@@ -165,9 +165,11 @@ With `holbuild` v0.14.59 or newer, MLton, and Python 3 on `PATH`:
 ```
 
 The demo builds `tests/.emit/run-test` and compares exact native/HOL encoded
-inputs and results for all eleven fixture cases and a passing stdin trace.
-The fixture includes intentional output, revert, deployment-nonce, address,
-and state-checkpoint mismatches, plus an agreeing state checkpoint.
+inputs and results for seventeen cases across three fixtures, plus a passing
+stdin trace. The fixtures include intentional output, revert, deployment-nonce,
+address, and checkpoint mismatches. Real py-evm captures cover a source deployment
+and a call with nonzero persistent/transient storage and a log, plus EOA,
+self-transfer, insufficient-balance, and raw-fallback message calls.
 Before writing parity expectations, the kernel smoke requires both prepared
 and replayed case names to equal the expected names in order. Missing,
 extra, duplicate, or reordered cases therefore fail rather than allowing an
@@ -186,6 +188,34 @@ rejects duplicate object members and account/slot keys, out-of-range words,
 malformed addresses, and malformed byte/topic hex. These checks do not add gas
 or temporary-memory coverage; old traces without checkpoints retain only their
 original checks.
+
+This is the checkpoint **consumer**, not a new checkpoint-producing fuzz driver.
+`tools/bytecode_fuzz.py` remains bytecode parity testing, and the upstream export
+plugin does not automatically gain full-state snapshots. The separate
+`fuzzing` project supplies them: its py-evm adapter enumerates complete state,
+and `oracle.record_checkpoint` appends a checkpoint after deployment and each
+top-level call (including reverts). Point that runner at this checkout, with
+its compiler checkout matching this repository's `VYPER_PIN`:
+
+```bash
+HOL_ROOT="$PWD"
+FUZZING_ROOT=/path/to/fuzzing
+cd "$FUZZING_ROOT"
+.venv/bin/python runner.py --hol-root "$HOL_ROOT" \
+  --pytest "$HOL_ROOT/tests/fixtures/run_test_json/checkpoint_scenario.py"
+```
+
+This supplied scenario exercises the producing hooks and native consumer together
+for source state changes, EOA/self messages, insufficient funds, and raw fallback
+execution. It requires the separate runner's optional upstream-test dependencies.
+
+The `checkpoint_source_state.json` and `checkpoint_message_calls.json` smoke
+fixtures were captured with that producer and py-evm `0.12.1b1` on Prague.
+The former uses `oracle.observe` with pinned Vyper `577d2534`; its negative
+control changes only the final expected persistent-storage value. The latter
+uses the same snapshot/export adapter for real EVM message calls. Replay treats
+calls as messages inside the fixture transaction: no sender nonce increment,
+and empty calldata still executes a raw-deployed target's fallback.
 
 ```bash
 # Build only; add --smoke for native/HOL parity checks:

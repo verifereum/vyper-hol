@@ -432,40 +432,6 @@ End
 
 val () = cv_auto_trans raw_call_evm_def;
 
-Definition is_transfer_def:
-  is_transfer ct ⇔
-  NULL ct.callData ∧ ¬ct.static ∧
-  ct.expectedOutput = SOME []
-End
-
-val () = cv_auto_trans is_transfer_def;
-
-Definition do_transfer_def:
-  do_transfer ct am = let
-    acc = am.accounts;
-    saddr = ct.sender;
-    taddr = ct.target;
-    sender = lookup_account saddr acc;
-    target = lookup_account taddr acc;
-    value = ct.value;
-    sbal = sender.balance;
-    (* TODO(test-semantics): charge gas for value transfers. *)
-  in
-    if value ≤ sbal then
-      INL $
-      am with accounts updated_by
-        (update_account saddr
-          (sender with <| balance updated_by (flip $- value);
-                          nonce updated_by SUC |>) o
-          (update_account taddr
-            (target with balance updated_by ($+ value))))
-    else INR (Error $ RuntimeError "do_transfer")
-End
-
-val () = do_transfer_def
-  |> SRULE [combinTheory.o_DEF, combinTheory.C_DEF]
-  |> cv_auto_trans;
-
 
 Definition make_create_tx_def:
   make_create_tx sender nonce value data gas_limit gas_price : transaction =
@@ -602,19 +568,20 @@ Definition run_trace_def:
      )
    | Call ct => (snss,
      case ALOOKUP snss ct.target
-     of NONE => if is_transfer ct then do_transfer ct am
-                else
-                  (let rr = raw_call_evm am ct in
-                  let res = FST rr; am' = SND rr in
-                  case res of
-                  | INR ex => if IS_NONE ct.expectedOutput then INL am'
-                              else INR ex
-                  | INL out =>
-                      (case ct.expectedOutput of
-                       | NONE => INR (Error $ RuntimeError "error expected")
-                       | SOME expected =>
-                           if out = expected then INL am'
-                           else INR (Error $ RuntimeError "output mismatch")))
+     of NONE =>
+        (* Exported calls are message calls: preserve the sender nonce and
+           execute any raw-deployed fallback, even with empty calldata. *)
+        (let rr = raw_call_evm am ct in
+         let res = FST rr; am' = SND rr in
+         case res of
+         | INR ex => if IS_NONE ct.expectedOutput then INL am'
+                     else INR ex
+         | INL out =>
+             (case ct.expectedOutput of
+              | NONE => INR (Error $ RuntimeError "error expected")
+              | SOME expected =>
+                  if out = expected then INL am'
+                  else INR (Error $ RuntimeError "output mismatch")))
       | SOME (reads_gas, sns) => let
         cr = run_call reads_gas sns am ct;
         call_res = FST cr;

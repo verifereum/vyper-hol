@@ -8,7 +8,13 @@ Libs
 
 fun holbuild_extra_deps (_ : string list) = ();
 fun holbuild_extra_outputs (_ : string list) = ();
-val () = holbuild_extra_deps ["fixtures/run_test_json/basic.json"];
+val fixtures = ["fixtures/run_test_json/basic.json",
+                "fixtures/run_test_json/checkpoint_source_state.json",
+                "fixtures/run_test_json/checkpoint_message_calls.json"];
+val () = holbuild_extra_deps
+  ["fixtures/run_test_json/basic.json",
+   "fixtures/run_test_json/checkpoint_source_state.json",
+   "fixtures/run_test_json/checkpoint_message_calls.json"];
 val () = holbuild_extra_outputs [".emit/json-smoke.expected"];
 val () = OS.FileSys.mkDir ".emit" handle OS.SysErr _ => ();
 
@@ -44,16 +50,20 @@ in
   List.app rejects ["[] {}", "[] garbage", "[]\011", "[]\012"]
 end;
 
-val fixture = "fixtures/run_test_json/basic.json";
-val prepared = vyperJsonReplayLib.prepare_file fixture;
-val replays = vyperJsonReplayLib.replay_file fixture;
+val prepared = List.concat (List.map vyperJsonReplayLib.prepare_file fixtures);
+val replays = List.concat (List.map vyperJsonReplayLib.replay_file fixtures);
 val expected_status =
   [("test_basic_code",true), ("test_output_mismatch",false),
    ("test_expected_revert",true), ("test_unexpected_revert",false),
    ("test_null_code",true), ("test_raw_without_deployer_nonce",true),
    ("test_raw_deployer_nonce",true), ("test_raw_deployer_nonce_rewind",false),
    ("test_raw_deployer_nonce_address_mismatch",false),
-   ("test_checkpoint_balance",true), ("test_checkpoint_balance_mismatch",false)];
+   ("test_checkpoint_balance",true), ("test_checkpoint_balance_mismatch",false),
+   ("test_checkpoint_source_state",true),
+   ("test_checkpoint_source_storage_mismatch",false),
+   ("test_checkpoint_eoa_message",true), ("test_checkpoint_self_message",true),
+   ("test_checkpoint_insufficient_message",true),
+   ("test_checkpoint_raw_fallback",true)];
 val expected_names = List.map #1 expected_status;
 (* Failures must report the intended mismatch boundary. *)
 val expected_errors =
@@ -62,7 +72,9 @@ val expected_errors =
    ("test_raw_deployer_nonce_address_mismatch",
     "raw deployment address mismatch"),
    ("test_checkpoint_balance_mismatch",
-    "field=balance slot=none expected=8 actual=7")];
+    "field=balance slot=none expected=8 actual=7"),
+   ("test_checkpoint_source_storage_mismatch",
+    "field=storage slot=0 expected=10 actual=9")];
 val () =
   if List.map #1 prepared = expected_names then ()
   else raise Fail "prepared fixture names differ from expected names or order";

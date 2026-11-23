@@ -1,0 +1,343 @@
+{
+  "test_checkpoint_eoa_message": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 100
+      },
+      {
+        "trace_type": "call",
+        "output": "",
+        "call_succeeded": true,
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "2978a8bf7cc2fa105db3ac37d5a6a83331f888a856cb82b32b36a901cf7bd8ef"
+            }
+          }
+        },
+        "call_args": {
+          "to": "0x4D3016A2baF1e55eE9717704e5C20EB2a8f21a43",
+          "calldata": "",
+          "value": 7,
+          "is_modifying": true
+        },
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": null
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "call",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0x4d3016a2baf1e55ee9717704e5c20eb2a8f21a43",
+            "balance": 7,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 93,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          }
+        ],
+        "transient_storage": [],
+        "logs": []
+      }
+    ]
+  },
+  "test_checkpoint_self_message": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 100
+      },
+      {
+        "trace_type": "call",
+        "output": "",
+        "call_succeeded": true,
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "2978a8bf7cc2fa105db3ac37d5a6a83331f888a856cb82b32b36a901cf7bd8ef"
+            }
+          }
+        },
+        "call_args": {
+          "to": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+          "calldata": "",
+          "value": 7,
+          "is_modifying": true
+        },
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": null
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "call",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 100,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          }
+        ],
+        "transient_storage": [],
+        "logs": []
+      }
+    ]
+  },
+  "test_checkpoint_insufficient_message": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 1
+      },
+      {
+        "trace_type": "call",
+        "output": null,
+        "call_succeeded": false,
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "2978a8bf7cc2fa105db3ac37d5a6a83331f888a856cb82b32b36a901cf7bd8ef"
+            }
+          }
+        },
+        "call_args": {
+          "to": "0x4D3016A2baF1e55eE9717704e5C20EB2a8f21a43",
+          "calldata": "",
+          "value": 2,
+          "is_modifying": true
+        },
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": null
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "call",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 1,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          }
+        ],
+        "transient_storage": [],
+        "logs": []
+      }
+    ]
+  },
+  "test_checkpoint_raw_fallback": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 100
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "6017600c60003960176000f36001600055600260015d602a600052600160206000a100",
+        "calldata": null,
+        "value": 0,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "2978a8bf7cc2fa105db3ac37d5a6a83331f888a856cb82b32b36a901cf7bd8ef"
+            }
+          }
+        },
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "runtime_bytecode": "6001600055600260015d602a600052600160206000a100",
+        "deployment_succeeded": true
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 100,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "6001600055600260015d602a600052600160206000a100",
+            "storage": []
+          }
+        ],
+        "transient_storage": [],
+        "logs": []
+      },
+      {
+        "trace_type": "call",
+        "output": "",
+        "call_succeeded": true,
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "2978a8bf7cc2fa105db3ac37d5a6a83331f888a856cb82b32b36a901cf7bd8ef"
+            }
+          }
+        },
+        "call_args": {
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "calldata": "",
+          "value": 0,
+          "is_modifying": true
+        },
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": null
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "call",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 100,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "6001600055600260015d602a600052600160206000a100",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 2
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000001"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      }
+    ]
+  }
+}

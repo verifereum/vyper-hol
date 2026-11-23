@@ -1,0 +1,2220 @@
+{
+  "test_checkpoint_source_state": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x4D3016A2baF1e55eE9717704e5C20EB2a8f21a43",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x3f63e11f3E314046Ea1D36a9Ee9191654b6Ef254",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x23806896DAdB2b994fc2Ca97d21A20b17AF256F4",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x62dCdC5d1A22063E7135d9645E146D179973A45f",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x35E830CBF8F6285450e6E29e5DC6C1628742CdCB",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x586cf55B5ac2794339ccDF9D7d02f6828659A28B",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x37DF7548Ed6A3972ef9dE8CF72D421c5E97173eb",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0xf17425153412Ba46996c18eB3346Fd38C9f0215f",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x4a6A41FA1F2d16c9Ef99105E5Aa4B68342D755aD",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "source",
+        "contract_abi": [
+          {
+            "name": "Changed",
+            "inputs": [
+              {
+                "name": "value",
+                "type": "uint256",
+                "indexed": false
+              }
+            ],
+            "anonymous": false,
+            "type": "event"
+          },
+          {
+            "stateMutability": "nonpayable",
+            "type": "function",
+            "name": "update",
+            "inputs": [
+              {
+                "name": "x",
+                "type": "uint256"
+              }
+            ],
+            "outputs": [],
+            "gas": 37514
+          },
+          {
+            "stateMutability": "nonpayable",
+            "type": "constructor",
+            "inputs": [],
+            "outputs": []
+          }
+        ],
+        "initcode": "346100145760035f5560676100185f3960675ff35b5f80fd5f3560e01c6382ab890a811861005f57602436103417610063576004355f556004356001810181811061006357905060015d7f938d2ee5be9cfb0f7270ee2eff90507e94b37625d9d2b3a61c97d30a4560b82960043560405260206040a1005b5f5ffd5b5f80fd85582016c425064150dc029405a562f9f0e134ace5937ec475c259c0bec657d26597b418678000a1657679706572830005000034",
+        "calldata": null,
+        "value": 0,
+        "source_code": "event Changed:\n    value: uint256\n\nstored: uint256\nscratch: transient(uint256)\n\n@deploy\ndef __init__():\n    self.stored = 3\n\n@external\ndef update(x: uint256):\n    self.stored = x\n    self.scratch = x + 1\n    log Changed(value=x)\n",
+        "annotated_ast": {
+          "contract_name": "/home/ubuntu/fuzzing/unknown_0.vy",
+          "ast": {
+            "source_sha256sum": "8feda03c4dbb270e047a2285f6eb88372a2cf3d2ad789e50feb2782b853a380d",
+            "ast_type": "Module",
+            "body": [
+              {
+                "ast_type": "EventDef",
+                "body": [
+                  {
+                    "annotation": {
+                      "ast_type": "Name",
+                      "col_offset": 11,
+                      "end_col_offset": 18,
+                      "end_lineno": 2,
+                      "id": "uint256",
+                      "lineno": 2,
+                      "node_id": 5,
+                      "src": "26:7:-1"
+                    },
+                    "ast_type": "AnnAssign",
+                    "col_offset": 4,
+                    "end_col_offset": 18,
+                    "end_lineno": 2,
+                    "lineno": 2,
+                    "node_id": 2,
+                    "src": "19:14:-1",
+                    "target": {
+                      "ast_type": "Name",
+                      "col_offset": 4,
+                      "end_col_offset": 9,
+                      "end_lineno": 2,
+                      "id": "value",
+                      "lineno": 2,
+                      "node_id": 3,
+                      "src": "19:5:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    },
+                    "value": null
+                  }
+                ],
+                "col_offset": 0,
+                "doc_string": null,
+                "end_col_offset": 18,
+                "end_lineno": 2,
+                "lineno": 1,
+                "name": "Changed",
+                "node_id": 1,
+                "src": "0:33:-1"
+              },
+              {
+                "annotation": {
+                  "ast_type": "Name",
+                  "col_offset": 8,
+                  "end_col_offset": 15,
+                  "end_lineno": 4,
+                  "id": "uint256",
+                  "lineno": 4,
+                  "node_id": 10,
+                  "src": "43:7:-1"
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 15,
+                "end_lineno": 4,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": false,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 4,
+                "node_id": 7,
+                "src": "35:15:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 6,
+                  "end_lineno": 4,
+                  "id": "stored",
+                  "lineno": 4,
+                  "node_id": 8,
+                  "src": "35:6:-1",
+                  "type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  }
+                },
+                "value": null,
+                "type": {
+                  "bits": 256,
+                  "is_signed": false,
+                  "name": "uint256",
+                  "typeclass": "integer"
+                }
+              },
+              {
+                "annotation": {
+                  "ast_type": "Name",
+                  "col_offset": 19,
+                  "end_col_offset": 26,
+                  "end_lineno": 5,
+                  "id": "uint256",
+                  "lineno": 5,
+                  "node_id": 18,
+                  "src": "70:7:-1"
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 27,
+                "end_lineno": 5,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": false,
+                "is_reentrant": false,
+                "is_transient": true,
+                "lineno": 5,
+                "node_id": 12,
+                "src": "51:27:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 7,
+                  "end_lineno": 5,
+                  "id": "scratch",
+                  "lineno": 5,
+                  "node_id": 13,
+                  "src": "51:7:-1",
+                  "type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  }
+                },
+                "value": null,
+                "type": {
+                  "bits": 256,
+                  "is_signed": false,
+                  "name": "uint256",
+                  "typeclass": "integer"
+                }
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 19,
+                  "end_lineno": 9,
+                  "lineno": 8,
+                  "node_id": 21,
+                  "src": "88:35:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 19,
+                    "end_lineno": 9,
+                    "lineno": 9,
+                    "node_id": 22,
+                    "src": "108:15:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "stored",
+                      "col_offset": 4,
+                      "end_col_offset": 15,
+                      "end_lineno": 9,
+                      "lineno": 9,
+                      "node_id": 23,
+                      "src": "108:11:-1",
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 9,
+                        "id": "self",
+                        "lineno": 9,
+                        "node_id": 24,
+                        "src": "108:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "variable_reads": [
+                        {
+                          "name": "stored",
+                          "decl_node": {
+                            "node_id": 7,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "name": "stored",
+                          "decl_node": {
+                            "node_id": 7,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 18,
+                      "end_col_offset": 19,
+                      "end_lineno": 9,
+                      "lineno": 9,
+                      "node_id": 27,
+                      "src": "122:1:-1",
+                      "value": 3,
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 18,
+                        "end_col_offset": 19,
+                        "end_lineno": 9,
+                        "lineno": 9,
+                        "node_id": 27,
+                        "src": "122:1:-1",
+                        "value": 3,
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 7,
+                    "end_lineno": 7,
+                    "id": "deploy",
+                    "lineno": 7,
+                    "node_id": 28,
+                    "src": "81:6:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 19,
+                "end_lineno": 9,
+                "lineno": 8,
+                "name": "__init__",
+                "node_id": 20,
+                "returns": null,
+                "src": "88:35:-1",
+                "func_type": {
+                  "argument_types": [],
+                  "return_type": null,
+                  "name": "__init__",
+                  "type_decl_node": {
+                    "node_id": 20,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                }
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 14,
+                        "end_col_offset": 21,
+                        "end_lineno": 12,
+                        "id": "uint256",
+                        "lineno": 12,
+                        "node_id": 33,
+                        "src": "149:7:-1"
+                      },
+                      "arg": "x",
+                      "ast_type": "arg",
+                      "col_offset": 11,
+                      "end_col_offset": 21,
+                      "end_lineno": 12,
+                      "lineno": 12,
+                      "node_id": 32,
+                      "src": "146:10:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 22,
+                  "end_lineno": 15,
+                  "lineno": 12,
+                  "node_id": 31,
+                  "src": "135:91:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 19,
+                    "end_lineno": 13,
+                    "lineno": 13,
+                    "node_id": 35,
+                    "src": "163:15:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "stored",
+                      "col_offset": 4,
+                      "end_col_offset": 15,
+                      "end_lineno": 13,
+                      "lineno": 13,
+                      "node_id": 36,
+                      "src": "163:11:-1",
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 13,
+                        "id": "self",
+                        "lineno": 13,
+                        "node_id": 37,
+                        "src": "163:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "variable_reads": [
+                        {
+                          "name": "stored",
+                          "decl_node": {
+                            "node_id": 7,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "name": "stored",
+                          "decl_node": {
+                            "node_id": 7,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Name",
+                      "col_offset": 18,
+                      "end_col_offset": 19,
+                      "end_lineno": 13,
+                      "id": "x",
+                      "lineno": 13,
+                      "node_id": 40,
+                      "src": "177:1:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "variable_reads": [
+                        {
+                          "name": "x",
+                          "decl_node": {
+                            "node_id": 32,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 24,
+                    "end_lineno": 14,
+                    "lineno": 14,
+                    "node_id": 42,
+                    "src": "183:20:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "scratch",
+                      "col_offset": 4,
+                      "end_col_offset": 16,
+                      "end_lineno": 14,
+                      "lineno": 14,
+                      "node_id": 43,
+                      "src": "183:12:-1",
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 14,
+                        "id": "self",
+                        "lineno": 14,
+                        "node_id": 44,
+                        "src": "183:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "variable_reads": [
+                        {
+                          "name": "scratch",
+                          "decl_node": {
+                            "node_id": 12,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "name": "scratch",
+                          "decl_node": {
+                            "node_id": 12,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "BinOp",
+                      "col_offset": 19,
+                      "end_col_offset": 24,
+                      "end_lineno": 14,
+                      "left": {
+                        "ast_type": "Name",
+                        "col_offset": 19,
+                        "end_col_offset": 20,
+                        "end_lineno": 14,
+                        "id": "x",
+                        "lineno": 14,
+                        "node_id": 48,
+                        "src": "198:1:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "variable_reads": [
+                          {
+                            "name": "x",
+                            "decl_node": {
+                              "node_id": 32,
+                              "source_id": -1
+                            },
+                            "access_path": []
+                          }
+                        ]
+                      },
+                      "lineno": 14,
+                      "node_id": 47,
+                      "op": {
+                        "ast_type": "Add",
+                        "col_offset": 19,
+                        "end_col_offset": 24,
+                        "end_lineno": 14,
+                        "lineno": 14,
+                        "node_id": 50,
+                        "src": "198:5:-1"
+                      },
+                      "right": {
+                        "ast_type": "Int",
+                        "col_offset": 23,
+                        "end_col_offset": 24,
+                        "end_lineno": 14,
+                        "lineno": 14,
+                        "node_id": 51,
+                        "src": "202:1:-1",
+                        "value": 1,
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "folded_value": {
+                          "ast_type": "Int",
+                          "col_offset": 23,
+                          "end_col_offset": 24,
+                          "end_lineno": 14,
+                          "lineno": 14,
+                          "node_id": 51,
+                          "src": "202:1:-1",
+                          "value": 1,
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        }
+                      },
+                      "src": "198:5:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Log",
+                    "col_offset": 4,
+                    "end_col_offset": 24,
+                    "end_lineno": 15,
+                    "lineno": 15,
+                    "node_id": 53,
+                    "src": "208:20:-1",
+                    "value": {
+                      "args": [],
+                      "ast_type": "Call",
+                      "col_offset": 8,
+                      "end_col_offset": 24,
+                      "end_lineno": 15,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 8,
+                        "end_col_offset": 15,
+                        "end_lineno": 15,
+                        "id": "Changed",
+                        "lineno": 15,
+                        "node_id": 55,
+                        "src": "212:7:-1",
+                        "type": {
+                          "type_t": {
+                            "name": "Changed",
+                            "type_decl_node": {
+                              "node_id": 1,
+                              "source_id": -1
+                            },
+                            "typeclass": "event"
+                          }
+                        }
+                      },
+                      "keywords": [
+                        {
+                          "arg": "value",
+                          "ast_type": "keyword",
+                          "col_offset": 16,
+                          "end_col_offset": 23,
+                          "end_lineno": 15,
+                          "lineno": 15,
+                          "node_id": 57,
+                          "src": "220:7:-1",
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 22,
+                            "end_col_offset": 23,
+                            "end_lineno": 15,
+                            "id": "x",
+                            "lineno": 15,
+                            "node_id": 58,
+                            "src": "226:1:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "variable_reads": [
+                              {
+                                "name": "x",
+                                "decl_node": {
+                                  "node_id": 32,
+                                  "source_id": -1
+                                },
+                                "access_path": []
+                              }
+                            ]
+                          }
+                        }
+                      ],
+                      "lineno": 15,
+                      "node_id": 54,
+                      "src": "212:16:-1",
+                      "type": {
+                        "name": "(void)"
+                      }
+                    },
+                    "type": {
+                      "name": "Changed",
+                      "type_decl_node": {
+                        "node_id": 1,
+                        "source_id": -1
+                      },
+                      "typeclass": "event"
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 11,
+                    "id": "external",
+                    "lineno": 11,
+                    "node_id": 60,
+                    "src": "126:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 24,
+                "end_lineno": 15,
+                "lineno": 12,
+                "name": "update",
+                "node_id": 30,
+                "returns": null,
+                "src": "135:93:-1",
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  ],
+                  "return_type": null,
+                  "name": "update",
+                  "type_decl_node": {
+                    "node_id": 30,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                }
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 23,
+            "end_lineno": 15,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "/home/ubuntu/fuzzing/unknown_0.vy",
+            "resolved_path": "/home/ubuntu/fuzzing/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "src": "0:227:-1",
+            "type": {
+              "name": "/home/ubuntu/fuzzing/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "imports": []
+        },
+        "solc_json": {
+          "language": "Vyper",
+          "sources": {
+            "unknown_0.vy": {
+              "content": "event Changed:\n    value: uint256\n\nstored: uint256\nscratch: transient(uint256)\n\n@deploy\ndef __init__():\n    self.stored = 3\n\n@external\ndef update(x: uint256):\n    self.stored = x\n    self.scratch = x + 1\n    log Changed(value=x)\n",
+              "sha256sum": "8feda03c4dbb270e047a2285f6eb88372a2cf3d2ad789e50feb2782b853a380d"
+            }
+          },
+          "settings": {
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ],
+            "optimize": "gas",
+            "debug": false,
+            "enable_decimals": true,
+            "evmVersion": "prague",
+            "experimentalCodegen": false
+          },
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "16c425064150dc029405a562f9f0e134ace5937ec475c259c0bec657d26597b4"
+        },
+        "compiler_settings": {
+          "optimize": "gas",
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "debug": false,
+          "enable_decimals": true
+        },
+        "storage_layout": {
+          "storage_layout": {
+            "stored": {
+              "type": "uint256",
+              "n_slots": 1,
+              "slot": 0
+            }
+          },
+          "transient_storage_layout": {
+            "scratch": {
+              "type": "uint256",
+              "n_slots": 1,
+              "slot": 1
+            }
+          }
+        },
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "2978a8bf7cc2fa105db3ac37d5a6a83331f888a856cb82b32b36a901cf7bd8ef"
+            }
+          }
+        },
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "runtime_bytecode": "5f3560e01c6382ab890a811861005f57602436103417610063576004355f556004356001810181811061006357905060015d7f938d2ee5be9cfb0f7270ee2eff90507e94b37625d9d2b3a61c97d30a4560b82960043560405260206040a1005b5f5ffd5b5f80fd",
+        "deployment_succeeded": true
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0x23806896dadb2b994fc2ca97d21a20b17af256f4",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x35e830cbf8f6285450e6e29e5dc6c1628742cdcb",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x37df7548ed6a3972ef9de8cf72d421c5e97173eb",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x3f63e11f3e314046ea1d36a9ee9191654b6ef254",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x4a6a41fa1f2d16c9ef99105e5aa4b68342d755ad",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x4d3016a2baf1e55ee9717704e5c20eb2a8f21a43",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x586cf55b5ac2794339ccdf9d7d02f6828659a28b",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x62dcdc5d1a22063e7135d9645e146d179973a45f",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "5f3560e01c6382ab890a811861005f57602436103417610063576004355f556004356001810181811061006357905060015d7f938d2ee5be9cfb0f7270ee2eff90507e94b37625d9d2b3a61c97d30a4560b82960043560405260206040a1005b5f5ffd5b5f80fd",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 3
+              }
+            ]
+          },
+          {
+            "address": "0xf17425153412ba46996c18eb3346fd38c9f0215f",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          }
+        ],
+        "transient_storage": [],
+        "logs": []
+      },
+      {
+        "trace_type": "clear_transient_storage"
+      },
+      {
+        "trace_type": "call",
+        "output": "",
+        "call_succeeded": true,
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "2978a8bf7cc2fa105db3ac37d5a6a83331f888a856cb82b32b36a901cf7bd8ef"
+            }
+          }
+        },
+        "call_args": {
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "calldata": "82ab890a0000000000000000000000000000000000000000000000000000000000000009",
+          "value": 0,
+          "is_modifying": true
+        },
+        "python_args": {
+          "args": [
+            9
+          ],
+          "kwargs": {}
+        },
+        "function_name": "update"
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "call",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0x23806896dadb2b994fc2ca97d21a20b17af256f4",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x35e830cbf8f6285450e6e29e5dc6c1628742cdcb",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x37df7548ed6a3972ef9de8cf72d421c5e97173eb",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x3f63e11f3e314046ea1d36a9ee9191654b6ef254",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x4a6a41fa1f2d16c9ef99105e5aa4b68342d755ad",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x4d3016a2baf1e55ee9717704e5c20eb2a8f21a43",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x586cf55b5ac2794339ccdf9d7d02f6828659a28b",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x62dcdc5d1a22063e7135d9645e146d179973a45f",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "5f3560e01c6382ab890a811861005f57602436103417610063576004355f556004356001810181811061006357905060015d7f938d2ee5be9cfb0f7270ee2eff90507e94b37625d9d2b3a61c97d30a4560b82960043560405260206040a1005b5f5ffd5b5f80fd",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 9
+              }
+            ]
+          },
+          {
+            "address": "0xf17425153412ba46996c18eb3346fd38c9f0215f",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 10
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "938d2ee5be9cfb0f7270ee2eff90507e94b37625d9d2b3a61c97d30a4560b829"
+            ],
+            "data": "0000000000000000000000000000000000000000000000000000000000000009"
+          }
+        ]
+      }
+    ]
+  },
+  "test_checkpoint_source_storage_mismatch": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x4D3016A2baF1e55eE9717704e5C20EB2a8f21a43",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x3f63e11f3E314046Ea1D36a9Ee9191654b6Ef254",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x23806896DAdB2b994fc2Ca97d21A20b17AF256F4",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x62dCdC5d1A22063E7135d9645E146D179973A45f",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x35E830CBF8F6285450e6E29e5DC6C1628742CdCB",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x586cf55B5ac2794339ccDF9D7d02f6828659A28B",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x37DF7548Ed6A3972ef9dE8CF72D421c5E97173eb",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0xf17425153412Ba46996c18eB3346Fd38C9f0215f",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "set_balance",
+        "address": "0x4a6A41FA1F2d16c9Ef99105E5Aa4B68342D755aD",
+        "value": 1000000000000000000000000000000
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "source",
+        "contract_abi": [
+          {
+            "name": "Changed",
+            "inputs": [
+              {
+                "name": "value",
+                "type": "uint256",
+                "indexed": false
+              }
+            ],
+            "anonymous": false,
+            "type": "event"
+          },
+          {
+            "stateMutability": "nonpayable",
+            "type": "function",
+            "name": "update",
+            "inputs": [
+              {
+                "name": "x",
+                "type": "uint256"
+              }
+            ],
+            "outputs": [],
+            "gas": 37514
+          },
+          {
+            "stateMutability": "nonpayable",
+            "type": "constructor",
+            "inputs": [],
+            "outputs": []
+          }
+        ],
+        "initcode": "346100145760035f5560676100185f3960675ff35b5f80fd5f3560e01c6382ab890a811861005f57602436103417610063576004355f556004356001810181811061006357905060015d7f938d2ee5be9cfb0f7270ee2eff90507e94b37625d9d2b3a61c97d30a4560b82960043560405260206040a1005b5f5ffd5b5f80fd85582016c425064150dc029405a562f9f0e134ace5937ec475c259c0bec657d26597b418678000a1657679706572830005000034",
+        "calldata": null,
+        "value": 0,
+        "source_code": "event Changed:\n    value: uint256\n\nstored: uint256\nscratch: transient(uint256)\n\n@deploy\ndef __init__():\n    self.stored = 3\n\n@external\ndef update(x: uint256):\n    self.stored = x\n    self.scratch = x + 1\n    log Changed(value=x)\n",
+        "annotated_ast": {
+          "contract_name": "/home/ubuntu/fuzzing/unknown_0.vy",
+          "ast": {
+            "source_sha256sum": "8feda03c4dbb270e047a2285f6eb88372a2cf3d2ad789e50feb2782b853a380d",
+            "ast_type": "Module",
+            "body": [
+              {
+                "ast_type": "EventDef",
+                "body": [
+                  {
+                    "annotation": {
+                      "ast_type": "Name",
+                      "col_offset": 11,
+                      "end_col_offset": 18,
+                      "end_lineno": 2,
+                      "id": "uint256",
+                      "lineno": 2,
+                      "node_id": 5,
+                      "src": "26:7:-1"
+                    },
+                    "ast_type": "AnnAssign",
+                    "col_offset": 4,
+                    "end_col_offset": 18,
+                    "end_lineno": 2,
+                    "lineno": 2,
+                    "node_id": 2,
+                    "src": "19:14:-1",
+                    "target": {
+                      "ast_type": "Name",
+                      "col_offset": 4,
+                      "end_col_offset": 9,
+                      "end_lineno": 2,
+                      "id": "value",
+                      "lineno": 2,
+                      "node_id": 3,
+                      "src": "19:5:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    },
+                    "value": null
+                  }
+                ],
+                "col_offset": 0,
+                "doc_string": null,
+                "end_col_offset": 18,
+                "end_lineno": 2,
+                "lineno": 1,
+                "name": "Changed",
+                "node_id": 1,
+                "src": "0:33:-1"
+              },
+              {
+                "annotation": {
+                  "ast_type": "Name",
+                  "col_offset": 8,
+                  "end_col_offset": 15,
+                  "end_lineno": 4,
+                  "id": "uint256",
+                  "lineno": 4,
+                  "node_id": 10,
+                  "src": "43:7:-1"
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 15,
+                "end_lineno": 4,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": false,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 4,
+                "node_id": 7,
+                "src": "35:15:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 6,
+                  "end_lineno": 4,
+                  "id": "stored",
+                  "lineno": 4,
+                  "node_id": 8,
+                  "src": "35:6:-1",
+                  "type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  }
+                },
+                "value": null,
+                "type": {
+                  "bits": 256,
+                  "is_signed": false,
+                  "name": "uint256",
+                  "typeclass": "integer"
+                }
+              },
+              {
+                "annotation": {
+                  "ast_type": "Name",
+                  "col_offset": 19,
+                  "end_col_offset": 26,
+                  "end_lineno": 5,
+                  "id": "uint256",
+                  "lineno": 5,
+                  "node_id": 18,
+                  "src": "70:7:-1"
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 27,
+                "end_lineno": 5,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": false,
+                "is_reentrant": false,
+                "is_transient": true,
+                "lineno": 5,
+                "node_id": 12,
+                "src": "51:27:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 7,
+                  "end_lineno": 5,
+                  "id": "scratch",
+                  "lineno": 5,
+                  "node_id": 13,
+                  "src": "51:7:-1",
+                  "type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  }
+                },
+                "value": null,
+                "type": {
+                  "bits": 256,
+                  "is_signed": false,
+                  "name": "uint256",
+                  "typeclass": "integer"
+                }
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 19,
+                  "end_lineno": 9,
+                  "lineno": 8,
+                  "node_id": 21,
+                  "src": "88:35:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 19,
+                    "end_lineno": 9,
+                    "lineno": 9,
+                    "node_id": 22,
+                    "src": "108:15:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "stored",
+                      "col_offset": 4,
+                      "end_col_offset": 15,
+                      "end_lineno": 9,
+                      "lineno": 9,
+                      "node_id": 23,
+                      "src": "108:11:-1",
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 9,
+                        "id": "self",
+                        "lineno": 9,
+                        "node_id": 24,
+                        "src": "108:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "variable_reads": [
+                        {
+                          "name": "stored",
+                          "decl_node": {
+                            "node_id": 7,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "name": "stored",
+                          "decl_node": {
+                            "node_id": 7,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 18,
+                      "end_col_offset": 19,
+                      "end_lineno": 9,
+                      "lineno": 9,
+                      "node_id": 27,
+                      "src": "122:1:-1",
+                      "value": 3,
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 18,
+                        "end_col_offset": 19,
+                        "end_lineno": 9,
+                        "lineno": 9,
+                        "node_id": 27,
+                        "src": "122:1:-1",
+                        "value": 3,
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 7,
+                    "end_lineno": 7,
+                    "id": "deploy",
+                    "lineno": 7,
+                    "node_id": 28,
+                    "src": "81:6:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 19,
+                "end_lineno": 9,
+                "lineno": 8,
+                "name": "__init__",
+                "node_id": 20,
+                "returns": null,
+                "src": "88:35:-1",
+                "func_type": {
+                  "argument_types": [],
+                  "return_type": null,
+                  "name": "__init__",
+                  "type_decl_node": {
+                    "node_id": 20,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                }
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 14,
+                        "end_col_offset": 21,
+                        "end_lineno": 12,
+                        "id": "uint256",
+                        "lineno": 12,
+                        "node_id": 33,
+                        "src": "149:7:-1"
+                      },
+                      "arg": "x",
+                      "ast_type": "arg",
+                      "col_offset": 11,
+                      "end_col_offset": 21,
+                      "end_lineno": 12,
+                      "lineno": 12,
+                      "node_id": 32,
+                      "src": "146:10:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 22,
+                  "end_lineno": 15,
+                  "lineno": 12,
+                  "node_id": 31,
+                  "src": "135:91:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 19,
+                    "end_lineno": 13,
+                    "lineno": 13,
+                    "node_id": 35,
+                    "src": "163:15:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "stored",
+                      "col_offset": 4,
+                      "end_col_offset": 15,
+                      "end_lineno": 13,
+                      "lineno": 13,
+                      "node_id": 36,
+                      "src": "163:11:-1",
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 13,
+                        "id": "self",
+                        "lineno": 13,
+                        "node_id": 37,
+                        "src": "163:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "variable_reads": [
+                        {
+                          "name": "stored",
+                          "decl_node": {
+                            "node_id": 7,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "name": "stored",
+                          "decl_node": {
+                            "node_id": 7,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Name",
+                      "col_offset": 18,
+                      "end_col_offset": 19,
+                      "end_lineno": 13,
+                      "id": "x",
+                      "lineno": 13,
+                      "node_id": 40,
+                      "src": "177:1:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "variable_reads": [
+                        {
+                          "name": "x",
+                          "decl_node": {
+                            "node_id": 32,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 24,
+                    "end_lineno": 14,
+                    "lineno": 14,
+                    "node_id": 42,
+                    "src": "183:20:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "scratch",
+                      "col_offset": 4,
+                      "end_col_offset": 16,
+                      "end_lineno": 14,
+                      "lineno": 14,
+                      "node_id": 43,
+                      "src": "183:12:-1",
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 14,
+                        "id": "self",
+                        "lineno": 14,
+                        "node_id": 44,
+                        "src": "183:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "variable_reads": [
+                        {
+                          "name": "scratch",
+                          "decl_node": {
+                            "node_id": 12,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "name": "scratch",
+                          "decl_node": {
+                            "node_id": 12,
+                            "source_id": -1
+                          },
+                          "access_path": []
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "BinOp",
+                      "col_offset": 19,
+                      "end_col_offset": 24,
+                      "end_lineno": 14,
+                      "left": {
+                        "ast_type": "Name",
+                        "col_offset": 19,
+                        "end_col_offset": 20,
+                        "end_lineno": 14,
+                        "id": "x",
+                        "lineno": 14,
+                        "node_id": 48,
+                        "src": "198:1:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "variable_reads": [
+                          {
+                            "name": "x",
+                            "decl_node": {
+                              "node_id": 32,
+                              "source_id": -1
+                            },
+                            "access_path": []
+                          }
+                        ]
+                      },
+                      "lineno": 14,
+                      "node_id": 47,
+                      "op": {
+                        "ast_type": "Add",
+                        "col_offset": 19,
+                        "end_col_offset": 24,
+                        "end_lineno": 14,
+                        "lineno": 14,
+                        "node_id": 50,
+                        "src": "198:5:-1"
+                      },
+                      "right": {
+                        "ast_type": "Int",
+                        "col_offset": 23,
+                        "end_col_offset": 24,
+                        "end_lineno": 14,
+                        "lineno": 14,
+                        "node_id": 51,
+                        "src": "202:1:-1",
+                        "value": 1,
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "folded_value": {
+                          "ast_type": "Int",
+                          "col_offset": 23,
+                          "end_col_offset": 24,
+                          "end_lineno": 14,
+                          "lineno": 14,
+                          "node_id": 51,
+                          "src": "202:1:-1",
+                          "value": 1,
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        }
+                      },
+                      "src": "198:5:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Log",
+                    "col_offset": 4,
+                    "end_col_offset": 24,
+                    "end_lineno": 15,
+                    "lineno": 15,
+                    "node_id": 53,
+                    "src": "208:20:-1",
+                    "value": {
+                      "args": [],
+                      "ast_type": "Call",
+                      "col_offset": 8,
+                      "end_col_offset": 24,
+                      "end_lineno": 15,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 8,
+                        "end_col_offset": 15,
+                        "end_lineno": 15,
+                        "id": "Changed",
+                        "lineno": 15,
+                        "node_id": 55,
+                        "src": "212:7:-1",
+                        "type": {
+                          "type_t": {
+                            "name": "Changed",
+                            "type_decl_node": {
+                              "node_id": 1,
+                              "source_id": -1
+                            },
+                            "typeclass": "event"
+                          }
+                        }
+                      },
+                      "keywords": [
+                        {
+                          "arg": "value",
+                          "ast_type": "keyword",
+                          "col_offset": 16,
+                          "end_col_offset": 23,
+                          "end_lineno": 15,
+                          "lineno": 15,
+                          "node_id": 57,
+                          "src": "220:7:-1",
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 22,
+                            "end_col_offset": 23,
+                            "end_lineno": 15,
+                            "id": "x",
+                            "lineno": 15,
+                            "node_id": 58,
+                            "src": "226:1:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "variable_reads": [
+                              {
+                                "name": "x",
+                                "decl_node": {
+                                  "node_id": 32,
+                                  "source_id": -1
+                                },
+                                "access_path": []
+                              }
+                            ]
+                          }
+                        }
+                      ],
+                      "lineno": 15,
+                      "node_id": 54,
+                      "src": "212:16:-1",
+                      "type": {
+                        "name": "(void)"
+                      }
+                    },
+                    "type": {
+                      "name": "Changed",
+                      "type_decl_node": {
+                        "node_id": 1,
+                        "source_id": -1
+                      },
+                      "typeclass": "event"
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 11,
+                    "id": "external",
+                    "lineno": 11,
+                    "node_id": 60,
+                    "src": "126:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 24,
+                "end_lineno": 15,
+                "lineno": 12,
+                "name": "update",
+                "node_id": 30,
+                "returns": null,
+                "src": "135:93:-1",
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  ],
+                  "return_type": null,
+                  "name": "update",
+                  "type_decl_node": {
+                    "node_id": 30,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                }
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 23,
+            "end_lineno": 15,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "/home/ubuntu/fuzzing/unknown_0.vy",
+            "resolved_path": "/home/ubuntu/fuzzing/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "src": "0:227:-1",
+            "type": {
+              "name": "/home/ubuntu/fuzzing/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "imports": []
+        },
+        "solc_json": {
+          "language": "Vyper",
+          "sources": {
+            "unknown_0.vy": {
+              "content": "event Changed:\n    value: uint256\n\nstored: uint256\nscratch: transient(uint256)\n\n@deploy\ndef __init__():\n    self.stored = 3\n\n@external\ndef update(x: uint256):\n    self.stored = x\n    self.scratch = x + 1\n    log Changed(value=x)\n",
+              "sha256sum": "8feda03c4dbb270e047a2285f6eb88372a2cf3d2ad789e50feb2782b853a380d"
+            }
+          },
+          "settings": {
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ],
+            "optimize": "gas",
+            "debug": false,
+            "enable_decimals": true,
+            "evmVersion": "prague",
+            "experimentalCodegen": false
+          },
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "16c425064150dc029405a562f9f0e134ace5937ec475c259c0bec657d26597b4"
+        },
+        "compiler_settings": {
+          "optimize": "gas",
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "debug": false,
+          "enable_decimals": true
+        },
+        "storage_layout": {
+          "storage_layout": {
+            "stored": {
+              "type": "uint256",
+              "n_slots": 1,
+              "slot": 0
+            }
+          },
+          "transient_storage_layout": {
+            "scratch": {
+              "type": "uint256",
+              "n_slots": 1,
+              "slot": 1
+            }
+          }
+        },
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "2978a8bf7cc2fa105db3ac37d5a6a83331f888a856cb82b32b36a901cf7bd8ef"
+            }
+          }
+        },
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "runtime_bytecode": "5f3560e01c6382ab890a811861005f57602436103417610063576004355f556004356001810181811061006357905060015d7f938d2ee5be9cfb0f7270ee2eff90507e94b37625d9d2b3a61c97d30a4560b82960043560405260206040a1005b5f5ffd5b5f80fd",
+        "deployment_succeeded": true
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0x23806896dadb2b994fc2ca97d21a20b17af256f4",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x35e830cbf8f6285450e6e29e5dc6c1628742cdcb",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x37df7548ed6a3972ef9de8cf72d421c5e97173eb",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x3f63e11f3e314046ea1d36a9ee9191654b6ef254",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x4a6a41fa1f2d16c9ef99105e5aa4b68342d755ad",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x4d3016a2baf1e55ee9717704e5c20eb2a8f21a43",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x586cf55b5ac2794339ccdf9d7d02f6828659a28b",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x62dcdc5d1a22063e7135d9645e146d179973a45f",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "5f3560e01c6382ab890a811861005f57602436103417610063576004355f556004356001810181811061006357905060015d7f938d2ee5be9cfb0f7270ee2eff90507e94b37625d9d2b3a61c97d30a4560b82960043560405260206040a1005b5f5ffd5b5f80fd",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 3
+              }
+            ]
+          },
+          {
+            "address": "0xf17425153412ba46996c18eb3346fd38c9f0215f",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          }
+        ],
+        "transient_storage": [],
+        "logs": []
+      },
+      {
+        "trace_type": "clear_transient_storage"
+      },
+      {
+        "trace_type": "call",
+        "output": "",
+        "call_succeeded": true,
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "2978a8bf7cc2fa105db3ac37d5a6a83331f888a856cb82b32b36a901cf7bd8ef"
+            }
+          }
+        },
+        "call_args": {
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "calldata": "82ab890a0000000000000000000000000000000000000000000000000000000000000009",
+          "value": 0,
+          "is_modifying": true
+        },
+        "python_args": {
+          "args": [
+            9
+          ],
+          "kwargs": {}
+        },
+        "function_name": "update"
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "call",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0x23806896dadb2b994fc2ca97d21a20b17af256f4",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x35e830cbf8f6285450e6e29e5dc6c1628742cdcb",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x37df7548ed6a3972ef9de8cf72d421c5e97173eb",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x3f63e11f3e314046ea1d36a9ee9191654b6ef254",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x4a6a41fa1f2d16c9ef99105e5aa4b68342d755ad",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x4d3016a2baf1e55ee9717704e5c20eb2a8f21a43",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x586cf55b5ac2794339ccdf9d7d02f6828659a28b",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0x62dcdc5d1a22063e7135d9645e146d179973a45f",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "5f3560e01c6382ab890a811861005f57602436103417610063576004355f556004356001810181811061006357905060015d7f938d2ee5be9cfb0f7270ee2eff90507e94b37625d9d2b3a61c97d30a4560b82960043560405260206040a1005b5f5ffd5b5f80fd",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 10
+              }
+            ]
+          },
+          {
+            "address": "0xf17425153412ba46996c18eb3346fd38c9f0215f",
+            "balance": 1000000000000000000000000000000,
+            "nonce": 0,
+            "code": "",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 10
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "938d2ee5be9cfb0f7270ee2eff90507e94b37625d9d2b3a61c97d30a4560b829"
+            ],
+            "data": "0000000000000000000000000000000000000000000000000000000000000009"
+          }
+        ]
+      }
+    ]
+  }
+}
