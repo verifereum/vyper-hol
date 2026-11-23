@@ -1,7 +1,7 @@
 (* Imported source-location facts for retagged snapshots. *)
 Theory bodyMemSnapshotSourceLocation
 Ancestors
-  exprSimConcatResult exprLowering loweringPosts context compileEnv vyperAST
+  exprPtrUnwrapStorageShape exprLowering loweringPosts context compileEnv vyperAST
 
 Theorem snapshot_saved_representation:
   compile_snapshot_vv ce T (vv_with_type ty vv) sa = (saved,sb) ==>
@@ -58,9 +58,9 @@ Proof
 QED
 
 Resume snapshot_changed_type_location[builtin]:
-  Cases_on `b` >> gvs[lowered_value_type_def, expr_type_def] >>
-  drule concat_compile_shape >> strip_tac >>
-  gvs[vv_location_def, base_ptr_def]
+  Cases_on `vv` >> simp[vv_location_def] >>
+  CCONTR_TAC >> drule_all compile_nonmemory_lowered_value_type >>
+  gvs[expr_type_def]
 QED
 
 Resume snapshot_changed_type_location[typebuiltin]:
