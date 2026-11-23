@@ -6,6 +6,8 @@ Ancestors
 Libs
   BasicProvers
 
+val _ = Parse.hide "body";
+
 Theorem getter_tag_none[local]:
   public_getter_src NONE top = public_getter top
 Proof
@@ -86,19 +88,20 @@ Proof
   rpt gen_tac >> IF_CASES_TAC >> simp[] >> metis_tac[]
 QED
 
-Theorem selected_external_member_mods:
+Theorem selected_external_member_with_defaults_mods:
   source_typing_ok_mods mods exps am tx /\
   ALOOKUP mods (ALOOKUP exps name) = SOME tops /\ MEM top tops /\
   ((name <> "__default__" /\
-    top = FunctionDecl External mut nr rr name args [] ret b) \/
-   public_getter_src (ALOOKUP exps name) top = SOME (mut,nr,rr,name,args,([]:expr list),ret,b)) /\
+    top = FunctionDecl External mut nr rr name args dflts ret body) \/
+   public_getter_src (ALOOKUP exps name) top =
+     SOME (mut,nr,rr,name,args,dflts,ret,body)) /\
   classify_functions_unit mods exps = (exts,ints,fb,ctor,ics) ==>
   MEM (ALOOKUP exps name,subst_consts_fn_mods (consts_env_mods mods)
-         (mut,nr,rr,name,args,([]:expr list),ret,b)) exts
+         (mut,nr,rr,name,args,dflts,ret,body)) exts
 Proof
   strip_tac >>
   qabbrev_tac `src = ALOOKUP exps name` >>
-  qabbrev_tac `g = (mut,nr,rr,name,args,([]:expr list),ret,b)` >>
+  qabbrev_tac `g = (mut,nr,rr,name,args,dflts,ret,body)` >>
   `MEM (src,g) (exported_fns mods exps ++ MAP (\f. (NONE,f))
       (FST (FOLDR classify_function ([],[],NONE,NONE) (main_module mods)) ++
        public_getters (main_module mods)))` by (
@@ -117,4 +120,17 @@ Proof
   qpat_x_assum `MAP _ _ = exts` (SUBST1_TAC o SYM) >>
   simp[MEM_MAP, Excl "MAP_APPEND", Excl "MEM_APPEND"] >>
   qexists_tac `(src,g)` >> fs[MEM_APPEND, MEM_MAP, Abbr `g`]
+QED
+
+Theorem selected_external_member_mods:
+  source_typing_ok_mods mods exps am tx /\
+  ALOOKUP mods (ALOOKUP exps name) = SOME tops /\ MEM top tops /\
+  ((name <> "__default__" /\
+    top = FunctionDecl External mut nr rr name args [] ret b) \/
+   public_getter_src (ALOOKUP exps name) top = SOME (mut,nr,rr,name,args,([]:expr list),ret,b)) /\
+  classify_functions_unit mods exps = (exts,ints,fb,ctor,ics) ==>
+  MEM (ALOOKUP exps name,subst_consts_fn_mods (consts_env_mods mods)
+         (mut,nr,rr,name,args,([]:expr list),ret,b)) exts
+Proof
+  MATCH_ACCEPT_TAC selected_external_member_with_defaults_mods
 QED
