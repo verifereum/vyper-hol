@@ -625,21 +625,6 @@ Proof
   fs[runtime_sym_env_def, NOT_EXISTS_THM] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem runtime_sym_compile_bool_chain_ops_instance[local]:
-  (runtime_sym_label exit_lbl /\
-   (!e ss vv ss'. MEM e (bool_chain_operands is_and (n - 1) a) /\
-      EVERY runtime_sym_inst (state_insts ss) /\
-      lower_value cfn ce (BaseT BoolT) e ss = (vv,ss') ==>
-      EVERY runtime_sym_inst (state_insts ss') /\
-      ~is_label_operand vv) /\
-   EVERY runtime_sym_inst (state_insts st2) /\
-   compile_bool_chain_ops cfn ce is_and result exit_lbl
-     (bool_chain_operands is_and (n - 1) a) st2 = (u,st3)) ==>
-  EVERY runtime_sym_inst (state_insts st3)
-Proof
-  MATCH_ACCEPT_TAC runtime_sym_compile_bool_chain_ops
-QED
-
 Theorem runtime_sym_builtin_body:
   runtime_sym_generator_contracts tops /\
   (!e t. expr_size e < list_size expr_size args ==>
@@ -729,15 +714,9 @@ Proof
      imp_res_tac runtime_sym_fresh_var >>
      imp_res_tac runtime_sym_fresh_label >>
      `EVERY runtime_sym_inst (state_insts st3)` by
-       (MATCH_MP_TAC
-          (Q.INST [`a` |-> `a`, `ce` |-> `ce`, `cfn` |-> `cfn`,
-                   `exit_lbl` |-> `exit_lbl`, `is_and` |-> `is_and`,
-                   `n` |-> `n`, `result` |-> `result`,
-                   `st2` |-> `st2`, `u` |-> `()`, `st3` |-> `st3`]
-                  runtime_sym_compile_bool_chain_ops_instance) >>
-        conj_tac
-        >- qpat_assum `runtime_sym_label exit_lbl` ACCEPT_TAC
-        >- metis_tac[]) >>
+       (drule_at (Pat `compile_bool_chain_ops _ _ _ _ _ _ _ = _`)
+          runtime_sym_compile_bool_chain_ops >>
+        simp[] >> disch_then irule >> first_assum ACCEPT_TAC) >>
      imp_res_tac runtime_sym_new_block_result >>
      gvs[runtime_sym_value_def] )
   >~ [`Bop bop`] >- suspend "bop"
