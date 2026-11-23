@@ -15,6 +15,7 @@ Ancestors
   bodyPtrBopScalarCompile bodyPtrBopScalarSeq abiDecoderRange emitHelper
   loweringStateRelDefs bodyFullBopWordSuccess bodyPtrBopScalarDynamic
   abiBoundedBytesExecution decoderGhostFramePtr fragGasCopyLoop fragGasSeqPtr memSafeRun
+  fragGasCopySeqLiftProps
   abiDecoderComplexHead abiDecoderComplexGuard exprSimAbiDecodeCompositePrefix
   exprSimAbiDecodeComplexOutcome
   abiDecodeRejectMemberTable abiDecodeRejectArrayPrefix abiDecodeRejectIndexedGuard
