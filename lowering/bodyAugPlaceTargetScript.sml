@@ -10,7 +10,7 @@
  *)
 Theory bodyAugPlaceTarget
 Ancestors
-  bodyInvCodeProps bodyMainModuleProps moduleVariableKeyProps compileUnit alist
+  bodyTypedTargetScope vyperTypeEnv bodyInvCodeProps bodyMainModuleProps moduleVariableKeyProps compileUnit alist
   exprBodyPreProps stmtExprAllocationPreProps
   valueEncodingProps
   targetPlaceLive exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
@@ -80,15 +80,8 @@ Proof
     supported_place_root tops nsid)` suffices_by simp[] >>
   ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
   simp[target_root_def, supportedTargetsTheory.supported_target_info_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
-QED
-
-Theorem aug_place_supported_root_namespace:
-  supported_place_root tops (src,id) ==> src = NONE
-Proof
-  strip_tac >> spose_not_then assume_tac >>
-  drule supportedDeclsTheory.supported_lookup_other_module >>
-  strip_tac >> gvs[supportedExprFormsTheory.supported_place_root_def]
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  metis_tac[supportedExprFormsTheory.supported_place_root_def]
 QED
 
 Theorem aug_place_supported_root_decl:
@@ -113,7 +106,8 @@ QED
 Theorem aug_place_supported_immutable_root_decl_mods:
   contract_inv mods exps ctx cenv cx /\
   supported_target_info (main_module mods) bindings t = SOME pt /\
-  immutable_root cx t ==>
+  immutable_root cx t /\
+  (?id. target_root t = TopLevelNameTarget (NONE,id)) ==>
   ?id vis mut ty slot.
     target_root t = TopLevelNameTarget (NONE,id) /\
     supported_variable_decl (main_module mods) (NONE,id) = SOME (vis,mut,ty,slot) /\
@@ -124,8 +118,8 @@ Proof
   drule_then assume_tac contract_inv_module_codes >>
   qpat_x_assum `immutable_root cx t`
     (strip_assume_tac o REWRITE_RULE [immutable_root_def]) >>
-  `supported_place_root (main_module mods) (src,id)` by metis_tac[aug_place_supported_root] >>
-  drule_then SUBST_ALL_TAC aug_place_supported_root_namespace >>
+  `supported_place_root (main_module mods) (NONE,id)` by
+    metis_tac[aug_place_supported_root] >>
   gvs[] >>
   Cases_on `supported_variable_decl (main_module mods) (NONE,id)` >-
     (gvs[supportedExprFormsTheory.supported_place_root_def] >>
@@ -145,24 +139,14 @@ Theorem aug_place_supported_toplevel_mutable_mods:
   expr_sim_inv_mods mods cenv cx env es /\ target_mutable env (TopLevelNameTarget nsid) ==>
   ~immutable_root cx (TopLevelNameTarget nsid)
 Proof
-  strip_tac >> strip_tac >>
-  drule_then assume_tac contract_inv_main_module >>
-  drule_then assume_tac contract_inv_module_codes >>
+  PairCases_on `nsid` >> strip_tac >> strip_tac >>
   drule_then assume_tac expr_sim_inv_mods_env >>
-  drule_all_then strip_assume_tac aug_place_supported_immutable_root_decl_mods >>
-  gvs[target_root_def] >>
-  drule_then strip_assume_tac bodyStorageMetadataTheory.supported_variable_decl_mem >>
-  `get_module_code cx NONE = SOME (main_module mods)` by simp[] >>
-  `bare_globals_complete env.bare_globals cx` by
-    fs[env_consistent_def, env_context_consistent_def] >>
-  map_every (fn pat => qpat_assum pat mp_tac)
-    [`get_module_code cx NONE = SOME (main_module mods)`,
-     `MEM (VariableDecl _ _ _ _ _) (main_module mods)`,
-     `bare_globals_complete env.bare_globals cx`,
-     `target_mutable env (TopLevelNameTarget (NONE,id))`] >>
-  POP_ASSUM_LIST kall_tac >>
-  simp[bare_globals_complete_def, target_mutable_def] >>
-  metis_tac[optionTheory.NOT_SOME_NONE]
+  gvs[immutable_root_def, target_root_def, target_mutable_def,
+      optionTheory.IS_SOME_EXISTS] >>
+  Cases_on `x` >>
+  metis_tac[env_consistent_toplevel_storage_static,
+    env_consistent_toplevel_hashmap_static, optionTheory.SOME_11,
+    optionTheory.NOT_SOME_NONE]
 QED
 
 Theorem aug_place_supported_toplevel_mutable:
@@ -185,7 +169,9 @@ Theorem aug_place_storage_field_root_mods:
   ~immutable_root cx (AttributeTarget (TopLevelNameTarget (src,id)) fld)
 Proof
   strip_tac >>
-  drule_then strip_assume_tac supported_storage_field_write_decl >>
+  drule_then strip_assume_tac
+    (SIMP_RULE (srw_ss()) [] (Q.SPECL [`tops`, `NONE`, `id`, `fld`]
+      supported_storage_field_write_decl)) >>
   drule_then assume_tac contract_inv_module_codes >>
   fs[immutable_root_def, target_root_def]
 QED
@@ -194,13 +180,14 @@ Theorem aug_place_storage_field_root:
   body_inv tops ctx cenv cx /\ supported_storage_field_write tops nsid fld ==>
   ~immutable_root cx (AttributeTarget (TopLevelNameTarget nsid) fld)
 Proof
-  PairCases_on `nsid` >> strip_tac >>
-  drule_then strip_assume_tac supported_storage_field_write_decl >> gvs[] >>
-  drule_then assume_tac body_inv_contract >>
-  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
-                   `ctx` |-> `ctx`, `tops` |-> `tops`, `src` |-> `NONE`,
-                   `id` |-> `nsid1`]
-          aug_place_storage_field_root_mods) >> simp[ALOOKUP_def]
+  PairCases_on `nsid` >> Cases_on `nsid0` >> strip_tac
+  >- (drule_then assume_tac body_inv_contract >>
+      mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                      `ctx` |-> `ctx`, `tops` |-> `tops`, `src` |-> `NONE`,
+                      `id` |-> `nsid1`]
+              aug_place_storage_field_root_mods) >> simp[ALOOKUP_def]) >>
+  drule_then assume_tac body_inv_qualified_module_absent >>
+  simp[immutable_root_def, target_root_def]
 QED
 
 Theorem aug_place_target_indices_pre:
@@ -318,6 +305,8 @@ Theorem aug_place_legacy_field_info:
   IS_SOME (supported_target_info tops bindings
     (AttributeTarget (TopLevelNameTarget id) fld))
 Proof
+  Cases_on `FST id <> NONE`
+  >- simp[supportedTargetsTheory.supported_target_info_def] >>
   simp[supported_storage_field_write_def, supportedExprFormsTheory.supported_storage_fields_def] >>
   Cases_on `supported_variable_decl tops id` >> simp[] >>
   rename1 `supported_variable_decl tops id = SOME d` >> PairCases_on `d` >>
@@ -339,6 +328,8 @@ Theorem aug_place_legacy_subscript_info:
   IS_SOME (supported_target_info tops bindings
     (SubscriptTarget (TopLevelNameTarget id) key))
 Proof
+  Cases_on `FST id <> NONE`
+  >- simp[supportedTargetsTheory.supported_target_info_def] >>
   simp[supportedExprFormsTheory.supported_subscript_base_def] >>
   strip_tac
   >- suspend "array"
