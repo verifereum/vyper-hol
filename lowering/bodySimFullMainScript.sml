@@ -15,6 +15,7 @@ Ancestors bodyFullShadowBodyInv bodyFullRaiseCustomError bodyFullAssertCustomErr
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph typedCopyMetadata alist list
   vyperTypeContract[qualified,ignore_grammar] constSubst bodyLoopCalls
   contractInvContextProps
+  bodyFullPredsMods bodyFullPostsMods bodyFullZeroCasesMods bodyInvSplit constSubstMods
 
 val _ = Parse.hide "body";
 
@@ -435,4 +436,126 @@ Proof
           drule_then assume_tac contract_inv_singleton_source_modules >>
           simp[] >> first_assum ACCEPT_TAC) >>
   metis_tac[body_sim_full_mutual, body_stmts_full_ok_def]
+QED
+
+(* The linked induction follows calls reachable from the main and exported
+   entry points, with each function's constants already substituted. *)
+val linked_body_guard =
+  ``ALOOKUP cx.sources cx.txn.target = SOME mods /\
+    vyperTypeContract$exports_ok cx.layouts cx.txn.target mods exps /\
+    EVERY (struct_args_unique o SND) mods /\
+    (!src tops vis mut nr raw fn args dflts ret ss.
+       ALOOKUP mods src = SOME tops /\
+       MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+       stmts_loop_calls_ok mods
+         (subst_consts_stmts_mods (consts_env_mods mods) ss))``;
+
+val linked_calls_live =
+  ``\calls. EVERY (\k. MEM k (vyperTypeContract$linked_live_functions mods exps)) calls``;
+
+fun linked_body_ind rank_guard =
+  evaluate_ind
+  |> Q.SPECL [
+       `\cx s. ^rank_guard /\ ^linked_body_guard /\
+         ^linked_calls_live (int_calls_stmt s) /\ stmt_loop_calls_ok mods s ==>
+         body_stmt_full_ok_mods mods exps cx s`,
+       `\cx ss. ^rank_guard /\ ^linked_body_guard /\
+         ^linked_calls_live (int_calls_stmts ss) /\ stmts_loop_calls_ok mods ss ==>
+         body_stmts_full_ok_mods mods exps cx ss`,
+       `\cx it. ^rank_guard /\ ^linked_body_guard /\
+         ^linked_calls_live (int_calls_iterator it) ==>
+         body_iterator_full_ok_mods mods exps cx it`,
+       `\cx tyv nm body vs. ^rank_guard /\ ^linked_body_guard /\
+         ^linked_calls_live (int_calls_stmts body) /\ stmts_loop_calls_ok mods body ==>
+         body_for_full_ok_mods mods exps cx tyv nm body vs`,
+       `\cx e. ^rank_guard /\ ^linked_body_guard /\
+         ^linked_calls_live (int_calls_expr e) ==>
+         body_expr_full_ok_mods mods exps cx e`,
+       `\cx es. ^rank_guard /\ ^linked_body_guard /\
+         ^linked_calls_live (int_calls_exprs es) ==>
+         body_exprs_full_ok_mods mods exps cx es`,
+       `\cx t. ^rank_guard /\ ^linked_body_guard /\
+         ^linked_calls_live (int_calls_target t) ==>
+         body_base_target_full_ok_mods mods exps cx t`,
+       `\cx t. ^rank_guard /\ ^linked_body_guard /\
+         ^linked_calls_live (int_calls_target t) ==>
+         body_base_target_full_ok_mods mods exps cx t`,
+       `\cx g v. ^rank_guard /\ ^linked_body_guard /\
+         ^linked_calls_live (int_calls_atarget g) ==>
+         body_tuple_target_full_ok_mods mods exps cx g v`,
+       `\cx gs vs. ^rank_guard /\ ^linked_body_guard /\
+         ^linked_calls_live (int_calls_atargets gs) ==>
+         body_tuple_targets_full_ok_mods mods exps cx gs vs`]
+  |> CONV_RULE (DEPTH_CONV BETA_CONV);
+
+val ranked_linked_body_ind = linked_body_ind ``LENGTH (remcode cx) <= rank``;
+
+Theorem body_sim_full_mutual_ranked_mods:
+  !mods exps rank:num. ^(snd (dest_imp (concl ranked_linked_body_ind)))
+Proof
+  cheat
+QED
+
+Theorem body_sim_full_mutual_mods:
+  !mods exps. ^(simpLib.SIMP_CONV bool_ss []
+    (snd (dest_imp (concl (linked_body_ind boolSyntax.T)))) |> concl |> rhs)
+Proof
+  rpt gen_tac >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_rename_tac `ALOOKUP cx.sources cx.txn.target` >>
+  qspecl_then [`mods`, `exps`, `LENGTH (remcode cx)`] strip_assume_tac
+    body_sim_full_mutual_ranked_mods >>
+  first_x_assum irule >> asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
+
+Theorem body_stmts_sim_full_mods:
+  !DF lo d PG mods exps src tops bindings ctx shadow_ctx func shadow_func
+    cenv cx env env' ret_ty lctx RetQ ss es.
+    contract_inv mods exps ctx cenv cx /\
+    module_body_inv mods src tops cenv cx /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    vyperTypeContract$exports_ok cx.layouts cx.txn.target mods exps /\
+    EVERY (struct_args_unique o SND) mods /\
+    supported_stmts tops bindings ss /\
+    (!sid ts vis mut nr raw fn args dflts ret body.
+       ALOOKUP mods sid = SOME ts /\
+       MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
+       stmts_loop_calls_ok mods
+         (subst_consts_stmts_mods (consts_env_mods mods) body)) /\
+    stmts_loop_calls_ok mods ss /\
+    EVERY (\k. MEM k (vyperTypeContract$linked_live_functions mods exps))
+      (int_calls_stmts ss) /\
+    (!target. supported_stmts_expr_exists
+       (expr_abi_decode_target_root target) ss ==>
+       EXISTS (occurs_abi_decode_target target o SND) mods) /\
+    body_const_cells_agree_mods mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmts env ret_ty ss = SOME env' /\
+    stmts_exprs_ok cenv ss /\
+    ~supported_stmts_expr_exists (unallocated_bare_global_root cenv env) ss /\
+    (!key. MEM (vyperSubscriptOverlap$WriteAcc (vyperSubscriptOverlap$StateRef key))
+                (vyperSubscriptOverlap$accesses_stmts ss) /\
+           IS_SOME (FLOOKUP env.bare_global_assignable key) ==>
+           IS_SOME (FLOOKUP cenv.ce_module_vars key)) /\
+    call_evaluation_safe cx (int_calls_stmts ss) /\
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmts_env cenv lctx ret_ty ss)
+      (stmts_env (gas_shadow_env T cenv) lctx ret_ty (MAP gas_shadow_stmt ss))
+      (eval_stmts cx ss) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ALOOKUP cx.sources cx.txn.target = SOME mods` by
+    drule_then ACCEPT_TAC body_const_cells_agree_mods_sources >>
+  `body_stmts_full_ok_mods mods exps cx ss` by
+    (irule (cj 2 (Q.SPECL [`mods`, `exps`] body_sim_full_mutual_mods)) >>
+     asm_rewrite_tac[]) >>
+  qpat_x_assum `body_stmts_full_ok_mods _ _ _ _`
+    (mp_tac o Q.SPECL [`DF`, `lo`, `d`, `PG`, `src`, `tops`, `bindings`,
+        `ctx`, `shadow_ctx`, `func`, `shadow_func`, `cenv`, `env`, `env'`,
+        `ret_ty`, `lctx`, `RetQ`, `es`] o
+     REWRITE_RULE [body_stmts_full_ok_mods_def]) >>
+  asm_rewrite_tac[]
 QED
