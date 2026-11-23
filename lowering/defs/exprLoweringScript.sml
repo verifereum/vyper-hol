@@ -212,6 +212,18 @@ Definition lowered_value_type_def:
     BaseT (BytesT (Dynamic (LENGTH bs))) ∧
   lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (HexBytesL bs)) =
     BaseT (BytesT (Dynamic (LENGTH bs))) ∧
+  lowered_value_type cenv
+      (Builtin (BaseT (StringT _)) NamedConst
+         [Literal _ (StringL s)]) =
+    BaseT (StringT (LENGTH s)) ∧
+  lowered_value_type cenv
+      (Builtin (BaseT (BytesT (Dynamic _))) NamedConst
+         [Literal _ (BytesL bs)]) =
+    BaseT (BytesT (Dynamic (LENGTH bs))) ∧
+  lowered_value_type cenv
+      (Builtin (BaseT (BytesT (Dynamic _))) NamedConst
+         [Literal _ (HexBytesL bs)]) =
+    BaseT (BytesT (Dynamic (LENGTH bs))) ∧
   lowered_value_type cenv (Builtin ty (Concat _) args) =
     concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args)) ∧
   lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
