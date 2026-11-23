@@ -39,7 +39,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   `supported_string_reason tops (Literal (BaseT (StringT ml)) (StringL str))` by
     gvs[supported_stmt_raise_reason, supported_raise_reason_def] >>
-  drule_then strip_assume_tac supported_string_reason_body_calls >>
+  drule_then strip_assume_tac
+    (SIMP_RULE (srw_ss()) [int_calls_expr_def]
+      (Q.SPEC `tops` supported_string_reason_body_calls
+         |> Q.SPEC `Literal (BaseT (StringT ml)) (StringL str)`)) >>
   drule_then strip_assume_tac body_inv_main_code >>
   drule_then assume_tac body_inv_contract >>
   `get_tenv cx = type_env tops` by

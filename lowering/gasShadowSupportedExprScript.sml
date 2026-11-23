@@ -29,16 +29,24 @@ Theorem shadow_struct_elements[local]:
     supported_struct_elements tops ty fields
 Proof
   Cases_on `ty` >> simp[supported_struct_elements_def] >>
-  rename1 `StructT id` >> Cases_on `supported_struct_fields tops id` >>
+  rename1 `StructT id` >> Cases_on `FST id = NONE` >> simp[] >>
+  Cases_on `supported_struct_fields tops id` >>
   simp[EVERY_MAP] >> AP_TERM_TAC >>
   AP_THM_TAC >> AP_TERM_TAC >>
   simp[FUN_EQ_THM, pairTheory.FORALL_PROD]
 QED
 
+Theorem qualified_place_root_shadow[local]:
+  !e. qualified_place_root (gas_shadow_expr e) = qualified_place_root e
+Proof
+  measureInduct_on `expr_size e` >>
+  Cases_on `e` >> simp[qualified_place_root_def, gas_shadow_expr_def, expr_size_def]
+QED
+
 Theorem shadow_subscript_place[local]:
   supported_subscript_place tops (gas_shadow_expr e) = supported_subscript_place tops e
 Proof
-  simp[supported_subscript_place_def, supported_place_info_def]
+  simp[supported_subscript_place_def, supported_place_info_def, qualified_place_root_shadow]
 QED
 
 Theorem gas_shadow_target_indices:
