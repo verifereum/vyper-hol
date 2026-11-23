@@ -20,7 +20,7 @@ Ancestors
   bodySimIfExpWidened bodySimStructLitWidened bodySimMakeArrayWidened
   bodySimBopInLiteralWord bodySimBopHeld
   bodySimConvertWidened
-  exprSimSource
+  exprSimSource exprSimBoolChain boolChainOperandsGuarded
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
   exprSimPlaces exprSimMapDefs exprSimSubscriptMap exprSimPopNested bodyPopNestedTargetFrag targetPlaceSim exprSimAggregates exprSimSend exprSimBuiltins exprSimECArith vyperAST
@@ -80,6 +80,24 @@ Proof
   >- (drule body_expr_ok_map_other >>
       simp[expr_map_case_def] >> metis_tac[]) >>
   fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
+QED
+
+Theorem body_bool_chain_case:
+  !cx ann d n e. body_expr_ok cx e ==>
+    body_expr_ok cx (Builtin ann (BoolChain d n) [e])
+Proof
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `!k x. body_expr_ok cx x ==>
+     bool_chain_case F ctx func cenv cx (bool_chain_operands d k x)` by
+    (match_mp_tac (Q.INST
+       [`G` |-> `\c. ?s tv s'. eval_expr cx c s = (INL tv,s')`]
+       bool_chain_operands_guarded) >>
+     BETA_TAC >> rpt conj_tac
+     >- (simp[bool_chain_case_def] >> metis_tac[body_expr_ok_case])
+     >- (rpt gen_tac >> MATCH_ACCEPT_TAC body_ifexp_children_ok) >>
+     simp[bool_chain_case_def] >> metis_tac[body_expr_ok_case]) >>
+  irule compile_bool_chain_case >> simp[]
 QED
 
 Theorem body_exprs_ok_case:
