@@ -16,14 +16,13 @@ fun secs t0 = Real.fmt (StringCvt.FIX (SOME 2)) (Time.toReal (Time.- (Time.now (
 fun truth conv t = let
     val r = rhs (concl (conv t))
   in if Teq r then "T" else if Feq r then "F" else "open"
-  end handle HOL_ERR e => "err:" ^ #message e
-           | e => "err:" ^ General.exnMessage e
+  end handle e => "err:" ^ General.exnMessage e
 
 val tenv_free_ids = map (fn n => let
     val g = tm ("!tenv. vyperABIEntries$abi_method_id tenv \"" ^ n ^ "\" [] = " ^
                 "vyperABIEntries$abi_method_id FEMPTY \"" ^ n ^ "\" []")
   in TRANS (SPEC_ALL (prove (g, simp[vyperABIEntriesTheory.abi_method_id_def,
-                                    vyperABITheory.vyper_to_abi_types_def])))
+                                    vyperABITheory.vyper_to_abi_type_def])))
            (cv_transLib.cv_eval (tm ("vyperABIEntries$abi_method_id FEMPTY \"" ^ n ^
                                      "\" []")))
   end handle e => (print ("selector " ^ n ^ ": " ^ General.exnMessage e ^ "\n");
@@ -31,16 +30,25 @@ val tenv_free_ids = map (fn n => let
 
 val () = computeLib.add_funs (List.filter (fn th => not (Teq (concl th))) tenv_free_ids)
 
+(* Every selector the units can ask for, so EVAL never hashes. *)
+val selector_names = ["f", "entry", "x", "__default__", "g", "s", "gsf", "tgeo",
+                      "zzz", "__init__", "c", "y"]
+val () = computeLib.add_funs (List.concat (map (fn n =>
+    map (fn args => cv_transLib.cv_eval (tm ("function_selector \"" ^ n ^ "\" " ^ args)))
+      ["[]", "[Uint 256]", "[Uint 8]"]) selector_names))
+
 fun check_conv d lay mods = let
     val t = tm ("vyperTypeContract$check_contract " ^ d ^ " [(2w:address, " ^ lay ^
                 ")] 2w " ^ mods)
     val r = rhs (concl (vyperCheckContractLib.check_contract_conv t))
   in if optionSyntax.is_some r then "T" else if optionSyntax.is_none r then "F"
      else "open"
-  end handle HOL_ERR e => "err:" ^ #message e
-           | e => "err:" ^ General.exnMessage e
+  end handle e => "err:" ^ General.exnMessage e
 
-fun exec_conv exec_thm = REWR_CONV exec_thm THENC EVAL
+(* imm_len_mods is [nocompute]; unfold it before evaluating. *)
+fun exec_conv exec_thm =
+  REWR_CONV exec_thm THENC PURE_REWRITE_CONV [bodyInvSplitTheory.imm_len_mods_def] THENC
+  EVAL
 
 fun groups d lay mods exps = [
   truth (exec_conv screen_g1_exec) (tm ("screen_g1 " ^ d ^ " " ^ mods ^ " " ^ exps)),
@@ -54,7 +62,7 @@ val compile_rule = CONV_RULE (RAND_CONV
    DEPTH_CONV wordsLib.SIZES_CONV THENC numLib.REDUCE_CONV))
 
 fun hm_slots () = map (fn s => let
-    val r = rhs (concl (cv_transLib.cv_eval (tm (
+    val r = rhs (concl (EVAL (tm (
       "w2n (THE (compute_hashmap_slot (n2w " ^ Int.toString s ^ ") [" ^
       "BaseT (UintT 256)] [ValueSubscript (IntV 1)]))"))))
   in Arbnum.toString (numSyntax.dest_numeral r) end
@@ -97,7 +105,7 @@ fun run_c (u : linkedScreenGen.unit_spec) lay = let
         val src = rhs (concl (cv_transLib.cv_eval (list_mk_comb (
           prim_mk_const {Thy = "linkedScreenDefs", Name = "screen_src_run"},
           [tm lay, tm (#mods u), tm (#exps u), dbc, stringSyntax.fromMLstring (#fname u),
-           data, code, tm "BaseT (UintT 256)", ks]))))
+           data, code, tm (#rt u), ks]))))
         val src_parts = pairSyntax.strip_pair src
         (* evm: deploy_ok, dep_slots, code, call_ok, rdata, call_slots
            src: deploy_ok, dep_slots, call_ok, bytes option, call_slots *)
@@ -121,8 +129,7 @@ fun run_c (u : linkedScreenGen.unit_spec) lay = let
             ",ret=" ^ term_str (s 3)]
       end
     end
-  end handle HOL_ERR e => ["c_err:" ^ #message e, "", "", "", ""]
-           | e => ["c_err:" ^ General.exnMessage e, "", "", "", ""]
+  end handle e => ["c_err:" ^ General.exnMessage e, "", "", "", ""]
 
 val header = ["id", "site", "vis", "place", "qualifier", "qual_rel", "presence",
   "target_declared", "target_alloc", "kind",

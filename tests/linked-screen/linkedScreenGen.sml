@@ -133,8 +133,7 @@ fun ref_expr kind t = case kind of
       lst (map (fn (f,v) => "(" ^ str f ^ ", " ^ lit v ^ ")") (intended_struct t)) ^
       ") \"b\")" end
   | KFlag => let val n = nsid t "F" in
-      "(TypeBuiltin " ^ u256 ^ " Convert (FlagT " ^ n ^ ") [FlagMember (FlagT " ^
-      n ^ ") " ^ n ^ " \"B\"])" end
+      "(FlagMember (FlagT " ^ n ^ ") " ^ n ^ " \"B\")" end
   | _ => raise Fail "ref_expr: not an expression kind"
 
 fun write_target kind t = case kind of
@@ -174,7 +173,7 @@ fun ref_type kind t = case kind of
 type unit_spec =
   {id : string, axes : (string * string) list,
    mods : string, exps : string, sl : string, tl : string,
-   fname : string, sel : string, hm : bool}
+   fname : string, sel : string, rt : string, hm : bool}
 
 fun site_name v = if v = VDep then "__init__" else "f"
 
@@ -185,18 +184,24 @@ fun build {d, called, v, place, t, pres, kind} = let
   val s_slot = fn m => if m < 2 then "(SOME " ^ i m ^ ")" else "NONE"
   fun selfq m = m
   (* The site's own pieces. *)
+  (* The site's value type: a flag kind returns the flag itself. *)
+  val rt = if kind = KFlag then "(FlagT " ^ nsid t "F" ^ ")" else u256
   val (site_extra, site_stmts, site_args, site_dflts) = let
       fun finish (stmts, e) =
-        if v = VDep then stmts @ ["Assign (BaseTarget (TopLevelNameTarget " ^
+        if v = VDep andalso rt <> u256 then
+          stmts @ ["AnnAssign \"v\" " ^ rt ^ " " ^ e,
+                   "Assign (BaseTarget (TopLevelNameTarget " ^ nsid (selfq d) "s" ^
+                   ")) " ^ lit 1]
+        else if v = VDep then stmts @ ["Assign (BaseTarget (TopLevelNameTarget " ^
                                    nsid (selfq d) "s" ^ ")) " ^ e]
         else stmts @ ["Return (SOME " ^ e ^ ")"]
     in case place of
          PBody => ([], finish (ref_stmts kind t), "[]", "[]")
-       | PDefault => ([], finish ([], "(Name " ^ u256 ^ " \"a\")"),
-                      "[(\"a\", " ^ u256 ^ ")]", "[" ^ ref_expr kind t ^ "]")
+       | PDefault => ([], finish ([], "(Name " ^ rt ^ " \"a\")"),
+                      "[(\"a\", " ^ rt ^ ")]", "[" ^ ref_expr kind t ^ "]")
        | PConstInit => (["VariableDecl Private (Constant " ^ ref_expr kind t ^
-                         ") \"c\" " ^ u256 ^ " NONE"],
-                        finish ([], "(TopLevelName " ^ u256 ^ " " ^
+                         ") \"c\" " ^ rt ^ " NONE"],
+                        finish ([], "(TopLevelName " ^ rt ^ " " ^
                                     nsid (selfq d) "c" ^ ")"), "[]", "[]")
        | PFieldStruct => (["StructDecl \"W\" [(\"w\", " ^ ref_type kind t ^ ")]"],
                           finish ([], lit 1), "[]", "[]")
@@ -205,7 +210,8 @@ fun build {d, called, v, place, t, pres, kind} = let
        | PFieldError => (["ErrorDecl \"ErW\" [(\"w\", " ^ ref_type kind t ^ ")]"],
                          finish ([], lit 1), "[]", "[]")
     end
-  val site_ret = if v = VDep then "NoneT" else u256
+  val site_ret = if v = VDep then "NoneT" else rt
+  val entry_rt = if v = VInt andalso called then rt else u256
   val site_fn = "FunctionDecl " ^ vis_term v ^ " Nonpayable F F " ^
     str (site_name v) ^ " " ^ site_args ^ " " ^ site_dflts ^ " " ^ site_ret ^
     " " ^ lst site_stmts
@@ -242,10 +248,10 @@ fun build {d, called, v, place, t, pres, kind} = let
               lst init_body]
       val entry = if m <> 0 then [] else let
           val body = if v = VInt andalso called
-                     then "Return (SOME (Call " ^ u256 ^ " (IntCall " ^
+                     then "Return (SOME (Call " ^ rt ^ " (IntCall " ^
                           nsid d "f" ^ ") [] NONE))"
                      else "Return (SOME " ^ lit 0 ^ ")"
-        in ["FunctionDecl External Nonpayable F F \"entry\" [] [] " ^ u256 ^
+        in ["FunctionDecl External Nonpayable F F \"entry\" [] [] " ^ entry_rt ^
             " [" ^ body ^ "]"] end
     in pin @ ys @ targets @ site @ init @ entry end
   val mods = "([" ^ String.concatWith ";\n " (map (fn m =>
@@ -277,7 +283,8 @@ fun build {d, called, v, place, t, pres, kind} = let
               ("kind", kind_name kind)]
 in
   {id = id, axes = axes, mods = mods, exps = exps, sl = sl, tl = tl,
-   fname = fname, sel = fname, hm = (case kind of KHm _ => true | _ => false)} : unit_spec
+   fname = fname, sel = fname, rt = if fname = "f" then rt else entry_rt,
+   hm = (case kind of KHm _ => true | _ => false)} : unit_spec
 end
 
 (* ===== The enumeration ===== *)
@@ -331,7 +338,8 @@ fun mk {id, family, axes, mods, exps, sl, tl, fname, sel} : unit_spec = let
     val ax = map (fn a => (a, case List.find (fn (b, _) => a = b) axes of
                                 SOME (_, x) => x | NONE => "-")) all
   in {id = family ^ "." ^ id, axes = ax @ [("kind", family)], mods = mods,
-      exps = exps, sl = sl, tl = tl, fname = fname, sel = sel, hm = false} end
+      exps = exps, sl = sl, tl = tl, fname = fname, sel = sel, rt = u256,
+      hm = false} end
 
 fun modlist ms = "([" ^ String.concatWith ";\n " (map (fn (q, ds) =>
     "(" ^ q ^ ", " ^ lst ds ^ ")") ms) ^ "] : (num option # toplevel list) list)"
@@ -373,7 +381,7 @@ fun export_units () = List.concat (map (fn src => List.concat (map (fn k =>
                          (if src = 1 then decl 1 else []) (if src = 2 then decl 2 else []),
          exps = "[(" ^ str name ^ ", " ^ i src ^ ")]", sl = sl, tl = tl0,
          fname = fname, sel = sel}
-  end) [false, true]) export_kinds)) [1, 2, 9]
+  end) [false, true]) export_kinds)) [1, 2, 9])
 
 (* Dotted names: a declaration spelled "1.x" against module 1's "x". *)
 fun dotted_units () = List.concat (map (fn cls => List.concat (map (fn loc =>
@@ -403,7 +411,7 @@ fun dotted_units () = List.concat (map (fn cls => List.concat (map (fn loc =>
            ("qualifier", if rt = 0 then "NONE" else "SOME1"), ("presence", "dotted_at_" ^ i loc)],
          mods = std_mods m0 m1 [], exps = "([] : (string # num) list)",
          sl = sl, tl = tl0, fname = "entry", sel = "entry"}
-  end) [("1.x", 0), ("x", 1)]) [0, 1])) ["Constant", "Storage", "Function"]
+  end) [("1.x", 0), ("x", 1)]) [0, 1])) ["Constant", "Storage", "Function"])
 
 (* One name in two declaration classes of one module. *)
 val decl_classes = ["Storage", "Constant", "Immutable", "Function", "HashMap",

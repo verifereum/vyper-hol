@@ -15,7 +15,7 @@ Ancestors
   supportedProgram supportedDecls supportedTypes vyperInterpreter
   vyperABI contractABI constSubstMods list alist pair rich_list
 Libs
-  cv_transLib
+  cv_transLib wordsLib
 
 (* ===== Generic list forms of the quantified clauses ===== *)
 
