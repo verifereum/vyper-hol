@@ -65,7 +65,7 @@
 Theory whitelistFlags
 Ancestors
   typedCopyMetadata typedCopyDomain compileVyper exprOpenPrimitives exprLowering
-  compileEnv venomInst
+  compileEnv venomInst checkedTypeNamespace supportedStmtTraverse
   supportedExprForms supportedTypes supportedDecls vyperTypeSystem vyperValue vyperAST
   finite_map list pair combin arithmetic pred_set
 
@@ -158,7 +158,7 @@ Theorem nonagg_leaf_nested_struct[local]:
   (!t. leaf t ==> (!e b. t <> ArrayT e b) /\ (!ts. t <> TupleT ts) /\
                   (!id. t <> StructT id)) ==>
   (supported_nested_type leaf fuel tops (StructT id) <=>
-   fuel <> 0 /\
+   FST id <> NONE \/ fuel <> 0 /\
    case supported_struct_fields tops id of
      NONE => F
    | SOME fields =>
@@ -181,16 +181,15 @@ QED
 Theorem nested_metadata_fields_leaf:
   (!t. leaf t ==> (!e b. t <> ArrayT e b) /\ (!ts. t <> TupleT ts) /\
                   (!id. t <> StructT id)) /\
-  struct_metadata_types_match tops sf /\
+  struct_metadata_types_match tops sf /\ supported_main_nsid nsid /\
   supported_nested_type leaf fuel tops (StructT nsid) ==>
   0 < fuel /\
   EVERY (supported_nested_type leaf (fuel - 1) tops o FST o SND)
     (get_struct_fields sf (nsid_to_string nsid))
 Proof
-  strip_tac >> drule nonagg_leaf_nested_struct >>
-  disch_then (fn th => fs[th]) >>
-  Cases_on `nsid` >> rename1 `(modid,name)` >> Cases_on `modid` >>
-  gvs[supported_struct_fields_other_module, nsid_to_string_def] >>
+  Cases_on `nsid` >> rename1 `(modid,name)` >>
+  strip_tac >> gvs[supported_main_nsid_def, nsid_to_string_def] >>
+  drule nonagg_leaf_nested_struct >> disch_then (fn th => fs[th]) >>
   Cases_on `supported_struct_fields tops (NONE,name)` >> gvs[] >>
   simp[get_struct_fields_def] >>
   Cases_on `FLOOKUP sf name` >> simp[] >>
@@ -205,16 +204,14 @@ Theorem nested_metadata_agrees_fields_leaf:
   (!n name. n <= fuel /\
             supported_nested_type leaf n tops (StructT (NONE,name)) ==>
             FLOOKUP sub name = FLOOKUP sf name) /\
+  supported_main_nsid nsid /\
   supported_nested_type leaf fuel tops (StructT nsid) ==>
   get_struct_fields sub (nsid_to_string nsid) =
   get_struct_fields sf (nsid_to_string nsid)
 Proof
-  strip_tac >>
-  Cases_on `nsid` >> rename1 `(modid,name)` >> Cases_on `modid`
-  >- (simp[nsid_to_string_def, get_struct_fields_def] >>
-      first_x_assum (qspecl_then [`fuel`, `name`] mp_tac) >> simp[]) >>
-  drule nonagg_leaf_nested_struct >> disch_then (fn th => fs[th]) >>
-  gvs[supported_struct_fields_other_module]
+  Cases_on `nsid` >> rename1 `(modid,name)` >>
+  strip_tac >> gvs[supported_main_nsid_def, nsid_to_string_def, get_struct_fields_def] >>
+  res_tac >> simp[]
 QED
 
 Theorem nested_type_rank_metadata_invariant_leaf:
@@ -224,6 +221,7 @@ Theorem nested_type_rank_metadata_invariant_leaf:
     struct_metadata_types_match tops sf /\
     struct_metadata_types_match tops sub /\
     supported_nested_type leaf fuel tops ty /\
+    unqualified_struct_metadata sf /\ supported_type_namespace ty /\
     (!n name. n <= fuel /\
               supported_nested_type leaf n tops (StructT (NONE,name)) ==>
               FLOOKUP sub name = FLOOKUP sf name) ==>
@@ -234,17 +232,22 @@ Proof
   >- (rpt strip_tac >> rename1 `ArrayT elem bd` >>
       qpat_x_assum `supported_nested_type _ _ _ (ArrayT _ _)` mp_tac >>
       drule nonagg_leaf_nested_struct >> disch_then (fn th => simp[th]) >>
-      strip_tac >> simp[type_rank_def] >>
+      strip_tac >> fs[type_rank_def, supported_type_namespace_def] >>
       first_x_assum irule >> qexistsl_tac [`fuel`, `leaf`, `tops`] >>
       simp[] >> metis_tac[])
   >- (rpt strip_tac >>
       qpat_x_assum `supported_nested_type _ _ _ (TupleT _)` mp_tac >>
       drule nonagg_leaf_nested_struct >> disch_then (fn th => simp[th]) >>
-      strip_tac >> simp[type_rank_def] >>
+      strip_tac >> fs[type_rank_def, supported_type_namespace_def] >>
+      fs[supported_types_namespace_every] >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[] >> rpt strip_tac >>
-      first_x_assum irule >> simp[] >>
+      first_x_assum irule >> simp[] >> conj_tac
+      >- (fs[EVERY_MEM] >> res_tac) >>
       qexistsl_tac [`fuel`, `leaf`, `tops`] >> fs[EVERY_MEM] >> metis_tac[])
   >- (rpt strip_tac >>
+      fs[supported_type_namespace_def] >>
+      drule_then (qspec_then `nsid_to_string nsid` assume_tac)
+        unqualified_struct_metadata_lookup >>
       `0 < fuel /\
        EVERY (supported_nested_type leaf (fuel - 1) tops o FST o SND)
          (get_struct_fields sf (nsid_to_string nsid))` by
@@ -257,7 +260,7 @@ Proof
       simp[type_rank_def] >> AP_TERM_TAC >> irule MAP_CONG >> simp[] >>
       rpt strip_tac >> qmatch_goalsub_rename_tac `FST (SND triple)` >>
       first_x_assum irule >> simp[] >>
-      conj_tac >- (qexists_tac `triple` >> simp[]) >>
+      conj_tac >- (fs[EVERY_MEM] >> res_tac) >>
       qexistsl_tac [`fuel - 1`, `leaf`, `tops`] >>
       simp[struct_metadata_types_match_delete] >>
       fs[EVERY_MEM] >> rw[DOMSUB_FLOOKUP_THM] >>
@@ -270,7 +273,7 @@ Theorem nested_fields_rank_leaf:
   !fuel tops sf name fields leaf.
     (!t. leaf t ==> (!e b. t <> ArrayT e b) /\ (!ts. t <> TupleT ts) /\
                     (!id. t <> StructT id)) /\
-    struct_metadata_types_match tops sf /\
+    struct_metadata_types_match tops sf /\ unqualified_struct_metadata sf /\
     FLOOKUP sf name = SOME fields /\
     EVERY (supported_nested_type leaf fuel tops o FST o SND) fields ==>
     SUM (MAP (type_rank sf o FST o SND) fields) <
@@ -283,14 +286,18 @@ Proof
       `0 < n /\
        EVERY (supported_nested_type leaf (n - 1) tops o FST o SND)
          (get_struct_fields sf (nsid_to_string (NONE,name)))` by
-        (irule nested_metadata_fields_leaf >> simp[]) >>
+        (irule nested_metadata_fields_leaf >> simp[supported_main_nsid_def]) >>
       first_x_assum irule >> simp[] >>
       qexistsl_tac [`leaf`, `n - 1`, `tops`] >>
       gvs[get_struct_fields_def, nsid_to_string_def]) >>
+  `EVERY (supported_type_namespace o FST o SND) fields` by
+    (drule_then (qspec_then `name` mp_tac) unqualified_struct_metadata_lookup >>
+     simp[get_struct_fields_def]) >>
   `MAP (type_rank (sf \\ name) o FST o SND) fields =
    MAP (type_rank sf o FST o SND) fields` by
     (irule MAP_CONG >> simp[] >> rpt strip_tac >>
-     irule nested_type_rank_metadata_invariant_leaf >>
+     irule nested_type_rank_metadata_invariant_leaf >> simp[] >>
+     conj_tac >- (fs[EVERY_MEM] >> res_tac) >>
      qexistsl_tac [`fuel`, `leaf`, `tops`] >>
      simp[struct_metadata_types_match_delete, DOMSUB_FLOOKUP_THM] >>
      fs[EVERY_MEM] >> rw[] >> metis_tac[]) >>
@@ -301,7 +308,7 @@ QED
 Theorem nested_copy_metadata_acyclic_leaf:
   (!t. leaf t ==> (!e b. t <> ArrayT e b) /\ (!ts. t <> TupleT ts) /\
                   (!id. t <> StructT id)) /\
-  struct_metadata_types_match tops sf /\
+  struct_metadata_types_match tops sf /\ unqualified_struct_metadata sf /\
   FEVERY (λ(name,fields).
     EVERY (supported_nested_type leaf fuel tops o FST o SND) fields) sf ==>
   acyclic_struct_metadata sf
@@ -318,10 +325,14 @@ Theorem struct_fields_map_acyclic_leaf:
                   (!id. t <> StructT id)) /\
   struct_args_unique tops /\
   (!name fields. MEM (StructDecl name fields) tops ==>
+     EVERY (supported_type_namespace o SND) fields /\
      EVERY (supported_nested_type leaf (LENGTH tops) tops o SND) fields) ==>
   acyclic_struct_metadata (make_struct_fields_map tops)
 Proof
   strip_tac >> irule nested_copy_metadata_acyclic_leaf >>
+  conj_tac
+  >- (simp[unqualified_struct_metadata_def, make_struct_fields_map_def] >>
+      irule built_struct_fields_every >> simp[FEVERY_FEMPTY] >> metis_tac[]) >>
   qexistsl_tac [`LENGTH tops`, `leaf`, `tops`] >>
   simp[make_struct_fields_map_types_match] >>
   simp[make_struct_fields_map_def] >> irule built_struct_fields_every >>
@@ -332,6 +343,7 @@ QED
 Theorem flag_struct_fields_map_acyclic:
   struct_args_unique tops /\
   (!name fields. MEM (StructDecl name fields) tops ==>
+     EVERY (supported_type_namespace o SND) fields /\
      EVERY (supported_nested_type
               (\t. supported_scalar_type t \/ ?n. t = FlagT n)
               (LENGTH tops) tops o SND) fields) ==>

@@ -9,7 +9,7 @@
 Theory bodyFullAugAssign
 Ancestors stateFrame[qualified,ignore_grammar] bodyPtrDefs[qualified,ignore_grammar]
   stateRelProj exprBodyPreProps[qualified,ignore_grammar]
-  augAssignFullTargetRoutes augAssignFullEntryPre augAssignFullCodeStages
+  bodyTypedTargetScope augAssignFullTargetRoutes augAssignFullEntryPre augAssignFullCodeStages
   augAssignFullBindStages augAssignFullSourceReplay augAssignFullRhsSaved
   augAssignFullLoad augAssignFullImmutableValidLoad augAssignFullImmutableCertificate
   augAssignFullStageFrames augAssignFullImmutableStageFrames augAssignFullWriteback
@@ -1936,6 +1936,10 @@ Finalise body_augassign_local_full
 
 Resume body_augassign_toplevel_word_full[use_ordinary]:
   rpt gen_tac >> strip_tac >>
+  `FST nsid = NONE` by
+    (PairCases_on `nsid` >>
+     gvs[Once type_stmt_def, well_typed_target_def] >>
+     metis_tac[body_inv_toplevel_target_main, optionTheory.IS_SOME_EXISTS]) >>
   drule_all (Q.INST [`bindings` |-> `bindings`] augassign_scalar_target_route) >>
   disch_then strip_assume_tac >>
   irule augassign_ordinary_full >>
