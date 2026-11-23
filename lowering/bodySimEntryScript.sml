@@ -60,9 +60,13 @@ Proof
        immutable_section_layout_mods_def, build_compile_env_unit_def,
        pairTheory.ELIM_UNCURRY] >>
   strip_tac >> rpt conj_tac >> simp[]
-  >~ [`!sid tls. _ ==> supported_module_headers tls /\ _`]
-  >- (qx_genl_tac [`sid`,`tls`] >> disch_tac >>
-      qpat_assum `!s ts. ALOOKUP mods s = SOME ts ==> supported_module_headers ts /\ _`
+  >- (qx_gen_tac `sid` >> qx_gen_tac `tls` >> disch_tac >>
+      qpat_assum
+        `!s ts. ALOOKUP mods s = SOME ts ==>
+           supported_module_headers ts /\
+           (s = NONE ==> supported_program ts /\
+              (cx.in_deploy ==> supported_program_deploy ts)) /\
+           ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel s) ts))`
         (qspecl_then [`sid`,`tls`] mp_tac) >>
       simp[])
   >~ [`acyclic_struct_metadata (make_struct_fields_map_mods mods)`]
