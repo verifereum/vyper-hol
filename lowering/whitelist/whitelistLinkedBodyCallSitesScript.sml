@@ -7,7 +7,7 @@ Ancestors
 
 (* Each linked replacement remains a constant expression.  In particular,
    its module-qualified names cannot hide an internal call. *)
-Theorem subst_const_mods_constant[local]:
+Theorem subst_const_mods_constant:
   (!e env. EVERY (constant_expr mods o SND) env /\ constant_expr mods e ==>
      constant_expr mods (subst_consts_expr_mods env e)) /\
   (!es env. EVERY (constant_expr mods o SND) env /\ EVERY (constant_expr mods) es ==>
@@ -53,7 +53,7 @@ Proof
   irule module_const_mods_constant >> metis_tac[]
 QED
 
-Theorem checked_const_mods_constant[local]:
+Theorem checked_const_mods_constant:
   check_contract mode layouts addr mods = SOME art ==>
   EVERY (constant_expr mods o SND) (consts_env_mods mods)
 Proof
