@@ -199,7 +199,7 @@ fun static_gate src cx vis args ret body tops =
     stmts_exprs_ok ce ^body /\
     call_evaluation_safe ^cx (int_calls_stmts ^body)``
 
-fun define_static_gate thm_name src cx decl tops ctx_facts entry_facts =
+fun specialize_static_gate src cx decl tops =
   let
     val (_, [vis, mut, nr, raw, name, args, dflts, ret, body]) = strip_comb decl
     val goal = static_gate src cx vis args ret body tops
@@ -210,19 +210,30 @@ fun define_static_gate thm_name src cx decl tops ctx_facts entry_facts =
        ``args : (string # type) list`` |-> args, ``dflts : expr list`` |-> dflts,
        ``ret : type`` |-> ret, ``ss : stmt list`` |-> body, ``tops : toplevel list`` |-> tops]
       linked_witness_entry_static_gate
-  in
-    Q.store_thm (thm_name, [ANTIQUOTE goal],
-      mp_tac ctx_facts >> simp[] >> rpt strip_tac >>
-      mp_tac entry_facts >> simp[] >> rpt strip_tac >>
-      mp_tac selected_gate >>
-      simp[] >> impl_tac >- metis_tac[] >>
-      strip_tac >> metis_tac[])
-  end
+  in (goal, selected_gate) end
 
-val _ = define_static_gate "linked_witness_constructor_entry_gate" ``NONE : num option``
-  constructor_context constructor_decl constructor_tops linked_witness_constructor_context
-  linked_witness_constructor_body_checks
+val (constructor_gate, constructor_gate_rule) =
+  specialize_static_gate ``NONE : num option`` constructor_context constructor_decl constructor_tops
 
-val _ = define_static_gate "linked_witness_external_entry_gate" ``SOME 2``
-  external_context external_decl external_tops linked_witness_external_context
-  linked_witness_external_body_checks
+val (external_gate, external_gate_rule) =
+  specialize_static_gate ``SOME 2`` external_context external_decl external_tops
+
+Theorem linked_witness_constructor_entry_gate:
+  ^constructor_gate
+Proof
+  mp_tac linked_witness_constructor_context >> simp[] >> rpt strip_tac >>
+  mp_tac linked_witness_constructor_body_checks >> simp[] >> rpt strip_tac >>
+  mp_tac constructor_gate_rule >>
+  simp[] >> impl_tac >- metis_tac[] >>
+  strip_tac >> metis_tac[]
+QED
+
+Theorem linked_witness_external_entry_gate:
+  ^external_gate
+Proof
+  mp_tac linked_witness_external_context >> simp[] >> rpt strip_tac >>
+  mp_tac linked_witness_external_body_checks >> simp[] >> rpt strip_tac >>
+  mp_tac external_gate_rule >>
+  simp[] >> impl_tac >- metis_tac[] >>
+  strip_tac >> metis_tac[]
+QED
