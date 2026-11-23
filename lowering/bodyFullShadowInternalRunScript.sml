@@ -350,6 +350,38 @@ Proof
   qexistsl_tac [`start`, `final`, `data`] >> simp[]
 QED
 
+Theorem deploy_unit_ordered_run:
+  lower_vyper_deploy_unit_mods mods exps rp bc = SOME unit /\
+  classify_functions_unit mods exps = (exts,ints,fb,SOME constructor,ctors) /\
+  ips = MAP (set_internal_package_target rp.rpol_target o
+    package_internal_fn_unit mods T (K global_nonreentrant_slot) T
+      (imm_len_mods mods))
+    (order_internals_unit (deploy_internal_order_unit (SOME constructor)
+      (ints ++ ctors)) (ints ++ ctors)) ==>
+  ?start final raw data.
+    compile_internal_fn_bodies ips start = ((),final) /\
+    extract_context_with_internals "__deploy" ips final = SOME (raw,data) /\
+    raw.ctx_functions = unit.cu_context.ctx_functions /\
+    lowering_context_ok unit.cu_context /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips) /\
+    EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks start)
+Proof
+  strip_tac >>
+  Cases_on `set_constructor_package_target rp.rpol_target
+    (package_constructor_unit mods T (K global_nonreentrant_slot) constructor)` >>
+  rename1 `set_constructor_package_target _ _ = cpkg` >>
+  PairCases_on `cpkg` >>
+  `run_deploy_lowering T rp bc (imm_len_mods mods) cpkg1 0 ips
+    cpkg0 cpkg6 cpkg2 cpkg3 cpkg4 cpkg5 "__deploy" = SOME unit` by
+    (qpat_x_assum `lower_vyper_deploy_unit_mods _ _ _ _ = _` mp_tac >>
+     simp[lower_vyper_deploy_unit_mods_def, GSYM imm_len_mods_def, AllCaseEqs()]) >>
+  drule deploy_internal_run_labels >> strip_tac >>
+  `raw.ctx_functions = unit.cu_context.ctx_functions` by
+    fs[install_immutable_reservation_def] >>
+  qexistsl_tac [`start`, `final`, `raw`, `data`] >>
+  simp[unit_package_internal_labels]
+QED
+
 (* The lowering packages only the reachable internal functions.  The lookup
    premise says this one's label resolves in the unit, so some packaged
    function has the same id (internal_fn_label_id_11), hence the same key
