@@ -76,8 +76,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule supported_program_internal_names >> strip_tac >>
   drule classified_internal_names_distinct >> gvs[] >> strip_tac >>
-  conj_tac >- metis_tac[ALL_DISTINCT_MAP, ALL_DISTINCT_order_deploy_internals] >>
-  simp[]
+  simp[] >>
+  drule_then (qspec_then `ctor` assume_tac) ALL_DISTINCT_order_deploy_internals >>
+  imp_res_tac ALL_DISTINCT_MAP >> first_assum ACCEPT_TAC
 QED
 
 Theorem deploy_internal_package_labels:

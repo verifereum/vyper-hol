@@ -81,7 +81,7 @@ Proof
     (mp_tac o Q.AP_TERM `FST`) >>
   simp[] >> strip_tac >>
   drule internal_fn_label_id_11 >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[]
+  simp[pairTheory.EXISTS_PROD] >> metis_tac[]
 QED
 
 Theorem extract_context_internal_code_by_labels:
