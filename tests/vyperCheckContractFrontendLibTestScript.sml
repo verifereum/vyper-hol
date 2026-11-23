@@ -433,6 +433,36 @@ val _ = assert_modules "builtin sentinel paths keep distinct canonical identitie
             [JTL_StructDef "Record" [JArg "x" (JT_Integer 256 F) (JTA_Integer 256 F)];
              JTL_FlagDef "Mode" ["A"; "B"]])]``);
 
+(* Test the body marker independently of declaration-time default types. *)
+fun math_function name body =
+  ``JTL_FunctionDef ^name ["internal"] []
+      [JArg "x" (JT_Integer 256 F) (JTA_Integer 256 F)]
+      [JE_Int 1 (JT_Integer 256 F)]
+      (JFuncType [JT_Integer 256 F] JT_None) JTA_None ^body``;
+fun math_body ty =
+  ``[JS_If (JE_Bool T)
+      [JS_AnnAssign "y" ^ty (JTA_Integer 256 F) (JE_Int 2 ^ty)] []]``;
+val math_declarations =
+  ``[^(math_function ``"typed"`` (math_body ``JT_Integer 256 F``));
+     ^(math_function ``"untyped"`` (math_body ``JT_None``));
+     ^(math_function ``"noop"`` ``[JS_Pass]``)]``;
+fun check_math_import path expected =
+  let
+    val {modules, ...} = prepare_ast
+      ``JAnnotatedAST (JModule 0 F [])
+          [JImportedModule (-2) ^path ^path F ^math_declarations]``
+    val names = rhs (concl (EVAL
+      ``MAP (λtop. case top of FunctionDecl _ _ _ _ name _ _ _ _ => name
+                    | _ => "") (FLAT (MAP SND ^modules))``))
+  in
+    if aconv names expected then ()
+    else raise Fail ("imported math function filtering: " ^ term_to_string names)
+  end;
+val _ = check_math_import ``"vyper/builtins/stdlib/math.vy"`` ``["typed"; "noop"]``;
+val _ = check_math_import ``"/compiler/vyper/builtins/stdlib/math.vy"``
+  ``["typed"; "noop"]``;
+val _ = check_math_import ``"local/math.vy"`` ``["typed"; "untyped"; "noop"]``;
+
 (* Generated at VYPER_PIN with `vyper -f annotated_ast,layout
    duplicate_interface/main/c.vy`; resolved paths are relative to the fixture
    root. The compiler repeats IPing, including its nonempty event declaration. *)
@@ -474,6 +504,11 @@ end;
 
 val _ = check_fixture false "scoped_locals/main.json";
 val _ = check_fixture false "simple.json";
+(* Generated at VYPER_PIN with vyper -f annotated_ast,layout stdlib_math.vy,
+   keeping the builtin path relative to the Vyper installation. The call to
+   isqrt leaves sqrt's body untyped in the standalone JSON. *)
+val _ = check_fixture false "stdlib_math.json";
+val _ = check_fixture true "stdlib_math.json";
 (* Named constants fold to literals; slice start bounds remain runtime checks. *)
 val _ = check_fixture false "slice_named_start.json";
 (* Constant slice lengths fold to literals: a code slice and a narrowing byte
