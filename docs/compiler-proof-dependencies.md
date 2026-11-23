@@ -43,7 +43,11 @@ from the lowering separately; the graph's `supported_program -> S2` edge and
 its single S3 edge are Milestone 1's. Units with `DALLOCA` get S3's memory
 facts from `lower_vyper_runtime_unit_memory_ok_from_no_wrap` instead, which
 replaces S3's no-`DALLOCA` and entry-FMP premises by no-wrap and FMP-floor
-facts at every reachable instruction. The deploy tops take their shape from
+facts at every reachable instruction. Those facts are not an S1 premise: the
+call tops produce them from the memory-safe entry runs (`selected_raw_memory`,
+through `lowered_unit_checked_dalloca_facts`), since the memory-safety check
+gives `dalloca_no_wrap` at every `DALLOCA` it reaches
+(`mem_safe_point_dalloca_no_wrap`). The deploy tops take their shape from
 `deploy_unit_o1_shape_ok`.
 
 ```text
@@ -105,16 +109,24 @@ the regions and backends observed for the chosen gas readings.
 
 ## S1–S7: stage producers
 
-`holbuild check` reports the numbered S2–S7 exports below clean, with no
-admission in their closure. S1's own proof is complete: it is proved from the entry bridge, the joint
-body simulation (`bodySimFullMain.body_stmts_sim_full`) and the halt bridge,
-but its closure reaches the narrow case lemmas still admitted for the forms the
-widened whitelist newly accepts; each is marked `GATE_ADMISSION` at its
-declaration. Generic composition and each L1–L13 have none. See the [Milestone 1 source owners and receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
+All seven stage exports below are proved, with no admission in their closures.
+S1 is proved from the entry bridge, the joint body simulation
+(`bodySimFullMain.body_stmts_sim_full`) and the halt bridge. Generic
+composition and each L1–L13 have none either. `vyper_call_correct`,
+`e2e_deploy_correctness` and S1 reach no admitted lemma.
+`vyper_call_gas_sufficient` reaches only `call_entry_reachable_create_size_ok`
+and `e2e_deploy_gas_sufficient` only `deploy_entry_reachable_create_size_ok`
+([e2eGasSufficient](../lowering/e2eGasSufficientScript.sml)): the two held
+claims, marked `GATE_ADMISSION`, that, from the call or deploy entry, every
+reachable creation instruction meets the init-code size check
+`inst_create_size_ok`, blueprint forms included. The one other admitted
+theorem, `function_inliner_correct`, lies under no top. See the [Milestone 1
+source owners and
+receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
 
 | ID | Saved export | Consumes / produces | Future owner |
 |---|---|---|---|
-| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` | lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + two guards for units with `DALLOCA` (allocation budget within the initial FMP, FMP below 2^254; `dalloca_no_wrap` at every reachable instruction) -> `source_unit_execution_correct`: for some gas marks, a source run that is the same for every gas tail appended to the readings the marks select, whose storage observations lie in the trace domain (`storage_trace_domain`), and a raw exit related to the source result at every valid storage horizon; or a focus witness instead when storage is invalid for every gas tail appended to the readings the marks select, or when the source run is the same for every tail and source-exempt | Milestone 6 |
+| S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` | lowering + `supported_program` + `source_typing_ok` + `source_deployment_rel` + `valid_vyper_call` + `initial_venom_state_rel` + `outcomes_accounts_typed` + two guards for units with `DALLOCA` (allocation budget within the initial FMP, FMP below 2^254; `dalloca_fmp_headroom` at every reachable instruction, which is `inst.inst_opcode = DALLOCA ==> w2n s.vs_fmp + MAX (venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata)) (2 ** 255 + 2 ** 64) < dimword (:256)`) -> `source_unit_execution_correct`: for some gas marks, a source run that is the same for every gas tail appended to the readings the marks select, whose storage observations lie in the trace domain (`storage_trace_domain`), and a raw exit related to the source result at every valid storage horizon; or a focus witness instead when storage is invalid for every gas tail appended to the readings the marks select, or when the source run is the same for every tail and source-exempt | Milestone 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` | lowering + `check_contract F` + `raw_shape_free_program` -> `o1_source_unit_ok`. The call tops use `loweringMemCorrect.lower_vyper_runtime_unit_checked_source_shape` instead: successful runtime lowering and `check_contract F` give `o1_source_unit_ok`, `unit_entry_no_params` and `unit_fmp_unsealed`, including units outside `raw_shape_free_program` (`raw_call` on `msg.data`, `create_copy_of`, `create_from_blueprint`), whose three shape cases are proved from the mode-parametric shape theorem at `static = F` (`lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params_mode`). The deploy tops use `ctorDeployShape.checked_lower_vyper_deploy_unit_source_shape` under `check_contract T`, whose three matching deploy cases are proved from `run_deploy_lowering_source_unit_ok_mode` at `static = F` | Milestone 5 |
 | S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` | lowering + initial state + no `DALLOCA` + entry FMP floor + `__entry` lookup and entry label + memory-safe and pointer-safe entry runs at every fuel -> `raw_unit_memory_ok`, no function `fn_eom`, `fixed_region_reserved 0`, pointer discipline and taint bounds | Milestone 5 |
 | S3d | `loweringMemCorrect.lower_vyper_runtime_unit_dload_offset_ok` | lowering + `code_layout_valid` + `__entry` lookup and entry label + memory-safe entry runs at every fuel -> `mem_inv dload_offset_ok` (DLOAD/DLOADBYTES offsets plus the code prefix stay below 2^256) | Milestone 5 |
@@ -145,8 +157,8 @@ They are separately saved Hyp0/no-axiom/no-admission objects. In particular:
   it is not a derivation of that relation for arbitrary EVM runs.
 - `e2eCorrectness.e2e_vyper_to_evm` is clean generic composition with explicit
   stage contracts; at Milestone 1, `vyper_call_correct` closed them with
-  admitted S1–S7. All seven are proved now; S1's closure reaches the narrow
-  `GATE_ADMISSION` case lemmas.
+  admitted S1–S7. All seven are proved now, and `vyper_call_correct`
+  reaches no admitted lemma.
 
 TASK056 full saved logical closures: top378/generic30 recorded nodes, no legacy,
 deployment or function-simulation dependencies. Source admission count is
@@ -186,8 +198,7 @@ producers remain Milestone 7 work.
 
 `e2eDeployCorrectness.e2e_deploy_correctness` is a meaningful single-frame
 creation statement (Milestone 6 item7), not the old proved `T` placeholder. It
-is proved except for the narrow `GATE_ADMISSION` case lemmas its closure
-reaches, and assumes no whitelist: `deploy_typing_ok_supported_programs` derives
+is proved, reaches no admitted lemma, and assumes no whitelist: `deploy_typing_ok_supported_programs` derives
 `supported_program` and `supported_program_deploy` from `deploy_typing_ok` and
 the `layouts_agree` inside `deploy_state_rel`. Its premises are
 `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME
