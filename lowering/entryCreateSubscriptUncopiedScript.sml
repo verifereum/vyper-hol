@@ -99,8 +99,7 @@ Theorem subscript_nocopy_index_ready:
     ce cx ty idx mid (st0,sm,sn,shm,shn,iop,s,G1,tn1)
 Proof
   strip_tac >>
-  `expr_body_pre ce cx env obj es` by
-    (irule expr_body_pre_array_subscript_base >> metis_tac[]) >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_typed >>
   `expr_body_pre ce cx env (Subscript ann obj idx) (es with gas_obs := gs)` by simp[] >>
   `expr_body_pre ce cx env idx mid` by
     metis_tac[expr_body_pre_array_subscript_index_after_base] >>
@@ -141,15 +140,17 @@ Theorem subscript_nocopy_base_ready:
   compile_expr ce ty obj sa = (bvv,sm) /\
   compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr obj) sha = (bvv,shm) /\
   gas_shadow_state sm shm /\ fn_has_code sa sm func /\ fn_has_code sha shm shfunc ==>
-  expr_body_pre ce cx env obj es /\
+  (~array_slot_base ce obj ==> expr_body_pre ce cx env obj es) /\
+  (array_slot_base ce obj ==> ~const_name_root cx obj /\
+    well_typed_expr env obj /\ expr_sim_inv ce cx env es) /\
   expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG,func,shfunc)
     ce cx ty obj es (st0,sa,sm,sha,shm,bvv,s0,G0,tn0)
 Proof
   strip_tac >>
-  `expr_body_pre ce cx env obj es` by
-    metis_tac[expr_body_pre_array_subscript_base] >>
-  `gas_admissible (eval_expr cx obj) expr_vv_res_ok es` by
-    (irule exprSimHypsTheory.expr_body_pre_vv_gas_admissible >> metis_tac[]) >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_admissible >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_typed >>
+  conj_tac >- metis_tac[expr_body_pre_array_subscript_base] >>
+  conj_tac >- metis_tac[expr_body_pre_array_subscript_slot_base] >>
   fs[expr_vv_sim_full_pre_def] >> metis_tac[]
 QED
 
@@ -160,9 +161,10 @@ Theorem subscript_nocopy_base_not_map:
   ~(?tr slot kt vt. raw = HashMapRef tr slot kt vt)
 Proof
   strip_tac >>
-  `expr_body_pre ce cx env obj (es with gas_obs := gs)` by
-    (irule expr_body_pre_array_subscript_base >> simp[] >> metis_tac[]) >>
-  drule_all expr_body_pre_runtime_typed >>
+  `expr_body_pre ce cx env (Subscript ann obj idx) (es with gas_obs := gs)` by simp[] >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_typed >>
+  `expr_sim_inv ce cx env (es with gas_obs := gs)` by simp[] >>
+  drule_all expr_sim_inv_eval_result >>
   strip_tac >> Cases_on `raw` >> gvs[vyperTypeInvariantsTheory.eval_result_typed_def]
 QED
 
