@@ -40,7 +40,7 @@ Ancestors
   vyperTypeEventLookup vyperTypeCallGraph vyperTypeInvariants
   supportedTypes supportedDecls supportedNames supportedExprForms
   supportedStmtTraverse compileVyper selectorDispatch contractABI
-  entryDispatchProps vyperGetter constSubst sorting
+  entryDispatchProps vyperGetter constSubst sorting vyperImportRefsProps
 
 (* ===== The single-module namespace facts ===== *)
 
@@ -377,11 +377,11 @@ Proof
   simp[GSYM sublist_cons])
 QED
 
-Theorem check_contract_selectors_distinct:
-  check_contract F layouts addr [(NONE, tops)] = SOME art ==>
+Triviality supported_selectors_distinct_of_method_ids:
+  ALL_DISTINCT (abi_external_method_ids (type_env tops) tops) ==>
   supported_selectors_distinct tops
 Proof
-  strip_tac >> drule check_contract_single_namespaces >> strip_tac >>
+  strip_tac >>
   qspec_then `tops` strip_assume_tac
     (Q.INST [`tenv` |-> `type_env tops`]
       (INST_TYPE [alpha |-> ``:expr``] build_selectors_provenance)) >>
@@ -391,6 +391,22 @@ Proof
   drule_all sublist_ALL_DISTINCT >> strip_tac >>
   drule sortingTheory.ALL_DISTINCT_PERM >> strip_tac >>
   pop_assum (irule o iffRL) >> first_assum ACCEPT_TAC
+QED
+
+Theorem check_contract_module_selectors_distinct:
+  check_contract deploy layouts addr mods = SOME art /\ MEM (src,tops) mods ==>
+  supported_selectors_distinct tops
+Proof
+  strip_tac >> irule supported_selectors_distinct_of_method_ids >>
+  metis_tac[vyperImportRefsPropsTheory.check_contract_module_external_method_ids_distinct]
+QED
+
+Theorem check_contract_selectors_distinct:
+  check_contract F layouts addr [(NONE, tops)] = SOME art ==>
+  supported_selectors_distinct tops
+Proof
+  strip_tac >> irule supported_selectors_distinct_of_method_ids >>
+  drule check_contract_single_namespaces >> simp[]
 QED
 
 (* ===== S26: no local or loop variable rebinds an argument ===== *)
