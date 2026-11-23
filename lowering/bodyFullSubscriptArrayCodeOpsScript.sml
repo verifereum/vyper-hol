@@ -156,7 +156,7 @@ Proof
 QED
 
 (* ADD keeps the left operand's provenance when the right is scalar. *)
-Theorem scalar_binop_joint_frame_run:
+Theorem scalar_binop_joint_frame_endpoint:
   (opc = ADD /\ w = a + b \/ opc = MUL /\ w = a * b) /\
   emit_op opc [left;right] sa = (Var out,sb) /\ fn_has_code sa sb func /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
@@ -164,8 +164,7 @@ Theorem scalar_binop_joint_frame_run:
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
   op_taint tn left = {} /\ op_taint tn right = {} /\ op_prov G right = NONE ==>
   ?Gf tnf sf.
-    (?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
-         sf = (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    sf = (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
     (!D lo explicit. allocas_from lo s ==>
       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
     sf.vs_current_bb = sb.cs_current_bb /\
@@ -189,16 +188,14 @@ Theorem scalar_binop_joint_frame_run:
       local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule emit_op_facts >> strip_tac >> gnvs[] >>
+  drule emit_op_facts >> strip_tac >>
+  qpat_x_assum `Var _ = Var _` (SUBST_ALL_TAC o SIMP_RULE (srw_ss()) []) >>
+  rename1 `emit_op opc [left;right] sa = (Var out,sb)` >>
   qabbrev_tac `i = mk_inst sa.cs_next_id opc [left;right] [out]` >>
   qabbrev_tac `u = update_var out w s` >>
   qexistsl_tac [`step_prov PG G i u`, `step_taint i s u tn`,
     `u with vs_inst_idx := SUC s.vs_inst_idx`] >>
-  conj_tac
-  >- (`step_inst_base i s = OK u` by
-        (simp[Abbr `i`, Abbr `u`] >> gvs[] >> metis_tac[step_ADD, step_MUL]) >>
-      qexists_tac `u` >> drule emitted_insts_emit_op >> strip_tac >>
-      gvs[Abbr `i`, run_inst_seq_def, ADD1]) >>
+  conj_tac >- simp[Abbr `u`] >>
   conj_tac
   >- (rpt strip_tac >>
       `?o' t K tau. Var out = Var o' /\
@@ -264,10 +261,55 @@ Theorem scalar_binop_joint_frame:
     (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
       local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all scalar_binop_joint_frame_run >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
+  disch_then (mp_tac o MATCH_MP scalar_binop_joint_frame_endpoint) >>
+  disch_then strip_assume_tac >>
   qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[]
+QED
+
+(* Recover the instruction-list run at the exact scalar landing, without
+   reselecting the endpoint or its ghosts. *)
+Theorem scalar_binop_joint_frame_run:
+  (opc = ADD /\ w = a + b \/ opc = MUL /\ w = a * b) /\
+  emit_op opc [left;right] sa = (Var out,sb) /\ fn_has_code sa sb func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\ op_prov G right = NONE ==>
+  ?Gf tnf sf.
+    (?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
+         sf = (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    (!D lo explicit. allocas_from lo s ==>
+      gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var out sf = SOME w /\
+    op_taint tnf (Var out) = {} /\
+    op_prov Gf (Var out) = (if opc = ADD then op_prov G left else NONE) /\
+    sf.vs_immutables = s.vs_immutables /\
+    sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
+    sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\
+    sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    sf.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!q. not_fresh_at sa q ==>
+      lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
+      op_taint tnf (Var q) = op_taint tn (Var q)) /\
+    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
+Proof
+  disch_then (fn th =>
+    (map_every assume_tac (CONJUNCTS th)) >>
+    mp_tac (MATCH_MP scalar_binop_joint_frame_endpoint th)) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[] >>
+  qexists_tac `update_var out w s` >> drule emitted_insts_emit_op >>
+  strip_tac >>
+  `step_inst_base (mk_inst sa.cs_next_id opc [left;right] [out]) s =
+    OK (update_var out w s)` by (fs[] >> metis_tac[step_ADD,step_MUL]) >>
+  gvs[run_inst_seq_def,ADD1]
 QED
 
 Theorem scalar_emit_landing_layout[local]:
