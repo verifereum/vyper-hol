@@ -18,8 +18,8 @@
  *)
 Theory unitExecutionCompose
 Ancestors
-  gasOutcomeFull fragGasOriginPtrExec fragGasOriginPtr fragGasOrigin
-  gasExemptCert gasStorage fragExec fragExecPtr vyperStorageTrace
+  gasOutcomeFull gasOutcomeFullMods fragGasOriginPtrExec fragGasOriginPtr fragGasOrigin
+  gasExemptCert gasExemptCertMods sourceExemptMods gasStorage fragExec fragExecPtr vyperStorageTrace
   vyperStorageFootprint ptrSafeRun ptrDiscipline vyperState venomState
 
 (* A framed source extends its start's storage trace. *)
@@ -82,8 +82,8 @@ Proof
 QED
 
 (* A final action may extend the observations while preserving their horizons. *)
-Theorem unit_execution_compose_horizon:
-  !DF E ctx func cx st0 tops source es0 s0 G0 tn0 Q R vs0 CT REL EX marks0.
+Theorem unit_execution_compose_horizon_mods:
+  !DF E ctx func cx st0 mods source es0 s0 G0 tn0 Q R vs0 CT REL EX marks0.
     storage_trace_frame source /\
     storage_trace_domain cx st0 es0.storage_trace /\
     (!H. valid_horizon cx st0 H es0.storage_trace ==>
@@ -92,7 +92,7 @@ Theorem unit_execution_compose_horizon:
        ((!fuel. ptr_safe_run (DF H) 0 fuel ctx func [] G0 tn0 s0) ==>
         !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY entry_taint
                  vs0)) /\
-    gas_outcome_full (DF, 0, E, ctx, func, []) tops cx st0 source
+    gas_outcome_full_mods (DF, 0, E, ctx, func, []) mods cx st0 source
       (es0, s0, G0, tn0) Q R /\
     (!gobs res ee. source (es0 with gas_obs := gobs) = (res, ee) ==>
        (storage_trace_domain cx st0 (SND (SND (SND (CT gobs)))) <=>
@@ -106,7 +106,7 @@ Theorem unit_execution_compose_horizon:
     (!gx err ee cr am' rqs obs.
        (!tail. source (es0 with gas_obs := gx ++ tail) =
                (INR (Error err), ee with gas_obs := tail)) /\
-       unspecified_behaviour_exempt tops err /\
+       unspecified_behaviour_exempt_mods mods err /\
        CT gx = (cr, am', rqs, obs) ==>
        EX (cr, am', rqs)) /\
     (!gx res ee t.
@@ -154,8 +154,8 @@ Theorem unit_execution_compose_horizon:
                        entry_taint vs0))
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [gas_outcome_full_def]) >>
+  qpat_x_assum `gas_outcome_full_mods _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_full_mods_def]) >>
   qexists_tac `marks`
   >- ((* storage outside every horizon *)
       disj1_tac >> conj_tac
@@ -267,7 +267,7 @@ Proof
       fs[] >> metis_tac[gas_origin_ptr_path_exit_safe]) >>
   (* an exempt error *)
   disj2_tac >>
-  drule gas_exempt_cert_execution >> strip_tac >>
+  drule gas_exempt_cert_execution_mods >> strip_tac >>
   qabbrev_tac `gx = gas_explicit marks s0.vs_gas_readings` >>
   `!tail. source (es0 with gas_obs := gx ++ tail) =
           (INR (Error err), ee with gas_obs := tail)` by
@@ -283,6 +283,155 @@ Proof
   conj_tac >- metis_tac[] >>
   `valid_horizon cx st0 H es0.storage_trace` by metis_tac[] >>
   metis_tac[entry_focus_prefix]
+QED
+
+Theorem unit_execution_compose_mods:
+  !DF E ctx func cx st0 mods source es0 s0 G0 tn0 Q R vs0 CT REL EX marks0.
+    storage_trace_frame source /\
+    storage_trace_domain cx st0 es0.storage_trace /\
+    (!H. valid_horizon cx st0 H es0.storage_trace ==>
+       gas_origin_ptr_path (DF H, 0, E, ctx, func, [])
+         (vs0, FEMPTY, entry_taint) marks0 (OK s0, G0, tn0) /\
+       ((!fuel. ptr_safe_run (DF H) 0 fuel ctx func [] G0 tn0 s0) ==>
+        !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY entry_taint
+                 vs0)) /\
+    gas_outcome_full_mods (DF, 0, E, ctx, func, []) mods cx st0 source
+      (es0, s0, G0, tn0) Q R /\
+    (!gobs res ee. source (es0 with gas_obs := gobs) = (res, ee) ==>
+       SND (SND (SND (CT gobs))) = ee.storage_trace) /\
+    (!gx res ee.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (res, ee with gas_obs := tail)) ==>
+       !tail. CT (gx ++ tail) = CT gx) /\
+    (!gx err ee cr am' rqs obs.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (INR (Error err), ee with gas_obs := tail)) /\
+       unspecified_behaviour_exempt_mods mods err /\
+       CT gx = (cr, am', rqs, obs) ==>
+       EX (cr, am', rqs)) /\
+    (!gx res ee t.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (res, ee with gas_obs := tail)) /\
+       storage_trace_domain cx st0 ee.storage_trace /\
+       (?H G tn. valid_horizon cx st0 H ee.storage_trace /\
+                 Q H res (ee with gas_obs := []) G tn t) ==>
+       ?r. exit_result r /\
+         !H G tn. valid_horizon cx st0 H ee.storage_trace /\
+                  Q H res (ee with gas_obs := []) G tn t ==>
+           ?G' tn'.
+             gas_origin_ptr_path (DF H, 0, E, ctx, func, [])
+               (t, G, tn) [] (r, G', tn') /\
+             !cr am' rqs obs. CT gx = (cr, am', rqs, obs) ==>
+               REL H (cr, am', rqs) r) /\
+    (!gx res ee H gt r cr am' rqs obs.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (res, ee with gas_obs := tail)) /\
+       valid_horizon cx st0 H ee.storage_trace /\
+       exit_result r /\ R H res (ee with gas_obs := []) gt r /\
+       CT gx = (cr, am', rqs, obs) ==>
+       REL H (cr, am', rqs) r) ==>
+    ?marks.
+      ((!tail. ~storage_trace_domain cx st0
+                 (SND (SND (SND
+                   (CT (gas_explicit marks s0.vs_gas_readings ++ tail)))))) /\
+       ?H leaf leaf_pg leaf_g leaf_tn finish.
+         gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
+           (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
+           (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+      ?res am' rqs obs.
+        (!tail. CT (gas_explicit marks s0.vs_gas_readings ++ tail) =
+                (res, am', rqs, obs)) /\
+        ((EX (res, am', rqs) /\
+          ?H leaf leaf_pg leaf_g leaf_tn finish.
+            gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
+              (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
+              (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+         (?r. exit_result r /\ storage_trace_domain cx st0 obs /\
+            gas_origin_path T E ctx func vs0 (marks0 ++ marks) r /\
+            !H. valid_horizon cx st0 H obs ==>
+              REL H (res, am', rqs) r /\
+              !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY
+                       entry_taint vs0))
+Proof
+  rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.SPECL [`DF`, `E`, `ctx`, `func`, `cx`, `st0`, `mods`, `source`, `es0`, `s0`, `G0`, `tn0`, `Q`, `R`, `vs0`, `CT`, `REL`, `EX`, `marks0`] unit_execution_compose_horizon_mods) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+Theorem unit_execution_compose_horizon:
+  !DF E ctx func cx st0 tops source es0 s0 G0 tn0 Q R vs0 CT REL EX marks0.
+    storage_trace_frame source /\
+    storage_trace_domain cx st0 es0.storage_trace /\
+    (!H. valid_horizon cx st0 H es0.storage_trace ==>
+       gas_origin_ptr_path (DF H, 0, E, ctx, func, [])
+         (vs0, FEMPTY, entry_taint) marks0 (OK s0, G0, tn0) /\
+       ((!fuel. ptr_safe_run (DF H) 0 fuel ctx func [] G0 tn0 s0) ==>
+        !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY entry_taint
+                 vs0)) /\
+    gas_outcome_full (DF, 0, E, ctx, func, []) tops cx st0 source
+      (es0, s0, G0, tn0) Q R /\
+    (!gobs res ee. source (es0 with gas_obs := gobs) = (res, ee) ==>
+       (storage_trace_domain cx st0 (SND (SND (SND (CT gobs)))) <=>
+        storage_trace_domain cx st0 ee.storage_trace) /\
+       (!H. valid_horizon cx st0 H (SND (SND (SND (CT gobs)))) <=>
+            valid_horizon cx st0 H ee.storage_trace)) /\
+    (!gx res ee.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (res, ee with gas_obs := tail)) ==>
+       !tail. CT (gx ++ tail) = CT gx) /\
+    (!gx err ee cr am' rqs obs.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (INR (Error err), ee with gas_obs := tail)) /\
+       unspecified_behaviour_exempt tops err /\
+       CT gx = (cr, am', rqs, obs) ==>
+       EX (cr, am', rqs)) /\
+    (!gx res ee t.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (res, ee with gas_obs := tail)) /\
+       storage_trace_domain cx st0 ee.storage_trace /\
+       (?H G tn. valid_horizon cx st0 H ee.storage_trace /\
+                 Q H res (ee with gas_obs := []) G tn t) ==>
+       ?r. exit_result r /\
+         !H G tn. valid_horizon cx st0 H ee.storage_trace /\
+                  Q H res (ee with gas_obs := []) G tn t ==>
+           ?G' tn'.
+             gas_origin_ptr_path (DF H, 0, E, ctx, func, [])
+               (t, G, tn) [] (r, G', tn') /\
+             !cr am' rqs obs. CT gx = (cr, am', rqs, obs) ==>
+               REL H (cr, am', rqs) r) /\
+    (!gx res ee H gt r cr am' rqs obs.
+       (!tail. source (es0 with gas_obs := gx ++ tail) =
+               (res, ee with gas_obs := tail)) /\
+       valid_horizon cx st0 H ee.storage_trace /\
+       exit_result r /\ R H res (ee with gas_obs := []) gt r /\
+       CT gx = (cr, am', rqs, obs) ==>
+       REL H (cr, am', rqs) r) ==>
+    ?marks.
+      ((!tail. ~storage_trace_domain cx st0
+                 (SND (SND (SND
+                   (CT (gas_explicit marks s0.vs_gas_readings ++ tail)))))) /\
+       ?H leaf leaf_pg leaf_g leaf_tn finish.
+         gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
+           (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
+           (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+      ?res am' rqs obs.
+        (!tail. CT (gas_explicit marks s0.vs_gas_readings ++ tail) =
+                (res, am', rqs, obs)) /\
+        ((EX (res, am', rqs) /\
+          ?H leaf leaf_pg leaf_g leaf_tn finish.
+            gas_origin_ptr_focus (DF H, 0, E, ctx, func, [])
+              (vs0, FEMPTY, entry_taint) (marks0 ++ marks)
+              (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
+         (?r. exit_result r /\ storage_trace_domain cx st0 obs /\
+            gas_origin_path T E ctx func vs0 (marks0 ++ marks) r /\
+            !H. valid_horizon cx st0 H obs ==>
+              REL H (res, am', rqs) r /\
+              !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY
+                       entry_taint vs0))
+Proof
+  rewrite_tac[gas_outcome_full_singleton_def,
+              GSYM unspecified_behaviour_exempt_mods_singleton] >>
+  MATCH_ACCEPT_TAC unit_execution_compose_horizon_mods
 QED
 
 Theorem unit_execution_compose:
@@ -353,8 +502,7 @@ Theorem unit_execution_compose:
               !fuel. ptr_safe_blocks (DF H) 0 fuel ctx func [] FEMPTY
                        entry_taint vs0))
 Proof
-  rpt gen_tac >> strip_tac >>
-  match_mp_tac (Q.SPECL [`DF`, `E`, `ctx`, `func`, `cx`, `st0`, `tops`, `source`, `es0`, `s0`, `G0`, `tn0`, `Q`, `R`, `vs0`, `CT`, `REL`, `EX`, `marks0`] unit_execution_compose_horizon) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  rpt strip_tac >> first_x_assum drule >> simp[]
+  rewrite_tac[gas_outcome_full_singleton_def,
+              GSYM unspecified_behaviour_exempt_mods_singleton] >>
+  MATCH_ACCEPT_TAC unit_execution_compose_mods
 QED

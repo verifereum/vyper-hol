@@ -6,7 +6,8 @@ Ancestors
   compileEnv context venomState venomInst entrySinkExtraction list ptrDiscipline
   exprPtrUnwrapAllocEntry exprPtrUnwrapAllocSeparation exprPtrUnwrapCodeCopyShape
   bufferAllocationExecution unitTransformDefs memSafeRun codegenRel contextCodegenRel
-  exprPtrUnwrapAllocation rich_list allocationPtr venomMemDefs venomMemProofs venomMemProps valueEncodingProps immutableCopyExecution exprSimStorageCopy loweringHalt
+  exprPtrUnwrapAllocation rich_list allocationPtr venomMemDefs venomMemProofs venomMemProps valueEncodingProps immutableCopyExecution
+  immutableCopyExterior exprSimStorageCopy loweringHalt
   loweringStateRelDefs loweringPosts finite_map allocaHistory freshWrites exprSimAlloc arithmetic
 
 (* Both checks are established on the range execution's raw endpoint.
@@ -81,25 +82,6 @@ Proof
      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts), Gf, tnf)` by
     (irule emitted_origin_ptr_path >> metis_tac[]) >>
   qexistsl [`Gf`, `tnf`, `t`] >> simp[]
-QED
-
-Theorem ctor_transfers_exterior[local]:
-  !n off s.
-  w2n b + off + 32*n < dimword(:256) ==>
-  !at len. at+len <= w2n b+off \/ w2n b+off+32*n <= at ==>
-  mem_bytes_at at len (immutable_transfers F T a b n off s).vs_memory =
-  mem_bytes_at at len s.vs_memory
-Proof
-  Induct >- simp[immutable_transfers_def] >> rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  simp[Once immutable_transfers_def] >>
-  `w2n b+(off+32)+32*n < dimword(:256) /\
-   (at+len <= w2n b+(off+32) \/ w2n b+(off+32)+32*n <= at)` by
-    (fs[MULT_SUC] >> decide_tac) >>
-  `w2n (b+n2w off) = w2n b+off` by
-    (Cases_on `b` >> fs[wordsTheory.word_add_n2w]) >>
-  simp[immutable_word_transfer_def, mstore_mem_bytes_at_disjoint] >>
-  first_x_assum irule >> simp[]
 QED
 
 Theorem ctor_code_copy_origin_execution:
@@ -252,7 +234,8 @@ Proof
      drule_all copy_ctor_run >> strip_tac >>
      `zz = t` by fs[copy_runtime_frame_def] >> gvs[] >>
      rpt gen_tac >> strip_tac >>
-     simp[ctor_transfers_exterior |> Q.SPECL [`n`, `0`, `a`] |> SRULE []]) >>
+     simp[immutable_copy_transfers_exterior |> Q.INST [`ctor` |-> `T`]
+          |> Q.SPECL [`n`, `0`, `a`] |> SRULE []]) >>
   drule unwrap_alloc_generated_code >> strip_tac >>
   drule unwrap_alloc_current_block >> strip_tac >>
   `LENGTH mid.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
