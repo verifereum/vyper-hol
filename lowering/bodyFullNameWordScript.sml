@@ -10,6 +10,7 @@ Ancestors
   venomExecSemantics venomInst venomState vyperInterpreter vyperState
   vyperAST vyperTyping finite_map list words emitHelper compileEnv fragExec
   instMemFrontier fragExecMem bodyMemoryDefs memSafeRun
+  exprSimFullBundleProps emitHelperProps fragGasOrigin
 
 Theorem name_word_ghost_inputs[local]:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
@@ -65,18 +66,33 @@ Proof
   simp[ghost_kept_at_def, mload_ghost_frame] >> metis_tac[mload_ghost_frame]
 QED
 
-Theorem name_word_full:
-  expr_body_pre cenv cx env (Name ann id) es /\ is_word_type ann ==>
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Name ann id) es
+(* Expose the actual fetched edge and its posts before either the ordinary
+   or the confined outcome packages that edge as a path. *)
+Theorem name_word_full_edge:
+  expr_body_pre cenv cx env (Name ann id) es /\ is_word_type ann /\
+  expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Name ann id) es (st0,sa,sb,sha,shb,op,s0,G0,tn0) /\
+  storage_trace_domain cx st0 es.storage_trace ==>
+  ?v t G tn bb inst.
+    (!tail. bind (eval_expr cx (Name ann id)) (read_result cx)
+              (es with gas_obs := tail) = (INL v,es with gas_obs := tail)) /\
+    ~(s0.vs_current_bb = sb.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sb.cs_current_insts) /\
+    lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s0.vs_inst_idx = SOME inst /\
+    sa.cs_next_id <= inst.inst_id /\ inst.inst_id < sb.cs_next_id /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    !H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_edge (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (s0,G0,tn0) [] (OK t,G,tn) /\
+      expr_sim_full_post (DF,lo,d,ctx,func) cenv cx (Name ann id)
+        (es,sa,sb,s0,op,G0,tn0) H (INL v : (value,exception) sum)
+        (es with gas_obs := []) G tn t
 Proof
-  rw[expr_sim_full_def] >>
+  rw[expr_sim_full_hypotheses_def,expr_sim_full_code_def] >>
   `expr_sim_pre cenv cx env (Name ann id) es` by
     simp[expr_sim_pre_body, vyperTypeCallGraphTheory.int_calls_expr_def] >>
-  irule gas_outcome_full_initial_domain >>
-  conj_tac >- simp[storage_trace_frame_bind, evaluate_storage_trace_frame,
-                   storage_trace_frame_read_result] >>
-  simp[] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon es.storage_trace)
      es.storage_trace` by gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   first_assum drule >> strip_tac >>
@@ -84,16 +100,30 @@ Proof
   qmatch_asmsub_abbrev_tac `alloca_history func t` >>
   qabbrev_tac `inst = mk_inst sa.cs_next_id MLOAD [Var p] [out]` >>
   qabbrev_tac `u = update_var out (typed_val_to_w256 entry.type entry.value) s0` >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`step_prov PG G0 inst u`, `es`, `INL entry.value`, `t`,
-               `step_taint inst s0 u tn0`] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `sb.cs_current_insts = sa.cs_current_insts ++ [inst]` by gvs[Abbr `inst`] >>
+  qpat_x_assum `sb.cs_current_insts = _ ++ [mk_inst _ _ _ _]` kall_tac >>
+  `LENGTH sb.cs_current_insts = SUC s0.vs_inst_idx` by simp[] >>
+  `sa.cs_next_id <= inst.inst_id /\ inst.inst_id < sb.cs_next_id` by
+    simp[Abbr `inst`,mk_inst_def] >>
+  drule_all fn_has_code_same_block >>
+  disch_then (qx_choose_then `bb` strip_assume_tac) >>
+  `get_instruction bb (LENGTH sa.cs_current_insts) = SOME inst` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  qexistsl_tac [`entry.value`,`t`,`step_prov PG G0 inst u`,
+               `step_taint inst s0 u tn0`,`bb`,`inst`] >>
   conj_tac
   >- (gen_tac >> qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`]
        mp_tac eval_name_word >> simp[vyperStateTheory.bind_def]) >>
-  simp[] >> rpt strip_tac >>
-  first_assum drule >> strip_tac >>
-  all_tac >~ [`gas_origin_ptr_path _ _ _ _`]
-  >- suspend "name_load_path" >>
+  simp[expr_sim_full_post_def,expr_sim_full_endpoint_def] >>
+  (`~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = SUC (LENGTH sa.cs_current_insts) /\
+    t.vs_alloca_next = s0.vs_alloca_next` by simp[Abbr `t`,Abbr `u`,update_var_def]) >>
+  simp[vyperASTTheory.expr_type_def] >> gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >> rpt conj_tac >>
+  all_tac >~ [`gas_origin_ptr_edge _ _ _ _`]
+  >- suspend "name_load_edge" >>
   all_tac >~ [`expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`]
   >- (drule_all body_name_wordtype_post >>
       disch_then (qspec_then `entry.value` mp_tac) >>
@@ -104,7 +134,8 @@ Proof
   drule_all name_word_full_ghost_frame >>
   disch_then (qspecl_then [`typed_val_to_w256 entry.type entry.value`,
                           `LENGTH sb.cs_current_insts`, `PG`] strip_assume_tac) >>
-  fs[Abbr `t`, Abbr `u`, Abbr `inst`, update_var_def, vyperASTTheory.expr_type_def] >>
+  fs[Abbr `t`, Abbr `u`, Abbr `inst`, update_var_def, arithmeticTheory.ADD1,
+     vyperASTTheory.expr_type_def] >>
   drule_all name_word_ghost_inputs >> strip_tac >> gvs[] >>
   simp[ptr_val_ok_def] >>
   conj_tac
@@ -116,35 +147,40 @@ Proof
        FLOOKUP_DRESTRICT]
 QED
 
-Resume name_word_full[name_load_path]:
+Resume name_word_full_edge[name_load_edge]:
+  `allocas_from lo s0` by metis_tac[ghost_inv_at_def] >>
   drule_all name_word_ghost_inputs >> strip_tac >> gvs[Abbr `inst`] >>
-  `LENGTH sb.cs_current_insts = SUC s0.vs_inst_idx` by
-    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-        fresh_id_def, fresh_var_def, emit_def] >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  `sb.cs_current_insts = sa.cs_current_insts ++
-     [mk_inst sa.cs_next_id MLOAD [Var p] [out]]` by
-    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-        fresh_id_def, fresh_var_def, emit_def] >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-  `inst_mem_below_frontier (mk_inst sa.cs_next_id MLOAD [Var p] [out]) s0` by
+  `inst_mem_below_frontier
+    (mk_inst sa.cs_next_id MLOAD [Var p] [STRING #"%" (toString sa.cs_next_var)]) s0` by
     metis_tac[body_wordtype_name_MLOAD_frontier] >>
-  `allocas_from lo s0` by gvs[ghost_inv_at_def] >>
   `ptr_inst_ok (DF H) lo 0 ctx func G0 tn0
-    (mk_inst sa.cs_next_id MLOAD [Var p] [out]) s0` by
+    (mk_inst sa.cs_next_id MLOAD [Var p] [STRING #"%" (toString sa.cs_next_var)]) s0` by
     (irule ptr_inst_ok_mload_lo >> simp[]) >>
   drule_at (Pat `ptr_inst_ok _ _ _ _ _ _ _ _ _`)
     straight_line_origin_ptr_edge >>
   simp[mk_inst_def, is_terminator_def, inst_dload_in_section_def,
        step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def,
-       Abbr `t`, Abbr `u`, update_var_def] >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] assume_tac) >>
-  once_rewrite_tac[GSYM APPEND_NIL] >>
-  irule (cj 2 gas_origin_ptr_path_rules) >>
-  pure_rewrite_tac[APPEND_NIL] >>
-  goal_assum (drule_at Any) >> simp[gas_origin_ptr_path_rules]
+       Abbr `t`, Abbr `u`, update_var_def]
 QED
 
-Finalise name_word_full
+Finalise name_word_full_edge
+
+Theorem name_word_full:
+  expr_body_pre cenv cx env (Name ann id) es /\ is_word_type ann ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Name ann id) es
+Proof
+  strip_tac >> simp[expr_sim_full_via_bundle] >>
+  rpt gen_tac >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  conj_tac >- simp[storage_trace_frame_bind, evaluate_storage_trace_frame,
+                   storage_trace_frame_read_result] >>
+  `~s0.vs_halted` by fs[expr_sim_full_hypotheses_def] >>
+  simp[] >> strip_tac >> drule_all name_word_full_edge >> strip_tac >>
+  irule gas_outcome_full_pure >> simp[] >>
+  qexistsl_tac [`G`,`es`,`INL v`,`t`,`tn`] >> simp[] >>
+  gen_tac >> disch_tac >> first_x_assum drule >> strip_tac >>
+  `gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (t,G,tn) [] (OK t,G,tn)` by simp[gas_origin_ptr_path_rules] >>
+  drule_all (cj 2 gas_origin_ptr_path_rules) >> simp[]
+QED
