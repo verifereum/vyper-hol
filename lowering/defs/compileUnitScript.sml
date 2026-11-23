@@ -746,8 +746,7 @@ End
 Definition order_internals_unit_def:
   order_internals_unit names ints =
     FLAT (MAP (λn. FILTER (λ(src, f). nsid_to_string (src, fn_decl_name f) = n)
-                     ints) names) ++
-    FILTER (λ(src, f). ¬MEM (nsid_to_string (src, fn_decl_name f)) names) ints
+                     ints) names)
 End
 
 (* ===== Complete-unit lowering ===== *)
@@ -1171,9 +1170,7 @@ Theorem order_internals_unit_singleton:
 Proof
   simp[order_internals_unit_def, order_internals_def,
        MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF,
-       BETA_RULE (Q.SPEC `λfname. fname = n` filter_unit_internal_names_singleton),
-       BETA_RULE (Q.SPEC `λfname. ¬MEM fname names`
-                    filter_unit_internal_names_singleton)]
+       BETA_RULE (Q.SPEC `λfname. fname = n` filter_unit_internal_names_singleton)]
 QED
 
 Theorem internal_callees_unit_singleton[local]:
