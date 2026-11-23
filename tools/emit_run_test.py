@@ -38,6 +38,7 @@ def main():
             "tests/fixtures/run_test_json/checkpoint_message_calls.json",
             "tests/fixtures/run_test_json/checkpoint_code_provenance.json",
             "tests/fixtures/run_test_json/checkpoint_raw_init_transient.json",
+            "tests/fixtures/run_test_json/checkpoint_raw_underfunded.json",
         ]
         actual = []
         for fixture_path in fixtures:

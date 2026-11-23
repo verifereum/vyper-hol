@@ -772,9 +772,11 @@ Definition run_raw_deployment_def:
     let nonce = case dt.deployerNonce of NONE => sender.nonce | SOME n => n in
     let am = am with accounts updated_by
                update_account dt.deployer (sender with nonce := nonce) in
+    (* The direct fixture deployment helper executes with gas price zero and
+       charges no fees, independently of transaction metadata in the trace. *)
     let tx = make_create_tx dt.deployer nonce dt.value
                             (dt.initcode ++ dt.callData)
-                            dt.gasLimit dt.gasPrice in
+                            dt.gasLimit 0 in
     let expected = callee_from_tx_to dt.deployer nonce NONE in
     let blk = make_create_block dt in
     if nonce < sender.nonce then
@@ -783,6 +785,12 @@ Definition run_raw_deployment_def:
        address when the trace recorded one. *)
     else if dt.expectedAddress <> 0w /\ expected <> dt.expectedAddress then
       INR (Error $ RuntimeError "raw deployment address mismatch")
+    (* Direct fixture CREATE consumes its nonce even when the endowment is
+       unaffordable. No initcode executes and no transaction gas fee is charged. *)
+    else if sender.balance < dt.value then
+      if dt.expectedSuccess then
+        INR (Error $ RuntimeError "raw deployment success mismatch")
+      else INL (increment_account_nonce dt.deployer am)
     else
       case raw_create_transaction dt.chainId dt.blockHashes blk
                                   am.accounts am.tStorage tx of

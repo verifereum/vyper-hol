@@ -12,13 +12,15 @@ val fixtures = ["fixtures/run_test_json/basic.json",
                 "fixtures/run_test_json/checkpoint_source_state.json",
                 "fixtures/run_test_json/checkpoint_message_calls.json",
                 "fixtures/run_test_json/checkpoint_code_provenance.json",
-                "fixtures/run_test_json/checkpoint_raw_init_transient.json"];
+                "fixtures/run_test_json/checkpoint_raw_init_transient.json",
+                "fixtures/run_test_json/checkpoint_raw_underfunded.json"];
 val () = holbuild_extra_deps
   ["fixtures/run_test_json/basic.json",
    "fixtures/run_test_json/checkpoint_source_state.json",
    "fixtures/run_test_json/checkpoint_message_calls.json",
    "fixtures/run_test_json/checkpoint_code_provenance.json",
-   "fixtures/run_test_json/checkpoint_raw_init_transient.json"];
+   "fixtures/run_test_json/checkpoint_raw_init_transient.json",
+   "fixtures/run_test_json/checkpoint_raw_underfunded.json"];
 val () = holbuild_extra_outputs [".emit/json-smoke.expected"];
 val () = OS.FileSys.mkDir ".emit" handle OS.SysErr _ => ();
 
@@ -82,7 +84,11 @@ val expected_status =
       nested STATICCALL reading it, failed-constructor rollback, raw calls
       before and after an explicit transient clear, and a changed-slot control. *)
    ("test_checkpoint_raw_init_transient",true),
-   ("test_checkpoint_raw_init_transient_mismatch",false)];
+   ("test_checkpoint_raw_init_transient_mismatch",false),
+   ("test_checkpoint_raw_underfunded",true),
+   ("test_checkpoint_raw_underfunded_gas_price_ignored",true),
+   ("test_checkpoint_raw_underfunded_nonce_mismatch",false),
+   ("test_checkpoint_raw_underfunded_unexpected_success",false)];
 val expected_names = List.map #1 expected_status;
 (* Failures must report the intended mismatch boundary. *)
 val expected_errors =
@@ -106,7 +112,11 @@ val expected_errors =
     "field=nonce slot=none expected=2 actual=1"),
    ("test_checkpoint_raw_code_mismatch", "field=code slot=none"),
    ("test_checkpoint_raw_init_transient_mismatch",
-    "field=transient_storage slot=1 expected=43 actual=42")];
+    "field=transient_storage slot=1 expected=43 actual=42"),
+   ("test_checkpoint_raw_underfunded_nonce_mismatch",
+    "field=nonce slot=none expected=1 actual=2"),
+   ("test_checkpoint_raw_underfunded_unexpected_success",
+    "raw deployment success mismatch")];
 val () =
   if List.map #1 prepared = expected_names then ()
   else raise Fail "prepared fixture names differ from expected names or order";

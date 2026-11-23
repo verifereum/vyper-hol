@@ -1,0 +1,1082 @@
+{
+  "test_checkpoint_raw_underfunded": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 5
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "3a6002556011600055601760015d602a600052600760206000a160016000f3",
+        "calldata": null,
+        "value": 0,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "runtime_bytecode": "00",
+        "deployment_succeeded": true,
+        "deployer_nonce": 0
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 5,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "6063600055605860015d6063600052600860206000a160016000f3",
+        "calldata": null,
+        "value": 6,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0x0000000000000000000000000000000000000000",
+        "runtime_bytecode": "",
+        "deployment_succeeded": false,
+        "deployer_nonce": 1
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 1,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 5,
+            "nonce": 2,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "60006000f3",
+        "calldata": null,
+        "value": 5,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0xfb99838B0Fd63f923F37e1d8803877A7f532Ce5C",
+        "runtime_bytecode": "",
+        "deployment_succeeded": true,
+        "deployer_nonce": 2
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 2,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 0,
+            "nonce": 3,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          },
+          {
+            "address": "0xfb99838b0fd63f923f37e1d8803877a7f532ce5c",
+            "balance": 5,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      }
+    ]
+  },
+  "test_checkpoint_raw_underfunded_gas_price_ignored": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 5
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "3a6002556011600055601760015d602a600052600760206000a160016000f3",
+        "calldata": null,
+        "value": 0,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 7,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "runtime_bytecode": "00",
+        "deployment_succeeded": true,
+        "deployer_nonce": 0
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 5,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "6063600055605860015d6063600052600860206000a160016000f3",
+        "calldata": null,
+        "value": 6,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 7,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0x0000000000000000000000000000000000000000",
+        "runtime_bytecode": "",
+        "deployment_succeeded": false,
+        "deployer_nonce": 1
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 1,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 5,
+            "nonce": 2,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "60006000f3",
+        "calldata": null,
+        "value": 5,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 7,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0xfb99838B0Fd63f923F37e1d8803877A7f532Ce5C",
+        "runtime_bytecode": "",
+        "deployment_succeeded": true,
+        "deployer_nonce": 2
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 2,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 0,
+            "nonce": 3,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          },
+          {
+            "address": "0xfb99838b0fd63f923f37e1d8803877a7f532ce5c",
+            "balance": 5,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      }
+    ]
+  },
+  "test_checkpoint_raw_underfunded_nonce_mismatch": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 5
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "3a6002556011600055601760015d602a600052600760206000a160016000f3",
+        "calldata": null,
+        "value": 0,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "runtime_bytecode": "00",
+        "deployment_succeeded": true,
+        "deployer_nonce": 0
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 5,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "6063600055605860015d6063600052600860206000a160016000f3",
+        "calldata": null,
+        "value": 6,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0x0000000000000000000000000000000000000000",
+        "runtime_bytecode": "",
+        "deployment_succeeded": false,
+        "deployer_nonce": 1
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 1,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 5,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "60006000f3",
+        "calldata": null,
+        "value": 5,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0xfb99838B0Fd63f923F37e1d8803877A7f532Ce5C",
+        "runtime_bytecode": "",
+        "deployment_succeeded": true,
+        "deployer_nonce": 2
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 2,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 0,
+            "nonce": 3,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          },
+          {
+            "address": "0xfb99838b0fd63f923f37e1d8803877a7f532ce5c",
+            "balance": 5,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      }
+    ]
+  },
+  "test_checkpoint_raw_underfunded_unexpected_success": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {
+        "trace_type": "set_balance",
+        "address": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+        "value": 5
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "3a6002556011600055601760015d602a600052600760206000a160016000f3",
+        "calldata": null,
+        "value": 0,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "runtime_bytecode": "00",
+        "deployment_succeeded": true,
+        "deployer_nonce": 0
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 0,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 5,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "6063600055605860015d6063600052600860206000a160016000f3",
+        "calldata": null,
+        "value": 6,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0x0000000000000000000000000000000000000000",
+        "runtime_bytecode": "",
+        "deployment_succeeded": true,
+        "deployer_nonce": 1
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 1,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 5,
+            "nonce": 2,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      },
+      {
+        "trace_type": "deployment",
+        "deployment_type": "raw_bytecode",
+        "contract_abi": [],
+        "initcode": "60006000f3",
+        "calldata": null,
+        "value": 5,
+        "source_code": null,
+        "annotated_ast": null,
+        "solc_json": null,
+        "compiler_settings": null,
+        "storage_layout": null,
+        "raw_ir": null,
+        "blueprint_initcode_prefix": null,
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "function_name": "constructor",
+        "env": {
+          "tx": {
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1",
+            "gas": 10000000000,
+            "gas_price": 0,
+            "blob_hashes": []
+          },
+          "block": {
+            "number": 1,
+            "timestamp": 1700000000,
+            "gas_limit": 10000000000,
+            "excess_blob_gas": 0,
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "b7be19e5d262bebe6017ea742cb3080f556fafffe0941131ca59f907c59a309a"
+            }
+          }
+        },
+        "deployed_address": "0xfb99838B0Fd63f923F37e1d8803877A7f532Ce5C",
+        "runtime_bytecode": "",
+        "deployment_succeeded": true,
+        "deployer_nonce": 2
+      },
+      {
+        "trace_type": "state_checkpoint",
+        "boundary": "deployment",
+        "call_index": 2,
+        "accounts": [
+          {
+            "address": "0xc28b8a66397691f40c92271a9ebc04cabc1acca1",
+            "balance": 0,
+            "nonce": 3,
+            "code": "",
+            "storage": []
+          },
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "balance": 0,
+            "nonce": 1,
+            "code": "00",
+            "storage": [
+              {
+                "slot": 0,
+                "value": 17
+              }
+            ]
+          },
+          {
+            "address": "0xfb99838b0fd63f923f37e1d8803877a7f532ce5c",
+            "balance": 5,
+            "nonce": 1,
+            "code": "",
+            "storage": []
+          }
+        ],
+        "transient_storage": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "slot": 1,
+            "value": 23
+          }
+        ],
+        "logs": [
+          {
+            "address": "0xed4efeaed8057c619a6d7aacc0459874eaf3c166",
+            "topics": [
+              "0000000000000000000000000000000000000000000000000000000000000007"
+            ],
+            "data": "000000000000000000000000000000000000000000000000000000000000002a"
+          }
+        ]
+      }
+    ]
+  }
+}

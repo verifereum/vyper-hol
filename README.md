@@ -165,7 +165,7 @@ With `holbuild` v0.14.59 or newer, MLton, and Python 3 on `PATH`:
 ```
 
 The demo builds `tests/.emit/run-test` and compares exact native/HOL encoded
-inputs and results for twenty-eight cases across five fixtures, plus a passing
+inputs and results for thirty-two cases across six fixtures, plus a passing
 stdin trace. The fixtures include intentional output, revert, deployment-nonce,
 address, checkpoint, dispatch, and unexpected-internal-error mismatches.
 Real py-evm captures cover a source deployment
@@ -211,6 +211,14 @@ reads before/after an explicit transient clear. Its negative control changes
 the first expected transient value. Raw deployment preserves these slots until
 an explicit reset. Corrected message-call routing and raw-deployment transient
 threading affect existing traces too, not only traces containing checkpoints.
+
+`checkpoint_raw_underfunded.json` captures an unaffordable raw endowment between
+a state-seeding deployment and an exactly affordable deployment. The failed
+creation consumes its nonce without changing balances, storage, transient state
+or committed logs. Controls alter the expected nonce, claim unexpected success,
+and override recorded gas-price metadata while retaining the direct helper's
+fee-free, zero-`GASPRICE` execution. Raw deployment always uses gas price zero
+and charges no fees, matching that helper; this also applies to existing traces.
 
 ```bash
 # Build only; add --smoke for native/HOL parity checks:
