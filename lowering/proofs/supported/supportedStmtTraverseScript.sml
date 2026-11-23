@@ -110,7 +110,7 @@ End
 Definition body_stmt_safe_def:
   body_stmt_safe tops s <=>
     ~supported_stmt_expr_exists expr_evm_run_root s /\
-    EVERY (\c. FST c = NONE /\
+    EVERY (\c. FST c = NONE ==>
                IS_SOME (supported_function_decl tops c Internal))
       (int_calls_stmt s)
 End
@@ -122,7 +122,7 @@ End
 Theorem body_stmts_safe_iff:
   body_stmts_safe tops ss <=>
     ~supported_stmts_expr_exists expr_evm_run_root ss /\
-    EVERY (\c. FST c = NONE /\
+    EVERY (\c. FST c = NONE ==>
                IS_SOME (supported_function_decl tops c Internal))
       (int_calls_stmts ss)
 Proof

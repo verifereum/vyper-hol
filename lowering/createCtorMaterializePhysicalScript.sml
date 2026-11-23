@@ -90,6 +90,13 @@ Proof
   `ptr_covers Gz tz p z n` by
     (irule assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame >>
      qexistsl_tac [`Ga`,`a`,`ta`] >> simp[]) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  metis_tac[]
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >~ [`mem_bytes_at b n z.vs_memory = _`] >-
+    (qpat_assum `!aid off sz. _ ==> mem_bytes_at off sz z.vs_memory = _`
+       (qspecl_then [`aid`, `b`, `n`] mp_tac) >> simp[] >>
+     disch_then MATCH_MP_TAC >> first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  qpat_assum `!aid off sz i. _ ==> i IN ta.t_mem`
+    (qspecl_then [`aid`, `b`, `n`, `i`] mp_tac) >> simp[] >>
+  disch_then MATCH_MP_TAC >> first_assum ACCEPT_TAC
 QED

@@ -6,7 +6,7 @@
  *   intcall_args_full
  *)
 Theory bodyFullIntCallArgs
-Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragGasPath compileVyper[qualified,ignore_grammar] pair[qualified,ignore_grammar] vyperStorageBackend[qualified,ignore_grammar] vyperStorageFootprint[qualified,ignore_grammar] freshWrites[qualified,ignore_grammar] bodyFullAllocaFresh[qualified,ignore_grammar] bodyIntCallSource[qualified,ignore_grammar] bodySim[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] supportedNames[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
+Ancestors bodyCallSupport bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragGasPath compileVyper[qualified,ignore_grammar] pair[qualified,ignore_grammar] vyperStorageBackend[qualified,ignore_grammar] vyperStorageFootprint[qualified,ignore_grammar] freshWrites[qualified,ignore_grammar] bodyFullAllocaFresh[qualified,ignore_grammar] bodyIntCallSource[qualified,ignore_grammar] bodySim[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] supportedNames[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
   compileExprAllocaFresh[qualified,ignore_grammar]
   compilerInstructionSuffix[qualified,ignore_grammar]
   abiEncoderProps[qualified,ignore_grammar]
@@ -14,7 +14,7 @@ Ancestors bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragG
   bodyInvIntCallPinsProps
   bodyIntCallSeams bodyFullPreds bodySimFull bodyFullUnwrap
   constSubst constSubstStmtsPreserve
-  gasOutcomeFull bodyPtrDefs gasShadow gasShadowShape gasContext exprSimHypsDefs
+  gasOutcomeFull gasExemptScope[qualified,ignore_grammar] bodyPtrDefs gasShadow gasShadowShape gasContext exprSimHypsDefs
   exprSimIfExpWidenedAdapter exprSimSliceCompose
   loweringPosts exprSimVVFrame valueEncodingProofs bodyPtrBytestringBuiltinsWindowGhost
   exprReasonOperand haltExitProj typedMemoryCopy
@@ -1946,6 +1946,8 @@ Proof
     (simp[FUN_EQ_THM] >> metis_tac[allocLimitsPropsTheory.lowered_value_type_struct_fields]) >>
   `type_alloc_ok updated = type_alloc_ok original` by
     simp[FUN_EQ_THM, allocLimitsTheory.type_alloc_ok_def] >>
+  `array_slot_base updated = array_slot_base original` by
+    metis_tac[allocLimitsPropsTheory.array_slot_base_frame] >>
   gvs[allocLimitsTheory.alloc_limits_expr_def, allocLimitsTheory.type_alloc_ok_def,
        exprLoweringTheory.copies_subscript_base_def,
        supportedExprTraverseTheory.supported_expr_exists_def, constSubstCorrectTheory.base_target_root_def] >>
@@ -2068,7 +2070,7 @@ Proof
      >- metis_tac[logArgumentTypeEvalTheory.consistent_variable_type_well_formed] >>
      gvs[vyperTypeInvariantsTheory.env_consistent_def,
          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
-  drule_then strip_assume_tac bodyExprPreFactsTheory.supported_expr_body_calls >>
+  drule_all_then strip_assume_tac bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
   `~supported_expr_exists
       (const_name_root (cx with stk updated_by CONS (NONE,name))) e` by
     (`cx_tops (cx with stk updated_by CONS (NONE,name)) = cx_tops cx` by
@@ -2111,16 +2113,15 @@ Proof
   `get_module_code (cx with stk updated_by CONS (NONE,name)) NONE =
      get_module_code cx NONE` by
     simp[NoAsms, vyperContextTheory.get_module_code_def] >>
-  `EVERY (\c. ?ts. get_module_code (cx with stk updated_by CONS (NONE,name))
-                         (FST c) = SOME ts /\
-                    supported_program ts /\
-                    IS_SOME (supported_function_decl ts (NONE,SND c) Internal))
+  `EVERY (\c. FST c = NONE /\
+              ?ts. supported_program ts /\
+                   get_module_code (cx with stk updated_by CONS (NONE,name)) NONE = SOME ts /\
+                   IS_SOME (supported_function_decl ts c Internal))
      (int_calls_expr e)` by
-    (fs[EVERY_MEM] >> qx_gen_tac `call` >> strip_tac >>
-     `FST call = NONE` by res_tac >>
-     `(NONE,SND call) = call` by (Cases_on `call` >> fs[]) >>
-     simp[] >> res_tac) >>
-  fs[expr_body_pre_split_def, expr_body_pre_mods_def, GSYM const_name_root_mods_singleton,
+    (simp[EVERY_MEM] >> qx_gen_tac `call` >> strip_tac >> conj_tac >>
+     fs[EVERY_MEM]) >>
+  fs[expr_body_pre_split_def, expr_body_pre_mods_def, GSYM source_body_calls_main,
+     GSYM const_name_root_mods_singleton,
      vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
      finite_mapTheory.FUNION_FEMPTY_2]
 QED
@@ -8103,33 +8104,8 @@ Proof
   qexistsl_tac [`err`,`ee`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >>
   reverse conj_tac
   >- (qexists_tac `H` >> fs[]) >>
-  qabbrev_tac `enter = \src:evaluation_state.
-    (if src with gas_obs := [] = es with gas_obs := [] then
-       (INL T,src with scopes := scopes)
-     else (INL F,src)) : bool evaluation_result` >>
-  qabbrev_tac `rest = \b:bool.
-    ignore_bind (if b then scoped else source) (return ())` >>
-  `vyperState$bind enter rest = ignore_bind source (return ())` by
-    (simp[FUN_EQ_THM,Abbr `enter`,Abbr `rest`,bind_def] >>
-     gen_tac >> IF_CASES_TAC >> simp[] >>
-     `x = es with gas_obs := x.gas_obs` by
-       fs[evaluation_state_component_equality] >>
-     qpat_assum `x = es with gas_obs := x.gas_obs` (fn th => once_rewrite_tac[th]) >>
-     qpat_assum `!obs. source _ = scoped _`
-       (qspec_then `x.gas_obs` mp_tac) >>
-     simp[ignore_bind_def,bind_def,evaluation_state_component_equality]) >>
-  `gas_marked_exec T (ctx,fn) enter (es,s) [] (INL T)
-       (es with scopes := scopes) (OK s)` by
-    (simp[gasSummaryTheory.gas_marked_exec_def,gasSummaryTheory.gas_explicit_def,Abbr `enter`,
-          evaluation_state_component_equality] >>
-     irule fragGasModeTheory.gas_marked_path_from_mem >>
-     simp[cj 1 fragGasPathMemTheory.gas_path_mem_rules]) >>
-  `gas_exempt_cert T tops (ctx,fn) (rest T)
-     ((es with scopes := scopes) with gas_obs := [],s)
-     marks (err,ee) (leaf,finish')` by
-    (simp[Abbr `rest`] >>
-     drule gasExemptCertTheory.gas_exempt_cert_start_gas_obs >> simp[]) >>
-  drule_all gasExemptCertTheory.gas_exempt_cert_bind_bool >> simp[]
+  irule gasExemptScopeTheory.gas_exempt_cert_source_scope >> simp[] >>
+  qexistsl_tac [`scoped`,`scopes`] >> simp[]
 QED
 
 Theorem args_rest_outcome[local]:
@@ -11077,5 +11053,5 @@ Proof
   simp_tac bool_ss [vyperStateTheory.evaluation_state_accfupds] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qexists_tac `H` >>
-  qpat_assum `valid_horizon cx st0 H ed.storage_trace` ACCEPT_TAC
+  (simp[])
 QED
