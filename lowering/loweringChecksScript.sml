@@ -31,7 +31,8 @@ Ancestors
   vyperCtorAliasTest createImmutableBytecodeTest createCompletionProbe
   ctorImmutableAppendTest
   e2eWitnessCompute e2eWitness e2eNonreentrantWitness e2eCompose e2eERC20Witness
-  e2eModsWitness
+  e2eModsWitness linkedBodyWitness linkedBodyWitnessContext linkedBodyDeadImportWitness
+  linkedStructFields
   (* tests of the bytecode evaluation library the native runner shares *)
   evalCompilerBytecodeLibTest
   (* operand-stack checker: pinned internal-call bytecode and deep call chains *)

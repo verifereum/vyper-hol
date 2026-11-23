@@ -211,6 +211,21 @@ Definition target_in_immutables_def:
     target_in_immutables mvars bt
 End
 
+(* A storage or transient array variable.  As a subscript base Python reads
+   it in place (_lower_array_subscript lowers it to a pointer) and never
+   copies it to memory: it is not derived from a dynamic-array element, so
+   copies_subscript_base is false, and no buffer is allocated for it.
+   Mirrors Python: expr.py _lower_array_subscript *)
+Definition array_slot_base_def:
+  array_slot_base cenv (TopLevelName t nsid) =
+    (is_ArrayT t /\
+     case FLOOKUP cenv.ce_module_vars nsid of
+       SOME (StorageLoc _) => T
+     | SOME (TransientLoc _) => T
+     | _ => F) /\
+  array_slot_base cenv _ = F
+End
+
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
    and string literals, struct and array literals, empty(T) of a type that
@@ -233,7 +248,8 @@ Definition alloc_limits_expr_def:
      type_memory_bytes cenv (StructT nsid) < 2 ** 64 /\
      alloc_limits_named_exprs cenv kes) /\
   alloc_limits_expr cenv (Subscript t x y) =
-    (type_alloc_ok cenv t /\ alloc_limits_expr cenv x /\
+    (type_alloc_ok cenv t /\
+     (array_slot_base cenv x \/ alloc_limits_expr cenv x) /\
      alloc_limits_expr cenv y /\
      ~pop_subscript_overlap cenv.ce_modules x y /\
      (copies_subscript_base cenv x y ==>

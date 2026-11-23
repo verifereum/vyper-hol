@@ -214,7 +214,9 @@ Theorem subscript_array_framed_code_full:
       cenv cx ty (Subscript ann e1 e2) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `expr_body_pre cenv cx env e1 es` by
+    metis_tac[exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base,
+              exprSimTopLevelPropsTheory.array_slot_base_compile_location] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty e1 es` by
     (fs[body_expr_full_ok_def] >> metis_tac[]) >>
