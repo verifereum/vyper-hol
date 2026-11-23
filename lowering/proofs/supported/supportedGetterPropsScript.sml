@@ -48,6 +48,7 @@ QED
 Theorem supported_getter_subscript[local]:
   !tops vt e kt vn.
   supported_place_expr tops e /\ supported_subscript_place tops e /\
+  ~qualified_place_root e /\
   int_calls_expr e = [] /\
   supported_place_type tops kt /\
   (supported_place_info tops e = MapPT kt vt \/
@@ -69,6 +70,7 @@ Theorem supported_build_getter_path[local]:
   !e kt vt n. !args ret exp tops.
   build_getter e kt vt n = (args,ret,exp) /\
   supported_place_expr tops e /\ supported_subscript_place tops e /\
+  ~qualified_place_root e /\
   int_calls_expr e = [] /\
   supported_place_type tops kt /\
   (supported_place_info tops e = MapPT kt vt \/
@@ -104,7 +106,8 @@ Proof
       simp[supported_place_type_def, Once supported_nested_type_def,
            supported_scalar_type_def, supported_word_type_def, supported_int_width_def] >>
     first_x_assum drule >>
-    simp[supported_subscript_place_def, supported_hashmap_value_def] >>
+    simp[supported_subscript_place_def, supported_hashmap_value_def,
+         qualified_place_root_def] >>
     strip_tac >> simp[]) >>
   all_tac
   >>~- ([`~is_ArrayT ty`],
@@ -119,7 +122,7 @@ Proof
     fs[supported_place_type_def, Once supported_nested_type_def,
        supported_hashmap_key_type_def] >>
   first_x_assum (qspec_then `tops` mp_tac) >>
-  simp[supported_subscript_place_def]
+  simp[supported_subscript_place_def, qualified_place_root_def]
 QED
 
 Theorem getter_variable_member_lookup[local]:
@@ -218,13 +221,14 @@ Theorem closed_constant_type_place[local]:
   !e env.
     constant_expr [(NONE,tops)] e /\ const_local_refs e = [] ==>
     type_place_expr env e = NONE /\
-    supported_place_info tops e = ValPT (expr_type e)
+    supported_place_info tops e = ValPT (expr_type e) /\
+    ~qualified_place_root e
 Proof
   completeInduct_on `expr_size e` >>
   gen_tac >> disch_tac >> gen_tac >> strip_tac >>
   Cases_on `e` >>
   gvs[constant_expr_def, const_local_refs_def, well_typed_expr_def,
-      supported_place_info_def, place_type_def, expr_type_def]
+      supported_place_info_def, place_type_def, expr_type_def, qualified_place_root_def]
   >- (PairCases_on `p` >> Cases_on `p0` >>
       gvs[constant_expr_def, const_local_refs_def, declared_constant_def]) >>
   qpat_x_assum `!m. _` (qspec_then `expr_size e'` mp_tac) >>
@@ -325,7 +329,7 @@ Proof
   rename1 `expr_type r = ArrayT elem bd` >>
   `supported_place_expr tops r /\ supported_place_type tops (ArrayT elem bd)` by
     metis_tac[array_constant_supported_place] >>
-  `supported_place_info tops r = ValPT (expr_type r)` by
+  `supported_place_info tops r = ValPT (expr_type r) /\ ~qualified_place_root r` by
     metis_tac[closed_constant_type_place] >>
   `supported_place_type tops (BaseT (UintT 256))` by
     simp[supported_place_type_def, Once supported_nested_type_def,
@@ -428,6 +432,7 @@ Proof
            (impl_tac >-
              (simp[supported_pure_expr_def, supported_place_root_def,
                    supported_subscript_place_def, supported_place_info_def,
+                   qualified_place_root_def,
                    place_type_def, supported_storage_value_def, supported_value_type_def,
                    int_calls_expr_def,
                    supported_hashmap_value_def] >>
@@ -450,6 +455,7 @@ Proof
   (impl_tac >-
     (simp[supported_pure_expr_def, supported_place_root_def,
           supported_subscript_place_def, supported_place_info_def,
+          qualified_place_root_def,
           place_type_def, int_calls_expr_def] >>
      fs[supported_place_type_def, Once supported_nested_type_def,
         supported_hashmap_key_type_def])) >>
