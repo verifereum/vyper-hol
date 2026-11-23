@@ -6,7 +6,7 @@ Ancestors
   vfmExecution[ignore_grammar] vyperAST vyperGetter vyperABI
   vyperMisc vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
-  vyperSubscriptOverlap
+  vyperSubscriptOverlap constSubstMods[qualified]
 Libs
   wordsLib intLib monadsyntax
 
@@ -1033,20 +1033,40 @@ Definition eval_raw_call_def:
 End
 
 
+val raw_call_frame_rewrites =
+  [eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+   assert_def, return_def, raise_def, get_accounts_def,
+   get_transient_storage_def, lift_option_def, update_accounts_def,
+   update_transient_def, append_logs_def, update_pending_deletions_def,
+   record_storage_backend_def, record_storage_event_def,
+   UNCURRY, COND_RATOR,
+   option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()];
+
 Theorem eval_raw_call_preserves_non_accounts:
   eval_raw_call cx flags target_addr calldata amount gas st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, update_accounts_def,
-       update_transient_def, append_logs_def, update_pending_deletions_def,
-       record_storage_backend_def, record_storage_event_def,
-       UNCURRY, COND_RATOR,
-       option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
+  Cases_on `flags.rcf_is_delegate` >-
+   (Cases_on `flags.rcf_revert_on_failure` >-
+     (simp raw_call_frame_rewrites >> rpt strip_tac >> gvs[] >>
+      imp_res_tac frame_call_value_state >>
+      imp_res_tac take_delegate_outcome_frame >>
+      imp_res_tac adopt_call_outcome_frame >>
+      gvs[evaluation_state_component_equality]) >>
+    simp raw_call_frame_rewrites >> rpt strip_tac >> gvs[] >>
+    imp_res_tac frame_call_value_state >>
+    imp_res_tac take_delegate_outcome_frame >>
+    imp_res_tac adopt_call_outcome_frame >>
+    gvs[evaluation_state_component_equality]) >>
+  Cases_on `flags.rcf_revert_on_failure` >-
+   (simp raw_call_frame_rewrites >> rpt strip_tac >> gvs[] >>
+    imp_res_tac frame_call_value_state >>
+    imp_res_tac take_call_outcome_frame >>
+    imp_res_tac adopt_call_outcome_frame >>
+    gvs[evaluation_state_component_equality]) >>
+  simp raw_call_frame_rewrites >> rpt strip_tac >> gvs[] >>
   imp_res_tac frame_call_value_state >>
-  imp_res_tac take_call_outcome_frame >> imp_res_tac take_delegate_outcome_frame >>
+  imp_res_tac take_call_outcome_frame >>
   imp_res_tac adopt_call_outcome_frame >>
   gvs[evaluation_state_component_equality]
 QED
@@ -2155,6 +2175,14 @@ Definition constants_order_def:
     if IS_SOME src_id_opt then (src_id_opt, ts) :: constants_order rest
     else constants_order rest ++ [(src_id_opt, ts)]
 End
+
+Theorem consts_env_modules_order_eq:
+  consts_env_modules_order mods = constants_order mods
+Proof
+  Induct_on `mods` >- simp[constSubstModsTheory.consts_env_modules_order_def,
+                           constants_order_def] >>
+  Cases >> simp[constSubstModsTheory.consts_env_modules_order_def, constants_order_def]
+QED
 
 
 (* constants_order only reorders the modules. *)
