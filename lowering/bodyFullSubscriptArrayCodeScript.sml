@@ -157,7 +157,7 @@ Theorem code_array_selected_landing:
       (it,Gi,tni) [] (OK sf,Gf,tnf) /\
     expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (Subscript et obj idx)
       (es,sa,sb,s0,LocatedValue et (mk_ptr out LocCode),G0,tn0)
-      H (INL child) fin Gf tnf sf)
+      H (INL child : eval_result + exception) fin Gf tnf sf)
 Proof
   strip_tac >> conj_tac >- simp[] >> qx_gen_tac `H` >> strip_tac >>
   first_x_assum (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
@@ -231,8 +231,10 @@ Proof
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty e1 es` by
     (fs[body_expr_full_ok_def] >> metis_tac[]) >>
-  simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  drule_all compile_expr_array_subscript >> strip_tac >>
+  simp[expr_vv_sim_full_via_bundle,expr_vv_sim_full_hypotheses_def,
+       expr_sim_full_code_def] >>
+  qx_genl_tac [`st0`, `sa`, `sb`, `shadow_sa`, `shadow_sb`, `vv`, `s0`, `G0`, `tn0`] >>
+  strip_tac >> drule_all compile_expr_array_subscript >> strip_tac >>
   rename1 `compile_expr cenv ty e1 sa = (bvv,sm)` >>
   drule compile_expr_extends >> strip_tac >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
@@ -721,9 +723,10 @@ Resume subscript_array_framed_code_full[fixed_selection]:
            simp[ptrDisciplineTheory.allocas_below_fmp_def, allocas, fmp, initial] >>
            metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.scalar_mul_add_joint_frame) >>
+    bodyFullSubscriptArrayCodeOpsTheory.scalar_mul_add_joint_frame_run) >>
   disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`]
+    (CONJUNCTS_THEN2 (mk_asm "address_run") strip_assume_tac)) >>
   `!q. not_fresh_at st2 q ==> not_fresh_at cs' q` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `st2` >> fs[ci_mono_def, cs_extends_def]) >>
@@ -840,9 +843,11 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
      simp[] ) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame) >>
+    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame_run) >>
   disch_then (qspecl_then [`PG`, `Gi`] mp_tac) >>
-  disch_then (qx_choosel_then [`lenvar`, `Gl`, `tnl`, `il`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`lenvar`, `Gl`, `tnl`, `il`]
+      (CONJUNCTS_THEN2 assume_tac
+        (CONJUNCTS_THEN2 (mk_asm "length_run") strip_assume_tac))) >>
   `word_of_bytes T (0w:bytes32)
       (TAKE 32 (DROP (w2n w) it.vs_data_section ++ REPLICATE 32 0w)) =
       n2w (array_length (ArrayTV etv (Dynamic n)) av)` by
@@ -925,9 +930,10 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
            simp[ptrDisciplineTheory.allocas_below_fmp_def, allocas, fmp, initial] >>
            metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.code_dynamic_address_joint_frame) >>
+    bodyFullSubscriptArrayCodeOpsTheory.code_dynamic_address_joint_frame_run) >>
   disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`]
+    (CONJUNCTS_THEN2 (mk_asm "address_run") strip_assume_tac)) >>
   `!q. not_fresh_at st2 q ==>
     lookup_var q sf = lookup_var q it /\ FLOOKUP Gf q = FLOOKUP Gi q /\
     op_taint tnf (Var q) = op_taint tni (Var q)` by metis_tac[] >>
@@ -1068,7 +1074,7 @@ Resume subscript_array_framed_code_full[fixed_rejection]:
   `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``] array_bounds_check_joint_oob_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] (map_every assume_tac o CONJUNCTS)) >>
   irule gas_outcome_full_exit >> simp[] >>
   qexistsl_tac [`Gf`, `fin`, `Abort Revert_abort sf`,
      `INR (Error (RuntimeError "evaluate_subscripts array_index"))`, `tnf`] >>
@@ -1119,9 +1125,11 @@ Resume subscript_array_framed_code_full[dynamic_rejection]:
     (drule_all exprSimBopRestWordLoadSafetyTheory.rest_word_immutable_region_bound >> simp[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame) >>
+    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame_run) >>
   disch_then (qspecl_then [`PG`, `Gi`] mp_tac) >>
-  disch_then (qx_choosel_then [`lenvar`, `Gl`, `tnl`, `il`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`lenvar`, `Gl`, `tnl`, `il`]
+      (CONJUNCTS_THEN2 assume_tac
+        (CONJUNCTS_THEN2 (mk_asm "length_run") strip_assume_tac))) >>
   `word_of_bytes T (0w:bytes32)
       (TAKE 32 (DROP (w2n w) it.vs_data_section ++ REPLICATE 32 0w)) =
       n2w (array_length (ArrayTV etv (Dynamic n)) av)` by
@@ -1154,7 +1162,7 @@ Resume subscript_array_framed_code_full[dynamic_rejection]:
            metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``] array_bounds_check_joint_oob_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] (map_every assume_tac o CONJUNCTS)) >>
   irule gas_outcome_full_exit >> simp[] >>
   qexistsl_tac [`Gf`, `fin`, `Abort Revert_abort sf`,
      `INR (Error (RuntimeError "evaluate_subscripts array_index"))`, `tnf`] >>
