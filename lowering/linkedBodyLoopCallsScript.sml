@@ -322,3 +322,17 @@ Proof
        simp_tac (srw_ss()) [FUN_EQ_THM, callee_writes_ok_def, same])) >>
   simp[]
 QED
+
+Theorem checked_subst_consts_int_calls_mods:
+  check_contract mode layouts addr mods = SOME artifact ==>
+  (!e. int_calls_expr (subst_consts_expr_mods (consts_env_mods mods) e) =
+       int_calls_expr e) /\
+  (!ss. int_calls_stmts (subst_consts_stmts_mods (consts_env_mods mods) ss) =
+        int_calls_stmts ss)
+Proof
+  strip_tac >>
+  `!key r. ALOOKUP (consts_env_mods mods) key = SOME r ==> int_calls_expr r = []` by
+    (rpt strip_tac >> drule_all checked_qualified_const_loop_replacements >> simp[]) >>
+  drule qualified_const_subst_expr_int_calls >>
+  drule qualified_const_subst_stmts_int_calls >> simp[]
+QED
