@@ -1,6 +1,6 @@
 Theory bodyFullBopWordSuccess
 Ancestors
-  bodyPtrBopScalarSeq bodyPtrBopScalarOutcome fragGasCopyLoop
+  bodyPtrBopScalarSeq bodyPtrBopScalarOutcome fragGasCopyLoop fragGasCopySeqLiftProps
   instMemFrontier fragExecMem memSafeRun fragGasSeqPtr list venomInst
 
 Theorem bop_word_scalar_success_joint:

@@ -12,6 +12,7 @@ Ancestors
   bodyFullAttributeAdd loweringPosts bodyPtrDefs venomExecSemantics exprSimVVFrame
   emitHelper venomInst venomState typedCopyCompatibility
   logBytesRobustSeqPtr bodyCopyMemoryBase fragGasCopyLoop fragGasOriginPtrDead
+  fragGasCopySeqLiftProps
   exprSimBufferStore reasonCopySourcePtr
   bodyMemAggregatePath fragGasPathFrameMem logValueFramePtr internalReturnImmutableTypes
   bodyFullBuiltinWordPowCompose stateRelProj immutableDeployAssignFacts
