@@ -221,19 +221,31 @@ val (external_gate, external_gate_rule) =
 Theorem linked_witness_constructor_entry_gate:
   ^constructor_gate
 Proof
-  mp_tac linked_witness_constructor_context >> simp[] >> rpt strip_tac >>
-  mp_tac linked_witness_constructor_body_checks >> simp[] >> rpt strip_tac >>
-  mp_tac constructor_gate_rule >>
-  simp[] >> impl_tac >- metis_tac[] >>
-  strip_tac >> metis_tac[]
+  strip_assume_tac linked_witness_constructor_context >>
+  strip_assume_tac linked_witness_constructor_body_checks >>
+  rename1 `check_contract T _ _ _ = SOME checked_art` >>
+  mp_tac (INST [``am : abstract_machine`` |-> ``linked_witness_initial_machine``,
+               ``tx : call_txn`` |-> ``linked_witness_deploy_tx``,
+               ``art : contract_type_artifact`` |-> ``checked_art : contract_type_artifact``]
+          constructor_gate_rule) >>
+  simp[] >>
+  disch_then (qx_choose_then `ctx` (qx_choose_then `ce`
+              (qx_choose_then `env'` strip_assume_tac))) >>
+  qexistsl [`ctx`, `ce`, `env'`] >> simp[]
 QED
 
 Theorem linked_witness_external_entry_gate:
   ^external_gate
 Proof
-  mp_tac linked_witness_external_context >> simp[] >> rpt strip_tac >>
-  mp_tac linked_witness_external_body_checks >> simp[] >> rpt strip_tac >>
-  mp_tac external_gate_rule >>
-  simp[] >> impl_tac >- metis_tac[] >>
-  strip_tac >> metis_tac[]
+  strip_assume_tac linked_witness_external_context >>
+  strip_assume_tac linked_witness_external_body_checks >>
+  rename1 `check_contract F _ _ _ = SOME checked_art` >>
+  mp_tac (INST [``am : abstract_machine`` |-> ``linked_witness_am_call``,
+               ``tx : call_txn`` |-> ``linked_witness_call_tx``,
+               ``art : contract_type_artifact`` |-> ``checked_art : contract_type_artifact``]
+          external_gate_rule) >>
+  simp[] >>
+  disch_then (qx_choose_then `ctx` (qx_choose_then `ce`
+              (qx_choose_then `env'` strip_assume_tac))) >>
+  qexistsl [`ctx`, `ce`, `env'`] >> simp[]
 QED
