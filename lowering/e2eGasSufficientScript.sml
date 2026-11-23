@@ -34,6 +34,8 @@ Ancestors
   ptrDiscipline lowerDloadDefs e2eComposition sourceUnitExitSafe
   sourceUnitExecution exprSimHypsDefs
   o1PipelineCorrect o1PipelineCompose o1PassContract contextCodegenRel
+  o1CreateSizeTransport[qualified,ignore_grammar]
+  loweringCreateSize[qualified,ignore_grammar] createExprSizeExit[qualified,ignore_grammar]
   o1StaticPipelineCorrect runtimeLabelReadiness
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource passSimulationDefs contextCodegenRel
@@ -244,6 +246,53 @@ Proof
        venomStateTheory.venom_state_component_equality] >>
   metis_tac[opt_entry_state_identity, opt_entry_state_def,
             venomStateTheory.venom_state_component_equality]
+QED
+
+Triviality call_create_entry_facts:
+  !own fin tops rpolicy prog prog' cplan am tx es0 g u vs.
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    (own <=> fin = asm_opt_finalizer) /\
+    call_state_rel tops (assemble prog') am tx es0 /\
+    codegen_assembly rpolicy u = SOME prog /\ unit_shape_ok u /\
+    vs = (if own then opt_entry_state_own prog prog' cplan (add_frame_gas g es0)
+          else opt_entry_state prog prog' cplan (add_frame_gas g es0)) ==>
+    source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
+    code_layout_valid vs /\ o1_initial_state_ok vs /\
+    vs.vs_fmp = vs.vs_initial_fmp /\ vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
+    vs.vs_outcomes = MAP SND (call_trace (add_frame_gas g es0)) /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `vs = opt_entry_state_own prog prog' cplan (add_frame_gas g es0)` by
+    (Cases_on `own` >- fs[] >>
+     `fin = K SOME` by fs[accepted_finalizers_def] >>
+     gvs[opt_entry_state_own_identity] >>
+     metis_tac[opt_entry_state_identity_add_frame_gas]) >>
+  `vs = opt_entry_state_own prog prog' cplan es0 with
+      <|vs_outcomes := MAP SND (call_trace (add_frame_gas g es0));
+        vs_gas_readings := gas_readings (add_frame_gas g es0)|>` by
+    simp[opt_entry_state_own_def, entry_venom_state_add_frame_gas,
+         venomStateTheory.venom_state_component_equality] >>
+  `initial_venom_state_rel tops am tx (opt_entry_state_own prog prog' cplan es0)` by
+    metis_tac[opt_entry_initial_venom_state_rel_own, opt_entry_own_txp_identity] >>
+  `code_layout_valid (opt_entry_state_own prog prog' cplan es0)` by
+    metis_tac[opt_entry_code_layout_valid_own] >>
+  `source_deployment_rel tops am tx` by
+    fs[call_state_rel_def, frame_fresh_def, frame_tx_rel_def, world_rel_def] >>
+  `wf_state (add_frame_gas g es0) /\
+   balance_bounded (2 ** 256 - 1) (add_frame_gas g es0) /\
+   returndata_bounded (add_frame_gas g es0)` by
+    fs[call_state_rel_def, evm_state_ok_def, add_frame_gas_wf_state, add_frame_gas_bounded] >>
+  drule_all call_trace_outcomes_bounded >> strip_tac >>
+  qpat_x_assum `vs = opt_entry_state_own _ _ _ _ with
+                     <|vs_outcomes := _; vs_gas_readings := _|>` SUBST1_TAC >>
+  asm_rewrite_tac[] >>
+  conj_tac >- fs[initial_venom_state_rel_def, venom_env_rel_def] >>
+  conj_tac >-
+    (qpat_assum `code_layout_valid _` mp_tac >>
+     simp_tac (srw_ss()) [code_layout_valid_def]) >>
+  fs[o1_initial_state_ok_def, opt_entry_state_own_def, entry_venom_state_def,
+     venomStateTheory.init_venom_state_def, outcomes_accounts_typed_def, EVERY_MEM]
 QED
 
 (* CREATE and CREATE2 are absent from the lowered unit, so the size
