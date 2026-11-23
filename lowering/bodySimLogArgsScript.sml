@@ -284,7 +284,8 @@ Theorem log_arg_body_pre[local]:
     well_typed_expr env e /\
     ~supported_expr_exists
        (\e. ~is_extcode e /\
-            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+            ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) e /\
+    alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
               occurs_abi_decode_target target tops) /\
@@ -311,7 +312,8 @@ Theorem body_log_snapshot_expr_pre_mods:
   contract_inv mods exps ctx cenv cx /\ supported_pure_exprs (main_module mods) args /\
   well_typed_exprs env args /\
   ~supported_exprs_exists
-     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) args /\
+  alloc_limits_exprs cenv args /\
   ~supported_exprs_exists (const_name_root_mods mods) args /\
   call_evaluation_safe cx (int_calls_exprs args) /\
   (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
@@ -324,12 +326,13 @@ Proof
   `supported_pure_expr (main_module mods) e /\ ~is_extcode e /\
    ~supported_expr_exists (const_name_root_mods mods) e /\
    ~supported_expr_exists
-     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) e /\
    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
       occurs_abi_decode_target target (main_module mods))` by
     (fs[supported_pure_exprs_every, EVERY_MEM, supported_exprs_exists_every,
         EXISTS_MEM] >> metis_tac[]) >>
   `supported_expr (main_module mods) e` by simp[supported_expr_def] >>
+  `alloc_limits_expr cenv e` by metis_tac[exprSimSourceTheory.alloc_limits_exprs_mem] >>
   mp_tac (Q.INST [`calls` |-> `[]`, `es` |-> `st`] stmt_expr_body_pre_main_mods) >>
   simp[] >> metis_tac[well_typed_exprs_member, call_evaluation_safe_exprs_mem]
 QED
@@ -339,7 +342,8 @@ Theorem body_log_snapshot_expr_pre:
   body_inv tops ctx cenv cx /\ supported_pure_exprs tops args /\
   well_typed_exprs env args /\
   ~supported_exprs_exists
-     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) args /\
+  alloc_limits_exprs cenv args /\
   ~supported_exprs_exists (const_name_root cx) args /\
   call_evaluation_safe cx (int_calls_exprs args) /\
   (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
@@ -378,7 +382,8 @@ Theorem body_log_args_ready:
     ~supported_exprs_exists (const_name_root cx) args /\
     ~supported_exprs_exists
        (\e. ~is_extcode e /\
-            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+            ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) args /\
+    alloc_limits_exprs cenv args /\
     call_evaluation_safe cx (int_calls_exprs args) /\
     (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
               occurs_abi_decode_target target tops) ==>
@@ -394,6 +399,8 @@ Proof
     SIMP_RULE std_ss [Once well_typed_expr_def]) >>
   qpat_x_assum `~supported_exprs_exists (\e. ~is_extcode e /\ _) (h::args)`
     (strip_assume_tac o SIMP_RULE std_ss [Once supported_expr_exists_def, DE_MORGAN_THM]) >>
+  qpat_x_assum `alloc_limits_exprs _ (h::args)`
+    (strip_assume_tac o SIMP_RULE std_ss [Once alloc_limits_expr_def]) >>
   qpat_x_assum `call_evaluation_safe _ _` (assume_tac o
     SIMP_RULE std_ss [Once int_calls_expr_def]) >>
   qpat_x_assum `!target. supported_exprs_exists _ _ ==> _` (strip_assume_tac o
