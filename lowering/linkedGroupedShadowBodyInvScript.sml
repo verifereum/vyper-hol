@@ -5,8 +5,11 @@ Ancestors
   gasShadowModuleDefs gasShadowUnit gasShadowState gasShadow
   compileUnit compileVyper compileEnv moduleLowering constSubstMods
   loweringShapeDefs vyperCompiler venomInst list pair option rich_list alist
+  linkedInternalSelection linkedCheckedDeclarationNames whitelistCheckerSelectorProps
+  vyperTypeContractContext vyperTypeContract
 
 Theorem grouped_runtime_shadow_body_inv_mods:
+  check_contract F layouts addr mods = SOME art /\
   lower_vyper_runtime_unit_mods mods exps rp = SOME unit /\
   classify_functions_unit mods exps = (exts,ints,fb,ctor,imp_ctors) /\
   EXISTS (external_has_defaults o SND) exts /\
@@ -93,6 +96,14 @@ Proof
      disch_then (qspecl_then [`initial_compile_state "__entry"`,
                               `initial_compile_state "__entry"`] mp_tac) >>
      simp[gas_shadow_state_refl]) >>
+  `ALL_DISTINCT (MAP FST mods)` by
+    (drule check_contract_namespaces_ok >> simp[contract_namespaces_ok_def]) >>
+  `!src tops. ALOOKUP mods src = SOME tops ==> supported_declaration_names tops` by
+    (rpt strip_tac >>
+     `MEM (src,tops) mods` by drule_then ACCEPT_TAC ALOOKUP_MEM >>
+     `supported_selectors_distinct tops` by
+       drule_all_then ACCEPT_TAC check_contract_module_selectors_distinct >>
+     drule_all check_contract_supported_declaration_names_mods >> simp[]) >>
   `!src tops mode vis mut nr rr fname args dflts ret ss callee.
       ALOOKUP mods src = SOME tops /\
       (vis = Internal \/ (mode /\ src <> NONE /\ vis = Deploy)) /\
@@ -104,7 +115,11 @@ Proof
       mode = F /\ MEM (src,subst_consts_fn_mods (consts_env_mods mods)
         (mut,nr,rr,fname,args,dflts,ret,ss)) srcs` by
     (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-     `mode = F` by
+     `?selected. MEM selected srcs /\
+       internal_fn_label (build_func_ids_mods 0 mods (nsid_to_string (src,fname)))
+         (nsid_to_string (src,fname)) (MAP SND args) mode =
+       FST (set_internal_package_target rp.rpol_target
+         (package_internal_fn_unit mods T (K global_nonreentrant_slot) F 0 selected))` by
        (qpat_assum `lookup_function _ _ = _`
           (mp_tac o MATCH_MP lookup_function_mem) >>
         qpat_assum `extract_context_with_internals "__entry" ips run_end = _`
@@ -113,19 +128,42 @@ Proof
         simp[internal_fn_descriptors_map, GSYM MAP_MAP_o, MEM_MAP] >>
         strip_tac
         >- fs[internal_fn_label_def] >>
-        rename1 `MEM packed srcs` >> PairCases_on `packed` >>
-        fs[package_internal_fn_unit_def, set_internal_package_target_def] >>
-        metis_tac[internal_fn_label_mode]) >>
-     qpat_x_assum `mode = F` SUBST_ALL_TAC >>
-     qpat_x_assum `vis = Internal \/ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
-     `MEM (src,subst_consts_fn_mods (consts_env_mods mods)
-         (mut,nr,rr,fname,args,dflts,ret,ss))
-         (FST (SND (classify_functions_unit mods exps)))` by
-       (irule classified_unit_internal_member >> qexists_tac `tops` >> fs[]) >>
-     qpat_assum `classify_functions_unit mods exps = _` (fn classes =>
-       qpat_assum `MEM _ (FST (SND (classify_functions_unit mods exps)))`
-         (mp_tac o REWRITE_RULE [classes])) >>
-     simp[Abbr `srcs`, order_internals_unit_mem]) >>
+        rename1 `MEM packed srcs` >> qexists_tac `packed` >>
+        PairCases_on `packed` >>
+        fs[package_internal_fn_unit_def, set_internal_package_target_def]) >>
+     PairCases_on `selected` >>
+     qpat_x_assum `internal_fn_label _ _ _ _ = FST _` mp_tac >>
+     simp[package_internal_fn_unit_def, set_internal_package_target_def] >>
+     strip_tac >>
+     `mode = F` by metis_tac[internal_fn_label_mode] >>
+     `MEM (selected0,selected1,selected2,selected3,selected4,selected5,
+             selected6,selected7,selected8) (ints ++ imp_ctors)` by
+       (simp[MEM_APPEND] >> disj1_tac >>
+        irule order_internals_unit_mem >>
+        qexists_tac `runtime_internal_order_unit (exported_runtime_fns mods exps)
+          (main_module mods) ints` >>
+        qpat_assum `Abbrev (srcs = _)`
+          (fn source_eq => PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] source_eq)]) >>
+        first_assum ACCEPT_TAC) >>
+     qpat_x_assum `internal_fn_label _ _ _ _ = _`
+       (assume_tac o GSYM o MATCH_MP internal_fn_label_id_11) >>
+     `(selected0,selected1,selected2,selected3,selected4,selected5,
+       selected6,selected7,selected8) =
+       (src,subst_consts_fn_mods (consts_env_mods mods)
+          (mut,nr,rr,fname,args,dflts,ret,ss))` by
+       (mp_tac (Q.INST [`exps` |-> `exps`,`exts` |-> `exts`,`ints` |-> `ints`,
+          `fb` |-> `fb`,`ctor` |-> `ctor`,`imp_ctors` |-> `imp_ctors`,
+          `tops` |-> `tops`,`vis` |-> `vis`,
+          `src'` |-> `selected0`,
+          `picked` |-> `(selected1,selected2,selected3,selected4,selected5,
+                           selected6,selected7,selected8)`,
+          `stmts` |-> `ss`] checked_classified_internal_id_unique) >>
+        `vis = Internal` by fs[] >>
+        simp[fn_decl_name_def] >>
+        disch_then (fn unique =>
+          qpat_assum `!s ts. ALOOKUP mods s = SOME ts ==> supported_declaration_names ts`
+            (ACCEPT_TAC o MATCH_MP unique))) >>
+     asm_rewrite_tac[] >> metis_tac[]) >>
   mp_tac (Q.INST [`is_ctor` |-> `F`, `name` |-> `"__entry"`,
       `unit` |-> `unit`, `shadow_unit` |-> `shadow_unit`,
       `raw` |-> `unit.cu_context`, `rawS` |-> `shadow_unit.cu_context`,
