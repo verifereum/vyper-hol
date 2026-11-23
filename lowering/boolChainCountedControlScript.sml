@@ -2,7 +2,7 @@
 Theory boolChainCountedControl
 Ancestors
   exprSimDefs exprSimSource exprSimWordArgs exprSimSliceCompose exprSimMemDefs
-  exprSimIfExpWidenedRoot
+  exprSimIfExp
   boolChainWordPost boolChainSource boolChainCodeLayout gasOutcomeSourceCong stmtSimProps
   placeTypedCopyPath fragGasSeqAbort exprSimUint2Str emitHelperProps
   fragGasMode fragGasPath gasSummary gasOutcome vyperStorageTrace
@@ -104,7 +104,8 @@ Proof
   qabbrev_tac `m = update_var rv (val_to_w256 (BoolV b)) u` >>
   qabbrev_tac `z = jump_to xl m` >>
   `gas_marked_path F ctx func u 0 (OK z)` by
-    (drule_all exprSimIfExpWidenedRootTheory.assign_join_path >>
+    (simp[gas_marked_path_def] >>
+     drule_all exprSimIfExpTheory.ifexp_root_suffix_path >>
      simp[Abbr `z`, Abbr `m`, jump_to_def]) >>
   simp[gas_outcome_def, gas_summary_at_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>

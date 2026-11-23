@@ -2,6 +2,7 @@ Theory entryReachBodyFirstEmissionExprSupport
 Ancestors
   entryReachBodyFirstEmissionSupport compilerFirstEmission externalEntryShape
   exprLowering compileEnv fragExec emitHelper venomInst finite_map list builtinSystem
+  boolChainOperandsCons
 
 Theorem first_emission_bytelike_literal[local]:
   !bs n a x b. compile_bytelike_literal bs n a = (x,b) ==>
@@ -3244,8 +3245,7 @@ Proof
       conj_tac
       >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule cs_appends_bind >>
           simp[cs_appends_prims] >> rw[cs_appends_def, cs_extends_refl]) >>
-      Cases_on `n - 1` >> Cases_on `HD args` >> simp[bool_chain_operands_def] >>
-      rpt IF_CASES_TAC >> simp[]) >>
+      metis_tac[bool_chain_operands_cons, NOT_CONS_NIL]) >>
   drule first_emission_builtin_modular >> disch_then irule >> goal_assum (drule_at Any) >> simp[]
 QED
 

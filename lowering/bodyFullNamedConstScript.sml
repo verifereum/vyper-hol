@@ -6,6 +6,7 @@ Ancestors
   gasShadowCompile gasOutcomeFullCompose exprSimMemDefs exprSafeOperandBuiltins
   exprLowering loweringPosts vyperTypeSystem vyperContext vyperState vyperInterpreter
   exprReasonOperand exprSimAggregateLayout exprOperandVar exprSimHyps
+  namesBuiltinExclusions
   abiEmptyDispatch abiEmptyAllocate exprSafeOperand compileEnv context
   bodySimFull bodyPtrDefs gasOutcomeFull gasShadowState gasShadow
   exprSimHypsDefs vyperAST exprCallBounds
@@ -103,9 +104,7 @@ Theorem compile_named_const[local]:
       else LocatedValue ann (mk_ptr op LocMemory)),sb)
 Proof
   strip_tac >>
-  `~names_builtin NamedConst [e]` by
-    (Cases_on `e` >> simp[names_builtin_def]) >>
-  simp[compile_expr_builtin_dispatch] >>
+  simp[compile_expr_builtin_dispatch, names_builtin_exclusions] >>
   simp[Once compile_builtin_dispatch_component_eq] >>
   fs[lower_value_def, comp_bind_def] >>
   simp[listTheory.list_size_def, lower_value_def, comp_bind_def,
