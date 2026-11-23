@@ -87,7 +87,8 @@ Proof
   rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
   simp[initial_evaluation_context_def, find_function_module_def] >>
   simp entry_context_simps >>
-  simp[context_function_live_def, function_live_def, linked_witness_exports_def]
+  simp[context_function_live_def, function_live_def, linked_witness_exports_def] >>
+  rpt conj_tac
   >- (disj1_tac >>
       simp[linked_witness_mods_def, ALOOKUP_def, module_allocated_def,
            toplevel_allocated_def, lookup_var_slot_in_layouts_def])
