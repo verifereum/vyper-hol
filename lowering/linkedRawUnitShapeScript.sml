@@ -1,7 +1,7 @@
 (* Raw source-unit invariants for the linked O1 pipeline. *)
 Theory linkedRawUnitShape
 Ancestors
-  compileUnit vyperCompiler vyperLoweringCorrect deployUnitProducers
+  compileUnit vyperCompiler vyperLoweringCorrect deployUnitProducers bodyInvSplit
   o1PassContract venomInst list
 
 Theorem lower_vyper_runtime_unit_raw_shape_mods:
@@ -61,4 +61,15 @@ Proof
            mk_venom_context_def] >>
       pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
   drule_then ACCEPT_TAC run_lowering_global_reserved
+QED
+
+Theorem lower_vyper_deploy_unit_global_reserved_mods:
+  lower_vyper_deploy_unit_mods mods exps rpolicy runtime_bc = SOME unit ==>
+  unit.cu_context.ctx_global_reserved =
+    if imm_len_mods mods = 0 then [] else [(0, imm_len_mods mods)]
+Proof
+  simp[lower_vyper_deploy_unit_mods_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[bool_case_eq] >> strip_tac >>
+  drule run_deploy_lowering_global_reserved >>
+  Cases_on `imm_len_mods mods = 0` >> fs[imm_len_mods_def]
 QED
