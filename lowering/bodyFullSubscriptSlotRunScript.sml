@@ -66,7 +66,7 @@ Proof
        memSafeRunTheory.inst_dload_in_section_def]
 QED
 
-Theorem slot_length_stage[local]:
+Theorem slot_length_stage_run:
   (if dyn then compile_ptr_load ctor imm (slot_loc tr) bop
    else comp_return (Lit (n2w cnt))) sa = (len,sl) /\
   fn_has_code sa sl fn /\ eval_operand bop s = SOME slot /\ op_taint tn bop = {} /\
@@ -81,12 +81,17 @@ Theorem slot_length_stage[local]:
     t.vs_inst_idx = LENGTH sl.cs_current_insts /\
     op_taint tn' len = {} /\ op_prov G' len = NONE /\
     (!x. len = Var x ==> not_fresh_at sl x) /\
-    array_length_frame sa s G tn t G' tn'
+    array_length_frame sa s G tn t G' tn' /\
+    (?raw. run_inst_seq (emitted_insts sa sl) s = OK raw /\
+           t = (raw with vs_inst_idx := LENGTH sl.cs_current_insts))
 Proof
   reverse (Cases_on `dyn`)
   >- (simp[comp_return_def] >> strip_tac >> gvs[] >>
       qexistsl [`s`,`G`,`tn`] >>
-      simp[eval_operand_def, op_prov_def, op_taint_def, array_length_frame_def] >>
+      simp[eval_operand_def, op_prov_def, op_taint_def, array_length_frame_def,
+           emitted_insts_def, run_inst_seq_def] >>
+      (reverse conj_tac >-
+        (qpat_assum `s.vs_inst_idx = _` (SUBST1_TAC o SYM) >> simp[])) >>
       gen_tac >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
   simp[] >> strip_tac >>
   `emit_op (if tr then TLOAD else SLOAD) [bop] sa = (len,sl)` by
@@ -119,8 +124,35 @@ Proof
   (conj_tac
    >- simp[step_taint_def, set_var_taint_def, out_taint_def, op_taint_def,
            mk_inst_def, FLOOKUP_UPDATE, pred_setTheory.EXTENSION]) >>
-  irule step_prov_out_none >> simp[mk_inst_def] >>
-  irule out_prov_other_none >> simp[mk_inst_def]
+  (conj_tac
+   >- (irule step_prov_out_none >> simp[mk_inst_def] >>
+       irule out_prov_other_none >> simp[mk_inst_def])) >>
+  gvs[array_length_step_ok_def] >>
+  qpat_assum `!f G. step_inst_base _ _ = _ /\ _`
+    (qspecl_then [`fn`,`G`] strip_assume_tac) >>
+  simp[emitted_insts_def, DROP_LENGTH_APPEND, run_inst_seq_def]
+QED
+
+Theorem slot_length_stage[local]:
+  (if dyn then compile_ptr_load ctor imm (slot_loc tr) bop
+   else comp_return (Lit (n2w cnt))) sa = (len,sl) /\
+  fn_has_code sa sl fn /\ eval_operand bop s = SOME slot /\ op_taint tn bop = {} /\
+  (dyn ==> key_taint (if tr then tn.t_trans else tn.t_stor) slot = {}) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t G' tn'.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    eval_operand len t = SOME (if dyn then (if tr then tload slot s else sload slot s)
+                                else n2w cnt) /\
+    ~t.vs_halted /\ t.vs_current_bb = sl.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sl.cs_current_insts /\
+    op_taint tn' len = {} /\ op_prov G' len = NONE /\
+    (!x. len = Var x ==> not_fresh_at sl x) /\
+    array_length_frame sa s G tn t G' tn'
+Proof
+  strip_tac >> drule_all slot_length_stage_run >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >>
+  qexistsl [`t`,`G'`,`tn'`] >> simp[]
 QED
 
 (* The optional load and the two scalar stages are in one basic block. *)
