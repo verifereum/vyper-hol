@@ -204,8 +204,10 @@ Proof
 QED
 
 local
-  val unobserved = SIMP_RULE bool_ss [bodyFullExtCallDelayedSlotTheory.saved_restore_copy_laws_true]
-    (Q.INST [`P` |-> `\a b u z. T`] abi_encode_saved_restore_row_side_core)
+  val unobserved = PURE_REWRITE_RULE
+    [bodyFullExtCallDelayedSlotTheory.saved_restore_copy_laws_true,
+     boolTheory.AND_CLAUSES, boolTheory.IMP_CLAUSES, boolTheory.FORALL_SIMP]
+    (BETA_RULE (Q.INST [`P` |-> `\a b u z. T`] abi_encode_saved_restore_row_side_core))
 in
 Theorem abi_encode_saved_restore_row_pure:
   ^(concl unobserved)

@@ -425,8 +425,10 @@ Proof
 QED
 
 local
-  val unobserved = SIMP_RULE bool_ss [saved_restore_copy_laws_true]
-    (Q.INST [`P` |-> `\a b u z. T`] extcall_slot_unwrap_from_side)
+  val unobserved = PURE_REWRITE_RULE
+    [saved_restore_copy_laws_true, boolTheory.AND_CLAUSES,
+     boolTheory.IMP_CLAUSES, boolTheory.FORALL_SIMP]
+    (BETA_RULE (Q.INST [`P` |-> `\a b u z. T`] extcall_slot_unwrap_from_side))
 in
 Theorem extcall_slot_unwrap_pure:
   ^(concl unobserved)
