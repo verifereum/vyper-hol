@@ -9,7 +9,7 @@ Ancestors
   bytestringCopyExecution immutableCopyExecution
   bodyFullUnwrapRun bodyPtrIfExpAssignFrame exprPtrCtorImmStore
   exprPtrCtorCodeLoad exprPtrUnwrapOffsetSegment exprPtrUnwrapScalarEdges
-  exprPtrUnwrapScalarSegments fragGasCopyLoop fragGasOriginPtrLoop
+  exprPtrUnwrapScalarSegments fragGasCopyLoop fragGasCopySeqLiftProps fragGasOriginPtrLoop
   instSeqComposePtr logInstSeqPtr[qualified,ignore_grammar]
   abiEncoderWindowLookup[qualified,ignore_grammar] decoderSetupStepPtr
   bodyPtrDefs decoderGhostFramePtr ghostPcTransportPtr
