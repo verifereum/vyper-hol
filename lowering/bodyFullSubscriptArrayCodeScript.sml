@@ -5,6 +5,7 @@ Ancestors vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ig
   bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose
   bodyFullAttributeAdd bodyFullGhostFrame bodyFullPathHistory
   bodyFullSubscriptArrayCodeBounds bodyFullSubscriptArrayCodeOps
+  bodyFullEmptyLeafData exprSimFullBundleProps
   bodyFullIfExpReach bodyFullHashKeccakFixed stateRelProj exprSimSubscriptArraySuffix
   gasShadowCompileStmtHelpers bodyPtrPrecompileBuiltinsGhost
   exprSimSubscriptArrayEndpoint exprSimSubscriptArrayOrigin
@@ -133,8 +134,45 @@ Proof
   conj_tac >- metis_tac[] >> metis_tac[]
 QED
 
+(* The selector supplies the ordinary post at its chosen landing, before
+   that landing is hidden by the existential in gas_outcome_full. *)
+Theorem code_array_selected_landing:
+  ~cenv.ce_is_ctor /\ fin.gas_obs = [] /\
+  (!tail. select_result cx (ArrayT et bd) tv (ValueSubscript (IntV i))
+     (fin with gas_obs := tail) = (INL child,fin with gas_obs := tail)) /\
+  (!v. child <> Value v) /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (it,Gi,tni) [] (OK sf,Gf,tnf) /\
+    vv_post H ctx func cenv cx (Subscript et obj idx) es sa sb s0 fin child
+      (LocatedValue et (mk_ptr out LocCode)) sf /\
+    ghost_inv_at (DF H) lo d cenv cx fin Gf tnf sf) /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 Gf tnf /\
+  expr_sim_full_endpoint func sb s0 sf /\
+  op_taint tnf out = {} /\ op_prov Gf out = NONE ==>
+  (!tail. select_result cx (ArrayT et bd) tv (ValueSubscript (IntV i))
+     (fin with gas_obs := tail) = (INL child,fin with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (it,Gi,tni) [] (OK sf,Gf,tnf) /\
+    expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (Subscript et obj idx)
+      (es,sa,sb,s0,LocatedValue et (mk_ptr out LocCode),G0,tn0)
+      H (INL child) fin Gf tnf sf)
+Proof
+  strip_tac >> conj_tac >- simp[] >> qx_gen_tac `H` >> strip_tac >>
+  first_x_assum (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sf` by
+    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[NoAsms,vv_post_def] >> strip_tac >>
+     first_assum (ACCEPT_TAC o MATCH_MP
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  simp[expr_vv_sim_full_post_def,expr_type_def,contextTheory.mk_ptr_def,
+       exprSimMemDefsTheory.vv_store_bound_nonmem,ptr_vv_ok_def] >>
+  fs[contextTheory.mk_ptr_def]
+QED
+
 Theorem code_array_selected_outcome_tail[local]:
-  ~it.vs_halted /\ fin.gas_obs = [] /\
+  ~it.vs_halted /\ ~cenv.ce_is_ctor /\ fin.gas_obs = [] /\
   (!tail. select_result cx (ArrayT et bd) tv (ValueSubscript (IntV i))
      (fin with gas_obs := tail) = (INL child,fin with gas_obs := tail)) /\
   (!v. child <> Value v) /\
@@ -152,46 +190,17 @@ Theorem code_array_selected_outcome_tail[local]:
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (select_result cx (ArrayT et bd) tv (ValueSubscript (IntV i)))
     (fin,it,Gi,tni)
-    (\H res' ee G tn t'. ?tv'. res' = INL tv' /\
-      vv_post H ctx func cenv cx (Subscript et obj idx) es sa sb s0 ee tv'
-        (LocatedValue et (mk_ptr out LocCode)) t' /\
-      vv_store_bound cx (expr_type (Subscript et obj idx))
-        (lowered_value_type cenv (Subscript et obj idx)) ee tv'
-        (LocatedValue et (mk_ptr out LocCode)) t' /\
-      t'.vs_current_bb = sb.cs_current_bb /\
-      t'.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history func t' /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp t') /\
-      s0.vs_alloca_next <= t'.vs_alloca_next /\
-      ghost_inv_at (DF H) lo d cenv cx ee G tn t' /\
-      ptr_vv_ok cx (expr_type (Subscript et obj idx)) tv'
-        (LocatedValue et (mk_ptr out LocCode)) ee G tn t' /\
-      (!v'. tv' = Value v' /\ ~is_word_type (expr_type (Subscript et obj idx)) /\
-        ~is_bytestring_type (expr_type (Subscript et obj idx)) ==>
-        vv_own cenv cx (expr_type (Subscript et obj idx)) sa sb ee (Value v')
-          (LocatedValue et (mk_ptr out LocCode)) t' /\
-        (mk_ptr out LocCode).ptr_location = LocMemory) /\
-      ((mk_ptr out LocCode).ptr_location = LocMemory ==>
-        ptr_buf_ok cenv (Subscript et obj idx) (mk_ptr out LocCode).ptr_operand G t') /\
-      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) R
+    (expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (Subscript et obj idx)
+      (es,sa,sb,s0,LocatedValue et (mk_ptr out LocCode),G0,tn0)) R
 Proof
-  strip_tac >> irule gas_outcome_full_pure >>
-  reverse conj_tac >- simp[] >>
+  strip_tac >>
+  `expr_sim_full_endpoint func sb s0 sf` by simp[expr_sim_full_endpoint_def] >>
+  drule_all code_array_selected_landing >> strip_tac >>
+  irule gas_outcome_full_pure >> simp[] >>
   qexistsl_tac [`Gf`, `fin`, `INL child`, `sf`, `tnf`] >>
-  simp[NoAsms] >> conj_tac >- simp[] >>
-  qx_gen_tac `H` >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp sf` by
-    (qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==>
-       gas_origin_ptr_path _ _ _ _ /\ _`
-       (qspec_then `H` (drule_then mp_tac)) >>
-     simp[NoAsms, vv_post_def] >> strip_tac >>
-     first_assum (ACCEPT_TAC o MATCH_MP
-       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `fin with gas_obs := [] = fin` by
     (qpat_x_assum `fin.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
-  pop_assum SUBST1_TAC >>
-  simp[expr_type_def, contextTheory.mk_ptr_def,
-       exprSimMemDefsTheory.vv_store_bound_nonmem, ptr_vv_ok_def] >>
-  metis_tac[]
+  simp[]
 QED
 
 Theorem subscript_array_framed_code_full:
