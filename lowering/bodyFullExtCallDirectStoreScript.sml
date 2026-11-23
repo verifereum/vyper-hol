@@ -13,7 +13,10 @@ Ancestors
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
 Libs horizonTypeLib pureFrameLib
 
-Theorem abi_encode_saved_store_static_pure:
+Theorem abi_encode_saved_store_static_phase:
+  abi_values_source_phase ctx func lo explicit PG R /\
+  (!a u. u.vs_current_bb = a.cs_current_bb /\
+         u.vs_inst_idx = LENGTH a.cs_current_insts ==> R a a u u) /\
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
     shared pbase capacity root dst dst_offset prefix a u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -45,6 +48,7 @@ Theorem abi_encode_saved_store_static_pure:
     abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
       shared pbase capacity root dst dst_offset prefix c z Gz tz /\
     abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot (SUC i) c z Gz tz /\
+    R a c u z /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -105,8 +109,9 @@ Proof
   mp_tac (Q.INST [`env` |-> `get_tenv cx`,`s` |-> `u`,`G` |-> `Gu`,`tn` |-> `tu`,
     `st` |-> `a`,`en` |-> `c`,`dst` |-> `Var head`,
     `d` |-> `pbase+dst_offset+h`,`sb` |-> `w2n (w:bytes32)`,`bs` |-> `enc at av`]
-    abi_encode_values_static_store) >>
+    abi_encode_values_static_store_phase) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    TRY (qpat_assum `!a u. _ ==> R a a u u` irule >> conj_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
     qpat_assum `at = vyper_to_abi_type (get_tenv cx) ty` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
     qpat_assum `LENGTH (enc at av) = hs` (fn th => PURE_REWRITE_TAC [th]) >>
     asm_rewrite_tac[]) >>
@@ -133,6 +138,44 @@ Proof
     abi_encode_values_static_prefix) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >> metis_tac[]) >>
   disch_then ACCEPT_TAC
+QED
+
+Theorem abi_encode_saved_store_static_pure:
+  abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
+    shared pbase capacity root dst dst_offset prefix a u Gu tu /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
+  shared <> loc /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = shared /\
+  inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
+  abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot i a u Gu tu /\
+  i < LENGTH ats /\ LENGTH ats = LENGTH avs /\
+  at = EL i ats /\ av = EL i avs /\ at = vyper_to_abi_type (get_tenv cx) ty /\
+  abi_encoder_layout_valid at av /\ LIST_REL abi_encoder_layout_valid (TAKE i ats) (TAKE i avs) /\
+  h = LENGTH (FLAT (abi_tuple_heads hl 0 (TAKE i ats) (TAKE i avs))) /\
+  off = hl + LENGTH (FLAT (abi_tuple_tails (TAKE i ats) (TAKE i avs))) /\
+  hs = abi_member_head_size at /\ h + hs <= hl /\ off <= capacity-dst_offset /\
+  ~is_word_type ty /\ ~is_abi_dynamic ce.ce_struct_fields ty /\ ~is_dynamic at /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi (get_tenv cx) ty v = SOME av /\ type_memory_bytes ce ty = type_memory_size tv /\
+  eval_operand (Var head) u = SOME (n2w (pbase+dst_offset+h)) /\ ptr_covers Gu tu head u hs /\
+  not_fresh_at a head /\ (!x. src = Var x ==> not_fresh_at a x) /\
+  expr_val_rel cx ty v src u /\ ptr_val_ok cx ty v src Gu tu u /\ expr_store_bound cx ty v src u /\
+  (?first last. expr_val_at ce cx ty first last ee v src u /\
+     (shared < first.cs_next_id \/ last.cs_next_id <= shared)) /\
+  compile_store_memory ce src (Var head) ty ty a = ((),c) /\ fn_has_code a c func /\ ci_mono a c ==>
+  ?z Gz tz.
+    (pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
+    abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
+      shared pbase capacity root dst dst_offset prefix c z Gz tz /\
+    abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot (SUC i) c z Gz tz /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)
+Proof
+  mp_tac (Q.INST [`R` |-> `\a b u v. T`] abi_encode_saved_store_static_phase) >>
+  simp_tac bool_ss [abi_values_source_phase_trivial]
 QED
 
 Theorem abi_encode_saved_store_static =
