@@ -108,14 +108,15 @@ Proof
 QED
 
 Theorem supported_append_storage_decl:
-  supported_storage_dynamic_array tops nid ==>
+  FST nid = NONE /\ supported_storage_dynamic_array tops nid ==>
   ?vis mut elem n slot.
     supported_variable_decl tops nid =
       SOME (vis,mut,ArrayT elem (Dynamic n),SOME slot) /\
     (mut = Storage \/ mut = Transient) /\ supported_storage_type tops elem
 Proof
+  strip_tac >>
   Cases_on `supported_variable_decl tops nid` >>
-  simp[supported_storage_dynamic_array_def] >>
+  gvs[supported_storage_dynamic_array_def] >>
   PairCases_on `x` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >>
   gvs[supported_storage_dynamic_array_def] >>
   rename1 `ArrayT elem bd` >> Cases_on `bd` >> gvs[] >> metis_tac[]
@@ -138,7 +139,8 @@ Theorem body_append_runtime_metadata_mods:
        es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
 Proof
   REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  drule_then strip_assume_tac supported_append_storage_decl >>
+  drule_then strip_assume_tac (SIMP_RULE (srw_ss()) []
+    (Q.INST [`nid` |-> `(NONE,id)`] supported_append_storage_decl)) >>
   drule_all_then strip_assume_tac body_append_root_metadata_mods >>
   `get_module_code cx src = SOME tops` by metis_tac[contract_inv_module_codes] >>
   drule_then strip_assume_tac supported_variable_decl_mem >>
