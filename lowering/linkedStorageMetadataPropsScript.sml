@@ -130,14 +130,14 @@ Proof
 QED
 
 Theorem supported_scalar_target_decl:
-  supported_scalar_target tops (src,id) ==>
+  src = NONE /\ supported_scalar_target tops (src,id) ==>
   src = NONE /\
   ?vis mut ty slot.
     MEM (VariableDecl vis mut id ty (SOME slot)) tops /\
     (mut = Storage \/ mut = Transient)
 Proof
-  simp[supported_scalar_target_def] >>
-  Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
+  Cases_on `src` >> simp[supported_scalar_target_def] >>
+  Cases_on `supported_variable_decl tops (NONE,id)` >> simp[] >>
   PairCases_on `x` >> Cases_on `x1` >> Cases_on `x3` >>
   simp[] >> metis_tac[supported_variable_decl_mem]
 QED
