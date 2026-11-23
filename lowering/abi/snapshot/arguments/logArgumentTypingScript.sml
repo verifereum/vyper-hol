@@ -65,6 +65,30 @@ Proof
   >- (strip_tac >> simp[GSYM event_arg_compatible_alias_def] >>
       irule concat_event_arg_compatible >> fs[Once well_typed_expr_def, expr_type_def] >>
       metis_tac[typedCopyCompatibilityTheory.event_arg_compatible_reflexive])
+  >~ [`Builtin (BaseT (StringT n)) NamedConst [Literal ty (StringL s)]`]
+  >- (strip_tac >>
+      gvs[Once well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
+      fs[well_typed_expr_def] >>
+      drule literal_event_arg_compatible >>
+      disch_then (qspecl_then [`cenv`, `BaseT (StringT n)`] mp_tac) >>
+      simp[lowered_value_type_def, expr_type_def, GSYM event_arg_compatible_alias_def,
+           typedCopyCompatibilityTheory.event_arg_compatible_reflexive])
+  >~ [`Builtin (BaseT (BytesT (Dynamic n))) NamedConst [Literal ty (BytesL bs)]`]
+  >- (strip_tac >>
+      gvs[Once well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
+      fs[well_typed_expr_def] >>
+      drule literal_event_arg_compatible >>
+      disch_then (qspecl_then [`cenv`, `BaseT (BytesT (Dynamic n))`] mp_tac) >>
+      simp[lowered_value_type_def, expr_type_def, GSYM event_arg_compatible_alias_def,
+           typedCopyCompatibilityTheory.event_arg_compatible_reflexive])
+  >~ [`Builtin (BaseT (BytesT (Dynamic n))) NamedConst [Literal ty (HexBytesL bs)]`]
+  >- (strip_tac >>
+      gvs[Once well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
+      fs[well_typed_expr_def] >>
+      drule literal_event_arg_compatible >>
+      disch_then (qspecl_then [`cenv`, `BaseT (BytesT (Dynamic n))`] mp_tac) >>
+      simp[lowered_value_type_def, expr_type_def, GSYM event_arg_compatible_alias_def,
+           typedCopyCompatibilityTheory.event_arg_compatible_reflexive])
   >~ [`Literal (BaseT (StringT _)) (StringL _)`]
   >- (strip_tac >> simp[GSYM event_arg_compatible_alias_def] >>
       irule literal_event_arg_compatible >> fs[Once well_typed_expr_def, expr_type_def] >>
@@ -119,20 +143,11 @@ Theorem checked_expr_event_arg_compatible:
     well_typed_expr env e /\ event_arg_compatible fty (expr_type e) ==>
     event_arg_compatible fty (lowered_value_type cenv e)
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `e` >> fs[expr_type_def]
-  >~ [`Call _ cl _ _`]
-  >- (Cases_on `cl` >> gvs[lowered_value_type_def, expr_type_def] >>
-      rename1 `IntCall fid` >> PairCases_on `fid` >> fs[Once well_typed_expr_def] >>
-      first_x_assum drule >> strip_tac >>
-      gvs[event_arg_compatible_alias_def, type_widens_to_def] >>
-      metis_tac[typedCopyCompatibilityTheory.arg_type_fits_trans])
-  >~ [`Builtin _ b _`]
-  >- (Cases_on `b` >>
-      FIRST [irule concat_event_arg_compatible >> fs[Once well_typed_expr_def],
-        simp[lowered_value_type_def, expr_type_def]]) >>
-  FIRST [irule literal_event_arg_compatible >> fs[Once well_typed_expr_def],
-    drule_all checked_type_builtin_event_arg_compatible >> simp[],
-    simp[lowered_value_type_def, expr_type_def]]
+  rpt strip_tac >>
+  drule_all lowered_value_type_fits >> strip_tac >>
+  fs[event_arg_compatible_alias_def] >>
+  irule (CONJUNCT1 typedCopyCompatibilityTheory.arg_type_fits_trans) >>
+  qexists_tac `expr_type e` >> simp[]
 QED
 
 Theorem checked_exprs_event_arg_compatible:
