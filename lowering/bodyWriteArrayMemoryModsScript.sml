@@ -15,6 +15,7 @@ Ancestors
   finite_map list alist pair combin
   loweringStateRelDefs compileEnv targetPlaceSim vyperInterpreter vyperState
   exprSimHypsDefs allocLimits vyperValue
+  bodyWriteArrayMemoryLoadMods bodyWriteArrayMemoryChildMods
 Libs
   pairLib monadsyntax
 
@@ -312,4 +313,81 @@ Proof
     (irule evaluate_subscripts_type >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
   Cases_on `a'` >> gvs[vyperTypingTheory.value_has_type_def] >>
   drule_all subscripts_type_well_formed >> simp[] >> metis_tac[]
+QED
+
+(* The current lookup identifies the word independently of the horizon. *)
+Theorem write_array_memory_length_mods:
+  write_array_reached_mods
+    ((DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func),
+     (mods,exps,cenv,cx,env,bt,e,et,bd,vt),
+     (st0,es,sa,s0,G0,tn0),
+     (sm,sn,sb,shadow_sa,shadow_sb,rb,iop,r),
+     (base_gas,mid1,PlaceR (MemoryPlace id path),t1,G1,tn1),
+     (index_gas,mid2,v,t2,G2,tn2)) /\
+  valid_horizon cx st0 H mid2.storage_trace /\
+  eval_operand (FST rb) t1 = SOME b ==>
+  FST (SND rb) = SOME LocMemory /\ SND (SND rb) = SOME (ValPT (ArrayT et bd)) /\
+  allocas_from lo t2 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t2) /\
+  ?nw.
+    (!entry etv av. lookup_scopes id mid2.scopes = SOME entry /\
+        evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+        evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) ==>
+      nw = n2w (array_length (ArrayTV etv bd) av)) /\
+    (!n. bd = Fixed n ==> nw = n2w n) /\
+    (!cap len sl. bd = Dynamic cap /\
+      compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory (FST rb) sn = (len,sl) ==>
+      ?ul Gl tl. array_length_loader_ok cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory
+          (FST rb) nw sn len sl lo ctx func PG t2 G2 tn2 ul Gl tl /\
+        op_prov Gl len = NONE /\ op_taint tl len = {})
+Proof
+  strip_tac >> drule_all_then strip_assume_tac write_array_memory_current_mods >>
+  drule_all_then strip_assume_tac write_array_reached_operands_mods >>
+  drule_all_then strip_assume_tac write_array_reached_posts_mods >>
+  `allocas_from lo t2` by fs[ghost_inv_at_mods_def] >>
+  drule_then assume_tac bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >>
+  `eval_operand (FST rb) t2 = SOME b` by fs[] >>
+  `!p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ==>
+          op_prov G2 (FST rb) = FLOOKUP G2 p` by simp[] >>
+  drule_all write_array_memory_load_from_current_mods >> simp[LET_THM] >> strip_tac >>
+  qexists `n2w (array_length (ArrayTV etv bd) av)` >> simp[] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem write_array_memory_extend_mods:
+  write_array_reached_mods
+    ((DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func),
+     (mods,exps,cenv,cx,env,bt,e,et,bd,vt),
+     (st0,es,sa,s0,G0,tn0),
+     (sm,sn,sb,shadow_sa,shadow_sb,rb,iop,r),
+     (base_gas,mid1,PlaceR (MemoryPlace id path),t1,G1,tn1),
+     (index_gas,mid2,IntV i,t2,G2,tn2)) /\
+  valid_horizon cx st0 H mid2.storage_trace /\
+  eval_operand (FST rb) t1 = SOME b /\
+  i = (if is_signed_type (expr_type e) then w2i iw else &(w2n iw)) /\
+  (!entry etv av. lookup_scopes id mid2.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+      evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) ==>
+    nw = n2w (array_length (ArrayTV etv bd) av)) /\
+  write_array_select_frame
+    ((DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func),
+     (mods,exps,cenv,cx,env,bt,e,et,bd,vt),
+     (st0,es,sa,s0,G0,tn0),
+     (sm,sn,sb,shadow_sa,shadow_sb,rb,iop,r),
+     (base_gas,mid1,PlaceR (MemoryPlace id path),t1,G1,tn1),
+     (index_gas,mid2,IntV i,t2,G2,tn2))
+    (LocMemory,b,iw,nw) (t3,G3,tn3) ==>
+  let child = PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV i)])) in
+  let in_range = idx_in_range (is_signed_type (expr_type e)) iw nw in
+    extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript (IntV i)) mid2 =
+      ((if in_range then INL child else
+        INR (Error (RuntimeError "evaluate_subscripts array_index"))),mid2) /\
+    (in_range ==> target_ptr_ok cenv child r G3 tn3 t3 /\
+      write_target_location_mods cenv cx (SubscriptTarget bt e) mid2 child vt r G3 t3)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac write_array_memory_current_mods >>
+  drule_all_then strip_assume_tac write_array_reached_operands_mods >>
+  `!p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ==>
+          op_prov G2 (FST rb) = FLOOKUP G2 p` by simp[] >>
+  qpat_x_assum `!entry etv av. _ ==> nw = _` (drule_all_then SUBST_ALL_TAC) >>
+  drule_all write_array_memory_child_from_current_mods >> simp[]
 QED
