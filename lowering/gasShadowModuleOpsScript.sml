@@ -15,21 +15,6 @@ Proof
        gas_shadow_compiles_emit_op, gas_shadow_compiles_return]
 QED
 
-Theorem gas_shadow_compiles_materialize_internal_params:
-  !ps ce. gas_shadow_compiles (materialize_internal_params ce ps)
-    (materialize_internal_params ce ps)
-Proof
-  Induct >> rpt gen_tac
-  >- simp[materialize_internal_params_def, gas_shadow_compiles_return] >>
-  PairCases_on `h` >>
-  simp[materialize_internal_params_def] >>
-  Cases_on `h1` >> simp[] >>
-  Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
-  rename1 `SOME loc` >> Cases_on `loc` >>
-  simp[gas_shadow_compiles_bind, comp_ignore_bind_def,
-       gas_shadow_compiles_emit_op, gas_shadow_compiles_emit_void]
-QED
-
 Theorem gas_shadow_compiles_nonreentrant_lock:
   !key trans view. gas_shadow_compiles (compile_nonreentrant_lock key trans view)
     (compile_nonreentrant_lock key trans view)
