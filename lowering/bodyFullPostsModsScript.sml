@@ -4,7 +4,7 @@ Ancestors
   bodySimFull bodySimEntry loweringPosts loweringStateRelDefs bodyPtrDefs bodySim
   exprLowering exprLoweringProps compileEnv bodyInvSplit bodyFullShadowBodyInv
   exprSimDefs exprSimMapDefs exprSimHypsDefs stmtSimDefs stmtLowering
-  gasOutcomeFull gasShadow gasShadowState gasShadowUnit
+  gasOutcomeFull gasOutcomeFullMods gasShadow gasShadowState gasShadowUnit
   gasExplicitSites gasContext allocaHistory contextRawReachable unitMemInv
   vyperInterpreter vyperState vyperAST vyperContext vyperTypeSystem
   vyperTypeCallGraph vyperTypeInvariants vyperStoragePlaceProvenance vyperStorageFootprint
@@ -109,9 +109,9 @@ Definition expr_sim_full_mods_def[nocompute]:
         ghost_inv_at_mods (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
+        cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx))
         (es, s0, G0, tn0)
         (\H res ee G tn t. ?v. res = INL v /\
           expr_post_mods H ctx func cenv cx e es sa sb s0 ee v op t /\
@@ -162,9 +162,9 @@ Definition expr_vv_sim_full_mods_def[nocompute]:
         ghost_inv_at_mods (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_expr cx e) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_expr cx e) (es, s0, G0, tn0)
         (\H res ee G tn t. ?tv. res = INL tv /\
           vv_post_mods H ctx func cenv cx e es sa sb s0 ee tv vv t /\
           vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e)
@@ -231,9 +231,9 @@ Definition expr_map_sim_full_mods_def[nocompute]:
         ghost_inv_at_mods (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_expr cx e) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_expr cx e) (es, s0, G0, tn0)
         (\H res ee G tn t. ?tr slot kt vt tp p.
           res = INL (HashMapRef tr slot kt vt) /\
           storage_mapping_region cx tr slot (HashMapT kt vt) /\
@@ -304,9 +304,9 @@ Definition stmt_frag_full_mods_def[nocompute]:
         ghost_inv_at_mods (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 source (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 source (es, s0, G0, tn0)
         (\H res ee G tn t. ?cenv''.
           stmt_lands lctx sb res t /\ ~t.vs_halted /\
           (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
@@ -456,6 +456,7 @@ Theorem expr_sim_full_mods_singleton:
 Proof
   strip_tac >> PairCases_on `cfg` >>
   simp[expr_sim_full_mods_def, expr_sim_full_def,
+       GSYM gas_outcome_full_singleton_def,
        dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton,
        immutable_frame_conj_singleton, SF CONJ_ss, expr_post_mods_singleton]
 QED
@@ -467,6 +468,7 @@ Theorem expr_vv_sim_full_mods_singleton:
 Proof
   strip_tac >> PairCases_on `cfg` >>
   simp[expr_vv_sim_full_mods_def, expr_vv_sim_full_def,
+       GSYM gas_outcome_full_singleton_def,
        dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton,
        immutable_frame_conj_singleton, SF CONJ_ss, vv_post_mods_singleton]
 QED
@@ -478,6 +480,7 @@ Theorem expr_map_sim_full_mods_singleton:
 Proof
   strip_tac >> PairCases_on `cfg` >>
   simp[expr_map_sim_full_mods_def, expr_map_sim_full_def,
+       GSYM gas_outcome_full_singleton_def,
        dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton,
        immutable_frame_conj_singleton, SF CONJ_ss]
 QED
@@ -498,7 +501,9 @@ Theorem stmt_frag_full_mods_singleton:
 Proof
   strip_tac >>
   PairCases_on `cfg` >>
-  simp[stmt_frag_full_mods_def, stmt_frag_full_def, cenv_top_ext_def,
+  ASM_SIMP_TAC bool_ss [stmt_frag_full_mods_def, stmt_frag_full_def,
+                       GSYM gas_outcome_full_singleton_def] >>
+  simp[cenv_top_ext_def,
        compile_env_component_equality,
        dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton,
        immutable_frame_conj_singleton, SF CONJ_ss]

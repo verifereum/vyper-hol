@@ -818,7 +818,11 @@ Resume focus_cut_owned_writer_path[post_write]:
         `!k. t <= k /\ k < r ==> ~in_revert_forward (EL k h).po_fn (EL k h).po_state /\
             x NOTIN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state (EL (SUC k) h).po_state)` by
           (gen_tac >> strip_tac >>
-           `SUC w <= k /\ k <= r` by decide_tac >> simp[]) >>
+           `SUC w <= k /\ k <= r` by
+             (map_every (fn bound => qpat_assum bound mp_tac)
+                [`w < t`, `t <= k`, `k < r`] >>
+              POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+           simp[]) >>
         mp_tac (Q.INST [`i` |-> `t`, `j` |-> `r`, `aid` |-> `aid`, `d` |-> `d`,
                         `fn` |-> `fn`, `x` |-> `x`, `n` |-> `n`]
                  (SPEC_ALL ptr_cut_owner_interval_no_kill)) >>
