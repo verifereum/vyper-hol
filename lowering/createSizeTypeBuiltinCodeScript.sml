@@ -1,10 +1,10 @@
 (* Static branch destinations of the type-builtin dispatcher. *)
 Theory createSizeTypeBuiltinCode
 Ancestors
-  createSizeCutCode createSizeCutOpens exprLowering exprCallBounds builtinAbi builtinBytes
+  exprValueWrapperStateProps createSizeCutCode createSizeCutOpens exprLowering exprCallBounds builtinAbi builtinBytes
   builtinSimple context emitHelper compileEnv vyperAST pair list option
 
-val _ = augment_srw_ss [rewrites [create_cut_value_wrappers]];
+val _ = augment_srw_ss [rewrites [dalloca_windows_state_wrappers]];
 
 (* Discharge the straight-line templates without unfolding a compiler state. *)
 fun type_cut_steps ths =
