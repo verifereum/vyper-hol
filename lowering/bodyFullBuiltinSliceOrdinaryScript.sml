@@ -463,9 +463,8 @@ Proof
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
   `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
-    (pure_rewrite_tac[local_ptrs_reserved_def,
-       gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
-     pure_rewrite_tac[GSYM local_ptrs_reserved_def] >> first_assum ACCEPT_TAC) >>
+    (irule bodyFullSharedTheory.local_ptrs_reserved_gas_shadow >>
+     qexists_tac `sa` >> conj_tac >> first_assum ACCEPT_TAC) >>
   `ci_mono shadow_s1 shadow_sc` by
     (qspecl_then [`src_op`,`shadow_s1`] mp_tac
        exprLoweringPropsTheory.ci_mono_compile_bytestring_src >> simp[]) >>
@@ -856,8 +855,10 @@ Proof
      qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
        (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env len start_mid` by
-    (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
-     disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> fs[]) >>
+    (qpat_assum `expr_sim_inv cenv cx env (start_mid with gas_obs := [])`
+       (ASSUME_TAC o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_gas_obs]) >>
+     drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
+     disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> simp[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty len start_mid` by
     (`body_expr_full_ok cx len` by fs[body_exprs_full_ok_def] >>
@@ -1649,9 +1650,8 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
   `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
-    (pure_rewrite_tac[local_ptrs_reserved_def,
-       gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
-     pure_rewrite_tac[GSYM local_ptrs_reserved_def] >> first_assum ACCEPT_TAC) >>
+    (irule bodyFullSharedTheory.local_ptrs_reserved_gas_shadow >>
+     qexists_tac `sa` >> conj_tac >> first_assum ACCEPT_TAC) >>
   `ci_mono shadow_s1 shadow_sc` by
     (irule exprSimSliceOrdinaryContextTheory.slice_fixed_capture_ci_mono >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
@@ -2101,8 +2101,10 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
      qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
        (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `expr_body_pre cenv cx env len start_mid` by
-    (drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
-     disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> fs[]) >>
+    (qpat_assum `expr_sim_inv cenv cx env (start_mid with gas_obs := [])`
+       (ASSUME_TAC o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_gas_obs]) >>
+     drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
+     disch_then (qspecl_then [`len`,`start_mid`] mp_tac) >> simp[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty len start_mid` by
     (`body_expr_full_ok cx len` by fs[body_exprs_full_ok_def] >>

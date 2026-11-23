@@ -1,7 +1,7 @@
 (* Exact raw runtime execution and its result boundary for a linked unit. *)
 Theory sourceUnitExecutionMods
 Ancestors
-  compileUnit e2eDefs e2eModsDefs finite_map sourceUnitExecution
+  compileUnit e2eDefs e2eModsDefs finite_map sourceUnitExecution sourceExemptMods
   vyperContext vyperLoweringCorrect
 
 Definition initial_venom_state_rel_mods_def:
