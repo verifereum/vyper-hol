@@ -6,6 +6,7 @@
 Theory loweringChecks
 Ancestors
   constSubstCV
+  constSubstModsCorrect[qualified]
   (* allocation limits, conversions, concat buffers, shared callee memory *)
   compilerLoweringTest
   (* dynamic peak-memory statement type and constant bindings *)
