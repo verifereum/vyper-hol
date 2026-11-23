@@ -143,7 +143,7 @@ Proof
   Cases_on `order_custom_error_kwargs ps kwargs` >> simp[]
 QED
 
-Triviality ordered_error_args_subst:
+Theorem ordered_error_args_subst:
   order_custom_error_args params (subst_consts_error_mods cenv err) =
   OPTION_MAP (MAP (subst_consts_expr_mods cenv))
     (order_custom_error_args params err)
