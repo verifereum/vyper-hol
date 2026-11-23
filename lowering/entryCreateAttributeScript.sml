@@ -312,3 +312,136 @@ Proof
   first_assum (irule_at Any) >> fs[create_operand_full_scope_def,create_operand_at_def] >>
   metis_tac[]
 QED
+
+Theorem attribute_vv_from_base[local]:
+  body_inv tops ctx ce cx /\ expr_body_pre ce cx env (Attribute ann obj fld) es /\
+  expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG,f,sf) ce cx ty (Attribute ann obj fld) es
+    (st0,a,b,sha,shb,vv,s,G,tn) /\
+  L a b /\
+  (!m shm bvv. expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG,f,sf) ce cx ty obj es
+      (st0,a,m,sha,shm,bvv,s,G,tn) /\ L a m ==>
+    scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,f,PG) tops cx st0 a m
+      (eval_expr cx obj) (es,s,G,tn)
+      (field_vv_post (DF,lo,d,ctx,f) ce cx obj (es,a,m,s,bvv,G,tn))
+      (create_operand_exit_post ctx cx) /\
+    create_operand_cut a m (gas_explicit_sites ctx shctx) ctx f tops cx st0
+      (eval_expr cx obj) (es,s)) /\
+  (!a m b. cs_extends a m /\ cs_extends m b /\ L a b ==> L a m) /\
+  (!a m b u. cs_extends a m /\ cs_extends m b /\ L a b /\
+       create_cut_region a m u /\ ~create_operand_at m u ==> ~create_operand_at b u) /\
+  (!a m b s. create_cut_code {} a m /\ fn_has_code a m f /\ create_cut_region a m s /\
+       m.cs_next_id <= b.cs_next_id /\
+       (!u. create_cut_region a m u /\ ~create_operand_at m u ==> ~create_operand_at b u) ==>
+       (!marks. create_operand_focus_scope a m (gas_explicit_sites ctx shctx) ctx f s marks ==>
+                create_operand_focus_scope a b (gas_explicit_sites ctx shctx) ctx f s marks) /\
+       (!marks r. exit_result r /\ create_operand_full_scope a m (gas_explicit_sites ctx shctx) ctx f s marks r ==>
+                create_operand_full_scope a b (gas_explicit_sites ctx shctx) ctx f s marks r) /\
+       (!left t. create_expr_prefix a m (gas_explicit_sites ctx shctx) ctx f s left t ==>
+                create_expr_prefix a b (gas_explicit_sites ctx shctx) ctx f s left t)) ==>
+  scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,f,PG) tops cx st0 a b
+    (eval_expr cx (Attribute ann obj fld)) (es,s,G,tn)
+    (field_vv_post (DF,lo,d,ctx,f) ce cx (Attribute ann obj fld) (es,a,b,s,vv,G,tn))
+    (create_operand_exit_post ctx cx) /\
+  create_operand_cut a b (gas_explicit_sites ctx shctx) ctx f tops cx st0
+    (eval_expr cx (Attribute ann obj fld)) (es,s)
+Proof
+  strip_tac >> drule_all attribute_base_pre >> strip_tac >>
+  rename1 `compile_expr ce ty obj a = (bvv,m)` >>
+  `L a m` by metis_tac[] >>
+  qpat_x_assum `!m shm bvv. _ ==> _` (drule_then (strip_assume_tac o UNDISCH)) >>
+  drule operand_vv_cut_code >> disch_tac >>
+  fs[s1PrefixDefsTheory.expr_vv_sim_full_pre_def] >>
+  `create_cut_region a m s` by
+    (drule_all create_cut_region_rules >> fs[]) >>
+  `a.cs_next_id <= m.cs_next_id` by metis_tac[exprLoweringPropsTheory.compile_expr_grows] >>
+  `m.cs_next_id <= b.cs_next_id` by
+    (drule_all attribute_add_layout >> simp[]) >>
+  `!u. create_cut_region a m u /\ ~create_operand_at m u ==> ~create_operand_at b u` by metis_tac[] >>
+  qpat_x_assum `!a m b s. create_cut_code {} a m /\ _ ==> _`
+    (qspecl_then [`a`,`m`,`b`,`s`] mp_tac) >>
+  simp[] >> strip_tac >> irule attribute_vv_at_split >>
+  first_assum (irule_at Any) >> simp[] >> metis_tac[]
+QED
+
+(* The guarded callback is used at the compiled base, before the field ADD.
+   The value arm invokes the same generic forcing law as the other VV cases. *)
+Theorem create_attribute_scoped_case:
+  body_inv (cx_tops cx) ctx ce cx /\
+  expr_body_pre ce cx env (Attribute ann obj fld) es /\
+  (!a m b. cs_extends a m /\ cs_extends m b /\ L a b ==> L a m) /\
+  (!a m b u. cs_extends a m /\ cs_extends m b /\ L a b /\
+       create_cut_region a m u /\ ~create_operand_at m u ==> ~create_operand_at b u) /\
+  (!a m b s. create_cut_code {} a m /\ fn_has_code a m f /\ create_cut_region a m s /\
+       m.cs_next_id <= b.cs_next_id /\
+       (!u. create_cut_region a m u /\ ~create_operand_at m u ==> ~create_operand_at b u) ==>
+       (!marks. create_operand_focus_scope a m (gas_explicit_sites ctx shctx) ctx f s marks ==>
+                create_operand_focus_scope a b (gas_explicit_sites ctx shctx) ctx f s marks) /\
+       (!marks r. exit_result r /\ create_operand_full_scope a m (gas_explicit_sites ctx shctx) ctx f s marks r ==>
+                create_operand_full_scope a b (gas_explicit_sites ctx shctx) ctx f s marks r) /\
+       (!left t. create_expr_prefix a m (gas_explicit_sites ctx shctx) ctx f s left t ==>
+                create_expr_prefix a b (gas_explicit_sites ctx shctx) ctx f s left t)) /\
+  (!e st0 a b sha shb op s G tn.
+    expr_body_pre ce cx env e es /\ L a b /\
+    expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,f,sf) ce cx ty e es
+      (st0,a,b,sha,shb,op,s,G,tn) /\
+    (!m shm vv. L a m /\
+       expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG,f,sf) ce cx ty e es
+         (st0,a,m,sha,shm,vv,s,G,tn) ==>
+       scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,f,PG)
+         (cx_tops cx) cx st0 a m (eval_expr cx e) (es,s,G,tn)
+         (\H res ee G' tn' t. create_operand_vv_post (DF,lo,d,ctx,f) ce cx e
+           (es,a,m,s,vv,G,tn) H res ee G' tn' t /\ create_operand_at m t)
+         (create_operand_exit_post ctx cx) /\
+       create_operand_cut a m (gas_explicit_sites ctx shctx) ctx f (cx_tops cx) cx st0
+         (eval_expr cx e) (es,s)) ==>
+    scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,f,PG)
+      (cx_tops cx) cx st0 a b (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
+      (expr_sim_full_post (DF,lo,d,ctx,f) ce cx e (es,a,b,s,op,G,tn))
+      (create_operand_exit_post ctx cx) /\
+    create_operand_cut a b (gas_explicit_sites ctx shctx) ctx f (cx_tops cx) cx st0
+      (bind (eval_expr cx e) (read_result cx)) (es,s)) /\
+  (!st0 a m sha shm vv s G tn. L a m /\
+     expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG,f,sf) ce cx ty obj es
+       (st0,a,m,sha,shm,vv,s,G,tn) ==>
+     scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,f,PG)
+       (cx_tops cx) cx st0 a m (eval_expr cx obj) (es,s,G,tn)
+       (\H res ee G' tn' t. create_operand_vv_post (DF,lo,d,ctx,f) ce cx obj
+         (es,a,m,s,vv,G,tn) H res ee G' tn' t /\ create_operand_at m t)
+       (create_operand_exit_post ctx cx) /\
+     create_operand_cut a m (gas_explicit_sites ctx shctx) ctx f (cx_tops cx) cx st0
+       (eval_expr cx obj) (es,s)) ==>
+  (!st0 a b sha shb vv s G tn. L a b /\
+     expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG,f,sf) ce cx ty (Attribute ann obj fld) es
+       (st0,a,b,sha,shb,vv,s,G,tn) ==>
+     scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,f,PG)
+       (cx_tops cx) cx st0 a b (eval_expr cx (Attribute ann obj fld)) (es,s,G,tn)
+       (\H res ee G' tn' t. create_operand_vv_post (DF,lo,d,ctx,f) ce cx (Attribute ann obj fld)
+         (es,a,b,s,vv,G,tn) H res ee G' tn' t /\ create_operand_at b t)
+       (create_operand_exit_post ctx cx) /\
+     create_operand_cut a b (gas_explicit_sites ctx shctx) ctx f (cx_tops cx) cx st0
+       (eval_expr cx (Attribute ann obj fld)) (es,s)) /\
+  (!st0 a b sha shb op s G tn. L a b /\
+     expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,f,sf) ce cx ty (Attribute ann obj fld) es
+       (st0,a,b,sha,shb,op,s,G,tn) ==>
+     scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,f,PG)
+       (cx_tops cx) cx st0 a b (bind (eval_expr cx (Attribute ann obj fld)) (read_result cx)) (es,s,G,tn)
+       (expr_sim_full_post (DF,lo,d,ctx,f) ce cx (Attribute ann obj fld) (es,a,b,s,op,G,tn))
+       (create_operand_exit_post ctx cx) /\
+     create_operand_cut a b (gas_explicit_sites ctx shctx) ctx f (cx_tops cx) cx st0
+       (bind (eval_expr cx (Attribute ann obj fld)) (read_result cx)) (es,s))
+Proof
+  strip_tac >> conj_asm1_tac
+  >- (rpt gen_tac >> strip_tac >>
+      simp[GSYM field_vv_scoped_post] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      irule attribute_vv_from_base >>
+      qpat_assum `expr_vv_sim_full_pre _ _ _ _ _ _ _` (irule_at Any) >>
+      simp[] >>
+      qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
+      qexists_tac `L` >> rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC >> NO_TAC) >>
+      rpt gen_tac >> strip_tac >>
+      qpat_assum `!st0 a m sha shm vv s G tn. _ ==> _` (drule_all_then mp_tac) >>
+      simp[GSYM field_vv_scoped_post] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!e st0 a b sha shb op s G tn. _ ==> _` irule >>
+  simp[] >> metis_tac[]
+QED
