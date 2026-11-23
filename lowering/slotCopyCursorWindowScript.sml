@@ -97,3 +97,39 @@ Proof
   disch_then irule >> rw[] >>
   first_x_assum (qspec_then `SUC j` mp_tac) >> simp[ADD_CLAUSES]
 QED
+
+Theorem slot_copy_walk_then:
+  slot_copy_walk A explicit ctx func s t /\
+  slot_copy_walk A explicit ctx func t r ==>
+  slot_copy_walk A explicit ctx func s r
+Proof
+  metis_tac[slot_copy_walk_trans, transitive_def]
+QED
+
+Theorem slot_copy_window_then_jump:
+  ~s.vs_halted /\ ~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> GAS) code /\
+  run_inst_seq code s = OK raw /\
+  t = raw with vs_inst_idx := s.vs_inst_idx + LENGTH code /\
+  get_instruction bb t.vs_inst_idx = SOME jump /\
+  (jump.inst_opcode = JMP \/ jump.inst_opcode = JNZ) /\
+  step_inst_base jump t = OK (jump_to lbl t) /\
+  (!j. j < LENGTH (code ++ [jump]) ==>
+       A s.vs_current_bb (s.vs_inst_idx+j) (EL j (code ++ [jump]))) ==>
+  slot_copy_walk A explicit ctx func s (jump_to lbl t)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `slot_copy_walk A explicit ctx func s t` by
+    (qpat_assum `t = _ with vs_inst_idx := _` (pure_rewrite_tac o single) >>
+     irule slot_copy_straight_window >> simp[] >>
+     rpt strip_tac >> first_x_assum (qspec_then `j` mp_tac) >>
+     simp[EL_APPEND1]) >>
+  `A t.vs_current_bb t.vs_inst_idx jump` by
+    (first_x_assum (qspec_then `LENGTH code` mp_tac) >> simp[EL_APPEND2]) >>
+  `slot_copy_walk A explicit ctx func t (jump_to lbl t)` by
+    (irule slot_copy_jump_window >> gvs[] >> metis_tac[]) >>
+  metis_tac[slot_copy_walk_then]
+QED
