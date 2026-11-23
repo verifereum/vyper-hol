@@ -1012,7 +1012,7 @@ Theorem well_typed_builtin_app_length:
 Proof
   simp[oneline well_typed_builtin_app_def] >>
   Cases_on `blt` >> rw[builtin_args_length_ok_def] >>
-  pop_assum mp_tac >> TRY CASE_TAC >> rw[]
+  pop_assum mp_tac >> TRY CASE_TAC >> rw[compatible_bound_def]
 QED
 
 (* Helper: Flag Not never produces TypeError when well-typed *)
@@ -2440,14 +2440,15 @@ Theorem typed_membership_success:
   evaluate_type tenv t2 = SOME tv2 /\
   value_has_type tv1 v1 /\ value_has_type tv2 v2 ==>
   ty = BaseT BoolT /\
-  ?b. evaluate_membership tv2 (bt = Bop NotIn) v1 v2 = INL (BoolV b)
+  ?b. evaluate_binop u tv2 (if bt = Bop NotIn then NotIn else In)
+        v1 v2 = INL (BoolV b)
 Proof
   strip_tac >>
   gvs[well_typed_builtin_app_def, well_typed_binop_def] >>
   gvs[evaluate_type_def, AllCaseEqs()] >>
-  simp[evaluate_membership_flag, evaluate_binop_def, binop_negate_def] >>
+  simp[evaluate_binop_def, binop_negate_def] >>
   drule vht_ArrayTV_exists >> strip_tac >>
-  simp[evaluate_membership_array]
+  simp[evaluate_binop_def, binop_negate_def]
 QED
 
 Theorem well_typed_membership_dispatch:
@@ -2456,7 +2457,7 @@ Theorem well_typed_membership_dispatch:
   LIST_REL value_has_type tvs vs ==>
   ty = BaseT BoolT /\ LENGTH vs = 2 /\
   ?ht b. evaluate_type (get_tenv cx) (EL 1 ts) = SOME ht /\
-    evaluate_membership ht (bt = Bop NotIn) (EL 0 vs) (EL 1 vs) = INL (BoolV b)
+    evaluate_builtin cx acc ty bt ts vs = INL (BoolV b)
 Proof
   strip_tac >>
   `LENGTH ts = 2` by
@@ -2464,7 +2465,9 @@ Proof
      gvs[builtin_args_length_ok_def]) >>
   gvs[LENGTH_EQ_NUM_compute] >>
   Cases_on `tvs` >> gvs[] >>
-  drule typed_membership_success >> simp[] >> metis_tac[]
+  drule typed_membership_success >> simp[] >> strip_tac >>
+  gvs[evaluate_builtin_def, LET_THM, type_to_int_bound_def] >>
+  metis_tac[]
 QED
 
 Theorem well_typed_builtin_app_no_type_error:

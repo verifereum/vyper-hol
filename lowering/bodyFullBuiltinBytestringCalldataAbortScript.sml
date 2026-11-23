@@ -17,7 +17,7 @@ Theorem bytestring_calldata_full_abort:
   LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
   (dimword (:256) <= a+n \/ LENGTH s.vs_call_ctx.cc_calldata < a+n) /\
   alloca_inv s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u HG tm. !D.
@@ -76,6 +76,10 @@ Proof
           [`limit` |-> `LENGTH s.vs_call_ctx.cc_calldata`]) >>
         impl_tac >- gvs[dimword_def] >>
         gvs[GSYM dimword_def]) >> simp[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     qpat_assum `v = _` SUBST1_TAC >>
+     simp[allocas_below_fmp_def, update_var_def]) >>
   mp_tac (bytestring_slice_bounds_full_abort |> Q.INST [`a` |-> `start_arg`, `n` |-> `length_arg`] |> Q.INST
     [`sa` |-> `s1`, `sb` |-> `s2`, `s` |-> `v`,
      `start_arg` |-> `start`, `length_arg` |-> `Lit (n2w n)`,

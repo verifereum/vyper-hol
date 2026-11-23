@@ -2,7 +2,7 @@
 Theory bodyFullBopRestWordBoundedControl
 Ancestors
   bodyFullBopRestWordControl bodyPtrBopInBoundedLayout
-  bodyPtrSignedConvertClamp fragGasCopyLoop
+  bodyPtrSignedConvertClamp fragGasCopyLoop fragGasCopySeqLiftProps
   bodyPtrBopInLoopSearch bodyPtrBopInLoopCode bodyPtrBopInLoopLayout
   bodyPtrBopInLoopContract bodyPtrBopInLiteralSuffix bodyPtrBopInScalarTransport
   exprLoweringProps fragExecMem fragGasEmitCtrl fragGasSeqPtr fragGasOriginPtr fragGasOriginPtrLoop stmtAppendStorageRunPtr
@@ -248,6 +248,12 @@ Proof
    isPREFIX code (DROP s.vs_inst_idx entry_bb.bb_instructions) /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
     simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre inst post v. code = pre ++ inst::post /\ run_inst_seq pre s = OK v ==>
+      unitTransformDefs$dalloca_no_wrap inst v)` by
+    (rpt strip_tac >>
+     `MEM inst code` by metis_tac[MEM_APPEND, MEM] >>
+     gvs[Abbr `code`, mk_inst_def, unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
     (OK (t with vs_inst_idx := 5),G1,tn1)` by
     (drule_all run_inst_seq_gas_origin_ptr_path >>
@@ -295,7 +301,7 @@ Resume rest_word_membership_bounded_capacity_joint[ptr]:
        (Q.INST [`id` |-> `sa.cs_next_id+3`]
          (SPEC_ALL scalar_iszero_assert_certificate))) >>
      simp[op_prov_def, op_taint_def] >> qexists_tac `t` >> gvs[]) >>
-  irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
+  irule fragGasCopySeqLiftPropsTheory.inst_seq_ptr_lower_bound_transport >>
   conj_tac >- simp[Abbr `code`, mk_inst_def] >>
   simp[] >> qexists_tac `0` >> gvs[]
 QED

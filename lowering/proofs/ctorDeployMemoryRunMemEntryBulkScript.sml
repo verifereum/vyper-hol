@@ -311,7 +311,14 @@ Proof
  `gas_path_mem ctx func s
     (LENGTH (FILTER (\i. i.inst_opcode = GAS) code))
     (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code))` by
-   (irule run_inst_seq_gas_path_mem >> gvs[] >> metis_tac[]) >>
+   (irule run_inst_seq_gas_path_mem >> gvs[] >> rpt strip_tac >>
+    irule dalloca_no_wrap_non_dalloca >>
+    `MEM i (emitted_insts st st')` by metis_tac[MEM_APPEND, MEM] >>
+    qpat_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _`
+      (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+    disch_then drule >>
+    simp[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def] >>
+    strip_tac >> gvs[]) >>
  `gas_path_mem ctx func s 0
     (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts))` by gvs[] >>
  simp[] >> drule gas_path_mem_ok_suffix >> simp[]

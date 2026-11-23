@@ -1,7 +1,7 @@
 (* Concat on the joint finite-horizon body contract. *)
 Theory bodyFullBuiltinConcat
 Ancestors exprSimDefs[qualified,ignore_grammar] stmtSimProps[qualified,ignore_grammar]
-  bodyFullBuiltinConcatLoop bodyFullBuiltinConcatFrame bodyFullOfVV bodyInvNoDalloca
+  bodyFullBuiltinConcatLoop bodyFullBuiltinConcatFrame bodyFullOfVV
   bodyFullHashKeccakFixed[qualified,ignore_grammar] bodyFullIfExpReach[qualified,ignore_grammar]
   bodyFullPreds bodySimFull gasOutcomeFullCompose gasOutcomeFullGuarded
   exprSimConcatResult exprSimConcatSource exprSimHyps exprSimSource
@@ -18,6 +18,7 @@ Theorem concat_sim_full:
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a (Concat n) args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a (Concat n) args) es /\
@@ -145,7 +146,7 @@ Resume concat_sim_full[vv]:
 QED
 
 Resume concat_sim_full[shadow]:
-  qpat_assum `compile_expr cenv ty (gas_shadow_expr (Builtin a (Concat n) args)) shadow_sa = _`
+  qpat_assum `compile_expr _ ty (gas_shadow_expr (Builtin a (Concat n) args)) shadow_sa = _`
     (mp_tac o SIMP_RULE (srw_ss())
       [gasShadowTheory.gas_shadow_expr_def,gasShadowTheory.gas_shadow_builtin_def]) >>
   disch_then (mp_tac o MATCH_MP exprSimConcatResultTheory.concat_compile_shape) >>
@@ -185,13 +186,15 @@ Resume concat_sim_full[shadow]:
     (assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
   qmatch_assum_abbrev_tac
     `compile_concat compile_expr cenv args dataop infos ob.buf_operand s4 = ((),s5)` >>
+  `gas_shadow_compiles (compile_concat compile_expr cenv args dataop infos ob.buf_operand)
+     (compile_concat compile_expr (gas_shadow_env T cenv)
+       (MAP gas_shadow_expr args) dataop infos ob.buf_operand)` by
+    (irule (REWRITE_RULE [COND_CLAUSES]
+       (Q.INST [`sh` |-> `T`] gas_shadow_compiles_concat_env)) >>
+     irule (cj 1 gas_shadow_compile_expr_env)) >>
   `gas_shadow_state s5 shadow_s5` by
-    (mp_tac (Q.INST [`sh` |-> `T`,`cenv` |-> `cenv`,
-       `data_ptr` |-> `dataop`,`off_ptr` |-> `ob.buf_operand`]
-       (MATCH_MP gasShadowCompileHelpersTheory.gas_shadow_compiles_concat
-         (cj 1 gasShadowCompileTheory.gas_shadow_compile_expr))) >>
-     disch_then (qspecl_then [`args`,`infos`] mp_tac) >>
-     simp_tac bool_ss [] >> rewrite_tac[gas_shadow_compiles_def] >>
+    (qpat_x_assum `gas_shadow_compiles (compile_concat _ _ _ _ _ _) _`
+       (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
      disch_then (qspecl_then [`s4`,`shadow_s4`] mp_tac) >> simp[]) >>
   `ci_mono shadow_s4 shadow_s5` by
     (qpat_assum `compile_concat _ _ _ _ _ _ shadow_s4 = _` mp_tac >>
@@ -297,12 +300,12 @@ Resume concat_sim_full[loop]:
     (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
        qpat_assum `MEM func ctx.ctx_functions` (fn member =>
          ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi (CONJ inv member))))) >>
-  `!fn inst z. frag_reachable ctx func t4 fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func t4 fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK t4,G4,tn4)`
        (qspec_then `DF (storage_trace_horizon es.storage_trace)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe]))))))) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t4` by
     (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> stmt_state_rel _ _ _ _ _ _ t4 /\ _`

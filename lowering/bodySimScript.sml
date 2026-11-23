@@ -34,13 +34,14 @@
 
 Theory bodySim
 Ancestors
-  loweringPosts bodyInvSplit compileUnit immSectionDead
+  loweringPosts bodyInvSplit bodySimModsProps compileUnit immSectionDead
   vyperContext vyperTypeContractStaticMaps alist finite_map arithmetic
   list exprSimDefs exprSimHypsDefs stmtSimDefs compileEnv compileVyper vyperTypeContract
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness immutableRelation
   immutableLocationProps exprSimMapDefs supportedNameRoot
+  supportedExprForms supportedDecls
 Libs
   monadsyntax
 
@@ -122,21 +123,6 @@ Proof
   rpt strip_tac >> gvs[] >>
   drule module_toplevel_vtype_key_MEM_Variable >>
   disch_then (qspec_then `NONE` mp_tac) >> simp[]
-QED
-
-Theorem singleton_immutable_region[local]:
-  immutable_region_mods [(NONE,tops)] src name off width <=>
-    src = NONE /\
-    ?pre post vis ty slot.
-      tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
-      off = compute_immutables_len
-        (get_struct_fields (make_struct_fields_map tops)) pre /\
-      width = type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty
-Proof
-  Cases_on `src` >>
-  simp[immutable_region_mods_def, make_struct_fields_map_mods_singleton, ALOOKUP_def] >>
-  eq_tac >> rpt strip_tac >>
-  qexistsl [`pre`, `post`, `vis`, `ty`, `slot`] >> gvs[]
 QED
 
 Theorem compute_immutables_len_byte_coverage:
@@ -293,7 +279,7 @@ Theorem body_inv_nonreentrant_slot:
   MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\ nr ==>
   cx.nonreentrant_slot = SOME global_nonreentrant_slot
 Proof
-  rw[body_inv_def] >> res_tac
+  metis_tac[body_inv_contract, body_inv_module, body_inv_nonreentrant_slot_mods]
 QED
 
 (* The type checker gives every function of the main module its declared
@@ -317,9 +303,7 @@ Theorem body_inv_copies_subscript_base:
     body_inv tops ctx cenv cx ==>
     copies_subscript_base cenv obj idx = subscript_reads_base cx obj idx
 Proof
-  rw[body_inv_def, cenv_module_pins_def,
-     exprLoweringTheory.copies_subscript_base_def,
-     vyperInterpreterTheory.subscript_reads_base_def]
+  metis_tac[body_inv_contract, body_inv_module, body_inv_copies_subscript_base_mods]
 QED
 
 Theorem cenv_module_pins_immutable_section_layout:
@@ -333,60 +317,38 @@ QED
 Theorem body_inv_immutable_section_layout:
   !tops ctx cenv cx. body_inv tops ctx cenv cx ==> immutable_section_layout cenv tops
 Proof
-  rw[body_inv_def] >> irule cenv_module_pins_immutable_section_layout >>
-  simp[]
+  metis_tac[body_inv_contract, body_inv_module, body_inv_immutable_section_layout_mods,
+            immutable_section_layout_mods_singleton]
 QED
 
-(* A name const_name_root marks is a constant declaration of tops: neither a
-   place root, storage nor an immutable, so supported code never names one. *)
+(* The existing support predicates resolve top-level names only in the
+   main namespace. Use the main module's declarations even when the
+   active module src is an import. *)
+Theorem body_inv_main_module[local]:
+  body_inv tops ctx cenv cx ==> main_module [(NONE,tops)] = tops /\ cx_tops cx = tops
+Proof
+  `body_inv tops ctx cenv cx ==> get_module_code cx NONE = SOME tops` by
+    metis_tac[body_inv_contract, body_inv_module, contract_inv_module_code] >>
+  simp[main_module_def, gasContextTheory.cx_tops_module]
+QED
+
 Theorem body_inv_const_name_decl:
   body_inv tops ctx cenv cx /\ cx_const_name cx nsid ==>
   ?vis c ty slot.
     supported_variable_decl tops nsid = SOME (vis,Constant c,ty,slot)
 Proof
-  strip_tac >>
-  `cx_tops cx = tops /\
-   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-    gvs[body_inv_def, gasContextTheory.cx_tops_module] >>
-  PairCases_on `nsid` >> gvs[cx_const_name_def] >>
-  drule_all distinct_module_consts_env_names_constant >> simp[]
+  Cases_on `nsid` >> metis_tac[body_inv_contract, body_inv_module,
+    body_inv_main_module, cx_const_name_split_def, cx_const_name_def,
+    body_inv_const_name_decl_mods]
 QED
 
 Theorem body_inv_const_name_not_root:
   body_inv tops ctx cenv cx /\ cx_const_name cx nsid ==>
-  ~supported_place_root tops nsid /\
   (!ty. ~supported_storage_value tops nsid ty) /\
   supported_immutable_type tops nsid = NONE
 Proof
-  strip_tac >> drule_all body_inv_const_name_decl >> strip_tac >>
-  drule supported_constant_decl_not_root >> simp[]
-QED
-
-Theorem body_inv_const_name_root:
-  body_inv tops ctx cenv cx ==>
-  !x. const_name_root cx x ==>
-    ?ty id. x = TopLevelName ty id /\
-      ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
-      supported_immutable_type tops id = NONE
-Proof
-  rpt strip_tac >> Cases_on `x` >> gvs[const_name_root_def] >>
-  drule_all body_inv_const_name_not_root >> simp[]
-QED
-
-Theorem body_inv_const_name_free:
-  body_inv tops ctx cenv cx /\ supported_expr tops e ==>
-  ~supported_expr_exists (const_name_root cx) e
-Proof
-  strip_tac >> drule body_inv_const_name_root >> strip_tac >>
-  drule_all supported_expr_no_name_root >> simp[]
-QED
-
-Theorem body_inv_target_const_name_free:
-  body_inv tops ctx cenv cx /\ supported_target_info tops bindings bt <> NONE ==>
-  ~supported_target_exists (const_name_root cx) bt
-Proof
-  strip_tac >> drule body_inv_const_name_root >> strip_tac >>
-  irule (cj 2 supported_target_info_no_name_root) >> metis_tac[]
+  metis_tac[body_inv_contract, body_inv_module, body_inv_main_module,
+    cx_const_name_split_def, body_inv_const_name_not_root_mods]
 QED
 
 (* The compile env's modules are the source's, the main module alone, whose
@@ -399,10 +361,7 @@ Theorem body_inv_modules_aligned:
        ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
     ALL_DISTINCT (MAP FST cenv.ce_modules)
 Proof
-  rw[body_inv_def, cenv_module_pins_def]
-  >- (Cases_on `src` >> simp[] >>
-      Cases_on `get_module_code cx (SOME x)` >> gvs[] >> res_tac >> gvs[]) >>
-  res_tac >> gvs[]
+  metis_tac[body_inv_contract, body_inv_module, body_inv_modules_aligned_mods]
 QED
 
 (* The compile env binds no local the typing does not know: every name
@@ -438,8 +397,33 @@ Definition stmt_exprs_ok_def:
        (\e. ~is_extcode e /\ ~byte_widths_expr e) s /\
     alloc_limits_stmt cenv s /\
     (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
-       return_buffer_ok cenv)
+       return_buffer_ok cenv) /\
+    ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s
 End
+
+Theorem body_inv_const_name_roots:
+  body_inv tops ctx cenv cx ==>
+  const_name_root_mods cenv.ce_modules = const_name_root cx
+Proof
+  strip_tac >>
+  `cenv.ce_modules = [(NONE,cx_tops cx)]` by
+    (drule body_inv_main_module >> fs[body_inv_def, cenv_module_pins_def]) >>
+  asm_rewrite_tac[const_name_root_mods_singleton]
+QED
+
+Theorem stmt_exprs_ok_module_const_name_free:
+  stmt_exprs_ok cenv s ==>
+  ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s
+Proof
+  simp[stmt_exprs_ok_def]
+QED
+
+Theorem body_inv_stmt_const_name_free:
+  body_inv tops ctx cenv cx /\ stmt_exprs_ok cenv s ==>
+  ~supported_stmt_expr_exists (const_name_root cx) s
+Proof
+  metis_tac[body_inv_const_name_roots, stmt_exprs_ok_module_const_name_free]
+QED
 
 (* stmt_exprs_ok of each statement of a block, under the local types
    compile_stmts threads to it. *)

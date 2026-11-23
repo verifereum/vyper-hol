@@ -53,7 +53,7 @@ Theorem dalloca_windows_internal_function:
   (!env lc rt. env.ce_func_defaults = ce.ce_func_defaults ==>
      preserves_dalloca_windows window (compile_stmts env lc rt fbody)) ==>
   preserves_dalloca_windows window
-    (compile_internal_function ce params buf nr key tr view F 0 fbody ret)
+    (compile_internal_function ce params buf nr key tr view ctor imm_len fbody ret)
 Proof
   strip_tac >> Cases_on `nr` >>
   simp[compile_internal_function_def, comp_ignore_bind_def] >> (
@@ -61,8 +61,9 @@ Proof
     >- (COND_CASES_TAC >> windows_tac []) >>
     rpt gen_tac >> BETA_TAC >>
     NTAC 6 (irule dalloca_windows_bind >> reverse conj_tac
-      >- simp[dalloca_windows_return, dalloca_windows_internal_param_decls,
-              dalloca_windows_emit_helpers] >> rpt gen_tac >> BETA_TAC) >>
+      >- windows_tac [dalloca_windows_internal_param_decls,
+                      compile_fixed_region_with_id_def, dalloca_windows_emit, mk_inst_def] >>
+      rpt gen_tac >> BETA_TAC) >>
     match_mp_tac (Q.ISPEC `\env. env.ce_func_defaults = ce.ce_func_defaults`
       (Q.GEN `P` dalloca_windows_bind_result)) >>
     conj_tac >- simp[dalloca_windows_return] >>
@@ -115,14 +116,6 @@ Proof
   simp[compile_generate_runtime_def] >> rpt strip_tac >>
   windows_tac [dalloca_windows_dispatch, dalloca_windows_external_fn_bodies,
                dalloca_windows_internal_fn_bodies]
-QED
-
-Theorem register_kwarg_vars_defaults[local]:
-  !kwvars ce.
-    (compile_register_kwarg_vars ce kwvars).ce_func_defaults = ce.ce_func_defaults
-Proof
-  Induct >> simp[compile_register_kwarg_vars_def] >>
-  rpt gen_tac >> PairCases_on `h` >> simp[compile_register_kwarg_vars_def]
 QED
 
 Theorem dalloca_windows_common_function_body:

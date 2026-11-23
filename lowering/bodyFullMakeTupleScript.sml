@@ -2,7 +2,7 @@
 Theory bodyFullMakeTuple
 Ancestors exprSimDefs[qualified,ignore_grammar]
   bodyFullMakeArrayResultDefs bodyFullMakeArrayInit bodyFullMakeArrayLoop
-  bodyFullPreds bodySimFull bodyInvNoDalloca bodyMemTupleLayout
+  bodyFullPreds bodySimFull bodyMemTupleLayout
   exprSimAggregateLayout exprSimAggregateSource exprSimHyps exprSimHypsDefs exprSimSource
   exprOperandVar exprLoweringProps exprLowering compileEnv
   gasOutcomeFullStmts gasOutcomeFullCompose gasOutcomeFull gasStorage
@@ -22,6 +22,7 @@ Theorem make_tuple_vv_sim_full_conditional:
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (MakeArray NONE n) args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (MakeArray NONE n) args) es
@@ -31,7 +32,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `expr_sim_inv cenv cx env es /\ compatible_bound n (LENGTH args)` by
     gvs[expr_body_pre_def,cj 9 vyperTypeSystemTheory.well_typed_expr_def,
-        vyperTypeSystemTheory.well_typed_builtin_app_def] >>
+        vyperTypeSystemTheory.well_typed_builtin_app_def,
+        vyperValueTheory.compatible_bound_def] >>
   `body_exprs_full_ok cx args` by
     (first_x_assum irule >> simp[vyperContextTheory.builtin_args_length_ok_def]) >>
   `!e ee. MEM e args /\ expr_sim_inv cenv cx env ee ==>
@@ -47,14 +49,14 @@ Proof
     simp[type_memory_bytes_def] >>
   `?sba ssm su.
     compile_alloc_buffer (type_memory_size_list tvs) shadow_sa = (sba,ssm) /\
-    compile_make_tuple compile_expr cenv (MAP gas_shadow_expr args) tys
+    compile_make_tuple compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) tys
       sba.buf_operand 0 ssm = (su,shadow_sb)` by
     (qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
      simp[gas_shadow_expr_def,gas_shadow_builtin_def,compile_tuple_literal] >>
      Cases_on `compile_alloc_buffer (type_memory_size_list tvs) shadow_sa` >>
      simp[tuple_literal_types_def] >>
-     Cases_on `compile_make_tuple compile_expr cenv (MAP gas_shadow_expr args)
-       tys q.buf_operand 0 r` >>
+     Cases_on `compile_make_tuple compile_expr (gas_shadow_env T cenv)
+       (MAP gas_shadow_expr args) tys q.buf_operand 0 r` >>
      simp[as_ptr_val_def] >> metis_tac[]) >>
   `sba = ba /\ gas_shadow_state sm ssm` by
     (mp_tac (Q.INST [`nbytes` |-> `type_memory_size_list tvs`]
@@ -84,13 +86,13 @@ Resume make_tuple_vv_sim_full_conditional[loop]:
      conj_tac >- fs[ci_mono_def] >> qexists `shadow_sa` >> fs[ci_mono_def]) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!fn i z. frag_reachable ctx func si fn i z ==> dalloca_no_wrap i z` by
+  `!fn i z. frag_reachable ctx func si fn i z ==> dalloca_fmp_headroom i z` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK si,Gi,tni)`
        (qspec_then `DF (storage_trace_horizon es.storage_trace)` assume_tac) >>
      qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) [] (OK si,Gi,tni)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i z. frag_reachable ctx func s0 fn i z ==> _`
-           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi)))) >>
   mp_tac (Q.INST [`csbase` |-> `sa`, `ebase` |-> `es`, `sbase` |-> `s0`,
     `Gbase` |-> `G0`, `tnbase` |-> `tn0`, `aid` |-> `sa.cs_next_id`,
@@ -100,7 +102,7 @@ Resume make_tuple_vv_sim_full_conditional[loop]:
     `ssm`,`shadow_sb`,`es`,`si`,`Gi`,`tni`] mp_tac) >>
   (impl_tac >-
     (fs[ci_mono_def] >> rpt conj_tac
-     >~ [`!fn inst z. frag_reachable ctx func si fn inst z ==> dalloca_no_wrap inst z`]
+     >~ [`!fn inst z. frag_reachable ctx func si fn inst z ==> dalloca_fmp_headroom inst z`]
      >- first_assum ACCEPT_TAC >>
      rpt strip_tac >> simp[]
      >- (qpat_x_assum `!name b len. local_region _ _ _ name b len ==> _` irule >>

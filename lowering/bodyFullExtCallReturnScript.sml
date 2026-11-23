@@ -1,6 +1,7 @@
 (* Counted return handling after the successful external call. *)
 Theory bodyFullExtCallReturn
 Ancestors
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullExtCallReturnSizedDecode bodyFullExtCallReturnSizeRoute
   bodyFullExtCallReturnDefaultValue bodyFullExtCallReturnVoid
   bodyFullExtCallReturnSource extcallReturnEntryBridge extcallReturnDefaultRouting
@@ -21,7 +22,6 @@ Theorem extcall_return_full:
     B L xs p d dstid live ceiling s G tn lo PG.
     abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
       st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
-    ~ctx_has_dalloca ctx /\
     abi_decode_ptr_window G tn s source (n2w B) L /\
     ptr_covers G tn output s (type_memory_bytes ce ty) /\
     op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -69,7 +69,6 @@ Theorem extcall_return_full:
       else TAKE (static_length (vyper_to_abi_type env ty)) (DROP p xs)) /\
     ~(vyper_decode_valid_enc (vyper_to_abi_type env ty) bytes /\
       abi_vyper_admissible env ty (dec (vyper_to_abi_type env ty) bytes)) /\
-    ~ctx_has_dalloca ctx /\
     abi_decode_ptr_window G tn s source (n2w B) L /\
     ptr_covers G tn output s (type_memory_bytes ce ty) /\
     op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -120,7 +119,7 @@ Theorem extcall_return_full:
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
     fn_has_code sr sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    MEM func ctx.ctx_functions /\ ~ctx_has_dalloca ctx /\
+    MEM func ctx.ctx_functions /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
             not_fresh_at sa x) /\
@@ -411,7 +410,12 @@ Resume extcall_return_full[has_horizon]:
          drule return_default_path_intervals >> strip_tac >>
          drule_all return_default_intervals_code >> strip_tac >>
          `LENGTH a.vs_returndata < dimword (:256)` by simp[] >>
-         `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
+         `ctx_has_dalloca ctx ==> allocas_below_fmp a` by
+        (qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace`
+           (qx_choose_then `Hroom` assume_tac) >>
+         qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ a /\ _`
+           (drule_then (ACCEPT_TAC o MATCH_MP
+             bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o CONJUNCT1))) >>
          drule_at (Pat `emit_op RETURNDATASIZE _ ar = _`)
            (INST_TYPE [alpha |-> ``:256``] return_default_shell_entry) >>
          disch_then (drule_all_then (qspecl_then [`tm`,`explicit`,`PG`,`J`]
@@ -473,7 +477,12 @@ Resume extcall_return_full[has_horizon]:
          simp[IgnAsm `result_op = buf.buf_operand`,allocas_from_def] >>
          conj_tac >- (disj2_tac >> qexistsl_tac [`xl`,`cj`,`old3`] >> simp[]) >>
          first_assum (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp p` by simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp p` by
+        (qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace`
+           (qx_choose_then `Hroom` assume_tac) >>
+         qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ p /\ _`
+           (drule_then (ACCEPT_TAC o MATCH_MP
+             bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o CONJUNCT1))) >>
       drule_at (Pat `compile_return_value_decode _ _ _ = _`)
         extcall_return_size_route >>
       disch_then (drule_all_then mp_tac) >>
@@ -746,8 +755,14 @@ Resume extcall_return_full[decode_success]:
            (qx_gen_tac `D` >>
             `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (z,Gd,td) []
                  (OK (jump_to xl z),Gd,td)` by
-              (irule emit_jmp_origin_ptr >> simp[] >>
-               MAP_EVERY qexists_tac [`de`,`cj`] >> simp[]) >>
+              (irule emit_jmp_origin_ptr >>
+               simp[] >> conj_tac >-
+               (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+                  vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ z /\ _`
+                 (drule_then (ACCEPT_TAC o MATCH_MP
+                   bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+                   CONJUNCT1 o REWRITE_RULE [vv_post_def] o CONJUNCT1))) >>
+               qexistsl_tac [`de`,`cj`] >> simp[]) >>
             qpat_assum `!D. gas_origin_ptr_path _ (t,G,tn) [] (OK z,Gd,td)`
               (qspec_then `D` mp_tac) >>
             qpat_assum `gas_origin_ptr_path _ (z,Gd,td) [] _` mp_tac >>

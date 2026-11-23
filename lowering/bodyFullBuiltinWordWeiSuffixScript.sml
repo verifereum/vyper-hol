@@ -187,10 +187,18 @@ Proof
   drule_all word_scale_code_prefix >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       (emitted_insts sa sb) /\
-   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
+   EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
     (Cases_on `denomination_multiplier dn = 1`
      >- (gvs[] >> drule word_scale_identity >> strip_tac >> gvs[]) >>
-     drule_all word_scale_emitted_shape >> simp[]) >>
+     drule_all word_scale_emitted_shape >> strip_tac >> simp[] >>
+     fs[EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum (drule_then strip_assume_tac) >> fs[MEM]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts sa sb = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     fs[EVERY_MEM, MEM_APPEND]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     metis_tac[as_wei_value_suffix_mem_ok] >>
   first_x_assum (qspec_then `D` assume_tac) >>
@@ -321,8 +329,15 @@ Proof
   qmatch_asmsub_abbrev_tac `run_inst_seq p s = OK u` >>
   `emitted_insts sa sb = p ++ [q] /\ LENGTH p = 5 /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) p /\
-   FILTER (\i. i.inst_opcode = GAS) p = []` by
+   FILTER (\i. i.inst_opcode = GAS) p = [] /\
+   EVERY (\i. i.inst_opcode <> DALLOCA) p` by
     simp[Abbr `p`, Abbr `q`, mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==> !pre i post v.
+      p = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+      dalloca_no_wrap i v)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) p` mp_tac >>
+     simp[EVERY_APPEND]) >>
   `run_inst_seq_mem_ok p s` by
     (simp[Abbr `p`, run_inst_seq_mem_ok_def, inst_mem_below_frontier_def,
        inst_dload_in_section_def, source_memory_read_ranges_def,

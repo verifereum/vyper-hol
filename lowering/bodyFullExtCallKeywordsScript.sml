@@ -11,10 +11,11 @@ Ancestors
 Theorem extcall_kwarg_scalar_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\ ~(k = EKDefault /\ ~is_word_type rt) /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,rt),sb) /\
-  compile_ext_call_kwarg compile_expr cenv rt k (gas_shadow_expr e)
-    shadow_sa = ((op,rt),shadow_sb) /\
+  compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt k
+    (gas_shadow_expr e) shadow_sa = ((op,rt),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -26,7 +27,7 @@ Theorem extcall_kwarg_scalar_full:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
     storage_well_formed_on cx es (FST H) /\
@@ -56,7 +57,8 @@ Proof
   strip_tac >>
   qabbrev_tac `ty = if k = EKDefault then rt else BaseT (UintT 256)` >>
   `lower_value compile_expr cenv ty e sa = (op,sb) /\
-   lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (op,shadow_sb)` by
+   lower_value compile_expr (gas_shadow_env T cenv) ty
+     (gas_shadow_expr e) shadow_sa = (op,shadow_sb)` by
     (qpat_x_assum `compile_ext_call_kwarg _ _ _ _ e _ = _` mp_tac >>
      qpat_x_assum `compile_ext_call_kwarg _ _ _ _ (gas_shadow_expr e) _ = _` mp_tac >>
      simp[compile_ext_call_kwarg_def, Abbr `ty`, comp_bind_def,

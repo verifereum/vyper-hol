@@ -11,7 +11,7 @@ Ancestors
   gasShadowCompileStmtHelpers abiBuiltinEncodeWord stmtSimAppendStorageCompose abiTupleProps
   bodyPtrDefs supportedTypes valueEncoding valueEncodingProps valueEncodingDefs
   vyperValue vyperTyping vyperAST vyperState venomState finite_map list words arithmetic
-  abiDecodeStaticProps appendStorageStageTransportPtr bodyMemoryDefs
+  abiDecodeStaticProps entryDecodeStaticProps appendStorageStageTransportPtr bodyMemoryDefs
   dynCopyExec loweringShapeDefs ptrDiscipline stateFrame valueEncodingProofs
   valueEncodingTyping vyperLookup
 
@@ -29,7 +29,7 @@ QED
 
 Theorem append_local_word_ghost_inputs[local]:
   expr_sim_pre ce cx env (Name (ArrayT elem (Dynamic cap)) id) es /\
-  supported_full_word_type elem /\ stmt_state_rel H ctx func ce cx es s /\
+  is_word_type elem /\ stmt_state_rel H ctx func ce cx es s /\
   ghost_inv_at D lo d ce cx es G tn s ==>
   ?entry p sz bp tv vs.
     lookup_scopes id es.scopes = SOME entry /\
@@ -51,9 +51,7 @@ Proof
      simp[] >> Cases_on `entry.value` >> simp[value_has_type_def] >>
      rename1 `ArrayV arr` >> Cases_on `arr` >> simp[value_has_type_def]) >>
   `type_memory_size tv = 32` by
-    (qpat_x_assum `supported_full_word_type elem` mp_tac >>
-     rw[supported_full_word_type_def] >>
-     fs[evaluate_type_def, type_memory_size_def]) >>
+    metis_tac[entryDecodeStaticPropsTheory.word_type_memory_size] >>
   `ptr_covers G tn p s sz /\
    !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
      val_in_memory entry.type entry.value (w2n w) mem` by
@@ -117,9 +115,9 @@ Proof
   simp_tac (srw_ss()) [DECIDE ``off+32+j*32 = 32*j+(off+32)``]
 QED
 
-Theorem body_append_local_word_full:
+Theorem body_append_local_primitive_full:
   !cx id e.
-    supported_full_word_type (expr_type e) /\
+    is_word_type (expr_type e) /\
     (!s0 p s1. eval_target_place cx (NameTarget id) s0 = (INL p,s1) ==>
                   body_expr_full_ok cx e) ==>
     body_stmt_full_ok cx (Append (NameTarget id) e)
@@ -127,7 +125,7 @@ Proof
   rpt strip_tac >> rw[body_stmt_full_ok_def] >>
   rw[stmt_frag_full_def] >>
   `~(?nm. NameTarget id = TopLevelNameTarget nm)` by simp[] >>
-  drule_all body_append_resolved_pre >> strip_tac >>
+  drule_all body_append_word_pre >> strip_tac >>
   irule gas_outcome_full_initial_domain >>
   conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
   simp[] >> strip_tac >>
@@ -140,20 +138,21 @@ Proof
   `body_expr_full_ok cx e` by metis_tac[] >>
   `cenv.ce_var_type id = SOME (ArrayT (expr_type e) (Dynamic cap))` by
     fs[expr_sim_inv_def] >>
-  `is_word_type (expr_type e)` by fs[supported_full_word_type_def, is_word_type_def] >>
   `compile_get_target_ptr compile_expr cenv (NameTarget id) sa =
     ((Var p,SOME LocMemory,SOME (ValPT (ArrayT (expr_type e) (Dynamic cap)))) ,sa)` by
     simp[compile_get_target_ptr_def, comp_return_def] >>
   drule_all stmtSimAppendResolvedTheory.append_resolved_word_code_parts >> strip_tac >>
   gvs[] >>
-  Cases_on `lower_value compile_expr cenv (expr_type e)
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
     (gas_shadow_expr e) shadow_sa` >>
-  rename1 `lower_value compile_expr cenv (expr_type e)
+  rename1 `lower_value compile_expr _ _
     (gas_shadow_expr e) shadow_sa = (shadow_op,shadow_sm)` >>
   `shadow_op = vop /\ gas_shadow_state sm shadow_sm` by
-    (qspec_then `expr_type e` mp_tac (Q.GEN `ty` gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (irule gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e sa = (vop,sm)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
   gvs[] >>
   `compile_dynarray_append cenv (Var p) shadow_op 32 32 (expr_type e)
      (lowered_value_type cenv e) cap T LocMemory sm = ((),sb)` by
@@ -180,7 +179,7 @@ Proof
   suspend "place_full"
 QED
 
-Resume body_append_local_word_full[place_full]:
+Resume body_append_local_primitive_full[place_full]:
   irule gas_outcome_full_pure >> simp[] >>
   qexistsl_tac [`G0`, `es`, `INL (MemoryPlace id [])`, `s0`, `tn0`] >>
   conj_tac
@@ -188,27 +187,27 @@ Resume body_append_local_word_full[place_full]:
   simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules]
 QED
 
-Resume body_append_local_word_full[place_storage_frame]:
+Resume body_append_local_primitive_full[place_storage_frame]:
   simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
 QED
 
-Resume body_append_local_word_full[append_storage_frame]:
+Resume body_append_local_primitive_full[append_storage_frame]:
   simp[vyperStorageTraceTheory.storage_trace_frame_bind,
        vyperStorageTraceTheory.evaluate_storage_trace_frame,
        vyperStorageTraceTheory.storage_trace_frame_read_result,
        vyperStorageTraceTheory.storage_trace_frame_append_place]
 QED
 
-Resume body_append_local_word_full[place_error_cert]:
+Resume body_append_local_primitive_full[place_error_cert]:
   metis_tac[gasExemptCertTheory.gas_exempt_cert_error_place]
 QED
 
-Resume body_append_local_word_full[place_bind_cert]:
+Resume body_append_local_primitive_full[place_bind_cert]:
   rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_place >>
   goal_assum (drule_at Any) >> fs[]
 QED
 
-Resume body_append_local_word_full[rhs_full]:
+Resume body_append_local_primitive_full[rhs_full]:
   rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
@@ -220,7 +219,7 @@ Resume body_append_local_word_full[rhs_full]:
       (expr_type e) (lowered_value_type cenv (gas_shadow_expr e)) cap T
       LocMemory shadow_sm =
       ((),shadow_sb)` by
-    (qpat_x_assum `stmt_env _ _ _ _ shadow_sa = _` mp_tac >>
+    (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) shadow_sa = _` mp_tac >>
      simp[gasShadowTheory.gas_shadow_stmt_def, gasShadowTheory.gas_shadow_expr_def, stmt_env_def, stmtLoweringTheory.declare_stmt_local_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def,
           Once stmtLoweringTheory.compile_stmt_def, compile_get_target_ptr_def] >>
@@ -235,8 +234,9 @@ Resume body_append_local_word_full[rhs_full]:
      simp[cs_extends_def] >> qexists_tac `[]` >>
      fs[emitHelperPropsTheory.inst_extends_def, same_blocks_def]) >>
   `cs_extends shadow_sa shadow_sm` by
-    (qpat_assum `lower_value _ _ _ _ shadow_sa = _` mp_tac >>
-     qspecl_then [`cenv`, `expr_type e`, `gas_shadow_expr e`, `shadow_sa`]
+    (qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _` mp_tac >>
+     qspecl_then [`gas_shadow_env T cenv`, `expr_type e`,
+                  `gas_shadow_expr e`, `shadow_sa`]
        mp_tac ci_mono_lower_value_compile_expr >> simp[ci_mono_def]) >>
   `fn_has_code shadow_sa shadow_sm shadow_func` by
     (drule_all fragExecTheory.fn_has_code_split >> simp[]) >>
@@ -308,26 +308,26 @@ Resume body_append_local_word_full[rhs_full]:
   simp[Abbr `Q1`] >> suspend "append_suffix"
 QED
 
-Resume body_append_local_word_full[value_storage_frame]:
+Resume body_append_local_primitive_full[value_storage_frame]:
   simp[vyperStorageTraceTheory.storage_trace_frame_append_place]
 QED
 
-Resume body_append_local_word_full[rhs_storage_frame]:
+Resume body_append_local_primitive_full[rhs_storage_frame]:
   simp[vyperStorageTraceTheory.storage_trace_frame_bind,
        vyperStorageTraceTheory.evaluate_storage_trace_frame,
        vyperStorageTraceTheory.storage_trace_frame_read_result]
 QED
 
-Resume body_append_local_word_full[value_error_cert]:
+Resume body_append_local_primitive_full[value_error_cert]:
   metis_tac[gasExemptCertTheory.gas_exempt_cert_error_value]
 QED
 
-Resume body_append_local_word_full[value_bind_cert]:
+Resume body_append_local_primitive_full[value_bind_cert]:
   rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
   goal_assum (drule_at Any) >> fs[]
 QED
 
-Resume body_append_local_word_full[rhs_exit]:
+Resume body_append_local_primitive_full[rhs_exit]:
   simp[Abbr `R1`] >> rpt gen_tac >>
   rpt (pop_assum kall_tac) >>
   Cases_on `res` >> Cases_on `r` >> simp[expr_exit_def] >>
@@ -338,7 +338,7 @@ Resume body_append_local_word_full[rhs_exit]:
   simp[]
 QED
 
-Resume body_append_local_word_full[append_suffix]:
+Resume body_append_local_primitive_full[append_suffix]:
   rpt strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
@@ -379,7 +379,7 @@ Resume body_append_local_word_full[append_suffix]:
     (simp[place_ptr_rel_def, mem_path_offset_def, evaluate_type_def, WORD_ADD_0]) >>
   `evaluate_subscripts entry'.type entry'.value [] = INL (ArrayV (DynArrayV vs))` by
     simp[evaluate_subscripts_def] >>
-  drule_all append_memory_array_layout >> strip_tac >> gvs[] >>
+  drule_all append_memory_word_layout >> strip_tac >> gvs[] >>
   `not_fresh_at sm p` by
     (irule freshWritesTheory.not_fresh_at_mono >> goal_assum (drule_at Any) >>
      fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
@@ -439,7 +439,7 @@ Resume body_append_local_word_full[append_suffix]:
   >> suspend "append_full"
 QED
 
-Resume body_append_local_word_full[append_full]:
+Resume body_append_local_primitive_full[append_full]:
   rpt strip_tac >>
   `!st. st.scopes = mid.scopes ==>
     append_place cx (MemoryPlace id []) v st =
@@ -606,7 +606,7 @@ Resume body_append_local_word_full[append_full]:
   simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def]
 QED
 
-Resume body_append_local_word_full[append_success]:
+Resume body_append_local_primitive_full[append_success]:
   qpat_assum `!len. _ /\ _ ==> ?u. _` (qspec_then `LENGTH vs` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `fn_has_code sm sb func` by metis_tac[fragExecTheory.fn_has_code_split] >>
@@ -632,7 +632,12 @@ Resume body_append_local_word_full[append_success]:
        (mp_then (Pat `run_inst_seq _ _ = _`) mp_tac
          fragGasSeqPtrTheory.run_inst_seq_gas_origin_ptr_path) >>
      simp[] >> disch_then irule >> conj_tac
-     >- (qexists_tac `bb` >> metis_tac[]) >>
+     >- (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+         qpat_x_assum `EVERY (\i. i.inst_opcode = MLOAD \/ _) (emitted_insts sm sb)` mp_tac >>
+         qpat_assum `emitted_insts sm sb = _` mp_tac >>
+         rpt (pop_assum kall_tac) >> disch_then SUBST1_TAC >>
+         simp[EVERY_APPEND] >> rpt strip_tac >> fs[]) >>
+     conj_tac >- (qexists_tac `bb` >> metis_tac[]) >>
      qpat_assum `!D k. inst_seq_ptr D _ _ _ _ _ _ _ _ _ _`
        (qspecl_then [`D`, `t.vs_inst_idx`] mp_tac) >> simp[NoAsms]) >>
   `value_has_type tv v` by
@@ -671,12 +676,16 @@ Resume body_append_local_word_full[append_success]:
         `eval_operand shadow_op t = SOME w`] >>
      rpt (pop_assum kall_tac) >> simp[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   `abi_tuple_word tv v` by
-    (qpat_assum `supported_full_word_type (expr_type e)` mp_tac >>
+    (qpat_assum `is_word_type (expr_type e)` mp_tac >>
      qpat_assum `evaluate_type (get_tenv cx) (expr_type e) = SOME tv` mp_tac >>
      qpat_assum `value_has_type tv v` mp_tac >> rpt (pop_assum kall_tac) >>
-     rw[supported_full_word_type_def] >>
-     gvs[evaluate_type_def, value_has_type_def, abi_tuple_word_def] >>
-     Cases_on `v` >> gvs[value_has_type_def]) >>
+     Q.SPEC_TAC (`expr_type e`, `ty`) >> Cases_on `ty` >>
+     simp[is_word_type_def, evaluate_type_def, AllCaseEqs()]
+     >~ [`FlagTV`] >-
+       (rpt strip_tac >> Cases_on `v` >> gvs[value_has_type_def, abi_tuple_word_def]) >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def] >>
+     TRY (rename1 `BytesT bd` >> Cases_on `bd` >> gvs[is_word_type_def]) >>
+     rpt strip_tac >> Cases_on `v` >> gvs[value_has_type_def, abi_tuple_word_def]) >>
   `u.vs_alloca_next = t.vs_alloca_next /\ u.vs_allocas = t.vs_allocas` by
     (qpat_assum `state_frame u = _` mp_tac >> rpt (pop_assum kall_tac) >>
      simp[stateFrameTheory.state_frame_def, dynCopyExecTheory.mstore_control_fields]) >>
@@ -853,7 +862,7 @@ Resume body_append_local_word_full[append_success]:
   simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]
 QED
 
-Resume body_append_local_word_full[scope_old_vars]:
+Resume body_append_local_primitive_full[scope_old_vars]:
   gen_tac >> strip_tac >>
   `not_fresh_at sm x` by
     (irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
@@ -876,7 +885,7 @@ Resume body_append_local_word_full[scope_old_vars]:
   metis_tac[]
 QED
 
-Resume body_append_local_word_full[scope_memory_frame]:
+Resume body_append_local_primitive_full[scope_memory_frame]:
   `32*(cap+1) <= sz` by
     (qpat_assum `local_ptrs_rel func cenv mid.scopes t` mp_tac >>
      qpat_assum `lookup_scopes id mid.scopes = _` mp_tac >>
@@ -896,7 +905,7 @@ Resume body_append_local_word_full[scope_memory_frame]:
   simp[] >> decide_tac
 QED
 
-Resume body_append_local_word_full[scope_low_frame]:
+Resume body_append_local_primitive_full[scope_low_frame]:
   `stmt_state_rel H ctx func cenv cx mid t` by fs[expr_post_def] >>
   `lo <= w2n bp` by
     (`dead_lo_ok H (DF H) lo cenv cx` by simp[] >>
@@ -910,7 +919,7 @@ Resume body_append_local_word_full[scope_low_frame]:
   simp[valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint]
 QED
 
-Resume body_append_local_word_full[robust_array]:
+Resume body_append_local_primitive_full[robust_array]:
   pure_rewrite_tac [DECIDE ``LENGTH vs+1 = 1+LENGTH vs``, ADD_ASSOC] >>
   match_mp_tac (Q.INST [`old_taint` |-> `tn1.t_mem`,
     `old_memory` |-> `t.vs_memory`] append_local_word_robust_array) >>
@@ -955,7 +964,7 @@ Resume body_append_local_word_full[robust_array]:
   dep_rewrite.DEP_REWRITE_TAC [valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint] >> decide_tac
 QED
 
-Resume body_append_local_word_full[success_alloca_frame]:
+Resume body_append_local_primitive_full[success_alloca_frame]:
   `?xs. mid.storage_trace = es.storage_trace ++ xs` by
     (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
        (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
@@ -1055,4 +1064,16 @@ Resume body_append_local_word_full[success_alloca_frame]:
         [valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint] >> decide_tac)
 QED
 
-Finalise body_append_local_word_full
+Finalise body_append_local_primitive_full
+
+Theorem body_append_local_word_full:
+  !cx id e.
+    supported_full_word_type (expr_type e) /\
+    (!s0 p s1. eval_target_place cx (NameTarget id) s0 = (INL p,s1) ==>
+                  body_expr_full_ok cx e) ==>
+    body_stmt_full_ok cx (Append (NameTarget id) e)
+Proof
+  rpt strip_tac >>
+  `is_word_type (expr_type e)` by fs[supported_full_word_type_def, is_word_type_def] >>
+  metis_tac[body_append_local_primitive_full]
+QED

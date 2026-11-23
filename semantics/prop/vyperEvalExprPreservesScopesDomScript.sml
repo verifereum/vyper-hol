@@ -476,11 +476,6 @@ Proof
           >- (first_x_assum irule >> metis_tac[]) >>
           gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
       Cases_on `bt = Env MsgGas` >> simp[] >>
-      Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[]
-      >- (ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-          >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
-          gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[] >>
-          ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
       ho_match_mp_tac scope_pop_effect_bind >> conj_tac
       >- (Cases_on `code_slice_source bt es` >> simp[]
           >- (first_x_assum irule >> metis_tac[]) >>
@@ -493,7 +488,8 @@ Proof
           gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
           gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
       gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac
+      >- (IF_CASES_TAC >> simp[]) >>
       gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >> simp[]
 QED
 
@@ -807,7 +803,7 @@ QED
 
 Resume eval_mutual_scope_pop_effect[Builtin]:
   irule eval_builtin_scope_effect >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >> metis_tac[]
+  metis_tac[]
 QED
 
 Finalise eval_mutual_scope_pop_effect

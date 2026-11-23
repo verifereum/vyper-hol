@@ -8,7 +8,7 @@ Ancestors
   valueTypingMemoryProps vyperTyping exprSimDefs stmtSimDefs venomState
   valueEncoding valueEncodingProofs intCallResult compileEnv loweringStateRelDefs exprLoweringProps
   loweringSlice exprLowering exprSimBufferStore valueEncodingProofs
-  words venomExecSemantics stmtLowering context fragExec fragExecMem
+  words venomExecSemantics stmtLowering context fragExec fragExecMem logBytesCodePtr
   allocaHistoryFragment list rich_list emitHelper emitHelperProps venomInst
   exprSimLiteralBuffer exprSimAlloc exprSimBuffer finite_map allocLimits
   bodySim exprSimHyps vyperTypeSystem vyperTypeInvariants memoryLocalRhsProps
@@ -139,30 +139,6 @@ Proof
   drule_all allocaHistoryFragmentTheory.alloca_history_run_inst_seq >> simp[]
 QED
 
-Theorem body_decl_frag_at_cursor:
-  !ctx st st' P Q R.
-    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
-    isPREFIX st.cs_current_insts st'.cs_current_insts /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-      (emitted_insts st st') /\
-    (!s. P s /\ ~s.vs_halted /\
-       s.vs_current_bb = st.cs_current_bb /\
-       s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-       run_inst_seq_mem_ok (emitted_insts st st') s /\
-       ?t. run_inst_seq (emitted_insts st st') s = OK t /\
-           Q (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-    frag_exec_mem ctx st st' P Q R
-Proof
-  rpt gen_tac >> strip_tac >>
-  qabbrev_tac `P' = \s. P s /\ ~s.vs_halted /\
-    s.vs_current_bb = st.cs_current_bb /\
-    s.vs_inst_idx = LENGTH st.cs_current_insts` >>
-  `frag_exec_mem ctx st st' P' Q R` by
-    (irule frag_exec_mem_run_inst_seq >> simp[Abbr `P'`] >> metis_tac[]) >>
-  fs[frag_exec_mem_def, Abbr `P'`] >>
-  rpt gen_tac >> strip_tac >> first_x_assum drule >> simp[]
-QED
-
 Theorem annassign_memory_store_body_frag_mem:
   !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d R.
     compile_store_memory cenv src (Var p) ty ty sa = ((), sb) /\
@@ -215,6 +191,17 @@ Proof
       goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
       qexistsl_tac [`w`, `get_tenv cx`, `tyv`, `v`, `sw`] >>
       simp[] >> metis_tac[])
+  >- (irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      `MEM i (emitted_insts sa sb)` by simp[MEM_APPEND] >>
+      Cases_on `is_bytestring_type ty` >> fs[compile_store_memory_def]
+      >- (drule compile_store_bytestring_opcodes >> simp[EVERY_MEM] >>
+          disch_then (qspec_then `i` mp_tac) >> simp[] >> strip_tac >> simp[]) >>
+      Cases_on `type_memory_size tyv`
+      >- gvs[compile_copy_memory_def, comp_return_def, emitted_insts_def] >>
+      fs[compile_copy_memory_def] >> drule emitted_insts_emit_void >>
+      disch_then (fn th =>
+        qpat_x_assum `MEM i (emitted_insts sa sb)` mp_tac >>
+        simp_tac (srw_ss()) [th] >> strip_tac >> simp[mk_inst_def]))
   >- simp[stmt_state_rel_inst_idx]
   >- (`alloca_inv s` by fs[stmt_state_rel_def] >>
       `alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
@@ -446,6 +433,12 @@ Proof
      rpt strip_tac >> gvs[]) >>
   `return_buf_frame d ce sn t` by
     (irule return_buf_frame_frame >> qexistsl_tac [`ce`, `s`, `sa`] >> simp[]) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sn)` by
+    (asm_simp_tac (srw_ss()) [EVERY_APPEND] >> conj_tac
+     >- (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
+         drule emitted_insts_emit_op >> simp[mk_inst_def]) >>
+     Cases_on `n` >- gvs[compile_copy_memory_def, comp_return_def, emitted_insts_def] >>
+     fs[compile_copy_memory_def] >> drule emitted_insts_emit_void >> simp[mk_inst_def]) >>
   fs[same_blocks_def] >> irule body_decl_frag_at_cursor >>
   asm_simp_tac (srw_ss()) [IS_PREFIX_APPEND] >> rpt strip_tac >> gvs[] >>
   simp[stmt_state_rel_inst_idx] >> conj_tac
@@ -630,7 +623,9 @@ Proof
      (emitted_insts sa sA)` by simp[is_terminator_def] >>
   irule body_decl_frag_at_cursor >> fs[same_blocks_def, IS_PREFIX_APPEND] >>
   rpt strip_tac >> gvs[]
-  >- (simp[run_inst_seq_mem_ok_last] >> irule instMemFrontierTheory.below_frontier_no_ranges >> simp[Abbr `A`, mk_inst_def]) >>
+  >- (simp[run_inst_seq_mem_ok_last] >> irule instMemFrontierTheory.below_frontier_no_ranges >> simp[Abbr `A`, mk_inst_def])
+  >- (`MEM i [A]` by metis_tac[MEM_APPEND, MEM] >>
+      irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >> gvs[]) >>
   `run_inst_seq (emitted_insts sa sA) s = OK t` by
     (gvs[mk_inst_def] >> simp[run_inst_seq_def, step_inst_base_opcode_eqs]) >>
   `alloca_history func (t with vs_inst_idx := LENGTH sA.cs_current_insts)` by

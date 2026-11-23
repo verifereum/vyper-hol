@@ -3,7 +3,9 @@
 Theory bodyFullBuiltinECArithCompose
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullPreds bodySimFull exprSimECArith bodyInvNoDalloca
+  bodyFullPreds bodySimFull exprSimECArith
+  bodyFullIfExpReach[qualified,ignore_grammar]
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
   gasOutcomeFullCompose gasShadowCompile gasShadowCompileStmtHelpers
   exprSimHypsDefs exprLowering loweringPosts vyperAST list
   vyperStorageTrace exprSimHyps exprSimSource
@@ -19,19 +21,20 @@ Theorem ec_arith_vv_from_tail_full:
     expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
     expr_type e2 = (if bt = ECAdd then a else BaseT (UintT 256)) /\
     body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
     compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
-    compile_expr cenv ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa =
+    compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa =
       (vv,shadow_sb) /\
     lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
     lower_value compile_expr cenv (expr_type e2) e2 s1 = (y,s2) /\
-    lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
       (x,shadow_s1) /\
-    lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_s1 =
+    lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2) (gas_shadow_expr e2) shadow_s1 =
       (y,shadow_s2) /\
     (if bt = ECAdd then compile_ecadd_points x y s2
      else compile_ecmul_point x y s2) = (res,sb) /\
-    vv = FST (as_ptr_val a LocMemory (res,sb)) /\
+    vv = FST (as_stack_val a (res,sb)) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
     gas_shadow_state s2 shadow_s2 /\ gas_shadow_state sb shadow_sb /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -39,7 +42,7 @@ Theorem ec_arith_vv_from_tail_full:
     MEM shadow_func shadow_ctx.ctx_functions /\
     fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     gas_admissible (eval_expr cx (Builtin a bt [e1;e2])) expr_vv_res_ok es /\
@@ -91,7 +94,8 @@ Theorem ec_arith_vv_from_tail_full:
           (lowered_value_type cenv (Builtin a bt [e1;e2])) ee tv vv t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+        alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+        s0.vs_alloca_next <= t.vs_alloca_next /\
         ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
         ptr_vv_ok cx (post_value_type cenv (Builtin a bt [e1;e2])) tv vv ee G tn t /\
         (!v. tv = Value v /\ ~is_word_type (post_value_type cenv (Builtin a bt [e1;e2])) /\
@@ -111,19 +115,20 @@ Theorem ec_arith_vv_from_tail_full:
         (!ty' p. vv = LocatedValue ty' p /\ p.ptr_location = LocMemory ==>
           ptr_buf_ok cenv (Builtin a bt [e1;e2]) p.ptr_operand G t) /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-      (\H rr ee gt r. expr_exit rr r /\ halt_exit H cx ee rr r)) ==>
+      (\H rr ee gt r. expr_exit rr r /\ halt_exit H cx ee rr r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))) ==>
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (bt = ECAdd \/ bt = ECMul) /\
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es
 Proof
   disch_then (mk_asm "tail") >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `~ctx_has_dalloca ctx` by (drule body_inv_no_dalloca >> simp[]) >>
   `a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
    ?e1 e2. args = [e1;e2] /\
      expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
@@ -141,27 +146,27 @@ Proof
     lower_value compile_expr cenv (expr_type e2) e2 s1 = (y,s2) /\
     (if bt = ECAdd then compile_ecadd_points x y s2
      else compile_ecmul_point x y s2) = (res,sb) /\
-    vv = FST (as_ptr_val a LocMemory (res,sb))` by
+    vv = FST (as_stack_val a (res,sb))` by
     (asm_x "tail" kall_tac >>
      Cases_on `bt = ECAdd` >> gvs[] >> metis_tac[compile_ec_operands]) >>
-  `?shadow_s1. lower_value compile_expr cenv (expr_type e1)
-      (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
-      gas_shadow_state s1 shadow_s1` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e1`, `e` |-> `e1`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (expr_type e1)
-       (gas_shadow_expr e1) shadow_sa` >> gvs[]) >>
-  `?shadow_s2. lower_value compile_expr cenv (expr_type e2)
-      (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
-      gas_shadow_state s2 shadow_s2` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e2`, `e` |-> `e2`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`s1`,`shadow_s1`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (expr_type e2)
-       (gas_shadow_expr e2) shadow_s1` >> gvs[]) >>
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1)
+      (gas_shadow_expr e1) shadow_sa` >>
+  rename1 `lower_value _ _ _ (gas_shadow_expr e1) shadow_sa = (shadow_x,shadow_s1)` >>
+  `shadow_x = x /\ gas_shadow_state s1 shadow_s1` by
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e1 sa = (x,s1)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e1) shadow_sa = _` (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
+  qpat_x_assum `shadow_x = x` SUBST_ALL_TAC >>
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2)
+      (gas_shadow_expr e2) shadow_s1` >>
+  rename1 `lower_value _ _ _ (gas_shadow_expr e2) shadow_s1 = (shadow_y,shadow_s2)` >>
+  `shadow_y = y /\ gas_shadow_state s2 shadow_s2` by
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ e2 s1 = (y,s2)` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr e2) shadow_s1 = _` (irule_at Any) >>
+     simp[] >> irule gas_shadow_stmt_lower_value_env) >>
+  qpat_x_assum `shadow_y = y` SUBST_ALL_TAC >>
   `expr_body_pre cenv cx env e1 es` by
     (irule exprOpenFirstOperandTheory.expr_body_pre_builtin_head >>
      goal_assum (drule_at Any) >> rpt strip_tac >> gvs[]) >>
@@ -170,7 +175,10 @@ Proof
     (qpat_assum `body_exprs_full_ok _ _` mp_tac >>
      pure_rewrite_tac[body_exprs_full_ok_def] >> strip_tac >>
      qpat_assum `body_expr_full_ok _ e1`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_assum `!df l dd pg ts c sc f sf ce en ty' ee.
+                  _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+       mp_tac >>
      disch_then drule_all >> simp[]) >>
   qpat_assum `lower_value _ _ _ e1 sa = _`
     (mp_then Any strip_assume_tac (cj 2 exprLoweringPropsTheory.compile_expr_grows)) >>
@@ -230,7 +238,7 @@ Proof
         (\v2. ec_source_tail cx a bt [expr_type e1;expr_type e2] [v1;v2]))` by
     (irule ec_eval_bind >> simp[]) >>
   pop_assum SUBST1_TAC >> BETA_TAC >>
-  irule gas_outcome_full_bind_all >> rpt conj_tac
+  irule gas_outcome_full_bind_all_path >> rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
   >- (POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
       irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
@@ -276,6 +284,12 @@ Resume ec_arith_vv_from_tail_full[first_success]:
      (INL v1,mid)` by
     (qpat_x_assum `!tail. _ = _` (qspec_then `[]` mp_tac) >>
      simp[vyperStateTheory.evaluation_state_component_equality]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env e1` by
+       qpat_assum `expr_body_pre _ cx env e1 _`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `expr_sim_inv cenv cx env mid` by
     (qpat_assum `bind (eval_expr cx e1) (read_result cx) _ = _`
        (mp_then (Pos last) (qspec_then `cenv` mp_tac)
@@ -296,7 +310,10 @@ Resume ec_arith_vv_from_tail_full[first_success]:
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e2) e2 mid` by
     (qpat_x_assum `body_expr_full_ok _ e2`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_assum `!df l dd pg ts c sc f sf ce en ty' ee.
+                  _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+       mp_tac >>
      disch_then drule_all >> simp[]) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
     expr_post H ctx func cenv cx e1 es sa s1 s0 mid v1 x t /\
@@ -330,6 +347,13 @@ Resume ec_arith_vv_from_tail_full[first_success]:
       (rpt strip_tac >>
        qpat_x_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
          drule >> simp[loweringPostsTheory.expr_post_def]) >>
+    `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+      (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+          stmt_state_rel H ctx func cenv cx mid t /\ _`
+         (qspec_then `storage_trace_horizon mid.storage_trace`
+           (drule_then (ACCEPT_TAC o
+              MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+              CONJUNCT1)))) >>
     simp[] >> rpt conj_tac
     >~ [`local_ptrs_reserved cenv s1`]
     >- metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var]
@@ -339,10 +363,16 @@ Resume ec_arith_vv_from_tail_full[first_success]:
         qexists_tac `sa` >> simp[])
     >~ [`gas_admissible _ _ _`]
     >- metis_tac[expr_body_pre_gas_admissible] >>
-    rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >>
-    simp[] >> strip_tac >>
-    fs[ptrDisciplineTheory.ctx_has_dalloca_def,EXISTS_MEM] >>
-    simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[])) >> strip_tac >>
+    `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+      metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+    qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+        gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
+      (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
+    qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)` (fn path =>
+      qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
+      qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
+        (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
+         CONJ path o CONJ no_phi))))) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ (mid,t,G1,tn1) childQ2 childR2` >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
@@ -380,8 +410,6 @@ Resume ec_arith_vv_from_tail_full[second_success]:
   disj1_tac >> qexists_tac `v2` >> (conj_tac >- REFL_TAC) >> BETA_TAC >>
   `~t'.vs_halted /\ mid'.gas_obs = []` by
     (asm_x "tail" kall_tac >> metis_tac[]) >>
-  qpat_assum `~ctx_has_dalloca ctx`
-    (fn th => rewrite_tac [th]) >>
   asm "tail" irule >>
   asm_x "tail" kall_tac >>
   qpat_assum `compile_expr cenv ty (Builtin _ _ _) sa = _` (irule_at Any) >>
@@ -402,6 +430,7 @@ Theorem ec_arith_builtin_vv_sim_full:
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es
@@ -410,7 +439,17 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   mp_tac (SPEC_ALL ec_arith_staged_cut) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  strip_tac >> Cases_on `u.vs_outcomes = []`
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (`valid_horizon cx st0 (storage_trace_horizon es2.storage_trace) es2.storage_trace` by
+       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==>
+       gas_origin_ptr_path _ (t2,G2,tn2) [] (OK u,Gu,tnu) /\ _`
+       (qspec_then `storage_trace_horizon es2.storage_trace`
+         (drule_then strip_assume_tac)) >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx es2 u`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  Cases_on `u.vs_outcomes = []`
   >- (`gas_explicit [F] t2.vs_gas_readings = []` by
         (Cases_on `t2.vs_gas_readings` >> simp[gasSummaryTheory.gas_explicit_cons]) >>
       `w2n (64w:256 word) = 64` by
@@ -439,8 +478,8 @@ Proof
             (assume_tac o PURE_REWRITE_RULE [width])) >>
         simp[])) >>
       disch_then ACCEPT_TAC) >>
-  `vv = LocatedValue a (mk_ptr (Var dst) LocMemory)` by
-    simp[exprLoweringTheory.as_ptr_val_def] >>
+  `vv = StackValue a (Var dst)` by
+    simp[exprLoweringTheory.as_stack_val_def] >>
   `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
    sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= s2.cs_next_id` by
     (qpat_assum `lower_value _ _ _ e1 sa = _`
@@ -496,6 +535,7 @@ Theorem ec_arith_builtin_sim_full:
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es /\

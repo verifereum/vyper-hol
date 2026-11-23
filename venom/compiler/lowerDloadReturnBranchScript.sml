@@ -1,7 +1,7 @@
 (* Branch reconstruction retaining the saved return package witnesses. *)
 Theory lowerDloadReturnBranch
 Ancestors
-  lowerDloadReturnControl lowerDloadReturnAlignment lowerDloadReturnOrdinary
+  lowerDloadReturnAlignment lowerDloadReturnOrdinary
   lowerDloadSafetyControlCoverage lowerDloadEnvelopeControl lowerDloadSafetyPhiEffects
   lowerDloadSafetyAmbient lowerDloadSafetyKernel lowerDloadSafetyLocations
   ptrDiscipline venomExecProofs

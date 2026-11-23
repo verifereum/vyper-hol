@@ -98,7 +98,7 @@ Proof
        (mp_tac o SIMP_RULE (srw_ss()) [MAPi_def, combinTheory.o_DEF, ADD_CLAUSES]) >>
      asm_simp_tac (srw_ss()) [ADD_CLAUSES]) >>
   pop_assum (mp_tac o CONV_RULE (DEPTH_CONV pairLib.GEN_BETA_CONV) o
-    MATCH_MP plan_steps_cons_result) >>
+    MATCH_MP reorderPreparationPropsTheory.plan_steps_cons_result) >>
   disch_then (qx_choose_then `step_ops` (qx_choose_then `mid`
     (qx_choose_then `rest_ops` strip_assume_tac))) >>
   `plan_state_residual_wf alloc_base pending (SUC fixed) mid /\
@@ -120,11 +120,5 @@ Theorem reorder_plan_materialised:
     post.ps_stack = stack_pop (LENGTH pending) post.ps_stack ++ pending
 Proof
   rpt gen_tac >> strip_tac >>
-  `plan_state_residual_wf alloc_base pending 0 ps` by
-    (drule_all residual_budget_wf_to_residual >> simp[]) >>
-  mp_tac (Q.SPECL [`pending`,`pending`,`0`,`alloc_base`,`dfg`,`ps`,`ops`,`post`]
-    reorder_materialised_steps) >>
-  (impl_tac >- asm_simp_tac (srw_ss()) [GSYM reorder_plan_eq_plan_steps]) >>
-  strip_tac >> asm_rewrite_tac [] >>
-  irule fixed_suffix_decompose >> fs[plan_state_residual_wf_def]
+  drule_all reorder_plan_materialised_arranged >> simp[]
 QED

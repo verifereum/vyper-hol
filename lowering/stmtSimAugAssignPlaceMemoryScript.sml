@@ -9,15 +9,16 @@
  *)
 Theory stmtSimAugAssignPlaceMemory
 Ancestors
+  targetOverlapAccess vyperSubscriptOverlap
   vyperTypeBuiltins valueEncodingProps vyperExprNoControl gasContext targetPlaceSimDefs gasExemptCert gasSummary gasSummaryCompose gasOutcome
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
-  stmtSimIf stmtLoweringMono stmtLowering compileEnv loweringStateRelDefs fragExec
+  stmtLoweringMono stmtLowering compileEnv loweringStateRelDefs fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
-  stmtSimReasonStorage stmtSimReasonCode supportedExprs stmtSimAssign stmtSimDeclStore
+  stmtSimReasonStorage supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimBuiltins
   exprReasonOperand stmtSimDeclCompose
@@ -27,8 +28,8 @@ Ancestors
   stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
   vyperTypeContract compileVyper supportedTypes stmtSimAssignAttr
   stmtSimAssignStorageCopy
-  stmtSimAugAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignStorage
-  stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
+  stmtSimAssignAttrStorage
+  stmtSimAssignMem
   stmtSimAssignTupleTargets
   memoryLocalRhsProps stmtPoppedKeys exprOpenMain bodyStorageMetadata
   vyperPureExpr targetPlaceSim targetPlaceSimCases exprSimDefs
@@ -66,8 +67,7 @@ Proof
 QED
 
 Theorem aug_place_memory_read_typed:
-  expr_sim_inv cenv cx env es /\
-  supported_target_info tops bindings t = SOME info /\
+  target_pre cenv cx env t es /\ type_place_target env t = SOME (Type ty) /\
   eval_target_place cx t es = (INL (MemoryPlace id path),st) /\
   read_place cx (MemoryPlace id path) st = (INL cur,st') /\
   stmt_state_rel H ctx func cenv cx st s /\
@@ -76,11 +76,11 @@ Theorem aug_place_memory_read_typed:
   ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv cur
 Proof
   strip_tac >> drule_all aug_place_target_memory_live >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
   `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
     (drule_all aug_place_target_entry_typed >> simp[]) >>
-  `st.scopes = es.scopes` by metis_tac[aug_place_target_scopes] >>
   gvs[place_ptr_rel_def] >>
-  `tv0 = entry.type` by metis_tac[aug_place_entry_type_agrees, optionTheory.SOME_11] >>
+  `tv0 = entry.type` by metis_tac[aug_place_target_entry_type_agrees, optionTheory.SOME_11] >>
   gvs[] >>
   `cur = v` by
     gvs[read_place_def, get_scopes_def, bind_def, lift_option_type_def,
@@ -91,7 +91,7 @@ Proof
 QED
 
 Theorem aug_place_memory_access_ready:
-  expr_sim_inv cenv cx env es /\ body_inv tops ctx cenv cx /\
+  target_pre cenv cx env t es /\ body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty t bop e) /\
   ((?bt fld. t = AttributeTarget bt fld) \/ (?bt key. t = SubscriptTarget bt key)) /\
   type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
@@ -105,6 +105,7 @@ Theorem aug_place_memory_access_ready:
        mload (w2n w) s = typed_val_to_w256 tv cur
 Proof
   strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
   `?info. supported_target_info tops bindings t = SOME info` by
     metis_tac[aug_place_supported_stmt_target_info] >>
   drule aug_place_typing >> strip_tac >>
@@ -349,19 +350,35 @@ Proof
 QED
 
 Theorem aug_place_rhs_memory_live:
-  supported_stmt tops bindings (AugAssign ty bt bop e) /\
-  supported_target_info tops bindings bt = SOME info /\
-  eval_target_place cx bt s = (INL (MemoryPlace id path),st) /\
+  target_root bt = NameTarget id /\ ~aug_assign_overlap cenv bt e /\
+  expr_sim_inv cenv cx env st /\
+  lookup_scopes id st.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL old /\
+  subscripts_type entry.type path = SOME ptv /\
   bind (eval_expr cx e) (read_result cx) st = (r,ee) ==>
-  ?entry old. lookup_scopes id ee.scopes = SOME entry /\
-    evaluate_subscripts entry.type entry.value path = INL old
+  ?entry' old'. lookup_scopes id ee.scopes = SOME entry' /\
+    evaluate_subscripts entry'.type entry'.value path = INL old' /\
+    entry'.type = entry.type
 Proof
-  strip_tac >> drule_all aug_place_target_memory_live >> strip_tac >>
-  `supported_expr tops e` by fs[supported_stmt_def] >>
-  qpat_x_assum `bind _ _ _ = _` mp_tac >>
-  simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  imp_res_tac aug_place_supported_expr_scopes >>
-  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
+  strip_tac >> Cases_on `path`
+  >- (drule_all aug_place_rhs_entry_type >>
+      metis_tac[evaluate_subscripts_def]) >>
+  `~var_is_prim_word cenv (LocalRef id)` by
+    (Cases_on `cenv.ce_var_type id` >>
+     simp[var_is_prim_word_def, target_place_type_def] >>
+     rename1 `cenv.ce_var_type id = SOME root_ty` >>
+     `evaluate_type (get_tenv cx) root_ty = SOME entry.type` by
+       metis_tac[aug_place_entry_type_agrees] >>
+     Cases_on `root_ty` >> simp[is_word_type_def] >>
+     rpt strip_tac >> gvs[vyperValueTheory.evaluate_type_def, subscripts_type_def, AllCaseEqs()] >>
+     Cases_on `h` >> imp_res_tac subscript_type_value_int_shape >>
+     TRY (qpat_x_assum `_ = entry.type` (SUBST_ALL_TAC o SYM)) >>
+     gvs[subscript_type_def, is_word_type_def]) >>
+  `~MEM (WriteAcc (LocalRef id)) (accesses_expr e)` by
+    (drule (Q.SPEC `cenv.ce_modules` target_root_local_nonconstant_read) >>
+     fs[aug_assign_overlap_def, EXISTS_MEM, expr_accesses_def, MEM_APPEND] >>
+     metis_tac[]) >>
+  drule_all (REWRITE_RULE [ETA_AX] aug_place_rhs_memory_entry) >> metis_tac[]
 QED
 
 Theorem aug_place_store_entry_types:
@@ -1295,7 +1312,7 @@ Theorem compile_augassign_place_memory_case:
         read_place cx p s2 = (INL cur,s3) /\
         place_type_value cx p s4 = (INL ptv,s5)) ==>
      expr_sim_case F ctx func cenv cx e) /\
-    expr_body_pre cenv cx env e es ==>
+    ~aug_assign_overlap cenv bt e /\ expr_body_pre cenv cx env e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty bt bop e))
       (eval_stmt cx (AugAssign ty bt bop e)) es
@@ -1389,7 +1406,10 @@ Resume compile_augassign_place_memory_case[base_normal]:
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      first_x_assum (qspec_then `[]` assume_tac) >> metis_tac[]) >>
   qpat_assum `!tail. eval_target_place _ _ _ = _`
-    (qspec_then `[]` assume_tac) >>
+    (qspec_then `[]` (assume_tac o SIMP_RULE bool_ss [APPEND_NIL])) >>
+  `target_pre cenv cx env bt (es with gas_obs :=
+     gas_explicit marks' s0.vs_gas_readings)` by
+    fs[target_pre_def, expr_sim_inv_gas_obs] >>
   drule_all aug_place_target_memory_live >> strip_tac >>
   `expr_sim_inv cenv cx env (raw with gas_obs := [])` by
     fs[expr_body_pre_def] >>
@@ -1554,14 +1574,18 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
     (irule aug_place_saved_operand >>
      goal_assum (drule_at Any) >>
      qexists_tac `s1` >> simp[]) >>
-  `?entry old. lookup_scopes id (raw' with gas_obs := []).scopes = SOME entry /\
-     evaluate_subscripts entry.type entry.value path = INL old` by
-    (irule aug_place_rhs_memory_live >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any) >>
-     qexists_tac `es with gas_obs :=
-       gas_explicit marks' s0.vs_gas_readings ++
-       gas_explicit marks'' u.vs_gas_readings` >> simp[]) >>
+  rename1 `lookup_scopes id raw.scopes = SOME prior` >>
+  `subscripts_type prior.type path = SOME ptv` by
+    (qpat_assum `place_type_value cx (MemoryPlace id path) _ = _`
+       (mp_tac o REWRITE_RULE [place_type_value_def, get_scopes_def, bind_def]) >>
+     Cases_on `subscripts_type prior.type path` >>
+     gvs[lift_option_type_def, bind_def, return_def, raise_def]) >>
+  `lookup_scopes id (raw with gas_obs := gas_explicit marks'' u.vs_gas_readings).scopes =
+      SOME prior` by simp[] >>
+  `expr_sim_inv cenv cx env
+     (raw with gas_obs := gas_explicit marks'' u.vs_gas_readings)` by
+    fs[expr_body_pre_def] >>
+  drule_all aug_place_rhs_memory_live >> strip_tac >>
   `place_ptr_rel cenv cx t' (PlaceR (MemoryPlace id path)) w
      (SOME LocMemory) (Type ty)` by
     (irule aug_place_memory_ptr_frame >> qexistsl_tac [`u`, `s1`] >> simp[]) >>
@@ -1684,7 +1708,7 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
   qpat_assum `alloca_frame _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `place_ptr_rel _ _ t' _ _ _ _` (irule_at Any) >>
   qpat_assum `evaluate_type _ ty = SOME ptv` (irule_at Any) >>
-  qexistsl_tac [`old`, `env`, `entry'`] >>
+  qexistsl_tac [`old'`, `env`, `entry'`] >>
   simp[exprBopSimPropsTheory.bop_result_gas_obs,
        expr_sim_inv_gas_obs] >>
   reverse conj_tac

@@ -1,13 +1,15 @@
 (* Joint AnnAssign: physical layout of a widened aggregate RHS. *)
 Theory bodyFullAnnAssignWidened
 Ancestors
+  bodyInvCodeProps bodyInvSplit bodyInvExecutionProps exprBodyPreProps
   assignRelayoutCaller annassignRelayoutSource annassignRelayoutFrag annassignRelayoutPost
+  augAssignFullRhsSaved
   bodySimFull bodyPtrDefs exprSimSource exprSimHypsDefs gasOutcomeFullCompose
   loweringPosts exprLoweringProps exprOperandVar assignBasePtrBoundary
   externalReturnBounds exprSimAggregateChildren representationCleanPtr
   vyperTypeSystem vyperTypeInvariants vyperInterpreter vyperState
   compileEnv venomState venomMemDefs words arithmetic
-  bodyFullShared bodyFullAnnAssignMemoryPost bodyInvNoDalloca bodySim bodyExprPreFacts
+  bodyFullShared bodyFullAnnAssignMemoryPost bodySim bodyExprPreFacts
   stmtSimDeclSource stmtSimDeclCompose stmtSimProps gasOutcomeFullStmts
   gasExemptCert vyperStorageTrace bodyMemoryDefs stmtLoweringMono freshWrites
   emitHelperProps fragExec allocaHistory typedMemoryCopy bodyDeclCopyMemory exprLowering stmtLowering
@@ -44,7 +46,7 @@ Theorem annassign_widened_full_layout:
       val_footprint stv v = type_memory_size stv)
 Proof
   strip_tac >> drule_all assign_relayout_source_classify >> strip_tac >>
-  `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
+  `expr_sim_inv ce cx env es` by metis_tac[expr_body_pre_static_facts] >>
   drule_all widening_memory_layout_bound >> strip_tac >>
   `0 < type_memory_size stv` by
     (irule strict_widening_source_positive >> metis_tac[]) >>
@@ -168,7 +170,7 @@ Theorem annassign_widened_full_execution:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ old
     (stmt_env old lctx ret_ty (AnnAssign id typ e))
-    (stmt_env old lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+    (stmt_env (gas_shadow_env T old) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
     (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   strip_tac >>
@@ -179,15 +181,20 @@ Proof
     qpat_assum `return_buf_sep d old es s0` (fn sep =>
       irule (MATCH_MP gas_outcome_full_use_return_buf_allocas
         (CONJ frame sep)))) >>
-  `old.ce_alloca_locals /\ ~ctx_has_dalloca ctx` by
-    (conj_tac >- fs[body_inv_def] >> drule body_inv_no_dalloca >> simp[]) >>
+  `old.ce_alloca_locals` by metis_tac[body_inv_contract, contract_inv_alloca_locals] >>
   drule_all annassign_full_prefix_parts >> strip_tac >>
   qpat_x_assum `!sa ce r. declare_local _ _ _ _ = _ ==> _` drule >>
   strip_tac >>
   drule_all declare_local_memory_types_mem >> strip_tac >>
   `type_memory_bytes ce typ = type_memory_bytes old typ` by simp[] >>
   `ce.ce_func_return_type = build_func_return_type tops /\
-   supported_program tops /\ get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+   supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    (drule_then strip_assume_tac body_inv_main_code >>
+     drule_then assume_tac body_inv_contract >>
+     drule_then assume_tac body_inv_module >>
+     drule_all_then strip_assume_tac contract_inv_module_gate >>
+     drule_then assume_tac contract_inv_return_types >>
+     fs[compileUnitTheory.build_func_return_type_mods_singleton]) >>
   `type_memory_bytes ce typ < 2 ** 64` by fs[] >>
   drule_all annassign_widened_full_layout >> strip_tac >>
   `~(has_length_word typ /\ is_empty_value_expr e)` by
@@ -216,9 +223,13 @@ Resume annassign_widened_full_execution[prefix]:
   `type_memory_bytes old typ < dimword (:256)` by simp[dimword_def] >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  qpat_assum `declare_local old id typ sa = (ce,r)`
-    (mp_then Any mp_tac (SRULE [] annassign_full_alloc_rhs_prefix)) >>
-  disch_then drule_all >>
+  mp_tac (Q.SPECL
+    [`DF`,`lo`,`d`,`PG`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,`old`,`ce`,
+     `cx`,`es`,`id`,`typ`,`e`,`st0`,`sa`,`r`,`a`,`b`,`shadow_a`,`shadow_b`,
+     `p`,`type_memory_bytes old typ`,`op`,`s0`,`G0`,`tn0`,`lctx`]
+    annassign_full_alloc_rhs_prefix) >>
+  impl_tac
+  >- (simp[] >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac) >>
   suspend "rhs"
 QED
@@ -262,12 +273,10 @@ Resume annassign_widened_full_execution[source]:
       simp[] >> rpt strip_tac >> Cases_on `res`
       >- (qpat_x_assum `expr_exit (INL _) _` mp_tac >>
           simp_tac (srw_ss()) [exprSimDefsTheory.expr_exit_def]) >>
-      qpat_x_assum `expr_exit _ _` mp_tac >>
-      qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >>
-      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-      simp[bodyPtrDefsTheory.stmt_exit_ptr_def,exprSimDefsTheory.halt_exit_def] >>
-      fs[exprSimDefsTheory.halt_exit_def] >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      qexists_tac `y` >> simp[NoAsms] >>
+      irule (INST_TYPE [alpha |-> ``:value``]
+        augAssignFullRhsSavedTheory.augassign_expr_exit_to_stmt_exit) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   BETA_TAC >> rpt strip_tac >> suspend "continuation"
 QED
 
@@ -331,7 +340,7 @@ Resume annassign_widened_full_execution[suffix]:
          [Lit (n2w (type_memory_bytes old typ))] [p]`]
        annassign_memory_full_suffix_post) >>
      (impl_tac >- (
-     `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
+     `expr_sim_inv ce cx env es` by metis_tac[expr_body_pre_static_facts] >>
      drule_all immutable_assign_copy_metadata >> strip_tac >>
      `not_fresh_at b xs` by
        (qpat_assum `lower_value compile_expr ce (expr_type e) e a = _`
@@ -361,7 +370,9 @@ Resume annassign_widened_full_execution[suffix]:
      conj_tac
      >- (rpt strip_tac >>
          qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
-           drule >> simp[expr_post_def]) >>
+           drule >>
+         disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def] o BETA_RULE) >>
+         simp[]) >>
      conj_tac
      >- (rpt strip_tac >>
          qpat_x_assum `!aid off len i. _` irule >>

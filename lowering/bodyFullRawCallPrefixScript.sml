@@ -2,9 +2,9 @@
 Theory bodyFullRawCallPrefix
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullPreds bodySimFull bodyFullWordArgs bodyInvNoDalloca stateRelProj
+  bodyFullPreds bodySimFull bodyFullWordArgs bodyFullIfExpReach stateRelProj
   bodyFullRawCallForcedArgs bodyFullIntCallReturnFrame
-  bodyFullRawCallHeader bodyFullRawCallGas bodyFullRawCallOutbuf
+  bodyFullRawCallHeader bodyFullRawCallGas bodyFullRawCallOutbuf bodyFullHashKeccakFixed
   bodyFullRawCallGeneratedPrefix bodyFullRawCallKwargsBytes bodyFullRawCallKwargsSource
   gasOutcomeFullCompose gasOutcomeFullGuarded exprSimRawCall
   exprSimSource wordArgsPtr gasShadowCompileStmtHelpers gasShadowCompileHelpers
@@ -17,9 +17,10 @@ Theorem raw_call_prefix_prepared_full:
   gas ov op result s1 s2 s3 s4 s5 s6 s7 xs es s0 G0 tn0 k Q R.
  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
  body_exprs_full_ok cx (a::d::kws) /\
+ body_const_cells_agree [(NONE,tops)] cx env es /\
  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
  compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) NONE) sa=(vv,sb) /\
- compile_expr cenv ty
+ compile_expr (gas_shadow_env T cenv) ty
    (gas_shadow_expr (Call ann (RawCallTarget flags) (a::d::kws) NONE))
    shadow_sa=(vv,shadow_sb) /\
  lower_value compile_expr cenv (BaseT AddressT) a sa=(addr,s1) /\
@@ -46,7 +47,7 @@ Theorem raw_call_prefix_prepared_full:
  (!x sz. cenv.ce_return_pc=SOME(PtrVar(Var x) sz) ==> not_fresh_at sa x) /\
  return_buf_frame dframe cenv sa s0 /\ alloca_history func s0 /\
  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
- (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+ (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
  (!H. valid_horizon cx st0 H es.storage_trace ==>
    stmt_state_rel H ctx func cenv cx es s0 /\
    storage_well_formed_on cx es (FST H) /\
@@ -130,20 +131,21 @@ Theorem raw_call_prefix_prepared_full:
        bind (eval_exprs cx kws) (k av dv)))) (es,s0,G0,tn0) Q R
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
-  `?h1. lower_value compile_expr cenv (BaseT AddressT) (gas_shadow_expr a)
-       shadow_sa = (addr,h1) /\ gas_shadow_state s1 h1` by
-    (mp_tac (Q.INST [`ty` |-> `BaseT AddressT`, `e` |-> `a`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
+  `?h1. lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
+       (gas_shadow_expr a) shadow_sa = (addr,h1) /\ gas_shadow_state s1 h1` by
+    (`gas_shadow_compiles (lower_value compile_expr cenv (BaseT AddressT) a)
+       (lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
+          (gas_shadow_expr a))` by irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (mp_tac o Q.SPECL [`sa`, `shadow_sa`] o
+       REWRITE_RULE [gas_shadow_compiles_def]) >>
      simp[] >> metis_tac[pairTheory.PAIR]) >>
-  `?h2. lower_value compile_expr cenv (expr_type d) (gas_shadow_expr d)
-       h1 = (data,h2) /\ gas_shadow_state s2 h2` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type d`, `e` |-> `d`]
-       gas_shadow_stmt_lower_value) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`s1`, `h1`] mp_tac) >>
+  `?h2. lower_value compile_expr (gas_shadow_env T cenv) (expr_type d)
+       (gas_shadow_expr d) h1 = (data,h2) /\ gas_shadow_state s2 h2` by
+    (`gas_shadow_compiles (lower_value compile_expr cenv (expr_type d) d)
+       (lower_value compile_expr (gas_shadow_env T cenv) (expr_type d)
+          (gas_shadow_expr d))` by irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (mp_tac o Q.SPECL [`s1`, `h1`] o
+       REWRITE_RULE [gas_shadow_compiles_def]) >>
      simp[] >> metis_tac[pairTheory.PAIR]) >>
   `?h3. emit_op MLOAD [data] h2 = (len,h3) /\ gas_shadow_state s3 h3` by
     (mp_tac (Q.INST [`opc` |-> `MLOAD`, `opc'` |-> `MLOAD`, `ops` |-> `[data]`]
@@ -160,12 +162,12 @@ Proof
      simp[] >> metis_tac[pairTheory.PAIR]) >>
   `gas_shadow_compiles
      (compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws)
-     (compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws
+     (compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) NoneT flags.rcf_kws
        (MAP gas_shadow_expr kws))` by
-    (irule (Q.INST [`sh` |-> `T`] gas_shadow_compiles_ext_call_kwargs
+    (irule (Q.INST [`sh` |-> `T`] gas_shadow_compiles_ext_call_kwargs_env
               |> SIMP_RULE (srw_ss()) []) >>
-     simp[cj 1 gasShadowCompileTheory.gas_shadow_compile_expr]) >>
-  `?h5. compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws
+     simp[cj 1 gasShadowCompileTheory.gas_shadow_compile_expr_env]) >>
+  `?h5. compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) NoneT flags.rcf_kws
        (MAP gas_shadow_expr kws) h4 = ((vo,go,ignored),h5) /\
        gas_shadow_state s5 h5` by
     (qpat_x_assum `gas_shadow_compiles _ _` mp_tac >>
@@ -199,31 +201,20 @@ Proof
    go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ignored = NONE` by
     (drule_all exprSimRawCallTheory.raw_call_kwargs_word_args >>
      strip_tac >> gvs[]) >>
-  `!todo. gas_shadow_compiles
-     (lower_word_args cenv (K (BaseT (UintT 256))) todo)
-     (lower_word_args cenv (K (BaseT (UintT 256))) (MAP gas_shadow_expr todo))` by
-    (POP_ASSUM_LIST (K all_tac) >>
-     Induct >> simp[exprSimWordArgsTheory.lower_word_args_def,listTheory.MAP,
-                    gas_shadow_compiles_return] >>
-     gen_tac >> irule gas_shadow_compiles_bind >>
-     simp[gas_shadow_stmt_lower_value] >>
-     gen_tac >> irule gas_shadow_compiles_bind >>
-     simp[gas_shadow_compiles_return]) >>
-  `lower_word_args cenv (K (BaseT (UintT 256)))
+  `gas_shadow_compiles
+     (lower_word_args cenv (K (BaseT (UintT 256))) kws)
+     (lower_word_args (gas_shadow_env T cenv) (K (BaseT (UintT 256)))
+        (MAP gas_shadow_expr kws))` by
+    simp[gas_shadow_compiles_lower_word_args] >>
+  `lower_word_args (gas_shadow_env T cenv) (K (BaseT (UintT 256)))
      (MAP gas_shadow_expr kws) h4 = (xs,h5)` by
-    (drule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)
+    (qpat_x_assum `compile_ext_call_kwargs _ _ _ _ kws s4 = _` kall_tac >>
+     drule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)
        exprSimRawCallTheory.raw_call_kwargs_word_args >>
      simp[] >> strip_tac >>
-     qpat_x_assum `!todo. gas_shadow_compiles _ _`
-       (mp_tac o Q.SPECL [`s4`,`h4`] o
-        REWRITE_RULE [gas_shadow_compiles_def] o Q.SPEC `kws`) >>
-     simp[] >> metis_tac[pairTheory.PAIR]) >>
-  `!todo x y ops. lower_word_args cenv (K (BaseT (UintT 256))) todo x = (ops,y) ==>
-     ci_mono x y` by
-    (POP_ASSUM_LIST (K all_tac) >> Induct >>
-     simp[lower_word_args_nil,ci_mono_refl] >> rpt gen_tac >>
-     rw[lower_word_args_cons] >>
-     metis_tac[ci_mono_lower_value_compile_expr,ci_mono_trans,pairTheory.SND]) >>
+     qpat_x_assum `gas_shadow_compiles (lower_word_args _ _ _) _`
+       (mp_tac o Q.SPECL [`s4`,`h4`] o REWRITE_RULE [gas_shadow_compiles_def]) >>
+     simp[]) >>
   `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\
    ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7 /\ ci_mono s7 sb` by
     (rpt conj_tac
@@ -231,7 +222,7 @@ Proof
      >- metis_tac[ci_mono_lower_value_compile_expr,pairTheory.SND]
      >- metis_tac[ci_mono_emit_op,pairTheory.SND]
      >- metis_tac[ci_mono_emit_op,pairTheory.SND]
-     >- metis_tac[]
+     >- metis_tac[ci_mono_lower_word_args]
      >- (qpat_x_assum `(case go of NONE => emit_op GAS [] s5 | SOME g => (g,s5)) = (gas,s6)` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >> Cases_on `go` >> simp[] >> strip_tac >>
          metis_tac[ci_mono_emit_op,pairTheory.SND,ci_mono_refl])
@@ -254,7 +245,7 @@ Proof
      >- metis_tac[ci_mono_lower_value_compile_expr,pairTheory.SND]
      >- metis_tac[ci_mono_emit_op,pairTheory.SND]
      >- metis_tac[ci_mono_emit_op,pairTheory.SND]
-     >- metis_tac[]
+     >- metis_tac[ci_mono_lower_word_args]
      >- (qpat_x_assum `(case go of NONE => emit_op GAS [] h5 | SOME g => (g,h5)) = (gas,h6)` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >> Cases_on `go` >> simp[] >> strip_tac >>
          metis_tac[ci_mono_emit_op,pairTheory.SND,ci_mono_refl])
@@ -306,7 +297,7 @@ Proof
   first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
   qexistsl_tac [`tops`,`shadow_sa`,`h2`,`h1`,`shadow_func`,`sa`,`s2`,`s1`,
                 `dframe`,`data`,`addr`] >>
-  simp[] >>
+  simp[] >> (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >-
     (qpat_assum `!H exc ee gt r. _ ==> R H _ _ _ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
@@ -316,6 +307,18 @@ Proof
                simp[cj 6 evaluate_storage_trace_frame]) >>
   qx_genl_tac [`gsA`,`av`,`esA`,`tA`,`GA`,`tnA`,`gsD`,`bs`,`esD`,`tD`,`GD`,`tnD`] >>
   strip_tac >>
+  `well_typed_expr env a /\ well_typed_expr env d` by
+    (qpat_assum `expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es`
+       (mp_tac o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     simp[vyperTypeSystemTheory.well_typed_expr_def]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env esA` by
+    (irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx a) (read_result cx) _ = (INL av,esA)` (irule_at Any) >>
+     simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env esD` by
+    (irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx d) (read_result cx) _ = (INL (BytesV bs),esD)` (irule_at Any) >>
+     simp[]) >>
   `valid_horizon cx st0 (storage_trace_horizon esD.storage_trace)
      esD.storage_trace` by
     (qpat_assum `storage_trace_domain cx st0 esD.storage_trace`
@@ -436,15 +439,22 @@ Proof
     (qpat_assum `ci_mono s2 s3` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
      qpat_assum `ci_mono s3 s4` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
      rpt strip_tac >> metis_tac[loweringShapeDefsTheory.not_fresh_at_mono,arithmeticTheory.LESS_EQ_TRANS]) >>
-  `!fn inst u. frag_reachable ctx func t4 fn inst u ==> dalloca_no_wrap inst u` by
-    (rpt strip_tac >>
-     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
-     qpat_assum `MEM fn ctx.ctx_functions` mp_tac >>
-     qpat_assum `MEM inst (fn_insts fn)` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-          unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[body_inv_no_phi] >>
+  `!fn inst u. frag_reachable ctx func t4 fn inst u ==> dalloca_fmp_headroom inst u` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (tD,GD,tnD) [] (OK t4,G4,tn4)`
+       (qspec_then `DF (storage_trace_horizon esD.storage_trace)` (fn path =>
+        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
+        qpat_assum `!fn inst s. frag_reachable ctx func tD fn inst s ==> _`
+          (ACCEPT_TAC o (fn nowrap =>
+            MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
+              (LIST_CONJ [path, phi, nowrap]))))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t4` by
+    (qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx esD t4 /\ _`
+      (qspec_then `storage_trace_horizon esD.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     first_assum (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   mp_tac (Q.SPECL [`kws`,`DF`,`lo`,`dframe`,`ctx`,`shadow_ctx`,`PG`,`tops`,
      `func`,`shadow_func`,`cenv`,`env`,`cx`,`BaseT (UintT 256)`,
      `esD`,`st0`,`s4`,`s5`,`h4`,`h5`,`xs`,`t4`,`G4`,`tn4`]
@@ -452,7 +462,7 @@ Proof
   (impl_tac >-
     (qpat_assum `lower_word_args cenv (K _) kws s4 = _`
        (assume_tac o SIMP_RULE std_ss [combinTheory.K_DEF]) >>
-     qpat_assum `lower_word_args cenv (K _) (MAP gas_shadow_expr kws) h4 = _`
+     qpat_assum `lower_word_args _ (K _) (MAP gas_shadow_expr kws) h4 = _`
        (assume_tac o SIMP_RULE std_ss [combinTheory.K_DEF]) >>
      rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
   strip_tac >>
@@ -890,6 +900,16 @@ Proof
      qpat_assum `s0.vs_alloca_next <= t6.vs_alloca_next` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      metis_tac[bodyMemoryDefsTheory.body_local_region_frontier,arithmeticTheory.LESS_EQ_TRANS]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t6 /\
+    t6.vs_alloca_next + pending_alloca_size func t6 <= w2n t6.vs_initial_fmp` by
+    (strip_tac >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx esK t6`
+       (fn rel => conj_tac
+          >- (match_mp_tac (MATCH_MP stmt_state_rel_allocas_below_fmp rel) >>
+              first_assum ACCEPT_TAC)
+          >> mp_tac (MATCH_MP stmt_state_rel_fmp_room rel)) >>
+     qpat_assum `ctx_has_dalloca ctx` (fn has =>
+       simp[NoAsms,fmp_room_def,has]) >> decide_tac) >>
   qabbrev_tac `t7 = u with vs_inst_idx := LENGTH s7.cs_current_insts` >>
   mp_tac (Q.INST [`sa` |-> `s6`, `sb` |-> `s7`, `sk` |-> `sa`,
     `es0` |-> `es`, `es` |-> `esK`, `s` |-> `t6`, `d` |-> `dframe`,
@@ -1022,50 +1042,10 @@ Proof
         fs[bodyPtrDefsTheory.mem_agree_outside_def] >> rpt strip_tac >>
         first_x_assum irule >> simp[] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
      metis_tac[]) >>
-  `?ai q. MEM ai (fn_insts func) /\ ai.inst_opcode = ALLOCA /\
-     ai.inst_outputs = [q] /\ ai.inst_id = s6.cs_next_id /\
-     not_local_ptr cenv esK.scopes q` by
-    (qpat_assum `compile_raw_call_outbuf flags.rcf_max_outsize s6 = _` mp_tac >>
-     qpat_assum `fn_has_code s6 s7 func` mp_tac >>
-     qpat_assum `local_ptrs_reserved cenv s6` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-     Cases_on `flags.rcf_max_outsize = 0`
-     >- (fs[builtinSystemTheory.compile_raw_call_outbuf_def,
-           compileEnvTheory.comp_bind_def,compileEnvTheory.comp_return_def] >>
-         pairarg_tac >> gvs[compileEnvTheory.comp_bind_def,compileEnvTheory.comp_return_def] >>
-         drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
-         goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def] >>
-         irule exprSimOperandsTheory.fresh_not_local_ptr >>
-         qexists_tac `s6` >> simp[loweringStateRelDefsTheory.not_fresh_at_def]) >>
-     `0 < flags.rcf_max_outsize` by decide_tac >>
-     drule_all raw_call_outbuf_allocation_site >> metis_tac[]) >>
   `stmt_state_rel (storage_trace_horizon esK.storage_trace) ctx func cenv cx esK t7` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ t7 /\ _`
        (qspec_then `storage_trace_horizon esK.storage_trace` mp_tac) >> simp[]) >>
-  `!name lb sz. local_region cenv esK.scopes t7 name lb sz ==>
-     regions_disjoint b' (if flags.rcf_max_outsize = 0 then 0 else
-       ((flags.rcf_max_outsize+31) DIV 32)*32+32) lb sz` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ esK t7`
-       (mp_tac o MATCH_MP stmt_state_rel_local_ptrs_alloca) >>
-     map_every (fn q => qpat_assum q mp_tac)
-       [`MEM ai (fn_insts func)`, `ai.inst_outputs = [q]`,
-        `not_local_ptr cenv esK.scopes q`, `ai.inst_id = s6.cs_next_id`,
-        `FLOOKUP t7.vs_allocas s6.cs_next_id = _`, `fn_inst_ids_distinct func`] >>
-     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-     irule localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >> metis_tac[]) >>
-  `(cenv.ce_is_ctor ==> !name tv v off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME(ImmutableLoc off) /\
-     FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME(tv,v) ==>
-     regions_disjoint off (type_memory_size tv) b'
-       (if flags.rcf_max_outsize = 0 then 0 else ((flags.rcf_max_outsize+31) DIV 32)*32+32))` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ esK t7`
-       (mp_tac o REWRITE_RULE [exprLoweringPropsTheory.immutable_alloca_sep_def] o
-          MATCH_MP bodyFullIntCallReturnFrameTheory.return_stmt_immutable_sep) >>
-     map_every (fn q => qpat_assum q mp_tac)
-       [`MEM ai (fn_insts func)`, `ai.inst_opcode = ALLOCA`,
-        `ai.inst_id = s6.cs_next_id`, `FLOOKUP t7.vs_allocas s6.cs_next_id = _`] >>
-     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  drule_all raw_call_outbuf_separated >> strip_tac >>
   `s6.cs_next_var <= s7.cs_next_var /\ s5.cs_next_var <= s7.cs_next_var` by
     (qpat_assum `ci_mono s6 s7` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
      qpat_assum `s5.cs_next_var <= s6.cs_next_var` mp_tac >>

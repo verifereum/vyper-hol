@@ -12,6 +12,8 @@ Ancestors
   venomState venomInst freshWrites words finite_map ptrDiscipline
   loweringStateRelDefs fragExec venomExecSemantics vyperStorageFootprint
 
+Libs horizonTypeLib pureFrameLib
+
 Theorem saved_ctor_immutable_operand[local]:
   lo <> 0 /\ local_ptrs_reserved ce su /\ immutable_base_zero ce t /\
   ghost_inv_at D lo d ce cx ee G tn t /\ ce.ce_imm_alloca = SOME region ==>
@@ -61,7 +63,7 @@ Proof
   drule_all copy_ctor_run >> strip_tac >> fs[copy_runtime_frame_def] >> metis_tac[]
 QED
 
-Theorem extcall_saved_ctor_copy_replay:
+Theorem extcall_saved_ctor_copy_replay_pure:
   lowered_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\ p.ptr_location = LocCode /\ ce.ce_is_ctor /\
   compile_expr ce (expr_type e) e si = (LocatedValue (expr_type e) p,sm) /\
@@ -88,6 +90,7 @@ Theorem extcall_saved_ctor_copy_replay:
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) ==>
   ?z G' tn'.
+    pure_frame ce fn ee su t z /\
     gas_origin_ptr_path
       (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
        lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
@@ -105,7 +108,8 @@ Theorem extcall_saved_ctor_copy_replay:
     (!x. not_fresh_at su x ==>
        lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn'
+    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
+    expr_val_at ce cx (expr_type e) su sb ee v src z
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by simp[post_value_type_lowered] >>
@@ -201,7 +205,7 @@ Proof
   `wb_frame ce ee ee si t t /\ ghost_kept_at lo ce ee si G tn t G tn` by
     simp[wb_frame_def, ghost_kept_at_def] >>
   `u = update_var root dst (buffer_allocation_fields t su.cs_next_id (type_memory_size rt))` by simp[] >>
-  drule_all ctor_code_copy_retained_frames >> strip_tac >>
+  drule_all ctor_code_copy_retained_frames_pure >> strip_tac >>
   `not_fresh_at mid root` by (drule_all allocated_copy_operands_old >> simp[]) >>
   `lookup_var root z = SOME dst` by (fs[copy_runtime_frame_def, lookup_var_def] >> metis_tac[]) >>
   `val_wf rt v /\ w2n a + type_memory_size rt < dimword(:256)` by
@@ -252,8 +256,36 @@ Proof
   pop_assum (mk_asm "copy_post") >>
   `eval_operand (Var root) z = SOME dst` by
     (rewrite_tac[eval_operand_def] >> first_assum ACCEPT_TAC) >>
+  `expr_val_at ce cx (expr_type e) su sb ee v (Var root)
+    (z with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (`vv_post H0 ctx fn ce cx e ee su su t ee (Value v) (LocatedValue (expr_type e) p) t` by
+       (`vv_post H0 ctx fn ce cx e ee si su t ee (Value v) (LocatedValue (expr_type e) p) t` by metis_tac[] >>
+        qpat_assum `p.ptr_location = LocCode` (fn loc =>
+          pop_assum mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+          simp[loc, vv_post_def, vv_at_def, vv_own_def,
+            exprSimPropsTheory.locals_kept_refl, pure_frame_refl])) >>
+     `!ty. evaluate_type (get_tenv cx) (expr_type e) = SOME ty ==>
+       type_memory_bytes ce (expr_type e) = type_memory_size ty` by simp[] >>
+     `su.cs_next_var <= su.cs_next_var /\ su.cs_next_id <= su.cs_next_id` by simp[] >>
+     `expr_post H0 ctx fn ce cx e ee su sb t ee v (Var root) z` by
+       (mp_tac (Q.INST [`H` |-> `H0`] (INST [``s:venom_state`` |-> ``t:venom_state``,
+          ``s0:venom_state`` |-> ``t:venom_state``,
+          ``sa:compile_state`` |-> ``su:compile_state``,
+          ``sm:compile_state`` |-> ``su:compile_state``,
+          ``t:vyperAST$type`` |-> ``expr_type e``,
+          ``cenv:compile_env`` |-> ``ce:compile_env``,
+          ``func:ir_function`` |-> ``fn:ir_function``,
+          ``es:evaluation_state`` |-> ``ee:evaluation_state``,
+          ``a:venom_state`` |-> ``allocst:venom_state``,
+          ``op:operand`` |-> ``Var root``, ``nb:num`` |-> ``type_memory_size rt``,
+          ``k:num`` |-> ``SUC t.vs_inst_idx``] (horizonTypeLib.at_horizon_named "H" ctor_code_copy_endpoint_post))) >>
+        asm_simp_tac (srw_ss()) []) >>
+     qpat_assum `expr_post H0 ctx fn ce cx e ee su sb t ee v (Var root) z`
+       (mp_tac o cj 4 o REWRITE_RULE [expr_post_def]) >>
+     simp[expr_val_at_def, instIdxIndepTheory.eval_op_inst_idx,
+       local_region_def, venomStateTheory.lookup_var_def]) >>
   qexistsl [`z with vs_inst_idx := LENGTH sb.cs_current_insts`,`HG`,`tf`] >>
-  simp[] >>
+  asm_rewrite_tac[] >> simp[] >>
   conj_tac >-
     (gen_tac >> disch_tac >>
      conj_tac >- (irule gas_origin_ptr_path_from_no_dead >> first_assum ACCEPT_TAC) >>
@@ -267,3 +299,6 @@ Proof
   simp[expr_store_bound_def, blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
   gvs[] >> decide_tac
 QED
+
+Theorem extcall_saved_ctor_copy_replay =
+  pureFrameLib.drop_frame extcall_saved_ctor_copy_replay_pure

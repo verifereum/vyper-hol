@@ -239,7 +239,8 @@ Definition deploy_result_rel_def:
                       (exc = Reverted \/ s = "UNREACHABLE")
     | INR (Error e) =>
         unspecified_behaviour_exempt tops e \/
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
+        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
+                      (!d. e = RevertData d ==> exc = Reverted)
     | INR _ => F
 End
 

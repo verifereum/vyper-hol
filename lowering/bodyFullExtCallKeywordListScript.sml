@@ -73,10 +73,11 @@ QED
 Theorem extcall_keyword_head_outcome[local]:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\
   expr_type e = ext_call_kw_type rt k /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,dt),sb) /\
-  compile_ext_call_kwarg compile_expr cenv rt k (gas_shadow_expr e)
+  compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt k (gas_shadow_expr e)
     shadow_sa = ((op,dt),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -89,7 +90,7 @@ Theorem extcall_keyword_head_outcome[local]:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
     storage_well_formed_on cx es (FST H) /\
@@ -177,12 +178,13 @@ QED
 Theorem extcall_request_keywords_owned_outcome:
   body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_sim_inv cenv cx env es /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st) /\
   MAP expr_type xs = MAP (ext_call_kw_type rt) ks /\
   compile_ext_call_kwargs compile_expr cenv rt ks xs sa = ((vo,go,dopt),sb) /\
-  compile_ext_call_kwargs compile_expr cenv rt ks (MAP gas_shadow_expr xs)
+  compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) rt ks (MAP gas_shadow_expr xs)
     shadow_sa = ((vo,go,dopt),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -195,7 +197,7 @@ Theorem extcall_request_keywords_owned_outcome:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
     storage_well_formed_on cx es (FST H) /\
@@ -278,32 +280,38 @@ Resume extcall_request_keywords_owned_outcome[cons]:
   PairCases_on `q` >>
   rename1 `compile_ext_call_kwarg _ _ _ _ _ sa = ((op,dt),sm)` >>
   `gas_shadow_compiles (compile_ext_call_kwarg compile_expr cenv rt k e)
-     (compile_ext_call_kwarg compile_expr cenv rt k (gas_shadow_expr e))` by
-    (mp_tac (Q.INST [`return_type` |-> `rt`, `sh` |-> `T`]
-      (MATCH_MP gas_shadow_compiles_ext_call_kwarg (cj 1 gas_shadow_compile_expr))) >> simp[]) >>
-  Cases_on `compile_ext_call_kwarg compile_expr cenv rt k (gas_shadow_expr e) shadow_sa` >>
+     (compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt k (gas_shadow_expr e))` by
+    (irule (SIMP_RULE bool_ss []
+      (Q.INST [`sh` |-> `T`] gas_shadow_compiles_ext_call_kwarg_env)) >>
+     simp[cj 1 gas_shadow_compile_expr_env]) >>
+  Cases_on `compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt k (gas_shadow_expr e) shadow_sa` >>
   rename1 `compile_ext_call_kwarg _ _ _ _ (gas_shadow_expr e) shadow_sa = (z,shadow_sm)` >>
   qpat_x_assum `gas_shadow_compiles _ _` (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
   disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
   `gas_shadow_compiles (compile_ext_call_kwargs compile_expr cenv rt ks xs)
-    (compile_ext_call_kwargs compile_expr cenv rt ks (MAP gas_shadow_expr xs))` by
-    (mp_tac (Q.INST [`return_type` |-> `rt`, `sh` |-> `T`]
-      (MATCH_MP gas_shadow_compiles_ext_call_kwargs (cj 1 gas_shadow_compile_expr))) >> simp[]) >>
+    (compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) rt ks (MAP gas_shadow_expr xs))` by
+    (irule (SIMP_RULE bool_ss []
+      (Q.INST [`sh` |-> `T`] gas_shadow_compiles_ext_call_kwargs_env)) >>
+     simp[cj 1 gas_shadow_compile_expr_env]) >>
   Cases_on `compile_ext_call_kwargs compile_expr cenv rt ks xs sm` >>
   PairCases_on `q` >>
   rename1 `compile_ext_call_kwargs _ _ rt ks xs sm = ((vot,got,dopt_t),sb_t)` >>
-  Cases_on `compile_ext_call_kwargs compile_expr cenv rt ks (MAP gas_shadow_expr xs) shadow_sm` >>
+  Cases_on `compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) rt ks (MAP gas_shadow_expr xs) shadow_sm` >>
   rename1 `compile_ext_call_kwargs _ _ rt ks (MAP gas_shadow_expr xs) shadow_sm = (z,shadow_sb_t)` >>
   qpat_x_assum `gas_shadow_compiles _ _` (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
   disch_then (qspecl_then [`sm`,`shadow_sm`] mp_tac) >>
   simp[] >> strip_tac >> gvs[compile_ext_call_kwargs_def, comp_bind_def, comp_return_def] >>
   `cs_extends sa sm /\ cs_extends shadow_sa shadow_sm` by
-    (conj_tac >> irule (cj 1 (MATCH_MP first_emission_ext_call_kwarg
-                                        (cj 1 first_emission_compile_expr))) >> metis_tac[]) >>
+    (conj_tac >>
+     (let val extends = cj 1 (MATCH_MP first_emission_ext_call_kwarg
+                                      (cj 1 first_emission_compile_expr))
+      in first_assum (mp_then Any ACCEPT_TAC extends) end)) >>
   `cs_extends sm sb /\ cs_extends shadow_sm shadow_sb` by
-    (conj_tac >> irule (cj 1 (MATCH_MP first_emission_ext_call_kwargs
-                                        (cj 1 first_emission_compile_expr))) >> metis_tac[]) >>
+    (conj_tac >>
+     (let val extends = cj 1 (MATCH_MP first_emission_ext_call_kwargs
+                                      (cj 1 first_emission_compile_expr))
+      in first_assum (mp_then Any ACCEPT_TAC extends) end)) >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func /\
    fn_has_code shadow_sa shadow_sm shadow_func /\ fn_has_code shadow_sm shadow_sb shadow_func` by
     metis_tac[fn_has_code_split] >>
@@ -346,11 +354,11 @@ Resume extcall_request_keywords_owned_outcome[tail]:
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
     (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
-  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)` (fn path =>
      qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
      qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
-       (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+       (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
         CONJ path o CONJ no_phi)))) >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
@@ -364,6 +372,12 @@ Resume extcall_request_keywords_owned_outcome[tail]:
        (INL v, mid with gas_obs := [])` by
     (qpat_assum `!tail. bind _ _ _ = _`
        (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [listTheory.APPEND_NIL]))) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx e) _ _ = (INL v,mid with gas_obs := [])`
+       (irule_at Any) >> imp_res_tac exprBodyPrePropsTheory.expr_body_pre_static_facts >> simp[]) >>
   `expr_sim_inv cenv cx env mid` by
     (`expr_body_pre cenv cx env e
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by

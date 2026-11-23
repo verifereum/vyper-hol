@@ -5,7 +5,8 @@ Ancestors
   venomExecSemantics venomInst venomState fragExec
   ctorDeployMemoryRunMemEntryFirstEmission compilerFirstEmission
   exprLoweringProps exprLowering compileEnv
-  fragGasPath gasOutcomeFull bodySim list
+  fragGasPath gasOutcomeFull bodySim bodyInvSplit compileUnit vyperCompiler list
+  contractInvContextProps
 Libs
   monadsyntax
 
@@ -219,28 +220,29 @@ Proof
   metis_tac[fragGasModeTheory.gas_marked_path_exec]
 QED
 
-Theorem body_inv_no_phi:
-  body_inv tops ctx cenv cx /\ MEM fn ctx.ctx_functions ==>
+Theorem body_inv_no_phi_mods:
+  contract_inv mods exps ctx cenv cx /\ MEM fn ctx.ctx_functions ==>
   !bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0
 Proof
-  strip_tac >>
-  `lowering_context_ok ctx` by
-    (qpat_assum `body_inv _ _ _ _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     rw[bodySimTheory.body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[] >>
-     metis_tac[vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry,
-               deployUnitProducersTheory.lower_vyper_deploy_unit_context_ok]) >>
+  strip_tac >> drule contract_inv_lowering_context >> strip_tac >>
   rpt strip_tac >> irule venomExecProofsTheory.no_phis_phi_prefix_length_zero >>
   fs[vyperCompilerTheory.lowering_context_ok_def,vyperCompilerTheory.ptr_ok_check_def,EVERY_MEM] >>
   metis_tac[venomFnInstsProofsTheory.MEM_fn_insts]
 QED
 
-Theorem gas_origin_ptr_path_dalloca_no_wrap:
+Theorem body_inv_no_phi:
+  body_inv tops ctx cenv cx /\ MEM fn ctx.ctx_functions ==>
+  !bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0
+Proof
+  metis_tac[body_inv_contract, body_inv_no_phi_mods]
+QED
+
+Theorem gas_origin_ptr_path_dalloca_fmp_headroom:
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (s0,G0,tn0) marks (OK s1,G1,tn1) /\
   (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) ==>
-  !fn inst s. frag_reachable ctx func s1 fn inst s ==> dalloca_no_wrap inst s
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) ==>
+  !fn inst s. frag_reachable ctx func s1 fn inst s ==> dalloca_fmp_headroom inst s
 Proof
   strip_tac >> drule gas_origin_ptr_path_erase >> strip_tac >>
   `!i. active_inst func i s1 ==> frag_reachable ctx func s0 func i s1` by

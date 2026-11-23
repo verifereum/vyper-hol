@@ -16,6 +16,8 @@ Ancestors
   evalCompilerRange evalCompilerAllocationBudget evalCompilerInternalImmutables
   evalAssignmentOrderChecks evalCompilerSourceShape evalCompilerPopSubscriptOverlap
   evalCompilerSiblingScopeTypes
+  (* Linked runtime dispatch and entry proofs. *)
+  defaultDispatchMods dispatchedCallAssemblyMods
   (* exact Python parity for every retained raw-system and creation fixture *)
   evalCompilerRawSystem evalCompilerCreateBuiltins
   (* branch_opt's output checker on a sample of the parity fixtures'
@@ -29,6 +31,7 @@ Ancestors
   vyperCtorAliasTest createImmutableBytecodeTest createCompletionProbe
   ctorImmutableAppendTest
   e2eWitnessCompute e2eWitness e2eNonreentrantWitness e2eCompose e2eERC20Witness
+  e2eModsWitness
   (* tests of the bytecode evaluation library the native runner shares *)
   evalCompilerBytecodeLibTest
   (* operand-stack checker: pinned internal-call bytecode and deep call chains *)
@@ -38,10 +41,14 @@ Ancestors
   vyperMembershipParityTest vyperMembershipMatrixTest
   (* more interface contracts on concrete inputs; raw RETURN's copy *)
   e2eBoundaryTest groupedDispatchProps rawReturnCopy
-  entryPackagedRuntimeCode
   (* compiled creation code and events *)
   vyperCreateMemoryTest vyperEventForwardStruct vyperEventArgumentLifetime
-  checkedLogEmptyExecution checkedLogDataExecution
+  abiEmptyLogPath bodyFullLog
   (* ABI encode/decode edge cases and size boundaries *)
   abiDecodeBoundsTest abiDecodeAliasTest abiDecoderBytesEdges
   createSizeBoundaryTest
+  (* Standalone ABI execution checks. *)
+  abiScratchBuiltinOpenSource exprSimAbiEncodeRegion
+  (* S1 request-prefix companion cases. *)
+  s1PrefixLiteralWord s1PrefixWordWei s1PrefixRawCall
+  s1PrefixNames s1PrefixBuiltinLeaves s1PrefixPrecompile s1PrefixStmtZero

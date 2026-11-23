@@ -64,30 +64,25 @@ Proof
   qabbrev_tac `u3 = update_var a3 (c * word_xor r (n2w n)) u2` >>
   qabbrev_tac `u4 = update_var a4 (word_xor (n2w n) (c * word_xor r (n2w n))) u3` >>
   `step_inst_base (mk_inst sa.cs_next_id RETURNDATASIZE [] [a0]) s = OK u0` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
-     simp[mk_inst_def, exec_read0_def, Abbr `u0`, Abbr `r`]) >>
+    simp[NoAsms, step_inst_base_opcode_eqs, mk_inst_def, exec_read0_def,
+         Abbr `u0`, Abbr `r`] >>
   `step_inst_base (mk_inst (sa.cs_next_id+1) LT [Var a0;Lit (n2w n)] [a1]) u0 = OK u1` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
-     simp[mk_inst_def, exec_pure2_def, Abbr `u1`, Abbr `u0`, Abbr `c`, Abbr `r`,
-          eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+    (simp[NoAsms, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+          Abbr `u1`, Abbr `u0`, Abbr `c`, Abbr `r`, eval_operand_def,
+          lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
      Cases_on `LENGTH s.vs_returndata < n` >> simp[bool_to_word_def]) >>
   `step_inst_base (mk_inst (sa.cs_next_id+2) XOR [Var a0;Lit (n2w n)] [a2]) u1 = OK u2` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
-     simp[mk_inst_def, exec_pure2_def, Abbr `u2`, Abbr `u1`, Abbr `u0`,
-          eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+    (simp[NoAsms, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+          Abbr `u2`, Abbr `u1`, Abbr `u0`, eval_operand_def, lookup_var_def,
+          update_var_def, FLOOKUP_UPDATE] >> simp[]) >>
   `step_inst_base (mk_inst (sa.cs_next_id+3) MUL [Var a1;Var a2] [a3]) u2 = OK u3` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
-     simp[mk_inst_def, exec_pure2_def, Abbr `u3`, Abbr `u2`, Abbr `u1`,
-          eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+    (simp[NoAsms, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+          Abbr `u3`, Abbr `u2`, Abbr `u1`, eval_operand_def, lookup_var_def,
+          update_var_def, FLOOKUP_UPDATE] >> simp[]) >>
   `step_inst_base (mk_inst (sa.cs_next_id+4) XOR [Lit (n2w n);Var a3] [a4]) u3 = OK u4` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
-     simp[mk_inst_def, exec_pure2_def, Abbr `u4`, Abbr `u3`,
-          eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+    simp[NoAsms, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+         Abbr `u4`, Abbr `u3`, eval_operand_def, lookup_var_def, update_var_def,
+         FLOOKUP_UPDATE] >>
   `word_xor (n2w n) (c * word_xor r (n2w n)) = n2w (LENGTH (TAKE n s.vs_returndata)):bytes32` by
     (simp[Abbr `c`, Abbr `r`, LENGTH_TAKE_EQ] >>
      Cases_on `LENGTH s.vs_returndata < n` >> simp[arithmeticTheory.MIN_DEF] >>
@@ -235,12 +230,13 @@ QED
 
 Resume raw_call_tuple_length_checked[taint5]:
   `b < dimword (:256)` by (simp[dimword_def] >> decide_tac) >>
-  simp[Abbr `tnf`, Abbr `tn5`, step_taint_def, taint_component_equality,
+  simp[NoAsms, Abbr `tnf`, Abbr `tn5`, step_taint_def, taint_component_equality,
        set_var_taint_def, mem_taint_def, store_taint_def, imm_taint_def,
        adopt_reset_def, new_site_bytes_def, step_writes_def, written_taint_def,
        source_memory_write_ranges_def, fixed_source_write_range_def,
        range_bytes_def, mk_inst_def, mstore_def, FLOOKUP_DEF,
-       op_taint_def, FAPPLY_FUPDATE_THM, EXTENSION, SF CONJ_ss, DRESTRICT_UNIV]
+       op_taint_def, FAPPLY_FUPDATE_THM, EXTENSION, SF CONJ_ss, DRESTRICT_UNIV] >>
+  simp[]
 QED
 
 Resume raw_call_tuple_length_checked[readsafe]:

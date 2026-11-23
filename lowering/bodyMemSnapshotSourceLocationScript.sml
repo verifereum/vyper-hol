@@ -33,6 +33,10 @@ Proof
       Cases_on `b` >> gvs[compile_literal_vv_def, comp_return_def, vv_location_def] >>
       Cases_on `b'` >> gvs[compile_literal_vv_def, comp_bind_def, comp_return_def, vv_location_def] >>
       rpt (pairarg_tac >> gvs[]) >> gvs[base_ptr_def, vv_location_def])
+  >~ [`compile_literal_vv _ (HexBytesL _) _ = _`]
+  >- (simp[compile_literal_vv_def, comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      strip_tac >> gvs[base_ptr_def, vv_location_def])
   >> simp[compile_literal_vv_def, comp_return_def] >>
   strip_tac >> gvs[vv_location_def]
 QED

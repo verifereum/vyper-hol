@@ -2,7 +2,7 @@
    TOP-LEVEL: do_restore_venom_asm_rel, emit_one_input_venom_asm_rel. *)
 Theory emitOperandSim
 Ancestors
-  emitInputSim doDupCorrect doDupModel doSwapSim spillSim allocMono planAlign planWf
+  emitInputSim operandInventory doDupCorrect doDupModel doSwapSim spillSim allocMono planAlign planWf
   stackOpSim
   stackPlanGen stackPlanOps stackPlanTypes stackModel planExec
   prefixExec prefixSim mixedPrefixSim strongPrefixSim
@@ -275,9 +275,11 @@ Proof
 QED
 
 (* Prepared distinct operands already in their final order need no reorder. *)
-Theorem reorder_plan_two_prepared:
+Theorem reorder_plan_two_prepared[local]:
   !dfg h h' ps stk.
-    ps.ps_stack = stk ++ [h;h'] /\ h <> h' ==>
+    ps.ps_stack = stk ++ [h;h'] /\ h <> h' /\
+    (~is_var_operand h \/ FLOOKUP ps.ps_spilled h = NONE) /\
+    (~is_var_operand h' \/ FLOOKUP ps.ps_spilled h' = NONE) ==>
     reorder_plan dfg [h;h'] ps = ([],ps)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -288,6 +290,15 @@ Proof
     (irule stack_get_unfixed_depth_zero >>
      asm_simp_tac (srw_ss())
        [stack_get_depth_def, REVERSE_APPEND, stack_find_def]) >>
+  `stack_get_depth h ps.ps_stack = SOME 1 /\
+   stack_get_depth h' ps.ps_stack = SOME 0` by
+    asm_simp_tac (srw_ss()) [stack_get_depth_def, REVERSE_APPEND, stack_find_def] >>
+  `reorder_prepare_plan [h;h'] ps = ([],ps)` by
+    (Cases_on `is_var_operand h` >> Cases_on `is_var_operand h'` >>
+     gvs[reorder_prepare_plan_def, restore_spilled_plan_def, do_restore_def,
+          sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
+          sortingTheory.PART_DEF, stack_get_unfixed_depth_empty_window,
+          reduce_depth_plan_le_16, LET_THM]) >>
   qpat_x_assum `ps.ps_stack = _` kall_tac >>
   asm_simp_tac (srw_ss()) [reorder_plan_def, reorder_one_def,
     MAPi_def, MAPi_ACC_def, LET_THM]
@@ -319,6 +330,11 @@ Proof
        mp_tac (REWRITE_RULE [eq,pairTheory.SND]
          (Q.SPECL [`dist`,`mid`] do_dup_stack))) >>
      asm_simp_tac (srw_ss()) [stack_dup_def, SNOC_APPEND]) >>
+  `ps'.ps_spilled = mid.ps_spilled` by
+    (qspecl_then [`dist`, `mid`] mp_tac do_dup_spilled >> simp[]) >>
+  `is_var_operand h ==> FLOOKUP mid.ps_spilled h = NONE` by
+    (qspecl_then [`opc`, `first_nl`, `h`, `ps`] mp_tac
+       emit_one_input_var_not_spilled >> simp[flookup_thm]) >>
   mp_tac (Q.SPECL [`dfg`,`h`,`Var v`,`ps'`,`stk`] reorder_plan_two_prepared) >>
-  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> simp_tac bool_ss []
+  simp[] >> metis_tac[]
 QED

@@ -3,7 +3,8 @@ Ancestors
   abiEncoderSourceAggregate abiEncoderOpenInput abiEncoderWindow vyperABIValid
   abiTypeBoundProps exprSimHypsDefs loweringStateRelDefs typedMemoryCopy
   structFieldsProps bodySim vyperContext finite_map alist list
-  externalReturnSelectedResources
+  externalReturnSelectedResources bodyInvMetadataProps
+  vyperTypeConstantFold
 
 Theorem custom_error_source_rep_window_bound:
   source_rep env ty ei ct /\ evaluate_type env ty = SOME tv /\
@@ -28,33 +29,31 @@ Proof
   gvs[expr_sim_inv_def] >> metis_tac[]
 QED
 
-Theorem custom_error_main_modules_struct_keys:
-  !mods k a. EVERY (\m. FST m = NONE) mods /\
-    FLOOKUP (type_env_all_modules mods) k = SOME (StructArgs a) ==>
-    FST k = NONE
+Theorem contract_inv_distinct_module_sources[local]:
+  contract_inv mods exps ctx ce cx ==> ALL_DISTINCT (MAP FST mods)
 Proof
-  Induct_on `mods` >- simp[type_env_all_modules_def] >>
-  Cases_on `h` >> simp[type_env_all_modules_def, FLOOKUP_FUNION] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  drule type_env_for_module_struct_mem >> strip_tac >> gvs[]
+  simp[bodyInvSplitTheory.contract_inv_def]
+QED
+
+Theorem custom_error_body_inv_struct_keys_mods:
+  contract_inv mods exps ctx ce cx /\
+  FLOOKUP (get_tenv cx) k = SOME (StructArgs a) ==>
+  IS_SOME (ALOOKUP mods (FST k))
+Proof
+  PairCases_on `k` >> strip_tac >>
+  drule_then SUBST_ALL_TAC contract_inv_type_env >>
+  drule_then assume_tac contract_inv_distinct_module_sources >>
+  qpat_x_assum `FLOOKUP _ _ = SOME _` mp_tac >>
+  simp[FLOOKUP_type_env_all_modules, AllCaseEqs(), optionTheory.IS_SOME_EXISTS] >>
+  metis_tac[]
 QED
 
 Theorem custom_error_body_inv_struct_keys:
   body_inv tops ctx ce cx /\
     FLOOKUP (get_tenv cx) k = SOME (StructArgs a) ==> FST k = NONE
 Proof
-  strip_tac >>
-  `!src ts. get_module_code cx src = SOME ts ==> src = NONE` by
-    gvs[bodySimTheory.body_inv_def] >>
-  qpat_x_assum `body_inv _ _ _ _` kall_tac >>
-  Cases_on `ALOOKUP cx.sources cx.txn.target` >>
-  gvs[get_tenv_def, get_module_code_def] >>
-  irule custom_error_main_modules_struct_keys >>
-  goal_assum (drule_at Any) >>
-  simp[EVERY_MEM] >> rpt strip_tac >>
-  `MEM (FST m) (MAP FST x)` by (simp[MEM_MAP] >> metis_tac[]) >>
-  `ALOOKUP x (FST m) <> NONE` by simp[ALOOKUP_NONE] >>
-  Cases_on `ALOOKUP x (FST m)` >> gvs[]
+  strip_tac >> drule_then assume_tac body_inv_contract >>
+  drule_all custom_error_body_inv_struct_keys_mods >> simp[ALOOKUP_def]
 QED
 
 Theorem custom_error_invariant_layout:

@@ -1,6 +1,7 @@
 (* Shifted, same-witness array preheader boundaries for Entry. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteArraySetup
 Ancestors
+  entryDecoderStateFrame
   loweringStateRelDefs
   compileEnv fragGasPathMem ctorDeployMemoryRunMemEntryArraySteps ctorDeployMemoryRunMemEntryCompositeSetup ctorAbiActualSites ctorDeployMemoryRunMemEntryShiftedCheckedArrayEntry
   ctorDeployMemoryRunPtrPrefixCompleteArrayRun
@@ -19,7 +20,8 @@ Ancestors
   exprLowering fragExec instIdxIndep rich_list exprLoweringProps abiDecoderLoop
   abiEncoderRegisteredEffect ctorAbiActualFrame ctorAbiActualObservations fragGasSeqAbort
   abiDecoderRecursiveLoopContext abiDecoderTypedContract abiEncoderZeroFrame venomWf
-  fragGasOriginPtr
+  fragGasOriginPtr intCallCallee[qualified,ignore_grammar]
+  frameAllocationEffects[qualified,ignore_grammar]
 
 val Ok = ``\k ctx func site ids D N d outsz next limit_st
     tv vs slot_id slot base prefix cursor s.
@@ -186,6 +188,7 @@ Theorem prefix_complete_array_guard_entry_mode_exact:
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp /\
     t.vs_code = s.vs_code /\ t.vs_gas_readings = s.vs_gas_readings /\
     t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
     t.vs_block_ctx = s.vs_block_ctx /\
@@ -231,10 +234,17 @@ Proof
      fs[inst_extends_def,emitted_insts_def] >>
      disch_then (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
   drule ctorDeployMemoryRunPtrPrefixLoopSetupTheory.prefix_loop_guard_outputs >> simp[mk_inst_def] >> disch_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+    simp[mk_inst_def] >>
+  `ctx_has_dalloca ctx ==> !pre i post u.
+     emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+     unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> fs[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   `checked ==> gas_path_mem ctx func s 0
      (OK (raw with vs_inst_idx := LENGTH st'.cs_current_insts)) /\
      alloca_history func (raw with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     (strip_tac >>
+     qpat_assum `checked ==> _` (drule_then strip_assume_tac) >>
      `run_inst_seq_mem_ok (emitted_insts st st') s` by
        (irule ctor_checked_array_prefix_mem_ok >> metis_tac[]) >>
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
@@ -242,7 +252,8 @@ Proof
        simp[mk_inst_def, is_terminator_def] >>
      `raw.vs_allocas = s.vs_allocas /\ raw.vs_current_bb = s.vs_current_bb` by
        simp[Abbr `raw`, update_var_def] >>
-     metis_tac[ctor_checked_emitted_endpoint]) >>
+     drule_all (Q.INST [`ctx` |-> `ctx`, `t` |-> `raw`] ctor_checked_emitted_endpoint) >>
+     strip_tac >> simp[]) >>
   qmatch_asmsub_abbrev_tac `ptr_safe_run Ddead lo _ ctx func PG H qt _` >>
   `checked ==> !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (raw with vs_inst_idx := LENGTH st'.cs_current_insts),H,qt)` by
@@ -257,7 +268,11 @@ Proof
           `fn` |-> `func`, `a` |-> `n2w sb`, `ys` |-> `[]`, `G'` |-> `H`, `tn'` |-> `qt`]
           ctorDeployMemoryRunPtrPrefixCopyRunTheory.prefix_copy_count_success_ptr) >>
         simp[LET_THM, fragGasSeqPtrTheory.inst_seq_ptr_def, Abbr `H`, Abbr `qt`]) >>
-     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> simp[] >> qexists_tac `st` >> asm_rewrite_tac[]) >>
+     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexists_tac `st` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `raw.vs_fmp = s.vs_fmp /\ raw.vs_initial_fmp = s.vs_initial_fmp` by
+    simp[Abbr `raw`,update_var_def] >>
   qexistsl [`raw with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`] >>
   suspend "package"
 QED
@@ -371,6 +386,7 @@ Theorem prefix_complete_array_header_entry_mode_exact:
       eval_operand op t = SOME w) /\
     t.vs_labels = s.vs_labels /\ abi_encoder_registered_effect {} [(d,32)] s t /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp /\
     ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
     t.vs_code = s.vs_code /\ t.vs_gas_readings = s.vs_gas_readings /\
@@ -406,6 +422,15 @@ Proof
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
     (irule abi_decode_sequence_allocation_frame >>
      qexists `emitted_insts st st'` >> fs[EVERY_CONJ]) >>
+  `t.vs_initial_fmp = s.vs_initial_fmp` by metis_tac[run_inst_seq_initial_fmp] >>
+  `t.vs_fmp = s.vs_fmp` by
+    (irule (BETA_RULE (Q.ISPEC `\u:venom_state. u.vs_fmp`
+       run_inst_seq_preserves_field)) >>
+     qexists_tac `emitted_insts st st'` >> simp[] >>
+     rpt strip_tac >>
+     irule venomInstProofs1Theory.step_inst_base_preserves_fmp_ordinary >>
+     qexists_tac `i` >>
+     gvs[mk_inst_def,is_terminator_def,is_alloca_op_def,is_ext_call_op_def]) >>
   `LENGTH st'.cs_current_insts = LENGTH st.cs_current_insts+2` by
     (qpat_x_assum `emitted_insts st st' = _` mp_tac >>
      fs[inst_extends_def,emitted_insts_def] >>
@@ -424,14 +449,24 @@ Proof
        simp[mk_inst_def,is_terminator_def] >>
      `alloca_history func s` by metis_tac[] >>
      `t.vs_current_bb = s.vs_current_bb` by metis_tac[] >>
-     drule_all ctor_checked_emitted_endpoint >>
-     disch_then (qspec_then `ctx` strip_assume_tac) >>
+     `ctx_has_dalloca ctx ==> !pre i post u.
+        emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u` by
+       (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+          simp[mk_inst_def] >>
+        rpt strip_tac >> fs[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
+     drule_all (Q.INST [`ctx` |-> `ctx`, `t` |-> `t`] ctor_checked_emitted_endpoint) >>
+     strip_tac >>
      rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
        i.inst_opcode <> GAS) (emitted_insts st st')` by
        simp[mk_inst_def,is_terminator_def] >>
-     rpt strip_tac >>
-     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> simp[] >> qexists_tac `st` >> asm_rewrite_tac[]) >>
+     qx_gen_tac `Dchecked` >> gen_tac >>
+     qpat_assum `!K. inst_seq_ptr K lo ctx func PG G tn _ s H qt`
+       (qspec_then `Dchecked` assume_tac) >>
+     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexists_tac `st` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`] >>
   asm_simp_tac bool_ss [] >>
   conj_tac >-
@@ -502,7 +537,7 @@ Proof
   metis_tac[]
 QED
 *)
-Theorem prefix_complete_array_index_entry_mode:
+Theorem prefix_complete_array_index_entry_mode_fmp:
   abi_decode_index_init st = (ip,st') /\
   (!i. MEM i (emitted_insts st st') ==> MEM i (fn_insts func)) /\
   st.cs_next_id IN ctor_actual_sites func ids /\
@@ -535,8 +570,11 @@ Theorem prefix_complete_array_index_entry_mode:
       mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
     ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
+    (frame_fmp ==> t.vs_fmp = s.vs_fmp) /\
     t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
     t.vs_block_ctx = s.vs_block_ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp) /\
     ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
 Proof
@@ -565,6 +603,8 @@ Proof
   `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st')` by
     simp[abi_decoder_reentry_opcode_def,mk_inst_def] >>
   drule_all deploy_ctor_decoder_sequence_ambient >> strip_tac >>
+  `t.vs_fmp = s.vs_fmp` by
+    (drule_all entry_decoder_sequence_obs >> simp[entry_decoder_obs_fmp]) >>
   `LENGTH st'.cs_current_insts = LENGTH st.cs_current_insts+2` by
     (qpat_x_assum `emitted_insts st st' = _` mp_tac >>
      fs[inst_extends_def,emitted_insts_def] >>
@@ -588,19 +628,55 @@ Proof
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
        i.inst_opcode <> GAS) (emitted_insts st st')` by
        simp[mk_inst_def,is_terminator_def] >>
+     `ctx_has_dalloca ctx ==> !pre i post u.
+        emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u` by
+       (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+          simp[mk_inst_def] >>
+        rpt strip_tac >> fs[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
+     qx_gen_tac `Dchecked` >> gen_tac >>
+     qpat_assum `!K. inst_seq_ptr K lo ctx func PG G tn _ s H qt`
+       (qspec_then `Dchecked` assume_tac) >>
+     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexists_tac `st` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
+    (strip_tac >>
+     `EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE)
+       (emitted_insts st st')` by
+       (simp_tac bool_ss [EVERY_MEM] >> rpt strip_tac
+        >- (qpat_assum `!i. MEM i (emitted_insts st st') ==> _`
+              (drule_then ACCEPT_TAC)) >>
+        gvs[mk_inst_def]) >>
+     drule_all intCallCalleeTheory.run_inst_seq_static_charge >> strip_tac >>
+     `t.vs_initial_fmp = s.vs_initial_fmp` by
+       metis_tac[run_inst_seq_initial_fmp] >>
+     fs[allocas_below_fmp_def,alloca_inv_def,alloca_next_valid_def] >>
      rpt strip_tac >>
-     irule fragGasOriginPtrLoopTheory.emitted_origin_ptr_path >> simp[] >> qexists_tac `st` >> asm_rewrite_tac[]) >>
+     qpat_assum `!aid b sz. FLOOKUP t.vs_allocas aid = SOME (b,sz) ==> _`
+       (drule_then assume_tac) >> decide_tac) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`p`,`H`,`qt`] >>
   conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
-  simp[eval_op_inst_idx] >>
+  simp[eval_op_inst_idx,allocas_below_fmp_def,pending_alloca_size_def] >>
   conj_tac >- (fs[allocas_from_def] >> metis_tac[]) >>
   conj_tac >-
     (rpt strip_tac >>
      `v <> STRING #"%" (toString st.cs_next_var)` by
        (fs[abi_decoder_older_vars_def] >> metis_tac[LESS_EQ_REFL]) >>
      metis_tac[]) >>
-  metis_tac[]
+  conj_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
+  qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t /\ _`
+    (drule_then (strip_assume_tac o SRULE [allocas_below_fmp_def,pending_alloca_size_def])) >>
+  qpat_x_assum `t.vs_fmp = s.vs_fmp` (fn th => once_rewrite_tac[SYM th]) >>
+  asm_simp_tac bool_ss [ADD_COMM] >> first_assum ACCEPT_TAC
 QED
+
+Theorem prefix_complete_array_index_entry_mode =
+  prefix_complete_array_index_entry_mode_fmp
+  |> Q.INST [`frame_fmp` |-> `F`]
+  |> PURE_REWRITE_RULE [tautLib.TAUT `((F ==> p) /\ q) <=> q`]
 
 
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
@@ -717,7 +793,7 @@ Proof
   rpt strip_tac >> fs[abi_decode_frame_def] >> metis_tac[]
 QED
 *)
-Theorem prefix_complete_array_setup_mode_exact:
+Theorem prefix_complete_array_setup_mode_exact_fmp:
   abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
   abi_decode_array_header (Var dst) src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
@@ -741,7 +817,9 @@ Theorem prefix_complete_array_setup_mode_exact:
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d+outsz <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
   (checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH initial.vs_data_section /\
     fn_inst_ids_distinct func /\ alloca_history func initial) ==>
   ?prepared slot iv H qt.
@@ -767,9 +845,12 @@ Theorem prefix_complete_array_setup_mode_exact:
     DISJOINT qt.t_mem {a | slot <= a /\ a < slot+32} /\ qt.t_mem SUBSET tn.t_mem /\
     qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
     allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\ lo <= slot /\
+    (frame_fmp ==> prepared.vs_fmp = initial.vs_fmp) /\
     prepared.vs_code = initial.vs_code /\ prepared.vs_gas_readings = initial.vs_gas_readings /\
     prepared.vs_outcomes = initial.vs_outcomes /\ prepared.vs_tx_ctx = initial.vs_tx_ctx /\
     prepared.vs_block_ctx = initial.vs_block_ctx /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+      prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp) /\
     (!a n. (a+n <= d \/ d+32 <= a) /\ (a+n <= slot \/ slot+32 <= a) ==>
       mem_bytes_at a n prepared.vs_memory = mem_bytes_at a n initial.vs_memory) /\
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
@@ -786,7 +867,7 @@ Proof
    header_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   `checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH initial.vs_data_section /\
     alloca_history func initial` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by metis_tac[] >>
   drule_all prefix_complete_array_guard_entry_mode_exact >>
   disch_then (qspecl_then [`PG`,`G`,`Ddead`] strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial guard` >>
@@ -806,7 +887,10 @@ Proof
   `checked ==> w2n (n2w sb : bytes32) + 32 <= LENGTH guard.vs_data_section /\
     d+32 <= guard.vs_alloca_next /\ alloca_history func guard` by
     (fs[abi_decoder_address_frame_def,w2n_n2w] >> metis_tac[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp guard` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp guard` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp initial` mp_tac >>
+     pure_rewrite_tac[allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
   drule_all prefix_complete_array_header_entry_mode_exact >>
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   `t.vs_allocas = initial.vs_allocas /\
@@ -819,9 +903,12 @@ Proof
   `mload d t = n2w (LENGTH vs)` by metis_tac[valueEncodingPropsTheory.mem_word_at_eq_mload] >>
   `checked ==> fn_inst_ids_distinct func /\ alloca_history func t` by metis_tac[] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
-    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by simp[] >>
-  drule_all prefix_complete_array_index_entry_mode >>
-  disch_then (qspecl_then [`tv`,`qt`,`outsz`,`PG`,`H`,`Ddead`] strip_assume_tac) >>
+    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
+    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp initial /\ _` mp_tac >>
+     pure_rewrite_tac[allocas_below_fmp_def,pending_alloca_size_def] >>
+     asm_rewrite_tac[]) >>
+  drule_all prefix_complete_array_index_entry_mode_fmp >>
+  disch_then (qspecl_then [`tv`,`qt`,`outsz`,`frame_fmp`,`PG`,`H`,`Ddead`] strip_assume_tac) >>
   `!x. abi_decoder_older_vars st.cs_next_var x ==>
     abi_decoder_older_vars guard_st.cs_next_var x /\
     abi_decoder_older_vars header_st.cs_next_var x` by
@@ -876,6 +963,8 @@ Proof
         gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,H,qt) [] (OK t',H',qt')` by
        metis_tac[] >>
      metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
+  `frame_fmp ==> t'.vs_fmp = initial.vs_fmp` by
+    (strip_tac >> res_tac >> metis_tac[]) >>
   qexistsl [`t'`,`p`,`STRING #"%" (toString header_st.cs_next_var)`,`H'`,`qt'`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -901,6 +990,11 @@ Proof
   conj_tac >- (fs[] >> NO_TAC) >>
   rpt strip_tac >> FIRST [fs[abi_decode_frame_def]] >> metis_tac[]
 QED
+
+Theorem prefix_complete_array_setup_mode_exact =
+  prefix_complete_array_setup_mode_exact_fmp
+  |> Q.INST [`frame_fmp` |-> `F`]
+  |> PURE_REWRITE_RULE [tautLib.TAUT `((F ==> p) /\ q) <=> q`]
 
 
 
@@ -939,7 +1033,9 @@ val PreparedPk = ``
     0 sb d slot slot 32 loop_st.cs_next_var prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     prepared.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
-  fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+    prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp) /\
   lo <= slot /\ lo <= d /\ D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
   venomMemDefs$regions_disjoint (slot,32) (d,type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   header_st.cs_next_id IN ctor_actual_sites func ids /\ frag_ids body_st end_st SUBSET ids /\
@@ -981,7 +1077,7 @@ Proof
   metis_tac[]
 QED
 *)
-Theorem prefix_complete_array_setup_loop_mode_exact:
+Theorem prefix_complete_array_setup_loop_mode_exact_fmp:
   (checked ==> sb+32 <= LENGTH initial.vs_data_section /\ alloca_history func initial) /\
   abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
   abi_decode_array_header (Var dst_var) src DLOAD guard_st = (cnt,header_st) /\
@@ -1007,7 +1103,9 @@ Theorem prefix_complete_array_setup_loop_mode_exact:
   FLOOKUP G dst_var = SOME (b,sz) /\ b <= d /\
   d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst_var) = {} /\
-  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
   abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
     DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -1042,6 +1140,7 @@ Theorem prefix_complete_array_setup_loop_mode_exact:
     DISJOINT qt.t_mem {a | slot <= a /\ a < slot+32} /\ qt.t_mem SUBSET tn.t_mem /\
     qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
     allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\ lo <= slot /\
+    (frame_fmp ==> prepared.vs_fmp = initial.vs_fmp) /\
     prepared.vs_code = initial.vs_code /\ prepared.vs_gas_readings = initial.vs_gas_readings /\
     prepared.vs_outcomes = initial.vs_outcomes /\ prepared.vs_tx_ctx = initial.vs_tx_ctx /\
     prepared.vs_block_ctx = initial.vs_block_ctx /\
@@ -1060,8 +1159,8 @@ Proof
   `checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH initial.vs_data_section /\
     fn_inst_ids_distinct func /\ alloca_history func initial` by
     (strip_tac >> fs[] >> decide_tac) >>
-  drule_all prefix_complete_array_setup_mode_exact >>
-  disch_then (qspecl_then [`tv`,`PG`,`Ddead`] strip_assume_tac) >>
+  drule_all prefix_complete_array_setup_mode_exact_fmp >>
+  disch_then (qspecl_then [`tv`,`frame_fmp`,`PG`,`Ddead`] strip_assume_tac) >>
   qpat_x_assum `Var slot_var = Var iv` (SUBST_ALL_TAC o SYM o SRULE []) >>
   `(^PreparedPk)` by suspend "data_package" >>
   `(^PreparedLoopAt)` by suspend "loop_zero" >>
@@ -1071,7 +1170,7 @@ Proof
   metis_tac[]
 QED
 
-Resume prefix_complete_array_setup_loop_mode_exact[data_package]:
+Resume prefix_complete_array_setup_loop_mode_exact_fmp[data_package]:
   qpat_assum `(^Ok) _ _ _ _ _ _ _ _ _ st.cs_next_var _ _ _ _ _ initial _ _ prepared`
     (strip_assume_tac o BETA_RULE) >>
   `venomMemDefs$regions_disjoint (slot,32) (d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)))` by
@@ -1085,7 +1184,7 @@ Resume prefix_complete_array_setup_loop_mode_exact[data_package]:
   suspend "recursive_data"
 QED
 
-Resume prefix_complete_array_setup_loop_mode_exact[loop_zero]:
+Resume prefix_complete_array_setup_loop_mode_exact_fmp[loop_zero]:
   asm_simp_tac std_ss [SUBSET_REFL] >>
   conj_tac >- metis_tac[ctorDeployMemoryRunPtrPrefixCopySupportTheory.prefix_copy_range_finite] >>
   conj_tac >-
@@ -1098,7 +1197,7 @@ Resume prefix_complete_array_setup_loop_mode_exact[loop_zero]:
   simp[valueEncodingDefsTheory.val_in_memory_def]
 QED
 
-Resume prefix_complete_array_setup_loop_mode_exact[slot_bound]:
+Resume prefix_complete_array_setup_loop_mode_exact_fmp[slot_bound]:
   `prepared.vs_alloca_next < dimword (:256)` by
     (drule_all deploy_ctor_shifted_frontier_bound >> simp[]) >>
   `slot+32 <= prepared.vs_alloca_next` by
@@ -1107,7 +1206,7 @@ Resume prefix_complete_array_setup_loop_mode_exact[slot_bound]:
      strip_tac >> first_x_assum drule >> simp[]) >> decide_tac
 QED
 
-Resume prefix_complete_array_setup_loop_mode_exact[live]:
+Resume prefix_complete_array_setup_loop_mode_exact_fmp[live]:
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
@@ -1119,14 +1218,14 @@ Resume prefix_complete_array_setup_loop_mode_exact[live]:
   simp[abi_decoder_operand_live_def,abi_decoder_older_vars_def,IN_DEF]
 QED
 
-Resume prefix_complete_array_setup_loop_mode_exact[recursive_data]:
+Resume prefix_complete_array_setup_loop_mode_exact_fmp[recursive_data]:
   asm_simp_tac bool_ss [abi_decoder_recursive_loop_data_def,abi_decoder_ranges_def, eval_operand_def,
     abi_decode_source_opcode_def,abi_decoder_operand_live_def] >>
   qpat_x_assum `venomMemDefs$regions_disjoint (slot,32) _` mp_tac >>
   simp[venomMemDefsTheory.regions_disjoint_def] >> gvs[]
 QED
 
-Resume prefix_complete_array_setup_loop_mode_exact[distinct_ids]:
+Resume prefix_complete_array_setup_loop_mode_exact_fmp[distinct_ids]:
   `!bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
     FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)` by
     (Induct >> simp[fn_insts_blocks_def]) >>
@@ -1134,4 +1233,9 @@ Resume prefix_complete_array_setup_loop_mode_exact[distinct_ids]:
   simp[fn_inst_ids_distinct_def,fn_insts_def]
 QED
 
-Finalise prefix_complete_array_setup_loop_mode_exact
+Finalise prefix_complete_array_setup_loop_mode_exact_fmp
+
+Theorem prefix_complete_array_setup_loop_mode_exact =
+  prefix_complete_array_setup_loop_mode_exact_fmp
+  |> Q.INST [`frame_fmp` |-> `F`]
+  |> PURE_REWRITE_RULE [tautLib.TAUT `((F ==> p) /\ q) <=> q`]

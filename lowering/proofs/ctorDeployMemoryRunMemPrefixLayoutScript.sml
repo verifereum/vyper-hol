@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemPrefixLayout
 Ancestors
+  ctorDeployMemoryRunMemEntryLabel
   ctorDeployMemoryRunMemPrefixSource ctorDeployInitcode ctorDeployShape
   ctorDeployLoweringCode ctorDeployLoweringDefs ctorDeployDefs e2eDeployDefs
   compileVyper moduleLowering compileEnv loweringStateRelDefs fragExec vyperCompiler context
@@ -102,7 +103,7 @@ QED
 Theorem ctor_prefix_rejecting_code:
   deploy_phases policy tops (deploy_bc,runtime_bc)
     (rpolicy,dunit,dout,prog,cplan) /\
-  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
+  deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
   classify_functions tops = (exts,ints,fb,SOME cf) /\
   (!mut nr fbody am_c es0.
     ~deploy_ctor_start tops am tx (mut,nr,fbody,am_c,es0)) /\
@@ -140,7 +141,7 @@ QED
 
 Theorem ctor_prefix_entry_value:
   deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\ tx.value <> 0 ==>
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\ tx.value <> 0 ==>
   (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>).
     vs_call_ctx.cc_callvalue <> 0w
 Proof
@@ -152,129 +153,18 @@ Proof
      disch_then (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx.cc_callvalue`) >>
      qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
      simp[deploy_state_rel_def] >> rpt strip_tac >>
-     gvs[deploy_entry_state_def, entry_venom_state_def]) >>
+     gvs[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def]) >>
   gvs[n2w_11, dimword_def]
 QED
 
-Theorem ctor_prefix_env_return_pc[local]:
-  !tops vis mut fname args ret fbody use_trans.
-    vis <> Internal ==>
-    (build_compile_env tops vis mut fname args ret fbody use_trans).ce_return_pc = NONE
-Proof
-  rpt strip_tac >> simp[build_compile_env_def] >>
-  rpt (pairarg_tac >> gvs[])
-QED
-
-Theorem ctor_prefix_lowering_run[local]:
-  !tops rpolicy runtime_bc unit.
-    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops /\ supported_program_deploy tops ==>
-    ?has_constructor imm args ctor_internal_fns cenv fbody pay nr nkey trans.
-      run_deploy_lowering has_constructor rpolicy runtime_bc imm args 0
-        ctor_internal_fns cenv fbody pay nr nkey trans "__deploy" = SOME unit /\
-      (has_constructor ==>
-        cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-        ~supported_stmts_expr_exists expr_shape_root fbody) /\
-      (~has_constructor ==> ctor_internal_fns = []) /\
-      EVERY internal_fn_shape_ok ctor_internal_fns /\
-      EVERY (\d. internal_label_ok (FST d))
-        (internal_fn_descriptors ctor_internal_fns) /\
-      ALL_DISTINCT (MAP FST (internal_fn_descriptors ctor_internal_fns))
-Proof
-  rpt gen_tac >> simp[lower_vyper_deploy_unit_def] >>
-  pairarg_tac >> simp[] >>
-  pairarg_tac >> simp[] >> rpt strip_tac >>
-  first_x_assum (irule_at Any) >>
-  Cases_on `ctor_fn` >> gvs[internal_fn_descriptors_def] >>
-  rename1 `classify_functions tops = (ext_fns, int_fns, fb_fn, SOME cf)` >>
-  `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>
-  drule_all ctorDeployShapeTheory.package_constructor_shape_ok >> strip_tac >> simp[] >>
-  `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
-                   (FST (SND (classify_functions tops))))`
-    by metis_tac[classified_internal_names_distinct,
-                 supported_program_internal_names] >>
-  qspecl_then [`tops`, `T`] mp_tac internal_descriptors_ok >>
-  impl_tac >- simp[] >> simp[] >> strip_tac >>
-  `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops T)
-     (order_internals (deploy_internal_order (SOME cf) int_fns) int_fns)))`
-    by (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops T)
-                (order_internals (deploy_internal_order (SOME cf) int_fns) int_fns)))
-              (MAP FST (MAP (source_internal_fn_descriptor tops T) int_fns))`
-          by (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
-              simp[PERM_order_deploy_internals]) >>
-        drule sortingTheory.ALL_DISTINCT_PERM >> simp[]) >>
-  gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
-     internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
-  simp[EVERY_MEM] >> rpt strip_tac
-  >- (irule ctorDeployShapeTheory.package_internal_fn_ctor_shape_ok >> gs[]) >>
-  fs[EVERY_MEM]
-QED
-
 Theorem ctor_prefix_entry_not_halted:
-  gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
   ~(vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                vs_inst_idx := 0 |>).vs_halted
 Proof
   simp[gas_variant_def] >>
   disch_then (mp_tac o Q.AP_TERM `\s. s.vs_halted`) >>
-  simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]
-QED
-
-Theorem ctor_prefix_run_entry_label[local]:
-  !has_constructor rpolicy runtime_bytecode immutables_len constructor_args
-   data_size ctor_internal_fns cenv fbody is_payable is_nonreentrant nkey
-   use_transient unit fn.
-    run_deploy_lowering has_constructor rpolicy runtime_bytecode immutables_len
-      constructor_args data_size ctor_internal_fns cenv fbody is_payable
-      is_nonreentrant nkey use_transient "__deploy" = SOME unit /\
-    (has_constructor ==>
-      cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-      ~supported_stmts_expr_exists expr_shape_root fbody) /\
-    (~has_constructor ==> ctor_internal_fns = []) /\
-    EVERY internal_fn_shape_ok ctor_internal_fns /\
-    EVERY (\d. internal_label_ok (FST d))
-      (internal_fn_descriptors ctor_internal_fns) /\
-    ALL_DISTINCT (MAP FST (internal_fn_descriptors ctor_internal_fns)) /\
-    lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn ==>
-    fn_entry_label fn = SOME "__deploy"
-Proof
-  rpt gen_tac >> strip_tac >>
-  `(if has_constructor then ctor_internal_fns else []) = ctor_internal_fns`
-    by (Cases_on `has_constructor` >> gvs[]) >>
-  Cases_on `compile_generate_deploy has_constructor (LENGTH runtime_bytecode)
-    immutables_len constructor_args data_size ctor_internal_fns cenv fbody
-    is_payable is_nonreentrant nkey use_transient
-    (initial_compile_state "__deploy")` >>
-  rename1 `_ = (u, st1)` >> Cases_on `u` >>
-  drule compile_generate_deploy_shape >> simp[] >> strip_tac >>
-  drule_all shape_state_source_certificates >> strip_tac >>
-  `package_internal_blocks (internal_fn_descriptors ctor_internal_fns)
-     (entry_blocks ++ FLAT segs) =
-   SOME (entry_blocks,
-         MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
-                         (SND (SND d))) (internal_fn_descriptors ctor_internal_fns)
-              segs)`
-    by (irule package_internal_blocks_segments >> asm_rewrite_tac [] >>
-        rewrite_tac[EVERY_MEM] >> gen_tac >> strip_tac >> BETA_TAC >>
-        irule deploy_internal_label_separate >> fs[EVERY_MEM]) >>
-  qpat_x_assum `run_deploy_lowering _ _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  qpat_x_assum `all_blocks st1 = _`
-    (assume_tac o REWRITE_RULE[all_blocks_def]) >>
-  gs[run_deploy_lowering_def, extract_context_with_internals_def] >>
-  strip_tac >> gvs[install_immutable_reservation_def, mk_venom_context_def] >>
-  gvs[lookup_function_def, FIND_thm, mk_raw_function_def,
-      fn_entry_label_def, entry_block_def] >>
-  Cases_on `entry_blocks` >> gvs[]
-QED
-
-Theorem ctor_prefix_lowered_entry_label:
-  lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
-  supported_program tops /\ supported_program_deploy tops /\
-  lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn ==>
-  fn_entry_label fn = SOME "__deploy"
-Proof
-  rpt strip_tac >> drule_all ctor_prefix_lowering_run >> strip_tac >>
-  drule_all ctor_prefix_run_entry_label >> simp[]
+  simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def, init_venom_state_def]
 QED
 
 Theorem ctor_prefix_task_entry_label:
@@ -288,5 +178,5 @@ Proof
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
    supported_program tops /\ supported_program_deploy tops` by
     fs[deploy_phases_def, deploy_source_ok_def] >>
-  drule_all ctor_prefix_lowered_entry_label >> simp[]
+  drule_all ctor_checked_entry_label_from_lowering >> simp[]
 QED

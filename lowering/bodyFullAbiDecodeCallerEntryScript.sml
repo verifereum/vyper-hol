@@ -1,8 +1,7 @@
-(* Caller resources at the physical child endpoint, and guarded decoder entry.
-   The quotations below are the installed Interface quotations. *)
+(* Caller resources at the physical child endpoint and guarded decoder entry. *)
 Theory bodyFullAbiDecodeCallerEntry
 Ancestors
-  bodyFullAbiDecodeInterface bodyInvNoDalloca abiBuiltinDecodeSetup
+  bodyFullAbiDecodeInterface abiBuiltinDecodeSetup
   exprSimAbiDecodeResources exprSimAbiDecodeInputBound
   exprSimAbiDecodeChildBounds exprSimAbiDecodeMinimumLayout abiDecoderLayoutBounds
   representationCleanPtr exprLoweringProps abiArgsLabelBoundary
@@ -41,7 +40,7 @@ val owned_decoder_state = ``\st s G tn.
 
 val guarded_decoder_pre = ``\start finish dst src opc base_op hi d write_start size s G tn.
   opc = MLOAD /\ fn_has_code start finish fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce start /\ (?H. V H) /\
+  local_ptrs_reserved ce start /\ (?H. V H) /\
   w2n input_word+LENGTH input_bytes < dimword (:256) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -83,7 +82,7 @@ val guarded_to_buf_entry = ``\dst src opc base_op hi info env sf ty tv live prot
 
 val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b data_var d.
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
-  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce st /\ origin.cs_next_var <= st.cs_next_var /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\

@@ -1,15 +1,10 @@
 (*
  * The hypotheses of the expression simulation theorem (#636)
  *
- * The main theorems (exprSimMain's compile_expr_sim and
- * compile_expr_vv_sim) say expr_ok of every expression: expr_sim and
- * expr_vv_sim (exprSim) hold at every source state where expr_sim_pre
- * holds.  expr_sim speaks of lower_value's code, expr_vv_sim of
- * compile_expr's alone and the value_vv it hands out, for a case that
- * unwraps an operand later or never.  The case lemmas each prove expr_ok,
- * or expr_vv_ok, from which expr_ok follows (expr_ok_of_vv), of one form of
- * expression from expr_sim_below, expr_ok of every smaller expression,
- * which is the induction hypothesis compile_expr_ind gives.
+ * expr_ok of an expression says expr_sim and expr_vv_sim (exprSimDefs)
+ * hold at every source state where expr_sim_pre holds.  expr_sim speaks of
+ * lower_value's code, expr_vv_sim of compile_expr's alone and the value_vv
+ * it hands out, for a case that unwraps an operand later or never.
  *
  * TOP-LEVEL:
  *   expr_sim_inv      — the facts about the source state and the context
@@ -17,16 +12,26 @@
  *                       invariants, the locals of the type environment
  *                       held through pointer variables, the flag
  *                       member ids, flag member counts and struct fields
- *                       of the compile environment, and the storage
- *                       invariants
+ *                       of the compile environment; storage decoding is
+ *                       expr_sim's horizon hypothesis, not here
  *   expr_sim_pre      — expr_sim_inv, the expression well typed, its
  *                       integer types of whole bytes, its buffers below
- *                       the allocation limit, and no internal call,
- *                       raw_call or create in it
+ *                       the allocation limit, no internal call in it
+ *                       and none expr_has_evm_run finds (every create is
+ *                       one), the context's call
+ *                       stack following an acyclic call graph
+ *                       (call_evaluation_safe), no main-module
+ *                       constant read by name (const_name_root), every
+ *                       abi_decode target it names occurring in the
+ *                       program, and every type dynamic under the
+ *                       context's type environment dynamic under the
+ *                       program's
  *   byte_widths_expr  — every node's type has a width of whole bytes
  *   expr_body_pre     — expr_sim_pre less int_calls_expr e = []: the
- *                       body simulation's (bodySim); its calls are to
- *                       the main module of a supported program
+ *                       body simulation's (bodySim); each internal call
+ *                       in it (int_calls_expr) is to a supported internal
+ *                       function of the main module, which then is a
+ *                       supported program
  *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
  *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre holds
  *   expr_ok           — both: the induction predicate
@@ -46,8 +51,10 @@
  *   expr_sim_pre_res_ok, expr_sim_pre_word_result — the results of an
  *                       expression are those expr_sim speaks of; a
  *                       word_value_type one's values are word_values
- *   expr_sim_pre_builtin_arg — an argument of a builtin meets expr_sim_pre
- *                       wherever expr_sim_inv holds
+ *   expr_sim_pre_builtin_arg — an argument of a builtin that meets
+ *                       expr_sim_pre meets it wherever expr_sim_inv
+ *                       holds, unless it is a code operand
+ *                       (is_extcode) of a Slice
  *   byte_widths_expr_type — the expression's own type has whole bytes
  *   expr_sim_pre_var_types_well_formed — the local types are well formed
  *   well_typed_expr_type_evaluates — a well-typed expression's type
@@ -56,11 +63,10 @@
  *                       exprSimUnwrap's expr_sim_of_vv_sim), and from
  *                       expr_sim_ok for a form lowered to a StackValue
  *   expr_sim_case, expr_vv_case — the judgments of a shared case lemma,
- *                       which compile_expr_sim and the body simulation
- *                       both use: expr_sim and expr_vv_sim wherever
- *                       expr_body_pre holds, and with no internal call if
- *                       its nocalls flag is set (expr_sim_ok_case,
- *                       expr_vv_ok_case, expr_ok_case)
+ *                       which the body simulation uses: expr_sim and
+ *                       expr_vv_sim wherever expr_body_pre holds, and with
+ *                       no internal call if its nocalls flag is set
+ *                       (expr_sim_ok_case, expr_vv_ok_case, expr_ok_case)
  *   expr_sim_case_of_vv, expr_vv_case_stack — expr_ok_of_vv and
  *                       expr_ok_stack for them
  *   exprs_case        — the operands' judgments, each one's only if the
@@ -166,25 +172,22 @@
  *     evaluator only drops outcomes from the front
  *     (eval_outcome_suffix_mutual), so expr_sim_pre_eval carries it on.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
- *     INVOKE, whose simulation is #638's call step; until that is stated
- *     this theorem excludes them, and #638 replaces this conjunct with its
- *     hypothesis on the callees.
- *   - The storage clauses: the outcomes are SOME (state_rel), every
- *     declared storage and transient region decodes
- *     (contract_storage_well_formed), the layout is safe, and every
- *     successful outcome still to consume keeps the regions decoding
- *     (oracle_storage_ok).  e2eDefs's source_storage_ok and
- *     call_outcomes_ok ask these of the entry state and the outcomes.
- *     Without them a storage read's slot need not decode: the source
- *     raises where the lowering reads the slot.  expr_sim_pre_eval
- *     carries them on by exprStoragePreservation, which needs no
- *     postulate about the code external calls run.
- *   - ~expr_has_evm_run e: no delegate raw_call or create.  The source
- *     runs these on the EVM even with the outcome oracle, and a delegate
- *     raw_call can write anything into the contract's storage, so nothing
- *     keeps the storage clauses across them without a postulate on that
- *     code.
- *     The supported subset excludes both (supported_expr_no_evm_run).
+ *     INVOKE, whose simulation is the body simulation's call step
+ *     (bodyFullIntCall's intcall_sim_full); this theorem excludes them,
+ *     and expr_body_pre replaces this conjunct with its hypothesis on the
+ *     callees.
+ *   - The oracle clause: the outcomes are SOME (state_rel), so the
+ *     source takes external calls from the outcome oracle.  Storage
+ *     decoding is not a clause of expr_sim_inv: expr_sim and expr_vv_sim
+ *     (exprSimDefs) assume, for every horizon valid over the incoming
+ *     storage trace (valid_horizon cx st0 H es.storage_trace), that its
+ *     regions also decode in es (storage_well_formed_on), and e2eDefs's
+ *     call_storage_ok asks that of the entry state over the call's
+ *     storage trace.  Without it a storage read's slot need not decode:
+ *     the source raises where the lowering reads the slot.
+ *   - ~expr_has_evm_run e: no call expr_evm_run_root marks; every
+ *     create is one.  The supported subset excludes them
+ *     (supported_expr_no_evm_run).
  *   - The popped keys clause (popped_keys_indexed): a local's popped
  *     history is typed, and every key is an index into a dynamic array.
  *     Reading a field or a tuple element of a popped element reads the
@@ -221,13 +224,13 @@
  *
  * Not here yet:
  *   - The rest of the compile environment's metadata (dynamic array
- *     capacities, method ids) is not related to the source context.  The
- *     cases that read it (Attribute, ...) will need a clause each in
- *     expr_sim_inv, as pop has the local types clause, and
- *     TopLevelName needs every immutable to be in ce_module_vars (#563);
- *     storage and transient variables are there by storage_vars_rel and
- *     transient_vars_rel.  Each is to match what Vyper's compiler
- *     guarantees.
+ *     capacities) is not related to the source context by expr_sim_inv,
+ *     which relates the local types pop reads, the method ids (the
+ *     selector clause) and the immutables TopLevelName reads (the
+ *     bare-global clauses: an immutable is at an ImmutableLoc of
+ *     ce_module_vars); storage and transient variables are there by
+ *     storage_vars_rel and transient_vars_rel.  Each is to match what
+ *     Vyper's compiler guarantees.
  *   - Keeping an operand's value_vv through the code between compile_expr
  *     and unwrap_value (a later operand's fragment) needs the operand
  *     composition of #636's Infrastructure: vv_post's memory frame for a
@@ -273,16 +276,18 @@ Libs
    (record_pop), and replace_popped keeps the keys. *)
 
 (* The source takes external calls from the outcome oracle (state_rel's
-   outcomes are SOME).  The finite storage conditions on the execution
-   trace are in call_storage_ok.
-   Every immutable or constant the source can read by
-   name (env.bare_globals) is an immutable of the module being lowered, at
-   an ImmutableLoc whose bytes end below 2 ** 256, as build_compile_env
-   places a supported program's immutables (immutableLocationProps).
-   Every function signature the typing knows returns the type cenv records
-   for it, as build_compile_env records the declared return types
-   (build_func_return_type), so an internal call's value is described at a
-   type its annotation widens (post_value_type). *)
+   outcomes are SOME).  Storage decoding is not a conjunct: expr_sim's
+   horizon hypothesis carries it (storage_well_formed_on), as e2eDefs's
+   call_storage_ok asks of the entry state.  Every immutable or constant
+   the source can read by name (env.bare_globals), except a main-module
+   constant with no bare_global_assignable entry (cx_const_name), is an
+   immutable of the module being lowered, at an ImmutableLoc whose bytes
+   end below 2 ** 256, as build_compile_env places a supported program's
+   immutables (immutableLocationProps).  Every function signature the
+   typing knows returns the type cenv records for it, as build_compile_env
+   records the declared return types (build_func_return_type), so an
+   internal call's value is described at a type its annotation widens
+   (post_value_type). *)
 
 (* The types whose values are word_values (loweringSlice): integers,
    decimals, booleans and flags.  address and bytesN values are BytesV. *)
@@ -293,10 +298,10 @@ Libs
 
 
 (* expr_sim_pre without int_calls_expr e = []: the body simulation's
-   (bodySim), where an operand may call an internal function.  Its calls
-   are to the main module of a supported program, as supported_expr's
-   are, so the callees' bodies keep storage well formed
-   (bodyStoragePreservation). *)
+   (bodySim), where an operand may call an internal function.  Each
+   internal call in it (int_calls_expr) is to a supported internal function
+   of the main module (supported_function_decl, which supported_expr checks
+   too), which then is a supported program. *)
 
 (* A call-free expression is described at its annotation. *)
 Theorem post_value_type_no_calls[simp]:
@@ -348,11 +353,11 @@ QED
 (* The judgments a shared case lemma takes of its operands and concludes of
    its expression: expr_sim and expr_vv_sim at one ctx, func and cx, at
    every state meeting expr_body_pre, and with no internal call in the
-   expression if nocalls.  With nocalls they are expr_sim_ok and
-   expr_vv_ok (expr_sim_ok_case, expr_vv_ok_case), compile_expr_sim's
-   induction predicate; without, what the body simulation's body_expr_ok
-   gives in a frame of the lowered program.  So one case lemma serves
-   both. *)
+   expression if nocalls.  With nocalls, held at every ctx, func and cx,
+   they are expr_sim_ok and expr_vv_ok (expr_sim_ok_case,
+   expr_vv_ok_case), and together expr_ok (expr_ok_case); without, what
+   the body simulation's body_expr_ok gives in a frame of the lowered
+   program.  So one case lemma serves both. *)
 
 
 (* The operands of an expression, evaluated and read in order, as
@@ -400,11 +405,6 @@ QED
 
 (* ===== Type soundness ===== *)
 
-(* The storage conjuncts of expr_sim_inv after evaluating e: with no
-   internal call by exprStoragePreservation, with one by
-   bodyStoragePreservation.  The outcomes still to consume are a suffix of
-   the earlier ones (vyperEvalOutcomeSuffix), so oracle_storage_ok
-   carries over. *)
 Theorem expr_sim_pre_res_ok:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
@@ -1050,7 +1050,7 @@ Proof
        raise_def, bind_def, ignore_bind_def] >>
   rename1 `evaluate_concat n vs` >>
   Cases_on `evaluate_concat n vs` >>
-  simp[return_def, raise_def, bind_def, ignore_bind_def]
+  simp[return_def, raise_def, bind_def, ignore_bind_def, is_self_codesize_def]
 QED
 
 Theorem concat_map_ctor_11:
@@ -1318,9 +1318,16 @@ Proof
           expr_type_def, arg_type_fits_def, compatible_bound_def,
           type_slot_size_def] >>
       imp_res_tac word_size_monotone >> decide_tac)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[well_typed_expr_def, well_typed_literal_def,
+          well_formed_type_def, evaluate_type_def, lowered_value_type_def,
+          expr_type_def, arg_type_fits_def, compatible_bound_def,
+          type_slot_size_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
   >~ [`Builtin _ (Concat _) _`]
   >- (rpt strip_tac >> drule_all expr_sim_inv_type_evaluates >> simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
-      `well_typed_builtin_app ty (Concat v2) (MAP expr_type args)` by
+      rename1 `well_typed_expr env (Builtin ty (Concat n) args)` >>
+      `well_typed_builtin_app ty (Concat n) (MAP expr_type args)` by
         gvs[well_typed_expr_def] >>
       drule physical_concat_fits >> strip_tac >>
       simp[lowered_value_type_def, expr_type_def] >>
@@ -1534,11 +1541,21 @@ Proof
            vyperTypingTheory.value_has_type_def, compatible_bound_def] >>
       gvs[type_slot_size_def, compatible_bound_def] >>
       imp_res_tac word_size_monotone >> decide_tac)
+  >- (rpt gen_tac >> simp[lowered_value_type_def] >> strip_tac >>
+      gvs[Once evaluate_def, bind_def, return_def, read_result_def,
+          vyperValueOperationTheory.evaluate_literal_def] >>
+      gvs[well_typed_expr_def, well_typed_literal_def,
+          well_formed_type_def, evaluate_type_def] >>
+      simp[value_runtime_typed_def, evaluate_type_def,
+           vyperTypingTheory.value_has_type_def, compatible_bound_def] >>
+      gvs[type_slot_size_def, compatible_bound_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
   >~ [`Builtin _ (Concat _) _`]
   >- (rpt strip_tac >> simp[lowered_value_type_def] >>
       drule_all concat_read_buffer_typed_at_inv >> simp[])
   >~ [`TypeBuiltin _ (AbiEncode _ _) _ _`]
   >- (rpt strip_tac >>
+      rename1 `well_typed_expr env (TypeBuiltin _ (AbiEncode ensure method_id) target args)` >>
       `!e. MEM e args ==> well_typed_expr env e /\
          alloc_limits_expr cenv e /\ call_evaluation_safe cx (int_calls_expr e)` by
         (rpt strip_tac >>
@@ -1547,7 +1564,7 @@ Proof
                    call_evaluation_safe_exprs_mem]) >>
       `env.type_defs = get_tenv cx /\
        sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-       well_typed_type_builtin_args (AbiEncode ensure method_id) v4 (MAP expr_type args)` by
+       well_typed_type_builtin_args (AbiEncode ensure method_id) target (MAP expr_type args)` by
         (qpat_assum `expr_sim_inv cenv cx env es`
            (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
          fs[well_typed_expr_def, env_consistent_def, env_context_consistent_def]) >>

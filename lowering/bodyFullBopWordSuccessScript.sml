@@ -1,6 +1,6 @@
 Theory bodyFullBopWordSuccess
 Ancestors
-  bodyPtrBopScalarSeq bodyPtrBopScalarOutcome fragGasCopyLoop
+  bodyPtrBopScalarSeq bodyPtrBopScalarOutcome fragGasCopyLoop fragGasCopySeqLiftProps
   instMemFrontier fragExecMem memSafeRun fragGasSeqPtr list venomInst
 
 Theorem bop_word_scalar_success_joint:
@@ -38,5 +38,12 @@ Proof
     (drule_all bop_scalar_seq_run >>
      disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
      metis_tac[inst_seq_ptr_ghost_unique]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i code` by simp[MEM_APPEND] >>
+     irule dalloca_no_wrap_non_dalloca >>
+     drule_all bop_scalar_seq_outputs >> strip_tac >> gvs[]) >>
   drule_all run_inst_seq_origin_ptr_lift >> simp[]
 QED

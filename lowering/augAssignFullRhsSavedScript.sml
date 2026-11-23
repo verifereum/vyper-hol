@@ -34,9 +34,10 @@ Theorem augassign_rhs_saved_outcome:
   read_place cx p sr = (INL cur,tr) /\
   place_type_value cx p sty = (INL ptv,tty) /\
   body_inv tops ctx cenv cx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre cenv cx env e es /\
   lower_value compile_expr cenv ty e sa = (op,sb) /\
-  lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa =
     (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -52,7 +53,7 @@ Theorem augassign_rhs_saved_outcome:
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
     storage_well_formed_on cx es (FST H) /\

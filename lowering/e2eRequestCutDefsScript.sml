@@ -108,7 +108,7 @@
  *   aborts, so the failed_outcome arm of (B) is never taken at a recorded
  *   request; it is kept so the text reads as signed.
  * - dispatched_vyper_call, source_unit_execution_correct_with,
- *   opt_entry_state and raw_variant are the existing definitions.
+ *   opt_entry_state_own and raw_variant are the existing definitions.
  *   recorded_outcomes_count is defined here.
  *)
 Theory e2eRequestCutDefs
@@ -224,8 +224,7 @@ End
 Definition s1_request_prefix_def:
   s1_request_prefix tops <=>
     !rpolicy unit.
-      lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-      supported_program tops ==>
+      lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
       ?shadow_ctx. !am tx ret vs.
         source_typing_ok tops am tx /\
         source_deployment_rel tops am tx /\
@@ -281,7 +280,6 @@ End
 Definition vyper_frame_staging_def:
   vyper_frame_staging fin policy tops runtime_bc am tx es <=>
     fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     (?deploy_bc. compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc)) /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -377,17 +375,17 @@ Definition call_guard_gas_link_stmt_def:
            generate_context_plan out.po_unit.cu_context = SOME cp /\
            fin rpolicy prog = SOME prog' /\
            runtime_bc = assemble prog' /\
-           w2n (opt_entry_state prog prog' cp es).vs_initial_fmp <= w2n fmp /\
+           w2n (opt_entry_state_own prog prog' cp es).vs_initial_fmp <= w2n fmp /\
            w2n fmp < 2 ** 254 /\
            unit_alloca_budget unit.cu_context +
              32 * ctx_dload_count unit.cu_context <= w2n fmp /\
-           raw_variant fmp vs (opt_entry_state prog prog' cp es) /\
+           raw_variant fmp vs (opt_entry_state_own prog prog' cp es) /\
            (!H':(bool # bytes32 # type_value) list # num list.
               (?fr. terminates (run_context fr unit.cu_context vs)) /\
               raw_unit_memory_ok unit.cu_context vs /\
               ptr_discipline 0 unit.cu_context vs /\
               taint_within
-                (cx_dead H' (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
+                (cx_dead H' (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state_own prog prog' cp es).vs_code) NONE))
                 unit.cu_context vs /\
               mem_inv dload_offset_ok unit.cu_context vs /\
               mem_inv dload_headroom_ok unit.cu_context vs /\
@@ -397,39 +395,39 @@ Definition call_guard_gas_link_stmt_def:
                   s.vs_data_section = vs.vs_data_section)
                 unit.cu_context vs ==>
               ctx_sim
-                (cx_dead H' (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
+                (cx_dead H' (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state_own prog prog' cp es).vs_code) NONE))
                 unit.cu_context out.po_unit.cu_context vs
-                (opt_entry_state prog prog' cp es) /\
+                (opt_entry_state_own prog prog' cp es) /\
               ctx_abort_rq
-                (cx_dead H' (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
+                (cx_dead H' (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state_own prog prog' cp es).vs_code) NONE))
                 unit.cu_context out.po_unit.cu_context vs
-                (opt_entry_state prog prog' cp es) /\
+                (opt_entry_state_own prog prog' cp es) /\
               (fin = asm_opt_finalizer ==>
                code_end_offset_ok
                  (\ctx fn inst s.
-                   raw_reachable (opt_entry_state prog prog' cp es) ctx fn inst s /\
+                   raw_reachable (opt_entry_state_own prog prog' cp es) ctx fn inst s /\
                    ~in_static_abort_prefix fn s)
                  out.po_unit.cu_context) /\
-              ((o1_lowered_inv out.po_unit.cu_context (opt_entry_state prog prog' cp es) /\
+              ((o1_lowered_inv out.po_unit.cu_context (opt_entry_state_own prog prog' cp es) /\
                 (fin = asm_opt_finalizer ==>
                  code_end_offset_ok
-                   (raw_reachable (opt_entry_state prog prog' cp es))
+                   (raw_reachable (opt_entry_state_own prog prog' cp es))
                    out.po_unit.cu_context)) \/
                ((?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
                   mem_inv (\ctx fn inst s. in_static_abort_prefix fn s \/
                             lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s)
-                    out.po_unit.cu_context (opt_entry_state prog prog' cp es)) /\
+                    out.po_unit.cu_context (opt_entry_state_own prog prog' cp es)) /\
                 !fuel. terminates (run_context fuel unit.cu_context vs) ==>
                        ?u. run_context fuel unit.cu_context vs = Abort ExHalt_abort u))) /\
-           source_unit_execution_correct_at marks tops ret am (tx with code := (opt_entry_state prog prog' cp es).vs_code) unit vs /\
+           source_unit_execution_correct_at marks tops ret am (tx with code := (opt_entry_state_own prog prog' cp es).vs_code) unit vs /\
            !tail' res am' rqs obs obs_pre rq outcome sfx H.
              call_external_trace (SOME vs.vs_outcomes)
-               (gas_explicit marks vs.vs_gas_readings ++ tail') am (tx with code := (opt_entry_state prog prog' cp es).vs_code) =
+               (gas_explicit marks vs.vs_gas_readings ++ tail') am (tx with code := (opt_entry_state_own prog prog' cp es).vs_code) =
                (res,am',rqs,obs) /\
              ~source_exempt tops (res,am',rqs) /\
              obs = obs_pre ++ StorageOutcome rq outcome :: sfx /\
              valid_horizon
-               (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE)
+               (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state_own prog prog' cp es).vs_code) NONE)
                (initial_state am []) H obs_pre ==>
              (computed_precompile rq ==>
                 outcome.co_accounts = rq.cr_accounts /\
@@ -438,7 +436,7 @@ Definition call_guard_gas_link_stmt_def:
                 recorded_outcomes_count obs_pre < LENGTH rqs /\
                 EL (recorded_outcomes_count obs_pre) rqs = rq /\
                 raw_safe_rq_upto
-                  (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
+                  (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state_own prog prog' cp es).vs_code) NONE))
                   0 (recorded_outcomes_count obs_pre) unit.cu_context vs /\
                 (?fn inst s fuel s' fn' inst' t fuel' t'.
                    raw_reachable vs unit.cu_context fn inst s /\
@@ -451,26 +449,26 @@ Definition call_guard_gas_link_stmt_def:
                    outcome =
                      (if s.vs_outcomes = [] then failed_outcome rq
                       else HD s.vs_outcomes) /\
-                   raw_reachable (opt_entry_state prog prog' cp es)
+                   raw_reachable (opt_entry_state_own prog prog' cp es)
                      out.po_unit.cu_context fn' inst' t /\
                    inst'.inst_opcode <> INVOKE /\
                    LENGTH t.vs_requests = recorded_outcomes_count obs_pre /\
                    step_inst fuel' out.po_unit.cu_context inst' t = OK t' /\
                    recorded_outcomes_count obs_pre < LENGTH t'.vs_requests /\
                    request_agree_except
-                     (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
+                     (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state_own prog prog' cp es).vs_code) NONE))
                      (EL (recorded_outcomes_count obs_pre) s'.vs_requests)
                      (EL (recorded_outcomes_count obs_pre) t'.vs_requests) /\
                    t.vs_outcomes = s.vs_outcomes) /\
                 ctx_rq_upto
-                  (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state prog prog' cp es).vs_code) NONE))
+                  (cx_dead H (initial_evaluation_context am.sources am.layouts (tx with code := (opt_entry_state_own prog prog' cp es).vs_code) NONE))
                   (recorded_outcomes_count obs_pre)
                   unit.cu_context out.po_unit.cu_context
-                  vs (opt_entry_state prog prog' cp es) /\
+                  vs (opt_entry_state_own prog prog' cp es) /\
                 (?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
                   mem_inv (\ctx fn inst s. (request_cut (recorded_outcomes_count obs_pre) s /\ ~in_static_abort_prefix fn s) ==>
-                    lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s) out.po_unit.cu_context (opt_entry_state prog prog' cp es)) /\
+                    lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s) out.po_unit.cu_context (opt_entry_state_own prog prog' cp es)) /\
                 (fin = asm_opt_finalizer ==>
-                  code_end_offset_ok (\ctx fn inst s. raw_reachable (opt_entry_state prog prog' cp es) ctx fn inst s /\
+                  code_end_offset_ok (\ctx fn inst s. raw_reachable (opt_entry_state_own prog prog' cp es) ctx fn inst s /\
                     request_cut (recorded_outcomes_count obs_pre) s /\ ~in_static_abort_prefix fn s) out.po_unit.cu_context)))
 End

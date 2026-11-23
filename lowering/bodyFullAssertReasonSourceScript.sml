@@ -6,6 +6,7 @@ Ancestors
   bodySim allocLimits compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness
   gasOutcome gasContext stmtSimDefs supportedStmts supportedStmtTraverse
   vyperInterpreter vyperState vyperTypeSystem vyperAST list
+  bodyInvCodeProps bodyInvSplit bodyInvMetadataProps exprSimHypsDefs compileUnit alist
 
 Theorem type_stmt_assert_reason:
   type_stmt env ret_ty (Assert e (AssertReason r)) =
@@ -44,7 +45,7 @@ QED
 (* Only the actual condition trace can activate the conditional reason IH. *)
 Theorem assert_reason_false_source_ready:
   (!s tv t. eval_expr cx e s = (INL tv,t) ==> body_expr_full_ok cx r) /\
-  expr_sim_pre cenv cx env e es /\
+  expr_body_pre cenv cx env e es /\
   ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
   supported_stmt tops bindings (Assert e (AssertReason r)) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -67,10 +68,10 @@ Theorem assert_reason_false_source_ready:
 Proof
   strip_tac >>
   qpat_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >> fs[] >>
-  `expr_sim_pre cenv cx env e (es with gas_obs := xs)` by simp[] >>
-  qpat_x_assum `expr_sim_pre _ _ _ _ es` kall_tac >>
+  `expr_body_pre cenv cx env e (es with gas_obs := xs)` by simp[] >>
+  qpat_x_assum `expr_body_pre _ _ _ _ es` kall_tac >>
   `expr_sim_inv cenv cx env (mid with gas_obs := [])` by
-    metis_tac[expr_sim_pre_eval] >>
+    metis_tac[exprSimSourceTheory.expr_body_pre_eval] >>
   `?tv t. eval_expr cx e (es with gas_obs := xs) = (INL tv,t)` by
     (qpat_x_assum `bind _ _ _ = _` mp_tac >>
      simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
@@ -86,6 +87,34 @@ Proof
   metis_tac[call_evaluation_safe_append_right]
 QED
 
+
+Theorem assert_reason_condition_source_pre_mods:
+  contract_inv mods exps ctx cenv cx /\
+  supported_stmt (main_module mods) bindings (Assert e (AssertReason r)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+      (Assert e (AssertReason r)) ==> occurs_abi_decode_target target (main_module mods)) /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  type_stmt env ret_ty (Assert e (AssertReason r)) = SOME env' /\
+  stmt_exprs_ok cenv (Assert e (AssertReason r)) /\
+  ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
+  call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason r))) ==>
+  expr_body_pre_mods mods cenv cx env e es
+Proof
+  strip_tac >>
+  `supported_expr (main_module mods) e` by
+    (fs[supported_stmt_assert_reason] >> simp[supportedExprsTheory.supported_expr_def]) >>
+  `~supported_expr_exists (const_name_root_mods mods) e` by
+    (drule_then assume_tac contract_inv_cenv_modules >>
+     drule stmt_exprs_ok_module_const_name_free >>
+     simp[supported_stmt_expr_exists_def]) >>
+  `alloc_limits_expr cenv e` by fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `~is_extcode e` by metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode] >>
+  mp_tac (Q.INST [`calls` |-> `int_calls_assert_reason (AssertReason r)`]
+    stmt_expr_body_pre_main_mods) >>
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
+      type_stmt_assert_reason, int_calls_stmt_def]
+QED
+
 Theorem assert_reason_condition_source_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assert e (AssertReason r)) /\
@@ -95,18 +124,24 @@ Theorem assert_reason_condition_source_pre:
   type_stmt env ret_ty (Assert e (AssertReason r)) = SOME env' /\
   stmt_exprs_ok cenv (Assert e (AssertReason r)) /\
   call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason r))) ==>
-  expr_sim_pre cenv cx env e es
+  expr_body_pre cenv cx env e es
 Proof
   strip_tac >>
-  `supported_pure_expr tops e /\ supported_expr tops e /\ int_calls_expr e = []` by
-    (gvs[supported_stmt_assert_reason, supported_assert_reason_def] >>
-     metis_tac[supported_pure_int_calls, supportedExprsTheory.supported_expr_def]) >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
   `~supported_expr_exists (const_name_root cx) e` by
-    metis_tac[bodySimTheory.body_inv_const_name_free] >>
-  simp[expr_sim_pre_body] >> irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-      supported_assert_exists_def, type_stmt_assert_reason, int_calls_stmt_def,
-      body_inv_def] >>
-  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
-  drule supported_expr_body_calls >> strip_tac >> gvs[] >> metis_tac[]
+    (drule_all body_inv_stmt_const_name_free >> simp[supported_stmt_expr_exists_def]) >>
+  drule_all_then assume_tac expr_sim_inv_no_unallocated_bare_globals >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx env es` by fs[expr_sim_inv_split_def] >>
+  drule_all_then assume_tac
+    (SIMP_RULE (srw_ss()) [main_module_def, ALOOKUP_def]
+      (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
+        assert_reason_condition_source_pre_mods)) >>
+  drule_then assume_tac contract_inv_type_env >>
+  fs[expr_body_pre_split_def, vyperContextTheory.type_env_all_modules_def,
+     vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2,
+     supported_stmt_expr_exists_def] >>
+  `supported_expr tops e` by
+    (fs[supported_stmt_assert_reason] >> simp[supportedExprsTheory.supported_expr_def]) >>
+  metis_tac[supported_expr_body_calls]
 QED

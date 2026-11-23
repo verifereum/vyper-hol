@@ -62,6 +62,7 @@ val fixtures = [
   ("env_block_program", "env_block.hex"),
   ("env_message_core_program", "env_message_core.hex"),
   ("env_tx_chain_program", "env_tx_chain.hex"),
+  ("event_log_program", "event_log.hex"),
   ("for_accum_program", "for_accum.hex"),
   ("for_break_program", "for_break.hex"),
   ("for_continue_program", "for_continue.hex"),
@@ -77,6 +78,7 @@ val fixtures = [
   ("internal_call_program", "internal_call.hex"),
   ("local_uint_program", "local_uint.hex"),
   ("loops_program", "loops.hex"),
+  ("mixed_event_log_program", "mixed_event_log.hex"),
   ("noop_program", "noop.hex"),
   ("raise_bare_program", "raise_bare.hex"),
   ("raise_reason_program", "raise_reason.hex"),
@@ -141,6 +143,8 @@ val fixtures = [
   ("task090_external_dynamic_program", "external_dynamic.hex"),
   ("task090_external_scalars_program", "external_scalars.hex"),
   ("task090_external_struct_program", "external_struct.hex"),
+  ("task090_interface_calls_program", "interface_calls.hex"),
+  ("task090_mixed_event_types_program", "mixed_event_types.hex"),
   ("task090_internal_bytes_call_program", "internal_bytes_call.hex"),
   ("task090_internal_struct_call_program", "internal_struct_call.hex"),
   ("task090_internal_tuple_call_program", "internal_tuple_call.hex"),
@@ -157,7 +161,8 @@ fun program_term "EMPTY" = ``[] : toplevel list``
 val suite_fixtures = [
   ("abi-codegen", [
     "arr_dyn_of_fixed", "arr_string_arg", "arr_string_ret", "arr_struct_noclamp",
-    "dec_bytes_unwrapT", "dec_uint_unwrapT", "enc_ensT_bytes", "enc_multi",
+    "dec_bytes_unwrapT", "dec_uint_unwrapT", "enc_ensF_dynamic_tuple",
+    "enc_ensT_bytes", "enc_multi",
     "flag256_arg", "flag256_array_arg", "st_string_field_arg", "tup_string_arg"]),
   ("builtin-forms", [
     "ceil_dec", "concat_bytes2", "concat_bytesn", "concat_one_bytes_arg",

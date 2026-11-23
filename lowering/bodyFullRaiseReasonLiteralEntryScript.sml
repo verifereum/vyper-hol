@@ -14,7 +14,7 @@ Theorem reason_literal_entry_source_family:
   compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sb) /\
   expr_body_pre cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
   32+32*word_size ml < dimword (:256) /\
   storage_trace_domain cx st0 es.storage_trace /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -119,7 +119,7 @@ Theorem reason_literal_message_full_entry:
   compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sb) /\
   expr_body_pre cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\
   32+32*word_size ml < dimword (:256) /\
   storage_trace_domain cx st0 es.storage_trace /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -162,7 +162,9 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
     (drule_then strip_assume_tac) >>
   drule reason_literal_compiler_shape >> strip_tac >>
-  `run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  `EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
+               i.inst_opcode = MSTORE) (emitted_insts sa sb) /\
+   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
    s.vs_alloca_next <= t.vs_alloca_next /\
    t.vs_halted = s.vs_halted /\ t.vs_current_bb = s.vs_current_bb` by
     (`MEM (mk_inst sa.cs_next_id ALLOCA
@@ -290,7 +292,8 @@ Resume reason_literal_message_full_entry[history]:
   irule alloca_history_run_inst_seq >>
   goal_assum (drule_at (Pat `run_inst_seq _ _ = _`)) >>
   fs[exprLoweringPropsTheory.stmt_state_rel_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  qpat_x_assum `EVERY _ (emitted_insts sa sb)` mp_tac >>
+  qpat_x_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)` mp_tac >>
   asm_rewrite_tac[EVERY_APPEND, EVERY_DEF, mk_inst_def] >>
   simp[EVERY_MEM, is_terminator_def]
 QED
@@ -378,6 +381,16 @@ Resume reason_literal_message_full_entry[path]:
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     gvs[] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+     !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by
+       (qpat_assum `emitted_insts sa sb = pre ++ i::post` (once_rewrite_tac o single) >>
+        simp[MEM_APPEND]) >>
+     qpat_assum `EVERY (\i. i.inst_opcode = ALLOCA \/ _) _`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then (drule_then (strip_assume_tac o BETA_RULE)) >> simp[]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
 QED
 Resume reason_literal_message_full_entry[inv]:

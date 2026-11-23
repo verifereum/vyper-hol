@@ -18,6 +18,28 @@ Ancestors
   vyperInterpreter vyperState vyperAST vyperTypeSystem
   stmtSimProps gasExemptCert vyperStorageTrace vyperStorageFootprint
 
+(* Both SHA buffer suffixes allocate only with static ALLOCA. *)
+fun sha_suffix_no_wrap_tac g = (
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sm sn)` by
+    (FIRST [qpat_assum `compile_sha256_bytes _ sm = (_,sn)` mp_tac,
+            qpat_assum `compile_sha256_bytesm _ _ sm = (_,sn)` mp_tac] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[builtinHashingTheory.compile_sha256_bytes_def,
+       builtinHashingTheory.compile_sha256_bytesm_def, contextTheory.compile_alloc_buffer_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_var_def, fresh_id_def, emit_def] >>
+     strip_tac >> gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+       APPEND_ASSOC, venomInstTheory.mk_inst_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     simp[venomInstTheory.mk_inst_def]) >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post u. emitted_insts sm sn = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     fs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM])
+) g;
+
 fun sha_memory_prepare_tac g = (
   `eval_operand (Var p) s = SOME (n2w b)` by simp[eval_operand_def] >>
   `b+32+LENGTH bs <= b'+sz'` by decide_tac >>
@@ -50,6 +72,7 @@ fun sha_memory_prepare_tac g = (
      qexists_tac `bb` >> gvs[rich_listTheory.IS_PREFIX_APPEND] >>
      pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
        rich_listTheory.DROP_LENGTH_APPEND] >> metis_tac[]) >>
+  sha_suffix_no_wrap_tac >>
   `run_inst_seq_mem_ok (emitted_insts sm sn) s` by
     (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
        expr_post H ctx func cenv cx e es sa sm s0 mid _ (Var p) s /\ _`
@@ -61,7 +84,7 @@ fun sha_memory_prepare_tac g = (
   `ghost_inv_at (DF (storage_trace_horizon mid.storage_trace)) lo d cenv cx mid G1 tn1 s` by
     metis_tac[] >>
   `compile_sha256_bytes (Var p) shadow_sm = (op,shadow_sb)` by
-    (qpat_x_assum `compile_expr cenv ty (gas_shadow_expr _) shadow_sa = _` mp_tac >>
+    (qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) shadow_sa = _` mp_tac >>
      simp[gas_shadow_expr_def, gas_shadow_builtin_def, compile_hash_singleton,
        is_bytestring_type_def] >>
      Cases_on `compile_sha256_bytes (Var p) shadow_sm` >>
@@ -257,7 +280,7 @@ irule gas_outcome_full_intro >>
         (fn th => once_rewrite_tac[GSYM th]) >>
       qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts`
         (fn th => once_rewrite_tac[GSYM th]) >>
-      irule run_inst_seq_gas_origin_ptr_path >> simp[] >>
+      irule run_inst_seq_gas_origin_ptr_path >> asm_rewrite_tac[] >> simp[] >>
       qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts` (fn idx =>
         qpat_assum `isPREFIX (emitted_insts sm sn) (DROP s.vs_inst_idx bb.bb_instructions)`
           (ACCEPT_TAC o REWRITE_RULE [idx]))) >>
@@ -313,14 +336,16 @@ Proof
   gvs[] >>
   `cs_extends sa sm` by
     (drule (cj 2 compile_expr_grows) >> simp[]) >>
-  `?shadow_sm. lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
-      shadow_sa = (v,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e`] gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
-     strip_tac >>
-     Cases_on `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
-     gvs[]) >>
+  `?shadow_sm. lower_value compile_expr (gas_shadow_env T cenv)
+      (expr_type e) (gas_shadow_expr e) shadow_sa = (v,shadow_sm) /\
+      gas_shadow_state sm shadow_sm` by
+    (qpat_assum `gas_shadow_state sa shadow_sa`
+       (mp_then Any mp_tac (REWRITE_RULE [gas_shadow_compiles_def]
+         (Q.INST [`ty` |-> `expr_type e`, `sd` |-> `T`]
+            gas_shadow_stmt_lower_value_env))) >>
+     disch_then (qspecl_then [`e`, `cenv`] mp_tac) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv)
+       (expr_type e) (gas_shadow_expr e) shadow_sa` >> simp[]) >>
   `?bty. expr_type e = BaseT bty` by
     (Cases_on `expr_type e` >> gvs[is_bytes_or_string_type_def]) >>
   `cs_extends sm sb` by
@@ -335,7 +360,7 @@ Proof
      metis_tac[hash_suffix_appends, cs_appends_def]) >>
   `cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sb` by
     (conj_tac >- (drule (cj 2 compile_expr_grows) >> simp[]) >>
-     qpat_x_assum `compile_expr cenv ty (gas_shadow_expr _) _ = _` mp_tac >>
+     qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
      simp[gas_shadow_expr_def, gas_shadow_builtin_def, compile_hash_singleton] >>
      pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
      qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
@@ -480,13 +505,14 @@ Resume sha_vv_sim_full[fixed_outcome]:
      qexists_tac `bb` >> gvs[rich_listTheory.IS_PREFIX_APPEND] >>
      pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
        rich_listTheory.DROP_LENGTH_APPEND] >> metis_tac[]) >>
+  sha_suffix_no_wrap_tac >>
   `run_inst_seq_mem_ok (emitted_insts sm sn) s` by
     (qpat_assum `expr_post _ _ _ _ _ e es sa sm s0 mid (BytesV bs) v s`
        (mp_then Any mp_tac sha256_typed_suffix_mem_ok) >>
      simp[is_bytestring_type_def, vyperTypingTheory.value_has_type_def]) >>
   `op_taint tn1 v = {}` by fs[ptr_val_ok_def] >>
   `compile_sha256_bytesm v (LENGTH bs) shadow_sm = (op,shadow_sb)` by
-    (qpat_x_assum `compile_expr cenv ty (gas_shadow_expr _) shadow_sa = _` mp_tac >>
+    (qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) shadow_sa = _` mp_tac >>
      simp[gas_shadow_expr_def, gas_shadow_builtin_def, compile_hash_singleton,
        is_bytestring_type_def] >>
      Cases_on `compile_sha256_bytesm v (LENGTH bs) shadow_sm` >>
@@ -831,7 +857,7 @@ Resume sha_vv_sim_full[fixed_success]:
         (fn th => once_rewrite_tac[GSYM th]) >>
       qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts`
         (fn th => once_rewrite_tac[GSYM th]) >>
-      irule run_inst_seq_gas_origin_ptr_path >> simp[] >>
+      irule run_inst_seq_gas_origin_ptr_path >> asm_rewrite_tac[] >> simp[] >>
       qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts` (fn idx =>
         qpat_assum `isPREFIX (emitted_insts sm sn) (DROP s.vs_inst_idx bb.bb_instructions)`
           (ACCEPT_TAC o REWRITE_RULE [idx]))) >>

@@ -129,7 +129,7 @@ Theorem deploy_ctor_entry_body_state_rel:
  deploy_ctor_code tops rp runtime_bc unit
    (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
- nr = F /\ nr' = nr /\ body' = body /\
+ nr = F /\ nr' = nr /\ body = subst_consts_stmts (module_consts_env tops []) body' /\
  cenv = (ce1 with ce_ctor_exit_label := SOME lbl) /\
  fresh_label "ctor_exit" st2 = (lbl,sa) /\
  bind_arguments (type_env tops) fargs tx.args = SOME scope /\

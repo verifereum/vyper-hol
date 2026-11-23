@@ -10,7 +10,7 @@ Theorem gas_shadow_deploy_final_state:
   gas_shadow_state
     (SND (compile_generate_deploy has bytes imm args size ints ce stmts pay nr key trans s))
     (SND (compile_generate_deploy has bytes imm args size
-      (MAP gas_shadow_internal_package ints) ce (MAP gas_shadow_stmt stmts) pay nr key trans s))
+      (MAP gas_shadow_internal_package ints) (gas_shadow_env T ce) (MAP gas_shadow_stmt stmts) pay nr key trans s))
 Proof
   rpt gen_tac >> irule (cj 2 (REWRITE_RULE [gas_shadow_compiles_def] gas_shadow_compile_generate_deploy)) >>
   simp[gas_shadow_state_refl]
@@ -21,7 +21,7 @@ Theorem gas_shadow_run_deploy_lowering:
   OPTREL gas_shadow_unit
     (run_deploy_lowering has rp bytes imm args size ints ce stmts pay nr key trans entry)
     (run_deploy_lowering has rp bytes imm args size
-      (MAP gas_shadow_internal_package ints) ce (MAP gas_shadow_stmt stmts) pay nr key trans entry)
+      (MAP gas_shadow_internal_package ints) (gas_shadow_env T ce) (MAP gas_shadow_stmt stmts) pay nr key trans entry)
 Proof
   rpt gen_tac >> simp[run_deploy_lowering_def] >>
   Cases_on `lowering_policy_ok rp` >> simp[] >>

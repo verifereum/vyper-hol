@@ -155,6 +155,16 @@ class Exports:
         include_regressions = not args.test and not args.fixture and regression_sources.is_dir()
         if include_regressions and regression_root.exists():
             raise ValueError(f"temporary regression directory already exists: {regression_root}")
+        # The copy's directories become packages (below); pytest stops a
+        # package path at a non-identifier name, and a package shadows a
+        # same-named module beside it.
+        if include_regressions:
+            for directory in filter(Path.is_dir, regression_sources.rglob("*")):
+                if not directory.name.isidentifier() or directory.with_suffix(".py").exists():
+                    raise ValueError(
+                        f"regression directory {directory.relative_to(self.repo)} must be named "
+                        "as a Python identifier, with no same-named .py file beside it"
+                    )
         fixture_sources = {}
         selections = list(args.test) if args.test or args.fixture else ["tests/functional"]
         if any(not test.startswith("tests/") for test in selections):
@@ -162,6 +172,11 @@ class Exports:
         try:
             if include_regressions:
                 shutil.copytree(regression_sources, regression_root)
+                # pytest names a module outside a package by its file name
+                # alone, so a regression file named like an upstream test
+                # aborts collection. Packages make the names path-qualified.
+                for directory in [regression_root, *filter(Path.is_dir, regression_root.rglob("*"))]:
+                    (directory / "__init__.py").touch()
             for source in args.fixture:
                 source = source.resolve()
                 relative = source.relative_to(self.repo).as_posix()

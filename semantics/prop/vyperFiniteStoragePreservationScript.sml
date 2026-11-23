@@ -2559,27 +2559,9 @@ Resume eval_storage_well_formed_on_mutual[Expr_Builtin]:
       imp_res_tac vyperStatePreservationTheory.next_gas_reading_state >>
       Cases_on `q` >> gvs[return_def, raise_def] >>
       irule (iffRL storage_well_formed_on_backends) >> qexists `st` >> simp[]) >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn`
-  >- (qpat_x_assum `!s x t. _ /\ bt <> Len /\ ~(_ \/ _) /\ _ ==> _` kall_tac >>
-      qpat_x_assum `!s x t. _`
-        (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-      simp_tac(srw_ss())[type_check_def, assert_def] >>
-      asm_rewrite_tac[] >> strip_tac >>
-      Cases_on `eval_exprs cx es st` >> rename1 `eval_exprs cx es st = (ar,ast)` >>
-      `storage_observations_ok cx H ast.storage_trace ==>
-       storage_well_formed_on cx ast (FST H)` by
-        (strip_tac >> qpat_x_assum `!env st res st'. _` irule >>
-         conj_tac >- simp[] >> qexistsl [`env`, `ar`, `st`] >> simp[]) >>
-      rpt (qpat_x_assum `!s x t. _` kall_tac) >>
-      simp_tac(srw_ss())[ignore_bind_def, bind_def, return_def, raise_def,
-        assert_def, lift_option_type_def, lift_sum_def, vyperMiscTheory.option_CASE_rator,
-        vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
-      rpt strip_tac >> gvs[]) >>
-  qpat_x_assum `!s x t. _ /\ bt <> Len /\ (_ \/ _) ==> _` kall_tac >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
   qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
-  qpat_assum `~(bt = Bop In \/ bt = Bop NotIn)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
     type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
   qmatch_goalsub_abbrev_tac `option_CASE (code_slice_source bt es) _ SF st` >>
@@ -2590,7 +2572,7 @@ Resume eval_storage_well_formed_on_mutual[Expr_Builtin]:
     (qpat_x_assum `option_CASE _ _ _ st = _` mp_tac >> qunabbrev_tac `SF` >>
      Cases_on `code_slice_source bt es`
      >- (simp_tac(srw_ss())[] >> rpt strip_tac >>
-         qpat_x_assum `!s x t. _ /\ _ /\ _ /\ _ /\ NONE = NONE ==> _`
+         qpat_x_assum `!s x t. _ /\ _ /\ _ /\ NONE = NONE ==> _`
            (qspecl_then [`st`, `()`, `st`] mp_tac) >>
          (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
                        gvs[type_check_def, assert_def, return_def])) >>
@@ -2602,7 +2584,7 @@ Resume eval_storage_well_formed_on_mutual[Expr_Builtin]:
      simp_tac(srw_ss())[bind_def, return_def, raise_def, get_accounts_def] >>
      Cases_on `eval_exprs cx (TL es) st` >>
      rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
-     qpat_x_assum `!s x t v c a. _ /\ _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
+     qpat_x_assum `!s x t v c a. _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
        (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
      (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
                    gvs[type_check_def, assert_def, return_def])) >>
@@ -2641,8 +2623,31 @@ Resume eval_storage_well_formed_on_mutual[Expr_Builtin]:
        drule_all >> simp[]) >>
   rpt (qpat_x_assum `!x. _` kall_tac) >>
   Cases_on `ar` >> simp_tac(srw_ss())[]
-  >- (Cases_on `evaluate_builtin cx ast.accounts ty bt (MAP expr_type es) x` >>
-      simp_tac(srw_ss())[return_def, raise_def]
+  >- (Cases_on `is_self_codesize bt es`
+      >- (simp_tac(srw_ss())[return_def, raise_def] >>
+          Cases_on `precompile_call_success bt x ast` >>
+          rename1 `precompile_call_success bt x ast = (pr,pst)` >>
+          `?suffix. pst.storage_trace = ast.storage_trace ++ suffix` by
+            metis_tac[storage_trace_frame_precompile_call_success,
+                      storage_trace_frame_prefix] >>
+          drule vyperStatePreservationTheory.precompile_call_success_state >>
+          strip_tac >> BasicProvers.VAR_EQ_TAC >>
+          Cases_on `pr` >> simp_tac(srw_ss())[] >>
+          strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+          qpat_x_assum `_ = (res,st')` mp_tac >>
+          simp_tac(srw_ss())[AllCaseEqs(), return_def, raise_def] >>
+          strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+          Cases_on `x` >> TRY (Cases_on `h`) >> TRY (Cases_on `t`) >>
+          gvs[vyperContextTheory.evaluate_self_codesize_def,
+              bind_def, return_def, raise_def] >>
+          irule (iffRL storage_well_formed_on_backends) >> qexists `ast` >>
+          simp_tac(srw_ss())[] >>
+          `storage_observations_ok cx H ast.storage_trace` by
+            (gvs[] >> metis_tac[storage_observations_ok_prefix]) >>
+          metis_tac[])
+      >- (Cases_on `evaluate_builtin cx ast.accounts ty bt (MAP expr_type es) x` >>
+          IF_CASES_TAC >> gvs[] >>
+          simp_tac(srw_ss())[return_def, raise_def]
       >- (Cases_on `precompile_call_success bt x ast` >>
           rename1 `precompile_call_success bt x ast = (pr,pst)` >>
           `?suffix. pst.storage_trace = ast.storage_trace ++ suffix` by
@@ -2652,10 +2657,15 @@ Resume eval_storage_well_formed_on_mutual[Expr_Builtin]:
           strip_tac >> BasicProvers.VAR_EQ_TAC >>
           Cases_on `pr` >> simp_tac(srw_ss())[] >>
           strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+          qpat_x_assum `_ = (res,st')` mp_tac >>
+          simp_tac(srw_ss())[AllCaseEqs(), return_def, raise_def] >>
+          strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
           irule (iffRL storage_well_formed_on_backends) >> qexists `ast` >>
-          simp_tac(srw_ss())[] >> first_x_assum irule >>
-          metis_tac[storage_observations_ok_prefix]) >>
-      rpt strip_tac >> gvs[]) >>
+          simp_tac(srw_ss())[] >>
+          `storage_observations_ok cx H ast.storage_trace` by
+            (gvs[] >> metis_tac[storage_observations_ok_prefix]) >>
+          metis_tac[]) >>
+      rpt strip_tac >> gvs[])) >>
   rpt strip_tac >> gvs[]
 QED
 

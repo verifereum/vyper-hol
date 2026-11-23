@@ -146,7 +146,12 @@ Resume body_assign_empty_scalar_suffix[memory_path]:
   simp[inst_seq_ptr_def,ifexp_materialize_mstore_ghost] >>
   fs[same_blocks_def,run_inst_seq_def,step_inst_base_opcode_eqs,mk_inst_def,
      exec_write2_def,eval_operand_def,is_terminator_def] >>
-  metis_tac[ifexp_materialize_mstore_ghost,mk_inst_def]
+  conj_tac
+  >- (strip_tac >> rpt gen_tac >> strip_tac >>
+      irule dalloca_no_wrap_non_dalloca >>
+      qpat_x_assum `[_] = _ ++ _` (mp_tac o Q.AP_TERM `MEM (i:instruction)`) >>
+      simp[] >> strip_tac >> gvs[]) >>
+  simp[GSYM mk_inst_def,ifexp_materialize_mstore_ghost]
 QED
 Resume body_assign_empty_scalar_suffix[storage]:
   gvs[compile_store_at_loc_def] >>
@@ -241,8 +246,17 @@ Resume body_assign_empty_scalar_suffix[code_path]:
   irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >> simp[] >>
   qexistsl_tac [`emitted_insts sa sb`,`sa`] >>
   fs[same_blocks_def] >>
-  conj_tac >- (fs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[is_terminator_def]) >>
-  first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]
+  conj_tac
+  >- (strip_tac >> rpt gen_tac >> strip_tac >>
+      irule dalloca_no_wrap_non_dalloca >>
+      qpat_assum `EVERY _ (emitted_insts sa sb)`
+        (qspec_then `i` mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+      simp[] >> strip_tac >> gvs[]) >>
+  first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[] >>
+  disch_then kall_tac >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  qpat_assum `EVERY _ (emitted_insts sa sb)` (drule o REWRITE_RULE[EVERY_MEM]) >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 Finalise body_assign_empty_scalar_suffix
 
@@ -257,6 +271,7 @@ Theorem body_assign_local_memory_empty_full:
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (NameTarget id)) e) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
@@ -272,7 +287,8 @@ Theorem body_assign_local_memory_empty_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty
+        (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>

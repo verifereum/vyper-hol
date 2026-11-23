@@ -17,7 +17,7 @@ Ancestors
   stmtSimDefs
   exprSimDefs
   loweringPosts exprSimTypedAlloc
-  gasContext gasExemptCert
+  gasContext gasExemptCert gasShadowCompileStmtHelpers
   bodySimFull bodySim bodyPtrDefs gasOutcomeFullCompose gasOutcomeFull
   fragGasOriginPtr fragGasOriginPtrExec fragGasSeqPtr gasShadowState
   vyperStorageTrace vyperStorageFootprint
@@ -1075,7 +1075,7 @@ Theorem compile_return_none_int_frag_full_taint:
                imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i))
       cenv
       (stmt_env cenv lctx ty (Return NONE))
-      (stmt_env cenv lctx ty (Return NONE))
+      (stmt_env (gas_shadow_env T cenv) lctx ty (Return NONE))
       (eval_stmt cx (Return NONE)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1154,7 +1154,7 @@ Theorem compile_return_none_int_frag_full:
       (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r)
       cenv
       (stmt_env cenv lctx ty (Return NONE))
-      (stmt_env cenv lctx ty (Return NONE))
+      (stmt_env (gas_shadow_env T cenv) lctx ty (Return NONE))
       (eval_stmt cx (Return NONE)) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1282,16 +1282,6 @@ Proof
       gas_shadow_state_def]
 QED
 
-Theorem emitted_ret_shadow_prefix[local]:
-  emit_inst RET [op; rpc] [] sm = ((), sb) /\
-  emit_inst RET [shadow_op; rpc] [] shadow_sm = ((), shadow_sb) /\
-  gas_shadow_state sb shadow_sb ==>
-  op = shadow_op /\ gas_shadow_state sm shadow_sm
-Proof
-  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
-  strip_tac >> gvs[gas_shadow_state_def, gas_shadow_inst_def, mk_inst_def]
-QED
-
 Theorem return_word_compile_parts[local]:
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
   cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
@@ -1413,7 +1403,7 @@ Theorem compile_return_word_int_frag_full_taint:
          (!i. i < lo /\ i IN (SND gt).t_mem ==>
               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) cenv
      (stmt_env cenv lctx ty (Return (SOME e)))
-     (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+     (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
      (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1424,13 +1414,12 @@ Proof
   qpat_assum `stmt_env _ _ _ (Return (SOME (gas_shadow_expr e))) shadow_sa = _`
     (mp_then Any mp_tac return_word_compile_parts) >> simp[] >>
     disch_then drule_all >> strip_tac >>
-  rename1 `lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+  rename1 `lower_value compile_expr _ _ (gas_shadow_expr e) shadow_sa =
              (shadow_op, shadow_sm)` >>
-  rename1 `compile_return_unlock cenv shadow_sm = ((), shadow_su)` >>
-  `op = shadow_op /\ gas_shadow_state su shadow_su` by
-    metis_tac[emitted_ret_shadow_prefix] >>
-  `gas_shadow_state sm shadow_sm` by
-    metis_tac[return_unlock_shadow_prefix] >>
+  `op = shadow_op /\ gas_shadow_state sm shadow_sm` by
+    (qpat_x_assum `gas_shadow_state sb shadow_sb` kall_tac >>
+     drule (REWRITE_RULE[gas_shadow_compiles_def] gas_shadow_stmt_lower_value_env) >>
+     disch_then (qspecl_then [`ty`, `T`, `e`, `cenv`] mp_tac) >> simp[]) >>
   qpat_x_assum `op = shadow_op` SUBST_ALL_TAC >>
   rpt (qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
@@ -1567,7 +1556,7 @@ Theorem compile_return_word_int_frag_full:
    stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx lctx
      (\H v ee gt r. intret_q H func cenv cx tv v ee r) cenv
      (stmt_env cenv lctx ty (Return (SOME e)))
-     (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+     (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
      (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> strip_tac >>

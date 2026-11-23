@@ -1,14 +1,19 @@
 (* Borrowed tuple bytes: pointer evaluation is distinct from writes. *)
 Theory tuplePlaceBorrow
 Ancestors
+  supportedExprTraverse
   tuplePlaceSnapshot tuplePlaceSource supportedTargets bodySimAugPlaceScopes
   vyperPlaceFrames vyperInterpreter vyperState vyperMisc vyperValue
   vyperScopePreservation vyperPlaceStatePreservation exprSimSource loweringPosts
-  targetPlaceLive
+  targetPlaceLive vyperTypeSystem vyperTypeEnv vyperSubscriptOverlap vyperAST
+  vyperLocalAccessFrame vyperValueOperation finite_map list pair
+  exprSimAttributeFields exprSimHypsDefs valueEncoding valueEncodingDefs
+  exprSimProps tuplePlaceGeometry
 
 Theorem tuple_place_supported_target_scopes:
   !bt tops cx es res ee.
     EVERY (supported_expr tops) (target_indices bt) /\
+    EVERY (\e. ~supported_expr_exists expr_effect_root e) (target_indices bt) /\
     eval_base_place cx bt es = (res,ee) ==> ee.scopes = es.scopes
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >> rpt gen_tac
@@ -21,32 +26,21 @@ Proof
       simp[vyperASTTheory.expr_size_def] >> strip_tac >> rpt strip_tac >>
       qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      strip_tac >> gvs[target_indices_def] >>
+      strip_tac >> gvs[supportedExprsTheory.target_indices_def] >>
       imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
-      imp_res_tac aug_place_supported_expr_scopes >>
+      imp_res_tac (REWRITE_RULE [expr_has_effect_def]
+        targetPureSourceFrameTheory.effect_free_source_projection) >>
+      fs[evaluation_state_component_equality] >>
       rpt (qpat_x_assum `_ = _ with storage_trace := _` (fn th => ONCE_REWRITE_TAC [th])) >>
       gvs[] >> metis_tac[])
   >> (qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
       simp[vyperASTTheory.expr_size_def] >> strip_tac >> rpt strip_tac >>
       qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      strip_tac >> gvs[target_indices_def] >>
+      strip_tac >> gvs[supportedExprsTheory.target_indices_def] >>
       imp_res_tac extend_place_state >>
       rpt (qpat_x_assum `_ = _ with storage_trace := _` (fn th => ONCE_REWRITE_TAC [th])) >>
       gvs[] >> metis_tac[])
-QED
-
-Theorem tuple_place_supported_target_borrow_bytes:
-  EVERY (supported_expr tops) (target_indices bt) /\
-  eval_base_place cx bt es = (res,ee) /\
-  target_post H ctx func cenv cx es sa sb s0 ee pv vt r s /\
-  local_region cenv es.scopes s0 n b sz ==>
-  mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory
-Proof
-  rpt strip_tac >>
-  drule_all tuple_place_supported_target_scopes >> strip_tac >>
-  irule tuple_place_target_unchanged_local >> goal_assum (drule_at Any) >>
-  simp[] >> metis_tac[]
 QED
 
 Theorem tuple_place_borrowed_tuple_path:
@@ -143,3 +137,147 @@ QED
    common-endpoint obligation is solved. No universal separation or store
    contract is certified by this diagnostic, and no root premise is changed.
 *)
+
+Theorem typed_expr_tuple_local_no_write[local]:
+  (!env e. well_typed_expr env e ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) ==>
+    ~MEM (WriteAcc (LocalRef id)) (accesses_expr e)) /\
+  (!env e vt. type_place_expr env e = SOME vt ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) ==>
+    ~MEM (WriteAcc (LocalRef id)) (accesses_expr e)) /\
+  (!env t vt. type_place_target env t = SOME vt ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) /\
+    MEM (WriteAcc (LocalRef id)) (accesses_target t) ==>
+    t = NameTarget id /\ vt = Type (TupleT tys)) /\
+  (!env es. well_typed_exprs env es ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) ==>
+    ~MEM (WriteAcc (LocalRef id)) (accesses_exprs es)) /\
+  (!env eo. well_typed_opt env eo ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) ==>
+    ~MEM (WriteAcc (LocalRef id)) (accesses_opt eo)) /\
+  (!env es. well_typed_named_exprs env es ==> !id tys.
+    FLOOKUP env.var_types id = SOME (TupleT tys) ==>
+    ~MEM (WriteAcc (LocalRef id)) (accesses_named_exprs es))
+Proof
+  ho_match_mp_tac well_typed_expr_ind >> rpt strip_tac >>
+  gvs[well_typed_expr_def, accesses_expr_def, AllCaseEqs()] >>
+  TRY (qmatch_asmsub_rename_tac `risky_builtin bi` >>
+       Cases_on `risky_builtin bi` >> gvs[]) >>
+  TRY (qmatch_asmsub_rename_tac `risky_call_target call` >>
+       Cases_on `risky_call_target call` >> gvs[]) >>
+  res_tac >> gvs[subscript_vtype_def, attribute_type_def]
+QED
+
+Theorem typed_tuple_local_target_entry:
+  !t env vt cx es p ee id tys.
+    type_place_target env t = SOME vt /\
+    FLOOKUP env.var_types id = SOME (TupleT tys) /\
+    eval_base_place cx t es = (INL p,ee) ==>
+    lookup_scopes id ee.scopes = lookup_scopes id es.scopes
+Proof
+  measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >> rpt gen_tac
+  >- (simp[Once evaluate_def, bind_def, get_scopes_def, type_check_def,
+           assert_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[])
+  >- (PairCases_on `p` >> simp[Once evaluate_def] >> metis_tac[lookup_global_scopes])
+  >- (qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >> simp[expr_size_def] >>
+      strip_tac >> rpt strip_tac >> fs[type_place_target_SubscriptTarget] >>
+      qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      strip_tac >> gvs[] >> imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
+      imp_res_tac (cj 1 typed_expr_tuple_local_no_write) >>
+      imp_res_tac eval_expr_unwritten_local >>
+      qpat_x_assum `ee = _` SUBST1_TAC >> simp[] >>
+      first_x_assum drule_all >> simp[])
+  >- (qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >> simp[expr_size_def] >>
+      strip_tac >> rpt strip_tac >> fs[type_place_target_AttributeTarget] >>
+      qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      strip_tac >> gvs[] >> imp_res_tac extend_place_state >>
+      qpat_x_assum `ee = _` SUBST1_TAC >> simp[] >>
+      first_x_assum drule_all >> simp[])
+QED
+
+Theorem tuple_borrow_no_array_headers_frame:
+  !H ctx func cenv cx env es sa sb s0 ee pv vt r s id b sz off tvs.
+  expr_sim_inv cenv cx env es /\
+  target_post H ctx func cenv cx es sa sb s0 ee pv vt r s /\
+  local_region cenv es.scopes s0 id b sz /\
+  b <= off /\ off + type_memory_size (TupleTV tvs) <= b + sz /\
+  local_path_at cenv cx id (off-b) (TupleTV tvs) /\
+  dynarray_free (TupleTV tvs) ==>
+  mem_bytes_at off (type_memory_size (TupleTV tvs)) s.vs_memory =
+  mem_bytes_at off (type_memory_size (TupleTV tvs)) s0.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >> fs[target_post_def] >>
+  qpat_x_assum `locals_kept _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
+  disch_then irule >> qexistsl_tac [`b`,`id`,`sz`] >> simp[] >>
+  rpt strip_tac >> drule dynarray_len_untupled_imp_at >> strip_tac >>
+  drule_all local_path_at_dynarray_apart >> decide_tac
+QED
+
+(* The header of an enclosing dynamic array precedes every child. Any
+   other reachable header has a path disjoint from the tuple's path. *)
+Theorem tuple_place_dynamic_header_apart[local]:
+  mem_path_offset root tuple_path = SOME (off,TupleTV tvs) /\
+  mem_path_offset root header_path = SOME (k,ArrayTV etv (Dynamic n)) /\
+  tuple_place_no_tuple_step root header_path ==>
+  off + type_memory_size (TupleTV tvs) <= k \/ k + 32 <= off
+Proof
+  strip_tac >>
+  Cases_on `?tail. header_path = tuple_path ++ tail`
+  >- (pop_assum (qx_choose_then `tail` SUBST_ALL_TAC) >>
+      Cases_on `tail` >- gvs[] >>
+      qpat_x_assum `tuple_place_no_tuple_step _ _`
+        (mp_tac o REWRITE_RULE [tuple_place_no_tuple_step_def]) >>
+      disch_then (qspecl_then [`tuple_path`, `h`, `t`, `off`, `tvs`] mp_tac) >>
+      simp[]) >>
+  Cases_on `?tail. tuple_path = header_path ++ tail`
+  >- (pop_assum (qx_choose_then `tail` SUBST_ALL_TAC) >>
+      Cases_on `tail` >- gvs[] >>
+      drule mem_path_offset_append_decompose >> strip_tac >> gvs[] >>
+      Cases_on `h` >> gvs[mem_path_offset_def, mem_step_offset_def,
+                          AllCaseEqs(), EXISTS_PROD] >>
+      Cases_on `v` >> gvs[mem_step_offset_def, AllCaseEqs(), EXISTS_PROD] >>
+      decide_tac) >>
+  drule_all tuple_place_paths_apart >> simp[type_memory_size_def] >> decide_tac
+QED
+
+Theorem tuple_borrow_untupled_header_apart[local]:
+  expr_sim_inv cenv cx env es /\
+  local_path_at cenv cx id off (TupleTV tvs) /\
+  dynarray_len_untupled cenv id k ==>
+  off + type_memory_size (TupleTV tvs) <= k \/ k + 32 <= off
+Proof
+  rw[local_path_at_def, dynarray_len_untupled_def] >> gvs[] >>
+  rename1 `type_path_offset cenv root_ty header_path = SOME (k,ArrayT et (Dynamic n))` >>
+  rename1 `evaluate_type (get_tenv cx) root_ty = SOME root_tv` >>
+  `tuple_place_no_tuple_step root_tv header_path` by
+    (simp[tuple_place_no_tuple_step_def] >> rpt strip_tac >>
+     drule_all mem_path_offset_type >> strip_tac >>
+     `?tys. pt = TupleT tys` by
+       (qpat_x_assum `evaluate_type _ pt = _` mp_tac >>
+        Cases_on `pt` >> simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+     gvs[] >> metis_tac[]) >>
+  drule_all type_path_offset_mem >> strip_tac >>
+  qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
+  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  irule tuple_place_dynamic_header_apart >> metis_tac[]
+QED
+
+Theorem tuple_borrow_locals_kept:
+  expr_sim_inv cenv cx env inv_state /\
+  locals_kept cenv es ee s0 s /\
+  local_region cenv es.scopes s0 id b sz /\
+  b <= off /\ off + type_memory_size (TupleTV tvs) <= b + sz /\
+  local_path_at cenv cx id (off - b) (TupleTV tvs) ==>
+  mem_bytes_at off (type_memory_size (TupleTV tvs)) s.vs_memory =
+  mem_bytes_at off (type_memory_size (TupleTV tvs)) s0.vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `locals_kept _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
+  disch_then irule >> qexistsl_tac [`b`, `id`, `sz`] >> simp[] >>
+  rpt strip_tac >> drule_all tuple_borrow_untupled_header_apart >> decide_tac
+QED

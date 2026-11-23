@@ -190,7 +190,7 @@ Theorem extcall_fetched_abort_path[local]:
   (!j. w2n iw <= j /\ j < w2n iw + w2n nw ==> j NOTIN tn.t_mem) /\
   (nw = 0w \/ w2n iw + w2n nw <= t.vs_alloca_next) /\
   (n2w cap = (0w:bytes32) \/ w2n rw + w2n (n2w cap:bytes32) <= t.vs_alloca_next) /\
-  allocas_from lo t /\ ~ctx_has_dalloca ctx /\ ~t.vs_halted /\
+  allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ ~t.vs_halted /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
   (!fuel. step_inst fuel ctx inst t = Abort a u) ==>
@@ -238,7 +238,7 @@ Theorem extcall_fetched_select[local]:
                   w2n ao + w2n az <= t.vs_alloca_next) /\
     (!j. w2n ao <= j /\ j < w2n ao + w2n az ==> j NOTIN tn.t_mem)) /\
   (cap <> 0 ==> ?p. buf = Var p /\ ptr_covers G tn p t cap) /\
-  allocas_from lo t /\ ~ctx_has_dalloca ctx ==>
+  allocas_from lo t ==>
   ((?err. (!tail. bind (frame_call_value cx value_opt)
       (\framed. eval_ext_call_effects cx target calldata framed source_gas ee.accounts)
       (ee with gas_obs := tail) =
@@ -253,6 +253,9 @@ Proof
   qhdtm_assum `extcall_request_ready`
     (strip_assume_tac o REWRITE_RULE [extcall_request_ready_def]) >>
   `stmt_state_rel H ctx func cenv cx ee t` by metis_tac[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx ee t`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `?gw. eval_operand gas t = SOME gw` by (Cases_on `eval_operand gas t` >> gs[]) >>
   `w2n (n2w cap : bytes32) = cap` by (simp[w2n_n2w] >> decide_tac) >>
   `w2n ro + cap <= t.vs_alloca_next` by
@@ -471,7 +474,7 @@ Theorem extcall_call_stage_full:
          (emit_void RETURNDATACOPY [fail_buf.buf_operand;Lit 0w;rds])
        (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand;rds] [])
          (new_block cont_lbl)))))))))) sp = (u,sr) /\
-  fn_has_code sp sr func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sp sr func /\ fn_inst_ids_distinct func /\
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee s /\

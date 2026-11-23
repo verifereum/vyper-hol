@@ -402,61 +402,9 @@ Proof
   simp[]
 QED
 
-(* ========== FOLDL projection for ops-accumulating step functions ==========
-   Many codegen functions are FOLDL of the form:
-     FOLDL (\(ops,ps) item. let (step_ops,ps') = f item ps in (ops++step_ops, ps'))
-   The plan_state (ps) is threaded; the ops just accumulate.
-
-   Key insight: foldl_snd_projection shows SND of this FOLDL equals a simpler
-   single-accumulator FOLDL, eliminating all pair-lambda issues from proofs. *)
-
-Theorem foldl_snd_projection[local]:
-  !f items init_ops init_ps.
-    SND (FOLDL (\(acc,ps) item.
-      let (ops,ps') = f item ps in (acc ++ ops, ps'))
-      (init_ops, init_ps) items)
-    = FOLDL (\ps item. SND (f item ps)) init_ps items
-Proof
-  gen_tac >> Induct >> rpt gen_tac >> simp[FOLDL] >>
-  Cases_on `f h init_ps` >>
-  simp[LET_THM] >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  first_x_assum (qspecl_then [`init_ops ++ q`, `r`] mp_tac) >>
-  simp[LET_THM] >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  simp[]
-QED
-
-Theorem foldl_simple_spill_base[local]:
-  !f items init_ps.
-    (!item ps. (SND (f item ps)).ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base) ==>
-    (FOLDL (\ps item. SND (f item ps)) init_ps items).ps_alloc.sa_spill_base =
-    init_ps.ps_alloc.sa_spill_base
-Proof
-  gen_tac >> Induct >> simp[FOLDL]
-QED
-
-Theorem foldl_simple_next_offset[local]:
-  !f items init_ps.
-    (!item ps. ps.ps_alloc.sa_next_offset <=
-               (SND (f item ps)).ps_alloc.sa_next_offset) ==>
-    init_ps.ps_alloc.sa_next_offset <=
-    (FOLDL (\ps item. SND (f item ps)) init_ps items).ps_alloc.sa_next_offset
-Proof
-  gen_tac >> Induct >> simp[FOLDL] >>
-  rpt strip_tac >>
-  `init_ps.ps_alloc.sa_next_offset <=
-   (SND (f h init_ps)).ps_alloc.sa_next_offset` by simp[] >>
-  `(SND (f h init_ps)).ps_alloc.sa_next_offset <=
-   (FOLDL (\ps item. SND (f item ps)) (SND (f h init_ps)) items)
-    .ps_alloc.sa_next_offset` by metis_tac[] >>
-  decide_tac
-QED
-
 (* ========== reorder_plan (FOLDL of reorder_one) ========== *)
 
-(* Pair-item version of foldl_snd_projection:
-   SND of pair-accum FOLDL with pair-items = simple FOLDL on SND *)
+(* SND of pair-accum FOLDL with pair-items = simple FOLDL on SND *)
 Theorem foldl_pair_item_snd_projection[local]:
   !g items init_ops init_ps.
     SND (FOLDL (\(acc,ps) (a,b).
@@ -502,18 +450,52 @@ Proof
   simp[]
 QED
 
+Theorem reorder_reduce_fold_alloc[local]:
+  !ordered targets ps acc ops post.
+    FOLDL (\(ops,st) op.
+      (\(step,st'). (ops ++ step,st'))
+        (reduce_depth_plan (LENGTH st.ps_stack - LENGTH targets)
+          targets op 0 0 st)) (acc,ps) ordered = (ops,post) ==>
+    post.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
+    ps.ps_alloc.sa_next_offset <= post.ps_alloc.sa_next_offset
+Proof
+  Induct >> simp[] >> rpt gen_tac >> pairarg_tac >> simp[] >> strip_tac >>
+  first_x_assum (qspecl_then
+    [`targets`, `st'`, `acc ++ step'`, `ops`, `post`] mp_tac) >>
+  simp[LET_THM] >> strip_tac >>
+  metis_tac[reduce_depth_plan_spill_base, reduce_depth_plan_next_offset,
+    LESS_EQ_TRANS]
+QED
+
+Theorem reorder_prepare_plan_alloc[local]:
+  !targets ps ops post.
+    reorder_prepare_plan targets ps = (ops,post) ==>
+    post.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
+    ps.ps_alloc.sa_next_offset <= post.ps_alloc.sa_next_offset
+Proof
+  rpt gen_tac >> simp[reorder_prepare_plan_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  drule (SRULE [LET_THM] reorder_reduce_fold_alloc) >> strip_tac >>
+  metis_tac[restore_spilled_plan_spill_base, restore_spilled_plan_next_offset,
+    LESS_EQ_TRANS]
+QED
+
 Theorem reorder_plan_spill_base:
   !dfg target_ops ps ops ps'.
     reorder_plan dfg target_ops ps = (ops, ps') ==>
     ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base
 Proof
-  rpt gen_tac >> PURE_REWRITE_TAC[reorder_plan_def] >> strip_tac >>
-  `ps' = SND (ops, ps')` by simp[] >> pop_assum SUBST1_TAC >>
-  qpat_x_assum `FOLDL _ _ _ = _` (SUBST1_TAC o GSYM) >>
-  PURE_REWRITE_TAC[foldl_pair_item_snd_projection] >>
-  match_mp_tac foldl_pair_simple_spill_base >> rpt gen_tac >>
-  Cases_on `reorder_one dfg target_ops a b ps` >> simp[] >>
-  metis_tac[reorder_one_spill_base]
+  rpt gen_tac >> simp[reorder_plan_def] >> pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `reorder_prepare_plan target_ops ps = (prep,prepared)` >>
+  `ps'.ps_alloc.sa_spill_base = prepared.ps_alloc.sa_spill_base` by
+    (`ps' = SND (ops,ps')` by simp[] >> pop_assum SUBST1_TAC >>
+     qpat_x_assum `FOLDL _ _ _ = _` (SUBST1_TAC o GSYM) >>
+     PURE_REWRITE_TAC[SRULE [LET_THM] foldl_pair_item_snd_projection] >>
+     match_mp_tac foldl_pair_simple_spill_base >> rpt gen_tac >>
+     qmatch_goalsub_abbrev_tac `SND step` >>
+     Cases_on `step` >> gvs[markerTheory.Abbrev_def] >>
+     metis_tac[reorder_one_spill_base]) >>
+  metis_tac[reorder_prepare_plan_alloc]
 QED
 
 Theorem reorder_plan_next_offset:
@@ -521,13 +503,17 @@ Theorem reorder_plan_next_offset:
     reorder_plan dfg target_ops ps = (ops, ps') ==>
     ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
 Proof
-  rpt gen_tac >> PURE_REWRITE_TAC[reorder_plan_def] >> strip_tac >>
-  `ps' = SND (ops, ps')` by simp[] >> pop_assum SUBST1_TAC >>
-  qpat_x_assum `FOLDL _ _ _ = _` (SUBST1_TAC o GSYM) >>
-  PURE_REWRITE_TAC[foldl_pair_item_snd_projection] >>
-  match_mp_tac foldl_pair_simple_next_offset >> rpt gen_tac >>
-  Cases_on `reorder_one dfg target_ops a b ps` >> simp[] >>
-  metis_tac[reorder_one_next_offset]
+  rpt gen_tac >> simp[reorder_plan_def] >> pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `reorder_prepare_plan target_ops ps = (prep,prepared)` >>
+  `prepared.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset` by
+    (`ps' = SND (ops,ps')` by simp[] >> pop_assum SUBST1_TAC >>
+     qpat_x_assum `FOLDL _ _ _ = _` (SUBST1_TAC o GSYM) >>
+     PURE_REWRITE_TAC[SRULE [LET_THM] foldl_pair_item_snd_projection] >>
+     match_mp_tac foldl_pair_simple_next_offset >> rpt gen_tac >>
+     qmatch_goalsub_abbrev_tac `SND step` >>
+     Cases_on `step` >> gvs[markerTheory.Abbrev_def] >>
+     metis_tac[reorder_one_next_offset]) >>
+  metis_tac[reorder_prepare_plan_alloc, LESS_EQ_TRANS]
 QED
 
 (* ========== SND-form simp rules for fn_eom ========== *)
@@ -1153,7 +1139,7 @@ Proof
     rpt gen_tac >> strip_tac >>
     simp[Once generate_fn_plan_aux_def] >>
     every_case_tac >> gvs[] >>
-    strip_tac >> gvs[] >> decide_tac
+    strip_tac >> gvs[MAX_LE] >> decide_tac
   )
 QED
 
@@ -1188,7 +1174,7 @@ Proof
   ho_match_mp_tac generate_fn_plan_aux_fuel_ind >> rpt conj_tac >>
   rpt gen_tac >> simp[Once generate_fn_plan_aux_fuel_def] >>
   every_case_tac >> gvs[] >> rpt strip_tac >>
-  imp_res_tac generate_block_plan_alloc_mono >> gvs[] >> decide_tac
+  imp_res_tac generate_block_plan_alloc_mono >> gvs[MAX_LE] >> decide_tac
 QED
 
 Theorem generate_fn_plan_fuel_alloc_mono:

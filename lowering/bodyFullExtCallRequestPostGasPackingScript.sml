@@ -72,7 +72,7 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Theorem post_gas_indexed_rows[local]:
+Theorem post_gas_indexed_rows:
   env.type_defs = get_tenv cx /\ expr_sim_inv cenv cx env pos /\
   (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
   LIST_REL (\e v. value_runtime_typed env (lowered_value_type cenv e) v) xs vs /\
@@ -165,14 +165,15 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem post_gas_tuple_plan[local]:
+Theorem post_gas_encoding_plans[local]:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env ee /\
   EVERY (assignable_type (get_tenv cx)) tys /\
   SUM (MAP (type_memory_bytes cenv) tys) < 2**64 ==>
   abi_size_bound cenv.ce_struct_fields (TupleT tys) =
     vyper_abi_size_bound (get_tenv cx) (TupleT tys) /\
-  abi_enc_plan (get_tenv cx) (TupleT tys)
-    (type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT tys))
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!ty. MEM ty tys ==> abi_enc_plan (get_tenv cx) ty
+    (type_to_abi_enc_info cenv.ce_struct_fields cenv ty))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all bodyCustomErrorWindowBoundsTheory.custom_error_invariant_layout >>
@@ -195,9 +196,10 @@ Proof
     simp[cj 2 vyperValueTheory.evaluate_type_def, vyperValueTheory.evaluate_types_OPT_MMAP,
          vyperValueTheory.type_slot_size_def, arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
   conj_tac >- metis_tac[] >>
-  Cases_on `tys = []` >- gvs[exprSimAbiEncodePlanDomainTheory.abi_encode_empty_tuple_compiled_plan] >>
-  `assignable_type (get_tenv cx) (TupleT tys)` by
-    simp[vyperTypeSystemTheory.assignable_type_def, vyperTypeSystemTheory.well_formed_type_def] >>
+  gen_tac >> disch_tac >>
+  `assignable_type (get_tenv cx) ty` by
+    (qpat_assum `EVERY (assignable_type (get_tenv cx)) tys`
+       (drule_then ACCEPT_TAC o REWRITE_RULE [listTheory.EVERY_MEM])) >>
   irule retAbiPlanPropsTheory.type_to_abi_enc_info_plan >>
   simp[] >> qexists `get_tenv cx` >> simp[finite_mapTheory.SUBMAP_REFL]
 QED
@@ -611,20 +613,14 @@ Theorem extcall_request_post_gas_packing:
         (if needs_external_call_wrap rt then TupleT [rt] else rt)) + 32) s5 = (ba,sb1) /\
   emit_void MSTORE [ba.buf_operand;Lit (n2w (cenv.ce_method_id fname ats))] sb1 = ((),sb2) /\
   (if av = [] then comp_return (Lit 4w) else
-     comp_bind
-       (compile_alloc_buffer (SUM (MAP (type_memory_bytes cenv) (MAP (lowered_value_type cenv) xs))))
-       (\aa.
-     comp_ignore_bind
-       (compile_extcall_store_values cenv (ZIP (av,MAP (lowered_value_type cenv) xs)) aa.buf_operand 0)
-     (comp_bind (emit_op ADD [ba.buf_operand;Lit 32w]) (\dst.
-      comp_bind
-        (compile_abi_encode_to_buf dst aa.buf_operand
-          (type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT (MAP (lowered_value_type cenv) xs))))
-        (\alen. emit_op ADD [alen;Lit 4w]))))) sb2 = (len,sb3) /\
+     comp_bind (emit_op ADD [ba.buf_operand;Lit 32w]) (\dst.
+      comp_bind (compile_abi_encode_values_to_buf cenv dst
+        (ZIP (av,MAP (lowered_value_type cenv) xs))) (\alen.
+      emit_op ADD [alen;Lit 4w]))) sb2 = (len,sb3) /\
   emit_op ADD [ba.buf_operand;Lit 28w] sb3 = (off,sp) /\
   fn_has_code s5 sb1 func /\ fn_has_code sb1 sb2 func /\
   fn_has_code sb2 sb3 func /\ fn_has_code sb3 sp func /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   valid_horizon cx st0 H ke.storage_trace /\
   stmt_state_rel (H0 : (bool # bytes32 # type_value) list # num list) ctx func cenv cx es s0 /\
@@ -751,7 +747,7 @@ Proof
      impl_tac >- simp[] >>
      simp[listTheory.LIST_REL_EL_EQN]) >>
   drule_all post_gas_lowered_assignable >> disch_then assume_tac >>
-  drule_all post_gas_tuple_plan >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all post_gas_encoding_plans >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `LENGTH vs = LENGTH xs` by metis_tac[listTheory.LIST_REL_LENGTH] >>
   `LENGTH xs = LENGTH ats` by
     (qpat_assum `arg_types_fit _ _` mp_tac >>
@@ -839,8 +835,6 @@ Proof
      simp[safe_operand_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
   qabbrev_tac `ptys = MAP (lowered_value_type cenv) xs` >>
   irule (Q.INST [`tys` |-> `ptys`, `abi` |-> `abi_size_bound cenv.ce_struct_fields (TupleT ptys)`,
-    `aenc` |-> `type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT ptys)`,
-    `mem` |-> `SUM (MAP (type_memory_bytes cenv) ptys)`,
     `mid` |-> `cenv.ce_method_id fname ats`, `sb` |-> `sb1`, `se` |-> `s5`,
     `sf` |-> `sb3`, `sm` |-> `sb2`, `vals` |-> `av`, `xs` |-> `xs`,
     `H0` |-> `H0`, `arg_types` |-> `ats`]
@@ -865,7 +859,7 @@ Proof
        irule vyperArithTheory.lt_dimword_256 >> qexists `64` >>
        qpat_assum `MAX _ _ + 32 < 2**64` mp_tac >>
        simp[NoAsms, arithmeticTheory.MAX_DEF] >> decide_tac)
-  >> TRY (FIRST_PROVE [simp[NoAsms, Abbr `ptys`]])
+  >> simp[NoAsms, Abbr `ptys`]
   >- (mp_tac (Q.INST [`pos` |-> `mid`, `se` |-> `s5`, `ee` |-> `ke`,
                        `t` |-> `zg`, `G` |-> `Gg`, `tn` |-> `tng`]
                post_gas_indexed_rows) >>

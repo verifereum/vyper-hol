@@ -3,7 +3,7 @@ Theory bodyFullRawCallHeader
 Ancestors
   bodyFullRawCallHeaderView bodyFullGhostFrame
   bodyPtrHashBuiltinsShaPrefix[qualified,ignore_grammar]
-  fragGasCopyLoop[qualified,ignore_grammar]
+  fragGasCopyLoop[qualified,ignore_grammar] fragGasCopySeqLiftProps[qualified,ignore_grammar]
   exprSimHash exprSimHashBoundary exprSimProps exprLoweringProps
   fragGasSeqPtr bodyBinopFragMemory
   bodyMemoryDefs bodyPtrDefs loweringPosts ghostPcTransportPtr ptrSafetyTransport
@@ -162,7 +162,7 @@ Resume raw_call_header_joint[path]:
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> ALLOCA)
       (emitted_insts s2 s4)` by simp[mk_inst_def] >>
   `inst_seq_ptr D lo ctx fn PG G tn (emitted_insts s2 s4) s G4 tn4` by
-    (irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
+    (irule fragGasCopySeqLiftPropsTheory.inst_seq_ptr_lower_bound_transport >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- first_assum ACCEPT_TAC >>
      qexists_tac `0` >> conj_tac >- simp[] >> first_assum ACCEPT_TAC) >>
@@ -170,6 +170,13 @@ Resume raw_call_header_joint[path]:
       (emitted_insts s2 s4) /\
    FILTER (\i. i.inst_opcode = GAS) (emitted_insts s2 s4) = []` by
     simp[mk_inst_def, is_terminator_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. emitted_insts s2 s4 = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts s2 s4)` by
+       simp[mk_inst_def] >>
+     fs[EVERY_MEM] >> rpt strip_tac >>
+     irule dalloca_no_wrap_non_dalloca >> metis_tac[MEM_APPEND, MEM]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >>
   simp[Abbr `t4`]
 QED

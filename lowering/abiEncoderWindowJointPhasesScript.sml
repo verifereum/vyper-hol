@@ -329,6 +329,15 @@ Proof
      `run_inst_seq [ai;si] s = OK raw` by
        metis_tac[markerTheory.Abbrev_def] >>
      `inst_seq_ptr D lo ctx func PG G tn [ai;si] s Ga tf` by metis_tac[] >>
+     `(ptrDiscipline$ctx_has_dalloca ctx ==>
+       !pre i post u. [ai;si] = pre ++ i::post /\
+         run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        `MEM i [ai;si]` by metis_tac[MEM_APPEND, MEM] >>
+        qpat_x_assum `MEM i [ai;si]`
+          (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+        simp[Abbr `ai`, Abbr `si`, mk_inst_def,
+             unitTransformDefsTheory.dalloca_no_wrap_def]) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
      simp_tac (srw_ss()) [Abbr `ai`, Abbr `si`, mk_inst_def] >>
      asm_rewrite_tac[] >> metis_tac[]) >>
@@ -546,7 +555,12 @@ Resume window_array_root_prefix_joint_strong[word_pre]:
    eval_operand src u = SOME (n2w sb) /\
    eval_operand dst u = SOME (n2w d) /\
    sb+32 <= u.vs_alloca_next /\ d+32 <= u.vs_alloca_next` by
-    (fs[window_array_root_def] >> decide_tac) >>
+    (qpat_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ u` mp_tac >>
+     qpat_assum `32 <= cap` mp_tac >>
+     qpat_assum `32 <= LENGTH (enc (Array NONE ty) (ListV avs))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac bool_ss [window_array_root_def] >> rpt strip_tac >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   `u.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
   `~u.vs_halted /\ u.vs_current_bb = c1.cs_current_bb /\
    u.vs_inst_idx = LENGTH c1.cs_current_insts` by
@@ -1129,6 +1143,15 @@ Proof
      `run_inst_seq [ai;mi;si] s = OK raw` by
        metis_tac[markerTheory.Abbrev_def] >>
      `inst_seq_ptr D lo ctx func PG G tn [ai;mi;si] s Gm tf` by metis_tac[] >>
+     `(ptrDiscipline$ctx_has_dalloca ctx ==>
+       !pre i post u. [ai;mi;si] = pre ++ i::post /\
+         run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        `MEM i [ai;mi;si]` by metis_tac[MEM_APPEND, MEM] >>
+        qpat_x_assum `MEM i [ai;mi;si]`
+          (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+        simp[Abbr `ai`, Abbr `mi`, Abbr `si`, mk_inst_def,
+             unitTransformDefsTheory.dalloca_no_wrap_def]) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
      simp_tac (srw_ss()) [Abbr `ai`, Abbr `mi`, Abbr `si`, mk_inst_def] >>
      asm_rewrite_tac[] >> metis_tac[]) >>
@@ -1548,6 +1571,15 @@ Proof
         POP_ASSUM_LIST (K ALL_TAC) >>
         simp[window_pure_seq_def, window_seq_def] >> metis_tac[]) >>
      `inst_seq_ptr D lo ctx func PG G tn [i1;i2;i3] s G3 tn3` by metis_tac[] >>
+     `(ptrDiscipline$ctx_has_dalloca ctx ==>
+       !pre i post u. [i1;i2;i3] = pre ++ i::post /\
+         run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        `MEM i [i1;i2;i3]` by metis_tac[MEM_APPEND, MEM] >>
+        qpat_x_assum `MEM i [i1;i2;i3]`
+          (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+        simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def,
+             unitTransformDefsTheory.dalloca_no_wrap_def]) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
      simp_tac (srw_ss()) [Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def] >>
      asm_rewrite_tac[] >> metis_tac[]) >>
@@ -1880,6 +1912,15 @@ Proof
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) [i1;i2;i3]` by
        simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def, is_terminator_def] >>
      `inst_seq_ptr D lo ctx func PG G tn [i1;i2;i3] s G3 tn3` by metis_tac[] >>
+     `(ptrDiscipline$ctx_has_dalloca ctx ==>
+       !pre i post u. [i1;i2;i3] = pre ++ i::post /\
+         run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        `MEM i [i1;i2;i3]` by metis_tac[MEM_APPEND, MEM] >>
+        qpat_x_assum `MEM i [i1;i2;i3]`
+          (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+        simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def,
+             unitTransformDefsTheory.dalloca_no_wrap_def]) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
      simp_tac (srw_ss()) [Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def] >>
      asm_rewrite_tac[] >> metis_tac[]) >>
@@ -2181,9 +2222,19 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      `inst_seq_ptr D lo ctx func PG G tn [bai;bsi] s bg2 bt2` by
        (first_x_assum (qspecl_then [`D`, `s.vs_inst_idx`] mp_tac) >> simp[]) >>
+     `(ptrDiscipline$ctx_has_dalloca ctx ==>
+       !pre i post u. [bai;bsi] = pre ++ i::post /\
+         run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        `MEM i [bai;bsi]` by metis_tac[MEM_APPEND, MEM] >>
+        qpat_x_assum `MEM i [bai;bsi]`
+          (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+        simp[Abbr `bai`, Abbr `bsi`, mk_inst_def,
+             unitTransformDefsTheory.dalloca_no_wrap_def]) >>
      mp_tac (Q.SPECL [`[bai;bsi]`, `s`, `br2`, `G`, `tn`,
        `bg2`, `bt2`, `ctx`, `func`, `bbb`] run_inst_seq_gas_origin_ptr_path) >>
-     fs[Abbr `back_prefix`, Abbr `bai`, Abbr `bsi`, mk_inst_def, is_terminator_def]) >>
+     fs[Abbr `back_prefix`, Abbr `bai`, Abbr `bsi`, mk_inst_def, is_terminator_def] >>
+     disch_then drule >> simp[]) >>
   `~back_prefix.vs_halted /\
     back_prefix.vs_current_bb = s.vs_current_bb /\
     back_prefix.vs_inst_idx = s.vs_inst_idx+2 /\
@@ -2244,6 +2295,7 @@ Proof
          qexists_tac `0` >>
          simp[step_inst_non_invoke, memSafeRunTheory.mem_safe_step_non_invoke] >>
          simp[mk_inst_def, gasEventsTheory.gas_events_step_def,
+           unitTransformDefsTheory.dalloca_no_wrap_def,
            unitTransformDefsTheory.inst_mem_below_frontier_def,
            memSafeRunTheory.inst_dload_in_section_def,
            contextCodegenRelTheory.source_memory_read_ranges_def,

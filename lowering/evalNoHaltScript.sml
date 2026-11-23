@@ -12,6 +12,7 @@ Ancestors
   vyperStatePreservation vyperExprNoControl vyperCall vyperTypeCallGraph
   supportedExprTraverse supportedStmtTraverse supportedDecls supportedProgram
   bodyStorageCases vyperGetter vyperTypeContractGetter vyperTypeContractSoundness
+  vyperCreateFrame vyperCallOutcomeFrame
 Libs
   pairLib monadsyntax
 
@@ -40,46 +41,6 @@ Theorem ignore_bind_halt[local]:
   ?x t. f s = (INL x, t) /\ g t = (INR HaltException, s')
 Proof
   simp[ignore_bind_def, bind_halt]
-QED
-
-Theorem try_halt[local]:
-  try f h s = (INR HaltException, s') ==>
-  ?e t. f s = (INR e, t) /\ h e t = (INR HaltException, s')
-Proof
-  simp[try_def] >> Cases_on `f s` >>
-  Cases_on `q` >> simp[]
-QED
-
-Theorem finally_halt[local]:
-  finally f g s = (INR HaltException, s') ==>
-  (?t. f s = (INR HaltException, t)) \/ (?t. g t = (INR HaltException, s'))
-Proof
-  simp[finally_def] >> Cases_on `f s` >>
-  Cases_on `q` >> simp[ignore_bind_halt, return_def, raise_def] >>
-  metis_tac[]
-QED
-
-Theorem finally_unless_halt_halt[local]:
-  finally_unless_halt f g s = (INR HaltException, s') ==>
-  (?t. f s = (INR HaltException, t)) \/ (?t. g t = (INR HaltException, s'))
-Proof
-  simp[finally_unless_halt_def] >> Cases_on `f s` >>
-  Cases_on `q` >> simp[ignore_bind_halt, return_def]
-  >- metis_tac[] >>
-  Cases_on `y` >>
-  simp[ignore_bind_halt, return_def, raise_def] >> metis_tac[]
-QED
-
-Theorem handle_function_halt[local]:
-  handle_function e s = (INR HaltException, s') ==> e = HaltException
-Proof
-  Cases_on `e` >> simp[handle_function_def, return_def, raise_def]
-QED
-
-Theorem handle_loop_exception_halt[local]:
-  handle_loop_exception e s = (INR HaltException, s') ==> e = HaltException
-Proof
-  rw[handle_loop_exception_def, return_def, raise_def]
 QED
 
 (* ===== Primitives that never halt ===== *)
@@ -386,444 +347,254 @@ val nh_ss = nh_base @ [lock_nh, storage_slot_nh, immutables_nh,
   append_place_nh, new_variable_nh, array_iterator_results_nh,
   eval_ext_call_nh, eval_send_nh, eval_raw_call_nh];
 
-Theorem guard_INL[local]:
-  (type_check b m s = (INL x, t) <=> b /\ t = s) /\
-  (check b m s = (INL x, t) <=> b /\ t = s) /\
-  (lift_option_type xo m s = (INL v, t) <=> xo = SOME v /\ t = s) /\
-  (lift_option xo m s = (INL v, t) <=> xo = SOME v /\ t = s)
+(* A halt in a newly created account carries its scheduled deletion. *)
+Theorem finally_halt_pending[local]:
+  finally f g s = (INR HaltException, t) /\
+  (!a a'. g a <> (INR HaltException,a')) /\
+  (!a a'. g a = (INL (),a') ==> a'.pending_deletions = a.pending_deletions) ==>
+  ?a. f s = (INR HaltException,a) /\
+      t.pending_deletions = a.pending_deletions
 Proof
-  Cases_on `b` >> Cases_on `xo` >>
-  simp[type_check_def, check_def, assert_def, lift_option_type_def,
-       lift_option_def, return_def, raise_def, oneTheory.one] >>
-  metis_tac[]
+  Cases_on `f s` >> Cases_on `q` >>
+  rw[finally_def, ignore_bind_halt, return_def, raise_def] >>
+  metis_tac[oneTheory.one]
 QED
 
-Theorem get_module_code_stk_upd[local]:
-  get_module_code (cx with stk updated_by f) src = get_module_code cx src
+Theorem finally_unless_halt_exact[local]:
+  finally_unless_halt f g s = (INR HaltException,t) /\
+  (!a a'. g a <> (INR HaltException,a')) ==>
+  f s = (INR HaltException,t)
 Proof
-  simp[get_module_code_def]
+  Cases_on `f s` >> Cases_on `q` >>
+  simp[finally_unless_halt_def, ignore_bind_halt, return_def]
+  >- metis_tac[] >>
+  Cases_on `y` >> simp[ignore_bind_halt, raise_def] >> metis_tac[]
 QED
 
-Theorem order_custom_error_args_exprs[local]:
-  order_custom_error_args params err = SOME es ==> es = custom_error_exprs err
+Theorem try_handlers_halt[local]:
+  (try f handle_function s = (INR HaltException,t) <=> f s = (INR HaltException,t)) /\
+  (try g handle_loop_exception s = (INR HaltException,t) <=>
+     g s = (INR HaltException,t))
 Proof
-  Cases_on `err` >> rw[order_custom_error_args_def, custom_error_exprs_def] >>
-  imp_res_tac order_custom_error_kwargs_SOME >> gvs[NULL_EQ]
+  conj_tac
+  >- (Cases_on `f s` >> Cases_on `q` >> simp[try_def] >>
+      Cases_on `y` >> simp[handle_function_def, return_def, raise_def]) >>
+  Cases_on `g s` >> Cases_on `q` >>
+  simp[try_def] >>
+  Cases_on `y` >> simp[handle_loop_exception_def, return_def, raise_def]
 QED
 
-(* ===== Syntactic preconditions ===== *)
-
-Theorem exprs_pre_every[local]:
-  !es. EVERY (\e. ~supported_expr_exists p e /\ EVERY Q (int_calls_expr e)) es
-       <=> ~supported_exprs_exists p es /\ EVERY Q (int_calls_exprs es)
+Theorem cleanup_preserves_pending[local]:
+  (pop_scope s = (INL (),t) ==> t.pending_deletions = s.pending_deletions) /\
+  (pop_function prev s = (INL (),t) ==> t.pending_deletions = s.pending_deletions) /\
+  (set_scopes scopes s = (INL (),t) ==> t.pending_deletions = s.pending_deletions)
 Proof
-  Induct >> simp[supported_expr_exists_def, int_calls_expr_def] >> metis_tac[]
+  Cases_on `s.scopes` >>
+  rw[pop_scope_def, pop_function_def, set_scopes_def, return_def, raise_def] >>
+  gvs[]
 QED
 
-Theorem fields_exprs[local]:
-  !kes. (supported_fields_exists p kes <=>
-         supported_exprs_exists p (MAP SND kes)) /\
-        int_calls_named_exprs kes = int_calls_exprs (MAP SND kes)
+Theorem halt_pending_transfer[local]:
+  vyperInterpreter$transfer_value src dst amount s = (INR HaltException,s') ==> F
 Proof
-  Induct >- simp[supported_expr_exists_def, int_calls_expr_def] >>
-  Cases >> simp[supported_expr_exists_def, int_calls_expr_def]
+  Cases_on `amount = 0 \/ src = dst` >>
+  simp[vyperInterpreterTheory.transfer_value_def, ignore_bind_halt, bind_halt,
+       return_def, state_ops_nh, checks_nh]
 QED
 
-val syn_ss = [supported_stmt_expr_exists_def, supported_expr_exists_def,
-  supported_assignment_exists_def, supported_iterator_exists_def,
-  supported_assert_exists_def, supported_raise_exists_def,
-  expr_halt_root_def, expr_evm_run_root_def, int_calls_stmt_def, int_calls_expr_def,
-  int_calls_atarget_def, int_calls_iterator_def, int_calls_assert_reason_def,
-  int_calls_raise_reason_def, EVERY_APPEND, exprs_pre_every,
-  fields_exprs, guard_INL, get_module_code_stk_upd];
+Theorem create_operands_nh[local]:
+  eval_create_operands cx kind has_salt rof tys offset vs s = (INR HaltException,s') ==> F
+Proof
+  `!ts v size st. eval_create cx kind has_salt rof ts v size st =
+      (INR HaltException,s') ==> F` by
+    (rpt strip_tac >> drule eval_create_exception_is_error >> simp[]) >>
+  Cases_on `kind` >> simp[vyperCreateTheory.eval_create_operands_def, LET_THM, bind_halt] >>
+  rpt strip_tac >> drule check_create_blueprint_exception_is_error >> simp[]
+QED
 
-val case_ss = nh_ss @ [raise_def];
+val pending_ss = nh_ss @
+  [try_handlers_halt, halt_pending_transfer, create_operands_nh,
+   raise_def];
 
-val generic_tac =
+val pending_generic_tac =
   rpt strip_tac >> pop_assum mp_tac >>
-  simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
-  rpt strip_tac >> gvs[] >> metis_tac[];
+  simp([Once evaluate_def, COND_RATOR] @ pending_ss) >>
+  rpt strip_tac >> gvs pending_ss >>
+  TRY (first_assum (fn th => first_assum (ACCEPT_TAC o MATCH_MP th)));
 
-val switch_tac =
-  rpt strip_tac >> pop_assum mp_tac >>
-  simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
-  rpt strip_tac >> drule switch_BoolV_halt >> simp case_ss >>
-  rpt strip_tac >> gvs[] >> metis_tac[];
+val apply_pending_hyp_tac =
+  first_assum (fn th => first_assum (ACCEPT_TAC o MATCH_MP th));
 
-Theorem int_call_body_halt[local]:
-  (!t t'. g t <> (INR HaltException, t')) /\
+val staged_pending_ih =
+  first_assum (fn th =>
+    drule_all_then (fn step =>
+      ACCEPT_TAC step ORELSE drule_all_then ACCEPT_TAC step) th);
+
+val cleanup_pending_tac =
+  drule finally_halt_pending >>
+  simp[state_ops_nh, cleanup_preserves_pending, ignore_bind_halt, return_def,
+       try_handlers_halt] >>
+  strip_tac >> gvs[] >>
+  TRY (drule switch_BoolV_halt >> simp pending_ss >> strip_tac >> gvs[]) >>
+  staged_pending_ih;
+
+
+Theorem internal_body_pending_cleanup[local]:
+  (!a a'. cleanup a <> (INR HaltException,a')) /\
   finally_unless_halt
-    (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-       (pop_function prev)) g s =
-    (INR HaltException, s') ==>
-  ?t t'. eval_stmts cxf ss t = (INR HaltException, t')
+    (finally (try (ignore_bind (eval_stmts cxf ss) (return NoneV))
+       handle_function) (pop_function prev)) cleanup s = (INR HaltException,t) ==>
+  ?u. eval_stmts cxf ss s = (INR HaltException,u) /\
+      t.pending_deletions = u.pending_deletions
 Proof
-  strip_tac >> drule finally_unless_halt_halt >> simp[] >> strip_tac >>
-  drule finally_halt >> simp[state_ops_nh] >> strip_tac >>
-  drule try_halt >> strip_tac >> imp_res_tac handle_function_halt >>
-  gvs[ignore_bind_halt, return_def] >> metis_tac[]
+  strip_tac >> drule_all finally_unless_halt_exact >> strip_tac >>
+  drule finally_halt_pending >>
+  simp[state_ops_nh, cleanup_preserves_pending, try_handlers_halt,
+       ignore_bind_halt, return_def] >>
+  metis_tac[cleanup_preserves_pending]
 QED
 
-Theorem dflts_finally_halt[local]:
+Theorem internal_defaults_pending_cleanup[local]:
   finally (ignore_bind (set_scopes sc) f) (set_scopes prev) s =
-    (INR HaltException, s') ==>
-  ?t t'. set_scopes sc s = (INL (), t) /\ f t = (INR HaltException, t')
+    (INR HaltException,t) ==>
+  ?a u. set_scopes sc s = (INL (),a) /\ f a = (INR HaltException,u) /\
+        t.pending_deletions = u.pending_deletions
 Proof
-  strip_tac >> drule finally_halt >> simp[state_ops_nh] >> strip_tac >>
-  gvs[ignore_bind_halt, state_ops_nh] >> metis_tac[oneTheory.one]
+  strip_tac >> drule finally_halt_pending >>
+  simp[state_ops_nh, cleanup_preserves_pending, ignore_bind_halt] >>
+  impl_tac >- metis_tac[CONJUNCT2 (CONJUNCT2 cleanup_preserves_pending)] >>
+  strip_tac >> qexistsl_tac [`t'`, `a`] >> simp[]
 QED
 
-Theorem eval_no_halt_every[local]:
-  (!cx s. ~supported_stmt_expr_exists expr_halt_root s /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s) ==>
-     !st st'. eval_stmt cx s st = (INR HaltException, st') ==> F) /\
-  (!cx ss. ~supported_stmts_expr_exists expr_halt_root ss /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss) ==>
-     !st st'. eval_stmts cx ss st = (INR HaltException, st') ==> F) /\
-  (!cx it. ~supported_iterator_exists expr_halt_root it /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator it) ==>
-     !st st'. eval_iterator cx it st = (INR HaltException, st') ==> F) /\
-  (!cx tyv nm ss vs. ~supported_stmts_expr_exists expr_halt_root ss /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss) ==>
-     !st st'. eval_for cx tyv nm ss vs st = (INR HaltException, st') ==> F) /\
-  (!cx e. ~supported_expr_exists expr_halt_root e /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) ==>
-     !st st'. eval_expr cx e st = (INR HaltException, st') ==> F) /\
-  (!cx es. EVERY (\e. ~supported_expr_exists expr_halt_root e /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) es ==>
-     !st st'. eval_exprs cx es st = (INR HaltException, st') ==> F) /\
-  (!cx t. ~supported_target_exists expr_halt_root t /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) ==>
-     !st st'. eval_base_place cx t st = (INR HaltException, st') ==> F) /\
-  (!cx t. ~supported_target_exists expr_halt_root t /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) ==>
-     !st st'. eval_target_place cx t st = (INR HaltException, st') ==> F) /\
-  (!cx g v. ~supported_assignment_exists expr_halt_root g /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget g) ==>
-     !st st'. assign_tuple_targets cx g v st = (INR HaltException, st') ==> F) /\
-  (!cx gs vs. ~supported_assignments_exists expr_halt_root gs /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_atargets gs) ==>
-     !st st'. assign_tuple_target_list cx gs vs st = (INR HaltException, st') ==>
-              F)
-Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac
-  >~ [`Call _ (IntCall (src_id_opt,fn)) es _`] >- suspend "IntCall"
-  >~ [`Call _ (ExtCall _ _ _ _) es _`] >- suspend "ExtCall"
-  >~ [`Builtin _ bt es`] >- suspend "Builtin"
-  >~ [`Raise (RaiseCustomError err)`] >- suspend "RaiseCustom"
-  >~ [`Assert _ (AssertCustomError err)`] >- suspend "AssertCustom"
-  >~ [`eval_for _ _ _ _ (_::_)`] >- suspend "ForCons"
-  >~ [`Assign (TupleTarget _) _`] >- generic_tac
-  >~ [`TupleTarget gs`] >- suspend "TupleTarget"
-  >~ [`If _ _ _`] >- suspend "If"
-  >~ [`Assert _ AssertBare`] >- switch_tac
-  >~ [`Assert _ AssertUnreachable`] >- switch_tac
-  >~ [`Assert _ (AssertReason _)`] >- switch_tac
-  >~ [`IfExp _ _ _ _`] >- switch_tac
-  >~ [`Subscript _ _ _`]
-  >- (rpt strip_tac >> pop_assum mp_tac >>
-      simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
-      Cases_on `subscript_reads_base cx e e'` >> gvs(bind_def :: case_ss) >>
-      gvs(AllCaseEqs() :: case_ss) >> metis_tac[])
-  >> generic_tac
-QED
+fun last_premise tm =
+  let val (p,q) = dest_imp (#2 (strip_forall tm)) in
+    if is_imp (#2 (strip_forall q)) then last_premise q else p
+  end;
 
-Resume eval_no_halt_every[If]:
-  rpt strip_tac >> pop_assum mp_tac >>
-  simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
-  rpt strip_tac >> drule finally_halt >> simp case_ss >> rpt strip_tac >>
-  drule switch_BoolV_halt >> strip_tac >> metis_tac[]
-QED
-
-Resume eval_no_halt_every[TupleTarget]:
+val pending_tuple_target_tac =
   rpt strip_tac >> pop_assum mp_tac >> simp[Once evaluate_def] >>
   Cases_on `v` >> simp[raise_def] >> CASE_TAC >> simp[raise_def] >>
-  gvs syn_ss >> metis_tac[]
-QED
+  strip_tac >> TRY staged_pending_ih;
 
-Resume eval_no_halt_every[ForCons]:
-  rpt strip_tac >> pop_assum mp_tac >>
-  simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
-  rpt strip_tac
-  >- (drule finally_halt >> simp case_ss >> rpt strip_tac >>
-      drule try_halt >> strip_tac >> imp_res_tac handle_loop_exception_halt >>
-      gvs case_ss >> metis_tac[]) >>
-  rename1 `if broke then _ else _` >> Cases_on `broke` >> gvs case_ss >>
-  metis_tac[]
-QED
+fun apply_trace_ih th =
+  let
+    val simplified = SIMP_RULE (srw_ss()) [] th
+    val body = #2 (strip_forall (concl simplified))
+  in
+    if is_imp body then
+      first_assum (mp_then (Pos hd) apply_trace_ih simplified)
+    else
+      ACCEPT_TAC simplified
+  end;
 
-Resume eval_no_halt_every[RaiseCustom]:
-  Cases_on `err` >> rpt strip_tac >> pop_assum mp_tac >>
-  simp([Once evaluate_def, option_CASE_rator] @ case_ss) >> rpt strip_tac >>
-  gvs([AllCaseEqs()] @ case_ss) >>
-  imp_res_tac order_custom_error_args_exprs >>
-  gvs(syn_ss @ case_ss) >> PairCases_on `p` >> gvs[] >>
-  gvs[supported_exprs_exists_every, NOT_EXISTS, combinTheory.o_DEF] >>
-  metis_tac[]
-QED
-
-Resume eval_no_halt_every[AssertCustom]:
-  Cases_on `err` >> rpt strip_tac >> pop_assum mp_tac >>
-  simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
-  rpt strip_tac >> drule switch_BoolV_halt >>
-  simp([option_CASE_rator] @ case_ss) >> rpt strip_tac >>
-  gvs([AllCaseEqs()] @ case_ss) >>
-  imp_res_tac order_custom_error_args_exprs >>
-  gvs(syn_ss @ case_ss) >> PairCases_on `p` >> gvs[] >>
-  gvs[supported_exprs_exists_every, NOT_EXISTS, combinTheory.o_DEF] >>
-  metis_tac[]
-QED
-
-Resume eval_no_halt_every[Builtin]:
-  rpt strip_tac >> pop_assum mp_tac >>
-  Cases_on `bt = Len` >> Cases_on `bt = Env MsgGas` >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-  simp([Once evaluate_def, COND_RATOR] @ case_ss) >>
-  gvs(syn_ss @ case_ss) >> rpt strip_tac >>
-  gvs[builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
-  gvs(syn_ss @ case_ss) >>
-  Cases_on `code_slice_source bt es` >- (gvs[] >> metis_tac[]) >>
-  rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
-  gvs([code_slice_source_SOME] @ syn_ss @ case_ss) >> metis_tac[]
-QED
-
-Resume eval_no_halt_every[ExtCall]:
-  rpt strip_tac >> pop_assum mp_tac >> gvs syn_ss >>
-  `EVERY (\e. ~supported_expr_exists expr_halt_root e /\
-          EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                     get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) es` by gvs[exprs_pre_every] >>
-  `!n. EVERY (\e. ~supported_expr_exists expr_halt_root e /\
-          EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                     get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) (TAKE n es) /\
-       EVERY (\e. ~supported_expr_exists expr_halt_root e /\
-          EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                     get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) (DROP n es) /\
-       EVERY (\e. ~supported_expr_exists expr_halt_root e /\
-          EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                     get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) (TAKE n (DROP 1 es))` by
-    metis_tac[EVERY_TAKE, EVERY_DROP] >>
-  simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-
-Resume eval_no_halt_every[IntCall]:
-  strip_tac >> simp syn_ss >> strip_tac >> rpt gen_tac >> strip_tac >>
-  gvs[] >>
-  Cases_on `MEM (NONE,fn) cx.stk`
-  >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
-      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      simp[Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
-           bind_def, raise_def]) >>
-  Cases_on `lookup_callable_function cx.in_deploy fn tops`
-  >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
-      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      simp[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
-           return_def, raise_def, ignore_bind_def, bind_def]) >>
-  rename1 `_ = SOME tup` >> PairCases_on `tup` >>
-  drule_all supported_callable_storage_syntax >> strip_tac >> gvs[] >>
-  Cases_on `LENGTH es <= LENGTH tup2 /\ LENGTH tup2 <= LENGTH es + LENGTH tup3`
-  >- suspend "IntCallLive" >>
-  rpt (qpat_x_assum `!x. _` kall_tac) >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
-       return_def, raise_def, ignore_bind_def, bind_def]
-QED
-
-Resume eval_no_halt_every[IntCallLive]:
-  `EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
-     (int_calls_exprs (DROP (LENGTH tup3 - (LENGTH tup2 - LENGTH es)) tup3))` by
-    (irule int_calls_exprs_DROP_EVERY >> simp[]) >>
-  `EVERY (\e. ~supported_expr_exists expr_halt_root e /\
-     EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                get_module_code (cx with stk updated_by CONS (NONE,fn)) NONE =
-                SOME tops) (int_calls_expr e))
-     (DROP (LENGTH tup3 - (LENGTH tup2 - LENGTH es)) tup3)` by
-    (irule EVERY_DROP >> simp[exprs_pre_every, get_module_code_stk_upd] >>
-     gvs[EVERY_MEM] >> metis_tac[]) >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def] >>
-  gvs(syn_ss @ case_ss @ [push_function_def, get_scopes_def]) >>
-  rpt strip_tac >> gvs[]
-  >~ [`finally_unless_halt _ _ _ = (INR HaltException,_)`]
-  >- (drule_at (Pos last) int_call_body_halt >>
-      impl_tac
-      >- (rpt gen_tac >> rpt (IF_CASES_TAC ORELSE CASE_TAC) >>
-          simp(raise_def :: nh_base)) >>
-      strip_tac >>
-      first_x_assum (fn th =>
-        if is_forall (concl th) andalso
-           can (find_term (same_const ``eval_stmts``)) (concl th)
-        then drule_all th else NO_TAC) >>
-      metis_tac[])
-  >~ [`finally _ _ _ = (INR HaltException,_)`]
-  >- (drule dflts_finally_halt >> strip_tac >> gvs[] >> metis_tac[])
-  >~ [`(if tup1 then _ else _) _ = (INR HaltException,_)`]
-  >- (qpat_x_assum `(if tup1 then _ else _) _ = (INR HaltException,_)` mp_tac >>
-      rpt (IF_CASES_TAC ORELSE CASE_TAC) >>
-      simp(raise_def :: nh_base)) >>
-  metis_tac[]
-QED
-
-Finalise eval_no_halt_every
-
-Theorem calls_pre_every[local]:
-  (l = [] \/ ?tops. supported_program tops /\
-                    get_module_code cx NONE = SOME tops /\
-                    EVERY (\c. FST c = NONE /\
-                         IS_SOME (supported_function_decl tops c Internal)) l) ==>
-  EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                                    get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) l
+Theorem eval_halt_pending[local]:
+  (!cx x s t. cx.txn.created_in_tx /\ eval_stmt cx x s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx xs s t. cx.txn.created_in_tx /\ eval_stmts cx xs s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx x s t. cx.txn.created_in_tx /\ eval_iterator cx x s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx ty id xs vs s t. cx.txn.created_in_tx /\ eval_for cx ty id xs vs s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx x s t. cx.txn.created_in_tx /\ eval_expr cx x s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx xs s t. cx.txn.created_in_tx /\ eval_exprs cx xs s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx x s t. cx.txn.created_in_tx /\ eval_base_place cx x s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx x s t. cx.txn.created_in_tx /\ eval_target_place cx x s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx x v s t. cx.txn.created_in_tx /\ assign_tuple_targets cx x v s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions) /\
+  (!cx xs vs s t. cx.txn.created_in_tx /\ assign_tuple_target_list cx xs vs s = (INR HaltException,t) ==>
+      MEM cx.txn.target t.pending_deletions)
 Proof
-  rw[] >> gvs[EVERY_MEM] >> metis_tac[]
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac >>
+  (fn (g as (_,w)) =>
+    if can (find_term (same_const ``IntCall``)) w then ALL_TAC g
+    else if can (find_term (can (match_term ``assign_tuple_targets cx
+                    (TupleTarget xs) v st``))) (last_premise w)
+    then pending_tuple_target_tac g
+    else pending_generic_tac g) >>
+  TRY (drule_then strip_assume_tac switch_BoolV_halt >> gvs pending_ss) >>
+  TRY (qpat_assum `(case err of CustomError _ _ _ => _) _ = _` (K ALL_TAC) >>
+       Cases_on `err` >> PairCases_on `p` >> gvs[AllCaseEqs(), option_CASE_rator] >>
+       gvs pending_ss >> TRY apply_pending_hyp_tac) >>
+  TRY apply_pending_hyp_tac >>
+  TRY (qpat_assum `ignore_bind (update_accounts _) _ _ = (INR HaltException,_)`
+         (mp_tac) >>
+       simp[ignore_bind_halt,state_ops_nh, update_pending_deletions_def,
+            raise_def, update_accounts_def, return_def] >> strip_tac >> gvs[]) >>
+  TRY (gvs[update_pending_deletions_def,return_def] >> NO_TAC) >>
+  TRY staged_pending_ih >>
+  TRY (cleanup_pending_tac >> NO_TAC) >>
+  TRY (qpat_assum `(if broke then _ else _) = _` (K ALL_TAC) >>
+       Cases_on `broke` >> gvs pending_ss >> staged_pending_ih) >>
+  TRY (qpat_assum `(if subscript_reads_base cx x x' then _ else _) = _`
+         (K ALL_TAC) >>
+       Cases_on `subscript_reads_base cx x x'` >> gvs pending_ss >>
+       TRY staged_pending_ih) >>
+  TRY (qpat_assum `(case v of ArrayV _ => _ | _ => _) _ = _` (K ALL_TAC) >>
+       Cases_on `v` >> gvs pending_ss >> CASE_TAC >> gvs pending_ss >>
+       staged_pending_ih) >>
+  TRY (qpat_assum `(if bt = Len then _ else _) = _` (K ALL_TAC) >>
+       Cases_on `bt = Len` >> Cases_on `bt = Env MsgGas` >> gvs pending_ss >>
+       TRY (Cases_on `code_slice_source bt xs` >> gvs pending_ss >>
+         TRY (PairCases_on `x` >> gvs pending_ss)) >>
+       TRY (Cases_on `is_self_codesize bt xs` >>
+         gvs[evaluate_self_codesize_def] >> gvs pending_ss) >>
+       TRY staged_pending_ih) >>
+  TRY (qpat_x_assum `ignore_bind (update_accounts _) _ _ = (INL (),_)` mp_tac >>
+       simp[ignore_bind_def, bind_def, update_accounts_def,
+            update_pending_deletions_def, return_def] >> strip_tac >> gvs[]) >>
+  TRY (first_assum (fn th =>
+      if can (find_term (same_const ``assign_tuple_target_list``)) (concl th)
+         andalso is_eq (concl th)
+      then mp_tac th else NO_TAC) >>
+    simp[value_CASE_rator, array_value_CASE_rator, AllCaseEqs(), raise_def] >>
+    strip_tac >> gvs[] >> staged_pending_ih) >>
+  TRY (rpt strip_tac >>
+    qpat_x_assum `eval_expr cx (Call _ (IntCall _) _ _) _ = _` mp_tac >>
+    simp_tac std_ss ([Once evaluate_def] @ pending_ss) >>
+    rpt strip_tac >>
+    TRY staged_pending_ih >>
+    TRY (drule internal_defaults_pending_cleanup >> strip_tac) >>
+    TRY (drule internal_body_pending_cleanup >>
+       impl_tac >- metis_tac[CONJUNCT2 lock_nh] >> strip_tac)) >>
+  TRY (drule (CONJUNCT1 lock_nh) >> simp[]) >>
+  TRY (drule_at (Pos last) internal_body_pending_cleanup >>
+    impl_tac >- metis_tac[CONJUNCT2 lock_nh] >> strip_tac) >>
+  TRY (qpat_assum `push_function _ _ _ _ = (INL cxf,_)`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [push_function_def, return_def])) >>
+  TRY (qpat_x_assum `t.pending_deletions = u.pending_deletions` SUBST1_TAC) >>
+  TRY (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ _ = _`
+    (K ALL_TAC) >>
+    Cases_on `(x:unit)` >> Cases_on `(x':unit)` >> Cases_on `(x'':unit)` >>
+    TRY (qpat_x_assum `cx with stk updated_by _ = cxf` (SUBST_ALL_TAC o SYM)) >>
+    TRY (qpat_x_assum `t.pending_deletions = u.pending_deletions` SUBST1_TAC) >>
+    first_assum (fn th =>
+      if is_forall (concl th)
+      then drule_all_then (ACCEPT_TAC o SIMP_RULE (srw_ss()) [])
+        (SIMP_RULE (srw_ss()) [] th)
+      else NO_TAC)) >>
+  TRY (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ _ = _`
+    (K ALL_TAC) >>
+    rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
+    TRY staged_pending_ih) >>
+  TRY (qpat_assum `assign_tuple_target_list _ _ _ _ = (INR HaltException,_)`
+    (K ALL_TAC) >> gvs[] >> metis_tac[]) >>
+  TRY (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ _ = _`
+    (K ALL_TAC) >> first_assum (fn th =>
+      if is_forall (concl th) then apply_trace_ih th else NO_TAC)) >>
+  TRY (qpat_x_assum `cx with stk updated_by _ = cxf` (SUBST_ALL_TAC o SYM) >>
+    rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
+    first_assum (fn th =>
+      if is_forall (concl th) then apply_trace_ih th else NO_TAC))
 QED
 
-(* Evaluation never halts (SELFDESTRUCT is the only source of HaltException)
-   when no evm-run root occurs and every internal call selects a supported
-   Internal declaration in the current module. *)
-Theorem eval_no_halt:
-  (!cx e st st'.
-     ~supported_expr_exists expr_halt_root e /\
-     (int_calls_expr e = [] \/
-      ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
-             EVERY (\c. FST c = NONE /\
-                         IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) ==>
-     eval_expr cx e st <> (INR HaltException, st')) /\
-  (!cx es st st'.
-     ~supported_exprs_exists expr_halt_root es /\
-     (int_calls_exprs es = [] \/
-      ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
-             EVERY (\c. FST c = NONE /\
-                         IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)) ==>
-     eval_exprs cx es st <> (INR HaltException, st')) /\
-  (!cx s st st'.
-     ~supported_stmt_expr_exists expr_halt_root s /\
-     (int_calls_stmt s = [] \/
-      ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
-             EVERY (\c. FST c = NONE /\
-                         IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) ==>
-     eval_stmt cx s st <> (INR HaltException, st')) /\
-  (!cx ss st st'.
-     ~supported_stmts_expr_exists expr_halt_root ss /\
-     (int_calls_stmts ss = [] \/
-      ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
-             EVERY (\c. FST c = NONE /\
-                         IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss)) ==>
-     eval_stmts cx ss st <> (INR HaltException, st'))
+Theorem eval_stmts_halt_pending_deletions:
+  eval_stmts cx ss s = (INR HaltException,t) ==>
+  cx.txn.created_in_tx ==> MEM cx.txn.target t.pending_deletions
 Proof
-  rpt conj_tac >> rpt gen_tac >>
-  disch_then (CONJUNCTS_THEN2 assume_tac
-                (assume_tac o MATCH_MP calls_pre_every))
-  >- metis_tac[cj 5 eval_no_halt_every]
-  >- (`EVERY (\e. ~supported_expr_exists expr_halt_root e /\
-         EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
-                    get_module_code cx NONE = SOME tops /\
-                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) es`
-        by simp[exprs_pre_every] >>
-      metis_tac[cj 6 eval_no_halt_every])
-  >- metis_tac[cj 1 eval_no_halt_every] >>
-  metis_tac[cj 2 eval_no_halt_every]
-QED
-
-Theorem build_getter_no_halt[local]:
-  !e kt vt n args ret exp.
-    build_getter e kt vt n = (args,ret,exp) /\
-    ~supported_expr_exists expr_halt_root e ==>
-    ~supported_expr_exists expr_halt_root exp
-Proof
-  recInduct build_getter_ind >> rpt conj_tac >> rpt gen_tac >>
-  TRY disch_tac >> rpt gen_tac >>
-  simp[Once build_getter_def] >> rw[] >> gvs[] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[supported_expr_exists_def, expr_halt_root_def, expr_evm_run_root_def] >>
-  first_x_assum irule >> simp[supported_expr_exists_def, expr_halt_root_def, expr_evm_run_root_def]
-QED
-
-Theorem selected_public_getter_body_no_halt[local]:
-  is_public_getter_decl fn decl /\
-  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,gbody) ==>
-  ~supported_stmts_expr_exists expr_halt_root gbody
-Proof
-  Cases_on `decl` >>
-  gvs[is_public_getter_decl_def, external_getter_tuple_def]
-  >- (Cases_on `v` >> gvs[] >>
-      Cases_on `is_ArrayT t` >> gvs[]
-      >- (rpt strip_tac >>
-          drule_all array_public_getter_tuple_shape >> strip_tac >> gvs[] >>
-          `~supported_expr_exists expr_halt_root exp` by
-            (irule build_getter_no_halt >> goal_assum (drule_at Any) >>
-             simp[supported_expr_exists_def, expr_halt_root_def, expr_evm_run_root_def]) >>
-          gvs[supported_stmt_expr_exists_def, supported_expr_exists_def]) >>
-      rpt strip_tac >>
-      gvs[external_getter_tuple_def, supported_stmt_expr_exists_def, supported_expr_exists_def,
-          expr_halt_root_def, expr_evm_run_root_def]) >>
-  Cases_on `v` >> gvs[is_public_getter_decl_def] >> rpt strip_tac >>
-  drule_all hashmap_public_getter_tuple_shape >> strip_tac >> gvs[] >>
-  `~supported_expr_exists expr_halt_root exp` by
-    (irule build_getter_no_halt >> goal_assum (drule_at Any) >>
-     simp[supported_expr_exists_def, expr_halt_root_def, expr_evm_run_root_def]) >>
-  gvs[supported_stmt_expr_exists_def, supported_expr_exists_def]
-QED
-
-(* The body an external entry runs never halts in a supported program. *)
-Theorem external_body_no_halt:
-  supported_program tops /\ get_module_code cx NONE = SOME tops /\
-  lookup_function src name External tops =
-    SOME (mut,nr,args,dflts,ret,fbody) ==>
-  eval_stmts cx fbody st <> (INR HaltException, st')
-Proof
-  strip_tac >> drule lookup_function_External_cases >> strip_tac
-  >- (drule_all (SRULE [] (Q.INST [`vis` |-> `External`] supported_program_function)) >>
-      simp[supported_function_body_def] >> strip_tac >>
-      drule (cj 2 supported_stmts_storage_syntax) >> strip_tac >>
-      irule (cj 4 eval_no_halt) >> metis_tac[]) >>
-  irule (cj 4 eval_no_halt) >>
-  conj_tac
-  >- (drule_all selected_public_getter_body_no_halt >> simp[]) >>
-  disj1_tac >>
-  drule_all selected_public_getter_body_int_calls_empty >> simp[]
-QED
-
-(* The constructor body (declared, or the synthetic empty one) never halts
-   in a supported program. *)
-Theorem deploy_body_no_halt:
-  supported_program tops /\ supported_program_deploy tops /\
-  get_module_code cx NONE = SOME tops /\
-  lookup_function src name Deploy tops =
-    SOME (mut,nr,args,dflts,ret,fbody) ==>
-  eval_stmts cx fbody st <> (INR HaltException, st')
-Proof
-  strip_tac >>
-  drule vyperTypeContractStaticMapsTheory.lookup_function_Deploy_SOME_cases >>
-  strip_tac >> gvs[]
-  >- simp[Once evaluate_def, return_def] >>
-  drule_all supported_program_deploy_function >>
-  simp[supported_function_body_def] >>
-  strip_tac >>
-  drule (cj 2 supported_stmts_storage_syntax) >> strip_tac >>
-  irule (cj 4 eval_no_halt) >> metis_tac[]
+  metis_tac[CONJUNCT1 (CONJUNCT2 eval_halt_pending)]
 QED

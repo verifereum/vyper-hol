@@ -162,11 +162,18 @@ Proof
   >- (drule abs_suffix_opcodes >> strip_tac >>
       `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
          (emitted_insts sa sb) /\
-       FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
-        (`EVERY (\opc. opc <> INVOKE /\ ~is_terminator opc /\ opc <> GAS)
+       FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
+       EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+        (`EVERY (\opc. opc <> INVOKE /\ ~is_terminator opc /\ opc <> GAS /\
+                        opc <> DALLOCA)
            (MAP (\i. i.inst_opcode) (emitted_insts sa sb))` by
            simp[is_terminator_def] >>
          fs[EVERY_MAP, EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
+      `(ctx_has_dalloca ctx ==>
+        !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+          run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+        (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+         fs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM]) >>
       `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
         metis_tac[abs_suffix_mem_ok] >>
       `inst_seq_ptr (DF H) lo ctx fn PG G tn (emitted_insts sa sb) s G' tn'` by simp[] >>
@@ -709,7 +716,10 @@ Proof
     (gen_tac >>
      drule_at (Pat `run_inst_seq _ _ = _`) run_inst_seq_gas_origin_ptr_path >>
      simp[is_terminator_def] >>
-     disch_then irule >> simp[]) >>
+     disch_then irule >> simp[] >>
+     rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i [i0;i1;i2;i3;i4]` by metis_tac[MEM_APPEND, MEM] >>
+     fs[]) >>
   `get_instruction bb (s.vs_inst_idx + 5) = SOME i5` by
     (`LENGTH (DROP s.vs_inst_idx bb.bb_instructions) =
         LENGTH (i0::i1::i2::i3::i4::i5::i6::i7::i8::l)` by asm_rewrite_tac[] >>

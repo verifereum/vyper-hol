@@ -19,7 +19,7 @@ Theory stmtLowering
 Ancestors
   exprLowering context compileEnv venomInst abiEncoder dretShapeDefs vyperExprEffects
 Libs
-  monadsyntax
+  monadsyntax pairLib
 
 (* ===== Target Compilation ===== *)
 
@@ -64,8 +64,8 @@ End
 (* Split already-evaluated operands into indexed topics and non-indexed data.
    indexed_flags: bool list parallel to evaluated ops. *)
 Definition split_log_ops_def:
-  split_log_ops [] [] = ([] : (operand # bool) list,
-                          [] : (operand # type) list) ∧
+  split_log_ops [] [] = ([] : ('a # bool) list,
+                          [] : ('a # type) list) ∧
   split_log_ops ((op, ty) :: rest) (T :: flags) =
     (let (topics, data) = split_log_ops rest flags in
      let is_bs = is_bytestring_type ty in
@@ -75,6 +75,16 @@ Definition split_log_ops_def:
      (topics, (op, ty) :: data)) ∧
   split_log_ops _ _ = ([], [])
 End
+
+Theorem every_split_log_ops:
+  !ops flags P. EVERY (P o FST) ops ==>
+    EVERY (P o FST) (FST (split_log_ops ops flags)) /\
+    EVERY (P o FST) (SND (split_log_ops ops flags))
+Proof
+  recInduct split_log_ops_ind >>
+  simp[split_log_ops_def] >> rpt strip_tac >>
+  pairarg_tac >> gvs[] >> metis_tac[]
+QED
 
 (* Hash indexed topic operands (bytestrings need keccak256).
    Input: list of (operand, is_bytestring) *)
@@ -87,6 +97,18 @@ Definition compile_log_topic_ops_def:
     od
 Termination
   WF_REL_TAC `measure (λops. LENGTH ops)`
+End
+
+(* Read each saved topic at its physical layout, after all arguments have
+   been captured. Hash a bytestring before reading the next topic. *)
+Definition compile_log_saved_topics_def:
+  compile_log_saved_topics cenv [] = return ([] : operand list) ∧
+  compile_log_saved_topics cenv ((vv,is_bs) :: rest) =
+    do op <- unwrap_value cenv vv;
+       topic <- compile_encode_log_topic op is_bs;
+       topics <- compile_log_saved_topics cenv rest;
+       return (topic :: topics)
+    od
 End
 
 (* Store already-evaluated data operands into the declared field layouts.
@@ -191,59 +213,33 @@ Definition compile_reason_message_def:
 End
 
 (* ===== Revert with Custom Error ===== *)
-(* Store each argument at its declared type's offset in the argument tuple,
-   evaluating them in order: the first at the tuple's base, later ones at
-   base + offset.
-   Mirrors Python: vyper/codegen_venom/stmt.py:_store_custom_error_args *)
-Definition compile_custom_error_store_args_def:
-  compile_custom_error_store_args cenv [] _ dst offset = return () ∧
-  compile_custom_error_store_args cenv _ [] dst offset = return () ∧
-  compile_custom_error_store_args cenv (e::es) (ty::tys) dst offset =
-    do vv <- compile_expr cenv (expr_type e) e;
-       arg_ptr <- (if offset = 0 then return dst
-                   else emit_op ADD [dst; Lit (n2w offset)]);
-       v <- unwrap_value cenv vv;
-       compile_store_memory cenv v arg_ptr ty (lowered_value_type cenv e);
-       compile_custom_error_store_args cenv es tys dst
-         (offset + type_memory_bytes cenv ty)
-    od
-Termination
-  WF_REL_TAC `measure (λ(cenv,es,tys,dst,off). LENGTH es)` >> simp[]
-End
-
 (* Revert with selector || abi_encode(args) of a declared custom error.
-   The arguments are stored in a tuple buffer at their declared types, then
-   ABI-encoded behind the selector word; the revert starts at buf+28, so the
-   data begins with the 4-byte selector.  An error the compile env doesn't
-   know emits INVALID, as an unknown event does.
+   Snapshot the checked arguments in declaration order, using the same
+   per-value snapshots as external-call arguments with no trailing operands.
+   Encode at the saved layouts behind the declared selector word. The revert
+   starts at buf+28, where the four selector bytes begin.
    Mirrors Python: vyper/codegen_venom/stmt.py:_revert_with_custom_error *)
 Definition compile_revert_with_custom_error_def:
   compile_revert_with_custom_error cenv (CustomError id positional kwargs) =
-    let err = CustomError id positional kwargs in
+    let arg_es = custom_error_exprs (CustomError id positional kwargs) in
     case cenv.ce_error_info (nsid_to_string id) of
       NONE => emit_inst INVALID [] []
     | SOME params =>
-        let arg_types = MAP SND params in
-        let args_tuple_t = TupleT arg_types in
-        let arg_es = custom_error_exprs err in
-        do args_alloc <- compile_alloc_buffer
-             (type_memory_bytes cenv args_tuple_t);
-           args_buf <- return args_alloc.buf_operand;
-           compile_custom_error_store_args cenv arg_es arg_types args_buf 0;
+        let arg_types = MAP (lowered_value_type cenv) arg_es in
+        do args <- compile_ext_call_args compile_expr cenv [] arg_types arg_es;
            buf_alloc <- compile_alloc_buffer
-             (abi_size_bound cenv.ce_struct_fields args_tuple_t + 32);
+             (abi_size_bound cenv.ce_struct_fields (TupleT arg_types) + 32);
            buf <- return buf_alloc.buf_operand;
            emit_void MSTORE
-             [buf; Lit (n2w (cenv.ce_method_id (SND id) arg_types))];
+             [buf; Lit (n2w (cenv.ce_method_id (SND id) (MAP SND params)))];
            if NULL arg_es then
              do revert_offset <- emit_op ADD [buf; Lit 28w];
                 emit_inst REVERT [revert_offset; Lit 4w] []
              od
            else
              do payload_buf <- emit_op ADD [buf; Lit 32w];
-                encoded_len <- compile_abi_encode_to_buf payload_buf args_buf
-                  (type_to_abi_enc_info cenv.ce_struct_fields cenv
-                     args_tuple_t);
+                encoded_len <- compile_abi_encode_values_to_buf cenv payload_buf
+                  (ZIP (args,arg_types));
                 revert_offset <- emit_op ADD [buf; Lit 28w];
                 revert_len <- emit_op ADD [Lit 4w; encoded_len];
                 emit_inst REVERT [revert_offset; revert_len] []
@@ -980,45 +976,32 @@ Definition compile_stmt_def:
        return ()
     od ∧
 
-  (* Log: event emission with indexed topics + ABI-encoded data.
-     Mirrors Python: vyper/codegen_venom/stmt.py:lower_Log.
-     CRITICAL: evaluate ALL args in AST order first (for side-effect ordering),
-     then split into indexed (topics) and non-indexed (data).
-     1. Evaluate all args in AST order
-     2. Split evaluated ops into topics and data
-     3. Hash bytestring topics
-     4. Store data to buffer, ABI-encode
-     5. Emit LOG *)
+  (* Snapshot in AST order before reading topics or writing the ABI data.
+     Mirrors Python: vyper/codegen_venom/stmt.py:lower_Log. *)
   compile_stmt cenv lctx ty (Log event_id args) =
     (let event_name = nsid_to_string event_id in
      case cenv.ce_event_info event_name of
        NONE => emit_inst INVALID [] []
-     | SOME (event_hash_value, arg_types, indexed_flags) =>
-         do eval_ops <- compile_log_eval_all cenv args;
-            log_split <- return (split_log_ops eval_ops indexed_flags);
+     | SOME (event_hash_value, _, indexed_flags) =>
+         let arg_types = MAP (lowered_value_type cenv) args in
+         do saved <- compile_ext_call_args compile_expr cenv [] arg_types args;
+            log_split <- return (split_log_ops (ZIP (saved,arg_types)) indexed_flags);
             raw_topics <- return (FST log_split);
-            data_ops <- return (SND log_split);
-            topic_ops <- compile_log_topic_ops raw_topics;
+            data_rows <- return (SND log_split);
+            topic_ops <- compile_log_saved_topics cenv raw_topics;
             all_topics <- return (Lit (n2w event_hash_value) :: topic_ops);
             n_topics <- return (LENGTH all_topics);
-            if NULL data_ops then
+            if NULL data_rows then
               (* Python builder.log stores LOG operands in physical stack
                  order: topic_count, reversed topics, size, offset. *)
               emit_inst (LOG : opcode)
                 (Lit (n2w n_topics) :: REVERSE all_topics ++ [Lit 0w; Lit 0w]) []
             else
-              let data_types = log_non_indexed_types indexed_flags arg_types in
-              let data_tuple_t = TupleT data_types in
-              let data_mem_size = SUM (MAP (type_memory_bytes cenv) data_types) in
-              do data_buf_alloc <- compile_alloc_buffer (MAX 32 data_mem_size);
-                 data_buf <- return data_buf_alloc.buf_operand;
-                 compile_log_store_data cenv data_ops data_types data_buf 0;
-                 abi_size <- return (abi_size_bound cenv.ce_struct_fields data_tuple_t);
-                 data_enc_info <- return (type_to_abi_enc_info cenv.ce_struct_fields cenv data_tuple_t);
-                 abi_buf_alloc <- compile_alloc_buffer (MAX 32 abi_size);
+              do abi_buf_alloc <- compile_alloc_buffer
+                   (abi_size_bound cenv.ce_struct_fields (TupleT (MAP SND data_rows)));
                  abi_buf <- return abi_buf_alloc.buf_operand;
                  encoded_len <-
-                   compile_abi_encode_to_buf abi_buf data_buf data_enc_info;
+                   compile_abi_encode_values_to_buf cenv abi_buf data_rows;
                  emit_inst (LOG : opcode)
                    (Lit (n2w n_topics) :: REVERSE all_topics ++
                       [encoded_len; abi_buf]) []
@@ -1087,17 +1070,17 @@ Definition compile_stmt_def:
             compile_internal_return_from_env cenv ty (lowered_value_type cenv e)
               val_op rpc
         | _ =>
-            (* External return: ABI encoding + nonreentrant unlock.
-               Mirrors Python: vyper/codegen_venom/stmt.py:_lower_external_return which unlocks
-               before encoding/returning.
-               Normalize when ret_src_typ ≠ ret_typ for non-prim,
-               non-bytestring-to-bytestring. Python lines 936-945. *)
+            (* Compatible bounded returns can be encoded at their physical
+               layout, as in Python's _lower_external_return. *)
             let is_prim = is_word_type ty in
             let src_ty = lowered_value_type cenv e in
+            let use_src_layout =
+              (¬cenv.ce_raw_return ∧ ¬is_prim ∧ src_ty ≠ ty ∧
+               vyperTypeSystem$arg_type_fits src_ty ty) in
             let needs_normalize =
               (¬is_prim ∧
                ¬(is_bytestring_type ty ∧ is_bytestring_type src_ty) ∧
-               src_ty ≠ ty) in
+               src_ty ≠ ty ∧ ¬use_src_layout) in
             let nr_info = cenv.ce_nonreentrant in
             let is_nonreentrant = FST nr_info in
             let nkey = FST (SND nr_info) in
@@ -1127,8 +1110,16 @@ Definition compile_stmt_def:
                       F nkey use_transient is_view
                  od
                else
+                 let sf = cenv.ce_struct_fields in
+                 let enc_ty =
+                   if vyperABI$needs_external_call_wrap src_ty ∧
+                      is_abi_dynamic sf src_ty
+                   then TupleT [src_ty] else src_ty in
                  compile_external_return (SOME ret_op) is_prim F
-                   cenv.ce_ret_enc_info cenv.ce_max_return_size
+                   (if use_src_layout then type_to_abi_enc_info sf cenv enc_ty
+                    else cenv.ce_ret_enc_info)
+                   (if use_src_layout then abi_size_bound sf enc_ty
+                    else cenv.ce_max_return_size)
                    is_nonreentrant nkey use_transient is_view
             od)
     od ∧

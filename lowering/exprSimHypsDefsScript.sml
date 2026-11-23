@@ -6,6 +6,7 @@ Ancestors
   vyperTypeCallGraph vyperTypeInvariants vyperRuntimeAccounts vyperPlaceInvariants
   vyperStorageLayoutSafety vyperTypeStoragePreservation supportedExprTraverse
   supportedProgram placeTypingProps allocLimits selectorDispatch constSubst
+  vyperContext alist option
 
 Definition outcomes_accounts_typed_def:
   outcomes_accounts_typed (oos : call_outcome list option) <=>
@@ -68,20 +69,122 @@ Definition bare_globals_layout_def:
     ALL_DISTINCT (MAP FST modules)
 End
 
-(* A constant of the main module: classify_functions substitutes every
-   reference to it (module_consts_env), so no lowered TopLevelName names
-   it, and build_compile_env gives it no ce_module_vars location. *)
-Definition cx_const_name_def:
+(* Lowering substitutes constants before compiling a function body. *)
+Definition cx_const_name_mods_def[nocompute]:
+  cx_const_name_mods mods ((src:num option),id) <=>
+    ?tops. ALOOKUP mods src = SOME tops /\
+           MEM id (MAP FST (module_consts_env tops []))
+End
+
+Definition cx_const_name_split_def[nocompute]:
+  cx_const_name cx nsid <=>
+    cx_const_name_mods [(NONE,cx_tops cx)] nsid
+End
+
+Theorem cx_const_name_def:
   cx_const_name cx ((src:num option),id) <=>
     src = NONE /\ MEM id (MAP FST (module_consts_env (cx_tops cx) []))
-End
+Proof
+  Cases_on `src` >>
+  simp[cx_const_name_split_def, cx_const_name_mods_def, ALOOKUP_def]
+QED
 
 Definition const_name_root_def:
   const_name_root cx (TopLevelName ty nsid) = cx_const_name cx nsid /\
   const_name_root cx _ = F
 End
 
-Definition expr_sim_inv_def:
+Definition const_name_root_mods_def[nocompute]:
+  const_name_root_mods mods (TopLevelName ty nsid) = cx_const_name_mods mods nsid /\
+  const_name_root_mods mods _ = F
+End
+
+Definition unallocated_bare_global_root_def[nocompute]:
+  unallocated_bare_global_root cenv env (TopLevelName ty nsid) =
+    (IS_SOME (FLOOKUP env.bare_globals nsid) /\
+     FLOOKUP cenv.ce_module_vars nsid = NONE) /\
+  unallocated_bare_global_root cenv env _ = F
+End
+
+Theorem const_name_root_mods_singleton:
+  const_name_root_mods [(NONE,cx_tops cx)] = const_name_root cx
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >> Cases_on `x` >>
+  simp[const_name_root_mods_def, const_name_root_def, cx_const_name_split_def]
+QED
+
+(* Shared tables cover the linked unit. The active module still owns its
+   bare globals, and any immutable allocated by the unit has a bounded
+   location even when its module is inactive. *)
+Definition expr_sim_inv_mods_def[nocompute]:
+  expr_sim_inv_mods mods cenv cx env (es:evaluation_state) <=>
+    env_consistent env cx es /\ state_well_typed es /\
+    accounts_well_typed es.accounts /\
+    context_well_typed cx /\ functions_well_typed cx /\
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+             ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+             cenv.ce_var_type id = SOME ty) /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+               cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
+    (!src fid ts ls mid i.
+       get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
+       INDEX_OF mid ls = SOME i ==>
+       cenv.ce_flag_member_id (nsid_to_string (src, fid)) mid = i) /\
+    (!nsid m. FLOOKUP (get_tenv cx) nsid = SOME (FlagArgs m) ==>
+              cenv.ce_flag_n_members (nsid_to_string nsid) = m) /\
+    (* The compile environment's method id of an external function is the
+       selector of its signature, the four bytes the source sends first
+       (build_ext_calldata); build_compile_env fills ce_method_id with
+       exactly that, over its type environment. *)
+    (!fname tys.
+       cenv.ce_method_id fname tys =
+       w2n (calldata_method_id
+              (function_selector fname (vyper_to_abi_types (get_tenv cx) tys)))) /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    (!name fields.
+       FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+       ALL_DISTINCT (MAP FST fields) /\
+       EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+                                     sz = type_memory_size tv) fields) /\
+    outcomes_accounts_typed es.outcomes /\
+    IS_SOME es.outcomes /\
+    (* A storage or transient variable has its declared type in
+       ce_module_var_type, where the lowering reads a pop's element type,
+       and is not a mapping (build_var_type_map, build_hashmap_info). *)
+    (!src id ts tr typ id_str.
+       get_module_code cx src = SOME ts /\
+       find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) ==>
+       cenv.ce_hashmap_info (src,id) = NONE /\
+       cenv.ce_module_var_type (src,id) = SOME typ) /\
+    popped_keys_indexed es.scopes /\
+    place_map_tables_agree_on_defined cenv env /\
+    (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
+               cenv.ce_hashmap_info nsid = NONE) /\
+    (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\
+       (~cx_const_name_mods mods (src,id) \/
+        IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) ==>
+       (src = env.current_src ==> src = cenv.ce_module) /\
+       (IS_SOME (FLOOKUP cenv.ce_module_vars (src,id)) ==>
+        ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+              !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+                   off + type_memory_size tv < dimword (:256))) /\
+    bare_globals_layout cenv.ce_is_ctor cenv.ce_module_var_type
+      cenv.ce_module_vars cenv.ce_modules cx env.bare_globals
+      env.bare_global_assignable
+End
+
+Definition expr_sim_inv_split_def[nocompute]:
+  expr_sim_inv cenv cx env es <=>
+    expr_sim_inv_mods [(NONE,cx_tops cx)] cenv cx env es /\
+    (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\
+       (~cx_const_name cx (src,id) \/
+        IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) ==>
+       src = cenv.ce_module /\
+       IS_SOME (FLOOKUP cenv.ce_module_vars (src,id)))
+End
+
+Theorem expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
     env_consistent env cx es /\ state_well_typed es /\
     accounts_well_typed es.accounts /\
@@ -136,7 +239,15 @@ Definition expr_sim_inv_def:
     bare_globals_layout cenv.ce_is_ctor cenv.ce_module_var_type
       cenv.ce_module_vars cenv.ce_modules cx env.bare_globals
       env.bare_global_assignable
-End
+Proof
+  simp[expr_sim_inv_split_def, expr_sim_inv_mods_def, GSYM cx_const_name_split_def] >>
+  eq_tac >> strip_tac >>
+  rpt (FIRST [first_assum ACCEPT_TAC, conj_tac]) >>
+  rpt gen_tac >> strip_tac >>
+  rpt (qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\ _ ==> _`
+    (mp_tac o Q.SPECL [`src`, `id`, `ty`])) >>
+  simp[] >> metis_tac[IS_SOME_EXISTS]
+QED
 
 Theorem extend_local_bare_globals[simp]:
   (extend_local env id typ a).bare_globals = env.bare_globals /\
@@ -222,7 +333,72 @@ Definition expr_sim_pre_def:
               is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
 End
 
-Definition expr_body_pre_def:
+Definition expr_body_pre_mods_def[nocompute]:
+  expr_body_pre_mods mods cenv cx env e es <=>
+    expr_sim_inv_mods mods cenv cx env es /\ well_typed_expr env e /\
+    byte_widths_expr e /\ alloc_limits_expr cenv e /\
+    call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
+    ~supported_expr_exists (const_name_root_mods mods) e /\
+    ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+          (int_calls_expr e) /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+              EXISTS (occurs_abi_decode_target target o SND) mods) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env_all_modules mods) target))
+End
+
+Definition expr_body_pre_split_def[nocompute]:
+  expr_body_pre cenv cx env e es <=>
+    expr_body_pre_mods [(NONE,cx_tops cx)] cenv cx env e es /\
+    expr_sim_inv cenv cx env es /\
+    EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+              occurs_abi_decode_target target (cx_tops cx)) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
+End
+
+Theorem int_calls_expr_main_split:
+  EVERY (\c. FST c = NONE /\
+             ?tops. supported_program tops /\
+                    get_module_code cx NONE = SOME tops /\
+                    IS_SOME (supported_function_decl tops c Internal))
+    (int_calls_expr e) <=>
+  EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+  EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                    supported_program tops /\
+                    IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+    (int_calls_expr e)
+Proof
+  simp[EVERY_MEM, FORALL_PROD] >> eq_tac >> strip_tac >> rpt strip_tac >>
+  res_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem expr_sim_inv_no_unallocated_bare_globals:
+  expr_sim_inv cenv cx env es /\
+  ~supported_expr_exists (const_name_root cx) e ==>
+  ~supported_expr_exists (unallocated_bare_global_root cenv env) e
+Proof
+  strip_tac >>
+  `!x. unallocated_bare_global_root cenv env x ==> const_name_root cx x` by
+    (gen_tac >> Cases_on `x` >>
+     simp[unallocated_bare_global_root_def, const_name_root_def] >>
+     rename1 `cx_const_name cx nsid` >> PairCases_on `nsid` >>
+     rw[IS_SOME_EXISTS] >>
+     qpat_x_assum `expr_sim_inv _ _ _ _`
+       (mp_tac o CONJUNCT2 o REWRITE_RULE [expr_sim_inv_split_def]) >>
+     disch_then (qspecl_then [`nsid0`, `nsid1`] mp_tac) >>
+     simp[]) >>
+  strip_tac >>
+  qpat_x_assum `~supported_expr_exists (const_name_root cx) e` mp_tac >>
+  simp[] >> irule (CONJUNCT1 supported_expr_exists_mono) >>
+  metis_tac[]
+QED
+
+Theorem expr_body_pre_def:
   expr_body_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
@@ -237,7 +413,15 @@ Definition expr_body_pre_def:
               occurs_abi_decode_target target (cx_tops cx)) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
               is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
-End
+Proof
+  simp[expr_body_pre_split_def, expr_body_pre_mods_def,
+       int_calls_expr_main_split, const_name_root_mods_singleton,
+       type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
+  eq_tac >> strip_tac >> simp[] >>
+  `expr_sim_inv_mods [(NONE,cx_tops cx)] cenv cx env es` by
+    fs[expr_sim_inv_split_def] >>
+  drule_all expr_sim_inv_no_unallocated_bare_globals >> simp[]
+QED
 
 Definition expr_sim_ok_def:
   expr_sim_ok cenv e <=>

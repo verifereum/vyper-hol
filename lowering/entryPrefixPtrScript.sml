@@ -132,7 +132,9 @@ Theorem dispatch_raw_jump_joint[local]:
   gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
     (OK (jump_to lbl s),G,tn)
 Proof
-  strip_tac >> irule dispatch_joint_edge_path >> conj_tac
+  strip_tac >>
+  `i.inst_opcode <> DALLOCA` by (strip_tac >> gvs[is_terminator_def]) >>
+  irule dispatch_joint_edge_path >> conj_tac
   >- simp[jump_to_def] >> conj_tac
   >- (rewrite_tac[gas_path_mem_edge_def] >> simp[] >> qexists_tac `0` >>
       simp[step_inst_non_invoke, gas_count_step_def, mem_safe_step_non_invoke] >>
@@ -181,7 +183,7 @@ Proof
   rpt strip_tac >> Cases_on `op'` >> gvs[op_taint_def] >> strip_tac >> gvs[]
 QED
 
-Theorem dispatch_entry_ghost[local]:
+Theorem dispatch_entry_ghost:
   (!bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) ==>
   entry_prov fn s G = G /\ entry_taint_vars fn s tn = tn
@@ -220,7 +222,7 @@ Proof
   metis_tac[gas_path_mem_rules, arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem compile_selector_checks_ptr_endpoint:
+Theorem compile_selector_checks_ptr_endpoint_frame:
   !sels mid st st'.
     compile_selector_checks mid sels st = ((), st') ==>
     !ctx fn ss m lo PG G tn.
@@ -240,6 +242,7 @@ Theorem compile_selector_checks_ptr_endpoint:
         gas_path_mem ctx fn ss 0 (OK tt) /\
         (!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (ss, G, tn) [] (OK tt, G', tn')) /\
         vars_pc_only ss tt /\ fresh_vars_wrt st' tt /\ ~tt.vs_halted /\
+        eval_operand mid tt = SOME m /\ op_taint tn' mid = {} /\
         tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
         tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
         (case selector_hit m sels of
@@ -353,7 +356,7 @@ Proof
   suspend "miss"
 QED
 
-Resume compile_selector_checks_ptr_endpoint[hit]:
+Resume compile_selector_checks_ptr_endpoint_frame[hit]:
   qpat_x_assum `!mid st st'. _` kall_tac >>
   `entry_prov fn (jump_to match u) G1 = G1 /\
    entry_taint_vars fn (jump_to match u) tn1 = tn1` by
@@ -392,7 +395,7 @@ Resume compile_selector_checks_ptr_endpoint[hit]:
     (simp[Abbr `tt`, control_moves_keep_vars] >>
      irule fresh_vars_wrt_mono >> qexists_tac `tail` >> simp[] >>
      drule compile_selector_checks_next_var >> simp[]) >>
-  simp[Abbr `tt`, jump_to_def] >>
+  simp[Abbr `tt`, jump_to_def, control_moves_keep_vars] >>
   rpt strip_tac >>
   qpat_x_assum `!D fuel. _ ==> ptr_safe_run _ _ _ _ _ _ _ _ ss`
     (qspecl_then [`D`, `fuel`] irule) >>
@@ -407,7 +410,7 @@ Resume compile_selector_checks_ptr_endpoint[hit]:
   fs[get_instruction_def, jump_to_def]
 QED
 
-Resume compile_selector_checks_ptr_endpoint[miss]:
+Resume compile_selector_checks_ptr_endpoint_frame[miss]:
   `entry_prov fn (jump_to next u) G1 = G1 /\
    entry_taint_vars fn (jump_to next u) tn1 = tn1` by
     (irule entry_ghost_no_phi >> simp[jump_to_def] >> metis_tac[]) >>
@@ -439,7 +442,7 @@ Resume compile_selector_checks_ptr_endpoint[miss]:
   qpat_x_assum `!D. _` (qspec_then `D` irule) >> simp[]
 QED
 
-Finalise compile_selector_checks_ptr_endpoint
+Finalise compile_selector_checks_ptr_endpoint_frame
 
 Theorem dispatch_scalar_update_ptr_endpoint:
   (!fuel. step_inst fuel ctx (mk_inst id opc ops [out]) s =
@@ -510,31 +513,69 @@ Proof
 QED
 
 
-Theorem compile_selector_dispatch_linear_ptr_endpoint:
-  compile_selector_dispatch_linear selectors fallback st = ((),st') /\
-  fn_has_code st st' fn /\
-  EVERY (\(sel,lbl). sel < 2 ** 32) selectors /\
+
+
+(* The physical dispatch prelude is the same for both entry compilers. *)
+Theorem dispatch_prelude_ptr_endpoint:
   LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256) /\
   fresh_vars_wrt st ss /\ ~ss.vs_halted /\
   ss.vs_current_bb = st.cs_current_bb /\
   ss.vs_inst_idx = LENGTH st.cs_current_insts /\
   allocas_from lo ss /\ (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
-  (!bb. lookup_block
-          (linear_dispatch_target ss.vs_call_ctx.cc_calldata selectors fallback)
-          fn.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) ==>
-  ?tt G' tn'.
-    gas_path_mem ctx fn ss 0 (OK tt) /\
-    (!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (ss, G, tn) [] (OK tt, G', tn')) /\
-    vars_pc_only ss tt /\ fresh_vars_wrt st' tt /\ ~tt.vs_halted /\
-    tt.vs_current_bb = linear_dispatch_target ss.vs_call_ctx.cc_calldata selectors fallback /\
-    tt.vs_inst_idx = 0 /\
-    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
-    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-    !D. (!fuel. ptr_safe_blocks D lo fuel ctx fn PG G' tn' tt) ==>
-        !fuel. ptr_safe_run D lo fuel ctx fn PG G tn ss
+  (LENGTH ss.vs_call_ctx.cc_calldata < 4 ==>
+    !bb. lookup_block fallback fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  q.cs_current_bb = d /\ LENGTH q.cs_current_insts = 2 /\
+  q.cs_next_var = st.cs_next_var + 5 /\
+  lookup_block st.cs_current_bb fn.fn_blocks = SOME b0 /\
+  get_instruction b0 (LENGTH st.cs_current_insts) =
+    SOME (mk_inst st.cs_next_id CALLDATASIZE []
+      [STRING #"%" (toString st.cs_next_var)]) /\
+  get_instruction b0 (SUC (LENGTH st.cs_current_insts)) =
+    SOME (mk_inst (st.cs_next_id + 1) LT
+      [Var (STRING #"%" (toString st.cs_next_var)); Lit 4w]
+      [STRING #"%" (toString (st.cs_next_var + 1))]) /\
+  get_instruction b0 (SUC (SUC (LENGTH st.cs_current_insts))) =
+    SOME (mk_inst (st.cs_next_id + 2) ISZERO
+      [Var (STRING #"%" (toString (st.cs_next_var + 1)))]
+      [STRING #"%" (toString (st.cs_next_var + 2))]) /\
+  get_instruction b0 (SUC (SUC (SUC (LENGTH st.cs_current_insts)))) =
+    SOME (mk_inst (st.cs_next_id + 3) JNZ
+      [Var (STRING #"%" (toString (st.cs_next_var + 2))); Label d; Label fallback] []) /\
+  lookup_block d fn.fn_blocks = SOME bd /\
+  get_instruction bd 0 = SOME (mk_inst (st.cs_next_id + 4) CALLDATALOAD
+    [Lit 0w] [STRING #"%" (toString (st.cs_next_var + 3))]) /\
+  get_instruction bd 1 = SOME (mk_inst (st.cs_next_id + 5) SHR
+    [Lit 224w; Var (STRING #"%" (toString (st.cs_next_var + 3)))]
+    [STRING #"%" (toString (st.cs_next_var + 4))]) /\
+  phi_prefix_length bd.bb_instructions = 0 ==>
+  (if 4 <= LENGTH ss.vs_call_ctx.cc_calldata then
+     ?t G' tn'.
+       gas_path_mem ctx fn ss 0 (OK t) /\
+       (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+          (ss,G,tn) [] (OK t,G',tn')) /\
+       vars_pc_only ss t /\ fresh_vars_wrt q t /\ ~t.vs_halted /\
+       t.vs_current_bb = q.cs_current_bb /\ t.vs_inst_idx = LENGTH q.cs_current_insts /\
+       eval_operand (Var (STRING #"%" (toString (st.cs_next_var + 4)))) t =
+         SOME (calldata_method_id ss.vs_call_ctx.cc_calldata) /\
+       op_taint tn' (Var (STRING #"%" (toString (st.cs_next_var + 4)))) = {} /\
+       tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+       tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+       (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t) ==>
+            !fuel. ptr_safe_run D lo fuel ctx fn PG G tn ss)
+   else
+     ?t G' tn'.
+       gas_path_mem ctx fn ss 0 (OK t) /\
+       (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+         (ss,G,tn) [] (OK t,G',tn')) /\
+       vars_pc_only ss t /\ fresh_vars_wrt q t /\ ~t.vs_halted /\
+       t.vs_current_bb = fallback /\ t.vs_inst_idx = 0 /\
+       tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+       tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+       (!D. (!fuel. ptr_safe_blocks D lo fuel ctx fn PG G' tn' t) ==>
+            !fuel. ptr_safe_run D lo fuel ctx fn PG G tn ss))
 Proof
-  strip_tac >> drule_all compile_selector_dispatch_linear_layout >> strip_tac >>
+  strip_tac >>
   qabbrev_tac `cd = ss.vs_call_ctx.cc_calldata` >>
   `!fuel. step_inst fuel ctx
      (mk_inst st.cs_next_id CALLDATASIZE []
@@ -556,7 +597,7 @@ Proof
   suspend "lt"
 QED
 
-Resume compile_selector_dispatch_linear_ptr_endpoint[lt]:
+Resume dispatch_prelude_ptr_endpoint[lt]:
   `!fuel. step_inst fuel ctx
      (mk_inst (st.cs_next_id + 1) LT
        [Var (STRING #"%" (toString st.cs_next_var)); Lit 4w]
@@ -576,7 +617,7 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[lt]:
   suspend "iszero"
 QED
 
-Resume compile_selector_dispatch_linear_ptr_endpoint[iszero]:
+Resume dispatch_prelude_ptr_endpoint[iszero]:
   qpat_x_assum `u2 = _` kall_tac >>
   qpat_x_assum `G2 = _` kall_tac >>
   qpat_x_assum `tn2 = _` kall_tac >>
@@ -615,9 +656,7 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[iszero]:
   suspend "branch"
 QED
 
-Resume compile_selector_dispatch_linear_ptr_endpoint[branch]:
-  drule compile_selector_dispatch_linear_next_var_exact >> strip_tac >>
-  `st.cs_next_var + 5 <= st'.cs_next_var` by simp[] >>
+Resume dispatch_prelude_ptr_endpoint[branch]:
   `gas_path_mem ctx fn u3 0
      (OK (jump_to (if bool_to_word (4 <= LENGTH cd) <> 0w then d else fallback) u3))` by
     (irule for_range_jnz_zero_path_mem >> simp[] >>
@@ -628,12 +667,12 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[branch]:
     (rpt gen_tac >> irule dispatch_jnz_joint >> simp[] >>
      qexistsl_tac [`st.cs_next_id + 3`,
        `Var (STRING #"%" (toString (st.cs_next_var + 2)))`] >> simp[]) >>
-  Cases_on `4 <= LENGTH cd`
+  Cases_on `4 <= LENGTH cd` >> fs[]
   >- suspend "load"
   >> suspend "short"
 QED
 
-Resume compile_selector_dispatch_linear_ptr_endpoint[short]:
+Resume dispatch_prelude_ptr_endpoint[short]:
   qabbrev_tac `tt = jump_to fallback u3` >>
   `gas_path_mem ctx fn ss 0 (OK tt)` by
     (qpat_x_assum `gas_path_mem ctx fn u3 0 (OK _)` mp_tac >>
@@ -643,29 +682,33 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[short]:
      disch_then drule >> simp[]) >>
   `entry_prov fn tt G3 = G3 /\ entry_taint_vars fn tt tn3 = tn3` by
     (irule dispatch_entry_ghost >>
-     fs[Abbr `tt`, jump_to_def, linear_dispatch_target_short, Abbr `cd`]) >>
+     fs[Abbr `tt`, jump_to_def, Abbr `cd`]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (ss,G,tn) [] (OK tt,G3,tn3)` by
     (irule dispatch_joint_then >> qexistsl_tac [`G3`, `tn3`, `u3`] >>
      fs[Abbr `tt`, bool_to_word_def]) >>
-  qexistsl_tac [`tt`, `entry_prov fn tt G3`, `entry_taint_vars fn tt tn3`] >>
-  `fresh_vars_wrt st' tt` by
+  qexistsl_tac [`tt`, `G3`, `tn3`] >>
+  `fresh_vars_wrt q tt` by
     (simp[Abbr `tt`, control_moves_keep_vars] >>
      irule fresh_vars_wrt_mono >>
      qexists_tac `st with cs_next_var := st.cs_next_var + 3` >> simp[]) >>
-  simp[entry_taint_vars_frame, linear_dispatch_target_short, Abbr `cd`] >>
   `vars_pc_only ss tt` by simp[Abbr `tt`, vars_pc_only_jump_to] >>
-  simp[Abbr `tt`, jump_to_def] >>
-  rpt strip_tac >>
+  `~tt.vs_halted /\ tt.vs_current_bb = fallback /\ tt.vs_inst_idx = 0` by
+    simp[Abbr `tt`, jump_to_def] >>
+  asm_simp_tac bool_ss [] >> rpt strip_tac >>
+  `ptr_safe_blocks D lo fuel ctx fn PG
+     (entry_prov fn (jump_to fallback u3) G3)
+     (entry_taint_vars fn (jump_to fallback u3) tn3) (jump_to fallback u3)` by
+    fs[Abbr `tt`] >>
   `ptr_safe_run D lo fuel ctx fn PG G3 tn3 u3` suffices_by metis_tac[] >>
   irule ptr_safe_cond_jump_continuation >>
   simp[] >>
   qexistsl_tac [`st.cs_next_id + 3`, `fallback`,
     `Var (STRING #"%" (toString (st.cs_next_var + 2)))`,
     `bool_to_word (4 <= LENGTH ss.vs_call_ctx.cc_calldata)`, `d`] >>
-  gvs[bool_to_word_def, jump_to_def]
+  fs[bool_to_word_def, Abbr `cd`]
 QED
 
-Resume compile_selector_dispatch_linear_ptr_endpoint[load]:
+Resume dispatch_prelude_ptr_endpoint[load]:
   qabbrev_tac `s4 = jump_to d u3` >>
   `gas_path_mem ctx fn ss 0 (OK s4)` by
     (qpat_x_assum `gas_path_mem ctx fn u3 0 (OK _)` mp_tac >>
@@ -708,7 +751,7 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[load]:
   suspend "shift"
 QED
 
-Resume compile_selector_dispatch_linear_ptr_endpoint[shift]:
+Resume dispatch_prelude_ptr_endpoint[shift]:
   `w >>> 224 = calldata_method_id cd` by
     simp[Abbr `w`, calldataload_0_shr_224] >>
   qpat_x_assum `Abbrev (w = _)` kall_tac >>
@@ -748,7 +791,7 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[shift]:
   suspend "checks"
 QED
 
-Resume compile_selector_dispatch_linear_ptr_endpoint[checks]:
+Resume dispatch_prelude_ptr_endpoint[checks]:
   `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G6 tn6 u6) ==>
        !fuel. ptr_safe_run D lo fuel ctx fn PG G tn ss` by
     (rpt strip_tac >>
@@ -764,13 +807,74 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[checks]:
      qpat_x_assum `!fuel. ptr_safe_blocks _ _ _ _ _ _ _ _ s4`
        (qspec_then `fuel` mp_tac) >>
      fs[Abbr `s4`]) >>
+  qexistsl_tac [`u6`, `G6`, `tn6`] >> fs[Abbr `cd`]
+QED
+
+Finalise dispatch_prelude_ptr_endpoint
+
+Theorem compile_selector_dispatch_linear_ptr_endpoint:
+  compile_selector_dispatch_linear selectors fallback st = ((),st') /\
+  fn_has_code st st' fn /\
+  EVERY (\(sel,lbl). sel < 2 ** 32) selectors /\
+  LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256) /\
+  fresh_vars_wrt st ss /\ ~ss.vs_halted /\
+  ss.vs_current_bb = st.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH st.cs_current_insts /\
+  allocas_from lo ss /\ (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
+  (!bb. lookup_block
+          (linear_dispatch_target ss.vs_call_ctx.cc_calldata selectors fallback)
+          fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) ==>
+  ?tt G' tn'.
+    gas_path_mem ctx fn ss 0 (OK tt) /\
+    (!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (ss, G, tn) [] (OK tt, G', tn')) /\
+    vars_pc_only ss tt /\ fresh_vars_wrt st' tt /\ ~tt.vs_halted /\
+    tt.vs_current_bb = linear_dispatch_target ss.vs_call_ctx.cc_calldata selectors fallback /\
+    tt.vs_inst_idx = 0 /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    !D. (!fuel. ptr_safe_blocks D lo fuel ctx fn PG G' tn' tt) ==>
+        !fuel. ptr_safe_run D lo fuel ctx fn PG G tn ss
+Proof
+  strip_tac >> drule_all compile_selector_dispatch_linear_layout >> strip_tac >>
+  drule compile_selector_dispatch_linear_next_var_exact >> strip_tac >>
+  `st.cs_next_var + 5 <= st'.cs_next_var` by simp[] >>
+  `(LENGTH ss.vs_call_ctx.cc_calldata < 4 ==>
+    !bb. lookup_block fallback fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0)` by
+    (strip_tac >> qpat_assum `!bb. lookup_block (linear_dispatch_target _ _ _) _ = _ ==> _`
+      (mp_tac o SIMP_RULE bool_ss [linear_dispatch_target_short]) >>
+     simp[linear_dispatch_target_short]) >>
+  mp_tac (Q.INST [`b0` |-> `b0`, `bd` |-> `bd`, `q` |-> `q`, `d` |-> `d`,
+     `st` |-> `st`, `fallback` |-> `fallback`, `ss` |-> `ss`,
+     `ctx` |-> `ctx`, `fn` |-> `fn`, `lo` |-> `lo`, `PG` |-> `PG`,
+     `G` |-> `G`, `tn` |-> `tn`] (SPEC_ALL dispatch_prelude_ptr_endpoint)) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qabbrev_tac `cd = ss.vs_call_ctx.cc_calldata` >>
+  reverse (Cases_on `4 <= LENGTH cd`)
+  >- (simp[linear_dispatch_target_short] >>
+      disch_then (qx_choosel_then [`t`,`G'`,`tn'`] strip_assume_tac) >>
+      qexistsl_tac [`t`,`G'`,`tn'`] >>
+      simp[] >> irule fresh_vars_wrt_mono >> qexists_tac `q` >> simp[]) >>
+  fs[] >> disch_then (qx_choosel_then [`u6`,`G6`,`tn6`] strip_assume_tac) >>
+  suspend "checks"
+QED
+
+Resume compile_selector_dispatch_linear_ptr_endpoint[checks]:
   drule compile_selector_checks_next_var_exact >> strip_tac >>
   `r.cs_next_var = st'.cs_next_var` by simp[] >>
   `linear_dispatch_target cd selectors fallback =
      case selector_hit (calldata_method_id cd) selectors of
        SOME l => l | NONE => fallback` by
     (irule linear_dispatch_target_selector_hit >> simp[]) >>
-  drule compile_selector_checks_ptr_endpoint >>
+  `allocas_from lo u6 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u6)` by
+    (qpat_x_assum `vars_pc_only ss u6` mp_tac >>
+     qpat_x_assum `allocas_from lo ss` mp_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp ss` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[vars_pc_only_def, venom_state_component_equality,
+          allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  drule compile_selector_checks_ptr_endpoint_frame >>
   disch_then (qspecl_then [`ctx`, `fn`, `u6`, `calldata_method_id cd`,
     `lo`, `PG`, `G6`, `tn6`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
@@ -837,3 +941,42 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[fallback]:
 QED
 
 Finalise compile_selector_dispatch_linear_ptr_endpoint
+
+Theorem compile_selector_checks_ptr_endpoint:
+  !sels mid st st'.
+    compile_selector_checks mid sels st = ((), st') ==>
+    !ctx fn ss m lo PG G tn.
+      fn_has_code st st' fn /\ eval_operand mid ss = SOME m /\
+      fresh_vars_wrt st ss /\ ~ss.vs_halted /\
+      ss.vs_current_bb = st.cs_current_bb /\
+      ss.vs_inst_idx = LENGTH st.cs_current_insts /\
+      allocas_from lo ss /\ (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
+      op_taint tn mid = {} /\
+      (!lbl bb. selector_hit m sels = SOME lbl /\
+         lookup_block lbl fn.fn_blocks = SOME bb ==>
+         phi_prefix_length bb.bb_instructions = 0) /\
+      (st'.cs_current_insts = [] ==>
+        ?bb. lookup_block st'.cs_current_bb fn.fn_blocks = SOME bb /\
+             phi_prefix_length bb.bb_instructions = 0) ==>
+      ?tt G' tn'.
+        gas_path_mem ctx fn ss 0 (OK tt) /\
+        (!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (ss, G, tn) [] (OK tt, G', tn')) /\
+        vars_pc_only ss tt /\ fresh_vars_wrt st' tt /\ ~tt.vs_halted /\
+        tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+        tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+        (case selector_hit m sels of
+           SOME lbl => tt.vs_current_bb = lbl /\ tt.vs_inst_idx = 0
+         | NONE => tt.vs_current_bb = st'.cs_current_bb /\
+                   tt.vs_inst_idx = LENGTH st'.cs_current_insts) /\
+        !D. (!fuel. case selector_hit m sels of
+           SOME lbl => ptr_safe_blocks D lo fuel ctx fn PG G' tn' tt
+         | NONE => ptr_safe_run D lo fuel ctx fn PG G' tn' tt) ==>
+          !fuel. ptr_safe_run D lo fuel ctx fn PG G tn ss
+Proof
+  rpt gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+  drule compile_selector_checks_ptr_endpoint_frame >>
+  disch_then (qspecl_then [`ctx`,`fn`,`ss`,`m`,`lo`,`PG`,`G`,`tn`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`tt`,`G'`,`tn'`] strip_assume_tac) >>
+  qexistsl_tac [`tt`,`G'`,`tn'`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED

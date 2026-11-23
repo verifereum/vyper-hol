@@ -5,7 +5,7 @@ Ancestors
  ctorDeployDefs context ctorDeployLoweringDefs deployUnitProducers ctorDeployMemoryFrontier allocaFrontierRoom
  moduleLoweringProps fragExec venomExecSemantics venomInst venomState
  vyperCompiler compileEnv o1PassContract e2eEntry finite_map list
- ctorDeployLoweringPrefix ctorDeployShape unitShapeDefs compileVyper
+ ctorDeployLoweringPrefix ctorDeployMemoryRunMemEntryLabel acceptedContextPhi compileVyper
  o1ScheduleDecompHelpers ctorDeployInitcode e2eDeployDefs vyperState
  vyperInterpreter vyperContext venomMemDefs allocaBudgetProps
  allocaFrontierBound fcgCorrectnessProof fcgDefs ctorDeployImmBudget
@@ -32,15 +32,30 @@ Proof
 QED
 
 Theorem deploy_ctor_entry_initial_fields[local]:
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
  fresh_vars_wrt (initial_compile_state "__deploy") vs /\
  ~vs.vs_halted /\ vs.vs_allocas = FEMPTY /\
  vs.vs_alloca_next = imm_len tops
 Proof
- simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
+ simp[gas_variant_def, opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def,
       init_venom_state_def, venom_state_component_equality] >>
  strip_tac >>
  simp[fresh_vars_wrt_def, initial_compile_state_def, lookup_var_def]
+QED
+
+Theorem deploy_ctor_raw_variant_from_gas_variant:
+  gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+  raw_variant (opt_deploy_entry_state_own prog prog' cplan tops es).vs_initial_fmp vs
+    (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes)
+Proof
+  strip_tac >> simp[raw_variant_def] >>
+  `(opt_deploy_entry_state_own prog prog' cplan tops es) with
+      <|vs_fmp := (opt_deploy_entry_state_own prog prog' cplan tops es).vs_initial_fmp;
+        vs_initial_fmp := (opt_deploy_entry_state_own prog prog' cplan tops es).vs_initial_fmp|> =
+    opt_deploy_entry_state_own prog prog' cplan tops es` by
+    simp[venom_state_component_equality, opt_deploy_entry_state_own_def,
+         opt_entry_state_own_def, entry_venom_state_def] >>
+  gvs[venom_state_fupdfupds]
 QED
 
 Theorem deploy_ctor_original_entry_shape:
@@ -58,7 +73,6 @@ Theorem deploy_ctor_original_entry_shape:
       phi_prefix_length bb.bb_instructions = 0
 Proof
  rpt gen_tac >> strip_tac >>
- drule_all deploy_prefix_ctor_entry_label >> strip_tac >>
  fs[deploy_ctor_code_def] >>
  drule lower_vyper_deploy_unit_entry >> strip_tac >>
  drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
@@ -66,18 +80,17 @@ Proof
    (fs[lowering_context_ok_def, ctx_fn_names_def] >>
     drule lookup_function_member_iff >>
     disch_then (qspecl_then [`"__deploy"`, `func`] mp_tac) >> simp[]) >>
+ drule_all ctor_checked_entry_label_from_lowering >> strip_tac >>
  drule_all lowered_unit_entry_facts >> strip_tac >>
  simp[] >>
- drule_all lower_vyper_deploy_unit_source_unit_ok >> strip_tac >>
- `EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts func)` by
-   (gvs[o1_source_unit_ok_def, EVERY_MEM] >> metis_tac[]) >>
- gvs[] >>
  rename1 `fn_entry_label f = SOME "__deploy"` >>
  Cases_on `f.fn_blocks` >- gvs[fn_entry_label_def, entry_block_def] >>
- gvs[fn_entry_label_def, entry_block_def] >>
- qexists `h` >> simp[lookup_block_def, FIND_thm] >>
- Cases_on `h.bb_instructions` >> simp[phi_prefix_length_def] >>
- fs[fn_insts_def, fn_insts_blocks_def, raw_opcode_ok_def]
+ fs[fn_entry_label_def, entry_block_def] >>
+ `lookup_block "__deploy" f.fn_blocks = SOME h` by
+   simp[lookup_block_def, FIND_thm] >>
+ qexists `h` >> conj_tac >- fs[lookup_block_def, FIND_thm] >>
+ irule lowering_context_ok_block_phi >>
+ goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem deploy_ctor_start_accepts_value[local]:
@@ -117,14 +130,14 @@ Proof
 QED
 
 Theorem deploy_ctor_prefix_entry:
- !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+ !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func
   mut nr' body' am_c es0 exts ints fb cf cenv0 pos_args is_payable ret.
- deploy_phases policy tops (deploy_bc,runtime_bc)
+ deploy_phases policy tops (assemble prog,runtime_bc)
    (rpolicy,dunit,dout,prog,cplan) /\
  deploy_source_ok tops am tx /\
- deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+ deploy_state_rel tops (assemble prog') am tx es /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rpolicy runtime_bc dunit
    (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
@@ -156,7 +169,7 @@ Proof
  drule_all deploy_ctor_package_accepts_value >> disch_tac >>
  `is_payable \/ vs.vs_call_ctx.cc_callvalue = 0w` by
    (Cases_on `is_payable` >> simp[] >>
-    gvs[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
+    gvs[gas_variant_def, opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def,
         deploy_state_rel_def, venom_state_component_equality,
         call_context_component_equality]) >>
  drule_all deploy_ctor_enter_context >>
@@ -561,8 +574,12 @@ Theorem deploy_ctor_entry_before_register:
         ?fuel'. run_context fuel' dunit.cu_context vs = r)
 Proof
  rpt gen_tac >> strip_tac >>
- `gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes)` by
-   fs[gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+ `deploy_bc = assemble prog` by fs[deploy_phases_def] >>
+ qpat_x_assum `deploy_bc = _` SUBST_ALL_TAC >>
+ `gas_variant vs (opt_deploy_entry_state_own prog prog cplan tops es
+     with vs_outcomes := vs.vs_outcomes)` by
+   fs[opt_deploy_entry_state_own_identity, gas_variant_def,
+      venomStateTheory.venom_state_component_equality] >>
  drule_all deploy_ctor_prefix_entry >>
  disch_then (map_every assume_tac o CONJUNCTS) >>
  qpat_x_assum `?e. _` (qx_choose_then `e` (map_every assume_tac o CONJUNCTS)) >>
@@ -587,12 +604,12 @@ Proof
 QED
 
 Theorem deploy_ctor_entry_before_register_gas_path:
- !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+ !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
   body cenv nr nkey ut imm exit_lbl sa sb sj se sp sf func mut nr' body' am_c es0
   exts ints fb cf cenv0 pos_args is_payable ret cap st_pay st1 cenv1 st2 st3.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+ deploy_phases policy tops (assemble prog,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
  deploy_ctor_code tops rpolicy runtime_bc dunit
    (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,se,sp,sf,func) /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\

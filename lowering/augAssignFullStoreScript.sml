@@ -61,6 +61,8 @@ Proof
      simp[Abbr `inst`, mk_inst_def, inst_mem_below_frontier_def,
           inst_dload_in_section_def, source_memory_read_ranges_def,
           source_memory_write_ranges_def, is_terminator_def]) >>
+  `ctx_has_dalloca ctx ==> dalloca_no_wrap inst s` by
+    (Cases_on `tr` >> simp[Abbr `inst`, mk_inst_def, dalloca_no_wrap_non_dalloca]) >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
      (OK (u with vs_inst_idx := SUC s.vs_inst_idx),G,un)` by
     (mp_tac (Q.INST [`i` |-> `inst`, `u` |-> `u`, `D` |-> `D`, `lo` |-> `lo`,
@@ -110,7 +112,8 @@ Proof
   simp[exit_result_def] >> qexists_tac `i` >> Cases_on `tr` >>
   simp[Abbr `i`, mk_inst_def, step_inst_non_invoke, step_inst_base_def,
        eval_operands_def, gas_events_step_def, gas_count_step_def,
-       mem_safe_step_non_invoke, inst_mem_below_frontier_def,
+       mem_safe_step_non_invoke, dalloca_no_wrap_non_dalloca,
+       inst_mem_below_frontier_def,
        inst_dload_in_section_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, exit_result_def] >>
   fs[mk_inst_def]

@@ -46,6 +46,7 @@ Proof
 QED
 
 Theorem fixed_bytes_conversion_valid:
+  0 < n /\
   (!k. bd = Dynamic k ==> k <= n) /\ (!k. bd = Fixed k ==> k <> n) ==>
   valid_conversion (BaseT (BytesT bd)) (BaseT (BytesT (Fixed n)))
 Proof

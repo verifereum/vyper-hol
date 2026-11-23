@@ -388,8 +388,8 @@ Proof
   `?bb. lookup_block state.vs_current_bb func.fn_blocks = SOME bb /\
      isPREFIX (emitted_insts sa sb) (DROP state.vs_inst_idx bb.bb_instructions)` by
     (gvs[fn_has_code_def, exprLoweringPropsTheory.same_blocks_def, IS_PREFIX_APPEND] >> simp[DROP_APPEND]) >>
-  drule_all run_inst_seq_gas_origin_ptr_path >> strip_tac >>
-  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
+   EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
     (qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[compile_store_bytestring_def, compile_bytestring_copy_len_def,
@@ -397,6 +397,14 @@ Proof
           fresh_var_def, fresh_id_def, emit_def, comp_return_def] >>
      strip_tac >> gvs[exprLoweringPropsTheory.emitted_insts_def, DROP_APPEND1,
                      venomInstTheory.mk_inst_def]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre state = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by simp[listTheory.MEM_APPEND] >>
+     fs[listTheory.EVERY_MEM, unitTransformDefsTheory.dalloca_no_wrap_def]) >>
+  drule_all run_inst_seq_gas_origin_ptr_path >> strip_tac >>
   qexistsl_tac [`t with vs_inst_idx := state.vs_inst_idx + LENGTH (emitted_insts sa sb)`,
                 `Gf`, `tnf`] >>
   simp[] >>

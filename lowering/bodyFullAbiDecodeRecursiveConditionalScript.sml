@@ -40,13 +40,17 @@ QED
 
 Resume abi_decode_joint_mutual_length_from_array[word]:
   asm_x "array" kall_tac >>
-  CONV_TAC normalize >> rpt gen_tac >> disch_tac >>
+  CONV_TAC normalize >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   mp_tac (BETA_RULE abi_decode_word_case_observed_conditional) >>
   (impl_tac >-
-    (rpt gen_tac >> strip_tac >>
-     `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
-     match_mp_tac abi_decode_clamp_joint_observed >> asm_rewrite_tac[])) >>
-  disch_then (fn th => first_x_assum (unpack_observed o MATCH_MP (CONV_RULE normalize th))) >>
+    MATCH_ACCEPT_TAC abi_decode_clamp_joint_observed) >>
+  disch_then (mp_tac o Q.SPECL
+    [`dst`,`src_op`,`load_opc`,`base_op`,`hi_op`,`clamp_info`,`env`,`sf`,`ty`,
+     `tv`,`live`,`protected`,`start`,`finish'`,`s`,`G`,`tn`,`d`] o
+    CONV_RULE normalize) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then unpack_observed >>
   qexistsl [`r`, `G'`, `tn'`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -59,7 +63,12 @@ QED
 
 Resume abi_decode_joint_mutual_length_from_array[bytes]:
   CONV_TAC normalize >>
-  MATCH_ACCEPT_TAC (CONV_RULE normalize abi_decode_bytes_case_observed_conditional)
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  MATCH_MP_TAC (CONV_RULE normalize (Q.SPECL
+    [`dst`,`src_op`,`load_opc`,`base_op`,`hi_op`,`max_len`,`env`,`sf`,`ty`,
+     `tv`,`live`,`protected`,`start`,`finish'`,`s`,`G`,`tn`,`d`]
+    abi_decode_bytes_case_observed_conditional)) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume abi_decode_joint_mutual_length_from_array[complex]:

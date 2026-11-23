@@ -365,9 +365,14 @@ Resume typed_store_rank_path_mem[equal_numeric]:
   simp[w2n_add_2] >> decide_tac
 QED
 Resume typed_store_rank_path_mem[equal_finish]:
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    (drule typed_dynarray_equal_shape >>
+     strip_tac >> simp[mk_inst_def]) >>
   `gas_path_mem ctx fn s 0 (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (irule bodyDeclZeroGasPathTheory.body_decl_zero_gas_path >>
-     simp[] >> qexists_tac `sa` >> simp[] >>
+     simp[] >> qexists_tac `sa` >> simp[] >> rpt conj_tac >>
+     TRY (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+          qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_APPEND] >> NO_TAC) >>
      drule typed_dynarray_equal_shape >>
      simp[same_blocks_def, mk_inst_def, is_terminator_def]) >>
   `val_in_memory (ArrayTV tv (Dynamic (LENGTH l))) (ArrayV (DynArrayV l))

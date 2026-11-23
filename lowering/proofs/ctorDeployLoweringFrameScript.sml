@@ -7,7 +7,7 @@ Ancestors
   ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract bodySim e2eDefs callTrace
   ctorDeployDefs immSectionDead e2eDeployDefs e2eEntry
   vyperTypeStoragePreservation list supportedDecls supportedProgram
-  compileEnv loweringStateRelDefs compileVyper moduleLowering entryLocals ctorEntryLocals bodySimEntry
+  compileEnv loweringStateRelDefs compileVyper moduleLowering entryLocals bodySimEntry
   exprLoweringProps context finite_map stmtLoweringMono freshWrites fragExec vyperScopePreservation
   vyperPlaceInvariants vyperInterpreter vyperState vyperMisc
   vyperTypeDeploymentMachine vyperTypeBindArguments vyperTypeInvariants
@@ -18,7 +18,9 @@ Ancestors
   typedCopyProducer typedCopyMetadata vyperTypeContractContext
   placeTypingBuildProps structFieldsProps pair allocLimitsProps alist
   ctorDeployLoweringFrameStmtWidths ctorDeployLoweringFrameSupport vyperTypeSystem
-  bodyExprPreFacts immutableLocationProps entryStateRel
+  bodyExprPreFacts immutableLocationProps entryStateRel entryDispatchProps
+  ctorDeployLoweringEntrySelection ctorDeployLoweringArms constSubstStmtsPreserve constSubst
+  bodyFullPreds constSubstStmts constSubstCorrect
 Libs
   monadsyntax
 
@@ -233,11 +235,11 @@ Proof
 QED
 
 Theorem deploy_ctor_immutable_epilogue:
-  !tops am tx mut nr body am_c es0 rpolicy runtime_bc dunit cenv nkey ut
+  !tops am tx mut nr body source_body am_c es0 rpolicy runtime_bc dunit cenv nkey ut
    imm exit_lbl sa sb sj st_exit st_epilogue st_final func deploy_bc es.
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
-    deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
+    deploy_ctor_start tops am tx (mut,nr,source_body,am_c,es0) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
        st_epilogue,st_final,func) ==>
@@ -398,6 +400,7 @@ Theorem deploy_frame_checked_body_setup:
     env_immutables_consistent (artifact_env deploy_art mods NONE) cx st /\
     context_well_typed cx ==>
     ?env_body env_after.
+      env_body = function_entry_env deploy_art mods NONE Deploy args /\
       env_body.current_src = NONE /\
       env_body.type_defs = type_env_all_modules mods /\
       env_body.fn_sigs = deploy_art.cta_fn_sigs /\
@@ -492,6 +495,7 @@ Theorem deploy_frame_source_start_setup:
     check_contract F am.layouts tx.target [(NONE,tops)] = SOME runtime_art /\
     lookup_function NONE tx.function_name Deploy tops =
       SOME (mut,nr,args,[],NoneT,body) /\
+    env_body = function_entry_env deploy_art [(NONE,tops)] NONE Deploy args /\
     env_body.current_src = NONE /\
     env_body.type_defs = type_env_all_modules [(NONE,tops)] /\
     env_body.fn_sigs = deploy_art.cta_fn_sigs /\
@@ -538,7 +542,7 @@ Proof
   drule_all (SRULE [] (Q.INST [`tx` |-> `tx with created_in_tx := T`]
                          checked_constructor_call_evaluation_safe)) >>
   strip_tac >>
-  qexistsl [`env_body`, `env_after`] >> simp[] >> metis_tac[]
+  qexists_tac `env_after` >> gvs[] >> metis_tac[]
 QED
 
 Theorem deploy_frame_supported_body:
@@ -565,6 +569,7 @@ Theorem deploy_frame_semantic_setup:
     check_contract F am.layouts tx.target [(NONE,tops)] = SOME runtime_art /\
     lookup_function NONE tx.function_name Deploy tops =
       SOME (mut,nr,args,[],NoneT,stmts) /\
+    env_t = function_entry_env deploy_art [(NONE,tops)] NONE Deploy args /\
     env_t.current_src = NONE /\
     env_t.type_defs = type_env_all_modules [(NONE,tops)] /\
     env_t.fn_sigs = deploy_art.cta_fn_sigs /\
@@ -593,13 +598,14 @@ Theorem deploy_frame_semantic_setup:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_frame_source_start_setup >> strip_tac >>
-  `~nr` by metis_tac[deploy_ctor_not_nonreentrant] >> gvs[] >>
+  `nr = F` by metis_tac[deploy_ctor_not_nonreentrant] >>
+  qpat_x_assum `nr = F` SUBST_ALL_TAC >>
   drule deploy_frame_ctor_start_scopes >> strip_tac >>
   `supported_program_deploy tops` by gvs[deploy_source_ok_def] >>
   drule_all deploy_frame_supported_body >> strip_tac >>
   `outcomes_accounts_typed (SOME vs.vs_outcomes)` by
     metis_tac[deploy_frame_outcomes_accounts_typed] >>
-  qexistsl [`bindings`, `env_body`, `env_after`] >>
+  qexistsl [`deploy_art`, `runtime_art`, `args`, `bindings`, `env_body`, `env_after`] >>
   simp[] >> metis_tac[]
 QED
 
@@ -976,13 +982,13 @@ QED
 
 Theorem deploy_ctor_formal_var_types:
   !tops rpolicy runtime_bc dunit stmts cenv nr nkey ut imm exit_lbl
-   sa sb sj st_exit st_epilogue st_final func mut args.
+   sa sb sj st_exit st_epilogue st_final func mut args source_body.
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (stmts,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
        st_epilogue,st_final,func) /\ supported_program tops /\
     supported_program_deploy tops /\
     lookup_function NONE "__init__" Deploy tops =
-      SOME (mut,nr,args,[],NoneT,stmts) ==>
+      SOME (mut,nr,args,[],NoneT,source_body) ==>
     !id ty. MEM (id,ty) args ==> cenv.ce_var_type id = SOME ty
 Proof
   rpt gen_tac >> strip_tac >>
@@ -994,21 +1000,23 @@ Proof
   mp_tac (Q.SPECL [`tops`, `NONE:num option`, `"__init__"`]
     classify_functions_ctor_lookup) >> simp[] >> strip_tac >>
   gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
+  simp[entryDispatchPropsTheory.collect_locals_subst_consts_stmts] >>
   rpt gen_tac >> strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
   drule_all supported_program_deploy_function >> strip_tac >>
-  irule deploy_frame_formal_type_lookup >> goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any)
+  irule (INST_TYPE [alpha |-> ``:function_visibility``]
+    deploy_frame_formal_type_lookup) >> simp[] >>
+  qexistsl_tac [`tops`, `Deploy`] >> simp[]
 QED
 
 Theorem deploy_ctor_allocation_bounds:
   !tops rpolicy runtime_bc dunit stmts cenv nr nkey ut imm exit_lbl
-   sa sb sj st_exit st_epilogue st_final func mut args.
+   sa sb sj st_exit st_epilogue st_final func mut args source_body.
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (stmts,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
        st_epilogue,st_final,func) /\
     lookup_function NONE "__init__" Deploy tops =
-      SOME (mut,nr,args,[],NoneT,stmts) ==>
+      SOME (mut,nr,args,[],NoneT,source_body) ==>
     EVERY (\a. type_memory_bytes cenv (SND a) < 2 ** 64) args /\
     alloc_limits_stmts cenv stmts
 Proof
@@ -1020,15 +1028,19 @@ Proof
     (drule_all lower_vyper_deploy_unit_ctor_named_init >> simp[ctor_named_init_def]) >>
   mp_tac (Q.SPECL [`tops`, `NONE:num option`, `"__init__"`]
     classify_functions_ctor_lookup) >> simp[] >> strip_tac >>
-  gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
+  `classify_functions tops =
+     (exts,ints,fb,SOME (mut,nr,rr,"__init__",args,[],NoneT,stmts))` by
+    fs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
   `fn_allocs_ok tops (mut,nr,rr,"__init__",args,[],NoneT,stmts)` by
     (irule lower_vyper_deploy_unit_allocs_ok >>
-     conj_tac >- metis_tac[] >>
-     goal_assum (drule_at Any) >> simp[]) >>
+     conj_tac
+     >- metis_tac[] >>
+     qexistsl [`SOME (mut,nr,rr,"__init__",args,[],NoneT,stmts)`,
+       `exts`, `fb`, `ints`] >> simp[]) >>
   `alloc_env_agree
      (build_compile_env tops Internal mut "__init__" args NoneT stmts F) cenv` by
     (drule deploy_ctor_alloc_env_agree >> strip_tac >> gvs[]) >>
-  drule_all fn_allocs_ok_body >>
+  gvs[] >> drule_all fn_allocs_ok_body >>
   simp[EVERY_MEM, FORALL_PROD] >> metis_tac[]
 QED
 
@@ -1179,7 +1191,8 @@ Theorem deploy_frame_typed_allocated_stmts_exprs_ok:
   (!id vt. FLOOKUP env.toplevel_vtypes id = SOME vt ==>
      well_formed_vtype env.type_defs vt) /\
   type_stmts env ret ss = SOME env' /\
-  alloc_limits_stmts cenv ss /\ ~cenv.ce_is_external ==>
+  alloc_limits_stmts cenv ss /\ ~cenv.ce_is_external /\
+  ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss ==>
   stmts_exprs_ok cenv ss
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1194,12 +1207,12 @@ QED
 
 Theorem deploy_ctor_typed_allocation_frame:
   !tops rpolicy runtime_bc dunit stmts cenv nr nkey ut imm exit_lbl
-   sa sb sj st_exit st_epilogue st_final func mut args bindings env env'.
+   sa sb sj st_exit st_epilogue st_final func mut args source_body bindings env env'.
   deploy_ctor_code tops rpolicy runtime_bc dunit
     (stmts,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
      st_epilogue,st_final,func) /\
   vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
-    SOME (mut,nr,args,[],NoneT,stmts) /\
+    SOME (mut,nr,args,[],NoneT,source_body) /\
   supported_stmts tops bindings stmts /\
   (!id ty. FLOOKUP env.var_types id = SOME ty ==>
      well_formed_type env.type_defs ty) /\
@@ -1207,7 +1220,8 @@ Theorem deploy_ctor_typed_allocation_frame:
      well_formed_vtype env.type_defs vt) /\
   (!n ty. FLOOKUP env.var_types n = SOME ty ==>
      ?id. MEM (id,ty) args /\ n = id) /\
-  type_stmts env NoneT stmts = SOME env' ==>
+  type_stmts env NoneT stmts = SOME env' /\
+  ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) stmts ==>
   stmts_exprs_ok cenv stmts /\ locals_alloc_ok cenv env
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1220,12 +1234,12 @@ QED
 
 Theorem deploy_ctor_argument_locations[local]:
   !tops rpolicy runtime_bc dunit stmts cenv nr nkey ut imm exit_lbl
-   sa sb sj st_exit st_epilogue st_final func mut args.
+   sa sb sj st_exit st_epilogue st_final func mut args source_body.
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (stmts,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
        st_epilogue,st_final,func) /\ supported_program tops /\
     lookup_function NONE "__init__" Deploy tops =
-      SOME (mut,nr,args,[],NoneT,stmts) ==>
+      SOME (mut,nr,args,[],NoneT,source_body) ==>
     EVERY (\a. ?p sz. FLOOKUP cenv.ce_vars (FST a) = SOME (PtrVar (Var p) sz)) args /\
     (!n l. FLOOKUP cenv.ce_vars n = SOME l ==> MEM n (MAP FST args))
 Proof
@@ -1244,12 +1258,12 @@ QED
 
 Theorem deploy_ctor_checked_locals_declared:
   !tops rpolicy runtime_bc dunit stmts cenv nr nkey ut imm exit_lbl
-   sa sb sj st_exit st_epilogue st_final func mut args env_t.
+   sa sb sj st_exit st_epilogue st_final func mut args source_body env_t.
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (stmts,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
        st_epilogue,st_final,func) /\ supported_program tops /\
     lookup_function NONE "__init__" Deploy tops =
-      SOME (mut,nr,args,[],NoneT,stmts) /\
+      SOME (mut,nr,args,[],NoneT,source_body) /\
     (!id ty. MEM (id,ty) args ==> FLOOKUP env_t.var_types id = SOME ty) ==>
     ce_locals_declared cenv env_t
 Proof
@@ -1266,12 +1280,12 @@ QED
 
 Theorem deploy_ctor_checked_pointer_domain:
   !tops rpolicy runtime_bc dunit stmts cenv nr nkey ut imm exit_lbl
-   sa sb sj st_exit st_epilogue st_final func mut args env_t.
+   sa sb sj st_exit st_epilogue st_final func mut args source_body env_t.
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (stmts,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
        st_epilogue,st_final,func) /\ supported_program tops /\
     lookup_function NONE "__init__" Deploy tops =
-      SOME (mut,nr,args,[],NoneT,stmts) /\
+      SOME (mut,nr,args,[],NoneT,source_body) /\
     (!n ty. FLOOKUP env_t.var_types n = SOME ty ==>
       ?id. MEM (id,ty) args /\ n = id) ==>
     !n. n IN FDOM env_t.var_types ==>
@@ -1328,19 +1342,78 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem deploy_ctor_body_subst_context:
+  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
+  deploy_ctor_start tops am tx (mut,nr,source_body,am_c,es0) /\
+  lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
+  check_contract T am.layouts tx.target [(NONE,tops)] = SOME deploy_art /\
+  check_contract F am.layouts tx.target [(NONE,tops)] = SOME runtime_art /\
+  lookup_function NONE tx.function_name Deploy tops =
+    SOME (mut,nr,args,[],NoneT,source_body) /\
+  env_body = function_entry_env deploy_art [(NONE,tops)] NONE Deploy args ==>
+  ?roots.
+    const_subst_context roots (deploy_evaluation_context tops am tx) env_body
+      (module_consts_env tops []) [(NONE,tops)] deploy_art /\
+    const_cells_agree roots es0
+Proof
+  strip_tac >>
+  drule_all deploy_ctor_constant_cells >> strip_tac >>
+  `EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) /\
+   EVERY (no_sha256_expr o SND) (module_consts_env tops [])` by
+    (Cases_on `classify_functions tops` >> PairCases_on `r` >>
+     drule_all compileVyperTheory.lower_vyper_deploy_unit_consts_guard >> simp[]) >>
+  qabbrev_tac `cx = deploy_evaluation_context tops am tx` >>
+  `cx.txn.target = tx.target /\ cx.layouts = am.layouts /\
+   ALOOKUP cx.sources tx.target = SOME [(NONE,tops)]` by
+    simp[Abbr `cx`, deploy_evaluation_context_def, initial_evaluation_context_def] >>
+  `!src. IS_SOME src ==>
+      get_source_immutables src (constant_machine_immutables am_c tx.target) =
+      get_source_immutables src imms` by simp[merge_constant_imms_imports] >>
+  `!id tv v. FLOOKUP A id = SOME (tv,v) ==>
+      FLOOKUP (get_source_immutables NONE
+        (constant_machine_immutables am_c tx.target)) id = SOME (tv,v)` by
+    simp[vyperTypeContractTheory.merge_constant_imms_def,
+         vyperTypeInitialStateTheory.get_source_immutables_set_same,
+         finite_mapTheory.FLOOKUP_FUNION] >>
+  mp_tac (Q.INST [`cx` |-> `cx`, `mods` |-> `[(NONE,tops)]`,
+     `artifact` |-> `runtime_art`, `am` |-> `am_c`, `sc` |-> `es0.scopes`,
+     `imms` |-> `imms`, `A` |-> `A`, `current_src` |-> `NONE`] checked_module_consts_subst_context) >>
+  impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
+  `const_subst_context roots cx env_body (module_consts_env tops [])
+     [(NONE,tops)] deploy_art` by
+    (qpat_assum `check_contract T _ _ _ = _`
+       (strip_assume_tac o MATCH_MP check_contract_nonsig_maps) >>
+     qpat_assum `check_contract F _ _ _ = _`
+       (strip_assume_tac o MATCH_MP check_contract_nonsig_maps) >>
+     irule (Q.INST [`art` |-> `runtime_art`,
+       `env` |-> `artifact_env runtime_art [(NONE,tops)] NONE`, `mode` |-> `T`]
+       const_subst_context_checked_artifact) >>
+     gvs[frame_maps_def, vyperTypeContractTheory.artifact_env_def] >>
+     qexistsl_tac [`runtime_art`, `tops`] >>
+     simp[vyperTypeContractTheory.function_entry_env_def,
+          vyperTypeContractTheory.artifact_env_def,
+          vyperTypeContractContextTheory.FOLDL_extend_local_args_static]) >>
+  `es0.immutables = am_c.immutables` by
+    (`~nr` by metis_tac[deploy_ctor_not_nonreentrant] >>
+     gvs[deploy_ctor_start_def, lock_if_nr_def, ignore_bind_def, bind_def,
+         return_def, AllCaseEqs()] >>
+     drule send_call_value_preserves_immutables >> simp[initial_state_def]) >>
+  qexists_tac `roots` >> fs[Abbr `cx`, const_cells_agree_def, initial_state_def]
+QED
+
 Theorem deploy_ctor_body_frame:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
-   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut am_c es0.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
+   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut source_body am_c es0.
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
+    deploy_state_rel tops (assemble prog') am tx es /\
     call_outcomes_ok am tx vs.vs_outcomes /\
-    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
-    deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) ==>
+    deploy_ctor_start tops am tx (mut, nr, source_body, am_c, es0) ==>
     body_inv tops dunit.cu_context cenv (deploy_evaluation_context tops am tx) /\
     cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
     LENGTH runtime_bc + imm_len tops < dimword(:256) /\
@@ -1349,6 +1422,8 @@ Theorem deploy_ctor_body_frame:
        !x. imm = Var x ==> not_fresh_at st_epilogue x) /\
     ?bindings env_t env'.
       supported_stmts tops bindings body /\
+      body_const_cells_agree [(NONE,tops)]
+        (deploy_evaluation_context tops am tx) env_t es0 /\
       expr_sim_inv cenv (deploy_evaluation_context tops am tx) env_t
         (es0 with outcomes := SOME vs.vs_outcomes) /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
@@ -1371,8 +1446,58 @@ Proof
   `supported_program tops /\ supported_program_deploy tops` by
     fs[deploy_source_ok_def] >>
   `imm_len tops < dimword(:256)` by decide_tac >>
-  `lookup_function NONE "__init__" Deploy tops = SOME (mut,nr,args,[],NoneT,body')` by
-    metis_tac[] >>
+  `lookup_function NONE "__init__" Deploy tops =
+     SOME (mut,nr,args,[],NoneT,source_body)` by fs[] >>
+  qmatch_asmsub_rename_tac `deploy_ctor_code _ _ _ _
+    (compiled_body,_,_,_,_,_,_,_,_,_,_,_,_,_)` >>
+  `compiled_body = subst_consts_stmts (module_consts_env tops []) source_body` by
+    (drule_all deploy_ctor_entry_selection_agrees >> simp[]) >>
+  drule_all deploy_ctor_constant_cells >> strip_tac >>
+  `IS_SOME (type_stmts env_t NoneT compiled_body) /\
+    ?bs. supported_stmts tops bs compiled_body` by
+    (drule lookup_function_Deploy_SOME_cases >> strip_tac
+     >- fs[subst_consts_stmt_def, supportedStmtsTheory.supported_stmt_def,
+           Once type_stmt_def] >>
+     drule_all supported_program_deploy_function >> strip_tac >>
+     drule_all
+       (SIMP_RULE (srw_ss()) [supportedExprsTheory.supported_pure_expr_def]
+         (Q.INST [`mode` |-> `T`, `vis` |-> `Deploy`, `dflts` |-> `[]`]
+           (INST_TYPE [alpha |-> ``:160 word``] checked_const_substituted_function))) >>
+     gvs[supported_function_body_def] >> metis_tac[]) >>
+  qpat_x_assum `IS_SOME (type_stmts env_t NoneT compiled_body)`
+    (qx_choose_then `env_compiled` assume_tac o
+     REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
+  qmatch_asmsub_rename_tac `supported_stmts tops compiled_bindings compiled_body` >>
+  `body_const_cells_agree [(NONE,tops)]
+      (deploy_evaluation_context tops am tx) env_t es0` by
+    (`lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+       fs[deploy_phases_def] >>
+     `cx_tops (deploy_evaluation_context tops am tx) = tops` by
+       simp[deploy_evaluation_context_def, initial_evaluation_context_def,
+            gasContextTheory.cx_tops_def, get_module_code_def] >>
+     drule_all deploy_ctor_body_subst_context >>
+     disch_then (qx_choose_then `roots` strip_assume_tac) >>
+     `frame_maps env_t deploy_art` by simp[] >>
+     pure_once_rewrite_tac [body_const_cells_agree_def] >>
+     qexistsl_tac [`roots`, `deploy_art`, `imms`, `A`] >>
+     qpat_assum `cx_tops (deploy_evaluation_context tops am tx) = tops`
+       (fn th => pure_rewrite_tac [th]) >>
+     rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+       simp[deploy_evaluation_context_def, initial_evaluation_context_def]]) >>
+  qpat_x_assum `env_t = function_entry_env _ _ _ _ _` kall_tac >>
+  `~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) compiled_body` by
+    (`cenv.ce_modules = [(NONE,tops)]` by fs[body_inv_def, cenv_module_pins_def] >>
+     simp[] >>
+     irule (INST_TYPE [alpha |-> ``:160 word``]
+       checked_const_substitution_const_name_free) >>
+     conj_tac >> goal_assum (drule_at Any)) >>
+  `int_calls_stmts compiled_body = int_calls_stmts source_body` by
+    (simp[] >>
+     irule (SIMP_RULE (srw_ss()) []
+       (Q.INST [`mods` |-> `[(NONE,tops)]`]
+         (INST_TYPE [alpha |-> ``:160 word``] checked_const_substitution_int_calls))) >>
+     conj_tac >> goal_assum (drule_at Any)) >>
   `(!id ty. FLOOKUP env_t.var_types id = SOME ty ==>
       well_formed_type env_t.type_defs ty) /\
    (!id vt. FLOOKUP env_t.toplevel_vtypes id = SOME vt ==>
@@ -1383,7 +1508,7 @@ Proof
          qexistsl [`tx.target`, `deploy_art`, `T`, `am.layouts`, `[(NONE,tops)]`] >> simp[]) >>
      goal_assum (drule_at Any)) >>
   drule_all deploy_ctor_typed_allocation_frame >> strip_tac >>
-  qexistsl [`bindings`, `env_t`, `env'`] >> simp[] >>
+  qexistsl [`compiled_bindings`, `env_t`, `env_compiled`] >> simp[] >>
   reverse conj_tac
   >- metis_tac[deploy_ctor_checked_locals_declared] >>
   `!n. n IN FDOM env_t.var_types ==>

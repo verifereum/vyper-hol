@@ -1,16 +1,18 @@
 (* Counted memory-safe execution of the calldata array element setup. *)
 Theory sourceArraySetupGasMem
 Ancestors
-  calldataDynStep fragGasSeqMem fragExecMem abiDecoderContract abiDecoderArraySetupInputs abiEncoder
+  calldataDynStep fragGasSeqMem fragExecMem memSafeRun ptrDiscipline
+  abiDecoderContract abiDecoderArraySetupInputs abiEncoder
   stmtReasonLitFragMemory abiDecoderTypedCompose
   abiDecoderLoopSetup abiDecoderDynamicLoopSetup abiDecoderIndexedAddress abiDecoderRange
   abiDecoderGuards compileEnv emitHelper emitHelperProps exprLoweringProps
   venomInst venomState venomExecSemantics words list rich_list arithmetic
 
-Theorem source_array_setup_no_gas[local]:
+Theorem source_array_setup_no_gas_or_dalloca[local]:
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     di abi_sz mem_sz st = (ops,st') ==>
-  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts st st')
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts st st') /\
+  EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')
 Proof
   strip_tac >>
   qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
@@ -48,8 +50,13 @@ Proof
      reverse conj_tac >- gvs[EVERY_MEM] >>
      ho_match_mp_tac (GEN_ALL calldata_element_setup_prefix_safe) >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  `EVERY (\i. i.inst_opcode <> GAS) (emitted_insts st st')` by
-    metis_tac[source_array_setup_no_gas] >>
+  drule source_array_setup_no_gas_or_dalloca >> strip_tac >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre initial = OK u ==>
+      dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[]) >>
   `st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'` by
     gvs[inst_extends_def] >>
   drule_all fn_has_code_code >> strip_tac >>

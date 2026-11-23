@@ -29,12 +29,16 @@ Theorem dispatched_entry_endpoint_default:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
       SOME (tx.function_name, tx.args) /\
     tx.function_name = "__default__" /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -120,8 +124,6 @@ Proof
          simp[defaultConcreteRegistrationDefsTheory.default_registration_ptr_reservation_def] >>
          metis_tac[]) >> simp[]))) >>
   pop_assum strip_assume_tac >>
-  `~ctx_has_dalloca unit.cu_context` by
-    metis_tac[entryReachBodyFmpTheory.entry_runtime_no_dalloca] >>
   `fn_inst_ids_distinct fn` by
     (`ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
        metis_tac[allocaFrontierBoundTheory.ctx_inst_ids_distinct_fn,
@@ -181,74 +183,7 @@ Proof
   gvs[] >> qexistsl [`G`,`tn`] >> simp[]
 QED
 
-Theorem fallback_guarded_placement[local]:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\
-  venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-  fn_entry_label fn = SOME elbl /\
-  set_fallback_package_target rpolicy.rpol_target
-    (package_fallback_fn tops T (K global_nonreentrant_slot)
-      (FST (SND (SND (classify_functions tops))))) =
-    SOME (ce,pay,nr,key,ut,view,fbody,rt) ==>
-  ?fallback label_st dispatch_st opened checks st st'.
-    runtime_fallback_body_start tops rpolicy
-      ("fn___default__",ce,[],4,pay,nr,key,ut,view,fbody,rt) st /\
-    compile_selector_dispatch_linear
-      (MAP (\(sel,lbl,z). (sel,lbl))
-        (build_selectors (type_env tops) (FST (classify_functions tops))))
-      fallback label_st = ((),dispatch_st) /\
-    compile_external_fn_bodies
-      (MAP (set_external_package_target rpolicy.rpol_target o
-        package_external_fn tops T (K global_nonreentrant_slot))
-        (FST (classify_functions tops))) dispatch_st = ((),opened) /\
-    new_block fallback opened = (opened.cs_current_bb,checks) /\
-    compile_entry_checks 4 pay checks = ((),st) /\
-    compile_guarded_body ce nr key ut view fbody rt st = ((),st') /\
-    cs_extends dispatch_st checks /\ cs_extends checks st /\
-    fn_has_code label_st dispatch_st fn /\ fn_has_code checks st fn /\
-    fn_has_code st st' fn /\ ~block_is_terminated st /\
-    label_st.cs_current_bb = "__entry" /\ label_st.cs_current_bb = elbl /\
-    label_st.cs_current_insts = []
-Proof
-  strip_tac >> drule_all default_runtime_compile_layout >> strip_tac >> gvs[] >>
-  Cases_on `compile_entry_checks 4 pay checks` >>
-  rename1 `compile_entry_checks 4 pay checks = (u,st)` >> Cases_on `u` >>
-  `compile_guarded_body ce nr key ut view fbody rt st = ((),entry_end)` by
-    (qpat_x_assum `compile_fallback_body _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     qpat_x_assum `compile_entry_checks 4 pay checks = _` mp_tac >>
-     simp[compile_fallback_body_def, compile_entry_checks_def,
-       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
-     rpt (pairarg_tac >> gvs[])) >>
-  `shape_state st /\ cs_extends checks st` by
-    (mp_tac (Q.SPECL [`4`,`pay`] compile_entry_checks_shape) >>
-     simp[shape_step_def, shape_extends_def] >> disch_then drule >> simp[]) >>
-  `cs_extends st entry_end` by
-    (mp_tac (Q.SPECL [`ce`,`nr`,`key`,`ut`,`view`,`fbody`,`rt`]
-       compile_guarded_body_shape) >>
-     impl_tac >- fs[fallback_shape_ok_def] >>
-     simp[shape_step_def, shape_extends_def] >> disch_then drule >> simp[]) >>
-  `fn_has_code checks st (mk_raw_function "__entry" (all_blocks entry_end)) /\
-   fn_has_code st entry_end (mk_raw_function "__entry" (all_blocks entry_end))` by
-    metis_tac[fn_has_code_split] >>
-  `~block_is_terminated st` by
-    (irule compile_entry_checks_open >>
-     qexistsl [`4`,`pay`,`checks`,`()`] >> simp[] >>
-     drule emitHelperPropsTheory.new_block_props >> simp[block_is_terminated_def]) >>
-  qexistsl [`fallback`,`label_st`,`dispatch_st`,`external_st`,`checks`,`st`,`entry_end`] >>
-  simp[] >> rpt conj_tac
-  >- (rw[runtime_fallback_body_start_def] >>
-      Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
-      rename1 `classify_functions tops = (exts,ints,fb,ctor)` >>
-      Cases_on `fb`
-      >- fs[package_fallback_fn_def, set_fallback_package_target_def] >>
-      rename1 `classify_functions tops = (exts,ints,SOME fb,ctor)` >>
-      qexistsl [`fb`,`fallback`,`label_st`,`dispatch_st`,`external_st`,`checks`] >> simp[])
-  >- metis_tac[cs_extends_trans] >>
-  qpat_x_assum `(fallback,label_st) = fresh_label _ _` (mp_tac o SYM) >>
-  simp[fresh_label_def, initial_compile_state_def]
-QED
-
-Theorem fallback_empty_environment[local]:
+Theorem fallback_empty_environment:
   set_fallback_package_target target
     (package_fallback_fn tops T (K global_nonreentrant_slot)
       (SOME (mut,nr,rr,"__default__",[],([] : expr list),ret,fbody))) =
@@ -328,7 +263,11 @@ QED
 Theorem fallback_entry_registration_joint:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
   source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
   calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
     SOME (tx.function_name,tx.args) /\
   (LENGTH vs.vs_call_ctx.cc_calldata < 4 \/
@@ -345,11 +284,11 @@ Theorem fallback_entry_registration_joint:
     rt = (if ret = NoneT then NONE else SOME ret) /\
     runtime_fallback_body_start tops rpolicy
       ("fn___default__",cenv,[],4,mut = Payable,T,global_nonreentrant_slot,
-       T,mut = View,fbody,rt) sa /\
-    compile_guarded_body cenv T global_nonreentrant_slot T (mut = View) fbody rt sa =
+       T,mut = View,subst_consts_stmts (module_consts_env tops []) fbody,rt) sa /\
+    compile_guarded_body cenv T global_nonreentrant_slot T (mut = View)
+      (subst_consts_stmts (module_consts_env tops []) fbody) rt sa =
       ((),st') /\
     fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
-    ~ctx_has_dalloca unit.cu_context /\
     local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
     unit.cu_context.ctx_entry = SOME "__entry" /\
     venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
@@ -396,7 +335,7 @@ Proof
   `?ce. set_fallback_package_target rpolicy.rpol_target
       (package_fallback_fn tops T (K global_nonreentrant_slot)
         (FST (SND (SND (classify_functions tops))))) =
-      SOME (ce,mut = Payable,T,global_nonreentrant_slot,T,mut = View,fbody,rt)` by
+      SOME (ce,mut = Payable,T,global_nonreentrant_slot,T,mut = View,subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
     simp[package_fallback_fn_def, set_fallback_package_target_def, Abbr `rt`] >>
   rename1 `set_fallback_package_target _ _ = SOME (ce,_,T,_,T,_,_,_)` >>
   drule lower_vyper_runtime_unit_context_entry >>
@@ -408,9 +347,10 @@ Proof
      `fn_has_entry fn` by metis_tac[venomInstTheory.lookup_function_MEM] >>
      Cases_on `fn.fn_blocks` >> gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
   rename1 `fn_entry_label fn = SOME elbl` >>
-  drule_all fallback_guarded_placement >>
-  disch_then (qx_choosel_then
-    [`fallback`,`label_st`,`dispatch_st`,`opened`,`checks`,`st`,`st'`] strip_assume_tac) >>
+  drule_all (SIMP_RULE std_ss [listTheory.NOT_EXISTS]
+    (INST_TYPE [alpha |-> ``:string``] default_fallback_compile_placement)) >>
+  disch_then (qspec_then `"fn___default__"` (qx_choosel_then
+    [`fallback`,`label_st`,`dispatch_st`,`opened`,`checks`,`st`,`st'`] strip_assume_tac)) >>
   gvs[] >>
   `new_block (linear_dispatch_target vs.vs_call_ctx.cc_calldata
       (MAP (\(sel,lbl,z). (sel,lbl))
@@ -429,7 +369,6 @@ Proof
   disch_then (qspec_then `ARB` (qx_choosel_then [`s0`,`G0`,`tn0`] strip_assume_tac)) >>
   `fn_inst_ids_distinct fn` by
     metis_tac[lowered_runtime_function_inst_ids_distinct, venomInstTheory.lookup_function_MEM] >>
-  `~ctx_has_dalloca unit.cu_context` by metis_tac[entry_runtime_no_dalloca] >>
   `?bb. lookup_block "__entry" fn.fn_blocks = SOME bb /\
        phi_prefix_length bb.bb_instructions = 0` by
     (`?bb. lookup_block "__entry" fn.fn_blocks = SOME bb` by
@@ -447,5 +386,7 @@ Proof
   qexistsl [`ce`,`st`,`st'`,`s0`,`G0`,`tn0`] >>
   fs[defaultConcreteRegistrationDefsTheory.default_registration_resources_def,
      defaultConcreteRegistrationDefsTheory.default_registration_entry_frame_def,
-     local_ptrs_reserved_def, Abbr `rt`]
+     local_ptrs_reserved_def, Abbr `rt`] >>
+  qpat_assum `runtime_fallback_body_start _ _ _ _` mp_tac >>
+  simp_tac std_ss [runtime_fallback_body_start_def]
 QED

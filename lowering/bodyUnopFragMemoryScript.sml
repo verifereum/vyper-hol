@@ -78,6 +78,10 @@ Theorem run_inst_seq_abort_zero_path_mem:
     EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
                ~is_terminator i.inst_opcode) code /\
     run_inst_seq_mem_ok code s /\
+    (ptrDiscipline$ctx_has_dalloca ctx ==>
+      !pre i post u. code = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==>
+        unitTransformDefs$dalloca_no_wrap i u) /\
     run_inst_seq code s = Abort a t ==>
     ?j. gas_marked_path T ctx func s 0
       (Abort a (t with vs_inst_idx := j))
@@ -85,6 +89,11 @@ Proof
   Induct_on `code` >- simp[run_inst_seq_def] >>
   rpt gen_tac >> strip_tac >>
   drule instruction_prefix_cursor >> strip_tac >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==> unitTransformDefs$dalloca_no_wrap h s)` by
+    (disch_tac >>
+     qpat_assum `ptrDiscipline$ctx_has_dalloca ctx ==> _` (mp_tac o UNDISCH) >>
+     disch_then (qspecl_then [`[]`, `h`, `code`, `s`] mp_tac) >>
+     simp[run_inst_seq_def]) >>
   Cases_on `step_inst_base h s` >>
   gvs[run_inst_seq_def, run_inst_seq_mem_ok_def]
   >- (rename1 `step_inst_base h s = OK u` >>
@@ -92,10 +101,29 @@ Proof
       `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
         metis_tac[step_preserves_halted, step_preserves_control_flow] >>
       `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
-      first_x_assum (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
-      disch_then (qspec_then `t with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
-      simp[run_inst_seq_inst_idx, exec_result_map_def] >>
-      disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+      `(ptrDiscipline$ctx_has_dalloca ctx ==>
+        !pre i post v. code = pre ++ i::post /\
+          run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) = OK v ==>
+          unitTransformDefs$dalloca_no_wrap i v)` by
+        (disch_tac >> rpt gen_tac >> strip_tac >>
+         `EVERY (\i. ~is_terminator i.inst_opcode) pre` by fs[EVERY_APPEND] >>
+         qpat_x_assum `run_inst_seq pre _ = OK v` mp_tac >>
+         simp[run_inst_seq_inst_idx] >>
+         Cases_on `run_inst_seq pre u` >> simp[exec_result_map_def] >>
+         disch_then (SUBST1_TAC o SYM) >>
+         rename1 `run_inst_seq pre u = OK w` >>
+         qpat_assum `ptrDiscipline$ctx_has_dalloca ctx ==> !pre i post v. _`
+           (mp_tac o UNDISCH) >>
+         disch_then (qspecl_then [`h::pre`, `i`, `post`, `w`] mp_tac) >>
+         simp[run_inst_seq_def, unitTransformDefsTheory.dalloca_no_wrap_def,
+              eval_op_inst_idx]) >>
+      first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+                                  `t with vs_inst_idx := SUC s.vs_inst_idx`,
+                                  `a`, `ctx`, `func`, `bb`] mp_tac) >>
+      (impl_tac >-
+        (qpat_assum `ptrDiscipline$ctx_has_dalloca ctx ==> !pre i post v.
+                     code = _ /\ _ ==> _` mp_tac >>
+         simp[run_inst_seq_inst_idx, exec_result_map_def])) >>
       simp[] >> strip_tac >> qexists_tac `j` >>
       drule_at (Pat `step_inst_base _ _ = OK _`) gas_marked_path_step >>
       simp[] >> disch_then irule >> metis_tac[]) >>
@@ -144,6 +172,16 @@ Proof
   drule writes_fresh_path_opcodes >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s0` by
     metis_tac[writes_fresh_mem_ok] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    (qpat_x_assum `writes_fresh sa _` mp_tac >>
+     simp[writes_fresh_def, EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> simp[fresh_write_op_def] >> rpt strip_tac >> gvs[]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s0 = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `i.inst_opcode <> DALLOCA` by fs[EVERY_APPEND] >>
+     simp[dalloca_no_wrap_non_dalloca]) >>
   drule_all straight_fresh_code_prefix >> strip_tac >>
   `?rest. DROP s0.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest`
     by fs[IS_PREFIX_APPEND] >>
@@ -377,9 +415,10 @@ Proof
 QED
 
 (* compile_unop_sim (exprSimUnopCompose) for expr_sim_mem. *)
-Theorem compile_unop_sim_mem:
+Theorem compile_unop_sim_mem[local]:
   !ctx func cenv cx ty ann bi e1 ty1 f es.
     bi <> Len /\ ~precompile_builtin bi /\ builtin_args_length_ok bi 1 /\
+    ~is_self_codesize bi [e1] /\
     is_word_type ann /\ is_word_type (expr_type e1) /\
     (!sa sb op.
        lower_value compile_expr cenv ty (Builtin ann bi [e1]) sa = (op, sb) ==>
@@ -516,6 +555,7 @@ Proof
     >- simp[]
     >- simp[]
     >- simp[builtin_args_length_ok_def]
+    >- simp[is_self_codesize_def]
     >- simp[]
     >- simp[]
     >- (rpt strip_tac >> drule lower_value_not >> simp[])

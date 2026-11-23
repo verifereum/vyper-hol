@@ -1,7 +1,8 @@
 Theory bodyFullPop
 Ancestors
-  bodyFullTarget bodyFullTargetDefs bodyFullPreds bodySimFull bodyFullOfVV bodyInvNoDalloca
+  bodyFullTarget bodyFullTargetDefs bodyFullPreds bodySimFull bodyFullOfVV
   gasOutcomeFullCompose gasOutcomeFull gasShadowCompile gasShadowState gasShadow
+  gasShadowCompileStmtHelpers
   exprSimPopNestedLocalSource exprSimPopNestedLocalHandoff exprSimPopNestedLocalRun
   popTargetPre exprSimHyps exprSimHypsDefs exprSimSource exprSimPopNestedBase
   exprLoweringProps loweringPosts exprLowering compileEnv stmtLoweringMono
@@ -10,6 +11,7 @@ Ancestors
   ptrDiscipline venomExecSemantics venomState fragGasSeqPtr
   exprPtrCtorImmStore exprPtrCtorCodeLoad emitHelperProps venomInst decoderGhostFramePtr
   bodyPtrSignedConvertBool fragGasCopyLoop finite_map instSeqComposePtr exprSimPop words instIdxIndep
+  fragGasCopySeqLiftProps
   fragExecMem instMemFrontier memSafeRun fragGasEmitCtrl fragGasOriginPtrLoop
   bodyPtrBopAssert gasEvents gasCount unitTransformDefs contextCodegenRel codegenRel ptrSafetyTransport
   stmtReasonLitFragMemory exprSimPopNestedLocalProps vyperLookup
@@ -877,6 +879,15 @@ Proof
         mk_inst (id+1) ISZERO [Var x0] [x1];
         mk_inst (id+2) ISZERO [Var x1] [x2]]` by
        simp[mk_inst_def, is_terminator_def] >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         [mk_inst id MLOAD [Var p] [x0];
+          mk_inst (id+1) ISZERO [Var x0] [x1];
+          mk_inst (id+2) ISZERO [Var x1] [x2]] = pre ++ i::post /\
+         run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        qpat_x_assum `_ = _ ++ i::_` (mp_tac o Q.AP_TERM `MEM i`) >>
+        simp[] >> disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
+        simp[dalloca_no_wrap_def,mk_inst_def]) >>
      qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `D` assume_tac) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
@@ -905,7 +916,7 @@ Proof
      simp[] >> irule bop_assert_ptr_inst_ok >> simp[]) >>
   simp[step_inst_non_invoke, pop_step_ASSERT, lookup_var_def,
     bool_to_word_def, gas_events_step_def, gas_count_step_def,
-    mem_safe_step_non_invoke, mk_inst_def,
+    mem_safe_step_non_invoke, dalloca_no_wrap_def, mk_inst_def,
     inst_mem_below_frontier_def, inst_dload_in_section_def,
     source_memory_read_ranges_def, source_memory_write_ranges_def]
 QED
@@ -1275,6 +1286,14 @@ Proof
         rpt conj_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) prefix` by
        (Cases_on `tr` >> simp[Abbr `prefix`,mk_inst_def,is_terminator_def]) >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         prefix = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+         dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        qpat_x_assum `_ = _ ++ i::_` (mp_tac o Q.AP_TERM `MEM i`) >>
+        Cases_on `tr` >> simp[Abbr `prefix`] >>
+        disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
+        simp[dalloca_no_wrap_def,mk_inst_def]) >>
      qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ prefix _ _ _`
        (qspec_then `D` assume_tac) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
@@ -1303,7 +1322,8 @@ Proof
          (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
      qexists_tac `0` >> simp[] >> irule bop_assert_ptr_inst_ok >> simp[]) >>
   simp[step_inst_non_invoke,pop_step_ASSERT,lookup_var_def,
-    gas_events_step_def,gas_count_step_def,mem_safe_step_non_invoke,mk_inst_def,
+    gas_events_step_def,gas_count_step_def,mem_safe_step_non_invoke,
+    dalloca_no_wrap_def,mk_inst_def,
     inst_mem_below_frontier_def,inst_dload_in_section_def,
     source_memory_read_ranges_def,source_memory_write_ranges_def]
 QED
@@ -1325,16 +1345,18 @@ Proof
   qpat_x_assum `compile_expr cenv ty (Pop ann bt) sa = _` mp_tac >>
   simp[Once nested_pop_compile_eq] >> pairarg_tac >> simp[] >> strip_tac >>
   `?shadow_sm.
-     compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_sa =
-       ((rb0,rb1,rb2),shadow_sm) /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (MATCH_MP gasShadowCompileHelpersTheory.gas_shadow_compiles_get_target_ptr
-       (cj 1 gas_shadow_compile_expr)) >>
-     disch_then (qspecl_then [`bt`, `cenv`, `T`] mp_tac) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
+     compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target bt) shadow_sa = ((rb0,rb1,rb2),shadow_sm) /\
+     gas_shadow_state sm shadow_sm` by
+    (`gas_shadow_compiles (compile_get_target_ptr compile_expr cenv bt)
+       (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+          (gas_shadow_target bt))` by irule gas_shadow_stmt_get_target_ptr_env >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+        REWRITE_RULE [gas_shadow_compiles_def]) >>
      simp[] >> strip_tac >>
-     Cases_on `compile_get_target_ptr compile_expr cenv (gas_shadow_target bt) shadow_sa` >>
-     gvs[]) >>
+     Cases_on `compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target bt) shadow_sa` >> gvs[]) >>
   drule nested_pop_target_admissible >> strip_tac >>
   `?n. type_place_target env bt = SOME (Type (ArrayT ann (Dynamic n)))` by
     (irule well_typed_expr_Pop_dynamic_target >>
@@ -1348,12 +1370,12 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     (irule fn_has_code_split >> gvs[ci_mono_def]) >>
   `cs_extends shadow_sm shadow_sb` by
-    (qpat_x_assum `compile_expr cenv ty (gas_shadow_expr (Pop ann bt)) shadow_sa = _` mp_tac >>
+    (qpat_x_assum `compile_expr _ _ (gas_shadow_expr (Pop ann bt)) _ = _` mp_tac >>
      simp[gas_shadow_expr_def, Once nested_pop_compile_eq] >>
      pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
      metis_tac[ci_mono_compile_dynarray_pop, pairTheory.SND, ci_mono_def]) >>
   `cs_extends shadow_sa shadow_sm` by
-    (mp_tac (Q.SPECL [`gas_shadow_target bt`, `cenv`, `shadow_sa`]
+    (mp_tac (Q.SPECL [`gas_shadow_target bt`, `gas_shadow_env T cenv`, `shadow_sa`]
        ci_mono_compile_get_target_ptr) >> simp[ci_mono_def]) >>
   `fn_has_code shadow_sa shadow_sm shadow_func` by
     (drule_all fn_has_code_split >> simp[]) >>
@@ -1561,6 +1583,15 @@ Resume pop_vv_full_of_target[memory_suffix]:
       isPREFIX (memory_pop_insts (Var hdr_var) sm.cs_next_id
         (type_memory_bytes cenv ann) x0 x1 x2 x3 x4 x5 x6)
         (DROP t.vs_inst_idx bb.bb_instructions)` by simp[] >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         memory_pop_insts (Var hdr_var) sm.cs_next_id
+           (type_memory_bytes cenv ann) x0 x1 x2 x3 x4 x5 x6 = pre ++ i::post /\
+         run_inst_seq pre t = OK u ==> dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        qpat_x_assum `_ = _ ++ i::_` (mp_tac o Q.AP_TERM `MEM i`) >>
+        simp[memory_pop_insts_def] >>
+        disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
+        simp[dalloca_no_wrap_def,mk_inst_def]) >>
      qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `D` assume_tac) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
@@ -2124,6 +2155,14 @@ Resume pop_full_storage_static_path[prefix]:
             (qspecl_then [`D`,`s.vs_inst_idx`]
               (ACCEPT_TAC o REWRITE_RULE [eq])))) >>
      `isPREFIX prefix (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         prefix = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+         dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        qpat_x_assum `_ = _ ++ i::_` (mp_tac o Q.AP_TERM `MEM i`) >>
+        Cases_on `tr` >> simp[Abbr `prefix`,Abbr `load`,Abbr `chunk`] >>
+        disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
+        simp[dalloca_no_wrap_def,mk_inst_def]) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
      Cases_on `tr` >> simp[Abbr `prefix`,Abbr `load`,Abbr `chunk`,mk_inst_def,
        nested_pop_suffix_def]) >>
@@ -2168,7 +2207,8 @@ Resume pop_full_storage_static_path[exit]:
      rpt strip_tac >> gvs[]) >>
   irule exit_inst_origin_ptr >> Cases_on `tr` >> fs[Abbr `i`,Abbr `u`] >>
   simp[exit_result_def,step_inst_non_invoke,
-    mem_safe_step_non_invoke,gas_events_step_def,gas_count_step_def,mk_inst_def,
+    mem_safe_step_non_invoke,dalloca_no_wrap_def,
+    gas_events_step_def,gas_count_step_def,mk_inst_def,
     inst_mem_below_frontier_def,inst_dload_in_section_def,
     source_memory_read_ranges_def,source_memory_write_ranges_def] >>
   fs[GSYM mk_inst_def,step_inst_non_invoke]
@@ -2492,6 +2532,15 @@ Resume pop_vv_full_of_target[storage_positive]:
        (nested_pop_suffix rb0 tr sm.cs_next_id (type_slot_size etv)
          x0 x1 x2 x3 x4 x5 x6)` by
        (Cases_on `tr` >> simp[nested_pop_suffix_def,mk_inst_def,is_terminator_def]) >>
+     `(ctx_has_dalloca ctx ==> !pre i post u.
+         nested_pop_suffix rb0 tr sm.cs_next_id (type_slot_size etv)
+           x0 x1 x2 x3 x4 x5 x6 = pre ++ i::post /\
+         run_inst_seq pre t = OK u ==> dalloca_no_wrap i u)` by
+       (rpt strip_tac >>
+        qpat_x_assum `_ = _ ++ i::_` (mp_tac o Q.AP_TERM `MEM i`) >>
+        Cases_on `tr` >> simp[nested_pop_suffix_def] >>
+        disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >>
+        simp[dalloca_no_wrap_def,mk_inst_def]) >>
      qpat_assum `!D. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `D` assume_tac) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>

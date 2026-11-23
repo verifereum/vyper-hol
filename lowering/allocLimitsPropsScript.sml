@@ -7,7 +7,9 @@
  *   alloc_limits_stmt_exists    -- alloc_limits_expr of every expression of
  *                                  a statement that holds no block,
  *                                  but a slice's .code
- *                                  source (is_extcode), which the check skips
+ *                                  source (is_extcode), which the check skips,
+ *                                  and an array subscript's storage base
+ *                                  (array_slot_base), which it exempts
  *   fn_allocs_ok_body           -- alloc_limits_stmts of a function body the
  *                                  runtime unit lowers, and the parameters'
  *                                  sizes, in any compile env that agrees
@@ -79,6 +81,32 @@ Proof
   rw[aug_assign_overlap_def, var_is_prim_word_def]
 QED
 
+(* A slot base reads only the module variables. *)
+Theorem array_slot_base_frame:
+  !c c'. c'.ce_module_vars = c.ce_module_vars ==>
+         array_slot_base c' = array_slot_base c
+Proof
+  rpt strip_tac >> simp[FUN_EQ_THM] >> Cases >> simp[array_slot_base_def]
+QED
+
+(* A slot base is an array. *)
+Theorem array_slot_base_is_ArrayT:
+  !cenv e. array_slot_base cenv e ==> is_ArrayT (expr_type e)
+Proof
+  gen_tac >> Cases >> simp[array_slot_base_def, expr_type_def]
+QED
+
+(* A map is never a slot base: its annotation is NoneT, not an array. *)
+Theorem type_place_hashmap_not_array_slot_base:
+  type_place_expr env e = SOME (HashMapT kt vt) ==> ~array_slot_base cenv e
+Proof
+  rpt strip_tac >>
+  drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
+  drule array_slot_base_is_ArrayT >>
+  simp[vyperTypeSystemTheory.vtype_annotation_ok_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem alloc_limits_struct_fields:
   (!c e c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type /\
@@ -121,7 +149,12 @@ Proof
   drule ext_call_alloc_ok_struct_fields >> strip_tac >>
   drule_all target_subscript_overlap_frame >> strip_tac >>
   simp[alloc_limits_expr_def, type_alloc_ok_def,
-       exprLoweringTheory.copies_subscript_base_def]
+       exprLoweringTheory.copies_subscript_base_def] >>
+  `lowered_value_type c' = lowered_value_type c` by
+    (simp[FUN_EQ_THM] >> metis_tac[lowered_value_type_struct_fields]) >>
+  `type_alloc_ok c' = type_alloc_ok c` by simp[FUN_EQ_THM, type_alloc_ok_def] >>
+  drule_then assume_tac array_slot_base_frame >>
+  simp[]
 QED
 
 (* A slice's .code source, which the check skips for its address, is
@@ -145,27 +178,40 @@ QED
 
 Theorem alloc_limits_expr_exists:
   (!cenv e. alloc_limits_expr cenv e ==>
-            ~supported_expr_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) e) /\
+            ~supported_expr_exists (\e. ~is_extcode e /\ ~array_slot_base cenv e /\
+                 ~alloc_limits_expr cenv e) e) /\
   (!cenv tgt. alloc_limits_target cenv tgt ==>
-              ~supported_target_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) tgt) /\
+              ~supported_target_exists (\e. ~is_extcode e /\ ~array_slot_base cenv e /\
+                 ~alloc_limits_expr cenv e) tgt) /\
   (!cenv es. alloc_limits_exprs cenv es ==>
-             ~supported_exprs_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) es) /\
+             ~supported_exprs_exists (\e. ~is_extcode e /\ ~array_slot_base cenv e /\
+                 ~alloc_limits_expr cenv e) es) /\
   (!cenv opt. alloc_limits_opt cenv opt ==>
-              ~supported_opt_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) opt) /\
+              ~supported_opt_exists (\e. ~is_extcode e /\ ~array_slot_base cenv e /\
+                 ~alloc_limits_expr cenv e) opt) /\
   (!cenv kes. alloc_limits_named_exprs cenv kes ==>
-              ~supported_fields_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) kes)
+              ~supported_fields_exists (\e. ~is_extcode e /\ ~array_slot_base cenv e /\
+                 ~alloc_limits_expr cenv e) kes)
 Proof
   ho_match_mp_tac alloc_limits_expr_ind >> rpt conj_tac >> rpt gen_tac >>
-  rpt strip_tac >> gvs[alloc_limits_expr_def, supported_expr_exists_def] >>
-  qpat_x_assum `alloc_limits_exprs _ (if _ then _ else _)` mp_tac >>
-  IF_CASES_TAC >> gvs[supported_exprs_exists_extcode]
+  rpt strip_tac >> gvs[alloc_limits_expr_def, supported_expr_exists_def]
+  >~ [`alloc_limits_exprs _ (if _ then _ else _)`]
+  >- (qpat_x_assum `alloc_limits_exprs _ (if _ then _ else _)` mp_tac >>
+      qspecl_then [`\e. array_slot_base cenv e \/ alloc_limits_expr cenv e`, `es`]
+        mp_tac supported_exprs_exists_extcode >>
+      simp[] >> IF_CASES_TAC >> gvs[]) >>
+  (* a slot base, which only its own node exempts *)
+  rename1 `array_slot_base cenv x` >> Cases_on `x` >>
+  gvs[array_slot_base_def, supported_expr_exists_def]
 QED
 
 Theorem alloc_limits_assignment_exists:
   (!cenv g. alloc_limits_assignment cenv g ==>
-            ~supported_assignment_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) g) /\
+            ~supported_assignment_exists (\e. ~is_extcode e /\ ~array_slot_base cenv e /\
+                 ~alloc_limits_expr cenv e) g) /\
   (!cenv gs. alloc_limits_assignments cenv gs ==>
-             ~supported_assignments_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) gs)
+             ~supported_assignments_exists (\e. ~is_extcode e /\ ~array_slot_base cenv e /\
+                 ~alloc_limits_expr cenv e) gs)
 Proof
   ho_match_mp_tac alloc_limits_assignment_ind >>
   rw[alloc_limits_assignment_def, supported_assignment_exists_def] >>
@@ -174,7 +220,8 @@ QED
 
 Theorem alloc_limits_iterator_exists:
   !cenv it. alloc_limits_iterator cenv it ==>
-            ~supported_iterator_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) it
+            ~supported_iterator_exists (\e. ~is_extcode e /\ ~array_slot_base cenv e /\
+                 ~alloc_limits_expr cenv e) it
 Proof
   Cases_on `it` >>
   rw[alloc_limits_iterator_def, supported_iterator_exists_def] >>
@@ -183,7 +230,8 @@ QED
 
 Theorem alloc_limits_assert_exists:
   !cenv r. alloc_limits_assert cenv r ==>
-           ~supported_assert_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) r
+           ~supported_assert_exists (\e. ~is_extcode e /\ ~array_slot_base cenv e /\
+                 ~alloc_limits_expr cenv e) r
 Proof
   Cases_on `r` >>
   rw[alloc_limits_assert_def, supported_assert_exists_def,
@@ -193,7 +241,8 @@ QED
 
 Theorem alloc_limits_raise_exists:
   !cenv r. alloc_limits_raise cenv r ==>
-           ~supported_raise_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) r
+           ~supported_raise_exists (\e. ~is_extcode e /\ ~array_slot_base cenv e /\
+                 ~alloc_limits_expr cenv e) r
 Proof
   Cases_on `r` >>
   rw[alloc_limits_raise_def, supported_raise_exists_def,
@@ -208,7 +257,8 @@ Theorem alloc_limits_stmt_exists:
   !cenv s.
     alloc_limits_stmt cenv s /\ (!c ss1 ss2. s <> If c ss1 ss2) /\
     (!id ty it n body. s <> For id ty it n body) ==>
-    ~supported_stmt_expr_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) s
+    ~supported_stmt_expr_exists (\e. ~is_extcode e /\ ~array_slot_base cenv e /\
+                 ~alloc_limits_expr cenv e) s
 Proof
   gen_tac >> Cases >>
   rw[alloc_limits_stmt_def, supported_stmt_expr_exists_def] >>
@@ -289,14 +339,6 @@ Definition alloc_env_agree_def:
     c'.ce_func_mutability = c.ce_func_mutability
 End
 
-Theorem custom_error_alloc_ok_frame:
-  !c c' err. alloc_env_agree c c' ==>
-    custom_error_alloc_ok c' err = custom_error_alloc_ok c err
-Proof
-  rw[alloc_env_agree_def] >> drule type_memory_bytes_frame >> strip_tac >>
-  Cases_on `err` >> simp[custom_error_alloc_ok_def]
-QED
-
 Theorem alloc_env_agree_var_type:
   !c c' f. alloc_env_agree c c' ==>
     alloc_env_agree (c with ce_var_type updated_by f)
@@ -370,6 +412,18 @@ Proof
   metis_tac[lowered_value_type_struct_fields]
 QED
 
+Theorem custom_error_alloc_ok_frame:
+  !c c' err. alloc_env_agree c c' ==>
+    custom_error_alloc_ok c' err = custom_error_alloc_ok c err
+Proof
+  rw[alloc_env_agree_def] >> drule type_memory_bytes_frame >> strip_tac >>
+  `lowered_value_type c' = lowered_value_type c` by
+    (simp[FUN_EQ_THM] >> metis_tac[lowered_value_type_frame]) >>
+  `type_alloc_ok c' = type_alloc_ok c` by simp[FUN_EQ_THM, type_alloc_ok_def] >>
+  Cases_on `err` >> simp[custom_error_alloc_ok_def] >>
+  Cases_on `c.ce_error_info (nsid_to_string p)` >> simp[]
+QED
+
 Theorem assign_alloc_ok_frame:
   !c c' bt e. alloc_env_agree c c' ==>
     assign_alloc_ok c' bt e = assign_alloc_ok c bt e
@@ -433,6 +487,10 @@ Proof
   drule_all alloc_limits_frame >> strip_tac >>
   `!tgt e. aug_assign_overlap c1 tgt e = aug_assign_overlap c0 tgt e` by
     (rpt gen_tac >> irule aug_assign_overlap_frame >> simp[]) >>
+  `type_alloc_ok c1 = type_alloc_ok c0` by
+    (drule type_memory_bytes_frame >> simp[FUN_EQ_THM, type_alloc_ok_def]) >>
+  `type_memory_bytes c1 = type_memory_bytes c0` by
+    (drule type_memory_bytes_frame >> simp[FUN_EQ_THM]) >>
   gvs[alloc_limits_stmt_def, log_alloc_ok_def] >> metis_tac[]
 QED
 

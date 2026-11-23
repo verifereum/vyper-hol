@@ -154,51 +154,6 @@ Proof
   strip_tac >> match_mp_tac (specialize_frame symbolic_frame_reason_message) >> simp[]
 QED
 
-Theorem deploy_blocks_frame_log_save_arg:
-  (!c t v. deploy_blocks_frame (compile_materialize_vv c t v)) ==>
-  deploy_blocks_frame (compile_log_save_arg cenv ty op es)
-Proof
-  strip_tac >>
-  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
-    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
-      (Q.GEN `R` symbolic_frame_log_save_arg))) >>
-  simp[]
-QED
-
-Theorem deploy_blocks_frame_log_eval_all:
-  (!c t e. deploy_blocks_frame (lower_value compile_expr c t e)) /\
-  (!c t v. deploy_blocks_frame (compile_materialize_vv c t v)) ==>
-  !es cenv. deploy_blocks_frame (compile_log_eval_all cenv es)
-Proof
-  strip_tac >>
-  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
-    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
-      (Q.GEN `R` symbolic_frame_log_eval_all))) >>
-  simp[]
-QED
-
-Theorem deploy_blocks_frame_log_topic_ops:
-  (!op b. deploy_blocks_frame (compile_encode_log_topic op b)) ==>
-  !ops. deploy_blocks_frame (compile_log_topic_ops ops)
-Proof
-  strip_tac >>
-  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
-    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
-      (Q.GEN `R` symbolic_frame_log_topic_ops))) >>
-  simp[]
-QED
-
-Theorem deploy_blocks_frame_log_store_data:
-  (!c v b t s. deploy_blocks_frame (compile_store_memory c v b t s)) ==>
-  !ops tys cenv buf off. deploy_blocks_frame (compile_log_store_data cenv ops tys buf off)
-Proof
-  strip_tac >>
-  match_mp_tac (REWRITE_RULE [symbolic_frame_deploy]
-    (Q.ISPEC `\blocks (s:compile_state) t. t = s with cs_blocks := s.cs_blocks ++ blocks`
-      (Q.GEN `R` symbolic_frame_log_store_data))) >>
-  simp[]
-QED
-
 Theorem deploy_blocks_frame_tuple_load_all:
   (!op b. deploy_blocks_frame (compile_load_memory op b)) ==>
   !tys cenv op off. deploy_blocks_frame (compile_tuple_load_all cenv op tys off)
@@ -268,17 +223,6 @@ Proof
   strip_tac >> match_mp_tac (specialize_frame symbolic_frame_iter_elem_copy) >> simp[]
 QED
 
-Theorem deploy_blocks_frame_custom_error_store_args:
-  (!c t e. deploy_blocks_frame (compile_expr c t e)) /\
-  (!c v. deploy_blocks_frame (unwrap_value c v)) /\
-  (!c v b t s. deploy_blocks_frame (compile_store_memory c v b t s)) ==>
-  !es tys cenv dst off.
-    deploy_blocks_frame (compile_custom_error_store_args cenv es tys dst off)
-Proof
-  strip_tac >> Induct >> Cases_on `tys` >>
-  simp[compile_custom_error_store_args_def, comp_ignore_bind_def]
-QED
-
 Theorem deploy_blocks_frame_revert_with_custom_error:
   (!c t e. deploy_blocks_frame (compile_expr c t e)) /\
   (!c v. deploy_blocks_frame (unwrap_value c v)) /\
@@ -286,12 +230,17 @@ Theorem deploy_blocks_frame_revert_with_custom_error:
   (!a b i. deploy_blocks_frame (compile_abi_encode_to_buf a b i)) ==>
   deploy_blocks_frame (compile_revert_with_custom_error cenv err)
 Proof
-  strip_tac >> Cases_on `err` >>
+  strip_tac >>
+  `!es tys. deploy_blocks_frame (compile_ext_call_args compile_expr cenv [] tys es)` by
+    (rpt gen_tac >> irule deploy_blocks_frame_ext_call_args >>
+     simp[deploy_blocks_frame_snapshot_vv, deploy_blocks_frame_materialize_vv]) >>
+  `!dst rows. deploy_blocks_frame (compile_abi_encode_values_to_buf cenv dst rows)` by
+    simp[deploy_blocks_frame_abi_encode_values_to_buf] >>
+  Cases_on `err` >>
   simp[compile_revert_with_custom_error_def, comp_ignore_bind_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[deploy_blocks_frame_custom_error_store_args]),
-    match_mp_tac deploy_blocks_frame_bind >> conj_tac
-      >- simp[deploy_blocks_frame_custom_error_store_args] >> gen_tac,
-    BasicProvers.TOP_CASE_TAC])
+  rpt (FIRST [match_mp_tac deploy_blocks_frame_bind >> conj_tac
+      >- simp[] >> gen_tac >> BETA_TAC,
+    BasicProvers.TOP_CASE_TAC, CHANGED_TAC (simp[])])
 QED
 
 Theorem deploy_blocks_frame_stmt_cond:
@@ -307,9 +256,6 @@ Theorem deploy_blocks_frame_stmt_cond:
   (!i b v loc. deploy_blocks_frame (compile_store_at_loc i b v loc)) /\
   (!c e. deploy_blocks_frame (compile_reason_message c e)) /\
   (!c v (t:type) n. deploy_blocks_frame (compile_revert_with_reason c v t n)) /\
-  (!c es. deploy_blocks_frame (compile_log_eval_all c es)) /\
-  (!ops. deploy_blocks_frame (compile_log_topic_ops ops)) /\
-  (!c ops tys buf off. deploy_blocks_frame (compile_log_store_data c ops tys buf off)) /\
   (!a b i. deploy_blocks_frame (compile_abi_encode_to_buf a b i)) /\
   (!c. deploy_blocks_frame (compile_return_unlock c)) /\
   (!k t v. deploy_blocks_frame (compile_nonreentrant_unlock k t v)) /\

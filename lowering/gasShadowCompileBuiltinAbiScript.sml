@@ -4,15 +4,15 @@ Ancestors
   builtinAbi exprLowering
 
 Theorem gas_shadow_compiles_lower_abi_encode:
-  gas_shadow_compiles (lower_abi_encode ensure_tuple method_id_opt src_op enc_info maxlen)
-    (lower_abi_encode ensure_tuple method_id_opt src_op enc_info maxlen)
+  (!dst. gas_shadow_compiles (encode dst) (encode dst)) ==>
+  gas_shadow_compiles (lower_abi_encode method_id_opt maxlen encode)
+    (lower_abi_encode method_id_opt maxlen encode)
 Proof
-  Cases_on `method_id_opt` >>
+  strip_tac >> Cases_on `method_id_opt` >>
   simp[lower_abi_encode_def, comp_ignore_bind_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_return,
-               gas_shadow_compiles_emit_void, gas_shadow_compiles_emit_op, gas_shadow_compiles_bind,
-               gas_shadow_compiles_abi_encode_to_buf] >>
+               gas_shadow_compiles_emit_void, gas_shadow_compiles_emit_op, gas_shadow_compiles_bind] >>
        gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
 QED
 

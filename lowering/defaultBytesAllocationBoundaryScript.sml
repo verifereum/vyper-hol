@@ -15,7 +15,8 @@ Theorem default_bytes_allocation_boundary_footprint:
   alloca_inv s /\ alloca_frontier_inv_from k ctx fn site s /\
   fn_inst_ids_distinct fn /\ k + unit_alloca_budget ctx < dimword (:256) /\
   FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   alloca_history fn s /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?a H u p.
@@ -117,8 +118,6 @@ Resume default_bytes_allocation_boundary_footprint[origin]:
   qexistsl [`ALLOCA`,`[Lit (n2w cap)]`,`buf.buf_operand`,`st`] >>
   qpat_x_assum `s.vs_alloca_next + cap < dimword (:256)` kall_tac >>
   qpat_x_assum `k + unit_alloca_budget ctx < dimword (:256)` kall_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all prefix_register_alloc_pair >>
   disch_then (qspecl_then [`STRING #"%" (toString st.cs_next_var)`,
     `tn`,`0`,`PG`,`G`,`D`] mp_tac) >>
@@ -130,8 +129,6 @@ Resume default_bytes_allocation_boundary_footprint[origin]:
 QED
 Resume default_bytes_allocation_boundary_footprint[pullback]:
   gen_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
   drule_all prefix_register_alloc_run_continuation >>
   simp[NoAsms, LET_THM] >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
@@ -190,7 +187,10 @@ Theorem default_bytes_allocation_boundary:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u a) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all default_bytes_allocation_boundary_footprint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
+  drule_all default_bytes_allocation_boundary_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl [`a`,`H`,`u`,`p`] >> simp[]
 QED

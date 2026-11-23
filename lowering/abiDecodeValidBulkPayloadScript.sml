@@ -2,7 +2,7 @@
 Theory abiDecodeValidBulkPayload
 Ancestors calldataDecodePtr[qualified,ignore_grammar] abiDecodePtrMemberFrame[qualified] arithmetic[qualified,ignore_grammar]
   abiDecoderBulk decoderNavigationPtr decoderArraySetupPtr
-  decoderGhostFramePtr fragGasCopyLoop fragGasOriginPtr logInstSeqPtr
+  decoderGhostFramePtr fragGasCopyLoop fragGasCopySeqLiftProps fragGasOriginPtr logInstSeqPtr
   stmtReasonMemory allocaFootprint exprSimBufferStore exprSimAccounts
   emitHelperProps exprLoweringProps fragExec instIdxIndep words rich_list pred_set
   venomState ptrDiscipline fragGasSeqPtr venomInst abiEncoder abiDecoderComposition compileEnv
@@ -66,6 +66,15 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
            i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts sa sb)` by
     simp[mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i [mk_inst sa.cs_next_id MCOPY [Var dst;Var src;lenop] []]` by
+       (qpat_assum `emitted_insts sa sb = [mk_inst _ _ _ _]` (SUBST1_TAC o SYM) >>
+        qpat_assum `emitted_insts sa sb = pre ++ i::post` SUBST1_TAC >> simp[]) >>
+     fs[mk_inst_def]) >>
   `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G tf` by simp[] >>
   drule_all (cj 1 run_inst_seq_origin_ptr_lift) >> simp[]
 QED

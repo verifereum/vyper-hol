@@ -1,7 +1,7 @@
 Theory bodyFullRawLogCompose
 Ancestors
   bodyFullShadowBodyInv
-  exprSimCallRawLog bodyInvNoDalloca contextRawReachable ptrDiscipline[qualified,ignore_grammar]
+  exprSimCallRawLog bodyFullIntCallReturnHalt bodyFullIfExpReach bodyFullHashKeccakFixed contextRawReachable ptrDiscipline[qualified,ignore_grammar]
   bodyFullRawLogLayout bodyFullRawLogJoinPost bodyFullRawLogTopics
   bodyFullRawLogReadiness bodyFullRawLogFixed bodyFullRawLogDynamic
   bodyFullExprGeneric bodyFullPreds vyperTypeArgFits exprWordOperand
@@ -65,11 +65,12 @@ QED
 
 Theorem raw_log_expr_sim_full:
   (!ce ty e. gas_shadow_compiles (lower_value compile_expr ce ty e)
-    (lower_value compile_expr ce ty (gas_shadow_expr e))) /\
+    (lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e))) /\
   (!ce xs. gas_shadow_compiles (compile_multi_exprs compile_expr ce xs)
-    (compile_multi_exprs compile_expr ce (MAP gas_shadow_expr xs))) /\
+    (compile_multi_exprs compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr xs))) /\
   body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Call ann RawLog args dflt) es ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann RawLog args dflt) es
@@ -95,7 +96,8 @@ Proof
      gvs[well_typed_expr_def, well_typed_builtin_app_def,
          compatible_bound_def, builtin_args_length_ok_def]) >> gvs[] >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  drule_all raw_log_full_layout_shadow >> strip_tac >>
+  drule_all (Q.INST [`shadow_defaults` |-> `T`] raw_log_full_layout_shadow) >>
+  strip_tac >>
   `EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
                  (!l. op <> Label l)) ops` by
     (irule raw_log_topics_operands_shape >>
@@ -117,7 +119,6 @@ Proof
                 push_log (encode_raw_event_values cx.txn.target vs bs);
                 return NoneV od))` by
     simp[Abbr `source`, raw_log_eval, compatible_bound_def, bind_assoc, SF ETA_ss] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   mp_tac raw_log_topics_full >>
   (impl_tac >- MATCH_ACCEPT_TAC raw_log_full_data_reached_ready) >>
   disch_then drule_all >>
@@ -125,9 +126,17 @@ Proof
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
     (fn th => assume_tac th) >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ topicQ topicR` >>
-  simp[Abbr `cfg`, Abbr `ct`, Abbr `initial`, Abbr `R`] >>
+  simp[Abbr `cfg`, Abbr `ct`, Abbr `initial`] >>
+  irule gas_outcome_full_post_mono >>
+  qexistsl_tac [`Q`, `\H res ee gt r.
+    (expr_exit res r /\ halt_exit H cx ee res r) /\
+    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
+  BETA_TAC >> simp[Abbr `R`] >>
+  irule (BETA_RULE (Q.SPEC
+    `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`
+    (Q.GEN `R` gas_outcome_full_halt_room))) >>
   qpat_assum `source = _` (fn th => rewrite_tac[th]) >>
-  irule gas_outcome_full_bind_all >>
+  irule gas_outcome_full_bind_all_path >>
   rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gas_exempt_cert_bind_values >>
@@ -162,17 +171,33 @@ QED
 Resume raw_log_expr_sim_full[continuation]:
   markerLib.RESUME_TAC >> (
   rename1 `compile_multi_exprs compile_expr cenv topics sa = (ops,sm)` >>
-  rename1 `compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr topics)
+  rename1 `compile_multi_exprs compile_expr _ (MAP gas_shadow_expr topics)
     shadow_sa = (ops,shadow_sm)` >>
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
      mid.storage_trace` by fs[storage_trace_domain_def] >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+        gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (fn path =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` (fn phi =>
+         qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s`
+           (fn no_wrap => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
+             (LIST_CONJ [path,phi,no_wrap])))))) >>
   fs[Abbr `topicQ`] >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+      ((?v. _ = INL v /\ _) /\ _)`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx mid t`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   `LENGTH vs <= 4` by decide_tac >>
   qexists_tac `vs` >> conj_tac >- first_assum ACCEPT_TAC >>
   BETA_TAC >>
@@ -184,6 +209,17 @@ Resume raw_log_expr_sim_full[continuation]:
      first_x_assum (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
      qpat_assum `!tail. eval_exprs cx topics _ = _` (qspec_then `gs` assume_tac) >>
      fs[Abbr `tail_source`, bind_def] >> metis_tac[]) >>
+  `well_typed_exprs env topics` by
+    (qpat_assum `expr_body_pre cenv cx env (Call _ RawLog _ _) es`
+       (mp_tac o cj 2 o REWRITE_RULE [expr_body_pre_def]) >>
+     simp[Once well_typed_expr_def] >>
+     strip_tac >> fs[well_typed_expr_def, well_typed_builtin_app_def]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[body_const_cells_agree_state_updates] >>
+     irule body_const_cells_agree_exprs >>
+     qpat_assum `!tail. eval_exprs cx topics _ = _` (qspec_then `[]` (irule_at Any)) >>
+     simp[body_const_cells_agree_state_updates]) >>
   `expr_sim_inv cenv cx env mid` by fs[expr_body_pre_def] >>
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
     (qpat_assum `!tail. eval_exprs cx topics _ = _`
@@ -203,20 +239,15 @@ Resume raw_log_expr_sim_full[continuation]:
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type data) data mid` by
     (qpat_assum `body_expr_full_ok cx data`
-       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then drule_all >> metis_tac[]) >>
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+       _ ==> expr_sim_full _ _ _ _ _ _ /\ _` drule_all >> simp[]) >>
   FIRST [qpat_assum `expr_type data = BaseT (BytesT (Fixed 32))`
            (K all_tac) >> suspend "fixed_data",
          suspend "dynamic_data"])
 QED
 
 Resume raw_log_expr_sim_full[fixed_data]:
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t /\
-     !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by simp[] >>
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
   qpat_assum `compile_call _ _ _ _ RawLog _ _ _ = _`
     (mp_then (Pat `compile_call _ _ _ _ RawLog _ _ _ = _`) mp_tac raw_log_fixed_data_full) >>
   disch_then (fn th => qpat_assum `compile_alloc_buffer 32 sm = _`
@@ -248,9 +279,9 @@ Resume raw_log_expr_sim_full[fixed_data]:
      >~ [`local_ptrs_reserved cenv sm`]
      >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
          fs[ci_mono_def])
-     >~ [`!fn inst t'. frag_reachable ctx func t fn inst t' ==> dalloca_no_wrap inst t'`]
+     >~ [`!fn inst t'. frag_reachable ctx func t fn inst t' ==> dalloca_fmp_headroom inst t'`]
      >- (rpt strip_tac >> qpat_assum
-           `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s`
+           `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s`
            (qspecl_then [`fn`, `inst`, `t'`] MATCH_MP_TAC) >> first_assum ACCEPT_TAC)
      >~ [`!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x`]
      >- (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
@@ -324,11 +355,6 @@ Resume raw_log_expr_sim_full[dynamic_data]:
       ghost_kept_at lo cenv mid sm G1 tn1 t G tn`,
     `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`] >>
   simp[Abbr `rawlog`] >> conj_tac >- suspend "dynamic_post" >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
-    (rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >>
-     metis_tac[]) >>
   simp[expr_type_def] >>
   qpat_assum `LENGTH vs <= (4:num)` (fn bnd =>
     irule (SRULE [bnd, expr_type_def, loweringPostsTheory.post_value_type_def]
@@ -342,7 +368,7 @@ Resume raw_log_expr_sim_full[dynamic_data]:
         raw_log_dynamic_data_full))) >>
   simp[loweringPostsTheory.post_value_type_bytestring,
     compileEnvTheory.is_bytestring_type_def] >> rpt conj_tac
-  >~ [`!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s`]
+  >~ [`!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s`]
   >- first_assum ACCEPT_TAC
   >~ [`!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x`]
   >- (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
@@ -396,6 +422,10 @@ Resume raw_log_expr_sim_full[fixed_post]:
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `H` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp endst` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ endst`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
   gvs[] >> simp[Abbr `Q`] >>
   `valid_horizon cx st0 H es.storage_trace` by
     (qpat_assum `!tail. eval_exprs cx topics _ = _`
@@ -424,6 +454,10 @@ Resume raw_log_expr_sim_full[dynamic_post]:
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `H` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp endst` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ endst`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp o
+        CONJUNCT1 o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
   gvs[] >> simp[Abbr `Q`] >>
   `valid_horizon cx st0 H es.storage_trace` by
     (qpat_assum `!tail. eval_exprs cx topics _ = _`

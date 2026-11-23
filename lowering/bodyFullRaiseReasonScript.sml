@@ -11,7 +11,7 @@ Theory bodyFullRaiseReason
 Ancestors
   bodyFullShadowBodyInv
   stateRelProj
-  bodyFullRaiseReasonLiteral bodyFullRaiseReasonNonliteral
+  bodyFullRaiseReasonLiteralAction bodyFullRaiseReasonNonliteral
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
@@ -26,6 +26,7 @@ Theorem compile_raise_reason_frag_full:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Raise (RaiseReason e)) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Raise (RaiseReason e)) = SOME env' /\
@@ -36,12 +37,14 @@ Theorem compile_raise_reason_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Raise (RaiseReason e)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
       (eval_stmt cx (Raise (RaiseReason e))) es
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `?ml str. e = Literal (BaseT (StringT ml)) (StringL str)`
-  >- (gvs[] >> irule compile_raise_reason_literal_frag_full >>
-      metis_tac[]) >>
+  >- (gvs[] >> irule compile_raise_reason_literal_frag_full_action >>
+      asm_rewrite_tac[] >> conj_tac
+      >- (qexistsl_tac [`bindings`,`tops`] >> asm_rewrite_tac[]) >>
+      qexistsl_tac [`env`,`env'`] >> asm_rewrite_tac[]) >>
   irule compile_raise_reason_nonliteral_frag_full >> metis_tac[]
 QED

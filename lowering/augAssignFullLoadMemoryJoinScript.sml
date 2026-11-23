@@ -25,13 +25,12 @@ Proof
   strip_tac >>
   `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
     metis_tac[aug_place_target_entry_typed] >>
-  `st.scopes = es.scopes` by metis_tac[aug_place_target_scopes] >>
   qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac bool_ss [target_post_def] >> strip_tac >>
   qpat_x_assum `place_ptr_rel _ _ _ _ _ _ _` mp_tac >>
   simp[place_ptr_rel_def] >> strip_tac >> gvs[] >>
   `tv0 = entry.type` by
-    metis_tac[aug_place_entry_type_agrees, optionTheory.SOME_11] >> gvs[] >>
+    metis_tac[aug_place_target_entry_type_agrees, optionTheory.SOME_11] >> gvs[] >>
   `subscripts_type entry.type path = SOME tv` by
     metis_tac[mem_path_offset_sound] >>
   `value_has_type tv v` by metis_tac[evaluate_subscripts_type] >>

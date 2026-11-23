@@ -683,7 +683,9 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
           v1 (ArrayV av) ee = INL (BoolV answer)` by
     (Cases_on `bop = In` >>
      gvs[exprBopSimDefsTheory.bop_result_def, Abbr `answer`,
-         vyperValueOperationTheory.evaluate_membership_array]) >>
+         vyperContextTheory.evaluate_builtin_def, LET_THM,
+         vyperValueOperationTheory.evaluate_binop_def,
+         vyperValueOperationTheory.binop_negate_def]) >>
   qexistsl [`[]`, `fin`, `q`, `BoolV answer`] >>
   simp[gasSummaryTheory.gas_marked_exec_def] >>
   simp[loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,

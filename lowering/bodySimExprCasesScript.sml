@@ -181,7 +181,9 @@ Proof
   Cases_on `bt` >>
   rw[vyperTypeSystemTheory.well_typed_builtin_app_def, builtin_args_length_ok_def]
   >~ [`well_typed_builtin_app _ (MakeArray o' _) _`]
-  >- (Cases_on `o'` >> gvs[vyperTypeSystemTheory.well_typed_builtin_app_def]) >>
+  >- (Cases_on `o'` >>
+      gvs[vyperTypeSystemTheory.well_typed_builtin_app_def,
+          vyperValueTheory.compatible_bound_def]) >>
   gvs[]
 QED
 

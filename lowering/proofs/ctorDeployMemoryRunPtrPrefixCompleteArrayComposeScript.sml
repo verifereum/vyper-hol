@@ -35,7 +35,8 @@ val PreparedPk = ``
     0 sb d slot slot 32 loop_st.cs_next_var prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     prepared.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
-  fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+    prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp) /\
   lo <= slot /\ lo <= d /\ D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
   venomMemDefs$regions_disjoint (slot,32) (d,type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   header_st.cs_next_id IN ctor_actual_sites func ids /\ frag_ids body_st end_st SUBSET ids /\
@@ -127,7 +128,8 @@ val SetupPrem = ``
   FLOOKUP G dst_var = SOME (b,sz) /\ b <= d /\
   d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= b+sz /\
   op_taint tn src = {} /\ op_taint tn (Var dst_var) = {} /\
-  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
   abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
     DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -142,13 +144,14 @@ val SetupPrem = ``
   lookup_block loop_st.cs_current_bb func.fn_blocks = SOME entry_bb /\
   entry_bb.bb_instructions = loop_st.cs_current_insts ++ [mk_inst jump_id JMP [Label hdr] []]``;
 
-val CshiftMode = ``\checked ty tv.
-  ^(rand (rator (concl prefix_complete_array_prepared_pair_mode)))``;
+val CshiftModeWithFmp = ``\checked ty tv.
+  ^(rand (rator (concl prefix_complete_array_prepared_path_mode_fmp)))``;
 
 val LoopAtMode = ``\label index j X. (^LoopAt) label index j X /\
   (checked ==> alloca_history func (FST X))``;
 
-val FrameMode = ``\X Y. (^Frame) X Y /\
+val FrameModeWithFmp = ``\X Y. (^Frame) X Y /\
+  (frame_fmp ==> (FST Y).vs_fmp = (FST X).vs_fmp) /\
   (checked ==> gas_path_mem ctx func (FST X) 0 (OK (FST Y)) /\
     alloca_history func (FST Y))``;
 
@@ -207,8 +210,8 @@ Proof
   irule abi_decode_sim_trans >> qexists `prepared` >> asm_rewrite_tac[]
 QED
 *)
-Theorem prefix_complete_array_setup_exit_pair_mode_exact:
-  (^CshiftMode) checked ty tv ==> (^SetupPremMode) ==>
+Theorem prefix_complete_array_setup_exit_pair_mode_exact_fmp:
+  (^CshiftModeWithFmp) checked ty tv ==> (^SetupPremMode) ==>
   ?prepared slot H qt actual Hout qout A.
     (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, Hout, qout)) /\
     (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual) /\
@@ -216,7 +219,10 @@ Theorem prefix_complete_array_setup_exit_pair_mode_exact:
       lookup_var x prepared = lookup_var x initial) /\
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
       lookup_var x actual = lookup_var x initial) /\ 
+    (frame_fmp ==> actual.vs_fmp = initial.vs_fmp) /\
     (^SetupResult) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+      actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
     (^LoopAt) exit_lbl 0 (LENGTH vs) (actual,Hout,qout,A) /\
     (^Frame) (prepared,H,qt,range_bytes [(d,32)]) (actual,Hout,qout,A) /\
     val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
@@ -228,14 +234,16 @@ Theorem prefix_complete_array_setup_exit_pair_mode_exact:
 Proof
   disch_then (mk_asm "child") >>
   strip_tac >>
-  mp_tac prefix_complete_array_setup_loop_mode_exact >>
+  mp_tac prefix_complete_array_setup_loop_mode_exact_fmp >>
   (impl_tac >- simp[]) >> strip_tac >>
   rule_assum_tac BETA_RULE >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
   `(^SetupResult)` by (simp_tac std_ss [] >> asm_rewrite_tac[SUBSET_REFL] >> simp[]) >>
   `?actual Hout qout A.
     (^LoopAtMode) exit_lbl 0 (LENGTH vs) (actual,Hout,qout,A) /\
-    (^FrameMode) (prepared,H,qt,range_bytes [(d,32)]) (actual,Hout,qout,A) /\
+    (^FrameModeWithFmp) (prepared,H,qt,range_bytes [(d,32)]) (actual,Hout,qout,A) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+      actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
     (checked ==> !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (prepared,H,qt) [] (OK actual,Hout,qout)) /\
     val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
@@ -249,13 +257,17 @@ Proof
           `B` |-> `range_bytes [(d,32)]`,
           `prefix` |-> `loop_st.cs_current_insts`, `id` |-> `jump_id`,
           `hdr_bb` |-> `hdr_bb'`, `bb` |-> `entry_bb`]
-         prefix_complete_array_prepared_path_mode))) >>
+         prefix_complete_array_prepared_path_mode_fmp))) >>
      (impl_tac >-
        (asm_simp_tac std_ss [SUBSET_REFL] >> rpt strip_tac >> fs[])) >>
      disch_then (qx_choosel_then [`actual`,`Hout`,`qout`,`A`] strip_assume_tac) >>
      qexistsl [`actual`,`Hout`,`qout`,`A`] >> asm_simp_tac std_ss [] >>
      qpat_x_assum `checked ==> _ /\ _ /\ !D explicit. _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp_tac std_ss [] >> metis_tac[]) >>
+  `frame_fmp ==> actual.vs_fmp = initial.vs_fmp` by
+    (strip_tac >>
+     qpat_assum `(^FrameModeWithFmp) _ _` (strip_assume_tac o SIMP_RULE std_ss []) >>
+     res_tac >> simp[]) >>
   qexistsl [`prepared`,`slot`,`H`,`qt`,`actual`,`Hout`,`qout`,`A`] >>
   rule_assum_tac (SIMP_RULE std_ss []) >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
@@ -283,6 +295,10 @@ Proof
 QED
 
 
+Theorem prefix_complete_array_setup_exit_pair_mode_exact =
+  prefix_complete_array_setup_exit_pair_mode_exact_fmp
+  |> Q.INST [`frame_fmp` |-> `F`]
+  |> PURE_REWRITE_RULE [tautLib.TAUT `((F ==> p) /\ q) <=> q`]
 
 
 val _ = export_theory();

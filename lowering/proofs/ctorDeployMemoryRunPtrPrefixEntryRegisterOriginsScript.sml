@@ -45,7 +45,9 @@ val RegisterSuffixOriginsMode = ``\checked.
     (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
     ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
     initial.vs_inst_idx = LENGTH st.cs_current_insts /\
-    allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    allocas_from lo initial /\ lo <= initial.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+      initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
     (!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
       inst.inst_operands = [Lit n] /\
       FLOOKUP initial.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
@@ -68,10 +70,13 @@ val RegisterSuffixOriginsMode = ``\checked.
       actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
       abi_decode_sim ctx func initial actual /\
       allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+        actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
       initial.vs_alloca_next <= actual.vs_alloca_next /\
       actual.vs_code = initial.vs_code /\ actual.vs_outcomes = initial.vs_outcomes /\
       actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
       actual.vs_gas_readings = initial.vs_gas_readings /\
+      actual.vs_fmp = initial.vs_fmp /\
       (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
       qt.t_mem SUBSET (tn.t_mem UNION
         {j | initial.vs_alloca_next <= j /\ j < actual.vs_alloca_next}) /\
@@ -274,6 +279,7 @@ Resume prefix_entry_register_suffix_origins_coverage_mode[finish]:
     (qpat_x_assum `checked ==> !D explicit. gas_origin_ptr_path _ (initial,_,_) _ _` mp_tac >>
      qpat_x_assum `checked ==> !D explicit. gas_origin_ptr_path _ (middle,_,_) _ _` mp_tac >>
      rpt (pop_assum kall_tac) >> metis_tac[gas_origin_ptr_path_trans]) >>
+  `actual.vs_fmp = initial.vs_fmp` by asm_rewrite_tac[] >>
   qexistsl [`actual`,`H`,`qt`] >> asm_rewrite_tac[] >>
   conj_tac >- suspend "effect" >>
   conj_tac >- metis_tac[] >>

@@ -12,9 +12,8 @@ Ancestors
 Theorem runtime_data_frame_create_call_composed:
   (!vv. runtime_data_frame (unwrap_value cenv vv)) /\
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
-  (!vs p off. runtime_data_frame (compile_extcall_store_values cenv vs p off)) /\
   (!copy vv. runtime_data_frame (compile_snapshot_vv cenv copy vv)) /\
-  (!p s enc. runtime_data_frame (compile_abi_encode_to_buf p s enc)) /\
+  (!dst rows. runtime_data_frame (compile_abi_encode_values_to_buf cenv dst rows)) /\
   (!p d n loc. runtime_data_frame (compile_slot_to_memory p d n loc)) /\
   (!b a p d n off. runtime_data_frame (compile_imm_copy_to_memory b a p d n off)) /\
   (!d s n. runtime_data_frame (compile_copy_memory_dynamic d s n)) /\
@@ -29,7 +28,7 @@ Theorem runtime_data_frame_create_call_composed:
 Proof
   strip_tac >> irule runtime_data_frame_create_call >>
   simp[runtime_data_frame_create_blueprint_args,
-       runtime_data_frame_create_ctor_tuple, runtime_data_frame_raw_create,
+       runtime_data_frame_create_ctor_args, runtime_data_frame_raw_create,
        runtime_data_frame_create_snapshot, runtime_data_frame_create_salt,
        runtime_data_frame_lower_value]
 QED
@@ -50,17 +49,16 @@ Theorem runtime_data_frame_call_composed:
       (cenv_without_defaults cenv (nsid_to_string id))
       (omitted_defaults cenv (nsid_to_string id) (LENGTH args)) stack tys)) /\
   (!buf vs off. runtime_data_frame (store_multi_results buf vs off)) /\
-  (!a vs ts ms az mid rz mn rb sc v g sk hd d rt dt ei di.
-    runtime_data_frame (compile_external_call_kwargs cenv a vs ts ms az mid rz mn rb
-      sc v g sk hd d rt dt ei di)) /\
+  (!a vs ts az mid rz mn rb sc v g sk hd d rt dt di.
+    runtime_data_frame (compile_external_call_kwargs cenv a vs ts az mid rz mn rb
+      sc v g sk hd d rt dt di)) /\
   (!n. runtime_data_frame (compile_raw_call_outbuf n)) /\
   (!a p n g v ct sz rof ov op.
     runtime_data_frame (compile_raw_call_finish a p n g v ct sz rof ov op)) /\
   runtime_data_frame compile_msg_data_to_memory /\
   (!v. runtime_data_frame (compile_raw_revert v)) /\
   (!v. runtime_data_frame (compile_selfdestruct v)) /\
-  (!vs p off. runtime_data_frame (compile_extcall_store_values cenv vs p off)) /\
-  (!p s enc. runtime_data_frame (compile_abi_encode_to_buf p s enc)) /\
+  (!dst rows. runtime_data_frame (compile_abi_encode_values_to_buf cenv dst rows)) /\
   (!p d n loc. runtime_data_frame (compile_slot_to_memory p d n loc)) /\
   (!b a p d n off. runtime_data_frame (compile_imm_copy_to_memory b a p d n off)) /\
   (!d s n. runtime_data_frame (compile_copy_memory_dynamic d s n)) /\
@@ -83,7 +81,7 @@ QED
      concat, store_abi_tuple, materialize/ifexp_arm/snapshot, struct_lit,
      abi_encode_args, external kwargs, and create_salt.
    Addressing: get_target_ptr, subscript, attribute, extcall_store_args.
-   Creation: ctor_tuple, blueprint_args, snapshot, raw_create, create_call.
+   Creation: ctor_args, blueprint_args, snapshot, raw_create, create_call.
    Calls: all compile_call targets, store_words, invert, acc, modular names.
    call_can_mutate and expr_can_mutate are pure tests, not state computations.
    No recursive callback premise is widened: addressing uses target_indices;

@@ -18,6 +18,7 @@ Ancestors bodyPtrBopScalarSeq[qualified,ignore_grammar]
   bodyFullAbiDecodeScalarObserved fragGasOriginPtr forPtrAllocationFrame
   bodyFullAbiDecodeOwnedCopyEffect abiEncoderWindowLeaves[qualified]
   bodyFullAbiDecodeArrayBulkWindow[qualified]
+  bodyFullAbiDecodeOwnedStateProps
 
 (* Same owned-state quotation as the finite constructor contracts. *)
 val owned_decoder_state = ``\st s G tn.
@@ -66,7 +67,7 @@ val guarded_observed_pre = ``\start finish dst src opc base_op hi info env sf ty
        off + abi_member_head_size (vyper_to_abi_type env ty) <= h)) /\
   compile_abi_decode_to_buf dst src opc base_op hi info start = ((),finish) /\
   opc = MLOAD /\ fn_has_code start finish fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce start /\ (?H. V H) /\
+  local_ptrs_reserved ce start /\ (?H. V H) /\
   w2n input_word+LENGTH input_bytes < dimword (:256) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -111,6 +112,16 @@ val guarded_observed_post = ``\start finish s G tn tv d.
          !mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
            val_in_memory tv v d mem)) \/
      (?t. r = Abort Revert_abort t))``;
+
+fun owned_fmp_at state =
+  qpat_assum `Abbrev (OS = _)` (fn ab =>
+    qpat_assum `OS _ ^state _ _`
+      (map_every assume_tac o CONJUNCTS o BETA_RULE o
+       PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] ab])) >>
+  strip_tac >> irule owned_decoder_allocas_below_fmp >>
+  qexistsl [`V`,`ce`,`ctx`,`cx`,`es`,`fn`] >> simp[] >> rpt strip_tac >>
+  qpat_assum `!H. V H ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+    (drule_then (ACCEPT_TAC o CONJUNCT1));
 
 Theorem abi_decode_bytes_case_observed_conditional:
   !dst src opc base_op hi n env sf ty tv live protected start finish s G tn d.
@@ -160,7 +171,7 @@ Proof
   `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at start x) /\
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at start x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by (owned_fmp_at ``s:venom_state``) >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       abi_decode_bytes_head_joint_observed)) >>
@@ -199,7 +210,7 @@ Proof
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sh x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono,local_ptrs_reserved_next_var] >>
   `off+32 <= LENGTH input_bytes` by decide_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by (owned_fmp_at ``u:venom_state``) >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       abi_decode_bytes_owned_load_frame_joint_observed)) >>
@@ -232,7 +243,7 @@ Proof
   `eval_operand cnt v = SOME (n2w c)` by simp[] >>
   `abi_decoder_operand_live sl.cs_next_var cnt` by
     fs[abi_decoder_operand_live_def,abi_decoder_older_vars_def,not_fresh_at_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp v` by (owned_fmp_at ``v:venom_state``) >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       abi_decode_bytes_count_joint_observed)) >>
@@ -384,7 +395,7 @@ Proof
       simp[w2n_n2w,arithmeticTheory.LESS_MOD]) >>
   disch_then (DISJ_CASES_THEN2 (qx_choose_then `rr` assume_tac)
                              (qx_choose_then `rw` strip_assume_tac))
-  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp w` by simp[] >>
+  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp w` by (owned_fmp_at ``w:venom_state``) >>
       drule_all member_scalar_revert_observed >>
       disch_then (qspecl_then [`explicit`,`PG`]
         (qx_choose_then `z` (qx_choose_then `Gz` (qx_choose_then `Tz` strip_assume_tac)))) >>
@@ -409,7 +420,7 @@ Proof
           comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[]) >>
   `EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sc sg)` by
     metis_tac[bodyFullAbiDecodeScalarNoAllocaTheory.abi_decode_scalar_seq_no_alloca] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp w` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp w` by (owned_fmp_at ``w:venom_state``) >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all (PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_scalar_frame_joint)) >>
@@ -571,7 +582,7 @@ Proof
      rpt (pop_assum kall_tac) >> ntac 2 disch_tac >>
      simp[] >> gen_tac >> strip_tac >> asm_rewrite_tac[] >>
      simp[op_prov_def,op_taint_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp y` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp y` by (owned_fmp_at ``y:venom_state``) >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all ((PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_scalar_frame_joint) |>
@@ -629,7 +640,7 @@ Proof
     (qpat_assum `last = Var padvar` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
   `w2n (n2w d : 256 word) + type_memory_size tv < dimword (:256)` by
     simp[w2n_n2w,arithmeticTheory.LESS_MOD] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp z3` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z3` by (owned_fmp_at ``z3:venom_state``) >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all ((PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       bodyFullAbiDecodeArrayBulkWindowTheory.abi_decode_bulk_window_add_joint) |>
@@ -745,7 +756,7 @@ Proof
      qpat_assum `EVERY (\(b,bytes). b+LENGTH bytes <= d \/ _) protected`
        (mp_tac o SIMP_RULE (srw_ss()) [EVERY_MEM,FORALL_PROD]) >>
      disch_then drule >> simp[Abbr `pad`] >> decide_tac) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp z4` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z4` by (owned_fmp_at ``z4:venom_state``) >>
   `emit_void MSTORE [Var padvar; Lit 0w] c4 = ((),c5)` by metis_tac[] >>
   qpat_assum `Abbrev (OS = _)` (fn os =>
     qpat_assum `Abbrev (IO = _)` (fn io =>
@@ -826,7 +837,7 @@ Proof
        qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es z5 /\ _`
           (mp_tac o CONJUNCT1 o CONJUNCT2 o (fn th => MATCH_MP th vh)))) >>
      simp[ghost_inv_at_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp z5` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z5` by (owned_fmp_at ``z5:venom_state``) >>
   qpat_assum `Abbrev (OS = _)` (fn th =>
     drule_all ((PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]
       bodyFullAbiDecodeGuardReadObservedTheory.abi_decode_bytes_scalar_frame_joint) |>

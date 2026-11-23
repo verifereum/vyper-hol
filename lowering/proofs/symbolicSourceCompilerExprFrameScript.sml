@@ -272,7 +272,7 @@ Proof
 QED
 
 Theorem symbolic_frame_ext_call_args:
-  (!e ty. MEM e es ==> symbolic_frame R (cfn cenv ty e)) /\
+  (!e. MEM e es ==> symbolic_frame R (cfn cenv (expr_type e) e)) /\
   (!copy vv. symbolic_frame R (compile_snapshot_vv cenv copy vv)) ==>
   symbolic_frame R (compile_ext_call_args cfn cenv kw_es tys es)
 Proof

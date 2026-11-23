@@ -9,7 +9,8 @@ Ancestors
   bodySimFull bodyFullPreds exprSimECArith
   gasShadowCompile exprSimHypsDefs exprLowering loweringPosts vyperAST list
   vyperStorageTrace vyperStorageFootprint exprSimHyps exprSimOperands exprSimSource
-  stateRelProj allocaSiteResource
+  stateRelProj allocaSiteResource allocasBelowFmpUpdatesProps
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 open compileEnvTheory;
 
@@ -19,19 +20,20 @@ Theorem ecmul_staging_full_from_transfers:
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e2 = (if bt = ECAdd then a else BaseT (UintT 256)) /\
   body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
   compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
-  compile_expr cenv ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa =
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa =
     (vv,shadow_sb) /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e2) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   (if bt = ECAdd then compile_ecadd_points x y s2
    else compile_ecmul_point x y s2) = (res,sb) /\
-  vv = FST (as_ptr_val a LocMemory (res,sb)) /\
+  vv = FST (as_stack_val a (res,sb)) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -39,7 +41,7 @@ Theorem ecmul_staging_full_from_transfers:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   gas_admissible (eval_expr cx (Builtin a bt [e1;e2])) expr_vv_res_ok es /\
@@ -133,7 +135,7 @@ Theorem ecmul_staging_full_from_transfers:
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
     (lo <> 0 ==> !z. cenv.ce_imm_alloca = SOME (Var z) ==> not_fresh_at sm z) /\
-    ~u.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~u.vs_halted /\
     lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX [gi;ci;ai] (DROP u.vs_inst_idx bb.bb_instructions) /\
     (func.fn_name,id) NOTIN gas_explicit_sites ctx shadow_ctx /\
@@ -307,7 +309,9 @@ Proof
         metis_tac[fragExecTheory.fn_has_code_split,
                   loweringHaltTheory.compile_alloc_buffer_extends] >>
       `96 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp t2` by simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp t2` by
+        (qpat_assum `stmt_state_rel _ ctx func cenv cx es2 t2`
+           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
       drule_all (Q.INST [`n` |-> `96`,`sa` |-> `s2`,`sb` |-> `ca`,
         `s` |-> `t2`,`buf` |-> `ib`]
         (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
@@ -397,7 +401,11 @@ Proof
         `w2n w+64 <= w2n wi \/ w2n wi+64 <= w2n w` assume_tac >-
         (qpat_x_assum `regions_disjoint (w2n wi) 96 (w2n w) 64` mp_tac >>
          pure_rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp ta` by simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp ta` by
+        (qpat_assum `!H. stmt_state_rel H ctx func cenv cx es2 t2 ==> _`
+           (qspec_then `storage_trace_horizon es2.storage_trace`
+             (drule_then (ACCEPT_TAC o
+                MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)))) >>
       drule_all (SRULE [] (Q.INST [`pd` |-> `0`, `nd` |-> `96`]
         (SPEC_ALL ec_point_copy_origin_ptr_path))) >>
       disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
@@ -476,7 +484,11 @@ Proof
            (mp_then Any mp_tac stmtReasonLitFragMemoryTheory.fn_has_code_code) >> simp[]) >>
       qpat_assum `ib.buf_operand = Var src` (fn th =>
         qpat_assum `_ cm = ((),sp)` (assume_tac o REWRITE_RULE [th])) >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp tm` by simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp tm` by
+        (qpat_assum `tm with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|> = ta`
+           (assume_tac o REWRITE_RULE[allocas_below_fmp_updates] o
+            Q.AP_TERM `allocas_below_fmp`) >>
+         asm_rewrite_tac[]) >>
       drule_all (SRULE [] (Q.INST [`pd` |-> `64`, `nd` |-> `96`]
         (SPEC_ALL ec_scalar_store_origin_ptr_path))) >>
       disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
@@ -663,7 +675,9 @@ Proof
         (MATCH_MP_TAC (cj 1 fragExecTheory.fn_has_code_split) >>
          qexists `sb` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
       `64 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp tp` by simp[] >>
+      `ctx_has_dalloca ctx ==> allocas_below_fmp tp` by
+        (qpat_assum `stmt_state_rel _ ctx func cenv cx es2 tp`
+           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
       drule_all (Q.INST [`n` |-> `64`,`sa` |-> `sp`,
         `sb` |-> `sm`,`s` |-> `tp`,`buf` |-> `ob`]
         (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
@@ -1097,7 +1111,7 @@ Proof
          simp[comp_bind_def,comp_return_def,FUN_EQ_THM]) >>
       `?shadow_res. compile_ecmul_point (Var p) y shadow_s2 =
          (shadow_res,shadow_sb)` by
-        (qpat_assum `compile_expr cenv ty (gas_shadow_expr _) shadow_sa = _`
+        (qpat_assum `compile_expr _ _ (gas_shadow_expr _) shadow_sa = _`
            (fn whole =>
          qpat_assum `lower_value _ _ _ (gas_shadow_expr e1) shadow_sa = _` (fn one =>
          qpat_assum `lower_value _ _ _ (gas_shadow_expr e2) shadow_s1 = _` (fn two =>

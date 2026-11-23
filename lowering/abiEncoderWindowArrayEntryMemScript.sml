@@ -290,8 +290,14 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
     (drule emit_op_mem_ok >> disch_then irule >> simp[] >>
      irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st en)` by
+    (drule emitted_insts_emit_op >> simp[mk_inst_def]) >>
   `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
+    (irule window_seq_mem_cont >> simp[] >> qexists_tac `st` >>
+     `window_seq st en s t` by fs[window_pure_seq_def] >>
+     simp[] >> rpt strip_tac >>
+     irule dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM, MEM_APPEND]) >>
   qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
   (conj_tac >- metis_tac[window_pure_seq_phase]) >>
   Cases_on `out` >> fs[eval_operand_def, lookup_var_def]

@@ -11,6 +11,7 @@ Ancestors
   bodyPtrBopScalarOutcome rich_list emitHelper venomInst exprLoweringProps
   abiDecoderReentryAddress abiDecoderRange abiDecoderDynamicLoopSetup placeMemoryCodeLayout
   entryDecoderHistoryFrame fragExecMem instMemFrontier memSafeRun fragGasCopyLoop fragGasSeqPtr
+  fragGasCopySeqLiftProps
   abiMalformedConstructorContract abiMalformedBulkConstructor abiMalformedMemberSetup
   abiMalformedRecursiveInterface abiDecodePtrMemberFrame decoderGhostFramePtr fragGasOriginPtrLoop
 
@@ -238,6 +239,13 @@ Proof
      rpt gen_tac >> strip_tac >> gen_tac >> drule_all bop_scalar_seq_outputs >> strip_tac >>
      conj_tac >- (irule below_frontier_no_ranges >> gvs[]) >>
      irule inst_dload_in_section_other >> gvs[]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts sa sb = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by simp[] >>
+     irule dalloca_no_wrap_non_dalloca >>
+     drule_all bop_scalar_seq_outputs >> simp[] >> strip_tac >> gvs[]) >>
   qexistsl [`Gf`,`tnf`] >> simp[lookup_var_def, op_taint_def] >>
   rpt gen_tac >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>

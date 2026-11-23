@@ -213,6 +213,7 @@ Theorem word_abs_sim_full:
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a bt args) es /\
@@ -242,13 +243,16 @@ Proof
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule lower_value_abs >> strip_tac >>
   rename1 `compile_builtin_abs x s1 = (op,sb)` >>
-  Cases_on `lower_value compile_expr cenv ty
-              (gas_shadow_expr e) shadow_sa` >>
-  rename1 `lower_value _ _ _ _ shadow_sa = (shadow_x,shadow_s1)` >>
+  Cases_on `lower_value compile_expr (gas_shadow_env T cenv)
+              ty (gas_shadow_expr e) shadow_sa` >>
+  rename1 `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = (shadow_x,shadow_s1)` >>
+  `gas_shadow_compiles (lower_value compile_expr cenv ty e)
+     (lower_value compile_expr (gas_shadow_env T cenv)
+       ty (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
   `shadow_x = x /\ gas_shadow_state s1 shadow_s1` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `e`]
-      gas_shadow_stmt_lower_value) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >> metis_tac[pairTheory.FST, pairTheory.SND]) >>
+    (qpat_x_assum `gas_shadow_compiles _ _`
+       (mp_tac o REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >>
+     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
   drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
   `cs_extends s1 sb /\ s1.cs_next_var <= sb.cs_next_var` by
     (qpat_assum `compile_builtin_abs _ _ = _`
@@ -272,7 +276,8 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (irule unop_operand_admissible >>
      qexistsl [`expr_type e`, `Abs`] >>
-     simp[builtin_args_length_ok_def, vyperInterpreterTheory.precompile_builtin_def]) >>
+     simp[builtin_args_length_ok_def, vyperInterpreterTheory.precompile_builtin_def,
+          vyperContextTheory.is_self_codesize_def]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ e _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `shadow_sa`, `shadow_s1`,

@@ -29,22 +29,26 @@ Proof
   qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   conj_tac
   >- (drule_all normalize_byte_offset_straight >> strip_tac >>
+      `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+                  ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+       EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+        (qpat_assum `compile_with_byte_offset _ _ _ = _` mp_tac >>
+         rpt (pop_assum kall_tac) >> Cases_on `off = 0`
+         >- simp[compile_with_byte_offset_def, comp_return_def,
+                 emitted_insts_def] >>
+         simp[compile_with_byte_offset_def] >> strip_tac >>
+         drule emitted_insts_emit_op_local >> strip_tac >>
+         simp[mk_inst_def, is_terminator_def]) >>
+      drule_then assume_tac normalize_byte_offset_mem_ok >>
       irule body_decl_zero_gas_path >> simp[] >>
       qexists_tac `sa` >> simp[same_blocks_def] >>
       conj_tac >- (
         qpat_x_assum `isPREFIX _ _` mp_tac >>
         simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
         simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]) >>
-      conj_tac
-      >- (Cases_on `off = 0`
-          >- (qpat_x_assum `compile_with_byte_offset _ _ _ = _` mp_tac >>
-              simp[compile_with_byte_offset_def, comp_return_def] >>
-              strip_tac >> simp[emitted_insts_def]) >>
-          qpat_x_assum `compile_with_byte_offset _ _ _ = _` mp_tac >>
-          simp[compile_with_byte_offset_def] >> strip_tac >>
-          drule emitted_insts_emit_op_local >> strip_tac >>
-          simp[mk_inst_def, is_terminator_def]) >>
-      drule normalize_byte_offset_mem_ok >> simp[]) >>
+      rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+      `MEM i (emitted_insts sa sb)` by simp[] >>
+      fs[listTheory.EVERY_MEM]) >>
   drule_all normalize_byte_offset_straight >> strip_tac >>
   gvs[venom_state_component_equality, eval_operand_def, lookup_var_def]
 QED

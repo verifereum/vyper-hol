@@ -49,16 +49,17 @@ QED
    empty branch b is the compile_expr endpoint: no unwrap is performed. *)
 Theorem annassign_full_prefix_parts:
   stmt_env old lctx ret_ty (AnnAssign id typ e) sa = (ce,sf) /\
-  stmt_env old lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)) shadow_sa =
-    (ce,shadow_sf) /\
+  stmt_env (gas_shadow_env T old) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)) shadow_sa =
+    (gas_shadow_env T ce,shadow_sf) /\
   old.ce_alloca_locals /\ ~is_word_type typ /\
   local_ptrs_reserved old sa /\ gas_shadow_state sa shadow_sa /\
   fn_has_code sa sf func /\ fn_has_code shadow_sa shadow_sf shadow_func ==>
   ?r shadow_r p sz a shadow_a vv sv shadow_sv op b shadow_b.
     declare_local old id typ sa = (ce,r) /\
-    declare_local old id typ shadow_sa = (ce,shadow_r) /\
+    declare_local (gas_shadow_env T old) id typ shadow_sa = (gas_shadow_env T ce,shadow_r) /\
     compile_stmt ce lctx ret_ty (AnnAssign id typ e) r = ((),sf) /\
-    compile_stmt ce lctx ret_ty (AnnAssign id typ (gas_shadow_expr e)) shadow_r =
+    compile_stmt (gas_shadow_env T ce) lctx ret_ty
+      (AnnAssign id typ (gas_shadow_expr e)) shadow_r =
       ((),shadow_sf) /\
     sz = type_memory_bytes old typ /\
     FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -71,22 +72,22 @@ Theorem annassign_full_prefix_parts:
     compile_alloc_buffer sz shadow_sa =
       (<|buf_operand := Var p; buf_size := sz|>,shadow_a) /\
     compile_expr ce (expr_type e) e a = (vv,sv) /\
-    compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a = (vv,shadow_sv) /\
+    compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_a = (vv,shadow_sv) /\
     (if has_length_word typ /\ is_empty_value_expr e then
        b = sv /\ shadow_b = shadow_sv /\ op = Lit 0w /\
        emit_void MSTORE [Var p; Lit 0w] b = ((),sf) /\
        emit_void MSTORE [Var p; Lit 0w] shadow_b = ((),shadow_sf)
      else
        unwrap_value ce vv sv = (op,b) /\
-       unwrap_value ce vv shadow_sv = (op,shadow_b) /\
+       unwrap_value (gas_shadow_env T ce) vv shadow_sv = (op,shadow_b) /\
        lower_value compile_expr ce (expr_type e) e a = (op,b) /\
-       lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a =
+       lower_value compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_a =
          (op,shadow_b) /\
        compile_assign_value ce (Var p) LocMemory op F (vv_location vv)
          typ (lowered_value_type ce e) (type_memory_bytes ce typ) b = ((),sf) /\
-       compile_assign_value ce (Var p) LocMemory op F (vv_location vv)
-         typ (lowered_value_type ce (gas_shadow_expr e))
-         (type_memory_bytes ce typ) shadow_b = ((),shadow_sf)) /\
+       compile_assign_value (gas_shadow_env T ce) (Var p) LocMemory op F (vv_location vv)
+         typ (lowered_value_type (gas_shadow_env T ce) (gas_shadow_expr e))
+         (type_memory_bytes (gas_shadow_env T ce) typ) shadow_b = ((),shadow_sf)) /\
     gas_shadow_state r shadow_r /\ gas_shadow_state a shadow_a /\
     gas_shadow_state sv shadow_sv /\ gas_shadow_state b shadow_b /\
     cs_extends sa a /\ cs_extends a sv /\ cs_extends sv b /\ cs_extends b sf /\
@@ -107,16 +108,15 @@ Proof
   drule stmt_env_annassign >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` (mk_asm "original") >>
   drule_all declare_local_ptr >> strip_tac >>
-  `?shadow_r. declare_local old id typ shadow_sa = (ce,shadow_r) /\
-    compile_stmt ce lctx ret_ty (AnnAssign id typ (gas_shadow_expr e)) shadow_r =
-      ((),shadow_sf)` by
-    (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
-     simp[gas_shadow_stmt_def] >> metis_tac[stmt_env_annassign]) >>
+  qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
+    (strip_assume_tac o MATCH_MP stmt_env_annassign o
+     REWRITE_RULE [gas_shadow_stmt_def]) >>
+  rename1 `declare_local _ _ _ shadow_sa = (_,shadow_r)` >>
   `gas_shadow_state st shadow_r` by
-    (mp_tac (Q.INST [`cenv` |-> `old`, `ty` |-> `typ`]
-       gas_shadow_compiles_declare_local) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> gvs[]) >>
+    (mp_tac (Q.INST [`cenv` |-> `old`, `id` |-> `id`, `ty` |-> `typ`, `sd` |-> `T`]
+       gas_shadow_compiles_env_declare_local) >>
+     rewrite_tac[gas_shadow_compiles_env_def] >>
+     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
   asm_x "original" mp_tac >>
   simp[Once compile_stmt_def, emit_local_alloca_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
@@ -151,19 +151,20 @@ Proof
     (<|buf_operand := Var (STRING #"%" (toString sa.cs_next_var));
        buf_size := type_memory_bytes old typ|>,shadow_a)` by
     (`shadow_r = shadow_sa with cs_next_var := shadow_sa.cs_next_var + 1` by
-       metis_tac[declare_local_ptr] >>
+       (qpat_assum `declare_local _ _ _ shadow_sa = _`
+          (mp_then Any mp_tac declare_local_ptr) >> simp[]) >>
      `shadow_sa.cs_next_var = sa.cs_next_var` by fs[gas_shadow_state_def] >>
      qpat_x_assum `emit_inst ALLOCA _ _ shadow_r = _` mp_tac >>
      simp[compile_alloc_buffer_def,emit_op_def,emit_inst_def,fresh_id_def,
        fresh_var_def,comp_bind_def,comp_ignore_bind_def,comp_return_def,
        pairTheory.pair_case_thm] >> strip_tac >> gvs[]) >>
-  Cases_on `compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a` >>
+  Cases_on `compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_a` >>
   rename1 `compile_expr _ _ (gas_shadow_expr e) _ = (shadow_vv,shadow_sv)` >>
   `shadow_vv = vv /\ gas_shadow_state sv shadow_sv` by
-    (mp_tac (Q.INST [`cenv` |-> `ce`,`ty` |-> `expr_type e`]
-      gas_shadow_stmt_compile_expr) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`a`,`shadow_a`] mp_tac) >> gvs[]) >>
+    (mp_tac (Q.INST [`cenv` |-> `ce`, `ty` |-> `expr_type e`, `sd` |-> `T`]
+       gas_shadow_stmt_compile_expr_env) >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`a`,`shadow_a`] mp_tac) >> simp[]) >>
   gvs[] >>
   Cases_on `has_length_word typ /\ is_empty_value_expr e`
   >- suspend "empty" >>
@@ -177,7 +178,7 @@ Proof
      disch_then (qspecl_then [`sv`,`shadow_sv`] mp_tac) >> gvs[]) >>
   gnvs[] >>
   `lower_value compile_expr ce (expr_type e) e a = (op,b) /\
-   lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a =
+   lower_value compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_a =
      (op,shadow_b)` by simp[lower_value_def,comp_bind_def] >>
   `compile_assign_value ce (Var (STRING #"%" (toString sa.cs_next_var)))
     LocMemory op F (vv_location vv) typ (lowered_value_type ce e)
@@ -717,7 +718,7 @@ Theorem annassign_full_rhs_from_entry:
     compile_alloc_buffer sz sa =
       (<|buf_operand := Var p; buf_size := sz|>,a) /\
     lower_value compile_expr ce (expr_type e) e a = (op,b) /\
-    lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a =
+    lower_value compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_a =
       (op,shadow_b) /\
     gas_shadow_state a shadow_a /\ gas_shadow_state b shadow_b /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -731,7 +732,7 @@ Theorem annassign_full_rhs_from_entry:
     (!x cap. old.ce_return_buf = SOME (PtrVar (Var x) cap) ==>
       not_fresh_at sa x) /\
     return_buf_frame d old sa s0 /\ alloca_history func s0 /\
-    (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_fmp_headroom inst z) /\
     storage_trace_domain cx st0 es.storage_trace /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -1083,7 +1084,7 @@ Theorem annassign_full_alloc_rhs_prefix:
     compile_alloc_buffer sz sa =
       (<|buf_operand := Var p; buf_size := sz|>,a) /\
     lower_value compile_expr ce (expr_type e) e a = (op,b) /\
-    lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a =
+    lower_value compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_a =
       (op,shadow_b) /\
     gas_shadow_state a shadow_a /\ gas_shadow_state b shadow_b /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -1099,7 +1100,7 @@ Theorem annassign_full_alloc_rhs_prefix:
       not_fresh_at sa x) /\
     return_buf_frame d old sa s0 /\ alloca_history func s0 /\
     (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-    (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
     storage_trace_domain cx st0 es.storage_trace /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -1195,12 +1196,12 @@ Proof
   drule_all annassign_full_alloc_entry >>
   disch_then (qspecl_then [`PG`,`gas_explicit_sites ctx shadow_ctx`]
     (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac)) >>
-  `!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK entry,Ga,tna)`
        (qspec_then `ARB` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
        qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
-       ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+       ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
          (LIST_CONJ [path,phi,safe]))))))) >>
   drule_all annassign_full_rhs_from_entry >> strip_tac >>
   qexistsl_tac [`w`,`entry`,`Ga`,`tna`] >> asm_rewrite_tac[] >>

@@ -24,10 +24,11 @@
 
 Theory deepResidualSim
 Ancestors
+  reorderPreparationInventoryProps stackOpSim
   deepResidualBudget fnPlanPrefix preparedPrefixSim generatedPrefixSim
   generatedReorderSim genericInputReady reorderSim doSwapSim codegenRel asmSem planExec
   stackPlanGen stackPlanOps stackPlanTypes stackModel blockSimHelpers planSpillBounds
-  stackOpSim sorting list rich_list arithmetic inputMaterialised operandPreparationSim reorderStages
+  sorting list rich_list arithmetic inputMaterialised operandPreparationSim reorderStages
 
 Theorem filter_distinct_elem_count_le_one[local]:
   !l (x : 'a) P.
@@ -119,11 +120,30 @@ Proof
      (MAPi (\i op. (i,op)) target_ops)` by
     (simp[EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
      rpt strip_tac >> gvs[] >> simp[MEM_EL] >> qexists_tac `p_1` >> simp[]) >>
-  `plan_steps (\(idx,op) ps. reorder_one dfg target_ops idx op ps)
-     (MAPi (\i op. (i,op)) target_ops) ps = (ops,ps')` by
-    (qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-     simp[reorder_plan_eq_plan_steps]) >>
-  drule_all plan_steps_reorder_venom_asm_rel_numeric_marked >> simp[]
+  drule reorderPreparationPropsTheory.reorder_plan_split >> strip_tac >> gvs[EVERY_APPEND] >>
+  drule_all reorder_prepare_residual_budget_wf_marked >> strip_tac >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    fs[residual_budget_wf_marked_def] >>
+  `!at. MEM at mid.ps_stack \/ at IN FDOM mid.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    metis_tac[reorder_prepare_inventory_subset] >>
+  `!op1 at. MEM op1 target_ops /\
+        (MEM at mid.ps_stack \/ at IN FDOM mid.ps_spilled) /\
+        operand_equiv dfg op1 at ==>
+        operand_val vs lo op1 = operand_val vs lo at` by metis_tac[] >>
+  gvs[execute_plan_append, asm_block_at_append] >>
+  qspecl_then [`target_ops`, `ps`, `prep`, `mid`, `lo`, `o2pc`,
+    `prog`, `vs`, `st`] mp_tac reorderPreparationTracePropsTheory.reorder_prepass_venom_asm_rel_numeric >>
+  simp[execute_plan_append] >> strip_tac >>
+  rename1 `venom_asm_rel lo mid vs st1` >>
+  `asm_block_at prog st1.as_pc (execute_plan initial_fmp rest)` by simp[] >>
+  qspecl_then [`MAPi (\i op. (i,op)) target_ops`, `mid`, `rest`, `ps'`, `st1`] mp_tac
+    (Q.INST [`pending` |-> `target_ops`, `spill_base` |-> `base'`]
+      plan_steps_reorder_venom_asm_rel_numeric_marked) >>
+  impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >>
+  strip_tac >> rename1 `venom_asm_rel lo ps' vs final` >>
+  qexists_tac `final` >>
+  asm_simp_tac std_ss [LENGTH_APPEND, asm_steps_add, ADD_ASSOC] >> simp[]
 QED
 
 (* generatedPrefixSim$selected_input_arranged over the marker-tolerant budget. *)

@@ -137,7 +137,11 @@ Resume toplevel_code_ctor_execution_full[paths]:
        (qpat_x_assum `!k. inst_seq_ptr D _ _ _ _ _ _ _ _ _ _`
          (qspec_then `a.vs_inst_idx` mp_tac) >> simp[]) >>
      irule emitted_origin_ptr_path >>
-     simp[] >> qexistsl [`emitted_insts mid sb`,`mid`] >> gvs[]) >>
+     simp[] >> qexistsl [`emitted_insts mid sb`,`mid`] >>
+     gvs[] >>
+     (strip_tac >> gen_tac >> gen_tac >> gen_tac >> gen_tac >> strip_tac >>
+      qpat_x_assum `emitted_insts mid sb = _` SUBST_ALL_TAC >>
+      fs[EVERY_MEM, memSafeRunTheory.dalloca_no_wrap_non_dalloca])) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf)` by
     (gen_tac >>

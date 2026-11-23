@@ -3,7 +3,7 @@
 Theory bodyFullTargetMappingScratchTail
 Ancestors
   bodyPtrPopTargetSimMapScratchRun bodyFullUnwrapSlotPost bodyFullUnwrapRun
-  bodyFullAllocGeneric fragGasCopyLoop fragExecMem instMemFrontier
+  bodyFullAllocGeneric fragGasCopyLoop fragGasCopySeqLiftProps fragExecMem instMemFrontier
   valueEncodingProps exprSimMapKey exprSimPrecompiles exprSimHash fragExec exprLoweringProps vyperStorage
   bodyPtrDefs ptrDiscipline venomState venomExecSemantics venomInst
   words finite_map pred_set list
@@ -127,12 +127,17 @@ Resume mapping_scratch_tail_full_run[memory]:
   irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 Resume mapping_scratch_tail_full_run[path]:
+  `!i u. MEM i code ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     gvs[mk_inst_def]) >>
+  `!pre i post u. code = pre ++ i::post ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (metis_tac[MEM_APPEND, MEM]) >>
   irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
   simp[] >> qexistsl_tac [`code`, `sa`] >> simp[] >>
-  conj_tac >- (simp[mk_inst_def, is_terminator_def]) >>
+  conj_tac >- simp[mk_inst_def, is_terminator_def] >>
   conj_tac >- suspend "memchecks" >>
   simp[Abbr `HG`, Abbr `tm`] >>
-  irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
+  irule fragGasCopySeqLiftPropsTheory.inst_seq_ptr_lower_bound_transport >>
   simp[mk_inst_def] >> qexists_tac `0` >> simp[] >>
   gvs[ALL_DISTINCT] >>
   irule (SRULE [mk_inst_def] map_scratch_store_hash_checked) >> simp[]

@@ -172,7 +172,8 @@ Theorem lower_abi_encode_scratch_open:
   let write_size = case method_id_opt of NONE => 0 | SOME _ => 32 in
   let outsz = 32+32*word_size (maxlen+mid_size) in
   let allocated = abi_builtin_allocate_state start.cs_next_id outsz initial in
-  lower_abi_encode ensure method_id_opt src (type_to_abi_enc_info sf ce ty) maxlen start = (out,final) /\
+  lower_abi_encode method_id_opt maxlen
+    (\dst. compile_abi_encode_to_buf dst src (type_to_abi_enc_info sf ce ty)) start = (out,final) /\
   fn_has_code start final func /\
   (start.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -207,7 +208,7 @@ Theorem lower_abi_encode_scratch_open:
 Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule lower_abi_encode_trace >> strip_tac >>
+  drule lower_abi_encode_trace >> BETA_TAC >> strip_tac >>
   drule_all abi_builtin_encode_code >> strip_tac >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
   drule abi_builtin_encode_setup_live >> strip_tac >>
@@ -264,8 +265,8 @@ Theorem lower_abi_encode_scratch_source_open_rep:
   LENGTH vs = LENGTH tys /\
   vyper_to_abi (get_tenv cx) enc_ty (abi_builtin_encode_value ensure tys vs) = SOME av /\
   enc ct rv = enc (vyper_to_abi_type (get_tenv cx) enc_ty) av /\
-  lower_abi_encode ensure method_id_opt src
-    (type_to_abi_enc_info ce.ce_struct_fields ce enc_ty) maxlen start = (out,final) /\
+  lower_abi_encode method_id_opt maxlen
+    (\dst. compile_abi_encode_to_buf dst src (type_to_abi_enc_info ce.ce_struct_fields ce enc_ty)) start = (out,final) /\
   fn_has_code start final func /\
   (start.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>

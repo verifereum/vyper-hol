@@ -1724,14 +1724,90 @@ val () = check_rejects empty_layouts
          [Return (SOME (Literal (BaseT (UintT 256)) (IntL 1)))]])]
     : (num option # toplevel list) list``
 
-(* Exports may name only functions of allocated modules. *)
+val fallback_export_modules =
+  ``[(NONE, []);
+     (SOME 1, [FunctionDecl External Nonpayable F F "__default__" [] [] NoneT []])]
+    : (num option # toplevel list) list``
+
+(* Stateful exports need an allocated module. A stateless fallback needs no slots. *)
 Theorem exports_ok_uninitialized_module:
   ~exports_ok ^empty_layouts ^zero_address
      ^(uninit_modules lib_double lib_double) [("set_x", 1)] /\
   exports_ok ^lib_x_layouts ^zero_address
      ^(uninit_modules lib_double lib_double) [("set_x", 1)] /\
+  exports_ok ^empty_layouts ^zero_address ^fallback_export_modules [("__default__", 1)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+Theorem exports_ok_unresolved_export:
+  ~exports_ok ^empty_layouts ^zero_address ^fallback_export_modules [("missing", 1)] /\
+  ~exports_ok ^empty_layouts ^zero_address
+    ^(uninit_modules lib_double lib_double) [("quad", 2)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+(* Fallback exports have no selector, so this checks name uniqueness directly. *)
+Theorem exports_ok_duplicate_export_name:
+  ~exports_ok ^empty_layouts ^zero_address ^fallback_export_modules
+    [("__default__", 1); ("__default__", 1)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+(* Main and exported entry points can reach the same imported state through
+   different call paths. A pure export from that import uses no state. *)
+fun immutable_ownership_modules slot main =
+  ``[(NONE, ^main);
+     (SOME 1,
+      [VariableDecl Private Immutable "imm" ^u256 ^slot;
+       FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT
+         [Assign (BaseTarget (TopLevelNameTarget (SOME 1,"imm"))) ^(uint 7)];
+       FunctionDecl Internal View F F "read" [] [] ^u256
+         [Return (SOME (TopLevelName ^u256 (SOME 1,"imm")))];
+       FunctionDecl External View F F "exported_read" [] [] ^u256
+         [Return (SOME (Call ^u256 (IntCall (SOME 1,"read")) [] NONE))];
+       FunctionDecl External Pure F F "entry" [] [] ^u256
+         [Return (SOME ^(uint 5))]])] : (num option # toplevel list) list``
+
+val main_reads_import =
+  ``[FunctionDecl External View F F "main_read" [] [] ^u256
+       [Return (SOME (Call ^u256 (IntCall (SOME 1,"read")) [] NONE))]]``
+
+val () = check_rejects empty_layouts
+  (immutable_ownership_modules ``NONE : num option`` main_reads_import)
+val () = check_accepts "main reads allocated imported immutable" false
+  empty_layouts (immutable_ownership_modules ``SOME 0 : num option`` main_reads_import)
+
+val constructor_reads_import =
+  ``[FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT
+       [AnnAssign "x" ^u256 (Call ^u256 (IntCall (SOME 1,"read")) [] NONE)]]``
+
+val () = List.app (fn deploy =>
+  check_rejects_in deploy empty_layouts
+    (immutable_ownership_modules ``NONE : num option`` constructor_reads_import))
+  [``F``, ``T``]
+
+val dormant_immutable =
+  immutable_ownership_modules ``NONE : num option`` ``[] : toplevel list``
+val allocated_immutable =
+  immutable_ownership_modules ``SOME 0 : num option`` ``[] : toplevel list``
+
+fun immutable_getter_module slot =
+  ``[(NONE, []); (SOME 1, [VariableDecl (Public F) Immutable "getter" ^u256 ^slot])]
+    : (num option # toplevel list) list``
+
+Theorem exports_ok_imported_immutable_ownership:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address ^dormant_immutable) /\
+  IS_SOME (check_contract T ^empty_layouts ^zero_address ^dormant_immutable) /\
+  exports_ok ^empty_layouts ^zero_address ^dormant_immutable [("entry",1)] /\
+  ~exports_ok ^empty_layouts ^zero_address ^dormant_immutable [("exported_read",1)] /\
+  exports_ok ^empty_layouts ^zero_address ^allocated_immutable [("exported_read",1)] /\
+  ~exports_ok ^empty_layouts ^zero_address
+    ^(immutable_getter_module ``NONE : num option``) [("getter",1)] /\
   exports_ok ^empty_layouts ^zero_address
-     ^(uninit_modules lib_double lib_double) [("quad", 2)]
+    ^(immutable_getter_module ``SOME 0``) [("getter",1)]
 Proof
   CONV_TAC vyperCheckContractLib.check_contract_conv
 QED
@@ -1748,6 +1824,23 @@ fun selector_modules name lib =
     : (num option # toplevel list) list``
 val selector_exports = ``[("collate_propagate_storage", 1n)]``
 val selector_collision_modules = selector_modules "burn" ``[^selector_collate]``
+
+(* Neither main member has a selector. Vyper also rejects the private
+   constant clash when it constructs the module namespace. *)
+Theorem exports_ok_main_member_clash:
+  ~exports_ok ^empty_layouts ^zero_address
+    [(NONE, [FunctionDecl Internal Pure F F "collate_propagate_storage" [] [] NoneT []]);
+     (SOME 1, [^selector_collate])]
+    ^selector_exports /\
+  ~exports_ok ^empty_layouts ^zero_address
+    [(NONE, [VariableDecl Private
+      (Constant (Literal (BaseT (UintT 256)) (IntL 42)))
+      "collate_propagate_storage" (BaseT (UintT 256)) NONE]);
+     (SOME 1, [^selector_collate])]
+    ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
 
 Theorem exports_ok_function_selector_collision:
   IS_SOME (check_contract F ^empty_layouts ^zero_address
@@ -1934,6 +2027,39 @@ Theorem inactive_public_getter_needs_no_lock:
 Proof
   simp[check_toplevel_body_def, function_live_def]
 QED
+
+val imported_lock_entry =
+  ``FunctionDecl External View T F "locked" [] [] NoneT [Pass]``
+val declaration_free_lock_module =
+  ``[(NONE, []); (SOME 1, [^imported_lock_entry])]
+     : (num option # toplevel list) list``
+val unallocated_lock_module =
+  ``[(NONE, []);
+     (SOME 1, [VariableDecl Private Storage "x" ^u256 NONE;
+               ^imported_lock_entry])] : (num option # toplevel list) list``
+val lock_only_layout =
+  ``[((0w : address), ([], [((NONE,"$.nonreentrant_key"),0)]))]
+     : (address # (storage_layout # storage_layout)) list``
+fun immutable_lock_module slot =
+  ``[(NONE, []);
+     (SOME 1, [VariableDecl Private Immutable "x" ^u256 ^slot;
+               ^imported_lock_entry])] : (num option # toplevel list) list``
+val unallocated_immutable_lock_module = immutable_lock_module ``NONE : num option``
+
+Theorem imported_lock_liveness:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address ^unallocated_lock_module) /\
+  ~IS_SOME (check_contract F ^lib_x_layouts ^zero_address ^unallocated_lock_module) /\
+  IS_SOME (check_contract F ^lock_only_layout ^zero_address
+             ^declaration_free_lock_module) /\
+  exports_ok ^lock_only_layout ^zero_address ^declaration_free_lock_module [("locked",1)] /\
+  IS_SOME (check_contract F ^lock_only_layout ^zero_address
+             ^unallocated_immutable_lock_module) /\
+  ~exports_ok ^lock_only_layout ^zero_address ^unallocated_immutable_lock_module [("locked",1)] /\
+  exports_ok ^lock_only_layout ^zero_address ^(immutable_lock_module ``SOME 0``) [("locked",1)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
 (* Each collision has an accepted control differing only in its getter name
    or omitted-default prefix. Check the full checker in both modes. *)
 fun check_selector_decls in_deploy layouts decls =
@@ -2425,3 +2551,55 @@ val () = check_accepts "ternary arms not written" false empty_layouts
   (iterable_function (iter_ifexp (iter_name "ys") (iter_name "ys")) xs_write)
 val () = check_accepts "subscripted ternary not written" false empty_layouts
   (iterable_function xss_ifexp_head xs_write)
+
+(* String-literal equality and membership, as the freshness checks of
+   declared names use them. *)
+fun expect_conv conv (tm, expected) = let
+  val th = conv tm
+in
+  if aconv (lhs (concl th)) tm andalso
+     aconv (rhs (concl th)) (if expected then T else F) then ()
+  else raise Fail ("unexpected string conversion result: " ^
+                   thm_to_string th)
+end
+
+fun expect_unchanged conv tm =
+  (conv tm; raise Fail ("expected UNCHANGED on " ^ term_to_string tm))
+  handle UNCHANGED => ()
+
+val () = List.app
+  (expect_conv vyperCheckContractLib.string_literal_eq_conv)
+  [(``"x12" = "x12"``, true), (``"" = ""``, true),
+   (``"x12" = "x13"``, false), (``"x1" = "x12"``, false),
+   (``"x12" = "x1"``, false), (``"" = "a"``, false),
+   (``"a" = ""``, false), (``"amount_in" = "amount_out"``, false)]
+val () = expect_unchanged vyperCheckContractLib.string_literal_eq_conv
+  ``(s : string) = "a"``
+
+val () = List.app
+  (expect_conv vyperCheckContractLib.string_literal_in_conv)
+  [(``"b" IN {"a"; "b"; "c"}``, true), (``"c" IN {"a"; "b"; "c"}``, true),
+   (``"d" IN {"a"; "b"; "c"}``, false), (``"a" IN ({} : string set)``, false),
+   (``"ab" IN {"a"; "abc"}``, false)]
+val () = expect_unchanged vyperCheckContractLib.string_literal_in_conv
+  ``"a" IN {"b"; (s : string)}``
+
+(* The compset reaches the conversions before its generic list rules: a
+   freshness test against 20 names takes about 2,300 primitive inferences
+   with them and about 10,000 without. *)
+val () = let
+  val names = List.tabulate (20, fn i =>
+    stringSyntax.fromMLstring ("x" ^ Int.toString i))
+  val var_types = foldl (fn (name, fm) => ``^fm |+ (^name, 1n)``)
+    ``FEMPTY : string |-> num`` names
+  val () = Count.counting_thms true
+  val meter = Count.mk_meter ()
+  val th = computeLib.CBV_CONV vyperCheckContractLib.check_contract_compset
+    ``"y" IN FDOM ^var_types``
+  val inferences = #prims (Count.read meter)
+  val () = Count.counting_thms false
+in
+  if Feq (rhs (concl th)) andalso inferences < 5000 then ()
+  else raise Fail ("freshness test took " ^ Int.toString inferences ^
+                   " inferences: " ^ thm_to_string th)
+end

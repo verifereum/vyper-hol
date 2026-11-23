@@ -6,6 +6,7 @@ Ancestors
   typedCopyOriginPtrBase typedMemoryCopy bodyPtrMakeArrayEmission bodyFullShared bodyPtrDefs
   allocaFootprint gasOriginPtrLabels instSeqPtrLo fragGasOriginPtrDead
   fragGasOriginPtrLoop fragGasCopyLoop stmtReasonLitFragMemory fragExec fragGasPath stmtSimProps
+  fragGasCopySeqLiftProps
   stateFrame emitHelperProps loweringShapeRules
   fragGasSeqPtrContext[qualified]
   compileEnv emitHelper venomInst venomExecSemantics venomState
@@ -141,6 +142,13 @@ Proof
        i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS)
      [mk_inst sa.cs_next_id MLOAD [Var counter] [out]]` by
     simp[mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      [mk_inst sa.cs_next_id MLOAD [Var counter] [out]] = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     `MEM i [mk_inst sa.cs_next_id MLOAD [Var counter] [out]]` by
+       (qpat_assum `[_] = pre ++ i::post` SUBST1_TAC >> simp[MEM_APPEND]) >>
+     fs[mk_inst_def]) >>
   drule_all run_inst_seq_origin_ptr_lift >>
   simp[Abbr `t`]
 QED
@@ -406,9 +414,11 @@ Proof
   `emit_op ADD [Var input;src] sb = (addr,sc)` by
     gvs[abiEncoderTheory.compile_abi_dec_addr_def] >>
   `sb.cs_next_var <= sd.cs_next_var /\ not_fresh_at sb idx` by
-    gvs[abiEncoderTheory.compile_abi_dec_addr_def, emit_op_def, emit_inst_def,
-        comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
-        emit_def, comp_return_def, not_fresh_at_def] >>
+    (qpat_assum `emit_op MLOAD _ sa = _` mp_tac >>
+     qpat_assum `emit_op ADD _ sb = _` mp_tac >>
+     qpat_assum `emit_op MLOAD _ sc = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[emit_op_eq, not_fresh_at_def] >> rpt strip_tac >> gvs[]) >>
   `!x. not_fresh_at sb x ==> not_fresh_at sd x` by
     (qpat_x_assum `sb.cs_next_var <= sd.cs_next_var` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>

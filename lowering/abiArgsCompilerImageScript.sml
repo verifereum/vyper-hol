@@ -126,7 +126,12 @@ Theorem abi_image_literal_not_label:
 Proof
   Cases_on `lit`
   >- (Cases_on `b` >> simp[compile_literal_vv_def, comp_return_def] >>
-      rpt strip_tac >> gvs[vv_operand_def]) >>
+      rpt strip_tac >> gvs[vv_operand_def])
+  >~ [`compile_literal_vv _ (HexBytesL _) _ = _`]
+  >- (simp[compile_literal_vv_def, comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+      gvs[vv_operand_def, base_ptr_def] >>
+      metis_tac[abi_image_bytelike_not_label]) >>
   simp[compile_literal_vv_def, comp_return_def, comp_bind_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
   gvs[vv_operand_def, base_ptr_def]
@@ -196,8 +201,8 @@ Proof
 QED
 
 Theorem abi_image_external_call_not_label:
-  compile_external_call_kwargs ce addr vals tys memsz abisz mid retsz mn outsz
-    static value gas skip hasdef def rt dt einfo dinfo sa = (op,sb) ==>
+  compile_external_call_kwargs ce addr vals tys abisz mid retsz mn outsz
+    static value gas skip hasdef def rt dt dinfo sa = (op,sb) ==>
   op <> Label l
 Proof
   simp[compile_external_call_kwargs_def, LET_THM, comp_bind_def,
@@ -374,7 +379,7 @@ Proof
 QED
 
 Theorem abi_image_abi_encode_not_label:
-  lower_abi_encode ensure mid src info maxlen sa = (op,sb) ==> op <> Label l
+  lower_abi_encode mid maxlen encode sa = (op,sb) ==> op <> Label l
 Proof
   simp[builtinAbiTheory.lower_abi_encode_def, LET_THM,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
@@ -535,9 +540,11 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()]
   >~ [`LocatedValue _ (base_ptr _)`] >-
     (gvs[vv_operand_def, base_ptr_def] >> metis_tac[abi_image_alloc_not_label]) >>
-  qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
-  qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory res` >>
-  Cases_on `res` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
+  FIRST [qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac,
+         qpat_x_assum `as_stack_val _ _ = _` mp_tac] >>
+  FIRST [qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory res`,
+         qmatch_goalsub_abbrev_tac `as_stack_val vt res`] >>
+  Cases_on `res` >> gvs[as_ptr_val_def, as_stack_val_def, markerTheory.Abbrev_def] >>
   strip_tac >> gvs[vv_operand_def, mk_ptr_def] >>
   metis_tac[abi_image_slice_adhoc_not_label, abi_image_slice_out_not_label,
             abi_image_slice_data_not_label, abi_image_ec_not_label,
@@ -840,16 +847,23 @@ Resume abi_image_compile_mutual[expr]:
 QED
 
 Resume abi_image_compile_mutual[builtin]:
-  rpt gen_tac >> simp[Once compile_expr_raw_def] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
-  drule_all abi_image_builtin_label >> strip_tac >>
-  TRY (`sm.cs_blocks = sa.cs_blocks` suffices_by metis_tac[]) >>
-  drule_at (Pat `lower_value`) abi_image_child_lower_label >>
-  (impl_tac
-   >- (rpt strip_tac >>
-       `expr_size e + cenv_defaults_size ce' <
-        list_size expr_size args + cenv_defaults_size ce` by decide_tac >>
-       metis_tac[])) >> simp[]
+  let
+    val child_label_tac =
+      drule_at (Pat `lower_value`) abi_image_child_lower_label >>
+      (impl_tac
+       >- (rpt strip_tac >>
+           `expr_size e + cenv_defaults_size ce' <
+            list_size expr_size args + cenv_defaults_size ce` by decide_tac >>
+           metis_tac[])) >> simp[]
+  in
+    rpt gen_tac >> simp[Once compile_expr_raw_def] >>
+    CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
+    drule_all abi_image_builtin_label >> strip_tac
+    >~ [`bi = AsWeiValue denom`]
+    >- (`sm.cs_blocks = sa.cs_blocks` suffices_by metis_tac[] >>
+        child_label_tac) >>
+    child_label_tac
+  end
 QED
 
 Resume abi_image_compile_mutual[type_builtin]:

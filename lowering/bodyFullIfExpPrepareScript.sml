@@ -6,7 +6,8 @@ Ancestors
   bodyFullUnwrap bodyFullPreds bodyFullIfExpReach bodyFullHashKeccakFixed
   bodySimFull gasOutcomeFullCompose gasOutcomeFull gasOutcomeFullGuarded gasShadowCompile
   fragGasPathFrameMem
-  gasShadowCompileHelpers exprSimMemorySource exprSimIfExp exprSimDefs
+  gasShadowCompileHelpers gasShadowCompileStmtHelpers
+  exprSimMemorySource exprSimIfExp exprSimDefs
   exprSimCalldataSlice exprSimIfExpWidenedAdapter
   exprSimMemDefs bodyPtrDefs loweringPosts exprLowering exprLoweringProps
   typedCopyDomain vyperTypeSystem vyperTypeInvariants compileEnv context vyperAST
@@ -786,7 +787,7 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es1 /\
   expr_type e = t /\
   compile_expr cenv ty e sa = (vv,sm) /\
-  compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\
@@ -794,7 +795,7 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
   fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
-  (!fn inst s. frag_reachable ctx func u fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func u fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -1405,20 +1406,21 @@ Theorem ifexp_vv_full_root_uniform:
   expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty (IfExp t c a b) es
 Proof
   strip_tac >> rewrite_tac[expr_vv_sim_full_def] >> rpt strip_tac >>
-  `(!ty' e. gas_shadow_compiles (compile_expr cenv ty' e)
-      (compile_expr cenv ty' (gas_shadow_expr e))) /\
-   (!ty' e. gas_shadow_compiles (lower_value compile_expr cenv ty' e)
-      (lower_value compile_expr cenv ty' (gas_shadow_expr e))) /\
-   (!rt at av. gas_shadow_compiles (compile_ifexp_arm cenv rt at av)
-      (compile_ifexp_arm cenv rt at av))` by
-    metis_tac[gasShadowCompileTheory.gas_shadow_compile_expr,
-      gasShadowCompileHelpersTheory.gas_shadow_compiles_lower_value,
-      gasShadowCompileConvertTheory.gas_shadow_compiles_ifexp_arm] >>
+  `!ty' e. gas_shadow_compiles (compile_expr cenv ty' e)
+      (compile_expr (gas_shadow_env T cenv) ty' (gas_shadow_expr e))` by
+    (rpt gen_tac >> irule gas_shadow_stmt_compile_expr_env) >>
+  `!ty' e. gas_shadow_compiles (lower_value compile_expr cenv ty' e)
+      (lower_value compile_expr (gas_shadow_env T cenv) ty' (gas_shadow_expr e))` by
+    (rpt gen_tac >> irule gas_shadow_stmt_lower_value_env) >>
+  `!rt at av. gas_shadow_compiles (compile_ifexp_arm cenv rt at av)
+      (compile_ifexp_arm (gas_shadow_env T cenv) rt at av)` by
+    simp[gasShadowCompileConvertTheory.gas_shadow_compiles_ifexp_arm] >>
   drule_all bodyFullIfExpShadowTheory.ifexp_shadow_code_layout >>
   disch_then (assume_tac o GEN_ALL) >>
   `?cop sc shadow_sc.
     lower_value compile_expr cenv (BaseT BoolT) c sa = (cop,sc) /\
-    lower_value compile_expr cenv (BaseT BoolT) (gas_shadow_expr c) shadow_sa = (cop,shadow_sc) /\
+    lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT)
+      (gas_shadow_expr c) shadow_sa = (cop,shadow_sc) /\
     gas_shadow_state sc shadow_sc /\ fn_has_code sa sc func /\
     fn_has_code shadow_sa shadow_sc shadow_func` by
     (qpat_assum `!sel. ?cop. _` (qspec_then `T` strip_assume_tac) >>
@@ -1496,7 +1498,7 @@ Proof
   qpat_assum `!sel. ?cop. _` (qspec_then `sel` strip_assume_tac) >>
   `cop' = cop /\ sc' = sc /\ shadow_sc' = shadow_sc` by
     (qpat_x_assum `lower_value compile_expr cenv (BaseT BoolT) c sa = (cop',sc')` mp_tac >>
-     qpat_x_assum `lower_value compile_expr cenv (BaseT BoolT) (gas_shadow_expr c) shadow_sa = (cop',shadow_sc')` mp_tac >> simp[]) >>
+     qpat_x_assum `lower_value compile_expr _ (BaseT BoolT) (gas_shadow_expr c) shadow_sa = (cop',shadow_sc')` mp_tac >> simp[]) >>
   qpat_x_assum `cop' = cop` SUBST_ALL_TAC >>
   qpat_x_assum `sc' = sc` SUBST_ALL_TAC >>
   qpat_x_assum `shadow_sc' = shadow_sc` SUBST_ALL_TAC >>
@@ -1577,7 +1579,7 @@ Resume ifexp_vv_full_root_uniform[arm]:
      qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) cm (OK z,G1,tn1)` (irule_at Any) >>
      simp[]) >>
   `!fn inst s. frag_reachable ctx func (jump_to (if sel then tl else el) z) fn inst s ==>
-       dalloca_no_wrap inst s` by
+       dalloca_fmp_headroom inst s` by
     (qx_genl_tac [`afn`,`inst`,`u0`] >> strip_tac >>
      qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` irule >>
      qexists_tac `afn` >>
@@ -1593,7 +1595,7 @@ Resume ifexp_vv_full_root_uniform[arm]:
   irule_at Any (Q.INST [`t` |-> `t`, `c` |-> `c`, `a` |-> `a`, `b` |-> `b`]
     ifexp_arm_outcome_full_conditional) >>
   qpat_assum `compile_expr cenv ty (if sel then a else b) se = (av,sea)` (irule_at Any) >>
-  qpat_assum `compile_expr cenv ty (gas_shadow_expr (if sel then a else b)) shadow_se = _`
+  qpat_assum `compile_expr _ _ (gas_shadow_expr _) shadow_se = _`
     (irule_at Any) >>
   qpat_assum `expr_vv_sim_full _ _ _ _ (if sel then a else b) mid` (irule_at Any) >>
   qexistsl [`t`,`sx`,`rty`,`aop`,`env`,`c`,`b`,`a`] >>

@@ -14,7 +14,7 @@ Ancestors
   ctorDeployMemoryRunMemEntryRegistration fragGasPathMem
   fragGasOriginPtr fragGasOriginPtrLoop
 
-val RegisterDecodeMode = ``\checked.
+val RegisterDecodeModeWith = ``\frame checked.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),last) /\
  abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
@@ -38,11 +38,15 @@ val RegisterDecodeMode = ``\checked.
  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= initial.vs_alloca_next /\ lo <= d /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+   initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\ lo <= initial.vs_alloca_next /\ lo <= d /\
  (checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) av) <=
    LENGTH initial.vs_data_section /\ alloca_history func initial) ==>
  ?actual H qt B.
+ frame (initial:venom_state) (actual:venom_state) /\
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+   actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
  val_in_memory tv v d actual.vs_memory /\
  abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st last))
    [(d,type_memory_bytes ce ty)] initial actual /\
@@ -72,8 +76,15 @@ val RegisterDecodeMode = ``\checked.
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-Theorem prefix_entry_register_decode_paired_mode:
- !checked. (^RegisterDecodeMode) checked
+val RegisterDecodeMode = rhs (concl (SIMP_CONV bool_ss []
+ ``(^RegisterDecodeModeWith) (\s t. T)``));
+
+val RegisterDecodeFmpFrameMode = rhs (concl (SIMP_CONV bool_ss []
+ ``(^RegisterDecodeModeWith) (\s t. t.vs_fmp = s.vs_fmp)``));
+
+Theorem prefix_entry_register_decode_mode_fmp[local]:
+ !checked. (^RegisterDecodeModeWith)
+   (\s t. frame_fmp ==> t.vs_fmp = s.vs_fmp) checked
 Proof
  gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
  `st.cs_next_var <= last.cs_next_var` by
@@ -83,30 +94,32 @@ Proof
  `ctor_actual_scratch func (frag_ids st last) 0 initial.vs_alloca_next initial` by
    (simp_tac bool_ss [ctor_actual_scratch_def, frag_ids_def, GSPECIFICATION] >>
     rpt strip_tac >> res_tac >> gvs[]) >>
- Cases_on `checked`
- >- (drule (BETA_RULE prefix_canonical_coherent_complete_checked) >> suspend "instantiate") >>
- drule (BETA_RULE prefix_canonical_coherent_complete_code) >> suspend "instantiate"
-QED
-
-Resume prefix_entry_register_decode_paired_mode[instantiate]:
- markerLib.RESUME_TAC >>
- qpat_x_assum `_ ==> _ /\ alloca_history _ _` (strip_assume_tac o SRULE []) >> disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
- disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
- disch_then (drule_at (Pat `eval_operand (Var dst) initial = _`)) >>
- disch_then (drule_at (Pat `fresh_vars_wrt last initial`)) >>
- simp_tac bool_ss [LESS_EQ_REFL, SUBSET_REFL] >>
- disch_then (qspecl_then [`k`,`ctx`,`func`,`site`,`sb`] mp_tac) >>
- disch_then (qspecl_then [`0`,`initial.vs_alloca_next`,`frag_ids st last`] mp_tac) >>
- simp_tac bool_ss [ADD, ZERO_LESS_EQ, SUBSET_REFL, LESS_EQ_REFL] >>
- disch_then drule_all >>
- disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
- qexistsl [`actual`,`H`,`qt`,`B`] >> asm_rewrite_tac[] >>
+ mp_tac (BETA_RULE (Q.SPECL [`ce`,`env`,`ce.ce_struct_fields`,`ty`,`tv`]
+   prefix_canonical_coherent_complete_mode_fmp)) >>
+ impl_tac >- first_assum ACCEPT_TAC >>
+ disch_then (qspecl_then
+   [`dst`,`src`,`st`,`last`,`ctx`,`func`,`site`,`initial`,`last`,`sb`,`d`,
+    `0`,`initial.vs_alloca_next`,`frag_ids st last`,`av`,`v`,
+    `type_to_abi_dec_info ce.ce_struct_fields ce ty`,`G`,`tn`,`b`,`sz`,`D`,`lo`,`PG`]
+   mp_tac) >>
+ (impl_tac >- asm_rewrite_tac[ADD,ZERO_LESS_EQ,SUBSET_REFL,LESS_EQ_REFL]) >>
+ strip_tac >> qexistsl [`actual`,`H`,`qt`,`B`] >> BETA_TAC >> fs[ADD] >>
  metis_tac[]
 QED
 
-Finalise prefix_entry_register_decode_paired_mode
+Theorem prefix_entry_register_decode_paired_mode:
+ !checked. (^RegisterDecodeMode) checked
+Proof
+  mp_tac (Q.INST [`frame_fmp` |-> `F`] prefix_entry_register_decode_mode_fmp) >>
+  simp_tac bool_ss []
+QED
 
-
+Theorem prefix_entry_register_decode_fmp_frame_paired_mode:
+ !checked. (^RegisterDecodeFmpFrameMode) checked
+Proof
+  mp_tac (Q.INST [`frame_fmp` |-> `T`] prefix_entry_register_decode_mode_fmp) >>
+  simp_tac bool_ss []
+QED
 
 Theorem prefix_entry_register_address_decode_paired_mode:
  !checked ptr.
@@ -187,6 +200,9 @@ Proof
   lo <= prepared.vs_alloca_next` by simp[] >>
  `checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) (EL i avs)) <=
    LENGTH prepared.vs_data_section /\ alloca_history func prepared` by metis_tac[] >>
+ `(ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+   prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp)`
+   by simp[] >>
  drule_all (BETA_RULE (Q.SPEC `checked` prefix_entry_register_decode_paired_mode)) >>
  disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
  disch_then (qx_choose_then `actual` (qx_choose_then `H` (qx_choose_then `qt`

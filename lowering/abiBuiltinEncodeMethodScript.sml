@@ -1,11 +1,12 @@
 Theory abiBuiltinEncodeMethod
 Ancestors
-  abiDecoderRange
+  abiDecoderLoopRegisters
+  abiDecoderRange abiEncoderWindowLookup abiDecoderArrayHeader venomMemProps context
   abiBuiltinEncodeCode abiBuiltinEncodeCorrect abiBuiltinPrefix abiEncoderWrites
   abiDecoderReentry abiDecoderDynamicLoopSetup abiDecoderGuards abiDecoderFrameCompose
   abiDecoderContract compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps venomInst
   venomState venomExecSemantics words list rich_list arithmetic abiEncoderMemory
-  abiEncoderSequence abiDecoderTypedContract abiDecoderLoop fragExec instIdxIndep
+  abiEncoderSequence abiEncoderBytesPrefix abiDecoderTypedContract abiDecoderLoop fragExec instIdxIndep
   valueEncodingProps byte abiBuiltinEncodeAllocate abiBuiltinEncodeSetup abiBuiltinAllocation
   finite_map valueEncoding valueEncodingDefs abiBuiltinEncodeInput abiBuiltinEncodeEffect
   abiBuiltinEncodeCorrect abiBuiltinEncodeCorrect abiBuiltinEncodeContext abiEncoderCorrect
@@ -42,6 +43,108 @@ Proof
   simp[DROP_LENGTH_APPEND, IS_PREFIX_APPEND, is_terminator_def, mk_inst_def]
 QED
 
+Theorem abi_encode_open_alloc_buffer:
+  compile_alloc_buffer outsz st = (buf,st') /\
+  ((FLOOKUP s.vs_allocas st.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
+  outsz < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+    eval_operand buf.buf_operand t = SOME (n2w p) /\
+    abi_builtin_allocation_frame st.cs_next_var st.cs_next_id outsz s t /\
+    inst_extends st st'
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule inst_extends_emit_op >> strip_tac >>
+  qabbrev_tac `allocated = abi_builtin_allocate_state st.cs_next_id outsz s` >>
+  qabbrev_tac `t = update_var (STRING #"%" (toString st.cs_next_var)) (n2w p) allocated` >>
+  `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w outsz)]
+    [STRING #"%" (toString st.cs_next_var)]) s = OK t` by
+    (gvs[Abbr `t`, Abbr `allocated`, abi_builtin_allocate_state_def] >>
+     asm_simp_tac (srw_ss()) [Once step_inst_base_def, exec_alloca_def,
+       mk_inst_def, w2n_n2w, eval_operand_def, LET_THM, ADD_COMM]) >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op t = eval_operand op s` by
+    (rpt strip_tac >> simp[Abbr `t`, abi_decoder_generated_update_operand] >>
+     Cases_on `FLOOKUP s.vs_allocas st.cs_next_id = NONE` >>
+     Cases_on `op` >> simp[Abbr `allocated`, abi_builtin_allocate_state_def,
+       eval_operand_def, lookup_var_def]) >>
+  qexists_tac `t` >> simp[run_inst_seq_def] >>
+  gvs[abi_builtin_allocation_frame_def, Abbr `t`, Abbr `allocated`,
+    update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+    abi_builtin_allocate_state_def]
+QED
+
+Theorem abi_encode_open_emit_add:
+  emit_op ADD [lhs;rhs] st = (out,st') /\
+  eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+    eval_operand out t = SOME (a+b) /\
+    abi_decoder_address_frame st.cs_next_var s t /\ inst_extends st st'
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  drule inst_extends_emit_op >> strip_tac >>
+  `step_inst_base (mk_inst st.cs_next_id ADD [lhs;rhs]
+      [STRING #"%" (toString st.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString st.cs_next_var)) (a+b) s)` by
+    (irule step_ADD >> simp[]) >>
+  qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) (a+b) s` >>
+  simp[run_inst_seq_def, abi_decoder_address_frame_def,
+    abi_decoder_generated_update_operand, update_var_def, eval_operand_def,
+    lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem abi_encode_open_store_sequence[local]:
+  emit_void MSTORE [buf;value_op] st = ((),final) /\
+  eval_operand buf s = SOME (n2w p) /\ eval_operand value_op s = SOME w /\
+  p < dimword (:256) ==>
+  run_inst_seq (emitted_insts st final) s = OK (mstore p w s) /\ inst_extends st final /\
+  mload p (mstore p w s) = w /\ abi_decode_frame p 32 s (mstore p w s) /\
+  (mstore p w s).vs_allocas = s.vs_allocas /\
+  (mstore p w s).vs_alloca_next = s.vs_alloca_next /\
+  (mstore p w s).vs_halted = s.vs_halted /\
+  (!op. eval_operand op (mstore p w s) = eval_operand op s)
+Proof
+  strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  drule inst_extends_emit_void >> strip_tac >>
+  asm_simp_tac (srw_ss()) [run_inst_seq_def, Once step_inst_base_def,
+    exec_write2_def, mk_inst_def, w2n_n2w, abi_decode_mstore_frame,
+    mload_mstore_same, eval_operand_mstore]
+QED
+
+Theorem abi_encode_open_method_sequence:
+  abi_builtin_encode_method_id (SOME mid) buf st = ((),final) /\
+  eval_operand buf initial = SOME (n2w p) /\ p+32 < dimword (:256) ==>
+  ?actual. run_inst_seq (emitted_insts st final) initial = OK actual /\ inst_extends st final /\
+    mload (p+32) actual = mid << 224 /\
+    abi_decode_frame (p+32) 32 initial actual /\
+    actual.vs_allocas = initial.vs_allocas /\ actual.vs_alloca_next = initial.vs_alloca_next /\
+    actual.vs_halted = initial.vs_halted /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
+      eval_operand op actual = SOME w)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_builtin_encode_method_trace >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+  `eval_operand (Lit 32w) initial = SOME 32w` by simp[eval_operand_def] >>
+  drule_all abi_encode_open_emit_add >> strip_tac >>
+  rename1 `abi_decoder_address_frame st.cs_next_var initial prepared` >>
+  `eval_operand method_ptr prepared = SOME (n2w (p+32)) /\
+   eval_operand (Lit (mid << 224)) prepared = SOME (mid << 224)` by
+    simp[word_add_n2w, eval_operand_def] >>
+  drule_all abi_encode_open_store_sequence >> strip_tac >>
+  `run_inst_seq (emitted_insts st final) initial = OK (mstore (p+32) (mid << 224) prepared) /\
+   inst_extends st final` by
+    (drule_all abi_decode_sequence_chain >> simp[]) >>
+  qpat_assum `abi_decoder_address_frame _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
+  `abi_decode_frame (p+32) 32 initial (mstore (p+32) (mid << 224) prepared)` by
+    (irule abi_decode_frame_trans >> qexists_tac `prepared` >> simp[abi_decode_frame_def]) >>
+  qexists_tac `mstore (p+32) (mid << 224) prepared` >> asm_simp_tac bool_ss [] >>
+  rpt strip_tac >> first_x_assum irule >> asm_simp_tac bool_ss []
+QED
+
 Theorem abi_builtin_encode_method_sequence:
   abi_builtin_encode_method_id (SOME mid) buf st = ((),final) /\
   eval_operand buf initial = SOME (n2w p) /\ p+32 < dimword (:256) /\
@@ -55,31 +158,19 @@ Theorem abi_builtin_encode_method_sequence:
       eval_operand op actual = SOME w)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule abi_builtin_encode_method_trace >> strip_tac >>
-  imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
-  `write_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
-  mp_tac (Q.INST [`lhs` |-> `buf`, `rhs` |-> `Lit 32w`, `out` |-> `method_ptr`,
-    `a` |-> `n2w p:bytes32`, `b` |-> `32w:bytes32`, `st'` |-> `write_st`,
-    `s` |-> `initial:venom_state`] abi_builtin_emit_add) >>
-  impl_tac >- asm_simp_tac (srw_ss()) [eval_operand_def] >> strip_tac >>
-  rename1 `abi_builtin_prefix st write_st limit_st initial prepared` >>
-  qpat_assum `abi_builtin_prefix _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_builtin_prefix_def]) >>
-  mp_tac (Q.INST [`buf` |-> `method_ptr`, `value_op` |-> `Lit (mid << 224)`,
-    `p` |-> `p+32:num`, `s` |-> `prepared:venom_state`, `st` |-> `write_st`,
-    `w` |-> `(mid:bytes32) << 224`] abi_builtin_store_sequence) >>
-  impl_tac >- asm_simp_tac (srw_ss()) [word_add_n2w, eval_operand_def] >> strip_tac >>
-  `run_inst_seq (emitted_insts st final) initial = OK (mstore (p+32) (mid << 224) prepared) /\
-   inst_extends st final` by
-    (mp_tac (Q.INST [`st1` |-> `write_st`, `st2` |-> `final`, `s` |-> `initial:venom_state`,
-      `s1` |-> `prepared:venom_state`, `s2` |-> `mstore (p+32) (mid << 224) prepared`]
-      abi_decode_sequence_chain) >> asm_simp_tac bool_ss []) >>
-  qpat_assum `abi_decoder_address_frame _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
-  `abi_decode_frame (p+32) 32 initial (mstore (p+32) (mid << 224) prepared)` by
-    (irule abi_decode_frame_trans >> qexists_tac `prepared` >> asm_simp_tac bool_ss [abi_decode_frame_def]) >>
-  qexists_tac `mstore (p+32) (mid << 224) prepared` >> asm_simp_tac bool_ss [] >>
-  rpt strip_tac >> first_x_assum irule >> asm_simp_tac bool_ss []
+  drule_all abi_encode_open_method_sequence >> strip_tac >>
+  qexists_tac `actual` >> asm_rewrite_tac[] >>
+  irule abi_window_seq_fresh >>
+  qexistsl_tac [`final`, `emitted_insts st final`, `initial`] >>
+  asm_simp_tac bool_ss [] >>
+  qpat_x_assum `abi_builtin_encode_method_id _ _ _ = _` mp_tac >>
+  simp[abi_builtin_encode_method_id_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, not_fresh_at_def] >>
+  rpt strip_tac >> irule fresh_var_distinct >> decide_tac
 QED
 
 (* ===== Reach ===== *)
@@ -135,25 +226,103 @@ QED
 
 (* ===== Setup ===== *)
 
-(* Actual allocation, data-pointer ADD and method-ID ADD/MSTORE setup. *)
-
-Theorem abi_builtin_encode_method_setup_context:
-  abi_builtin_encode_setup (SOME mid) maxlen st = (ops,ready) /\ fn_has_code st ready func ==>
-  ?address_st.
-    abi_builtin_encode_allocate (32+32*word_size (maxlen+4)) 36 st = (ops,address_st) /\
-    abi_builtin_encode_method_id (SOME mid) (FST ops) address_st = ((),ready) /\
-    fn_has_code st address_st func /\ fn_has_code address_st ready func /\
-    address_st.cs_next_var = st.cs_next_var+2 /\ ready.cs_next_var = address_st.cs_next_var+1
+(* Execute allocation, the selector store and the data-pointer ADD in order. *)
+Theorem abi_encode_open_method_setup_sequence:
+  abi_builtin_encode_setup (SOME mid) maxlen st = (ops,ready) /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,32+32*word_size (maxlen+4))) /\
+  32+32*word_size (maxlen+4) < dimword (:256) /\ p+32 < dimword (:256) ==>
+  ?actual. run_inst_seq (emitted_insts st ready) initial = OK actual /\
+    eval_operand (FST ops) actual = SOME (n2w p) /\
+    eval_operand (SND ops) actual = SOME (n2w (p+36)) /\
+    mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid /\
+    abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id
+      (32+32*word_size (maxlen+4)) p 32 initial actual /\
+    inst_extends st ready
 Proof
-  strip_tac >> drule abi_builtin_encode_setup_allocate_trace >> strip_tac >>
-  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [GSYM ADD_ASSOC]) >>
-  drule abi_builtin_encode_allocate_shape >> strip_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_builtin_encode_setup_trace >> strip_tac >>
+  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
+  rename1 `compile_alloc_buffer _ st = (buf,allocated)` >>
+  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >>
   drule abi_builtin_encode_method_shape >> strip_tac >>
-  `cs_extends st address_st /\ cs_extends address_st ready` by
-    (conj_tac >> irule cs_extends_same_block >> asm_simp_tac bool_ss []) >>
-  mp_tac (Q.SPECL [`st`, `address_st`, `ready`, `func`] fn_has_code_split) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  qexists_tac `address_st` >> asm_simp_tac bool_ss []
+  `st.cs_next_var <= allocated.cs_next_var /\
+    allocated.cs_next_var <= method_st.cs_next_var` by decide_tac >>
+  drule_all abi_encode_open_alloc_buffer >> strip_tac >>
+  rename1 `abi_builtin_allocation_frame _ _ _ initial allocated_s` >>
+  `abi_decoder_operand_live allocated.cs_next_var buf.buf_operand`
+    by metis_tac[abi_decoder_operand_live_emit] >>
+  drule_all abi_encode_open_method_sequence >> strip_tac >>
+  rename1 `abi_decode_frame (p+32) 32 allocated_s prefixed` >>
+  `eval_operand buf.buf_operand prefixed = SOME (n2w p)` by metis_tac[] >>
+  `eval_operand (Lit 36w) prefixed = SOME 36w` by simp[eval_operand_def] >>
+  drule_all abi_encode_open_emit_add >> strip_tac >>
+  rename1 `abi_decoder_address_frame method_st.cs_next_var prefixed actual` >>
+  `abi_decoder_operand_live method_st.cs_next_var buf.buf_operand` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  `eval_operand buf.buf_operand actual = SOME (n2w p)` by
+    (fs[abi_decoder_address_frame_def] >> metis_tac[]) >>
+  `abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id
+    (32+32*word_size (maxlen+4)) p 32 initial prefixed` by
+    (irule abi_builtin_encode_setup_frame_compose >>
+     qexistsl_tac [`allocated_s`, `allocated.cs_next_var`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st method_st) initial = OK prefixed /\
+   inst_extends st method_st` by
+    (irule abi_decode_sequence_chain >> qexistsl_tac [`allocated_s`, `allocated`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st ready) initial = OK actual /\ inst_extends st ready` by
+    (irule abi_decode_sequence_chain >> qexistsl_tac [`prefixed`, `method_st`] >> simp[]) >>
+  `st.cs_next_var <= method_st.cs_next_var` by decide_tac >>
+  `abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id
+    (32+32*word_size (maxlen+4)) p 32 initial actual` by
+    (qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ initial prefixed`
+       (MAP_EVERY assume_tac o CONJUNCTS o
+        SIMP_RULE bool_ss [abi_builtin_encode_setup_frame_def, abi_decode_frame_def]) >>
+     qpat_assum `abi_decoder_address_frame _ prefixed actual`
+       (MAP_EVERY assume_tac o CONJUNCTS o
+        SIMP_RULE bool_ss [abi_decoder_address_frame_def]) >>
+     asm_simp_tac bool_ss [abi_builtin_encode_setup_frame_def, abi_decode_frame_def] >>
+     conj_tac
+     >- (rpt strip_tac >>
+         `abi_decoder_operand_live method_st.cs_next_var op` by
+           (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
+         `eval_operand op prefixed = SOME w` by simp[] >> simp[]) >>
+     rpt strip_tac >> first_assum irule >> asm_rewrite_tac[]) >>
+  drule abi_builtin_encode_method_window >> strip_tac >>
+  `actual.vs_memory = prefixed.vs_memory` by fs[abi_decoder_address_frame_def] >>
+  qexists_tac `actual` >> gvs[word_add_n2w]
+QED
+
+Theorem abi_builtin_encode_method_setup_sequence:
+  abi_builtin_encode_setup (SOME mid) maxlen st = (ops,ready) /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,32+32*word_size (maxlen+4))) /\
+  32+32*word_size (maxlen+4) < dimword (:256) /\ p+32 < dimword (:256) /\
+  ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
+  ?actual. run_inst_seq (emitted_insts st ready) initial = OK actual /\
+    eval_operand (FST ops) actual = SOME (n2w p) /\
+    eval_operand (SND ops) actual = SOME (n2w (p+36)) /\
+    mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid /\
+    fresh_vars_wrt limit_st actual /\
+    abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id
+      (32+32*word_size (maxlen+4)) p 32 initial actual /\
+    inst_extends st ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_open_method_setup_sequence >> strip_tac >>
+  qexists_tac `actual` >> asm_rewrite_tac[] >>
+  irule abi_window_seq_fresh >>
+  qexistsl_tac [`ready`, `emitted_insts st ready`, `initial`] >>
+  asm_simp_tac bool_ss [] >>
+  qpat_x_assum `abi_builtin_encode_setup _ _ _ = _` mp_tac >>
+  simp[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
+    compile_alloc_buffer_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, not_fresh_at_def] >>
+  rpt strip_tac >> irule fresh_var_distinct >> decide_tac
 QED
 
 Theorem abi_builtin_encode_method_setup_reach:
@@ -173,25 +342,15 @@ Theorem abi_builtin_encode_method_setup_reach:
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_builtin_encode_method_setup_context >> strip_tac >>
-  drule abi_builtin_encode_allocate_live >> strip_tac >>
-  `address_st.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= address_st.cs_next_var` by decide_tac >>
-  mp_tac (Q.INST [`outsz` |-> `32+32*word_size (maxlen+4):num`, `data_offset` |-> `36:num`, `ctx` |-> `ctx`]
-    abi_builtin_encode_allocate_reach) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  rename1 `abi_decode_sim ctx func initial addressed` >>
-  mp_tac (Q.INST [`st` |-> `address_st`, `final` |-> `ready`, `buf` |-> `FST (ops:operand # operand)`,
-    `initial` |-> `addressed:venom_state`, `ctx` |-> `ctx`] abi_builtin_encode_method_reach) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  rename1 `abi_decode_sim ctx func addressed actual` >>
-  `actual.vs_halted = addressed.vs_halted` by simp[] >>
-  `eval_operand (FST ops) actual = SOME (n2w p) /\
-   eval_operand (SND ops) actual = SOME (n2w (p+36))` by
-    (conj_tac >> first_x_assum irule >> asm_simp_tac bool_ss []) >>
-  `abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id (32+32*word_size (maxlen+4)) p 32 initial actual` by
-    (drule_all abi_builtin_encode_setup_frame_compose >> simp[]) >>
-  qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
-  irule abi_decode_sim_trans >> qexists_tac `addressed` >> asm_simp_tac bool_ss []
+  drule_all abi_builtin_encode_method_setup_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st ready) initial = OK encoded` >>
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  `~encoded.vs_halted` by fs[abi_builtin_encode_setup_frame_def] >>
+  drule_all abi_encoder_run_sequence_reach >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `encoded with vs_inst_idx := LENGTH ready.cs_current_insts` >>
+  gvs[abi_builtin_encode_setup_frame_def, fresh_vars_wrt_def, eval_op_inst_idx,
+      abi_decode_frame_def] >> metis_tac[]
 QED
 
 (* ===== Value ===== *)
@@ -219,7 +378,8 @@ QED
 (* Complete lower_abi_encode with a method ID, from pure input/resources. *)
 
 Theorem lower_abi_encode_method:
-  lower_abi_encode ensure (SOME mid) src (type_to_abi_enc_info sf ce ty) maxlen start = (out,final) /\
+  lower_abi_encode (SOME mid) maxlen
+    (\dst. compile_abi_encode_to_buf dst src (type_to_abi_enc_info sf ce ty)) start = (out,final) /\
   fn_has_code start final func /\
   (start.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -240,7 +400,7 @@ Theorem lower_abi_encode_method:
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule lower_abi_encode_trace >> strip_tac >>
+  drule lower_abi_encode_trace >> BETA_TAC >> strip_tac >>
   drule_all abi_builtin_encode_code >> strip_tac >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
   drule abi_builtin_encode_setup_live >> strip_tac >>

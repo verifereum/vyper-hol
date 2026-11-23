@@ -7,7 +7,7 @@ Ancestors arithmetic[qualified,ignore_grammar]
   typedCopyOriginPtrDynArray bodyPtrSignedConvertScalarOps bytestringCopyExecution
   fragGasSeqPtr fragGasOriginPtr fragExecMem venomExecSemantics
   venomState venomInst ptrDiscipline memSafeRun
-  instMemFrontier fragExec fragGasCopyLoop fragGasSeq exprLoweringProps
+  instMemFrontier fragExec fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeq exprLoweringProps
 Libs
   stepInstBaseLib
 
@@ -53,6 +53,11 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS)
     [mk_inst id SHR [Lit 5w;sum] [out]]` by simp[mk_inst_def, is_terminator_def] >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+    [mk_inst id SHR [Lit 5w;sum] [out]] = pre ++ i::post /\
+    run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     Cases_on `pre` >> gvs[mk_inst_def]) >>
   drule_all_then (qspec_then `explicit` mp_tac) run_inst_seq_origin_ptr_lift >>
   simp[run_inst_seq_def, mk_inst_def, is_terminator_def]
 QED

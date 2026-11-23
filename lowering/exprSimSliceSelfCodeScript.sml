@@ -73,6 +73,7 @@ Proof
     simp[FUN_EQ_THM, eval_exprs_nil, return_def] >>
   simp[FUN_EQ_THM, eval_exprs_cons_action, Once evaluate_def,
        builtin_args_length_ok_def, code_slice_source_def,
+       is_self_codesize_def,
        precompile_call_success_def, precompile_builtin_def,
        vyperContextTheory.evaluate_builtin_def,
        type_check_def, assert_def, get_accounts_def,

@@ -9,7 +9,11 @@ Theorem ctor_supported_scalar_default_strict_type:
   supported_scalar_type ty /\ evaluate_type env ty = SOME tv ==>
   has_type (vyper_to_abi_type env ty) (default_to_abi tv)
 Proof
-  Cases_on `ty` >>
+  Cases_on `ty`
+  >~ [`supported_scalar_type (FlagT _)`]
+  >- (rpt strip_tac >>
+      gvs[evaluate_type_def, AllCaseEqs(), default_to_abi_def,
+          vyper_to_abi_type_def, has_type_def, valid_int_bound_def]) >>
   gvs[supported_scalar_type_def, supported_word_type_def,
       supported_string_type_def] >> Cases_on `b` >>
   gvs[supported_word_type_def, supported_string_type_def,
@@ -27,7 +31,11 @@ Theorem ctor_supported_scalar_default_inverse:
   supported_scalar_type ty /\ evaluate_type env ty = SOME tv ==>
   abi_to_vyper env ty (default_to_abi tv) = SOME (default_value tv)
 Proof
-  Cases_on `ty` >>
+  Cases_on `ty`
+  >~ [`supported_scalar_type (FlagT _)`]
+  >- (rpt strip_tac >>
+      gvs[evaluate_type_def, AllCaseEqs(), default_to_abi_def,
+          default_value_def, abi_to_vyper_def]) >>
   gvs[supported_scalar_type_def, supported_word_type_def,
       supported_string_type_def] >> Cases_on `b` >>
   gvs[supported_word_type_def, supported_string_type_def,

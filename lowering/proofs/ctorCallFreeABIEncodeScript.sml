@@ -2,7 +2,7 @@
 Theory ctorCallFreeABIEncode
 Ancestors
   list compileEnv venomInst loweringShapeDefs emitHelper context abiEncoder
-  ctorCallFreeRules ctorCallFreeValues
+  ctorCallFreeRules ctorCallFreeValues exprLowering
 
 val abi_preserve_tac =
   rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
@@ -107,4 +107,31 @@ Proof
   strip_tac >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
   FIRST (map irule (CONJUNCTS outcomes_free_abi_encode)) >>
   simp[DISJ_IMP_THM, FORALL_AND_THM]
+QED
+
+Theorem outcomes_free_abi_encode_values_to_buf:
+  (!opc. opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
+         opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE /\
+         opc <> RETURNDATACOPY ==> P opc) ==>
+  !s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_abi_encode_values_to_buf cenv dst rows s)))
+Proof
+  strip_tac >>
+  `!rs d c off s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+     EVERY (\i. P i.inst_opcode)
+       (state_insts (SND (compile_abi_encode_value_rows cenv d c off rs s)))` by
+    (Induct >> simp[compile_abi_encode_value_rows_def, every_state_insts_return] >>
+     gen_tac >> PairCases_on `h` >>
+     simp[compile_abi_encode_value_rows_def] >> rpt gen_tac >>
+     simp_tac bool_ss [GSYM AND_IMP_INTRO] >>
+     fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+     rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
+       every_state_insts_return, outcomes_free_unwrap_value,
+       outcomes_free_store_memory, cj 2 outcomes_free_abi_encode,
+       DISJ_IMP_THM, FORALL_AND_THM]),
+       gen_tac, strip_tac, irule ctorCallFreeRulesTheory.every_state_insts_bind,
+       irule ctorCallFreeRulesTheory.every_state_insts_ignore_bind,
+       conj_tac, IF_CASES_TAC])) >>
+  simp[compile_abi_encode_values_to_buf_def] >> abi_preserve_tac
 QED

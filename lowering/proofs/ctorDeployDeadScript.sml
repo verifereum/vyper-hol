@@ -9,7 +9,7 @@ Theory ctorDeployDead
 Ancestors
   ctorDeployDefs bodyPtrDefs gasContext ctorDeployDeadSectionFrame ctorDeployDeadSectionRel
   ctorDeployDeadLoad ctorDeployDeadImmTypes e2eComposition ptrDiscipline accountsRelProps compileEnv loweringStateRelDefs
-  vyperInterpreter e2eDeployDefs vyperContext sourceUnitExecution list rich_list
+  vyperInterpreter e2eDeployDefs e2eDefs vyperContext sourceUnitExecution list rich_list
 
 Theorem deploy_dead_wf:
   !H tops runtime_bc am tx.
@@ -68,10 +68,33 @@ Proof
   simp[EL_APPEND_EQN, EL_DROP]
 QED
 
+Theorem deploy_halt_result_rel_dead[local]:
+  ALOOKUP am'.sources tx.target = NONE /\
+  deploy_venom_result_rel H tops runtime_bc tx (INL (am',rqs)) (Halt s) /\
+  dead_result_rel (deploy_dead H tops runtime_bc am tx) (Halt s) (Halt s') ==>
+  deploy_venom_result_rel H tops runtime_bc tx (INL (am',rqs)) (Halt s')
+Proof
+  simp[deploy_venom_result_rel_def, initial_evaluation_context_def] >>
+  strip_tac >> gvs[] >>
+  `s'.vs_returndata = []` by (Cases_on `s'.vs_returndata` >> gvs[dead_result_rel_def]) >>
+  `external_call_result_rel H tops NoneT tx (INR HaltException,am',rqs) (Halt s)` by
+    simp[external_call_result_rel_def] >>
+  `dead_result_rel
+      (vyperLoweringCorrect$external_call_dead H tx (INR HaltException,am',rqs))
+      (Halt s) (Halt (s' with vs_immutables := s.vs_immutables))` by
+    fs[dead_result_rel_def, deploy_dead_def,
+       vyperLoweringCorrectTheory.external_call_dead_def,
+       accounts_agree_except_def, transient_agree_except_def, imms_agree_except_def,
+       word_agree_except_def, LIST_REL_EL_EQN, request_agree_except_def] >>
+  drule_all external_call_result_rel_dead_transport >>
+  fs[external_call_result_rel_def, dead_result_rel_def]
+QED
+
 Theorem deploy_venom_result_rel_dead:
   !H tops runtime_bc am tx orc gobs src res res'.
     deploy_source_ok tops am tx /\
     src = load_contract orc gobs am tx [(NONE, tops)] [] /\
+    ALOOKUP am.sources tx.target = NONE /\
     deploy_venom_result_rel H tops runtime_bc tx src res /\
     ~deploy_source_exempt tops src /\
     dead_result_rel (deploy_dead H tops runtime_bc am tx) res res'
@@ -85,10 +108,11 @@ Proof
       Cases_on `src`
       >- (rename1 `INL p` >> PairCases_on `p` >>
           rename1 `INL (am', rqs)` >>
-          drule load_contract_sources_layouts >>
-          impl_tac >- (qpat_x_assum `deploy_source_ok _ _ _` mp_tac >>
-                       simp[deploy_source_ok_def]) >>
-          strip_tac >>
+          Cases_on `ALOOKUP am'.sources tx.target = NONE`
+          >- (`dead_result_rel (deploy_dead H tops runtime_bc am tx)
+                  (Halt s) (Halt s')` by fs[dead_result_rel_def] >>
+              drule_all deploy_halt_result_rel_dead >> simp[]) >>
+          `am'.sources <> am.sources` by (strip_tac >> gvs[]) >>
           `(initial_evaluation_context am'.sources am'.layouts tx NONE).txn = tx`
             by simp[initial_evaluation_context_def] >>
           qabbrev_tac `cx = initial_evaluation_context am'.sources am'.layouts tx NONE` >>

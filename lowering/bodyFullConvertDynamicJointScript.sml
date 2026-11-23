@@ -1,7 +1,7 @@
 Theory bodyFullConvertDynamicJoint
 Ancestors
   bodyFullShadowBodyInv
-  haltExitProj typeBuiltinPrereqs bodyInvNoDalloca
+  haltExitProj typeBuiltinPrereqs
   bodyFullPreds bodySimFull exprLowering bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertChildRead bodyFullPathHistory exprSafeOperand bodyPtrSignedConvertSourceTyping
   valueCopyBytes bodyPtrMakeArrayBytesTransport bodyPtrTypeBuiltinsBytesWordInputs
@@ -76,6 +76,7 @@ QED
 Theorem convert_dynamic_vv_sim_full:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
   body_expr_full_ok cx e /\ is_bytestring_type (expr_type e) /\
   ~is_bytestring_type dst ==>
@@ -99,15 +100,17 @@ Proof
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (x,sm)` >>
   simp[exprBopLoweringTheory.lower_value_child_call, SF ETA_ss, expr_type_def] >>
   strip_tac >>
-  `?shadow_sm. lower_value compile_expr cenv (expr_type e)
+  `?shadow_sm. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
       (gas_shadow_expr e) shadow_sa = (x,shadow_sm) /\
       gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e`, `sh` |-> `T`]
-      (MATCH_MP gasShadowCompileHelpersTheory.gas_shadow_compiles_lower_value
-        (cj 1 gas_shadow_compile_expr))) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
-     simp[] >> metis_tac[pairTheory.PAIR]) >>
+    (`gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+       (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+         (gas_shadow_expr e))` by
+       irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env >>
+     pop_assum (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+                REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> simp[]) >>
   `cs_extends sa sm /\ cs_extends shadow_sa shadow_sm` by
     metis_tac[compile_expr_grows] >>
   qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
@@ -152,7 +155,7 @@ Proof
   disch_then (qspecl_then
     [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
   (impl_tac >- (simp[] >>
-     qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s`
+     qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s`
        ACCEPT_TAC)) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>

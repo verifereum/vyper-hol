@@ -9,6 +9,7 @@ Ancestors
   exprPtrUnwrapAllocation exprPtrUnwrapCopyEdges
   loweringHalt exprLoweringProps
   stateRelProj finite_map words list pair arithmetic
+  bodyFullHashKeccakFixed
 
 (* Separate the actual allocation site, not the allocation frontier.  The
    two alternatives for the input certificate are deliberately retained. *)
@@ -145,7 +146,7 @@ val scratch_input_origin = ``\s.
 Theorem abi_decode_array_scratch_loop_entry_horizon_joint:
   abi_decode_index_init sa = (ip,loop_st) /\
   fn_has_code sa loop_st fn /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ local_ptrs_reserved ce sa /\
+  local_ptrs_reserved ce sa /\
   (?H:(bool # 'a word # type_value) list # num list. V H) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -356,6 +357,15 @@ Resume abi_decode_array_scratch_loop_entry_horizon_joint[alloc_frame]:
      irule scratch_mstore_mem_ok >>
      simp[venomStateTheory.eval_operand_def]) >>
   `allocas_from lo s` by metis_tac[bodyPtrDefsTheory.ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H0 ctx fn ce cx es s`
+       (mp_then Any ACCEPT_TAC stmt_state_rel_allocas_below_fmp)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `stmt_state_rel H0 ctx fn ce cx es u`
+       (mp_then Any ACCEPT_TAC stmt_state_rel_allocas_below_fmp)) >>
+  `ctx_has_dalloca ctx ==>
+    allocas_below_fmp (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[ptrDisciplineTheory.allocas_below_fmp_def] >>
   `!D. inst_seq_ptr D lo ctx fn PG G tn [al;st] s Gf tnf` by
     (gen_tac >>
      `ptr_inst_ok D lo 0 ctx fn G tn al s` by
@@ -389,7 +399,13 @@ Resume abi_decode_array_scratch_loop_entry_horizon_joint[alloc_frame]:
        (s,G,tn) [] (OK t,Gf,tnf)` by
     (qx_gen_tac `H` >> disch_tac >> simp[NoAsms, Abbr `t`] >>
      irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >> simp[] >>
-     qexistsl_tac [`[al;st]`,`sa`] >> simp[]) >>
+     qexistsl_tac [`[al;st]`,`sa`] >> simp[] >>
+     rpt strip_tac >>
+     `MEM i [al;st]` by
+       (pure_asm_rewrite_tac[] >> simp[MEM_APPEND]) >>
+     qpat_x_assum `MEM i [al;st]` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     asm_rewrite_tac [] >> simp[NoAsms, Abbr `al`, Abbr `st`, venomInstTheory.mk_inst_def]) >>
   `alloca_inv s` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   `alloca_history fn t` by
     (simp[NoAsms, Abbr `t`] >> irule emitted_alloca_history >> simp[] >>
@@ -654,5 +670,9 @@ Theorem abi_decode_array_scratch_loop_entry_joint:
     (!i. output_base <= i /\ i < output_base+output_cap /\ i IN tnf.t_mem ==>
       i IN tn.t_mem)
 Proof
-  MATCH_ACCEPT_TAC abi_decode_array_scratch_loop_entry_horizon_joint
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (INST_TYPE [Type.alpha |-> ``:256``]
+    abi_decode_array_scratch_loop_entry_horizon_joint) >>
+  (impl_tac >- (BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  BETA_TAC >> disch_then ACCEPT_TAC
 QED

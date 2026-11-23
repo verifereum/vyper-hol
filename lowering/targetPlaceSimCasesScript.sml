@@ -76,7 +76,7 @@ Theorem target_idx_case_ok:
     target_idx_case nocalls ctx func cenv cx bt
 Proof
   recInduct base_assignment_target_induct >>
-  rw[target_idx_case_def, target_indices_def, int_calls_expr_def] >>
+  rw[target_idx_case_def, supportedExprsTheory.target_indices_def, int_calls_expr_def] >>
   metis_tac[expr_case_of_ok, MEM_APPEND, MEM]
 QED
 

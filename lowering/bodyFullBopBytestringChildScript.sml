@@ -9,7 +9,9 @@ Theorem bop_bytestring_selected_child_full_halt:
    | SOME digest => (Lit digest,sa)) = (h,sz) /\
   is_bytestring_type (expr_type e) /\ expr_body_pre cenv cx env e es /\
   body_inv tops ctx cenv cx /\ fn_has_code sa sz func /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u)) /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   alloca_history func s /\ ~s.vs_halted /\
@@ -25,15 +27,15 @@ Theorem bop_bytestring_selected_child_full_halt:
     lower_value compile_expr cenv (expr_type e) e sa = (m,cb) ==>
     ?shadow_sa shadow_cb.
       lower_value compile_expr cenv (expr_type e) e sa = (m,cb) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
-        (m,shadow_cb) /\
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+        (gas_shadow_expr e) shadow_sa = (m,shadow_cb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state cb shadow_cb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
       gas_shadow_function func shadow_func /\
       MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
       fn_has_code sa cb func /\ fn_has_code shadow_sa shadow_cb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
       (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
       (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
       gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
@@ -64,15 +66,18 @@ Proof
   (reverse conj_tac >- metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!m cb. _` drule_all >> strip_tac >>
-  `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_no_wrap inst u` by
-    (rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >> simp[] >>
-     strip_tac >> fs[unitTransformDefsTheory.dalloca_no_wrap_def,
+  `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u` by
+    (Cases_on `ctx_has_dalloca ctx` >- fs[] >>
+     rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >> simp[] >>
+     strip_tac >> fs[unitTransformDefsTheory.dalloca_fmp_headroom_def,
        ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
      metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   simp[] >> strip_tac >> first_x_assum drule_all >> strip_tac >>
-  drule gasOutcomeFullTheory.gas_outcome_full_post_mono >> disch_then irule >> simp[]
+  drule gasOutcomeFullTheory.gas_outcome_full_post_mono >> disch_then irule >> simp[] >>
+  rpt gen_tac >> strip_tac >> qexists_tac `v` >> simp[]
 QED
 
 Theorem bop_bytestring_selected_child_full:
@@ -98,8 +103,8 @@ Theorem bop_bytestring_selected_child_full:
     lower_value compile_expr cenv (expr_type e) e sa = (m,cb) ==>
     ?shadow_sa shadow_cb.
       lower_value compile_expr cenv (expr_type e) e sa = (m,cb) /\
-      lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa =
-        (m,shadow_cb) /\
+      lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+        (gas_shadow_expr e) shadow_sa = (m,shadow_cb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state cb shadow_cb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
       gas_shadow_function func shadow_func /\
@@ -132,7 +137,11 @@ Theorem bop_bytestring_selected_child_full:
       (~expr_has_effect e ==> pure_frame cenv func es sa s t))
     (\H res ee gt r. expr_exit res r)
 Proof
-  strip_tac >> drule_all bop_bytestring_selected_child_full_halt >>
+  strip_tac >>
+  qpat_assum `~ctx_has_dalloca ctx` (fn guard =>
+    qpat_assum `!m cb. _` (assume_tac o SIMP_RULE bool_ss [guard]) >>
+    drule_all (SIMP_RULE bool_ss [guard] bop_bytestring_selected_child_full_halt)) >>
+  qpat_x_assum `explicit = gas_explicit_sites ctx shadow_ctx` SUBST_ALL_TAC >>
   strip_tac >>
   drule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
   disch_then irule >> simp[]

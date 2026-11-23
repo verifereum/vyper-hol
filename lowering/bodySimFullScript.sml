@@ -5,7 +5,7 @@ Theory bodySimFull
 Ancestors
   exprSimMapDefs ptrDiscipline unitMemInv contextRawReachable
   gasOutcomeFull bodyPtrDefs vyperStorageFootprint exprSimMemDefs stmtSimDefs
-  gasShadow gasShadowState gasShadowUnit gasExplicitSites
+  gasShadow gasShadowState gasShadowUnit gasExplicitSites gasShadowCompileBase
   exprLowering stmtLowering loweringPosts compileEnv allocaHistory
   vyperInterpreter vyperState venomState venomWf list option
 
@@ -14,7 +14,7 @@ Definition expr_map_sim_full_def:
     cenv cx ty e es <=>
     !st0 sa sb shadow_sa shadow_sb vv s0 G0 tn0.
       compile_expr cenv ty e sa = (vv, sb) /\
-      compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (vv, shadow_sb) /\
+      compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa = (vv, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
       gas_shadow_function func shadow_func /\
@@ -32,7 +32,8 @@ Definition expr_map_sim_full_def:
       return_buf_frame d cenv sa s0 /\
       alloca_history func s0 /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+                  dalloca_fmp_headroom inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
         storage_well_formed_on cx es (FST H) /\
@@ -82,7 +83,7 @@ Definition expr_sim_full_def:
     cenv cx ty e es <=>
     !st0 sa sb shadow_sa shadow_sb op s0 G0 tn0.
       lower_value compile_expr cenv ty e sa = (op, sb) /\
-      lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa =
+      lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa =
         (op, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -101,7 +102,8 @@ Definition expr_sim_full_def:
       return_buf_frame d cenv sa s0 /\
       alloca_history func s0 /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+                  dalloca_fmp_headroom inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
         storage_well_formed_on cx es (FST H) /\
@@ -135,7 +137,7 @@ Definition expr_vv_sim_full_def:
     cenv cx ty e es <=>
     !st0 sa sb shadow_sa shadow_sb vv s0 G0 tn0.
       compile_expr cenv ty e sa = (vv, sb) /\
-      compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (vv, shadow_sb) /\
+      compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa = (vv, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
       gas_shadow_function func shadow_func /\
@@ -153,7 +155,8 @@ Definition expr_vv_sim_full_def:
       return_buf_frame d cenv sa s0 /\
       alloca_history func s0 /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+                  dalloca_fmp_headroom inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
         storage_well_formed_on cx es (FST H) /\
@@ -208,8 +211,9 @@ Definition return_buf_sep_def:
              loweringStateRelDefs$regions_disjoint (w2n bw) capacity b sz)
 End
 
-(* Both compilations include local declarations and return the same
-   environment, as stmt_env and stmts_env do. *)
+(* Both compilations include local declarations: the original returns
+   cenv', as stmt_env and stmts_env do, and the shadow returns
+   gas_shadow_env T cenv'. *)
 Definition stmt_frag_full_def:
   stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cx lctx RetQ cenv
@@ -217,7 +221,7 @@ Definition stmt_frag_full_def:
     source es <=>
     !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 cenv'.
       m sa = (cenv', sb) /\
-      shadow_m shadow_sa = (cenv', shadow_sb) /\
+      shadow_m shadow_sa = (gas_shadow_env T cenv', shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
       gas_shadow_function func shadow_func /\
@@ -236,7 +240,8 @@ Definition stmt_frag_full_def:
       return_buf_sep d cenv es s0 /\
       alloca_history func s0 /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==>
+                  dalloca_fmp_headroom inst s) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
         stmt_state_rel H ctx func cenv cx es s0 /\
         storage_well_formed_on cx es (FST H) /\
@@ -277,6 +282,25 @@ Definition stmt_frag_full_def:
           (ctx_has_dalloca ctx ==>
            !s. (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 End
+
+Theorem stmt_frag_full_source_cong:
+  stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    cx lctx RetQ cenv m shadow_m source es /\
+  (!gs. source' (es with gas_obs := gs) = source (es with gas_obs := gs)) ==>
+  stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    cx lctx RetQ cenv m shadow_m source' es
+Proof
+  rewrite_tac[stmt_frag_full_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  irule gas_outcome_full_source_cong >> qexists_tac `source` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!st0 sa sb shadow_sa shadow_sb s0 G0 tn0 cenv'. _`
+    (qspecl_then [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`s0`,`G0`,`tn0`,`cenv'`]
+      match_mp_tac) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_x_assum `gas_admissible source' (stmt_res_ok lctx) es` mp_tac >>
+  simp[gasContextTheory.gas_admissible_def]
+QED
 
 (* The bytes of the older allocations clear of the live locals gain no
    taint across two fragments, the first keeping its allocations and the
@@ -335,6 +359,7 @@ Definition frame_ret_ok_full_def:
       stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx lctx RetQ cenv'
         (stmt_env cenv' lctx ret_ty (Return eo))
-        (stmt_env cenv' lctx ret_ty (Return (OPTION_MAP gas_shadow_expr eo)))
+        (stmt_env (gas_shadow_env T cenv') lctx ret_ty
+          (Return (OPTION_MAP gas_shadow_expr eo)))
         (eval_stmt cx (Return eo)) es
 End

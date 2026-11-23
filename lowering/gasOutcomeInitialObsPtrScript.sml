@@ -48,48 +48,7 @@ Theorem gas_exempt_cert_initial_obs_forward:
     !gs. gas_exempt_cert memory tops p source
       ((FST start) with gas_obs := gs,SND start) marks out endpoint
 Proof
-  ho_match_mp_tac gas_exempt_cert_ind >> rpt conj_tac
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      irule (cj 1 gas_exempt_cert_rules) >>
-      simp[gas_exempt_origin_initial_obs])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 2 gas_exempt_cert_rules, gas_marked_exec_initial_obs])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 3 gas_exempt_cert_rules])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 4 gas_exempt_cert_rules, gas_marked_exec_initial_obs])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 5 gas_exempt_cert_rules])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 6 gas_exempt_cert_rules, gas_marked_exec_initial_obs])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 7 gas_exempt_cert_rules])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 8 gas_exempt_cert_rules, gas_marked_exec_initial_obs])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 9 gas_exempt_cert_rules])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 10 gas_exempt_cert_rules, gas_marked_exec_initial_obs])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 11 gas_exempt_cert_rules])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 12 gas_exempt_cert_rules, gas_marked_exec_initial_obs])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 13 gas_exempt_cert_rules])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 14 gas_exempt_cert_rules, gas_marked_exec_initial_obs])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 15 gas_exempt_cert_rules])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      irule (cj 16 gas_exempt_cert_rules) >> qexists_tac `mid` >> simp[])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      irule (cj 17 gas_exempt_cert_rules) >> qexists_tac `mid` >> simp[])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      irule (cj 18 gas_exempt_cert_rules) >> simp[])
-  >- (rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-      metis_tac[cj 19 gas_exempt_cert_rules]) >>
-  rpt gen_tac >> simp[] >> strip_tac >> gen_tac >>
-  metis_tac[cj 20 gas_exempt_cert_rules]
+  ACCEPT_TAC gas_exempt_cert_start_gas_obs
 QED
 
 Theorem gas_exempt_cert_initial_obs:

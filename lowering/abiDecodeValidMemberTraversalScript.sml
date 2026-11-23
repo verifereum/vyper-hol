@@ -3,7 +3,8 @@ Theory abiDecodeValidMemberTraversal
 Ancestors
   abiDecoderComplexGuard abiDecoderComplexHead abiEncoder
   bodyPtrBopScalarSeq bodyPtrBopScalarOutcome entryDecoderHistoryFrame
-  fragGasCopyLoop fragGasSeqPtr fragExecMem instMemFrontier memSafeRun ptrDiscipline
+  fragGasCopyLoop fragGasSeqPtr fragExecMem instMemFrontier memSafeRun ptrDiscipline allocasBelowFmpUpdatesProps
+  fragGasCopySeqLiftProps
   emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   abiDecodePtrMemberFrame abiValidAllocatedMembers abiValidAllocatedContract abiValidMembers
   abiDecoderMemberInfos abiDecoderContract abiMalformedRecursiveInterface
@@ -24,12 +25,6 @@ Ancestors
   abiDecoderDynamicLoopSetup freshWrites abiValidAllocatedComplex
   abiDecoderMembers contractABI abiDecoderStruct abiDecoderFixedMemory
   abiValidAggregateHeads vyperABIValid exprSimAggregateEncoding vyperValue
-
-Triviality member_allocas_below_fmp_vars:
-  allocas_below_fmp (s with vs_vars := vars) <=> allocas_below_fmp s
-Proof
-  simp[allocas_below_fmp_def]
-QED
 
 Theorem member_guard_scalar_code[local]:
   abi_decode_complex_head_guard pos hi n sa = ((),sb) ==>
@@ -72,11 +67,8 @@ Proof
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
   qabbrev_tac `sn = s with vs_inst_idx := LENGTH sa.cs_current_insts` >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp sn` by
-    (strip_tac >>
-     qpat_assum `ctx_has_dalloca ctx` (fn mode =>
-       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
-         (fn bound => mp_tac (MP bound mode))) >>
-     simp[Abbr `sn`, allocas_below_fmp_def]) >>
+    (simp[Abbr `sn`, allocas_below_fmp_def] >>
+     fs[allocas_below_fmp_def]) >>
   qabbrev_tac `un = u with vs_inst_idx := LENGTH sa.cs_current_insts` >>
   `isPREFIX (emitted_insts sa sb) (DROP sn.vs_inst_idx bb.bb_instructions)` by
     simp[Abbr `sn`, IS_PREFIX_APPEND] >>
@@ -109,9 +101,19 @@ Proof
      conj_tac >- (irule below_frontier_no_ranges >> gvs[]) >>
      irule inst_dload_in_section_other >> gvs[]) >>
   `lookup_block sn.vs_current_bb func.fn_blocks = SOME bb` by simp[Abbr `sn`] >>
+  `(ctx_has_dalloca ctx ==> !pre i post v.
+      emitted_insts sa sb = pre ++ i::post /\ run_inst_seq pre sn = OK v ==>
+      unitTransformDefs$dalloca_no_wrap i v)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by fs[MEM_APPEND] >>
+     drule_all bop_scalar_seq_outputs >> strip_tac >> gvs[]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (sn,G,tn) []
-      (OK (un with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf) /\ allocas_from lo un` by
-    (rpt gen_tac >> metis_tac[run_inst_seq_origin_ptr_lift]) >>
+      (OK (un with vs_inst_idx := sn.vs_inst_idx + LENGTH (emitted_insts sa sb)),Gf,tnf) /\
+      allocas_from lo un` by
+    (rpt gen_tac >>
+     match_mp_tac (Q.INST [`code` |-> `emitted_insts sa sb`, `bb` |-> `bb`]
+       run_inst_seq_origin_ptr_lift) >>
+     asm_rewrite_tac[]) >>
   qexistsl_tac [`Gf`, `tnf`] >>
   fs[Abbr `sn`, Abbr `un`, FORALL_AND_THM, lookup_var_def, op_taint_def, allocas_from_def] >>
   metis_tac[]
@@ -153,7 +155,6 @@ val decode_child_run = ``\ty tv.
  abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
    st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s ==>
  !G tn PG lo.
- ~ctx_has_dalloca ctx /\
  abi_decode_ptr_window G tn s source (n2w B) L /\
  ptr_covers G tn output s (type_memory_bytes ce ty) /\
  op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -184,7 +185,6 @@ val decode_members_run = ``\tys tvs.
  abi_valid_allocated_members_entry H0 ce env sf tys tvs vs ctx func cenv cx es
    st en (Var source) hi pos (Var output) B L xs p d outsz ao vo dstid live ceiling s ==>
  !G tn PG lo.
- ~ctx_has_dalloca ctx /\
  abi_decode_ptr_window G tn s source (n2w B) L /\
  ptr_covers G tn output s outsz /\
  op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -449,7 +449,7 @@ Proof
      simp[not_fresh_at_def] >> metis_tac[DECIDE ``a+1 <= n ==> a <= n``]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r2` by
     (qpat_assum `r2 = r1 with vs_vars := r2.vs_vars` (fn th => once_rewrite_tac [th]) >>
-     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
+     rewrite_tac[allocas_below_fmp_updates] >> first_assum ACCEPT_TAC) >>
   gvs[] >>
   qpat_assum `ptr_covers G2 tn2 q r2 32`
     (mp_then Any mp_tac allocated_member_read_origin) >>
@@ -586,7 +586,7 @@ Proof
      qpat_assum `!i. B <= i /\ i < B + L ==> _` irule >> decide_tac) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r1` by
     (qpat_assum `r1 = s with vs_vars := r1.vs_vars` (fn th => once_rewrite_tac [th]) >>
-     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
+     rewrite_tac[allocas_below_fmp_updates] >> first_assum ACCEPT_TAC) >>
   drule_all allocated_member_address_read_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `G3` (qx_choose_then `tn3` strip_assume_tac))) >>
   `~r3.vs_halted /\ r3.vs_current_bb = c3.cs_current_bb` by
@@ -596,7 +596,7 @@ Proof
     (Cases_on `pos` >> gvs[op_taint_def,op_prov_def] >> metis_tac[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r3` by
     (qpat_assum `r3 = r1 with vs_vars := r3.vs_vars` (fn th => once_rewrite_tac [th]) >>
-     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
+     rewrite_tac[allocas_below_fmp_updates] >> first_assum ACCEPT_TAC) >>
   drule_all allocated_dynamic_suffix_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac))) >>
   `sa.cs_next_var <= sb.cs_next_var /\ c4.cs_next_var <= sb.cs_next_var` by
@@ -701,7 +701,7 @@ Proof
     (`d < dimword (:256)` by decide_tac >> simp[w2n_n2w, LESS_MOD]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp r` by
     (qpat_assum `r = s with vs_vars := r.vs_vars` (fn th => once_rewrite_tac [th]) >>
-     rewrite_tac[member_allocas_below_fmp_vars] >> first_assum ACCEPT_TAC) >>
+     rewrite_tac[allocas_below_fmp_updates] >> first_assum ACCEPT_TAC) >>
   drule_all member_navigation_emit_pointer_pc_uniform_origin >>
   disch_then (qspec_then `PG` (qx_choose_then `x`
     (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac)))) >>
@@ -827,7 +827,7 @@ Theorem decoder_joint_members_head_entry[local]:
     (abi_decoder_member_infos sf ce tys)
     (ao + abi_embedded_static_size ce.ce_struct_fields ty)
     (vo + type_memory_bytes ce ty) end_st = ((),en) /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s outsz /\ op_prov G pos = NONE /\ op_prov G hi = NONE /\
   op_taint tn pos = {} /\ op_taint tn hi = {} /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s ==>
@@ -1111,7 +1111,7 @@ Theorem decoder_joint_complex_guard[local]:
   p + headsz <= L /\ middle.cs_next_var <= ceiling.cs_next_var /\
   fresh_vars_wrt ceiling s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s n /\ op_prov G pos = NONE /\ op_prov G hi = NONE /\
   op_taint tn pos = {} /\ op_taint tn hi = {} /\
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s ==>
@@ -1157,7 +1157,9 @@ Proof
   `alloca_inv s` by metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st middle)` by fs[EVERY_MEM] >>
   drule_all entry_straight_line_alloca_history >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
   drule_all member_scalar_guard_actual_run >>
   disch_then (qspec_then `PG` (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac))) >>
   qpat_x_assum `r = _` SUBST_ALL_TAC >>
@@ -1197,7 +1199,7 @@ Theorem decoder_joint_complex_members[local]:
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) (DROP p xs) (DROP p xs)) = SOME vs /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+  abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s (type_memory_size_list tvs) /\
   op_prov G pos = NONE /\ op_prov G hi = NONE /\
   op_taint tn pos = {} /\ op_taint tn hi = {} /\

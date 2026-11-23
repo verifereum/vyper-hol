@@ -90,6 +90,9 @@ current series contains:
 - `5336-dft-abort-order.patch`, vyperlang/vyper#5336: DFT keeps aborting
   instructions (an `assert`, an internal call) in their order, scheduling each
   after the previous run of aborting instructions.
+- `5337-spill-successor-state.patch`, vyperlang/vyper#5337: each DFS successor
+  restores its parent's spill allocator. The function's peak spill end sets
+  the next function's spill base.
 - `5338-widen-bytestring-convert.patch`, vyperlang/vyper#5338: widening
   bytestring conversions copy the value into a buffer of the result type.
 - `5344-uint2str-buffer.patch`, vyperlang/vyper#5344: `uint2str` allocates
@@ -123,6 +126,8 @@ current series contains:
 - `5386-complex-compare-reject.patch`, vyperlang/vyper#5386: `==` and `!=` on
   structs, arrays and tuples are rejected with `TypeMismatch`, as in legacy
   codegen, instead of comparing the operands' memory pointers.
+- `5389-abi-encode-standalone-value.patch`, vyperlang/vyper#5389 (open):
+  `abi_encode(t, ensure_tuple=False)` encodes a tuple as one value.
 - `local-dft-create-abort.patch`, not upstream: makes Python's DFT schedule as
   the HOL pass does where it deliberately departs from upstream:
   `create`/`create2` count as aborts. Its name sorts after the PR files it

@@ -3,7 +3,7 @@
    the supported-fragment traversals see the same roots on both sides. *)
 Theory gasShadowShape
 Ancestors
-  loweringShapeProps gasShadow gasShadowModuleDefs
+  loweringShapeProps gasShadow gasShadowModuleDefs gasShadowCompileBase
   supportedStmtTraverse supportedExprTraverse supportedProgram unitShapeDefs
   vyperAST list rich_list
 
@@ -25,26 +25,16 @@ Proof
   TRY COND_CASES_TAC >> gvs[] >> metis_tac[]
 QED
 
-Theorem supported_default_expression_gas_shadow:
-  !tops e. supported_default_expression tops e ==> gas_shadow_expr e = e
-Proof
-  simp[supported_default_expression_def] >> rpt strip_tac >>
-  irule (CONJUNCT1 gas_shadow_identity_without_msg_gas) >>
-  qexists_tac `expr_msg_gas_root` >> simp[expr_msg_gas_root_def]
-QED
-
 Theorem omitted_defaults_gas_shadow_id:
-  !tops dflts k. EVERY (supported_default_expression tops) dflts ==>
+  !dflts k. ~supported_exprs_exists expr_msg_gas_root dflts ==>
     MAP gas_shadow_expr (DROP k dflts) = DROP k dflts
 Proof
   rpt strip_tac >>
-  irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
-  irule supported_default_expression_gas_shadow >>
-  qexists_tac `tops` >>
-  gvs[EVERY_MEM] >>
-  first_x_assum irule >>
-  irule (Q.SPECL [`dflts`,`k`,`EL x (DROP k dflts)`] MEM_DROP_IMP) >>
-  irule EL_MEM >> simp[]
+  sg `MAP gas_shadow_expr dflts = dflts`
+  >- (irule (cj 3 gas_shadow_identity_without_msg_gas) >>
+      qexists_tac `expr_msg_gas_root` >>
+      simp[expr_msg_gas_root_def]) >>
+  simp[MAP_DROP]
 QED
 
 Theorem gas_shadow_expr_shape_root:
@@ -145,13 +135,21 @@ Proof
   simp[gas_shadow_shape_stmts_exists_ind, gas_shadow_expr_shape_root]
 QED
 
+Theorem cenv_static_ok_gas_shadow_env:
+  cenv_static_ok (gas_shadow_env sd c) <=> cenv_static_ok c
+Proof
+  rw[cenv_static_ok_def, gas_shadow_env_defaults, EVERY_MAP] >>
+  simp[EVERY_MEM, pairTheory.FORALL_PROD, gas_shadow_expr_exists_invariant,
+       gas_shadow_expr_shape_root]
+QED
+
 Theorem gas_shadow_external_fn_shape_ok:
   external_fn_shape_ok p ==>
   external_fn_shape_ok (gas_shadow_external_package p)
 Proof
   PairCases_on `p` >>
   simp[external_fn_shape_ok_def, gas_shadow_external_package_def,
-       gas_shadow_shape_stmts_exists]
+       gas_shadow_shape_stmts_exists, cenv_static_ok_gas_shadow_env]
 QED
 
 Theorem gas_shadow_internal_fn_shape_ok:
@@ -160,7 +158,7 @@ Theorem gas_shadow_internal_fn_shape_ok:
 Proof
   PairCases_on `p` >>
   simp[internal_fn_shape_ok_def, gas_shadow_internal_package_def,
-       gas_shadow_shape_stmts_exists]
+       gas_shadow_shape_stmts_exists, cenv_static_ok_gas_shadow_env]
 QED
 
 Theorem gas_shadow_fallback_shape_ok:
@@ -170,5 +168,5 @@ Proof
   Cases_on `fb` >- simp[fallback_shape_ok_def] >>
   rename1 `SOME p` >> PairCases_on `p` >>
   simp[fallback_shape_ok_def, gas_shadow_fallback_package_def,
-       gas_shadow_shape_stmts_exists]
+       gas_shadow_shape_stmts_exists, cenv_static_ok_gas_shadow_env]
 QED

@@ -34,7 +34,7 @@ Ancestors
   stmtSimDefs
   loweringPosts
   list rich_list finite_map pred_set alist
-  fragExec exprSimHyps exprSimLeaves exprSimAttributeFields stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem storageStoreFrame
+  fragExec exprSimHyps exprSimAttributeFields stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem storageStoreFrame
   stmtSimAssignStorage stmtSimAssignAttr
   vyperStorageTrace vyperStorageFootprint vyperStoragePlaceRegion
   vyperStorageRegionWrite gasStorage

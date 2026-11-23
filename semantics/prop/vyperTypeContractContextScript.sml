@@ -521,7 +521,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem is_immutable_decl_MEM_Immutable_exists[local]:
+Theorem is_immutable_decl_MEM_Immutable_exists:
   !n ts. is_immutable_decl n ts ==>
   ?vis ty init. MEM (VariableDecl vis Immutable n ty init) ts
 Proof
@@ -551,6 +551,26 @@ Proof
   metis_tac[optionTheory.NOT_SOME_NONE]
 QED
 
+Theorem artifact_toplevel_vtypes_lookup_transfer_context:
+  check_contract cx.in_deploy cx.layouts cx.txn.target mods = SOME art /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  toplevel_vtypes_complete toplevel_vtypes cx /\
+  FLOOKUP (function_entry_env art mods entry_src vis args).toplevel_vtypes k = SOME vt ==>
+  FLOOKUP toplevel_vtypes k = SOME vt
+Proof
+  PairCases_on `k` >>
+  rw[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
+  qpat_assum `check_contract cx.in_deploy _ _ _ = _`
+    (strip_assume_tac o MATCH_MP check_contract_nonsig_maps) >>
+  drule_then assume_tac check_contract_runtime_namespaces >>
+  gvs[FLOOKUP_DRESTRICT_SOME] >>
+  drule_all build_contract_type_artifact_toplevel_vtypes_sound >> rw[] >>
+  gvs[toplevel_vtypes_complete_def, lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def] >>
+  gvs[get_module_code_def] >>
+  metis_tac[REWRITE_RULE [lookup_var_slot_in_layouts_def] var_allocated_slot_VariableDecl,
+            REWRITE_RULE [lookup_var_slot_in_layouts_def] var_allocated_slot_HashMapDecl]
+QED
+
 Theorem artifact_toplevel_vtypes_lookup_transfer_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
@@ -559,14 +579,11 @@ Theorem artifact_toplevel_vtypes_lookup_transfer_initial:
   FLOOKUP (function_entry_env art mods entry_src vis args).toplevel_vtypes k = SOME vt ==>
   FLOOKUP toplevel_vtypes k = SOME vt
 Proof
-  PairCases_on `k` >>
-  rw[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
-  drule check_contract_artifact_fields >> strip_tac >>
-  gvs[FLOOKUP_DRESTRICT_SOME] >>
-  drule_all build_contract_type_artifact_toplevel_vtypes_sound >> rw[] >>
-  gvs[toplevel_vtypes_complete_def, lookup_var_slot_from_layout_initial] >>
-  gvs[get_module_code_def, initial_evaluation_context_def] >>
-  metis_tac[var_allocated_slot_VariableDecl, var_allocated_slot_HashMapDecl]
+  strip_tac >>
+  match_mp_tac (Q.INST [`cx` |-> `initial_evaluation_context sources layouts tx src`]
+    artifact_toplevel_vtypes_lookup_transfer_context) >>
+  simp[initial_evaluation_context_def] >>
+  fs[initial_evaluation_context_def]
 QED
 
 Theorem check_contract_namespaces_ok:
@@ -674,6 +691,24 @@ Proof
   simp[bare_global_assignable_complete_def, initial_evaluation_context_def]
 QED
 
+Theorem artifact_flag_members_lookup_transfer_context:
+  check_contract cx.in_deploy cx.layouts cx.txn.target mods = SOME art /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  flag_members_complete flag_members cx /\
+  FLOOKUP (function_entry_env art mods entry_src vis args).flag_members k = SOME members ==>
+  FLOOKUP flag_members k = SOME members
+Proof
+  PairCases_on `k` >>
+  rw[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
+  qpat_assum `check_contract cx.in_deploy _ _ _ = _`
+    (strip_assume_tac o MATCH_MP check_contract_nonsig_maps) >>
+  drule_then assume_tac check_contract_runtime_namespaces >>
+  gvs[] >>
+  drule_all build_contract_type_artifact_flag_members_sound >> rw[] >>
+  gvs[flag_members_complete_def, get_module_code_def] >>
+  metis_tac[lookup_flag_MEM_FlagDecl, contract_namespaces_ok_module_flag_member_keys, ALOOKUP_MEM]
+QED
+
 Theorem artifact_flag_members_lookup_transfer_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
@@ -682,11 +717,11 @@ Theorem artifact_flag_members_lookup_transfer_initial:
   FLOOKUP (function_entry_env art mods entry_src vis args).flag_members k = SOME members ==>
   FLOOKUP flag_members k = SOME members
 Proof
-  PairCases_on `k` >>
-  rw[function_entry_env_def, artifact_env_def, check_contract_def, FOLDL_extend_local_args_static] >> gvs[] >>
-  drule_all build_contract_type_artifact_flag_members_sound >> rw[] >>
-  gvs[flag_members_complete_def, get_module_code_def, initial_evaluation_context_def] >>
-  metis_tac[lookup_flag_MEM_FlagDecl, contract_namespaces_ok_module_flag_member_keys, ALOOKUP_MEM]
+  strip_tac >>
+  match_mp_tac (Q.INST [`cx` |-> `initial_evaluation_context sources layouts tx src`]
+    artifact_flag_members_lookup_transfer_context) >>
+  simp[initial_evaluation_context_def] >>
+  fs[initial_evaluation_context_def]
 QED
 
 Theorem artifact_toplevel_non_bare_globals_NONE_transfer_initial:

@@ -111,6 +111,7 @@ Proof
     irule (cj 4 well_typed_write_roots) >> goal_assum (drule_at Any) >>
     simp[defaults_env_def, function_entry_env_def,
          FOLDL_extend_local_args_static, artifact_env_def]) >>
+  qpat_x_assum `type_stmts _ _ (subst_consts_stmts_mods _ _) = _` kall_tac >>
   drule (CONJUNCT2 type_stmt_write_roots) >>
   disch_then (qspec_then `R` mp_tac) >>
   simp[function_entry_env_def, FOLDL_extend_local_args_static, artifact_env_def]
@@ -177,7 +178,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem checked_runtime_write_roots[local]:
+Theorem checked_runtime_write_roots:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\ tx.target = addr ==>
   !sid id vt. FLOOKUP art.cta_toplevel_vtypes (sid,id) = SOME vt /\
@@ -228,7 +229,7 @@ Proof
   metis_tac[getter_writes_ok, expr_writes_ok_def]
 QED
 
-Theorem checked_external_selected_writes[local]:
+Theorem checked_external_selected_writes:
   !am tx mods art cx src ts mut nr args dflts ret bod R.
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\

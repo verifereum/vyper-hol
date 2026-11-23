@@ -1,7 +1,7 @@
 (* One pass through a nonbulk calldata decoder loop. *)
 Theory calldataNoneArrayIteration
 Ancestors
-  calldataArrayRawCallsite decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr
+  decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr
   abiDecoderLoopRegisters decoderGhostFramePtr allocaFrontierBound
   calldataDynOwned calldataChildFrame calldataFiniteTransport ptrDiscipline
   abiDecodeRanges abiDecoderExecution
@@ -11,6 +11,7 @@ Ancestors
   fragGasOriginPtr fragGasOriginPtrLoop fragExec emitHelperProps instIdxIndep venomExecSemantics
   venomState loweringStateRelDefs abiDecoderLoopSetup abiDecoderArraySetupInputs
   words arithmetic finite_map pred_set list
+  decoderOriginAllocationFrame[qualified,ignore_grammar]
 
 (* Both the header displacement and the scaled element offset are modular. *)
 Theorem none_array_member_word[local]:
@@ -213,6 +214,20 @@ Proof
   simp[w2n_n2w, cd_member_ptr_def, cd_at_def, LET_THM]
 QED
 
+Theorem none_array_path_allocas_below_fmp[local]:
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,H,u) /\
+  fn_inst_ids_distinct fn /\ entry_decoder_obs s t /\
+  t.vs_allocas = s.vs_allocas /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t)
+Proof
+  strip_tac >>
+  drule_all decoderOriginAllocationFrameTheory.decoder_origin_path_allocation_frame >>
+  strip_tac >> fs[entry_decoder_obs_def] >> asm_rewrite_tac[allocas_below_fmp_def] >>
+  qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+    (ACCEPT_TAC o REWRITE_RULE[allocas_below_fmp_def])
+QED
+
 Theorem none_array_iteration_paths:
   abi_decoder_coherent ce env sf ty tv /\
   abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD
@@ -264,7 +279,8 @@ Theorem none_array_iteration_paths:
     ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
       ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
   fresh_vars_wrt limit s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\
   (!a A ta child.
     SND (SND ops) = Var child /\
     eval_operand (FST (SND ops)) a = SOME (n2w (cd_member_ptr F s.vs_call_ctx.cc_calldata tv
@@ -276,7 +292,9 @@ Theorem none_array_iteration_paths:
     op_taint ta (FST (SND ops)) = {} /\ op_prov A (FST (SND ops)) = NONE /\
     fresh_vars_wrt limit a /\ entry_decoder_obs s a /\
     a.vs_allocas = s.vs_allocas /\ a.vs_alloca_next = s.vs_alloca_next /\
+    a.vs_initial_fmp = s.vs_initial_fmp /\
     alloca_inv a /\ alloca_frontier_inv ctx fn site a /\ allocas_from lo a /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp a) /\
     ~a.vs_halted /\ a.vs_current_bb = ready.cs_current_bb /\
     a.vs_inst_idx = LENGTH ready.cs_current_insts ==>
     (?z Z tz. z.vs_returndata = [] /\
@@ -291,6 +309,7 @@ Theorem none_array_iteration_paths:
       fresh_vars_wrt limit r /\
       r.vs_call_ctx = a.vs_call_ctx /\ r.vs_data_section = a.vs_data_section /\
       alloca_inv r /\ alloca_frontier_inv ctx fn site r /\ allocas_from lo r /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp r) /\
       a.vs_alloca_next <= r.vs_alloca_next /\
       (!id p k. FLOOKUP a.vs_allocas id = SOME (p,k) ==> FLOOKUP r.vs_allocas id = SOME (p,k)) /\
       (!id. id < ready.cs_next_id \/ last.cs_next_id <= id ==>
@@ -319,6 +338,7 @@ Theorem none_array_iteration_paths:
     fresh_vars_wrt limit t /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
     alloca_inv t /\ alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     s.vs_alloca_next <= t.vs_alloca_next /\
     mload slot t = n2w (SUC j) /\ ptr_covers H u q t 32 /\ ptr_covers H u root t cap /\
     DISJOINT {x | slot <= x /\ x < slot+32} u.t_mem /\
@@ -342,7 +362,6 @@ Proof
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME hdr_bb` by simp[] >>
   `!x. src = Var x ==> ~MEM x [iv;cv;cmp;done]` by metis_tac[] >>
   `src <> Var iv` by (strip_tac >> fs[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (Q.INST [`bb` |-> `hdr_bb`, `id` |-> `hid`,
                  `srcaddr` |-> `n2w sb`] none_array_true_header) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
@@ -408,10 +427,26 @@ Proof
     (qpat_x_assum `eval_operand (SND (SND ops)) a = _` mp_tac >>
      qpat_x_assum `abi_decoder_operand_live ready.cs_next_var (SND (SND ops))` mp_tac >>
      asm_rewrite_tac[eval_operand_def] >> simp[NoAsms]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (mp_tac (Q.INST [`s` |-> `s`, `G` |-> `G`, `tn` |-> `tn`,
+       `t` |-> `t`, `H` |-> `H`, `u` |-> `u`, `D` |-> `ARB`,
+       `explicit` |-> `ARB`] none_array_path_allocas_below_fmp) >>
+     (impl_tac >- asm_rewrite_tac[]) >> disch_then ACCEPT_TAC) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK a,A,ta)` by
     (rpt gen_tac >> irule gas_origin_ptr_path_trans >>
      qexistsl_tac [`H`,`t`,`u`] >> metis_tac[]) >>
+  `a.vs_initial_fmp = s.vs_initial_fmp` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK a,A,ta)`
+       (qspecl_then [`ARB`,`ARB`] (fn path =>
+         qpat_assum `fn_inst_ids_distinct fn` (fn distinct =>
+           ACCEPT_TAC (CONJUNCT1 (MATCH_MP
+             decoderOriginAllocationFrameTheory.decoder_origin_path_allocation_frame
+             (CONJ path distinct))))))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by
+    (mp_tac (Q.INST [`s` |-> `s`, `G` |-> `G`, `tn` |-> `tn`,
+       `t` |-> `a`, `H` |-> `A`, `u` |-> `ta`, `D` |-> `ARB`,
+       `explicit` |-> `ARB`] none_array_path_allocas_below_fmp) >>
+     (impl_tac >- asm_rewrite_tac[]) >> disch_then ACCEPT_TAC) >>
   qpat_x_assum `!a A ta child. SND (SND ops) = Var child /\ _ ==> _`
     (qspecl_then [`a`,`A`,`ta`,`child`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >> strip_tac
@@ -483,7 +518,6 @@ Proof
      simp[NoAsms, op_prov_def] >> asm_rewrite_tac[]) >>
   `lookup_block r.vs_current_bb fn.fn_blocks = SOME back_bb /\
    slot+32 <= r.vs_alloca_next` by (asm_rewrite_tac[] >> decide_tac) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp r` by simp[] >>
   mp_tac (Q.INST [`s` |-> `r`, `G` |-> `R`, `tn` |-> `tr`, `bb` |-> `back_bb`,
                  `id` |-> `last.cs_next_id`, `prefix` |-> `last.cs_current_insts`,
                  `iv` |-> `ix`, `k` |-> `last.cs_next_var`] none_array_backedge) >>
@@ -508,6 +542,11 @@ Proof
   `!x. x IN protect ==> lookup_var x b = lookup_var x s /\
       FLOOKUP B x = FLOOKUP G x /\ op_taint tb (Var x) = op_taint tn (Var x)` by metis_tac[] >>
   `ptr_covers B tb root b cap` by metis_tac[ptr_covers_frame] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp b` by
+    (mp_tac (Q.INST [`s` |-> `r`, `G` |-> `R`, `tn` |-> `tr`,
+       `t` |-> `b`, `H` |-> `B`, `u` |-> `tb`, `D` |-> `ARB`,
+       `explicit` |-> `ARB`] none_array_path_allocas_below_fmp) >>
+     (impl_tac >- asm_rewrite_tac[]) >> disch_then ACCEPT_TAC) >>
   qexistsl_tac [`b`,`B`,`tb`,`scratch`] >> asm_rewrite_tac[] >>
   conj_tac
   >- (qpat_x_assum `!id p k. FLOOKUP a.vs_allocas id = SOME (p,k) ==> _` mp_tac >>

@@ -19,10 +19,27 @@ Definition runtime_gas_shadow_unit_def:
       (order_internals (runtime_internal_order tops ints) ints) in
     let fall = set_fallback_package_target rpolicy.rpol_target
       (package_fallback_fn tops T (K global_nonreentrant_slot) fb) in
-    run_lowering selectors (MAP gas_shadow_external_package packs)
-      (MAP gas_shadow_internal_package ips)
-      (OPTION_MAP gas_shadow_fallback_package fall) rpolicy 0 0
-      ([] : dense_bucket list) (build_dense_entry_info selectors packs) "__entry"
+    if EXISTS external_has_defaults exts then
+      let groups = MAP (package_external_group tops rpolicy.rpol_target
+                          T (K global_nonreentrant_slot)) exts in
+      run_grouped_lowering
+        (MAP (\group. case group of
+          ExternalSingle selector package =>
+            ExternalSingle selector (gas_shadow_external_package package)
+        | ExternalDefaults common entries specs head_offset =>
+            ExternalDefaults
+              (common with <| ec_env := gas_shadow_env T common.ec_env;
+                             ec_body := MAP gas_shadow_stmt common.ec_body |>)
+              entries
+              (MAP (\(name,ty,e). (name,ty,gas_shadow_expr e)) specs)
+              head_offset) groups)
+        (MAP gas_shadow_internal_package ips)
+        (OPTION_MAP gas_shadow_fallback_package fall) rpolicy "__entry"
+    else
+      run_lowering selectors (MAP gas_shadow_external_package packs)
+        (MAP gas_shadow_internal_package ips)
+        (OPTION_MAP gas_shadow_fallback_package fall) rpolicy 0 0
+        ([] : dense_bucket list) (build_dense_entry_info selectors packs) "__entry"
 End
 
 Theorem gas_shadow_run_lowering:
@@ -59,35 +76,6 @@ Proof
 QED
 
 
-Theorem runtime_gas_shadow_unit_exists:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  classify_functions tops = (exts,ints,fb,ctor) /\
-  ~EXISTS external_has_defaults exts ==>
-  ?shadow_unit.
-    runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
-    gas_shadow_unit unit shadow_unit
-Proof
-  strip_tac >>
-  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
-  simp[lower_vyper_runtime_unit_def] >> strip_tac >>
-  qmatch_asmsub_abbrev_tac
-    `run_lowering sels packs ips fall rpolicy 0 0 [] info "__entry"` >>
-  `OPTREL gas_shadow_unit (SOME unit)
-    (run_lowering sels (MAP gas_shadow_external_package packs)
-      (MAP gas_shadow_internal_package ips)
-      (OPTION_MAP gas_shadow_fallback_package fall) rpolicy 0 0 [] info "__entry")` by
-    (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = SOME unit`
-       (SUBST1_TAC o SYM) >> irule gas_shadow_run_lowering) >>
-  Cases_on `run_lowering sels (MAP gas_shadow_external_package packs)
-      (MAP gas_shadow_internal_package ips)
-      (OPTION_MAP gas_shadow_fallback_package fall) rpolicy 0 0 [] info "__entry"` >>
-  gvs[optionTheory.OPTREL_def] >>
-  rename1 `gas_shadow_unit unit shadow_unit` >>
-  qexists_tac `shadow_unit` >>
-  gvs[runtime_gas_shadow_unit_def, Abbr `sels`, Abbr `packs`, Abbr `ips`,
-      Abbr `fall`, Abbr `info`]
-QED
-
 Theorem gas_shadow_run_grouped_lowering:
   !groups ints fb rp entry.
   OPTREL gas_shadow_unit
@@ -98,7 +86,8 @@ Theorem gas_shadow_run_grouped_lowering:
           ExternalSingle selector (gas_shadow_external_package package)
       | ExternalDefaults common entries specs head_offset =>
           ExternalDefaults
-            (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+            (common with <| ec_env := gas_shadow_env T common.ec_env;
+                           ec_body := MAP gas_shadow_stmt common.ec_body |>)
             entries
             (MAP (\(name,ty,e). (name,ty,gas_shadow_expr e)) specs)
             head_offset) groups)
@@ -107,7 +96,7 @@ Theorem gas_shadow_run_grouped_lowering:
 Proof
   rpt gen_tac >>
   qspecl_then [`groups`, `ints`, `fb`] mp_tac
-    gas_shadow_compile_generate_grouped_runtime >>
+    (Q.INST [`sd` |-> `T`] gas_shadow_compile_generate_grouped_runtime) >>
   rewrite_tac[gas_shadow_compiles_def] >>
   disch_then (qspecl_then [`initial_compile_state entry`,
                            `initial_compile_state entry`] mp_tac) >>
@@ -126,4 +115,47 @@ Proof
   `lowering_context_ok x0 <=> lowering_context_ok x'0`
     by metis_tac[gas_shadow_lowering_context_ok] >>
   simp[] >> IF_CASES_TAC >> simp[gas_shadow_unit_def]
+QED
+
+Theorem runtime_gas_shadow_unit_exists:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  classify_functions tops = (exts,ints,fb,ctor) ==>
+  ?shadow_unit.
+    runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+    gas_shadow_unit unit shadow_unit
+Proof
+  strip_tac >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  Cases_on `EXISTS external_has_defaults exts` >>
+  simp[lower_vyper_runtime_unit_def] >> strip_tac
+  >- (qmatch_asmsub_abbrev_tac
+        `run_grouped_lowering groups ips fall rpolicy "__entry"` >>
+      qspecl_then [`groups`, `ips`, `fall`, `rpolicy`, `"__entry"`]
+        mp_tac gas_shadow_run_grouped_lowering >>
+      asm_rewrite_tac[] >>
+      simp[optionTheory.OPTREL_def, AllCaseEqs()] >>
+      rpt strip_tac >> simp[runtime_gas_shadow_unit_def, Abbr `groups`,
+        Abbr `ips`, Abbr `fall`]) >>
+  qmatch_asmsub_abbrev_tac
+    `run_lowering sels packs ips fall rpolicy 0 0 [] info "__entry"` >>
+  `OPTREL gas_shadow_unit (SOME unit)
+    (run_lowering sels (MAP gas_shadow_external_package packs)
+      (MAP gas_shadow_internal_package ips)
+      (OPTION_MAP gas_shadow_fallback_package fall) rpolicy 0 0 [] info "__entry")` by
+    (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = SOME unit`
+       (SUBST1_TAC o SYM) >> irule gas_shadow_run_lowering) >>
+  Cases_on `run_lowering sels (MAP gas_shadow_external_package packs)
+      (MAP gas_shadow_internal_package ips)
+      (OPTION_MAP gas_shadow_fallback_package fall) rpolicy 0 0 [] info "__entry"` >>
+  gvs[optionTheory.OPTREL_def] >>
+  rename1 `gas_shadow_unit unit shadow_unit` >>
+  qexists_tac `shadow_unit` >>
+  gvs[runtime_gas_shadow_unit_def, Abbr `sels`, Abbr `packs`, Abbr `ips`,
+      Abbr `fall`, Abbr `info`] >>
+  Cases_on `EXISTS external_has_defaults exts` >> simp[] >>
+  qpat_x_assum `EXISTS external_has_defaults exts`
+    (strip_assume_tac o REWRITE_RULE [EXISTS_MEM]) >>
+  qpat_x_assum `EVERY ($~ o external_has_defaults) exts`
+    (mp_tac o REWRITE_RULE [EVERY_MEM, combinTheory.o_DEF]) >>
+  rename1 `MEM external exts` >> disch_then (qspec_then `external` mp_tac) >> simp[]
 QED

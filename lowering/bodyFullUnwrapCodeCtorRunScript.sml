@@ -6,7 +6,8 @@ Ancestors
   compileEnv context venomState venomInst entrySinkExtraction list ptrDiscipline
   exprPtrUnwrapAllocEntry exprPtrUnwrapAllocSeparation exprPtrUnwrapCodeCopyShape
   bufferAllocationExecution unitTransformDefs memSafeRun codegenRel contextCodegenRel
-  exprPtrUnwrapAllocation rich_list allocationPtr venomMemDefs venomMemProofs venomMemProps valueEncodingProps immutableCopyExecution exprSimStorageCopy loweringHalt
+  exprPtrUnwrapAllocation rich_list allocationPtr venomMemDefs venomMemProofs venomMemProps valueEncodingProps immutableCopyExecution
+  immutableCopyExterior exprSimStorageCopy loweringHalt
   loweringStateRelDefs loweringPosts finite_map allocaHistory freshWrites exprSimAlloc arithmetic
 
 (* Both checks are established on the range execution's raw endpoint.
@@ -54,10 +55,19 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (irule body_ctor_copy_mem_ok >> metis_tac[]) >>
   drule code_ctor_copy_insts >> strip_tac >>
+  `emitted_insts sa sb = is` by simp[emitted_insts_def, DROP_LENGTH_APPEND] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
                ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
-    (fs[emitted_insts_def, DROP_APPEND, EVERY_MEM] >> rpt strip_tac >>
+    (fs[EVERY_MEM] >> rpt strip_tac >>
      first_x_assum drule >> strip_tac >> gvs[is_terminator_def]) >>
+  `!pre i post u. emitted_insts sa sb = pre ++ i::post ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i (emitted_insts sa sb)` by
+       (qpat_assum `emitted_insts sa sb = pre ++ i::post`
+          (fn th => pure_rewrite_tac[th]) >> simp[MEM_APPEND]) >>
+     qpat_x_assum `EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; MSTORE]) is`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then (qspec_then `i` mp_tac) >> gvs[] >> strip_tac >> simp[]) >>
   `run_inst_seq (emitted_insts sa sb) s = OK t /\
    sb.cs_current_bb = sa.cs_current_bb /\
    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
@@ -72,25 +82,6 @@ Proof
      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts), Gf, tnf)` by
     (irule emitted_origin_ptr_path >> metis_tac[]) >>
   qexistsl [`Gf`, `tnf`, `t`] >> simp[]
-QED
-
-Theorem ctor_transfers_exterior[local]:
-  !n off s.
-  w2n b + off + 32*n < dimword(:256) ==>
-  !at len. at+len <= w2n b+off \/ w2n b+off+32*n <= at ==>
-  mem_bytes_at at len (immutable_transfers F T a b n off s).vs_memory =
-  mem_bytes_at at len s.vs_memory
-Proof
-  Induct >- simp[immutable_transfers_def] >> rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  simp[Once immutable_transfers_def] >>
-  `w2n b+(off+32)+32*n < dimword(:256) /\
-   (at+len <= w2n b+(off+32) \/ w2n b+(off+32)+32*n <= at)` by
-    (fs[MULT_SUC] >> decide_tac) >>
-  `w2n (b+n2w off) = w2n b+off` by
-    (Cases_on `b` >> fs[wordsTheory.word_add_n2w]) >>
-  simp[immutable_word_transfer_def, mstore_mem_bytes_at_disjoint] >>
-  first_x_assum irule >> simp[]
 QED
 
 Theorem ctor_code_copy_origin_execution:
@@ -243,7 +234,8 @@ Proof
      drule_all copy_ctor_run >> strip_tac >>
      `zz = t` by fs[copy_runtime_frame_def] >> gvs[] >>
      rpt gen_tac >> strip_tac >>
-     simp[ctor_transfers_exterior |> Q.SPECL [`n`, `0`, `a`] |> SRULE []]) >>
+     simp[immutable_copy_transfers_exterior |> Q.INST [`ctor` |-> `T`]
+          |> Q.SPECL [`n`, `0`, `a`] |> SRULE []]) >>
   drule unwrap_alloc_generated_code >> strip_tac >>
   drule unwrap_alloc_current_block >> strip_tac >>
   `LENGTH mid.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>

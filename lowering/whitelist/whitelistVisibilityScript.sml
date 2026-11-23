@@ -6,11 +6,12 @@
 
 Theory whitelistVisibility
 Ancestors
+  moduleVariableKeyProps linkedStorageMetadataProps
   bodyAppendStorageFacts entryStateRel bodyStorageMetadata exprOpenCases
   supportedDecls compileVyper constSubst compileEnv vyperTypeEnv vyperTypeContract
   vyperContext vyperInterpreter vyperState vyperTypeInvariants exprSimHyps
   exprSimHypsDefs vyperTypeSystem
-  bodySim list finite_map pair
+  bodySim bodyInvSplit bodyInvCodeProps bodyInvModuleProps compileUnit alist list finite_map pair
 
 (* ===== Storage variables and hashmaps of any visibility ===== *)
 
@@ -217,12 +218,29 @@ QED
 
 (* ===== The S1 lemmas whose statements name Private ===== *)
 
-(* bodyAppendStorageFacts' body_append_runtime_metadata, with
+Theorem storage_binding_mods[local]:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_variable_decl tops (NONE,id) = SOME (vis,mut,ty,SOME slot) /\
+  (mut = Storage \/ mut = Transient) ==>
+  get_module_code cx src = SOME tops /\
+  find_var_decl_by_name id tops = SOME (StorageVarDecl (mut = Transient) ty,id) /\
+  cenv.ce_module_var_type (src,id) = SOME ty /\ cenv.ce_hashmap_info (src,id) = NONE
+Proof
+  REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_then (assume_tac o Q.SPEC `src`) contract_inv_module_codes >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[contract_inv_unqualified_variable_keys] >>
+  drule_all_then strip_assume_tac supported_variable_decl_storage_binding >>
+  drule_then strip_assume_tac supported_variable_decl_mem >> simp[] >>
+  metis_tac[contract_inv_variable_metadata]
+QED
+
+(* bodyAppendStorageFacts' body_append_runtime_metadata_mods, with
    supported_storage_dynamic_array replaced by a lookup of any
    visibility. *)
-Theorem body_append_runtime_metadata_vis:
-  body_inv tops ctx cenv cx /\
-  supported_variable_decl tops (src,id) =
+Theorem body_append_runtime_metadata_vis_mods:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_variable_decl tops (NONE,id) =
     SOME (vis, mut, ArrayT delem (Dynamic dn), SOME dslot) /\
   (mut = Storage \/ mut = Transient) /\ supported_full_word_type delem /\
   env_consistent env cx es /\
@@ -238,13 +256,10 @@ Theorem body_append_runtime_metadata_vis:
       (INL (StoragePlace tr (n2w slot) tv),
        es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
 Proof
-  strip_tac >>
-  `ALL_DISTINCT
-     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
-   get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
-  drule supported_variable_decl_storage_binding >> disch_then drule >>
-  (impl_tac >- fs[]) >> strip_tac >> gvs[] >>
-  drule_all body_append_root_metadata >> strip_tac >>
+  REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all_then strip_assume_tac storage_binding_mods >>
+  `cenv.ce_module_dynarray_capacity (src,id) = dn` by
+    metis_tac[body_append_capacity_lookup_mods] >>
   `find_var_decl_by_name id tops <> NONE` by simp[] >>
   drule_all append_typed_storage_target >> strip_tac >> gvs[] >>
   drule_all append_storage_target_eval >> strip_tac >>
@@ -252,12 +267,12 @@ Proof
 QED
 
 (* bodyAppendStorageFacts' body_append_target_bounds, likewise. *)
-Theorem body_append_target_bounds_vis:
-  body_inv tops ctx cenv cx /\
-  supported_variable_decl tops (src,id) =
+Theorem body_append_target_bounds_vis_mods:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_variable_decl tops (NONE,id) =
     SOME (vis, mut, ArrayT delem (Dynamic dn), SOME dslot) /\
   (mut = Storage \/ mut = Transient) /\ supported_full_word_type delem /\
-  expr_sim_inv cenv cx env es /\
+  env_consistent env cx es /\
   type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' ==>
   ?elem n tr key slot tv.
     supported_full_word_type elem /\ 0 < n /\ n + 1 < dimword(:256) /\
@@ -273,8 +288,7 @@ Theorem body_append_target_bounds_vis:
 Proof
   REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule append_typing_target >> strip_tac >>
-  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  drule_all body_append_runtime_metadata_vis >> strip_tac >> gvs[] >>
+  drule_all body_append_runtime_metadata_vis_mods >> strip_tac >> gvs[] >>
   `env.type_defs = get_tenv cx` by
     fs[env_consistent_def, env_context_consistent_def] >>
   `assignable_type env.type_defs
@@ -286,32 +300,25 @@ QED
 
 (* bodySimStmtCases' body_assign_copy_target, with the Private lookup
    replaced by a lookup of any visibility. *)
-Theorem body_assign_copy_target_vis:
-  !tops ctx cenv cx src id vis mut ty ast_slot env es ret_ty e env'.
-    body_inv tops ctx cenv cx /\
-    supported_variable_decl tops (src,id) = SOME (vis,mut,ty,SOME ast_slot) /\
-    (mut = Storage \/ mut = Transient) /\ expr_sim_inv cenv cx env es /\
+Theorem body_assign_copy_target_vis_mods:
+  !mods exps tops ctx cenv cx src id vis mut ty ast_slot env es ret_ty e env'.
+    contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+    supported_variable_decl tops (NONE,id) = SOME (vis,mut,ty,SOME ast_slot) /\
+    (mut = Storage \/ mut = Transient) /\ env_consistent env cx es /\
     type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) =
       SOME env' ==>
-    src = NONE /\ get_module_code cx NONE = SOME tops /\
-    cenv.ce_hashmap_info (NONE,id) = NONE /\
-    cenv.ce_module_var_type (NONE,id) = SOME ty /\
+    get_module_code cx src = SOME tops /\
+    cenv.ce_hashmap_info (src,id) = NONE /\
+    cenv.ce_module_var_type (src,id) = SOME ty /\
     ?tr id_str off tvt.
       find_var_decl_by_name id tops = SOME (StorageVarDecl tr ty,id_str) /\
-      lookup_var_slot_from_layout cx tr NONE id_str = SOME off /\
+      lookup_var_slot_from_layout cx tr src id_str = SOME off /\
       evaluate_type (get_tenv cx) ty = SOME tvt
 Proof
-  rpt gen_tac >> strip_tac >> (
-  `ALL_DISTINCT
-     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
-   get_module_code cx NONE = SOME tops /\
-   cenv.ce_hashmap_info = build_hashmap_info tops /\
-   cenv.ce_module_var_type (NONE,id) = build_var_type_map tops (NONE,id)` by
-    fs[body_inv_def] >>
-  drule supported_variable_decl_storage_binding >> disch_then drule >>
-  (impl_tac >- fs[]) >> strip_tac >> gvs[] >>
-  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  Cases_on `type_place_target env (TopLevelNameTarget (NONE,id))` >>
+  rpt gen_tac >> REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all_then strip_assume_tac storage_binding_mods >>
+  qpat_x_assum `mut = Storage \/ mut = Transient` kall_tac >>
+  Cases_on `type_place_target env (TopLevelNameTarget (src,id))` >>
   gvs[type_stmt_def, atarget_accepts_def] >>
   rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
   gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
@@ -319,7 +326,7 @@ Proof
       first_x_assum drule >> strip_tac >> gvs[]) >>
   drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
   strip_tac >> gvs[] >>
-  gvs[optionTheory.IS_SOME_EXISTS])
+  gvs[optionTheory.IS_SOME_EXISTS]
 QED
 
 (* ===== FlagDecl and ErrorDecl entries ===== *)

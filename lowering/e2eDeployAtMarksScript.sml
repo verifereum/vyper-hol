@@ -19,6 +19,8 @@
  *)
 Theory e2eDeployAtMarks
 Ancestors
+  codegenLabelDisciplined fnPlanPlaceRevertPostamble finite_map
+  ownSymSrcUnit gasFocusOptLabelFlow[qualified,ignore_grammar] codegenSymOwnRel ctorDeployRawEntryFacts
   e2eDeployDefs e2eDefs ctorDeployDefs deployUnitExecution deployUnitExitSafe
   ctorDeployMemoryFrontier ctorDeployImmBudget ctorDeployInitcode
   ctorDeployEntry ctorDeployShape ctorDeployDefsReach ctorDeployDead
@@ -26,7 +28,7 @@ Ancestors
   ctorDeployFrame compileVyper codegen e2eProducers e2eComposition e2eEntry
   o1PipelineCorrect o1PipelineCompose o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs gasSummary vyperStorageFootprint
-  deploySymSrcUnit codegenAsmOpt codegenSymRel codegenEntryRel asmFrameRel
+  deploySymSrcGeneratorFrame[qualified] runtimeSymSrcPackageTransport[qualified] codegenAsmOpt codegenSymRel codegenEntryRel asmFrameRel
   compilePhasesProps asmOptimizer contextCodegenRel contextRawReachable
   contextPlanLayoutProps asmDataSuffixProps frameRel codegenRel
   loweringStateRelDefs vyperArith callTrace memSafeRun frameObsStep
@@ -107,6 +109,41 @@ Proof
   rewrite_tac[GSYM CONJ_ASSOC]
 QED
 
+Theorem opt_deploy_asm_rels_own:
+  !tops prog prog' am tx es cplan.
+    deploy_state_rel tops (assemble prog') am tx es /\
+    assemble prog' <> [] ==>
+    (opt_deploy_entry_state_own prog prog' cplan tops es).vs_code =
+      assemble prog' ++ (opt_deploy_entry_state_own prog prog' cplan tops es).vs_data_section /\
+    codegen_asm_entry_rel_reloc (lo_reloc prog prog') cplan prog
+      (opt_deploy_entry_state_own prog prog' cplan tops es)
+      (entry_asm_state (opt_deploy_entry_state_own prog prog' cplan tops es)
+        (shadow_root es)) /\
+    asm_frame_rel prog'
+      (opt_deploy_entry_state_own prog prog' cplan tops es).vs_data_section
+      (shadow_root es)
+      (entry_asm_state (opt_deploy_entry_state_own prog prog' cplan tops es)
+        (shadow_root es))
+      (shadow_root es)
+Proof
+  rpt strip_tac >>
+  `wf_state (shadow_root es)` by fs[deploy_state_rel_def, shadow_root_wf_state] >>
+  fs[deploy_state_rel_def] >>
+  drule shadow_root_single >> strip_tac >>
+  `es.txParams.blockNumber < dimword (:256)` by
+    (fs[e2eDefsTheory.tx_block_fields_rel_def, tx_env_ok_def] >>
+     irule lt_dimword_256 >> qexists_tac `255` >> simp[]) >>
+  simp[codegen_asm_entry_rel_reloc_def, asm_frame_rel_def, asm_evm_rel_def,
+       entry_asm_state_def, shared_state_rel_def, venom_asm_terminal_rel_def,
+       opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+       data_suffix_assemble, asm_pc_to_offset_zero, entry_venom_state_frame_fields,
+       finite_mapTheory.FLOOKUP_o_f] >>
+  gvs[entry_venom_state_def, venomStateTheory.init_venom_state_def,
+      contextCodegenRelTheory.context_memory_rel_def, wordsTheory.w2n_n2w,
+      listTheory.DROP_APPEND, CONJ_ASSOC] >>
+  gen_tac >> Cases_on `FLOOKUP (lo_reloc prog prog') l` >> simp[]
+QED
+
 Theorem deploy_venom_result_rel_code_update[local]:
   deploy_venom_result_rel H tops runtime_bc (tx with code := c) src vr =
   deploy_venom_result_rel H tops runtime_bc tx src vr
@@ -141,10 +178,66 @@ QED
 
 (* The bridges at the deployment entry: the S4 memory facts of vs from its
    memory-safe and pointer-safe runs from "__deploy". *)
+Theorem deploy_selected_memory_from_checked:
+  deploy_phases policy tops (deploy_bc, runtime_bc)
+    (rpolicy, dunit, dout, prog, cplan) /\
+  vs.vs_alloca_next = imm_len tops /\
+  ctx_has_dalloca dunit.cu_context /\
+  (ctx_has_dalloca dunit.cu_context ==>
+     imm_len tops + unit_alloca_budget dunit.cu_context +
+       32 * ctx_dload_count dunit.cu_context <= w2n vs.vs_initial_fmp) /\
+  code_layout_valid vs /\
+  lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME func /\
+  fn_entry_label func = SOME "__deploy" /\
+  (!fuel. mem_safe_blocks fuel dunit.cu_context func
+     (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                 vs_inst_idx := 0 |>)) /\
+  (!fuel. ptr_safe_blocks D (imm_len tops) fuel dunit.cu_context func [] FEMPTY
+     entry_taint
+     (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                 vs_inst_idx := 0 |>)) ==>
+  raw_unit_memory_ok dunit.cu_context vs /\
+  ptr_discipline (imm_len tops) dunit.cu_context vs /\
+  taint_within D dunit.cu_context vs /\
+  mem_inv dload_offset_ok dunit.cu_context vs /\
+  mem_inv dload_headroom_ok dunit.cu_context vs
+Proof
+  strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
+  `dunit.cu_context.ctx_entry = SOME "__deploy"` by
+    (drule lower_vyper_deploy_unit_entry >> simp[]) >>
+  drule deploy_imm_alloca_budget_ok >> strip_tac >>
+  `imm_len tops + unit_alloca_budget dunit.cu_context < dimword (:256)` by
+    decide_tac >>
+  `ptr_discipline (imm_len tops) dunit.cu_context vs /\
+   taint_within D dunit.cu_context vs` by
+    (match_mp_tac (Q.SPECL [`D`, `imm_len tops`, `dunit.cu_context`,
+        `"__deploy"`, `func`, `"__deploy"`, `vs`] lowered_unit_ptr_taint) >>
+     simp[]) >>
+  `!f inst s. raw_reachable vs dunit.cu_context f inst s ==>
+      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (match_mp_tac (Q.SPECL [`imm_len tops`, `dunit.cu_context`,
+        `"__deploy"`, `func`, `"__deploy"`, `vs`] lowered_unit_checked_dalloca_facts) >>
+     simp[]) >>
+  simp[] >> rpt conj_tac
+  >- (qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `func`,
+                   `"__deploy"`, `vs`] mp_tac lowered_unit_raw_memory_ok_from_no_wrap >>
+      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[])
+  >- (qspecl_then [`dunit.cu_context`, `"__deploy"`, `func`, `"__deploy"`,
+                   `vs`] mp_tac lowered_unit_dload_offset_ok >>
+      impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[]) >>
+  qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `func`, `vs`]
+    mp_tac lowered_unit_dload_headroom_ok_from >>
+  impl_tac >- (gvs[] >> first_assum ACCEPT_TAC) >> simp[]
+QED
+
 Theorem deploy_selected_memory:
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_source_ok tops am tx /\
+  ~ctx_has_dalloca dunit.cu_context /\
   vs.vs_alloca_next = imm_len tops /\
   w2n vs.vs_initial_fmp <= w2n vs.vs_fmp /\
   code_layout_valid vs /\
@@ -168,7 +261,7 @@ Proof
     fs[deploy_phases_def] >>
   drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
   drule lower_vyper_deploy_unit_entry >> strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   drule deploy_imm_alloca_budget_ok >> strip_tac >>
   `EVERY pre_fmp_ops dunit.cu_context.ctx_functions` by
     (rw[listTheory.EVERY_MEM] >> irule source_pre_fmp_ops >> metis_tac[]) >>
@@ -195,10 +288,11 @@ QED
 (* The entry state's own facts: its callee outcomes, its code layout, and the
    compiled entry state's initial context relation. *)
 Theorem deploy_entry_facts[local]:
+  fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
   deploy_phases policy tops (assemble prog, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_state_rel tops (assemble prog') am tx es /\
-  vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
+  vs_out = opt_deploy_entry_state_own prog prog' cplan tops es /\
   txp = tx with code := vs_out.vs_code /\
   deploy_source_ok tops am txp /\
   raw_variant fmp vs vs_out ==>
@@ -208,36 +302,27 @@ Theorem deploy_entry_facts[local]:
   vs.vs_initial_fmp = fmp /\ vs.vs_fmp = fmp
 Proof
   strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
   `o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
    codegen_assembly rpolicy dout.po_unit = SOME prog` by
     fs[deploy_phases_def] >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
-  drule_all deploy_bc_size_bounded >> strip_tac >>
-  `?args_bytes.
-     (FST (HD es.contexts)).msgParams.code = assemble prog' ++ args_bytes /\
-     constructor_args_encode tops txp args_bytes` by
-    (fs[deploy_state_rel_def, constructor_args_encode_def] >> metis_tac[]) >>
-  `LENGTH args_bytes < 2 ** 128` by
-    metis_tac[constructor_args_size_bounded] >>
-  drule_all codegen_assembly_asm_encoding_wf >> strip_tac >>
-  `FLOOKUP (SND (compute_label_offsets prog)) "code_end" =
-     SOME (LENGTH (assemble prog))` by
-    (irule immutable_code_end_length >>
-     fs[deploy_phases_def] >> metis_tac[listTheory.APPEND_ASSOC]) >>
-  `LENGTH args_bytes + LENGTH (assemble prog) <= dimword (:256) DIV 2` by
-    (fs[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
-     decide_tac) >>
+  `txp = tx` by
+    (qpat_assum `vs_out = _` (fn th => asm_rewrite_tac [th]) >>
+     drule_all deploy_own_txp_identity >> simp[]) >>
   `code_layout_valid vs_out` by
-    simp[code_layout_valid_def, opt_deploy_entry_state_def,
-         opt_entry_state_def, entry_venom_state_frame_fields,
-         rich_listTheory.DROP_LENGTH_APPEND] >>
+    (Q.SUBGOAL_THEN
+       `code_layout_valid
+          (vs_out with <|vs_gas_readings := vs_out.vs_gas_readings;
+                         vs_fmp := fmp; vs_initial_fmp := fmp|>)` mp_tac
+     >- (gvs[] >> irule deploy_raw_entry_code_layout >> metis_tac[]) >>
+     simp[code_layout_valid_def]) >>
   `code_layout_valid vs` by
     (MATCH_MP_TAC (Q.INST
        [`si` |-> `vs`, `so` |-> `vs_out with <|vs_fmp := fmp; vs_initial_fmp := fmp|>`]
        gas_variant_code_layout_valid) >>
-     conj_tac >- metis_tac[raw_variant_def] >>
+     conj_tac >- fs[raw_variant_def] >>
      qpat_x_assum `code_layout_valid vs_out` mp_tac >>
      simp[code_layout_valid_def]) >>
   qpat_x_assum `raw_variant _ _ _` mp_tac >>
@@ -245,7 +330,7 @@ Proof
   disch_then (mp_tac o Q.AP_TERM
     `\s:venom_state. (s.vs_outcomes, s.vs_alloca_next,
        s.vs_initial_fmp, s.vs_fmp)`) >>
-  simp[opt_deploy_entry_state_def, opt_entry_state_def,
+  simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
        entry_venom_state_frame_fields, entry_venom_state_def] >>
   metis_tac[]
 QED
@@ -255,13 +340,12 @@ QED
 Theorem deploy_correct_at_tail[local]:
   fin IN accepted_finalizers /\
   fin rpolicy prog = SOME prog' /\
-  (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
   compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
   deploy_phases policy tops (assemble prog, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   deploy_state_rel tops (assemble prog') am tx es /\
   LENGTH (call_trace es) < 2 ** 64 /\
-  vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
+  vs_out = opt_deploy_entry_state_own prog prog' cplan tops es /\
   txp = tx with code := vs_out.vs_code /\
   deploy_source_ok tops am txp /\
   ~(?t. runtime_bc = 0xEFw :: t) /\
@@ -316,7 +400,7 @@ Proof
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
     fs[deploy_phases_def] >>
   drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_o1_shape_ok >> strip_tac >>
   qspecl_then [`marks`, `tops`, `runtime_bc`, `am`, `txp`, `dunit`, `vs`, `tail`]
     mp_tac deploy_unit_exit_safe_runs >>
   impl_tac >- gvs[] >> strip_tac >>
@@ -324,7 +408,19 @@ Proof
     (deploy_storage_trace (SOME vs.vs_outcomes)
        (gas_explicit marks vs.vs_gas_readings ++ tail) am txp tops)` >>
   `w2n vs.vs_initial_fmp <= w2n vs.vs_fmp` by simp[] >>
-  drule_all deploy_selected_memory >> strip_tac >>
+  `raw_unit_memory_ok dunit.cu_context vs /\
+   ptr_discipline (imm_len tops) dunit.cu_context vs /\
+   taint_within (deploy_dead H tops runtime_bc am txp) dunit.cu_context vs /\
+   mem_inv dload_offset_ok dunit.cu_context vs /\
+   mem_inv dload_headroom_ok dunit.cu_context vs` by
+    (Cases_on `ctx_has_dalloca dunit.cu_context`
+     >- (irule deploy_selected_memory_from_checked >>
+         rpt conj_tac >>
+         TRY (first_assum ACCEPT_TAC) >>
+         TRY (qexistsl_tac [`cplan`, `assemble prog`, `dout`, `policy`,
+                             `prog`, `rpolicy`, `runtime_bc`] >> simp[]) >>
+         gvs[]) >>
+     metis_tac[deploy_selected_memory]) >>
   `ctx_sim (deploy_dead H tops runtime_bc am txp) dunit.cu_context
      dout.po_unit.cu_context vs vs_out /\
    (fin = asm_opt_finalizer ==>
@@ -347,9 +443,9 @@ Proof
                `run_context fuel dunit.cu_context vs`,
                `run_context fuel' dout.po_unit.cu_context vs_out`] mp_tac
     deploy_venom_result_rel_dead >>
-  impl_tac >- gvs[] >> strip_tac >>
+  impl_tac >- gvs[deploy_state_rel_def] >> strip_tac >>
   `vs_out.vs_initial_fmp = n2w cplan.cp_initial_fmp` by
-    fs[opt_deploy_entry_state_def, opt_entry_state_def, entry_venom_state_def] >>
+    fs[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def] >>
   `o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
    codegen_assembly rpolicy dout.po_unit = SOME prog /\
    generate_context_plan dout.po_unit.cu_context = SOME cplan` by
@@ -363,7 +459,7 @@ Proof
     (Cases_on `fin = K SOME`
      >- (`prog' = prog` by fs[] >>
          `vs_out = deploy_entry_state prog cplan tops es /\ txp = tx` by
-           metis_tac[opt_deploy_entry_state_identity, deploy_txp_identity] >>
+           metis_tac[opt_deploy_entry_state_own_identity, deploy_own_txp_identity] >>
          qpat_x_assum `prog' = prog` SUBST_ALL_TAC >>
          qpat_x_assum `txp = tx` SUBST_ALL_TAC >>
          drule_all deploy_initcode_half_bounded >> strip_tac >>
@@ -373,25 +469,20 @@ Proof
            mp_tac codegen_correct >>
          impl_tac >- gvs[] >> disch_then ACCEPT_TAC) >>
      `fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
-     `supported_program tops /\ supported_program_deploy tops /\
-      ~program_reads_self_code tops` by fs[deploy_source_ok_def] >>
-     `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-       (fs[deploy_source_ok_def] >> metis_tac[deploy_typing_ok_vtype_keys_distinct]) >>
-     drule_all lower_vyper_deploy_unit_sym_src_ok >> strip_tac >>
+     `supported_program tops /\ supported_program_deploy tops` by fs[deploy_source_ok_def] >>
+     drule_all lower_vyper_deploy_unit_sym_src_ok_own >> strip_tac >>
      drule_all deploy_unit_defs_reach_uses >> strip_tac >>
-     drule_all o1_pipeline_label_flow_preserved >> strip_tac >>
+     drule_all gasFocusOptLabelFlowTheory.focus_opt_label_flow_own >> strip_tac >>
      drule_all o1_pipeline_sym_unit_static_ok >> strip_tac >>
-     drule_all opt_deploy_codegen_asm_entry_rel >>
-     disch_then (qspecl_then [`prog`, `cplan`] assume_tac) >>
      `assemble prog' <> []` by
        (irule codegen_assembly_finalizer_nonempty >> metis_tac[]) >>
-     drule_all opt_deploy_asm_frame_rel >>
-     disch_then (qspecl_then [`prog`, `cplan`] assume_tac) >>
+     qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`]
+       mp_tac opt_deploy_asm_rels_own >>
+     impl_tac >- simp[] >> disch_then strip_assume_tac >>
      qspecl_then [`fuel'`, `rpolicy`, `dout.po_unit`, `cplan`, `prog`, `prog'`,
                   `raw_reachable vs_out`, `vs_out`, `shadow_root es`]
-       mp_tac codegen_correct_asm_opt >>
-     impl_tac
-     >- gvs[opt_deploy_entry_state_def, opt_entry_state_def] >>
+       mp_tac codegen_correct_asm_opt_own >>
+     impl_tac >- gvs[] >>
      disch_then ACCEPT_TAC) >>
   `deploy_venom_result_rel H tops runtime_bc tx
      (load_contract (SOME vs.vs_outcomes)
@@ -418,13 +509,12 @@ Theorem e2e_deploy_correct_from_gas_link:
    am tx txp es vs_out fmp r es'.
     fin IN accepted_finalizers /\
     fin rpolicy prog = SOME prog' /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_state_rel tops (assemble prog') am tx es /\
     LENGTH (call_trace es) < 2 ** 64 /\
-    vs_out = opt_deploy_entry_state prog prog' cplan tops es /\
+    vs_out = opt_deploy_entry_state_own prog prog' cplan tops es /\
     txp = tx with code := vs_out.vs_code /\
     deploy_source_ok tops am txp /\
     ~(?t. runtime_bc = 0xEFw :: t) /\

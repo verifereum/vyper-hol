@@ -80,6 +80,12 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
        i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code` by
     simp[Abbr `code`, abi_decode_header_insts_def, mk_inst_def, is_terminator_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      dalloca_no_wrap i u)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) code` by
+       simp[Abbr `code`, abi_decode_header_insts_def, mk_inst_def] >>
+     rpt strip_tac >> fs[EVERY_APPEND]) >>
   `?bb. lookup_block hdr func.fn_blocks = SOME bb /\
     bb.bb_instructions = code ++ [mk_inst (id+4) JNZ [Var done;Label exit_lbl;Label body_lbl] []]` by
     (gvs[abi_decode_loop_cfg_def, Abbr `code`, abi_decode_header_insts_def]) >>
@@ -88,7 +94,9 @@ Proof
   `gas_path_mem ctx func s 0 (OK (hs with vs_inst_idx := 4)) /\
    hs.vs_gas_readings = s.vs_gas_readings /\
    alloca_history func (hs with vs_inst_idx := 4)` by
-    (irule ctor_checked_sequence_endpoint >> simp[] >> qexists_tac `code` >> simp[IS_PREFIX_APPEND]) >>
+    (irule ctor_checked_sequence_endpoint >> simp[] >> qexists_tac `code` >>
+     simp[IS_PREFIX_APPEND] >>
+     qpat_assum `ptrDiscipline$ctx_has_dalloca _ ==> _` mp_tac >> simp[]) >>
   qmatch_asmsub_abbrev_tac `alloca_history func u` >>
   `~u.vs_halted /\ u.vs_current_bb = hdr /\ u.vs_inst_idx = 4` by
     simp[Abbr `u`, Abbr `hs`, abi_decode_header_state_def, update_var_def] >>
@@ -260,8 +268,9 @@ Proof
     (irule below_frontier_no_ranges >> simp[]) >>
   `memSafeRun$inst_dload_in_section inst s` by
     simp[memSafeRunTheory.inst_dload_in_section_def] >>
-  drule_all straight_line_mem_edge >>
-  disch_then (qspec_then `ctx` assume_tac) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==> dalloca_no_wrap inst s)` by
+    simp[memSafeRunTheory.dalloca_no_wrap_non_dalloca] >>
+  drule_all straight_line_mem_edge >> strip_tac >>
   `~t.vs_halted` by
     (drule step_inst_base_preserves_all >> simp[] >> metis_tac[]) >>
   `gas_path_mem ctx func (t with vs_inst_idx := SUC s.vs_inst_idx) 0
@@ -287,8 +296,13 @@ Proof
   strip_tac >> drule ctor_actual_index_insts >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st st')` by simp[mk_inst_def, is_terminator_def] >>
-  drule_all run_inst_seq_gas_path_mem >>
-  disch_then (qspec_then `ctx` assume_tac) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st st')` by
+       simp[mk_inst_def] >>
+     rpt strip_tac >> fs[EVERY_APPEND]) >>
+  drule_all run_inst_seq_gas_path_mem >> strip_tac >>
   `gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := s.vs_inst_idx + 2))` by
     gvs[mk_inst_def] >>
   drule gas_path_mem_ok_suffix >> simp[] >> strip_tac >> simp[] >>
@@ -478,8 +492,14 @@ Proof
      qexists `emitted_insts st st'` >> simp[] >> rpt strip_tac >>
      `~is_terminator i.inst_opcode` by (fs[EVERY_MEM] >> metis_tac[]) >>
      drule_all step_inst_base_preserves_all >> simp[]) >>
-  drule_all ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==> dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     qpat_x_assum `EVERY (\i. abi_decoder_reentry_opcode _) _` mp_tac >>
+     simp[EVERY_APPEND] >> strip_tac >>
+     Cases_on `i.inst_opcode = DALLOCA` >> fs[abi_decoder_reentry_opcode_def]) >>
+  drule_all ctor_checked_emitted_endpoint >> strip_tac >>
   drule_all ctor_word_path_sim >> strip_tac >>
   qexists `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   gvs[instIdxIndepTheory.eval_op_inst_idx, abi_decode_frame_def,
@@ -771,8 +791,14 @@ Proof
      qexists `emitted_insts st st'` >> simp[] >> rpt strip_tac >>
      `~is_terminator i.inst_opcode` by (fs[EVERY_MEM] >> metis_tac[]) >>
      drule_all step_inst_base_preserves_all >> simp[]) >>
-  drule_all ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre initial = OK u ==> dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     qpat_x_assum `EVERY (\i. abi_decoder_reentry_opcode _ /\ _) _` mp_tac >>
+     simp[EVERY_APPEND] >> strip_tac >>
+     Cases_on `i.inst_opcode = DALLOCA` >> fs[abi_decoder_reentry_opcode_def]) >>
+  drule_all ctor_checked_emitted_endpoint >> strip_tac >>
   drule_all ctor_word_path_sim >> strip_tac >>
   qexists `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   gvs[instIdxIndepTheory.eval_op_inst_idx, abi_decoder_address_frame_def,
@@ -910,13 +936,22 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code` by
     simp[Abbr `code`, abi_decode_backedge_insts_def, mk_inst_def, is_terminator_def] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      dalloca_no_wrap i u)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) code` by
+       simp[Abbr `code`, abi_decode_backedge_insts_def, mk_inst_def] >>
+     rpt strip_tac >> fs[EVERY_APPEND]) >>
   `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
     simp[Abbr `code`, abi_decode_backedge_insts_def, IS_PREFIX_APPEND, DROP_LENGTH_APPEND] >>
   `gas_path_mem ctx func s 0 (OK (hs with vs_inst_idx := s.vs_inst_idx + LENGTH code)) /\
    hs.vs_gas_readings = s.vs_gas_readings /\
    alloca_history func (hs with vs_inst_idx := s.vs_inst_idx + LENGTH code)` by
     (irule ctor_checked_sequence_endpoint >> goal_assum (drule_at Any) >> simp[] >>
-     qexists `code` >> simp[] >> metis_tac[]) >>
+     qexists `code` >> simp[] >>
+     qpat_assum `ptrDiscipline$ctx_has_dalloca _ ==> _` mp_tac >>
+     simp[Abbr `code`, abi_decode_backedge_insts_def, DROP_LENGTH_APPEND,
+          IS_PREFIX_APPEND]) >>
   qmatch_asmsub_abbrev_tac `alloca_history func u` >>
   `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\
     u.vs_inst_idx = LENGTH prefix + 2` by
@@ -1300,8 +1335,14 @@ Proof
   drule_all ctor_checked_array_setup_mem_ok >> strip_tac >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   `t.vs_allocas = s.vs_allocas` by fs[abi_decoder_address_frame_def] >>
-  drule_all ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st st' = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     qpat_x_assum `EVERY (\i. abi_decoder_reentry_opcode _) _` mp_tac >>
+     simp[EVERY_APPEND] >> strip_tac >>
+     Cases_on `i.inst_opcode = DALLOCA` >> fs[abi_decoder_reentry_opcode_def]) >>
+  drule_all ctor_checked_emitted_endpoint >> strip_tac >>
   qexists `t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   gvs[abi_decoder_address_frame_def, abi_encoder_registered_effect_def,
       fresh_vars_wrt_def, eval_op_inst_idx]

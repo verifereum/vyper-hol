@@ -1,6 +1,6 @@
 Theory bodyFullStoreSlotsOffset
 Ancestors
-  immutableOffsetPtr fragGasCopyLoop typedCopyOriginPtrBase
+  immutableOffsetPtr fragGasCopyLoop fragGasCopySeqLiftProps typedCopyOriginPtrBase
   context compileEnv exprSimCopy fragGasOriginPtr venomExecSemantics
   ptrDiscipline venomState words venomInst fragExec instMemFrontier
   logTopicScalarPtr typedCopyPtr fragGasSeqPtr fragExecMem
@@ -30,6 +30,13 @@ Proof
      irule (cj 1 typed_copy_origin_ptr_binop_checks) >>
      simp[op_taint_def, ptrDisciplineTheory.allocas_from_def] >>
      metis_tac[ptrDisciplineTheory.allocas_from_def]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+       [mk_inst id ADD [op;Lit off] [out]] = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     qpat_x_assum `[_] = _ ++ _` (mp_tac o SYM) >>
+     simp[listTheory.APPEND_EQ_SING] >> strip_tac >>
+     simp[dalloca_no_wrap_non_dalloca, mk_inst_def]) >>
   conj_tac
   >- (gen_tac >>
       irule (SRULE [GSYM arithmeticTheory.ADD1]
@@ -41,7 +48,8 @@ Proof
         inst_mem_below_frontier_def, inst_dload_in_section_def,
         source_memory_read_ranges_def, source_memory_write_ranges_def,
         mk_inst_def, is_terminator_def] >>
-      Cases_on `DROP s.vs_inst_idx bb.bb_instructions` >> gvs[mk_inst_def]) >>
+      Cases_on `DROP s.vs_inst_idx bb.bb_instructions` >> gvs[mk_inst_def] >>
+      first_assum ACCEPT_TAC) >>
   irule logTopicScalarPtrTheory.inst_seq_ptr_immutable_taint_frame >>
   goal_assum (drule_at Any) >> simp[mk_inst_def]
 QED

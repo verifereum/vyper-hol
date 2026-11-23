@@ -1,6 +1,7 @@
 Theory fnBlockPlanStaticInventory
 Ancestors
-  inputMaterialised reorderStages
+  inputMaterialised reorderStages reorderPreparationProps
+  reorderPreparationInventoryProps fnPlanLineageInventory
   stackModel stackPlanOps planWf doSwapSim reorderSim sorting list rich_list pred_set
   fnFrameStepsRevertForward stackPlanGen livenessDefs cfgDefs venomInst venomWf
   fnBlockPlanStaticRetRegion genericInputReady
@@ -792,6 +793,7 @@ Theorem inventory_reorder_pop_exhausted:
   (!x. MEM x pending ==> LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
   MEM op pending /\
   LIST_ELEM_COUNT op ps.ps_stack = LIST_ELEM_COUNT op pending /\
+  (~is_var_operand op \/ FLOOKUP ps.ps_spilled op = NONE) /\
   reorder_plan dfg pending ps = (ops, qs) ==>
   ~MEM op (stack_pop (LENGTH pending) qs.ps_stack)
 Proof
@@ -801,11 +803,12 @@ Proof
     (metis_tac[reorder_plan_materialised_order]) >>
   `LENGTH pending <= LENGTH qs.ps_stack` by
     (irule reorder_plan_materialised_length_floor >> metis_tac[]) >>
-  `!x. MEM x pending ==> LIST_ELEM_COUNT x qs.ps_stack = LIST_ELEM_COUNT x ps.ps_stack` by
-    (metis_tac[reorder_plan_materialised_counts]) >>
+  `~(is_var_operand op /\ op IN FDOM ps.ps_spilled)` by
+    gvs[finite_mapTheory.FLOOKUP_DEF] >>
   `qs.ps_stack = stack_pop (LENGTH pending) qs.ps_stack ++ pending` by
     (irule fixed_suffix_decompose >> simp[]) >>
-  `LIST_ELEM_COUNT op qs.ps_stack = LIST_ELEM_COUNT op ps.ps_stack` by simp[] >>
+  `LIST_ELEM_COUNT op qs.ps_stack = LIST_ELEM_COUNT op ps.ps_stack` by
+    (drule_all reorder_plan_materialised_counts >> simp[]) >>
   `LIST_ELEM_COUNT op qs.ps_stack =
     LIST_ELEM_COUNT op (stack_pop (LENGTH pending) qs.ps_stack) +
     LIST_ELEM_COUNT op pending` by metis_tac[elem_count_append] >>
@@ -855,92 +858,19 @@ Proof
   metis_tac[PERM_MEM_EQ]
 QED
 
-Theorem inventory_restore_physical_origin[local]:
-  do_restore op ps = (ops,qs) ==>
-  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ x = op
-Proof
-  simp[do_restore_def] >> Cases_on `FLOOKUP ps.ps_spilled op` >>
-  simp[stack_push_def] >> rpt strip_tac >> gvs[]
-QED
-
 Theorem inventory_poke_physical_origin[local]:
   MEM x (stack_poke d op stk) ==> MEM x stk \/ x = op
 Proof
   simp[stack_poke_def, MEM_LUPDATE] >> metis_tac[EL_MEM]
 QED
 
-Theorem inventory_two_swaps_origin[local]:
-  d < LENGTH ps.ps_stack /\ f <= 16 /\
-  do_swap d ps = (ops,mid) /\ do_swap f mid = (ops',qs) ==>
-  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack
-Proof
-  strip_tac >>
-  `!x. MEM x mid.ps_stack ==> MEM x ps.ps_stack` by
-    (metis_tac[inventory_swap_physical_origin]) >>
-  `!x. MEM x qs.ps_stack ==> MEM x mid.ps_stack` by
-    (metis_tac[inventory_swap_physical_origin]) >>
-  metis_tac[]
-QED
-
-Theorem inventory_reorder_one_physical_origin[local]:
-  LENGTH pending <= 16 /\ reorder_one dfg pending idx op ps = (ops,qs) ==>
-  !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ x = op
-Proof
-  strip_tac >> qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
-  simp_tac bool_ss [reorder_one_def, LET_THM] >>
-  pairarg_tac >>
-  `!x. MEM x ps1.ps_stack ==> MEM x ps.ps_stack \/ x = op` by
-    (gvs[AllCaseEqs()] >> metis_tac[inventory_restore_physical_origin]) >>
-  qmatch_goalsub_abbrev_tac `stack_get_unfixed_depth op f n` >>
-  `f <= 16` by (simp[Abbr `f`, Abbr `n`] >> decide_tac) >>
-  Cases_on `stack_get_unfixed_depth op f n ps1.ps_stack`
-  >- (simp[] >> rpt strip_tac >> gvs[]) >>
-  simp[] >> pairarg_tac >>
-  `!x. MEM x ps2.ps_stack ==> MEM x ps1.ps_stack` by
-    (qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
-     IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
-     metis_tac[inventory_reduce_physical_origin]) >>
-  Cases_on `stack_get_unfixed_depth op f n ps2.ps_stack`
-  >- (simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  rename1 `stack_get_unfixed_depth op f n ps2.ps_stack = SOME dist` >>
-  `dist < LENGTH ps2.ps_stack` by metis_tac[stack_get_unfixed_depth_bound] >>
-  simp_tac (srw_ss()) [] >> Cases_on `dist = f`
-  >- (simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  Cases_on `f < LENGTH ps2.ps_stack` >> simp[] >>
-  TRY (rename1 `operand_equiv dfg op _` >>
-       Cases_on `operand_equiv dfg op (stack_peek f ps2.ps_stack)` >> simp[]) >>
-  rpt (pairarg_tac >> simp[]) >> rpt strip_tac >> gvs[]
-  >~ [`MEM _ (stack_poke _ _ _)`]
-  >- (`MEM (stack_peek f ps2.ps_stack) ps2.ps_stack` by
-        metis_tac[stack_peek_mem] >>
-      metis_tac[inventory_poke_physical_origin]) >>
-  metis_tac[inventory_two_swaps_origin]
-QED
-
-Theorem inventory_reorder_steps_origin[local]:
-  !items ps ops qs pending dfg.
-    EVERY (\(idx,op). MEM op pending) items /\ LENGTH pending <= 16 /\
-    plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps = (ops,qs) ==>
-    !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ MEM x pending
-Proof
-  Induct >> simp[foldlSimTheory.plan_steps_def] >> rpt gen_tac >>
-  PairCases_on `h` >> simp[] >> strip_tac >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `reorder_one dfg pending idx op ps = (step_ops,mid)` >>
-  `!x. MEM x mid.ps_stack ==> MEM x ps.ps_stack \/ x = op` by
-    metis_tac[inventory_reorder_one_physical_origin] >>
-  qpat_x_assum `!ps ops qs pending dfg. _` drule >> simp[] >> metis_tac[]
-QED
-
 Theorem inventory_reorder_bounded_physical_origin[local]:
   LENGTH pending <= 16 /\ reorder_plan dfg pending ps = (ops,qs) ==>
   !x. MEM x qs.ps_stack ==> MEM x ps.ps_stack \/ MEM x pending
 Proof
-  strip_tac >>
-  `EVERY (\(idx,op). MEM op pending) (MAPi (\i op. (i,op)) pending)` by
-    simp[EVERY_EL, indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi, EL_MEM] >>
-  gvs[reorder_plan_eq_plan_steps] >>
-  metis_tac[inventory_reorder_steps_origin]
+  strip_tac >> rpt strip_tac >>
+  `LENGTH pending <= 17` by decide_tac >>
+  metis_tac[reorder_plan_stack_support]
 QED
 
 Theorem inventory_emit_one_physical_origin:
@@ -1069,6 +999,10 @@ Proof
     metis_tac[stackPlanTypesTheory.is_var_operand_def, finite_mapTheory.FLOOKUP_DEF, optionTheory.IS_SOME_EXISTS] >>
   `LIST_ELEM_COUNT (Var v) mid.ps_stack = LIST_ELEM_COUNT (Var v) operands` by
     (metis_tac[inventory_emit_dead_count, inventory_filter_count]) >>
+  `FLOOKUP mid.ps_spilled (Var v) = NONE` by
+    (drule emit_input_plan_vars_not_spilled >>
+     disch_then (qspec_then `Var v` mp_tac) >>
+     simp[finite_mapTheory.FLOOKUP_DEF, stackPlanTypesTheory.is_var_operand_def]) >>
   metis_tac[inventory_reorder_pop_exhausted]
 QED
 
@@ -1734,7 +1668,36 @@ Proof
   `EVERY (\(idx,op). idx < LENGTH target /\ MEM op target)
     (MAPi (\i op. (i,op)) target)` by
     simp[EVERY_EL, indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi, EL_MEM] >>
-  gvs[reorder_plan_eq_plan_steps] >> metis_tac[inventory_reorder_steps_partition]
+  drule reorder_plan_split >> strip_tac >>
+  rename1 `reorder_prepare_plan target ps = (prep,mid)` >>
+  qspecl_then [`target`, `ps`, `prep`, `mid`,
+    `\st trace out.
+       set target SUBSET set st.ps_stack /\ ALL_DISTINCT st.ps_stack /\
+       DISJOINT (set st.ps_stack) (FDOM st.ps_spilled) ==>
+       set target SUBSET set out.ps_stack /\ ALL_DISTINCT out.ps_stack /\
+       DISJOINT (set out.ps_stack) (FDOM out.ps_spilled) /\
+       set out.ps_stack SUBSET set st.ps_stack`]
+    (mp_tac o BETA_RULE) reorder_prepare_trace_relation >>
+  impl_tac
+  >- (rpt conj_tac
+      >- simp[]
+      >- metis_tac[SUBSET_TRANS]
+      >- (rpt gen_tac >> strip_tac >> strip_tac >>
+          `FLOOKUP st.ps_spilled op = NONE` by
+            (gvs[finite_mapTheory.flookup_thm, SUBSET_DEF, DISJOINT_ALT] >>
+             metis_tac[]) >>
+          gvs[do_restore_def])
+      >- (rpt gen_tac >> strip_tac >> strip_tac >>
+          drule_all inventory_reduce_partition >> strip_tac >>
+          conj_tac
+          >- (gvs[SUBSET_DEF] >> rpt strip_tac >>
+              metis_tac[reduce_depth_plan_keeps_pending_count, LIST_ELEM_COUNT_MEM]) >>
+          simp[SUBSET_DEF] >> metis_tac[inventory_reduce_physical_origin])
+      >- first_assum ACCEPT_TAC) >>
+  simp[] >> strip_tac >>
+  qspecl_then [`MAPi (\i op. (i,op)) target`, `mid`, `rest`, `qs`, `target`, `dfg`]
+    mp_tac inventory_reorder_steps_partition >>
+  simp[] >> strip_tac >> metis_tac[SUBSET_TRANS]
 QED
 
 Theorem inventory_reorder_distinct:
@@ -2443,14 +2406,6 @@ Proof
 QED
 
 
-Theorem inventory_selected_not_target[local]:
-  select_spill_candidate stk targets dist n = SOME cand ==>
-  ~MEM (stack_peek cand stk) targets
-Proof
-  simp[select_spill_candidate_def, LET_THM] >> strip_tac >>
-  drule FIND_SOME_MEM >> simp[]
-QED
-
 Theorem inventory_spill_key:
   d < LENGTH ps.ps_stack /\ do_spill_at d ps = (ops,qs) ==>
   ?off. qs.ps_spilled = ps.ps_spilled |+ (stack_peek d ps.ps_stack,off)
@@ -2481,7 +2436,7 @@ Proof
     (drule stack_get_unfixed_depth_bound >> decide_tac) >>
   `cand < LENGTH ps.ps_stack` by
     metis_tac[select_spill_candidate_bound] >>
-  drule inventory_selected_not_target >> strip_tac >>
+  drule select_spill_candidate_not_pending >> strip_tac >>
   Cases_on `do_spill_at cand ps` >> gvs[] >>
   rename1 `do_spill_at cand ps = (spill_ops,mid)` >>
   drule_all inventory_spill_key >> strip_tac >>
@@ -2700,13 +2655,35 @@ Theorem inventory_reorder_phase:
   reorder_plan dfg targets ps = (ops,qs) ==>
   EVERY P qs.ps_stack \/ LENGTH qs.ps_stack <= LENGTH targets
 Proof
-  disch_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `EVERY (\(idx,op). idx < LENGTH targets /\ MEM op targets)
       (MAPi (\i op. (i,op)) targets)` by
     simp[EVERY_EL, indexedListsTheory.LENGTH_MAPi,
          indexedListsTheory.EL_MAPi, EL_MEM] >>
-  gvs[reorder_plan_eq_plan_steps] >>
-  metis_tac[inventory_reorder_steps_phase]
+  drule reorder_plan_split >> strip_tac >>
+  rename1 `reorder_prepare_plan targets ps = (prep,mid)` >>
+  qspecl_then [`targets`, `ps`, `prep`, `mid`,
+    `\st trace out.
+       (!x. MEM x targets ==> FLOOKUP st.ps_spilled x = NONE) /\
+       (EVERY P st.ps_stack \/ LENGTH st.ps_stack <= LENGTH targets) ==>
+       (!x. MEM x targets ==> FLOOKUP out.ps_spilled x = NONE) /\
+       (EVERY P out.ps_stack \/ LENGTH out.ps_stack <= LENGTH targets)`]
+    (mp_tac o BETA_RULE) reorder_prepare_trace_relation >>
+  impl_tac
+  >- (rpt conj_tac
+      >- simp[]
+      >- metis_tac[]
+      >- (rpt gen_tac >> strip_tac >> strip_tac >>
+          `FLOOKUP st.ps_spilled op = NONE` by metis_tac[] >>
+          gvs[do_restore_def])
+      >- metis_tac[inventory_reduce_target_exclusion, inventory_reduce_phase]
+      >- first_assum ACCEPT_TAC) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qspecl_then [`MAPi (\i op. (i,op)) targets`, `mid`, `rest`, `qs`]
+    mp_tac inventory_reorder_steps_phase >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem inventory_restore_reorder_residual_support:
@@ -2832,7 +2809,7 @@ Theorem inventory_regular_jmp_marker_free:
 Proof
   strip_tac >>
   qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  `!s. reorder_plan dfg [] s = ([],s)` by simp[reorder_plan_def] >>
+  `!s. reorder_plan dfg [] s = ([],s)` by simp[reorder_plan_nil] >>
   simp[generate_regular_inst_plan_def, compute_operands_def,
        asmIRTheory.get_non_label_operands_def,
        emit_input_plan_def, LET_THM] >>

@@ -1,6 +1,8 @@
 (* Selecting a subplace from the current immutable representation. *)
 Theory bodyFullSubscriptLiveImmSelect
 Ancestors
+  exprBodyPreCallSafetyProps exprBodyPreTypingProps
+  bodyInvCodeProps bodyInvSplit bodyInvExecutionProps exprBodyPreProps alist
   bodyFullExtCallPosTransport bodySimFull loweringPosts
   exprSimSubscriptArrayLiveImmutableSuffix exprSimSubscriptArrayLiveImmutableView
   exprSimSubscriptArrayLiveImmutableMetadata exprSimWordArgs exprSimSource
@@ -16,7 +18,7 @@ Ancestors
   bodyFullSubscriptArrayCodeOps bodyFullSubscriptArrayCodeBounds
   bodyPtrSignedConvertSourceFrame exprSimSubscriptArrayEndpoint
   exprSimSubscriptArrayCompose bodyFullGhostFrame bodyFullPathHistory
-  targetSubscriptMemory bodyInvNoDalloca vyperStorageFootprint
+  targetSubscriptMemory vyperStorageFootprint
   exprSimSubscriptArraySuffix gasOutcomeFullCompose compileEnv bodyPtrDefs
   freshWrites wordArgsPtr gasSummary fragExec exprSimMemDefs venomState
 
@@ -166,7 +168,7 @@ Proof
   first_x_assum (qspec_then `obj` mp_tac) >> simp[expr_size_def] >> metis_tac[]
 QED
 
-Theorem constant_decl_mem_consts[local]:
+Theorem constant_decl_mem_consts:
   !tops acc id. constant_decl id tops ==>
     MEM id (MAP FST (module_consts_env tops acc))
 Proof
@@ -189,25 +191,30 @@ Proof
   TRY (IF_CASES_TAC >> gvs[]) >> metis_tac[]
 QED
 
-Theorem immutable_no_copy_index_access[local]:
-  body_inv tops ctx cenv cx /\
-  ~supported_expr_exists (const_name_root cx) obj /\
+Theorem contract_inv_subscript_overlap[local]:
+  contract_inv mods exps ctx cenv cx ==>
+  subscript_reads_base cx obj idx = subscript_overlap mods obj idx
+Proof
+  simp[contract_inv_def, subscript_reads_base_def]
+QED
+
+Theorem immutable_no_copy_index_access_mods[local]:
+  contract_inv mods exps ctx cenv cx /\
+  ~cx_const_name_mods mods (src,id) /\
   eval_expr cx obj es = (INL (PlaceR (ImmutablePlace src id path)),mid) /\
   is_ArrayT (expr_type obj) /\ base_through_dynarray obj /\
   ~subscript_reads_base cx obj idx ==>
-  ~MEM RiskyAcc (expr_accesses [(NONE,tops)] idx) /\
-  ~MEM (WriteAcc (StateRef (src,id))) (expr_accesses [(NONE,tops)] idx)
+  ~MEM RiskyAcc (expr_accesses mods idx) /\
+  ~MEM (WriteAcc (StateRef (src,id))) (expr_accesses mods idx)
 Proof
   strip_tac >>
-  `MEM (StateRef (src,id))
-       (nonconstant_reads [(NONE,tops)] (expr_accesses [(NONE,tops)] obj))` by
+  `MEM (StateRef (src,id)) (nonconstant_reads mods (expr_accesses mods obj))` by
     (irule nonconstant_state_read_mem >> conj_tac
-     >- (drule_all eval_expr_immutable_root_nonconstant >>
-         fs[body_inv_def, cx_const_name_def, cx_tops_def] >>
-         metis_tac[constant_decl_mem_consts]) >>
+     >- (fs[cx_const_name_mods_def] >> metis_tac[constant_decl_mem_consts]) >>
      simp[expr_accesses_def] >> metis_tac[evaluated_immutable_direct_read]) >>
   qpat_x_assum `~subscript_reads_base _ _ _` mp_tac >>
-  fs[body_inv_def, subscript_reads_base_def, subscript_overlap_def, any_written_MEM] >>
+  drule_then (fn th => simp[th, subscript_overlap_def, any_written_MEM])
+    contract_inv_subscript_overlap >>
   metis_tac[listTheory.MEM]
 QED
 
@@ -223,46 +230,115 @@ Proof
   metis_tac[externalBodyFrameTheory.supported_function_names_mem]
 QED
 
-Theorem immutable_index_callable_closed[local]:
-  !tops ctx cenv cx src ts fn mut nr args dflts ret body.
-  body_inv tops ctx cenv cx /\ get_module_code cx src = SOME ts /\
+Theorem immutable_index_callable_closed_mods:
+  !mods exps ctx cenv cx src ts fn mut nr args dflts ret body.
+  contract_inv mods exps ctx cenv cx /\ get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,body) ==>
-  ALOOKUP [(NONE,tops)] src = SOME ts /\
+  ALOOKUP mods src = SOME ts /\
   (find_function fn ts = SOME (dflts,body) \/ (dflts = [] /\ body = []))
 Proof
-  simp[body_inv_def, get_module_code_def, lookup_callable_function_def,
-       supported_program_def, supported_declaration_names_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  rpt strip_tac >>
+  drule_then (assume_tac o Q.SPEC `src`) contract_inv_module_codes >>
+  `ALOOKUP mods src = SOME ts` by fs[] >>
+  drule_all_then assume_tac contract_inv_supported_module >>
+  fs[lookup_callable_function_def, supported_program_def,
+     supported_declaration_names_def, AllCaseEqs()] >>
   metis_tac[lookup_function_Internal_SOME_MEM, lookup_function_Deploy_SOME_cases,
             find_function_distinct_decl]
 QED
 
-Theorem immutable_no_copy_dynamic_frame[local]:
-  body_inv tops ctx cenv cx /\
-  ~supported_expr_exists (const_name_root cx) obj /\
+Theorem immutable_no_copy_dynamic_frame_mods[local]:
+  contract_inv mods exps ctx cenv cx /\
+  ~cx_const_name_mods mods (src,id) /\
   eval_expr cx obj es = (INL (PlaceR (ImmutablePlace src id path)),mid) /\
   is_ArrayT (expr_type obj) /\ base_through_dynarray obj /\
   ~subscript_reads_base cx obj idx /\
-  expr_body_pre cenv cx env idx ix /\ ix.immutables = mid.immutables /\
+  expr_body_pre_mods mods cenv cx env idx ix /\ ix.immutables = mid.immutables /\
   eval_expr cx idx ix = (res,fin) ==>
   FLOOKUP (case ALOOKUP fin.immutables cx.txn.target of
        NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
   FLOOKUP (case ALOOKUP mid.immutables cx.txn.target of
        NONE => FEMPTY | SOME imms => get_source_immutables src imms) id
 Proof
-  strip_tac >> drule_all immutable_no_copy_index_access >> strip_tac >>
-  `!s f ts m nr a ds r b.
-       get_module_code cx s = SOME ts /\
-       lookup_callable_function cx.in_deploy f ts = SOME (m,nr,a,ds,r,b) ==>
-       ALOOKUP [(NONE,tops)] s = SOME ts /\
-       (find_function f ts = SOME (ds,b) \/ (ds = [] /\ b = []))` by
-    metis_tac[immutable_index_callable_closed] >>
+  strip_tac >> drule_all_then strip_assume_tac immutable_no_copy_index_access_mods >>
   qpat_assum `ix.immutables = mid.immutables`
     (once_rewrite_tac o single o GSYM) >>
   irule eval_expr_unwritten_immutable >>
-  gvs[expr_body_pre_def, expr_sim_inv_def] >>
-  qexistsl [`idx`, `env`, `[(NONE,tops)]`, `res`] >> simp[] >>
-  rpt strip_tac >> first_x_assum drule_all >> simp[]
+  fs[expr_body_pre_mods_def, expr_sim_inv_mods_def] >>
+  qexistsl [`idx`, `env`, `mods`, `res`] >> simp[] >>
+  rpt strip_tac >> drule_all_then strip_assume_tac immutable_index_callable_closed_mods >>
+  simp[]
+QED
+
+(* An index following a dynamic ancestor must leave that ancestor live. *)
+Theorem immutable_target_index_frame_mods:
+  contract_inv mods exps ctx cenv cx /\ expr_body_pre_mods mods cenv cx env idx es /\
+  target_root bt = TopLevelNameTarget (src,id) /\ ~cx_const_name_mods mods (src,id) /\
+  target_through_dynarray cenv bt /\ ~target_subscript_overlap cenv bt idx /\
+  eval_expr cx idx es = (res,ee) ==>
+  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+  FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables src imms) id
+Proof
+  strip_tac >> drule_then assume_tac contract_inv_cenv_modules >>
+  `MEM (StateRef (src,id)) (nonconstant_reads cenv.ce_modules
+      (expr_accesses cenv.ce_modules (target_to_expr bt)))` by
+    (irule target_root_state_nonconstant_read >>
+     fs[cx_const_name_mods_def] >> metis_tac[constant_decl_mem_consts]) >>
+  drule_all_then strip_assume_tac target_subscript_overlap_unwritten >>
+  drule_then strip_assume_tac expr_body_pre_mods_runtime_typing >>
+  drule_then assume_tac expr_body_pre_mods_call_evaluation_safe >>
+  gvs[vyperTypeExprSoundnessTheory.runtime_consistent_def] >>
+  irule eval_expr_unwritten_immutable >> simp[] >>
+  qexistsl [`idx`,`env`,`cenv.ce_modules`,`res`] >> simp[] >>
+  rpt gen_tac >> strip_tac >> drule_all_then ACCEPT_TAC immutable_index_callable_closed_mods
+QED
+
+Theorem immutable_target_index_frame:
+  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env idx es /\
+  target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
+  target_through_dynarray cenv bt /\ ~target_subscript_overlap cenv bt idx /\
+  eval_expr cx idx es = (res,ee) ==>
+  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id =
+  FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id
+Proof
+  strip_tac >> drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  drule_all_then assume_tac body_inv_expr_body_pre_mods >>
+  irule immutable_target_index_frame_mods >>
+  qexistsl [`bt`,`cenv`,`ctx`,`env`,`[]`,`idx`,`[(NONE,tops)]`,`res`] >>
+  fs[cx_const_name_split_def]
+QED
+
+Theorem immutable_target_path_after_index:
+  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env idx es /\
+  target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
+  ~target_subscript_overlap cenv bt idx /\
+  eval_expr cx idx es = (res,ee) /\
+  FLOOKUP env.bare_globals (NONE,id) = SOME root_ty /\
+  evaluate_type (get_tenv cx) root_ty = SOME itv /\
+  FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id = SOME (itv,old) /\
+  evaluate_subscripts itv old path = INL v /\
+  (~target_through_dynarray cenv bt ==> fixed_shape_path itv path) ==>
+  expr_sim_inv cenv cx env ee /\
+  ?current a.
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+      NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id =
+      SOME (itv,current) /\
+    evaluate_subscripts itv current path = INL a
+Proof
+  strip_tac >> drule_all_then strip_assume_tac expr_body_pre_eval_result >> simp[] >>
+  Cases_on `target_through_dynarray cenv bt`
+  >- (drule_all_then assume_tac immutable_target_index_frame >>
+      qexistsl [`old`,`v`] >> simp[]) >>
+  `fixed_shape_path itv path` by simp[] >>
+  drule_all_then strip_assume_tac live_immutable_root_current >>
+  drule_all_then strip_assume_tac current_immutable_fixed_path_live >>
+  metis_tac[]
 QED
 
 Theorem immutable_typed_path[local]:
@@ -403,8 +479,16 @@ Theorem live_immutable_path_after_index[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >> disch_tac >>
   Cases_on `base_through_dynarray obj`
-  >- (`~supported_expr_exists (const_name_root cx) obj` by fs[expr_body_pre_def] >>
-      drule_all immutable_no_copy_dynamic_frame >> strip_tac >>
+  >- (`~supported_expr_exists (const_name_root cx) obj` by metis_tac[expr_body_pre_static_facts] >>
+      drule_then assume_tac body_inv_contract >>
+      drule_then strip_assume_tac body_inv_main_code >>
+      drule_all_then assume_tac eval_expr_immutable_root_nonconstant >>
+      `~cx_const_name_mods [(NONE,tops)] (src,id)` by
+        (qpat_assum `cx_tops cx = tops` (SUBST1_TAC o SYM) >>
+         fs[cx_const_name_split_def]) >>
+      `expr_body_pre_mods [(NONE,tops)] cenv cx env idx ix` by
+        metis_tac[body_inv_expr_body_pre_mods] >>
+      drule_all_then strip_assume_tac immutable_no_copy_dynamic_frame_mods >>
       qexists `saved` >>
       qpat_x_assum `read_result cx _ mid = _` mp_tac >>
       Cases_on `ALOOKUP mid.immutables cx.txn.target` >>
@@ -415,7 +499,9 @@ Proof
   `fixed_shape_path itv path` by
     (irule immutable_fixed_spine >> goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
      qexistsl [`env`,`root_ty`] >>
-     fs[expr_body_pre_def, expr_sim_inv_def, vyperTypeExprSoundnessTheory.runtime_consistent_def]) >>
+     qpat_assum `expr_body_pre cenv cx env obj es`
+       (strip_assume_tac o REWRITE_RULE [expr_body_pre_split_def, expr_body_pre_mods_def]) >>
+     fs[expr_sim_inv_def, vyperTypeExprSoundnessTheory.runtime_consistent_def]) >>
   drule_all live_immutable_root_current >> strip_tac >> gvs[] >>
   irule current_immutable_fixed_path_live >> metis_tac[]
 QED
@@ -463,7 +549,7 @@ Proof
     metis_tac[cj 1 exprSimSourceTheory.expr_body_pre_eval_result] >>
   `~cx_const_name cx (src,id)` by
     (irule eval_expr_immutable_root_nonconstant >>
-     goal_assum (drule_at Any) >> fs[expr_body_pre_def]) >>
+     goal_assum (drule_at Any) >> metis_tac[expr_body_pre_static_facts]) >>
   `stmt_state_rel H ctx func cenv cx fin s` by fs[expr_post_def] >>
   `vv_place_ptr cenv cx mid u (PlaceR (ImmutablePlace src id path))
      (LocatedValue (ArrayT et bd) p)` by fs[vv_post_def] >>
@@ -553,7 +639,11 @@ Proof
        (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf)` by
-    (irule emitted_origin_ptr_path >> metis_tac[]) >>
+    (irule emitted_origin_ptr_path >> simp[] >>
+     qexistsl [`emitted_insts sa sb`,`sa`] >> simp[] >>
+     rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     drule copy_ctor_load_shape >> simp[listTheory.EVERY_APPEND] >>
+     strip_tac >> gvs[]) >>
   qexistsl [`Gf`,`tnf`,`t`] >> simp[immutable_copy_read_def] >>
   drule gas_origin_ptr_path_dead_mono >> simp[Abbr `D`]
 QED
@@ -745,7 +835,7 @@ QED
 
 (* The length read, bounds check and address arithmetic form one no-mark
    path.  The abort branch stops before executing the address arithmetic. *)
-Theorem live_code_select_joint[local]:
+Theorem live_code_select_joint:
   compile_array_subscript arg idx dyn (if dyn then 0 else cnt) 32 esz sgn
     (compile_ptr_load ctor imm LocCode) sa = (dst,sb) /\
   fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
@@ -859,7 +949,7 @@ Resume live_code_select_joint[out_of_range]:
 QED
 Finalise live_code_select_joint
 
-Theorem current_immutable_dynamic_header[local]:
+Theorem current_immutable_dynamic_header:
   stmt_state_rel H ctx func cenv cx fin s /\
   immutable_holds cenv cx (ArrayT et (Dynamic cap)) raw w fin s /\
   evaluate_type (get_tenv cx) et = SOME etv /\
@@ -1059,7 +1149,9 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
   `stmt_state_rel H0 ctx func cenv cx fin s` by fs[expr_post_def] >>
   `expr_body_pre cenv cx env obj (es with gas_obs := bgs)` by
-    (drule_all expr_body_pre_array_subscript_base >> simp[]) >>
+    (simp[] >> irule expr_body_pre_array_subscript_base_eval >>
+     qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[] >>
+     metis_tac[]) >>
   `expr_body_pre cenv cx env idx mid` by
     (`expr_body_pre cenv cx env (Subscript et obj idx) (es with gas_obs := bgs)` by simp[] >>
      drule_all expr_body_pre_array_subscript_index_after_base >> simp[]) >>

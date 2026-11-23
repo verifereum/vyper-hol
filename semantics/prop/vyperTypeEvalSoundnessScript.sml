@@ -2205,6 +2205,14 @@ QED
 
 (* ===== Builtin, type-builtin, and pop expression cases ===== *)
 
+Theorem self_codesize_form[local]:
+  is_self_codesize bt es ==>
+  ?addr. bt = Acc Codesize /\ es = [addr] /\ is_self_addr addr
+Proof
+  strip_tac >> Cases_on `bt` >> Cases_on `es` >> TRY (Cases_on `t`) >>
+  TRY (Cases_on `a`) >> gvs[is_self_codesize_def] >> metis_tac[]
+QED
+
 
 Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
   rpt gen_tac >> strip_tac >>
@@ -2287,49 +2295,6 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
       qspec_then `w` assume_tac wordsTheory.w2n_lt >>
       fs[wordsTheory.dimword_def]) >>
   qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn`
-  >- (qpat_assum `bt = Bop In \/ bt = Bop NotIn` (fn th => rewrite_tac[th]) >>
-      qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
-      simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
-                         type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
-      Cases_on `eval_exprs cx es st` >>
-      rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-      qpat_x_assum `!s'' x t. _ /\ bt = Len ==> _` kall_tac >>
-      qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ (_ \/ _) ==> _`
-        (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-      (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
-      qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env es vs | INR _ => T`
-        (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
-      (impl_tac >- simp[]) >> strip_tac >>
-      rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
-      rpt (qpat_x_assum `!s'' x t. _` kall_tac) >>
-      Cases_on `args_res`
-      >- (
-        rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
-        qpat_x_assum `case INL vs of INL vs => exprs_runtime_typed env es vs | INR v1 => T`
-          mp_tac >> simp_tac(srw_ss())[] >> strip_tac >>
-        qpat_x_assum `exprs_runtime_typed env es vs` mp_tac >>
-        rewrite_tac[exprs_runtime_typed_def] >> strip_tac >>
-        `MAP (evaluate_type (get_tenv cx)) (MAP expr_type es) = MAP SOME tvs` by
-          (gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP]) >>
-        `?ret_tv. evaluate_type (get_tenv cx) ty = SOME ret_tv` by
-          (gvs[well_formed_type_def, IS_SOME_EXISTS]) >>
-    (drule_all well_typed_membership_dispatch >> strip_tac >>
-            `LENGTH es = 2` by
-              (gvs[LIST_REL_EL_EQN]) >>
-            qpat_x_assum `evaluate_type _ (EL 1 (MAP expr_type es)) = SOME ht`
-              mp_tac >> simp[EL_MAP] >> disch_tac >>
-            qpat_x_assum `evaluate_membership _ _ _ _ = _`
-              (assume_tac o SRULE []) >>
-            asm_simp_tac (srw_ss())
-              [bind_def, assert_def, lift_option_type_def, lift_option_def,
-               return_def, raise_def] >>
-            strip_tac >> gvs[no_type_error_result_def, expr_type_def,
-                             eval_result_typed_def, value_result_typed_Value,
-                             evaluate_type_def, value_has_type_def]))
-      >> simp[bind_def] >> strip_tac >>
-      gvs[no_type_error_result_def])
-  >> qpat_assum `~(bt = Bop In \/ bt = Bop NotIn)` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
                      type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
@@ -2350,10 +2315,9 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
     qpat_x_assum `option_CASE _ _ _ st = _` mp_tac >> qunabbrev_tac `SF` >>
     Cases_on `code_slice_source bt es`
     >- (simp_tac(srw_ss())[] >> strip_tac >>
-        qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ ~(_ \/ _) /\ bt <> Env MsgGas /\ NONE = NONE ==> _`
+        qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ bt <> Env MsgGas /\ NONE = NONE ==> _`
           (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-        (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
-                   simp[type_check_def, assert_def])) >> strip_tac >>
+        (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
         qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env es vs | INR _ => T`
           (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
         (impl_tac >- simp[]) >>
@@ -2365,10 +2329,9 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
     simp_tac(srw_ss())[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
     Cases_on `eval_exprs cx (TL es) st` >>
     rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
-    qpat_x_assum `!s'' x t v c a. _ /\ _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
+    qpat_x_assum `!s'' x t v c a. _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
-    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
-                   simp[type_check_def, assert_def])) >> strip_tac >>
+    (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
     qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env (TL es) vs | INR _ => T`
       (qspecl_then [`env`,`st`,`tail_res`,`tail_st`] mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>
@@ -2381,8 +2344,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
     rename1 `eval_exprs cx [addr] tail_st = (addr_res,addr_st)` >>
     qpat_x_assum `!s'' x t v c a s3 tv t'. _ ==> _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`,`st`,`tail_vs`,`tail_st`] mp_tac) >>
-    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
-                   simp[type_check_def, assert_def])) >> strip_tac >>
+    (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
     qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env [addr] vs | INR _ => T`
       (qspecl_then [`env`,`tail_st`,`addr_res`,`addr_st`] mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>
@@ -2421,6 +2383,44 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
         (gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP]) >>
       `?ret_tv. evaluate_type (get_tenv cx) ty = SOME ret_tv` by
         (gvs[well_formed_type_def, IS_SOME_EXISTS]) >>
+      Cases_on `is_self_codesize bt es`
+      >- (Cases_on `evaluate_self_codesize cx vs`
+          >- (rename1 `evaluate_self_codesize cx vs = INL self_v` >>
+              `value_has_type ret_tv self_v` by
+                (drule self_codesize_form >> strip_tac >>
+                 qpat_x_assum `bt = Acc Codesize` SUBST_ALL_TAC >>
+                 qpat_x_assum `es = [addr]` SUBST_ALL_TAC >>
+                 Cases_on `vs`
+                 >- gvs[evaluate_self_codesize_def]
+                 >> Cases_on `h` >> gvs[evaluate_self_codesize_def] >>
+                    TRY (Cases_on `self_v`) >>
+                    gvs[is_self_codesize_def,
+                        well_typed_builtin_app_def, expr_type_def,
+                        account_item_type_def, value_has_type_def,
+                        evaluate_type_def, wordsTheory.dimword_def,
+                        context_well_typed_def]) >>
+              gvs[is_self_codesize_def] >>
+              asm_rewrite_tac[] >> simp_tac(srw_ss())[return_def] >>
+              Cases_on `precompile_call_success bt vs args_st` >>
+              rename1 `precompile_call_success bt vs args_st = (pc_res,pc_st)` >>
+              drule precompile_call_success_state >> strip_tac >>
+              Cases_on `pc_res`
+              >- (asm_rewrite_tac[] >> simp_tac(srw_ss())[] >> strip_tac >>
+                  gvs[no_type_error_result_def, expr_result_typed_def,
+                      expr_runtime_typed_def, expr_type_def,
+                      value_result_typed_Value])
+              >> drule precompile_call_success_exception >> strip_tac >>
+              asm_rewrite_tac[] >> simp_tac(srw_ss())[] >> strip_tac >>
+              gvs[no_type_error_result_def])
+          >> drule self_codesize_form >> strip_tac >>
+             qpat_x_assum `bt = Acc Codesize` SUBST_ALL_TAC >>
+             qpat_x_assum `es = [addr]` SUBST_ALL_TAC >>
+             gvs[is_self_codesize_def, raise_def, bind_def, return_def,
+                 no_type_error_result_def] >>
+             strip_tac >> Cases_on `y'` >>
+             gvs[evaluate_self_codesize_def, value_has_type_def,
+                 evaluate_type_def, well_typed_builtin_app_def])
+      >> gvs[is_self_codesize_def] >>
       Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs`
       >- (rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = INL builtin_v` >>
           `value_has_type ret_tv builtin_v` by
@@ -3668,44 +3668,12 @@ Resume eval_scc_type_sound_results_mutual[TraceBuiltinBody]:
            AllCaseEqs()] >>
       strip_tac >> imp_res_tac next_gas_reading_state >>
       irule typed_scope_transition_scopes >> gvs[assert_def, return_def]) >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn`
-  >- (
-      qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ (_ \/ _) ==> _`
-        (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-      (impl_tac >- (qpat_x_assum `bt = Bop In \/ bt = Bop NotIn` mp_tac >>
-                   simp[type_check_def, assert_def])) >> strip_tac >>
-      rpt (qpat_x_assum `!s'' x t. type_check _ _ _ = _ /\ _ ==> _` kall_tac) >>
-      qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ _` kall_tac >>
-      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th =>
-        simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def, raise_def,
-          type_check_def, assert_def, th]) >>
-      qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
-      qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
-      asm_rewrite_tac[] >>
-      simp[NoAsms, bind_def, ignore_bind_def, assert_def, return_def, raise_def,
-           AllCaseEqs()] >>
-      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-      qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-        (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
-      disch_then (qspec_then `env` mp_tac) >>
-      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-      imp_res_tac lift_sum_state >> imp_res_tac type_check_state >>
-      imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
-      asm_rewrite_tac[] >>
-      qpat_x_assum `get_accounts _ = _` mp_tac >>
-      simp[NoAsms, get_accounts_def, return_def] >> strip_tac >>
-      rpt BasicProvers.VAR_EQ_TAC >>
-      imp_res_tac precompile_call_success_state >>
-      gvs[typed_scope_transition_def] >>
-      qexists_tac `events` >> simp[])
-  >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th =>
     simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def, raise_def,
       type_check_def, assert_def, th]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
   qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
-  qpat_assum `~(bt = Bop In \/ bt = Bop NotIn)` (fn th => rewrite_tac[th]) >>
   simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def, raise_def,
     type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
   qmatch_goalsub_abbrev_tac `option_CASE (code_slice_source bt es) _ SF st` >>
@@ -3715,10 +3683,9 @@ Resume eval_scc_type_sound_results_mutual[TraceBuiltinBody]:
     qpat_x_assum `option_CASE _ _ _ st = _` mp_tac >> qunabbrev_tac `SF` >>
     Cases_on `code_slice_source bt es`
     >- (simp_tac(srw_ss())[] >> strip_tac >>
-        qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ ~(_ \/ _) /\ bt <> Env MsgGas /\ NONE = NONE ==> _`
+        qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ bt <> Env MsgGas /\ NONE = NONE ==> _`
           (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-        (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
-                   simp[type_check_def, assert_def])) >> strip_tac >>
+        (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
         qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
           (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
         (impl_tac >- simp[]) >> simp[]) >>
@@ -3729,10 +3696,9 @@ Resume eval_scc_type_sound_results_mutual[TraceBuiltinBody]:
     simp_tac(srw_ss())[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
     Cases_on `eval_exprs cx (TL es) st` >>
     rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
-    qpat_x_assum `!s'' x t v c a. _ /\ _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
+    qpat_x_assum `!s'' x t v c a. _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
-    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
-                   simp[type_check_def, assert_def])) >> strip_tac >>
+    (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
     qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env (TL es) vs | INR _ => T`
       (qspecl_then [`env`,`st`,`tail_res`,`tail_st`] mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>
@@ -3748,8 +3714,7 @@ Resume eval_scc_type_sound_results_mutual[TraceBuiltinBody]:
     rename1 `eval_exprs cx [addr] tail_st = (addr_res,addr_st)` >>
     qpat_x_assum `!s'' x t v c a s3 tv t'. _ ==> _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`,`st`,`tail_vs`,`tail_st`] mp_tac) >>
-    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
-                   simp[type_check_def, assert_def])) >> strip_tac >>
+    (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
     qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
       (qspecl_then [`env`,`tail_st`,`addr_res`,`addr_st`] mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>
@@ -3765,6 +3730,40 @@ Resume eval_scc_type_sound_results_mutual[TraceBuiltinBody]:
   reverse (Cases_on `args_res`) >> simp_tac(srw_ss())[]
   >- (strip_tac >> gvs[]) >>
   rename1 `option_CASE _ _ _ st = (INL vs,args_st)` >>
+  Cases_on `is_self_codesize bt es`
+  >- (Cases_on `evaluate_self_codesize cx vs`
+      >- (rename1 `evaluate_self_codesize cx vs = INL self_v` >>
+          drule self_codesize_form >> strip_tac >>
+          qpat_x_assum `bt = Acc Codesize` SUBST_ALL_TAC >>
+          qpat_x_assum `es = [addr]` SUBST_ALL_TAC >>
+          gvs[is_self_codesize_def] >>
+          Cases_on `precompile_call_success bt vs args_st` >>
+          rename1 `precompile_call_success bt vs args_st = (pc_res,pc_st)` >>
+          drule precompile_call_success_state >> strip_tac >>
+          Cases_on `pc_res` >> simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
+          qpat_x_assum `_ = (res,st')` mp_tac >>
+          simp_tac(srw_ss())[return_def, bind_def] >> strip_tac >>
+          irule typed_scope_transition_trans >>
+          qexists_tac `args_st` >> simp[typed_scope_transition_scopes])
+      >> simp_tac(srw_ss())[raise_def] >> strip_tac >>
+         drule self_codesize_form >> strip_tac >>
+         qpat_x_assum `bt = Acc Codesize` SUBST_ALL_TAC >>
+         qpat_x_assum `es = [addr]` SUBST_ALL_TAC >>
+         `is_self_codesize (Acc Codesize) [addr]` by
+           gvs[is_self_codesize_def] >>
+             `st'.scopes = args_st.scopes` by
+               (qpat_x_assum `is_self_codesize (Acc Codesize) [addr]`
+                  (fn th => rewrite_tac[th]) >>
+                qpat_x_assum `_ = (res,st')` mp_tac >>
+                simp_tac(srw_ss())[is_self_codesize_def,
+                                   evaluate_self_codesize_def,
+                                   raise_def, bind_def, return_def,
+                                   CaseEq "sum", CaseEq "prod"] >>
+                rpt strip_tac >> gvs[raise_def]) >>
+             irule typed_scope_transition_trans >>
+             qexists_tac `args_st` >>
+             simp[typed_scope_transition_scopes])
+  >> gvs[is_self_codesize_def] >>
   Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
   simp_tac(srw_ss())[return_def, raise_def]
   >- (Cases_on `precompile_call_success bt vs args_st` >>

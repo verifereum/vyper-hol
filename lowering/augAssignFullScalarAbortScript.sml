@@ -1,7 +1,7 @@
 (* A scalar abort has one cursor and one ghost endpoint for every bound. *)
 Theory augAssignFullScalarAbort
 Ancestors
-  augAssignPtrScalarRun fragGasCopyLoop fragGasSeqPtr
+  augAssignPtrScalarRun fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeqPtr
   ptrDiscipline ptrSafeRun venomExecSemantics venomState venomInst
   finite_map pred_set list rich_list
 
@@ -40,8 +40,18 @@ Proof
      metis_tac[inst_seq_ptr_ghost_unique]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               i.inst_opcode <> GAS) code` by gvs[EVERY_MEM] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     gvs[augAssignPtrScalarCertificateTheory.scalar_code_append,
+         augAssignPtrScalarCertificateTheory.scalar_code_def,
+         augAssignPtrScalarCertificateTheory.scalar_shape_def,
+         augAssignPtrScalarCertificateTheory.scalar_binary_def,
+         augAssignPtrScalarCertificateTheory.scalar_unary_def,
+         unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   drule_all run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` (qx_choose_then `j` assume_tac)) >>
+  disch_then (qx_choose_then `j` assume_tac) >>
   qexistsl [`j`,`G'`,`tn'`] >>
   conj_tac >- simp[] >>
   conj_tac

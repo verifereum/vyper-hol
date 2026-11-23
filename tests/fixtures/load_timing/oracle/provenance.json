@@ -69,6 +69,10 @@
       "sha256": "205d42895611d1b990fe7eca01eabab4ce01abf930acb96095f642f0a159cd1e"
     },
     {
+      "path": "bytecode/patches/5337-spill-successor-state.patch",
+      "sha256": "60b5bf4177a6c5e4a91f425ab4eb92ba3bd9e27280b7f3b46f8c90a4e06fde7b"
+    },
+    {
       "path": "bytecode/patches/5338-widen-bytestring-convert.patch",
       "sha256": "f83fe33ded4fd11a22e31eeb45a5216ed52eef35a7cc2ab50f2e11de67126d37"
     },
@@ -103,6 +107,10 @@
     {
       "path": "bytecode/patches/5386-complex-compare-reject.patch",
       "sha256": "f250f2017de5cf9854b471b032aff6a5189973eec3f4f9333ed9552339770cdf"
+    },
+    {
+      "path": "bytecode/patches/5389-abi-encode-standalone-value.patch",
+      "sha256": "4aa42d5d6b739f80fe17a7637a26de4610d86bd69578f14688276cc4ce697dcc"
     },
     {
       "path": "bytecode/patches/local-dft-create-abort.patch",

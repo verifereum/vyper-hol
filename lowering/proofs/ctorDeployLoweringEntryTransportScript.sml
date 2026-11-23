@@ -6,7 +6,7 @@ Ancestors
  compileEnv entryStateRel vyperContext vyperState valueEncoding finite_map list
  ctorDeployDefs e2eDeployDefs e2eEntry o1PassContract rich_list
  ctorDeployLoweringDefs deployUnitProducers unitShapeDefs venomExecSemantics
- venomInst venomState ctorDeployShape venomExecProps ctorDeployInitcode
+ venomInst venomState venomExecProps venomExecProofs fragExec ctorDeployInitcode
 
 Theorem deploy_ctor_singleton_type_env:
  type_env_all_modules [(NONE,tops)] = type_env tops
@@ -48,18 +48,33 @@ Proof
 QED
 
 Theorem deploy_ctor_entry_data_section:
- !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
- deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+ deploy_state_rel tops (assemble prog') am tx es /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es
+                   with vs_outcomes := vs.vs_outcomes) ==>
  constructor_args_encode tops tx vs.vs_data_section
 Proof
- rpt strip_tac >>
- `vs.vs_data_section = (deploy_entry_state prog cplan tops es).vs_data_section` by
-  (gvs[gas_variant_def] >>
-   pop_assum (mp_tac o Q.AP_TERM `\s. s.vs_data_section`) >> simp[]) >>
- gvs[deploy_phases_def, deploy_state_rel_def,
-     deploy_entry_state_def, entry_venom_state_def, DROP_LENGTH_APPEND]
+ strip_tac >>
+ qpat_x_assum `gas_variant _ _` (mp_tac o PURE_REWRITE_RULE [gas_variant_def]) >>
+ disch_then (mp_tac o Q.AP_TERM `\s. s.vs_data_section`) >>
+ simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+      entry_venom_state_frame_fields] >>
+ fs[deploy_state_rel_def, DROP_LENGTH_APPEND] >>
+ strip_tac >> gvs[]
+QED
+
+Theorem deploy_ctor_entry_data_section_raw:
+ deploy_state_rel tops (assemble prog') am tx es /\
+ raw_variant fmp vs (opt_deploy_entry_state_own prog prog' cplan tops es
+                   with vs_outcomes := vs.vs_outcomes) ==>
+ constructor_args_encode tops tx vs.vs_data_section
+Proof
+ strip_tac >>
+ qpat_x_assum `raw_variant _ _ _` (mp_tac o PURE_REWRITE_RULE [raw_variant_def, gas_variant_def]) >>
+ disch_then (mp_tac o Q.AP_TERM `\s. s.vs_data_section`) >>
+ simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def,
+      entry_venom_state_frame_fields] >>
+ fs[deploy_state_rel_def, DROP_LENGTH_APPEND] >>
+ strip_tac >> gvs[]
 QED
 
 Theorem deploy_ctor_prefix_data_bytes:
@@ -88,24 +103,17 @@ Theorem deploy_ctor_raw_blocks_no_phi:
  phi_prefix_length bb.bb_instructions = 0
 Proof
  rpt gen_tac >> strip_tac >> fs[deploy_ctor_code_def] >>
- drule_all lower_vyper_deploy_unit_source_unit_ok >> strip_tac >>
- `EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts func)` by
-  (gvs[o1_source_unit_ok_def, EVERY_MEM] >> metis_tac[]) >>
- `MEM bb func.fn_blocks` by
-  metis_tac[lookup_block_MEM] >>
- Cases_on `bb.bb_instructions` >> simp[phi_prefix_length_def] >>
- qpat_x_assum `EVERY _ (fn_insts func)` mp_tac >>
- simp[fn_insts_def, fn_insts_blocks_MEM, EVERY_MEM] >>
- disch_then (qspec_then `h` mp_tac) >>
- impl_tac >- (qexists `bb` >> simp[]) >>
- simp[raw_opcode_ok_def]
+ drule lower_vyper_deploy_unit_context_ok >> strip_tac >>
+ irule no_phis_phi_prefix_length_zero >>
+ fs[vyperCompilerTheory.lowering_context_ok_def, vyperCompilerTheory.ptr_ok_check_def, EVERY_MEM] >>
+ metis_tac[lookup_block_fn_insts]
 QED
 
 Theorem deploy_ctor_entry_data_size:
- !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
- deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
- deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
- gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
+ !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs.
+ deploy_phases policy tops (assemble prog,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
+ gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) ==>
  LENGTH vs.vs_data_section < dimword(:256)
 Proof
  rpt strip_tac >> drule_all deploy_ctor_entry_data_section >> strip_tac >>

@@ -2,7 +2,8 @@
 Theory bodyFullAssertReasonControl
 Ancestors
   reasonCompilerProps stmtSimReason stmtSimAssertProps bodyFullShared bodySimFull
-  gasShadowCompileStmtCases gasShadowCompileStmtHelpers
+  gasShadowCompileStmtCases gasShadowCompileStmtHelpers gasShadowStmtEnv
+  gasShadowCompileStmtBase
   bodyFullAllocaFresh bodyFullGhostFrame
   exprSimDefs stmtSimProps stmtSimDefs bodyMemoryDefs bodyPtrDefs
   emitHelper emitHelperProps freshWrites compileEnv allocaHistory
@@ -82,11 +83,11 @@ QED
 
 Theorem compile_assert_reason_layout_full:
   stmt_env cenv lctx ty (Assert e (AssertReason r)) sa = (ce,sb) /\
-  stmt_env cenv lctx ty
+  stmt_env (gas_shadow_env T cenv) lctx ty
     (Assert (gas_shadow_expr e) (AssertReason (gas_shadow_expr r))) ta = (ct,tb) /\
   gas_shadow_state sa ta /\ fn_has_code sa sb func /\ fn_has_code ta tb sfunc ==>
   ?op s1 ok s2 fl s3 s4 entry last t1 t2 t3 t4 sentry slast.
-    ce = cenv /\ ct = cenv /\
+    ce = cenv /\ ct = gas_shadow_env T cenv /\
     lower_value compile_expr cenv (BaseT BoolT) e sa = (op,s1) /\
     fresh_label "assert_ok" s1 = (ok,s2) /\
     fresh_label "assert_fail" s2 = (fl,s3) /\
@@ -94,12 +95,13 @@ Theorem compile_assert_reason_layout_full:
     new_block fl s4 = (s4.cs_current_bb,entry) /\
     stmt_env cenv lctx ty (Raise (RaiseReason r)) entry = (cenv,last) /\
     new_block ok last = (last.cs_current_bb,sb) /\
-    lower_value compile_expr cenv (BaseT BoolT) (gas_shadow_expr e) ta = (op,t1) /\
+    lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT) (gas_shadow_expr e) ta = (op,t1) /\
     fresh_label "assert_ok" t1 = (ok,t2) /\
     fresh_label "assert_fail" t2 = (fl,t3) /\
     emit_inst JNZ [op; Label ok; Label fl] [] t3 = ((),t4) /\
     new_block fl t4 = (t4.cs_current_bb,sentry) /\
-    stmt_env cenv lctx ty (Raise (RaiseReason (gas_shadow_expr r))) sentry = (cenv,slast) /\
+    stmt_env (gas_shadow_env T cenv) lctx ty (Raise (RaiseReason (gas_shadow_expr r))) sentry =
+      (gas_shadow_env T cenv,slast) /\
     new_block ok slast = (slast.cs_current_bb,tb) /\
     gas_shadow_state s1 t1 /\ gas_shadow_state entry sentry /\
     gas_shadow_state last slast /\
@@ -124,8 +126,11 @@ Proof
   qpat_assum `stmt_env _ _ _ (Assert (gas_shadow_expr e) _) _ = _`
     (mp_then Any (qx_choosel_then [`op'`, `t1`, `ok'`, `t2`, `fl'`, `t3`,
       `t4`, `sentry`, `slast`] strip_assume_tac) compile_assert_reason_parts) >>
+  `gas_shadow_compiles (lower_value compile_expr cenv (BaseT BoolT) e)
+    (lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT)
+      (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
   `op' = op /\ gas_shadow_state s1 t1` by
-    metis_tac[gas_shadow_step, gas_shadow_stmt_lower_value] >> gvs[] >>
+    metis_tac[gas_shadow_step] >> gvs[] >>
   `ok' = ok /\ gas_shadow_state s2 t2` by
     metis_tac[gas_shadow_step, gas_shadow_compiles_fresh_label] >> gvs[] >>
   `fl' = fl /\ gas_shadow_state s3 t3` by
@@ -135,17 +140,14 @@ Proof
   `gas_shadow_state entry sentry` by
     metis_tac[gas_shadow_step, gas_shadow_compiles_new_block] >>
   rename1 `stmt_env cenv lctx ty (Raise (RaiseReason r)) entry = (cenv,last)` >>
-  `gas_shadow_compiles (stmt_env cenv lctx ty (Raise (RaiseReason r)))
-    (stmt_env cenv lctx ty (Raise (RaiseReason (gas_shadow_expr r))))` by
-    (simp[stmt_env_def, declare_stmt_local_def] >>
-     ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-     >- simp[gas_shadow_compiles_return] >> gen_tac >>
-     simp[comp_ignore_bind_def] >>
-     ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-     >- (irule (SRULE [gas_shadow_stmt_def, gas_shadow_raise_reason_def]
-         (gas_shadow_stmt_raise |> Q.GEN `r` |> Q.SPEC `RaiseReason r`))) >>
-     simp[gas_shadow_compiles_return]) >>
-  `gas_shadow_state last slast` by metis_tac[gas_shadow_step] >>
+  `gas_shadow_compiles_env T (stmt_env cenv lctx ty (Raise (RaiseReason r)))
+    (stmt_env (gas_shadow_env T cenv) lctx ty
+      (gas_shadow_stmt (Raise (RaiseReason r))))` by irule gas_shadow_stmt_env_env >>
+  `gas_shadow_state last slast` by
+    (qpat_x_assum `gas_shadow_compiles_env _ _ _` mp_tac >>
+     simp[gas_shadow_compiles_env_def, gas_shadow_stmt_def,
+          gas_shadow_raise_reason_def] >>
+     disch_then (qspecl_then [`entry`, `sentry`] mp_tac) >> simp[]) >>
   `fn_has_code sa s1 func /\ fn_has_code s3 s4 func /\
     fn_has_code entry last func /\
     s3.cs_current_bb = s1.cs_current_bb /\

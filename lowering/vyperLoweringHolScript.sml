@@ -2,7 +2,6 @@
 Theory vyperLoweringHol
 Ancestors
   (* arbitrary-calldata entry and S1 suppliers *)
-  calldataArrayRawCallsite
   calldataBulkOperationalCertificate calldataBulkSourceOutcome
   calldataExactBytesJoint
   calldataExactScalarAccepted calldataExactScalarRejected calldataNoneFallbackJoint
@@ -14,12 +13,15 @@ Ancestors
   loweringCalldataCorrect registrationGuardRejectOrigin
   dispatchedEntryValueRevert
   e2eLifecycle e2eTransactionWorld
+  e2eModsLifecycle
   e2eCodeFrame ownSymSrcUnit
+  runtimeSymSrcDynarrayAppend runtimeSymSrcModuleArgPreservation runtimeSymSrcRuntimeBoundary runtimeSymSrcStatements
   (* definitions *)
   moduleLowering compileUnit
   (* property statements and proofs *)
   dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
+  createExprSizeExit
   rawCallCalldataPeakMemory
   runtimePeakMemoryBound
   loweringRuntimeAllocationHistory loweringRuntimeRawVariantHistory
@@ -27,7 +29,7 @@ Ancestors
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
-  entryStateRel entryLocals ctorEntryLocals ctorSourceInputs
+  entryStateRel entryLocals ctorSourceInputs
   loweringSlice
   memSafeRun instMemFrontier fragExecMem allocaFootprint
   bodyPtrMakeArrayMemoryFrame
@@ -36,14 +38,14 @@ Ancestors
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
   exprSimBuiltins exprSimExtCallCase bodyIntCallSeams bodySimFullMain bodyFullStructLit externalReturnValuedFull ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimExpr
-  stmtSimBreak stmtSimContinue stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
+  stmtSimBreak stmtSimContinue stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
-  stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignTupleMem
+  stmtSimAssign stmtSimAssignMem stmtSimAssignTuple
   storageCopyBodyRaisePtr
   stmtSimAssignStorage stmtSimStoreCopy storageCopyLive stmtSimAssignStorageCopy
   stmtSimAssignAttr
-  stmtSimAssignAttrStorage stmtSimAugAssignAttr
+  stmtSimAssignAttrStorage
   valueEncodingProofs
   localPtrsProps
   nonreentrantEntryEquiv
@@ -56,15 +58,18 @@ Ancestors
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
+  runtimeUnitShapeMods ctorDeployShapeMods
   ctorShapeProps ctorUnitShape
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   bodyFullShadowBodyInvLowering
+  bodyFullPredsMods
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem
   loweringMemCorrect
+  linkedUnitMemory
   asmSymBridge
   asmSymBridgeOwn
   asmDataEnv

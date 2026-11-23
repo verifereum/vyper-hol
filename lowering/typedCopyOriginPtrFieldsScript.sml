@@ -358,7 +358,9 @@ Resume typed_copy_origin_ptr_add_path[path]:
     (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
         d_ret := K {} |>,lo,explicit,ctx,func,PG)
     (s,G,tn) [] (OK (u with vs_inst_idx := SUC s.vs_inst_idx),gf,tf)` by
-    (simp[Abbr `gf`, Abbr `tf`] >>
+    (`ctx_has_dalloca ctx ==> unitTransformDefs$dalloca_no_wrap i s` by
+       simp[Abbr `i`, mk_inst_def, unitTransformDefsTheory.dalloca_no_wrap_def] >>
+     simp[Abbr `gf`, Abbr `tf`] >>
      drule_all straight_line_origin_ptr_edge >> simp[Abbr `i`, mk_inst_def,
        is_terminator_def]) >>
   drule (cj 2 gas_origin_ptr_path_rules) >>
@@ -732,7 +734,14 @@ Proof
      `evaluate_type tenv (EL i dtys) = SOME (THE (evaluate_type tenv (EL i dtys))) /\
       evaluate_type tenv (EL i stys) = SOME (THE (evaluate_type tenv (EL i stys)))` by
        (`IS_SOME (evaluate_type tenv (EL i dtys)) /\
-         IS_SOME (evaluate_type tenv (EL i stys))` by metis_tac[] >>
+         IS_SOME (evaluate_type tenv (EL i stys))` by
+          (conj_tac
+           >- (qpat_assum `!n. n < LENGTH dtys ==>
+                 IS_SOME (evaluate_type tenv (EL n dtys))`
+                 (MATCH_MP_TAC o Q.SPEC `i`) >> first_assum ACCEPT_TAC) >>
+           qpat_assum `!n. n < LENGTH dtys ==>
+             IS_SOME (evaluate_type tenv (EL n stys))`
+             (MATCH_MP_TAC o Q.SPEC `i`) >> first_assum ACCEPT_TAC) >>
         Cases_on `evaluate_type tenv (EL i dtys)` >>
         Cases_on `evaluate_type tenv (EL i stys)` >> gvs[])
      >- (irule typed_copy_memory_size >> qexists_tac `tenv` >>

@@ -16,6 +16,7 @@ Theorem compile_rest_word_membership_full:
   (!a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\
   body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Builtin ann (Bop bop) [e1;e2]) es
@@ -97,13 +98,13 @@ Resume compile_rest_word_membership_full[after_needle]:
         (qpat_assum `needleQ (storage_trace_horizon _) _ _ _ _ t` mp_tac >>
          simp_tac bool_ss [Abbr `needleQ`] >>
          strip_tac >> first_assum ACCEPT_TAC) >>
-      `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+      `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u` by
         (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _`
            (qspec_then `storage_trace_horizon mid.storage_trace`
              (drule_then assume_tac)) >>
          qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)`
            (fn path => ASSUME_TAC (MATCH_MP (REWRITE_RULE[GSYM AND_IMP_INTRO]
-              bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap) path)) >>
+              bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom) path)) >>
          qpat_x_assum `(!bb. MEM bb func.fn_blocks ==> _) ==> _`
            (fn th => mp_tac th) >>
          impl_tac >- first_assum ACCEPT_TAC >>
@@ -267,7 +268,9 @@ Resume compile_rest_word_membership_full[after_array]:
         x (ArrayV av) ee = INL (BoolV answer)` by
         (Cases_on `bop = In` >>
          gvs[exprBopSimDefsTheory.bop_result_def, Abbr `answer`,
-             vyperValueOperationTheory.evaluate_membership_array]) >>
+             vyperContextTheory.evaluate_builtin_def, LET_THM,
+         vyperValueOperationTheory.evaluate_binop_def,
+         vyperValueOperationTheory.binop_negate_def]) >>
       irule gas_outcome_full_intro >>
       qexistsl [`Gt'`, `mid'`, `[]`, `OK q`, `INL (BoolV answer)`, `Tt`] >>
       conj_tac

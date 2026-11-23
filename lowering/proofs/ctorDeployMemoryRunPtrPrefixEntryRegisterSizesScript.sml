@@ -3,7 +3,7 @@ Theory ctorDeployMemoryRunPtrPrefixEntryRegisterSizes
 Ancestors
   loweringStateRelDefs
  ctorDeployMemoryRunPtrPrefixEntryLiteralSizes
- ctorDeployLoweringEntryRegisterSizes ctorDeployMemoryRunPtrPrefixEntryRegisterOne
+ ctorDeployLoweringEntryRegisterSizes
  ctorDeployMemoryRunPtrPrefixEntryRegisterAlloc
  ctorDeployMemoryRunPtrPrefixRegisterOne ctorDeployMemoryRunPtrPrefixRegisterAlloc
  ctorDeployMemoryRunPtrPrefixEntryRegisterDecode
@@ -42,7 +42,8 @@ val RegisterDecodeSizesMode = ``\checked.
  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= initial.vs_alloca_next /\ lo <= d /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+   initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\ lo <= initial.vs_alloca_next /\ lo <= d /\
  (!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
    inst.inst_operands = [Lit n] /\
    FLOOKUP initial.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
@@ -53,6 +54,8 @@ val RegisterDecodeSizesMode = ``\checked.
    inst.inst_operands = [Lit n] /\
    FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+   actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
  val_in_memory tv v d actual.vs_memory /\
  abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st last))
    [(d,type_memory_bytes ce ty)] initial actual /\
@@ -69,6 +72,7 @@ val RegisterDecodeSizesMode = ``\checked.
  actual.vs_code = initial.vs_code /\ actual.vs_outcomes = initial.vs_outcomes /\
  actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
  actual.vs_gas_readings = initial.vs_gas_readings /\
+ actual.vs_fmp = initial.vs_fmp /\
  (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
  FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\ DISJOINT B qt.t_mem /\
  (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
@@ -86,7 +90,7 @@ Theorem prefix_entry_register_decode_sizes_mode:
  !checked. (^RegisterDecodeSizesMode) checked
 Proof
  gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
- drule_all (BETA_RULE (SPEC_ALL prefix_entry_register_decode_paired_mode)) >>
+ drule_all (BETA_RULE (SPEC_ALL prefix_entry_register_decode_fmp_frame_paired_mode)) >>
  disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
  disch_then (qx_choose_then `actual` (qx_choose_then `H` (qx_choose_then `qt`
    (qx_choose_then `B` (map_every assume_tac o CONJUNCTS))))) >>
@@ -125,7 +129,8 @@ val RegisterAddressDecodeSizesMode = ``\checked.
  (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
  FLOOKUP G ptr = SOME (b,sz) /\ b <= d /\ d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn (Var ptr) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= initial.vs_alloca_next /\ lo <= d /\
+ allocas_from lo initial /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+   initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\ lo <= initial.vs_alloca_next /\ lo <= d /\
  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
  (!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -138,6 +143,8 @@ val RegisterAddressDecodeSizesMode = ``\checked.
    inst.inst_operands = [Lit n] /\
    FLOOKUP actual.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+ (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+   actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
  val_in_memory tv v d actual.vs_memory /\
  abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st last))
    [(d,type_memory_bytes ce ty)] initial actual /\
@@ -153,6 +160,7 @@ val RegisterAddressDecodeSizesMode = ``\checked.
  actual.vs_code = initial.vs_code /\ actual.vs_outcomes = initial.vs_outcomes /\
  actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
  actual.vs_gas_readings = initial.vs_gas_readings /\
+ actual.vs_fmp = initial.vs_fmp /\
  (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
  FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\ DISJOINT B qt.t_mem /\
  (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
@@ -170,7 +178,7 @@ Theorem prefix_entry_register_address_decode_sizes_mode:
  !checked. (^RegisterAddressDecodeSizesMode) checked
 Proof
  gen_tac >> BETA_TAC >> gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
+ `ctx_has_dalloca ctx ==> allocas_below_fmp initial` by (strip_tac >> fs[]) >>
  drule_all (BETA_RULE (SPEC_ALL prefix_entry_register_canonical_address_paired_mode)) >>
  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
  disch_then (qx_choose_then `src` (qx_choose_then `middle`
@@ -196,6 +204,10 @@ Proof
    (asm_rewrite_tac[]) >>
  `checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) (EL i avs)) <=
    LENGTH prepared.vs_data_section /\ alloca_history func prepared` by metis_tac[] >>
+ `(ctx_has_dalloca ctx ==> allocas_below_fmp prepared /\
+   prepared.vs_alloca_next + pending_alloca_size func prepared <= w2n prepared.vs_initial_fmp)` by
+   (strip_tac >> fs[allocas_below_fmp_def,exprLoweringPropsTheory.pending_alloca_size_def] >>
+    first_assum ACCEPT_TAC) >>
  drule_all (BETA_RULE (SPEC_ALL prefix_entry_register_decode_sizes_mode)) >>
  disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
  disch_then (qx_choose_then `actual` (qx_choose_then `H` (qx_choose_then `qt`
@@ -207,6 +219,8 @@ Proof
     >- (irule (SRULE [ADD] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>
         qexists_tac `prepared` >> simp[]) >>
     metis_tac[]) >>
+ `actual.vs_fmp = initial.vs_fmp` by
+   asm_rewrite_tac[] >>
  qexistsl [`actual`,`H`,`qt`,`B`] >> asm_rewrite_tac[] >>
  conj_tac >- suspend "effect" >>
  conj_tac >- suspend "scratch" >>
@@ -278,7 +292,8 @@ val RegisterOneSlotSizesMode = ``\checked.
   (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
-  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
   (!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit n] /\
     FLOOKUP initial.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
@@ -299,6 +314,8 @@ val RegisterOneSlotSizesMode = ``\checked.
     local_ptrs_rel func ce' [scope] actual /\
     abi_encoder_registered_effect (frag_ids st last) [] initial actual /\
     allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+   actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
     alloca_inv actual /\ alloca_frontier_inv_from k ctx func site actual /\
     fresh_vars_wrt last actual /\
     (!aid. last.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
@@ -312,6 +329,7 @@ val RegisterOneSlotSizesMode = ``\checked.
     actual.vs_code = initial.vs_code /\ actual.vs_outcomes = initial.vs_outcomes /\
     actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
     actual.vs_gas_readings = initial.vs_gas_readings /\
+    actual.vs_fmp = initial.vs_fmp /\
     (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
     FINITE B /\ B SUBSET range_bytes [(initial.vs_alloca_next,type_memory_bytes ce ty)] /\
     DISJOINT B qt.t_mem /\
@@ -337,8 +355,6 @@ Proof
   gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >>
   `checked ==> alloca_history func initial` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
-    initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp` by simp[] >>
   drule_all (BETA_RULE (SPEC_ALL prefix_entry_register_alloc_actual_mode)) >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
   disch_then (qx_choose_then `a` (qx_choose_then `AG` (qx_choose_then `atn`
@@ -415,6 +431,8 @@ Resume prefix_entry_register_one_slot_sizes_coverage_mode[finish]:
     (strip_tac >> conj_tac
      >- (irule (SRULE [ADD] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>
          qexists_tac `a` >> simp[]) >> metis_tac[]) >>
+  `a.vs_fmp = initial.vs_fmp` by simp[update_var_def] >>
+  `actual.vs_fmp = initial.vs_fmp` by asm_rewrite_tac[] >>
   qexistsl [`actual`,`H`,`qt`,`B`] >>
   conj_tac >- asm_rewrite_tac[] >>
   conj_tac >- suspend "slot" >> asm_rewrite_tac[] >>

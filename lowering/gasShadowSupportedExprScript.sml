@@ -1,34 +1,18 @@
 (* Support is preserved in the original declaration environment. *)
 Theory gasShadowSupportedExpr
 Ancestors
-  gasShadow gasShadowCompilePure supportedExprs supportedExprForms vyperAST list pair combin
-
-Theorem shadow_literal_tests[local]:
-  supported_integer_literal (gas_shadow_expr e) = supported_integer_literal e /\
-  supported_nonnegative_literal (gas_shadow_expr e) = supported_nonnegative_literal e
-Proof
-  Cases_on `e` >> simp[gas_shadow_expr_def, supported_integer_literal_def,
-    supported_nonnegative_literal_def]
-QED
-
-Theorem shadow_literal_elements[local]:
-  supported_literal_elements tops ty (MAP gas_shadow_expr es) =
-    supported_literal_elements tops ty es
-Proof
-  simp[supported_literal_elements_def, MAP_MAP_o, o_DEF] >>
-  Cases_on `ty` >> simp[MAP_MAP_o, o_DEF, EVERY_MAP, ETA_THM]
-QED
+  gasShadow gasShadowCompilePure supportedExprs supportedExprForms vyperAST vyperContext list pair combin
 
 Theorem shadow_builtin_form[local]:
   supported_builtin_form tops ty (gas_shadow_builtin bi) (MAP gas_shadow_expr es) =
     supported_builtin_form tops ty bi es
 Proof
-  Cases_on `bi` >> simp[gas_shadow_builtin_def, supported_builtin_form_def,
-    shadow_literal_elements] >>
-  rpt (IF_CASES_TAC >> simp[]) >>
+  Cases_on `bi` >>
+  simp[gas_shadow_builtin_def, supported_builtin_form_def,
+       supported_binop_def, builtin_args_length_ok_def] >>
+  TRY (Cases_on `e = MsgGas` >> simp[builtin_args_length_ok_def]) >>
   rpt (qmatch_goalsub_rename_tac `MAP gas_shadow_expr xs` >>
-    Cases_on `xs` >> simp[supported_builtin_form_def, shadow_literal_elements,
-      shadow_literal_tests, EVERY_MAP, o_DEF])
+       Cases_on `xs` >> simp[builtin_args_length_ok_def, supported_binop_def])
 QED
 
 Theorem shadow_type_builtin_form[local]:
@@ -57,6 +41,14 @@ Proof
   simp[supported_subscript_place_def, supported_place_info_def]
 QED
 
+Theorem gas_shadow_target_indices:
+  !target. target_indices (gas_shadow_target target) =
+           MAP gas_shadow_expr (target_indices target)
+Proof
+  measureInduct_on `base_assignment_target_size target` >>
+  Cases_on `target` >> simp[gas_shadow_expr_def, target_indices_def, expr_size_def]
+QED
+
 Theorem shadow_pure_support[local]:
   (!tops e. supported_pure_expr tops e ==>
      supported_pure_expr tops (gas_shadow_expr e)) /\
@@ -71,7 +63,12 @@ Proof
   rpt conj_tac >> rpt gen_tac >>
   simp[gas_shadow_expr_def, supported_pure_expr_def,
        shadow_builtin_form, shadow_type_builtin_form,
-       shadow_struct_elements, shadow_subscript_place]
+       shadow_struct_elements, shadow_subscript_place, gas_shadow_target_indices,
+       EVERY_MAP, EVERY_MEM] >>
+  rpt strip_tac >> gvs[] >>
+  TRY (Cases_on `target` >> gvs[]) >>
+  TRY (Cases_on `default` >> gvs[]) >>
+  gvs[MEM_MAP] >> metis_tac[]
 QED
 
 Theorem gas_shadow_supported_pure_expr:
@@ -88,11 +85,11 @@ Theorem shadow_effect_support[local]:
 Proof
   ho_match_mp_tac supported_effect_expr_ind >>
   rpt conj_tac >> rpt gen_tac >>
-  simp[gas_shadow_expr_def, supported_effect_expr_def,
-       shadow_subscript_place] >>
-  rpt strip_tac >>
-  gvs[gas_shadow_expr_def, supported_effect_expr_def] >>
-  metis_tac[shadow_pure_support]
+  simp[gas_shadow_expr_def, supported_effect_expr_def, shadow_subscript_place,
+       gas_shadow_target_indices, EVERY_MAP, EVERY_MEM] >>
+  rpt strip_tac >> gvs[gas_shadow_expr_def, supported_effect_expr_def] >>
+  TRY (Cases_on `default` >> gvs[]) >>
+  gvs[MEM_MAP] >> metis_tac[shadow_pure_support]
 QED
 
 Theorem gas_shadow_supported_effect_expr:

@@ -127,10 +127,6 @@ QED
      bytes use window_alloca_growth_frame, as in phases_open;
    - execution/frame transitivity, then abi_decode_sim_ctx_no_invoke ONCE.
 
-   Expression consumer: abi_encode_nonword_counted_suffix currently returns
-   bytes/control ONLY. Extend its Q with a real-function execution frame,
-   registered effects and old-register preservation, not with strong_result
-   (the latter contains execution and is not returndata insensitive).
    vv_post additionally requires stmt_state_rel, vv_holds, vv_at, old rows,
    protected old allocation bytes and locals_kept. The four-field exec_frame
    is not sufficient for those. Protected byte disjointness is supplied by
@@ -143,8 +139,8 @@ QED
    No-block route: same phase composition target; count with the original
    abi_decode_sim_gas_path and the no-block observer, not a relabeled start.
    Its observer hypothesis has neither fn_name agreement nor no-INVOKE.
-   Existing abi_encode_nonword_no_block_observer uses straight-line execution;
-   a framed no-block consumer must retain that concrete sequence witness.
+   A framed no-block consumer must retain the concrete straight-line
+   execution witness.
    Do not instantiate the singleton transfer theorem below at an arbitrary
    no-block observer without proving its no-INVOKE premise.
 *)

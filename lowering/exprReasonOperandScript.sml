@@ -253,7 +253,11 @@ Proof
   Cases_on `lit`
   >- (Cases_on `b` >>
       simp[compile_literal_vv_def, comp_return_def] >>
-      rpt strip_tac >> gvs[reason_result_shape_def]) >>
+      rpt strip_tac >> gvs[reason_result_shape_def])
+  >~ [`HexBytesL bs`] >-
+    (simp[compile_literal_vv_def, comp_bind_def, comp_return_def] >>
+     strip_tac >> pairarg_tac >> gvs[reason_result_shape_def, base_ptr_def] >>
+     drule (GEN_ALL reason_bytelike_operand) >> simp[]) >>
   simp[compile_literal_vv_def, comp_return_def, comp_bind_def] >>
   rpt strip_tac >>
   gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
@@ -557,9 +561,11 @@ Proof
   >~ [`LocatedValue _ (base_ptr _)`] >-
     (gvs[reason_result_shape_def, base_ptr_def] >>
      metis_tac[reason_alloc_operand]) >>
-  qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
-  qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory res` >>
-  Cases_on `res` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
+  FIRST [qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac,
+         qpat_x_assum `as_stack_val _ _ = _` mp_tac] >>
+  FIRST [qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory res`,
+         qmatch_goalsub_abbrev_tac `as_stack_val vt res`] >>
+  Cases_on `res` >> gvs[as_ptr_val_def, as_stack_val_def, markerTheory.Abbrev_def] >>
   strip_tac >> gvs[reason_result_shape_def, mk_ptr_def] >>
   metis_tac[reason_slice_adhoc, reason_slice_out_buf, reason_slice_data,
             reason_ec_points, reason_uint2str]
@@ -679,7 +685,7 @@ Proof
 QED
 
 Theorem reason_abi_encode_operand:
-  lower_abi_encode ensure mid src info maxlen sa = (op,sb) ==> !l. op <> Label l
+  lower_abi_encode mid maxlen encode sa = (op,sb) ==> !l. op <> Label l
 Proof
   simp[builtinAbiTheory.lower_abi_encode_def, LET_THM,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
@@ -739,8 +745,8 @@ Proof
 QED
 
 Theorem reason_external_call_operand[local]:
-  compile_external_call_kwargs cenv addr vals tys memsz abisz mid retsz mn outsz
-    static value gas skip hasdef def rt dt einfo dinfo sa = (op,sb) ==>
+  compile_external_call_kwargs cenv addr vals tys abisz mid retsz mn outsz
+    static value gas skip hasdef def rt dt dinfo sa = (op,sb) ==>
   !l. op <> Label l
 Proof
   simp[compile_external_call_kwargs_def, LET_THM, comp_bind_def,

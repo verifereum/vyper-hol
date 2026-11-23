@@ -20,6 +20,7 @@
 
 Theory deepResidualBudget
 Ancestors
+  reorderPreparationProps reorderPreparationInventoryProps
   fnPlanPrefix preparedPrefixSim generatedPrefixSim generatedReorderSim
   genericInputReady reorderSim doSwapSim codegenRel asmSem planExec
   stackPlanGen stackPlanOps stackPlanTypes stackModel blockSimHelpers planWf planSpillBounds foldlSim
@@ -332,7 +333,7 @@ Proof
   fs[residual_budget_wf_marked_def] >>
   `plan_slots_bounded sb ps'` by metis_tac[do_spill_at_slots_bounded] >>
   `spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled` by
-    metis_tac[do_spill_at_layout_wf] >>
+    metis_tac[reorderPreparationTracePropsTheory.do_spill_at_layout_wf] >>
   `dead_stack_marker <> v` by metis_tac[] >>
   `!x. LIST_ELEM_COUNT x ps'.ps_stack <= LIST_ELEM_COUNT x ps.ps_stack` by
     (gen_tac >> qpat_assum `!x. _ + _ = _` (qspec_then `x` mp_tac) >>
@@ -392,21 +393,21 @@ Proof
   gvs[finite_mapTheory.FDOM_FUPDATE, elem_count_sing]
 QED
 
-Theorem reduce_depth_plan_residual_budget_wf_marked:
-  !fuel base pending target_op f ps ops ps'.
+Theorem reduce_depth_plan_keeps_marked_budget[local]:
+  !fuel base pending target_op f width ps ops ps'.
     residual_budget_wf_marked base pending ps /\
-    reduce_depth_plan fuel pending target_op f (LENGTH pending) ps =
+    reduce_depth_plan fuel pending target_op f width ps =
       (ops, ps') ==>
     residual_budget_wf_marked base pending ps'
 Proof
   Induct >> simp[reduce_depth_plan_def, LET_THM] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `stack_get_unfixed_depth target_op f (LENGTH pending)
+  Cases_on `stack_get_unfixed_depth target_op f width
               ps.ps_stack` >> gvs[] >>
-  Cases_on `f + 1 < LENGTH pending` >> gvs[] >>
+  Cases_on `f + 1 < width` >> gvs[] >>
   Cases_on `x <= 16` >> gvs[] >>
   Cases_on `select_spill_candidate ps.ps_stack pending x
-              (LENGTH pending)` >> gvs[] >>
+              width` >> gvs[] >>
   pairarg_tac >> gvs[] >>
   rename1 `do_spill_at cand ps = (spill_ops, ps1)` >>
   `1 <= LENGTH ps.ps_stack` by
@@ -418,14 +419,24 @@ Proof
     metis_tac[var_operand_not_marker] >>
   `residual_budget_wf_marked base' pending ps1` by
     metis_tac[residual_budget_wf_marked_do_spill_at] >>
-  Cases_on `reduce_depth_plan fuel pending target_op f (LENGTH pending) ps1` >>
+  Cases_on `reduce_depth_plan fuel pending target_op f width ps1` >>
   gvs[] >> metis_tac[]
 QED
 
-Theorem reduce_depth_plan_pending_inventory_mono_marked:
-  !fuel pending target_op f ps ops ps' base x.
+Theorem reduce_depth_plan_residual_budget_wf_marked:
+  !fuel base pending target_op f ps ops ps'.
     residual_budget_wf_marked base pending ps /\
     reduce_depth_plan fuel pending target_op f (LENGTH pending) ps =
+      (ops, ps') ==>
+    residual_budget_wf_marked base pending ps'
+Proof
+  metis_tac[reduce_depth_plan_keeps_marked_budget]
+QED
+
+Theorem reduce_depth_plan_keeps_marked_inventory[local]:
+  !fuel pending target_op f width ps ops ps' base x.
+    residual_budget_wf_marked base pending ps /\
+    reduce_depth_plan fuel pending target_op f width ps =
       (ops,ps') ==>
     LIST_ELEM_COUNT x ps.ps_stack +
       (if x IN FDOM ps.ps_spilled then 1 else 0) <=
@@ -434,12 +445,12 @@ Theorem reduce_depth_plan_pending_inventory_mono_marked:
 Proof
   Induct >> simp[reduce_depth_plan_def, LET_THM] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `stack_get_unfixed_depth target_op f (LENGTH pending)
+  Cases_on `stack_get_unfixed_depth target_op f width
               ps.ps_stack` >> gvs[] >>
-  Cases_on `f + 1 < LENGTH pending` >> gvs[] >>
+  Cases_on `f + 1 < width` >> gvs[] >>
   Cases_on `x' <= 16` >> gvs[] >>
   Cases_on `select_spill_candidate ps.ps_stack pending x'
-              (LENGTH pending)` >> gvs[] >>
+              width` >> gvs[] >>
   pairarg_tac >> gvs[] >>
   rename1 `do_spill_at cand ps = (spill_ops,ps1)` >>
   `1 <= LENGTH ps.ps_stack` by
@@ -460,13 +471,26 @@ Proof
   `residual_budget_wf_marked base' pending ps1` by
     metis_tac[residual_budget_wf_marked_do_spill_at] >>
   Cases_on `reduce_depth_plan fuel pending target_op f
-              (LENGTH pending) ps1` >> gvs[] >>
+              width ps1` >> gvs[] >>
   first_x_assum
-    (qspecl_then [`pending`, `target_op`, `f`, `ps1`, `q`, `ps'`,
+    (qspecl_then [`pending`, `target_op`, `f`, `width`, `ps1`, `q`, `ps'`,
                   `base'`, `x`] mp_tac) >>
   simp[] >>
   qpat_assum `!y. _` (qspec_then `x` assume_tac) >>
   decide_tac
+QED
+
+Theorem reduce_depth_plan_pending_inventory_mono_marked:
+  !fuel pending target_op f ps ops ps' base x.
+    residual_budget_wf_marked base pending ps /\
+    reduce_depth_plan fuel pending target_op f (LENGTH pending) ps =
+      (ops,ps') ==>
+    LIST_ELEM_COUNT x ps.ps_stack +
+      (if x IN FDOM ps.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x ps'.ps_stack +
+      (if x IN FDOM ps'.ps_spilled then 1 else 0)
+Proof
+  metis_tac[reduce_depth_plan_keeps_marked_inventory]
 QED
 
 Theorem reorder_restore_residual_budget_wf_marked:
@@ -760,6 +784,41 @@ Proof
   first_x_assum drule_all >> simp[]
 QED
 
+Theorem reorder_prepare_residual_budget_wf_marked:
+  !base targets ps ops post.
+    residual_budget_wf_marked base targets ps /\
+    pending_inventory_wf targets ps /\
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    reorder_prepare_plan targets ps = (ops,post) ==>
+    residual_budget_wf_marked base targets post /\
+    pending_inventory_wf targets post /\ LENGTH targets <= LENGTH post.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all reorder_prepare_materialised_counts >> strip_tac >> simp[] >>
+  qspecl_then [`targets`, `ps`, `ops`, `post`,
+    `\st. residual_budget_wf_marked base' targets st /\ pending_inventory_wf targets st`]
+    mp_tac reorder_prepare_preserves >>
+  simp[] >> disch_then irule >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      conj_tac >- metis_tac[residual_budget_wf_marked_restore] >>
+      fs[pending_inventory_wf_def] >> Cases_on `FLOOKUP start.ps_spilled op`
+      >- gvs[do_restore_def] >>
+      rename1 `FLOOKUP start.ps_spilled op = SOME off` >>
+      gen_tac >>
+      rename1 `LIST_ELEM_COUNT x targets <= _` >>
+      qspecl_then [`start`, `op`, `off`, `x`] mp_tac
+        do_restore_inventory_count_marked >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- metis_tac[reduce_depth_plan_keeps_marked_budget] >>
+  fs[pending_inventory_wf_def] >> gen_tac >>
+  rename1 `LIST_ELEM_COUNT x targets <= _` >>
+  drule_all reduce_depth_plan_keeps_marked_inventory >>
+  disch_then (qspec_then `x` mp_tac) >>
+  qpat_assum `!op. LIST_ELEM_COUNT op targets <= _`
+    (qspec_then `x` mp_tac) >> decide_tac
+QED
+
 (* The budget half of deepResidualSim's reorder_plan_venom_asm_rel_numeric_marked,
    with the stack-length floor it needs. *)
 Theorem reorder_plan_residual_budget_wf_marked:
@@ -777,8 +836,8 @@ Proof
      (MAPi (\i op. (i,op)) target_ops)` by
     (simp[EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
      rpt strip_tac >> gvs[]) >>
-  qpat_x_assum `reorder_plan _ _ _ = _`
-    (assume_tac o REWRITE_RULE [reorder_plan_eq_plan_steps]) >>
+  drule reorder_plan_split >> strip_tac >>
+  drule_all reorder_prepare_residual_budget_wf_marked >> strip_tac >>
   drule_all plan_steps_reorder_residual_budget_wf_marked >> simp[]
 QED
 
@@ -890,7 +949,7 @@ Proof
   Cases_on `d <= 16`
   >- (qpat_x_assum `do_swap _ _ = _` mp_tac >>
       simp[do_swap_def] >> Cases_on `d = 0` >> simp[] >>
-      strip_tac >> gvs[] >> metis_tac[reorderSimTheory.stack_swap_mem_subset]) >>
+      strip_tac >> gvs[] >> metis_tac[reorderPreparationInventoryPropsTheory.stack_swap_mem_subset]) >>
   metis_tac[reorderSimTheory.do_swap_inventory_subset]
 QED
 
@@ -996,7 +1055,7 @@ Proof
          (drule reduce_depth_plan_target_len_floor >> fs[]) >>
        `asm_block_at prog mid.as_pc (execute_plan initial_fmp reduce_ops)` by
          metis_tac[ADD_COMM] >>
-       drule_all reduce_depth_plan_venom_asm_rel_numeric >>
+       drule_all reorderPreparationTracePropsTheory.reduce_depth_plan_venom_asm_rel_numeric >>
        disch_then (qspec_then `o2pc` strip_assume_tac) >>
        rename1 `venom_asm_rel lo ps2 vs final` >> simp[] >> qexists `final` >>
        simp[] >> once_rewrite_tac[ADD_COMM] >>
@@ -1481,11 +1540,21 @@ Theorem reorder_plan_materialised_arranged_marked:
     ps'.ps_stack = stack_pop (LENGTH pending) ps'.ps_stack ++ pending
 Proof
   rpt gen_tac >> strip_tac >>
+  drule reorder_plan_split >> strip_tac >>
+  `pending_inventory_wf pending ps` by
+    (simp[pending_inventory_wf_def] >> rpt strip_tac >>
+     first_x_assum (qspec_then `op` mp_tac) >> decide_tac) >>
+  drule_all reorder_prepare_residual_budget_wf_marked >> strip_tac >>
+  `!x. MEM x pending ==> LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x mid.ps_stack` by
+    (qspecl_then [`pending`, `ps`, `prep`, `mid`] mp_tac
+       reorder_prepare_count_dom >> simp[] >> metis_tac[]) >>
+  `!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x mid.ps_stack` by
+    (gen_tac >> Cases_on `MEM x pending` >- metis_tac[] >>
+     fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
   `plan_state_residual_wf_marked spillbase pending (LENGTH pending) ps'` by
     (irule plan_steps_reorder_materialised_marked >> simp[] >>
-     qexistsl_tac [`dfg`, `[]`, `ops`, `ps`, `pending`] >>
-     simp[GSYM reorder_plan_eq_plan_steps] >>
-     irule residual_budget_wf_marked_to_residual >> simp[]) >>
+     qexistsl_tac [`dfg`, `[]`, `rest`, `mid`, `pending`] >>
+     simp[] >> irule residual_budget_wf_marked_to_residual >> simp[]) >>
   simp[] >> irule fixed_suffix_decompose >>
   fs[plan_state_residual_wf_marked_def]
 QED

@@ -1,26 +1,24 @@
 (*
- * Seam of external_entry_reaches_body_ptr (loweringPtrCorrect): the
- * selected external function's argument registration
+ * Entry seam: the selected external function's argument registration
  * (compile_register_positional_args: per parameter an ALLOCA buffer and
  * compile_decode_args from calldata into it), run from the state the entry
  * checks leave, reaches the guarded body's start s0 with
- *   - the S1 relation there (stmt_state_rel, as loweringRuntimeCorrect's
- *     admitted external_entry_reaches_body states it, here at the state the
- *     run actually reaches), and
+ *   - the S1 relation there (stmt_state_rel, at the state the run
+ *     actually reaches), and
  *   - a ghost (G0, tn0) in ghost_inv H NONE: each parameter's pointer covered
  *     by its ALLOCA and its value robust to the tainted bytes,
  * with safety of the run from s0 giving safety from the registration's
  * start, for any dead-byte bound D.
  *
  * The start state s1 and its ghost (G1, tn1) are what
- * entryPtrSeamPrefix's external_entry_reaches_registration_ptr provides.
+ * entryPtrSeamPrefix's external_entry_reaches_registration_ptr_nr provides.
  *)
 Theory entryPtrSeamRegister
 Ancestors allocaFrontierRoom allocaSiteResource compileAllocaProvenance
   decoderOriginAllocationFrame fragGasPathFrameMem
   memSafeRun unitTransformDefs codegenRel venomInstProofs
   fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem instMemFrontier ptrSafetyTransport decoderNavigationPtr decoderMemberPrefixPtr
-  sourceOwnedCoherentPtr sourceOwnedComplexPtr sourceOwnedArrayConstructorPtr decoderArrayInitPtr abiDecoderValidArray[qualified] actualDecoderAllocationPtr actualAllocaReplayPtr
+  sourceOwnedCoherentPtr sourceOwnedComplexPtr sourceOwnedArrayConstructorPtr decoderArrayInitPtr abiDecoderValidArray[qualified] actualDecoderAllocationPtr
   acceptedContextPhi sourceWordDecoderPtr sourceBytesRepresentation
   sourceEncodingWindows sourceEncodingLayout sourcePrimitiveMemberPtr sourcePrimitiveReentryPtr canonicalMemberTraversalPtr sourceRecursiveComplexPtr
   entryStateRel entryArgPtrs entryLocals registrationGuardPtr
@@ -32,23 +30,7 @@ Ancestors allocaFrontierRoom allocaSiteResource compileAllocaProvenance
   list rich_list selectorDispatch byte contractABI vyperABIRoundtrip
   valueEncoding valueEncodingDefs entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
   ctorDeployMemoryFrontier registrationSizeAdmissibility argumentRegistrationOpen
-  sourceEntrySelection
-
-(* Supported checked source excludes all runtime DALLOCA producers.  This
-   rules out the proposed near-limit source family before budgeting it. *)
-Theorem registration_supported_no_dalloca:
-  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx ==>
-  ~ctx_has_dalloca unit.cu_context
-Proof
-  strip_tac >>
-  `raw_shape_free_program tops` by
-    metis_tac[loweringShapeSourceTheory.supported_program_raw_shape_free_program] >>
-  irule o1PipelineCorrectTheory.every_no_dalloca >>
-  fs[e2eDefsTheory.source_typing_ok_def] >>
-  drule_all loweringShapeSourceTheory.lower_vyper_runtime_unit_no_dalloca_checked >>
-  simp[]
-QED
+  sourceEntrySelection entryReachBodyFmp entryValueRevertPtr
 
 Theorem registration_fmp_room_necessary:
   fmp_room ctx fn s /\
@@ -260,8 +242,7 @@ Theorem registration_initial_ptr_resources:
   initial_venom_state_rel tops am tx vs /\
   vars_pc_only (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
     vs_inst_idx := 0 |>) s /\
-  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-  ~ctx_has_dalloca unit.cu_context ==>
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn ==>
   s.vs_allocas = FEMPTY /\ s.vs_alloca_next = 0 /\ s.vs_memory = [] /\
   alloca_inv s /\ allocas_from 0 s /\ s.vs_call_ctx = vs.vs_call_ctx /\
   alloca_frontier_inv unit.cu_context fn site s /\
@@ -462,8 +443,7 @@ Theorem registration_owned_entry_inputs_nr:
     (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) /\
   vars_pc_only (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
     vs_inst_idx := 0 |>) s /\
-  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
-  ~ctx_has_dalloca unit.cu_context ==>
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn ==>
   ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
   dec_cenv_agrees ce (type_env tops) /\
   (!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE) /\
@@ -2423,7 +2403,8 @@ Theorem registration_singleton_joint[local]:
   (!bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
   fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t H u q p.
@@ -2479,8 +2460,6 @@ Proof
   `compile_register_positional_args ce
     [(name,F,dyn,sz,type_to_abi_dec_info sf ce ty)] (4+h) st = (ce',last)` by
     (Cases_on `prim` >> gvs[registration_primitive_as_aggregate]) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
   drule_all registration_aggregate_singleton_joint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl_tac [`t`,`H`,`u`,`q`,`p`] >>
@@ -2559,7 +2538,10 @@ Theorem registration_singleton_ptr_resources:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  rpt strip_tac >> drule_all registration_singleton_joint >>
+  rpt strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
+  drule_all registration_singleton_joint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
@@ -2775,7 +2757,7 @@ QED
 
 (* Caller readiness is quantified over the unchanged decoder metadata and
    calldata; no package or source-interpreter facts enter this induction. *)
-Theorem registration_owned_suffix_joint[local]:
+Theorem registration_owned_suffix_joint:
   !R ce0 args tvs vals env sf cd ctx fn site lo PG.
   (!ce2 st2 ce3 last2 name prim dyn sz di h loc n q.
     compile_register_positional_args ce2 [(name,prim,dyn,sz,di)] (4+h) st2 = (ce3,last2) /\
@@ -2833,7 +2815,8 @@ Theorem registration_owned_suffix_joint[local]:
   (!label bb. lookup_block label fn.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
   fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t H u.
@@ -2971,6 +2954,14 @@ Proof
     (qpat_assum `SUM (MAP _ (TAKE (SUC i) args)) = _`
        (fn th => pure_once_rewrite_tac[th]) >>
      pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a /\
+    a.vs_alloca_next + pending_alloca_size fn a <= w2n a.vs_initial_fmp` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK a,H1,u1)`
+       (qspecl_then [`ARB`,`ARB`] assume_tac) >>
+     strip_tac >>
+     drule_at (Pat `gas_origin_ptr_path _ _ _ _`) decoder_origin_path_room >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   qpat_x_assum `!y. LENGTH args - y < _ ==> _` (qspec_then `SUC i` mp_tac) >>
   (impl_tac >- decide_tac) >>
   disch_then (drule_at (Pat `compile_register_positional_args _ _ _ _ = _`)) >>
@@ -3116,7 +3107,10 @@ Theorem registration_owned_suffix_invariant_resources:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  rpt strip_tac >> drule_all registration_owned_suffix_joint >>
+  rpt strip_tac >>
+  `(ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by simp[] >>
+  drule_all registration_owned_suffix_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `u`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
@@ -3402,7 +3396,9 @@ Theorem registration_owned_locals_joint_nr:
   vars_pc_only (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>) s1 /\
   fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
   s1.vs_current_bb = st.cs_current_bb /\ s1.vs_inst_idx = LENGTH st.cs_current_insts /\
-  ~ctx_has_dalloca unit.cu_context ==>
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) ==>
   ?tvs s0 G0 tn0.
     (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
       (s1,G1,tn1) [] (OK s0,G0,tn0)) /\
@@ -3439,6 +3435,23 @@ Theorem registration_owned_locals_joint_nr:
 Proof
   strip_tac >> drule_all registration_owned_entry_inputs_nr >>
   disch_then (qspec_then `site` strip_assume_tac) >>
+  `vars_pc_only vs s1` by
+    (irule vars_pc_only_trans >>
+     qexists_tac `vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>` >>
+     simp[] >> simp[vars_pc_only_def]) >>
+  `allocas_below_fmp s1` by
+    (drule initial_entry_allocas_below_fmp >> disch_then irule >> simp[]) >>
+  `s1.vs_fmp = s1.vs_initial_fmp /\ s1.vs_initial_fmp = vs.vs_initial_fmp` by
+    fs[vars_pc_only_def, venom_state_component_equality, initial_venom_state_rel_def] >>
+  `fmp_room unit.cu_context efn s1` by
+    (irule entry_frontier_fmp_room >>
+     rpt conj_tac >> TRY (qexists_tac `site` >> first_assum ACCEPT_TAC) >> fs[]) >>
+  `ctx_has_dalloca unit.cu_context ==> allocas_below_fmp s1 /\
+    s1.vs_alloca_next + pending_alloca_size efn s1 <= w2n s1.vs_initial_fmp` by
+    (strip_tac >>
+     qpat_assum `fmp_room unit.cu_context efn s1`
+       (mp_tac o REWRITE_RULE [fmp_room_def]) >>
+     simp[] >> decide_tac) >>
   drule_at (Pat `LIST_REL (abi_decoder_coherent _ _ _) _ _`)
     registration_owned_source_ready >>
   disch_then (drule_at (Pat `calldata_encodes _ _ _ _ _`)) >>
@@ -3626,6 +3639,9 @@ Theorem registration_owned_locals_joint[local]:
 Proof
   strip_tac >>
   drule_all valid_vyper_call_selected_calldata >> strip_tac >>
+  `(ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254)` by simp[] >>
   drule_all (Q.INST [`nr` |-> `F`] registration_owned_locals_joint_nr) >> simp[]
 QED
 
@@ -3830,7 +3846,7 @@ Theorem registration_actual_endpoint_relations_from_prefix:
     (lbl,cenv0,pos_args,mincd,pay,nr,key,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
   vars_pc_only (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>) s1 /\
-  ~ctx_has_dalloca unit.cu_context /\
+  fmp_room unit.cu_context efn s0 /\
   LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) (MAP SND args) tvs /\
   local_ptrs_rel efn cenv [env] s0 /\
   (!j. j < LENGTH args ==> ?aid q p n.
@@ -3905,9 +3921,6 @@ Resume registration_actual_endpoint_relations_from_prefix[actual_stmt]:
       (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
   `alloca_room unit.cu_context efn s0` by
     (drule_all registration_frontier_alloca_room >> simp[]) >>
-  `fmp_room unit.cu_context efn s0` by
-    (irule registration_no_dalloca_fmp_room >> simp[] >>
-     drule vyperCompilerTheory.lookup_function_result_name >> simp[]) >>
   simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_def,
        immutable_base_zero_def] >>
   conj_tac >- suspend "actual_state" >> first_assum ACCEPT_TAC
@@ -4042,6 +4055,9 @@ Theorem registration_actual_endpoint_relations_nr:
     es0 G0 tn0 s0
 Proof
   strip_tac >>
+  `fmp_room unit.cu_context efn s0` by
+    (irule registration_no_dalloca_fmp_room >> simp[] >>
+     drule vyperCompilerTheory.lookup_function_result_name >> simp[]) >>
   drule_all_then MATCH_ACCEPT_TAC registration_actual_endpoint_relations_from_prefix
 QED
 
@@ -4129,7 +4145,9 @@ Theorem registration_positional_args_joint_nr:
     s1.vs_current_bb = st.cs_current_bb /\
     s1.vs_inst_idx = LENGTH st.cs_current_insts /\
     tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\ tn1.t_imm = {} /\
-    ~ctx_has_dalloca unit.cu_context ==>
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) ==>
     ?s0 G0 tn0.
     (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
       (s1,G1,tn1) [] (OK s0,G0,tn0)) /\
@@ -4170,7 +4188,17 @@ Proof
         simp[fragGasModeTheory.gas_marked_path_def] >> strip_tac >>
         drule fragGasPathMemTheory.gas_path_mem_exec >>
         metis_tac[gas_path_code_labels]) >>
-     gen_tac >> drule_all registration_actual_endpoint_relations_from_prefix >>
+     gen_tac >>
+     `s0.vs_initial_fmp = s1.vs_initial_fmp` by
+       (qpat_assum `!D explicit. gas_origin_ptr_path _ (s1,G1,tn1) [] (OK s0,G0,tn0)`
+          (qspecl_then [`ARB`,`ARB`] assume_tac) >>
+        drule_all decoder_origin_path_allocation_frame >> simp[]) >>
+     `s1.vs_fmp = vs.vs_initial_fmp /\ s1.vs_initial_fmp = vs.vs_initial_fmp` by
+       fs[vars_pc_only_def, venom_state_component_equality, initial_venom_state_rel_def] >>
+     `fmp_room unit.cu_context efn s0` by
+       (irule entry_frontier_fmp_room >>
+        rpt conj_tac >> TRY (qexists_tac `ARB` >> first_assum ACCEPT_TAC) >> fs[]) >>
+     drule_all registration_actual_endpoint_relations_from_prefix >>
      disch_then (Q.ISPEC_THEN `H` ACCEPT_TAC)) >> simp[]
 QED
 
@@ -4223,6 +4251,9 @@ Theorem registration_positional_args_joint[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all valid_vyper_call_selected_calldata >> strip_tac >>
+  `(ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254)` by simp[] >>
   drule_all registration_positional_args_joint_nr >>
   disch_then (qspec_then `G1` strip_assume_tac) >>
   qexistsl_tac [`s0`, `G0`, `tn0`] >> simp[]
@@ -4232,15 +4263,17 @@ QED
    it owns the caller side of the decoder contract.
    Hints (not binding):
    - Per argument, the decode is the is_prim word path (ADD, CALLDATALOAD,
-     clamp, MSTORE), the dynamic path (head offset load, ADD 4, then
+     clamp, MSTORE), the dynamic path (head offset load, ADD 4, the
+     pointer guard's ASSERT (compile_abi_arg_ptr_guard), then
      compile_abi_decode_to_buf) or the static path (ADD, then
-     compile_abi_decode_to_buf); for the latter two, entryPtrSeamDecoder's
-     calldata_scratch_decoder_ptr is the contract, at lower = 0.
-   - Its inputs (abi_scratch_decoder_input, abi_decoder_budget) come from
-     valid_vyper_call's calldata_encodes and bind_arguments; the ordinary
+     compile_abi_decode_to_buf); for the latter two,
+     sourceOwnedCoherentPtr's source_owned_coherent_decoder_ptr is the
+     contract.
+   - Its value and calldata premises (value_has_type, vyper_to_abi, the
+     encoding in the calldata) come from valid_vyper_call's
+     calldata_encodes and bind_arguments; the ordinary
      static-only precedent is entryStateRel's external_body_entry_state_rel
-     with entryArgPtrs' register_positional_args_local_ptrs, and the
-     memory-sourced builtin precedent is abiBuiltinValidCaller.
+     with entryArgPtrs' register_positional_args_local_ptrs.
    - Earlier parameters stay robust: each later decode writes only its own
      buffer and its scratch slots and leaves taint and provenance of older
      variables alone (the contract's frame conjuncts).
@@ -4310,6 +4343,9 @@ Theorem register_positional_args_ptr_nr:
   calldata_encodes (type_env tops) tx.function_name (MAP SND args)
     tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, nr, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -4356,8 +4392,6 @@ Theorem register_positional_args_ptr_nr:
           !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca unit.cu_context` by
-    (drule_all registration_supported_no_dalloca >> simp[]) >>
   drule_all registration_positional_args_joint_nr >>
   disch_then (qspec_then `G1` strip_assume_tac) >>
   `gas_path_mem unit.cu_context efn s1 0 (OK s0)` by
@@ -4380,6 +4414,9 @@ Theorem register_positional_args_ptr:
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\

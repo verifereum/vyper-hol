@@ -121,6 +121,7 @@ Theorem slice_builtin_self_vv_full_from_tail:
   (!cenv cx env a n ct addr start len es ee e tops ctx DF lo d shadow_ctx PG func shadow_func ty.
     expr_body_pre cenv cx env
       (Builtin a (Slice n) [Builtin ct (Acc Code) [addr];start;len]) es /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\
     expr_sim_inv cenv cx env ee /\ (e = start \/ e = len \/ e = addr) /\
     body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx  ==>
@@ -136,6 +137,7 @@ Theorem slice_builtin_self_vv_full_from_tail:
               body_exprs_full_ok cx [addr])) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = SOME (code_ty,addr) /\
     is_self_code (Builtin code_ty (Acc Code) [addr]) ==>
@@ -152,8 +154,8 @@ Proof
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty start es` by
     (`expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
      asm "child_run" (irule o cj 1) >>
-     simp[] >> conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` (irule_at Any) >> simp[]) >>
+     simp[] >> qexistsl_tac [`a`, `addr`, `code_ty`, `env`, `es`,
+                   `len`, `n`, `start`, `tops`] >> simp[]) >>
   `?self_ty. addr = Builtin self_ty (Env SelfAddr) []` by
     (qpat_x_assum `is_self_code _` mp_tac >> rpt (pop_assum kall_tac) >>
      rewrite_tac[Once (oneline is_self_code_def)] >>
@@ -205,16 +207,17 @@ Proof
   `local_ptrs_reserved cenv shadow_sa` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
+  `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
+    (irule bodyFullSharedTheory.local_ptrs_reserved_gas_shadow >>
+     qexists_tac `sa` >> conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_assum `compile_slice_code start_op' len_op' _ st2' = _`
     (mp_then Any drule_all slice_self_compilation_context) >> strip_tac >>
-  qpat_assum `compile_slice_code start_op' len_op' _ st2' = _`
-    (mp_then Any strip_assume_tac exprSimSliceSelfCodeTheory.slice_code_decompose) >>
-  gvs[] >>
   `start_op' = start_op /\ gas_shadow_state st1 st1'` by
-    (qpat_x_assum `tail_run :- _` kall_tac >>
-     qpat_x_assum `child_run :- _` kall_tac >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-               gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ start sa = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr start) shadow_sa = _`
+       (irule_at Any) >>
+     simp[] >> irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env) >>
   gvs[] >>
   rewrite_tac[exprSimSliceSelfCodeTheory.slice_self_code_actions] >>
   `expr_body_pre cenv cx env start es` by
@@ -282,6 +285,12 @@ Proof
        `INL v`,`mid with gas_obs := []`] mp_tac
        exprSimSourceTheory.expr_body_pre_eval >> fs[SF ETA_ss]) >>
   `expr_sim_inv cenv cx env mid` by fs[] >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
+       (qspec_then `[]` (irule_at Any)) >> fs[expr_body_pre_def]) >>
   `body_expr_full_ok cx len` by
     (qpat_x_assum `body_exprs_full_ok cx [start;len]` mp_tac >>
      simp[body_exprs_full_ok_def] >> strip_tac >>
@@ -292,8 +301,10 @@ Proof
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty len (mid with gas_obs := [])` by
     (asm "child_run" (irule o cj 1) >> simp[] >>
-     conj_tac >- (qexists_tac `tops` >> simp[]) >>
-     qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` (irule_at Any) >> simp[]) >>
+     qexistsl_tac [`BaseT (BytesT (Dynamic n))`,
+       `Builtin (BaseT AddressT) (Env SelfAddr) []`,
+       `BaseT (BytesT (Dynamic 24576))`, `env`, `es`,
+       `len`, `n`, `start`, `tops`] >> simp[]) >>
   `expr_body_pre cenv cx env len mid` by
     (`well_typed_expr env
         (Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code)
@@ -304,10 +315,11 @@ Proof
      drule exprSimSourceTheory.expr_body_pre_builtin_typed_arg >>
      disch_then (qspecl_then [`len`,`mid`] mp_tac) >> fs[]) >>
   `len_op' = len_op /\ gas_shadow_state st2 st2'` by
-    (qpat_x_assum `tail_run :- _` kall_tac >>
-     qpat_x_assum `child_run :- _` kall_tac >>
-     metis_tac[gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value,
-               gasShadowStateTheory.gas_shadow_compiles_def,pairTheory.FST,pairTheory.SND]) >>
+    (irule bodyFullSharedTheory.gas_shadow_step >>
+     qpat_assum `lower_value _ _ _ len st1 = _` (irule_at Any) >>
+     qpat_assum `lower_value _ _ _ (gas_shadow_expr len) st1' = _`
+       (irule_at Any) >>
+     simp[] >> irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env) >>
   gvs[] >>
   `sa.cs_next_var <= st1.cs_next_var` by fs[exprLoweringPropsTheory.ci_mono_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st1 x` by
@@ -340,11 +352,11 @@ Proof
        qpat_assum `MEM func ctx.ctx_functions` (fn member =>
          ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.body_inv_no_phi
            (CONJ inv member))))) >>
-  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_no_wrap inst u` by
+  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
          qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
-           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+           (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
             CONJ path o CONJ no_phi)))) >>
   qpat_x_assum `expr_sim_full _ _ _ _ len _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>

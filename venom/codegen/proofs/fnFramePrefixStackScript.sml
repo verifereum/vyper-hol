@@ -42,7 +42,7 @@ Proof
      Cases_on `stack_get_depth op ps.ps_stack` >> simp[FLOOKUP_DEF]
      >- (IF_CASES_TAC >> simp[]) >>
      drule stackModelTheory.stack_get_depth_props >>
-     metis_tac[reorderSimTheory.stack_peek_mem]) >>
+     metis_tac[reorderPreparationInventoryPropsTheory.stack_peek_mem]) >>
   `!at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
      MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
      ~is_var_operand at \/

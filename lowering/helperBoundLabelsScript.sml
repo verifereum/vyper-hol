@@ -787,14 +787,15 @@ Proof
 QED
 
 Theorem bound_labels_lower_abi_encode:
-  (!l. compiler_label l ==> P l) /\
+  (!dst t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (encode dst t))))) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label)
-    (all_blocks (SND (lower_abi_encode tuple mid src info maxlen s))))
+    (all_blocks (SND (lower_abi_encode mid maxlen encode s))))
 Proof
   strip_tac >> Cases_on `mid` >> simp[lower_abi_encode_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_alloc_buffer, cj 2 bound_labels_abi_encode, comp_return_def]),
+    bound_labels_alloc_buffer, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED

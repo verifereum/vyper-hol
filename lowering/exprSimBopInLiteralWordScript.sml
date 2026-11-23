@@ -216,8 +216,10 @@ Proof
   `MakeArray (SOME et) n <> Len /\ MakeArray (SOME et) n <> Env MsgGas /\
    ~precompile_builtin (MakeArray (SOME et) n) /\ code_slice_source (MakeArray (SOME et) n) elems = NONE /\
    MakeArray (SOME et) n <> Bop In /\ MakeArray (SOME et) n <> Bop NotIn /\
-   builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH elems)` by
-    simp[precompile_builtin_def, builtin_args_length_ok_def] >>
+   builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH elems) /\
+   ~is_self_codesize (MakeArray (SOME et) n) elems` by
+    simp[precompile_builtin_def, builtin_args_length_ok_def,
+         is_self_codesize_def] >>
   drule_all eval_expr_builtin_action >>
   disch_then (qspecl_then [`cx`, `a`] mp_tac) >>
   simp[builtin_result_def, evaluate_builtin_def] >>
@@ -298,7 +300,9 @@ Proof
   rename1 `eval_exprs cx elems st = (INL vs, st')` >>
   drule eval_exprs_length >> disch_tac >>
   `compatible_bound n (LENGTH vs)` by metis_tac[] >>
-  simp[bop_result_def, evaluate_membership_array, literal_array_membership]
+  Cases_on `bop = In` >>
+  gvs[bop_result_def, vyperContextTheory.evaluate_builtin_def, LET_THM,
+      evaluate_binop_def, binop_negate_def, literal_array_membership]
 QED
 Theorem literal_body_evaluate_types:
   expr_body_pre cenv cx env

@@ -163,17 +163,25 @@ QED
 Resume default_word_registration_step_footprint[execution_frame]:
   `t.vs_current_bb = ready.vs_current_bb /\ t.vs_halted = ready.vs_halted` by
     (qpat_x_assum `t = _` (fn th => once_rewrite_tac [th]) >> simp[]) >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abiDecoderWordOutcomeTheory.abi_decoder_word_opcodes >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
       i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS)
       (emitted_insts first decoded)` by
-    (`abi_decode_source_opcode CALLDATALOAD` by
-       simp[abiDecoderContractTheory.abi_decode_source_opcode_def] >>
-     drule_all abiDecoderWordOutcomeTheory.abi_decoder_word_opcodes >>
-     simp[listTheory.EVERY_MEM, abiDecoderWordOutcomeTheory.abi_word_opcode_def] >>
-     strip_tac >> gen_tac >> strip_tac >>
-     first_x_assum drule >> strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
+    (simp[EVERY_MEM] >> gen_tac >> disch_tac >>
+     qpat_assum `EVERY (\i. abi_word_opcode i.inst_opcode) _`
+       (drule_then mp_tac o REWRITE_RULE[EVERY_MEM]) >>
+     simp[abiDecoderWordOutcomeTheory.abi_word_opcode_def] >>
+     strip_tac >> gvs[is_terminator_def]) >>
+  `ctx_has_dalloca ctx ==>
+    !pre i post mid. emitted_insts first decoded = pre ++ i::post /\
+      run_inst_seq pre ready = OK mid ==> unitTransformDefs$dalloca_no_wrap i mid` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_assum `EVERY (\i. abi_word_opcode i.inst_opcode) _` mp_tac >>
+     simp[EVERY_APPEND] >>
+     strip_tac >> gvs[abiDecoderWordOutcomeTheory.abi_word_opcode_def]) >>
   drule_all ctorDeployMemoryRunMemEntryCompositeSetupTheory.ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   conj_tac >- suspend "alloca_inv" >>
   conj_tac >- suspend "frontier" >>
   conj_tac >- suspend "allocas_from" >>

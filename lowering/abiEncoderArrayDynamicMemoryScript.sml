@@ -5,7 +5,7 @@ Ancestors
   abiDecoderContract fragExec compileEnv emitHelperProps emitHelper venomInst venomExecSemantics
   list rich_list arithmetic abiEncoderArraySourceSpine abiEncoderMemberSpine
   abiEncoderMemberPhaseRaw abiEncoderMemberSourceAdapter abiEncoderExtendSim
-  abiEncoderArrayTailPrepare abiEncoderDynamic abiEncoderChildCompose abiEncoderChildFrames
+  abiEncoderDynamic abiEncoderChildCompose abiEncoderChildFrames
   abiEncoderChildInputs abiEncoderCorrect abiDecoderEffect abiDecoderAllocation
   abiDecoderProtectedScratch abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderLoop
   valueEncoding venomState finite_map pred_set words abiEncoderAfterAddress abiEncoderInput

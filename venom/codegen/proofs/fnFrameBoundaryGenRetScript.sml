@@ -1,5 +1,6 @@
 Theory fnFrameBoundaryGenRet
 Ancestors
+  reorderPreparationProps
   fnPlanPrefix venomOperandProps
   genFrameSim frameRel contextCodegenRel codegenRel emitSim
   fnFrameTerminalPrep preparedPrefixSim asmFrame strongPrefixSim prefixSim stackOpSim
@@ -235,30 +236,34 @@ Proof
   drule_all do_swap_small_result >> strip_tac >> gvs[]
 QED
 
-Theorem reorder_fold_small_result[local]:
-  !xs acc ps ops ps'.
-  FOLDL (\(ops, ps) (idx, op).
-    let (step_ops, next) = reorder_one dfg targets idx op ps in
-      (ops ++ step_ops, next)) (acc, ps) xs = (ops, ps') /\
-  LENGTH ps'.ps_stack <= 16 ==>
-  LENGTH ps.ps_stack <= LENGTH ps'.ps_stack /\
-  (!off. MEM (SOSpill off) ops ==> MEM (SOSpill off) acc)
-Proof
-  Induct >> simp[] >> rpt gen_tac >> Cases_on `h` >> simp[] >>
-  pairarg_tac >> simp[] >> strip_tac >> fs[LET_THM] >>
-  first_x_assum drule >> simp[] >> strip_tac >>
-  `LENGTH next.ps_stack <= 16` by decide_tac >>
-  drule_all reorder_one_small_result >> strip_tac >>
-  conj_tac >- decide_tac >> gvs[]
-QED
-
 Theorem reorder_plan_small_result:
   reorder_plan dfg targets ps = (ops, ps') /\ LENGTH ps'.ps_stack <= 16 ==>
   LENGTH ps.ps_stack <= LENGTH ps'.ps_stack /\
   (!off. ~MEM (SOSpill off) ops)
 Proof
-  simp[reorder_plan_def] >> strip_tac >>
-  drule_all (SIMP_RULE (srw_ss()) [LET_THM] reorder_fold_small_result) >> simp[]
+  strip_tac >>
+  qspecl_then [`dfg`, `targets`, `ps`, `ops`, `ps'`,
+    `\st trace post. LENGTH post.ps_stack <= 16 ==>
+       LENGTH st.ps_stack <= LENGTH post.ps_stack /\
+       (!off. ~MEM (SOSpill off) trace)`]
+    (mp_tac o BETA_RULE) reorder_plan_trace_relation >>
+  impl_tac
+  >- (rpt conj_tac
+      >- simp[]
+      >- (rpt gen_tac >> strip_tac >> disch_tac >>
+          qpat_assum `LENGTH finish'.ps_stack <= 16 ==> _` (fn th => drule th) >>
+          strip_tac >>
+          `LENGTH mid.ps_stack <= 16` by decide_tac >>
+          qpat_assum `LENGTH mid.ps_stack <= 16 ==> _` (fn th => drule th) >>
+          strip_tac >> simp[MEM_APPEND] >> decide_tac)
+      >- (rpt gen_tac >> strip_tac >> disch_tac >>
+          drule do_restore_no_spill >> simp[])
+      >- (rpt gen_tac >> strip_tac >> disch_tac >>
+          drule_all reduce_depth_plan_small_result >> simp[])
+      >- (rpt gen_tac >> strip_tac >> disch_tac >>
+          drule_all reorder_one_small_result >> simp[])
+      >- first_assum ACCEPT_TAC) >>
+  simp[]
 QED
 
 Theorem ret_plan_no_spill:

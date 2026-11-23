@@ -18,7 +18,7 @@ Ancestors
   (* semantics properties *)
   vyperSemanticsHol
   (* frontend, its cv translation, and the test runner *)
-  vyperTestRunner jsonToVyperCV
+  vyperTestRunner jsonToVyperCV jsonToVyperExprProps
   (* compiler passes *)
   venomPassesHol
   (* analysis roll-up *)
@@ -35,7 +35,7 @@ Ancestors
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
   (* O1: lifting per-function pass facts to the stage contract *)
   o1PassLift
-  (* O1: the pipeline's request companion at an abort *)
+  (* O1: DFT's request companion at an abort *)
   dftRequestsGas
   (* O1: joint simulation, abort requests and memory for static frames *)
   o1StaticPipelineCorrect
@@ -57,6 +57,8 @@ Ancestors
      bytes, widened returns *)
   actualDecoderPackaging actualRegistrationCode actualEntryAllocationFrame
   allocaHistoryFragment ctorRegisterArgs
+  entryPtrSeamRegisterMods[qualified,ignore_grammar]
+  ctorDeployMemoryRunPtrPrefixEntrySemanticMods[qualified,ignore_grammar]
   nonreentrantEntry nonreentrantSource nonreentrantExit
   builtinBytesMemory concatMemory exprSimConvertFromBytes
   stmtSimReturnWiden
@@ -73,7 +75,6 @@ Ancestors
   assignPlaceEmptyCompose
   assignPlaceGasCompose assignPlaceBytesStore
   (* whitelist: retained raw-call and CREATE compiler shape proofs *)
-  whitelistS2CreateShape whitelistS2Shape
   (* pointer safety of the lowering *)
   normalizationAllocPtr
   ptrSafetyTransport staticTypeFitsPtr
@@ -83,6 +84,8 @@ Ancestors
   e2eGasSufficient e2eGasSufficientTop
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
+  (* linked-module boundaries for runtime and deployment *)
+  e2eModsDefs[qualified,ignore_grammar] e2eDeployModsDefs[qualified,ignore_grammar]
   (* body induction: custom-error raise and assert pieces *)
   stmtSimCustomErrorRevert
   (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)

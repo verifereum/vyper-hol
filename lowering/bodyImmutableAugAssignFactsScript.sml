@@ -1,9 +1,46 @@
 Theory bodyImmutableAugAssignFacts
 Ancestors
-  bodySim bodyStorageMetadata exprSimHypsDefs stmtSimAugAssignPlace supportedDecls
+  bodySim bodyInvSplit bodyInvCodeProps bodyInvMetadataProps exprBodyPreProps
+  augAssignFullImmutableSetup alist bodyStorageMetadata exprSimHypsDefs
+  stmtSimAugAssignPlace supportedDecls
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperInterpreter
   vyperState exprOpenMain exprSimSource exprSimTopLevelImmutable
   finite_map list compileEnv loweringStateRelDefs exprSimUnwrap loweringPosts exprLoweringProps
+
+(* In a linked environment, a declaration can be typed before its location
+   is allocated. The location bound applies when the compiler map has an entry. *)
+Theorem immutable_augassign_metadata_mods:
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
+  cx.in_deploy /\ expr_sim_inv_mods mods cenv cx env es /\
+  supported_immutable_type tops (NONE,id) = SOME ity /\
+  type_stmt env ret_ty (AugAssign ty (TopLevelNameTarget (src,id)) bop e) =
+    SOME env' ==>
+  cenv.ce_is_ctor /\ ty = ity /\ is_word_type ty /\
+  FLOOKUP env.bare_globals (src,id) = SOME ty /\
+  FLOOKUP env.bare_global_assignable (src,id) = SOME ty /\
+  src = cenv.ce_module /\
+  cenv.ce_module_var_type (src,id) = SOME ty /\
+  (IS_SOME (FLOOKUP cenv.ce_module_vars (src,id)) ==>
+   ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+         (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+               off + type_memory_size tv < dimword (:256)))
+Proof
+  strip_tac >>
+  drule_then strip_assume_tac aug_place_typing >>
+  `is_word_type ty` by
+    (`?tv. evaluate_type env.type_defs ty = SOME tv` by
+       metis_tac[assignable_type_well_formed, well_formed_type_def,
+                 optionTheory.IS_SOME_EXISTS] >>
+     metis_tac[stmtSimAugAssignTheory.well_typed_binop_augassign_is_word]) >>
+  qpat_assum `module_body_inv _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [module_body_inv_def]) >>
+  drule_all_then strip_assume_tac augassign_immutable_place_mods >>
+  drule_then assume_tac contract_inv_constructor >>
+  `ty = ity` by
+    fs[type_place_target_TopLevelNameTarget] >>
+  fs[expr_sim_inv_mods_def, bare_globals_layout_def] >>
+  metis_tac[]
+QED
 
 Theorem immutable_augassign_metadata:
   !tops ctx cenv cx env es src id ity ret_ty ty bop e env'.
@@ -21,30 +58,25 @@ Theorem immutable_augassign_metadata:
                 off + type_memory_size tv < dimword (:256))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all aug_place_typing_word >> strip_tac >>
-  drule aug_place_typing >> strip_tac >>
-  qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
-  simp[supported_immutable_type_def] >>
-  Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
-  rename1 `_ = SOME decl` >> PairCases_on `decl` >>
-  Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
-  simp[] >> strip_tac >> gvs[] >>
-  drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
-  rename1 `supported_value_type tops ity` >>
-  `get_module_code cx NONE = SOME tops /\
-   bare_globals_complete env.bare_globals cx /\
-   bare_global_assignable_complete env.bare_global_assignable cx` by
-    fs[body_inv_def, expr_sim_inv_def, env_consistent_def,
-       env_context_consistent_def] >>
-  `FLOOKUP env.bare_globals (NONE,id) = SOME ity /\
-   FLOOKUP env.bare_global_assignable (NONE,id) = SOME ity` by
-    metis_tac[bare_globals_complete_def, bare_global_assignable_complete_def] >>
-  gvs[type_place_target_TopLevelNameTarget] >>
-  `~cx_const_name cx (NONE,id)` by
-    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_decl >>
-     strip_tac >> gvs[]) >>
-  fs[expr_sim_inv_def, bare_globals_layout_def, body_inv_def] >>
-  metis_tac[]
+  `src = NONE` by
+    (spose_not_then assume_tac >>
+     drule_then strip_assume_tac supported_lookup_other_module >>
+     fs[supported_immutable_type_def]) >>
+  gvs[] >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac body_inv_module >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx env es` by fs[expr_sim_inv_split_def] >>
+  drule_all_then strip_assume_tac (SIMP_RULE (srw_ss()) [ALOOKUP_def] (Q.INST
+    [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`]
+    (SPEC_ALL immutable_augassign_metadata_mods))) >>
+  qpat_x_assum `ty = ity` SUBST_ALL_TAC >>
+  `IS_SOME (FLOOKUP cenv.ce_module_vars (NONE,id))` by
+    (qpat_assum `expr_sim_inv cenv cx env es`
+       (mp_tac o Q.SPECL [`NONE`,`id`,`ity`] o
+        CONJUNCT2 o REWRITE_RULE [expr_sim_inv_split_def]) >>
+     simp[]) >>
+  first_x_assum drule >> simp[]
 QED
 
 Theorem immutable_augassign_source_prefix:

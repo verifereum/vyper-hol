@@ -208,35 +208,14 @@ Proof
       `pure_expr (HD es)` by
         (Cases_on `es` >> gvs[builtin_args_length_ok_def]) >>
       fs[type_check_def, assert_def, return_def] >> metis_tac[]) >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn`
-  >- (
-      rpt strip_tac >>
-      (* the code-slice and ordinary IHs don't apply to membership *)
-      rpt (qpat_x_assum `!s'' x t v. _` kall_tac) >>
-      qpat_x_assum `!s'' x t. _ /\ _ /\ ~(_ \/ _) /\ _ ==> _` kall_tac >>
-      gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
-          type_check_def, assert_def, return_def, raise_def,
-          get_accounts_def, lift_sum_def, precompile_call_success_def,
-          AllCaseEqs()] >>
-      gvs[get_accounts_def, ETA_THM, return_def, raise_def,
-          sum_CASE_rator, AllCaseEqs()] >>
-      gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
-          lift_option_type_def, lift_option_def, get_accounts_def,
-          AllCaseEqs()] >>
-      gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
-      Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
-      gvs[return_def, raise_def, sum_CASE_rator, AllCaseEqs()] >>
-      qpat_x_assum `sum_CASE _ _ _ _ = _` mp_tac >>
-      qmatch_goalsub_abbrev_tac `sum_CASE ans` >>
-      Cases_on `ans` >> gvs[return_def, raise_def] >> metis_tac[])
-  >> rpt strip_tac >> fs[pure_expr_def] >>
+  rpt strip_tac >> fs[pure_expr_def] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >>
   Cases_on `builtin_args_length_ok bt (LENGTH es)` >>
   fs[type_check_def, assert_def, return_def, raise_def, ignore_bind_def,
      bind_def] >>
   simp[AllCaseEqs(), return_def] >> strip_tac >> gvs[return_def] >>
-  imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >> gvs[]
+  imp_res_tac get_accounts_state >> imp_res_tac if_lift_sum_state >> gvs[]
   >>~- ([`option_CASE (code_slice_source _ _) _ _ _ = _`],
         drule_at (Pos last) builtin_operands_preserve >>
         disch_then (qspec_then
@@ -376,7 +355,7 @@ QED
 Resume expr_state_mutual[builtin]:
   rpt gen_tac >> strip_tac >>
   qspecl_then [`cx`, `ty`, `bt`, `es`] mp_tac case_Builtin >>
-  (impl_tac >- (Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >> metis_tac[])) >>
+  (impl_tac >- metis_tac[]) >>
   simp[]
 QED
 

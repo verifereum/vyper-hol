@@ -41,7 +41,9 @@ Theorem default_bytes_registration_step_footprint:
   alloca_inv s /\ alloca_frontier_inv_from k ctx fn site s /\
   fn_inst_ids_distinct fn /\ k + unit_alloca_budget ctx < dimword (:256) /\
   FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
   alloca_history fn s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -112,7 +114,6 @@ Proof
     (irule abi_decode_bytes_extent_capacity_bound >> qexists `s.vs_alloca_next` >> simp[]) >>
   `abi_decode_bytes_copy_size maxn < dimword (:256) /\
    ptr_covers H u p ready (abi_decode_bytes_copy_size maxn)` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp ready` by simp[] >>
   drule_all default_bytes_decode_origin >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qabbrev_tac `out = t with vs_inst_idx := LENGTH decoded.cs_current_insts` >>
@@ -171,8 +172,14 @@ Resume default_bytes_registration_step_footprint[execution_frame]:
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
      i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts first decoded)` by
     (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts first decoded = pre ++ i::post /\
+      run_inst_seq pre ready = OK u ==> unitTransformDefs$dalloca_no_wrap i u` by
+    (rpt strip_tac >>
+     drule calldataBytesSentinelShapeTheory.calldata_bytes_sentinel_non_dalloca >>
+     simp[EVERY_APPEND, unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   drule_all ctorDeployMemoryRunMemEntryCompositeSetupTheory.ctor_checked_emitted_endpoint >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  strip_tac >>
   conj_tac >- suspend "alloca_inv" >>
   conj_tac >- suspend "frontier" >>
   conj_tac >- suspend "allocas_from" >>
@@ -254,7 +261,10 @@ Theorem default_bytes_registration_step:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u out) ==>
        !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all default_bytes_registration_step_footprint >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp` by simp[] >>
+  drule_all default_bytes_registration_step_footprint >>
   disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
   qexistsl [`out`,`H`,`u`,`p`] >> simp[]
 QED

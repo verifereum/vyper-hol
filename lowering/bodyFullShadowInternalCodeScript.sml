@@ -5,6 +5,7 @@ Ancestors
   vyperCompiler venomExecProps venomInst list intCallLookup ctorUnitShape
   gasShadowInternal gasShadowState gasShadowModuleDefs gasShadowUnit
   gasShadowUnitGuards gasShadowUnitExtract gasShadow
+  bodyInternalFunctionIntervalProps externalEntryShape internalBlockPackagingProps
 
 Theorem compile_internal_fn_bodies_append[local]:
   !xs ys st.
@@ -49,34 +50,6 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem fn_has_code_block_suffix[local]:
-  final.cs_blocks = fresh ++ entry.cs_blocks /\
-  func.fn_blocks = REVERSE fresh ++
-    [<| bb_label := final.cs_current_bb;
-        bb_instructions := final.cs_current_insts |>] /\
-  ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks) ==>
-  fn_has_code entry final func
-Proof
-  strip_tac >> simp[fn_has_code_def, emitted_blocks_def] >> conj_tac
-  >- (rpt strip_tac >> irule MEM_lookup_block >>
-      simp[] >> gvs[TAKE_APPEND1]) >>
-  qexists_tac `<| bb_label := final.cs_current_bb;
-                 bb_instructions := final.cs_current_insts |>` >>
-  simp[] >> irule MEM_lookup_block >> gvs[]
-QED
-
-Theorem fn_has_code_new_block_segment[local]:
-  new_block label before = (old,entry) /\
-  cs_extends entry final /\
-  all_blocks final = all_blocks before ++ func.fn_blocks /\
-  ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks) ==>
-  fn_has_code entry final func
-Proof
-  strip_tac >> gvs[cs_extends_def] >>
-  irule fn_has_code_block_suffix >> goal_assum (drule_at Any) >>
-  gvs[new_block_def, all_blocks_def, APPEND_ASSOC]
-QED
-
 Theorem internal_fn_descriptors_append[simp,local]:
   !xs ys. internal_fn_descriptors (xs ++ ys) =
           internal_fn_descriptors xs ++ internal_fn_descriptors ys
@@ -85,11 +58,73 @@ Proof
   rpt gen_tac >> PairCases_on `h` >> simp[internal_fn_descriptors_def]
 QED
 
+Theorem compile_internal_fn_bodies_label_segments:
+  !packages start final.
+    compile_internal_fn_bodies packages start = ((),final) ==>
+    ?segments.
+      all_blocks final = all_blocks start ++ FLAT segments /\
+      LIST_REL
+        (\(label,ce,params,has_buf,nr,key,trans,view,ctor,ilen,ss,ret) segment.
+          segment <> [] /\ (HD segment).bb_label = label /\
+          EVERY (\bb. isPREFIX "@" bb.bb_label) (TL segment) /\
+          ?before old entry after.
+            new_block label before = (old,entry) /\
+            compile_internal_function ce params has_buf nr key trans view ctor ilen
+              ss ret entry = ((),after) /\
+            cs_extends entry after /\
+            all_blocks after = all_blocks before ++ segment)
+        packages segments
+Proof
+  Induct >- simp[compile_internal_fn_bodies_def, comp_return_def] >>
+  qx_gen_tac `h` >> PairCases_on `h` >> rpt gen_tac >>
+  Cases_on `new_block h0 start` >> rename1 `new_block h0 start = (old,entry)` >>
+  Cases_on `compile_internal_function h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 entry` >>
+  rename1 `compile_internal_function _ _ _ _ _ _ _ _ _ _ _ entry = (u,after)` >>
+  Cases_on `u` >>
+  simp[Once compile_internal_fn_bodies_def, comp_ignore_bind_def, comp_bind_def] >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+    qspecl_then [`h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `h7`, `h8`,
+               `h9`, `h10`, `h11`, `entry`] mp_tac compile_internal_function_labels >>
+  simp[] >> strip_tac >>
+  drule cs_extends_block_stream_labels >> strip_tac >>
+  `REVERSE entry.cs_blocks = all_blocks start /\ entry.cs_current_bb = h0` by
+    gvs[new_block_def, all_blocks_def, LET_THM] >>
+  qexists_tac `(bb::tail)::segments` >>
+  gvs[APPEND_ASSOC] >> conj_tac
+  >- (qpat_x_assum `EVERY (isPREFIX "@") _` mp_tac >>
+      qpat_x_assum `MAP _ tail = _` (assume_tac o SYM) >>
+      simp[EVERY_MAP]) >>
+  qexistsl_tac [`start`, `old`, `entry`, `after`] >> simp[]
+QED
+
+Theorem internal_fn_descriptors_map:
+  internal_fn_descriptors packages =
+    MAP (\(label,ce,params,buf,nr,key,trans,view,ctor,ilen,ss,rt).
+      (label,buf,ce.ce_returns_count)) packages
+Proof
+  Induct_on `packages` >> simp[internal_fn_descriptors_def] >>
+  qx_gen_tac `pkg` >> PairCases_on `pkg` >>
+  simp[internal_fn_descriptors_def]
+QED
+
+Theorem compile_internal_labels:
+  compile_internal_fn_bodies packages start = (u,final) ==>
+  ?segments.
+    all_blocks final = all_blocks start ++ FLAT segments /\
+    LIST_REL
+      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg)) (internal_fn_descriptors packages) segments
+Proof
+  Cases_on `u` >> strip_tac >>
+  drule compile_internal_fn_bodies_label_segments >> strip_tac >>
+  qexists_tac `segments` >> simp[] >>
+  rewrite_tac[internal_fn_descriptors_map, LIST_REL_MAP1] >>
+  irule LIST_REL_mono >> goal_assum (drule_at Any) >>
+  simp[combinTheory.o_DEF, pairTheory.FORALL_PROD]
+QED
+
 Theorem compile_internal_fn_bodies_selected_segments[local]:
-  compile_internal_fn_bodies (xs ++ [selected] ++ ys) st = (r,final) /\
-  shape_state st /\ EVERY internal_fn_shape_ok (xs ++ [selected] ++ ys) /\
-  EVERY (\d. internal_label_ok (FST d))
-    (internal_fn_descriptors (xs ++ [selected] ++ ys)) ==>
+  compile_internal_fn_bodies (xs ++ [selected] ++ ys) st = (r,final) ==>
   ?before after seg pre post.
     (?u. compile_internal_fn_bodies xs st = (u,before)) /\
     (?v. compile_internal_fn_bodies [selected] before = (v,after)) /\
@@ -97,20 +132,26 @@ Theorem compile_internal_fn_bodies_selected_segments[local]:
     all_blocks before = all_blocks st ++ FLAT pre /\
     all_blocks after = all_blocks before ++ seg /\
     all_blocks final = all_blocks after ++ FLAT post /\
-    LIST_REL internal_segment_ok (internal_fn_descriptors xs) pre /\
-    LIST_REL internal_segment_ok (internal_fn_descriptors [selected]) [seg] /\
-    LIST_REL internal_segment_ok (internal_fn_descriptors ys) post
+    LIST_REL
+      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg)) (internal_fn_descriptors xs) pre /\
+    LIST_REL
+      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg)) (internal_fn_descriptors [selected]) [seg] /\
+    LIST_REL
+      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg)) (internal_fn_descriptors ys) post
 Proof
   strip_tac >> drule compile_internal_fn_bodies_selected >> strip_tac >>
   fs[internal_fn_descriptors_def] >>
   qpat_assum `compile_internal_fn_bodies xs st = _`
-    (mp_then Any mp_tac compile_internal_fn_bodies_shape) >>
+    (mp_then Any mp_tac compile_internal_labels) >>
   simp[internal_fn_descriptors_def] >> strip_tac >>
   qpat_assum `compile_internal_fn_bodies [selected] before = _`
-    (mp_then Any mp_tac compile_internal_fn_bodies_shape) >>
+    (mp_then Any mp_tac compile_internal_labels) >>
   simp[internal_fn_descriptors_def] >> strip_tac >>
   qpat_assum `compile_internal_fn_bodies ys after = _`
-    (mp_then Any mp_tac compile_internal_fn_bodies_shape) >>
+    (mp_then Any mp_tac compile_internal_labels) >>
   simp[internal_fn_descriptors_def] >> strip_tac >>
   PairCases_on `selected` >>
   gvs[internal_fn_descriptors_def, LIST_REL_CONS1] >>
@@ -121,9 +162,6 @@ Theorem internal_singleton_code[local]:
   compile_internal_fn_bodies
     [(label,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret)] before =
     (r,after) /\
-  shape_state before /\ internal_label_ok label /\
-  internal_fn_shape_ok
-    (label,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret) /\
   all_blocks after = all_blocks before ++ func.fn_blocks /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks) ==>
   ?old entry.
@@ -133,26 +171,23 @@ Theorem internal_singleton_code[local]:
     fn_has_code entry after func
 Proof
   strip_tac >> drule compile_internal_fn_bodies_singleton >> strip_tac >>
-  `shape_state entry` by (irule shape_state_new_block >> metis_tac[]) >>
-  `internal_label_ok entry.cs_current_bb` by
-    gvs[internal_fn_shape_ok_def, new_block_def] >>
-  `shape_step T compiler_label (\st. internal_label_ok st.cs_current_bb)
-     (compile_internal_function ce params has_buf nr key trans view ctor imm_len
-        ss ret) (\x st. T)` by
-    (irule compile_internal_function_shape >> gvs[internal_fn_shape_ok_def]) >>
-  `cs_extends entry after` by
-    (gvs[shape_step_def, shape_extends_def] >> metis_tac[]) >>
-  goal_assum (drule_at Any) >> simp[] >>
-  irule fn_has_code_new_block_segment >> metis_tac[]
+  qexistsl_tac [`old`, `entry`] >> simp[] >>
+  irule fn_has_code_new_block_segment >>
+  simp[] >> conj_tac >- metis_tac[] >>
+  qspecl_then [`ce`, `params`, `has_buf`, `nr`, `key`, `trans`, `view`,
+    `ctor`, `imm_len`, `ss`, `ret`, `entry`] mp_tac compile_internal_function_labels >>
+  simp[]
 QED
 
 Theorem extract_context_partition_lookup[local]:
   extract_context_with_internals entry ints final = SOME (ctx,data) /\
   ALL_DISTINCT (MAP (\f. f.fn_name) ctx.ctx_functions) /\
   all_blocks final = entry_blocks ++ FLAT segs /\
-  LIST_REL internal_segment_ok (internal_fn_descriptors ints) segs /\
+  LIST_REL
+      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg)) (internal_fn_descriptors ints) segs /\
   ALL_DISTINCT (MAP FST (internal_fn_descriptors ints)) /\
-  EVERY (\d. ~compiler_label (FST d) /\
+  EVERY (\d. ~isPREFIX "@" (FST d) /\
     ~MEM (FST d) (MAP (\bb. bb.bb_label) entry_blocks))
     (internal_fn_descriptors ints) ==>
   !i. i < LENGTH segs ==>
@@ -162,7 +197,9 @@ Theorem extract_context_partition_lookup[local]:
       (EL i segs) (FST (SND (EL i (internal_fn_descriptors ints))))
       (SND (SND (EL i (internal_fn_descriptors ints)))))
 Proof
-  strip_tac >> drule_all package_internal_blocks_segments >> strip_tac >>
+  strip_tac >>
+  drule_all (Q.SPECL [`internal_fn_descriptors ints`, `segs`, `entry_blocks`,
+      `isPREFIX "@"`] package_internal_blocks_separated_segments) >> strip_tac >>
   rpt strip_tac >> imp_res_tac LIST_REL_LENGTH >>
   qpat_x_assum `extract_context_with_internals _ _ _ = _` mp_tac >>
   qpat_x_assum `all_blocks final = _`
@@ -183,17 +220,21 @@ Theorem extract_context_selected_segment_lookup[local]:
     SOME (ctx,data) /\
   ALL_DISTINCT (MAP (\f. f.fn_name) ctx.ctx_functions) /\
   ALL_DISTINCT (MAP FST (internal_fn_descriptors (xs ++ [selected] ++ ys))) /\
-  all_blocks start <> [] /\ (HD (all_blocks start)).bb_label = entry /\
-  EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks start))) /\
-  (entry = "__entry" \/ entry = "__deploy") /\
+  EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks start) /\
   EVERY (\d. internal_label_ok (FST d))
     (internal_fn_descriptors (xs ++ [selected] ++ ys)) /\
   all_blocks before = all_blocks start ++ FLAT pre /\
   all_blocks after = all_blocks before ++ seg /\
   all_blocks final = all_blocks after ++ FLAT post /\
-  LIST_REL internal_segment_ok (internal_fn_descriptors xs) pre /\
-  LIST_REL internal_segment_ok (internal_fn_descriptors [selected]) [seg] /\
-  LIST_REL internal_segment_ok (internal_fn_descriptors ys) post ==>
+  LIST_REL
+      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg)) (internal_fn_descriptors xs) pre /\
+  LIST_REL
+      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg)) (internal_fn_descriptors [selected]) [seg] /\
+  LIST_REL
+      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg)) (internal_fn_descriptors ys) post ==>
   lookup_function (FST (HD (internal_fn_descriptors [selected])))
     ctx.ctx_functions =
   SOME (mk_internal_function (FST (HD (internal_fn_descriptors [selected]))) seg
@@ -201,17 +242,22 @@ Theorem extract_context_selected_segment_lookup[local]:
     (SND (SND (HD (internal_fn_descriptors [selected])))))
 Proof
   strip_tac >>
-  `LIST_REL internal_segment_ok
+  `LIST_REL
+      (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+        EVERY (\bb. isPREFIX "@" bb.bb_label) (TL seg))
      (internal_fn_descriptors (xs ++ [selected] ++ ys))
      (pre ++ [seg] ++ post)` by
-    (simp[] >> irule LIST_REL_APPEND_suff >> simp[] >>
-     irule LIST_REL_APPEND_suff >> simp[]) >>
-  `EVERY (\d. ~compiler_label (FST d) /\
+    metis_tac[LIST_REL_APPEND_suff, internal_fn_descriptors_append, APPEND_ASSOC] >>
+  `EVERY (\d. ~isPREFIX "@" (FST d) /\
      ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks start)))
        (internal_fn_descriptors (xs ++ [selected] ++ ys))` by
-    (rewrite_tac[EVERY_MEM] >> gen_tac >> disch_tac >> BETA_TAC >>
-     `internal_label_ok (FST e)` by (fs[EVERY_MEM] >> metis_tac[]) >>
-     metis_tac[internal_name_not_entry_label, deploy_internal_label_separate]) >>
+    (rewrite_tac[EVERY_MEM] >> qx_gen_tac `desc` >> strip_tac >> BETA_TAC >>
+     `internal_label_ok (FST desc)` by
+       (qpat_assum `EVERY (\d. internal_label_ok (FST d)) _`
+          (qspec_then `desc` mp_tac o REWRITE_RULE [EVERY_MEM]) >> simp[]) >>
+     conj_tac
+     >- (Cases_on `FST desc` >> fs[internal_label_ok_def]) >>
+     simp[MEM_MAP] >> fs[EVERY_MEM] >> metis_tac[]) >>
   `all_blocks final = all_blocks start ++ FLAT (pre ++ [seg] ++ post)` by
     simp[FLAT_APPEND, APPEND_ASSOC] >>
   qpat_x_assum `all_blocks final = all_blocks after ++ FLAT post` kall_tac >>
@@ -231,12 +277,8 @@ Theorem extract_context_selected_internal_code:
   ctx_inst_ids_distinct ctx /\
   compile_internal_fn_bodies
     (xs ++ [(label,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret)] ++ ys)
-    start = ((),final) /\ shape_state start /\
-  all_blocks start <> [] /\ (HD (all_blocks start)).bb_label = entry /\
-  EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks start))) /\
-  (entry = "__entry" \/ entry = "__deploy") /\
-  EVERY internal_fn_shape_ok
-    (xs ++ [(label,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret)] ++ ys) /\
+    start = ((),final) /\
+  EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks start) /\
   EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors
     (xs ++ [(label,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret)] ++ ys)) /\
   ALL_DISTINCT (MAP FST (internal_fn_descriptors
@@ -252,7 +294,7 @@ Theorem extract_context_selected_internal_code:
     ctx_inst_ids_distinct ctx
 Proof
   strip_tac >>
-  drule_all compile_internal_fn_bodies_selected_segments >> strip_tac >>
+  drule compile_internal_fn_bodies_selected_segments >> strip_tac >>
   drule extract_context_selected_segment_lookup >>
   disch_then (qspecl_then [`start`, `seg`, `pre`, `post`, `before`, `after`] mp_tac) >>
   simp[] >>
@@ -264,11 +306,6 @@ Proof
      drule lookup_function_MEM >> strip_tac >> simp[]) >>
   `all_blocks after = all_blocks before ++ func.fn_blocks` by
     simp[Abbr `func`, mk_internal_function_def, mk_raw_function_def] >>
-  `shape_state before` by
-    (qpat_assum `compile_internal_fn_bodies xs start = _`
-       (mp_then Any mp_tac compile_internal_fn_bodies_shape) >>
-     fs[] >> metis_tac[]) >>
-  `internal_label_ok label` by fs[internal_fn_descriptors_def] >>
   fs[] >> drule_all internal_singleton_code >> strip_tac >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any)
@@ -296,15 +333,9 @@ Theorem selected_internal_shadow_code:
   compile_internal_fn_bodies sips startS = ((),run_endS) /\
   extract_context_with_internals name ips run_end = SOME (ctx,data) /\
   extract_context_with_internals name sips run_endS = SOME (sctx,sdata) /\
-  shape_state start /\ shape_state startS /\
   gas_shadow_state start startS /\ gas_shadow_context ctx sctx /\
-  (name = "__entry" \/ name = "__deploy") /\
-  all_blocks start <> [] /\ all_blocks startS <> [] /\
-  (HD (all_blocks start)).bb_label = name /\
-  (HD (all_blocks startS)).bb_label = name /\
-  EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks start))) /\
-  EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks startS))) /\
-  EVERY internal_fn_shape_ok ips /\ EVERY internal_fn_shape_ok sips /\
+  EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks start) /\
+  EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks startS) /\
   EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips) /\
   ALL_DISTINCT (MAP FST (internal_fn_descriptors ips)) /\
   ALL_DISTINCT (MAP (\f. f.fn_name) ctx.ctx_functions) /\
@@ -323,7 +354,7 @@ Theorem selected_internal_shadow_code:
     ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
     MEM sf sctx.ctx_functions /\ gas_shadow_function callee sf /\
     new_block label beforeS = (oldS,entryS) /\
-    compile_internal_function ce params has_rb nr key trans view ctor ilen
+    compile_internal_function (gas_shadow_env T ce) params has_rb nr key trans view ctor ilen
       (MAP gas_shadow_stmt ss) rt entryS = ((),finalS) /\
     gas_shadow_state entry entryS /\ gas_shadow_state final finalS /\
     fn_has_code entryS finalS sf
@@ -350,14 +381,14 @@ Proof
     compile_internal_fn_bodies (MAP gas_shadow_internal_package xs)
       startS = ((),shadow_before) /\
     new_block label shadow_before = (shadow_old,shadow_entry) /\
-    compile_internal_function ce params has_rb nr key trans view ctor ilen
+    compile_internal_function (gas_shadow_env T ce) params has_rb nr key trans view ctor ilen
       (MAP gas_shadow_stmt ss) rt shadow_entry = ((),shadow_final) /\
     fn_has_code shadow_entry shadow_final shadow_callee` by
     (mp_tac (Q.INST [`entry` |-> `name`, `final` |-> `run_endS`,
        `ctx` |-> `sctx`, `data` |-> `sdata`, `start` |-> `startS`,
        `xs` |-> `MAP gas_shadow_internal_package xs`,
        `ys` |-> `MAP gas_shadow_internal_package ys`,
-       `ss` |-> `MAP gas_shadow_stmt ss`,
+       `ce` |-> `gas_shadow_env T ce`, `ss` |-> `MAP gas_shadow_stmt ss`,
        `has_buf` |-> `has_rb`, `imm_len` |-> `ilen`, `ret` |-> `rt`]
        extract_context_selected_internal_code) >>
      simp[internal_fn_descriptors_def, oneTheory.one] >> metis_tac[]) >>
@@ -376,10 +407,14 @@ Proof
     (mp_tac gas_shadow_compiles_new_block >> simp[gas_shadow_compiles_def] >>
      disch_then (qspecl_then [`real_before`, `shadow_before`] mp_tac) >> simp[]) >>
   `gas_shadow_state real_final shadow_final` by
-    (mp_tac (Q.SPECL [`ce`, `params`, `has_rb`, `nr`, `key`, `trans`, `view`,
-      `ctor`, `ilen`, `ss`, `rt`] gas_shadow_compile_internal_function) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`real_entry`, `shadow_entry`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles
+        (compile_internal_function ce params has_rb nr key trans view ctor ilen ss rt)
+        (compile_internal_function (gas_shadow_env T ce) params has_rb nr key trans
+          view ctor ilen (MAP gas_shadow_stmt ss) rt)` by
+       irule gas_shadow_compile_internal_function >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`real_entry`, `shadow_entry`] mp_tac o
+         REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >>
   qexistsl_tac [`real_before`, `real_old`, `real_entry`, `real_final`, `shadow_callee`,
     `shadow_before`, `shadow_old`, `shadow_entry`, `shadow_final`] >>
   fs[]

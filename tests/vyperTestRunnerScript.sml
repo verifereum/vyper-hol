@@ -3,7 +3,7 @@ Ancestors
   vyperSmallStepCV
   contractABI vyperABIDecode vyperABI vyperInterpreter vyperSmallStep jsonAST
   jsonToVyper vfmContext vfmExecution vfmTransaction vfmDecreasesGas
-  vyperStateCheckpoint
+  vyperStateCheckpoint vyperCalldata
 Libs
   cv_transLib wordsLib
 
@@ -161,11 +161,10 @@ Definition compute_vyper_args_def:
     then let
       abiArgsTup = vyper_abi_dec abiTupTy padded 0;
       vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
-      vyArgsTv = evaluate_type tenv (TupleT vyTys);
-      vyArgs = (case OPTION_BIND vyArgsTv
-                  (λtv. OPTION_BIND vyArgsTup (extract_elements tv))
-                  of NONE => [] | SOME ls => ls)
-      in SOME vyArgs else NONE;
+      vyArgsTv = evaluate_type tenv (TupleT vyTys)
+      in OPTION_BIND vyArgsTv
+           (λtv. OPTION_BIND vyArgsTup (extract_elements tv))
+    else NONE;
   in
     (argsOpt, tenv, SND vyTysRet)
 End
@@ -188,6 +187,160 @@ val () = increment_account_nonce_def
   |> SRULE [combinTheory.o_DEF, combinTheory.C_DEF]
   |> cv_auto_trans;
 
+(* The runner's verdict when compute_vyper_args rejects a call's or a
+   deployment's calldata. The interpreter never runs on it, and no other code
+   raises this message. Vyper's entry also reverts on such calldata, so the
+   verdict satisfies an expected failure. *)
+Definition calldata_rejected_msg_def:
+  calldata_rejected_msg = "runner: ABI decoder rejected calldata"
+End
+
+val () = cv_auto_trans calldata_rejected_msg_def;
+
+(* The interpreter's own calldata entry (vyperCalldata): selector lookup,
+   fallback and argument decoding, as the compiled contract does them.
+   The cv translator takes no higher-order functions, so its FIND, EXISTS and
+   OPT_MMAP steps are rewritten to the first-order forms below, proved equal. *)
+Definition find_selector_def:
+  find_selector tenv sel [] = NONE ∧
+  find_selector tenv sel ((name,tys)::sigs) =
+    if abi_method_id tenv name tys = sel then SOME (name,tys)
+    else find_selector tenv sel sigs
+End
+
+Theorem find_selector_FIND:
+  ∀sigs. find_selector tenv sel sigs =
+         FIND (λ(name,tys). abi_method_id tenv name tys = sel) sigs
+Proof
+  Induct >- simp[find_selector_def, listTheory.FIND_thm] >>
+  Cases >> simp[find_selector_def, listTheory.FIND_thm]
+QED
+
+Definition has_default_decl_def:
+  has_default_decl [] = F ∧
+  has_default_decl (t::ts) = (is_default_decl t ∨ has_default_decl ts)
+End
+
+Theorem has_default_decl_EXISTS:
+  ∀ts. has_default_decl ts = EXISTS is_default_decl ts
+Proof
+  Induct >> simp[has_default_decl_def]
+QED
+
+Theorem OPT_MMAP_evaluate_type:
+  OPT_MMAP (evaluate_type tenv) tys = evaluate_types tenv tys []
+Proof
+  simp[vyperValueTheory.evaluate_types_OPT_MMAP] >>
+  Cases_on `OPT_MMAP (evaluate_type tenv) tys` >> simp[]
+QED
+
+(* Mutually recursive groups, translated whole before cv_auto_trans meets them. *)
+val () = cv_trans tv_abi_dynamic_def;
+val () = cv_trans tv_abi_static_size_def;
+val () = cv_trans tv_needs_clamp_def;
+val () = cv_trans tv_abi_size_def;
+(* Byte/word conversions in the big-endian forms vfmTypes translates. *)
+val () = cv_auto_trans
+  (REWRITE_RULE [GSYM byteTheory.word_of_bytes_be_def] cd_word_def);
+val () = cv_auto_trans
+  (REWRITE_RULE [GSYM byteTheory.word_to_bytes_be_def] cd_word_value_def);
+val () = cv_auto_trans cd_member_ptr_def;
+val cd_decode_pre_def = cv_trans_pre_rec
+  "cd_decode_pre cd_decode_elems_pre cd_decode_list_pre"
+  (REWRITE_RULE [GSYM vyperMiscTheory.CHR_o_w2n_eq] cd_decode_def)
+  (WF_REL_TAC `inv_image ($< LEX $<) (λx. case x of
+       INL (_,_,t,_) => (cv_size t, 0)
+     | INR (INL (_,_,t,_,_,k)) => (cv_size t, cv$c2n k + 1)
+     | INR (INR (_,_,ts,_,_)) => (cv_size ts, 0))`
+   \\ rw[]
+   \\ qspec_then `cv_snd cv_v` assume_tac vyperMiscTheory.cv_size_cv_map_snd_le
+   \\ Cases_on `cv_v` \\ gvs[cvTheory.cv_size_def, cvTheory.cv_lt_def, cvTheory.cv_sub_def, cvTheory.c2b_def]
+   \\ TRY (rename1 `cv_size (cv_fst fg)` \\ Cases_on `fg`
+           \\ gvs[cvTheory.cv_size_def, cvTheory.cv_fst_def]));
+
+(* The preconditions are only the recursive calls'. *)
+Theorem cd_decode_pre[cv_pre,local]:
+  (∀nat cd t p. cd_decode_pre nat cd t p) ∧
+  (∀nat cd t base i k. cd_decode_elems_pre nat cd t base i k) ∧
+  (∀nat cd ts p ofs. cd_decode_list_pre nat cd ts p ofs)
+Proof
+  ho_match_mp_tac cd_decode_ind \\ rw[]
+  \\ simp[Once cd_decode_pre_def] \\ rw[] \\ gvs[]
+QED
+
+val () = calldata_dispatch_def
+  |> REWRITE_RULE [GSYM find_selector_FIND, GSYM has_default_decl_EXISTS,
+                   OPT_MMAP_evaluate_type]
+  |> cv_auto_trans;
+
+(* The runner's verdict when calldata_dispatch finds no entry for a call's
+   calldata: the contract reverts with empty returndata before any function
+   body (calldata_dispatch_def). *)
+Definition dispatch_rejected_msg_def:
+  dispatch_rejected_msg = "calldata_dispatch: no entry"
+End
+
+val () = cv_auto_trans dispatch_rejected_msg_def;
+
+(* RuntimeError messages that are Vyper's own run-time failures (reverts the
+   language defines), by exact match. Any other RuntimeError is an internal
+   error of the interpreter or the runner and fails a test that expects a
+   failure. Where each is raised: *)
+Definition contract_failure_messages_def:
+  contract_failure_messages = [
+    (* semantics/vyperValueOperationScript.sml *)
+    "bounded_int_op bound"; "bounded_decimal_op"; "Decimal Mul bound";
+    "Exp~"; "Div0"; "Mod0"; "ewv bound"; "ewv neg"; "evaluate_slice range";
+    "convert uint bound"; "convert int flag bound"; "convert BytesV bound";
+    "convert bytes string"; "convert string bytes";
+    "convert string string bound"; "Div overflow";
+    "convert BytesV uint bound"; "convert BytesV int bound";
+    "convert bytes address"; "convert int bound"; "convert int address";
+    "convert flag int bound"; "convert flag uint bound";
+    "convert decimal int"; "convert decimal uint"; "append overflow";
+    (* semantics/vyperContextScript.sml *)
+    "AddMod division by zero"; "MulMod division by zero";
+    "evaluate_block_hash"; "evaluate_extract32 start";
+    "evaluate_extract32 bytesM"; "evaluate_extract32 address clamp";
+    "Neg operand bound"; "ECAdd invalid point"; "ECMul invalid point";
+    (* semantics/vyperABIScript.sml, abi_decode *)
+    "abi_decode invalid"; "abi_decode conversion";
+    (* semantics/vyperStateScript.sml *)
+    "evaluate_subscripts array_index"; "array fixed oob";
+    "array dynamic length oob"; "pop empty storage array";
+    "pop empty memory array"; "append full storage array";
+    "assign_subscripts array_index"; "array dynamic capacity oob";
+    (* check_not_static here, and the static call value check in
+       vyperInterpreterScript.sml *)
+    "write in static context";
+    (* semantics/vyperCreateScript.sml *)
+    "create source has no deployable code"; "create address collision";
+    "create initcode too large";
+    "create insufficient balance or nonce limit"; "create failed";
+    (* semantics/vyperInterpreterScript.sml; "call lookup_function" is
+       external dispatch finding no function and no __default__ *)
+    "not Payable"; "no range"; "For too long"; "send failed";
+    "ExtCall target has no code"; "call lookup_function";
+    "transfer_value amount"; "nonreentrant lock";
+    (* raw_call_evm below: the EVM call reverted *)
+    "raw_call_evm reverted";
+    calldata_rejected_msg; dispatch_rejected_msg]
+End
+
+val () = cv_auto_trans contract_failure_messages_def;
+
+(* Whether an exception satisfies a trace that expects the call or the
+   deployment to fail. *)
+Definition expected_failure_def:
+  expected_failure (AssertException _) = T ∧
+  expected_failure (Error (RevertData _)) = T ∧
+  expected_failure (Error (RuntimeError msg)) =
+    MEM msg contract_failure_messages ∧
+  expected_failure _ = F
+End
+
+val () = cv_auto_trans expected_failure_def;
+
 Definition run_deployment_def:
   run_deployment am dt = let
     sns = compute_selector_names dt.contractAbi;
@@ -196,7 +349,7 @@ Definition run_deployment_def:
     name = find_deploy_function_name ts;
     argTys = find_args_by_name name dt.contractAbi;
     ar = compute_vyper_args all_mods ts Deploy name argTys dt.callData;
-    res = case FST ar of NONE => INR (Error $ RuntimeError "run_deployment args")
+    res = case FST ar of NONE => INR (Error $ RuntimeError calldata_rejected_msg)
           | SOME args => let
     tx = <| sender := dt.deployer
           ; target := dt.deployedAddress
@@ -356,30 +509,85 @@ QED
 
 val () = cv_auto_trans call_gas_readings_def;
 
-Definition run_call_def:
-  run_call reads_gas sns am ct = let
-    sel = TAKE 4 ct.callData;
-    fna = case ALOOKUP sns sel of SOME fna => fna
+(* A call's entry by the trace's Python ABI description: the selector looked
+   up in the trace's ABI, the arguments decoded by compute_vyper_args. *)
+Definition python_call_entry_def:
+  python_call_entry sns all_mods exps cd = let
+    fna = case ALOOKUP sns (TAKE 4 cd) of SOME fna => fna
              | NONE => ("__default__", [], []);
-    name = FST fna; argTys = FST (SND fna);
-    all_mods = case ALOOKUP am.sources ct.target of
-                 SOME mods => mods
-               | _ => [];
-    (* Check exports to find which module the function lives in *)
-    src_id_opt = case ALOOKUP am.exports ct.target of
-                   NONE => NONE
+    name = FST fna;
+    src_id_opt = case exps of NONE => NONE
                  | SOME export_map => ALOOKUP export_map name;
     ts = case ALOOKUP all_mods src_id_opt of
            SOME ts => ts
          | NONE => case ALOOKUP all_mods NONE of SOME ts => ts | _ => [];
-    ar = compute_vyper_args all_mods ts External name argTys (DROP 4 ct.callData);
-    retTys = SND (SND fna);
-    tenv = FST (SND ar);
-    retTypes = SND (SND ar);
   in
-    case FST ar of NONE => ((INR (Error $ RuntimeError "run_call args"), am),
-                            (retTys, (retTypes, (FEMPTY, F))))
-  | SOME args => let
+    case FST (compute_vyper_args all_mods ts External name (FST (SND fna))
+                (DROP 4 cd)) of
+      NONE => NONE
+    | SOME args => SOME (name, args)
+End
+
+val () = cv_auto_trans python_call_entry_def;
+
+(* Whether every signature has the same argument types under tenv as under
+   tenv_all. *)
+Definition sigs_resolve_same_def:
+  sigs_resolve_same tenv tenv_all [] = T ∧
+  sigs_resolve_same tenv tenv_all ((name,tys)::sigs) =
+    (evaluate_types tenv tys [] = evaluate_types tenv_all tys [] ∧
+     sigs_resolve_same tenv tenv_all sigs)
+End
+
+val () = cv_auto_trans sigs_resolve_same_def;
+
+(* Whether calldata_dispatch is the contract's entry. It reads only the main
+   module: its external functions, and its own type environment. So the
+   contract has a main module (a blueprint has none), may import modules but
+   exports none of their functions, and every argument type of its external
+   functions means the same in the main module's type environment as in all
+   modules'. *)
+Definition dispatchable_def:
+  dispatchable all_mods exps tops ⇔
+    IS_SOME (ALOOKUP all_mods NONE) ∧
+    (case exps of NONE => T | SOME em => NULL em) ∧
+    sigs_resolve_same (type_env tops) (type_env_all_modules all_mods)
+      (abi_external_signatures tops)
+End
+
+val () = cv_auto_trans dispatchable_def;
+
+(* A call's entry is the interpreter's own (calldata_dispatch) where the
+   contract is dispatchable, else the Python path, whose NONE keeps the
+   calldata_rejected_msg verdict. *)
+Definition run_call_def:
+  run_call reads_gas sns am ct = let
+    all_mods = case ALOOKUP am.sources ct.target of
+                 SOME mods => mods
+               | _ => [];
+    exps = ALOOKUP am.exports ct.target;
+    tops = case ALOOKUP all_mods NONE of SOME ts => ts | _ => [];
+    tenv = type_env_all_modules all_mods;
+    dispatched = dispatchable all_mods exps tops;
+    entry = if dispatched then calldata_dispatch tops ct.callData
+            else python_call_entry sns all_mods exps ct.callData;
+  in
+    case entry of
+      NONE => ((INR (Error $ RuntimeError
+                       (if dispatched then dispatch_rejected_msg
+                        else calldata_rejected_msg)), am),
+               (NoneT, (tenv, F)))
+    | SOME (name, args) => let
+    (* Check exports to find which module the function lives in *)
+    src_id_opt = case exps of
+                   NONE => NONE
+                 | SOME export_map => ALOOKUP export_map name;
+    ts = case ALOOKUP all_mods src_id_opt of
+           SOME ts => ts
+         | NONE => tops;
+    retType = case lookup_function NONE name External ts of
+                SOME (_,_,_,_,ret,_) => ret
+              | NONE => NoneT;
     tx = <| sender := ct.sender
           ; target := ct.target
           ; function_name := name
@@ -409,7 +617,7 @@ Definition run_call_def:
     is_raw = call_external_raw_return am tx;
     gobs = if reads_gas then call_gas_readings am ct else []
   in (let (res, am', _) = call_external NONE gobs am tx in (res, am'),
-      (retTys, (retTypes, (tenv, is_raw))))
+      (retType, (tenv, is_raw)))
 End
 
 val () = cv_auto_trans run_call_def;
@@ -514,6 +722,15 @@ End
 
 val () = cv_auto_trans run_raw_deployment_def;
 
+(* The addresses whose account code run_trace copies from the trace (a
+   blueprint's or an interpreted deployment's dt.runtimeBytecode) instead of
+   computing it: exactly those it adds to snss. That code agrees with the
+   trace by construction, so a comparison of the replayed state against the
+   trace must leave it out. *)
+Definition trace_code_addresses_def:
+  trace_code_addresses snss = MAP FST snss
+End
+
 Definition run_trace_def:
   run_trace snss am tr =
   case tr
@@ -541,8 +758,9 @@ Definition run_trace_def:
                       ((lookup_account dt.deployedAddress am'.accounts)
                         with code := dt.runtimeBytecode)))
               | err => err
-            else if ISR res then INL am
-            else INR (Error $ RuntimeError "deployment success");
+            else (case res of
+                  | INR ex => if expected_failure ex then INL am else INR ex
+                  | INL _ => INR (Error $ RuntimeError "deployment success"));
       res = case res of
               INL am' => INL (increment_account_nonce dt.deployer am')
             | INR e => INR e;
@@ -574,8 +792,9 @@ Definition run_trace_def:
         (let rr = raw_call_evm am ct in
          let res = FST rr; am' = SND rr in
          case res of
-         | INR ex => if IS_NONE ct.expectedOutput then INL am'
-                     else INR ex
+         | INR ex =>
+             if IS_NONE ct.expectedOutput ∧ expected_failure ex
+             then INL am' else INR ex
          | INL out =>
              (case ct.expectedOutput of
               | NONE => INR (Error $ RuntimeError "error expected")
@@ -587,17 +806,17 @@ Definition run_trace_def:
         call_res = FST cr;
         am = SND call_res in
        case FST call_res
-       of (* TODO(test-semantics): decide whether AssertException should satisfy expected failure traces. *)
+       of
         | INR HaltException =>
             if ct.expectedOutput = SOME [] then INL am
             else INR (Error $ RuntimeError "halt output mismatch")
-       | INR ex => if IS_NONE ct.expectedOutput then INL am
-                   else INR ex
+       | INR ex => if IS_NONE ct.expectedOutput ∧ expected_failure ex
+                   then INL am else INR ex
        | INL v =>
        case ct.expectedOutput
          of NONE => INR (Error $ RuntimeError "error expected")
           | SOME out => let
-              ar = SND (SND cr);
+              ar = SND cr;
               rawVyRetTy = FST ar; tenv = FST (SND ar);
               is_raw = SND (SND ar);
             in

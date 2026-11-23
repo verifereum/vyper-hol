@@ -127,6 +127,14 @@ Proof
     `t with vs_inst_idx := LENGTH cs'.cs_current_insts`, `tn'`] >>
   simp[bind_def, read_result_def, return_def] >>
   qx_gen_tac `H` >> strip_tac >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa cs' = pre ++ i::post /\
+      run_inst_seq pre s0 = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (`compile_bytelike_literal (TAKE 4 (Keccak_256_w64 bs))
+        (LENGTH (TAKE 4 (Keccak_256_w64 bs))) sa = (buf,cs')` by
+       simp[LENGTH_TAKE, LENGTH_Keccak_256_w64] >>
+     drule literalBufferOpcodeShapeTheory.literal_bytelike_emitted_non_dalloca >>
+     rpt strip_tac >> gvs[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   drule_all literal_bytelike_counted_shape >> strip_tac >>
   drule_all bytelike_literal_shape >> strip_tac >>
   drule_all fn_has_code_code >> strip_tac >>
@@ -149,7 +157,8 @@ Proof
         run_inst_seq_gas_origin_ptr_path >>
       disch_then (qspec_then `gas_explicit_sites ctx shadow_ctx` mp_tac) >>
       simp[emitted_insts_def, DROP_PREFIX] >>
-      disch_then irule >> gvs[emitted_insts_def, DROP_PREFIX]) >>
+      disch_then irule >> gvs[emitted_insts_def, DROP_PREFIX] >>
+      first_assum ACCEPT_TAC) >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (drule_then strip_assume_tac) >>
   `expr_post H ctx func cenv cx
@@ -217,7 +226,8 @@ Proof
         run_inst_seq_gas_origin_ptr_path >>
       disch_then (qspec_then `gas_explicit_sites ctx shadow_ctx` mp_tac) >>
       simp[emitted_insts_def, DROP_PREFIX] >>
-      disch_then irule >> gvs[emitted_insts_def, DROP_PREFIX])
+      disch_then irule >> gvs[emitted_insts_def, DROP_PREFIX] >>
+      first_assum ACCEPT_TAC)
   >~ [`vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`]
   >- (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
       qpat_x_assum `buf.buf_operand = _` mp_tac >>

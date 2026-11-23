@@ -17,7 +17,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec  exprSimLeaves exprSimOps  stmtSimAssign stmtSimAssignMem
+  fragExec  exprSimOps  stmtSimAssign stmtSimAssignMem
   stmtSimAssignStorage exprSimHash exprOperandVar stmtSimDecl vyperExprNoControl
   stmtSimStoreCopy storageCopyLive accountsRelProps
   fragGasMode fragGasSeq fragGasPath venomExecProofs
@@ -505,6 +505,7 @@ Proof
       assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
   gvs[evaluate_def, bind_def, return_def, get_accounts_def,
       lift_sum_def, evaluate_builtin_def, read_result_def,
+      is_self_codesize_def,
       evaluate_type_def, AllCaseEqs(), value_has_type_def] >>
   Cases_on `evaluate_type (get_tenv cx) elem_ty` >>
   gvs[return_def, raise_def, value_has_type_def, bind_def, ignore_bind_def,

@@ -13,7 +13,7 @@
  *)
 Theory e2eLifecycle
 Ancestors
-  e2eDefs e2eDeployDefs e2eComposition ctorDeployDeadLoad supportedProgram
+  e2eDefs e2eDeployDefs e2eComposition ctorDeployDeadLoad
   vyperInterpreter vyperTypeContract vyperTypeContractSoundness
   vyperTypeDeploymentMachine vyperTypeExternalCallMachine
   vyperTypeInitialState vyperTypeInvariants
@@ -178,14 +178,13 @@ Proof
   strip_tac >> drule check_contract_external_method_ids_distinct >>
   disch_then (qspecl_then [`tops`, `NONE`] mp_tac) >>
   simp[exports_ok_def, abi_deployed_signatures_def,
-       abi_external_method_ids_def]
+       abi_external_method_ids_def, check_linked_state_ownership_def]
 QED
 
 (* ===== Deployment to call ===== *)
 
 Theorem deploy_establishes_call_ready:
   deploy_typing_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  supported_program tops /\ supported_program_deploy tops /\
   balance_bounded (2 ** 256 - 1) es /\
   run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete /\
   load_contract orc gs am tx [(NONE, tops)] [] = INL (am', rqs) /\
@@ -195,8 +194,11 @@ Proof
   strip_tac >>
   gvs[deploy_typing_ok_constants_ready] >>
   `wf_state es /\ layouts_agree tops am tx` by fs[deploy_state_rel_def] >>
+  `am'.sources <> am.sources` by
+    (strip_tac >>
+     `ALOOKUP am.sources tx.target = NONE` by fs[deploy_state_rel_def] >>
+     gvs[deploy_result_rel_def]) >>
   drule_all load_contract_sources_layouts >> strip_tac >>
-  `am'.sources <> am.sources` by gvs[listTheory.CONS_ACYCLIC] >>
   drule_all load_contract_establishes_constants_fold >> strip_tac >>
   `context_well_typed
      (initial_evaluation_context ((tx.target, [(NONE, tops)]) :: am.sources)
@@ -239,7 +241,6 @@ QED
 (* The guarded form: the finite storage guard stays inside the filling. *)
 Theorem deploy_call_result_establishes_call_ready:
   deploy_typing_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  supported_program tops /\ supported_program_deploy tops /\
   balance_bounded (2 ** 256 - 1) es /\
   run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete /\
   deploy_call_result_rel tops runtime_bc am tx es r es' ==>
@@ -266,7 +267,7 @@ QED
 
 Theorem call_preserves_call_ready:
   call_ready tops runtime_bc am tx.target /\ call_tx_well_typed tx /\
-  supported_program tops /\ runtime_bc <> [] /\
+  runtime_bc <> [] /\
   call_state_rel tops runtime_bc am tx es /\ LENGTH es.contexts = 1 /\
   balance_bounded (2 ** 256 - 1) es /\
   run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete /\

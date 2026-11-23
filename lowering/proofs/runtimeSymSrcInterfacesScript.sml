@@ -13,7 +13,6 @@ Ancestors
 
 Definition runtime_sym_inst_def:
   runtime_sym_inst i <=>
-    i.inst_opcode <> CODESIZE /\
     (i.inst_opcode = CODECOPY ==>
       ?dst sz. i.inst_operands = [dst; Label "runtime_begin"; sz]) /\
     ~MEM (Label "code_end") i.inst_operands /\
@@ -288,11 +287,14 @@ Theorem runtime_sym_bop_selections:
   supported_expr tops (HD args) /\ supported_expr tops (EL 1 args)
 Proof
   namedCases_on `args` ["", "a rest"] >>
-  simp[runtime_sym_builtin_domain, supported_builtin_form_def] >>
+  simp[runtime_sym_builtin_domain, supported_builtin_form_def,
+       vyperContextTheory.builtin_args_length_ok_def] >>
   namedCases_on `rest` ["", "b tail"] >>
-  simp[runtime_sym_builtin_domain, supported_builtin_form_def] >>
+  simp[runtime_sym_builtin_domain, supported_builtin_form_def,
+       vyperContextTheory.builtin_args_length_ok_def] >>
   Cases_on `tail` >>
-  simp[runtime_sym_builtin_domain, supported_builtin_form_def, supported_expr_def]
+  simp[runtime_sym_builtin_domain, supported_builtin_form_def,
+       vyperContextTheory.builtin_args_length_ok_def, supported_expr_def]
 QED
 
 Theorem runtime_sym_convert_selection:

@@ -14,6 +14,7 @@ Ancestors
 Theorem bop_in_literal_operands_clean_full_halt:
   !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
     (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
@@ -29,10 +30,10 @@ Theorem bop_in_literal_operands_clean_full_halt:
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
     fn_has_code sa sb func /\
     (!shadow_xs shadow_sb.
-       lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
+       lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -85,15 +86,14 @@ Proof
     (irule exprSimSourceTheory.expr_body_pre_gas_admissible >> metis_tac[]) >>
   qpat_x_assum `lower_word_args _ _ (h::args) _ = _`
     (strip_assume_tac o REWRITE_RULE [lower_word_args_cons]) >>
-  `?shadow_s1. lower_value compile_expr cenv (expr_type h)
+  `?shadow_s1. lower_value compile_expr (gas_shadow_env T cenv) (expr_type h)
       (gas_shadow_expr h) shadow_sa = (x,shadow_s1) /\
       gas_shadow_state s1 shadow_s1` by
-    (qspecl_then [`cenv`, `expr_type h`, `h`] mp_tac
-       (Q.GENL [`cenv`, `ty`, `e`] gas_shadow_stmt_lower_value) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then drule >> simp[] >>
-     Cases_on `lower_value compile_expr cenv (expr_type h) (gas_shadow_expr h) shadow_sa` >>
-     gvs[]) >>
+    (drule (REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]
+       (Q.INST [`sd` |-> `T`] gas_shadow_stmt_lower_value_env)) >>
+     disch_then (qspecl_then [`expr_type h`, `h`, `cenv`] mp_tac) >> simp[] >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type h)
+       (gas_shadow_expr h) shadow_sa` >> gvs[]) >>
   `!e. MEM e (h::args) ==> expr_type e = expr_type e1` by
     (drule_all literal_body_typing >> strip_tac >>
      fs[EVERY_MEM] >> metis_tac[listTheory.MEM]) >>
@@ -114,12 +114,12 @@ Proof
   `fn_has_code sa s1 func` by
     metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
   `!aa ss oo ff.
-     lower_word_args cenv expr_type (MAP gas_shadow_expr aa) ss = (oo,ff) ==>
+     lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr aa) ss = (oo,ff) ==>
      cs_extends ss ff` by
     (Induct >> simp[lower_word_args_nil, compileEnvTheory.cs_extends_refl] >>
      rpt gen_tac >> simp[lower_word_args_cons] >> rpt strip_tac >>
      metis_tac[cj 2 compile_expr_grows, compileEnvTheory.cs_extends_trans]) >>
-  Cases_on `lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_s1` >>
+  Cases_on `lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr args) shadow_s1` >>
   rename1 `lower_word_args _ _ (MAP gas_shadow_expr args) shadow_s1 = (shadow_ys,shadow_sb)` >>
   `fn_has_code shadow_sa shadow_sb shadow_func` by
     (qpat_x_assum `!xx ss. lower_word_args _ _ _ shadow_sa = _ ==> _` irule >>
@@ -182,11 +182,11 @@ Proof
   strip_tac >> qunabbrev_tac `pathQ` >> qunabbrev_tac `HeadPost` >>
   RULE_ASSUM_TAC BETA_RULE >>
   qpat_x_assum `((?v. _) /\ (?cm. gas_origin_ptr_path _ _ cm _)) /\ _` strip_assume_tac >>
-  `!fn inst s. frag_reachable ctx func t1 fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func t1 fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t1,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t1` by
     (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ t1`
@@ -204,6 +204,12 @@ Proof
      pure_rewrite_tac[APPEND_NIL] >>
      qpat_x_assum `mid with gas_obs := [] = mid`
        (fn th => rewrite_tac[th])) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env h` by
+       qpat_assum `expr_body_pre _ cx env h _`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     irule body_const_cells_agree_expr_read >>
+     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
   `expr_sim_inv cenv cx env mid /\ value_has_type tv v` by
     (`expr_body_pre cenv cx env h
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
@@ -244,7 +250,7 @@ Proof
      conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
      conj_tac >- (rpt strip_tac >>
        qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _` drule >>
-       simp[] >> metis_tac[expr_post_def]) >>
+       simp[expr_post_def]) >>
      conj_tac >-
        (qexistsl_tac [`shadow_func`, `shadow_s1`] >> asm_rewrite_tac[] >>
         rpt strip_tac >>
@@ -253,7 +259,6 @@ Proof
                   cj 2 compile_expr_grows]) >>
      conj_tac >- metis_tac[local_ptrs_reserved_next_var] >>
      conj_tac >- metis_tac[fn_has_code_mid, compileEnvTheory.cs_extends_refl] >>
-     conj_tac >- metis_tac[] >>
      conj_tac >-
        (irule return_buf_frame_frame >> goal_assum (drule_at Any) >>
         simp[] >> metis_tac[expr_post_def]) >>
@@ -340,6 +345,7 @@ QED
 Theorem bop_in_literal_operands_clean_full:
   !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
     (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
@@ -355,10 +361,10 @@ Theorem bop_in_literal_operands_clean_full:
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
     fn_has_code sa sb func /\
     (!shadow_xs shadow_sb.
-       lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
+       lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -398,6 +404,7 @@ QED
 Theorem bop_in_literal_operands_full:
   !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
     (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
@@ -413,10 +420,10 @@ Theorem bop_in_literal_operands_full:
     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
     fn_has_code sa sb func /\
     (!shadow_xs shadow_sb.
-       lower_word_args cenv expr_type (MAP gas_shadow_expr args) shadow_sa =
+       lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr args) shadow_sa =
          (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\

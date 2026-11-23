@@ -82,10 +82,7 @@ Inductive dfs_aux_call:
     SOME (s_ops, visited_after, ps_after) ==>
   dfs_succs_call liveness dfg cfg fn ps0 saved_stack saved_spilled
     succs visited_after
-    (ps_g with <|
-       ps_alloc := ps_after.ps_alloc with
-         sa_free_slots := ps_g.ps_alloc.sa_free_slots;
-       ps_label_counter := ps_after.ps_label_counter |>)
+    (ps_g with ps_label_counter := ps_after.ps_label_counter)
 End
 
 (* The function planner, run from ps0, planned block lbl from state ps:

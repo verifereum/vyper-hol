@@ -26,7 +26,7 @@ Theorem expr_sim_full_of_vv_with_buffer:
   expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty e es ==>
   !st0 sa sb shadow_sa shadow_sb op s0 G0 tn0.
     lower_value compile_expr cenv ty e sa = (op,sb) /\
-    lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (op,shadow_sb) /\
+    lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa = (op,shadow_sb) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -39,7 +39,7 @@ Theorem expr_sim_full_of_vv_with_buffer:
     gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
     return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
       stmt_state_rel H ctx func cenv cx es s0 /\ storage_well_formed_on cx es (FST H) /\
       ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
@@ -69,14 +69,20 @@ Proof
   simp[lower_value_def, comp_bind_def] >>
   Cases_on `compile_expr cenv ty e sa` >> rename1 `_ = (vv, sm)` >>
   simp[] >> strip_tac >>
-  qpat_x_assum `lower_value compile_expr cenv ty (gas_shadow_expr e) _ = _` mp_tac >>
+  qpat_x_assum `lower_value compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
   simp[lower_value_def, comp_bind_def] >>
-  Cases_on `compile_expr cenv ty (gas_shadow_expr e) shadow_sa` >>
-  rename1 `_ = (vv', shadow_sm)` >> simp[] >> strip_tac >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa` >>
+  rename1 `_ = (vv', shadow_sm)` >>
+  simp[gasShadowCompileBaseTheory.unwrap_value_gas_shadow_env] >> strip_tac >>
   `vv' = vv /\ gas_shadow_state sm shadow_sm` by
-    (qspecl_then [`cenv`,`ty`,`e`,`T`] mp_tac (cj 1 gas_shadow_compile_expr) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (compile_expr cenv ty e)
+       (compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))` by
+       irule (cj 1 gas_shadow_compile_expr_env |> SPEC_ALL |>
+              Q.INST [`shadow` |-> `T`] |> REWRITE_RULE [COND_CLAUSES]) >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+        REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >>
+     simp[]) >>
   gvs[] >>
   qpat_assum `compile_expr cenv ty e sa = _`
     (strip_assume_tac o MATCH_MP exprSimUnwrapTheory.compile_expr_extends) >>

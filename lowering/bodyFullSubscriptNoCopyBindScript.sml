@@ -2,9 +2,9 @@
    or that the index preserves the source's scopes or immutables. *)
 Theory bodyFullSubscriptNoCopyBind
 Ancestors option[qualified,ignore_grammar] vyperTypeValues[qualified,ignore_grammar] vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ignore_grammar]
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyFullToplevelVVStorage
   bodyFullPreds bodySimFull gasOutcomeFullCompose bodyFullSubscriptCapturedPlace
-  bodyInvNoDalloca stateRelProj exprSimSubscriptArraySuffix
+  stateRelProj exprSimSubscriptArraySuffix
   gasShadowCompileStmtHelpers bodyFullBuiltinWordPowCompose
   exprSimSubscriptArrayFramed exprSimSubscriptArrayOrigin exprSimSubscriptArraySource exprSimHyps exprSimSource
   exprOperandVar exprLoweringProps exprSimUnwrap fragExec
@@ -19,6 +19,7 @@ Theorem subscript_nocopy_bind_full:
     (!s raw t. eval_expr cx e1 s = (INL raw,t) ==> body_expr_full_ok cx e2) /\
     body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et bd /\ place_type cenv e1 = ValPT (ArrayT et bd) /\
     post_value_type cenv e1 = expr_type e1 /\
@@ -35,7 +36,7 @@ Theorem subscript_nocopy_bind_full:
         (is_signed_type (expr_type e2))
         (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) st2 = (dst,sb) /\
       fn_has_code sa sb func /\ fn_has_code st2 sb func /\
-      fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+      fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
       local_ptrs_reserved cenv st2 /\
       sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -118,11 +119,18 @@ Theorem subscript_nocopy_bind_full:
       cenv cx ty (Subscript ann e1 e2) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_then assume_tac body_inv_no_dalloca >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_typed >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_admissible >>
+  `~array_slot_base cenv e1 ==> expr_body_pre cenv cx env e1 es` by
+    metis_tac[expr_body_pre_array_subscript_base] >>
+  (* A storage or transient array base has no precondition of its own: its
+     simulation needs only the invariant and typing. *)
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty e1 es` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (Cases_on `array_slot_base cenv e1`
+     >- metis_tac[toplevel_slot_base_vv_full,
+                  expr_body_pre_array_subscript_slot_base] >>
+     fs[body_expr_full_ok_def] >> metis_tac[]) >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule_all compile_expr_array_subscript >> strip_tac >>
   rename1 `compile_expr cenv ty e1 sa = (bvv,sm)` >>
@@ -136,19 +144,19 @@ Proof
   `cs_extends sm sb` by
     (irule cs_extends_trans >> qexists_tac `st2` >> simp[]) >>
   drule_all fn_has_code_split >> strip_tac >>
-  `?shadow_sm. compile_expr cenv ty (gas_shadow_expr e1) shadow_sa =
+  `?shadow_sm. compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa =
       (bvv,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (cj 1 gas_shadow_compile_expr |> Q.SPECL [`cenv`, `ty`, `e1`, `T`]) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
-     strip_tac >>
-     Cases_on `compile_expr cenv ty (gas_shadow_expr e1) shadow_sa` >> gvs[]) >>
+    (`gas_shadow_compiles (compile_expr cenv ty e1)
+         (compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1))` by
+       irule gas_shadow_stmt_compile_expr_env >>
+     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+       REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa` >>
+     simp[]) >>
   `cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sb` by
     suspend "shadow_extends" >>
   `fn_has_code shadow_sa shadow_sm shadow_func` by
     (drule_all fn_has_code_split >> simp[]) >>
-  `gas_admissible (eval_expr cx e1) expr_vv_res_ok es` by
-    (drule expr_body_pre_vv_gas_admissible >> simp[]) >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ e1 _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
@@ -221,6 +229,9 @@ Resume subscript_nocopy_bind_full[after_base]:
     (`mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
      qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
      qpat_assum `mid with gas_obs := [] = mid` (fn th => simp[NoAsms, th])) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (irule body_const_cells_agree_expr >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[]) >>
   `expr_body_pre cenv cx env e2 mid` by
     (irule expr_body_pre_array_subscript_index_after_base >>
      goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[] >>
@@ -228,13 +239,15 @@ Resume subscript_nocopy_bind_full[after_base]:
   `body_expr_full_ok cx e2` by metis_tac[] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e2 mid` by
     (fs[body_expr_full_ok_def] >> metis_tac[]) >>
-  `?shadow_st2. lower_value compile_expr cenv ty (gas_shadow_expr e2)
+  `?shadow_st2. lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2)
       shadow_sm = (iop,shadow_st2) /\ gas_shadow_state st2 shadow_st2` by
-    (mp_tac (Q.INST [`e` |-> `e2`]
-       gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sm`, `shadow_sm`] mp_tac) >> simp[] >> strip_tac >>
-     Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr e2) shadow_sm` >> gvs[]) >>
+    (`gas_shadow_compiles (lower_value compile_expr cenv ty e2)
+       (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2))` by
+       irule gas_shadow_stmt_lower_value_env >>
+     pop_assum (qspecl_then [`sm`, `shadow_sm`] mp_tac o
+       REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2) shadow_sm` >>
+     simp[]) >>
   `cs_extends shadow_sm shadow_st2 /\ cs_extends shadow_st2 shadow_sb` by
     (`cs_extends shadow_sm shadow_st2` by
        (qpat_assum `lower_value _ _ _ _ shadow_sm = _`
@@ -272,7 +285,7 @@ Resume subscript_nocopy_bind_full[after_base]:
          qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G1,tn1)` (fn path =>
            qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
            qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
-             (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+             (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
               CONJ path o CONJ no_phi))))
      >> rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
@@ -367,6 +380,8 @@ QED
 
 Resume subscript_nocopy_bind_full[fixed_pop]:
   qpat_x_assum `?n id path. _` strip_assume_tac >> gvs[] >>
+  `expr_body_pre cenv cx env e1 es` by
+    metis_tac[base_from_pop_not_array_slot_base] >>
   `ann = et` by
     (`well_typed_expr env (Subscript ann e1 e2) /\ well_typed_expr env e1` by
        metis_tac[exprSimHypsDefsTheory.expr_body_pre_def] >>

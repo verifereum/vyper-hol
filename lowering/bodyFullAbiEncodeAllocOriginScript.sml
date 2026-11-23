@@ -145,11 +145,19 @@ Proof
   `t.vs_current_bb = s.vs_current_bb` by
     (qpat_assum `t with <| vs_vars := _; vs_allocas := _; vs_alloca_next := _ |> = s`
        (SUBST1_TAC o SYM) >> simp[]) >>
+  `run_inst_seq [ins] s = OK t` by simp[run_inst_seq_def] >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. [ins] = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (strip_tac >> rpt gen_tac >> Cases_on `pre` >>
+     simp[] >> strip_tac >>
+     gvs[Abbr `ins`, mk_inst_def, unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),
         step_prov PG G ins t, step_taint ins s t tn)` by
     (gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
-     simp[] >> qexistsl_tac [`[ins]`, `sa`] >> simp[] >> metis_tac[]) >>
+     (conj_tac >- simp[]) >> qexistsl_tac [`[ins]`, `sa`] >>
+     asm_rewrite_tac[] >> simp[]) >>
   `alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule emitted_alloca_history >> simp[] >>
      qexistsl_tac [`[ins]`, `s`, `sa`] >>

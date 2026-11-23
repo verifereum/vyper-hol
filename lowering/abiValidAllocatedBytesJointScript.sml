@@ -7,6 +7,7 @@ Ancestors
   abiDecodeMemReentry abiDecodePtrReentry abiDecodePtrReentryObservations
   abiDecoderReentry abiDecoderVarSequence abiDecoderVarExtend abiDecodePtrMemberFrame
   fragGasCopyLoop fragGasOriginPtr bodyFullPathHistory calldataTypedRobustPtr
+  fragGasCopySeqLiftProps
   stateRelProj exprLoweringProps emitHelperProps compileEnv freshWrites
   bodyPtrDefs ptrDiscipline loweringStateRelDefs venomState venomInst
   contractABI vyperTypeABI list words arithmetic finite_map pred_set
@@ -15,7 +16,7 @@ Theorem abi_valid_allocated_bytes_joint_observations:
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
   abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s (type_memory_bytes ce ty) /\
   op_prov G pos = NONE /\ op_prov G hi = NONE /\
@@ -89,7 +90,16 @@ Proof
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
   `32 + contractABI$ceil32 n <= out_cap` by
     simp[Abbr `out_cap`, abiDecoderBytesTheory.abi_decode_bytes_copy_size_def, contractABITheory.ceil32_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp pruned` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp pruned` by
+    (`pruned.vs_allocas = s.vs_allocas /\ pruned.vs_fmp = s.vs_fmp /\
+       pruned.vs_initial_fmp = s.vs_initial_fmp` by
+       simp[Abbr `pruned`, abi_decoder_prune_vars_def] >>
+     PURE_REWRITE_TAC [allocas_below_fmp_def] >>
+     qpat_assum `pruned.vs_allocas = s.vs_allocas` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `pruned.vs_fmp = s.vs_fmp` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `pruned.vs_initial_fmp = s.vs_initial_fmp` (PURE_REWRITE_TAC o single) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o PURE_REWRITE_RULE [allocas_below_fmp_def])) >>
   drule_all abi_decode_valid_bytes_pruned_certificate >>
   disch_then (qspecl_then [`func`, `PG`] (qx_choose_then `Gf` (qx_choose_then `tf`
     (map_every assume_tac o CONJUNCTS)))) >>
@@ -127,6 +137,14 @@ Proof
      Cases_on `i.inst_opcode = ALLOCA` >> simp[is_alloca_op_def]) >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts st en) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts st en = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     disch_tac >>
+     qpat_assum `EVERY (\i. abi_decoder_reentry_opcode _) _`
+       (qspec_then `i` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     simp[abi_decoder_reentry_opcode_def, MEM_APPEND]) >>
   `!explicit. gas_origin_ptr_path (empty_dead,lo,explicit,ctx,func,PG)
         (s,G,tn) [] (OK t,Gf,tf)` by
     (gen_tac >> drule_all run_inst_seq_origin_ptr_lift >> simp[Abbr `t`]) >>

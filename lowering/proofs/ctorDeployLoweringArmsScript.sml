@@ -1,7 +1,7 @@
 (* The bad-storage and exempt arms of deploy_unit_execution_correct_at
  * (deployUnitExecution) at the joint body induction's marks: the body's
  * gas_outcome_full arm at the body start (s0, G0, tn0), prefixed with
- * deploy_ctor_entry_joint's zero-mark entry path, and the constructor body's
+ * deploy_ctor_entry_joint_raw's zero-mark entry path, and the constructor body's
  * run carried through load_contract_trace.
  * TOP-LEVEL: deploy_ctor_bad_storage_arm, deploy_ctor_exempt_arm,
  * deploy_ctor_source_trace.
@@ -10,11 +10,11 @@ Theory ctorDeployLoweringArms
 Ancestors
   ctorDeployLoweringEntrySelection ctorDeployLoweringSource
   ctorDeployLoweringDefs
-  ctorDeployDefs e2eDeployDefs gasStorage gasExemptCert fragGasOriginPtr
+  ctorDeployDefs e2eDeployDefs gasStorage fragGasOriginPtr
   vyperStorageTrace vyperStorageFootprint vyperTypeConstantFold vyperInterpreter
   vyperTypeContract vyperTypeConstantCells vyperTypeContractStaticMaps
   vyperTypeExprSoundness vyperContext
-  vyperState evalNoHalt list alist
+  vyperState evalNoHalt constSubstCorrect list alist
 
 val _ = Parse.hide "body";
 val _ = Parse.hide "finish";
@@ -31,15 +31,13 @@ Theorem deploy_ctor_arm_selection[local]:
   deploy_ctor_code tops rp runtime_bc unit
     (body,cenv,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
   deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
-  nr' = F /\ body' = body
+  nr' = F
 Proof
   strip_tac >>
   `supported_program tops` by fs[ctorDeployDefsTheory.deploy_source_ok_def] >>
   drule_all deploy_ctor_entry_selection_agrees >> strip_tac >>
-  `nr' = F` by
-    (gvs[deploy_state_rel_def, constructor_args_encode_def,
-         deploy_ctor_start_def]) >>
-  simp[]
+  gvs[deploy_state_rel_def, constructor_args_encode_def,
+      deploy_ctor_start_def]
 QED
 
 (* The deployment guard is the finite storage guard of the load trace. *)
@@ -164,7 +162,9 @@ Proof
   gvs[contract_constants_ok_def, optionTheory.IS_SOME_EXISTS] >>
   `deployment_constant_cells_typed (type_env_all_modules mods) cx.txn.target mods am` by
     (rw[deployment_constant_cells_typed_def] >>
-     drule_all checked_initial_immutables_constant_absent >> gvs[]) >>
+     `MEM ((NONE:num option),tops) [(NONE,tops)]` by simp[] >>
+     metis_tac[checked_initial_immutables_constant_absent,
+               optionTheory.NOT_SOME_NONE]) >>
   drule_at (Pat `check_contract _ _ _ _ = _`)
     constants_fold_evaluate_module_constants_trace >>
   disch_then (qspec_then `constants_order mods` mp_tac) >>
@@ -201,6 +201,56 @@ Proof
   gvs[]
 QED
 
+Theorem deploy_ctor_constant_cells:
+  deploy_source_ok tops am tx /\
+  deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) ==>
+  ?imms A.
+    constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
+    constant_machine_immutables am_c tx.target = merge_constant_imms NONE A imms /\
+    deployment_constant_cells_typed (type_env_all_modules [(NONE,tops)])
+      tx.target [(NONE,tops)] am_c
+Proof
+  strip_tac >>
+  `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
+    fs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_def] >>
+  pop_assum strip_assume_tac >>
+  `contract_constants_ok [(NONE,tops)]` by
+    (qpat_x_assum `check_contract F _ _ _ = _` mp_tac >>
+     simp[check_contract_def] >> rw[]) >>
+  qpat_assum `deploy_ctor_start _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [deploy_ctor_start_def]) >>
+  fs[contract_constants_ok_def, constants_order_def, constants_fold_def,
+     AllCaseEqs()] >>
+  Cases_on `constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY` >> fs[] >>
+  qmatch_asmsub_rename_tac
+    `constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A` >>
+  qabbrev_tac `cx = deploy_evaluation_context tops am tx` >>
+  qabbrev_tac `am_i = am with
+    <|immutables updated_by CONS (tx.target,imms);
+      exports updated_by CONS (tx.target,[])|>` >>
+  `cx.txn.target = tx.target /\
+   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+   ALOOKUP am_i.immutables cx.txn.target = SOME imms` by
+    simp[Abbr `cx`, Abbr `am_i`, deploy_evaluation_context_def,
+         initial_evaluation_context_def] >>
+  `deployment_constant_cells_typed (type_env_all_modules [(NONE,tops)])
+     cx.txn.target [(NONE,tops)] am_i` by
+    (rw[deployment_constant_cells_typed_def] >>
+     `MEM ((NONE:num option),tops) [(NONE,tops)]` by simp[] >>
+     metis_tac[checked_initial_immutables_constant_absent,
+               optionTheory.NOT_SOME_NONE]) >>
+  `constants_fold [(NONE,tops)] imms [(NONE,tops)] =
+     SOME (merge_constant_imms NONE A imms)` by
+    fs[constants_fold_def] >>
+  qspecl_then [`[(NONE,tops)]`, `imms`, `am_i`,
+    `merge_constant_imms NONE A imms`, `cx`, `art`, `F`, `am.layouts`, `tx.target`]
+    mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`] constants_fold_evaluate_module_constants) >>
+  simp[] >> strip_tac >>
+  `am_c' = am_c` by
+    fs[evaluate_all_constants_def, constants_order_def, Abbr `am_i`] >>
+  gvs[constant_machine_immutables_def] >> metis_tac[]
+QED
+
 (* deploy_ctor_finish reads no gas observations. *)
 Theorem deploy_ctor_finish_gas_obs:
   deploy_ctor_finish tops tx cx nr mut am_c res (st with gas_obs := g) =
@@ -228,8 +278,12 @@ Theorem deploy_ctor_source_trace:
       eval_stmts (deploy_evaluation_context tops am tx) body
         (es0 with <| gas_obs := gobs; outcomes := orc |>) = (res, st) ==>
       load_contract_trace orc gobs am tx [(NONE, tops)] [] =
-        (deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx)
-           F mut am_c res st,
+        ((if res = INR HaltException then
+            INL (finalize_pending_deletions
+              (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st),
+              st.requests)
+          else deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx)
+            F mut am_c res st),
          st.storage_trace)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -254,16 +308,13 @@ Proof
     (rpt strip_tac >> irule deploy_ctor_return_none >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      qexistsl [`gobs`, `orc`, `st`] >> gvs[]) >>
-  `res <> INR HaltException` by
-    (strip_tac >>
-     `!s s'. eval_stmts (deploy_evaluation_context tops am tx) body s <>
-             (INR HaltException, s')` by
-       (rpt gen_tac >> irule deploy_body_no_halt >>
-        gvs[ctorDeployDefsTheory.deploy_source_ok_def] >> metis_tac[]) >>
-     metis_tac[]) >>
   `load_contract orc gobs am tx [(NONE,tops)] [] =
-     deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx)
-       F mut am_c res st` by
+      if res = INR HaltException then
+        INL (finalize_pending_deletions
+          (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st),
+          st.requests)
+      else deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx)
+        F mut am_c res st` by
     (qspecl_then [`tops`, `am`, `tx`, `mut`, `F`, `body`, `am_c`, `es0`,
                   `gobs`, `orc`, `res`, `st`] mp_tac deploy_ctor_source_run >>
      simp[]) >>
@@ -332,15 +383,14 @@ QED
 (* The bad-storage arm: the body's storage failure is the deployment's, and
    the focus from the body start extends back to the unit's entry. *)
 Theorem deploy_ctor_bad_storage_arm:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final
    func mut nr' body' am_c es0 s0 G0 tn0 explicit marks H
    leaf leaf_pg leaf_g leaf_tn finish.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    deploy_state_rel tops (assemble prog') am tx es /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -357,7 +407,7 @@ Theorem deploy_ctor_bad_storage_arm:
            [] (OK s0, G0, tn0)) /\
     gas_bad_storage_at (deploy_evaluation_context tops am tx)
       (initial_state am [])
-      (eval_stmts (deploy_evaluation_context tops am tx) body)
+      (eval_stmts (deploy_evaluation_context tops am tx) body')
       (es0 with outcomes := SOME vs.vs_outcomes) s0 marks /\
     (storage_trace_domain (deploy_evaluation_context tops am tx)
        (initial_state am [])
@@ -390,12 +440,12 @@ Proof
      ([] ++ marks) (leaf, leaf_pg, leaf_g, leaf_tn, finish)` by
     (irule (cj 2 gas_origin_ptr_focus_rules) >>
      gvs[storage_trace_domain_nil] >> metis_tac[]) >>
-  mp_tac (Q.SPECL [`tops`, `am`, `tx`, `mut`, `body`, `am_c`, `es0`]
+  mp_tac (Q.SPECL [`tops`, `am`, `tx`, `mut`, `body'`, `am_c`, `es0`]
     deploy_ctor_source_trace) >>
   impl_tac >- simp[] >> strip_tac >>
   fs[] >> rpt strip_tac >>
   qabbrev_tac `gx = gas_explicit marks vs.vs_gas_readings ++ tail` >>
-  Cases_on `eval_stmts (deploy_evaluation_context tops am tx) body
+  Cases_on `eval_stmts (deploy_evaluation_context tops am tx) body'
               (es0 with <| gas_obs := gx; outcomes := SOME vs.vs_outcomes |>)` >>
   rename1 `_ = (res, st)` >>
   qpat_x_assum `!orc gobs res st. _`
@@ -411,15 +461,14 @@ QED
 (* The exempt arm: the body's exempt error is the deployment's source
    result, with one trace for every continuation of the readings. *)
 Theorem deploy_ctor_exempt_arm:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final
    func mut nr' body' am_c es0 s0 G0 tn0 explicit marks H err ee
    leaf leaf_pg leaf_g leaf_tn finish.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    deploy_state_rel tops (assemble prog') am tx es /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
@@ -434,11 +483,11 @@ Theorem deploy_ctor_exempt_arm:
            (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
                        vs_inst_idx := 0 |>, FEMPTY, entry_taint)
            [] (OK s0, G0, tn0)) /\
-    gas_exempt_cert T tops (dunit.cu_context, func)
-      (ignore_bind (eval_stmts (deploy_evaluation_context tops am tx) body)
-         (return ()))
-      (es0 with outcomes := SOME vs.vs_outcomes, s0) marks (err, ee)
-      (leaf, finish) /\
+    (!tail. eval_stmts (deploy_evaluation_context tops am tx) body'
+      (es0 with <|gas_obs := gas_explicit marks vs.vs_gas_readings ++ tail;
+                  outcomes := SOME vs.vs_outcomes|>) =
+      (INR (Error err), ee with gas_obs := tail)) /\
+    unspecified_behaviour_exempt tops err /\
     (storage_trace_domain (deploy_evaluation_context tops am tx)
        (initial_state am [])
        (es0 with outcomes := SOME vs.vs_outcomes).storage_trace ==>
@@ -473,22 +522,11 @@ Proof
      ([] ++ marks) (leaf, leaf_pg, leaf_g, leaf_tn, finish)` by
     (irule (cj 2 gas_origin_ptr_focus_rules) >>
      gvs[storage_trace_domain_nil] >> metis_tac[]) >>
-  mp_tac (Q.SPECL [`tops`, `am`, `tx`, `mut`, `body`, `am_c`, `es0`]
+  mp_tac (Q.SPECL [`tops`, `am`, `tx`, `mut`, `body'`, `am_c`, `es0`]
     deploy_ctor_source_trace) >>
   impl_tac >- simp[] >> strip_tac >>
-  drule gas_exempt_cert_execution >> strip_tac >>
-  `!tail. eval_stmts (deploy_evaluation_context tops am tx) body
-            (es0 with <| gas_obs := gas_explicit marks vs.vs_gas_readings ++ tail;
-                         outcomes := SOME vs.vs_outcomes |>) =
-          (INR (Error err), ee with gas_obs := tail)` by
-    (gen_tac >> first_x_assum (qspec_then `tail` mp_tac) >>
-     simp[ignore_bind_def, bind_def, return_def] >>
-     Cases_on `eval_stmts (deploy_evaluation_context tops am tx) body
-                 (es0 with <| outcomes := SOME vs.vs_outcomes;
-                   gas_obs := gas_explicit marks vs.vs_gas_readings ++ tail |>)` >>
-     Cases_on `q` >> simp[]) >>
   qexistsl_tac [`INR (Error err)`, `ee.storage_trace`] >>
   fs[deploy_source_exempt_def] >> gen_tac >>
-  first_x_assum (qspec_then `tail` assume_tac) >>
+  qpat_x_assum `!tail. eval_stmts _ _ _ = _` (qspec_then `tail` assume_tac) >>
   first_x_assum drule >> simp[deploy_ctor_finish_def]
 QED

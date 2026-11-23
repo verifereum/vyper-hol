@@ -14,7 +14,8 @@ Theory vyperTypeContract
 Ancestors
   list rich_list arithmetic finite_map option pair pred_set
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperEvent vyperTypeSystem vyperTypeCallGraph vyperABIEntries
+  vyperEvent vyperTypeSystem vyperTypeCallGraph vyperABIEntries constSubstMods
+  vyperSubscriptOverlap
 Libs
   wordsLib
 
@@ -412,17 +413,6 @@ Definition constant_value_def:
            if bt = Len then
              (case vs of
               | [v] => OPTION_MAP (\n. IntV (&n)) (constant_length v)
-              | _ => NONE)
-           else if bt = Bop In \/ bt = Bop NotIn then
-             (case vs of
-              | [v1;v2] =>
-                  (case evaluate_type (type_env_all_modules mods)
-                           (expr_type (EL 1 es)) of
-                   | NONE => NONE
-                   | SOME tv =>
-                       (case evaluate_membership tv (bt = Bop NotIn) v1 v2 of
-                        | INL v => SOME v
-                        | INR _ => NONE))
               | _ => NONE)
            else
              case evaluate_builtin (constant_context mods) empty_accounts
@@ -903,6 +893,83 @@ Definition context_function_live_def:
           (live_functions cx.layouts cx.txn.target mods) k
 End
 
+(* The main constructor and deployed interface root the linked code.
+   An import's constructor enters the graph through an actual call. *)
+Definition linked_main_roots_def:
+  linked_main_roots mods =
+    case ALOOKUP mods (NONE:num option) of
+    | NONE => []
+    | SOME tops =>
+        contract_keys external_name_keys_toplevel [((NONE:num option),tops)] ++
+        FLAT (MAP (\tl. case tl of
+          | FunctionDecl Deploy _ _ _ name _ _ _ _ => [(NONE,name)]
+          | _ => []) tops)
+End
+
+Definition linked_export_roots_def:
+  linked_export_roots (exps : (string # num) list) =
+    MAP (\(name,src). (SOME src,name)) exps
+End
+
+Definition linked_live_functions_from_def:
+  linked_live_functions_from mods roots =
+    let edges = contract_call_edges mods in
+    call_closure edges (LENGTH roots + LENGTH edges) [] roots
+End
+
+Definition linked_live_functions_def:
+  linked_live_functions mods exps =
+    linked_live_functions_from mods
+      (linked_main_roots mods ++ linked_export_roots exps)
+End
+
+(* A stateless export can come from an import with dormant immutables.
+   Check the slots when a reachable operation actually uses module state. *)
+Definition linked_toplevel_allocated_def:
+  linked_toplevel_allocated layouts addr src tl <=>
+    case tl of
+    | VariableDecl _ Immutable _ _ slot => IS_SOME slot
+    | _ => toplevel_allocated layouts addr src tl
+End
+
+Definition linked_state_ref_allocated_def:
+  linked_state_ref_allocated layouts addr mods (src,id) <=>
+    case ALOOKUP mods src of
+    | NONE => F
+    | SOME tops =>
+        constant_decl id tops \/
+        (EXISTS (\tl. MEM (src,id) (self_member_keys_toplevel src tl) /\
+                      linked_toplevel_allocated layouts addr src tl) tops /\
+         (src <> NONE ==> EVERY (linked_toplevel_allocated layouts addr src) tops))
+End
+
+(* Constants need no owned state. The singleton allocator assigns immutable
+   offsets independently of the declaration's slot. *)
+Definition check_linked_state_ownership_def:
+  check_linked_state_ownership layouts addr mods live <=>
+    (case mods of [(NONE,_)] => T | _ => F) \/
+    EVERY (\(src,tops).
+      EVERY (\tl. case tl of
+          | FunctionDecl _ _ nr _ name _ dflts _ stmts =>
+              MEM (src,name) live ==>
+              (nr /\ src <> NONE ==>
+               EVERY (linked_toplevel_allocated layouts addr src) tops) /\
+              EVERY (\a. case a of
+                        | ReadAcc (StateRef key) =>
+                            linked_state_ref_allocated layouts addr mods key
+                        | WriteAcc (StateRef key) =>
+                            linked_state_ref_allocated layouts addr mods key
+                        | _ => T)
+                    (accesses_exprs dflts ++ accesses_stmts stmts)
+          | VariableDecl (Public _) _ name _ _ =>
+              MEM (src,name) live ==>
+              linked_state_ref_allocated layouts addr mods (src,name)
+          | HashMapDecl (Public _) _ name _ _ _ =>
+              MEM (src,name) live ==>
+              linked_state_ref_allocated layouts addr mods (src,name)
+          | _ => T) tops) mods
+End
+
 Definition live_artifact_def:
   live_artifact layouts addr mods live art =
     art with <| cta_fn_sigs :=
@@ -1098,7 +1165,14 @@ Definition check_function_body_def:
       stmts_no_control_escape body /\
       well_typed_exprs (defaults_env env) dflts /\
       EVERY (runtime_constant_expr mods) dflts /\
-      MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
+      MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args) /\
+      (* The compiler lowers the constant-substituted body and defaults, so
+         they must type too: a constant name can hide a literal that the raw
+         checks above would treat more laxly. *)
+      IS_SOME (type_stmts env ret
+                 (subst_consts_stmts_mods (consts_env_mods mods) body)) /\
+      well_typed_exprs (defaults_env env)
+        (subst_consts_exprs_mods (consts_env_mods mods) dflts)
 End
 
 Definition check_function_body_in_mode_def:
@@ -1146,11 +1220,9 @@ End
    module that no live function calls is not checked at all, so such dead
    code is accepted even when Vyper would reject it.
 
-   Two more differences from Vyper.  A live function may read an immutable
-   of an uninitialized module, which Vyper rejects without `uses:`; its
-   value is the default.  And exports_ok rejects exporting any function of
-   an uninitialized module, while Vyper accepts exporting one that uses no
-   state. *)
+   The separate linked ownership check uses resolved state references and
+   slots.  It covers code reached from the main interface and constructor
+   in either mode.  exports_ok covers the remaining entry points. *)
 Definition check_contract_def:
   check_contract in_deploy layouts addr mods =
     let live = live_functions layouts addr mods in
@@ -1160,13 +1232,15 @@ Definition check_contract_def:
          contract_call_graph_acyclic mods /\
          main_module_allocated layouts addr mods /\
          EVERY (check_module in_deploy layouts addr mods live art) mods /\
-         contract_constants_ok mods
+         contract_constants_ok mods /\
+         check_linked_state_ownership layouts addr mods
+           (linked_live_functions_from mods (linked_main_roots mods))
       then SOME art else NONE
 End
 
-(* Exports name allocated modules, and the combined deployed interface has
-   distinct selectors.  An external function is never an internal callee,
-   so it is live exactly when its module is allocated. *)
+(* Exports name external entries of allocated imports and share the main
+   module's namespace. Check state ownership along exported call paths.
+   The combined deployed interface has distinct selectors. *)
 Definition exports_ok_def:
   exports_ok layouts addr mods exps <=>
     EVERY (\(fn,src).
@@ -1175,8 +1249,26 @@ Definition exports_ok_def:
              | SOME tls => module_allocated layouts addr (SOME src) tls) exps /\
     ALL_DISTINCT
       (MAP (\(name,tys). abi_method_id (type_env_all_modules mods) name tys)
-        (abi_deployed_signatures mods exps))
+        (abi_deployed_signatures mods exps)) /\
+    EVERY (\(name, src).
+      MEM (SOME src, name) (contract_keys external_name_keys_toplevel mods)) exps /\
+    ALL_DISTINCT (MAP FST exps) /\
+    EVERY (\(name, _).
+      ~MEM (NONE, name) (contract_keys self_member_keys_toplevel mods)) exps /\
+    check_linked_state_ownership layouts addr mods
+      (linked_live_functions_from mods (linked_export_roots exps))
 End
+
+Theorem exports_ok_names:
+  exports_ok layouts addr mods exps ==>
+  EVERY (\(name, src).
+    MEM (SOME src, name) (contract_keys external_name_keys_toplevel mods)) exps /\
+  ALL_DISTINCT (MAP FST exps) /\
+  EVERY (\(name, _).
+    ~MEM (NONE, name) (contract_keys self_member_keys_toplevel mods)) exps
+Proof
+  simp[exports_ok_def]
+QED
 
 (* Successful checking guarantees distinct member names for every
    actual struct declaration, including declarations in imported modules. *)
@@ -1324,7 +1416,7 @@ Proof
   drule (check_contract_external_method_ids_distinct
     |> Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`, `tls` |-> `tops`]) >>
   simp[exports_ok_def, abi_deployed_signatures_def,
-       abi_external_method_ids_def]
+       abi_external_method_ids_def, check_linked_state_ownership_def]
 QED
 
 Theorem function_header_nonreentrant_view:

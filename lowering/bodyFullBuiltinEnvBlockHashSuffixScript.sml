@@ -273,6 +273,13 @@ Proof
       simp[IS_PREFIX_APPEND] >>
     `EVERY (\j. j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode) [j1;j2;j3;j4]` by
       simp[Abbr `j1`, Abbr `j2`, Abbr `j3`, Abbr `j4`, mk_inst_def, is_terminator_def] >>
+    `(ctx_has_dalloca ctx ==>
+      !pre i post u. [j1;j2;j3;j4] = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+      (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+       `MEM i [j1;j2;j3;j4]` by
+         (qpat_assum `[j1;j2;j3;j4] = _` (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+       fs[MEM] >> gvs[Abbr `j1`, Abbr `j2`, Abbr `j3`, Abbr `j4`, mk_inst_def]) >>
     drule_all run_inst_seq_gas_origin_ptr_path >>
     simp[Abbr `j1`, Abbr `j2`, Abbr `j3`, Abbr `j4`, mk_inst_def]) >>
  qabbrev_tac `j5 = mk_inst (sa.cs_next_id+4) ASSERT [Var good] []` >>
@@ -430,6 +437,13 @@ Proof
          unitTransformDefsTheory.inst_mem_below_frontier_def,
          memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
          contextCodegenRelTheory.source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
+    `(ctx_has_dalloca ctx ==>
+      !pre i post u. [j1;j2;j3;j4;j5;j6] = pre ++ i::post /\
+        run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+      (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+       `MEM i [j1;j2;j3;j4;j5;j6]` by
+         (qpat_assum `[j1;j2;j3;j4;j5;j6] = _` (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+       fs[MEM] >> simp[Abbr `j1`, Abbr `j2`, Abbr `j3`, Abbr `j4`, Abbr `j5`, Abbr `j6`, mk_inst_def]) >>
     drule_all run_inst_seq_gas_origin_ptr_path >>
     simp[Abbr `j1`, Abbr `j2`, Abbr `j3`, Abbr `j4`, Abbr `j5`, Abbr `j6`, mk_inst_def]) >>
  qabbrev_tac `j7 = mk_inst (sa.cs_next_id+6) ASSERT [Var recent] []` >>
@@ -584,6 +598,13 @@ Resume blockhash_full_suffix[success]:
          unitTransformDefsTheory.inst_mem_below_frontier_def,
          memSafeRunTheory.inst_dload_in_section_def,
          contextCodegenRelTheory.source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
+    `(ctx_has_dalloca ctx ==>
+      !pre i post u. [j7;j8] = pre ++ i::post /\
+        run_inst_seq pre v6 = OK u ==> dalloca_no_wrap i u)` by
+      (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+       `MEM i [j7;j8]` by
+         (qpat_assum `[j7;j8] = _` (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+       fs[MEM] >> simp[Abbr `j7`, Abbr `j8`, mk_inst_def]) >>
     `lookup_block v6.vs_current_bb func.fn_blocks = SOME bb` by
       metis_tac[Abbr `v6`] >>
     `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (v6,G6,tn6) [] (OK t8,G8,tn8)` by

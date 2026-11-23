@@ -1,7 +1,7 @@
 (* Join the copied and uncopied array continuations at the index cut. *)
 Theory bodyFullSubscriptUnframedArray
 Ancestors vyperState[qualified,ignore_grammar] exprSimIfExpWidenedOwnedProvenance[qualified,ignore_grammar]
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullSubscriptCopiedBind bodyFullSubscriptNoCopyBind
   bodyFullSubscriptNoCopyMemorySelect[qualified,ignore_grammar]
   bodyFullSubscriptCopySnapshot bodyFullSubscriptLiveSlotSelect
@@ -46,6 +46,7 @@ Theorem subscript_unframed_array_vv_full:
         else return res) s3 = (INL res',t') ==>
        body_expr_full_ok cx e2) /\
     body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Subscript v8 e1 e2) es /\
     expr_type e1 = ArrayT et bd /\
     place_type cenv e1 = ValPT (ArrayT et bd) /\
@@ -96,14 +97,20 @@ Proof
           qexistsl [`G1`,`bvv`,`gs1`,`gs2`,`iop`,`mid`,`s`,`sm`,`st2`,`tn1`,`ty`] >>
           rpt conj_tac >> first_assum ACCEPT_TAC)
       >- suspend "immutable") >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `expr_body_pre cenv cx env e1 es` by
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+     qpat_assum `eval_expr cx e1 _ = (INL _,_)` (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env e1 (es with gas_obs := gs1)` by simp[] >>
   drule_all_then strip_assume_tac exprSimSourceTheory.expr_body_pre_runtime_typed >>
   gvs[vyperTypeInvariantsTheory.eval_result_typed_def]
 QED
 
 Resume subscript_unframed_array_vv_full[immutable]:
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `expr_body_pre cenv cx env e1 es` by
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+     qpat_assum `eval_expr cx e1 _ = (INL _,_)` (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env (Subscript v8 e1 e2) (es with gas_obs := gs1)` by simp[] >>
   drule_all_then assume_tac expr_body_pre_array_subscript_index_after_base >>
   `well_typed_expr env (Subscript v8 e1 e2) /\
@@ -158,7 +165,10 @@ QED
 
 Resume subscript_unframed_array_vv_full[value]:
   qpat_x_assum `~((!t r t'. eval_expr _ _ _ = _ ==> _) /\ _)` kall_tac >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `expr_body_pre cenv cx env e1 es` by
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+     qpat_assum `eval_expr cx e1 _ = (INL _,_)` (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env e1 (es with gas_obs := gs1)` by simp[] >>
   drule_all_then strip_assume_tac exprSimSourceTheory.expr_body_pre_runtime_typed >>
   qpat_assum `expr_type e1 = _` (fn eq =>
@@ -264,6 +274,9 @@ Resume subscript_unframed_array_vv_full[value]:
   qpat_assum `expr_post _ _ _ _ _ e2 (mid with gas_obs := gs2) _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o
      REWRITE_RULE [exprSimSubscriptArrayComposeTheory.expr_post_initial_gas, expr_post_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx fin it`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `~expr_has_effect (Subscript et e1 e2) ==> pure_frame cenv func es sa s0 it` by
     (simp[] >> strip_tac >> irule exprSimPropsTheory.pure_frame_trans >> simp[] >>
      qexistsl [`mid`,`sm`,`s`] >> fs[wb_frame_def]) >>
@@ -275,10 +288,10 @@ Resume subscript_unframed_array_vv_full[value]:
          simp[vyperTypingTheory.value_has_type_inv]) >>
       qpat_x_assum `v = ArrayV _` SUBST_ALL_TAC >>
       simp[mk_ptr_def, vv_location_def, vv_operand_def, post_value_type_def] >>
-      qpat_assum `~ctx_has_dalloca ctx` (fn nd =>
-        irule (SIMP_RULE (srw_ss()) [nd, mk_ptr_def, vv_location_def, vv_operand_def,
-                                     post_value_type_def]
-                 subscript_fixed_memory_select_full)) >>
+      irule (SIMP_RULE (srw_ss()) [mk_ptr_def, vv_location_def, vv_operand_def,
+                                   post_value_type_def]
+               subscript_fixed_memory_select_full) >>
+      simp[] >>
       conj_tac
       >- (gen_tac >> strip_tac >>
           qpat_assum `!H. valid_horizon _ _ H _ ==> _`
@@ -358,10 +371,9 @@ Resume subscript_unframed_array_vv_full[value]:
   `type_memory_bytes cenv et = type_memory_size elem_tv` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   simp[mk_ptr_def, vv_location_def, vv_operand_def, post_value_type_def] >>
-  qpat_assum `~ctx_has_dalloca ctx` (fn nd =>
-    irule (SIMP_RULE (srw_ss()) [nd, mk_ptr_def, vv_location_def, vv_operand_def,
-                                 post_value_type_def]
-             subscript_dynamic_value_select_full)) >>
+  irule (SIMP_RULE (srw_ss()) [mk_ptr_def, vv_location_def, vv_operand_def,
+                               post_value_type_def]
+           subscript_dynamic_value_select_full) >>
   simp[] >>
   conj_tac
   >- (gen_tac >> strip_tac >>
@@ -423,6 +435,8 @@ Resume subscript_unframed_array_vv_full[copied]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
   >- suspend "copied_select" >>
+  drule_then assume_tac
+    exprSimSubscriptArraySourceTheory.copies_subscript_base_not_array_slot_base >>
   drule_all subscript_array_copy_snapshot_caller_frame >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] strip_assume_tac) >>
   qexistsl [`u`,`Gc`,`tnc`,`q`,`w`,`atv`] >> simp[]
@@ -446,7 +460,11 @@ Resume subscript_unframed_array_vv_full[copied_select]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (drule_then (map_every assume_tac o CONJUNCTS)) >>
   drule_all_then strip_assume_tac exprSimSubscriptArraySuffixTheory.framed_array_index_post_view >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  qpat_assum `copies_subscript_base _ _ _`
+    (assume_tac o MATCH_MP exprSimSubscriptArraySourceTheory.copies_subscript_base_not_array_slot_base) >>
+  `expr_body_pre cenv cx env e1 es` by
+    (irule expr_body_pre_array_subscript_base >>
+     qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _` (irule_at Any) >> simp[]) >>
   `well_typed_expr env (Subscript v8 e1 e2) /\ well_typed_expr env e1` by fs[expr_body_pre_def] >>
   `v8 = et` by
     (drule_all vyperTypeConstantFoldTheory.constant_subscript_type_ok >>
@@ -463,7 +481,11 @@ Resume subscript_unframed_array_vv_full[copied_select]:
   `op_taint tni iop = {} /\ op_prov Gi iop = NONE` by
     fs[bodyPtrDefsTheory.ptr_val_ok_def] >>
   `allocas_from lo z` by fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
-  drule_then assume_tac bodyInvNoDallocaTheory.body_inv_no_dalloca >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ fin z /\ _`
+       (qspec_then `storage_trace_horizon fin.storage_trace`
+         (drule_then (ACCEPT_TAC o
+            MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o CONJUNCT1)))) >>
   `exprLoweringProps$ci_mono sa sm /\ exprLoweringProps$ci_mono sm sc /\
    exprLoweringProps$ci_mono sc si` by
     (conj_tac
@@ -556,9 +578,8 @@ Resume subscript_unframed_array_vv_full[copied_fixed]:
      qpat_x_assum `evaluate_type _ (ArrayT et (Fixed 0)) = SOME _` mp_tac >>
      simp[Once vyperValueTheory.evaluate_type_def]) >>
   simp[mk_ptr_def, vv_location_def, vv_operand_def, post_value_type_def] >>
-  qpat_assum `~ctx_has_dalloca ctx` (fn nd =>
-    irule (SIMP_RULE (srw_ss()) [nd, mk_ptr_def, vv_location_def, vv_operand_def,
-                                 post_value_type_def] subscript_fixed_memory_select_full)) >>
+  irule (SIMP_RULE (srw_ss()) [mk_ptr_def, vv_location_def, vv_operand_def,
+                               post_value_type_def] subscript_fixed_memory_select_full) >>
   simp[] >>
   qexistsl [`Var q`,`iop`,
     `compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory`,`si`,
@@ -584,9 +605,8 @@ Resume subscript_unframed_array_vv_full[copied_dynamic]:
   `compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory =
      (\op. emit_op MLOAD [op])` by simp[FUN_EQ_THM,compile_ptr_load_def] >>
   simp[mk_ptr_def, vv_location_def, vv_operand_def, post_value_type_def] >>
-  qpat_assum `~ctx_has_dalloca ctx` (fn nd =>
-    irule (SIMP_RULE (srw_ss()) [nd, mk_ptr_def, vv_location_def, vv_operand_def,
-                                 post_value_type_def] subscript_dynamic_value_select_full)) >>
+  irule (SIMP_RULE (srw_ss()) [mk_ptr_def, vv_location_def, vv_operand_def,
+                               post_value_type_def] subscript_dynamic_value_select_full) >>
   simp[] >>
   qexistsl [`w`,`b`,`Var q`,`ArrayT et (Dynamic n)`,`0`,`iop`,`si`,`si`,`psz`] >>
   fs[GSYM mk_ptr_def, elem_size_in_location_def, is_slot_addressed_def, word_scale_def,

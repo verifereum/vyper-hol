@@ -6,5 +6,8 @@ arr_struct_noclamp
 arr_string_ret
 dec_bytes_unwrapT
 dec_uint_unwrapT
+enc_ensF_dynamic_tuple
+enc_ensT_bytes
+enc_multi
 flag256_arg
 flag256_array_arg

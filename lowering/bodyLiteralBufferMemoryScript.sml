@@ -14,6 +14,7 @@ Theory bodyLiteralBufferMemory
 Ancestors
   exprSimLiteralBuffer exprSimMemDefs exprSimMemoryPath exprSimUnwrapProps
   fragGasSeqMem allocaHistoryFragment allocaFootprint instMemFrontier
+  literalBufferOpcodeShape memSafeRun ptrDiscipline
   fragExecMem fragGasPathMem fragGasMode gasSummary gasOutcome gasStorage
   vyperStorageFootprint
   exprSimVVFrame exprSimAlloc exprSimProps exprSimDefs exprSimHypsDefs
@@ -287,8 +288,12 @@ Proof
   drule_all alloca_history_run_inst_seq >> strip_tac >>
   `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     simp[IS_PREFIX_APPEND3] >>
-  drule_all run_inst_seq_gas_path_mem >>
-  disch_then (qspec_then `ctx` mp_tac) >> gvs[]
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u)` by
+    (drule literal_bytelike_emitted_non_dalloca >> rpt strip_tac >>
+     gvs[EVERY_APPEND, dalloca_no_wrap_non_dalloca]) >>
+  drule_all run_inst_seq_gas_path_mem >> gvs[]
 QED
 
 (* The buffer holds the literal's value: the counted run, its value post
@@ -472,18 +477,14 @@ Proof
 QED
 
 (* A bytes literal of a dynamic bytes type, or a string literal. *)
-Theorem literal_other_body_mem:
+Theorem literal_bytes_or_string_body_mem[local]:
   !ctx func cenv cx env ty ann l es.
-    expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
+    expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann /\
+    ((?bs. l = BytesL bs) \/ (?str. l = StringL str)) ==>
     expr_sim_mem ctx func cenv cx ty (Literal ann l) es /\
     expr_vv_sim_mem ctx func cenv cx ty (Literal ann l) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `(?bs. l = BytesL bs) \/ (?str. l = StringL str)` by
-    (gvs[expr_sim_pre_def, well_typed_expr_def] >> Cases_on `l` >> gvs[] >>
-     Cases_on `ann` >> gvs[well_typed_literal_def] >>
-     rename1 `BaseT bt` >> Cases_on `bt` >>
-     gvs[well_typed_literal_def, is_word_type_def]) >>
   gvs[expr_sim_pre_def, well_typed_expr_def] >>
   Cases_on `ann` >> gvs[well_typed_literal_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
@@ -494,7 +495,7 @@ Proof
   rename1 `StringT n` >> suspend "string"
 QED
 
-Resume literal_other_body_mem[bytes]:
+Resume literal_bytes_or_string_body_mem[bytes]:
   gvs[alloc_limits_expr_def, literal_alloc_ok_def, compatible_bound_def] >>
   `32 + 32 * word_size (LENGTH bs) < dimword (:256)` by
     (simp[wordsTheory.dimword_def] >> decide_tac) >>
@@ -531,7 +532,7 @@ Resume literal_other_body_mem[bytes]:
   rpt conj_tac >> decide_tac
 QED
 
-Resume literal_other_body_mem[string]:
+Resume literal_bytes_or_string_body_mem[string]:
   gvs[alloc_limits_expr_def, literal_alloc_ok_def, well_formed_type_def,
       vyperValueTheory.evaluate_type_def] >>
   `32 + 32 * word_size (LENGTH str) < dimword (:256)` by
@@ -571,4 +572,43 @@ Resume literal_other_body_mem[string]:
   rpt conj_tac >> decide_tac
 QED
 
-Finalise literal_other_body_mem
+Finalise literal_bytes_or_string_body_mem
+
+Theorem literal_other_body_mem:
+  !ctx func cenv cx env ty ann l es.
+    expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
+    expr_sim_mem ctx func cenv cx ty (Literal ann l) es /\
+    expr_vv_sim_mem ctx func cenv cx ty (Literal ann l) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?bs. l = HexBytesL bs`
+  >- (gvs[] >>
+      `?n. ann = BaseT (BytesT (Dynamic n))` by
+        (fs[expr_sim_pre_def, well_typed_expr_def] >>
+         drule well_typed_literal_hex_bytes >> simp[]) >>
+      gvs[] >>
+      `expr_sim_pre cenv cx env (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) es` by
+        fs[expr_sim_pre_def, well_typed_expr_def, well_typed_literal_def,
+           byte_widths_expr_def, alloc_limits_expr_def, literal_alloc_ok_def,
+           vyperTypeCallGraphTheory.int_calls_expr_def,
+           supportedExprTraverseTheory.expr_has_evm_run_def,
+           supportedExprTraverseTheory.supported_expr_exists_def,
+           supportedExprTraverseTheory.expr_evm_run_root_def,
+           supportedExprTraverseTheory.call_operands_effect_root_def,
+           const_name_root_def, supportedProgramTheory.expr_abi_decode_target_root_def] >>
+      mp_tac (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `env`, `ty`,
+        `BaseT (BytesT (Dynamic n))`, `BytesL bs`, `es`]
+        literal_bytes_or_string_body_mem) >>
+      simp[is_word_type_def, expr_sim_mem_def, expr_vv_sim_mem_def, lower_value_def,
+           hex_bytes_literal_compile, hex_bytes_literal_eval, lowered_value_type_def,
+           expr_post_def, vv_post_def, post_value_type_def, expr_type_def,
+           supportedExprTraverseTheory.expr_has_effect_def,
+           supportedExprTraverseTheory.supported_expr_exists_def,
+           supportedExprTraverseTheory.expr_effect_root_def]) >>
+  MATCH_MP_TAC (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `env`, `ty`, `ann`, `l`, `es`]
+    literal_bytes_or_string_body_mem) >> simp[] >>
+  gvs[expr_sim_pre_def, well_typed_expr_def] >> Cases_on `l` >> gvs[] >>
+  Cases_on `ann` >> gvs[well_typed_literal_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[well_typed_literal_def, is_word_type_def]
+QED

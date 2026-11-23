@@ -60,7 +60,14 @@ Theorem first_emission_literal_vv:
      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  rpt gen_tac >> Cases_on `lit` >>
+  rpt gen_tac >> Cases_on `lit`
+  >~ [`HexBytesL bs`] >-
+    (simp[compile_literal_vv_def] >>
+     map_every qid_spec_tac [`b`, `x`, `a`] >>
+     ho_match_mp_tac first_emission_strong >>
+     ho_match_mp_tac first_emission_strong_bind >> conj_tac
+     >- metis_tac[first_emission_bytelike_literal] >>
+     simp[comp_return_def, cs_extends_refl]) >>
   simp[compile_literal_vv_def, comp_return_def, cs_extends_refl]
   >- (Cases_on `b'` >> simp[compile_literal_vv_def, comp_return_def, cs_extends_refl])
   >- (Cases_on `ty` >> simp[] >>
@@ -706,9 +713,9 @@ Proof
 QED
 
 Theorem first_emission_external_call_kwargs[local]:
-  !ce addr av ats ms az mid rz rmin rm stat cv gas skip hd dv rt dt ei di a x b.
-  compile_external_call_kwargs ce addr av ats ms az mid rz rmin rm stat cv gas
-    skip hd dv rt dt ei di a = (x,b) ==>
+  !ce addr av ats az mid rz rmin rm stat cv gas skip hd dv rt dt di a x b.
+  compile_external_call_kwargs ce addr av ats az mid rz rmin rm stat cv gas
+    skip hd dv rt dt di a = (x,b) ==>
   cs_extends a b /\
   (!fn. fn_has_code a b fn ==> ?bb i.
     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
@@ -729,8 +736,8 @@ Proof
               irule comp_bind_labels >> conj_tac >> rpt gen_tac,
               irule comp_ignore_bind_labels >> conj_tac >> rpt gen_tac] >>
        BETA_TAC >> simp[LET_THM, emit_op_labels, emit_inst_labels, emit_void_labels,
-         compile_alloc_buffer_labels, compile_extcall_store_values_labels,
-         compile_abi_encode_labels, compile_abi_decode_labels,
+         compile_alloc_buffer_labels, compile_abi_encode_values_to_buf_labels,
+         compile_abi_decode_labels,
          compile_return_value_decode_labels, comp_return_labels])
   >~ [`new_block`] >- (irule new_block_action_labels >> simp[])
   >~ [`new_block`] >- (irule new_block_action_labels >> simp[]) >>
@@ -739,8 +746,7 @@ Proof
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
        rpt gen_tac >> BETA_TAC >> simp[LET_THM, compile_alloc_buffer_labels,
-         compile_extcall_store_values_labels, emit_op_labels,
-         compile_abi_encode_labels, comp_return_labels]) >>
+         compile_abi_encode_values_to_buf_labels, emit_op_labels, comp_return_labels]) >>
   IF_CASES_TAC >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
@@ -1012,24 +1018,6 @@ Proof
   simp[cs_appends_return]
 QED
 
-Theorem create_ctor_tuple_extension_only[local]:
-  (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
-  !ce es. cs_appends (compile_create_ctor_tuple cfn ce es)
-Proof
-  strip_tac >> rpt gen_tac >> simp_tac (srw_ss()) [compile_create_ctor_tuple_def, LET_THM] >>
-  irule cs_appends_bind >> reverse conj_tac
-  >- (irule create_ctor_args_extension_only >> first_assum ACCEPT_TAC) >>
-  gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
-  >- (rw[cs_appends_def] >>
-      qspecl_then [`type_memory_bytes ce (TupleT (MAP (lowered_value_type ce) es))`, `st`]
-        mp_tac (cj 1 compile_alloc_buffer_labels) >> simp[]) >>
-  gen_tac >> BETA_TAC >> irule cs_appends_ignore_bind >> conj_tac
-  >- (rw[cs_appends_def] >>
-      qspecl_then [`ce`, `ZIP (a,MAP (lowered_value_type ce) es)`, `a'.buf_operand`, `0`, `st`]
-        mp_tac (cj 1 compile_extcall_store_values_labels) >> simp[]) >>
-  simp[cs_appends_return]
-QED
-
 Theorem create_blueprint_args_extension_only[local]:
   (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
   !ce raw later_es es. cs_appends (compile_create_blueprint_args cfn ce raw later_es es)
@@ -1055,27 +1043,27 @@ Proof
   Cases_on `es = []` >> simp[]
   >- simp[cs_appends_return] >>
   irule cs_appends_bind >> reverse conj_tac
-  >- (irule create_ctor_tuple_extension_only >> first_assum ACCEPT_TAC) >>
+  >- (irule create_ctor_args_extension_only >> first_assum ACCEPT_TAC) >>
   gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
   >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_alloc_buffer_labels, pairTheory.SND]) >>
   gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
-  >- (rw[cs_appends_def] >> metis_tac[cj 1 (CONJUNCT1 (CONJUNCT2 compile_abi_encode_labels)), pairTheory.SND]) >>
+  >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_abi_encode_values_to_buf_labels, pairTheory.SND]) >>
   simp[cs_appends_return]
 QED
 
 Theorem raw_create_suffix_extension_only[local]:
   (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
-  !ce bytecode value es salt rof maxlen abi_size enc.
+  !ce bytecode value es salt rof maxlen abi_size tys.
   cs_appends
     (do len <- emit_op MLOAD [bytecode];
         data <- emit_op ADD [bytecode; Lit 32w];
         (ptr,total) <-
           (if es = [] then return (data,len)
-           else do src <- compile_create_ctor_tuple cfn ce es;
+           else do vals <- compile_create_ctor_args cfn ce es;
                    buf <- compile_alloc_buffer (maxlen + abi_size);
                    compile_copy_memory_dynamic buf.buf_operand data len;
                    dst <- emit_op ADD [buf.buf_operand; len];
-                   args_len <- compile_abi_encode_to_buf dst src enc;
+                   args_len <- compile_abi_encode_values_to_buf ce dst (ZIP (vals,tys));
                    total <- emit_op ADD [len; args_len];
                    return (buf.buf_operand,total)
                 od);
@@ -1090,7 +1078,7 @@ Proof
   irule cs_appends_bind >> reverse conj_tac
   >- (IF_CASES_TAC >> simp[cs_appends_return] >>
       irule cs_appends_bind >> reverse conj_tac
-      >- (irule create_ctor_tuple_extension_only >> first_assum ACCEPT_TAC) >>
+      >- (irule create_ctor_args_extension_only >> first_assum ACCEPT_TAC) >>
       gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
       >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_alloc_buffer_labels, pairTheory.SND]) >>
       gen_tac >> BETA_TAC >> irule cs_appends_ignore_bind >> conj_tac
@@ -1098,7 +1086,7 @@ Proof
       irule cs_appends_bind >> reverse conj_tac
       >- simp[cs_appends_emit_helpers] >>
       gen_tac >> BETA_TAC >> irule cs_appends_bind >> reverse conj_tac
-      >- (rw[cs_appends_def] >> metis_tac[cj 1 (CONJUNCT1 (CONJUNCT2 compile_abi_encode_labels)), pairTheory.SND]) >>
+      >- (rw[cs_appends_def] >> metis_tac[cj 1 compile_abi_encode_values_to_buf_labels, pairTheory.SND]) >>
       gen_tac >> BETA_TAC >> irule cs_appends_bind >>
       simp[cs_appends_emit_helpers, cs_appends_return]) >>
   qx_gen_tac `pl` >> PairCases_on `pl` >> simp_tac (srw_ss()) [] >>
@@ -1340,38 +1328,6 @@ Proof
   metis_tac[first_emission_return]
 QED
 
-Theorem first_emission_create_ctor_tuple[local]:
-  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
-  !ce es a x b. compile_create_ctor_tuple cfn ce es a = (x,b) ==>
-  cs_extends a b /\
-  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-    a.cs_current_insts = b.cs_current_insts) \/
-   (!fn. fn_has_code a b fn ==> ?bb i.
-     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  strip_tac >> rpt gen_tac >>
-  simp_tac (srw_ss()) [compile_create_ctor_tuple_def, LET_THM] >>
-  map_every qid_spec_tac [`b`, `x`, `a`] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (drule first_emission_create_ctor_args >>
-      disch_then (qspecl_then [`es`, `ce`] ACCEPT_TAC)) >>
-  gen_tac >> ho_match_mp_tac first_emission_strong >>
-  ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- metis_tac[first_emission_alloc_buffer] >>
-  gen_tac >> simp[GSYM cs_appends_def] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  irule cs_appends_ignore_bind >> simp[cs_appends_return] >>
-  rw[cs_appends_def] >>
-  metis_tac[cj 1 compile_extcall_store_values_labels, pairTheory.SND]
-QED
-
 Theorem first_emission_create_blueprint_args:
   (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
     cs_extends a b /\
@@ -1410,15 +1366,15 @@ Proof
   Cases_on `es = []` >> simp[]
   >- simp[comp_return_def, cs_extends_refl] >>
   ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (drule first_emission_create_ctor_tuple >>
-      disch_then (qspecl_then [`ce`, `es`] ACCEPT_TAC)) >>
+  >- (drule first_emission_create_ctor_args >>
+      disch_then (qspecl_then [`es`, `ce`] ACCEPT_TAC)) >>
   gen_tac >> ho_match_mp_tac first_emission_strong >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- metis_tac[first_emission_alloc_buffer] >>
   gen_tac >> simp[GSYM cs_appends_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule cs_appends_bind >> simp[cs_appends_return] >> rw[cs_appends_def] >>
-  metis_tac[cj 1 (CONJUNCT1 (CONJUNCT2 compile_abi_encode_labels)), pairTheory.SND]
+  metis_tac[cj 1 compile_abi_encode_values_to_buf_labels, pairTheory.SND]
 QED
 
 Resume first_emission_create_blueprint_args[invalid_blueprint_args]:
@@ -1700,6 +1656,14 @@ Theorem first_emission_acc[local]:
      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
   strip_tac >> gen_tac >> Cases_on `item`
+  >~ [`compile_acc cfn ce e Codesize`]
+  >- (rewrite_tac[compile_acc_def] >> Cases_on `is_self_addr e`
+      >- (simp[] >> rpt strip_tac >> drule_at Any
+           (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[])
+      >- (simp[] >> ho_match_mp_tac first_emission_pair_let >>
+          (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> simp[]) >> gen_tac) >>
+          rpt strip_tac >> drule_at Any
+            (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]))
   >~ [`compile_acc cfn ce e Address`]
   >- (rewrite_tac[compile_acc_def] >> ho_match_mp_tac first_emission_lower_value >> simp[])
   >~ [`compile_acc cfn ce e Code`]
@@ -2062,11 +2026,9 @@ Resume first_emission_builtin_ec[add]:
     >- metis_tac[] >> gen_tac >>
     ho_match_mp_tac first_emission_pair_let >> conj_tac
     >- metis_tac[first_emission_unwrap_value] >> gen_tac) >>
-  qspecl_then [`compile_ecadd_points p1 p2`, `p1`, `p2`] mp_tac first_emission_ec >>
-  simp[] >> strip_tac >> rpt gen_tac >>
-  rename1 `compile_ecadd_points p1 p2 st` >>
-  Cases_on `compile_ecadd_points p1 p2 st` >>
-  simp[as_ptr_val_def] >> strip_tac >> gvs[] >> metis_tac[]
+  ho_match_mp_tac first_emission_as_stack_val >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_ec >> simp[SF ETA_ss] >> metis_tac[]
 QED
 
 Resume first_emission_builtin_ec[mul]:
@@ -2076,11 +2038,9 @@ Resume first_emission_builtin_ec[mul]:
   (conj_tac >- metis_tac[first_emission_unwrap_value] >> gen_tac) >>
   ho_match_mp_tac first_emission_pair_let >>
   (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
-  qspecl_then [`compile_ecmul_point p s`, `p`, `s`] mp_tac first_emission_ec >>
-  simp[] >> strip_tac >> rpt gen_tac >>
-  rename1 `compile_ecmul_point p s st` >>
-  Cases_on `compile_ecmul_point p s st` >>
-  simp[as_ptr_val_def] >> strip_tac >> gvs[] >> metis_tac[]
+  ho_match_mp_tac first_emission_as_stack_val >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_ec >> simp[SF ETA_ss] >> metis_tac[]
 QED
 
 Finalise first_emission_builtin_ec
@@ -2737,8 +2697,8 @@ Proof
 QED
 
 Theorem first_emission_abi_primitives[local]:
-  !m ensure mid src ei di maxlen minsz maxsz outsz.
-  (m = lower_abi_encode (ensure:bool) mid src ei maxlen \/
+  !m mid encode src di maxlen minsz maxsz outsz.
+  (m = lower_abi_encode mid maxlen encode /\ (!dst. cs_appends (encode dst)) \/
    m = lower_abi_decode src di minsz maxsz outsz) ==>
   !a x b. m a = (x,b) ==>
   cs_extends a b /\
@@ -2761,8 +2721,7 @@ Proof
        simp[cs_appends_emit_helpers, cs_appends_return, GSYM cs_appends_def,
             abiDecoderAppendTheory.cs_appends_abi_alloc_buffer]) >>
   rw[cs_appends_def] >>
-  metis_tac[cj 1 (cj 2 compile_abi_encode_labels),
-            cj 1 (cj 1 compile_abi_decode_labels), pairTheory.SND]
+  metis_tac[cj 1 (cj 1 compile_abi_decode_labels), pairTheory.SND]
 QED
 
 Theorem first_emission_type_builtin_abi_decode:
@@ -2795,35 +2754,6 @@ Proof
   simp[Abbr `m`] >> metis_tac[]
 QED
 
-Theorem first_emission_abi_encode_args[local]:
-  !es ce.
-  (!ce ty e a x b. MEM e es /\ cfn ce ty e a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
-  !a x b. compile_abi_encode_args cfn ce es a = (x,b) ==>
-  cs_extends a b /\
-  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-    a.cs_current_insts = b.cs_current_insts) \/
-   (!fn. fn_has_code a b fn ==> ?bb i.
-     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  Induct_on `es`
-  >- simp[compile_abi_encode_args_def, comp_return_def, cs_extends_refl] >>
-  rpt gen_tac >> strip_tac >> rewrite_tac[compile_abi_encode_args_def] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac >- metis_tac[MEM] >>
-  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (IF_CASES_TAC >> metis_tac[first_emission_materialize_vv,
-                              first_emission_strong, first_emission_unwrap_value]) >>
-  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (first_x_assum ho_match_mp_tac >> metis_tac[MEM]) >>
-  metis_tac[first_emission_return]
-QED
-
 Theorem first_emission_type_builtin_abi_encode:
   (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
     cs_extends a b /\
@@ -2842,43 +2772,20 @@ Theorem first_emission_type_builtin_abi_encode:
      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
   strip_tac >> rpt gen_tac >> simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
-  rpt IF_CASES_TAC >> map_every qid_spec_tac [`b`, `x`, `a`] >>
-  ho_match_mp_tac first_emission_pair_let
-  >~ [`compile_abi_encode_args`]
-  >- ((conj_tac >- (ho_match_mp_tac first_emission_abi_encode_args >> metis_tac[])) >>
-      gen_tac >> suspend "abi_stage")
-  >~ [`lower_value`]
-  >- ((conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
-      gen_tac >> suspend "abi_stage") >>
-  (conj_tac >- metis_tac[]) >> gen_tac >>
-  ho_match_mp_tac first_emission_pair_let >>
-  (conj_tac >- metis_tac[first_emission_unwrap_value]) >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (simp[compile_abi_encode_args_def] >>
+      ho_match_mp_tac first_emission_ext_call_args >> first_assum ACCEPT_TAC) >>
   gen_tac >> rpt gen_tac >>
-  qmatch_goalsub_abbrev_tac `as_ptr_val vv_ty LocMemory (m st2)` >>
-  Cases_on `m st2` >> simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val vv_ty LocMemory (m st1)` >>
+  Cases_on `m st1` >> simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
   qspec_then `m` mp_tac first_emission_abi_primitives >>
-  simp[Abbr `m`] >> metis_tac[]
+  simp[Abbr `m`] >>
+  `!dst. cs_appends (compile_abi_encode_payload ce
+      (LENGTH args = 1 /\ ~ensure) vs (MAP (lowered_value_type ce) args) dst)` by
+    (simp[cs_appends_def] >> metis_tac[compile_abi_encode_payload_labels, pairTheory.SND]) >>
+  metis_tac[]
 QED
-
-Resume first_emission_type_builtin_abi_encode[abi_stage]:
-  markerLib.RESUME_TAC >> rewrite_tac[state_pair_let_bind] >>
-  ho_match_mp_tac first_emission_strong >>
-  ho_match_mp_tac first_emission_strong_bind >>
-  (conj_tac >- metis_tac[first_emission_alloc_buffer]) >>
-  gen_tac >> simp[GSYM cs_appends_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  irule cs_appends_bind >> reverse conj_tac
-  >- (simp[cs_appends_emit_helpers] >> rw[cs_appends_def] >>
-      metis_tac[cj 1 compile_store_abi_tuple_labels, pairTheory.SND]) >>
-  all_tac
-  >~ [`cs_appends (emit_void MSTORE _)`]
-  >- simp[cs_appends_emit_helpers] >>
-  gen_tac >> BETA_TAC >> rw[cs_appends_def] >>
-  qmatch_asmsub_abbrev_tac `as_ptr_val vv_ty LocMemory (m st)` >>
-  Cases_on `m st` >> gvs[as_ptr_val_def, Abbr `m`] >>
-  metis_tac[cj 1 lower_abi_encode_labels, pairTheory.SND]
-QED
-
-Finalise first_emission_type_builtin_abi_encode
 
 Theorem first_emission_list_membership[local]:
   (!needle ops a x b. compile_list_membership_in needle ops a = (x,b) ==>

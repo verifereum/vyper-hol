@@ -864,7 +864,8 @@ Theorem compile_typed_word_builtin_sim:
     wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
     bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
     bt <> Bop In /\ bt <> Bop NotIn /\
-    builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
+    builtin_args_length_ok bt (LENGTH args) /\ ~is_self_codesize bt args /\
+    is_word_type ann /\
     (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
       ?xs sm. lower_word_args cenv arg_ty args sa = (xs,sm) /\ code xs sm = (op,sb)) /\
     (!xs. straight_fresh (code xs)) /\
@@ -877,7 +878,7 @@ Theorem compile_typed_word_builtin_sim:
 Proof
   rpt gen_tac >> strip_tac >>
   `wb_args_shape cenv arg_ty args` by metis_tac[typed_word_args_shape] >>
-  irule compile_word_builtin_sim >> simp[] >>
+  irule compile_word_builtin_sim >> simp[is_self_codesize_def] >>
   qexistsl_tac [`expr_sim_inv cenv cx env`, `arg_ty`, `code`] >> simp[] >>
   rpt conj_tac
   >~ [`cs_extends`]
@@ -911,7 +912,8 @@ Proof
   `expr_type e = BaseT DecimalT /\ ann = BaseT (IntT 256)` by
     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
   irule compile_typed_word_builtin_sim >>
-  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def] >>
+  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def,
+       is_self_codesize_def] >>
   qexistsl_tac [`\e. ty`, `(\xs. compile_floor (EL 0 xs) 10000000000)`, `env`] >>
   simp[straight_fresh_floor] >> conj_tac
   >- (rpt strip_tac >> drule lower_value_floor >> strip_tac >>
@@ -933,7 +935,8 @@ Proof
   `expr_type e = BaseT DecimalT /\ ann = BaseT (IntT 256)` by
     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
   irule compile_typed_word_builtin_sim >>
-  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def] >>
+  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def,
+       is_self_codesize_def] >>
   qexistsl_tac [`\e. ty`, `(\xs. compile_ceil (EL 0 xs) 10000000000)`, `env`] >>
   simp[straight_fresh_ceil] >> conj_tac
   >- (rpt strip_tac >> drule lower_value_ceil >> strip_tac >>
@@ -977,7 +980,8 @@ Proof
     (gvs[expr_body_pre_def, well_typed_expr_def] >>
      gvs[well_typed_builtin_app_def]) >>
   irule compile_typed_word_builtin_sim >>
-  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def] >>
+  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def,
+       is_self_codesize_def] >>
   qexistsl_tac [`\e. ty`, `\xs. (if bt = AddMod then compile_addmod else compile_mulmod)
                                 (EL 0 xs) (EL 1 xs) (EL 2 xs)`, `env`] >>
   conj_tac
@@ -1002,7 +1006,8 @@ Proof
    expr_type b = BaseT (UintT 256)` by
     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
   irule compile_typed_word_builtin_sim >>
-  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def] >>
+  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def,
+       is_self_codesize_def] >>
   qexistsl_tac [`\e. ty`, `\xs. compile_pow_mod256 (EL 0 xs) (EL 1 xs)`, `env`] >>
   simp[straight_fresh_compile_modular] >> conj_tac
   >- (rpt strip_tac >> drule lower_value_pow_mod256 >> strip_tac >>
@@ -1023,7 +1028,8 @@ Proof
     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
         is_uint_type_def] >>
   irule compile_typed_word_builtin_sim >>
-  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def] >>
+  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def,
+       is_self_codesize_def] >>
   qexistsl_tac [`expr_type`, `\xs. compile_as_wei_value_int (EL 0 xs) (denomination_multiplier d) F`, `env`] >>
   simp[straight_fresh_as_wei_value_int] >> conj_tac
   >- (rpt strip_tac >> drule_at Any lower_value_as_wei_value >> simp[] >> strip_tac >>

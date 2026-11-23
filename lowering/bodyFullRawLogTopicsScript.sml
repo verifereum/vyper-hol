@@ -22,12 +22,13 @@ Theorem raw_log_topics_full:
    env ann n data dflt st0 sa sb shadow_sa shadow_sb ops es s G0 tn0.
   (!cenv ty e.
      gas_shadow_compiles (lower_value compile_expr cenv ty e)
-       (lower_value compile_expr cenv ty (gas_shadow_expr e))) /\
+       (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))) /\
   (!cenv xs.
      gas_shadow_compiles (compile_multi_exprs compile_expr cenv xs)
-       (compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr xs))) /\
+       (compile_multi_exprs compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr xs))) /\
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
@@ -37,7 +38,7 @@ Theorem raw_log_topics_full:
     [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
       (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] /\
   compile_multi_exprs compile_expr cenv topics sa = (ops,sb) /\
-  compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr topics)
+  compile_multi_exprs compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr topics)
     shadow_sa = (ops,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -45,7 +46,7 @@ Theorem raw_log_topics_full:
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst st. frag_reachable ctx func s fn inst st ==> dalloca_no_wrap inst st) /\
+  (!fn inst st. frag_reachable ctx func s fn inst st ==> dalloca_fmp_headroom inst st) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\

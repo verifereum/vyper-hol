@@ -9,6 +9,7 @@ Ancestors
   loweringPosts exprSimMemDefs vyperValue vyperStorageFootprint
   exprLowering exprSimWordArgs fragGasOriginPtr vyperState
   stateRelProj exprSimVVFrame bodyFullExtCallSavedOperand
+Libs pureFrameLib
 
 (* The slot address is computed before the saved argument is unwrapped. *)
 Theorem extcall_slot_address[local]:
@@ -123,7 +124,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem extcall_slot_nonmemory_unwrap[local]:
+Theorem extcall_slot_nonmemory_unwrap_pure[local]:
   lowered_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\ p.ptr_location <> LocMemory /\
   compile_expr ce (expr_type e) e si = (LocatedValue (expr_type e) p,sm) /\
@@ -155,6 +156,7 @@ Theorem extcall_slot_nonmemory_unwrap[local]:
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) ==>
   ?z G' tn'.
+    pure_frame ce fn ee su t z /\
     gas_origin_ptr_path
       (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
        lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
@@ -172,7 +174,8 @@ Theorem extcall_slot_nonmemory_unwrap[local]:
     (!x. not_fresh_at su x ==>
        lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn'
+    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
+    expr_val_at ce cx (expr_type e) su sb ee v src z
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by metis_tac[post_value_type_lowered] >>
@@ -191,13 +194,13 @@ Proof
       simp[exprSimUnwrapTheory.vv_post_calldata]) >>
   Cases_on `p.ptr_location = LocCode`
   >- (Cases_on `ce.ce_is_ctor`
-      >- (irule extcall_saved_ctor_copy_replay >> simp[] >>
+      >- (irule extcall_saved_ctor_copy_replay_pure >> simp[] >>
           qexistsl [`p`,`si`,`sm`] >> fs[]) >>
-      irule extcall_saved_runtime_copy_replay >> simp[] >>
+      irule extcall_saved_runtime_copy_replay_pure >> simp[] >>
       qexistsl [`p`,`si`,`sm`] >> simp[]) >>
   `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient` by
     (Cases_on `p.ptr_location` >> fs[]) >>
-  irule extcall_saved_slot_copy_replay >> simp[] >>
+  irule extcall_saved_slot_copy_replay_pure >> simp[] >>
   qexistsl [`p`,`si`,`sm`] >> simp[]
 QED
 
@@ -289,7 +292,7 @@ QED
 
 (* The unwrap returns a store input at a single physical endpoint.  The
    retained interval [si,sm) is used only for a non-memory saved value. *)
-Theorem extcall_slot_unwrap[local]:
+Theorem extcall_slot_unwrap_pure:
   ty = lowered_value_type ce e /\
   ((?tag op0. saved = StackValue tag op0) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
@@ -326,6 +329,7 @@ Theorem extcall_slot_unwrap[local]:
   alloca_history fn t /\ ~t.vs_halted /\ t.vs_current_bb = su.cs_current_bb /\
   t.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?z G' tn'.
+    pure_frame ce fn ee su t z /\
     gas_origin_ptr_path
       (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
        lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
@@ -343,7 +347,12 @@ Theorem extcall_slot_unwrap[local]:
     (!x. not_fresh_at su x ==>
        lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn'
+    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
+    (!p. saved = LocatedValue ty p /\ p.ptr_location <> LocMemory ==>
+      expr_val_at ce cx ty su sb ee v src z) /\
+    ((?tag op0. saved = StackValue tag op0) \/
+     (?p. saved = LocatedValue ty p /\ p.ptr_location = LocMemory) ==>
+      z = t)
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `val_wf rt v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
@@ -363,11 +372,14 @@ Proof
   qpat_x_assum `ty = expr_type e` SUBST_ALL_TAC >>
   qpat_x_assum `expr_type e = lowered_value_type ce e` (assume_tac o SYM) >>
   simp[] >>
-  irule (SIMP_RULE (boss_ss()) [] extcall_slot_nonmemory_unwrap) >>
+  irule (SIMP_RULE (boss_ss()) [] extcall_slot_nonmemory_unwrap_pure) >>
   `type_memory_size rt < 18446744073709551616` by fs[] >>
   simp[] >> qexistsl [`p`,`raw`,`si`,`sm`] >>
   fs[contextTheory.vv_operand_def, contextTheory.vv_location_def]
 QED
+
+Theorem extcall_slot_unwrap =
+  pureFrameLib.drop_frame extcall_slot_unwrap_pure
 
 (* Use the actual saved snapshot to protect the read operand from the ADD.
    The two physical endpoints do not depend on the storage horizon. *)

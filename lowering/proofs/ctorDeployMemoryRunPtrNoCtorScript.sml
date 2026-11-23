@@ -8,7 +8,8 @@
 Theory ctorDeployMemoryRunPtrNoCtor
 Ancestors
   ctorDeployDefs ctorDeployMemoryRunMemNoCtor ctorDeployImmBudget
-  ctorDeployShape gasSummary ptrSafeRun ptrDiscipline venomInst
+  ctorDeployShape deployDynamicMemory loweringShapeSource
+  gasSummary ptrSafeRun ptrDiscipline venomInst
   venomExecSemantics venomState codegenRel contextCodegenRel memLocDefs
   o1PassContract o1PipelineCorrect e2eEntry unitTransformDefs
 
@@ -176,13 +177,13 @@ Proof
 QED
 
 Theorem deploy_no_ctor_run_ptr_safe:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    exts ints fb fn lbl.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
+    deploy_phases policy tops (assemble prog, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant vs (deploy_entry_state prog cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    gas_variant vs (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
     classify_functions tops = (exts, ints, fb, NONE) /\
     lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl
@@ -196,12 +197,14 @@ Proof
   drule_all deploy_no_ctor_entry_shape >> strip_tac >> gvs[] >>
   `vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops` by
     (fs[gas_variant_def] >>
-     qpat_x_assum `(deploy_entry_state _ _ _ _ with vs_outcomes := _) = _`
+     qpat_x_assum `(opt_deploy_entry_state_own _ _ _ _ _ with vs_outcomes := _) = _`
        (mp_tac o Q.AP_TERM `\x. (x.vs_allocas, x.vs_alloca_next)`) >>
-     simp[deploy_entry_state_def, entry_venom_state_def,
+     simp[opt_deploy_entry_state_own_def, opt_entry_state_own_def, entry_venom_state_def,
           init_venom_state_def]) >>
   drule deploy_imm_budget_ok >> strip_tac >>
-  drule_all deploy_unit_shape_ok >> strip_tac >>
+  `~deploy_dalloca_form_occurs expr_raw_shape_root tops` by
+    simp[deploy_dalloca_form_occurs_def] >>
+  drule_all deploy_unit_no_dalloca_static >> strip_tac >>
   irule simple_deploy_entry_ptr_safe >>
   simp[]
 QED

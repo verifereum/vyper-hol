@@ -1,11 +1,12 @@
 (* Scope projection frames for the source snapshot of an array iterator. *)
 Theory stmtSimForArrayFrame
 Ancestors
+  bodySimAugPlaceScopes
   list rich_list finite_map vyperState vyperLookup vyperScopePreservation
   supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter vyperCallOutcomeFrame
   vyperStatePreservation supportedExprForms supportedExprTraverse
   vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits vyperCreate vyperCreateFrame
-  vyperLocalAccessFrame
+  vyperLocalAccessFrame supportedTraverseFalse
 
 (* select_result, extend_place and lookup_global record a storage
    observation, so their end state is the start state with a longer
@@ -111,218 +112,53 @@ Proof
   simp[evaluate_def, bind_def]
 QED
 
-Theorem singleton_expr_scopes[local]:
-  (!r s'. eval_exprs cx [e] s = (r,s') ==> s'.scopes = s.scopes) /\
-  eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes
-Proof
-  strip_tac >> drule eval_exprs_singleton_end_state >> metis_tac[]
-QED
-
 Theorem supported_pure_scopes_mutual:
-  (!tops e. supported_pure_expr tops e ==>
+  (!tops e. supported_effect_free_expr tops e ==>
     !cx es res es'. eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes) /\
-  (!tops exprs. supported_pure_exprs tops exprs ==>
+  (!tops exprs. supported_effect_free_exprs tops exprs ==>
     !cx es res es'. eval_exprs cx exprs es = (res,es') ==> es'.scopes = es.scopes) /\
-  (!tops fields. supported_pure_fields tops fields ==>
+  (!tops fields. supported_effect_free_fields tops fields ==>
     !cx es res es'. eval_exprs cx (MAP SND fields) es = (res,es') ==>
       es'.scopes = es.scopes) /\
-  (!tops e. supported_place_expr tops e ==>
+  (!tops e. supported_effect_free_place_expr tops e ==>
     !cx es res es'. eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes)
 Proof
-  ho_match_mp_tac supported_pure_expr_ind >> rpt conj_tac >>
-  simp[supported_pure_expr_def] >> rpt strip_tac
-  >>~- ([`eval_expr _ (Name _ _) _ = _`],
-      gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
-          type_check_def, assert_def, lift_option_type_def,
-          return_def, raise_def, AllCaseEqs()])
-  >>~- ([`eval_expr _ (Literal _ _) _ = _`],
-      gvs[Once evaluate_def, return_def])
-  >>~- ([`eval_expr _ (TopLevelName _ _) _ = _`],
-      rename1 `eval_expr cx (TopLevelName ty nsid) es = _` >>
-      PairCases_on `nsid` >> gvs[Once evaluate_def] >>
-      drule lookup_global_scopes >> simp[])
-  >>~- ([`eval_expr _ (FlagMember _ _ _) _ = _`],
-      gvs[Once evaluate_def] >> drule lookup_flag_mem_scopes >> simp[])
-  >>~- ([`eval_expr _ (IfExp _ _ _ _) _ = _`], suspend "ifexp")
-  >>~- ([`eval_expr _ (StructLit _ _ _) _ = _`], suspend "struct")
-  >~ [`eval_expr _ (Subscript _ _ _) _ = _`] >- suspend "subscript1"
-  >>~- ([`eval_expr _ (Subscript _ _ _) _ = _`], suspend "subscript2")
-  >~ [`eval_expr _ (Attribute _ _ _) _ = _`] >- suspend "attribute1"
-  >>~- ([`eval_expr _ (Attribute _ _ _) _ = _`], suspend "attribute2")
-  >>~- ([`eval_expr _ (Builtin _ _ _) _ = _`], suspend "builtin")
-  >>~- ([`eval_expr _ (TypeBuiltin _ _ _ _) _ = _`], suspend "typebuiltin")
-  >>~- ([`eval_exprs _ [] _ = _`], gvs[Once evaluate_def, return_def])
-  >> gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def]
-  >> imp_res_tac read_result_state >> gvs[] >> metis_tac[]
+  metis_tac[bodySimAugPlaceScopesTheory.aug_place_pure_scopes_mutual]
 QED
-
-Resume supported_pure_scopes_mutual[ifexp]:
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, switch_BoolV_def,
-      AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac read_result_state >> imp_res_tac conditional_result_state >> gvs[] >>
-  gvs[COND_RATOR, AllCaseEqs(), raise_def] >> metis_tac[]
-QED
-
-Resume supported_pure_scopes_mutual[struct]:
-  rename1 `eval_expr cx (StructLit ty nsid fields) es = _` >>
-  PairCases_on `nsid` >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  metis_tac[]
-QED
-
-Resume supported_pure_scopes_mutual[subscript1]:
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
-  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> trace_scopes_tac >> metis_tac[]
-QED
-
-Resume supported_pure_scopes_mutual[subscript2]:
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
-  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> trace_scopes_tac >> metis_tac[]
-QED
-
-Resume supported_pure_scopes_mutual[attribute1]:
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> trace_scopes_tac >> metis_tac[]
-QED
-
-Resume supported_pure_scopes_mutual[attribute2]:
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> trace_scopes_tac >> metis_tac[]
-QED
-
-Resume supported_pure_scopes_mutual[builtin]:
-  `code_slice_source blt exprs = NONE` by
-    (Cases_on `code_slice_source blt exprs` >> simp[] >>
-     rename1 `SOME p` >> PairCases_on `p` >>
-     gvs[code_slice_source_SOME, supported_builtin_form_def]) >>
-  Cases_on `blt = Len`
-  >- (`?e. exprs = [e]` by
-       (namedCases_on `exprs` ["", "arg tail"] >>
-        gvs[supported_builtin_form_def] >>
-        Cases_on `tail` >> gvs[supported_builtin_form_def]) >>
-      gvs[] >> qpat_x_assum `eval_expr _ (Builtin _ Len _) _ = _` mp_tac >>
-      simp[NoAsms, Once evaluate_def, type_check_def, assert_def, bind_def,
-           ignore_bind_def, return_def, raise_def, AllCaseEqs(),
-           vyperContextTheory.builtin_args_length_ok_def] >>
-      rpt strip_tac >> imp_res_tac result_array_length_state >> gvs[] >>
-      drule_at (Pat `eval_expr _ e _ = _`) singleton_expr_scopes >>
-      disch_then irule >> metis_tac[]) >>
-  Cases_on `blt = Env MsgGas` >>
-  Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
-  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
-      ignore_bind_def, return_def, raise_def, COND_RATOR, lift_option_type_def,
-      vfmTypesTheory.option_CASE_rator, AllCaseEqs(), get_accounts_def] >>
-  imp_res_tac next_gas_reading_state >>
-  imp_res_tac lift_option_type_state >>
-  imp_res_tac lift_sum_state >>
-  imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]
-QED
-
-Resume supported_pure_scopes_mutual[typebuiltin]:
-  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
-      ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
-  imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]
-QED
-
-Finalise supported_pure_scopes_mutual
 
 
 Theorem supported_pure_exprs_scopes:
   !tops exprs cx es res es'.
-    supported_pure_exprs tops exprs /\ eval_exprs cx exprs es = (res,es') ==>
+    supported_effect_free_exprs tops exprs /\ eval_exprs cx exprs es = (res,es') ==>
     es'.scopes = es.scopes
 Proof
   metis_tac[supported_pure_scopes_mutual]
 QED
 
 Theorem supported_effect_scopes_mutual:
-  (!tops e. supported_effect_expr tops e ==>
+  (!tops e. supported_root_effect_expr tops e ==>
     ~supported_expr_exists expr_internal_call_root e ==>
     !cx es res es'. eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes) /\
-  (!tops e. supported_effect_place_expr tops e ==>
+  (!tops e. supported_root_effect_place_expr tops e ==>
     ~supported_expr_exists expr_internal_call_root e ==>
     !cx es res es'. eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes)
 Proof
-  ho_match_mp_tac supported_effect_expr_ind >> rpt conj_tac >>
-  simp[supported_effect_expr_def, supported_expr_exists_def,
-       expr_internal_call_root_def] >> rpt strip_tac
-  >>~- ([`eval_expr _ (Subscript _ _ _) _ = _`],
-    gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-    gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
-    imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-    imp_res_tac supported_pure_scopes_mutual >> gvs[] >> trace_scopes_tac >>
-    metis_tac[])
-  >>~- ([`eval_expr _ (Attribute _ _ _) _ = _`],
-    gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-    imp_res_tac select_result_state >> gvs[] >> trace_scopes_tac >> metis_tac[])
-  >~ [`eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) _ = _`]
-  >- suspend "external"
-  >~ [`eval_expr _ (Call _ (Send F) _ _) _ = _`] >- suspend "send2"
-  >~ [`eval_expr _ (Call _ (Send T) _ _) _ = _`] >- suspend "send3"
-  >> suspend "pop"
+  metis_tac[bodySimAugPlaceScopesTheory.aug_place_effect_scopes_mutual]
 QED
-
-Resume supported_effect_scopes_mutual[external]:
-  `!n. supported_pure_exprs tops (TAKE n args)` by
-    (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE]) >>
-  `!n. supported_pure_exprs tops (DROP n args)` by
-    (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_DROP]) >>
-  `!n m. supported_pure_exprs tops (TAKE n (DROP m args))` by
-    (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE, EVERY_DROP]) >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac eval_ext_call_preserves_non_accounts >>
-  imp_res_tac read_results_state >> imp_res_tac supported_pure_scopes_mutual >>
-  gvs[] >> metis_tac[supported_pure_exprs_scopes]
-QED
-
-Resume supported_effect_scopes_mutual[send2]:
-  `supported_pure_exprs tops [a;v]` by simp[supported_pure_expr_def] >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-      assert_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac eval_send_preserves_non_accounts >>
-  imp_res_tac supported_pure_scopes_mutual >>
-  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
-QED
-
-Resume supported_effect_scopes_mutual[send3]:
-  `supported_pure_exprs tops [a;v;g]` by simp[supported_pure_expr_def] >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-      assert_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac eval_send_preserves_non_accounts >>
-  imp_res_tac supported_pure_scopes_mutual >>
-  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
-QED
-
-Resume supported_effect_scopes_mutual[pop]:
-  rename1 `eval_expr cx (Pop ty (TopLevelNameTarget nsid)) es = _` >>
-  PairCases_on `nsid` >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  imp_res_tac lookup_global_scopes >>
-  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def, AllCaseEqs()] >>
-  metis_tac[pop_nonmemory_scopes, lookup_global_not_memory]
-QED
-
-Finalise supported_effect_scopes_mutual
 
 
 Theorem supported_expr_scopes:
   !tops e cx es res es'.
-    supported_expr tops e /\ ~supported_expr_exists expr_internal_call_root e /\
+    supported_root_expr tops e /\ ~supported_expr_exists expr_internal_call_root e /\
     eval_expr cx e es = (res,es') ==> es'.scopes = es.scopes
 Proof
-  simp[supported_expr_def] >>
+  simp[supported_root_expr_def] >>
   metis_tac[supported_pure_scopes_mutual, supported_effect_scopes_mutual]
 QED
 
 Theorem supported_exprs_scopes:
   !exprs tops cx es res es'.
-    EVERY (\e. supported_expr tops e /\
+    EVERY (\e. supported_root_expr tops e /\
       ~supported_expr_exists expr_internal_call_root e) exprs /\
     eval_exprs cx exprs es = (res,es') ==> es'.scopes = es.scopes
 Proof
@@ -716,7 +552,7 @@ Resume eval_observation_frame_pred[Builtin]:
   qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
   rename1 `Builtin _ bt es` >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  Cases_on `bt = Len` >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+  Cases_on `bt = Len` >>
   Cases_on `bt = Env MsgGas` >> gvs[] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
        return_def, raise_def, type_check_def, assert_def] >>
@@ -725,7 +561,7 @@ Resume eval_observation_frame_pred[Builtin]:
       assert_def, return_def, raise_def,
       vyperContextTheory.builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
   imp_res_tac result_array_length_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac lift_sum_state >> imp_res_tac next_gas_reading_state >>
+  imp_res_tac if_lift_sum_state >> imp_res_tac next_gas_reading_state >>
   imp_res_tac precompile_call_success_state >>
   gvs[get_accounts_def, return_def] >> res_tac >> gvs[] >>
   Cases_on `code_slice_source bt es`
@@ -739,21 +575,6 @@ Resume eval_observation_frame_pred[Builtin]:
 QED
 
 Finalise eval_observation_frame_pred
-
-Theorem supported_exists_false[local]:
-  (!e. ~supported_expr_exists (\x. F) e) /\
-  (!t. ~supported_target_exists (\x. F) t) /\
-  (!es. ~supported_exprs_exists (\x. F) es)
-Proof
-  `(!p e. p = (\x. F) ==> ~supported_expr_exists p e) /\
-   (!p t. p = (\x. F) ==> ~supported_target_exists p t) /\
-   (!p es. p = (\x. F) ==> ~supported_exprs_exists p es) /\
-   (!p opt. p = (\x. F) ==> ~supported_opt_exists p opt) /\
-   (!p fields. p = (\x. F) ==> ~supported_fields_exists p fields)` by
-    (ho_match_mp_tac supported_expr_exists_ind >>
-     rw[supported_expr_exists_def]) >>
-  simp[]
-QED
 
 (* An observation of the state that reads only the scopes and the immutables
    is kept by evaluating an expression or a target whose pops go only
@@ -931,7 +752,7 @@ QED
 Resume eval_name_projection_mutual[Builtin]:
   rename1 `Builtin _ bt es` >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  Cases_on `bt = Len` >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+  Cases_on `bt = Len` >>
   Cases_on `bt = Env MsgGas` >> gvs[] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
        return_def, raise_def, type_check_def, assert_def] >>
@@ -939,7 +760,7 @@ Resume eval_name_projection_mutual[Builtin]:
   gvs[expr_writes_ok_def, SF ETA_ss, type_check_def, assert_def, return_def,
       raise_def, vyperContextTheory.builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
   imp_res_tac result_array_length_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac lift_sum_state >> imp_res_tac next_gas_reading_state >>
+  imp_res_tac if_lift_sum_state >> imp_res_tac next_gas_reading_state >>
   imp_res_tac get_accounts_scopes >> imp_res_tac precompile_call_success_state >>
   gvs[] >> res_tac >> gvs[] >>
   Cases_on `code_slice_source bt es`
@@ -957,7 +778,7 @@ Finalise eval_name_projection_mutual
 Theorem supported_target_eval_scopes:
   !target tops bindings pt cx es res es'.
     supported_target_info tops bindings target = SOME pt /\
-    ~supported_target_exists expr_internal_call_root target /\
+    ~supported_target_exists expr_effect_root target /\
     eval_base_place cx target es = (res,es') ==> es'.scopes = es.scopes
 Proof
   measureInduct_on `base_assignment_target_size target` >>
@@ -977,14 +798,16 @@ Proof
   trace_scopes_tac >>
   rename1 `supported_target_info tops bindings inner = SOME inner_pt` >>
   first_x_assum (qspec_then `inner` mp_tac) >> simp[] >>
-  disch_then drule_all >> strip_tac >>
-  metis_tac[supported_expr_scopes]
+  disch_then drule_all >> strip_tac >> gvs[] >>
+  imp_res_tac (REWRITE_RULE [expr_has_effect_def]
+    targetPureSourceFrameTheory.effect_free_source_projection) >>
+  fs[evaluation_state_component_equality]
 QED
 
 Theorem supported_target_place_scopes:
   !target tops bindings pt cx es res es'.
     supported_target_info tops bindings target = SOME pt /\
-    ~supported_target_exists expr_internal_call_root target /\
+    ~supported_target_exists expr_effect_root target /\
     eval_target_place cx target es = (res,es') ==> es'.scopes = es.scopes
 Proof
   rpt strip_tac >>
@@ -1006,65 +829,6 @@ Proof
   >~ [`write_place _ (StoragePlace _ _ _) _ _ = _`]
   >- (drule write_storage_place_scopes >> simp[]) >>
   drule write_immutable_place_scopes >> simp[]
-QED
-
-Theorem supported_simple_target_eval_scopes:
-  !target tops bindings cx es res es'.
-    supported_target tops bindings target /\
-    ~supported_target_exists expr_internal_call_root target /\
-    eval_base_place cx target es = (res,es') ==> es'.scopes = es.scopes
-Proof
-  Cases_on `target` >>
-  simp[supported_target_def, supported_expr_exists_def] >> rpt strip_tac
-  >~ [`eval_base_place _ (NameTarget _) _ = _`]
-  >- gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
-         type_check_def, assert_def, return_def, raise_def, AllCaseEqs()]
-  >>~- ([`eval_base_place _ (TopLevelNameTarget _) _ = _`],
-      rename1 `eval_base_place cx (TopLevelNameTarget nsid) es = _` >>
-      PairCases_on `nsid` >> gvs[Once evaluate_def] >>
-      metis_tac[lookup_global_scopes])
-  >~ [`eval_base_place _ (SubscriptTarget _ _) _ = _`]
-  >- suspend "subscript"
-  >> suspend "attribute"
-QED
-
-Resume supported_simple_target_eval_scopes[subscript]:
-  rename1 `eval_base_place cx (SubscriptTarget inner key) es = _` >>
-  Cases_on `inner` >> gvs[] >>
-  rename1 `eval_base_place cx (SubscriptTarget (TopLevelNameTarget nsid) key) es = _` >>
-  PairCases_on `nsid` >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  imp_res_tac lookup_global_scopes >> imp_res_tac read_result_state >>
-  imp_res_tac extend_place_state >> gvs[] >> trace_scopes_tac >>
-  metis_tac[supported_expr_scopes]
-QED
-
-Resume supported_simple_target_eval_scopes[attribute]:
-  rename1 `eval_base_place cx (AttributeTarget inner fname) es = _` >>
-  Cases_on `inner` >> gvs[] >>
-  rename1 `eval_base_place cx (AttributeTarget (TopLevelNameTarget nsid) fname) es = _` >>
-  PairCases_on `nsid` >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  imp_res_tac lookup_global_scopes >> imp_res_tac extend_place_state >> gvs[] >>
-  trace_scopes_tac
-QED
-
-Finalise supported_simple_target_eval_scopes
-
-Theorem supported_any_target_place_scopes:
-  !target tops bindings cx es res es'.
-    (supported_target tops bindings target \/
-     (?pt. supported_target_info tops bindings target = SOME pt)) /\
-    ~supported_target_exists expr_internal_call_root target /\
-    eval_target_place cx target es = (res,es') ==> es'.scopes = es.scopes
-Proof
-  rpt strip_tac
-  >- (gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-      imp_res_tac supported_simple_target_eval_scopes >>
-      Cases_on `pv` >> gvs[get_place_def, return_def, raise_def]) >>
-  metis_tac[supported_target_place_scopes]
 QED
 
 Theorem projection_length[local]:
@@ -1350,81 +1114,6 @@ Proof
       FULL_SIMP_TAC std_ss [] >>
       first_x_assum drule_all >> simp[]) >>
   qpat_x_assum `!cx tyv id body name es res es'. _` kall_tac >> gvs[]
-QED
-
-Theorem range_iterator_scopes[local]:
-  !cx a b es res es'.
-    (!s r t. eval_expr cx a s = (r,t) ==> t.scopes = s.scopes) /\
-    (!s r t. eval_expr cx b s = (r,t) ==> t.scopes = s.scopes) /\
-    eval_iterator cx (Range a b) es = (res,es') ==>
-    es'.scopes = es.scopes
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac read_result_state >> imp_res_tac lift_sum_state >>
-  gvs[return_def] >> metis_tac[]
-QED
-
-Theorem array_iterator_scopes[local]:
-  !cx e es res es'.
-    (!s r t. eval_expr cx e s = (r,t) ==> t.scopes = s.scopes) /\
-    eval_iterator cx (Array e) es = (res,es') ==>
-    es'.scopes = es.scopes
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac array_iterator_results_state >>
-  gvs[return_def] >> metis_tac[]
-QED
-
-Theorem literal_expr_scopes[local]:
-  !cx ty lit es res es'.
-    eval_expr cx (Literal ty lit) es = (res,es') ==> es'.scopes = es.scopes
-Proof
-  simp[Once evaluate_def, return_def] >> rpt strip_tac >> gvs[]
-QED
-
-Theorem name_expr_scopes[local]:
-  !cx ty id es res es'.
-    eval_expr cx (Name ty id) es = (res,es') ==> es'.scopes = es.scopes
-Proof
-  simp[Once evaluate_def, get_scopes_def, type_check_def, assert_def,
-       ignore_bind_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
-QED
-
-Theorem supported_iterator_scopes:
-  !tops ty it n cx es res es'.
-    supported_iterator tops ty it n /\
-    ~supported_iterator_exists expr_internal_call_root it /\
-    eval_iterator cx it es = (res,es') ==>
-    es'.scopes = es.scopes
-Proof
-  Cases_on `it` >> rpt gen_tac >> strip_tac
-  >~ [`eval_iterator cx (Array arr) es = _`]
-  >- (irule array_iterator_scopes >> goal_assum (drule_at Any) >>
-      Cases_on `arr`
-      >~ [`Name _ _`] >- metis_tac[name_expr_scopes]
-      >~ [`TopLevelName _ nid`]
-      >- (PairCases_on `nid` >> simp[Once evaluate_def] >>
-          metis_tac[lookup_global_scopes]) >>
-      gvs[supported_iterator_def, supportedStmtTraverseTheory.supported_iterator_exists_def] >>
-      metis_tac[supported_expr_scopes]) >>
-  rename1 `eval_iterator cx (Range a b) es = _` >>
-  irule range_iterator_scopes >> goal_assum (drule_at Any) >>
-  Cases_on `a`
-  >~ [`eval_iterator cx (Range (Literal aty alit) b) es = _`]
-  >- (Cases_on `b`
-      >~ [`eval_iterator cx (Range (Literal aty alit) (Literal bty blit)) es = _`]
-      >- (Cases_on `alit` >> Cases_on `blit` >> gvs[supported_iterator_def] >>
-          metis_tac[literal_expr_scopes, cj 1 supported_pure_scopes_mutual]) >>
-      gvs[supported_iterator_def] >>
-      metis_tac[literal_expr_scopes, cj 1 supported_pure_scopes_mutual]) >>
-  gvs[supported_iterator_def] >>
-  metis_tac[cj 1 supported_pure_scopes_mutual]
 QED
 
 Theorem balanced_conditional_projection[local]:

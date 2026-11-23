@@ -1,7 +1,8 @@
 (* Caller-local boundaries used by the joint internal-call return frame. *)
 Theory bodyFullIntCallReturnFrame
 Ancestors
-  bodySim bodyFullIntCallDefs exprLoweringProps ctorDeployDeadSection
+  bodyInvSplit bodyInvCodeProps immutableRegionTypingProps immutableRegionDeadProps
+  exprSimHypsDefs bodySim bodyFullIntCallDefs exprLoweringProps ctorDeployDeadSection
   immutableLocationProps vyperTypeContract abiCallerTypeEnv vyperContext finite_map alist
   bodySimLogArgs stateRelProj fnRunFields
   bodyStorageMetadata compileVyper list bodyPtrDefs ptrDiscipline intCallFrame
@@ -15,100 +16,118 @@ Proof
   simp_tac bool_ss [stmt_state_rel_def]
 QED
 
-Theorem intcall_immutable_decl_metadata:
-  body_inv (pre ++ [VariableDecl vis Immutable name ty slot] ++ post)
-    ctx cenv cx ==>
-  cenv.ce_module = NONE /\
-  FLOOKUP cenv.ce_module_vars (NONE,name) =
-    SOME (ImmutableLoc (compute_immutables_len
-      (get_struct_fields (make_struct_fields_map
-        (pre ++ [VariableDecl vis Immutable name ty slot] ++ post))) pre)) /\
-  cenv.ce_module_var_type (NONE,name) = SOME ty
+Theorem intcall_immutable_decl_metadata_mods:
+  contract_inv mods exps ctx cenv cx /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  immutable_region_mods mods src name off bytes ==>
+  FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+  ?ty tv. cenv.ce_module_var_type (src,name) = SOME ty /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ bytes = type_memory_size tv
+Proof
+  strip_tac >> drule_all_then strip_assume_tac immutable_region_mods_type >>
+  drule_then assume_tac contract_inv_immutable_section_layout >>
+  fs[immutable_section_layout_mods_def] >> metis_tac[]
+QED
+
+Theorem intcall_evaluated_immutable_coverage_mods:
+  contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env es /\
+  i < imm_len_mods mods ==>
+  ?src name off ty tv.
+    immutable_region_mods mods src name off (type_memory_size tv) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+    cenv.ce_module_var_type (src,name) = SOME ty /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\
+    off <= i /\ i < off + type_memory_size tv
 Proof
   strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option))
-      (pre ++ [VariableDecl vis Immutable name ty slot] ++ post)))` by
-    fs[body_inv_def] >>
-  `MEM (VariableDecl vis Immutable name ty slot)
-      (pre ++ [VariableDecl vis Immutable name ty slot] ++ post)` by simp[] >>
-  drule_all build_maps_variable >> strip_tac >>
-  `!vis' name' ty' slot'.
-    MEM (VariableDecl vis' Immutable name' ty' slot') post ==> name' <> name` by
-    (gvs[ALL_DISTINCT_APPEND, toplevel_vtype_keys_toplevel_def] >>
-     rpt strip_tac >> gvs[] >>
-     drule vyperTypeContractStaticMapsTheory.module_toplevel_vtype_key_MEM_Variable >>
-     disch_then (qspec_then `NONE` mp_tac) >> simp[]) >>
-  fs[body_inv_def, cenv_module_pins_def] >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
-  irule (add_immutable_locations_declaration_lookup |> Q.INST [`off` |-> `0`] |> SRULE []) >>
-  simp[]
+  drule_then assume_tac contract_inv_immutable_section_layout >>
+  `?src name off bytes. immutable_region_mods mods src name off bytes /\
+      off <= i /\ i < off + bytes` by fs[immutable_section_layout_mods_def] >>
+  drule_all_then strip_assume_tac intcall_immutable_decl_metadata_mods >>
+  metis_tac[]
 QED
 
-Theorem intcall_local_immutable_dead_disjoint:
-  body_inv tops ctx cenv cx /\ cenv.ce_is_ctor /\
-  immutable_decl_sep cenv cx scopes t.vs_vars t.vs_allocas t.vs_alloca_next /\
+Theorem intcall_immutable_region_disjoint[local]:
+  contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env es /\
+  cenv.ce_is_ctor /\ immutable_region_mods mods src id off bytes /\
+  immutable_decl_sep_mods cenv cx scopes t.vs_vars t.vs_allocas t.vs_alloca_next /\
+  (local_region cenv scopes t name b sz \/ FLOOKUP t.vs_allocas aid = SOME (b,sz)) ==>
+  regions_disjoint off bytes b sz
+Proof
+  REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all_then strip_assume_tac intcall_immutable_decl_metadata_mods >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  `?tops. ALOOKUP mods src = SOME tops` by
+    fs[immutable_region_mods_def] >>
+  qpat_x_assum `immutable_decl_sep_mods _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [immutable_decl_sep_mods_def]) >>
+  disch_then (qspecl_then [`src`, `tops`] mp_tac) >>
+  simp[immutable_decl_sep_alt] >> disch_then drule >>
+  simp[loweringStateRelDefsTheory.local_region_def] >>
+  fs[loweringStateRelDefsTheory.local_region_def] >> metis_tac[]
+QED
+
+Theorem intcall_local_immutable_dead_disjoint_mods:
+  contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env es /\
+  cenv.ce_is_ctor /\
+  immutable_decl_sep_mods cenv cx scopes t.vs_vars t.vs_allocas t.vs_alloca_next /\
   local_region cenv scopes t name b sz /\ b <= i /\ i < b + sz ==>
-  ~imm_section_dead (cx_tops cx) sec i
+  ~imm_section_dead_mods cenv sec i
 Proof
   rpt strip_tac >>
-  `cx_tops cx = tops` by (fs[body_inv_def] >> simp[gasContextTheory.cx_tops_def]) >>
-  gvs[immSectionDeadTheory.imm_section_dead_def] >>
-  drule (cj 1 mem_dead_bytes_range) >> strip_tac >>
-  drule intcall_immutable_decl_metadata >> strip_tac >>
-  `get_module_code cx NONE = SOME (cx_tops cx)` by
-    (fs[body_inv_def] >> metis_tac[]) >>
-  `evaluate_type (get_tenv cx) ty = SOME tv` by
-    metis_tac[abi_caller_type_submap, body_main_type_env_submap] >>
-  gvs[immutable_decl_sep_alt] >>
-  first_x_assum drule_all >> strip_tac >>
-  first_x_assum drule >>
-  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+  drule_all_then (fn th => fs[th]) imm_section_dead_mods_regions >>
+  `regions_disjoint off (type_memory_size tv) b sz` by
+    (irule intcall_immutable_region_disjoint >> rpt (goal_assum (drule_at Any)) >>
+     qexistsl [`ARB`, `name`] >> simp[]) >>
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >>
+  drule (cj 1 mem_dead_bytes_range) >> decide_tac
 QED
 
-Theorem intcall_immutable_decl_evaluates[local]:
-  expr_sim_inv cenv cx tenv es /\
-  get_module_code cx NONE = SOME tops /\
-  MEM (VariableDecl vis Immutable name ty slot) tops ==>
-  ?tv. evaluate_type (get_tenv cx) ty = SOME tv
+Theorem intcall_local_immutable_prefix_disjoint_mods:
+  contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env es /\
+  cenv.ce_is_ctor /\
+  immutable_decl_sep_mods cenv cx scopes t.vs_vars t.vs_allocas t.vs_alloca_next /\
+  local_region cenv scopes t name b sz /\ b <= i /\ i < b + sz ==>
+  imm_len_mods mods <= i
 Proof
-  rpt strip_tac >>
-  `env_context_consistent tenv cx` by
-    fs[exprSimHypsDefsTheory.expr_sim_inv_def,
-       vyperTypeInvariantsTheory.env_consistent_def] >>
-  `FLOOKUP tenv.toplevel_vtypes (NONE,name) = SOME (Type ty)` by
-    (fs[vyperTypeInvariantsTheory.env_context_consistent_def,
-        vyperTypeInvariantsTheory.toplevel_vtypes_complete_def] >>
-     qpat_x_assum `!src ts vis mut id ty init. _` irule >>
-     qexistsl [`slot`, `Immutable`, `tops`, `vis`] >> simp[]) >>
-  fs[vyperTypeInvariantsTheory.env_context_consistent_def] >>
-  qpat_x_assum `!src id vt. _ ==> well_formed_vtype _ _` drule >>
-  simp[vyperTypeSystemTheory.well_formed_vtype_def,
-       vyperTypeSystemTheory.well_formed_type_def, optionTheory.IS_SOME_EXISTS]
+  rpt strip_tac >> spose_not_then assume_tac >>
+  `i < imm_len_mods mods` by decide_tac >>
+  drule_all_then strip_assume_tac intcall_evaluated_immutable_coverage_mods >>
+  `regions_disjoint off (type_memory_size tv) b sz` by
+    (irule intcall_immutable_region_disjoint >> rpt (goal_assum (drule_at Any)) >>
+     qexistsl [`ARB`, `name`] >> simp[]) >>
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
-Theorem intcall_evaluated_immutable_coverage:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx tenv es /\
-  i < imm_len (cx_tops cx) ==>
-  ?pre vis name ty slot post tv.
-    tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
-    evaluate_type (get_tenv cx) ty = SOME tv /\
-    compute_immutables_len (get_struct_fields cenv.ce_struct_fields) pre <= i /\
-    i < compute_immutables_len (get_struct_fields cenv.ce_struct_fields) pre +
-        type_memory_size tv
+Theorem intcall_alloca_immutable_prefix_disjoint_mods:
+  contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env es /\
+  cenv.ce_is_ctor /\
+  immutable_decl_sep_mods cenv cx scopes t.vs_vars t.vs_allocas t.vs_alloca_next /\
+  FLOOKUP t.vs_allocas aid = SOME (b,sz) /\ b <= i /\ i < b + sz ==>
+  imm_len_mods mods <= i
 Proof
-  rpt strip_tac >>
-  `cx_tops cx = tops /\ get_module_code cx NONE = SOME tops /\
-   cenv.ce_struct_fields = make_struct_fields_map tops` by
-    (fs[body_inv_def, cenv_module_pins_def, gasContextTheory.cx_tops_def] >>
-     metis_tac[]) >>
-  `i < compute_immutables_len (get_struct_fields cenv.ce_struct_fields) tops` by
-    gvs[immSectionDeadTheory.imm_len_def] >>
-  drule compute_immutables_len_byte_coverage >> strip_tac >>
-  `MEM (VariableDecl vis Immutable name ty slot) tops` by simp[] >>
-  drule_all intcall_immutable_decl_evaluates >> strip_tac >>
-  drule_all exprSimHypsTheory.expr_sim_inv_memory_size >> strip_tac >>
-  qexistsl [`pre`, `vis`, `name`, `ty`, `slot`, `post`, `tv`] >>
-  gvs[structFieldsPropsTheory.type_mem_bytes_type_memory_bytes]
+  rpt strip_tac >> spose_not_then assume_tac >>
+  `i < imm_len_mods mods` by decide_tac >>
+  drule_all_then strip_assume_tac intcall_evaluated_immutable_coverage_mods >>
+  `regions_disjoint off (type_memory_size tv) b sz` by
+    (irule intcall_immutable_region_disjoint >> rpt (goal_assum (drule_at Any)) >>
+     qexistsl [`aid`, `ARB`] >> simp[]) >>
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem intcall_immutable_sep_singleton[local]:
+  body_inv tops ctx cenv cx /\
+  immutable_decl_sep cenv cx scopes vars allocas next ==>
+  immutable_decl_sep_mods cenv cx scopes vars allocas next
+Proof
+  strip_tac >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  drule_then strip_assume_tac body_inv_module_locations >>
+  `cenv with ce_module := NONE = cenv` by
+    (simp[compileEnvTheory.compile_env_component_equality] >>
+     qpat_assum `cenv.ce_module = NONE` (fn th => simp[th])) >>
+  fs[immutable_decl_sep_mods_def, ALOOKUP_def, AllCaseEqs()]
 QED
 
 Theorem intcall_local_immutable_prefix_disjoint:
@@ -118,18 +137,13 @@ Theorem intcall_local_immutable_prefix_disjoint:
   local_region cenv scopes t name b sz /\ b <= i /\ i < b + sz ==>
   imm_len (cx_tops cx) <= i
 Proof
-  rpt strip_tac >> spose_not_then assume_tac >>
-  `i < imm_len (cx_tops cx)` by decide_tac >>
-  drule_all intcall_evaluated_immutable_coverage >> strip_tac >>
-  qpat_x_assum `tops = _` SUBST_ALL_TAC >>
-  drule (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND] intcall_immutable_decl_metadata) >> strip_tac >>
-  `cenv.ce_struct_fields = make_struct_fields_map
-     (pre ++ VariableDecl vis Immutable name' ty slot :: post)` by
-    fs[body_inv_def, cenv_module_pins_def] >>
-  gvs[immutable_decl_sep_alt] >>
-  first_x_assum drule_all >> strip_tac >>
-  first_x_assum drule >>
-  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+  strip_tac >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_all_then assume_tac intcall_immutable_sep_singleton >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx tenv es` by fs[expr_sim_inv_split_def] >>
+  drule_all_then mp_tac intcall_local_immutable_prefix_disjoint_mods >>
+  simp[imm_len_mods_singleton]
 QED
 
 Theorem intcall_alloca_immutable_prefix_disjoint:
@@ -139,18 +153,13 @@ Theorem intcall_alloca_immutable_prefix_disjoint:
   FLOOKUP t.vs_allocas aid = SOME (b,sz) /\ b <= i /\ i < b + sz ==>
   imm_len (cx_tops cx) <= i
 Proof
-  rpt strip_tac >> spose_not_then assume_tac >>
-  `i < imm_len (cx_tops cx)` by decide_tac >>
-  drule_all intcall_evaluated_immutable_coverage >> strip_tac >>
-  qpat_x_assum `tops = _` SUBST_ALL_TAC >>
-  drule (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND] intcall_immutable_decl_metadata) >> strip_tac >>
-  `cenv.ce_struct_fields = make_struct_fields_map
-     (pre ++ VariableDecl vis Immutable name ty slot :: post)` by
-    fs[body_inv_def, cenv_module_pins_def] >>
-  gvs[immutable_decl_sep_alt] >>
-  first_x_assum drule_all >> strip_tac >>
-  first_x_assum drule >>
-  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+  strip_tac >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_all_then assume_tac intcall_immutable_sep_singleton >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx tenv es` by fs[expr_sim_inv_split_def] >>
+  drule_all_then mp_tac intcall_alloca_immutable_prefix_disjoint_mods >>
+  simp[imm_len_mods_singleton]
 QED
 
 Theorem intcall_return_ghost_inv:
@@ -333,19 +342,7 @@ Resume intcall_return_ghost_kept[allocas]:
      metis_tac[]) >>
   `lo <= i` by
     (fs[dead_lo_ok_def] >> Cases_on `cenv.ce_is_ctor` >> gvs[] >>
-     spose_not_then assume_tac >>
-     `i < imm_len (cx_tops cx)` by decide_tac >>
-     drule_all intcall_evaluated_immutable_coverage >> strip_tac >>
-     qpat_x_assum `tops = _` SUBST_ALL_TAC >>
-     drule (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]
-       intcall_immutable_decl_metadata) >> strip_tac >>
-     `cenv.ce_struct_fields = make_struct_fields_map
-       (pre ++ VariableDecl vis Immutable name' ty slot :: post)` by
-       fs[body_inv_def, cenv_module_pins_def] >>
-     gvs[immutable_decl_sep_alt] >>
-     first_x_assum drule_all >> strip_tac >>
-     qpat_x_assum `!aid b sz. FLOOKUP t.vs_allocas aid = _ ==> _` drule >>
-     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+     drule_all intcall_alloca_immutable_prefix_disjoint >> simp[]) >>
   `i IN tn.t_mem` by
     (fs[intcall_callee_exit_full_def] >>
      qpat_x_assum `!i. lo <= i /\ _ ==> _` irule >> simp[] >>

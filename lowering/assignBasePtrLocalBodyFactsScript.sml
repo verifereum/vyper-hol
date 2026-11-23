@@ -1,12 +1,78 @@
 (* Source typing and allocation facts for the supported local-memory wrapper. *)
 Theory assignBasePtrLocalBodyFacts
 Ancestors bodySim bodyExprPreFacts memoryLocalRhsProps exprSimHyps exprSimHypsDefs
-  exprSimDefs exprSimAggregateLayout vyperTypeArgFits supportedStmtTraverse
+  exprSimDefs exprSimAggregateLayout vyperTypeArgFits supportedStmtTraverse supportedExprTraverse
   supportedStmts supportedExprs vyperTypeSystem vyperTypeEnv vyperTypeCallGraph
   vyperTypeInvariants gasContext finite_map list compileEnv
+  bodyInvSplit bodyInvCodeProps bodyInvMetadataProps bodySimModsProps compileUnit alist pair
+  allocLimitsProps
 
-(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
-val irule_body_pre = bodyConstNameLib.irule_body_pre;
+Theorem main_module_code_and_gate[local]:
+  contract_inv mods exps ctx cenv cx ==>
+  ALOOKUP mods NONE = SOME (main_module mods) /\
+  get_module_code cx NONE = SOME (main_module mods) /\
+  supported_program (main_module mods)
+Proof
+  strip_tac >>
+  drule_then (assume_tac o Q.SPEC `NONE`) contract_inv_module_codes >>
+  fs[contract_inv_def, main_module_def, optionTheory.IS_SOME_EXISTS] >>
+  res_tac
+QED
+
+Theorem assign_base_local_rhs_pre_mods:
+  !cx id e mods exps src tops bindings ctx cenv env env' ret_ty es ty.
+    contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
+    ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget (NameTarget id)) e) ==>
+       occurs_abi_decode_target target (main_module mods)) /\
+    supported_stmt (main_module mods) bindings (Assign (BaseTarget (NameTarget id)) e) /\
+    expr_sim_inv_mods mods cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
+    FLOOKUP env.var_types id = SOME ty ==>
+    supported_expr (main_module mods) e /\ well_typed_expr env e /\
+    type_widens_to env.type_defs (expr_type e) ty /\
+    expr_body_pre_mods mods cenv cx env e es
+Proof
+  rpt strip_tac >>
+  `supported_expr (main_module mods) e` by gvs[supported_stmt_def, supported_assignment_def] >>
+  `well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) ty` by
+    (gvs[type_stmt_def, atarget_accepts_def, well_typed_expr_def, AllCaseEqs()] >>
+     Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
+     rename1 `FLOOKUP env.var_assignable id = SOME asg` >> Cases_on `asg` >> gvs[]) >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `~supported_expr_exists (const_name_root_mods mods) e` by
+    (drule_then assume_tac contract_inv_cenv_modules >>
+     drule stmt_exprs_ok_module_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
+  drule_then strip_assume_tac main_module_code_and_gate >>
+  `byte_widths_expr e /\ alloc_limits_expr cenv e` by
+    (fs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
+        supported_assignment_exists_def, allocLimitsTheory.alloc_limits_stmt_def] >>
+     CCONTR_TAC >> fs[] >>
+     qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) _` mp_tac >>
+     simp[] >> irule supported_expr_exists_root >>
+     metis_tac[alloc_limits_expr_not_extcode]) >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    fs[int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
+  `EVERY (\c. ?ts. get_module_code cx (FST c) = SOME ts /\
+                   supported_program ts /\
+                   IS_SOME (supported_function_decl ts (NONE,SND c) Internal))
+          (int_calls_expr e)` by
+    (mp_tac (Q.INST [`e` |-> `e`] int_calls_expr_main_split) >>
+     disch_then (fn th => irule (iffLR th |> cj 2)) >>
+     fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `(!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+       EXISTS (occurs_abi_decode_target target o SND) mods)` by
+    (fs[supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
+     rpt strip_tac >> simp[EXISTS_MEM] >>
+     qexists_tac `(NONE,main_module mods)` >> simp[] >>
+     metis_tac[ALOOKUP_MEM]) >>
+  drule_then assume_tac contract_inv_type_env >>
+  simp[expr_body_pre_mods_def]
+QED
 
 Theorem assign_base_local_rhs_pre:
   !cx id e tops bindings ctx cenv env env' ret_ty es ty.
@@ -24,22 +90,25 @@ Theorem assign_base_local_rhs_pre:
     type_widens_to env.type_defs (expr_type e) ty /\
     expr_body_pre cenv cx env e es
 Proof
-  rpt strip_tac >>
-  `supported_expr tops e` by gvs[supported_stmt_def, supported_assignment_def] >>
-  `well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) ty` by
-    (gvs[type_stmt_def, atarget_accepts_def, well_typed_expr_def, AllCaseEqs()] >>
-     Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
-     rename1 `FLOOKUP env.var_assignable id = SOME asg` >> Cases_on `asg` >> gvs[]) >>
-  simp[] >> drule_then strip_assume_tac supported_expr_body_calls >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops` by gvs[body_inv_def] >>
-  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
-  `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
-      is_dynamic (vyper_to_abi_type (type_env tops) target)` by gvs[body_inv_def] >>
-  irule_body_pre stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-      supported_assignment_exists_def, int_calls_stmt_def,
-      int_calls_atarget_def, int_calls_expr_def] >>
-  qexists_tac `[]` >> simp[]
+  rpt gen_tac >> strip_tac >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac body_inv_module >>
+  `supported_expr tops e` by fs[supported_stmt_def, supported_assignment_def] >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
+  drule_all_then assume_tac expr_sim_inv_no_unallocated_bare_globals >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx env es` by fs[expr_sim_inv_split_def] >>
+  drule_all_then strip_assume_tac
+    (SIMP_RULE (srw_ss()) [main_module_def, ALOOKUP_def]
+      (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`]
+        (SPEC_ALL assign_base_local_rhs_pre_mods))) >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then assume_tac contract_inv_type_env >>
+  fs[expr_body_pre_split_def, supported_stmt_expr_exists_def,
+     supported_assignment_exists_def, vyperContextTheory.type_env_all_modules_def,
+     vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2]
 QED
 
 Theorem assign_base_local_memory_bytes_pos:

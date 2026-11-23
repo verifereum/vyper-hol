@@ -118,6 +118,8 @@ Resume body_full_memory_copy_frame_path[path]:
     simp[Abbr `inst`,inst_mem_below_frontier_def,inst_dload_in_section_def,
          mk_inst_def,source_memory_read_ranges_def,source_memory_write_ranges_def,
          sized_source_write_range_def,eval_operand_def] >>
+  `(ctx_has_dalloca ctx ==> dalloca_no_wrap inst s)` by
+    simp[Abbr `inst`,mk_inst_def,dalloca_no_wrap_def] >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (sc with vs_inst_idx := SUC s.vs_inst_idx),G,tf)` by
     (`inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\

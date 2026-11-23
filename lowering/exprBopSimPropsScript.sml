@@ -104,7 +104,6 @@ Theorem eval_expr_bop_cases:
             res = bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 es')
 Proof
   rpt gen_tac >>
-  Cases_on `bop = In \/ bop = NotIn` >> (
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -126,10 +125,11 @@ Proof
   >- (simp[] >> rw[] >> simp[]) >>
   rename1 `read_result cx r2 st2 = (INL v2, es2)` >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
-       lift_sum_def, lift_option_type_def, type_check_def, assert_def,
-       bop_result_def] >>
+       lift_sum_def, type_check_def, assert_def,
+       precompile_call_success_def, bop_result_def] >>
   BasicProvers.every_case_tac >>
-  gvs[bind_def, return_def, raise_def, read_result_def] >> rw[] >> gvs[])
+  gvs[bind_def, return_def, raise_def, read_result_def,
+      is_self_codesize_def] >> rw[] >> gvs[]
 QED
 
 Theorem eval_operand_frame:
@@ -234,7 +234,7 @@ Theorem locals_kept_pop_store:
   !func cenv es es' s0 u id b sz k w entry entry' hnew.
     local_ptrs_rel func cenv es.scopes s0 /\
     local_region cenv es.scopes s0 id b sz /\ k + 32 <= sz /\
-    dynarray_len_at cenv id k /\
+    dynarray_len_untupled cenv id k /\
     u.vs_memory = (mstore (b + k) w s0).vs_memory /\
     MAP FDOM es'.scopes = MAP FDOM es.scopes /\
     lookup_scopes id es.scopes = SOME entry /\
@@ -268,7 +268,7 @@ Proof
       irule mstore_mem_bytes_at_disjoint >>
       Cases_on `nm = id`
       >- (`b' = b` by gvs[local_region_def] >> gvs[] >>
-          qpat_x_assum `!k. dynarray_len_at _ _ k ==> _` drule >> simp[]) >>
+          qpat_x_assum `!k. dynarray_len_untupled _ _ k ==> _` drule >> simp[]) >>
       `regions_disjoint b sz b' sz'` by (gvs[local_ptrs_rel_def] >> metis_tac[]) >>
       gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
   >- (rw[scopes_progress_def] >> Cases_on `n = id` >> gvs[])
@@ -295,7 +295,7 @@ Theorem locals_kept_live_pop:
   !func cenv es es' s0 u id b sz k w entry entry' hnew path arr etv n.
     local_ptrs_rel func cenv es.scopes s0 /\
     local_region cenv es.scopes s0 id b sz /\ k + 32 <= sz /\
-    dynarray_len_at cenv id k /\
+    dynarray_len_untupled cenv id k /\
     u.vs_memory = (mstore (b + k) w s0).vs_memory /\
     MAP FDOM es'.scopes = MAP FDOM es.scopes /\
     lookup_scopes id es.scopes = SOME entry /\
@@ -428,7 +428,6 @@ Theorem eval_expr_bop_bind:
                 v1 v2 es2, es2)) od)
 Proof
   simp[FUN_EQ_THM] >> gen_tac >>
-  Cases_on `bop = In \/ bop = NotIn` >> (
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -446,10 +445,10 @@ Proof
   reverse (Cases_on `res2`) >- simp[] >>
   rename1 `read_result cx r2 st2 = (INL v2, es2)` >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
-       lift_sum_def, lift_option_type_def, type_check_def, assert_def,
-       bop_result_def] >>
+       lift_sum_def, type_check_def, assert_def,
+       precompile_call_success_def, bop_result_def] >>
   BasicProvers.every_case_tac >>
-  gvs[bind_def, return_def, raise_def, read_result_def])
+  gvs[bind_def, return_def, raise_def, read_result_def, is_self_codesize_def]
 QED
 
 Theorem bop_result_gas_obs[simp]:

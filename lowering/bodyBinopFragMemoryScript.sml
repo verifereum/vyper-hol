@@ -188,12 +188,21 @@ Proof
    sb.cs_current_bb = sa.cs_current_bb` by
     metis_tac[straight_fresh_def] >>
   drule writes_fresh_path_opcodes >> strip_tac >>
-  `EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sa sb)` by
-    (rw[listTheory.EVERY_MEM] >>
-     qpat_x_assum `writes_fresh _ _`
+  `!i. MEM i (emitted_insts sa sb) ==>
+       i.inst_opcode <> ALLOCA /\ i.inst_opcode <> DALLOCA` by
+    (rpt strip_tac >>
+     qpat_assum `writes_fresh _ _`
        (mp_tac o REWRITE_RULE [writes_fresh_def, listTheory.EVERY_MEM]) >>
-     disch_then drule >> strip_tac >> strip_tac >>
-     gvs[fresh_write_op_def]) >>
+     disch_then drule >> strip_tac >> gvs[fresh_write_op_def]) >>
+  `EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts sa sb)` by
+    simp[EVERY_MEM] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s0 = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by simp[MEM_APPEND] >>
+     qpat_assum `!i. MEM i _ ==> _` drule >>
+     simp[unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s0` by
     metis_tac[writes_fresh_mem_ok] >>
   drule_all straight_fresh_code_prefix >> strip_tac >>

@@ -334,7 +334,8 @@ Theorem compile_log_eval_all_full_store_bound_halt:
       EVERY (\e. post_value_type cenv e = expr_type e) args /\
       well_typed_exprs env args /\
       compile_log_eval_all cenv args sa = (ops, sb) /\
-      compile_log_eval_all cenv (MAP gas_shadow_expr args) shadow_sa =
+      compile_log_eval_all (gas_shadow_env T cenv)
+        (MAP gas_shadow_expr args) shadow_sa =
         (ops, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -344,7 +345,7 @@ Theorem compile_log_eval_all_full_store_bound_halt:
       fn_has_code sa sb func /\
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
         !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
       (!H. dead_lo_ok H (DF H) lo cenv cx) /\
@@ -367,7 +368,8 @@ Theorem compile_log_eval_all_full_store_bound_halt:
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
         (cx_tops cx) cx st0 (eval_exprs cx args) (es, s0, G0, tn0)
         (log_full_post DF lo d ctx func cenv cx es sa sb s0 G0 tn0 args ops)
-        (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
+        (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+          (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   rpt gen_tac >> strip_tac >> Induct
   >- (rpt gen_tac >> strip_tac >> gvs[compile_log_eval_all_nil] >>
@@ -380,9 +382,9 @@ Proof
   `~exprs_can_mutate cenv (MAP gas_shadow_expr args)` by
     simp[gas_shadow_expr_can_mutate] >>
   qpat_x_assum `compile_log_eval_all cenv (e::args) sa = _` mp_tac >>
-  qpat_x_assum `compile_log_eval_all cenv (gas_shadow_expr e::_) _ = _` mp_tac >>
+  qpat_x_assum `compile_log_eval_all _ (gas_shadow_expr e::_) _ = _` mp_tac >>
   simp[compile_log_eval_all_unsaved_cons] >> rpt strip_tac >> gvs[] >>
-  rename1 `lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e)
+  rename1 `lower_value compile_expr _ (expr_type e) (gas_shadow_expr e)
              shadow_sa = (x, ssm)` >>
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (x, sm)` >>
   suspend "cons"
@@ -390,8 +392,8 @@ QED
 
 Resume compile_log_eval_all_full_store_bound_halt[cons]:
   `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
-     (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e))` by
-    simp[gas_shadow_stmt_lower_value] >>
+     (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
   `gas_shadow_state sm ssm` by
     (qpat_x_assum `gas_shadow_compiles _ _`
        (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
@@ -408,8 +410,8 @@ Resume compile_log_eval_all_full_store_bound_halt[cons]:
     (qspecl_then [`args`, `sm`, `ys`, `sb`] mp_tac compile_log_eval_all_grows >>
      simp[]) >>
   `cs_extends ssm shadow_sb` by
-    (qspecl_then [`MAP gas_shadow_expr args`, `ssm`, `ys`, `shadow_sb`] mp_tac
-       compile_log_eval_all_grows >> simp[]) >>
+    (qpat_assum `compile_log_eval_all _ (MAP gas_shadow_expr _) _ = _`
+       (mp_then (Pos (el 2)) mp_tac compile_log_eval_all_grows) >> simp[]) >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func /\
    fn_has_code shadow_sa ssm shadow_func /\
    fn_has_code ssm shadow_sb shadow_func` by
@@ -463,10 +465,11 @@ Resume compile_log_eval_all_full_store_bound_halt[cons]:
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ pathQ headR` (irule_at Any) >>
   conj_tac >- simp[] >>
-  (* The former weaker error projection closed with
-     metis_tac[expr_exit_INR_type]; retain both error facts here. *)
   rpt strip_tac >> Cases_on `res` >> fs[Abbr `headR`, expr_exit_def] >>
-  conj_tac >- metis_tac[expr_exit_INR_type] >> gvs[halt_exit_def]
+  rpt conj_tac
+  >- metis_tac[expr_exit_INR_type]
+  >- fs[halt_exit_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume compile_log_eval_all_full_store_bound_halt[tail]:
@@ -478,16 +481,16 @@ Resume compile_log_eval_all_full_store_bound_halt[tail]:
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   qunabbrev_tac `pathQ` >> qunabbrev_tac `headQ` >> BETA_TAC >> strip_tac >>
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
     (Cases_on `ctx_has_dalloca ctx`
      >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by fs[] >>
          qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t,G1,tn1)` (fn path =>
            qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
            qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
-             ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+             ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
                (LIST_CONJ [path,no_phi,safe])))))) >>
      rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_no_wrap_def] >> metis_tac[]) >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM, unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
     (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ t`
        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
@@ -564,7 +567,8 @@ Resume compile_log_eval_all_full_store_bound_halt[ih]:
      (\H res ee G tn u.
         log_full_post DF lo d ctx func cenv cx mid sm sb t G1 tn1 args ys
           H res ee G tn u /\ valid_horizon cx st0 H mid.storage_trace)
-     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)` by
+     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+          (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))` by
     (irule gas_outcome_full_post_source >>
      first_assum (irule_at Any) >> simp[] >> rpt strip_tac >>
      first_x_assum (qspec_then `[]` assume_tac) >> fs[] >>
@@ -611,7 +615,8 @@ Theorem compile_log_eval_all_full_halt:
       EVERY (\e. post_value_type cenv e = expr_type e) args /\
       well_typed_exprs env args /\
       compile_log_eval_all cenv args sa = (ops, sb) /\
-      compile_log_eval_all cenv (MAP gas_shadow_expr args) shadow_sa =
+      compile_log_eval_all (gas_shadow_env T cenv)
+        (MAP gas_shadow_expr args) shadow_sa =
         (ops, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -621,7 +626,7 @@ Theorem compile_log_eval_all_full_halt:
       fn_has_code sa sb func /\
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
         !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
       (!H. dead_lo_ok H (DF H) lo cenv cx) /\
@@ -702,7 +707,8 @@ Theorem compile_log_eval_all_full_store_bound:
       EVERY (\e. post_value_type cenv e = expr_type e) args /\
       well_typed_exprs env args /\
       compile_log_eval_all cenv args sa = (ops, sb) /\
-      compile_log_eval_all cenv (MAP gas_shadow_expr args) shadow_sa =
+      compile_log_eval_all (gas_shadow_env T cenv)
+        (MAP gas_shadow_expr args) shadow_sa =
         (ops, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -712,7 +718,7 @@ Theorem compile_log_eval_all_full_store_bound:
       fn_has_code sa sb func /\
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
         !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
       (!H. dead_lo_ok H (DF H) lo cenv cx) /\
@@ -760,7 +766,8 @@ Theorem compile_log_eval_all_full:
       EVERY (\e. post_value_type cenv e = expr_type e) args /\
       well_typed_exprs env args /\
       compile_log_eval_all cenv args sa = (ops, sb) /\
-      compile_log_eval_all cenv (MAP gas_shadow_expr args) shadow_sa =
+      compile_log_eval_all (gas_shadow_env T cenv)
+        (MAP gas_shadow_expr args) shadow_sa =
         (ops, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -770,7 +777,7 @@ Theorem compile_log_eval_all_full:
       fn_has_code sa sb func /\
       fn_has_code shadow_sa shadow_sb shadow_func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp s0 /\
         !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
       (!H. dead_lo_ok H (DF H) lo cenv cx) /\

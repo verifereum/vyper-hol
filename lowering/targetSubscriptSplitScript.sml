@@ -16,7 +16,7 @@
 
 Theory targetSubscriptSplit
 Ancestors
-  targetLocalLive targetPlaceLive targetSubscriptMemory targetSubscriptStorage targetSubscriptDecode targetSubscriptContinuation
+  targetLocalLive targetPlaceLive targetSubscriptMemory targetSubscriptStorage targetSubscriptContinuation
   targetPlaceSimCasesBase exprReasonOperand exprSimPopNestedLocalHandoff
   exprSimFieldLayout exprSafeOperandBuiltins exprSafeOperand
   exprSimSource evalNoHalt
@@ -339,7 +339,6 @@ Proof
       Cases_on `builtin_args_length_ok bt (LENGTH es)`
       >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
           Cases_on `bt = Env MsgGas` >>
-          Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
           Cases_on `code_slice_source bt es`
           >>~- ([`code_slice_source bt es = SOME _`],
                 rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
@@ -365,8 +364,12 @@ Proof
           imp_res_tac lift_option_type_state >>
           imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[] >>
           Cases_on `es` >>
+          TRY (Cases_on `bt`) >> TRY (Cases_on `a`) >>
+          TRY (Cases_on `is_self_addr h`) >>
           gvs[vyperContextTheory.builtin_args_length_ok_def,
-              supported_expr_exists_def] >> metis_tac[])
+              supported_expr_exists_def, vyperContextTheory.is_self_codesize_def,
+              vyperContextTheory.evaluate_self_codesize_def] >>
+          imp_res_tac lift_sum_state >> gvs[] >> metis_tac[])
       >> simp[Once evaluate_def, type_check_def, assert_def, bind_def,
               ignore_bind_def, raise_def])
   >- (rpt gen_tac >> strip_tac >>
@@ -597,7 +600,7 @@ Theorem target_subscript_pure_index_live:
   !st0 H. valid_horizon cx st0 H mid.storage_trace ==>
     nested_pop_result_live H cx ee pv
 Proof
-  simp[target_indices_def, EVERY_APPEND] >> strip_tac >>
+  simp[supportedExprsTheory.target_indices_def, EVERY_APPEND] >> strip_tac >>
   drule_all nested_pop_eval_base_pure_state >> strip_tac >>
   `ee = mid with storage_trace := ee.storage_trace` by
     (qpat_x_assum `bind _ _ _ = _` mp_tac >>

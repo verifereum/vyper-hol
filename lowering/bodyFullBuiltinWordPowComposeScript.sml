@@ -3,27 +3,13 @@ Theory bodyFullBuiltinWordPowCompose
 Ancestors
   bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullShared gasOutcomeFullCompose
-  bodyInvNoDalloca contextRawReachable unitMemInv bodyFullIfExpReach
+  contextRawReachable unitMemInv bodyFullIfExpReach
   exprSimWordBuiltins exprSimSource gasShadowCompileStmtHelpers
   fragGasSeqPtr bodyFullGhostFrame bodyFullBuiltinWordPowPost wordArgsPtr
   gasExemptCert vyperStorageTrace exprSimWordArgs exprLoweringProps
   exprSimHypsDefs exprLowering vyperAST vyperTypeSystem list finite_map words
 
 val _ = Parse.hide "body";
-
-Theorem pow_compose_reachable_no_wrap:
-  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions ==>
-  !t fn inst u. frag_reachable ctx func t fn inst u ==>
-    dalloca_no_wrap inst u
-Proof
-  rpt strip_tac >>
-  drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-  drule bodyInvNoDallocaTheory.body_inv_no_dalloca >>
-  simp[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM] >>
-  strip_tac >>
-  `inst.inst_opcode <> DALLOCA` by metis_tac[] >>
-  simp[unitTransformDefsTheory.dalloca_no_wrap_def]
-QED
 
 Theorem pow_mod256_sim_full_from_suffix:
   (!DF lo explicit ctx func PG d cenv cx st0 ee sm sb x y op t G1 tn1 ann ts (va:bytes32) (vb:bytes32).
@@ -81,6 +67,7 @@ Theorem pow_mod256_sim_full_from_suffix:
     (builtin_args_length_ok PowMod256 (LENGTH args) ==> body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin a PowMod256 args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a PowMod256 args) es /\
@@ -108,13 +95,6 @@ Proof
       `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
          cenv cx ty x0 es` by
         metis_tac[body_expr_full_ok_def] >>
-      Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr x0) shadow_sa` >>
-      rename1 `lower_value compile_expr cenv ty (gas_shadow_expr x0) shadow_sa = (sx,ss1)` >>
-      `sx = x /\ gas_shadow_state s1 ss1` by
-        (mp_tac (gas_shadow_stmt_lower_value |> Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `x0`]) >>
-         simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-         disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
-      gvs[] >>
       `cs_extends sa s1 /\ cs_extends s1 s2` by
         metis_tac[CONJUNCT2 exprLoweringPropsTheory.compile_expr_grows] >>
       `cs_extends s2 sb` by
@@ -131,15 +111,29 @@ Proof
            (irule (Q.SPECL [`s1`, `s2`, `sb`, `func`]
               fragExecTheory.fn_has_code_split) >> simp[]) >>
          simp[]) >>
-      `lower_value compile_expr cenv ty
+      `lower_value compile_expr (gas_shadow_env T cenv) ty
         (Builtin (BaseT (UintT 256)) PowMod256
           [gas_shadow_expr x0; gas_shadow_expr x0']) shadow_sa = (op,shadow_sb)` by
         gvs[gasShadowTheory.gas_shadow_expr_def, gasShadowTheory.gas_shadow_builtin_def] >>
       drule_at (Pat `lower_value _ _ _ (Builtin _ _ _) shadow_sa = _`)
         lower_value_pow_mod256 >> strip_tac >>
+      rename1 `lower_value compile_expr _ ty (gas_shadow_expr x0) shadow_sa = (shadow_x,shadow_s1)` >>
+      rename1 `lower_value compile_expr _ ty (gas_shadow_expr x0') shadow_s1 = (shadow_y,shadow_s2)` >>
+      `shadow_x = x /\ gas_shadow_state s1 shadow_s1` by
+        (irule gas_shadow_step >>
+         qpat_assum `lower_value _ _ _ x0 sa = (x,s1)` (irule_at Any) >>
+         qpat_assum `lower_value _ _ _ (gas_shadow_expr x0) shadow_sa = _`
+           (irule_at Any) >>
+         simp[] >> irule gas_shadow_stmt_lower_value_env) >>
+      `shadow_y = y /\ gas_shadow_state s2 shadow_s2` by
+        (irule gas_shadow_step >>
+         qpat_assum `lower_value _ _ _ x0' s1 = (y,s2)` (irule_at Any) >>
+         qpat_assum `lower_value _ _ _ (gas_shadow_expr x0') shadow_s1 = _`
+           (irule_at Any) >>
+         simp[] >> irule gas_shadow_stmt_lower_value_env) >>
       gvs[] >>
-      rename1 `lower_value compile_expr cenv ty (gas_shadow_expr x0) shadow_sa = (x,shadow_s1)` >>
-      rename1 `lower_value compile_expr cenv ty (gas_shadow_expr x0') shadow_s1 = (shadow_y,shadow_s2)` >>
+      rename1 `lower_value compile_expr cenv ty x0 sa = (x,s1)` >>
+      rename1 `lower_value compile_expr cenv ty x0' s1 = (y,s2)` >>
       `cs_extends shadow_sa shadow_s1 /\ cs_extends shadow_s1 shadow_s2` by
         metis_tac[CONJUNCT2 exprLoweringPropsTheory.compile_expr_grows] >>
       `cs_extends shadow_s2 shadow_sb` by
@@ -172,12 +166,12 @@ Proof
          (cx_tops cx) cx st0 (bind (eval_expr cx x0) (read_result cx))
          (es,s0,G0,tn0)
          (\H res ee GG tt u. firstQ H res ee GG tt u /\
-            (!fn i v. frag_reachable ctx func u fn i v ==> dalloca_no_wrap i v))
+            (!fn i v. frag_reachable ctx func u fn i v ==> dalloca_fmp_headroom i v))
          firstR` by
         (irule bodyFullIfExpReachTheory.gas_outcome_full_post_path >>
          qpat_assum `gas_outcome_full _ _ _ _ _ _ firstQ firstR` (irule_at Any) >>
          simp[] >> rpt strip_tac >>
-         drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap >>
+         drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >>
          disch_then ACCEPT_TAC) >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ firstQ firstR` kall_tac >>
       unabbrev_all_tac >>
@@ -190,6 +184,7 @@ Proof
         (`eval_exprs cx [] = return []` by
            simp[FUN_EQ_THM, exprSimWordArgsTheory.eval_exprs_nil, vyperStateTheory.return_def] >>
          simp[exprSimWordArgsTheory.eval_expr_builtin_action,
+              vyperContextTheory.is_self_codesize_def,
               exprSimWordArgsTheory.eval_exprs_cons_action,
               vyperContextTheory.builtin_args_length_ok_def,
               vyperInterpreterTheory.precompile_builtin_def,
@@ -230,6 +225,12 @@ Proof
                  (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ mid.gas_obs)` by
                 simp[expr_body_pre_def] >>
               metis_tac[exprSimSourceTheory.expr_body_pre_eval]) >>
+           `body_const_cells_agree [(NONE,tops)] cx env mid` by
+             (qpat_assum `!tail. _ = (INL v,_)`
+                (qspec_then `mid.gas_obs` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
+              `well_typed_expr env x0` by fs[expr_body_pre_def] >>
+              irule body_const_cells_agree_expr_read >>
+              goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >> simp[]) >>
            `expr_body_pre cenv cx env x0' mid` by
              (irule expr_body_pre_builtin_arg >>
               conj_tac >- first_assum ACCEPT_TAC >>
@@ -243,13 +244,6 @@ Proof
               metis_tac[]) >>
            `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
               cenv cx ty x0' mid` by metis_tac[body_expr_full_ok_def] >>
-           `shadow_y = y /\ gas_shadow_state s2 shadow_s2` by
-             (mp_tac (gas_shadow_stmt_lower_value |> Q.INST
-               [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `x0'`]) >>
-              simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-              disch_then (qspecl_then [`s1`, `shadow_s1`] mp_tac) >> simp[]) >>
-           gvs[] >>
-           rename1 `lower_value compile_expr cenv ty x0' s1 = (y,s2)` >>
            `fn_has_code shadow_s1 shadow_s2 shadow_func` by
              metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
            qpat_x_assum `expr_sim_full _ _ _ _ x0' mid`
@@ -401,7 +395,8 @@ Proof
                  (qx_choose_then `tn2` strip_assume_tac))) >>
                `v = IntV (&w2n (val_to_w256 v)) /\
                 v' = IntV (&w2n (val_to_w256 v'))` by
-                 metis_tac[uint_value_word_rep, arithmeticTheory.LESS_EQ_REFL] >>
+                 (conj_tac >> irule uint_value_word_rep >>
+                  qexists_tac `256` >> simp[]) >>
                `builtin_result cx mid'.accounts (BaseT (UintT 256)) PowMod256
                   [BaseT (UintT 256);BaseT (UintT 256)] [v;v'] =
                 INL (IntV (&w2n (word_exp (val_to_w256 v) (val_to_w256 v'))))` by

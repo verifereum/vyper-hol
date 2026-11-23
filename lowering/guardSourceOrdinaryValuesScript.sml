@@ -754,10 +754,9 @@ QED
 
 Resume finite_prefix_Expr_Builtin[args]:
   Cases_on `code_slice_source bt es`
-  >- (qpat_x_assum `!s x t v c a. _ /\ _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _` kall_tac >>
+  >- (qpat_x_assum `!s x t v c a. _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _` kall_tac >>
   qpat_x_assum `!s x t v c a s3 tv t'. _ ==> _` kall_tac >>
   asm_rewrite_tac[optionTheory.option_case_def] >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   asm_rewrite_tac[bind_def, ignore_bind_def, return_def, raise_def,
@@ -774,6 +773,9 @@ Resume finite_prefix_Expr_Builtin[args]:
    (valid_horizon cx initial_st H args_st.storage_trace ==>
     valid_horizon cx initial_st H st'.storage_trace)` by
     (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
+     Cases_on `is_self_codesize bt es` >>
+     gvs[vyperContextTheory.is_self_codesize_def,
+       vyperContextTheory.evaluate_self_codesize_def] >>
      Cases_on `args_res` >>
      gvs[bind_def, ignore_bind_def, return_def, raise_def,
        lift_option_type_def, assert_def, get_accounts_def, AllCaseEqs()] >>
@@ -800,11 +802,12 @@ Resume finite_prefix_Expr_Builtin[code_slice]:
   `~precompile_builtin bt` by
     (drule (iffLR code_slice_source_SOME) >> strip_tac >>
      simp[precompile_builtin_def]) >>
-  `~(bt = Bop In \/ bt = Bop NotIn)` by
-    (drule (iffLR code_slice_source_SOME) >> strip_tac >> simp[]) >>
+  `~is_self_codesize bt es` by
+    (drule (iffLR code_slice_source_SOME) >> strip_tac >>
+     simp[vyperContextTheory.is_self_codesize_def]) >>
   drule_all code_slice_operand_typing >> strip_tac >>
   drule_all code_slice_operand_call_safe >> strip_tac >>
-  qpat_x_assum `!s x t v c a. _ /\ _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
+  qpat_x_assum `!s x t v c a. _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
     (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
   (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
                 gvs[type_check_def, assert_def, return_def])) >> strip_tac >>

@@ -210,6 +210,8 @@ Definition lowered_value_type_def:
     BaseT (StringT (LENGTH s)) ∧
   lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (BytesL bs)) =
     BaseT (BytesT (Dynamic (LENGTH bs))) ∧
+  lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (HexBytesL bs)) =
+    BaseT (BytesT (Dynamic (LENGTH bs))) ∧
   lowered_value_type cenv (Builtin ty (Concat _) args) =
     concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args)) ∧
   lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
@@ -711,8 +713,8 @@ End
 
 (* ===== Bytestring Hash ===== *)
 (* Get keccak256 hash for bytestring comparison.
-   For constant literals: hash is a compile-time literal.
-   For variables: runtime SHA3.
+   StringL and BytesL fold to a compile-time hash.
+   HexBytesL and variables use runtime SHA3.
    Mirrors Python: expr.py _get_bytestring_hash *)
 Definition bytestring_literal_hash_def:
   bytestring_literal_hash (Literal _ (StringL s)) =
@@ -1009,9 +1011,9 @@ End
    has_default: T if default_return_value provided
    default_op: operand for default return value (only used if has_default)
    Mirrors Python: expr.py _lower_external_call + _parse_external_call_kwargs *)
-(* Lowering an external-call argument first produces a VyperValue.  Pointer
-   arguments are deliberately unwrapped only when Python stores the temporary
-   argument tuple, after allocating the shared call buffer. *)
+(* Direct external-call packing unwraps each saved VyperValue while encoding
+   its ABI row. Callers of compile_extcall_store_values use unwrap_value when
+   storing arguments in a temporary tuple. *)
 Definition unwrap_value_def:
   unwrap_value cenv (StackValue ty op) = return op ∧
   unwrap_value cenv (LocatedValue ty p) =
@@ -1049,97 +1051,6 @@ Definition compile_extcall_store_values_def:
         else if is_bytestring_type ty then compile_store_bytestring v dst
         else emit_void MCOPY [dst; v; Lit (n2w mem_size)]);
        compile_extcall_store_values cenv rest buf_op (offset + mem_size)
-    od
-End
-
-Definition compile_external_call_kwargs_def:
-  compile_external_call_kwargs (cenv : compile_env) (addr_op : operand)
-                               (arg_vals : vyper_value list) (arg_types : type list)
-                               args_mem_size args_abi_size method_id_val return_abi_size
-                               min_return_size ret_mem_bytes use_staticcall
-                               call_value gas_op skip_check has_default default_op
-                               return_type default_ty args_enc_info ret_dec_info =
-    let buf_size = (if args_abi_size > return_abi_size
-                    then args_abi_size else return_abi_size) + 32 in
-    let ret_len = Lit (n2w return_abi_size) in
-    do (* Python allocates the shared call/return buffer before the temporary
-          memory-layout argument tuple. *)
-       buf_op_alloc <- compile_alloc_buffer buf_size;
-       let buf_op = buf_op_alloc.buf_operand in
-       do (* Store method ID *)
-          emit_void MSTORE [buf_op; Lit (n2w method_id_val)];
-          (* Python omits the temporary tuple entirely for zero arguments.
-             The calldata is the selector and the encoded arguments, at their
-             encoded length rather than the tuple's ABI size bound
-             (vyper#5127). *)
-          call_len <-
-            (if arg_vals = [] then return (Lit 4w)
-             else
-               do args_alloc <- compile_alloc_buffer args_mem_size;
-                  let args_op = args_alloc.buf_operand in
-                  do compile_extcall_store_values cenv (ZIP (arg_vals,arg_types))
-                       args_op 0;
-                     args_dst <- emit_op ADD [buf_op; Lit 32w];
-                     args_len <- compile_abi_encode_to_buf args_dst args_op
-                                   args_enc_info;
-                     emit_op ADD [args_len; Lit 4w]
-                  od
-               od);
-          call_offset <- emit_op ADD [buf_op; Lit 28w];
-          (* Extcodesize check for void calls without skip_contract_check.
-             Python keys void calls on the return type being None, not on
-             a zero ABI size. *)
-          (if return_type = NoneT ∧ ¬skip_check then
-             compile_extcodesize_check addr_op
-           else return ());
-          (* Dispatch CALL or STATICCALL with explicit gas *)
-          success <- (if use_staticcall then
-            emit_op STATICCALL [gas_op; addr_op; call_offset; call_len;
-                                buf_op; ret_len]
-          else
-            emit_op CALL [gas_op; addr_op; call_value;
-                          call_offset; call_len; buf_op; ret_len]);
-          (* Revert propagation *)
-          fail_lbl <- fresh_label "extcall_fail";
-          cont_lbl <- fresh_label "extcall_cont";
-          emit_inst JNZ [success; Label cont_lbl; Label fail_lbl] [];
-          new_block fail_lbl;
-          rds <- emit_op RETURNDATASIZE [];
-          (* Python allocates a zero-sized buffer and reuses its pointer for
-             both RETURNDATACOPY and REVERT.  Keep the ALLOCA: its shared SSA
-             value affects exact stack scheduling even though it resolves to 0. *)
-          fail_buf_alloc <- compile_alloc_buffer 0;
-          let fail_buf = fail_buf_alloc.buf_operand in
-          do emit_void RETURNDATACOPY [fail_buf; Lit 0w; rds];
-             emit_inst REVERT [fail_buf; rds] []
-          od;
-          new_block cont_lbl;
-          (* Return value handling *)
-          (* Python's new_temporary_value(wrapped_return_t) allocates the
-             memory size of the return type, not its ABI size bound. *)
-          if return_type = NoneT then
-            comp_return (Lit 0w)
-          else if has_default then
-            do (* Allocate result, use default_return_path *)
-               result_op_alloc <- compile_alloc_buffer ret_mem_bytes;
-               let result_op = result_op_alloc.buf_operand in
-               compile_default_return_path cenv return_type default_ty
-                                           buf_op result_op default_op addr_op
-                                           skip_check min_return_size return_abi_size
-                                           ret_dec_info
-            od
-          else
-            do (* Simple decode path *)
-               result_op_alloc <- compile_alloc_buffer ret_mem_bytes;
-               let result_op = result_op_alloc.buf_operand in
-               do hi_op <- compile_return_value_decode min_return_size
-                                                    return_abi_size;
-                  compile_abi_decode_to_buf result_op (Lit 0w) MLOAD buf_op
-                    hi_op ret_dec_info;
-                  return result_op
-               od
-            od
-       od
     od
 End
 
@@ -1280,6 +1191,123 @@ Termination
   \\ rw[finite_mapTheory.FDOM_DOMSUB, CARD_DELETE]
   >- ( Cases_on`CARD (FDOM sfields)` \\ gvs[] )
   \\ gvs[finite_mapTheory.TO_FLOOKUP]
+End
+
+(* Encode saved tuple members directly into the ABI head and tail. *)
+Definition compile_abi_encode_value_rows_def:
+  compile_abi_encode_value_rows cenv dst cursor static_ofst [] = return () ∧
+  compile_abi_encode_value_rows cenv dst cursor static_ofst ((vv,ty)::rows) =
+    let sfields = cenv.ce_struct_fields in
+    do head_ptr <- emit_op ADD [dst; Lit (n2w static_ofst)];
+       (if is_abi_dynamic sfields ty then
+          do tail_ofst <- emit_op MLOAD [cursor];
+             tail_ptr <- emit_op ADD [dst; tail_ofst];
+             src <- unwrap_value cenv vv;
+             len <- compile_abi_encode_to_buf tail_ptr src
+                      (type_to_abi_enc_info sfields cenv ty);
+             emit_void MSTORE [head_ptr; tail_ofst];
+             next_ofst <- emit_op ADD [tail_ofst; len];
+             emit_void MSTORE [cursor; next_ofst]
+          od
+        else
+          do src <- unwrap_value cenv vv;
+             compile_store_memory cenv src head_ptr ty ty
+          od);
+       compile_abi_encode_value_rows cenv dst cursor
+         (static_ofst + abi_embedded_static_size sfields ty) rows
+    od
+End
+
+Definition compile_abi_encode_values_to_buf_def:
+  compile_abi_encode_values_to_buf cenv dst rows =
+    let static_size = abi_static_size cenv.ce_struct_fields
+                        (TupleT (MAP SND rows)) in
+    do cursor_alloc <- compile_alloc_buffer 32;
+       let cursor = cursor_alloc.buf_operand in
+       do emit_void MSTORE [cursor; Lit (n2w static_size)];
+          compile_abi_encode_value_rows cenv dst cursor 0 rows;
+          emit_op MLOAD [cursor]
+       od
+    od
+End
+
+Definition compile_external_call_kwargs_def:
+  compile_external_call_kwargs (cenv : compile_env) (addr_op : operand)
+                               (arg_vals : vyper_value list) (arg_types : type list)
+                               args_abi_size method_id_val return_abi_size
+                               min_return_size ret_mem_bytes use_staticcall
+                               call_value gas_op skip_check has_default default_op
+                               return_type default_ty ret_dec_info =
+    let buf_size = (if args_abi_size > return_abi_size
+                    then args_abi_size else return_abi_size) + 32 in
+    let ret_len = Lit (n2w return_abi_size) in
+    do buf_op_alloc <- compile_alloc_buffer buf_size;
+       let buf_op = buf_op_alloc.buf_operand in
+       do emit_void MSTORE [buf_op; Lit (n2w method_id_val)];
+          call_len <-
+            (if arg_vals = [] then return (Lit 4w)
+             else
+               do args_dst <- emit_op ADD [buf_op; Lit 32w];
+                  args_len <- compile_abi_encode_values_to_buf cenv args_dst
+                                (ZIP (arg_vals,arg_types));
+                  emit_op ADD [args_len; Lit 4w]
+               od);
+          call_offset <- emit_op ADD [buf_op; Lit 28w];
+          (* Extcodesize check for void calls without skip_contract_check.
+             Python keys void calls on the return type being None, not on
+             a zero ABI size. *)
+          (if return_type = NoneT ∧ ¬skip_check then
+             compile_extcodesize_check addr_op
+           else return ());
+          (* Dispatch CALL or STATICCALL with explicit gas *)
+          success <- (if use_staticcall then
+            emit_op STATICCALL [gas_op; addr_op; call_offset; call_len;
+                                buf_op; ret_len]
+          else
+            emit_op CALL [gas_op; addr_op; call_value;
+                          call_offset; call_len; buf_op; ret_len]);
+          (* Revert propagation *)
+          fail_lbl <- fresh_label "extcall_fail";
+          cont_lbl <- fresh_label "extcall_cont";
+          emit_inst JNZ [success; Label cont_lbl; Label fail_lbl] [];
+          new_block fail_lbl;
+          rds <- emit_op RETURNDATASIZE [];
+          (* Python allocates a zero-sized buffer and reuses its pointer for
+             both RETURNDATACOPY and REVERT.  Keep the ALLOCA: its shared SSA
+             value affects exact stack scheduling even though it resolves to 0. *)
+          fail_buf_alloc <- compile_alloc_buffer 0;
+          let fail_buf = fail_buf_alloc.buf_operand in
+          do emit_void RETURNDATACOPY [fail_buf; Lit 0w; rds];
+             emit_inst REVERT [fail_buf; rds] []
+          od;
+          new_block cont_lbl;
+          (* Return value handling *)
+          (* Python's new_temporary_value(wrapped_return_t) allocates the
+             memory size of the return type, not its ABI size bound. *)
+          if return_type = NoneT then
+            comp_return (Lit 0w)
+          else if has_default then
+            do (* Allocate result, use default_return_path *)
+               result_op_alloc <- compile_alloc_buffer ret_mem_bytes;
+               let result_op = result_op_alloc.buf_operand in
+               compile_default_return_path cenv return_type default_ty
+                                           buf_op result_op default_op addr_op
+                                           skip_check min_return_size return_abi_size
+                                           ret_dec_info
+            od
+          else
+            do (* Simple decode path *)
+               result_op_alloc <- compile_alloc_buffer ret_mem_bytes;
+               let result_op = result_op_alloc.buf_operand in
+               do hi_op <- compile_return_value_decode min_return_size
+                                                    return_abi_size;
+                  compile_abi_decode_to_buf result_op (Lit 0w) MLOAD buf_op
+                    hi_op ret_dec_info;
+                  return result_op
+               od
+            od
+       od
+    od
 End
 
 (* ABI clamp info from type — used for decoding validation.
@@ -1536,7 +1564,11 @@ Definition compile_literal_vv_def:
      | _ => (* fallback: use string length *)
          do buf <- compile_bytelike_literal (MAP (n2w o ORD) s) (LENGTH s);
             return (LocatedValue ty (base_ptr buf))
-         od)
+         od) ∧
+  compile_literal_vv ty (HexBytesL bs) =
+    do buf <- compile_bytelike_literal bs (LENGTH bs);
+       return (LocatedValue ty (base_ptr buf))
+    od
 End
 
 (* ===== Name (Variable Reference) ===== *)
@@ -2505,39 +2537,6 @@ Definition compile_snapshot_vv_def:
     else return vv
 End
 
-(* Capture composites before a later argument can mutate their source.
-   Keep the pinned compiler's tuple staging; this backports the operand
-   preservation fix from Vyper #5127 without changing the encoder API. *)
-Definition compile_abi_encode_args_def:
-  compile_abi_encode_args cfn cenv [] = return ([] : operand list) ∧
-  compile_abi_encode_args cfn cenv (e::es) =
-    do vv <- cfn cenv (expr_type e) e;
-       op <- (if ~is_word_type (expr_type e) ∧ exprs_can_mutate cenv es then
-                compile_materialize_vv cenv (lowered_value_type cenv e) vv
-              else unwrap_value cenv vv);
-       ops <- compile_abi_encode_args cfn cenv es;
-       return (op::ops)
-    od
-End
-
-Theorem compile_abi_encode_args_callback_cong:
-  ∀es. (∀e. MEM e es ⇒ f cenv (expr_type e) e = g cenv (expr_type e) e) ⇒
-    compile_abi_encode_args f cenv es = compile_abi_encode_args g cenv es
-Proof
-  Induct >> simp[compile_abi_encode_args_def] >> rpt strip_tac >> fs[]
-QED
-
-Theorem compile_abi_encode_args_cong[defncong]:
-  cenv = cenv' ∧ es = es' ∧ st = st' ∧
-  (∀a b e s. a = cenv' ∧ b = expr_type e ∧ MEM e es' ⇒
-     f a b e s = g a b e s) ⇒
-  compile_abi_encode_args f cenv es st = compile_abi_encode_args g cenv' es' st'
-Proof
-  rpt strip_tac >> gvs[] >> AP_THM_TAC >>
-  irule compile_abi_encode_args_callback_cong >> simp[FUN_EQ_THM]
-QED
-
-
 (* Whether subscript base_e[idx_e] copies its base before lowering the index:
    the index could resize a dynamic array the base was derived from.
    Mirrors Python: expr.py _lower_array_subscript (overlap) *)
@@ -2627,6 +2626,45 @@ Definition compile_ext_call_args_def:
   compile_ext_call_args cfn cenv kw_es _ _ = comp_return ([] : vyper_value list)
 End
 
+(* Encode a saved value directly for the standalone case, or an ABI tuple
+   of saved values and their physical types for the wrapped case. *)
+Definition compile_abi_encode_payload_def:
+  compile_abi_encode_payload cenv single vals tys dst =
+    if single then
+      do src <- unwrap_value cenv (HD vals);
+         if is_word_type (HD tys) then
+           do emit_void MSTORE [dst; src]; return (Lit 32w) od
+         else
+           compile_abi_encode_to_buf dst src
+             (type_to_abi_enc_info cenv.ce_struct_fields cenv (HD tys))
+      od
+    else compile_abi_encode_values_to_buf cenv dst (ZIP (vals,tys))
+End
+
+(* Lower and snapshot each value before lowering any later operand. *)
+Definition compile_abi_encode_args_def:
+  compile_abi_encode_args cfn cenv es =
+    compile_ext_call_args cfn cenv [] (MAP (lowered_value_type cenv) es) es
+End
+
+Theorem compile_abi_encode_args_callback_cong:
+  ∀es. (∀e. MEM e es ⇒ f cenv (expr_type e) e = g cenv (expr_type e) e) ⇒
+    compile_abi_encode_args f cenv es = compile_abi_encode_args g cenv es
+Proof
+  simp[compile_abi_encode_args_def] >>
+  Induct >> simp[compile_ext_call_args_def] >> rpt strip_tac >> fs[]
+QED
+
+Theorem compile_abi_encode_args_cong[defncong]:
+  cenv = cenv' ∧ es = es' ∧ st = st' ∧
+  (∀a b e s. a = cenv' ∧ b = expr_type e ∧ MEM e es' ⇒
+     f a b e s = g a b e s) ⇒
+  compile_abi_encode_args f cenv es st = compile_abi_encode_args g cenv' es' st'
+Proof
+  rpt strip_tac >> gvs[] >> AP_THM_TAC >>
+  irule compile_abi_encode_args_callback_cong >> simp[FUN_EQ_THM]
+QED
+
 (* Lower one keyword operand of extcall/staticcall: value= and gas= are
    uint256 words; default_return_value= is a word of the return type, or,
    for any other type, a value Python materializes where it is lowered, at
@@ -2689,21 +2727,10 @@ Definition compile_create_ctor_args_def:
   compile_create_ctor_args cfn cenv [] = comp_return ([] : vyper_value list) ∧
   compile_create_ctor_args cfn cenv (e::es) =
     do vv <- cfn cenv (expr_type e) e;
-       vv <- compile_snapshot_vv cenv (exprs_can_mutate cenv es) vv;
+       vv <- compile_snapshot_vv cenv (exprs_can_mutate cenv es)
+               (ext_call_arg_value (lowered_value_type cenv e) vv);
        rest <- compile_create_ctor_args cfn cenv es;
        comp_return (vv::rest)
-    od
-End
-
-(* Evaluate the constructor arguments before allocating the temporary tuple,
-   then unwrap them while storing it, exactly as for external-call arguments. *)
-Definition compile_create_ctor_tuple_def:
-  compile_create_ctor_tuple cfn cenv args =
-    let tys = MAP (lowered_value_type cenv) args in
-    do vals <- compile_create_ctor_args cfn cenv args;
-       tmp <- compile_alloc_buffer (type_memory_bytes cenv (TupleT tys));
-       compile_extcall_store_values cenv (ZIP (vals,tys)) tmp.buf_operand 0;
-       return tmp.buf_operand
     od
 End
 
@@ -2724,11 +2751,10 @@ Definition compile_create_blueprint_args_def:
        | _ => do emit_inst INVALID [] []; return (Lit 0w,Lit 0w) od)
     else if args = [] then return (Lit 0w,Lit 0w)
     else
-      let tuple_ty = TupleT (MAP (lowered_value_type cenv) args) in
-      let enc = type_to_abi_enc_info cenv.ce_struct_fields cenv tuple_ty in
-      do src <- compile_create_ctor_tuple cfn cenv args;
-         buf <- compile_alloc_buffer (abi_size_bound cenv.ce_struct_fields tuple_ty);
-         len <- compile_abi_encode_to_buf buf.buf_operand src enc;
+      let tys = MAP (lowered_value_type cenv) args in
+      do vals <- compile_create_ctor_args cfn cenv args;
+         buf <- compile_alloc_buffer (abi_size_bound cenv.ce_struct_fields (TupleT tys));
+         len <- compile_abi_encode_values_to_buf cenv buf.buf_operand (ZIP (vals,tys));
          return (buf.buf_operand,len)
       od
 End
@@ -2763,25 +2789,21 @@ End
 
 Definition compile_raw_create_def:
   compile_raw_create cfn cenv bytecode_e value_e ctor_args salt_e rof =
-    (* RawCreate._inputs promotes its bytecode use to Bytes[49152]. Names in
-       our AST retain declaration types, so use the builtin bound for buffer
-       capacity and slot copying, while evaluating the original expression. *)
-    let maxlen = 49152 in
-    let bytecode_ty = BaseT (BytesT (Dynamic maxlen)) in
-    let tuple_ty = TupleT (MAP (lowered_value_type cenv) ctor_args) in
-    let enc = type_to_abi_enc_info cenv.ce_struct_fields cenv tuple_ty in
-    let abi_size = abi_size_bound cenv.ce_struct_fields tuple_ty in
+    let bytecode_ty = lowered_value_type cenv bytecode_e in
+    let maxlen = bytelike_type_bound bytecode_ty in
+    let tys = MAP (lowered_value_type cenv) ctor_args in
+    let abi_size = abi_size_bound cenv.ce_struct_fields (TupleT tys) in
     do vv <- cfn cenv (expr_type bytecode_e) bytecode_e;
        bytecode <- compile_create_snapshot cenv vv bytecode_ty;
        len <- emit_op MLOAD [bytecode];
        data <- emit_op ADD [bytecode; Lit 32w];
        (ptr,total) <-
          (if ctor_args = [] then return (data,len)
-          else do src <- compile_create_ctor_tuple cfn cenv ctor_args;
+          else do vals <- compile_create_ctor_args cfn cenv ctor_args;
                   buf <- compile_alloc_buffer (maxlen + abi_size);
                   compile_copy_memory_dynamic buf.buf_operand data len;
                   dst <- emit_op ADD [buf.buf_operand; len];
-                  args_len <- compile_abi_encode_to_buf dst src enc;
+                  args_len <- compile_abi_encode_values_to_buf cenv dst (ZIP (vals,tys));
                   total <- emit_op ADD [len; args_len];
                   return (buf.buf_operand,total)
                od);
@@ -2974,16 +2996,12 @@ Definition compile_call_def:
           vyper#5239. The selector is the same under both, since bounds don't
           appear in it. *)
        let call_arg_types = MAP (lowered_value_type cenv) func_args in
-       (* Python evaluates all positional arguments before call kwargs and
-          allocates their memory-layout tuple only after the call buffer. *)
        let (arg_vals, st2) =
          compile_ext_call_args cfn cenv kw_es call_arg_types func_args st1 in
        let ((value_opt, gas_opt, default_opt), st3) =
          compile_ext_call_kwargs cfn cenv return_type opts kw_es st2 in
        let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
-       let args_mem_size = SUM (MAP (type_memory_bytes cenv) call_arg_types) in
        let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT call_arg_types) in
-       let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT call_arg_types) in
        let wrapped_return =
          (if needs_external_call_wrap return_type then TupleT [return_type]
           else return_type) in
@@ -3002,11 +3020,11 @@ Definition compile_call_def:
          compile_external_call_kwargs cenv addr_op
                                     arg_vals
                                     call_arg_types
-                                    args_mem_size args_abi_size method_id_val
+                                    args_abi_size method_id_val
                                     return_abi_size min_return_size ret_mem_bytes
                                     is_static value_op gas_op skip_contract_check
                                     has_default default_op return_type default_ty
-                                    args_enc_info ret_dec_info st5 in
+                                    ret_dec_info st5 in
        if return_type = NoneT then (StackValue ret_ty result_op, st6)
        else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st6)) ∧
   compile_call cfn cenv ret_ty ty (Send has_gas) args default_ret st =
@@ -3191,8 +3209,9 @@ Definition compile_acc_def:
     (let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
      emit_op BALANCE [addr_op] st1) ∧
   compile_acc cfn cenv addr_e Codesize st =
-    (let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
-     emit_op EXTCODESIZE [addr_op] st1) ∧
+    (if is_self_addr addr_e then emit_op CODESIZE [] st
+     else let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
+          emit_op EXTCODESIZE [addr_op] st1) ∧
   compile_acc cfn cenv addr_e Codehash st =
     (let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
      emit_op EXTCODEHASH [addr_op] st1) ∧
@@ -3518,14 +3537,14 @@ Definition compile_builtin_dispatch_body_def:
           let (p1, st1a) = unwrap_value cenv p1_vv st1 in
           let (p2_vv, st2) = compile_expr cenv p2_ty e_p2 st1a in
           let (p2, st2a) = unwrap_value cenv p2_vv st2 in
-          as_ptr_val ret_ty LocMemory (compile_ecadd_points p1 p2 st2a))
+          as_stack_val ret_ty (compile_ecadd_points p1 p2 st2a))
      | ECMul =>
          (let e_p = HD args in let e_s = EL 1 args in
           let p_ty = expr_type e_p in
           let (p_vv, st1) = compile_expr cenv p_ty e_p st in
           let (p, st1a) = unwrap_value cenv p_vv st1 in
           let (s, st2) = lower_value compile_expr cenv (BaseT (UintT 256)) e_s st1a in
-          as_ptr_val ret_ty LocMemory (compile_ecmul_point p s st2))
+          as_stack_val ret_ty (compile_ecmul_point p s st2))
      | Concat max_len =>
          (let arg_infos = MAP (λe.
             let ety = expr_type e in
@@ -3689,37 +3708,14 @@ Definition compile_type_builtin_dispatch_body_def:
           as_stack_val vv_ty (compile_clamp_basetype raw ret_ty st4))
      | AbiEncode ensure method_id =>
          (let method_id_word = OPTION_MAP bytes_method_id_word method_id in
-          if LENGTH args = 1 ∧ ¬ensure then
-          let e1 = HD args in
-          let src_ty = expr_type e1 in
-          let enc_ty = lowered_value_type cenv e1 in
-          let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
-          let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
-          if is_word_type src_ty then
-            (* Prim word: stage to temp memory for encoder *)
-            let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
-            let (tmp_alloc, st2) = compile_alloc_buffer 32 st1 in
-            let tmp = tmp_alloc.buf_operand in
-            let (_, st3) = emit_void MSTORE [tmp; v] st2 in
-            as_ptr_val vv_ty LocMemory
-              (lower_abi_encode ensure method_id_word tmp enc_info maxlen st3)
-          else
-            let (src_vv, st1) = compile_expr cenv src_ty e1 st in
-            let (src_op, st2) = unwrap_value cenv src_vv st1 in
-            as_ptr_val vv_ty LocMemory
-              (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2)
-          else
           let arg_tys = MAP (lowered_value_type cenv) args in
-          let enc_ty = TupleT arg_tys in
-          let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
+          let single = (LENGTH args = 1 ∧ ¬ensure) in
+          let enc_ty = if single then HD arg_tys else TupleT arg_tys in
           let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
           let (vs, st1) = compile_abi_encode_args compile_expr cenv args st in
-          let (tup_alloc, st2) =
-                compile_alloc_buffer (type_memory_bytes cenv enc_ty) st1 in
-          let tup = tup_alloc.buf_operand in
-          let (_, st3) = compile_store_abi_tuple cenv tup 0 (ZIP (vs, arg_tys)) st2 in
           as_ptr_val vv_ty LocMemory
-            (lower_abi_encode ensure method_id_word tup enc_info maxlen st3))
+            (lower_abi_encode method_id_word maxlen
+              (compile_abi_encode_payload cenv single vs arg_tys) st1))
      | AbiDecode unwrap =>
          (let e1 = HD args in
           let (data_vv, st1) = compile_expr cenv (expr_type e1) e1 st in

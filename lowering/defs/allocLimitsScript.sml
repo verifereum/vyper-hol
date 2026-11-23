@@ -33,6 +33,8 @@ Ancestors
    and the bound holds of it all the same. *)
 Definition literal_alloc_ok_def:
   literal_alloc_ok (BytesL bs) = (32 + 32 * word_size (LENGTH bs) < 2 ** 64) /\
+  literal_alloc_ok (HexBytesL bs) =
+    (32 + 32 * word_size (LENGTH bs) < 2 ** 64) /\
   literal_alloc_ok (StringL str) =
     (32 + 32 * word_size (LENGTH str) < 2 ** 64) /\
   literal_alloc_ok _ = T
@@ -49,10 +51,9 @@ End
 (* The buffers _lower_external_call allocates for an external call: the
    argument tuple in memory (new_temporary_value) and the call buffer, the
    larger of the argument and return ABI size bounds plus the method id word
-   (allocate_buffer).  CREATE's non-raw constructor arguments likewise need
-   a tuple staging buffer and an ABI buffer. RawCreate's current producer
-   reserves 49152 bytes before its ABI suffix. These aggregate sizes are
-   not bounded by any one argument's type_alloc_ok. *)
+   (allocate_buffer). CREATE encodes constructor arguments directly into
+   an ABI buffer, with room for the bytecode prefix in raw_create. The
+   bytecode snapshot itself is covered by the operand's type_alloc_ok. *)
 Definition ext_call_alloc_ok_def:
   ext_call_alloc_ok cenv (ExtCall _ _ (_, arg_tys, ret) _) es =
     (let tys = MAP (lowered_value_type cenv) (TAKE (LENGTH arg_tys) (DROP 1 es));
@@ -62,7 +63,7 @@ Definition ext_call_alloc_ok_def:
            (abi_size_bound cenv.ce_struct_fields wrapped) + 32 < 2 ** 64) /\
   ext_call_alloc_ok cenv (CreateTarget ck has_salt _ _) es =
     (case es of
-       _:: _::rest =>
+       target:: _::rest =>
          if LENGTH rest < (if has_salt then 1 else 0) +
               (case ck of CreateFromBlueprint _ => 1 | _ => 0)
          then T
@@ -72,14 +73,13 @@ Definition ext_call_alloc_ok_def:
                 let args = if has_salt then FRONT rest else rest;
                     ty = TupleT (MAP expr_type args) in
                   args = [] \/
-                  (type_memory_bytes cenv ty < 2 ** 64 /\
-                   49152 + abi_size_bound cenv.ce_struct_fields ty < 2 ** 64)
+                  vyperTypeSystem$bytelike_type_bound (expr_type target) +
+                    abi_size_bound cenv.ce_struct_fields ty < 2 ** 64
             | CreateFromBlueprint raw_args =>
                 let args = DROP (if has_salt then 2 else 1) rest;
                     ty = TupleT (MAP expr_type args) in
                   raw_args \/ args = [] \/
-                  (type_memory_bytes cenv ty < 2 ** 64 /\
-                   abi_size_bound cenv.ce_struct_fields ty < 2 ** 64)
+                  abi_size_bound cenv.ce_struct_fields ty < 2 ** 64
             | _ => T)
      | _ => T) /\
   ext_call_alloc_ok cenv _ _ = T
@@ -211,6 +211,21 @@ Definition target_in_immutables_def:
     target_in_immutables mvars bt
 End
 
+(* A storage or transient array variable.  As a subscript base Python reads
+   it in place (_lower_array_subscript lowers it to a pointer) and never
+   copies it to memory: it is not derived from a dynamic-array element, so
+   copies_subscript_base is false, and no buffer is allocated for it.
+   Mirrors Python: expr.py _lower_array_subscript *)
+Definition array_slot_base_def:
+  array_slot_base cenv (TopLevelName t nsid) =
+    (is_ArrayT t /\
+     case FLOOKUP cenv.ce_module_vars nsid of
+       SOME (StorageLoc _) => T
+     | SOME (TransientLoc _) => T
+     | _ => F) /\
+  array_slot_base cenv _ = F
+End
+
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
    and string literals, struct and array literals, empty(T) of a type that
@@ -233,7 +248,8 @@ Definition alloc_limits_expr_def:
      type_memory_bytes cenv (StructT nsid) < 2 ** 64 /\
      alloc_limits_named_exprs cenv kes) /\
   alloc_limits_expr cenv (Subscript t x y) =
-    (type_alloc_ok cenv t /\ alloc_limits_expr cenv x /\
+    (type_alloc_ok cenv t /\
+     (array_slot_base cenv x \/ alloc_limits_expr cenv x) /\
      alloc_limits_expr cenv y /\
      ~pop_subscript_overlap cenv.ce_modules x y /\
      (copies_subscript_base cenv x y ==>
@@ -264,13 +280,13 @@ Definition alloc_limits_expr_def:
         Empty => (~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64)
       | Convert => (~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64)
       | AbiEncode ensure mid =>
-          (let single = (LENGTH es = 1 /\ ~ensure) in
-           let enc_ty = if single then expr_type (HD es)
-                        else TupleT (MAP expr_type es) in
+          (let arg_tys = MAP (lowered_value_type cenv) es in
+           let enc_ty = if LENGTH es = 1 /\ ~ensure then HD arg_tys
+                        else TupleT arg_tys in
            let mid_size = case mid of NONE => 0 | SOME _ => 4 in
            32 + 32 * word_size
              (abi_size_bound cenv.ce_struct_fields enc_ty + mid_size) < 2 ** 64 /\
-           (~single ==> type_memory_bytes cenv enc_ty < 2 ** 64))
+           EVERY (type_alloc_ok cenv) arg_tys)
       | AbiDecode unwrap =>
           (let wty = if unwrap /\ needs_external_call_wrap ty then TupleT [ty]
                      else ty in
@@ -368,33 +384,34 @@ Definition alloc_limits_raise_def:
   alloc_limits_raise cenv RaiseUnreachable = T
 End
 
-(* A log's two buffers are below Python's allocation limit, as lower_Log
-   allocates them through allocate_buffer: the data of its non-indexed
-   arguments, and their ABI encoding.  An event the compile env doesn't
-   know has none, since compile_stmt emits INVALID for it. *)
+(* Log allocates at the saved argument layouts. The declared non-indexed
+   bound ensures the source event field types can be evaluated. *)
 Definition log_alloc_ok_def:
   log_alloc_ok cenv id es ⇔
     case cenv.ce_event_info (nsid_to_string id) of
       NONE => T
     | SOME (_, arg_types, flags) =>
-        let tys = log_non_indexed_types flags arg_types in
-          SUM (MAP (type_memory_bytes cenv) tys) < 2 ** 64 ∧
-          abi_size_bound cenv.ce_struct_fields (TupleT tys) < 2 ** 64
+        let dtys = log_non_indexed_types flags arg_types in
+        let ptys = MAP (lowered_value_type cenv) es in
+        let pdata_tys = log_non_indexed_types flags ptys in
+          SUM (MAP (type_memory_bytes cenv) dtys) < 2 ** 64 ∧
+          EVERY (type_alloc_ok cenv) ptys ∧
+          abi_size_bound cenv.ce_struct_fields (TupleT pdata_tys) < 2 ** 64
 End
 
-(* A custom error's two buffers are below Python's allocation limit, as
-   _revert_with_custom_error allocates them through allocate_buffer: the
-   arguments' tuple at the declared types, and its ABI encoding behind the
-   selector word.  An error the compile env doesn't know has none, since
-   compile_revert_with_custom_error emits INVALID for it. *)
+(* A custom error reserves its ABI payload and the selector word at the
+   saved argument layouts. A composite argument can also be materialized
+   individually. The encoder's 32-byte cursor needs no separate check.
+   An unknown error emits INVALID without allocating a buffer. *)
 Definition custom_error_alloc_ok_def:
   custom_error_alloc_ok cenv (CustomError id positional kwargs) ⇔
     case cenv.ce_error_info (nsid_to_string id) of
       NONE => T
-    | SOME params =>
-        let t = TupleT (MAP SND params) in
-          type_memory_bytes cenv t < 2 ** 64 ∧
-          abi_size_bound cenv.ce_struct_fields t + 32 < 2 ** 64
+    | SOME _ =>
+        let tys = MAP (lowered_value_type cenv)
+                    (custom_error_exprs (CustomError id positional kwargs)) in
+          EVERY (type_alloc_ok cenv) tys ∧
+          abi_size_bound cenv.ce_struct_fields (TupleT tys) + 32 < 2 ** 64
 End
 
 (* For a target in storage or transient storage, SOME of the place type
@@ -752,19 +769,17 @@ Theorem alloc_limits_abi_encode_output:
   alloc_limits_expr ce (TypeBuiltin t (AbiEncode ensure mid) ty es) ==>
   32 + 32 * word_size
     (abi_size_bound ce.ce_struct_fields
-      (if LENGTH es = 1 /\ ~ensure then expr_type (HD es)
-       else TupleT (MAP expr_type es)) +
+      (if LENGTH es = 1 /\ ~ensure then lowered_value_type ce (HD es)
+       else TupleT (MAP (lowered_value_type ce) es)) +
      (case mid of NONE => 0 | SOME _ => 4)) < 2 ** 64
 Proof
-  simp[Once alloc_limits_expr_def, LET_THM]
+  Cases_on `es` >> simp[Once alloc_limits_expr_def, LET_THM]
 QED
 
 Theorem alloc_limits_abi_encode_staging:
-  alloc_limits_expr ce (TypeBuiltin t (AbiEncode ensure mid) ty es) /\
-  ~(LENGTH es = 1 /\ ~ensure) ==>
-  type_memory_bytes ce (TupleT (MAP expr_type es)) < 2 ** 64
+  alloc_limits_expr ce (TypeBuiltin t (AbiEncode ensure mid) ty es) ==>
+  EVERY (type_alloc_ok ce) (MAP (lowered_value_type ce) es)
 Proof
-  Cases_on `LENGTH es = 1 /\ ~ensure` >>
   simp[Once alloc_limits_expr_def, LET_THM]
 QED
 

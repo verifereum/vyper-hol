@@ -1,76 +1,66 @@
 Theory augAssignFullTargetRoutes
 Ancestors
+  bodyInvCodeProps moduleVariableKeyProps linkedStorageMetadataProps
   bodyAugPlaceTarget supportedStmts supportedTargets supportedTypes
-  supportedExprForms supportedDecls bodySim list alist
+  supportedExprForms supportedDecls bodySim targetPlaceSim list alist
+  exprSimHypsDefs vyperTypeSystem
 
 Theorem augassign_name_target_info:
   supported_stmt tops bindings (AugAssign ty (NameTarget id) bop e) ==>
   ?pt. supported_target_info tops bindings (NameTarget id) = SOME pt
 Proof
+  simp[supported_stmt_def, supported_target_def, supported_aug_target_def,
+       supported_target_info_def] >>
+  Cases_on `ALOOKUP bindings id` >> simp[]
+QED
+
+Theorem augassign_scalar_target_route_mods:
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
+  supported_scalar_target tops (NONE,id) ==>
+  ?vis ity slot mut.
+    supported_variable_decl tops (NONE,id) = SOME (vis,mut,ity,SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\
+    supported_target_info tops bindings (TopLevelNameTarget (NONE,id)) =
+      SOME (ValPT ity) /\
+    ~immutable_root cx (TopLevelNameTarget (src,id))
+Proof
   strip_tac >>
-  `supported_target tops bindings (NameTarget id) \/
-   supported_aug_target tops bindings (NameTarget id)` by
-    (qpat_x_assum `supported_stmt _ _ _` mp_tac >>
-     simp[Once supported_stmt_def]) >>
-  pop_assum strip_assume_tac
-  >- (Cases_on `ALOOKUP bindings id` >> gvs[supported_target_def] >>
-      rename1 `supported_value_type tops ity` >>
-      `supported_place_type tops ity` suffices_by
-        simp[supported_target_info_def] >>
-      Cases_on `ity` >>
-      gvs[supported_value_type_def, supported_place_type_def] >>
-      simp[Once supported_nested_type_def] >>
-      gvs[supported_scalar_type_def, supported_word_type_def,
-          supported_string_type_def] >>
-      (rpt conj_tac)
-      >~ [`EVERY _ l`]
-        >- (gvs[EVERY_MEM] >> rpt strip_tac >>
-            simp[Once supported_nested_type_def])
-      >~ [`ALOOKUP bindings id = SOME (ArrayT elem bd)`]
-        >- (Cases_on `bd` >> gvs[] >>
-            simp[Once supported_nested_type_def, supported_scalar_type_def])
-      >> Cases_on `supported_struct_fields tops p` >> gvs[] >>
-         (Cases_on `tops` >> gvs[supported_struct_fields_def]) >>
-         gvs[EVERY_MEM] >> rpt strip_tac >>
-         simp[Once supported_nested_type_def, supported_scalar_type_def]) >>
-  Cases_on `supported_target_info tops bindings (NameTarget id)` >>
-  gvs[supported_aug_target_def]
+  drule_then assume_tac contract_inv_module_codes >>
+  drule_all_then assume_tac contract_inv_unqualified_variable_keys >>
+  Cases_on `supported_variable_decl tops (NONE,id)` >>
+  gvs[supported_scalar_target_def] >>
+  rename1 `SOME decl` >> PairCases_on `decl` >>
+  Cases_on `decl3` >> Cases_on `decl1` >> gvs[] >>
+  `IS_SOME (find_var_decl_by_name id tops)` by
+    (irule aug_place_supported_root_decl >> metis_tac[]) >>
+  drule_all_then strip_assume_tac aug_place_variable_excludes_hashmap >>
+  gvs[supported_target_info_def, supportedExprFormsTheory.supported_place_root_def,
+      immutable_root_def, target_root_def, optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem augassign_scalar_target_route:
   body_inv tops ctx cenv cx /\
   supported_scalar_target tops nsid ==>
-  ?ity slot mut.
-    supported_variable_decl tops nsid = SOME (Private,mut,ity,SOME slot) /\
+  ?vis ity slot mut.
+    supported_variable_decl tops nsid = SOME (vis,mut,ity,SOME slot) /\
     (mut = Storage \/ mut = Transient) /\
-    supported_full_word_type ity /\
     supported_target_info tops bindings (TopLevelNameTarget nsid) =
       SOME (ValPT ity) /\
     ~immutable_root cx (TopLevelNameTarget nsid)
 Proof
-  strip_tac >>
-  qpat_x_assum `supported_scalar_target _ _` mp_tac >>
-  simp[supported_scalar_target_def] >>
-  Cases_on `supported_variable_decl tops nsid` >> simp[] >>
-  rename1 `_ = SOME decl` >> PairCases_on `decl` >>
-  Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
-  simp[] >> strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-    fs[body_inv_def] >>
-  `supported_hashmap_decl tops nsid = NONE` by
-    metis_tac[aug_place_variable_excludes_hashmap] >>
-  `supported_storage_type tops decl2` by
-    (gvs[supported_full_word_type_def] >>
-     simp[supported_storage_type_def, Once supported_nested_type_def,
-          supported_full_word_type_def]) >>
-  `supported_target_info tops bindings (TopLevelNameTarget nsid) = SOME (ValPT decl2)` by
-    simp[supported_target_info_def, supported_place_root_def] >>
-  metis_tac[aug_place_supported_root_not_immutable]
+  PairCases_on `nsid` >> strip_tac >>
+  drule_then strip_assume_tac supported_scalar_target_decl >>
+  gvs[] >> drule_then assume_tac body_inv_contract >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                  `ctx` |-> `ctx`, `src` |-> `NONE`, `id` |-> `nsid1`]
+          augassign_scalar_target_route_mods) >> simp[ALOOKUP_def]
 QED
 
 Theorem augassign_other_target_routes:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty t bop e) /\
+  expr_sim_inv cenv cx env es /\ target_mutable env t /\
+  (immutable_root cx t ==> ?nsid. t = TopLevelNameTarget nsid) /\
   ~(?id. t = NameTarget id) /\
   ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
   ~(?id fld. t = AttributeTarget (NameTarget id) fld) /\
@@ -85,10 +75,8 @@ Proof
   Cases_on `t`
   >- gvs[]
   >- suspend "toplevel"
-  >- (disj1_tac >> metis_tac[aug_place_supported_stmt_target_info,
-                            aug_place_supported_root_not_immutable]) >>
-  disj1_tac >> metis_tac[aug_place_supported_stmt_target_info,
-                        aug_place_supported_root_not_immutable]
+  >- (disj1_tac >> gvs[] >> metis_tac[aug_place_supported_stmt_target_info]) >>
+  disj1_tac >> gvs[] >> metis_tac[aug_place_supported_stmt_target_info]
 QED
 
 Resume augassign_other_target_routes[toplevel]:
@@ -102,7 +90,7 @@ Resume augassign_other_target_routes[toplevel]:
   `?pt. supported_target_info tops bindings (TopLevelNameTarget nsid) = SOME pt` by
     (Cases_on `supported_target_info tops bindings (TopLevelNameTarget nsid)` >>
      gvs[supported_aug_target_def]) >>
-  metis_tac[aug_place_supported_root_not_immutable]
+  metis_tac[aug_place_supported_toplevel_mutable]
 QED
 
 Finalise augassign_other_target_routes

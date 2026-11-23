@@ -21,64 +21,6 @@ Ancestors
   ptrDiscipline ptrSafeRun words list rich_list arithmetic finite_map pred_set
   fragGasOriginPtr
 
-val CshiftCode = ``\ty tv.
- !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
-  G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
-   (type_to_abi_dec_info sf ce ty) st = ((),st') /\
- abi_decoder_coherent ce env sf ty tv /\
- abi_decoder_metadata ce env ty tv root_di av v /\
- eval_operand src initial = SOME (n2w sb) /\
- eval_operand (Var dst) initial = SOME (n2w d) /\
- sb + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
- mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) av))
-   initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
- (!x. src = Var x \/ Var dst = Var x \/ Lit 0w = Var x ==> not_fresh_at st x) /\
- st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
- fn_has_code st st' func /\ fn_inst_ids_distinct func /\
- (st.cs_blocks = st'.cs_blocks \/ !bb.
-    lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
-    phi_prefix_length bb.bb_instructions = 0) /\
- alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\
- k + unit_alloca_budget ctx < dimword (:256) /\
- D <= d /\ d + type_memory_bytes ce ty <= D+N /\ D+N <= initial.vs_alloca_next /\
- frag_ids st st' SUBSET ids /\ ctor_actual_scratch func ids D N initial /\
- ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
- initial.vs_inst_idx = LENGTH st.cs_current_insts /\
- FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
- d + type_memory_bytes ce ty <= b+sz /\
- op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
- lo <= initial.vs_alloca_next /\ lo <= d ==>
- ?actual H qt B.
- allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
- val_in_memory tv v d actual.vs_memory /\
- abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
-   [(d,type_memory_bytes ce ty)] initial actual /\
- alloca_inv actual /\ alloca_frontier_inv_from k ctx func site actual /\
- ctor_actual_scratch func ids D N actual /\ D+N <= actual.vs_alloca_next /\
- actual.vs_data_section = initial.vs_data_section /\
- actual.vs_call_ctx = initial.vs_call_ctx /\
- (!x. not_fresh_at st x ==> lookup_var x actual = lookup_var x initial) /\
- ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\
- actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
- abi_decode_sim ctx func initial actual /\ fresh_vars_wrt limit_st actual /\
- actual.vs_labels = initial.vs_labels /\ actual.vs_code = initial.vs_code /\
- actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
- actual.vs_block_ctx = initial.vs_block_ctx /\ actual.vs_gas_readings = initial.vs_gas_readings /\
- (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
- FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\
- DISJOINT B qt.t_mem /\
- (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
-    val_in_memory tv v d mem) /\
- qt.t_mem SUBSET tn.t_mem /\
- qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
- (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
-                           op_taint qt (Var x) = op_taint tn (Var x)) /\
- ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
-   !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
-
-
 val Ok = ``\k ctx func site ids D N d outsz next limit_st
     tv vs slot_id slot base prefix cursor s.
     prefix <= LENGTH vs /\ cursor <= LENGTH vs /\
@@ -97,6 +39,11 @@ val Ok = ``\k ctx func site ids D N d outsz next limit_st
 val CshiftMode = ``\checked ty tv.
   ^(rand (rator (concl prefix_complete_array_initial_exit_pair_mode_exact)))``;
 
+val CshiftModeWithFmp = ``\checked ty tv.
+  ^(rand (rator (concl prefix_complete_array_initial_exit_pair_mode_exact_fmp)))``;
+
+val CshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^CshiftMode) F``));
+
 (* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
    joint gas-origin pointer path; the original proof below proves the rest.
 Proof
@@ -105,7 +52,7 @@ Proof
 QED
 *)
 Theorem prefix_complete_array_exit_staged_mode[local]:
- (^CshiftMode) checked ty tv ==>
+ (^CshiftModeWithFmp) checked ty tv ==>
  abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id ==>
  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) ==>
@@ -134,7 +81,8 @@ Theorem prefix_complete_array_exit_staged_mode[local]:
  FLOOKUP G dst_var = SOME (b,sz) /\ b <= d /\
  d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst_var) = {} /\
- allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+ allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+   initial.vs_alloca_next + pending_alloca_size func initial <= w2n initial.vs_initial_fmp) /\
  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
    (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn))) (ListV avs) (ArrayV (DynArrayV vs)) /\
@@ -156,6 +104,8 @@ Theorem prefix_complete_array_exit_staged_mode[local]:
      st.cs_next_var limit_st tv vs header_st.cs_next_id slot initial (LENGTH vs) (LENGTH vs) actual /\
    ~actual.vs_halted /\ actual.vs_current_bb = exit_lbl /\ actual.vs_inst_idx = 0 /\
    allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+     actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
    FLOOKUP Hout slot_var = SOME (slot,32) /\ FLOOKUP Hout dst_var = SOME (b,sz) /\
    op_taint qout (Var slot_var) = {} /\ op_taint qout (Var dst_var) = {} /\ op_taint qout src = {} /\
    FINITE A /\ A SUBSET range_bytes [(d,32+LENGTH vs*type_memory_size tv)] /\ DISJOINT A qout.t_mem /\
@@ -167,21 +117,22 @@ Theorem prefix_complete_array_exit_staged_mode[local]:
    (!x. abi_decoder_older_vars st.cs_next_var x ==>
      FLOOKUP Hout x = FLOOKUP G x /\ op_taint qout (Var x) = op_taint tn (Var x)) /\
    (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
+   (frame_fmp ==> actual.vs_fmp = initial.vs_fmp) /\
    actual.vs_code = initial.vs_code /\ actual.vs_gas_readings = initial.vs_gas_readings /\
    actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
    actual.vs_block_ctx = initial.vs_block_ctx /\ abi_decode_sim ctx func initial actual /\
    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG Hout qout actual) ==>
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
 Proof
- disch_then (mp_tac o MATCH_MP (BETA_RULE prefix_complete_array_initial_exit_pair_mode_exact) o BETA_RULE) >>
+ disch_then (mp_tac o MATCH_MP (BETA_RULE prefix_complete_array_initial_exit_pair_mode_exact_fmp) o BETA_RULE) >>
  rpt strip_tac >> BETA_TAC >> first_x_assum irule >> asm_rewrite_tac[]
 QED
 
-Theorem prefix_dynamic_array_loop_complete_mode_contract:
- (^CshiftMode) checked ty tv /\
+Theorem prefix_dynamic_array_loop_complete_mode_contract_fmp:
+ (^CshiftModeWithFmp) checked ty tv /\
  (is_abi_dynamic ce.ce_struct_fields ty \/
    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
- (^CshiftMode) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+ (^CshiftModeWithFmp) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
  disch_then (CONJUNCTS_THEN2 (mk_asm "child") assume_tac) >>
  simp_tac bool_ss [] >> rpt gen_tac >>
@@ -267,6 +218,13 @@ Proof
  qpat_x_assum `!x. abi_decoder_older_vars _ x ==> lookup_var x actual = _` mp_tac >>
  simp[abi_decoder_older_vars_def]
 QED
+
+
+
+Theorem prefix_dynamic_array_loop_complete_mode_contract =
+  prefix_dynamic_array_loop_complete_mode_contract_fmp
+  |> Q.INST [`frame_fmp` |-> `F`]
+  |> PURE_REWRITE_RULE [tautLib.TAUT `((F ==> p) /\ q) <=> q`]
 
 Theorem prefix_dynamic_array_loop_complete_code_contract:
  (^CshiftCode) ty tv /\

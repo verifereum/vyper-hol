@@ -11,6 +11,7 @@ Ancestors decoderNavigationPtr
   abiDecoderClamp abiEncoder compileEnv loweringStateRelDefs emitHelper exprLoweringProps
   fragExec venomInst list arithmetic words bodyPtrDefs decoderGhostFramePtr
   ptrDiscipline ptrSafeRun venomState venomExecSemantics entryDispatchPtr
+  moduleLoweringProps calldataDynOwned abiDecoderReentry
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep contextCodegenRel
 
 (* ===== Clean scalar steps, with LT ===== *)
@@ -463,4 +464,56 @@ Proof
    >- (Cases_on `eval_operand a s` >> simp[]) >>
    Cases_on `tail` >> simp[] >>
    Cases_on `eval_operand a s` >> simp[])
+QED
+
+(* The optional dynamic-keyword guard preserves the preallocated slots. *)
+Theorem grouped_keyword_pointer_guard:
+  (if dyn then compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) sa = ((),sb)
+   else sa = sb) /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  abi_decoder_operand_live sa.cs_next_var src /\
+  eval_operand src s = SOME w /\ (dyn ==> ~(w <+ 4w)) /\
+  op_taint tn src = {} /\ op_prov G src = NONE /\
+  fresh_vars_wrt sa s /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t G' tn'.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t) ==>
+         !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    vars_pc_only s t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    fresh_vars_wrt sb t /\ eval_operand src t = SOME w /\
+    abi_decoder_operand_live sb.cs_next_var src /\
+    op_taint tn' src = {} /\ op_prov G' src = NONE /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
+      op_taint tn' (Var p) = op_taint tn (Var p))
+Proof
+  Cases_on `dyn` >> simp[]
+  >- (strip_tac >>
+      `!x. src = Var x ==> not_fresh_at sa x` by
+        (rpt strip_tac >> gvs[calldata_operand_live_not_fresh]) >>
+      drule_all registration_ptr_guard_origin_frame >>
+      disch_then (qspec_then `PG` strip_assume_tac) >>
+      rename1 `fresh_vars_wrt sb (s with vs_vars := vars)` >>
+      qabbrev_tac `t = s with <|vs_vars := vars; vs_inst_idx := LENGTH sb.cs_current_insts|>` >>
+      `sb.cs_current_bb = sa.cs_current_bb /\
+       sa.cs_next_var <= sb.cs_next_var` by
+        (drule registration_ptr_guard_insts >> simp[]) >>
+      qexistsl_tac [`t`,`G'`,`tn'`] >>
+      `eval_operand src t = SOME w /\ op_taint tn' src = {} /\ op_prov G' src = NONE` by
+        (Cases_on `src` >> fs[eval_operand_def, op_taint_def, op_prov_def, Abbr `t`,
+          lookup_var_def, calldata_operand_live_not_fresh]) >>
+      `abi_decoder_operand_live sb.cs_next_var src` by
+        (irule abi_decoder_operand_live_mono >> qexists_tac `sa.cs_next_var` >> simp[]) >>
+      simp[Abbr `t`, vars_pc_only_def, venom_state_component_equality,
+           fresh_vars_wrt_def, lookup_var_def] >>
+      fs[fresh_vars_wrt_def]) >>
+  strip_tac >> gvs[] >> qexistsl_tac [`s`,`G`,`tn`] >>
+  simp[gas_origin_ptr_path_rules, vars_pc_only_refl]
 QED

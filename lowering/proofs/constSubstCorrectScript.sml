@@ -191,11 +191,7 @@ Proof
   ho_match_mp_tac const_local_refs_ind >>
   simp[const_local_refs_def, constant_expr_def, subst_consts_expr_def,
        constant_value_def, expr_type_def] >>
-  rpt strip_tac >> gvs[SF ETA_ss]
-  >~ [`constant_builtin bi`]
-  >- (first_x_assum (qspec_then `E` mp_tac) >> simp[] >> strip_tac >>
-      Cases_on `es` >> gvs[subst_consts_expr_def] >>
-      rename1 `h::rest` >> Cases_on `rest` >> gvs[subst_consts_expr_def]) >>
+  rpt strip_tac >> gvs[SF ETA_ss] >>
   rename1 `TopLevelName ty ns` >> PairCases_on `ns` >> Cases_on `ns0` >>
   gvs[subst_consts_expr_def, const_local_refs_def, const_replacements_ok_def,
       expr_type_def] >>
@@ -930,17 +926,19 @@ QED
 
 (* Constant roots cannot occur in the checked immutable-write namespace. *)
 Theorem checked_constant_not_assignable:
-  contract_namespaces_ok F mods /\ declared_constant mods src id ==>
-  FLOOKUP (build_contract_type_artifact F mods).cta_bare_global_assignable
+  contract_namespaces_ok mode mods /\ declared_constant mods src id ==>
+  FLOOKUP (build_contract_type_artifact mode mods).cta_bare_global_assignable
     (src,id) = NONE
 Proof
   rpt strip_tac >>
-  Cases_on `FLOOKUP (build_contract_type_artifact F mods).cta_bare_global_assignable (src,id)` >> simp[] >>
+  Cases_on `FLOOKUP (build_contract_type_artifact mode mods).cta_bare_global_assignable (src,id)` >> simp[] >>
   drule_all build_contract_type_artifact_bare_global_assignable_sound >>
   strip_tac >> gvs[declared_constant_def] >>
   `ALL_DISTINCT (MAP FST mods)` by gvs[contract_namespaces_ok_def] >>
   `ALOOKUP mods src = SOME tls` by metis_tac[ALOOKUP_ALL_DISTINCT_MEM] >>
   gvs[] >>
+  `contract_namespaces_ok F mods` by
+    (Cases_on `mode` >> gvs[contract_namespaces_ok_deploy_implies_runtime]) >>
   drule_all contract_namespaces_ok_module_toplevel_vtype_keys >>
   metis_tac[vyperTypeConstantCellsTheory.module_immutable_constant_names_distinct]
 QED
@@ -1182,14 +1180,14 @@ Proof
 QED
 
 Theorem function_entry_constant_maps:
-  (function_entry_env art mods src Internal args).bare_globals = art.cta_bare_globals /\
-  (function_entry_env art mods src Internal args).bare_global_assignable =
+  (function_entry_env art mods src vis args).bare_globals = art.cta_bare_globals /\
+  (function_entry_env art mods src vis args).bare_global_assignable =
     art.cta_bare_global_assignable /\
-  (function_entry_env art mods src Internal args).fn_sigs = art.cta_fn_sigs /\
-  (defaults_env (function_entry_env art mods src Internal args)).bare_globals = art.cta_bare_globals /\
-  (defaults_env (function_entry_env art mods src Internal args)).bare_global_assignable =
+  (function_entry_env art mods src vis args).fn_sigs = art.cta_fn_sigs /\
+  (defaults_env (function_entry_env art mods src vis args)).bare_globals = art.cta_bare_globals /\
+  (defaults_env (function_entry_env art mods src vis args)).bare_global_assignable =
     art.cta_bare_global_assignable /\
-  (defaults_env (function_entry_env art mods src Internal args)).fn_sigs = art.cta_fn_sigs
+  (defaults_env (function_entry_env art mods src vis args)).fn_sigs = art.cta_fn_sigs
 Proof
   simp[function_entry_env_def, defaults_env_def, artifact_env_def,
     vyperTypeContractContextTheory.FOLDL_extend_local_args_static]
@@ -2015,7 +2013,7 @@ End
 
 Definition checked_frame_context_def:
   checked_frame_context cx mods art src id env <=>
-    check_contract F cx.layouts cx.txn.target mods = SOME art /\
+    (?mode. check_contract mode cx.layouts cx.txn.target mods = SOME art) /\
     ALOOKUP cx.sources cx.txn.target = SOME mods /\
     declared_constant mods src id /\ frame_maps env art
 End
@@ -2033,7 +2031,7 @@ Proof
 QED
 
 Theorem frame_maps_function_entry[simp]:
-  frame_maps (function_entry_env art mods current_src Internal args) art
+  frame_maps (function_entry_env art mods current_src vis args) art
 Proof
   simp[frame_maps_def, function_entry_constant_maps]
 QED
@@ -2060,7 +2058,41 @@ Theorem checked_frame_context_push_function:
   checked_frame_context cx' mods art src id env
 Proof
   simp[push_function_def, return_def, checked_frame_context_def] >>
-  rpt strip_tac >> gvs[]
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem checked_intcall_static:
+  check_contract mode cx.layouts cx.txn.target mods = SOME art /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\ frame_maps env art /\
+  well_typed_expr env (Call ty (IntCall (call_src,fn)) es drv) /\
+  get_module_code cx call_src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) ==>
+  ?vis.
+    IS_SOME (type_stmts (function_entry_env art mods call_src vis args) ret ss) /\
+    well_typed_exprs (defaults_env (function_entry_env art mods call_src vis args)) dflts
+Proof
+  strip_tac >>
+  qpat_x_assum `well_typed_expr _ _` mp_tac >>
+  simp[Once well_typed_expr_def] >> strip_tac >>
+  fs[frame_maps_def] >>
+  drule check_contract_artifact_fields >> strip_tac >>
+  `FLOOKUP (build_contract_type_artifact mode mods).cta_fn_sigs
+       (call_src,fn) = SOME sig /\
+   function_live cx.layouts cx.txn.target mods
+     (live_functions cx.layouts cx.txn.target mods) (call_src,fn)` by
+    gvs[FLOOKUP_DRESTRICT_SOME] >>
+  drule_all build_contract_type_artifact_fn_sigs_declared_sound >> strip_tac >>
+  gvs[get_module_code_def] >>
+  `lookup_callable_function mode fn ts = SOME (mut,nr,args,dflts,ret,ss)` by
+    (Cases_on `mode` >> Cases_on `cx.in_deploy` >>
+     gvs[lookup_callable_function_def, AllCaseEqs()] >>
+     gvs[include_fn_sig_def]) >>
+  gvs[] >>
+  `check_function_body_in_mode mode vis` by
+    (Cases_on `vis` >> gvs[check_function_body_in_mode_def, include_fn_sig_def]) >>
+  drule_all vyperTypeContractContextTheory.check_contract_function_body_MEM >>
+  strip_tac >>
+  qexists `vis` >> fs[check_function_body_def]
 QED
 
 Theorem checked_frame_intcall_static:
@@ -2068,20 +2100,19 @@ Theorem checked_frame_intcall_static:
   well_typed_expr env (Call ty (IntCall (call_src,fn)) es drv) /\
   get_module_code cx call_src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) ==>
-  checked_frame_context cx mods art src id
-    (function_entry_env art mods call_src Internal args) /\
-  IS_SOME (type_stmts (function_entry_env art mods call_src Internal args) ret ss) /\
-  well_typed_exprs (defaults_env (function_entry_env art mods call_src Internal args)) dflts
+  ?vis.
+    checked_frame_context cx mods art src id
+      (function_entry_env art mods call_src vis args) /\
+    IS_SOME (type_stmts (function_entry_env art mods call_src vis args) ret ss) /\
+    well_typed_exprs (defaults_env (function_entry_env art mods call_src vis args)) dflts
 Proof
   strip_tac >>
-  `frame_maps env art` by gvs[checked_frame_context_def] >>
-  `env.fn_sigs = art.cta_fn_sigs` by gvs[frame_maps_def] >>
-  `check_contract F cx.layouts cx.txn.target mods = SOME art /\
-   ALOOKUP cx.sources cx.txn.target = SOME mods` by
-    gvs[checked_frame_context_def] >>
-  drule_all checked_typed_intcall_body >> strip_tac >>
-  simp[] >> irule checked_frame_context_transport >> simp[] >>
-  qexistsl [`cx`, `env`] >> simp[]
+  qpat_assum `checked_frame_context _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [checked_frame_context_def]) >>
+  mp_tac (Q.INST [`mode` |-> `mode`] (SPEC_ALL checked_intcall_static)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qexists `vis` >> simp[checked_frame_context_def] >>
+  qexists `mode` >> simp[]
 QED
 
 Theorem type_frame_maps_mutual:
@@ -2224,7 +2255,10 @@ Theorem checked_frame_context_constant_root:
   IS_SOME (FLOOKUP env.bare_globals (src,id))
 Proof
   simp[checked_frame_context_def, frame_maps_def] >> rpt strip_tac >>
-  drule check_contract_artifact_fields >> strip_tac >> gvs[] >>
+  drule check_contract_artifact_fields >>
+  drule check_contract_nonsig_maps >>
+  drule check_contract_runtime_namespaces >>
+  rpt strip_tac >> gvs[] >>
   metis_tac[checked_constant_not_assignable, checked_constant_bare_global]
 QED
 
@@ -2546,13 +2580,6 @@ Proof
       simp[protected_cell_frame_reads, protected_cell_frame_call_primitives]) >>
   Cases_on `bt = Env MsgGas`
   >- simp[protected_cell_frame_next_gas_reading] >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn`
-  >- (simp[] >> irule protected_cell_frame_bind >> reverse conj_tac
-      >- (simp[state_rel_frame_result] >> metis_tac[]) >>
-      rpt strip_tac >> simp_tac bool_ss [] >>
-      irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
-      rpt strip_tac >> irule protected_cell_frame_bind >>
-      simp[protected_cell_frame_pure_guards, protected_cell_frame_reads]) >>
   simp[] >> irule protected_cell_frame_bind >> reverse conj_tac
   >- (Cases_on `code_slice_source bt es`
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
@@ -2571,6 +2598,7 @@ Proof
       rpt strip_tac >> irule protected_cell_frame_bind >>
       simp[protected_cell_frame_reads, protected_cell_frame_call_primitives]) >>
   rpt strip_tac >> simp_tac bool_ss [] >>
+  Cases_on `is_self_codesize bt es` >> asm_simp_tac bool_ss [] >>
   simp[state_rel_frame_result, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> imp_res_tac lift_sum_state >>
   imp_res_tac precompile_call_success_state >>
@@ -2632,14 +2660,14 @@ Proof
           irule protected_cell_frame_bind >>
           simp[protected_cell_frame_primitives] >> rpt strip_tac >>
           simp_tac bool_ss [] >>
-          `well_typed_exprs (defaults_env (function_entry_env art mods call_src Internal tup2))
+          `well_typed_exprs (defaults_env (function_entry_env art mods call_src vis tup2))
              (DROP (LENGTH tup3 - (LENGTH tup2 - LENGTH es)) tup3)` by
             (irule (cj 2 frame_well_typed_exprs_slices) >> simp[]) >>
           simp[state_rel_frame_result] >> rpt strip_tac >>
           first_x_assum irule >>
           conj_tac >- metis_tac[] >>
           conj_tac >- metis_tac[] >>
-          qexistsl [`art`, `defaults_env (function_entry_env art mods call_src Internal tup2)`, `mods`] >>
+          qexistsl [`art`, `defaults_env (function_entry_env art mods call_src vis tup2)`, `mods`] >>
           simp[checked_frame_context_def] >>
           qpat_x_assum `checked_frame_context cx mods art src id env` mp_tac >>
           simp[checked_frame_context_def]) >>
@@ -2697,7 +2725,7 @@ Proof
       >- simp[protected_cell_frame_return] >>
       simp[state_rel_frame_result] >> rpt strip_tac >>
       first_x_assum irule >> conj_tac >- metis_tac[] >>
-      qexistsl [`art`, `function_entry_env art mods call_src Internal tup2`, `mods`, `tup4`] >>
+      qexistsl [`art`, `function_entry_env art mods call_src vis tup2`, `mods`, `tup4`] >>
       simp[] >> irule checked_frame_context_push_function >>
       goal_assum drule >> simp[])
   >~ [`type_stmt env ret (Append bt e)`]
@@ -3561,21 +3589,7 @@ Resume constant_expr_replay_aux[builtin]:
       `result_array_length cx pv' st = (INL n,st)` by
         metis_tac[constant_result_length, const_result_at_observe] >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-           type_check_def, assert_def])
-  >- (qexistsl [`Value v`,`roots`] >>
-      simp[const_result_at_def, expr_type_def] >> conj_tac
-      >- gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def,
-             artifact_env_def, expr_type_def] >>
-      rpt strip_tac >> gvs[] >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-           type_check_def, assert_def, lift_option_type_def, lift_sum_def])
-  >- (qexistsl [`Value v`,`roots`] >>
-      simp[const_result_at_def, expr_type_def] >> conj_tac
-      >- gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def,
-             artifact_env_def, expr_type_def] >>
-      rpt strip_tac >> gvs[] >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-           type_check_def, assert_def, lift_option_type_def, lift_sum_def]) >>
+           type_check_def, assert_def]) >>
   qexistsl [`Value v`,`roots`] >> simp[const_result_at_def, expr_type_def] >>
   conj_tac
   >- gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def, artifact_env_def, expr_type_def] >>
@@ -3590,6 +3604,9 @@ Resume constant_expr_replay_aux[builtin]:
      rename1 `code_slice_source bt es = SOME operands` >>
      PairCases_on `operands` >>
      gvs[code_slice_source_SOME, constant_expr_def, constant_builtin_def]) >>
+  `~is_self_codesize bt es` by
+    (Cases_on `bt` >> gvs[is_self_codesize_def, constant_builtin_def]) >>
+  asm_simp_tac bool_ss [] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        lift_sum_def, get_accounts_def, return_def,
        precompile_call_success_def]
@@ -4612,10 +4629,10 @@ Proof
   irule protected_cell_frame_bind >> simp[protected_cell_frame_primitives] >>
   rpt strip_tac >> simp_tac bool_ss [] >>
   irule checked_eval_exprs_protected_cell_frame >>
-  qexistsl [`art`,`defaults_env (function_entry_env art mods call_src Internal args)`,`mods`] >>
+  qexistsl [`art`,`defaults_env (function_entry_env art mods call_src vis args)`,`mods`] >>
   simp[] >> conj_tac
   >- (irule (cj 2 frame_well_typed_exprs_slices) >> simp[]) >>
-  gvs[checked_frame_context_def]
+  gvs[checked_frame_context_def] >> metis_tac[]
 QED
 
 Theorem checked_intcall_defaults_const_cells_agree:
@@ -4999,7 +5016,7 @@ Proof
   Cases_on `builtin_args_length_ok Sha256 (LENGTH es)` >> simp[] >>
   Cases_on `q` >> simp[bind_def] >>
   Cases_on `evaluate_builtin cx r.accounts ty Sha256 (MAP expr_type es) x` >>
-  simp[lift_sum_def, bind_def, precompile_call_success_def, check_def,
+  simp[is_self_codesize_def, lift_sum_def, bind_def, precompile_call_success_def, check_def,
        get_accounts_def, assert_def, return_def, raise_def]
 QED
 
@@ -5069,7 +5086,6 @@ Proof
           rpt strip_tac >> gvs[EVERY_DEF] >> metis_tac[]) >>
       `code_slice_source bi es = NONE /\ bi <> Env MsgGas` by
         (Cases_on `bi` >> gvs[constant_builtin_def, code_slice_source_SOME]) >>
-      Cases_on `bi = Bop In \/ bi = Bop NotIn` >>
       qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, ignore_bind_def, bind_def, type_check_def,
            assert_def, raise_def, return_def, AllCaseEqs()] >>
@@ -5828,7 +5844,7 @@ Proof
   AP_TERM_TAC >> ABS_TAC >>
   AP_TERM_TAC >> ABS_TAC >>
   Cases_on `evaluate_builtin cx acc ct (Acc Code) [expr_type a] avs` >>
-  simp[FUN_EQ_THM, bind_def, lift_sum_def, return_def, raise_def]
+  simp[FUN_EQ_THM, is_self_codesize_def, bind_def, lift_sum_def, return_def, raise_def]
 QED
 
 Theorem const_subst_code_source[local]:
@@ -6091,7 +6107,16 @@ Proof
       >- (irule const_computations_related_refl >> simp[]) >>
       rpt strip_tac >> BETA_TAC >>
       `s = st` by (gvs[type_check_def, assert_def, return_def, raise_def, AllCaseEqs()]) >>
-      gvs[] >> Cases_on `bi = Len`
+      gvs[] >>
+      `!e. is_self_addr (subst_consts_expr env' e) = is_self_addr e` by
+        metis_tac[const_subst_self_addr] >>
+      `is_self_codesize bi (MAP (subst_consts_expr env') es) =
+       is_self_codesize bi es` by
+        (Cases_on `bi` >> gvs[is_self_codesize_def] >>
+         Cases_on `es` >> gvs[is_self_codesize_def] >>
+         Cases_on `t` >> gvs[] >>
+         metis_tac[]) >>
+      Cases_on `bi = Len`
       >- (gvs[] >> Cases_on `es` >>
           gvs[well_typed_builtin_app_def, well_typed_expr_def] >>
           simp_tac bool_ss [GSYM vyperStateTheory.bind_assoc] >>
@@ -6103,23 +6128,6 @@ Proof
                   gvs[const_subst_expr_ok_def] >>
                   metis_tac[const_subst_context_expr_frame]) >>
               rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
-          rpt strip_tac >> irule const_computations_related_refl >>
-          simp[const_results_related_def]) >>
-      Cases_on `bi = Bop In \/ bi = Bop NotIn`
-      >- (`LENGTH es = 2` by
-            (gvs[type_check_def, assert_def, return_def, raise_def,
-                 builtin_args_length_ok_def, AllCaseEqs()]) >>
-          `expr_type (EL 1 (MAP (subst_consts_expr env') es)) =
-           expr_type (EL 1 es)` by
-            (qpat_x_assum `MAP expr_type _ = MAP expr_type es` mp_tac >>
-             simp[LIST_EQ_REWRITE, subst_consts_exprs_map, EL_MAP] >>
-             disch_then (qspec_then `1` mp_tac) >> simp[]) >>
-          simp[] >> simp_tac bool_ss [GSYM vyperStateTheory.bind_assoc] >>
-          irule const_computations_related_prefix >> reverse conj_tac
-          >- (drule_all const_subst_exprs_from_elements >>
-              simp[const_subst_exprs_ok_def, const_computations_related_eq,
-                   subst_consts_exprs_map] >>
-              disch_then (qspec_then `s` mp_tac) >> simp[bind_def]) >>
           rpt strip_tac >> irule const_computations_related_refl >>
           simp[const_results_related_def]) >>
       Cases_on `bi = Env MsgGas` >> simp[]
@@ -6164,7 +6172,8 @@ Proof
       >- (irule const_computations_related_prefix >> reverse conj_tac
           >- (irule const_computations_related_prefix >> reverse conj_tac
               >- (simp[const_computations_related_eq] >>
-                  irule const_subst_code_source >> metis_tac[]) >>
+                  drule_all const_subst_code_source >>
+                  simp[const_subst_self_addr]) >>
               rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
           rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
       rpt strip_tac >> irule const_computations_related_refl >>

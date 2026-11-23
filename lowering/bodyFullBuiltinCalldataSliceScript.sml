@@ -3,7 +3,8 @@ Theory bodyFullBuiltinCalldataSlice
 Ancestors exprSimDefs[qualified,ignore_grammar]
   bodyFullBuiltinBytestringCalldataCase bodyFullBuiltinBytestringCalldataRun
   bodyFullBuiltinBytestringCalldataAbort
-  bodyPtrBytestringBuiltinsExternalSlice bodyFullPreds bodySimFull bodyInvNoDalloca
+  bodyPtrBytestringBuiltinsExternalSlice bodyFullPreds bodySimFull stateRelProj
+  bodyFullHashKeccakFixed
   bodyPtrBytestringBuiltinsWindowGhost wordArgsPtr ptrDiscipline localPtrsProps
   reasonCodeResourcesPtr bodyPtrAttributeFields
   valueEncodingDefs vyperValue vyperTypeInvariants exprSimProps exprSimMemDefs
@@ -24,12 +25,12 @@ Theorem calldata_slice_vv_sim_full:
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   drule_all calldata_slice_body_operand_full >>
   disch_then (qspecl_then [`shadow_func`,`lo`,`func`,`d`,`PG`,`DF`]
     strip_assume_tac) >> gvs[] >>
@@ -49,13 +50,16 @@ Proof
        (type_memory_bytes cenv (BaseT (BytesT (Dynamic m)))) sm` >>
      gvs[as_ptr_val_def,comp_return_def]) >>
   qpat_x_assum `vv = _` SUBST_ALL_TAC >>
-  `?sx ss. lower_value compile_expr cenv (expr_type e)
-     (gas_shadow_expr e) shadow_sa = (sx,ss)` by metis_tac[pairTheory.PAIR] >>
-  `sx = x /\ gas_shadow_state sm ss` by
-    (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `expr_type e`, `e` |-> `e`]
-      gas_shadow_stmt_lower_value) >> rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
-  qpat_x_assum `sx = x` SUBST_ALL_TAC >>
+  `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+     (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
+  `?ss. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+     (gas_shadow_expr e) shadow_sa = (x,ss) /\ gas_shadow_state sm ss` by
+    (qpat_x_assum `gas_shadow_compiles _ _` (fn th =>
+       qpat_assum `gas_shadow_state sa shadow_sa`
+         (mp_then Any mp_tac (REWRITE_RULE[gas_shadow_compiles_def] th))) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> simp[] >> metis_tac[]) >>
   `compile_slice_calldata x (Lit (n2w n))
       (type_memory_bytes cenv (BaseT (BytesT (Dynamic m)))) ss = (out,shadow_sb)` by
     (qpat_x_assum `compile_expr _ _ (gas_shadow_expr (Builtin _ _ _)) _ = _` mp_tac >>
@@ -80,7 +84,7 @@ Proof
     metis_tac[expr_body_pre_gas_admissible] >>
   `lower_value compile_expr cenv (BaseT (UintT 256)) e sa = (x,sm)` by
     (qpat_assum `expr_type e = _` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
-  `lower_value compile_expr cenv (BaseT (UintT 256))
+  `lower_value compile_expr (gas_shadow_env T cenv) (BaseT (UintT 256))
      (gas_shadow_expr e) shadow_sa = (x,ss)` by
     (qpat_assum `expr_type e = _` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `expr_sim_full _ _ _ _ e es`
@@ -94,7 +98,8 @@ Proof
                     (CalldataSlice n) [expr_type e] [v] of
                   INL r => INL (Value r) | INR ex => INR ex),mid))` by
     (irule eval_expr_unary_builtin_action >>
-     simp[precompile_builtin_def,builtin_args_length_ok_def]) >>
+     simp[precompile_builtin_def,builtin_args_length_ok_def,
+       is_self_codesize_def]) >>
   pop_assum SUBST1_TAC >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
@@ -169,6 +174,10 @@ Proof
   `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid t /\
    storage_well_formed_on cx mid (FST (storage_trace_horizon mid.storage_trace))` by
     fs[expr_post_def] >>
+  `ctx_has_dalloca ctx ==>
+    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp` by
+    (drule stateRelProjTheory.stmt_state_rel_fmp_room >>
+     simp[fmp_room_def] >> decide_tac) >>
   `allocas_from lo t /\ lo <= t.vs_alloca_next` by fs[ghost_inv_at_def] >>
   `context_well_typed cx` by fs[expr_sim_inv_def] >>
   `local_ptrs_reserved cenv sm` by
@@ -259,7 +268,10 @@ Proof
         `INL (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))`,`z`,`tm`] >>
       simp[builtin_result_def,vyperContextTheory.evaluate_builtin_def,
            evaluate_calldata_slice_uint,GSYM dimword_def] >>
-      conj_tac >- (Cases_on `2 ** 256 <= a+n` >> gvs[dimword_def]) >>
+      conj_tac
+      >- (qpat_assum `a+n < dimword (:256) /\ a+n <= LENGTH cx.txn.calldata`
+            (mp_tac o CONJUNCT1) >>
+          simp[NoAsms, dimword_def, GSYM NOT_LESS]) >>
       qx_gen_tac `H` >> strip_tac >>
       qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
         expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
@@ -424,7 +436,8 @@ Proof
          (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
          disch_then ACCEPT_TAC) >>
       fs[expr_type_def,post_value_type_def,lowered_value_type_def,mk_ptr_def,
-         vv_location_def,is_bytestring_type_def]) >>
+         vv_location_def,is_bytestring_type_def] >>
+      drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   `alloca_inv t /\ t.vs_call_ctx.cc_calldata = cx.txn.calldata` by
     fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
   `LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by
@@ -465,6 +478,7 @@ Theorem calldata_slice_expr_sim_full:
       body_exprs_full_ok cx args) /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
@@ -472,9 +486,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es` by
-    (irule calldata_slice_vv_sim_full >> simp[] >> conj_tac
-     >- (qexists_tac `tops` >> simp[]) >>
-     qexists_tac `env` >> simp[]) >>
+    (irule calldata_slice_vv_sim_full >> simp[] >>
+     qexistsl_tac [`env`, `tops`] >> simp[]) >>
   irule bodyFullOfVVTheory.expr_sim_full_of_vv >> simp[] >>
   conj_tac
   >- (rpt strip_tac >>

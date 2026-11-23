@@ -99,10 +99,11 @@ QED
 Theorem extcall_operand_materialized_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\
   ~is_word_type (expr_type e) /\ dt = lowered_value_type cenv e /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
-  compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
+  compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
   compile_materialize_vv cenv dt vv sm = (op,sb) /\
   compile_materialize_vv cenv dt vv shadow_sm = (op,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
@@ -116,7 +117,7 @@ Theorem extcall_operand_materialized_full:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
     storage_well_formed_on cx es (FST H) /\
@@ -195,13 +196,15 @@ QED
 
 Resume extcall_operand_materialized_full[child]:
   `gas_shadow_state sm shadow_sm` by
-    (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`e`,`T`]
-       (cj 1 gasShadowCompileTheory.gas_shadow_compile_expr)) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+        (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+       irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+        REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >> simp[]) >>
   `ci_mono shadow_sa shadow_sm` by
-    (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`gas_shadow_expr e`,`shadow_sa`]
-       (cj 1 ci_mono_compile_expr_sa)) >> simp[gasShadowTheory.gas_shadow_expr_type]) >>
+    (qspecl_then [`gas_shadow_env T cenv`,`expr_type e`,`gas_shadow_expr e`,`shadow_sa`]
+       mp_tac (cj 1 ci_mono_compile_expr_sa) >> simp[]) >>
   `ci_mono shadow_sm shadow_sb` by
     (mp_tac (Q.SPECL [`cenv`,`lowered_value_type cenv e`,`vv`,`shadow_sm`]
        ci_mono_compile_materialize_vv) >> simp[]) >>
@@ -589,10 +592,11 @@ Finalise extcall_operand_materialized_full
 Theorem extcall_kwarg_default_owned_lookup_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
-  compile_ext_call_kwarg compile_expr cenv rt EKDefault (gas_shadow_expr e)
+  compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt EKDefault (gas_shadow_expr e)
     shadow_sa = ((op,dt),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -605,7 +609,7 @@ Theorem extcall_kwarg_default_owned_lookup_full:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
     storage_well_formed_on cx es (FST H) /\
@@ -649,13 +653,16 @@ Proof
   strip_tac >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
-  Cases_on `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e)
+    (gas_shadow_expr e) shadow_sa` >>
   rename1 `compile_expr _ _ (gas_shadow_expr e) shadow_sa = (sv,shadow_sm)` >>
   `sv = vv` by
-    (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`e`,`T`]
-       (cj 1 gas_shadow_compile_expr)) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+        (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+       irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+        REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >> simp[]) >>
   Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv sm` >>
   Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv shadow_sm` >>
   gvs[compile_ext_call_kwarg_def, comp_bind_def, comp_return_def] >>
@@ -680,10 +687,11 @@ QED
 Theorem extcall_kwarg_default_lookup_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
-  compile_ext_call_kwarg compile_expr cenv rt EKDefault (gas_shadow_expr e)
+  compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt EKDefault (gas_shadow_expr e)
     shadow_sa = ((op,dt),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -696,7 +704,7 @@ Theorem extcall_kwarg_default_lookup_full:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
     storage_well_formed_on cx es (FST H) /\
@@ -739,10 +747,11 @@ QED
 Theorem extcall_kwarg_default_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
-  compile_ext_call_kwarg compile_expr cenv rt EKDefault (gas_shadow_expr e)
+  compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt EKDefault (gas_shadow_expr e)
     shadow_sa = ((op,dt),shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -755,7 +764,7 @@ Theorem extcall_kwarg_default_full:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
     storage_well_formed_on cx es (FST H) /\

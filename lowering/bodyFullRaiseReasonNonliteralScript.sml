@@ -1,9 +1,9 @@
 (* Nonliteral RaiseReason over the joint finite-horizon judgment. *)
 Theory bodyFullRaiseReasonNonliteral
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyInvCodeProps bodyInvMetadataProps exprBodyPreProps
   stateRelProj
-  bodyFullRaiseReasonContinuation bodyFullPreds bodySimFull bodyFullShared bodyInvNoDalloca
+  bodyFullRaiseReasonContinuation bodyFullPreds bodySimFull bodyFullShared
   reasonCompilerProps reasonSourceProps gasShadowCompileStmtHelpers
   reasonResourcesPtr
   exprSimSource exprSimHypsDefs exprOperandVar aggregateEvaluatedLayout vyperEvalExprPreservesScopesDom
@@ -26,6 +26,7 @@ Theorem compile_raise_reason_nonliteral_frag_full:
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Raise (RaiseReason e)) ==>
        occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Raise (RaiseReason e)) = SOME env' /\
@@ -37,23 +38,32 @@ Theorem compile_raise_reason_nonliteral_frag_full:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Raise (RaiseReason e)))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
       (eval_stmt cx (Raise (RaiseReason e))) es
 Proof
   rpt gen_tac >> strip_tac >>
   `supported_string_reason tops e` by
     gvs[supported_stmt_raise_reason, supported_raise_reason_def] >>
   drule_then strip_assume_tac supported_string_reason_body_calls >>
-  `cx_tops cx = tops` by
-    (irule cx_tops_module >> gvs[body_inv_def]) >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac body_inv_module >>
+  drule_all_then strip_assume_tac bodyInvSplitTheory.contract_inv_module_gate >>
+  `get_tenv cx = type_env tops` by
+    (drule_then assume_tac contract_inv_type_env >>
+     fs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
+        finite_mapTheory.FUNION_FEMPTY_2]) >>
+  `alloc_limits_expr cenv e` by fs[bodySimTheory.stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
+          allocLimitsTheory.alloc_limits_raise_def] >>
+  `~is_extcode e` by metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode] >>
   `~supported_expr_exists (const_name_root cx) e` by
-    (drule body_inv_const_name_root >> strip_tac >>
-     drule_all supportedNameRootTheory.supported_string_reason_no_name_root >> simp[]) >>
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_raise_exists_def]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
      gvs[type_stmt_raise_reason, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_raise_exists_def, int_calls_stmt_def,
-         int_calls_raise_reason_def, body_inv_def] >>
+         int_calls_raise_reason_def] >>
      qexists_tac `[]` >> simp[]) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type e) e es` by
@@ -65,16 +75,15 @@ QED
 
 Resume compile_raise_reason_nonliteral_frag_full[layout]:
   drule compile_reason_message_cases >> strip_tac >- metis_tac[] >>
-  `stmt_env cenv lctx ret_ty (Raise (RaiseReason (gas_shadow_expr e))) shadow_sa =
-     (cenv,shadow_sb)` by gvs[gas_shadow_stmt_def, gas_shadow_raise_reason_def] >>
   drule_all raise_reason_compiler_code >> strip_tac >>
-  qpat_assum `stmt_env _ _ _ _ shadow_sa = _`
-    (mp_then Any strip_assume_tac compile_raise_reason_parts) >>
-  `vv' = vv /\ gas_shadow_state sm sm'` by
-    (mp_tac gas_shadow_compile_reason_message >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >> gvs[] >>
+  qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
+    (mp_tac o REWRITE_RULE [gas_shadow_stmt_def, gas_shadow_raise_reason_def]) >>
+  disch_then (mp_then Any strip_assume_tac compile_raise_reason_parts) >>
   drule_all raise_reason_compiler_code >> strip_tac >>
+  `gas_shadow_compiles (compile_reason_message cenv e)
+     (compile_reason_message (gas_shadow_env T cenv) (gas_shadow_expr e))` by
+    irule gas_shadow_compile_reason_message_env >>
+  drule_all gas_shadow_step >> strip_tac >> gvs[] >>
   `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
     metis_tac[raise_reason_raw_admissible] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
@@ -83,7 +92,8 @@ Resume compile_raise_reason_nonliteral_frag_full[layout]:
 QED
 
 Resume compile_raise_reason_nonliteral_frag_full[expression]:
-  `compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,sm')` by
+  `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa =
+     (vv,sm')` by
     (qpat_assum `compile_reason_message _ (gas_shadow_expr _) _ = _`
        (mp_then Any mp_tac compile_reason_message_cases) >>
      strip_tac
@@ -119,14 +129,19 @@ Resume compile_raise_reason_nonliteral_frag_full[compose]:
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
-  simp[Abbr `reasonR`] >> rpt strip_tac >>
+  simp[Abbr `reasonR`] >> rpt gen_tac >> strip_tac >>
   Cases_on `res` >- fs[expr_exit_def] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
-  simp[stmt_exit_ptr_def] >>
-  qpat_x_assum `expr_exit _ _` mp_tac >>
-  qpat_x_assum `halt_exit _ _ _ _ _` mp_tac >>
-  rpt (pop_assum kall_tac) >>
-  simp[halt_exit_def] >> metis_tac[expr_exit_INR_type]
+  `expr_exit (INR y : unit + exception) r` by
+    (qpat_assum `expr_exit _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[expr_exit_INR_type]) >>
+  `!ir t. r <> IntRet ir t` by
+    (qpat_assum `expr_exit _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     rpt strip_tac >> gvs[] >>
+     qpat_x_assum `expr_exit _ _` mp_tac >>
+     Cases_on `y` >> simp[expr_exit_def] >>
+     rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
+  fs[stmt_exit_ptr_def, halt_exit_def]
 QED
 
 Resume compile_raise_reason_nonliteral_frag_full[normal]:
@@ -151,7 +166,7 @@ Resume compile_raise_reason_nonliteral_frag_full[normal]:
      simp[] >> disch_then irule >>
      qexistsl_tac [`storage_trace_horizon mid.storage_trace`,`e`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `well_typed_expr env e` by fs[expr_body_pre_def] >>
+  `well_typed_expr env e` by metis_tac[expr_body_pre_static_facts] >>
   drule_all reasonSourcePropsTheory.supported_reason_string_type >>
   disch_then (qx_choose_then `cap` assume_tac) >>
   `post_value_type cenv e = expr_type e` by
@@ -171,14 +186,13 @@ Resume compile_raise_reason_nonliteral_frag_full[normal]:
      type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
      type_memory_size rt < 2**64` by metis_tac[body_post_type_allocation_bound] >>
   `type_alloc_ok cenv (BaseT (StringT cap))` by
-    metis_tac[expr_body_pre_def, alloc_limits_expr_type_alloc_ok] >>
+    metis_tac[expr_body_pre_static_facts, alloc_limits_expr_type_alloc_ok] >>
   `64 + type_memory_bytes cenv (BaseT (StringT cap)) < dimword(:256)` by
     metis_tac[reason_encoder_allocation_limit] >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
     (qpat_assum `compile_expr _ _ e sa = _`
        (mp_then Any mp_tac (cj 1 compiler_compile_var)) >> simp[]) >>
   fs[] >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `?z Gf tnf. !H. valid_horizon cx st0 H mid.storage_trace ==>
      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (t,G1,tn1) [] (Abort Revert_abort z,Gf,tnf)` by

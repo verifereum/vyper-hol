@@ -12,7 +12,7 @@ Ancestors
   bodyPtrDefs fragGasOriginPtr ghostPcTransportPtr
   bodyFullAbiDecodeFiniteGuardEffect bodyFullAbiDecodeArrayBulkWindow
   bodyFullAbiDecodeOwnedCopyEffect stateRelProj venomMemDefs fragGasOriginPtrLoop
-  fragGasPath valueEncodingProps
+  fragGasPath valueEncodingProps bodyFullAbiDecodeOwnedStateProps
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 val owned_decoder_state = ``\st s G tn.
@@ -224,7 +224,7 @@ Theorem abi_decode_array_bulk_scalar_joint_effect[local]:
   abi_decoder_operand_live sa.cs_next_var src /\
   op_prov G cnt = NONE /\ op_prov G src = NONE /\
   op_taint tn cnt = {} /\ op_taint tn src = {} /\
-  ~ctx_has_dalloca ctx /\ fn_has_code sa sb fn /\
+  fn_has_code sa sb fn /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (^owned_decoder_state) sa s G tn /\ (?H. V H) /\
@@ -248,14 +248,18 @@ Theorem abi_decode_array_bulk_scalar_joint_effect[local]:
         FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x)) /\
     tnf.t_mem = tn.t_mem
 Proof
-  BETA_TAC >> strip_tac >>
+  BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_decode_bulk_scalar_code >> strip_tac >>
   drule_all abi_decode_array_bulk_scalar_run >> strip_tac >>
   `!op. op IN (cnt INSERT src INSERT {op | ?w. op = Lit w}) ==>
     op_prov G op = NONE /\ op_taint tn op = {}` by
     (simp[] >> rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
   `allocas_from lo s` by metis_tac[ghost_inv_at_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (strip_tac >> irule owned_decoder_allocas_below_fmp >>
+     qexistsl [`V`,`ce`,`ctx`,`cx`,`es`,`fn`] >> simp[] >> rpt strip_tac >>
+     qpat_assum `!H. V H ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
   mp_tac (Q.INST [
     `A` |-> `cnt INSERT src INSERT {op | ?w. op = Lit w}`,
     `B` |-> `data INSERT copy_sz INSERT cnt INSERT src INSERT {op | ?w. op = Lit w}`]
@@ -284,7 +288,7 @@ QED
 
 val bulk_entry = ``
   abi_decode_bulk_payload (Var dp) src cnt msz MLOAD (Var input) sa = ((),sf) /\
-  fn_has_code sa sf fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sf fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ (?H. V H) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\

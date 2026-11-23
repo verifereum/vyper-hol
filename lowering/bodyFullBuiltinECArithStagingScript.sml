@@ -17,15 +17,19 @@ Theorem ec_arith_staged_cut:
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e2 = (if bt = ECAdd then a else BaseT (UintT 256)) /\
   body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
   compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
-  compile_expr cenv ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa = (vv,shadow_sb) /\
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a bt [e1;e2]))
+    shadow_sa = (vv,shadow_sb) /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e2) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1)
+    (gas_shadow_expr e1) shadow_sa = (x,shadow_s1) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2)
+    (gas_shadow_expr e2) shadow_s1 = (y,shadow_s2) /\
   (if bt = ECAdd then compile_ecadd_points x y s2 else compile_ecmul_point x y s2) = (res,sb) /\
-  vv = FST (as_ptr_val a LocMemory (res,sb)) /\
+  vv = FST (as_stack_val a (res,sb)) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\ gas_shadow_state sb shadow_sb /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -33,7 +37,7 @@ Theorem ec_arith_staged_cut:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   gas_admissible (eval_expr cx (Builtin a bt [e1;e2])) expr_vv_res_ok es /\
@@ -115,7 +119,7 @@ Theorem ec_arith_staged_cut:
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
     (lo <> 0 ==> !z. cenv.ce_imm_alloca = SOME (Var z) ==> not_fresh_at sm z) /\
-    ~u.vs_halted /\ ~ctx_has_dalloca ctx /\
+    ~u.vs_halted /\
     lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX [gi;ci;ai] (DROP u.vs_inst_idx bb.bb_instructions) /\
     (func.fn_name,id) NOTIN gas_explicit_sites ctx shadow_ctx /\

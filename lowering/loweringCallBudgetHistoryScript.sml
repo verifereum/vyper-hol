@@ -409,7 +409,8 @@ val call_budget_headers = [
   ("lower_vyper_runtime_unit_call_budget",
    ``!tops rpolicy unit am tx ret vs k.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\ source_typing_ok tops am tx /\
+    supported_program tops /\ ~ctx_has_dalloca unit.cu_context /\
+    source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
@@ -449,7 +450,8 @@ val call_budget_headers = [
   ("lower_vyper_runtime_unit_allocation_history",
    ``!tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\ source_typing_ok tops am tx /\
+    supported_program tops /\ ~ctx_has_dalloca unit.cu_context /\
+    source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
@@ -580,7 +582,8 @@ val call_budget_headers = [
   ("lower_vyper_runtime_unit_raw_variant_history",
    ``!tops rpolicy unit am tx ret vs fmp.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\ source_typing_ok tops am tx /\
+    supported_program tops /\ ~ctx_has_dalloca unit.cu_context /\
+    source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
@@ -866,6 +869,32 @@ Proof
        lower_history_count_def]
 QED
 
+Theorem lower_budget_paired_alloc_count:
+  lower_history_pairs h pair ==>
+  LENGTH (FILTER (\a. lower_event_allocates (EL a h) /\
+    pair a < LENGTH h) (GENLIST I (LENGTH h))) <= lower_history_count h
+Proof
+  strip_tac >>
+  qpat_x_assum `lower_history_pairs h pair`
+    (CONJUNCTS_THEN2 assume_tac
+      (CONJUNCTS_THEN2 assume_tac kall_tac) o
+      REWRITE_RULE [lower_history_pairs_def]) >>
+  qabbrev_tac `allocs = FILTER (\a. lower_event_allocates (EL a h) /\
+    pair a < LENGTH h) (GENLIST I (LENGTH h))` >>
+  qabbrev_tac `effects = FILTER (\a. lower_event_consumes (EL a h))
+    (GENLIST I (LENGTH h))` >>
+  `ALL_DISTINCT allocs` by
+    simp[Abbr`allocs`, FILTER_ALL_DISTINCT, ALL_DISTINCT_GENLIST] >>
+  `INJ pair (set allocs) (set effects)` by
+    (simp_tac (srw_ss())
+       [INJ_DEF, Abbr`allocs`, Abbr`effects`, MEM_FILTER, MEM_GENLIST] >>
+     rpt strip_tac >>
+     metis_tac[prim_recTheory.LESS_REFL]) >>
+  qspecl_then [`pair`, `allocs`, `effects`] mp_tac lower_budget_inj_list_length >>
+  simp[Abbr`allocs`, Abbr`effects`, lower_budget_filter_indices_length,
+       lower_history_count_def]
+QED
+
 Theorem lower_budget_completed_pairs_count:
   !h pair q.
     lower_history_pairs h pair /\ lower_history_current h pair q ==>
@@ -875,26 +904,7 @@ Theorem lower_budget_completed_pairs_count:
       LENGTH (FILTER lower_event_allocates h) <= lower_history_count h)
 Proof
   rpt gen_tac >> strip_tac >>
-  `LENGTH (FILTER (\a. lower_event_allocates (EL a h) /\
-    pair a < LENGTH h) (GENLIST I (LENGTH h))) <= lower_history_count h` by
-    (qpat_x_assum `lower_history_pairs h pair`
-       (CONJUNCTS_THEN2 assume_tac
-         (CONJUNCTS_THEN2 assume_tac kall_tac) o
-         REWRITE_RULE [lower_history_pairs_def]) >>
-     qabbrev_tac `allocs = FILTER (\a. lower_event_allocates (EL a h) /\
-       pair a < LENGTH h) (GENLIST I (LENGTH h))` >>
-     qabbrev_tac `effects = FILTER (\a. lower_event_consumes (EL a h))
-       (GENLIST I (LENGTH h))` >>
-     `ALL_DISTINCT allocs` by
-       simp[Abbr`allocs`, FILTER_ALL_DISTINCT, ALL_DISTINCT_GENLIST] >>
-     `INJ pair (set allocs) (set effects)` by
-       (simp_tac (srw_ss())
-          [INJ_DEF, Abbr`allocs`, Abbr`effects`, MEM_FILTER, MEM_GENLIST] >>
-        rpt strip_tac >>
-        metis_tac[prim_recTheory.LESS_REFL]) >>
-     qspecl_then [`pair`, `allocs`, `effects`] mp_tac lower_budget_inj_list_length >>
-     simp[Abbr`allocs`, Abbr`effects`, lower_budget_filter_indices_length,
-          lower_history_count_def]) >>
+  drule lower_budget_paired_alloc_count >> strip_tac >>
   conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >>
   `FILTER (\a. lower_event_allocates (EL a h) /\ pair a < LENGTH h)
      (GENLIST I (LENGTH h)) =

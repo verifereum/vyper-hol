@@ -88,7 +88,7 @@ Theorem abi_valid_allocated_primitive_joint_observations:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   abi_decode_ptr_window G tn s source (n2w B) L /\
   ptr_covers G tn output s (type_memory_bytes ce ty) /\
   op_prov G pos = NONE /\ op_prov G hi = NONE /\

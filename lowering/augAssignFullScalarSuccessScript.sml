@@ -1,7 +1,8 @@
 (* Uniform ghost endpoint for a successful scalar instruction run. *)
 Theory augAssignFullScalarSuccess
 Ancestors
-  augAssignPtrScalarRun fragGasSeqPtr fragGasCopyLoop
+  augAssignPtrScalarRun augAssignPtrScalarCertificate fragGasSeqPtr fragGasCopyLoop
+  fragGasCopySeqLiftProps
   ptrDiscipline ptrSafeRun fragExec fragExecMem venomExecSemantics
   venomState venomInst finite_map pred_set list rich_list
 
@@ -33,6 +34,15 @@ Theorem augassign_scalar_success_uniform:
       op_taint tn' (Var v) = op_taint tn (Var v))
 Proof
   strip_tac >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     fs[scalar_code_append, scalar_code_def] >>
+     qpat_x_assum `scalar_shape i` mp_tac >>
+     simp[scalar_shape_def, scalar_binary_def, scalar_unary_def] >>
+     rpt strip_tac >> gvs[]) >>
   `?H tm. inst_seq_ptr ARB 0 ctx func PG G tn code s H tm` by
     (irule scalar_code_inst_seq_ptr_lo >>
      simp[allocas_from_def] >> qexists `A` >> simp[]) >>

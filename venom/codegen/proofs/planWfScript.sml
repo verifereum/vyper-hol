@@ -17,7 +17,7 @@
 
 Theory planWf
 Ancestors
-  venomExecProofs prefixExec prefixSim stackPlanOps stackPlanGen stackModel stackPlanTypes codegenRel asmIR list rich_list arithmetic pair option
+  depthReductionLengthProps venomExecProofs prefixExec prefixSim stackPlanOps stackPlanGen stackModel stackPlanTypes codegenRel asmIR list rich_list arithmetic pair option
 Libs
   BasicProvers
 
@@ -171,7 +171,8 @@ QED
 Theorem reorder_plan_nil[simp]:
   !dfg ps. reorder_plan dfg [] ps = ([], ps)
 Proof
-  simp[reorder_plan_def]
+  simp[reorder_plan_def, reorder_prepare_plan_def, restore_spilled_plan_def,
+    sortingTheory.QSORT_DEF]
 QED
 
 (* ===== Stack length helpers ===== *)
@@ -469,42 +470,6 @@ Proof
   Cases_on `k <= 16` >> simp[prefix_end_len_def, stack_op_wf_def]
 QED
 
-Theorem prefix_wf_append_iff[local]:
-  !xs ys lo n.
-    prefix_wf lo n (xs ++ ys) <=>
-    prefix_wf lo n xs /\ prefix_wf lo (prefix_end_len lo n xs) ys
-Proof
-  Induct >> simp[prefix_wf_def, prefix_end_len_def] >>
-  rpt gen_tac >> pairarg_tac >> simp[] >> metis_tac[]
-QED
-
-Theorem flat_map_singleton[local]:
-  !f xs. FLAT (MAP (\x. [f x]) xs) = MAP f xs
-Proof
-  Induct_on `xs` >> simp[]
-QED
-
-Theorem prefix_wf_indexed_restores[local]:
-  !idxs f lo n.
-    prefix_wf lo n (MAP (\i. SORestore (f i)) idxs) /\
-    prefix_end_len lo n (MAP (\i. SORestore (f i)) idxs) = n + LENGTH idxs
-Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  simp[prefix_wf_def, prefix_end_len_def, stack_op_wf_def]
-QED
-
-Theorem prefix_wf_indexed_restore_swaps[local]:
-  !idxs f lo n.
-    0 < n ==>
-    prefix_wf lo n (FLAT (MAP (\i. [SORestore (f i); SOSwap 1]) idxs)) /\
-    prefix_end_len lo n (FLAT (MAP (\i. [SORestore (f i); SOSwap 1]) idxs)) =
-      n + LENGTH idxs
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  first_x_assum (qspecl_then [`f`, `lo`, `n + 1`] mp_tac) >>
-  simp[prefix_wf_def, prefix_end_len_def, stack_op_wf_def]
-QED
-
 Theorem do_dup_wf_len:
   !dist ps lo.
     dist < LENGTH ps.ps_stack ==>
@@ -788,57 +753,7 @@ Proof
   simp[stack_push_length]
 QED
 
-(* ===== stack_find / stack_get_depth after element removal ===== *)
-
-(* Removing element at position k from a list shifts stack_find for
-   a match at position d > k to position d-1 *)
-Theorem stack_find_remove_at[local]:
-  !xs p k d.
-    stack_find p xs = SOME d /\ k < d /\ k < LENGTH xs /\ ~p (EL k xs) ==>
-    stack_find p (TAKE k xs ++ DROP (SUC k) xs) = SOME (d - 1)
-Proof
-  Induct >> simp[stack_find_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `k`
-  >- (
-    (* k = 0: remove first element *)
-    gvs[] >>
-    Cases_on `stack_find p xs` >> gvs[]
-  )
-  >>
-  rename1 `SUC k' < d` >>
-  Cases_on `p h`
-  >- (
-    (* p h = T: match at position 0. But d > SUC k' >= 1. Contradiction *)
-    gvs[]
-  )
-  >>
-  gvs[] >>
-  Cases_on `stack_find p xs` >> gvs[] >>
-  rename1 `stack_find p xs = SOME d1` >>
-  simp[stack_find_def] >>
-  first_x_assum (qspecl_then [`p`, `k'`, `d1`] mp_tac) >>
-  simp[EL]
-QED
-
 (* do_spill_at_length: exact length change *)
-Theorem do_spill_at_length_exact:
-  !cand ps. 1 <= LENGTH ps.ps_stack ==>
-    LENGTH (SND (do_spill_at cand ps)).ps_stack = LENGTH ps.ps_stack - 1
-Proof
-  rpt strip_tac >> simp[do_spill_at_def] >>
-  Cases_on `cand = 0`
-  >- (simp[do_spill_tos_def, LET_THM] >>
-      Cases_on `alloc_spill_slot ps.ps_alloc` >> simp[stack_pop_def])
-  >> simp[LET_THM] >>
-  Cases_on `do_spill_tos (ps with ps_stack := stack_swap cand ps.ps_stack)` >>
-  simp[] >>
-  fs[do_spill_tos_def, LET_THM] >>
-  Cases_on `alloc_spill_slot
-    (ps with ps_stack := stack_swap cand ps.ps_stack).ps_alloc` >>
-  gvs[stack_pop_def, stack_swap_length, LENGTH_LUPDATE]
-QED
-
 (* select_spill_candidate returns value < target_dist *)
 Theorem select_spill_candidate_lt_dist[local]:
   !stk forbidden target_dist target_len cand.
@@ -1190,52 +1105,6 @@ Proof
   irule prefix_wf_len_append >> metis_tac[]
 QED
 
-(*  Place phase helper: handles the final positioning of an operand.
-    After restore+reduce, we have op at depth dist' in ps2.
-    Place it at final_dist. 4 sub-cases in reorder_one_def. *)
-Theorem place_phase_wf_len[local]:
-  !dfg op dist' final_dist ps2 lo n.
-    dist' < LENGTH ps2.ps_stack /\
-    final_dist < LENGTH ps2.ps_stack /\
-    n = LENGTH ps2.ps_stack ==>
-    let (place_ops, ps_out) =
-      if dist' = final_dist then ([] : stack_op list, ps2)
-      else if final_dist < LENGTH ps2.ps_stack then
-        let at_target = stack_peek final_dist ps2.ps_stack in
-        if operand_equiv dfg op at_target then
-          ([] : stack_op list,
-           ps2 with ps_stack :=
-             stack_poke final_dist op
-               (stack_poke dist' at_target ps2.ps_stack))
-        else
-          let (s1, ps3) = do_swap dist' ps2 in
-          let (s2, ps4) = do_swap final_dist ps3 in
-          (s1 ++ s2, ps4)
-      else
-        let (s1, ps3) = do_swap dist' ps2 in
-        let (s2, ps4) = do_swap final_dist ps3 in
-        (s1 ++ s2, ps4)
-    in
-      prefix_wf lo n place_ops /\
-      prefix_end_len lo n place_ops = LENGTH ps_out.ps_stack
-Proof
-  rpt strip_tac >> simp[LET_THM] >>
-  IF_CASES_TAC >- simp[prefix_wf_def, prefix_end_len_def] >>
-  (* dist' <> final_dist *)
-  (* final_dist < LENGTH ps2.ps_stack is TRUE by hypothesis *)
-  `final_dist < LENGTH ps2.ps_stack` by simp[] >>
-  simp[] >>
-  IF_CASES_TAC
-  >- (
-    (* operand_equiv: two pokes, no ops *)
-    simp[stack_poke_length]
-  ) >>
-  (* two swaps *)
-  qspecl_then [`dist'`, `final_dist`, `ps2`, `lo`]
-    mp_tac (REWRITE_RULE [LET_THM] two_swaps_wf) >>
-  simp[] >> pairarg_tac >> simp[] >> pairarg_tac >> simp[]
-QED
-
 Theorem reorder_one_wf_len:
   !dfg target_ops target_idx op ps lo.
     target_idx < LENGTH target_ops /\
@@ -1405,7 +1274,69 @@ QED
 
 Finalise reorder_one_wf_len;
 
-(* ===== reorder_plan: FOLDL of reorder_one ===== *)
+(* ===== reorder preparation and placement ===== *)
+
+Theorem restore_spilled_plan_wf_len[local]:
+  !targets ps lo ops post.
+    restore_spilled_plan targets ps = (ops,post) ==>
+    prefix_wf lo (LENGTH ps.ps_stack) ops /\
+    prefix_end_len lo (LENGTH ps.ps_stack) ops = LENGTH post.ps_stack /\
+    LENGTH ps.ps_stack <= LENGTH post.ps_stack
+Proof
+  Induct >> simp[restore_spilled_plan_def] >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  strip_tac >> gvs[] >>
+  rename1 `do_restore h ps = (head_ops,mid)` >>
+  qspecl_then [`h`, `ps`, `lo`] mp_tac do_restore_wf_len >>
+  simp[] >> strip_tac >>
+  `LENGTH ps.ps_stack <= LENGTH mid.ps_stack` by
+    (qspecl_then [`h`, `ps`] mp_tac do_restore_length >> simp[]) >>
+  first_x_assum drule >> disch_then (qspec_then `lo` strip_assume_tac) >>
+  metis_tac[prefix_wf_len_append, LESS_EQ_TRANS]
+QED
+
+Theorem reorder_reduce_fold_wf_len[local]:
+  !ordered targets ps acc lo n ops post.
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    prefix_wf lo n acc /\ prefix_end_len lo n acc = LENGTH ps.ps_stack /\
+    FOLDL (\(ops,st) op.
+      (\(step,st'). (ops ++ step,st'))
+        (reduce_depth_plan (LENGTH st.ps_stack - LENGTH targets)
+          targets op 0 0 st)) (acc,ps) ordered = (ops,post) ==>
+    prefix_wf lo n ops /\ prefix_end_len lo n ops = LENGTH post.ps_stack /\
+    LENGTH targets <= LENGTH post.ps_stack
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  `prefix_wf lo (LENGTH ps.ps_stack) step' /\
+   prefix_end_len lo (LENGTH ps.ps_stack) step' = LENGTH st'.ps_stack` by
+    (qspecl_then [`LENGTH ps.ps_stack - LENGTH targets`, `targets`, `h`,
+                  `0`, `0`, `ps`, `lo`] mp_tac reduce_depth_plan_wf_len >>
+     simp[]) >>
+  drule reduce_depth_plan_excess_length_floor >> strip_tac >>
+  `LENGTH targets <= LENGTH st'.ps_stack` by decide_tac >>
+  first_x_assum (qspecl_then
+    [`targets`, `st'`, `acc ++ step'`, `lo`, `n`, `ops`, `post`] mp_tac) >>
+  simp[LET_THM] >> metis_tac[prefix_wf_len_append]
+QED
+
+Theorem reorder_prepare_plan_wf_len[local]:
+  !targets ps lo ops post.
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    reorder_prepare_plan targets ps = (ops,post) ==>
+    prefix_wf lo (LENGTH ps.ps_stack) ops /\
+    prefix_end_len lo (LENGTH ps.ps_stack) ops = LENGTH post.ps_stack /\
+    LENGTH targets <= LENGTH post.ps_stack
+Proof
+  rpt gen_tac >> simp[reorder_prepare_plan_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `restore_spilled_plan (FILTER is_var_operand targets) ps = (_,restored)` >>
+  drule restore_spilled_plan_wf_len >> disch_then (qspec_then `lo` strip_assume_tac) >>
+  drule_at (Pat `FOLDL _ _ _ = _`) (SRULE [LET_THM] reorder_reduce_fold_wf_len) >>
+  disch_then (qspecl_then [`lo`, `LENGTH restored.ps_stack`] mp_tac) >>
+  simp[] >> strip_tac >>
+  metis_tac[prefix_wf_len_append]
+QED
 
 Theorem reorder_plan_foldl_wf_len[local]:
   !items dfg target_ops acc_ops ps lo n.
@@ -1457,22 +1388,28 @@ Theorem reorder_plan_wf_len:
     prefix_wf lo (LENGTH ps.ps_stack) ops /\
     prefix_end_len lo (LENGTH ps.ps_stack) ops = LENGTH ps'.ps_stack
 Proof
-  rpt gen_tac >> rpt disch_tac >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `reorder_prepare_plan target_ops ps` >>
+  rename1 `reorder_prepare_plan target_ops ps = (prep_ops,prepared)` >>
   simp[reorder_plan_def, LET_THM] >>
+  `prefix_wf lo (LENGTH ps.ps_stack) prep_ops /\
+   prefix_end_len lo (LENGTH ps.ps_stack) prep_ops = LENGTH prepared.ps_stack /\
+   LENGTH target_ops <= LENGTH prepared.ps_stack` by
+    metis_tac[reorder_prepare_plan_wf_len] >>
   `EVERY (\(idx:num, op:operand). idx < LENGTH target_ops /\ MEM op target_ops)
      (MAPi (\i op. (i, op)) target_ops)` by (
     simp[EVERY_MEM, FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
     rpt strip_tac >> gvs[] >> metis_tac[MEM_EL]
   ) >>
   qspecl_then [`MAPi (\i (op:operand). (i, op)) target_ops`,
-    `dfg`, `target_ops`, `([] : stack_op list)`, `ps`, `lo`,
+    `dfg`, `target_ops`, `prep_ops`, `prepared`, `lo`,
     `LENGTH ps.ps_stack`]
     mp_tac (REWRITE_RULE [LET_THM] reorder_plan_foldl_wf_len) >>
   simp[prefix_wf_def, prefix_end_len_def] >>
   strip_tac >>
   Cases_on `FOLDL (\(ops,ps) (idx,op).
     (\(step_ops,ps'). (ops ++ step_ops, ps'))
-      (reorder_one dfg target_ops idx op ps)) ([],ps)
+      (reorder_one dfg target_ops idx op ps)) (prep_ops,prepared)
     (MAPi (\i op. (i, op)) target_ops)` >>
   gvs[]
 QED

@@ -55,13 +55,12 @@ Proof
        bounded_int_op_def, bounded_decimal_op_def, AllCaseEqs()]
 QED
 
-Theorem code_membership_error_exclusions[local]:
+Theorem code_source_error_exclusion[local]:
   (!cx acc self cty aty vs. evaluate_code_source cx acc self cty aty vs <>
-    INR ^missing_reading) /\
-  (!tv neg v1 v2. evaluate_membership tv neg v1 v2 <> INR ^missing_reading)
+    INR ^missing_reading)
 Proof
   simp[evaluate_code_source_def, builtin_error_exclusion,
-       evaluate_membership_def, binop_error_exclusion, AllCaseEqs()]
+       AllCaseEqs()]
 QED
 
 Theorem convert_error_exclusion[local]:
@@ -102,7 +101,22 @@ Theorem type_builtin_error_exclusion[local]:
     INR ^missing_reading
 Proof
   rpt gen_tac >> Cases_on `tb`
-  >>> SPLIT_LT 6 (ALLGOALS (simp[type_builtin_eq,
+  >>> SPLIT_LT 1 (ALLGOALS (simp[type_builtin_eq,
+        conversion_delegate_error_exclusions, oneline evaluate_max_value_def,
+        oneline evaluate_min_value_def, AllCaseEqs()]), ALL_LT)
+  >>> SPLIT_LT 1 (ALLGOALS (simp[type_builtin_eq,
+        conversion_delegate_error_exclusions, oneline evaluate_max_value_def,
+        oneline evaluate_min_value_def, AllCaseEqs()]), ALL_LT)
+  >>> SPLIT_LT 1 (ALLGOALS (simp[type_builtin_eq,
+        conversion_delegate_error_exclusions, oneline evaluate_max_value_def,
+        oneline evaluate_min_value_def, AllCaseEqs()]), ALL_LT)
+  >>> SPLIT_LT 1 (ALLGOALS (simp[type_builtin_eq,
+        conversion_delegate_error_exclusions, oneline evaluate_max_value_def,
+        oneline evaluate_min_value_def, AllCaseEqs()]), ALL_LT)
+  >>> SPLIT_LT 1 (ALLGOALS (simp[type_builtin_eq,
+        conversion_delegate_error_exclusions, oneline evaluate_max_value_def,
+        oneline evaluate_min_value_def, AllCaseEqs()]), ALL_LT)
+  >>> SPLIT_LT 1 (ALLGOALS (simp[type_builtin_eq,
         conversion_delegate_error_exclusions, oneline evaluate_max_value_def,
         oneline evaluate_min_value_def, AllCaseEqs()]), ALL_LT)
   >>> SPLIT_LT 1 (ALLGOALS (simp[type_builtin_eq, abi_error_exclusions,
@@ -147,7 +161,6 @@ QED
 Theorem pure_reading_error_exclusions:
   (!v1 v2. get_range_limits v1 v2 <> INR ^missing_reading) /\
   (!u tv bop v1 v2. evaluate_binop u tv bop v1 v2 <> INR ^missing_reading) /\
-  (!tv neg v1 v2. evaluate_membership tv neg v1 v2 <> INR ^missing_reading) /\
   (!cx acc self cty aty vs. evaluate_code_source cx acc self cty aty vs <>
     INR ^missing_reading) /\
   (!cx acc ty bt tys vs. evaluate_builtin cx acc ty bt tys vs <>
@@ -164,7 +177,7 @@ Theorem pure_reading_error_exclusions:
   (!a. pop_element a <> INR ^missing_reading) /\
   (!a. popped_value a <> INR ^missing_reading)
 Proof
-  simp[range_error_exclusion, binop_error_exclusion, code_membership_error_exclusions,
+  simp[range_error_exclusion, binop_error_exclusion, code_source_error_exclusion,
        builtin_error_exclusion, type_builtin_error_exclusion, abi_return_error_exclusion,
        subscript_read_error_exclusions, subscript_write_error_exclusion,
        replace_memory_error_exclusion, array_mutation_error_exclusions]

@@ -7,6 +7,7 @@ Ancestors
   stackPlanTypes planExec asmSem dfgDefs symPlannerSim symShuffleSim
   spillPlanSim reorderStages inputMaterialised reduceDepthSim mixedPrefixSim
   fnFrameStepsRevertForward symFrameControlFacts fnFrameDeepJmp
+  reorderPreparationProps generatedReorderSim planSpillBounds deepResidualBudget allocMono
 
 (* Parser abbreviations only; no new logical definitions. *)
 val control_bridge_core_tm = let
@@ -218,15 +219,15 @@ Proof
   drule reduceDepthSimTheory.do_spill_at_stack_length >> simp[] >> decide_tac
 QED
 
-Theorem sym_reduce_depth_plan_frame_sim_mode_conditional:
+Theorem sym_reduce_depth_plan_frame_sim_width[local]:
   (!n cs ss ss'. bridge_core lo code_ok cs ss /\
     sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
     ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
       bridge_core lo code_ok cs' ss') ==>
-  !fuel pending op f ps ops ps' base initial_fmp cp fn ret srest ss ctx labs0 cs r.
-  residual_budget_wf_marked base pending ps /\
-  LENGTH pending <= LENGTH ps.ps_stack /\
-  reduce_depth_plan fuel pending op f (LENGTH pending) ps = (ops,ps') /\
+  !fuel pending op f width ps ops ps' base initial_fmp cp fn ret srest ss ctx labs0 cs r.
+  plan_slots_bounded base ps /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  reduce_depth_plan fuel pending op f width ps = (ops,ps') /\
   (!off. MEM (SOSpill off) ops ==> off < dimword(:256)) /\
   MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
   r.sr_spill_base <= base /\ ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
@@ -252,11 +253,11 @@ Proof
       conj_tac >- (qexists `m` >> simp[]) >> metis_tac[]) >>
   qpat_x_assum `reduce_depth_plan (SUC fuel) _ _ _ _ _ = _` mp_tac >>
   simp[Once stackPlanOpsTheory.reduce_depth_plan_def] >>
-  Cases_on `f + 1 < LENGTH pending`
+  Cases_on `f + 1 < width`
   >- (strip_tac >> asm "frame" assume_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_mode_def,
          asmSpliceTheory.sym_steps_def, asmSpliceOwnTheory.sym_steps_own_def] >>
       conj_tac >- (qexists `m` >> simp[]) >> metis_tac[]) >>
-  Cases_on `stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack` >> simp[]
+  Cases_on `stack_get_unfixed_depth op f width ps.ps_stack` >> simp[]
   >- (strip_tac >> asm "frame" assume_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_mode_def,
          asmSpliceTheory.sym_steps_def, asmSpliceOwnTheory.sym_steps_own_def] >>
       conj_tac >- (qexists `m` >> simp[]) >> metis_tac[]) >>
@@ -264,33 +265,38 @@ Proof
   >- (strip_tac >> asm "frame" assume_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_mode_def,
          asmSpliceTheory.sym_steps_def, asmSpliceOwnTheory.sym_steps_own_def] >>
       conj_tac >- (qexists `m` >> simp[]) >> metis_tac[]) >>
-  Cases_on `select_spill_candidate ps.ps_stack pending dist (LENGTH pending)` >> simp[]
+  Cases_on `select_spill_candidate ps.ps_stack pending dist width` >> simp[]
   >- (strip_tac >> asm "frame" assume_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_mode_def,
          asmSpliceTheory.sym_steps_def, asmSpliceOwnTheory.sym_steps_own_def] >>
       conj_tac >- (qexists `m` >> simp[]) >> metis_tac[]) >>
   pairarg_tac >> rename1 `do_spill_at cand ps = (hops,ps1)` >> gvs[] >>
-  pairarg_tac >> rename1 `reduce_depth_plan fuel pending op f (LENGTH pending) ps1 = (tops,ps2)` >>
+  pairarg_tac >> rename1 `reduce_depth_plan fuel pending op f width ps1 = (tops,ps2)` >>
   strip_tac >> gvs[] >> suspend "selected_spill"
 QED
 
-Resume sym_reduce_depth_plan_frame_sim_mode_conditional[selected_spill]:
+Resume sym_reduce_depth_plan_frame_sim_width[selected_spill]:
   `dist < LENGTH ps.ps_stack` by
     metis_tac[stackModelTheory.stack_get_unfixed_depth_bound] >>
   `16 < dist` by decide_tac >>
-  drule_all selected_spill_marked_budget >> strip_tac >>
-  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\ plan_slots_bounded base' ps` by
-    fs[deepResidualBudgetTheory.residual_budget_wf_marked_def] >>
+  `1 <= LENGTH ps.ps_stack` by decide_tac >>
+  drule_all planWfTheory.select_spill_candidate_bound >> strip_tac >>
+  `cand < LENGTH ps.ps_stack` by decide_tac >>
+  drule_all planSpillBoundsTheory.do_spill_at_slots_bounded >> strip_tac >>
+  drule_all reorderPreparationTracePropsTheory.do_spill_at_layout_wf >> strip_tac >>
   `ps1.ps_alloc.sa_next_offset <= r.sr_spill_end` by
     metis_tac[allocMonoTheory.reduce_depth_plan_next_offset, arithmeticTheory.LESS_EQ_TRANS] >>
   `(!off. MEM (SOSpill off) hops ==> off < dimword(:256)) /\
    (!off. MEM (SOSpill off) tops ==> off < dimword(:256))` by metis_tac[] >>
   gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
-  `1 <= LENGTH ps.ps_stack` by decide_tac >>
-  `cand < LENGTH ps.ps_stack` by
-    metis_tac[planWfTheory.select_spill_candidate_bound] >>
   `!off. MEM (SOSpill off) hops ==> off < dimword(:256)` by metis_tac[] >>
   asm "frame" (map_every assume_tac o CONJUNCTS o BETA_RULE) >>
-  asm "spill" drule_all >>
+  asm "spill" (qspecl_then [`cp'`, `cand`, `ps`, `hops`, `ps1`,
+    `initial_fmp`, `fn`, `ret`, `srest`, `ss`, `ctx`, `labs0`,
+    `cs`, `r`, `base'`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      qpat_assum `!i l d j. FLOOKUP ss.sym_mem_labels i = SOME (l,d,j) ==> _`
+        (drule_then strip_assume_tac) >> simp[]) >>
   disch_then (qx_choose_then `cs'` (qx_choose_then `ss'`
     (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
       (CONJUNCTS_THEN2 (mk_asm "frame1") assume_tac))))) >>
@@ -303,7 +309,36 @@ Resume sym_reduce_depth_plan_frame_sim_mode_conditional[selected_spill]:
   simp[stackOpSimTheory.asm_steps_add, sym_steps_mode_add] >> (metisTools.METIS_TAC [])
 QED
 
-Finalise sym_reduce_depth_plan_frame_sim_mode_conditional
+Finalise sym_reduce_depth_plan_frame_sim_width
+
+Theorem sym_reduce_depth_plan_frame_sim_mode_conditional:
+  (!n cs ss ss'. bridge_core lo code_ok cs ss /\
+    sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
+    ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      bridge_core lo code_ok cs' ss') ==>
+  !fuel pending op f ps ops ps' base initial_fmp cp fn ret srest ss ctx labs0 cs r.
+  residual_budget_wf_marked base pending ps /\
+  LENGTH pending <= LENGTH ps.ps_stack /\
+  reduce_depth_plan fuel pending op f (LENGTH pending) ps = (ops,ps') /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword(:256)) /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= base /\ ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  control_frame lo code_ok p ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps lo (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps_mode allow_own p env own
+      (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    control_frame lo code_ok p ctx cp fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  strip_tac >> drule sym_reduce_depth_plan_frame_sim_width >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  fs[deepResidualBudgetTheory.residual_budget_wf_marked_def] >>
+  first_x_assum irule >> metis_tac[]
+QED
 
 val control_bridge_core_tm = let
   val (params, body) = strip_forall (concl asmSymBridgeTheory.asm_sym_rel_core_pc)
@@ -991,7 +1026,7 @@ Proof
   rpt gen_tac >> PairCases_on `h` >>
   ntac 14 (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
   disch_then (CONJUNCTS_THEN2 (mk_asm "frame") strip_assume_tac) >>
-  drule reorderStagesTheory.plan_steps_cons_result >> strip_tac >>
+  drule reorderPreparationPropsTheory.plan_steps_cons_result >> strip_tac >>
   qpat_x_assum `ops = _` SUBST_ALL_TAC >>
   asm "frame" (map_every assume_tac o CONJUNCTS o SRULE []) >>
   asm "cons" irule >>
@@ -999,6 +1034,135 @@ Proof
   conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
   qexistsl [`h0`, `items`, `h1`, `pending`, `ps`, `ps1`, `r`, `spill_base`] >>
   simp[] >> rpt gen_tac >> strip_tac >> gvs[]
+QED
+
+Theorem sym_reorder_prepass_frame_sim_mode_conditional[local]:
+  (!n cs ss ss'. bridge_core lo code_ok cs ss /\
+    sym_steps_mode allow_own p env own n ss = SymOK ss' ==>
+    ?cs'. asm_steps lo (build_offset_to_pc p) p n cs = AsmOK cs' /\
+      bridge_core lo code_ok cs' ss') ==>
+  reorder_prepare_plan pending ps = (ops,ps') /\
+  plan_slots_bounded spill_base ps /\ spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= spill_base /\ ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword(:256)) /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
+  control_frame lo code_ok p ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps lo (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps_mode allow_own p env own (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    control_frame lo code_ok p ctx cplan fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  strip_tac >>
+  drule sym_do_restore_frame_sim_mode_conditional >>
+  disch_then (mk_asm "restore") >>
+  drule sym_reduce_depth_plan_frame_sim_width >>
+  disch_then (mk_asm "reduce") >>
+  ntac 9 (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
+  disch_then (CONJUNCTS_THEN2 (mk_asm "entry") strip_assume_tac) >>
+  asm "entry" (strip_assume_tac o BETA_RULE) >>
+  qspecl_then [`pending`, `ps`, `ops`, `ps'`,
+    `\st trace post.
+      st.ps_alloc.sa_next_offset <= post.ps_alloc.sa_next_offset /\
+      (plan_slots_bounded spill_base st /\ spill_alloc_layout_wf st.ps_alloc st.ps_spilled ==>
+       plan_slots_bounded spill_base post /\ spill_alloc_layout_wf post.ps_alloc post.ps_spilled) /\
+      (!ac sy.
+        post.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+        plan_slots_bounded spill_base st /\ spill_alloc_layout_wf st.ps_alloc st.ps_spilled /\
+        (!off. MEM (SOSpill off) trace ==> off < dimword(:256)) /\
+        (!off. MEM (SORestore off) trace ==> off < dimword(:256)) /\
+        control_frame lo code_ok p ctx cplan fn ret srest labs0 st ac sy /\
+        asm_block_at p ac.as_pc (execute_plan initial_fmp trace) ==>
+        ?ac' sy'.
+          asm_steps lo (build_offset_to_pc p) p
+            (LENGTH (execute_plan initial_fmp trace)) ac = AsmOK ac' /\
+          sym_steps_mode allow_own p env own
+            (LENGTH (execute_plan initial_fmp trace)) sy = SymOK sy' /\
+          control_frame lo code_ok p ctx cplan fn ret srest labs0 post ac' sy' /\
+          ac'.as_pc = ac.as_pc + LENGTH (execute_plan initial_fmp trace))`]
+    (mp_tac o BETA_RULE) reorder_prepare_trace_relation >>
+  impl_tac
+  >- (rpt conj_tac
+      >- (simp[execute_plan_def, asm_steps_def, sym_steps_mode_def,
+               asmSpliceTheory.sym_steps_def, asmSpliceOwnTheory.sym_steps_own_def] >>
+          metis_tac[])
+      >- (rpt gen_tac >> strip_tac >>
+          rpt conj_tac
+          >- metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+          >- metis_tac[] >>
+          rpt gen_tac >> strip_tac >>
+          gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
+              listTheory.MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM] >>
+          `mid.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
+          qpat_x_assum `!ac' sy'. _ /\
+            asm_block_at p ac'.as_pc (execute_plan initial_fmp first_ops) ==> _`
+            (qspecl_then [`ac`, `sy`] mp_tac) >>
+          simp[] >> impl_tac
+          >- (conj_tac >- (qexists_tac `m'` >> simp[]) >>
+              rpt strip_tac >>
+              qpat_assum `!i l d j. FLOOKUP sy.sym_mem_labels i = SOME (l,d,j) ==> _`
+                (drule_then strip_assume_tac) >> simp[]) >>
+          disch_then (qx_choose_then `ac1` (qx_choose_then `sy1` strip_assume_tac)) >>
+          qpat_x_assum `!ac' sy'. _ /\
+            asm_block_at p ac'.as_pc (execute_plan initial_fmp rest_ops) ==> _`
+            (qspecl_then [`ac1`, `sy1`] mp_tac) >>
+          simp[] >> impl_tac
+          >- (conj_tac >- (qexists_tac `m''` >> simp[]) >>
+              rpt strip_tac >>
+              qpat_assum `!i l d j. FLOOKUP sy1.sym_mem_labels i = SOME (l,d,j) ==> _`
+                (drule_then strip_assume_tac) >> simp[]) >>
+          disch_then (qx_choose_then `ac2` (qx_choose_then `sy2` strip_assume_tac)) >>
+          qexistsl_tac [`ac2`, `sy2`] >>
+          simp[stackOpSimTheory.asm_steps_add, sym_steps_mode_add] >>
+          conj_tac
+          >- (rename1 `sy2.sym_base = ac2 with
+                <|as_stack := []; as_memory := witness; as_code := []|>` >>
+              qexists_tac `witness` >> simp[]) >>
+          rpt strip_tac >>
+          qpat_assum `!i l d j. FLOOKUP sy2.sym_mem_labels i = SOME (l,d,j) ==> _`
+            (drule_then strip_assume_tac) >> simp[])
+      >- (rpt gen_tac >> strip_tac >>
+          rpt conj_tac
+          >- metis_tac[do_restore_next_offset]
+          >- metis_tac[do_restore_slots_bounded, spillPlanSimTheory.do_restore_layout_wf] >>
+          rpt gen_tac >> strip_tac >>
+          asm "restore" (qspecl_then [`cplan`, `op`, `st`, `step_ops`,
+            `finish'`, `initial_fmp`, `fn`, `ret`, `srest`, `sy`, `ctx`,
+            `labs0`, `ac`, `r`] (mp_tac o BETA_RULE)) >>
+          impl_tac
+          >- (simp[] >> conj_tac >- (qexists_tac `m'` >> simp[]) >>
+              rpt strip_tac >>
+              qpat_assum `!i l d j. FLOOKUP sy.sym_mem_labels i = SOME (l,d,j) ==> _`
+                (drule_then strip_assume_tac) >> simp[]) >>
+          disch_then ACCEPT_TAC)
+      >- (rpt gen_tac >> strip_tac >>
+          rpt conj_tac
+          >- metis_tac[reduce_depth_plan_next_offset]
+          >- metis_tac[reduce_depth_plan_slots_bounded, reorderSimTheory.reduce_depth_plan_layout_wf,
+                       pairTheory.SND] >>
+          rpt gen_tac >> strip_tac >>
+          asm "reduce" (qspecl_then [`LENGTH st.ps_stack - LENGTH pending`,
+            `pending`, `op`, `0`, `0`, `st`, `step_ops`, `finish'`,
+            `spill_base`, `initial_fmp`, `cplan`, `fn`, `ret`, `srest`,
+            `sy`, `ctx`, `labs0`, `ac`, `r`] (mp_tac o BETA_RULE)) >>
+          impl_tac
+          >- (simp[] >> conj_tac >- (qexists_tac `m'` >> simp[]) >>
+              rpt strip_tac >>
+              qpat_assum `!i l d j. FLOOKUP sy.sym_mem_labels i = SOME (l,d,j) ==> _`
+                (drule_then strip_assume_tac) >> simp[]) >>
+          disch_then ACCEPT_TAC)
+      >- first_assum ACCEPT_TAC) >>
+  disch_then (qspecl_then [`cs`, `ss`] mp_tac o CONJUNCT2 o CONJUNCT2) >>
+  impl_tac
+  >- (simp[] >> conj_tac >- (qexists_tac `m` >> simp[]) >>
+      rpt strip_tac >>
+      qpat_assum `!i l d j. FLOOKUP ss.sym_mem_labels i = SOME (l,d,j) ==> _`
+        (drule_then strip_assume_tac) >> simp[]) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem sym_reorder_plan_frame_sim_marked_mode_conditional:
@@ -1029,21 +1193,60 @@ Theorem sym_reorder_plan_frame_sim_marked_mode_conditional:
       control_frame lo code_ok p ctx cplan fn ret srest labs0 ps' cs' ss' /\
       cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
 Proof
-  strip_tac >> drule sym_plan_steps_reorder_frame_sim_marked_mode_conditional >>
-  disch_then (fn th => disch_then (mp_then Any (mk_asm "steps") th)) >>
-  gen_tac >> ntac 13 (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
-  disch_then (CONJUNCTS_THEN2 (mk_asm "frame") strip_assume_tac) >>
+  disch_then (mk_asm "bridge") >>
+  disch_then (mk_asm "swap") >>
+  gen_tac >> strip_tac >>
+  drule reorder_plan_split >> strip_tac >>
+  rename1 `reorder_prepare_plan pending ps = (prep,prepared)` >>
+  drule sym_plan_steps_reorder_alloc >> strip_tac >>
+  `r.sr_spill_base <= spill_base` by
+    (drule reorder_plan_spill_base >>
+     fs[residual_budget_wf_marked_def, plan_slots_bounded_def,
+        alloc_slots_bounded_def]) >>
+  drule_all reorder_prepare_residual_budget_wf_marked >> strip_tac >>
+  `plan_slots_bounded spill_base ps /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    fs[residual_budget_wf_marked_def] >>
+  qpat_x_assum `ops = _` SUBST_ALL_TAC >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
+      listTheory.EVERY_APPEND] >>
+  drule control_plan_address_bounds >> strip_tac >>
+  `(!off. MEM (SOSpill off) prep ==> off < dimword(:256)) /\
+   (!off. MEM (SORestore off) prep ==> off < dimword(:256))` by
+    metis_tac[control_plan_address_bounds] >>
+  `prepared.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
+  asm "bridge" (mp_tac o MP
+    (Q.INST [`ops` |-> `prep`, `ps'` |-> `prepared`]
+      sym_reorder_prepass_frame_sim_mode_conditional)) >>
+  impl_tac
+  >- (simp[] >> conj_tac >- (qexists_tac `m` >> simp[]) >>
+      rpt strip_tac >>
+      qpat_assum `!i l d j. FLOOKUP ss.sym_mem_labels i = SOME (l,d,j) ==> _`
+        (drule_then strip_assume_tac) >> simp[]) >>
+  disch_then (qx_choose_then `cs1` (qx_choose_then `ss1` strip_assume_tac)) >>
   `EVERY (\(idx,op). idx < LENGTH pending /\ MEM op pending)
     (MAPi (\i op. (i,op)) pending)` by
     (simp[listTheory.EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
      rpt strip_tac >> gvs[] >> metis_tac[listTheory.EL_MEM]) >>
-  qpat_x_assum `reorder_plan _ _ _ = _`
-    (assume_tac o REWRITE_RULE [reorderStagesTheory.reorder_plan_eq_plan_steps]) >>
-  gvs[] >>
-  asm "frame" (map_every assume_tac o CONJUNCTS o SRULE []) >>
-  asm "steps" (drule_at Any o SRULE [] o
-    Q.INST [`dfg` |-> `dfg_build_function fn`] o SPEC_ALL) >>
-  rpt (disch_then (drule_at Any)) >> simp[]
+  `asm_block_at p cs1.as_pc (execute_plan initial_fmp rest)` by simp[] >>
+  asm "bridge" (mp_tac o MP
+    (Q.INST [`dfg` |-> `dfg_build_function fn`]
+      sym_plan_steps_reorder_frame_sim_marked_mode_conditional)) >>
+  asm "swap" (fn th => disch_then (mp_tac o C MP th)) >>
+  disch_then (qspecl_then [`MAPi (\i op. (i,op)) pending`, `prepared`,
+    `rest`, `ps'`, `cs1`, `ss1`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> conj_tac >- (qexists_tac `m'` >> simp[]) >>
+      rpt strip_tac >>
+      qpat_assum `!i l d j. FLOOKUP ss1.sym_mem_labels i = SOME (l,d,j) ==> _`
+        (drule_then strip_assume_tac) >> simp[]) >>
+  disch_then (qx_choose_then `cs2` (qx_choose_then `ss2` strip_assume_tac)) >>
+  qexistsl_tac [`cs2`, `ss2`] >>
+  simp[stackOpSimTheory.asm_steps_add, sym_steps_mode_add] >>
+  conj_tac >- (qexists_tac `m''` >> simp[]) >>
+  rpt strip_tac >>
+  qpat_assum `!i l d j. FLOOKUP ss2.sym_mem_labels i = SOME (l,d,j) ==> _`
+    (drule_then strip_assume_tac) >> simp[]
 QED
 
 Theorem sym_restore_spilled_cons_frame_sim_mode_conditional:

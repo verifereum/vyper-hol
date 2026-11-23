@@ -3,7 +3,7 @@ Theory ctorDeployMemoryRunPtrPrefixCopyRun
 Ancestors
   loweringStateRelDefs
   venomExecProofs exprSimUnwrap instIdxIndep slotCopyExecution ghostPcTransportPtr compileEnv
-  ctorDeployMemoryRunPtrPrefixCopyStep ctorDeployMemoryRunPtrPrefixBoolPreheader
+  ctorDeployMemoryRunPtrPrefixCopyStep
   ctorDeployMemoryRunPtrPrefixBoolWord ctorDeployMemoryRunPtrPrefixSequence
   abiDecoderBytes abiDecoderGuards abiDecoderContract abiDecoderComposition
   abiDecoderBulk abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader

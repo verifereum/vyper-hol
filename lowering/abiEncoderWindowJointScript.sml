@@ -290,11 +290,27 @@ Proof
   `FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en) = []` by
     (qpat_assum `emitted_insts st en = _` (fn th => rewrite_tac[th]) >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[bytestring_encoder_insts_def, mk_inst_def]) >>
+     simp_tac (bool_ss ++ numSimps.REDUCE_ss)
+       [bytestring_encoder_insts_def, listTheory.FILTER,
+        emitHelperPropsTheory.mk_inst_opcode,
+        venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st en)` by
     (qpat_assum `emitted_insts st en = _` (fn th => rewrite_tac[th]) >>
      MATCH_ACCEPT_TAC bytestring_encoder_straight) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st en)` by
+    (qpat_assum `emitted_insts st en = _` (fn th => rewrite_tac[th]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac (bool_ss ++ numSimps.REDUCE_ss)
+       [EVERY_MEM, MEM, bytestring_encoder_insts_def, mk_inst_def] >>
+     rpt strip_tac >>
+     gvs[EVERY_MEM, MEM, bytestring_encoder_insts_def, mk_inst_def,
+       venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm]) >>
+  `ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st en = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM, MEM_APPEND]) >>
   `s.vs_inst_idx + LENGTH (emitted_insts st en) = LENGTH en.cs_current_insts` by
     (qpat_assum `en.cs_current_insts = st.cs_current_insts ++ _` mp_tac >>
      qpat_assum `s.vs_inst_idx = LENGTH st.cs_current_insts` mp_tac >>

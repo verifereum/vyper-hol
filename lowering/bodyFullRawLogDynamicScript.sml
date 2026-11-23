@@ -15,8 +15,8 @@ Theorem raw_log_dynamic_data_full:
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx (expr_type data) data es /\
   lower_value compile_expr cenv (expr_type data) data sa = (data_op,sm) /\
-  lower_value compile_expr cenv (expr_type data) (gas_shadow_expr data)
-    shadow_sa = (data_op,shadow_sm) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type data)
+    (gas_shadow_expr data) shadow_sa = (data_op,shadow_sm) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\
@@ -24,7 +24,7 @@ Theorem raw_log_dynamic_data_full:
   fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\

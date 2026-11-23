@@ -14,7 +14,75 @@ Ancestors
   targetPlaceSim targetPlaceSimCasesBase exprSimHypsDefs
   vyperAST vyperTypeSystem vyperTypeEnv vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperTypeInvariants vyperTypeAssignContext
-  supportedExprTraverse supportedProgram allocLimits list
+  supportedExprTraverse supportedProgram allocLimits list exprBodyPreProps
+  targetPlaceLive supportedExprs
+
+Theorem target_indices_pre_of_body_mods:
+  !bt vt mods cenv cx env.
+    type_place_target env bt = SOME vt /\ byte_widths_target bt /\
+    alloc_limits_target cenv bt /\
+    call_evaluation_safe cx (int_calls_target bt) /\
+    ~supported_target_exists expr_evm_run_root bt /\
+    ~supported_target_exists (const_name_root_mods mods) bt /\
+    ~supported_target_exists (unallocated_bare_global_root cenv env) bt /\
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+          (int_calls_target bt) /\
+    (!target. supported_target_exists (expr_abi_decode_target_root target) bt ==>
+              EXISTS (occurs_abi_decode_target target o SND) mods) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env_all_modules mods) target)) ==>
+    !e es. MEM e (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env es ==>
+           expr_body_pre_mods mods cenv cx env e es
+Proof
+  recInduct base_assignment_target_induct >> rw[target_indices_def] >>
+  gvs[type_place_target_AttributeTarget, type_place_target_SubscriptTarget,
+      byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+      supported_expr_exists_def] >>
+  imp_res_tac call_evaluation_safe_append_left >>
+  imp_res_tac call_evaluation_safe_append_right >>
+  FIRST [qpat_assum `MEM _ (target_indices _)`
+           (K (first_x_assum irule >> simp[])),
+         rw[expr_body_pre_mods_def, expr_has_evm_run_def]] >>
+  metis_tac[]
+QED
+
+Theorem target_pre_of_pop_mods:
+  !mods cenv cx env ann bt es.
+    expr_body_pre_mods mods cenv cx env (Pop ann bt) es /\ ~immutable_root cx bt ==>
+    expr_sim_inv_mods mods cenv cx env es /\ ~immutable_root cx bt /\
+    alloc_limits_target cenv bt /\
+    (!e st. MEM e (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env st ==>
+            expr_body_pre_mods mods cenv cx env e st)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `expr_body_pre_mods _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_body_pre_mods_def]) >>
+  gvs[Once well_typed_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
+      int_calls_expr_def, expr_has_evm_run_def, supported_expr_exists_def,
+      expr_abi_decode_target_root_def, expr_evm_run_root_def,
+      const_name_root_mods_def, unallocated_bare_global_root_def] >>
+  rpt gen_tac >> strip_tac >>
+  irule target_indices_pre_of_body_mods >> simp[] >> metis_tac[]
+QED
+
+Theorem target_indices_pre_from_singleton[local]:
+  !bt cenv cx env.
+    alloc_limits_target cenv bt /\
+    EVERY (\c. FST c = NONE) (int_calls_target bt) /\
+    (!e es. MEM e (target_indices bt) /\ expr_sim_inv cenv cx env es ==>
+      expr_body_pre_mods [(NONE,cx_tops cx)] cenv cx env e es) ==>
+    target_indices_pre cenv cx env bt
+Proof
+  recInduct base_assignment_target_induct >>
+  rw[target_indices_pre_def, target_indices_def, alloc_limits_expr_def,
+     int_calls_expr_def] >>
+  fs[expr_body_pre_split_def, expr_body_pre_mods_def,
+     vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
+     finite_mapTheory.FUNION_FEMPTY_2] >>
+  metis_tac[]
+QED
 
 (* Every index of a typed target meets expr_body_pre wherever expr_sim_inv
    holds, from the target's part of an expression's expr_body_pre. *)
@@ -36,15 +104,21 @@ Theorem target_indices_pre_of_body:
               is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)) ==>
     target_indices_pre cenv cx env bt
 Proof
-  recInduct base_assignment_target_induct >> rw[target_indices_pre_def] >>
-  gvs[type_place_target_AttributeTarget, type_place_target_SubscriptTarget,
-      byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
-      supported_expr_exists_def] >>
-  imp_res_tac call_evaluation_safe_append_left >>
-  imp_res_tac call_evaluation_safe_append_right
-  >~ [`expr_body_pre _ _ _ e _`]
-  >- rw[expr_body_pre_def, expr_has_evm_run_def] >>
-  first_x_assum irule >> simp[] >> metis_tac[]
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`e` |-> `Pop (BaseT BoolT) bt`] int_calls_expr_main_split) >>
+  simp[int_calls_expr_def] >> strip_tac >>
+  irule target_indices_pre_from_singleton >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `~supported_expr_exists (const_name_root cx) (Pop (BaseT BoolT) bt)` by
+    simp[supported_expr_exists_def, const_name_root_def] >>
+  drule_all expr_sim_inv_no_unallocated_bare_globals >>
+  simp[supported_expr_exists_def, unallocated_bare_global_root_def] >>
+  strip_tac >>
+  irule target_indices_pre_of_body_mods >>
+  fs[expr_sim_inv_split_def, const_name_root_mods_singleton,
+     vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
+     finite_mapTheory.FUNION_FEMPTY_2] >>
+  metis_tac[]
 QED
 
 (* A pop's target meets target_pre where the pop meets expr_body_pre and
@@ -54,12 +128,11 @@ Theorem target_pre_of_pop:
     expr_body_pre cenv cx env (Pop ann bt) es /\ ~immutable_root cx bt ==>
     target_pre cenv cx env bt es
 Proof
-  rw[expr_body_pre_def, target_pre_def] >>
-  gvs[Once well_typed_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
-      int_calls_expr_def, expr_has_evm_run_def, supported_expr_exists_def,
-      expr_abi_decode_target_root_def, expr_evm_run_root_def,
-      exprSimHypsDefsTheory.const_name_root_def] >>
-  irule target_indices_pre_of_body >> simp[] >> metis_tac[]
+  rw[expr_body_pre_split_def, int_calls_expr_def] >>
+  drule_all target_pre_of_pop_mods >> strip_tac >>
+  simp[target_pre_def] >>
+  irule target_indices_pre_from_singleton >> simp[] >>
+  metis_tac[expr_sim_inv_split_def]
 QED
 
 (* A target is in an immutable exactly when its root is a module variable
@@ -109,8 +182,7 @@ Theorem pop_immutable_root_rejected:
     F
 Proof
   rpt gen_tac >> strip_tac >>
-  `expr_sim_inv cenv cx env es /\ well_typed_expr env (Pop ann bt) /\
-   alloc_limits_expr cenv (Pop ann bt)` by fs[expr_body_pre_def] >>
+  drule expr_body_pre_static_facts >> strip_tac >>
   `env_context_consistent env cx` by
     fs[expr_sim_inv_def, env_consistent_def] >>
   `?ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty` by

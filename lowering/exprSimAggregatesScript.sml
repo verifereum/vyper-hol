@@ -8,9 +8,8 @@
  * exprSimConvert proves (which rest on the cheated lower_value_word_shape).
  * Struct and array literals store each child with unwrap_value_sim, so
  * they carry exprSimUnwrap's cheated constructor immutable cases.
- * The other conversions, abi_encode and abi_decode are re-exported from
- * their leaf theories (exprSimConvertOther, exprSimAbiEncode,
- * exprSimAbiDecode).
+ * Other conversions and abi_decode are re-exported from their leaf theories
+ * (exprSimConvertOther and exprSimAbiDecode).
  *
  * TOP-LEVEL:
  *   compile_struct_lit_case, compile_make_array_case — StructLit, MakeArray
@@ -31,8 +30,7 @@
  *                           bool to an integer and from an integer to
  *                           bool; compile_convert_other_case for the rest
  *                           (#548)
- *   compile_abi_encode_case, compile_abi_decode_case — abi_encode (#551),
- *                           abi_decode with its validation aborts, row 4
+ *   compile_abi_decode_case — abi_decode with its validation aborts, row 4
  *
  * StructLit, MakeArray and empty(T) of a type that is not a word build
  * their value in a buffer of their own, an ALLOCA of type_memory_bytes
@@ -66,7 +64,6 @@ Theory exprSimAggregates
 Ancestors
   exprSimAggregatesAllocCounted
   exprSimAbiDecode
-  exprSimAbiEncode
   exprSimConvertOther
   exprWordOperand
   exprSimSource
@@ -356,7 +353,8 @@ Resume compile_make_array_vv_case[tuple]:
   `!e. MEM e args /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
   `compatible_bound bnd (LENGTH args)` by
     gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
-      vyperTypeSystemTheory.well_typed_builtin_app_def] >>
+      vyperTypeSystemTheory.well_typed_builtin_app_def,
+      vyperValueTheory.compatible_bound_def] >>
 
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `ci_mono sm sb` by
@@ -1157,7 +1155,5 @@ Proof
   >- (gvs[] >> irule compile_convert_word_case >> simp[]) >>
   irule compile_convert_other_case >> metis_tac[]
 QED
-
-Theorem compile_abi_encode_case = exprSimAbiEncodeTheory.compile_abi_encode_case
 
 Theorem compile_abi_decode_case = exprSimAbiDecodeTheory.compile_abi_decode_case

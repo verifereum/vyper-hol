@@ -240,14 +240,6 @@ Proof
   metis_tac[abi_encoder_input_open, abi_encoder_open_input_window]
 QED
 
-Theorem abi_window_setup_zero_probe[local]:
-  32+32*word_size 0 = 32 /\
-  64 <= 32+32*word_size (0+4) /\
-  (!p. p+32 = dimword (:256) ==> ~(p+32 < dimword (:256)))
-Proof
-  simp[abi_builtin_rounded_capacity_checks]
-QED
-
 Theorem abi_window_allocate_opcodes[local]:
   abi_builtin_encode_allocate outsz data_offset st = (ops,address_st) ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st address_st)
@@ -354,26 +346,20 @@ Theorem abi_window_method_setup_observed_reach:
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_builtin_encode_method_setup_context >> strip_tac >>
-  drule abi_builtin_encode_allocate_live >> strip_tac >>
-  `address_st.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= address_st.cs_next_var` by decide_tac >>
-  drule abi_window_allocate_observed_reach >> disch_then drule >>
-  disch_then (qspecl_then [`p`, `limit_st`, `initial`, `ctx`] mp_tac) >>
-  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  rename1 `abi_decode_sim ctx func initial addressed` >>
-  drule abi_window_method_observed_reach >> disch_then drule >>
-  disch_then (qspecl_then [`p`, `limit_st`, `addressed`, `ctx`] mp_tac) >>
-  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  rename1 `abi_decode_sim ctx func addressed actual` >>
-  `actual.vs_halted = addressed.vs_halted` by simp[] >>
-  `eval_operand (FST ops) actual = SOME (n2w p) /\
-   eval_operand (SND ops) actual = SOME (n2w (p+36))` by
-    (conj_tac >> first_x_assum irule >> asm_rewrite_tac[]) >>
-  `abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id
-    (32+32*word_size (maxlen+4)) p 32 initial actual` by
-    (drule_all abi_builtin_encode_setup_frame_compose >> simp[]) >>
-  qexists_tac `actual` >> asm_rewrite_tac[] >>
-  irule abi_decode_sim_trans >> qexists_tac `addressed` >> asm_rewrite_tac[]
+  drule_all abi_builtin_encode_method_setup_sequence >> strip_tac >>
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  drule abi_builtin_encode_setup_opcodes >>
+  strip_tac >>
+  `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st ready)` by
+    (fs[EVERY_MEM, abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
+  drule_all ctor_actual_sequence_world >> strip_tac >>
+  drule_all ctor_actual_sequence_labels >> strip_tac >>
+  `~actual.vs_halted` by fs[abi_builtin_encode_setup_frame_def] >>
+  drule_all abi_encoder_run_sequence_reach >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `actual with vs_inst_idx := LENGTH ready.cs_current_insts` >>
+  gvs[abi_builtin_encode_setup_frame_def, abi_decode_frame_def,
+    fresh_vars_wrt_def, eval_op_inst_idx] >> metis_tac[]
 QED
 
 Theorem abi_window_setup_none_allocate[local]:
@@ -473,11 +459,4 @@ Theorem abi_window_fresh_vars_fields:
   fresh_vars_wrt limit_st t
 Proof
   simp[fresh_vars_wrt_def]
-QED
-
-Theorem abi_window_empty_sequence_fresh[local]:
-  run_inst_seq [] s = OK t /\ fresh_vars_wrt limit_st s ==>
-  fresh_vars_wrt limit_st t
-Proof
-  simp[run_inst_seq_def] >> metis_tac[]
 QED

@@ -64,7 +64,7 @@ QED
 
 Theorem abi_decode_caller_guard_joint:
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
-  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st ready fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce st /\ origin.cs_next_var <= st.cs_next_var /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at origin x) /\
@@ -185,6 +185,14 @@ Proof
     (qpat_x_assum `fn_has_code sb header_st fn` mp_tac >>
      simp[fn_has_code_def, IS_PREFIX_APPEND, DROP_APPEND1, DROP_LENGTH_NIL,
           PULL_EXISTS] >> metis_tac[APPEND_ASSOC]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `?H. V H` (qx_choose_then `h` assume_tac) >>
+     qpat_assum `!H. V H ==> stmt_state_rel H ctx fn ce cx es u /\ _`
+       (qspec_then `h` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (mp_tac o CONJUNCT1) >>
+     MATCH_ACCEPT_TAC
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   Cases_on `min_size <= LENGTH input_bytes /\ LENGTH input_bytes <= max_size`
   >- suspend "success"
   >> suspend "reject"
@@ -192,7 +200,6 @@ QED
 
 Resume abi_decode_caller_guard_joint[success]:
   `?t. run_inst_seq (emitted_insts sb header_st) u = OK t` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all bop_word_scalar_success_joint >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
@@ -344,13 +351,22 @@ Resume abi_decode_caller_guard_joint[reject]:
      simp[run_inst_seq_def]) >>
   qpat_x_assum `bop_scalar_seq R A (emitted_insts sb header_st) B` kall_tac >>
   qpat_x_assum `bop_scalar_seq R A prefix C` kall_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by simp[] >>
   drule_all calldataClampPtrTheory.scalar_seq_abort_replay_ptr >>
   disch_then (qspecl_then [`fn`, `PG`,
     `<| d_stor := K (K {}); d_trans := K (K {});
         d_imm := K {}; d_ret := K {} |>`] strip_assume_tac) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post z. cut = pre ++ i::post /\ run_inst_seq pre u = OK z ==>
+      unitTransformDefs$dalloca_no_wrap i z)` by
+    (rpt strip_tac >>
+     `MEM i cut` by simp[MEM_APPEND] >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     drule_all bop_scalar_seq_outputs >>
+     disch_then (assume_tac o CONJUNCT1) >> strip_tac >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
+     qpat_assum `i.inst_opcode = DALLOCA` (fn th => simp[NoAsms, th])) >>
   drule_all run_inst_seq_origin_ptr_abort_lift >>
-  disch_then (qspecl_then [`explicit`, `ctx`, `PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qabbrev_tac `rj = Abort Revert_abort (t with vs_inst_idx := j)` >>
   qabbrev_tac `rp = Abort Revert_abort
     (t with vs_inst_idx := LENGTH sb.cs_current_insts + LENGTH prefix)` >>

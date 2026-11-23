@@ -15,6 +15,8 @@ Ancestors
   compileEnv emitHelperProps venomState venomInst venomExecSemantics
   venomMemDefs bodyPtrDefs ptrSafetyTransport codegenRel contextCodegenRel
   loweringStateRelDefs words finite_map pred_set ptrDiscipline
+  decoderOriginAllocationFrame[qualified,ignore_grammar]
+  exprLoweringProps[qualified,ignore_grammar]
 Libs
   BasicProvers
 
@@ -61,6 +63,22 @@ Proof
   rpt gen_tac >> metis_tac[gas_origin_ptr_path_append, listTheory.APPEND_NIL]
 QED
 
+Theorem none_array_path_credit[local]:
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+     (s,G,tn) [] (OK t,H,u)) /\
+  fn_inst_ids_distinct fn /\
+  (ctx_has_dalloca ctx ==>
+    s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) ==>
+  (ctx_has_dalloca ctx ==>
+    t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp)
+Proof
+  strip_tac >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
+    (qspecl_then [`ARB`,`ARB`] assume_tac) >>
+  drule_all decoderOriginAllocationFrameTheory.decoder_origin_path_allocation_frame >>
+  disch_then (fn frame => rewrite_tac[frame]) >> first_assum ACCEPT_TAC
+QED
+
 (* Only the actual counter site needs allocation credit. *)
 Theorem none_array_first_header:
   abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -95,6 +113,7 @@ Theorem none_array_first_header:
     v.vs_call_ctx = s.vs_call_ctx /\ v.vs_data_section = s.vs_data_section /\
     allocas_from lo v /\ p+32 <= v.vs_alloca_next /\ s.vs_alloca_next <= v.vs_alloca_next /\
     alloca_inv v /\ alloca_frontier_inv ctx fn site v /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp v) /\
     (!id. id <> hs.cs_next_id ==> FLOOKUP v.vs_allocas id = FLOOKUP s.vs_allocas id) /\
     FLOOKUP v.vs_allocas hs.cs_next_id = SOME (p,32) /\
     (!id b cap. FLOOKUP s.vs_allocas id = SOME (b,cap) ==> FLOOKUP v.vs_allocas id = SOME (b,cap)) /\
@@ -227,6 +246,10 @@ Resume none_array_first_header[finish]:
   `!x. lookup_var x (jump_to hdr t) = lookup_var x t` by
     simp[jump_to_def,lookup_var_def] >>
   `mload p (jump_to hdr t) = mload p t` by simp[NoAsms,jump_to_def,mload_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp (jump_to hdr t)` by
+    (simp[NoAsms,jump_to_def,allocas_below_fmp_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t`
+       (ACCEPT_TAC o REWRITE_RULE[allocas_below_fmp_def])) >>
   simp[jump_to_def] >> metis_tac[]
 QED
 
@@ -258,6 +281,7 @@ Theorem none_array_final_header[local]:
     (alloca_inv s ==> alloca_inv v) /\
     (!site. alloca_frontier_inv ctx fn site s ==> alloca_frontier_inv ctx fn site v) /\
     allocas_from lo v /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp v) /\
     (!limit. fresh_vars_wrt limit s /\
        (!x. MEM x [iv;cv;cmp;done] ==> ?k. x = STRING #"%" (toString k) /\ k < limit.cs_next_var)
        ==> fresh_vars_wrt limit v) /\
@@ -279,13 +303,18 @@ Proof
     (gen_tac >> strip_tac >>
      irule (cj 1 (Q.INST [`t` |-> `jump_to lbl (abi_decode_header_state iv cv cmp done j ncount s)`]
                     decoder_index_header_replay_frame)) >> asm_rewrite_tac[]) >>
-  pop_assum mp_tac >>
+  qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+  qpat_assum `!limit. _ ==> fresh_vars_wrt limit (jump_to exit_lbl _)` mp_tac >>
   qpat_assum `allocas_from lo s` mp_tac >>
-  simp[jump_to_def,abi_decode_header_state_def,update_var_def,
+  simp[jump_to_def,abi_decode_header_state_def,update_var_def,allocas_below_fmp_def,
        alloca_inv_def,allocas_non_overlapping_def,alloca_next_valid_def,
        alloca_frontier_inv_def,allocaBudgetPropsTheory.remaining_alloca_budget_def,
        lookup_var_def,allocas_from_def] >>
-  disch_tac >> conj_tac >- fs[allocas_from_def] >> first_assum ACCEPT_TAC
+  disch_tac >> conj_tac >- fs[allocas_from_def] >>
+  conj_tac
+  >- qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o REWRITE_RULE[allocas_below_fmp_def]) >>
+  first_assum ACCEPT_TAC
 QED
 
 (* The count failure occurs before the header store and counter allocation. *)
@@ -344,7 +373,9 @@ Theorem none_nonbulk_fold_paths:
   ptr_covers G tn root initial (32+maxn*type_memory_size tv) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   fresh_vars_wrt limit initial /\ allocas_from lo initial /\ lo <= initial.vs_alloca_next /\
-  ~ctx_has_dalloca ctx /\ ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
+    initial.vs_alloca_next + pending_alloca_size fn initial <= w2n initial.vs_initial_fmp) /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   (!a b child sop s p e A ta.
     compile_abi_decode_to_buf (Var child) sop CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -364,6 +395,8 @@ Theorem none_nonbulk_fold_paths:
     e+type_memory_size tv < dimword (:256) /\ ptr_covers A ta child s (type_memory_size tv) /\
     op_taint ta sop = {} /\ op_prov A sop = NONE /\
     fresh_vars_wrt limit s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
     ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
     (?z B u. z.vs_returndata = [] /\
         !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,A,ta) [] (Abort Revert_abort z,B,u)) \/
@@ -371,6 +404,7 @@ Theorem none_nonbulk_fold_paths:
       ~r.vs_halted /\ r.vs_current_bb = b.cs_current_bb /\ r.vs_inst_idx = LENGTH b.cs_current_insts /\
       r.vs_call_ctx = s.vs_call_ctx /\ r.vs_data_section = s.vs_data_section /\
       alloca_inv r /\ alloca_frontier_inv ctx fn site r /\ allocas_from lo r /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp r) /\
       (!id q k. a.cs_next_id <= id /\ id < b.cs_next_id /\ FLOOKUP r.vs_allocas id = SOME (q,k) ==>
         k = 32 /\ q < dimword (:256) /\ q+32 <= r.vs_alloca_next /\
         ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\ ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
@@ -390,6 +424,7 @@ Theorem none_nonbulk_fold_paths:
     ~v.vs_halted /\ v.vs_current_bb = last.cs_current_bb /\ v.vs_inst_idx = LENGTH last.cs_current_insts /\
     v.vs_call_ctx = initial.vs_call_ctx /\ v.vs_data_section = initial.vs_data_section /\
     alloca_inv v /\ alloca_frontier_inv ctx fn site v /\ allocas_from lo v /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp v) /\
     (!id p k. st.cs_next_id <= id /\ id < last.cs_next_id /\ FLOOKUP v.vs_allocas id = SOME (p,k) ==>
       k = 32 /\ p < dimword (:256) /\ p+32 <= v.vs_alloca_next /\
       ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\ ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
@@ -419,7 +454,9 @@ Proof
   drule_all calldata_nonbulk_parent_shell_conditional >>
   disch_then (qx_choose_then `ip` (qx_choose_then `cop` strip_assume_tac)) >>
   Cases_on `maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD sw initial)`
-  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp initial` by simp[] >>
+  >- (`ctx_has_dalloca ctx ==> allocas_below_fmp initial` by
+        (strip_tac >> qpat_assum `ctx_has_dalloca ctx ==> _`
+           (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
       disj1_tac >> drule_all none_array_count_reject >>
       disch_then (qspec_then `PG` ACCEPT_TAC)) >>
   qabbrev_tac `cap = 32+maxn*type_memory_size tv` >>
@@ -472,11 +509,18 @@ Proof
      qexists_tac `x0` >> asm_rewrite_tac[] >> decide_tac) >>
   `lookup_var root initial = SOME (n2w d)` by
     (qpat_assum `eval_operand (Var root) initial = _` mp_tac >> simp[NoAsms,eval_operand_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp initial /\
-     initial.vs_alloca_next + pending_alloca_size fn initial <= w2n initial.vs_initial_fmp` by simp[] >>
+  `ctx_has_dalloca ctx ==>
+     initial.vs_alloca_next + pending_alloca_size fn initial <= w2n initial.vs_initial_fmp` by
+    (strip_tac >> qpat_assum `ctx_has_dalloca ctx ==> _`
+       (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
   drule_all none_array_first_header >>
   disch_then (qspec_then `PG` (qx_choose_then `first` (qx_choose_then `A0`
     (qx_choose_then `tn0` (qx_choose_then `q` (map_every assume_tac o CONJUNCTS)))))) >>
+  `ctx_has_dalloca ctx ==>
+     first.vs_alloca_next + pending_alloca_size fn first <= w2n first.vs_initial_fmp` by
+    (mp_tac (Q.INST [`s` |-> `initial`, `G` |-> `G`, `tn` |-> `tn`,
+      `t` |-> `first`, `H` |-> `A0`, `u` |-> `tn0`] none_array_path_credit) >>
+     (impl_tac >- asm_rewrite_tac[]) >> disch_then ACCEPT_TAC) >>
   qabbrev_tac `cnt = w2n (abi_decode_load CALLDATALOAD sw initial)` >>
   qabbrev_tac `sb = w2n sw` >>
   `n2w sb : bytes32 = sw /\ cnt < dimword(:256) /\
@@ -570,6 +614,9 @@ Proof
     ~s.vs_halted /\ s.vs_call_ctx = initial.vs_call_ctx /\
     s.vs_data_section = initial.vs_data_section /\ s.vs_labels = initial.vs_labels /\
     alloca_inv s /\ alloca_frontier_inv ctx fn site s /\ allocas_from lo s /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    (ctx_has_dalloca ctx ==>
+      s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp) /\
     initial.vs_alloca_next <= s.vs_alloca_next /\ fresh_vars_wrt limit s /\
     ptr_covers A ta root s cap /\
     (!id p k. st.cs_next_id <= id /\ id < last.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (p,k) ==>
@@ -641,13 +688,17 @@ Resume none_nonbulk_fold_paths[exit]:
   (qpat_assum `Q s A ta` mp_tac >> simp[NoAsms, Abbr `Q`]) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME hdr_bb` by asm_rewrite_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
   mp_tac (Q.INST [`bb` |-> `hdr_bb`, `id` |-> `loop_st.cs_next_id+1`,
     `G` |-> `A`, `tn` |-> `ta`, `body_lbl` |-> `FST (SND (labels:string#string#string))`,
     `exit_lbl` |-> `SND (SND (labels:string#string#string))`] none_array_final_header) >>
   (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choose_then `v` (qx_choose_then `B` (qx_choose_then `u`
     (map_every assume_tac o CONJUNCTS)))) >>
+  `ctx_has_dalloca ctx ==>
+     v.vs_alloca_next + pending_alloca_size fn v <= w2n v.vs_initial_fmp` by
+    (mp_tac (Q.INST [`s` |-> `s`, `G` |-> `A`, `tn` |-> `ta`,
+      `t` |-> `v`, `H` |-> `B`, `u` |-> `u`] none_array_path_credit) >>
+     (impl_tac >- asm_rewrite_tac[]) >> disch_then ACCEPT_TAC) >>
   qexistsl_tac [`v`,`B`,`u`] >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
   simp[NoAsms,Abbr `R`] >>
@@ -734,6 +785,11 @@ Resume none_nonbulk_fold_paths[iteration]:
      conj_tac >- decide_tac >>
      map_every qx_gen_tac [`a`,`C`,`ct`,`child`] >>
      disch_then (map_every assume_tac o CONJUNCTS) >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp a /\
+        a.vs_alloca_next + pending_alloca_size fn a <= w2n a.vs_initial_fmp` by
+       (strip_tac >> conj_tac >- (first_assum irule >> first_assum ACCEPT_TAC) >>
+        qpat_assum `ctx_has_dalloca ctx ==> s.vs_alloca_next + _ <= _` drule >>
+        asm_rewrite_tac[exprLoweringPropsTheory.pending_alloca_size_def]) >>
      qmatch_asmsub_abbrev_tac `eval_operand (FST (SND ops)) a = SOME (n2w pos : bytes32)` >>
      qmatch_asmsub_abbrev_tac `lookup_var child a = SOME (n2w e : bytes32)` >>
      qpat_assum `!a b child sop s p e A ta. _`
@@ -760,6 +816,11 @@ Resume none_nonbulk_fold_paths[iteration]:
       qpat_assum `s.vs_call_ctx = initial.vs_call_ctx` (fn eq =>
         qpat_assum `IS_SOME (cd_decode F s.vs_call_ctx.cc_calldata tv _)`
           (ACCEPT_TAC o REWRITE_RULE[eq]))) >>
+  `ctx_has_dalloca ctx ==>
+     t.vs_alloca_next + pending_alloca_size fn t <= w2n t.vs_initial_fmp` by
+    (mp_tac (Q.INST [`s` |-> `s`, `G` |-> `A`, `tn` |-> `ta`,
+      `t` |-> `t`, `H` |-> `B`, `u` |-> `u`] none_array_path_credit) >>
+     (impl_tac >- asm_rewrite_tac[]) >> disch_then ACCEPT_TAC) >>
   `t.vs_labels = s.vs_labels` by
     (qpat_assum `!s A ta t B u. _ ==> t.vs_labels = s.vs_labels`
       (qspecl_then [`s`,`A`,`ta`,`t`,`B`,`u`] drule) >> simp[]) >>

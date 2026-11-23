@@ -8,7 +8,7 @@
  *
  * r4: st is pinned by runtime_selected_body_start.
  *
- * Proof: the prefix seam (external_entry_reaches_registration_ptr) runs
+ * Proof: the prefix seam (external_entry_reaches_registration_ptr_nr) runs
  * __entry to the start s1 of argument registration; the registration seam
  * (register_positional_args_ptr) runs s1 to the body start s0.  Both carry
  * the zero-GAS memory-checked path and the joint pointer path, which
@@ -26,6 +26,7 @@ Ancestors
   loweringPosts exprLoweringProps vyperStorageFootprint ptrSafeRun
   ptrDiscipline bodyPtrDefs runtimeBodyStartDefs fragGasOriginPtr
   entryPtrSeamPrefix entryPtrSeamRegister externalEntryChecks entryStateRel
+  entryRejectCode acceptedContextPhi
   sourceEntrySelection
   bodyMemAggregatePath fragGasPathFrameMem venomMemProofs
   moduleLoweringProps vyperCompiler nonreentrantEntryPath externalReturnPackage entryDispatchProps
@@ -47,27 +48,14 @@ Theorem runtime_entry_function_no_phi_nr:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   strip_tac >>
-  drule_all lookup_function_external_raw_member >>
-  simp[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
-  strip_tac >>
-  `?cenv pos_args min_cds is_payable nkey ut iv rt.
-     set_external_package_target rpolicy.rpol_target
-       (package_external_fn tops T (K global_nonreentrant_slot)
-         (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,
-          name,args,([]:expr list),ret,
-          subst_consts_stmts (module_consts_env tops []) fbody)) =
-     ("fn_" ++ name,cenv,pos_args,min_cds,is_payable,nr,nkey,ut,iv,
-      subst_consts_stmts (module_consts_env tops []) fbody,rt)` by
-    simp[package_external_fn_def, set_external_package_target_def, LET_THM] >>
-  pop_assum strip_assume_tac >>
-  drule_all source_runtime_entry_checks_code >> strip_tac >>
-  `sa.cs_current_bb = "__entry" /\ sa.cs_current_insts = []` by
-    (qpat_x_assum `fresh_label _ _ = _` mp_tac >>
-     simp[fresh_label_def, initial_compile_state_def, LET_THM] >>
-     strip_tac >> gvs[]) >>
-  drule_all linear_dispatch_entry_no_phi >> strip_tac >>
-  simp[] >> qexists_tac `bb` >>
-  gvs[fn_entry_label_def, entry_block_def, listTheory.NULL_EQ]
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_entry_label >> strip_tac >>
+  `?bb. lookup_block "__entry" fn.fn_blocks = SOME bb` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def, lookup_block_def, listTheory.FIND_thm]) >>
+  drule_all lowering_context_ok_block_phi >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`fn`, `bb`] >> simp[]
 QED
 
 Theorem runtime_entry_function_no_phi:
@@ -125,6 +113,7 @@ Theorem external_entry_registration_joint:
   !tops rpolicy unit am tx ret vs mut nr args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     tx.function_name <> "__default__" /\
@@ -132,6 +121,9 @@ Theorem external_entry_registration_joint:
     calldata_encodes (type_env tops) tx.function_name (MAP SND args)
       tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, nr, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -230,7 +222,7 @@ QED
 Theorem selected_nonreentrant_lock_metadata:
   source_deployment_rel tops am tx /\ source_typing_ok tops am tx /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
-    SOME (mut,T,args,[],ret,fbody) ==>
+    SOME (mut,T,args,dflts,ret,fbody) ==>
   (initial_evaluation_context am.sources am.layouts tx NONE).nonreentrant_slot =
     SOME global_nonreentrant_slot /\
   is_view_mut mut = (mut = View)
@@ -261,6 +253,26 @@ Proof
   simp[vyperGetterTheory.getter_def] >> rpt (pairarg_tac >> simp[])
 QED
 
+(* An empty path's mark list is independent of which GAS sites are explicit. *)
+Theorem gas_origin_ptr_path_empty_sites:
+  gas_origin_ptr_path (D,lo,E,ctx,func,PG) (s,G,tn) [] out ==>
+  gas_origin_ptr_path (D,lo,E',ctx,func,PG) (s,G,tn) [] out
+Proof
+  qsuff_tac `!p st marks out. gas_origin_ptr_path p st marks out ==>
+    marks = [] ==> case p of (D,lo,E,ctx,func,PG) =>
+      gas_origin_ptr_path (D,lo,E',ctx,func,PG) st [] out`
+  >- (disch_then (qspecl_then [`(D,lo,E,ctx,func,PG)`, `(s,G,tn)`, `[]`, `out`]
+        mp_tac) >> simp[]) >>
+  `!D lo E ctx func PG st out.
+      gas_origin_ptr_edge (D,lo,E,ctx,func,PG) st [] out ==>
+      gas_origin_ptr_edge (D,lo,E',ctx,func,PG) st [] out` by
+    (rpt gen_tac >> PairCases_on `st` >> PairCases_on `out` >>
+     simp[gas_origin_ptr_edge_def, fragGasOriginTheory.gas_origin_edge_def] >> metis_tac[]) >>
+  ho_match_mp_tac gas_origin_ptr_path_ind >>
+  rpt conj_tac >> rpt gen_tac >> simp[] >>
+  metis_tac[gas_origin_ptr_path_rules, listTheory.APPEND]
+QED
+
 (* Both the compiled endpoint and its ghost are fixed before choosing H. *)
 Theorem selected_entry_after_lock:
   is_view_mut mut = (mut = View) /\
@@ -274,18 +286,18 @@ Theorem selected_entry_after_lock:
   fresh_vars_wrt sa s0 /\ local_ptrs_reserved cenv sa /\
   cenv.ce_return_pc = NONE /\ return_buf_frame NONE cenv sa s0 /\
   alloca_history func s0 /\
-  gas_path_mem ctx func ss 0 (OK s0) /\
-  (!D explicit. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
-    (ss,FEMPTY,entry_taint) [] (OK s0,G0,tn0)) /\
+  gas_path_mem ctx func ss (LENGTH marks0) (OK s0) /\
+  (!D. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
+    (ss,FEMPTY,entry_taint) marks0 (OK s0,G0,tn0)) /\
   (!D. (!fuel. ptr_safe_run D 0 fuel ctx func [] G0 tn0 s0) ==>
     !fuel. ptr_safe_blocks D 0 fuel ctx func [] FEMPTY entry_taint ss) /\
   (!H : (bool # bytes32 # type_value) list # num list.
     stmt_state_rel H ctx func cenv cx es0 s0 /\
     ghost_inv H NONE cenv cx es0 G0 tn0 s0) ==>
   ?s G tn.
-    gas_path_mem ctx func ss 0 (OK s) /\
-    (!D explicit. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
-      (ss,FEMPTY,entry_taint) [] (OK s,G,tn)) /\
+    gas_path_mem ctx func ss (LENGTH marks0) (OK s) /\
+    (!D. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
+      (ss,FEMPTY,entry_taint) marks0 (OK s,G,tn)) /\
     (!D. (!fuel. ptr_safe_run D 0 fuel ctx func [] G tn s) ==>
       !fuel. ptr_safe_blocks D 0 fuel ctx func [] FEMPTY entry_taint ss) /\
     alloca_history func s /\ return_buf_frame NONE cenv sl s /\
@@ -317,12 +329,12 @@ Proof
      Cases_on `mut = View` >> simp[] >> strip_tac >> gvs[]) >>
   qexistsl_tac [`s_lock`, `G_lock`, `tn_lock`] >>
   simp[] >> rpt conj_tac
-  >- (`gas_path_mem ctx func ss (0 + 0) (OK s_lock)`
+  >- (`gas_path_mem ctx func ss (LENGTH marks0 + 0) (OK s_lock)`
         suffices_by simp[] >>
       irule gas_path_mem_then >> qexists_tac `s0` >> simp[])
-  >- (rpt gen_tac >>
-      qpat_assum `!D explicit. gas_origin_ptr_path _ (ss,_,_) _ _`
-        (qspecl_then [`D`, `explicit`] (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+  >- (gen_tac >>
+      qpat_assum `!D. gas_origin_ptr_path _ (ss,_,_) _ _`
+        (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
       disch_then (qspecl_then [`s0`, `G0`, `tn0`, `[]`,
         `OK s_lock`, `G_lock`, `tn_lock`] mp_tac) >>
       simp[]) >>
@@ -337,6 +349,7 @@ Theorem external_entry_locked_joint:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 es_lock.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     tx.function_name <> "__default__" /\
@@ -344,6 +357,9 @@ Theorem external_entry_locked_joint:
     calldata_encodes (type_env tops) tx.function_name (MAP SND args)
       tx.args vs.vs_call_ctx.cc_calldata /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut,T,args,[],ret,fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -424,7 +440,6 @@ Theorem external_entry_locked_joint:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all selected_nonreentrant_lock_metadata >> strip_tac >>
-  drule_all registration_supported_no_dalloca >> strip_tac >>
   drule_all external_entry_registration_joint >>
   disch_then (qx_choosel_then
     [`pbody`,`lbl`,`cenv0`,`pos_args`,`min_cds`,`is_payable`,`nkey`,`ut'`,
@@ -442,7 +457,20 @@ Proof
   simp[] >> strip_tac >>
   `global_nonreentrant_slot < dimword (:256)` by
     simp[global_nonreentrant_slot_def, wordsTheory.dimword_def] >>
-  drule_all selected_entry_after_lock >> strip_tac >>
+  `!D. gas_origin_ptr_path
+    (D,0,EMPTY,unit.cu_context,func,[])
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+      vs_inst_idx := 0|>, FEMPTY, entry_taint) [] (OK s0,G0,tn0)` by
+    (gen_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  mp_tac (Q.INST
+    [`ctx` |-> `unit.cu_context`,
+     `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
+     `nkey` |-> `global_nonreentrant_slot`,
+     `marks0` |-> `[]:bool list`, `explicit` |-> `EMPTY`,
+     `ss` |-> `vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                         vs_inst_idx := 0|>`]
+    selected_entry_after_lock) >>
+  simp[] >> strip_tac >>
   drule_all entry_path_endpoint_facts >> strip_tac >>
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all runtime_entry_function_no_phi_nr >> strip_tac >>
@@ -463,7 +491,8 @@ Proof
   fs[] >>
   rpt strip_tac >>
   qpat_x_assum `!st0 H. valid_horizon _ _ _ es_lock.storage_trace ==> _`
-    drule >> simp[GSYM ghost_inv_cx_dead]
+    drule >> simp[GSYM ghost_inv_cx_dead] >>
+  metis_tac[gas_origin_ptr_path_empty_sites]
 QED
 
 (* Continue any registered runtime entry through its rejecting lock. *)
@@ -476,19 +505,19 @@ Theorem external_entry_abort_from_registration:
   fn_has_code sa st' func /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  s0.vs_gas_readings = ss.vs_gas_readings /\
+  s0.vs_gas_readings = DROP (LENGTH marks0) ss.vs_gas_readings /\
   (!H : (bool # bytes32 # type_value) list # num list.
     stmt_state_rel H ctx func cenv cx es0 s0 /\
     ghost_inv H NONE cenv cx es0 G0 tn0 s0) /\
-  (!D explicit. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
-    (ss,FEMPTY,entry_taint) [] (OK s0,G0,tn0)) ==>
+  (!D. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
+    (ss,FEMPTY,entry_taint) marks0 (OK s0,G0,tn0)) ==>
   ?a s G tn.
     expr_exit (INR exc : unit + exception) (Abort a s) /\
     (exc = Error (RuntimeError "nonreentrant lock") \/
      exc = Error (RuntimeError "write in static context")) /\
-    s.vs_gas_readings = ss.vs_gas_readings /\
-    !D explicit. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
-      (ss,FEMPTY,entry_taint) [] (Abort a s,G,tn)
+    s.vs_gas_readings = DROP (LENGTH marks0) ss.vs_gas_readings /\
+    !D. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
+      (ss,FEMPTY,entry_taint) marks0 (Abort a s,G,tn)
 Proof
   strip_tac >>
   drule_all guarded_body_code_from_registration >> simp[] >> strip_tac >>
@@ -508,9 +537,9 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> simp[]) >>
   qexistsl_tac [`a`,`s_abort`,`G_abort`,`tn_abort`] >>
   simp[] >>
-  rpt gen_tac >>
-  qpat_assum `!D explicit. gas_origin_ptr_path _ (_,FEMPTY,_) _ _`
-    (qspecl_then [`D`,`explicit`] (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+  gen_tac >>
+  qpat_assum `!D. gas_origin_ptr_path _ (_,FEMPTY,_) _ _`
+    (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
   disch_then (qspecl_then [`s0`,`G0`,`tn0`,`[]`,
     `Abort a s_abort`,`G_abort`,`tn_abort`] mp_tac) >>
   simp[]
@@ -520,10 +549,14 @@ Theorem external_entry_subst_consts_joint:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\

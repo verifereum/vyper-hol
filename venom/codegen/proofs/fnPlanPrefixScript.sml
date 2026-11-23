@@ -203,13 +203,10 @@ Proof
   qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_regular_inst_plan_def, compute_operands_def,
        asmIRTheory.get_non_label_operands_def, is_label_operand_def,
-       stackPlanOpsTheory.reorder_plan_def,
        generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def,
        stackModelTheory.stack_pop_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   rename1 `restore_spilled_plan targets ps = (restore_ops, restored)` >>
-  `reorder_plan dfg targets restored = (swap_ops, ps2)` by
-    simp[stackPlanOpsTheory.reorder_plan_def] >>
   `!at. MEM at targets ==> at NOTIN FDOM ps2.ps_spilled` by
     metis_tac[phi_restore_reorder_target_absence] >>
   simp[GSYM finite_mapTheory.FDOM_EQ_EMPTY, pred_setTheory.EXTENSION,
@@ -490,7 +487,7 @@ Proof
   `stack_peek 0 (stack_swap d ps.ps_stack) = v` by
     (simp[stackModelTheory.stack_peek_def, stackModelTheory.stack_swap_def,
           listTheory.EL_LUPDATE] >> gvs[stackModelTheory.stack_peek_def]) >>
-  qspecl_then [`x`, `stack_swap d ps.ps_stack`] mp_tac reorderSimTheory.stack_pop_one_elem_count >>
+  qspecl_then [`x`, `stack_swap d ps.ps_stack`] mp_tac reorderPreparationInventoryPropsTheory.stack_pop_one_elem_count >>
   simp[phi_popmany_singleton_stack] >>
   `stack_swap d ps.ps_stack <> []` by
     (strip_tac >>

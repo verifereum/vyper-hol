@@ -90,20 +90,27 @@ Proof
   imp_res_tac iterator_builtin_arity >> gvs[]
 QED
 
-Theorem checked_runtime_source_builtin_arity:
-  check_contract F layouts addr [(NONE, tops)] = SOME art /\
+Theorem checked_source_builtin_arity:
+  check_contract mode layouts addr [(NONE, tops)] = SOME art /\
   MEM (FunctionDecl vis mut nr rr name args dflts ret stmts) tops /\
-  vis <> Deploy ==>
+  (mode \/ vis <> Deploy) ==>
   ~supported_stmts_expr_exists short_builtin_args stmts /\
   EVERY (\e. ~supported_expr_exists short_builtin_args e) dflts
 Proof
   strip_tac >>
-  drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
-  drule check_contract_runtime_function_body_MEM >> simp[] >>
-  disch_then drule_all >>
+  `check_function_body layouts addr [(NONE,tops)] art NONE
+     vis mut nr args dflts ret stmts` by
+    (Cases_on `mode` >> fs[]
+     >- (drule check_contract_deploy_function_body_MEM >> simp[] >>
+         disch_then drule_all >> simp[])
+     >> drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
+     drule check_contract_runtime_function_body_MEM >> simp[] >>
+     disch_then drule_all >> simp[]) >>
+  pop_assum mp_tac >>
   simp[check_function_body_def, optionTheory.IS_SOME_EXISTS] >> strip_tac >>
   (conj_tac >- metis_tac[type_stmt_builtin_arity] >>
-   drule (cj 4 well_typed_expr_builtin_arity) >>
+   qpat_x_assum `well_typed_exprs _ dflts`
+     (mp_tac o MATCH_MP (cj 4 well_typed_expr_builtin_arity)) >>
    simp[supported_exprs_exists_every, GSYM EVERY_NOT_EXISTS, combinTheory.o_DEF])
 QED
 
@@ -218,20 +225,18 @@ Proof
 QED
 
 Theorem checked_module_consts_builtin_arity[local]:
-  source_typing_ok source_tops am tx /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
   ALOOKUP (module_consts_env source_tops []) id = SOME r ==>
   ~supported_expr_exists short_builtin_args r
 Proof
   strip_tac >>
-  qpat_x_assum `source_typing_ok _ _ _`
-    (strip_assume_tac o REWRITE_RULE [source_typing_ok_def]) >>
   `ALOOKUP [(NONE:num option,source_tops)] NONE = SOME source_tops` by simp[] >>
   drule_all checked_module_consts_env_replacement_shape >>
   metis_tac[short_builtin_args_shape_root, cj 1 supported_expr_exists_mono]
 QED
 
-Theorem subst_checked_fn_builtin_arity[local]:
-  source_typing_ok source_tops am tx /\
+Theorem subst_checked_fn_builtin_arity:
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
   ~supported_stmts_expr_exists short_builtin_args stmts /\
   EVERY (\d. ~supported_expr_exists short_builtin_args d) dflts ==>
   ~supported_stmts_expr_exists short_builtin_args
@@ -248,16 +253,6 @@ Proof
   metis_tac[subst_consts_expr_builtin_arity]
 QED
 
-Theorem runtime_source_function_builtin_arity[local]:
-  source_typing_ok source_tops am tx /\
-  MEM (FunctionDecl vis mut nr rr name args dflts ret stmts) source_tops /\
-  vis <> Deploy ==>
-  ~supported_stmts_expr_exists short_builtin_args stmts /\
-  EVERY (\d. ~supported_expr_exists short_builtin_args d) dflts
-Proof
-  simp[source_typing_ok_def] >> metis_tac[checked_runtime_source_builtin_arity]
-QED
-
 Theorem public_getter_builtin_arity[local]:
   public_getter top = SOME (mut,nr,rr,name,args,dflts,ret,stmts) ==>
   ~supported_stmts_expr_exists short_builtin_args stmts /\
@@ -269,7 +264,7 @@ Proof
 QED
 
 Theorem classify_external_builtin_arity:
-  source_typing_ok source_tops am tx /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
   MEM (mut,nr,rr,name,args,dflts,ret,stmts)
       (FST (classify_functions source_tops)) ==>
   ~supported_stmts_expr_exists short_builtin_args stmts /\
@@ -277,12 +272,12 @@ Theorem classify_external_builtin_arity:
 Proof
   strip_tac >> drule classify_functions_external_source >> strip_tac >>
   gvs[subst_consts_fn_def] >> irule (GEN_ALL subst_checked_fn_builtin_arity) >>
-  metis_tac[runtime_source_function_builtin_arity, public_getter_builtin_arity,
+  metis_tac[checked_source_builtin_arity, public_getter_builtin_arity,
             function_visibility_distinct]
 QED
 
 Theorem classify_internal_builtin_arity:
-  source_typing_ok source_tops am tx /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
   MEM (mut,nr,rr,name,args,dflts,ret,stmts)
       (FST (SND (classify_functions source_tops))) ==>
   ~supported_stmts_expr_exists short_builtin_args stmts /\
@@ -290,11 +285,11 @@ Theorem classify_internal_builtin_arity:
 Proof
   strip_tac >> drule (iffLR (SPEC_ALL MEM_classify_internal)) >> strip_tac >>
   gvs[subst_consts_fn_def] >> irule (GEN_ALL subst_checked_fn_builtin_arity) >>
-  metis_tac[runtime_source_function_builtin_arity, function_visibility_distinct]
+  metis_tac[checked_source_builtin_arity, function_visibility_distinct]
 QED
 
 Theorem classify_fallback_builtin_arity:
-  source_typing_ok source_tops am tx /\
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art /\
   FST (SND (SND (classify_functions source_tops))) =
     SOME (mut,nr,rr,name,args,dflts,ret,stmts) ==>
   ~supported_stmts_expr_exists short_builtin_args stmts /\
@@ -302,7 +297,7 @@ Theorem classify_fallback_builtin_arity:
 Proof
   strip_tac >> drule classify_functions_fallback_mem >> strip_tac >>
   gvs[subst_consts_fn_def] >> irule (GEN_ALL subst_checked_fn_builtin_arity) >>
-  metis_tac[runtime_source_function_builtin_arity, function_visibility_distinct]
+  metis_tac[checked_source_builtin_arity, function_visibility_distinct]
 QED
 
 Definition compile_env_builtin_arity_def:
@@ -312,7 +307,7 @@ Definition compile_env_builtin_arity_def:
 End
 
 Theorem build_compile_env_builtin_arity:
-  source_typing_ok source_tops am tx ==>
+  check_contract F layouts addr [(NONE, source_tops)] = SOME art ==>
   compile_env_builtin_arity
     (build_compile_env source_tops vis mut name args ret stmts ut)
 Proof

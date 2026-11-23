@@ -47,6 +47,8 @@ Proof
   `!x. not_fresh_at sa x ==> x <> out` by
     (rpt strip_tac >> fs[not_fresh_at_def, Abbr `out`] >>
      first_x_assum (qspec_then `sa.cs_next_var` mp_tac) >> simp[]) >>
+  `i.inst_opcode <> DALLOCA` by
+    (simp[Abbr `i`, mk_inst_def] >> strip_tac >> gvs[MEM]) >>
   `step_inst_base i s = OK u` by simp[Abbr `i`, Abbr `u`, Abbr `out`] >>
   `step_prov PG G i u = DRESTRICT G (COMPL {out}) /\
    step_taint i s u tn = tn with t_var := tn.t_var |+ (out,{})` by
@@ -83,8 +85,9 @@ Proof
                 `tn with t_var := tn.t_var |+ (out,{})`] >>
   conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[Abbr `u`] >>
   conj_tac
-  >- (gen_tac >> irule emitted_origin_ptr_path >> simp[] >>
-      qexistsl_tac [`[i]`,`sa`] >> simp[]) >>
+  >- (gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >> simp[] >>
+      qexistsl_tac [`[i]`,`sa`] >> simp[] >>
+      rpt strip_tac >> Cases_on `pre` >> gvs[]) >>
   simp[Abbr `u`, lookup_var_update_var, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
        op_prov_def, op_taint_def, FLOOKUP_DRESTRICT] >>
   rpt strip_tac >> metis_tac[]

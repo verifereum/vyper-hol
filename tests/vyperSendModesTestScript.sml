@@ -173,3 +173,28 @@ Theorem send_none_executes_invalid_recipient:
 Proof
   CONV_TAC cv_eval
 QED
+
+(* Oracle mode records an explicit gas= operand as the request's cap; the
+   omitted keyword records SOME 0 (send_bigstep_failure_whole_state). *)
+Definition send_gas_call_def:
+  send_gas_call target amount gas = Call NoneT (Send T)
+    [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [target]));
+     Literal (BaseT (UintT 256)) (IntL (&amount));
+     Literal (BaseT (UintT 256)) (IntL (&gas))] NONE
+End
+val () = cv_auto_trans send_gas_call_def;
+
+Theorem send_explicit_gas_records_cap:
+  (SND (eval_expr empty_evaluation_context (send_gas_call 9w 7 50000)
+    (send_state with outcomes := SOME [send_outcome F [] (2 ** 256); cpscv_tail]))).requests =
+    send_state.requests ++
+      [(call_outcome_request 9w [] (SOME 7) send_state with cr_gas := SOME 50000)]
+Proof
+  simp (send_monad_simps @ [send_gas_call_def, evaluate_def,
+       evaluate_literal_def, send_address_literal, eval_send_def,
+       frame_call_value_def, check_def, COND_RATOR, take_call_outcome_def,
+       take_request_outcome_def, call_outcome_request_def, take_outcome_def,
+       record_request_def, computed_precompile_addresses, send_outcome_def,
+       cpscv_outcome_def, send_state_def, cpscv_state_def, empty_state_def,
+       UNCURRY])
+QED

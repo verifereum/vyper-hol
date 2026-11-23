@@ -5,7 +5,7 @@
 Theory compilerLoweringTest
 Ancestors
   evalCompilerSubsetState compileVyper vyperCompiler exprLowering context
-  concretizeMemLocDefs vyperInterpreter alist integer_word
+  concretizeMemLocDefs vyperInterpreter alist integer_word compileUnit
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib vyperCheckContractLib
   jsonASTLib finite_mapLib computeLib wordsLib
 
@@ -76,6 +76,371 @@ Theorem allocation_limit_defaults_return_rejected:
       allocation_limit_defaults_return_program rpolicy = NONE
 Proof
   gen_tac >> ACCEPT_TAC allocation_limit_defaults_return_eval
+QED
+
+(* @external
+   def f(h: bytes32 = sha256(b"x")):
+       pass
+   Python folds the default to a bytes32 literal and so does the frontend,
+   but a raw AST may keep the call. Evaluating it at entry would call the
+   sha256 precompile, which the lowering refuses; the folded default
+   still lowers. *)
+Definition sha256_default_program_def:
+  sha256_default_program =
+    [FunctionDecl External Nonpayable F F "f"
+       [("h", BaseT (BytesT (Fixed 32)))]
+       [Builtin (BaseT (BytesT (Fixed 32))) Sha256
+          [Literal (BaseT (BytesT (Dynamic 1))) (BytesL [120w])]]
+       NoneT [Pass]]
+End
+
+Definition sha256_folded_default_program_def:
+  sha256_folded_default_program =
+    [FunctionDecl External Nonpayable F F "f"
+       [("h", BaseT (BytesT (Fixed 32)))]
+       [Literal (BaseT (BytesT (Fixed 32))) (BytesL (REPLICATE 32 0w))]
+       NoneT [Pass]]
+End
+
+val sha256_default_eval =
+  EVAL ``lower_vyper_runtime_unit sha256_default_program rpolicy``
+
+Theorem sha256_default_rejected:
+  !rpolicy. lower_vyper_runtime_unit sha256_default_program rpolicy = NONE
+Proof
+  gen_tac >> ACCEPT_TAC sha256_default_eval
+QED
+
+val sha256_folded_default_eval =
+  EVAL ``IS_SOME (lower_vyper_runtime_unit sha256_folded_default_program
+    ((ARB : resolved_compiler_policy) with
+       <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+          rpol_final_assembly := FAP_Optimize |>))``
+
+Theorem sha256_folded_default_lowers:
+  IS_SOME (lower_vyper_runtime_unit sha256_folded_default_program
+    ((ARB : resolved_compiler_policy) with
+       <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+          rpol_final_assembly := FAP_Optimize |>))
+Proof
+  ACCEPT_TAC (EQT_ELIM sha256_folded_default_eval)
+QED
+
+(* ===== Blueprint lowering ===== *)
+
+(* create_from_blueprint(t, *ctor, code_offset=offset, raw_args=raw) *)
+Definition blueprint_fixture_call_def:
+  blueprint_fixture_call raw offset ctor =
+    Call (BaseT AddressT) (CreateTarget (CreateFromBlueprint raw) F T [])
+      ([Name (BaseT AddressT) "t"; Literal (BaseT (UintT 256)) (IntL 0);
+        Literal (BaseT (UintT 256)) (IntL offset)] ++ ctor) NONE
+End
+
+Definition blueprint_bytes_arg_def:
+  blueprint_bytes_arg bound = Name (BaseT (BytesT (Dynamic bound))) "b"
+End
+
+Definition blueprint_uint_arg_def:
+  blueprint_uint_arg = Name (BaseT (UintT 256)) "n"
+End
+
+(* (t: address, b: Bytes[bound], n: uint256) *)
+Definition blueprint_fixture_params_def:
+  blueprint_fixture_params bound =
+    [("t", BaseT AddressT); ("b", BaseT (BytesT (Dynamic bound)));
+     ("n", BaseT (UintT 256))]
+End
+
+(* decls
+   @external
+   def f(t: address, b: Bytes[bound], n: uint256) -> address:
+       return call *)
+Definition blueprint_runtime_program_def:
+  blueprint_runtime_program decls bound call =
+    decls ++
+    [FunctionDecl External Nonpayable F F "f" (blueprint_fixture_params bound)
+       ([] : expr list) (BaseT AddressT) [Return (SOME call)]]
+End
+
+(* decls
+   @deploy
+   def __init__(t: address, b: Bytes[bound], n: uint256):
+       call *)
+Definition blueprint_deploy_program_def:
+  blueprint_deploy_program decls bound call =
+    decls ++
+    [FunctionDecl Deploy Nonpayable F F "__init__"
+       (blueprint_fixture_params bound) ([] : expr list) NoneT [Expr call]]
+End
+
+(* s: Bytes[10] *)
+Definition blueprint_storage_bytes_def:
+  blueprint_storage_bytes =
+    VariableDecl Private Storage "s" (BaseT (BytesT (Dynamic 10))) (SOME 0)
+End
+
+(* s: transient(Bytes[10]) *)
+Definition blueprint_transient_bytes_def:
+  blueprint_transient_bytes =
+    VariableDecl Private Transient "s" (BaseT (BytesT (Dynamic 10))) (SOME 0)
+End
+
+(* m: HashMap[uint256, Bytes[10]] *)
+Definition blueprint_hashmap_bytes_def:
+  blueprint_hashmap_bytes =
+    HashMapDecl Private F "m" (BaseT (UintT 256))
+      (Type (BaseT (BytesT (Dynamic 10)))) (SOME 0)
+End
+
+Definition blueprint_fixture_policy_def:
+  blueprint_fixture_policy =
+    (ARB : resolved_compiler_policy) with
+      <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+         rpol_final_assembly := FAP_Optimize |>
+End
+
+(* A dynamic storage, transient or hashmap-value variable with a dynamic
+   constructor argument or raw_args. *)
+val blueprint_dynamic_lowers_eval = EVAL
+  ``IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [blueprint_storage_bytes] 10
+         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [blueprint_storage_bytes] 10
+         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [blueprint_transient_bytes] 10
+         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [blueprint_hashmap_bytes] 10
+         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy)``
+
+Theorem blueprint_dynamic_lowers:
+  IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [blueprint_storage_bytes] 10
+         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [blueprint_storage_bytes] 10
+         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [blueprint_transient_bytes] 10
+         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [blueprint_hashmap_bytes] 10
+         (blueprint_fixture_call T 3 [blueprint_bytes_arg 10])) blueprint_fixture_policy)
+Proof
+  ACCEPT_TAC (EQT_ELIM blueprint_dynamic_lowers_eval)
+QED
+
+(* The same storage variable with a static argument, and the same dynamic
+   argument and raw_args without it. *)
+val blueprint_dynamic_neighbours_eval = EVAL
+  ``IS_SOME (lower_vyper_runtime_unit
+       (blueprint_runtime_program [blueprint_storage_bytes] 10
+          (blueprint_fixture_call F 3 [blueprint_uint_arg]))
+       blueprint_fixture_policy) /\
+    IS_SOME (lower_vyper_runtime_unit
+       (blueprint_runtime_program [] 10
+          (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]))
+       blueprint_fixture_policy) /\
+    IS_SOME (lower_vyper_runtime_unit
+       (blueprint_runtime_program [] 10
+          (blueprint_fixture_call T 3 [blueprint_bytes_arg 10]))
+       blueprint_fixture_policy)``
+
+Theorem blueprint_dynamic_neighbours_lower:
+  IS_SOME (lower_vyper_runtime_unit
+     (blueprint_runtime_program [blueprint_storage_bytes] 10
+        (blueprint_fixture_call F 3 [blueprint_uint_arg]))
+     blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
+     (blueprint_runtime_program [] 10
+        (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]))
+     blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_runtime_unit
+     (blueprint_runtime_program [] 10
+        (blueprint_fixture_call T 3 [blueprint_bytes_arg 10]))
+     blueprint_fixture_policy)
+Proof
+  ACCEPT_TAC (EQT_ELIM blueprint_dynamic_neighbours_eval)
+QED
+
+(* Both a large literal code_offset and zero lower to the runtime check. *)
+val blueprint_offset_lowers_eval = EVAL
+  ``IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [] 10
+         (blueprint_fixture_call F (2 ** 255 + 1) [blueprint_uint_arg]))
+      blueprint_fixture_policy)``
+
+Theorem blueprint_offset_lowers:
+  IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [] 10
+         (blueprint_fixture_call F (2 ** 255 + 1) [blueprint_uint_arg]))
+      blueprint_fixture_policy)
+Proof
+  ACCEPT_TAC (EQT_ELIM blueprint_offset_lowers_eval)
+QED
+
+val blueprint_offset_zero_eval =
+  EVAL ``IS_SOME (lower_vyper_runtime_unit
+           (blueprint_runtime_program [] 10
+              (blueprint_fixture_call F 0 [blueprint_uint_arg]))
+           blueprint_fixture_policy)``
+
+Theorem blueprint_offset_zero_lowers:
+  IS_SOME (lower_vyper_runtime_unit
+    (blueprint_runtime_program [] 10
+       (blueprint_fixture_call F 0 [blueprint_uint_arg]))
+    blueprint_fixture_policy)
+Proof
+  ACCEPT_TAC (EQT_ELIM blueprint_offset_zero_eval)
+QED
+
+(* Raw arguments with bounds on either side of the old allocation cap. *)
+val blueprint_args_bound_lowers_eval = EVAL
+  ``IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [] (2 ** 64 - 2 ** 32)
+         (blueprint_fixture_call T 3
+            [blueprint_bytes_arg (2 ** 64 - 2 ** 32)])) blueprint_fixture_policy)``
+
+Theorem blueprint_args_bound_lowers:
+  IS_SOME (lower_vyper_runtime_unit
+      (blueprint_runtime_program [] (2 ** 64 - 2 ** 32)
+         (blueprint_fixture_call T 3
+            [blueprint_bytes_arg (2 ** 64 - 2 ** 32)])) blueprint_fixture_policy)
+Proof
+  ACCEPT_TAC (EQT_ELIM blueprint_args_bound_lowers_eval)
+QED
+
+val blueprint_args_bound_neighbour_eval =
+  EVAL ``IS_SOME (lower_vyper_runtime_unit
+           (blueprint_runtime_program [] (2 ** 64 - 2 ** 33)
+              (blueprint_fixture_call T 3
+                 [blueprint_bytes_arg (2 ** 64 - 2 ** 33)]))
+           blueprint_fixture_policy)``
+
+Theorem blueprint_args_bound_neighbour_lowers:
+  IS_SOME (lower_vyper_runtime_unit
+    (blueprint_runtime_program [] (2 ** 64 - 2 ** 33)
+       (blueprint_fixture_call T 3
+          [blueprint_bytes_arg (2 ** 64 - 2 ** 33)]))
+    blueprint_fixture_policy)
+Proof
+  ACCEPT_TAC (EQT_ELIM blueprint_args_bound_neighbour_eval)
+QED
+
+(* The same call forms lower in a constructor. *)
+val blueprint_deploy_lowers_eval = EVAL
+  ``IS_SOME (lower_vyper_deploy_unit
+      (blueprint_deploy_program [blueprint_storage_bytes] 10
+         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]))
+      blueprint_fixture_policy []) /\
+  IS_SOME (lower_vyper_deploy_unit
+      (blueprint_deploy_program [] 10
+         (blueprint_fixture_call F (2 ** 255 + 1) [blueprint_uint_arg]))
+      blueprint_fixture_policy []) /\
+  IS_SOME (lower_vyper_deploy_unit
+      (blueprint_deploy_program [] (2 ** 64 - 2 ** 32)
+         (blueprint_fixture_call T 3
+            [blueprint_bytes_arg (2 ** 64 - 2 ** 32)]))
+      blueprint_fixture_policy [])``
+
+Theorem blueprint_deploy_lowers:
+  IS_SOME (lower_vyper_deploy_unit
+      (blueprint_deploy_program [blueprint_storage_bytes] 10
+         (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]))
+      blueprint_fixture_policy []) /\
+  IS_SOME (lower_vyper_deploy_unit
+      (blueprint_deploy_program [] 10
+         (blueprint_fixture_call F (2 ** 255 + 1) [blueprint_uint_arg]))
+      blueprint_fixture_policy []) /\
+  IS_SOME (lower_vyper_deploy_unit
+      (blueprint_deploy_program [] (2 ** 64 - 2 ** 32)
+         (blueprint_fixture_call T 3
+            [blueprint_bytes_arg (2 ** 64 - 2 ** 32)]))
+      blueprint_fixture_policy [])
+Proof
+  ACCEPT_TAC (EQT_ELIM blueprint_deploy_lowers_eval)
+QED
+
+val blueprint_deploy_neighbours_eval = EVAL
+  ``IS_SOME (lower_vyper_deploy_unit
+       (blueprint_deploy_program [blueprint_storage_bytes] 10
+          (blueprint_fixture_call F 3 [blueprint_uint_arg]))
+       blueprint_fixture_policy []) /\
+    IS_SOME (lower_vyper_deploy_unit
+       (blueprint_deploy_program [] 10
+          (blueprint_fixture_call F 0 [blueprint_uint_arg]))
+       blueprint_fixture_policy []) /\
+    IS_SOME (lower_vyper_deploy_unit
+       (blueprint_deploy_program [] (2 ** 64 - 2 ** 33)
+          (blueprint_fixture_call T 3
+             [blueprint_bytes_arg (2 ** 64 - 2 ** 33)]))
+       blueprint_fixture_policy [])``
+
+Theorem blueprint_deploy_neighbours_lower:
+  IS_SOME (lower_vyper_deploy_unit
+     (blueprint_deploy_program [blueprint_storage_bytes] 10
+        (blueprint_fixture_call F 3 [blueprint_uint_arg]))
+     blueprint_fixture_policy []) /\
+  IS_SOME (lower_vyper_deploy_unit
+     (blueprint_deploy_program [] 10
+        (blueprint_fixture_call F 0 [blueprint_uint_arg]))
+     blueprint_fixture_policy []) /\
+  IS_SOME (lower_vyper_deploy_unit
+     (blueprint_deploy_program [] (2 ** 64 - 2 ** 33)
+        (blueprint_fixture_call T 3
+           [blueprint_bytes_arg (2 ** 64 - 2 ** 33)]))
+     blueprint_fixture_policy [])
+Proof
+  ACCEPT_TAC (EQT_ELIM blueprint_deploy_neighbours_eval)
+QED
+
+(* A blueprint call in the main module with dynamic storage in an import. *)
+val blueprint_mods_lowers_eval = EVAL
+  ``IS_SOME (lower_vyper_runtime_unit_mods
+      [(NONE, blueprint_runtime_program [] 10
+                (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]));
+       (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_deploy_unit_mods
+      [(NONE, blueprint_deploy_program [] 10
+                (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]));
+       (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy [])``
+
+Theorem blueprint_mods_lowers:
+  IS_SOME (lower_vyper_runtime_unit_mods
+      [(NONE, blueprint_runtime_program [] 10
+                (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]));
+       (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_deploy_unit_mods
+      [(NONE, blueprint_deploy_program [] 10
+                (blueprint_fixture_call F 3 [blueprint_bytes_arg 10]));
+       (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy [])
+Proof
+  ACCEPT_TAC (EQT_ELIM blueprint_mods_lowers_eval)
+QED
+
+val blueprint_mods_neighbours_eval = EVAL
+  ``IS_SOME (lower_vyper_runtime_unit_mods
+       [(NONE, blueprint_runtime_program [] 10
+                 (blueprint_fixture_call F 3 [blueprint_uint_arg]));
+        (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy) /\
+    IS_SOME (lower_vyper_deploy_unit_mods
+       [(NONE, blueprint_deploy_program [] 10
+                 (blueprint_fixture_call F 3 [blueprint_uint_arg]));
+        (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy [])``
+
+Theorem blueprint_mods_neighbours_lower:
+  IS_SOME (lower_vyper_runtime_unit_mods
+     [(NONE, blueprint_runtime_program [] 10
+               (blueprint_fixture_call F 3 [blueprint_uint_arg]));
+      (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy) /\
+  IS_SOME (lower_vyper_deploy_unit_mods
+     [(NONE, blueprint_deploy_program [] 10
+               (blueprint_fixture_call F 3 [blueprint_uint_arg]));
+      (SOME 1, [blueprint_storage_bytes])] [] blueprint_fixture_policy [])
+Proof
+  ACCEPT_TAC (EQT_ELIM blueprint_mods_neighbours_eval)
 QED
 
 val allocation_limit_raise_eval =

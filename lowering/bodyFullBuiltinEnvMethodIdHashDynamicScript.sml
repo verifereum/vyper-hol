@@ -181,7 +181,14 @@ Resume method_id_hash_dynamic_full_run[endpoint]:
    (gen_tac >> simp[NoAsms, Abbr `u`] >>
     irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >> simp[] >>
     qexistsl [`emitted_insts sm sh`, `sm`] >>
-    fs[same_blocks_def, mk_inst_def, is_terminator_def]) >>
+    fs[same_blocks_def, mk_inst_def, is_terminator_def] >>
+    rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+    `MEM i (emitted_insts sm sh)` by
+      (qpat_assum `emitted_insts sm sh = _` (pure_once_rewrite_tac o single) >>
+       qpat_assum `[_;_;_] = _` (pure_once_rewrite_tac o single) >> simp[]) >>
+    qpat_x_assum `MEM i (emitted_insts sm sh)` mp_tac >>
+    qpat_assum `emitted_insts sm sh = _` (pure_once_rewrite_tac o single) >>
+    PURE_REWRITE_TAC[MEM] >> strip_tac >> gvs[]) >>
  `!H. valid_horizon cx st0 H mid.storage_trace ==>
     stmt_state_rel H ctx func cenv cx mid u /\
     storage_well_formed_on cx mid (FST H)` by

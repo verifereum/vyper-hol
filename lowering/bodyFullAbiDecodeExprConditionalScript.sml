@@ -4,14 +4,14 @@ Ancestors
   bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
   bodyFullAbiDecodeCallerFull bodyFullAbiDecodeCallerSetupOrigin
   bodyFullAbiDecodeCallerCutEndpoint bodyFullAbiDecodeCallerEntryOrigin
-  bodyInvNoDalloca bodySimFull exprSimAbiDecodeEntryTyping
+  bodySimFull exprSimAbiDecodeEntryTyping
   gasOutcomeFullCompose exprSimHyps exprSimSource exprLowering compileEnv
   exprSimAbiDecodeBodySuccess exprSimAbiDecodeOblivious exprSimAbiDecodeCompose
   exprSimUnwrap exprLoweringProps exprOpenFirstOperand gasShadow gasShadowCompileStmtHelpers
   gasShadowState fragExec stmtSimProps haltExitProj vyperStorageTrace
   vyperContext vyperInterpreter vyperState vyperAST
   vyperStorageFootprint exprSimHypsDefs vyperTypeExprResult vyperTypeExprSoundness
-  vyperTypeInvariants vyperTyping
+  vyperTypeInvariants vyperTyping bodyInvCodeProps exprBodyPreProps
 
 (* Retain the two closed producer propositions at the checked caller boundary. *)
 local
@@ -86,6 +86,7 @@ Theorem abi_decode_singleton_vv_full[local]:
   ^decode_guarded_producer /\ ^decode_cut_selector /\
   body_inv tops ctx ce cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
   body_exprs_full_ok cx [e] ==>
@@ -94,7 +95,6 @@ Theorem abi_decode_singleton_vv_full[local]:
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "guarded")
     (CONJUNCTS_THEN2 (mk_asm "selector") (map_every assume_tac o CONJUNCTS))) >>
-  drule body_inv_no_dalloca >> strip_tac >>
   drule expr_body_pre_type_builtin_head >> strip_tac >>
   `expr_sim_full (DF,lo,delta,ctx,shadow_ctx,PG,func,shadow_func)
        ce cx (expr_type e) e es` by
@@ -104,15 +104,15 @@ Proof
        ONCE_REWRITE_RULE [body_expr_full_ok_def]) >> simp[]) >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule_all abi_decode_singleton_compile >> simp[] >> strip_tac >> gvs[] >>
-  `?shadow_start. lower_value compile_expr ce (expr_type e)
+  `?shadow_start. lower_value compile_expr (gas_shadow_env T ce) (expr_type e)
      (gas_shadow_expr e) shadow_sa = (data,shadow_start) /\
      gas_shadow_state start shadow_start` by
-    (mp_tac (Q.INST [`cenv` |-> `ce`, `ty` |-> `expr_type e`, `e` |-> `e`]
-       gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_sa` >>
-     gvs[]) >>
+    (qpat_assum `gas_shadow_state sa shadow_sa`
+       (mp_then Any mp_tac (REWRITE_RULE [gas_shadow_compiles_def]
+         (Q.INST [`sd` |-> `T`] gas_shadow_stmt_lower_value_env))) >>
+     disch_then (qspecl_then [`expr_type e`,`e`,`ce`] mp_tac) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T ce) (expr_type e)
+       (gas_shadow_expr e) shadow_sa` >> simp[]) >>
   `fn_has_code shadow_sa shadow_start shadow_func` by
     (qpat_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
      simp[gas_shadow_expr_def, NoAsms] >> strip_tac >>
@@ -181,8 +181,7 @@ Resume abi_decode_singleton_vv_full[continuation]:
   `?bs. v = BytesV bs` by
     (`env.type_defs = get_tenv cx` by
        (qpat_assum `expr_body_pre _ _ _ e _`
-          (ACCEPT_TAC o MATCH_MP abi_decode_inv_type_env o
-           CONJUNCT1 o REWRITE_RULE [expr_body_pre_def])) >>
+          (ACCEPT_TAC o MATCH_MP expr_body_pre_env_type_defs)) >>
      qpat_assum `evaluate_type _ (expr_type e) = SOME _` (fn ty_th =>
        qpat_assum `env.type_defs = get_tenv cx` (fn env_th =>
          qpat_x_assum `expr_result_typed _ _ _` (fn res_th =>
@@ -208,9 +207,7 @@ Resume abi_decode_singleton_vv_full[continuation]:
      conj_tac >- ACCEPT_TAC (BETA_RULE abi_decode_endpoint_producer_checked) >>
      conj_tac >-
        (`cx_tops cx = tops` by
-          (irule gasContextTheory.cx_tops_module >>
-           qpat_assum `body_inv _ _ _ _`
-             (mp_tac o REWRITE_RULE [bodySimTheory.body_inv_def]) >> simp[NoAsms]) >>
+          (drule_then (ACCEPT_TAC o cj 2) body_inv_main_code) >>
         simp[] >> rpt strip_tac >>
         qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
           (drule_then strip_assume_tac)) >>
@@ -241,7 +238,9 @@ Resume abi_decode_singleton_vv_full[continuation]:
      disch_then (qx_choose_then `b` $ qx_choose_then `data_var` $
        qx_choose_then `d` $ mk_asm "entry_origin") >>
      qexistsl [`b`,`data_var`,`d`,`ops`,`ready`] >>
-     conj_tac >- asm "entry_origin" ACCEPT_TAC >>
+     conj_asm1_tac >- asm "entry_origin" ACCEPT_TAC >>
+     pop_assum (fn entry => asm_x "entry_origin" kall_tac >>
+                            mk_asm "entry_origin" entry) >>
      reverse conj_tac >- simp[] >>
      qabbrev_tac `wtv = if unwrap /\ needs_external_call_wrap ty then TupleTV [tyv] else tyv` >>
      `abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields wty wtv /\
@@ -302,7 +301,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
   qpat_assum `expr_body_pre _ _ _ _ _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [expr_body_pre_def]) >>
+    (strip_assume_tac o MATCH_MP expr_body_pre_static_facts) >>
   drule abi_decode_parent_type >> strip_tac >> gvs[] >>
   `body_exprs_full_ok cx [e]` by
     (first_x_assum irule >>
@@ -314,6 +313,7 @@ Proof
       conj_tac >- asm "guarded" ACCEPT_TAC >>
       conj_tac >- asm "selector" ACCEPT_TAC >>
       qpat_assum `shadow_body_inv tops ctx shadow_ctx` (irule_at Any) >>
+      qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es'` (irule_at Any) >>
       simp[] >> goal_assum (drule_at Any)) >>
   irule expr_sim_full_of_vv >> simp[] >>
   conj_tac

@@ -12,12 +12,13 @@ Theorem bop_operands_full_cps_exit:
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\
@@ -29,7 +30,7 @@ Theorem bop_operands_full_cps_exit:
   fn_has_code shadow_s1 shadow_s2 shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= s1.cs_next_var /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
@@ -155,11 +156,11 @@ Proof
   qpat_assum `Abbrev (P = _)`
     (fn th => simp[REWRITE_RULE [markerTheory.Abbrev_def] th, NoAsms]) >>
   strip_tac >> gvs[] >>
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
     (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t,G1,tn1)` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
        qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
            (LIST_CONJ [path,no_phi,safe])))))) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
     (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ t`
@@ -174,6 +175,15 @@ Proof
     (drule_at (Pos last) (REWRITE_RULE [ETA_THM] expr_body_pre_eval) >>
      disch_then (qspec_then `cenv` mp_tac) >>
      simp[] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env e1` by
+       qpat_assum `expr_body_pre _ cx env e1 _`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])`
+       suffices_by simp[] >>
+     irule body_const_cells_agree_expr_read >>
+     qpat_assum `bind (eval_expr cx e1) _ _ = (_, mid with gas_obs := [])`
+       (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env e2 mid` by metis_tac[] >>
   `body_expr_full_ok cx e2` by
     (gvs[body_exprs_full_ok_def] >> first_x_assum irule >>
@@ -236,12 +246,13 @@ Theorem bop_word_operands_full_cps_exit:
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\
@@ -253,7 +264,7 @@ Theorem bop_word_operands_full_cps_exit:
   fn_has_code shadow_s1 shadow_s2 shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= s1.cs_next_var /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
@@ -317,12 +328,13 @@ Theorem bop_operands_full_cps:
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\
@@ -334,7 +346,7 @@ Theorem bop_operands_full_cps:
   fn_has_code shadow_s1 shadow_s2 shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= s1.cs_next_var /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
@@ -397,12 +409,13 @@ Theorem bop_word_operands_full_cps:
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e1) shadow_sa =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
     (x,shadow_s1) /\
-  lower_value compile_expr cenv (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e2) shadow_s1 =
     (y,shadow_s2) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
   gas_shadow_state s2 shadow_s2 /\
@@ -414,7 +427,7 @@ Theorem bop_word_operands_full_cps:
   fn_has_code shadow_s1 shadow_s2 shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= s1.cs_next_var /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\

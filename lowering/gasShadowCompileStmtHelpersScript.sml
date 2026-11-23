@@ -2,37 +2,37 @@
 Theory gasShadowCompileStmtHelpers
 Ancestors
   gasShadowCompileStmtOps gasShadowCompileStmtBase gasShadowCompile
-  gasShadowCompileHelpers gasShadowCompileLiteral gasShadowCompileContext
+  gasShadowCompileHelpers gasShadowCompileExternal gasShadowCompileLiteral gasShadowCompileContext
   gasShadowCompileConvert gasShadowCompileAbi gasShadow gasShadowState
   stmtLowering exprLowering compileEnv vyperAST list
 
-Theorem gas_shadow_stmt_compile_expr:
+Theorem gas_shadow_stmt_compile_expr_env:
   gas_shadow_compiles (compile_expr cenv ty e)
-    (compile_expr cenv ty (gas_shadow_expr e))
+    (compile_expr (gas_shadow_env sd cenv) ty (gas_shadow_expr e))
 Proof
-  qspecl_then [`cenv`, `ty`, `e`, `T`] mp_tac (cj 1 gas_shadow_compile_expr) >> simp[]
+  qspecl_then [`cenv`, `ty`, `e`, `T`] mp_tac (cj 1 gas_shadow_compile_expr_env) >> simp[]
 QED
 
-Theorem gas_shadow_stmt_lower_value:
+Theorem gas_shadow_stmt_lower_value_env:
   gas_shadow_compiles (lower_value compile_expr cenv ty e)
-    (lower_value compile_expr cenv ty (gas_shadow_expr e))
+    (lower_value compile_expr (gas_shadow_env sd cenv) ty (gas_shadow_expr e))
 Proof
   `!sh. gas_shadow_compiles (lower_value compile_expr cenv ty e)
-     (lower_value compile_expr cenv ty (if sh then gas_shadow_expr e else e))`
+     (lower_value compile_expr (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))`
     suffices_by (disch_then (qspec_then `T` mp_tac) >> simp[]) >>
-  gen_tac >> irule gas_shadow_compiles_lower_value >>
-  simp[cj 1 gas_shadow_compile_expr]
+  gen_tac >> irule gas_shadow_compiles_lower_value_env >>
+  simp[cj 1 gas_shadow_compile_expr_env]
 QED
 
-Theorem gas_shadow_stmt_get_target_ptr:
+Theorem gas_shadow_stmt_get_target_ptr_env:
   gas_shadow_compiles (compile_get_target_ptr compile_expr cenv bt)
-    (compile_get_target_ptr compile_expr cenv (gas_shadow_target bt))
+    (compile_get_target_ptr compile_expr (gas_shadow_env sd cenv) (gas_shadow_target bt))
 Proof
   `!target ce sh. gas_shadow_compiles (compile_get_target_ptr compile_expr ce target)
-     (compile_get_target_ptr compile_expr ce (if sh then gas_shadow_target target else target))`
+     (compile_get_target_ptr compile_expr (gas_shadow_env sd ce) (if sh then gas_shadow_target target else target))`
     suffices_by (disch_then (qspecl_then [`bt`, `cenv`, `T`] mp_tac) >> simp[]) >>
-  irule gas_shadow_compiles_get_target_ptr >>
-  simp[cj 1 gas_shadow_compile_expr]
+  irule gas_shadow_compiles_get_target_ptr_env >>
+  simp[cj 1 gas_shadow_compile_expr_env]
 QED
 
 Theorem gas_shadow_compile_log_save_arg:
@@ -46,10 +46,10 @@ QED
 
 Theorem gas_shadow_compile_log_eval_all:
   !es. gas_shadow_compiles (compile_log_eval_all cenv es)
-    (compile_log_eval_all cenv (MAP gas_shadow_expr es))
+    (compile_log_eval_all (gas_shadow_env sd cenv) (MAP gas_shadow_expr es))
 Proof
   Induct >> simp[compile_log_eval_all_def, gas_shadow_compiles_bind,
-    gas_shadow_compiles_return, gas_shadow_stmt_lower_value,
+    gas_shadow_compiles_return, gas_shadow_stmt_lower_value_env,
     gas_shadow_compile_log_save_arg]
 QED
 
@@ -62,51 +62,47 @@ Proof
        combinTheory.o_DEF, pairTheory.PAIR_MAP_THM]
 QED
 
-Theorem gas_shadow_compile_custom_error_store_args:
-  !es tys dst off.
-  gas_shadow_compiles (compile_custom_error_store_args cenv es tys dst off)
-    (compile_custom_error_store_args cenv (MAP gas_shadow_expr es) tys dst off)
-Proof
-  Induct >> Cases_on `tys` >> rpt gen_tac >>
-  simp[compile_custom_error_store_args_def, comp_ignore_bind_def] >>
-  rpt IF_CASES_TAC >>
-  simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
-       gas_shadow_stmt_compile_expr, gas_shadow_compiles_unwrap_value,
-       gas_shadow_compiles_store_memory]
-QED
-
 Theorem gas_shadow_compile_revert_with_custom_error:
   gas_shadow_compiles (compile_revert_with_custom_error cenv err)
-    (compile_revert_with_custom_error cenv (gas_shadow_custom_error err))
+    (compile_revert_with_custom_error (gas_shadow_env sd cenv) (gas_shadow_custom_error err))
 Proof
-  namedCases_on `err` ["id positional kwargs"] >>
-  simp[gas_shadow_custom_error_def, compile_revert_with_custom_error_def] >>
+  Cases_on `err` >> rename1 `CustomError id pos kw` >>
+  simp[compile_revert_with_custom_error_def, gas_shadow_custom_error_def] >>
   Cases_on `cenv.ce_error_info (nsid_to_string id)` >>
   simp[gas_shadow_compiles_emit_inst] >>
   simp[GSYM gas_shadow_custom_error_def, gas_shadow_custom_error_exprs,
-       comp_ignore_bind_def] >>
+       comp_ignore_bind_def, MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss] >>
+  match_mp_tac gas_shadow_compiles_bind >> conj_tac
+  >- (mp_tac (Q.INST [`sh` |-> `T`]
+         (MATCH_MP gas_shadow_compiles_ext_call_args (cj 1 gas_shadow_compile_expr_env))) >>
+      simp[] >>
+      disch_then (qspecl_then [`custom_error_exprs (CustomError id pos kw)`,
+        `[]`, `MAP (lowered_value_type cenv)
+                    (custom_error_exprs (CustomError id pos kw))`] mp_tac) >>
+      simp[]) >>
+  gen_tac >> BETA_TAC >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_return,
-               gas_shadow_compile_custom_error_store_args,
                gas_shadow_compiles_emit_void] >> gen_tac >> BETA_TAC) >>
   IF_CASES_TAC >>
   simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
-       gas_shadow_compiles_emit_inst, gas_shadow_compiles_abi_encode_to_buf]
+       gas_shadow_compiles_emit_inst, gas_shadow_compiles_abi_encode_values_to_buf]
 QED
 
 Theorem gas_shadow_stmt_compile_expr_same[local]:
-  gas_shadow_compiles (compile_expr cenv ty e) (compile_expr cenv ty e)
+  gas_shadow_compiles (compile_expr cenv ty e)
+    (compile_expr (gas_shadow_env sd cenv) ty e)
 Proof
-  qspecl_then [`cenv`, `ty`, `e`, `F`] mp_tac (cj 1 gas_shadow_compile_expr) >> simp[]
+  qspecl_then [`cenv`, `ty`, `e`, `F`] mp_tac (cj 1 gas_shadow_compile_expr_env) >> simp[]
 QED
 
-Theorem gas_shadow_compile_reason_message:
+Theorem gas_shadow_compile_reason_message_env:
   gas_shadow_compiles (compile_reason_message cenv e)
-    (compile_reason_message cenv (gas_shadow_expr e))
+    (compile_reason_message (gas_shadow_env sd cenv) (gas_shadow_expr e))
 Proof
   Cases_on `e` >>
   simp[gas_shadow_expr_def, compile_reason_message_def] >>
-  simp[GSYM gas_shadow_expr_def, gas_shadow_stmt_compile_expr,
+  simp[GSYM gas_shadow_expr_def, gas_shadow_stmt_compile_expr_env,
        gas_shadow_stmt_compile_expr_same] >>
   Cases_on `t` >> Cases_on `l` >>
   simp[compile_reason_message_def, gas_shadow_stmt_compile_expr_same] >>
@@ -116,10 +112,10 @@ Proof
        gas_shadow_compiles_bytelike_literal]
 QED
 
-Theorem gas_shadow_compile_tuple_store_all:
+Theorem gas_shadow_compile_tuple_store_all_env:
   !tys targets vals.
   gas_shadow_compiles (compile_tuple_store_all cenv tys targets vals)
-    (compile_tuple_store_all cenv tys (MAP gas_shadow_assignment targets) vals)
+    (compile_tuple_store_all (gas_shadow_env sd cenv) tys (MAP gas_shadow_assignment targets) vals)
 Proof
   Induct >> Cases_on `targets` >> Cases_on `vals` >>
   simp[compile_tuple_store_all_def, gas_shadow_compiles_return] >>
@@ -128,7 +124,7 @@ Proof
        comp_ignore_bind_def, gas_shadow_compiles_bind,
        gas_shadow_compiles_emit_void] >> gen_tac >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- simp[gas_shadow_stmt_get_target_ptr] >>
+  >- simp[gas_shadow_stmt_get_target_ptr_env] >>
   gen_tac >>
   rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- (rpt IF_CASES_TAC >>
@@ -139,7 +135,7 @@ QED
 
 Theorem gas_shadow_compile_tuple_unpack:
   gas_shadow_compiles (compile_tuple_unpack cenv ty stage targets src)
-    (compile_tuple_unpack cenv ty stage (MAP gas_shadow_assignment targets) src)
+    (compile_tuple_unpack (gas_shadow_env sd cenv) ty stage (MAP gas_shadow_assignment targets) src)
 Proof
   simp[compile_tuple_unpack_def] >>
   qmatch_goalsub_abbrev_tac `EXISTS _ etys` >>
@@ -151,5 +147,22 @@ Proof
            gas_shadow_compiles_return, gas_shadow_compiles_alloc_buffer,
            gas_shadow_compiles_emit_void]) >>
   gen_tac >> ho_match_mp_tac gas_shadow_compiles_bind >>
-  simp[gas_shadow_compiles_tuple_load_all, gas_shadow_compile_tuple_store_all]
+  simp[gas_shadow_compiles_tuple_load_all, gas_shadow_compile_tuple_store_all_env]
 QED
+
+(* The same-environment forms. *)
+Theorem gas_shadow_stmt_compile_expr =
+  REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F] (Q.INST [`sd` |-> `F`] gas_shadow_stmt_compile_expr_env)
+
+Theorem gas_shadow_stmt_lower_value =
+  REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F] (Q.INST [`sd` |-> `F`] gas_shadow_stmt_lower_value_env)
+
+Theorem gas_shadow_stmt_get_target_ptr =
+  REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F] (Q.INST [`sd` |-> `F`] gas_shadow_stmt_get_target_ptr_env)
+
+Theorem gas_shadow_compile_reason_message =
+  REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F] (Q.INST [`sd` |-> `F`] gas_shadow_compile_reason_message_env)
+
+Theorem gas_shadow_compile_tuple_store_all =
+  REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F] (Q.INST [`sd` |-> `F`] gas_shadow_compile_tuple_store_all_env)
+

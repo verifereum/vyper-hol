@@ -127,6 +127,12 @@ Proof
     (drule concat_bytes_shape >> disch_then SUBST1_TAC >> simp[mk_inst_def,is_terminator_def]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (drule_all concat_bytes_arm_mem_ok >> simp[]) >>
+  `(ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (`EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+       (drule concat_bytes_shape >> disch_then SUBST1_TAC >> simp[mk_inst_def]) >>
+     rpt strip_tac >> fs[EVERY_APPEND, memSafeRunTheory.dalloca_no_wrap_non_dalloca]) >>
   qexistsl_tac [`V`,`Gf`,`tnf`] >>
   conj_tac >- simp[] >>
   conj_tac

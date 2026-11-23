@@ -1,6 +1,6 @@
 Theory fnLineageInvTerminal
 Ancestors
-  spillPlanSim
+  spillPlanSim reorderPreparationInventoryProps
   fnPlanLineageReorder fnPlanLineageInventory stackPlanOps stackModel
   reorderSim doSwapSim planWf generatedPrefixSim planSpillBounds
   list sorting pred_set stackPlanGen venomInst finite_map rich_list indexedLists
@@ -17,7 +17,7 @@ Proof
   drule select_spill_candidate_var_not_pending >> strip_tac >>
   `1 <= LENGTH stk` by (Cases_on `stk` >> gvs[]) >>
   drule_all planWfTheory.select_spill_candidate_bound >> strip_tac >>
-  drule reorderSimTheory.stack_peek_mem >> strip_tac >>
+  drule reorderPreparationInventoryPropsTheory.stack_peek_mem >> strip_tac >>
   metis_tac[]
 QED
 
@@ -95,7 +95,7 @@ Proof
   `stack_get_unfixed_depth op (LENGTH targets - 1 - idx) (LENGTH targets) core = SOME d` by
     (qpat_x_assum `stack_get_unfixed_depth _ _ _ _ = SOME _` mp_tac >>
      asm_rewrite_tac[] >>
-     simp[stack_get_unfixed_depth_bottom_excluded, MEM_REPLICATE]) >>
+     simp[reorderPreparationFramePropsTheory.stack_get_unfixed_depth_bottom_excluded, MEM_REPLICATE]) >>
   `d < LENGTH core` by metis_tac[stack_get_unfixed_depth_bound] >>
   `stack_peek d core = op` by metis_tac[stack_get_unfixed_depth_peek] >>
   `LENGTH targets < idx + (LENGTH ps.ps_stack + 1)` by simp[] >>
@@ -198,6 +198,11 @@ Proof
     (MAPi (\i op. (i,op)) targets)` by
     (simp[EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
      rpt strip_tac >> gvs[] >> metis_tac[MEM_EL]) >>
+  `reorder_prepare_plan targets ps = ([],ps)` by
+    (irule reorder_prepare_noop >> conj_tac
+     >- (fs[DISJOINT_ALT] >> metis_tac[])
+     >> DISJ2_TAC >> fs[lineage_core_def, MEM_REPLICATE] >>
+     metis_tac[stackPlanTypesTheory.is_var_operand_def, dead_stack_marker_def]) >>
   drule_all full_inventory_reorder_fold_preservation >>
   disch_then (qspecl_then [`dfg`, `[]`] mp_tac) >>
   gvs[reorder_plan_def]
@@ -508,6 +513,8 @@ Proof
     (MAPi (\i op. (i,op)) targets)` by
     (simp[EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
      rpt strip_tac >> gvs[] >> metis_tac[MEM_EL]) >>
+  `reorder_prepare_plan targets ps = ([],ps)` by
+    (irule reorder_prepare_noop >> simp[]) >>
   drule_all safe_full_support_reorder_fold_perm >>
   disch_then (qspecl_then [`dfg`, `[]`] mp_tac) >>
   gvs[reorder_plan_def]
@@ -736,6 +743,8 @@ Proof
     (mp_then Any mp_tac target_window_reorder_fold_perm) >>
   disch_then (qspecl_then [`MAPi (\i op. (SUC i,op)) t`, `h::t`, `dfg`, `q`] mp_tac) >>
   simp[] >>
+  `reorder_prepare_plan (h::t) rs = ([],rs)` by
+    (irule reorder_prepare_noop >> simp[]) >>
   qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
   simp[reorder_plan_def, indexedListsTheory.MAPi_def] >>
   simp[combinTheory.o_DEF] >> strip_tac >> gvs[] >> strip_tac >>

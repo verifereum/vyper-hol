@@ -40,6 +40,7 @@ Proof
       gvs[reason_result_shape_def]) >>
   `(?n st. e = Literal (BaseT (StringT n)) (StringL st)) \/
    (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) \/
+   (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (HexBytesL bs)) \/
    (?ann n args. e = Builtin ann (Concat n) args) \/
    (?ann en method tys args. e = TypeBuiltin ann (AbiEncode en method) tys args) \/
    (?ann fid args dr. e = Call ann (IntCall fid) args dr)` by
@@ -58,6 +59,9 @@ Proof
      rename1 `Call ann tgt args dr` >> Cases_on `tgt` >>
      simp[lowered_value_type_def]) >>
   pop_assum mp_tac >> strip_tac
+  >- (gvs[Once compile_expr_raw_def, compile_expr_body_def, vyperASTTheory.expr_type_def,
+          compile_literal_vv_def, comp_bind_def, comp_return_def] >>
+      pairarg_tac >> gvs[])
   >- (gvs[Once compile_expr_raw_def, compile_expr_body_def, vyperASTTheory.expr_type_def,
           compile_literal_vv_def, comp_bind_def, comp_return_def] >>
       pairarg_tac >> gvs[])
@@ -135,7 +139,7 @@ QED
 (* The snapshot saves the read value, not the source place.  Retagging
    therefore retains the region/local value witness without retagging a
    memory path in the source store. *)
-Theorem snapshot_bytes_retag[local]:
+Theorem snapshot_bytes_retag:
   expr_body_pre ce cx env e es /\ post_value_type ce e = expr_type e /\
   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
   eval_expr cx e es = (INL raw,ee) /\ read_result cx raw ee = (INL v,ee) /\
@@ -200,9 +204,10 @@ QED
 Theorem extcall_pos_aggregate_outcome:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sb) /\
-  compile_expr cenv (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
+  compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
   compile_snapshot_vv cenv F
     (ext_call_arg_value (lowered_value_type cenv e) vv) sb = (sv,sb) /\
   ~is_word_type (vv_type (ext_call_arg_value (lowered_value_type cenv e) vv)) /\
@@ -212,7 +217,7 @@ Theorem extcall_pos_aggregate_outcome:
   MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\

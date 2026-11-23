@@ -50,34 +50,26 @@ effects and registered-allocation effects.
 
 ## Log consumer
 
-[`logAbiEncoder`](../lowering/logAbiEncoderScript.sml) composes
-`compile_abi_encode_to_buf_frag_effect` with the actual LOG instruction.
-[`logDataPacking`](../lowering/logDataPackingScript.sml) supplies its input from
-checked argument packing. `memory_value_rel_val_in_memory` in
-[`memoryValueEncoding`](../lowering/memoryValueEncodingScript.sml)
-bridges typed packing to the canonical `val_in_memory` relation.
-[`checkedLogDataExecution`](../lowering/checkedLogDataExecutionScript.sml)
-composes argument evaluation, topics, buffer allocation, packing and encoding,
-preserving source-state and local pointer relations and the source event.
-These standalone event proofs use the legacy fixed-offset `state_rel_simple`
-relation, including `immutables_rel_simple`'s word-indexed constructor
-bookkeeping. This is separate from `state_rel` and its `immutables_rel`
-constructor-memory/deployment invariant; no implication between the two state
-relations is claimed.
+`compile_stmt` captures each Log argument with the shared positional snapshot
+routine. After all snapshots, it unwraps indexed values and hashes bytestring
+topics. The non-indexed rows keep their physical types and encode directly at
+the base of the registered output buffer. An empty data list emits `LOG` with
+offset and length zero.
 
-The former native recursive Log encoder and its array, resource and trace
-machinery are retired. Log uses the shared encoder's `enc_scratch`/`enc_frame`
-resource contract and non-error continuation simulation. Cached scratch is
-permitted above live source/output regions; the resource premises do not assume
-encoder execution. The shared registered effect preserves the source context
-fields needed by both return and Log consumers.
+`compile_log_frag_full` covers argument evaluation through emission for
+supported Log statements with pure arguments. Its indexed-only branch executes
+the empty-data suffix. Its nonempty branch uses
+`abi_encode_saved_values_execute` to encode the saved rows and preserves the
+live topics across the encoder's cursor and payload writes.
+[Log statement proof](../lowering/bodyFullLogScript.sml) and
+[shared saved-row encoder](../lowering/bodyFullExtCallDirectEncodeScript.sml).
 
 ## Compiler fixtures
 
-The `abi-codegen` corpus contains twelve pinned-Python source, AST and bytecode
+The `abi-codegen` corpus contains thirteen pinned-Python source, AST and bytecode
 fixtures. Its provenance is reproduced by
 `bytecode/python-o1-bytecode-fixtures --check --vyper-repo PATH`.
-The ABI parity theories compare compiler output with those bytecode fixtures;
-this is finite differential evidence, not a universal compiler equivalence
-theorem. See [compiler-definition-parity.md](compiler-definition-parity.md) for
-the repository pin and compiler boundary.
+The [native parity runner](../bytecode/native/README.md) compares the
+compiler's deployment and runtime bytecode against these oracles. See
+[compiler-definition-parity.md](compiler-definition-parity.md) for the
+repository pin and compiler boundary.

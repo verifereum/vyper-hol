@@ -66,6 +66,14 @@ Proof
      rpt strip_tac >>
      qpat_x_assum `!i. MEM i code ==> _` drule >>
      rewrite_tac[listTheory.MEM] >> strip_tac >> fs[is_terminator_def]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i code` by simp[listTheory.MEM_APPEND] >>
+     qpat_assum `!i. MEM i code ==> _` drule >>
+     rewrite_tac[listTheory.MEM] >> strip_tac >>
+     simp[unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   conj_tac
   >- (drule_all run_inst_seq_gas_path_mem >> simp[]) >>
   gvs[rich_listTheory.IS_PREFIX_APPEND] >>

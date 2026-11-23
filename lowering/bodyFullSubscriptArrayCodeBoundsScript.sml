@@ -1,7 +1,7 @@
 (* Read-only array bounds suffixes, with one endpoint at every horizon. *)
 Theory bodyFullSubscriptArrayCodeBounds
 Ancestors
-  bodyFullTargetArrayScalar bodyPtrSignedConvertSourceFrame fragGasCopyLoop
+  bodyFullTargetArrayScalar bodyPtrSignedConvertSourceFrame fragGasCopyLoop fragGasCopySeqLiftProps
   augAssignPtrScalarRun augAssignPtrScalarCertificate fragGasOriginPtrDead
   fragGasSeqPtr fragGasOriginPtr fragExecMem fragExec memSafeRun
   exprSimArrayIndex emitHelper freshWrites compileEnv loweringStateRelDefs
@@ -14,7 +14,8 @@ Theorem bounds_suffix_layout[local]:
   sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> ALLOCA /\
-              ~is_terminator i.inst_opcode /\ i.inst_opcode <> GAS)
+              ~is_terminator i.inst_opcode /\ i.inst_opcode <> GAS /\
+              i.inst_opcode <> DALLOCA)
     (emitted_insts sa sb) /\
   scalar_code {v | idx = Var v \/ len = Var v} (emitted_insts sa sb) /\
   writes_fresh sa (emitted_insts sa sb) /\
@@ -90,6 +91,12 @@ Proof
         isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
     (fs[fn_has_code_def, IS_PREFIX_APPEND] >>
      metis_tac[DROP_LENGTH_APPEND, APPEND_ASSOC]) >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u. code = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (strip_tac >> rpt gen_tac >> strip_tac >>
+     qpat_x_assum `EVERY (\i. _ /\ _ /\ _ /\ _ /\ i.inst_opcode <> DALLOCA) code` mp_tac >>
+     simp[EVERY_APPEND]) >>
   Cases_on `idx_in_range sgn a b` >> gvs[]
   >- (qexistsl [`Gf`,`tnf`,`t with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
       conj_tac
@@ -108,7 +115,7 @@ Proof
                i.inst_opcode <> GAS) code` by fs[EVERY_CONJ] >>
   qspecl_then [`code`,`s`,`Revert_abort`,`t`,`ctx`,`func`,`bb`] mp_tac
     run_inst_seq_abort_origin_ptr_uniform >>
-  impl_tac >- simp[] >>
+  impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choose_then `j` assume_tac) >>
   qexistsl [`Gf`,`tnf`,`t with vs_inst_idx := j`] >>
   conj_tac

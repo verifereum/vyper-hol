@@ -165,9 +165,10 @@ With `holbuild` v0.14.59 or newer, MLton, and Python 3 on `PATH`:
 ```
 
 The demo builds `tests/.emit/run-test` and compares exact native/HOL encoded
-inputs and results for seventeen cases across three fixtures, plus a passing
+inputs and results for twenty-three cases across three fixtures, plus a passing
 stdin trace. The fixtures include intentional output, revert, deployment-nonce,
-address, and checkpoint mismatches. Real py-evm captures cover a source deployment
+address, checkpoint, dispatch, and unexpected-internal-error mismatches.
+Real py-evm captures cover a source deployment
 and a call with nonzero persistent/transient storage and a log, plus EOA,
 self-transfer, insufficient-balance, and raw-fallback message calls.
 Before writing parity expectations, the kernel smoke requires both prepared

@@ -6,7 +6,7 @@ Ancestors
   symPlannerSim symShuffleSim stackPlanGen stackPlanTypes planExec asmSem
   asmSymSem frameRel contextCodegenRel unitShapeDefs dfgDefs asmSplice
   spillPlanSim reorderStages inputMaterialised reduceDepthSim mixedPrefixSim
-  fnFrameStepsRevertForward
+  fnFrameStepsRevertForward reorderPreparationProps
 
 val control_bridge_core_tm = let
   val (params, body) = strip_forall (concl asmSymBridgeTheory.asm_sym_rel_core_pc)
@@ -545,7 +545,7 @@ Theorem reorder_reduce_no_spill_identity:
   (!off. ~MEM (SOSpill off) ops) ==> ops = [] /\ ps1 = ps
 Proof
   Cases_on `dist > 16` >> simp[] >>
-  metis_tac[fnFrameStepsRevertForwardTheory.rf_reduce_spill_free]
+  metis_tac[reorderPreparationPropsTheory.reduce_depth_plan_spill_free]
 QED
 
 Theorem reorder_restore_read_only_kind_replay:
@@ -697,8 +697,63 @@ Theorem reorder_plan_read_only_kind_replay:
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  rewrite_tac[reorderStagesTheory.reorder_plan_eq_plan_steps] >>
-  MATCH_ACCEPT_TAC reorder_steps_read_only_kind_replay
+  strip_tac >>
+  qspecl_then [`dfg`, `pending`, `ps`, `ops`, `ps'`,
+    `\st trace out. !q.
+      LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+        q.ps_stack st.ps_stack /\ q.ps_spilled = st.ps_spilled /\
+      (!x a y b.
+        FLOOKUP st.ps_spilled x = SOME a /\
+        FLOOKUP st.ps_spilled y = SOME b /\ x <> y ==>
+        a + 32 <= b \/ b + 32 <= a) /\
+      (!off. ~MEM (SOSpill off) trace) /\
+      (!off. MEM (SORestore off) trace ==> off < dimword(:256)) ==>
+      prefix_spill_wf fmp lo trace q /\
+      LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+        (apply_prefix_ops fmp lo trace q).ps_stack out.ps_stack /\
+      (apply_prefix_ops fmp lo trace q).ps_spilled = out.ps_spilled`]
+    (mp_tac o BETA_RULE) reorder_plan_trace_relation >>
+  impl_tac
+  >- (rpt conj_tac
+      >- simp[mixedPrefixSimTheory.apply_prefix_ops_def,
+              mixedPrefixSimTheory.prefix_spill_wf_def]
+      >- (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+          gvs[listTheory.MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM] >>
+          qpat_x_assum `!q'. _ ==> prefix_spill_wf fmp lo first_ops q' /\ _`
+            (qspec_then `q` mp_tac) >>
+          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+          qabbrev_tac `qm = apply_prefix_ops fmp lo first_ops q` >>
+          `!x a y b.
+             FLOOKUP qm.ps_spilled x = SOME a /\
+             FLOOKUP qm.ps_spilled y = SOME b /\ x <> y ==>
+             a + 32 <= b \/ b + 32 <= a` by
+            (qspecl_then [`first_ops`, `q`, `fmp`, `lo`] mp_tac
+               doSwapSimTheory.safe_prefix_spilled_separated >>
+             impl_tac >- (conj_tac >> fs[] >> first_assum ACCEPT_TAC) >>
+             simp[Abbr `qm`]) >>
+          qpat_x_assum `!q'. _ ==> prefix_spill_wf fmp lo rest_ops q' /\ _`
+            (qspec_then `qm` mp_tac) >>
+          impl_tac
+          >- (conj_tac >- first_assum ACCEPT_TAC >>
+              conj_tac >- first_assum ACCEPT_TAC >>
+              qpat_assum `qm.ps_spilled = mid.ps_spilled` (fn eq =>
+                qpat_assum `!x a y b. FLOOKUP qm.ps_spilled x = _ /\ _ ==> _`
+                  (ACCEPT_TAC o REWRITE_RULE [eq]))) >>
+          simp[doSwapSimTheory.prefix_spill_wf_append,
+               planAlignTheory.apply_prefix_ops_append, Abbr `qm`])
+      >- metis_tac[do_restore_read_only_kind_replay]
+      >- (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+          drule_all reduce_depth_plan_spill_free >>
+          simp[mixedPrefixSimTheory.apply_prefix_ops_def,
+               mixedPrefixSimTheory.prefix_spill_wf_def])
+      >- (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >> gvs[] >>
+          drule_all (SRULE [] (Q.INST [`dfg` |-> `dfg_build_function fn`]
+            reorder_one_read_only_kind_replay)) >>
+          disch_then (qspecl_then [`lo`, `fmp`] ACCEPT_TAC))
+      >- first_assum ACCEPT_TAC) >>
+  disch_then (qspec_then `qs` mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[]
 QED
 
 Theorem sym_kinds_ok_kind_transport:

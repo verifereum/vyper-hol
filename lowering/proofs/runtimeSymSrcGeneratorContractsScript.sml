@@ -11,7 +11,7 @@
    make_tuple/array/array_elems [6]: MakeArray (NONE/SOME).
    struct_lit [6]: StructLit fields; abi_encode_args [6]: AbiEncode.
    concat [6]: Concat (currently rejected by supported_builtin_form).
-   call/acc [7]: Call and Acc. Call children are precisely args and default.
+   call/acc [7]: Call and Acc. Calls use args, defaults and RawLog topic elements.
 
    The aggregate signatures include forms outside the current whitelist. *)
 Theory runtimeSymSrcGeneratorContracts
@@ -166,7 +166,7 @@ Definition runtime_sym_abi_encode_args_clause_def:
     EVERY runtime_sym_inst (state_insts s) /\
     compile_abi_encode_args cfn ce es s = (ops,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\
-    EVERY (\op. ~is_label_operand op) ops
+    EVERY runtime_sym_value ops
 End
 
 Definition runtime_sym_concat_clause_def:
@@ -190,6 +190,9 @@ Definition runtime_sym_call_clause_def:
        MEM e (omitted_defaults ce (nsid_to_string fid) (LENGTH es)) ==>
        runtime_sym_expr_contract tops cfn
          (cenv_without_defaults ce (nsid_to_string fid)) t e) /\
+    (!topics data e t. target = RawLog /\ es = [topics;data] /\
+       MEM e (raw_log_topic_exprs topics) ==>
+       runtime_sym_expr_contract tops cfn ce t e) /\
     runtime_sym_env tops ce /\ supported_expr tops (Call rt target es default) /\
     ~supported_expr_exists is_self_code (Call rt target es default) /\
     EVERY runtime_sym_inst (state_insts s) /\
@@ -358,9 +361,12 @@ End
 
 Definition runtime_sym_abi_clauses_def:
   runtime_sym_abi_clauses tops <=>
-  (!ensure mid src info n s op s'. ~is_label_operand src /\
+  (!mid n encode s op s'.
+     (!dst st len st'. ~is_label_operand dst /\
+        EVERY runtime_sym_inst (state_insts st) /\ encode dst st = (len,st') ==>
+        EVERY runtime_sym_inst (state_insts st') /\ ~is_label_operand len) /\
      EVERY runtime_sym_inst (state_insts s) /\
-     lower_abi_encode (ensure : bool) mid src info n s = (op,s') ==>
+     lower_abi_encode mid n encode s = (op,s') ==>
      EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
   (!src info lo hi size s op s'. ~is_label_operand src /\
      EVERY runtime_sym_inst (state_insts s) /\
@@ -536,12 +542,3 @@ Proof
   >> irule expr_list_member_bound >> simp[]
 QED
 
-Theorem runtime_sym_pop_target_domain:
-  supported_expr tops (Pop ty target) ==>
-  (?id. target = TopLevelNameTarget id /\ supported_storage_dynamic_array tops id) /\
-  (!p. ~supported_target_exists p target)
-Proof
-  Cases_on `target` >>
-  simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-       supported_expr_exists_def]
-QED

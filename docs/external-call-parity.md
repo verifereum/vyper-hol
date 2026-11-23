@@ -1,8 +1,8 @@
 # External-call differential results
 
-All 25 sources now match the pinned Vyper bytecode exactly. Before the fix, 18
-of them differed. The sources are the 21 single-module sources and 4
-multi-module probes from
+The original comparison found exact bytecode matches for all 25 sources after
+the fixes. Before the fixes, 18 differed. The sources are 21 single-module
+sources and 4 multi-module probes from
 [issue #555](https://github.com/verifereum/vyper-hol/issues/555). The fixes
 cover five parts of one external call:
 
@@ -17,9 +17,10 @@ The stock HOL contract checker accepted every source in both deployment and
 runtime modes. The multi-module probes were accepted both on the full module
 list and on the main module alone.
 
-Fixtures named in [the pending list](../bytecode/pending-5127-port.md)
-are out of the parity checks until the compiler changes they depend on are
-ported; their MATCH entries below hold again once they are back.
+The [pending list](../bytecode/pending-5127-port.md) tracks parity ports still
+needed. The native runner checks `i02`, `i03`, `i09`, `i13` and `i15` as
+expected bounded-decoder differences. These five are outside
+`bytecode/external-calls/parity-fixtures.txt`.
 
 The oracle is Vyper `0.5.0b1+commit.577d2534`, pinned by `VYPER_PIN`.
 It was built with experimental codegen, no optimization, the Prague EVM version,
@@ -36,26 +37,24 @@ used.
 throwaway checker fix (`account_item_type_def`, since landed in #576). With the
 stock checker of that time their verdict was `CHECKER_REJECTS_REAL_ACCEPTS`.
 
-**After column.** Measured on this branch, after all five parts and the
-whitelist change, with the probe in `memory_store_witnesses.py`.
+**After column.** Measured after all five parts and the whitelist change with
+the probe in `memory_store_witnesses.py`.
 
-**Reading the cells.** `MATCH` means the deployment and runtime bytes are both
-identical. A difference cell shows the HOL/Vyper runtime lengths and the first
-differing runtime byte (zero-based). Whitelist membership (`supported_program`)
-is given as baseline → after. It does not decide whether a source is compiled.
-`P` marks the sources in `parity-fixtures.txt`, which the native runner checks
-(`bytecode/native/README.md`); those listed in
-[`pending-5127-port.md`](../bytecode/pending-5127-port.md) are out of it until
-their port lands.
+**Reading the cells.** `MATCH` records byte-exact deployment and runtime
+results from the historical probes. A difference cell shows the HOL/Vyper
+runtime lengths and the first differing runtime byte (zero-based). Whitelist
+membership (`supported_program`) is given as baseline → after. It does not
+decide whether a source is compiled. In this table `P` marks current membership
+in `bytecode/external-calls/parity-fixtures.txt`.
 
 | Source | Part | Whitelist | Baseline | After |
 |---|---|---|---|---|
-| `i15_iface_ret_iface_direct` P | a06-10 | T → T | 219/218 B, rt@54 | MATCH (218 B) |
-| `i09_iface_ret_iface` P | a06-10 | T → T | 224/223 B, rt@54 | MATCH (223 B) |
+| `i15_iface_ret_iface_direct` | a06-10 | T → T | 219/218 B, rt@54 | MATCH (218 B) |
+| `i09_iface_ret_iface` | a06-10 | T → T | 224/223 B, rt@54 | MATCH (223 B) |
 | `c03_iface_address_attr` P | control (a06-10) | T → T | MATCH | MATCH (103 B) |
-| `i02_iface_default_param` P | a06-03 | F → T | 207/207 B, rt@87 | MATCH (207 B) |
-| `i03_two_ifaces_same_name` P | a06-03 | F → T | 209/209 B, rt@89 | MATCH (209 B) |
-| `i13_ext_fn_before_iface` P | a06-03 | F → T | 207/207 B, rt@87 | MATCH (207 B) |
+| `i02_iface_default_param` | a06-03 | F → T | 207/207 B, rt@87 | MATCH (207 B) |
+| `i03_two_ifaces_same_name` | a06-03 | F → T | 209/209 B, rt@89 | MATCH (209 B) |
+| `i13_ext_fn_before_iface` | a06-03 | F → T | 207/207 B, rt@87 | MATCH (207 B) |
 | `i01_name_clash_ext` | control (a06-03) | T → T | MATCH | MATCH (207 B) |
 | `e04_ret_string` P | a06-04 | F → T | 367/365 B, rt@54 | MATCH (365 B) |
 | `e05_ret_bytes` P | a06-04 | F → T | 365/363 B, rt@54 | MATCH (363 B) |
@@ -104,9 +103,10 @@ fixtures, because the witness library compiles single-module exports.
 ## Keyword operands
 
 These sources cover the keyword operands of an external call and `send`
-(#553); `e19_gas_kw` and `s02_send_gas` are the issue's witnesses. All match
-the pinned Vyper bytecode exactly. Each is in `parity-fixtures.txt` and checked by the native runner;
-`e29_default_ret_skip` above is too.
+(#553). The table records the matches from the original probe. At the
+current pin, `e44_skip_contract_check`, `s01_send` and `s02_send_gas` match
+exactly. The other keyword operands in the table still differ in bounded ABI
+decoding. The native runner checks these expected differences.
 
 | Source | What it covers | After |
 |---|---|---|
@@ -126,10 +126,9 @@ These sources pass a positional argument whose type is narrower than the
 declared parameter type (#553, a06-06). Vyper lays the argument buffer out
 with the types of the lowered argument values, so the calldata length follows
 the call site; the type checker admits a bytestring or dynamic array with a
-smaller bound (`arg_type_fits`). They matched the pinned Vyper bytecode
-exactly until the v0.5.0b1 pin changed their bytes; the comparison returns
-with the ports listed in
-[`pending-5127-port.md`](../bytecode/pending-5127-port.md). A storage,
+smaller bound (`arg_type_fits`). Direct request encoding restores exact
+deployment and runtime bytecode against the current pin for all five fixtures
+below. The table gives the original probe sizes. A storage,
 transient or immutable variable is the exception: Vyper reads it at its
 annotated type, which for a call argument is the declared parameter type.
 A narrower struct field (`self.p.name` with `name: String[5]`) is not admitted

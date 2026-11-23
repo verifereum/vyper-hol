@@ -564,7 +564,12 @@ Resume slice_memory_tail_full[mcopy_checked]:
      qexistsl_tac [`[offset_inst;copy_inst;store_inst]`,`sd`] >>
      simp[] >>
      simp[Abbr `offset_inst`,Abbr `copy_inst`,Abbr `store_inst`,
-       venomInstTheory.mk_inst_def,venomInstTheory.is_terminator_def]) >>
+       venomInstTheory.mk_inst_def,venomInstTheory.is_terminator_def] >>
+     rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     rename1 `ins.inst_opcode <> DALLOCA` >>
+     qpat_assum `_ = _ ++ [ins] ++ _`
+       (mp_tac o Q.AP_TERM `\code. MEM ins code`) >>
+     simp[] >> disch_then (REPEAT_TCL DISJ_CASES_THEN SUBST1_TAC) >> simp[]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (OK target,G3,tm)` by
     (gen_tac >>

@@ -24,7 +24,10 @@ Proof
         (rpt strip_tac >> gvs[is_word_type_def]) >>
       simp[compile_expr_def, expr_type_def] >> irule compile_literal_bytes_stack >> simp[]) 
   >~ [`BoolL b`]
-  >- (Cases_on `b` >> simp[compile_expr_def, compile_literal_vv_def, expr_type_def, comp_return_def]) >>
+  >- (Cases_on `b` >> simp[compile_expr_def, compile_literal_vv_def, expr_type_def, comp_return_def])
+  >~ [`HexBytesL bs`]
+  >- (gvs[expr_sim_pre_def, well_typed_expr_def] >>
+      drule well_typed_literal_hex_bytes >> strip_tac >> gvs[is_word_type_def]) >>
   simp[compile_expr_def, compile_literal_vv_def, expr_type_def, comp_return_def]
 QED
 
@@ -76,7 +79,9 @@ Proof
   Cases_on `l` >> gvs[well_typed_literal_def]
   >~ [`BoolL b`] >- (Cases_on `b` >> body_literal_prefix_tac)
   >~ [`IntL i`] >- body_literal_prefix_tac
-  >~ [`DecimalL i`] >- body_literal_prefix_tac >>
+  >~ [`DecimalL i`] >- body_literal_prefix_tac
+  >~ [`HexBytesL bs`]
+  >- (drule well_typed_literal_hex_bytes >> strip_tac >> gvs[is_word_type_def]) >>
   Cases_on `ann` >> gvs[well_typed_literal_def, is_word_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
   gvs[well_typed_literal_def, is_word_type_def]

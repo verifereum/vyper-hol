@@ -6,10 +6,25 @@ Ancestors vyperTypeInvariants[qualified,ignore_grammar] bodyPtrDefs[qualified,ig
   gasShadowCompile gasShadowState gasShadow exprSimHypsDefs vyperStorageTrace
   gasExemptCert vyperInterpreter vyperState vyperAST exprLoweringProps
   instIdxIndep fragGasOriginPtrLoop fragExec venomState venomExecSemantics
-  bodyInvNoDalloca contextRawReachable bodyFullSubscriptMappingValue
+  bodyFullIfExpReach bodyFullHashKeccakFixed contextRawReachable bodyFullSubscriptMappingValue
 
 (* The two selections share the base and key evaluation and execute the
    same hash suffix. The continuations differ only in the selected result. *)
+val mapping_shadow_type_tac =
+  fs[gasShadowCompileBaseTheory.place_type_gas_shadow_env,
+     gasShadowCompileBaseTheory.copies_subscript_base_gas_shadow_env,
+     gasShadowCompilePureTheory.gas_shadow_place_type,
+     exprLoweringTheory.copies_subscript_base_def,
+     gasShadowCompilePureTheory.gas_shadow_subscript_overlap];
+
+fun mapping_shadow_parts_tac shadow_type =
+  qpat_assum `compile_expr _ _ (gas_shadow_expr (Subscript _ _ _)) _ = _`
+    (mp_tac o REWRITE_RULE [gas_shadow_expr_def]) >> strip_tac >>
+  shadow_type >>
+  qpat_x_assum `compile_expr _ _ (Subscript _ (gas_shadow_expr _) _) _ = _`
+    (mp_then (Pos hd) mp_tac compile_expr_mapping_subscript_parts) >>
+  simp[] >> strip_tac >> gvs[];
+
 fun mapping_base_tac base_admissible shadow_type index_cont =
   drule_all compile_expr_mapping_subscript_parts >> strip_tac >>
   rename1 `compile_mapping_subscript _ hashed sp = (outop,sb)` >>
@@ -31,19 +46,17 @@ fun mapping_base_tac base_admissible shadow_type index_cont =
     metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
   `gas_admissible (eval_expr cx e1) expr_map_res_ok es` by
     base_admissible >>
-  `?shadow_sm. compile_expr cenv ty (gas_shadow_expr e1) shadow_sa =
+  `?shadow_sm. compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa =
        (bvv,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
-    (mp_tac (cj 1 gas_shadow_compile_expr |> Q.SPECL [`cenv`, `ty`, `e1`, `T`]) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
-     simp[] >> strip_tac >>
-     Cases_on `compile_expr cenv ty (gas_shadow_expr e1) shadow_sa` >> gvs[]) >>
+    (`gas_shadow_compiles (compile_expr cenv ty e1)
+        (compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1))` by
+       irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env >>
+     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+       REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa` >> simp[]) >>
   `cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sb` by
     (drule (cj 1 compile_expr_grows) >> strip_tac >>
-     qpat_assum `compile_expr _ _ (gas_shadow_expr (Subscript _ _ _)) _ = _`
-       (mp_tac o REWRITE_RULE [gas_shadow_expr_def]) >> strip_tac >>
-     shadow_type >>
-     drule_all compile_expr_mapping_subscript_parts >> strip_tac >> gvs[] >>
+     mapping_shadow_parts_tac shadow_type >>
      `cs_extends shadow_sm sn'` by
        (qpat_assum `lower_value _ _ _ _ shadow_sm = _`
           (mp_then Any mp_tac (cj 2 compile_expr_grows)) >> simp[]) >>
@@ -69,7 +82,7 @@ fun mapping_base_tac base_admissible shadow_type index_cont =
     (qpat_assum `~subscript_reads_base _ _ _`
       (mp_then Any mp_tac exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind) >>
      simp[]) >>
-  asm_rewrite_tac[] >> irule gas_outcome_full_bind_all >>
+  asm_rewrite_tac[] >> irule gas_outcome_full_bind_all_path >>
   `!res : eval_result + exception. !r.
      (?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r) <=> expr_exit res r` by
     (Cases >> simp[]) >>
@@ -111,6 +124,10 @@ fun mapping_index_source_tac index_pre parent_res_ok =
      qpat_assum `!tail. eval_expr _ _ (_ with gas_obs := _ ++ tail) = _`
        (qspec_then `[]` mp_tac) >>
      pure_rewrite_tac[listTheory.APPEND_NIL] >> metis_tac[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`IS_SOME (type_place_expr env e1)` by simp[] >>
+     irule body_const_cells_agree_expr >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[]) >>
   index_pre >>
   `expr_body_pre cenv cx env e2 mid` by
     (irule (cj 3 mapping_subscript_index_pre) >>
@@ -133,22 +150,20 @@ fun mapping_index_source_tac index_pre parent_res_ok =
          exprSimDefsTheory.expr_vv_res_ok_def, exprSimDefsTheory.expr_res_ok_def]);
 
 fun mapping_index_shadow_tac shadow_type =
-  `?shadow_sn. lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2)
-      shadow_sm = (key,shadow_sn) /\ gas_shadow_state sn shadow_sn` by
-    (mp_tac (Q.INST [`ty` |-> `expr_type e2`, `e` |-> `e2`]
-       gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sm`, `shadow_sm`] mp_tac) >>
-     simp[] >> strip_tac >>
-     Cases_on `lower_value compile_expr cenv (expr_type e2) (gas_shadow_expr e2) shadow_sm` >> gvs[]) >>
+  `?shadow_sn. lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2)
+      (gas_shadow_expr e2) shadow_sm = (key,shadow_sn) /\ gas_shadow_state sn shadow_sn` by
+    (`gas_shadow_compiles (lower_value compile_expr cenv (expr_type e2) e2)
+        (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2) (gas_shadow_expr e2))` by
+       irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env >>
+     pop_assum (qspecl_then [`sm`, `shadow_sm`] mp_tac o
+       REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e2)
+                 (gas_shadow_expr e2) shadow_sm` >> simp[]) >>
   `cs_extends shadow_sm shadow_sn /\ cs_extends shadow_sn shadow_sb` by
     (`cs_extends shadow_sm shadow_sn` by
        (qpat_assum `lower_value _ _ _ _ shadow_sm = _`
           (mp_then Any mp_tac (cj 2 compile_expr_grows)) >> simp[]) >>
-     qpat_assum `compile_expr _ _ (gas_shadow_expr (Subscript _ _ _)) _ = _`
-       (mp_tac o REWRITE_RULE [gas_shadow_expr_def]) >> strip_tac >>
-     shadow_type >>
-     drule_all compile_expr_mapping_subscript_parts >> strip_tac >> gvs[] >>
+     mapping_shadow_parts_tac shadow_type >>
      `cs_extends shadow_sn sp'` by
        (Cases_on `is_bytestring_type kt` >> gvs[compileEnvTheory.cs_extends_refl] >>
         mp_tac (Q.SPECL [`key`, `F`, `shadow_sn`] ci_mono_compile_keccak256_key) >>
@@ -164,17 +179,20 @@ fun mapping_index_shadow_tac shadow_type =
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_fmp_headroom inst z` by
+    (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+       metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+       gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G1,tn1)`
+       (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
+     qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G1,tn1)`
+       (mp_then (Pos hd) mp_tac bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom) >>
+     asm_rewrite_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `sm`, `sn`, `shadow_sm`, `shadow_sn`,
                           `key`, `s`, `G1`, `tn1`] mp_tac) >>
-  (impl_tac >-
-    (gvs[] >> rpt strip_tac >>
-     drule_all contextRawReachableTheory.frag_reachable_members >> strip_tac >>
-     drule bodyInvNoDallocaTheory.body_inv_no_dalloca >>
-     simp[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >> strip_tac >>
-     `inst.inst_opcode <> DALLOCA` by metis_tac[] >>
-     simp[unitTransformDefsTheory.dalloca_no_wrap_def])) >> strip_tac >>
+  (impl_tac >- (gvs[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ indexQ indexR`;
 
 fun mapping_index_bind_tac selection_cont =
@@ -202,15 +220,16 @@ fun mapping_index_bind_tac selection_cont =
         (mp_then Any MATCH_ACCEPT_TAC bodyFullTargetSubscriptTheory.expr_exit_INR_retype)) >>
   fs[exprSimDefsTheory.halt_exit_def];
 
-fun mapping_selection_tac base_result_typed =
+val mapping_selection_intro_tac =
   qx_genl_tac [`imarks`, `ires`, `fin`, `Gi`, `tni`, `it`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon fin.storage_trace) fin.storage_trace` by
     gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `indexQ (storage_trace_horizon fin.storage_trace) ires fin Gi tni it /\
    ~it.vs_halted /\ fin.gas_obs = []` by metis_tac[] >>
   qpat_x_assum `indexQ _ _ _ _ _ _` mp_tac >>
-  simp[Abbr `indexQ`, NoAsms] >> strip_tac >> gvs[] >>
-  base_result_typed >>
+  simp[Abbr `indexQ`, NoAsms] >> strip_tac >> gvs[];
+
+val mapping_selection_key_tac =
   `expr_type e2 = kt /\ hashmap_key_type kt` by
     metis_tac[mapping_subscript_key_type] >>
   `bind (eval_expr cx e2) (read_result cx)
@@ -283,7 +302,6 @@ val mapping_suffix_tac =
      >- (irule exprOperandVarTheory.compile_lower_value_var >>
          qexistsl_tac [`cenv`, `e2`, `key`, `sm`, `expr_type e2`] >> simp[]) >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `~ctx_has_dalloca ctx` by metis_tac[body_inv_no_dalloca] >>
   `allocas_from lo it /\ lo <= it.vs_alloca_next` by
     ((qpat_assum `ghost_inv_at (DF (storage_trace_horizon _)) _ _ _ _ _ _ _ _` mp_tac >>
      simp[bodyPtrDefsTheory.ghost_inv_at_def] >> (metis_tac[bodyPtrDefsTheory.ghost_inv_at_def]))) >>
@@ -401,6 +419,9 @@ val mapping_map_package_tac =
   simp[contextTheory.mk_ptr_def, contextTheory.vv_location_def] >>
   qpat_assum `wb_frame cenv es fin sa s0 u`
     (strip_assume_tac o PURE_REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    first_assum (ACCEPT_TAC o MATCH_MP
+      bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   rpt conj_tac >> first_assum ACCEPT_TAC;
 
 
@@ -408,6 +429,7 @@ Theorem subscript_map_map_full:
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_map_pre cenv cx env (Subscript ann e1 e2) es /\
     expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e1 es ==>
     expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -432,11 +454,9 @@ Proof
     metis_tac[map_base_no_overlap] >>
   rewrite_tac[expr_map_sim_full_def] >> rpt gen_tac >> strip_tac >>
   mapping_base_tac (metis_tac[subscript_map_base_admissible])
-    (`place_type cenv (gas_shadow_expr e1) = MapPT kt (HashMapT ikt ivt) /\
-      ~copies_subscript_base cenv (gas_shadow_expr e1) (gas_shadow_expr e2)` by
-       metis_tac[gasShadowCompilePureTheory.gas_shadow_place_type,
-                 exprLoweringTheory.copies_subscript_base_def,
-                 gasShadowCompilePureTheory.gas_shadow_subscript_overlap])
+    (`place_type (gas_shadow_env T cenv) (gas_shadow_expr e1) = MapPT kt (HashMapT ikt ivt) /\
+      ~copies_subscript_base (gas_shadow_env T cenv) (gas_shadow_expr e1) (gas_shadow_expr e2)` by
+       mapping_shadow_type_tac)
     (suspend "mapping_index")
 QED
 
@@ -446,23 +466,22 @@ Resume subscript_map_map_full[mapping_index]:
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[])
     ``expr_map_res_ok`` >>
   mapping_index_shadow_tac
-    (`place_type cenv (gas_shadow_expr e1) = MapPT kt (HashMapT ikt ivt) /\
-      ~copies_subscript_base cenv (gas_shadow_expr e1) (gas_shadow_expr e2)` by
-       metis_tac[gasShadowCompilePureTheory.gas_shadow_place_type,
-                 exprLoweringTheory.copies_subscript_base_def,
-                 gasShadowCompilePureTheory.gas_shadow_subscript_overlap]) >>
+    (`place_type (gas_shadow_env T cenv) (gas_shadow_expr e1) = MapPT kt (HashMapT ikt ivt) /\
+      ~copies_subscript_base (gas_shadow_env T cenv) (gas_shadow_expr e1) (gas_shadow_expr e2)` by
+       mapping_shadow_type_tac) >>
   mapping_index_bind_tac (suspend "mapping_selection")
 QED
 
 Resume subscript_map_map_full[mapping_selection]:
-  mapping_selection_tac
-    (`kt' = kt /\ vt = HashMapT ikt ivt` by
+  mapping_selection_intro_tac >>
+  `kt' = kt /\ vt = HashMapT ikt ivt` by
       (qpat_assum `eval_expr cx e1 (_ with gas_obs := _) = _`
          (mp_then Any mp_tac expr_map_pre_eval_result) >>
        disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
        simp[] >> strip_tac >>
        first_x_assum (qspec_then `HashMapT kt (HashMapT ikt ivt)` mp_tac) >>
-       simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping])) >>
+       simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping]) >>
+  mapping_selection_key_tac >>
   mapping_suffix_tac >> mapping_frames_tac >> mapping_pure_frame_tac >>
   mapping_map_package_tac
 QED
@@ -473,6 +492,7 @@ Theorem subscript_map_full:
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es kt vt.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
     place_type cenv e1 = MapPT kt vt /\
     expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -493,11 +513,9 @@ Proof
     (irule subscript_result_base_admissible >>
      qexists_tac `expr_vv_res_ok` >> simp[subscript_result_predicates_exceptions] >>
      goal_assum (drule_at Any))
-    (`place_type cenv (gas_shadow_expr e1) = MapPT kt declared_vt /\
-      ~copies_subscript_base cenv (gas_shadow_expr e1) (gas_shadow_expr e2)` by
-       metis_tac[gasShadowCompilePureTheory.gas_shadow_place_type,
-                 exprLoweringTheory.copies_subscript_base_def,
-                 gasShadowCompilePureTheory.gas_shadow_subscript_overlap])
+    (`place_type (gas_shadow_env T cenv) (gas_shadow_expr e1) = MapPT kt declared_vt /\
+      ~copies_subscript_base (gas_shadow_env T cenv) (gas_shadow_expr e1) (gas_shadow_expr e2)` by
+       mapping_shadow_type_tac)
     (suspend "leaf_index")
 QED
 
@@ -507,23 +525,22 @@ Resume subscript_map_full[leaf_index]:
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[])
     ``expr_vv_res_ok`` >>
   mapping_index_shadow_tac
-    (`place_type cenv (gas_shadow_expr e1) = MapPT kt declared_vt /\
-      ~copies_subscript_base cenv (gas_shadow_expr e1) (gas_shadow_expr e2)` by
-       metis_tac[gasShadowCompilePureTheory.gas_shadow_place_type,
-                 exprLoweringTheory.copies_subscript_base_def,
-                 gasShadowCompilePureTheory.gas_shadow_subscript_overlap]) >>
+    (`place_type (gas_shadow_env T cenv) (gas_shadow_expr e1) = MapPT kt declared_vt /\
+      ~copies_subscript_base (gas_shadow_env T cenv) (gas_shadow_expr e1) (gas_shadow_expr e2)` by
+       mapping_shadow_type_tac) >>
   mapping_index_bind_tac (suspend "leaf_selection")
 QED
 
 Resume subscript_map_full[leaf_selection]:
-  mapping_selection_tac
-    (`kt' = kt /\ vt = declared_vt` by
+  mapping_selection_intro_tac >>
+  `kt' = kt /\ vt = declared_vt` by
       (qpat_assum `eval_expr cx e1 (_ with gas_obs := _) = _`
          (mp_then Any mp_tac expr_map_pre_eval_result) >>
        disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
        simp[] >> strip_tac >>
        first_x_assum (qspec_then `HashMapT kt declared_vt` mp_tac) >>
-       simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping])) >>
+       simp[vyperPlaceResultTypingTheory.eval_result_typed_mapping]) >>
+  mapping_selection_key_tac >>
   mapping_suffix_tac >> mapping_frames_tac >> mapping_pure_frame_tac >>
   `~well_typed_expr env e1` by
     metis_tac[vyperTypeExprResultTheory.well_typed_expr_not_hashmap_place] >>
@@ -593,6 +610,9 @@ Resume subscript_map_full[leaf_selection]:
   `(mk_ptr outop (slot_loc tr)).ptr_location = slot_loc tr /\
    vv_location (LocatedValue ann (mk_ptr outop (slot_loc tr))) = SOME (slot_loc tr)` by
     simp[contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+     first_assum (ACCEPT_TAC o MATCH_MP
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
   simp[vyperASTTheory.expr_type_def] >>
   match_mp_tac (Q.INST [`D` |-> `DF H`] subscript_mapping_value_place_post) >>
   qpat_assum `!H. dead_lo_ok H (DF H) lo cenv cx` (qspec_then `H` assume_tac) >>

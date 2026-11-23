@@ -1,7 +1,8 @@
 (* Shared expression-call and body-precondition boundaries. *)
 Theory bodyExprPreFacts
 Ancestors
-  bodyStorageCases
+  bodyStorageCases bodyInvariantFrameProps bodyInvCodeProps bodyInvMetadataProps
+  bodyMainModuleProps bodyInvExecutionProps alist compileUnit
   exprSimSource bodySim allocLimitsProps stmtLowering stmtLoweringMono
   fragExec stmtSimProps
   loweringPosts supportedStmtTraverse vyperCallOutcomeStorage vyperTypeExprSoundness
@@ -43,88 +44,311 @@ QED
 
 
 Theorem supported_pure_int_calls:
-  !tops e. supported_pure_expr tops e ==> int_calls_expr e = []
+  !tops e. supported_effect_free_expr tops e ==> int_calls_expr e = []
 Proof
   metis_tac[supported_pure_no_internal_call, expr_has_internal_call_def,
             no_internal_call_int_calls]
 QED
 
-(* supported_function_decl finds only the main module's functions. *)
-
-(* A supported expression runs no EVM code, and its internal calls are to
-   internal functions of the main module, as expr_body_pre asks. *)
-(* A supported expression is no bare .code: supported_builtin_form
-   rejects Acc Code. *)
-Theorem supported_expr_not_extcode[local]:
-  !tops e. supported_expr tops e ==> ~is_extcode e
+(* All EVM-running roots are handled by the body simulation. *)
+Theorem stmt_no_evm_run[local]:
+  (!s. ~supported_stmt_expr_exists expr_evm_run_root s) /\
+  (!ss. ~supported_stmts_expr_exists expr_evm_run_root ss)
 Proof
-  rpt gen_tac >> Cases_on `is_extcode e` >> simp[] >>
-  Cases_on `e` >> gvs[exprLoweringTheory.is_extcode_def] >>
-  rename1 `Builtin _ b l` >> Cases_on `b` >>
-  gvs[exprLoweringTheory.is_extcode_def] >>
-  rename1 `Acc a` >> Cases_on `a` >>
-  gvs[exprLoweringTheory.is_extcode_def] >>
-  Cases_on `l` >> gvs[exprLoweringTheory.is_extcode_def] >>
-  rename1 `_ :: tl` >> Cases_on `tl` >>
-  gvs[exprLoweringTheory.is_extcode_def,
-      supportedExprsTheory.supported_expr_def,
-      supportedExprsTheory.supported_pure_expr_def,
-      supportedExprsTheory.supported_effect_expr_def,
-      supportedExprFormsTheory.supported_builtin_form_def]
+  `!p e. p = expr_evm_run_root ==> ~supported_expr_exists p e` by
+    (sg `(!p e. p = expr_evm_run_root ==> ~supported_expr_exists p e) /\
+         (!p t. p = expr_evm_run_root ==> ~supported_target_exists p t) /\
+         (!p es. p = expr_evm_run_root ==> ~supported_exprs_exists p es) /\
+         (!p eo. p = expr_evm_run_root ==> ~supported_opt_exists p eo) /\
+         (!p fes. p = expr_evm_run_root ==> ~supported_fields_exists p fes)`
+     >- (ho_match_mp_tac supported_expr_exists_ind >>
+         rw[supported_expr_exists_def, expr_evm_run_root_def]) >> simp[]) >>
+  `(!p t. p = expr_evm_run_root ==> ~supported_assignment_exists p t) /\
+   (!p ts. p = expr_evm_run_root ==> ~supported_assignments_exists p ts)` by
+    (ho_match_mp_tac supported_assignment_exists_ind >>
+     simp[supported_assignment_exists_def, supported_target_exists_indices] >>
+     fs[EVERY_MEM, combinTheory.o_DEF]) >>
+  `!es. ~supported_exprs_exists expr_evm_run_root es` by
+    (Induct >> simp[supported_expr_exists_def]) >>
+  `!eo. ~supported_opt_exists expr_evm_run_root eo` by
+    (Cases >> simp[supported_expr_exists_def]) >>
+  `!r. ~supported_assert_exists expr_evm_run_root r` by
+    (Cases >> simp[supported_assert_exists_def, EXISTS_MEM]) >>
+  `!r. ~supported_raise_exists expr_evm_run_root r` by
+    (Cases >> simp[supported_raise_exists_def, EXISTS_MEM]) >>
+  `!i. ~supported_iterator_exists expr_evm_run_root i` by
+    (Cases >> simp[supported_iterator_exists_def]) >>
+  sg `(!p s. p = expr_evm_run_root ==> ~supported_stmt_expr_exists p s) /\
+       (!p ss. p = expr_evm_run_root ==> ~supported_stmts_expr_exists p ss)`
+  >- (ho_match_mp_tac supported_stmt_expr_exists_ind >>
+      simp[supported_stmt_expr_exists_def, supported_target_exists_indices,
+           EVERY_MEM, combinTheory.o_DEF, EXISTS_MEM]) >> simp[]
+QED
+
+Theorem supported_string_reason_expr[local]:
+  supported_string_reason tops e ==> supported_expr tops e
+Proof
+  Cases_on `e` >>
+  gvs[supported_string_reason_def, supportedExprsTheory.supported_expr_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >>
+  gvs[supported_string_reason_def, supported_pure_expr_def]
+QED
+
+Theorem supported_base_target_main_calls[local]:
+  (supported_target tops bindings t \/ supported_aug_target tops bindings t) ==>
+  EVERY (\c. FST c = NONE /\
+             IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t)
+Proof
+  Cases_on `t` >>
+  simp[supported_target_def, supported_aug_target_def, int_calls_expr_def] >>
+  strip_tac >> drule supported_target_info_main_calls >>
+  simp[int_calls_expr_def, EVERY_APPEND]
+QED
+
+Theorem supported_assignment_main_calls[local]:
+  supported_assignment tops bindings target e ==>
+  EVERY (\c. FST c = NONE /\
+             IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget target)
+Proof
+  Cases_on `target` >>
+  simp[supported_assignment_def, int_calls_atarget_def]
+  >- metis_tac[supported_base_target_main_calls] >>
+  strip_tac >> qpat_x_assum `EVERY _ _` mp_tac >>
+  qmatch_goalsub_rename_tac `int_calls_atargets ts` >>
+  Induct_on `ts` >> simp[int_calls_atarget_def] >>
+  Cases_on `h` >> simp[int_calls_atarget_def, EVERY_APPEND] >>
+  metis_tac[supported_base_target_main_calls]
+QED
+
+Theorem supported_append_target_main_calls[local]:
+  supported_append_target tops t ==>
+  EVERY (\c. FST c = NONE /\
+             IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t)
+Proof
+  `!t. int_calls_target t = FLAT (MAP int_calls_expr (target_indices t))` by
+    (measureInduct_on `base_assignment_target_size t` >>
+     Cases_on `t` >> simp[int_calls_expr_def, target_indices_def] >>
+     gvs[vyperASTTheory.expr_size_def]) >>
+  strip_tac >>
+  `EVERY (supported_pure_expr tops) (target_indices t)` by
+    (Cases_on `t` >> gvs[supported_append_target_def, target_indices_def]) >>
+  qpat_x_assum `!t. int_calls_target t = _`
+    (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
+  simp[EVERY_FLAT, EVERY_MAP, EVERY_MEM, combinTheory.o_DEF] >>
+  rpt strip_tac >> fs[EVERY_MEM] >>
+  `supported_pure_expr tops x` by (first_x_assum irule >> simp[]) >>
+  drule (cj 1 supported_pure_main_calls) >>
+  simp[EVERY_MEM] >> disch_then (qspec_then `c` mp_tac) >> simp[]
+QED
+
+Theorem supported_iterator_main_calls[local]:
+  supported_iterator tops ty it bound ==>
+  EVERY (\c. FST c = NONE /\
+             IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator it)
+Proof
+  Cases_on `it`
+  >- (simp[int_calls_iterator_def] >>
+      qmatch_goalsub_rename_tac `int_calls_expr arr` >> Cases_on `arr`
+      >~ [`Name _ _`]
+      >- simp[int_calls_expr_def]
+      >~ [`TopLevelName _ _`]
+      >- simp[int_calls_expr_def]
+      >> simp[supported_iterator_def] >> metis_tac[supported_expr_main_calls])
+  >> simp[supported_iterator_def, int_calls_iterator_def, EVERY_APPEND] >>
+  qmatch_goalsub_rename_tac
+    `EVERY _ (int_calls_expr lo) /\ EVERY _ (int_calls_expr hi)` >>
+  strip_tac >>
+  `supported_pure_expr tops lo /\ supported_pure_expr tops hi` suffices_by
+    metis_tac[supported_pure_main_calls] >>
+  Cases_on `lo` >> gvs[supported_pure_expr_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >> gvs[supported_pure_expr_def] >>
+  Cases_on `hi` >> gvs[supported_pure_expr_def]
+QED
+
+Theorem supported_reasons_main_calls[local]:
+  (!tops r. supported_assert_reason tops r ==>
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_assert_reason r)) /\
+  (!tops r. supported_raise_reason tops r ==>
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_raise_reason r))
+Proof
+  conj_tac >> rpt gen_tac >> Cases_on `r` >>
+  simp[supported_assert_reason_def, supported_raise_reason_def,
+       int_calls_assert_reason_def, int_calls_raise_reason_def,
+       GSYM supported_pure_exprs_every] >>
+  metis_tac[supported_pure_main_calls, supported_expr_main_calls,
+            supported_string_reason_expr]
+QED
+
+Theorem supported_stmts_main_calls[local]:
+  (!tops bindings s. supported_stmt tops bindings s ==>
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) /\
+  (!tops bindings ss. supported_stmts tops bindings ss ==>
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss))
+Proof
+  ho_match_mp_tac supported_stmt_ind >>
+  simp[supported_stmt_def, int_calls_stmt_def, int_calls_expr_def, EVERY_APPEND] >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  imp_res_tac supported_assignment_def >>
+  imp_res_tac supported_log_def >>
+  imp_res_tac supported_pure_main_calls >>
+  imp_res_tac supported_expr_main_calls >>
+  imp_res_tac supported_assignment_main_calls >>
+  imp_res_tac supported_base_target_main_calls >>
+  imp_res_tac supported_append_target_main_calls >>
+  imp_res_tac supported_iterator_main_calls >>
+  imp_res_tac supported_reasons_main_calls >> gvs[]
 QED
 
 Theorem supported_stmt_body_safe:
   supported_stmt tops bindings s ==> body_stmt_safe tops s
 Proof
-  rw[body_stmt_safe_def] >>
-  drule (cj 1 supported_stmts_storage_syntax) >> simp[]
+  simp[body_stmt_safe_def, stmt_no_evm_run] >>
+  metis_tac[supported_stmts_main_calls]
 QED
 
 Theorem supported_stmts_body_safe:
   supported_stmts tops bindings ss ==> body_stmts_safe tops ss
 Proof
-  rw[body_stmts_safe_iff] >>
-  drule (cj 2 supported_stmts_storage_syntax) >> simp[]
+  simp[body_stmts_safe_iff, stmt_no_evm_run] >>
+  metis_tac[supported_stmts_main_calls]
 QED
 
+(* The body expression precondition permits effects in call operands. *)
 Theorem supported_expr_body_calls:
   !tops e. supported_expr tops e ==>
     ~expr_has_evm_run e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
-      (int_calls_expr e) /\
-    ~is_extcode e
+      (int_calls_expr e)
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- metis_tac[supported_expr_no_evm_run] >>
-  conj_tac >- metis_tac[supported_expr_no_call_operand_effects] >>
-  PURE_ONCE_REWRITE_TAC[CONJ_ASSOC] >>
-  reverse conj_tac >- metis_tac[supported_expr_not_extcode] >>
+  rpt strip_tac >>
+  imp_res_tac supported_expr_no_evm_run >>
   imp_res_tac supported_expr_main_calls >>
-  gvs[listTheory.EVERY_CONJ]
+  gvs[EVERY_CONJ]
 QED
 
-(* The same for a reason, which may also be a string literal. *)
 Theorem supported_string_reason_body_calls:
   !tops e. supported_string_reason tops e ==>
     ~expr_has_evm_run e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
+      (int_calls_expr e)
+Proof
+  metis_tac[supported_string_reason_expr, supported_expr_body_calls]
+QED
+
+Theorem main_module_calls_resolve[local]:
+  contract_inv mods exps ctx cenv cx /\
+  EVERY (\c. FST c = NONE /\
+              IS_SOME (supported_function_decl (main_module mods) c Internal)) calls ==>
+  EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                    supported_program tops /\
+                    IS_SOME (supported_function_decl tops (NONE,SND c) Internal)) calls
+Proof
+  strip_tac >>
+  drule_then assume_tac contract_inv_main_module >>
+  `get_module_code cx NONE = SOME (main_module mods)` by
+    metis_tac[contract_inv_module_codes] >>
+  `supported_program (main_module mods)` by metis_tac[contract_inv_supported_module] >>
+  fs[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt gen_tac >> strip_tac >> res_tac >> fs[]
+QED
+
+Theorem supported_stmts_main_calls_mods:
+  contract_inv mods exps ctx cenv cx ==>
+  (!bindings s. supported_stmt (main_module mods) bindings s ==>
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+      (int_calls_stmt s)) /\
+  (!bindings ss. supported_stmts (main_module mods) bindings ss ==>
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+      (int_calls_stmts ss))
+Proof
+  strip_tac >> conj_tac >> rpt gen_tac >> strip_tac >>
+  metis_tac[supported_stmts_main_calls, main_module_calls_resolve]
+QED
+
+Theorem supported_expr_body_calls_mods:
+  contract_inv mods exps ctx cenv cx /\ supported_expr (main_module mods) e ==>
+  ~expr_has_evm_run e /\
+  EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                    supported_program tops /\
+                    IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+    (int_calls_expr e)
+Proof
+  strip_tac >> drule_then strip_assume_tac supported_expr_body_calls >>
+  simp[] >> irule main_module_calls_resolve >> simp[EVERY_CONJ] >> metis_tac[]
+QED
+
+(* A statement's expression meets the linked precondition. *)
+Theorem stmt_expr_body_pre_mods:
+  !mods cenv cx env e es calls.
+    expr_sim_inv_mods mods cenv cx env es /\ well_typed_expr env e /\
+    ~supported_expr_exists
+       (\e. ~is_extcode e /\
+             ~(byte_widths_expr e /\
+                (array_slot_base cenv e \/ alloc_limits_expr cenv e))) e /\
+    ~is_extcode e /\
+    (~array_slot_base cenv e \/ alloc_limits_expr cenv e) /\
+    ~supported_expr_exists (const_name_root_mods mods) e /\
+    ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
+    call_evaluation_safe cx (int_calls_expr e ++ calls) /\
+    ~expr_has_evm_run e /\
+    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                      supported_program tops /\
+                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
       (int_calls_expr e) /\
-    ~is_extcode e
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+       EXISTS (occurs_abi_decode_target target o SND) mods) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+       is_dynamic (vyper_to_abi_type (type_env_all_modules mods) target)) ==>
+    expr_body_pre_mods mods cenv cx env e es
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `?t str. e = Literal t (StringL str)`
-  >- gvs[expr_has_evm_run_def, supported_expr_exists_def,
-         expr_evm_run_root_def, int_calls_expr_def,
-         exprLoweringTheory.is_extcode_def] >>
-  irule supported_expr_body_calls >>
-  simp[supportedExprsTheory.supported_expr_def] >>
-  Cases_on `e` >> gvs[supported_string_reason_def] >>
-  rename1 `Literal _ lit` >> Cases_on `lit` >>
-  gvs[supported_string_reason_def]
+  `byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e)` by
+    (CCONTR_TAC >>
+     qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) _` mp_tac >>
+     simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
+  `alloc_limits_expr cenv e` by metis_tac[] >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    metis_tac[call_evaluation_safe_append_left] >>
+  simp[expr_body_pre_mods_def]
+QED
+
+Theorem stmt_expr_body_pre_main_mods:
+  contract_inv mods exps ctx cenv cx /\
+  supported_expr (main_module mods) e /\
+  expr_sim_inv_mods mods cenv cx env es /\ well_typed_expr env e /\
+  ~supported_expr_exists
+     (\e. ~is_extcode e /\
+           ~(byte_widths_expr e /\
+                (array_slot_base cenv e \/ alloc_limits_expr cenv e))) e /\
+  ~is_extcode e /\
+  (~array_slot_base cenv e \/ alloc_limits_expr cenv e) /\
+  ~supported_expr_exists (const_name_root_mods mods) e /\
+  ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
+  call_evaluation_safe cx (int_calls_expr e ++ calls) /\
+  (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+     occurs_abi_decode_target target (main_module mods)) ==>
+  expr_body_pre_mods mods cenv cx env e es
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all_then strip_assume_tac supported_expr_body_calls_mods >>
+  drule_then assume_tac contract_inv_main_module >>
+  drule_then assume_tac contract_inv_type_env >>
+  qspecl_then [`mods`,`cenv`,`cx`,`env`,`e`,`es`,`calls`] mp_tac
+    stmt_expr_body_pre_mods >>
+  impl_tac
+  >- (simp[EXISTS_MEM] >> rpt strip_tac >>
+      qexists_tac `(NONE,main_module mods)` >> simp[] >>
+      metis_tac[ALOOKUP_MEM]) >>
+  simp[]
 QED
 
 (* A statement's expression meets expr_body_pre. *)
@@ -133,9 +357,10 @@ Theorem stmt_expr_body_pre:
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     ~supported_expr_exists
        (\e. ~is_extcode e /\
-             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+             ~(byte_widths_expr e /\
+                (array_slot_base cenv e \/ alloc_limits_expr cenv e))) e /\
     ~is_extcode e /\
-    ~supported_expr_exists call_operands_effect_root e /\
+    (~array_slot_base cenv e \/ alloc_limits_expr cenv e) /\
     ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
@@ -151,14 +376,20 @@ Theorem stmt_expr_body_pre:
     expr_body_pre cenv cx env e es
 Proof
   rpt gen_tac >> strip_tac >>
-  `byte_widths_expr e /\ alloc_limits_expr cenv e` by
-    (CCONTR_TAC >>
-     qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) _` mp_tac >>
-     simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
-  `call_evaluation_safe cx (int_calls_expr e)` by
-    metis_tac[call_evaluation_safe_append_left] >>
-  simp[expr_body_pre_def] >>
-  Cases_on `int_calls_expr e` >> gvs[listTheory.EVERY_MEM] >> metis_tac[]
+  `EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
+                    supported_program tops /\
+                    IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
+     (int_calls_expr e)` by
+    (Cases_on `int_calls_expr e` >- simp[] >>
+     PairCases_on `h` >> gvs[EVERY_MEM, pairTheory.FORALL_PROD] >>
+     rpt gen_tac >> strip_tac >> res_tac >> gvs[]) >>
+  simp[expr_body_pre_split_def] >>
+  drule_all_then assume_tac expr_sim_inv_no_unallocated_bare_globals >>
+  qspecl_then [`[(NONE,cx_tops cx)]`,`cenv`,`cx`,`env`,`e`,`es`,`calls`] mp_tac
+    stmt_expr_body_pre_mods >>
+  fs[expr_sim_inv_split_def, const_name_root_mods_singleton,
+     vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
+     FUNION_FEMPTY_2]
 QED
 
 (* The same, from byte_widths_expr of every node and alloc_limits_expr of
@@ -169,7 +400,6 @@ Theorem stmt_expr_body_pre_alloc:
     ~supported_expr_exists (\e. ~is_extcode e /\ ~byte_widths_expr e) e /\
     alloc_limits_expr cenv e /\
     ~is_extcode e /\
-    ~supported_expr_exists call_operands_effect_root e /\
     ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
@@ -186,9 +416,10 @@ Theorem stmt_expr_body_pre_alloc:
 Proof
   rpt gen_tac >> strip_tac >> irule_body_pre stmt_expr_body_pre >> simp[] >>
   reverse conj_tac >- (qexists_tac `calls` >> simp[]) >>
-  `(\e. ~is_extcode e /\ (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)) =
+  `(\e. ~is_extcode e /\
+         (~byte_widths_expr e \/ ~array_slot_base cenv e /\ ~alloc_limits_expr cenv e)) =
    (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
-        (~is_extcode e /\ ~alloc_limits_expr cenv e))` by
+        (~is_extcode e /\ ~array_slot_base cenv e /\ ~alloc_limits_expr cenv e))` by
     (simp[FUN_EQ_THM] >> metis_tac[]) >>
   pop_assum SUBST1_TAC >> simp[supported_expr_exists_disj] >>
   imp_res_tac alloc_limits_expr_exists >> simp[]
@@ -246,15 +477,21 @@ Proof
   rw[same_frame_def] >> qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]
 QED
 
+Theorem body_inv_same_frame_mods:
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
+  same_frame cenv c ==>
+  contract_inv mods exps ctx c cx /\ module_body_inv mods src tops c cx
+Proof
+  strip_tac >> drule_then (fn th => simp[th]) body_invariants_same_frame
+QED
+
 Theorem body_inv_same_frame:
   !tops ctx cenv c cx.
     body_inv tops ctx cenv cx /\ same_frame cenv c ==>
     body_inv tops ctx c cx
 Proof
-  rpt strip_tac >>
-  fs[body_inv_def, cenv_module_pins_def, same_frame_def,
-     compile_env_component_equality] >>
-  metis_tac[]
+  simp[body_inv_split_def] >> rpt gen_tac >> strip_tac >>
+  drule_then (fn th => simp[th]) body_invariants_same_frame
 QED
 
 Theorem frame_ret_ok_same_frame:
@@ -304,7 +541,7 @@ Theorem stmt_exprs_ok_agree:
     stmt_exprs_ok c = stmt_exprs_ok cenv
 Proof
   rpt strip_tac >> simp[FUN_EQ_THM, stmt_exprs_ok_def] >>
-  drule (cj 1 alloc_limits_stmt_struct_fields) >> simp[]
+  drule (cj 1 alloc_limits_stmt_struct_fields) >> fs[alloc_env_agree_def]
 QED
 
 Theorem return_buffer_ok_var_type[simp]:
@@ -316,6 +553,7 @@ QED
 
 Theorem decl_var_type_return_fields[simp]:
   !cenv s.
+    (decl_var_type cenv s).ce_modules = cenv.ce_modules /\
     (decl_var_type cenv s).ce_is_external = cenv.ce_is_external /\
     (decl_var_type cenv s).ce_raw_return = cenv.ce_raw_return /\
     return_buffer_ok (decl_var_type cenv s) = return_buffer_ok cenv
@@ -464,15 +702,18 @@ Theorem stmt_exprs_ok_flat:
     (stmt_exprs_ok cenv s <=>
      ~supported_stmt_expr_exists
         (\e. ~is_extcode e /\
-              ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
+              ~(byte_widths_expr e /\
+                (array_slot_base cenv e \/ alloc_limits_expr cenv e))) s /\
      alloc_limits_stmt cenv s /\
      (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
-        return_buffer_ok cenv))
+        return_buffer_ok cenv) /\
+     ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s)
 Proof
   rpt strip_tac >>
-  `(\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) =
+  `(\e. ~is_extcode e /\ ~(byte_widths_expr e /\
+                (array_slot_base cenv e \/ alloc_limits_expr cenv e))) =
    (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
-        (~is_extcode e /\ ~alloc_limits_expr cenv e))` by
+        (~is_extcode e /\ ~array_slot_base cenv e /\ ~alloc_limits_expr cenv e))` by
     (simp[FUN_EQ_THM] >> metis_tac[]) >>
   pop_assum SUBST1_TAC >>
   simp[stmt_exprs_ok_def, supported_stmt_expr_exists_disj] >>
@@ -486,7 +727,8 @@ Theorem stmts_exprs_ok_thm:
        (\e. ~is_extcode e /\ ~byte_widths_expr e) ss /\
     alloc_limits_stmts cenv ss /\
     (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
-       return_buffer_ok cenv)
+       return_buffer_ok cenv) /\
+    ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss
 Proof
   Induct >>
   simp[stmts_exprs_ok_def, supported_stmt_expr_exists_def, stmt_exprs_ok_def,

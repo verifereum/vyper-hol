@@ -1,7 +1,8 @@
 Theory gasShadowCompileBodies
 Ancestors
   gasShadowCompileBase gasShadowCompilePure gasShadowCompileHelpers
-  gasShadowCompileOps gasShadowCompileConvert gasShadowCompileNames
+  gasShadowCompileConvert gasShadowCompileNames
+  gasShadowCompileAbi gasShadowCompileBuiltinAbi gasShadowCompileExternal
   gasShadowCompileBuiltinBytes exprLowering gasShadow gasShadowState compileEnv
   list pair
 
@@ -22,18 +23,18 @@ QED
 
 Theorem gas_shadow_compiles_type_body_convert[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_type_builtin_dispatch_body f cenv vv_ty ty Convert ret_ty args)
-    (compile_type_builtin_dispatch_body g cenv vv_ty ty Convert ret_ty
+    (compile_type_builtin_dispatch_body g (gas_shadow_env sd cenv) vv_ty ty Convert ret_ty
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
   qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
     gas_shadow_HD_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `selected` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_type_builtin_dispatch_body_def, GSYM comp_bind_def,
@@ -62,10 +63,10 @@ QED
 
 Theorem gas_shadow_compiles_type_body_extract32[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_type_builtin_dispatch_body f cenv vv_ty ty Extract32 ret_ty args)
-    (compile_type_builtin_dispatch_body g cenv vv_ty ty Extract32 ret_ty
+    (compile_type_builtin_dispatch_body g (gas_shadow_env sd cenv) vv_ty ty Extract32 ret_ty
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -74,8 +75,8 @@ Proof
   qspecl_then [`1`, `args`, `sh`] (qx_choose_then `offset_mode` assume_tac)
     gas_shadow_EL_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `head_mode` >> Cases_on `offset_mode` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_type_builtin_dispatch_body_def, GSYM comp_bind_def,
@@ -99,10 +100,10 @@ QED
 
 Theorem gas_shadow_compiles_type_body_decode[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_type_builtin_dispatch_body f cenv vv_ty ty (AbiDecode unwrap) ret_ty args)
-    (compile_type_builtin_dispatch_body g cenv vv_ty ty (AbiDecode unwrap) ret_ty
+    (compile_type_builtin_dispatch_body g (gas_shadow_env sd cenv) vv_ty ty (AbiDecode unwrap) ret_ty
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -125,75 +126,41 @@ QED
 
 Theorem gas_shadow_compiles_type_body_encode[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_type_builtin_dispatch_body f cenv vv_ty ty (AbiEncode ensure method_id) ret_ty args)
-    (compile_type_builtin_dispatch_body g cenv vv_ty ty (AbiEncode ensure method_id) ret_ty
+    (compile_type_builtin_dispatch_body g (gas_shadow_env sd cenv) vv_ty ty (AbiEncode ensure method_id) ret_ty
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
-  `MAP expr_type (if sh then MAP gas_shadow_expr args else args) = MAP expr_type args`
-    by (Cases_on `sh` >> simp[MAP_MAP_o, combinTheory.o_DEF, ETA_THM]) >>
   `MAP (lowered_value_type cenv) (if sh then MAP gas_shadow_expr args else args) =
    MAP (lowered_value_type cenv) args`
-    by (Cases_on `sh` >>
-        simp[MAP_MAP_o, MAP_EQ_f, combinTheory.o_DEF, gas_shadow_lowered_value_type]) >>
+    by (Cases_on `sh` >> simp[MAP_MAP_o, MAP_EQ_f, combinTheory.o_DEF]) >>
   `LENGTH (if sh then MAP gas_shadow_expr args else args) = LENGTH args`
     by (Cases_on `sh` >> simp[]) >>
-  qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
-    gas_shadow_HD_alternative >>
-  `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
-  simp[compile_type_builtin_dispatch_body_def] >>
-  Cases_on `LENGTH args = 1 /\ ~ensure` >> simp[]
-  >- (Cases_on `selected` >> gvs[] >>
-      (Cases_on `is_word_type (expr_type (HD args))` >> simp[]
-       >- (simp[GSYM comp_bind_def, comp_bind_uncurry] >>
-           CONV_TAC (DEPTH_CONV ETA_CONV) >>
-           match_mp_tac gas_shadow_compiles_bind >> conj_tac
-           >- metis_tac[COND_CLAUSES] >>
-           gen_tac >> BETA_TAC >>
-           match_mp_tac gas_shadow_compiles_bind >> conj_tac
-           >- simp[gasShadowCompileContextTheory.gas_shadow_compiles_alloc_buffer] >>
-           gen_tac >> BETA_TAC >>
-           match_mp_tac gas_shadow_compiles_bind >> conj_tac
-           >- irule gas_shadow_compiles_emit_void >>
-           gen_tac >> BETA_TAC >>
-           irule gas_shadow_compiles_as_ptr_val >>
-           simp[gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_lower_abi_encode]) >>
-       simp[GSYM comp_bind_def, comp_bind_uncurry] >>
-       CONV_TAC (DEPTH_CONV ETA_CONV) >>
-       match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- metis_tac[COND_CLAUSES] >>
-       gen_tac >> BETA_TAC >>
-       match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- irule gas_shadow_compiles_unwrap_value >>
-       gen_tac >> BETA_TAC >>
-       irule gas_shadow_compiles_as_ptr_val >>
-       simp[gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_lower_abi_encode])) >>
-  simp[GSYM comp_bind_def, comp_bind_uncurry] >>
+  simp[compile_type_builtin_dispatch_body_def, GSYM comp_bind_def, comp_bind_uncurry] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- (irule gas_shadow_compiles_abi_encode_args >> simp[]) >>
-  gen_tac >> BETA_TAC >>
-  match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- simp[gasShadowCompileContextTheory.gas_shadow_compiles_alloc_buffer] >>
-  gen_tac >> BETA_TAC >>
-  match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- simp[gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_store_abi_tuple] >>
+  >- (irule gas_shadow_compiles_abi_encode_args_env >> simp[]) >>
   gen_tac >> BETA_TAC >>
   irule gas_shadow_compiles_as_ptr_val >>
-  simp[gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_lower_abi_encode]
+  irule gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_lower_abi_encode >>
+  gen_tac >> simp[compile_abi_encode_payload_def] >> IF_CASES_TAC
+  >- (simp[comp_ignore_bind_def] >> match_mp_tac gas_shadow_compiles_bind >>
+      simp[gas_shadow_compiles_unwrap_value] >> gen_tac >> BETA_TAC >>
+      IF_CASES_TAC >>
+      simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_return,
+           gas_shadow_compiles_bind, gas_shadow_compiles_abi_encode_to_buf]) >>
+  simp[gas_shadow_compiles_abi_encode_values_to_buf]
 QED
 
 Theorem gas_shadow_compiles_type_body:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_type_builtin_dispatch_body f cenv vv_ty ty tb ret_ty args)
-    (compile_type_builtin_dispatch_body g cenv vv_ty ty tb ret_ty
+    (compile_type_builtin_dispatch_body g (gas_shadow_env sd cenv) vv_ty ty tb ret_ty
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >> Cases_on `tb`
@@ -228,17 +195,17 @@ QED
 
 Theorem gas_shadow_compiles_expr_body_if[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_expr_body f bf tf cenv ty (IfExp et cond_e then_e else_e))
-    (compile_expr_body g bg tg cenv ty
+    (compile_expr_body g bg tg (gas_shadow_env sd cenv) ty
       (if sh then gas_shadow_expr (IfExp et cond_e then_e else_e)
        else IfExp et cond_e then_e else_e))
 Proof
   strip_tac >>
   `!t e. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if sh then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if sh then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `sh` >> simp[gas_shadow_expr_def] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_expr_body_def, GSYM comp_bind_def, GSYM comp_return_def,
@@ -262,10 +229,10 @@ QED
 
 Theorem gas_shadow_compiles_expr_body_struct[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_expr_body f bf tf cenv ty (StructLit et name fields))
-    (compile_expr_body g bg tg cenv ty
+    (compile_expr_body g bg tg (gas_shadow_env sd cenv) ty
       (if sh then gas_shadow_expr (StructLit et name fields)
        else StructLit et name fields))
 Proof
@@ -286,14 +253,14 @@ QED
 
 Theorem gas_shadow_compiles_expr_body_pop[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_expr_body f bf tf cenv ty (Pop et target))
-    (compile_expr_body g bg tg cenv ty
+    (compile_expr_body g bg tg (gas_shadow_env sd cenv) ty
       (if sh then gas_shadow_expr (Pop et target) else Pop et target))
 Proof
   strip_tac >>
-  drule gas_shadow_compiles_get_target_ptr >> strip_tac >>
+  drule gas_shadow_compiles_get_target_ptr_env >> strip_tac >>
   Cases_on `sh` >> simp[gas_shadow_expr_def] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_expr_body_def, vyperASTTheory.expr_type_def,
@@ -310,7 +277,7 @@ QED
 Theorem gas_shadow_compiles_expr_body_toplevel[local]:
   gas_shadow_compiles
     (compile_expr_body f bf tf cenv ty (TopLevelName et nsid))
-    (compile_expr_body g bg tg cenv ty (TopLevelName et nsid))
+    (compile_expr_body g bg tg (gas_shadow_env sd cenv) ty (TopLevelName et nsid))
 Proof
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_expr_body_def, vyperASTTheory.expr_type_def] >>
@@ -463,11 +430,11 @@ QED
 Theorem gas_shadow_compiles_expr_body_builtin[local]:
   (!cenv et ty bi args sh.
     gas_shadow_compiles (bf cenv et ty bi args)
-      (bg cenv et ty (if sh then gas_shadow_builtin bi else bi)
+      (bg (gas_shadow_env sd cenv) et ty (if sh then gas_shadow_builtin bi else bi)
         (if sh then MAP gas_shadow_expr args else args))) ==>
   gas_shadow_compiles
     (compile_expr_body f bf tf cenv ty (Builtin et bi args))
-    (compile_expr_body g bg tg cenv ty
+    (compile_expr_body g bg tg (gas_shadow_env sd cenv) ty
       (if sh then gas_shadow_expr (Builtin et bi args)
        else Builtin et bi args))
 Proof
@@ -495,15 +462,15 @@ QED
 
 Theorem gas_shadow_compiles_expr_body:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) /\
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) /\
   (!cenv et ty bi args sh. gas_shadow_compiles (bf cenv et ty bi args)
-    (bg cenv et ty (if sh then gas_shadow_builtin bi else bi)
+    (bg (gas_shadow_env sd cenv) et ty (if sh then gas_shadow_builtin bi else bi)
       (if sh then MAP gas_shadow_expr args else args))) /\
   (!cenv vv_ty ty tb ret_ty args sh.
     gas_shadow_compiles (tf cenv vv_ty ty tb ret_ty args)
-      (tg cenv vv_ty ty tb ret_ty (if sh then MAP gas_shadow_expr args else args))) ==>
+      (tg (gas_shadow_env sd cenv) vv_ty ty tb ret_ty (if sh then MAP gas_shadow_expr args else args))) ==>
   gas_shadow_compiles (compile_expr_body f bf tf cenv ty e)
-    (compile_expr_body g bg tg cenv ty (if sh then gas_shadow_expr e else e))
+    (compile_expr_body g bg tg (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))
 Proof
   strip_tac >> Cases_on `e`
   >- suspend "name"
@@ -583,20 +550,20 @@ Finalise gas_shadow_compiles_expr_body
 
 Theorem gas_shadow_compiles_builtin_body_simple[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) /\
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) /\
   (bi = Len \/ bi = Neg \/ bi = Abs \/ bi = BlockHash \/
    bi = BlobHash \/ bi = Ceil \/ bi = Floor) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty bi args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty bi
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty bi
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
   qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
     gas_shadow_HD_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `bi` >> gvs[] >>
   Cases_on `selected` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
@@ -615,11 +582,11 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_modular[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) /\
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) /\
   (bi = AddMod \/ bi = MulMod) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty bi args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty bi
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty bi
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -630,8 +597,8 @@ Proof
   qspecl_then [`2`, `args`, `sh`] (qx_choose_then `sel_m` assume_tac)
     gas_shadow_EL_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `bi` >> gvs[] >>
   Cases_on `sel_a` >> Cases_on `sel_b` >> Cases_on `sel_m` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
@@ -646,19 +613,19 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_ptr_unary[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) /\
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) /\
   (bi = CalldataSlice n \/ bi = Uint2Str n) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty bi args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty bi
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty bi
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
   qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
     gas_shadow_HD_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `bi` >> gvs[] >>
   Cases_on `selected` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
@@ -674,7 +641,7 @@ QED
 Theorem gas_shadow_compiles_builtin_body_env[local]:
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty (Env item) args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty
       (if sh then gas_shadow_builtin (Env item) else Env item)
       (if sh then MAP gas_shadow_expr args else args))
 Proof
@@ -692,18 +659,18 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_not[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty Not args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty Not
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty Not
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
   qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
     gas_shadow_HD_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `selected` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def, GSYM comp_bind_def, comp_bind_uncurry] >>
@@ -717,10 +684,10 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_acc[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty (Acc item) args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty (Acc item)
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty (Acc item)
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -737,7 +704,7 @@ QED
 Theorem gas_shadow_compiles_builtin_body_calldatalen[local]:
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty CalldataLen args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty CalldataLen args')
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty CalldataLen args')
 Proof
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def] >>
@@ -748,10 +715,10 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_powmod[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty PowMod256 args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty PowMod256
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty PowMod256
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -760,8 +727,8 @@ Proof
   qspecl_then [`1`, `args`, `sh`] (qx_choose_then `sel_b` assume_tac)
     gas_shadow_EL_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `sel_a` >> Cases_on `sel_b` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def, GSYM comp_bind_def, comp_bind_uncurry] >>
@@ -774,10 +741,10 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_ecrecover[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty ECRecover args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty ECRecover
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty ECRecover
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -790,8 +757,8 @@ Proof
   qspecl_then [`3`, `args`, `sh`] (qx_choose_then `sel_s` assume_tac)
     gas_shadow_EL_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `sel_h` >> Cases_on `sel_v` >>
   Cases_on `sel_r` >> Cases_on `sel_s` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
@@ -805,10 +772,10 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_ecadd[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty ECAdd args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty ECAdd
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty ECAdd
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -824,16 +791,16 @@ Proof
     >- metis_tac[COND_CLAUSES] >> gen_tac >> BETA_TAC >>
     match_mp_tac gas_shadow_compiles_bind >> conj_tac
     >- irule gas_shadow_compiles_unwrap_value >> gen_tac >> BETA_TAC) >>
-   irule gas_shadow_compiles_as_ptr_val >>
+   irule gas_shadow_compiles_as_stack_val >>
    irule gasShadowCompileBuiltinScalarTheory.gas_shadow_compiles_ecadd_points)
 QED
 
 Theorem gas_shadow_compiles_builtin_body_ecmul[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty ECMul args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty ECMul
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty ECMul
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -842,8 +809,8 @@ Proof
   qspecl_then [`1`, `args`, `sh`] (qx_choose_then `sel_b` assume_tac)
     gas_shadow_EL_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `sel_a` >> Cases_on `sel_b` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def, GSYM comp_bind_def, comp_bind_uncurry] >>
@@ -854,24 +821,24 @@ Proof
    >- irule gas_shadow_compiles_unwrap_value >> gen_tac >> BETA_TAC >>
    match_mp_tac gas_shadow_compiles_bind >> conj_tac
    >- metis_tac[COND_CLAUSES] >> gen_tac >> BETA_TAC >>
-   irule gas_shadow_compiles_as_ptr_val >>
+   irule gas_shadow_compiles_as_stack_val >>
    irule gasShadowCompileBuiltinScalarTheory.gas_shadow_compiles_ecmul_point)
 QED
 
 Theorem gas_shadow_compiles_builtin_body_wei[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty (AsWeiValue denom) args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty (AsWeiValue denom)
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty (AsWeiValue denom)
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
   qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
     gas_shadow_HD_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `selected` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def, GSYM comp_bind_def, comp_bind_uncurry] >>
@@ -886,18 +853,18 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_methodid[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty MethodId args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty MethodId
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty MethodId
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
   qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
     gas_shadow_HD_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `selected` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def, GSYM comp_bind_def, comp_bind_uncurry] >>
@@ -915,10 +882,10 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_makearray[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty (MakeArray elem_ty_opt bnd) args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty (MakeArray elem_ty_opt bnd)
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty (MakeArray elem_ty_opt bnd)
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -939,10 +906,10 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_concat[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty (Concat max_len) args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty (Concat max_len)
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty (Concat max_len)
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >> Cases_on `sh` >>
@@ -955,7 +922,7 @@ Proof
             gas_shadow_compiles_emit_op, gas_shadow_compiles_emit_void] >>
     gen_tac >> BETA_TAC) >>
    match_mp_tac gas_shadow_compiles_bind >> conj_tac
-   >- metis_tac[gas_shadow_compiles_concat, COND_CLAUSES] >>
+   >- metis_tac[gas_shadow_compiles_concat_env, COND_CLAUSES] >>
    gen_tac >> BETA_TAC >>
    rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
     >- simp[gas_shadow_compiles_emit_op, gas_shadow_compiles_emit_void] >>
@@ -967,19 +934,19 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_hash[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) /\
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) /\
   (bi = Keccak256 \/ bi = Sha256) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty bi args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty bi
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty bi
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
   qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
     gas_shadow_HD_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `selected` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def, GSYM comp_bind_def, comp_bind_uncurry] >>
@@ -1001,10 +968,10 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_slice[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty (Slice max_len) args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty (Slice max_len)
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty (Slice max_len)
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -1015,8 +982,8 @@ Proof
   qspecl_then [`2`, `args`, `sh`] (qx_choose_then `sel_len` assume_tac)
     gas_shadow_EL_alternative >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `sel_src` >> Cases_on `sel_start` >> Cases_on `sel_len` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def, GSYM comp_bind_def, comp_bind_uncurry] >>
@@ -1079,10 +1046,10 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body_bop[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty (Bop op) args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty (Bop op)
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty (Bop op)
       (if sh then MAP gas_shadow_expr args else args))
 Proof
   strip_tac >>
@@ -1094,8 +1061,8 @@ Proof
    (if sh then MAP gas_shadow_expr (TL args) else TL args)`
     by (Cases_on `sh` >> simp[]) >>
   `!t e mode. gas_shadow_compiles (lower_value f cenv t e)
-    (lower_value g cenv t (if mode then gas_shadow_expr e else e))`
-    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
+    (lower_value g (gas_shadow_env sd cenv) t (if mode then gas_shadow_expr e else e))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
   Cases_on `sel_a` >> Cases_on `sel_b` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def, GSYM comp_bind_def, comp_bind_uncurry] >>
@@ -1105,12 +1072,12 @@ Proof
         >- metis_tac[COND_CLAUSES] >> gen_tac >> BETA_TAC) >>
        `!mode. gas_shadow_compiles
           (f cenv (expr_type (HD (TL args))) (HD (TL args)))
-          (g cenv (expr_type (HD (TL args)))
+          (g (gas_shadow_env sd cenv) (expr_type (HD (TL args)))
             (if mode then gas_shadow_expr (HD (TL args)) else HD (TL args)))`
          by metis_tac[] >>
        `!es mode. gas_shadow_compiles (compile_multi_exprs f cenv es)
-         (compile_multi_exprs g cenv (if mode then MAP gas_shadow_expr es else es))`
-         by metis_tac[gas_shadow_compiles_multi_exprs] >>
+         (compile_multi_exprs g (gas_shadow_env sd cenv) (if mode then MAP gas_shadow_expr es else es))`
+         by metis_tac[gas_shadow_compiles_multi_exprs_env] >>
        qpat_x_assum `!cenv ty e sh. _` kall_tac >>
        qpat_x_assum `!t e mode. _` kall_tac >>
        Cases_on `HD (TL args)` >> gvs[gas_shadow_expr_def] >>
@@ -1119,7 +1086,7 @@ Proof
        simp[GSYM comp_bind_def, comp_bind_uncurry] >>
        CONV_TAC (DEPTH_CONV ETA_CONV) >>
        (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-        >- metis_tac[gas_shadow_compiles_multi_exprs, COND_CLAUSES] >>
+        >- metis_tac[gas_shadow_compiles_multi_exprs_env, COND_CLAUSES] >>
         gen_tac >> BETA_TAC >> irule gas_shadow_compiles_as_stack_val >>
         Cases_on `op = In` >>
         simp[gasShadowCompileMembershipTheory.gas_shadow_compiles_list_membership_in,
@@ -1147,10 +1114,10 @@ QED
 
 Theorem gas_shadow_compiles_builtin_body:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
-    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+    (g (gas_shadow_env sd cenv) ty (if sh then gas_shadow_expr e else e))) ==>
   gas_shadow_compiles
     (compile_builtin_dispatch_body f cenv ret_ty ty bi args)
-    (compile_builtin_dispatch_body g cenv ret_ty ty
+    (compile_builtin_dispatch_body g (gas_shadow_env sd cenv) ret_ty ty
       (if sh then gas_shadow_builtin bi else bi)
       (if sh then MAP gas_shadow_expr args else args))
 Proof

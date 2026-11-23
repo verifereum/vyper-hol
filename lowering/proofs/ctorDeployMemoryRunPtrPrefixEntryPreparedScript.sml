@@ -1,6 +1,7 @@
 Theory ctorDeployMemoryRunPtrPrefixEntryPrepared
 Ancestors
-  ctorDeployMemoryRunPtrPrefixEntryRegisterList ctorDeployMemoryRunPtrDefs
+  ctorDeployMemoryRunPtrPrefixRegisterList ctorDeployMemoryRunMemEntryShiftedObservation
+  ctorDeployMemoryRunPtrDefs
   ctorDeployMemoryFrontier allocaFrontierRoom e2eDeployDefs
 
 Theorem prefix_entry_frontier_all_sites:

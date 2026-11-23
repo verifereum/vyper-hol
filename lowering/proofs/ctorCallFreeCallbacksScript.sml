@@ -68,6 +68,28 @@ Proof
   rpt strip_tac >> irule outcomes_free_multi_exprs >> simp[DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
+Theorem make_tuple_opcode_bound:
+  !es tys buf off s.
+  P ADD /\
+  (!vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (unwrap_value ce vv st)))) /\
+  (!src dst dt sty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_store_memory ce src dst dt sty st)))) /\
+  (!e ty st. MEM e es /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_make_tuple f ce es tys buf off s)))
+Proof
+  Induct_on `es` >> rpt strip_tac >>
+  Cases_on `tys` >> simp[compile_make_tuple_def, every_state_insts_return] >>
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op]),
+    gen_tac, strip_tac, irule every_state_insts_bind,
+    irule every_state_insts_ignore_bind, conj_tac, first_assum irule]) >>
+  simp[]
+QED
+
 Theorem outcomes_free_make_tuple:
   !es tys buf off s.
   (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
@@ -79,16 +101,10 @@ Theorem outcomes_free_make_tuple:
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_make_tuple f ce es tys buf off s)))
 Proof
-  Induct_on `es` >> rpt strip_tac >>
-  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  Cases_on `tys` >> simp[compile_make_tuple_def, every_state_insts_return] >>
-  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-      opcode_every_emit_inst,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]),
-    gen_tac, strip_tac, irule every_state_insts_bind,
-    irule every_state_insts_ignore_bind, conj_tac, first_assum irule]) >>
-  simp[]
+  rpt strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  irule make_tuple_opcode_bound >>
+  simp[SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
+    SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]
 QED
 
 Theorem opcode_every_make_tuple:
@@ -114,6 +130,28 @@ Proof
   rpt strip_tac >> irule outcomes_free_make_tuple >> simp[DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
+Theorem make_array_elems_opcode_bound:
+  !es ety sz lw buf idx s.
+  P ADD /\
+  (!vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (unwrap_value ce vv st)))) /\
+  (!src dst dt sty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_store_memory ce src dst dt sty st)))) /\
+  (!e ty st. MEM e es /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_make_array_elems f ce es ety sz lw buf idx s)))
+Proof
+  Induct_on `es` >> rpt strip_tac >>
+  simp[compile_make_array_elems_def, every_state_insts_return] >>
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op]),
+    gen_tac, strip_tac, irule every_state_insts_bind,
+    irule every_state_insts_ignore_bind, conj_tac, first_assum irule]) >>
+  simp[]
+QED
+
 Theorem outcomes_free_make_array_elems:
   !es ety sz lw buf idx s.
   (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
@@ -125,16 +163,10 @@ Theorem outcomes_free_make_array_elems:
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_make_array_elems f ce es ety sz lw buf idx s)))
 Proof
-  Induct_on `es` >> rpt strip_tac >>
-  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_make_array_elems_def, every_state_insts_return] >>
-  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-      opcode_every_emit_inst,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]),
-    gen_tac, strip_tac, irule every_state_insts_bind,
-    irule every_state_insts_ignore_bind, conj_tac, first_assum irule]) >>
-  simp[]
+  rpt strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  irule make_array_elems_opcode_bound >>
+  simp[SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
+    SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]
 QED
 
 Theorem opcode_every_make_array_elems:
@@ -201,6 +233,31 @@ Proof
   rpt strip_tac >> irule outcomes_free_make_array >> simp[DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
+Theorem struct_lit_opcode_bound:
+  !fields buf off s.
+  P ADD /\
+  (!vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (unwrap_value ce vv st)))) /\
+  (!src dst dt sty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_store_memory ce src dst dt sty st)))) /\
+  (!nm e ty st. MEM (nm,e) fields /\
+    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
+  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  EVERY (\i. P i.inst_opcode)
+    (state_insts (SND (compile_struct_lit f ce ty fields buf off s)))
+Proof
+  Induct_on `fields` >> rpt strip_tac >>
+  simp[compile_struct_lit_def, every_state_insts_return] >>
+  rename1 `compile_struct_lit _ _ _ (fld::_)` >> PairCases_on `fld` >>
+  simp[compile_struct_lit_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op]),
+    gen_tac, strip_tac, irule every_state_insts_bind,
+    irule every_state_insts_ignore_bind, conj_tac, first_assum irule]) >>
+  metis_tac[]
+QED
+
 Theorem outcomes_free_struct_lit:
   !fields buf off s.
   (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
@@ -213,18 +270,11 @@ Theorem outcomes_free_struct_lit:
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_struct_lit f ce ty fields buf off s)))
 Proof
-  Induct_on `fields` >> rpt strip_tac >>
-  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_struct_lit_def, every_state_insts_return] >>
-  rename1 `compile_struct_lit _ _ _ (fld::_)` >> PairCases_on `fld` >>
-  simp[compile_struct_lit_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
-      opcode_every_emit_inst,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]),
-    gen_tac, strip_tac, irule every_state_insts_bind,
-    irule every_state_insts_ignore_bind, conj_tac, first_assum irule]) >>
-  metis_tac[]
+  rpt strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  irule struct_lit_opcode_bound >>
+  simp[SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
+    SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem opcode_every_struct_lit:
@@ -300,52 +350,6 @@ Proof
   rpt strip_tac >> irule outcomes_free_concat >> simp[DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
-Theorem outcomes_free_abi_encode_args:
-  !es s.
-  (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
-    MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
-    TSTORE; CALLDATACOPY] ==> P opc) /\
-  (!e ty st. MEM e es /\ EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
-  (!ty vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_materialize_vv ce ty vv st)))) /\
-  EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_abi_encode_args f ce es s)))
-Proof
-  Induct_on `es` >> rpt strip_tac >>
-  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_abi_encode_args_def, every_state_insts_return] >>
-  rpt (FIRST [CHANGED_TAC (simp[every_state_insts_return,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value]),
-    gen_tac, strip_tac, irule every_state_insts_bind,
-    conj_tac, IF_CASES_TAC, first_assum irule]) >> simp[]
-QED
-
-Theorem opcode_every_abi_encode_args:
-  (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
-         opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
-  (
-  (!ce ty vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_materialize_vv ce ty vv st)))) ==>
-  (!ce vv st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (unwrap_value ce vv st)))) ==>
-  !es cfn cenv.
-  (!e ty st. MEM e es ==>
-    EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (cfn cenv ty e st)))) ==>
-  !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
-    EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_abi_encode_args cfn cenv es st)))
-  )
-Proof
-  rpt strip_tac >> irule outcomes_free_abi_encode_args >> simp[DISJ_IMP_THM, FORALL_AND_THM]
-QED
-
 Theorem outcomes_free_attribute:
   P ADD /\
   (!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
@@ -376,7 +380,7 @@ Proof
 QED
 
 Theorem outcomes_free_acc:
-  P BALANCE /\ P EXTCODEHASH /\ P EXTCODESIZE /\ P GT /\ P INVALID /\
+  P BALANCE /\ P CODESIZE /\ P EXTCODEHASH /\ P EXTCODESIZE /\ P GT /\ P INVALID /\
   (!st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (lower_value cfn cenv (BaseT AddressT) addr_e st)))) /\

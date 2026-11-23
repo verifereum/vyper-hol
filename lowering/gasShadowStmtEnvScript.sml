@@ -5,18 +5,31 @@ Ancestors
   compileVyper gasShadow gasShadowState compileEnv vyperAST list
   gasShadowSupportedExpr gasShadowSupportedStmts
 
-Theorem gas_shadow_stmts_env:
+Theorem gas_shadow_stmts_env_env:
   !ss ce lc ty.
-    gas_shadow_compiles (stmts_env ce lc ty ss)
-      (stmts_env ce lc ty (MAP gas_shadow_stmt ss))
+    gas_shadow_compiles_env sd (stmts_env ce lc ty ss)
+      (stmts_env (gas_shadow_env sd ce) lc ty (MAP gas_shadow_stmt ss))
 Proof
-  Induct >> simp[stmts_env_def, gas_shadow_compiles_return] >>
-  rpt gen_tac >> ho_match_mp_tac gas_shadow_compiles_get_terminated >>
-  gen_tac >> Cases_on `b` >> simp[gas_shadow_compiles_return] >>
-  ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- simp[gas_shadow_compiles_declare_stmt_local] >>
+  Induct >> simp[stmts_env_def, gas_shadow_compiles_env_return] >>
+  rpt gen_tac >> ho_match_mp_tac gas_shadow_compiles_get_terminated_env >>
+  gen_tac >> Cases_on `b` >> simp[gas_shadow_compiles_env_return] >>
+  ho_match_mp_tac gas_shadow_compiles_env_bind_env >> conj_tac
+  >- simp[gas_shadow_compiles_env_declare_stmt_local] >>
   gen_tac >> simp[comp_ignore_bind_def] >>
-  ho_match_mp_tac gas_shadow_compiles_bind >> simp[gas_shadow_compile_stmt]
+  ho_match_mp_tac gas_shadow_compiles_bind_env >> simp[gas_shadow_compile_stmt_env]
+QED
+
+Theorem gas_shadow_stmt_env_env:
+  !s ce lc ty.
+    gas_shadow_compiles_env sd (stmt_env ce lc ty s)
+      (stmt_env (gas_shadow_env sd ce) lc ty (gas_shadow_stmt s))
+Proof
+  rpt gen_tac >> simp[stmt_env_def] >>
+  ho_match_mp_tac gas_shadow_compiles_env_bind_env >> conj_tac
+  >- simp[gas_shadow_compiles_env_declare_stmt_local] >>
+  gen_tac >> simp[comp_ignore_bind_def] >>
+  ho_match_mp_tac gas_shadow_compiles_bind_env >>
+  simp[gas_shadow_compile_stmt_env, gas_shadow_compiles_env_return]
 QED
 
 Theorem gas_shadow_valued_return:
@@ -37,3 +50,8 @@ Proof
   simp[gas_shadow_supported_pure_expr, gas_shadow_supported_effect_expr,
        gas_shadow_supported_expr]
 QED
+
+(* The same-environment forms. *)
+Theorem gas_shadow_stmts_env =
+  REWRITE_RULE [gasShadowCompileBaseTheory.gas_shadow_env_F, gas_shadow_compiles_env_F] (Q.INST [`sd` |-> `F`] gas_shadow_stmts_env_env)
+

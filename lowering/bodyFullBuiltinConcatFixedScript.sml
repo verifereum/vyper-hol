@@ -114,6 +114,14 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
     ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
     (drule concat_fixed_shape >> disch_then SUBST1_TAC >> simp[mk_inst_def,is_terminator_def]) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+    (drule concat_fixed_shape >> disch_then SUBST1_TAC >> simp[mk_inst_def]) >>
+  `(ctx_has_dalloca ctx ==> !pre i post u.
+      emitted_insts sa sb = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+     simp[EVERY_APPEND]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (drule_all concat_fixed_arm_mem_ok >> simp[]) >>
   qexistsl_tac [`V`,`Gf`,`tnf`] >>

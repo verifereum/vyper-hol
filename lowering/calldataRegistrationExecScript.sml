@@ -1,6 +1,7 @@
 (* Liveness-only execution boundaries for positional calldata registration. *)
 Theory calldataRegistrationExec
 Ancestors
+  abiDecoderLoopRegisters
   valueEncodingDefs loweringStateRelDefs calldataRegistration abiDecoderReentryAddress fragExecMem actualAllocExec
   venomExecProofs emitHelperProps exprLoweringProps finite_map words
   abiDecoderReentry venomState venomExecSemantics abiDecoderContract
@@ -57,7 +58,7 @@ Proof
   >- (simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
        ASCIInumbersTheory.toString_inj]) >>
   gen_tac >> strip_tac >>
-  drule calldata_update_protected >>
+  drule abi_decoder_generated_update_operand >>
   disch_then (qspecl_then [`w`,`s`] mp_tac) >> Cases_on `op` >>
   simp[eval_operand_def, lookup_var_def, update_var_def])
 QED
@@ -331,7 +332,18 @@ Proof
      i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
      (emitted_insts st last)` by
     (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st last)` by
+    (qpat_x_assum `compile_abi_arg_ptr_guard _ _ _ _ = _` mp_tac >>
+     simp[compile_abi_arg_ptr_guard_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+          fresh_id_def, emit_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[emitted_insts_def] >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]) >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      qpat_x_assum `emitted_insts _ _ = _ ++ _` SUBST_ALL_TAC >> fs[]) >>
   conj_tac
   >- (rpt strip_tac >> irule instMemFrontierTheory.below_frontier_no_ranges >>
       qpat_x_assum `emitted_insts _ _ = _ ++ _` SUBST_ALL_TAC >> fs[]) >>
@@ -370,7 +382,7 @@ Proof
   strip_tac >>
   `abi_decoder_operand_live (n + 1) op` by
     (irule abi_decoder_operand_live_mono >> qexists_tac `n` >> simp[]) >>
-  simp[calldataDynOwnedTheory.calldata_update_protected]
+  simp[abi_decoder_generated_update_operand]
 QED
 
 (* Alloca invariants read only the allocas and their frontier. *)

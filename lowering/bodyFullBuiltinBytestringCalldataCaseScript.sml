@@ -10,7 +10,8 @@ Theorem calldata_slice_body_operand_full:
      body_exprs_full_ok cx args) /\
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
   ?e m. args = [e] /\ expr_type e = BaseT (UintT 256) /\
     ann = BaseT (BytesT (Dynamic m)) /\ 0 < n /\ n <= m /\ m < 2 ** 256 /\ n < 2 ** 256 /\
     expr_body_pre cenv cx env e es /\

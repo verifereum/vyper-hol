@@ -22,7 +22,7 @@
 Theory stmtLoweringMono
 Ancestors
   fragExec exprLoweringProps stmtLowering exprLowering context compileEnv
-  abiEncoder emitHelper
+  abiEncoder emitHelper eventLoweringStructure
 
 (* ===== The helpers of compile_stmt ===== *)
 
@@ -223,16 +223,12 @@ Proof
 QED
 
 Theorem ci_mono_custom_error:
-  (!cenv es tys d off sa.
-     ci_mono sa (SND (compile_custom_error_store_args cenv es tys d off sa))) /\
-  (!cenv err sa. ci_mono sa (SND (compile_revert_with_custom_error cenv err sa)))
+  !cenv err sa. ci_mono sa (SND (compile_revert_with_custom_error cenv err sa))
 Proof
-  conj_asm1_tac
-  >- (gen_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >>
-      simp[compile_custom_error_store_args_def] >>
-      ci_mono_chain_tac ci_mono_stmt_rws) >>
   gen_tac >> Cases >> simp[compile_revert_with_custom_error_def] >>
-  ci_mono_chain_tac ci_mono_stmt_rws
+  ci_mono_chain_tac
+    (SIMP_RULE (srw_ss()) [cj 1 ci_mono_compile_expr_sa] ci_mono_compile_ext_call_args ::
+     ci_mono_compile_abi_encode_values_to_buf :: ci_mono_stmt_rws)
 QED
 
 Theorem ci_mono_internal_return[local]:
@@ -319,8 +315,10 @@ val stmt_ci_tac =
            ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
            ci_mono_custom_error :: ci_mono_stmt_rws)
   in
-    rpt gen_tac >> simp[Once compile_stmt_def] >> chain >>
-    simp[pairTheory.ELIM_UNCURRY] >> chain
+    rpt gen_tac >>
+    (MATCH_ACCEPT_TAC compile_log_stmt_ci_mono ORELSE
+     (simp[Once compile_stmt_def] >> chain >>
+      simp[pairTheory.ELIM_UNCURRY] >> chain))
   end;
 
 val loop_ci_tac = RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >> stmt_ci_tac;

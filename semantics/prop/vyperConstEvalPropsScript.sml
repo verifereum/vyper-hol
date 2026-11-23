@@ -35,12 +35,14 @@ Proof
   rw[eval_constant_def, AllCaseEqs()] >>
   gvs[expr_type_def, eval_pure_expr_def, evaluate_literal_def,
       read_result_def, return_def, evaluate_type_builtin_def,
-      type_builtin_args_length_ok_def] >>
-  `b <> Len /\ b <> Bop In /\ b <> Bop NotIn /\ ~precompile_builtin b /\
+      type_builtin_args_length_ok_def, closed_builtin_def] >>
+  `b <> Len /\ ~precompile_builtin b /\
    code_slice_source b es = NONE` by
     (Cases_on `b` >> gvs[closed_builtin_def]) >>
-  gvs[] >>
-  drule_all closed_builtin_context_free >> simp[]
+  Cases_on `is_self_codesize b es`
+  >- (Cases_on `b` >> TRY (Cases_on `a`) >>
+      gvs[closed_builtin_def, is_self_codesize_def])
+  >- (drule_all closed_builtin_context_free >> simp[])
 QED
 
 Theorem eval_constant_sound_mutual[local]:
@@ -54,15 +56,19 @@ Proof
   simp[Once vyperInterpreterTheory.evaluate_def] >>
   gvs[bind_def, ignore_bind_def, return_def, read_result_def,
       type_check_def, assert_def, lift_sum_def,
-      evaluate_type_builtin_def, type_builtin_args_length_ok_def] >>
+      evaluate_type_builtin_def, type_builtin_args_length_ok_def,
+      closed_builtin_def] >>
   simp[Once vyperInterpreterTheory.evaluate_def, return_def] >>
-  `b <> Len /\ b <> Bop In /\ b <> Bop NotIn /\ b <> Env MsgGas /\
+  `b <> Len /\ b <> Env MsgGas /\
    ~precompile_builtin b /\ code_slice_source b es = NONE` by
     (Cases_on `b` >> gvs[closed_builtin_def]) >>
   drule (cj 2 eval_constant_pure) >> strip_tac >>
   drule_all closed_builtin_context_free >> strip_tac >>
-  simp[get_accounts_def, bind_def, return_def, ignore_bind_def,
-       vyperInterpreterTheory.precompile_call_success_def]
+  Cases_on `is_self_codesize b es`
+  >- (Cases_on `b` >> TRY (Cases_on `a`) >>
+      gvs[closed_builtin_def, is_self_codesize_def])
+  >- (simp[get_accounts_def, bind_def, return_def, ignore_bind_def,
+           vyperInterpreterTheory.precompile_call_success_def])
 QED
 
 (* A computed value is what the interpreter returns in any context and state,

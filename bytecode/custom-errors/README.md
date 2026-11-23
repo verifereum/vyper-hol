@@ -2,17 +2,12 @@
 
 These sources exercise the lowering of `raise E(...)` and `assert c, E(...)`
 for a declared `error E` ([issue #1195](https://github.com/verifereum/vyper-hol/issues/1195)).
-The HOL lowering follows Python Vyper before vyperlang/vyper#5127: it
-stores the arguments in a tuple buffer at their declared types, ABI-encodes
-them behind the error's selector and reverts with
-`selector || abi_encode(args)`; an error without arguments reverts with the
-selector alone. At `VYPER_PIN`, `_revert_with_custom_error`
-(`codegen_venom/stmt.py`) lowers the arguments as values and encodes them
-with the direct encoder, so every fixture here waits for that port (P4 in
-[`../pending-5127-port.md`](../pending-5127-port.md)). Once it lands, each
-source has an exact bytecode comparison, run by
-`./native/bytecode_parity_native.exe . custom-errors` from `bytecode/`
-(`../native/README.md`).
+The HOL lowering snapshots the arguments in declaration order and encodes
+them directly after the declared selector, following
+`_revert_with_custom_error` in the pinned compiler. An error without
+arguments reverts with the four-byte selector alone. Compare deployment
+and runtime bytes with the pinned oracles by running
+`./native/bytecode_parity_native.exe . custom-errors` from `bytecode/`.
 
 | Source | Checks |
 |---|---|
@@ -22,7 +17,7 @@ source has an exact bytecode comparison, run by
 | `ce_assert_static` | static arguments on a failed `assert` |
 | `ce_raise_kwargs` | keyword arguments, in declaration order |
 | `ce_raise_dynamic` | a static argument followed by `String` and `Bytes` arguments |
-| `ce_assert_dynamic` | a string literal stored at a wider declared `String` type |
+| `ce_assert_dynamic` | a string literal with a wider declared `String` parameter type |
 | `ce_raise_dynarray` | a `DynArray` argument |
 
 `oracle/` holds the annotated AST/layout JSON and deployment/runtime bytecode

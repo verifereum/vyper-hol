@@ -11,7 +11,7 @@ Theory bodyFullStmtsCons
 Ancestors
   bodySimFull gasOutcomeFullCompose gasOutcomeFullStmts fragGasOriginPtr
   bodyFullIfExpReach
-  gasShadowState gasShadowCompileStmt gasShadowCompileStmtBase bodyFullShared
+  gasShadowState gasShadowCompileBase gasShadowStmtEnv gasShadowCompileStmtBase bodyFullShared
   stmtFragPtr stmtSimSeqEnv stmtSimProps stmtSimDefs
   loweringPosts bodyMemoryDefs bodyPtrDefs bodyExprPreFacts
   stmtLoweringMono fragExec gasSummaryCompose gasExemptCert exprSimDefs
@@ -28,10 +28,10 @@ Ancestors
      bodyFullIf's compile_if_stmt_frag_full composes the same way through
      gas_outcome_full_bind_all, reading H-free facts of the midpoint at
      storage_trace_horizon mid.storage_trace.
-   - The shadow facts the pre-horizon proof took as premises follow from
-     gas_shadow_terminated (bodyFullShared) and from gas_shadow_compiles of
-     stmt_env (gas_shadow_compiles_bind, gas_shadow_compiles_declare_stmt_local,
-     gas_shadow_compile_stmt).
+   - The shadow head is live by gas_shadow_terminated (bodyFullShared).
+     Its returned environment and compile state are related to the original
+     results by gas_shadow_stmt_env_env; the shadow tail starts from those
+     returned values.
    - dead_lo_ok depends on the environment only through ce_is_ctor, which
      cenv_top_ext preserves (cenv_top_ext_is_ctor). *)
 Theorem stmt_frag_full_cons_env:
@@ -42,7 +42,7 @@ Theorem stmt_frag_full_cons_env:
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty stmt)
-      (stmt_env cenv lctx ty (gas_shadow_stmt stmt))
+      (stmt_env (gas_shadow_env T cenv) lctx ty (gas_shadow_stmt stmt))
       (eval_stmt cx stmt) es /\
     (!gs es1 c sa sm.
        eval_stmt cx stmt (es with gas_obs := gs) = (INL (), es1) /\
@@ -51,21 +51,18 @@ Theorem stmt_frag_full_cons_env:
        stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
          cx lctx RetQ c
          (stmts_env c lctx ty ss)
-         (stmts_env c lctx ty (MAP gas_shadow_stmt ss))
+         (stmts_env (gas_shadow_env T c) lctx ty (MAP gas_shadow_stmt ss))
          (eval_stmts cx ss) es1) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmts_env cenv lctx ty (stmt::ss))
-      (stmts_env cenv lctx ty (MAP gas_shadow_stmt (stmt::ss)))
+      (stmts_env (gas_shadow_env T cenv) lctx ty (MAP gas_shadow_stmt (stmt::ss)))
       (eval_stmts cx (stmt::ss)) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `gas_shadow_compiles (stmt_env cenv lctx ty stmt)
-     (stmt_env cenv lctx ty (gas_shadow_stmt stmt))` by
-    (simp[stmt_env_def, comp_ignore_bind_def] >> irule gas_shadow_compiles_bind >>
-     simp[gas_shadow_compiles_declare_stmt_local] >> gen_tac >>
-     irule gas_shadow_compiles_bind >>
-     simp[gas_shadow_compile_stmt, gas_shadow_compiles_return]) >>
+  `gas_shadow_compiles_env T (stmt_env cenv lctx ty stmt)
+     (stmt_env (gas_shadow_env T cenv) lctx ty (gas_shadow_stmt stmt))` by
+    irule gas_shadow_stmt_env_env >>
   simp[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   `ctx_has_dalloca ctx ==> !bb. MEM bb func.fn_blocks ==>
       phi_prefix_length bb.bb_instructions = 0` by
@@ -78,10 +75,10 @@ Proof
   qpat_x_assum `stmts_env _ _ _ (gas_shadow_stmt stmt::MAP gas_shadow_stmt ss) _ = _` mp_tac >>
   simp[stmts_env_cons, comp_bind_def] >> pairarg_tac >> simp[] >>
   strip_tac >>
-  rename1 `stmt_env cenv lctx ty (gas_shadow_stmt stmt) shadow_sa = (c', shadow_sm)` >>
-  `c' = c /\ gas_shadow_state sm shadow_sm` by
-    (qpat_x_assum `gas_shadow_compiles _ _` mp_tac >>
-     simp[gas_shadow_compiles_def] >>
+  rename1 `stmt_env _ _ _ (gas_shadow_stmt stmt) shadow_sa = (c', shadow_sm)` >>
+  `c' = gas_shadow_env T c /\ gas_shadow_state sm shadow_sm` by
+    (qpat_x_assum `gas_shadow_compiles_env _ _ _` mp_tac >>
+     simp[gas_shadow_compiles_env_def] >>
      disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
   gvs[] >>
   qspecl_then [`cenv`, `lctx`, `ty`, `stmt`, `sa`, `c`, `sm`] mp_tac
@@ -91,13 +88,15 @@ Proof
     (qspecl_then [`c`, `lctx`, `ty`, `ss`] mp_tac stmts_env_cs_mono >>
      simp[cs_mono_def] >> metis_tac[]) >>
   `cs_extends shadow_sa shadow_sm` by
-    (`stmts_env cenv lctx ty [gas_shadow_stmt stmt] shadow_sa = (c, shadow_sm)` by
+    (`stmts_env (gas_shadow_env T cenv) lctx ty [gas_shadow_stmt stmt] shadow_sa =
+        (gas_shadow_env T c, shadow_sm)` by
        simp[stmts_env_cons, comp_bind_def, stmts_env_def, comp_return_def] >>
-     qspecl_then [`cenv`, `lctx`, `ty`, `[gas_shadow_stmt stmt]`] mp_tac
+     qspecl_then [`gas_shadow_env T cenv`, `lctx`, `ty`, `[gas_shadow_stmt stmt]`] mp_tac
        stmts_env_cs_mono >>
      simp[cs_mono_def] >> metis_tac[]) >>
   `cs_extends shadow_sm shadow_sb` by
-    (qspecl_then [`c`, `lctx`, `ty`, `MAP gas_shadow_stmt ss`] mp_tac stmts_env_cs_mono >>
+    (qspecl_then [`gas_shadow_env T c`, `lctx`, `ty`, `MAP gas_shadow_stmt ss`] mp_tac
+       stmts_env_cs_mono >>
      simp[cs_mono_def] >> metis_tac[]) >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_split] >>
@@ -172,16 +171,16 @@ Resume stmt_frag_full_cons_env[continue]:
 QED
 
 Resume stmt_frag_full_cons_env[tail]:
-  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_no_wrap inst s` by
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
     (Cases_on `ctx_has_dalloca ctx`
      >- (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by fs[] >>
          qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t,G1,tn1)` (fn path =>
          qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
          qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _`
-           (fn safe => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_no_wrap
+           (fn safe => ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
              (LIST_CONJ [path,no_phi,safe])))))) >>
      rpt strip_tac >> drule_all frag_reachable_members >> strip_tac >>
-     simp[unitTransformDefsTheory.dalloca_no_wrap_def] >> strip_tac >>
+     simp[unitTransformDefsTheory.dalloca_fmp_headroom_def] >> strip_tac >>
      `ctx_has_dalloca ctx` by
        (simp_tac bool_ss [ctx_has_dalloca_def, EXISTS_MEM] >>
         qexists_tac `fn` >> conj_tac >- first_assum ACCEPT_TAC >>

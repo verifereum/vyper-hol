@@ -26,11 +26,12 @@ val _ = augment_srw_ss [rewrites [
   deploy_blocks_frame_call_raw_log, deploy_blocks_frame_call_raw_log_pair,
   deploy_blocks_frame_create_call, deploy_blocks_frame_raw_create,
   deploy_blocks_frame_create_snapshot, deploy_blocks_frame_create_blueprint_args,
-  deploy_blocks_frame_create_ctor_tuple, deploy_blocks_frame_ext_call_args,
+  deploy_blocks_frame_create_ctor_args, deploy_blocks_frame_ext_call_args,
   deploy_blocks_frame_extcall_store_args, deploy_blocks_frame_ext_call_kwargs,
   deploy_blocks_frame_ext_call_kwarg, deploy_blocks_frame_create_salt,
   deploy_blocks_frame_array_subscript, deploy_blocks_frame_stage_intcall_args,
   deploy_blocks_frame_external_call_kwargs, deploy_blocks_frame_default_return_path,
+  deploy_blocks_frame_abi_encode_values_to_buf, deploy_blocks_frame_abi_encode_payload,
   deploy_blocks_frame_extcall_store_values, deploy_blocks_frame_multi_vvs,
   deploy_blocks_frame_return_value_decode,
   deploy_blocks_frame_create_copy, deploy_blocks_frame_create_blueprint,
@@ -44,8 +45,8 @@ Proof
   strip_tac >>
   `!copy vv. deploy_blocks_frame (compile_snapshot_vv ce copy vv)` by
     (rpt gen_tac >> irule deploy_blocks_frame_snapshot_vv >> simp[]) >>
-  `!es. deploy_blocks_frame (compile_create_ctor_tuple cf ce es)` by
-    (gen_tac >> irule deploy_blocks_frame_create_ctor_tuple >> simp[]) >>
+  `!es. deploy_blocks_frame (compile_create_ctor_args cf ce es)` by
+    (gen_tac >> irule deploy_blocks_frame_create_ctor_args >> simp[]) >>
   irule deploy_blocks_frame_create_call >> simp[]
 QED
 
@@ -75,8 +76,6 @@ val _ = augment_srw_ss [rewrites [
   deploy_blocks_frame_internal_return, deploy_blocks_frame_external_return,
   deploy_blocks_frame_internal_return_from_env,
   deploy_blocks_frame_revert_with_reason, deploy_blocks_frame_reason_message,
-  deploy_blocks_frame_log_save_arg, deploy_blocks_frame_log_eval_all,
-  deploy_blocks_frame_log_topic_ops, deploy_blocks_frame_log_store_data,
   deploy_blocks_frame_tuple_load_all, deploy_blocks_frame_store_at_loc,
   deploy_blocks_frame_assign_value, deploy_blocks_frame_tuple_store_all,
   deploy_blocks_frame_tuple_unpack, deploy_blocks_frame_iter_elem_copy]];

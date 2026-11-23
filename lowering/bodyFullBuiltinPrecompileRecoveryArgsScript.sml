@@ -11,9 +11,10 @@ Theorem ecrecover_args_suffix_full:
     expr_body_pre cenv cx env (Builtin ann ECRecover args) entry /\
     args = done ++ todo /\ body_exprs_full_ok cx todo /\
     body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
     lower_word_args cenv (\e. ty) todo sa = (xs,sm) /\
-    lower_word_args cenv (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
+    lower_word_args (gas_shadow_env T cenv) (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
       (xs,shadow_sm) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -21,7 +22,7 @@ Theorem ecrecover_args_suffix_full:
     MEM shadow_func shadow_ctx.ctx_functions /\
     fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_no_wrap inst s) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -50,9 +51,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   irule lower_word_args_sim_full >> simp[] >> rpt conj_tac
   >- first_assum ACCEPT_TAC
-  >- (qexistsl_tac [`shadow_func`, `shadow_sa`, `shadow_sm`, `ty`] >> simp[])
-  >- (qexists_tac `tops` >> simp[]) >>
-  qexists_tac `env` >> simp[] >>
+  >- (qexistsl_tac [`shadow_func`, `shadow_sa`, `shadow_sm`, `ty`] >> simp[]) >>
+  qexistsl_tac [`env`, `tops`] >> simp[] >>
   rpt strip_tac
   >- (drule expr_body_pre_builtin_arg >>
       disch_then (qspecl_then [`e`, `ee`] mp_tac) >> simp[]) >>

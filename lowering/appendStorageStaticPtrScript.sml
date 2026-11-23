@@ -3,6 +3,7 @@ Theory appendStorageStaticPtr
 Ancestors
   appendStorageRel appendStorageStageTransportPtr stmtAppendStorageSuffixPtr
   stmtAppendStoragePathPtr stmtSimAppendStorage fragGasCopyLoop fragGasSeqPtr fragExecMem
+  fragGasCopySeqLiftProps
   exprLowering emitHelper contextCodegenRel freshWrites
   instMemFrontier emittedSeqComposePtr ptrSafeRun ptrDiscipline
   exprLoweringProps emitHelperProps stateFrame venomInst venomState
@@ -37,12 +38,18 @@ Proof
     metis_tac[inst_seq_ptr_ghost_unique] >>
   drule_all append_storage_word_suffix_code >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-      i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts sa sb) /\
+      i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS /\
+      i.inst_opcode <> DALLOCA) (emitted_insts sa sb) /\
    run_inst_seq_mem_ok (emitted_insts sa sb) s` by suspend "memory" >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
       i.inst_opcode <> GAS) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
-  drule_all run_inst_seq_abort_origin_ptr_uniform >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `(ctx_has_dalloca ctx ==>
+     !pre i post u. emitted_insts sa sb = pre ++ i::post /\
+       run_inst_seq pre s = OK u ==> unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by simp[] >>
+     irule dalloca_no_wrap_non_dalloca >> fs[EVERY_MEM]) >>
+  drule_all run_inst_seq_abort_origin_ptr_uniform >> strip_tac >>
   qexistsl_tac [`u`, `j`, `Gf`, `tf`] >>
   conj_tac >- first_assum ACCEPT_TAC >> rpt gen_tac >>
   first_x_assum irule >>

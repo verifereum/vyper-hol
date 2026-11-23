@@ -17,7 +17,7 @@ Ancestors
   supportedExprs supportedExprForms
   exprLowering  vyperTypeSystem compileEnv loweringStateRelDefs finite_map
   supportedDecls vyperState vyperInterpreter list
-  builtinSystem venomInst supportedExprTraverse whitelistCheckerDecls
+  builtinSystem builtinCreate venomInst supportedExprTraverse whitelistCheckerDecls
 
 Theorem compile_expr_name_open:
   !cenv cx env es ann id ty sa vv sb.
@@ -150,27 +150,7 @@ val raw_call_open_tac =
   rpt (pairarg_tac >> simp[]) >> IF_CASES_TAC >>
   strip_tac >> gvs[] >> drule compile_raw_call_finish_open >> simp[];
 
-Theorem compile_raw_call_open:
-  !cfn cenv rty ty flags addr data args default sa vv sb.
-    ~flags.rcf_is_delegate /\
-    compile_call cfn cenv rty ty (RawCallTarget flags) (addr::data::args)
-      default sa = (vv,sb) ==> ~block_is_terminated sb
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >>
-  raw_call_open_tac
-QED
 
-Theorem compile_raw_call_calldata_open:
-  !cfn cenv rty ty flags addr args default sa vv sb.
-    ~flags.rcf_is_delegate /\
-    compile_call cfn cenv rty ty (RawCallCalldataTarget flags) (addr::args)
-      default sa = (vv,sb) ==> ~block_is_terminated sb
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >>
-  raw_call_open_tac
-QED
 
 Theorem compile_raw_log_open:
   !cfn cenv rty ty topics data default sa vv sb.
@@ -181,6 +161,86 @@ Proof
   pairarg_tac >> simp[] >> IF_CASES_TAC >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   drule emit_inst_nonterminator_open >> simp[is_terminator_def]
+QED
+
+Theorem create_arg_types_ok_minimum[local]:
+  create_arg_types_ok kind salted tys ==>
+  SUC (SUC ((if salted then 1 else 0) +
+    (case kind of CreateFromBlueprint _ => 1 | _ => 0))) <= LENGTH tys
+Proof
+  Cases_on `kind` >> Cases_on `salted` >>
+  rw[create_arg_types_ok_def] >> simp[]
+QED
+
+Theorem compile_check_create_result_open[local]:
+  compile_check_create_result result rof st = (v,sb) /\
+  ~block_is_terminated st ==> ~block_is_terminated sb
+Proof
+  Cases_on `rof` >>
+  simp[compile_check_create_result_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  drule new_block_open >> simp[]
+QED
+
+val create_finish_open_tac =
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  irule compile_check_create_result_open >>
+  goal_assum (drule_at (Pat `compile_check_create_result _ _ _ = _`)) >>
+  qpat_x_assum `(case _ of NONE => _ | SOME _ => _) _ = _` mp_tac >>
+  BasicProvers.TOP_CASE_TAC >> strip_tac >>
+  drule emit_op_nonterminator_open >> simp[is_terminator_def];
+
+Theorem compile_create_dispatch_open[local]:
+  compile_create_dispatch code_ptr len value salt rof st = (v,sb) ==>
+  ~block_is_terminated sb
+Proof
+  simp[compile_create_dispatch_def, comp_bind_def] >> create_finish_open_tac
+QED
+
+Theorem compile_create_copy_open[local]:
+  compile_create_copy target value salt rof st = (v,sb) ==>
+  ~block_is_terminated sb
+Proof
+  simp[compile_create_copy_def, comp_bind_def, comp_ignore_bind_def] >>
+  create_finish_open_tac
+QED
+
+Theorem compile_create_blueprint_append_open[local]:
+  compile_create_blueprint_append target value salt offset code_size args_ptr len rof st =
+    (v,sb) ==> ~block_is_terminated sb
+Proof
+  simp[compile_create_blueprint_append_def, comp_bind_def, comp_ignore_bind_def] >>
+  create_finish_open_tac
+QED
+
+Theorem compile_create_call_open[local]:
+  create_arg_types_ok kind salted (MAP expr_type args) /\
+  compile_create_call cfn cenv kind salted rof args st = (v,sb) ==>
+  ~block_is_terminated sb
+Proof
+  strip_tac >> drule create_arg_types_ok_minimum >> simp[] >> strip_tac >>
+  Cases_on `args` >> gvs[arithmeticTheory.LESS_EQ_MONO] >>
+  rename1 `target::rest` >> Cases_on `rest` >>
+  gvs[arithmeticTheory.LESS_EQ_MONO] >>
+  rename1 `target::value::rest` >>
+  `~(LENGTH rest < (if salted then 1 else 0) +
+      (case kind of CreateFromBlueprint _ => 1 | _ => 0))` by
+    simp[arithmeticTheory.NOT_LESS] >>
+  qpat_x_assum `compile_create_call _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_create_call_def] >>
+  Cases_on `kind` >> simp[] >>
+  simp[compile_raw_create_def, comp_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  TRY (drule compile_create_dispatch_open >> simp[] >> NO_TAC) >>
+  TRY (drule compile_create_copy_open >> simp[] >> NO_TAC) >>
+  qpat_x_assum `comp_bind _ _ _ = _` mp_tac >> simp[comp_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  TRY (drule compile_create_blueprint_append_open >> simp[] >> NO_TAC) >>
+  TRY (drule compile_create_dispatch_open >> simp[] >> NO_TAC) >>
+  qpat_x_assum `comp_bind _ _ _ = _` mp_tac >> simp[comp_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  drule compile_create_dispatch_open >> simp[]
 QED
 
 Theorem compile_call_open:
@@ -210,6 +270,10 @@ Proof
   >~ [`RawCallCalldataTarget flags`]
     >- (fs[well_typed_expr_def] >> Cases_on `args` >> gvs[] >>
         qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >> raw_call_open_tac)
+  >~ [`CreateTarget kind salted rof order`]
+    >- (fs[well_typed_expr_def, compile_call_def] >>
+        Cases_on `compile_create_call cfn cenv kind salted rof args sa` >>
+        gvs[as_stack_val_def] >> metis_tac[compile_create_call_open])
   >~ [`RawLog`]
     >- (fs[well_typed_expr_def, LENGTH_EQ_NUM_compute] >>
         gvs[] >> drule compile_raw_log_open >> simp[]) >>

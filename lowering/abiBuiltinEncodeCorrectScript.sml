@@ -299,7 +299,8 @@ QED
 (* End-to-end lower_abi_encode without a method ID: actual setup, every
    translated recursive descriptor, and the final length word. *)
 Theorem lower_abi_encode_no_method:
-  lower_abi_encode ensure NONE src (type_to_abi_enc_info sf ce ty) maxlen start = (out,final) /\
+  lower_abi_encode NONE maxlen
+    (\dst. compile_abi_encode_to_buf dst src (type_to_abi_enc_info sf ce ty)) start = (out,final) /\
   fn_has_code start final func /\
   (start.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -323,7 +324,7 @@ Theorem lower_abi_encode_no_method:
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule lower_abi_encode_trace >> strip_tac >>
+  drule lower_abi_encode_trace >> BETA_TAC >> strip_tac >>
   drule_all abi_builtin_encode_code >> strip_tac >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
   drule abi_builtin_encode_setup_live >> strip_tac >>

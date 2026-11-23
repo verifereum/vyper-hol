@@ -1,9 +1,9 @@
 (* Source selection boundaries for the internal-call body simulation. *)
 Theory bodyIntCallSource
 Ancestors
-  bodySim supportedProgram supportedDecls bodyIntCallReturn
+  bodySim supportedProgram supportedDecls
   vyperTypeContractStaticMaps vyperInterpreter list exprSimHypsDefs
-  intCallLookup
+  intCallLookup exprBodyPreProps bodyInvCodeProps
 
 Theorem supported_runtime_callable:
   supported_program tops /\
@@ -45,7 +45,7 @@ Theorem expr_body_pre_intcall_main:
   expr_body_pre cenv cx env (Call ty (IntCall (src,name)) es dflt) st ==>
   src = NONE
 Proof
-  simp[expr_body_pre_def,
+  simp[expr_body_pre_split_def,
        vyperTypeCallGraphTheory.int_calls_expr_def] >>
   strip_tac >> gvs[]
 QED
@@ -69,6 +69,28 @@ Proof
   goal_assum (drule_at Any) >> gvs[]
 QED
 
+Theorem expr_body_pre_intcall_signature_mods:
+  expr_body_pre_mods mods cenv cx env (Call ty (IntCall (src,name)) es dflt) st ==>
+  ?ts mut nr args dflts ret ss.
+    get_module_code cx src = SOME ts /\
+    lookup_callable_function cx.in_deploy name ts =
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    LENGTH es <= LENGTH args /\
+    LENGTH args - LENGTH dflts <= LENGTH es /\
+    LIST_REL (type_widens_to env.type_defs) (MAP expr_type es)
+      (TAKE (LENGTH es) (MAP SND args)) /\
+    type_widens_to env.type_defs ret ty
+Proof
+  strip_tac >> drule expr_body_pre_mods_inv >> strip_tac >>
+  drule expr_sim_inv_mods_env >> strip_tac >>
+  drule expr_body_pre_mods_well_typed >> strip_tac >>
+  `well_typed_expr env (Call ty (IntCall (src,name)) es dflt) /\
+   fn_sigs_consistent env.fn_sigs cx` by
+    fs[vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  drule_all typed_intcall_source_signature >> simp[]
+QED
+
 Theorem expr_body_pre_intcall_signature:
   expr_body_pre cenv cx env (Call ty (IntCall (src,name)) es dflt) st ==>
   ?ts mut nr args dflts ret ss.
@@ -81,14 +103,39 @@ Theorem expr_body_pre_intcall_signature:
       (TAKE (LENGTH es) (MAP SND args)) /\
     type_widens_to env.type_defs ret ty
 Proof
+  metis_tac[expr_body_pre_split_def, expr_body_pre_intcall_signature_mods]
+QED
+
+Theorem body_intcall_source_selection_mods:
+  contract_inv mods exps ctx cenv cx /\
+  expr_body_pre_mods mods cenv cx env (Call ty (IntCall (src,name)) es dflt) st ==>
+  ?callee_tops mut nr args dflts ret ss.
+    ALOOKUP mods src = SOME callee_tops /\
+    get_module_code cx src = SOME callee_tops /\
+    lookup_callable_function cx.in_deploy name callee_tops =
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    LENGTH es <= LENGTH args /\
+    LENGTH args - LENGTH dflts <= LENGTH es /\
+    LIST_REL (type_widens_to env.type_defs) (MAP expr_type es)
+      (TAKE (LENGTH es) (MAP SND args)) /\
+    type_widens_to env.type_defs ret ty /\
+    (?rr. MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) callee_tops) /\
+    supported_pure_exprs callee_tops dflts /\
+    EVERY (supported_default_expression callee_tops) dflts /\
+    supported_function_body callee_tops Internal args ss
+Proof
   strip_tac >>
-  `well_typed_expr env (Call ty (IntCall (src,name)) es dflt) /\
-   fn_sigs_consistent env.fn_sigs cx` by
-    gvs[expr_body_pre_def,
-        expr_sim_inv_def,
-        vyperTypeInvariantsTheory.env_consistent_def,
-        vyperTypeInvariantsTheory.env_context_consistent_def] >>
-  drule_all typed_intcall_source_signature >> simp[]
+  `?callee_tops. ALOOKUP mods src = SOME callee_tops /\
+     supported_program callee_tops /\
+     IS_SOME (supported_function_decl callee_tops (NONE,name) Internal)` by
+    (drule expr_body_pre_mods_int_calls >>
+     drule contract_inv_module_codes >>
+     simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  pop_assum strip_assume_tac >>
+  drule expr_body_pre_intcall_signature_mods >> strip_tac >>
+  drule contract_inv_module_codes >> strip_tac >> gvs[] >>
+  drule_all supported_internal_callable >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem body_intcall_source_selection:
@@ -109,16 +156,10 @@ Theorem body_intcall_source_selection:
     EVERY (supported_default_expression tops) dflts /\
     supported_function_body tops Internal args ss
 Proof
-  strip_tac >>
-  drule expr_body_pre_intcall_main >> strip_tac >> gvs[] >>
-  drule expr_body_pre_intcall_signature >> strip_tac >>
-  `get_module_code cx NONE = SOME tops` by gvs[body_inv_def] >>
-  `IS_SOME (supported_function_decl tops (NONE,name) Internal)` by
-    gvs[expr_body_pre_def, vyperTypeCallGraphTheory.int_calls_expr_def] >>
-  gvs[] >>
-  `supported_program tops` by gvs[body_inv_def] >>
-  drule_all supported_internal_callable >> strip_tac >> gvs[] >>
-  goal_assum (drule_at Any) >> simp[]
+  strip_tac >> drule expr_body_pre_intcall_main >> strip_tac >> gvs[] >>
+  drule_all body_inv_expr_body_pre_mods >> strip_tac >>
+  drule body_inv_contract >> strip_tac >>
+  drule_all body_intcall_source_selection_mods >> simp[alistTheory.ALOOKUP_def]
 QED
 
 Theorem typed_internal_call_occurrences:

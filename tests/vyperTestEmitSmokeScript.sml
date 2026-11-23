@@ -59,6 +59,13 @@ val expected_status =
    ("test_raw_deployer_nonce",true), ("test_raw_deployer_nonce_rewind",false),
    ("test_raw_deployer_nonce_address_mismatch",false),
    ("test_checkpoint_balance",true), ("test_checkpoint_balance_mismatch",false),
+   ("test_internal_error_on_expected_revert",false),
+   ("test_short_calldata",false), ("test_trace_abi_ignored",true),
+   ("test_blueprint_call",false),
+   (* a static call writing state raises "write in static context",
+      which the runner counts as an expected failure *)
+   ("test_static_call_rejects_state_write",true),
+   ("test_static_call_write_reason",false),
    ("test_checkpoint_source_state",true),
    ("test_checkpoint_source_storage_mismatch",false),
    ("test_checkpoint_eoa_message",true), ("test_checkpoint_self_message",true),
@@ -74,7 +81,15 @@ val expected_errors =
    ("test_checkpoint_balance_mismatch",
     "field=balance slot=none expected=8 actual=7"),
    ("test_checkpoint_source_storage_mismatch",
-    "field=storage slot=0 expected=10 actual=9")];
+    "field=storage slot=0 expected=10 actual=9"),
+   ("test_internal_error_on_expected_revert", "Name not in scope"),
+   (* calldata_dispatch, not the trace ABI, rejects a call without its argument *)
+   ("test_short_calldata", "calldata_dispatch: no entry"),
+   (* a blueprint has no source to dispatch on: not an accepted revert *)
+   ("test_blueprint_call", "call get sources"),
+   (* the same static call expecting success: shows the expected failure
+      above is "write in static context" and no other accepted revert *)
+   ("test_static_call_write_reason", "write in static context")];
 val () =
   if List.map #1 prepared = expected_names then ()
   else raise Fail "prepared fixture names differ from expected names or order";

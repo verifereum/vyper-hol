@@ -6,7 +6,7 @@ Ancestors
 
 (* The selected word is already at the call cursor; the list relation
    packages source uint256 range and operand preservation together. *)
-Theorem raw_call_selected_gas_word[local]:
+Theorem raw_call_selected_gas_word:
   !ks xs vs v.
     LIST_REL (\x v. ?w. eval_operand x t = SOME w /\
                         dest_NumV v = SOME (w2n w)) xs vs /\
@@ -31,17 +31,16 @@ Theorem raw_call_request_gas_at_entry:
       g = w2n gw
 Proof
   strip_tac >>
-  drule raw_call_pre_flags >> simp[] >> strip_tac >>
-  drule raw_call_kwargs_types >> strip_tac >>
+  drule raw_call_keywords_pre >> strip_tac >>
   `LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                         value_has_type tv v) kws kvs` by
     (irule stack_args_values_typed_body >>
      goal_assum (drule_at Any) >> simp[] >>
      qexistsl [`cenv`,`env`] >> simp[] >> rpt strip_tac >>
-     `expr_type e = BaseT (UintT 256)` by fs[EVERY_MEM] >>
-     simp[is_word_type_def] >>
-     `MEM e (a::d::kws)` by simp[] >>
-     drule_all expr_body_pre_raw_call_arg >> simp[]) >>
+     `expr_type e = BaseT (UintT 256) /\
+      !st. expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st` by
+       fs[EVERY_MEM] >>
+     simp[is_word_type_def]) >>
   `LIST_REL (\x v. ?w. eval_operand x t7 = SOME w /\
                        dest_NumV v = SOME (w2n w)) xs kvs` by
     (fs[typed_args_post_def, LIST_REL_EL_EQN, LENGTH_ZIP, EVERY_EL] >>

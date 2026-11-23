@@ -9,19 +9,11 @@
 
 Theory targetPlaceLive
 Ancestors
-  compileEnv loweringStateRelDefs accountsRelProps exprSimPopStorage allocLimits allocLimitsProps
+  supportedExprs compileEnv loweringStateRelDefs accountsRelProps exprSimPopStorage allocLimits allocLimitsProps
   vyperAST vyperValue vyperState vyperInterpreter vyperLookupStorage
   vyperPlaceFrames vyperPureExpr vyperStatePreservation
   vyperStorageLayoutSafety vyperStoragePlaceRegion vyperStoragePlaceProvenance
   list finite_map
-
-(* The indices of a target, in order. *)
-Definition target_indices_def:
-  target_indices (NameTarget id) = [] /\
-  target_indices (TopLevelNameTarget nsid) = [] /\
-  target_indices (AttributeTarget t fld) = target_indices t /\
-  target_indices (SubscriptTarget t e) = target_indices t ++ [e]
-End
 
 Theorem alloc_limits_target_indices_not_extcode:
   alloc_limits_target cenv t ==>

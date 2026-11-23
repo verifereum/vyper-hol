@@ -1,6 +1,7 @@
 (* Reentrant primitive calldata decoding: older operands may be absent. *)
 Theory calldataWordLive
 Ancestors
+  abiDecoderLoopRegisters
   valueEncodingDefs calldataDynOwned calldataWordLeaf abiDecoderClampedWord entryDecodeProps abiEncoder abiDecoderReentry
   abiDecoderGuards abiDecoderRange abiDecoderContract valueEncodingProps safeSequence
   emitHelperProps exprLoweringProps compileEnv emitHelper
@@ -154,7 +155,7 @@ Proof
     OK (update_var (STRING #"%" (toString st.cs_next_var)) extended s)` by
     (simp[Abbr `extended`] >> irule step_SIGNEXTEND >> simp[eval_operand_def]) >>
   `eval_operand op (update_var (STRING #"%" (toString st.cs_next_var)) extended s) = SOME w` by
-    metis_tac[calldata_update_protected] >>
+    metis_tac[abi_decoder_generated_update_operand] >>
   `step_inst_base (mk_inst c1.cs_next_id EQ [op;canonical]
     [STRING #"%" (toString c1.cs_next_var)])
     (update_var (STRING #"%" (toString st.cs_next_var)) extended s) =
@@ -373,10 +374,13 @@ Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_clamped_word_shape >> strip_tac >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-     (emitted_insts st last)` by (fs[EVERY_MEM] >> metis_tac[]) >>
   drule calldata_word_opcodes >> strip_tac >>
+  drule calldataWordOpcodesTheory.calldata_word_checked_opcodes >>
+  rewrite_tac[EVERY_MEM] >> disch_then (mk_asm "checked_opcodes") >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
+  >- (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      asm "checked_opcodes" (qspec_then `i` mp_tac) >> simp[]) >>
+  conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_word_prefix_live) >>
       qexistsl_tac [`src`,`p`,`dst`,`d`,`clamp`] >> simp[]) >>

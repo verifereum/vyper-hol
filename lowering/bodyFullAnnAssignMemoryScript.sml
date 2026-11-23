@@ -1,7 +1,7 @@
 (* Joint ordinary-memory and empty AnnAssign execution. *)
 Theory bodyFullAnnAssignMemory
 Ancestors
-  bodyFullPreds bodySimFull bodySim bodyInvNoDalloca gasShadow
+  bodyFullPreds bodySimFull bodySim gasShadow
   bodySimDeclCases bodyExprPreFacts exprSimHyps exprSimHypsDefs exprSimSource
   memoryLocalRhsProps supportedStmts supportedStmtTraverse
   stmtSimDeclEmpty stmtSimDeclSource bodyDeclCopyMemory
@@ -308,7 +308,7 @@ Finalise annassign_memory_full_empty_post
    run with the reserved destination and the original allocation frame. *)
 Theorem annassign_memory_full_raw_rhs_from_entry[local]:
   compile_expr ce ty e a = (vv,b) /\
-  compile_expr ce ty (gas_shadow_expr e) shadow_a = (vv,shadow_b) /\
+  compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) shadow_a = (vv,shadow_b) /\
   gas_shadow_state a shadow_a /\ gas_shadow_state b shadow_b /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -320,7 +320,7 @@ Theorem annassign_memory_full_raw_rhs_from_entry[local]:
   (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at a x) /\
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   return_buf_frame d ce a entry /\ alloca_history func entry /\
-  (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z) /\
+  (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_fmp_headroom inst z) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func ce cx es entry /\
     storage_well_formed_on cx es (FST H) /\
@@ -403,7 +403,7 @@ Proof
   rewrite_tac[expr_vv_sim_full_def] >>
   disch_then (qspecl_then [`st0`,`a`,`b`,`shadow_a`,`shadow_b`,
     `vv`,`entry`,`Ga`,`tna`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> disch_tac >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
   irule gas_outcome_full_post_source >>
   goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >>
   simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
@@ -479,8 +479,8 @@ Theorem annassign_memory_full_physical_rhs_from_entry[local]:
     compile_alloc_buffer sz sa =
       (<|buf_operand := Var p; buf_size := sz|>,a) /\
     lower_value compile_expr ce (expr_type e) e a = (op,b) /\
-    lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a =
-      (op,shadow_b) /\
+    lower_value compile_expr (gas_shadow_env T ce) (expr_type e)
+      (gas_shadow_expr e) shadow_a = (op,shadow_b) /\
     gas_shadow_state a shadow_a /\ gas_shadow_state b shadow_b /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -493,7 +493,7 @@ Theorem annassign_memory_full_physical_rhs_from_entry[local]:
     (!x cap. old.ce_return_buf = SOME (PtrVar (Var x) cap) ==>
       not_fresh_at sa x) /\
     return_buf_frame d old sa s0 /\ alloca_history func s0 /\
-    (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z) /\
+    (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_fmp_headroom inst z) /\
     storage_trace_domain cx st0 es.storage_trace /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
     expr_body_pre ce cx env e es /\
@@ -614,14 +614,16 @@ Resume annassign_memory_full_physical_rhs_from_entry[split]:
   simp[lower_value_def,comp_bind_def] >>
   Cases_on `compile_expr ce (expr_type e) e a` >> rename1 `_ = (vv,sm)` >>
   simp[] >> strip_tac >>
-  qpat_x_assum `lower_value compile_expr ce (expr_type e) (gas_shadow_expr e) _ = _` mp_tac >>
+  qpat_x_assum `lower_value compile_expr _ (expr_type e) (gas_shadow_expr e) _ = _` mp_tac >>
   simp[lower_value_def,comp_bind_def] >>
-  Cases_on `compile_expr ce (expr_type e) (gas_shadow_expr e) shadow_a` >>
-  rename1 `_ = (vv',shadow_sm)` >> simp[] >> strip_tac >>
-  `vv' = vv /\ gas_shadow_state sm shadow_sm` by
-    (qspecl_then [`ce`,`expr_type e`,`e`,`T`] mp_tac (cj 1 gas_shadow_compile_expr) >>
-     simp[gasShadowStateTheory.gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`a`,`shadow_a`] mp_tac) >> simp[]) >>
+  Cases_on `compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_a` >>
+  rename1 `_ = (vv',shadow_sm)` >> simp[gasShadowCompileBaseTheory.unwrap_value_gas_shadow_env] >> strip_tac >>
+  `FST (compile_expr ce (expr_type e) e a) =
+     FST (compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_a) /\
+   gas_shadow_state (SND (compile_expr ce (expr_type e) e a))
+     (SND (compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_a))` by
+    (irule (REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]
+      gas_shadow_stmt_compile_expr_env) >> first_assum ACCEPT_TAC) >>
   gvs[] >>
   `cs_extends a sm /\ a.cs_next_var <= sm.cs_next_var /\
    a.cs_next_id <= sm.cs_next_id` by metis_tac[compile_expr_grows] >>
@@ -866,7 +868,7 @@ Theorem annassign_memory_full_execution:
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
-    (stmt_env cenv lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
     (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -907,12 +909,12 @@ Proof
     (qx_choosel_then [`w`, `entry`, `Ga`, `tna`] strip_assume_tac)) >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_no_wrap inst z` by
+  `!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_fmp_headroom inst z` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s0,G0,tn0) [] (OK entry,Ga,tna)`
        (qspec_then `ARB` (fn path =>
        qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn phi =>
        qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
-       ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap
+       ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
          (LIST_CONJ [path,phi,safe]))))))) >>
   Cases_on `has_length_word typ /\ is_empty_value_expr e`
   >- suspend "empty" >>

@@ -38,7 +38,7 @@ Theorem reason_literal_encoder_origin_ptr:
   buf.buf_operand = Var p /\ not_fresh_at sm p /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  fn_has_code sm sf func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sm sf func /\ fn_inst_ids_distinct func /\
   storage_trace_domain cx st0 es.storage_trace /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     expr_post H ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))

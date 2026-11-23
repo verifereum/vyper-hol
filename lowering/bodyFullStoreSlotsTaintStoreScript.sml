@@ -1,6 +1,6 @@
 Theory bodyFullStoreSlotsTaintStore
 Ancestors
-  assignBasePtrWordStore fragGasCopyLoop bodyFullStoreSlotsRetired
+  assignBasePtrWordStore fragGasCopyLoop fragGasCopySeqLiftProps bodyFullStoreSlotsRetired
   fragGasSeqPtr fragGasSeqPtrContext fragGasOriginPtr fragExecMem exprLoweringProps
   emitHelperProps emitHelper compileEnv venomExecSemantics venomState
   venomInst ptrDiscipline contextCodegenRel codegenRel unitTransformDefs
@@ -73,6 +73,15 @@ Proof
     (Cases_on `tr` >> simp[mk_inst_def, is_terminator_def]) >>
   `isPREFIX [mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE) [addr;op] []]
     (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+  `(ptrDiscipline$ctx_has_dalloca ctx ==>
+    !pre i post u.
+      [mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE) [addr;op] []] =
+        pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      unitTransformDefs$dalloca_no_wrap i u)` by
+    (rpt strip_tac >> irule dalloca_no_wrap_non_dalloca >>
+     `MEM i [mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE) [addr;op] []]` by
+       metis_tac[listTheory.MEM_APPEND, listTheory.MEM] >>
+     Cases_on `tr` >> gvs[mk_inst_def]) >>
   drule_all run_inst_seq_origin_ptr_lift >>
   disch_then (qspec_then `explicit` strip_assume_tac) >> gvs[]
 QED

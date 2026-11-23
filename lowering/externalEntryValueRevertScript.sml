@@ -5,10 +5,10 @@ Ancestors
   entryChecksLayout entryChecksPassPtr
   fragGasOriginPtr fragGasOrigin fragGasPathPtr gasEvents gasCount memSafeRun instMemFrontier
   loweringStateRelDefs ptrDiscipline ptrSafeRun actualEntryAllocationFrame
-  moduleLoweringProps entryReachBodyFmp
+  moduleLoweringProps
   sourceUnitExecution gasShadowRunLowering gasShadowUnitGuards gasShadowUnit
   gasShadowModuleDefs vyperCall
-  list pair fragExec
+  list pair arithmetic fragExec
   compileEnv compileVyper moduleLowering
   e2eDefs supportedProgram vyperLoweringCorrect
   vyperTypeSystem
@@ -19,7 +19,7 @@ val _ = Parse.hide "body";
 
 (* The source fails to move the call value only for a nonpayable function
    called with value: value_transfer_ok rules out a failed transfer. *)
-Theorem send_call_value_fails[local]:
+Theorem send_call_value_fails:
   !mut srcs layouts tx am env orc e es.
     value_transfer_ok tx am.accounts /\
     send_call_value mut (initial_evaluation_context srcs layouts tx NONE)
@@ -38,11 +38,12 @@ Proof
 QED
 
 (* Rejection precedes defaults, argument binding and all storage reads. *)
-Theorem external_value_reject_trace[local]:
+Theorem external_value_reject_trace:
   source_deployment_rel tops am tx /\
   lookup_function NONE tx.function_name External tops =
-    SOME (mut, nr, args, [], ret, fbody) /\
-  LENGTH tx.args = LENGTH args /\
+    SOME (mut, nr, args, dflts, ret, fbody) /\
+  LENGTH tx.args <= LENGTH args /\
+  LENGTH args - LENGTH tx.args <= LENGTH dflts /\
   mut <> Payable /\ tx.value <> 0 ==>
   !gs. call_external_trace orc gs am tx =
     (INR (Error (RuntimeError "not Payable")), am, [], [])
@@ -54,7 +55,7 @@ Proof
        send_call_value_def, vyperStateTheory.bind_def,
        vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
        vyperStateTheory.assert_def, vyperStateTheory.raise_def,
-       initial_state_def]
+       initial_state_def, GSYM NOT_LESS]
 QED
 
 (* Rejection occurs before evaluation can consume any gas readings. *)
@@ -73,6 +74,7 @@ Theorem external_entry_reject_readings_nr:
 Proof
   strip_tac >> drule_all send_call_value_fails >> strip_tac >>
   `LENGTH tx.args = LENGTH args` by metis_tac[bind_arguments_length] >>
+  `LENGTH tx.args <= LENGTH args /\ LENGTH args - LENGTH tx.args <= LENGTH ([]:expr list)` by simp[] >>
   gen_tac >> drule_all external_value_reject_trace >>
   disch_then (qspecl_then [`SOME os`, `gs`] assume_tac) >>
   drule call_external_trace_result >> simp[] >>
@@ -97,7 +99,8 @@ QED
 
 Theorem external_value_reject_dispatch[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
+  supported_program tops /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\ source_typing_ok tops am tx /\
   tx.function_name <> "__default__" /\
     LENGTH tx.args = LENGTH args /\
     calldata_encodes (type_env tops) tx.function_name (MAP SND args)
@@ -128,7 +131,6 @@ Theorem external_value_reject_dispatch[local]:
       (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>))
 Proof
   strip_tac >>
-  drule_all entry_runtime_no_dalloca >> strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule_all entry_value_reject_callvalue >> strip_tac >>
   drule_all lower_runtime_named_source_packages >> strip_tac >>
@@ -144,6 +146,9 @@ Proof
      gvs[get_instruction_def, phi_prefix_length_def]) >>
   qabbrev_tac `ss = vs with <|vs_prev_bb := NONE;
     vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+  `allocas_below_fmp ss` by
+    (irule initial_entry_allocas_below_fmp >>
+     goal_assum (drule_at Any) >> simp[Abbr `ss`, vars_pc_only_def]) >>
   `fresh_vars_wrt sf ss /\ ~ss.vs_halted /\ allocas_from 0 ss /\
    LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256)` by
     (drule_all initial_entry_dispatch_scalars >>
@@ -165,6 +170,11 @@ Proof
     (drule vars_pc_only_allocas >>
      drule vars_pc_only_fields >> simp[Abbr `ss`] >>
      fs[allocas_from_def] >> metis_tac[]) >>
+  `vars_pc_only vs tt` by
+    (irule vars_pc_only_trans >> qexists_tac `ss` >>
+     conj_tac >- simp[Abbr `ss`, vars_pc_only_def] >> simp[]) >>
+  `allocas_below_fmp tt` by
+    (drule initial_entry_allocas_below_fmp >> disch_then irule >> simp[]) >>
   drule_all entryDispatchPtrTheory.compile_selector_dispatch_linear_layout >> strip_tac >>
   qexistsl_tac [`fn`, `sc`, `sk`, `mc`, `tt`, `G'`, `tn'`] >>
   simp[block_is_terminated_def, Abbr `ss`] >>
@@ -266,7 +276,8 @@ QED
 
 Theorem external_value_reject_target[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\
-  supported_program tops /\ source_typing_ok tops am tx /\
+  supported_program tops /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\ source_typing_ok tops am tx /\
   tx.function_name <> "__default__" /\
     LENGTH tx.args = LENGTH args /\
     calldata_encodes (type_env tops) tx.function_name (MAP SND args)
@@ -303,6 +314,7 @@ Theorem external_entry_value_revert_nr:
   !tops rpolicy unit am tx ret vs mut nr args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     tx.function_name <> "__default__" /\
@@ -325,6 +337,7 @@ Proof
   `value_transfer_ok tx am.accounts` by fs[initial_venom_state_rel_def] >>
   drule_all send_call_value_fails >> strip_tac >>
   `LENGTH tx.args = LENGTH args` by metis_tac[bind_arguments_length] >>
+  `LENGTH tx.args <= LENGTH args /\ LENGTH args - LENGTH tx.args <= LENGTH ([]:expr list)` by simp[] >>
   drule_all external_value_reject_trace >>
   disch_then (qspec_then `SOME vs.vs_outcomes` assume_tac) >>
   drule_all external_value_reject_target >> strip_tac >>
@@ -378,6 +391,7 @@ Theorem external_entry_value_revert:
   !tops rpolicy unit am tx ret vs mut args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
     source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\

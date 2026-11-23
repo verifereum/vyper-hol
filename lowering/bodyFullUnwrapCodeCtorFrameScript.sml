@@ -1,6 +1,6 @@
 Theory bodyFullUnwrapCodeCtorFrame
 Ancestors
-  exprPtrCodeCopyEndpoint bodyFullUnwrapSlotPost bodyFullUnwrapRun
+  bodyFullUnwrapCodePureFrame exprPtrCodeCopyEndpoint bodyFullUnwrapSlotPost bodyFullUnwrapRun
   freshWrites exprPtrUnwrapAllocSemantic exprPtrUnwrapAllocation
   exprPtrUnwrapAllocSeparation exprPtrUnwrapRetained
   exprPtrUnwrapAllocationFrame exprSimStorageCopy bodyPtrDefs
@@ -143,7 +143,7 @@ Proof
      eval_operand_def, lookup_var_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]
 QED
 
-Theorem ctor_code_copy_retained_frames:
+Theorem ctor_code_copy_retained_frames_pure:
   compile_alloc_buffer nb sb = (buf,mid) /\ fn_has_code sb mid func /\
   stmt_state_rel H ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sb /\ local_ptrs_reserved cenv sa /\
@@ -160,6 +160,7 @@ Theorem ctor_code_copy_retained_frames:
     mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) /\
   (!i. i < w2n d \/ w2n d+nb <= i ==> (i IN tf.t_mem <=> i IN tn.t_mem)) /\
   lo <= w2n d /\ ghost_kept_at lo cenv es sa Gi ti s0 G tn ==>
+  pure_frame cenv func ee sb s (z with vs_inst_idx := LENGTH sc.cs_current_insts) /\
   ghost_kept_at lo cenv es sa Gi ti s0 HG tf /\
   wb_frame cenv ee ee sb s (z with vs_inst_idx := LENGTH sc.cs_current_insts) /\
   ghost_kept_at lo cenv ee sb G tn s HG tf
@@ -215,7 +216,17 @@ Proof
      conj_tac >- metis_tac[] >>
      reverse conj_tac >- metis_tac[] >> qexistsl [`nb`, `w2n d`] >>
      fs[regions_disjoint_def] >> metis_tac[]) >>
-  simp[] >> qpat_x_assum `wb_frame cenv ee ee sb s z` mp_tac >>
+  `pure_frame cenv func ee sb s z` by
+    (mp_tac (Q.INST [`dst_addr` |-> `w2n (d:bytes32)`]
+       unwrap_alloc_copy_pure_frame) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  simp[pure_frame_inst_idx] >>
+  qpat_x_assum `wb_frame cenv ee ee sb s z` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
   simp[wb_frame_def, lookup_var_def, locals_kept_def] >> metis_tac[]
 QED
+
+Theorem ctor_code_copy_retained_frames =
+  let val premise = fst (dest_imp (concl ctor_code_copy_retained_frames_pure))
+  in DISCH premise (CONJUNCT2 (UNDISCH ctor_code_copy_retained_frames_pure)) end

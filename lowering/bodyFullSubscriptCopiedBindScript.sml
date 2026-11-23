@@ -2,7 +2,7 @@
 Theory bodyFullSubscriptCopiedBind
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullPreds bodySimFull bodyFullSubscriptCapturedPlace
+  bodyFullPreds bodySimFull bodyFullShared bodyFullSubscriptCapturedPlace
   gasOutcomeFullCompose gasOutcomeFullGuarded gasShadowCompile
   gasShadowCompileConvert gasShadowCompileStmtHelpers
   exprSimSubscriptArray exprSimSubscriptArraySource
@@ -11,7 +11,7 @@ Ancestors
   bodyFullBuiltinConcatScratch bodyPtrBytestringBuiltinsWindowGhost
   bodyPtrDefs loweringPosts exprSimWordArgs ptrDiscipline
   exprLowering compileEnv vyperAST gasShadowState gasShadow
-  bodyInvNoDalloca fragExec exprSimHyps gasExemptCert vyperStorageTrace
+  fragExec exprSimHyps gasExemptCert vyperStorageTrace
   vyperTyping[qualified,ignore_grammar]
   bodyFullIfExpReach
   contextRawReachable[qualified,ignore_grammar]
@@ -58,7 +58,7 @@ QED
 
 Theorem copied_array_cuts[local]:
   compile_expr ce ty (Subscript ann obj idx) sa = (vv,sb) /\
-  compile_expr ce ty (gas_shadow_expr (Subscript ann obj idx)) sha = (vv,shb) /\
+  compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr (Subscript ann obj idx)) sha = (vv,shb) /\
   gas_shadow_state sa sha /\
   place_type ce obj = ValPT (ArrayT et bd) /\
   copies_subscript_base ce obj idx ==>
@@ -75,43 +75,31 @@ Theorem copied_array_cuts[local]:
       (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca loc)
       si = (dst,sb) /\
     vv = LocatedValue ann (mk_ptr dst loc) /\
-    compile_expr ce ty (gas_shadow_expr obj) sha = (bvv,shm) /\
+    compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr obj) sha = (bvv,shm) /\
     compile_snapshot_vv ce T bvv shm = (cvv,shc) /\
-    lower_value compile_expr ce ty (gas_shadow_expr idx) shc = (iop,shi) /\
+    lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr idx) shc = (iop,shi) /\
     gas_shadow_state sm shm /\ gas_shadow_state sc shc /\ gas_shadow_state si shi /\
     cs_extends sa sm /\ cs_extends sm sc /\ cs_extends sc si /\ cs_extends si sb /\
     cs_extends sha shm /\ cs_extends shm shc /\ cs_extends shc shi /\ cs_extends shi shb
 Proof
   strip_tac >> drule_all compile_expr_copied_array_subscript >> strip_tac >>
-  `copies_subscript_base ce (gas_shadow_expr obj) (gas_shadow_expr idx) /\
-   place_type ce (gas_shadow_expr obj) = ValPT (ArrayT et bd)` by
+  `copies_subscript_base (gas_shadow_env T ce) (gas_shadow_expr obj) (gas_shadow_expr idx) /\
+   place_type (gas_shadow_env T ce) (gas_shadow_expr obj) = ValPT (ArrayT et bd)` by
     gvs[copies_subscript_base_def] >>
   qpat_x_assum `compile_expr _ _ (gas_shadow_expr (Subscript _ _ _)) _ = _` mp_tac >>
   simp[gas_shadow_expr_def] >> strip_tac >>
   drule_all compile_expr_copied_array_subscript >> strip_tac >>
-  `?shm. compile_expr ce ty (gas_shadow_expr obj) sha = (bvv,shm) /\
-         gas_shadow_state sm shm` by
-    (mp_tac (cj 1 gas_shadow_compile_expr |> Q.SPECL [`ce`, `ty`, `obj`, `T`]) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`, `sha`] mp_tac) >> simp[] >>
-     Cases_on `compile_expr ce ty (gas_shadow_expr obj) sha` >> simp[]) >>
-  gvs[] >>
-  `?shc. compile_snapshot_vv ce T bvv shm = (cvv,shc) /\ gas_shadow_state sc shc` by
-    (mp_tac (Q.INST [`cenv` |-> `ce`, `copy_flag` |-> `T`, `vv` |-> `bvv`]
-       gas_shadow_compiles_snapshot_vv) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sm`, `shm`] mp_tac) >> simp[] >>
-     Cases_on `compile_snapshot_vv ce T bvv shm` >> simp[]) >>
-  gvs[] >>
-  rename1 `gas_shadow_state sc shadow_c` >>
-  `?shi. lower_value compile_expr ce ty (gas_shadow_expr idx) shadow_c = (iop,shi) /\
-         gas_shadow_state si shi` by
-    (mp_tac (Q.INST [`cenv` |-> `ce`, `e` |-> `idx`]
-        gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value) >>
-     simp[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sc`, `shadow_c`] mp_tac) >> simp[] >>
-     Cases_on `lower_value compile_expr ce ty (gas_shadow_expr idx) shadow_c` >> simp[]) >>
-  gvs[] >>
+  `gas_shadow_compiles (compile_expr ce ty obj)
+     (compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr obj))` by
+    irule gas_shadow_stmt_compile_expr_env >>
+  drule_all_then strip_assume_tac gas_shadow_step >> gvs[] >>
+  `gas_shadow_compiles (compile_snapshot_vv ce T bvv)
+     (compile_snapshot_vv ce T bvv)` by irule gas_shadow_compiles_snapshot_vv >>
+  drule_all_then strip_assume_tac gas_shadow_step >> gvs[] >>
+  `gas_shadow_compiles (lower_value compile_expr ce ty idx)
+     (lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr idx))` by
+    irule gas_shadow_stmt_lower_value_env >>
+  drule_all_then strip_assume_tac gas_shadow_step >> gvs[] >>
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   metis_tac[compile_expr_extends, cj 2 compile_expr_grows,
     ci_mono_compile_snapshot_vv, ci_mono_def, pairTheory.SND, copied_array_suffix_extends]
@@ -192,6 +180,7 @@ Theorem subscript_copied_bind_caller_frames:
        read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok cx idx) /\
     body_expr_full_ok cx obj /\ body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
     subscript_reads_base cx obj idx /\ copies_subscript_base ce obj idx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre ce cx env (Subscript ann obj idx) es /\
     expr_type obj = ArrayT et bd /\ place_type ce obj = ValPT (ArrayT et bd) /\
     post_value_type ce obj = expr_type obj /\
@@ -317,7 +306,9 @@ Theorem subscript_copied_bind_caller_frames:
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty (Subscript ann obj idx) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `expr_body_pre ce cx env obj es` by
+    metis_tac[exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base,
+              exprSimSubscriptArraySourceTheory.copies_subscript_base_not_array_slot_base] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty obj es` by
     (fs[body_expr_full_ok_def] >> metis_tac[]) >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
@@ -394,6 +385,12 @@ Resume subscript_copied_bind_caller_frames[base_success]:
   `body_expr_full_ok cx idx` by
     (qpat_assum `!s raw ee saved. eval_expr _ _ _ = _ /\ read_result _ _ _ = _ ==> _`
        drule_all >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env mid` by
+    (`well_typed_expr env obj` by
+       qpat_assum `expr_body_pre _ cx env obj _`
+         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     irule body_const_cells_agree_expr >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[]) >>
   `expr_body_pre ce cx env idx mid` by
     (`expr_body_pre ce cx env (Subscript ann obj idx)
          (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
@@ -432,11 +429,11 @@ Resume subscript_copied_bind_caller_frames[base_success]:
      `gas_origin_ptr_path (DF H0,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (s0,G0,tn0) marks (OK u,Gc,tnc)` by
        metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, listTheory.APPEND_NIL] >>
-     `!fn i v. frag_reachable ctx func u fn i v ==> dalloca_no_wrap i v` by
+     `!fn i v. frag_reachable ctx func u fn i v ==> dalloca_fmp_headroom i v` by
        (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) marks (OK u,Gc,tnc)` (fn path =>
         qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length _ = _` (fn no_phi =>
         qpat_assum `!fn i v. frag_reachable ctx func s0 fn i v ==> _`
-          (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_no_wrap o
+          (ACCEPT_TAC o MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom o
            CONJ path o CONJ no_phi)))) >>
      simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qpat_x_assum `cvv = LocatedValue _ _` SUBST_ALL_TAC >>
@@ -599,6 +596,7 @@ Theorem subscript_copied_bind_full:
        read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok cx idx) /\
     body_expr_full_ok cx obj /\ body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
     subscript_reads_base cx obj idx /\ copies_subscript_base ce obj idx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre ce cx env (Subscript ann obj idx) es /\
     expr_type obj = ArrayT et bd /\ place_type ce obj = ValPT (ArrayT et bd) /\
     post_value_type ce obj = expr_type obj /\

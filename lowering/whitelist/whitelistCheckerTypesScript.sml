@@ -215,11 +215,6 @@ QED
 
 (* Row 21: the checker types literal elements and struct fields exactly, and
    an exact copy is whitelisted. *)
-Theorem supported_copy_types_refl:
-  supported_copy_types ty ty
-Proof
-  simp[supported_copy_types_def]
-QED
 
 (* ===== Binary operators ===== *)
 
@@ -562,25 +557,6 @@ QED
 
 (* The target residual excludes locals, subscripts and attributes. Full-word
    non-Private arrays retain the visibility restriction of the old clause. *)
-Theorem type_stmt_append_supported:
-  type_stmt env ret_ty (Append target e) = SOME env' /\
-  target = TopLevelNameTarget nid /\
-  supported_variable_decl tops nid = SOME (vis, mut, ty, SOME slot) /\
-  type_place_target env target = SOME (Type ty) /\
-  (mut = Storage \/ mut = Transient) /\
-  (vis = Private \/
-   ?elem dn. ty = ArrayT elem (Dynamic dn) /\ ~supported_full_word_type elem) /\
-  (!elem dn. ty = ArrayT elem (Dynamic dn) /\ ~supported_full_word_type elem ==>
-             expr_type e = elem) /\
-  supported_pure_expr tops e ==>
-  supported_stmt tops bindings (Append target e)
-Proof
-  rpt strip_tac >> Cases_on `ty` >>
-  gvs[type_stmt_def, supported_stmt_def, supported_append_target_def] >>
-  rename1 `ArrayT elem bd` >> Cases_on `bd` >>
-  gvs[type_stmt_def, supported_storage_dynamic_array_def] >> metis_tac[]
-QED
-
 (* ===== For iterators ===== *)
 
 (* An array For the checker accepts is a supported iterator given the

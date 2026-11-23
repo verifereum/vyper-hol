@@ -1,7 +1,7 @@
 Theory bodyFullBuiltinEnvHashCompose
 Ancestors
   bodyFullShadowBodyInv bodyFullHashKeccakFixed[qualified,ignore_grammar]
- bodyFullPreds bodySimFull gasOutcomeFullCompose bodyFullGhostFrame bodyInvNoDalloca
+ bodyFullPreds bodySimFull gasOutcomeFullCompose bodyFullGhostFrame
  gasShadowCompileStmtHelpers gasShadowState exprSimSource exprSimHypsDefs
  exprSimWordBuiltins exprSimUnopComposeProps exprSimUnopProps exprUnopSimDefs exprSimWordArgs exprSimProps exprSimOperands
  exprLoweringProps exprLowering exprBopLowering loweringPosts valueEncoding
@@ -86,7 +86,9 @@ Theorem hash_builtin_value_from_suffixes:
  (bt = BlockHash \/ bt = BlobHash) /\
  builtin_args_length_ok bt (LENGTH args) /\ body_exprs_full_ok cx args /\
  body_inv tops ctx cenv cx /\
- shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre cenv cx env (Builtin a bt args) es ==>
+ shadow_body_inv tops ctx shadow_ctx /\
+ body_const_cells_agree [(NONE,tops)] cx env es /\
+ expr_body_pre cenv cx env (Builtin a bt args) es ==>
  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
    cenv cx ty (Builtin a bt args) es
 Proof
@@ -117,13 +119,17 @@ Proof
     simp[lower_value_child_call, vyperASTTheory.expr_size_def, list_size_def] >>
     rpt (pairarg_tac >> gvs[]) >>
     rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def, builtinMiscTheory.compile_blobhash_def]) >>
- `?shadow_sm. lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa = (x,shadow_sm) /\
-    gas_shadow_state sm shadow_sm` by
-   (mp_tac (Q.INST [`cenv` |-> `cenv`, `ty` |-> `ty`, `e` |-> `e`] gas_shadow_stmt_lower_value) >>
-    rewrite_tac[gas_shadow_compiles_def] >>
+ `?shadow_sm.
+    lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e)
+      shadow_sa = (x,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
+   (`gas_shadow_compiles (lower_value compile_expr cenv ty e)
+       (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))` by
+      irule gas_shadow_stmt_lower_value_env >>
+    qpat_x_assum `gas_shadow_compiles _ _`
+      (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
-    simp[] >> strip_tac >>
-    Cases_on `lower_value compile_expr cenv ty (gas_shadow_expr e) shadow_sa` >> gvs[]) >>
+    Cases_on `lower_value compile_expr (gas_shadow_env T cenv) ty
+      (gas_shadow_expr e) shadow_sa` >> simp[]) >>
  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var` by
    metis_tac[cj 2 compile_expr_grows] >>
  `cs_extends sm sb` by
@@ -156,7 +162,8 @@ Proof
  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
    (irule unop_operand_admissible >>
     qexistsl_tac [`BaseT (BytesT (Fixed 32))`, `bt`] >>
-    Cases_on `bt = BlockHash` >> gvs[precompile_builtin_def]) >>
+    Cases_on `bt = BlockHash` >> gvs[precompile_builtin_def,
+                                      vyperContextTheory.is_self_codesize_def]) >>
  qpat_x_assum `expr_sim_full _ _ _ _ e es` mp_tac >>
  rewrite_tac[expr_sim_full_def] >> simp[] >>
  disch_then (drule_all_then assume_tac) >>
@@ -164,7 +171,8 @@ Proof
  `bind (eval_expr cx (Builtin (BaseT (BytesT (Fixed 32))) bt [e])) (read_result cx) =
   bind (bind (eval_expr cx e) (read_result cx))
     (\v es. (unop_result cx (BaseT (BytesT (Fixed 32))) bt [expr_type e] v es, es))` by
-   (irule eval_expr_unop_action_general >> Cases_on `bt = BlockHash` >> gvs[precompile_builtin_def]) >>
+   (irule eval_expr_unop_action_general >> Cases_on `bt = BlockHash` >>
+    gvs[precompile_builtin_def, vyperContextTheory.is_self_codesize_def]) >>
  pop_assum SUBST1_TAC >>
  irule gas_outcome_full_bind_all >>
  conj_tac

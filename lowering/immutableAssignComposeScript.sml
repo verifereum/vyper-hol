@@ -69,6 +69,44 @@ Proof
   first_x_assum irule >> fs[regions_disjoint_def] >> metis_tac[]
 QED
 
+Theorem immutable_assign_suffix_stmt_post_frame[local]:
+  stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+  local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\
+  write_place cx (ImmutablePlace ce.ce_module id path) v ee = (INL (),fin) /\
+  stmt_state_rel H ctx func ce cx fin q /\
+  (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+    vs_immutables := s.vs_immutables; vs_prev_bb := s.vs_prev_bb;
+    vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx|>) = s /\
+  (!x. not_fresh_at su x ==> lookup_var x q = lookup_var x s) /\
+  (!a k. regions_disjoint a k off (type_memory_size itv) ==>
+    mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
+  ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+  ~block_is_terminated sb ==>
+  stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin
+    (q with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  strip_tac >>
+  `fin.scopes = ee.scopes` by
+    metis_tac[vyperPlaceFramesTheory.write_immutable_place_scopes] >>
+  `storage_well_formed_on cx fin (FST H)` by
+    (drule vyperPlaceFramesTheory.write_immutable_place_frame >> strip_tac >>
+     `storage_well_formed_on cx fin (FST H) <=>
+      storage_well_formed_on cx ee (FST H)` by
+       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+     fs[]) >>
+  `alloca_frame ce ee su s ce fin q` by
+    (irule immutable_assign_suffix_alloca_frame >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
+       stmt_state_rel_inst_idx] >>
+  qpat_x_assum `_ = s` mp_tac >> simp[venom_state_component_equality] >>
+  strip_tac >> gvs[lookup_var_def] >>
+  irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem immutable_assign_suffix_stmt_post:
   stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
   expr_sim_inv ce cx env ee /\
@@ -94,23 +132,45 @@ Theorem immutable_assign_suffix_stmt_post:
 Proof
   strip_tac >>
   `stmt_state_rel H ctx func ce cx fin q` by
-    (irule immutable_store_stmt_state_rel >> goal_assum (drule_at Any) >> metis_tac[]) >>
-  `fin.scopes = ee.scopes` by
-    metis_tac[vyperPlaceFramesTheory.write_immutable_place_scopes] >>
-  `storage_well_formed_on cx fin (FST H)` by
-    (drule vyperPlaceFramesTheory.write_immutable_place_frame >> strip_tac >>
-     `storage_well_formed_on cx fin (FST H) <=>
-      storage_well_formed_on cx ee (FST H)` by
-       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
-     fs[]) >>
-  `alloca_frame ce ee su s ce fin q` by
-    (irule immutable_assign_suffix_alloca_frame >>
-     goal_assum (drule_at Any) >> metis_tac[]) >>
-  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
-       stmt_state_rel_inst_idx] >>
-  qpat_x_assum `_ = s` mp_tac >> simp[venom_state_component_equality] >>
-  strip_tac >> gvs[lookup_var_def] >>
-  irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]
+    (irule immutable_store_stmt_state_rel >>
+     rpt (CHANGED_TAC (first_assum (irule_at Any))) >> simp[]) >>
+  irule immutable_assign_suffix_stmt_post_frame >>
+  rpt (CHANGED_TAC (first_assum (irule_at Any))) >> simp[]
+QED
+
+Theorem immutable_path_assign_suffix_stmt_post:
+  stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+  expr_sim_inv ce cx env ee /\
+  local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
+  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ity /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\
+  mem_path_offset itv path = SOME (k,ptv) /\
+  write_place cx (ImmutablePlace ce.ce_module id path) v ee = (INL (),fin) /\
+  value_has_type ptv v /\ val_in_memory ptv v (off+k) q.vs_memory /\
+  (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+    vs_immutables := s.vs_immutables; vs_prev_bb := s.vs_prev_bb;
+    vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx|>) = s /\
+  (!x. not_fresh_at su x ==> lookup_var x q = lookup_var x s) /\
+  LENGTH s.vs_memory <= LENGTH q.vs_memory /\
+  (!a n. regions_disjoint a n (off+k) (type_memory_size ptv) ==>
+    mem_bytes_at a n q.vs_memory = mem_bytes_at a n s.vs_memory) /\
+  ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+  ~block_is_terminated sb ==>
+  stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin
+    (q with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  strip_tac >>
+  `stmt_state_rel H ctx func ce cx fin q` by
+    (irule immutable_path_store_stmt_state_rel >>
+     rpt (CHANGED_TAC (first_assum (irule_at Any))) >> simp[]) >>
+  drule_then strip_assume_tac exprSimPropsTheory.mem_path_offset_sound >>
+  `!a n. regions_disjoint a n off (type_memory_size itv) ==>
+    mem_bytes_at a n q.vs_memory = mem_bytes_at a n s.vs_memory` by
+    (rpt strip_tac >> first_x_assum irule >> fs[regions_disjoint_def] >> decide_tac) >>
+  irule immutable_assign_suffix_stmt_post_frame >>
+  rpt (CHANGED_TAC (first_assum (irule_at Any))) >> simp[]
 QED
 
 Theorem immutable_assign_word_stmt_post_frame:

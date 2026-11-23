@@ -16,6 +16,7 @@ Ancestors abiDecoderIndexInit[qualified,ignore_grammar]
   abiDecoderArraySetupCode abiDecoderIndexedAddress abiDecoderArrayBound abiDecoderGuard
   abiEncoder compileEnv emitHelper vyperABI contractABI
   abiMalformedRecursiveInterface abiMalformedBulkConstructor bodyFullPathHistory
+  abiMalformedEntryProps[qualified,ignore_grammar]
   calldataDynOwned exprLoweringProps loweringStateRelDefs ptrDiscipline
   venomExecSemantics venomMemDefs venomState words finite_map pred_set list arithmetic
   exprSimConvertFromBytes exprSimAbiDecodeArrayRuntimeSetup freshWrites
@@ -43,7 +44,7 @@ val repeat_entry = ``\j s G tn. (^parent) s /\ (^counter) s /\ (^root_ghosts) s 
 Theorem finite_reject_repeat[local]:
   (^parent) u /\ (^counter) u /\ (^root_ghosts) u G tn /\
   fresh_vars_wrt ceiling u /\ ~u.vs_halted /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [ip] /\ not_local_ptr cenv es.scopes ip /\ inst.inst_id IN sites /\
   st.cs_next_var <= next /\ next < ceiling.cs_next_var /\
@@ -65,7 +66,9 @@ Proof
   `slot+32 < dimword (:256)` by fs[alloca_room_def] >>
   qabbrev_tac `P = {a | w2n (n2w B:bytes32) <= a /\ a < w2n (n2w B:bytes32)+L}` >>
   `DISJOINT P tn.t_mem` by fs[Abbr `P`, abi_decode_ptr_window_def, DISJOINT_ALT] >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qhdtm_assum `abi_malformed_entry`
+       (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
   drule_all decoder_index_backedge_ptr_core_uniform_origin_frame >>
   disch_then (qspec_then `PG` (qx_choosel_then [`Hg`,`zg`,`t`] strip_assume_tac)) >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid u t /\
@@ -106,7 +109,7 @@ Theorem finite_reject_header[local]:
     (Var ip) cnt ls = ((),en) /\ fn_has_code ls en func /\
   hdr = fresh_label_output "dec_dyn_hdr" ls.cs_next_label /\
   st.cs_next_var <= ls.cs_next_var /\ not_fresh_at ls ip /\
-  ls.cs_next_var + 5 <= ceiling.cs_next_var /\ ~ctx_has_dalloca ctx /\
+  ls.cs_next_var + 5 <= ceiling.cs_next_var /\
   n = abi_head_word (DROP p xs) /\ j < n /\ p+32 <= L ==>
   ?b Gb tb. (^parent) b /\ (^counter) b /\ (^root_ghosts) b Gb tb /\
     fresh_vars_wrt ceiling b /\ ~b.vs_halted /\
@@ -138,7 +141,9 @@ Proof
    mload (w2n (n2w slot:bytes32)) h = n2w j /\
    (!a. w2n (n2w slot:bytes32) <= a /\ a < w2n (n2w slot:bytes32)+32 ==>
          a NOTIN th.t_mem)` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp h` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp h` by
+    (qhdtm_assum `abi_malformed_entry`
+       (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
   drule_all malformed_finite_header_body_joint >>
   disch_then (qspec_then `PG` (qx_choosel_then [`b`,`Gb`,`tb`] strip_assume_tac)) >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid h b` by
@@ -226,7 +231,7 @@ Theorem finite_reject_indexed_read_boundary[local]:
   sb.cs_next_var <= ceiling.cs_next_var /\
   b.vs_current_bb = sa.cs_current_bb /\ b.vs_inst_idx = LENGTH sa.cs_current_insts /\
   j < n /\ p+32+n*stride <= L /\ (dec_info_needs_offset di ==> 32 <= stride) /\
-  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx ==>
+  fn_inst_ids_distinct func ==>
   ?data head cut t H z.
     (^parent) t /\
     abi_malformed_entry H0 ctx func cenv cx es cut sites dstid live
@@ -260,7 +265,9 @@ Proof
     (fs[GSYM calldata_operand_live_not_fresh] >> metis_tac[abi_decoder_operand_live_mono]) >>
   `w2n (n2w slot:bytes32)+32 <= b.vs_alloca_next /\ mload (w2n (n2w slot:bytes32)) b = n2w j /\
    (!a. w2n (n2w slot:bytes32) <= a /\ a < w2n (n2w slot:bytes32)+32 ==> a NOTIN tb.t_mem)` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp b` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp b` by
+    (qhdtm_assum `abi_malformed_entry`
+       (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
   drule_all malformed_indexed_reads_joint_frame >>
   disch_then (qspec_then `PG` (qx_choosel_then [`data`,`head`,`cut`,`t`,`H`,`z`] strip_assume_tac)) >>
   `alloca_history func t` by (irule body_full_path_alloca_history >> metis_tac[]) >>
@@ -333,7 +340,7 @@ Theorem finite_reject_indexed_pass_boundary[local]:
   fn_has_code nav sb func /\ child_sites SUBSET sites /\
   st.cs_next_var <= cut.cs_next_var /\ not_fresh_at cut ip /\
   cut.cs_next_var <= nav.cs_next_var /\ nav.cs_next_var <= ceiling.cs_next_var /\
-  sb.cs_next_var <= ceiling.cs_next_var /\ ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct func /\
+  sb.cs_next_var <= ceiling.cs_next_var /\ fn_inst_ids_distinct func /\
   32+j*memsz+memsz <= outsz /\ fresh_vars_wrt ceiling t /\ ~t.vs_halted /\
   t.vs_current_bb = cut.cs_current_bb /\ t.vs_inst_idx = LENGTH cut.cs_current_insts /\
   eval_operand idx t = SOME (n2w j) /\ abi_decoder_operand_live cut.cs_next_var idx /\
@@ -343,7 +350,9 @@ Theorem finite_reject_indexed_pass_boundary[local]:
   ?u Gu tu. (^child_cut) q t H z u Gu tu
 Proof
   simp_tac bool_ss [] >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qhdtm_assum `abi_malformed_entry`
+       (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
   drule_all (SIMP_RULE bool_ss [pairTheory.FST,pairTheory.SND]
     (Q.INST [`ops` |-> `(idx,pos,dstop)`] malformed_indexed_pass_joint)) >>
   disch_then (qspec_then `PG` (qx_choosel_then [`u`,`Gu`,`tu`,`r`] strip_assume_tac)) >>
@@ -396,7 +405,7 @@ Theorem finite_reject_after_indexed_reads[local]:
     (Var source) hi pos (Var output) B L xs p d outsz t /\
   (^read_layout) cut t H z data head /\ fn_has_code cut sb func /\
   child_sites SUBSET sites /\ st.cs_next_var <= cut.cs_next_var /\ not_fresh_at cut ip /\
-  sb.cs_next_var <= ceiling.cs_next_var /\ ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct func /\
+  sb.cs_next_var <= ceiling.cs_next_var /\ fn_inst_ids_distinct func /\
   32+j*memsz+memsz <= outsz /\ fresh_vars_wrt ceiling t /\ ~t.vs_halted /\
   t.vs_current_bb = cut.cs_current_bb /\ t.vs_inst_idx = LENGTH cut.cs_current_insts /\
   eval_operand idx t = SOME (n2w j) /\ op_taint z idx = {} /\ op_prov H idx = NONE /\
@@ -413,6 +422,9 @@ Theorem finite_reject_after_indexed_reads[local]:
       j*stride) t H z u Gu tu
 Proof
   simp_tac bool_ss [listTheory.EVERY_DEF] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qhdtm_assum `abi_malformed_entry`
+       (ACCEPT_TAC o MATCH_MP abiMalformedEntryPropsTheory.abi_malformed_entry_allocas_below_fmp)) >>
   `L < dimword (:256) /\ hi <> Lit 0w /\ eval_operand hi t = SOME (n2w L) /\
    abi_decoder_operand_live cut.cs_next_var hi` by
     (fs[abi_malformed_entry_def,abi_malformed_allocated_window_def] >> decide_tac) >>
@@ -433,7 +445,6 @@ Proof
              `EVERY (abi_decoder_operand_live cut.cs_next_var) [data;off;hi]` by simp[] >>
              `!op. MEM op [data;off;hi] ==> op_prov H op = NONE /\ op_taint z op = {}` by
                simp[DISJ_IMP_THM] >>
-             `ctx_has_dalloca ctx ==> allocas_below_fmp t` by simp[] >>
              drule_all malformed_indexed_guard_revert_joint >>
              disch_then (qspec_then `PG` (qx_choosel_then [`v`,`Gv`,`tv`] strip_assume_tac)) >>
              qexistsl [`v`,`Gv`,`tv`] >> simp[]) >>
@@ -466,7 +477,7 @@ Theorem finite_reject_to_child[local]:
     (Var ip) cnt ls = ((),en) /\ fn_has_code ls en func /\
   hdr = fresh_label_output "dec_dyn_hdr" ls.cs_next_label /\
   st.cs_next_var <= ls.cs_next_var /\ not_fresh_at ls ip /\
-  ls.cs_next_var + 5 <= ceiling.cs_next_var /\ ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct func /\
+  ls.cs_next_var + 5 <= ceiling.cs_next_var /\ fn_inst_ids_distinct func /\
   abi_decode_array_element_setup (Var ip) pos (Var output) MLOAD (Var source)
     hi di stride memsz sa = ((idx,child,dstop),sb) /\ fn_has_code sa sb func /\
   sa.cs_current_bb = fresh_label_output "dec_dyn_body" (ls.cs_next_label+1) /\
@@ -574,7 +585,7 @@ val success_ih = ``!H0 ce env sf ty tv v ctx func cenv cx es st en source hi pos
   output B L xs p d dstid live ceiling s G tn lo PG.
   abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
     st en (Var source) hi pos (Var output) B L xs p d dstid live ceiling s /\
-  ~ctx_has_dalloca ctx /\ (^child_ghosts) pos output (type_memory_bytes ce ty) s G tn ==>
+  (^child_ghosts) pos output (type_memory_bytes ce ty) s G tn ==>
   ?u H z. abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
       d (type_memory_bytes ce ty) s u /\ (^worlds) s u /\ (^path) s G tn (OK u) H z /\
     ptr_covers H z output u (type_memory_bytes ce ty) /\
@@ -602,7 +613,7 @@ val reject_ih = ``\ce env sf ty tv. !H0 output b_op source hi st en func ctx cen
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   bytes = (^source_view) ty b /\ (^malformed_view) ty bytes /\
-  ~ctx_has_dalloca ctx /\ (^child_ghosts) b_op output (type_memory_bytes ce ty) s G tn ==>
+  (^child_ghosts) b_op output (type_memory_bytes ce ty) s G tn ==>
   (^abort) s G tn``;
 
 val good_at = ``\q. q <= L /\
@@ -614,7 +625,7 @@ val child_layout = ``
   memsz = type_memory_bytes ce ty /\
   child_sites = abi_malformed_scratch_sites sb se func /\ child_sites SUBSET sites /\
   compile_abi_decode_to_buf dstop child MLOAD (Var source) hi di sb = ((),se) /\
-  fn_has_code sb se func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sb se func /\ fn_inst_ids_distinct func /\
   st.cs_next_var <= sb.cs_next_var /\ se.cs_next_var <= ceiling.cs_next_var /\
   not_fresh_at sb ip /\ idx = Var iv``;
 val child_meta = ``
@@ -811,7 +822,7 @@ Theorem finite_reject_enter_loop[local]:
   inst = mk_inst (ls.cs_next_id-2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (ls.cs_next_var-1))] /\
   MEM inst (fn_insts func) /\ ls.cs_next_id-2 IN sites /\
-  hdr = fresh_label_output "dec_dyn_hdr" ls.cs_next_label /\ ~ctx_has_dalloca ctx ==>
+  hdr = fresh_label_output "dec_dyn_hdr" ls.cs_next_label ==>
   ?h slot Gh th. (^repeat_entry) 0 h Gh th /\ (^worlds) s h /\ (^path) s G tn (OK h) Gh th
 Proof
   simp_tac bool_ss [] >> strip_tac >>
@@ -901,7 +912,6 @@ Theorem malformed_finite_array_first_failure_joint:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   (^malformed_view) (ArrayT ty (Dynamic maxn)) (DROP p xs) /\
   n = abi_head_word (DROP p xs) /\ n <= maxn /\ p+32+n*stride <= L /\
-  ~ctx_has_dalloca ctx /\
   (^child_ghosts) pos output (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) s G tn ==>
   (^abort) s G tn
 Proof

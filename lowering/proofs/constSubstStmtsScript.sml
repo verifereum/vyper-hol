@@ -23,6 +23,19 @@ Proof
   metis_tac[]
 QED
 
+Theorem const_subst_context_checked_artifact:
+  const_subst_context roots cx env E mods art /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  check_contract mode cx.layouts cx.txn.target mods = SOME art' /\
+  frame_maps env' art' /\
+  env'.type_defs = env.type_defs /\
+  env'.bare_globals = env.bare_globals /\
+  env'.toplevel_vtypes = env.toplevel_vtypes ==>
+  const_subst_context roots cx env' E mods art'
+Proof
+  rw[const_subst_context_def, checked_frame_context_def] >> metis_tac[]
+QED
+
 Theorem const_subst_context_type_stmt:
   const_subst_context roots cx env E mods art /\
   type_stmt env ret s = SOME env' ==>
@@ -42,7 +55,7 @@ QED
 
 (* ===== Constant cells across state steps ===== *)
 
-Theorem const_cells_agree_scopes[local]:
+Theorem const_cells_agree_scopes:
   const_cells_agree roots (st with scopes := sc) = const_cells_agree roots st
 Proof
   simp[const_cells_agree_def]
@@ -107,7 +120,7 @@ Proof
   metis_tac[const_subst_context_frames]
 QED
 
-Theorem const_subst_context_tuple_frame[local]:
+Theorem const_subst_context_tuple_frame:
   const_subst_context roots cx env E mods art /\
   writable_atarget env g /\ const_cells_agree roots st /\
   assign_tuple_targets cx g v st = (res,st') ==>
@@ -239,7 +252,7 @@ Proof
   gvs[optionTheory.OPTION_MAP_COMPOSE, combinTheory.o_DEF, subst_consts_expr_def]
 QED
 
-Theorem order_custom_error_args_subst[local]:
+Theorem order_custom_error_args_subst:
   order_custom_error_args params
     (CustomError id (subst_consts_exprs E pos) (subst_consts_fields E kw)) =
   OPTION_MAP (subst_consts_exprs E)
@@ -678,6 +691,14 @@ Proof
   simp[FUN_EQ_THM, evaluate_builtin_def, get_tenv_stk]
 QED
 
+Theorem evaluate_self_codesize_stk[local]:
+  evaluate_self_codesize (cx with stk := s) = evaluate_self_codesize cx
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >> Cases_on `x` >>
+  TRY (Cases_on `t`) >> TRY (Cases_on `h`) >>
+  simp[vyperContextTheory.evaluate_self_codesize_def]
+QED
+
 Theorem evaluate_type_builtin_oneline[local] =
   oneline evaluate_type_builtin_def
 
@@ -737,7 +758,11 @@ Proof
       >- (Cases_on `es` >>
           gvs[builtin_args_length_ok_def, type_check_def, assert_def,
               bind_def, ignore_bind_def, result_array_length_stk]) >>
-      gvs[bind_def, ignore_bind_def, COND_RATOR, get_tenv_stk, evaluate_builtin_stk])
+      Cases_on `is_self_codesize bt es` >>
+      gvs[bind_def, ignore_bind_def, COND_RATOR, get_tenv_stk, evaluate_builtin_stk,
+          vyperContextTheory.is_self_codesize_def,
+          vyperContextTheory.evaluate_self_codesize_def,
+          evaluate_self_codesize_stk])
   >~ [`evaluate_type_builtin`]
   >- (`!st. eval_exprs (cx with stk := s) es st = eval_exprs cx es st` by
         (irule eval_exprs_stk_from_elements >> gvs[EVERY_MEM]) >>
@@ -764,15 +789,15 @@ QED
 
 Theorem const_subst_context_function_entry:
   const_subst_context roots cx env E mods art /\
-  check_contract F cx.layouts cx.txn.target mods = SOME art /\
+  check_contract mode cx.layouts cx.txn.target mods = SOME art /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\ frame_maps env art ==>
-  const_subst_context roots cx (function_entry_env art mods src Internal args)
-    E mods art
+  !src vis args.
+    const_subst_context roots cx (function_entry_env art mods src vis args) E mods art
 Proof
-  strip_tac >> gvs[const_subst_context_def, frame_maps_def] >>
-  `(function_entry_env art mods src Internal args).toplevel_vtypes =
+  strip_tac >> rpt gen_tac >> gvs[const_subst_context_def, frame_maps_def] >>
+  `(function_entry_env art mods src vis args).toplevel_vtypes =
      art.cta_toplevel_vtypes /\
-   (function_entry_env art mods src Internal args).type_defs =
+   (function_entry_env art mods src vis args).type_defs =
      type_env_all_modules mods` by
     simp[function_entry_env_def, artifact_env_def,
          vyperTypeContractContextTheory.FOLDL_extend_local_args_static] >>
@@ -792,26 +817,22 @@ QED
 Theorem const_subst_intcall_body:
   const_subst_context roots cx env E mods art /\
   (!id r. ALOOKUP E id = SOME r ==> constant_expr mods r) /\
-  check_contract F cx.layouts cx.txn.target mods = SOME art /\
+  check_contract mode cx.layouts cx.txn.target mods = SOME art /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\ frame_maps env art /\
-  well_typed_expr env (Call ty (IntCall (NONE,fn)) es drv) /\
-  get_module_code cx NONE = SOME ts /\
-  lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) /\
+  IS_SOME (type_stmts (function_entry_env art mods NONE vis args) ret ss) /\
   const_cells_agree roots st ==>
   eval_stmts (cx with stk updated_by CONS (NONE,fn)) (subst_consts_stmts E ss) st =
   eval_stmts (cx with stk updated_by CONS (NONE,fn)) ss st
 Proof
   strip_tac >>
-  `IS_SOME (type_stmts (function_entry_env art mods NONE Internal args) ret ss)` by
-    (drule_then irule (cj 1 checked_typed_intcall_body) >>
-     gvs[frame_maps_def] >> metis_tac[]) >>
   `cx with stk updated_by CONS (NONE,fn) = cx with stk := (NONE,fn)::cx.stk` by
     simp[vyperContextTheory.evaluation_context_component_equality] >>
   pop_assum SUBST1_TAC >>
   irule const_subst_eval_stmts >> goal_assum (drule_at Any) >>
-  qexistsl [`art`,`mods`,`roots`] >> simp[] >>
+  qexistsl [`art`,`function_entry_env art mods NONE vis args`,`mods`,`ret`] >>
+  simp[] >>
   drule_all const_subst_context_function_entry >>
-  disch_then (qspecl_then [`NONE`,`args`] assume_tac) >>
+  disch_then (qspecl_then [`NONE`,`vis`,`args`] assume_tac) >>
   drule const_subst_context_stk >> impl_tac >- metis_tac[] >> simp[]
 QED
 
@@ -828,7 +849,7 @@ QED
 
 Theorem module_consts_intcall_body:
   const_subst_context roots cx env (module_consts_env tops []) mods art /\
-  check_contract F cx.layouts cx.txn.target mods = SOME art /\
+  check_contract cx.in_deploy cx.layouts cx.txn.target mods = SOME art /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
@@ -841,6 +862,53 @@ Theorem module_consts_intcall_body:
     (subst_consts_stmts (module_consts_env tops []) ss) st =
   eval_stmts (cx with stk updated_by CONS (NONE,fn)) ss st
 Proof
-  strip_tac >> irule const_subst_intcall_body >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[module_consts_env_constant_expr]
+  strip_tac >>
+  mp_tac (Q.INST [`mode` |-> `cx.in_deploy`, `call_src` |-> `NONE`]
+    (SPEC_ALL checked_intcall_static)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  irule const_subst_intcall_body >>
+  qexistsl [`args`,`art`,`env`,`cx.in_deploy`,`mods`,`ret`,`roots`,`vis`] >>
+  simp[] >> metis_tac[module_consts_env_constant_expr]
+QED
+Theorem module_consts_intcall_defaults:
+  const_subst_context roots cx env (module_consts_env tops []) mods art /\
+  check_contract cx.in_deploy cx.layouts cx.txn.target mods = SOME art /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  ALOOKUP mods NONE = SOME tops /\
+  constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
+  frame_maps env art /\
+  well_typed_expr env (Call ty (IntCall (NONE,fn)) es drv) /\
+  get_module_code cx NONE = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) /\
+  const_cells_agree roots st ==>
+  eval_exprs (cx with stk updated_by CONS (NONE,fn))
+    (DROP n (subst_consts_exprs (module_consts_env tops []) dflts)) st =
+  eval_exprs (cx with stk updated_by CONS (NONE,fn)) (DROP n dflts) st
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`mode` |-> `cx.in_deploy`, `call_src` |-> `NONE`]
+    (SPEC_ALL checked_intcall_static)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  drule_all const_subst_context_function_entry >>
+  disch_then (qspecl_then [`NONE`,`vis`,`args`] assume_tac) >>
+  qabbrev_tac `denv = defaults_env (function_entry_env art mods NONE vis args)` >>
+  `const_subst_context roots cx denv (module_consts_env tops []) mods art` by
+    (irule const_subst_context_static >>
+     qpat_assum `const_subst_context roots cx (function_entry_env _ _ _ _ _) _ _ _`
+       (irule_at Any) >>
+     simp[Abbr `denv`, defaults_env_def]) >>
+  `const_subst_context roots (cx with stk updated_by CONS (NONE,fn))
+     denv (module_consts_env tops []) mods art` by
+    (`cx with stk updated_by CONS (NONE,fn) = cx with stk := (NONE,fn)::cx.stk` by
+       simp[vyperContextTheory.evaluation_context_component_equality] >>
+     pop_assum SUBST1_TAC >> irule const_subst_context_stk >>
+     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+       rpt strip_tac >> drule_all_then ACCEPT_TAC module_consts_env_constant_expr]) >>
+  `well_typed_exprs denv (DROP n dflts)` by
+    (irule (cj 2 frame_well_typed_exprs_slices) >> simp[]) >>
+  `DROP n (subst_consts_exprs (module_consts_env tops []) dflts) =
+     subst_consts_exprs (module_consts_env tops []) (DROP n dflts)` by
+    simp[subst_consts_exprs_map, MAP_DROP] >>
+  pop_assum SUBST1_TAC >>
+  metis_tac[const_subst_eval_exprs]
 QED

@@ -6,7 +6,7 @@ Ancestors
   bodyPtrBopScalarOutcome bodyPtrBopScalarSeq
   abiEncoder emitHelperProps exprLoweringProps compileEnv fragExec
   venomInst venomExecSemantics venomState loweringStateRelDefs arithmetic words
-  exprSimConvertBytes abiDecoderContract fragGasCopyLoop fragGasSeqPtr
+  exprSimConvertBytes abiDecoderContract fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeqPtr
   stmtReasonLitFragMemory instMemFrontier fragExecMem memSafeRun ptrDiscipline
   pred_set list rich_list fragGasOriginPtr instIdxIndep
   abiMalformedRecursiveInterface exprSimAbiDecodeMemberExecute valueEncodingProps vyperABI
@@ -173,6 +173,13 @@ Proof
      drule_all bop_scalar_seq_outputs >> strip_tac >>
      conj_tac >- (irule below_frontier_no_ranges >> gvs[]) >>
      irule inst_dload_in_section_other >> gvs[]) >>
+  `ctx_has_dalloca ctx ==> !pre i post v.
+     emitted_insts sa sb = pre ++ i::post /\ run_inst_seq pre s = OK v ==>
+     dalloca_no_wrap i v` by
+    (rpt strip_tac >>
+     `MEM i (emitted_insts sa sb)` by simp[MEM_APPEND] >>
+     irule dalloca_no_wrap_non_dalloca >>
+     drule_all bop_scalar_seq_outputs >> strip_tac >> gvs[]) >>
   `LENGTH sb.cs_current_insts = s.vs_inst_idx + LENGTH (emitted_insts sa sb)` by
     fs[inst_extends_def] >>
   qexistsl [`G'`,`tn'`] >> simp[] >> reverse conj_tac

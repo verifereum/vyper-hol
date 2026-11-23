@@ -46,9 +46,23 @@ Proof
   qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   conj_tac
   >- (drule_all normalize_byte_offset_straight >> strip_tac >>
+      `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)` by
+        (qpat_x_assum `compile_with_byte_offset _ _ _ = _` mp_tac >>
+         rpt (pop_assum kall_tac) >> Cases_on `off = 0`
+         >- simp[compile_with_byte_offset_def, comp_return_def, emitted_insts_def] >>
+         simp[compile_with_byte_offset_def, emit_op_def, emit_inst_def,
+              fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+              comp_return_def, comp_ignore_bind_def] >> strip_tac >>
+         gvs[emitted_insts_def, rich_listTheory.DROP_APPEND1, mk_inst_def]) >>
+      `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+        metis_tac[normalize_byte_offset_mem_ok] >>
       irule typed_bytes_child_seq_cont >> simp[] >>
       qexists_tac `sa` >> simp[] >>
-      drule normalize_byte_offset_mem_ok >> simp[]) >>
+      rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+      `MEM i (emitted_insts sa sb)` by simp[] >>
+      qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+      simp[listTheory.EVERY_MEM] >> disch_then (qspec_then `i` mp_tac) >>
+      simp[]) >>
   drule_all normalize_byte_offset_straight >> strip_tac >>
   gvs[venom_state_component_equality, eval_operand_def, lookup_var_def]
 QED

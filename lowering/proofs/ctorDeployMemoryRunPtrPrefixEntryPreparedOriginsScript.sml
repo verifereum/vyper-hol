@@ -35,7 +35,8 @@ val PreparedOriginsMode = ``\checked.
   ~t.vs_halted /\ t.vs_current_bb = st.cs_current_bb /\
   t.vs_inst_idx = LENGTH st.cs_current_insts /\
   allocas_from (imm_len tops) t /\ t.vs_alloca_next = imm_len tops /\
-  ~ctx_has_dalloca ctx /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+    t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp) /\
   (!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit n] /\
     FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
@@ -58,10 +59,13 @@ val PreparedOriginsMode = ``\checked.
     actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
     abi_decode_sim ctx func t actual /\
     allocas_from (imm_len tops) actual /\ imm_len tops <= actual.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp actual /\
+      actual.vs_alloca_next + pending_alloca_size func actual <= w2n actual.vs_initial_fmp) /\
     t.vs_alloca_next <= actual.vs_alloca_next /\
     actual.vs_code = t.vs_code /\ actual.vs_outcomes = t.vs_outcomes /\
     actual.vs_tx_ctx = t.vs_tx_ctx /\ actual.vs_block_ctx = t.vs_block_ctx /\
     actual.vs_gas_readings = t.vs_gas_readings /\
+    actual.vs_fmp = t.vs_fmp /\
     (!a. a < imm_len tops ==> read_byte a actual.vs_memory = read_byte a t.vs_memory) /\
     qt.t_mem SUBSET (tn.t_mem UNION
       {j | t.vs_alloca_next <= j /\ j < actual.vs_alloca_next}) /\

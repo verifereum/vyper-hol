@@ -8,7 +8,8 @@ Ancestors
 
 Theorem literal_nonword_classify:
   expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
-  (?bs n. l = BytesL bs /\ ann = BaseT (BytesT (Dynamic n))) \/
+  (?bs n. (l = BytesL bs \/ l = HexBytesL bs) /\
+          ann = BaseT (BytesT (Dynamic n))) \/
   (?str n. l = StringL str /\ ann = BaseT (StringT n))
 Proof
   strip_tac >> gvs[expr_sim_pre_def, well_typed_expr_def] >>
