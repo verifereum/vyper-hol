@@ -462,6 +462,17 @@ fun crossclass_units () = List.concat (map (fn (c1, c2) => map (fn m => let
          fname = "entry", sel = "entry"} end) [0, 1]) (pairs decl_classes))
 
 (* Selector collisions: gsf() and tgeo() share a 4-byte selector. *)
+(* q21f9b((uint256)) and q25078((uint8)) differ, but with m1's structs
+   unresolved (type_env of m1 alone keys them under NONE) both read as
+   (()) and share selector 0xea91fb4e. *)
+val struct_coll_m1 = [
+    "StructDecl \"S\" [(\"a\", " ^ u256 ^ ")]",
+    "StructDecl \"T\" [(\"a\", BaseT (UintT 8))]",
+    "FunctionDecl External View F F \"q21f9b\" [(\"v\", StructT (SOME 1, \"S\"))] [] " ^
+      u256 ^ " [Return (SOME (Literal " ^ u256 ^ " (IntL 101)))]",
+    "FunctionDecl External View F F \"q25078\" [(\"v\", StructT (SOME 1, \"T\"))] [] " ^
+      u256 ^ " [Return (SOME (Literal " ^ u256 ^ " (IntL 102)))]"]
+
 fun selector_units () = map (fn (id, m0, m1, exps) =>
     mk {id = id, family = "selector", axes = [("site", "0")],
         mods = std_mods (m0 @ [entry0]) m1 [], exps = exps, sl = sl0, tl = tl0,
@@ -471,7 +482,10 @@ fun selector_units () = map (fn (id, m0, m1, exps) =>
    ("both_in_m1_exported_one", [], [ext_fn "gsf" 101, ext_fn "tgeo" 101], "[(\"tgeo\", 1)]"),
    ("main_and_export", [ext_fn "gsf" 100], [ext_fn "tgeo" 101], "[(\"tgeo\", 1)]"),
    ("main_and_unexported", [ext_fn "gsf" 100], [ext_fn "tgeo" 101], "([] : (string # num) list)"),
-   ("two_exports", [], [ext_fn "gsf" 101, ext_fn "tgeo" 101], "[(\"gsf\", 1); (\"tgeo\", 1)]")]
+   ("two_exports", [], [ext_fn "gsf" 101, ext_fn "tgeo" 101], "[(\"gsf\", 1); (\"tgeo\", 1)]"),
+   ("env_only_m1", [], struct_coll_m1, "([] : (string # num) list)"),
+   ("env_only_m1_exported", [], struct_coll_m1, "[(\"q21f9b\", 1); (\"q25078\", 1)]")]
+
 
 (* Call cycles, a constructor calling itself, duplicate and missing ids. *)
 fun calling name t callee = "FunctionDecl Internal View F F " ^ str name ^ " [] [] " ^

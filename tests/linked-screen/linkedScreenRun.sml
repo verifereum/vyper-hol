@@ -37,6 +37,12 @@ val () = computeLib.add_funs (List.concat (map (fn n =>
     map (fn args => cv_transLib.cv_eval (tm ("function_selector \"" ^ n ^ "\" " ^ args)))
       ["[]", "[Uint 256]", "[Uint 8]"]) selector_names))
 
+(* The type-env selector collision pair, with their struct arguments
+   resolved and unresolved. *)
+val () = computeLib.add_funs (List.concat (map (fn n =>
+    map (fn args => cv_transLib.cv_eval (tm ("function_selector \"" ^ n ^ "\" " ^ args)))
+      ["[Tuple [Uint 256]]", "[Tuple [Uint 8]]", "[Tuple []]"]) ["q21f9b", "q25078"]))
+
 fun check_conv d lay mods = let
     val t = tm ("vyperTypeContract$check_contract " ^ d ^ " [(2w:address, " ^ lay ^
                 ")] 2w " ^ mods)
