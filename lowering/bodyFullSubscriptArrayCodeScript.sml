@@ -200,7 +200,9 @@ Proof
   qexistsl_tac [`Gf`, `fin`, `INL child`, `sf`, `tnf`] >>
   `fin with gas_obs := [] = fin` by
     (qpat_x_assum `fin.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
-  simp[]
+  simp[] >> rpt strip_tac >>
+  qpat_assum `!K. valid_horizon _ _ K _ ==> _ /\ expr_vv_sim_full_post _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H` mp_tac) >> simp[]
 QED
 
 Theorem subscript_array_framed_code_full:
