@@ -17,6 +17,7 @@ Ancestors
   bodyFullShadowBodyInv bodyFullIntCallReturnHalt bodyFullHashKeccakFixed
   bodyFullToplevelValue bodyFullToplevelVV bodyFullIfExpReach[qualified,ignore_grammar]
   bodyFullLiteralWord bodyFullLiteralBuffer bodyFullLiteralNonword
+  bodyFullEmptyLeafData exprSimFullBundleProps
   bodyFullNameVV bodyFullNameNonword bodyFullNameWord exprSimOperators
   bodyFullBopInLiteralOperands bodyFullBopInLiteralTail exprSimBopInLiteralWord
   bodyFullBopBytesEqLayout bodyFullBopBytesEqSuffix exprBopSimProps
@@ -85,12 +86,20 @@ QED
 (* A flag member compiles to StackValue (Lit _) and emits no instruction
    (compile_expr_def), in runtime and constructor frames alike; the source
    side is exprSimProps' eval_expr_flag_member_gas. *)
-Theorem flag_member_value_full[local]:
-  expr_body_pre cenv cx env (FlagMember ann nsid mid) es ==>
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (FlagMember ann nsid mid) es
+Theorem flag_member_value_nil:
+  expr_body_pre cenv cx env (FlagMember ann nsid mid) es /\
+  expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (FlagMember ann nsid mid) es (st0,sa,sb,sha,shb,op,s0,G0,tn0) ==>
+  sb = sa /\ ?v.
+    (!tail. bind (eval_expr cx (FlagMember ann nsid mid)) (read_result cx)
+              (es with gas_obs := tail) = (INL v,es with gas_obs := tail)) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         expr_sim_full_post (DF,lo,d,ctx,func) cenv cx (FlagMember ann nsid mid)
+           (es,sa,sb,s0,op,G0,tn0) H (INL v : value + exception)
+           (es with gas_obs := []) G0 tn0 s0)
 Proof
-  rw[expr_sim_full_def] >> PairCases_on `nsid` >>
+  simp[expr_sim_full_hypotheses_def, expr_sim_full_code_def] >>
+  strip_tac >> PairCases_on `nsid` >>
   drule eval_expr_flag_member_gas >> strip_tac >>
   `cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid = i` by
     (gvs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
@@ -100,12 +109,7 @@ Proof
   qpat_x_assum `lower_value _ _ _ _ sa = _` mp_tac >>
   simp[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
        unwrap_value_def] >> strip_tac >> gvs[] >>
-  irule gas_outcome_full_pure >>
-  reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G0`, `es`,
-    `INL (FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid))`,
-    `s0`, `tn0`] >>
-  simp[] >> rpt strip_tac >>
+  simp[expr_sim_full_post_def, expr_sim_full_endpoint_def] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >>
   simp[gas_origin_ptr_path_rules, expr_store_bound_def,
        expr_type_def, is_word_type_def, ptr_val_ok_def, op_taint_def,
@@ -125,12 +129,19 @@ Proof
   gvs[expr_type_def, is_word_type_def]
 QED
 
-Theorem flag_member_vv_full[local]:
-  expr_body_pre cenv cx env (FlagMember ann nsid mid) es ==>
-  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (FlagMember ann nsid mid) es
+Theorem flag_member_vv_nil:
+  expr_body_pre cenv cx env (FlagMember ann nsid mid) es /\
+  expr_vv_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (FlagMember ann nsid mid) es (st0,sa,sb,sha,shb,vv,s0,G0,tn0) ==>
+  sb = sa /\ ?res.
+    (!tail. eval_expr cx (FlagMember ann nsid mid) (es with gas_obs := tail) =
+            (res,es with gas_obs := tail)) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (FlagMember ann nsid mid)
+           (es,sa,sb,s0,vv,G0,tn0) H res (es with gas_obs := []) G0 tn0 s0)
 Proof
-  rw[expr_vv_sim_full_def] >> PairCases_on `nsid` >>
+  simp[expr_vv_sim_full_hypotheses_def, expr_sim_full_code_def] >>
+  strip_tac >> PairCases_on `nsid` >>
   `gas_admissible (bind (eval_expr cx (FlagMember ann (nsid0,nsid1) mid))
      (read_result cx)) expr_res_ok es` by
     (irule exprSimStackTheory.eval_expr_force_admissible >> simp[] >>
@@ -144,13 +155,10 @@ Proof
   gvs[gas_shadow_expr_def] >>
   qpat_x_assum `compile_expr _ _ _ sa = _` mp_tac >>
   simp[compile_expr_def, comp_return_def] >> strip_tac >> gvs[] >>
-  irule gas_outcome_full_pure >>
-  reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G0`, `es`,
-    `INL (Value (FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid)))`,
-    `s0`, `tn0`] >>
+  qexists_tac `INL (Value (FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid)))` >>
   conj_tac >- simp[Once evaluate_def, lookup_flag_mem_def, return_def] >>
-  simp[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  simp[expr_vv_sim_full_post_def, expr_sim_full_endpoint_def] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
   simp[gas_origin_ptr_path_rules, vv_store_bound_def, contextTheory.vv_location_def,
        expr_type_def, is_word_type_def, ptr_vv_ok_def, ptr_val_ok_def,
        read_result_def, return_def, op_taint_def,
@@ -170,6 +178,28 @@ Proof
   >- (gvs[op_taint_def] >> metis_tac[]) >>
   gvs[expr_type_def, is_word_type_def] >>
   gvs[contextTheory.vv_location_def]
+QED
+
+Theorem flag_member_value_full[local]:
+  expr_body_pre cenv cx env (FlagMember ann nsid mid) es ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (FlagMember ann nsid mid) es
+Proof
+  rw[expr_sim_full_via_bundle] >>
+  drule_all flag_member_value_nil >> strip_tac >>
+  irule gas_outcome_full_unchanged >>
+  gvs[expr_sim_full_hypotheses_def] >> first_assum ACCEPT_TAC
+QED
+
+Theorem flag_member_vv_full[local]:
+  expr_body_pre cenv cx env (FlagMember ann nsid mid) es ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (FlagMember ann nsid mid) es
+Proof
+  rw[expr_vv_sim_full_via_bundle] >>
+  drule_all flag_member_vv_nil >> strip_tac >>
+  irule gas_outcome_full_unchanged >>
+  gvs[expr_vv_sim_full_hypotheses_def] >> first_assum ACCEPT_TAC
 QED
 
 Theorem flag_member_expr_full_ok:

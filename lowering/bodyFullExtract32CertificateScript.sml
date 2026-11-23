@@ -2,7 +2,7 @@
 Theory bodyFullExtract32Certificate
 Ancestors
   extract32Certificate exprSimExtract32Read exprLoweringProps
-  fragGasCopyLoop instSeqPtrLo fragGasSeqPtr ptrDiscipline
+  fragGasCopyLoop fragGasCopySeqLiftProps instSeqPtrLo fragGasSeqPtr ptrDiscipline
   compileEnv venomState venomInst freshWrites list
 
 Theorem extract32_suffix_certificate:
