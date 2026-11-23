@@ -4753,7 +4753,8 @@ Definition const_subst_context_def:
       checked_frame_context cx mods art src id env) /\
     (!id r. ALOOKUP E id = SOME r ==>
       (?tops. get_module_code cx NONE = SOME tops /\
-        ALOOKUP (module_consts_env tops []) id = SOME r) /\
+        ALOOKUP (module_consts_env tops []) id = SOME r /\
+        ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]) /\
       constant_expr mods r /\ const_local_refs r = [] /\
       FLOOKUP env.bare_globals (NONE,id) = SOME (expr_type r) /\
       FLOOKUP env.toplevel_vtypes (NONE,id) = SOME (Type (expr_type r)) /\
@@ -4824,11 +4825,24 @@ Theorem const_subst_blueprint_literal_offset:
   blueprint_literal_offset cx has_salt (subst_consts_exprs E es) =
   blueprint_literal_offset cx has_salt es
 Proof
-  strip_tac >>
-  simp[blueprint_literal_offset_def, subst_consts_exprs_map,
-       GSYM MAP_DROP] >>
+  Cases_on `E` >- simp[subst_consts_expr_empty] >>
+  rename1 `const_subst_context roots cx env (entry::rest) mods art` >>
+  Cases_on `entry` >> strip_tac >>
+  rename1 `const_subst_context roots cx env ((id,r)::rest) mods art` >>
+  `?tops. get_module_code cx NONE = SOME tops /\
+          ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+    (qpat_assum `const_subst_context _ _ _ _ _ _`
+       (mp_tac o CONJUNCT2 o CONJUNCT2 o REWRITE_RULE [const_subst_context_def]) >>
+     disch_then (qspecl_then [`id`, `r`] mp_tac) >>
+     simp[ALOOKUP_def] >> metis_tac[]) >>
+  `!e. subst_consts_expr (module_consts_env tops []) (subst_consts_expr ((id,r)::rest) e) =
+       subst_consts_expr (module_consts_env tops []) e` by
+    (drule const_subst_normalized_expr >> simp[]) >>
+  qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+    (fn code => simp[MATCH_MP blueprint_literal_offset_singleton code,
+                     subst_consts_exprs_map, GSYM MAP_DROP]) >>
   Cases_on `DROP (if has_salt then 3 else 2) es` >>
-  simp[] >> metis_tac[const_subst_normalized_expr]
+  simp[]
 QED
 
 Theorem const_subst_typed_annotation:
@@ -6426,6 +6440,7 @@ Theorem checked_module_consts_subst_context:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   EVERY (no_sha256_expr o SND) (module_consts_env tops []) /\
@@ -6448,7 +6463,8 @@ Proof
   qexists `roots ++ roots'` >>
   simp[const_cells_agree_append, const_subst_context_def, get_module_code_def] >>
   conj_tac
-  >- (drule get_tenv_sources >> simp[artifact_env_def]) >>
+  >- (simp[artifact_env_def] >> irule EQ_SYM >>
+      irule get_tenv_sources >> first_assum ACCEPT_TAC) >>
   conj_tac
   >- (gvs[constant_roots_provenance_def, checked_frame_context_def,
           frame_maps_def, artifact_env_def] >> metis_tac[]) >>
@@ -6475,6 +6491,7 @@ Theorem checked_module_consts_substitution:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   EVERY (no_sha256_expr o SND) (module_consts_env tops []) /\
