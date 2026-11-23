@@ -292,8 +292,10 @@ Theorem stmt_expr_body_pre_mods:
     expr_sim_inv_mods mods cenv cx env es /\ well_typed_expr env e /\
     ~supported_expr_exists
        (\e. ~is_extcode e /\
-             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+             ~(byte_widths_expr e /\
+                (array_slot_base cenv e \/ alloc_limits_expr cenv e))) e /\
     ~is_extcode e /\
+    (~array_slot_base cenv e \/ alloc_limits_expr cenv e) /\
     ~supported_expr_exists (const_name_root_mods mods) e /\
     ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
@@ -309,10 +311,11 @@ Theorem stmt_expr_body_pre_mods:
     expr_body_pre_mods mods cenv cx env e es
 Proof
   rpt gen_tac >> strip_tac >>
-  `byte_widths_expr e /\ alloc_limits_expr cenv e` by
+  `byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e)` by
     (CCONTR_TAC >>
      qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) _` mp_tac >>
      simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
+  `alloc_limits_expr cenv e` by metis_tac[] >>
   `call_evaluation_safe cx (int_calls_expr e)` by
     metis_tac[call_evaluation_safe_append_left] >>
   simp[expr_body_pre_mods_def]
@@ -324,8 +327,10 @@ Theorem stmt_expr_body_pre_main_mods:
   expr_sim_inv_mods mods cenv cx env es /\ well_typed_expr env e /\
   ~supported_expr_exists
      (\e. ~is_extcode e /\
-           ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+           ~(byte_widths_expr e /\
+                (array_slot_base cenv e \/ alloc_limits_expr cenv e))) e /\
   ~is_extcode e /\
+  (~array_slot_base cenv e \/ alloc_limits_expr cenv e) /\
   ~supported_expr_exists (const_name_root_mods mods) e /\
   ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
   call_evaluation_safe cx (int_calls_expr e ++ calls) /\
@@ -333,7 +338,7 @@ Theorem stmt_expr_body_pre_main_mods:
      occurs_abi_decode_target target (main_module mods)) ==>
   expr_body_pre_mods mods cenv cx env e es
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all_then strip_assume_tac supported_expr_body_calls_mods >>
   drule_then assume_tac contract_inv_main_module >>
   drule_then assume_tac contract_inv_type_env >>
@@ -352,8 +357,10 @@ Theorem stmt_expr_body_pre:
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     ~supported_expr_exists
        (\e. ~is_extcode e /\
-             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+             ~(byte_widths_expr e /\
+                (array_slot_base cenv e \/ alloc_limits_expr cenv e))) e /\
     ~is_extcode e /\
+    (~array_slot_base cenv e \/ alloc_limits_expr cenv e) /\
     ~supported_expr_exists (const_name_root cx) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
@@ -409,9 +416,10 @@ Theorem stmt_expr_body_pre_alloc:
 Proof
   rpt gen_tac >> strip_tac >> irule_body_pre stmt_expr_body_pre >> simp[] >>
   reverse conj_tac >- (qexists_tac `calls` >> simp[]) >>
-  `(\e. ~is_extcode e /\ (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)) =
+  `(\e. ~is_extcode e /\
+         (~byte_widths_expr e \/ ~array_slot_base cenv e /\ ~alloc_limits_expr cenv e)) =
    (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
-        (~is_extcode e /\ ~alloc_limits_expr cenv e))` by
+        (~is_extcode e /\ ~array_slot_base cenv e /\ ~alloc_limits_expr cenv e))` by
     (simp[FUN_EQ_THM] >> metis_tac[]) >>
   pop_assum SUBST1_TAC >> simp[supported_expr_exists_disj] >>
   imp_res_tac alloc_limits_expr_exists >> simp[]
@@ -694,16 +702,18 @@ Theorem stmt_exprs_ok_flat:
     (stmt_exprs_ok cenv s <=>
      ~supported_stmt_expr_exists
         (\e. ~is_extcode e /\
-              ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
+              ~(byte_widths_expr e /\
+                (array_slot_base cenv e \/ alloc_limits_expr cenv e))) s /\
      alloc_limits_stmt cenv s /\
      (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
         return_buffer_ok cenv) /\
      ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s)
 Proof
   rpt strip_tac >>
-  `(\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) =
+  `(\e. ~is_extcode e /\ ~(byte_widths_expr e /\
+                (array_slot_base cenv e \/ alloc_limits_expr cenv e))) =
    (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
-        (~is_extcode e /\ ~alloc_limits_expr cenv e))` by
+        (~is_extcode e /\ ~array_slot_base cenv e /\ ~alloc_limits_expr cenv e))` by
     (simp[FUN_EQ_THM] >> metis_tac[]) >>
   pop_assum SUBST1_TAC >>
   simp[stmt_exprs_ok_def, supported_stmt_expr_exists_disj] >>
