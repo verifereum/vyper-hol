@@ -13,7 +13,7 @@
 Theory bodyFullBoolChain
 Ancestors
   bodyFullIfExp exprSimBoolChain bodyFullOfVV bodyFullPreds bodySimFull
-  exprSimIfExp exprSimDefs exprLowering
+  exprSimIfExp exprSimDefs exprLowering boolChainOperandsCons
   boolChainFullSelect boolChainFullSingleton boolChainShadowLayout
   boolChainFullHead boolChainFullFinish boolChainCountedControl
   bodyFullWordStackBuiltin boolChainSource boolChainCodeLayout
@@ -98,8 +98,7 @@ QED
 
 Resume bool_chain_ops_outcome_full[test]:
   `?hd hs. bool_chain_operands p k tail = hd::hs` by
-    (Cases_on `k` >> Cases_on `tail` >> simp[bool_chain_operands_def] >>
-     rpt IF_CASES_TAC >> simp[]) >>
+    simp[bool_chain_operands_cons] >>
   fs[bool_chain_full_ok_def] >>
   drule_all (SIMP_RULE bool_ss [listTheory.MAP] bool_chain_test_shadow_layout) >> strip_tac >>
   qpat_x_assum `x = IfExp _ _ _ _` SUBST_ALL_TAC >>
@@ -176,11 +175,10 @@ Resume bool_chain_ops_outcome_full[continue]:
   `bool_chain_full_ok cx (bool_chain_operands p k tail)` by
     (simp[bool_chain_full_ok_def] >> first_x_assum irule >>
      qabbrev_tac `src = es with gas_obs := gas_explicit marks s.vs_gas_readings` >>
-     qpat_assum `bind (eval_expr cx c) _ src = (_,mid)` mp_tac >>
-     Cases_on `eval_expr cx c src` >> reverse (Cases_on `q`)
-     >- gvs[bind_def] >>
-     rename1 `eval_expr cx c src = (INL raw,after)` >>
-     strip_tac >> qexistsl_tac [`src`,`raw`,`after`] >> simp[]) >>
+     qpat_assum `bind (eval_expr cx c) _ src = (INL _,mid)`
+       (mp_then Any (qx_choose_then `raw` (qx_choose_then `after` strip_assume_tac))
+          (CONV_RULE (DEPTH_CONV ETA_CONV) eval_expr_read_INL)) >>
+     qexistsl_tac [`src`,`raw`,`after`] >> simp[]) >>
   `expr_body_pre cenv cx env tail mid /\ expr_type tail = BaseT BoolT` by
     (Cases_on `p` >> fs[]) >>
   `sa0.cs_next_var <= st.cs_next_var /\ sa0.cs_next_id <= st.cs_next_id /\

@@ -21,6 +21,7 @@ Theory exprSimBoolChain
 Ancestors
   exprSimIfExp exprSimOperators exprSimProps exprSimDefs exprSimHypsDefs
   exprLowering boolChainCountedControl boolChainCodeLayout boolChainWordPost
+  boolChainOperandsCons
   gasOutcomeSourceCong exprSimSource exprSimHyps exprSimWordArgs loweringPosts
   vyperAST vyperState vyperValue vyperInterpreter vyperStorageTrace
   vyperStorageFootprint gasSummary stmtSimDeclCompose fragGasMode fragGasPath
@@ -81,8 +82,7 @@ QED
 
 Resume bool_chain_ops_outcome[test]:
   `?hd hs. bool_chain_operands d k tail = hd::hs` by
-    (Cases_on `k` >> Cases_on `tail` >> simp[bool_chain_operands_def] >>
-     rpt IF_CASES_TAC >> simp[]) >>
+    simp[bool_chain_operands_cons] >>
   fs[bool_chain_case_def] >>
   drule bool_chain_test_layout >> strip_tac >>
   qpat_x_assum `!fn. fn_has_code sa sb fn ==> _` (qspec_then `func` mp_tac) >>
