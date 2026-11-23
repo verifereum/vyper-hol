@@ -2,6 +2,7 @@
 Theory runtimePeakMemoryExprDispatch
 Ancestors
   runtimePeakMemoryExpr runtimePeakMemoryArity runtimePeakMemorySourceGate runtimePeakMemoryBuiltins
+  exprValueWrapperStateProps
   runtimePeakMemoryAbi runtimePeakMemoryCode exprLowering exprCallBounds
   exprCallbackContracts exprSimHypsDefs exprCallbackSupport loweringShapeProps supportedExprTraverse vyperAST
   builtinSimple compileEnv context emitHelper venomInst list arithmetic
