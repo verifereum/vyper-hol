@@ -3715,7 +3715,9 @@ Proof
        builtin_ec_labels, builtin_concat_labels, builtin_makearray_labels, builtin_slice_labels]
   >- (once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
       ho_match_mp_tac pair_case_labels >> conj_tac >- simp[lower_value_labels] >>
-      simp[as_ptr_val_def, cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
+      Cases_on `is_word_type ret_ty` >>
+      simp[as_stack_val_def, as_ptr_val_def, cs_extends_refl, added_labels_def,
+           DROP_LENGTH_TOO_LONG]) >>
   once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
   ho_match_mp_tac pair_case_labels >> conj_tac >- simp[fresh_var_action_labels] >>
   rpt gen_tac >> ho_match_mp_tac fresh_label_pair_labels >> rpt gen_tac >> disch_tac >>
