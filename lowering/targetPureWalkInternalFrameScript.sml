@@ -37,7 +37,8 @@ Proof
   >- (mp_tac (Q.INST [`tops` |-> `cx_tops cx`,
         `module_code` |-> `get_module_code cx`, `in_deploy` |-> `cx.in_deploy`]
         target_walk_supported_call_context) >>
-      simp[CONJ_ASSOC] >> metis_tac[]) >>
+      simp[CONJ_ASSOC] >>
+      disch_then (fn th => first_assum (ACCEPT_TAC o MATCH_MP th))) >>
   strip_tac >>
   drule_all target_walk_read_only_syntax >> strip_tac >>
   rpt gen_tac >> conj_tac >> first_assum irule >>
