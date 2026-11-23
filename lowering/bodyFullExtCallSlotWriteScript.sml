@@ -55,6 +55,7 @@ Theorem slot_flat_copy[local]:
   val_wf tv v /\ val_footprint tv v <= n /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n a) m) ==>
   ?q Gf tf.
+    run_inst_seq (emitted_insts sa sb) s = OK (q with vs_inst_idx := s.vs_inst_idx) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK q,Gf,tf)) /\
     (!m. mem_agree_outside tf.t_mem q.vs_memory m ==> val_in_memory tv v (w2n b) m) /\
     typed_copy_state_frame sa (w2n b) n s q /\
@@ -93,6 +94,9 @@ Proof
      qexistsl_tac [`a`,`b`,`Var dst`,`Lit (n2w n)`,`n2w n`,`src`] >>
      Cases_on `n = 0` >> gvs[]) >>
   qexistsl_tac [`r with vs_inst_idx := LENGTH sb.cs_current_insts`,`G`,`tf`] >>
+  conj_tac >- simp[run_inst_seq_def, Abbr `i`, Abbr `r`, venom_state_fupdfupds,
+                   venom_state_component_equality, mstore_def, mcopy_def,
+                   write_memory_with_expansion_def] >>
   conj_tac
   >- (gen_tac >> irule slot_void_origin_path >> simp[mk_inst_def, is_terminator_def] >>
       goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
@@ -121,6 +125,7 @@ Theorem slot_word_store[local]:
   eval_operand op s = SOME (typed_val_to_w256 tv v) /\ op_taint tn op = {} /\
   is_word_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
   ?q Gf tf.
+    run_inst_seq (emitted_insts sa sb) s = OK (q with vs_inst_idx := s.vs_inst_idx) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK q,Gf,tf)) /\
     (!m. mem_agree_outside tf.t_mem q.vs_memory m ==> val_in_memory tv v (w2n b) m) /\
     typed_copy_state_frame sa (w2n b) 32 s q /\
@@ -151,6 +156,9 @@ Proof
      simp[Abbr `i`, ptr_inst_ok_mstore]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by metis_tac[emit_mstore_mem_ok] >>
   qexistsl_tac [`r with vs_inst_idx := LENGTH sb.cs_current_insts`,`G`,`tf`] >>
+  conj_tac >- simp[run_inst_seq_def, Abbr `i`, Abbr `r`, venom_state_fupdfupds,
+                   venom_state_component_equality, mstore_def, mcopy_def,
+                   write_memory_with_expansion_def] >>
   conj_tac
   >- (gen_tac >> irule slot_void_origin_path >> simp[] >>
       goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
@@ -173,7 +181,7 @@ QED
    The frame covers the entire typed slot even when the bytestring write
    only uses its rounded runtime extent. No source coverage is needed for
    the emitted zero-width MCOPY. *)
-Theorem extcall_tuple_slot_write:
+val tuple_slot_write_inputs = ``
   (if is_word_type ty then emit_void MSTORE [Var dst;src]
    else if is_bytestring_type ty then compile_store_bytestring src (Var dst)
    else emit_void MCOPY [Var dst;src;Lit (n2w (type_memory_bytes ce ty))])
@@ -201,10 +209,11 @@ Theorem extcall_tuple_slot_write:
        (is_bytestring_type ty ==>
           type_memory_size tv + 64 < dimword (:256) /\
           type_memory_size tv <> 0 /\ lo <= s.vs_alloca_next /\
-          not_fresh_at sa dst /\ (!x. src = Var x ==> not_fresh_at sa x)))) ==>
-  ?q Gf tf.
+          not_fresh_at sa dst /\ (!x. src = Var x ==> not_fresh_at sa x))))``;
+
+val tuple_slot_write_post = ``
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK q,Gf,tf)) /\
-    (!m. mem_agree_outside tf.t_mem q.vs_memory m ==> val_in_memory tv v (w2n b) m) /\
+    (!m. mem_agree_outside tf.t_mem q.vs_memory m ==> val_in_memory tv v (w2n (b:256 word)) m) /\
     typed_copy_state_frame sa (w2n b) (type_memory_size tv) s q /\
     (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G x /\
       op_taint tf (Var x) = op_taint tn (Var x)) /\
@@ -212,7 +221,14 @@ Theorem extcall_tuple_slot_write:
          (i IN tf.t_mem <=> i IN tn.t_mem)) /\
     tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
     q.vs_current_bb = sb.cs_current_bb /\ q.vs_current_bb = s.vs_current_bb /\
-    q.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~q.vs_halted
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~q.vs_halted``;
+
+Theorem extcall_tuple_slot_write_scalar_exact:
+  ^tuple_slot_write_inputs ==>
+  ?q Gf tf.
+    (~is_bytestring_type ty ==>
+     run_inst_seq (emitted_insts sa sb) s = OK (q with vs_inst_idx := s.vs_inst_idx)) /\
+    ^tuple_slot_write_post
 Proof
   strip_tac >> Cases_on `is_word_type ty`
   >- (fs[] >>
@@ -252,4 +268,13 @@ Proof
   drule_all slot_flat_copy >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   qexistsl [`q`,`Gf`,`tf`] >> gs[arithmeticTheory.ADD_COMM] >> metis_tac[]
+QED
+
+Theorem extcall_tuple_slot_write:
+  ^tuple_slot_write_inputs ==> ?q Gf tf. ^tuple_slot_write_post
+Proof
+  disch_tac >> mp_tac (SPEC_ALL extcall_tuple_slot_write_scalar_exact) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (qx_choosel_then [`q`,`Gf`,`tf`] (assume_tac o CONJUNCT2)) >>
+  qexistsl_tac [`q`,`Gf`,`tf`] >> first_assum ACCEPT_TAC
 QED
