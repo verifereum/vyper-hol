@@ -34,9 +34,7 @@ End
 (* Omitted defaults are lowered from the same expressions in both compiler
    runs. They must be invariant under the explicit gas-read shadowing. *)
 Definition supported_default_expression_def:
-  supported_default_expression tops e <=>
-    supported_expr tops e /\
-    ~supported_expr_exists expr_nonmain_type_root e
+  supported_default_expression tops e <=> supported_expr tops e
 End
 
 (* The source-shape restriction on internal names. supported_declaration_names
