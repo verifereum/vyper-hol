@@ -44,9 +44,8 @@ Proof
   `~supported_expr_exists (const_name_root_mods mods) e` by
     (drule stmt_exprs_ok_module_const_name_free >>
      simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
-  `~is_extcode e` by
-    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-     qexists_tac `cenv` >> fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
+  `alloc_limits_expr cenv e` by fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `~is_extcode e` by metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode] >>
   conj_tac
   >- (mp_tac (Q.INST [`calls` |-> `[]`] stmt_expr_body_pre_main_mods) >>
       fs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, supported_assignment_exists_def,
