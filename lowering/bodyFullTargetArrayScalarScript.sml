@@ -10,7 +10,7 @@ Ancestors
   fragGasOrigin gasEvents memSafeRun fragGasSeqAbort venomInstProofs instIdxIndep fragGasPathPtr gasCount ptrSafeRun
   augAssignPtrScalarRun augAssignPtrScalarCertificate augAssignPtrScalarSafety
   augAssignPtrScalarExec ptrDiscipline emitHelper pred_set finite_map
-  fragGasOriginPtrDead
+  fragGasOriginPtrDead arrayAbortItinerary
   unitTransformDefs freshWrites contextCodegenRel codegenRel loweringStateRelDefs
 
 Theorem array_scalar_step_abort_frame[local]:
@@ -652,6 +652,85 @@ Proof
        FLOOKUP_UPDATE, run_inst_seq_def]
 QED
 
+Theorem array_bounds_check_nonalias_uniform_observed:
+  array_bounds_check idx len sgn sa = ((),sb) /\
+  eval_operand idx s = SOME iw /\ eval_operand len s = SOME nw /\
+  (!x. idx = Var x ==> not_fresh_at sa x) /\
+  (!x. len = Var x ==> not_fresh_at sa x) /\
+  op_prov G idx = NONE /\ op_prov G len = NONE /\
+  op_taint tn idx = {} /\ op_taint tn len = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  fn_has_code sa sb func /\
+  EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+               ~is_terminator ins.inst_opcode) (emitted_insts sa sb) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t j H tm.
+    run_inst_seq (emitted_insts sa sb) s =
+      (if idx_in_range sgn iw nw then OK t else Abort Revert_abort t) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (if idx_in_range sgn iw nw then
+         (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,tm)
+       else (Abort Revert_abort (t with vs_inst_idx := j),H,tm))) /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP H x = FLOOKUP G x /\ FLOOKUP tm.t_var x = FLOOKUP tn.t_var x /\
+      FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
+    (t with vs_vars := s.vs_vars) =
+      (if idx_in_range sgn iw nw then s else revert_state (set_returndata [] s)) /\
+    (~idx_in_range sgn iw nw ==>
+      array_abort_itinerary (emitted_insts sa sb) func s Revert_abort t
+        (t with vs_inst_idx := j))
+Proof
+  strip_tac >>
+  `!pre ins post u. emitted_insts sa sb = pre ++ ins::post ==>
+      dalloca_no_wrap ins u` by
+    (drule array_bounds_check_shape >> metis_tac[scalar_shape_prefix_no_wrap]) >>
+  drule_all array_bounds_check_nonalias_run >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    metis_tac[array_bounds_check_mem_ok] >>
+  `?H tm. inst_seq_ptr
+    <|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>
+    lo ctx func PG G tn (emitted_insts sa sb) s H tm` by
+    (irule array_bounds_check_ptr_exists >> metis_tac[]) >>
+  drule_all array_bounds_check_metadata >> strip_tac >>
+  Cases_on `idx_in_range sgn iw nw` >> gvs[]
+  >- (`gas_origin_ptr_path
+        (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
+         lo,explicit,ctx,func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,tm)` by
+        (irule emitted_origin_ptr_path >> simp[] >>
+         qexistsl [`emitted_insts sa sb`, `sa`] >> fs[same_blocks_def] >>
+         metis_tac[]) >>
+      qexistsl [`H`, `tm`] >> simp[] >>
+      conj_tac
+      >- (gen_tac >> irule gas_origin_ptr_path_from_no_dead >> gvs[]) >>
+      metis_tac[array_bounds_check_ok_frame]) >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (fs[fn_has_code_def, IS_PREFIX_APPEND] >>
+     qexists `bb` >> gvs[IS_PREFIX_APPEND, DROP_APPEND, DROP_LENGTH_NIL, APPEND_ASSOC]) >>
+  `?j. gas_origin_ptr_path
+      (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
+       lo,explicit,ctx,func,PG) (s,G,tn) []
+      (Abort Revert_abort (t with vs_inst_idx := j),H,tm)` by
+    (irule array_abort_joint_run >> simp[] >>
+     qexists `emitted_insts sa sb` >> simp[] >> metis_tac[]) >>
+  `array_abort_itinerary (emitted_insts sa sb) func s Revert_abort t
+       (t with vs_inst_idx := j)` by
+    (`gas_origin_path T explicit ctx func s [] (Abort Revert_abort (t with vs_inst_idx := j))`
+       by (drule gas_origin_ptr_path_projections >> simp[]) >>
+     irule run_inst_seq_abort_itinerary >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  qexistsl [`j`, `H`, `tm`] >> simp[] >>
+  conj_tac
+  >- (gen_tac >> irule gas_origin_ptr_path_from_no_dead >> gvs[]) >>
+  metis_tac[array_scalar_seq_abort_frame, array_bounds_check_shape,
+            array_bounds_check_writes_fresh]
+QED
+
 Theorem array_bounds_check_nonalias_uniform:
   array_bounds_check idx len sgn sa = ((),sb) /\
   eval_operand idx s = SOME iw /\ eval_operand len s = SOME nw /\
@@ -682,42 +761,5 @@ Theorem array_bounds_check_nonalias_uniform:
     (t with vs_vars := s.vs_vars) =
       (if idx_in_range sgn iw nw then s else revert_state (set_returndata [] s))
 Proof
-  strip_tac >>
-  `!pre ins post u. emitted_insts sa sb = pre ++ ins::post ==>
-      dalloca_no_wrap ins u` by
-    (drule array_bounds_check_shape >> metis_tac[scalar_shape_prefix_no_wrap]) >>
-  drule_all array_bounds_check_nonalias_run >> strip_tac >>
-  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
-    metis_tac[array_bounds_check_mem_ok] >>
-  `?H tm. inst_seq_ptr
-    <|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>
-    lo ctx func PG G tn (emitted_insts sa sb) s H tm` by
-    (irule array_bounds_check_ptr_exists >> metis_tac[]) >>
-  drule_all array_bounds_check_metadata >> strip_tac >>
-  Cases_on `idx_in_range sgn iw nw` >> gvs[]
-  >- (`gas_origin_ptr_path
-        (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
-         lo,explicit,ctx,func,PG) (s,G,tn) []
-        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,tm)` by
-        (irule emitted_origin_ptr_path >> simp[] >>
-         qexistsl [`emitted_insts sa sb`, `sa`] >> fs[same_blocks_def] >>
-         metis_tac[]) >>
-      qexistsl [`H`, `tm`] >> simp[] >>
-      conj_tac
-      >- (gen_tac >> irule gas_origin_ptr_path_from_no_dead >> gvs[]) >>
-      metis_tac[array_bounds_check_ok_frame]) >>
-  `?j. gas_origin_ptr_path
-      (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
-       lo,explicit,ctx,func,PG) (s,G,tn) []
-      (Abort Revert_abort (t with vs_inst_idx := j),H,tm)` by
-    (irule array_abort_joint_run >> simp[] >>
-     fs[fn_has_code_def, IS_PREFIX_APPEND] >>
-     qexistsl [`bb`, `emitted_insts sa sb`] >>
-     gvs[IS_PREFIX_APPEND, DROP_APPEND, DROP_LENGTH_NIL, APPEND_ASSOC] >>
-     metis_tac[]) >>
-  qexistsl [`j`, `H`, `tm`] >> simp[] >>
-  conj_tac
-  >- (gen_tac >> irule gas_origin_ptr_path_from_no_dead >> gvs[]) >>
-  metis_tac[array_scalar_seq_abort_frame, array_bounds_check_shape,
-            array_bounds_check_writes_fresh]
+  strip_tac >> drule_all array_bounds_check_nonalias_uniform_observed >> metis_tac[]
 QED
