@@ -138,6 +138,56 @@ Proof
   fs[create_operand_full_scope_def,create_operand_at_def]
 QED
 
+(* The Keccak suppliers return an unmarked origin run at the advanced
+   cursor. Establish that this exact endpoint and the empty mark list
+   are the ones admitted by the compiled suffix region. *)
+Theorem create_keccak_suffix_scope:
+  (compile_keccak256_bytes x a = (op,b) \/
+   compile_keccak256_bytesm x m a = (op,b)) /\
+  fn_has_code a b f /\ create_operand_at a s /\ ~s.vs_halted /\
+  run_inst_seq (emitted_insts a b) s = OK u ==>
+  create_operand_full_scope a b E C f s []
+    (OK (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts a b)))
+Proof
+  strip_tac >>
+  `b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b` by
+    metis_tac[create_hash_suffix_layout] >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts a b) = []` by
+    (FIRST [drule bodyPtrHashBuiltinsKeccakShapeTheory.hash_keccak_bytes_emission,
+            drule bodyPtrHashBuiltinsKeccakFixedRunTheory.hash_fixed_keccak_emission] >>
+     simp[mk_inst_def]) >>
+  `s.vs_inst_idx + LENGTH (emitted_insts a b) = LENGTH b.cs_current_insts` by
+    fs[create_operand_at_def] >>
+  mp_tac (Q.INST [`m` |-> `m`,`x` |-> `x`,`op` |-> `op`]
+    create_hash_suffix_success_scope) >> simp[]
+QED
+
+Theorem create_keccak_suffix_outcome:
+  (compile_keccak256_bytes x a = (op,b) \/
+   compile_keccak256_bytesm x m a = (op,b)) /\
+  fn_has_code a b f /\ create_operand_at a s /\ ~s.vs_halted /\
+  run_inst_seq (emitted_insts a b) s = OK u /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,E,C,f,PG) (s,G,tn) []
+        (OK (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts a b)),G',tn') /\
+      Q H res (ee with gas_obs := []) G' tn'
+        (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts a b))) ==>
+  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a b
+    source (es,s,G,tn) Q R
+Proof
+  rpt (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >> strip_tac >>
+  `create_operand_full_scope a b E C f s []
+     (OK (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts a b)))` by
+    metis_tac[create_keccak_suffix_scope] >>
+  rewrite_tac[scoped_operand_outcome_def] >> qexists_tac `[]` >>
+  disj2_tac >> disj1_tac >>
+  qexistsl_tac [`res`,`ee`, `OK (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts a b))`,
+    `G'`,`tn'`] >> simp[gasSummaryTheory.gas_explicit_def, exit_result_def] >>
+  metis_tac[ADD_COMM]
+QED
+
 (* Matching the installed fetch and the actual step is enough here; an
    abort cannot complete a caller transition to the continuation. *)
 Theorem buffer_origin_at_fetch[local]:
@@ -230,6 +280,73 @@ Proof
   irule buffer_sequence_abort_scope >>
   qpat_assum `run_inst_seq _ _ = Abort _ _` (irule_at Any) >>
   qexists_tac `bb` >> simp[]
+QED
+
+Theorem sha_implicit_gas_explicit[local]:
+  gas_explicit [F] gs = []
+Proof
+  mp_tac (Q.SPECL [`1`,`gs`] gasSummaryTheory.gas_explicit_replicate_false) >>
+  pure_rewrite_tac[EVAL ``REPLICATE 1 F``] >> simp[]
+QED
+
+(* SHA executes one compiler-inserted GAS in either branch. The caller
+   supplies the classification proved from the actual shadow compilation. *)
+Theorem create_sha_suffix_success_outcome:
+  (compile_sha256_bytes x a = (op,b) \/
+   compile_sha256_bytesm x m a = (op,b)) /\
+  fn_has_code a b f /\ create_operand_at a s /\ ~s.vs_halted /\
+  run_inst_seq (emitted_insts a b) s = OK u /\
+  MAP (\i. (f.fn_name,i.inst_id) IN E)
+    (FILTER (\i. i.inst_opcode = GAS) (emitted_insts a b)) = [F] /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,E,C,f,PG) (s,G,tn) [F]
+        (OK (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts a b)),G',tn') /\
+      Q H res (ee with gas_obs := []) G' tn'
+        (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts a b))) ==>
+  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a b
+    source (es,s,G,tn) Q R
+Proof
+  rpt (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >> strip_tac >>
+  `b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b` by
+    metis_tac[create_hash_suffix_layout] >>
+  `s.vs_inst_idx + LENGTH (emitted_insts a b) = LENGTH b.cs_current_insts` by
+    fs[create_operand_at_def] >>
+  `create_operand_full_scope a b E C f s [F]
+     (OK (u with vs_inst_idx := LENGTH b.cs_current_insts))` by
+    (mp_tac (Q.INST [`m` |-> `m`,`x` |-> `x`,`op` |-> `op`]
+        create_hash_suffix_success_scope) >> simp[]) >>
+  rewrite_tac[scoped_operand_outcome_def] >> qexists_tac `[F]` >>
+  disj2_tac >> disj1_tac >>
+  qexistsl_tac [`res`,`ee`,`OK (u with vs_inst_idx := LENGTH b.cs_current_insts)`,
+    `G'`,`tn'`] >> fs[sha_implicit_gas_explicit, exit_result_def]
+QED
+
+Theorem create_sha_suffix_abort_outcome:
+  (compile_sha256_bytes x a = (op,b) \/
+   compile_sha256_bytesm x m a = (op,b)) /\
+  fn_has_code a b f /\ create_operand_at a s /\
+  run_inst_seq (emitted_insts a b) s = Abort err w /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,E,C,f,PG) (s,G,tn) [F] (Abort err u,G',tn') /\
+      R H res (ee with gas_obs := []) (G',tn') (Abort err u)) ==>
+  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a b
+    source (es,s,G,tn) Q R
+Proof
+  rpt (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `gas_origin_path T E C f s [F] (Abort err u)` by
+    metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_projections] >>
+  `create_operand_full_scope a b E C f s [F] (Abort err u)` by
+    metis_tac[create_hash_suffix_abort_scope] >>
+  rewrite_tac[scoped_operand_outcome_def] >> qexists_tac `[F]` >>
+  disj2_tac >> disj1_tac >>
+  qexistsl_tac [`res`,`ee`,`Abort err u`,`G'`,`tn'`] >>
+  fs[sha_implicit_gas_explicit, exit_result_def]
 QED
 
 Theorem create_hash_suffix_code:
