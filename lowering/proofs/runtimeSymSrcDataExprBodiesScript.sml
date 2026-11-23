@@ -14,18 +14,6 @@ Proof
   simp[]
 QED
 
-Theorem runtime_data_frame_compile_bool_chain_ops_eq[local]:
-  (!e. MEM e es ==> runtime_data_frame (lower_value f ce (BaseT BoolT) e)) ==>
-  !st. (SND (compile_bool_chain_ops f ce d r exit_lbl es st)).cs_data_sections =
-        st.cs_data_sections
-Proof
-  strip_tac >>
-  `runtime_data_frame (compile_bool_chain_ops f ce d r exit_lbl es)`
-    by (match_mp_tac runtime_data_frame_compile_bool_chain_ops >> simp[]) >>
-  metis_tac [runtime_data_frame_def]
-QED
-
-
 Theorem runtime_data_frame_type_builtin_dispatch_body:
   (!ty e. runtime_data_frame (lower_value cfn cenv ty e)) /\
   (!ty e. runtime_data_frame (cfn cenv ty e)) /\
@@ -209,7 +197,8 @@ Proof
         Cases_on `bytestring_literal_hash (HD (TL args))` >> simp[]) >>
   Cases_on `method_id_literal (HD args)` >> simp[] >>
   simp[runtimeSymSrcDataFrameTheory.runtime_data_frame_def,
-       (valOf (DB.local_thm "runtime_data_frame_compile_bool_chain_ops_eq")),
+       CONV_RULE (RAND_CONV (REWR_CONV runtime_data_frame_def))
+         (valOf (DB.local_thm "runtime_data_frame_compile_bool_chain_ops")),
        (valOf (DB.local_thm "runtime_data_frame_compile_bool_chain_ops")),
        exprLoweringTheory.compile_bool_chain_ops_def,
        exprLoweringTheory.bool_chain_operands_def,
