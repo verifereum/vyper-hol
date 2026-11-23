@@ -45,13 +45,16 @@ Theorem body_inv_build_internal_env_mods:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx
 Proof
   strip_tac >>
-  qpat_x_assum `cenv = _` SUBST_ALL_TAC >>
+  qpat_x_assum `(cenv:compile_env) = _` SUBST_ALL_TAC >>
   `caller.ce_module_vars =
     add_immutable_locations_unit
       (get_struct_fields (make_struct_fields_map_mods mods)) mods
       (add_module_var_locations_mods mods FEMPTY)` by
-    (qpat_assum `contract_inv mods exps ctx caller cx` mp_tac >>
-     simp[contract_inv_def, cenv_module_pins_mods_def]) >>
+    (qpat_assum `contract_inv mods exps ctx caller cx`
+       (map_every assume_tac o CONJUNCTS o REWRITE_RULE [contract_inv_def]) >>
+     qpat_assum `cenv_module_pins_mods mods caller`
+       (map_every assume_tac o CONJUNCTS o REWRITE_RULE [cenv_module_pins_mods_def]) >>
+     first_assum ACCEPT_TAC) >>
   qpat_x_assum `contract_inv mods exps ctx caller cx` mp_tac >>
   simp[contract_inv_def, cenv_module_pins_mods_def, module_body_inv_def,
        immutable_section_layout_mods_def, build_compile_env_unit_def,
