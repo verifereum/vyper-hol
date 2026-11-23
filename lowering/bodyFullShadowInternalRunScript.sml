@@ -314,6 +314,42 @@ Proof
   simp[compile_internal_fn_bodies_def, comp_return_def]
 QED
 
+Theorem unit_ordered_lookup_member:
+  key = nsid_to_string (s,fn_decl_name f) /\
+  MEM (s,f) pool /\
+  ips = MAP (set_internal_package_target tgt o
+    package_internal_fn_unit mods trans keys ctor cap)
+    (order_internals_unit names pool) /\
+  extract_context_with_internals entry ips final = SOME (raw,data) /\
+  lookup_function (internal_fn_label (build_func_ids_mods 0 mods key)
+    printed tys mode) raw.ctx_functions = SOME callee /\
+  internal_fn_label (build_func_ids_mods 0 mods key) printed tys mode <> entry /\
+  (!m g. MEM (m,g) pool /\
+     build_func_ids_mods 0 mods key =
+       build_func_ids_mods 0 mods (nsid_to_string (m,fn_decl_name g)) ==>
+     key = nsid_to_string (m,fn_decl_name g)) ==>
+  MEM (s,f) (order_internals_unit names pool)
+Proof
+  strip_tac >>
+  `MEM (internal_fn_label (build_func_ids_mods 0 mods key) printed tys mode)
+    (entry :: MAP FST (internal_fn_descriptors ips))` by
+    metis_tac[venomInstTheory.lookup_function_mem, extract_context_internal_names] >>
+  qpat_x_assum `ips = _` SUBST_ALL_TAC >>
+  qpat_x_assum `MEM _ (_ :: _)` mp_tac >>
+  pure_rewrite_tac[internal_fn_descriptors_map, listTheory.MAP_MAP_o] >>
+  simp[MEM_MAP, combinTheory.o_DEF] >>
+  disch_then (qx_choose_then `w` strip_assume_tac) >>
+  Cases_on `w` >>
+  qmatch_asmsub_rename_tac `MEM (owner,decl) (order_internals_unit _ _)` >>
+  qpat_x_assum `!m g. _` (qspecl_then [`owner`, `decl`] assume_tac) >>
+  PairCases_on `decl` >>
+  qpat_x_assum `internal_fn_label _ _ _ _ = _` mp_tac >>
+  simp[package_internal_fn_unit_def, set_internal_package_target_def] >>
+  strip_tac >> drule internal_fn_label_id_11 >> strip_tac >>
+  qpat_x_assum `key = _` SUBST_ALL_TAC >>
+  fs[order_internals_unit_mem, fn_decl_name_def] >> metis_tac[]
+QED
+
 (* The lowering packages only the reachable internal functions.  The lookup
    premise says this one's label resolves in the unit, so some packaged
    function has the same id (internal_fn_label_id_11), hence the same key
