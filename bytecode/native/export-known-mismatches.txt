@@ -6,9 +6,6 @@
 # A reason is an issue (#543), or several joined by +:
 #   decode-guards  the HOL ABI decoder's bounded-decode guards
 #                  (bytecode/pending-bounded-decode-guards.md)
-#   5127-P4        the unported direct ABI encoder (bytecode/pending-5127-port.md)
-#   5127-P8        raw_create snapshotting its initcode in a fixed Bytes[49152]
-#                  buffer where the pin sizes it by the argument
 #   map-key-copy   the pin copies a bytestring map key before hashing it; the
 #                  HOL lowering hashes it in place (shorter code)
 #   const-list-in  `x in CONST_LIST` lowered over the substituted list literal
@@ -17,10 +14,6 @@
 # and/or chains of 3+ operands, external calls, logs, abi_decode) and the
 # rest by reading the bytecode diff. A contract can have causes beyond the
 # one listed: when its fix lands, the check reports what remains.
-71ec00225e7afe41 none #1404  # functional/codegen/types/test_array_indexing::test_boundary_access_to_arr
-f9a843aa1f17e882 none #1404  # functional/codegen/types/test_array_indexing::test_boundary_access_to_arr
-d2e914248b13e709 none #1404  # functional/codegen/types/test_array_indexing::test_negative_ix_access_to_large_arr
-dffdbff36e315665 none #1404  # functional/codegen/types/test_array_indexing::test_oob_access_to_large_arr
 14a0a48f6763bd15 bytes #1405  # functional/builtins/codegen/test_convert::test_convert_zero_bytes_to_bool
 0fd0d7e7f04a21a3 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_extcall_oob
 e001fa93c7860757 bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops0-False-False-False-False]
@@ -176,7 +169,7 @@ bebf96127d573fa5 bytes decode-guards  # functional/builtins/codegen/test_as_wei_
 362566d5e1609944 bytes decode-guards  # functional/builtins/codegen/test_ceil::test_ceil_ext_call
 0372d53e4597c2e3 bytes decode-guards  # functional/builtins/codegen/test_create_functions::test_create_minimal_proxy_to_call
 e064ae12b2669043 bytes decode-guards  # functional/builtins/codegen/test_create_functions::test_minimal_proxy_exception
-a06ee089505e4d5e bytes 5127-P8  # functional/builtins/codegen/test_create_functions::test_raw_create_double_eval
+a06ee089505e4d5e bytes decode-guards  # functional/builtins/codegen/test_create_functions::test_raw_create_double_eval
 87b32d4bf2c46e39 bytes decode-guards  # functional/builtins/codegen/test_ec::test_ecadd_ext_call
 0bec9a21125a4c15 bytes decode-guards  # functional/builtins/codegen/test_ec::test_ecmul_ext_call
 db2de8141f588053 bytes decode-guards  # functional/builtins/codegen/test_empty::test_empty_as_func_arg[\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01...
