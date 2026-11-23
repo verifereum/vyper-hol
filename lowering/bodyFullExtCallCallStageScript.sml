@@ -67,7 +67,7 @@ Proof
 QED
 
 (* Split the call suffix without unfolding the individual code emitters. *)
-Theorem extcall_call_layout[local]:
+Theorem extcall_call_layout:
   !ret_type skip addr_op is_static gas_op call_offset call_len buf_op ret_len
    value_op sp u sr.
   comp_ignore_bind
