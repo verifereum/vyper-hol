@@ -2186,7 +2186,82 @@ val () = List.app (fn in_deploy =>
         self_member_hashmap ``Private``, self_member_hashmap ``Public F``])
        [``Internal``, ``External``]))) [false, true]
 
+(* An imported body must keep its source id on calls, even if main
+   declares a function of the same name. *)
+fun import_call_modules source =
+  ``[(NONE,
+       [FunctionDecl Internal Pure F F "helper" [] [] NoneT [Pass];
+        FunctionDecl External Pure F F "entry" [] [] NoneT
+          [Expr (Call NoneT (IntCall (SOME 1,"run")) [] NONE)]]);
+      (SOME 1,
+       [FunctionDecl Internal Pure F F "helper" [] [] NoneT [Pass];
+        FunctionDecl Internal Pure F F "run" [] [] NoneT
+          [Expr (Call NoneT (IntCall (^source,"helper")) [] NONE)]])]
+    : (num option # toplevel list) list``
+
+val () = check_accepts "qualified internal call in import" false
+  empty_layouts (import_call_modules ``SOME 1``)
+val () = check_rejects empty_layouts (import_call_modules ``NONE : num option``)
+
+(* Linked units must have a main entry, even when all storage and code
+   belong to imports. *)
+val () = let
+  val layouts =
+    ``[(^zero_address,
+        ([((SOME 1,"s"),1)] : storage_layout, [] : storage_layout))]``
+  val imports =
+    ``[(SOME 1,
+         [VariableDecl Private Storage "s" ^u256 (SOME 1);
+          FunctionDecl External Nonpayable F F "entry" [] [] ^u256
+            [Return (SOME (Literal ^u256 (IntL 101)))]]);
+       (SOME 2,[VariableDecl Private Storage "s" ^u256 NONE])]
+      : (num option # toplevel list) list``
+  val with_main = ``(NONE, []) :: ^imports``
+in
+  check_rejects_in ``F`` layouts imports;
+  check_rejects_in ``T`` layouts imports;
+  check_accepts "imports with empty main (runtime)" false layouts with_main;
+  check_accepts "imports with empty main (deploy)" true layouts with_main
+end
+
 val () = cv_auto_trans contract_namespaces_ok_def;
+
+(* In the local ABI environment the qualified struct becomes an empty tuple,
+   causing a collision at 0x3a3b86bc. The linked environment instead resolves
+   the struct to a tuple containing uint256. *)
+local
+  fun imported_selectors name =
+    ``[StructDecl "Arg" [("value", ^u256)];
+       FunctionDecl External Pure F F "struct_input_45647"
+         [("a", StructT (SOME 1, "Arg"))] [] NoneT [];
+       ^(selector_main name)]``
+  val colliding = imported_selectors "uint_input_59157"
+  fun linked tls = ``[(NONE, []); (SOME 1, ^tls)]``
+in
+Theorem imported_selectors_collide_only_in_local_type_env:
+  ~ALL_DISTINCT (abi_external_method_ids (type_env ^colliding) ^colliding) /\
+  ALL_DISTINCT
+    (abi_external_method_ids (type_env_all_modules ^(linked colliding)) ^colliding)
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val () = check_rejects empty_layouts (linked colliding)
+val () = check_accepts "distinct imported selectors" false empty_layouts
+  (linked (imported_selectors "uint_input_59158"))
+end
+
+(* The struct keys are distinct pairs. A dot in the main name would make
+   their lowered names coincide. The control changes only that name. *)
+local
+  fun dotted_name_modules name =
+    ``[(NONE, [StructDecl ^(stringSyntax.fromMLstring name) [("value", ^u256)]]);
+       (SOME 1, [StructDecl "foo" [("value", ^u256)]])]``
+in
+val () = check_rejects empty_layouts (dotted_name_modules "1.foo")
+val () = check_accepts "dot-free main and imported declarations" false
+  empty_layouts (dotted_name_modules "foo")
+end
 
 Theorem cross_visibility_self_member_clash_cv:
   ~contract_namespaces_ok F
