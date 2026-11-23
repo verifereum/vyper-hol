@@ -16,12 +16,14 @@ Theorem runtime_load_joint_path[local]:
   i = mk_inst sa.cs_next_id DLOAD [arg] [out] /\
   u = update_var out (word_of_bytes T (0w:bytes32)
     (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))) s ==>
+  emitted_insts sa sb = [i] /\
+  run_inst_seq (emitted_insts sa sb) s = OK u /\
   !D lo explicit. allocas_from lo s ==>
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
        step_prov PG G i u,step_taint i s u tn)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >> strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule emitted_insts_emit_op >> strip_tac >> gnvs[] >>
   `sb.cs_current_bb = sa.cs_current_bb` by (drule emit_op_facts >> simp[]) >>
   drule_all fn_has_code_same_block >> strip_tac >>
@@ -32,6 +34,8 @@ Proof
   qmatch_goalsub_abbrev_tac `step_prov PG G i u` >>
   `step_inst_base i s = OK u` by
     simp[Abbr `i`, Abbr `u`, exprSimUnwrapTheory.step_DLOAD] >>
+  conj_tac >- fs[run_inst_seq_def, Abbr `i`] >>
+  rpt gen_tac >> strip_tac >>
   `ptr_inst_ok D lo 0 ctx func G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_code_load >> simp[]) >>
   `inst_mem_below_frontier i s /\ inst_dload_in_section i s` by
@@ -46,6 +50,81 @@ Proof
     simp[Abbr `u`, update_var_def] >>
   drule (cj 1 gas_origin_ptr_path_rules) >> strip_tac >>
   metis_tac[cj 2 gas_origin_ptr_path_rules, APPEND]
+QED
+
+(* The raw DLOAD and the joint path share their endpoint up to the PC. *)
+Theorem compile_imm_load_word_runtime_joint_run:
+  compile_imm_load_word F imm arg sa = (op,sb) /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  eval_operand arg s = SOME a /\ op_taint tn arg = {} /\
+  w2n a <= LENGTH s.vs_data_section /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?out Gf tnf sf.
+    op = Var out /\
+    emitted_insts sa sb = [mk_inst sa.cs_next_id DLOAD [arg] [out]] /\
+    (?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+      sf = (raw with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    (!D lo explicit. allocas_from lo s ==>
+      gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var out sf = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))) /\
+    op_taint tnf op = {} /\ op_prov Gf op = NONE /\
+    sf.vs_immutables = s.vs_immutables /\
+    sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
+    sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    sf.vs_requests = s.vs_requests /\ sf.vs_data_section = s.vs_data_section /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!q. not_fresh_at sa q ==>
+      lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
+      op_taint tnf (Var q) = op_taint tn (Var q)) /\
+    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
+Proof
+  simp[compile_imm_load_word_runtime] >> strip_tac >>
+  drule emit_op_facts >> strip_tac >> gvs[] >>
+  qabbrev_tac `i = mk_inst sa.cs_next_id DLOAD [arg] [out]` >>
+  qabbrev_tac `u = update_var out (word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))) s` >>
+  qexistsl_tac [`step_prov PG G i u`, `step_taint i s u tn`,
+    `u with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  `emitted_insts sa sb = [i] /\
+   run_inst_seq (emitted_insts sa sb) s = OK u /\
+   (!D lo explicit. allocas_from lo s ==>
+     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+       (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+        step_prov PG G i u,step_taint i s u tn))` by
+    metis_tac[runtime_load_joint_path] >>
+  conj_tac >- simp[Abbr `i`] >>
+  conj_tac >- (qexists_tac `u` >> simp[ADD1]) >>
+  conj_tac >- simp[] >>
+  `!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (rpt strip_tac >>
+     drule_all (cj 1 compile_imm_load_word_runtime_frame |>
+       REWRITE_RULE [compile_imm_load_word_runtime]) >>
+     disch_then (qspec_then `word_of_bytes T (0w:bytes32)
+       (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))` mp_tac) >>
+     simp[Abbr `u`, ADD1]) >>
+  `op_prov (step_prov PG G i u) (Var out) = NONE` by
+    (simp[Abbr `i`] >> irule step_prov_out_none >>
+     simp[mk_inst_def] >> irule out_prov_other_none >> simp[mk_inst_def]) >>
+  `!p. p <> out ==> FLOOKUP (step_prov PG G i u) p = FLOOKUP G p /\
+    op_taint (step_taint i s u tn) (Var p) = op_taint tn (Var p)` by
+    simp[Abbr `i`, scalar_step_old_prov, scalar_step_old_taint] >>
+  `!p. not_fresh_at sa p ==> p <> out` by metis_tac[] >>
+  simp[Abbr `i`, runtime_code_load_clean] >>
+  simp[step_taint_def, mk_inst_def, set_var_taint_def,
+       mem_taint_def, store_taint_def, imm_taint_def, step_writes_def,
+       source_memory_write_ranges_def, written_taint_def, range_bytes_def,
+       adopt_reset_def, Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  simp[new_site_bytes_def, FLOOKUP_DEF, pred_setTheory.EXTENSION, SF CONJ_ss]
 QED
 
 Theorem compile_imm_load_word_runtime_joint_frame:
@@ -78,37 +157,10 @@ Theorem compile_imm_load_word_runtime_joint_frame:
     (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
       local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
-  simp[compile_imm_load_word_runtime] >> strip_tac >>
-  drule emit_op_facts >> strip_tac >> gvs[] >>
-  qabbrev_tac `i = mk_inst sa.cs_next_id DLOAD [arg] [out]` >>
-  qabbrev_tac `u = update_var out (word_of_bytes T (0w:bytes32)
-    (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))) s` >>
-  qexistsl_tac [`step_prov PG G i u`, `step_taint i s u tn`,
-    `u with vs_inst_idx := SUC s.vs_inst_idx`] >>
-  conj_tac
-  >- metis_tac[runtime_load_joint_path] >>
-  `!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==>
-      stmt_state_rel H ctx func cenv cx es (u with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (rpt strip_tac >>
-     drule_all (cj 1 compile_imm_load_word_runtime_frame |>
-       REWRITE_RULE [compile_imm_load_word_runtime]) >>
-     disch_then (qspec_then `word_of_bytes T (0w:bytes32)
-       (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))` mp_tac) >>
-     simp[Abbr `u`, ADD1]) >>
-  `op_prov (step_prov PG G i u) (Var out) = NONE` by
-    (simp[Abbr `i`] >> irule step_prov_out_none >>
-     simp[mk_inst_def] >> irule out_prov_other_none >> simp[mk_inst_def]) >>
-  `!p. p <> out ==> FLOOKUP (step_prov PG G i u) p = FLOOKUP G p /\
-    op_taint (step_taint i s u tn) (Var p) = op_taint tn (Var p)` by
-    simp[Abbr `i`, scalar_step_old_prov, scalar_step_old_taint] >>
-  `!p. not_fresh_at sa p ==> p <> out` by metis_tac[] >>
-  simp[Abbr `i`, runtime_code_load_clean] >>
-  simp[step_taint_def, mk_inst_def, set_var_taint_def,
-       mem_taint_def, store_taint_def, imm_taint_def, step_writes_def,
-       source_memory_write_ranges_def, written_taint_def, range_bytes_def,
-       adopt_reset_def, Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  simp[new_site_bytes_def, FLOOKUP_DEF, pred_setTheory.EXTENSION, SF CONJ_ss]
+  strip_tac >> drule_all compile_imm_load_word_runtime_joint_run >>
+  disch_then (qspecl_then [`PG`, `G`]
+    (qx_choosel_then [`out`, `Gf`, `tnf`, `sf`] strip_assume_tac)) >>
+  qexistsl_tac [`out`, `Gf`, `tnf`, `sf`] >> simp[]
 QED
 
 (* ADD keeps the left operand's provenance when the right is scalar. *)
