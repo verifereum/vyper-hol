@@ -10635,8 +10635,8 @@ Resume create_blueprint_expr_full_ok[ctor_raw]:
      qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (fn pre =>
        qpat_assum `body_inv _ _ _ _` (fn inv =>
          mp_tac (MATCH_MP body_inv_expr_pre_calls (CONJ inv pre)))) >>
-     simp[NoAsms,int_calls_expr_def,EVERY_APPEND,EVERY_MEM] >>
-     metis_tac[]) >>
+     simp[NoAsms,int_calls_expr_def,EVERY_APPEND] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `compile_create_blueprint_args _ _ T _ (MAP gas_shadow_expr [e]) _ = _`
     (assume_tac o CONV_RULE (LAND_CONV (RATOR_CONV (RAND_CONV (SIMP_CONV bool_ss [MAP]))))) >>
   ho_match_mp_tac (GEN_ALL blueprint_raw_args_cut) >>
