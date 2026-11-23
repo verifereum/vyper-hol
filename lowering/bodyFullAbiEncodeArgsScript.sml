@@ -703,7 +703,11 @@ QED
 Resume abi_encode_vv_full_from_packaging[wrapped_row_execute]:
   `expr_body_pre ce cx env e es` by
     metis_tac[EL_MEM, Abbr `e`, abi_encode_body_arg_pre] >>
-  `!l. vv_operand sv <> Label l` by metis_tac[abi_encode_snapshot_not_label] >>
+  `!l. vv_operand sv <> Label l` by
+    (match_mp_tac (Q.INST [`si` |-> `si`, `sm` |-> `sm`,
+       `ss` |-> `ss`, `vv` |-> `row_vv`, `copy` |-> `copy`]
+       abi_encode_snapshot_not_label) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `~is_word_type (lowered_value_type ce e) ==> ~is_word_type (expr_type e)` by
     metis_tac[expr_body_pre_lowered_fits, arg_type_fits_word_type] >>
   `?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
@@ -790,7 +794,9 @@ Resume abi_encode_vv_full_from_packaging[physical_row]:
       `evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\ value_has_type tv v` by
         (simp_tac bool_ss [Abbr `e`, Abbr `v`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
       `type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv` by
-        (irule expr_sim_inv_memory_size >> goal_assum (drule_at Any) >> metis_tac[]) >>
+        (match_mp_tac (Q.SPECL [`ce`, `lowered_value_type ce e`, `cx`, `env`, `es`, `tv`]
+           expr_sim_inv_memory_size) >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
       `is_word_type (lowered_value_type ce e)` by metis_tac[] >>
       qexists_tac `tv` >> asm_rewrite_tac[] >>
       `type_memory_bytes ce (lowered_value_type ce e) = 32` by
@@ -1002,7 +1008,10 @@ QED
 
 Resume abi_encode_vv_full_from_packaging[standalone_separation]:
   rpt strip_tac >>
-  `stmt_state_rel H0 ctx func ce cx mid' pre` by metis_tac[] >>
+  `stmt_state_rel H0 ctx func ce cx mid' pre` by
+    qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==>
+      stmt_state_rel H ctx func ce cx mid' pre /\ _`
+      (qspec_then `H0` (drule_then (ACCEPT_TAC o cj 1))) >>
   `regions_disjoint p N b n` suffices_by
     simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   irule local_ptrs_rel_alloca_disjoint >>
@@ -1369,8 +1378,16 @@ Resume abi_encode_vv_full_from_packaging[finish_result_separation]:
   rpt strip_tac >>
   `local_region ce mid'.scopes q name b sz` by
     (irule local_region_frame_fwd >> qexistsl_tac [`actual`,`st`,`mid'.scopes`] >>
-     simp[] >> fs[ci_mono_def] >> metis_tac[not_fresh_at_mono, LESS_EQ_TRANS]) >>
-  metis_tac[loweringStateRelDefsTheory.regions_disjoint_def]
+     asm_simp_tac bool_ss [] >> qx_genl_tac [`x`,`old_word`] >> strip_tac >>
+     `not_fresh_at body_end x` by
+       (qpat_assum `!x. not_fresh_at st x ==> not_fresh_at body_end x`
+          (irule o SPEC_ALL) >> first_assum ACCEPT_TAC) >>
+     qpat_assum `typed_copy_state_frame body_end p N q actual`
+       (qspec_then `x` (drule_then (once_rewrite_tac o single o SYM)) o
+        cj 2 o REWRITE_RULE [typed_copy_state_frame_def]) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `!name b sz. local_region ce mid'.scopes q name b sz ==> _`
+    (drule_then (ACCEPT_TAC o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def]))
 QED
 
 Resume abi_encode_vv_full_from_packaging[finish_caller_frame]:
@@ -1380,7 +1397,7 @@ Resume abi_encode_vv_full_from_packaging[finish_caller_frame]:
      simp[cj 6 evaluate_storage_trace_frame]) >>
   `stmt_state_rel H0 ctx func ce cx es s0` by metis_tac[] >>
   `sa.cs_next_var <= st.cs_next_var /\ sa.cs_next_id <= st.cs_next_id` by
-    fs[ci_mono_def] >>
+    qpat_assum `ci_mono sa st` (ACCEPT_TAC o CONJUNCT2 o REWRITE_RULE [ci_mono_def]) >>
   `wb_frame ce es mid' sa s0 q` by
     (qpat_assum `stmt_state_rel H0 ctx func ce cx es s0`
        (mp_then Any assume_tac exprSimWordArgsTheory.wb_frame_trans) >>
