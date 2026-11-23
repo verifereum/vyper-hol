@@ -173,7 +173,7 @@ Proof
     (simp_tac bool_ss [Abbr `covers`, declared_constant_def] >> rpt strip_tac >>
      drule_all checked_initial_immutables_constant_absent >> strip_tac >> fs[]) >>
   `closed (consts_env_mods mods)` by
-    (simp[consts_env_mods_def] >>
+    (simp[consts_env_mods_def, consts_env_modules_order_eq] >>
      qpat_assum `!rest imms final E. _`
        (qspecl_then [`constants_order mods`, `imms`, `final`, `[]`] mp_tac) >>
      simp[EVERY_MEM, MEM_constants_order] >>
