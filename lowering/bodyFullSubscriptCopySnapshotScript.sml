@@ -13,7 +13,7 @@ Ancestors
 
 Theorem subscript_array_copy_snapshot_caller_frame:
   expr_body_pre ce cx env (Subscript ann obj idx) es /\
-  expr_type obj = ArrayT et bd /\
+  expr_type obj = ArrayT et bd /\ ~array_slot_base ce obj /\
   eval_expr cx obj (es with gas_obs := gs) = (INL raw,mid) /\
   read_result cx raw mid = (INL saved,mid) /\
   compile_expr ce ty obj sa = (bvv,sm) /\
@@ -442,7 +442,7 @@ Finalise subscript_array_copy_snapshot_caller_frame
 (* The original interface forgets only the two caller-frame facts. *)
 Theorem subscript_array_copy_snapshot_joint:
   expr_body_pre ce cx env (Subscript ann obj idx) es /\
-  expr_type obj = ArrayT et bd /\
+  expr_type obj = ArrayT et bd /\ ~array_slot_base ce obj /\
   eval_expr cx obj (es with gas_obs := gs) = (INL raw,mid) /\
   read_result cx raw mid = (INL saved,mid) /\
   compile_expr ce ty obj sa = (bvv,sm) /\

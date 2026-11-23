@@ -3,7 +3,8 @@ Theory bodyFullPredsMods
 Ancestors
   bodyFullPreds bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit bodySim
   exprSimHypsDefs exprSimMapDefs supportedStmts supportedProgram
-  supportedExprTraverse allocLimits placeTypingProps compileEnv exprLowering
+  supportedExprTraverse allocLimits allocLimitsProps[qualified] placeTypingProps
+  compileEnv exprLowering
   gasShadow gasContext bodySimFull vyperInterpreter vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperState vyperContext vyperAST
   vyperTypeInvariants list alist option pair finite_map
@@ -381,11 +382,14 @@ Proof
     gvs[expr_body_pre_mods_def, expr_sim_inv_mods_def] >>
   gvs[expr_body_pre_mods_def, Once well_typed_expr_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
-      expr_has_evm_run_thm, EVERY_APPEND]
-  >- (drule_all place_type_well_typed_on_defined >> simp[]) >>
+      expr_has_evm_run_thm, EVERY_APPEND] >>
+  (* the value-typed base contradicts the map place type, slot base or not *)
+  TRY (drule_all place_type_well_typed_on_defined >> simp[] >> NO_TAC) >>
   drule_all place_type_checked_place_on_defined >> strip_tac >>
   rename1 `type_place_expr env obj = SOME bty` >>
   Cases_on `bty` >> gvs[value_type_place_def] >>
+  drule_then assume_tac allocLimitsPropsTheory.type_place_hashmap_not_array_slot_base >>
+  gvs[] >>
   simp[expr_map_pre_mods_def] >>
   gvs[supported_expr_exists_def] >>
   metis_tac[call_evaluation_safe_append_left]
