@@ -2,7 +2,7 @@
 Theory entryStoreObserverStep
 Ancestors
   exprSimAbiGasBridge fragGasOriginPtr fragGasOrigin fragGasPathPtr
-  createSizePrefixReplay
+  createSizePrefixReplay createSizeCutCode
   abiEncoderProps contextCodegenRel memSafeRun ptrSafeRun ptrDiscipline
   venomInst venomInstProps venomExecSemantics venomState gasCount gasEvents
   list pair
@@ -46,7 +46,7 @@ QED
 
 Theorem store_observer_jump[local]:
   MEM i.inst_opcode [JMP; JNZ] /\ step_inst fuel ctx i u = OK t ==>
-  t = jump_to t.vs_current_bb u /\ MEM (Label t.vs_current_bb) i.inst_operands
+  t = jump_to t.vs_current_bb u
 Proof
   simp[] >> strip_tac >>
   gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs(), jump_to_def]
@@ -55,11 +55,10 @@ QED
 Theorem store_observer_jump_state[local]:
   MEM i.inst_opcode [JMP; JNZ] /\ step_inst fuel ctx i u = OK t /\
   ~u.vs_halted ==>
-  t.vs_inst_idx = 0 /\ ~t.vs_halted /\ MEM (Label t.vs_current_bb) i.inst_operands
+  t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
-  strip_tac >> drule_all store_observer_jump >> strip_tac >>
-  qpat_x_assum `t = jump_to _ _` (fn th => once_rewrite_tac[th]) >>
-  simp[jump_to_def] >> fs[jump_to_def]
+  strip_tac >> drule_all store_observer_jump >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[jump_to_def]
 QED
 
 Theorem store_observer_phi_zero[local]:
@@ -110,18 +109,22 @@ Proof
   pure_rewrite_tac[gas_origin_edge_def] >> simp[] >> metis_tac[]
 QED
 
-(* The geometric premises only concern the emitted instructions and their
-   generated branch labels, not the observer's memory or pointer semantics. *)
-Theorem store_observer_joint_step:
-  cs_extends a b /\ fn_has_code a b f /\ frag_gas_free a b /\
+(* Only the current off-cut fetch and a selected jump destination need
+   to agree between the observer and the real function. *)
+Theorem store_observer_joint_step_fetch:
   (u.vs_current_bb,u.vs_inst_idx) IN frag_observer_region a b /\
   (u.vs_current_bb,u.vs_inst_idx) <> frag_observer_cut b /\
-  (!i. MEM i (frag_code a b) ==>
-    i.inst_id IN frag_ids a b /\
+  (!lbl idx bb i.
+    (lbl,idx) IN frag_observer_region a b /\ (lbl,idx) <> frag_observer_cut b /\
+    lookup_block lbl (frag_observer a b f id).fn_blocks = SOME bb /\
+    get_instruction bb idx = SOME i ==>
+    MEM i (frag_code a b) /\ i.inst_id IN frag_ids a b /\
     MEM i.inst_opcode [ADD; MLOAD; AND; MCOPY; NOT; MSTORE; INVALID; ASSIGN;
-                       JMP; LT; ISZERO; JNZ; MUL; GT; ASSERT]) /\
+                       JMP; LT; ISZERO; JNZ; MUL; GT; ASSERT] /\
+    ?real. lookup_block lbl f.fn_blocks = SOME real /\
+           get_instruction real idx = SOME i) /\
   (!i lbl. MEM i (frag_code a b) /\ MEM i.inst_opcode [JMP; JNZ] /\
-    MEM (Label lbl) i.inst_operands ==>
+    MEM lbl (create_cut_targets i.inst_opcode i.inst_operands) ==>
     (lbl,0) IN frag_observer_region a b /\
     ?ob bb. lookup_block lbl (frag_observer a b f id).fn_blocks = SOME ob /\
             lookup_block lbl f.fn_blocks = SOME bb /\
@@ -138,10 +141,11 @@ Proof
   disch_then (CONJUNCTS_THEN2 assume_tac
     (qx_choose_then `fuel` (qx_choose_then `ob` (qx_choose_then `inst`
       (qx_choose_then `middle` (REPEAT_TCL CONJUNCTS_THEN assume_tac)))))) >>
-  drule_all frag_observer_code_provenance >> strip_tac >>
-  drule_all frag_observer_instruction_agrees >> strip_tac >>
-  qpat_assum `!i. MEM i (frag_code _ _) ==> _`
-    (drule_then (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  qpat_assum `!lbl idx bb i. _`
+    (qspecl_then [`u.vs_current_bb`, `u.vs_inst_idx`, `ob`, `inst`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `?real. lookup_block _ _ = SOME real /\ _` strip_assume_tac >>
   `inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
    inst.inst_opcode <> REVERT /\ inst.inst_opcode <> RETURNDATACOPY` by fs[] >>
   `mem_safe_step fuel ctx inst u` by metis_tac[revert_forward_at_opcode] >>
@@ -170,9 +174,11 @@ Proof
            tn1 = entry_taint_vars (frag_observer a b f id) t tn) \/
         (v = t /\ G1 = G /\ tn1 = tn))` suffices_by
        (disch_then (qx_choose_then `land` (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
-        `land.vs_inst_idx = 0 /\ ~land.vs_halted /\
-         MEM (Label land.vs_current_bb) inst.inst_operands` by
-          (irule store_observer_jump_state >> metis_tac[]) >>
+        `land.vs_inst_idx = 0 /\ ~land.vs_halted` by
+          metis_tac[store_observer_jump_state] >>
+        `step_inst_base inst u = OK land` by metis_tac[step_inst_non_invoke] >>
+        `MEM land.vs_current_bb (create_cut_targets inst.inst_opcode inst.inst_operands)` by
+          metis_tac[create_cut_targets_sound] >>
         qpat_assum `!i lbl. _` (qspecl_then [`inst`,`land.vs_current_bb`] mp_tac) >>
         (impl_tac >- simp[]) >> strip_tac >>
         `v = land /\ G1 = G /\ tn1 = tn` by
@@ -187,4 +193,38 @@ Proof
         conj_tac >- (irule store_observer_install >> metis_tac[]) >> simp[]) >>
      metis_tac[]) >>
   simp[] >> irule store_observer_prefix >> metis_tac[]
+QED
+
+Theorem store_observer_joint_step:
+  cs_extends a b /\ fn_has_code a b f /\ frag_gas_free a b /\
+  (u.vs_current_bb,u.vs_inst_idx) IN frag_observer_region a b /\
+  (u.vs_current_bb,u.vs_inst_idx) <> frag_observer_cut b /\
+  (!i. MEM i (frag_code a b) ==>
+    i.inst_id IN frag_ids a b /\
+    MEM i.inst_opcode [ADD; MLOAD; AND; MCOPY; NOT; MSTORE; INVALID; ASSIGN;
+                       JMP; LT; ISZERO; JNZ; MUL; GT; ASSERT]) /\
+  (!i lbl. MEM i (frag_code a b) /\ MEM i.inst_opcode [JMP; JNZ] /\
+    MEM (Label lbl) i.inst_operands ==>
+    (lbl,0) IN frag_observer_region a b /\
+    ?ob bb. lookup_block lbl (frag_observer a b f id).fn_blocks = SOME ob /\
+            lookup_block lbl f.fn_blocks = SOME bb /\
+            phi_prefix_length ob.bb_instructions = 0 /\
+            phi_prefix_length bb.bb_instructions = 0) /\
+  gas_origin_ptr_edge (D,lo,explicit,ctx,frag_observer a b f id,PG)
+    (u,G,tn) [] (OK v,G1,tn1) ==>
+  gas_origin_ptr_edge (D,lo,explicit,ctx,f,PG) (u,G,tn) [] (OK v,G1,tn1) /\
+  create_prefix_step a b explicit ctx f u [] v /\
+  (v.vs_current_bb,v.vs_inst_idx) IN frag_observer_region a b
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  irule store_observer_joint_step_fetch >>
+  asm_rewrite_tac[] >> qexists_tac `id` >> asm_rewrite_tac[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `MEM (Label lbl) i.inst_operands` by
+        (qpat_x_assum `MEM lbl (create_cut_targets _ _)` mp_tac >>
+         simp[create_cut_targets_def] >> rpt (BasicProvers.TOP_CASE_TAC >> gvs[])) >>
+      metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all frag_observer_code_provenance >> strip_tac >>
+  drule_all frag_observer_instruction_agrees >> metis_tac[]
 QED
