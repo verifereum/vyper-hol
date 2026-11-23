@@ -7,7 +7,7 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint gasSummaryCompose fragGasPath
   vyperInterpreter vyperState list pair arithmetic compileEnv exprLowering
   createSizeCreateLayoutCode createSizeOperandCode createSizeConcreteSnapshots
-  createSizeCutCode fragExec
+  createSizeCutCode fragExec createCtorSegmentArrival relation abiEncoderProps
 
 (* The snapshot row may use a second compiler band after the VV expression.
    Its completed-row callback consumes exactly the observations of the two
@@ -166,4 +166,24 @@ Proof
   disj2_tac >> qexists_tac `vv` >> simp[] >>
   qpat_assum `!a' vals' m' es' s'' next'. _` irule >>
   first_assum (irule_at Any) >> simp[] >> conj_tac >> first_assum ACCEPT_TAC
+QED
+
+(* The observed suffix after a row supplies the exit fetch required by the
+   snapshot replay theorem. It may be a pending caller visit, so no OK
+   execution of that instruction, or of a later dispatch, is required. *)
+Theorem create_ctor_row_exit_fetch[local]:
+  create_interior_visit a b E ctx fn (p,d,k) t (before,hit,after) ==>
+  ?i. create_operand_fetch a b fn t i /\
+      ctor_segment_fetch fn t = SOME i /\ a.cs_next_id <= i.inst_id
+Proof
+  simp_tac bool_ss [create_interior_visit_def,LET_THM] >>
+  disch_then (CONJUNCTS_THEN2 (K ALL_TAC) (CONJUNCTS_THEN2 (K ALL_TAC)
+    (REPEAT_TCL CHOOSE_THEN (CONJUNCTS_THEN2 mp_tac
+      (CONJUNCTS_THEN2 assume_tac (K ALL_TAC)))))) >>
+  simp[Once RTC_CASES1] >> strip_tac
+  >- (gvs[] >> fs[create_operand_fetch_def,ctor_segment_fetch_def,frag_ids_def]) >>
+  qmatch_asmsub_rename_tac `create_operand_native_step _ _ _ _ _ _ _ endpoint` >>
+  PairCases_on `endpoint` >>
+  fs[create_operand_native_step_def,create_operand_fetch_def,
+     ctor_segment_fetch_def,frag_ids_def] >> metis_tac[]
 QED
