@@ -189,29 +189,9 @@ malformed addresses, and malformed byte/topic hex. These checks do not add gas
 or temporary-memory coverage; old traces without checkpoints retain only their
 original checks.
 
-This is the checkpoint **consumer**, not a new checkpoint-producing fuzz driver.
-`tools/bytecode_fuzz.py` remains bytecode parity testing, and the upstream export
-plugin does not automatically gain full-state snapshots. The separate
-`fuzzing` project supplies them: its py-evm adapter enumerates complete state,
-and `oracle.record_checkpoint` appends a checkpoint after deployment and each
-top-level call (including reverts). Point that runner at this checkout, with
-its compiler checkout matching this repository's `VYPER_PIN`:
-
-```bash
-HOL_ROOT="$PWD"
-FUZZING_ROOT=/path/to/fuzzing
-cd "$FUZZING_ROOT"
-.venv/bin/python runner.py --hol-root "$HOL_ROOT" \
-  --pytest "$HOL_ROOT/tests/fixtures/run_test_json/checkpoint_scenario.py"
-```
-
-This supplied scenario exercises the producing hooks and native consumer together
-for source state changes, EOA/self messages, insufficient funds, and raw fallback
-execution. It requires the separate runner's optional upstream-test dependencies.
-
 The `checkpoint_source_state.json` and `checkpoint_message_calls.json` smoke
-fixtures were captured with that producer and py-evm `0.12.1b1` on Prague.
-The former uses `oracle.observe` with pinned Vyper `577d2534`; its negative
+fixtures were originally captured with the external `fuzzing` producer and
+py-evm `0.12.1b1` on Prague. The former uses pinned Vyper `577d2534`; its negative
 control changes only the final expected persistent-storage value. The latter
 uses the same snapshot/export adapter for real EVM message calls. Replay treats
 calls as messages inside the fixture transaction: no sender nonce increment,
@@ -238,6 +218,89 @@ translation has no preconditions, so the native executable runs the same
 translation for every input the JSON decoder accepts. CI builds the frontend,
 emitter, and kernel replay smoke theories; native MLton compilation is an
 explicit local step.
+
+### Full-state differential fuzzing
+
+`tools/bytecode_state_fuzz.py` produces checkpoints and replays them through
+`tests/.emit/run-test`, without the external `fuzzing` project. It reuses
+`bytecode_fuzz.Program` for seeded source generation, compiles with **unmodified**
+Vyper at `VYPER_PIN`, and derives boundary-heavy call arguments from the ABI.
+`tools/bytecode_fuzz.py` remains the separate bytecode-parity driver.
+
+Use a Python 3.11.17 virtual environment with pip supporting `--group`, and a
+clean compiler checkout matching `VYPER_PIN`. Install the upstream test/backend
+dependencies using the same constraints as the export setup:
+
+```bash
+HOL_ROOT="$PWD"
+VYPER_SRC=/absolute/path/to/clean/vyper
+(
+  cd "$VYPER_SRC"
+  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0b1 \
+    PIP_CONSTRAINT="$HOL_ROOT/tests/semantics-test-constraints.txt $HOL_ROOT/tests/semantics-build-constraints.txt" \
+    python -m pip install . --group test
+)
+python tools/emit_run_test.py
+python tools/bytecode_state_fuzz.py --vyper "$VYPER_SRC" \
+  --smoke --out /tmp/vyper-state-smoke
+python tools/bytecode_state_fuzz.py --vyper "$VYPER_SRC" \
+  --count 100 --seed 1629 --calls-per-case 6 --out /tmp/vyper-state-campaign
+```
+
+The default profile is Venom, `--optimize none`, Prague, decimals enabled,
+metadata enabled, and debugging disabled. `--codegen legacy` and
+`--optimize gas|codesize` select other compiler profiles. The driver verifies
+the checkout, imported compiler/test-module paths, and py-evm `0.12.1b1`;
+compiler rejection is not an execution comparison.
+
+The local adapter enumerates all account/storage trie leaves and live journals,
+not sampled slots or getter results. It retains write preimages from an empty
+world, rejects unknown preimages/incomplete backing state, and captures without
+flushing or mutating execution state. Deployment and every call, including
+reverts, get checkpoints. Calls reset transient storage at their start; snapshots
+retain cumulative committed logs. Gas, fees, temporary memory, and transaction
+sender-nonce increments are not modeled: calls use the upstream message helpers.
+`--smoke` exercises persistent/transient writes, logs, clearing, and rollback.
+
+For explicit local-coercion or other stateful scenarios, supply `--source case.vy`
+and `--calls calls.json`. The calls file is an object such as:
+
+```json
+{
+  "constructor_args": [],
+  "deployment_value": 0,
+  "calls": [
+    {"function": "seed", "args": [9]},
+    {"function": "clear", "args": [], "value": 0}
+  ]
+}
+```
+
+Arguments follow the compiler ABI: bytes values are hex strings, arrays and
+tuples are positional JSON arrays, and other scalars use their ABI representation.
+Constructor arguments and call arguments both support nested byte containers.
+Source imports resolve relative to the original source file's directory.
+
+Each new output directory retains source, call plans, complete traces, compiler/
+backend provenance, native-binary SHA-256, and process diagnostics. Existing runs
+are never overwritten. Replay a saved `traces.json` directly with `run-test`, or
+re-execute its `source.vy` and `calls.json` through `--source`/`--calls` with the
+saved compiler settings. Reference execution and native replay have separate
+per-case timeouts (`--reference-timeout` and `--timeout`).
+
+Exit status is **0** for agreement with at least one executed comparison, **1**
+for semantic mismatches, and **2** for operational errors/timeouts or no executed
+comparisons. Malformed native output, import failures, and crashes are not
+reported as semantic mismatches. Compiler/backend exceptions are not converted
+into expected contract reverts. A campaign finding does not alter the semantics.
+
+Run the producer regressions, including real compiler/py-evm/native execution:
+
+```bash
+VYPER_STATE_VYPER="$VYPER_SRC" python -m unittest discover \
+  -s tools -p 'test_bytecode_state_*.py' -v
+```
+
 
 ### Running the Vyper test suite
 
