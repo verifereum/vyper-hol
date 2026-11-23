@@ -4,7 +4,7 @@
 Theory bodyFullBuiltinUint2Str
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullPreds bodySimFull bodyFullOfVV bodyFullAllocaFresh
+  bodyFullPreds bodyFullSimProjection bodySimFull bodyFullOfVV bodyFullAllocaFresh
   bodyFullGhostFrame bodyFullUnwrapRun bodyFullShared bodyMemoryDefs
   bodyFullBuiltinUint2StrSuffix bodyFullBuiltinUint2StrRun
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
@@ -51,10 +51,12 @@ Proof
   drule uint2str_expr_types >> strip_tac >> gvs[] >>
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >> disch_then irule >> fs[expr_body_pre_def]) >>
+  `body_expr_full_ok cx e` by
+    (qpat_x_assum `builtin_args_length_ok _ _ ==> _` mp_tac >>
+     simp[vyperContextTheory.builtin_args_length_ok_def, body_exprs_full_ok_def]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty e es` by
-    (fs[vyperContextTheory.builtin_args_length_ok_def, body_exprs_full_ok_def,
-        body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   `post_value_type cenv e = expr_type e` by
     (irule post_value_type_word >> simp[is_word_type_def]) >>
   rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
