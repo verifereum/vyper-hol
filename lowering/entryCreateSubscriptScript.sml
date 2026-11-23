@@ -1,0 +1,15 @@
+(* Facade for the scoped Subscript case. *)
+Theory entryCreateSubscript
+Ancestors entryCreateSubscriptLayout
+
+Theorem create_subscript_tuple_layout =
+  entryCreateSubscriptLayoutTheory.create_subscript_tuple_layout
+
+Theorem create_subscript_tuple_suffix_code =
+  entryCreateSubscriptLayoutTheory.create_subscript_tuple_suffix_code
+
+Theorem create_subscript_tuple_suffix_scope =
+  entryCreateSubscriptLayoutTheory.create_subscript_tuple_suffix_scope
+
+Theorem create_subscript_mapping_layout =
+  entryCreateSubscriptLayoutTheory.create_subscript_mapping_layout
