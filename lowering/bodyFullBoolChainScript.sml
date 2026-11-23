@@ -16,7 +16,7 @@ Ancestors
   exprSimIfExp exprSimDefs exprLowering boolChainOperandsCons
   boolChainFullSelect boolChainFullSingleton boolChainShadowLayout
   boolChainFullHead boolChainFullFinish boolChainCountedControl
-  bodyFullWordStackBuiltin boolChainSource boolChainCodeLayout
+  bodyFullWordStackBuiltin boolChainSource boolChainWrapperRead boolChainCodeLayout
   gasShadowBoolChainOperands gasShadow[qualified] gasShadowState bodyFullShared[qualified]
   bodyMemoryDefs wordArgsPtr exprSimMemDefs
   bodyFullIfExpPrepare bodyFullIfExpReach exprBodyPreProps exprSimSource
@@ -244,7 +244,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   irule word_stack_builtin_body_full_intro >> simp[] >>
   rpt gen_tac >> strip_tac >>
-  drule_then strip_assume_tac bool_chain_wrapper_action >> gvs[] >>
+  drule_then assume_tac bool_chain_wrapper_read_action >>
+  drule_then strip_assume_tac bool_chain_wrapper_action >>
+  qpat_x_assum `!gs. eval_expr _ (Builtin _ _ _) _ = _` kall_tac >> gvs[] >>
   simp[expr_type_def, is_word_type_def, post_value_type_word] >>
   conj_tac
   >- (gen_tac >>
@@ -276,10 +278,7 @@ Proof
   qabbrev_tac `root = Builtin (BaseT BoolT) (BoolChain is_and n) [e]` >>
   irule gas_outcome_full_source_cong >>
   qexists_tac `bind (eval_expr cx e) (read_result cx)` >> conj_tac
-  >- (gen_tac >>
-      Cases_on `bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs)` >>
-      rename1 `bind (eval_expr cx e) _ _ = (res,ee)` >> Cases_on `res` >>
-      fs[bind_def, return_def, read_result_def]) >>
+  >- simp[Abbr `root`] >>
   suspend "outcome"
 QED
 

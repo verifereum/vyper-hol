@@ -9,7 +9,7 @@ Ancestors
   placeTypedCopyPath stmtSimProps emitHelperProps venomExecSemantics venomInst venomState exprSimUint2Str loweringPosts
 
 
-Theorem assign_join_path[local]:
+Theorem assign_join_path:
   emit_inst ASSIGN [op] [rv] sx = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
   fn_has_code sx sy func /\ fn_has_code sy sz func /\
