@@ -118,6 +118,10 @@ Resume return_supported_evaluated_plan[tuple]:
 QED
 
 Resume return_supported_evaluated_plan[struct]:
+  `FST id = NONE` by
+    (qpat_x_assum `evaluate_type tenv (StructT id) = _` mp_tac >>
+     simp[Once evaluate_type_def, AllCaseEqs(), LET_THM] >> strip_tac >>
+     gvs[] >> metis_tac[FLOOKUP_SUBMAP]) >>
   Cases_on `is_abi_dynamic cenv.ce_struct_fields (StructT id)`
   >- (qpat_x_assum `supported_nested_type _ _ _ (StructT _)` mp_tac >>
       simp[Once supported_nested_type_def, supported_scalar_type_def,
