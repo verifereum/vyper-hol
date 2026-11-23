@@ -63,13 +63,19 @@ Proof
        `tys` |-> `MAP SND (args : (string # type) list)`, `mode` |-> `is_ctor`]
        packaged_internal_source_id) >>
      impl_tac >- fs[] >> strip_tac >>
-     rename1 `MEM other srcs` >> PairCases_on `other` >>
+     rename1 `build_func_ids 0 tops fname =
+                build_func_ids 0 tops (FST (SND (SND (SND other))))` >>
+     PairCases_on `other` >>
      `MEM (other0,other1,other2,other3,other4,other5,other6,other7)
         (FST (SND (classify_functions tops)))` by metis_tac[] >>
      qpat_x_assum `MEM _ (FST (SND (classify_functions tops)))`
        (strip_assume_tac o REWRITE_RULE [MEM_classify_internal]) >>
      `fname = other3` by
-       (irule build_func_ids_11 >> fs[] >> metis_tac[]) >>
+       (qspecl_then [`tops`, `0`, `Internal`, `mut`, `nr`, `rr`, `fname`, `args`,
+          `dflts`, `ret`, `ss`, `Internal`, `other0`, `other1`, `other2`,
+          `other3`, `other4`, `rawdflts`, `other6`, `rawbody`]
+          mp_tac build_func_ids_11 >>
+        simp[] >> disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
      first_x_assum irule >> simp[Abbr `src`, subst_consts_fn_def] >>
      goal_assum (drule_at Any) >> simp[]) >>
   `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips)` by
@@ -331,21 +337,32 @@ Proof
   metis_tac[]
 QED
 
-(* Two modules can declare the same internal name and lower to distinct labels. *)
+(* A linked unit whose main module calls its internal foo from an external
+   function. The imported module's foo is never called, so it is not lowered:
+   the unit lowers only the internal functions something reaches. *)
 Theorem two_module_unit_lowers[local]:
-  mods = [(NONE,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]]);
+  mods = [(NONE,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass];
+          FunctionDecl External Nonpayable F F "bar" [] [] NoneT
+            [Expr (Call NoneT (IntCall (NONE,"foo")) [] NONE)]]);
           (SOME 1,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]])] ==>
-  ?unit main lib.
+  ?unit main.
     lower_vyper_runtime_unit_mods mods []
       <| rpol_target := all_capabilities;
          rpol_frontend_dispatch := Linear;
          rpol_final_assembly := FAP_Optimize |> = SOME unit /\
     lookup_function (internal_fn_label 0 "foo" [] F)
-      unit.cu_context.ctx_functions = SOME main /\
-    lookup_function (internal_fn_label 1 "1.foo" [] F)
-      unit.cu_context.ctx_functions = SOME lib
+      unit.cu_context.ctx_functions = SOME main
 Proof
-  strip_tac >> gvs[] >> EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
+  strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `lower_vyper_runtime_unit_mods M [] P` >>
+  (* Evaluating only the looked-up name avoids normalising the whole unit. *)
+  `case lower_vyper_runtime_unit_mods M [] P of
+     NONE => F
+   | SOME u => IS_SOME (lookup_function (internal_fn_label 0 "foo" [] F)
+                          u.cu_context.ctx_functions)` by
+    (simp[Abbr `M`, Abbr `P`] >> EVAL_TAC) >>
+  Cases_on `lower_vyper_runtime_unit_mods M [] P` >>
+  fs[optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem foo_supported[local]:
@@ -364,24 +381,34 @@ Proof
        supported_pure_expr_def]
 QED
 
+Theorem foo_bar_supported[local]:
+  supported_program [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass];
+    FunctionDecl External Nonpayable F F "bar" [] [] NoneT
+      [Expr (Call NoneT (IntCall (NONE,"foo")) [] NONE)]]
+Proof
+  EVAL_TAC
+QED
+
 Theorem two_module_unit_invariants[local]:
-  tops = [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]] /\
-  mods = [(NONE,tops); (SOME 1,tops)] ==>
-  ?ctx cenv cx main lib.
+  tops = [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass];
+          FunctionDecl External Nonpayable F F "bar" [] [] NoneT
+            [Expr (Call NoneT (IntCall (NONE,"foo")) [] NONE)]] /\
+  mods = [(NONE,tops); (SOME 1,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]])] ==>
+  ?ctx cenv cx main.
     contract_inv mods [] ctx cenv cx /\
-    module_body_inv mods (SOME 1) tops cenv cx /\
+    module_body_inv mods NONE tops cenv cx /\
     ~cx.in_deploy /\
     lookup_function (internal_fn_label 0 "foo" [] F)
-      ctx.ctx_functions = SOME main /\
-    lookup_function (internal_fn_label 1 "1.foo" [] F)
-      ctx.ctx_functions = SOME lib
+      ctx.ctx_functions = SOME main
 Proof
   strip_tac >>
-  `mods = [(NONE,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]]);
+  `mods = [(NONE,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass];
+          FunctionDecl External Nonpayable F F "bar" [] [] NoneT
+            [Expr (Call NoneT (IntCall (NONE,"foo")) [] NONE)]]);
            (SOME 1,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]])]`
     by fs[] >>
   drule two_module_unit_lowers >> strip_tac >>
-  qabbrev_tac `ce = build_compile_env_unit mods (SOME 1) Internal Pure "foo"
+  qabbrev_tac `ce = build_compile_env_unit mods NONE Internal Pure "foo"
     [] NoneT [Pass] T` >>
   `cenv_module_pins_mods mods ce` by
     simp[NoAsms, Abbr `ce`, build_compile_env_unit_def, cenv_module_pins_mods_def,
@@ -390,12 +417,13 @@ Proof
   qexists_tac `ce` >>
   qexists_tac `(ARB:evaluation_context) with
     <| in_deploy := F; sources := [((ARB:evaluation_context).txn.target,mods)] |>` >>
-  qexistsl_tac [`main`, `lib`] >>
+  qexists_tac `main` >>
   simp[contract_inv_def, module_body_inv_def, get_tenv_def] >>
   rpt conj_tac >>
   simp[NoAsms, Abbr `ce`, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY] >>
   gvs[] >>
-  simp[foo_supported, toplevel_vtype_keys_toplevel_def, make_struct_fields_map_mods_def,
+  simp[foo_supported, foo_bar_supported, toplevel_vtype_keys_toplevel_def,
+       make_struct_fields_map_mods_def,
        build_struct_fields_map_mods_def, build_struct_fields_map_src_def] >>
   simp[immutable_section_layout_mods_def, immutable_region_mods_def,
        imm_len_mods_def, ALOOKUP_def, AllCaseEqs(),
@@ -403,7 +431,7 @@ Proof
        add_immutable_locations_unit_def, add_annotated_immutables_mods_def,
        add_annotated_immutables_src_def, compute_immutables_len_unit_def,
        annotated_immutables_len_def] >>
-  rpt strip_tac >> gvs[foo_supported, toplevel_vtype_keys_toplevel_def,
+  rpt strip_tac >> gvs[foo_supported, foo_bar_supported, toplevel_vtype_keys_toplevel_def,
     function_mutability_ok_def, stmt_mutability_ok_def, listTheory.APPEND_EQ_SING] >>
   qexistsl_tac [`<| rpol_target := all_capabilities;
                    rpol_frontend_dispatch := Linear;
@@ -412,25 +440,25 @@ Proof
 QED
 
 Theorem linked_two_module_internal_code:
-  tops = [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]] /\
-  mods = [(NONE,tops); (SOME 1,tops)] ==>
-  ?ctx cenv cx main lib entry final.
+  tops = [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass];
+          FunctionDecl External Nonpayable F F "bar" [] [] NoneT
+            [Expr (Call NoneT (IntCall (NONE,"foo")) [] NONE)]] /\
+  mods = [(NONE,tops); (SOME 1,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]])] ==>
+  ?ctx cenv cx main entry final.
     contract_inv mods [] ctx cenv cx /\
-    module_body_inv mods (SOME 1) tops cenv cx /\
+    module_body_inv mods NONE tops cenv cx /\
     immutable_section_layout_mods mods cenv /\
     ~cx.in_deploy /\
     lookup_function (internal_fn_label 0 "foo" [] F)
       ctx.ctx_functions = SOME main /\
-    lookup_function (internal_fn_label 1 "1.foo" [] F)
-      ctx.ctx_functions = SOME lib /\
-    fn_has_code entry final lib /\
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) lib.fn_blocks)
+    fn_has_code entry final main /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) main.fn_blocks)
 Proof
   strip_tac >> drule_all two_module_unit_invariants >> strip_tac >>
   `immutable_section_layout_mods mods cenv` by
     metis_tac[body_inv_immutable_section_layout_mods] >>
-  `nsid_to_string (SOME 1,"foo") = "1.foo" /\
-    build_func_ids_mods 0 mods "1.foo" = 1` by
+  `nsid_to_string (NONE,"foo") = "foo" /\
+    build_func_ids_mods 0 mods "foo" = 0` by
     (qpat_x_assum `mods = _` SUBST1_TAC >>
      qpat_x_assum `tops = _` SUBST1_TAC >> EVAL_TAC >> simp[]) >>
   `MEM (FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]) tops` by simp[] >>
@@ -438,10 +466,10 @@ Proof
   qpat_x_assum `tops = _` kall_tac >>
   `lookup_function
       (internal_fn_label
-        (build_func_ids_mods 0 mods (nsid_to_string (SOME 1,"foo")))
-        (nsid_to_string (SOME 1,"foo")) (MAP SND ([] : (string # type) list))
-        cx.in_deploy) ctx.ctx_functions = SOME lib` by simp[] >>
+        (build_func_ids_mods 0 mods (nsid_to_string (NONE,"foo")))
+        (nsid_to_string (NONE,"foo")) (MAP SND ([] : (string # type) list))
+        cx.in_deploy) ctx.ctx_functions = SOME main` by simp[] >>
   drule_all body_inv_selected_internal_code_mods >> strip_tac >>
-  qexistsl_tac [`ctx`, `cenv`, `cx`, `main`, `lib`, `entry`, `final`] >>
+  qexistsl_tac [`ctx`, `cenv`, `cx`, `main`, `entry`, `final`] >>
   simp[]
 QED
