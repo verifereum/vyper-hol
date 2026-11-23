@@ -36,18 +36,20 @@ Theorem selected_source_transport[local]:
   create_operand_cut i z explicit ctx func tops cx st0 source (es,s)
 Proof
   strip_tac >> reverse conj_tac
-  >- fs[create_operand_cut_def, create_body_cut_def] >>
+  >- (qpat_x_assum `create_operand_cut _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[create_operand_cut_def, create_body_cut_def]) >>
   qpat_x_assum `scoped_operand_outcome _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [scoped_operand_outcome_def]) >>
   rewrite_tac[scoped_operand_outcome_def] >> qexists_tac `marks`
   >- (disj1_tac >> conj_tac
       >- fs[gas_bad_storage_at_def] >>
-      simp[] >> qexists_tac `H` >> simp[])
+      simp[] >> qexistsl_tac [`H`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >>
+      metis_tac[])
   >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >> simp[]) >>
   disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >>
-  simp[] >> qexists_tac `H` >> simp[]
+  simp[] >> qexists_tac `H` >> simp[] >> metis_tac[]
 QED
 
 Theorem intcall_selected_source_scope:

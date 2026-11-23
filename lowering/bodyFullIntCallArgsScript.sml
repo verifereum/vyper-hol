@@ -11020,5 +11020,5 @@ Proof
   simp_tac bool_ss [vyperStateTheory.evaluation_state_accfupds] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qexists_tac `H` >>
-  qpat_assum `valid_horizon cx st0 H ed.storage_trace` ACCEPT_TAC
+  (simp[])
 QED
