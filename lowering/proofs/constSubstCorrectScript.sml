@@ -3845,7 +3845,7 @@ Proof
   Cases_on `b` >> gvs[builtin_operands_ok_def]
 QED
 
-Theorem fold_const_int_case[local]:
+Theorem fold_const_int_case:
   (case fold_const_expr e of Literal ty (IntL n) => P n | _ => q) =
   (case e of Literal ty (IntL n) => P n | _ => q)
 Proof
