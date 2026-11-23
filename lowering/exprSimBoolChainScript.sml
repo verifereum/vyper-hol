@@ -25,7 +25,7 @@ Ancestors
   vyperAST vyperState vyperValue vyperInterpreter vyperStorageTrace
   vyperStorageFootprint gasSummary stmtSimDeclCompose fragGasMode fragGasPath
   stmtSimProps emitHelperProps exprLoweringProps compileEnv venomState venomInst
-  vyperTypeCallGraph finite_map loweringSlice valueEncoding
+  vyperTypeCallGraph finite_map loweringSlice valueEncoding boolChainSource exprSimMemDefs loweringShapeDefs
 
 (* Each operand simulates, a later one where the one before evaluates. *)
 Definition bool_chain_case_def:
@@ -36,22 +36,6 @@ Definition bool_chain_case_def:
      ((?s tv s'. eval_expr cx e s = (INL tv, s')) ==>
       bool_chain_case nocalls ctx func cenv cx es))
 End
-
-(* The chain is the identity on its one argument, the nested conditional;
-   its code tests the operands in turn (compile_bool_chain_ops), which
-   computes the conditional's value: an and stops at the first false
-   operand with false, an or at the first true one with true. *)
-Theorem compile_bool_chain_case:
-  !nocalls ctx func cenv cx ann is_and n e.
-    bool_chain_case nocalls ctx func cenv cx
-      (bool_chain_operands is_and (n - 1) e) ==>
-    expr_sim_case nocalls ctx func cenv cx
-      (Builtin ann (BoolChain is_and n) [e]) /\
-    expr_vv_case nocalls ctx func cenv cx
-      (Builtin ann (BoolChain is_and n) [e])
-Proof
-  cheat
-QED
 
 (* The endpoint is at the preallocated exit; the lift carries the frame
    relative to the original entry across the already executed tests. *)
@@ -207,3 +191,64 @@ Resume bool_chain_ops_outcome[short]:
 QED
 
 Finalise bool_chain_ops_outcome
+
+(* The chain is the identity on its one argument, the nested conditional;
+   its code tests the operands in turn (compile_bool_chain_ops), which
+   computes the conditional's value: an and stops at the first false
+   operand with false, an or at the first true one with true. *)
+
+Theorem compile_bool_chain_case:
+  !nocalls ctx func cenv cx ann is_and n e.
+    bool_chain_case nocalls ctx func cenv cx
+      (bool_chain_operands is_and (n - 1) e) ==>
+    expr_sim_case nocalls ctx func cenv cx
+      (Builtin ann (BoolChain is_and n) [e]) /\
+    expr_vv_case nocalls ctx func cenv cx
+      (Builtin ann (BoolChain is_and n) [e])
+Proof
+  rpt gen_tac >> strip_tac >> conj_asm1_tac
+  >- (
+    simp[expr_sim_case_def, expr_sim_def, int_calls_expr_def] >> rpt strip_tac >>
+    drule_then strip_assume_tac bool_chain_wrapper_action >> gvs[] >>
+    qabbrev_tac `root = Builtin (BaseT BoolT) (BoolChain is_and n) [e]` >>
+    `!gs. bind (eval_expr cx root) (read_result cx) (es with gas_obs := gs) =
+          bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs)` by
+      (gen_tac >> simp[Abbr `root`] >>
+       Cases_on `bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs)` >>
+       rename1 `bind (eval_expr cx e) _ _ = (res,ee)` >> Cases_on `res` >>
+       fs[bind_def, return_def, read_result_def]) >>
+    simp[Abbr `root`] >>
+    Cases_on `compile_expr cenv ty (Builtin (BaseT BoolT) (BoolChain is_and n) [e]) sa` >>
+    drule_then strip_assume_tac bool_chain_root_layout >>
+    gvs[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
+    rename1 `new_block _ sf = (_,sb)` >>
+    `sa.cs_next_var <= sg.cs_next_var` by simp[] >>
+    `local_ptrs_reserved cenv sg` by metis_tac[local_ptrs_reserved_next_var] >>
+    `fn_has_code sg sf func` by metis_tac[] >>
+    irule gas_outcome_source_cong >>
+    qexists_tac `bind (eval_expr cx e) (read_result cx)` >> simp[] >>
+    irule gas_outcome_post_mono >>
+    qexists_tac `\H res ee z. ?b. res = INL (BoolV b) /\
+       expr_post H ctx func cenv cx (Builtin (BaseT BoolT) (BoolChain is_and n) [e])
+         es sa sb s0 ee (BoolV b) (Var rv) z /\
+       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = 0` >>
+    conj_tac >- (simp[] >> rpt strip_tac >> qexists_tac `BoolV b` >> simp[]) >>
+    irule bool_chain_ops_outcome >> simp[expr_type_def] >>
+    (conj_tac >- (qexists_tac `env` >> simp[])) >>
+    qexistsl_tac [`is_and`,`n - 1`,`nocalls`,`sg`,`sf`] >> simp[] >>
+    rpt strip_tac >> match_mp_tac expr_post_word_intro >>
+    simp[expr_type_def, is_word_type_def, word_value_def] >>
+    `eval_operand op u = SOME (val_to_w256 (BoolV b))` by
+      (drule expr_post_word_operand >> simp[is_word_type_def, evaluate_type_def, word_value_def]) >>
+    fs[expr_post_def, wb_frame_def] >> rpt strip_tac
+    >- (qpat_assum `!x w. not_fresh_at sg x /\ _ ==> _` irule >> simp[] >>
+        irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[])
+    >- (qpat_assum `!aid off sz. _ ==> mem_bytes_at _ _ u.vs_memory = _` irule >>
+        simp[] >> conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `aid` >> simp[]) >>
+    `~expr_has_effect e'` by fs[] >>
+    qpat_x_assum `_ ==> pure_frame _ _ _ sg _ _` mp_tac >> simp[pure_frame_def]) >>
+  irule expr_vv_case_stack >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> drule eval_expr_builtin_value >> simp[]) >>
+  rpt gen_tac >> Cases_on `compile_expr cenv ty (Builtin ann (BoolChain is_and n) [e]) sa` >>
+  drule_then strip_assume_tac bool_chain_root_layout >> simp[]
+QED
