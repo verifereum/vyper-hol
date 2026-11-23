@@ -2186,6 +2186,23 @@ val () = List.app (fn in_deploy =>
         self_member_hashmap ``Private``, self_member_hashmap ``Public F``])
        [``Internal``, ``External``]))) [false, true]
 
+(* An imported body must keep its source id on calls, even if main
+   declares a function of the same name. *)
+fun import_call_modules source =
+  ``[(NONE,
+       [FunctionDecl Internal Pure F F "helper" [] [] NoneT [Pass];
+        FunctionDecl External Pure F F "entry" [] [] NoneT
+          [Expr (Call NoneT (IntCall (SOME 1,"run")) [] NONE)]]);
+      (SOME 1,
+       [FunctionDecl Internal Pure F F "helper" [] [] NoneT [Pass];
+        FunctionDecl Internal Pure F F "run" [] [] NoneT
+          [Expr (Call NoneT (IntCall (^source,"helper")) [] NONE)]])]
+    : (num option # toplevel list) list``
+
+val () = check_accepts "qualified internal call in import" false
+  empty_layouts (import_call_modules ``SOME 1``)
+val () = check_rejects empty_layouts (import_call_modules ``NONE : num option``)
+
 val () = cv_auto_trans contract_namespaces_ok_def;
 
 Theorem cross_visibility_self_member_clash_cv:
