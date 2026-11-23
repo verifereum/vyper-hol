@@ -4513,8 +4513,13 @@ Resume create_ctor_rows_outcome[rows_pack]:
      `lookup_var x u = SOME w` by
        (qpat_assum `!x w. not_fresh_at ss x /\ lookup_var x t = SOME w ==> _`
          (qspecl_then [`x`,`w`] mp_tac) >> simp[]) >>
+     `!n b sz. local_region cenv ee.scopes u n b sz ==>
+        regions_disjoint (w2n w) (type_memory_size tv) b sz` by
+       (qpat_assum `!n b sz. local_region cenv mid.scopes t n b sz <=> _`
+          (fn eq => qpat_assum `!n b sz. local_region cenv mid.scopes t n b sz ==> _`
+            (ACCEPT_TAC o REWRITE_RULE [eq]))) >>
      qexistsl [`x`,`w`,`tv`] >> simp[venomStateTheory.eval_operand_def] >>
-     metis_tac[]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `(cenv.ce_is_ctor /\ vv_location sv = SOME LocCode ==>
       !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
         eval_operand (vv_operand sv) u = SOME w ==>
