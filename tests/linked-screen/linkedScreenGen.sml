@@ -338,7 +338,7 @@ fun mk {id, family, axes, mods, exps, sl, tl, fname, sel} : unit_spec = let
     val ax = map (fn a => (a, case List.find (fn (b, _) => a = b) axes of
                                 SOME (_, x) => x | NONE => "-")) all
   in {id = family ^ "." ^ id, axes = ax @ [("kind", family)], mods = mods,
-      exps = exps, sl = sl, tl = tl, fname = fname, sel = sel, rt = u256,
+      exps = exps, sl = sl, tl = tl, fname = fname, sel = sel, rt = if fname = "__default__" then "NoneT" else u256,
       hm = false} end
 
 fun modlist ms = "([" ^ String.concatWith ";\n " (map (fn (q, ds) =>

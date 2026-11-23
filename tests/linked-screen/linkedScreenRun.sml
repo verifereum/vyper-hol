@@ -43,6 +43,26 @@ val () = computeLib.add_funs (List.concat (map (fn n =>
     map (fn args => cv_transLib.cv_eval (tm ("function_selector \"" ^ n ^ "\" " ^ args)))
       ["[Tuple [Uint 256]]", "[Tuple [Uint 8]]", "[Tuple []]"]) ["q21f9b", "q25078"]))
 
+(* Inside EVAL, hand closed applications of keccak and of the ABI type
+   translation to cv_eval: event signatures, unregistered selectors and
+   struct ABI types otherwise take minutes each or exhaust the heap. *)
+fun cv_closed_conv c t =
+  if same_const (fst (strip_comb t)) c andalso null (free_vars t)
+  then cv_transLib.cv_eval t else raise UNCHANGED
+val () = computeLib.add_convs (map (fn (thy, name, n) => let
+    val c = prim_mk_const {Thy = thy, Name = name}
+  in (c, n, cv_closed_conv c) end)
+  [("keccak", "Keccak_256_w64", 1), ("vyperABI", "vyper_to_abi_type", 2),
+   ("vyperABI", "vyper_to_abi_types", 2)])
+
+(* EVAL leaves FUNION and domain removal of explicit maps unreduced, so
+   type_env_all_modules lookups get stuck and the selector and event hashes
+   built on them blow up.  Reduce them to update chains. *)
+val () = computeLib.add_funs [finite_mapTheory.FUNION_FEMPTY_1,
+  finite_mapTheory.FUNION_FEMPTY_2, finite_mapTheory.FUNION_FUPDATE_1,
+  finite_mapTheory.DOMSUB_FEMPTY, finite_mapTheory.DOMSUB_FUPDATE_THM,
+  finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_EMPTY]
+
 fun check_conv d lay mods = let
     val t = tm ("vyperTypeContract$check_contract " ^ d ^ " [(2w:address, " ^ lay ^
                 ")] 2w " ^ mods)
