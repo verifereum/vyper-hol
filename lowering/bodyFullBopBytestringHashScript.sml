@@ -6,6 +6,7 @@ Ancestors
   bodyPtrBopHashSuffix bodyPtrBopHashFrame bodyMemBopHeldHash
   bodyPtrIfExpBytesFrame abiEncodeOwnership venomInst loweringStateRelDefs
   externalEntryShape fragExec fragGasCopyLoop fragGasSeqPtr gasOutcomeFullCompose
+  fragGasCopySeqLiftProps
   exprSimWordArgs bytestringHashProps exprSimHashBoundary exprSimHash exprSimHyps exprLoweringProps
   exprSimProps bodyFullPreds bodyPtrDefs gasStorage vyperStorageTrace
   loweringPosts exprSimMemDefs allocaHistoryFragment bodyFullUnwrapRun

@@ -133,41 +133,11 @@ val frame_wf_simps = [
   vfmExecutionPropTheory.wf_accounts_def,
   vfmExecutionPropTheory.wf_account_state_def]
 
-(* Select the concrete declaration named by the evaluated ownership goal. *)
-fun linked_cell_witness (asms, goal) = let
-  val member = find_term
-    (can (match_term ``MEM (src, id) (self_member_keys_toplevel src decl)``))
-    goal
-  val (src, name) = pairSyntax.dest_pair (rand (rator member))
-  val (_, tops) = pairSyntax.dest_pair (valOf (List.find
-    (fn entry => aconv (fst (pairSyntax.dest_pair entry)) src)
-    (fst (listSyntax.dest_list linked_mods))))
-  val decl = valOf (List.find
-    (fn top => case strip_comb top of
-       (_, [_, _, id, _, _]) => aconv id name
-     | _ => false)
-    (fst (listSyntax.dest_list tops)))
-in
-  exists_tac decl (asms, goal)
-end
-
-(* Reduce the reachable functions and their access lists to the two modules. *)
-Triviality linked_witness_ownership:
-  linked_state_ownership_ok linked_witness_initial_machine.layouts
-    linked_witness_deploy_tx.target linked_witness_mods linked_witness_exports
-Proof
-  simp[linked_state_ownership_ok_def, linked_witness_mods_def] >>
-  rpt strip_tac >> gvs[] >>
-  EVAL_TAC >> simp[linked_state_ref_allocated_def] >>
-  EVAL_TAC >> rpt conj_tac >> linked_cell_witness >> EVAL_TAC
-QED
-
 Triviality linked_witness_deploy_typing:
   deploy_typing_ok_mods linked_witness_mods linked_witness_exports
     linked_witness_initial_machine linked_witness_deploy_tx
 Proof
-  rewrite_tac[deploy_typing_ok_mods_def, linked_check_deploy, linked_check_runtime,
-              linked_witness_ownership] >>
+  rewrite_tac[deploy_typing_ok_mods_def, linked_check_deploy, linked_check_runtime] >>
   simp ([linked_witness_initial_machine_def, linked_witness_deploy_tx_def,
          p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
          vyperInterpreterTheory.initial_machine_state_def, linked_deploy_length] @
@@ -402,7 +372,6 @@ Triviality linked_witness_source_typing:
 Proof
   rewrite_tac[source_typing_ok_mods_def, linked_witness_export_names] >>
   simp[linked_call_layout, linked_targets_agree, linked_check_runtime,
-       linked_witness_ownership,
        REWRITE_RULE [linked_targets_agree] linked_witness_global_cells] >>
   rewrite_tac[linked_call_machine, linked_source_machine] >>
   simp ([linked_witness_am_deploy_post_def, linked_call_immutables,
