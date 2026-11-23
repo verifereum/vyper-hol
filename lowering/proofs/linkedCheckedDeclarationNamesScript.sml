@@ -47,8 +47,13 @@ Proof
              Cases >> simp[event_keys_toplevel_def]) >>
           irule (INST_TYPE [beta |-> ``:num option # string``] ALL_DISTINCT_MAP) >>
           qexists_tac `\n. (src,n)` >> simp[]) >>
-      simp[EVERY_MEM] >> Cases >> simp[supported_function_header_names_def] >>
-      strip_tac >> drule_all check_contract_toplevel_decl_MEM_checked >>
-      simp[check_toplevel_decl_def, params_ok_def, supported_function_bindings_def]) >>
+      conj_tac
+      >- (simp[EVERY_MEM] >> Cases >> simp[supported_function_header_names_def] >>
+          strip_tac >> drule_all check_contract_toplevel_decl_MEM_checked >>
+          simp[check_toplevel_decl_def, params_ok_def, supported_function_bindings_def]) >>
+      drule check_contract_namespaces_ok >>
+      simp[contract_namespaces_ok_def, EVERY_MEM, pairTheory.FORALL_PROD, PULL_EXISTS] >>
+      strip_tac >>
+      metis_tac[]) >>
   irule sublist_ALL_DISTINCT >> qexists_tac `supported_function_names tops` >> simp[]
 QED
