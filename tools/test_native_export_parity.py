@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
@@ -87,6 +88,14 @@ class CheckerTests(unittest.TestCase):
                 with self.assertRaises(ImportError):
                     nep.write_fixture(nep.Contract("x", "t::x", "y: uint256"), Path(d))
             self.assertFalse((Path(d) / "x.hex").exists())
+
+    @unittest.skipUnless(importlib.util.find_spec("vyper"), "needs the pinned Vyper")
+    def test_compile_contract_ignores_earlier_compiles(self) -> None:
+        sqrt = "import math\n@external\ndef f() -> decimal:\n    return math.sqrt(2.0)\n"
+        isqrt = "import math\n@external\ndef f() -> uint256:\n    return math.isqrt(2)\n"
+        alone = nep.compile_contract(sqrt, Path("a.vy"))
+        nep.compile_contract(isqrt, Path("b.vy"))
+        self.assertEqual(nep.compile_contract(sqrt, Path("a.vy")), alone)
 
 
 class BytesTests(unittest.TestCase):
