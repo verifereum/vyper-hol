@@ -102,7 +102,10 @@ Proof
          qpat_x_assum `raw = Value _` SUBST_ALL_TAC >>
          drule_all_then strip_assume_tac subscript_owned_value_transport >>
          gvs[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >> metis_tac[]) >>
-  `expr_body_pre ce cx env obj es` by (drule_all expr_body_pre_array_subscript_base >> simp[]) >>
+  `expr_body_pre ce cx env obj es` by
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+     qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[]) >>
   drule_all_then strip_assume_tac expr_body_pre_runtime_typed >>
   `value_has_type (ArrayTV etv (Dynamic cap)) v` by metis_tac[optionTheory.SOME_11] >>
   drule_all_then assume_tac vv_post_memory_footprint_bound >>
