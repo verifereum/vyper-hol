@@ -3,6 +3,16 @@ Ancestors
   groupedRuntimeBodyCode groupedInternalLabels entryRejectCode entryCompileIntervals
   externalEntryShape exprLoweringProps fragExec moduleLowering compileEnv emitHelper
   loweringShapeDefs groupedEntryCounters emitHelperProps venomInst list pair
+  groupedRuntimeEndpoint
+Libs groupedEndpointIntroLib
+
+(* Compatibility instance for the unredecorated public routes. *)
+Theorem grouped_registered_intro_unrestricted:
+  ^(intro D endpoint_const)
+Proof
+  rpt gen_tac >>
+  disch_then (ACCEPT_TAC o MATCH_MP grouped_registered_body_endpoint o CONJUNCT1)
+QED
 
 (* Distinctness at an actual descendant of the grouped dispatch.  Identify
    the compiler states by their equations, not by block lookup in the code. *)
