@@ -1,6 +1,6 @@
 Theory bodyFullNameNonword
 Ancestors
-  bodySimFull gasOutcomeFullCompose
+  bodySimFull gasOutcomeFullCompose bodyFullEmptyLeafData exprSimFullBundleProps
   exprSimNameValue exprSimSource exprSimHypsDefs bodyPtrDefs
   gasShadow fragGasOriginPtr exprLoweringProps loweringPosts
   vyperTypeEnv vyperTypeSystem vyperTypeInvariants valueEncodingProofs
@@ -63,12 +63,19 @@ Proof
   gvs[ptr_covers_def] >> drule val_store_size_le >> strip_tac >> decide_tac
 QED
 
-Theorem name_nonword_full:
-  expr_body_pre cenv cx env (Name ann id) es /\ ~is_word_type ann ==>
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Name ann id) es
+Theorem name_nonword_nil:
+  expr_body_pre cenv cx env (Name ann id) es /\ ~is_word_type ann /\
+  expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Name ann id) es (st0,sa,sb,sha,shb,op,s0,G0,tn0) ==>
+  sb = sa /\ ?v.
+    (!tail. bind (eval_expr cx (Name ann id)) (read_result cx) (es with gas_obs := tail) =
+            (INL v, es with gas_obs := tail)) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         expr_sim_full_post (DF,lo,d,ctx,func) cenv cx (Name ann id)
+           (es,sa,sb,s0,op,G0,tn0) H (INL v : value + exception)
+           (es with gas_obs := []) G0 tn0 s0)
 Proof
-  rw[expr_sim_full_def] >>
+  simp[expr_sim_full_hypotheses_def, expr_sim_full_code_def] >> strip_tac >>
   `expr_sim_pre cenv cx env (Name ann id) es` by
     simp[expr_sim_pre_body, vyperTypeCallGraphTheory.int_calls_expr_def] >>
   `?entry. lookup_scopes id es.scopes = SOME entry` by
@@ -80,13 +87,12 @@ Proof
   disch_then (qspecl_then [`ty`, `sa`, `ann`] assume_tac) >>
   gvs[lower_value_def, comp_bind_def, comp_return_def,
       unwrap_value_def, contextTheory.mk_ptr_def] >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G0`, `es`, `INL entry.value`, `s0`, `tn0`] >>
+  qexists_tac `entry.value` >>
   conj_tac
   >- (gen_tac >>
       qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`]
         mp_tac eval_name_word >> simp[vyperStateTheory.bind_def]) >>
-  simp[] >> rpt strip_tac >>
+  simp[expr_sim_full_post_def, expr_sim_full_endpoint_def] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >>
   drule_all name_nonword_ghost_posts >> strip_tac >>
   simp[gas_origin_ptr_path_rules, ghost_kept_at_def] >>
@@ -98,4 +104,15 @@ Proof
                       eval_operand_def] >>
       rpt strip_tac >> gvs[] >> drule val_store_size_le >> strip_tac >> decide_tac) >>
   gvs[ghost_inv_at_def] >> metis_tac[]
+QED
+
+Theorem name_nonword_full:
+  expr_body_pre cenv cx env (Name ann id) es /\ ~is_word_type ann ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Name ann id) es
+Proof
+  rw[expr_sim_full_via_bundle] >>
+  drule_all name_nonword_nil >> strip_tac >>
+  irule gas_outcome_full_unchanged >>
+  gvs[expr_sim_full_hypotheses_def] >> first_assum ACCEPT_TAC
 QED
