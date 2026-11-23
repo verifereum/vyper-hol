@@ -2,7 +2,7 @@
 Theory e2eDeployModsDefs
 Ancestors
   e2eModsDefs e2eDefs e2eDeployDefs e2eGasSufficient[qualified]
-  ctorDeployDefs[qualified] compileUnit
+  ctorDeployDefs[qualified] compileUnit sourceExemptMods
   vyperInterpreter vyperTypeContract vyperTypeInvariants vyperContext vyperABI
   vyperStorageFootprint callTrace frameOutcome vfmExecution vfmState
   alist finite_map list
