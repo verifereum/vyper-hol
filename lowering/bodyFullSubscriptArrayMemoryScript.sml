@@ -135,6 +135,40 @@ Proof
   rpt strip_tac >> gvs[allocas_from_def] >> first_assum irule >> first_assum ACCEPT_TAC
 QED
 
+(* Keep the installed base, index and fixed selector cuts in one view. *)
+Theorem framed_memory_subscript_compile_cuts:
+  compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
+  place_type cenv obj = ValPT (ArrayT et (Fixed n)) /\
+  ~copies_subscript_base cenv obj idx /\
+  (!ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory) /\
+  fn_has_code sa sb func ==>
+  ?bvv sm iop st2 dst.
+    compile_expr cenv ty obj sa = (bvv,sm) /\
+    lower_value compile_expr cenv ty idx sm = (iop,st2) /\
+    vv_location bvv = SOME LocMemory /\
+    compile_array_subscript (vv_operand bvv) iop F n (word_scale LocMemory)
+      (elem_size_in_location cenv LocMemory et) (is_signed_type (expr_type idx))
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) st2 = (dst,sb) /\
+    vv = LocatedValue ann (mk_ptr dst LocMemory) /\
+    cs_extends sa sm /\ cs_extends sm st2 /\ cs_extends st2 sb /\
+    fn_has_code sa sm func /\ fn_has_code sm st2 func /\ fn_has_code st2 sb func
+Proof
+  strip_tac >> drule_all compile_expr_array_subscript >> strip_tac >>
+  rename1 `compile_expr cenv ty obj sa = (bvv,sm)` >>
+  `vv_location bvv = SOME LocMemory` by metis_tac[pairTheory.FST] >> gvs[] >>
+  drule_then assume_tac compile_expr_extends >>
+  drule_then strip_assume_tac (cj 2 compile_expr_grows) >>
+  `cs_extends st2 sb` by
+    (`ci_mono st2 sb` suffices_by simp[ci_mono_def] >>
+     qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
+       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
+     irule ci_mono_compile_array_subscript >> simp[ci_mono_compile_ptr_load]) >>
+  `cs_extends sm sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sm func /\ fn_has_code sm st2 func /\ fn_has_code st2 sb func` by
+    metis_tac[fn_has_code_split] >>
+  metis_tac[]
+QED
+
 Theorem subscript_array_framed_memory_full:
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et n.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
@@ -160,20 +194,13 @@ Proof
     cenv cx ty e1 es` by
     (fs[body_expr_full_ok_def] >> metis_tac[]) >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  drule_all compile_expr_array_subscript >> strip_tac >>
-  rename1 `compile_expr cenv ty e1 sa = (bvv,sm)` >>
-  `vv_location bvv = SOME LocMemory` by metis_tac[pairTheory.FST] >>
-  `loc = LocMemory` by simp[] >> gvs[] >>
-  drule compile_expr_extends >> strip_tac >>
-  drule (cj 2 compile_expr_grows) >> strip_tac >>
-  `cs_extends st2 sb` by
-    (`ci_mono st2 sb` suffices_by simp[ci_mono_def] >>
-     qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
-       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
-     irule ci_mono_compile_array_subscript >> simp[ci_mono_compile_ptr_load]) >>
-  `cs_extends sm sb` by
-    (irule cs_extends_trans >> qexists_tac `st2` >> simp[]) >>
-  drule_all fn_has_code_split >> strip_tac >>
+  drule_all framed_memory_subscript_compile_cuts >>
+  disch_then (qx_choosel_then [`bvv`,`sm`,`iop`,`st2`,`dst`] strip_assume_tac) >>
+  `cs_extends sm sb` by metis_tac[cs_extends_trans] >>
+  qpat_assum `compile_expr cenv ty e1 sa = _`
+    (mp_then Any strip_assume_tac compile_expr_extends) >>
+  qpat_assum `lower_value compile_expr _ _ e2 sm = _`
+    (mp_then Any strip_assume_tac (cj 2 compile_expr_grows)) >> gvs[] >>
   `?shadow_sm. compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa =
       (bvv,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
     (`gas_shadow_compiles (compile_expr cenv ty e1)
