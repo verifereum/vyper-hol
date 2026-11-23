@@ -57,7 +57,7 @@ Proof
                   code_action_alloc_buffer]
 QED
 
-Theorem buffer_unwrap_action[local,simp]:
+Theorem buffer_unwrap_action:
   code_action ^buffer_safe (unwrap_value ce vv)
 Proof
   Cases_on `vv` >> simp[unwrap_value_def, code_action_return, buffer_ptr_actions] >>
@@ -66,7 +66,7 @@ Proof
   simp[code_action_return, buffer_ensure_action]
 QED
 
-Theorem buffer_store_action[local,simp]:
+Theorem buffer_store_action:
   code_action ^buffer_safe (compile_store_memory ce src dst dt st)
 Proof
   `!ce dst dt src st. code_action ^buffer_safe (compile_store_memory_typed ce dst dt src st)` by

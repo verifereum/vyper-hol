@@ -32,9 +32,29 @@ Definition abi_encode_values_path_def[local]:
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK v,Gv,tv)
 End
 
+(* The extra endpoint relation is folded over the very same steps as the
+   ghost path. The cursor laws consume the actual straight-line sequence,
+   not just the resulting PC or the absence of GAS marks. *)
+Definition abi_encode_values_path_laws_def:
+  abi_encode_values_path_laws R func st en s hl out <=>
+    (!a u. R a a u u) /\
+    (!a b c u v z. ci_mono a b /\ ci_mono b c /\ R a b u v /\ R b c v z ==> R a c u z) /\
+    (!p a b v. emit_op ALLOCA [Lit 32w] st = (p,a) /\
+      emit_void MSTORE [p; Lit (n2w hl)] a = ((),b) /\ fn_has_code st b func /\
+      ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+      s.vs_inst_idx = LENGTH st.cs_current_insts /\
+      run_inst_seq (emitted_insts st b) s = OK (v with vs_inst_idx := s.vs_inst_idx) /\
+      v.vs_inst_idx = LENGTH b.cs_current_insts ==> R st b s v) /\
+    (!p a u v. emit_op MLOAD [p] a = (out,en) /\ fn_has_code a en func /\
+      ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\
+      u.vs_inst_idx = LENGTH a.cs_current_insts /\
+      run_inst_seq (emitted_insts a en) u = OK (v with vs_inst_idx := u.vs_inst_idx) /\
+      v.vs_inst_idx = LENGTH en.cs_current_insts ==> R a en u v)
+End
+
 (* The caller proves its frame through pure phases and supplies the
    materialization rule for a singleton at the original argument index. *)
-Theorem abi_encode_values_execute:
+Theorem abi_encode_values_execute_with_path:
   compile_abi_encode_values_to_buf ce dst rows st = (out,en) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
   LIST_REL (\row at. abi_embedded_static_size ce.ce_struct_fields (SND row) =
@@ -66,14 +86,18 @@ Theorem abi_encode_values_execute:
       [EL i rows] a = ((),c) /\ fn_has_code a c func ==>
     ?v Gv tv. P c v Gv tv /\
       abi_encode_values_prefix_at ats avs hl d cursor st.cs_next_id slot (SUC i) c v Gv tv /\
-      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK v,Gv,tv))) ==>
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK v,Gv,tv)) /\
+      R a c u v) /\
+  abi_encode_values_path_laws R func st en s hl out ==>
   ?t G' tn'.
     P en t G' tn' /\ eval_operand out t = SOME (n2w (LENGTH bytes)) /\ op_taint tn' out = {} /\
     (!x. out = Var x ==> not_fresh_at en x) /\
     mem_bytes_at d (LENGTH bytes) t.vs_memory = bytes /\
     (!j. d <= j /\ j < d + LENGTH bytes ==> j NOTIN tn'.t_mem) /\
-    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    R st en s t
 Proof
+  simp_tac bool_ss [abi_encode_values_path_laws_def, GSYM CONJ_ASSOC] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `LENGTH rows = LENGTH ats /\ LENGTH ats = LENGTH avs` by metis_tac[LIST_REL_LENGTH] >>
   `abi_static_size ce.ce_struct_fields (TupleT (MAP SND rows)) = hl` by
@@ -84,7 +108,7 @@ Proof
            ci_mono st a /\ P a u Gu tu /\ ?slot.
              abi_encode_values_prefix_at ats avs hl d cursor st.cs_next_id slot i a u Gu tu`,
          `row_step` |-> `\a c (u,Gu,tu) (v,Gv,tv).
-           ci_mono a c /\ abi_encode_values_path lo explicit ctx func PG (u,Gu,tu) (v,Gv,tv)`,
+           ci_mono a c /\ abi_encode_values_path lo explicit ctx func PG (u,Gu,tu) (v,Gv,tv) /\ R a c u v`,
          `Q` |-> `\out (u,Gu,tu). P en u Gu tu /\
            eval_operand out u = SOME (n2w (LENGTH bytes)) /\ op_taint tu out = {} /\
            (!x. out = Var x ==> not_fresh_at en x) /\ mem_bytes_at d (LENGTH bytes) u.vs_memory = bytes /\
@@ -103,7 +127,7 @@ Proof
           `fn_has_code st b' func` by metis_tac[ci_mono_def, ci_mono_trans, fn_has_code_split] >>
           qpat_assum `!a u Gu tu. P a u Gu tu ==> _` (drule_then strip_assume_tac) >>
           mp_tac (Q.INST [`mid` |-> `a`, `en` |-> `b'`, `dst_site` |-> `owner`,
-            `dst_base` |-> `b`, `capacity` |-> `cap`] abi_encode_values_cursor_init) >>
+            `dst_base` |-> `b`, `capacity` |-> `cap`] abi_encode_values_cursor_init_run) >>
           impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
             >- (qpat_assum `abi_static_size _ _ = hl` (fn th =>
                   qpat_assum `emit_void MSTORE _ a = _` (ACCEPT_TAC o REWRITE_RULE [th])))
@@ -117,6 +141,11 @@ Proof
              >- metis_tac[ci_mono_trans] >>
              simp[SUBSET_DEF, IN_DIFF]) >>
           `ci_mono st b'` by metis_tac[ci_mono_trans] >>
+          `R st b' s v` by
+            (qpat_assum `!p a b v. emit_op ALLOCA _ _ = _ /\ _ ==> _`
+               (qspecl_then [`cursor`,`a`,`b'`,`v`] mp_tac) >>
+             impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+                           metis_tac[window_phase_control]) >> simp[]) >>
           qexistsl_tac [`v`,`Gv`,`tv`] >> asm_rewrite_tac[abi_encode_values_path_def] >>
           qexists_tac `slot` >> simp[abi_encode_values_prefix_at_def,
             abi_tuple_heads_def, abi_tuple_tails_def] >> metis_tac[])
@@ -158,7 +187,7 @@ Proof
           mp_tac (Q.INST [`s` |-> `u`, `st` |-> `a`, `G` |-> `Gu`, `tn` |-> `tu`,
             `cursor` |-> `p`,
             `tys` |-> `ats`, `vs` |-> `avs`, `tl` |-> `LENGTH (FLAT (abi_tuple_tails ats avs))`]
-            abi_encode_values_finish) >>
+            abi_encode_values_finish_run) >>
           impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
             TRY REFL_TAC >> TRY (asm_rewrite_tac[]) >>
             POP_ASSUM_LIST (K ALL_TAC) >> NO_TAC) >>
@@ -168,13 +197,29 @@ Proof
                (qspecl_then [`a`,`en`,`{}`,`u`,`Gu`,`tu`,`v`,`Gv`,`tv`] MATCH_MP_TAC) >>
              rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
              simp[SUBSET_DEF]) >>
+          `R a en u v` by
+            (qpat_assum `!p a u v. emit_op MLOAD _ _ = _ /\ _ ==> _`
+               (qspecl_then [`Var p`,`a`,`u`,`v`] mp_tac) >>
+             impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+                           metis_tac[window_phase_control]) >> simp[]) >>
           qexistsl_tac [`v`,`Gv`,`tv`] >> asm_rewrite_tac[abi_encode_values_path_def])
       >- simp[ci_mono_refl, abi_encode_values_path_def] >>
       rpt gen_tac >> strip_tac >>
       conj_tac >- metis_tac[ci_mono_trans] >>
+      reverse conj_tac >- metis_tac[] >>
       fs[abi_encode_values_path_def] >> metis_tac[gas_origin_ptr_path_trans]) >>
   `~s.vs_halted` by (qpat_assum `!a u Gu tu. P a u Gu tu ==> _`
     (drule_then (ACCEPT_TAC o cj 5))) >>
   simp_tac bool_ss [abi_encode_values_path_def] >>
+  qpat_x_assum `bytes = _` SUBST_ALL_TAC >>
+  simp_tac bool_ss [enc_def] >>
+  disch_then (qx_choosel_then [`v`,`Gv`,`tv`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  qexistsl_tac [`v`,`Gv`,`tv`] >> asm_rewrite_tac[] >>
   metis_tac[cj 1 gas_origin_ptr_path_rules]
 QED
+
+Theorem abi_encode_values_execute =
+  (PURE_REWRITE_RULE [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP] o BETA_RULE o
+   PURE_REWRITE_RULE [abi_encode_values_path_laws_def])
+    (Q.INST [`R` |-> `\(a:compile_state) (b:compile_state) (u:venom_state) (v:venom_state). T`]
+      abi_encode_values_execute_with_path)
