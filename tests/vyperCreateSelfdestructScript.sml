@@ -3,7 +3,7 @@ Ancestors
   vyperSmallStepCV
   vyperCreate vyperInterpreter vyperSmallStep[ignore_grammar]
   vyperAST vyperContext vyperState vyperValue vyperValueOperation vyperEvalPureExpr
-  constSubst vyperPinFold vyperOriginFold vyperPinFoldProps jsonToVyper jsonToVyperCV
+  constSubst constSubstMods vyperPinFold vyperOriginFold vyperPinFoldProps jsonToVyper jsonToVyperCV
   list vfmExecution vfmState finite_set finite_map
 Libs
   wordsLib cv_transLib vyperConstEvalLib jsonASTLib
@@ -269,7 +269,7 @@ Theorem blueprint_runtime_positive_offset_rejected[local]:
 Proof
   strip_tac >> simp_tac bool_ss [blueprint_runtime_offset_rejected_def, LET_THM] >>
   irule blueprint_prefix_rejected >>
-  simp[blueprint_literal_offset_def, subst_consts_expr_def,
+  simp[blueprint_literal_offset_def, subst_consts_expr_mods_def,
        origin_fold_value_def, is_int_literal_def] >>
   qexists_tac `[BytesV (REPLICATE 19 0w ++ [42w]); IntV 0; IntV (&offset)]` >>
   simp[blueprint_runtime_pure_prefix, blueprint_runtime_state_def,
@@ -387,7 +387,30 @@ Theorem blueprint_flag_runtime_mode[local]:
      blueprint_flag_offset]
 Proof
   simp[blueprint_literal_offset_def, blueprint_flag_offset_def,
-       subst_consts_expr_def, origin_fold_value_def, is_int_literal_def]
+       subst_consts_expr_mods_def, origin_fold_value_def, is_int_literal_def]
+QED
+
+val imported_offset = ``TopLevelName (BaseT (UintT 256)) (SOME 1,"OFFSET")``;
+val literal_offset = ``Literal (BaseT (UintT 256)) (IntL 3)``;
+val imported_offset_body = ``[Expr (blueprint_test_offset_expr ^imported_offset)]``;
+val imported_offset_modules =
+  ``[(NONE,[FunctionDecl External Nonpayable F F "deploy_blueprint"
+             [] [] NoneT ^imported_offset_body]);
+     (SOME 1,[VariableDecl Private (Constant ^literal_offset)
+             "OFFSET" (BaseT (UintT 256)) NONE])]``;
+
+Theorem blueprint_imported_constant_literal_offset:
+  blueprint_literal_offset
+    (blueprint_test_context with sources := [(41w,^imported_offset_modules)]) F
+    [blueprint_test_address; Literal (BaseT (UintT 256)) (IntL 0); ^imported_offset] /\
+  (case subst_consts_fn_mods (consts_env_mods ^imported_offset_modules)
+          (Nonpayable,F,F,"deploy_blueprint",[],[],NoneT,^imported_offset_body)
+   of (_,_,_,_,_,_,_,
+       [Expr (Call _ (CreateTarget (CreateFromBlueprint F) F _ _) [_;_;off] _)]) =>
+        is_int_literal (origin_fold_value off)
+    | _ => F)
+Proof
+  EVAL_TAC
 QED
 
 Definition blueprint_flag_runtime_rejected_def:
