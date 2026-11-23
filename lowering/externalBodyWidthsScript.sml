@@ -20,7 +20,7 @@ Ancestors
   vyperTypeEvalStoragePreservation vyperTypeStoragePreservation
   vyperStorageLayoutSafety vyperStorageBackend vyperPlaceInvariants
   vyperInterpreter vyperState vyperContext venomState venomExecSemantics
-  venomWf bodyExprPreFacts
+  venomWf bodyExprPreFacts bodyQualifiedStmtSupport
 
 val _ = Parse.hide "body";
 
@@ -449,6 +449,7 @@ Theorem stmt_exprs_ok_from_traversal_bounds:
   ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss /\
   ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss /\
   alloc_limits_stmts cenv ss /\
+  qualified_stmts_decls_ok cenv.ce_modules ss /\
   (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
    return_buffer_ok cenv) ==>
   stmts_exprs_ok cenv ss
