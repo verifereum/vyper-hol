@@ -146,7 +146,14 @@ def compile_contract(source: str, path: Path) -> tuple[str, str]:
     interpreter, as python_o1_bytecode_oracle.py --frontend writes them."""
     import vyper
     from vyper.compiler.settings import OptimizationLevel, Settings
+    from vyper.semantics.analysis import imports
 
+    # Vyper keeps one parsed AST per stdlib module (math.vy, the ercs) for the
+    # whole process, and type checking annotates it in place, so without this
+    # an imported module's JSON would carry annotations from whichever
+    # contracts this process compiled before.  Clearing it gives every
+    # contract the JSON a compile on its own gives.
+    imports._builtins_cache.clear()
     settings = Settings(optimize=OptimizationLevel.NONE, evm_version="prague",
                         experimental_codegen=True, enable_decimals=True)
     result = vyper.compile_code(
