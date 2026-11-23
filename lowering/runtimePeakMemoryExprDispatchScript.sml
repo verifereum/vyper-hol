@@ -67,7 +67,9 @@ Theorem dalloca_windows_builtin_dispatch_body:
   (!ct e. MEM e args /\ is_extcode e ==>
     preserves_dalloca_windows window (cfn cenv ct (extcode_addr_expr e))) /\
   (!ann el_ty bnd elems. MEM (Builtin ann (MakeArray el_ty bnd) elems) args ==>
-    preserves_dalloca_windows window (compile_multi_exprs cfn cenv elems)) ==>
+    preserves_dalloca_windows window (compile_multi_exprs cfn cenv elems)) /\
+  (!d n e. bi = BoolChain d n /\ MEM e (bool_chain_operands d (n - 1) (HD args)) ==>
+    preserves_dalloca_windows window (cfn cenv (BaseT BoolT) e)) ==>
   preserves_dalloca_windows window (compile_builtin_dispatch_body cfn cenv rt ty bi args)
 Proof
   Cases_on `bi` >>
