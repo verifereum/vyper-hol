@@ -1,6 +1,7 @@
 Theory entryCreateDeployLayout
 Ancestors
-  entryCreateDeploySelected ctorDeployLoweringCode ctorDeployLoweringCodeShape
+  entryCreateDeploySelected entryCreateIntervalLayout
+  ctorDeployLoweringCode ctorDeployLoweringCodeShape
   ctorDeployEntryLabels moduleLowering compileVyper compileEnv fragExec
   e2eDeployDefs ctorDeployDefs ctorDeployLoweringDefs loweringShapeDefs list
 
@@ -46,21 +47,32 @@ Proof
   drule_all deploy_ctor_member_certificates >> simp[]
 QED
 
-Theorem deploy_body_create_cut_rule_of_layout:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx os layout.
+Theorem deploy_ctor_body_layout_at:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx
+   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final f.
   deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
   deploy_source_ok tops am tx /\
-  (!body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final f.
-    deploy_ctor_code tops rpolicy runtime_bc dunit
-      (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,f) ==>
-    layout sa sb) /\
+  deploy_ctor_code tops rpolicy runtime_bc dunit
+    (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,f) ==>
+  create_layout sa sb
+Proof
+  rpt gen_tac >> strip_tac >> drule_all deploy_ctor_packaged_body_span >> strip_tac >>
+  `cs_extends sa st_final` by metis_tac[cs_extends_trans] >>
+  drule_all create_layout_of_all_blocks >> strip_tac >>
+  metis_tac[create_layout_subinterval, cs_extends_refl]
+QED
+
+Theorem deploy_body_create_cut_rule_of_layout:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx os.
+  deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
+  deploy_source_ok tops am tx /\
   (let C = dunit.cu_context;
        cx = deploy_evaluation_context tops am tx;
        st0 = initial_state am [];
        DF = \H. deploy_dead H tops runtime_bc am tx;
        lo = imm_len tops in
    !body cenv f Csh fsh sa sb sha shb base src G tn d k before key hit i s.
-    layout sa sb /\
+    create_layout sa sb /\
     (?mut source_body am_c es0.
       deploy_ctor_start tops am tx (mut,F,source_body,am_c,es0) /\
       src = es0 with outcomes := SOME os) /\
@@ -100,9 +112,9 @@ Proof
   strip_tac >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `?nkey ut imm exit_lbl sj st_exit st_epilogue st_final.
     deploy_ctor_code _ _ _ _ _` strip_assume_tac >>
-  `layout sa sb` by (first_x_assum (drule_then ACCEPT_TAC)) >>
+  `create_layout sa sb` by (drule_all deploy_ctor_body_layout_at >> simp[]) >>
   qpat_x_assum `!body cenv f Csh fsh sa sb sha shb base src G tn d k before key hit i s.
-    layout sa sb /\ _ ==> _` irule >>
+    create_layout sa sb /\ _ ==> _` irule >>
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   (conj_tac >- metis_tac[]) >> metis_tac[]
 QED
