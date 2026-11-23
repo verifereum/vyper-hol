@@ -7,11 +7,16 @@
    of its endpoint joins it. *)
 Theory gasOutcomeFull
 Ancestors
-  fragGasOriginPtr fragGasOrigin gasOutcome gasStorage gasExemptCert
+  gasOutcomeFullMods fragGasOriginPtr fragGasOrigin gasOutcome gasStorage gasExemptCert
   gasSummary fragGasMode fragGasPathPtr vyperStorageFootprint
   vyperInterpreter vyperState venomState
 
-Definition gas_outcome_full_def:
+Definition gas_outcome_full_singleton_def:
+  gas_outcome_full cfg tops cx st0 source start Q R <=>
+    gas_outcome_full_mods cfg [(NONE,tops)] cx st0 source start Q R
+End
+
+Theorem gas_outcome_full_def:
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
       (es, s, G, tn) Q R <=>
     ?marks.
@@ -40,7 +45,10 @@ Definition gas_outcome_full_def:
              valid_horizon cx st0 H es.storage_trace) /\
             gas_origin_ptr_focus (DF H, lo, explicit, ctx, func, PG)
               (s, G, tn) marks (leaf, leaf_pg, leaf_g, leaf_tn, finish))
-End
+Proof
+  simp[gas_outcome_full_singleton_def, gas_outcome_full_mods_def,
+       gas_exempt_cert_singleton_def]
+QED
 
 (* A horizon valid for a trace is valid for each of its prefixes. *)
 Theorem valid_horizon_append:
