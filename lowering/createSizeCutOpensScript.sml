@@ -42,12 +42,6 @@ Proof
   simp[UNCURRY_VAR] >> metis_tac[create_cut_code_join]
 QED
 
-Theorem create_cut_value_wrappers:
-  SND (as_stack_val ty p) = SND p /\ SND (as_ptr_val ty loc p) = SND p
-Proof
-  Cases_on `p` >> simp[as_stack_val_def, as_ptr_val_def]
-QED
-
 Theorem create_alloc_buffer_cut_code:
   create_cut_code exits a (SND (compile_alloc_buffer n a))
 Proof

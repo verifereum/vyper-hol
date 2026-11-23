@@ -1,7 +1,7 @@
 (* Uniform IfExp VV preparation, independent of the VV-to-expression conversion. *)
 Theory bodyFullIfExpPrepare
 Ancestors
-  bodyFullIfExpWiden bodyFullIfExpWidenCall
+  bodyFullIfExpObserve bodyFullIfExpWiden bodyFullIfExpWidenCall
   bodyFullIfExpFinish bodyFullIfExpShadow bodyFullAllocGeneric typedCopyOriginPtr
   bodyFullUnwrap bodyFullPreds bodyFullIfExpReach bodyFullHashKeccakFixed
   bodySimFull gasOutcomeFullCompose gasOutcomeFull gasOutcomeFullGuarded gasShadowCompile
@@ -375,7 +375,12 @@ Proof
   gvs[is_word_type_def, is_bytestring_type_def, vyperValueTheory.evaluate_type_def, vyperStateTheory.return_def, AllCaseEqs()]
 QED
 
-Theorem ifexp_selected_arm_step_full:
+Theorem ifexp_selected_arm_step_observed:
+  ifexp_observed_unwrap T obs DF lo explicit ctx func PG d cenv cx /\
+  ifexp_observed_alloc obs ctx func /\
+  ifexp_observed_bytes_store obs /\
+  ifexp_observed_typed_store obs /\
+  ifexp_observed_widening obs ctx func /\
   compile_expr cenv ty e sa = (vv,sm) /\
   (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
   compile_ifexp_arm cenv t (lowered_value_type cenv e) vv sm = (op,sb) /\
@@ -447,6 +452,7 @@ Theorem ifexp_selected_arm_step_full:
                        val_in_memory rt val (w2n w) mem)) /\
   ghost_kept_at lo cenv es1 sa G1 tn1 u G tn ==>
   ?v z' Gz tf.
+    obs ctx func sm sb z z' /\
     read_result cx tva ee = (INL v,ee) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
@@ -483,7 +489,7 @@ Proof
   suspend "nocopy"
 QED
 
-Resume ifexp_selected_arm_step_full[nocopy]:
+Resume ifexp_selected_arm_step_observed[nocopy]:
   markerLib.RESUME_TAC >>
   `unwrap_value cenv vv sm = (op,sb)` by
     (qpat_x_assum `compile_ifexp_arm _ _ _ _ _ = _` mp_tac >> simp[compile_ifexp_arm_def]) >>
@@ -498,8 +504,9 @@ Resume ifexp_selected_arm_step_full[nocopy]:
   `evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty` by metis_tac[] >>
   `!v. read_result cx tva ee = (INL v,ee) ==> value_has_type rty v` by metis_tac[] >>
   `sm.cs_next_var <= sm.cs_next_var /\ sm.cs_next_id <= sm.cs_next_id` by simp[] >>
-  drule_all unwrap_value_origin_ptr >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qpat_x_assum `ifexp_observed_unwrap T obs _ _ _ _ _ _ _ _ _`
+    (drule_all o SIMP_RULE bool_ss [ifexp_observed_unwrap_def]) >>
+  strip_tac >>
   `z'.vs_labels = z.vs_labels` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
@@ -553,7 +560,7 @@ Resume ifexp_selected_arm_step_full[nocopy]:
   simp[same_memory_layout_def] >> rpt strip_tac >> metis_tac[]
 QED
 
-Resume ifexp_selected_arm_step_full[physical]:
+Resume ifexp_selected_arm_step_observed[physical]:
   markerLib.RESUME_TAC >>
   `unwrap_value cenv vv sm = (op,sb)` by
     (qpat_x_assum `compile_ifexp_arm _ _ _ _ _ = _` mp_tac >>
@@ -573,8 +580,9 @@ Resume ifexp_selected_arm_step_full[physical]:
   `!v. read_result cx tva ee = (INL v,ee) ==> value_has_type stv v` by metis_tac[] >>
   `vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tva vv z` by metis_tac[] >>
   `sm.cs_next_var <= sm.cs_next_var /\ sm.cs_next_id <= sm.cs_next_id` by simp[] >>
-  drule_all unwrap_value_origin_ptr >>
-  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  qpat_x_assum `ifexp_observed_unwrap T obs _ _ _ _ _ _ _ _ _`
+    (drule_all o SIMP_RULE bool_ss [ifexp_observed_unwrap_def]) >>
+  strip_tac >>
   `~is_word_type (post_value_type cenv e)` by
     metis_tac[exprSimLayoutTransportTheory.compatible_word_type] >>
   `~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e` by
@@ -607,7 +615,7 @@ Resume ifexp_selected_arm_step_full[physical]:
   simp[] >> metis_tac[]
 QED
 
-Resume ifexp_selected_arm_step_full[nocopyown]:
+Resume ifexp_selected_arm_step_observed[nocopyown]:
   markerLib.RESUME_TAC >>
   `v' = v` by metis_tac[ifexp_conditional_value_eq] >>
   qpat_x_assum `v' = v` SUBST_ALL_TAC >>
@@ -657,23 +665,19 @@ Resume ifexp_selected_arm_step_full[nocopyown]:
   qexists `sm` >> simp[])
 QED
 
-Resume ifexp_selected_arm_step_full[widened]:
+Resume ifexp_selected_arm_step_observed[widened]:
   markerLib.RESUME_TAC >>
       (`!id path. tva <> PlaceR (MemoryPlace id path)` by metis_tac[] >>
       qpat_assum `!id path. tva <> PlaceR (MemoryPlace id path)`
         (fn th => SIMP_TAC bool_ss [th]) >>
-      mp_tac (Q.INST [`ptv` |-> `stv`] ifexp_widened_call_arm_step_full) >>
+      mp_tac (Q.INST [`ptv` |-> `stv`] ifexp_widened_call_arm_step_observed) >>
       impl_tac
       >- (rpt conj_tac >>
-      FIRST_PROVE [(rpt gen_tac >> strip_tac >>
-                    drule_all unwrap_value_origin_ptr >>
-                    disch_then (qspecl_then [`explicit`,`PG`]
-                      (qx_choosel_then [`readval`,`endstate`,`endG`,`endtn`] strip_assume_tac)) >>
-                    qexistsl [`readval`,`endstate`,`endG`,`endtn`] >> simp[] >> NO_TAC),
+      FIRST_PROVE [(irule ifexp_observed_unwrap_drop_own >> simp[]),
              MATCH_ACCEPT_TAC (GEN_ALL ifexp_alloca_origin_ptr_edge),
              MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_ghost_frame_at),
              MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_kept_frame_at),
-             MATCH_ACCEPT_TAC (GEN_ALL compile_store_memory_typed_origin_ptr_path),
+             (first_assum ACCEPT_TAC),
              (qpat_assum `post_value_type cenv e = lowered_value_type cenv e`
                 (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC),
              (asm_simp_tac bool_ss [] >> NO_TAC),
@@ -692,36 +696,140 @@ Resume ifexp_selected_arm_step_full[widened]:
       qexists `sm` >> simp[])
 QED
 
-Resume ifexp_selected_arm_step_full[bytes]:
+Resume ifexp_selected_arm_step_observed[bytes]:
   markerLib.RESUME_TAC >>
       `!id path. tva <> PlaceR (MemoryPlace id path)` by metis_tac[] >>
       qpat_assum `!id path. tva <> PlaceR (MemoryPlace id path)`
         (fn th => SIMP_TAC bool_ss [th]) >>
       qpat_assum `is_bytestring_type t` (fn th => SIMP_TAC bool_ss [th]) >>
-      irule ifexp_widen_arm_step_full >> rpt conj_tac >>
-      FIRST [(rpt gen_tac >> strip_tac >>
-              drule_all unwrap_value_origin_ptr >>
-              disch_then (qspecl_then [`explicit`,`PG`]
-                (qx_choosel_then [`readval`,`endstate`,`endG`,`endtn`] strip_assume_tac)) >>
-              qexistsl [`readval`,`endstate`,`endG`,`endtn`] >> simp[] >> NO_TAC),
+      irule ifexp_widen_arm_step_observed >> rpt conj_tac >>
+      FIRST_PROVE [(irule ifexp_observed_unwrap_drop_own >> simp[]),
              MATCH_ACCEPT_TAC (GEN_ALL ifexp_alloca_origin_ptr_edge),
              MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_ghost_frame_at),
              MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_kept_frame_at),
-             MATCH_ACCEPT_TAC (GEN_ALL compile_store_bytestring_origin_ptr_path),
+             first_assum ACCEPT_TAC,
              (asm_simp_tac bool_ss [] >> NO_TAC),
              first_assum MATCH_ACCEPT_TAC,
              (qexists_tac `rty` >> simp[] >> rpt strip_tac >>
               qpat_x_assum `!v. read_result cx tva ee = _ ==> _` drule >> simp[]),
              (irule valueCopyBytesTheory.is_bytestring_word_type >> first_assum MATCH_ACCEPT_TAC),
-             (qexistsl_tac [`e`,`sm`,`ty`,`vv`] >> gvs[]),
+             (qexistsl_tac [`e`,`ty`,`vv`] >> gvs[]),
              FAIL_TAC "bytes concrete"] >> gvs[]
 QED
 
-Finalise ifexp_selected_arm_step_full
+Finalise ifexp_selected_arm_step_observed
+
+Triviality ifexp_materialize_observation_true:
+  ifexp_observed_unwrap T (\_ _ _ _ _ _. T) DF lo explicit ctx func PG d cenv cx /\
+  ifexp_observed_alloc (\_ _ _ _ _ _. T) ctx func /\
+  ifexp_observed_bytes_store (\_ _ _ _ _ _. T) /\
+  ifexp_observed_typed_store (\_ _ _ _ _ _. T) /\
+  ifexp_observed_widening (\_ _ _ _ _ _. T) ctx func
+Proof
+  pure_rewrite_tac [ifexp_observed_unwrap_def, ifexp_observed_alloc_def,
+    ifexp_observed_bytes_store_def, ifexp_observed_typed_store_def,
+    ifexp_observed_widening_def] >> BETA_TAC >>
+  pure_rewrite_tac [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP] >>
+  rpt conj_tac >> rpt gen_tac >>
+  FIRST [MATCH_ACCEPT_TAC unwrap_value_origin_ptr,
+         MATCH_ACCEPT_TAC compile_store_bytestring_origin_ptr_path,
+         MATCH_ACCEPT_TAC compile_store_memory_typed_origin_ptr_path]
+QED
+
+(* Keep the ordinary arm step as the True specialization of the observed one. *)
+local
+  val arm_step_unobserved =
+    PURE_REWRITE_RULE [AND_CLAUSES, ifexp_materialize_observation_true]
+      (BETA_RULE (Q.INST [`obs` |-> `\_ _ _ _ _ _. T`] ifexp_selected_arm_step_observed))
+in
+Theorem ifexp_selected_arm_step_full:
+  ^(concl arm_step_unobserved)
+Proof
+  ACCEPT_TAC arm_step_unobserved
+QED
+end
 
 (* Source composition is independent of the proof of arm conversion.
    The conversion contract is specialized at the fixed compiler layout;
    only its runtime endpoint is universally quantified. *)
+(* Source facts shared by the ordinary and first-exit arm callbacks. *)
+Theorem ifexp_arm_raw_admissible:
+  gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es ==>
+  gas_admissible (eval_expr cx e) expr_vv_res_ok es
+Proof
+  rw[gasContextTheory.gas_admissible_def] >>
+  qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >>
+  Cases_on `res` >> simp[vyperStateTheory.bind_def, expr_vv_res_ok_def] >>
+  rename1 `INL rv0` >> Cases_on `rv0` >>
+  simp[conditional_result_def, vyperStateTheory.raise_def, expr_vv_res_ok_def]
+QED
+
+Theorem ifexp_arm_raw_source:
+  eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\
+  (!gs raw ee. eval_expr cx e (es with gas_obs := gs) = (INL raw,ee) ==>
+    eval_result_typed (env,cx,ee) raw (Type (expr_type e))) /\
+  (!gs v ee. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) ==>
+    value_has_type rty v /\
+    !ptv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv ==>
+      value_has_type ptv v) ==>
+  eval_result_typed (env,cx,ee) tv (Type (expr_type e)) /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  (!id path. tv = PlaceR (MemoryPlace id path) ==>
+    same_memory_layout ce (lowered_value_type ce e) (expr_type e)) /\
+  (!v. read_result cx tv ee = (INL v,ee) ==>
+    value_has_type rty v /\
+    !ptv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv ==>
+      value_has_type ptv v)
+Proof
+  strip_tac >> conj_tac >- metis_tac[] >>
+  conj_tac >- (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> drule ifexp_raw_place_layout >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!gs v ee. bind _ _ _ = _ ==> _`
+    (qspecl_then [`gs`,`v`,`ee`] mp_tac) >> simp[vyperStateTheory.bind_def]
+QED
+
+Theorem ifexp_arm_pure_source:
+  eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\
+  gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es /\
+  read_result cx tv ee = (INL v,ee) ==>
+  ?ctv. (!tail. conditional_result cx tv (ee with gas_obs := tail) =
+                 (INL ctv,ee with gas_obs := tail)) /\
+        read_result cx ctv ee = (INL v,ee)
+Proof
+  strip_tac >> Cases_on `conditional_result cx tv ee` >>
+  rename1 `conditional_result cx tv ee = (cr,ces)` >>
+  `expr_vv_res_ok cr` by
+    (qpat_x_assum `gas_admissible (bind _ _) _ _`
+      (qspec_then `gs` mp_tac o REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
+     fs[vyperStateTheory.bind_def]) >>
+  metis_tac[bodyPtrIfExpConditionalSourceTheory.ifexp_conditional_source_success]
+QED
+
+Theorem ifexp_arm_conditional_vv_facts:
+  read_result cx raw ee = (INL v,ee) /\
+  conditional_result cx raw ee = (INL tv,ee) /\
+  read_result cx tv ee = (INL v,ee) /\
+  (~is_word_type t ==> vv_at ce cx t sa sb ee raw (LocatedValue t (mk_ptr op LocMemory)) z) /\
+  (~is_word_type t ==> !id path. raw = PlaceR (MemoryPlace id path) ==>
+    vv_place_ptr ce cx ee z raw (LocatedValue t (mk_ptr op LocMemory))) /\
+  (!ctv w. conditional_result cx raw ee = (INL ctv,ee) /\ ctv = Value w /\
+     ~is_word_type t /\ ~is_bytestring_type t ==>
+     vv_own ce cx t sa sb ee ctv (LocatedValue t (mk_ptr op LocMemory)) z) ==>
+  (~is_word_type t ==> vv_at ce cx t sa sb ee tv (LocatedValue t (mk_ptr op LocMemory)) z) /\
+  (~is_word_type t ==> vv_place_ptr ce cx ee z tv (LocatedValue t (mk_ptr op LocMemory))) /\
+  (!w. tv = Value w /\ ~is_word_type t /\ ~is_bytestring_type t ==>
+     vv_own ce cx t sa sb ee tv (LocatedValue t (mk_ptr op LocMemory)) z)
+Proof
+  strip_tac >> conj_tac
+  >- (strip_tac >> irule ifexp_vv_at_conditional >> qexistsl [`raw`,`v`] >> simp[] >>
+      drule ifexp_conditional_result_shape >> strip_tac >>
+      fs[read_result_def, vyperStateTheory.return_def]) >>
+  conj_tac
+  >- (strip_tac >> drule ifexp_conditional_result_place >> strip_tac >> gvs[]) >>
+  metis_tac[]
+QED
+
 Theorem ifexp_arm_outcome_full_conditional[local]:
   (!ee tv z G tn.
     (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
@@ -846,13 +954,7 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   strip_tac >>
-  `gas_admissible (eval_expr cx e) expr_vv_res_ok es1` by
-    (rw[gasContextTheory.gas_admissible_def] >>
-     qpat_x_assum `gas_admissible (bind _ _) _ _`
-       (qspec_then `gs` mp_tac o REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
-     Cases_on `res` >> simp[vyperStateTheory.bind_def, expr_vv_res_ok_def] >>
-     rename1 `INL rv0` >> Cases_on `rv0` >>
-     simp[conditional_result_def, vyperStateTheory.raise_def, expr_vv_res_ok_def]) >>
+  drule ifexp_arm_raw_admissible >> strip_tac >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`vv`,`u`,`G1`,`tn1`] mp_tac) >>
@@ -899,21 +1001,7 @@ Resume ifexp_arm_outcome_full_conditional[selected]:
      qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
      pure_rewrite_tac [listTheory.APPEND_NIL] >>
      disch_then assume_tac >> fs[]) >>
-  `eval_result_typed (env,cx,ee) tv (Type (expr_type e))` by metis_tac[] >>
-  `MAP FDOM es1.scopes = MAP FDOM ee.scopes` by
-    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
-  `!v. read_result cx tv ee = (INL v,ee) ==>
-     value_has_type rty v /\
-     !ptv. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv ==>
-       value_has_type ptv v` by
-    (rpt strip_tac >>
-     qpat_x_assum `!gs v ee. bind _ _ _ = _ ==> _`
-       (qspecl_then [`gas_explicit marks u.vs_gas_readings`,`v`,`ee`] mp_tac) >>
-     simp[vyperStateTheory.bind_def]) >>
-  fs[] >>
-  `!id path. tv = PlaceR (MemoryPlace id path) ==>
-    same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)` by
-    (rpt strip_tac >> gvs[] >> drule ifexp_raw_place_layout >> simp[]) >>
+  drule_all ifexp_arm_raw_source >> strip_tac >> fs[] >>
   qpat_x_assum `!ee tv z G tn. _`
     (qspecl_then [`ee`,`tv`,`z`,`G`,`tn`] mp_tac) >>
   (impl_tac >- (gvs[] >> metis_tac[])) >>
@@ -922,14 +1010,7 @@ Resume ifexp_arm_outcome_full_conditional[selected]:
 QED
 
 Resume ifexp_arm_outcome_full_conditional[pure]:
-  Cases_on `conditional_result cx tv ee` >>
-  rename1 `conditional_result cx tv ee = (cr,ces)` >>
-  `expr_vv_res_ok cr` by
-    (qpat_x_assum `gas_admissible (bind _ _) _ _`
-      (qspec_then `gas_explicit marks u.vs_gas_readings` mp_tac o
-       REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
-     fs[vyperStateTheory.bind_def]) >>
-  drule_all bodyPtrIfExpConditionalSourceTheory.ifexp_conditional_source_success >>
+  drule_all ifexp_arm_pure_source >>
   disch_then (qx_choose_then `ctv` strip_assume_tac) >>
   rename1 `expr_store_bound cx t v op zf` >>
   irule gas_outcome_full_pure >>
@@ -953,43 +1034,13 @@ Resume ifexp_arm_outcome_full_conditional[post]:
   `~zf.vs_halted` by
     (drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
      simp[fragExecTheory.exit_result_def] >> metis_tac[])
-  >> rpt strip_tac >>
-  (fn g as (_, goal) =>
-    case total dest_thy_const (fst (strip_comb goal)) of
-      SOME {Name = "vv_at", ...} => suspend "post_at" g
-    | SOME {Name = "vv_own", ...} => suspend "post_own" g
-    | _ => suspend "post_place" g)
-QED
-
-Resume ifexp_arm_outcome_full_conditional[post_at]:
-  irule ifexp_vv_at_conditional >>
-  qexistsl [`tv`,`v`] >> fs[] >>
-  qpat_assum `!tail. conditional_result _ _ _ = _`
-    (qspec_then `ee.gas_obs` mp_tac) >>
-  pure_rewrite_tac (TypeBase.updates_of ``:evaluation_state``) >>
-  disch_then (mp_tac o MATCH_MP ifexp_conditional_result_shape) >>
-  strip_tac >> fs[read_result_def, vyperStateTheory.return_def]
-QED
-
-Resume ifexp_arm_outcome_full_conditional[post_own]:
-  `cr = INL (Value v') /\ ces = ee` by
+  >>
+  `conditional_result cx tv ee = (INL ctv,ee)` by
     (qpat_assum `!tail. conditional_result _ _ _ = _`
        (qspec_then `[]` mp_tac) >>
      qpat_assum `ee with gas_obs := [] = ee`
-       (fn th => PURE_REWRITE_TAC [th]) >>
-     qpat_assum `ctv = Value v'` (fn th => PURE_REWRITE_TAC [th]) >>
-     qpat_assum `conditional_result cx tv ee = (cr,ces)`
-       (fn th => PURE_REWRITE_TAC [th]) >> simp[]) >>
-  qpat_assum `!v. _ ==> vv_own cenv cx t sa sb ee _ _ zf`
-    (qspec_then `v'` mp_tac) >> simp[]
-QED
-
-Resume ifexp_arm_outcome_full_conditional[post_place]:
-  qpat_assum `!tail. conditional_result _ _ _ = _`
-    (qspec_then `ee.gas_obs` mp_tac) >>
-  pure_rewrite_tac (TypeBase.updates_of ``:evaluation_state``) >>
-  disch_then (mp_tac o MATCH_MP ifexp_conditional_result_place) >>
-  strip_tac >> gvs[]
+       (fn th => PURE_REWRITE_TAC [th]) >> disch_then ACCEPT_TAC) >>
+  drule_all (SIMP_RULE (srw_ss()) [] ifexp_arm_conditional_vv_facts) >> simp[]
 QED
 
 Finalise ifexp_arm_outcome_full_conditional
@@ -1112,7 +1163,7 @@ Proof
             vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
 QED
 
-Theorem ifexp_root_jnz_origin_path[local]:
+Theorem ifexp_root_jnz_origin_path:
   expr_post H ctx func cenv cx c es sa sc s0 mid (BoolV sel) cop u /\
   expr_type c = BaseT BoolT /\
   emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\
@@ -1132,7 +1183,7 @@ Proof
      valueEncodingTheory.val_to_w256_def]
 QED
 
-Theorem ifexp_ghost_inv_at_jump[local]:
+Theorem ifexp_ghost_inv_at_jump:
   ghost_inv_at D lo d cenv cx es G tn (jump_to l s) <=>
   ghost_inv_at D lo d cenv cx es G tn s
 Proof
@@ -1172,7 +1223,7 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem ifexp_arm_finish_vv_family[local]:
+Theorem ifexp_arm_finish_vv_family_observed:
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -1219,8 +1270,11 @@ Theorem ifexp_arm_finish_vv_family[local]:
   sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
   emit_inst ASSIGN [op] [rv] sd = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
-  fn_has_code sd sy func /\ fn_has_code sy sz func ==>
-  ?z Gz tf. !H. valid_horizon cx st0 H tr ==>
+  fn_has_code sd sy func /\ fn_has_code sy sz func /\
+  (!w. eval_operand op u = SOME w ==>
+       finish_at (jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts))) ==>
+  ?z Gz tf. ((?H0. valid_horizon cx st0 H0 tr) ==> finish_at z) /\
+    !H. valid_horizon cx st0 H tr ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (u,G,tn) [] (OK z,Gz,tf) /\
     (?tv'. INL tv = INL tv' /\
       vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv'
@@ -1276,6 +1330,7 @@ Proof
     [`jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)`,
      `step_prov PG G (mk_inst sd.cs_next_id ASSIGN [op] [rv]) (update_var rv w u)`,
      `step_taint (mk_inst sd.cs_next_id ASSIGN [op] [rv]) u (update_var rv w u) tn`] >>
+  conj_tac >- simp[] >>
   gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H tr ==> _`
     (qspec_then `H` mp_tac) >>
@@ -1299,6 +1354,54 @@ Proof
     (Q.INST [`sc` |-> `sc`,`sd` |-> `sd`,`op` |-> `op`,`u` |-> `u`]
       ifexp_vv_own_assigned_root_frame)) >>
   simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+(* Frames at the selected arm entry, before attaching an arm outcome. *)
+Theorem ifexp_selected_jump_ready:
+  compile_expr ce ty e se = (av,sm) /\
+  compile_ifexp_arm ce rt (lowered_value_type ce e) av sm = (op,sx) /\
+  emit_inst ASSIGN [op] [rv] sx = ((),sy) /\
+  fn_has_code se sm fn /\ fn_has_code sm sx fn /\ fn_has_code sx sy fn /\
+  se.cs_current_insts = [] /\ se.cs_current_bb = lbl /\
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s0,G0,tn0) marks (OK z,G,tn) /\
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (z,G,tn) [] (OK (jump_to lbl z),G,tn) /\
+  (!f i u. frag_reachable ctx fn s0 f i u ==> dalloca_fmp_headroom i u) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+  alloca_history fn z /\ ~z.vs_halted /\
+  return_buf_frame d ce sa s0 /\ sa.cs_next_var <= se.cs_next_var /\
+  s0.vs_alloca_next <= z.vs_alloca_next /\
+  expr_post H ctx fn ce cx c es sa sc s0 mid v cop z ==>
+  (!f i u. frag_reachable ctx fn (jump_to lbl z) f i u ==> dalloca_fmp_headroom i u) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp (jump_to lbl z)) /\
+  alloca_history fn (jump_to lbl z) /\ ~ (jump_to lbl z).vs_halted /\
+  (jump_to lbl z).vs_current_bb = se.cs_current_bb /\
+  (jump_to lbl z).vs_inst_idx = LENGTH se.cs_current_insts /\
+  return_buf_frame d ce se (jump_to lbl z)
+Proof
+  strip_tac >>
+  `!i. active_inst fn i (jump_to lbl z) ==>
+       frag_reachable ctx fn s0 fn i (jump_to lbl z)` by
+    (rpt strip_tac >> irule ifexp_selected_entry_reachable >>
+     qpat_assum `compile_expr _ _ _ se = _` (irule_at Any) >>
+     qpat_assum `compile_ifexp_arm _ _ _ _ sm = _` (irule_at Any) >>
+     qpat_assum `emit_inst ASSIGN _ _ sx = _` (irule_at Any) >>
+     qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ _` (irule_at Any) >> simp[]) >>
+  conj_tac >- metis_tac[contextRawReachableTheory.frag_reachable_trans] >>
+  conj_tac
+  >- (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp z` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      simp[jump_to_def, ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
+  conj_tac
+  >- (irule allocaHistoryTheory.alloca_history_jump >>
+      simp[jump_to_def] >> qexists `z` >> simp[]) >>
+  simp[bodyMemoryDefsTheory.return_buf_frame_jump_to] >>
+  `~(jump_to lbl z).vs_halted /\ (jump_to lbl z).vs_current_bb = se.cs_current_bb /\
+   (jump_to lbl z).vs_inst_idx = LENGTH se.cs_current_insts` by simp[jump_to_def] >>
+  simp[] >>
+  irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+  qexistsl [`ce`,`s0`,`sa`] >> fs[expr_post_def]
 QED
 
 Theorem ifexp_vv_full_root_uniform:
@@ -1570,26 +1673,8 @@ Resume ifexp_vv_full_root_uniform[arm]:
      (z,G1,tn1) [] (OK (jump_to (if sel then tl else el) z),G1,tn1)` by
     (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
        (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
-  `!i. active_inst func i (jump_to (if sel then tl else el) z) ==>
-       frag_reachable ctx func s0 func i (jump_to (if sel then tl else el) z)` by
-    (rpt strip_tac >> irule ifexp_selected_entry_reachable >>
-     qpat_assum `compile_expr cenv ty (if sel then a else b) se = (av,sea)` (irule_at Any) >>
-     qpat_assum `compile_ifexp_arm cenv t _ av sea = (aop,sx)` (irule_at Any) >>
-     qpat_assum `emit_inst ASSIGN [aop] [rv] sx = ((),sy)` (irule_at Any) >>
-     qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) cm (OK z,G1,tn1)` (irule_at Any) >>
-     simp[]) >>
-  `!fn inst s. frag_reachable ctx func (jump_to (if sel then tl else el) z) fn inst s ==>
-       dalloca_fmp_headroom inst s` by
-    (qx_genl_tac [`afn`,`inst`,`u0`] >> strip_tac >>
-     qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _` irule >>
-     qexists_tac `afn` >>
-     irule contextRawReachableTheory.frag_reachable_trans >>
-     qpat_assum `frag_reachable ctx func (jump_to (if sel then tl else el) z) afn inst u0`
-       (irule_at Any) >> first_assum ACCEPT_TAC) >>
-  `(ctx_has_dalloca ctx ==> allocas_below_fmp (jump_to (if sel then tl else el) z))` by
-    (qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp z` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[jump_to_def, ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
+  `sa.cs_next_var <= se.cs_next_var` by decide_tac >>
+  drule_all ifexp_selected_jump_ready >> strip_tac >>
   simp[Abbr `finalR`] >>
   irule ifexp_outcome_zero_suffix_framed >>
   irule_at Any (Q.INST [`t` |-> `t`, `c` |-> `c`, `a` |-> `a`, `b` |-> `b`]
@@ -1611,15 +1696,6 @@ Resume ifexp_vv_full_root_uniform[arm]:
       Cases_on `sel` >> simp[]) >>
   conj_tac >- (Cases_on `sel` >> simp[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (simp[bodyMemoryDefsTheory.return_buf_frame_jump_to] >>
-      irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-      qexistsl [`cenv`,`s0`,`sa`] >> simp[] >>
-      qpat_x_assum `expr_post _ _ _ _ _ c _ _ _ _ _ _ _ z` mp_tac >>
-      simp[expr_post_def]) >>
-  conj_tac
-  >- (irule allocaHistoryTheory.alloca_history_jump >>
-      simp[jump_to_def] >> qexists `z` >> simp[]) >>
   conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> ((?v. _) /\ _) /\ _`
@@ -1651,7 +1727,8 @@ Resume ifexp_vv_full_root_uniform[arm]:
   simp[NoAsms, expr_type_def] >>
   irule (CONV_RULE (RAND_CONV
     (SIMP_CONV (srw_ss() ++ numSimps.ARITH_ss) [post_value_type_def, expr_type_def]))
-    ifexp_arm_finish_vv_family) >>
+    (PURE_REWRITE_RULE [IMP_CLAUSES, AND_CLAUSES, FORALL_SIMP]
+      (BETA_RULE (Q.INST [`finish_at` |-> `\s. T`] ifexp_arm_finish_vv_family_observed)))) >>
   simp[] >>
   conj_tac >- metis_tac[] >>
   qexistsl [`G1`,`cop`,`IfExp t c a b`,`mid`,`if sel then tl else el`,
