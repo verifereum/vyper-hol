@@ -1816,29 +1816,39 @@ Proof
   simp[deploy_internal_order_def, reach_internals_distinct]
 QED
 
-Theorem ALL_DISTINCT_MAP_FILTER[local]:
-  !f P l. ALL_DISTINCT (MAP f l) ==> ALL_DISTINCT (MAP f (FILTER P l))
+(* Selecting from functions with distinct keys keeps the keys distinct. *)
+Theorem ALL_DISTINCT_order_internals[local]:
+  !f names ints. ALL_DISTINCT names /\ ALL_DISTINCT (MAP f ints) ==>
+    ALL_DISTINCT (MAP f (order_internals names ints))
 Proof
-  ntac 2 gen_tac >> Induct >> rw[listTheory.MEM_MAP, listTheory.MEM_FILTER] >> metis_tac[]
+  rpt strip_tac >>
+  `PERM (order_internals names ints)
+     (FILTER (\x. MEM (FST (SND (SND (SND x)))) names) ints)` by
+    simp[PERM_order_internals] >>
+  qmatch_asmsub_abbrev_tac `PERM _ (FILTER P ints)` >>
+  `PERM ints (FILTER P ints ++ FILTER ($~ o P) ints)` by
+    simp[sortingTheory.PERM_SPLIT] >>
+  `ALL_DISTINCT (MAP f (FILTER P ints))` by
+    metis_tac[sortingTheory.PERM_MAP, sortingTheory.ALL_DISTINCT_PERM,
+              listTheory.MAP_APPEND, listTheory.ALL_DISTINCT_APPEND] >>
+  metis_tac[sortingTheory.PERM_MAP, sortingTheory.ALL_DISTINCT_PERM]
 QED
 
-(* Selecting from functions with distinct keys keeps the keys distinct. *)
 Theorem ALL_DISTINCT_order_runtime_internals:
   !f tops ints. ALL_DISTINCT (MAP f ints) ==>
     ALL_DISTINCT (MAP f (order_internals (runtime_internal_order tops ints) ints))
 Proof
-  metis_tac[PERM_order_runtime_internals, sortingTheory.PERM_MAP,
-            sortingTheory.ALL_DISTINCT_PERM, ALL_DISTINCT_MAP_FILTER]
+  rpt strip_tac >> irule ALL_DISTINCT_order_internals >>
+  simp[runtime_internal_order_def, reach_internals_distinct]
 QED
 
 Theorem ALL_DISTINCT_order_deploy_internals:
   !f ctor ints. ALL_DISTINCT (MAP f ints) ==>
     ALL_DISTINCT (MAP f (order_internals (deploy_internal_order ctor ints) ints))
 Proof
-  metis_tac[PERM_order_deploy_internals, sortingTheory.PERM_MAP,
-            sortingTheory.ALL_DISTINCT_PERM, ALL_DISTINCT_MAP_FILTER]
+  rpt strip_tac >> irule ALL_DISTINCT_order_internals >>
+  simp[deploy_internal_order_def, reach_internals_distinct]
 QED
-
 (* ===== Policy-driven complete-unit lowering ===== *)
 
 (* Package runtime metadata from source, but keep the raw lowering result atomic.
