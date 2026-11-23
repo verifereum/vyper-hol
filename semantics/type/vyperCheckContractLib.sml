@@ -33,6 +33,7 @@ val checker_defs =
    constSubstModsTheory.subst_consts_stmt_mods_def,
    constSubstModsTheory.module_consts_env_mods_def,
    constSubstModsTheory.consts_env_mods_acc_def,
+   constSubstModsTheory.consts_env_modules_order_def,
    constSubstModsTheory.consts_env_mods_def,
    constSubstTheory.fold_const_expr_def,
    constSubstTheory.fold_const_builtin_def,
