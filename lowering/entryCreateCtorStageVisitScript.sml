@@ -263,3 +263,28 @@ Proof
   qpat_assum `!a' vals' m' es' s'' next'. _` irule >>
   first_assum (irule_at Any) >> simp[] >> conj_tac >> first_assum ACCEPT_TAC
 QED
+
+(* Crossing inspected administrative code does not evaluate an argument.
+   The callback concerns only the unchanged source at the actual cut. *)
+Theorem create_ctor_admin_skip[local]:
+  body_inv tops ctx ce cx /\ MEM fn ctx.ctx_functions /\
+  create_cut_code {} a m /\ fn_has_code a m fn /\
+  create_cut_code {} m b /\ fn_has_code m b fn /\
+  EVERY (\i. ~MEM i.inst_opcode [INVOKE; CREATE; CREATE2]) (frag_code a m) /\
+  ~s.vs_halted /\
+  (!first u. create_operand_at m u /\
+    create_expr_prefix a m E ctx fn s (create_cut_marks E first) u ==>
+    create_cut_marks E first = [] /\ s.vs_gas_readings = u.vs_gas_readings /\
+    create_operand_cut m b E ctx fn tops cx st0 source (es,u)) ==>
+  create_operand_cut a b E ctx fn tops cx st0 source (es,s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `create_operand_cut a m E ctx fn tops cx st0 source (es,s)` by
+    (irule create_effect_suffix_cut >> metis_tac[]) >>
+  simp[create_operand_cut_def] >> rpt gen_tac >> strip_tac >>
+  drule_all create_interior_visit_first_exit >> strip_tac
+  >- (fs[create_operand_cut_def] >> metis_tac[]) >>
+  qpat_assum `!first u. create_operand_at m u /\ _ ==> _`
+    (drule_all_then strip_assume_tac) >>
+  fs[create_operand_cut_def, create_body_cut_def] >> metis_tac[]
+QED
