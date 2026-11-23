@@ -444,6 +444,7 @@ QED
 val linked_body_guard =
   ``ALOOKUP cx.sources cx.txn.target = SOME mods /\
     vyperTypeContract$exports_ok cx.layouts cx.txn.target mods exps /\
+    IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target mods) /\
     EVERY (struct_args_unique o SND) mods /\
     (!src tops vis mut nr raw fn args dflts ret ss.
        ALOOKUP mods src = SOME tops /\
@@ -518,6 +519,7 @@ Theorem body_stmts_sim_full_mods:
     module_body_inv mods src tops cenv cx /\
     shadow_body_inv_mods mods exps ctx shadow_ctx /\
     vyperTypeContract$exports_ok cx.layouts cx.txn.target mods exps /\
+    IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target mods) /\
     EVERY (struct_args_unique o SND) mods /\
     supported_stmts tops bindings ss /\
     (!sid ts vis mut nr raw fn args dflts ret body.
