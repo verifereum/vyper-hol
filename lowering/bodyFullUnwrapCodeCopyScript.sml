@@ -60,7 +60,7 @@ Proof
 QED
 
 (* The raw instruction list at the selected allocation/copy endpoint. *)
-Theorem unwrap_code_copy_endpoint_run[local]:
+Theorem unwrap_code_copy_endpoint_run:
   compile_alloc_buffer nb sb = (buf,mid) /\ buf.buf_operand = Var root /\
   compile_imm_copy_to_memory ctor imm src buf.buf_operand n 0 mid = ((),sc) /\
   step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
