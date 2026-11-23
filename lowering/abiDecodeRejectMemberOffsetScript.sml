@@ -6,7 +6,7 @@ Ancestors
   bodyPtrBopScalarOutcome bodyPtrBopScalarSeq
   abiEncoder emitHelperProps exprLoweringProps compileEnv fragExec
   venomInst venomExecSemantics venomState loweringStateRelDefs arithmetic words
-  exprSimConvertBytes abiDecoderContract fragGasCopyLoop fragGasSeqPtr
+  exprSimConvertBytes abiDecoderContract fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeqPtr
   stmtReasonLitFragMemory instMemFrontier fragExecMem memSafeRun ptrDiscipline
   pred_set list rich_list fragGasOriginPtr instIdxIndep
   abiMalformedRecursiveInterface exprSimAbiDecodeMemberExecute valueEncodingProps vyperABI

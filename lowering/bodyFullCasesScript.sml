@@ -29,6 +29,7 @@ Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallS
   bodyFullExprCore exprSimOperators exprLoweringProps compileEnv
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps exprSimAggregateLayout loweringPosts bodyExprPreFacts supportedStmts
+  bodyInvCodeProps bodyInvExecutionProps contractInvContextProps exprBodyPreProps
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
   vyperAST vyperInterpreter vyperState vyperValue list
@@ -134,7 +135,10 @@ Theorem body_assign_case_full:
     body_stmt_full_ok cx (Assign (BaseTarget t) e)
 Proof
   rw[body_stmt_full_ok_def] >>
-  `struct_args_unique tops` by (fs[body_inv_def] >> metis_tac[]) >>
+  `struct_args_unique tops` by
+    (drule_then assume_tac body_inv_contract >>
+     drule_then assume_tac contract_inv_singleton_source_modules >>
+     metis_tac[]) >>
   Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
                     is_word_type ty`
   >- (gvs[] >> irule body_assign_local_word_full >> metis_tac[]) >>
@@ -467,7 +471,8 @@ Theorem body_msg_gas_full_case:
 Proof
   rw[body_expr_full_ok_def] >>
   `args = [] /\ ann = env_item_type MsgGas` by
-    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+    (drule_then strip_assume_tac expr_body_pre_static_facts >>
+     gvs[well_typed_expr_def, well_typed_builtin_app_def]) >>
   gvs[compile_msg_gas_sim_full]
 QED
 
@@ -558,7 +563,7 @@ Proof
   rpt gen_tac >> strip_tac >> PairCases_on `sig` >> fs[] >>
   irule extcall_body_full_ok_of_vv >> rpt gen_tac >> strip_tac >>
   `acyclic_struct_metadata cenv.ce_struct_fields` by
-    fs[bodySimTheory.body_inv_def] >>
+    metis_tac[body_inv_contract, contract_inv_acyclic_struct_metadata] >>
   rewrite_tac [expr_vv_sim_full_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
@@ -618,7 +623,9 @@ Theorem body_for_case_full:
     body_stmt_full_ok cx (For id typ it n body)
 Proof
   rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
-  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by fs[body_inv_def] >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+    (drule body_inv_contract >>
+     MATCH_ACCEPT_TAC contract_inv_singleton_source_modules) >>
   irule compile_for_frag_full >> metis_tac[]
 QED
 
@@ -866,20 +873,23 @@ Proof
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >>
      simp[supported_stmt_expr_exists_def, supported_expr_exists_def]) >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  `well_typed_expr env e` by fs[type_stmt_def] >>
+  drule_all_then strip_assume_tac bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
-  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
+    drule_then ACCEPT_TAC body_inv_main_support >>
+  `cx_tops cx = tops` by (drule_then (ACCEPT_TAC o CONJUNCT2) body_inv_main_code) >>
+  `alloc_limits_expr cenv e` by
+    gvs[stmt_exprs_ok_flat, alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_expr_def] >>
   `expr_body_pre cenv cx env e es` by
     (irule (Q.SPECL [`cenv`, `cx`, `env`, `e`, `es`, `[]`]
               stmt_expr_body_pre) >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-         supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def,
-         body_inv_def]
-     >- (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-         qexists_tac `cenv` >>
-         fs[alloc_limits_stmt_def,alloc_limits_expr_def]) >>
-     metis_tac[]) >>
+         supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def] >>
+     conj_tac
+     >- (rpt strip_tac >> drule_all_then ACCEPT_TAC body_inv_singleton_abi_types) >>
+     irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
+     qexists_tac `cenv` >>
+     fs[alloc_limits_stmt_def,alloc_limits_expr_def]) >>
   first_x_assum (qspecl_then [`cenv`, `env`, `lctx`, `SOME e`, `es`] mp_tac) >>
   simp[same_frame_refl] >> disch_then irule >>
   fs[body_expr_full_ok_def] >> metis_tac[]
@@ -951,7 +961,7 @@ Proof
   disch_then (mk_asm "tail_contract") >> rpt gen_tac >> strip_tac >>
   asm "source_contract" drule >> strip_tac >> gvs[] >>
   `expr_body_pre cenv cx env e es` by
-    (first_x_assum irule >> gvs[expr_body_pre_def]) >>
+    (first_x_assum irule >> metis_tac[expr_body_pre_static_facts]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type e) e es` by
     (gvs[body_exprs_full_ok_def] >>
@@ -1291,6 +1301,28 @@ Proof
 QED
 
 (* Local source and paired compilation boundaries for the joint case. *)
+Theorem selfdestruct_full_source_pre_mods[local]:
+  !mods cenv cx env ann args dflt es.
+    expr_body_pre_mods mods cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
+    ?e. args = [e] /\ ann = NoneT /\ dflt = NONE /\
+      expr_type e = BaseT AddressT /\
+      (!es'. expr_sim_inv_mods mods cenv cx env es' ==>
+         expr_body_pre_mods mods cenv cx env e es') /\
+      eval_expr cx (Call ann SelfDestructTarget args dflt) =
+        bind (bind (eval_expr cx e) (read_result cx)) (selfdestruct_tail cx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?e. args = [e] /\ ann = NoneT /\ dflt = NONE /\
+       expr_type e = BaseT AddressT` by
+    gvs[expr_body_pre_mods_def, well_typed_expr_def, LENGTH_EQ_NUM_compute] >>
+  gvs[eval_selfdestruct_action] >>
+  rw[expr_body_pre_mods_def] >>
+  gvs[expr_body_pre_mods_def, well_typed_expr_def, byte_widths_expr_def,
+      alloc_limits_expr_def, int_calls_expr_def,
+      expr_has_evm_run_thm, supported_expr_exists_def,
+      supported_exprs_exists_every]
+QED
+
 Theorem selfdestruct_full_source_pre:
   !cenv cx env ann args dflt es.
     expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
@@ -1302,15 +1334,12 @@ Theorem selfdestruct_full_source_pre:
         bind (bind (eval_expr cx e) (read_result cx)) (selfdestruct_tail cx)
 Proof
   rpt gen_tac >> strip_tac >>
-  `?e. args = [e] /\ ann = NoneT /\ dflt = NONE /\
-       expr_type e = BaseT AddressT` by
-    gvs[expr_body_pre_def, well_typed_expr_def, LENGTH_EQ_NUM_compute] >>
-  gvs[eval_selfdestruct_action] >>
-  rw[expr_body_pre_def] >>
-  gvs[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
-      alloc_limits_expr_def, int_calls_expr_def,
-      expr_has_evm_run_thm, supported_expr_exists_def,
-      supported_exprs_exists_every]
+  qpat_x_assum `expr_body_pre _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_body_pre_split_def]) >>
+  drule_then strip_assume_tac selfdestruct_full_source_pre_mods >>
+  gvs[expr_body_pre_split_def, int_calls_expr_def, supported_expr_exists_def,
+      supported_exprs_exists_every] >>
+  rpt strip_tac >> first_assum irule >> fs[expr_sim_inv_split_def]
 QED
 
 Theorem selfdestruct_full_layout_shadow:

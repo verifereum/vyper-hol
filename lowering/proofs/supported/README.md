@@ -53,9 +53,9 @@ bounds where those types are supported. Typing and allocation are separate.
   `(mutability,nonreentrant,raw_return,args,defaults,return_type,body)`.
 - `supported_event_fields tops id`: option of declared `(argument,indexed)` list.
 
-These are **raw syntactic lookups**, not admission predicates: inspect their
-results and combine them with the declaration/type checks. All namespace-bearing
-lookups reject `SOME module_id`, including `SOME 0`.
+These raw lookups take a single module's declarations and an unqualified key
+`(NONE, name)`. For a qualified reference `(SOME module_id, name)`, the linked
+checks resolve the module first and use its declarations with `(NONE, name)`.
 
 `FunctionDecl` header checks deliberately ignore the body, as their name and
 `supported_header_body_independent` contract state. There is no body predicate
@@ -109,10 +109,10 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
 - `supported_storage_scalar tops id ty`, `supported_storage_array tops id`,
   `supported_storage_dynamic_array tops id`, `supported_subscript_base tops id`,
   `supported_storage_fields tops id`, `supported_storage_field_read tops id field`.
-  These inspect the declaration lookups; require private slotted admitted storage/map
-  declarations, reject modules, and distinguish aggregate places from values.
-  Storage-field **reads** require the first field; writes may use any field
-  in the exported field list.
+  For unqualified ids, these check the local declaration, its storage type,
+  and its slot. Storage-field reads check declared field membership.
+  The syntax predicates accept qualified ids for resolution by the linked
+  checks. `supported_storage_fields` itself is a single-module field lookup.
 - `supported_external_return_type tops ty`: any `supported_value_type tops ty`
   (W, strings/bytes, tuples of scalars, arrays of W, word structs); no NoneT.
 
@@ -124,9 +124,11 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
   Subscript/Attribute are specially checked places, not standalone P values.
   Ternaries use the supported value types with tuple results excluded.
 - `supported_effect_expr tops e` (E): only root IntCall, ExtCall, Send, or Pop.
-  All call arguments, including external target/value, must be P. Internal
-  lookup requires Internal/NONE. ExtCall requires exact count, W arguments and
-  a supported value return. No declaration is consulted: the selector is
+  All call arguments, including external target/value, must be P. An
+  unqualified `IntCall` requires an `Internal` declaration in `tops`. The
+  syntax gate accepts qualified `IntCall` ids for resolution in the linked
+  unit, including imported constructors in deploy mode. ExtCall requires
+  exact count, W arguments and a supported value return. Its selector is
   hashed from the call-site signature, as the source semantics does
   ([#555](https://github.com/verifereum/vyper-hol/issues/555)).
   Keyword operands (`value=`, `gas=`, `default_return_value=`) follow the
