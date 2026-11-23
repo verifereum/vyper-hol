@@ -16,6 +16,9 @@ Ancestors
   exprSimIfExp exprSimDefs exprLowering
   boolChainFullSelect boolChainFullSingleton boolChainShadowLayout
   boolChainFullHead boolChainFullFinish boolChainCountedControl
+  bodyFullWordStackBuiltin boolChainSource boolChainCodeLayout
+  gasShadowBoolChainOperands gasShadow[qualified] gasShadowState bodyFullShared[qualified]
+  bodyMemoryDefs wordArgsPtr exprSimMemDefs
   bodyFullIfExpPrepare bodyFullIfExpReach exprBodyPreProps exprSimSource
   exprSimExtract32Post exprSimWordArgs gasOutcomeFullCompose gasOutcomeFull
   vyperStorageTrace vyperStorageFootprint exprLoweringProps loweringPosts
@@ -240,5 +243,78 @@ Theorem bool_chain_expr_full_ok:
     bool_chain_full_ok cx (bool_chain_operands is_and (n - 1) e) ==>
     body_expr_full_ok cx (Builtin ann (BoolChain is_and n) [e])
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule word_stack_builtin_body_full_intro >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule_then strip_assume_tac bool_chain_wrapper_action >> gvs[] >>
+  simp[expr_type_def, is_word_type_def, post_value_type_word] >>
+  conj_tac
+  >- (gen_tac >>
+      Cases_on `compile_expr cenv ty (Builtin (BaseT BoolT) (BoolChain is_and n) [e]) sa` >>
+      drule_then strip_assume_tac bool_chain_root_layout >> simp[]) >>
+  simp[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `compile_expr cenv ty (Builtin (BaseT BoolT) (BoolChain is_and n) [e]) sa` >>
+  drule_then strip_assume_tac bool_chain_root_layout >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) ty
+    (Builtin (BaseT BoolT) (BoolChain is_and n) [gas_shadow_expr e]) shadow_sa` >>
+  qpat_assum `compile_expr _ _ (Builtin _ _ [gas_shadow_expr e]) shadow_sa = _`
+    (mp_then Any strip_assume_tac bool_chain_root_layout) >>
+  gvs[gasShadowTheory.gas_shadow_expr_def, gasShadowTheory.gas_shadow_builtin_def,
+      gas_shadow_bool_chain_operands,
+      lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
+  rename1 `fn_has_code sa sb func` >>
+  rename1 `fn_has_code shadow_sa shadow_sb shadow_func` >>
+  rename1 `fresh_var sa = (rv,sr)` >>
+  rename1 `fresh_var shadow_sa = (rv,shadow_sr)` >>
+  rename1 `fresh_label "bool_exit" sr = (_,sg)` >>
+  rename1 `fresh_label "bool_exit" shadow_sr = (_,shadow_sg)` >>
+  `gas_shadow_state sr shadow_sr` by
+    (mp_then (Pos hd) (drule_all o GEN_ALL) bodyFullSharedTheory.gas_shadow_step
+       gas_shadow_compiles_fresh_var >> simp[]) >>
+  `gas_shadow_state sg shadow_sg` by
+    (mp_then (Pos hd) (drule_all o GEN_ALL) bodyFullSharedTheory.gas_shadow_step
+       gas_shadow_compiles_fresh_label >> simp[]) >>
+  `shadow_sb.cs_current_bb = sb.cs_current_bb` by gvs[gas_shadow_state_def] >>
+  qabbrev_tac `root = Builtin (BaseT BoolT) (BoolChain is_and n) [e]` >>
+  irule gas_outcome_full_source_cong >>
+  qexists_tac `bind (eval_expr cx e) (read_result cx)` >> conj_tac
+  >- (gen_tac >>
+      Cases_on `bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs)` >>
+      rename1 `bind (eval_expr cx e) _ _ = (res,ee)` >> Cases_on `res` >>
+      fs[bind_def, return_def, read_result_def]) >>
+  suspend "outcome"
 QED
+
+Resume bool_chain_expr_full_ok[outcome]:
+  irule gas_outcome_full_post_mono >>
+  qexistsl_tac
+    [`\H res ee Gz tf z. ?b. res = INL (BoolV b) /\
+        expr_post H ctx func cenv cx root es sa sb s0 ee (BoolV b) (Var rv) z /\
+        z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+        s0.vs_alloca_next <= z.vs_alloca_next /\ ghost_inv_at (DF H) lo d cenv cx ee Gz tf z /\
+        ptr_val_ok cx (BaseT BoolT) (BoolV b) (Var rv) Gz tf z /\
+        ghost_kept_at lo cenv es sa G0 tn0 s0 Gz tf`,
+     `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u)`] >>
+  BETA_TAC >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> qexists_tac `BoolV b` >>
+      simp[Abbr `root`, expr_type_def, is_word_type_def, expr_store_bound_word]) >>
+  conj_tac >- simp[] >>
+  rename1 `compile_bool_chain_ops _ (gas_shadow_env T cenv) _ _ _ _ shadow_sg = ((),shadow_sf)` >>
+  qpat_assum `!fn. fn_has_code sa sb fn ==> _` (drule_then strip_assume_tac) >>
+  qpat_assum `!fn. fn_has_code shadow_sa shadow_sb fn ==> _` (drule_then strip_assume_tac) >>
+  `return_buf_frame d cenv sg s0` by
+    (drule return_buf_frame_frame >> disch_then irule >> simp[]) >>
+  irule bool_chain_ops_outcome_full >>
+  simp[Abbr `root`, expr_type_def, wb_frame_refl, ghost_kept_at_refl] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qexistsl_tac [`n - 1`,`is_and`,`sg`,`sf`,`shadow_func`,`shadow_sg`,`shadow_sf`] >>
+      simp[] >>
+      qpat_assum `shadow_sb.cs_current_bb = sb.cs_current_bb` (once_rewrite_tac o single o SYM) >>
+      first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`env`,`tops`] >> simp[]
+QED
+
+Finalise bool_chain_expr_full_ok
