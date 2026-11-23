@@ -1264,13 +1264,14 @@ Resume compiler_builtin_var[boolchain]:
   rpt (pairarg_tac >> gvs[]) >>
   rpt strip_tac >> gvs[contextTheory.vv_operand_def] >>
   rename [`fresh_var sa = (res,s1)`, `fresh_label _ s1 = (ex,s2)`,
-          `compile_bool_chain_ops _ _ _ res ex _ s2 = (_,s3)`] >>
+          `compile_bool_chain_ops _ _ direction res ex
+             (bool_chain_operands direction (budget - 1) _) s2 = (_,s3)`] >>
   `not_fresh_at s1 res` by
     (drule fresh_var_safe_operand >> simp[safe_operand_def]) >>
   `ci_mono s1 s2` by metis_tac[ci_mono_fresh_label, pairTheory.SND] >>
   `ci_mono s2 s3` by
-    (`ci_mono s2 (SND (compile_bool_chain_ops cfn cenv b res ex
-                          (bool_chain_operands b (n - 1) (HD args)) s2))` by
+    (`ci_mono s2 (SND (compile_bool_chain_ops cfn cenv direction res ex
+                          (bool_chain_operands direction (budget - 1) (HD args)) s2))` by
        simp[ci_mono_compile_bool_chain_ops, ci_mono_lower_value_cfn] >>
      gvs[]) >>
   `ci_mono s3 sb` by metis_tac[ci_mono_new_block, pairTheory.SND] >>

@@ -1067,8 +1067,12 @@ Resume compile_subscript_array_copied_base_case[base_normal]:
        (Cases_on `bi` >>
         gvs[lowered_value_type_def, concat_buffer_type_def, vyperASTTheory.expr_type_def]
         >~ [`Builtin _ NamedConst _`] >-
-          (simp[Once (oneline lowered_value_type_def), vyperASTTheory.expr_type_def] >>
-           Cases_on `l` >> simp[] >> Cases_on `h` >> simp[]) >>
+          (rename1 `Builtin _ NamedConst args` >>
+           simp[Once (oneline lowered_value_type_def), vyperASTTheory.expr_type_def] >>
+           qspec_then `args` (DISJ_CASES_THEN2 SUBST_ALL_TAC
+             (qx_choose_then `arg` (qx_choose_then `rest` SUBST_ALL_TAC))) list_CASES
+           >- simp[] >>
+           simp[] >> Cases_on `arg` >> simp[]) >>
         gvs[expr_body_pre_def] >>
         qpat_x_assum `well_typed_expr env (Builtin _ _ _)` mp_tac >>
         simp[Once well_typed_expr_def, well_typed_builtin_app_def,

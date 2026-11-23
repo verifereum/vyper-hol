@@ -25,12 +25,12 @@ Theorem named_const_eval[local]:
   named_const_operand e ==>
   eval_expr cx (Builtin ann NamedConst [e]) = eval_expr cx e
 Proof
-  strip_tac >> rw[FUN_EQ_THM] >>
+  strip_tac >> simp[FUN_EQ_THM] >> qx_gen_tac `st` >>
   simp[Once evaluate_def, builtin_args_length_ok_def, code_slice_source_def,
        is_self_codesize_def, type_check_def, assert_def, ignore_bind_def,
        return_def, bind_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def] >>
-  Cases_on `eval_expr cx e x` >> rename1 `_ = (res,st')` >> Cases_on `res` >>
+  Cases_on `eval_expr cx e st` >> rename1 `_ = (res,st')` >> Cases_on `res` >>
   gvs[] >> drule_all named_const_operand_eval_value >> strip_tac >>
   simp[read_result_def, return_def, Once evaluate_def, get_accounts_def,
        evaluate_builtin_def, lift_sum_def, precompile_call_success_def,
@@ -212,8 +212,9 @@ Proof
   >- (rpt strip_tac >>
       drule_then (mp_tac o REWRITE_RULE [expr_type_def]) expr_body_pre_copy_ok >> simp[]) >>
   drule expr_body_pre_type_evaluates >>
-  simp[optionTheory.IS_SOME_EXISTS, expr_type_def] >> strip_tac >>
-  qexists_tac `x` >> simp[] >> rpt gen_tac >> strip_tac >>
+  simp[optionTheory.IS_SOME_EXISTS, expr_type_def] >>
+  disch_then (qx_choose_then `tv` assume_tac) >>
+  qexists_tac `tv` >> simp[] >> rpt gen_tac >> strip_tac >>
   `expr_body_pre cenv cx env (Builtin ann NamedConst [e]) (es with gas_obs := gs)` by simp[] >>
   drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[expr_type_def] >> metis_tac[]
 QED

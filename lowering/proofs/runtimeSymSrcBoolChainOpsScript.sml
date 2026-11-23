@@ -29,6 +29,7 @@ Proof
         (drule_all_then strip_assume_tac) >>
       drule_all_then assume_tac runtime_sym_assign >>
       drule_all_then ACCEPT_TAC runtime_sym_jump) >>
+  rename1 `compile_bool_chain_ops _ _ _ _ _ (head::next::rest) _ = _` >>
   simp[Once compile_bool_chain_ops_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >>
@@ -61,7 +62,8 @@ Proof
        rename1 `compile_bool_chain_ops _ _ _ _ _ _ tail_st = ((),st')` >>
        qexists `tail_st` >> asm_rewrite_tac[]) >>
    rpt gen_tac >> strip_tac >>
-   `MEM e (head::h::t)` by (pure_once_rewrite_tac[MEM] >> asm_rewrite_tac[]) >>
+   `MEM e (head::next::rest)` by
+     (pure_once_rewrite_tac[MEM] >> asm_rewrite_tac[]) >>
    qpat_assum `!e s v s'. MEM e (head::_) /\ _ ==> _`
      (drule_all_then ACCEPT_TAC))
 QED
