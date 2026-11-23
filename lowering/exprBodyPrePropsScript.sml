@@ -1,6 +1,6 @@
 Theory exprBodyPreProps
 Ancestors
-  exprSimHypsDefs bodyInvCodeProps vyperTypeInvariants
+  bodyCallSupport exprSimHypsDefs bodyInvCodeProps vyperTypeInvariants
 
 Theorem body_inv_expr_body_pre_mods:
   body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
@@ -37,10 +37,7 @@ QED
 
 Theorem expr_body_pre_mods_int_calls:
   expr_body_pre_mods mods cenv cx env e es ==>
-  EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
-                    supported_program tops /\
-                    IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
-    (int_calls_expr e)
+  EVERY (source_body_call_supported cx) (int_calls_expr e)
 Proof
   simp[expr_body_pre_mods_def]
 QED
