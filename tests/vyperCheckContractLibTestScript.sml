@@ -2226,6 +2226,43 @@ end
 
 val () = cv_auto_trans contract_namespaces_ok_def;
 
+(* In the local ABI environment the qualified struct becomes an empty tuple,
+   causing a collision at 0x3a3b86bc. The linked environment instead resolves
+   the struct to a tuple containing uint256. *)
+local
+  fun imported_selectors name =
+    ``[StructDecl "Arg" [("value", ^u256)];
+       FunctionDecl External Pure F F "struct_input_45647"
+         [("a", StructT (SOME 1, "Arg"))] [] NoneT [];
+       ^(selector_main name)]``
+  val colliding = imported_selectors "uint_input_59157"
+  fun linked tls = ``[(NONE, []); (SOME 1, ^tls)]``
+in
+Theorem imported_selectors_collide_only_in_local_type_env:
+  ~ALL_DISTINCT (abi_external_method_ids (type_env ^colliding) ^colliding) /\
+  ALL_DISTINCT
+    (abi_external_method_ids (type_env_all_modules ^(linked colliding)) ^colliding)
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val () = check_rejects empty_layouts (linked colliding)
+val () = check_accepts "distinct imported selectors" false empty_layouts
+  (linked (imported_selectors "uint_input_59158"))
+end
+
+(* The struct keys are distinct pairs. A dot in the main name would make
+   their lowered names coincide. The control changes only that name. *)
+local
+  fun dotted_name_modules name =
+    ``[(NONE, [StructDecl ^(stringSyntax.fromMLstring name) [("value", ^u256)]]);
+       (SOME 1, [StructDecl "foo" [("value", ^u256)]])]``
+in
+val () = check_rejects empty_layouts (dotted_name_modules "1.foo")
+val () = check_accepts "dot-free main and imported declarations" false
+  empty_layouts (dotted_name_modules "foo")
+end
+
 Theorem cross_visibility_self_member_clash_cv:
   ~contract_namespaces_ok F
     [(NONE, [FunctionDecl Internal Nonpayable F F "foo" [] [] NoneT [];
