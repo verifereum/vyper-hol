@@ -16,6 +16,7 @@ Ancestors bodyFullShadowBodyInv bodyFullRaiseCustomError bodyFullAssertCustomErr
   vyperTypeContract[qualified,ignore_grammar] constSubst bodyLoopCalls
   contractInvContextProps
   bodyFullPredsMods bodyFullPostsMods bodyFullZeroCasesMods bodyInvSplit constSubstMods
+  bodyQualifiedStmtSupport
 
 val _ = Parse.hide "body";
 
@@ -457,15 +458,18 @@ fun linked_body_ind rank_guard =
   evaluate_ind
   |> Q.SPECL [
        `\cx s. ^rank_guard /\ ^linked_body_guard /\
+         qualified_stmt_decls_ok mods s /\
          ^linked_calls_live (int_calls_stmt s) /\ stmt_loop_calls_ok mods s ==>
          body_stmt_full_ok_mods mods exps cx s`,
        `\cx ss. ^rank_guard /\ ^linked_body_guard /\
+         qualified_stmts_decls_ok mods ss /\
          ^linked_calls_live (int_calls_stmts ss) /\ stmts_loop_calls_ok mods ss ==>
          body_stmts_full_ok_mods mods exps cx ss`,
        `\cx it. ^rank_guard /\ ^linked_body_guard /\
          ^linked_calls_live (int_calls_iterator it) ==>
          body_iterator_full_ok_mods mods exps cx it`,
        `\cx tyv nm body vs. ^rank_guard /\ ^linked_body_guard /\
+         qualified_stmts_decls_ok mods body /\
          ^linked_calls_live (int_calls_stmts body) /\ stmts_loop_calls_ok mods body ==>
          body_for_full_ok_mods mods exps cx tyv nm body vs`,
        `\cx e. ^rank_guard /\ ^linked_body_guard /\
@@ -521,6 +525,7 @@ Theorem body_stmts_sim_full_mods:
        MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
        stmts_loop_calls_ok mods
          (subst_consts_stmts_mods (consts_env_mods mods) body)) /\
+    qualified_stmts_decls_ok mods ss /\
     stmts_loop_calls_ok mods ss /\
     EVERY (\k. MEM k (vyperTypeContract$linked_live_functions mods exps))
       (int_calls_stmts ss) /\
