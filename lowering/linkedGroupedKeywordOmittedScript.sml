@@ -2,7 +2,7 @@
 Theory linkedGroupedKeywordOmitted
 Ancestors
   groupedKeywordOmitted groupedKeywordOwners linkedRuntimeDefaultExpression
-  gasOutcomeFullModsSource exprSimFullBundleProps
+  gasOutcomeFullModsSource exprSimFullBundleProps bodyFullPostsMods bodyInvSplit
   exprOperandVar exprLoweringProps emitHelperProps typedMemoryCopy
   loweringPosts bodyPtrDefs loweringStateRelDefs typedCopyOriginPtrBase
   bodyPtrMakeArrayCopyStateFrame bodyFullEmptyFrame bodySimFull robustCopyTransportPtr
@@ -18,8 +18,10 @@ Theorem grouped_keyword_omitted_expression_mods:
   local_ptrs_reserved (ce with ce_vars := FEMPTY) sa /\ fn_inst_ids_distinct fn /\
   gas_outcome_full_mods (DF,0,explicit,ctx,fn,PG) mods cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
-    (expr_sim_full_post (DF,0,NONE,ctx,fn) (ce with ce_vars := FEMPTY)
-      cx e (es,sa,mid,s,src,G,tn))
+    (\H res ee J tz u.
+      expr_sim_full_post (DF,0,NONE,ctx,fn) (ce with ce_vars := FEMPTY)
+        cx e (es,sa,mid,s,src,G,tn) H res ee J tz u /\
+      immutable_frame_mods fn (ce with ce_vars := FEMPTY) cx ee u)
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)) /\
   (if is_word_type ty then emit_void MSTORE [Var dst;src]
@@ -56,6 +58,7 @@ Theorem grouped_keyword_omitted_expression_mods:
             !mem. mem_agree_outside tz.t_mem u.vs_memory mem ==>
               val_in_memory otv x old_base mem) /\
           stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx ee u /\
+          immutable_frame_mods fn (ce with ce_vars := FEMPTY) cx ee u /\
           storage_well_formed_on cx ee (FST H) /\
           ghost_inv_at (DF H) 0 NONE (ce with ce_vars := FEMPTY) cx ee J tz u /\
           ee.scopes = es.scopes /\ expr_sim_inv_mods mods (ce with ce_vars := FEMPTY) cx env ee /\
@@ -111,6 +114,16 @@ Proof
   `alloca_history fn u` by metis_tac[body_full_path_alloca_history] >>
   `stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx ee u` by
     metis_tac[grouped_keyword_store_runtime_state] >>
+  `t.vs_data_section = u.vs_data_section` by
+    (qpat_assum `typed_copy_state_frame mid _ _ t u` mp_tac >>
+     simp[NoAsms, typed_copy_state_frame_def, venom_state_component_equality]) >>
+  `immutable_frame_mods fn (ce with ce_vars := FEMPTY) cx ee u` by
+    (qpat_assum `immutable_frame_mods fn (ce with ce_vars := FEMPTY) cx ee t` mp_tac >>
+     qpat_assum `t.vs_data_section = u.vs_data_section` (fn data =>
+       qpat_assum `~ce.ce_is_ctor` (fn runtime =>
+         simp[NoAsms, immutable_frame_mods_def, immutables_rel_mods_def,
+              immutables_rel_def, immutable_alloca_sep_mods_def,
+              immutable_alloca_sep_def, immutable_decl_sep_def, data, runtime]))) >>
   `ghost_inv_at (DF H) 0 NONE (ce with ce_vars := FEMPTY) cx ee J tz u` by
     metis_tac[grouped_keyword_store_runtime_ghost] >>
   qpat_assum `typed_copy_state_frame mid _ _ t u`
