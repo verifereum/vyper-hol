@@ -44,7 +44,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `supported_string_reason tops e` by
     gvs[supported_stmt_raise_reason, supported_raise_reason_def] >>
-  drule_then strip_assume_tac supported_string_reason_body_calls >>
+  `well_typed_expr env e` by fs[type_stmt_raise_reason] >>
+  drule_all_then assume_tac bodySingletonCallSupportTheory.body_inv_typed_calls_main >>
+  drule_all_then strip_assume_tac supported_string_reason_body_calls >>
   drule_then strip_assume_tac body_inv_main_code >>
   drule_then assume_tac body_inv_contract >>
   drule_then assume_tac body_inv_module >>
@@ -53,11 +55,9 @@ Proof
     (drule_then assume_tac contract_inv_type_env >>
      fs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
         finite_mapTheory.FUNION_FEMPTY_2]) >>
-  `~is_extcode e` by
-    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-     qexists_tac `cenv` >>
-     fs[bodySimTheory.stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
-          allocLimitsTheory.alloc_limits_raise_def]) >>
+  `alloc_limits_expr cenv e` by fs[bodySimTheory.stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
+          allocLimitsTheory.alloc_limits_raise_def] >>
+  `~is_extcode e` by metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode] >>
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >>
      simp[supported_stmt_expr_exists_def, supported_raise_exists_def]) >>
