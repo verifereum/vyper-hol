@@ -1,6 +1,6 @@
 Theory vyperTestLibTest
 Ancestors vyperTestShardLibTest vyperTestRunner
-Libs vyperTestLib
+Libs vyperTestLib cv_transLib wordsLib
 
 fun source code = JSON.OBJECT [("source_code", JSON.STRING code)];
 
@@ -162,12 +162,20 @@ local
      ("boundary",JSON.STRING "call"), ("call_index",JSON.INT 0),
      ("accounts",JSON.ARRAY accounts),
      ("transient_storage",JSON.ARRAY transient), ("logs",JSON.ARRAY logs)]
+  fun accepts label expected json =
+    case TraceDecode.decode_cases (JSON.ARRAY [json]) of
+      [("case",[actual])] =>
+        if aconv (rhs (concl (cv_eval (mk_eq (actual,expected))))) ``T``
+        then ()
+        else raise Fail ("checkpoint decoded unexpected state: " ^ label)
+    | _ => raise Fail ("checkpoint decoded unexpected traces: " ^ label)
   fun rejects label reason json =
     if ((TraceDecode.decode_cases (JSON.ARRAY [json]); false)
-        handle Fail _ => true
-             | JSONDecode.JSONError _ => true
+        handle Fail message => String.isSubstring reason message
+             | JSONDecode.JSONError (Fail message,_) =>
+                 String.isSubstring reason message
              | _ => false) then ()
-    else raise Fail ("checkpoint accepted " ^ label ^ " (" ^ reason ^ ")")
+    else raise Fail ("checkpoint rejection did not reach " ^ label ^ " (" ^ reason ^ ")")
   val empty_account = account address 0 "" []
   val transient = JSON.OBJECT
     [("address",JSON.STRING address), ("slot",JSON.INT 0),
@@ -185,6 +193,21 @@ local
          ("address",JSON.STRING address)::("value",JSON.INT 7)::fields)
     | _ => raise Fail "expected checkpoint object"
 in
+  val () = accepts "empty account"
+    ``StateCheckpoint <|cpBoundary := "call"; cpIndex := 0;
+      cpAccounts := [<|cpAddress := 1w; cpBalance := 0; cpNonce := 0;
+                      cpCode := []; cpStorage := []|>];
+      cpTransient := []; cpLogs := []|>``
+    (checkpoint [empty_account] [] [])
+  val () = let
+    val maximum = JsonImportHol.natural (limit - 1)
+  in accepts "maximum word and slot"
+    ``StateCheckpoint <|cpBoundary := "call"; cpIndex := 0;
+      cpAccounts := [<|cpAddress := 1w; cpBalance := ^maximum; cpNonce := 0;
+                      cpCode := []; cpStorage := [(^maximum,^maximum)]|>];
+      cpTransient := []; cpLogs := []|>``
+    (checkpoint [account address (limit - 1) "" [slot (limit - 1) (limit - 1)]] [] [])
+  end
   val () = rejects "short address" "exactly 20 hex bytes"
     (checkpoint [account "0x01" 0 "" []] [] [])
   val () = rejects "odd code" "even-length unprefixed hex"

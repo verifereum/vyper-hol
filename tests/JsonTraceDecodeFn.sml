@@ -530,23 +530,21 @@ val transient_entry_ty = mk_type ("prod", [word_ty 160,slot_pair_ty])
 val log_entry_ty = mk_type ("prod", [word_ty 160,
   mk_type ("prod", [mk_type ("list", [bytes32_ty]),bytes_ty])])
 
-fun checkpoint_hex_char c =
-  Char.isDigit c orelse (#"a" <= Char.toLower c andalso Char.toLower c <= #"f")
 val checkpoint_address_text =
   andThen string (fn s =>
     if String.size s = 42 andalso String.isPrefix "0x" s andalso
-       List.all checkpoint_hex_char (String.explode (String.extract (s,2,NONE)))
+       List.all Char.isHexDigit (String.explode (String.extract (s,2,NONE)))
     then succeed (String.map Char.toLower s)
     else fail "checkpoint address must contain exactly 20 hex bytes")
 val checkpoint_address = JSONDecode.map address_from_hex checkpoint_address_text
 val checkpoint_bytes =
   andThen string (fn s =>
-    if String.size s mod 2 = 0 andalso List.all checkpoint_hex_char (String.explode s)
+    if String.size s mod 2 = 0 andalso List.all Char.isHexDigit (String.explode s)
     then succeed (bytes_from_hex s)
     else fail "checkpoint byte string must be even-length unprefixed hex")
 val checkpoint_topic =
   andThen string (fn s =>
-    if String.size s = 64 andalso List.all checkpoint_hex_char (String.explode s)
+    if String.size s = 64 andalso List.all Char.isHexDigit (String.explode s)
     then succeed (bytes32_from_hex s)
     else fail "checkpoint topic must contain exactly 32 unprefixed hex bytes")
 val checkpoint_natural =
