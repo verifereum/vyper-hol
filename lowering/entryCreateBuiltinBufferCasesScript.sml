@@ -6,6 +6,8 @@ Ancestors
   emitHelper emitHelperProps compileEnv exprLoweringProps exprLowering fragExec
   vyperAST vyperTypeSystem
   entryCreateFocusSpec entryCreatePathScope entryCreateCompletedCut
+  entryCreateNativeFirstExit entryCreateStmtCases entryCreateBodyCut
+  createSizeCutRegion bodySim vyperInterpreter vyperStorageTrace vyperState
   createSizePrefixReplay createMarkedPath fragGasOrigin fragGasSeqAbort gasEvents
   venomState venomInst venomInstProps venomExecSemantics venomExecProofs instIdxIndep
   list rich_list arithmetic relation
@@ -277,4 +279,99 @@ Proof
   strip_tac >> qmatch_asmsub_abbrev_tac `as_stack_val _ action` >>
   Cases_on `action` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
   metis_tac[create_hash_suffix_code]
+QED
+
+Theorem hash_frag_disjoint[local]:
+  (compile_keccak256_bytes x a = (op,b) \/
+   compile_keccak256_bytesm x m a = (op,b) \/
+   compile_sha256_bytes x a = (op,b) \/
+   compile_sha256_bytesm x m a = (op,b)) ==>
+  EVERY (\i. ~MEM i.inst_opcode [INVOKE; CREATE; CREATE2]) (frag_code a b)
+Proof
+  strip_tac >>
+  gvs[compile_keccak256_bytes_def, compile_keccak256_bytesm_def,
+      compile_sha256_bytes_def, compile_sha256_bytesm_def,
+      contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+      fresh_var_def, emit_def, frag_code_def, emitted_blocks_def, emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[mk_inst_def]
+QED
+
+Theorem hash_suffix_visit_safe[local]:
+  body_inv tops ctx ce cx /\ MEM f ctx.ctx_functions /\ fn_has_code mid b f /\
+  create_cut_code {} mid b /\
+  EVERY (\i. ~MEM i.inst_opcode [INVOKE; CREATE; CREATE2]) (frag_code mid b) /\
+  create_interior_visit mid b E ctx f (p,d,k) t (back,hit,after) ==>
+  create_body_cut E tops cx st0 source (es,s) (before,hit)
+Proof
+  strip_tac >> drule_all create_cut_region_rules >> strip_tac >>
+  `create_cut_region mid b t` by fs[create_interior_visit_def,create_operand_at_def] >>
+  drule create_interior_visit_cases >> strip_tac >>
+  `create_cut_region mid b u` by metis_tac[create_expr_prefix_cut_region] >>
+  fs[create_operand_fetch_def,create_operand_at_def,EVERY_MEM] >>
+  `MEM inst (frag_code mid b)` by metis_tac[] >>
+  gvs[] >> irule create_cut_noncreate_visit >> metis_tac[]
+QED
+
+(* A hash suffix cannot own an oversized CREATE even when it is visited
+   immediately after a child that performed an internal call. *)
+Theorem create_hash_eval_cut:
+  body_inv tops ctx ce cx /\ MEM f ctx.ctx_functions /\
+  create_cut_code {} a mid /\ fn_has_code a mid f /\ fn_has_code mid b f /\
+  (compile_keccak256_bytes x mid = (op,b) \/
+   compile_keccak256_bytesm x m mid = (op,b) \/
+   compile_sha256_bytes x mid = (op,b) \/
+   compile_sha256_bytesm x m mid = (op,b)) /\
+  create_operand_cut a mid E ctx f tops cx st0
+    (bind (eval_expr cx e) (read_result cx)) (es,s) /\
+  source = bind (bind (eval_expr cx e) (read_result cx)) next /\
+  (!v. storage_trace_frame (next v)) ==>
+  create_operand_cut a b E ctx f tops cx st0 source (es,s)
+Proof
+  rpt (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >> strip_tac >>
+  qpat_assum `compile_keccak256_bytes _ _ = _ \/ _`
+    (fn th => map_every (assume_tac o C MATCH_MP th)
+      [create_hash_suffix_code,hash_frag_disjoint]) >>
+  simp[create_operand_cut_def] >> rpt strip_tac >>
+  drule_all create_interior_visit_first_exit >> strip_tac
+  >- (irule create_cut_bind_left >> fs[create_operand_cut_def] >> metis_tac[]) >>
+  irule hash_suffix_visit_safe >> metis_tac[]
+QED
+
+Theorem create_hash_vv_eval_cut:
+  (bt = Keccak256 \/ bt = Sha256) /\
+  well_typed_expr env (Builtin ann bt [e]) /\
+  compile_expr ce ty (Builtin ann bt [e]) a = (vv,b) /\
+  fn_has_code a b f /\ body_inv tops ctx ce cx /\ MEM f ctx.ctx_functions /\
+  (!x mid. lower_value compile_expr ce (expr_type e) e a = (x,mid) ==>
+    create_cut_code {} a mid /\
+    create_operand_cut a mid E ctx f tops cx st0
+      (bind (eval_expr cx e) (read_result cx)) (es,s)) ==>
+  create_operand_cut a b E ctx f tops cx st0 (eval_expr cx (Builtin ann bt [e])) (es,s)
+Proof
+  rpt (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >> strip_tac >>
+  `?x m op mid. lower_value compile_expr ce (expr_type e) e a = (x,mid) /\
+    vv = StackValue (BaseT (BytesT (Fixed 32))) op /\
+    (compile_keccak256_bytes x mid = (op,b) \/ compile_keccak256_bytesm x m mid = (op,b) \/
+     compile_sha256_bytes x mid = (op,b) \/ compile_sha256_bytesm x m mid = (op,b)) /\
+    cs_extends a mid /\ create_cut_code {} mid b` by
+    (irule create_hash_compile_layout >> metis_tac[]) >>
+  `cs_extends mid b` by fs[create_cut_code_def] >>
+  `fn_has_code a mid f /\ fn_has_code mid b f` by metis_tac[fn_has_code_split] >>
+  `create_cut_code {} a mid /\
+   create_operand_cut a mid E ctx f tops cx st0
+     (bind (eval_expr cx e) (read_result cx)) (es,s)` by metis_tac[] >>
+  `?next. eval_expr cx (Builtin ann bt [e]) =
+       bind (bind (eval_expr cx e) (read_result cx)) next /\
+     !v. storage_trace_frame (next v)` by
+    (Cases_on `bt = Sha256` >> gvs[]
+     >- (qexists_tac `\v es1. case builtin_result cx es1.accounts ann Sha256 [expr_type e] [v] of
+           INR exc => (INR exc,es1)
+         | INL w => ignore_bind (precompile_call_success Sha256 [v]) (return (Value w)) es1` >>
+         simp[eval_expr_sha256_action,sha256_continuation_frame]) >>
+     qexists_tac `\v st. ((case builtin_result cx st.accounts ann Keccak256 [expr_type e] [v] of
+                         INL w => INL (Value w) | INR exc => INR exc),st)` >>
+     simp[eval_expr_unary_builtin_action, vyperContextTheory.builtin_args_length_ok_def,
+          vyperContextTheory.is_self_codesize_def, storage_trace_frame_def]) >>
+  irule create_hash_eval_cut >> metis_tac[]
 QED
