@@ -7,7 +7,8 @@ Ancestors
 
 Theorem contract_inv_nonreentrant_slot[local]:
   contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops /\
-  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\ nr ==>
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\ nr /\
+  (src = NONE \/ MEM (src,name) (linked_live_functions mods exps)) ==>
   cx.nonreentrant_slot = SOME global_nonreentrant_slot
 Proof
   rw[contract_inv_def] >> res_tac >> fs[]
@@ -15,7 +16,8 @@ QED
 
 Theorem body_inv_nonreentrant_slot_mods:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
-  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\ nr ==>
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\ nr /\
+  (src = NONE \/ MEM (src,name) (linked_live_functions mods exps)) ==>
   cx.nonreentrant_slot = SOME global_nonreentrant_slot
 Proof
   metis_tac[module_body_inv_lookup, contract_inv_nonreentrant_slot]
@@ -89,14 +91,11 @@ QED
 
 Theorem body_inv_const_name_not_root_mods:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
-  cx_const_name_mods mods nsid ==>
-  (!ty. ~supported_storage_value (main_module mods) nsid ty) /\
-  supported_immutable_type (main_module mods) nsid = NONE
+  cx_const_name_mods mods (NONE,id) ==>
+  (!ty. ~supported_storage_value (main_module mods) (NONE,id) ty) /\
+  supported_immutable_type (main_module mods) (NONE,id) = NONE
 Proof
-  PairCases_on `nsid` >> Cases_on `nsid0` >> strip_tac
-  >- metis_tac[body_inv_const_name_decl_mods, supported_constant_decl_not_root] >>
-  simp[supported_storage_value_def,
-       supported_immutable_type_def, supported_lookup_other_module]
+  metis_tac[body_inv_const_name_decl_mods, supported_constant_decl_not_root]
 QED
 
 Theorem body_inv_immutable_section_layout_mods:
