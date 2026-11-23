@@ -3,6 +3,7 @@ Ancestors
   bodySim bodyStorageMetadata exprSimHypsDefs supportedExprs
   supportedExprForms supportedDecls supportedExprTraverse targetPlaceSim
   gasContext constSubst vyperAST list
+  bodyTypedTargetScope vyperTypeSystem vyperTypeInvariants finite_map pair
   vyperTypeContract[qualified,ignore_grammar]
 
 Theorem loop_iterator_root_occurs[local]:
@@ -58,8 +59,30 @@ Proof
   first_x_assum (drule_then mp_tac) >> simp[]
 QED
 
+Triviality typed_iterator_root_declared:
+  !e t nid.
+    (well_typed_expr env e \/ IS_SOME (type_place_expr env e)) /\
+    loop_iterator_place e = SOME t /\ target_root t = TopLevelNameTarget nid ==>
+    IS_SOME (FLOOKUP env.bare_globals nid) \/
+    IS_SOME (FLOOKUP env.toplevel_vtypes nid)
+Proof
+  measureInduct_on `expr_size e` >> Cases_on `e` >>
+  simp[vyperTypeContractTheory.loop_iterator_place_def, target_root_def,
+       well_typed_expr_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[target_root_def, optionTheory.IS_SOME_EXISTS, AllCaseEqs()]
+  >~ [`FLOOKUP env.bare_globals p`]
+  >- (PairCases_on `p` >>
+      gvs[well_typed_expr_def, AllCaseEqs()] >> metis_tac[])
+  >~ [`FLOOKUP env.bare_globals p`]
+  >- (PairCases_on `p` >>
+      gvs[well_typed_expr_def, AllCaseEqs()] >> metis_tac[]) >>
+  first_x_assum (qspec_then `e'` mp_tac) >>
+  simp[expr_size_def] >> metis_tac[]
+QED
+
 Theorem supported_nested_iterator_root_kind:
-  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  well_typed_expr env e /\ supported_expr tops e /\
   ~supported_expr_exists (const_name_root cx) e /\
   (~(?ty nid. e = TopLevelName ty nid)) /\
   loop_iterator_place e = SOME t /\ target_root t = TopLevelNameTarget nid ==>
@@ -71,6 +94,13 @@ Theorem supported_nested_iterator_root_kind:
      supported_hashmap_decl tops nid = SOME (vis,transient,kt,vt,SOME slot))
 Proof
   strip_tac >>
+  `FST nid = NONE` by
+    (PairCases_on `nid` >> Cases_on `nid0` >> simp[] >>
+     `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+     `?ts. get_module_code cx (SOME x) = SOME ts` by
+       (irule typed_toplevel_lookup_module >>
+        metis_tac[typed_iterator_root_declared]) >>
+     drule_then assume_tac body_inv_qualified_module_absent >> gvs[]) >>
   drule_all nested_iterator_supported_root >> strip_tac >>
   `~cx_const_name cx nid` by
     (strip_tac >>
