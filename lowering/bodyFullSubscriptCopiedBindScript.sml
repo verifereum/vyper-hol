@@ -306,7 +306,9 @@ Theorem subscript_copied_bind_caller_frames:
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty (Subscript ann obj idx) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `expr_body_pre ce cx env obj es` by
+    metis_tac[exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base,
+              exprSimSubscriptArraySourceTheory.copies_subscript_base_not_array_slot_base] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty obj es` by
     (fs[body_expr_full_ok_def] >> metis_tac[]) >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
