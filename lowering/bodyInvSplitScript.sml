@@ -158,7 +158,8 @@ Definition contract_inv_def[nocompute]:
        ALOOKUP (build_func_defaults_mods mods) (nsid_to_string (src,name))) /\
     (!src tops vis mut nr rr name args dflts ret ss.
        ALOOKUP mods src = SOME tops /\
-       MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops ==>
+       MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+       (src = NONE \/ MEM (src,name) (linked_live_functions mods exps)) ==>
        function_mutability_ok mods vis mut nr dflts ss /\
        (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot)) /\
     immutable_section_layout_mods mods cenv
