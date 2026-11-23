@@ -2,6 +2,7 @@
 Theory exprPtrUnwrapStorageShape
 Ancestors
   exprLowering compileEnv context abiBuiltinDispatchCorrect exprSimHypsDefs
+  namesBuiltinExclusions
 
 Theorem compile_literal_located_memory[local]:
   compile_literal_vv ty lit sa = (LocatedValue t p,sb) ==> p.ptr_location = LocMemory
@@ -29,15 +30,6 @@ Proof
   simp[AllCaseEqs(), base_ptr_def, mk_ptr_def] >>
   rpt strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
   gvs[AllCaseEqs(), base_ptr_def, mk_ptr_def]
-QED
-
-Theorem names_builtin_exclusions[local]:
-  (!n args. ~names_builtin (Concat n) args) /\
-  (!args. ~names_builtin NamedConst args)
-Proof
-  `!bt args. names_builtin bt args ==> bt <> NamedConst /\ (!n. bt <> Concat n)`
-    suffices_by metis_tac[] >>
-  ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]
 QED
 
 Theorem compile_abiencode_located_memory[local]:
