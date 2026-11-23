@@ -28,6 +28,7 @@ Theorem run_lowering_entry_coverage[local]:
     MEM func unit.cu_context.ctx_functions /\
     compile_generate_runtime sels packs [] fall Linear buckets metadata
       dense info (initial_compile_state "__entry") = ((),entry_end) /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks entry_end)) /\
     (!bb. MEM bb (all_blocks entry_end) ==>
       lookup_block bb.bb_label func.fn_blocks = SOME bb)
 Proof
@@ -40,7 +41,7 @@ Proof
      simp[extract_context_with_internals_def, AllCaseEqs()] >>
      strip_tac >> gvs[mk_venom_context_def, mk_raw_function_def,
                       lookup_function_def, listTheory.FIND_thm]) >>
-  drule_all run_lowering_retained_entry >> strip_tac >>
+  drule_all run_lowering_retained_entry_distinct >> strip_tac >>
   qexistsl_tac [`func`, `se`] >> simp[] >>
   metis_tac[lookup_function_MEM]
 QED
@@ -82,7 +83,9 @@ Theorem run_lowering_pinned_body_interval[local]:
   ?func.
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
     MEM func unit.cu_context.ctx_functions /\
-    fn_has_code sa st' func
+    fn_has_code sa st' func /\
+    (?entry_end. cs_extends st' entry_end /\
+      ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks entry_end)))
 Proof
   strip_tac >> drule_all run_lowering_entry_coverage >> strip_tac >>
   drule runtime_external_internal_phase_split >> strip_tac >>
@@ -110,7 +113,10 @@ Proof
     metis_tac[cs_appends_def, cs_appends_external_fn_bodies] >>
   `cs_extends external_st entry_end` by
     metis_tac[cs_appends_def, cs_appends_runtime_fallback_suffix] >>
-  metis_tac[cs_extends_trans, fn_has_code_retained_interval]
+  `cs_extends st' entry_end` by metis_tac[cs_extends_trans] >>
+  conj_tac
+  >- metis_tac[fn_has_code_retained_interval] >>
+  qexists_tac `entry_end` >> simp[]
 QED
 
 (* The legacy dispatcher reaches the same registration labels in the real
@@ -442,7 +448,8 @@ Theorem run_lowering_fallback_body_interval[local]:
   ?func.
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
     MEM func unit.cu_context.ctx_functions /\
-    fn_has_code st st' func
+    fn_has_code st st' func /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks st'))
 Proof
   strip_tac >> drule_all run_lowering_entry_coverage >> strip_tac >>
   drule runtime_external_internal_phase_split >> strip_tac >>
@@ -843,4 +850,57 @@ Proof
      `shadow_sb`, `shadow_unit`] strip_assume_tac) >>
   qexistsl_tac [`func`, `shadow_ctx`, `shadow_func`, `cenv'`, `sb`,
                 `shadow_sa`, `shadow_sb`] >> simp[]
+QED
+
+(* The selected interval belongs to the ordinary runtime compilation, not
+   just to a function that happens to contain its instructions. *)
+Theorem runtime_entry_body_layout_retained:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  runtime_entry_body_start tops rpolicy
+    (lbl,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt) st /\
+  compile_register_positional_args ce pos 4 st = (cenv,sa) /\
+  compile_guarded_body cenv nr key ut iv fbody rt sa = ((),st') ==>
+  ?entry_end. cs_extends st' entry_end /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks entry_end))
+Proof
+  strip_tac >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rename1 `classify_functions tops = (exts,ints,fb,ctor)` >>
+  `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+      (FST (SND (classify_functions tops))))` by
+    (irule supported_names_internal_names_distinct >>
+     fs[supported_program_def, supported_declaration_names_def]) >>
+  drule (Q.SPEC `F` (Q.SPEC `tops` internal_descriptors_ok)) >> simp[] >> strip_tac >>
+  `EVERY (\d. internal_label_ok (FST d))
+    (internal_fn_descriptors
+      (MAP (set_internal_package_target rpolicy.rpol_target o
+        package_internal_fn tops T (K global_nonreentrant_slot) F 0)
+        (order_internals (runtime_internal_order tops ints) ints)))` by
+    (simp[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
+      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP, EVERY_MEM] >>
+     fs[EVERY_MAP, EVERY_MEM, MEM_MAP, PULL_EXISTS]) >>
+  `EVERY (\(lbl,ce,pos,mincd,pay,nr,key,ut,iv,body,rt). jump_label_ok lbl)
+    (MAP (set_external_package_target rpolicy.rpol_target o
+      package_external_fn tops T (K global_nonreentrant_slot)) exts)` by
+    irule runtime_external_package_labels >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  `~EXISTS external_has_defaults exts` by fs[] >>
+  simp[lower_vyper_runtime_unit_def] >> strip_tac >>
+  qpat_x_assum `runtime_entry_body_start _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [runtime_entry_body_start_def])
+  >- (fs[runtime_selected_body_start_def] >> gvs[] >>
+      qpat_assum `MAP (set_external_package_target _ o _) _ = _`
+        (fn pkgs => rule_assum_tac (PURE_REWRITE_RULE [pkgs])) >>
+      rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+      qpat_x_assum `(_,_) = fresh_label _ _` (assume_tac o SYM) >>
+      `EVERY (\(lbl,ce,pos,mincd,pay,nr,key,ut,iv,body,rt). jump_label_ok lbl)
+        (pre ++ (lbl,ce,pos,mincd,pay,nr,key,ut,iv,fbody,rt)::post)` by simp[] >>
+      drule_all run_lowering_pinned_body_interval >> metis_tac[])
+  >- (fs[runtime_fallback_body_start_def] >>
+      gvs[compile_register_positional_args_def, comp_return_def] >>
+      qpat_x_assum `(_,_) = fresh_label _ _` (assume_tac o SYM) >>
+      drule_all run_lowering_fallback_body_interval >>
+      metis_tac[cs_extends_refl])
 QED
