@@ -1,30 +1,32 @@
 Theory bodyFullTypeBuiltinWords
 Ancestors
-  bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose
+  bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose bodyFullEmptyLeafData
+  exprSimFullBundleProps
   exprSimHyps exprSimHypsDefs exprSimSource exprSimProps exprLoweringProps
   exprLowering loweringPosts exprSimMemDefs bodyPtrDefs gasShadow fragGasOriginPtr
   ptrDiscipline compileEnv context valueEncoding vyperTyping vyperTypeSystem
   vyperContext vyperValueOperation vyperAST vyperInterpreter vyperState venomState
 
-Theorem type_builtin_literal_vv_full:
-  expr_body_pre cenv cx env (TypeBuiltin ann tb typ args) es /\
+Theorem type_builtin_literal_vv_nil:
   is_word_type ann /\
-  (!gs. eval_expr cx (TypeBuiltin ann tb typ args) (es with gas_obs := gs) =
-        (INL (Value v), es with gas_obs := gs)) /\
   (!sa. compile_expr cenv ty (TypeBuiltin ann tb typ args) sa =
         (StackValue ann (Lit w), sa)) /\
   (!rt. evaluate_type (get_tenv cx) ann = SOME rt ==>
-        typed_val_to_w256 rt v = w) ==>
-  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+        typed_val_to_w256 rt v = w) /\
+  expr_vv_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TypeBuiltin ann tb typ args) es
+      (st0,sa,sb,sha,shb,vv,s0,G0,tn0) ==>
+  sb = sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (TypeBuiltin ann tb typ args)
+         (es,sa,sb,s0,vv,G0,tn0) H (INL (Value v) : eval_result + exception)
+         (es with gas_obs := []) G0 tn0 s0)
 Proof
-  strip_tac >> rw[expr_vv_sim_full_def] >>
-  qpat_x_assum `!sa. compile_expr _ _ _ sa = _`
+  strip_tac >> fs[expr_vv_sim_full_hypotheses_def,expr_sim_full_code_def] >>
+  qpat_assum `!sa. compile_expr _ _ _ sa = _`
     (qspec_then `sa` assume_tac) >> gvs[] >>
-  irule gas_outcome_full_pure >>
-  reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G0`, `es`, `INL (Value v)`, `s0`, `tn0`] >>
-  simp[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  simp[expr_vv_sim_full_post_def,expr_sim_full_endpoint_def] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
   simp[gas_origin_ptr_path_rules, vv_store_bound_def, vv_location_def,
        expr_type_def, ptr_vv_ok_def, ptr_val_ok_def,
        read_result_def, return_def, op_taint_def,
@@ -44,11 +46,35 @@ Proof
   gvs[expr_type_def] >> gvs[vv_location_def]
 QED
 
-Theorem bound_builtin_vv_full[local]:
-  MEM tb [MaxValue; MinValue; Epsilon] /\
-  expr_body_pre cenv cx env (TypeBuiltin ann tb typ args) es ==>
+Theorem type_builtin_literal_vv_full:
+  expr_body_pre cenv cx env (TypeBuiltin ann tb typ args) es /\
+  is_word_type ann /\
+  (!gs. eval_expr cx (TypeBuiltin ann tb typ args) (es with gas_obs := gs) =
+        (INL (Value v), es with gas_obs := gs)) /\
+  (!sa. compile_expr cenv ty (TypeBuiltin ann tb typ args) sa =
+        (StackValue ann (Lit w), sa)) /\
+  (!rt. evaluate_type (get_tenv cx) ann = SOME rt ==>
+        typed_val_to_w256 rt v = w) ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TypeBuiltin ann tb typ args) es
+Proof
+  rw[expr_vv_sim_full_via_bundle] >>
+  drule_all type_builtin_literal_vv_nil >> strip_tac >>
+  irule gas_outcome_full_unchanged >>
+  gvs[expr_vv_sim_full_hypotheses_def] >> first_assum ACCEPT_TAC
+QED
+
+Theorem type_builtin_bound_literal:
+  MEM tb [MaxValue; MinValue; Epsilon] /\
+  expr_body_pre cenv cx env (TypeBuiltin ann tb typ args) es ==>
+  is_word_type ann /\
+  ?v w.
+    (!gs. eval_expr cx (TypeBuiltin ann tb typ args) (es with gas_obs := gs) =
+          (INL (Value v), es with gas_obs := gs)) /\
+    (!sa. compile_expr cenv ty (TypeBuiltin ann tb typ args) sa =
+          (StackValue ann (Lit w), sa)) /\
+    (!rt. evaluate_type (get_tenv cx) ann = SOME rt ==>
+          typed_val_to_w256 rt v = w)
 Proof
   strip_tac >>
   `args = [] /\ ann = typ /\ is_numeric_type typ /\
@@ -61,7 +87,7 @@ Proof
    typ = BaseT DecimalT` by
     (Cases_on `typ` >> gvs[] >> rename1 `BaseT bt` >> Cases_on `bt` >> gvs[]) >>
   gvs[] >>
-  irule type_builtin_literal_vv_full >> simp[is_word_type_def] >>
+  simp[is_word_type_def] >>
   simp[compile_expr_type_builtin_dispatch, Once compile_expr_def,
        comp_return_def, type_bounds_def, type_bits_def, is_signed_type_def] >>
   simp[Once evaluate_def, type_builtin_args_length_ok_def, type_check_def,
@@ -73,6 +99,16 @@ Proof
   PURE_REWRITE_TAC [typed_val_to_w256_def, val_to_w256_def,
     integer_wordTheory.i2w_0, integer_wordTheory.i2w_pos] >>
   simp[] >> metis_tac[]
+QED
+
+Theorem bound_builtin_vv_full[local]:
+  MEM tb [MaxValue; MinValue; Epsilon] /\
+  expr_body_pre cenv cx env (TypeBuiltin ann tb typ args) es ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (TypeBuiltin ann tb typ args) es
+Proof
+  strip_tac >> drule_all type_builtin_bound_literal >> strip_tac >>
+  irule type_builtin_literal_vv_full >> metis_tac[]
 QED
 
 Theorem bound_builtin_expr_full_ok:
