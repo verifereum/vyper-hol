@@ -7,9 +7,9 @@ Ancestors
   immutableLocationProps immSectionDead
   immutableValue immutableEncoding valueEncoding valueEncodingDefs loweringStateRelDefs
   vyperInterpreter vyperContext vyperState vyperTypeContract vyperTypeInvariants
-  vyperTypeCallGraph vyperSubscriptOverlap
+  vyperTypeCallGraphSoundness vyperTypeContractContext
   vyperABI vyperABIEntries vyperCalldata supportedStmtTraverse
-  vyperStorageFootprint callTrace frameOutcome frameGas vfmExecution vfmState
+  sourceExemptMods vyperStorageFootprint callTrace frameOutcome frameGas vfmExecution vfmState
   alist finite_map list pair
 
 (* Linked bytecode uses annotated offsets, so its allocated immutables
@@ -49,70 +49,62 @@ Proof
   simp[] >> qexistsl [`pre`, `post`, `vis`, `ty`, `slot`] >> simp[]
 QED
 
-(* The creation entry and the deployed interface are the call graph roots.
-   An import's constructor enters the graph only through an actual call. *)
-Definition linked_live_functions_def:
-  linked_live_functions mods exps =
-    let main = main_module mods in
-    let roots =
-      contract_keys external_name_keys_toplevel [(NONE, main)] ++
-      FLAT (MAP (\tl. case tl of
-        | FunctionDecl Deploy _ _ _ name _ _ _ _ => [(NONE, name)]
-        | _ => []) main) ++
-      MAP (\(name, src). (SOME src, name)) exps in
-    let edges = contract_call_edges mods in
-    call_closure edges (LENGTH roots + LENGTH edges) [] roots
-End
-
-Definition linked_toplevel_allocated_def:
-  linked_toplevel_allocated layouts addr src tl <=>
-    case tl of
-    | VariableDecl _ Immutable _ _ slot => IS_SOME slot
-    | _ => toplevel_allocated layouts addr src tl
-End
-
-Definition linked_state_ref_allocated_def:
-  linked_state_ref_allocated layouts addr mods (src, id) <=>
-    ?tops.
-      ALOOKUP mods src = SOME tops /\
-      (constant_decl id tops \/
-       ?tl.
-         MEM tl tops /\ MEM (src, id) (self_member_keys_toplevel src tl) /\
-         linked_toplevel_allocated layouts addr src tl /\
-         (src <> NONE ==> EVERY (linked_toplevel_allocated layouts addr src) tops))
-End
-
-(* Constants are available through imports without owning their state.
-   A nonreentrant function uses the module's state even with an empty body.
-   The singleton allocator assigns immutable offsets independently of slots. *)
 Definition linked_state_ownership_ok_def:
   linked_state_ownership_ok layouts addr mods exps <=>
-    (?tops. mods = [(NONE, tops)]) \/
-    let live = linked_live_functions mods exps in
-    let allocated = linked_state_ref_allocated layouts addr mods in
-    !src tops tl.
-      MEM (src, tops) mods /\ MEM tl tops ==>
-      case tl of
-      | FunctionDecl _ _ nr _ name _ dflts _ stmts =>
-          MEM (src, name) live ==>
-          (nr /\ src <> NONE ==>
-           EVERY (linked_toplevel_allocated layouts addr src) tops) /\
-          EVERY (\a. case a of
-                    | ReadAcc (StateRef key) => allocated key
-                    | WriteAcc (StateRef key) => allocated key
-                    | _ => T)
-                (accesses_exprs dflts ++ accesses_stmts stmts)
-      | VariableDecl (Public _) _ name _ _ =>
-          MEM (src, name) live ==> allocated (src, name)
-      | HashMapDecl (Public _) _ name _ _ _ =>
-          MEM (src, name) live ==> allocated (src, name)
-      | _ => T
+    check_linked_state_ownership layouts addr mods (linked_live_functions mods exps)
 End
 
 Theorem linked_state_ownership_ok_singleton[simp]:
   linked_state_ownership_ok layouts addr [(NONE, tops)] []
 Proof
-  simp[linked_state_ownership_ok_def]
+  simp[linked_state_ownership_ok_def, check_linked_state_ownership_def]
+QED
+
+Theorem check_contract_linked_state_ownership_ok:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  exports_ok layouts addr mods exps ==>
+  linked_state_ownership_ok layouts addr mods exps
+Proof
+  strip_tac >>
+  `check_linked_state_ownership layouts addr mods
+     (linked_live_functions_from mods (linked_main_roots mods))` by
+    fs[check_contract_def] >>
+  `check_linked_state_ownership layouts addr mods
+     (linked_live_functions_from mods (linked_export_roots exps))` by
+    fs[exports_ok_def] >>
+  Cases_on `(case mods of [(NONE,_)] => T | _ => F)` >>
+  gvs[linked_state_ownership_ok_def, check_linked_state_ownership_def,
+      EVERY_MEM, FORALL_PROD] >>
+  qx_genl_tac [`src`, `tops`] >> strip_tac >>
+  qx_gen_tac `tl` >> strip_tac >>
+  ntac 2 (qpat_x_assum `!s ts. MEM (s,ts) mods ==> _`
+    (qspecl_then [`src`, `tops`]
+      (fn th => mp_tac (th |> UNDISCH |> Q.SPEC `tl` |> UNDISCH)))) >>
+  Cases_on `tl` >> simp[linked_live_functions_member, DISJ_IMP_THM] >>
+  rpt CASE_TAC >> simp[DISJ_IMP_THM]
+QED
+
+Theorem check_contract_linked_lock_slot:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  exports_ok layouts addr mods exps /\
+  MEM (src,tops) mods /\
+  MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops /\
+  (src = NONE \/ MEM (src,name) (linked_live_functions mods exps)) ==>
+  ALOOKUP (case ALOOKUP layouts addr of NONE => [] | SOME (_,tl) => tl)
+    (NONE,"$.nonreentrant_key") = SOME global_nonreentrant_slot
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP FST mods)` by fs[check_contract_def, contract_namespaces_ok_def] >>
+  `ALOOKUP mods src = SOME tops` by metis_tac[ALOOKUP_ALL_DISTINCT_MEM] >>
+  `vis <> Deploy` by metis_tac[check_contract_deploy_nonreentrant] >>
+  `function_live layouts addr mods (live_functions layouts addr mods) (src,name)` by
+    metis_tac[check_contract_main_module_allocated, module_allocated_function_live,
+              linked_live_functions_function_live] >>
+  `check_function_body layouts addr mods art src vis mut T args dflts ret stmts` by
+    metis_tac[check_contract_function_body_MEM, check_function_body_in_mode_def] >>
+  fs[check_function_body_def, contextTheory.global_nonreentrant_slot_def] >>
+  Cases_on `ALOOKUP layouts addr` >> gvs[lookup_nonreentrant_slot_def] >>
+  PairCases_on `x` >> gvs[]
 QED
 
 (* Storage and transient declarations use their module-qualified keys.
@@ -196,7 +188,6 @@ Definition source_typing_ok_mods_def:
     ?art.
       check_contract F am.layouts tx.target mods = SOME art /\
       exports_ok am.layouts tx.target mods exps /\
-      linked_state_ownership_ok am.layouts tx.target mods exps /\
       global_cells_typed_mods mods art.cta_bare_globals (account_immutables am tx.target) /\
       (!src tops. MEM (src, tops) mods ==>
         ?cenv.
@@ -358,25 +349,6 @@ Theorem tx_return_bytes_mods_singleton:
 Proof
   simp[tx_return_bytes_mods_def, tx_return_bytes_def, external_return_type_mods_singleton,
        return_bytes_mods_singleton]
-QED
-
-(* A dynamic abi_decode may occur in an imported body or in the main
-   module. Its type is interpreted in the linked unit's type environment. *)
-Definition unspecified_behaviour_exempt_mods_def:
-  unspecified_behaviour_exempt_mods mods e <=>
-    (e = RuntimeError "abi_decode invalid" /\
-     ?src tops ty. MEM (src, tops) mods /\
-       occurs_abi_decode_target ty tops /\
-       is_dynamic (vyper_to_abi_type (type_env_all_modules mods) ty)) \/
-    e = RuntimeError "transfer_value recipient overflow"
-End
-
-Theorem unspecified_behaviour_exempt_mods_singleton:
-  unspecified_behaviour_exempt_mods [(NONE, tops)] e <=>
-    unspecified_behaviour_exempt tops e
-Proof
-  simp[unspecified_behaviour_exempt_mods_def, unspecified_behaviour_exempt_def,
-       type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2]
 QED
 
 Definition source_exempt_mods_def:
