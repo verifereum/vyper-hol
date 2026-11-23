@@ -143,13 +143,14 @@ End
 val () = cv_auto_trans checkpoint_key_def;
 
 Definition checkpoint_account_cells_def:
-  checkpoint_account_cells a =
+  checkpoint_account_cells ignored_code a =
     if a.cpBalance = 0 ∧ a.cpNonce = 0 ∧ NULL a.cpCode ∧
        EVERY (λ(k,v). v = 0) a.cpStorage then [] else
     [((a.cpAddress,CheckAccount,NONE),PresentValue);
      ((a.cpAddress,CheckBalance,NONE),NumberValue a.cpBalance);
-     ((a.cpAddress,CheckNonce,NONE),NumberValue a.cpNonce);
-     ((a.cpAddress,CheckCode,NONE),BytesValue a.cpCode)] ++
+     ((a.cpAddress,CheckNonce,NONE),NumberValue a.cpNonce)] ++
+    (if MEM a.cpAddress ignored_code then []
+     else [((a.cpAddress,CheckCode,NONE),BytesValue a.cpCode)]) ++
     MAP (λ(k,v). ((a.cpAddress,CheckStorage,SOME k),NumberValue v))
       (FILTER (λ(k,v). v ≠ 0) a.cpStorage)
 End
@@ -166,8 +167,8 @@ End
 val () = cv_auto_trans checkpoint_log_cells_def;
 
 Definition checkpoint_cells_def:
-  checkpoint_cells accounts transient logs =
-    FLAT (MAP checkpoint_account_cells accounts) ++
+  checkpoint_cells ignored_code accounts transient logs =
+    FLAT (MAP (checkpoint_account_cells ignored_code) accounts) ++
     MAP (λ(a,k,v). ((a,CheckTransient,SOME k),NumberValue v))
       (FILTER (λ(a,k,v). v ≠ 0) transient) ++
     checkpoint_log_cells 0 logs
@@ -256,9 +257,9 @@ End
 val () = cv_auto_trans checkpoint_message_def;
 
 Definition compare_state_checkpoint_def:
-  compare_state_checkpoint (am:abstract_machine) cp =
-    let expected = checkpoint_cells cp.cpAccounts cp.cpTransient cp.cpLogs;
-        actual = checkpoint_cells (checkpoint_accounts am.accounts)
+  compare_state_checkpoint ignored_code (am:abstract_machine) cp =
+    let expected = checkpoint_cells ignored_code cp.cpAccounts cp.cpTransient cp.cpLogs;
+        actual = checkpoint_cells ignored_code (checkpoint_accounts am.accounts)
           (checkpoint_transient am.tStorage)
           (MAP (λe. (e.logger,e.topics,e.data)) am.logs) in
     case (checkpoint_index expected LN,checkpoint_index actual LN) of

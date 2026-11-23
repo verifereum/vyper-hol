@@ -165,7 +165,7 @@ With `holbuild` v0.14.59 or newer, MLton, and Python 3 on `PATH`:
 ```
 
 The demo builds `tests/.emit/run-test` and compares exact native/HOL encoded
-inputs and results for twenty-three cases across three fixtures, plus a passing
+inputs and results for twenty-six cases across four fixtures, plus a passing
 stdin trace. The fixtures include intentional output, revert, deployment-nonce,
 address, checkpoint, dispatch, and unexpected-internal-error mismatches.
 Real py-evm captures cover a source deployment
@@ -183,7 +183,14 @@ the pinned importer's bounded, chunk-dependent handling of repeated lowercase
 its separate single-prefix rule.
 
 `state_checkpoint` traces compare complete sparse account balances, nonces,
-runtime code, persistent and transient storage, and ordered committed logs.
+persistent and transient storage, ordered committed logs, and independently
+computed runtime code. Code installed from the trace for interpreted source and
+blueprint deployments is an input, not an independently verified result: only
+its code field is excluded at those addresses. Their account presence, balance,
+nonce and storage remain checked; raw-deployment and other EVM-computed code
+remain compared. `checkpoint_code_provenance.json` checks this distinction with
+altered source code, a source nonce mismatch, and a raw code mismatch.
+
 Zero slots equal absent slots; fully empty accounts equal absence. The decoder
 rejects duplicate object members and account/slot keys, out-of-range words,
 malformed addresses, and malformed byte/topic hex. These checks do not add gas
@@ -228,6 +235,15 @@ explicit local step.
 Vyper at `VYPER_PIN`, and derives boundary-heavy call arguments from the ABI.
 `tools/bytecode_fuzz.py` remains the separate bytecode-parity driver.
 
+Generated contracts add a bounded payable constructor, funding, an EOA transfer,
+and `create_copy_of(self)` to the existing random expressions. The default call
+plan starts with successful funding, transfer and endowed creation, then
+exercises random functions. This changes balances, creates an account, and
+increments the creator contract's nonce without incrementing message senders'
+nonces. Endowments and amounts are small; each contract can create at most two
+copies. Shorter `--calls-per-case` plans truncate that prefix. Saved constructor
+arguments, endowments and call plans replay unchanged through explicit-source mode.
+
 Use a Python 3.11.17 virtual environment with pip supporting `--group`, and a
 clean compiler checkout matching `VYPER_PIN`. Install the upstream test/backend
 dependencies using the same constraints as the export setup:
@@ -257,11 +273,16 @@ compiler rejection is not an execution comparison.
 The local adapter enumerates all account/storage trie leaves and live journals,
 not sampled slots or getter results. It retains write preimages from an empty
 world, rejects unknown preimages/incomplete backing state, and captures without
-flushing or mutating execution state. Deployment and every call, including
-reverts, get checkpoints. Calls reset transient storage at their start; snapshots
-retain cumulative committed logs. Gas, fees, temporary memory, and transaction
-sender-nonce increments are not modeled: calls use the upstream message helpers.
-`--smoke` exercises persistent/transient writes, logs, clearing, and rollback.
+flushing or mutating execution state. Deployments and calls get checkpoints for
+success, REVERT, and non-resource exceptional execution failures such as INVALID
+and insufficient funds. The adapter distinguishes the current operation's failure
+from stale backend results; failed creation setup rolls back the callee account
+while retaining the fixture's consumed deployment nonce. Calls reset transient
+storage at their start; snapshots retain cumulative committed logs. Gas, fees,
+temporary memory, and transaction sender-nonce increments are not modeled:
+calls use the upstream message helpers. Out-of-gas remains an operational failure,
+not a semantic comparison. `--smoke` exercises persistent/transient writes,
+logs, clearing, and rollback.
 
 For explicit local-coercion or other stateful scenarios, supply `--source case.vy`
 and `--calls calls.json`. The calls file is an object such as:
@@ -292,8 +313,9 @@ per-case timeouts (`--reference-timeout` and `--timeout`).
 Exit status is **0** for agreement with at least one executed comparison, **1**
 for semantic mismatches, and **2** for operational errors/timeouts or no executed
 comparisons. Malformed native output, import failures, and crashes are not
-reported as semantic mismatches. Compiler/backend exceptions are not converted
-into expected contract reverts. A campaign finding does not alter the semantics.
+reported as semantic mismatches. Only identified execution failures are captured
+as failed contract outcomes; unrelated compiler, ABI, backend and snapshot errors
+remain operational failures. A campaign finding does not alter the semantics.
 
 Run the producer regressions, including real compiler/py-evm/native execution:
 

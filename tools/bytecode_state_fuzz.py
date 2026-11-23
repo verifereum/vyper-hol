@@ -45,6 +45,47 @@ SMOKE_CALLS = [
 ]
 
 
+def generated_source(seed: str) -> str:
+    """Keep Program's expressions, adding bounded full-world state operations."""
+    return """state_initial: uint256
+state_creations: uint256
+
+@deploy
+@payable
+def __init__(initial: uint256):
+    assert initial <= 32
+    assert msg.value <= 128
+    self.state_initial = initial
+
+""" + Program(random.Random(seed)).generate() + """
+@external
+@payable
+def state_fund():
+    assert msg.value <= 32
+
+@external
+def state_send(recipient: address, amount: uint256):
+    assert amount <= 16
+    send(recipient, amount)
+
+@external
+@payable
+def state_create(amount: uint256) -> address:
+    assert msg.value <= 32
+    assert amount <= 16
+    assert self.state_creations < 2
+    self.state_creations += 1
+    return create_copy_of(self, value=amount)
+"""
+
+
+def generated_deployment(seed: str) -> dict:
+    """Endow every generated deployment enough for its successful call prefix."""
+    rng = random.Random(f"{seed}:deployment")
+    return {"constructor_args": [rng.randint(1, 32)],
+            "deployment_value": rng.randint(64, 128)}
+
+
 def write_json(path: Path, value) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n")
 
@@ -75,16 +116,32 @@ def abi_value(item: dict, rng: random.Random, addresses: tuple) -> object:
     raise ValueError(f"unsupported generated ABI type: {ty}")
 
 
-def plan_calls(abi: list[dict], seed: str, count: int, addresses: tuple) -> list[dict]:
+def plan_calls(abi: list[dict], seed: str, count: int, addresses: tuple,
+               *, generated: bool = False) -> list[dict]:
     rng = random.Random(seed)
     functions = [item for item in abi if item.get("type") == "function"]
     if not functions:
         raise ValueError("generated program has no external functions")
+    prefix = []
+    if generated:
+        # ReferenceRun lists its funded EOAs first and the deployed contract last.
+        # These small values succeed independently of Program's random arithmetic
+        # and assertions, rather than hoping a full-width amount is affordable.
+        amount = rng.randint(1, 16)
+        prefix = [
+            {"function": "state_fund", "args": [], "value": rng.randint(1, 32)},
+            {"function": "state_send",
+             "args": [rng.choice(addresses[:-1]), rng.randint(1, 16)]},
+            {"function": "state_create", "args": [amount], "value": amount},
+        ][:count]
+        functions = [item for item in functions
+                     if item["name"] not in ("state_fund", "state_send", "state_create")]
     rng.shuffle(functions)
-    return [
+    return prefix + [
         {"function": item["name"],
          "args": [abi_value(arg, rng, addresses) for arg in item["inputs"]]}
-        for item in (functions[index % len(functions)] for index in range(count))
+        for item in (functions[index % len(functions)]
+                     for index in range(count - len(prefix)))
     ]
 
 
@@ -120,7 +177,8 @@ def reference_worker(config_path: Path) -> int:
         )
         calls = config["calls"]
         if calls is None:
-            calls = plan_calls(run.abi, config["seed"], config["calls_per_case"], run.addresses)
+            calls = plan_calls(run.abi, config["seed"], config["calls_per_case"],
+                               run.addresses, generated=config.get("generated", False))
         write_json(directory / "calls.json", {
             "constructor_args": config.get("constructor_args", []),
             "deployment_value": config.get("deployment_value", 0), "calls": calls,
@@ -255,16 +313,19 @@ def main(argv=None) -> int:
         directory = args.out / name
         directory.mkdir()
         (directory / "source.vy").write_text(
-            source if source is not None else Program(random.Random(seed)).generate()
+            source if source is not None else generated_source(seed)
         )
         config = {
             "name": name, "seed": seed, "vyper": str(args.vyper),
             "source_dir": str(args.source.resolve().parent if args.source else ROOT),
             "optimize": args.optimize, "experimental_codegen": args.codegen == "venom",
             "calls_per_case": args.calls_per_case,
+            "generated": source is None,
             "calls": scenario.get("calls", SMOKE_CALLS if args.smoke else None),
-            "constructor_args": scenario.get("constructor_args", []),
-            "deployment_value": scenario.get("deployment_value", 0),
+            **(generated_deployment(seed) if source is None else {
+                "constructor_args": scenario.get("constructor_args", []),
+                "deployment_value": scenario.get("deployment_value", 0),
+            }),
         }
         report = run_case(directory, config, args, binary_digest)
         counts[report["status"]] += 1

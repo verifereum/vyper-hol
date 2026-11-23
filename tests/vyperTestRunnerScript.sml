@@ -774,7 +774,7 @@ Definition run_trace_def:
    | RawDeployment dt =>
      (snss, run_raw_deployment am dt)
    | StateCheckpoint cp => (snss,
-       case compare_state_checkpoint am cp of
+       case compare_state_checkpoint (trace_code_addresses snss) am cp of
        | NONE => INL am
        | SOME message => INR (Error (RuntimeError message)))
    | ClearTransientStorage => (snss,

@@ -287,7 +287,9 @@ class ReferenceRun:
                         compiler_settings=settings,
                         input_bundle=FilesystemInputBundle([source_dir]),
                     )
-            except base_env.ExecutionReverted:
+            except base_env.EvmError as error:
+                if not self.env.is_execution_failure(error):
+                    raise
                 self.contract = None
             self.abi = (self.contract.abi if self.contract is not None
                         else self.traces[-1]["contract_abi"])
@@ -298,11 +300,11 @@ class ReferenceRun:
             _record_checkpoint(self.env, self.traces, "deployment", 0)
 
     def call(self, plan: dict) -> None:
-        """Execute a message, observing only real EVM reverts as expected failures."""
+        """Checkpoint non-resource EVM failures, never setup or backend errors."""
         with _LOCK:
-            from tests.evm_backends.base_env import ExecutionReverted
+            from tests.evm_backends.base_env import EvmError
             if self.contract is None:
-                raise ValueError("Cannot call a contract whose deployment reverted")
+                raise ValueError("Cannot call a contract whose deployment failed")
 
             function_name = plan["function"]
             arguments = plan.get("args", [])
@@ -318,8 +320,9 @@ class ReferenceRun:
             self.env.clear_transient_storage()
             try:
                 function(*decoded, value=plan.get("value", 0))
-            except ExecutionReverted:
+            except EvmError as error:
+                if not self.env.is_execution_failure(error):
+                    raise
                 # Upstream BaseEnv already exported call_succeeded=False.
-                pass
             _record_checkpoint(self.env, self.traces, "call", self._call_index)
             self._call_index += 1

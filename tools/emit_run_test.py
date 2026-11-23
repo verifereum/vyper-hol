@@ -36,6 +36,7 @@ def main():
             "tests/fixtures/run_test_json/basic.json",
             "tests/fixtures/run_test_json/checkpoint_source_state.json",
             "tests/fixtures/run_test_json/checkpoint_message_calls.json",
+            "tests/fixtures/run_test_json/checkpoint_code_provenance.json",
         ]
         actual = []
         for fixture_path in fixtures:

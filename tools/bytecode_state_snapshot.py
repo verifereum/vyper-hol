@@ -250,10 +250,15 @@ def env_class():
     importing this module or using capture directly on a local py-evm state.
     """
     from tests.evm_backends.pyevm_env import PyEvmEnv
+    from eth.exceptions import InsufficientFunds, OutOfGas
+    from tests.evm_backends.base_env import EvmError
 
     class SnapshotPyEvmEnv(PyEvmEnv):
         def __init__(self, gas_limit, account_keys, tracing, block_number, evm_version, exporter):
             self._logs = []
+            self._operation_computation = None
+            self._operation_exception = None
+            self._operation_checkpoint = None
             super().__init__(gas_limit, account_keys, tracing, block_number, evm_version, exporter)
 
         @cached_property
@@ -274,7 +279,63 @@ def env_class():
         def full_state_snapshot(self):
             return capture(self._state, self._logs)
 
+        def is_execution_failure(self, error):
+            """Recognize only this operation's non-resource EVM failure.
+
+            last_result intentionally retains the upstream fixture semantics: it
+            can still describe an earlier operation when apply_message rejects
+            insufficient funds before returning any computation.
+            """
+            return (
+                error is self._operation_exception
+                and not isinstance(error.__cause__, OutOfGas)
+            )
+
+        @contextmanager
+        def _execution_operation(self):
+            self._operation_computation = None
+            self._operation_exception = None
+            self._operation_checkpoint = self._state.snapshot()
+            try:
+                yield
+            except BaseException as error:
+                # apply_message/create_message can raise before returning a
+                # computation, leaving their own journal checkpoint open.
+                self._state.revert(self._operation_checkpoint)
+                computation = self._operation_computation
+                if isinstance(error, EvmError) and (
+                    (computation is not None
+                     and computation.is_error
+                     and error.__cause__ is computation.error)
+                    or (computation is None
+                        and isinstance(error.__cause__, InsufficientFunds))
+                ):
+                    self._operation_exception = error
+                raise
+            else:
+                self._state.commit(self._operation_checkpoint)
+            finally:
+                self._operation_checkpoint = None
+
+        def _message_call(self, *args, **kwargs):
+            with self._execution_operation():
+                return super()._message_call(*args, **kwargs)
+
+        def _deploy(self, *args, **kwargs):
+            with self._execution_operation():
+                return super()._deploy(*args, **kwargs)
+
+        def _generate_contract_address(self, sender):
+            address = super()._generate_contract_address(sender)
+            # The fixture consumes this nonce before attempting CREATE. Keep it
+            # on failure, but roll back the new account's nonce and all init writes.
+            if self._operation_checkpoint is not None:
+                self._state.commit(self._operation_checkpoint)
+                self._operation_checkpoint = self._state.snapshot()
+            return address
+
         def _check_computation(self, computation):
+            self._operation_computation = computation
             if not computation.is_error:
                 # Direct message helpers commit writes but leave SELFDESTRUCT
                 # deletion to the transaction executor. Apply only that missing
