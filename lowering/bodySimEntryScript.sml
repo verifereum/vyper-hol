@@ -59,7 +59,16 @@ Proof
   simp[contract_inv_def, cenv_module_pins_mods_def, module_body_inv_def,
        immutable_section_layout_mods_def, build_compile_env_unit_def,
        pairTheory.ELIM_UNCURRY] >>
-  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+  strip_tac >> rpt conj_tac >> simp[]
+  >~ [`!sid tls. _ ==> supported_module_headers tls /\ _`]
+  >- (qx_genl_tac [`sid`,`tls`] >> disch_tac >>
+      qpat_assum `!s ts. ALOOKUP mods s = SOME ts ==> supported_module_headers ts /\ _`
+        (qspecl_then [`sid`,`tls`] mp_tac) >>
+      simp[])
+  >~ [`acyclic_struct_metadata (make_struct_fields_map_mods mods)`]
+  >- (qpat_assum `caller.ce_struct_fields = _` (SUBST1_TAC o SYM) >>
+      first_assum ACCEPT_TAC) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem body_inv_ce_vars_update[local,simp]:
