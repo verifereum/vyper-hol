@@ -314,6 +314,42 @@ Proof
   simp[compile_internal_fn_bodies_def, comp_return_def]
 QED
 
+Theorem runtime_unit_ordered_run:
+  lower_vyper_runtime_unit_mods mods exps rp = SOME unit /\
+  classify_functions_unit mods exps = (exts,ints,fb,cf,ctors) /\
+  ips = MAP (set_internal_package_target rp.rpol_target o
+    package_internal_fn_unit mods T (K global_nonreentrant_slot) F 0)
+    (order_internals_unit (runtime_internal_order_unit
+      (exported_runtime_fns mods exps) (main_module mods) ints) ints) ==>
+  ?start final data.
+    compile_internal_fn_bodies ips start = ((),final) /\
+    extract_context_with_internals "__entry" ips final = SOME (unit.cu_context,data) /\
+    lowering_context_ok unit.cu_context /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips) /\
+    EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks start)
+Proof
+  strip_tac >>
+  `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips)` by
+    simp[unit_package_internal_labels] >>
+  qpat_x_assum `ips = MAP _ _` (assume_tac o SYM) >>
+  Cases_on `EXISTS (external_has_defaults o SND) exts`
+  >- (qpat_x_assum `lower_vyper_runtime_unit_mods _ _ _ = _` mp_tac >>
+      simp[lower_vyper_runtime_unit_mods_def, AllCaseEqs()] >> strip_tac >>
+      drule grouped_internal_run_labels >>
+      simp[EVERY_MAP, package_external_group_unit_labels] >> strip_tac >>
+      qexistsl_tac [`start`, `final`, `data`] >> simp[]) >>
+  qpat_x_assum `lower_vyper_runtime_unit_mods _ _ _ = _` mp_tac >>
+  simp[lower_vyper_runtime_unit_mods_def, AllCaseEqs()] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_lowering sels packs ips fall rp 0 0 [] info "__entry"` >>
+  `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) sels` by
+    simp[Abbr `sels`, build_selectors_fn_labels] >>
+  `EVERY (\p. isPREFIX "fn_" (FST p)) packs` by
+    simp[Abbr `packs`, EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD,
+         package_external_fn_unit_def, set_external_package_target_def] >>
+  drule_all runtime_internal_run_labels >> strip_tac >>
+  qexistsl_tac [`start`, `final`, `data`] >> simp[]
+QED
+
 (* The lowering packages only the reachable internal functions.  The lookup
    premise says this one's label resolves in the unit, so some packaged
    function has the same id (internal_fn_label_id_11), hence the same key
