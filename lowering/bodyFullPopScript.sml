@@ -22,6 +22,7 @@ Ancestors
   bodyFullUnwrapRun bodyFullGhostFrame
   loweringStateRelDefs bodyFullMemoryFrames
   stmtAppendStorageRunPtr payloadLoadStorePtr appendStorageGhostPtr
+  ptrSafeRun fragGasOriginPtr fragGasOrigin fragGasPathPtr
 
 val _ = Parse.hide "body";
 
@@ -1201,7 +1202,9 @@ Proof
   Cases_on `tr` >> gvs[Abbr `tm`,op_taint_def] >> metis_tac[]
 QED
 
-Theorem pop_full_storage_empty_path[local]:
+(* The empty slot-array run ends at the length ASSERT. Keep its installed
+   prefix and final edge together, with one ghost pair for all D. *)
+Theorem pop_slot_empty_selected:
   eval_operand hdr s = SOME slot /\ op_taint tn hdr = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
   (if tr then tload slot s else sload slot s) = 0w /\
@@ -1213,9 +1216,24 @@ Theorem pop_full_storage_empty_path[local]:
     (DROP s.vs_inst_idx bb.bb_instructions) /\
   get_instruction bb (s.vs_inst_idx+3) =
     SOME (mk_inst (id+3) ASSERT [Var x2] []) ==>
-  ?v G' tn'. !D.
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-      (Abort Revert_abort v,G',tn')
+  ?p v G' tn'.
+    (?u.
+      step_inst_base (mk_inst id (if tr then TLOAD else SLOAD) [hdr] [x0]) s = OK u /\
+      lookup_var x0 u = SOME 0w /\
+      run_inst_seq [mk_inst (id+1) ISZERO [Var x0] [x1];
+        mk_inst (id+2) ISZERO [Var x1] [x2]] u = OK p) /\
+    run_inst_seq [mk_inst id (if tr then TLOAD else SLOAD) [hdr] [x0];
+      mk_inst (id+1) ISZERO [Var x0] [x1];
+      mk_inst (id+2) ISZERO [Var x1] [x2]] s = OK p /\
+    p.vs_current_bb = s.vs_current_bb /\
+    lookup_var x2 (p with vs_inst_idx := s.vs_inst_idx+3) = SOME 0w /\
+    step_inst_base (mk_inst (id+3) ASSERT [Var x2] [])
+      (p with vs_inst_idx := s.vs_inst_idx+3) = Abort Revert_abort v /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (OK (p with vs_inst_idx := s.vs_inst_idx+3),G',tn') /\
+      gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG)
+        (p with vs_inst_idx := s.vs_inst_idx+3,G',tn') []
+        (Abort Revert_abort v,G',tn'))
 Proof
   strip_tac >>
   mp_tac (Q.INST [`out` |-> `x0`, `fn` |-> `func`]
@@ -1274,12 +1292,11 @@ Proof
              (ACCEPT_TAC o SIMP_RULE (srw_ss()) []))) >>
      qpat_assum `!D. inst_seq_ptr D lo ctx func PG G1 tn1 _ _ G2 tn2`
        (qspec_then `D` (ACCEPT_TAC o REWRITE_RULE [arithmeticTheory.ADD1]))) >>
-  qexistsl_tac [`revert_state (set_returndata []
-    (v with vs_inst_idx := s.vs_inst_idx+3))`,`G2`,`tn2`] >>
-  gen_tac >>
-  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-    (OK (v with vs_inst_idx := s.vs_inst_idx+3),G2,tn2)` by
-    (`run_inst_seq_mem_ok prefix s` by
+  qabbrev_tac `p = v with vs_inst_idx := s.vs_inst_idx+3` >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK p,G2,tn2)` by
+    (gen_tac >> qunabbrev_tac `p` >>
+     `run_inst_seq_mem_ok prefix s` by
        (irule run_inst_seq_mem_ok_every >>
         Cases_on `tr` >>
         simp[Abbr `prefix`,mk_inst_def,inst_dload_in_section_def] >>
@@ -1298,34 +1315,63 @@ Proof
        (qspec_then `D` assume_tac) >>
      drule_all run_inst_seq_gas_origin_ptr_path >>
      Cases_on `tr` >> simp[Abbr `prefix`,mk_inst_def]) >>
-  irule gas_origin_ptr_path_trans >> goal_assum (drule_at Any) >>
-  `~v.vs_halted /\ v.vs_current_bb = s.vs_current_bb /\
-    allocas_from lo v /\ lookup_var x2 v = SOME 0w` by
-    (gvs[Abbr `v`,update_var_def,lookup_var_def,FLOOKUP_UPDATE,allocas_from_def] >>
-     first_assum ACCEPT_TAC) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp (v with vs_inst_idx := s.vs_inst_idx+3)` by
-    (simp[Abbr `v`, allocas_below_fmp_def, update_var_def] >>
+  `~p.vs_halted /\ p.vs_current_bb = s.vs_current_bb /\
+    allocas_from lo p /\ lookup_var x2 p = SOME 0w` by
+    (gvs[Abbr `p`,Abbr `v`,update_var_def,lookup_var_def,FLOOKUP_UPDATE,
+      allocas_from_def] >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp p` by
+    (simp[Abbr `p`,Abbr `v`,allocas_below_fmp_def,update_var_def] >>
      qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
      simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
-  irule exit_inst_origin_ptr >> simp[exit_result_def] >>
-  `lookup_var x2 (v with vs_inst_idx := s.vs_inst_idx+3) = SOME 0w` by
-    fs[lookup_var_def] >>
-  `step_inst_base (mk_inst (id+3) ASSERT [Var x2] [])
-    (v with vs_inst_idx := s.vs_inst_idx+3) =
-    Abort Revert_abort (revert_state (set_returndata []
-      (v with vs_inst_idx := s.vs_inst_idx+3)))` by simp[pop_step_ASSERT] >>
-  `ptr_inst_ok D lo 0 ctx func G2 tn2 (mk_inst (id+3) ASSERT [Var x2] [])
-    (v with vs_inst_idx := s.vs_inst_idx+3)` by
-    (irule ptr_inst_ok_lower_bound_transport >>
-     conj_tac >- (simp[allocas_from_def] >>
-       qpat_assum `allocas_from lo v`
-         (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])) >>
-     qexists_tac `0` >> simp[] >> irule bop_assert_ptr_inst_ok >> simp[]) >>
-  simp[step_inst_non_invoke,pop_step_ASSERT,lookup_var_def,
-    gas_events_step_def,gas_count_step_def,mem_safe_step_non_invoke,
-    dalloca_no_wrap_def,mk_inst_def,
-    inst_mem_below_frontier_def,inst_dload_in_section_def,
-    source_memory_read_ranges_def,source_memory_write_ranges_def]
+  qabbrev_tac `i = mk_inst (id+3) ASSERT [Var x2] []` >>
+  qabbrev_tac `w = revert_state (set_returndata [] p)` >>
+  `get_instruction bb p.vs_inst_idx = SOME i` by simp[Abbr `p`,Abbr `i`] >>
+  `step_inst_base i p = Abort Revert_abort w` by simp[Abbr `i`,Abbr `w`,pop_step_ASSERT] >>
+  `!D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (p,G2,tn2) []
+     (Abort Revert_abort w,G2,tn2)` by
+    (gen_tac >>
+     `ptr_inst_ok D lo 0 ctx func G2 tn2 i p` by
+       (irule ptr_inst_ok_lower_bound_transport >> simp[] >>
+        qexists_tac `0` >> simp[Abbr `i`] >> irule bop_assert_ptr_inst_ok >> simp[]) >>
+     `ptr_safe_step D lo 0 ctx func PG G2 tn2 i p` by
+       simp[ptr_safe_step_def,Abbr `i`,mk_inst_def] >>
+     simp[gas_origin_ptr_edge_def,gas_origin_edge_def,gas_path_ptr_edge_def] >>
+     conj_tac >> qexists_tac `0` >>
+     simp[Abbr `i`,step_inst_non_invoke,exit_result_def,
+       gas_events_step_def,gas_count_step_def,mem_safe_step_non_invoke,
+       dalloca_no_wrap_def,mk_inst_def,
+       inst_mem_below_frontier_def,inst_dload_in_section_def,
+       source_memory_read_ranges_def,source_memory_write_ranges_def] >> metis_tac[]) >>
+  qexistsl_tac [`v`,`w`,`G2`,`tn2`] >>
+  conj_tac >- (qexists_tac `u` >>
+    simp[lookup_var_def,update_var_def,FLOOKUP_UPDATE]) >>
+  gvs[Abbr `prefix`,Abbr `p`,Abbr `i`]
+QED
+
+Theorem pop_full_storage_empty_path[local]:
+  eval_operand hdr s = SOME slot /\ op_taint tn hdr = {} /\
+  key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
+  (if tr then tload slot s else sload slot s) = 0w /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX [mk_inst id (if tr then TLOAD else SLOAD) [hdr] [x0];
+    mk_inst (id+1) ISZERO [Var x0] [x1];
+    mk_inst (id+2) ISZERO [Var x1] [x2]]
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  get_instruction bb (s.vs_inst_idx+3) =
+    SOME (mk_inst (id+3) ASSERT [Var x2] []) ==>
+  ?v G' tn'. !D.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (Abort Revert_abort v,G',tn')
+Proof
+  strip_tac >> drule_all pop_slot_empty_selected >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G`]
+    (qx_choosel_then [`p`,`v`,`G'`,`tn'`] strip_assume_tac)) >>
+  qexistsl_tac [`v`,`G'`,`tn'`] >> gen_tac >>
+  qpat_assum `!D. gas_origin_ptr_path _ _ _ _ /\ _`
+    (qspec_then `D` strip_assume_tac) >>
+  irule gas_origin_ptr_path_trans >> goal_assum (drule_at Any) >>
+  irule (cj 3 gas_origin_ptr_path_rules) >> simp[exit_result_def]
 QED
 
 Theorem pop_vv_full_of_target[local]:
