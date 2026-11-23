@@ -7,10 +7,10 @@
  * TOP-LEVEL: the body_*_full sub-shape theorems below.
  *)
 Theory bodyFullAssignTuple
-Ancestors bodyImmutableStoreMemory[qualified,ignore_grammar]
+Ancestors bodySingletonCallSupport bodyImmutableStoreMemory[qualified,ignore_grammar]
   immutableWordStorePath[qualified,ignore_grammar]
   immutableDeployAssignPathGhost[qualified,ignore_grammar]
-  bodyFullShadowBodyInv bodyStorageCases[qualified,ignore_grammar]
+  bodyTypedTargetScope bodyFullShadowBodyInv bodyStorageCases[qualified,ignore_grammar]
   immutableRegionWriteProps[qualified,ignore_grammar]
   bodyInvCodeProps[qualified,ignore_grammar]
   bodyInvExecutionProps[qualified,ignore_grammar] exprBodyPreProps[qualified,ignore_grammar]
@@ -6221,7 +6221,8 @@ Proof
 QED
 
 Theorem tuple_assign_target_supported_calls[local]:
-  supported_target tops bindings t ==>
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  IS_SOME (type_place_target env t) /\ supported_target tops bindings t ==>
   ~supported_target_exists expr_evm_run_root t /\
   EVERY (\c. FST c = NONE /\
              IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t)
@@ -6229,7 +6230,9 @@ Proof
   mp_tac (Q.SPECL [`tops`, `bindings`, `t`]
     bodyStorageCasesTheory.supported_target_info_main_calls) >>
   Cases_on `t` >>
-  gvs[supported_target_def, supportedExprTraverseTheory.supported_expr_exists_def, int_calls_expr_def]
+  gvs[supported_target_def, supportedExprTraverseTheory.supported_expr_exists_def, int_calls_expr_def] >>
+  rpt strip_tac >> drule_all_then assume_tac body_inv_typed_target_calls_main >>
+  fs[EVERY_MEM, int_calls_expr_def] >> metis_tac[]
 QED
 
 Theorem tuple_assign_immutable_toplevel_type[local]:
@@ -6239,8 +6242,13 @@ Theorem tuple_assign_immutable_toplevel_type[local]:
     IS_SOME (supported_immutable_type tops (ns,id))
 Proof
   strip_tac >> gvs[] >> PairCases_on `nsid` >>
-  `~supported_scalar_target tops (nsid0,nsid1)` by
-    metis_tac[augAssignFullTargetRoutesTheory.augassign_scalar_target_route] >>
+  `nsid0 = NONE` by metis_tac[body_inv_immutable_target_main, target_root_def] >>
+  gvs[] >>
+  `~supported_scalar_target tops (NONE,nsid1)` by
+    (strip_tac >>
+     mp_tac (Q.INST [`nsid` |-> `(NONE,nsid1)`, `ctx` |-> `ctx`, `cenv` |-> `cenv`]
+       augAssignFullTargetRoutesTheory.augassign_scalar_target_route) >>
+     simp[] >> metis_tac[]) >>
   fs[supportedStmtsTheory.supported_target_def]
 QED
 
@@ -10579,7 +10587,9 @@ Proof
      `~supported_target_exists (\x. ~is_extcode x /\ ~byte_widths_expr x) head` by
        (qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o REWRITE_RULE [stmt_exprs_ok_def]) >>
         metis_tac[])) >>>
-  HEADGOAL (drule_then strip_assume_tac tuple_assign_target_supported_calls) >>>
+  HEADGOAL (
+    `IS_SOME (type_place_target env head)` by simp[] >>
+    drule_all_then strip_assume_tac tuple_assign_target_supported_calls) >>>
   HEADGOAL (sg `byte_widths_target head`) >>>
   HEADGOAL (irule tuple_assign_target_widths >>
     conj_tac >- first_assum ACCEPT_TAC >>
@@ -12931,7 +12941,8 @@ Proof
      `~supported_target_exists (\x. ~is_extcode x /\ ~byte_widths_expr x) head` by
        (qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o REWRITE_RULE [stmt_exprs_ok_def]) >>
         metis_tac[]) >>
-     drule_then strip_assume_tac tuple_assign_target_supported_calls >>
+     `IS_SOME (type_place_target env head)` by simp[] >>
+     drule_all_then strip_assume_tac tuple_assign_target_supported_calls >>
      `byte_widths_target head` by
        (irule tuple_assign_target_widths >> conj_tac >- first_assum ACCEPT_TAC >>
         qexists_tac `cenv` >> first_assum ACCEPT_TAC) >>
