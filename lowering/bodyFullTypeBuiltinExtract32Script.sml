@@ -5,7 +5,7 @@ Ancestors
   typeBuiltinPrereqs
   bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
-  bodyFullPreds bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
+  bodyFullPreds bodyFullSimProjection bodyFullOfVV bodyFullExprGeneric bodyFullAllocGeneric
   bodyFullExtract32Prepare bodyFullExtract32Suffix bodyFullExtract32SuffixExit
   bodyFullExtract32JoinFrame bodyPtrTypeBuiltinsSavedOperand wordArgsPtr
   gasShadowCompile gasShadowCompileStmtHelpers exprOperandVar exprLoweringProps stmtSimProps
@@ -49,9 +49,10 @@ Proof
     (irule expr_body_pre_type_builtin_arg >>
      conj_tac >- fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
      goal_assum (drule_at Any) >> simp[]) >>
+  `body_expr_full_ok cx src` by fs[body_exprs_full_ok_def] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type src) src es` by
-    (fs[body_exprs_full_ok_def, body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   `gas_admissible (bind (eval_expr cx src) (read_result cx)) expr_res_ok es` by
     (drule (CONV_RULE (DEPTH_CONV ETA_CONV) extract32_vv_first_admissible) >> simp[]) >>
   `?shadow_s1. lower_value compile_expr (gas_shadow_env T cenv) (expr_type src)
@@ -220,10 +221,7 @@ Resume extract32_vv_full[offset_entry]:
      fs[exprSimHypsDefsTheory.expr_body_pre_def]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty off mid` by
-    (qpat_assum `body_expr_full_ok cx off`
-       (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,
-                     `shadow_func`,`cenv`,`env`,`ty`,`mid`] mp_tac o
-        CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >> simp[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   `gas_admissible (bind (eval_expr cx off) (read_result cx)) expr_res_ok mid` by
     metis_tac[expr_body_pre_gas_admissible] >>
   `?shadow_s2. compile_bytestring_src (Var sv) shadow_s1 = ((len,data),shadow_s2) /\
