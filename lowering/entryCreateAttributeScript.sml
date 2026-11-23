@@ -1,8 +1,9 @@
 Theory entryCreateAttribute
 Ancestors
   bodyFullAttribute bodyPtrAttributeObservation entryCreateFocusSpec
-  entryCreateAdminSequence entryCreateScopedBind entryCreatePathScope
+  entryCreateAdminSequence entryCreateScopedBind entryCreatePathScope entryCreateBodyCut
   entryCreateCompletedCut entryCreateOperandReplay entryCreateNativeFirstExit
+  entryCreatePendingScope createSizePrefixReplay
   createSizeCutCode createSizeCutRegion exprSimAbiGasBridge
   abiEncoderProps gasSummary gasExemptCert fragGasOriginPtrExec fragExec
   vyperState vyperAST vyperStorageTrace vyperStorageFootprint
@@ -198,4 +199,116 @@ Proof
       rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[] >>
       Cases_on `res` >> Cases_on `r` >> gvs[create_operand_exit_post_def,exprSimDefsTheory.expr_exit_def]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
+QED
+
+Theorem attribute_add_cut_code[local]:
+  emit_op ADD [x; Lit off] m = (p,b) ==> create_cut_code {} m b
+Proof
+  strip_tac >>
+  `create_cut_code {} m (SND (emit_op ADD [x; Lit off] m))` by
+    (irule create_cut_code_emit_op >> simp[create_cut_targets_def]) >>
+  pop_assum mp_tac >> asm_simp_tac bool_ss [pairTheory.SND]
+QED
+
+(* The right visit has no CREATE of its own or in a pending callee. Its
+   administrative cut is independent of the source computation. *)
+Theorem attribute_cut[local]:
+  body_inv tops ctx ce cx /\ MEM f ctx.ctx_functions /\
+  create_cut_code {} a m /\ fn_has_code a m f /\ fn_has_code m b f /\
+  emit_op ADD [x; Lit off] m = (p,b) /\
+  create_operand_cut a m E ctx f tops cx st0 (eval_expr cx obj) (es,s) ==>
+  create_operand_cut a b E ctx f tops cx st0
+    (eval_expr cx (Attribute ann obj fld)) (es,s)
+Proof
+  strip_tac >>
+  drule attribute_add_cut_code >> disch_tac >>
+  drule_all attribute_add_layout >> strip_tac >>
+  simp[create_operand_cut_def] >> rpt strip_tac >>
+  drule_all create_interior_visit_first_exit >> strip_tac
+  >- (`eval_expr cx (Attribute ann obj fld) =
+        bind (eval_expr cx obj) (\v. select_result cx (expr_type obj) v (AttrSubscript fld))` by
+        simp[FUN_EQ_THM,exprSimAttributeTheory.eval_expr_attribute] >>
+      asm_rewrite_tac[] >> irule create_cut_bind_left >> simp[storage_trace_frame_select] >>
+      fs[create_operand_cut_def] >> metis_tac[]) >>
+  simp[create_body_cut_def] >> rpt strip_tac >>
+  `create_operand_cut m b E ctx f tops cx st0 (\_. (res,ee)) (es,t)` by
+    (irule create_admin_sequence_cut >> simp[mk_inst_def,is_terminator_def]) >>
+  qpat_x_assum `create_operand_cut m b _ _ _ _ _ _ _ _` mp_tac >>
+  simp[create_operand_cut_def,create_body_cut_def] >>
+  disch_then (drule_then mp_tac) >> simp[] >> metis_tac[]
+QED
+
+(* The suffix and the whole expression have the same exit. Widening the
+   suffix therefore only changes the lower end of its instruction-ID band. *)
+Theorem attribute_suffix_step_widen[local]:
+  a.cs_next_id <= m.cs_next_id /\ create_prefix_step m b E ctx f s left t ==>
+  create_prefix_step a b E ctx f s left t
+Proof
+  simp[create_prefix_step_def, frag_ids_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem attribute_full_scope_join[local]:
+  a.cs_next_id <= m.cs_next_id /\
+  create_expr_prefix a b E ctx f s left t /\
+  create_operand_full_scope m b E ctx f t right r ==>
+  create_operand_full_scope a b E ctx f s (left ++ right) r
+Proof
+  Cases_on `r` >> simp[create_operand_full_scope_def] >> strip_tac >>
+  metis_tac[create_expr_prefix_mono,attribute_suffix_step_widen,
+            create_expr_prefix_append,APPEND_ASSOC]
+QED
+
+Theorem attribute_focus_scope_join[local]:
+  a.cs_next_id <= m.cs_next_id /\
+  body_inv tops ctx ce cx /\ MEM f ctx.ctx_functions /\
+  create_cut_code {} m b /\ fn_has_code m b f /\ create_operand_at m t /\
+  create_expr_prefix a b E ctx f s left t /\
+  create_operand_focus_scope m b E ctx f t right ==>
+  create_operand_focus_scope a b E ctx f s (left ++ right)
+Proof
+  strip_tac >> irule entryCreatePendingScopeTheory.create_operand_focus_scope_prepend >>
+  first_assum (irule_at Any) >> irule entryCreatePendingScopeTheory.create_operand_focus_scope_lift >>
+  first_assum (irule_at Any) >> first_assum (irule_at Any) >> simp[] >>
+  `create_cut_region m b t` by
+    (drule_all create_cut_region_rules >> fs[create_operand_at_def]) >>
+  metis_tac[attribute_suffix_step_widen]
+QED
+
+Theorem attribute_vv_at_split[local]:
+  body_inv tops ctx ce cx /\ MEM f ctx.ctx_functions /\
+  expr_body_pre ce cx env (Attribute ann obj fld) es /\
+  compile_expr ce ty obj a = (bvv,m) /\
+  emit_op ADD [vv_operand bvv;
+    Lit (n2w (attr_offset ce (expr_type obj) (vv_loc bvv) fld))] m = (p,b) /\
+  vv = LocatedValue ann (mk_ptr p (vv_loc bvv)) /\
+  create_cut_code {} a m /\ fn_has_code a m f /\ fn_has_code m b f /\
+  a.cs_next_id <= m.cs_next_id /\ local_ptrs_reserved ce a /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+  scoped_operand_outcome (DF,lo,E,ctx,f,PG) tops cx st0 a m (eval_expr cx obj) (es,s,G,tn)
+    (field_vv_post (DF,lo,d,ctx,f) ce cx obj (es,a,m,s,bvv,G,tn))
+    (create_operand_exit_post ctx cx) /\
+  create_operand_cut a m E ctx f tops cx st0 (eval_expr cx obj) (es,s) /\
+  (!marks. create_operand_focus_scope a m E ctx f s marks ==>
+           create_operand_focus_scope a b E ctx f s marks) /\
+  (!marks r. exit_result r /\ create_operand_full_scope a m E ctx f s marks r ==>
+             create_operand_full_scope a b E ctx f s marks r) /\
+  (!left t. create_expr_prefix a m E ctx f s left t ==>
+            create_expr_prefix a b E ctx f s left t) ==>
+  scoped_operand_outcome (DF,lo,E,ctx,f,PG) tops cx st0 a b
+    (eval_expr cx (Attribute ann obj fld)) (es,s,G,tn)
+    (field_vv_post (DF,lo,d,ctx,f) ce cx (Attribute ann obj fld) (es,a,b,s,vv,G,tn))
+    (create_operand_exit_post ctx cx) /\
+  create_operand_cut a b E ctx f tops cx st0 (eval_expr cx (Attribute ann obj fld)) (es,s)
+Proof
+  strip_tac >> drule attribute_add_cut_code >> disch_tac >>
+  reverse conj_tac >- (irule attribute_cut >> first_assum (irule_at Any) >> metis_tac[]) >>
+  qpat_x_assum `vv = LocatedValue _ _` SUBST_ALL_TAC >>
+  irule attribute_bind_scoped >> first_assum (irule_at Any) >> simp[] >>
+  qexistsl_tac [`ty`,`env`] >> simp[] >> conj_tac
+  >- (rpt strip_tac >> irule attribute_full_scope_join >>
+      first_assum (irule_at Any) >> fs[create_operand_full_scope_def] >> metis_tac[]) >>
+  rpt strip_tac >> irule attribute_focus_scope_join >>
+  first_assum (irule_at Any) >> fs[create_operand_full_scope_def,create_operand_at_def] >>
+  metis_tac[]
 QED
