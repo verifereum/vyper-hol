@@ -8,21 +8,12 @@
 #                  (bytecode/pending-bounded-decode-guards.md)
 #   map-key-copy   the pin copies a bytestring map key before hashing it; the
 #                  HOL lowering hashes it in place (shorter code)
-#   const-list-in  `x in CONST_LIST` lowered over the substituted list literal
-#                  where the pin reads the constant array
 # Reasons were attributed from the source's features (folded expressions,
 # and/or chains of 3+ operands, external calls, logs, abi_decode) and the
 # rest by reading the bytecode diff. A contract can have causes beyond the
 # one listed: when its fix lands, the check reports what remains.
 14a0a48f6763bd15 bytes #1405  # functional/builtins/codegen/test_convert::test_convert_zero_bytes_to_bool
 0fd0d7e7f04a21a3 bytes decode-guards  # functional/builtins/codegen/test_abi_decode::test_abi_decode_extcall_oob
-e001fa93c7860757 bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops0-False-False-False-False]
-87e4f2267d5d9c86 bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops1-False-False-False-False]
-441c80f0041e782d bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops3-False-False-False-False]
-d038b62541a95ddf bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops4-False-False-False-False]
-2e670433c7f68d99 bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops5-False-False-False-False]
-96bb160272a6bb8c bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops6-False-False-False-False]
-f6ab44204e05bf3b bytes #556  # functional/codegen/features/test_short_circuiting::test_complex_combination[ops7-False-False-False-False]
 115630236db2fd66 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_default_override2
 25c5916733d463d5 bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_default_return_value_reads_storage...
 0f3a4e33d22a550f bytes decode-guards  # functional/codegen/calling_convention/test_external_contract_calls::test_external_contract_calls
@@ -232,13 +223,10 @@ a8eb4dbb2dbfb1ab bytes decode-guards  # functional/codegen/test_interfaces::test
 1ad4fe9161d524c5 bytes decode-guards  # functional/codegen/test_interfaces::test_external_interface_int_clampers[int128]
 103948e59cfac6a4 bytes decode-guards  # functional/codegen/test_interfaces::test_external_interface_int_clampers[uint8]
 a9459af86c6d2514 bytes decode-guards  # functional/codegen/test_interfaces::test_self_interface_via_storage
-bf39909ef4af8dfb bytes const-list-in  # functional/codegen/types/numbers/test_constants::test_constant_lists
 f866e6311be54e83 bytes decode-guards  # functional/codegen/types/test_array_indexing::test_array_index_overlap_extcall
-28c14c4bb8d9039d bytes #556  # functional/codegen/types/test_dynamic_array::test_member_in_updated_nested_list
 fc55f5601f0ac4cf bytes decode-guards  # functional/codegen/types/test_dynamic_array::test_venom_external_call_dynarray_bytes_elem_size_mismatch
 8f151f76b1449108 bytes decode-guards  # functional/codegen/vyper_hol_regression/abi/test_dynamic_padding::test_nonzero_dynamic_padding_does_not_cha...
 4ce2f31caef7eb87 bytes decode-guards  # functional/codegen/vyper_hol_regression/abi/test_returndata_padding::test_external_call_ignores_dynamic_pad...
 9fc477309e9b77d6 bytes decode-guards  # functional/codegen/vyper_hol_regression/abi/test_returndata_padding::test_external_call_ignores_dynamic_pad...
-e50833be91c1abb0 bytes #556  # functional/codegen/vyper_hol_regression/hand/test_boolean_evaluation_order::test_boolean_operands_short_circuit_left...
 d2322cb5f88b4a36 bytes decode-guards  # functional/syntax/test_return_tuple::test_external_call_in_return_tuple
 edee6067ac50f50e bytes decode-guards  # functional/syntax/test_return_tuple::test_nested_external_call_in_return_tuple
