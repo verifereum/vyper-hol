@@ -97,14 +97,20 @@ Proof
           qexistsl [`G1`,`bvv`,`gs1`,`gs2`,`iop`,`mid`,`s`,`sm`,`st2`,`tn1`,`ty`] >>
           rpt conj_tac >> first_assum ACCEPT_TAC)
       >- suspend "immutable") >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `expr_body_pre cenv cx env e1 es` by
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+     qpat_assum `eval_expr cx e1 _ = (INL _,_)` (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env e1 (es with gas_obs := gs1)` by simp[] >>
   drule_all_then strip_assume_tac exprSimSourceTheory.expr_body_pre_runtime_typed >>
   gvs[vyperTypeInvariantsTheory.eval_result_typed_def]
 QED
 
 Resume subscript_unframed_array_vv_full[immutable]:
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `expr_body_pre cenv cx env e1 es` by
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+     qpat_assum `eval_expr cx e1 _ = (INL _,_)` (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env (Subscript v8 e1 e2) (es with gas_obs := gs1)` by simp[] >>
   drule_all_then assume_tac expr_body_pre_array_subscript_index_after_base >>
   `well_typed_expr env (Subscript v8 e1 e2) /\
@@ -159,7 +165,10 @@ QED
 
 Resume subscript_unframed_array_vv_full[value]:
   qpat_x_assum `~((!t r t'. eval_expr _ _ _ = _ ==> _) /\ _)` kall_tac >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `expr_body_pre cenv cx env e1 es` by
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+     qpat_assum `eval_expr cx e1 _ = (INL _,_)` (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env e1 (es with gas_obs := gs1)` by simp[] >>
   drule_all_then strip_assume_tac exprSimSourceTheory.expr_body_pre_runtime_typed >>
   qpat_assum `expr_type e1 = _` (fn eq =>
@@ -195,7 +204,13 @@ Resume subscript_unframed_array_vv_full[value]:
   `well_typed_expr env e1 /\
    (!id t. FLOOKUP env.var_types id = SOME t ==>
           ?q sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz))` by
-    fs[expr_body_pre_def, expr_sim_inv_def] >>
+    qpat_assum `expr_body_pre cenv cx env e1 es` (fn pre =>
+      let
+        val facts = MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts pre
+        val inv = REWRITE_RULE [expr_sim_inv_def] (cj 1 facts)
+      in
+        ACCEPT_TAC (CONJ (cj 2 facts) (cj 6 inv))
+      end) >>
   `!l. vv_operand bvv <> Label l` by (irule lower_compile_expr_not_label >> metis_tac[]) >>
   `expr_body_pre cenv cx env (Subscript v8 e1 e2) (es with gas_obs := gs1)` by simp[] >>
   qpat_x_assum `tvt = ArrayTV _ _` SUBST_ALL_TAC >>
@@ -426,6 +441,8 @@ Resume subscript_unframed_array_vv_full[copied]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
   >- suspend "copied_select" >>
+  drule_then assume_tac
+    exprSimSubscriptArraySourceTheory.copies_subscript_base_not_array_slot_base >>
   drule_all subscript_array_copy_snapshot_caller_frame >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] strip_assume_tac) >>
   qexistsl [`u`,`Gc`,`tnc`,`q`,`w`,`atv`] >> simp[]
@@ -449,7 +466,11 @@ Resume subscript_unframed_array_vv_full[copied_select]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (drule_then (map_every assume_tac o CONJUNCTS)) >>
   drule_all_then strip_assume_tac exprSimSubscriptArraySuffixTheory.framed_array_index_post_view >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  qpat_assum `copies_subscript_base _ _ _`
+    (assume_tac o MATCH_MP exprSimSubscriptArraySourceTheory.copies_subscript_base_not_array_slot_base) >>
+  `expr_body_pre cenv cx env e1 es` by
+    (irule expr_body_pre_array_subscript_base >>
+     qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _` (irule_at Any) >> simp[]) >>
   `well_typed_expr env (Subscript v8 e1 e2) /\ well_typed_expr env e1` by fs[expr_body_pre_def] >>
   `v8 = et` by
     (drule_all vyperTypeConstantFoldTheory.constant_subscript_type_ok >>

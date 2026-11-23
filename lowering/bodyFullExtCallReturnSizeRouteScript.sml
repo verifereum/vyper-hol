@@ -5,7 +5,7 @@ Ancestors
   abiDecodeScalarRunSafety[qualified,ignore_grammar]
   bodyPtrBopScalarCompile bodyPtrBopScalarOutcome bodyPtrBopScalarSeq
   bodyPtrBopScalarDynamic bodyFullGhostFrame bodyFullUnwrapRun exprSimWordArgs
-  fragGasOriginPtr fragGasCopyLoop fragGasSeqPtr fragExec fragExecMem
+  fragGasOriginPtr fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeqPtr fragExec fragExecMem
   fragGasOrigin fragGasMode fragGasPathFrameMem bodyMemAggregatePath
   abiReturnPrefixTransport decoderGhostFramePtr bodyPtrDefs loweringPosts
   stmtReasonLitFragMemory
