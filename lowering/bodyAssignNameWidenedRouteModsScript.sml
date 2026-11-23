@@ -14,6 +14,10 @@ Ancestors
   bodyFullShadowBodyInv bodyPtrIfExpCopyInputs exprOperandVar
   freshWrites bodyDeclMemoryCore exprSimMemDefs
   bodyFullPostsMods venomState loweringStateRelDefs bodyPtrDefs bodyInvSplit
+  bodyAssignNameOutcomeMods bodyAssignLocalInstallMods bodyLocalTypedCopyPathMods
+  bodyLocalCopyWritesMods assignRelayoutFrag gasOutcomeFullPostMods
+  stmtSimDeclTypedCode bodyFullShared wordArgsPtr vyperStorageFootprint
+  bodyInvCodeProps stmtLoweringMono vyperStorageTrace stmtSimDefs
 Libs monadsyntax
 
 Theorem widened_rhs_is_call[local]:
@@ -290,3 +294,173 @@ Resume assign_name_widened_success_resources_mods[floor]:
      immutable_alloca_sep_mods_def, immutable_alloca_sep_def] >> metis_tac[]
 QED
 Finalise assign_name_widened_success_resources_mods
+
+Theorem assign_name_widened_route_mods:
+  linked_assign_name_context_mods mods exps cx id e
+    (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    src tops bindings cenv env env' ret_ty RetQ es /\
+  body_expr_full_ok_mods mods exps cx e /\
+  FLOOKUP env.var_types id = SOME ty /\ ~is_word_type ty /\
+  0 < type_memory_bytes cenv ty /\
+  (expr_type e = ty \/ lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
+   has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+  ~(lowered_value_type cenv e = expr_type e \/
+    is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type cenv e) /\
+    arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
+  stmt_frag_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ cenv
+    (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty
+      (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
+    (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `expr_type e = ty \/ _` kall_tac >>
+  drule_all_then strip_assume_tac linked_assign_name_setup_mods >>
+  `ty' = ty` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `ty' = ty` SUBST_ALL_TAC >>
+  qhdtm_x_assum `linked_assign_name_context_mods`
+    (strip_assume_tac o REWRITE_RULE [linked_assign_name_context_mods_def]) >>
+  drule_all_then strip_assume_tac widened_rhs_code >>
+  drule_all_then strip_assume_tac widened_rhs_layout >>
+  `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by simp[] >>
+  rewrite_tac[stmt_frag_full_mods_def] >> rpt gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac assign_local_relayout_code_parts >>
+  qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
+  drule_all_then strip_assume_tac assign_name_shadow_value_rhs_mods >>
+  rename1 `gas_shadow_state sB shadow_sB` >>
+  `fn_has_code shadow_sa shadow_sB shadow_func` by suspend "shadow" >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
+    fs[ret_pc_ok_def] >>
+  drule_then assume_tac assign_local_admissible_rhs >>
+  qhdtm_x_assum `expr_sim_full_mods` (mp_tac o REWRITE_RULE [expr_sim_full_mods_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sB`,`shadow_sa`,`shadow_sB`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  drule_all_then assume_tac gas_outcome_full_mods_return_buf_allocas >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full_mods _ _ _ _ _ _ childQ _` >>
+  irule assign_local_memory_full_outcome_mods >>
+  conj_tac >- (qexists_tac `lctx` >> first_assum ACCEPT_TAC) >>
+  qexists_tac `\H res ee G tn t. childQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
+  conj_tac >- suspend "continue" >>
+  conj_tac >- (simp[Abbr `childQ`] >> metis_tac[]) >>
+  irule gas_outcome_full_mods_post_source >>
+  qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ childQ _` (irule_at Any) >> simp[]
+QED
+
+Resume assign_name_widened_route_mods[shadow]:
+  qpat_x_assum `stmt_env _ _ _ (Assign _ e) sa = _` kall_tac >>
+  qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
+  pure_rewrite_tac[gasShadowTheory.gas_shadow_stmt_def,
+    gasShadowTheory.gas_shadow_assignment_def,gasShadowTheory.gas_shadow_expr_def] >> strip_tac >>
+  `expr_type (gas_shadow_expr e) = expr_type e` by simp[] >>
+  `FLOOKUP (gas_shadow_env T cenv).ce_vars id = SOME (PtrVar (Var p) cap)` by simp[] >>
+  `(gas_shadow_env T cenv).ce_var_type id = SOME ty` by simp[] >>
+  `~(has_length_word (expr_type (gas_shadow_expr e)) /\ is_empty_value_expr (gas_shadow_expr e))` by simp[] >>
+  drule_all_then strip_assume_tac assign_local_relayout_code_parts >>
+  qpat_x_assum `lower_value _ _ _ (gas_shadow_expr e) _ = _` mp_tac >> simp[]
+QED
+
+Resume assign_name_widened_route_mods[continue]:
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  rpt (qhdtm_x_assum `gas_outcome_full_mods` kall_tac) >>
+  qunabbrev_tac `childQ` >> rule_assum_tac BETA_RULE >>
+  rename1 `evaluate_type (get_tenv cx) ty = SOME dtv` >>
+  qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
+  `valid_horizon cx st0 H0 mid.storage_trace` by
+    fs[Abbr `H0`, storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `H0` (drule_then strip_assume_tac)) >>
+  qpat_x_assum `INL v = INL _` (SUBST_ALL_TAC o REWRITE_RULE [sumTheory.INL_11]) >>
+  `ptr_buf_ok cenv e op Gi u` by
+    (qpat_assum `~is_word_type (post_value_type _ _) ==> _` mp_tac >> simp[]) >>
+  `dead_lo_ok_mods H0 (DF H0) lo cenv cx` by simp[] >>
+  `0 < type_memory_size dtv` by metis_tac[] >>
+  drule_all assign_name_widened_success_resources_mods >>
+  disch_then (qx_choosel_then [`pre`,`sc`,`entry`,`rest`,`ff`,`stv`,`xs`,`sw`,`dw`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `op = Var xs` SUBST_ALL_TAC >>
+  `stmt_state_rel H0 ctx func cenv cx mid u` by fs[expr_post_mods_def, expr_post_def] >>
+  drule_then assume_tac contract_inv_acyclic_struct_metadata >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+   (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+       sz = type_memory_size tv) fields)` by
+    (qpat_assum `expr_sim_inv_mods _ _ _ _ _`
+       (map_every assume_tac o CONJUNCTS o REWRITE_RULE [expr_sim_inv_mods_def]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `type_memory_size stv < dimword (:256)` by
+    (irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+     qexists_tac `w2n sw + type_memory_size stv` >> simp[arithmeticTheory.LESS_EQ_ADD]) >>
+  `ci_mono sa sB` by metis_tac[ci_mono_lower_value_compile_expr,pairTheory.SND] >>
+  `ci_mono sB sb` by metis_tac[cj 1 ci_mono_stmt_helpers,pairTheory.SND] >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sB x` by
+    (fs[ci_mono_def] >> metis_tac[not_fresh_at_mono]) >>
+  suspend "path"
+QED
+
+Resume assign_name_widened_route_mods[path]:
+  `vv_location vv = SOME LocMemory ==>
+    expr_val_at cenv cx (lowered_value_type cenv e) sa sB mid v' (Var xs) u /\
+    ?b len. b <= w2n dw /\ w2n dw + type_memory_size dtv <= b + len /\
+      ((?name. local_region cenv mid.scopes u name b len) \/
+       ?aid. aid < sB.cs_next_id /\ FLOOKUP u.vs_allocas aid = SOME (b,len))` by
+    (strip_tac >> simp[] >> qexistsl_tac [`w2n dw`,`cap`] >> simp[] >> metis_tac[]) >>
+  `vv_location vv <> SOME LocMemory ==>
+    w2n sw + type_memory_size stv <= w2n dw \/ w2n dw + type_memory_size dtv <= w2n sw` by simp[] >>
+  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sB x` by metis_tac[] >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sB x` by metis_tac[] >>
+  mp_tac (Q.INST [`ce` |-> `cenv`, `cx` |-> `cx`, `H0` |-> `H0`,
+    `mid` |-> `mid`, `s` |-> `u`, `start` |-> `sa`, `sa` |-> `sB`, `sf` |-> `sb`,
+    `xd` |-> `p`, `dty` |-> `ty`, `dtv` |-> `dtv`, `cap` |-> `cap`, `dw` |-> `dw`,
+    `xs` |-> `xs`, `sty` |-> `lowered_value_type cenv e`, `stv` |-> `stv`,
+    `v` |-> `v'`, `loc` |-> `vv_location vv`, `sw` |-> `sw`,
+    `G` |-> `Gi`, `tn` |-> `ti`, `lo` |-> `lo`, `ctx` |-> `ctx`, `func` |-> `func`,
+    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `PG` |-> `PG`]
+    (SPEC_ALL local_typed_copy_path_mods)) >>
+  impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE (simp[] >> NO_TAC))) >>
+  disch_then (qx_choosel_then [`snap`,`scB`,`Gs`,`ts`,`t`,`Gf`,`tf`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qexistsl_tac [`ff`,`t`,`Gf`,`tf`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> strip_tac >> BETA_TAC >>
+  conj_tac >- first_assum (irule o SPEC_ALL) >>
+  suspend "horizon"
+QED
+
+Resume assign_name_widened_route_mods[horizon]:
+  `valid_horizon cx st0 H mid.storage_trace` by
+    (qpat_assum `ff.storage_trace = mid.storage_trace` (fn eq =>
+       qpat_assum `valid_horizon cx st0 H ff.storage_trace`
+         (ACCEPT_TAC o REWRITE_RULE [eq]))) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `H` (drule_then (strip_assume_tac o SIMP_RULE (srw_ss()) []))) >>
+  `mid with gas_obs := [] = mid /\ ff with gas_obs := [] = ff` by
+    (qpat_assum `ff = mid with scopes := _` (once_rewrite_tac o single) >>
+     simp[evaluation_state_component_equality]) >>
+  `write_place cx (MemoryPlace id []) v' mid = (INL (),ff)` by
+    (qpat_assum `mid with gas_obs := [] = mid` (fn meq =>
+       qpat_assum `ff with gas_obs := [] = ff` (fn feq =>
+         qpat_assum `!tail. write_place _ _ _ _ = _`
+           (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [meq,feq]))))) >>
+  qpat_assum `!tail. bind (eval_expr _ _) _ _ = _`
+    (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+       simp[storage_trace_frame_bind_all,cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
+         storage_trace_frame_read_result] >>
+     drule valid_horizon_frame >> disch_then drule >> simp[]) >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  drule_then assume_tac eval_read_preserves_scopes_dom >>
+  qpat_assum `expr_post_mods H ctx func cenv cx e es sa sB s0 mid _ _ u`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [expr_post_mods_def,expr_post_def]) >>
+  `stmt_state_rel H ctx func cenv cx mid snap /\ immutable_frame_mods func cenv cx mid snap /\
+    ghost_inv_at_mods (DF H) lo d cenv cx mid Gs ts snap` by
+    (rpt conj_tac >> first_assum (irule o SPEC_ALL) >> first_assum ACCEPT_TAC) >>
+  `scB.cs_next_var <= sb.cs_next_var` by first_assum ACCEPT_TAC >>
+  FAIL_TAC "install"
+QED
+
+Finalise assign_name_widened_route_mods
