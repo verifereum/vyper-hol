@@ -14,7 +14,8 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
   bodyExprPreFacts exprBodyPreProps bodyInvCodeProps allocLimits allocLimitsProps exprSimSource vyperTypeCallGraph
   bodyFullLogScalarTopics bodyFullLogSuffix bodyFullHashKeccakFixed supportedStmtTraverse
-  bodySimLogArgs stmtSimLogTrace exprSimHyps whitelistLogWiden
+  bodySimLogArgs stmtSimLogTrace exprSimHyps whitelistLogWiden checkedTypeNamespace
+  bodyQualifiedStmtSupport bodyInvMetadataProps[qualified,ignore_grammar]
   supportedExprs supportedExprTraverse
   vyperTypeCallStackSoundness vyperTypeExprSoundness vyperTypeInvariants
   stmtLowering context compileEnv gasShadowState gasShadowCompileStmtHelpers gasShadowCompileStmtCases
@@ -206,10 +207,11 @@ Proof
     (imp_res_tac vyperTypeABITheory.OPT_MMAP_LIST_REL >>
      fs[LIST_REL_EL_EQN, EVERY_EL, well_formed_type_def] >>
      metis_tac[optionTheory.IS_SOME_EXISTS]) >>
-  `type_env tops SUBMAP get_tenv cx` by
-    (irule body_main_type_env_submap >>
-     qpat_assum `body_inv tops ctx cenv cx`
-       (ACCEPT_TAC o cj 1 o MATCH_MP body_inv_main_code)) >>
+  `get_tenv cx = type_env tops` by
+    (drule_then assume_tac body_inv_contract >>
+     drule_then assume_tac bodyInvMetadataPropsTheory.contract_inv_type_env >>
+     fs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
+        finite_mapTheory.FUNION_FEMPTY_2]) >>
   `EVERY (assignable_type (get_tenv cx)) decl` by
     (`EVERY (supported_nested_type supported_event_leaf_type (LENGTH tops) tops) decl` by
        simp[Abbr `decl`] >>
@@ -217,7 +219,8 @@ Proof
      qspecl_then [`supported_event_leaf_type`,`LENGTH tops`,`tops`,`ty`] mp_tac
        supported_nested_evaluated_assignable >> simp[] >>
      disch_then (qspecl_then [`get_tenv cx`,`{}`] mp_tac) >>
-     simp[finite_mapTheory.DRESTRICT_UNIV] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+     fs[finite_mapTheory.DRESTRICT_UNIV] >>
+     metis_tac[optionTheory.IS_SOME_EXISTS, checkedTypeNamespaceTheory.type_env_struct_namespace]) >>
   `EVERY (assignable_type (get_tenv cx)) src` by
     metis_tac[cj 2 arg_type_fits_source_assignable] >>
   `!ty. MEM ty src ==>
@@ -952,6 +955,9 @@ Proof
   `supported_log tops id args` by
     (qpat_assum `supported_stmt tops bindings (Log id args)` mp_tac >>
      simp_tac bool_ss [supported_stmt_def]) >>
+  `FST id = NONE` by
+    (Cases_on `FST id` >> gvs[stmt_exprs_ok_def, body_inv_def,
+                              cenv_module_pins_def, alistTheory.ALOOKUP_def]) >>
   `?fields. supported_event_fields tops id = SOME fields` by
     (Cases_on `supported_event_fields tops id` >> fs[supported_log_def]) >>
   `supported_pure_exprs tops args /\
@@ -971,7 +977,7 @@ Proof
   `~supported_exprs_exists (const_name_root cx) args` by
     (drule_all body_inv_stmt_const_name_free >> simp[supported_stmt_expr_exists_def]) >>
   `~supported_exprs_exists
-      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) args /\
    call_evaluation_safe cx (int_calls_exprs args) /\
    (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
       occurs_abi_decode_target target tops)` by
