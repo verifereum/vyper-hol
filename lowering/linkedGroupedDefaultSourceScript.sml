@@ -4,7 +4,7 @@ Ancestors
   compileUnit compileVyper constSubstMods defaultDispatchModsGetter
   publicGetterProps vyperReadOnlySyntax loweringShapeProps vyperAST
   vyperTypeContract vyperTypeContractContext
-  list pair alist
+  allocLimitsProps compileEnv finite_map list pair alist rich_list
 
 val _ = Parse.hide "tops";
 val _ = Parse.hide "body";
@@ -126,4 +126,72 @@ Proof
     (qspec_then `(key,owner)` mp_tac o REWRITE_RULE [EVERY_MEM] o
      CONJUNCT1 o PURE_REWRITE_RULE [exports_ok_def]) >>
   simp[]
+QED
+
+Theorem classified_grouped_default_compile_inputs_mods:
+  lower_vyper_runtime_unit_mods mods exps rp = SOME unit /\
+  classify_functions_unit mods exps = (exts,ints,fb,ctor,imp_ctors) /\
+  EXISTS (external_has_defaults o SND) exts /\
+  MEM (src,(mut,nr,rr,name,args,ds,ret,body)) exts /\
+  package_external_group_unit mods rp.rpol_target T
+    (K global_nonreentrant_slot) (src,(mut,nr,rr,name,args,ds,ret,body)) =
+      ExternalDefaults common entries specs off ==>
+  ds <> [] /\
+  specs = MAP (\((n,ty),e). (n,ty,e)) (ZIP (DROP (LENGTH args - LENGTH ds) args,ds)) /\
+  fn_allocs_ok_unit mods (src,(mut,nr,rr,name,args,ds,ret,body)) /\
+  no_sha256_exprs ds /\
+  alloc_limits_exprs (common.ec_env with ce_vars := FEMPTY) ds
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `fn_allocs_ok_unit mods (src,(mut,nr,rr,name,args,ds,ret,body)) /\
+   no_sha256_exprs ds` by
+    (qpat_assum `lower_vyper_runtime_unit_mods _ _ _ = _` mp_tac >>
+     qpat_assum `classify_functions_unit _ _ = _` (fn classified =>
+       qpat_assum `EXISTS _ exts` (fn grouped =>
+         simp_tac bool_ss [lower_vyper_runtime_unit_mods_def, LET_THM,
+           classified, grouped, pairTheory.ELIM_UNCURRY])) >>
+     IF_CASES_TAC >> simp[] >> strip_tac >>
+     qpat_x_assum `compute_immutables_len_unit _ _ < _ /\ _`
+       (map_every assume_tac o CONJUNCTS o SIMP_RULE (srw_ss()) [EVERY_APPEND]) >>
+     qpat_assum `EVERY (fn_allocs_ok_unit _) exts`
+       (drule_then assume_tac o REWRITE_RULE [EVERY_MEM]) >>
+     qpat_assum `EVERY (external_defaults_no_sha256 o SND) exts`
+       (drule_then mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     simp[external_defaults_no_sha256_def]) >>
+  qabbrev_tac `allocation_env =
+    build_compile_env_unit mods src Internal mut name args ret body F` >>
+  `alloc_limits_exprs allocation_env ds` by
+    fs[fn_allocs_ok_unit_def, Abbr `allocation_env`] >>
+  qabbrev_tac `entry_env =
+    build_compile_env_unit mods src External mut name args ret body T` >>
+  `ds <> [] /\
+   specs = MAP (\((n,ty),e). (n,ty,e))
+     (ZIP (DROP (LENGTH args - LENGTH ds) args,ds)) /\
+   (common.ec_env with ce_vars := FEMPTY).ce_struct_fields =
+     entry_env.ce_struct_fields /\
+   (common.ec_env with ce_vars := FEMPTY).ce_func_return_type =
+     entry_env.ce_func_return_type /\
+   (common.ec_env with ce_vars := FEMPTY).ce_modules =
+     entry_env.ce_modules /\
+   (common.ec_env with ce_vars := FEMPTY).ce_var_type =
+     entry_env.ce_var_type /\
+   (common.ec_env with ce_vars := FEMPTY).ce_hashmap_info =
+     entry_env.ce_hashmap_info /\
+   (common.ec_env with ce_vars := FEMPTY).ce_module_var_type =
+     entry_env.ce_module_var_type /\
+   (common.ec_env with ce_vars := FEMPTY).ce_module_vars =
+     entry_env.ce_module_vars` by
+    (qpat_x_assum `package_external_group_unit _ _ _ _ _ = _` mp_tac >>
+     Cases_on `ds` >> Cases_on `ret = NoneT` >>
+     simp[package_external_group_unit_def, package_external_fn_unit_def,
+          set_external_package_target_def, update_cenv_nonreentrant_def,
+          update_cenv_ret_abi_def, GSYM markerTheory.Abbrev_def, AllCaseEqs()] >>
+     strip_tac >> gvs[]) >>
+  simp[] >>
+  `alloc_limits_exprs (common.ec_env with ce_vars := FEMPTY) =
+   alloc_limits_exprs allocation_env` suffices_by simp[] >>
+  irule (cj 4 (UNDISCH (SPEC_ALL alloc_limits_frame)) |> DISCH_ALL) >>
+  asm_rewrite_tac[] >>
+  simp[Abbr `entry_env`, Abbr `allocation_env`, build_compile_env_unit_def] >>
+  rpt (pairarg_tac >> simp[])
 QED
