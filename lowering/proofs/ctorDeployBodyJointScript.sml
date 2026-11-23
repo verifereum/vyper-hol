@@ -16,7 +16,7 @@ Ancestors
   ctorDeployMemoryFrontier ctorDeployMemoryRunMemNoCtor
   ctorDeployMemoryRunPtrNoCtor ctorDeployMemoryRunPtrPrefix
   ctorDeployMemoryRunMemPrefixLayout ctorDeployMemoryRunMemPrefixSource
-  ctorDeployLoweringNoCtor ctorDeployLoweringPrefix
+  ctorDeployLoweringNoCtor ctorDeployLoweringPrefix simpleDeployRaw
   fragGasSeqAbort fragGasMode fragGasOrigin fragGasPathMem runFromGasPathMem
   gasShadowUnit gasShadowState fragExec memSafeRun gasCount
   venomExecProofs venomExecProps venomExecSemantics venomInst venomState
@@ -42,27 +42,6 @@ Ancestors
 val _ = Parse.hide "body";
 
 (* ===== Zero-mark runs ===== *)
-
-(* A function with no GAS and no INVOKE counts no reads on any path. *)
-Theorem gas_path_mem_gas_free[local]:
-  !ctx fn s n r.
-    gas_path_mem ctx fn s n r ==>
-    (!bb i. MEM bb fn.fn_blocks /\ MEM i bb.bb_instructions ==>
-            i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE) ==>
-    n = 0
-Proof
-  ho_match_mp_tac gas_path_mem_ind >> rpt conj_tac >> rpt gen_tac >>
-  rpt strip_tac >> gvs[gas_path_mem_edge_def] >>
-  `MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
-    (gvs[get_instruction_def, AllCaseEqs()] >>
-     metis_tac[lookup_block_MEM, EL_MEM]) >>
-  `inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE` by
-    (qpat_assum `!bb i. _`
-       (qspecl_then [`bb`, `inst`] mp_tac) >> simp[]) >>
-  gvs[gas_count_step_def] >> metis_tac[]
-QED
-
-
 
 (* The entry state of the deploy unit is the transaction's state at the
    entry label. *)
