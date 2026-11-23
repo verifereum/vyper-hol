@@ -28,10 +28,18 @@ Theorem extcall_stage_inventory:
 Proof
   disch_then (strip_assume_tac o MATCH_MP extcall_call_layout) >>
   Cases_on `ret_type = NoneT /\ ~skip` >> Cases_on `stat` >>
-  gvs[compile_extcodesize_check_def, compile_alloc_buffer_def,
-      emit_op_def, emit_inst_def, emit_void_def, comp_bind_def,
-      comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def,
-      fresh_label_def, emit_def, new_block_def] >>
+  qpat_x_assum `(if ret_type = NoneT /\ ~skip then _ else _) sp = _` mp_tac >>
+  simp[compile_extcodesize_check_def, comp_return_def, comp_bind_def,
+       comp_ignore_bind_def, emit_op_def, emit_void_def, fresh_var_def,
+       fresh_id_def, emit_def] >> disch_then (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `emit_op _ _ _ = (success,s2)` mp_tac >>
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_var_def, fresh_id_def, emit_def] >>
+  disch_then (map_every (SUBST_ALL_TAC o SYM) o CONJUNCTS) >>
+  gvs[fresh_label_def] >>
+  gvs[emit_op_def, emit_inst_def, emit_void_def, compile_alloc_buffer_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+      fresh_id_def, emit_def, new_block_def] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   simp[create_cut_code_def, cs_extends_def, frag_code_def, emitted_blocks_def,
        added_labels_def, all_blocks_def, frag_ids_def, mk_inst_def,
