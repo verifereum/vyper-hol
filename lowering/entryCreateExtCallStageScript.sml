@@ -42,3 +42,28 @@ Proof
        DECIDE ``n - (n + m) = 0n``] >>
   rpt strip_tac >> gvs[create_cut_targets_def]
 QED
+
+Theorem extcall_stage_cut:
+  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
+  fn_has_code sp sr func /\
+  comp_ignore_bind
+    (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr
+     else comp_return ())
+    (comp_bind
+      (if stat then emit_op STATICCALL [gas;addr;off;len;buf;Lit (n2w cap)]
+       else emit_op CALL [gas;addr;value;off;len;buf;Lit (n2w cap)])
+      (\success. comp_bind (fresh_label "extcall_fail") (\fail_lbl.
+       comp_bind (fresh_label "extcall_cont") (\cont_lbl.
+       comp_ignore_bind (emit_inst JNZ [success;Label cont_lbl;Label fail_lbl] [])
+       (comp_ignore_bind (new_block fail_lbl)
+       (comp_bind (emit_op RETURNDATASIZE []) (\rds.
+       comp_bind (compile_alloc_buffer 0) (\fail_buf.
+       comp_ignore_bind
+         (emit_void RETURNDATACOPY [fail_buf.buf_operand;Lit 0w;rds])
+         (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand;rds] [])
+           (new_block cont_lbl)))))))))) sp = (u,sr) ==>
+  create_operand_cut sp sr explicit ctx func tops cx st0 source (es,s)
+Proof
+  strip_tac >> drule_then strip_assume_tac extcall_stage_inventory >>
+  irule create_effect_suffix_cut >> simp[] >> goal_assum drule
+QED
