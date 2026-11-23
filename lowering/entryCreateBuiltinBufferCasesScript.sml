@@ -1,7 +1,9 @@
 (* First-exit and selected-cut facts for buffer-valued builtins. *)
 Theory entryCreateBuiltinBufferCases
 Ancestors
-  entryCreateEffectFocus entryCreateAdminSequence
+  entryCreateEffectFocus entryCreateAdminSequence entryCreateCompositeFocus
+  bodyFullHashKeccak bodyFullEmptyLeafData exprSimFullBundleProps s1PrefixDefs
+  bodyFullIfExpReach fragGasPath gasExemptCert
   createSizeCutCode abiEncoderProps exprSimAbiGasBridge exprSimHash builtinHashing context
   emitHelper emitHelperProps compileEnv exprLoweringProps exprLowering fragExec
   vyperAST vyperTypeSystem
@@ -491,4 +493,95 @@ Proof
      simp[eval_expr_unary_builtin_action, vyperContextTheory.builtin_args_length_ok_def,
           vyperContextTheory.is_self_codesize_def, storage_trace_frame_def]) >>
   irule create_hash_eval_cut >> metis_tac[]
+QED
+
+Theorem buffer_value_child_ready[local]:
+  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a m source (es,s,G,tn)
+    (expr_sim_full_post (DF,lo,d,C,f) ce cx e (es,a,m,s,x,G,tn))
+    (create_operand_exit_post C cx) ==>
+  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a m source (es,s,G,tn)
+    (\H res ee G1 tn1 t. ?v. res = INL v /\
+       expr_sim_full_post (DF,lo,d,C,f) ce cx e (es,a,m,s,x,G,tn)
+         H (INL v : value + exception) ee G1 tn1 t /\
+       ~t.vs_halted /\ ee.gas_obs = [])
+    (\H res ee gt r. ?exc. res = INR exc /\
+       create_operand_exit_post C cx H (INR exc : eval_result + exception) ee gt r)
+Proof
+  simp[scoped_operand_outcome_def] >> strip_tac >> qexists_tac `marks` >> simp[]
+  >- metis_tac[]
+  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >>
+      simp[] >> rpt strip_tac >> res_tac >> fs[]
+      >- metis_tac[expr_sim_full_post_def,gas_origin_ptr_path_erase,gas_path_normal] >>
+      Cases_on `res` >>
+      fs[create_operand_exit_post_def, stmtSimPropsTheory.expr_exit_INR_type,
+         exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
+QED
+
+(* The installed split supplies the geometric laws separately from the two
+   semantic witnesses. In particular, a child failure never runs Keccak. *)
+Theorem create_keccak_vv_scoped_at:
+  expr_body_pre ce cx env (Builtin ann Keccak256 [e]) es /\
+  expr_vv_sim_full_pre (DF,lo,d,C,shC,PG,f,shf) ce cx ty (Builtin ann Keccak256 [e]) es
+    (st0,a,b,sha,shb,vv,s0,G0,tn0) /\
+  expr_sim_scoped (DF,lo,d,C,shC,PG,f,shf) ce cx (expr_type e) e es /\
+  (!x m. lower_value compile_expr ce (expr_type e) e a = (x,m) ==>
+    (!marks. create_operand_focus_scope a m (gas_explicit_sites C shC) C f s0 marks ==>
+             create_operand_focus_scope a b (gas_explicit_sites C shC) C f s0 marks) /\
+    (!marks r. exit_result r /\ create_operand_full_scope a m (gas_explicit_sites C shC) C f s0 marks r ==>
+               create_operand_full_scope a b (gas_explicit_sites C shC) C f s0 marks r) /\
+    (!left t right. create_operand_full_scope a m (gas_explicit_sites C shC) C f s0 left (OK t) /\
+                    create_operand_focus_scope m b (gas_explicit_sites C shC) C f t right ==>
+                    create_operand_focus_scope a b (gas_explicit_sites C shC) C f s0 (left ++ right)) /\
+    (!left t right r. create_operand_full_scope a m (gas_explicit_sites C shC) C f s0 left (OK t) /\
+                      create_operand_full_scope m b (gas_explicit_sites C shC) C f t right r ==>
+                      create_operand_full_scope a b (gas_explicit_sites C shC) C f s0 (left ++ right) r)) ==>
+  scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG) (cx_tops cx) cx st0 a b
+    (eval_expr cx (Builtin ann Keccak256 [e])) (es,s0,G0,tn0)
+    (expr_vv_sim_full_post (DF,lo,d,C,f) ce cx (Builtin ann Keccak256 [e]) (es,a,b,s0,vv,G0,tn0))
+    (create_operand_exit_post C cx)
+Proof
+  rpt (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >> strip_tac >>
+  `expr_vv_sim_full_hypotheses (DF,lo,d,C,shC,PG,f,shf) ce cx ty (Builtin ann Keccak256 [e]) es
+     (st0,a,b,sha,shb,vv,s0,G0,tn0)` by
+    (fs[expr_vv_sim_full_hypotheses_def,expr_vv_sim_full_pre_def,expr_sim_full_code_def] >>
+     rpt strip_tac >> res_tac >> fs[]) >>
+  drule_all keccak_vv_observed >> strip_tac >>
+  `expr_sim_full_pre (DF,lo,d,C,shC,PG,f,shf) ce cx (expr_type e) e es
+     (st0,a,sm,sha,shadow_sm,x,s0,G0,tn0) /\
+   lower_value compile_expr ce (expr_type e) e a = (x,sm)` by
+    (fs[expr_sim_full_hypotheses_def,expr_sim_full_pre_def,expr_sim_full_code_def] >>
+     rpt strip_tac >> res_tac >> fs[]) >>
+  qpat_x_assum `expr_sim_scoped _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_scoped_def]) >>
+  disch_then (drule_then assume_tac) >>
+  drule_then assume_tac buffer_value_child_ready >>
+  qpat_x_assum `!q m. lower_value compile_expr ce (expr_type e) e a = (q,m) ==> _`
+    (qspecl_then [`x`,`sm`] mp_tac) >>
+  simp[] >> strip_tac >>
+  asm_rewrite_tac[] >> irule scoped_operand_bind >>
+  simp[storage_trace_frame_bind, evaluate_storage_trace_frame,
+       storage_trace_frame_read_result, storage_trace_frame_def, keccak_value_action_def] >>
+  rpt conj_tac
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> once_rewrite_tac[ignore_bind_def] >> once_rewrite_tac[bind_assoc] >>
+      drule_then irule gas_exempt_cert_bind_value >> simp[GSYM ignore_bind_def])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> once_rewrite_tac[ignore_bind_def] >> once_rewrite_tac[bind_assoc] >>
+      irule gas_exempt_cert_error_value >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`\H v ee G1 tn1 t.
+    expr_sim_full_post (DF,lo,d,C,f) ce cx e (es,a,sm,s0,x,G0,tn0)
+      H (INL v : value + exception) ee G1 tn1 t /\ ~t.vs_halted /\ ee.gas_obs = []`, `sm`] >>
+  simp[] >> reverse conj_tac >- metis_tac[] >>
+  qx_genl_tac [`marks`,`v`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
+  qpat_assum `!marks res mid G1 tn1 s. _ ==> _`
+    (qspecl_then [`marks`,`INL v`,`mid with gas_obs := []`,`G1`,`tn1`,`t`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
+  `create_operand_at sm t /\ ~t.vs_halted` by
+    (`valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     res_tac >> fs[expr_sim_full_post_def,expr_sim_full_endpoint_def,create_operand_at_def]) >>
+  gvs[] >> irule create_keccak_suffix_outcome >>
+  qpat_assum `run_inst_seq _ _ = OK _` (irule_at Any) >>
+  qexistsl_tac [`x`,`tnf`,`ans`,`q`,`m`,`mid`,`Gf`] >> simp[]
 QED
