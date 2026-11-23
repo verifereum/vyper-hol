@@ -15,6 +15,7 @@ Ancestors
   bodyStorageCopyMemory bodyMemAssignTopCopyPaths fragGasCopySeqLiftProps
   fragGasStorageCopyBodyProps fragGasStorageCopyHeaderProps
   fragGasSeqPtrContext fragGasSeqPtr fragGasSeqAbort fragGasOriginPtr fragGasOriginPtrLoop fragGasOrigin
+  fragGasCopyIterSide
   ptrSafetyTransport instMemFrontier fragExecMem fragExec memSafeRun checkedPrefixCursor
   gasEvents gasCount ptrSafeRun ptrDiscipline bodyPtrDefs typedCopyPtr
   decoderGhostFramePtr exprLoweringProps venomMemProps
@@ -195,28 +196,7 @@ Theorem copy_loop_iterate_origin_ptr:
       Inv n Gf tnf t /\ ~t.vs_halted /\
       t.vs_current_bb = exit /\ t.vs_inst_idx = 0
 Proof
-  ntac 6 gen_tac >> Induct
-  >- (rpt gen_tac >> strip_tac >>
-      `k = n` by decide_tac >>
-      qpat_x_assum `!j G tn q. j <= n /\ _ ==> _`
-        (qspecl_then [`k`, `G`, `tn`, `s`] mp_tac) >>
-      simp[] >> strip_tac >> qexistsl_tac [`r`, `G1`, `tn1`] >> gvs[]) >>
-  rpt gen_tac >> strip_tac >>
-  `k < n /\ k <= n /\ (k+1)+remaining = n` by decide_tac >>
-  qpat_assum `!j G tn q. j <= n /\ _ ==> _`
-    (qspecl_then [`k`, `G`, `tn`, `s`] mp_tac) >>
-  (impl_tac >- simp[]) >>
-  disch_then (qx_choosel_then [`r`, `G1`, `tn1`] strip_assume_tac) >>
-  qpat_assum `!j G tn q. j < n /\ _ ==> _`
-    (qspecl_then [`k`, `G1`, `tn1`, `r`] mp_tac) >>
-  (impl_tac >- gvs[]) >>
-  disch_then (qx_choosel_then [`u`, `G2`, `tn2`] strip_assume_tac) >>
-  qpat_x_assum `!k G tn s. (_ /\ _ /\ k + remaining = n /\ _) ==> _`
-    (qspecl_then [`k+1`, `G2`, `tn2`, `u`] mp_tac) >>
-  (impl_tac >- simp[]) >>
-  strip_tac >>
-  qexistsl_tac [`t`, `Gf`, `tnf`] >> simp[] >>
-  metis_tac[origin_ptr_path_then]
+  mp_tac (Q.SPEC `\p q. T` copy_loop_iterate_origin_ptr_side) >> simp[]
 QED
 
 (* ===== Storage to memory ===== *)
