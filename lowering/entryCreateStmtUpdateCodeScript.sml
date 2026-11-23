@@ -16,7 +16,7 @@ fun cut_updates extra =
       conj_tac, IF_CASES_TAC, BasicProvers.TOP_CASE_TAC] >> clean)
   end;
 
-Theorem update_ptr_word_cut[local,simp]:
+Theorem update_ptr_word_cut[simp]:
   create_cut_code E a (SND (compile_ptr_load ctor imm loc p a)) /\
   create_cut_code E a (SND (compile_ptr_store ctor imm loc p v a))
 Proof
@@ -25,7 +25,7 @@ Proof
                compile_imm_load_word_def, compile_imm_store_word_def]
 QED
 
-Theorem update_array_subscript_cut[local]:
+Theorem update_array_subscript_cut:
   (!p a. create_cut_code {} a (SND (load p a))) ==>
   !a. create_cut_code {} a
       (SND (compile_array_subscript p i dyn cnt ws sz signed load a))
@@ -33,7 +33,7 @@ Proof
   strip_tac >> gen_tac >> cut_updates [compile_array_subscript_def]
 QED
 
-Theorem update_target_ptr_cut[local,simp]:
+Theorem update_target_ptr_cut[simp]:
   !tgt ce a. create_cut_code {} a (SND (compile_get_target_ptr compile_expr ce tgt a))
 Proof
   gen_tac >> measureInduct_on `base_assignment_target_size tgt` >>
