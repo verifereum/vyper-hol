@@ -39,7 +39,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   `supported_string_reason tops (Literal (BaseT (StringT ml)) (StringL str))` by
     gvs[supported_stmt_raise_reason, supported_raise_reason_def] >>
-  drule_then strip_assume_tac supported_string_reason_body_calls >>
+  drule_then strip_assume_tac
+    (SIMP_RULE (srw_ss()) [int_calls_expr_def]
+      (Q.SPEC `tops` supported_string_reason_body_calls
+         |> Q.SPEC `Literal (BaseT (StringT ml)) (StringL str)`)) >>
   drule_then strip_assume_tac body_inv_main_code >>
   drule_then assume_tac body_inv_contract >>
   `get_tenv cx = type_env tops` by
@@ -52,7 +55,8 @@ Proof
          supported_raise_exists_def, int_calls_stmt_def,
          int_calls_raise_reason_def, int_calls_expr_def,
          exprLoweringTheory.is_extcode_def, expr_has_evm_run_def,
-         supported_expr_exists_def, expr_evm_run_root_def] >>
+         supported_expr_exists_def, expr_evm_run_root_def,
+         allocLimitsTheory.array_slot_base_def] >>
      simp[supported_expr_exists_def, const_name_root_def, int_calls_expr_def] >>
      metis_tac[]) >>
   `type_alloc_ok cenv (BaseT (StringT ml))` by

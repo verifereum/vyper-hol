@@ -1,7 +1,7 @@
 (* Read-only array bounds suffixes, with one endpoint at every horizon. *)
 Theory bodyFullSubscriptArrayCodeBounds
 Ancestors
-  bodyFullTargetArrayScalar bodyPtrSignedConvertSourceFrame fragGasCopyLoop
+  bodyFullTargetArrayScalar bodyPtrSignedConvertSourceFrame fragGasCopyLoop fragGasCopySeqLiftProps
   augAssignPtrScalarRun augAssignPtrScalarCertificate fragGasOriginPtrDead
   fragGasSeqPtr fragGasOriginPtr fragExecMem fragExec memSafeRun
   exprSimArrayIndex emitHelper freshWrites compileEnv loweringStateRelDefs

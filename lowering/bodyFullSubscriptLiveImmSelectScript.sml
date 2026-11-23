@@ -2,7 +2,7 @@
 Theory bodyFullSubscriptLiveImmSelect
 Ancestors
   exprBodyPreCallSafetyProps exprBodyPreTypingProps
-  bodyInvCodeProps bodyInvSplit bodyInvExecutionProps exprBodyPreProps alist
+  bodyInvCodeProps bodyInvSplit bodyCallSupport exprBodyPreProps alist
   bodyFullExtCallPosTransport bodySimFull loweringPosts
   exprSimSubscriptArrayLiveImmutableSuffix exprSimSubscriptArrayLiveImmutableView
   exprSimSubscriptArrayLiveImmutableMetadata exprSimWordArgs exprSimSource
@@ -240,8 +240,9 @@ Proof
   rpt strip_tac >>
   drule_then (assume_tac o Q.SPEC `src`) contract_inv_module_codes >>
   `ALOOKUP mods src = SOME ts` by fs[] >>
-  drule_all_then assume_tac contract_inv_supported_module >>
-  fs[lookup_callable_function_def, supported_program_def,
+  `supported_module_headers ts` by
+    (fs[bodyInvSplitTheory.contract_inv_def] >> res_tac) >>
+  fs[lookup_callable_function_def, bodyCallSupportTheory.supported_module_headers_def,
      supported_declaration_names_def, AllCaseEqs()] >>
   metis_tac[lookup_function_Internal_SOME_MEM, lookup_function_Deploy_SOME_cases,
             find_function_distinct_decl]
@@ -1149,7 +1150,9 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
   `stmt_state_rel H0 ctx func cenv cx fin s` by fs[expr_post_def] >>
   `expr_body_pre cenv cx env obj (es with gas_obs := bgs)` by
-    (drule_all expr_body_pre_array_subscript_base >> simp[]) >>
+    (simp[] >> irule expr_body_pre_array_subscript_base_eval >>
+     qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[] >>
+     metis_tac[]) >>
   `expr_body_pre cenv cx env idx mid` by
     (`expr_body_pre cenv cx env (Subscript et obj idx) (es with gas_obs := bgs)` by simp[] >>
      drule_all expr_body_pre_array_subscript_index_after_base >> simp[]) >>
