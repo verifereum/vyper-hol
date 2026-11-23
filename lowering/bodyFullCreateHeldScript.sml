@@ -10,6 +10,7 @@
  *)
 Theory bodyFullCreateHeld
 Ancestors
+  bodySingletonCallSupport
   blueprintLiteralOffsetProps[qualified,ignore_grammar]
   bodyFullForArrayRound[qualified,ignore_grammar]
   abiDecodeValidFiniteLoop[qualified,ignore_grammar]
@@ -4593,16 +4594,8 @@ Resume create_ctor_rows_outcome[rows_frame]:
         `expr_body_pre cenv cx env e' mid` by
           (qpat_assum `!e' st. MEM e' (e::xs) /\ _ ==> _`
              (qspecl_then [`e'`,`mid`] mp_tac) >> simp[]) >>
-        qpat_assum `expr_body_pre cenv cx env e' mid`
-          (strip_assume_tac o REWRITE_RULE [expr_body_pre_split_def]) >>
-        `FST c = NONE` by
-          (qpat_assum `EVERY (\c. FST c = NONE) (int_calls_expr e')`
-             (mp_tac o Q.SPEC `c` o REWRITE_RULE [EVERY_MEM]) >> simp[]) >>
-        `(NONE,SND c) = c` by (Cases_on `c` >> fs[]) >>
-        `get_module_code cx NONE = SOME tops` by
-          (drule bodyInvCodePropsTheory.body_inv_main_code >> simp[]) >>
-        drule expr_body_pre_mods_int_calls >>
-        simp[EVERY_MEM] >> disch_then (qspec_then `c` mp_tac) >> simp[]) >>
+        drule_all_then assume_tac body_inv_expr_pre_calls >>
+        fs[EVERY_MEM] >> res_tac) >>
      `~exprs_can_mutate cenv xs` by fs[Abbr `copy`] >>
      drule_all targetPureWalkSourceTheory.nonmutating_exprs_source_frame >>
      simp[vyperMachineFrameTheory.machine_frame_def] >> strip_tac >> gen_tac >>
@@ -4659,8 +4652,13 @@ Resume create_ctor_rows_outcome[rows_pack]:
      `lookup_var x u = SOME w` by
        (qpat_assum `!x w. not_fresh_at ss x /\ lookup_var x t = SOME w ==> _`
          (qspecl_then [`x`,`w`] mp_tac) >> simp[]) >>
+     `!n b sz. local_region cenv ee.scopes u n b sz ==>
+        regions_disjoint (w2n w) (type_memory_size tv) b sz` by
+       (qpat_assum `!n b sz. local_region cenv mid.scopes t n b sz <=> _`
+          (fn eq => qpat_assum `!n b sz. local_region cenv mid.scopes t n b sz ==> _`
+            (ACCEPT_TAC o REWRITE_RULE [eq]))) >>
      qexistsl [`x`,`w`,`tv`] >> simp[venomStateTheory.eval_operand_def] >>
-     metis_tac[]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `(cenv.ce_is_ctor /\ vv_location sv = SOME LocCode ==>
       !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
         eval_operand (vv_operand sv) u = SOME w ==>
@@ -10778,13 +10776,11 @@ Resume create_blueprint_expr_full_ok[ctor_raw]:
       (int_calls_exprs (amount::(salts ++ [offset])))` by
     (qpat_assum `if s then (?salt. _) else salts = []` mp_tac >> Cases_on `s` >>
      simp[NoAsms] >> strip_tac >> qpat_x_assum `salts = _` SUBST_ALL_TAC >>
-     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _`
-       (strip_assume_tac o REWRITE_RULE [expr_body_pre_split_def]) >>
-     drule_then mp_tac expr_body_pre_mods_int_calls >>
-     qpat_x_assum `EVERY (\c. FST c = NONE) (int_calls_expr (Call _ _ _ _))` mp_tac >>
-     simp[NoAsms,int_calls_expr_def,EVERY_APPEND,EVERY_MEM] >>
-     qpat_assum `get_module_code cx NONE = SOME tops` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[pairTheory.PAIR,optionTheory.SOME_11]) >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (fn pre =>
+       qpat_assum `body_inv _ _ _ _` (fn inv =>
+         mp_tac (MATCH_MP body_inv_expr_pre_calls (CONJ inv pre)))) >>
+     simp[NoAsms,int_calls_expr_def,EVERY_APPEND] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `compile_create_blueprint_args _ _ T _ (MAP gas_shadow_expr [e]) _ = _`
     (assume_tac o CONV_RULE (LAND_CONV (RATOR_CONV (RAND_CONV (SIMP_CONV bool_ss [MAP]))))) >>
   ho_match_mp_tac (GEN_ALL blueprint_raw_args_cut) >>
