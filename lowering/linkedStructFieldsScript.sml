@@ -3,16 +3,6 @@ Ancestors
   linkedNsidProps structFieldsProps compileUnit compileEnv vyperTypeContract
   vyperContext vyperAST loweringStateRelDefs typedCopyMetadata finite_map list pair
 
-Triviality linked_type_key_member:
-  MEM (StructDecl name args) tops ==>
-  MEM (src,name) (FLAT (MAP (type_def_keys_toplevel src) tops))
-Proof
-  strip_tac >> simp[MEM_FLAT] >>
-  qexists_tac `type_def_keys_toplevel src (StructDecl name args)` >>
-  simp[MEM_MAP, type_def_keys_toplevel_def] >>
-  qexists_tac `StructDecl name args` >> simp[type_def_keys_toplevel_def]
-QED
-
 Triviality linked_struct_name_no_dot:
   contract_namespaces_ok dep mods /\ MEM (src,tops) mods /\
   MEM (StructDecl name args) tops ==>
@@ -33,18 +23,6 @@ Proof
   Induct >> simp[type_env_for_module_def] >>
   Cases >> rw[type_env_for_module_def, FLOOKUP_UPDATE] >> gvs[] >>
   metis_tac[]
-QED
-
-Triviality type_env_for_module_struct_lookup_src:
-  !tops src name args.
-    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel src) tops)) /\
-    MEM (StructDecl name args) tops ==>
-    FLOOKUP (type_env_for_module src tops) (src,name) = SOME (StructArgs args)
-Proof
-  Induct >> simp[] >> Cases >>
-  simp[type_env_for_module_def, type_def_keys_toplevel_def, FLOOKUP_UPDATE,
-       ALL_DISTINCT_APPEND] >>
-  rw[] >> gvs[] >> metis_tac[linked_type_key_member]
 QED
 
 Triviality linked_struct_type_origin:
@@ -74,7 +52,7 @@ Proof
   simp[type_env_all_modules_def, FLOOKUP_FUNION, contract_keys_def,
        ALL_DISTINCT_APPEND] >>
   rpt strip_tac >> gvs[]
-  >- (drule_all type_env_for_module_struct_lookup_src >> simp[]) >>
+  >- (drule_all type_env_for_module_struct_lookup >> simp[]) >>
   Cases_on `FLOOKUP (type_env_for_module h0 h1) (src,name)` >> simp[]
   >- metis_tac[contract_keys_def] >>
   imp_res_tac type_env_for_module_key_src >> gvs[MEM_MAP] >> metis_tac[]
@@ -149,7 +127,7 @@ Proof
       nsid_to_string (src,n) <> nsid_to_string (src,name)` by
     (rpt strip_tac >>
      `n = name` by (Cases_on `src` >> fs[nsid_to_string_def, APPEND_11]) >>
-     gvs[] >> metis_tac[linked_type_key_member]) >>
+     gvs[] >> metis_tac[typedCopyProducerTheory.struct_decl_type_key_member]) >>
   drule struct_fields_map_src_absent >> simp[FLOOKUP_UPDATE]
 QED
 
