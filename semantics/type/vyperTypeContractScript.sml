@@ -15,7 +15,7 @@ Ancestors
   list rich_list arithmetic finite_map option pair pred_set
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
   vyperEvent vyperTypeSystem vyperTypeCallGraph vyperABIEntries constSubstMods
-  vyperSubscriptOverlap
+  vyperSubscriptOverlap vyperImportRefs
 Libs
   wordsLib
 
@@ -204,7 +204,9 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys external_name_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys self_member_keys_toplevel mods) /\
     EVERY (\(src,tls).
-      ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls)) mods /\
+      ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls) /\
+      ALL_DISTINCT (abi_external_method_ids (type_env tls) tls) /\
+      (src = NONE \/ EVERY imported_toplevel_refs_ok tls)) mods /\
     EVERY (\(_,tls). EVERY (\tl. ~MEM #"." (case tl of
         FunctionDecl _ _ _ _ name _ _ _ _ => name
       | VariableDecl _ _ name _ _ => name
