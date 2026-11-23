@@ -5318,7 +5318,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem declared_constant_overlap_test[local]:
+Theorem declared_constant_overlap_test:
   ALL_DISTINCT (MAP FST mods) /\ declared_constant mods src id ==>
   ?ts. ALOOKUP mods src = SOME ts /\ vyperSubscriptOverlap$constant_decl id ts
 Proof
@@ -5519,7 +5519,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem value_or_const_capture_success[local]:
+Theorem value_or_const_capture_success:
   ((?v. p = Value v) \/ (?v. const_result_at roots cx ty p v)) /\
   (if c then bind (read_result cx p) (\v. return (Value v))
    else return p) st = (INL q,s) ==>
@@ -5529,7 +5529,7 @@ Proof
   gvs[bind_def, return_def, AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem value_or_const_select_success[local]:
+Theorem value_or_const_select_success:
   ((?v. p = Value v) \/ (?v. const_result_at roots cx ty p v)) /\
   const_cells_agree roots st /\
   (!v tv w. evaluate_type (get_tenv cx) ty = SOME tv /\
