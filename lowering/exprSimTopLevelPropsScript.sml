@@ -86,3 +86,65 @@ Proof
   first_x_assum (qspec_then `[]` mp_tac) >>
   lookup_global_tac >> simp[expr_vv_res_ok_def]
 QED
+
+(* ===== Storage and transient array bases (array_slot_base) ===== *)
+
+(* A name the compile environment places in storage or transient storage
+   is a storage variable: not missing (that is an immutable, a bare global
+   placed at an ImmutableLoc), not a constant, not a mapping. *)
+Theorem array_slot_base_storage_decl:
+  expr_sim_inv cenv cx env s /\ well_typed_expr env (TopLevelName ann (src,id)) /\
+  ~const_name_root cx (TopLevelName ann (src,id)) /\
+  array_slot_base cenv (TopLevelName ann (src,id)) /\
+  get_module_code cx src = SOME ts ==>
+  ?tr typ id_str. find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str)
+Proof
+  simp[allocLimitsTheory.array_slot_base_def, const_name_root_def] >> strip_tac >>
+  `FLOOKUP env.bare_globals (src,id) = NONE` by
+    (Cases_on `FLOOKUP env.bare_globals (src,id)` >> simp[] >>
+     qpat_x_assum `expr_sim_inv _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
+     qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\ _ ==> _`
+       (qspecl_then [`src`, `id`, `x`] mp_tac) >>
+     impl_tac >- gvs[] >> strip_tac >>
+     qpat_x_assum `option_CASE (FLOOKUP _ _) _ _` mp_tac >> simp[]) >>
+  `FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ann)` by
+    gvs[well_typed_expr_def] >>
+  Cases_on `find_var_decl_by_name id ts`
+  >- (gvs[expr_sim_inv_def] >>
+      metis_tac[TopLevelName_nonbare_find_NONE_contradiction]) >>
+  PairCases_on `x` >> Cases_on `x0` >> simp[] >>
+  fs[expr_sim_inv_def] >>
+  metis_tac[TopLevelName_Type_HashMapVarDecl_impossible]
+QED
+
+(* So it evaluates to a storage place, if to anything. *)
+Theorem array_slot_base_eval_storage:
+  expr_sim_inv cenv cx env s /\ well_typed_expr env e /\ ~const_name_root cx e /\
+  array_slot_base cenv e /\ eval_expr cx e s' = (INL r,t) ==>
+  ?tr slot vt. r = PlaceR (StoragePlace tr slot vt)
+Proof
+  strip_tac >>
+  `?ann src id. e = TopLevelName ann (src,id)` by
+    (Cases_on `e` >> fs[allocLimitsTheory.array_slot_base_def] >>
+     rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >> simp[]) >>
+  gvs[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  Cases_on `get_module_code cx src` >> lookup_global_tac >>
+  drule_all array_slot_base_storage_decl >> strip_tac >> simp[] >>
+  Cases_on `lookup_var_slot_from_layout cx tr src id_str` >>
+  Cases_on `evaluate_type (get_tenv cx) typ` >>
+  simp[bind_def, raise_def, return_def, ignore_bind_def,
+       record_storage_event_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* And it compiles to a storage or transient pointer, never memory or code. *)
+Theorem array_slot_base_compile_location:
+  array_slot_base cenv e ==>
+  vv_location (FST (compile_expr cenv ty e st)) <> SOME LocMemory /\
+  vv_location (FST (compile_expr cenv ty e st)) <> SOME LocCode
+Proof
+  Cases_on `e` >> simp[allocLimitsTheory.array_slot_base_def] >> strip_tac >>
+  BasicProvers.every_case_tac >> gvs[compile_expr_def, vv_location_def, mk_ptr_def]
+QED
