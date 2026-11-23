@@ -198,149 +198,15 @@ Proof
        asm_rewrite_tac[] >>
        qexistsl_tac [`cap`, `dst`, `sb`, `src`, `sz`] >> asm_rewrite_tac[])
   >~ [`compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,en)`]
-  >- (
-  `abi_encoder_window_input (AbiBytestring maxlen) at av sb cap s.vs_memory` by
-    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
-  qpat_assum `abi_encoder_window_input _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_bytes_iff]) >>
-  qpat_x_assum `av = BytesV bs` SUBST_ALL_TAC >>
-  `LENGTH (enc at (BytesV bs)) = 32+contractABI$ceil32 (LENGTH bs)` by
-    metis_tac[abi_encoder_bytes_encoding] >>
-  `0 < cap /\ 0 < LENGTH (enc at (BytesV bs))` by decide_tac >>
-  `sb+cap <= s.vs_alloca_next /\
-   regions_disjoint (sb,cap) (d,LENGTH (enc at (BytesV bs))) /\
-   (?sp. src = Var sp /\ ptr_covers G tn sp s cap) /\
-   (?dp. dst = Var dp /\ ptr_covers G tn dp s (LENGTH (enc at (BytesV bs))))` by
-    metis_tac[] >>
-  `abi_encoder_window_pre ctx func st en dst src (AbiBytestring maxlen)
-    at (BytesV bs) sb cap d s` by
-    (simp_tac bool_ss [abi_encoder_window_pre_def] >> metis_tac[]) >>
-  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-    mem_word_at sb mem = n2w (LENGTH bs) /\
-    mem_bytes_at (sb+32) (LENGTH bs) mem = bs` by
-    (gen_tac >> strip_tac >>
-     qpat_assum `!mem. _ ==> abi_encoder_window_input _ _ _ _ _ mem`
-       (qspec_then `mem` mp_tac) >>
-     qpat_assum `mem_agree_outside tn.t_mem s.vs_memory mem` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     gvs[abi_encoder_window_bytes_iff]) >>
-  `!i. sb <= i /\ i < sb+32 ==> i NOTIN tn.t_mem` by
-    (mp_tac (Q.SPECL [`tn.t_mem`, `s.vs_memory`, `sb`,
-       `n2w (LENGTH (bs:8 word list)):256 word`] robust_mem_word_at_clean) >>
-     impl_tac >- metis_tac[] >> simp[]) >>
-  `!i. sb+32 <= i /\ i < sb+32+LENGTH bs ==> i NOTIN tn.t_mem` by
-    (mp_tac (Q.SPECL [`tn.t_mem`, `s.vs_memory`, `sb+32`,
-       `LENGTH (bs:8 word list)`, `bs:8 word list`] robust_mem_bytes_at_clean) >>
-     impl_tac >- metis_tac[] >> simp[]) >>
-  `!i. sb <= i /\ i < sb+32+LENGTH bs ==> i NOTIN tn.t_mem` by
-    (rpt strip_tac >> Cases_on `i < sb+32` >> metis_tac[NOT_LESS]) >>
-  `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
-  `LENGTH bs <= contractABI$ceil32 (LENGTH bs)` by
-    metis_tac[abi_encoder_ceil32_bounds] >>
-  `sb < dimword (:256) /\ d < dimword (:256) /\
-   LENGTH bs+31 < dimword (:256) /\
-   d+contractABI$ceil32 (LENGTH bs) < dimword (:256) /\
-   32+LENGTH bs < dimword (:256) /\
-   sb+32+LENGTH bs <= s.vs_alloca_next /\
-   d+32+contractABI$ceil32 (LENGTH bs) <= s.vs_alloca_next /\
-   sb+32+LENGTH bs < dimword (:256) /\
-   d+32+contractABI$ceil32 (LENGTH bs) < dimword (:256)` by decide_tac >>
-  `mload sb s = n2w (LENGTH bs) /\ read_memory (sb+32) (LENGTH bs) s = bs` by
-    metis_tac[mem_word_at_eq_mload, read_memory_eq_mem_bytes_at] >>
-  `regions_disjoint (sb,32+LENGTH bs) (d,32+contractABI$ceil32 (LENGTH bs))` by
-    (qpat_assum `regions_disjoint (sb,cap) _` mp_tac >>
-     qpat_assum `LENGTH (enc at (BytesV bs)) = _` mp_tac >>
-     qpat_assum `32+LENGTH bs <= cap` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-     qpat_assum `LENGTH (enc at (BytesV bs)) = _`
-       (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-     fs[regions_disjoint_def, Excl "enc_def"] >> decide_tac) >>
-  drule_all abi_encode_framed_bytes_endpoint >> strip_tac >>
-  rename1 `window_seq st en s raw` >>
-  `run_inst_seq (emitted_insts st en) s = OK raw` by
-    (qpat_assum `window_seq st en s raw` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp_tac bool_ss [window_seq_def]) >>
-  qpat_x_assum `src = Var sp` SUBST_ALL_TAC >>
-  qpat_x_assum `dst = Var dp` SUBST_ALL_TAC >>
-  `ptr_covers G tn sp s (32+LENGTH bs)` by
-    (irule reasonCopySourcePtrTheory.ptr_covers_mono >>
-     qexists_tac `cap` >> asm_rewrite_tac[]) >>
-  `ptr_covers G tn dp s (32+contractABI$ceil32 (LENGTH bs))` by metis_tac[] >>
-  `not_fresh_at st sp /\ not_fresh_at st dp` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
-    qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
-      (fn th => ACCEPT_TAC (DISCH (fst (dest_imp (concl th)))
-        (CONJUNCT1 (UNDISCH th)))) >>
-  `w2n (n2w sb : 256 word) = sb /\ w2n (n2w d : 256 word) = d` by
-    simp[w2n_n2w, LESS_MOD] >>
-  mp_tac (Q.INST [`dst` |-> `Var dp`, `src` |-> `Var sp`,
-    `cnt` |-> `LENGTH (bs:8 word list)`, `db` |-> `d`, `sb` |-> `sb`,
-    `final` |-> `en`] (SPEC_ALL window_bytes_mem_checks)) >>
-  (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >> strip_tac >>
-  mp_tac (Q.INST [`src` |-> `sp:string`, `dst` |-> `dp:string`,
-    `p` |-> `(n2w sb : 256 word)`, `q` |-> `(n2w d : 256 word)`]
-    (SPEC_ALL bytes_encoder_joint_ghosts)) >>
-  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  drule compile_abi_bytestring_code >> strip_tac >>
-  `!x. out = Var x ==> not_fresh_at en x` by
-    (qpat_assum `out = Var (EL 8 _)` mp_tac >>
-     qpat_assum `en.cs_next_var = st.cs_next_var+9` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[compiler_var_names_EL, not_fresh_at_def]) >>
-  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en) = []` by
-    (qpat_assum `emitted_insts st en = _` (fn th => rewrite_tac[th]) >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp_tac (bool_ss ++ numSimps.REDUCE_ss)
-       [bytestring_encoder_insts_def, listTheory.FILTER,
-        emitHelperPropsTheory.mk_inst_opcode,
-        venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm]) >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts st en)` by
-    (qpat_assum `emitted_insts st en = _` (fn th => rewrite_tac[th]) >>
-     MATCH_ACCEPT_TAC bytestring_encoder_straight) >>
-  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st en)` by
-    (qpat_assum `emitted_insts st en = _` (fn th => rewrite_tac[th]) >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp_tac (bool_ss ++ numSimps.REDUCE_ss)
-       [EVERY_MEM, MEM, bytestring_encoder_insts_def, mk_inst_def] >>
-     rpt strip_tac >>
-     gvs[EVERY_MEM, MEM, bytestring_encoder_insts_def, mk_inst_def,
-       venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm]) >>
-  `ctx_has_dalloca ctx ==>
-    !pre i post u. emitted_insts st en = pre ++ i::post /\
-      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
-    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
-     qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM, MEM_APPEND]) >>
-  `s.vs_inst_idx + LENGTH (emitted_insts st en) = LENGTH en.cs_current_insts` by
-    (qpat_assum `en.cs_current_insts = st.cs_current_insts ++ _` mp_tac >>
-     qpat_assum `s.vs_inst_idx = LENGTH st.cs_current_insts` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[LENGTH_APPEND]) >>
-  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    isPREFIX (emitted_insts st en) (DROP s.vs_inst_idx bb.bb_instructions)` by
-    (qpat_assum `fn_has_code st en func` mp_tac >>
-     qpat_assum `same_blocks st en` mp_tac >>
-     qpat_assum `en.cs_current_insts = st.cs_current_insts ++ _` mp_tac >>
-     qpat_assum `s.vs_current_bb = st.cs_current_bb` mp_tac >>
-     qpat_assum `s.vs_inst_idx = LENGTH st.cs_current_insts` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp_tac bool_ss [fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
-     rpt strip_tac >> qexists_tac `bb` >>
-     asm_rewrite_tac[] >> metis_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND]) >>
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-    (s,G,tn) []
-    (OK (raw with vs_inst_idx := LENGTH en.cs_current_insts),G',tn')` by
-    (gen_tac >>
-     qpat_assum `!D. inst_seq_ptr D _ _ _ _ _ _ _ _ _ _`
-       (qspec_then `D` assume_tac) >>
-     mp_tac (Q.SPECL [`emitted_insts st en`, `s`, `raw`, `G`, `tn`,
-       `G'`, `tn'`, `ctx`, `func`, `bb`] run_inst_seq_gas_origin_ptr_path) >>
-     (impl_tac >- asm_rewrite_tac[]) >>
-     qpat_assum `FILTER _ (emitted_insts st en) = []` mp_tac >>
-     qpat_assum `s.vs_inst_idx + LENGTH (emitted_insts st en) = _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> metis_tac[MAP]) >>
-  qexistsl_tac [`raw with vs_inst_idx := LENGTH en.cs_current_insts`, `G'`, `tn'`] >>
-  asm_rewrite_tac[] >> rpt strip_tac >> metis_tac[ADD_ASSOC]
-     )
+  >- (`encoder_leaf_pre (AbiBytestring maxlen) dst src st out en ctx func s at av sb cap d G tn lo` by
+        (pure_rewrite_tac[encoder_leaf_pre_def] >>
+         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+         disch_tac >> res_tac) >>
+      drule compile_abi_encode_to_buf_bytes_window_joint_trace >>
+      disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+      qexistsl_tac [`t`,`G'`,`tn'`] >>
+      qhdtm_assum `encoder_leaf_post`
+        (ACCEPT_TAC o PURE_REWRITE_RULE [encoder_leaf_post_def]))
   >~ [`compile_abi_encode_to_buf dst src (AbiDynArray _ _ _ _) st = (out,en)`]
   >-     (qpat_assum `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> abi_encoder_window_input _ _ _ _ _ mem`
        (qspec_then `s.vs_memory` mp_tac) >>
