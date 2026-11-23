@@ -3,6 +3,7 @@
 Theory createCtorSlotLoopOriginBand
 Ancestors
   createCtorStraightBand createCtorSegmentArrival fragGasStorageCopyBodyProps fragGasStorageCopyHeaderProps fragGasCopyLoop fragGasOriginPtrLoop
+  fragGasCopySeqLiftProps
   exprSimPtrTopLevelStorageCopy exprSimStorageCopy bodyStorageCopyMemory
   fragGasSeqPtrContext fragGasSeqPtr fragGasSeqAbort fragGasOriginPtr instMemFrontier
   exprLoweringProps ptrDisciplineTaintProps memLocDefs

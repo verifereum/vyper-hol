@@ -676,9 +676,6 @@ Proof
   gvs[as_stack_val_def] >> metis_tac[]
 QED
 
-Theorem dalloca_windows_state_wrappers =
-  exprValueWrapperStatePropsTheory.dalloca_windows_state_wrappers
-
 Theorem dalloca_windows_compile_call:
   (!chunk. raw_call_dalloca_chunk chunk 1 ==> window chunk 1) /\
   (!chunk. create_copy_dalloca_chunk chunk 5 ==> window chunk 5) /\

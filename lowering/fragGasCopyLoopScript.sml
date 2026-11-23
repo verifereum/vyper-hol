@@ -6,8 +6,6 @@
  * TOP-LEVEL:
  *   storage_copy_loop_origin_ptr -- SLOAD/TLOAD + MSTORE per slot
  *   memory_copy_loop_origin_ptr -- MLOAD + SSTORE/TSTORE per slot
- *   inst_seq_ptr_lower_bound_transport -- a pointer-checked straight-line
- *     run at a lower reserved bound is checked at a higher one
  *)
 Theory fragGasCopyLoop
 Ancestors
@@ -25,12 +23,6 @@ Ancestors
   words arithmetic list rich_list finite_map pred_set pair
 
 (* ===== Generic pieces ===== *)
-
-Theorem inst_seq_ptr_lower_bound_transport =
-  fragGasCopySeqLiftPropsTheory.inst_seq_ptr_lower_bound_transport
-
-Theorem run_inst_seq_origin_ptr_lift =
-  fragGasCopySeqLiftPropsTheory.run_inst_seq_origin_ptr_lift
 
 (* The abort cursor is fixed from the executed instruction prefix before
    considering any dead set or pointer ghosts. *)
