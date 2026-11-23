@@ -367,12 +367,14 @@ The result relation ties source gas observations to the frame's EVM gas readings
   every gas filling of its outcomes, no exempt source observation
   (`~gas_source_exempt`) and fewer than 2⁶⁴ entries. The identity
   case composes proved lowering, O1 fuel/memory and codegen gas bounds. The
-  assembly-optimizer case is proved from the same stages. Like the other top
-  theorems, the general companion rests on the narrow case lemmas still
-  admitted after the whitelist premise was removed. Each is marked
-  `GATE_ADMISSION` at its declaration, and every admitted statement under the
-  companion is one of them. The deploy companion `e2e_deploy_gas_sufficient`
-  similarly composes proved stage bounds; with enough added gas, and under
+  assembly-optimizer case is proved from the same stages. The general
+  companion reaches exactly one admitted lemma,
+  `call_entry_reachable_create_size_ok`, marked `GATE_ADMISSION`: from the
+  call entry, every reachable creation instruction meets the init-code size
+  check. The correctness tops reach no admitted lemma. The deploy companion
+  `e2e_deploy_gas_sufficient` similarly composes proved stage bounds and
+  reaches exactly one admitted lemma, `deploy_entry_reachable_create_size_ok`,
+  the same claim at the deploy entry; with enough added gas, and under
   its source-exemption, storage and trace-length (fewer than 2⁶⁴ entries)
   conditions on that raised-gas run, OutOfGas implies that the code to deposit
   is oversized or that the frame reached a `RETURNDATACOPY` instruction.
@@ -394,8 +396,8 @@ the finite storage guard, the result relation uses the constructor's call outcom
 compares accounts and transient storage at the run's storage horizon,
 along with logs and call requests. Successful installation returns and deposits
 `runtime_bc ++ section` satisfying `immutables_section_rel`.
-`gen_fn_simulation` is separately ADMITTED,
-Milestone4.2, also off path. The
+`venomToAsmProps.gen_fn_simulation` (Milestone 4.2) is proved; S7's
+`codegen_correct` uses it through `codegenEntrySim`. The
 [completed retirement ledger](../lowering/e2eLegacy.md) retains original proof
 history and maps all obsolete APIs to the clean new boundary; no compatibility
 bridge is a current producer. Final project/generated/all101/strict bytecode
