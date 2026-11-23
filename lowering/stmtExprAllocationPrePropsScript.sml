@@ -1,7 +1,7 @@
 Theory stmtExprAllocationPreProps
 Ancestors
   allocLimits allocLimitsProps bodyExprPreFacts bodyInvCodeProps bodyInvSplit
-  bodySim compileUnit exprLowering exprSimHypsDefs finite_map list
+  bodyCallSupport bodySim compileUnit exprLowering exprSimHypsDefs finite_map list
   supportedExprTraverse supportedExprs supportedStmtTraverse
   vyperContext vyperTypeCallGraph
 
@@ -50,6 +50,6 @@ Proof
     (strip_assume_tac o REWRITE_RULE [expr_body_pre_mods_def]) >>
   gvs[expr_body_pre_split_def, type_env_all_modules_def, type_env_def,
       FUNION_FEMPTY_2] >>
-  gvs[EVERY_MEM, pairTheory.FORALL_PROD] >>
+  gvs[EVERY_MEM, pairTheory.FORALL_PROD, source_body_call_supported_def] >>
   rpt strip_tac >> res_tac >> gvs[alistTheory.ALOOKUP_def]
 QED

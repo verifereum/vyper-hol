@@ -143,14 +143,17 @@ Proof
     fs[Abbr `H0`, storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
     (drule_then (map_every assume_tac o CONJUNCTS)) >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
-  `expr_body_pre cenv cx env obj (es with gas_obs := gs1)` by simp[] >>
-  drule_all_then strip_assume_tac expr_body_pre_runtime_typed >>
+  (* the base may be a huge slot base, whose own precondition the parent's
+     does not give: take what is used from the parent's *)
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_typed >>
+  `expr_sim_inv cenv cx env (es with gas_obs := gs1)` by simp[] >>
+  `expr_sim_inv cenv cx env mid /\
+   eval_result_typed (env,cx,mid) (PlaceR (StoragePlace tr slot vt))
+     (Type (expr_type obj))` by metis_tac[expr_sim_inv_eval_result] >>
   `env_consistent env cx (es with gas_obs := gs1) /\
-   runtime_consistent env cx (es with gas_obs := gs1) /\ functions_well_typed cx /\
-   well_typed_expr env obj /\ call_evaluation_safe cx (int_calls_expr obj)` by
-    (qpat_assum `expr_body_pre _ _ _ obj (es with gas_obs := _)`
-       (mp_tac o PURE_REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
+   runtime_consistent env cx (es with gas_obs := gs1) /\ functions_well_typed cx` by
+    (qpat_assum `expr_sim_inv _ _ _ (es with gas_obs := _)`
+       (mp_tac o PURE_REWRITE_RULE [expr_sim_inv_def]) >>
      PURE_REWRITE_TAC [vyperTypeExprSoundnessTheory.runtime_consistent_def] >>
      disch_then (map_every assume_tac o CONJUNCTS) >> simp[]) >>
   `env.type_defs = get_tenv cx` by
@@ -226,8 +229,8 @@ Proof
   `!l. p.ptr_operand <> Label l` by
     (`!id t. FLOOKUP env.var_types id = SOME t ==>
         ?x sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var x) sz)` by
-       (qpat_assum `expr_body_pre cenv cx env obj es` mp_tac >>
-        rewrite_tac[expr_body_pre_def, expr_sim_inv_def] >>
+       (qpat_assum `expr_sim_inv cenv cx env es` mp_tac >>
+        rewrite_tac[expr_sim_inv_def] >>
         rpt strip_tac >> first_x_assum drule >> simp[]) >>
      `reason_uniform_shape compile_expr cenv ty obj` by
        (irule compile_expr_reason_uniform >> metis_tac[]) >>
@@ -457,9 +460,6 @@ Proof
       (drule_all expr_body_pre_array_subscript_index_after_base >> simp[]) >>
     `!l. iop <> Label l` by
       (drule_all expr_body_pre_lower_value_word_shape >> simp[]) >>
-    `expr_sim_inv cenv cx env mid` by
-      (qpat_assum `eval_expr cx obj _ = _`
-         (mp_then Any mp_tac exprSimSourceTheory.expr_body_pre_eval_result) >> simp[]) >>
     `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
       (qpat_assum `eval_expr cx obj _ = _`
          (mp_then Any mp_tac vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom) >>
