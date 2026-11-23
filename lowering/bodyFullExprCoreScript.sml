@@ -33,7 +33,7 @@ Ancestors
   exprBopDigestProps bytestringHashProps vyperFiniteStoragePreservation
   exprLowering vyperTyping vyperTypeSystem loweringPosts valueEncoding vyperValueOperation
   exprSimMemDefs bodyPtrDefs gasShadow fragGasOriginPtr ptrDiscipline loweringSlice
-  bodyFullPreds bodySimFull bodySim exprSimHypsDefs compileEnv
+  bodyFullSimProjection bodyFullPreds bodySimFull bodySim exprSimHypsDefs compileEnv
   vyperContext vyperAST vyperInterpreter vyperState vyperValue venomState list
 
 val _ = Parse.hide "body";
@@ -868,11 +868,7 @@ Resume bop_bytes_eq_sim_full[second]:
      metis_tac[eval_expr_read_INL]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e1) e2 mid` by
-    (qpat_assum `body_expr_full_ok cx e2`
-      (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_full_ok_def]) >>
-     disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
-         `func`,`shadow_func`,`cenv`,`env`,`expr_type e1`,`mid`] mp_tac) >>
-     simp[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   `gas_admissible (bind (eval_expr cx e2) (read_result cx)) expr_res_ok mid` by
     (irule expr_body_pre_gas_admissible >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
