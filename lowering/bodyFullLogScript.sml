@@ -14,7 +14,8 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
   bodyExprPreFacts exprBodyPreProps bodyInvCodeProps allocLimits allocLimitsProps exprSimSource vyperTypeCallGraph
   bodyFullLogScalarTopics bodyFullLogSuffix bodyFullHashKeccakFixed supportedStmtTraverse
-  bodySimLogArgs stmtSimLogTrace exprSimHyps whitelistLogWiden
+  bodySimLogArgs stmtSimLogTrace exprSimHyps whitelistLogWiden checkedTypeNamespace
+  bodyQualifiedStmtSupport bodyInvMetadataProps[qualified,ignore_grammar]
   supportedExprs supportedExprTraverse
   vyperTypeCallStackSoundness vyperTypeExprSoundness vyperTypeInvariants
   stmtLowering context compileEnv gasShadowState gasShadowCompileStmtHelpers gasShadowCompileStmtCases
@@ -206,10 +207,11 @@ Proof
     (imp_res_tac vyperTypeABITheory.OPT_MMAP_LIST_REL >>
      fs[LIST_REL_EL_EQN, EVERY_EL, well_formed_type_def] >>
      metis_tac[optionTheory.IS_SOME_EXISTS]) >>
-  `type_env tops SUBMAP get_tenv cx` by
-    (irule body_main_type_env_submap >>
-     qpat_assum `body_inv tops ctx cenv cx`
-       (ACCEPT_TAC o cj 1 o MATCH_MP body_inv_main_code)) >>
+  `get_tenv cx = type_env tops` by
+    (drule_then assume_tac body_inv_contract >>
+     drule_then assume_tac bodyInvMetadataPropsTheory.contract_inv_type_env >>
+     fs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
+        finite_mapTheory.FUNION_FEMPTY_2]) >>
   `EVERY (assignable_type (get_tenv cx)) decl` by
     (`EVERY (supported_nested_type supported_event_leaf_type (LENGTH tops) tops) decl` by
        simp[Abbr `decl`] >>
@@ -217,7 +219,8 @@ Proof
      qspecl_then [`supported_event_leaf_type`,`LENGTH tops`,`tops`,`ty`] mp_tac
        supported_nested_evaluated_assignable >> simp[] >>
      disch_then (qspecl_then [`get_tenv cx`,`{}`] mp_tac) >>
-     simp[finite_mapTheory.DRESTRICT_UNIV] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+     fs[finite_mapTheory.DRESTRICT_UNIV] >>
+     metis_tac[optionTheory.IS_SOME_EXISTS, checkedTypeNamespaceTheory.type_env_struct_namespace]) >>
   `EVERY (assignable_type (get_tenv cx)) src` by
     metis_tac[cj 2 arg_type_fits_source_assignable] >>
   `!ty. MEM ty src ==>
@@ -952,6 +955,9 @@ Proof
   `supported_log tops id args` by
     (qpat_assum `supported_stmt tops bindings (Log id args)` mp_tac >>
      simp_tac bool_ss [supported_stmt_def]) >>
+  `FST id = NONE` by
+    (Cases_on `FST id` >> gvs[stmt_exprs_ok_def, body_inv_def,
+                              cenv_module_pins_def, alistTheory.ALOOKUP_def]) >>
   `?fields. supported_event_fields tops id = SOME fields` by
     (Cases_on `supported_event_fields tops id` >> fs[supported_log_def]) >>
   `supported_pure_exprs tops args /\
@@ -971,7 +977,7 @@ Proof
   `~supported_exprs_exists (const_name_root cx) args` by
     (drule_all body_inv_stmt_const_name_free >> simp[supported_stmt_expr_exists_def]) >>
   `~supported_exprs_exists
-      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) args /\
    call_evaluation_safe cx (int_calls_exprs args) /\
    (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
       occurs_abi_decode_target target tops)` by
@@ -1042,10 +1048,15 @@ Proof
       >- (irule gas_outcome_full_post_source >>
           qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
           conj_tac >- simp[] >> simp[Abbr `captureR`] >>
-          rpt strip_tac >> Cases_on `res` >- fs[expr_exit_def] >>
-          simp[stmt_exit_ptr_def] >>
-          gvs[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_def] >>
-          rpt strip_tac >> gvs[] >> fs[expr_exit_def]) >>
+          rpt gen_tac >> Cases_on `res` >>
+          simp[expr_exit_def, halt_exit_def, stmt_exit_ptr_def] >>
+          ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:unit``] stmtSimPropsTheory.expr_exit_INR_type] >>
+          simp[] >> rpt strip_tac
+          >- (qpat_assum `ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s`
+                (drule_then (drule_then ACCEPT_TAC))) >>
+          qpat_assum `r = IntRet _ _` (fn outcome =>
+            qpat_assum `expr_exit (INR _) r` (mp_tac o REWRITE_RULE [outcome])) >>
+          simp[NoAsms,expr_exit_def]) >>
       suspend "selected_capture") >>
   irule gas_outcome_full_bad_intro >>
   qexistsl_tac [`storage_trace_horizon es.storage_trace`, `func`, `G0`,
@@ -1256,8 +1267,18 @@ Resume compile_log_frag_full[selected_topics]:
          POP_ASSUM_LIST (K all_tac) >>
          metis_tac[ci_mono_emit_inst, pairTheory.SND]) >>
      `ci_mono se alloc_end /\ ci_mono alloc_end enc_end /\ ci_mono enc_end sb` by
-       metis_tac[ci_mono_compile_alloc_buffer, ci_mono_compile_abi_encode_values_to_buf,
-         ci_mono_emit_inst, pairTheory.SND] >>
+       (conj_tac
+       >- (qpat_assum `compile_alloc_buffer _ se = (buf,alloc_end)` (fn code =>
+             SUBST1_TAC (SYM (REWRITE_RULE [pairTheory.SND] (Q.AP_TERM `SND` code)))) >>
+           MATCH_ACCEPT_TAC ci_mono_compile_alloc_buffer) >>
+       conj_tac
+       >- (qpat_assum `compile_abi_encode_values_to_buf cenv buf.buf_operand data_rows alloc_end = (len,enc_end)`
+             (fn code => SUBST1_TAC
+                (SYM (REWRITE_RULE [pairTheory.SND] (Q.AP_TERM `SND` code)))) >>
+           MATCH_ACCEPT_TAC ci_mono_compile_abi_encode_values_to_buf) >>
+       qpat_assum `emit_inst LOG _ [] enc_end = ((),sb)` (fn code =>
+         SUBST1_TAC (SYM (REWRITE_RULE [pairTheory.SND] (Q.AP_TERM `SND` code)))) >>
+       MATCH_ACCEPT_TAC ci_mono_emit_inst) >>
      metis_tac[ci_mono_trans]) >>
   `fn_has_code sm se func /\ fn_has_code se sb func` by
     (qpat_assum `fn_has_code sa sb func` mp_tac >>
@@ -1298,10 +1319,18 @@ Resume compile_log_frag_full[selected_topics]:
      disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
      qpat_x_assum `?ty v. _` (qx_choosel_then [`ty`,`v`] strip_assume_tac) >>
      qpat_x_assum `row1 = is_bytestring_type ty` SUBST_ALL_TAC >>
+     qpat_assum `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
+       (assume_tac o Q.EXISTS (`?H. valid_horizon cx st0 H mid.storage_trace`,
+                              `storage_trace_horizon mid.storage_trace`)) >>
+     `!H. valid_horizon cx st0 H mid.storage_trace ==> stmt_state_rel H ctx func cenv cx mid t` by
+       (gen_tac >> disch_tac >>
+        qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+          stmt_state_rel H ctx func cenv cx mid t /\ _`
+          (drule_then (ACCEPT_TAC o cj 1))) >>
      mp_tac (Q.INST [`es` |-> `mid`, `s` |-> `t`, `G` |-> `G1`, `tn` |-> `tn1`,
        `front` |-> `sm`, `sv` |-> `row0`, `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
        (SPEC_ALL compile_log_one_saved_topic)) >>
-     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
      disch_then ACCEPT_TAC) >>
   disch_then (qspecl_then [`raw_topics`,`topics`,`sm`,`se`,`ops`,`t`,`G1`,`tn1`] mp_tac) >>
   impl_tac >- simp[Abbr `raw_topics`] >>
@@ -1340,11 +1369,16 @@ Resume compile_log_frag_full[selected_data]:
     (qexists_tac `storage_trace_horizon mid.storage_trace` >> first_assum ACCEPT_TAC) >>
   qpat_assum `log_topic_state ctx func cenv cx st0 mid DF lo d sm t G1 tn1 se tp Gp tnp`
     (strip_assume_tac o REWRITE_RULE [log_topic_state_def]) >>
+  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+    qpat_assum `MAP FDOM mid.scopes = MAP FDOM es.scopes` (ACCEPT_TAC o SYM) >>
   `wb_frame cenv es mid sa s0 tp` by
     (mp_tac (Q.INST [`H` |-> `storage_trace_horizon es.storage_trace`] (Q.SPECL
        [`func`,`cenv`,`cx`,`es`,`s0`,`sa`,`mid`,`mid`,`sm`,`t`,`tp`,`ctx`]
        (horizonTypeLib.at_horizon_named "H" wb_frame_trans))) >>
-     fs[ci_mono_def]) >>
+     qpat_assum `ci_mono sa sm`
+       (map_every assume_tac o CONJUNCTS o REWRITE_RULE [ci_mono_def]) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   `ghost_kept_at lo cenv es sa G0 tn0 s0 Gp tnp` by
     (qspecl_then [`lo`,`cenv`,`es`,`sa`,`G0`,`tn0`,`s0`,`G1`,`tn1`,`mid`,`sm`,`Gp`,`tnp`,
         `t`,`storage_trace_horizon es.storage_trace`,`ctx`,`func`,`cx`,`mid`]
@@ -1422,8 +1456,18 @@ Resume compile_log_frag_full[direct_data]:
     (rewrite_tac o single o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   strip_tac >>
   `ci_mono se alloc_end /\ ci_mono alloc_end enc_end /\ ci_mono enc_end sb` by
-    metis_tac[ci_mono_compile_alloc_buffer, ci_mono_compile_abi_encode_values_to_buf,
-      ci_mono_emit_inst, pairTheory.SND] >>
+    (conj_tac
+      >- (qpat_assum `compile_alloc_buffer _ se = (buf,alloc_end)` (fn code =>
+            SUBST1_TAC (SYM (REWRITE_RULE [pairTheory.SND] (Q.AP_TERM `SND` code)))) >>
+          MATCH_ACCEPT_TAC ci_mono_compile_alloc_buffer) >>
+      conj_tac
+      >- (qpat_assum `compile_abi_encode_values_to_buf cenv buf.buf_operand data_rows alloc_end = (data_len,enc_end)`
+            (fn code => SUBST1_TAC
+               (SYM (REWRITE_RULE [pairTheory.SND] (Q.AP_TERM `SND` code)))) >>
+          MATCH_ACCEPT_TAC ci_mono_compile_abi_encode_values_to_buf) >>
+      qpat_assum `emit_inst LOG _ [] enc_end = ((),sb)` (fn code =>
+        SUBST1_TAC (SYM (REWRITE_RULE [pairTheory.SND] (Q.AP_TERM `SND` code)))) >>
+      MATCH_ACCEPT_TAC ci_mono_emit_inst) >>
   `fn_has_code se alloc_end func /\ fn_has_code alloc_end enc_end func /\
     fn_has_code enc_end sb func` by
     (qpat_assum `fn_has_code se sb func` mp_tac >>
@@ -1477,7 +1521,10 @@ Resume compile_log_frag_full[direct_rows]:
      decide_tac) >>
   qabbrev_tac `hl = head_lengths ats 0` >>
   `LENGTH data_rows = LENGTH dvs /\ LENGTH data_rows = LENGTH ats /\
-   LENGTH ats = LENGTH avs` by metis_tac[LIST_REL_LENGTH] >>
+   LENGTH ats = LENGTH avs` by
+    (conj_tac >- qpat_assum `LIST_REL _ data_rows dvs` (ACCEPT_TAC o MATCH_MP LIST_REL_LENGTH) >>
+     conj_tac >- qpat_assum `LIST_REL _ data_rows ats` (ACCEPT_TAC o MATCH_MP LIST_REL_LENGTH) >>
+     qpat_assum `LIST_REL _ ats avs` (ACCEPT_TAC o MATCH_MP LIST_REL_LENGTH)) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==> stmt_state_rel H ctx func cenv cx mid tp` by
     (gen_tac >> disch_tac >>
      qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -1618,8 +1665,15 @@ Resume compile_log_frag_full[direct_rows]:
     (strip_assume_tac o MATCH_MP log_topics_values) >>
   `!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (t,G1,tn1) [] (OK z,Gz,tz)` by
     (gen_tac >> irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gp`,`tp`,`tnp`] >>
-     conj_tac >- metis_tac[] >>
-     irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gu`,`u`,`tu`] >> metis_tac[]) >>
+     conj_tac
+     >- (qpat_assum `!D. gas_origin_ptr_path _ (t,G1,tn1) [] (OK tp,Gp,tnp)`
+           (qspec_then `D` ACCEPT_TAC)) >>
+     irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gu`,`u`,`tu`] >>
+     conj_tac
+     >- (qpat_assum `!D. gas_origin_ptr_path _ (tp,Gp,tnp) [] (OK u,Gu,tu)`
+           (qspec_then `D` ACCEPT_TAC)) >>
+     qpat_assum `!D. gas_origin_ptr_path _ (u,Gu,tu) [] (OK z,Gz,tz)`
+       (qspec_then `D` ACCEPT_TAC)) >>
   `wb_frame cenv es mid sa s0 z` by
     (mp_tac (Q.INST [`H` |-> `storage_trace_horizon es.storage_trace`] (Q.SPECL
        [`func`,`cenv`,`cx`,`es`,`s0`,`sa`,`mid`,`mid`,`se`,`tp`,`z`,`ctx`]
