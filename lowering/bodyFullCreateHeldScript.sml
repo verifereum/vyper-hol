@@ -10,7 +10,7 @@
  *)
 Theory bodyFullCreateHeld
 Ancestors
-  bodySingletonCallSupport
+  bodySingletonCallSupport bodyFullProxyBufferSpine
   blueprintLiteralOffsetProps[qualified,ignore_grammar]
   bodyFullForArrayRound[qualified,ignore_grammar]
   abiDecodeValidFiniteLoop[qualified,ignore_grammar]
@@ -877,6 +877,7 @@ Theorem proxy_shift_origin[local]:
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?x t G' tn'. aligned = Var x /\ not_fresh_at sb x /\
+    proxy_buffer_span sa sb explicit ctx func s t /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
     t = (update_var x (w << 96) s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     t.vs_current_bb = sb.cs_current_bb /\
@@ -908,6 +909,12 @@ Proof
   >- (simp[not_fresh_at_def] >>
       gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
           fresh_id_def, fresh_var_def, emit_def]) >>
+  conj_tac
+  >- (drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+      `sb.cs_current_bb = sa.cs_current_bb` by metis_tac[] >>
+      irule proxy_buffer_span_run >>
+      simp[mk_inst_def, is_terminator_def, run_inst_seq_def, Abbr `u`,
+           step_inst_base_opcode_eqs, exec_pure2_def, bind_outputs_def, eval_operand_def]) >>
   conj_tac
   >- (gen_tac >>
       `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
@@ -950,6 +957,7 @@ Theorem proxy_offset_store_origin[local]:
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    proxy_buffer_span sa sb explicit ctx func s t /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     lookup_var p t = SOME w /\ ptr_covers G' tn' p t 96 /\
@@ -967,8 +975,21 @@ Proof
   `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     gvs[] >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
-  drule_all bodyFullBuiltinECArithTransfersTheory.ec_scalar_store_origin_ptr_path >>
+  drule_all bodyFullBuiltinECArithTransfersTheory.ec_scalar_store_origin_ptr_path_with_raw_endpoint >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `proxy_buffer_span sa sb explicit ctx func s t` by
+    (`LENGTH sb.cs_current_insts = s.vs_inst_idx + LENGTH (emitted_insts sa sb)` by
+       simp[LENGTH_APPEND] >>
+     qpat_assum `t = r with vs_inst_idx := _` SUBST1_TAC >>
+     qpat_assum `LENGTH sb.cs_current_insts = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
+     irule proxy_buffer_span_run >>
+     `sa.cs_next_id <= sb.cs_next_id` by simp[] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qexists_tac `emitted_insts sa sb` >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  qpat_x_assum `t = r with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `run_inst_seq _ _ = OK r` kall_tac >>
   qexistsl_tac [`t`,`G'`,`tn'`] >>
   `t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
    t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
@@ -1006,6 +1027,7 @@ Theorem proxy_buf_written[local]:
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    proxy_buffer_span m1 sb explicit ctx func s t /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     lookup_var p t = SOME w /\ ptr_covers G' tn' p t 96 /\
     t.vs_memory = (mstore (w2n w + 39) post
@@ -1027,6 +1049,15 @@ Proof
   drule_all bodyFullAbiEncodeSetupTailTheory.abi_encode_payload_word_origin >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choose_then `s1` (qx_choose_then `t1` strip_assume_tac))) >>
+  `proxy_buffer_span m1 m2 explicit ctx func s s1` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_void >> strip_tac >>
+     drule_all bodyPtrMakeArrayPrimitiveInstallTheory.emit_void_fetch_boundary >> strip_tac >>
+     qpat_assum `s1 = _` SUBST1_TAC >>
+     `SUC s.vs_inst_idx = LENGTH m2.cs_current_insts` by simp[] >>
+     qpat_assum `SUC s.vs_inst_idx = _` SUBST1_TAC >>
+     irule proxy_buffer_span_run >>
+     simp[run_inst_seq_def, mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs,
+          exec_write2_def, eval_operand_def]) >>
   suspend "shift"
 QED
 
@@ -1084,6 +1115,8 @@ Resume proxy_buf_written[pack]:
   conj_tac
   >- (gen_tac >>
       metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
+  `proxy_buffer_span m1 sb explicit ctx func s t` by
+    metis_tac[proxy_buffer_span_trans] >>
   `s2.vs_memory = (mstore b pre s).vs_memory /\
    s2.vs_allocas = s.vs_allocas /\ s2.vs_alloca_next = s.vs_alloca_next` by
     simp[update_var_def,mstore_def] >>
@@ -1125,7 +1158,7 @@ Finalise proxy_buf_written
 (* The proxy window is an ordinary registered 96-byte allocation, but
    CREATE reads only its first 54 bytes. The full registration and the
    saved-variable frame are available to a subsequent salt evaluation. *)
-Theorem proxy_buf_origin_window:
+Theorem proxy_buf_origin_window_steps:
   compile_create_proxy_buf target sa = (buf,sb) /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
@@ -1142,6 +1175,7 @@ Theorem proxy_buf_origin_window:
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     allocas_from lo t /\ lo <= t.vs_alloca_next /\ alloca_history func t /\
+    RTC (proxy_buffer_step sa sb explicit ctx func) s t /\
     w2n w + 96 < dimword (:256) /\ w2n w + 96 <= t.vs_alloca_next /\
     lookup_var p t = SOME w /\ ptr_covers G' tn' p t 96 /\
     FLOOKUP G' p = SOME (w2n w,96) /\
@@ -1188,14 +1222,25 @@ Proof
   `96 < dimword (:256)` by EVAL_TAC >>
   drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> strip_tac >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``]
-    bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_exact) >>
+    bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_with_raw_endpoint) >>
   disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
-    (qx_choose_then `p` (qx_choose_then `w` (qx_choose_then `u`
-      (qx_choose_then `Ga` (qx_choose_then `ta` strip_assume_tac)))))) >>
+    (qx_choosel_then [`p`,`w`,`u`,`Ga`,`ta`,`raw`] strip_assume_tac)) >>
+  `proxy_buffer_span sa m1 explicit ctx func s u` by
+    (drule abiBufferAllocationCodeTheory.compile_alloc_buffer_code >> strip_tac >>
+     qpat_assum `u = raw with vs_inst_idx := _` SUBST1_TAC >>
+     irule proxy_buffer_span_run >>
+     `sa.cs_next_id <= m1.cs_next_id` by simp[] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qexists_tac `emitted_insts sa m1` >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  qpat_x_assum `u = raw with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `Ga = step_prov _ _ _ _` kall_tac >>
+  qpat_x_assum `ta = step_taint _ _ _ _` kall_tac >>
   suspend "writes"
 QED
 
-Resume proxy_buf_origin_window[writes]:
+Resume proxy_buf_origin_window_steps[writes]:
   `stmt_state_rel H ctx func cenv cx es u` by
     (qpat_assum `!h. stmt_state_rel h _ _ _ _ _ _ ==> stmt_state_rel h _ _ _ _ _ _`
        (qspec_then `H:(bool # bytes32 # type_value) list # num list` mp_tac) >> simp[]) >>
@@ -1221,7 +1266,7 @@ Resume proxy_buf_origin_window[writes]:
   suspend "frame"
 QED
 
-Resume proxy_buf_origin_window[frame]:
+Resume proxy_buf_origin_window_steps[frame]:
   `!x. not_fresh_at sa x ==> not_fresh_at m1 x` by
     (rpt strip_tac >> irule stmtFragPtrTheory.not_fresh_at_mono >>
      qexists_tac `sa` >> simp[]) >>
@@ -1262,7 +1307,11 @@ Resume proxy_buf_origin_window[frame]:
   suspend "pack"
 QED
 
-Resume proxy_buf_origin_window[pack]:
+Resume proxy_buf_origin_window_steps[pack]:
+  `RTC (proxy_buffer_step sa sb explicit ctx func) s t` by
+    (`proxy_buffer_span sa sb explicit ctx func s t` by
+       (irule proxy_buffer_span_trans >> qexistsl_tac [`m1`,`u`] >> asm_rewrite_tac[]) >>
+     fs[proxy_buffer_span_def]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')` by
     (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
      qexistsl_tac [`Ga`,`u`,`ta`] >> simp[]) >>
@@ -1293,7 +1342,7 @@ Resume proxy_buf_origin_window[pack]:
   suspend "state_rel"
 QED
 
-Resume proxy_buf_origin_window[state_rel]:
+Resume proxy_buf_origin_window_steps[state_rel]:
   `(∀name b n. local_region cenv es.scopes s name b n ⇒
        regions_disjoint pb 96 b n)` by
     (qpat_assum `!name b n. local_region cenv es.scopes u name b n ==> _`
@@ -1316,7 +1365,7 @@ Resume proxy_buf_origin_window[state_rel]:
   suspend "wb_frame"
 QED
 
-Resume proxy_buf_origin_window[wb_frame]:
+Resume proxy_buf_origin_window_steps[wb_frame]:
   conj_tac
   >- (irule bodyFullUnwrapSlotPostTheory.unwrap_slot_copy_wb_frame >>
       conj_tac >- simp[] >>
@@ -1337,7 +1386,7 @@ Resume proxy_buf_origin_window[wb_frame]:
   suspend "ghost_kept"
 QED
 
-Resume proxy_buf_origin_window[ghost_inv]:
+Resume proxy_buf_origin_window_steps[ghost_inv]:
   rpt strip_tac >>
   `ghost_inv_at D lo d cenv cx es Ga ta u` by
     (irule (INST_TYPE [``:'a`` |-> ``:256``] bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at) >>
@@ -1368,7 +1417,7 @@ Resume proxy_buf_origin_window[ghost_inv]:
   qpat_assum `!off n. _ ==> mem_bytes_at off n t.vs_memory = _` irule >> decide_tac
 QED
 
-Resume proxy_buf_origin_window[ghost_kept]:
+Resume proxy_buf_origin_window_steps[ghost_kept]:
   rpt strip_tac >>
   `!x. not_fresh_at sk x ==> not_fresh_at sa x` by
     (rpt strip_tac >> irule stmtFragPtrTheory.not_fresh_at_mono >>
@@ -1382,7 +1431,49 @@ Resume proxy_buf_origin_window[ghost_kept]:
   simp[IgnAsm `!x. not_fresh_at sa x ==> lookup_var x t = _`, pred_setTheory.DIFF_SUBSET]
 QED
 
-Finalise proxy_buf_origin_window
+Finalise proxy_buf_origin_window_steps
+
+Theorem proxy_buf_origin_window:
+  compile_create_proxy_buf target sa = (buf,sb) /\ fn_has_code sa sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+    ctx func cenv cx es s /\ alloca_history func s /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand target s = SOME word /\ op_taint tn target = {} /\
+  (!x. target = Var x ==> not_fresh_at sa x) ==>
+  ?p w t G' tn'.
+    buf = Var p /\ not_fresh_at sb p /\ sa.cs_next_id < sb.cs_next_id /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\ alloca_history func t /\
+    w2n w + 96 < dimword (:256) /\ w2n w + 96 <= t.vs_alloca_next /\
+    lookup_var p t = SOME w /\ ptr_covers G' tn' p t 96 /\
+    FLOOKUP G' p = SOME (w2n w,96) /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,96) /\
+    (!name b n. local_region cenv es.scopes t name b n ==> regions_disjoint (w2n w) 96 b n) /\
+    read_memory (w2n w) 54 t = minimal_proxy_initcode (w2w word) /\
+    (!i. w2n w <= i /\ i < w2n w + 54 ==> i NOTIN tn'.t_mem) /\
+    (!H':(bool # bytes32 # type_value) list # num list.
+       stmt_state_rel H' ctx func cenv cx es s ==> stmt_state_rel H' ctx func cenv cx es t) /\
+    wb_frame cenv es es sa s t /\
+    (!D d. ghost_inv_at D lo d cenv cx es G tn s ==> ghost_inv_at D lo d cenv cx es G' tn' t) /\
+    (!sk es0 G0 tn0 s0. sk.cs_next_var <= sa.cs_next_var /\
+      (!aid b n. FLOOKUP s0.vs_allocas aid = SOME (b,n) /\ aid < sk.cs_next_id ==>
+                   b + n <= s.vs_alloca_next) /\
+      (!name b n. local_region cenv es0.scopes s0 name b n ==> b + n <= s.vs_alloca_next) /\
+      ghost_kept_at lo cenv es0 sk G0 tn0 s0 G tn ==>
+      ghost_kept_at lo cenv es0 sk G0 tn0 s0 G' tn') /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (qx_choosel_then [`p`,`w`,`t`,`G'`,`tn'`] strip_assume_tac o
+              MATCH_MP proxy_buf_origin_window_steps) >>
+  qexistsl_tac [`p`,`w`,`t`,`G'`,`tn'`] >> asm_rewrite_tac[]
+QED
 
 (* Run the compiler's result check after either creation opcode. The
    non-reverting case returns the original word, even when it is zero. *)
