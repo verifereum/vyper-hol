@@ -69,7 +69,7 @@ fun named_literal_fits_tac ty =
   simp[lowered_value_type_def, expr_type_def, GSYM event_arg_compatible_alias_def,
        event_arg_compatible_reflexive];
 
-Theorem copy_lowered_fits_mods[local]:
+Theorem copy_lowered_fits_mods:
   !ce e. expr_sim_inv_mods mods ce cx env es /\ well_typed_expr env e ==>
     arg_type_fits (lowered_value_type ce e) (expr_type e)
 Proof
