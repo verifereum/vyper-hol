@@ -11,7 +11,7 @@ Ancestors
 
 (* The successful fall-through and the failed assertion use the same
    four installed slots, including for a folded offset. *)
-Theorem blueprint_check_layout[local]:
+Theorem blueprint_check_layout:
   compile_create_blueprint_check lit target off a = (code,b) ==>
   b.cs_current_bb = a.cs_current_bb /\
   b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
@@ -35,7 +35,7 @@ QED
 
 (* DALLOCA and both copies are straight-line; the CREATE itself belongs to
    the following dispatch band, not to this preparation slice. *)
-Theorem blueprint_append_layout[local]:
+Theorem blueprint_append_layout:
   create_blueprint_append_itinerary target off code data len a app bufop total_op ==>
   (LAST app).cs_current_bb = a.cs_current_bb /\
   (LAST app).cs_current_insts = a.cs_current_insts ++ emitted_insts a (LAST app) /\
@@ -59,7 +59,7 @@ QED
 
 (* The target consumes the same entry and ghosts as the outer call. The
    shadow endpoint here is the target cut, not the end of the call. *)
-Theorem blueprint_scoped_target[local]:
+Theorem blueprint_scoped_target:
   args = target::rest /\
   expr_body_pre ce cx env (Call ann (CreateTarget (CreateFromBlueprint raw) hs rof ks) args df) es /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
