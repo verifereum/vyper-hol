@@ -14,7 +14,8 @@ Ancestors
   vyperContext vyperTypeSystem vyperTypeContract vyperTypeArgFits
   vyperTypeCallGraph exprLowering compileEnv placeTypingProps
   supportedTypes supportedDecls supportedExprForms supportedExprs
-  whitelistCheckerTypes supportedGetterProps
+  whitelistCheckerTypes supportedGetterProps whitelistStructFieldProps
+  whitelistExprTypeProps whitelistNestedTypeProps whitelistHashmapValueProps
 
 (* ===== Types ===== *)
 
@@ -27,47 +28,9 @@ Theorem assignable_type_supported_nested[local]:
       (!t. supported_scalar_type t ==> leaf t) ==>
       supported_nested_type leaf fuel tops ty
 Proof
-  ho_match_mp_tac assignable_type_ind >> rpt conj_tac >> rpt gen_tac
-  >~ [`BaseT bt`]
-  >- (rw[assignable_type_def, Once supported_nested_type_def] >>
-      first_x_assum irule >>
-      drule well_formed_base_scalar >>
-      rw[supported_scalar_type_def, supported_word_type_def] >>
-      gvs[supported_word_type_def])
-  >~ [`TupleT tys`]
-  >- (rpt strip_tac >> fs[assignable_type_def, EVERY_MEM] >>
-      ONCE_REWRITE_TAC[supported_nested_type_def] >>
-      disj2_tac >> simp[EVERY_MEM, NULL_EQ] >> metis_tac[])
-  >~ [`ArrayT elem bd`]
-  >- (rpt strip_tac >>
-      fs[assignable_type_def] >>
-      ONCE_REWRITE_TAC[supported_nested_type_def] >>
-      Cases_on `bd` >> simp[] >>
-      metis_tac[well_formed_fixed_array_nonempty])
-  >~ [`StructT id`]
-  >- (rpt strip_tac >>
-      Cases_on `FLOOKUP tenv id` >> fs[assignable_type_def] >>
-      rename1 `FLOOKUP tenv id = SOME desc` >>
-      Cases_on `desc` >> fs[] >>
-      rename1 `FLOOKUP tenv id = SOME (StructArgs args)` >>
-      `id IN FDOM tenv` by gvs[flookup_thm] >>
-      `0 < CARD (FDOM tenv)` by
-        (spose_not_then assume_tac >>
-         `CARD (FDOM tenv) = 0` by decide_tac >>
-         gvs[CARD_EQ_0, FDOM_FINITE]) >>
-      `CARD (FDOM (tenv \\ id)) = CARD (FDOM tenv) - 1` by
-        simp[FDOM_DOMSUB, CARD_DELETE, FDOM_FINITE] >>
-      `fuel <> 0` by decide_tac >>
-      `supported_struct_fields tops id = SOME args` by metis_tac[] >>
-      ONCE_REWRITE_TAC[supported_nested_type_def] >>
-      simp[EVERY_MEM, NULL_EQ] >> strip_tac >> disj2_tac >> rpt strip_tac >>
-      first_x_assum irule >>
-      gvs[EVERY_MEM, DOMSUB_FLOOKUP_THM, AllCaseEqs()] >>
-      metis_tac[DECIDE ``a <= b ==> a - 1 <= b - 1:num``])
-  >~ [`FlagT id`]
-  >- (rw[Once supported_nested_type_def] >>
-      first_x_assum irule >> simp[supported_scalar_type_def])
-  >> simp[assignable_type_def]
+  rpt strip_tac >> drule linked_nested_with_fuel >>
+  disch_then irule >> simp[] >> qexists_tac `FDOM tenv` >>
+  simp[] >> disj2_tac >> metis_tac[flookup_thm]
 QED
 
 Theorem assignable_type_supported_place:
@@ -104,19 +67,10 @@ QED
 Theorem checker_hashmap_value_supported:
   !vt. check_value_type (type_env tops) vt ==> supported_hashmap_value tops vt
 Proof
-  Induct >> simp[check_value_type_def, supported_hashmap_value_def,
-                  supported_storage_type_def, GSYM supported_place_type_def] >>
-  metis_tac[assignable_type_supported_place, checker_hashmap_key_supported]
-QED
-
-Theorem supported_place_type_tuple_el[local]:
-  supported_place_type tops (TupleT tys) /\ n < LENGTH tys ==>
-  supported_place_type tops (EL n tys)
-Proof
-  rw[supported_place_type_def] >>
-  qpat_x_assum `supported_nested_type _ _ _ (TupleT _)` mp_tac >>
-  simp[Once supported_nested_type_def, supported_scalar_type_def,
-       supported_word_type_def, supported_string_type_def, EVERY_EL]
+  rpt strip_tac >>
+  irule (Q.INST [`tenv` |-> `type_env tops`, `imported_only` |-> `F`]
+    checked_hashmap_value_supported) >>
+  simp[assignable_type_supported_place] >> metis_tac[checker_hashmap_key_supported]
 QED
 
 Theorem type_env_struct_MEM:
@@ -284,10 +238,8 @@ QED
 Theorem valid_conversion_not_agg[local]:
   valid_conversion s t ==> checker_agg_ok tops t
 Proof
-  Cases_on `t` >> simp[checker_agg_ok_def] >>
-  Cases_on `s` >> simp[valid_conversion_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >> simp[valid_conversion_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >> simp[valid_conversion_def]
+  strip_tac >> drule valid_conversion_nonaggregate >>
+  Cases_on `t` >> simp[checker_agg_ok_def]
 QED
 
 Theorem well_typed_binop_not_agg[local]:
@@ -382,32 +334,13 @@ Theorem well_typed_type_builtin_supported_form:
   well_formed_type (type_env tops) ty ==>
   supported_type_builtin_form tops ty tb target es /\ checker_agg_ok tops ty
 Proof
-  strip_tac >>
-  `(tb = MaxValue \/ tb = MinValue) ==> supported_numeric_type target` by
-    metis_tac[well_typed_max_min_value_supported] >>
-  drule well_typed_type_builtin_args_arity >>
-  Cases_on `tb` >> simp[] >> strip_tac >>
-  gvs[LENGTH_EQ_NUM_compute, supported_type_builtin_form_def,
-      type_builtin_result_ok_def, well_typed_type_builtin_args_def,
-      supported_value_type_def]
-  >~ [`abi_encode_size_ok`] >- (Cases_on `es` >> gvs[checker_agg_ok_def])
-  >~ [`valid_conversion`] >- metis_tac[valid_conversion_not_agg]
-  >> fs[numeric_agg_ok, checker_agg_ok_assignable, checker_agg_ok_base,
-        assignable_type_supported_place]
+  strip_tac >> irule (Q.INST [`tenv` |-> `type_env tops`] typed_type_builtin_form) >>
+  simp[checker_agg_ok_base, numeric_agg_ok,
+       assignable_type_supported_place, checker_agg_ok_assignable] >>
+  metis_tac[valid_conversion_not_agg]
 QED
 
 (* ===== Places ===== *)
-
-Theorem check_value_type_subscript_child[local]:
-  check_value_type tenv vt /\ subscript_vtype vt kty = SOME vt' ==>
-  check_value_type tenv vt'
-Proof
-  Cases_on `vt` >> simp[check_value_type_def] >> rpt strip_tac
-  >- (rename1 `subscript_vtype (Type ty)` >> Cases_on `ty` >>
-      gvs[subscript_vtype_def, check_value_type_def, assignable_type_def,
-          AllCaseEqs()])
-  >> gvs[subscript_vtype_def, AllCaseEqs()]
-QED
 
 Theorem subscript_place_vtype[local]:
   checker_env_ok tops env /\ type_place_expr env be = SOME vt /\
@@ -567,10 +500,7 @@ Proof
   gvs[supported_main_nsid_def] >>
   conj_tac >- metis_tac[checker_env_struct_assignable,
                         assignable_type_supported_place] >>
-  rw[EVERY_MEM, FORALL_PROD] >>
-  Cases_on `ALOOKUP args p_1` >> gvs[ALOOKUP_NONE] >>
-  qpat_x_assum `MAP FST _ = _` (SUBST_ALL_TAC o SYM) >>
-  gvs[MEM_MAP, EXISTS_PROD] >> metis_tac[]
+  irule structlit_fields_lookup >> simp[]
 QED
 
 Theorem checker_builtin_pure[local]:
