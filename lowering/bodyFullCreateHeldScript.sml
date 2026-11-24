@@ -10026,6 +10026,203 @@ QED
 
 Finalise blueprint_raw_args_cut
 
+(* Dispatch-side frame and scalar facts at the selected materialization
+   landing. The ordinary and confined finishes use this same handoff. *)
+Theorem create_blueprint_finish_dispatch_inputs:
+  fn_inst_ids_distinct func /\ ctx_has_dalloca ctx /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx es s0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
+  wb_frame cenv es ee sa s0 s /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+  alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sm x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sm x) /\
+  return_buf_frame d cenv sm s /\
+  eval_operand amount s = SOME aw /\ op_taint tn amount = {} /\
+  OPTREL (\op w. eval_operand op s = SOME w /\ op_taint tn op = {}) sop sw /\
+  (!x. amount = Var x \/ sop = SOME (Var x) ==> not_fresh_at sm x) /\
+  sm.cs_next_var <= sc.cs_next_var /\
+  gas_origin_ptr_path (DF (storage_trace_horizon ee.storage_trace),lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (OK t,Gmat,tt) /\
+  (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx;
+            vs_memory := s.vs_memory; vs_fmp := s.vs_fmp|>) = s /\
+  w2n t.vs_fmp = w2n s.vs_fmp + venomLayout$ceil32 N /\
+  w2n s.vs_fmp + N <= LENGTH t.vs_memory /\ LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+  (!j k. j+k <= w2n s.vs_fmp ==> read_memory j k t = read_memory j k s) /\
+  (!i. i < w2n s.vs_fmp /\ i IN tt.t_mem ==> i IN tn.t_mem) /\
+  tt.t_stor = tn.t_stor /\ tt.t_trans = tn.t_trans /\ tt.t_imm = tn.t_imm /\
+  (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s /\
+    FLOOKUP Gmat x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)) ==>
+  sa.cs_next_var <= sc.cs_next_var /\ local_ptrs_reserved cenv sc /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sc x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sc x) /\
+  alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee t /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx ee Gmat tt t) /\
+  wb_frame cenv es ee sa s0 t /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gmat tt /\
+  eval_operand amount t = SOME aw /\ op_taint tt amount = {} /\
+  (case sop of NONE => sw = NONE | SOME op =>
+    ?w. sw = SOME w /\ eval_operand op t = SOME w /\ op_taint tt op = {})
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. _ ==> stmt_state_rel H ctx func cenv cx ee s /\ _`
+    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_labels = s.vs_labels` by
+    (conj_tac
+     >- (qpat_assum `_ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|> = _`
+           (mp_tac o AP_TERM ``\u:venom_state. u.vs_alloca_next``) >> simp[])
+     >> qpat_assum `_ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|> = _`
+          (mp_tac o AP_TERM ``\u:venom_state. u.vs_labels``) >> simp[]) >>
+  `alloca_history func t` by
+    (irule bodyFullPathHistoryTheory.body_full_path_alloca_history >>
+     first_assum (irule_at Any) >>
+     simp[] >> metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee t /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx ee Gmat tt t /\ wb_frame cenv es ee sa s0 t /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 Gmat tt` by suspend "materialized" >>
+  qpat_assum `!H. _ ==> stmt_state_rel H ctx func cenv cx ee t /\ _`
+    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  `sa.cs_next_var <= sc.cs_next_var` by decide_tac >>
+  `local_ptrs_reserved cenv sc` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  `(!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sc x) /\
+   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sc x)` by
+    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+  `!op. (!x. op = Var x ==> not_fresh_at sm x) ==>
+      eval_operand op t = eval_operand op s /\ op_prov Gmat op = op_prov G op /\
+      op_taint tt op = op_taint tn op` by
+    (match_mp_tac bodyPtrBytestringBuiltinsExternalSliceTheory.reserved_operand_ghost_frame >> simp[]) >>
+  `eval_operand amount t = SOME aw /\ op_taint tt amount = {}` by metis_tac[] >>
+  `(case sop of NONE => sw = NONE | SOME op =>
+      ?w. sw = SOME w /\ eval_operand op t = SOME w /\ op_taint tt op = {})` by
+    (Cases_on `sop` >> Cases_on `sw` >> gvs[optionTheory.OPTREL_def] >> metis_tac[]) >>
+  simp[] >> metis_tac[]
+QED
+
+Resume create_blueprint_finish_dispatch_inputs[materialized]:
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. _ ==> stmt_state_rel H ctx func cenv cx ee s /\ _`
+    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  qpat_assum `!b k. _ ==> read_memory b k t = _`
+    (assume_tac o REWRITE_RULE [memoryReadPropsTheory.read_memory_eq_mem_bytes_at]) >>
+  `w2n s.vs_fmp = w2n s.vs_fmp` by REFL_TAC >>
+  qpat_assum `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx es s0`
+    (mp_then (Pos (el 2))
+      (drule_all_then (map_every assume_tac o CONJUNCTS))
+      bodyFullDynamicBufferTheory.dynamic_buffer_materialized_frame) >>
+  simp[]
+QED
+
+Finalise create_blueprint_finish_dispatch_inputs
+
+(* Recover the prepared-path inputs at the offset return. *)
+Theorem create_blueprint_finish_path_inputs:
+  compile_create_blueprint_check lit target off sm = (codep,sn) /\
+  compile_create_blueprint_append target amount sop off codep args_ptr cnt rof sn = (result,sb) /\
+  fn_has_code sm sb func /\ MEM func ctx.ctx_functions /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
+  accounts_well_typed ee.accounts /\ LENGTH bs = 20 /\
+  code = (lookup_account (word_of_bytes_be bs) ee.accounts).code ==>
+  ctx_has_dalloca ctx /\ allocas_from lo s /\
+  allocas_below_fmp s /\ s.vs_alloca_next <= w2n s.vs_fmp /\ LENGTH code <= 24576 /\
+  code = (lookup_account (w2w (typed_val_to_w256 (BaseTV AddressT) (BytesV bs))) s.vs_accounts).code
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. _ ==> stmt_state_rel H ctx func cenv cx ee s /\ _`
+    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  `ctx_has_dalloca ctx` by suspend "dalloca" >>
+  `allocas_below_fmp s /\ s.vs_alloca_next <= w2n s.vs_fmp` by suspend "frontier" >>
+  qpat_assum `stmt_state_rel _ ctx func cenv cx ee s`
+    (mp_then Any (mp_then Any (map_every assume_tac o CONJUNCTS)
+       accountsRelPropsTheory.state_rel_accounts)
+       stateRelProjTheory.stmt_state_rel_state_rel) >>
+  `LENGTH code <= 24576 /\
+   (lookup_account (w2w (typed_val_to_w256 (BaseTV AddressT) (BytesV bs))) s.vs_accounts).code = code` by
+    (drule_all_then strip_assume_tac exprSimSliceExtcodeTheory.slice_extcode_account >> simp[]) >>
+  fs[ghost_inv_at_def]
+QED
+
+Resume create_blueprint_finish_path_inputs[dalloca]:
+  drule dallocaCreateGeometryTheory.create_blueprint_create_prefix >>
+  disch_then (qx_choosel_then [`len`,`u`,`buf`,`v`,`w`,`r`,`created`,`r'`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `compile_alloc_dynamic _ _ = _`
+    (assume_tac o REWRITE_RULE [compile_alloc_dynamic_def]) >>
+  `cs_extends sm sn` by
+    metis_tac[externalEntryShapeTheory.compile_create_blueprint_check_labels,pairTheory.SND] >>
+  `cs_extends sm u /\ cs_extends u v /\ cs_extends v w` by
+    (rpt conj_tac
+     >- (irule cs_extends_trans >> qexists_tac `sn` >> conj_tac
+         >- first_assum ACCEPT_TAC >>
+         qpat_assum `emit_op ADD _ sn = (_,u)`
+           (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_op_grows))
+     >- qpat_assum `emit_op DALLOCA _ u = (_,v)`
+          (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_op_grows) >>
+     qpat_assum `emit_void EXTCODECOPY _ v = ((),w)`
+       (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_void_grows)) >>
+  `cs_extends w r` by
+    (Cases_on `cnt = Lit 0w`
+     >- (qpat_assum `cnt = Lit 0w` (fn empty =>
+           qpat_assum `if cnt = Lit 0w then r = w else _`
+             (SUBST1_TAC o SIMP_RULE bool_ss [empty])) >>
+         simp[NoAsms,cs_extends_refl]) >>
+     qpat_assum `cnt <> Lit 0w` (fn nonempty =>
+       qpat_assum `if cnt = Lit 0w then r = w else _`
+         (qx_choosel_then [`args_dest`,`sx`] strip_assume_tac o
+          SIMP_RULE bool_ss [nonempty,compile_copy_memory_dynamic_def])) >>
+     irule cs_extends_trans >> qexists_tac `sx` >> conj_tac
+     >- qpat_assum `emit_op ADD _ w = (args_dest,sx)`
+          (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_op_grows) >>
+     qpat_assum `emit_void MCOPY _ sx = ((),r)`
+       (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_void_grows)) >>
+  `cs_extends r r'` by
+    (qpat_assum `(case sop of NONE => _ | SOME _ => _) r = (created,r')` mp_tac >>
+     Cases_on `sop` >> simp[NoAsms] >>
+     disch_then (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_op_grows)) >>
+  `cs_extends r' sb` by
+    metis_tac[externalEntryShapeTheory.compile_check_create_result_labels,pairTheory.SND] >>
+  `fn_has_code u v func` by
+    (irule fragExecTheory.fn_has_code_mid >>
+     qpat_assum `fn_has_code sm sb func` (irule_at Any) >>
+     simp[] >> metis_tac[cs_extends_trans]) >>
+  qpat_assum `emit_op DALLOCA _ _ = _`
+    (mp_then Any (map_every assume_tac o CONJUNCTS) exprLoweringPropsTheory.emit_op_extends) >>
+  qpat_assum `emit_op DALLOCA _ _ = _`
+    (mp_then Any (map_every assume_tac o CONJUNCTS) emitHelperPropsTheory.emitted_insts_emit_op) >>
+  qpat_assum `same_blocks u v` (strip_assume_tac o REWRITE_RULE [same_blocks_def]) >>
+  qpat_assum `fn_has_code u v func` (mp_then Any mp_tac stmtReasonLitFragMemoryTheory.fn_has_code_code) >>
+  disch_then (qspec_then `emitted_insts u v` mp_tac) >> simp[] >> strip_tac >>
+  simp[ctx_has_dalloca_def,EXISTS_MEM] >> qexists `func` >> simp[] >>
+  qexists `mk_inst u.cs_next_id DALLOCA [len] [STRING #"%" (toString u.cs_next_var)]` >>
+  reverse conj_tac >- simp[mk_inst_def] >> first_x_assum irule >> simp[]
+QED
+
+Resume create_blueprint_finish_path_inputs[frontier]:
+  `s.vs_alloca_next <= w2n s.vs_initial_fmp /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx ee s`
+       (mp_then Any mp_tac stateRelProjTheory.stmt_state_rel_fmp_room) >>
+     simp[fmp_room_def] >> rpt strip_tac >> decide_tac) >>
+  `s.vs_alloca_next <= w2n s.vs_fmp` by decide_tac >>
+  simp[allocas_below_fmp_def] >>
+  qpat_assum `stmt_state_rel _ ctx func cenv cx ee s`
+    (mp_then Any strip_assume_tac stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
+  fs[alloca_inv_def,alloca_next_valid_def] >> rpt strip_tac >> first_x_assum drule >> decide_tac
+QED
+
+Finalise create_blueprint_finish_path_inputs
+
 (* The check uses the post-operand account view. Only its success arm
    constructs a DALLOCA window; size failure still belongs to dispatch. *)
 Theorem create_blueprint_finish[local]:
@@ -10081,26 +10278,11 @@ Theorem create_blueprint_finish[local]:
        (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `ctx_has_dalloca ctx` by suspend "dalloca" >>
-  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
-    fs[storage_trace_domain_def] >>
-  qpat_assum `!H. _ ==> stmt_state_rel H ctx func cenv cx ee s /\ _`
-    (drule_then (map_every assume_tac o CONJUNCTS)) >>
-  qpat_assum `stmt_state_rel _ ctx func cenv cx ee s`
-    (mp_then Any (mp_then Any (map_every assume_tac o CONJUNCTS)
-       accountsRelPropsTheory.state_rel_accounts)
-       stateRelProjTheory.stmt_state_rel_state_rel) >>
-  `LENGTH code <= 24576 /\
-   (lookup_account (w2w (typed_val_to_w256 (BaseTV AddressT) (BytesV bs))) s.vs_accounts).code = code` by
-    (drule_all_then strip_assume_tac exprSimSliceExtcodeTheory.slice_extcode_account >> simp[]) >>
-  `allocas_from lo s` by fs[ghost_inv_at_def] >>
-  `allocas_below_fmp s /\ s.vs_alloca_next <= w2n s.vs_fmp` by suspend "frontier" >>
+  drule_all_then (map_every assume_tac o CONJUNCTS) create_blueprint_finish_path_inputs >>
   `gas_origin_ptr_path (DF (storage_trace_horizon ee.storage_trace),lo,explicit,ctx,func,PG)
      (s,G,tn) [] (OK s,G,tn)` by simp[cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules] >>
-  qpat_assum `(lookup_account _ s.vs_accounts).code = code` (assume_tac o SYM) >>
   drule_all create_blueprint_prepared_path >>
   qpat_x_assum `code = (lookup_account _ s.vs_accounts).code` kall_tac >>
-  qpat_x_assum `(lookup_account _ s.vs_accounts).code = code` kall_tac >>
   qpat_x_assum `code = (lookup_account _ ee.accounts).code` kall_tac >>
   pure_rewrite_tac [LET_THM] >> BETA_TAC >>
   qabbrev_tac `n = blueprint_copy_size (w2n ow) code` >>
@@ -10109,73 +10291,6 @@ Proof
         (fn th => pure_rewrite_tac [EQF_INTRO th,COND_CLAUSES]) >> suspend "bad") >>
   qpat_assum `if lit then _ else _`
     (fn th => pure_rewrite_tac [EQT_INTRO th,COND_CLAUSES]) >> suspend "good"
-QED
-
-Resume create_blueprint_finish[dalloca]:
-  drule dallocaCreateGeometryTheory.create_blueprint_create_prefix >>
-  disch_then (qx_choosel_then [`len`,`u`,`buf`,`v`,`w`,`r`,`created`,`r'`]
-    (map_every assume_tac o CONJUNCTS)) >>
-  qpat_x_assum `compile_alloc_dynamic _ _ = _`
-    (assume_tac o REWRITE_RULE [compile_alloc_dynamic_def]) >>
-  `cs_extends sm sn` by
-    metis_tac[externalEntryShapeTheory.compile_create_blueprint_check_labels,pairTheory.SND] >>
-  `cs_extends sm u /\ cs_extends u v /\ cs_extends v w` by
-    (rpt conj_tac
-     >- (irule cs_extends_trans >> qexists_tac `sn` >> conj_tac
-         >- first_assum ACCEPT_TAC >>
-         qpat_assum `emit_op ADD _ sn = (_,u)`
-           (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_op_grows))
-     >- qpat_assum `emit_op DALLOCA _ u = (_,v)`
-          (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_op_grows) >>
-     qpat_assum `emit_void EXTCODECOPY _ v = ((),w)`
-       (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_void_grows)) >>
-  `cs_extends w r` by
-    (Cases_on `cnt = Lit 0w`
-     >- (qpat_assum `cnt = Lit 0w` (fn empty =>
-           qpat_assum `if cnt = Lit 0w then r = w else _`
-             (SUBST1_TAC o SIMP_RULE bool_ss [empty])) >>
-         simp[NoAsms,cs_extends_refl]) >>
-     qpat_assum `cnt <> Lit 0w` (fn nonempty =>
-       qpat_assum `if cnt = Lit 0w then r = w else _`
-         (qx_choosel_then [`args_dest`,`sx`] strip_assume_tac o
-          SIMP_RULE bool_ss [nonempty,compile_copy_memory_dynamic_def])) >>
-     irule cs_extends_trans >> qexists_tac `sx` >> conj_tac
-     >- qpat_assum `emit_op ADD _ w = (args_dest,sx)`
-          (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_op_grows) >>
-     qpat_assum `emit_void MCOPY _ sx = ((),r)`
-       (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_void_grows)) >>
-  `cs_extends r r'` by
-    (qpat_assum `(case sop of NONE => _ | SOME _ => _) r = (created,r')` mp_tac >>
-     Cases_on `sop` >> simp[NoAsms] >>
-     disch_then (ACCEPT_TAC o MATCH_MP stmtSimAugAssignPlaceTheory.aug_place_emit_op_grows)) >>
-  `cs_extends r' sb` by
-    metis_tac[externalEntryShapeTheory.compile_check_create_result_labels,pairTheory.SND] >>
-  `fn_has_code u v func` by
-    (irule fragExecTheory.fn_has_code_mid >>
-     qpat_assum `fn_has_code sm sb func` (irule_at Any) >>
-     simp[] >> metis_tac[cs_extends_trans]) >>
-  qpat_assum `emit_op DALLOCA _ _ = _`
-    (mp_then Any (map_every assume_tac o CONJUNCTS) exprLoweringPropsTheory.emit_op_extends) >>
-  qpat_assum `emit_op DALLOCA _ _ = _`
-    (mp_then Any (map_every assume_tac o CONJUNCTS) emitHelperPropsTheory.emitted_insts_emit_op) >>
-  qpat_assum `same_blocks u v` (strip_assume_tac o REWRITE_RULE [same_blocks_def]) >>
-  qpat_assum `fn_has_code u v func` (mp_then Any mp_tac stmtReasonLitFragMemoryTheory.fn_has_code_code) >>
-  disch_then (qspec_then `emitted_insts u v` mp_tac) >> simp[] >> strip_tac >>
-  simp[ctx_has_dalloca_def,EXISTS_MEM] >> qexists `func` >> simp[] >>
-  qexists `mk_inst u.cs_next_id DALLOCA [len] [STRING #"%" (toString u.cs_next_var)]` >>
-  reverse conj_tac >- simp[mk_inst_def] >> first_x_assum irule >> simp[]
-QED
-
-Resume create_blueprint_finish[frontier]:
-  `s.vs_alloca_next <= w2n s.vs_initial_fmp /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
-    (qpat_assum `stmt_state_rel _ ctx func cenv cx ee s`
-       (mp_then Any mp_tac stateRelProjTheory.stmt_state_rel_fmp_room) >>
-     simp[fmp_room_def] >> rpt strip_tac >> decide_tac) >>
-  `s.vs_alloca_next <= w2n s.vs_fmp` by decide_tac >>
-  simp[allocas_below_fmp_def] >>
-  qpat_assum `stmt_state_rel _ ctx func cenv cx ee s`
-    (mp_then Any strip_assume_tac stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
-  fs[alloca_inv_def,alloca_next_valid_def] >> rpt strip_tac >> first_x_assum drule >> decide_tac
 QED
 
 Resume create_blueprint_finish[bad]:
@@ -10193,55 +10308,11 @@ Resume create_blueprint_finish[good]:
   qabbrev_tac `N = n + LENGTH args` >>
   irule gasOutcomeFullStmtsTheory.gas_outcome_full_zero_prefix >>
   qexistsl [`Gmat`,`t`,`tt`] >> conj_tac >- simp[] >>
-  `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_labels = s.vs_labels` by
-    (conj_tac
-     >- (qpat_assum `_ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|> = _`
-           (mp_tac o AP_TERM ``\u:venom_state. u.vs_alloca_next``) >> simp[])
-     >> qpat_assum `_ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|> = _`
-          (mp_tac o AP_TERM ``\u:venom_state. u.vs_labels``) >> simp[]) >>
-  `alloca_history func t` by
-    (irule bodyFullPathHistoryTheory.body_full_path_alloca_history >>
-     qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,Gmat,tt)`
-       (qspecl_then [`DF (storage_trace_horizon ee.storage_trace)`,`explicit`] (irule_at Any)) >>
-     simp[] >> metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca]) >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx ee t /\ storage_well_formed_on cx ee (FST H) /\
-    ghost_inv_at (DF H) lo d cenv cx ee Gmat tt t /\ wb_frame cenv es ee sa s0 t /\
-    ghost_kept_at lo cenv es sa G0 tn0 s0 Gmat tt` by suspend "materialized" >>
-  suspend "dispatch"
-QED
-
-Resume create_blueprint_finish[materialized]:
-  gen_tac >> disch_tac >>
-  qpat_assum `!H. _ ==> stmt_state_rel H ctx func cenv cx ee s /\ _`
-    (drule_then (map_every assume_tac o CONJUNCTS)) >>
-  qpat_assum `!b k. _ ==> read_memory b k t = _`
-    (assume_tac o REWRITE_RULE [memoryReadPropsTheory.read_memory_eq_mem_bytes_at]) >>
-  `w2n s.vs_fmp = w2n s.vs_fmp` by REFL_TAC >>
-  qpat_assum `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx es s0`
-    (mp_then (Pos (el 2))
-      (drule_all_then (map_every assume_tac o CONJUNCTS))
-      bodyFullDynamicBufferTheory.dynamic_buffer_materialized_frame) >>
-  simp[]
-QED
-
-Resume create_blueprint_finish[dispatch]:
-  `sa.cs_next_var <= sc.cs_next_var` by decide_tac >>
-  `local_ptrs_reserved cenv sc` by
-    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
-  `(!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sc x) /\
-   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sc x)` by
-    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-  `!op. (!x. op = Var x ==> not_fresh_at sm x) ==>
-      eval_operand op t = eval_operand op s /\ op_prov Gmat op = op_prov G op /\
-      op_taint tt op = op_taint tn op` by
-    (match_mp_tac bodyPtrBytestringBuiltinsExternalSliceTheory.reserved_operand_ghost_frame >> simp[]) >>
   `!x. amount = Var x \/ sop = SOME (Var x) ==> not_fresh_at sm x` by
     (qpat_assum `!x. MEM (Var x) _ \/ _ ==> _` mp_tac >> simp[MEM] >> metis_tac[]) >>
-  `eval_operand amount t = SOME aw /\ op_taint tt amount = {}` by metis_tac[] >>
-  `(case sop of NONE => sw = NONE | SOME op =>
-      ?w. sw = SOME w /\ eval_operand op t = SOME w /\ op_taint tt op = {})` by
-    (Cases_on `sop` >> Cases_on `sw` >> gvs[optionTheory.OPTREL_def] >> metis_tac[]) >>
+  qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) [] (OK t,Gmat,tt)`
+    (qspecl_then [`DF (storage_trace_horizon ee.storage_trace)`,`explicit`] assume_tac) >>
+  drule_all_then (map_every assume_tac o CONJUNCTS) create_blueprint_finish_dispatch_inputs >>
   `w2n (n2w N:bytes32) = N` by simp[wordsTheory.w2n_n2w] >>
   `!tail. source (ee with gas_obs := tail) =
     if N > 2 * max_code_size then
@@ -10251,8 +10322,6 @@ Resume create_blueprint_finish[dispatch]:
       (read_result cx) (ee with gas_obs := tail)` by
     (qpat_assum `!tail. source (ee with gas_obs := tail) = _`
        (fn th => simp[Once th,Abbr `N`])) >>
-  qpat_assum `!H. _ ==> stmt_state_rel H ctx func cenv cx ee t /\ _`
-    (drule_then (map_every assume_tac o CONJUNCTS)) >>
   irule create_dispatch_outcome_full >>
   qpat_assum `compile_create_dispatch (Var p) lenop _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `eval_operand (Var p) t = SOME _` (irule_at Any) >>
