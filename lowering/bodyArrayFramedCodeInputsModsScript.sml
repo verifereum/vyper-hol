@@ -1,7 +1,6 @@
-(* Linked runtime-code array subscript. *)
-Theory bodySubscriptArrayFramedCodeMods
+(* Linked runtime-code array subscript inputs. *)
+Theory bodyArrayFramedCodeInputsMods
 Ancestors
-  bodySubscriptArrayRouteDefsMods bodyFullPredsMods bodyFullPostsMods
   exprSimHypsDefs exprBodyPreProps exprSimTopLevelProps
   exprSimSubscriptArrayFramed exprLoweringProps
   gasShadowCompileStmtHelpers gasShadowState gasShadowCompileBase
@@ -10,7 +9,7 @@ Ancestors
   vyperTypeCallStackSoundness vyperTypeInvariants exprSimSubscriptArraySource
   fragExec compileEnv list
 
-Theorem framed_code_subscript_base_pre[local]:
+Theorem framed_code_subscript_base_pre:
   expr_body_pre_mods mods ce cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et bd /\
   vv_location (FST (compile_expr ce ty obj st)) = SOME LocCode ==>
@@ -73,7 +72,7 @@ Proof
   Cases_on `lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr idx) shm` >> simp[]
 QED
 
-Theorem framed_code_subscript_cuts[local]:
+Theorem framed_code_subscript_cuts:
   compile_expr ce ty (Subscript ann obj idx) sa = (vv,sb) /\
   compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr (Subscript ann obj idx)) sha = (vv,shb) /\
   gas_shadow_state sa sha /\
