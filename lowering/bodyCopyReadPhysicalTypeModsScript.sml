@@ -192,7 +192,7 @@ val copy_named_literal_read_tac =
       compatible_bound_def] >>
   imp_res_tac word_size_monotone >> decide_tac;
 
-Theorem copy_read_lowered_type_mods[local]:
+Theorem copy_read_lowered_type_mods:
   !ce e es v ee.
     expr_sim_inv_mods mods ce cx env es /\ well_typed_expr env e /\
     alloc_limits_expr ce e /\ call_evaluation_safe cx (int_calls_expr e) /\
