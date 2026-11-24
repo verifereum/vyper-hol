@@ -44,10 +44,35 @@ Theorem body_inv_build_internal_env_mods:
     with <| ce_target := caller.ce_target; ce_is_ctor := caller.ce_is_ctor |> ==>
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx
 Proof
-  rw[contract_inv_def, cenv_module_pins_mods_def, module_body_inv_def,
-     build_compile_env_unit_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[immutable_section_layout_mods_def] >> res_tac >> fs[] >> metis_tac[]
+  strip_tac >>
+  qpat_x_assum `(cenv:compile_env) = _` SUBST_ALL_TAC >>
+  `caller.ce_module_vars =
+    add_immutable_locations_unit
+      (get_struct_fields (make_struct_fields_map_mods mods)) mods
+      (add_module_var_locations_mods mods FEMPTY)` by
+    (qpat_assum `contract_inv mods exps ctx caller cx`
+       (map_every assume_tac o CONJUNCTS o REWRITE_RULE [contract_inv_def]) >>
+     qpat_assum `cenv_module_pins_mods mods caller`
+       (map_every assume_tac o CONJUNCTS o REWRITE_RULE [cenv_module_pins_mods_def]) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_x_assum `contract_inv mods exps ctx caller cx` mp_tac >>
+  simp[contract_inv_def, cenv_module_pins_mods_def, module_body_inv_def,
+       immutable_section_layout_mods_def, build_compile_env_unit_def,
+       pairTheory.ELIM_UNCURRY] >>
+  strip_tac >> rpt conj_tac >> simp[]
+  >- (qx_gen_tac `sid` >> qx_gen_tac `tls` >> disch_tac >>
+      qpat_assum
+        `!s ts. ALOOKUP mods s = SOME ts ==>
+           supported_module_headers ts /\
+           (s = NONE ==> supported_program ts /\
+              (cx.in_deploy ==> supported_program_deploy ts)) /\
+           ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel s) ts))`
+        (qspecl_then [`sid`,`tls`] mp_tac) >>
+      simp[])
+  >~ [`acyclic_struct_metadata (make_struct_fields_map_mods mods)`]
+  >- (qpat_assum `caller.ce_struct_fields = _` (SUBST1_TAC o SYM) >>
+      first_assum ACCEPT_TAC) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem body_inv_ce_vars_update[local,simp]:
