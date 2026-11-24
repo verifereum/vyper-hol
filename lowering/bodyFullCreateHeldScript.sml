@@ -670,16 +670,36 @@ Proof
         `!H. valid_horizon cx st0 H ee'.storage_trace ==> _`,
         `!H. valid_horizon cx st0 H ee.storage_trace ==> _`,
         `state_rel H func cenv cx ee s`] >>
-     Cases_on `oc.co_success` >>
-     fs[stmt_state_rel_def, state_rel_def, Abbr `ee'`, Abbr `taken`, Abbr `t`,
-        local_ptrs_rel_def, local_region_def, local_backed_def, lookup_var_def,
-        alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
-        alloca_room_def, fmp_room_def, pending_alloca_size_def,
-        immutable_alloca_sep_def, immutable_base_zero_def,
-        storage_rel_def, transient_rel_def, contract_storage_def, contract_transient_def,
-        accounts_rel_def, immutables_rel_def, extCallOracleStepTheory.logs_rel_eq,
-        listTheory.LIST_REL_APPEND] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     pure_rewrite_tac[stmt_state_rel_def, state_rel_def] >>
+     rpt conj_tac
+     >- (qpat_x_assum `local_ptrs_rel _ _ _ s` mp_tac >>
+         simp[local_ptrs_rel_def, local_region_def, local_backed_def,
+              lookup_var_def, Abbr `ee'`, Abbr `taken`, Abbr `t`])
+     >- simp[storage_rel_def, contract_storage_def, Abbr `ee'`, Abbr `taken`, Abbr `t`]
+     >- simp[]
+     >- simp[transient_rel_def, contract_transient_def, Abbr `ee'`, Abbr `taken`, Abbr `t`]
+     >- simp[]
+     >- (qpat_x_assum `accounts_rel _ _ ee s` mp_tac >>
+         simp[accounts_rel_def, Abbr `ee'`, Abbr `taken`, Abbr `t`])
+     >- (qpat_x_assum `immutables_rel _ _ _ _ ee s` mp_tac >>
+         simp[immutables_rel_def, Abbr `ee'`, Abbr `taken`, Abbr `t`])
+     >- (qpat_x_assum `logs_rel _ _ ee s` mp_tac >> Cases_on `oc.co_success` >>
+         simp[extCallOracleStepTheory.logs_rel_eq, Abbr `ee'`, Abbr `taken`, Abbr `t`])
+     >- simp[Abbr `t`]
+     >- simp[Abbr `ee'`, Abbr `taken`, Abbr `t`]
+     >- simp[Abbr `ee'`, Abbr `taken`, Abbr `t`, listTheory.LIST_REL_APPEND]
+     >- (Cases_on `oc.co_success` >> simp[Abbr `ee'`, Abbr `taken`, Abbr `t`])
+     >- (qpat_x_assum `alloca_inv s` mp_tac >>
+         simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def, Abbr `t`])
+     >- (qpat_x_assum `alloca_room _ _ s` mp_tac >>
+         simp[alloca_room_def, pending_alloca_size_def, Abbr `t`])
+     >- (qpat_x_assum `fmp_room _ _ s` mp_tac >>
+         simp[fmp_room_def, pending_alloca_size_def, Abbr `t`])
+     >- (drule immutable_alloca_sep_fields >> disch_then irule >>
+         simp[local_region_def, lookup_var_def, Abbr `ee'`, Abbr `taken`, Abbr `t`] >>
+         metis_tac[])
+     >- simp[]
+     >- (simp[Abbr `t`] >> first_assum ACCEPT_TAC)) >>
   qexistsl_tac [`ee'`,`t`,`a`,`rq`,`rq'`] >>
   simp[exec_create_def] >>
   simp[Abbr `t`, Abbr `ee'`, Abbr `taken`, Abbr `rq`, Abbr `rq'`, Abbr `k`, Abbr `a`]
