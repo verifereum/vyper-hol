@@ -42,7 +42,7 @@ Proof
     (gvs[type_stmt_def, atarget_accepts_def, well_typed_expr_def, AllCaseEqs()] >>
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >> Cases_on `asg` >> gvs[]) >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_all_then strip_assume_tac supported_expr_body_calls_mods >>
   `~supported_expr_exists (const_name_root_mods mods) e` by
     (drule_then assume_tac contract_inv_cenv_modules >>
      drule stmt_exprs_ok_module_const_name_free >>
@@ -57,13 +57,6 @@ Proof
      metis_tac[alloc_limits_expr_not_extcode]) >>
   `call_evaluation_safe cx (int_calls_expr e)` by
     fs[int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
-  `EVERY (\c. ?ts. get_module_code cx (FST c) = SOME ts /\
-                   supported_program ts /\
-                   IS_SOME (supported_function_decl ts (NONE,SND c) Internal))
-          (int_calls_expr e)` by
-    (mp_tac (Q.INST [`e` |-> `e`] int_calls_expr_main_split) >>
-     disch_then (fn th => irule (iffLR th |> cj 2)) >>
-     fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
   `(!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
        EXISTS (occurs_abi_decode_target target o SND) mods)` by
     (fs[supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
@@ -104,7 +97,7 @@ Proof
     (SIMP_RULE (srw_ss()) [main_module_def, ALOOKUP_def]
       (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`]
         (SPEC_ALL assign_base_local_rhs_pre_mods))) >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_all_then strip_assume_tac bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
   drule_then assume_tac contract_inv_type_env >>
   fs[expr_body_pre_split_def, supported_stmt_expr_exists_def,
      supported_assignment_exists_def, vyperContextTheory.type_env_all_modules_def,

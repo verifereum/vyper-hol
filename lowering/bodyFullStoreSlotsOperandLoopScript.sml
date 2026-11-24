@@ -1,6 +1,7 @@
 Theory bodyFullStoreSlotsOperandLoop
 Ancestors
   fragGasOriginPtrLoop fragGasCopyLoop fragGasOriginPtrDead placeStoreCopyPath stmtSimStoreCopy
+  fragGasCopySeqLiftProps
   bodyMemAssignTopCopyPaths bodyMemAssignTopCopyLoop
   decoderGhostFramePtr bodyFullStoreSlotsRetired
   fragGasSeqPtr fragGasSeqPtrContext fragGasOriginPtr ptrSafeRun ptrDiscipline
