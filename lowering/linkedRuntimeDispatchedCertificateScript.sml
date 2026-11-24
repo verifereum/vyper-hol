@@ -3883,7 +3883,382 @@ val linked_empty_body_support_tac =
        (strip_assume_tac o BETA_RULE o PURE_REWRITE_RULE [supported_function_body_def, LET_THM]) >>
      simp[NoAsms, Abbr `bindings`] >> first_assum ACCEPT_TAC);
 
+val linked_empty_body_live_tac =
+  `src = ALOOKUP exps tx.function_name` by
+    (qpat_assum `tx.function_name = "__default__"` (fn name =>
+       simp[NoAsms, Abbr `src`, name])) >>
+  `cx = initial_evaluation_context am.sources am.layouts tx src /\
+    cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn = tx` by
+    simp[NoAsms, Abbr `cx`, initial_evaluation_context_def] >>
+  `vyperInterpreter$lookup_function src tx.function_name External tops =
+      SOME (mut,nr,args,[],ret,fbody) /\
+    external_return_type_mods mods exps tx.function_name = ret` by
+    (qpat_assum `tx.function_name = "__default__"` (fn name =>
+       simp[NoAsms, name, Abbr `src`]) >> conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all linkedRuntimeSourceLookupTheory.linked_runtime_source_lookup >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `lookup_exported_function cx am tx.function_name = SOME (mut,nr,args,[],ret,fbody)` by
+    (qpat_assum `lookup_exported_function cx am tx.function_name = _` SUBST1_TAC >>
+     first_assum ACCEPT_TAC) >>
+  `MEM (src,tops) mods` by drule_then ACCEPT_TAC ALOOKUP_MEM >>
+  `MEM (src,tx.function_name) (linked_main_roots mods ++ linked_export_roots exps)` by
+    (Cases_on `src` >> simp_tac bool_ss [MEM_APPEND]
+     >- (disj1_tac >>
+         qpat_assum `ALOOKUP mods NONE = SOME tops` (fn main =>
+           simp[NoAsms, main, linked_main_roots_def, contract_keys_def, MEM_APPEND]) >>
+         disj1_tac >> simp[NoAsms, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+         qpat_assum `MEM (FunctionDecl External mut nr _ tx.function_name args [] ret fbody) tops`
+           (fn decl => exists_tac (rand (rator (concl decl))) >>
+             simp[NoAsms, external_name_keys_toplevel_def, decl])) >>
+     disj2_tac >> simp[NoAsms, linked_export_roots_def, MEM_MAP, EXISTS_PROD] >>
+     FIRST [qpat_assum `SOME _ = ALOOKUP exps tx.function_name`
+       (ACCEPT_TAC o MATCH_MP ALOOKUP_MEM o SYM),
+       qpat_assum `ALOOKUP exps tx.function_name = SOME _`
+         (ACCEPT_TAC o MATCH_MP ALOOKUP_MEM)]) >>
+  `MEM (src,tx.function_name) (linked_live_functions mods exps)` by
+    (PURE_REWRITE_TAC [linked_live_functions_def, linked_live_functions_from_def, LET_THM] >>
+     BETA_TAC >> irule (cj 1 call_closure_from_roots) >> first_assum ACCEPT_TAC) >>
+  `EVERY (\k. MEM k (linked_live_functions mods exps)) (int_calls_stmts fallback_code)` by
+    (simp_tac bool_ss [Abbr `fallback_code`] >>
+     drule_all_then ACCEPT_TAC checked_live_body_subst_calls_mods);
+
+val linked_empty_body_immutable_tac =
+  `check_linked_state_ownership am.layouts tx.target mods (linked_live_functions mods exps)` by
+    (PURE_REWRITE_TAC [GSYM linked_state_ownership_ok_def] >>
+     drule_all_then ACCEPT_TAC check_contract_linked_state_ownership_ok) >>
+  `immutable_section_layout_mods mods ce` by
+    drule_then ACCEPT_TAC contract_inv_immutable_section_layout >>
+  `fallback_types.bare_global_assignable = art.cta_bare_global_assignable` by
+    simp[NoAsms, Abbr `fallback_types`, artifact_env_def] >>
+  `!key r. ALOOKUP (consts_env_mods mods) key = SOME r ==> accesses_expr r = []` by
+    (qx_genl_tac [`const_key`,`rhs`] >> PairCases_on `const_key` >> strip_tac >>
+     qpat_assum `!sid id r. ALOOKUP (consts_env_mods mods) (sid,id) = SOME r ==> _`
+       (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  `~supported_stmts_expr_exists (unallocated_bare_global_root ce fallback_types) fallback_code /\
+    (!key. MEM (WriteAcc (StateRef key)) (accesses_stmts fallback_code) /\
+           IS_SOME (FLOOKUP fallback_types.bare_global_assignable key) ==>
+           IS_SOME (FLOOKUP ce.ce_module_vars key))` by
+    (simp_tac bool_ss [Abbr `fallback_code`] >>
+     drule_all_then ACCEPT_TAC linkedEntryImmutableGuardsTheory.linked_checked_body_immutable_guards) >>
+  `stmts_no_control_escape fbody` by
+    (qpat_assum `check_function_body am.layouts tx.target mods art src
+         External mut nr args [] ret fbody`
+       (map_every assume_tac o CONJUNCTS o SIMP_RULE bool_ss
+         [check_function_body_def, LET_THM]) >> first_assum ACCEPT_TAC);
+
+val linked_empty_body_lock_tac =
+  qabbrev_tac `raw = lookup_raw_return_or_F src tx.function_name External tops` >>
+  `MEM (FunctionDecl External mut nr raw tx.function_name args [] ret fbody) tops` by
+    (simp_tac bool_ss [Abbr `raw`] >> first_assum ACCEPT_TAC) >>
+  `function_header_ok External mut nr raw tx.function_name args [] ret` by
+    drule_all_then ACCEPT_TAC check_contract_function_header >>
+  `nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
+          is_view_mut mut = (mut = View)` by
+    (strip_tac >>
+     conj_tac
+     >- (qpat_assum `cx = initial_evaluation_context am.sources am.layouts tx src` SUBST1_TAC >>
+         qpat_assum `nr` (ASSUME_TAC o EQT_INTRO) >>
+         `MEM (FunctionDecl External mut T raw tx.function_name args [] ret fbody) tops` by
+           (qpat_assum `nr = T` (fn enabled =>
+              qpat_assum `MEM (FunctionDecl External mut nr raw tx.function_name args [] ret fbody) tops`
+                (ACCEPT_TAC o PURE_REWRITE_RULE [enabled]))) >>
+         Q.SUBGOAL_THEN `src = NONE \/ MEM (src,tx.function_name) (linked_live_functions mods exps)`
+           assume_tac >- (disj2_tac >> first_assum ACCEPT_TAC) >>
+         drule_all_then mp_tac check_contract_linked_lock_slot >>
+         Cases_on `ALOOKUP am.layouts tx.target`
+         >- (qpat_assum `ALOOKUP am.layouts tx.target = NONE` (fn layout =>
+               simp[NoAsms, layout, initial_evaluation_context_def, lookup_nonreentrant_slot_def])) >>
+         Cases_on `x` >>
+         qpat_assum `ALOOKUP am.layouts tx.target = SOME _` (fn layout =>
+           simp[NoAsms, layout, initial_evaluation_context_def, lookup_nonreentrant_slot_def])) >>
+     qpat_assum `nr` (ASSUME_TAC o EQT_INTRO) >>
+     qpat_assum `nr = T` (fn enabled =>
+       qpat_assum `function_header_ok External mut nr raw tx.function_name args [] ret`
+         (mp_tac o MATCH_MP function_header_nonreentrant_view o PURE_REWRITE_RULE [enabled])) >>
+     simp[NoAsms, is_view_mut_def]) >>
+  `raw ==> ?n. ret = BaseT (BytesT (Dynamic n))` by
+    (qpat_assum `function_header_ok External mut nr raw tx.function_name args [] ret`
+       mp_tac >> simp[NoAsms, function_header_ok_def]) >>
+  `ret <> NoneT ==> assignable_type (get_tenv cx) ret` by
+    (strip_tac >> drule_all_then mp_tac check_contract_function_return_type >>
+     qpat_assum `get_tenv cx = type_env_all_modules mods` (fn tenv =>
+       qpat_assum `ret <> NoneT` (fn nonempty => simp[NoAsms, tenv, nonempty]))) >>
+  `global_nonreentrant_slot < dimword (:256)` by
+    simp[NoAsms, contextTheory.global_nonreentrant_slot_def, wordsTheory.dimword_def];
+
+val linked_empty_body_base_tac =
+  `fallback_base.ce_modules = mods /\ fallback_base.ce_is_external /\ ~fallback_base.ce_is_ctor /\
+   fallback_base.ce_return_pc = NONE /\ fallback_base.ce_return_buf = NONE /\
+   fallback_base.ce_imm_alloca = NONE /\ fallback_base.ce_ctor_exit_label = NONE /\
+   fallback_base.ce_type_env = type_env_all_modules mods /\
+   fallback_base.ce_struct_fields = make_struct_fields_map_mods mods` by
+    simp[NoAsms, Abbr `fallback_base`, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY];
+
+val linked_empty_body_package_tac =
+  `ce.ce_modules = mods /\ ce.ce_is_external /\ ~ce.ce_is_ctor /\
+   ce.ce_return_pc = NONE /\ ce.ce_return_buf = NONE /\ ce.ce_imm_alloca = NONE /\
+   ce.ce_ctor_exit_label = NONE /\ ce.ce_nonreentrant = (nr,global_nonreentrant_slot,T,mut = View) /\
+   ce.ce_raw_return = raw /\ ce.ce_type_env = type_env_all_modules mods /\
+   ce.ce_struct_fields = make_struct_fields_map_mods mods` by
+    (qpat_assum `ce = _` SUBST1_TAC >>
+     Cases_on `ret = NoneT` >>
+     pop_assum (fn ret_case => qpat_assum `tx.function_name = "__default__"` (fn name =>
+       simp[NoAsms, ret_case, name, Abbr `raw`,
+         update_cenv_nonreentrant_def, update_cenv_ret_abi_def])) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC);
+
+val linked_empty_body_context_tac =
+  `local_ptrs_reserved ce body_start /\ return_buf_frame NONE ce body_start fallback_body_vs` by
+    (PURE_REWRITE_TAC [local_ptrs_reserved_def, loweringPostsTheory.return_buf_frame_def] >>
+     map_every (fn pat => qpat_assum pat SUBST1_TAC)
+       [`ce.ce_vars = FEMPTY`,`ce.ce_imm_alloca = NONE`,`ce.ce_return_buf = NONE`] >>
+     simp[NoAsms]) >>
+  `IS_SOME (check_contract F cx.layouts cx.txn.target mods)` by
+    (qpat_assum `check_contract F cx.layouts cx.txn.target mods = SOME art`
+       (fn check => simp[NoAsms, check])) >>
+  `exports_ok cx.layouts cx.txn.target mods exps` by
+    (simp[NoAsms, Abbr `cx`, initial_evaluation_context_def] >> first_assum ACCEPT_TAC) >>
+  `contract_namespaces_ok F mods` by drule_then ACCEPT_TAC check_contract_namespaces_ok >>
+  `env_context_consistent fallback_types cx` by
+    (qpat_assum `env_consistent fallback_types cx es0` (mp_tac o REWRITE_RULE [env_consistent_def]) >>
+     strip_tac >> first_assum ACCEPT_TAC);
+
+val linked_empty_body_alloc_tac =
+  qabbrev_tac `alloc_env = build_compile_env_unit mods src Internal mut "__default__" args ret fallback_code F` >>
+  `alloc_env_agree alloc_env fallback_base` by
+    simp[NoAsms, alloc_env_agree_def, Abbr `alloc_env`, Abbr `fallback_base`,
+         build_compile_env_unit_def, pairTheory.ELIM_UNCURRY] >>
+  `alloc_env_agree alloc_env ce` by
+    (qpat_assum `ce = _` SUBST1_TAC >>
+     qpat_assum `alloc_env_agree alloc_env fallback_base` mp_tac >>
+     Cases_on `ret = NoneT` >>
+     pop_assum (fn ret_case => simp[NoAsms, ret_case, alloc_env_agree_def,
+       update_cenv_nonreentrant_def, update_cenv_ret_abi_def]));
+
+val linked_empty_body_alloc_bounds_tac =
+  `alloc_limits_stmts ce fallback_code /\ type_memory_bytes ce ret < 2 ** 64` by
+    (`type_memory_bytes ce = type_memory_bytes alloc_env` by
+       (irule type_memory_bytes_frame >>
+        qpat_assum `alloc_env_agree alloc_env ce`
+          (strip_assume_tac o REWRITE_RULE [alloc_env_agree_def]) >> first_assum ACCEPT_TAC) >>
+     pop_assum SUBST1_TAC >>
+     qspecl_then [`alloc_env`,`fallback_code`,`ce`] mp_tac
+       (cj 2 alloc_limits_stmt_struct_fields) >>
+     impl_tac >- first_assum ACCEPT_TAC >> disch_then SUBST1_TAC >>
+     qpat_assum `EVERY (fn_allocs_ok_unit mods) (case fb of NONE => [] | SOME sf => [sf])` mp_tac >>
+     qpat_assum `fb = SOME _` (fn fallback =>
+       simp[NoAsms, fallback, fn_allocs_ok_unit_def, Abbr `alloc_env`, Abbr `src`]));
+
+val linked_empty_body_widths_tac =
+  `~supported_stmts_expr_exists (const_name_root_mods mods) fallback_code` by
+    (simp_tac bool_ss [Abbr `fallback_code`] >>
+     MATCH_MP_TAC (Q.INST [`mods` |-> `mods`, `ss` |-> `fbody`]
+       linkedEntryImmutableGuardsTheory.substituted_stmts_const_name_free_mods) >>
+     first_assum ACCEPT_TAC) >>
+  `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) fallback_code` by
+    (MATCH_MP_TAC (Q.INST [`args` |-> `args`, `cx` |-> `cx`,
+       `env` |-> `fallback_types`, `env'` |-> `after_body`, `ret` |-> `ret`,
+       `ss` |-> `fallback_code`] (SPEC_ALL typed_parameter_body_excludes_bad_widths)) >>
+     qpat_assum `fallback_types.var_types = FEMPTY` (fn empty =>
+       qpat_assum `(args:(string # type) list) = []` (fn args => simp[NoAsms, empty, args])) >>
+     conj_tac >> first_assum ACCEPT_TAC);
+
+val linked_empty_body_stmts_exprs_tac =
+  `stmts_exprs_ok ce fallback_code` by
+    (MATCH_MP_TAC stmt_exprs_ok_from_traversal_bounds >>
+     qpat_assum `ce.ce_modules = mods` SUBST1_TAC >>
+     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+       strip_tac >>
+       qpat_assum `stmts_valued_return fallback_code /\ ~ce.ce_raw_return ==> return_buffer_ok ce`
+         (drule_all_then ACCEPT_TAC)]) >>
+  `ret <> NoneT ==> stmts_no_fallthrough fbody` by
+    (strip_tac >>
+     qpat_assum `ret <> NoneT` (fn nonempty =>
+       qpat_assum `check_function_body am.layouts tx.target mods art src External mut nr args [] ret fbody`
+         (strip_assume_tac o SIMP_RULE (srw_ss()) [check_function_body_def, LET_THM, nonempty])) >>
+     first_assum ACCEPT_TAC);
+
+val linked_empty_body_return_buffer_tac =
+  `stmts_valued_return fallback_code /\ ~ce.ce_raw_return ==> return_buffer_ok ce` by
+    (strip_tac >> Cases_on `ret = NoneT`
+     >- (qpat_assum `type_stmts fallback_types ret fallback_code = SOME after_body`
+           (mp_tac o MATCH_MP externalCallSelectedTheory.type_stmts_none_valued_return o
+             REWRITE_RULE [ASSUME ``ret = NoneT``]) >>
+         qpat_assum `stmts_valued_return fallback_code` (fn valued => simp[NoAsms, valued])) >>
+     Cases_on `is_word_type ret`
+     >- (qpat_assum `is_word_type ret`
+           (mp_tac o Q.SPEC `fallback_base with ce_raw_return := raw` o
+             MATCH_MP (ONCE_REWRITE_RULE [SWAP_FORALL_THM]
+               update_cenv_ret_abi_word_return_buffer_ok)) >>
+         qpat_assum `ce = _` SUBST1_TAC >>
+         qpat_assum `tx.function_name = "__default__"` (fn name =>
+           qpat_assum `ret <> NoneT` (fn nonempty =>
+             simp[NoAsms, nonempty, name, Abbr `raw`, return_buffer_ok_def,
+               update_cenv_nonreentrant_def]))) >>
+     qpat_assum `OPTION_ALL _ fall` mp_tac >>
+     map_every (fn pat => qpat_assum pat SUBST1_TAC)
+       [`fall = SOME (ce,pay,nr,key,tr,view,fallback_code,rt)`,`rt = _`] >>
+     qpat_assum `~ce.ce_raw_return` (fn raw_off =>
+       qpat_assum `~is_word_type ret` (fn not_word =>
+         qpat_assum `stmts_valued_return fallback_code` (fn valued =>
+           qpat_assum `ret <> NoneT` (fn ty =>
+             simp[NoAsms, external_return_buffer_ok_def, raw_off, not_word, valued, ty])))));
+
+(* The linear caller has two zero-reading path segments; the grouped
+   caller supplies its own path and does not use this tactic. *)
+val linked_linear_empty_path_tac =
+  qabbrev_tac `start = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+  qabbrev_tac `explicit = gas_explicit_sites unit.cu_context shadow_unit.cu_context` >>
+  `!D. gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
+      (start,FEMPTY,entry_taint) [] (OK fallback_body_vs,fallback_body_G,fallback_body_taint)` by
+    (gen_tac >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (_ ,FEMPTY,entry_taint) [] (OK hit,Gh,tnh)`
+       (qspecl_then [`D`,`explicit`] (mp_tac o MATCH_MP (SPEC_ALL gas_origin_ptr_path_append))) >>
+     disch_then (qspecl_then [`hit`,`Gh`,`tnh`,`[]`,`OK fallback_body_vs`,
+         `fallback_body_G`,`fallback_body_taint`] mp_tac) >>
+     simp_tac bool_ss [APPEND, Abbr `start`] >>
+     disch_then MATCH_MP_TAC >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (hit,Gh,tnh) []
+          (OK fallback_body_vs,fallback_body_G,fallback_body_taint)`
+       (qspecl_then [`D`,`explicit`] ACCEPT_TAC)) >>
+  `gas_path_mem unit.cu_context fn start 0 (OK fallback_body_vs)` by
+    qpat_assum `!D. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) [] (OK fallback_body_vs,_,_)`
+      (qspec_then `ARB` (ACCEPT_TAC o MATCH_MP selectedAcceptedInterfacesTheory.selected_zero_path_mem));
+
+val linked_empty_entry_open_tac =
+  `~block_is_terminated body_start` by
+    (irule selectedEntryPrefixCodeTheory.compile_entry_checks_open >>
+     qexistsl_tac [`4`,`pay`,`check_start`,`()`] >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `check_start.cs_current_insts = []` (fn empty =>
+       simp[NoAsms, block_is_terminated_def, empty])) >>
+  `!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==> phi_prefix_length bb.bb_instructions = 0` by
+    (rpt gen_tac >> strip_tac >> drule_all_then ACCEPT_TAC lowering_context_ok_block_phi) >>
+  `?bb. lookup_block "__entry" fn.fn_blocks = SOME bb /\ phi_prefix_length bb.bb_instructions = 0` by
+    (`?bb. lookup_block "__entry" fn.fn_blocks = SOME bb` by
+       (qpat_assum `fn_entry_label fn = SOME "__entry"` mp_tac >>
+        Cases_on `fn.fn_blocks` >>
+        qpat_assum `fn.fn_blocks = _` (fn blocks =>
+          simp[NoAsms, blocks, fn_entry_label_def, entry_block_def, lookup_block_def, FIND_thm])) >>
+     rename1 `lookup_block "__entry" fn.fn_blocks = SOME found_bb` >>
+     qexists_tac `found_bb` >> conj_tac >- first_assum ACCEPT_TAC >>
+     drule_all_then ACCEPT_TAC lowering_context_ok_block_phi) >>
+  rename1 `phi_prefix_length entry_bb.bb_instructions = 0`;
+
+val linked_empty_entry_ptr_tac =
+  `!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context fn []
+            fallback_body_G fallback_body_taint fallback_body_vs) ==>
+       !fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint start` by
+    (gen_tac >> strip_tac >>
+     `!fuel. ptr_safe_run D 0 fuel unit.cu_context fn [] FEMPTY entry_taint start` by
+       (MATCH_MP_TAC (Q.INST [`explicit` |-> `explicit`, `t` |-> `fallback_body_vs`,
+         `H` |-> `fallback_body_G`, `u` |-> `fallback_body_taint`]
+         selectedAcceptedInterfacesTheory.selected_zero_path_ptr_pullback) >>
+        conj_tac
+        >- qpat_assum `!D. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) [] (OK fallback_body_vs,_,_)`
+             (qspec_then `D` ACCEPT_TAC) >>
+        conj_tac
+        >- (map_every qx_gen_tac [`phi_bb`,`phi_label`] >>
+            qpat_assum `!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==> _`
+              (qspecl_then [`phi_label`,`phi_bb`] ACCEPT_TAC)) >>
+        first_assum ACCEPT_TAC) >>
+     MATCH_MP_TAC (Q.INST [`bb` |-> `entry_bb`]
+       entryDispatchPtrTheory.ptr_safe_blocks_from_phi_free_run) >>
+     conj_tac >- (simp[NoAsms, Abbr `start`] >> first_assum ACCEPT_TAC) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- simp[NoAsms, Abbr `start`] >>
+     first_assum ACCEPT_TAC);
+
+val linked_empty_return_plan_tac =
+  `ret <> NoneT ==>
+    ce.ce_ret_enc_info = (update_cenv_ret_abi ce ret).ce_ret_enc_info /\
+    ce.ce_max_return_size = (update_cenv_ret_abi ce ret).ce_max_return_size /\
+    assignable_type (get_tenv cx) ret /\
+    (ce.ce_raw_return ==> ?n. ret = BaseT (BytesT (Dynamic n))) /\
+    type_memory_bytes ce ret < 2 ** 64` by
+    (strip_tac >>
+     `ce.ce_struct_fields = (fallback_base with ce_raw_return := raw).ce_struct_fields` by
+       (qpat_assum `fallback_base.ce_struct_fields = _` (fn fields => simp[NoAsms, fields]) >>
+        first_assum ACCEPT_TAC) >>
+     `type_memory_bytes ce = type_memory_bytes (fallback_base with ce_raw_return := raw)` by
+       (irule type_memory_bytes_frame >> first_assum ACCEPT_TAC) >>
+     `type_to_abi_enc_info (fallback_base with ce_raw_return := raw).ce_struct_fields ce ret =
+      type_to_abi_enc_info (fallback_base with ce_raw_return := raw).ce_struct_fields
+        (fallback_base with ce_raw_return := raw) ret` by
+       (irule linkedReturnAbiLayoutTheory.type_to_abi_enc_info_struct_fields >> first_assum ACCEPT_TAC) >>
+     `ce.ce_ret_enc_info = (update_cenv_ret_abi (fallback_base with ce_raw_return := raw) ret).ce_ret_enc_info /\
+      ce.ce_max_return_size = (update_cenv_ret_abi (fallback_base with ce_raw_return := raw) ret).ce_max_return_size` by
+       (qpat_assum `ce = _` SUBST1_TAC >>
+        qpat_assum `tx.function_name = "__default__"` (fn name =>
+          qpat_assum `ret <> NoneT` (fn nonempty =>
+            simp[NoAsms, name, Abbr `raw`, nonempty, update_cenv_nonreentrant_def, update_cenv_ret_abi_def, LET_THM]))) >>
+     qpat_assum `ce.ce_ret_enc_info = _` SUBST1_TAC >>
+     qpat_assum `ce.ce_max_return_size = _` SUBST1_TAC >>
+     qpat_assum `ce.ce_raw_return = raw` (fn raw_eq =>
+       qpat_assum `ce.ce_struct_fields = (fallback_base with ce_raw_return := raw).ce_struct_fields` (fn fields =>
+         qpat_assum `type_memory_bytes ce = type_memory_bytes (fallback_base with ce_raw_return := raw)` (fn size =>
+           qpat_assum `type_to_abi_enc_info _ ce ret = _` (fn plan =>
+             qpat_assum `type_memory_bytes ce ret < 2 ** 64` (fn limit =>
+               let val plan = SIMP_RULE (srw_ss()) [] plan
+                   val limit = SIMP_RULE (srw_ss()) [AP_THM size ``ret:type``] limit
+               in simp[NoAsms, raw_eq, fields, size, plan, limit, update_cenv_ret_abi_def, LET_THM]
+               end))))) >>
+     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+       qpat_assum `ret <> NoneT` (fn nonempty => first_assum (ACCEPT_TAC o C MATCH_MP nonempty))]);
+
+val linked_empty_return_none_tac =
+  `lookup_raw_return_or_F src tx.function_name External tops = raw` by
+    simp[NoAsms, Abbr `raw`] >>
+  `ret = NoneT ==> tx_return_bytes_mods mods exps cx.txn NoneV []` by
+    (strip_tac >>
+     `~raw` by
+       (qpat_assum `raw ==> ?n. ret = BaseT (BytesT (Dynamic n))` mp_tac >>
+        qpat_assum `ret = NoneT` (fn none => simp[NoAsms, none])) >>
+     qpat_assum `cx.txn = tx` SUBST1_TAC >>
+     qpat_assum `src = ALOOKUP exps tx.function_name` (fn src_eq =>
+       qpat_assum `ALOOKUP mods src = SOME tops` (fn selected =>
+         qpat_assum `lookup_raw_return_or_F src tx.function_name External tops = raw` (fn raw_eq =>
+           qpat_assum `external_return_type_mods mods exps tx.function_name = ret` (fn ret_eq =>
+             qpat_assum `ret = NoneT` (fn none =>
+               qpat_assum `~raw` (fn not_raw =>
+                 simp[NoAsms, GSYM src_eq, selected, raw_eq, ret_eq, none, not_raw,
+                   tx_return_bytes_mods_def, return_bytes_mods_def, LET_THM])))))));
+
+val linked_empty_entry_static_tac =
+  `MEM fn unit.cu_context.ctx_functions /\ MEM fallback_shadow_fn shadow_unit.cu_context.ctx_functions` by
+    (conj_tac >> drule_then ACCEPT_TAC venomInstTheory.lookup_function_MEM) >>
+  `ctx_inst_ids_distinct unit.cu_context` by
+    (drule lowering_context_ok_static_integrity >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `fn_inst_ids_distinct fn` by
+    (drule_all ctx_inst_ids_distinct_fn >>
+     simp[NoAsms, fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_map_id]) >>
+  `LENGTH args = LENGTH tx.args` by
+    drule_then ACCEPT_TAC vyperCallTheory.bind_arguments_length >>
+  `ALL_DISTINCT (MAP FST mods)` by
+    (qpat_assum `contract_namespaces_ok F mods`
+       (strip_assume_tac o PURE_REWRITE_RULE [contract_namespaces_ok_def]) >>
+     first_assum ACCEPT_TAC);
+
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_body_guards]:
+  linked_empty_body_types_tac >>
+  linked_empty_body_support_tac >>
+  linked_empty_body_live_tac >>
+  linked_empty_body_immutable_tac >>
+  linked_empty_body_lock_tac >>
+  linked_empty_body_base_tac >>
+  linked_empty_body_package_tac >>
+  linked_empty_body_context_tac >>
+  linked_empty_body_alloc_tac >>
+  linked_empty_body_alloc_bounds_tac >>
+  linked_empty_body_widths_tac >>
+  linked_empty_body_return_buffer_tac >>
+  linked_empty_body_stmts_exprs_tac >>
+  linked_linear_empty_path_tac >>
+  linked_empty_entry_open_tac >>
+  linked_empty_entry_ptr_tac >>
+  linked_empty_return_plan_tac >>
+  linked_empty_return_none_tac >>
+  linked_empty_entry_static_tac >>
   cheat
 QED
 
