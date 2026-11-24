@@ -1,9 +1,10 @@
 (* Full-body induction predicates for a linked contract and its active module. *)
 Theory bodyFullPredsMods
 Ancestors
-  bodyFullPreds bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit bodySim
+  bodyCallSupport bodyFullPreds bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit bodySim
   exprSimHypsDefs exprSimMapDefs supportedStmts supportedProgram
-  supportedExprTraverse allocLimits placeTypingProps compileEnv exprLowering
+  supportedExprTraverse allocLimits allocLimitsProps[qualified] placeTypingProps
+  compileEnv exprLowering
   gasShadow gasContext bodySimFull vyperInterpreter vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperState vyperContext vyperAST
   vyperTypeInvariants list alist option pair finite_map
@@ -197,13 +198,12 @@ QED
 
 Theorem int_calls_expr_main_singleton[local]:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-  EVERY (\c. ?ts. get_module_code cx (FST c) = SOME ts /\
-                 supported_program ts /\
-                 IS_SOME (supported_function_decl ts (NONE,SND c) Internal))
+  EVERY (source_body_call_supported cx)
     (int_calls_expr e) ==>
   EVERY (\c. FST c = NONE) (int_calls_expr e)
 Proof
-  simp[EVERY_MEM, FORALL_PROD, get_module_code_def, ALOOKUP_def] >>
+  simp[EVERY_MEM, FORALL_PROD, source_body_call_supported_def,
+       get_module_code_def, ALOOKUP_def] >>
   rpt strip_tac >> res_tac >> gvs[AllCaseEqs()]
 QED
 
@@ -213,7 +213,7 @@ fun expr_pre_mods_singleton_tac split_def mods_def =
   simp[split_def] >>
   qpat_assum `ALOOKUP cx.sources _ = _`
     (assume_tac o MATCH_MP int_calls_expr_main_singleton) >>
-  simp[mods_def, expr_sim_inv_mods_singleton,
+  simp[mods_def, expr_sim_inv_mods_singleton, source_body_calls_main,
        type_env_def, type_env_all_modules_def, FUNION_FEMPTY_2,
        SF CONJ_ss] >>
   metis_tac[];
@@ -381,11 +381,14 @@ Proof
     gvs[expr_body_pre_mods_def, expr_sim_inv_mods_def] >>
   gvs[expr_body_pre_mods_def, Once well_typed_expr_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
-      expr_has_evm_run_thm, EVERY_APPEND]
-  >- (drule_all place_type_well_typed_on_defined >> simp[]) >>
+      expr_has_evm_run_thm, EVERY_APPEND] >>
+  (* the value-typed base contradicts the map place type, slot base or not *)
+  TRY (drule_all place_type_well_typed_on_defined >> simp[] >> NO_TAC) >>
   drule_all place_type_checked_place_on_defined >> strip_tac >>
   rename1 `type_place_expr env obj = SOME bty` >>
   Cases_on `bty` >> gvs[value_type_place_def] >>
+  drule_then assume_tac allocLimitsPropsTheory.type_place_hashmap_not_array_slot_base >>
+  gvs[] >>
   simp[expr_map_pre_mods_def] >>
   gvs[supported_expr_exists_def] >>
   metis_tac[call_evaluation_safe_append_left]
