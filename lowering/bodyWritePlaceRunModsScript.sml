@@ -10,7 +10,7 @@ Ancestors
   bodyWriteTargetStageMods bodyFullPostsMods bodyInvSplit gasExemptCertMods
   vyperInterpreter vyperState vyperStorageTrace vyperStorageFootprint
   exprSimDefs loweringPosts fragGasOriginPtr gasOutcomeFull gasSummary gasOutcome
-  gasContext targetPlaceSimCases list bodyFullTargetSubscript
+  gasContext targetPlaceSimCases list bodyFullTargetSubscript bodyWritePlaceLiveMods
 Libs
   monadsyntax pairLib
 
@@ -91,9 +91,12 @@ QED
 Theorem write_base_to_place_mods[local]:
   write_base_sim_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx env bt es /\
-  (!gs id path mid.
+  (!gs id path mid ty r G t.
+     type_place_target env bt = SOME (Type ty) /\
      eval_base_place cx bt (es with gas_obs := gs) =
-       (INL (PlaceR (MemoryPlace id path)),mid) ==>
+       (INL (PlaceR (MemoryPlace id path)),mid) /\
+     write_target_location_mods cenv cx bt mid (PlaceR (MemoryPlace id path))
+       (Type ty) r G t ==>
      ?entry v. lookup_scopes id mid.scopes = SOME entry /\
                evaluate_subscripts entry.type entry.value path = INL v) ==>
   write_place_sim_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -163,8 +166,38 @@ Resume write_base_to_place_mods[place]:
     (drule_then strip_assume_tac) >>
   simp[gas_origin_ptr_path_rules] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
-  qpat_assum `!gs id path mid. eval_base_place _ _ _ = _ ==> _`
-    (drule_then ACCEPT_TAC)
+  qpat_assum `!H'. valid_horizon _ _ H' mid.storage_trace ==> _`
+    (qspec_then `H` (drule_then assume_tac)) >>
+  drule_then strip_assume_tac write_target_post_view_mods >>
+  qpat_assum `!gs id path mid r G t. _ /\ _ ==> _`
+    (drule_all_then ACCEPT_TAC)
 QED
 
 Finalise write_base_to_place_mods
+
+Theorem write_target_place_run_mods:
+  contract_inv mods exps ctx cenv cx /\
+  module_body_inv mods src tops cenv cx /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree_mods mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  type_place_target env bt = SOME (Type ty) /\ alloc_limits_target cenv bt /\
+  (!e st. MEM e (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env st ==>
+          expr_body_pre_mods mods cenv cx env e st) /\
+  body_base_target_full_ok_mods mods exps cx bt /\
+  (immutable_root cx bt ==>
+     ?owner id off. target_root bt = TopLevelNameTarget (owner,id) /\
+        cenv.ce_is_ctor /\
+        FLOOKUP cenv.ce_module_vars (owner,id) = SOME (ImmutableLoc off)) ==>
+  write_place_sim_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx env bt es
+Proof
+  strip_tac >> irule write_base_to_place_mods >> reverse conj_tac
+  >- (irule write_target_base_run_mods >> simp[] >>
+      qexistsl_tac [`exps`,`mods`,`src`,`tops`] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  irule write_place_memory_live_mods >>
+  qpat_assum `eval_base_place _ _ _ = _` (irule_at Any) >>
+  qpat_assum `write_target_location_mods _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qexistsl_tac [`mods`,`env`] >> simp[]
+QED
