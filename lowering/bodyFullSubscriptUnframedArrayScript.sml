@@ -204,7 +204,13 @@ Resume subscript_unframed_array_vv_full[value]:
   `well_typed_expr env e1 /\
    (!id t. FLOOKUP env.var_types id = SOME t ==>
           ?q sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz))` by
-    fs[expr_body_pre_def, expr_sim_inv_def] >>
+    qpat_assum `expr_body_pre cenv cx env e1 es` (fn pre =>
+      let
+        val facts = MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts pre
+        val inv = REWRITE_RULE [expr_sim_inv_def] (cj 1 facts)
+      in
+        ACCEPT_TAC (CONJ (cj 2 facts) (cj 6 inv))
+      end) >>
   `!l. vv_operand bvv <> Label l` by (irule lower_compile_expr_not_label >> metis_tac[]) >>
   `expr_body_pre cenv cx env (Subscript v8 e1 e2) (es with gas_obs := gs1)` by simp[] >>
   qpat_x_assum `tvt = ArrayTV _ _` SUBST_ALL_TAC >>
