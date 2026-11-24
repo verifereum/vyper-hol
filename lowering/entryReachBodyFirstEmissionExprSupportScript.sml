@@ -2,6 +2,7 @@ Theory entryReachBodyFirstEmissionExprSupport
 Ancestors
   entryReachBodyFirstEmissionSupport compilerFirstEmission externalEntryShape
   exprLowering compileEnv fragExec emitHelper venomInst finite_map list builtinSystem
+  boolChainOperandsCons
 
 Theorem first_emission_bytelike_literal[local]:
   !bs n a x b. compile_bytelike_literal bs n a = (x,b) ==>
@@ -3135,6 +3136,52 @@ Resume first_emission_builtin_bop[literal_member]:
 QED
 Finalise first_emission_builtin_bop
 
+(* A nonempty chain emits before it opens another block. After the first
+   instruction, the remaining code and continuation need only extend it. *)
+Theorem first_emission_bool_chain_ops[local]:
+  (!e a x b. lower_value cfn ce (BaseT BoolT) e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) /\
+  cs_appends (k ()) /\ es <> [] ==>
+  !a x b. comp_bind (compile_bool_chain_ops cfn ce is_and result exit_lbl es) k a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  Induct_on `es` >- simp[] >>
+  qx_gen_tac `e` >> strip_tac >> Cases_on `es` >>
+  simp_tac bool_ss [Once compile_bool_chain_ops_def, comp_ignore_bind_def, comp_bind_assoc] >>
+  ho_match_mp_tac first_emission_bind >>
+  (conj_tac >- metis_tac[]) >>
+  gen_tac >> BETA_TAC
+  >- (ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- (rpt strip_tac >> drule_at Any (cj 1 first_emission_emit_helpers) >> simp[]) >>
+      Cases >> simp[GSYM cs_appends_def] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> irule cs_appends_bind >>
+      simp[cs_appends_emit_helpers]) >>
+  Cases_on `is_and` >> simp[comp_bind_assoc, fragFuelTheory.comp_bind_return] >>
+  ntac 2 (ho_match_mp_tac first_emission_bind >> conj_tac
+    >- metis_tac[first_emission_fresh_label] >> gen_tac >> BETA_TAC) >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >>
+  (conj_tac
+   >- (rpt strip_tac >> drule_at Any (cj 1 first_emission_emit_helpers) >> simp[])) >>
+  Cases >> simp[GSYM cs_appends_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  ntac 4 (irule cs_appends_bind >>
+    simp[cs_appends_prims, cs_appends_emit_helpers]) >>
+  qpat_x_assum `(_ /\ _ /\ _::_ <> []) ==> _` mp_tac >>
+  simp[cs_appends_def] >> (impl_tac >- first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
 Theorem first_emission_builtin_dispatch:
   (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
     cs_extends a b /\
@@ -3178,7 +3225,27 @@ Proof
   >~ [`MethodId`] >- (drule first_emission_builtin_method_id >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
   >~ [`ECRecover`] >- (drule first_emission_builtin_ec >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
   >~ [`ECAdd`] >- (drule first_emission_builtin_ec >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
-  >~ [`ECMul`] >- (drule first_emission_builtin_ec >> disch_then irule >> goal_assum (drule_at Any) >> simp[]) >>
+  >~ [`ECMul`] >- (drule first_emission_builtin_ec >> disch_then irule >> goal_assum (drule_at Any) >> simp[])
+  >~ [`NamedConst`]
+  >- (pop_assum mp_tac >> map_every qid_spec_tac [`b`, `x`, `a`] >>
+      simp[compile_builtin_dispatch_body_def, LET_THM] >>
+      ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+      rw[as_stack_val_def, as_ptr_val_def, cs_extends_refl])
+  >~ [`BoolChain d n`]
+  >- (pop_assum mp_tac >> map_every qid_spec_tac [`b`, `x`, `a`] >>
+      simp[compile_builtin_dispatch_body_def, LET_THM] >>
+      ho_match_mp_tac first_emission_pair_let >>
+      (conj_tac >- metis_tac[first_emission_fresh]) >>
+      gen_tac >> ho_match_mp_tac first_emission_pair_let >>
+      (conj_tac >- metis_tac[first_emission_fresh_label]) >>
+      gen_tac >> rewrite_tac[state_pair_let_bind] >>
+      ho_match_mp_tac first_emission_bool_chain_ops >>
+      (conj_tac >- (gen_tac >> ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
+      conj_tac
+      >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule cs_appends_bind >>
+          simp[cs_appends_prims] >> rw[cs_appends_def, cs_extends_refl]) >>
+      metis_tac[bool_chain_operands_cons, NOT_CONS_NIL]) >>
   drule first_emission_builtin_modular >> disch_then irule >> goal_assum (drule_at Any) >> simp[]
 QED
 
