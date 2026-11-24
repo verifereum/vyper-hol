@@ -14,7 +14,7 @@ Ancestors
   contextCodegenRel exprSimPtrTopLevelStorageCopy exprSimPtrTopLevelCopy exprSimStorageCopy
   bodyStorageCopyMemory bodyMemAssignTopCopyPaths fragGasCopySeqLiftProps
   fragGasStorageCopyBodyProps fragGasStorageCopyHeaderProps slotCopyCursorWindow
-  relation
+  relation rawSlotCopyChunk
   fragGasSeqPtrContext fragGasSeqPtr fragGasSeqAbort fragGasOriginPtr fragGasOriginPtrLoop fragGasOrigin
   fragGasCopyIterSide
   ptrSafetyTransport instMemFrontier fragExecMem fragExec memSafeRun checkedPrefixCursor
@@ -241,6 +241,7 @@ Theorem storage_copy_init_origin_ptr[local]:
   !loc D explicit PG. ?t G1 tn1.
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1) /\
     slot_copy_walk A explicit ctx func s t /\
+    slot_copy_chunk id (id+2) ctx func s t /\
     (toplevel_copy_inv cv ds dst src loc a b n s G tn 0 G1 tn1 t /\
      allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t)) /\
     ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0
@@ -300,6 +301,17 @@ Proof
   qexistsl_tac [`jump_to hdr t0`, `G1`, `tn1`] >>
   conj_tac >- metis_tac[origin_ptr_path_then] >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (pure_rewrite_tac[slot_copy_chunk_def] >>
+      qexistsl_tac [`bb`, `[i0]`, `u0`, `t0`,
+                    `mk_inst (id+1) JMP [Label hdr] []`, `hdr`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+      >- simp[mk_inst_def, Abbr `i0`, is_terminator_def]
+      >- (rpt strip_tac >>
+          qpat_assum `ctx_has_dalloca ctx ==> !pre i post v. _` drule >>
+          disch_then drule_all >> simp[])
+      >> simp[Abbr `t0`, Abbr `u0`, update_var_def, mk_inst_def,
+              step_inst_base_def, eval_operand_def]) >>
   simp[Abbr `t0`, Abbr `u0`, Abbr `G1`, Abbr `tn1`, Abbr `i0`] >>
   rpt conj_tac
   >- (pure_rewrite_tac[GSYM update_var_def] >>
@@ -309,7 +321,7 @@ Proof
 QED
 
 (* Keep the test and its taken branch at the actual intermediate cursor. *)
-Theorem storage_copy_header_origin_ptr_walk_run:
+Theorem storage_copy_header_origin_ptr_walk_chunk[local]:
   toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
   cv <> tv /\ dst <> tv /\ (!x. src = Var x ==> x <> tv) /\ MEM tv ds /\
@@ -334,6 +346,7 @@ Theorem storage_copy_header_origin_ptr_walk_run:
       r = jump_to (if k=n then exit_lbl else body_lbl) t) /\
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK r,G1,tn1) /\
     slot_copy_walk A explicit ctx func s r /\
+    slot_copy_chunk id (id+2) ctx func s r /\
     (toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G1 tn1 r /\
      allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r)) /\
     ~r.vs_halted /\ r.vs_inst_idx = 0 /\
@@ -377,7 +390,55 @@ Proof
   conj_tac >- (irule origin_ptr_path_then >> qexistsl_tac [`G1`, `t`, `tn1`] >>
                gvs[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (pure_rewrite_tac[slot_copy_chunk_def] >>
+      qexistsl_tac [`bb`, `[mk_inst id EQ [Var cv;Lit (n2w n)] [tv]]`, `u`, `t`,
+                    `mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []`,
+                    `if k=n then exit_lbl else body_lbl`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+      >- simp[mk_inst_def, is_terminator_def]
+      >- (rpt strip_tac >>
+          qpat_assum `ctx_has_dalloca ctx ==> !pre i post v. _` drule >>
+          disch_then drule_all >> simp[])
+      >> simp[mk_inst_def]) >>
   gvs[jump_to_def, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
+QED
+
+Theorem storage_copy_header_origin_ptr_walk_run:
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
+  cv <> tv /\ dst <> tv /\ (!x. src = Var x ==> x <> tv) /\ MEM tv ds /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX [mk_inst id EQ [Var cv;Lit (n2w n)] [tv];
+    mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []]
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  (!j. j < 2 ==> A s.vs_current_bb (s.vs_inst_idx+j)
+    (EL j [mk_inst id EQ [Var cv;Lit (n2w n)] [tv];
+           mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []])) ==>
+  !D explicit PG. ?r G1 tn1.
+    (?u t.
+      run_inst_seq [mk_inst id EQ [Var cv;Lit (n2w n)] [tv]] s = OK u /\
+      t = u with vs_inst_idx := SUC s.vs_inst_idx /\
+      get_instruction bb s.vs_inst_idx = SOME (mk_inst id EQ [Var cv;Lit (n2w n)] [tv]) /\
+      ~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
+      t.vs_inst_idx = SUC s.vs_inst_idx /\
+      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx =
+        SOME (mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []) /\
+      step_inst_base (mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []) t = OK r /\
+      r = jump_to (if k=n then exit_lbl else body_lbl) t) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK r,G1,tn1) /\
+    slot_copy_walk A explicit ctx func s r /\
+    (toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G1 tn1 r /\
+     allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r)) /\
+    ~r.vs_halted /\ r.vs_inst_idx = 0 /\
+    r.vs_current_bb = (if k=n then exit_lbl else body_lbl)
+Proof
+  rpt strip_tac >>
+  drule_all storage_copy_header_origin_ptr_walk_chunk >>
+  disch_then (qspecl_then [`D`,`explicit`,`PG`]
+    (qx_choosel_then [`r`,`G1`,`tn1`] (CONJUNCTS_THEN2 assume_tac strip_assume_tac))) >>
+  qexistsl_tac [`r`,`G1`,`tn1`] >> asm_rewrite_tac[]
 QED
 
 (* Forget the walk guard without changing which EQ/JNZ run is returned. *)
@@ -418,7 +479,7 @@ QED
 
 (* The allowance licenses just the setup suffix, header and body.  The
    compiler exit is a destination and requires no fetched occurrence. *)
-Theorem storage_copy_loop_origin_ptr_walk:
+Theorem storage_copy_loop_origin_ptr_walk_chunks[local]:
   compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) /\
   fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
@@ -441,6 +502,7 @@ Theorem storage_copy_loop_origin_ptr_walk:
   ?t Gf tnf cv ds.
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
     slot_copy_walk A explicit ctx func s t /\
+    RTC (slot_copy_chunk sa.cs_next_id sb.cs_next_id ctx func) s t /\
     toplevel_copy_inv cv ds dst src loc a b n s G tn n Gf tnf t /\
     (!x. not_fresh_at sa x ==> ~MEM x ds) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
@@ -469,6 +531,10 @@ Proof
     gvs[Abbr `setup`] >>
   drule_all storage_copy_init_origin_ptr >>
   disch_then (qspecl_then [`loc`, `D`, `explicit`, `PG`] strip_assume_tac) >>
+  `RTC (slot_copy_chunk sa.cs_next_id sb.cs_next_id ctx func) s t` by
+    (irule RTC_SINGLE >>
+     drule_at (Pat `slot_copy_chunk _ _ _ _ _ _`) slot_copy_chunk_mono >>
+     disch_then irule >> simp[]) >>
   qmatch_asmsub_abbrev_tac `toplevel_copy_inv cv ds dst src loc a b n s G tn 0 G1 tn1 t` >>
   qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `fn_has_code _ _ _` kall_tac >>
@@ -480,7 +546,8 @@ Proof
      ~q.vs_halted /\ q.vs_current_bb = hdr /\ q.vs_inst_idx = 0 ==>
      ?r Gr tr. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q,Gj,tj) []
          (OK r,Gr,tr) /\
-       slot_copy_walk A explicit ctx func q r /\
+       (slot_copy_walk A explicit ctx func q r /\
+        RTC (slot_copy_chunk sa.cs_next_id sb.cs_next_id ctx func) q r) /\
        (toplevel_copy_inv cv ds dst src loc a b n s G tn j Gr tr r /\
         allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r)) /\
        ~r.vs_halted /\ r.vs_inst_idx = 0 /\
@@ -499,17 +566,22 @@ Proof
        (EL i [mk_inst (sa.cs_next_id+2) EQ [Var cv;Lit (n2w n)] [tv];
           mk_inst ((sa.cs_next_id+2)+1) JNZ [Var tv;Label exit;Label loop_body] []])` by
        gvs[Abbr `hdr_code`] >>
-     drule storage_copy_header_origin_ptr_walk_run >> disch_then drule_all >>
+     drule storage_copy_header_origin_ptr_walk_chunk >> disch_then drule_all >>
      disch_then (qspecl_then [`D`, `explicit`, `PG`]
        (qx_choosel_then [`r`, `Gr`, `tr`] strip_assume_tac)) >>
-     qexistsl_tac [`r`, `Gr`, `tr`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`r`, `Gr`, `tr`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     irule RTC_SINGLE >>
+     drule_at (Pat `slot_copy_chunk _ _ _ _ _ _`) slot_copy_chunk_mono >>
+     disch_then irule >> simp[]) >>
   `!j Gj tj q. j < n /\
      (toplevel_copy_inv cv ds dst src loc a b n s G tn j Gj tj q /\
       allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q)) /\
      ~q.vs_halted /\ q.vs_current_bb = loop_body /\ q.vs_inst_idx = 0 ==>
      ?r Gr tr. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q,Gj,tj) []
          (OK r,Gr,tr) /\
-       slot_copy_walk A explicit ctx func q r /\
+       (slot_copy_walk A explicit ctx func q r /\
+        RTC (slot_copy_chunk sa.cs_next_id sb.cs_next_id ctx func) q r) /\
        (toplevel_copy_inv cv ds dst src loc a b n s G tn (j+1) Gr tr r /\
         allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r)) /\
        ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0` by
@@ -535,7 +607,7 @@ Proof
            mk_inst ((sa.cs_next_id+4)+7) JMP [Label hdr] []]|>` by
        (simp[Abbr `body_code`] >> metis_tac[]) >>
      drule_at (Pat `lookup_block _ _ = SOME <|bb_label := _; bb_instructions := _|>`)
-       storage_copy_body_origin_path_window >>
+       storage_copy_body_origin_path_chunk >>
      disch_then drule_all >>
      disch_then (qspecl_then [`D`, `explicit`, `PG`]
        (qx_choosel_then [`r`, `Gf`, `tnf`] strip_assume_tac)) >>
@@ -569,18 +641,84 @@ Proof
         `back.inst_opcode = JMP \/ back.inst_opcode = JNZ` suffices_by
           (disch_tac >> drule_all slot_copy_window_then_jump >> simp[]) >>
         simp[Abbr `back`, mk_inst_def]) >>
-     qexistsl_tac [`r`, `Gf`, `tnf`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qspecl_then [`slot_copy_walk A explicit ctx func`,
+     qexistsl_tac [`r`, `Gf`, `tnf`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     irule RTC_SINGLE >>
+     drule_at (Pat `slot_copy_chunk _ _ _ _ _ _`) slot_copy_chunk_mono >>
+     disch_then irule >> simp[]) >>
+  qspecl_then [`\q r. slot_copy_walk A explicit ctx func q r /\
+                      RTC (slot_copy_chunk sa.cs_next_id sb.cs_next_id ctx func) q r`,
                `\j Gj tj q. toplevel_copy_inv cv ds dst src loc a b n s G tn j Gj tj q /\
                             allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q)`,
                `(D,lo,explicit,ctx,func,PG)`, `n`, `hdr`, `loop_body`, `exit`,
                `n`, `0`, `G1`, `tn1`, `t`] mp_tac copy_loop_iterate_origin_ptr_with >>
   BETA_TAC >> impl_tac
-  >- (rpt conj_tac >> TRY (first_assum MATCH_ACCEPT_TAC) >> simp[slot_copy_walk_trans]) >>
+  >- (rpt conj_tac >> TRY (first_assum MATCH_ACCEPT_TAC) >>
+      simp[transitive_def] >> metis_tac[slot_copy_walk_then, RTC_TRANS]) >>
   disch_then (qx_choosel_then [`t2`, `Gf`, `tnf`] strip_assume_tac) >>
   qexistsl_tac [`t2`, `Gf`, `tnf`, `cv`, `ds`] >> simp[] >>
   conj_tac >- metis_tac[origin_ptr_path_then] >>
-  metis_tac[slot_copy_walk_then]
+  conj_tac >- metis_tac[slot_copy_walk_then] >>
+  metis_tac[RTC_TRANS]
+QED
+
+Theorem storage_copy_loop_origin_ptr_walk:
+  compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) /\
+  fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
+  not_fresh_at sa dst /\ (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
+  n < 2**256 /\ b + 32*n < 2**256 /\ b + 32*n <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!body hdr body_code hdr_code setup.
+     emitted_blocks sa sb =
+       [<|bb_label := body; bb_instructions := body_code|>;
+        <|bb_label := hdr; bb_instructions := hdr_code|>;
+        <|bb_label := sa.cs_current_bb;
+          bb_instructions := sa.cs_current_insts ++ setup|>] ==>
+     (!j. j < LENGTH setup ==>
+          A sa.cs_current_bb (LENGTH sa.cs_current_insts+j) (EL j setup)) /\
+     (!j. j < LENGTH hdr_code ==> A hdr j (EL j hdr_code)) /\
+     (!j. j < LENGTH body_code ==> A body j (EL j body_code))) ==>
+  ?t Gf tnf cv ds.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    slot_copy_walk A explicit ctx func s t /\
+    toplevel_copy_inv cv ds dst src loc a b n s G tn n Gf tnf t /\
+    (!x. not_fresh_at sa x ==> ~MEM x ds) /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all storage_copy_loop_origin_ptr_walk_chunks >>
+  disch_then (qspecl_then [`explicit`, `PG`, `D`]
+    (qx_choosel_then [`t`, `Gf`, `tnf`, `cv`, `ds`] strip_assume_tac)) >>
+  qexistsl_tac [`t`, `Gf`, `tnf`, `cv`, `ds`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem storage_copy_loop_origin_ptr_chunks:
+  compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) /\
+  fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
+  not_fresh_at sa dst /\ (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
+  n < 2**256 /\ b + 32*n < 2**256 /\ b + 32*n <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf cv ds.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    RTC (slot_copy_chunk sa.cs_next_id sb.cs_next_id ctx func) s t /\
+    toplevel_copy_inv cv ds dst src loc a b n s G tn n Gf tnf t /\
+    (!x. not_fresh_at sa x ==> ~MEM x ds) /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all (Q.INST [`A` |-> `\l k i. T`] storage_copy_loop_origin_ptr_walk_chunks
+             |> SIMP_RULE bool_ss []) >>
+  disch_then (qspecl_then [`explicit`, `PG`, `D`]
+    (qx_choosel_then [`t`, `Gf`, `tnf`, `cv`, `ds`] strip_assume_tac)) >>
+  qexistsl_tac [`t`, `Gf`, `tnf`, `cv`, `ds`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem storage_copy_loop_origin_ptr:
@@ -600,8 +738,7 @@ Theorem storage_copy_loop_origin_ptr:
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all (Q.INST [`A` |-> `\l k i. T`] storage_copy_loop_origin_ptr_walk
-             |> SIMP_RULE bool_ss []) >>
+  drule_all storage_copy_loop_origin_ptr_chunks >>
   disch_then (qspecl_then [`explicit`, `PG`, `D`]
     (qx_choosel_then [`t`, `Gf`, `tnf`, `cv`, `ds`] strip_assume_tac)) >>
   qexistsl_tac [`t`, `Gf`, `tnf`, `cv`, `ds`] >> rpt conj_tac >> first_assum ACCEPT_TAC

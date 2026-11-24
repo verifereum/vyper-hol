@@ -5,7 +5,7 @@ Ancestors
   fragGasCopySeqLiftProps fragGasOriginPtrLoop exprLoweringProps rich_list
   fragGasSeqPtrContext ptrDiscipline memSafeRun unitTransformDefs fragExecMem fragExec
   contextCodegenRel venomState venomInst venomExecSemantics
-  venomExecProofs arithmetic words list
+  venomExecProofs arithmetic words list rawSlotCopyChunk
 
 Theorem storage_copy_body_ptr_run:
   (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
@@ -79,7 +79,8 @@ Proof
 QED
 
 (* The counted path through the body and its jump back to the header. *)
-Theorem storage_copy_body_origin_path_window:
+
+Theorem storage_copy_body_origin_path_chunk:
   (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   allocas_from lo s /\
   ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
@@ -103,6 +104,7 @@ Theorem storage_copy_body_origin_path_window:
     (toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 (k+1) G1 tn1 r /\
      allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r)) /\
     ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0 /\
+    slot_copy_chunk id (id+8) ctx func s r /\
     ?code u t bb.
       lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
       isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -158,14 +160,70 @@ Proof
   conj_tac >- simp[jump_to_def] >>
   conj_tac >- simp[jump_to_def] >>
   conj_tac >- simp[jump_to_def] >>
-  qexistsl_tac [`code`, `r`, `t`, `bb`] >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
-    fs[EVERY_MEM] >>
   `EVERY (\i. id <= i.inst_id /\ i.inst_id < id+7) code` by
     (qpat_x_assum `code = _` SUBST1_TAC >>
      Cases_on `loc = LocStorage` >> simp[mk_inst_def] >> decide_tac) >>
+  conj_tac
+  >- (pure_rewrite_tac[slot_copy_chunk_def] >>
+      qexistsl_tac [`bb`, `code`, `r`, `t`, `mk_inst (id+7) JMP [Label hdr] []`, `hdr`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+      >- (qpat_assum `code = _` SUBST1_TAC >> Cases_on `loc = LocStorage` >>
+          simp[mk_inst_def, is_terminator_def] >> decide_tac)
+      >- (rpt strip_tac >>
+          qpat_assum `ctx_has_dalloca ctx ==> !pre i post v. _` drule >>
+          disch_then drule_all >> simp[])
+      >> simp[step_inst_base_def, mk_inst_def, eval_operand_def, Abbr `t`]) >>
+  qexistsl_tac [`code`, `r`, `t`, `bb`] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
+    fs[EVERY_MEM] >>
   asm_rewrite_tac[] >>
   Cases_on `loc = LocStorage` >> simp[Abbr `t`, Abbr `bb`, is_terminator_def, mk_inst_def]
+QED
+
+Theorem storage_copy_body_origin_path_window:
+  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  allocas_from lo s /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      [mk_inst id ADD [src;Var cv] [sv];
+       mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+       mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+       mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+       mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+       mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+       mk_inst (id+6) ASSIGN [Var nv] [cv];
+       mk_inst (id+7) JMP [Label hdr] []]|> ==>
+  !D explicit PG. ?r G1 tn1.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK r,G1,tn1) /\
+    (toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 (k+1) G1 tn1 r /\
+     allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r)) /\
+    ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0 /\
+    ?code u t bb.
+      lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+      EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+      EVERY (\i. id <= i.inst_id /\ i.inst_id < id+7) code /\
+      run_inst_seq code s = OK u /\
+      t = u with vs_inst_idx := s.vs_inst_idx + LENGTH code /\
+      t.vs_current_bb = s.vs_current_bb /\
+      get_instruction bb t.vs_inst_idx = SOME (mk_inst (id+7) JMP [Label hdr] []) /\
+      r = jump_to hdr t /\
+      EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+                 i.inst_opcode <> GAS) code /\
+      bb.bb_instructions = code ++ [mk_inst (id+7) JMP [Label hdr] []]
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >>
+  drule_all storage_copy_body_origin_path_chunk >>
+  disch_then (qspecl_then [`D`, `explicit`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`r`, `G1`, `tn1`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`code`, `u`, `t`, `bb`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem storage_copy_body_origin_path:
