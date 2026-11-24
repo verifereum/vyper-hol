@@ -898,9 +898,14 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
      gvs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
          ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
   `eval_operand iop ib = SOME iw /\ op_taint tnb iop = {} /\ op_prov Gb iop = NONE` by
-    (Cases_on `iop` >>
-     gvs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
-         ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`eval_operand iop it = SOME iw`, `op_taint tni iop = {}`,
+        `op_prov Gi iop = NONE`, `!q. iop = Var q ==> not_fresh_at st2 q`,
+        `!l. iop <> Label l`,
+        `!q. not_fresh_at st2 q ==> lookup_var q ib = lookup_var q it /\ _ /\ _`] >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `iop` >>
+     simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
+          ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
   `fn_has_code cs'' sb func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
   qpat_x_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
   simp[exprSimArrayIndexTheory.array_elem_ptr_def,
