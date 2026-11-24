@@ -31,7 +31,7 @@ Theorem buffer_word_copy_action[local,simp]:
   code_action ^buffer_safe (compile_word_copy_loop_base src dst n ll sl ctor imm)
 Proof
   Cases_on `word_scale ll = 1` >> Cases_on `word_scale sl = 1` >>
-  simp[compile_word_copy_loop_base_def, comp_ignore_bind_def] >> buffer_actions [buffer_ptr_actions]
+  simp[compile_word_copy_loop_base_def, comp_ignore_bind_def, buffer_ptr_actions] >> buffer_actions []
 QED
 
 Theorem buffer_imm_copy_action[local,simp]:
