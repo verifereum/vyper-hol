@@ -62,12 +62,12 @@ Proof
        GSYM fmap_domsub, SF CONJ_ss, taint_component_equality]
 QED
 
-Theorem precheck_assert_path[local]:
+Theorem precheck_assert_edge[local]:
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSERT [op] []) /\
   eval_operand op s = SOME w /\ op_taint tn op = {} /\
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+  gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (if w = 0w then Abort Revert_abort (revert_state (set_returndata [] s))
      else OK (s with vs_inst_idx := SUC s.vs_inst_idx),G,tn)
 Proof
@@ -80,7 +80,6 @@ Proof
   Cases_on `w = 0w` >> gvs[]
   >- (`step_inst_base i s = Abort Revert_abort (revert_state (set_returndata [] s))` by
         simp[Abbr `i`, step_ASSERT_revert] >>
-      irule (cj 3 gas_origin_ptr_path_rules) >> simp[exit_result_def] >>
       rewrite_tac[gas_origin_ptr_edge_def] >> conj_tac
       >- (rewrite_tac[gas_origin_edge_def] >> simp[] >> qexists_tac `0` >>
           simp[step_inst_non_invoke, Abbr `i`, mk_inst_def, gas_events_step_def,
@@ -96,11 +95,145 @@ Proof
     simp[ptr_inst_ok_def, step_inst_non_invoke, Abbr `i`, mk_inst_def,
          step_ASSERT_ok, access_ok_def, taint_ok_def, source_memory_read_ranges_def,
          source_memory_write_ranges_def] >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-       (OK (s with vs_inst_idx := SUC s.vs_inst_idx),G,tn)` by
-    (drule_all straight_line_origin_ptr_edge >> simp[Abbr `i`, mk_inst_def, bop_assert_ghost]) >>
-  drule (cj 2 gas_origin_ptr_path_rules) >> disch_then (qspec_then `[]` mp_tac) >>
-  simp[] >> disch_then irule >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]
+  drule_all straight_line_origin_ptr_edge >> simp[Abbr `i`, mk_inst_def, bop_assert_ghost]
+QED
+
+(* The two installed instructions share the same intermediate state in
+   the ghost path, the terminal fetch, and the successful base run. *)
+Theorem extcall_codesize_checked_edges:
+  compile_extcodesize_check addr a = ((),b) /\ fn_has_code a b func /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_operand addr s = SOME aw /\ op_taint tn addr = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  let out = STRING #"%" (toString a.cs_next_var) in
+  let w = n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code) : bytes32 in
+  let v = update_var out w s in
+  let u = v with vs_inst_idx := SUC s.vs_inst_idx in
+  let t = u with vs_inst_idx := LENGTH b.cs_current_insts in
+  let abort = Abort Revert_abort (revert_state (set_returndata [] u)) in
+  let tm = tn with t_var := tn.t_var |+ (out,{}) in
+  (?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+        get_instruction bb s.vs_inst_idx = SOME (mk_inst a.cs_next_id EXTCODESIZE [addr] [out]) /\
+        get_instruction bb u.vs_inst_idx = SOME (mk_inst (a.cs_next_id + 1) ASSERT [Var out] [])) /\
+  step_inst_base (mk_inst a.cs_next_id EXTCODESIZE [addr] [out]) s = OK v /\
+  (w <> 0w ==> run_inst_seq (emitted_insts a b) s = OK v /\
+                t = v with vs_inst_idx := LENGTH b.cs_current_insts) /\
+  u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = SUC s.vs_inst_idx /\
+  (!D explicit.
+    gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G \\ out,tm) /\
+    gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (u,G \\ out,tm) []
+      (if w = 0w then abort else OK t,G \\ out,tm) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (if w = 0w then abort else OK t,G \\ out,tm))
+Proof
+  strip_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
+  drule precheck_code_shape >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  qpat_x_assum `!i. i < _ ==> _` (fn th =>
+    strip_assume_tac (SIMP_RULE (boss_ss()) [] (Q.SPEC `0` th)) >>
+    strip_assume_tac (SIMP_RULE (boss_ss()) [] (Q.SPEC `1` th))) >>
+  qmatch_goalsub_abbrev_tac `update_var out w s` >>
+  qabbrev_tac `u = update_var out w s with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `tm = tn with t_var := tn.t_var |+ (out,{})` >>
+  `!D explicit. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+           (OK u,G \\ out,tm)` by
+    (simp[NoAsms, Abbr `u`, Abbr `tm`, Abbr `w`] >> rpt gen_tac >>
+     irule precheck_codesize_edge >> metis_tac[]) >>
+  `~u.vs_halted /\ lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+   get_instruction bb u.vs_inst_idx = SOME (mk_inst (a.cs_next_id + 1) ASSERT [Var out] []) /\
+   eval_operand (Var out) u = SOME w /\ op_taint tm (Var out) = {} /\ allocas_from lo u` by
+    (simp[Abbr `u`, Abbr `tm`, update_var_def, allocas_from_def,
+          eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, op_taint_def, arithmeticTheory.ADD1] >>
+     fs[allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (simp[Abbr `u`,update_var_def,allocas_below_fmp_def] >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
+       (ACCEPT_TAC o SRULE[allocas_below_fmp_def])) >>
+  `update_var out w s with vs_inst_idx := SUC s.vs_inst_idx = u` by simp[Abbr `u`] >>
+  qpat_x_assum `update_var _ _ _ with vs_inst_idx := _ = u` SUBST1_TAC >>
+  conj_tac >- (qexists_tac `bb` >> simp[]) >>
+  `step_inst_base (mk_inst a.cs_next_id EXTCODESIZE [addr] [out]) s =
+     OK (update_var out w s)` by simp[Abbr `w`, slice_extcodesize_step] >>
+  qpat_assum `step_inst_base _ _ = _` (PURE_ONCE_REWRITE_TAC o single) >>
+  simp_tac bool_ss [] >> conj_tac
+  >- (strip_tac >>
+      `eval_operand (Var out) (update_var out w s) = SOME w` by
+        simp[eval_operand_def,update_var_def,lookup_var_def,FLOOKUP_UPDATE] >>
+      simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
+           step_ASSERT_ok, Abbr `u`]) >>
+  ntac 2 (conj_tac >- simp[Abbr `u`, update_var_def]) >>
+  `SUC u.vs_inst_idx = LENGTH b.cs_current_insts` by simp[Abbr `u`, update_var_def] >>
+  rpt gen_tac >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G \\ out,tm)` by
+    simp[] >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (u,G \\ out,tm) []
+    (if w = 0w then Abort Revert_abort (revert_state (set_returndata [] u))
+     else OK (u with vs_inst_idx := LENGTH b.cs_current_insts),G \\ out,tm)` by
+    (qpat_assum `SUC _ = LENGTH _` (SUBST1_TAC o SYM) >>
+     irule precheck_assert_edge >> metis_tac[]) >>
+  `tm = tn with t_var := tn.t_var |+ (out,{})` by simp[Abbr `tm`] >>
+  qpat_assum `tm = _` (PURE_ONCE_REWRITE_TAC o single o SYM) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  Cases_on `w = 0w` >>
+  qpat_x_assum `gas_origin_ptr_edge _ (u,_,_) [] _` mp_tac
+  >- (qpat_assum `w = 0w` (fn th => simp_tac bool_ss [th]) >> disch_tac >>
+      qpat_assum `gas_origin_ptr_edge _ (u,_,_) [] _`
+        (mp_then Any mp_tac (cj 3 gas_origin_ptr_path_rules)) >>
+      simp_tac bool_ss [exit_result_def] >> disch_tac >>
+      qpat_assum `gas_origin_ptr_edge _ (s,_,_) [] _`
+        (mp_then Any mp_tac (cj 2 gas_origin_ptr_path_rules)) >>
+      disch_then drule >> simp_tac bool_ss [listTheory.APPEND]) >>
+  qpat_assum `w <> 0w` (fn th => simp_tac bool_ss [th]) >> disch_tac >>
+  `~(u with vs_inst_idx := LENGTH b.cs_current_insts).vs_halted` by
+    (simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+     (u with vs_inst_idx := LENGTH b.cs_current_insts,G \\ out,tm) []
+     (OK (u with vs_inst_idx := LENGTH b.cs_current_insts),G \\ out,tm)` by
+    (irule (cj 1 gas_origin_ptr_path_rules) >> first_assum ACCEPT_TAC) >>
+  qpat_assum `gas_origin_ptr_edge _ (u,_,_) [] _`
+    (mp_then Any mp_tac (cj 2 gas_origin_ptr_path_rules)) >>
+  disch_then drule >> simp_tac bool_ss [listTheory.APPEND] >> disch_tac >>
+  qpat_assum `gas_origin_ptr_edge _ (s,_,_) [] _`
+    (mp_then Any mp_tac (cj 2 gas_origin_ptr_path_rules)) >>
+  disch_then drule >> simp_tac bool_ss [listTheory.APPEND]
+QED
+
+Theorem extcall_codesize_checked_steps:
+  compile_extcodesize_check addr a = ((),b) /\ fn_has_code a b func /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_operand addr s = SOME aw /\ op_taint tn addr = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  let out = STRING #"%" (toString a.cs_next_var) in
+  let w = n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code) : bytes32 in
+  let v = update_var out w s in
+  let u = v with vs_inst_idx := SUC s.vs_inst_idx in
+  let t = u with vs_inst_idx := LENGTH b.cs_current_insts in
+  let abort = Abort Revert_abort (revert_state (set_returndata [] u)) in
+  let tm = tn with t_var := tn.t_var |+ (out,{}) in
+  (?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+        get_instruction bb s.vs_inst_idx = SOME (mk_inst a.cs_next_id EXTCODESIZE [addr] [out]) /\
+        get_instruction bb u.vs_inst_idx = SOME (mk_inst (a.cs_next_id + 1) ASSERT [Var out] [])) /\
+  step_inst_base (mk_inst a.cs_next_id EXTCODESIZE [addr] [out]) s = OK v /\
+  (w <> 0w ==> run_inst_seq (emitted_insts a b) s = OK v /\
+                t = v with vs_inst_idx := LENGTH b.cs_current_insts) /\
+  (!D explicit. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G \\ out,tm) /\
+    (w = 0w ==> gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (u,G \\ out,tm) [] (abort,G \\ out,tm)) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (if w = 0w then abort else OK t,G \\ out,tm))
+Proof
+  strip_tac >> drule_all extcall_codesize_checked_edges >>
+  disch_then (qspecl_then [`PG`, `G`] mp_tac) >>
+  rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  conj_tac >- (qexists_tac `bb` >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> first_x_assum (qspecl_then [`D`, `explicit`] strip_assume_tac) >>
+  rpt conj_tac >> simp[] >> strip_tac >> gvs[]
 QED
 
 (* A single physical endpoint, including on rejection. *)
@@ -122,43 +255,7 @@ Theorem extcall_codesize_checked_path:
      G \\ (STRING #"%" (toString a.cs_next_var)),
      tn with t_var := tn.t_var |+ (STRING #"%" (toString a.cs_next_var),{}))
 Proof
-  strip_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
-  drule precheck_code_shape >> strip_tac >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  qpat_x_assum `!i. i < _ ==> _` (fn th =>
-    strip_assume_tac (SIMP_RULE (boss_ss()) [] (Q.SPEC `0` th)) >>
-    strip_assume_tac (SIMP_RULE (boss_ss()) [] (Q.SPEC `1` th))) >>
-  qmatch_goalsub_abbrev_tac `update_var out w s` >>
-  qabbrev_tac `u = update_var out w s with vs_inst_idx := SUC s.vs_inst_idx` >>
-  qabbrev_tac `tm = tn with t_var := tn.t_var |+ (out,{})` >>
-  `!D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-           (OK u,G \\ out,tm)` by
-    (simp[NoAsms, Abbr `u`, Abbr `tm`, Abbr `w`] >> gen_tac >>
-     irule precheck_codesize_edge >> metis_tac[]) >>
-  `~u.vs_halted /\ lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
-   get_instruction bb u.vs_inst_idx = SOME (mk_inst (a.cs_next_id + 1) ASSERT [Var out] []) /\
-   eval_operand (Var out) u = SOME w /\ op_taint tm (Var out) = {} /\ allocas_from lo u` by
-    (simp[Abbr `u`, Abbr `tm`, update_var_def, allocas_from_def,
-          eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, op_taint_def, arithmeticTheory.ADD1] >>
-     fs[allocas_from_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
-    (simp[Abbr `u`,update_var_def,allocas_below_fmp_def] >>
-     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s`
-       (ACCEPT_TAC o SRULE[allocas_below_fmp_def])) >>
-  gen_tac >>
-  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,G \\ out,tm) []
-     (if w = 0w then Abort Revert_abort (revert_state (set_returndata [] u))
-      else OK (u with vs_inst_idx := LENGTH b.cs_current_insts),G \\ out,tm)` by
-    (`SUC u.vs_inst_idx = LENGTH b.cs_current_insts` by
-       simp[Abbr `u`, update_var_def] >>
-     qpat_x_assum `SUC _ = LENGTH _` (SUBST1_TAC o SYM) >>
-     irule precheck_assert_path >> metis_tac[]) >>
-  `update_var out w s with vs_inst_idx := SUC s.vs_inst_idx = u` by simp[Abbr `u`] >>
-  qpat_x_assum `update_var _ _ _ with vs_inst_idx := _ = u` SUBST1_TAC >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-           (OK u,G \\ out,tm)` by metis_tac[] >>
-  drule (cj 2 gas_origin_ptr_path_rules) >> disch_then (qspec_then `[]` mp_tac) >>
-  simp[Abbr `tm`]
+  strip_tac >> drule_all extcall_codesize_checked_steps >> simp[LET_THM]
 QED
 
 Theorem precheck_guard_agrees[local]:
