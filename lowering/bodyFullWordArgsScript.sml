@@ -32,6 +32,34 @@ Proof
   simp[gas_shadow_compiles_return]
 QED
 
+(* The scoped and ambient simulators extend exactly the same typed and
+   ghost post when a first argument has finished. *)
+Theorem word_args_cons_post:
+  expr_post H ctx func cenv cx e es sa s1 s0 mid v x t /\
+  typed_args_post H ctx func cenv cx mid s1 t fin rest ys vs u /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM mid.scopes /\
+  sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
+  is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) /\
+  op_taint tn1 x = {} /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+  ghost_kept_at lo cenv mid s1 G1 tn1 t G tn /\
+  EVERY (\p. op_taint tn p = {}) ys ==>
+  typed_args_post H ctx func cenv cx es sa s0 fin (e::rest) (x::ys) (v::vs) u /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+  EVERY (\p. op_taint tn p = {}) (x::ys)
+Proof
+  strip_tac >>
+  `typed_args_post H ctx func cenv cx es sa s0 fin (e::rest) (x::ys) (v::vs) u` by
+    (irule typed_args_post_cons >> simp[] >> qexistsl [`mid`,`s1`,`t`] >> simp[]) >>
+  simp[] >> conj_tac
+  >- (`wb_frame cenv es mid sa s0 t` by metis_tac[expr_post_frame] >>
+      metis_tac[ghost_kept_at_wb_trans]) >>
+  Cases_on `x` >> fs[ptrDisciplineTheory.op_taint_def, ghost_kept_at_def] >>
+  metis_tac[]
+QED
+
 (* Readiness is supplied by the containing expression at each source state. *)
 Theorem lower_word_args_by_type_sim_full:
   !todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx tyf
@@ -307,7 +335,6 @@ Proof
      first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
   qpat_x_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
-  `op_taint tn1 x = {}` by fs[ptr_val_ok_def] >>
   gvs[] >>
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
         (qpat_assum `!tail. bind (eval_expr cx e) _ _ = _` (qspec_then `[]` mp_tac) >>
@@ -325,38 +352,13 @@ Proof
          qpat_assum `!tail. bind (eval_expr cx e) _ _ = _`
            (qspec_then `[]` mp_tac) >> simp[]) >>
       `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
-  `ghost_kept cenv mid s1 G1 tn1 t G' tn'` by
-    (qpat_assum `ghost_kept_at lo cenv mid s1 G1 tn1 t G' tn'`
-       (mp_tac o REWRITE_RULE [ghost_kept_at_def]) >>
-     simp[NoAsms, ghost_kept_def] >> strip_tac >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `op_taint tn' x = {}` by
-    (qpat_assum `ghost_kept cenv mid s1 G1 tn1 t G' tn'` mp_tac >>
-     qpat_assum `op_taint tn1 x = {}` mp_tac >>
-     qpat_assum `!z. x = Var z ==> not_fresh_at s1 z` mp_tac >>
-     rpt (pop_assum kall_tac) >>
-     metis_tac[wordArgsPtrTheory.ghost_kept_operand]) >>
-  simp[EVERY_DEF] >>
-  conj_tac
-  >- (`expr_body_pre cenv cx env e es` by
-        (qpat_assum `!child ee. _ ==> expr_body_pre _ _ _ child ee /\ _`
-           (qspecl_then [`e`, `es`] mp_tac) >> simp[]) >>
-      drule exprSimHypsTheory.expr_body_pre_type_evaluates >>
-      simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
-      irule typed_args_post_cons >> simp[] >>
-      qexistsl_tac [`mid`, `s1`, `t`] >> simp[]) >>
-  qpat_assum `expr_post H ctx func cenv cx e es sa s1 s0 mid v x t`
-    (assume_tac o MATCH_MP exprSimWordArgsTheory.expr_post_frame) >>
-  qpat_assum `stmt_state_rel H ctx func cenv cx es s0`
-    (fn ssr => let
-       val horizon = hd (snd (strip_comb (concl ssr)));
-       val th = SPEC_ALL wordArgsPtrTheory.ghost_kept_at_wb_trans;
-       val hv = List.find (fn v => fst (dest_var v) = "H") (free_vars (concl th));
-     in irule (INST_TYPE (match_type (type_of (valOf hv)) (type_of horizon)) th) end) >>
-  rpt conj_tac
-  >- first_assum ACCEPT_TAC
-  >- (qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`G1`, `mid`, `mid`, `t`, `s1`, `tn1`] >> simp[]
+  `expr_body_pre cenv cx env e es` by
+    (qpat_assum `!child ee. _ ==> expr_body_pre _ _ _ child ee /\ _`
+       (qspecl_then [`e`, `es`] mp_tac) >> simp[]) >>
+  drule exprSimHypsTheory.expr_body_pre_type_evaluates >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  `op_taint tn1 x = {}` by fs[ptr_val_ok_def] >>
+  drule_all word_args_cons_post >> simp[]
 QED
 
 Theorem lower_word_args_sim_full:
