@@ -10,10 +10,8 @@
  *)
 Theory bodyFullCreateHeld
 Ancestors
-  rawCreateMemorySpine rawCreateAdminSpine
-  bodySingletonCallSupport
-  rawCreateAdminSpine[qualified] rawCreateCodeCopySpine[qualified]
-  blueprintLiteralOffsetProps[qualified,ignore_grammar]
+  rawCreateMemorySpine rawCreateAdminSpine bodySingletonCallSupport bodyFullProxyBufferSpine
+  rawCreateAdminSpine rawCreateCodeCopySpine[qualified] blueprintLiteralOffsetProps[qualified,ignore_grammar]
   bodyFullForArrayRound[qualified,ignore_grammar]
   abiDecodeValidFiniteLoop[qualified,ignore_grammar]
   bodyFullExtCallPosAggregate[qualified,ignore_grammar]
@@ -38,8 +36,8 @@ Ancestors
   bodyPtrMakeArrayEmission[qualified] bodyPtrEnvBuiltinsEdges[qualified]
   ptrDisciplineEmptyTaint[qualified]
   fragGasOriginPtrLoop[qualified] fragGasOriginPtr[qualified] fragExec[qualified]
-  fragGasOrigin[qualified] fragGasPathPtr[qualified] rawCreateAdminSpine
-  bodyFullAbiEncodeSetupTail[qualified] bodyFullAllocaFresh[qualified]
+  fragGasOrigin[qualified] fragGasPathPtr[qualified]
+  rawCreateAdminSpine bodyFullAbiEncodeSetupTail[qualified] bodyFullAllocaFresh[qualified]
   bodyMemEcArithTransfers[qualified] bodyFullBuiltinECArithTransfers[qualified]
   stmtReasonLitFragMemory[qualified] bodyFullHashKeccakFixed[qualified]
   stmtFragPtr[qualified] exprPtrUnwrapFrames[qualified] exprSimStorageCopy[qualified]
@@ -899,6 +897,7 @@ Theorem proxy_shift_origin[local]:
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?x t G' tn'. aligned = Var x /\ not_fresh_at sb x /\
+    proxy_buffer_span sa sb explicit ctx func s t /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
     t = (update_var x (w << 96) s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     t.vs_current_bb = sb.cs_current_bb /\
@@ -930,6 +929,12 @@ Proof
   >- (simp[not_fresh_at_def] >>
       gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
           fresh_id_def, fresh_var_def, emit_def]) >>
+  conj_tac
+  >- (drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+      `sb.cs_current_bb = sa.cs_current_bb` by metis_tac[] >>
+      irule proxy_buffer_span_run >>
+      simp[mk_inst_def, is_terminator_def, run_inst_seq_def, Abbr `u`,
+           step_inst_base_opcode_eqs, exec_pure2_def, bind_outputs_def, eval_operand_def]) >>
   conj_tac
   >- (gen_tac >>
       `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
@@ -972,6 +977,7 @@ Theorem proxy_offset_store_origin[local]:
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    proxy_buffer_span sa sb explicit ctx func s t /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     lookup_var p t = SOME w /\ ptr_covers G' tn' p t 96 /\
@@ -989,8 +995,21 @@ Proof
   `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     gvs[] >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
-  drule_all bodyFullBuiltinECArithTransfersTheory.ec_scalar_store_origin_ptr_path >>
+  drule_all bodyFullBuiltinECArithTransfersTheory.ec_scalar_store_origin_ptr_path_with_raw_endpoint >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `proxy_buffer_span sa sb explicit ctx func s t` by
+    (`LENGTH sb.cs_current_insts = s.vs_inst_idx + LENGTH (emitted_insts sa sb)` by
+       simp[LENGTH_APPEND] >>
+     qpat_assum `t = r with vs_inst_idx := _` SUBST1_TAC >>
+     qpat_assum `LENGTH sb.cs_current_insts = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
+     irule proxy_buffer_span_run >>
+     `sa.cs_next_id <= sb.cs_next_id` by simp[] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qexists_tac `emitted_insts sa sb` >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  qpat_x_assum `t = r with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `run_inst_seq _ _ = OK r` kall_tac >>
   qexistsl_tac [`t`,`G'`,`tn'`] >>
   `t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
    t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
@@ -1028,6 +1047,7 @@ Theorem proxy_buf_written[local]:
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    proxy_buffer_span m1 sb explicit ctx func s t /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     lookup_var p t = SOME w /\ ptr_covers G' tn' p t 96 /\
     t.vs_memory = (mstore (w2n w + 39) post
@@ -1049,6 +1069,15 @@ Proof
   drule_all bodyFullAbiEncodeSetupTailTheory.abi_encode_payload_word_origin >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choose_then `s1` (qx_choose_then `t1` strip_assume_tac))) >>
+  `proxy_buffer_span m1 m2 explicit ctx func s s1` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_void >> strip_tac >>
+     drule_all bodyPtrMakeArrayPrimitiveInstallTheory.emit_void_fetch_boundary >> strip_tac >>
+     qpat_assum `s1 = _` SUBST1_TAC >>
+     `SUC s.vs_inst_idx = LENGTH m2.cs_current_insts` by simp[] >>
+     qpat_assum `SUC s.vs_inst_idx = _` SUBST1_TAC >>
+     irule proxy_buffer_span_run >>
+     simp[run_inst_seq_def, mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs,
+          exec_write2_def, eval_operand_def]) >>
   suspend "shift"
 QED
 
@@ -1116,6 +1145,8 @@ Resume proxy_buf_written[pack]:
   conj_tac
   >- (gen_tac >>
       metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
+  `proxy_buffer_span m1 sb explicit ctx func s t` by
+    metis_tac[proxy_buffer_span_trans] >>
   `s2.vs_memory = (mstore b pre s).vs_memory /\
    s2.vs_allocas = s.vs_allocas /\ s2.vs_alloca_next = s.vs_alloca_next` by
     simp[update_var_def,mstore_def] >>
@@ -1157,7 +1188,7 @@ Finalise proxy_buf_written
 (* The proxy window is an ordinary registered 96-byte allocation, but
    CREATE reads only its first 54 bytes. The full registration and the
    saved-variable frame are available to a subsequent salt evaluation. *)
-Theorem proxy_buf_origin_window:
+Theorem proxy_buf_origin_window_steps:
   compile_create_proxy_buf target sa = (buf,sb) /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
@@ -1174,6 +1205,7 @@ Theorem proxy_buf_origin_window:
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     allocas_from lo t /\ lo <= t.vs_alloca_next /\ alloca_history func t /\
+    RTC (proxy_buffer_step sa sb explicit ctx func) s t /\
     w2n w + 96 < dimword (:256) /\ w2n w + 96 <= t.vs_alloca_next /\
     lookup_var p t = SOME w /\ ptr_covers G' tn' p t 96 /\
     FLOOKUP G' p = SOME (w2n w,96) /\
@@ -1219,18 +1251,26 @@ Proof
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `96 < dimword (:256)` by EVAL_TAC >>
   drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> strip_tac >>
-  mp_tac (Q.INST [`n` |-> `96`, `buf` |-> `allocation`, `sb` |-> `m1`,
-    `sa` |-> `sa`, `func` |-> `func`, `cenv` |-> `cenv`, `H` |-> `H`,
-    `ctx` |-> `ctx`, `cx` |-> `cx`, `es` |-> `es`, `s` |-> `s`,
-    `lo` |-> `lo`, `explicit` |-> `explicit`, `PG` |-> `PG`, `G` |-> `G`, `tn` |-> `tn`]
-    (INST_TYPE [``:'a`` |-> ``:256``, ``:'b`` |-> ``:256``]
-      bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_exact)) >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  disch_then (qx_choosel_then [`p`,`w`,`u`,`Ga`,`ta`] strip_assume_tac) >>
+  drule_all (INST_TYPE [``:'b`` |-> ``:256``]
+    bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_with_raw_endpoint) >>
+  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
+    (qx_choosel_then [`p`,`w`,`u`,`Ga`,`ta`,`raw`] strip_assume_tac)) >>
+  `proxy_buffer_span sa m1 explicit ctx func s u` by
+    (drule abiBufferAllocationCodeTheory.compile_alloc_buffer_code >> strip_tac >>
+     qpat_assum `u = raw with vs_inst_idx := _` SUBST1_TAC >>
+     irule proxy_buffer_span_run >>
+     `sa.cs_next_id <= m1.cs_next_id` by simp[] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qexists_tac `emitted_insts sa m1` >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  qpat_x_assum `u = raw with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `Ga = step_prov _ _ _ _` kall_tac >>
+  qpat_x_assum `ta = step_taint _ _ _ _` kall_tac >>
   suspend "writes"
 QED
 
-Resume proxy_buf_origin_window[writes]:
+Resume proxy_buf_origin_window_steps[writes]:
   `stmt_state_rel H ctx func cenv cx es u` by
     (qpat_assum `!h. stmt_state_rel h _ _ _ _ _ _ ==> stmt_state_rel h _ _ _ _ _ _`
        (qspec_then `H:(bool # bytes32 # type_value) list # num list` mp_tac) >> simp[]) >>
@@ -1256,7 +1296,7 @@ Resume proxy_buf_origin_window[writes]:
   suspend "frame"
 QED
 
-Resume proxy_buf_origin_window[frame]:
+Resume proxy_buf_origin_window_steps[frame]:
   `!x. not_fresh_at sa x ==> not_fresh_at m1 x` by
     (rpt strip_tac >> irule stmtFragPtrTheory.not_fresh_at_mono >>
      qexists_tac `sa` >> simp[]) >>
@@ -1297,7 +1337,11 @@ Resume proxy_buf_origin_window[frame]:
   suspend "pack"
 QED
 
-Resume proxy_buf_origin_window[pack]:
+Resume proxy_buf_origin_window_steps[pack]:
+  `RTC (proxy_buffer_step sa sb explicit ctx func) s t` by
+    (`proxy_buffer_span sa sb explicit ctx func s t` by
+       (irule proxy_buffer_span_trans >> qexistsl_tac [`m1`,`u`] >> asm_rewrite_tac[]) >>
+     fs[proxy_buffer_span_def]) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')` by
     (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
      qexistsl_tac [`Ga`,`u`,`ta`] >> simp[]) >>
@@ -1328,7 +1372,7 @@ Resume proxy_buf_origin_window[pack]:
   suspend "state_rel"
 QED
 
-Resume proxy_buf_origin_window[state_rel]:
+Resume proxy_buf_origin_window_steps[state_rel]:
   `(∀name b n. local_region cenv es.scopes s name b n ⇒
        regions_disjoint pb 96 b n)` by
     (qpat_assum `!name b n. local_region cenv es.scopes u name b n ==> _`
@@ -1351,7 +1395,7 @@ Resume proxy_buf_origin_window[state_rel]:
   suspend "wb_frame"
 QED
 
-Resume proxy_buf_origin_window[wb_frame]:
+Resume proxy_buf_origin_window_steps[wb_frame]:
   conj_tac
   >- (irule bodyFullUnwrapSlotPostTheory.unwrap_slot_copy_wb_frame >>
       conj_tac >- simp[] >>
@@ -1372,7 +1416,7 @@ Resume proxy_buf_origin_window[wb_frame]:
   suspend "ghost_kept"
 QED
 
-Resume proxy_buf_origin_window[ghost_inv]:
+Resume proxy_buf_origin_window_steps[ghost_inv]:
   rpt strip_tac >>
   `ghost_inv_at D lo d cenv cx es Ga ta u` by
     (irule (INST_TYPE [``:'a`` |-> ``:256``] bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at) >>
@@ -1403,7 +1447,7 @@ Resume proxy_buf_origin_window[ghost_inv]:
   qpat_assum `!off n. _ ==> mem_bytes_at off n t.vs_memory = _` irule >> decide_tac
 QED
 
-Resume proxy_buf_origin_window[ghost_kept]:
+Resume proxy_buf_origin_window_steps[ghost_kept]:
   rpt strip_tac >>
   `!x. not_fresh_at sk x ==> not_fresh_at sa x` by
     (rpt strip_tac >> irule stmtFragPtrTheory.not_fresh_at_mono >>
@@ -1417,7 +1461,49 @@ Resume proxy_buf_origin_window[ghost_kept]:
   simp[IgnAsm `!x. not_fresh_at sa x ==> lookup_var x t = _`, pred_setTheory.DIFF_SUBSET]
 QED
 
-Finalise proxy_buf_origin_window
+Finalise proxy_buf_origin_window_steps
+
+Theorem proxy_buf_origin_window:
+  compile_create_proxy_buf target sa = (buf,sb) /\ fn_has_code sa sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+    ctx func cenv cx es s /\ alloca_history func s /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand target s = SOME word /\ op_taint tn target = {} /\
+  (!x. target = Var x ==> not_fresh_at sa x) ==>
+  ?p w t G' tn'.
+    buf = Var p /\ not_fresh_at sb p /\ sa.cs_next_id < sb.cs_next_id /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\ alloca_history func t /\
+    w2n w + 96 < dimword (:256) /\ w2n w + 96 <= t.vs_alloca_next /\
+    lookup_var p t = SOME w /\ ptr_covers G' tn' p t 96 /\
+    FLOOKUP G' p = SOME (w2n w,96) /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,96) /\
+    (!name b n. local_region cenv es.scopes t name b n ==> regions_disjoint (w2n w) 96 b n) /\
+    read_memory (w2n w) 54 t = minimal_proxy_initcode (w2w word) /\
+    (!i. w2n w <= i /\ i < w2n w + 54 ==> i NOTIN tn'.t_mem) /\
+    (!H':(bool # bytes32 # type_value) list # num list.
+       stmt_state_rel H' ctx func cenv cx es s ==> stmt_state_rel H' ctx func cenv cx es t) /\
+    wb_frame cenv es es sa s t /\
+    (!D d. ghost_inv_at D lo d cenv cx es G tn s ==> ghost_inv_at D lo d cenv cx es G' tn' t) /\
+    (!sk es0 G0 tn0 s0. sk.cs_next_var <= sa.cs_next_var /\
+      (!aid b n. FLOOKUP s0.vs_allocas aid = SOME (b,n) /\ aid < sk.cs_next_id ==>
+                   b + n <= s.vs_alloca_next) /\
+      (!name b n. local_region cenv es0.scopes s0 name b n ==> b + n <= s.vs_alloca_next) /\
+      ghost_kept_at lo cenv es0 sk G0 tn0 s0 G tn ==>
+      ghost_kept_at lo cenv es0 sk G0 tn0 s0 G' tn') /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (qx_choosel_then [`p`,`w`,`t`,`G'`,`tn'`] strip_assume_tac o
+              MATCH_MP proxy_buf_origin_window_steps) >>
+  qexistsl_tac [`p`,`w`,`t`,`G'`,`tn'`] >> asm_rewrite_tac[]
+QED
 
 (* Run the compiler's result check after either creation opcode. The
    non-reverting case returns the original word, even when it is zero. *)
@@ -2901,6 +2987,143 @@ Resume raw_create_scalar_suffix_cut[salt_some]:
 QED
 Finalise raw_create_scalar_suffix_cut
 
+(* The optional salt may execute an internal call. Its writeback and
+   ghost frames, rather than its instruction shape, preserve the private
+   proxy buffer constructed before evaluating the salt. *)
+Theorem proxy_salt_dispatch_handoff:
+  expr_body_pre cenv cx env salt ea /\ expr_type salt = BaseT (BytesT (Fixed 32)) /\
+  lower_value compile_expr cenv (BaseT (BytesT (Fixed 32))) salt c = (salt_op,sm) /\
+  expr_result_typed env salt (Value sv) /\ expr_sim_inv cenv cx env ew /\
+  storage_trace_domain cx st0 ew.storage_trace /\
+  (!H. valid_horizon cx st0 H ew.storage_trace ==>
+    expr_post H ctx func cenv cx salt ea c sm sbuf ew sv salt_op ssalt /\
+    ghost_inv_at (DF H) lo d cenv cx ew Gsalt tns ssalt) /\
+  ptr_val_ok cx (post_value_type cenv salt) sv salt_op Gsalt tns ssalt /\
+  ghost_kept_at lo cenv ea c Gbuf tnb sbuf Gsalt tns /\
+  s0.vs_alloca_next <= sbuf.vs_alloca_next /\ sbuf.vs_alloca_next <= ssalt.vs_alloca_next /\
+  stmt_state_rel H0 ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  ci_mono sa c /\ ci_mono c sm /\
+  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at c x) /\
+  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at c x) /\
+  wb_frame cenv es ea sa s0 sbuf /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gbuf tnb /\
+  lookup_var pbuf sbuf = SOME pw /\ ptr_covers Gbuf tnb pbuf sbuf 96 /\
+  (?aid. FLOOKUP sbuf.vs_allocas aid = SOME (w2n pw,96) /\ aid < c.cs_next_id) /\
+  not_fresh_at c pbuf /\ w2n pw + 96 <= sbuf.vs_alloca_next /\ w2n pw + 96 < dimword (:256) /\
+  (!name b n. local_region cenv ea.scopes sbuf name b n ==> regions_disjoint (w2n pw) 96 b n) /\
+  read_memory (w2n pw) 54 sbuf = minimal_proxy_initcode addr /\
+  (!i. w2n pw <= i /\ i < w2n pw + 54 ==> i NOTIN tnb.t_mem) /\
+  eval_operand y sbuf = SOME aw /\ op_taint tnb y = {} /\
+  (!x. y = Var x ==> not_fresh_at c x) /\ (!l. y <> Label l) ==>
+  local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sm x) /\
+  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sm x) /\
+  s0.vs_alloca_next <= ssalt.vs_alloca_next /\
+  (!H. valid_horizon cx st0 H ew.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ew ssalt /\ storage_well_formed_on cx ew (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx ew Gsalt tns ssalt) /\
+  wb_frame cenv es ew sa s0 ssalt /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gsalt tns /\
+  outcomes_accounts_typed ew.outcomes /\
+  eval_operand (Var pbuf) ssalt = SOME pw /\ ptr_covers Gsalt tns pbuf ssalt 54 /\
+  not_fresh_at sm pbuf /\ w2n pw + 54 <= ssalt.vs_alloca_next /\ w2n pw + 54 < dimword (:256) /\
+  read_memory (w2n pw) 54 ssalt = minimal_proxy_initcode addr /\
+  (!i. w2n pw <= i /\ i < w2n pw + 54 ==> i NOTIN tns.t_mem) /\
+  eval_operand y ssalt = SOME aw /\ op_taint tns y = {} /\
+  (!x. y = Var x ==> not_fresh_at sm x) /\
+  ?sw. eval_operand salt_op ssalt = SOME sw /\ op_taint tns salt_op = {} /\
+    (!x. salt_op = Var x ==> not_fresh_at sm x) /\ dest_create_salt sv = SOME sw /\
+    (!tv av ts off rof tail.
+      dest_AddressV tv = SOME addr /\ dest_NumV av = SOME (w2n aw) /\ LENGTH ts = 3 ==>
+      bind (eval_create_operands cx CreateMinimalProxy T rof ts off [tv;av;sv])
+        (read_result cx) (ew with gas_obs := tail) =
+      bind (ignore_bind (check_not_static cx)
+        (create_oracle_result (SOME sw) (w2n aw) (minimal_proxy_initcode addr) rof))
+        (read_result cx) (ew with gas_obs := tail))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?aid. FLOOKUP sbuf.vs_allocas aid = _ /\ _` strip_assume_tac >>
+  `is_word_type (BaseT (BytesT (Fixed 32)))` by simp[is_word_type_def] >>
+  `lower_value compile_expr cenv (expr_type salt) salt c = (salt_op,sm)` by simp[] >>
+  drule_all create_word_cut_frame_facts >> strip_tac >>
+  drule_all create_cut_frames_trans >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon ew.storage_trace) ew.storage_trace`
+    by fs[storage_trace_domain_def] >>
+  `stmt_state_rel (storage_trace_horizon ew.storage_trace) ctx func cenv cx ew ssalt`
+    by first_assum (drule_then strip_assume_tac) >>
+  `IS_SOME ew.outcomes` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ ew ssalt`
+       (strip_assume_tac o REWRITE_RULE [exprLoweringPropsTheory.stmt_state_rel_def,
+                                        loweringStateRelDefsTheory.state_rel_def]) >> simp[]) >>
+  `outcomes_accounts_typed ew.outcomes` by fs[expr_sim_inv_def] >>
+  suspend "window"
+QED
+
+Resume proxy_salt_dispatch_handoff[window]:
+  `!name base len. local_region cenv ea.scopes sbuf name base len ==>
+     w2n pw + 96 <= base \/ base + len <= w2n pw` by
+    (qpat_assum `!name b n. local_region cenv ea.scopes sbuf name b n ==> regions_disjoint _ _ b n`
+       (ACCEPT_TAC o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def])) >>
+  `read_memory (w2n pw) 96 ssalt = read_memory (w2n pw) 96 sbuf` by
+    (simp[read_memory_eq_mem_bytes_at] >>
+     qpat_assum `wb_frame cenv ea ew c sbuf ssalt`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     first_assum (drule_all_then ACCEPT_TAC)) >>
+  `!u. read_memory (w2n pw) 54 u = TAKE 54 (read_memory (w2n pw) 96 u)` by
+    (gen_tac >>
+     qspecl_then [`w2n pw`,`96`,`0`,`54`,`u`] mp_tac read_memory_subwindow >> simp[]) >>
+  `read_memory (w2n pw) 54 ssalt = minimal_proxy_initcode addr` by
+    (qpat_assum `!u. read_memory _ 54 u = _` (qspec_then `sbuf` mp_tac) >> simp[]) >>
+  `!i. w2n pw <= i /\ i < w2n pw + 54 ==> i NOTIN tns.t_mem` by
+    (rpt strip_tac >> `i < w2n pw + 96` by decide_tac >>
+     qpat_assum `ghost_kept_at lo cenv ea c Gbuf tnb sbuf Gsalt tns`
+       (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
+     `i IN tnb.t_mem` by first_assum (drule_all_then ACCEPT_TAC) >>
+     metis_tac[]) >>
+  `lookup_var pbuf ssalt = SOME pw` by
+    (match_mp_tac (Q.SPECL [`cenv`, `ea`, `ew`, `c`, `sbuf`, `ssalt`, `pbuf`, `pw`]
+       exprSimWordArgsTheory.wb_frame_vars) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `ptr_covers Gsalt tns pbuf ssalt 54` by
+    (qpat_assum `ghost_kept_at lo cenv ea c Gbuf tnb sbuf Gsalt tns`
+       (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
+     qpat_assum `ptr_covers Gbuf tnb pbuf sbuf 96`
+       (strip_assume_tac o REWRITE_RULE [ptr_covers_def]) >>
+     gvs[ptr_covers_def] >> rpt (goal_assum (drule_at Any)) >> decide_tac) >>
+  suspend "dispatch"
+QED
+
+Resume proxy_salt_dispatch_handoff[dispatch]:
+  `eval_operand y ssalt = SOME aw /\ op_taint tns y = {}` by
+    (conj_tac
+     >- (match_mp_tac (Q.SPECL [`y`,`c`,`sbuf`,`ssalt`,`aw`]
+           exprBopSimPropsTheory.eval_operand_frame) >>
+         simp[] >> rpt strip_tac >>
+         irule exprSimWordArgsTheory.wb_frame_vars >>
+         qpat_assum `wb_frame cenv ea ew c sbuf ssalt` (irule_at Any) >> simp[]) >>
+     `op_taint tns y = op_taint tnb y` suffices_by simp[] >>
+     irule emittedSeqComposePtrTheory.old_operand_taint_frame >> qexists `c` >>
+     simp[] >> gen_tac >> disch_tac >>
+     qpat_assum `ghost_kept_at lo cenv ea c Gbuf tnb sbuf Gsalt tns`
+       (mp_tac o REWRITE_RULE [ghost_kept_at_def]) >> simp[]) >>
+  `sa.cs_next_var <= c.cs_next_var /\ c.cs_next_var <= sm.cs_next_var /\
+   sa.cs_next_id <= c.cs_next_id /\ c.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
+  `local_ptrs_reserved cenv sm` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,arithmeticTheory.LESS_EQ_TRANS] >>
+  `(!z n. cenv.ce_return_buf = SOME (PtrVar (Var z) n) ==> not_fresh_at sm z) /\
+   (!z n. cenv.ce_return_pc = SOME (PtrVar (Var z) n) ==> not_fresh_at sm z) /\
+   (!z. y = Var z ==> not_fresh_at sm z) /\ not_fresh_at sm pbuf` by
+    (rpt conj_tac >> rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
+     qexists_tac `c` >> simp[]) >>
+  qabbrev_tac `sw = typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) sv` >>
+  `dest_create_salt sv = SOME sw` by
+    (simp[Abbr `sw`] >> irule create_salt_word >> first_assum ACCEPT_TAC) >>
+  `w2n pw + 54 < dimword (:256)` by decide_tac >>
+  simp[eval_operand_def] >> rpt strip_tac >>
+  irule (SIMP_RULE (srw_ss()) [dest_optional_salt_def]
+     (Q.INST [`salt` |-> `SOME sv`] create_proxy_read_prepared)) >> simp[]
+QED
+Finalise proxy_salt_dispatch_handoff
+
 Theorem proxy_expr_sim_from_parts:
   body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
@@ -3308,136 +3531,32 @@ Resume proxy_expr_sim_from_parts[salt_cut]:
            vyperStorageTraceTheory.storage_trace_frame_create_operands]) >>
   map_every qx_gen_tac [`sv`,`ew`,`Gsalt`,`tns`,`ssalt`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `valid_horizon cx st0 (storage_trace_horizon ew.storage_trace) ew.storage_trace`
-    by qpat_assum `storage_trace_domain cx st0 ew.storage_trace`
-      (ACCEPT_TAC o REWRITE_RULE [storage_trace_domain_def]) >>
-  qpat_assum `!H. valid_horizon _ _ H ew.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  `wb_frame cenv ea ew c sbuf ssalt` by
-    (qpat_assum `expr_post _ _ _ _ _ salt _ _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
-     simp[loweringPostsTheory.wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `!H. valid_horizon cx st0 H ew.storage_trace ==>
-     stmt_state_rel H ctx func cenv cx ew ssalt /\
-     storage_well_formed_on cx ew (FST H) /\
-     ghost_inv_at (DF H) lo d cenv cx ew Gsalt tns ssalt` by
-    (gen_tac >> disch_tac >>
-     qpat_assum `!H. valid_horizon _ _ H ew.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-       (qspec_then `H` (drule_then strip_assume_tac)) >>
-     qpat_assum `expr_post _ _ _ _ _ salt _ _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >> simp[]) >>
-  suspend "salt_window"
+  suspend "salt_handoff"
 QED
 
-Resume proxy_expr_sim_from_parts[salt_window]:
-  `!name base len. local_region cenv ea.scopes sbuf name base len ==>
-     w2n pw + 96 <= base \/ base + len <= w2n pw` by
-    (qpat_assum `!name b n. local_region cenv ea.scopes sbuf name b n ==> regions_disjoint _ _ b n`
-       (ACCEPT_TAC o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def])) >>
-  `read_memory (w2n pw) 96 ssalt = read_memory (w2n pw) 96 sbuf` by
-    (simp[read_memory_eq_mem_bytes_at] >>
-     qpat_assum `wb_frame cenv ea ew c sbuf ssalt`
-       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
-     first_assum (drule_all_then ACCEPT_TAC)) >>
-  `!u. read_memory (w2n pw) 54 u = TAKE 54 (read_memory (w2n pw) 96 u)` by
-    (gen_tac >>
-     qspecl_then [`w2n pw`,`96`,`0`,`54`,`u`] mp_tac read_memory_subwindow >> simp[]) >>
-  `read_memory (w2n pw) 54 ssalt = minimal_proxy_initcode (w2w tw)` by
-    (qpat_assum `!u. read_memory _ 54 u = _` (qspec_then `sbuf` mp_tac) >> simp[]) >>
-  `!i. w2n pw <= i /\ i < w2n pw + 54 ==> i NOTIN tns.t_mem` by
-    (rpt strip_tac >> `i < w2n pw + 96` by decide_tac >>
-     qpat_assum `ghost_kept_at lo cenv ea c Gbuf tnb sbuf Gsalt tns`
-       (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
-     `i IN tnb.t_mem` by first_assum (drule_all_then ACCEPT_TAC) >>
-     metis_tac[]) >>
-  `lookup_var pbuf ssalt = SOME pw` by
-    (match_mp_tac (Q.SPECL [`cenv`, `ea`, `ew`, `c`, `sbuf`, `ssalt`, `pbuf`, `pw`]
-       exprSimWordArgsTheory.wb_frame_vars) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `ptr_covers Gsalt tns pbuf ssalt 54` by
-    (qpat_assum `ghost_kept_at lo cenv ea c Gbuf tnb sbuf Gsalt tns`
-       (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
-     qpat_assum `ptr_covers Gbuf tnb pbuf sbuf 96`
-       (assume_tac o CONJUNCT1 o REWRITE_RULE [ptr_covers_def]) >>
-     simp[ptr_covers_def]) >>
-  `eval_operand y ssalt = SOME aw /\ op_taint tns y = {}` by
-    (conj_tac
-     >- (match_mp_tac (Q.SPECL [`y`,`c`,`sbuf`,`ssalt`,`aw`]
-           exprBopSimPropsTheory.eval_operand_frame) >>
-         simp[] >> rpt strip_tac >>
-         match_mp_tac (Q.SPECL [`cenv`,`ea`,`ew`,`c`,`sbuf`,`ssalt`]
-           exprSimWordArgsTheory.wb_frame_vars) >> simp[]) >>
-     `op_taint tns y = op_taint tnb y` suffices_by simp[] >>
-     irule emittedSeqComposePtrTheory.old_operand_taint_frame >> qexists `c` >>
-     simp[] >> gen_tac >> disch_tac >>
-     qpat_assum `ghost_kept_at lo cenv ea c Gbuf tnb sbuf Gsalt tns`
-       (mp_tac o REWRITE_RULE [ghost_kept_at_def]) >> simp[]) >>
-  suspend "salt_root_frames"
-QED
-Resume proxy_expr_sim_from_parts[salt_root_frames]:
-  `MAP FDOM es.scopes = MAP FDOM ea.scopes` by metis_tac[] >>
-  `wb_frame cenv es ew sa s0 ssalt` by
-    (irule (INST_TYPE [``:'a`` |-> ``:256``] exprSimWordArgsTheory.wb_frame_trans) >> simp[] >>
-     conj_tac >- (qexistsl [`ea`,`c`,`sbuf`] >> simp[]) >>
-     qexistsl [`storage_trace_horizon ea.storage_trace`,`ctx`,`cx`,`func`] >> simp[]) >>
-  `ghost_kept_at lo cenv es sa G0 tn0 s0 Gsalt tns` by
-    (irule (INST_TYPE [``:'b`` |-> ``:256``] wordArgsPtrTheory.ghost_kept_at_wb_trans) >>
-     qpat_assum `ghost_kept_at lo cenv ea c Gbuf tnb sbuf Gsalt tns` (irule_at Any) >>
-     simp[] >>
-     qexistsl [`func`,`ea`,`cx`,`ctx`,`storage_trace_horizon ea.storage_trace`] >> simp[]) >>
-  `local_ptrs_reserved cenv d'` by
-    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
-     qexists_tac `c` >> asm_rewrite_tac[]) >>
-  `(!z n. cenv.ce_return_buf = SOME (PtrVar (Var z) n) ==> not_fresh_at d' z) /\
-   (!z n. cenv.ce_return_pc = SOME (PtrVar (Var z) n) ==> not_fresh_at d' z) /\
-   (!z. y = Var z ==> not_fresh_at d' z) /\ not_fresh_at d' pbuf` by
-    (rpt conj_tac >> rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
-     qexists_tac `c` >> simp[]) >>
-  suspend "salt_dispatch"
-QED
-
-Resume proxy_expr_sim_from_parts[salt_dispatch]:
-  `is_word_type (expr_type salt) /\
-   evaluate_type (get_tenv cx) (expr_type salt) = SOME (BaseTV (BytesT (Fixed 32)))` by
-    simp[is_word_type_def,vyperValueTheory.evaluate_type_def] >>
-  qpat_assum `lower_value _ _ _ salt c = _`
-    (mp_then Any (drule_all_then strip_assume_tac) exprSimSourceTheory.expr_body_pre_lower_value_word_shape) >>
-  `value_has_type (BaseTV (BytesT (Fixed 32))) sv` by
-    (qpat_x_assum `expr_result_typed _ salt _` mp_tac >>
-     simp[vyperTypeExprResultTheory.expr_result_typed_def,
-          vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-          vyperTypeInvariantsTheory.value_result_typed_def,vyperValueTheory.evaluate_type_def] >>
-     rpt strip_tac >> simp[]) >>
-  qabbrev_tac `sw = typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) sv` >>
-  `eval_operand salt_op ssalt = SOME sw` by
-    (qpat_assum `expr_post _ _ _ _ _ salt _ _ _ _ _ _ _ _`
-       (mp_then Any drule_all exprSimPrecompilesTheory.expr_post_typed_stack_operand) >>
-     simp[Abbr `sw`]) >>
-  `op_taint tns salt_op = {}` by
-    (qpat_x_assum `ptr_val_ok _ _ sv salt_op _ _ _` mp_tac >>
-     simp[ptr_val_ok_def,loweringPostsTheory.post_value_type_def,is_word_type_def]) >>
-  `dest_create_salt sv = SOME sw` by
-    (simp[Abbr `sw`] >> irule create_salt_word >> first_assum ACCEPT_TAC) >>
-  `outcomes_accounts_typed ew.outcomes` by
-    (qpat_assum `expr_sim_inv _ _ _ ew`
-       (mp_tac o REWRITE_RULE [expr_sim_inv_def]) >> simp[]) >>
-  `stmt_state_rel (storage_trace_horizon ew.storage_trace) ctx func cenv cx ew ssalt`
-    by first_assum (drule_then strip_assume_tac) >>
-  `IS_SOME ew.outcomes` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ ew ssalt`
-      (strip_assume_tac o REWRITE_RULE [exprLoweringPropsTheory.stmt_state_rel_def,
-                                       loweringStateRelDefsTheory.state_rel_def]) >> simp[]) >>
+Resume proxy_expr_sim_from_parts[salt_handoff]:
+  `ci_mono sa c` by
+    (irule ci_mono_trans >> qexists_tac `b` >> simp[] >>
+     irule ci_mono_trans >> qexists_tac `a` >> simp[]) >>
+  Q.SUBGOAL_THEN `?aid. FLOOKUP sbuf.vs_allocas aid = SOME (w2n pw,96) /\ aid < c.cs_next_id`
+    assume_tac >- (qexists_tac `b.cs_next_id` >> simp[]) >>
+  `s0.vs_alloca_next <= sbuf.vs_alloca_next` by decide_tac >>
+  `eval_operand y sbuf = SOME aw /\ op_taint tnb y = {}` by
+    (qpat_assum `!op. _ ==> eval_operand op sbuf = eval_operand op samt /\ _`
+       (qspec_then `y` mp_tac) >> simp[]) >>
+  `stmt_state_rel (storage_trace_horizon ea.storage_trace) ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+       (qspec_then `storage_trace_horizon ea.storage_trace` mp_tac) >> simp[]) >>
+  qspecl_then [`d'`, `w2w tw`, `storage_trace_horizon ea.storage_trace`] mp_tac
+    (Q.GENL [`sm`, `addr`, `H0`] proxy_salt_dispatch_handoff) >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
+  disch_then strip_assume_tac >>
   qpat_assum `!st0 sa sb sm s0 G0 tn0 result ee s G tn ptr pv amount aw sop sw addr source.
     _ ==> gas_outcome_full _ _ _ _ _ _ _ _` irule >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (gen_tac >> disch_tac >> simp[] >> NO_TAC) >>
-  TRY decide_tac >>
   qexistsl [`w2w tw`,`y`,`aw`,`Var pbuf`,`pw`,`d'`,`SOME salt_op`,`SOME sw`] >>
   qpat_x_assum `buf = Var pbuf` SUBST_ALL_TAC >>
-  simp[eval_operand_def] >> rpt conj_tac
-  >- (gen_tac >>
-      irule (SIMP_RULE (srw_ss()) [dest_optional_salt_def]
-        (Q.INST [`salt` |-> `SOME sv`] create_proxy_read_prepared)) >> simp[]) >>
+  simp[] >>
   qpat_assum `w2n pw + 96 < dimword (:256)` mp_tac >>
   simp[NoAsms,wordsTheory.dimword_def] >> numLib.ARITH_TAC
 QED
@@ -3803,6 +3922,133 @@ QED
 
 Finalise create_ctor_borrowed_row
 
+Definition create_ctor_borrowed_head_post_def:
+  create_ctor_borrowed_head_post (DF,lo,d,ctx,func) cenv cx e
+      (es,sa,sb,s0,vv,sv,G0,tn0) H res ee G tn t <=>
+    ?v. res = INL v /\
+      ((?tag op. sv = StackValue tag op) \/
+       (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location = LocMemory) \/
+       (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location <> LocMemory /\
+            lowered_value_type cenv e = expr_type e /\ sv = vv)) /\
+      (?raw. read_result cx raw ee = (INL v,ee) /\
+        vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
+        vv_at cenv cx (lowered_value_type cenv e) sa sb ee raw sv t /\
+        ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G tn t /\
+        vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t) /\
+      vv_storage_live H cx sv ee t /\
+      ((case sv of StackValue _ _ => T | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+         ptr_buf_ok cenv e (vv_operand sv) G t) /\
+      (cenv.ce_is_ctor /\ vv_location sv = SOME LocCode ==>
+        !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
+          eval_operand (vv_operand sv) t = SOME w ==>
+          w2n w + type_memory_size rt <= lo /\
+          (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==> val_in_memory rt v (w2n w) mem)) /\
+      stmt_state_rel H ctx func cenv cx ee t /\ storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv sb t /\ ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      wb_frame cenv es ee sa s0 t /\ MAP FDOM ee.scopes = MAP FDOM es.scopes /\
+      (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
+      (~expr_has_effect e ==>
+       (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
+       (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>))
+End
+
+Theorem create_ctor_borrowed_head_endpoint:
+  expr_body_pre cenv cx env e es /\ body_inv tops ctx cenv cx /\
+  compile_expr cenv (expr_type e) e sa = (vv,sb) /\
+  sv = ext_call_arg_value (lowered_value_type cenv e) vv /\
+  ~is_word_type (lowered_value_type cenv e) /\
+  eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\
+  read_result cx tv ee = (INL v,ee) /\
+  bodyFullAttribute$field_vv_post (DF,lo,d,ctx,func) cenv cx e
+    (es,sa,sb,s0,vv,G0,tn0) H (INL tv : eval_result + exception) ee G1 tn1 t /\
+  return_buf_frame d cenv sa s0 /\ ~t.vs_halted /\
+  valid_horizon cx st0 H ee.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    storage_well_formed_on cx es (FST H)) ==>
+  create_ctor_borrowed_head_post (DF,lo,d,ctx,func) cenv cx e
+    (es,sa,sb,s0,vv,sv,G0,tn0) H (INL v) ee G1 tn1 t
+Proof
+  strip_tac >>
+  qpat_x_assum `bodyFullAttribute$field_vv_post _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE bool_ss
+      [bodyFullAttributeTheory.field_vv_post_def, sumTheory.INL_11]) >>
+  simp[create_ctor_borrowed_head_post_def,NoAsms] >>
+  qabbrev_tac `entry = es with gas_obs := gs` >>
+  `expr_body_pre cenv cx env e entry` by simp[Abbr `entry`] >>
+  `valid_horizon cx entry H ee.storage_trace` by
+    (qpat_assum `eval_expr cx e entry = (INL tv,ee)`
+       (mp_then Any mp_tac valid_horizon_frame) >>
+     simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame] >> disch_tac >>
+     `valid_horizon cx st0 H es.storage_trace` by fs[Abbr `entry`] >>
+     `(storage_well_formed_on cx entry (FST H) <=> storage_well_formed_on cx es (FST H))` by
+       (irule storage_well_formed_on_backends >> simp[Abbr `entry`]) >>
+     fs[valid_horizon_def]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
+     simp[Abbr `entry`]) >>
+  `~expr_has_effect e ==>
+    (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
+    (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)` by
+    (strip_tac >> drule_all targetPureSourceFrameTheory.effect_free_source_projection >>
+     simp[Abbr `entry`]) >>
+  `vv_storage_live H cx vv ee t` by
+    (`vv_post H ctx func cenv cx e entry sa sb s0 ee tv vv t` by
+       simp[Abbr `entry`,exprSimPropsTheory.vv_post_initial_gas] >>
+     qpat_assum `expr_body_pre cenv cx env e entry`
+       (strip_assume_tac o MATCH_MP expr_body_pre_static_facts) >>
+     qpat_assum `expr_body_pre cenv cx env e entry`
+       (assume_tac o MATCH_MP exprBodyPreCallSafetyPropsTheory.expr_body_pre_call_evaluation_safe) >>
+     `runtime_consistent env cx entry /\ functions_well_typed cx` by
+       fs[expr_sim_inv_def,runtime_consistent_def] >>
+     irule bodyFullAssignTheory.body_assign_rhs_storage_live >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`cenv`,`ctx`,`e`,`env`,`entry`,`func`,`tv`,`s0`,`sa`,`sb`,`tops`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
+  `wb_frame cenv es ee sa s0 t` by
+    (rewrite_tac[loweringPostsTheory.wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `return_buf_frame d cenv sb t` by
+    (irule bodyMemoryDefsTheory.return_buf_frame_frame >> qexistsl [`cenv`,`s0`,`sa`] >>
+     qpat_assum `compile_expr _ _ e sa = _`
+       (mp_then Any mp_tac exprSimUnwrapTheory.compile_expr_extends) >>
+     simp[] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `~is_word_type (post_value_type cenv e)` by
+    (drule exprSimHypsTheory.expr_body_pre_lowered_fits >> strip_tac >>
+     `~is_word_type (expr_type e)` by metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type] >>
+     drule_all (Q.SPECL [`cenv`,`e`] abiEncodeMaterializeTheory.materialize_post_lowered_classify) >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
+  `((?tag op. sv = StackValue tag op) \/
+    (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location = LocMemory) \/
+    (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location <> LocMemory /\
+        lowered_value_type cenv e = expr_type e /\ sv = vv)) /\
+    (?raw. read_result cx raw ee = (INL v,ee) /\
+       vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
+       vv_at cenv cx (lowered_value_type cenv e) sa sb ee raw sv t /\
+       ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G1 tn1 t /\
+       vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t)`
+    suffices_by (disch_then (map_every assume_tac o CONJUNCTS) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >> suspend "representation") >>
+  match_mp_tac (Q.GENL [`env`,`es`,`raw`,`vv`] create_ctor_borrowed_row) >>
+  qexistsl [`env`,`entry`,`tv`] >> simp[]
+QED
+
+Resume create_ctor_borrowed_head_endpoint[representation]:
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  Cases_on `vv` >> gvs[ext_call_arg_value_def, vv_operand_def, vv_location_def,
+                       loweringPostsTheory.vv_storage_live_def] >>
+  strip_tac >>
+  drule_all exprPtrUnwrapStorageShapeTheory.compile_nonmemory_lowered_value_type >> strip_tac >>
+  gvs[loweringPostsTheory.post_value_type_lowered, arithmeticTheory.ADD_COMM]
+QED
+
+Finalise create_ctor_borrowed_head_endpoint
+
 (* Reading a borrowed aggregate adds no target instruction. Its source
    read still runs immediately, before evaluating any later argument. *)
 Theorem create_ctor_borrowed_head_outcome:
@@ -3942,102 +4188,37 @@ Resume create_ctor_borrowed_head_outcome[package]:
   conj_tac
   >- (irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >>
       first_assum ACCEPT_TAC) >>
-  BETA_TAC >> qexists `v` >> rewrite_tac[] >>
-  rule_assum_tac BETA_RULE >>
-  qpat_assum `!H. _ ==> (?p. INL tv = INL p /\ _) /\ _`
-    (drule_then (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
+  BETA_TAC >> rule_assum_tac BETA_RULE >>
   suspend "endpoint"
 QED
 
 Resume create_ctor_borrowed_head_outcome[endpoint]:
-  qabbrev_tac `entry = es with gas_obs := gas_explicit marks s0.vs_gas_readings` >>
-  `expr_body_pre cenv cx env e entry` by simp[Abbr `entry`] >>
-  `valid_horizon cx entry H ee.storage_trace` by
-    (qpat_assum `eval_expr cx e entry = (INL tv,ee)`
-       (mp_then Any mp_tac valid_horizon_frame) >>
-     simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame] >> disch_tac >>
-     `valid_horizon cx st0 H es.storage_trace` by fs[Abbr `entry`] >>
-     qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _` (drule_then strip_assume_tac) >>
-     `(storage_well_formed_on cx entry (FST H) <=> storage_well_formed_on cx es (FST H))` by
-       (irule storage_well_formed_on_backends >> simp[Abbr `entry`]) >>
-     fs[valid_horizon_def]) >>
-  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
-    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
-     simp[Abbr `entry`]) >>
-  `~expr_has_effect e ==>
-    (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
-    (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)` by
-    (strip_tac >> drule_all targetPureSourceFrameTheory.effect_free_source_projection >>
-     simp[Abbr `entry`]) >>
-  `vv_storage_live H cx vv ee t` by
-    (`vv_post H ctx func cenv cx e entry sa sb s0 ee tv vv t` by
-       simp[Abbr `entry`,exprSimPropsTheory.vv_post_initial_gas] >>
-     qpat_assum `expr_body_pre cenv cx env e entry`
-       (strip_assume_tac o MATCH_MP expr_body_pre_static_facts) >>
-     qpat_assum `expr_body_pre cenv cx env e entry`
-       (assume_tac o MATCH_MP exprBodyPreCallSafetyPropsTheory.expr_body_pre_call_evaluation_safe) >>
-     `runtime_consistent env cx entry /\ functions_well_typed cx` by
-       fs[expr_sim_inv_def,runtime_consistent_def] >>
-     irule bodyFullAssignTheory.body_assign_rhs_storage_live >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl [`cenv`,`ctx`,`e`,`env`,`entry`,`func`,`tv`,`s0`,`sa`,`sb`,`tops`] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
-  `wb_frame cenv es ee sa s0 t` by
-    (rewrite_tac[loweringPostsTheory.wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `return_buf_frame d cenv sb t` by
-    (irule bodyMemoryDefsTheory.return_buf_frame_frame >> qexistsl [`cenv`,`s0`,`sa`] >>
-     qpat_assum `compile_expr _ _ e sa = _`
-       (mp_then Any mp_tac exprSimUnwrapTheory.compile_expr_extends) >>
-     simp[] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `create_ctor_borrowed_head_post (DF,lo,d,ctx,func) cenv cx e
+    (es,sa,sb,s0,vv,sv,G0,tn0) H (INL v : value + exception) ee G1 tn1 t`
+    suffices_by simp[create_ctor_borrowed_head_post_def] >>
+  irule create_ctor_borrowed_head_endpoint >>
   `sv = ext_call_arg_value (lowered_value_type cenv e) vv` by
     fs[compile_snapshot_vv_def, comp_return_def] >>
-  `~is_word_type (post_value_type cenv e)` by
-    (drule exprSimHypsTheory.expr_body_pre_lowered_fits >> strip_tac >>
-     `~is_word_type (expr_type e)` by metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type] >>
-     drule_all (Q.SPECL [`cenv`,`e`] abiEncodeMaterializeTheory.materialize_post_lowered_classify) >>
-     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
-  qpat_x_assum `!H. _ ==> (?p. INL tv = INL p /\ _) /\ _` kall_tac >>
-  qpat_x_assum `!gs pv st tag p. eval_expr _ _ _ = _ /\ _ ==> _` kall_tac >>
-  `((?tag op. sv = StackValue tag op) \/
-    (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location = LocMemory) \/
-    (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location <> LocMemory /\
-        lowered_value_type cenv e = expr_type e /\ sv = vv)) /\
-    (?raw. read_result cx raw ee = (INL v,ee) /\
-       vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
-       vv_at cenv cx (lowered_value_type cenv e) sa sb ee raw sv t /\
-       ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G1 tn1 t /\
-       vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t)`
-    suffices_by (disch_then (map_every assume_tac o CONJUNCTS) >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- first_assum ACCEPT_TAC >> suspend "representation") >>
-  match_mp_tac (Q.GENL [`env`,`es`,`raw`,`vv`] create_ctor_borrowed_row) >>
-  qexistsl [`env`,`entry`,`tv`] >> simp[]
+  simp[] >> rpt conj_tac
+  >- (qexists `tops` >> first_assum ACCEPT_TAC)
+  >- (qexists `st0` >> simp[] >> rpt strip_tac >>
+      qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+        (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC)
+  >- (qexists `env` >> first_assum ACCEPT_TAC) >>
+  qexistsl [`gas_explicit marks s0.vs_gas_readings`,`tv`] >> simp[] >>
+  qpat_assum `!H. _ ==> (?p. INL tv = INL p /\ _) /\ _`
+    (drule_then mp_tac) >>
+  pure_rewrite_tac[bodyFullAttributeTheory.field_vv_post_def] >>
+  disch_then (ACCEPT_TAC o CONJUNCT1)
 QED
 
 Resume create_ctor_borrowed_head_outcome[representation]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  map_every (fn pat => qpat_assum pat mp_tac)
-    [`sv = ext_call_arg_value _ vv`,
-     `vv_storage_live H cx vv ee t`,
-     `!tag op. vv = StackValue tag op /\ _ ==> ptr_buf_ok cenv e op G1 t`,
-     `!tag p. vv = LocatedValue tag p /\ _ ==> ptr_buf_ok cenv e p.ptr_operand G1 t`,
-     `~is_word_type (post_value_type cenv e)`,
-     `compile_expr cenv (expr_type e) e sa = (vv,sb)`,
-     `cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-       ?v. read_result cx tv ee = (INL v,ee) /\ _`,
-     `read_result cx tv ee = (INL v,ee)`,
-     `(?tag op. sv = StackValue tag op) \/ _`,
-     `~expr_has_effect e ==> _ = _`] >>
-  rpt (pop_assum kall_tac) >> ntac 10 disch_tac >>
-  Cases_on `vv` >>
-  gvs[ext_call_arg_value_def,vv_operand_def,vv_location_def,
-      loweringPostsTheory.vv_storage_live_def] >>
+  Cases_on `vv` >> gvs[ext_call_arg_value_def, vv_operand_def, vv_location_def,
+                       loweringPostsTheory.vv_storage_live_def] >>
   strip_tac >>
-  qpat_assum `lowered_value_type cenv e = expr_type e`
-    (assume_tac o MATCH_MP (SPEC_ALL loweringPostsTheory.post_value_type_lowered)) >>
-  fs[arithmeticTheory.ADD_COMM]
+  drule_all exprPtrUnwrapStorageShapeTheory.compile_nonmemory_lowered_value_type >> strip_tac >>
+  gvs[loweringPostsTheory.post_value_type_lowered, arithmeticTheory.ADD_COMM]
 QED
 
 Finalise create_ctor_borrowed_head_outcome
