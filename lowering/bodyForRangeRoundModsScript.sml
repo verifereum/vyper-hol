@@ -89,6 +89,63 @@ Proof
   disj1_tac >> qexists_tac `()` >> gvs[GSYM ignore_bind_def]
 QED
 
+(* The selected read can be either a captured value or a storage place.
+   The physical prefix has one endpoint for all valid storage horizons. *)
+Theorem for_read_push_round_prefix_mods:
+  ~s.vs_halted /\
+  (storage_trace_domain cx st0 es.storage_trace ==>
+   ?ep u Gf tf.
+     (!tail. bind (read_result cx a) (push_scope_with_var id tyv)
+          (es with gas_obs := tail) = (INL (),ep with gas_obs := tail)) /\
+     ep.gas_obs = [] /\ ep.storage_trace = es.storage_trace /\
+     (!H. valid_horizon cx st0 H es.storage_trace ==>
+        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+          (s,G,tn) [] (OK u,Gf,tf)) /\
+     gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+       (finally (try (ignore_bind (eval_stmts cx body) (return F))
+                     handle_loop_exception) pop_scope) (ep,u,Gf,tf) Q R) ==>
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+    (do v <- read_result cx a;
+        push_scope_with_var id tyv v;
+        finally (try (do eval_stmts cx body; return F od)
+                     handle_loop_exception) pop_scope od) (es,s,G,tn) Q R
+Proof
+  strip_tac >> Cases_on `storage_trace_domain cx st0 es.storage_trace`
+  >- (first_x_assum drule >> strip_tac >> suspend "prefix") >>
+  irule range_round_bad_domain >> simp[]
+QED
+
+Resume for_read_push_round_prefix_mods[prefix]:
+  pure_rewrite_tac[ignore_bind_def] >>
+  once_rewrite_tac[GSYM bind_assoc] >> irule gas_outcome_full_mods_bind_all >>
+  rpt conj_tac
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_bind_unit >>
+      qexistsl_tac [`mid`,`t`,`v`] >> BETA_TAC >>
+      qhdtm_assum `gas_exempt_cert_mods` (assume_tac o BETA_RULE) >> simp[])
+  >~ [`gas_exempt_cert_mods _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_error_unit >> first_assum ACCEPT_TAC)
+  >~ [`storage_trace_frame (bind _ _)`]
+  >- (irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_read_result, storage_trace_frame_state_updates])
+  >- simp[GSYM ignore_bind_def, range_round_trace_frame] >>
+  qexists_tac `\H res mid G1 tn1 t.
+    res = INL () /\ mid = ep /\ G1 = Gf /\ tn1 = tf /\ t = u` >>
+  BETA_TAC >> reverse conj_tac
+  >- (irule gas_outcome_full_mods_pure >> simp[] >>
+      qexistsl_tac [`Gf`,`ep`,`INL ()`,`u`,`tf`] >>
+      `ep with gas_obs := [] = ep` by simp[evaluation_state_component_equality] >>
+      simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  disj1_tac >> qexists_tac `()` >> gvs[GSYM ignore_bind_def]
+QED
+
+Finalise for_read_push_round_prefix_mods
+
 Theorem range_cons_round_mods:
   for_code func cenv bc ret_ty body id tyv p sz ainst cv ev dv nv cond_lbl
     exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
