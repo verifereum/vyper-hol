@@ -14,9 +14,10 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   bodyFullIntCallDefs bodyFullIntCallByteFrame bodyFullPreds
   constSubst constSubstStmtsPreserve bodyFullIntCallCheckedBody
   vyperTypeContractFunction bodySimFull[qualified]
-  bodyInvSplit bodyInvCodeProps bodyInvExecutionProps bodyInvMetadataProps
+  bodyInvSplit bodyCallSupport[qualified,ignore_grammar] bodyInvCodeProps bodyInvExecutionProps bodyInvMetadataProps
   bodyInvIntCallPinsProps contractInvContextProps
   moduleVariableKeyProps compileUnit bodyFullPostsMods[qualified,ignore_grammar]
+  bodyQualifiedStmtSupport linkedConstAnnotations constSubstMods[qualified]
   bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
   ctorDeployLoweringSource nonreentrantEquiv internalReturnMemoryMem
   internalReturnStackAggregate[qualified,ignore_grammar]
@@ -1175,6 +1176,7 @@ Theorem intcall_lowering_suffix[local]:
       NoLoop (case rt of SOME ty => ty | NONE => BaseT BoolT) ss a = (ce',b) /\
     cs_extends entry a /\ fn_has_code entry final callee ==>
     cs_extends a final /\ fn_has_code a b callee /\ fn_has_code b final callee /\
+    cs_extends a b /\ cs_extends b final /\
     (if block_is_terminated b then ((),b)
      else comp_ignore_bind
        (if nr then compile_nonreentrant_unlock key trans view else comp_return ())
@@ -2143,6 +2145,17 @@ Proof
 QED
 
 (* A matched lock abort exits before evaluating the body. *)
+Theorem intcall_callee_lock_abort_source:
+  lock_if_nr cx nr (is_view_mut mut) es = (INR (Error (RuntimeError msg)),ee) ==>
+  !tail. intcall_callee_src cx name mut nr ss (es with gas_obs := tail) =
+           (INR (Error (RuntimeError msg)),ee with gas_obs := tail)
+Proof
+  strip_tac >> gen_tac >>
+  drule_then (qspec_then `tail` assume_tac) externalCallSelectedTheory.lock_if_nr_with_gas_obs >>
+  rewrite_tac[intcall_callee_src_def] >>
+  once_rewrite_tac[ignore_bind_def] >> once_rewrite_tac[bind_def] >> simp[]
+QED
+
 Theorem intcall_callee_lock_abort[local]:
   ~s.vs_halted /\
   lock_if_nr cx nr (is_view_mut mut) es = (INR (Error (RuntimeError msg)),ee) /\
@@ -2154,20 +2167,9 @@ Theorem intcall_callee_lock_abort[local]:
       rtv retc rb n m t tn0 res ee gt r)
 Proof
   strip_tac >>
-  drule_then strip_assume_tac intcall_callee_lock_fields >>
-  `!tail. lock_if_nr cx nr (is_view_mut mut) (es with gas_obs := tail) =
-          (INR (Error (RuntimeError msg)),ee with gas_obs := tail)` by
-    (gen_tac >>
-     `es with gas_obs := tail = es with <|scopes := es.scopes;
-         outcomes := es.outcomes; gas_obs := tail|>` by
-       simp[evaluation_state_component_equality] >>
-     pop_assum SUBST1_TAC >>
-     simp[lock_if_nr_transport, evaluation_state_component_equality]) >>
   irule gas_outcome_full_exit >> reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`Gl`, `ee`, `Abort ab u`, `INR (Error (RuntimeError msg))`, `tnl`] >>
-  conj_tac
-  >- (gen_tac >> rewrite_tac[intcall_callee_src_def] >>
-      once_rewrite_tac[ignore_bind_def] >> once_rewrite_tac[bind_def] >> simp[]) >>
+  conj_tac >- (irule intcall_callee_lock_abort_source >> first_assum ACCEPT_TAC) >>
   simp[exit_result_def, intcall_callee_exit_full_def, intcall_callee_exit_def,
        expr_exit_def, haltExitProjTheory.halt_exit_not_halt]
 QED
@@ -2324,7 +2326,8 @@ Theorem intcall_callee_body_bounds[local]:
   (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
   env_consistent env cx locked /\
   type_stmts env ret ss = SOME env' /\ ~body_ce.ce_is_external /\
-  ~supported_stmts_expr_exists (const_name_root_mods body_ce.ce_modules) ss ==>
+  ~supported_stmts_expr_exists (const_name_root_mods body_ce.ce_modules) ss /\
+  qualified_stmts_decls_ok body_ce.ce_modules ss ==>
   locals_alloc_ok body_ce env /\ stmts_exprs_ok body_ce ss
 Proof
   strip_tac >> drule_all allocLimitsPropsTheory.fn_allocs_ok_body >> strip_tac >>
@@ -2381,8 +2384,14 @@ Proof
   gvs[immutable_section_layout_mods_def] >>
   conj_tac >- (rpt strip_tac >> res_tac) >>
   conj_tac >- (qexistsl [`policy`, `unit`] >> simp[]) >>
+  conj_tac
+  >- (simp[NoAsms, bodyCallSupportTheory.linked_body_calls_resolved_def,
+           vyperTypeInvariantsTheory.context_function_live_context] >>
+      qpat_assum `linked_body_calls_resolved _ cx`
+        (ACCEPT_TAC o SIMP_RULE (srw_ss()) [bodyCallSupportTheory.linked_body_calls_resolved_def])) >>
   conj_tac >- (rpt strip_tac >> res_tac) >>
-  conj_tac >> first_assum ACCEPT_TAC
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >> res_tac
 QED
 
 Theorem intcall_callee_body_metadata[local]:
@@ -2528,6 +2537,29 @@ Proof
   simp[gas_shadow_valued_return] >> metis_tac[gas_shadow_supported_stmts]
 QED
 
+(* The selected body client gets the same source typing and substitution
+   facts used by the ordinary body simulation. *)
+Definition intcall_callee_body_inputs_def:
+  intcall_callee_body_inputs tops ctx pushed body_ce ret rt ss locked <=>
+    let compiled_ss = subst_consts_stmts (module_consts_env tops []) ss in
+    body_inv tops ctx body_ce pushed /\
+    (!gs. eval_stmts pushed ss (locked with gas_obs := gs) =
+          eval_stmts pushed compiled_ss (locked with gas_obs := gs)) /\
+    stmts_env body_ce NoLoop ret compiled_ss =
+      stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty) compiled_ss /\
+    stmts_env (gas_shadow_env T body_ce) NoLoop ret (MAP gas_shadow_stmt compiled_ss) =
+      stmts_env (gas_shadow_env T body_ce) NoLoop
+        (case rt of NONE => BaseT BoolT | SOME ty => ty) (MAP gas_shadow_stmt compiled_ss) /\
+    ?bindings env env_after.
+      supported_stmts tops bindings compiled_ss /\
+      (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) compiled_ss ==>
+                occurs_abi_decode_target target tops) /\
+      body_const_cells_agree [(NONE,tops)] pushed env locked /\
+      expr_sim_inv body_ce pushed env locked /\ ce_locals_declared body_ce env /\
+      locals_alloc_ok body_ce env /\ type_stmts env ret compiled_ss = SOME env_after /\
+      stmts_exprs_ok body_ce compiled_ss /\ call_evaluation_safe pushed (int_calls_stmts compiled_ss)
+End
+
 (* This interface separates source typing and the paired body compiler
    from the execution that reaches the body. The return frame is abstract. *)
 Theorem intcall_callee_locked_body_frag[local]:
@@ -2562,7 +2594,9 @@ Theorem intcall_callee_locked_body_frag[local]:
         (case rt of NONE => BaseT BoolT | SOME ty => ty) (MAP gas_shadow_stmt ss_comp))
       (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) locked /\
     gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (stmt_res_ok NoLoop) locked /\
-    body_ce.ce_is_ctor = caller.ce_is_ctor
+    body_ce.ce_is_ctor = caller.ce_is_ctor /\
+    intcall_callee_body_inputs tops ctx (cx with stk updated_by CONS (NONE,name))
+      body_ce ret rt ss locked
 Proof
   strip_tac >>
   drule_all intcall_callee_locked_source >> strip_tac >>
@@ -2656,6 +2690,16 @@ Proof
      irule intcall_checked_body_const_name_free >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
   `type_stmts env ret ss_comp = SOME env_after` by simp[] >>
+  `qualified_stmts_decls_ok body_ce.ce_modules ss_comp` by
+    (`body_ce.ce_modules = [(NONE,tops)]` by
+       (qpat_assum `body_inv tops _ body_ce _`
+         (ACCEPT_TAC o MATCH_MP contract_inv_cenv_modules o
+          MATCH_MP bodySimTheory.body_inv_contract)) >>
+     drule_all (SIMP_RULE (srw_ss())
+       [constSubstModsTheory.consts_env_mods_singleton,
+        constSubstModsTheory.subst_consts_mods_singleton]
+       (Q.INST [`mods` |-> `[(NONE,tops)]`]
+         checked_qualified_body_decl_resolution)) >> simp[]) >>
   drule_all intcall_callee_body_bounds >> strip_tac >>
   drule_all intcall_callee_locked_body >> strip_tac >>
   `?bindings. supported_stmts tops bindings ss_comp` by
@@ -2691,6 +2735,14 @@ Proof
          drule_all constSubstStmtsTheory.module_consts_env_constant_expr >> simp[]) >>
      fs[check_function_body_def]) >>
   drule_all intcall_callee_body_return_type >> strip_tac >>
+  `intcall_callee_body_inputs tops ctx (cx with stk updated_by CONS (NONE,name))
+      body_ce ret rt ss locked` by
+    (simp[NoAsms,intcall_callee_body_inputs_def] >>
+     qpat_assum `ss_comp = subst_consts_stmts _ _` (pure_rewrite_tac o single o SYM) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     qexistsl_tac [`bindings`,`env`,`env_after`] >>
+     qpat_assum `int_calls_stmts ss_comp = _` (pure_rewrite_tac o single) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   qpat_assum `stmts_env body_ce NoLoop ret ss_comp = _`
     (pure_once_rewrite_tac o single o SYM) >>
@@ -2755,6 +2807,10 @@ Theorem intcall_callee_locked_body_outcome[local]:
     ghost_inv_at (DF K) lo dret body_ce (cx with stk updated_by CONS (NONE,name)) locked Gbody tnbody at_body) /\
   ~at_body.vs_halted /\ at_body.vs_current_bb = body_start.cs_current_bb /\
   at_body.vs_inst_idx = LENGTH body_start.cs_current_insts ==>
+  intcall_callee_body_inputs tops ctx (cx with stk updated_by CONS (NONE,name))
+    body_ce ret rt ss locked /\
+  gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (stmt_res_ok NoLoop) locked /\
+  (!K. dead_lo_ok K (DF K) lo body_ce (cx with stk updated_by CONS (NONE,name))) /\
   gas_outcome_full
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,PG)
     (cx_tops (cx with stk updated_by CONS (NONE,name))) (cx with stk updated_by CONS (NONE,name)) st0 (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (locked,at_body,Gbody,tnbody)
@@ -2796,10 +2852,15 @@ Proof
       (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) locked /\
     gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss)
       (stmt_res_ok NoLoop) locked /\
-    body_ce.ce_is_ctor = caller.ce_is_ctor` by
+    body_ce.ce_is_ctor = caller.ce_is_ctor /\
+    intcall_callee_body_inputs tops ctx (cx with stk updated_by CONS (NONE,name))
+      body_ce ret rt ss locked` by
     (drule_all intcall_callee_locked_body_frag >> simp[NoAsms]) >>
   `!K. dead_lo_ok K (DF K) lo body_ce (cx with stk updated_by CONS (NONE,name))` by
     (gen_tac >> irule intcall_callee_dead_lo >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qhdtm_x_assum `stmt_frag_full` (mp_tac o REWRITE_RULE [bodySimFullTheory.stmt_frag_full_def]) >>
   disch_then (qspecl_then [`st0`,`body_start`,`body_end`,`shadow_start`,`shadow_end`,
                           `at_body`,`Gbody`,`tnbody`,`env_end`] mp_tac) >>
@@ -4010,12 +4071,207 @@ Proof
   rw[contract_inv_def, optionTheory.FORALL_OPTION] >> res_tac
 QED
 
-Theorem intcall_callee_full:
-  !DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
+(* Compilation and concrete cursors of the straight-line entry phases.
+   The actual origin path is recorded separately; zero GAS is not used as
+   an opcode classification. *)
+Definition intcall_callee_prologue_route_def:
+  intcall_callee_prologue_route callee ce params has_rb ctor ilen rt
+    (entry,prologue) (entered,at_pro) <=>
+    ?ce1 caps pc imm ce2 capture reserved materialized at_capture at_reserve at_mat.
+      compile_internal_entry_prefix ce params has_rb entry = ((ce1,caps,pc),capture) /\
+      (if ctor /\ 0 < ilen then
+         comp_bind (compile_fixed_region_with_id ilen)
+           (\ar. comp_return (SOME (SND ar).buf_operand))
+       else comp_return NONE) capture = (imm,reserved) /\
+      materialize_internal_params ce1 caps reserved = (ce2,materialized) /\
+      (case rt of NONE => comp_return ()
+        | SOME ty => if 0 < ce.ce_returns_count then
+             comp_ignore_bind (compile_alloc_buffer (type_memory_bytes ce ty))
+               (comp_return ())
+           else comp_return ()) materialized = ((),prologue) /\
+      fn_has_code entry capture callee /\ fn_has_code capture reserved callee /\
+      fn_has_code reserved materialized callee /\ fn_has_code materialized prologue callee /\
+      entry.cs_current_insts = [] /\
+      entered.vs_current_bb = entry.cs_current_bb /\
+      entered.vs_inst_idx = LENGTH entry.cs_current_insts /\
+      at_capture.vs_current_bb = capture.cs_current_bb /\
+      at_capture.vs_inst_idx = LENGTH capture.cs_current_insts /\
+      at_reserve.vs_current_bb = reserved.cs_current_bb /\
+      at_reserve.vs_inst_idx = LENGTH reserved.cs_current_insts /\
+      at_mat.vs_current_bb = materialized.cs_current_bb /\
+      at_mat.vs_inst_idx = LENGTH materialized.cs_current_insts /\
+      at_pro.vs_current_bb = prologue.cs_current_bb /\
+      at_pro.vs_inst_idx = LENGTH prologue.cs_current_insts
+End
+
+(* Keep the callbacks opaque during the shared preparation proof. Each
+   branch opens only its own elimination rule. *)
+Definition intcall_callee_selected_callbacks_with_def:
+  intcall_callee_selected_callbacks_with K P (DF,lo,ctx,shadow_ctx,callee)
+    (tops,cx,st0,name,mut,nr,ret,ss,es1) (entered,G,tn,arg_ops) <=>
+      (~storage_trace_domain cx st0 es1.storage_trace ==> P) /\
+      (!key. nr /\ cx.nonreentrant_slot = SOME key /\
+        ~storage_trace_domain cx st0 (es1.storage_trace ++ [StorageLock key]) ==> P) /\
+      (!ce params has_rb ctor ilen rt entry prologue a at_pro Gpro tnpro msg ee ab u j Gl tnl.
+        intcall_callee_prologue_route callee ce params has_rb ctor ilen rt
+          (entry,prologue) (entered,at_pro) /\
+        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
+           [] (OK at_pro,Gpro,tnpro)) /\
+        nr /\ compile_nonreentrant_lock global_nonreentrant_slot T (is_view_mut mut) prologue = ((),a) /\
+        fn_has_code prologue a callee /\
+        lock_if_nr cx nr (is_view_mut mut) es1 = (INR (Error (RuntimeError msg)),ee) /\
+        run_inst_seq (emitted_insts prologue a) at_pro = Abort ab u /\
+        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
+           [] (Abort ab (u with vs_inst_idx := j),Gl,tnl)) ==> P) /\
+      (!ce params has_rb ctor ilen rt entry prologue at_pro Gpro tnpro
+        a b aS bS final sf body_ce body_out ss_comp dret RetQ locked at_body Gl tnl.
+        let pushed = cx with stk updated_by CONS (NONE,name);
+            body_ty = case rt of NONE => BaseT BoolT | SOME ty => ty
+        in
+        intcall_callee_prologue_route callee ce params has_rb ctor ilen rt
+          (entry,prologue) (entered,at_pro) /\
+        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
+           [] (OK at_pro,Gpro,tnpro)) /\
+        (if nr then compile_nonreentrant_lock global_nonreentrant_slot T (is_view_mut mut)
+         else comp_return ()) prologue = ((),a) /\
+        fn_has_code prologue a callee /\ fn_has_code b final callee /\
+        (?rpc. (if block_is_terminated b then ((),b)
+          else comp_ignore_bind
+            (if nr then compile_nonreentrant_unlock global_nonreentrant_slot T (mut = View)
+             else comp_return ())
+            (case rt of NONE => emit_inst RET [rpc] [] | SOME _ => emit_inst INVALID [] []) b) =
+          ((),final)) /\
+        (?u. run_inst_seq (emitted_insts prologue a) at_pro = OK u /\
+             at_body = u with vs_inst_idx := LENGTH a.cs_current_insts) /\
+        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
+           [] (OK at_body,Gl,tnl)) /\
+        (!gs. lock_if_nr cx nr (is_view_mut mut) (es1 with gas_obs := gs) =
+              (INL (),locked with gas_obs := gs)) /\
+        (!K tr. valid_horizon pushed st0 K tr <=> valid_horizon cx st0 K tr) /\
+        (!K. valid_horizon cx st0 K locked.storage_trace ==> valid_horizon cx st0 K es1.storage_trace) /\
+        at_body.vs_gas_readings = entered.vs_gas_readings /\
+        ss_comp = subst_consts_stmts (module_consts_env tops []) ss /\
+        intcall_callee_body_inputs tops ctx pushed body_ce ret rt ss locked /\
+        frame_ret_ok_full (DF,lo,dret,ctx,shadow_ctx,MAP (op_prov G) arg_ops,callee,sf)
+          pushed RetQ body_ce ret /\
+        stmts_env body_ce NoLoop body_ty ss_comp a = (body_out,b) /\
+        stmts_env (gas_shadow_env T body_ce) NoLoop body_ty (MAP gas_shadow_stmt ss_comp) aS =
+          (gas_shadow_env T body_out,bS) /\
+        gas_shadow_state a aS /\ gas_shadow_state b bS /\
+        gas_shadow_function callee sf /\ MEM callee ctx.ctx_functions /\
+        MEM sf shadow_ctx.ctx_functions /\ fn_has_code a b callee /\ fn_has_code aS bS sf /\
+        (!K. dead_lo_ok K (DF K) lo body_ce pushed) /\
+        fn_inst_ids_distinct callee /\ local_ptrs_reserved body_ce a /\ ret_pc_ok body_ce a at_body /\
+        (!x sz. body_ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+        ~block_is_terminated a /\ gas_admissible (eval_stmts pushed ss) (stmt_res_ok NoLoop) locked /\
+        return_buf_frame dret body_ce a at_body /\ return_buf_sep dret body_ce locked at_body /\
+        alloca_history callee at_body /\ (ctx_has_dalloca ctx ==> allocas_below_fmp at_body) /\
+        (!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_fmp_headroom inst s) /\
+        (!K. valid_horizon pushed st0 K locked.storage_trace ==>
+          stmt_state_rel K ctx callee body_ce pushed locked at_body /\
+          storage_well_formed_on pushed locked (FST K) /\
+          ghost_inv_at (DF K) lo dret body_ce pushed locked Gl tnl at_body) /\
+        ~at_body.vs_halted /\ at_body.vs_current_bb = a.cs_current_bb /\
+        at_body.vs_inst_idx = LENGTH a.cs_current_insts /\ K a b ==> P)
+End
+
+Definition intcall_callee_selected_callbacks_def:
+  intcall_callee_selected_callbacks P (DF,lo,ctx,shadow_ctx,callee)
+    (tops,cx,st0,name,mut,nr,ret,ss,es1) (entered,G,tn,arg_ops) <=>
+      (~storage_trace_domain cx st0 es1.storage_trace ==> P) /\
+      (!key. nr /\ cx.nonreentrant_slot = SOME key /\
+        ~storage_trace_domain cx st0 (es1.storage_trace ++ [StorageLock key]) ==> P) /\
+      (!ce params has_rb ctor ilen rt entry prologue a at_pro Gpro tnpro msg ee ab u j Gl tnl.
+        intcall_callee_prologue_route callee ce params has_rb ctor ilen rt
+          (entry,prologue) (entered,at_pro) /\
+        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
+           [] (OK at_pro,Gpro,tnpro)) /\
+        nr /\ compile_nonreentrant_lock global_nonreentrant_slot T (is_view_mut mut) prologue = ((),a) /\
+        fn_has_code prologue a callee /\
+        lock_if_nr cx nr (is_view_mut mut) es1 = (INR (Error (RuntimeError msg)),ee) /\
+        run_inst_seq (emitted_insts prologue a) at_pro = Abort ab u /\
+        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
+           [] (Abort ab (u with vs_inst_idx := j),Gl,tnl)) ==> P) /\
+      (!ce params has_rb ctor ilen rt entry prologue at_pro Gpro tnpro
+        a b aS bS final sf body_ce body_out ss_comp dret RetQ locked at_body Gl tnl.
+        let pushed = cx with stk updated_by CONS (NONE,name);
+            body_ty = case rt of NONE => BaseT BoolT | SOME ty => ty
+        in
+        intcall_callee_prologue_route callee ce params has_rb ctor ilen rt
+          (entry,prologue) (entered,at_pro) /\
+        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
+           [] (OK at_pro,Gpro,tnpro)) /\
+        (if nr then compile_nonreentrant_lock global_nonreentrant_slot T (is_view_mut mut)
+         else comp_return ()) prologue = ((),a) /\
+        fn_has_code prologue a callee /\ fn_has_code b final callee /\
+        (?rpc. (if block_is_terminated b then ((),b)
+          else comp_ignore_bind
+            (if nr then compile_nonreentrant_unlock global_nonreentrant_slot T (mut = View)
+             else comp_return ())
+            (case rt of NONE => emit_inst RET [rpc] [] | SOME _ => emit_inst INVALID [] []) b) =
+          ((),final)) /\
+        (?u. run_inst_seq (emitted_insts prologue a) at_pro = OK u /\
+             at_body = u with vs_inst_idx := LENGTH a.cs_current_insts) /\
+        (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+           MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
+           [] (OK at_body,Gl,tnl)) /\
+        (!gs. lock_if_nr cx nr (is_view_mut mut) (es1 with gas_obs := gs) =
+              (INL (),locked with gas_obs := gs)) /\
+        (!K tr. valid_horizon pushed st0 K tr <=> valid_horizon cx st0 K tr) /\
+        (!K. valid_horizon cx st0 K locked.storage_trace ==> valid_horizon cx st0 K es1.storage_trace) /\
+        at_body.vs_gas_readings = entered.vs_gas_readings /\
+        ss_comp = subst_consts_stmts (module_consts_env tops []) ss /\
+        intcall_callee_body_inputs tops ctx pushed body_ce ret rt ss locked /\
+        frame_ret_ok_full (DF,lo,dret,ctx,shadow_ctx,MAP (op_prov G) arg_ops,callee,sf)
+          pushed RetQ body_ce ret /\
+        stmts_env body_ce NoLoop body_ty ss_comp a = (body_out,b) /\
+        stmts_env (gas_shadow_env T body_ce) NoLoop body_ty (MAP gas_shadow_stmt ss_comp) aS =
+          (gas_shadow_env T body_out,bS) /\
+        gas_shadow_state a aS /\ gas_shadow_state b bS /\
+        gas_shadow_function callee sf /\ MEM callee ctx.ctx_functions /\
+        MEM sf shadow_ctx.ctx_functions /\ fn_has_code a b callee /\ fn_has_code aS bS sf /\
+        (!K. dead_lo_ok K (DF K) lo body_ce pushed) /\
+        fn_inst_ids_distinct callee /\ local_ptrs_reserved body_ce a /\ ret_pc_ok body_ce a at_body /\
+        (!x sz. body_ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+        ~block_is_terminated a /\ gas_admissible (eval_stmts pushed ss) (stmt_res_ok NoLoop) locked /\
+        return_buf_frame dret body_ce a at_body /\ return_buf_sep dret body_ce locked at_body /\
+        alloca_history callee at_body /\ (ctx_has_dalloca ctx ==> allocas_below_fmp at_body) /\
+        (!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_fmp_headroom inst s) /\
+        (!K. valid_horizon pushed st0 K locked.storage_trace ==>
+          stmt_state_rel K ctx callee body_ce pushed locked at_body /\
+          storage_well_formed_on pushed locked (FST K) /\
+          ghost_inv_at (DF K) lo dret body_ce pushed locked Gl tnl at_body) /\
+        ~at_body.vs_halted /\ at_body.vs_current_bb = a.cs_current_bb /\
+        at_body.vs_inst_idx = LENGTH a.cs_current_insts ==> P)
+End
+
+Theorem intcall_callee_selected_callbacks_with_plain[local]:
+  intcall_callee_selected_callbacks P (DF,lo,ctx,shadow_ctx,callee)
+    (tops,cx,st0,name,mut,nr,ret,ss,es1) (entered,G,tn,arg_ops) <=>
+  intcall_callee_selected_callbacks_with (\a b. T) P (DF,lo,ctx,shadow_ctx,callee)
+    (tops,cx,st0,name,mut,nr,ret,ss,es1) (entered,G,tn,arg_ops)
+Proof
+  simp[intcall_callee_selected_callbacks_def, intcall_callee_selected_callbacks_with_def]
+QED
+
+(* Early domain failures, an executed lock abort and a successful body
+   landing are separate exits from preparation. The ordinary full outcome
+   below is retained as a projection, not a second proof of preparation. *)
+Theorem intcall_callee_selected_landing_with:
+  !L body_layout P DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
    G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
    rbs pvs dflts.
     body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+    shadow_body_inv_with L tops ctx shadow_ctx /\
+    (!entry a b final. cs_extends entry a /\ cs_extends a b /\
+       cs_extends b final /\ L entry final ==> body_layout a b) /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
@@ -4042,7 +4298,9 @@ Theorem intcall_callee_full:
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
       eval_operands arg_ops t = SOME argv ==>
-      gas_outcome_full
+      intcall_callee_selected_callbacks_with body_layout P (DF,lo,ctx,shadow_ctx,callee)
+        (tops,cx,st0,name,mut,nr,ret,ss,es1) (entered,G,tn,arg_ops) ==>
+      P /\ gas_outcome_full
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
          MAP (op_prov G) arg_ops)
         (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
@@ -4053,9 +4311,14 @@ Theorem intcall_callee_full:
              (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
              sa.cs_next_id sb.cs_next_id t tn res ee gt r)
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> disch_tac >>
+  drule_then assume_tac bodyFullShadowBodyInvTheory.shadow_body_inv_with_forget >>
   reverse (Cases_on `storage_trace_domain cx st0 es1.storage_trace`)
-  >- (irule intcall_callee_bad_entry >> simp[] >>
+  >- (conj_tac >-
+        (qhdtm_assum `intcall_callee_selected_callbacks_with`
+           (irule o cj 1 o REWRITE_RULE [intcall_callee_selected_callbacks_with_def]) >>
+         first_assum ACCEPT_TAC) >>
+      irule intcall_callee_bad_entry >> simp[] >>
       qexistsl_tac [`func`, `t`] >> fs[]) >>
   drule_all intcall_callee_entry_decode >> strip_tac >>
   `intcall_entry_full (DF, lo, d)
@@ -4084,7 +4347,7 @@ Proof
      qpat_assum `lbl = internal_fn_label _ _ _ _`
        (fn th => ONCE_REWRITE_TAC [SYM th]) >>
      first_assum ACCEPT_TAC) >>
-  drule_all bodyFullShadowBodyInvTheory.shadow_body_inv_callee_code >>
+  drule_all bodyFullShadowBodyInvTheory.shadow_body_inv_callee_code_with >>
   strip_tac >>
   qpat_x_assum `compiled_ss = subst_consts_stmts _ _` (assume_tac o SYM) >>
   qpat_x_assum `set_internal_package_target _ (package_internal_fn _ _ _ _ _ (subst_consts_fn _ _)) = _`
@@ -4166,6 +4429,7 @@ Proof
      >- (qexists_tac `prologue` >> asm_rewrite_tac []) >>
      qexists_tac `prologueS` >> asm_rewrite_tac []) >>
   `cs_extends a final /\ fn_has_code a b callee /\ fn_has_code b final callee /\
+   cs_extends a b /\ cs_extends b final /\
    (if block_is_terminated b then ((),b)
     else comp_ignore_bind
       (if nr' then compile_nonreentrant_unlock key trans view else comp_return ())
@@ -4176,6 +4440,9 @@ Proof
        `entry_info1`, `entry_info2`, `prologue`, `a`, `body_out`, `b`,
        `callee`] mp_tac intcall_lowering_suffix >>
      fs[Abbr `lock`, Abbr `body_ce`, Abbr `body_ty`]) >>
+  `body_layout a b` by
+    (qpat_assum `!entry a b final. _ ==> body_layout a b` irule >>
+     simp[] >> qexistsl_tac [`entry`, `final`] >> simp[]) >>
   `gas_shadow_env T body_ce = (gas_shadow_env T entry_info0) with
      <|ce_imm_alloca := entry_info2; ce_alloca_locals := T|>` by
     simp[Abbr `body_ce`, gasShadowCompileBaseTheory.gas_shadow_env_def] >>
@@ -4268,7 +4535,12 @@ Proof
      simp[ptrDisciplineTheory.allocas_from_def] >>
      metis_tac[loweringStateRelDefsTheory.fresh_vars_wrt_def, ptrDisciplineTheory.allocas_from_def]) >>
   `cs_extends reserved final /\ fn_has_code capture reserved callee` by
-    metis_tac[fn_has_code_split, cs_extends_trans] >>
+    (conj_asm1_tac
+     >- (irule cs_extends_trans >> qexists_tac `prologue` >>
+         reverse conj_tac >- (irule cs_extends_trans >> qexists_tac `a` >> simp[]) >>
+         irule cs_extends_trans >> qexists_tac `materialized` >> simp[]) >>
+     irule fn_has_code_mid >> reverse conj_tac >- (qexistsl_tac [`final`,`entry`] >> simp[]) >>
+     first_assum ACCEPT_TAC) >>
   `fmp_room ctx callee at_capture` by
     (qspecl_then [`ctx`,`callee`,`entered`,`at_capture`] mp_tac fmp_room_fields_cong >>
      qpat_assum `at_capture = captured with vs_inst_idx := _` (once_rewrite_tac o single) >>
@@ -5204,6 +5476,14 @@ Proof
      metis_tac[bodySimTheory.body_inv_nonreentrant_slot]) >>
   Cases_on `nr /\ ~storage_trace_domain cx st0 (es1.storage_trace ++ [StorageLock key])`
   >- (qpat_assum `nr /\ ~_` strip_assume_tac >>
+      conj_tac >-
+        (qhdtm_assum `intcall_callee_selected_callbacks_with`
+           (qspec_then `key` mp_tac o cj 2 o REWRITE_RULE [intcall_callee_selected_callbacks_with_def]) >>
+         (impl_tac >-
+            (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+             qpat_assum `nr ==> _ /\ cx.nonreentrant_slot = SOME key`
+               (drule_then (ACCEPT_TAC o cj 2)))) >>
+         simp[NoAsms]) >>
       qpat_assum `nr` (rewrite_tac o single) >> irule intcall_callee_bad_lock >>
       (metis_tac[])) >>
   `nr ==> compile_nonreentrant_lock key T view prologue = ((),a) /\
@@ -5255,6 +5535,25 @@ Proof
      drule_then strip_assume_tac intcall_callee_lock_shape >>
      irule intcall_callee_lock_path >> rpt conj_tac >>
      (first_assum ACCEPT_TAC ORELSE (qexistsl_tac [`key`,`view`] >> simp[]))) >>
+  `intcall_callee_prologue_route callee ce params has_rb ctor ilen rt
+      (entry,prologue) (entered,at_pro)` by
+    (simp[NoAsms,intcall_callee_prologue_route_def] >>
+     qexistsl_tac [`ce1`,`caps`,`entry_info1`,`entry_info2`,`entry_info0`,
+                   `capture`,`reserved`,`materialized`,`at_capture`,`at_reserve`,`at_mat`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     simp[NoAsms, Abbr `at_mat`]) >>
+  `(if nr then compile_nonreentrant_lock global_nonreentrant_slot T (is_view_mut mut)
+     else comp_return ()) prologue = ((),a)` by
+    (Cases_on `nr`
+     >- (qpat_assum `T ==> view = is_view_mut mut /\ _`
+           (strip_assume_tac o SIMP_RULE bool_ss []) >>
+         qpat_assum `T ==> compile_nonreentrant_lock _ _ _ _ = _ /\ _`
+           (mp_tac o cj 1 o SIMP_RULE bool_ss []) >>
+         qpat_assum `key = global_nonreentrant_slot` (pure_rewrite_tac o single) >>
+         qpat_assum `view = is_view_mut mut` (pure_rewrite_tac o single) >>
+         simp[NoAsms]) >>
+     qpat_assum `lock prologue = ((),a)` mp_tac >>
+     qpat_assum `nr' = F` (fn eq => simp[NoAsms, Abbr `lock`, eq])) >>
   `~nr ==> a = prologue` by
     (disch_tac >> qpat_x_assum `lock prologue = ((),a)` mp_tac >>
      qpat_assum `nr' = nr` (fn hyp =>
@@ -5291,11 +5590,25 @@ Proof
          goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
       qpat_assum `!ab u. run_inst_seq _ at_pro = Abort ab u ==> ?j. _` drule >>
       disch_then (qx_choose_then `j` assume_tac) >>
+      `!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+          MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
+          [] (Abort ab (u with vs_inst_idx := j),Gl,tnl)` by
+        (gen_tac >> irule gas_origin_ptr_path_trans >>
+         qexistsl_tac [`Gpro`,`at_pro`,`tnpro`] >>
+         conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+      conj_tac >-
+        (qhdtm_assum `intcall_callee_selected_callbacks_with`
+           (irule o cj 3 o REWRITE_RULE [intcall_callee_selected_callbacks_with_def]) >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         conj_tac >- (qexistsl_tac [`ee`,`msg`] >> first_assum ACCEPT_TAC) >>
+         qexistsl_tac [`Gl`,`Gpro`,`a`,`ab`,`at_pro`,`ce`,`ctor`,`entry`,`has_rb`,
+                       `ilen`,`j`,`params`,`prologue`,`rt`,`tnl`,`tnpro`,`u`] >>
+         rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+         qpat_assum `(if nr then compile_nonreentrant_lock _ _ _ else _) prologue = ((),a)`
+           mp_tac >> qpat_assum `nr` (pure_rewrite_tac o single) >> simp[NoAsms]) >>
       irule intcall_callee_lock_abort >> conj_tac
       >- (qexistsl_tac [`Gl`,`ab`,`tnl`,`u with vs_inst_idx := j`] >>
-          gen_tac >> irule gas_origin_ptr_path_trans >>
-          qexistsl_tac [`Gpro`,`at_pro`,`tnpro`] >>
-          conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+          gen_tac >> first_assum MATCH_ACCEPT_TAC) >>
       conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`ee`,`msg`] >> first_assum ACCEPT_TAC) >>
   pop_assum strip_assume_tac >>
@@ -5925,6 +6238,29 @@ Proof
     (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
      simp[NoAsms] >> first_assum ACCEPT_TAC) >>
   strip_tac >>
+  conj_tac >-
+    (qhdtm_assum `intcall_callee_selected_callbacks_with`
+       (irule o SIMP_RULE bool_ss [LET_THM,pairTheory.UNCURRY_DEF] o cj 4 o
+        REWRITE_RULE [intcall_callee_selected_callbacks_with_def]) >>
+     qpat_assum `Abbrev (pushed = _)`
+       (pure_rewrite_tac o single o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`Gl`,`Gpro`,`RetQ`,`a`,`aS`,`at_body`,`at_pro`,`b`,`bS`,
+       `body_ce`,`body_out`,`ce`,`ctor`,`ret_dest`,`entry`,`final`,`has_rb`,`ilen`,
+       `locked`,`params`,`prologue`,`rt`,`sf`,`tnl`,`tnpro`] >>
+     qpat_assum `Abbrev (body_ty = _)`
+       (pure_rewrite_tac o single o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     qpat_assum `subst_consts_stmts _ _ = compiled_ss` (pure_rewrite_tac o single) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     TRY (qexists_tac `u` >> simp[NoAsms, Abbr `at_body`] >> first_assum ACCEPT_TAC >> NO_TAC) >>
+     qexists_tac `entry_info1` >>
+     qpat_assum `(if block_is_terminated b then ((),b) else _) = ((),final)` mp_tac >>
+     qpat_assum `nr' = nr` (pure_rewrite_tac o single) >>
+     qpat_assum `key = global_nonreentrant_slot` (pure_rewrite_tac o single) >>
+     qpat_assum `trans = T` (pure_rewrite_tac o single) >>
+     qpat_assum `view = (mut = View)` (pure_rewrite_tac o single) >> simp[NoAsms]) >>
   `!K. gas_origin_ptr_path (DF K,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
       MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
       [] (OK at_body,Gl,tnl)` by
@@ -6323,4 +6659,103 @@ Proof
       qexists_tac `H` >>
       conj_tac >- (disch_tac >> first_assum irule >> first_assum ACCEPT_TAC) >>
       first_assum ACCEPT_TAC)
+QED
+
+Theorem intcall_callee_selected_landing:
+  !P DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
+   G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
+   rbs pvs dflts.
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    LENGTH args - LENGTH dflts <= LENGTH es /\
+    LENGTH es <= LENGTH args /\
+    ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
+       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) /\
+    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+    MEM func ctx.ctx_functions /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+    (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+       intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
+         sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
+         G tn) /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
+    gas_invoke_entry (ctx,func) t callee entered /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
+    !bb inst lbl arg_ops argv.
+      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx = SOME inst /\
+      decode_invoke inst = SOME (lbl,arg_ops) /\
+      eval_operands arg_ops t = SOME argv ==>
+      intcall_callee_selected_callbacks P (DF,lo,ctx,shadow_ctx,callee)
+        (tops,cx,st0,name,mut,nr,ret,ss,es1) (entered,G,tn,arg_ops) ==>
+      P /\ gas_outcome_full
+        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
+         MAP (op_prov G) arg_ops)
+        (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
+        (es1, entered, FEMPTY, tn with t_var := FEMPTY)
+        (\H res ee G' tn' t'. F)
+        (\H res ee gt r.
+           intcall_callee_exit_full (DF, lo) H func cenv cx mut nr rtv rc
+             (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
+             sa.cs_next_id sb.cs_next_id t tn res ee gt r)
+Proof
+  pure_rewrite_tac[intcall_callee_selected_callbacks_with_plain] >>
+  MATCH_ACCEPT_TAC
+    (SIMP_RULE bool_ss [bodyFullShadowBodyInvTheory.shadow_body_inv_with_plain]
+      (Q.SPECL [`\a b. T`, `\a b. T`] intcall_callee_selected_landing_with))
+QED
+
+Theorem intcall_callee_full:
+  !DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
+   G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
+   rbs pvs dflts.
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    LENGTH args - LENGTH dflts <= LENGTH es /\
+    LENGTH es <= LENGTH args /\
+    ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
+       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) /\
+    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+    MEM func ctx.ctx_functions /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+    (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+       intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
+         sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
+         G tn) /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
+    gas_invoke_entry (ctx,func) t callee entered /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
+    !bb inst lbl arg_ops argv.
+      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx = SOME inst /\
+      decode_invoke inst = SOME (lbl,arg_ops) /\
+      eval_operands arg_ops t = SOME argv ==>
+      gas_outcome_full
+        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
+         MAP (op_prov G) arg_ops)
+        (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
+        (es1, entered, FEMPTY, tn with t_var := FEMPTY)
+        (\H res ee G' tn' t'. F)
+        (\H res ee gt r.
+           intcall_callee_exit_full (DF, lo) H func cenv cx mut nr rtv rc
+             (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
+             sa.cs_next_id sb.cs_next_id t tn res ee gt r)
+Proof
+  MATCH_ACCEPT_TAC
+    (SIMP_RULE bool_ss [intcall_callee_selected_callbacks_def, LET_THM, pairTheory.UNCURRY_DEF]
+       (Q.SPEC `T` intcall_callee_selected_landing))
 QED

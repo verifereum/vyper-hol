@@ -27,16 +27,8 @@ Theorem ld_adoption_guard_agreement:
      (t'.vs_requests <> t.vs_requests)) /\
     computed_precompile (LAST s'.vs_requests) =
       computed_precompile (LAST t'.vs_requests) ==>
-    ((~s.vs_call_ctx.cc_static /\
-      s'.vs_requests <> s.vs_requests /\
-      ~computed_precompile (LAST s'.vs_requests) /\
-      s'.vs_outcomes <> s.vs_outcomes /\
-      (HD s.vs_outcomes).co_success) <=>
-     (~t.vs_call_ctx.cc_static /\
-      t'.vs_requests <> t.vs_requests /\
-      ~computed_precompile (LAST t'.vs_requests) /\
-      t'.vs_outcomes <> t.vs_outcomes /\
-      (HD t.vs_outcomes).co_success))
+    ((adopt_guard s.vs_call_ctx.cc_static s s' (HD s.vs_outcomes).co_success) <=>
+     (adopt_guard t.vs_call_ctx.cc_static t t' (HD t.vs_outcomes).co_success))
 Proof
   rpt strip_tac >> simp[]
 QED
