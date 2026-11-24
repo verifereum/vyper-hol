@@ -79,6 +79,14 @@ Proof
   simp[code_action_emit_void]
 QED
 
+(* These actions are also used after a saved external-call argument. *)
+Theorem saved_value_admin_actions:
+  code_action ^buffer_safe (unwrap_value ce vv) /\
+  code_action ^buffer_safe (compile_store_memory ce src dst dt st)
+Proof
+  simp[buffer_unwrap_action, buffer_store_action]
+QED
+
 Theorem intcall_stage_buffer_admin_safe:
   compile_alloc_buffer n a = (buf,b) /\
   unwrap_value ce vv b = (op,c) /\
