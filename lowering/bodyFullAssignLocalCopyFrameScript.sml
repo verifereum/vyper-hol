@@ -7,6 +7,7 @@ Ancestors
   emitHelperProps exprLowering exprLoweringProps exprOperandVar exprSimBufferStore
   exprSimDefs exprSimMemorySource[qualified,ignore_grammar] exprSimUnwrap finite_map
   fragExec fragGasCopyLoop fragGasMode fragGasOrigin fragGasOriginPtr fragGasSeqPtr
+  fragGasCopySeqLiftProps
   fragGasSeqPtrContext gasExemptCert gasOutcomeFullCompose
   gasShadowCompile[qualified,ignore_grammar] gasShadowState haltExitProj list loweringPosts
   pair placeMemoryCopyEffect placeMemoryTypedPrimitive[qualified,ignore_grammar] pred_set
@@ -348,8 +349,8 @@ Resume body_assign_local_memory_flat_copy_effect[path]:
     (irule fragGasSeqPtrContextTheory.inst_seq_ptr_restore_ctx >>
      simp[mk_inst_def,is_terminator_def,is_alloca_op_def]) >>
   `inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) u G tnf` by
-    ((irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
-     simp[mk_inst_def] >> qexists_tac `0` >> simp[] >> (gvs[mk_inst_def, fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport]))) >>
+    ((irule fragGasCopySeqLiftPropsTheory.inst_seq_ptr_lower_bound_transport >>
+     simp[mk_inst_def] >> qexists_tac `0` >> simp[] >> (gvs[mk_inst_def, fragGasCopySeqLiftPropsTheory.inst_seq_ptr_lower_bound_transport]))) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts sa sb)` by simp[mk_inst_def,is_terminator_def] >>
   `(ctx_has_dalloca ctx ==>
