@@ -2549,7 +2549,7 @@ Proof
     simp[Abbr `t`,mstore_def,lookup_var_def] >>
   qexistsl_tac [`t`,`tf`] >> gvs[Abbr `t`,Abbr `tf`] >>
   conj_tac >- suspend "family" >>
-  conj_tac >- simp[mstore_def] >>
+  TRY (conj_tac >- (qmatch_goalsub_rename_tac `~u.vs_halted` >> simp[mstore_def])) >>
   conj_tac >- suspend "return" >>
   conj_tac >- suspend "history" >>
   conj_tac >- suspend "frame" >>
