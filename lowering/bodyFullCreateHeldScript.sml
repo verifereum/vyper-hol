@@ -2610,7 +2610,7 @@ Proof
   fs[ptr_val_ok_def,loweringPostsTheory.post_value_type_def]
 QED
 
-Theorem create_operand_cut_frame[local]:
+Theorem create_operand_cut_frame:
   wb_frame cenv es ee sa s t /\ ghost_kept_at lo cenv es sa G tn s G' tn' /\
   (!x. op = Var x ==> not_fresh_at sa x) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME w /\ op_taint tn op = {} ==>
@@ -2656,7 +2656,7 @@ QED
 
 (* Project the typed word and the write-back and horizon frames from the
    same operand run. The scalar continuations use both views of the post. *)
-Theorem create_word_cut_frame_facts[local]:
+Theorem create_word_cut_frame_facts:
   expr_body_pre cenv cx env e es /\ expr_result_typed env e (Value v) /\
   expr_type e = BaseT bt /\ is_word_type (BaseT bt) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
