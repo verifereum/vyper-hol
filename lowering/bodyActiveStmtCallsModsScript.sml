@@ -1,7 +1,8 @@
 (* Resolve calls of a typed statement at the linked unit's active module. *)
 Theory bodyActiveStmtCallsMods
 Ancestors
-  bodyLinkedCallResolution bodyFullPredsMods bodyInvModuleProps
+  bodyLinkedCallResolution bodyLinkedUnqualifiedCallProps bodyFullPredsMods
+  bodyInvModuleProps
   bodyExprPreFacts supportedStmtTraverse exprSimHypsDefs
   whitelistCheckerDecls list pair
 
