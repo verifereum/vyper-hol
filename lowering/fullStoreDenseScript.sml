@@ -6,7 +6,7 @@ Ancestors
   emitHelperProps emitHelper compileEnv venomExecSemantics venomState
   venomInst ptrDiscipline contextCodegenRel codegenRel unitTransformDefs
   memSafeRun wordLoadStorePtr decoderGhostFramePtr assignBasePtrWordStore
-  finite_map pred_set fragGasCopyLoop stmtSimStoreCopy rich_list
+  finite_map pred_set fragGasCopyLoop fragGasCopySeqLiftProps stmtSimStoreCopy rich_list
   exprSimPtrTopLevelStorageCopy words freshWrites localPtrsProps
   fragExec list loweringStateRelDefs
 Libs
