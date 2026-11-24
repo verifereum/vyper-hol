@@ -75,4 +75,3 @@ Proof
   goal_assum (drule_at (Pat `run_inst_seq _ _ = _`)) >>
   asm_rewrite_tac[vv_post_inst_idx] >> qexistsl [`p`, `t`] >> simp[]
 QED
-

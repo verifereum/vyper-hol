@@ -12,7 +12,6 @@ Ancestors
   loweringPosts loweringStateRelDefs bodyPtrDefs ptrDiscipline
   compileEnv context vyperStorageFootprint vyperState valueEncodingProps
   exprLowering exprSimSliceCaptureControl venomState venomInst bufferAllocationExecution finite_map words arithmetic
-  fragExec
 
 Libs horizonTypeLib pureFrameLib
 
@@ -230,15 +229,13 @@ Resume extcall_saved_runtime_copy_replay_with_run[value]:
      qpat_assum `Abbrev (q = _)` (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
      asm_rewrite_tac[slice_capture_value_index]) >>
   `pure_frame ce fn ee su t q` by simp[Abbr `q`] >>
-  Q.SUBGOAL_THEN
-    `?raw. run_inst_seq (emitted_insts su sb) t = OK raw /\
-           q = raw with vs_inst_idx := LENGTH sb.cs_current_insts`
-    (fn th => qexistsl [`q`,`HG`,`tf`] >> conj_tac >- ACCEPT_TAC th)
-  >- (simp[Abbr `q`] >>
-      qpat_assum `allocst = _ with vs_inst_idx := _`
-        (fn th => qpat_assum `copy_runtime_frame mid allocst sb z`
-          (assume_tac o REWRITE_RULE [th])) >>
-      drule_all unwrap_code_copy_endpoint_run >> simp[]) >>
+  qexistsl [`q`,`HG`,`tf`] >>
+  conj_tac >-
+    (simp[Abbr `q`] >>
+     qpat_assum `allocst = _` (fn th =>
+       qpat_assum `copy_runtime_frame mid allocst _ z`
+         (assume_tac o REWRITE_RULE[th])) >>
+     drule_all unwrap_code_copy_endpoint_run >> simp[]) >>
   asm_rewrite_tac[] >>
   conj_tac
   >- (gen_tac >> disch_tac >>
@@ -295,10 +292,11 @@ Theorem extcall_saved_runtime_copy_replay_pure:
     wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
     expr_val_at ce cx (expr_type e) su sb ee v src z
 Proof
-  disch_tac >> mp_tac extcall_saved_runtime_copy_replay_with_run >>
-  asm_rewrite_tac[] >>
-  disch_then (qx_choosel_then [`z`,`G'`,`tn'`] strip_assume_tac) >>
-  qexistsl [`z`,`G'`,`tn'`] >> asm_rewrite_tac[]
+  disch_tac >>
+  qpat_assum `P` (mp_tac o MATCH_MP (SPEC_ALL extcall_saved_runtime_copy_replay_with_run)) >>
+  disch_then (qx_choosel_then [`z`,`G'`,`tn'`]
+    (CONJUNCTS_THEN2 kall_tac assume_tac)) >>
+  qexistsl [`z`,`G'`,`tn'`] >> first_assum ACCEPT_TAC
 QED
 
 Theorem extcall_saved_runtime_copy_replay =
