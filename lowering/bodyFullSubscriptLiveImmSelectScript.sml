@@ -21,6 +21,7 @@ Ancestors
   targetSubscriptMemory vyperStorageFootprint
   exprSimSubscriptArraySuffix gasOutcomeFullCompose compileEnv bodyPtrDefs
   freshWrites wordArgsPtr gasSummary fragExec exprSimMemDefs venomState
+  bodyFullSubscriptLiveLanding
 
 Theorem selected_constructor_code_read[local]:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env fin /\
@@ -1071,7 +1072,7 @@ Proof
 QED
 
 (* The successful index cut, before executing the immutable bounds suffix. *)
-Theorem subscript_live_immutable_select_full:
+Theorem subscript_live_immutable_select_observed:
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Subscript et obj idx) es /\
   expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
@@ -1105,7 +1106,46 @@ Theorem subscript_live_immutable_select_full:
       (PlaceR (ImmutablePlace src id path)) (LocatedValue (ArrayT et bd) p) u /\
     expr_post H ctx func cenv cx idx (mid with gas_obs := gs) sm sn u fin key iop s /\
     ghost_inv_at (DF H) lo d cenv cx fin Gi tni s) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  (!a i cnt dyn.
+    compile_array_subscript p.ptr_operand iop dyn (if dyn then 0 else cnt) 32
+      (type_memory_bytes cenv et) (is_signed_type (expr_type idx))
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode) sn = (dst,sb) /\
+    fn_has_code sn sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+    s.vs_current_bb = sn.cs_current_bb /\ s.vs_inst_idx = LENGTH sn.cs_current_insts /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    eval_operand p.ptr_operand s = SOME a /\ copy_old_operand sn p.ptr_operand /\
+    op_taint tni p.ptr_operand = {} /\ op_prov Gi p.ptr_operand = NONE /\
+    eval_operand iop s = SOME (n2w i) /\ copy_old_operand sn iop /\
+    op_taint tni iop = {} /\ op_prov Gi iop = NONE /\
+    (!l. p.ptr_operand <> Label l /\ iop <> Label l) /\
+    (dyn ==> immutable_copy_read cenv.ce_is_ctor a s = n2w cnt /\
+      (cenv.ce_is_ctor ==> w2n a + 32 <= lo /\ mem_word_taint tni.t_mem (w2n a) = {} /\
+        (!region. cenv.ce_imm_alloca = SOME region ==> eval_operand region s = SOME 0w /\
+           copy_old_operand sn region /\ op_taint tni region = {} /\ op_prov Gi region = NONE)) /\
+      (~cenv.ce_is_ctor ==> w2n a <= LENGTH s.vs_data_section)) ==>
+    ?Gf tnf q.
+      certify sn sb s (if idx_in_range (is_signed_type (expr_type idx)) (n2w i) (n2w cnt)
+                 then OK q else Abort Revert_abort q) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,Gi,tni) []
+        ((if idx_in_range (is_signed_type (expr_type idx)) (n2w i) (n2w cnt)
+          then OK q else Abort Revert_abort q),Gf,tnf)) /\
+      q.vs_immutables = s.vs_immutables /\ q.vs_memory = s.vs_memory /\
+      q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next /\
+      q.vs_fmp = s.vs_fmp /\ q.vs_accounts = s.vs_accounts /\
+      q.vs_transient = s.vs_transient /\ q.vs_call_ctx = s.vs_call_ctx /\
+      q.vs_requests = s.vs_requests /\
+      tnf.t_mem = tni.t_mem /\ tnf.t_stor = tni.t_stor /\
+      tnf.t_trans = tni.t_trans /\ tnf.t_imm = tni.t_imm /\
+      (!v. not_fresh_at sn v ==> lookup_var v q = lookup_var v s /\
+        FLOOKUP Gf v = FLOOKUP Gi v /\ op_taint tnf (Var v) = op_taint tni (Var v)) /\
+      (idx_in_range (is_signed_type (expr_type idx)) (n2w i) (n2w cnt) ==>
+        q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~q.vs_halted /\
+        eval_operand dst q = SOME (a + n2w ((if dyn then 32 else 0) + i * type_memory_bytes cenv et)) /\
+        op_taint tnf dst = {} /\ op_prov Gf dst = NONE /\
+        !(H:(bool # bytes32 # type_value) list # num list) ce cc ee.
+          stmt_state_rel H ctx func ce cc ee s /\ local_ptrs_reserved ce sn ==>
+          stmt_state_rel H ctx func ce cc ee q)) ==>
+  live_select_landing (DF,lo,explicit,ctx,func,PG) cx st0
     (select_result cx (ArrayT et bd) (PlaceR (ImmutablePlace src id path)) (ValueSubscript key))
     (fin,s,Gi,tni)
     (\H res ee Gz tnz z. ?r. res = INL r /\
@@ -1143,8 +1183,9 @@ Theorem subscript_live_immutable_select_full:
        ghost_kept_at lo cenv es sa G0 tn0 s0 Gz tnz)
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
+    (certify sn sb s)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  ntac 2 (disch_then (map_every assume_tac o CONJUNCTS)) >>
   qabbrev_tac `H0 = storage_trace_horizon fin.storage_trace` >>
   `valid_horizon cx st0 H0 fin.storage_trace` by simp[Abbr `H0`, GSYM storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
@@ -1244,9 +1285,12 @@ Proof
     (qpat_assum `stmt_state_rel H0 ctx func cenv cx fin s`
        (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
      simp[]) >>
-  drule_all live_code_select_joint >>
-  disch_then (qspecl_then [`explicit`,`PG`]
-    (qx_choosel_then [`Gf`,`tnf`,`q`] (strip_assume_tac o SIMP_RULE (srw_ss()) []))) >>
+  qpat_x_assum `!a i cnt dyn. _`
+    (qspecl_then [`n2w (off+k)`,`w2n iw`,`cnt`,`dyn`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`q`]
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
+  `fin with gas_obs := [] = fin` by simp[evaluation_state_component_equality] >>
   reverse (Cases_on `idx_in_range (is_signed_type (expr_type idx)) iw (n2w cnt)`)
   >- (`~valid_index (ArrayTV etv bd) av i` by metis_tac[] >>
       `!al. av = SArrayV al ==> ?n. bd = Fixed n` by
@@ -1256,11 +1300,14 @@ Proof
         (irule live_immutable_select_error >> metis_tac[]) >>
       qpat_x_assum `i = if _ then _ else _` kall_tac >>
       qpat_x_assum `key = IntV i` SUBST_ALL_TAC >>
-      irule gas_outcome_full_intro >>
-      qexistsl [`Gf`,`fin`,`[]`,`Abort Revert_abort q`,
+      irule live_select_landing_exit >>
+      (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+      qexistsl [`Gf`,`Abort Revert_abort q`,
                 `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tnf`] >>
-      simp[gasSummaryTheory.gas_explicit_def, fragExecTheory.exit_result_def,
+      simp[fragExecTheory.exit_result_def,
            exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+      conj_tac
+      >- (qpat_x_assum `certify _ _ _ (if _ then _ else _)` mp_tac >> simp[]) >>
       conj_tac
       >- (gen_tac >>
           `!tr slot vt. PlaceR (ImmutablePlace src id path) <> PlaceR (StoragePlace tr slot vt)` by simp[] >>
@@ -1294,10 +1341,11 @@ Proof
      op_taint tnf (Var x) = op_taint tni (Var x)` by
     (gen_tac >> disch_tac >> qpat_assum `!v. not_fresh_at sn v ==> _` irule >>
      irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> simp[] >> decide_tac) >>
-  irule gas_outcome_full_intro >>
-  qexistsl [`Gf`,`fin`,`[]`,`OK q`,`INL rsel`,`tnf`] >>
-  `fin with gas_obs := [] = fin` by simp[evaluation_state_component_equality] >>
-  simp[gasSummaryTheory.gas_explicit_def, fragExecTheory.exit_result_def] >>
+  irule live_select_landing_ok >>
+  (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`Gf`,`INL rsel`,`q`,`tnf`] >> simp[] >>
+  conj_tac
+  >- (qpat_x_assum `certify _ _ _ (if _ then _ else _)` mp_tac >> simp[]) >>
   conj_tac
   >- (gen_tac >>
       `!tr slot vt. PlaceR (ImmutablePlace src id path) <> PlaceR (StoragePlace tr slot vt)` by simp[] >>
@@ -1344,4 +1392,85 @@ Proof
   `ghost_kept_at lo cenv es sa G0 tn0 s0 Gi tni` by
     (drule_all wordArgsPtrTheory.ghost_kept_at_wb_trans >> simp[]) >>
   irule ghost_kept_at_clean_suffix >> qexistsl [`Gi`,`tni`] >> simp[] >> metis_tac[]
+QED
+
+Theorem subscript_live_immutable_select_full:
+  body_inv tops ctx cenv cx /\
+  expr_body_pre cenv cx env (Subscript et obj idx) es /\
+  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
+  ~subscript_reads_base cx obj idx /\
+  eval_expr cx obj (es with gas_obs := bgs) = (INL (PlaceR (ImmutablePlace src id path)),mid) /\
+  bind (eval_expr cx idx) (read_result cx) (mid with gas_obs := gs) = (INL key,fin) /\
+  storage_trace_domain cx st0 fin.storage_trace /\ fin.gas_obs = [] /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sn /\
+  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  copy_old_operand sm p.ptr_operand /\ (!l. p.ptr_operand <> Label l) /\
+  copy_old_operand sn iop /\ (!l. iop <> Label l) /\
+  ptr_vv_ok cx (post_value_type cenv obj) (PlaceR (ImmutablePlace src id path))
+    (LocatedValue (ArrayT et bd) p) mid Gb tnb u /\
+  ptr_val_ok cx (post_value_type cenv idx) key iop Gi tni s /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 Gb tnb /\
+  ghost_kept_at lo cenv mid sm Gb tnb u Gi tni /\
+  s0.vs_alloca_next <= s.vs_alloca_next /\
+  compile_array_subscript p.ptr_operand iop
+    (case bd of Fixed _ => F | Dynamic _ => T) (case bd of Fixed n => n | Dynamic _ => 0)
+    32 (type_memory_bytes cenv et) (is_signed_type (expr_type idx))
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca p.ptr_location) sn = (dst,sb) /\
+  fn_has_code sn sb func /\ fn_inst_ids_distinct func /\ alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = sn.cs_current_bb /\ s.vs_inst_idx = LENGTH sn.cs_current_insts /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    vv_post H ctx func cenv cx obj es sa sm s0 mid
+      (PlaceR (ImmutablePlace src id path)) (LocatedValue (ArrayT et bd) p) u /\
+    expr_post H ctx func cenv cx idx (mid with gas_obs := gs) sm sn u fin key iop s /\
+    ghost_inv_at (DF H) lo d cenv cx fin Gi tni s) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (select_result cx (ArrayT et bd) (PlaceR (ImmutablePlace src id path)) (ValueSubscript key))
+    (fin,s,Gi,tni)
+    (\H res ee Gz tnz z. ?r. res = INL r /\
+       vv_post H ctx func cenv cx (Subscript et obj idx) es sa sb s0 ee
+         r (LocatedValue et (mk_ptr dst LocCode)) z /\
+       vv_store_bound cx (post_value_type cenv (Subscript et obj idx))
+         (lowered_value_type cenv (Subscript et obj idx)) ee
+         r (LocatedValue et (mk_ptr dst LocCode)) z /\
+       z.vs_current_bb = sb.cs_current_bb /\
+       z.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history func z /\
+       (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+       s0.vs_alloca_next <= z.vs_alloca_next /\
+       ghost_inv_at (DF H) lo d cenv cx ee Gz tnz z /\
+       ptr_vv_ok cx (post_value_type cenv (Subscript et obj idx))
+         r (LocatedValue et (mk_ptr dst LocCode)) ee Gz tnz z /\
+       (!v. r = Value v /\ ~is_word_type (post_value_type cenv (Subscript et obj idx)) /\
+          ~is_bytestring_type (post_value_type cenv (Subscript et obj idx)) ==>
+          vv_own cenv cx (post_value_type cenv (Subscript et obj idx)) sa sb ee
+            r (LocatedValue et (mk_ptr dst LocCode)) z /\
+          (!t' p'. LocatedValue et (mk_ptr dst LocCode) = LocatedValue t' p' ==>
+                   p'.ptr_location = LocMemory)) /\
+       (cenv.ce_is_ctor /\ vv_location (LocatedValue et (mk_ptr dst LocCode)) = SOME LocCode ==>
+        ?v. read_result cx r ee = (INL v,ee) /\
+            !rt w. evaluate_type (get_tenv cx) (post_value_type cenv (Subscript et obj idx)) = SOME rt /\
+              eval_operand (vv_operand (LocatedValue et (mk_ptr dst LocCode))) z = SOME w ==>
+              w2n w + type_memory_size rt <= lo /\
+              (!mem. mem_agree_outside tnz.t_mem z.vs_memory mem ==>
+                val_in_memory rt v (w2n w) mem)) /\
+       (!t' op. LocatedValue et (mk_ptr dst LocCode) = StackValue t' op /\
+          ~is_word_type (post_value_type cenv (Subscript et obj idx)) ==>
+          ptr_buf_ok cenv (Subscript et obj idx) op Gz z) /\
+       (!t' p'. LocatedValue et (mk_ptr dst LocCode) = LocatedValue t' p' /\
+          p'.ptr_location = LocMemory ==>
+          ptr_buf_ok cenv (Subscript et obj idx) p'.ptr_operand Gz z) /\
+       ghost_kept_at lo cenv es sa G0 tn0 s0 Gz tnz)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
+Proof
+  disch_then (mp_tac o MATCH_MP
+    (Q.INST [`certify` |-> `\sn sb s r. T`] subscript_live_immutable_select_observed)) >>
+  simp_tac bool_ss [] >>
+  (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC live_code_select_joint)) >>
+  disch_then (ACCEPT_TAC o Q.SPEC `cx_tops cx` o Q.GEN `tops` o
+    MATCH_MP live_select_landing_full)
 QED
