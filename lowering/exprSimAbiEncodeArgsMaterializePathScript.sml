@@ -692,30 +692,6 @@ Proof
 QED
 
 (* Field facts and horizon transport for the predicate-form path. *)
-Theorem materialize_alloc_run_fields[local]:
-  compile_alloc_buffer sz sa = (buf,sb) /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-  t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
-Proof
-  strip_tac >>
-  `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
-     ["%" ++ toString sa.cs_next_var]) s = OK t` by
-    gvs[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
-        fresh_id_def, fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
-        comp_return_def, exprLoweringPropsTheory.emitted_insts_def,
-        rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0,
-        exprLoweringPropsTheory.run_inst_seq_def, AllCaseEqs()] >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[venomExecSemanticsTheory.step_inst_base_def,
-       venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def,
-       venomStateTheory.eval_operand_def] >>
-  Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
-  >- (simp[venomStateTheory.update_var_def] >> strip_tac >> gvs[]) >>
-  rename1 `SOME entry` >> PairCases_on `entry` >>
-  simp[venomStateTheory.update_var_def] >> strip_tac >> gvs[]
-QED
-
 Theorem materialize_ssr_fields_transport[local]:
   stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list)
     ctx func ce cx es u /\
@@ -771,7 +747,7 @@ Proof
   drule_all exprSimAllocTheory.alloc_buffer_storage >> strip_tac >>
   drule_all exprSimAllocTheory.hash_alloc_buffer_labels >> strip_tac >>
   drule_all materialize_alloc_run_path >> strip_tac >>
-  drule_all materialize_alloc_run_fields >> strip_tac >>
+  drule_all exprSimAllocTheory.alloc_buffer_fields >> strip_tac >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `w`] >>
   simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx,
        venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,

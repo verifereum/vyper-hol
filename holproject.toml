@@ -37,7 +37,7 @@ deps = ["compilerNativeEmitTheory"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "fb28eee8484c909c7398b6e4a06a84aed7d1e2a2"
+rev = "9809b7a89aff44a466eb8275fefdd30736dc094b"
 
 # Functor parameter signatures are not inferred by HOL's module scanner.
 [actions.JsonASTDecodeFn]
