@@ -2,7 +2,7 @@
 Theory bodyMapSubscriptExtensionMods
 Ancestors
   bodyMapSubscriptStaticMods bodyMapSubscriptEndpointMods bodyMapSubscriptCodeMods
-  bodyMapChildrenBindMods bodyMapHashSuffixMods bodyMapSelectNestedMods bodyMapSelectLeafMods
+  bodyMapChildrenBindMods bodyMapHashSuffixMods bodyMapSelectNestedMods bodyMapSelectLeafAdapterMods
   bodyFullPredsMods bodyFullPostsMods bodyFullIfExpReach bodyFullTargetMappingRep
   bodyFullTargetMappingRun exprSimMapKey exprSimMapDefs exprSimHypsDefs exprSimDefs
   gasShadowCompileStmtHelpers gasShadowCompilePure gasShadowCompileBase
@@ -466,35 +466,6 @@ val map_select_post = ``\(H : (bool # 256 word # type_value) list # num list)
     op_taint tn p.ptr_operand = {} /\ op_prov G p.ptr_operand = NONE /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 G tn``;
 
-val leaf_select_post = ``\(H : (bool # 256 word # type_value) list # num list)
-    (res : eval_result + exception) ee (G : string |-> num # num) (tn : taint) t.
-  ?tv.
-    res = INL tv /\
-    vv_post_mods H ctx func cenv cx (Subscript ann obj idx) es sa sb s0 ee tv vv t /\
-    vv_store_bound cx (post_value_type cenv (Subscript ann obj idx))
-      (lowered_value_type cenv (Subscript ann obj idx)) ee tv vv t /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-    s0.vs_alloca_next <= t.vs_alloca_next /\
-    ghost_inv_at_mods (DF H) lo d cenv cx ee G tn t /\
-    ptr_vv_ok cx (post_value_type cenv (Subscript ann obj idx)) tv vv ee G tn t /\
-    (!v. tv = Value v /\ ~is_word_type (post_value_type cenv (Subscript ann obj idx)) /\
-         ~is_bytestring_type (post_value_type cenv (Subscript ann obj idx)) ==>
-         vv_own cenv cx (post_value_type cenv (Subscript ann obj idx)) sa sb ee tv vv t /\
-         (!t' p. vv = LocatedValue t' p ==> p.ptr_location = LocMemory)) /\
-    (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-     ?val. read_result cx tv ee = (INL val,ee) /\
-           !rt w. evaluate_type (get_tenv cx) (post_value_type cenv (Subscript ann obj idx)) = SOME rt /\
-                  eval_operand (vv_operand vv) t = SOME w ==>
-                    type_memory_size rt + w2n w <= lo /\
-                    (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
-                           val_in_memory rt val (w2n w) mem)) /\
-    (!t' op. vv = StackValue t' op /\ ~is_word_type (post_value_type cenv (Subscript ann obj idx)) ==>
-         ptr_buf_ok cenv (Subscript ann obj idx) op G t) /\
-    (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
-         ptr_buf_ok cenv (Subscript ann obj idx) p.ptr_operand G t) /\
-    ghost_kept_at lo cenv es sa G0 tn0 s0 G tn``;
-
 Theorem subscript_map_map_full_mods:
   !mods exps cx ann obj idx DF lo d PG src tops ctx shadow_ctx func shadow_func cenv env ty es.
     (!s res t. eval_expr cx obj s = (INL res,t) ==>
@@ -602,23 +573,24 @@ Proof
           >- (qexistsl_tac [`d`,`sa`,`sb`,`shadow_func`,`shadow_sa`,`shadow_sb`,`ty`,`vv`] >>
               ((rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC) >-
                (rpt gen_tac >> strip_tac >>
-                simp[mk_ptr_def] >>
                 irule gas_outcome_full_mods_post_source >>
-                qexistsl_tac [`^leaf_select_post`,`^select_exit`] >> BETA_TAC >>
+                qexistsl_tac
+                  [`mapping_leaf_select_post_mods DF lo d ctx func cenv cx ann obj idx
+                      es sa sb s0 vv G0 tn0`,
+                   `mapping_select_exit_mods ctx cx`] >>
                 reverse conj_tac >-
                   (conj_tac
-                   >- (rpt gen_tac >> strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC)
-                   >- (irule (Q.INST [`R` |-> `^select_exit`] mapping_select_leaf_mods) >>
-                       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-                       qexistsl_tac [`Gu`,`outop`,`tnu`,`u`] >> simp[] >>
-                       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+                   >- simp[mapping_select_exit_mods_def]
+                   >- (irule mapping_select_leaf_adapter_mods >>
+                       rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+                       >- simp[GSYM IS_SOME_EXISTS]
+                       >> qexistsl_tac [`Gu`,`outop`,`tnu`,`u`] >> simp[] >>
                        rpt strip_tac >>
                        qpat_assum `!H. valid_horizon _ _ H _ ==> _`
                          (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC)) >>
-                rpt gen_tac >> strip_tac >>
-                qexistsl_tac [`tv`] >> simp[] >>
-                rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-                TRY REFL_TAC)) >>
-              first_assum ACCEPT_TAC)))
+                simp[mapping_leaf_select_post_mods_def])) >>
+              rpt strip_tac >>
+              qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+                (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC)))
 QED
 
