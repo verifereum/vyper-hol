@@ -12,7 +12,8 @@ Ancestors
   vyperInterpreter vyperState vyperAST venomInst venomInstProps list
   venomExecSemantics venomState emitHelperProps fragExec fragGasOrigin
   entryCreateCompletedCut createSizePrefixReplay createMarkedPath
-  entryCreatePathScope exprSimAbiGasBridge relation arithmetic
+  entryCreatePathScope entryCreateIntervalLayout entryCreateRegionLift
+  entryCreateNativeFirstExit exprSimAbiGasBridge relation arithmetic
 
 Definition scalar_convert_cont_def:
   scalar_convert_cont cx src dst v ee =
@@ -274,7 +275,7 @@ Theorem scalar_convert_terminal_scoped[local]:
   create_operand_at m t /\
   (!H. valid_horizon cx st0 H mid.storage_trace ==>
     expr_sim_full_post (DF,lo,d,ctx,f) ce cx e (es,a,m,s0,x,G0,tn0)
-       H (INL v) mid G1 tn1 t) ==>
+       H (INL v : value + exception) mid G1 tn1 t) ==>
   scoped_operand_outcome (DF,lo,E,ctx,f,PG) tops cx st0 m b
     (scalar_convert_cont cx (expr_type e) ann v) (mid,t,G1,tn1)
     (\H res ee G tn z.
@@ -378,22 +379,28 @@ Proof
   strip_tac >> drule_then assume_tac scalar_convert_cut_code >>
   qpat_x_assum `expr_sim_full_pre _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_sim_full_pre_def]) >>
-  once_rewrite_tac[scalar_convert_source] >> irule scoped_operand_bind_all >>
-  qexistsl_tac [`expr_sim_full_post (DF,lo,d,ctx,f) ce cx e (es,a,m,s0,x,G0,tn0)`,`m`] >>
+  once_rewrite_tac[scalar_convert_source] >> irule scoped_operand_bind_all_mixed >>
   simp[storage_trace_frame_bind,evaluate_storage_trace_frame,storage_trace_frame_read_result] >>
+  rpt conj_tac
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> once_rewrite_tac[ignore_bind_def] >> once_rewrite_tac[bind_assoc] >>
+      irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
+      qexistsl_tac [`mid`,`t`,`v`] >> fs[ignore_bind_def])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> once_rewrite_tac[ignore_bind_def] >> once_rewrite_tac[bind_assoc] >>
+      irule gasExemptCertTheory.gas_exempt_cert_error_value >> simp[]) >>
+  qexistsl_tac [`\H res mid G1 tn1 t.
+    expr_sim_full_post (DF,lo,d,ctx,f) ce cx e (es,a,m,s0,x,G0,tn0)
+      H res mid G1 tn1 t /\ mid.gas_obs = []`,`m`] >> simp[] >>
   rpt conj_tac
   >~ [`create_operand_focus_scope a b _ _ _ _ (_ ++ _)`]
   >- (rpt strip_tac >> fs[create_operand_full_scope_def, create_operand_at_def] >>
       irule scalar_convert_focus_join >> simp[create_operand_at_def] >> metis_tac[])
   >~ [`create_operand_full_scope a b _ _ _ _ (_ ++ _) _`]
-  >- (rpt strip_tac >> fs[create_operand_full_scope_def] >>
-      irule scalar_convert_full_join >> metis_tac[create_operand_full_scope_def])
-  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
-      metis_tac[])
-  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >> simp[]) >>
-  suspend "child" >> suspend "selected_continuation"
+  >- (rpt strip_tac >> irule scalar_convert_full_join >>
+      qexistsl_tac [`m`,`t`] >> fs[create_operand_full_scope_def])
+  >- suspend "selected_continuation" >>
+  suspend "child"
 QED
 
 Resume scalar_convert_scoped_bind[child]:
@@ -403,7 +410,10 @@ Resume scalar_convert_scoped_bind[child]:
   >- (disj1_tac >> metis_tac[])
   >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >> simp[] >>
       rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[] >>
-      Cases_on `res` >> Cases_on `r` >> gvs[create_operand_exit_post_def,exprSimDefsTheory.expr_exit_def]) >>
+      Cases_on `res` >> Cases_on `r` >>
+      gvs[create_operand_exit_post_def,exprSimDefsTheory.expr_exit_def,
+          exprSimDefsTheory.halt_exit_def,AllCaseEqs()] >>
+      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
@@ -418,6 +428,59 @@ Resume scalar_convert_scoped_bind[selected_continuation]:
     metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_projections,
               fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted] >>
   irule scalar_convert_terminal_scoped >> simp[] >>
-  qexistsl_tac [`env`,`marks`,`m`,`tops`,`x`] >> simp[] >> metis_tac[]
+  conj_tac >- (qexists_tac `marks` >> simp[]) >>
+  conj_tac >- metis_tac[] >>
+  qexists_tac `env` >> simp[]
 QED
 Finalise scalar_convert_scoped_bind
+
+Theorem create_convert_scalar_vv_case:
+  body_inv (cx_tops cx) ctx ce cx /\
+  expr_body_pre ce cx env (TypeBuiltin ann Convert ann [e]) es /\
+  ~is_bytestring_type (expr_type e) /\ ~is_bytestring_type ann /\
+  create_layout a b /\
+  expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG,f,shf) ce cx ty
+    (TypeBuiltin ann Convert ann [e]) es (st0,a,b,sha,shb,vv,s0,G0,tn0) /\
+  (!m shm x. create_layout a m /\
+    expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,f,shf) ce cx (expr_type e) e es
+      (st0,a,m,sha,shm,x,s0,G0,tn0) ==>
+    scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,f,PG)
+      (cx_tops cx) cx st0 a m (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+      (expr_sim_full_post (DF,lo,d,ctx,f) ce cx e (es,a,m,s0,x,G0,tn0))
+      (create_operand_exit_post ctx cx) /\
+    create_operand_cut a m (gas_explicit_sites ctx shctx) ctx f (cx_tops cx) cx st0
+      (bind (eval_expr cx e) (read_result cx)) (es,s0)) ==>
+  scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,f,PG)
+    (cx_tops cx) cx st0 a b (eval_expr cx (TypeBuiltin ann Convert ann [e])) (es,s0,G0,tn0)
+    (\H res ee G tn t. create_operand_vv_post (DF,lo,d,ctx,f) ce cx
+      (TypeBuiltin ann Convert ann [e]) (es,a,b,s0,vv,G0,tn0) H res ee G tn t /\
+      create_operand_at b t)
+    (create_operand_exit_post ctx cx) /\
+  create_operand_cut a b (gas_explicit_sites ctx shctx) ctx f (cx_tops cx) cx st0
+    (eval_expr cx (TypeBuiltin ann Convert ann [e])) (es,s0)
+Proof
+  strip_tac >> drule expr_body_pre_convert >> strip_tac >> gvs[] >>
+  drule_all scalar_convert_pre_split >> strip_tac >> gvs[] >>
+  `create_layout a m` by metis_tac[create_layout_subinterval,cs_extends_refl] >>
+  qpat_assum `!m shm x. _ ==> _` (drule_all_then strip_assume_tac) >>
+  drule_then assume_tac operand_value_cut_code >>
+  drule_then assume_tac scalar_convert_cut_code >>
+  qpat_assum `expr_sim_full_pre _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_sim_full_pre_def]) >>
+  `create_cut_region a m s0` by
+    (irule (cj 1 createSizeCutRegionTheory.create_cut_region_rules) >> simp[] >>
+     qexists_tac `f` >> simp[]) >>
+  `!u. create_cut_region a m u /\ ~create_operand_at m u ==> ~create_operand_at b u` by
+    metis_tac[create_layout_left_stop] >>
+  `a.cs_next_id <= m.cs_next_id /\ m.cs_next_id <= b.cs_next_id` by
+    fs[createSizeCutCodeTheory.create_cut_code_def] >>
+  reverse conj_tac
+  >- (irule scalar_convert_cut >> simp[] >> qexistsl_tac [`ce`,`m`,`out`,`x`] >> simp[] >>
+      rpt strip_tac >> drule_all create_interior_visit_first_exit >> metis_tac[]) >>
+  simp[create_operand_at_def] >> irule scalar_convert_scoped_bind >>
+  qpat_assum `expr_sim_full_pre _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
+  qexists_tac `env` >> simp[] >>
+  conj_tac >- (rpt strip_tac >> drule_all create_left_terminal_lift_at >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> drule_all create_left_prefix_lift_at >> simp[]) >>
+  rpt strip_tac >> drule_all create_left_focus_lift_at >> simp[]
+QED
