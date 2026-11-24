@@ -1026,3 +1026,108 @@ Proof
   qpat_assum `cap <> 0 ==> ?p b sz w. _` mp_tac >>
   SIMP_TAC bool_ss [arithmeticTheory.ADD_COMM]
 QED
+
+Theorem extcall_dispatch_selected_steps:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr value gas buf off len cap target value_opt calldata has_default
+    default_op default_ty default_opt ee s /\
+  (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+    ?w aid tv. eval_operand default_op s = SOME w /\
+      evaluate_type (get_tenv cx) default_ty = SOME tv /\
+      FLOOKUP s.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+      aid < sp.cs_next_id) /\
+  emit_op (if stat then STATICCALL else CALL)
+    (if stat then [gas;addr;off;len;buf;Lit (n2w cap)]
+     else [gas;addr;value;off;len;buf;Lit (n2w cap)]) sp = (Var out,sj) /\
+  inst = mk_inst sp.cs_next_id (if stat then STATICCALL else CALL)
+    (if stat then [gas;addr;off;len;buf;Lit (n2w cap)]
+     else [gas;addr;value;off;len;buf;Lit (n2w cap)]) [out] /\
+  ~not_fresh_at sp out /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  sj.cs_current_bb = s.vs_current_bb /\
+  LENGTH sj.cs_current_insts = SUC s.vs_inst_idx /\
+  emit_inst JNZ [Var out;Label cont_lbl;Label fail_lbl] [] sj = ((),se) /\
+  fn_has_code sj se func /\
+  new_block fail_lbl se = (old_fail,sf) /\
+  emit_op RETURNDATASIZE [] sf = (zop,sz) /\
+  compile_alloc_buffer 0 sz = (rb,sb0) /\
+  emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;zop] sb0 = ((),sc) /\
+  emit_inst REVERT [rb.buf_operand;zop] [] sc = ((),sb) /\
+  fn_has_code sf sb func /\
+  new_block cont_lbl sb = (old_cont,sr) /\
+  sp.cs_next_var <= sr.cs_next_var /\
+  sp.cs_next_id <= sr.cs_next_id /\
+  eval_operand gas s = SOME gw /\
+  (!g. OPTION_BIND source_gas dest_NumV = SOME g ==> g = w2n gw) /\
+  frame_call_value cx value_opt ee = (INL framed_value,ee) /\
+  take_call_outcome (OPTION_BIND source_gas dest_NumV) target calldata framed_value ee =
+    (INL (rq,oc),consumed) /\
+  EVERY (\p. op_taint tn p = {}) [addr;value;gas;buf;off;len;default_op] /\
+  (!ao az. eval_operand off s = SOME ao /\
+    eval_operand len s = SOME az ==>
+    (az <> 0w ==> (?p. off = Var p /\
+      ptr_covers G tn p s (w2n az)) /\
+      w2n ao + w2n az <= s.vs_alloca_next) /\
+    (!j. w2n ao <= j /\
+      j < w2n ao + w2n az ==> j NOTIN tn.t_mem)) /\
+  (cap <> 0 ==> ?p. buf = Var p /\
+    ptr_covers G tn p s cap) /\
+  (!dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
+    ptr_mem_ok cx default_ty dv default_op G tn s /\
+    (type_memory_bytes cenv default_ty <> 0 ==>
+      (?p. default_op = Var p /\
+        ptr_covers G tn p s (type_memory_bytes cenv default_ty)) /\
+      (!w. eval_operand default_op s = SOME w ==>
+        w2n w + type_memory_bytes cenv default_ty <= s.vs_alloca_next))) /\
+  allocas_from lo s /\ alloca_history func s /\
+  lo <= s.vs_alloca_next /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv_at (DF H) lo d cenv cx ee G tn s) ==>
+  if oc.co_success then
+    ?ee' z Gu tu.
+      adopt_call_outcome rq oc consumed = (INL (),ee') /\
+      extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr buf cap target
+        has_default default_op default_ty default_opt oc.co_returnData ee' z /\
+      (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+        ?w aid tv. eval_operand default_op z = SOME w /\
+          evaluate_type (get_tenv cx) default_ty = SOME tv /\
+          FLOOKUP z.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+          aid < sr.cs_next_id) /\
+      (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+        valid_horizon cx st0 H ee.storage_trace /\
+        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+          (OK z,Gu,tu) /\
+        ghost_inv_at (DF H) lo d cenv cx ee' Gu tu z) /\
+      (!tail. eval_ext_call_effects cx target calldata framed_value source_gas ee.accounts
+        (ee with gas_obs := tail) = (INL oc.co_returnData,ee' with gas_obs := tail)) /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 Gu tu /\
+      alloca_history func z /\ allocas_from lo z /\
+      lo <= z.vs_alloca_next /\ s0.vs_alloca_next <= z.vs_alloca_next /\
+      EVERY (\p. op_taint tu p = {}) [addr;buf;default_op] /\
+      (!dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
+        ptr_mem_ok cx default_ty dv default_op Gu tu z /\
+        (type_memory_bytes cenv default_ty <> 0 ==>
+          ?p b k w. default_op = Var p /\ FLOOKUP Gu p = SOME (b,k) /\
+            eval_operand default_op z = SOME w /\ b <= w2n w /\
+            w2n w + type_memory_bytes cenv default_ty <= b + k /\
+            w2n w + type_memory_bytes cenv default_ty <= z.vs_alloca_next)) /\
+      (cap <> 0 ==>
+        ?p b k w. buf = Var p /\ FLOOKUP Gu p = SOME (b,k) /\
+          eval_operand buf z = SOME w /\ b <= w2n w /\ w2n w + cap <= b + k /\
+          (!i. w2n w <= i /\ i < w2n w + MIN cap (LENGTH oc.co_returnData) ==> i NOTIN tu.t_mem))
+  else
+    ?f Gf tf. f.vs_returndata = oc.co_returnData /\
+      (!H. valid_horizon cx st0 H consumed.storage_trace ==>
+        valid_horizon cx st0 H ee.storage_trace /\
+        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+          (Abort Revert_abort f,Gf,tf)) /\
+      (!tail. eval_ext_call_effects cx target calldata framed_value source_gas ee.accounts
+        (ee with gas_obs := tail) =
+        (INR (Error (RevertData oc.co_returnData)),consumed with gas_obs := tail))
+Proof
+  (MATCH_ACCEPT_TAC extcall_dispatch_selected)
+QED
