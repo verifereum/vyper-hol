@@ -18,7 +18,84 @@ Ancestors
   venomExecSemantics venomState venomMemDefs venomInst
   contractABI valueEncodingProps words list rich_list finite_map pred_set arithmetic
 
-Theorem compile_abi_encode_to_buf_complex_window_joint:
+(* The primitive producer supplies the concrete straight-line run. The
+   payload law decides which enclosing path geometry to collect from it. *)
+Definition abi_members_straight_code_def:
+  abi_members_straight_code a b <=>
+    (?ops out. emit_op ADD ops a = (out,b)) \/
+    (?ops out. emit_op MLOAD ops a = (out,b)) \/
+    (?cursor value m. emit_op ALLOCA [Lit 32w] a = (cursor,m) /\
+      emit_void MSTORE [cursor;value] m = ((),b)) \/
+    (?dst ho dp ops. abi_encode_child_prefix dst ho dp a = (ops,b)) \/
+    (?head dp offset len out.
+      abi_encode_child_suffix head dp offset len a = (out,b))
+End
+
+Definition abi_members_path_laws_def:
+  abi_members_path_laws
+      (P : venom_context -> ir_function -> (string # num) set ->
+           compile_state -> compile_state -> venom_state -> venom_state -> bool) <=>
+    (!ctx func explicit a s. P ctx func explicit a a s s) /\
+    (!ctx func explicit a m b s u t.
+      a.cs_next_id <= m.cs_next_id /\ m.cs_next_id <= b.cs_next_id /\
+      P ctx func explicit a m s u /\ P ctx func explicit m b u t ==>
+      P ctx func explicit a b s t) /\
+    (!ctx func explicit a b s raw.
+      abi_members_straight_code a b /\ fn_has_code a b func /\
+      ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+      s.vs_inst_idx = LENGTH a.cs_current_insts /\
+      run_inst_seq (emitted_insts a b) s = OK raw ==>
+      P ctx func explicit a b s
+        (raw with vs_inst_idx := LENGTH b.cs_current_insts))
+End
+
+Triviality members_payload_refl:
+  abi_members_path_laws P ==> P ctx func explicit a a s s
+Proof
+  simp[abi_members_path_laws_def]
+QED
+
+Triviality members_payload_comp:
+  abi_members_path_laws P /\
+  a.cs_next_id <= m.cs_next_id /\ m.cs_next_id <= b.cs_next_id /\
+  P ctx func explicit a m s u /\ P ctx func explicit m b u t ==>
+  P ctx func explicit a b s t
+Proof
+  simp[abi_members_path_laws_def] >> metis_tac[]
+QED
+
+Triviality members_payload_pure:
+  abi_members_path_laws P /\ abi_members_straight_code a b /\
+  fn_has_code a b func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  window_pure_seq a b s raw ==>
+  P ctx func explicit a b s
+    (raw with vs_inst_idx := LENGTH b.cs_current_insts)
+Proof
+  simp[abi_members_path_laws_def,window_pure_seq_def,window_seq_def] >>
+  metis_tac[]
+QED
+
+Triviality members_payload_phase:
+  abi_members_path_laws P /\ abi_members_straight_code a b /\
+  fn_has_code a b func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  run_inst_seq (emitted_insts a b) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+  t.vs_inst_idx = LENGTH b.cs_current_insts ==>
+  P ctx func explicit a b s t
+Proof
+  simp[abi_members_path_laws_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`ctx`,`func`,`explicit`,`a`,`b`,`s`,
+    `t with vs_inst_idx := s.vs_inst_idx`] mp_tac) >>
+  `(t with vs_inst_idx := LENGTH b.cs_current_insts) = t` by
+    simp[venom_state_component_equality] >>
+  simp[]
+QED
+
+Theorem compile_abi_encode_to_buf_complex_window_joint_payload:
+  abi_members_path_laws P ==>
   (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==>
     !dst src st out en ctx func s at av sb cap d G tn lo explicit PG.
       compile_abi_encode_to_buf dst src ei st = (out,en) /\
@@ -72,6 +149,7 @@ Theorem compile_abi_encode_to_buf_complex_window_joint:
         tn'.t_stor = tn.t_stor /\
         tn'.t_trans = tn.t_trans /\
         tn'.t_imm = tn.t_imm /\
+        P ctx func explicit st en s t /\
         !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
           (s,G,tn) [] (OK t,G',tn')) ==>
   !dst src st out en ctx func s at av sb cap d G tn lo explicit PG.
@@ -126,10 +204,11 @@ Theorem compile_abi_encode_to_buf_complex_window_joint:
       tn'.t_stor = tn.t_stor /\
       tn'.t_trans = tn.t_trans /\
       tn'.t_imm = tn.t_imm /\
+      P ctx func explicit st en s t /\
       !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
         (s,G,tn) [] (OK t,G',tn')
 Proof
-  strip_tac >> rpt gen_tac >> strip_tac >>
+  strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `abi_encoder_window_input (AbiComplex infos) at av sb cap s.vs_memory` by
     (first_x_assum irule >> simp[mem_agree_outside_def]) >>
   `?ats avs. av = ListV avs /\ abi_encoder_tuple_type at ats /\
@@ -207,11 +286,13 @@ Proof
               decide_tac) >>
           simp[mem_bytes_at_def, eval_operand_def] >>
           irule window_phase_refl >> simp[]) >>
+      conj_tac
+      >- fs[abi_members_path_laws_def] >>
       gen_tac >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
   suspend "members"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[members]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[members]:
   drule_all window_complex_structural_members >> strip_tac >>
   drule_all window_complex_head_layout >> strip_tac >>
   `enc at (ListV avs) = enc (Tuple ats) (ListV avs)` by
@@ -238,7 +319,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[members]:
   suspend "member_induction"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_induction]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_induction]:
   qabbrev_tac `encoded_size = LENGTH (enc at (ListV avs))` >>
   qabbrev_tac `sites = window_alloca_sites func (frag_ids st en)` >>
   qabbrev_tac `head_bytes = \k.
@@ -305,6 +386,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_induction]:
         (!id b sz. id IN sites /\ FLOOKUP t.vs_allocas id = SOME (b,sz) ==>
           i < b \/ b+sz <= i) ==> (i IN tf.t_mem <=> i IN tu.t_mem)) /\
       tf.t_stor = tu.t_stor /\ tf.t_trans = tu.t_trans /\ tf.t_imm = tu.t_imm /\
+      P ctx func explicit current end_st u t /\
       !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
         (u,Gu,tu) [] (OK t,Gf,tf)` by
     (Induct >> rpt gen_tac >> strip_tac
@@ -313,7 +395,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_induction]:
   suspend "parent_assembly"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[members_done]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[members_done]:
   `k = LENGTH infos` by
     (qpat_assum `[] = DROP k infos` mp_tac >>
      qpat_assum `k <= LENGTH infos` mp_tac >>
@@ -354,8 +436,11 @@ Resume compile_abi_encode_to_buf_complex_window_joint[members_done]:
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (u,Gu,tu) [] (OK u,Gu,tu)` by
     (gen_tac >> irule (cj 1 gas_origin_ptr_path_rules) >> first_assum ACCEPT_TAC) >>
+  `P ctx func explicit end_st end_st u u` by
+    (irule members_payload_refl >> first_assum ACCEPT_TAC) >>
   map_every (fn pat => qpat_assum pat mp_tac)
-    [`window_phase ctx func end_st end_st sites [(d,encoded_size)] u u`,
+    [`P ctx func explicit end_st end_st u u`,
+     `window_phase ctx func end_st end_st sites [(d,encoded_size)] u u`,
      `window_member_prefix infos ats avs (LENGTH infos) d u.vs_memory`,
      `!i. d <= i /\ i < d+encoded_size ==> i NOTIN tu.t_mem`,
      `allocas_from lo u`, `lo <= u.vs_alloca_next`,
@@ -368,7 +453,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[members_done]:
   asm_simp_tac bool_ss [abi_encode_exec_frame_refl] >> first_assum ACCEPT_TAC
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_step]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_step]:
   rename1 `entry::rest = DROP k infos` >> PairCases_on `entry` >>
   rename1 `(ei,az,ms,dyn)::rest = DROP k infos` >>
   `k < LENGTH infos` by
@@ -415,7 +500,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_step]:
   suspend "member_source_add"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_source_add]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_source_add]:
   qabbrev_tac `source_offset = abi_encoder_member_span (TAKE k infos)` >>
   qabbrev_tac `source_var = STRING #"%" (toString current.cs_next_var)` >>
   `eval_operand (Lit (n2w source_offset)) u = SOME (n2w source_offset)` by
@@ -458,7 +543,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_source_add]:
   suspend "member_source_path"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_source_path]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_source_path]:
   `step_inst_base source_inst u = OK source_raw` by
     (qpat_assum `window_pure_seq current prepared u source_raw` mp_tac >>
      qpat_assum `emitted_insts current prepared = _` mp_tac >>
@@ -551,8 +636,13 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_source_path]:
   suspend "member_source_transport"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_source_transport]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_source_transport]:
   qabbrev_tac `us = source_raw with vs_inst_idx := LENGTH prepared.cs_current_insts` >>
+  `P ctx func explicit current prepared u us` by
+    (simp_tac bool_ss [Abbr `us`] >> irule members_payload_pure >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     pure_rewrite_tac[abi_members_straight_code_def] >> disj1_tac >>
+     goal_assum (drule_at Any)) >>
   `window_phase ctx func current prepared sites [(d,encoded_size)] u us` by
     (qpat_assum `window_phase ctx func current prepared _ _ u _` mp_tac >>
      simp_tac bool_ss [Abbr `us`]) >>
@@ -617,7 +707,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_source_transport]:
   suspend "member_source_coverage"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_source_coverage]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_source_coverage]:
   `0 < MIN ms (cap-source_offset) ==>
     sb+source_offset+MIN ms (cap-source_offset) <= us.vs_alloca_next /\
     ?p. elem_src = Var p /\
@@ -682,7 +772,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_source_coverage]:
   suspend "member_static_child"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_child]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_child]:
   drule_all window_static_child_context >>
   disch_then (qx_choose_then `head` (qx_choose_then `ready` strip_assume_tac)) >>
   `k < LENGTH ats /\ ~is_dynamic (EL k ats)` by
@@ -703,7 +793,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_child]:
   suspend "member_static_prepare"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_prepare]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_prepare]:
   qabbrev_tac `head_offset = SUM (MAP abi_member_head_size (TAKE k ats))` >>
   qabbrev_tac `head_var = STRING #"%" (toString prepared.cs_next_var)` >>
   `eval_operand (Lit (n2w head_offset)) us = SOME (n2w head_offset)` by
@@ -746,7 +836,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_prepare]:
   suspend "member_head_path"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_head_path]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_head_path]:
   `step_inst_base head_inst us = OK head_raw` by
     (qpat_assum `window_pure_seq prepared ready us head_raw` mp_tac >>
      qpat_assum `emitted_insts prepared ready = _` mp_tac >>
@@ -839,8 +929,13 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_head_path]:
   suspend "member_head_transport"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_head_transport]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_head_transport]:
   qabbrev_tac `uh = head_raw with vs_inst_idx := LENGTH ready.cs_current_insts` >>
+  `P ctx func explicit prepared ready us uh` by
+    (simp_tac bool_ss [Abbr `uh`] >> irule members_payload_pure >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     pure_rewrite_tac[abi_members_straight_code_def] >> disj1_tac >>
+     goal_assum (drule_at Any)) >>
   `window_phase ctx func prepared ready sites [(d,encoded_size)] us uh` by
     (qpat_assum `window_phase ctx func prepared ready _ _ us _` mp_tac >>
      simp_tac bool_ss [Abbr `uh`]) >>
@@ -893,7 +988,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_head_transport]:
   suspend "member_head_coverage"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_head_coverage]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_head_coverage]:
   qabbrev_tac `child_size = LENGTH (enc (EL k ats) (EL k avs))` >>
   `head_offset + child_size <= encoded_size` by
     (qpat_assum `head_offset + child_size <= head_lengths ats 0` mp_tac >>
@@ -926,7 +1021,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_head_coverage]:
   suspend "member_static_call"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_call]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_call]:
   `allocas_from lo uh /\ lo <= uh.vs_alloca_next` by
     (conj_tac >-
        (qpat_assum `allocas_from lo us` mp_tac >>
@@ -1084,7 +1179,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_call]:
   suspend "member_static_post"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_pre]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_pre]:
   qpat_x_assum `!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> _` kall_tac >>
   qpat_x_assum `!k current end_st result u Gu tu dp site slot. _` kall_tac >>
   map_every (fn q => qpat_assum q (fn th =>
@@ -1095,7 +1190,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_pre]:
   first_assum ACCEPT_TAC
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_child]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_child]:
   drule_all abiEncoderChildContextTheory.abi_encoder_dynamic_child_context >>
   disch_then (qx_choose_then `ops` (qx_choose_then `dyn_ready`
     (qx_choose_then `body_len` (qx_choose_then `body_end` strip_assume_tac)))) >>
@@ -1115,7 +1210,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_child]:
   suspend "member_dynamic_prefix"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_post]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_post]:
   `window_phase ctx func ready child_end
     (window_alloca_sites func (frag_ids ready child_end))
     [(d+head_offset,child_size)] uh child_actual` by
@@ -1241,7 +1336,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_post]:
   suspend "member_static_advance"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_advance]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_advance]:
   `!i. i < cap ==> (sb+i IN tc.t_mem <=> sb+i IN th.t_mem)` by
     (gen_tac >> strip_tac >>
      `0 < cap` by decide_tac >>
@@ -1333,7 +1428,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_advance]:
   suspend "member_static_prefix_frame"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_prefix_frame]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_prefix_frame]:
   `regions_disjoint (d,head_bytes k) (d+head_offset,child_size)` by
     (qpat_assum `head_bytes k = head_offset` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp_tac bool_ss [regions_disjoint_def] >> decide_tac) >>
@@ -1384,7 +1479,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_prefix_frame
   suspend "member_static_clean_prefix"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_clean_prefix]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_clean_prefix]:
   `abi_encoder_structural_valid (EL k ats) (EL k avs)` by
     (qpat_assum `LIST_REL abi_encoder_structural_valid ats avs` mp_tac >>
      qpat_assum `k < LENGTH ats` mp_tac >>
@@ -1431,7 +1526,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_clean_prefix
   suspend "member_static_taint_prefix"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_taint_prefix]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_taint_prefix]:
   `!i. (d <= i /\ i < d+head_bytes k) \/
     (d+window_member_head_size infos <= i /\
      i < d+window_member_head_size infos+tail_bytes k) ==>
@@ -1498,7 +1593,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_taint_prefix
   suspend "member_static_cursor"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_cursor]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_cursor]:
   `current.cs_next_var <= prepared.cs_next_var` by
     (qpat_assum `prepared.cs_next_var = current.cs_next_var+1` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
@@ -1531,7 +1626,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_cursor]:
   suspend "member_static_cursor_state"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_cursor_state]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_cursor_state]:
   `EXISTS (\(_,_,_,flag). flag) infos ==>
     site IN sites /\ site < child_end.cs_next_id /\
     (?p. dp = Var p /\ not_fresh_at child_end p /\ ptr_covers Gc tc p child_actual 32) /\
@@ -1589,7 +1684,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_cursor_state
   suspend "member_static_root_state"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_cursor_details]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_cursor_details]:
   `not_fresh_at child_end p` by
     (qpat_assum `not_fresh_at ready p` mp_tac >>
      qpat_assum `ready.cs_next_var <= child_end.cs_next_var` mp_tac >>
@@ -1631,7 +1726,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_cursor_detai
   suspend "member_static_cursor_memory"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_cursor_memory]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_cursor_memory]:
   `regions_disjoint (d,encoded_size) (slot,32)` by
     (qpat_assum `!id b sz. id IN sites /\ FLOOKUP uh.vs_allocas id = _ ==>
        regions_disjoint (d,encoded_size) (b,sz)`
@@ -1698,7 +1793,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_cursor_memor
   qexists_tac `p` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_root_state]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_root_state]:
   `lo <= child_actual.vs_alloca_next` by
     (qpat_assum `lo <= uh.vs_alloca_next` mp_tac >>
      qpat_assum `window_alloca_growth uh child_actual`
@@ -1746,7 +1841,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_root_state]:
   suspend "member_static_root_operands"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_root_operands]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_root_operands]:
   `current.cs_next_var <= ready.cs_next_var` by
     (qpat_assum `current.cs_next_var <= prepared.cs_next_var` mp_tac >>
      qpat_assum `prepared.cs_next_var <= ready.cs_next_var` mp_tac >>
@@ -1811,7 +1906,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_root_operand
   suspend "member_static_root_pointers"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_root_pointers]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_root_pointers]:
   `d+encoded_size <= child_actual.vs_alloca_next` by
     (qpat_assum `d+encoded_size <= uh.vs_alloca_next` mp_tac >>
      qpat_assum `window_alloca_growth uh child_actual`
@@ -1872,7 +1967,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_root_pointer
   suspend "member_static_tail"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_static_tail]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_static_tail]:
   `abi_encoder_member_span (TAKE (SUC k) infos) = source_offset+ms /\
    SUM (MAP abi_member_head_size (TAKE (SUC k) ats)) = head_offset+az` by
     (map_every (fn pat => qpat_assum pat mp_tac)
@@ -2064,11 +2159,23 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_static_tail]:
        qpat_assum `!D. gas_origin_ptr_path _ (child_actual,Gc,tc) []
          (OK tail_actual,Gf,tf)` (qspec_then `D` ACCEPT_TAC))) >>
      simp_tac bool_ss [APPEND]) >>
+  `P ctx func explicit current ready u uh` by
+    (irule members_payload_comp >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`prepared`,`us`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+  `P ctx func explicit current child_end u child_actual` by
+    (irule members_payload_comp >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`ready`,`uh`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+  `P ctx func explicit current end_st u tail_actual` by
+    (irule members_payload_comp >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`child_end`,`child_actual`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`tail_actual`,`Gf`,`tf`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[parent_assembly]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[parent_assembly]:
   `!id b sz. id IN sites /\ FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
     sz = 32 /\ (0 < cap ==> regions_disjoint (sb,cap) (b,sz)) /\
     regions_disjoint (d,encoded_size) (b,sz)` by
@@ -2193,6 +2300,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_assembly]:
      `!i. (i < d \/ d+encoded_size <= i) /\ _ ==>
        (i IN tf.t_mem <=> i IN tn.t_mem)`,
      `tf.t_stor = tn.t_stor`, `tf.t_trans = tn.t_trans`, `tf.t_imm = tn.t_imm`,
+     `P ctx func explicit st en s t`,
      `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
        (s,G,tn) [] (OK t,Gf,tf)`, `out = Lit _`] >>
   POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
@@ -2203,7 +2311,7 @@ QED
 
 (* The empty registered effect and execution frame fix the frontier. *)
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_prefix]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_prefix]:
   qabbrev_tac `head_offset=SUM (MAP abi_member_head_size (TAKE k ats))` >>
   qabbrev_tac `tail_offset=window_member_tail infos ats avs k` >>
   qabbrev_tac `child_size=LENGTH (enc (EL k ats) (EL k avs))` >>
@@ -2316,6 +2424,13 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_prefix]:
   disch_tac >> pop_assum (qx_choose_then `dyn_actual` (qx_choose_then `Gp`
     (qx_choose_then `tp` (qx_choose_then `hp`
       (qx_choose_then `child_ptr` strip_assume_tac))))) >>
+  `P ctx func explicit prepared dyn_ready us dyn_actual` by
+    (irule members_payload_phase >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+       (CHANGED_TAC (pure_rewrite_tac[abi_members_straight_code_def]) >>
+        ntac 3 disj2_tac >> disj1_tac >> goal_assum (drule_at Any)),
+       (qpat_assum `window_phase ctx func prepared dyn_ready {} [] us dyn_actual`
+          mp_tac >> simp_tac bool_ss [window_phase_def])]) >>
   `alloca_inv dyn_actual /\ alloca_room ctx func dyn_actual /\
    window_alloca_growth us dyn_actual /\
    ~dyn_actual.vs_halted /\ dyn_actual.vs_current_bb=dyn_ready.cs_current_bb /\
@@ -2394,7 +2509,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_prefix]:
   suspend "member_dynamic_call"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_call]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_call]:
   `prepared.cs_next_id <= dyn_ready.cs_next_id` by
     (qpat_assum `dyn_ready.cs_next_id=prepared.cs_next_id+3` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
@@ -2568,7 +2683,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_call]:
   suspend "member_dynamic_post"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_pre]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_pre]:
   qpat_x_assum `!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> _` kall_tac >>
   qpat_x_assum `!k current end_st result u Gu tu dp site slot. _` kall_tac >>
   map_every (fn q => qpat_assum q (fn tp =>
@@ -2580,7 +2695,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_pre]:
 QED
 
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_post]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_post]:
   `window_phase ctx func dyn_ready body_end
     (window_alloca_sites func (frag_ids dyn_ready body_end))
     [(d+tail_offset,child_size)] dyn_actual body_actual` by
@@ -2706,7 +2821,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_post]:
   suspend "member_dynamic_advance"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_advance]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_advance]:
   `!i. i < cap ==> (sb+i IN tb.t_mem <=> sb+i IN tp.t_mem)` by
     (gen_tac >> strip_tac >>
      `0 < cap` by decide_tac >>
@@ -2756,7 +2871,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_advance]:
   suspend "member_dynamic_suffix_prepare"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_prepare]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_suffix_prepare]:
   `dyn_ready.cs_next_var<=body_end.cs_next_var /\
    dyn_ready.cs_next_id<=body_end.cs_next_id` by
     (conj_tac >> first_assum ACCEPT_TAC) >>
@@ -2962,7 +3077,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_prep
   suspend "member_dynamic_suffix_post"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_pre]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_suffix_pre]:
   qpat_x_assum `!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> _` kall_tac >>
   qpat_x_assum `!k current end_st result u Gu tu dp site slot. _` kall_tac >>
   qpat_assum `FST ops=Var hp` (fn th => pure_rewrite_tac[GSYM th]) >>
@@ -2970,7 +3085,14 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_pre]
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_post]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_suffix_post]:
+  `P ctx func explicit body_end child_end body_actual child_actual` by
+    (irule members_payload_phase >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+       (CHANGED_TAC (pure_rewrite_tac[abi_members_straight_code_def]) >>
+        ntac 4 disj2_tac >> goal_assum (drule_at Any)),
+       (qpat_assum `window_phase ctx func body_end child_end _ _ body_actual child_actual`
+          mp_tac >> simp_tac bool_ss [window_phase_def])]) >>
   `head_bytes k=head_offset /\
    tail_offset=window_member_head_size infos+tail_bytes k /\
    head_offset+32<=window_member_head_size infos` by
@@ -3090,7 +3212,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_post
   suspend "member_dynamic_suffix_clean"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_clean]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_suffix_clean]:
   `head_bytes (SUC k)=head_offset+32` by
     (map_every (fn pat => qpat_assum pat mp_tac)
        [`LIST_REL abi_encoder_structural_valid ats avs`, `k<LENGTH ats`,
@@ -3206,7 +3328,7 @@ QED
 (* Source and global phase/frame follow in a separate bounded block, so
    source proof does not unfold prefix-layout arithmetic or recursive IH. *)
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_source]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_suffix_source]:
   `abi_encoder_registered_effect {site} [(d+head_offset,32)]
     body_actual child_actual` by
     (irule window_phase_effect >> goal_assum (drule_at Any)) >>
@@ -3280,7 +3402,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_sour
   suspend "member_dynamic_suffix_phase"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_phase]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_suffix_phase]:
   `window_phase ctx func dyn_ready child_end sites [(d,encoded_size)]
     dyn_actual child_actual` by
     (mp_tac (Q.INST [`st` |-> `dyn_ready`,`en` |-> `child_end`,
@@ -3324,7 +3446,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_suffix_phas
   suspend "member_dynamic_root_state"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_root_state]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_root_state]:
   `current.cs_next_var <= prepared.cs_next_var /\
    current.cs_next_var <= dyn_ready.cs_next_var /\
    current.cs_next_var <= body_end.cs_next_var /\
@@ -3356,7 +3478,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_root_state]
   suspend "member_dynamic_root_operands"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_root_operands]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_root_operands]:
   `alloca_inv child_actual /\ alloca_room ctx func child_actual /\
    window_alloca_growth u child_actual /\ ~child_actual.vs_halted /\
    child_actual.vs_current_bb=child_end.cs_current_bb /\
@@ -3497,7 +3619,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_root_operan
   suspend "member_dynamic_classifier"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_classifier]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_classifier]:
   `abi_encoder_registered_effect {site} [(d+head_offset,32)]
     body_actual child_actual /\ window_alloca_growth body_actual child_actual` by
     (qpat_assum `window_phase ctx func body_end child_end {site} _
@@ -3556,7 +3678,7 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_classifier]
   suspend "member_dynamic_tail"
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_tail]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[member_dynamic_tail]:
   `!i. (i<d \/ d+encoded_size<=i) /\
     (!id b sz. id IN sites /\ FLOOKUP child_actual.vs_allocas id=SOME (b,sz) ==>
       i<b \/ b+sz<=i) ==> (i IN tc.t_mem <=> i IN tu.t_mem)` by
@@ -3729,10 +3851,26 @@ Resume compile_abi_encode_to_buf_complex_window_joint[member_dynamic_tail]:
      (impl_tac >- (conj_tac >- REFL_TAC >>
        qpat_assum `!D. gas_origin_ptr_path _ (child_actual,Gc,tc) [] (OK tail_actual,Gf,tf)`
          (qspec_then `D` ACCEPT_TAC))) >> simp_tac bool_ss [APPEND]) >>
+  `P ctx func explicit current dyn_ready u dyn_actual` by
+    (irule members_payload_comp >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`prepared`,`us`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+  `P ctx func explicit current body_end u body_actual` by
+    (irule members_payload_comp >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`dyn_ready`,`dyn_actual`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+  `P ctx func explicit current child_end u child_actual` by
+    (irule members_payload_comp >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`body_end`,`body_actual`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+  `P ctx func explicit current end_st u tail_actual` by
+    (irule members_payload_comp >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`child_end`,`child_actual`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`tail_actual`,`Gf`,`tf`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
+Resume compile_abi_encode_to_buf_complex_window_joint_payload[parent_dynamic]:
   qpat_x_assum `!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> _` kall_tac >>
   drule_all abi_encoder_complex_dynamic_trace >>
   disch_then (qx_choose_then `dyn_ptr` (qx_choose_then `ready`
@@ -3823,6 +3961,15 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
   disch_then (qspecl_then [`explicit`,`PG`,`G`]
     (qx_choose_then `u` (qx_choose_then `slot` (qx_choose_then `p`
       (qx_choose_then `Gu` (qx_choose_then `tu` strip_assume_tac)))))) >>
+  `P ctx func explicit st ready s u` by
+    (irule members_payload_phase >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+       (CHANGED_TAC (pure_rewrite_tac[abi_members_straight_code_def]) >>
+        ntac 2 disj2_tac >> disj1_tac >>
+        qexistsl_tac [`dyn_ptr`,`Lit (n2w (window_member_head_size infos))`,`allocated`] >>
+        conj_tac >> first_assum ACCEPT_TAC),
+       (qpat_assum `window_phase ctx func st ready _ [] s u` mp_tac >>
+        simp_tac bool_ss [window_phase_def])]) >>
   `abi_encoder_registered_effect {st.cs_next_id} [] s u /\
    window_alloca_growth s u /\ alloca_inv u /\ alloca_room ctx func u /\
    ~u.vs_halted /\ u.vs_current_bb = ready.cs_current_bb /\
@@ -4183,6 +4330,11 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
         CONJUNCT1 o REWRITE_RULE [window_pure_seq_def]) >>
      asm_simp_tac (srw_ss()) [run_inst_seq_def]) >>
   qabbrev_tac `t=raw_load with vs_inst_idx := LENGTH en.cs_current_insts` >>
+  `P ctx func explicit middle en v t` by
+    (simp_tac bool_ss [Abbr `t`] >> irule members_payload_pure >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     pure_rewrite_tac[abi_members_straight_code_def] >> disj2_tac >> disj1_tac >>
+     goal_assum (drule_at Any)) >>
   qabbrev_tac `Gload=step_prov PG Gv ld raw_load` >>
   qabbrev_tac `tt=step_taint ld v raw_load tv` >>
   `window_phase ctx func middle en {} [] v t` by
@@ -4449,6 +4601,14 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
      asm_simp_tac (srw_ss()) [Abbr `q`,loweringStateRelDefsTheory.not_fresh_at_def] >>
      rpt strip_tac >> decide_tac) >>
+  `P ctx func explicit st middle s v` by
+    (irule members_payload_comp >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`ready`,`u`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `P ctx func explicit st en s t` by
+    (irule members_payload_comp >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`middle`,`v`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   qexistsl_tac [`t`,`Gload`,`tt`] >>
   map_every (fn pat => qpat_assum pat (fn abr => pure_rewrite_tac
     [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] abr)]))
@@ -4462,10 +4622,129 @@ Resume compile_abi_encode_to_buf_complex_window_joint[parent_dynamic]:
      `!x. not_fresh_at st x ==> FLOOKUP Gload x=_ /\ _`,
      `!i. (i<d \/ d+encoded_size<=i) /\ _ ==> (i IN tt.t_mem <=> i IN tn.t_mem)`,
      `tt.t_stor=tn.t_stor`,`tt.t_trans=tn.t_trans`,`tt.t_imm=tn.t_imm`,
+     `P ctx func explicit st en s t`,
      `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gload,tt)`] >>
   POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
   asm_rewrite_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 
-Finalise compile_abi_encode_to_buf_complex_window_joint
+Finalise compile_abi_encode_to_buf_complex_window_joint_payload
+
+(* The original callback remains sufficient when no geometry is requested. *)
+Theorem compile_abi_encode_to_buf_complex_window_joint:
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==>
+    !dst src st out en ctx func s at av sb cap d G tn lo explicit PG.
+      compile_abi_encode_to_buf dst src ei st = (out,en) /\
+      abi_encoder_admissible ei /\
+      (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+        abi_encoder_window_input ei at av sb cap mem) /\
+      eval_operand src s = SOME (n2w sb) /\
+      eval_operand dst s = SOME (n2w d) /\
+      op_taint tn src = {} /\ op_taint tn dst = {} /\
+      (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+      fn_has_code st en func /\ fn_inst_ids_distinct func /\
+      alloca_inv s /\ alloca_room ctx func s /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+        s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+      allocas_from lo s /\ lo <= s.vs_alloca_next /\
+      (0 < cap ==>
+        sb + cap <= s.vs_alloca_next /\
+        venomMemDefs$regions_disjoint
+          (sb,cap) (d,LENGTH (contractABI$enc at av)) /\
+        ?p. src = Var p /\ ptr_covers G tn p s cap) /\
+      d + LENGTH (contractABI$enc at av) <= s.vs_alloca_next /\
+      (0 < LENGTH (contractABI$enc at av) ==>
+        ?p. dst = Var p /\
+          ptr_covers G tn p s (LENGTH (contractABI$enc at av))) /\
+      (!inst b sz.
+        MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+        inst.inst_id IN frag_ids st en /\
+        FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+        sz = 32 /\
+        (0 < cap ==>
+          venomMemDefs$regions_disjoint (sb,cap) (b,sz)) /\
+        venomMemDefs$regions_disjoint
+          (d,LENGTH (contractABI$enc at av)) (b,sz)) /\
+      ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+      s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+      ?t G' tn'.
+        window_strong_result ctx func st en out at av d s t /\
+        abi_encode_exec_frame func s t /\
+        op_taint tn' out = {} /\
+        (!x. out = Var x ==> not_fresh_at en x) /\
+        (!i. d <= i /\ i < d + LENGTH (contractABI$enc at av) ==>
+          i NOTIN tn'.t_mem) /\
+        (!x. not_fresh_at st x ==>
+          FLOOKUP G' x = FLOOKUP G x /\
+          op_taint tn' (Var x) = op_taint tn (Var x)) /\
+        (!i. (i < d \/ d + LENGTH (contractABI$enc at av) <= i) /\
+          (!id b sz. id IN window_alloca_sites func (frag_ids st en) /\
+            FLOOKUP t.vs_allocas id = SOME (b,sz) ==>
+            i < b \/ b + sz <= i) ==>
+          (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+        tn'.t_stor = tn.t_stor /\
+        tn'.t_trans = tn.t_trans /\
+        tn'.t_imm = tn.t_imm /\
+        !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+          (s,G,tn) [] (OK t,G',tn')) ==>
+  !dst src st out en ctx func s at av sb cap d G tn lo explicit PG.
+    compile_abi_encode_to_buf dst src (AbiComplex infos) st = (out,en) /\
+    abi_encoder_admissible (AbiComplex infos) /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      abi_encoder_window_input (AbiComplex infos) at av sb cap mem) /\
+    eval_operand src s = SOME (n2w sb) /\
+    eval_operand dst s = SOME (n2w d) /\
+    op_taint tn src = {} /\ op_taint tn dst = {} /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+    fn_has_code st en func /\ fn_inst_ids_distinct func /\
+    alloca_inv s /\ alloca_room ctx func s /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    (0 < cap ==>
+      sb + cap <= s.vs_alloca_next /\
+      venomMemDefs$regions_disjoint
+        (sb,cap) (d,LENGTH (contractABI$enc at av)) /\
+      ?p. src = Var p /\ ptr_covers G tn p s cap) /\
+    d + LENGTH (contractABI$enc at av) <= s.vs_alloca_next /\
+    (0 < LENGTH (contractABI$enc at av) ==>
+      ?p. dst = Var p /\
+        ptr_covers G tn p s (LENGTH (contractABI$enc at av))) /\
+    (!inst b sz.
+      MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_id IN frag_ids st en /\
+      FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+      sz = 32 /\
+      (0 < cap ==>
+        venomMemDefs$regions_disjoint (sb,cap) (b,sz)) /\
+      venomMemDefs$regions_disjoint
+        (d,LENGTH (contractABI$enc at av)) (b,sz)) /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?t G' tn'.
+      window_strong_result ctx func st en out at av d s t /\
+      abi_encode_exec_frame func s t /\
+      op_taint tn' out = {} /\
+      (!x. out = Var x ==> not_fresh_at en x) /\
+      (!i. d <= i /\ i < d + LENGTH (contractABI$enc at av) ==>
+        i NOTIN tn'.t_mem) /\
+      (!x. not_fresh_at st x ==>
+        FLOOKUP G' x = FLOOKUP G x /\
+        op_taint tn' (Var x) = op_taint tn (Var x)) /\
+      (!i. (i < d \/ d + LENGTH (contractABI$enc at av) <= i) /\
+        (!id b sz. id IN window_alloca_sites func (frag_ids st en) /\
+          FLOOKUP t.vs_allocas id = SOME (b,sz) ==>
+          i < b \/ b + sz <= i) ==>
+        (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+      tn'.t_stor = tn.t_stor /\
+      tn'.t_trans = tn.t_trans /\
+      tn'.t_imm = tn.t_imm /\
+      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+        (s,G,tn) [] (OK t,G',tn')
+Proof
+  MATCH_ACCEPT_TAC
+    (SIMP_RULE bool_ss [abi_members_path_laws_def]
+      (Q.INST [`P` |-> `\ctx func explicit a b s t. T`]
+        compile_abi_encode_to_buf_complex_window_joint_payload))
+QED

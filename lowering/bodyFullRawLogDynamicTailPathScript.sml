@@ -31,7 +31,7 @@ Proof
     (v with vs_inst_idx := SUC s.vs_inst_idx)` >> gvs[]
 QED
 
-Theorem raw_log_dynamic_tail_path:
+Theorem raw_log_dynamic_tail_path_run:
   ~cx.txn.is_static /\
   emit_op MLOAD [data_op] sm = (len_op,s1) /\
   emit_op ADD [data_op;Lit 32w] s1 = (ptr_op,s2) /\
@@ -76,7 +76,9 @@ Theorem raw_log_dynamic_tail_path:
     storage_well_formed_on cx
       (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (FST H) /\
     ghost_inv_at (DF H) lo d cenv cx
-      (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) G1 tn1 u
+      (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) G1 tn1 u /\
+    run_inst_seq (emitted_insts sm sb) s =
+      OK (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs])
 Proof
   strip_tac >>
   Cases_on `?H. valid_horizon cx st0 H ee.storage_trace`
@@ -162,14 +164,70 @@ Proof
          simp[ghost_inv_at_def, ptr_covers_def, return_buf_ptr_def,
               stor_taint_ok_at_def, lookup_var_def, ptrDisciplineTheory.allocas_from_def] >> strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
       simp[stmt_state_rel_inst_idx] >>
-      drule_all (SRULE [LET_THM] raw_log_dynamic_sequence_path) >>
+      drule_all (SRULE [LET_THM] raw_log_dynamic_sequence_path_run) >>
       simp[LET_THM, venom_state_fupdfupds] >> strip_tac >>
       fs[venom_state_fupdfupds]) >>
   gvs[]
 QED
 
+Theorem raw_log_dynamic_tail_path:
+  ~cx.txn.is_static /\
+  emit_op MLOAD [data_op] sm = (len_op,s1) /\
+  emit_op ADD [data_op;Lit 32w] s1 = (ptr_op,s2) /\
+  emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [] s2 = ((),sb) /\
+  fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  LENGTH ops < dimword (:256) /\
+  EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) (data_op::ops) /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  expr_type data = BaseT (BytesT (Dynamic cap)) /\
+  post_value_type cenv data = expr_type data /\
+  evaluate_type (get_tenv cx) (expr_type data) = SOME (BaseTV (BytesT (Dynamic cap))) /\
+  expr_type (Call ann RawLog es_call dflt) = NoneT /\
+  post_value_type cenv (Call ann RawLog es_call dflt) = NoneT /\
+  expr_has_effect (Call ann RawLog es_call dflt) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx data es sa sm s0 ee (BytesV bs) data_op s /\
+    expr_store_bound cx (expr_type data) (BytesV bs) data_op s /\
+    ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
+    ptr_val_ok cx (post_value_type cenv data) (BytesV bs) data_op G tn s /\
+    ptr_buf_ok cenv data data_op G s /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+    alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+    eval_operands ops s = SOME (MAP event_value_to_word vals) /\
+    EVERY (\op. op_taint tn op = {}) ops /\
+    ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts) ==>
+  ?t u G1 tn1. !H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G1,tn1) /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func u /\ tn1.t_mem = tn.t_mem /\
+    (u with <|vs_logs := t.vs_logs; vs_inst_idx := t.vs_inst_idx|>) = t /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
+    ghost_kept_at lo cenv ee sm G tn s G1 tn1 /\
+    u = (t with <|vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs];
+                  vs_inst_idx := LENGTH sb.cs_current_insts|>) /\
+    stmt_state_rel H ctx func cenv cx
+      (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) u /\
+    storage_well_formed_on cx
+      (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx
+      (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) G1 tn1 u
+Proof
+  strip_tac >> drule_all raw_log_dynamic_tail_path_run >>
+  disch_then (qspecl_then [`explicit`, `PG`]
+    (qx_choose_then `t` (qx_choose_then `u`
+      (qx_choose_then `G1` (qx_choose_then `tn1` assume_tac))))) >>
+  qexistsl [`t`, `u`, `G1`, `tn1`] >> qx_gen_tac `H` >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+    (qspec_then `H` mp_tac) >> simp[]
+QED
+
 (* The static LOG abort retains the concrete preparation and its pointer checks. *)
-Theorem raw_log_dynamic_static_tail_path:
+Theorem raw_log_dynamic_static_tail_witness:
   cx.txn.is_static /\
   emit_op MLOAD [data_op] sm = (len_op,s1) /\
   emit_op ADD [data_op;Lit 32w] s1 = (ptr_op,s2) /\
@@ -198,7 +256,10 @@ Theorem raw_log_dynamic_static_tail_path:
     EVERY (\op. op_taint tn op = {}) ops /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts) ==>
-  ?u G1 tn1. !H. valid_horizon cx st0 H ee.storage_trace ==>
+  ?t u G1 tn1. !H. valid_horizon cx st0 H ee.storage_trace ==>
+    run_inst_seq (emitted_insts sm s2) s = OK t /\
+    gas_origin_edge T explicit ctx func
+      (t with vs_inst_idx := LENGTH s2.cs_current_insts) [] (Abort ExHalt_abort u) /\
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
       (Abort ExHalt_abort u,G1,tn1)
 Proof
@@ -226,7 +287,8 @@ Proof
         `topics` |-> `MAP event_value_to_word vals`]
         (INST_TYPE [alpha |-> ``:word8``] raw_log_dynamic_prepare_joint)) >>
       (impl_tac >- (simp[LESS_MOD] >> metis_tac[ADD_COMM, ADD_ASSOC])) >> strip_tac >>
-      qexistsl [`halt_state (set_returndata [] (t with vs_inst_idx := LENGTH s2.cs_current_insts))`, `G1`, `tn1`] >>
+      qexistsl [`t`, `halt_state (set_returndata [] (t with vs_inst_idx := LENGTH s2.cs_current_insts))`,
+                `G1`, `tn1`] >>
       qx_gen_tac `H` >> strip_tac >>
       qpat_assum `!H. valid_horizon _ _ _ _ ==> _`
         (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
@@ -335,9 +397,48 @@ Proof
          (Abort ExHalt_abort (halt_state (set_returndata [] q)),G1,tn1)` by
         (irule (cj 3 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >>
          simp[fragExecTheory.exit_result_def]) >>
-      qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) [] (OK q,G1,tn1)`
-        (mp_tac o MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
-      disch_then (qspecl_then [`q`,`G1`,`tn1`,`[]`] mp_tac) >>
-      simp[]) >>
+      `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+         (Abort ExHalt_abort (halt_state (set_returndata [] q)),G1,tn1)` by
+        (qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) [] (OK q,G1,tn1)`
+           (mp_tac o MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+         disch_then (qspecl_then [`q`,`G1`,`tn1`,`[]`] mp_tac) >> simp[]) >>
+      fs[fragGasOriginPtrTheory.gas_origin_ptr_edge_def]) >>
   gvs[]
+QED
+
+Theorem raw_log_dynamic_static_tail_path:
+  cx.txn.is_static /\
+  emit_op MLOAD [data_op] sm = (len_op,s1) /\
+  emit_op ADD [data_op;Lit 32w] s1 = (ptr_op,s2) /\
+  emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [] s2 = ((),sb) /\
+  fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  LENGTH ops < dimword (:256) /\
+  EVERY (\op. !x. op = Var x ==> not_fresh_at sm x) (data_op::ops) /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  expr_type data = BaseT (BytesT (Dynamic cap)) /\
+  post_value_type cenv data = expr_type data /\
+  evaluate_type (get_tenv cx) (expr_type data) = SOME (BaseTV (BytesT (Dynamic cap))) /\
+  expr_type (Call ann RawLog es_call dflt) = NoneT /\
+  post_value_type cenv (Call ann RawLog es_call dflt) = NoneT /\
+  expr_has_effect (Call ann RawLog es_call dflt) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx data es sa sm s0 ee (BytesV bs) data_op s /\
+    expr_store_bound cx (expr_type data) (BytesV bs) data_op s /\
+    ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
+    ptr_val_ok cx (post_value_type cenv data) (BytesV bs) data_op G tn s /\
+    ptr_buf_ok cenv data data_op G s /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+    alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+    eval_operands ops s = SOME (MAP event_value_to_word vals) /\
+    EVERY (\op. op_taint tn op = {}) ops /\
+    ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts) ==>
+  ?u G1 tn1. !H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (Abort ExHalt_abort u,G1,tn1)
+Proof
+  disch_then (mp_tac o MATCH_MP raw_log_dynamic_static_tail_witness) >>
+  rpt strip_tac >> qexistsl_tac [`u`, `G1`, `tn1`] >> simp[]
 QED
