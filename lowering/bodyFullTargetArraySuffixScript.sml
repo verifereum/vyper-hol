@@ -2,7 +2,7 @@
 Theory bodyFullTargetArraySuffix
 Ancestors
   bodyFullTargetSubscript bodyFullTargetArraySource bodyFullTargetArrayLoad
-  bodyFullTargetArrayScalar bodyFullTargetAttribute targetSubscriptMemory
+  bodyFullTargetArrayScalar arrayAbortItinerary bodyFullTargetAttribute targetSubscriptMemory
   targetSubscriptStorage bodyPtrDefs loweringPosts freshWrites fragGasOriginPtrDead
   targetSubscriptContinuation exprLowering exprSimArrayIndex
   finite_map pair list bodyFullTargetDefs venomState ptrDiscipline exprLoweringProps
@@ -687,6 +687,7 @@ Theorem array_tail_packet_dynamic_length[local]:
     (case FST (SND rb) of SOME l => l | NONE => LocMemory)
     (FST rb) sn = (len,sl) ==>
   ?w t G' tn'.
+    (case FST (SND rb) of SOME l => l | NONE => LocMemory) <> LocCode /\
     array_length_loader_ok cenv.ce_is_ctor cenv.ce_imm_alloca
       (case FST (SND rb) of SOME l => l | NONE => LocMemory)
       (FST rb) w sn len sl lo ctx func PG t2 G2 tn2 t G' tn' /\
@@ -777,6 +778,184 @@ Proof
        venomInstTheory.instruction_component_equality]
 QED
 
+(* The installed slice is sequential, uses only administrative opcodes, and
+   owns exactly the IDs minted on its compiler interval. *)
+Definition array_admin_slice_def:
+  array_admin_slice a b <=>
+    same_blocks a b /\
+    b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
+    a.cs_next_id <= b.cs_next_id /\
+    EVERY (\i. a.cs_next_id <= i.inst_id /\ i.inst_id < b.cs_next_id /\
+      i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+      i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2 /\
+      ~is_terminator i.inst_opcode) (emitted_insts a b)
+End
+
+Theorem array_admin_slice_refl[local,simp]:
+  array_admin_slice a a
+Proof
+  simp[array_admin_slice_def, same_blocks_def, emitted_insts_def,
+       rich_listTheory.DROP_LENGTH_NIL]
+QED
+
+Theorem array_admin_slice_append[local]:
+  array_admin_slice a m /\ array_admin_slice m b ==> array_admin_slice a b
+Proof
+  simp[array_admin_slice_def, same_blocks_def] >> strip_tac >>
+  drule_all emitted_insts_append >> strip_tac >>
+  simp[APPEND_ASSOC, EVERY_APPEND, EVERY_MEM] >>
+  fs[EVERY_MEM] >> rpt strip_tac >> res_tac >> decide_tac
+QED
+
+Theorem array_admin_emit_op[local]:
+  emit_op opc ops a = (dst,b) /\ opc <> INVOKE /\ opc <> GAS /\
+  opc <> CREATE /\ opc <> CREATE2 /\ ~is_terminator opc ==> array_admin_slice a b
+Proof
+  strip_tac >> drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  fs[array_admin_slice_def, venomInstTheory.mk_inst_def]
+QED
+
+Theorem array_admin_assert[local]:
+  emit_void ASSERT ops a = ((),b) ==> array_admin_slice a b
+Proof
+  strip_tac >> drule emitHelperPropsTheory.emitted_insts_emit_void >> strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  fs[array_admin_slice_def, venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
+QED
+
+Theorem array_length_step_tape[local]:
+  array_length_step_ok lo ctx f opc ops w a out b s G tn /\
+  MEM opc [ADD; MLOAD; SLOAD; TLOAD; CALLDATALOAD; ILOAD; DLOAD] ==>
+  array_admin_slice a b /\
+  run_inst_seq (emitted_insts a b) s = OK (update_var out w s)
+Proof
+  simp[array_length_step_ok_def] >> strip_tac >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  fs[array_admin_slice_def, run_inst_seq_def, venomInstTheory.mk_inst_def,
+     venomInstTheory.is_terminator_def]
+QED
+
+Theorem array_length_loader_tape[local]:
+  array_length_loader_ok ctor imm loc bop w a p b lo ctx f PG s G tn t H tm /\
+  loc <> LocCode ==>
+  array_admin_slice a b /\
+  run_inst_seq (emitted_insts a b) s = OK (t with vs_inst_idx := s.vs_inst_idx)
+Proof
+  strip_tac >> fs[array_length_loader_ok_def] >>
+  `MEM opc [ADD; MLOAD; SLOAD; TLOAD; CALLDATALOAD; ILOAD; DLOAD]` by simp[] >>
+  drule_all array_length_step_tape >> simp[update_var_def]
+QED
+
+Theorem array_tail_packet_initialized_tape:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
+  ?loc len sl sc p w t G tn b iw.
+    loc = (case FST (SND rb) of SOME l => l | NONE => LocMemory) /\
+    SND (SND rb) = SOME (ValPT (ArrayT et bd)) /\
+    (if (case bd of Dynamic _ => T | _ => F)
+     then compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST rb)
+     else comp_return (Lit (n2w (case bd of Fixed n => n | _ => 0)))) sn = (len,sl) /\
+    array_bounds_check iop len (is_signed_type (expr_type e)) sl = ((),sc) /\
+    array_elem_ptr (FST rb) iop (case bd of Dynamic _ => T | _ => F)
+      (word_scale loc) (elem_size_in_location cenv loc et) sc = (p,sb) /\
+    r = (p,FST (SND rb),SOME (ValPT et)) /\
+    fn_has_code sn sl func /\ fn_has_code sl sc func /\ fn_has_code sc sb func /\
+    sn.cs_next_var <= sl.cs_next_var /\
+    (!x. FST rb = Var x ==> not_fresh_at sn x) /\
+    (!x. iop = Var x ==> not_fresh_at sn x) /\
+    (!x. FST rb = Var x ==> not_fresh_at sl x) /\
+    (!x. iop = Var x ==> not_fresh_at sl x) /\
+    (!x. len = Var x ==> not_fresh_at sl x) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (t2,G2,tn2) [] (OK t,G,tn)) /\
+    array_length_frame sn t2 G2 tn2 t G tn /\
+    eval_operand (FST rb) t = SOME b /\ eval_operand iop t = SOME iw /\
+    eval_operand len t = SOME w /\
+    op_taint tn (FST rb) = {} /\ op_taint tn iop = {} /\
+    op_taint tn len = {} /\ op_prov G iop = NONE /\ op_prov G len = NONE /\
+    allocas_from lo t /\ ~t.vs_halted /\
+    t.vs_current_bb = sl.cs_current_bb /\ t.vs_inst_idx = LENGTH sl.cs_current_insts /\
+    (!id path entry etv av.
+      pv = PlaceR (MemoryPlace id path) /\
+      lookup_scopes id mid2.scopes = SOME entry /\
+      evaluate_type (get_tenv cx) et = SOME etv /\
+      evaluate_subscripts entry.type entry.value path = INL (ArrayV av) ==>
+      w = n2w (array_length (ArrayTV etv bd) av)) /\
+    (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+      w = n2w (case bd of Fixed cap => cap | Dynamic cap =>
+        w2n (lookup_storage slot (get_storage cx mid2 tr)) )) /\
+    array_admin_slice sn sl /\
+    run_inst_seq (emitted_insts sn sl) t2 = OK (t with vs_inst_idx := t2.vs_inst_idx)
+Proof
+  strip_tac >>
+  `~t2.vs_halted /\ t2.vs_current_bb = sn.cs_current_bb /\
+   t2.vs_inst_idx = LENGTH sn.cs_current_insts` by fs[array_tail_packet_def] >>
+  drule array_tail_packet_compile_parts >> strip_tac >>
+  drule array_tail_packet_operands_old >> strip_tac >>
+  drule array_tail_packet_scalar_inputs >> strip_tac >>
+  `ci_mono sn sl` by
+    (Cases_on `bd` >> gvs[comp_return_def] >>
+     metis_tac[ci_mono_compile_ptr_load, pairTheory.SND, ci_mono_refl]) >>
+  `ci_mono sl sc /\ ci_mono sc sb` by
+    metis_tac[array_tail_scalar_compiler_mono] >>
+  `fn_has_code sn sl func /\ fn_has_code sl sc func /\ fn_has_code sc sb func` by
+    (fs[array_tail_packet_def] >>
+     metis_tac[fragExecTheory.fn_has_code_split, ci_mono_def, cs_extends_trans]) >>
+  `sn.cs_next_var <= sl.cs_next_var` by fs[ci_mono_def] >>
+  `(!x. FST rb = Var x ==> not_fresh_at sl x) /\
+   (!x. iop = Var x ==> not_fresh_at sl x)` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `!x. len = Var x ==> not_fresh_at sl x` by
+    (Cases_on `bd` >> gvs[comp_return_def] >>
+     metis_tac[fragFuelExprHelpersTheory.compile_ptr_load_var,
+       fragFuelTheory.var_below_def, loweringStateRelDefsTheory.not_fresh_at_def]) >>
+  Cases_on `bd`
+  >- (gvs[comp_return_def] >>
+      qexistsl_tac [`n2w n`, `t2`, `G2`, `tn2`, `b`, `iw`] >>
+      simp[eval_operand_def, op_taint_def, op_prov_def, array_length_frame_def,
+           emitted_insts_def, rich_listTheory.DROP_LENGTH_NIL, run_inst_seq_def,
+           venom_state_component_equality] >>
+      conj_tac
+      >- (gen_tac >> irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >>
+          fs[array_tail_packet_def]) >>
+      rpt strip_tac >>
+      `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace) mid2.storage_trace` by
+        fs[array_tail_packet_def, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      drule_all array_tail_packet_memory_source >> strip_tac >>
+      gvs[] >> Cases_on `av` >>
+      gvs[value_has_type_def, vyperValueOperationTheory.array_length_def]) >>
+  gvs[] >>
+  drule_all array_tail_packet_dynamic_length >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `compile_ptr_load _ _ loc _ _` >>
+  `?tl Gl tnl.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+       (t2,G2,tn2) [] (OK tl,Gl,tnl)) /\
+    eval_operand len tl = SOME w /\ ~tl.vs_halted /\
+    tl.vs_current_bb = sl.cs_current_bb /\ tl.vs_inst_idx = LENGTH sl.cs_current_insts /\
+    array_length_frame sn t2 G2 tn2 tl Gl tnl /\
+    array_length_loader_ok cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST rb)
+      w sn len sl lo ctx func PG t2 G2 tn2 tl Gl tnl` by
+    (irule (array_tail_length_uniform |> Q.INST [`dyn` |-> `T`] |> SRULE []) >>
+     fs[array_tail_packet_def] >> metis_tac[]) >>
+  `tl = t /\ Gl = G' /\ tnl = tn'` by
+    metis_tac[array_tail_length_loader_unique] >>
+  gvs[] >>
+  drule_all array_tail_length_frame_operand >> strip_tac >>
+  `eval_operand (FST rb) t = SOME b /\ op_taint tn' (FST rb) = {}` by
+    metis_tac[array_tail_length_frame_operand] >>
+  `eval_operand iop t = SOME iw /\ op_taint tn' iop = {} /\ op_prov G' iop = NONE` by
+    metis_tac[array_tail_length_frame_operand] >>
+  `allocas_from lo t` by
+    (gvs[array_length_frame_def, allocas_from_def, venom_state_component_equality] >>
+     metis_tac[]) >>
+  qexistsl_tac [`w`, `t`, `G'`, `tn'`, `b`, `iw`] >>
+  simp[] >> drule_all array_length_loader_tape >> simp[]
+QED
+
 Theorem array_tail_packet_initialized_source:
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
@@ -817,68 +996,9 @@ Theorem array_tail_packet_initialized_source:
       w = n2w (case bd of Fixed cap => cap | Dynamic cap =>
         w2n (lookup_storage slot (get_storage cx mid2 tr)) ))
 Proof
-  strip_tac >>
-  `~t2.vs_halted /\ t2.vs_current_bb = sn.cs_current_bb /\
-   t2.vs_inst_idx = LENGTH sn.cs_current_insts` by fs[array_tail_packet_def] >>
-  drule array_tail_packet_compile_parts >> strip_tac >>
-  drule array_tail_packet_operands_old >> strip_tac >>
-  drule array_tail_packet_scalar_inputs >> strip_tac >>
-  `ci_mono sn sl` by
-    (Cases_on `bd` >> gvs[comp_return_def] >>
-     metis_tac[ci_mono_compile_ptr_load, pairTheory.SND, ci_mono_refl]) >>
-  `ci_mono sl sc /\ ci_mono sc sb` by
-    metis_tac[array_tail_scalar_compiler_mono] >>
-  `fn_has_code sn sl func /\ fn_has_code sl sc func /\ fn_has_code sc sb func` by
-    (fs[array_tail_packet_def] >>
-     metis_tac[fragExecTheory.fn_has_code_split, ci_mono_def, cs_extends_trans]) >>
-  `sn.cs_next_var <= sl.cs_next_var` by fs[ci_mono_def] >>
-  `(!x. FST rb = Var x ==> not_fresh_at sl x) /\
-   (!x. iop = Var x ==> not_fresh_at sl x)` by
-    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `!x. len = Var x ==> not_fresh_at sl x` by
-    (Cases_on `bd` >> gvs[comp_return_def] >>
-     metis_tac[fragFuelExprHelpersTheory.compile_ptr_load_var,
-       fragFuelTheory.var_below_def, loweringStateRelDefsTheory.not_fresh_at_def]) >>
-  Cases_on `bd`
-  >- (gvs[comp_return_def] >>
-      qexistsl_tac [`n2w n`, `t2`, `G2`, `tn2`, `b`, `iw`] >>
-      simp[eval_operand_def, op_taint_def, op_prov_def, array_length_frame_def] >>
-      conj_tac
-      >- (gen_tac >> irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >>
-          fs[array_tail_packet_def]) >>
-      rpt strip_tac >>
-      `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace) mid2.storage_trace` by
-        fs[array_tail_packet_def, vyperStorageFootprintTheory.storage_trace_domain_def] >>
-      drule_all array_tail_packet_memory_source >> strip_tac >>
-      gvs[] >> Cases_on `av` >>
-      gvs[value_has_type_def, vyperValueOperationTheory.array_length_def]) >>
-  gvs[] >>
-  drule_all array_tail_packet_dynamic_length >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
-  qmatch_asmsub_abbrev_tac `compile_ptr_load _ _ loc _ _` >>
-  `?tl Gl tnl.
-    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-       (t2,G2,tn2) [] (OK tl,Gl,tnl)) /\
-    eval_operand len tl = SOME w /\ ~tl.vs_halted /\
-    tl.vs_current_bb = sl.cs_current_bb /\ tl.vs_inst_idx = LENGTH sl.cs_current_insts /\
-    array_length_frame sn t2 G2 tn2 tl Gl tnl /\
-    array_length_loader_ok cenv.ce_is_ctor cenv.ce_imm_alloca loc (FST rb)
-      w sn len sl lo ctx func PG t2 G2 tn2 tl Gl tnl` by
-    (irule (array_tail_length_uniform |> Q.INST [`dyn` |-> `T`] |> SRULE []) >>
-     fs[array_tail_packet_def] >> metis_tac[]) >>
-  `tl = t /\ Gl = G' /\ tnl = tn'` by
-    metis_tac[array_tail_length_loader_unique] >>
-  gvs[] >>
-  drule_all array_tail_length_frame_operand >> strip_tac >>
-  `eval_operand (FST rb) t = SOME b /\ op_taint tn' (FST rb) = {}` by
-    metis_tac[array_tail_length_frame_operand] >>
-  `eval_operand iop t = SOME iw /\ op_taint tn' iop = {} /\ op_prov G' iop = NONE` by
-    metis_tac[array_tail_length_frame_operand] >>
-  `allocas_from lo t` by
-    (gvs[array_length_frame_def, allocas_from_def, venom_state_component_equality] >>
-     metis_tac[]) >>
-  qexistsl_tac [`w`, `t`, `G'`, `tn'`, `b`, `iw`] >>
-  simp[]
+  strip_tac >> drule array_tail_packet_initialized_tape >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl [`loc`, `len`, `sl`, `sc`, `p`, `w`, `t`, `G`, `tn`, `b`, `iw`] >> simp[]
 QED
 
 Theorem array_tail_packet_initialized:
@@ -915,6 +1035,207 @@ Proof
   strip_tac >> drule array_tail_packet_initialized_source >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl [`loc`, `len`, `sl`, `sc`, `p`, `w`, `t`, `G`, `tn`, `b`, `iw`] >> simp[]
+QED
+
+(* Drop the cursor correction at the intermediate state before adjoining the
+   next raw slice. The result retains the same state modulo its cursor. *)
+Theorem array_admin_run_join[local]:
+  b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
+  c.cs_current_insts = b.cs_current_insts ++ emitted_insts b c /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts b c) /\
+  run_inst_seq (emitted_insts a b) s = OK (u with vs_inst_idx := s.vs_inst_idx) /\
+  run_inst_seq (emitted_insts b c) u = r ==>
+  run_inst_seq (emitted_insts a c) s =
+    exec_result_map (\t. t with vs_inst_idx := s.vs_inst_idx) r
+Proof
+  strip_tac >> drule_all run_inst_seq_chain >>
+  simp[fragExecTheory.run_inst_seq_inst_idx]
+QED
+
+Theorem array_tail_scalar_tape[local]:
+  array_bounds_check idx len sgn sa = ((),sc) /\
+  array_elem_ptr bop idx dyn ws esz sc = (p,sb) /\
+  eval_operand bop s = SOME b /\ eval_operand idx s = SOME iw /\
+  eval_operand len s = SOME nw /\
+  (!x. bop = Var x ==> not_fresh_at sa x) /\
+  (!x. idx = Var x ==> not_fresh_at sa x) /\
+  (!x. len = Var x ==> not_fresh_at sa x) /\
+  op_taint tn bop = {} /\ op_taint tn idx = {} /\ op_taint tn len = {} /\
+  op_prov G idx = NONE /\ op_prov G len = NONE /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  same_blocks sa sc /\ same_blocks sc sb /\
+  sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
+  sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
+  fn_has_code sa sc func /\ fn_has_code sc sb func /\
+  EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+               ~is_terminator ins.inst_opcode) (emitted_insts sa sc) /\
+  EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+               ~is_terminator ins.inst_opcode) (emitted_insts sc sb) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t H tm.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (if idx_in_range sgn iw nw then OK t else Abort Revert_abort t,H,tm)) /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP H x = FLOOKUP G x /\ FLOOKUP tm.t_var x = FLOOKUP tn.t_var x /\
+      FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
+    (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) =
+      (if idx_in_range sgn iw nw then s else revert_state (set_returndata [] s)) /\
+    (idx_in_range sgn iw nw ==>
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      eval_operand p t = SOME ((if dyn then b + n2w ws else b) + iw * n2w esz) /\
+      op_prov H p = op_prov G bop /\ op_taint tm p = {}) /\
+    run_inst_seq (emitted_insts sa sb) s =
+      (if idx_in_range sgn iw nw then OK (t with vs_inst_idx := s.vs_inst_idx)
+       else Abort Revert_abort (t with vs_inst_idx := s.vs_inst_idx)) /\
+    (if idx_in_range sgn iw nw then
+       ?u v. run_inst_seq (emitted_insts sa sc) s = OK u /\
+             run_inst_seq (emitted_insts sc sb)
+               (u with vs_inst_idx := LENGTH sc.cs_current_insts) = OK v /\
+             t = (v with vs_inst_idx := LENGTH sb.cs_current_insts)
+     else ?raw. array_abort_itinerary (emitted_insts sa sc) func s Revert_abort raw t)
+Proof
+  strip_tac >>
+  `sc.cs_current_bb = sa.cs_current_bb` by fs[same_blocks_def] >>
+  drule_all array_bounds_check_nonalias_uniform_observed >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  reverse (Cases_on `idx_in_range sgn iw nw`) >> fs[]
+  >- (`run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t` by
+        (drule_all emitted_insts_append >> simp[run_inst_seq_append_err]) >>
+      qexistsl [`t with vs_inst_idx := j`, `H`, `tm`] >> simp[] >>
+      qpat_x_assum `t with vs_vars := s.vs_vars = _` mp_tac >>
+      simp[venom_state_component_equality, revert_state_def, set_returndata_def] >>
+      disch_tac >> qexists `t` >> simp[]) >>
+  `ci_mono sa sc` by metis_tac[array_tail_scalar_compiler_mono] >>
+  `(!x. bop = Var x ==> not_fresh_at sc x) /\
+   (!x. idx = Var x ==> not_fresh_at sc x)` by
+    (fs[ci_mono_def] >> metis_tac[not_fresh_at_mono]) >>
+  `eval_operand bop t = SOME b /\ eval_operand idx t = SOME iw /\
+   op_taint tm bop = {} /\ op_taint tm idx = {} /\
+   op_prov H idx = NONE /\ op_prov H bop = op_prov G bop` by
+    (Cases_on `bop` >> Cases_on `idx` >>
+     gvs[eval_operand_def, lookup_var_def, op_taint_def, op_prov_def] >>
+     qpat_x_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  `allocas_from lo t /\ ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb` by
+    (qpat_x_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
+     simp[venom_state_component_equality, allocas_from_def] >>
+     metis_tac[allocas_from_def]) >>
+  `t.vs_inst_idx = s.vs_inst_idx` by
+    (qpat_assum `t with vs_vars := s.vs_vars = s`
+       (mp_tac o Q.AP_TERM `\u:venom_state. u.vs_inst_idx`) >> simp[]) >>
+  qabbrev_tac `sg = t with vs_inst_idx := LENGTH sc.cs_current_insts` >>
+  `run_inst_seq (emitted_insts sa sc) s = OK (sg with vs_inst_idx := s.vs_inst_idx)` by
+    simp[Abbr `sg`, venom_state_component_equality] >>
+  `eval_operand bop sg = SOME b /\ eval_operand idx sg = SOME iw /\
+   allocas_from lo sg` by
+    (simp[Abbr `sg`, instIdxIndepTheory.eval_op_inst_idx, allocas_from_def] >>
+     fs[allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sg` by
+    (qpat_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
+     simp[Abbr `sg`, venom_state_component_equality, allocas_below_fmp_def] >>
+     strip_tac >> fs[allocas_below_fmp_def]) >>
+  mp_tac (Q.INST [`s` |-> `sg`, `sa` |-> `sc`, `G` |-> `H`,
+    `tn` |-> `tm`] (SPEC_ALL array_elem_ptr_nonalias_uniform)) >>
+  impl_tac >- simp[] >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sc sb)` by
+    (qpat_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `dyn` >>
+     simp[array_elem_ptr_def, emitHelperTheory.emit_op_def,
+          comp_bind_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+          emit_def, comp_return_def] >>
+     strip_tac >> gvs[emitted_insts_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, venomInstTheory.mk_inst_def]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (sg,H,tm) []
+      (OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts),H',tm')` by
+    (gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
+     simp[Abbr `sg`] >>
+     qexistsl [`emitted_insts sc sb`, `sc`] >>
+     gvs[same_blocks_def] >> rpt strip_tac >>
+     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     gvs[EVERY_APPEND]) >>
+  `run_inst_seq (emitted_insts sa sb) s = OK (t' with vs_inst_idx := s.vs_inst_idx)` by
+    (irule (SIMP_RULE (srw_ss()) [instIdxIndepTheory.exec_result_map_def]
+       (Q.INST [`r` |-> `OK t'`] array_admin_run_join)) >>
+     qexistsl [`sc`,`sg`] >> fs[EVERY_MEM]) >>
+  `~t'.vs_halted /\ t'.vs_current_bb = sb.cs_current_bb` by
+    (qpat_assum `t' with vs_vars := sg.vs_vars = sg` mp_tac >>
+     simp[Abbr `sg`, venom_state_component_equality, same_blocks_def] >>
+     gvs[same_blocks_def]) >>
+  qexistsl [`t' with vs_inst_idx := LENGTH sb.cs_current_insts`, `H'`, `tm'`] >>
+  simp[instIdxIndepTheory.eval_op_inst_idx] >>
+  conj_tac
+  >- (gen_tac >>
+      `LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts +
+        (LENGTH (emitted_insts sa sc) + LENGTH (emitted_insts sc sb))` by gvs[] >>
+      metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND_NIL]) >>
+  conj_tac
+  >- (rpt strip_tac >> fs[ci_mono_def, Abbr `sg`] >>
+      metis_tac[not_fresh_at_mono]) >>
+  conj_tac
+  >- (qpat_x_assum `t' with vs_vars := sg.vs_vars = sg` mp_tac >>
+      qpat_x_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
+      simp[Abbr `sg`, venom_state_component_equality, same_blocks_def] >>
+      rpt strip_tac >> gvs[same_blocks_def]) >>
+  qexists `t'` >> simp[] >>
+  `LENGTH sa.cs_current_insts + LENGTH (emitted_insts sa sc) =
+   LENGTH sc.cs_current_insts` by gvs[] >>
+  qpat_assum `LENGTH sa.cs_current_insts + _ = LENGTH sc.cs_current_insts`
+    (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `run_inst_seq (emitted_insts sc sb) sg = OK t'` mp_tac >>
+  simp[Abbr `sg`]
+QED
+
+Theorem array_tail_scalar_uniform_observed:
+  array_bounds_check idx len sgn sa = ((),sc) /\
+  array_elem_ptr bop idx dyn ws esz sc = (p,sb) /\
+  eval_operand bop s = SOME b /\ eval_operand idx s = SOME iw /\
+  eval_operand len s = SOME nw /\
+  (!x. bop = Var x ==> not_fresh_at sa x) /\
+  (!x. idx = Var x ==> not_fresh_at sa x) /\
+  (!x. len = Var x ==> not_fresh_at sa x) /\
+  op_taint tn bop = {} /\ op_taint tn idx = {} /\ op_taint tn len = {} /\
+  op_prov G idx = NONE /\ op_prov G len = NONE /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  same_blocks sa sc /\ same_blocks sc sb /\
+  sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
+  sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
+  fn_has_code sa sc func /\ fn_has_code sc sb func /\
+  EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+               ~is_terminator ins.inst_opcode) (emitted_insts sa sc) /\
+  EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+               ~is_terminator ins.inst_opcode) (emitted_insts sc sb) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t H tm.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (if idx_in_range sgn iw nw then OK t else Abort Revert_abort t,H,tm)) /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP H x = FLOOKUP G x /\ FLOOKUP tm.t_var x = FLOOKUP tn.t_var x /\
+      FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
+    (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) =
+      (if idx_in_range sgn iw nw then s else revert_state (set_returndata [] s)) /\
+    (idx_in_range sgn iw nw ==>
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      eval_operand p t = SOME ((if dyn then b + n2w ws else b) + iw * n2w esz) /\
+      op_prov H p = op_prov G bop /\ op_taint tm p = {}) /\
+    (if idx_in_range sgn iw nw then
+       ?u v. run_inst_seq (emitted_insts sa sc) s = OK u /\
+             run_inst_seq (emitted_insts sc sb)
+               (u with vs_inst_idx := LENGTH sc.cs_current_insts) = OK v /\
+             t = (v with vs_inst_idx := LENGTH sb.cs_current_insts)
+     else ?raw. array_abort_itinerary (emitted_insts sa sc) func s Revert_abort raw t)
+Proof
+  strip_tac >> drule_all array_tail_scalar_tape >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl [`t`,`H`,`tm`] >> simp[]
 QED
 
 Theorem array_tail_scalar_uniform:
@@ -954,73 +1275,124 @@ Theorem array_tail_scalar_uniform:
       eval_operand p t = SOME ((if dyn then b + n2w ws else b) + iw * n2w esz) /\
       op_prov H p = op_prov G bop /\ op_taint tm p = {})
 Proof
-  strip_tac >>
-  `sc.cs_current_bb = sa.cs_current_bb` by fs[same_blocks_def] >>
-  drule_all array_bounds_check_nonalias_uniform >>
-  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
-  reverse (Cases_on `idx_in_range sgn iw nw`) >> fs[]
-  >- (qexistsl [`t with vs_inst_idx := j`, `H`, `tm`] >> simp[] >>
-      qpat_x_assum `t with vs_vars := s.vs_vars = _` mp_tac >>
-      simp[venom_state_component_equality, revert_state_def, set_returndata_def]) >>
-  `ci_mono sa sc` by metis_tac[array_tail_scalar_compiler_mono] >>
-  `(!x. bop = Var x ==> not_fresh_at sc x) /\
-   (!x. idx = Var x ==> not_fresh_at sc x)` by
-    (fs[ci_mono_def] >> metis_tac[not_fresh_at_mono]) >>
-  `eval_operand bop t = SOME b /\ eval_operand idx t = SOME iw /\
-   op_taint tm bop = {} /\ op_taint tm idx = {} /\
-   op_prov H idx = NONE /\ op_prov H bop = op_prov G bop` by
-    (Cases_on `bop` >> Cases_on `idx` >>
-     gvs[eval_operand_def, lookup_var_def, op_taint_def, op_prov_def] >>
-     qpat_x_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
-     simp[venom_state_component_equality] >> metis_tac[]) >>
-  `allocas_from lo t /\ ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb` by
-    (qpat_x_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
-     simp[venom_state_component_equality, allocas_from_def] >>
-     metis_tac[allocas_from_def]) >>
-  qpat_x_assum `run_inst_seq _ s = OK t` kall_tac >>
-  qabbrev_tac `sg = t with vs_inst_idx := LENGTH sc.cs_current_insts` >>
-  `eval_operand bop sg = SOME b /\ eval_operand idx sg = SOME iw /\
-   allocas_from lo sg` by
-    (simp[Abbr `sg`, instIdxIndepTheory.eval_op_inst_idx, allocas_from_def] >>
-     fs[allocas_from_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp sg` by
-    (qpat_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
-     simp[Abbr `sg`, venom_state_component_equality, allocas_below_fmp_def] >>
-     strip_tac >> fs[allocas_below_fmp_def]) >>
-  mp_tac (Q.INST [`s` |-> `sg`, `sa` |-> `sc`, `G` |-> `H`,
-    `tn` |-> `tm`] (SPEC_ALL array_elem_ptr_nonalias_uniform)) >>
-  impl_tac >- simp[] >> strip_tac >>
-  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sc sb)` by
+  strip_tac >> drule_all array_tail_scalar_uniform_observed >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`H`,`tm`] >> simp[]
+QED
+
+Theorem array_tail_packet_finite_tape[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
+  ?loc b iw nw t3 G3 tn3.
+    loc = (case FST (SND rb) of SOME l => l | NONE => LocMemory) /\
+    eval_operand (FST rb) t2 = SOME b /\ eval_operand iop t2 = SOME iw /\
+    (!H. valid_horizon cx st0 H mid2.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (t2,G2,tn2) []
+        (if idx_in_range (is_signed_type (expr_type e)) iw nw
+         then OK t3 else Abort Revert_abort t3,G3,tn3)) /\
+    tn3.t_mem = tn2.t_mem /\ tn3.t_stor = tn2.t_stor /\
+    tn3.t_trans = tn2.t_trans /\ tn3.t_imm = tn2.t_imm /\
+    (!x. not_fresh_at sn x ==>
+      FLOOKUP G3 x = FLOOKUP G2 x /\ FLOOKUP tn3.t_var x = FLOOKUP tn2.t_var x /\
+      FLOOKUP t3.vs_vars x = FLOOKUP t2.vs_vars x) /\
+    (t3 with <|vs_vars := t2.vs_vars; vs_inst_idx := t2.vs_inst_idx|>) =
+      (if idx_in_range (is_signed_type (expr_type e)) iw nw
+       then t2 else revert_state (set_returndata [] t2)) /\
+    (idx_in_range (is_signed_type (expr_type e)) iw nw ==>
+      ~t3.vs_halted /\ t3.vs_current_bb = sb.cs_current_bb /\
+      t3.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      eval_operand (FST r) t3 = SOME
+        ((if (case bd of Dynamic _ => T | _ => F) then b + n2w (word_scale loc) else b) +
+         iw * n2w (elem_size_in_location cenv loc et)) /\
+      op_prov G3 (FST r) = op_prov G2 (FST rb) /\ op_taint tn3 (FST r) = {}) /\
+    (!id path entry etv av.
+      pv = PlaceR (MemoryPlace id path) /\
+      lookup_scopes id mid2.scopes = SOME entry /\
+      evaluate_type (get_tenv cx) et = SOME etv /\
+      evaluate_subscripts entry.type entry.value path = INL (ArrayV av) ==>
+      nw = n2w (array_length (ArrayTV etv bd) av)) /\
+    (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+      nw = n2w (case bd of Fixed cap => cap | Dynamic cap =>
+        w2n (lookup_storage slot (get_storage cx mid2 tr)))) /\
+    array_admin_slice sn sb /\
+    run_inst_seq (emitted_insts sn sb) t2 =
+      (if idx_in_range (is_signed_type (expr_type e)) iw nw
+       then OK (t3 with vs_inst_idx := t2.vs_inst_idx)
+       else Abort Revert_abort (t3 with vs_inst_idx := t2.vs_inst_idx))
+Proof
+  strip_tac >> drule array_tail_packet_initialized_tape >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
+  `array_admin_slice sl sc` by
+    (qpat_assum `array_bounds_check _ _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[array_bounds_check_def, comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
+     qpat_x_assum `array_bounds_valid _ _ _ _ = _` mp_tac >>
+     simp[array_bounds_valid_def, comp_bind_def] >>
+     Cases_on `is_signed_type (expr_type e)` >> simp[comp_return_def] >>
+     rpt (pairarg_tac >> simp[]) >> strip_tac >>
+     imp_res_tac array_admin_emit_op >> imp_res_tac array_admin_assert >>
+     fs[venomInstTheory.is_terminator_def] >>
+     metis_tac[array_admin_slice_append]) >>
+  `array_admin_slice sc sb` by
     (qpat_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
-     rpt (pop_assum kall_tac) >> Cases_on `dyn` >>
-     simp[array_elem_ptr_def, emitHelperTheory.emit_op_def,
-          comp_bind_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
-          emit_def, comp_return_def] >>
-     strip_tac >> gvs[emitted_insts_def] >>
-     pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-     simp[rich_listTheory.DROP_LENGTH_APPEND, venomInstTheory.mk_inst_def]) >>
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (sg,H,tm) []
-      (OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts),H',tm')` by
-    (gen_tac >> irule bodyFullUnwrapRunTheory.emitted_origin_ptr_path >>
-     simp[Abbr `sg`] >>
-     qexistsl [`emitted_insts sc sb`, `sc`] >>
-     gvs[same_blocks_def] >> rpt strip_tac >>
-     irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
-     gvs[EVERY_APPEND]) >>
-  qexistsl [`t' with vs_inst_idx := LENGTH sb.cs_current_insts`, `H'`, `tm'`] >>
-  simp[instIdxIndepTheory.eval_op_inst_idx] >>
+     rpt (pop_assum kall_tac) >>
+     simp[array_elem_ptr_def, comp_bind_def] >>
+     rpt (pairarg_tac >> simp[]) >> strip_tac >>
+     Cases_on `bd` >> gvs[comp_return_def] >>
+     imp_res_tac array_admin_emit_op >> fs[venomInstTheory.is_terminator_def] >>
+     metis_tac[array_admin_slice_append]) >>
+  `array_admin_slice sn sb /\ array_admin_slice sl sb` by
+    metis_tac[array_admin_slice_append] >>
+  `same_blocks sl sc /\ same_blocks sc sb /\
+   sc.cs_current_insts = sl.cs_current_insts ++ emitted_insts sl sc /\
+   sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+     ~is_terminator i.inst_opcode) (emitted_insts sl sc) /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+     ~is_terminator i.inst_opcode) (emitted_insts sc sb)` by
+    fs[array_admin_slice_def, EVERY_MEM] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (strip_tac >>
+     `allocas_below_fmp t2` by fs[array_tail_packet_def] >>
+     `t.vs_allocas = t2.vs_allocas /\
+      t.vs_initial_fmp = t2.vs_initial_fmp /\ t.vs_fmp = t2.vs_fmp` by
+       (qpat_assum `array_length_frame _ t2 _ _ t _ _`
+          (mp_tac o Q.AP_TERM `\u:venom_state. (u.vs_allocas,u.vs_initial_fmp,u.vs_fmp)` o CONJUNCT1 o
+           REWRITE_RULE [array_length_frame_def]) >>
+        simp[]) >>
+     fs[allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
+  drule_all array_tail_scalar_tape >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
+  qpat_x_assum `if idx_in_range _ _ _ then (?u v. _) else _` kall_tac >>
+  `run_inst_seq (emitted_insts sn sb) t2 =
+      (if idx_in_range (is_signed_type (expr_type e)) iw w
+       then OK (t' with vs_inst_idx := t2.vs_inst_idx)
+       else Abort Revert_abort (t' with vs_inst_idx := t2.vs_inst_idx))` by
+    (`sl.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sl /\
+      sb.cs_current_insts = sl.cs_current_insts ++ emitted_insts sl sb /\
+      EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sl sb)` by
+       fs[array_admin_slice_def, EVERY_MEM] >>
+     drule_all (Q.INST [`a` |-> `sn`, `b` |-> `sl`, `c` |-> `sb`] array_admin_run_join) >>
+     Cases_on `idx_in_range (is_signed_type (expr_type e)) iw w` >>
+     simp[instIdxIndepTheory.exec_result_map_def]) >>
+  `eval_operand (FST rb) t2 = SOME b /\ eval_operand iop t2 = SOME iw /\
+   op_prov G (FST rb) = op_prov G2 (FST rb)` by
+    metis_tac[array_tail_length_frame_operand] >>
+  qexistsl [`loc`, `b`, `iw`, `w`, `t'`, `H`, `tm`] >> simp[] >>
   conj_tac
-  >- (gen_tac >>
-      `LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts +
-        (LENGTH (emitted_insts sa sc) + LENGTH (emitted_insts sc sb))` by gvs[] >>
+  >- (rpt strip_tac >>
+      Cases_on `idx_in_range (is_signed_type (expr_type e)) iw w` >> fs[] >>
       metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND_NIL]) >>
+  fs[array_length_frame_def] >>
   conj_tac
-  >- (rpt strip_tac >> fs[ci_mono_def, Abbr `sg`] >>
-      metis_tac[not_fresh_at_mono]) >>
-  qpat_x_assum `t' with vs_vars := sg.vs_vars = sg` mp_tac >>
-  qpat_x_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
-  simp[Abbr `sg`, venom_state_component_equality, same_blocks_def] >>
-  rpt strip_tac >> gvs[same_blocks_def]
+  >- (rpt strip_tac >> fs[lookup_var_def] >> metis_tac[not_fresh_at_mono]) >>
+  qpat_x_assum `t' with <|vs_vars := _; vs_inst_idx := _|> = _` mp_tac >>
+  qpat_x_assum `(t with vs_inst_idx := _) with vs_vars := _ = _` mp_tac >>
+  Cases_on `idx_in_range (is_signed_type (expr_type e)) iw w` >>
+  simp[venom_state_component_equality, revert_state_def, set_returndata_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem array_tail_packet_finite_source:
@@ -1060,66 +1432,9 @@ Theorem array_tail_packet_finite_source:
       nw = n2w (case bd of Fixed cap => cap | Dynamic cap =>
         w2n (lookup_storage slot (get_storage cx mid2 tr))))
 Proof
-  strip_tac >> drule array_tail_packet_initialized_source >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
-  `same_blocks sl sc /\
-   sc.cs_current_insts = sl.cs_current_insts ++ emitted_insts sl sc /\
-   EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
-     ~is_terminator ins.inst_opcode) (emitted_insts sl sc)` by
-    (qpat_x_assum `array_bounds_check _ _ _ _ = _` mp_tac >>
-     simp[array_bounds_check_def, comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
-     qpat_x_assum `array_bounds_valid _ _ _ _ = _` mp_tac >>
-     simp[array_bounds_valid_def, comp_bind_def] >>
-     Cases_on `is_signed_type (expr_type e)` >> simp[comp_return_def] >>
-     rpt (pairarg_tac >> simp[]) >> strip_tac >>
-     imp_res_tac emitHelperPropsTheory.emitted_insts_emit_op >> imp_res_tac emitHelperPropsTheory.emitted_insts_emit_void >>
-     imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
-     rpt (qpat_x_assum `_.cs_current_insts = _.cs_current_insts ++ emitted_insts _ _` kall_tac) >>
-     gvs[same_blocks_def] >>
-     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC,
-       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
-  `same_blocks sc sb /\
-   sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
-   EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
-     ~is_terminator ins.inst_opcode) (emitted_insts sc sb)` by
-    (qpat_x_assum `sc.cs_current_insts = sl.cs_current_insts ++ _` kall_tac >>
-     qpat_x_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
-     simp[array_elem_ptr_def, comp_bind_def] >>
-     rpt (pairarg_tac >> simp[]) >> strip_tac >>
-     Cases_on `bd` >> gvs[comp_return_def] >>
-     imp_res_tac emit_op_extends >> imp_res_tac emitHelperPropsTheory.emitted_insts_emit_op >>
-     rpt (qpat_x_assum `_.cs_current_insts = _.cs_current_insts ++ emitted_insts _ _` kall_tac) >>
-     gvs[same_blocks_def] >>
-     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC,
-       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
-    (strip_tac >>
-     `allocas_below_fmp t2` by fs[array_tail_packet_def] >>
-     `t.vs_allocas = t2.vs_allocas /\
-      t.vs_initial_fmp = t2.vs_initial_fmp /\ t.vs_fmp = t2.vs_fmp` by
-       (qpat_assum `array_length_frame _ t2 _ _ t _ _`
-          (mp_tac o Q.AP_TERM `\u:venom_state. (u.vs_allocas,u.vs_initial_fmp,u.vs_fmp)` o CONJUNCT1 o
-           REWRITE_RULE [array_length_frame_def]) >>
-        simp[]) >>
-     fs[allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
-  drule_all array_tail_scalar_uniform >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
-  `eval_operand (FST rb) t2 = SOME b /\ eval_operand iop t2 = SOME iw /\
-   op_prov G (FST rb) = op_prov G2 (FST rb)` by
-    metis_tac[array_tail_length_frame_operand] >>
-  qexistsl [`loc`, `b`, `iw`, `w`, `t'`, `H`, `tm`] >> simp[] >>
-  conj_tac
-  >- (rpt strip_tac >>
-      Cases_on `idx_in_range (is_signed_type (expr_type e)) iw w` >> fs[] >>
-      metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, APPEND_NIL]) >>
-  fs[array_length_frame_def] >>
-  conj_tac
-  >- (rpt strip_tac >> fs[lookup_var_def] >> metis_tac[not_fresh_at_mono]) >>
-  qpat_x_assum `t' with <|vs_vars := _; vs_inst_idx := _|> = _` mp_tac >>
-  qpat_x_assum `(t with vs_inst_idx := _) with vs_vars := _ = _` mp_tac >>
-  Cases_on `idx_in_range (is_signed_type (expr_type e)) iw w` >>
-  simp[venom_state_component_equality, revert_state_def, set_returndata_def] >>
-  rpt strip_tac >> gvs[]
+  strip_tac >> drule array_tail_packet_finite_tape >>
+  disch_then (qspecl_then [`shadow_ctx`,`PG`] strip_assume_tac) >>
+  qexistsl [`loc`,`b`,`iw`,`nw`,`t3`,`G3`,`tn3`] >> simp[]
 QED
 
 Theorem array_tail_packet_finite:
@@ -1415,6 +1730,73 @@ Proof
   fs[EVERY_MEM] >> metis_tac[]
 QED
 
+Definition array_suffix_post_def:
+  array_suffix_post DF lo d ctx func cenv cx es sa sb s0 vt r G0 tn0 H res ee G tn t <=>
+    ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 ee pv' vt r t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+      target_ptr_ok cenv pv' r G tn t /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn
+End
+
+(* The same witness as the full array simulation, with the raw installed
+   run exposed. No ghost choice is made inside the horizon quantifier. *)
+Theorem target_array_suffix_tape:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
+  array_admin_slice sn sb /\ fn_has_code sn sb func /\
+  ~t2.vs_halted /\ t2.vs_current_bb = sn.cs_current_bb /\
+  t2.vs_inst_idx = LENGTH sn.cs_current_insts /\
+  storage_trace_domain cx st0 mid2.storage_trace /\
+  ?res tr G3 tn3.
+    (case tr of
+       OK t => t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+         run_inst_seq (emitted_insts sn sb) t2 = OK (t with vs_inst_idx := t2.vs_inst_idx)
+     | Abort Revert_abort t =>
+         run_inst_seq (emitted_insts sn sb) t2 = Abort Revert_abort (t with vs_inst_idx := t2.vs_inst_idx)
+     | _ => F) /\
+    (!tail. extend_place cx pv (ValueSubscript v) (mid2 with gas_obs := tail) =
+      (res,mid2 with gas_obs := tail)) /\
+    !H. valid_horizon cx st0 H mid2.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (t2,G2,tn2) [] (tr,G3,tn3) /\
+      ((?t. tr = OK t /\
+        array_suffix_post DF lo d ctx func cenv cx es sa sb s0 vt r G0 tn0
+          H res (mid2 with gas_obs := []) G3 tn3 t) \/
+       (exit_result tr /\ expr_exit res tr))
+Proof
+  strip_tac >> drule array_tail_packet_finite_tape >>
+  disch_then (qspecl_then [`shadow_ctx`, `PG`] strip_assume_tac) >>
+  drule_all array_tail_packet_extend_result >> strip_tac >>
+  `fn_has_code sn sb func /\ ~t2.vs_halted /\ t2.vs_current_bb = sn.cs_current_bb /\
+   t2.vs_inst_idx = LENGTH sn.cs_current_insts /\
+   storage_trace_domain cx st0 mid2.storage_trace /\ mid2.gas_obs = []` by
+    fs[array_tail_packet_def] >>
+  simp[] >> qexistsl [`res`,
+    `if idx_in_range (is_signed_type (expr_type e)) iw nw then OK t3 else Abort Revert_abort t3`,
+    `G3`, `tn3`] >>
+  conj_tac >- (Cases_on `idx_in_range (is_signed_type (expr_type e)) iw nw` >> simp[]) >>
+  conj_tac >- simp[target_subscript_extend_gas_obs] >>
+  qpat_x_assum `t2.vs_inst_idx = LENGTH sn.cs_current_insts` kall_tac >>
+  rpt strip_tac >>
+  Cases_on `idx_in_range (is_signed_type (expr_type e)) iw nw` >> gvs[]
+  >- (`mid2 with gas_obs := [] = mid2` by
+        (simp[evaluation_state_component_equality]) >> simp[] >>
+      drule_all array_tail_packet_endpoint_frame >> strip_tac >>
+      `target_post H ctx func cenv cx es sa sb s0 mid2 child vt r t3` by
+        (irule array_tail_packet_child_post >> simp[] >>
+         goal_assum (drule_at (Pos List.last)) >> simp[] >> metis_tac[]) >>
+      `target_ptr_ok cenv child r G3 tn3 t3` by
+        (irule array_tail_packet_child_ptr_ok >> simp[] >>
+         goal_assum (drule_at (Pos List.last)) >> simp[] >> metis_tac[]) >>
+      simp[array_suffix_post_def] >> drule_all array_tail_packet_alloca_frame >> simp[]) >>
+  simp[fragExecTheory.exit_result_def, expr_exit_def]
+QED
+
 Theorem target_array_suffix_full:
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
@@ -1433,28 +1815,9 @@ Theorem target_array_suffix_full:
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
     (\H res ee gt q. expr_exit res q)
 Proof
-  strip_tac >> drule array_tail_packet_finite_source >>
-  disch_then (qspecl_then [`shadow_ctx`, `PG`] strip_assume_tac) >>
-  drule_all array_tail_packet_extend_result >> strip_tac >>
-  `storage_trace_domain cx st0 mid2.storage_trace /\ mid2.gas_obs = []` by
-    fs[array_tail_packet_def] >>
-  simp[gas_outcome_full_def] >> qexists `[]` >> disj2_tac >> disj1_tac >>
-  qexistsl [`res`, `mid2`,
-    `if idx_in_range (is_signed_type (expr_type e)) iw nw then OK t3 else Abort Revert_abort t3`,
-    `G3`, `tn3`] >>
-  conj_tac
-  >- (simp[gas_explicit_def, target_subscript_extend_gas_obs] >> simp[]) >>
-  simp[] >> rpt strip_tac >>
-  Cases_on `idx_in_range (is_signed_type (expr_type e)) iw nw` >> gvs[]
-  >- (`mid2 with gas_obs := [] = mid2` by
-        (simp[evaluation_state_component_equality]) >> simp[] >>
-      drule_all array_tail_packet_endpoint_frame >> strip_tac >>
-      `target_post H ctx func cenv cx es sa sb s0 mid2 child vt r t3` by
-        (irule array_tail_packet_child_post >> simp[] >>
-         goal_assum (drule_at (Pos List.last)) >> simp[] >> metis_tac[]) >>
-      `target_ptr_ok cenv child r G3 tn3 t3` by
-        (irule array_tail_packet_child_ptr_ok >> simp[] >>
-         goal_assum (drule_at (Pos List.last)) >> simp[] >> metis_tac[]) >>
-      simp[] >> drule_all array_tail_packet_alloca_frame >> simp[]) >>
-  simp[fragExecTheory.exit_result_def, expr_exit_def]
+  strip_tac >> drule target_array_suffix_tape >>
+  disch_then (qspecl_then [`shadow_ctx`,`PG`] strip_assume_tac) >>
+  simp[gas_outcome_full_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  qexistsl [`res`,`mid2`,`tr`,`G3`,`tn3`] >>
+  fs[gas_explicit_def, array_suffix_post_def]
 QED

@@ -25,6 +25,14 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* Select the simulation field, without unfolding the child judgments. *)
+fun use_ifexp_child child =
+  qpat_assum child
+    (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+  qpat_x_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+      _ ==> expr_sim_full _ _ _ _ _ _ /\ _` mp_tac >>
+  metis_tac[];
+
 Theorem ifexp_expr_full_ok_from_root[local]:
   (!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
@@ -73,7 +81,9 @@ Theorem ifexp_expr_full_ok_from_root[local]:
     body_expr_full_ok cx (IfExp v5 e1 e2 e3)
 Proof
   disch_then (assume_tac o GEN_ALL) >> rpt gen_tac >> strip_tac >>
-  simp[bodyFullPredsTheory.body_expr_full_ok_def] >>
+  once_rewrite_tac [bodyFullPredsTheory.body_expr_full_ok_def] >> simp[] >>
+  reverse conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> rpt (goal_assum (drule_at Any))) >>
   rpt gen_tac >> strip_tac >>
   drule ifexp_body_pre_children >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
@@ -97,7 +107,7 @@ Proof
       conj_tac >- fs[bodySimTheory.body_inv_def] >>
       conj_tac >- suspend "arms" >>
       conj_tac >- fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
-      fs[bodyFullPredsTheory.body_expr_full_ok_def] >> metis_tac[]) >>
+      use_ifexp_child `body_expr_full_ok cx e1`) >>
   qpat_x_assum `!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env. _` kall_tac >>
   irule bodyFullOfVVTheory.expr_sim_full_of_vv >>
   simp[post_value_type_def, expr_type_def] >>
@@ -132,14 +142,8 @@ Resume ifexp_expr_full_ok_from_root[arms]:
   `body_expr_full_ok cx e2 /\ body_expr_full_ok cx e3` by
     (qpat_x_assum `bind _ _ _ = _` mp_tac >>
      simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
-  conj_tac >- (qpat_assum `body_expr_full_ok cx e2`
-    (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-    disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,
-      `shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`ty`,`es1`] mp_tac) >> simp[]) >>
-  conj_tac >- (qpat_assum `body_expr_full_ok cx e3`
-    (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-    disch_then (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,
-      `shadow_ctx`,`func`,`shadow_func`,`cenv`,`env`,`ty`,`es1`] mp_tac) >> simp[]) >>
+  conj_tac >- use_ifexp_child `body_expr_full_ok cx e2` >>
+  conj_tac >- use_ifexp_child `body_expr_full_ok cx e3` >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
       `expr_body_pre cenv cx env e (es1 with gas_obs := gs')` by
