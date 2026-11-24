@@ -8,7 +8,7 @@ Ancestors
   vyperTypeSystem compileEnv context vyperState exprSimDefs
   vyperValueOperation venomState vyperValue loweringSlice vyperStorageFootprint
 
-Theorem body_literal_word_compile[local]:
+Theorem body_literal_word_compile:
   expr_sim_pre cenv cx env (Literal ann l) es /\ is_word_type ann ==>
   ?op. compile_expr cenv ty (Literal ann l) sa = (StackValue ann op,sa)
 Proof
