@@ -2,7 +2,7 @@
 Theory bodyFullBopRestWordBoundedControl
 Ancestors
   bodyFullBopRestWordControl bodyPtrBopInBoundedLayout
-  bodyPtrSignedConvertClamp fragGasCopyLoop
+  bodyPtrSignedConvertClamp fragGasCopyLoop fragGasCopySeqLiftProps
   bodyPtrBopInLoopSearch bodyPtrBopInLoopCode bodyPtrBopInLoopLayout
   bodyPtrBopInLoopContract bodyPtrBopInLiteralSuffix bodyPtrBopInScalarTransport
   exprLoweringProps fragExecMem fragGasEmitCtrl fragGasSeqPtr fragGasOriginPtr fragGasOriginPtrLoop stmtAppendStorageRunPtr
@@ -301,7 +301,7 @@ Resume rest_word_membership_bounded_capacity_joint[ptr]:
        (Q.INST [`id` |-> `sa.cs_next_id+3`]
          (SPEC_ALL scalar_iszero_assert_certificate))) >>
      simp[op_prov_def, op_taint_def] >> qexists_tac `t` >> gvs[]) >>
-  irule fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport >>
+  irule fragGasCopySeqLiftPropsTheory.inst_seq_ptr_lower_bound_transport >>
   conj_tac >- simp[Abbr `code`, mk_inst_def] >>
   simp[] >> qexists_tac `0` >> gvs[]
 QED
