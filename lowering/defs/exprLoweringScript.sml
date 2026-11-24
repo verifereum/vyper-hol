@@ -212,6 +212,18 @@ Definition lowered_value_type_def:
     BaseT (BytesT (Dynamic (LENGTH bs))) ∧
   lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (HexBytesL bs)) =
     BaseT (BytesT (Dynamic (LENGTH bs))) ∧
+  lowered_value_type cenv
+      (Builtin (BaseT (StringT _)) NamedConst
+         [Literal _ (StringL s)]) =
+    BaseT (StringT (LENGTH s)) ∧
+  lowered_value_type cenv
+      (Builtin (BaseT (BytesT (Dynamic _))) NamedConst
+         [Literal _ (BytesL bs)]) =
+    BaseT (BytesT (Dynamic (LENGTH bs))) ∧
+  lowered_value_type cenv
+      (Builtin (BaseT (BytesT (Dynamic _))) NamedConst
+         [Literal _ (HexBytesL bs)]) =
+    BaseT (BytesT (Dynamic (LENGTH bs))) ∧
   lowered_value_type cenv (Builtin ty (Concat _) args) =
     concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args)) ∧
   lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
@@ -3371,6 +3383,53 @@ Definition compile_expr_body_def:
         (LocatedValue ret_ty (mk_ptr elem_ptr loc), st2)))
 End
 
+(* The operands of an and/or chain of SUC n operands, read back from the
+   nested IfExp the frontend builds (boolop_and / boolop_or).  A level not of
+   the chain's shape ends the chain, so the code still computes the argument's
+   value whatever it is; the count stops a ternary written as the last operand
+   from being read as more of the chain. *)
+Definition bool_chain_operands_def:
+  bool_chain_operands is_and (SUC n) (IfExp ty c x y) =
+    (if is_and /\ y = Literal (BaseT BoolT) (BoolL F) then
+       c :: bool_chain_operands is_and n x
+     else if ~is_and /\ x = Literal (BaseT BoolT) (BoolL T) then
+       c :: bool_chain_operands is_and n y
+     else [IfExp ty c x y]) /\
+  bool_chain_operands is_and _ e = [e]
+End
+
+(* An and/or chain's operands, each tested in turn with a jump to a block
+   that sets the result and leaves; the last one is the result.
+   Mirrors Python: expr.py lower_BoolOp, block for block. *)
+Definition compile_bool_chain_ops_def:
+  compile_bool_chain_ops cfn cenv is_and result exit_lbl [] = return () /\
+  compile_bool_chain_ops cfn cenv is_and result exit_lbl [e] =
+    do v <- lower_value cfn cenv (BaseT BoolT) e;
+       emit_inst ASSIGN [v] [result];
+       emit_inst JMP [Label exit_lbl] []
+    od /\
+  compile_bool_chain_ops cfn cenv is_and result exit_lbl (e::es) =
+    do c <- lower_value cfn cenv (BaseT BoolT) e;
+       lbls <- (if is_and then
+                  do next_lbl <- fresh_label "and_next";
+                     short_lbl <- fresh_label "and_false";
+                     return (next_lbl, short_lbl)
+                  od
+                else
+                  do short_lbl <- fresh_label "or_true";
+                     next_lbl <- fresh_label "or_next";
+                     return (next_lbl, short_lbl)
+                  od);
+       emit_inst JNZ (if is_and then [c; Label (FST lbls); Label (SND lbls)]
+                      else [c; Label (SND lbls); Label (FST lbls)]) [];
+       new_block (SND lbls);
+       emit_inst ASSIGN [Lit (if is_and then 0w else 1w)] [result];
+       emit_inst JMP [Label exit_lbl] [];
+       new_block (FST lbls);
+       compile_bool_chain_ops cfn cenv is_and result exit_lbl es
+    od
+End
+
 Definition compile_builtin_dispatch_body_def:
   compile_builtin_dispatch_body compile_expr cenv ret_ty ty bi args st =
     (case bi of
@@ -3522,6 +3581,23 @@ Definition compile_builtin_dispatch_body_def:
           let (v1, st1) = lower_value compile_expr cenv ty e1 st in
           let (v2, st2) = lower_value compile_expr cenv ty e2 st1 in
           as_stack_val ret_ty (compile_pow_mod256 v1 v2 st2))
+     | NamedConst =>
+         (* A named constant lowers as its value: a word as is, anything else
+            held in memory. An array is materialised there (Python's
+            lower_List), so the membership arm above loops over it, as
+            Python's lower_Compare does for a name. *)
+         (let (op0, st1) = lower_value compile_expr cenv ty (HD args) st in
+          let op = (case op0 of Label _ => Lit 0w | _ => op0) in
+          if is_word_type ret_ty then as_stack_val ret_ty (op, st1)
+          else as_ptr_val ret_ty LocMemory (op, st1))
+     | BoolChain is_and n =>
+         (let (result, st1) = fresh_var st in
+          let (exit_lbl, st2) = fresh_label "bool_exit" st1 in
+          let (_, st3) = compile_bool_chain_ops compile_expr cenv is_and result
+                           exit_lbl (bool_chain_operands is_and (n - 1) (HD args))
+                           st2 in
+          let (_, st4) = new_block exit_lbl st3 in
+          (StackValue ret_ty (Var result), st4))
      | ECRecover =>
          (let e_hash = HD args in let e_v = EL 1 args in
           let e_r = EL 2 args in let e_s = EL 3 args in

@@ -1,7 +1,7 @@
 (* Positional requests: the head snapshot is retained through the actual tail. *)
 Theory entryCreateExtPosList
 Ancestors
-  createCtorSavedCons bodySingletonCallSupport entryCreateScopedBind
+  createCtorSavedCons bodySingletonCallSupport entryCreateScopedBind entryCreateExtPosConsScope
   entryCreateCompositeFocus entryCreateNativeFirstExit createSizeOperandCode
   createSizeConcreteSnapshots createSizeCutOpens gasShadowCompileStmtHelpers
   gasShadowCompileConvert fragGasPathFrameMem exprSimWordArgs
@@ -385,24 +385,11 @@ Proof
   qpat_x_assum `extcall_pos_scope_join _ _ _`
     (qspecl_then [`a`,`m`,`b`,`s`] mp_tac o REWRITE_RULE [extcall_pos_scope_join_def]) >>
   simp[] >> strip_tac >>
-  rewrite_tac[eval_exprs_cons_action] >>
-  qabbrev_tac `next = \v. bind (eval_exprs cx xs) (\vs. return (v::vs))` >>
-  irule scoped_operand_bind_all >>
-  simp[Abbr `next`,pos_list_read_frame] >>
-  qexistsl_tac [`P`,`m`] >> simp[] >> rpt conj_tac
-  >- (qpat_x_assum `scoped_operand_outcome _ _ _ _ a m _ _ _ _` mp_tac >>
-      rewrite_tac[scoped_operand_outcome_def] >> strip_tac >> qexists_tac `marks` >>
-      simp[] >> disj2_tac >> disj1_tac >> qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >>
-      simp[] >> rpt strip_tac >> res_tac >> fs[create_operand_exit_post_def,expr_exit_def] >> metis_tac[]) 
-  >- (rpt gen_tac >> strip_tac >>
-      `?H. valid_horizon cx st0 H mid.storage_trace` by fs[storage_trace_domain_def] >>
-      `?v. res = INL v` by metis_tac[] >> pop_assum SUBST_ALL_TAC >> simp[] >>
-      first_x_assum irule >>
-      qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >> simp[] >>
-      strip_tac >> qexistsl_tac [`gas_explicit marks s.vs_gas_readings`,`marks`] >>
-      fs[]) 
-  >- (rpt strip_tac >> simp[ignore_bind_def,bind_assoc] >>
-      irule gas_exempt_cert_error_result >> first_assum ACCEPT_TAC)
-  >> rpt strip_tac >> simp[ignore_bind_def,bind_assoc] >>
-  drule_then irule gas_exempt_cert_bind_result >> simp[GSYM ignore_bind_def]
+  irule pos_cons_scope_mixed >> qexistsl_tac [`P`,`m`] >> simp[] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  map_every qx_gen_tac [`obs`,`marks`,`v`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
+  qpat_x_assum `!obs marks v mid G1 tn1 t. _ ==> scoped_operand_outcome _ _ _ _ _ _ _ _ _ _`
+    (qspecl_then [`obs`,`marks`,`v`,`mid with gas_obs := []`,`G1`,`tn1`,`t`] mp_tac) >>
+  impl_tac >- (simp[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED
