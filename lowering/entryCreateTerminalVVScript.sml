@@ -120,3 +120,31 @@ Proof
       strip_tac >> drule_all terminal_scoped_outcome_vv >> simp[]) >>
   strip_tac >> irule terminal_operand_cut_vv >> simp[]
 QED
+
+(* The selected value outcome suffices; no simulation at other sites is needed. *)
+Theorem terminal_no_success_vv_pointwise_site:
+  (!st. ?exc ee. eval_expr cx e st = (INR exc,ee)) /\
+  expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG,func,shfunc)
+    ce cx ty e es (st0,sa,sb,sha,shb,StackValue ann op,s,G,tn) ==>
+  expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,func,shfunc)
+    ce cx ty e es (st0,sa,sb,sha,shb,op,s,G,tn) /\
+  (scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,func,PG)
+     (cx_tops cx) cx st0 sa sb (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
+     (expr_sim_full_post (DF,lo,d,ctx,func) ce cx e (es,sa,sb,s,op,G,tn))
+     (create_operand_exit_post ctx cx) ==>
+   scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,func,PG)
+     (cx_tops cx) cx st0 sa sb (eval_expr cx e) (es,s,G,tn)
+     (\H res ee G' tn' t.
+       create_operand_vv_post (DF,lo,d,ctx,func) ce cx e
+         (es,sa,sb,s,StackValue ann op,G,tn) H res ee G' tn' t /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+     (create_operand_exit_post ctx cx)) /\
+  (create_operand_cut sa sb (gas_explicit_sites ctx shctx) ctx func tops cx st0
+     (bind (eval_expr cx e) (read_result cx)) (es,s) ==>
+   create_operand_cut sa sb (gas_explicit_sites ctx shctx) ctx func tops cx st0
+     (eval_expr cx e) (es,s))
+Proof
+  strip_tac >> drule_all terminal_no_success_vv_site >> strip_tac >> simp[] >>
+  strip_tac >> drule_all terminal_scoped_outcome_vv >> simp[]
+QED
