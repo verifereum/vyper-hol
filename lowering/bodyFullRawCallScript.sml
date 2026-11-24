@@ -9,7 +9,7 @@ Ancestors
   contextCodegenRel codegenRel unitTransformDefs ptrSafeRun bodyFullRawCallCall
   exprSimRawCall exprSimHyps exprSimSource
   gasOutcomeFullCompose vyperStorageTrace bodyFullIntCallReturnHalt exprLoweringProps
-  bodyFullHashKeccakFixed bodyFullWordArgs
+  bodyFullHashKeccakFixed bodyFullWordArgs bodyFullRawCallAdapter
 Libs
   monadsyntax
 
@@ -1490,43 +1490,44 @@ Proof
    ORELSE (qexists_tac `env` >> rpt conj_tac >> first_assum ACCEPT_TAC))
 QED
 
-Theorem raw_call_expr_vv_full:
+Theorem raw_call_expr_vv_by:
   body_exprs_full_ok cx args /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
-  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
+  raw_call_vv_pre (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann (RawCallTarget flags) args dflt) es
+    (st0,sa,sb,shadow_sa,shadow_sb,vv,s0,G0,tn0) /\
+  raw_call_vv_answer_rules A ctx /\
+  raw_call_vv_prefix_rule A (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+    (tops,cenv,env,cx,ty,ann,flags,es)
+    (st0,sa,sb,shadow_sa,shadow_sb,vv,s0,G0,tn0) /\
+  raw_call_vv_request_rule A (DF,lo,dframe,ctx,func)
+    (cenv,env,cx,flags,st0) (es,sa,sb,s0,G0,tn0) ==>
+  A sa (eval_expr cx (Call ann (RawCallTarget flags) args dflt)) (es,s0,G0,tn0)
+    (raw_call_vv_answer_post (DF,lo,dframe,ctx,func) cenv cx
+      (Call ann (RawCallTarget flags) args dflt) (es,sa,sb,s0,vv,G0,tn0))
+    (raw_call_vv_answer_exit ctx cx)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  strip_tac >>
   drule raw_call_pre_operands >> strip_tac >>
   drule raw_call_pre_flags >> strip_tac >> gvs[] >>
-  rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `raw_call_vv_pre _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [raw_call_vv_pre_def]) >>
   drule compile_expr_raw_call >> strip_tac >>
   drule raw_call_kwargs_types >> simp[] >> strip_tac >>
   drule_all raw_call_kwargs_word_args >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
-  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-  qexistsl_tac [`Q`, `\H res ee gt r.
-    (expr_exit res r /\ halt_exit H cx ee res r) /\
-    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
-  BETA_TAC >> simp[Abbr `R`] >>
-  qunabbrev_tac `Q` >>
-  irule (BETA_RULE (Q.SPEC
-    `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`
-    (Q.GEN `R` gas_outcome_full_halt_room))) >>
+  irule raw_call_vv_answer_basic_exit >> conj_tac >- first_assum ACCEPT_TAC >>
   CONV_TAC (SIMP_CONV bool_ss [raw_call_eval_action]) >>
-  irule (BETA_RULE (Q.ISPEC `\av dv kvs.
-    do
-      type_check (LENGTH (av::dv::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
-      target <- lift_option_type (dest_AddressV av) "raw_call target";
-      data <- lift_option_type (dest_BytesV dv) "raw_call data";
-      amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
-      eval_raw_call cx flags target data amount (ext_call_kwarg EKGas flags.rcf_kws kvs)
-    od` (Q.GEN `k` (SPEC_ALL raw_call_prefix_prepared_full)))) >>
-  first_assum (irule_at (Pat `compile_expr _ _ (Call _ _ _ _) _ = _`)) >>
-  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+  qpat_x_assum `raw_call_vv_prefix_rule _ _ _ _`
+    (irule o BETA_RULE o Q.ISPEC `\av dv kvs.
+      do
+        type_check (LENGTH (av::dv::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
+        target <- lift_option_type (dest_AddressV av) "raw_call target";
+        data <- lift_option_type (dest_BytesV dv) "raw_call data";
+        amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
+        eval_raw_call cx flags target data amount (ext_call_kwarg EKGas flags.rcf_kws kvs)
+      od` o Q.GEN `k` o SPEC_ALL o REWRITE_RULE [raw_call_vv_prefix_rule_def]) >>
   first_assum (irule_at (Pat `lower_value _ _ _ a _ = _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ d _ = _`)) >>
   first_assum (irule_at (Pat `emit_op MLOAD _ _ = _`)) >>
@@ -1535,14 +1536,8 @@ Proof
   first_assum (irule_at (Pat `lower_word_args _ _ _ _ = _`)) >>
   first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
   first_assum (irule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  first_assum (irule_at (Pat `compile_expr _ _ (gas_shadow_expr _) _ = _`)) >>
-  first_assum (irule_at (Pat `return_buf_frame _ _ _ _`)) >>
-  first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
-  first_assum (irule_at (Pat `gas_shadow_function _ _`)) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
-  >- (rpt gen_tac >> strip_tac >> conj_tac
-      >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
-      metis_tac[haltExitProjTheory.halt_exit_INR_type])
+  >~ [`storage_trace_frame _`]
   >- (rpt gen_tac >> irule storage_trace_frame_ignore_bind >>
       simp[storage_trace_frame_checks] >>
       irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac >>
@@ -1643,8 +1638,7 @@ Proof
        disch_then (ACCEPT_TAC o SYM))) >>
   `fn_has_code s6 s7 func` by
     (`cs_extends s7 sb` by metis_tac[ci_mono_compile_raw_call_finish,ci_mono_def,pairTheory.SND] >>
-     irule fn_has_code_mid >>
-     conj_tac >-
+     irule fn_has_code_mid >> conj_tac >-
        qpat_assum `ci_mono s6 s7` (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ci_mono_def]) >>
      qexistsl [`sb`,`sa`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      qpat_assum `ci_mono sa s6` (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ci_mono_def])) >>
@@ -1656,31 +1650,32 @@ Proof
     (strip_tac >> qpat_assum `bs <> [] ==> _` drule >>
      qpat_assum `eval_operand dp t7 = _` mp_tac >>
      qpat_assum `op_taint tn7 dp = {}` mp_tac >>
-     qpat_assum `b + 32 < _` (mp_tac o REWRITE_RULE [GSYM (EVAL ``dimword (:256)``)]) >>
+     qpat_assum `b + 32 < _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      Cases_on `dp` >> simp[op_prov_def,eval_operand_def,ptr_covers_def,w2n_n2w] >>
      rpt strip_tac >> simp[] >> decide_tac) >>
   `read_memory (b + 32) (LENGTH bs) t7 = bs` by
     simp[memoryReadPropsTheory.read_memory_eq_mem_bytes_at] >>
   qpat_x_assum `vo = _` SUBST_ALL_TAC >>
-  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Qout Rout` >>
-  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-  qexistsl [`Qout`, `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
-  BETA_TAC >> simp[Abbr `Rout`,NoAsms] >>
-  qunabbrev_tac `Qout` >>
-  PURE_ONCE_REWRITE_TAC [Q.SPECL [`type_memory_size rt`,`w2n (w:bytes32)`]
-     arithmeticTheory.ADD_COMM] >>
-  mp_tac (REWRITE_RULE [loweringPostsTheory.post_value_type_def]
-    (Q.INST [`e` |-> `Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`,
-      `vv` |-> `if flags.rcf_max_outsize = 0 then StackValue (raw_call_return_type flags) result
-        else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)`,
-      `ib` |-> `b + 32`, `sout` |-> `s7`] raw_call_continuation_full)) >>
+  qpat_assum `raw_call_vv_answer_rules _ _`
+    (irule o cj 1 o REWRITE_RULE [raw_call_vv_answer_rules_def]) >>
+  qexistsl_tac [`raw_call_vv_answer_post (DF,lo,dframe,ctx,func) cenv cx
+      (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)
+      (es,sa,sb,s0,(if flags.rcf_max_outsize = 0 then StackValue (raw_call_return_type flags) result
+          else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)),G0,tn0)`,
+    `raw_call_vv_answer_exit ctx cx`] >>
+  simp[raw_call_vv_answer_exit_def,NoAsms] >>
+  qpat_assum `raw_call_vv_request_rule _ _ _ _`
+    (mp_tac o Q.INST [`e` |-> `Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`,
+       `vv` |-> `if flags.rcf_max_outsize = 0 then StackValue (raw_call_return_type flags) result
+         else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)`,
+       `ib` |-> `b + 32`, `sout` |-> `s7`] o SPEC_ALL o
+       REWRITE_RULE [raw_call_vv_request_rule_def]) >>
   (impl_tac >- suspend "continuation") >>
-  disch_then ACCEPT_TAC
+  simp[raw_call_vv_answer_exit_def]
 QED
 
-Resume raw_call_expr_vv_full[continuation]:
+Resume raw_call_expr_vv_by[continuation]:
   simp[NoAsms,ci_mono_refl,loweringPostsTheory.expr_has_effect_thm,
        exprLoweringTheory.lowered_value_type_def,vyperASTTheory.expr_type_def] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -1690,13 +1685,110 @@ Resume raw_call_expr_vv_full[continuation]:
        rpt conj_tac >> first_assum ACCEPT_TAC) >>
   TRY (qpat_assum `~(flags.rcf_is_delegate /\ flags.rcf_is_static)`
          (ACCEPT_TAC o REWRITE_RULE [DE_MORGAN_THM])) >>
-  TRY (qpat_assum `amount < dimword (:256)` (ACCEPT_TAC o REWRITE_RULE [EVAL ``dimword (:256)``])) >>
   TRY (qpat_assum `!g. OPTION_BIND (ext_call_kwarg EKGas _ _) _ = SOME g ==> _`
          (ACCEPT_TAC o SIMP_RULE (srw_ss()) [])) >>
   TRY (disj2_tac >> disj1_tac >> first_assum ACCEPT_TAC) >>
+  TRY (qpat_assum `amount < dimword (:256)`
+         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [])) >>
   PURE_ONCE_REWRITE_TAC [Q.SPECL [`LENGTH bs`,`32`] arithmeticTheory.ADD_COMM] >>
   PURE_REWRITE_TAC [arithmeticTheory.ADD_ASSOC] >>
   first_assum ACCEPT_TAC
 QED
 
-Finalise raw_call_expr_vv_full
+Finalise raw_call_expr_vv_by
+
+Theorem raw_call_vv_prefix_rule_full[local]:
+  raw_call_vv_prefix_rule
+    (\i source x Q R. gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 source x Q R)
+    (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func) (tops,cenv,env,cx,ty,ann,flags,es)
+    (st0,sa,sb,shadow_sa,shadow_sb,vv,s0,G0,tn0)
+Proof
+  simp_tac bool_ss [raw_call_vv_prefix_rule_def, raw_call_vv_pre_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule raw_call_prefix_prepared_full >>
+  first_assum (irule_at (Pat `compile_expr _ _ (Call _ _ _ _) _ = _`)) >>
+  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ a _ = _`)) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ d _ = _`)) >>
+  first_assum (irule_at (Pat `emit_op MLOAD _ _ = _`)) >>
+  first_assum (irule_at (Pat `emit_op ADD _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `lower_word_args _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_expr _ _ (gas_shadow_expr _) _ = _`)) >>
+  first_assum (irule_at (Pat `return_buf_frame _ _ _ _`)) >>
+  first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
+  first_assum (irule_at (Pat `gas_shadow_function _ _`)) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!H exc ee gt r. _ ==> R H (INR exc) ee gt r` irule >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type,haltExitProjTheory.halt_exit_INR_type]
+QED
+
+Theorem raw_call_vv_request_rule_full[local]:
+  raw_call_vv_request_rule
+    (\i source x Q R. gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 source x Q R)
+    (DF,lo,dframe,ctx,func) (cenv,env,cx,flags,st0) (es,sa,sb,s0,G0,tn0)
+Proof
+  simp_tac bool_ss [raw_call_vv_request_rule_def, raw_call_vv_answer_exit_fun] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qmatch_goalsub_abbrev_tac `raw_call_vv_answer_post _ _ _ _ (_,_,_,_,out,_,_)` >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q _` >>
+  `Q = (\H res ee G tn t. raw_call_vv_answer_post (DF,lo,dframe,ctx,func) cenv cx e
+                             (es,sa,sb,s0,out,G0,tn0) H res ee G tn t)` by
+    simp[Abbr `Q`, FUN_EQ_THM] >>
+  pop_assum SUBST1_TAC >>
+  pure_rewrite_tac [raw_call_vv_answer_post_def, GSYM CONJ_ASSOC] >>
+  irule (PURE_REWRITE_RULE [GSYM CONJ_ASSOC] raw_call_continuation_full) >>
+  first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `eval_operand dp _ = _`)) >>
+  first_assum (irule_at (Pat `eval_operand gas _ = _`)) >>
+  first_assum (irule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+  first_assum (irule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+  qexistsl_tac [`ib`,`gw`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  simp[Abbr `out`, DE_MORGAN_THM]
+QED
+
+Theorem raw_call_vv_answer_rules_full[local]:
+  raw_call_vv_answer_rules
+    (\i source x Q R. gas_outcome_full (DF,lo,E,ctx,func,PG) tops cx st0 source x Q R) ctx
+Proof
+  simp[raw_call_vv_answer_rules_def] >> conj_tac >>
+  rpt gen_tac >> PairCases_on `x` >>
+  metis_tac[gasOutcomeFullTheory.gas_outcome_full_post_mono,gas_outcome_full_halt_room]
+QED
+
+Theorem raw_call_expr_vv_full:
+  body_exprs_full_ok cx args /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
+  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Call ann (RawCallTarget flags) args dflt) es
+Proof
+  rpt (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >> disch_tac >>
+  simp_tac bool_ss [expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
+  `Q = raw_call_vv_answer_post (DF,lo,dframe,ctx,func) cenv cx
+         (Call ann (RawCallTarget flags) args dflt) (es,sa,sb,s0,vv,G0,tn0)` by
+    simp[Abbr `Q`, FUN_EQ_THM, raw_call_vv_answer_post_def] >>
+  `R = raw_call_vv_answer_exit ctx cx` by
+    simp[Abbr `R`, FUN_EQ_THM, raw_call_vv_answer_exit_def] >>
+  simp[] >>
+  irule (BETA_RULE (Q.ISPEC
+    `\(i:compile_state)
+       (source:evaluation_state -> (eval_result + vyperState$exception) # evaluation_state)
+       x Q R.
+       gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (cx_tops cx) cx st0 source x Q R` (Q.GEN `A` raw_call_expr_vv_by))) >>
+  first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
+  qexistsl_tac [`ty`,`tops`,`shadow_sb`,`shadow_sa`,`shadow_func`] >>
+  simp[raw_call_vv_prefix_rule_full,raw_call_vv_request_rule_full,raw_call_vv_answer_rules_full,
+       raw_call_vv_pre_def] >>
+  first_assum ACCEPT_TAC
+QED

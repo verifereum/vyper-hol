@@ -201,6 +201,29 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
+local
+  val (pre, post) = boolSyntax.dest_imp (concl (SPEC_ALL abi_encode_saved_restore_row_with_post))
+  val (_, rest) = boolSyntax.dest_conj pre
+in
+(* Specialize the shared restore to the observed cut. Away from that cut
+   the supplier uses the ordinary unobserved copy contract. *)
+Theorem abi_encode_saved_restore_row_side_core:
+  saved_restore_copy_laws ctx func explicit su sb P /\
+  (!a u. ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\
+    u.vs_inst_idx = LENGTH a.cs_current_insts ==> P a a u u) /\
+  ^rest ==> ^post
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `restore_copy_posts (\a b u z. a = su /\ b = sb ==> P a b u z)
+     (DF,lo,d,explicit,ctx,func,PG) ce cx st0 ee e` by
+    (irule bodyFullExtCallDelayedSlotTheory.restore_copy_posts_guarded >> simp[]) >>
+  mp_tac (Q.INST [`P` |-> `\a b u z. a = su /\ b = sb ==> P a b u z`]
+    abi_encode_saved_restore_row_with_post) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp_tac bool_ss []
+QED
+end
+
 Theorem abi_encode_saved_restore_row_pure:
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
