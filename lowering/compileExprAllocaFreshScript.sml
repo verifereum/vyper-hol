@@ -805,6 +805,18 @@ Proof
        alloca_suffix_return]
 QED
 
+Theorem compile_snapshot_vv_added_id:
+  compile_snapshot_vv ce copy vv a = (saved,b) /\ id IN frag_ids a b ==>
+  ?j. MEM j (added_insts a b) /\ j.inst_id = id
+Proof
+  strip_tac >>
+  `alloca_suffix 0 a (SND (compile_snapshot_vv ce copy vv a))` by
+    simp[alloca_suffix_snapshot_vv] >>
+  qpat_x_assum `alloca_suffix _ _ _` mp_tac >>
+  asm_simp_tac bool_ss [pairTheory.SND, alloca_suffix_def] >>
+  metis_tac[]
+QED
+
 Theorem alloca_suffix_subscript_all[local]:
   (!ce ty e a. k <= a.cs_next_var ==>
     alloca_suffix k a (SND (cfn ce ty e a))) /\
