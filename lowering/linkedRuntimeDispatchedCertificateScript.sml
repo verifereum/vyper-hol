@@ -77,9 +77,9 @@ fun linked_selected_trace_as_tac names gas res es unlocked =
   mp_tac (Q.INST [`gobs` |-> gas, `res` |-> res, `ee` |-> es,
       `unlocked` |-> unlocked, `body` |-> `fbody`, `dflts` |-> `[]:expr list`,
       `defaults` |-> `[]:value list`, `os` |-> `vs.vs_outcomes`,
-      `paid` |-> `es0 with <|scopes := [FEMPTY]; gas_obs := ^gas|>`,
-      `after_defaults` |-> `es0 with <|scopes := [FEMPTY]; gas_obs := ^gas|>`,
-      `locked` |-> `es_lock with gas_obs := ^gas`]
+      `paid` |-> `es0 with <|scopes := [FEMPTY]; gas_obs := ^(Parse.Term gas)|>`,
+      `after_defaults` |-> `es0 with <|scopes := [FEMPTY]; gas_obs := ^(Parse.Term gas)|>`,
+      `locked` |-> `es_lock with gas_obs := ^(Parse.Term gas)`]
       (SPEC_ALL linkedRuntimeSelectedTraceTheory.linked_runtime_selected_trace)) >>
   impl_tac
   >- (simp_tac (srw_ss()) [NoAsms, APPEND_NIL,
