@@ -4,7 +4,7 @@ Ancestors
   bodyFullExtCallPosTransport exprOperandVar freshWrites fragExec exprSimHypsDefs
   exprLoweringProps exprSimHyps vyperTyping valueEncodingDefs
   targetPurePostTransport exprBopSimProps stateRelProj
-  loweringPosts loweringStateRelDefs bodyPtrDefs fragGasOriginPtrDead
+  loweringPosts loweringStateRelDefs bodyPtrDefs fragGasOriginPtrDead bodyFullUnwrapSlotBand
   vyperStorageFootprint compileEnv exprLowering context venomState freshWrites
 Libs horizonTypeLib pureFrameLib
 
@@ -75,7 +75,7 @@ QED
 
 (* Keep Stage 1's saved value and provenance through the encoder's own
    cursor and address arithmetic, then materialize at the actual unwrap. *)
-Theorem extcall_direct_restore_saved_pure:
+Theorem extcall_direct_restore_saved_band:
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -129,7 +129,8 @@ Theorem extcall_direct_restore_saved_pure:
     (!x. src = Var x ==> not_fresh_at sb x) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)) /\
     (~is_word_type ty ==> expr_val_at ce cx ty si ss ee v src z \/
-                          expr_val_at ce cx ty su sb ee v src z)
+                          expr_val_at ce cx ty su sb ee v src z) /\
+    (unwrap_exit_phi_free func sb ==> unwrap_band func su sb u z)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_x_assum `?H. valid_horizon cx st0 H ee.storage_trace`
@@ -201,12 +202,74 @@ Proof
        POP_ASSUM_LIST (K ALL_TAC) >> NO_TAC) >>
      disch_then (qspecl_then [`tv`,`w`] mp_tac) >> asm_rewrite_tac[]) >>
   mp_tac (Q.INST [`fn` |-> `func`, `rt` |-> `tv`, `t` |-> `u`,
-    `G` |-> `Gu`, `tn` |-> `tu`] extcall_direct_saved_unwrap_pure) >>
+    `G` |-> `Gu`, `tn` |-> `tu`] extcall_direct_saved_unwrap_band) >>
   impl_tac >- (asm_rewrite_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
   qexistsl_tac [`z`,`Gz`,`tz`] >>
   asm_rewrite_tac[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   metis_tac[]
+QED
+
+Theorem extcall_direct_restore_saved_pure:
+  ty = lowered_value_type ce e /\
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
+  ((?tag op0. saved = StackValue tag op0) \/
+   (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
+   (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location <> LocMemory /\
+        ty = expr_type e /\ saved = vv)) /\
+  local_ptrs_reserved ce si /\ sm.cs_next_var <= su.cs_next_var /\ sm.cs_next_id <= su.cs_next_id /\
+  ss.cs_next_var <= front.cs_next_var /\ ss.cs_next_id <= front.cs_next_id /\
+  front.cs_next_var <= su.cs_next_var /\ local_ptrs_reserved ce front /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
+  (~is_word_type ty ==> ~is_word_type (expr_type e)) /\
+  (!l. vv_operand saved <> Label l) /\
+  read_result cx raw ee = (INL v,ee) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ type_memory_bytes ce ty = type_memory_size tv /\
+  type_memory_size tv < 2**64 /\ value_has_type tv v /\
+  vv_holds ce cx ty raw saved ee s /\ vv_at ce cx ty si ss ee raw saved s /\
+  ptr_vv_ok cx ty raw saved ee G tn s /\ vv_store_bound cx ty ty ee raw saved s /\
+  ((case saved of StackValue tag op0 => ~is_word_type ty
+      | LocatedValue tag p => p.ptr_location = LocMemory) ==>
+    ptr_buf_ok ce e (vv_operand saved) G s) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee s /\ vv_storage_live H cx saved ee s) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee u /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d ce cx ee Gu tu u) /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  wb_frame ce ee ee front s u /\ ghost_kept_at lo ce ee front G tn s Gu tu /\
+  s.vs_alloca_next <= u.vs_alloca_next /\
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  unwrap_value ce saved su = (src,sb) /\ fn_has_code su sb func /\ fn_inst_ids_distinct func /\
+  alloca_history func u /\ ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
+  u.vs_inst_idx = LENGTH su.cs_current_insts ==>
+  ?z Gz tz.
+    pure_frame ce func ee su u z /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func ce cx ee z /\ storage_well_formed_on cx ee (FST H) /\
+      ghost_inv_at (DF H) lo d ce cx ee Gz tz z) /\
+    expr_val_rel cx ty v src z /\ ptr_val_ok cx ty v src Gz tz z /\
+    expr_store_bound cx ty v src z /\ (~is_word_type ty ==> ptr_buf_ok ce e src Gz z) /\
+    alloca_history func z /\ u.vs_alloca_next <= z.vs_alloca_next /\
+    ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at su x ==>
+      lookup_var x z = lookup_var x u /\ FLOOKUP Gz x = FLOOKUP Gu x /\
+      op_taint tz (Var x) = op_taint tu (Var x)) /\
+    wb_frame ce ee ee su u z /\ ghost_kept_at lo ce ee su Gu tu u Gz tz /\
+    (!x. src = Var x ==> not_fresh_at sb x) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)) /\
+    (~is_word_type ty ==> expr_val_at ce cx ty si ss ee v src z \/
+                          expr_val_at ce cx ty su sb ee v src z)
+Proof
+  disch_tac >> mp_tac (SPEC_ALL extcall_direct_restore_saved_band) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
+  qexistsl [`z`,`Gz`,`tz`] >> asm_rewrite_tac[]
 QED
 
 Theorem extcall_direct_restore_saved =

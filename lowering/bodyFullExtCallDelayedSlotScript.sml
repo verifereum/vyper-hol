@@ -8,7 +8,7 @@ Ancestors
   bodyFullExtCallCtorCopyReplay fragGasOriginPtrDead
   loweringPosts exprSimMemDefs vyperValue vyperStorageFootprint
   exprLowering exprSimWordArgs fragGasOriginPtr vyperState
-  stateRelProj exprSimVVFrame bodyFullExtCallSavedOperand
+  stateRelProj exprSimVVFrame bodyFullExtCallSavedOperand bodyFullUnwrapSlotBand
 Libs pureFrameLib
 
 (* The slot address is computed before the saved argument is unwrapped. *)
@@ -124,7 +124,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem extcall_slot_nonmemory_unwrap_pure[local]:
+Theorem extcall_slot_nonmemory_unwrap_band[local]:
   lowered_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\ p.ptr_location <> LocMemory /\
   compile_expr ce (expr_type e) e si = (LocatedValue (expr_type e) p,sm) /\
@@ -175,7 +175,8 @@ Theorem extcall_slot_nonmemory_unwrap_pure[local]:
        lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x)) /\
     wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
-    expr_val_at ce cx (expr_type e) su sb ee v src z
+    expr_val_at ce cx (expr_type e) su sb ee v src z /\
+    (unwrap_exit_phi_free fn sb ==> unwrap_band fn su sb t z)
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by metis_tac[post_value_type_lowered] >>
@@ -194,13 +195,13 @@ Proof
       simp[exprSimUnwrapTheory.vv_post_calldata]) >>
   Cases_on `p.ptr_location = LocCode`
   >- (Cases_on `ce.ce_is_ctor`
-      >- (irule extcall_saved_ctor_copy_replay_pure >> simp[] >>
+      >- (irule extcall_saved_ctor_copy_replay_band >> simp[] >>
           qexistsl [`p`,`si`,`sm`] >> fs[]) >>
-      irule extcall_saved_runtime_copy_replay_pure >> simp[] >>
+      irule extcall_saved_runtime_copy_replay_band >> simp[] >>
       qexistsl [`p`,`si`,`sm`] >> simp[]) >>
   `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient` by
     (Cases_on `p.ptr_location` >> fs[]) >>
-  irule extcall_saved_slot_copy_replay_pure >> simp[] >>
+  irule extcall_saved_slot_copy_replay_band >> simp[] >>
   qexistsl [`p`,`si`,`sm`] >> simp[]
 QED
 
@@ -292,6 +293,93 @@ QED
 
 (* The unwrap returns a store input at a single physical endpoint.  The
    retained interval [si,sm) is used only for a non-memory saved value. *)
+Theorem extcall_slot_unwrap_band:
+  ty = lowered_value_type ce e /\
+  ((?tag op0. saved = StackValue tag op0) \/
+   (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
+   (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location <> LocMemory /\
+        ty = expr_type e /\ compile_expr ce (expr_type e) e si = (saved,sm) /\
+        (!x. p.ptr_operand = Var x ==> not_fresh_at sm x))) /\
+  (~is_word_type ty ==> ~is_word_type (expr_type e)) /\
+  sm.cs_next_var <= su.cs_next_var /\ sm.cs_next_id <= su.cs_next_id /\
+  local_ptrs_reserved ce si /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
+  unwrap_value ce saved su = (src,sb) /\
+  fn_has_code su sb fn /\ fn_inst_ids_distinct fn /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  evaluate_type (get_tenv cx) ty = SOME rt /\
+  type_memory_bytes ce ty = type_memory_size rt /\
+  type_memory_size rt < 2**64 /\ value_has_type rt v /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  read_result cx raw ee = (INL v,ee) /\ vv_holds ce cx ty raw saved ee t /\
+  ptr_vv_ok cx ty raw saved ee G tn t /\
+  vv_store_bound cx ty ty ee raw saved t /\
+  ((case saved of
+     StackValue tag op0 => ~is_word_type ty
+   | LocatedValue tag p => p.ptr_location = LocMemory) ==>
+    ptr_buf_ok ce e (vv_operand saved) G t) /\
+  (ce.ce_is_ctor /\ vv_location saved = SOME LocCode ==>
+    !w. eval_operand (vv_operand saved) t = SOME w ==>
+      w2n w + type_memory_size rt <= lo /\
+      (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
+        val_in_memory rt v (w2n w) mem)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx fn ce cx ee t /\ storage_well_formed_on cx ee (FST H) /\
+    vv_storage_live H cx saved ee t /\ ghost_inv_at (DF H) lo d ce cx ee G tn t) /\
+  alloca_history fn t /\ ~t.vs_halted /\ t.vs_current_bb = su.cs_current_bb /\
+  t.vs_inst_idx = LENGTH su.cs_current_insts ==>
+  ?z G' tn'.
+    pure_frame ce fn ee su t z /\
+    gas_origin_ptr_path
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
+       lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
+      stmt_state_rel H ctx fn ce cx ee z /\ storage_well_formed_on cx ee (FST H) /\
+      ghost_inv_at (DF H) lo d ce cx ee G' tn' z) /\
+    expr_val_rel cx ty v src z /\ ptr_val_ok cx ty v src G' tn' z /\
+    expr_store_bound cx ty v src z /\ (~is_word_type ty ==> ptr_buf_ok ce e src G' z) /\
+    (~is_word_type ty ==> !w. eval_operand src z = SOME w ==>
+       type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) /\
+    alloca_history fn z /\ t.vs_alloca_next <= z.vs_alloca_next /\
+    ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at su x ==>
+       lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
+    (!p. saved = LocatedValue ty p /\ p.ptr_location <> LocMemory ==>
+      expr_val_at ce cx ty su sb ee v src z) /\
+    ((?tag op0. saved = StackValue tag op0) \/
+     (?p. saved = LocatedValue ty p /\ p.ptr_location = LocMemory) ==>
+      z = t) /\
+    (unwrap_exit_phi_free fn sb ==> unwrap_band fn su sb t z)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `val_wf rt v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  Cases_on `(?tag op0. saved = StackValue tag op0) \/
+    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory)`
+  >- (drule_all extcall_slot_identity_unwrap >> strip_tac >>
+      qexistsl [`t`,`G`,`tn`] >>
+      gvs[wb_frame_refl, ghost_kept_at_def, cj 1 gas_origin_ptr_path_rules]) >>
+  `?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location <> LocMemory /\
+       ty = expr_type e /\ compile_expr ce (expr_type e) e si = (saved,sm) /\
+       (!x. p.ptr_operand = Var x ==> not_fresh_at sm x)` by metis_tac[] >>
+  `ty = expr_type e` by metis_tac[] >>
+  `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id /\
+   local_ptrs_reserved ce sm` by
+    metis_tac[exprSimUnwrapTheory.compile_expr_extends, local_ptrs_reserved_next_var] >>
+  qpat_x_assum `saved = LocatedValue ty p` SUBST_ALL_TAC >>
+  qpat_x_assum `ty = expr_type e` SUBST_ALL_TAC >>
+  qpat_x_assum `expr_type e = lowered_value_type ce e` (assume_tac o SYM) >>
+  simp[] >>
+  irule (SIMP_RULE (boss_ss()) [] extcall_slot_nonmemory_unwrap_band) >>
+  `type_memory_size rt < 18446744073709551616` by fs[] >>
+  simp[] >> qexistsl [`p`,`raw`,`si`,`sm`] >>
+  fs[contextTheory.vv_operand_def, contextTheory.vv_location_def]
+QED
+
 Theorem extcall_slot_unwrap_pure:
   ty = lowered_value_type ce e /\
   ((?tag op0. saved = StackValue tag op0) \/
@@ -354,28 +442,10 @@ Theorem extcall_slot_unwrap_pure:
      (?p. saved = LocatedValue ty p /\ p.ptr_location = LocMemory) ==>
       z = t)
 Proof
-  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  `val_wf rt v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
-  Cases_on `(?tag op0. saved = StackValue tag op0) \/
-    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory)`
-  >- (drule_all extcall_slot_identity_unwrap >> strip_tac >>
-      qexistsl [`t`,`G`,`tn`] >>
-      gvs[wb_frame_refl, ghost_kept_at_def, cj 1 gas_origin_ptr_path_rules]) >>
-  `?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location <> LocMemory /\
-       ty = expr_type e /\ compile_expr ce (expr_type e) e si = (saved,sm) /\
-       (!x. p.ptr_operand = Var x ==> not_fresh_at sm x)` by metis_tac[] >>
-  `ty = expr_type e` by metis_tac[] >>
-  `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id /\
-   local_ptrs_reserved ce sm` by
-    metis_tac[exprSimUnwrapTheory.compile_expr_extends, local_ptrs_reserved_next_var] >>
-  qpat_x_assum `saved = LocatedValue ty p` SUBST_ALL_TAC >>
-  qpat_x_assum `ty = expr_type e` SUBST_ALL_TAC >>
-  qpat_x_assum `expr_type e = lowered_value_type ce e` (assume_tac o SYM) >>
-  simp[] >>
-  irule (SIMP_RULE (boss_ss()) [] extcall_slot_nonmemory_unwrap_pure) >>
-  `type_memory_size rt < 18446744073709551616` by fs[] >>
-  simp[] >> qexistsl [`p`,`raw`,`si`,`sm`] >>
-  fs[contextTheory.vv_operand_def, contextTheory.vv_location_def]
+  disch_tac >> mp_tac (SPEC_ALL extcall_slot_unwrap_band) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (qx_choosel_then [`z`,`G'`,`tn'`] strip_assume_tac) >>
+  qexistsl [`z`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED
 
 Theorem extcall_slot_unwrap =
