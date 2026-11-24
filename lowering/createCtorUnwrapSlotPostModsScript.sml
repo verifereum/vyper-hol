@@ -14,6 +14,51 @@ Ancestors
   loweringPosts loweringStateRelDefs ptrDiscipline venomState venomExecSemantics
   valueEncodingProps vyperStorageFootprint finite_map pred_set words arithmetic
 
+(* Transport ordinary ghost fields at a zero prefix, then restore the
+   linked immutable prefix with the exterior copy frame at the real lo. *)
+val ctor_slot_copy_linked_ghost_tac =
+  `ghost_inv_at (DF H) 0 d cenv cx ee G tn s` by
+    (qpat_assum `ghost_inv_at_mods _ _ _ _ _ _ G tn s`
+       (strip_assume_tac o REWRITE_RULE[bodyFullShadowBodyInvTheory.ghost_inv_at_mods_def]) >>
+     simp[ghost_inv_at_def, allocas_from_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `ghost_inv_at (DF H) 0 d cenv cx ee Gf tnf z` by
+    (irule unwrap_slot_copy_ghost_inv_at_mono >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[allocas_from_def] >>
+     qexistsl [`G`, `func`, `nb`, `s`, `sa`, `w2n dst`, `tn`] >>
+     `nb + w2n dst = w2n dst + nb` by simp[ADD_COMM] >>
+     qpat_x_assum `nb + w2n dst = w2n dst + nb` (fn th => pure_rewrite_tac[th]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `mem_bytes_at 0 lo z.vs_memory = mem_bytes_at 0 lo s.vs_memory` by
+    (qpat_assum `!a k. _ ==> mem_bytes_at a k z.vs_memory = mem_bytes_at a k s.vs_memory`
+       (qspecl_then [`0`, `lo`] mp_tac) >> simp[]) >>
+  `!j. j < lo /\ j IN tnf.t_mem ==> j IN tn.t_mem` by
+    (rpt strip_tac >>
+     qpat_assum `!j. _ \/ _ ==> j IN tnf.t_mem ==> _` irule >>
+     simp[] >> decide_tac) >>
+  `!x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==>
+     FLOOKUP Gf x = NONE /\ op_taint tnf (Var x) = {}` by
+    (gen_tac >> strip_tac >>
+     `not_fresh_at sa x` by
+       (irule local_ptrs_reserved_imm_base >> qexists `cenv` >> simp[]) >>
+     qpat_assum `!x. not_fresh_at sa x ==> _` (drule_then strip_assume_tac) >>
+     qpat_assum `ghost_inv_at_mods _ _ _ _ _ _ G tn s`
+       (strip_assume_tac o REWRITE_RULE[bodyFullShadowBodyInvTheory.ghost_inv_at_mods_def]) >>
+     qpat_assum `!x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==> _`
+       (qspec_then `x` mp_tac) >> simp[]) >>
+  `!i. i < lo /\ i IN tnf.t_mem ==>
+     imm_section_dead_mods cenv (mem_bytes_at 0 lo z.vs_memory) i` by
+    (gen_tac >> strip_tac >>
+     `i IN tn.t_mem` by (qpat_assum `!j. j < lo /\ j IN tnf.t_mem ==> _` irule >> simp[]) >>
+     qpat_assum `mem_bytes_at 0 lo z.vs_memory = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `ghost_inv_at_mods _ _ _ _ _ _ G tn s`
+       (strip_assume_tac o REWRITE_RULE[bodyFullShadowBodyInvTheory.ghost_inv_at_mods_def]) >>
+     qpat_assum `!i. _ ==> imm_section_dead_mods _ _ i` irule >> simp[]) >>
+  qpat_assum `ghost_inv_at _ 0 _ _ _ _ Gf tnf z`
+    (strip_assume_tac o REWRITE_RULE[ghost_inv_at_def]) >>
+  rewrite_tac[bodyFullShadowBodyInvTheory.ghost_inv_at_mods_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+
 Theorem ctor_unwrap_slot_endpoint_post_mods:
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   ~is_word_type (post_value_type cenv e) /\
