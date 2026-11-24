@@ -5014,19 +5014,25 @@ Theorem create_dynamic_extcodecopy_path[local]:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   sb.cs_current_bb = sa.cs_current_bb /\
+  run_inst_seq (emitted_insts sa sb) s =
+    OK (write_memory_with_expansion (w2n b) (TAKE (w2n n) (DROP (w2n k) (lookup_account (w2w a) s.vs_accounts).code ++ REPLICATE (w2n n) 0w)) s) /\
   (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (write_memory_with_expansion (w2n b) (TAKE (w2n n) (DROP (w2n k) (lookup_account (w2w a) s.vs_accounts).code ++ REPLICATE (w2n n) 0w)) s with vs_inst_idx := LENGTH sb.cs_current_insts),G,
      tn with t_mem := tn.t_mem DIFF {j | w2n b <= j /\ j < w2n b + w2n n}))
 Proof
   strip_tac >> simp[] >>
   drule_all bodyPtrMakeArrayPrimitiveInstallTheory.emit_void_fetch_boundary >> strip_tac >>
-  simp[] >> rpt gen_tac >>
+  simp[] >>
   qabbrev_tac `i = mk_inst sa.cs_next_id EXTCODECOPY [addr;Var p;off;cnt] []` >>
   qmatch_goalsub_abbrev_tac `write_memory_with_expansion (w2n b) bytes s` >>
   qabbrev_tac `u = write_memory_with_expansion (w2n b) bytes s` >>
   `step_inst_base i s = OK u` by
     (simp[Abbr `i`, Abbr `u`, Abbr `bytes`] >>
      irule bodyPtrBytestringBuiltinsExternalSliceTheory.external_copy_step >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (drule (cj 1 emitHelperPropsTheory.emitted_insts_emit_void) >>
+      simp[GSYM markerTheory.Abbrev_def,run_inst_seq_def]) >>
+  rpt gen_tac >>
   `ptr_inst_ok D lo 0 ctx func G tn i s` by
     (simp[Abbr `i`] >> irule ptrSafetyTransportTheory.ptr_inst_ok_lower_bound_transport >>
      simp[] >> qexists `0` >> simp[] >>
@@ -6248,7 +6254,7 @@ Theorem create_blueprint_mixed_mcopy_path[local]:
   (!i. w2n a <= i /\ i < w2n a + w2n n ==> i NOTIN tn.t_mem) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  sb.cs_current_bb = sa.cs_current_bb /\
+  run_inst_seq (emitted_insts sa sb) s = OK (mcopy (w2n b) (w2n a) (w2n n) s) /\
   (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (mcopy (w2n b) (w2n a) (w2n n) s with vs_inst_idx := LENGTH sb.cs_current_insts),G,
      tn with t_mem := tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + w2n n}))
@@ -6257,11 +6263,15 @@ Proof
   qpat_x_assum `compile_copy_memory_dynamic _ _ _ _ = _`
     (assume_tac o REWRITE_RULE [compile_copy_memory_dynamic_def]) >>
   drule_all bodyPtrMakeArrayPrimitiveInstallTheory.emit_void_fetch_boundary >> strip_tac >>
-  simp[] >> rpt gen_tac >>
+  simp[] >>
   qabbrev_tac `i = mk_inst sa.cs_next_id MCOPY [Var dst;Var src;cnt] []` >>
   qabbrev_tac `u = mcopy (w2n b) (w2n a) (w2n n) s` >>
   `step_inst_base i s = OK u` by
     simp[Abbr `i`, Abbr `u`, mk_inst_def, step_inst_base_opcode_eqs, eval_operand_def] >>
+  conj_tac
+  >- (drule (cj 1 emitHelperPropsTheory.emitted_insts_emit_void) >>
+      simp[GSYM markerTheory.Abbrev_def,run_inst_seq_def]) >>
+  rpt gen_tac >>
   `ptr_inst_ok D lo 0 ctx func G tn i s` by
     (simp[Abbr `i`] >> irule ptrSafetyTransportTheory.ptr_inst_ok_lower_bound_transport >>
      simp[] >> qexists `0` >> simp[] >>
@@ -6305,13 +6315,20 @@ Theorem create_blueprint_add_path[local]:
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     (!p. p <> out ==> lookup_var p t = lookup_var p s /\
       FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)) /\
-    (!p. not_fresh_at sa p ==> p <> out)
+    (!p. not_fresh_at sa p ==> p <> out) /\
+    run_inst_seq (emitted_insts sa sb) s = OK (update_var out (a+b) s)
 Proof
   strip_tac >>
   drule_all bodyPtrMakeArrayEmissionTheory.emit_op_fetch_boundary >> strip_tac >>
   drule (cj 4 emitHelperPropsTheory.emitted_insts_emit_op) >> strip_tac >>
   qabbrev_tac `i = mk_inst sa.cs_next_id ADD [left;right] [tmp]` >>
   qabbrev_tac `u = update_var tmp (a+b) s` >>
+  `step_inst_base i s = OK u` by
+    simp[Abbr `i`,Abbr `u`,mk_inst_def,step_inst_base_opcode_eqs,exec_pure2_def] >>
+  `run_inst_seq (emitted_insts sa sb) s = OK u` by
+    (drule (cj 1 emitHelperPropsTheory.emitted_insts_emit_op) >>
+     qpat_assum `tmp = STRING _ _` (SUBST1_TAC o SYM) >>
+     simp[GSYM markerTheory.Abbrev_def,run_inst_seq_def]) >>
   qabbrev_tac `gf = step_prov PG G i u` >>
   qabbrev_tac `tf = step_taint i s u tn` >>
   qexistsl [`tmp`,`u with vs_inst_idx := LENGTH sb.cs_current_insts`,`gf`,`tf`] >>
@@ -6340,6 +6357,25 @@ Proof
   qpat_x_assum `tmp = STRING _ _` SUBST_ALL_TAC >>
   simp[Abbr `u`,update_var_def,lookup_var_def,eval_operand_def,finite_mapTheory.FLOOKUP_UPDATE] >>
   metis_tac[]
+QED
+
+(* Compose base executions while keeping the indexed landing of the
+   corresponding compiled fragment. *)
+Theorem create_append_indexed_run[local]:
+  emitHelperProps$inst_extends sa sb /\ emitHelperProps$inst_extends sb sc /\
+  (?u0. run_inst_seq (emitted_insts sa sb) s = OK u0 /\
+        u = (u0 with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  (?t0. run_inst_seq (emitted_insts sb sc) u = OK t0 /\
+        t = (t0 with vs_inst_idx := LENGTH sc.cs_current_insts)) /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sb sc) ==>
+  ?t0. run_inst_seq (emitted_insts sa sc) s = OK t0 /\
+       t = (t0 with vs_inst_idx := LENGTH sc.cs_current_insts)
+Proof
+  strip_tac >>
+  `emitted_insts sa sc = emitted_insts sa sb ++ emitted_insts sb sc` by
+    (irule emitted_insts_append >> fs[emitHelperPropsTheory.inst_extends_def]) >>
+  simp[] >> irule storageCopyBodyPtrTheory.run_inst_seq_cursor_append >>
+  simp[] >> metis_tac[]
 QED
 
 (* The compiler elides the suffix only for Lit 0w. An emitted MCOPY is
@@ -6380,13 +6416,20 @@ Theorem create_blueprint_args_append_path[local]:
                                  i < w2n b + LENGTH prefix + LENGTH args} /\
     z.t_stor = tn.t_stor /\ z.t_trans = tn.t_trans /\ z.t_imm = tn.t_imm /\
     (!x. not_fresh_at se x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint z (Var x) = op_taint tn (Var x))
+      FLOOKUP H x = FLOOKUP G x /\ op_taint z (Var x) = op_taint tn (Var x)) /\
+    emitHelperProps$inst_extends se sc /\
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS)
+      (emitted_insts se sc) /\
+    (?t0. run_inst_seq (emitted_insts se sc) s = OK t0 /\
+          t = (t0 with vs_inst_idx := LENGTH sc.cs_current_insts))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> Cases_on `cnt = Lit 0w`
   >- (fs[eval_operand_def,wordsTheory.n2w_11,wordsTheory.ZERO_LT_dimword] >>
       qexistsl [`s`,`G`,`tn`] >>
       simp[cs_extends_refl,fragGasOriginPtrTheory.gas_origin_ptr_path_rules,
-           venom_state_component_equality]) >>
+           venom_state_component_equality,emitHelperPropsTheory.inst_extends_refl,
+           emitted_insts_refl,run_inst_seq_def] >>
+      qexists `s` >> simp[]) >>
   suspend "emitted"
 QED
 
@@ -6456,19 +6499,37 @@ Resume create_blueprint_args_append_path[copy_edge]:
                    vs_inst_idx := LENGTH sc.cs_current_insts` >>
   qabbrev_tac `z = tu with t_mem := tu.t_mem DIFF
                      {i | w2n dest <= i /\ i < w2n dest + w2n cntw}` >>
-  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK t,Gu,z)` by
-    (rpt gen_tac >>
-     qpat_assum `Abbrev (t = _)` (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  `run_inst_seq (emitted_insts sx sc) u = OK (mcopy (w2n dest) (w2n a) (w2n cntw) u) /\
+   (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK t,Gu,z))` by
+    (qpat_assum `Abbrev (t = _)` (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
      qpat_assum `Abbrev (z = _)` (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     irule (cj 2 create_blueprint_mixed_mcopy_path) >>
+     irule create_blueprint_mixed_mcopy_path >>
      rpt conj_tac >>
-     FIRST_PROVE [qexistsl [`cnt`,`out`,`sx`,`q`] >> simp[IgnAsm `u = _`],
+     FIRST_PROVE [qexistsl [`cnt`,`out`,`q`] >> simp[IgnAsm `u = _`],
                   fs[IgnAsm `u = _`],
                   Cases_on `args` >> fs[IgnAsm `u = _`] >> decide_tac]) >>
+  qpat_assum `compile_copy_memory_dynamic _ _ _ _ = _`
+    (assume_tac o REWRITE_RULE [compile_copy_memory_dynamic_def]) >>
   `sc.cs_current_bb = sx.cs_current_bb` by
-    (qpat_assum `compile_copy_memory_dynamic _ _ _ _ = _`
-       (assume_tac o REWRITE_RULE [compile_copy_memory_dynamic_def]) >>
-     drule_all bodyPtrMakeArrayPrimitiveInstallTheory.emit_void_fetch_boundary >> strip_tac) >>
+    (drule_all bodyPtrMakeArrayPrimitiveInstallTheory.emit_void_fetch_boundary >> strip_tac) >>
+  suspend "append_run"
+QED
+
+Resume create_blueprint_args_append_path[append_run]:
+  drule emitHelperPropsTheory.inst_extends_emit_op >> strip_tac >>
+  drule emitHelperPropsTheory.inst_extends_emit_void >> strip_tac >>
+  `emitHelperProps$inst_extends se sc` by
+    metis_tac[emitHelperPropsTheory.inst_extends_trans] >>
+  `emitted_insts se sc = emitted_insts se sx ++ emitted_insts sx sc` by
+    (irule emitted_insts_append >> fs[emitHelperPropsTheory.inst_extends_def]) >>
+  drule (cj 1 emitHelperPropsTheory.emitted_insts_emit_op) >> strip_tac >>
+  drule (cj 1 emitHelperPropsTheory.emitted_insts_emit_void) >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS)
+    (emitted_insts se sc)` by simp[mk_inst_def,is_terminator_def] >>
+  `?t0. run_inst_seq (emitted_insts se sc) s = OK t0 /\
+        t = (t0 with vs_inst_idx := LENGTH sc.cs_current_insts)` by
+    (irule create_append_indexed_run >>
+     qexistsl [`sx`,`u`] >> simp[Abbr `t`,mk_inst_def,is_terminator_def]) >>
   suspend "endpoints"
 QED
 
@@ -6518,7 +6579,7 @@ Finalise create_blueprint_args_append_path
 (* Successful check already supplies the exact length of the account-code
    suffix. This theorem runs the remaining instruction-only prefix and
    leaves the dispatch unexecuted, even for an oversized initcode. *)
-Theorem create_blueprint_materialize[local]:
+Theorem create_blueprint_materialize_run:
   compile_create_blueprint_append target amount sop off code args_ptr cnt rof sa = (result,sb) /\
   fn_has_code sa sb func /\ body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
   gas_origin_ptr_path (D0,lo,explicit0,ctx,func,PG) (s0,G0,tn0) marks (OK s,G,tn) /\
@@ -6561,7 +6622,20 @@ Theorem create_blueprint_materialize[local]:
     (!i. i < w2n s.vs_fmp /\ i IN z.t_mem ==> i IN tn.t_mem) /\
     z.t_stor = tn.t_stor /\ z.t_trans = tn.t_trans /\ z.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint z (Var x) = op_taint tn (Var x))
+      FLOOKUP H x = FLOOKUP G x /\ op_taint z (Var x) = op_taint tn (Var x)) /\
+    sc.cs_current_bb = sa.cs_current_bb /\
+    emitHelperProps$inst_extends sa sc /\
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS)
+      (emitted_insts sa sc) /\
+    (?sm sn se.
+      emit_op ADD [code;cnt] sa = (size,sm) /\
+      compile_alloc_dynamic size sm = (Var p,sn) /\
+      emit_void EXTCODECOPY [target;Var p;off;code] sn = ((),se) /\
+      (if cnt = Lit 0w then sc = se else
+         ?dst sx. emit_op ADD [Var p;code] se = (dst,sx) /\
+           compile_copy_memory_dynamic dst args_ptr cnt sx = ((),sc))) /\
+    (?t0. run_inst_seq (emitted_insts sa sc) s = OK t0 /\
+          t = (t0 with vs_inst_idx := LENGTH sc.cs_current_insts))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule dallocaCreateGeometryTheory.create_blueprint_create_prefix >>
@@ -6575,8 +6649,8 @@ Proof
   suspend "layout"
 QED
 
-Resume create_blueprint_materialize[layout]:
-  qpat_x_assum `compile_alloc_dynamic _ _ = _`
+Resume create_blueprint_materialize_run[layout]:
+  qpat_assum `compile_alloc_dynamic _ _ = _`
     (assume_tac o REWRITE_RULE [compile_alloc_dynamic_def]) >>
   `cs_extends sa sm /\ cs_extends sm sn /\ cs_extends sn se /\ cs_extends se sc /\
    sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
@@ -6600,7 +6674,7 @@ Resume create_blueprint_materialize[layout]:
   suspend "total"
 QED
 
-Resume create_blueprint_materialize[total]:
+Resume create_blueprint_materialize_run[total]:
   qabbrev_tac `N = LENGTH prefix + LENGTH args` >>
   qabbrev_tac `B = w2n s.vs_fmp` >>
   `eval_operand tot_op u = SOME (n2w N)` by
@@ -6630,10 +6704,28 @@ Resume create_blueprint_materialize[total]:
     bodyFullDynamicBufferTheory.dalloca_origin_region_exact) >>
   disch_then (qspecl_then [`PG`,`Gu`]
     (qx_choosel_then [`v`,`Gv`,`tv`] (map_every assume_tac o CONJUNCTS))) >>
+  `run_inst_seq (emitted_insts sm sn) u = OK (v with vs_inst_idx := u.vs_inst_idx)` by
+    (qabbrev_tac `v0 = update_var p u.vs_fmp
+                     (u with vs_fmp := u.vs_fmp + n2w (venomLayout$ceil32 (w2n (n2w N:bytes32))))` >>
+     `step_inst 0 ctx i u = OK v0` by
+       (qpat_assum `tot_op = Var tot_var` SUBST_ALL_TAC >>
+        simp[Abbr `v0`,lowerDloadPtrDallocaTheory.dalloca_step_success,
+             IgnAsm `u = _`,IgnAsm `v = _`] >>
+        qexists `n2w N` >> simp[IgnAsm `u = _`,IgnAsm `v = _`]) >>
+     `step_inst_base i u = OK v0` by
+       (qpat_x_assum `step_inst 0 ctx i u = _` mp_tac >>
+        simp[step_inst_non_invoke,IgnAsm `u = _`,IgnAsm `v = _`]) >>
+     `emitted_insts sm sn = [i]` by
+       (qpat_assum `emit_op DALLOCA _ _ = _`
+          (mp_then Any (mp_tac o CONJUNCT1) emitHelperPropsTheory.emitted_insts_emit_op) >>
+        simp[Abbr `i`]) >>
+     simp[run_inst_seq_def,Abbr `v0`,update_var_def,IgnAsm `u = _`,
+          IgnAsm `u.vs_inst_idx = _`] >>
+     simp[venom_state_component_equality,IgnAsm `u = _`,IgnAsm `u.vs_inst_idx = _`]) >>
   suspend "allocated"
 QED
 
-Resume create_blueprint_materialize[allocated]:
+Resume create_blueprint_materialize_run[allocated]:
   `not_fresh_at sn p` by
     (drule (cj 4 emitHelperPropsTheory.emitted_insts_emit_op) >>
      simp[loweringShapeRulesTheory.fresh_output_props]) >>
@@ -6671,7 +6763,7 @@ Resume create_blueprint_materialize[allocated]:
   suspend "copy_code"
 QED
 
-Resume create_blueprint_materialize[copy_code]:
+Resume create_blueprint_materialize_run[copy_code]:
   `eval_operand (Var p) v = SOME s.vs_fmp` by
     simp[eval_operand_def,IgnAsm `v = _`,IgnAsm `u = _`] >>
   `v.vs_current_bb = sn.cs_current_bb /\ v.vs_inst_idx = LENGTH sn.cs_current_insts` by
@@ -6687,7 +6779,7 @@ Resume create_blueprint_materialize[copy_code]:
   suspend "written"
 QED
 
-Resume create_blueprint_materialize[written]:
+Resume create_blueprint_materialize_run[written]:
   `y.vs_current_bb = se.cs_current_bb /\ y.vs_inst_idx = LENGTH se.cs_current_insts /\
    ~y.vs_halted /\ y.vs_fmp = v.vs_fmp /\ y.vs_initial_fmp = s.vs_initial_fmp /\
    y.vs_allocas = v.vs_allocas /\ y.vs_alloca_next = s.vs_alloca_next /\
@@ -6714,7 +6806,7 @@ Resume create_blueprint_materialize[written]:
   suspend "args"
 QED
 
-Resume create_blueprint_materialize[args]:
+Resume create_blueprint_materialize_run[args]:
   `!x. not_fresh_at sa x ==> lookup_var x y = lookup_var x s /\
         FLOOKUP Gv x = FLOOKUP G x /\ op_taint ty (Var x) = op_taint tn (Var x)` by
     metis_tac[] >>
@@ -6770,10 +6862,49 @@ Resume create_blueprint_materialize[args]:
   `LENGTH prefix + LENGTH args < dimword (:256)` by simp[Abbr `N`,IgnAsm `prefix = _`] >>
   drule_all create_blueprint_args_append_path >>
   disch_then (qspec_then `PG` (qx_choosel_then [`t`,`H`,`z`] (map_every assume_tac o CONJUNCTS))) >>
+  suspend "append_run"
+QED
+
+Resume create_blueprint_materialize_run[append_run]:
+  qpat_assum `emit_op ADD _ sa = _`
+    (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+  qpat_assum `emit_op DALLOCA _ sm = _`
+    (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+  qpat_assum `emit_void EXTCODECOPY _ sn = _`
+    (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_void) >>
+  `emitHelperProps$inst_extends sa sm /\ emitHelperProps$inst_extends sm sn /\
+   emitHelperProps$inst_extends sn se` by simp[emitHelperPropsTheory.inst_extends_def] >>
+  `emitHelperProps$inst_extends sa sn /\ emitHelperProps$inst_extends sa se /\
+   emitHelperProps$inst_extends sa sc` by metis_tac[emitHelperPropsTheory.inst_extends_trans] >>
+  `?v0. run_inst_seq (emitted_insts sa sn) s = OK v0 /\
+        v = (v0 with vs_inst_idx := LENGTH sn.cs_current_insts)` by
+    (irule create_append_indexed_run >> qexistsl [`sm`,`u`] >> simp[mk_inst_def,is_terminator_def] >>
+     qexists `v with vs_inst_idx := u.vs_inst_idx` >>
+     simp[IgnAsm `v = _`,IgnAsm `u = _`]) >>
+  `?y0. run_inst_seq (emitted_insts sa se) s = OK y0 /\
+        y = (y0 with vs_inst_idx := LENGTH se.cs_current_insts)` by
+    (irule create_append_indexed_run >> qexistsl [`sn`,`v`] >> simp[mk_inst_def,is_terminator_def] >>
+     qpat_assum `Abbrev (y = _)`
+       (PURE_ONCE_REWRITE_TAC o single o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     qpat_assum `v = v0 with vs_inst_idx := _` (PURE_ONCE_REWRITE_TAC o single) >>
+     simp[write_memory_with_expansion_def,IgnAsm `prefix = _`]) >>
+  `?t0. run_inst_seq (emitted_insts sa sc) s = OK t0 /\
+        t = (t0 with vs_inst_idx := LENGTH sc.cs_current_insts)` by
+    (irule create_append_indexed_run >> qexistsl [`se`,`y`] >> fs[EVERY_MEM]) >>
+  `emitted_insts sa sn = emitted_insts sa sm ++ emitted_insts sm sn /\
+   emitted_insts sa se = emitted_insts sa sn ++ emitted_insts sn se /\
+   emitted_insts sa sc = emitted_insts sa se ++ emitted_insts se sc` by
+    (rpt conj_tac >> irule emitted_insts_append >>
+     rpt conj_tac >> PURE_ONCE_REWRITE_TAC[GSYM emitHelperPropsTheory.inst_extends_def] >>
+     first_assum ACCEPT_TAC) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS)
+    (emitted_insts sa sc)` by simp[mk_inst_def,is_terminator_def] >>
+  qpat_x_assum `v = v0 with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `y = y0 with vs_inst_idx := _` kall_tac >>
   suspend "finish"
 QED
 
-Resume create_blueprint_materialize[finish]:
+Resume create_blueprint_materialize_run[finish]:
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (v,Gv,tv) [] (OK y,Gv,ty)` by
     simp[Abbr `ty`,IgnAsm `prefix = _`,IgnAsm `u = _`,IgnAsm `v = _`] >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,H,z)` by
@@ -6802,10 +6933,15 @@ Resume create_blueprint_materialize[finish]:
   `~t.vs_halted /\ t.vs_fmp = v.vs_fmp` by
     (qpat_assum `t = _ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _|>`
        (PURE_ONCE_REWRITE_TAC o single) >> simp[]) >>
+  `sc.cs_current_bb = sa.cs_current_bb` by
+    (qpat_assum `t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx;
+                        vs_memory := s.vs_memory; vs_fmp := s.vs_fmp|> = s`
+       (mp_tac o Q.AP_TERM `\st. st.vs_current_bb`) >>
+     simp[IgnAsm `t = _`]) >>
   suspend "results"
 QED
 
-Resume create_blueprint_materialize[results]:
+Resume create_blueprint_materialize_run[results]:
   `!x. not_fresh_at sn x ==> not_fresh_at se x` by
     metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `!x. not_fresh_at sm x ==> not_fresh_at se x /\ not_fresh_at sc x /\ x <> p` by
@@ -6844,7 +6980,12 @@ Resume create_blueprint_materialize[results]:
      qpat_assum `z.t_mem = _` (PURE_ONCE_REWRITE_TAC o single) >>
      qpat_assum `!i. i < B /\ i IN ty.t_mem ==> i IN tn.t_mem` (qspec_then `j` mp_tac) >>
      POP_ASSUM_LIST kall_tac >> simp[pred_setTheory.IN_DIFF,CONJ_ASSOC]) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  reverse (rpt conj_tac)
+  >- (qexists `t0` >> conj_tac >> first_assum ACCEPT_TAC)
+  >- (qexistsl [`sn`,`se`] >> conj_tac
+      >- (sym_tac >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  TRY (first_assum ACCEPT_TAC) >>
   simp[IgnAsm `t = _`,IgnAsm `u = _`,IgnAsm `v = _`,IgnAsm `prefix = _`,Abbr `B`,Abbr `N`,Abbr `ty`] >>
   TRY (rpt strip_tac >> decide_tac) >>
   qpat_assum `s.vs_inst_idx = _` (fn pc =>
@@ -6853,7 +6994,59 @@ Resume create_blueprint_materialize[results]:
        (mp_tac o REWRITE_RULE [pc])) >> simp[NoAsms]
 QED
 
-Finalise create_blueprint_materialize
+Finalise create_blueprint_materialize_run
+
+Theorem create_blueprint_materialize[local]:
+  compile_create_blueprint_append target amount sop off code args_ptr cnt rof sa = (result,sb) /\
+  fn_has_code sa sb func /\ body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
+  gas_origin_ptr_path (D0,lo,explicit0,ctx,func,PG) (s0,G0,tn0) marks (OK s,G,tn) /\
+  (!fn i v. contextRawReachable$frag_reachable ctx func s0 fn i v ==> dalloca_fmp_headroom i v) /\
+  ctx_has_dalloca ctx /\ allocas_below_fmp s /\ allocas_from lo s /\
+  s.vs_alloca_next <= w2n s.vs_fmp /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand target s = SOME aw /\ op_taint tn target = {} /\
+  eval_operand off s = SOME ow /\ op_taint tn off = {} /\
+  take_pad_0 (LENGTH prefix) (DROP (w2n ow) (lookup_account (w2w aw) s.vs_accounts).code) = prefix /\
+  eval_operand code s = SOME (n2w (LENGTH prefix)) /\
+  eval_operand cnt s = SOME (n2w (LENGTH args)) /\
+  op_taint tn code = {} /\ op_taint tn cnt = {} /\
+  op_prov G code = NONE /\ op_prov G cnt = NONE /\
+  (!x. MEM (Var x) [target;off;code;args_ptr;cnt] ==> not_fresh_at sa x) /\
+  (cnt <> Lit 0w ==>
+    ?q a. args_ptr = Var q /\ lookup_var q s = SOME a /\ ptr_covers G tn q s (LENGTH args) /\
+      (args = [] \/ w2n a + LENGTH args <= s.vs_alloca_next) /\
+      (!i. w2n a <= i /\ i < w2n a + LENGTH args ==> i NOTIN tn.t_mem) /\
+      read_memory (w2n a) (LENGTH args) s = args) /\
+  LENGTH prefix + LENGTH args < dimword (:256) /\
+  venomLayout$ceil32 (LENGTH prefix + LENGTH args) <= 2 ** 255 + 2 ** 64 ==>
+  ?sc p size t H z.
+    compile_create_dispatch (Var p) size amount sop rof sc = (result,sb) /\
+    fn_has_code sc sb func /\ cs_extends sa sc /\ sa.cs_next_var <= sc.cs_next_var /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,H,z)) /\
+    ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\
+    (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx;
+              vs_memory := s.vs_memory; vs_fmp := s.vs_fmp|>) = s /\
+    lookup_var p t = SOME s.vs_fmp /\ ptr_covers H z p t (LENGTH prefix + LENGTH args) /\
+    eval_operand size t = SOME (n2w (LENGTH prefix + LENGTH args)) /\ op_taint z size = {} /\
+    (!x. Var x = size \/ x = p ==> not_fresh_at sc x) /\
+    w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
+    w2n t.vs_fmp = w2n s.vs_fmp + venomLayout$ceil32 (LENGTH prefix + LENGTH args) /\
+    w2n s.vs_fmp + LENGTH prefix + LENGTH args <= LENGTH t.vs_memory /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    read_memory (w2n s.vs_fmp) (LENGTH prefix + LENGTH args) t = prefix ++ args /\
+    (!j k. j+k <= w2n s.vs_fmp ==> read_memory j k t = read_memory j k s) /\
+    (!i. w2n s.vs_fmp <= i /\ i < w2n s.vs_fmp + LENGTH prefix + LENGTH args ==> i NOTIN z.t_mem) /\
+    (!i. i < w2n s.vs_fmp /\ i IN z.t_mem ==> i IN tn.t_mem) /\
+    z.t_stor = tn.t_stor /\ z.t_trans = tn.t_trans /\ z.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint z (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (strip_assume_tac o MATCH_MP create_blueprint_materialize_run) >>
+  rename1 `compile_create_dispatch (Var p) size_op amount sop rof sc = (result,sb)` >>
+  rename1 `ptr_covers H z p t (LENGTH prefix + LENGTH args)` >>
+  qexistsl [`sc`,`p`,`size_op`,`t`,`H`,`z`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
 
 (* Match the offset guard before entering the allocation path. The signed
    literal guard is deliberately not used to rule out EXTCODECOPY padding. *)
