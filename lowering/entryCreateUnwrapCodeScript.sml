@@ -82,6 +82,20 @@ Proof
   fs[create_operand_at_def, create_operand_full_scope_def] >> metis_tac[LENGTH_APPEND]
 QED
 
+(* Use the physical list result retained by the saved-value replay. *)
+Theorem create_unwrap_code_scope_of_list_run:
+  unwrap_value ce (LocatedValue ty p) a = (op,b) /\
+  p.ptr_location = LocCode /\ ~is_word_type ty /\ fn_has_code a b f /\
+  ~s.vs_halted /\ create_operand_at a s /\ create_operand_at b z /\
+  (?raw. run_inst_seq (emitted_insts a b) s = OK raw /\
+         z = raw with vs_inst_idx := LENGTH b.cs_current_insts) ==>
+  create_operand_full_scope a b E C f s [] (OK z)
+Proof
+  strip_tac >> drule_all unwrap_code_copy_layout >> strip_tac >>
+  `create_cut_code {} a b` by metis_tac[create_unwrap_cut_code, SND] >>
+  irule unwrap_code_list_scope >> asm_rewrite_tac[] >> metis_tac[]
+QED
+
 Theorem unwrap_code_region_fetch[local]:
   same_blocks a b /\ create_cut_code {} a b /\ fn_has_code a b f /\
   create_operand_at a s /\ create_expr_prefix a b E C f s marks u /\
