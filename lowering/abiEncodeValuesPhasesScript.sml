@@ -13,7 +13,7 @@ Ancestors
   valueEncodingProps valueEncodingDefs venomExecSemantics venomState venomInst venomMemDefs
   words byte finite_map pred_set arithmetic list pair
 
-Theorem abi_encode_values_head_address:
+Theorem abi_encode_values_head_address_endpoint:
   emit_op ADD [Var dst;Lit (n2w off)] st = (head,en) /\
   eval_operand (Var dst) s = SOME (n2w b) /\ ptr_covers G tn dst s cap /\
   off + n <= cap /\ b + cap <= s.vs_alloca_next /\ fn_has_code st en func /\
@@ -29,6 +29,7 @@ Theorem abi_encode_values_head_address:
       FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     tn'.t_imm = tn.t_imm /\ t.vs_memory = s.vs_memory /\
+    t = (update_var p (n2w b + n2w off) s with vs_inst_idx := SUC s.vs_inst_idx) /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
 Proof
   strip_tac >>
@@ -67,6 +68,27 @@ Proof
      PURE_REWRITE_TAC [abi_encode_exec_frame_inst_idx] >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`p`,`t`,`G'`,`tn'`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]
+QED
+
+Theorem abi_encode_values_head_address:
+  emit_op ADD [Var dst;Lit (n2w off)] st = (head,en) /\
+  eval_operand (Var dst) s = SOME (n2w b) /\ ptr_covers G tn dst s cap /\
+  off + n <= cap /\ b + cap <= s.vs_alloca_next /\ fn_has_code st en func /\
+  alloca_inv s /\ alloca_room ctx func s /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?p t G' tn'.
+    head = Var p /\ not_fresh_at en p /\ ptr_covers G' tn' p t n /\
+    eval_operand head t = SOME (n2w (b+off)) /\
+    window_phase ctx func st en {} [] s t /\ abi_encode_exec_frame func s t /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\ t.vs_memory = s.vs_memory /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
+Proof
+  strip_tac >> drule_all abi_encode_values_head_address_endpoint >> metis_tac[]
 QED
 
 (* Delayed materialization keeps cursor and destination allocations that
