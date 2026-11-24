@@ -1378,7 +1378,8 @@ val linked_positional_live_calls_tac =
              ALOOKUP mods sid = SOME ts /\ _ ==> _`
            (qspecl_then [`src`,`tops`,`External`,`mut`,`nr`,`raw`,
              `tx.function_name`,`args`,`[]`,`ret`,`fbody`] mp_tac) >>
-         simp[Abbr `body_code`]) >>
+         simp[NoAsms, Abbr `body_code`] >>
+         disch_then irule >> conj_tac >> first_assum ACCEPT_TAC) >>
      conj_tac
      >- (qpat_assum `int_calls_stmts body_code = int_calls_stmts fbody` SUBST1_TAC >>
          `int_calls_stmts fbody = []` by
@@ -1625,7 +1626,8 @@ val linked_positional_locals_fresh_tac =
            simp[NoAsms, REWRITE_RULE [markerTheory.Abbrev_def] abbrev,
                 function_entry_env_var_types_fdom, EVERY_MEM, MAP_APPEND, MEM_APPEND,
                 collect_locals_supported_bindings_mem]) >>
-         disch_then (qspec_then `id` mp_tac) >> simp[]) >>
+         disch_then (qspec_then `id` mp_tac) >>
+         qpat_assum `MEM id (MAP FST args)` (fn param => simp[NoAsms, param])) >>
      `collect_locals body_code = []` by
        (map_every (fn pat => qpat_assum pat mp_tac)
           [`external_getter_tuple src top = SOME (mut,nr,args,[],ret,fbody)`,
@@ -1655,9 +1657,12 @@ val linked_positional_local_types_tac =
        (qpat_assum `!id. MEM id (MAP FST args) ==> _` (drule_then mp_tac) >>
         simp[NoAsms, ALOOKUP_NONE, MAP_REVERSE]) >>
      `ALOOKUP (REVERSE args) id = SOME ty` by
-       (irule ALOOKUP_ALL_DISTINCT_MEM >> simp[MAP_REVERSE, ALL_DISTINCT_REVERSE]) >>
+       (irule ALOOKUP_ALL_DISTINCT_MEM >> simp[NoAsms, MAP_REVERSE, ALL_DISTINCT_REVERSE] >>
+        conj_tac >> first_assum ACCEPT_TAC) >>
      qpat_assum `registered_env.ce_var_type = _` SUBST1_TAC >>
-     asm_simp_tac (srw_ss()) [REVERSE_APPEND, ALOOKUP_APPEND]);
+     qpat_assum `ALOOKUP (REVERSE (collect_locals body_code)) id = NONE` (fn locals =>
+       simp[NoAsms, REVERSE_APPEND, ALOOKUP_APPEND, locals]) >>
+     first_assum ACCEPT_TAC);
 
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_selected_body_invariant]:
   linked_positional_locals_fresh_tac >>
@@ -7610,7 +7615,271 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_shad
 QED
 
 Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_value_accepted]:
-  cheat
+  linked_positional_package_env_tac >>
+  linked_positional_module_inv_tac >>
+  linked_positional_contract_inv_tac >>
+  linked_positional_source_frame_tac >>
+  linked_positional_module_alloc_tac >>
+  linked_positional_int_calls_tac >>
+  `MEM shadow_fn shadow_unit.cu_context.ctx_functions` by
+    (qpat_assum `venomInst$lookup_function "__entry" shadow_unit.cu_context.ctx_functions = SOME shadow_fn`
+       (ACCEPT_TAC o MATCH_MP venomInstTheory.lookup_function_MEM)) >>
+  linked_positional_selected_decl_tac (suspend "linked_grouped_legacy_source")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_source]:
+  linked_positional_checked_body_tac >>
+  linked_positional_call_safe_tac >>
+  linked_positional_declared_typing_tac >>
+  linked_positional_live_calls_tac >>
+  linked_positional_runtime_ready_tac >>
+  linked_positional_formals_tac >>
+  linked_positional_scope_tac >>
+  linked_positional_source_types_tac >>
+  linked_positional_static_maps_tac >>
+  linked_positional_const_cells_tac >>
+  linked_positional_slot_witness_tac >>
+  linked_positional_slot_metadata_tac >>
+  linked_positional_slot_sizes_tac >>
+  linked_positional_locals_fresh_tac >>
+  linked_positional_local_types_tac >>
+  linked_positional_expr_inv_tac >>
+  linked_positional_constants_tac >>
+  linked_positional_typed_widths_tac >>
+  linked_positional_decl_resolution_tac >>
+  linked_positional_alloc_env_tac >>
+  linked_positional_alloc_limits_tac >>
+  linked_positional_return_buffer_tac >>
+  asm "selected_decl" (DISJ_CASES_THEN strip_assume_tac)
+  >- suspend "linked_grouped_legacy_declared" >>
+  suspend "linked_grouped_legacy_getter"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared]:
+  linked_declared_support_env_tac >>
+  linked_declared_body_calls_tac >>
+  linked_declared_body_env_tac >>
+  linked_declared_body_typed_tac >>
+  linked_declared_body_const_guards_tac >>
+  linked_declared_supported_tac >>
+  linked_declared_exec_bindings_tac >>
+  linked_declared_owner_live_tac >>
+  linked_declared_immutable_guards_tac >>
+  linked_declared_lock_metadata_tac >>
+  linked_declared_return_metadata_tac >>
+  linked_registered_frame_tac >>
+  linked_registered_stmts_env_tac >>
+  linked_registered_lock_cases_tac
+    (suspend "linked_grouped_legacy_declared_success")
+    (suspend "linked_grouped_legacy_declared_abort")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter]:
+  linked_positional_getter_original_type_tac >>
+  linked_positional_getter_return_shape_tac >>
+  linked_positional_getter_properties_tac (suspend "linked_grouped_legacy_getter_registered") >>
+  linked_positional_getter_cases_tac (suspend "linked_grouped_legacy_getter_unsubstituted") >>
+  linked_positional_getter_replacement_owner_tac >>
+  linked_positional_getter_replacement_decl_tac >>
+  linked_positional_getter_replacement_type_tac >>
+  linked_positional_getter_replacement_body_tac >>
+  suspend "linked_grouped_legacy_getter_substituted"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_substituted]:
+  linked_getter_guard_replacement_base_tac >>
+  linked_getter_allocation_guards_tac >>
+  linked_positional_getter_type_tac >>
+  linked_positional_getter_lock_tac >>
+  linked_positional_getter_return_tac >>
+  linked_positional_getter_env_tac >>
+  linked_getter_path_refs_tac >>
+  linked_getter_import_decl_tac >>
+  linked_positional_getter_original_import_tac >>
+  linked_getter_import_fold_tac >>
+  linked_getter_import_subst_tac >>
+  linked_getter_import_acc_tac >>
+  linked_positional_getter_import_module_tac >>
+  linked_positional_getter_import_all_tac >>
+  linked_getter_import_all_modules_tac >>
+  linked_positional_getter_replacement_refs_tac >>
+  linked_positional_getter_support_tac >>
+  linked_positional_getter_properties_finish_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_unsubstituted]:
+  linked_positional_getter_no_replacement_tac >>
+  linked_getter_guard_owned_tac >>
+  linked_getter_guard_const_keys_tac >>
+  linked_positional_getter_unsubstituted_root_tac >>
+  linked_getter_allocation_guards_tac >>
+  linked_positional_getter_type_tac >>
+  linked_positional_getter_lock_tac >>
+  linked_positional_getter_return_tac >>
+  linked_positional_getter_env_tac >>
+  linked_getter_path_refs_tac >>
+  linked_getter_import_decl_tac >>
+  linked_positional_getter_original_import_tac >>
+  linked_positional_getter_unsubstituted_refs_tac >>
+  linked_positional_getter_support_tac >>
+  linked_positional_getter_properties_finish_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_registered]:
+  linked_positional_getter_registered_tac >>
+  linked_registered_frame_tac >>
+  linked_registered_stmts_env_tac >>
+  linked_registered_lock_cases_tac
+    (suspend "linked_grouped_legacy_getter_success")
+    (suspend "linked_grouped_legacy_getter_abort")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_abort]:
+  linked_registered_lock_abort_tac >>
+  linked_registered_lock_abort_source_tac >>
+  linked_registered_lock_abort_domain_tac >>
+  linked_registered_lock_abort_finish_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_abort]:
+  linked_registered_lock_abort_tac >>
+  linked_registered_lock_abort_source_tac >>
+  linked_registered_lock_abort_domain_tac >>
+  linked_registered_lock_abort_finish_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_success]:
+  linked_registered_lock_success_tac >>
+  linked_registered_locked_horizon_tac >>
+  linked_declared_locked_source_tac >>
+  `qualified_stmts_decls_ok mods body_code` by
+    (qpat_assum `MEM (FunctionDecl External _ _ _ _ _ _ _ _) tops ==> _`
+       (drule_then ACCEPT_TAC)) >>
+  linked_registered_replay_tac >>
+  linked_registered_return_layout_tac >>
+  linked_registered_return_frame_tac >>
+  linked_registered_structs_tac >>
+  linked_registered_abi_targets_tac >>
+  linked_registered_fragment_tac >>
+  linked_registered_shadow_tac >>
+  linked_registered_admissible_tac >>
+  linked_registered_reachability_tac >>
+  `immutable_section_layout_mods mods registered_env` by
+    drule_then ACCEPT_TAC contract_inv_immutable_section_layout >>
+  linked_registered_immutable_frame_tac >>
+  linked_registered_storage_prefix_tac >>
+  linked_registered_run_tac >>
+  linked_registered_trace_inputs_tac >>
+  linked_registered_compose_tac
+    {horizon_tac = suspend "linked_grouped_legacy_declared_horizon",
+     tails_tac = suspend "linked_grouped_legacy_declared_tails",
+     exempt_tac = suspend "linked_grouped_legacy_declared_exempt",
+     fallthrough_tac = suspend "linked_grouped_legacy_declared_fallthrough",
+     exit_tac = suspend "linked_grouped_legacy_declared_exit",
+     readings_tac = suspend "linked_grouped_legacy_declared_readings",
+     finish_tac = suspend "linked_grouped_legacy_declared_finish"}
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_success]:
+  linked_registered_lock_success_tac >>
+  linked_registered_locked_horizon_tac >>
+  linked_registered_replay_tac >>
+  linked_registered_return_layout_tac >>
+  linked_registered_return_frame_tac >>
+  linked_registered_structs_tac >>
+  linked_registered_abi_targets_tac >>
+  linked_registered_fragment_tac >>
+  linked_registered_shadow_tac >>
+  linked_registered_admissible_tac >>
+  linked_registered_reachability_tac >>
+  `immutable_section_layout_mods mods registered_env` by
+    drule_then ACCEPT_TAC contract_inv_immutable_section_layout >>
+  linked_registered_immutable_frame_tac >>
+  linked_registered_storage_prefix_tac >>
+  linked_registered_run_tac >>
+  linked_registered_trace_inputs_tac >>
+  linked_registered_compose_tac
+    {horizon_tac = suspend "linked_grouped_legacy_getter_horizon",
+     tails_tac = suspend "linked_grouped_legacy_getter_tails",
+     exempt_tac = suspend "linked_grouped_legacy_getter_exempt",
+     fallthrough_tac = suspend "linked_grouped_legacy_getter_fallthrough",
+     exit_tac = suspend "linked_grouped_legacy_getter_exit",
+     readings_tac = suspend "linked_grouped_legacy_getter_readings",
+     finish_tac = suspend "linked_grouped_legacy_getter_finish"}
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_horizon]:
+  linked_registered_trace_horizon_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_tails]:
+  linked_registered_trace_tails_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_exempt]:
+  linked_registered_trace_exempt_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_fallthrough]:
+  linked_registered_fallthrough_tac
+    (suspend "linked_grouped_legacy_declared_fallthrough_ghost")
+    (suspend "linked_grouped_legacy_declared_fallthrough_result")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_fallthrough_ghost]:
+  linked_registered_fallthrough_ghost_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_fallthrough_result]:
+  linked_registered_fallthrough_result_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_exit]:
+  linked_registered_trace_exit_tac (suspend "linked_grouped_legacy_declared_abort_or_halt")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_abort_or_halt]:
+  linked_registered_abort_or_halt_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_readings]:
+  linked_registered_trace_readings_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_declared_finish]:
+  linked_registered_finish_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_horizon]:
+  linked_registered_trace_horizon_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_tails]:
+  linked_registered_trace_tails_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_exempt]:
+  linked_registered_trace_exempt_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_fallthrough]:
+  linked_positional_getter_no_fallthrough_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_exit]:
+  linked_registered_trace_exit_tac (suspend "linked_grouped_legacy_getter_abort_or_halt")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_abort_or_halt]:
+  linked_registered_abort_or_halt_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_readings]:
+  linked_registered_trace_readings_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_getter_finish]:
+  linked_registered_finish_tac
 QED
 
 Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_entry]:
