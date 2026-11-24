@@ -6,8 +6,7 @@ Ancestors
   fragGasSeqPtr fragGasOriginPtr fragExec memSafeRun unitTransformDefs
   emitHelperProps exprPtrUnwrapCodeEdges stmtAppendStorageRunPtr bodyPtrDefs
   context contextCodegenRel codegenRel ptrDiscipline venomExecSemantics venomInstProofs
-  venomState venomInst finite_map words list arithmetic
-  storageCopyBodyPtr[qualified,ignore_grammar]
+  venomState venomInst finite_map words list arithmetic scalarAddressRuns
 
 Theorem runtime_load_joint_path[local]:
   emit_op DLOAD [arg] sa = (Var out,sb) /\ fn_has_code sa sb func /\
@@ -128,43 +127,6 @@ Proof
   simp[new_site_bytes_def, FLOOKUP_DEF, pred_setTheory.EXTENSION, SF CONJ_ss]
 QED
 
-Theorem compile_imm_load_word_runtime_joint_frame_run:
-  compile_imm_load_word F imm arg sa = (op,sb) /\
-  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  eval_operand arg s = SOME a /\ op_taint tn arg = {} /\
-  w2n a <= LENGTH s.vs_data_section /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?out Gf tnf sf.
-    op = Var out /\
-    (?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
-         sf = (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    (!D lo explicit. allocas_from lo s ==>
-      gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
-    sf.vs_current_bb = sb.cs_current_bb /\
-    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
-    lookup_var out sf = SOME (word_of_bytes T (0w:bytes32)
-      (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))) /\
-    op_taint tnf op = {} /\ op_prov Gf op = NONE /\
-    sf.vs_immutables = s.vs_immutables /\
-    sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
-    sf.vs_alloca_next = s.vs_alloca_next /\
-    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\ sf.vs_accounts = s.vs_accounts /\
-    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
-    sf.vs_requests = s.vs_requests /\ sf.vs_data_section = s.vs_data_section /\
-    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
-    (!q. not_fresh_at sa q ==>
-      lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
-      op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
-Proof
-  disch_then (mp_tac o MATCH_MP compile_imm_load_word_runtime_joint_run) >>
-  disch_then (qx_choosel_then [`out`,`Gf`,`tnf`,`sf`]
-    (map_every assume_tac o CONJUNCTS)) >>
-  qexistsl_tac [`out`,`Gf`,`tnf`,`sf`] >> simp[]
-QED
 Theorem compile_imm_load_word_runtime_joint_frame:
   compile_imm_load_word F imm arg sa = (op,sb) /\
   fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
@@ -202,7 +164,7 @@ Proof
 QED
 
 (* ADD keeps the left operand's provenance when the right is scalar. *)
-Theorem scalar_binop_joint_frame_run_endpoint[local]:
+Theorem scalar_binop_joint_frame_endpoint:
   (opc = ADD /\ w = a + b \/ opc = MUL /\ w = a * b) /\
   emit_op opc [left;right] sa = (Var out,sb) /\ fn_has_code sa sb func /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
@@ -211,8 +173,6 @@ Theorem scalar_binop_joint_frame_run_endpoint[local]:
   op_taint tn left = {} /\ op_taint tn right = {} /\ op_prov G right = NONE ==>
   ?Gf tnf sf.
     sf = (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    (?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
-         sf = (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     (!D lo explicit. allocas_from lo s ==>
       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
     sf.vs_current_bb = sb.cs_current_bb /\
@@ -244,11 +204,6 @@ Proof
   qexistsl_tac [`step_prov PG G i u`, `step_taint i s u tn`,
     `u with vs_inst_idx := SUC s.vs_inst_idx`] >>
   conj_tac >- simp[Abbr `u`] >>
-  conj_tac
-  >- (`step_inst_base i s = OK u` by
-        (simp[Abbr `i`, Abbr `u`] >> gvs[] >> metis_tac[step_ADD, step_MUL]) >>
-      qexists_tac `u` >> drule emitted_insts_emit_op >> strip_tac >>
-      gvs[Abbr `i`, run_inst_seq_def, ADD1]) >>
   conj_tac
   >- (rpt strip_tac >>
       `?o' t K tau. Var out = Var o' /\
@@ -282,81 +237,6 @@ Proof
        update_var_def, lookup_var_def, FLOOKUP_UPDATE, ADD1,
        scalar_step_old_prov, scalar_step_old_taint, SF CONJ_ss] >>
   metis_tac[]
-QED
-Theorem scalar_binop_joint_frame_endpoint:
-  (opc = ADD /\ w = a + b \/ opc = MUL /\ w = a * b) /\
-  emit_op opc [left;right] sa = (Var out,sb) /\ fn_has_code sa sb func /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
-  op_taint tn left = {} /\ op_taint tn right = {} /\ op_prov G right = NONE ==>
-  ?Gf tnf sf.
-    sf = (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    (!D lo explicit. allocas_from lo s ==>
-      gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
-    sf.vs_current_bb = sb.cs_current_bb /\
-    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
-    lookup_var out sf = SOME w /\
-    op_taint tnf (Var out) = {} /\
-    op_prov Gf (Var out) = (if opc = ADD then op_prov G left else NONE) /\
-    sf.vs_immutables = s.vs_immutables /\
-    sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
-    sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
-    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\
-    sf.vs_accounts = s.vs_accounts /\
-    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
-    sf.vs_requests = s.vs_requests /\
-    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
-    (!q. not_fresh_at sa q ==>
-      lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
-      op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
-Proof
-  disch_then (mp_tac o MATCH_MP scalar_binop_joint_frame_run_endpoint) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`]
-    (map_every assume_tac o CONJUNCTS)) >>
-  qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[]
-QED
-
-Theorem scalar_binop_joint_frame_run:
-  (opc = ADD /\ w = a + b \/ opc = MUL /\ w = a * b) /\
-  emit_op opc [left;right] sa = (Var out,sb) /\ fn_has_code sa sb func /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
-  op_taint tn left = {} /\ op_taint tn right = {} /\ op_prov G right = NONE ==>
-  ?Gf tnf sf.
-    (?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
-         sf = (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    (!D lo explicit. allocas_from lo s ==>
-      gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
-    sf.vs_current_bb = sb.cs_current_bb /\
-    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
-    lookup_var out sf = SOME w /\
-    op_taint tnf (Var out) = {} /\
-    op_prov Gf (Var out) = (if opc = ADD then op_prov G left else NONE) /\
-    sf.vs_immutables = s.vs_immutables /\
-    sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
-    sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
-    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\
-    sf.vs_accounts = s.vs_accounts /\
-    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
-    sf.vs_requests = s.vs_requests /\
-    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
-    (!q. not_fresh_at sa q ==>
-      lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
-      op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
-Proof
-  disch_then (mp_tac o MATCH_MP scalar_binop_joint_frame_run_endpoint) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`]
-    (map_every assume_tac o CONJUNCTS)) >>
-  qpat_x_assum `sf = update_var _ _ _ with vs_inst_idx := _` kall_tac >>
-  qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[]
 QED
 
 Theorem scalar_binop_joint_frame:
@@ -394,32 +274,9 @@ Proof
   qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[]
 QED
 
-Theorem scalar_emit_landing_layout[local]:
-  emit_op opc ops sa = (out,sb) /\ (opc = ADD \/ opc = MUL) ==>
-  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule emitted_insts_emit_op >> strip_tac >> gvs[mk_inst_def, is_terminator_def]
-QED
-
-Theorem scalar_address_landing_append[local]:
-  sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
-  sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
-  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb) /\
-  run_inst_seq (emitted_insts sa sm) s = OK u /\
-  m = (u with vs_inst_idx := LENGTH sm.cs_current_insts) /\
-  run_inst_seq (emitted_insts sm sb) m = OK v /\
-  t = (v with vs_inst_idx := LENGTH sb.cs_current_insts) ==>
-  ?r. run_inst_seq (emitted_insts sa sb) s = OK r /\
-      t = (r with vs_inst_idx := LENGTH sb.cs_current_insts)
-Proof
-  strip_tac >> drule_all emitted_insts_append >> disch_then SUBST1_TAC >>
-  drule_all storageCopyBodyPtrTheory.run_inst_seq_cursor_append >> simp[]
-QED
-
 (* The final ADD retains the captured base's provenance. *)
-Theorem scalar_mul_add_joint_frame_run:
+
+Theorem scalar_mul_add_joint_frame_observed:
   emit_op MUL [idx;Lit (n2w elem_size)] sa = (Var offset,sm) /\
   emit_op ADD [base_op;Var offset] sm = (Var out,sb) /\ fn_has_code sa sb func /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
@@ -439,7 +296,8 @@ Theorem scalar_mul_add_joint_frame_run:
     sf.vs_immutables = s.vs_immutables /\
     sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
     sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
-    sf.vs_fmp = s.vs_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\
+    sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     sf.vs_requests = s.vs_requests /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
@@ -458,115 +316,44 @@ Proof
    op_taint tn (Lit (n2w elem_size)) = {} /\
    op_prov G (Lit (n2w elem_size)) = NONE` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
-  drule_all (scalar_binop_joint_frame_run |>
-    Q.INST [`opc` |-> `MUL`, `w` |-> `a * b : bytes32`] |> SRULE []) >>
-  disch_then (qspec_then `PG` mp_tac) >> simp[word_mul_n2w] >>
+  drule_all (scalar_binop_joint_frame_endpoint |>
+    Q.INST [`opc` |-> `MUL`, `w` |-> `a * b : bytes32`] |>
+    CONV_RULE (LAND_CONV (SIMP_CONV (srw_ss()) []))) >>
+  disch_then (qspec_then `PG` mp_tac) >> pure_rewrite_tac[word_mul_n2w] >>
   disch_then (qx_choosel_then [`G1`,`tn1`,`s1`] strip_assume_tac) >>
   `eval_operand base_op s1 = SOME a /\ op_taint tn1 base_op = {} /\
    op_prov G1 base_op = op_prov G base_op` by
     (Cases_on `base_op` >> gvs[eval_operand_def, op_taint_def, op_prov_def]) >>
   `eval_operand (Var offset) s1 = SOME (n2w (i * elem_size))` by
     simp[eval_operand_def] >>
+  `op_prov G1 (Var offset) = NONE` by simp[] >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
     (`allocas_below_fmp s1 <=> allocas_below_fmp s` by simp[allocas_below_fmp_def] >>
      asm_rewrite_tac[]) >>
-  drule_all (scalar_binop_joint_frame_run |>
-    Q.INST [`opc` |-> `ADD`, `w` |-> `a + b : bytes32`] |> SRULE []) >>
+  drule_all (scalar_binop_joint_frame_endpoint |>
+    Q.INST [`opc` |-> `ADD`, `w` |-> `a + b : bytes32`] |>
+    CONV_RULE (LAND_CONV (SIMP_CONV (srw_ss()) []))) >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`G2`,`tn2`,`s2`] strip_assume_tac) >>
-  `?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
-       s2 = (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-    (imp_res_tac (SIMP_RULE (srw_ss()) []
-       (Q.INST [`opc` |-> `ADD`] scalar_emit_landing_layout)) >>
-     imp_res_tac (SIMP_RULE (srw_ss()) []
-       (Q.INST [`opc` |-> `MUL`] scalar_emit_landing_layout)) >>
-     drule_all scalar_address_landing_append >> simp[]) >>
+  `(?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
+        s2 = (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (`(?u. run_inst_seq (emitted_insts sa sm) s = OK u /\
+          s1 = (u with vs_inst_idx := LENGTH sm.cs_current_insts))` by
+        (`s1 = (update_var offset (n2w i * n2w elem_size) s with
+                 vs_inst_idx := SUC s.vs_inst_idx)` by simp[word_mul_n2w] >>
+         drule_all (emitted_scalar_binop_run |>
+           Q.INST [`opc` |-> `MUL`, `w` |-> `a * b : bytes32`] |> SRULE []) >>
+         simp[]) >>
+      `(?u. run_inst_seq (emitted_insts sm sb) s1 = OK u /\
+          s2 = (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+        (drule_all (emitted_scalar_binop_run |>
+           Q.INST [`opc` |-> `ADD`, `w` |-> `a + b : bytes32`] |> SRULE []) >>
+         simp[]) >>
+      drule (emitted_scalar_binop_code |> Q.INST [`opc` |-> `MUL`] |> SRULE []) >>
+      drule (emitted_scalar_binop_code |> Q.INST [`opc` |-> `ADD`] |> SRULE []) >>
+      rpt strip_tac >> irule emitted_address_run_append >>
+      qexistsl [`sm`,`s1`] >> metis_tac[]) >>
   qexistsl [`G2`,`tn2`,`s2`] >> simp[] >> conj_tac
-  >- (rpt strip_tac >>
-      `allocas_from lo s1` by (gvs[allocas_from_def] >> (gvs[allocas_from_def])) >>
-      metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `not_fresh_at sm q` by metis_tac[ci_mono_def, loweringShapeDefsTheory.not_fresh_at_mono] >>
-      metis_tac[]) >>
-  rpt strip_tac >>
-  `local_ptrs_reserved cenv sm` by metis_tac[ci_mono_def, local_ptrs_reserved_next_var] >>
-  metis_tac[]
-QED
-
-Theorem code_dynamic_address_joint_frame_run:
-  emit_op ADD [base_op;Lit 32w] sa = (Var data,sm) /\
-  emit_op MUL [idx;Lit (n2w elem_size)] sm = (Var offset,sn) /\
-  emit_op ADD [Var data;Var offset] sn = (Var out,sb) /\ fn_has_code sa sb func /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!q. idx = Var q ==> not_fresh_at sa q) /\ (!l. idx <> Label l) /\
-  eval_operand base_op s = SOME a /\ op_taint tn base_op = {} /\ op_prov G base_op = NONE /\
-  eval_operand idx s = SOME (n2w i) /\ op_taint tn idx = {} /\ op_prov G idx = NONE ==>
-  ?Gf tnf sf.
-    (?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
-         sf = (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    (!D lo explicit. allocas_from lo s ==>
-      gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
-    sf.vs_current_bb = sb.cs_current_bb /\
-    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
-    lookup_var out sf = SOME (a + n2w (32 + i * elem_size)) /\
-    op_taint tnf (Var out) = {} /\ op_prov Gf (Var out) = NONE /\
-    sf.vs_immutables = s.vs_immutables /\
-    sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
-    sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
-    sf.vs_fmp = s.vs_fmp /\ sf.vs_accounts = s.vs_accounts /\
-    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
-    sf.vs_requests = s.vs_requests /\
-    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
-    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
-    (!q. not_fresh_at sa q ==>
-      lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
-      op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
-Proof
-  strip_tac >>
-  `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb` by
-    metis_tac[ci_mono_emit_op, pairTheory.SND] >>
-  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
-    metis_tac[ci_mono_def, cs_extends_trans, fn_has_code_split] >>
-  `eval_operand (Lit 32w) s = SOME 32w /\
-   op_taint tn (Lit 32w) = {} /\ op_prov G (Lit 32w) = NONE` by
-    simp[eval_operand_def, op_taint_def, op_prov_def] >>
-  drule_all (scalar_binop_joint_frame_run |>
-    Q.INST [`opc` |-> `ADD`, `w` |-> `a + b : bytes32`] |> SRULE []) >>
-  disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`G1`, `tn1`, `s1`] strip_assume_tac) >>
-  `eval_operand idx s1 = SOME (n2w i) /\ op_taint tn1 idx = {} /\
-   op_prov G1 idx = NONE` by
-    (Cases_on `idx` >> gvs[eval_operand_def, op_taint_def, op_prov_def]) >>
-  `not_fresh_at sm data` by
-    (qpat_assum `emit_op ADD [base_op;Lit 32w] sa = _`
-       (mp_tac o MATCH_MP emit_op_facts) >> simp[]) >>
-  `(!q. Var data = Var q ==> not_fresh_at sm q) /\
-   (!l. Var data <> Label l) /\ eval_operand (Var data) s1 = SOME (a + 32w)` by
-    simp[eval_operand_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
-    (`allocas_below_fmp s1 <=> allocas_below_fmp s` by simp[allocas_below_fmp_def] >>
-     asm_rewrite_tac[]) >>
-  drule_all scalar_mul_add_joint_frame_run >>
-  disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`G2`, `tn2`, `s2`] strip_assume_tac) >>
-  `?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
-       s2 = (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-    (imp_res_tac (SIMP_RULE (srw_ss()) []
-       (Q.INST [`opc` |-> `ADD`] scalar_emit_landing_layout)) >>
-     imp_res_tac (SIMP_RULE (srw_ss()) []
-       (Q.INST [`opc` |-> `MUL`] scalar_emit_landing_layout)) >>
-     `emitted_insts sm sb = emitted_insts sm sn ++ emitted_insts sn sb` by
-       (irule emitted_insts_append >> simp[]) >>
-     `sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
-      EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
-       (simp[] >> metis_tac[APPEND_ASSOC]) >>
-     drule_all scalar_address_landing_append >> simp[]) >>
-  qexistsl [`G2`, `tn2`, `s2`] >>
-  simp[GSYM word_add_n2w, WORD_ADD_ASSOC] >> conj_tac
   >- (rpt strip_tac >>
       `allocas_from lo s1` by (gvs[allocas_from_def] >> gvs[allocas_from_def]) >>
       metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
@@ -597,7 +384,8 @@ Theorem scalar_mul_add_joint_frame:
     sf.vs_immutables = s.vs_immutables /\
     sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
     sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
-    sf.vs_fmp = s.vs_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\
+    sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     sf.vs_requests = s.vs_requests /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
@@ -608,9 +396,103 @@ Theorem scalar_mul_add_joint_frame:
     (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
       local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
-  strip_tac >> drule_all scalar_mul_add_joint_frame_run >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
-  qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[]
+  disch_then (mp_tac o MATCH_MP scalar_mul_add_joint_frame_observed) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+  qexistsl [`Gf`,`tnf`,`sf`] >> simp[]
+QED
+
+Theorem code_dynamic_address_joint_frame_observed:
+  emit_op ADD [base_op;Lit 32w] sa = (Var data,sm) /\
+  emit_op MUL [idx;Lit (n2w elem_size)] sm = (Var offset,sn) /\
+  emit_op ADD [Var data;Var offset] sn = (Var out,sb) /\ fn_has_code sa sb func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!q. idx = Var q ==> not_fresh_at sa q) /\ (!l. idx <> Label l) /\
+  eval_operand base_op s = SOME a /\ op_taint tn base_op = {} /\ op_prov G base_op = NONE /\
+  eval_operand idx s = SOME (n2w i) /\ op_taint tn idx = {} /\ op_prov G idx = NONE ==>
+  ?Gf tnf sf.
+    (?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
+         sf = (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    (!D lo explicit. allocas_from lo s ==>
+      gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var out sf = SOME (a + n2w (32 + i * elem_size)) /\
+    op_taint tnf (Var out) = {} /\ op_prov Gf (Var out) = NONE /\
+    sf.vs_immutables = s.vs_immutables /\
+    sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
+    sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\
+    sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    sf.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!q. not_fresh_at sa q ==>
+      lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
+      op_taint tnf (Var q) = op_taint tn (Var q)) /\
+    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
+Proof
+  strip_tac >>
+  `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb` by
+    metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[ci_mono_def, cs_extends_trans, fn_has_code_split] >>
+  `eval_operand (Lit 32w) s = SOME 32w /\
+   op_taint tn (Lit 32w) = {} /\ op_prov G (Lit 32w) = NONE` by
+    simp[eval_operand_def, op_taint_def, op_prov_def] >>
+  drule_all (scalar_binop_joint_frame_endpoint |>
+    Q.INST [`opc` |-> `ADD`, `w` |-> `a + b : bytes32`] |>
+    CONV_RULE (LAND_CONV (SIMP_CONV (srw_ss()) []))) >>
+  disch_then (qspec_then `PG` mp_tac) >>
+  disch_then (qx_choosel_then [`G1`, `tn1`, `s1`] strip_assume_tac) >>
+  `eval_operand idx s1 = SOME (n2w i) /\ op_taint tn1 idx = {} /\
+   op_prov G1 idx = NONE` by
+    (Cases_on `idx` >> gvs[eval_operand_def, op_taint_def, op_prov_def]) >>
+  `not_fresh_at sm data` by
+    (qpat_assum `emit_op ADD [base_op;Lit 32w] sa = _`
+       (mp_tac o MATCH_MP emit_op_facts) >> simp[]) >>
+  `(!q. Var data = Var q ==> not_fresh_at sm q) /\
+   (!l. Var data <> Label l) /\ eval_operand (Var data) s1 = SOME (a + 32w)` by
+    simp[eval_operand_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s1` by
+    (`allocas_below_fmp s1 <=> allocas_below_fmp s` by simp[allocas_below_fmp_def] >>
+     asm_rewrite_tac[]) >>
+  drule_all scalar_mul_add_joint_frame_observed >>
+  disch_then (qspec_then `PG` mp_tac) >>
+  disch_then (qx_choosel_then [`G2`, `tn2`, `s2`] strip_assume_tac) >>
+  qexistsl [`G2`, `tn2`, `s2`] >>
+  simp[GSYM word_add_n2w, WORD_ADD_ASSOC] >> conj_tac
+  >- (`(?u. run_inst_seq (emitted_insts sa sm) s = OK u /\
+          s1 = (u with vs_inst_idx := LENGTH sm.cs_current_insts))` by
+        (drule_all (emitted_scalar_binop_run |>
+           Q.INST [`opc` |-> `ADD`, `w` |-> `a + b : bytes32`] |> SRULE []) >>
+         simp[]) >>
+      `sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
+       EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
+        (drule (emitted_scalar_binop_code |> Q.INST [`opc` |-> `MUL`] |> SRULE []) >>
+         qpat_assum `emit_op ADD [Var data;Var offset] sn = _`
+           (mp_tac o MATCH_MP (emitted_scalar_binop_code |> Q.INST [`opc` |-> `ADD`] |> SRULE [])) >>
+         rpt strip_tac >>
+         `emitted_insts sm sb = emitted_insts sm sn ++ emitted_insts sn sb` by
+           metis_tac[emitted_insts_append] >>
+         simp[APPEND_ASSOC, is_terminator_def]) >>
+      qpat_assum `emit_op ADD [base_op;Lit 32w] sa = _`
+        (mp_tac o MATCH_MP (emitted_scalar_binop_code |> Q.INST [`opc` |-> `ADD`] |> SRULE [])) >>
+      rpt strip_tac >> irule emitted_address_run_append >>
+      qexistsl [`sm`,`s1`] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `allocas_from lo s1` by (gvs[allocas_from_def] >> gvs[allocas_from_def]) >>
+      metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sm q` by metis_tac[ci_mono_def, loweringShapeDefsTheory.not_fresh_at_mono] >>
+      metis_tac[]) >>
+  rpt strip_tac >>
+  `local_ptrs_reserved cenv sm` by metis_tac[ci_mono_def, local_ptrs_reserved_next_var] >>
+  metis_tac[]
 QED
 
 Theorem code_dynamic_address_joint_frame:
@@ -632,7 +514,8 @@ Theorem code_dynamic_address_joint_frame:
     sf.vs_immutables = s.vs_immutables /\
     sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
     sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
-    sf.vs_fmp = s.vs_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\
+    sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     sf.vs_requests = s.vs_requests /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
@@ -643,7 +526,7 @@ Theorem code_dynamic_address_joint_frame:
     (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
       local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
-  strip_tac >> drule_all code_dynamic_address_joint_frame_run >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
-  qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[]
+  disch_then (mp_tac o MATCH_MP code_dynamic_address_joint_frame_observed) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+  qexistsl [`Gf`,`tnf`,`sf`] >> simp[]
 QED
