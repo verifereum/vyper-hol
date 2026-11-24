@@ -1,7 +1,7 @@
 Theory bodyFullAbiEncodeArgs
 Ancestors
   bodyFullShadowBodyInv bodyFullExtCallPosList
-  bodyFullPreds bodySimFull
+  bodyFullPreds bodySimFull bodyFullEmptyLeafData exprSimFullBundleProps
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
   exprSimAbiEncodeRuntimeInputs abiEncodeArgsCase abiEncodeEndpointMetadata abiEncodeSnapshotOperandProps
   stmtSimProps[qualified,ignore_grammar]
@@ -46,84 +46,226 @@ Proof
   metis_tac[assign_place_operand_not_label]
 QED
 
-Theorem abi_encode_vv_full_from_packaging:
-  body_inv tops ctx ce cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  (LENGTH args = 1 /\ ~ensure ==> ~is_word_type (lowered_value_type ce (HD args))) /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
-  (!s x t. type_check
-      (type_builtin_args_length_ok (AbiEncode ensure mid) (LENGTH args))
-      "TypeBuiltin args" s = (INL x,t) ==> body_exprs_full_ok cx args) ==>
-  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    ce cx cty (TypeBuiltin ann (AbiEncode ensure mid) target args) es
+(* A phase law is the ordinary producer's exact premise and result packet,
+   with a side fact in that packet.  Make the statement templates from the
+   producer terms so the frame and resource interfaces stay single-sourced. *)
+local
+  val side_ty = ``:compile_state -> compile_state -> venom_state -> venom_state -> bool``
+  fun named vars name =
+    case List.filter (fn v => #1 (dest_var v) = name) vars of
+        [v] => v
+      | _ => raise Fail ("ABI packaging phase variable: " ^ name)
+  fun annotated side args tm =
+    let
+      val (prem,post) = dest_imp tm
+      val (vs,body) = strip_exists post
+      val side = list_mk_comb (side, map (named (vs @ free_vars tm)) args)
+    in
+      mk_imp (prem, list_mk_exists (vs, mk_conj (side,body)))
+    end
+  fun close fixed tm =
+    list_mk_forall (List.filter (fn v =>
+      not (List.exists (fn s => #1 (dest_var v) = s) fixed)) (free_vars tm), tm)
+  val common = ["ctx","func","explicit","PG","lo"]
+  val saved = ["ce","cx","st0","DF"]
+  fun law side (rule,fixed,args) =
+    close (side :: common @ fixed)
+      (annotated (mk_var (side,side_ty)) args (#2 (strip_forall (concl rule))))
+  fun equation name params rhs =
+    let
+      val args = map (named (free_vars rhs)) params
+      val ty = List.foldr (fn (x,t) => type_of x --> t) bool args
+    in
+      mk_eq (list_mk_comb (mk_var (name,ty),args), rhs)
+    end
+  fun phase rel name (rule,fixed,args) =
+    equation name (rel :: common @ fixed) (law rel (rule,fixed,args))
+  fun is_row_callback tm =
+    let val (vs,body) = strip_forall tm in
+      not (null vs) andalso is_imp body andalso
+      can (find_term (fn c => is_const c andalso
+        #Name (dest_thy_const c) = "compile_abi_encode_value_rows")) body
+    end
+  fun annotate_row_callback side tm =
+    if is_row_callback tm then
+      let
+        val (outer,p) = strip_forall tm
+        val (site,rows) = dest_imp p
+        val (inner,row) = strip_forall rows
+      in
+        list_mk_forall (outer,mk_imp (site,
+          list_mk_forall (inner,annotated side ["a","c","v","z"] row)))
+      end
+    else tm
+  fun fold_phase fixed =
+    let
+      val row = mk_var ("RowSide",side_ty)
+      val seg = mk_var ("Seg",side_ty)
+      val (pre,post) = dest_imp (#2 (strip_forall (concl abi_encode_saved_values_execute_pure)))
+      val premises = strip_conj pre
+      val [_] = List.filter is_row_callback premises
+      val rule = mk_imp (list_mk_conj (map (annotate_row_callback row) premises), post)
+      val params = "Seg" :: "RowSide" :: common @ fixed
+    in
+      equation "abi_packaging_fold_law" params
+        (close params (annotated seg ["st","en","u","z"] rule))
+    end
+in
+  val packaging_alloc_tm = phase "Seg" "abi_packaging_alloc_law"
+    (INST_TYPE [Type.beta |-> ``:256``] abi_encode_alloc_origin_exact,
+     ["sa","sb","n","buf","H"], ["sa","sb","s","t"])
+  val packaging_setup_tm = phase "Seg" "abi_packaging_setup_law"
+    (abi_encode_setup_tail_origin,
+     ["a","method_st","ready","mid","data","k","N","maxlen"], ["a","ready","s","t"])
+  val packaging_finish_tm = phase "Seg" "abi_packaging_finish_law"
+    (abi_encode_finish_origin, ["a","b","lenop","k"], ["a","b","s","t"])
+  val packaging_restore_tm = phase "Seg" "abi_packaging_restore_law"
+    (extcall_direct_restore_saved_pure,
+     saved @ ["d","front","su","sb","e","saved","src"], ["su","sb","u","z"])
+  val packaging_window_tm = phase "Seg" "abi_packaging_window_law"
+    (compile_abi_encode_to_buf_window_joint,
+     ["st","en","dst","src","ei","out"], ["st","en","s","t"])
+  val packaging_row_tm = phase "RowSide" "abi_packaging_row_law"
+    (abi_encode_saved_row_open_pure,
+     saved @ ["d","se","loc","shared","capacity","dst_offset","dst"], ["su","en","u","z"])
+  val packaging_fold_tm = fold_phase
+    (saved @ ["disp","se","st","en","shared","capacity","dst_offset","alen","rows","payload_var"])
+end
+
+Definition abi_packaging_alloc_law_def:
+  ^packaging_alloc_tm
+End
+
+Definition abi_packaging_setup_law_def:
+  ^packaging_setup_tm
+End
+
+Definition abi_packaging_finish_law_def:
+  ^packaging_finish_tm
+End
+
+Definition abi_packaging_restore_law_def:
+  ^packaging_restore_tm
+End
+
+Definition abi_packaging_window_law_def:
+  ^packaging_window_tm
+End
+
+Definition abi_packaging_row_law_def:
+  ^packaging_row_tm
+End
+
+Definition abi_packaging_fold_law_def:
+  ^packaging_fold_tm
+End
+
+(* This quantification is over the cuts of this compilation, not over
+   arbitrary intervals in the function.  Both payload suppliers are guarded. *)
+Definition abi_packaging_phases_def:
+  abi_packaging_phases Seg RowSide ctx func explicit PG lo ce cx st0 DF d hz
+      single tys args svs meth maxlen k N out st sb <=>
+  !buf allocated method_st data_ptr ready len body_end.
+    compile_alloc_buffer N st = (buf,allocated) /\
+    buf.buf_operand = out /\
+    abi_builtin_encode_method_id meth out allocated = ((),method_st) /\
+    emit_op ADD [out; Lit (n2w (32+k))] method_st = (data_ptr,ready) /\
+    compile_abi_encode_payload ce single svs tys data_ptr ready = (len,body_end) /\
+    abi_builtin_encode_finish out len k body_end = ((),sb) ==>
+    abi_packaging_alloc_law Seg ctx func explicit PG lo st allocated N buf hz /\
+    abi_packaging_setup_law Seg ctx func explicit PG lo allocated method_st ready meth data_ptr k N maxlen /\
+    abi_packaging_finish_law Seg ctx func explicit PG lo body_end sb len k /\
+    (single ==> !src unwrap_end.
+      unwrap_value ce (HD svs) ready = (src,unwrap_end) ==>
+      abi_packaging_restore_law Seg ctx func explicit PG lo ce cx st0 DF d st
+        ready unwrap_end (HD args) (HD svs) src /\
+      abi_packaging_window_law Seg ctx func explicit PG lo unwrap_end body_end data_ptr src
+        (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce (HD args))) len /\
+      (!pre z q. Seg ready unwrap_end pre z /\ Seg unwrap_end body_end z q ==>
+        Seg ready body_end pre q)) /\
+    (~single ==> !dp. data_ptr = Var dp ==>
+      abi_packaging_row_law RowSide ctx func explicit PG lo ce cx st0 DF d st
+        ready.cs_next_id st.cs_next_id N (32+k) dp /\
+      abi_packaging_fold_law Seg RowSide ctx func explicit PG lo ce cx st0 DF d st
+        ready body_end st.cs_next_id N (32+k) len (ZIP (svs,tys)) dp) /\
+    (!t u pre q actual. Seg st allocated t u /\ Seg allocated ready u pre /\
+      Seg ready body_end pre q /\ Seg body_end sb q actual ==> Seg st sb t actual)
+End
+
+Theorem abi_packaging_phases_trivial[local]:
+  abi_packaging_phases (\a b s t. T) (\a b s t. T) ctx func explicit PG lo ce cx st0 DF d hz
+    single tys args svs meth maxlen k N out st sb
 Proof
-  strip_tac >>
-  `1 <= LENGTH args` by
-    (Cases_on `args` >> simp[] >>
-     `well_typed_expr env (TypeBuiltin ann (AbiEncode ensure mid) target [])`
-       by fs[expr_body_pre_def] >>
-     pop_assum mp_tac >> simp[Once well_typed_expr_def,
-       well_typed_type_builtin_args_def]) >>
-  `body_exprs_full_ok cx args` by
-    (qpat_x_assum `!s x t. _` (qspecl_then [`es`, `()`, `es`] mp_tac) >>
-     simp[type_check_def, type_builtin_args_length_ok_def, assert_def, return_def]) >>
-  rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  drule_all compile_abi_encode_body_layout >>
-  disch_then (qx_choosel_then [`svs`,`st`,`out`] strip_assume_tac) >>
-  qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) shadow_sa = _` mp_tac >>
-  simp[gasShadowTheory.gas_shadow_expr_def] >> strip_tac >>
-  drule_at (Pat `compile_expr _ _ _ shadow_sa = _`) compile_abi_encode_body_layout >>
-  disch_then drule_all >> strip_tac >>
-  rename1 `compile_abi_encode_args compile_expr _ (MAP gas_shadow_expr args) shadow_sa =
-    (shadow_svs,shadow_st)` >>
-  `gas_shadow_compiles (compile_abi_encode_args compile_expr ce args)
-     (compile_abi_encode_args compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr args))` by
-    (irule (SIMP_RULE bool_ss []
-       (Q.INST [`sh` |-> `T`] gas_shadow_compiles_abi_encode_args_env)) >>
-     simp[cj 1 gas_shadow_compile_expr_env]) >>
-  `shadow_svs = svs /\ gas_shadow_state st shadow_st` by
-    (qpat_x_assum `gas_shadow_compiles _ _` mp_tac >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
-  qpat_x_assum `shadow_svs = svs` SUBST_ALL_TAC >>
-  `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
-  `!e q. MEM e args /\ expr_sim_inv ce cx env q ==> expr_body_pre ce cx env e q`
-    by metis_tac[abi_args_body_pre_arg] >>
-  qpat_assum `compile_abi_encode_args _ _ args sa = _`
-    (assume_tac o REWRITE_RULE [compile_abi_encode_args_def]) >>
-  qpat_assum `compile_abi_encode_args _ _ (MAP _ args) shadow_sa = _`
-    (assume_tac o REWRITE_RULE [compile_abi_encode_args_def, gasShadowCompileBaseTheory.lowered_value_type_gas_shadow_env]) >>
-  mp_tac (Q.INST [`cenv` |-> `ce`, `kw_es` |-> `[]:expr list`, `xs` |-> `args`,
-    `sb` |-> `st`, `shadow_sb` |-> `shadow_st`]
-    (Q.SPEC `T` extcall_request_positional_packing_outcome_named)) >>
-  simp[NoAsms] >> impl_tac >- asm_rewrite_tac[] >> strip_tac >>
-  dep_rewrite.DEP_REWRITE_TAC [eval_expr_abi_encode_action] >> simp[] >>
-  irule gas_outcome_full_bind_all >>
-  conj_tac >- simp[storage_trace_frame_def] >>
-  rpt conj_tac
-  >~ [`storage_trace_frame (eval_exprs _ _)`]
-  >- simp[cj 6 evaluate_storage_trace_frame]
-  >~ [`gas_marked_exec _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_values >>
-      goal_assum (drule_at Any) >> fs[])
-  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_values >>
-      first_assum ACCEPT_TAC) >>
-  qexists_tac `extcall_positional_post T DF lo d ctx func ce cx env
-    [] args svs sa st es s0 G0 tn0` >>
-  reverse conj_tac
-  >- (irule gas_outcome_full_post_source >> first_assum (irule_at Any) >>
-      rpt strip_tac >> Cases_on `res` >> gvs[] >>
-      conj_tac
-      >- (qpat_x_assum `expr_exit _ _` mp_tac >>
-          once_rewrite_tac[stmtSimPropsTheory.expr_exit_INR_type] >> simp[]) >>
-      fs[halt_exit_def]) >>
-  suspend "payload"
+  pure_rewrite_tac [abi_packaging_phases_def, abi_packaging_alloc_law_def,
+    abi_packaging_setup_law_def, abi_packaging_finish_law_def,
+    abi_packaging_restore_law_def, abi_packaging_window_law_def,
+    abi_packaging_row_law_def, abi_packaging_fold_law_def] >>
+  BETA_TAC >> pure_rewrite_tac [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP] >>
+  rpt (FIRST (map MATCH_ACCEPT_TAC
+    [abi_encode_alloc_origin_exact, abi_encode_setup_tail_origin,
+     abi_encode_finish_origin, extcall_direct_restore_saved_pure,
+     compile_abi_encode_to_buf_window_joint, abi_encode_saved_row_open_pure,
+     abi_encode_saved_values_execute_pure]) ORELSE
+    gen_tac ORELSE conj_tac ORELSE disch_tac)
 QED
 
-Resume abi_encode_vv_full_from_packaging[payload]:
-  rpt gen_tac >> strip_tac >>
+(* The list has already returned at this site.  Keep its selected source
+   equation and ghosts as inputs to the physical packaging continuation. *)
+Theorem abi_encode_normal_packaging_side:
+  body_inv tops ctx ce cx /\
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
+  (LENGTH args = 1 /\ ~ensure ==> ~is_word_type (lowered_value_type ce (HD args))) /\
+  1 <= LENGTH args /\
+  compile_abi_encode_args compile_expr ce args sa = (svs,st) /\
+  lower_abi_encode (OPTION_MAP bytes_method_id_word mid)
+    (abi_size_bound ce.ce_struct_fields
+      (if LENGTH args = 1 /\ ~ensure then lowered_value_type ce (HD args)
+       else TupleT (MAP (lowered_value_type ce) args)))
+    (compile_abi_encode_payload ce (LENGTH args = 1 /\ ~ensure) svs
+      (MAP (lowered_value_type ce) args)) st = (out,sb) /\
+  LocatedValue ann (mk_ptr out LocMemory) = vv /\
+  LENGTH svs = LENGTH args /\ ci_mono sa st /\ ci_mono st sb /\
+  fn_has_code sa st func /\ fn_has_code st sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==> stmt_state_rel H ctx func ce cx es s0) /\
+  storage_trace_domain cx st0 mid'.storage_trace /\
+  (!tail. eval_exprs cx args (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+       (res,mid' with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H mid'.storage_trace ==>
+       extcall_positional_post T DF lo d ctx func ce cx env [] args svs sa st es s0 G0 tn0
+         H res mid' G1 tn1 t) /\
+  (!H. valid_horizon cx st0 H mid'.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (s0,G0,tn0) marks (OK t,G1,tn1)) /\
+  (let single = (LENGTH args = 1 /\ ~ensure);
+       tys = MAP (lowered_value_type ce) args;
+       meth = OPTION_MAP bytes_method_id_word mid;
+       k = (case meth of NONE => 0 | SOME _ => 4);
+       maxlen = abi_size_bound ce.ce_struct_fields
+         (if single then lowered_value_type ce (HD args) else TupleT tys);
+       N = 32 + 32 * word_size (maxlen+k)
+   in abi_packaging_phases Seg RowSide ctx func (gas_explicit_sites ctx shadow_ctx) PG lo
+        ce cx st0 DF d (storage_trace_horizon mid'.storage_trace)
+        single tys args svs meth maxlen k N out st sb) ==>
+  ?vs payload actual Gf tf.
+    Seg st sb t actual /\
+    res = INL vs /\
+    evaluate_type_builtin cx (AbiEncode ensure mid) target (MAP expr_type args) vs =
+      INL (BytesV payload) /\
+    ~t.vs_halted /\
+    (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       (t,G1,tn1) [] (OK actual,Gf,tf)) /\
+    (!H. valid_horizon cx st0 H mid'.storage_trace ==>
+       expr_vv_sim_full_post (DF,lo,d,ctx,func) ce cx
+         (TypeBuiltin ann (AbiEncode ensure mid) target args) (es,sa,sb,s0,vv,G0,tn0)
+         H (INL (Value (BytesV payload)) : eval_result + exception)
+         (mid' with gas_obs := []) Gf tf actual)
+Proof
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
   qabbrev_tac `H0 = storage_trace_horizon mid'.storage_trace` >>
   `valid_horizon cx st0 H0 mid'.storage_trace` by
     fs[Abbr `H0`, storage_trace_domain_def] >>
@@ -167,11 +309,22 @@ Resume abi_encode_vv_full_from_packaging[payload]:
   `local_ptrs_reserved ce st` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
   `allocas_from lo t /\ lo <= t.vs_alloca_next` by fs[ghost_inv_at_def] >>
-  `compile_alloc_buffer N st = (buf,allocated)` by
-    simp[Abbr `N`, Abbr `k`] >>
-  drule_all (INST_TYPE [Type.beta |-> ``:256``] abi_encode_alloc_origin_exact) >>
-  disch_then (qspecl_then [`tn1`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`G1`]
-    (qx_choosel_then [`root`,`w`,`u`,`Gu`,`tu`] strip_assume_tac)) >>
+  `compile_alloc_buffer N st = (buf,allocated) /\
+   buf.buf_operand = out /\
+   abi_builtin_encode_method_id meth out allocated = ((),method_st) /\
+   emit_op ADD [out; Lit (n2w (32+k))] method_st = (data_ptr,ready) /\
+   compile_abi_encode_payload ce single svs tys data_ptr ready = (len,body_end) /\
+   abi_builtin_encode_finish out len k body_end = ((),sb)` by
+    fs[Abbr `N`, Abbr `k`] >>
+  qhdtm_x_assum `abi_packaging_phases`
+    (mp_tac o PURE_REWRITE_RULE [abi_packaging_phases_def]) >>
+  disch_then (drule_all_then (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  qpat_assum `abi_packaging_alloc_law _ _ _ _ _ _ st allocated N buf H0`
+    (fn th => mp_tac (Q.INST [`s` |-> `t`, `G` |-> `G1`, `tn` |-> `tn1`,
+          `cenv` |-> `ce`, `es` |-> `mid'`]
+       (SPEC_ALL (PURE_REWRITE_RULE [abi_packaging_alloc_law_def] th)))) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (qx_choosel_then [`root`,`w`,`u`,`Gu`,`tu`] strip_assume_tac) >>
   qabbrev_tac `p = w2n (w:bytes32)` >>
   `w = n2w p` by simp[Abbr `p`] >>
   `lo <= p` by metis_tac[allocas_from_def] >>
@@ -209,9 +362,9 @@ Resume abi_encode_vv_full_from_packaging[payload]:
     compile_abi_encode_payload ce single svs tys data_ptr ready = (len,body_end) /\
     abi_builtin_encode_finish (Var root) len k body_end = ((),sb)` by fs[Abbr `k`] >>
   qabbrev_tac `write_len = case meth of NONE => 0 | SOME _ => 32` >>
-  mp_tac (Q.INST [`a` |-> `allocated`, `s` |-> `u`, `mid` |-> `meth`,
-    `G` |-> `Gu`, `tn` |-> `tu`, `write_len` |-> `write_len`,
-    `data` |-> `data_ptr`, `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] abi_encode_setup_tail_origin) >>
+  qpat_assum `abi_packaging_setup_law _ _ _ _ _ _ allocated method_st ready meth data_ptr k N maxlen`
+    (fn th => mp_tac (Q.INST [`s` |-> `u`,`G` |-> `Gu`,`tn` |-> `tu`]
+      (SPEC_ALL (PURE_REWRITE_RULE [abi_packaging_setup_law_def] th)))) >>
   impl_tac >- asm_simp_tac (srw_ss()) [Abbr `k`, Abbr `N`, Abbr `write_len`] >>
   disch_then (qx_choosel_then [`dp`,`pre`,`Gpre`,`tnpre`] strip_assume_tac) >>
   `32+write_len <= N` by
@@ -244,7 +397,7 @@ Resume abi_encode_vv_full_from_packaging[payload]:
   suspend "setup_frame"
 QED
 
-Resume abi_encode_vv_full_from_packaging[setup_frame]:
+Resume abi_encode_normal_packaging_side[setup_frame]:
   `cs_extends allocated ready /\ allocated.cs_next_var <= ready.cs_next_var` by
     metis_tac[cs_extends_trans] >>
   `emit_op ALLOCA [Lit (n2w N)] st = (Var root,allocated)` by
@@ -359,14 +512,14 @@ Resume abi_encode_vv_full_from_packaging[setup_frame]:
     (!x. len = Var x ==> not_fresh_at body_end x) /\
     mem_bytes_at (p+32+k) (LENGTH bytes) q.vs_memory = bytes /\
     (!j. p+32+k <= j /\ j < p+32+k + LENGTH bytes ==> j NOTIN tq.t_mem) /\
-    pure_frame ce func mid' st t q /\
+    pure_frame ce func mid' st t q /\ Seg ready body_end pre q /\
     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (pre,Gpre,tnpre) [] (OK q,Gq,tq))` by
     (Cases_on `single` >- suspend "standalone_payload" >> suspend "wrapped_payload") >>
   suspend "finish_payload"
 QED
 
-Resume abi_encode_vv_full_from_packaging[setup_horizons]:
+Resume abi_encode_normal_packaging_side[setup_horizons]:
   gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> extcall_positional_post T DF lo d ctx
     func ce cx env [] args svs sa st es s0 G0 tn0 H _ _ _ _ _`
@@ -388,7 +541,7 @@ Resume abi_encode_vv_full_from_packaging[setup_horizons]:
   asm_rewrite_tac[]
 QED
 
-Resume abi_encode_vv_full_from_packaging[setup_caller_frame]:
+Resume abi_encode_normal_packaging_side[setup_caller_frame]:
   `u.vs_memory = t.vs_memory` by
     (qpat_assum `u with <|vs_vars := _; vs_allocas := _; vs_alloca_next := _;
          vs_inst_idx := _|> = t` (SUBST1_TAC o SYM) >> simp[]) >>
@@ -446,7 +599,7 @@ Resume abi_encode_vv_full_from_packaging[setup_caller_frame]:
     irule >> simp[] >> metis_tac[ci_mono_def, not_fresh_at_mono]
 QED
 
-Resume abi_encode_vv_full_from_packaging[setup_pure_frame]:
+Resume abi_encode_normal_packaging_side[setup_pure_frame]:
   `u.vs_memory = t.vs_memory` by
     (qpat_assum `u with <| vs_vars := _; vs_allocas := _; vs_alloca_next := _; vs_inst_idx := _ |> = t`
        (SUBST1_TAC o SYM) >> simp[]) >>
@@ -466,7 +619,7 @@ Resume abi_encode_vv_full_from_packaging[setup_pure_frame]:
   rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> first_assum ACCEPT_TAC
 QED
 
-Resume abi_encode_vv_full_from_packaging[selector_source]:
+Resume abi_encode_normal_packaging_side[selector_source]:
   conj_tac
   >- (Cases_on `meth` >> simp[Abbr `prefix`,Abbr `k`,abi_builtin_encode_prefix_def,
         abi_builtin_encode_method_bytes_length]) >>
@@ -477,7 +630,7 @@ Resume abi_encode_vv_full_from_packaging[selector_source]:
   simp_tac bool_ss [Abbr `prefix`, Abbr `meth`]
 QED
 
-Resume abi_encode_vv_full_from_packaging[selector_memory]:
+Resume abi_encode_normal_packaging_side[selector_memory]:
   namedCases_on `meth` ["", "selector"]
   >- simp[NoAsms, Abbr `k`, Abbr `prefix`, abi_builtin_encode_prefix_def,
           read_memory_eq_mem_bytes_at, mem_bytes_at_def, ADD_CLAUSES] >>
@@ -492,7 +645,7 @@ Resume abi_encode_vv_full_from_packaging[selector_memory]:
   simp[NoAsms, Abbr `k`, Abbr `write_len`, IN_DIFF] >> decide_tac
 QED
 
-Resume abi_encode_vv_full_from_packaging[wrapped_payload]:
+Resume abi_encode_normal_packaging_side[wrapped_payload]:
   `compile_abi_encode_values_to_buf ce (Var dp) rows ready = (len,body_end)` by
     (simp[NoAsms, Abbr `rows`] >>
      qpat_assum `data_ptr = Var dp` (fn eq =>
@@ -578,13 +731,16 @@ Resume abi_encode_vv_full_from_packaging[wrapped_payload]:
        (simp[NoAsms, abi_encode_method_id_size_def] >> AP_TERM_TAC >>
         sym_tac >> first_assum ACCEPT_TAC) >>
      decide_tac) >>
-  mp_tac (Q.INST [`ee` |-> `mid'`, `se` |-> `st`, `shared` |-> `st.cs_next_id`,
-    `disp` |-> `d`, `pbase` |-> `p`, `capacity` |-> `N`, `payload_var` |-> `dp`,
-    `dst_offset` |-> `32+k`, `st` |-> `ready`, `en` |-> `body_end`,
-    `s` |-> `t`, `G` |-> `G1`, `tn` |-> `tn1`, `alen` |-> `len`,
-    `u` |-> `pre`, `Gu` |-> `Gpre`, `tu` |-> `tnpre`,
-    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
-    abi_encode_saved_values_execute_pure) >>
+  qpat_assum `~F ==> !dp. data_ptr = Var dp ==> _`
+    (mp_tac o SIMP_RULE bool_ss []) >>
+  disch_then (qspec_then `dp` (drule_then strip_assume_tac)) >>
+  qpat_assum `Abbrev (rows = _)` (fn ab =>
+    qhdtm_assum `abi_packaging_fold_law`
+      (mp_tac o PURE_REWRITE_RULE [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] ab),
+        abi_packaging_fold_law_def])) >>
+  disch_then (drule_at (Pos hd)) >>
+  disch_then (drule_at (Pat `LIST_REL abi_encoder_layout_valid ats avs`)) >>
+  disch_then (qspecl_then [`bytes`,`hl`,`inst`] mp_tac) >>
   impl_tac >- suspend "wrapped_rows" >>
   disch_then (qx_choosel_then [`q`,`Gq`,`tq`]
     (strip_assume_tac o PURE_REWRITE_RULE [ADD_ASSOC])) >>
@@ -596,7 +752,7 @@ Resume abi_encode_vv_full_from_packaging[wrapped_payload]:
   asm_simp_tac bool_ss [LESS_EQ_REFL]
 QED
 
-Resume abi_encode_vv_full_from_packaging[wrapped_rows]:
+Resume abi_encode_normal_packaging_side[wrapped_rows]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   TRY (simp_tac bool_ss [Abbr `hl`] >> NO_TAC) >>
   TRY (qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
@@ -700,23 +856,27 @@ Resume abi_encode_vv_full_from_packaging[wrapped_rows]:
   suspend "saved_row"
 QED
 
-Resume abi_encode_vv_full_from_packaging[wrapped_row_execute]:
+Resume abi_encode_normal_packaging_side[wrapped_row_execute]:
   `expr_body_pre ce cx env e es` by
     metis_tac[EL_MEM, Abbr `e`, abi_encode_body_arg_pre] >>
-  `!l. vv_operand sv <> Label l` by metis_tac[abi_encode_snapshot_not_label] >>
+  `!l. vv_operand sv <> Label l` by
+    (match_mp_tac (Q.INST [`si` |-> `si`, `sm` |-> `sm`,
+       `ss` |-> `ss`, `vv` |-> `row_vv`, `copy` |-> `copy`]
+       abi_encode_snapshot_not_label) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `~is_word_type (lowered_value_type ce e) ==> ~is_word_type (expr_type e)` by
     metis_tac[expr_body_pre_lowered_fits, arg_type_fits_word_type] >>
   `?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
     type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
     type_memory_size tv < 2**64 /\ value_has_type tv v` by suspend "physical_row" >>
   `st.cs_next_id < ready.cs_next_id` by first_assum ACCEPT_TAC >>
-  mp_tac (Q.INST [`ee` |-> `mid'`,`se` |-> `st`,`shared` |-> `st.cs_next_id`,
-    `pbase` |-> `p`,`capacity` |-> `N`,`dst` |-> `dp`,`dst_offset` |-> `32+k`,
-    `s` |-> `t`,`G` |-> `G1`,`tn` |-> `tn1`,`prefix` |-> `prefix`,
-    `saved` |-> `sv`,`ty` |-> `lowered_value_type ce e`,`su` |-> `a`,
-    `u` |-> `vstate`,`Gu` |-> `Gv`,`tu` |-> `tvstate`,`en` |-> `c`,
-    `loc` |-> `ready.cs_next_id`,`cursor_inst` |-> `ci`,`vv` |-> `row_vv`,
-    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] abi_encode_saved_row_open_pure) >>
+  qhdtm_assum `abi_packaging_row_law`
+    (fn th => mp_tac (Q.INST [`ee` |-> `mid'`,`pbase` |-> `p`,
+       `s` |-> `t`,`G` |-> `G1`,`tn` |-> `tn1`,`prefix` |-> `prefix`,
+       `saved` |-> `sv`,`ty` |-> `lowered_value_type ce e`,`su` |-> `a`,
+       `u` |-> `vstate`,`Gu` |-> `Gv`,`tu` |-> `tvstate`,`en` |-> `c`,
+       `cursor_inst` |-> `ci`,`vv` |-> `row_vv`]
+       (SPEC_ALL (PURE_REWRITE_RULE [abi_packaging_row_law_def] th)))) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
     TRY (qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
     TRY (rename1 `LENGTH ats = LENGTH avs` >> decide_tac) >>
@@ -725,7 +885,7 @@ Resume abi_encode_vv_full_from_packaging[wrapped_row_execute]:
   disch_then ACCEPT_TAC
 QED
 
-Resume abi_encode_vv_full_from_packaging[wrapped_layout]:
+Resume abi_encode_normal_packaging_side[wrapped_layout]:
   `LENGTH tys = LENGTH declared /\ LENGTH tys = LENGTH vs /\
    LENGTH tys = LENGTH svs /\
    sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
@@ -760,7 +920,7 @@ Resume abi_encode_vv_full_from_packaging[wrapped_layout]:
   asm_rewrite_tac[]
 QED
 
-Resume abi_encode_vv_full_from_packaging[saved_row]:
+Resume abi_encode_normal_packaging_side[saved_row]:
   `LENGTH args = LENGTH svs` by decide_tac >>
   qpat_assum `LIST_REL _ (ZIP (args,svs)) vs` mp_tac >>
   qpat_assum `LENGTH args = LENGTH svs` (fn eq =>
@@ -783,14 +943,16 @@ Resume abi_encode_vv_full_from_packaging[saved_row]:
   simp[NoAsms, SF CONJ_ss] >> TRY (first_assum ACCEPT_TAC)
 QED
 
-Resume abi_encode_vv_full_from_packaging[physical_row]:
+Resume abi_encode_normal_packaging_side[physical_row]:
   Cases_on `is_word_type (expr_type e)`
   >- (drule_all abi_encode_body_args_indexed_physical_types >>
       disch_then (qspec_then `i` (drule_then (qx_choose_then `tv` strip_assume_tac)) o CONJUNCT2) >>
       `evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\ value_has_type tv v` by
         (simp_tac bool_ss [Abbr `e`, Abbr `v`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
       `type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv` by
-        (irule expr_sim_inv_memory_size >> goal_assum (drule_at Any) >> metis_tac[]) >>
+        (match_mp_tac (Q.SPECL [`ce`, `lowered_value_type ce e`, `cx`, `env`, `es`, `tv`]
+           expr_sim_inv_memory_size) >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
       `is_word_type (lowered_value_type ce e)` by metis_tac[] >>
       qexists_tac `tv` >> asm_rewrite_tac[] >>
       `type_memory_bytes ce (lowered_value_type ce e) = 32` by
@@ -807,7 +969,7 @@ Resume abi_encode_vv_full_from_packaging[physical_row]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume abi_encode_vv_full_from_packaging[standalone_payload]:
+Resume abi_encode_normal_packaging_side[standalone_payload]:
   `LENGTH args = 1 /\ ~ensure` by
     (qpat_assum `Abbrev (T = (LENGTH args = 1 /\ ~ensure))` mp_tac >>
      simp_tac bool_ss [markerTheory.Abbrev_def]) >>
@@ -925,10 +1087,17 @@ Resume abi_encode_vv_full_from_packaging[standalone_payload]:
        `ss` |-> `ss`, `vv` |-> `evv`, `copy` |-> `copy`]
        abi_encode_snapshot_not_label) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  mp_tac (Q.INST [`ee` |-> `mid'`,`front` |-> `st`,`s` |-> `t`,`G` |-> `G1`,`tn` |-> `tn1`,
-    `su` |-> `ready`,`sb` |-> `unwrap_end`,`u` |-> `pre`,`Gu` |-> `Gpre`,`tu` |-> `tnpre`,
-    `saved` |-> `sv`,`vv` |-> `evv`,`explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
-    extcall_direct_restore_saved_pure) >>
+  qpat_assum `T ==> !src unwrap_end. unwrap_value ce (HD svs) ready = _ ==> _`
+    (qspecl_then [`src`,`unwrap_end`] mp_tac o REWRITE_RULE [IMP_CLAUSES]) >>
+  impl_tac >- asm_rewrite_tac[HD] >>
+  qpat_assum `args = [e]` (fn args_eq =>
+    qpat_assum `svs = [sv]` (fn svs_eq =>
+      disch_then (MAP_EVERY assume_tac o CONJUNCTS o
+        SIMP_RULE bool_ss [args_eq,svs_eq,HD]))) >>
+  qhdtm_assum `abi_packaging_restore_law`
+    (fn th => mp_tac (Q.INST [`ee` |-> `mid'`,`s` |-> `t`,`G` |-> `G1`,`tn` |-> `tn1`,
+       `u` |-> `pre`,`Gu` |-> `Gpre`,`tu` |-> `tnpre`,`vv` |-> `evv`]
+       (SPEC_ALL (PURE_REWRITE_RULE [abi_packaging_restore_law_def] th)))) >>
   impl_tac >- suspend "standalone_restore_premises" >>
   disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
   `!name b n. local_region ce mid'.scopes pre name b n ==> p+N <= b \/ b+n <= p` by
@@ -986,13 +1155,18 @@ Resume abi_encode_vv_full_from_packaging[standalone_payload]:
     !mem. mem_agree_outside tz.t_mem z.vs_memory mem ==>
       abi_encoder_window_input (type_to_abi_enc_info ce.ce_struct_fields ce ty)
         at rv (w2n src_addr) (val_footprint tv v) mem` by suspend "standalone_open_input" >>
-  mp_tac (Q.INST [`st` |-> `unwrap_end`,`en` |-> `body_end`,`out` |-> `len`,
-    `dst` |-> `Var dp`,`ei` |-> `type_to_abi_enc_info ce.ce_struct_fields ce ty`,
-    `at` |-> `at`,`av` |-> `rv`,`s` |-> `z`,`G` |-> `Gz`,`tn` |-> `tz`,
-    `sb` |-> `w2n (src_addr:bytes32)`,`d` |-> `p+32+k`,`cap` |-> `val_footprint tv v`,
-    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] compile_abi_encode_to_buf_window_joint) >>
+  `lowered_value_type ce e = ty` by simp[Abbr `ty`] >>
+  qpat_assum `lowered_value_type ce e = ty` (fn ty_eq =>
+    qpat_assum `data_ptr = Var dp` (fn data_eq =>
+      qhdtm_assum `abi_packaging_window_law` (fn th =>
+        mp_tac (Q.INST [`at` |-> `at`,`av` |-> `rv`,`s` |-> `z`,`G` |-> `Gz`,`tn` |-> `tz`,
+          `sb` |-> `w2n (src_addr:bytes32)`,`d` |-> `p+32+k`,`cap` |-> `val_footprint tv v`]
+          (SPEC_ALL (PURE_REWRITE_RULE [abi_packaging_window_law_def,ty_eq,data_eq] th)))))) >>
   (impl_tac >- suspend "standalone_window_premises") >>
   disch_then (qx_choosel_then [`q`,`Gq`,`tq`] strip_assume_tac) >>
+  `Seg ready body_end pre q` by
+    (qpat_assum `!p1 p2 p3. Seg ready unwrap_end p1 p2 /\ _ ==> _`
+       (drule_all_then ACCEPT_TAC)) >>
   drule window_phase_strong_result >> strip_tac >>
   drule window_strong_result_public >>
   disch_then (fn th => mp_tac (MATCH_MP abi_encoder_window_result_output th)) >>
@@ -1000,9 +1174,12 @@ Resume abi_encode_vv_full_from_packaging[standalone_payload]:
   suspend "standalone_result"
 QED
 
-Resume abi_encode_vv_full_from_packaging[standalone_separation]:
+Resume abi_encode_normal_packaging_side[standalone_separation]:
   rpt strip_tac >>
-  `stmt_state_rel H0 ctx func ce cx mid' pre` by metis_tac[] >>
+  `stmt_state_rel H0 ctx func ce cx mid' pre` by
+    qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==>
+      stmt_state_rel H ctx func ce cx mid' pre /\ _`
+      (qspec_then `H0` (drule_then (ACCEPT_TAC o cj 1))) >>
   `regions_disjoint p N b n` suffices_by
     simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   irule local_ptrs_rel_alloca_disjoint >>
@@ -1012,7 +1189,7 @@ Resume abi_encode_vv_full_from_packaging[standalone_separation]:
   drule stmt_state_rel_local_ptrs_alloca >> simp[]
 QED
 
-Resume abi_encode_vv_full_from_packaging[source_cut]:
+Resume abi_encode_normal_packaging_side[source_cut]:
   qpat_assum `~is_word_type ty ==> _ \/ _` (drule_then strip_assume_tac)
   >- (qexistsl_tac [`si`,`ss`] >> asm_rewrite_tac[] >>
       qpat_assum `ci_mono ready unwrap_end` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
@@ -1021,13 +1198,13 @@ Resume abi_encode_vv_full_from_packaging[source_cut]:
   qexistsl_tac [`ready`,`unwrap_end`] >> asm_simp_tac bool_ss [LESS_EQ_REFL]
 QED
 
-Resume abi_encode_vv_full_from_packaging[standalone_source_premises]:
+Resume abi_encode_normal_packaging_side[standalone_source_premises]:
   qpat_assum `inst.inst_id = st.cs_next_id` (fn id_eq =>
     asm_rewrite_tac [id_eq]) >>
   rpt conj_tac >> decide_tac
 QED
 
-Resume abi_encode_vv_full_from_packaging[standalone_scratch]:
+Resume abi_encode_normal_packaging_side[standalone_scratch]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac
   >- (irule local_ptrs_reserved_next_var >> qexists_tac `ready` >>
       asm_rewrite_tac[] >>
@@ -1037,7 +1214,7 @@ Resume abi_encode_vv_full_from_packaging[standalone_scratch]:
   first_assum ACCEPT_TAC
 QED
 
-Resume abi_encode_vv_full_from_packaging[standalone_open_input]:
+Resume abi_encode_normal_packaging_side[standalone_open_input]:
   simp_tac bool_ss [Abbr `bytes`] >>
   `!t value_type. evaluate_type (get_tenv cx) t = SOME value_type ==>
     type_memory_bytes ce t = type_memory_size value_type` by
@@ -1051,7 +1228,7 @@ Resume abi_encode_vv_full_from_packaging[standalone_open_input]:
   simp[] >> qexists_tac `get_tenv cx` >> simp[]
 QED
 
-Resume abi_encode_vv_full_from_packaging[standalone_window_premises]:
+Resume abi_encode_normal_packaging_side[standalone_window_premises]:
   `ctx_has_dalloca ctx ==> allocas_below_fmp z /\
     z.vs_alloca_next + pending_alloca_size func z <= w2n z.vs_initial_fmp` by
     (strip_tac >> conj_tac
@@ -1079,7 +1256,7 @@ Resume abi_encode_vv_full_from_packaging[standalone_window_premises]:
   qpat_assum `32+k+LENGTH bytes <= N` mp_tac >> decide_tac
 QED
 
-Resume abi_encode_vv_full_from_packaging[standalone_result]:
+Resume abi_encode_normal_packaging_side[standalone_result]:
   qpat_assum `enc at rv = bytes` SUBST_ALL_TAC >>
   mp_tac (Q.INST [`ee` |-> `mid'`,`se` |-> `st`,`s` |-> `t`,`G` |-> `G1`,`tn` |-> `tn1`,
        `shared` |-> `st.cs_next_id`,`pbase` |-> `p`,`capacity` |-> `N`,
@@ -1109,7 +1286,7 @@ Resume abi_encode_vv_full_from_packaging[standalone_result]:
   qexistsl_tac [`H0`,`ctx`,`cx`] >> first_assum ACCEPT_TAC
 QED
 
-Resume abi_encode_vv_full_from_packaging[standalone_phase_premises]:
+Resume abi_encode_normal_packaging_side[standalone_phase_premises]:
   `32+k+LENGTH bytes <= N` by first_assum ACCEPT_TAC >>
   `!aid. aid IN window_alloca_sites func (frag_ids unwrap_end body_end) ==>
     unwrap_end.cs_next_id <= aid` by simp[NoAsms, window_alloca_sites_def, frag_ids_def] >>
@@ -1143,7 +1320,7 @@ Resume abi_encode_vv_full_from_packaging[standalone_phase_premises]:
   pop_assum mp_tac >> tautLib.TAUT_TAC
 QED
 
-Resume abi_encode_vv_full_from_packaging[standalone_restore_premises]:
+Resume abi_encode_normal_packaging_side[standalone_restore_premises]:
   `st.cs_next_var <= ready.cs_next_var /\ st.cs_next_id <= ready.cs_next_id` by
     (qpat_assum `ci_mono st allocated` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
      qpat_assum `allocated.cs_next_var <= ready.cs_next_var` mp_tac >>
@@ -1164,7 +1341,7 @@ Resume abi_encode_vv_full_from_packaging[standalone_restore_premises]:
     (qspecl_then [`tag`,`pp`] mp_tac) >> asm_simp_tac (srw_ss()) []
 QED
 
-Resume abi_encode_vv_full_from_packaging[finish_payload]:
+Resume abi_encode_normal_packaging_side[finish_payload]:
   qpat_assum `abi_encode_saved_state ctx func ce cx st0 mid' DF lo d st t G1 tn1
     st.cs_next_id p N root dp (32+k) prefix body_end q Gq tq`
     (mp_then Any mp_tac abi_encode_saved_state_resources) >>
@@ -1195,10 +1372,13 @@ Resume abi_encode_vv_full_from_packaging[finish_payload]:
     (qpat_assum `stmt_state_rel H0 ctx func ce cx mid' q`
       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `p+32 <= q.vs_alloca_next` by decide_tac >>
-  drule_all (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
-                     `PG` |-> `PG`] abi_encode_finish_origin) >>
-  disch_then (qspecl_then [`shadow_ctx`,`PG`]
+  qhdtm_assum `abi_packaging_finish_law`
+    (mp_tac o PURE_REWRITE_RULE [abi_packaging_finish_law_def]) >>
+  disch_then (drule_all_then
     (qx_choosel_then [`actual`,`Gf`,`tf`] (MAP_EVERY assume_tac o CONJUNCTS))) >>
+  `Seg st sb t actual` by
+    (qpat_assum `!s1 s2 s3 s4 s5. Seg st allocated s1 s2 /\ _ ==> _`
+       (drule_all_then ACCEPT_TAC)) >>
   `ptr_covers Gf tf root actual N` by metis_tac[] >>
   `typed_copy_state_frame body_end p N q actual` by
     (irule typed_copy_state_frame_subinterval >> qexistsl_tac [`p`,`32`] >> simp[] >>
@@ -1272,22 +1452,20 @@ Resume abi_encode_vv_full_from_packaging[finish_payload]:
      irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gpre`,`pre`,`tnpre`] >>
      asm_rewrite_tac[] >>
      irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gq`,`q`,`tq`] >> asm_rewrite_tac[]) >>
-  disj1_tac >> qexists_tac `vs` >> conj_tac >- first_assum ACCEPT_TAC >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`Gf`,`mid'`,`INL (Value (BytesV (prefix ++ bytes)))`,`actual`,`tf`] >>
-  conj_tac >- simp[] >>
-  simp[NoAsms] >>
+  qexistsl_tac [`vs`,`prefix ++ bytes`,`actual`,`Gf`,`tf`] >>
+  simp[NoAsms,Abbr `declared`,expr_vv_sim_full_post_def,expr_sim_full_endpoint_def] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   suspend "finish_post"
 QED
 
-Resume abi_encode_vv_full_from_packaging[finish_local_separation]:
+Resume abi_encode_normal_packaging_side[finish_local_separation]:
   rpt strip_tac >>
   mp_tac (Q.SPECL [`func`,`ce`,`mid'.scopes`,`q`,`inst`,`root`,`p`,`N`,`name`,`b`,`sz`]
     local_ptrs_rel_alloca_disjoint) >>
   asm_rewrite_tac[]
 QED
 
-Resume abi_encode_vv_full_from_packaging[finish_bytes]:
+Resume abi_encode_normal_packaging_side[finish_bytes]:
   `p+32+k-LENGTH prefix = p+32` by decide_tac >>
   `mem_bytes_at (p+32) k q.vs_memory = prefix` by
     (qpat_assum `read_memory _ (LENGTH prefix) q = prefix`
@@ -1322,7 +1500,7 @@ Resume abi_encode_vv_full_from_packaging[finish_bytes]:
   REFL_TAC
 QED
 
-Resume abi_encode_vv_full_from_packaging[finish_ghost]:
+Resume abi_encode_normal_packaging_side[finish_ghost]:
   qx_gen_tac `H` >> disch_tac >>
   qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==>
     stmt_state_rel H ctx func ce cx mid' q /\ _` (qspec_then `H` (drule_then strip_assume_tac)) >>
@@ -1349,7 +1527,7 @@ Resume abi_encode_vv_full_from_packaging[finish_ghost]:
   simp[NoAsms]
 QED
 
-Resume abi_encode_vv_full_from_packaging[finish_horizons]:
+Resume abi_encode_normal_packaging_side[finish_horizons]:
   gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==>
     stmt_state_rel H ctx func ce cx mid' q /\ _` (qspec_then `H` (drule_then strip_assume_tac)) >>
@@ -1365,22 +1543,30 @@ Resume abi_encode_vv_full_from_packaging[finish_horizons]:
     (qspec_then `H` (drule_then (ACCEPT_TAC o cj 1)))
 QED
 
-Resume abi_encode_vv_full_from_packaging[finish_result_separation]:
+Resume abi_encode_normal_packaging_side[finish_result_separation]:
   rpt strip_tac >>
   `local_region ce mid'.scopes q name b sz` by
     (irule local_region_frame_fwd >> qexistsl_tac [`actual`,`st`,`mid'.scopes`] >>
-     simp[] >> fs[ci_mono_def] >> metis_tac[not_fresh_at_mono, LESS_EQ_TRANS]) >>
-  metis_tac[loweringStateRelDefsTheory.regions_disjoint_def]
+     asm_simp_tac bool_ss [] >> qx_genl_tac [`x`,`old_word`] >> strip_tac >>
+     `not_fresh_at body_end x` by
+       (qpat_assum `!x. not_fresh_at st x ==> not_fresh_at body_end x`
+          (irule o SPEC_ALL) >> first_assum ACCEPT_TAC) >>
+     qpat_assum `typed_copy_state_frame body_end p N q actual`
+       (qspec_then `x` (drule_then (once_rewrite_tac o single o SYM)) o
+        cj 2 o REWRITE_RULE [typed_copy_state_frame_def]) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `!name b sz. local_region ce mid'.scopes q name b sz ==> _`
+    (drule_then (ACCEPT_TAC o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def]))
 QED
 
-Resume abi_encode_vv_full_from_packaging[finish_caller_frame]:
+Resume abi_encode_normal_packaging_side[finish_caller_frame]:
   `valid_horizon cx st0 H0 es.storage_trace` by
     (qpat_assum `eval_exprs cx args _ = (INL vs,mid')`
        (mp_then Any mp_tac valid_horizon_frame) >>
      simp[cj 6 evaluate_storage_trace_frame]) >>
   `stmt_state_rel H0 ctx func ce cx es s0` by metis_tac[] >>
   `sa.cs_next_var <= st.cs_next_var /\ sa.cs_next_id <= st.cs_next_id` by
-    fs[ci_mono_def] >>
+    qpat_assum `ci_mono sa st` (ACCEPT_TAC o CONJUNCT2 o REWRITE_RULE [ci_mono_def]) >>
   `wb_frame ce es mid' sa s0 q` by
     (qpat_assum `stmt_state_rel H0 ctx func ce cx es s0`
        (mp_then Any assume_tac exprSimWordArgsTheory.wb_frame_trans) >>
@@ -1423,7 +1609,7 @@ Resume abi_encode_vv_full_from_packaging[finish_caller_frame]:
   asm_rewrite_tac[]
 QED
 
-Resume abi_encode_vv_full_from_packaging[finish_pure_frame]:
+Resume abi_encode_normal_packaging_side[finish_pure_frame]:
   strip_tac >>
   `pure_frame ce func es sa s0 q` by
     (match_mp_tac (Q.SPECL [`ce`,`func`,`es`,`mid'`,`sa`,`st`,`s0`,`t`,`q`]
@@ -1456,7 +1642,7 @@ Resume abi_encode_vv_full_from_packaging[finish_pure_frame]:
   decide_tac
 QED
 
-Resume abi_encode_vv_full_from_packaging[finish_post]:
+Resume abi_encode_normal_packaging_side[finish_post]:
   qx_gen_tac `H` >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func ce cx mid' actual /\ _`
     (qspec_then `H` (drule_then strip_assume_tac)) >>
@@ -1478,14 +1664,9 @@ Resume abi_encode_vv_full_from_packaging[finish_post]:
   `is_bytestring_type (expr_type (TypeBuiltin ann (AbiEncode ensure mid) target args))` by
     (qpat_assum `ann = BaseT (BytesT (Dynamic limit))` (fn th =>
        simp[NoAsms, th, expr_type_def, is_bytestring_type_def])) >>
-  `out' = Var root` by
-    (qpat_assum `LocatedValue ann (mk_ptr out LocMemory) = _` mp_tac >>
-     simp[mk_ptr_def]) >>
+  qpat_assum `LocatedValue ann (mk_ptr out LocMemory) = vv` (SUBST1_TAC o SYM) >>
   qpat_assum `out = Var root` SUBST1_TAC >>
-  qpat_assum `out' = Var root` SUBST1_TAC >>
   simp[NoAsms, vv_location_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (qpat_assum `!D. gas_origin_ptr_path _ (t,G1,tn1) [] (OK actual,Gf,tf)`
-        (qspec_then `DF H` ACCEPT_TAC))
   >- (irule (REWRITE_RULE [expr_type_def]
         (Q.INST [`e` |-> `TypeBuiltin ann (AbiEncode ensure mid) target args`,
                  `result` |-> `Value (BytesV (prefix ++ bytes))`,
@@ -1529,6 +1710,107 @@ Resume abi_encode_vv_full_from_packaging[finish_post]:
   (simp[NoAsms, mk_ptr_def, vv_location_def])
   >- (qpat_assum `is_bytestring_type _` (fn th => simp[NoAsms, th])) >>
   first_assum ACCEPT_TAC
+QED
+
+Finalise abi_encode_normal_packaging_side
+
+(* Project the normal continuation back into the ordinary full list bind. *)
+Theorem abi_encode_vv_full_from_packaging:
+  body_inv tops ctx ce cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
+  (LENGTH args = 1 /\ ~ensure ==> ~is_word_type (lowered_value_type ce (HD args))) /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
+  (!s x t. type_check
+      (type_builtin_args_length_ok (AbiEncode ensure mid) (LENGTH args))
+      "TypeBuiltin args" s = (INL x,t) ==> body_exprs_full_ok cx args) ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    ce cx cty (TypeBuiltin ann (AbiEncode ensure mid) target args) es
+Proof
+  strip_tac >>
+  `1 <= LENGTH args` by
+    (Cases_on `args` >> simp[] >>
+     `well_typed_expr env (TypeBuiltin ann (AbiEncode ensure mid) target [])`
+       by fs[expr_body_pre_def] >>
+     pop_assum mp_tac >> simp[Once well_typed_expr_def,
+       well_typed_type_builtin_args_def]) >>
+  `body_exprs_full_ok cx args` by
+    (qpat_x_assum `!s x t. _` (qspecl_then [`es`, `()`, `es`] mp_tac) >>
+     simp[type_check_def, type_builtin_args_length_ok_def, assert_def, return_def]) >>
+  rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  drule_all compile_abi_encode_body_layout >>
+  disch_then (qx_choosel_then [`svs`,`st`,`out`] strip_assume_tac) >>
+  qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) shadow_sa = _` mp_tac >>
+  simp[gasShadowTheory.gas_shadow_expr_def] >> strip_tac >>
+  drule_at (Pat `compile_expr _ _ _ shadow_sa = _`) compile_abi_encode_body_layout >>
+  disch_then drule_all >> strip_tac >>
+  rename1 `compile_abi_encode_args compile_expr _ (MAP gas_shadow_expr args) shadow_sa =
+    (shadow_svs,shadow_st)` >>
+  `gas_shadow_compiles (compile_abi_encode_args compile_expr ce args)
+     (compile_abi_encode_args compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr args))` by
+    (irule (SIMP_RULE bool_ss []
+       (Q.INST [`sh` |-> `T`] gas_shadow_compiles_abi_encode_args_env)) >>
+     simp[cj 1 gas_shadow_compile_expr_env]) >>
+  `shadow_svs = svs /\ gas_shadow_state st shadow_st` by
+    (qpat_x_assum `gas_shadow_compiles _ _` mp_tac >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
+  qpat_x_assum `shadow_svs = svs` SUBST_ALL_TAC >>
+  `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
+  `!e q. MEM e args /\ expr_sim_inv ce cx env q ==> expr_body_pre ce cx env e q`
+    by metis_tac[abi_args_body_pre_arg] >>
+  qpat_assum `compile_abi_encode_args _ _ args sa = _`
+    (assume_tac o REWRITE_RULE [compile_abi_encode_args_def]) >>
+  qpat_assum `compile_abi_encode_args _ _ (MAP _ args) shadow_sa = _`
+    (assume_tac o REWRITE_RULE [compile_abi_encode_args_def, gasShadowCompileBaseTheory.lowered_value_type_gas_shadow_env]) >>
+  mp_tac (Q.INST [`cenv` |-> `ce`, `kw_es` |-> `[]:expr list`, `xs` |-> `args`,
+    `sb` |-> `st`, `shadow_sb` |-> `shadow_st`]
+    (Q.SPEC `T` extcall_request_positional_packing_outcome_named)) >>
+  simp[NoAsms] >> impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  dep_rewrite.DEP_REWRITE_TAC [eval_expr_abi_encode_action] >> simp[] >>
+  irule gas_outcome_full_bind_all_path >>
+  conj_tac >- simp[storage_trace_frame_def] >>
+  rpt conj_tac
+  >~ [`storage_trace_frame (eval_exprs _ _)`]
+  >- simp[cj 6 evaluate_storage_trace_frame]
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_values >>
+      goal_assum (drule_at Any) >> fs[])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_values >>
+      first_assum ACCEPT_TAC) >>
+  qexists_tac `extcall_positional_post T DF lo d ctx func ce cx env
+    [] args svs sa st es s0 G0 tn0` >>
+  reverse conj_tac
+  >- (irule gas_outcome_full_post_source >> first_assum (irule_at Any) >>
+      rpt strip_tac >> Cases_on `res` >> gvs[] >>
+      conj_tac
+      >- (qpat_x_assum `expr_exit _ _` mp_tac >>
+          once_rewrite_tac[stmtSimPropsTheory.expr_exit_INR_type] >> simp[]) >>
+      fs[halt_exit_def]) >>
+  suspend "normal_packaging"
+QED
+
+Resume abi_encode_vv_full_from_packaging[normal_packaging]:
+  rpt gen_tac >> strip_tac >>
+  `out' = out` by
+    (qpat_assum `LocatedValue ann (mk_ptr out LocMemory) = LocatedValue ann (mk_ptr out' LocMemory)`
+      mp_tac >> simp[mk_ptr_def]) >>
+  qpat_x_assum `out' = out` SUBST_ALL_TAC >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==> stmt_state_rel H ctx func ce cx es s0` by
+    (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  drule_all (Q.INST [`vv` |-> `LocatedValue ann (mk_ptr out LocMemory)`,
+                    `Seg` |-> `\a b s t. T`, `RowSide` |-> `\a b s t. T`]
+             abi_encode_normal_packaging_side
+             |> PURE_REWRITE_RULE [LET_THM] |> BETA_RULE
+             |> REWRITE_RULE [abi_packaging_phases_trivial]) >>
+  strip_tac >>
+  disj1_tac >> qexists_tac `vs` >> conj_tac >- first_assum ACCEPT_TAC >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`Gf`,`mid'`,`INL (Value (BytesV payload))`,`actual`,`tf`] >>
+  conj_tac >- simp[] >>
+  rpt strip_tac >> res_tac >>
+  fs[expr_vv_sim_full_post_def,expr_sim_full_endpoint_def]
 QED
 
 Finalise abi_encode_vv_full_from_packaging

@@ -272,7 +272,7 @@ Proof
 QED
 
 (* The joint run of one base-plus-offset ADD, offset zero included. *)
-Theorem typed_copy_origin_ptr_add_path:
+Theorem typed_copy_origin_ptr_add_path_with_raw_endpoint:
   !root off n total sa op sb a lo explicit ctx func PG s G tn base len.
   emit_op ADD [Var root; Lit (n2w off)] sa = (op,sb) /\
   not_fresh_at sa root /\ lookup_var root s = SOME a /\
@@ -283,6 +283,8 @@ Theorem typed_copy_origin_ptr_add_path:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?p t Gf tnf.
+    (?r. run_inst_seq (emitted_insts sa sb) s = OK r /\
+         t = (r with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     op = Var p /\ lookup_var p t = SOME (n2w (w2n a + off)) /\
     not_fresh_at sb p /\ ptr_covers Gf tnf p t n /\
     gas_origin_ptr_path
@@ -321,7 +323,13 @@ Proof
   suspend "add"
 QED
 
-Resume typed_copy_origin_ptr_add_path[add]:
+Resume typed_copy_origin_ptr_add_path_with_raw_endpoint[add]:
+  `step_inst_base i s = OK u` by
+    simp[Abbr `i`,Abbr `u`,step_inst_base_def,mk_inst_def,exec_pure2_def,eval_operand_def] >>
+  conj_tac >-
+    (qexists_tac `u` >> drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+     `emitted_insts sa sb = [i]` by fs[Abbr `i`,operand_11] >>
+     simp[exprLoweringPropsTheory.run_inst_seq_def,arithmeticTheory.ADD1]) >>
   `w2n (a + n2w off) = w2n a + off` by
     (irule typed_copy_offset_nonwrap >> decide_tac) >>
   conj_tac >- simp[Abbr `u`, lookup_var_def, update_var_def,
@@ -332,7 +340,7 @@ Resume typed_copy_origin_ptr_add_path[add]:
   suspend "frame"
 QED
 
-Resume typed_copy_origin_ptr_add_path[coverage]:
+Resume typed_copy_origin_ptr_add_path_with_raw_endpoint[coverage]:
   gvs[ptr_covers_def] >>
   simp[Abbr `gf`, Abbr `tf`, Abbr `i`, Abbr `u`,
        step_prov_def, set_prov_def, out_prov_def, first_prov_def,
@@ -342,14 +350,13 @@ Resume typed_copy_origin_ptr_add_path[coverage]:
   decide_tac
 QED
 
-Resume typed_copy_origin_ptr_add_path[path]:
+Resume typed_copy_origin_ptr_add_path_with_raw_endpoint[path]:
   `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
         get_instruction bb s.vs_inst_idx = SOME i` by
     (drule_all fragExecTheory.fn_has_code_same_block >>
      simp[] >> metis_tac[arithmeticTheory.ADD_0]) >>
   `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\ i.inst_opcode <> GAS` by
     simp[Abbr `i`, mk_inst_def, is_terminator_def] >>
-  `step_inst_base i s = OK u` by suspend "step" >>
   `ptr_inst_ok
     (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
         d_ret := K {} |>) lo 0 ctx func G tn i s` by suspend "ptr" >>
@@ -369,7 +376,7 @@ Resume typed_copy_origin_ptr_add_path[path]:
   irule (cj 1 gas_origin_ptr_path_rules) >> simp[Abbr `u`, update_var_def]
 QED
 
-Resume typed_copy_origin_ptr_add_path[frame]:
+Resume typed_copy_origin_ptr_add_path_with_raw_endpoint[frame]:
   simp[Abbr `u`, update_var_def, allocas_from_def, typed_copy_state_frame_def,
        venom_state_component_equality] >>
   conj_tac >- gvs[allocas_from_def] >>
@@ -389,18 +396,13 @@ Resume typed_copy_origin_ptr_add_path[frame]:
        lookup_var_def]
 QED
 
-Resume typed_copy_origin_ptr_add_path[step]:
-  simp[Abbr `i`, Abbr `u`, step_inst_base_def, mk_inst_def,
-       exec_pure2_def, eval_operand_def]
-QED
-
-Resume typed_copy_origin_ptr_add_path[mem]:
+Resume typed_copy_origin_ptr_add_path_with_raw_endpoint[mem]:
   simp[Abbr `i`, mk_inst_def, unitTransformDefsTheory.inst_mem_below_frontier_def,
        memSafeRunTheory.inst_dload_in_section_def,
        contextCodegenRelTheory.source_memory_read_ranges_def, source_memory_write_ranges_def]
 QED
 
-Resume typed_copy_origin_ptr_add_path[ptr]:
+Resume typed_copy_origin_ptr_add_path_with_raw_endpoint[ptr]:
   `op_taint tn (Var root) = {}` by gvs[ptr_covers_def] >>
   simp[ptr_inst_ok_def, Abbr `i`, mk_inst_def, access_ok_def, taint_ok_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
@@ -410,7 +412,41 @@ Resume typed_copy_origin_ptr_add_path[ptr]:
   simp[Abbr `u`, update_var_def]
 QED
 
-Finalise typed_copy_origin_ptr_add_path
+Finalise typed_copy_origin_ptr_add_path_with_raw_endpoint
+
+Theorem typed_copy_origin_ptr_add_path:
+  !root off n total sa op sb a lo explicit ctx func PG s G tn base len.
+  emit_op ADD [Var root; Lit (n2w off)] sa = (op,sb) /\
+  not_fresh_at sa root /\ lookup_var root s = SOME a /\
+  ptr_covers G tn root s total /\ off + n <= total /\
+  w2n a + off < dimword (:256) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?p t Gf tnf.
+    op = Var p /\ lookup_var p t = SOME (n2w (w2n a + off)) /\
+    not_fresh_at sb p /\ ptr_covers Gf tnf p t n /\
+    gas_origin_ptr_path
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+          d_ret := K {} |>,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf) /\
+    t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+    allocas_from lo t /\ typed_copy_state_frame sa base len s t /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!q. not_fresh_at sa q ==>
+      lookup_var q t = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
+      op_taint tnf (Var q) = op_taint tn (Var q)) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  ntac 16 gen_tac >> map_every qx_gen_tac [`frame_base`,`frame_len`] >>
+  strip_tac >> drule_all typed_copy_origin_ptr_add_path_with_raw_endpoint >>
+  disch_then (qspecl_then [`explicit`,`PG`,`frame_base`,`frame_len`] (qx_choosel_then
+    [`p`,`t`,`Gf`,`tnf`] strip_assume_tac)) >>
+  qexistsl_tac [`p`,`t`,`Gf`,`tnf`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
 
 Theorem typed_copy_origin_ptr_byte_offset_path:
   !root off n total sa op sb a lo explicit ctx func PG s G tn base len.
