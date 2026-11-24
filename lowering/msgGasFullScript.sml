@@ -18,7 +18,7 @@ Ancestors
 
 (* The checked GAS step and its ghosts, fixed before any horizon: the
    endpoint, provenance and taint do not depend on the dead mask. *)
-Theorem msg_gas_full_witness[local]:
+Theorem msg_gas_full_witness:
   compile_env_var MsgGas sa = (Var out, sb) /\
   compile_env_var GasPrice shadow_sa = (shadow_op, shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_function func shadow_func /\
