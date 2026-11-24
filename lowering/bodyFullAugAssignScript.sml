@@ -966,7 +966,9 @@ Resume body_augassign_nested_immutable_full[nested_store_post]:
   `return_buf_frame d cenv sb endState` by
     (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
      qexistsl_tac [`cenv`,`w`,`cd`] >>
-     `cd.cs_next_var <= sb.cs_next_var` by fs[exprLoweringPropsTheory.ci_mono_def] >>
+     `cd.cs_next_var <= sb.cs_next_var` by
+       qpat_assum `ci_mono cd sb`
+         (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprLoweringPropsTheory.ci_mono_def]) >>
      simp[]) >>
   `alloca_history func endState` by suspend "nested_store_history" >>
   `endState.vs_inst_idx = LENGTH sb.cs_current_insts` by simp[Abbr `endState`] >>
@@ -1130,7 +1132,11 @@ Resume body_augassign_nested_immutable_full[nested_store_frames]:
   `sa.cs_next_var <= ca.cs_next_var /\ ca.cs_next_var <= cb.cs_next_var /\
    cb.cs_next_var <= cc.cs_next_var /\ cc.cs_next_var <= cd.cs_next_var /\
    sa.cs_next_id <= ca.cs_next_id /\ ca.cs_next_id <= cb.cs_next_id /\
-   cb.cs_next_id <= cc.cs_next_id` by fs[exprLoweringPropsTheory.ci_mono_def] >>
+   cb.cs_next_id <= cc.cs_next_id` by
+    (MAP_EVERY (fn term => qpat_assum term
+       (strip_assume_tac o REWRITE_RULE [exprLoweringPropsTheory.ci_mono_def]))
+       [`ci_mono sa ca`, `ci_mono ca cb`, `ci_mono cb cc`, `ci_mono cc cd`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `alloca_frame cenv es sa s0 cenv st u` by
     (irule alloca_frame_trans >> qexistsl_tac [`cenv`,`st`,`v`,`ca`] >> simp[]) >>
   `MAP FDOM ee.scopes = MAP FDOM st.scopes` by
@@ -1170,7 +1176,9 @@ Resume body_augassign_nested_immutable_full[nested_store_frames]:
   conj_tac
   >- (irule alloca_frame_trans >> qexistsl_tac [`cenv`,`ee`,`w`,`cd`] >>
       `ci_mono sa cd` by metis_tac[exprLoweringPropsTheory.ci_mono_trans] >>
-      fs[exprLoweringPropsTheory.ci_mono_def]) >>
+      qpat_assum `ci_mono sa cd`
+        (assume_tac o cj 3 o REWRITE_RULE [exprLoweringPropsTheory.ci_mono_def]) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `!x. not_fresh_at sa x ==> not_fresh_at cd x` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
      conj_tac >- decide_tac >> first_assum ACCEPT_TAC) >>
