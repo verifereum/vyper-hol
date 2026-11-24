@@ -70,13 +70,392 @@ Ancestors
   gasPathDataSection[qualified] bodyFullHashKeccakFixed[qualified]
   linkedRuntimeSelectedTrace[qualified] unitExecutionComposeResult[qualified]
   linkedRuntimeDefaultReplay[qualified] linkedDefaultSourceFrame[qualified]
+  groupedEntryCommon[qualified] calldataRegistrationLocals[qualified]
+  dispatchedDecodeCast[qualified] dispatchedDecodeDomain[qualified]
   linkedDefaultError[qualified] gasExemptCertMods[qualified] gasOutcomeFullMods[qualified]
   loweringHalt[qualified] nonreentrantExit[qualified] sourceUnitExecution[qualified]
   stmtFragPtr[qualified] vyperCallFiniteStorageSupport[qualified] vyperEvalReadingErrors[qualified]
 
 val _ = Parse.hide "tops";
 
+(* Inputs for the successful omitted-default registration.  Keep the selected
+   package's ordinary argument locations separate from the keyword overlay. *)
+val linked_default_keyword_names_tac =
+  `MAP FST kw = MAP (\(name,_,_,_). name) vars /\ LENGTH kw = LENGTH vars` by
+    (qpat_assum `MAP (\(n,_,ty,_). (n,ty)) vars = kw` (SUBST1_TAC o SYM) >>
+     simp[NoAsms, MAP_MAP_o, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]);
+
+val linked_default_source_bind_tac =
+  `LIST_REL value_has_type kwtvs kwvals` by
+    (qpat_assum `kwtvs = MAP _ slots` SUBST1_TAC >>
+     pure_rewrite_tac[LIST_REL_MAP1] >>
+     qpat_assum `LIST_REL (\(aid,p,base,tv) v. aid < keyword_end.cs_next_id /\ _) slots kwvals`
+       mp_tac >> match_mp_tac LIST_REL_mono >> simp[NoAsms, FORALL_PROD]) >>
+  `LIST_REL value_has_type (ptvs ++ kwtvs) (pvals ++ kwvals)` by
+    (irule LIST_REL_APPEND_suff >> conj_tac >> first_assum ACCEPT_TAC) >>
+  irule calldataRegistrationLocalsTheory.decoded_arguments_bind >>
+  pure_rewrite_tac[LIST_REL_EL_EQN] >> conj_tac
+  >- (qpat_assum `LIST_REL value_has_type (ptvs ++ kwtvs) _`
+        (mp_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+      qpat_assum `LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) (MAP SND (pos ++ kw)) _`
+        (mp_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+      simp[NoAsms] >> decide_tac) >>
+  qx_gen_tac `i` >> strip_tac >> BETA_TAC >>
+  Cases_on `EL i (pos ++ kw)` >> REWRITE_TAC[pairTheory.UNCURRY] >> BETA_TAC >>
+  qexists_tac `EL i (ptvs ++ kwtvs)` >>
+  qpat_assum `LIST_REL value_has_type (ptvs ++ kwtvs) _`
+    (mp_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+  qpat_assum `LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) (MAP SND (pos ++ kw)) _`
+    (mp_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+  qpat_assum `i < LENGTH (pos ++ kw)` (fn bound =>
+    simp_tac bool_ss [LENGTH_MAP, EL_MAP, bound]) >>
+  strip_tac >> strip_tac >>
+  `i < LENGTH (ptvs ++ kwtvs)` by
+    (qpat_assum `LENGTH (pos ++ kw) = LENGTH (ptvs ++ kwtvs)` (SUBST1_TAC o SYM) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `!j. j < LENGTH (pos ++ kw) ==> _` (qspec_then `i` mp_tac) >>
+  qpat_assum `!j. j < LENGTH (ptvs ++ kwtvs) ==> _` (qspec_then `i` mp_tac) >>
+  qpat_assum `EL i (pos ++ kw) = _` (fn pair =>
+    qpat_assum `i < LENGTH (pos ++ kw)` (fn b =>
+      qpat_assum `i < LENGTH (ptvs ++ kwtvs)` (fn b' =>
+        simp[NoAsms, EL_MAP, pair, b, b'])));
+
+val linked_default_initialized_owners_tac =
+  `ALL_DISTINCT (MAP (\(name,_,_,_). name) vars)` by
+    (qpat_assum `MAP FST kw = _` (SUBST1_TAC o SYM) >>
+     qpat_assum `ALL_DISTINCT (MAP FST (pos ++ kw))` mp_tac >>
+     simp[NoAsms, MAP_APPEND, ALL_DISTINCT_APPEND]) >>
+  `LIST_REL (\(aid,p,base,tv) v. aid < keyword_end.cs_next_id /\
+    FLOOKUP keyword_state.vs_allocas aid = SOME (base,type_memory_size tv) /\
+    lookup_var p keyword_state = SOME (n2w base) /\
+    ptr_covers Ginit tninit p keyword_state (type_memory_size tv) /\ value_has_type tv v /\
+    (!mem. mem_agree_outside tninit.t_mem keyword_state.vs_memory mem ==> val_in_memory tv v base mem))
+    slots kwvals` by
+    (qpat_assum `LIST_REL (\(aid,p,base,tv) v. aid < keyword_end.cs_next_id /\ not_fresh_at _ _ /\ _) slots kwvals`
+       mp_tac >> match_mp_tac LIST_REL_mono >> simp[NoAsms, FORALL_PROD]) >>
+  map_every (fn pat => qpat_assum pat SUBST1_TAC)
+    [`cekw = compile_register_kwarg_vars common.ec_env vars`,
+     `MAP FST kw = _`, `LENGTH kw = LENGTH vars`, `kwtvs = MAP _ slots`] >>
+  irule groupedEntryCommonTheory.grouped_initialized_keyword_owners >>
+  rpt conj_tac >> first_assum ACCEPT_TAC;
+
+val linked_default_landed_owners_tac =
+  `selected_registration_owners fn (MAP FST kw) kwtvs kwvals (LENGTH kw)
+      cekw keyword_end keyword_state Ginit tninit` by linked_default_initialized_owners_tac >>
+  qpat_assum `landed = jump_to common_entry.cs_current_bb keyword_state` SUBST1_TAC >>
+  irule groupedEntryCommonTheory.grouped_jump_registration_owners >>
+  qexists_tac `keyword_end` >> conj_tac >> first_assum ACCEPT_TAC;
+
 (* Apply the selected declaration's source equation at a specified gas observation. *)
+val linked_default_kw_overlay_tac =
+  qabbrev_tac `kwmap = MAP (\(id,op,ty,e).
+    (id,PtrVar op (type_memory_bytes common.ec_env ty))) (REVERSE vars)` >>
+  `MAP FST kwmap = REVERSE (MAP FST kw)` by
+    (qpat_assum `MAP FST kw = _` SUBST1_TAC >>
+     simp[NoAsms, Abbr `kwmap`, MAP_MAP_o, MAP_REVERSE, combinTheory.o_DEF,
+          pairTheory.LAMBDA_PROD]) >>
+  `!id. FLOOKUP cekw.ce_vars id =
+     case ALOOKUP kwmap id of SOME loc => SOME loc | NONE => FLOOKUP common.ec_env.ce_vars id` by
+    (qpat_assum `cekw = _` SUBST1_TAC >>
+     simp[NoAsms, Abbr `kwmap`, compile_register_kwarg_vars_cenv]) >>
+  `!id. ~MEM id (MAP FST kw) ==> FLOOKUP cekw.ce_vars id = FLOOKUP common.ec_env.ce_vars id` by
+    (gen_tac >> strip_tac >>
+     `ALOOKUP kwmap id = NONE` by
+       (qpat_assum `MAP FST kwmap = _` (fn eq => simp[NoAsms,ALOOKUP_NONE, eq]) >>
+        first_assum ACCEPT_TAC) >>
+     qpat_assum `!id. FLOOKUP cekw.ce_vars id = _` (qspec_then `id` mp_tac) >>
+     qpat_assum `ALOOKUP kwmap id = NONE` (fn miss => simp[NoAsms, miss]));
+
+val linked_default_pos_overlay_tac =
+  `!id. MEM id (MAP FST pos) ==> ~MEM id (MAP FST kw)` by
+    (qpat_assum `ALL_DISTINCT (MAP FST (pos ++ kw))` mp_tac >>
+     simp_tac bool_ss [MAP_APPEND, ALL_DISTINCT_APPEND] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  `LIST_REL (\(name,ty) tv. ?loc. FLOOKUP cekw.ce_vars name = SOME loc /\
+      var_location_memory_size loc = SOME (type_memory_size tv)) pos ptvs` by
+    (qpat_assum `LIST_REL (\(name,ty) tv. ?loc.
+        FLOOKUP common.ec_env.ce_vars name = SOME loc /\ _) pos ptvs` mp_tac >>
+     PURE_REWRITE_TAC [LIST_REL_EL_EQN] >> strip_tac >>
+     conj_tac >- first_assum ACCEPT_TAC >> qx_gen_tac `i` >> strip_tac >>
+     `MEM (FST (EL i pos)) (MAP FST pos)` by
+       (PURE_REWRITE_TAC [MEM_MAP] >> qexists_tac `EL i pos` >>
+        REWRITE_TAC [MEM_EL] >> qexists_tac `i` >> simp[]) >>
+     qpat_assum `!id. MEM id (MAP FST pos) ==> _` (drule_then assume_tac) >>
+     qpat_assum `!id. ~MEM id (MAP FST kw) ==> _` (drule_then assume_tac) >>
+     qpat_assum `!j. j < LENGTH pos ==> _` (qspec_then `i` mp_tac) >>
+     Cases_on `EL i pos` >>
+     fs[NoAsms, pairTheory.UNCURRY] >>
+     qpat_assum `i < LENGTH pos` (fn bound =>
+       qpat_assum `FLOOKUP cekw.ce_vars _ = FLOOKUP common.ec_env.ce_vars _`
+         (fn lookup => simp[NoAsms, bound, lookup])));
+
+val linked_default_registered_domain_tac =
+  `!id. ~MEM id (MAP FST (pos ++ kw)) ==> FLOOKUP cekw.ce_vars id = NONE` by
+    (gen_tac >> strip_tac >>
+     `~MEM id (MAP FST kw)` by
+       (qpat_assum `~MEM id (MAP FST (_ ++ _))` mp_tac >> simp[NoAsms, MAP_APPEND]) >>
+     qpat_assum `!id. ~MEM id (MAP FST kw) ==> _` (drule_then SUBST1_TAC) >>
+     first_assum irule >> first_assum ACCEPT_TAC) >>
+  `!id. ~MEM id (MAP FST (pos ++ kw)) ==> FLOOKUP body_env.ce_vars id = NONE` by
+    (rpt strip_tac >> Cases_on `FLOOKUP body_env.ce_vars id` >> simp[NoAsms] >>
+     drule_all bodySimEntryTheory.compile_register_positional_args_bound >>
+     qpat_assum `!id. ~MEM id (MAP FST (pos ++ kw)) ==> FLOOKUP cekw.ce_vars id = NONE`
+       (drule_then (fn th => simp[NoAsms, th])));
+
+val linked_default_positional_installs_proof_tac =
+  qx_genl_tac [`id`,`op`,`ty`,`e`] >> PURE_REWRITE_TAC [MEM_EL] >>
+  disch_then (qx_choose_then `i` strip_assume_tac) >>
+  qpat_assum `LIST_REL (\(name,dst,ty,e) (aid,q,p,tv). dst = Var q /\ _) vars slots`
+    (strip_assume_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+  qpat_assum `LIST_REL (\(aid,p,base,tv) v. aid < keyword_end.cs_next_id /\ not_fresh_at _ _ /\ _) slots kwvals`
+    (strip_assume_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+  `i < LENGTH slots` by
+    (qpat_assum `LENGTH vars = LENGTH slots` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  qpat_assum `!j. j < LENGTH vars ==> _` (drule_then assume_tac) >>
+  qpat_assum `!j. j < LENGTH slots ==> _` (drule_then assume_tac) >>
+  qabbrev_tac `slot = EL i slots` >> PairCases_on `slot` >>
+  qpat_assum `(id,op,ty,e) = EL i vars` (SUBST_ALL_TAC o SYM) >>
+  pop_assum kall_tac >> ntac 2 (pop_assum mp_tac) >>
+  simp[NoAsms,pairTheory.UNCURRY] >> rpt strip_tac >>
+  irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `keyword_end` >>
+  conj_tac >> first_assum ACCEPT_TAC;
+
+val linked_default_positional_installs_tac =
+  `!id op ty e. MEM (id,op,ty,e) vars ==> ?p. op = Var p /\ not_fresh_at common_entry p` by
+    linked_default_positional_installs_proof_tac;
+
+val linked_default_kwmap_entries_tac =
+  `!id loc. ALOOKUP kwmap id = SOME loc ==>
+     ?op ty e. MEM (id,op,ty,e) vars /\ loc = PtrVar op (type_memory_bytes common.ec_env ty)` by
+    (rpt gen_tac >> disch_then (mp_tac o MATCH_MP (SPEC_ALL ALOOKUP_MEM)) >>
+     simp[NoAsms, Abbr `kwmap`, MEM_MAP, MEM_REVERSE, EXISTS_PROD] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  `!id p sz. FLOOKUP cekw.ce_vars id = SOME (PtrVar (Var p) sz) ==>
+     ?ty e. MEM (id,Var p,ty,e) vars` by
+    (rpt gen_tac >>
+     qpat_assum `!id. FLOOKUP cekw.ce_vars id = _`
+       (fn eq => PURE_ONCE_REWRITE_TAC [Q.SPEC `id` eq]) >>
+     Cases_on `ALOOKUP kwmap id` >> simp[NoAsms]
+     >- (qpat_assum `!id. FLOOKUP common.ec_env.ce_vars id = NONE \/ _`
+           (qspec_then `id` strip_assume_tac) >> simp[var_location_distinct]) >>
+     strip_tac >>
+     qpat_assum `!id loc. ALOOKUP kwmap id = SOME loc ==> _`
+       (drule_then (qx_choosel_then [`dst`,`ty`,`e`] strip_assume_tac)) >>
+     qexistsl_tac [`ty`,`e`] >>
+     qpat_assum `MEM (id,dst,ty,e) vars` mp_tac >>
+     qpat_assum `_ = PtrVar dst (type_memory_bytes common.ec_env ty)` mp_tac >>
+     qpat_assum `_ = PtrVar (Var p) sz` mp_tac >>
+     simp[NoAsms, var_location_11] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]);
+
+val linked_default_kwptr_unique_tac =
+  `!id1 ty1 e1 id2 ty2 e2 p. MEM (id1,Var p,ty1,e1) vars /\
+     MEM (id2,Var p,ty2,e2) vars ==> id1 = id2` by
+    (rpt gen_tac >> pure_rewrite_tac[MEM_EL] >>
+     disch_then (CONJUNCTS_THEN2 (qx_choose_then `i` strip_assume_tac)
+       (qx_choose_then `j` strip_assume_tac)) >>
+     `i = j` by
+       (qspecl_then [`MAP (\(_,op,_,_). op) vars`,`i`,`j`] mp_tac ALL_DISTINCT_EL_IMP >>
+        qpat_assum `(id1,Var p,ty1,e1) = EL i vars` (fn row1 =>
+          qpat_assum `(id2,Var p,ty2,e2) = EL j vars` (fn row2 =>
+            qpat_assum `i < LENGTH vars` (fn b => qpat_assum `j < LENGTH vars` (fn b' =>
+              qpat_assum `ALL_DISTINCT (MAP (\(_,op,_,_). op) vars)` (fn distinct =>
+                simp[NoAsms,EL_MAP,GSYM row1,GSYM row2,b,b',distinct])))))) >>
+     qpat_assum `i = j` SUBST_ALL_TAC >>
+     qpat_assum `(id1,Var p,ty1,e1) = _` mp_tac >>
+     qpat_assum `(id2,Var p,ty2,e2) = _` (fn eq => simp[NoAsms, GSYM eq]));
+
+val linked_default_memloc_key_tac =
+     qx_genl_tac [`id`,`z`,`n`] >> strip_tac >>
+     `ALOOKUP kwmap id = NONE` by
+       (qpat_assum `FLOOKUP cekw.ce_vars id = SOME (MemLoc _ _)` mp_tac >>
+        qpat_assum `!id. FLOOKUP cekw.ce_vars id = _`
+          (fn eq => PURE_ONCE_REWRITE_TAC [Q.SPEC `id` eq]) >>
+        Cases_on `ALOOKUP kwmap id` >> simp[NoAsms] >>
+        strip_tac >>
+        qpat_assum `!id loc. ALOOKUP kwmap id = SOME loc ==> _`
+          (drule_then strip_assume_tac) >>
+        qpat_assum `_ = PtrVar _ _` mp_tac >>
+        qpat_assum `_ = MemLoc _ _` (fn eq => simp[NoAsms,eq,var_location_distinct])) >>
+     `~MEM id (MAP FST kw)` by
+       (qpat_assum `ALOOKUP kwmap id = NONE` (mp_tac o REWRITE_RULE [ALOOKUP_NONE]) >>
+        qpat_assum `MAP FST kwmap = _` (fn eq => simp[NoAsms,eq])) >>
+     CCONTR_TAC >>
+     `~MEM id (MAP FST (pos ++ kw))` by
+       (qpat_assum `~MEM id (MAP FST pos)` (fn no_pos =>
+         qpat_assum `~MEM id (MAP FST kw)` (fn no_kw =>
+           simp[NoAsms,MAP_APPEND,no_pos,no_kw]))) >>
+     qpat_assum `!id. ~MEM id (MAP FST (_ ++ _)) ==> FLOOKUP cekw.ce_vars id = NONE`
+       (drule_then (fn miss =>
+         qpat_assum `FLOOKUP cekw.ce_vars id = SOME _`
+           (fn hit => mp_tac miss >> simp[NoAsms,hit])));
+
+val linked_default_kwmap_reserve_inputs_tac =
+  `!id z n. FLOOKUP cekw.ce_vars id = SOME (MemLoc z n) ==> MEM id (MAP FST pos)` by
+    linked_default_memloc_key_tac >>
+  `!id1 id2 p sz1 sz2. FLOOKUP cekw.ce_vars id1 = SOME (PtrVar (Var p) sz1) ==>
+     not_fresh_at common_entry p /\
+     (FLOOKUP cekw.ce_vars id2 = SOME (PtrVar (Var p) sz2) ==> id1 = id2)` by
+    (qx_genl_tac [`id1`,`id2`,`p`,`sz1`,`sz2`] >> strip_tac >>
+     qpat_assum `!id p sz. FLOOKUP cekw.ce_vars id = SOME (PtrVar (Var p) sz) ==> _`
+       (drule_then (qx_choosel_then [`ty1`,`e1`] assume_tac)) >>
+     conj_tac
+     >- (qpat_assum `!id op ty e. MEM (id,op,ty,e) vars ==> _`
+           (qspecl_then [`id1`,`Var p`,`ty1`,`e1`] (drule_then mp_tac)) >>
+         simp[NoAsms,venomStateTheory.operand_11]) >>
+     strip_tac >>
+     qpat_assum `!id p sz. FLOOKUP cekw.ce_vars id = SOME (PtrVar (Var p) sz) ==> _`
+       (qspecl_then [`id2`,`p`,`sz2`] (drule_then (qx_choosel_then [`ty2`,`e2`] assume_tac))) >>
+     qpat_assum `!id1 ty1 e1 id2 ty2 e2 p. MEM (id1,Var p,ty1,e1) vars /\ _ ==> _`
+       (qspecl_then [`id1`,`ty1`,`e1`,`id2`,`ty2`,`e2`,`p`] mp_tac) >>
+     qpat_assum `MEM (id1,Var p,ty1,e1) vars` (fn row1 =>
+       qpat_assum `MEM (id2,Var p,ty2,e2) vars` (fn row2 => simp[NoAsms,row1,row2])));
+
+val linked_default_kwmap_reserved_tac =
+  qpat_assum `compile_register_positional_args cekw (build_positional_args cekw pos) 4 common_entry =
+      (body_env,registered)`
+    (mp_tac o MATCH_MP (SIMP_RULE bool_ss [GSYM AND_IMP_INTRO]
+      (SPEC_ALL compile_register_positional_args_reserved))) >>
+  PURE_REWRITE_TAC [build_positional_args_FST, AND_IMP_INTRO] >>
+  impl_tac
+  >- (rpt conj_tac >>
+      FIRST [first_assum ACCEPT_TAC,
+        qpat_assum `cekw.ce_imm_alloca = NONE` (fn eq => simp[NoAsms,eq])]) >>
+  disch_then (ACCEPT_TAC o CONJUNCT1);
+
+val linked_default_package_vars_tac =
+  `common.ec_env.ce_vars = FST (allocate_args
+     (get_struct_fields (make_struct_fields_map_mods mods)) args 0 FEMPTY)` by
+    (qpat_assum `set_external_package_target _ (package_external_fn_unit mods _ _ _) =
+                 (_,common.ec_env,_,_,_,_,_,_,_,_,_)`
+       (mp_tac o Q.AP_TERM `\p. (FST (SND p)).ce_vars`) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `ret = NoneT` >>
+     pop_assum (fn ret_case => simp[NoAsms, ret_case, set_external_package_target_def,
+       package_external_fn_unit_def, update_cenv_nonreentrant_def,
+       update_cenv_ret_abi_def, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY, LET_THM]));
+
+val linked_default_package_domain_tac =
+  `(!id. ~MEM id (MAP FST (pos ++ kw)) ==> FLOOKUP common.ec_env.ce_vars id = NONE) /\
+   (!id. FLOOKUP common.ec_env.ce_vars id = NONE \/
+      ?off sz. FLOOKUP common.ec_env.ce_vars id = SOME (MemLoc off sz))` by
+    (qpat_assum `common.ec_env.ce_vars = _` SUBST1_TAC >>
+     qpat_assum `pos ++ kw = args` SUBST1_TAC >>
+     namedCases_on `allocate_args (get_struct_fields (make_struct_fields_map_mods mods)) args 0 FEMPTY`
+       ["argmap argend"] >> simp[NoAsms] >>
+     `!id. ~MEM id (MAP FST args) ==> FLOOKUP argmap id = NONE` by
+       (qx_gen_tac `id` >> strip_tac >>
+        drule_all_then mp_tac (Q.INST [`n` |-> `id`] (SPEC_ALL allocate_args_FLOOKUP_other)) >>
+        simp[NoAsms]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qx_gen_tac `id` >> Cases_on `MEM id (MAP FST args)`
+     >- (disj2_tac >> drule_all_then ACCEPT_TAC allocate_args_FLOOKUP_arg) >>
+     disj1_tac >> first_assum irule >> first_assum ACCEPT_TAC);
+
+val linked_default_package_positions_tac =
+  `LIST_REL (\(name,ty) tv. ?loc. FLOOKUP common.ec_env.ce_vars name = SOME loc /\
+     var_location_memory_size loc = SOME (type_memory_size tv)) args all_tvs` by
+    (PURE_REWRITE_TAC [LIST_REL_EL_EQN] >> conj_tac >- (sym_tac >> first_assum ACCEPT_TAC) >>
+     qx_gen_tac `i` >> strip_tac >>
+     qpat_assum `LIST_REL _ args (ZIP (MAP SND args,all_tvs))`
+       (mp_tac o Q.SPEC `i` o CONJUNCT2 o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+     Cases_on `EL i args` >>
+     qpat_assum `LENGTH all_tvs = LENGTH args` (fn len =>
+       qpat_assum `i < LENGTH args` (fn bound =>
+         simp[NoAsms,len,bound, EL_MAP,EL_ZIP]))) >>
+  `LIST_REL (\(name,ty) tv. ?loc. FLOOKUP common.ec_env.ce_vars name = SOME loc /\
+     var_location_memory_size loc = SOME (type_memory_size tv)) pos ptvs` by
+    (qpat_assum `pos = TAKE _ args` SUBST1_TAC >>
+     qpat_assum `ptvs = TAKE _ all_tvs` SUBST1_TAC >>
+     irule LIST_REL_TAKE >> first_assum ACCEPT_TAC);
+
+val linked_default_split_types_tac =
+  `ptvs ++ kwtvs = all_tvs` by
+    (map_every (fn pat => qpat_assum pat SUBST1_TAC)
+      [`ptvs = TAKE _ all_tvs`,`kwtvs = DROP _ all_tvs`] >> simp[NoAsms,TAKE_DROP]) >>
+  `LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) (MAP SND (pos ++ kw)) (ptvs ++ kwtvs)` by
+    (qpat_assum `ptvs ++ kwtvs = all_tvs` SUBST1_TAC >>
+     qpat_assum `pos ++ kw = args` SUBST1_TAC >>
+     drule_then ACCEPT_TAC vyperTypeABITheory.OPT_MMAP_LIST_REL) >>
+  `LENGTH pos = LENGTH ptvs /\ LENGTH kw = LENGTH kwtvs` by
+    (map_every (fn pat => qpat_assum pat SUBST1_TAC)
+       [`pos = TAKE _ args`,`kw = DROP _ args`,`ptvs = TAKE _ all_tvs`,`kwtvs = DROP _ all_tvs`] >>
+     qpat_assum `LENGTH all_tvs = LENGTH args` (fn len => simp[NoAsms,LENGTH_TAKE_EQ,LENGTH_DROP,len])) >>
+  `ALL_DISTINCT (MAP FST (pos ++ kw))` by
+    (qpat_assum `pos ++ kw = args` SUBST1_TAC >> first_assum ACCEPT_TAC);
+
+val linked_default_pos_values_tac =
+  `EVERY dispatchedDecodeDomain$cd_cast_domain ptvs` by
+    (qpat_assum `ptvs = TAKE _ all_tvs` SUBST1_TAC >>
+     irule EVERY_TAKE >> drule_then ACCEPT_TAC dispatchedDecodeDomainTheory.evaluate_types_cd_cast_domain) >>
+  `LIST_REL value_has_type ptvs pvals` by
+    (qpat_assum `calldata_decode_args _ ptvs 0 = SOME pvals` (fn decode =>
+      qpat_assum `EVERY dispatchedDecodeDomain$cd_cast_domain ptvs` (fn domains =>
+        mp_tac (MATCH_MP (SPEC_ALL dispatchedDecodeCastTheory.calldata_decode_args_safe_cast)
+                        (CONJ domains decode)))) >>
+     match_mp_tac LIST_REL_mono >> POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[vyperTypingTheory.safe_cast_result_well_typed]) >>
+  `LENGTH pos = LENGTH pvals` by
+    (qpat_assum `calldata_decode_args _ ptvs 0 = SOME pvals`
+       (mp_tac o MATCH_MP (SPEC_ALL calldata_decode_args_length)) >>
+     qpat_assum `LENGTH pos = LENGTH ptvs` (fn len => simp[NoAsms,len]) >> metis_tac[]);
+
+val linked_default_keyword_lengths_tac =
+  `LENGTH kw = LENGTH kwvals` by
+    (qpat_assum `LIST_REL (\(aid,p,base,tv) v. aid < keyword_end.cs_next_id /\ _) slots kwvals`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+     qpat_assum `kwtvs = MAP _ slots` (mp_tac o Q.AP_TERM `LENGTH`) >>
+     qpat_assum `LENGTH kw = LENGTH kwtvs` (fn len => simp[NoAsms,len]));
+
+val linked_default_decoder_abi_tac =
+  rpt gen_tac >> strip_tac >>
+  `MEM (arg,tv) (ZIP (args,all_tvs))` by
+    (qpat_assum `MEM (arg,tv) (ZIP (pos ++ kw,ptvs ++ kwtvs))` mp_tac >>
+     qpat_assum `pos ++ kw = args` (fn args =>
+       qpat_assum `ptvs ++ kwtvs = all_tvs` (fn tys => simp[NoAsms,args,tys]))) >>
+  `abi_decoder_coherent common.ec_env tenv common.ec_env.ce_struct_fields (SND arg) tv` by
+    (qpat_assum `LIST_REL (\arg tv. abi_decoder_coherent common.ec_env tenv _ _ _) args all_tvs`
+       (mp_tac o REWRITE_RULE [LIST_REL_EVERY_ZIP,EVERY_MEM]) >>
+     strip_tac >> qpat_assum `!x. MEM x (ZIP (args,all_tvs)) ==> _`
+       (drule_then (mp_tac o REWRITE_RULE [pairTheory.UNCURRY])) >> simp[NoAsms]) >>
+  `c with ce_vars := common.ec_env.ce_vars = common.ec_env` by
+    (qpat_assum `c = cekw with ce_vars := c.ce_vars`
+       (fn eq => PURE_ONCE_REWRITE_TAC [eq]) >>
+     qpat_assum `cekw = compile_register_kwarg_vars common.ec_env vars` SUBST1_TAC >>
+     simp[NoAsms,compile_register_kwarg_vars_cenv]) >>
+  `abi_decoder_coherent c tenv c.ce_struct_fields (SND arg) tv` by
+    (qpat_assum `abi_decoder_coherent common.ec_env tenv _ _ _` mp_tac >>
+     qpat_assum `c with ce_vars := common.ec_env.ce_vars = common.ec_env`
+       (fn eq => PURE_ONCE_REWRITE_TAC [GSYM eq]) >>
+     simp[NoAsms,ctor_decoder_coherent_vars]) >>
+  conj_tac >- (irule selected_register_one >> irule selected_argument_decoder_accepts >> first_assum ACCEPT_TAC) >>
+  first_assum ACCEPT_TAC;
+
+val linked_default_bounds_tac =
+  `EVERY (\tv. type_memory_size tv < dimword (:256)) (ptvs ++ kwtvs)` by
+    (qpat_assum `ptvs ++ kwtvs = all_tvs` SUBST1_TAC >>
+     PURE_REWRITE_TAC [EVERY_EL] >> qx_gen_tac `i` >> strip_tac >>
+     qpat_assum `LIST_REL _ args (ZIP (MAP SND args,all_tvs))`
+       (mp_tac o Q.SPEC `i` o CONJUNCT2 o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+     Cases_on `EL i args` >>
+     qpat_assum `LENGTH all_tvs = LENGTH args` (fn len =>
+       qpat_assum `i < LENGTH all_tvs` (fn b =>
+         simp[NoAsms,b,GSYM len,EL_MAP,EL_ZIP]))) >>
+  `4 + SUM (MAP tv_abi_size ptvs) < dimword (:256)` by
+    (qpat_assum `4 + SUM (MAP tv_abi_size all_tvs) < dimword (:256)` mp_tac >>
+     qpat_assum `ptvs ++ kwtvs = all_tvs` (fn tys =>
+       simp[NoAsms,GSYM tys,MAP_APPEND,SUM_APPEND]) >> decide_tac);
+
+val linked_default_kwenv_frame_tac =
+  `cekw with ce_vars := common.ec_env.ce_vars = common.ec_env` by
+    (qpat_assum `cekw = compile_register_kwarg_vars common.ec_env vars` SUBST1_TAC >>
+     simp[NoAsms,compile_register_kwarg_vars_cenv]) >>
+  `cekw.ce_imm_alloca = NONE` by
+    (qpat_assum `cekw with ce_vars := common.ec_env.ce_vars = common.ec_env`
+       (fn eq => PURE_ONCE_REWRITE_TAC [GSYM eq] >>
+          qpat_assum `common.ec_env.ce_imm_alloca = NONE` (mp_tac o PURE_ONCE_REWRITE_RULE [GSYM eq])) >>
+     simp[NoAsms]);
+
+
 fun linked_selected_trace_premises_tac ret_ty gas res es unlocked =
   mp_tac (Q.INST [`ret` |-> ret_ty, `gobs` |-> gas, `res` |-> res, `ee` |-> es,
       `unlocked` |-> unlocked, `dflts` |-> `[]:expr list`,
