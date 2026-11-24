@@ -121,7 +121,9 @@ Theorem captured_dynamic_load[local]:
     sn.cs_next_var <= sl.cs_next_var /\
     ~ul.vs_halted /\ ul.vs_current_bb = sl.cs_current_bb /\
     ul.vs_inst_idx = LENGTH sl.cs_current_insts /\
-    array_length_frame sn u G tn ul Gl tl
+    array_length_frame sn u G tn ul Gl tl /\
+    (?raw. run_inst_seq (emitted_insts sn sl) u = OK raw /\
+           ul = raw with vs_inst_idx := LENGTH sl.cs_current_insts)
 Proof
   strip_tac >>
   drule_then strip_assume_tac emitted_insts_emit_op >>
@@ -154,12 +156,88 @@ Proof
        (mp_tac o MATCH_MP emitted_insts_emit_op) >> simp[mk_inst_def]) >>
   qpat_x_assum `opc = MLOAD` SUBST_ALL_TAC >>
   qpat_assum `!fn PG. _` (qspecl_then [`fn`,`PG`] mp_tac) >>
-  simp[]
+  simp[run_inst_seq_def] >>
+  fs[array_length_step_ok_def]
 QED
 
-(* The bounds/address cut starts at the concrete load endpoint. The
-   frame at the original compiler cut survives both readonly stages. *)
+(* The scalar observation is made inside the scalar runner's existential,
+   so it refers to the very same state and ghosts as its semantic facts. *)
+Definition captured_dynamic_scalar_rule_def:
+  captured_dynamic_scalar_rule tail_obs <=>
+  !idx len sgn sa sc bop esz p sb s b iw nw tn G lo ctx fn explicit PG.
+    array_bounds_check idx len sgn sa = ((),sc) /\
+    array_elem_ptr bop idx T 32 esz sc = (p,sb) /\
+    eval_operand bop s = SOME b /\ eval_operand idx s = SOME iw /\
+    eval_operand len s = SOME nw /\
+    (!x. bop = Var x ==> not_fresh_at sa x) /\
+    (!x. idx = Var x ==> not_fresh_at sa x) /\
+    (!x. len = Var x ==> not_fresh_at sa x) /\
+    op_taint tn bop = {} /\ op_taint tn idx = {} /\ op_taint tn len = {} /\
+    op_prov G idx = NONE /\ op_prov G len = NONE /\
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    same_blocks sa sc /\ same_blocks sc sb /\
+    sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
+    sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
+    fn_has_code sa sc fn /\ fn_has_code sc sb fn /\
+    EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+                 ~is_terminator ins.inst_opcode) (emitted_insts sa sc) /\
+    EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+                 ~is_terminator ins.inst_opcode) (emitted_insts sc sb) /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t H tm.
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+        (if idx_in_range sgn iw nw then OK t else Abort Revert_abort t,H,tm)) /\
+      tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+      tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+      (!x. not_fresh_at sa x ==>
+        FLOOKUP H x = FLOOKUP G x /\ FLOOKUP tm.t_var x = FLOOKUP tn.t_var x /\
+        FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
+      (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) =
+        (if idx_in_range sgn iw nw then s else revert_state (set_returndata [] s)) /\
+      (idx_in_range sgn iw nw ==>
+        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        eval_operand p t = SOME (b + 32w + iw * n2w esz) /\
+        op_prov H p = op_prov G bop /\ op_taint tm p = {}) /\
+      tail_obs sa sc sb (idx_in_range sgn iw nw) (s,G,tn) (t,H,tm)
+End
+
+Theorem captured_dynamic_scalar_rule_trivial:
+  captured_dynamic_scalar_rule (\_ _ _ _ _ _. T)
+Proof
+  simp[captured_dynamic_scalar_rule_def] >> rpt gen_tac >> strip_tac >>
+  drule_all (Q.INST [`dyn` |-> `T`] array_tail_scalar_uniform) >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl [`t`,`H`,`tm`] >> simp[] >>
+  qpat_assum `s.vs_inst_idx = _` (once_rewrite_tac o single o GSYM) >>
+  first_assum ACCEPT_TAC
+QED
+
+(* The installed MLOAD ends at ul; the scalar run starts at that state,
+   with its actual length operand and without guessing the check result. *)
+Definition captured_dynamic_itinerary_def:
+  captured_dynamic_itinerary tail_obs fn bop iop dst esz sgn iw nw sn sb
+      (u,G,tn) (q,H,tm) <=>
+    ?len sl sc raw ul Gl tl.
+      emit_op MLOAD [bop] sn = (len,sl) /\
+      array_bounds_check iop len sgn sl = ((),sc) /\
+      array_elem_ptr bop iop T 32 esz sc = (dst,sb) /\
+      same_blocks sn sl /\ same_blocks sl sc /\ same_blocks sc sb /\
+      sl.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sl /\
+      sc.cs_current_insts = sl.cs_current_insts ++ emitted_insts sl sc /\
+      sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
+      fn_has_code sn sl fn /\ fn_has_code sl sc fn /\ fn_has_code sc sb fn /\
+      run_inst_seq (emitted_insts sn sl) u = OK raw /\
+      ul = raw with vs_inst_idx := LENGTH sl.cs_current_insts /\
+      eval_operand len ul = SOME nw /\
+      array_length_frame sn u G tn ul Gl tl /\
+      tail_obs sl sc sb (idx_in_range sgn iw nw) (ul,Gl,tl) (q,H,tm)
+End
+
+(* The frame at the original compiler cut survives both readonly stages. *)
 Theorem captured_dynamic_scalar_run[local]:
+  captured_dynamic_scalar_rule tail_obs /\
   compile_array_subscript bop iop T cnt 32 esz sgn (\op. emit_op MLOAD [op]) sn = (dst,sb) /\
   fn_has_code sn sb fn /\
   eval_operand bop u = SOME a /\ eval_operand iop u = SOME iw /\
@@ -178,6 +256,8 @@ Theorem captured_dynamic_scalar_run[local]:
     EVERY (\ins. ins.inst_opcode <> ALLOCA) (emitted_insts sn sb) /\
     same_blocks sn sb /\
     sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb /\
+    captured_dynamic_itinerary tail_obs fn bop iop dst esz sgn iw nw sn sb
+      (u,G,tn) (q,H,tm) /\
     (idx_in_range sgn iw nw ==>
       ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
       q.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -210,8 +290,14 @@ Proof
      strip_tac >>
      qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` drule >>
      simp[allocas_below_fmp_def] >> metis_tac[]) >>
-  drule_all (Q.INST [`dyn` |-> `T`] array_tail_scalar_uniform) >>
+  qpat_x_assum `captured_dynamic_scalar_rule tail_obs`
+    (drule_all o REWRITE_RULE [captured_dynamic_scalar_rule_def]) >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `captured_dynamic_itinerary tail_obs fn bop iop dst esz sgn iw nw sn sb
+      (u,G,tn) (t,H,tm)` by
+    (pure_rewrite_tac[captured_dynamic_itinerary_def] >>
+     qexistsl [`len`,`sl`,`sc`,`raw`,`ul`,`Gl`,`tl`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `same_blocks sn sb /\
    sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb` by
     (`emitted_insts sn sc = emitted_insts sn sl ++ emitted_insts sl sc` by
@@ -292,7 +378,8 @@ QED
 
 (* This suffix uses the retained representation, whether the caller
    obtained it by reading a popped place or by keeping an owned value. *)
-Theorem subscript_captured_dynamic_execution:
+Theorem subscript_captured_dynamic_execution_observed:
+  captured_dynamic_scalar_rule tail_obs /\
   compile_array_subscript bop iop T cnt 32 (type_memory_size tv) sgn
     (\op. emit_op MLOAD [op]) sn = (dst,sb) /\
   fn_has_code sn sb fn /\
@@ -316,6 +403,8 @@ Theorem subscript_captured_dynamic_execution:
   ?q H tm.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u,G,tn) []
       (if idx_in_range sgn iw (n2w (LENGTH vs)) then OK q else Abort Revert_abort q,H,tm)) /\
+    captured_dynamic_itinerary tail_obs fn bop iop dst (type_memory_size tv) sgn iw
+      (n2w (LENGTH vs)) sn sb (u,G,tn) (q,H,tm) /\
     (if idx_in_range sgn iw (n2w (LENGTH vs)) then
        0 <= i /\ Num i < LENGTH vs /\
        evaluate_subscripts (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs))
@@ -375,4 +464,55 @@ Proof
   simp[] >>
   qpat_x_assum `!m. _ ==> val_in_memory tv _ _ m` mp_tac >>
   simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+(* Ordinary clients do not ask for the scalar itinerary. *)
+Theorem subscript_captured_dynamic_execution:
+  compile_array_subscript bop iop T cnt 32 (type_memory_size tv) sgn
+    (\op. emit_op MLOAD [op]) sn = (dst,sb) /\
+  fn_has_code sn sb fn /\
+  eval_operand bop u = SOME a /\ eval_operand iop u = SOME iw /\
+  i = (if sgn then w2i iw else &(w2n iw)) /\
+  value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) /\
+  LENGTH vs < dimword (:256) /\
+  (!m. mem_agree_outside tn.t_mem u.vs_memory m ==>
+    val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) (w2n a) m) /\
+  op_prov G bop = SOME (pbase,sz) /\ op_prov G iop = NONE /\
+  pbase <= w2n a /\
+  w2n a + (32 + cap * type_memory_size tv) <= pbase + sz /\
+  w2n a + (32 + cap * type_memory_size tv) < dimword (:256) /\
+  w2n a + 32 <= u.vs_alloca_next /\
+  op_taint tn bop = {} /\ op_taint tn iop = {} /\
+  mem_word_taint tn.t_mem (w2n a) = {} /\
+  (!x. bop = Var x ==> not_fresh_at sn x) /\
+  (!x. iop = Var x ==> not_fresh_at sn x) /\
+  allocas_from lo u /\ alloca_history fn u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ ~u.vs_halted /\
+  u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts ==>
+  ?q H tm.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u,G,tn) []
+      (if idx_in_range sgn iw (n2w (LENGTH vs)) then OK q else Abort Revert_abort q,H,tm)) /\
+    (if idx_in_range sgn iw (n2w (LENGTH vs)) then
+       0 <= i /\ Num i < LENGTH vs /\
+       evaluate_subscripts (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs))
+         [ValueSubscript (IntV i)] = INL (EL (Num i) vs) /\
+       value_has_type tv (EL (Num i) vs) /\
+       ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+       q.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history fn q /\
+       eval_operand dst q = SOME (a + 32w + iw * n2w (type_memory_size tv)) /\
+       w2n (a + 32w + iw * n2w (type_memory_size tv)) =
+         w2n a + 32 + Num i * type_memory_size tv /\
+       op_prov H dst = SOME (pbase,sz) /\ op_taint tm dst = {} /\
+       w2n a + 32 + Num i * type_memory_size tv + type_memory_size tv <= pbase + sz /\
+       array_length_frame sn u G tn q H tm /\
+       (!m. mem_agree_outside tm.t_mem q.vs_memory m ==>
+         val_in_memory tv (EL (Num i) vs) (w2n a + 32 + Num i * type_memory_size tv) m)
+     else
+       evaluate_subscripts (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs))
+         [ValueSubscript (IntV i)] = INR (RuntimeError "evaluate_subscripts array_index"))
+Proof
+  strip_tac >>
+  assume_tac captured_dynamic_scalar_rule_trivial >>
+  drule_all subscript_captured_dynamic_execution_observed >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl [`q`,`H`,`tm`] >> simp[]
 QED

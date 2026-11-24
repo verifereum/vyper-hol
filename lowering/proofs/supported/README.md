@@ -53,9 +53,9 @@ bounds where those types are supported. Typing and allocation are separate.
   `(mutability,nonreentrant,raw_return,args,defaults,return_type,body)`.
 - `supported_event_fields tops id`: option of declared `(argument,indexed)` list.
 
-These are **raw syntactic lookups**, not admission predicates: inspect their
-results and combine them with the declaration/type checks. All namespace-bearing
-lookups reject `SOME module_id`, including `SOME 0`.
+These raw lookups take a single module's declarations and an unqualified key
+`(NONE, name)`. For a qualified reference `(SOME module_id, name)`, the linked
+checks resolve the module first and use its declarations with `(NONE, name)`.
 
 `FunctionDecl` header checks deliberately ignore the body, as their name and
 `supported_header_body_independent` contract state. There is no body predicate
@@ -109,10 +109,10 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
 - `supported_storage_scalar tops id ty`, `supported_storage_array tops id`,
   `supported_storage_dynamic_array tops id`, `supported_subscript_base tops id`,
   `supported_storage_fields tops id`, `supported_storage_field_read tops id field`.
-  These inspect the declaration lookups; require private slotted admitted storage/map
-  declarations, reject modules, and distinguish aggregate places from values.
-  Storage-field **reads** require the first field; writes may use any field
-  in the exported field list.
+  For unqualified ids, these check the local declaration, its storage type,
+  and its slot. Storage-field reads check declared field membership.
+  The syntax predicates accept qualified ids for resolution by the linked
+  checks. `supported_storage_fields` itself is a single-module field lookup.
 - `supported_external_return_type tops ty`: any `supported_value_type tops ty`
   (W, strings/bytes, tuples of scalars, arrays of W, word structs); no NoneT.
 
@@ -124,9 +124,11 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
   Subscript/Attribute are specially checked places, not standalone P values.
   Ternaries use the supported value types with tuple results excluded.
 - `supported_effect_expr tops e` (E): only root IntCall, ExtCall, Send, or Pop.
-  All call arguments, including external target/value, must be P. Internal
-  lookup requires Internal/NONE. ExtCall requires exact count, W arguments and
-  a supported value return. No declaration is consulted: the selector is
+  All call arguments, including external target/value, must be P. An
+  unqualified `IntCall` requires an `Internal` declaration in `tops`. The
+  syntax gate accepts qualified `IntCall` ids for resolution in the linked
+  unit, including imported constructors in deploy mode. ExtCall requires
+  exact count, W arguments and a supported value return. Its selector is
   hashed from the call-site signature, as the source semantics does
   ([#555](https://github.com/verifereum/vyper-hol/issues/555)).
   Keyword operands (`value=`, `gas=`, `default_return_value=`) follow the
@@ -199,11 +201,10 @@ Proof paths: `supportedExprFormPropsScript.sml` (F below) and
 - `supported_internal_stmt_shape`/list variant exclude AnnAssign and For
   recursively. `supported_internal_shape_bindings` proves this is exactly
   emptiness of both binding lists.
-- `supported_type_namespace` recursively checks **only** module components in
-  type annotations, independently of the W/value/storage classes. Together
-  with `expr_nonmain_type_root` and the statement traversal, this enforces the
-  global main-module requirement even in Name/Subscript annotations and loop
-  types; it does not invoke or reproduce source typing.
+- `supported_type_namespace` checks for main-module struct and flag names,
+  recursing through array and tuple types. The `For` clause uses
+  `supported_iterator` and checks the loop body with `supported_stmts`.
+  `supported_default_expression` uses `supported_expr`.
 - `supportedStmtsTheory`: `supported_stmt tops bindings`, `supported_stmts`
   enumerate every constructor. E is admitted at Expr, Return, AnnAssign,
   Assign/AugAssign RHSs and supported subscript-target indices. Nested effects
@@ -221,18 +222,21 @@ Proof paths: `supportedExprFormPropsScript.sml` (F below) and
   implemented evaluation orders, not an assignment simulation theorem:
   [stmtSim](../stmtSimScript.sml) still lists Assign/AugAssign as unproved.
 - `supported_iterator tops ty iter bound`: two IntL endpoints require integer
-  loop type, start <= end, and exact `Num(end-start)` (including zero); other
-  ranges require two P expressions and a positive bound; arrays require the
-  exact Name/Fixed element-type and bound shape. Nonliteral endpoint typing is
-  a separate source-typing check, not an added restriction here.
-- `supported_assert_reason`, `supported_raise_reason`: only bare,
-  UNREACHABLE or StringL. `supported_log` checks declared event existence,
-  module NONE, exact argument count/types and P arguments.
-- `supportedProgramTheory`: `supported_function_body` combines complete
-  binding/name checks, statement checks, annotation namespaces and the
-  Internal no-AnnAssign/no-For/no-IntCall restriction. Every For body excludes
-  IntCall through its entire recursive subtree. Send/ExtCall/Pop are **not**
-  prohibited merely because they are effects in an Internal/For body.
+  loop type, start <= end, and exact `Num(end-start)` (including zero).
+  Other ranges require two P expressions and a positive bound, and apply the
+  literal checks when substitution exposes two integer literals. Array
+  elements must have the loop type. A local fixed array's size must equal
+  the loop bound. In the other array forms, the array bound must fit within
+  the loop bound.
+- `supported_assert_reason` and `supported_raise_reason` admit bare,
+  UNREACHABLE, literal or pure string reasons, and custom errors with pure
+  arguments. Both custom errors and logs use module-qualified IDs. These
+  predicates check the main-module declaration and arguments locally for
+  unqualified IDs. Linked checks resolve imported declarations and validate
+  their arguments.
+- `supportedProgramTheory`: `supported_function_body` checks the parameter
+  names, uses the collected local and loop bindings to check the statements,
+  and requires `body_stmts_safe`.
 - `supported_declaration_body` explicitly handles all declarations;
   `supported_program` conjoins the declaration headers and actual selector/name
   checks with all function bodies. Fallback arguments, defaults,
