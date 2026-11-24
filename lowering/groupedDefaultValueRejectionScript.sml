@@ -7,7 +7,24 @@ Ancestors
   sourceUnitExecution vyperCall vyperState vyperInterpreter gasSummary
   venomState venomInst ptrDiscipline finite_map words list arithmetic
 
-Theorem grouped_selected_default_value_rejection:
+(* Retain the concrete check cursor before projecting ordinary correctness. *)
+val _ = Parse.hide "body";
+val (check_inputs, legacy_result) = dest_imp (concl (Q.INST
+  [`defaults` |-> `dflts`, `body` |-> `fbody`]
+  (SPEC_ALL grouped_entry_value_rejected)));
+val reject_result = ``reject_result:bool``;
+val selected_parameters = ["tops","am","tx","mut","nr","args","dflts","ret","fbody",
+                           "unit","vs","shadow_ctx","reject_result"];
+fun check_handler result =
+  let val body = ``^check_inputs ==> ^result`` in
+    list_mk_forall
+      (filter (fn v => not (mem (fst (dest_var v)) selected_parameters))
+        (free_vars body), body)
+  end;
+val reject_handler = check_handler reject_result;
+val legacy_handler = check_handler legacy_result;
+
+val selected_reject_inputs = ``
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   initial_venom_state_rel tops am tx vs /\
@@ -39,11 +56,12 @@ Theorem grouped_selected_default_value_rejection:
   common.ec_payable = (mut = Payable) /\
   send_call_value mut (initial_evaluation_context am.sources am.layouts tx NONE)
     (initial_state am [FEMPTY] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
-    (INR e,ev) ==>
-  source_unit_execution_correct_with shadow_ctx [] tops ret am tx unit vs /\
-  !tail. FST (call_external (SOME vs.vs_outcomes) tail am tx) <>
-    INR (Error (RuntimeError "msg.gas: no gas reading"))
+    (INR e,ev)``;
+
+Theorem grouped_selected_default_value_rejection_cases:
+  ^reject_handler ==> ^selected_reject_inputs ==> ^reject_result
 Proof
+  disch_then (mk_asm "on_check") >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `s = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
                             vs_inst_idx := 0|>` >>
@@ -70,7 +88,7 @@ Proof
   suspend "reject"
 QED
 
-Resume grouped_selected_default_value_rejection[reject]:
+Resume grouped_selected_default_value_rejection_cases[reject]:
   `value_transfer_ok tx am.accounts` by
     (qpat_assum `initial_venom_state_rel _ _ _ _`
        (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [initial_venom_state_rel_def])) >>
@@ -112,7 +130,23 @@ Resume grouped_selected_default_value_rejection[reject]:
     (qpat_assum `hit.vs_call_ctx = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   `phi_prefix_length bb.bb_instructions = 0` by
     (qpat_assum `!name bb. lookup_block name _ = SOME bb ==> _` (drule_then ACCEPT_TAC)) >>
-  drule_all grouped_entry_value_rejected >> disch_then ACCEPT_TAC
+  qpat_assum `s = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                            vs_inst_idx := 0|>` (fn eq =>
+    asm "on_check" (drule_all o PURE_REWRITE_RULE [eq])) >>
+  disch_then ACCEPT_TAC
 QED
 
-Finalise grouped_selected_default_value_rejection
+Finalise grouped_selected_default_value_rejection_cases
+
+Theorem grouped_default_legacy_rejection_handler[local]:
+  ^legacy_handler
+Proof
+  rpt gen_tac >> disch_then (ACCEPT_TAC o MATCH_MP grouped_entry_value_rejected)
+QED
+
+Theorem grouped_selected_default_value_rejection:
+  ^selected_reject_inputs ==> ^legacy_result
+Proof
+  ACCEPT_TAC (MATCH_MP grouped_selected_default_value_rejection_cases
+    grouped_default_legacy_rejection_handler)
+QED

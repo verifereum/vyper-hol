@@ -224,9 +224,23 @@ Resume abi_encode_vv_full_from_packaging[payload]:
        (drule_then mp_tac) >>
      simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def] >>
      decide_tac) >>
+  `!name x sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at allocated x` by
+    (rpt strip_tac >>
+     qpat_assum `local_ptrs_reserved ce allocated`
+       (qspecl_then [`name`, `name`, `x`, `sz`, `sz`] (drule_then (ACCEPT_TAC o cj 1)) o
+        cj 2 o REWRITE_RULE [local_ptrs_reserved_def])) >>
+  `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at allocated x) /\
+   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at allocated x) /\
+   (!x. lo <> 0 /\ ce.ce_imm_alloca = SOME (Var x) ==> not_fresh_at allocated x)` by
+    (qpat_assum `ci_mono st allocated`
+       (assume_tac o cj 2 o REWRITE_RULE [ci_mono_def]) >>
+     rpt conj_tac >> rpt strip_tac >>
+     irule not_fresh_at_mono >> qexists_tac `st` >> asm_rewrite_tac[] >>
+     first_assum (drule_all_then ACCEPT_TAC)) >>
   `ghost_inv_at (DF H0) lo d ce cx mid' Gpre tnpre pre` by
     (qpat_assum `!D d ce cx es. _ ==> ghost_inv_at D lo d ce cx es Gpre tnpre pre` irule >>
-     simp[] >> metis_tac[not_fresh_at_mono, local_ptrs_reserved_def]) >>
+     asm_rewrite_tac[]) >>
   suspend "setup_frame"
 QED
 
@@ -371,7 +385,7 @@ Resume abi_encode_vv_full_from_packaging[setup_horizons]:
       >> qpat_assum `typed_copy_state_frame allocated p N u pre`
            (ACCEPT_TAC o cj 2 o MATCH_MP (iffLR typed_copy_state_frame_def))) >>
   qpat_assum `!D d ce cx es. _ ==> ghost_inv_at D lo d ce cx es Gpre tnpre pre` irule >>
-  simp[] >> metis_tac[not_fresh_at_mono, local_ptrs_reserved_def]
+  asm_rewrite_tac[]
 QED
 
 Resume abi_encode_vv_full_from_packaging[setup_caller_frame]:
@@ -885,10 +899,32 @@ Resume abi_encode_vv_full_from_packaging[standalone_payload]:
        (mp_tac o SIMP_RULE (srw_ss()) [compile_abi_encode_payload_def, comp_bind_def,de,ue,se,te]))))) >>
      simp[]) >>
   `ci_mono ready unwrap_end /\ ci_mono unwrap_end body_end /\ ci_mono st body_end` by
-    metis_tac[ci_mono_unwrap_value, cj 2 ci_mono_compile_abi_encode, ci_mono_trans, SND] >>
+    (`ci_mono ready unwrap_end` by
+       (qpat_assum `unwrap_value ce sv ready = (src,unwrap_end)` (fn eq =>
+          ACCEPT_TAC (REWRITE_RULE [eq, SND]
+            (Q.SPECL [`ce`, `sv`, `ready`] ci_mono_unwrap_value)))) >>
+     `ci_mono unwrap_end body_end` by
+       (qpat_assum `compile_abi_encode_to_buf (Var dp) src _ unwrap_end = (len,body_end)`
+          (fn eq => ACCEPT_TAC (REWRITE_RULE [eq, SND]
+            (Q.SPECL [`Var dp`, `src`, `type_to_abi_enc_info ce.ce_struct_fields ce ty`,
+                      `unwrap_end`] (cj 2 ci_mono_compile_abi_encode))))) >>
+     asm_rewrite_tac[] >>
+     irule ci_mono_trans >> qexists_tac `unwrap_end` >> asm_rewrite_tac[] >>
+     irule ci_mono_trans >> qexists_tac `ready` >> asm_rewrite_tac[] >>
+     irule ci_mono_trans >> qexists_tac `allocated` >> asm_rewrite_tac[] >>
+     irule ci_mono_trans >> qexists_tac `method_st` >> asm_rewrite_tac[]) >>
   `fn_has_code ready unwrap_end func /\ fn_has_code unwrap_end body_end func` by
-    metis_tac[fn_has_code_split, ci_mono_def] >>
-  `!l. vv_operand sv <> Label l` by metis_tac[abi_encode_snapshot_not_label] >>
+    (match_mp_tac (Q.SPECL [`ready`, `unwrap_end`, `body_end`, `func`] fn_has_code_split) >>
+     asm_rewrite_tac[] >> conj_tac
+     >- qpat_assum `ci_mono ready unwrap_end`
+          (ACCEPT_TAC o cj 1 o REWRITE_RULE [ci_mono_def]) >>
+     qpat_assum `ci_mono unwrap_end body_end`
+       (ACCEPT_TAC o cj 1 o REWRITE_RULE [ci_mono_def])) >>
+  `!l. vv_operand sv <> Label l` by
+    (match_mp_tac (Q.INST [`si` |-> `si`, `sm` |-> `sm`,
+       `ss` |-> `ss`, `vv` |-> `evv`, `copy` |-> `copy`]
+       abi_encode_snapshot_not_label) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   mp_tac (Q.INST [`ee` |-> `mid'`,`front` |-> `st`,`s` |-> `t`,`G` |-> `G1`,`tn` |-> `tn1`,
     `su` |-> `ready`,`sb` |-> `unwrap_end`,`u` |-> `pre`,`Gu` |-> `Gpre`,`tu` |-> `tnpre`,
     `saved` |-> `sv`,`vv` |-> `evv`,`explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
@@ -920,12 +956,16 @@ Resume abi_encode_vv_full_from_packaging[standalone_payload]:
     (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func ce cx mid' z /\ _`
        (qspec_then `H0` (drule_then (ACCEPT_TAC o cj 1)))) >>
   `p+N <= z.vs_alloca_next /\ 32+k+LENGTH bytes <= N` by
-    (conj_tac >- metis_tac[alloca_site_registered_below] >>
+    (conj_tac
+     >- (irule alloca_site_registered_below >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qexists_tac `st.cs_next_id` >> first_assum ACCEPT_TAC) >>
      simp_tac bool_ss [Abbr `N`] >> irule abi_encode_payload_capacity >>
      first_assum ACCEPT_TAC) >>
   `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_id = st.cs_next_id /\ inst.inst_outputs = [root] /\
-    not_local_ptr ce mid'.scopes root` by metis_tac[] >>
+    not_local_ptr ce mid'.scopes root` by
+    (qexists_tac `inst` >> asm_rewrite_tac[]) >>
   mp_tac (Q.INST [`H` |-> `H0`,`s` |-> `z`,`G` |-> `Gz`,`tn` |-> `tz`,
     `ee` |-> `mid'`,`sa` |-> `first`,`sb` |-> `last`,`x` |-> `root`,`b` |-> `p`,
     `n` |-> `N`,`d` |-> `p+32+k`,`len` |-> `LENGTH (bytes:word8 list)`]
@@ -982,7 +1022,9 @@ Resume abi_encode_vv_full_from_packaging[source_cut]:
 QED
 
 Resume abi_encode_vv_full_from_packaging[standalone_source_premises]:
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >> metis_tac[]
+  qpat_assum `inst.inst_id = st.cs_next_id` (fn id_eq =>
+    asm_rewrite_tac [id_eq]) >>
+  rpt conj_tac >> decide_tac
 QED
 
 Resume abi_encode_vv_full_from_packaging[standalone_scratch]:
@@ -999,7 +1041,12 @@ Resume abi_encode_vv_full_from_packaging[standalone_open_input]:
   simp_tac bool_ss [Abbr `bytes`] >>
   `!t value_type. evaluate_type (get_tenv cx) t = SOME value_type ==>
     type_memory_bytes ce t = type_memory_size value_type` by
-    metis_tac[abi_encode_body_evaluated_metadata] >>
+    (rpt strip_tac >>
+     rename1 `type_memory_bytes ce input_ty = type_memory_size runtime_ty` >>
+     qpat_assum `evaluate_type (get_tenv cx) input_ty = SOME runtime_ty` (fn eval_ty =>
+       qpat_assum `expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es`
+         (fn pre => ACCEPT_TAC (CONJUNCT1
+           (MATCH_MP abi_encode_body_evaluated_metadata (CONJ pre eval_ty)))))) >>
   irule abi_encode_uniform_translated_footprint_window >>
   simp[] >> qexists_tac `get_tenv cx` >> simp[]
 QED
@@ -1069,7 +1116,10 @@ Resume abi_encode_vv_full_from_packaging[standalone_phase_premises]:
   `st.cs_next_id NOTIN window_alloca_sites func (frag_ids unwrap_end body_end)` by
     (strip_tac >> res_tac >> decide_tac) >>
   `local_ptrs_reserved ce unwrap_end` by
-    metis_tac[ci_mono_def, local_ptrs_reserved_next_var] >>
+    (irule local_ptrs_reserved_next_var >> qexists_tac `ready` >>
+     asm_rewrite_tac[] >>
+     qpat_assum `ci_mono ready unwrap_end`
+       (ACCEPT_TAC o cj 2 o REWRITE_RULE [ci_mono_def])) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   TRY (qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
   TRY (simp_tac (srw_ss()) [EVERY_DEF] >> decide_tac >> NO_TAC) >>
@@ -1165,7 +1215,17 @@ Resume abi_encode_vv_full_from_packaging[finish_payload]:
   `local_ptrs_reserved ce body_end /\
    (!x. not_fresh_at st x ==> not_fresh_at body_end x) /\
    (!x. not_fresh_at sa x ==> not_fresh_at body_end x)` by
-    (fs[ci_mono_def] >> metis_tac[local_ptrs_reserved_next_var, not_fresh_at_mono, LESS_EQ_TRANS]) >>
+    (conj_tac
+     >- (irule local_ptrs_reserved_next_var >> qexists_tac `st` >>
+         asm_rewrite_tac[]) >>
+     conj_tac
+     >- (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `st` >>
+         asm_rewrite_tac[]) >>
+     rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
+     asm_rewrite_tac[] >>
+     irule LESS_EQ_TRANS >> qexists_tac `st.cs_next_var` >>
+     qpat_assum `ci_mono sa st` (assume_tac o cj 2 o REWRITE_RULE [ci_mono_def]) >>
+     asm_rewrite_tac[]) >>
   `!H. valid_horizon cx st0 H mid'.storage_trace ==>
     ghost_inv_at (DF H) lo d ce cx mid' Gf tf actual /\
     ghost_kept_at lo ce mid' st G1 tn1 t Gf tf` by suspend "finish_ghost" >>
@@ -1368,15 +1428,28 @@ Resume abi_encode_vv_full_from_packaging[finish_pure_frame]:
   `pure_frame ce func es sa s0 q` by
     (match_mp_tac (Q.SPECL [`ce`,`func`,`es`,`mid'`,`sa`,`st`,`s0`,`t`,`q`]
        pure_frame_trans) >>
-     fs[wb_frame_def, ci_mono_def] >> metis_tac[]) >>
+     qpat_assum `ci_mono sa st` (assume_tac o cj 3 o REWRITE_RULE [ci_mono_def]) >>
+     qpat_assum `wb_frame ce mid' mid' st t q`
+       (assume_tac o cj 2 o REWRITE_RULE [wb_frame_def]) >>
+     qpat_assum `wb_frame ce es mid' sa s0 t`
+       (assume_tac o cj 1 o REWRITE_RULE [wb_frame_def]) >>
+     asm_rewrite_tac[] >>
+     first_assum (drule_then ACCEPT_TAC)) >>
   match_mp_tac (Q.SPECL [`ce`,`func`,`es`,`sa`,`s0`,`q`,`actual`,`inst`,`p`,`N`]
     pure_frame_buffer_tail) >>
-  asm_rewrite_tac[] >> rpt conj_tac >> TRY (fs[ci_mono_def] >> NO_TAC)
+  asm_rewrite_tac[] >> rpt conj_tac
+  >- (qpat_assum `inst.inst_id = st.cs_next_id` SUBST1_TAC >>
+      qpat_assum `ci_mono sa st` (ACCEPT_TAC o cj 3 o REWRITE_RULE [ci_mono_def]))
   >- (rpt strip_tac >>
       `local_region ce mid'.scopes actual n lb lsz` by
         (irule local_region_frame_fwd >> qexistsl_tac [`s0`,`sa`,`es.scopes`] >>
-         fs[wb_frame_def]) >>
-      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
+         asm_rewrite_tac[] >>
+         qpat_assum `wb_frame ce es mid' sa s0 actual`
+           (ACCEPT_TAC o cj 1 o REWRITE_RULE [wb_frame_def])) >>
+      qpat_assum `!name b sz. local_region ce mid'.scopes actual name b sz ==> _`
+        (drule_then mp_tac) >>
+      simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def] >>
+      decide_tac) >>
   rpt gen_tac >> simp[NoAsms, loweringStateRelDefsTheory.regions_disjoint_def] >>
   disch_tac >>
   qpat_assum `!a n. _ ==> mem_bytes_at a n actual.vs_memory = _` irule >>
