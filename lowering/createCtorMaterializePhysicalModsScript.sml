@@ -466,7 +466,59 @@ Theorem ctor_materialize_unwrap_retag_mods:
         type_memory_bytes ce (post_value_type ce e) = type_memory_size rty /\
         type_memory_size rty < 2 ** 64
 Proof
-  cheat
+  strip_tac >>
+  `expr_sim_inv_mods mods ce cx env es /\ well_typed_expr env e /\
+   alloc_limits_expr ce e /\ call_evaluation_safe cx (int_calls_expr e)` by
+    fs[expr_body_pre_mods_def] >>
+  drule ctor_physical_static_mods >>
+  disch_then (fn th => assume_tac th >> qspec_then `e` drule th) >>
+  disch_then (CONJUNCTS_THEN assume_tac) >>
+  `~is_word_type (post_value_type ce e)` by
+    metis_tac[is_bytestring_word_type] >>
+  `unwrap_value ce vv mid = (op,su)` by
+    (Cases_on `vv` >- fs[ext_call_arg_value_def] >>
+     rename1 `LocatedValue tag p` >>
+     `p.ptr_location <> LocMemory ==> tag = lowered_value_type ce e` by
+       (strip_tac >>
+        `post_value_type ce e = lowered_value_type ce e` by
+          (drule snapshot_changed_type_location >> fs[vv_location_def]) >>
+        fs[bodyFullPostsModsTheory.vv_post_mods_def,
+           bodyFullPostsModsTheory.vv_holds_mods_def, vv_holds_def] >>
+        Cases_on `p.ptr_location = LocCode` >> gvs[]) >>
+     Cases_on `p.ptr_location = LocMemory`
+     >- (`~is_word_type tag` by
+           (fs[bodyFullPostsModsTheory.vv_post_mods_def,
+               bodyFullPostsModsTheory.vv_holds_mods_def, vv_holds_def] >>
+            metis_tac[is_bytestring_word_type]) >>
+         gvs[ext_call_arg_value_def, unwrap_value_def]) >>
+     gvs[ext_call_arg_value_def]) >>
+  `bind (eval_expr cx e) (read_result cx) es = (INL v,ee)` by simp[bind_def] >>
+  `value_runtime_typed env (expr_type e) v` by
+    (drule_all ctor_read_annotation_mods >> simp[]) >>
+  `value_runtime_typed env (lowered_value_type ce e) v` by
+    (irule ctor_physical_read_mods >> simp[] >>
+     metis_tac[]) >>
+  `env.type_defs = get_tenv cx` by
+    (drule expr_sim_inv_mods_env >> simp[env_consistent_def, env_context_consistent_def]) >>
+  `value_runtime_typed env (post_value_type ce e) v` by metis_tac[] >>
+  `arg_type_fits (post_value_type ce e) (expr_type e)` by
+    metis_tac[ifexp_arg_type_fits_refl] >>
+  qpat_x_assum `value_runtime_typed _ (expr_type _) _` mp_tac >>
+  simp[value_runtime_typed_def] >>
+  disch_then (qx_choose_then `aty` strip_assume_tac) >>
+  qpat_x_assum `value_runtime_typed _ (post_value_type _ _) _` mp_tac >>
+  simp[value_runtime_typed_def] >>
+  disch_then (qx_choose_then `rty` strip_assume_tac) >>
+  qexists_tac `rty` >> simp[] >>
+  `type_memory_bytes ce (post_value_type ce e) = type_memory_size rty` by
+    metis_tac[ctor_physical_memory_size_mods] >>
+  `type_memory_bytes ce (expr_type e) = type_memory_size aty` by
+    metis_tac[ctor_physical_memory_size_mods] >>
+  `type_memory_size rty <= type_memory_size aty` by
+    metis_tac[cj 1 arg_fits_evaluated_memory_size] >>
+  drule alloc_limits_expr_type_alloc_ok >>
+  `~is_word_type (expr_type e)` by metis_tac[arg_type_fits_word_type] >>
+  simp[type_alloc_ok_def]
 QED
 
 Theorem ctor_materialize_unwrap_physical_mods:
