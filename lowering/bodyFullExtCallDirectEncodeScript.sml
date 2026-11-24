@@ -10,7 +10,7 @@ Ancestors
 
 (* The cursor site is distinct from the request allocation and is the
    only allocation touched by the loop's initialization and finish. *)
-Theorem abi_encode_saved_values_execute_with_frame_and_path[local]:
+Theorem abi_encode_saved_values_execute_with_frame_and_path:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
     shared pbase capacity root payload_var dst_offset prefix st u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
