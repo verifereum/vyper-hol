@@ -9,6 +9,9 @@ Ancestors
   context compileEnv bodyMemoryDefs bodyFullAssign abiEncodeArgsCase abiEncodeArgsSim abiEncodeMaterialize
   aggregateEvaluatedLayout exprPtrUnwrapStorageShape vyperEvalExprPreservesScopesDom
   vyperTypeExprSoundness vyperStorageFootprint vyperState freshWrites
+  createCtorSnapshotReadTypeMods createCtorSnapshotByteRetagMods
+  exprSimIfExpCompat createCtorStorageBaseOriginMods createCtorStorageSelectorOriginMods exprBodyPreTypingProps exprBodyPreCallSafetyProps
+  vyperTypeEvalSoundness vyperTypeEvalCaseProofs vyperTypeSystem valueCopyBytes vyperTypeSoundness vyperFiniteStoragePreservation vyperTypeExtCallCore vyperStoragePlaceObserved accountsRelProps vyperTypeInvariants loweringStateRelDefs
 
 (* The word snapshot is exactly the scalar child fragment, including
    any instructions emitted by unwrapping a located word. *)
@@ -99,7 +102,60 @@ Theorem ctor_retained_representation_mods[local]:
     ptr_vv_ok cx (lowered_value_type ce e) saved sv ee G tn t /\
     vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e) ee saved sv t
 Proof
-  cheat
+  strip_tac >> drule ctor_snapshot_word_types_mods >> strip_tac >>
+  `~is_word_type (expr_type e)` by metis_tac[] >>
+  drule expr_body_pre_mods_inv >> strip_tac >>
+  drule expr_body_pre_mods_well_typed >> strip_tac >>
+  drule expr_sim_inv_mods_env >> strip_tac >>
+  `env.type_defs = get_tenv cx` by metis_tac[env_consistent_type_defs_get_tenv] >>
+  `!id ty. FLOOKUP env.var_types id = SOME ty ==> well_formed_type env.type_defs ty` by
+    metis_tac[logArgumentTypeEvalTheory.consistent_variable_type_well_formed] >>
+  `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by fs[expr_sim_inv_mods_def] >>
+  `!fid sg. FLOOKUP env.fn_sigs fid = SOME sg ==>
+            ce.ce_func_return_type (nsid_to_string fid) = sg.ret_ty` by
+    metis_tac[expr_sim_inv_mods_return_type] >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    (drule_all ifexp_lowered_type_classify >> strip_tac >> simp[] >>
+     PairCases_on `fid` >>
+     gvs[well_typed_expr_def, lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+     qpat_x_assum `!fid sg. _` (drule_then SUBST1_TAC) >>
+     fs[type_widens_to_def]) >>
+  drule_all_then assume_tac materialize_post_lowered_classify >>
+  `~is_word_type (post_value_type ce e)` by metis_tac[is_bytestring_word_type] >>
+  `vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e) ee raw vv t` by
+    (irule extcall_saved_physical_store_bound >> conj_tac
+     >- (qexists_tac `v` >> simp[]) >> qexists_tac `post_value_type ce e` >> simp[]) >>
+  Cases_on `?tag p. vv = LocatedValue tag p /\ p.ptr_location <> LocMemory`
+  >- (gvs[] >>
+      `lowered_value_type ce e = expr_type e` by metis_tac[compile_nonmemory_lowered_value_type] >>
+      `post_value_type ce e = expr_type e` by simp[post_value_type_lowered] >>
+      `tag = expr_type e` by (Cases_on `p.ptr_location = LocCode` >> fs[vv_holds_mods_def, vv_holds_def]) >>
+      gvs[ext_call_arg_value_def] >> qexists_tac `raw` >> simp[]) >>
+  Cases_on `post_value_type ce e = lowered_value_type ce e`
+  >- (Cases_on `vv` >> gvs[ext_call_arg_value_def] >> qexists_tac `raw` >>
+      gvs[vv_holds_mods_def, vv_holds_def, vv_at_def, ptr_vv_ok_def, vv_store_bound_def]) >>
+  `post_value_type ce e = expr_type e` by
+    (Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+     >- (gvs[vyperASTTheory.expr_type_def] >> IF_CASES_TAC >> gvs[])
+     >> metis_tac[post_value_type_not_int_call]) >>
+  `vyperState$bind (eval_expr cx e) (read_result cx) es = (INL v,ee)` by simp[bind_def] >>
+  `?a. evaluate_type (get_tenv cx) (expr_type e) = SOME a /\ value_has_type a v` by
+    (drule expr_body_pre_mods_runtime_typing >> strip_tac >>
+     drule expr_body_pre_mods_call_evaluation_safe >> strip_tac >>
+     drule_at (Pat `vyperState$bind _ _ _ = _`) (REWRITE_RULE [ETA_AX] eval_expr_read_type_sound) >>
+     disch_then (qspec_then `env` mp_tac) >> simp[runtime_consistent_def, value_runtime_typed_def] >>
+     fs[runtime_consistent_def]) >>
+  drule_all_then strip_assume_tac ctor_snapshot_read_physical_type_mods >>
+  `(?tag op. vv = StackValue tag op) \/ (?tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory)` by
+    (Cases_on `vv` >> gvs[]) >>
+  `vv_holds_mods ce cx (lowered_value_type ce e) (Value v) sv ee t /\
+   vv_at ce cx (lowered_value_type ce e) sa sb ee (Value v) sv t /\
+   ptr_vv_ok cx (lowered_value_type ce e) (Value v) sv ee G tn t /\
+   vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e) ee (Value v) sv t` by
+    (qpat_x_assum `sv = _` SUBST_ALL_TAC >>
+     irule ctor_snapshot_bytes_retag_mods >> metis_tac[]) >>
+  Cases_on `vv` >> gvs[ext_call_arg_value_def] >>
+  qexists_tac `Value v` >> simp[read_result_def, return_def]
 QED
 
 Theorem ctor_retained_storage_live_mods[local]:
@@ -111,7 +167,48 @@ Theorem ctor_retained_storage_live_mods[local]:
   vv_post_mods H ctx func ce cx e es sa sb s0 ee raw vv t ==>
   vv_storage_live H cx vv ee t
 Proof
-  cheat
+  Cases_on `vv` >- simp[] >> strip_tac >>
+  rename1 `vv_storage_live _ _ (LocatedValue tag p) _ _` >>
+  Cases_on `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient`
+  >- (`tag = expr_type e /\ (!v. raw <> Value v)` by
+        (drule_at (Pat `contract_inv _ _ _ _ _`) ctor_storage_origin_from_base_mods >>
+         disch_then (drule_at (Pat `module_body_inv _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+         disch_then (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+         simp[] >> strip_tac >>
+         first_x_assum irule >> rpt gen_tac >> disch_tac >>
+         drule ctor_storage_base_origin_mods >> disch_then irule >>
+         metis_tac[]) >>
+      drule_then strip_assume_tac expr_body_pre_mods_runtime_typing >>
+      drule_then assume_tac expr_body_pre_mods_call_evaluation_safe >>
+      `eval_result_typed (env,cx,ee) raw (Type (expr_type e))` by
+        (irule (cj 2 typed_expr_success_preserves_type) >>
+         qpat_assum `runtime_consistent _ _ _`
+           (strip_assume_tac o REWRITE_RULE [runtime_consistent_def]) >>
+         asm_rewrite_tac[] >> qexists_tac `es with gas_obs := gs` >>
+         asm_rewrite_tac[]) >>
+      `env.type_defs = get_tenv cx` by metis_tac[runtime_consistent_get_tenv] >>
+      `vv_place_ptr_mods ce cx ee t raw (LocatedValue tag p)` by
+        fs[vv_post_mods_def] >>
+      Cases_on `raw` >> gvs[eval_result_typed_def] >>
+      rename1 `runtime_place_typed cx ee place tv` >>
+      Cases_on `place` >>
+      gvs[vv_place_ptr_mods_def, vv_place_ptr_def, runtime_place_typed_def,
+          place_type_value_def, return_def] >>
+      rename1 `eval_expr _ _ _ = (INL (PlaceR (StoragePlace tr slot leaf)),_)` >>
+      `storage_read_live H tr (get_storage cx ee tr) slot leaf` by
+        (Cases_on `type_slot_size leaf = 0`
+         >- simp[storage_read_live_def, wordsTheory.w2n_lt,
+                  arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
+         drule_all eval_expr_observed_region >> strip_tac >>
+         `MEM (tr,n2w offset,tv) (FST H)` by
+           (irule storage_observations_ok_root >>
+            fs[valid_horizon_def] >> metis_tac[]) >>
+         irule storage_place_observed_read_live >>
+         simp[storage_place_observed_def] >>
+         qexistsl [`n2w offset`, `tv`, `path`, `delta`] >> simp[]) >>
+      Cases_on `tr` >> gvs[slot_loc_def]) >>
+  gvs[]
 QED
 
 Theorem ctor_saved_head_retained_mods:
