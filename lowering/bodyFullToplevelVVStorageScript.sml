@@ -9,17 +9,18 @@ Ancestors
   vyperInterpreter vyperState vyperAST exprSimHyps exprSimDefs loweringStateRelDefs
   fragGasOriginPtr exprSimMemDefs bodyFullToplevelVVNil
 
+(* Needs no allocation bound on the variable's type: the read compiles to
+   its slot and allocates nothing. *)
 Theorem toplevel_storage_vv_nil:
   body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env (TopLevelName ann (src,id)) es /\
+  expr_sim_inv cenv cx env es /\
+  well_typed_expr env (TopLevelName ann (src,id)) /\
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
   toplevel_vv_nil (DF,lo,d,ctx,func)
     cenv cx ty (TopLevelName ann (src,id)) es
 Proof
   strip_tac >>
-  `expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es` by
-    simp[expr_sim_pre_body, vyperTypeCallGraphTheory.int_calls_expr_def] >>
   rw[toplevel_vv_nil_def] >>
   drule_all admissible_toplevel_storage_lookup >> strip_tac >>
   `!tail. eval_expr cx (TopLevelName ann (src,id)) (es with gas_obs := tail) =
@@ -34,7 +35,7 @@ Proof
     gvs[valid_horizon_def, storage_observations_ok_def, storage_trace_regions_def] >>
   qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> _` drule >> strip_tac >>
   `typ = ann` by
-    (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+    (gvs[expr_sim_inv_def] >>
      metis_tac[vyperTypeGlobalLookupSoundnessTheory.TopLevelName_storage_decl_type_eq]) >>
   gvs[] >>
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
@@ -118,7 +119,8 @@ Finalise toplevel_storage_vv_nil
 
 Theorem toplevel_storage_vv_full:
   body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env (TopLevelName ann (src,id)) es /\
+  expr_sim_inv cenv cx env es /\
+  well_typed_expr env (TopLevelName ann (src,id)) /\
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -126,4 +128,22 @@ Theorem toplevel_storage_vv_full:
 Proof
   strip_tac >> irule toplevel_vv_nil_full >> irule toplevel_storage_vv_nil >>
   metis_tac[]
+QED
+
+(* A storage or transient array variable read as a subscript base
+   (array_slot_base) is a storage variable (array_slot_base_storage_decl). *)
+Theorem toplevel_slot_base_vv_full:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  well_typed_expr env e /\ ~const_name_root cx e /\ array_slot_base cenv e ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es
+Proof
+  strip_tac >>
+  `?ann src id. e = TopLevelName ann (src,id)` by
+    (Cases_on `e` >> fs[allocLimitsTheory.array_slot_base_def] >>
+     rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >> simp[]) >>
+  gvs[] >>
+  Cases_on `get_module_code cx src`
+  >- (fs[expr_vv_sim_full_def] >> metis_tac[missing_module_not_gas_admissible]) >>
+  drule_all array_slot_base_storage_decl >> strip_tac >>
+  irule toplevel_storage_vv_full >> metis_tac[]
 QED
