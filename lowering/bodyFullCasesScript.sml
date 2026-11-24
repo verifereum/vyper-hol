@@ -11,7 +11,8 @@ Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallS
   bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
   bodyFullAppend bodyFullIfExp bodyFullAttribute
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
-  bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
+  bodyFullAssertReason bodyFullPreds bodyFullSimProjection
+  bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullStructLit bodyFullPop
   bodyFullSubscript[qualified,ignore_grammar]
   bodyFullSubscriptUnframedArray[qualified,ignore_grammar]
@@ -22,7 +23,8 @@ Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallS
   bodyFullExtCallReturn abiDecodeValidJoint abiDecodeRejectJoint gasOutcomeFull
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullBuiltinEnv
-  bodyFullMakeArray
+  bodyFullMakeArray bodyFullNamedConst bodyFullUnaryBuiltin
+  bodyFullBoolChainOperands bodyFullBoolChain
   bodyFullBuiltinConcat bodyFullBuiltinSlice bodyFullBuiltinCalldataSlice
   bodyFullBuiltinUint2Str
   bodyFullBuiltinECRecover bodyFullBuiltinECArithCompose
@@ -514,6 +516,14 @@ Proof
   `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len ==>
    body_exprs_full_ok cx es` by
     metis_tac[type_check_def, assert_def] >>
+  Cases_on `bt = NamedConst`
+  >- (gvs[] >> irule unary_builtin_expr_full_ok >>
+      gvs[builtin_args_length_ok_def, named_const_expr_full_ok]) >>
+  Cases_on `?is_and n. bt = BoolChain is_and n`
+  >- (gvs[] >> irule unary_builtin_expr_full_ok >>
+      gvs[builtin_args_length_ok_def] >> rpt strip_tac >>
+      irule bool_chain_expr_full_ok >>
+      irule body_expr_full_ok_bool_chain_operands >> simp[]) >>
   Cases_on `bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i) \/ (?i. bt = Acc i) \/
              bt = BlockHash \/ bt = BlobHash \/ bt = MethodId`
   >- (irule env_builtin_expr_full_ok >> rpt conj_tac >> gvs[] >>
@@ -873,7 +883,8 @@ Proof
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >>
      simp[supported_stmt_expr_exists_def, supported_expr_exists_def]) >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  `well_typed_expr env e` by fs[type_stmt_def] >>
+  drule_all_then strip_assume_tac bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     drule_then ACCEPT_TAC body_inv_main_support >>
   `cx_tops cx = tops` by (drule_then (ACCEPT_TAC o CONJUNCT2) body_inv_main_code) >>
@@ -891,7 +902,7 @@ Proof
      fs[alloc_limits_stmt_def,alloc_limits_expr_def]) >>
   first_x_assum (qspecl_then [`cenv`, `env`, `lctx`, `SOME e`, `es`] mp_tac) >>
   simp[same_frame_refl] >> disch_then irule >>
-  fs[body_expr_full_ok_def] >> metis_tac[]
+  gen_tac >> drule_all body_expr_full_ok_simulations >> simp[]
 QED
 
 (* Return, by the frame's own joint Return fragment. *)

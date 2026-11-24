@@ -8,41 +8,10 @@ Ancestors
   fragGasOrigin gasEvents instIdxIndep venomInst venomInstProofs1
   venomExecSemantics venomState createMarkedPath createSizePrefixReplay
   entryCreateCompletedCut exprSimAbiGasBridge stmtReasonLitFragMemory
-  loweringShapeDefs
+  loweringShapeDefs createCtorImmutableCopyBand
   arithmetic list rich_list relation pred_set pair
 
-Theorem unwrap_code_copy_layout[local]:
-  unwrap_value ce (LocatedValue ty p) a = (op,b) /\
-  p.ptr_location = LocCode /\ ~is_word_type ty ==>
-  same_blocks a b /\
-  b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
-  EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;ILOAD;DLOAD;MSTORE])
-    (emitted_insts a b)
-Proof
-  strip_tac >> qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
-  simp[unwrap_value_def, compile_ensure_in_memory_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  rename1 `compile_alloc_buffer _ a = (buf,mid)` >>
-  `same_blocks a mid` by
-    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
-     simp[compile_alloc_buffer_def, emitHelperTheory.emit_op_def, same_blocks_def,
-          fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
-          comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[]) >>
-  drule unwrap_alloc_generated_code >> strip_tac >>
-  Cases_on `ce.ce_is_ctor` >> fs[] >>
-  FIRST [drule code_ctor_copy_insts, drule code_copy_insts] >> strip_tac >>
-  `emitted_insts mid b = is` by
-    (qpat_assum `b.cs_current_insts = _` (fn th =>
-       pure_rewrite_tac[emitted_insts_def, th, DROP_LENGTH_APPEND]) >> REFL_TAC) >>
-  `emitted_insts a b = emitted_insts a mid ++ emitted_insts mid b` by
-    (irule emitted_insts_append >> simp[]) >>
-  (conj_tac >- metis_tac[same_blocks_trans] >>
-   conj_tac >- (pure_rewrite_tac[APPEND_ASSOC] >> simp[]) >>
-   fs[EVERY_MEM, mk_inst_def] >> rpt strip_tac >> gvs[] >>
-   qpat_x_assum `!j. MEM j (emitted_insts _ _) ==> _`
-     (qspec_then `i` mp_tac) >> simp[] >> strip_tac >> simp[])
-QED
+Theorem unwrap_code_copy_layout = createCtorImmutableCopyBandTheory.unwrap_code_copy_layout
 
 (* Confine the concrete list run, not an arbitrary zero-mark path reaching
    the same cursor. No instruction at the exit is traversed. *)
@@ -87,7 +56,7 @@ Proof
   drule_all entryCreatePathScopeTheory.create_expr_prefix_append >> simp[]
 QED
 
-Theorem unwrap_code_list_scope[local]:
+Theorem unwrap_code_list_scope:
   same_blocks a b /\ b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
   create_cut_code {} a b /\ fn_has_code a b f /\
   EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;ILOAD;DLOAD;MSTORE]) (emitted_insts a b) /\
@@ -111,6 +80,20 @@ Proof
     (irule unwrap_code_list_prefix >> fs[create_operand_at_def] >>
      qexists_tac `emitted_insts a b` >> simp[]) >>
   fs[create_operand_at_def, create_operand_full_scope_def] >> metis_tac[LENGTH_APPEND]
+QED
+
+(* Use the physical list result retained by the saved-value replay. *)
+Theorem create_unwrap_code_scope_of_list_run:
+  unwrap_value ce (LocatedValue ty p) a = (op,b) /\
+  p.ptr_location = LocCode /\ ~is_word_type ty /\ fn_has_code a b f /\
+  ~s.vs_halted /\ create_operand_at a s /\ create_operand_at b z /\
+  (?raw. run_inst_seq (emitted_insts a b) s = OK raw /\
+         z = raw with vs_inst_idx := LENGTH b.cs_current_insts) ==>
+  create_operand_full_scope a b E C f s [] (OK z)
+Proof
+  strip_tac >> drule_all unwrap_code_copy_layout >> strip_tac >>
+  `create_cut_code {} a b` by metis_tac[create_unwrap_cut_code, SND] >>
+  irule unwrap_code_list_scope >> asm_rewrite_tac[] >> metis_tac[]
 QED
 
 Theorem unwrap_code_region_fetch[local]:
