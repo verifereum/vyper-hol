@@ -1,7 +1,9 @@
 (* Finite-horizon composition for a framed fixed memory array. *)
 Theory bodyFullSubscriptArrayMemory
 Ancestors exprBopSimProps[qualified,ignore_grammar] integer[qualified,ignore_grammar] arithmetic[qualified,ignore_grammar] bodyPtrBopHashFootprint[qualified,ignore_grammar] exprSimBopRestWordLoads[qualified,ignore_grammar] exprSimHypsDefs[qualified,ignore_grammar] vyperTypeInvariants[qualified,ignore_grammar] exprSimIfExpCompat[qualified,ignore_grammar]
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyFullFramedMemorySelectionSpec
+  bodyFullTargetArraySuffix bodyPtrSignedConvertSourceFrame emitHelperProps
+  bodyFullEmptyLeafData exprSimFullBundleProps
   bodyFullSubscriptArrayMemoryFrame bodyFullSubscriptArrayCodeBounds
   bodyFullSubscriptArrayCodeOps bodyFullIfExpReach bodyFullHashKeccakFixed stateRelProj
   exprSimVVFrame exprSimIfExpWidenedAdapter assignBasePtrBoundary
@@ -169,7 +171,8 @@ Proof
   metis_tac[]
 QED
 
-Theorem subscript_array_framed_memory_full:
+Theorem subscript_array_framed_memory_full_from_selection:
+  framed_memory_selection_rule (\a b c s r. T) ==>
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et n.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
     body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
@@ -188,7 +191,7 @@ Theorem subscript_array_framed_memory_full:
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Subscript ann e1 e2) es
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  disch_tac >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_body_pre cenv cx env e1 es` by
     metis_tac[exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base,
               exprSimTopLevelPropsTheory.array_slot_base_compile_location] >>
@@ -264,20 +267,23 @@ Proof
   simp[Abbr `baseQ`, Abbr `baseR`] >> metis_tac[]
 QED
 
-Resume subscript_array_framed_memory_full[after_base]:
+Resume subscript_array_framed_memory_full_from_selection[after_base]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `s`] >>
   strip_tac >> fs[] >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     gvs[storage_trace_domain_def] >>
-  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
-    (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
   `baseQ (storage_trace_horizon mid.storage_trace) res mid G1 tn1 s` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> baseQ H _ _ _ _ _ /\ _`
        (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
   qpat_x_assum `baseQ _ _ _ _ _ _` mp_tac >>
   simp[Abbr `baseQ`, NoAsms] >> strip_tac >> gvs[] >>
   `~s.vs_halted /\ mid.gas_obs = []` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> simp[]) >>
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _ /\ mid.gas_obs = []`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
+  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _`
+    (fn th => mk_asm "base_path" th >>
+      qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac) th) >>
+  qpat_assum `!tail. eval_expr _ _ _ = _` (mk_asm "base_eval") >>
   `eval_expr cx e1 (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL tv,mid)` by
     (qpat_x_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
      simp[] >>
@@ -347,7 +353,7 @@ Resume subscript_array_framed_memory_full[after_base]:
          strip_tac >> fs[vv_post_def]))) >>
   strip_tac >>
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ indexQ indexR` >>
-  irule gas_outcome_full_bind_all >> simp[] >> rpt conj_tac
+  irule gas_outcome_full_bind_all_path >> simp[] >> rpt conj_tac
   >~ [`storage_trace_frame (bind _ _)`]
   >- simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame, storage_trace_frame_read_result]
   >~ [`storage_trace_frame (select_result _ _ _ _)`]
@@ -373,7 +379,7 @@ Resume subscript_array_framed_memory_full[after_base]:
   fs[exprSimDefsTheory.halt_exit_def]
 QED
 
-Resume subscript_array_framed_memory_full[selection]:
+Resume subscript_array_framed_memory_full_from_selection[selection]:
   qx_genl_tac [`imarks`, `ires`, `fin`, `Gi`, `tni`, `it`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon fin.storage_trace) fin.storage_trace` by
     gvs[storage_trace_domain_def] >>
@@ -381,11 +387,161 @@ Resume subscript_array_framed_memory_full[selection]:
    ~it.vs_halted /\ fin.gas_obs = []` by metis_tac[] >>
   qpat_x_assum `indexQ _ _ _ _ _ _` mp_tac >>
   simp[Abbr `indexQ`, NoAsms] >> strip_tac >> gvs[] >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (select_result cx (expr_type e1) tv (ValueSubscript v))
+     (fin,it,Gi,tni)
+     (expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (Subscript ann e1 e2)
+       (es,sa,sb,s0,LocatedValue ann (mk_ptr dst LocMemory),G0,tn0)) baseR`
+    suffices_by
+      simp[expr_vv_sim_full_post_def, expr_sim_full_endpoint_def, post_value_type_def,
+           AC CONJ_ASSOC CONJ_COMM] >>
+  asm "base_eval" assume_tac >> asm "base_path" assume_tac >>
+  `framed_memory_selection_hypotheses
+     (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     (tops,cenv,cx,env,ty,ann,e1,e2,et,n)
+     (st0,es,sa,sb,shadow_sa,shadow_sb,LocatedValue ann (mk_ptr dst LocMemory),s0,G0,tn0)
+     (sm,bvv,marks,tv,mid,s,G1,tn1) (st2,iop,imarks,v,fin,it,Gi,tni) dst` by
+    (simp[framed_memory_selection_hypotheses_def, expr_vv_sim_full_hypotheses_def,
+          expr_sim_full_code_def, expr_vv_sim_full_post_def, expr_sim_full_post_def,
+          expr_sim_full_endpoint_def] >> rpt strip_tac >>
+     (qpat_assum `!fn inst s. frag_reachable ctx func s0 fn inst s ==> _`
+        (drule_then ACCEPT_TAC) ORELSE
+      (first_assum (drule_then strip_assume_tac) >> simp[]))) >>
+  drule_all framed_memory_selection_rule_full >> simp[Abbr `baseR`]
+QED
+
+Finalise subscript_array_framed_memory_full_from_selection[local]
+
+(* We ask for an observation only on the selected scalar run.  The fixed
+   selector has no header load and reads its bound from a literal. *)
+Definition fixed_memory_scalar_observer_def:
+  fixed_memory_scalar_observer Obs <=>
+  !idx n sgn sa sc bop ws esz p sb s b iw tn G lo ctx explicit func PG.
+    array_bounds_check idx (Lit (n2w n)) sgn sa = ((),sc) /\
+    array_elem_ptr bop idx F ws esz sc = (p,sb) /\
+    eval_operand bop s = SOME b /\ eval_operand idx s = SOME iw /\
+    (!x. bop = Var x ==> not_fresh_at sa x) /\
+    (!x. idx = Var x ==> not_fresh_at sa x) /\
+    op_taint tn bop = {} /\ op_taint tn idx = {} /\ op_prov G idx = NONE /\
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    same_blocks sa sc /\ same_blocks sc sb /\
+    sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
+    sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
+    fn_has_code sa sc func /\ fn_has_code sc sb func /\
+    EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+                 ~is_terminator ins.inst_opcode) (emitted_insts sa sc) /\
+    EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+                 ~is_terminator ins.inst_opcode) (emitted_insts sc sb) /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t H tm.
+      Obs sa sc sb s (if idx_in_range sgn iw (n2w n) then OK t else Abort Revert_abort t) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (if idx_in_range sgn iw (n2w n) then OK t else Abort Revert_abort t,H,tm)) /\
+      tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+      tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+      (!x. not_fresh_at sa x ==>
+        FLOOKUP H x = FLOOKUP G x /\ FLOOKUP tm.t_var x = FLOOKUP tn.t_var x /\
+        FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
+      (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) =
+        (if idx_in_range sgn iw (n2w n) then s else revert_state (set_returndata [] s)) /\
+      (idx_in_range sgn iw (n2w n) ==>
+        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        eval_operand p t = SOME (b + iw * n2w esz) /\
+        op_prov H p = op_prov G bop /\ op_taint tm p = {})
+End
+
+Theorem fixed_memory_scalar_unobserved[local]:
+  fixed_memory_scalar_observer (\a b c s r. T)
+Proof
+  simp[fixed_memory_scalar_observer_def] >> rpt gen_tac >> strip_tac >>
+  rename1 `array_bounds_check idx (Lit (n2w n)) sgn sa = ((),sc)` >>
+  `eval_operand (Lit (n2w n)) s = SOME (n2w n) /\
+   op_taint tn (Lit (n2w n)) = {} /\ op_prov G (Lit (n2w n)) = NONE /\
+   (!x. Lit (n2w n) = Var x ==> not_fresh_at sa x)` by
+    simp[eval_operand_def, op_taint_def, op_prov_def] >>
+  drule_all array_tail_scalar_uniform >>
+  disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >> simp[]
+QED
+
+Theorem fixed_memory_scalar_code[local]:
+  array_bounds_check idx len sgn sa = ((),sc) /\
+  array_elem_ptr bop idx F ws esz sc = (dst,sb) /\ fn_has_code sa sb func ==>
+  same_blocks sa sc /\ same_blocks sc sb /\
+  sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
+  sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
+  fn_has_code sa sc func /\ fn_has_code sc sb func /\
+  EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+               ~is_terminator ins.inst_opcode) (emitted_insts sa sc) /\
+  EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+               ~is_terminator ins.inst_opcode) (emitted_insts sc sb)
+Proof
+  strip_tac >>
+  `same_blocks sa sc /\ sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
+   EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+                ~is_terminator ins.inst_opcode) (emitted_insts sa sc)` by
+    (qpat_assum `array_bounds_check _ _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[array_bounds_check_def, comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
+     qpat_x_assum `array_bounds_valid _ _ _ _ = _` mp_tac >>
+     Cases_on `sgn` >> simp[array_bounds_valid_def, comp_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> simp[]) >> strip_tac >>
+     imp_res_tac emitHelperPropsTheory.emitted_insts_emit_op >>
+     imp_res_tac emitHelperPropsTheory.emitted_insts_emit_void >>
+     imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
+     rpt (qpat_x_assum `_.cs_current_insts = _.cs_current_insts ++ emitted_insts _ _` kall_tac) >>
+     gvs[same_blocks_def] >>
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC,
+          venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  `same_blocks sc sb /\ sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
+   EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+                ~is_terminator ins.inst_opcode) (emitted_insts sc sb)` by
+    (qpat_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[array_elem_ptr_def, comp_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> simp[]) >> strip_tac >>
+     imp_res_tac emit_op_extends >> imp_res_tac emitHelperPropsTheory.emitted_insts_emit_op >>
+     rpt (qpat_x_assum `_.cs_current_insts = _.cs_current_insts ++ emitted_insts _ _` kall_tac) >>
+     gvs[same_blocks_def] >>
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC,
+          venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  simp[] >> irule fn_has_code_split >>
+  simp[cs_extends_def, same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
+  conj_tac >- (qexists `[]` >> fs[same_blocks_def]) >>
+  qexists `[]` >> fs[same_blocks_def]
+QED
+
+Theorem framed_memory_selection_observed:
+  fixed_memory_scalar_observer Obs ==> framed_memory_selection_rule Obs
+Proof
+  simp[framed_memory_selection_rule_def] >> disch_tac >> rpt gen_tac >>
+  simp[framed_memory_selection_hypotheses_def, expr_vv_sim_full_hypotheses_def,
+       expr_sim_full_code_def, expr_vv_sim_full_post_def, expr_sim_full_post_def,
+       expr_sim_full_endpoint_def] >>
+  strip_tac >> suspend "selection"
+QED
+
+Resume framed_memory_selection_observed[selection]:
+  `valid_horizon cx st0 (storage_trace_horizon fin.storage_trace) fin.storage_trace` by
+    gvs[storage_trace_domain_def] >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    gvs[storage_trace_domain_def] >>
+  `mid with gas_obs := [] = mid` by
+    (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
+  `eval_expr cx e1 (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL tv,mid)` by
+    (qpat_assum `!tail. eval_expr _ _ (_ with gas_obs := _ ++ tail) =
+        (INL _,_ with gas_obs := tail)` (qspec_then `[]` mp_tac) >>
+     qpat_assum `mid with gas_obs := [] = mid` (fn th => pure_rewrite_tac[APPEND_NIL,th]) >>
+     disch_then ACCEPT_TAC) >>
+  `fin with gas_obs := [] = fin` by
+    (qpat_assum `fin.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
   `bind (eval_expr cx e2) (read_result cx)
       (mid with gas_obs := gas_explicit imarks s.vs_gas_readings) = (INL v,fin)` by
-    (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >> simp[] >>
-     `fin with gas_obs := [] = fin` by
-       (qpat_assum `fin.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >> simp[]) >>
+    (qpat_assum `!tail. bind _ _ (_ with gas_obs := _ ++ tail) =
+        (INL _,_ with gas_obs := tail)` (qspec_then `[]` mp_tac) >>
+     qpat_assum `fin with gas_obs := [] = fin` (fn th => pure_rewrite_tac[APPEND_NIL,th]) >>
+     disch_then ACCEPT_TAC) >>
   `?ir. eval_expr cx e2 (mid with gas_obs := gas_explicit imarks s.vs_gas_readings) =
       (INL ir,fin) /\ read_result cx ir fin = (INL v,fin)` by
     (qpat_x_assum `bind _ _ _ = _` mp_tac >>
@@ -403,8 +559,10 @@ Resume subscript_array_framed_memory_full[selection]:
     (qpat_assum `compile_expr cenv ty e1 sa = _`
        (mp_then Any mp_tac (cj 1 exprOperandVarTheory.compiler_compile_var)) >>
      simp[contextTheory.vv_operand_def]) >>
-  `local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv st2` by
-    metis_tac[local_ptrs_reserved_next_var] >>
+  drule_then strip_assume_tac (cj 1 compile_expr_grows) >>
+  drule_then strip_assume_tac (cj 2 compile_expr_grows) >>
+  `local_ptrs_reserved cenv sm` by (irule local_ptrs_reserved_next_var >> metis_tac[]) >>
+  `local_ptrs_reserved cenv st2` by (irule local_ptrs_reserved_next_var >> metis_tac[]) >>
   `!x. iop = Var x ==> not_fresh_at st2 x` by
     (qpat_assum `lower_value compile_expr cenv ty e2 sm = _`
        (mp_then Any mp_tac exprOperandVarTheory.compile_lower_value_var) >> simp[]) >>
@@ -458,7 +616,13 @@ Resume subscript_array_framed_memory_full[selection]:
   suspend "base_view"
 QED
 
-Resume subscript_array_framed_memory_full[base_view]:
+Resume framed_memory_selection_observed[base_view]:
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> (_ /\ _) /\ gas_origin_ptr_path _ _ _ _`
+    (qspec_then `storage_trace_horizon mid.storage_trace`
+      (drule_then (strip_assume_tac o CONJUNCT1))) >>
+  qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> (_ /\ _) /\ gas_origin_ptr_path _ _ _ _`
+    (qspec_then `storage_trace_horizon fin.storage_trace`
+      (drule_then (strip_assume_tac o CONJUNCT1))) >>
   `!H. valid_horizon cx st0 H fin.storage_trace ==>
      vv_post H ctx func cenv cx (Subscript (ArrayT ann (Fixed n)) e1 e2)
        es sa st2 s0 fin tv (LocatedValue (ArrayT ann (Fixed n)) p) it` by
@@ -536,13 +700,41 @@ Resume subscript_array_framed_memory_full[base_view]:
       (if is_signed_type (expr_type e2) then w2i iw else &w2n iw) <=>
    idx_in_range (is_signed_type (expr_type e2)) iw (n2w n)` by
     (metis_tac[array_index_word_bounds]) >>
+  suspend "scalar"
+QED
+
+Resume framed_memory_selection_observed[scalar]:
+  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
+    (mp_then Any mp_tac fixed_memory_selector_layout) >>
+  disch_then (qx_choosel_then [`sc`,`s_mul`,`off`,`out`] strip_assume_tac) >>
+  qpat_x_assum `dst = Var out` SUBST_ALL_TAC >>
+  drule_all fixed_memory_scalar_code >> strip_tac >>
+  `st2.cs_next_id <= sb.cs_next_id` by
+    (`ci_mono st2 sc` by (drule fixed_memory_bounds_mono >> simp[]) >>
+     `ci_mono sc s_mul /\ ci_mono s_mul sb` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+     fs[ci_mono_def] >> decide_tac) >>
+  `!q. p.ptr_operand = Var q ==> not_fresh_at st2 q` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `op_taint tni iop = {} /\ op_prov Gi iop = NONE` by fs[ptr_val_ok_def] >>
+  `op_taint tni p.ptr_operand = {}` by fs[ptr_vv_ok_def] >>
+  `allocas_from lo it` by metis_tac[ghost_inv_at_def] >>
+  qpat_x_assum `fixed_memory_scalar_observer Obs`
+    (drule_all o REWRITE_RULE [fixed_memory_scalar_observer_def]) >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] mp_tac) >>
+  disch_then (qx_choosel_then [`sf`,`Gf`,`tnf`] strip_assume_tac) >>
   Cases_on `valid_index (ArrayTV etv (Fixed n)) av
     (if is_signed_type (expr_type e2) then w2i iw else &w2n iw)`
-  >- suspend "valid_selection" >>
+  >- (`idx_in_range (is_signed_type (expr_type e2)) iw (n2w n)` by
+        (qpat_assum `valid_index _ _ _ <=> idx_in_range _ _ _` (irule o iffLR) >>
+         first_assum ACCEPT_TAC) >>
+      qpat_assum `idx_in_range _ _ _` (fn th => RULE_ASSUM_TAC (SIMP_RULE bool_ss [th])) >>
+      suspend "valid_selection") >>
+  `~idx_in_range (is_signed_type (expr_type e2)) iw (n2w n)` by metis_tac[] >>
+  qpat_assum `~idx_in_range _ _ _` (fn th => RULE_ASSUM_TAC (SIMP_RULE bool_ss [th])) >>
   suspend "rejected_selection"
 QED
 
-Resume subscript_array_framed_memory_full[valid_selection]:
+Resume framed_memory_selection_observed[valid_selection]:
   drule vyperArrayTheory.array_index_valid >>
   pure_rewrite_tac[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
   `?child. select_result cx (ArrayT ann (Fixed n)) tv
@@ -579,30 +771,20 @@ Resume subscript_array_framed_memory_full[valid_selection]:
   suspend "selector"
 QED
 
-Resume subscript_array_framed_memory_full[selector]:
-  `st2.cs_next_id <= sb.cs_next_id` by
-    (qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
-       (mp_tac o AP_TERM ``SND : operand # compile_state -> compile_state``) >>
-     pure_rewrite_tac[pairTheory.SND] >>
-     disch_then (SUBST1_TAC o SYM) >>
-     irule (cj 3 (iffLR ci_mono_def)) >>
-     irule ci_mono_compile_array_subscript >>
-     simp[ci_mono_compile_ptr_load]) >>
-  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
-    (mp_then Any mp_tac fixed_memory_selector_layout) >>
-  disch_then (qx_choosel_then [`sc`,`s_mul`,`off`,`out`] strip_assume_tac) >> gvs[] >>
-  `fn_has_code st2 sb func` by metis_tac[fn_has_code_split] >>
-  `!q. p.ptr_operand = Var q ==> not_fresh_at st2 q` by
-    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `op_taint tni iop = {} /\ op_prov Gi iop = NONE` by
-    fs[ptr_val_ok_def] >>
-  `op_taint tni p.ptr_operand = {}` by fs[ptr_vv_ok_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
-  drule_all (fixed_memory_selector_joint_ok |>
-    INST_TYPE [alpha |-> ``:256``] |> Q.INST [`i` |-> `w2n (iw:bytes32)`] |>
-    SRULE []) >>
-  disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+Resume framed_memory_selection_observed[selector]:
+  qpat_x_assum `~sf.vs_halted /\ _` strip_assume_tac >>
+  `sf = it with <|vs_vars := sf.vs_vars; vs_inst_idx := sf.vs_inst_idx|>` by
+    (qpat_assum `sf with <|vs_vars := _; vs_inst_idx := _|> = _` mp_tac >>
+     simp[NoAsms, venom_state_component_equality]) >>
+  `sf.vs_immutables = it.vs_immutables /\ sf.vs_memory = it.vs_memory /\
+   sf.vs_allocas = it.vs_allocas /\ sf.vs_alloca_next = it.vs_alloca_next /\
+   sf.vs_data_section = it.vs_data_section /\ sf.vs_fmp = it.vs_fmp /\
+   sf.vs_accounts = it.vs_accounts /\ sf.vs_transient = it.vs_transient /\
+   sf.vs_call_ctx = it.vs_call_ctx /\ sf.vs_requests = it.vs_requests` by
+    (qpat_assum `sf = it with <|vs_vars := _; vs_inst_idx := _|>`
+       (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `lookup_var out sf = SOME (w + n2w (w2n iw * elem_size_in_location cenv LocMemory ann))` by
+    (fs[eval_operand_def] >> metis_tac[wordsTheory.n2w_w2n, wordsTheory.word_mul_n2w]) >>
   `w2n w + val_footprint (ArrayTV etv (Fixed n)) (ArrayV av) < dimword (:256)` by
     (qpat_assum `vv_post _ _ _ _ _ (Subscript _ _ _) _ _ _ _ _ _ _ _`
        (mp_then Any mp_tac vv_post_memory_footprint_bound) >>
@@ -611,6 +793,11 @@ Resume subscript_array_framed_memory_full[selector]:
   `j = w2n iw` by simp[Abbr `j`] >>
   `w2n ((w:bytes32) + n2w (j * type_memory_size etv)) = w2n w + j * type_memory_size etv` by
     (drule_all fixed_array_element_nonwrapping >> simp[Abbr `j`]) >>
+  `0 <= (if is_signed_type (expr_type e2) then w2i iw else &w2n iw) /\
+   (if is_signed_type (expr_type e2) then w2i iw else &w2n iw) < &n` by
+    (qpat_assum `array_length (ArrayTV _ _) _ = n` (fn len =>
+       qpat_assum `valid_index _ _ _`
+         (ACCEPT_TAC o REWRITE_RULE [vyperArrayTheory.valid_index_def,len]))) >>
   `j < n` by
     (`&j = (if is_signed_type (expr_type e2) then w2i iw else &w2n iw)` by
        simp[Abbr `j`, integerTheory.INT_OF_NUM] >>
@@ -668,8 +855,11 @@ Resume subscript_array_framed_memory_full[selector]:
   suspend "child_endpoint"
 QED
 
-Resume subscript_array_framed_memory_full[child_endpoint]:
-  `!q. not_fresh_at st2 q ==> lookup_var q sf = lookup_var q it` by metis_tac[] >>
+Resume framed_memory_selection_observed[child_endpoint]:
+  `!q. not_fresh_at st2 q ==> lookup_var q sf = lookup_var q it` by
+    (simp[lookup_var_def] >> rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at st2 x ==> FLOOKUP Gf x = _ /\ _`
+       (drule_then strip_assume_tac) >> simp[]) >>
   `!name b sz. local_region cenv fin.scopes it name b sz <=>
                local_region cenv fin.scopes sf name b sz` by
     (rpt gen_tac >> sym_tac >> irule exprSimCopyTheory.copy_buffer_local_region_frame >>
@@ -684,19 +874,20 @@ Resume subscript_array_framed_memory_full[child_endpoint]:
        es sa sb s0 fin tv (LocatedValue (ArrayT ann (Fixed n)) p) sf` by
     (rpt strip_tac >>
      `stmt_state_rel H ctx func cenv cx fin it` by
-       (qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-          drule >> metis_tac[exprSimWordArgsTheory.expr_post_state]) >>
+       (qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> (expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _) /\ _`
+          (qspec_then `H` (drule_then (irule o MATCH_MP exprSimWordArgsTheory.expr_post_state o CONJUNCT1 o CONJUNCT1)))) >>
      `stmt_state_rel H ctx func cenv cx fin sf` by
-       (qpat_assum `!H cenv cx es. stmt_state_rel _ _ _ _ _ _ it /\ _ ==> _`
-          (qspecl_then [`H`,`cenv`,`cx`,`fin`] mp_tac) >> simp[]) >>
+       (irule stmt_state_rel_readonly_vars_pc >> qexistsl [`it`,`st2`] >> simp[]) >>
      irule memory_vv_post_readonly_tail >>
      simp[post_value_type_def, vyperASTTheory.expr_type_def] >>
      qexistsl_tac [`it`,`st2`] >> simp[] >>
      fs[venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def] >>
      metis_tac[]) >>
   `eval_operand (Var out) sf = SOME (w + n2w (j * type_memory_size etv))` by
-    simp[venomStateTheory.eval_operand_def, elem_size_in_location_def,
-         is_slot_addressed_def] >>
+    (simp[venomStateTheory.eval_operand_def, elem_size_in_location_def,
+          is_slot_addressed_def] >>
+     pure_rewrite_tac[GSYM wordsTheory.word_mul_n2w, wordsTheory.n2w_w2n] >>
+     simp[wordsTheory.WORD_MULT_COMM]) >>
   `vv_place_ptr cenv cx fin sf tv (LocatedValue (ArrayT ann (Fixed n)) p)` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ sb _ _ _ _ sf`
        (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
@@ -725,7 +916,7 @@ Resume subscript_array_framed_memory_full[child_endpoint]:
   suspend "selected_ptr"
 QED
 
-Resume subscript_array_framed_memory_full[selected_ptr]:
+Resume framed_memory_selection_observed[selected_ptr]:
   `ptr_vv_ok cx ann child (LocatedValue ann (mk_ptr (Var out) LocMemory)) fin Gf tnf sf /\
    ptr_buf_ok cenv (Subscript ann e1 e2) (Var out) Gf sf` by
     (conj_tac
@@ -765,15 +956,18 @@ Resume subscript_array_framed_memory_full[selected_ptr]:
      ghost_inv_at (DF H) lo d cenv cx fin Gf tnf sf` by
     (rpt strip_tac >> irule ghost_inv_at_exterior_frame >>
      qexistsl_tac [`Gi`,`fin`,`it`,`st2`,`tni`] >> simp[] >>
-     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+     `!x. not_fresh_at sa x ==> not_fresh_at st2 x` by
+       (simp[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+     rpt conj_tac
+     >- (rpt strip_tac >> first_x_assum irule >> simp[])
+     >- (rpt strip_tac >> first_x_assum irule >> simp[]) >>
+     simp[ptrDisciplineTheory.op_taint_def]) >>
   `ghost_kept_at lo cenv es sa G0 tn0 s0 Gf tnf` by
-    (qpat_x_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 Gi tni` mp_tac >>
-     simp[ghost_kept_at_def] >>
+    (irule bodyFullUnwrapRunTheory.ghost_kept_at_clean_suffix >>
+     qexistsl_tac [`Gi`,`tni`] >> simp[pred_setTheory.SUBSET_REFL] >>
      `!q. not_fresh_at sa q ==> not_fresh_at st2 q` by
-       (simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
-        metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-     strip_tac >> conj_tac >- metis_tac[] >> simp[] >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
+       (simp[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+     rpt strip_tac >> simp[ptrDisciplineTheory.op_taint_def]) >>
   `!H. valid_horizon cx st0 H fin.storage_trace ==>
      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (it,Gi,tni) [] (OK sf,Gf,tnf)` by
@@ -781,28 +975,19 @@ Resume subscript_array_framed_memory_full[selected_ptr]:
      `allocas_from lo it` by metis_tac[ghost_inv_at_def] >>
      metis_tac[]) >>
   `alloca_inv it` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-       (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
-     (impl_tac >- simp[]) >>
-     disch_then (mp_tac o CONJUNCT1) >>
-     simp[NoAsms] >>
-     metis_tac[exprSimWordArgsTheory.expr_post_state, stmt_state_rel_local_ptrs_alloca]) >>
+    (drule exprSimWordArgsTheory.expr_post_state >>
+     disch_then assume_tac >> drule stmt_state_rel_local_ptrs_alloca >> simp[]) >>
   `alloca_history func sf` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _`
        (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
      (impl_tac >- simp[]) >> disch_tac >>
      drule_all body_full_path_alloca_history >> simp[]) >>
   `wb_frame cenv mid fin sm s it` by
-    (qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-       (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
-     (impl_tac >- simp[]) >>
-     disch_then (irule o MATCH_MP exprSimWordArgsTheory.expr_post_frame o CONJUNCT1)) >>
+    (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
   `eval_operand p.ptr_operand s = SOME w` by
     (`?bw. eval_operand p.ptr_operand s = SOME bw` by
-       ((qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-          (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-        (impl_tac >- simp[]) >> disch_then (mp_tac o CONJUNCT1) >>
-        simp[NoAsms, vv_post_def, vv_holds_def] >> (metis_tac[NoAsms, vv_post_def, vv_holds_def]))) >>
+       ((qpat_assum `vv_post _ _ _ _ _ e1 _ _ _ _ mid tv _ s` mp_tac >>
+        simp[NoAsms, vv_post_def, vv_holds_def] >> metis_tac[])) >>
      `eval_operand p.ptr_operand it = SOME bw` by
        ((irule exprBopSimPropsTheory.eval_operand_frame >>
         conj_tac >- simp[] >>
@@ -817,26 +1002,19 @@ Resume subscript_array_framed_memory_full[selected_ptr]:
   `vv_store_bound cx ann ann fin child
        (LocatedValue ann (mk_ptr (Var out) LocMemory)) sf` by
     suspend "selected_capacity" >>
-  irule gas_outcome_full_pure >>
-  reverse conj_tac >- simp[] >>
-  qexistsl_tac [`Gf`,`fin`,`INL child`,`sf`,`tnf`] >>
-  simp[NoAsms] >> conj_tac >- simp[] >>
-  qx_gen_tac `H` >> strip_tac >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp sf` by
-    (qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==>
-       vv_post _ _ _ _ _ _ _ _ sb _ _ _ _ sf`
-       (qspec_then `H` (drule_then mp_tac)) >>
-     simp[NoAsms, vv_post_def] >> strip_tac >>
-     first_assum (ACCEPT_TAC o MATCH_MP
-       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
-  `fin with gas_obs := [] = fin` by
-    (qpat_x_assum `fin.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
-  pop_assum SUBST1_TAC >>
-  gvs[vyperASTTheory.expr_type_def, exprLoweringTheory.lowered_value_type_def,
-      contextTheory.mk_ptr_def]
+    (qpat_assum `sf = it with <|vs_vars := _; vs_inst_idx := _|>`
+       (fn th => once_rewrite_tac[th]) >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp it` mp_tac >>
+     simp[NoAsms, allocas_below_fmp_def] >> metis_tac[NoAsms]) >>
+  `(mk_ptr (Var out) LocMemory).ptr_location = LocMemory /\
+   (mk_ptr (Var out) LocMemory).ptr_operand = Var out` by
+    simp[contextTheory.mk_ptr_def] >>
+  qexistsl [`sc`,`s_mul`,`off`,`out`,`INL child`,`OK sf`,`Gf`,`tnf`] >>
+  simp[vyperASTTheory.expr_type_def, exprLoweringTheory.lowered_value_type_def]
 QED
 
-Resume subscript_array_framed_memory_full[selected_own]:
+Resume framed_memory_selection_observed[selected_own]:
   `tv = Value (ArrayV av)` by
     (Cases_on `tv`
      >- fs[read_result_def, return_def]
@@ -846,11 +1024,9 @@ Resume subscript_array_framed_memory_full[selected_own]:
              AllCaseEqs()]) >>
      fs[read_result_def, raise_def]) >>
   `local_ptrs_rel func cenv mid.scopes s` by
-    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-     (impl_tac >- simp[]) >>
-     simp[NoAsms, vv_post_def] >>
-     metis_tac[stmt_state_rel_local_ptrs_alloca]) >>
+    (qpat_assum `vv_post _ _ _ _ _ e1 _ _ _ _ mid tv _ s`
+       (strip_assume_tac o REWRITE_RULE[vv_post_def]) >>
+     drule stmt_state_rel_local_ptrs_alloca >> simp[]) >>
   `!name b sz. local_region cenv fin.scopes sf name b sz ==>
                local_region cenv mid.scopes s name b sz` by
     (drule_all exprSimSubscriptArrayFrameTheory.local_region_wb_frame >>
@@ -891,7 +1067,7 @@ Resume subscript_array_framed_memory_full[selected_own]:
   metis_tac[]
 QED
 
-Resume subscript_array_framed_memory_full[selected_capacity]:
+Resume framed_memory_selection_observed[selected_capacity]:
   Q_TAC (fn t => SUBGOAL_THEN t ASSUME_TAC)
     `type_memory_size etv = 0 \/
      w2n (w + n2w (j * type_memory_size etv)) + type_memory_size etv <= sf.vs_alloca_next`
@@ -914,7 +1090,7 @@ Resume subscript_array_framed_memory_full[selected_capacity]:
   strip_tac >> simp[]
 QED
 
-Resume subscript_array_framed_memory_full[rejected_selection]:
+Resume framed_memory_selection_observed[rejected_selection]:
   `select_result cx (ArrayT ann (Fixed n)) tv
       (ValueSubscript (IntV (if is_signed_type (expr_type e2) then w2i iw else &w2n iw))) fin =
       (INR (Error (RuntimeError "evaluate_subscripts array_index")),fin)` by
@@ -927,29 +1103,33 @@ Resume subscript_array_framed_memory_full[rejected_selection]:
       (fin with gas_obs := tail) =
       (INR (Error (RuntimeError "evaluate_subscripts array_index")),fin with gas_obs := tail)` by
     simp[select_result_nonstorage_gas_obs] >>
-  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
-    (mp_then Any mp_tac fixed_memory_selector_layout) >>
-  disch_then (qx_choosel_then [`cs'`,`s_mul`,`off`,`out`] strip_assume_tac) >> gvs[] >>
-  drule_then assume_tac fixed_memory_bounds_mono >>
-  `ci_mono cs' sb` by metis_tac[ci_mono_emit_op, pairTheory.SND, ci_mono_trans] >>
-  `fn_has_code st2 cs' func` by metis_tac[fn_has_code_split, ci_mono_def] >>
-  `op_taint tni iop = {} /\ op_prov Gi iop = NONE` by fs[ptr_val_ok_def] >>
-  `eval_operand (Lit (n2w n)) it = SOME (n2w n) /\
-   op_taint tni (Lit (n2w n)) = {} /\ op_prov Gi (Lit (n2w n)) = NONE /\
-   (!q. iop = Var q \/ Lit (n2w n) = Var q ==> not_fresh_at st2 q) /\
-   (!l. iop <> Label l /\ Lit (n2w n) <> Label l)` by
-    simp[eval_operand_def, op_taint_def, op_prov_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
-  drule_all array_bounds_check_joint_oob_frame >>
-  disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
-  irule gas_outcome_full_exit >> simp[] >>
-  qexistsl_tac [`Gf`, `fin`, `Abort Revert_abort sf`,
-     `INR (Error (RuntimeError "evaluate_subscripts array_index"))`, `tnf`] >>
-  simp[fragExecTheory.exit_result_def, Abbr `baseR`, exprSimDefsTheory.expr_exit_def] >>
-  rpt strip_tac >>
-  `allocas_from lo it` by metis_tac[ghost_inv_at_def] >>
-  simp[exprSimDefsTheory.halt_exit_def]
+  qexistsl [`sc`,`s_mul`,`off`,`out`,
+    `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,
+    `Abort Revert_abort sf`,`Gf`,`tnf`] >>
+  simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]
 QED
 
-Finalise subscript_array_framed_memory_full
+Finalise framed_memory_selection_observed
+
+Theorem subscript_array_framed_memory_full:
+  !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et n.
+    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
+    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
+    expr_type e1 = ArrayT et (Fixed n) /\
+    place_type cenv e1 = ValPT (ArrayT et (Fixed n)) /\
+    post_value_type cenv e1 = expr_type e1 /\
+    (!t r t'. eval_expr cx e2 t = (INL r,t') ==>
+      t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+    (!s tr slot vt t.
+      eval_expr cx e1 s <> (INL (PlaceR (StoragePlace tr slot vt)),t)) /\
+    (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
+    (!ty st. vv_location (FST (compile_expr cenv ty e1 st)) = SOME LocMemory) ==>
+    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Subscript ann e1 e2) es
+Proof
+  mp_tac (MATCH_MP framed_memory_selection_observed fixed_memory_scalar_unobserved) >>
+  ACCEPT_TAC subscript_array_framed_memory_full_from_selection
+QED
