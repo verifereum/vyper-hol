@@ -173,7 +173,7 @@ Proof
     (simp_tac bool_ss [Abbr `covers`, declared_constant_def] >> rpt strip_tac >>
      drule_all checked_initial_immutables_constant_absent >> strip_tac >> fs[]) >>
   `closed (consts_env_mods mods)` by
-    (simp[consts_env_mods_def] >>
+    (simp[consts_env_mods_def, consts_env_modules_order_eq] >>
      qpat_assum `!rest imms final E. _`
        (qspecl_then [`constants_order mods`, `imms`, `final`, `[]`] mp_tac) >>
      simp[EVERY_MEM, MEM_constants_order] >>
@@ -321,4 +321,18 @@ Proof
     (qpat_assum `callee_write_ok x = callee_write_ok p` (fn same =>
        simp_tac (srw_ss()) [FUN_EQ_THM, callee_writes_ok_def, same])) >>
   simp[]
+QED
+
+Theorem checked_subst_consts_int_calls_mods:
+  check_contract mode layouts addr mods = SOME artifact ==>
+  (!e. int_calls_expr (subst_consts_expr_mods (consts_env_mods mods) e) =
+       int_calls_expr e) /\
+  (!ss. int_calls_stmts (subst_consts_stmts_mods (consts_env_mods mods) ss) =
+        int_calls_stmts ss)
+Proof
+  strip_tac >>
+  `!key r. ALOOKUP (consts_env_mods mods) key = SOME r ==> int_calls_expr r = []` by
+    (rpt strip_tac >> drule_all checked_qualified_const_loop_replacements >> simp[]) >>
+  drule qualified_const_subst_expr_int_calls >>
+  drule qualified_const_subst_stmts_int_calls >> simp[]
 QED

@@ -31,7 +31,7 @@ Ancestors
   appendStorageStageTransportPtr appendStorageStaticPtr fragGasCopyLoop instSeqPtrLo appendResolvedStorageRel
   fragGasCopySeqLiftProps
   vyperFiniteStoragePreservation assignTuplePtrLoadStep targetSubscriptStorage appendStorageGhostPtr
-  bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
+  bodyFullPreds bodyFullSimProjection bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   targetPlaceSimCases vyperExprNoControl vyperTypeCallGraph
@@ -6198,7 +6198,7 @@ Resume body_append_storage_word_frag_full[rhs_code]:
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid` by
     (irule expr_body_pre_gas_admissible >> goal_assum (drule_at Any)) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx elem e mid` by
-    (fs[body_expr_full_ok_def] >> first_x_assum (irule o cj 1) >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`vop`,`s0`,`G0`,`tn0`] mp_tac) >>
