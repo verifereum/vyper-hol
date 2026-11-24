@@ -3,8 +3,8 @@
 Theory entryCreateExprList
 Ancestors
   entryCreateScopedBind entryCreateCompositeFocus entryCreatePendingScope
-  entryCreateFocusSpec entryCreateCompletedCut entryCreateBodyCut
-  bodyFullWordArgs createSizeOperandCode createSizeCutCode exprSimFullBundleProps wordArgsPtr
+  entryCreateFocusSpec entryCreateCompletedCut entryCreateBodyCut entryCreateIntervalLayout
+  entryCreateNativeFirstExit entryCreateReplayBind createExprSizeExitDefs bodyFullExtCallPackingReady[qualified,ignore_grammar] bodyFullWordArgs createSizeOperandCode createSizeCutCode exprSimFullBundleProps wordArgsPtr
   bodyFullPreds exprSimSource exprSimPrecompiles gasShadowCompileStmtHelpers
   exprLoweringProps gasShadowState s1PrefixDefs exprBodyPreProps
   vyperStorageTrace vyperStorageFootprint gasExemptCert gasStorage gasSummary
@@ -329,7 +329,7 @@ Theorem create_word_args_tail_scoped[local]:
   storage_trace_domain cx st0 mid.storage_trace /\
   (!H. valid_horizon cx st0 H mid.storage_trace ==>
        expr_sim_full_post (DF,lo,d,C,f) ce cx e (es,a,m,s,op,G,tn)
-         H (INL v) (mid with gas_obs := []) G1 tn1 t /\
+         H (INL v : value + exception) (mid with gas_obs := []) G1 tn1 t /\
        gas_origin_ptr_path (DF H,lo,gas_explicit_sites C shC,C,f,PG)
          (s,G,tn) marks (OK t,G1,tn1)) /\
   (create_word_args_pre (DF,lo,d,C,shC,PG,f,shf) tops ce env cx tyf
@@ -402,17 +402,18 @@ Proof
 QED
 
 Theorem create_word_args_head_scoped[local]:
-  expr_sim_scoped (DF,lo,d,C,shC,PG,f,shf) ce cx ty e es /\
-  expr_sim_full_pre (DF,lo,d,C,shC,PG,f,shf) ce cx ty e es
-    (st0,a,m,ha,hm,op,s,G,tn) /\ body_inv tops C ce cx ==>
-  scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG)
+  scoped_operand_outcome (DF,lo,E,C,f,PG)
     tops cx st0 a m (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
     (expr_sim_full_post (DF,lo,d,C,f) ce cx e (es,a,m,s,op,G,tn))
-    (\H res ee gt r. (?exc. res = INR exc) /\
-       create_word_args_exit C cx H (case res of INL v => INL [v] | INR exc => INR exc) ee gt r)
+    (create_operand_exit_post C cx) ==>
+  scoped_operand_outcome (DF,lo,E,C,f,PG)
+    tops cx st0 a m (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
+    (\H res ee G1 tn1 t.
+       expr_sim_full_post (DF,lo,d,C,f) ce cx e (es,a,m,s,op,G,tn)
+         H res ee G1 tn1 t /\ ee.gas_obs = [])
+    (\H res ee gt r. ?exc. res = INR exc /\ create_word_args_exit C cx H (INR exc) ee gt r)
 Proof
-  simp[expr_sim_scoped_def] >> strip_tac >> res_tac >>
-  `cx_tops cx = tops` by metis_tac[bodyInvCodePropsTheory.body_inv_main_code] >>
+  strip_tac >>
   qpat_x_assum `scoped_operand_outcome _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o ONCE_REWRITE_RULE [scoped_operand_outcome_def]) >>
   rewrite_tac[scoped_operand_outcome_def] >> qexists_tac `marks`
@@ -424,4 +425,187 @@ Proof
       gvs[create_operand_exit_post_def, create_word_args_exit_def, wb_args_exit_def,
           exprSimDefsTheory.halt_exit_def]) >>
   disj2_tac >> disj2_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem create_word_args_cons_scoped_step[local]:
+  create_word_args_pre (DF,lo,d,C,shC,PG,f,shf) tops ce env cx tyf
+    (e::todo) (es,st0,a,b,ha,hb,ops,s,G,tn) /\ create_layout a b /\
+  (!e' ee st x y hx hy op' u K n.
+    MEM e' (e::todo) /\ expr_sim_inv ce cx env ee /\ expr_body_pre ce cx env e' ee /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\ is_word_type (expr_type e') /\
+    create_layout x y /\
+    expr_sim_full_pre (DF,lo,d,C,shC,PG,f,shf) ce cx (tyf e') e' ee
+      (st,x,y,hx,hy,op',u,K,n) ==>
+    scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG) tops cx st x y
+      (bind (eval_expr cx e') (read_result cx)) (ee,u,K,n)
+      (expr_sim_full_post (DF,lo,d,C,f) ce cx e' (ee,x,y,u,op',K,n))
+      (create_operand_exit_post C cx)) /\
+  (!x m y u.
+    body_inv tops C ce cx /\ MEM f C.ctx_functions /\
+    cs_extends x m /\ cs_extends m y /\ x.cs_next_id <= m.cs_next_id /\
+    m.cs_next_id <= y.cs_next_id /\ create_layout x y /\ create_operand_at x u /\
+    create_cut_code {} x m /\ create_cut_code {} m y /\
+    fn_has_code x m f /\ fn_has_code m y f ==>
+    let E = gas_explicit_sites C shC in
+      (!marks. create_operand_focus_scope x m E C f u marks ==>
+               create_operand_focus_scope x y E C f u marks) /\
+      (!marks r. exit_result r /\ create_operand_full_scope x m E C f u marks r ==>
+                 create_operand_full_scope x y E C f u marks r) /\
+      (!left t right. create_operand_full_scope x m E C f u left (OK t) /\
+         create_operand_focus_scope m y E C f t right ==>
+         create_operand_focus_scope x y E C f u (left ++ right)) /\
+      (!left t right r. create_operand_full_scope x m E C f u left (OK t) /\
+         create_operand_full_scope m y E C f t right r ==>
+         create_operand_full_scope x y E C f u (left ++ right) r)) /\
+  (!es' st' a' b' ha' hb' xs' s' G' n'.
+    create_layout a' b' /\
+    create_word_args_pre (DF,lo,d,C,shC,PG,f,shf) tops ce env cx tyf
+      todo (es',st',a',b',ha',hb',xs',s',G',n') ==>
+    scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG) tops cx st' a' b'
+      (eval_exprs cx todo) (es',s',G',n')
+      (create_word_args_post (DF,lo,d,C,f) ce cx (es',a',b',s',G',n') todo xs')
+      (create_word_args_exit C cx)) ==>
+  scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG) tops cx st0 a b
+    (eval_exprs cx (e::todo)) (es,s,G,tn)
+    (create_word_args_post (DF,lo,d,C,f) ce cx (es,a,b,s,G,tn) (e::todo) ops)
+    (create_word_args_exit C cx)
+Proof
+  strip_tac >> drule create_word_args_pre_cons >> strip_tac >> gvs[] >>
+  `lower_value compile_expr ce (tyf e) e a = (op,m) /\ fn_has_code a m f` by
+    fs[expr_sim_full_pre_def, expr_sim_full_code_def] >>
+  `cs_extends a m /\ cs_extends m b /\
+   a.cs_next_id <= m.cs_next_id /\ m.cs_next_id <= b.cs_next_id` by
+    metis_tac[ci_mono_lower_word_args, ci_mono_lower_value_compile_expr,
+              ci_mono_def, pairTheory.SND] >>
+  `create_layout a m /\ create_layout m b` by
+    metis_tac[create_layout_subinterval, compileEnvTheory.cs_extends_refl] >>
+  `create_cut_code {} a m /\ create_cut_code {} m b` by
+    metis_tac[create_operand_cut_code, create_word_args_cut_code, pairTheory.SND] >>
+  `body_inv tops C ce cx /\ MEM f C.ctx_functions /\ create_operand_at a s /\
+   expr_sim_inv ce cx env es /\ body_const_cells_agree [(NONE,tops)] cx env es` by
+    fs[create_word_args_pre_def, expr_sim_full_code_def] >>
+  qpat_assum `!x m y u. _ ==> _`
+    (qspecl_then [`a`,`m`,`b`,`s`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `!e' ee st x y hx hy op' u K n. _ ==> _`
+    (qspec_then `e` (drule_all_then assume_tac o SIMP_RULE bool_ss [])) >>
+  pure_rewrite_tac[create_word_args_eval_cons] >> irule scoped_operand_bind_all_mixed >>
+  simp[NoAsms, create_word_args_read_frame, create_word_args_cons_frame,
+       create_word_args_cert_cons, create_word_args_cons_ignore] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> drule_then irule gas_exempt_cert_bind_value >> simp[])
+  >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`\H res ee G1 tn1 t.
+    expr_sim_full_post (DF,lo,d,C,f) ce cx e (es,a,m,s,op,G,tn)
+      H res ee G1 tn1 t /\ ee.gas_obs = []`, `m`] >>
+  BETA_TAC >> reverse (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC))
+  >- (irule create_word_args_head_scoped >> first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  `?v. res = INL v` by fs[expr_sim_full_post_def] >> pop_assum strip_assume_tac >>
+  gvs[] >>
+  `mid with gas_obs := [] = mid` by
+    (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
+  qpat_assum `!tail. bind _ _ _ = _`
+    (qspec_then `[]` (assume_tac o SIMP_RULE bool_ss [APPEND_NIL])) >>
+  qpat_assum `mid with gas_obs := [] = mid`
+    (fn th => pure_once_rewrite_tac [SYM th]) >>
+  irule create_word_args_tail_scoped >>
+  qpat_assum `create_word_args_pre _ _ _ _ _ _ (e::todo) _` (irule_at Any) >>
+  qpat_assum `expr_sim_full_pre _ _ _ _ e es _` (irule_at Any) >>
+  qexistsl_tac [`gas_explicit marks s.vs_gas_readings`,`marks`] >>
+  qpat_assum `mid with gas_obs := [] = mid` (fn th =>
+    qpat_x_assum `bind _ _ _ = _` (assume_tac o PURE_REWRITE_RULE [th]) >>
+    pure_rewrite_tac [th]) >>
+  rpt (conj_tac ORELSE first_assum ACCEPT_TAC) >>
+  strip_tac >> first_x_assum (drule_all_then ACCEPT_TAC)
+QED
+
+Theorem create_word_args_cons_native_step[local]:
+  (!e' ee st x y hx hy operand u K n.
+    MEM e' (e::todo) /\ expr_sim_inv ce cx env ee /\
+    expr_body_pre ce cx env e' ee /\ body_const_cells_agree [(NONE,tops)] cx env ee /\
+    is_word_type (expr_type e') /\ create_layout x y /\
+    expr_sim_full_pre (DF,lo,d,C,shC,PG,f,shf) ce cx (tyf e') e' ee
+      (st,x,y,hx,hy,operand,u,K,n) ==>
+    scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG) tops cx st x y
+      (bind (eval_expr cx e') (read_result cx)) (ee,u,K,n)
+      (expr_sim_full_post (DF,lo,d,C,f) ce cx e' (ee,x,y,u,operand,K,n))
+      (create_operand_exit_post C cx) /\
+    create_operand_cut x y (gas_explicit_sites C shC) C f tops cx st
+      (bind (eval_expr cx e') (read_result cx)) (ee,u)) /\
+  create_word_args_pre (DF,lo,d,C,shC,PG,f,shf) tops ce env cx tyf
+    (e::todo) (es,st0,a,b,ha,hb,ops,s,G,tn) /\ create_layout a b /\
+  (!ee st x y hx hy operands u K n.
+    create_word_args_pre (DF,lo,d,C,shC,PG,f,shf) tops ce env cx tyf
+      todo (ee,st,x,y,hx,hy,operands,u,K,n) /\ create_layout x y ==>
+    create_operand_cut x y (gas_explicit_sites C shC) C f tops cx st
+      (eval_exprs cx todo) (ee,u)) ==>
+  create_operand_cut a b (gas_explicit_sites C shC) C f tops cx st0
+    (eval_exprs cx (e::todo)) (es,s)
+Proof
+  strip_tac >> drule create_word_args_pre_cons >> strip_tac >> gvs[] >>
+  `expr_sim_inv ce cx env es /\ body_const_cells_agree [(NONE,tops)] cx env es /\
+   body_inv tops C ce cx /\ ~s.vs_halted` by fs[create_word_args_pre_def] >>
+  `lower_value compile_expr ce (tyf e) e a = (op,m) /\
+   fn_has_code a m f /\ MEM f C.ctx_functions` by fs[expr_sim_full_pre_def] >>
+  `cs_extends a m /\ cs_extends m b` by
+    metis_tac[ci_mono_lower_word_args, ci_mono_lower_value_compile_expr,
+              ci_mono_def, pairTheory.SND] >>
+  `create_layout a m /\ create_layout m b` by
+    metis_tac[create_layout_subinterval, compileEnvTheory.cs_extends_refl] >>
+  qpat_x_assum `!e' ee st x y hx hy operand u K n. _`
+    (qspecl_then [`e`,`es`,`st0`,`a`,`m`,`ha`,`hm`,`op`,`s`,`G`,`tn`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `create_cut_code {} a m /\ create_cut_code {} m b` by
+    metis_tac[create_operand_cut_code, create_word_args_cut_code, pairTheory.SND] >>
+  rewrite_tac[create_word_args_eval_cons] >>
+  qabbrev_tac `src = bind (eval_expr cx e) (read_result cx)` >>
+  qmatch_asmsub_abbrev_tac `scoped_operand_outcome _ _ _ _ _ _ _ _ Q _` >>
+  `gas_completed_operand (DF,lo,gas_explicit_sites C shC,C,f,PG) tops cx st0
+    a m src (es,s,G,tn) Q` by
+    (irule scoped_outcome_completed_operand >> first_assum (irule_at Any) >>
+     metis_tac[body_inv_no_phi]) >>
+  qabbrev_tac `QR = \H r z K n u. Q H r z K n u /\
+      ?obs raw. src (es with gas_obs := obs) = (r,raw) /\ z = raw with gas_obs := []` >>
+  `gas_completed_operand (DF,lo,gas_explicit_sites C shC,C,f,PG) tops cx st0
+    a m src (es,s,G,tn) QR` by
+    (qpat_x_assum `gas_completed_operand _ _ _ _ _ _ _ _ Q`
+       mp_tac >> simp[gas_completed_operand_def, Abbr `QR`] >>
+     rpt strip_tac >>
+     qpat_x_assum `!H0 marks u tail r ee. create_expr_prefix _ _ _ _ _ _ _ _ /\ _ ==> _`
+       (drule_all_then (DISJ_CASES_THEN strip_assume_tac)) >>
+     gvs[] >> metis_tac[]) >>
+  irule create_operand_cut_bind_replay >>
+  qpat_assum `gas_completed_operand _ _ _ _ _ _ _ _ QR` (irule_at Any) >>
+  simp[create_word_args_cons_frame] >>
+  rpt conj_tac
+  >~ [`create_interior_visit _ _ _ _ _ _ _ _ ==> _`]
+  >- (rpt strip_tac >> drule_all create_interior_visit_first_exit >> metis_tac[])
+  >~ [`QR _ _ _ _ _ _ ==> _`]
+  >- (simp[Abbr `QR`, Abbr `Q`, expr_sim_full_post_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  fs[Abbr `QR`] >>
+  `raw.storage_trace = mid.storage_trace` by
+    (qpat_assum `mid with gas_obs := [] = raw with gas_obs := []` mp_tac >>
+     simp[evaluation_state_component_equality]) >>
+  `storage_trace_domain cx st0 raw.storage_trace` by
+    metis_tac[bodyFullExtCallPackingReadyTheory.extcall_packing_observed_domain] >>
+  irule create_word_args_cut_cons_result >>
+  qpat_assum `!ee st x y hx hy operands u K n. _`
+    (irule o SPEC_ALL) >>
+  simp[] >> qexistsl_tac [`G'`,`hm`,`hb`,`tn'`,`xs`] >>
+  fs[Abbr `src`, Abbr `Q`] >>
+  irule create_word_args_tail_pre >> simp[] >>
+  goal_assum (drule_at (Pat `create_word_args_pre _ _ _ _ _ _ (_::_) _`)) >>
+  goal_assum (drule_at (Pat `bind (eval_expr _ _) (read_result _) _ = _`)) >>
+  qexists_tac `create_cut_marks (gas_explicit_sites C shC) front` >>
+  simp[] >> rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  `post_value_type ce e = expr_type e` by simp[] >>
+  gvs[expr_sim_full_post_def]
 QED

@@ -2549,7 +2549,7 @@ Proof
     simp[Abbr `t`,mstore_def,lookup_var_def] >>
   qexistsl_tac [`t`,`tf`] >> gvs[Abbr `t`,Abbr `tf`] >>
   conj_tac >- suspend "family" >>
-  conj_tac >- simp[mstore_def] >>
+  TRY (conj_tac >- (qmatch_goalsub_rename_tac `~u.vs_halted` >> simp[mstore_def])) >>
   conj_tac >- suspend "return" >>
   conj_tac >- suspend "history" >>
   conj_tac >- suspend "frame" >>
@@ -4218,7 +4218,14 @@ Resume body_assign_storage_expr_cases[builtin]:
    >~ [`ECMul`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
    >~ [`Concat n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
    >~ [`Slice n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
-   >~ [`Uint2Str n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def]) >>
+   >~ [`Uint2Str n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
+   >~ [`NamedConst`] >-
+     (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+      pairarg_tac >> gvs[] >>
+      gvs[AllCaseEqs(), as_stack_val_def, as_ptr_val_def, mk_ptr_def])
+   >~ [`BoolChain _ _`] >-
+     (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+      rpt (pairarg_tac >> gvs[])) >>
    drule_at Any reason_builtin_scalar >> simp[reason_result_shape_def])
 QED
 
