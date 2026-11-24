@@ -247,6 +247,117 @@ Proof
   qexistsl_tac [`u`,`G'`,`tn'`] >> first_assum ACCEPT_TAC
 QED
 
+(* Keep the selected field extension and the exact machine landing together.
+   The continuation neither adds GAS nor changes the source evaluation state. *)
+Theorem target_attribute_selected_endpoint:
+  target_pre cenv cx env (AttributeTarget bt fld) es /\
+  attribute_type env.type_defs bty fld = SOME fty /\
+  gas_admissible (bind (eval_base_place cx bt)
+    (\pv. extend_place cx pv (AttrSubscript fld))) target_res_ok es /\
+  (!tail. eval_base_place cx bt
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+        (res,mid with gas_obs := tail)) /\
+  storage_trace_domain cx st0 mid.storage_trace /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    (?pv. res = INL pv /\
+      target_post H ctx func cenv cx es sa sm s0 mid pv (Type bty) rb t /\
+      t.vs_current_bb = sm.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
+      target_ptr_ok cenv pv rb G1 tn1 t /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1) /\
+    ~t.vs_halted /\ mid.gas_obs = []) /\
+  emit_op ADD [FST rb; Lit (n2w (target_field_offset cenv
+       (FST (SND rb)) (SND (SND rb)) fld))] sm = (dst,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at sa x) ==>
+  ?pv pv' out w u G' tn'.
+    res = INL pv /\ dst = Var out /\ eval_operand (FST rb) t = SOME w /\
+    u = (update_var out (w + n2w (target_field_offset cenv
+         (FST (SND rb)) (SND (SND rb)) fld)) t with vs_inst_idx := SUC t.vs_inst_idx) /\
+    target_field_type cenv (SND (SND rb)) fld = SOME (value_type_place (Type fty)) /\
+    (!tail. extend_place cx pv (AttrSubscript fld) (mid with gas_obs := tail) =
+       (INL pv',mid with gas_obs := tail)) /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G1,tn1) [] (OK u,G',tn') /\
+      target_post H ctx func cenv cx es sa sb s0 mid pv' (Type fty)
+        (dst,FST (SND rb),SOME (value_type_place (Type fty))) u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+      s0.vs_alloca_next <= u.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx mid G' tn' u /\
+      target_ptr_ok cenv pv' (dst,FST (SND rb),SOME (value_type_place (Type fty))) G' tn' u /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn')
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+     mid.storage_trace` by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    drule >> strip_tac >> gvs[] >>
+  `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
+  `eval_base_place cx bt
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL pv,mid)` by
+    (qpat_assum `!tail. eval_base_place _ _ _ = _`
+       (qspec_then `[]` mp_tac) >> REWRITE_TAC [APPEND_NIL] >>
+     qpat_assum `mid with gas_obs := [] = mid` (fn th => REWRITE_TAC [th])) >>
+  `env.type_defs = get_tenv cx` by fs[target_pre_def, expr_sim_inv_def,
+    env_consistent_def, env_context_consistent_def] >>
+  `?sid. bty = StructT sid` by
+    (Cases_on `bty` >> gvs[attribute_type_def]) >> gvs[] >>
+  Cases_on `extend_place cx pv (AttrSubscript fld) mid` >>
+  rename1 `extend_place _ _ _ _ = (res1, es2)` >>
+  `!m. res1 <> INR (Error (TypeError m))` by
+    (qpat_x_assum `gas_admissible (bind _ _) _ _`
+       (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
+     simp[bind_def] >> rpt strip_tac >> gvs[target_res_ok_def]) >>
+  `?w0. eval_operand (FST rb) t = SOME w0 /\
+        place_ptr_rel cenv cx t pv w0 (FST (SND rb)) (Type (StructT sid)) /\
+        SND (SND rb) = SOME (ValPT (StructT sid)) /\
+        place_readable cx mid pv` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> rpt strip_tac >>
+     qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o SIMP_RULE std_ss [target_post_def,value_type_place_def]) >>
+     qexists_tac `w` >> fs[]) >>
+  `expr_sim_inv cenv cx env mid` by
+    (irule eval_base_place_sim_inv >>
+     qexistsl_tac [`bt`, `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+                   `INL pv`] >> fs[target_pre_def] >>
+     metis_tac[target_pre_sub, target_pre_def]) >>
+  drule_all target_field_source_ptr >> strip_tac >> gvs[] >>
+  suspend "add"
+QED
+
+Resume target_attribute_selected_endpoint[add]:
+  rename1 `extend_place _ _ _ es2 = (INL _,es2)` >>
+  qspecl_then [`rb`, `target_field_offset cenv (FST (SND rb)) (SND (SND rb)) fld`,
+               `sm`, `dst`, `sb`, `func`, `ctx`, `cenv`, `sa`, `t`, `s0`, `w0`,
+               `cx`, `st0`, `es2.storage_trace`, `es`, `pv`,
+               `Type (StructT sid)`, `DF`, `lo`, `d`, `es2`, `G1`, `tn1`,
+               `pv'`, `G0`, `tn0`, `Type fty`, `explicit`, `PG`]
+    mp_tac target_add_suffix_endpoint >>
+  impl_tac
+  >- (simp[] >> gen_tac >> strip_tac >> res_tac >> simp[]) >>
+  strip_tac >> gvs[] >>
+  qexistsl_tac [`G'`,`tn'`] >> simp[] >>
+  rpt strip_tac >> res_tac >>
+  fs[target_post_def, stmt_state_rel_def, fmp_room_def,
+     allocas_below_fmp_def, venomMemDefsTheory.alloca_inv_def,
+     venomMemDefsTheory.alloca_next_valid_def] >>
+  rpt strip_tac >> res_tac >> decide_tac
+QED
+
+Finalise target_attribute_selected_endpoint
+
 Theorem target_attribute_sim_full:
   target_pre cenv cx env (AttributeTarget bt fld) es /\
   target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -322,76 +433,19 @@ Resume target_attribute_sim_full[selected]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
   qunabbrev_tac `childQ` >> RULE_ASSUM_TAC BETA_RULE >>
-  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
-     mid.storage_trace` by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
+  drule_all (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `PG` |-> `PG`]
+     target_attribute_selected_endpoint) >>
+  disch_then (qspecl_then [`shadow_ctx`,`PG`] strip_assume_tac) >>
+  `~t.vs_halted /\ mid.gas_obs = []` by metis_tac[storage_trace_domain_def] >>
   qexists_tac `pv` >> simp[] >>
-  `mid with gas_obs := [] = mid` by
-    simp[evaluation_state_component_equality] >>
-  `eval_base_place cx bt
-     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL pv, mid)`
-    by (qpat_assum `!tail. eval_base_place _ _ _ = _`
-          (qspec_then `[]` mp_tac) >> REWRITE_TAC [APPEND_NIL] >>
-        qpat_assum `mid with gas_obs := [] = mid` (fn th => REWRITE_TAC [th])) >>
-  `expr_sim_inv cenv cx env mid` by
-    (irule eval_base_place_sim_inv >>
-     qexistsl_tac [`bt`, `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-                   `INL pv`] >> fs[target_pre_def] >>
-     metis_tac[target_pre_sub, target_pre_def]) >>
-  `env.type_defs = get_tenv cx` by
-    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  `?sid. bty = StructT sid` by
-    (Cases_on `bty` >> gvs[attribute_type_def]) >> gvs[] >>
-  Cases_on `extend_place cx pv (AttrSubscript fld) mid` >>
-  rename1 `extend_place _ _ _ _ = (res1, es2)` >>
-  `!m. res1 <> INR (Error (TypeError m))` by
-    (qpat_x_assum `gas_admissible (bind _ _) _ _`
-       (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
-     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
-     simp[bind_def] >> rpt strip_tac >> gvs[target_res_ok_def]) >>
-  `?w0. eval_operand (FST rb) t = SOME w0 /\
-        place_ptr_rel cenv cx t pv w0 (FST (SND rb)) (Type (StructT sid)) /\
-        SND (SND rb) = SOME (ValPT (StructT sid)) /\
-        place_readable cx mid pv` by
-    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> rpt strip_tac >>
-     qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (strip_assume_tac o SIMP_RULE std_ss [target_post_def,
-                                             value_type_place_def]) >>
-     qexists_tac `w` >> fs[]) >>
-  drule_all target_field_source_ptr >> strip_tac >> gvs[] >>
-  suspend "tail"
-QED
-
-Resume target_attribute_sim_full[tail]:
-  qspecl_then [`rb`, `target_field_offset cenv (FST (SND rb)) (SND (SND rb)) fld`,
-               `sm`, `dst`, `sb`, `func`, `ctx`, `cenv`, `sa`, `t`, `s0`, `w0`,
-               `cx`, `st0`, `es2.storage_trace`, `es`, `pv`,
-               `Type (StructT sid)`, `DF`, `lo`, `d`, `es2`, `G1`, `tn1`,
-               `pv'`, `G0`, `tn0`, `Type fty`,
-               `gas_explicit_sites ctx shadow_ctx`, `PG`]
-    mp_tac target_add_suffix_full >>
-  impl_tac
-  >- (simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      gen_tac >> strip_tac >>
-      qpat_x_assum `!H. valid_horizon _ _ H es2.storage_trace ==> _` drule >>
-      strip_tac >> simp[]) >>
-  strip_tac >>
   irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G'`, `es2`, `INL pv'`, `u`, `tn'`] >>
-  conj_tac >- simp[] >>
-  rpt strip_tac >>
-  qpat_x_assum `!H. valid_horizon _ _ H es2.storage_trace ==>
-                    gas_origin_ptr_path _ _ _ _ /\ _` drule >>
-  simp[] >> strip_tac >>
-  fs[target_post_def, stmt_state_rel_def, fmp_room_def,
-     allocas_below_fmp_def, venomMemDefsTheory.alloca_inv_def,
-     venomMemDefsTheory.alloca_next_valid_def] >>
-  rpt strip_tac >> res_tac >> decide_tac
+  qexistsl_tac [`G'`, `mid`, `INL pv'`, `u`, `tn'`] >>
+  `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
+  `target_field_type (gas_shadow_env T cenv) (SND (SND rb)) fld =
+     SOME (value_type_place (Type fty))` by metis_tac[] >>
+  qpat_x_assum `u = _` kall_tac >>
+  qpat_x_assum `dst = Var _` SUBST_ALL_TAC >>
+  simp[] >> rpt strip_tac >> res_tac >> simp[]
 QED
 
 Finalise target_attribute_sim_full
@@ -540,6 +594,110 @@ Proof
   gvs[]
 QED
 
+(* Keep the orbit of the singleton ADD at the very endpoint where the
+   semantic continuation chooses its state and ghosts. *)
+Theorem immutable_target_field_endpoint:
+  expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt /\
+  type_place_target env bt = SOME (Type (StructT sid)) /\
+  attribute_type (get_tenv cx) (StructT sid) fld = SOME ty /\
+  emit_op ADD [FST rb; Lit (n2w field_off)] sm = (dst,sb) /\
+  field_off = target_field_offset cenv (FST (SND rb)) (SND (SND rb)) fld /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  storage_trace_domain cx st0 mid.storage_trace /\ ~t.vs_halted /\ mid.gas_obs = [] /\
+  (!tail. eval_target_place cx bt
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+    (res,mid with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    ?id path. res = INL (ImmutablePlace NONE id path) /\
+      target_root bt = TopLevelNameTarget (NONE,id) /\
+      imm_target_post H ctx func cenv cx es sa sm s0 mid id path (StructT sid) rb t /\
+      t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
+      target_ptr_ok cenv (PlaceR (ImmutablePlace NONE id path)) rb G1 tn1 t /\
+      op_prov G1 (FST rb) = NONE /\
+      (!itv iv. ~target_through_dynarray cenv bt /\
+        FLOOKUP (case ALOOKUP mid.immutables cx.txn.target of NONE => FEMPTY
+          | SOME imms => get_source_immutables NONE imms) id = SOME (itv,iv)
+        ==> fixed_shape_path itv path) /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1) ==>
+  ?id path out w u G' tn'.
+    res = INL (ImmutablePlace NONE id path) /\
+    dst = Var out /\ eval_operand (FST rb) t = SOME w /\
+    FST (SND rb) = SOME LocCode /\
+    target_field_type cenv (SND (SND rb)) fld = SOME (ValPT ty) /\
+    u = (update_var out (w + n2w field_off) t with vs_inst_idx := SUC t.vs_inst_idx) /\
+    (!gs. bind (extend_place cx (PlaceR (ImmutablePlace NONE id path))
+               (AttrSubscript fld)) get_place (mid with gas_obs := gs) =
+      (INL (ImmutablePlace NONE id (path ++ [AttrSubscript fld])),mid with gas_obs := gs)) /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G1,tn1) [] (OK u,G',tn') /\
+      target_root bt = TopLevelNameTarget (NONE,id) /\
+      imm_target_post H ctx func cenv cx es sa sb s0 mid id (path ++ [AttrSubscript fld]) ty
+        (dst,SOME LocCode,SOME (ValPT ty)) u /\
+      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+      s0.vs_alloca_next <= u.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx mid G' tn' u /\
+      target_ptr_ok cenv (PlaceR (ImmutablePlace NONE id (path ++ [AttrSubscript fld])))
+        (dst,SOME LocCode,SOME (ValPT ty)) G' tn' u /\
+      op_prov G' dst = NONE /\
+      (!itv iv. ~target_through_dynarray cenv bt /\
+        FLOOKUP (case ALOOKUP mid.immutables cx.txn.target of NONE => FEMPTY
+          | SOME imms => get_source_immutables NONE imms) id = SOME (itv,iv)
+        ==> fixed_shape_path itv (path ++ [AttrSubscript fld])) /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn')
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+     mid.storage_trace` by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[] >>
+  `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
+  `eval_target_place cx bt (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+    (INL (ImmutablePlace NONE id path),mid)` by
+    (qpat_assum `!tail. eval_target_place _ _ _ = _`
+       (qspec_then `[]` (mp_tac o REWRITE_RULE [listTheory.APPEND_NIL])) >>
+     qpat_assum `mid with gas_obs := [] = mid` (fn th => rewrite_tac[th]) >> simp[]) >>
+  `expr_sim_inv cenv cx env mid` by
+    (mp_tac (Q.INST [`s` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+       `s'` |-> `mid`,`t` |-> `bt`,`r` |-> `INL (ImmutablePlace NONE id path)`]
+       aug_place_target_inv) >> simp[expr_sim_inv_gas_obs]) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> imm_target_post H _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  qpat_assum `imm_target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [imm_target_post_def]) >>
+  drule_all_then strip_assume_tac immutable_target_field_source >>
+  qpat_x_assum `target_ptr_ok _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [target_ptr_ok_def]) >>
+  gvs[target_field_type_def,target_field_offset_def] >>
+  rename1 `mem_path_offset itv (path ++ [AttrSubscript fld]) = SOME (_,ftv)` >>
+  rename1 `evaluate_subscripts itv iv (path ++ [AttrSubscript fld]) = INL fv` >>
+  qmatch_asmsub_abbrev_tac `emit_op ADD [FST rb; Lit (n2w field_off)] sm` >>
+  mp_tac (Q.INST [`ee` |-> `mid`, `G` |-> `G1`, `tn` |-> `tn1`,
+     `bty` |-> `StructT sid`, `fty` |-> `ty`, `path'` |-> `path ++ [AttrSubscript fld]`]
+     immutable_target_field_add) >>
+  (impl_tac >- (simp[Abbr `field_off`] >> rpt strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+      (drule_then strip_assume_tac) >> gvs[])) >>
+  strip_tac >> qexistsl_tac [`out`,`G'`,`tn'`] >>
+  fs[arithmeticTheory.ADD_COMM] >> rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+      gas_origin_ptr_path _ _ _ _ /\ _` (drule_then strip_assume_tac) >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  irule immutable_target_fixed_snoc >> rpt conj_tac
+  >- (qexistsl [`k`,`ptv`] >> simp[] >>
+      qpat_assum `evaluate_type _ (StructT sid) = SOME ptv`
+        (strip_assume_tac o MATCH_MP evaluate_type_struct_fields) >> simp[])
+  >- (qexistsl [`field_off+k`,`ftv`] >> simp[]) >>
+  fs[target_through_dynarray_def]
+QED
+
 Theorem immutable_target_attribute_sim_full:
   expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt /\
   immutable_root cx bt /\
@@ -615,49 +773,25 @@ Resume immutable_target_attribute_sim_full[selected]:
   qunabbrev_tac `childQ` >> RULE_ASSUM_TAC BETA_RULE >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
      mid.storage_trace` by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[] >>
-  `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
-  `eval_target_place cx bt (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-    (INL (ImmutablePlace NONE id path),mid)` by
-    (qpat_assum `!tail. eval_target_place _ _ _ = _`
-       (qspec_then `[]` (mp_tac o REWRITE_RULE [listTheory.APPEND_NIL])) >>
-     qpat_assum `mid with gas_obs := [] = mid` (fn th => rewrite_tac[th]) >> simp[]) >>
-  `expr_sim_inv cenv cx env mid` by
-    (mp_tac (Q.INST [`s` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-       `s'` |-> `mid`,`t` |-> `bt`,`r` |-> `INL (ImmutablePlace NONE id path)`]
-       aug_place_target_inv) >> simp[expr_sim_inv_gas_obs]) >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> imm_target_post H _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  qpat_assum `imm_target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [imm_target_post_def]) >>
-  drule_all_then strip_assume_tac immutable_target_field_source >>
-  qpat_x_assum `target_ptr_ok _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [target_ptr_ok_def]) >>
-  gvs[target_field_type_def,target_field_offset_def] >>
-  rename1 `mem_path_offset itv (path ++ [AttrSubscript fld]) = SOME (_,ftv)` >>
-  rename1 `evaluate_subscripts itv iv (path ++ [AttrSubscript fld]) = INL fv` >>
+  `~t.vs_halted /\ mid.gas_obs = []` by
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+       (drule_then strip_assume_tac) >> simp[]) >>
   qmatch_asmsub_abbrev_tac `emit_op ADD [FST rb; Lit (n2w field_off)] sm` >>
-  mp_tac (Q.INST [`ee` |-> `mid`, `G` |-> `G1`, `tn` |-> `tn1`,
-     `bty` |-> `StructT sid`, `fty` |-> `ty`, `path'` |-> `path ++ [AttrSubscript fld]`,
-     `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] immutable_target_field_add) >>
-  (impl_tac >- (simp[Abbr `field_off`] >> rpt strip_tac >>
-    qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-      (drule_then strip_assume_tac) >> simp[])) >>
-  strip_tac >>
+  mp_tac (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+    immutable_target_field_endpoint) >>
+  (impl_tac >- simp[Abbr `field_off`]) >> strip_tac >>
+  qexists_tac `ImmutablePlace NONE id path` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
+  `target_field_type (gas_shadow_env T cenv) (SND (SND rb)) fld =
+     SOME (ValPT ty)` by metis_tac[] >>
   qexistsl_tac [`G'`,`mid`,`INL (ImmutablePlace NONE id (path ++ [AttrSubscript fld]))`,
-    `u`,`tn'`] >> simp[target_root_def] >> rpt strip_tac >>
+    `u`,`tn'`] >> simp[target_root_def, target_through_dynarray_def] >>
+  gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
       gas_origin_ptr_path _ _ _ _ /\ _` (drule_then strip_assume_tac) >>
-  simp[target_through_dynarray_def] >> rpt strip_tac >> gvs[] >>
-  irule immutable_target_fixed_snoc >> rpt conj_tac
-  >- (qexistsl [`k`,`ptv`] >> simp[] >>
-      qpat_assum `evaluate_type _ (StructT sid) = SOME ptv`
-        (strip_assume_tac o MATCH_MP evaluate_type_struct_fields) >> simp[])
-  >- (qexistsl [`field_off+k`,`ftv`] >> simp[]) >>
-  fs[target_through_dynarray_def]
+  gvs[]
 QED
 
 Finalise immutable_target_attribute_sim_full
