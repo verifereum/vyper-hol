@@ -5,6 +5,7 @@ Ancestors
   vyperStorageWritePreservation loweringStateRelDefs
   bodyFullSubscriptExprSlotRegion bodyFullSubscriptPopSlotRegion
   gasOutcomeFull vyperStorageTrace bodyFullSubscriptObservedSlotPtr
+  bodyFullSubscriptLiveLanding
   bodyFullSubscriptSlotRun exprSimSubscriptArrayLiveStorageElement
   exprSimSubscriptArrayLiveStorageEndpoint exprSimSubscriptArraySuffix
   exprSimSubscriptArraySource exprSimSource exprOperandVar vyperTypeConstantFold
@@ -62,7 +63,7 @@ Proof
   qexists_tac `H` >> fs[valid_horizon_def]
 QED
 
-Theorem subscript_live_slot_select_full:
+Theorem subscript_live_slot_select_landing:
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
   post_value_type cenv obj = expr_type obj /\
@@ -98,8 +99,8 @@ Theorem subscript_live_slot_select_full:
     vv_post H ctx func cenv cx obj es sa sm s0 mid (PlaceR (StoragePlace tr slot vt)) bvv s /\
     expr_post H ctx func cenv cx idx mid sm sn s fin key iop u /\
     ghost_inv_at (DF H) lo d cenv cx fin Gi tni u) ==>
-  gas_outcome_full
-    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+  live_select_landing
+    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cx st0
     (select_result cx (ArrayT et bd) (PlaceR (StoragePlace tr slot vt)) (ValueSubscript key))
     (fin,u,Gi,tni)
     (\H res ee G tn t. ?tv. res = INL tv /\
@@ -132,6 +133,9 @@ Theorem subscript_live_slot_select_full:
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+    (\r. (?q. r = OK q /\ q.vs_current_bb = sb.cs_current_bb /\
+                    q.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+         (?q. r = Abort Revert_abort q))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `H0 = storage_trace_horizon fin.storage_trace` >>
@@ -371,11 +375,11 @@ Proof
            gvs[vyperStateTheory.select_result_def, extend_place_storage_array_index]) >>
         qexists `"array dynamic capacity oob"` >>
         gvs[vyperStateTheory.select_result_def, extend_place_storage_array_index]) >>
-     irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >>
-     conj_tac >-
-       (qexistsl [`Gq`,`fin`,`Abort Revert_abort q`,`INR (Error (RuntimeError msg))`,`tnq`] >>
-        gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def,
-            fragExecTheory.exit_result_def]) >> simp[]) >>
+     irule live_select_landing_exit >>
+     (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+     qexistsl [`Gq`,`Abort Revert_abort q`,`INR (Error (RuntimeError msg))`,`tnq`] >>
+     gvs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def,
+         fragExecTheory.exit_result_def]) >>
   `0 <= i /\ Num i < bound_length bd /\
    (!n. bd = Dynamic n ==> Num i < w2n (lookup_storage slot (get_storage cx fin tr)))` by
     fs[Abbr `dyn`, AllCaseEqs()] >>
@@ -398,10 +402,11 @@ Proof
      qpat_x_assum `i = if _ then _ else _` kall_tac >>
      Cases_on `bd` >> gvs[Abbr `off`, vyperStateTheory.select_result_def,
                           extend_place_storage_array_index]) >>
-  irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
-  conj_tac >- (
-    qexistsl [`Gq`,`fin`,`INL (PlaceR (StoragePlace tr (slot + n2w off) etv))`,`q`,`tnq`] >>
-    conj_tac >- metis_tac[] >>
+  irule live_select_landing_ok >>
+  (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`Gq`,`INL (PlaceR (StoragePlace tr (slot + n2w off) etv))`,`q`,`tnq`] >>
+  simp[NoAsms] >> rpt conj_tac >- metis_tac[] >- metis_tac[] >- metis_tac[] >>
+  (
     qx_gen_tac `H` >> strip_tac >>
     conj_tac >- metis_tac[] >>
     `fin with gas_obs := [] = fin` by simp[vyperStateTheory.evaluation_state_component_equality] >>
@@ -510,4 +515,79 @@ Proof
     irule ghost_kept_at_clean_suffix >>
     qexistsl [`Gi`,`tni`] >> simp[ptrDisciplineTheory.op_taint_def] >>
     metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LE_TRANS]) >> simp[]
+QED
+
+Theorem subscript_live_slot_select_full:
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+  post_value_type cenv obj = expr_type obj /\
+  compile_expr cenv ty obj sa = (bvv,sm) /\
+  lower_value compile_expr cenv ty idx sm = (iop,sn) /\
+  loc = (case vv_location bvv of SOME l => l | NONE => LocMemory) /\
+  compile_array_subscript (vv_operand bvv) iop
+    (case bd of Fixed _ => F | Dynamic _ => T)
+    (case bd of Fixed n => n | Dynamic _ => 0)
+    (word_scale loc) (elem_size_in_location cenv loc et)
+    (is_signed_type (expr_type idx))
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) sn = (dst,sb) /\
+  fn_has_code sn sb func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  eval_expr cx obj (es with gas_obs := gs1) = (INL (PlaceR (StoragePlace tr slot vt)),mid) /\
+  bind (eval_expr cx idx) (read_result cx) (mid with gas_obs := gs2) = (INL key,fin) /\
+  storage_trace_domain cx st0 fin.storage_trace /\ fin.gas_obs = [] /\
+  ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
+  u.vs_inst_idx = LENGTH sn.cs_current_insts /\ alloca_history func u /\
+  s0.vs_alloca_next <= s.vs_alloca_next /\ s.vs_alloca_next <= u.vs_alloca_next /\
+  ptr_vv_ok cx (post_value_type cenv obj) (PlaceR (StoragePlace tr slot vt)) bvv mid G1 tn1 s /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+  ptr_val_ok cx (post_value_type cenv idx) key iop Gi tni u /\
+  ghost_kept_at lo cenv mid sm G1 tn1 s Gi tni /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    vv_post H ctx func cenv cx obj es sa sm s0 mid (PlaceR (StoragePlace tr slot vt)) bvv s /\
+    expr_post H ctx func cenv cx idx mid sm sn s fin key iop u /\
+    ghost_inv_at (DF H) lo d cenv cx fin Gi tni u) ==>
+  gas_outcome_full
+    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+    (select_result cx (ArrayT et bd) (PlaceR (StoragePlace tr slot vt)) (ValueSubscript key))
+    (fin,u,Gi,tni)
+    (\H res ee G tn t. ?tv. res = INL tv /\
+      vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sb s0 ee tv (LocatedValue ann (mk_ptr dst loc)) t /\
+      vv_store_bound cx (post_value_type cenv (Subscript ann obj idx))
+        (lowered_value_type cenv (Subscript ann obj idx)) ee tv (LocatedValue ann (mk_ptr dst loc)) t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+      ptr_vv_ok cx (post_value_type cenv (Subscript ann obj idx)) tv (LocatedValue ann (mk_ptr dst loc)) ee G tn t /\
+      (!v. tv = Value v /\ ~is_word_type (post_value_type cenv (Subscript ann obj idx)) /\
+           ~is_bytestring_type (post_value_type cenv (Subscript ann obj idx)) ==>
+           vv_own cenv cx (post_value_type cenv (Subscript ann obj idx)) sa sb ee tv (LocatedValue ann (mk_ptr dst loc)) t /\
+           (!t' p. (LocatedValue ann (mk_ptr dst loc)) = LocatedValue t' p ==> p.ptr_location = LocMemory)) /\
+      (cenv.ce_is_ctor /\ vv_location (LocatedValue ann (mk_ptr dst loc)) = SOME LocCode ==>
+       ?val. read_result cx tv ee = (INL val,ee) /\
+             !rt w. evaluate_type (get_tenv cx) (post_value_type cenv (Subscript ann obj idx)) =
+                    SOME rt /\ eval_operand (vv_operand (LocatedValue ann (mk_ptr dst loc))) t = SOME w ==>
+                    w2n w + type_memory_size rt <= lo /\
+                    (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
+                           val_in_memory rt val (w2n w) mem)) /\
+      (!t' op. (LocatedValue ann (mk_ptr dst loc)) = StackValue t' op /\
+               ~is_word_type (post_value_type cenv (Subscript ann obj idx)) ==>
+               ptr_buf_ok cenv (Subscript ann obj idx) op G t) /\
+      (!t' p. (LocatedValue ann (mk_ptr dst loc)) = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+              ptr_buf_ok cenv (Subscript ann obj idx) p.ptr_operand G t) /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+Proof
+  disch_then (mp_tac o MATCH_MP subscript_live_slot_select_landing) >>
+  metis_tac[live_select_landing_full]
 QED
