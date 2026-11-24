@@ -10,7 +10,7 @@
 
 Theory vyperTypeCallGraphSoundness
 Ancestors
-  arithmetic list pred_set vyperTypeCallGraph vyperTypeContract
+  alist arithmetic list rich_list pair pred_set vyperTypeCallGraph vyperTypeContract
 
 (* ===== Generic executable/declarative reachability boundary ===== *)
 
@@ -28,6 +28,105 @@ Proof
   strip_tac >>
   qexists_tac `(caller,callee)` >>
   simp[]
+QED
+
+Theorem call_closure_every:
+  EVERY P seen /\ EVERY P todo /\
+  (!x y. P x /\ call_edge_rel edges x y ==> P y) ==>
+  EVERY P (call_closure edges fuel seen todo)
+Proof
+  qid_spec_tac `todo` >> qid_spec_tac `seen` >> Induct_on `fuel` >>
+  simp[call_closure_def] >>
+  gen_tac >> Cases_on `todo` >> simp[call_closure_def] >>
+  strip_tac >> rw[] >>
+  qpat_x_assum `!seen todo. _` irule >>
+  simp[EVERY_APPEND, EVERY_MEM, MEM_direct_callees] >>
+  metis_tac[]
+QED
+
+Theorem unseen_edges_length[local]:
+  ~MEM k seen ==>
+  LENGTH (FILTER (\edge. ~MEM (FST edge) seen) edges) =
+  LENGTH (direct_callees edges k) +
+  LENGTH (FILTER (\edge. ~MEM (FST edge) (k::seen)) edges)
+Proof
+  Induct_on `edges` >> simp[direct_callees_def] >>
+  gen_tac >> strip_tac >>
+  Cases_on `FST h = k` >> Cases_on `MEM (FST h) seen` >>
+  gvs[direct_callees_def] >> decide_tac
+QED
+
+(* Every pending node and every edge whose caller has yet to be expanded
+   accounts for one unit of the original fuel. *)
+Theorem call_closure_complete[local]:
+  LENGTH todo + LENGTH (FILTER (\edge. ~MEM (FST edge) seen) edges) <= fuel /\
+  (!x y. MEM x seen /\ call_edge_rel edges x y ==> MEM y seen \/ MEM y todo) ==>
+  (!x. MEM x seen \/ MEM x todo ==> MEM x (call_closure edges fuel seen todo)) /\
+  (!x y. MEM x (call_closure edges fuel seen todo) /\ call_edge_rel edges x y ==>
+         MEM y (call_closure edges fuel seen todo))
+Proof
+  qid_spec_tac `todo` >> qid_spec_tac `seen` >> Induct_on `fuel`
+  >- (gen_tac >> Cases_on `todo` >> simp[call_closure_def] >> metis_tac[]) >>
+  gen_tac >> Cases_on `todo`
+  >- (simp[call_closure_def] >> metis_tac[]) >>
+  simp[call_closure_def] >>
+  strip_tac >> Cases_on `MEM h seen` >> gvs[]
+  >- (qpat_x_assum `!seen todo. _` (qspecl_then [`seen`,`t`] mp_tac) >>
+      impl_tac >- (conj_tac >- decide_tac >> metis_tac[]) >>
+      metis_tac[]) >>
+  drule_then (qspec_then `edges` assume_tac) unseen_edges_length >>
+  qpat_x_assum `!seen todo. _`
+    (qspecl_then [`h::seen`,`direct_callees edges h ++ t`] mp_tac) >>
+  impl_tac
+  >- (simp[MEM_direct_callees] >>
+      conj_tac >- (fs[] >> decide_tac) >> metis_tac[MEM_direct_callees]) >>
+  simp[MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem call_closure_from_roots:
+  (!x. MEM x roots ==>
+       MEM x (call_closure edges (LENGTH roots + LENGTH edges) [] roots)) /\
+  (!x y. MEM x (call_closure edges (LENGTH roots + LENGTH edges) [] roots) /\
+         call_edge_rel edges x y ==>
+         MEM y (call_closure edges (LENGTH roots + LENGTH edges) [] roots))
+Proof
+  qspecl_then [`roots`,`[]`,`edges`,`LENGTH roots + LENGTH edges`] mp_tac
+    (Q.GENL [`todo`,`seen`,`edges`,`fuel`] call_closure_complete) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem linked_live_functions_member:
+  MEM key (linked_live_functions mods exps) <=>
+  MEM key (linked_live_functions_from mods (linked_main_roots mods)) \/
+  MEM key (linked_live_functions_from mods (linked_export_roots exps))
+Proof
+  PURE_REWRITE_TAC [linked_live_functions_def, linked_live_functions_from_def, LET_THM] >>
+  BETA_TAC >>
+  qabbrev_tac `edges = contract_call_edges mods` >>
+  qabbrev_tac `main_roots = linked_main_roots mods` >>
+  qabbrev_tac `export_roots = linked_export_roots exps` >>
+  qabbrev_tac `close_roots = \roots.
+    call_closure edges (LENGTH roots + LENGTH edges) [] roots` >>
+  `MEM key (close_roots (main_roots ++ export_roots)) <=>
+   MEM key (close_roots main_roots) \/ MEM key (close_roots export_roots)`
+    suffices_by simp[Abbr `close_roots`] >>
+  `!roots. (!x. MEM x roots ==> MEM x (close_roots roots)) /\
+           (!x y. MEM x (close_roots roots) /\ call_edge_rel edges x y ==>
+                  MEM y (close_roots roots))` by
+    (rw[Abbr `close_roots`] >> metis_tac[call_closure_from_roots]) >>
+  `!P roots. EVERY P roots /\
+              (!x y. P x /\ call_edge_rel edges x y ==> P y) ==>
+              EVERY P (close_roots roots)` by
+    (rw[Abbr `close_roots`] >> metis_tac[call_closure_every, EVERY_DEF]) >>
+  `EVERY (\x. MEM x (close_roots main_roots) \/ MEM x (close_roots export_roots))
+         (close_roots (main_roots ++ export_roots))` by
+    (qpat_x_assum `!P roots. _` match_mp_tac >>
+     simp[EVERY_MEM] >> metis_tac[]) >>
+  `!roots. roots = main_roots \/ roots = export_roots ==>
+     EVERY (\x. MEM x (close_roots (main_roots ++ export_roots))) (close_roots roots)` by
+    (gen_tac >> strip_tac >> qpat_x_assum `!P roots. _` match_mp_tac >>
+     simp[EVERY_MEM] >> metis_tac[]) >>
+  fs[EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem MEM_reachable_nodes_NRC:
@@ -296,6 +395,78 @@ Proof
   conj_tac
   >- (qexists_tac `(src,tls)` >> simp[]) >>
   metis_tac[module_call_edges_function]
+QED
+
+Theorem contract_call_edge_caller[local]:
+  call_edge_rel (contract_call_edges mods) (src,name) callee ==>
+  ?tops vis mut nr rr args dflts ret body.
+    MEM (src,tops) mods /\
+    MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops
+Proof
+  simp[call_edge_rel_def, contract_call_edges_def, module_call_edges_def,
+       MEM_FLAT, MEM_MAP, EXISTS_PROD, PULL_EXISTS] >>
+  rpt gen_tac >> strip_tac >> rename1 `MEM (tl:toplevel) tops` >>
+  Cases_on `tl` >> gvs[toplevel_call_edges_def, MEM_MAP] >>
+  metis_tac[]
+QED
+
+Theorem linked_main_roots_source[local]:
+  MEM (src,name) (linked_main_roots mods) ==> src = NONE
+Proof
+  Cases_on `ALOOKUP mods NONE` >>
+  simp[linked_main_roots_def, contract_keys_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >> rename1 `MEM (tl:toplevel) tops` >>
+  Cases_on `tl` >> gvs[external_name_keys_toplevel_def] >>
+  TRY (Cases_on `f`) >> TRY (Cases_on `v`) >>
+  gvs[external_name_keys_toplevel_def]
+QED
+
+(* The ordinary typing roots include every function of an allocated module.
+   Getters can be roots of the linked closure but add no internal calls. *)
+Theorem linked_live_functions_function_live:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  exports_ok layouts addr mods exps /\
+  ALOOKUP mods src = SOME tops /\
+  MEM (src,name) (linked_live_functions mods exps) ==>
+  function_live layouts addr mods (live_functions layouts addr mods) (src,name)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP FST mods) /\ main_module_allocated layouts addr mods` by
+    fs[check_contract_def, contract_namespaces_ok_def] >>
+  qabbrev_tac `live = live_functions layouts addr mods` >>
+  qabbrev_tac `P = \k. function_live layouts addr mods live k \/
+                         ALOOKUP mods (FST k) = NONE` >>
+  `!x y. P x /\ call_edge_rel (contract_call_edges mods) x y ==> P y` by
+    (rpt gen_tac >> PairCases_on `x` >> strip_tac >>
+     drule_then strip_assume_tac contract_call_edge_caller >>
+     `ALOOKUP mods x0 = SOME tops'` by metis_tac[ALOOKUP_ALL_DISTINCT_MEM] >>
+     `MEM (x0,x1) live` by
+       (fs[Abbr `P`, function_live_def] >>
+        `MEM (x0,x1) (live_roots layouts addr mods)` by
+          (simp[live_roots_def, MEM_FLAT, MEM_MAP, EXISTS_PROD, PULL_EXISTS] >>
+           qexistsl_tac [`x0`,`tops'`] >> simp[MEM_FLAT, MEM_MAP] >>
+           metis_tac[toplevel_function_keys_def, MEM]) >>
+        fs[Abbr `live`, live_functions_def] >>
+        metis_tac[call_closure_from_roots]) >>
+     `MEM y live` by
+       (fs[Abbr `live`, live_functions_def] >>
+        metis_tac[call_closure_from_roots]) >>
+     Cases_on `y` >> simp[Abbr `P`, function_live_def]) >>
+  `EVERY P (linked_main_roots mods)` by
+    (rw[EVERY_MEM] >> PairCases_on `e` >>
+     imp_res_tac linked_main_roots_source >>
+     Cases_on `ALOOKUP mods NONE` >>
+     fs[Abbr `P`, main_module_allocated_def, function_live_def]) >>
+  `EVERY P (linked_export_roots exps)` by
+    (fs[exports_ok_def, linked_export_roots_def, EVERY_MEM, MEM_MAP, FORALL_PROD] >>
+     rw[] >> PairCases_on `y` >>
+     Cases_on `ALOOKUP mods (SOME y1)` >>
+     gvs[Abbr `P`, function_live_def] >> res_tac >> gvs[]) >>
+  `EVERY P (linked_live_functions mods exps)` by
+    (simp[linked_live_functions_def, linked_live_functions_from_def] >>
+     irule call_closure_every >> simp[EVERY_APPEND] >> metis_tac[]) >>
+  qpat_x_assum `EVERY P (linked_live_functions mods exps)` mp_tac >>
+  simp[EVERY_MEM] >> disch_then drule >> simp[Abbr `P`]
 QED
 
 Theorem contract_call_edge_nodes:
