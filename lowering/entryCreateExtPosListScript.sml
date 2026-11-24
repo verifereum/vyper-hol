@@ -13,7 +13,7 @@ Ancestors
   bodyFullIfExpReach fragGasMode fragExec exprSimDefs stmtSimProps vyperInterpreter
   entryCreateBodyCut createExprSizeExitDefs list bodyFullPreds exprSimSource
   exprSimHypsDefs gasShadowState gasShadowCompile gasShadowCompileHelpers
-  gasExplicitSites entryCreateExtPosConsScope
+  gasExplicitSites entryCreateExtPosConsAdapter
 
 Theorem pos_list_empty[local]:
   expr_sim_inv ce cx env es /\ return_buf_frame d ce a s /\
@@ -362,36 +362,6 @@ Definition extcall_pos_row_rule_def:
         (bind (eval_expr cx e) (read_result cx)) (es,s)
 End
 
-Definition extcall_pos_cons_rule_def:
-  extcall_pos_cons_rule DF lo E C f PG tops cx st0 <=>
-    !a m b e xs es s G tn P Q.
-      (!marks. create_operand_focus_scope a m E C f s marks ==>
-               create_operand_focus_scope a b E C f s marks) /\
-      (!marks r. exit_result r /\ create_operand_full_scope a m E C f s marks r ==>
-                 create_operand_full_scope a b E C f s marks r) /\
-      (!left t right. create_operand_full_scope a m E C f s left (OK t) /\
-          create_operand_focus_scope m b E C f t right ==>
-          create_operand_focus_scope a b E C f s (left ++ right)) /\
-      (!left t right r. create_operand_full_scope a m E C f s left (OK t) /\
-          create_operand_full_scope m b E C f t right r ==>
-          create_operand_full_scope a b E C f s (left ++ right) r) /\
-      scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a m
-        (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn) P (create_operand_exit_post C cx) /\
-      (!H r ee G1 tn1 t. P H r ee G1 tn1 t ==> ?v. r = INL v) /\
-      (!obs marks v mid G1 tn1 t.
-        bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) =
-          (INL v,mid with gas_obs := []) /\
-        (?H. valid_horizon cx st0 H mid.storage_trace) /\
-        (!H. valid_horizon cx st0 H mid.storage_trace ==>
-          P H (INL v) (mid with gas_obs := []) G1 tn1 t /\
-          gas_origin_ptr_path (DF H,lo,E,C,f,PG) (s,G,tn) marks (OK t,G1,tn1)) ==>
-        scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 m b
-          (bind (eval_exprs cx xs) (\vs. return (v::vs))) (mid with gas_obs := [],t,G1,tn1) Q
-          (create_operand_exit_post C cx)) ==>
-      scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a b
-        (eval_exprs cx (e::xs)) (es,s,G,tn) Q (create_operand_exit_post C cx)
-End
-
 Theorem pos_list_cons_cut[local]:
   body_inv tops C ce cx /\ MEM f C.ctx_functions /\ ~s.vs_halted /\
   (!bb. MEM bb f.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
@@ -636,42 +606,4 @@ Proof
     (drule_at (Pat `compile_ext_call_args _ _ _ _ (MAP gas_shadow_expr _) _ = _`)) >>
   disch_then (drule_at (Pat `compile_ext_call_args _ _ _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]
-QED
-
-Theorem extcall_pos_list_scoped_cut_from_head:
-  body_inv tops C ce cx /\ MEM f C.ctx_functions /\
-  (!H. dead_lo_ok H (DF H) lo ce cx) /\
-  extcall_pos_scope_join (gas_explicit_sites C shC) C f /\
-  extcall_pos_row_rule allowed keep DF lo d C shC f shf PG tops cx st0 ce env ==>
-  !xs a b sha shb svs es s G tn.
-    EVERY allowed xs /\ body_exprs_full_ok cx xs /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    (!e st. MEM e xs /\ expr_sim_inv ce cx env st ==> expr_body_pre ce cx env e st) /\
-    compile_ext_call_args compile_expr ce kw (MAP (lowered_value_type ce) xs) xs a = (svs,b) /\
-    compile_ext_call_args compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr kw)
-      (MAP (lowered_value_type ce) (MAP gas_shadow_expr xs))
-      (MAP gas_shadow_expr xs) sha = (svs,shb) /\
-    gas_shadow_state a sha /\ gas_shadow_state b shb /\
-    fn_has_code a b f /\ fn_has_code sha shb shf /\ local_ptrs_reserved ce a /\
-    (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
-    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
-    extcall_pos_entry DF lo d st0 C f ce cx env a es s G tn ==>
-    scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG) tops cx st0 a b
-      (eval_exprs cx xs) (es,s,G,tn)
-      (extcall_positional_post keep DF lo d C f ce cx env kw xs svs a b es s G tn)
-      (create_operand_exit_post C cx) /\
-    create_operand_cut a b (gas_explicit_sites C shC) C f tops cx st0 (eval_exprs cx xs) (es,s)
-Proof
-  strip_tac >>
-  `extcall_pos_cons_rule DF lo (gas_explicit_sites C shC) C f PG tops cx st0` by
-    rw[extcall_pos_cons_rule_def] >>
-    rpt gen_tac >> disch_tac >>
-    ho_match_mp_tac (Q.INST [`a` |-> `a`, `m` |-> `m`, `b` |-> `b`,
-      `E` |-> `gas_explicit_sites C shC`, `C` |-> `C`, `f` |-> `f`,
-      `s` |-> `s`, `DF` |-> `DF`, `lo` |-> `lo`, `PG` |-> `PG`,
-      `tops` |-> `tops`, `cx` |-> `cx`, `st0` |-> `st0`,
-      `e` |-> `e`, `xs` |-> `xs`, `es` |-> `es`, `G` |-> `G`,
-      `tn` |-> `tn`, `P` |-> `P`, `Q` |-> `Q`] pos_cons_scope_mixed) >>
-    metis_tac[] >>
-  irule extcall_pos_list_fold_given_cons >> simp[]
 QED
