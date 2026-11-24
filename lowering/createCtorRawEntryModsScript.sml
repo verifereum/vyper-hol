@@ -287,3 +287,110 @@ Proof
   qpat_assum `!x. not_fresh_at a x ==> FLOOKUP Gv x = _ /\ _`
     (qspec_then `x` mp_tac) >> simp[]
 QED
+
+Theorem raw_entry_add_step:
+  emit_op ADD [Var root;len] b = (dst,c) /\ fn_has_code b c func /\
+  not_fresh_at b root /\ lookup_var root t = SOME (n2w pbase) /\
+  eval_operand len t = SOME n /\ op_taint tf len = {} /\
+  ptr_covers G tf root t capacity /\ w2n n <= capacity /\
+  pbase + capacity < dimword (:256) /\
+  alloca_inv t /\ alloca_room ctx func t /\ allocas_from lo t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ ~t.vs_halted /\
+  t.vs_current_bb = b.cs_current_bb /\ t.vs_inst_idx = LENGTH b.cs_current_insts /\
+  gas_origin_edge F explicit ctx func t marks (OK v) ==>
+  ?out Gv tv. dst = Var out /\ not_fresh_at c out /\
+    eval_operand dst v = SOME (n2w (pbase + w2n n)) /\
+    ptr_covers Gv tv out v (capacity - w2n n) /\
+    window_phase ctx func b c {} [] t v /\ abi_encode_exec_frame func t v /\
+    typed_copy_state_frame b pbase capacity t v /\
+    (!k D. allocas_from k t ==>
+      gas_origin_ptr_path (D,k,explicit,ctx,func,PG) (t,G,tf) [] (OK v,Gv,tv)) /\
+    tv.t_mem = tf.t_mem /\ tv.t_stor = tf.t_stor /\ tv.t_trans = tf.t_trans /\
+    tv.t_imm = tf.t_imm /\
+    (!x. not_fresh_at b x ==> lookup_var x v = lookup_var x t /\
+      FLOOKUP Gv x = FLOOKUP G x /\ op_taint tv (Var x) = op_taint tf (Var x))
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `eval_operand (Var root) t = SOME (n2w pbase) /\ op_taint tf (Var root) = {}` by
+    (simp[eval_operand_def] >> fs[ptr_covers_def]) >>
+  drule_all emit_op_fetch_boundary >>
+  disch_then (qx_choosel_then [`out`,`bb`] strip_assume_tac) >>
+  qabbrev_tac `i = mk_inst b.cs_next_id ADD [Var root;len] [out]` >>
+  qabbrev_tac `raw = update_var out (n2w pbase+n) t` >>
+  qabbrev_tac `Gv = step_prov PG G i raw` >>
+  qabbrev_tac `tv = step_taint i t raw tf` >>
+  `step_inst_base i t = OK raw` by
+    simp[Abbr `i`,Abbr `raw`,step_inst_base_opcode_eqs,mk_inst_def,exec_pure2_def,
+         eval_operand_def,eval_operands_def,ADD_COMM] >>
+  `v = raw with vs_inst_idx := SUC t.vs_inst_idx` by suspend "observed" >>
+  `n2w pbase + n = n2w (pbase + w2n n)` by metis_tac[n2w_w2n,word_add_n2w] >>
+  `ptr_covers Gv tv out v (capacity - w2n n)` by suspend "coverage" >>
+  `window_pure_seq b c t raw /\ eval_operand dst raw = SOME (n2w pbase + n) /\
+    not_fresh_at c out` by suspend "pure" >>
+  `abi_encode_exec_frame func t v` by suspend "frame" >>
+  `window_phase ctx func b c {} [] t v` by
+    (qpat_assum `v = _` SUBST1_TAC >> simp[] >> metis_tac[window_pure_seq_phase]) >>
+  `!k D. allocas_from k t ==>
+    gas_origin_ptr_path (D,k,explicit,ctx,func,PG) (t,G,tf) [] (OK v,Gv,tv) /\
+    typed_copy_state_frame b pbase capacity t v` by suspend "path" >>
+  qexistsl_tac [`out`,`Gv`,`tv`] >>
+  `typed_copy_state_frame b pbase capacity t v` by metis_tac[] >>
+  `!k D. allocas_from k t ==>
+    gas_origin_ptr_path (D,k,explicit,ctx,func,PG) (t,G,tf) [] (OK v,Gv,tv)` by metis_tac[] >>
+  simp[] >> suspend "registers"
+QED
+
+Resume raw_entry_add_step[observed]:
+  qpat_assum `gas_origin_edge F _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_origin_edge_def] >>
+  strip_tac >> gvs[step_inst_non_invoke,exit_result_def,Abbr `i`,mk_inst_def,is_terminator_def]
+QED
+
+Resume raw_entry_add_step[coverage]:
+  qpat_assum `v = _` SUBST1_TAC >>
+  simp_tac bool_ss [Abbr `Gv`,Abbr `tv`,Abbr `i`,Abbr `raw`] >>
+  irule (REWRITE_RULE [n2w_w2n]
+    (Q.INST [`q` |-> `w2n (n:bytes32)`] abi_decode_ptr_output_address_covers)) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `capacity` >>
+  `pbase < dimword (:256)` by decide_tac >>
+  simp[w2n_n2w] >> decide_tac
+QED
+
+Resume raw_entry_add_step[pure]:
+  `run_inst_seq (emitted_insts b c) t = OK raw` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     gvs[Abbr `i`,run_inst_seq_def]) >>
+  qunabbrev_tac `raw` >>
+  gs[] >>
+  drule_all (SRULE [is_terminator_def]
+    (Q.INST [`opc` |-> `ADD`] window_emit_register_pure)) >> simp[]
+QED
+
+Resume raw_entry_add_step[frame]:
+  qpat_assum `v = _` SUBST1_TAC >> PURE_REWRITE_TAC [abi_encode_exec_frame_inst_idx] >>
+  irule abi_encode_framed_ordinary_pure_sequence >>
+  qexistsl_tac [`c`,`b`] >> simp[] >>
+  drule emitted_insts_emit_op >> simp[mk_inst_def,is_terminator_def,is_alloca_op_def,is_ext_call_op_def]
+QED
+
+Resume raw_entry_add_step[path]:
+  qx_genl_tac [`k`,`D`] >> strip_tac >>
+  qpat_x_assum `allocas_from lo t` kall_tac >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `w` |-> `x+y`]
+    typed_copy_origin_ptr_binop_path)) >>
+  disch_then (qspecl_then [`pbase`,`capacity`,`explicit`,`PG`,`G`,`D`] strip_assume_tac) >>
+  gvs[Abbr `raw`,Abbr `Gv`,Abbr `tv`,Abbr `i`]
+QED
+
+Resume raw_entry_add_step[registers]:
+  qpat_assum `v = _` SUBST1_TAC >>
+  simp[eval_operand_inst_idx] >>
+  simp[Abbr `Gv`,Abbr `tv`,Abbr `i`,Abbr `raw`,typed_copy_origin_ptr_binop_ghost_frame] >>
+  conj_tac >- simp[eval_operand_def,update_var_def,lookup_var_def,FLOOKUP_UPDATE] >>
+  qx_gen_tac `x` >> disch_tac >>
+  `x <> STRING #"%" (toString b.cs_next_var)` by metis_tac[] >>
+  simp[update_var_def,lookup_var_def,FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Finalise raw_entry_add_step[local]
