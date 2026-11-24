@@ -68,7 +68,16 @@ Definition supported_declaration_names_def:
     ALL_DISTINCT (supported_function_names tops) /\
     ALL_DISTINCT (supported_event_names tops) /\
     EVERY (supported_function_header_names tops) tops /\
-    supported_selectors_distinct tops
+    supported_selectors_distinct tops /\
+    EVERY (\tl. ~MEM #"." (case tl of
+        FunctionDecl _ _ _ _ name _ _ _ _ => name
+      | VariableDecl _ _ name _ _ => name
+      | HashMapDecl _ _ name _ _ _ => name
+      | StructDecl name _ => name
+      | EventDecl name _ => name
+      | ErrorDecl name _ => name
+      | FlagDecl name _ => name
+      | InterfaceDecl name _ => name)) tops
 End
 
 (* ===== Consumer contracts ===== *)

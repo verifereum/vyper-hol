@@ -2,7 +2,7 @@
 Theory abiDecodeValidBulkPayload
 Ancestors calldataDecodePtr[qualified,ignore_grammar] abiDecodePtrMemberFrame[qualified] arithmetic[qualified,ignore_grammar]
   abiDecoderBulk decoderNavigationPtr decoderArraySetupPtr
-  decoderGhostFramePtr fragGasCopyLoop fragGasOriginPtr logInstSeqPtr
+  decoderGhostFramePtr fragGasCopyLoop fragGasCopySeqLiftProps fragGasOriginPtr logInstSeqPtr
   stmtReasonMemory allocaFootprint exprSimBufferStore exprSimAccounts
   emitHelperProps exprLoweringProps fragExec instIdxIndep words rich_list pred_set
   venomState ptrDiscipline fragGasSeqPtr venomInst abiEncoder abiDecoderComposition compileEnv
