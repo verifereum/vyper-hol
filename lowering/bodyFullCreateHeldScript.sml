@@ -2261,6 +2261,75 @@ Proof
   qexistsl [`e`, `res`, `es with gas_obs := prefix`] >> fs[]
 QED
 
+(* Derive continuation facts at the actual scalar return. The replay
+   equation, path and post can come from either full or scoped simulation. *)
+Theorem create_scalar_return_handoff:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
+  expr_body_pre cenv cx env e es /\
+  lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
+  return_buf_frame d cenv sa s /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!tail. bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
+    (INL v,ee with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s,G,tn) marks (OK t,G1,tn1)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa sb s ee v op t /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    s.vs_alloca_next <= t.vs_alloca_next /\ ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t /\
+    ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t /\
+    ghost_kept_at lo cenv es sa G tn s G1 tn1) ==>
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa sb s ee v op t /\
+    ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t) /\
+  t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  ~t.vs_halted /\ alloca_history func t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+  s.vs_alloca_next <= t.vs_alloca_next /\
+  ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t /\
+  ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
+  return_buf_frame d cenv sb t /\
+  (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
+  body_const_cells_agree [(NONE,tops)] cx env ee /\
+  expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value v) /\
+  (?a tv b a' v' b'. eval_expr cx e a = (INL tv,b) /\
+                      read_result cx tv a' = (INL v',b')) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace)
+Proof
+  strip_tac >>
+  qpat_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >>
+  drule_all create_operand_read_post >> simp[] >>
+  disch_then (qspec_then `st0` strip_assume_tac) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
+    by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. _ ==> gas_origin_ptr_path _ _ _ _`
+    (drule_then assume_tac) >>
+  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  `~t.vs_halted` by
+    (drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
+     simp[fragExecTheory.exit_result_def]) >>
+  `return_buf_frame d cenv sb t` by
+    (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+     qpat_assum `return_buf_frame d cenv sa s` (irule_at Any) >>
+     fs[loweringPostsTheory.expr_post_def] >>
+     metis_tac[ci_mono_lower_value_compile_expr,ci_mono_def,pairTheory.SND]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+  `!f i z. frag_reachable ctx func t f i z ==> dalloca_fmp_headroom i z` by
+    (rpt gen_tac >> strip_tac >>
+     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ee`
+    by (irule create_operand_const_cells_replay >> rpt (goal_assum (drule_at Any))) >>
+  simp[] >> metis_tac[]
+QED
+
 (* A cut evaluates exactly one operand. The continuation receives the
    typing and IH guard from replay, and all horizon facts from that run. *)
 Theorem create_body_operand_cut_replay:
@@ -2352,32 +2421,8 @@ Proof
   reverse conj_tac
   >- (irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >>
       simp[] >> rpt strip_tac >> qexists `v` >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >>
-  drule_all create_operand_read_post >> simp[] >>
-  disch_then (qspec_then `st0` strip_assume_tac) >>
-  rule_assum_tac BETA_RULE >>
-  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
-    by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. _ ==> gas_origin_ptr_path _ _ _ _`
-    (drule_then assume_tac) >>
-  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  `~t.vs_halted` by
-    (drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
-     simp[fragExecTheory.exit_result_def]) >>
-  `return_buf_frame d cenv sb t` by
-    (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-     qpat_assum `return_buf_frame d cenv sa s` (irule_at Any) >>
-     fs[loweringPostsTheory.expr_post_def] >>
-     metis_tac[ci_mono_lower_value_compile_expr,ci_mono_def,pairTheory.SND]) >>
-  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!f i z. frag_reachable ctx func t f i z ==> dalloca_fmp_headroom i z` by
-    (rpt gen_tac >> strip_tac >>
-     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >> simp[]) >>
-  `body_const_cells_agree [(NONE,tops)] cx env ee`
-    by (irule create_operand_const_cells_replay >> rpt (goal_assum (drule_at Any))) >>
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  drule_all create_scalar_return_handoff >> strip_tac >>
   qpat_assum `!v ee G1 tn1 t. _ ==> gas_outcome_full _ _ _ _ _ _ _ _` irule >>
   simp[] >> metis_tac[]
 QED
