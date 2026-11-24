@@ -8,6 +8,7 @@
 Theory bodyFullTargetSubscript
 Ancestors
   bodyFullShadowBodyInv bodySim bodyInvMetadataProps targetSubscriptContinuation
+  bodyFullImmSubscriptIndexPre exprSimFullBundleProps
   bodyFullTargetDefs bodyFullTargetRoots bodyFullTargetImmutableArray bodyFullTargetImmutableWrite
   bodyFullSubscriptLiveImmSelect bodySimAugPlaceLoad immutableDeployAssignFacts
   exprWordOperand exprSimSource targetSubscriptSplit gasShadowCompileStmtHelpers
@@ -562,6 +563,343 @@ Proof
   Cases_on `x` >> simp[get_place_def,return_def,raise_def]
 QED
 
+(* The two successful landings identify the live array and its machine
+   operands. The continuation need not assume the bounds check succeeds. *)
+Theorem immutable_subscript_tail_at_index:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  target_indices_pre cenv cx env (SubscriptTarget bt e) /\
+  immutable_root cx bt /\ ~cx_const_name cx (NONE,id) /\
+  target_root bt = TopLevelNameTarget (NONE,id) /\
+  type_place_target env bt = SOME (Type (ArrayT et bd)) /\
+  subscript_vtype (Type (ArrayT et bd)) (expr_type e) = SOME (Type ty) /\
+  target_place_type cenv bt = SOME (ValPT (ArrayT et bd)) /\
+  compile_get_target_ptr compile_expr cenv (SubscriptTarget bt e) sa = (r,sb) /\
+  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+  lower_value compile_expr cenv (expr_type e) e sm = (iop,sn) /\
+  ci_mono sa sm /\ sm.cs_next_var <= sn.cs_next_var /\
+  fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
+  eval_target_place cx bt (es with gas_obs := base_gas) =
+    (INL (ImmutablePlace NONE id path),mid1) /\
+  storage_trace_domain cx st0 mid1.storage_trace /\
+  (!H. valid_horizon cx st0 H mid1.storage_trace ==>
+    imm_target_post H ctx func cenv cx es sa sm s0 mid1 id path (ArrayT et bd) rb t1 /\
+    ghost_inv_at (DF H) lo d cenv cx mid1 G1 tn1 t1) /\
+  s0.vs_alloca_next <= t1.vs_alloca_next /\
+  target_ptr_ok cenv (PlaceR (ImmutablePlace NONE id path)) rb G1 tn1 t1 /\
+  op_prov G1 (FST rb) = NONE /\
+  (!itv iv. ~target_through_dynarray cenv bt /\
+    FLOOKUP (case ALOOKUP mid1.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables NONE imms) id = SOME (itv,iv) ==>
+    fixed_shape_path itv path) /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+  expr_body_pre cenv cx env e mid1 /\
+  bind (eval_expr cx e) (read_result cx) (mid1 with gas_obs := index_gas) = (INL v,mid2) /\
+  storage_trace_domain cx st0 mid2.storage_trace /\ mid2.gas_obs = [] /\
+  ~t2.vs_halted /\ t2.vs_current_bb = sn.cs_current_bb /\
+  t2.vs_inst_idx = LENGTH sn.cs_current_insts /\ alloca_history func t2 /\
+  t1.vs_alloca_next <= t2.vs_alloca_next /\
+  (!H. valid_horizon cx st0 H mid2.storage_trace ==>
+    expr_post H ctx func cenv cx e mid1 sm sn t1 mid2 v iop t2 /\
+    ghost_inv_at (DF H) lo d cenv cx mid2 G2 tn2 t2 /\
+    ptr_val_ok cx (post_value_type cenv e) v iop G2 tn2 t2 /\
+    ghost_kept_at lo cenv mid1 sm G1 tn1 t1 G2 tn2) ==>
+  (!etv itv current k off av iw i dst.
+    v = IntV i /\ ty = et /\ r = (dst,SOME LocCode,SOME (ValPT et)) /\
+    cenv.ce_is_ctor /\ cenv.ce_module = NONE /\ expr_sim_inv cenv cx env mid2 /\
+    FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP mid2.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables NONE imms) id = SOME (itv,current) /\
+    off + type_memory_size itv < dimword (:256) /\
+    mem_path_offset itv path = SOME (k,ArrayTV etv bd) /\
+    evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+    evaluate_type (get_tenv cx) et = SOME etv /\
+    evaluate_subscripts itv current path = INL (ArrayV av) /\
+    compile_array_subscript (FST rb) iop
+      (case bd of Fixed _ => F | Dynamic _ => T)
+      (case bd of Fixed n => n | Dynamic _ => 0) 32 (type_memory_size etv)
+      (is_signed_type (expr_type e))
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode) sn = (dst,sb) /\
+    eval_operand (FST rb) t2 = SOME (n2w (off+k)) /\ copy_old_operand sn (FST rb) /\
+    op_taint tn2 (FST rb) = {} /\ op_prov G2 (FST rb) = NONE /\
+    eval_operand iop t2 = SOME iw /\ copy_old_operand sn iop /\
+    op_taint tn2 iop = {} /\ op_prov G2 iop = NONE /\
+    (!l. FST rb <> Label l /\ iop <> Label l) /\
+    i = (if is_signed_type (expr_type e) then w2i iw else &(w2n iw)) /\
+    local_ptrs_reserved cenv sn /\ sa.cs_next_var <= sn.cs_next_var /\
+    s0.vs_alloca_next <= t2.vs_alloca_next /\
+    (!H. valid_horizon cx st0 H mid2.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx mid2 t2 /\ storage_well_formed_on cx mid2 (FST H) /\
+      wb_frame cenv es mid2 sa s0 t2 /\ ghost_inv_at (DF H) lo d cenv cx mid2 G2 tn2 t2 /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2) ==>
+    (!H res ee G tn t.
+      (?xs. !tail. bind (extend_place cx (PlaceR (ImmutablePlace NONE id path))
+                          (ValueSubscript (IntV i))) get_place
+                      (mid2 with gas_obs := xs ++ tail) = (res,ee with gas_obs := tail)) /\
+      res = INL (ImmutablePlace NONE id (path ++ [ValueSubscript (IntV i)])) /\
+      imm_target_post H ctx func cenv cx es sa sb s0 ee id
+        (path ++ [ValueSubscript (IntV i)]) et (dst,SOME LocCode,SOME (ValPT et)) t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\ ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+      target_ptr_ok cenv (PlaceR (ImmutablePlace NONE id (path ++ [ValueSubscript (IntV i)])))
+        (dst,SOME LocCode,SOME (ValPT et)) G tn t /\
+      op_prov G dst = NONE /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G tn ==>
+      ?id' path'. res = INL (ImmutablePlace NONE id' path') /\
+        target_root (SubscriptTarget bt e) = TopLevelNameTarget (NONE,id') /\
+        imm_target_post H ctx func cenv cx es sa sb s0 ee id' path' ty r t /\
+        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+        s0.vs_alloca_next <= t.vs_alloca_next /\ ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+        target_ptr_ok cenv (PlaceR (ImmutablePlace NONE id' path')) r G tn t /\
+        op_prov G (FST r) = NONE /\
+        (!itv iv. ~target_through_dynarray cenv (SubscriptTarget bt e) /\
+          FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+            | SOME imms => get_source_immutables NONE imms) id' = SOME (itv,iv) ==>
+          fixed_shape_path itv path') /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) ==>
+    result) ==> result
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  disch_then (mk_asm "tail_cont") >>
+  qabbrev_tac `p = ImmutablePlace NONE id path` >>
+  qabbrev_tac `ix = mid1 with gas_obs := index_gas` >>
+  `expr_body_pre cenv cx env e ix` by simp[Abbr `ix`,expr_body_pre_gas_obs] >>
+  `is_int_type (expr_type e) /\ ty = et` by
+    (qpat_assum `subscript_vtype (Type (ArrayT et bd)) (expr_type e) = SOME (Type ty)` mp_tac >>
+     simp_tac (srw_ss()) [subscript_vtype_def,AllCaseEqs()]) >>
+  `is_word_type (expr_type e)` by
+    (Cases_on `expr_type e` >> gvs[is_int_type_def] >>
+     rename1 `is_word_type (BaseT bt')` >> Cases_on `bt'` >>
+     gvs[is_int_type_def,is_word_type_def]) >>
+  drule_all_then strip_assume_tac
+    (SIMP_RULE (srw_ss() ++ ETA_ss) [] expr_body_pre_word_type_result) >>
+  qpat_assum `!w. INL v = INL w ==> _`
+    (qspec_then `v` (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace)
+      mid2.storage_trace` by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
+    expr_post H ctx func cenv cx e mid1 sm sn t1 mid2 v iop t2 /\ _`
+    (qspec_then `storage_trace_horizon mid2.storage_trace` (drule_then strip_assume_tac)) >>
+  `?i iw. v = IntV i /\ eval_operand iop t2 = SOME iw /\
+     i = (if is_signed_type (expr_type e) then w2i iw else &(w2n iw))` by
+    (irule (INST_TYPE [alpha |-> ``:256``] immutable_target_index_word) >> simp[] >>
+     qexistsl [`storage_trace_horizon mid2.storage_trace`,`cenv`,`ctx`,`cx`,
+       `mid1`,`func`,`mid2`,`sm`,`sn`,`t1`,`tyv`] >> simp[]) >>
+  rename1 `v = IntV i` >> rename1 `eval_operand iop t2 = SOME iw` >>
+  qpat_x_assum `v = IntV i` SUBST_ALL_TAC >>
+  qpat_x_assum `ty = et` SUBST_ALL_TAC >>
+  `!H. valid_horizon cx st0 H mid2.storage_trace ==>
+     valid_horizon cx st0 H mid1.storage_trace` by
+    (rpt strip_tac >>
+     qspecl_then [`bind (eval_expr cx e) (read_result cx)`,`ix`,`INL (IntV i)`,`mid2`]
+       mp_tac (Q.GENL [`f`,`st`,`res`,`st'`] valid_horizon_frame) >>
+     asm_rewrite_tac[] >>
+     simp[Abbr `ix`,storage_trace_frame_bind_all,evaluate_storage_trace_frame,
+          storage_trace_frame_read_result]) >>
+  `!H. valid_horizon cx st0 H mid1.storage_trace ==>
+     valid_horizon cx st0 H es.storage_trace` by
+    (rpt strip_tac >>
+     qspecl_then [`eval_target_place cx bt`,`es with gas_obs := base_gas`,`INL p`,`mid1`]
+       mp_tac (Q.GENL [`f`,`st`,`res`,`st'`] valid_horizon_frame) >>
+     asm_rewrite_tac[] >> simp[evaluate_storage_trace_frame]) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid1.storage_trace)
+      mid1.storage_trace` by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
+    imm_target_post H ctx func cenv cx es sa sm s0 mid1 id path _ rb t1 /\ _`
+    (qspec_then `storage_trace_horizon mid1.storage_trace` (drule_then
+      (CONJUNCTS_THEN2 (strip_assume_tac o REWRITE_RULE[imm_target_post_def])
+        assume_tac))) >>
+  `IS_SOME (type_place_target env bt)` by simp[] >>
+  drule_all_then (qx_choosel_then [`root`,`root_ty`] strip_assume_tac)
+    typed_immutable_target_root >>
+  `root = id` by
+    (qpat_assum `target_root bt = TopLevelNameTarget (NONE,root)` mp_tac >>
+     qpat_assum `target_root bt = TopLevelNameTarget (NONE,id)` (fn th => simp[NoAsms,th])) >>
+  qpat_x_assum `root = id` SUBST_ALL_TAC >>
+  `expr_sim_inv cenv cx env mid1` by fs[expr_body_pre_def] >>
+  `cenv.ce_module = NONE /\ evaluate_type (get_tenv cx) root_ty = SOME itv` by
+    (qunabbrev_tac `p` >>
+     drule_all_then strip_assume_tac immutable_target_write_root >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `off + type_memory_size itv < dimword (:256)` by
+    (drule_all_then (strip_assume_tac o Q.SPEC `compile_expr`) immutable_assign_target_layout >>
+     `off' = off` by
+       (qpat_assum `FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off')` mp_tac >>
+        qpat_assum `FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off)`
+          (fn th => simp[NoAsms,th])) >>
+     qpat_x_assum `off' = off` SUBST_ALL_TAC >>
+     first_assum (drule_then ACCEPT_TAC)) >>
+  `?raw. eval_expr cx e ix = (INL raw,mid2)` by
+    (qpat_assum `bind (eval_expr cx e) (read_result cx) ix = (INL _,mid2)`
+       (mp_tac o MATCH_MP (SIMP_RULE (srw_ss() ++ ETA_ss) [] eval_expr_read_INL)) >>
+     disch_then (qx_choosel_then [`raw`,`mid`] strip_assume_tac) >>
+     drule_then (SUBST_ALL_TAC o GSYM) read_result_state >>
+     qexists_tac `raw` >> first_assum ACCEPT_TAC) >>
+  rename1 `evaluate_subscripts itv iv path = INL base_v` >>
+  suspend "live_path"
+QED
+
+Resume immutable_subscript_tail_at_index[live_path]:
+  `~target_subscript_overlap cenv bt e` by
+    (qpat_assum `target_indices_pre _ _ _ (SubscriptTarget bt e)` mp_tac >>
+     simp[NoAsms,target_indices_pre_def]) >>
+  `expr_sim_inv cenv cx env mid2 /\
+    ?current a. FLOOKUP (case ALOOKUP mid2.immutables cx.txn.target of
+      NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id =
+      SOME (itv,current) /\ evaluate_subscripts itv current path = INL a` by
+    (match_mp_tac (Q.INST [`es` |-> `ix`,`idx` |-> `e`,`ee` |-> `mid2`,
+       `res` |-> `INL raw`,`v` |-> `base_v`,`old` |-> `iv`,
+       `root_ty` |-> `root_ty`,`path` |-> `path`] immutable_target_path_after_index) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qpat_assum `Abbrev (ix = _)` (fn th =>
+       simp[NoAsms,REWRITE_RULE[markerTheory.Abbrev_def] th]) >>
+     TRY (first_assum ACCEPT_TAC) >>
+     rpt strip_tac >> first_assum (drule_all_then ACCEPT_TAC)) >>
+  `?etv. evaluate_type (get_tenv cx) et = SOME etv /\ ptv = ArrayTV etv bd` by
+    (qpat_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
+     simp[NoAsms,evaluate_type_def] >>
+     Cases_on `evaluate_type (get_tenv cx) et` >> simp[NoAsms] >>
+     IF_CASES_TAC >> simp[NoAsms]) >>
+  qpat_x_assum `ptv = ArrayTV etv bd` SUBST_ALL_TAC >>
+  `value_has_type (ArrayTV etv bd) a` by
+    (qspecl_then [`cenv`,`cx`,`env`,`mid2`,`NONE`,`id`,`path`,
+      `itv`,`current`,`k`,`ArrayTV etv bd`,`a`] mp_tac imm_place_at_value_type >>
+     simp[]) >>
+  Cases_on `a` >> gvs[value_has_type_def] >>
+  rename1 `evaluate_subscripts itv current path = INL (ArrayV av)` >>
+  `target_subscript_suffix cenv e rb iop sn = (r,sb)` by
+    (qpat_assum `compile_get_target_ptr compile_expr cenv (SubscriptTarget bt e) sa = (r,sb)`
+      (mp_tac o MATCH_MP target_subscript_compile_decompose) >>
+     simp[] >> TRY (disch_then ACCEPT_TAC)) >>
+  `type_memory_bytes cenv et = type_memory_size etv` by
+    (irule expr_sim_inv_memory_size >> qexistsl [`cx`,`env`,`mid2`] >> simp[]) >>
+  `rb = (FST rb,SOME LocCode,SOME (ValPT (ArrayT et bd)))` by
+    (PairCases_on `rb` >> gvs[]) >>
+  qpat_assum `rb = _` (fn th =>
+    qpat_x_assum `target_subscript_suffix cenv e rb iop sn = (r,sb)`
+      (mp_tac o ONCE_REWRITE_RULE[th])) >>
+  rewrite_tac[target_subscript_suffix_array,elem_size_in_location_def,word_scale_def] >>
+  disch_then (qx_choose_then `dst` strip_assume_tac) >>
+  qpat_x_assum `r = (_,_,_)` SUBST_ALL_TAC >>
+  suspend "operands"
+QED
+
+Resume immutable_subscript_tail_at_index[operands]:
+  `!l. FST rb <> Label l` by drule_all_then ACCEPT_TAC target_subscript_typed_base_not_label >>
+  `sa.cs_next_id <= sm.cs_next_id /\ sa.cs_next_var <= sm.cs_next_var` by fs[ci_mono_def] >>
+  `local_ptrs_reserved cenv sn` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `copy_old_operand sn (FST rb) /\ eval_operand (FST rb) t2 = SOME (n2w (off+k)) /\
+    op_taint tn2 (FST rb) = {} /\ op_prov G2 (FST rb) = NONE` by
+    (qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
+       expr_post H ctx func cenv cx e mid1 sm sn t1 mid2 _ iop t2 /\ _`
+       (qspec_then `storage_trace_horizon mid2.storage_trace`
+         (drule_then (CONJUNCTS_THEN2
+           (strip_assume_tac o REWRITE_RULE[expr_post_def]) assume_tac))) >>
+     qpat_assum `target_ptr_ok cenv (PlaceR p) rb G1 tn1 t1`
+       (strip_assume_tac o REWRITE_RULE[target_ptr_ok_def]) >>
+     match_mp_tac (Q.INST [`arg` |-> `FST rb`,`sm` |-> `sm`,
+       `t1` |-> `t1`,`tn1` |-> `tn1`,`G1` |-> `G1`,`lo` |-> `lo`,
+       `cenv` |-> `cenv`,`es` |-> `mid1`] immutable_target_operand_frame) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[arithmeticTheory.ADD_COMM]) >>
+  `post_value_type cenv e = expr_type e` by simp[] >>
+  `copy_old_operand sn iop /\ (!l. iop <> Label l)` by
+    (drule_all_then strip_assume_tac expr_body_pre_lower_value_word_shape >>
+     rewrite_tac[copy_old_operand_def] >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `op_taint tn2 iop = {} /\ op_prov G2 iop = NONE` by
+    (qpat_assum `is_word_type (expr_type e)` (fn word =>
+      qpat_assum `ptr_val_ok cx (expr_type e) _ iop G2 tn2 t2`
+        (ACCEPT_TAC o SIMP_RULE std_ss [ptr_val_ok_def,word]))) >>
+  `MAP FDOM es.scopes = MAP FDOM mid1.scopes` by
+    (drule_then mp_tac vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom >>
+     simp[]) >>
+  `!H. valid_horizon cx st0 H mid2.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx mid2 t2 /\ storage_well_formed_on cx mid2 (FST H) /\
+    wb_frame cenv es mid2 sa s0 t2 /\ ghost_inv_at (DF H) lo d cenv cx mid2 G2 tn2 t2 /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2` by suspend "frames" >>
+  `sa.cs_next_var <= sn.cs_next_var /\ s0.vs_alloca_next <= t2.vs_alloca_next` by
+    decide_tac >>
+  `compile_array_subscript (FST rb) iop
+      (case bd of Fixed _ => F | Dynamic _ => T)
+      (case bd of Fixed n => n | Dynamic _ => 0) 32 (type_memory_size etv)
+      (is_signed_type (expr_type e))
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode) sn = (dst,sb)` by
+    (qpat_assum `type_memory_bytes cenv et = type_memory_size etv` (fn bytes =>
+       qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = (dst,sb)`
+         (ACCEPT_TAC o SIMP_RULE std_ss [is_slot_addressed_def,bytes]))) >>
+  qunabbrev_tac `p` >>
+  asm_x "tail_cont" irule >>
+  gvs[arithmeticTheory.ADD_COMM] >>
+  conj_tac >-
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     simp[]) >>
+  suspend "post"
+QED
+
+Resume immutable_subscript_tail_at_index[post]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  simp[target_root_def] >> rpt gen_tac >> strip_tac >>
+  qpat_assum `?xs. !tail. _ = (_, ee with gas_obs := tail)`
+    (qx_choose_then `xs` assume_tac) >>
+  `ee.immutables = mid2.immutables` by
+    (qpat_assum `!tail. _ = (_, ee with gas_obs := tail)`
+       (qspec_then `[]` (mp_tac o AP_TERM ``SND : (place + exception) # evaluation_state -> evaluation_state``)) >>
+     simp[immutable_target_extend_state] >>
+     disch_then (mp_tac o AP_TERM ``(\s:evaluation_state. s.immutables)``) >> simp[]) >>
+  Cases_on `bd`
+  >- (fs[allocLimitsTheory.target_through_dynarray_def,imm_target_post_def] >>
+      qpat_x_assum `itv' = itv` SUBST_ALL_TAC >>
+      match_mp_tac (Q.INST [`k` |-> `k`,`k'` |-> `k'`,
+        `tv` |-> `ArrayTV etv (Fixed n)`,`tv'` |-> `ptv`]
+        immutable_target_fixed_snoc) >> simp[]) >>
+  qpat_x_assum `~target_through_dynarray cenv (SubscriptTarget bt e)` mp_tac >>
+  qpat_assum `target_place_type cenv bt = SOME (ValPT (ArrayT et (Dynamic n)))`
+    (fn ty => simp[NoAsms,Once allocLimitsTheory.target_through_dynarray_def,ty])
+QED
+
+Resume immutable_subscript_tail_at_index[frames]:
+  gen_tac >> strip_tac >>
+  `valid_horizon cx st0 H mid1.storage_trace` by
+    (first_assum (drule_then ACCEPT_TAC)) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (first_assum (drule_then ACCEPT_TAC)) >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
+    expr_post H ctx func cenv cx e mid1 sm sn t1 mid2 _ iop t2 /\ _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  `wb_frame cenv es mid1 sa s0 t1` by
+    (rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `wb_frame cenv mid1 mid2 sm t1 t2` by
+    drule_then ACCEPT_TAC exprSimWordArgsTheory.expr_post_frame >>
+  `stmt_state_rel H ctx func cenv cx mid2 t2 /\
+    storage_well_formed_on cx mid2 (FST H)` by
+    (qpat_assum `expr_post H ctx func cenv cx e mid1 sm sn t1 mid2 _ iop t2`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `wb_frame cenv es mid2 sa s0 t2` by
+    (match_mp_tac (Q.INST [`H` |-> `H`]
+       (Q.SPECL [`func`,`cenv`,`cx`,`es`,`s0`,`sa`,`mid1`,`mid2`,
+          `sm`,`t1`,`t2`,`ctx`]
+          (INST_TYPE [alpha |-> ``:256``] exprSimWordArgsTheory.wb_frame_trans))) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  match_mp_tac (Q.SPECL [`lo`,`cenv`,`es`,`sa`,`G0`,`tn0`,`s0`,
+      `G1`,`tn1`,`mid1`,`sm`,`G2`,`tn2`,`t1`,`H`,`ctx`,`func`,`cx`,`mid1`]
+    (INST_TYPE [beta |-> ``:256``] wordArgsPtrTheory.ghost_kept_at_wb_trans)) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise immutable_subscript_tail_at_index
+
 Theorem immutable_target_subscript_sim_full:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
@@ -625,9 +963,10 @@ Proof
 QED
 
 Resume immutable_target_subscript_sim_full[base]:
-  drule_then (fn th => RULE_ASSUM_TAC (REWRITE_RULE[th, GSYM bind_assoc]) >>
-                       REWRITE_TAC[th, GSYM bind_assoc])
-    immutable_target_subscript_source >>
+  drule_then (fn th =>
+    qpat_assum `gas_admissible (eval_target_place _ (SubscriptTarget _ _)) _ _`
+      (assume_tac o REWRITE_RULE [th,GSYM bind_assoc]) >>
+    REWRITE_TAC[th,GSYM bind_assoc]) immutable_target_subscript_source >>
   `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
     (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
      simp[gas_admissible_def, bind_def] >> rpt strip_tac >>
@@ -678,82 +1017,55 @@ Resume immutable_target_subscript_sim_full[index]:
     (qspec_then `storage_trace_horizon mid1.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[] >>
   qabbrev_tac `p = ImmutablePlace NONE id path` >>
-  `mid1 with gas_obs := [] = mid1` by
-    simp[evaluation_state_component_equality] >>
+  `expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (sm,sn,shadow_sm,shadow_sn)` by
+    simp[expr_sim_full_code_def] >>
+  `IS_SOME (type_place_target env bt)` by simp[] >>
+  `!H. valid_horizon cx st0 H mid1.storage_trace ==>
+    imm_target_post H ctx func cenv cx es sa sm s0 mid1 id path (ArrayT et bd) rb t1 /\
+    t1.vs_current_bb = sm.cs_current_bb /\ t1.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    alloca_history func t1 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t1) /\
+    s0.vs_alloca_next <= t1.vs_alloca_next /\
+    ghost_inv_at (DF H) lo d cenv cx mid1 G1 tn1 t1 /\
+    gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (s0,G0,tn0) marks (OK t1,G1,tn1)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
+       imm_target_post H ctx func cenv cx es sa sm s0 mid1 id path _ rb t1 /\ _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==> gas_origin_ptr_path _ _ _ _`
+       (drule_then assume_tac) >> simp[]) >>
+  `eval_base_place cx bt (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+      (INL (PlaceR p),mid1) /\
+    body_const_cells_agree [(NONE,tops)] cx env mid1 /\
+    expr_sim_inv cenv cx env mid1 /\ expr_body_pre cenv cx env e mid1 /\
+    body_expr_full_ok cx e /\
+    expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx (expr_type e) e mid1 (st0,sm,sn,shadow_sm,shadow_sn,iop,t1,G1,tn1)` by
+    (simp[Abbr `p`] >> irule immutable_subscript_index_pre >>
+     simp[] >> metis_tac[]) >>
+  `mid1 with gas_obs := [] = mid1` by simp[evaluation_state_component_equality] >>
   `eval_target_place cx bt
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-     (INL p, mid1)`
-    by (qpat_assum `!tail. eval_target_place _ _ _ = _`
-          (qspec_then `[]` (mp_tac o REWRITE_RULE [listTheory.APPEND_NIL])) >>
-        qpat_assum `mid1 with gas_obs := [] = mid1` (fn th => rewrite_tac[th]) >>
-        simp[Abbr `p`]) >>
-  `eval_base_place cx bt (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-      (INL (PlaceR p),mid1)` by
-    (irule tuplePlaceSourceHeadTheory.tuple_place_target_base_inversion >> simp[]) >>
+     (INL p, mid1)` by
+    (qpat_assum `!tail. eval_target_place _ _ _ = _`
+       (qspec_then `[]` (mp_tac o REWRITE_RULE [APPEND_NIL])) >>
+     qpat_assum `mid1 with gas_obs := [] = mid1` (fn th => rewrite_tac[th]) >>
+     simp[Abbr `p`]) >>
   `target_indices_pre cenv cx env bt` by fs[target_indices_pre_def] >>
-  `body_const_cells_agree [(NONE,tops)] cx env mid1` by
-    (irule body_const_cells_agree_base >>
-     qpat_assum `eval_base_place cx bt _ = (INL (PlaceR p),mid1)` (irule_at Any) >>
-     simp[]) >>
-  `expr_sim_inv cenv cx env mid1` by
-    (mp_tac (Q.INST [`s` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-       `s'` |-> `mid1`,`t` |-> `bt`,`r` |-> `INL p`] aug_place_target_inv) >>
-     simp[expr_sim_inv_gas_obs]) >>
-  `expr_body_pre cenv cx env e mid1` by
-    fs[target_indices_pre_def] >>
-  `body_expr_full_ok cx e` by
-    (fs[body_base_target_full_ok_def] >> first_x_assum irule >> metis_tac[]) >>
-  `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e mid1` by
     (drule_all body_expr_full_ok_simulations >> simp[]) >>
   suspend "index_run"
 QED
 
 Resume immutable_target_subscript_sim_full[index_run]:
-  `!fn inst s. frag_reachable ctx func t1 fn inst s ==>
-    dalloca_fmp_headroom inst s` by
-    (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-       metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-     qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
-       gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t1,G1,tn1)`
-       (qspec_then `storage_trace_horizon mid1.storage_trace` mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >>
-     strip_tac >>
-     metis_tac[bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom]) >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid1` by
-    (simp[gas_admissible_def] >> rpt strip_tac >>
-     Cases_on `res` >- simp[expr_res_ok_def] >> rename1 `INR ex` >>
-     `target_place_res_ok (INR ex : place + exception)` suffices_by
-       simp[target_place_res_ok_def, expr_res_ok_def] >>
-     qpat_x_assum `gas_admissible (bind (eval_target_place _ _) _) _ _`
-       (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
-     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs`
-                   mp_tac) >>
-     qpat_assum `!tail. eval_target_place _ _ _ = _`
-       (qspec_then `gs` assume_tac) >>
-     simp[Once bind_def] >>
-     `mid1 with gas_obs := gs = mid1 with gas_obs := gs` by simp[] >>
-     simp[Once bind_def] >> gvs[]) >>
-  `local_ptrs_reserved cenv sm` by
-    metis_tac[local_ptrs_reserved_next_var] >>
-  `return_buf_frame d cenv sm t1` by
-    (irule return_buf_frame_frame >>
-     qexistsl_tac [`cenv`, `s0`, `sa`] >>
-     fs[imm_target_post_def] >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`, `sm`, `sn`, `shadow_sm`, `shadow_sn`, `iop`,
-                           `t1`, `G1`, `tn1`] mp_tac) >>
-  impl_tac
-  >- (asm_rewrite_tac[] >> rpt conj_tac
-      >- metis_tac[not_fresh_at_mono]
-      >- metis_tac[not_fresh_at_mono] >>
-      gen_tac >> strip_tac >>
-      qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
-        imm_target_post H ctx func cenv cx es sa sm s0 mid1 id path _ rb t1 /\ _`
-        (qspec_then `H` (drule_then strip_assume_tac)) >>
-      fs[imm_target_post_def]) >>
-  strip_tac >>
+    (strip_assume_tac o REWRITE_RULE [expr_sim_full_via_bundle]) >>
+  qpat_x_assum `!st0 sa sb sha shb op s0 G0 tn0. expr_sim_full_hypotheses _ _ _ _ _ _ _ ==> _`
+    (qspecl_then [`st0`,`sm`,`sn`,`shadow_sm`,`shadow_sn`,`iop`,`t1`,`G1`,`tn1`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (strip_assume_tac o REWRITE_RULE [expr_sim_full_post_def,
+      expr_sim_full_endpoint_def]) >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ (bind (eval_expr cx e) _) _ idxQ idxR` >>
   irule gas_outcome_full_bind_all >>
@@ -805,237 +1117,32 @@ Resume immutable_target_subscript_sim_full[tail]:
       (qspec_then `[]` (mp_tac o REWRITE_RULE [listTheory.APPEND_NIL])) >>
      qpat_assum `mid2 with gas_obs := [] = mid2` (fn th => rewrite_tac[th]) >>
      simp[]) >>
-  qabbrev_tac `ix = mid1 with gas_obs := gas_explicit marks2 t1.vs_gas_readings` >>
-  `expr_body_pre cenv cx env e ix` by simp[Abbr `ix`,expr_body_pre_gas_obs] >>
-  `is_int_type (expr_type e) /\ ty = et` by
-    (qpat_assum `subscript_vtype (Type (ArrayT et bd)) (expr_type e) = SOME (Type ty)` mp_tac >>
-     simp_tac (srw_ss()) [subscript_vtype_def,AllCaseEqs()]) >>
-  `is_word_type (expr_type e)` by
-    (Cases_on `expr_type e` >> gvs[is_int_type_def] >>
-     rename1 `is_word_type (BaseT bt')` >> Cases_on `bt'` >>
-     gvs[is_int_type_def,is_word_type_def]) >>
-  drule_all_then strip_assume_tac
-    (SIMP_RULE (srw_ss() ++ ETA_ss) [] expr_body_pre_word_type_result) >>
-  qpat_assum `!w. INL v = INL w ==> _`
-    (qspec_then `v` (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
-  gvs[] >>
-  qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
-    expr_post H ctx func cenv cx e mid1 sm sn t1 mid2 v iop t2 /\ _`
-    (qspec_then `storage_trace_horizon mid2.storage_trace` (drule_then strip_assume_tac)) >>
-  `?i iw. v = IntV i /\ eval_operand iop t2 = SOME iw /\
-     i = (if is_signed_type (expr_type e) then w2i iw else &(w2n iw))` by
-    (irule (INST_TYPE [alpha |-> ``:256``] immutable_target_index_word) >> simp[] >>
-     qexistsl [`storage_trace_horizon mid2.storage_trace`,`cenv`,`ctx`,`cx`,
-       `mid1`,`func`,`mid2`,`sm`,`sn`,`t1`,`tyv`] >> simp[]) >>
-  gvs[] >>
-  `!H. valid_horizon cx st0 H mid2.storage_trace ==>
-     valid_horizon cx st0 H mid1.storage_trace` by
-    (rpt strip_tac >>
-     qspecl_then [`bind (eval_expr cx e) (read_result cx)`,
-       `mid1 with gas_obs := gas_explicit marks2 t1.vs_gas_readings`,
-       `INL (IntV (if is_signed_type (expr_type e) then w2i iw else &(w2n iw)))`,`mid2`]
-       mp_tac (Q.GENL [`f`,`st`,`res`,`st'`] valid_horizon_frame) >>
-     asm_rewrite_tac[] >>
-     simp[storage_trace_frame_bind_all,evaluate_storage_trace_frame,
-          storage_trace_frame_read_result]) >>
-  `!H. valid_horizon cx st0 H mid1.storage_trace ==>
-     valid_horizon cx st0 H es.storage_trace` by
-    (rpt strip_tac >>
-     qspecl_then [`eval_target_place cx bt`,
-       `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,`INL p`,`mid1`]
-       mp_tac (Q.GENL [`f`,`st`,`res`,`st'`] valid_horizon_frame) >>
-     asm_rewrite_tac[] >> simp[evaluate_storage_trace_frame]) >>
-  qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
-    imm_target_post H ctx func cenv cx es sa sm s0 mid1 id path _ rb t1 /\ _`
-    (qspec_then `storage_trace_horizon mid1.storage_trace` (drule_then
-      (CONJUNCTS_THEN2 (strip_assume_tac o REWRITE_RULE[imm_target_post_def])
-        assume_tac))) >>
-  `IS_SOME (type_place_target env bt)` by simp[] >>
-  drule_all_then (qx_choosel_then [`root`,`root_ty`] strip_assume_tac)
-    typed_immutable_target_root >>
-  `root = id` by
-    (qpat_assum `target_root bt = TopLevelNameTarget (NONE,root)` mp_tac >>
-     qpat_assum `target_root bt = TopLevelNameTarget (NONE,id)` (fn th => simp[NoAsms,th])) >>
-  qpat_x_assum `root = id` SUBST_ALL_TAC >>
-  `cenv.ce_module = NONE /\ evaluate_type (get_tenv cx) root_ty = SOME itv` by
-    (qunabbrev_tac `p` >>
-     drule_all_then strip_assume_tac immutable_target_write_root >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
-  `off + type_memory_size itv < dimword (:256)` by
-    (drule_all_then (strip_assume_tac o Q.SPEC `compile_expr`) immutable_assign_target_layout >>
-     `off' = off` by
-       (qpat_assum `FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off')` mp_tac >>
-        qpat_assum `FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off)`
-          (fn th => simp[NoAsms,th])) >>
-     qpat_x_assum `off' = off` SUBST_ALL_TAC >>
-     first_assum (drule_then ACCEPT_TAC)) >>
-  `?raw. eval_expr cx e ix = (INL raw,mid2)` by
-    (qpat_assum `bind (eval_expr cx e) (read_result cx) ix = (INL _,mid2)`
-       (mp_tac o MATCH_MP (SIMP_RULE (srw_ss() ++ ETA_ss) [] eval_expr_read_INL)) >>
-     disch_then (qx_choosel_then [`raw`,`mid`] strip_assume_tac) >>
-     drule_then (SUBST_ALL_TAC o GSYM) read_result_state >>
-     qexists_tac `raw` >> first_assum ACCEPT_TAC) >>
-  rename1 `evaluate_subscripts itv iv path = INL base_v` >>
-
-  `~target_subscript_overlap cenv bt e` by
-    (qpat_assum `target_indices_pre _ _ _ (SubscriptTarget bt e)` mp_tac >>
-     simp[NoAsms,target_indices_pre_def]) >>
-  `expr_sim_inv cenv cx env mid2 /\
-    ?current a. FLOOKUP (case ALOOKUP mid2.immutables cx.txn.target of
-      NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id =
-      SOME (itv,current) /\ evaluate_subscripts itv current path = INL a` by
-    (match_mp_tac (Q.INST [`es` |-> `ix`,`idx` |-> `e`,`ee` |-> `mid2`,
-       `res` |-> `INL raw`,`v` |-> `base_v`,`old` |-> `iv`,
-       `root_ty` |-> `root_ty`,`path` |-> `path`] immutable_target_path_after_index) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     qpat_assum `Abbrev (ix = _)` (fn th =>
-       simp[NoAsms,REWRITE_RULE[markerTheory.Abbrev_def] th]) >>
-     TRY (first_assum ACCEPT_TAC) >>
-     rpt strip_tac >> first_assum (drule_all_then ACCEPT_TAC)) >>
-  `?etv. evaluate_type (get_tenv cx) et = SOME etv /\ ptv = ArrayTV etv bd` by
-    (qpat_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
-     simp[NoAsms,evaluate_type_def] >>
-     Cases_on `evaluate_type (get_tenv cx) et` >> simp[NoAsms] >>
-     IF_CASES_TAC >> simp[NoAsms]) >>
-  qpat_x_assum `ptv = ArrayTV etv bd` SUBST_ALL_TAC >>
-  `value_has_type (ArrayTV etv bd) a` by
-    (qspecl_then [`cenv`,`cx`,`env`,`mid2`,`NONE`,`id`,`path`,
-      `itv`,`current`,`k`,`ArrayTV etv bd`,`a`] mp_tac imm_place_at_value_type >>
-     simp[]) >>
-  Cases_on `a` >> gvs[value_has_type_def] >>
-  rename1 `evaluate_subscripts itv current path = INL (ArrayV av)` >>
-  `target_subscript_suffix cenv e rb iop sn = (r,sb)` by
-    (qpat_assum `compile_get_target_ptr compile_expr cenv (SubscriptTarget bt e) sa = (r,sb)`
-       (mp_tac o MATCH_MP target_subscript_compile_decompose) >>
-     simp[] >> TRY (disch_then ACCEPT_TAC)) >>
-  `type_memory_bytes cenv et = type_memory_size etv` by
-    (irule expr_sim_inv_memory_size >> qexistsl [`cx`,`env`,`mid2`] >> simp[]) >>
-  `rb = (FST rb,SOME LocCode,SOME (ValPT (ArrayT et bd)))` by
-    (PairCases_on `rb` >> gvs[]) >>
-  qpat_assum `rb = _` (fn th =>
-    qpat_x_assum `target_subscript_suffix cenv e rb iop sn = (r,sb)`
-      (mp_tac o ONCE_REWRITE_RULE[th])) >>
-  rewrite_tac[target_subscript_suffix_array,elem_size_in_location_def,word_scale_def] >>
-  disch_then (qx_choose_then `dst` strip_assume_tac) >>
-  qpat_x_assum `r = (_,_,_)` SUBST_ALL_TAC >>
-  suspend "run_tail"
-QED
-
-Resume immutable_target_subscript_sim_full[run_tail]:
-  `!l. FST rb <> Label l` by drule_all_then ACCEPT_TAC target_subscript_typed_base_not_label >>
-  `sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
-  `local_ptrs_reserved cenv sn` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `!x. not_fresh_at sa x ==> not_fresh_at sn x` by metis_tac[not_fresh_at_mono] >>
-  `copy_old_operand sn (FST rb) /\ eval_operand (FST rb) t2 = SOME (n2w (off+k)) /\
-    op_taint tn2 (FST rb) = {} /\ op_prov G2 (FST rb) = NONE` by
-    (qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
-       expr_post H ctx func cenv cx e mid1 sm sn t1 mid2 _ iop t2 /\ _`
-       (qspec_then `storage_trace_horizon mid2.storage_trace`
-         (drule_then (CONJUNCTS_THEN2
-           (strip_assume_tac o REWRITE_RULE[expr_post_def]) assume_tac))) >>
-     qpat_assum `target_ptr_ok cenv (PlaceR p) rb G1 tn1 t1`
-       (strip_assume_tac o REWRITE_RULE[target_ptr_ok_def]) >>
-     match_mp_tac (Q.INST [`arg` |-> `FST rb`,`sm` |-> `sm`,
-       `t1` |-> `t1`,`tn1` |-> `tn1`,`G1` |-> `G1`,`lo` |-> `lo`,
-       `cenv` |-> `cenv`,`es` |-> `mid1`] immutable_target_operand_frame) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[arithmeticTheory.ADD_COMM]) >>
-  `post_value_type cenv e = expr_type e` by simp[] >>
-  `copy_old_operand sn iop /\ (!l. iop <> Label l)` by
-    (drule_all_then strip_assume_tac expr_body_pre_lower_value_word_shape >>
-     rewrite_tac[copy_old_operand_def] >> conj_tac >> first_assum ACCEPT_TAC) >>
-  `op_taint tn2 iop = {} /\ op_prov G2 iop = NONE` by
-    (qpat_assum `is_word_type (expr_type e)` (fn word =>
-      qpat_assum `ptr_val_ok cx (expr_type e) _ iop G2 tn2 t2`
-        (ACCEPT_TAC o SIMP_RULE std_ss [ptr_val_ok_def,word]))) >>
-  `MAP FDOM es.scopes = MAP FDOM mid1.scopes` by
-    (drule_then mp_tac vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom >>
-     simp[]) >>
-  `!H. valid_horizon cx st0 H mid2.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx mid2 t2 /\ storage_well_formed_on cx mid2 (FST H) /\
-    wb_frame cenv es mid2 sa s0 t2 /\ ghost_inv_at (DF H) lo d cenv cx mid2 G2 tn2 t2 /\
-    ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2` by suspend "frames" >>
-  `sa.cs_next_var <= sn.cs_next_var /\ s0.vs_alloca_next <= t2.vs_alloca_next` by
-    decide_tac >>
-  `compile_array_subscript (FST rb) iop
-      (case bd of Fixed _ => F | Dynamic _ => T)
-      (case bd of Fixed n => n | Dynamic _ => 0) 32 (type_memory_size etv)
-      (is_signed_type (expr_type e))
-      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode) sn = (dst,sb)` by
-    (qpat_assum `type_memory_bytes cenv et = type_memory_size etv` (fn bytes =>
-       qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = (dst,sb)`
-         (ACCEPT_TAC o SIMP_RULE std_ss [is_slot_addressed_def,bytes]))) >>
   qunabbrev_tac `p` >>
+  match_mp_tac (ONCE_REWRITE_RULE [AND_IMP_INTRO]
+    (Q.INST [`base_gas` |-> `gas_explicit marks s0.vs_gas_readings`,
+      `index_gas` |-> `gas_explicit marks2 t1.vs_gas_readings`]
+      immutable_subscript_tail_at_index)) >>
+  simp[] >>
+  conj_tac >-
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> (?v. _ /\ _) /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >> fs[]) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  disch_then (mk_asm "tail_post") >>
   irule gas_outcome_full_post_source >>
   irule_at Any immutable_target_array_tail >>
   simp[Abbr `childR`] >>
   qexistsl [`tops`,`tn0`,`sn`,`is_signed_type (expr_type e)`,`sb`,`sa`,
-    `s0`,`off`,`iw`,`iop`,`et`,`es`,`env`,`dst`,`d`,`cenv`,
-    `FST rb`,`G0`] >>
-  simp[arithmeticTheory.ADD_COMM] >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  suspend "tail_post"
-QED
-
-Resume immutable_target_subscript_sim_full[tail_post]:
+    `s0`,`off`,`iw`,`iop`,`et`,`es`,`env`,`dst`,`d`,`cenv`,`FST rb`,`G0`] >>
+  gvs[arithmeticTheory.ADD_COMM] >>
   conj_tac >-
     (gen_tac >> strip_tac >>
-     qpat_assum `!H. valid_horizon cx st0 H mid2.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx mid2 t2 /\ _`
-       (qspec_then `H` (drule_then strip_assume_tac)) >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  simp[target_root_def] >>
-  rpt gen_tac >> strip_tac >>
-  qpat_assum `?xs. !tail. _ = (_, ee with gas_obs := tail)`
-    (qx_choose_then `xs` assume_tac) >>
-  `ee.immutables = mid2.immutables` by
-    (qpat_assum `!tail. _ = (_, ee with gas_obs := tail)`
-       (qspec_then `[]` (mp_tac o AP_TERM ``SND : (place + exception) # evaluation_state -> evaluation_state``)) >>
-     simp[immutable_target_extend_state] >>
-     disch_then (mp_tac o AP_TERM ``(\s:evaluation_state. s.immutables)``) >> simp[]) >>
-  Cases_on `bd`
-  >- (fs[allocLimitsTheory.target_through_dynarray_def,imm_target_post_def] >>
-      qpat_x_assum `itv' = itv` SUBST_ALL_TAC >>
-      match_mp_tac (Q.INST [`k` |-> `k`,`k'` |-> `k'`,
-        `tv` |-> `ArrayTV etv (Fixed n)`,`tv'` |-> `ptv`]
-        immutable_target_fixed_snoc) >> simp[]) >>
-  qpat_x_assum `~target_through_dynarray cenv (SubscriptTarget bt e)` mp_tac >>
-  qpat_assum `target_place_type cenv bt = SOME (ValPT (ArrayT et (Dynamic n)))`
-    (fn ty => simp[NoAsms,Once allocLimitsTheory.target_through_dynarray_def,ty])
-QED
-
-Resume immutable_target_subscript_sim_full[frames]:
-  gen_tac >> strip_tac >>
-  `valid_horizon cx st0 H mid1.storage_trace` by
-    (first_assum (drule_then ACCEPT_TAC)) >>
-  `valid_horizon cx st0 H es.storage_trace` by
-    (first_assum (drule_then ACCEPT_TAC)) >>
-  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
-    (qspec_then `H` (drule_then strip_assume_tac)) >>
-  qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==>
-    expr_post H ctx func cenv cx e mid1 sm sn t1 mid2 _ iop t2 /\ _`
-    (qspec_then `H` (drule_then strip_assume_tac)) >>
-  `wb_frame cenv es mid1 sa s0 t1` by
-    (rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `wb_frame cenv mid1 mid2 sm t1 t2` by
-    drule_then ACCEPT_TAC exprSimWordArgsTheory.expr_post_frame >>
-  `stmt_state_rel H ctx func cenv cx mid2 t2 /\
-    storage_well_formed_on cx mid2 (FST H)` by
-    (qpat_assum `expr_post H ctx func cenv cx e mid1 sm sn t1 mid2 _ iop t2`
-       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
-  `wb_frame cenv es mid2 sa s0 t2` by
-    (match_mp_tac (Q.INST [`H` |-> `H`]
-       (Q.SPECL [`func`,`cenv`,`cx`,`es`,`s0`,`sa`,`mid1`,`mid2`,
-          `sm`,`t1`,`t2`,`ctx`]
-          (INST_TYPE [alpha |-> ``:256``] exprSimWordArgsTheory.wb_frame_trans))) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  match_mp_tac (Q.SPECL [`lo`,`cenv`,`es`,`sa`,`G0`,`tn0`,`s0`,
-      `G1`,`tn1`,`mid1`,`sm`,`G2`,`tn2`,`t1`,`H`,`ctx`,`func`,`cx`,`mid1`]
-    (INST_TYPE [beta |-> ``:256``] wordArgsPtrTheory.ghost_kept_at_wb_trans)) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+     qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >> simp[]) >>
+  qx_genl_tac [`H`,`ee`,`G3`,`tn3`,`t3`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  asm_x "tail_post" irule >> simp[] >>
+  qexistsl [`G3`,`H`,`t3`,`tn3`] >> simp[]
 QED
 
 Finalise immutable_target_subscript_sim_full

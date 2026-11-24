@@ -1,7 +1,7 @@
 (* Positional requests: the head snapshot is retained through the actual tail. *)
 Theory entryCreateExtPosList
 Ancestors
-  createCtorSavedCons bodySingletonCallSupport entryCreateScopedBind entryCreateExtPosConsScope
+  createCtorSavedCons bodySingletonCallSupport
   entryCreateCompositeFocus entryCreateNativeFirstExit createSizeOperandCode
   createSizeConcreteSnapshots createSizeCutOpens gasShadowCompileStmtHelpers
   gasShadowCompileConvert fragGasPathFrameMem exprSimWordArgs
@@ -203,7 +203,7 @@ End
 
 Definition extcall_pos_head_post_def:
   extcall_pos_head_post keep DF lo d C f ce cx env rest e sv a m es s G tn
-    H r ee G1 tn1 t <=>
+    H (r : value + exception) ee G1 tn1 t <=>
     ?v. r = INL v /\ extcall_positional_post keep DF lo d C f ce cx env
       rest [e] [sv] a m es s G tn H (INL [v] : value list + exception) ee G1 tn1 t
 End
@@ -362,34 +362,278 @@ Definition extcall_pos_row_rule_def:
         (bind (eval_expr cx e) (read_result cx)) (es,s)
 End
 
-Theorem pos_list_cons_scope[local]:
-  extcall_pos_scope_join E C f /\ create_operand_at a s /\
+Definition extcall_pos_cons_rule_def:
+  extcall_pos_cons_rule DF lo E C f PG tops cx st0 <=>
+    !a m b e xs es s G tn P Q.
+      (!marks. create_operand_focus_scope a m E C f s marks ==>
+               create_operand_focus_scope a b E C f s marks) /\
+      (!marks r. exit_result r /\ create_operand_full_scope a m E C f s marks r ==>
+                 create_operand_full_scope a b E C f s marks r) /\
+      (!left t right. create_operand_full_scope a m E C f s left (OK t) /\
+          create_operand_focus_scope m b E C f t right ==>
+          create_operand_focus_scope a b E C f s (left ++ right)) /\
+      (!left t right r. create_operand_full_scope a m E C f s left (OK t) /\
+          create_operand_full_scope m b E C f t right r ==>
+          create_operand_full_scope a b E C f s (left ++ right) r) /\
+      scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a m
+        (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn) P (create_operand_exit_post C cx) /\
+      (!H r ee G1 tn1 t. P H r ee G1 tn1 t ==> ?v. r = INL v) /\
+      (!obs marks v mid G1 tn1 t.
+        bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) =
+          (INL v,mid with gas_obs := []) /\
+        (?H. valid_horizon cx st0 H mid.storage_trace) /\
+        (!H. valid_horizon cx st0 H mid.storage_trace ==>
+          P H (INL v) (mid with gas_obs := []) G1 tn1 t /\
+          gas_origin_ptr_path (DF H,lo,E,C,f,PG) (s,G,tn) marks (OK t,G1,tn1)) ==>
+        scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 m b
+          (bind (eval_exprs cx xs) (\vs. return (v::vs))) (mid with gas_obs := [],t,G1,tn1) Q
+          (create_operand_exit_post C cx)) ==>
+      scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a b
+        (eval_exprs cx (e::xs)) (es,s,G,tn) Q (create_operand_exit_post C cx)
+End
+
+Theorem pos_list_cons_cut[local]:
+  body_inv tops C ce cx /\ MEM f C.ctx_functions /\ ~s.vs_halted /\
+  (!bb. MEM bb f.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   create_cut_code {} a m /\ fn_has_code a m f /\
   create_cut_code {} m b /\ fn_has_code m b f /\
+  create_operand_cut a m E C f tops cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s) /\
   scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a m
     (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn) P (create_operand_exit_post C cx) /\
   (!H r ee G1 tn1 t. P H r ee G1 tn1 t ==> ?v. r = INL v) /\
   (!obs marks v mid G1 tn1 t.
-    bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) = (INL v,mid) /\
+    bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) =
+      (INL v,mid with gas_obs := []) /\
     (?H. valid_horizon cx st0 H mid.storage_trace) /\
     (!H. valid_horizon cx st0 H mid.storage_trace ==>
-      P H (INL v) mid G1 tn1 t /\
+      P H (INL v) (mid with gas_obs := []) G1 tn1 t /\
       gas_origin_ptr_path (DF H,lo,E,C,f,PG) (s,G,tn) marks (OK t,G1,tn1)) ==>
-    scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 m b
-      (bind (eval_exprs cx xs) (\vs. return (v::vs))) (mid,t,G1,tn1) Q
-      (create_operand_exit_post C cx)) ==>
-  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a b
-    (eval_exprs cx (e::xs)) (es,s,G,tn) Q (create_operand_exit_post C cx)
+    create_operand_cut m b E C f tops cx st0 (eval_exprs cx xs) (mid with gas_obs := [],t)) ==>
+  create_operand_cut a b E C f tops cx st0 (eval_exprs cx (e::xs)) (es,s)
+Proof
+  strip_tac >> rewrite_tac[create_operand_cut_def] >> rpt gen_tac >> strip_tac >>
+  drule_all create_interior_visit_first_exit >> strip_tac
+  >- (irule create_cut_exprs_cons >> qexistsl_tac [`C`,`\h v ee g tn t. T`,`f`] >>
+      disj1_tac >> fs[create_operand_cut_def] >> metis_tac[]) >>
+  irule pos_list_cut_right >>
+  qpat_assum `create_expr_prefix _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `scoped_operand_outcome _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> reverse conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  `create_operand_cut m b E C f tops cx st0 (eval_exprs cx xs) (mid with gas_obs := [],t)`
+    by (first_x_assum irule >> conj_tac >- metis_tac[] >>
+        qexistsl_tac [`G1`,`create_cut_marks E front`,`obs`,`tn1`,`v`] >> simp[]) >>
+  fs[create_operand_cut_def] >> metis_tac[]
+QED
+
+Theorem pos_list_split[local]:
+  gas_shadow_state a sha /\
+  compile_ext_call_args compile_expr ce kw
+    (MAP (lowered_value_type ce) (e::xs)) (e::xs) a = (svs,b) /\
+  compile_ext_call_args compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr kw)
+    (MAP (lowered_value_type ce) (MAP gas_shadow_expr (e::xs)))
+    (MAP gas_shadow_expr (e::xs)) sha = (svs,shb) ==>
+  ?vv i shi sv m shm rest.
+    compile_expr ce (expr_type e) e a = (vv,i) /\
+    compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) sha = (vv,shi) /\
+    compile_snapshot_vv ce (exprs_can_mutate ce (xs ++ kw))
+       (ext_call_arg_value (lowered_value_type ce e) vv) i = (sv,m) /\
+    compile_snapshot_vv ce (exprs_can_mutate ce (xs ++ kw))
+       (ext_call_arg_value (lowered_value_type ce e) vv) shi = (sv,shm) /\
+    gas_shadow_state i shi /\ gas_shadow_state m shm /\ svs = sv::rest /\
+    compile_ext_call_args compile_expr ce kw (MAP (lowered_value_type ce) xs) xs m = (rest,b) /\
+    compile_ext_call_args compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr kw)
+      (MAP (lowered_value_type ce) (MAP gas_shadow_expr xs))
+      (MAP gas_shadow_expr xs) shm = (rest,shb)
+Proof
+  strip_tac >> Cases_on `compile_expr ce (expr_type e) e a` >>
+  rename1 `compile_expr ce (expr_type e) e a = (vv,i)` >>
+  Cases_on `compile_snapshot_vv ce (exprs_can_mutate ce (xs ++ kw))
+     (ext_call_arg_value (lowered_value_type ce e) vv) i` >>
+  rename1 `compile_snapshot_vv _ _ _ i = (sv,m)` >>
+  drule_all pos_list_shadow_head >> strip_tac >>
+  `exprs_can_mutate ce (MAP gas_shadow_expr xs ++ MAP gas_shadow_expr kw) =
+    exprs_can_mutate ce (xs ++ kw)` by
+      (pure_rewrite_tac[GSYM MAP_APPEND,gas_shadow_expr_can_mutate] >> REFL_TAC) >>
+  qpat_x_assum `compile_ext_call_args _ ce _ _ (e::xs) a = _`
+    (mp_tac o ONCE_REWRITE_RULE [compile_ext_call_args_def] o REWRITE_RULE [MAP]) >>
+  qpat_x_assum `compile_ext_call_args _ _ _ _ _ sha = _`
+    (mp_tac o ONCE_REWRITE_RULE [compile_ext_call_args_def] o REWRITE_RULE [MAP]) >>
+  simp[comp_bind_def,comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem pos_list_head_code[local]:
+  compile_expr ce (expr_type e) e a = (vv,i) /\
+  compile_snapshot_vv ce copy (ext_call_arg_value (lowered_value_type ce e) vv) i = (sv,m) ==>
+  ci_mono a m /\ create_cut_code {} a m
 Proof
   strip_tac >>
+  `ci_mono a i /\ create_cut_code {} a i` by
+    (qpat_assum `compile_expr _ _ _ a = _` mp_tac >>
+     metis_tac[cj 1 compile_expr_ci_mono,cj 1 create_operand_cut_code,pairTheory.SND]) >>
+  `ci_mono i m /\ create_cut_code {} i m` by
+    (qpat_assum `compile_snapshot_vv _ _ _ i = _` mp_tac >>
+     metis_tac[ci_mono_compile_snapshot_vv,create_vv_snapshot_cut_code,pairTheory.SND]) >>
+  metis_tac[ci_mono_trans,create_cut_code_join]
+QED
+
+Theorem pos_list_compile_mono[local]:
+  (compile_expr c ty e a = (vv,i) /\ compile_snapshot_vv ce copy raw i = (sv,m) ==>
+     ci_mono a m) /\
+  (compile_ext_call_args compile_expr c kw tys xs m = (svs,b) ==> ci_mono m b)
+Proof
+  conj_tac
+  >- (strip_tac >>
+      `ci_mono a i` by metis_tac[cj 1 compile_expr_ci_mono,pairTheory.SND] >>
+      `ci_mono i m` by metis_tac[ci_mono_compile_snapshot_vv,pairTheory.SND] >>
+      metis_tac[ci_mono_trans]) >>
+  strip_tac >>
+  qspecl_then [`xs`,`tys`,`compile_expr`,`c`,`kw`,`m`] mp_tac ci_mono_compile_ext_call_args >>
+  simp[cj 1 compile_expr_ci_mono]
+QED
+
+Theorem pos_list_cons_finish[local]:
+  body_inv tops C ce cx /\ MEM f C.ctx_functions /\
+  extcall_pos_scope_join E C f /\ extcall_pos_cons_rule DF lo E C f PG tops cx st0 /\
+  local_ptrs_reserved ce a /\ local_ptrs_reserved ce m /\ ci_mono a m /\ ci_mono m b /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  body_exprs_full_ok cx (e::xs) /\ expr_body_pre ce cx env e es /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  (!e' st. MEM e' xs /\ expr_sim_inv ce cx env st ==> expr_body_pre ce cx env e' st) /\
+  extcall_pos_entry DF lo d st0 C f ce cx env a es s G tn /\
+  create_cut_code {} a m /\ fn_has_code a m f /\ create_cut_code {} m b /\ fn_has_code m b f /\
+  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a m
+    (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
+    (extcall_pos_head_post keep DF lo d C f ce cx env (xs ++ kw) e sv a m es s G tn)
+    (create_operand_exit_post C cx) /\
+  create_operand_cut a m E C f tops cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s) /\
+  (!mid t G1 tn1. body_exprs_full_ok cx xs /\
+    body_const_cells_agree [(NONE,tops)] cx env mid /\
+    extcall_pos_entry DF lo d st0 C f ce cx env m mid t G1 tn1 ==>
+    scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 m b
+      (eval_exprs cx xs) (mid,t,G1,tn1)
+      (extcall_positional_post keep DF lo d C f ce cx env kw xs svs m b mid t G1 tn1)
+      (create_operand_exit_post C cx) /\
+    create_operand_cut m b E C f tops cx st0 (eval_exprs cx xs) (mid,t)) ==>
+  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a b
+    (eval_exprs cx (e::xs)) (es,s,G,tn)
+    (extcall_positional_post keep DF lo d C f ce cx env kw (e::xs) (sv::svs) a b es s G tn)
+    (create_operand_exit_post C cx) /\
+  create_operand_cut a b E C f tops cx st0 (eval_exprs cx (e::xs)) (es,s)
+Proof
+  strip_tac >>
+  `!bb. MEM bb f.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[body_inv_no_phi] >>
+  qabbrev_tac `P = extcall_pos_head_post keep DF lo d C f ce cx env (xs ++ kw) e sv a m es s G tn` >>
+  `!obs marks v mid G1 tn1 t.
+    bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) =
+      (INL v,mid with gas_obs := []) /\
+    (?H. valid_horizon cx st0 H mid.storage_trace) /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      P H (INL v) (mid with gas_obs := []) G1 tn1 t /\
+      gas_origin_ptr_path (DF H,lo,E,C,f,PG) (s,G,tn) marks (OK t,G1,tn1)) ==>
+    scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 m b
+      (bind (eval_exprs cx xs) (\vs. return (v::vs))) (mid with gas_obs := [],t,G1,tn1)
+      (extcall_positional_post keep DF lo d C f ce cx env kw (e::xs) (sv::svs) a b es s G tn)
+      (create_operand_exit_post C cx) /\
+    create_operand_cut m b E C f tops cx st0 (eval_exprs cx xs) (mid with gas_obs := [],t)` by
+    (rpt gen_tac >> strip_tac >>
+     `body_exprs_full_ok cx xs /\ body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := []) /\
+      extcall_pos_entry DF lo d st0 C f ce cx env m (mid with gas_obs := []) t G1 tn1` by
+      (irule pos_list_tail_entry >>
+       qpat_assum `extcall_pos_entry _ _ _ _ _ _ _ _ _ a _ _ _ _` (irule_at Any) >>
+       qpat_assum `bind _ _ _ = (INL v,_)` (irule_at Any) >>
+       simp[] >> qexistsl_tac [`sv`,`xs ++ kw`,`marks`,`keep`,`PG`,`H`,`E`] >> fs[Abbr `P`]) >>
+     qpat_assum `!mid t G1 tn1. _ ==> _ /\ create_operand_cut _ _ _ _ _ _ _ _ _ _`
+        (drule_all_then strip_assume_tac) >> simp[] >>
+     irule pos_list_cons_post >> simp[] >>
+     qpat_assum `bind _ _ _ = (INL v,_)` (irule_at Any) >>
+     fs[Abbr `P`,extcall_pos_entry_def]) >>
+  `!H r ee G1 tn1 t. P H r ee G1 tn1 t ==> ?v. r = INL v` by
+    (simp[Abbr `P`,extcall_pos_head_post_def] >> metis_tac[]) >>
+  qunabbrev_tac `P` >> reverse conj_tac
+  >- (irule pos_list_cons_cut >>
+      qpat_assum `scoped_operand_outcome _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+      fs[extcall_pos_entry_def] >> qexists_tac `ce` >> simp[] >>
+      reverse conj_tac >- first_assum ACCEPT_TAC >>
+      rpt gen_tac >> strip_tac >>
+      qpat_assum `!obs marks v mid G1 tn1 t. _ ==> _ /\ create_operand_cut _ _ _ _ _ _ _ _ _ _`
+        (drule_at (Pat `bind _ _ _ = (INL _,_)`)) >>
+      disch_then (qspecl_then [`marks`,`G1`,`tn1`,`t`] mp_tac) >> simp[] >> metis_tac[]) >>
   qpat_x_assum `extcall_pos_scope_join _ _ _`
     (qspecl_then [`a`,`m`,`b`,`s`] mp_tac o REWRITE_RULE [extcall_pos_scope_join_def]) >>
+  simp[] >> impl_tac >- fs[extcall_pos_entry_def] >> strip_tac >>
+  qpat_x_assum `extcall_pos_cons_rule _ _ _ _ _ _ _ _ _`
+    (irule o REWRITE_RULE [extcall_pos_cons_rule_def]) >>
+  qpat_assum `scoped_operand_outcome _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem extcall_pos_list_fold_given_cons:
+  body_inv tops C ce cx /\ MEM f C.ctx_functions /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  extcall_pos_scope_join (gas_explicit_sites C shC) C f /\
+  extcall_pos_cons_rule DF lo (gas_explicit_sites C shC) C f PG tops cx st0 /\
+  extcall_pos_row_rule allowed keep DF lo d C shC f shf PG tops cx st0 ce env ==>
+  !xs a b sha shb svs es s G tn.
+    EVERY allowed xs /\ body_exprs_full_ok cx xs /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    (!e st. MEM e xs /\ expr_sim_inv ce cx env st ==> expr_body_pre ce cx env e st) /\
+    compile_ext_call_args compile_expr ce kw (MAP (lowered_value_type ce) xs) xs a = (svs,b) /\
+    compile_ext_call_args compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr kw)
+      (MAP (lowered_value_type ce) (MAP gas_shadow_expr xs))
+      (MAP gas_shadow_expr xs) sha = (svs,shb) /\
+    gas_shadow_state a sha /\ gas_shadow_state b shb /\
+    fn_has_code a b f /\ fn_has_code sha shb shf /\ local_ptrs_reserved ce a /\
+    (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+    extcall_pos_entry DF lo d st0 C f ce cx env a es s G tn ==>
+    scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG) tops cx st0 a b
+      (eval_exprs cx xs) (es,s,G,tn)
+      (extcall_positional_post keep DF lo d C f ce cx env kw xs svs a b es s G tn)
+      (create_operand_exit_post C cx) /\
+    create_operand_cut a b (gas_explicit_sites C shC) C f tops cx st0 (eval_exprs cx xs) (es,s)
+Proof
+  strip_tac >> Induct_on `xs` >> rpt gen_tac >> strip_tac
+  >- (gvs[compile_ext_call_args_def,comp_return_def] >>
+      irule pos_list_empty >> fs[extcall_pos_entry_def]) >>
+  rename1 `body_exprs_full_ok cx (e::xs)` >> drule_all pos_list_split >> strip_tac >> gvs[] >>
+  `ci_mono a m /\ create_cut_code {} a m` by (drule_all pos_list_head_code >> simp[]) >>
+  `ci_mono m b /\ create_cut_code {} m b` by (drule_then strip_assume_tac pos_list_layout >> simp[]) >>
+  `fn_has_code a m f /\ fn_has_code m b f` by
+    metis_tac[fn_has_code_split,ci_mono_def] >>
+  `fn_has_code sha shm shf /\ fn_has_code shm shb shf` by
+    (`ci_mono sha shm /\ ci_mono shm shb` by metis_tac[pos_list_compile_mono] >>
+     metis_tac[fn_has_code_split,ci_mono_def]) >>
+  `body_expr_full_ok cx e /\ expr_body_pre ce cx env e es` by
+    fs[Once body_exprs_full_ok_def,extcall_pos_entry_def] >>
+  qpat_x_assum `extcall_pos_row_rule _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [extcall_pos_row_rule_def]) >>
+  disch_then (drule_at (Pat `compile_expr (gas_shadow_env T _) _ (gas_shadow_expr _) _ = _`)) >>
+  disch_then (drule_at (Pat `gas_shadow_state _ sha`)) >>
+  disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`xs ++ kw`] mp_tac) >>
   simp[] >> strip_tac >>
-  irule pos_cons_scope_mixed >> qexistsl_tac [`P`,`m`] >> simp[] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  map_every qx_gen_tac [`obs`,`marks`,`v`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
-  qpat_x_assum `!obs marks v mid G1 tn1 t. _ ==> scoped_operand_outcome _ _ _ _ _ _ _ _ _ _`
-    (qspecl_then [`obs`,`marks`,`v`,`mid with gas_obs := []`,`G1`,`tn1`,`t`] mp_tac) >>
-  impl_tac >- (simp[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
-  disch_then ACCEPT_TAC
+  `scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG) tops cx st0 a m
+     (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
+     (extcall_pos_head_post keep DF lo d C f ce cx env (xs ++ kw) e sv a m es s G tn)
+     (create_operand_exit_post C cx) /\
+   create_operand_cut a m (gas_explicit_sites C shC) C f tops cx st0
+     (bind (eval_expr cx e) (read_result cx)) (es,s)` by
+    (qpat_assum `!es s G tn. _ ==> _ /\ create_operand_cut _ _ _ _ _ _ _ _ _ _`
+      (qspecl_then [`es`,`s`,`G`,`tn`] mp_tac) >> simp[]) >>
+  irule pos_list_cons_finish >>
+  qpat_assum `scoped_operand_outcome _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >>
+  `a.cs_next_var <= m.cs_next_var` by fs[ci_mono_def] >>
+  `local_ptrs_reserved ce m` by metis_tac[local_ptrs_reserved_next_var] >>
+  `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at m x) /\
+   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at m x)` by
+    (rpt strip_tac >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_assum `!a b sha shb svs es s G tn. _ ==> _ /\ create_operand_cut _ _ _ _ _ _ _ _ _ _`
+    (drule_at (Pat `compile_ext_call_args _ _ _ _ (MAP gas_shadow_expr _) _ = _`)) >>
+  disch_then (drule_at (Pat `compile_ext_call_args _ _ _ _ _ _ = _`)) >>
+  simp[] >> metis_tac[]
 QED
