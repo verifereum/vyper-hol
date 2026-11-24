@@ -106,7 +106,7 @@ Proof
   >> simp[] >> qexists_tac `shadow_se` >> simp[] >> metis_tac[cs_extends_trans]
 QED
 
-Theorem grouped_shadow_entry_dispatch:
+val grouped_shadow_dispatch_statement = ``
   run_grouped_lowering groups ips fb rp "__entry" = SOME unit /\
   EVERY group_entry_labels_ok groups /\
   EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips) /\
@@ -145,7 +145,23 @@ Theorem grouped_shadow_entry_dispatch:
        NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
      | SOME (ce,pay,nr,key,tr,view,stmts,rt) =>
          compile_fallback_body ce pay nr key tr view stmts rt) shn = ((),she) /\
-    fn_has_code shn she shadow_fn /\ gas_shadow_state sn shn
+    fn_has_code shn she shadow_fn /\ gas_shadow_state sn shn``;
+
+val (grouped_shadow_dispatch_input, grouped_shadow_dispatch_output) =
+  boolSyntax.dest_imp grouped_shadow_dispatch_statement;
+val (grouped_shadow_dispatch_witnesses, grouped_shadow_dispatch_facts) =
+  boolSyntax.strip_exists grouped_shadow_dispatch_output;
+val grouped_shadow_dispatch_end =
+  valOf (List.find (fn v => fst (dest_var v) = "se") grouped_shadow_dispatch_witnesses);
+val grouped_shadow_dispatch_retained = boolSyntax.list_mk_exists
+  (grouped_shadow_dispatch_witnesses,
+   ``^grouped_shadow_dispatch_facts /\
+     cs_extends ^(valOf (List.find (fn v => fst (dest_var v) = "sd")
+       grouped_shadow_dispatch_witnesses)) ^grouped_shadow_dispatch_end /\
+     ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks ^grouped_shadow_dispatch_end))``);
+
+Theorem grouped_shadow_entry_dispatch_with_layout:
+  ^grouped_shadow_dispatch_input ==> ^grouped_shadow_dispatch_retained
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qspecl_then [`groups`,`ips`,`fb`,`rp`,`"__entry"`] mp_tac
@@ -211,6 +227,16 @@ Proof
   simp[]
 QED
 
+Theorem grouped_shadow_entry_dispatch:
+  ^grouped_shadow_dispatch_statement
+Proof
+  disch_then (mp_tac o MATCH_MP grouped_shadow_entry_dispatch_with_layout) >>
+  disch_then (qx_choosel_then [`shu`,`shfn`,`sf`,`fl`,`jobs`,`sd`,`shd`,
+    `sx`,`shx`,`sn`,`shn`,`se`,`she`] strip_assume_tac) >>
+  qexistsl_tac [`shu`,`shfn`,`sf`,`fl`,`jobs`,`sd`,`shd`,`sx`,`shx`,`sn`,`shn`,`se`,`she`] >>
+  asm_rewrite_tac[]
+QED
+
 Theorem cs_appends_grouped_jobs[local]:
   !jobs. cs_appends (compile_external_jobs jobs)
 Proof
@@ -221,7 +247,7 @@ Proof
   irule cs_appends_bind >> simp[cs_appends_register_positional_args, cs_appends_guarded_body]
 QED
 
-Theorem grouped_legacy_job_code:
+val grouped_legacy_job_statement = ``
   compile_external_jobs
     (pre ++ ExternalLegacyJob (lbl,ce,pa,mc,pay,nr,key,ut,view,ss,rt)::post)
     sd = ((),sj) /\
@@ -236,7 +262,19 @@ Theorem grouped_legacy_job_code:
     compile_register_positional_args ce pa 4 register = (cenv,body_start) /\
     fn_has_code register body_start fn /\
     compile_guarded_body cenv nr key ut view ss rt body_start = ((),done) /\
-    fn_has_code body_start done fn /\ cs_extends sd checks
+    fn_has_code body_start done fn /\ cs_extends sd checks``;
+
+val (grouped_legacy_job_input, grouped_legacy_job_output) =
+  boolSyntax.dest_imp grouped_legacy_job_statement;
+val (grouped_legacy_job_witnesses, grouped_legacy_job_facts) =
+  boolSyntax.strip_exists grouped_legacy_job_output;
+val grouped_legacy_job_end =
+  valOf (List.find (fn v => fst (dest_var v) = "done") grouped_legacy_job_witnesses);
+val grouped_legacy_job_retained = boolSyntax.list_mk_exists
+  (grouped_legacy_job_witnesses, ``^grouped_legacy_job_facts /\ cs_extends ^grouped_legacy_job_end se``);
+
+Theorem grouped_legacy_job_code_with_end:
+  ^grouped_legacy_job_input ==> ^grouped_legacy_job_retained
 Proof
   strip_tac >>
   Cases_on `compile_external_jobs pre sd` >>
@@ -258,6 +296,7 @@ Proof
   `cs_extends reg_state start_state` by
     metis_tac[cs_appends_def, cs_appends_register_positional_args] >>
   `cs_extends job_end runtime_end` by metis_tac[cs_extends_trans] >>
+  `cs_extends done_state runtime_end` by metis_tac[cs_extends_trans] >>
   `cs_extends dispatch_end check_state` by metis_tac[cs_extends_trans] >>
   `new_block lbl r = (r.cs_current_bb,check_state)` by
     (rename1 `[_] = earlier ++ [_] ++ later` >>
@@ -268,6 +307,14 @@ Proof
   irule fn_has_code_retained_interval >> asm_rewrite_tac[] >>
   qexists_tac `runtime_end` >> asm_rewrite_tac[] >>
   metis_tac[cs_extends_trans]
+QED
+
+Theorem grouped_legacy_job_code:
+  ^grouped_legacy_job_statement
+Proof
+  disch_then (mp_tac o MATCH_MP grouped_legacy_job_code_with_end) >>
+  disch_then (qx_choosel_then [`start`,`checks`,`reg`,`sa`,`done`,`cf`] strip_assume_tac) >>
+  qexistsl_tac [`start`,`checks`,`reg`,`sa`,`done`,`cf`] >> asm_rewrite_tac[]
 QED
 
 Theorem grouped_fallback_guarded_code:
