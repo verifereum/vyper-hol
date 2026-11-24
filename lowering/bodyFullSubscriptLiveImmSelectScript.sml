@@ -2,7 +2,7 @@
 Theory bodyFullSubscriptLiveImmSelect
 Ancestors
   exprBodyPreCallSafetyProps exprBodyPreTypingProps
-  bodyInvCodeProps bodyInvSplit bodyInvExecutionProps exprBodyPreProps alist
+  bodyInvCodeProps bodyInvSplit bodyCallSupport exprBodyPreProps alist
   bodyFullExtCallPosTransport bodySimFull loweringPosts
   exprSimSubscriptArrayLiveImmutableSuffix exprSimSubscriptArrayLiveImmutableView
   exprSimSubscriptArrayLiveImmutableMetadata exprSimWordArgs exprSimSource
@@ -240,8 +240,9 @@ Proof
   rpt strip_tac >>
   drule_then (assume_tac o Q.SPEC `src`) contract_inv_module_codes >>
   `ALOOKUP mods src = SOME ts` by fs[] >>
-  drule_all_then assume_tac contract_inv_supported_module >>
-  fs[lookup_callable_function_def, supported_program_def,
+  `supported_module_headers ts` by
+    (fs[bodyInvSplitTheory.contract_inv_def] >> res_tac) >>
+  fs[lookup_callable_function_def, bodyCallSupportTheory.supported_module_headers_def,
      supported_declaration_names_def, AllCaseEqs()] >>
   metis_tac[lookup_function_Internal_SOME_MEM, lookup_function_Deploy_SOME_cases,
             find_function_distinct_decl]
@@ -606,7 +607,8 @@ Theorem live_ctor_header_origin[local]:
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!p n. not_fresh_at sa p /\ ptr_covers G tn p s n ==>
-      ptr_covers Gf tnf p t n)
+      ptr_covers Gf tnf p t n) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `D = <|d_stor := (\a st. {}); d_trans := (\a st. {});
@@ -646,6 +648,61 @@ Proof
      strip_tac >> gvs[]) >>
   qexistsl [`Gf`,`tnf`,`t`] >> simp[immutable_copy_read_def] >>
   drule gas_origin_ptr_path_dead_mono >> simp[Abbr `D`]
+QED
+
+(* The constructor header's raw load and pointer path land at the same
+   state, modulo the instruction cursor. *)
+Theorem live_ctor_length_joint_run:
+  compile_imm_load_word T imm arg sa = (len,sb) /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  eval_operand arg s = SOME a /\ copy_old_operand sa arg /\
+  op_taint tn arg = {} /\ op_prov G arg = NONE /\
+  immutable_copy_read T a s = n2w cnt /\
+  w2n a + 32 <= lo /\ mem_word_taint tn.t_mem (w2n a) = {} /\
+  (!region. imm = SOME region ==> eval_operand region s = SOME 0w /\
+     copy_old_operand sa region /\ op_taint tn region = {} /\ op_prov G region = NONE) ==>
+  ?Gf tnf t.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+    eval_operand len t = SOME (n2w cnt) /\ op_taint tnf len = {} /\ op_prov Gf len = NONE /\
+    copy_old_operand sb len /\ (!l. len <> Label l) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_immutables = s.vs_immutables /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_initial_fmp = s.vs_initial_fmp /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es t) /\
+    (?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+      t = (raw with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  gvs[immutable_copy_read_def] >>
+  drule_all live_ctor_header_origin >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  rename1 `copy_runtime_frame sa s sb raw` >>
+  qexistsl [`Gf`,`tnf`,`raw with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
+  `?v. len = Var v` by
+    (Cases_on `imm`
+     >- (gvs[contextTheory.compile_imm_load_word_def] >>
+         drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[])
+     >> drule contextTheory.compile_imm_load_word_ctor_result >> simp[]) >>
+  `raw.vs_current_bb = s.vs_current_bb` by fs[copy_runtime_frame_def, exprLoweringPropsTheory.same_blocks_def] >>
+  `raw with vs_inst_idx := LENGTH sb.cs_current_insts =
+    s with <|vs_vars := raw.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|>` by
+    fs[copy_runtime_frame_def, copy_static_def, venomStateTheory.venom_state_component_equality] >>
+  `!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es (raw with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (rpt strip_tac >> irule stmt_state_rel_readonly_vars_pc >> qexistsl [`s`,`sa`] >>
+     fs[copy_runtime_frame_def, venomStateTheory.lookup_var_def]) >>
+  fs[copy_runtime_frame_def, copy_static_def, venomStateTheory.venom_state_component_equality,
+     venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def] >>
+  qexists `raw` >> simp[]
 QED
 
 (* Literal lengths and the two code loaders have the same interface to the
@@ -689,26 +746,11 @@ Proof
 QED
 
 Resume live_code_length_joint[constructor]:
-  gvs[immutable_copy_read_def] >>
-  drule_all live_ctor_header_origin >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  rename1 `copy_runtime_frame sa s sb raw` >>
-  qexistsl [`Gf`,`tnf`,`raw with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
-  `?v. len = Var v` by
-    (Cases_on `imm`
-     >- (gvs[contextTheory.compile_imm_load_word_def] >>
-         drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[])
-     >> drule contextTheory.compile_imm_load_word_ctor_result >> simp[]) >>
-  `raw.vs_current_bb = s.vs_current_bb` by fs[copy_runtime_frame_def, exprLoweringPropsTheory.same_blocks_def] >>
-  `raw with vs_inst_idx := LENGTH sb.cs_current_insts =
-    s with <|vs_vars := raw.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|>` by
-    fs[copy_runtime_frame_def, copy_static_def, venomStateTheory.venom_state_component_equality] >>
-  `!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-      stmt_state_rel H ctx func cenv cx es (raw with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-    (rpt strip_tac >> irule stmt_state_rel_readonly_vars_pc >> qexistsl [`s`,`sa`] >>
-     fs[copy_runtime_frame_def, venomStateTheory.lookup_var_def]) >>
-  fs[copy_runtime_frame_def, copy_static_def, venomStateTheory.venom_state_component_equality,
-     venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]
+  gvs[] >>
+  drule_all live_ctor_length_joint_run >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`Gf`,`tnf`,`t`] strip_assume_tac)) >>
+  qexistsl [`Gf`,`tnf`,`t`] >> simp[]
 QED
 
 Resume live_code_length_joint[runtime]:
@@ -1149,7 +1191,9 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
   `stmt_state_rel H0 ctx func cenv cx fin s` by fs[expr_post_def] >>
   `expr_body_pre cenv cx env obj (es with gas_obs := bgs)` by
-    (drule_all expr_body_pre_array_subscript_base >> simp[]) >>
+    (simp[] >> irule expr_body_pre_array_subscript_base_eval >>
+     qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[] >>
+     metis_tac[]) >>
   `expr_body_pre cenv cx env idx mid` by
     (`expr_body_pre cenv cx env (Subscript et obj idx) (es with gas_obs := bgs)` by simp[] >>
      drule_all expr_body_pre_array_subscript_index_after_base >> simp[]) >>
