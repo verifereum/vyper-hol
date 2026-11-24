@@ -63,7 +63,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem stage_observer_fetch_agreement[local]:
+Theorem stage_observer_fetch_agreement:
   fn_has_code a b f /\
   (lbl,idx) <> frag_observer_cut b /\
   lookup_block lbl (frag_observer a b f id).fn_blocks = SOME bb /\
@@ -78,7 +78,7 @@ Proof
   fs[fn_has_code_def] >> metis_tac[]
 QED
 
-Theorem stage_observer_fetch_region[local]:
+Theorem stage_observer_fetch_region:
   cs_extends a b /\ fn_has_code a b obs /\
   (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region a b /\
   lookup_block s.vs_current_bb obs.fn_blocks = SOME bb /\

@@ -59,34 +59,6 @@ Proof
   simp[regions_disjoint_def] >> metis_tac[]
 QED
 
-(* The raw instruction list at the selected allocation/copy endpoint. *)
-Theorem unwrap_code_copy_endpoint_run:
-  compile_alloc_buffer nb sb = (buf,mid) /\ buf.buf_operand = Var root /\
-  compile_imm_copy_to_memory ctor imm src buf.buf_operand n 0 mid = ((),sc) /\
-  step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
-  copy_runtime_frame mid (u with vs_inst_idx := SUC s.vs_inst_idx) sc z ==>
-  ?raw. run_inst_seq (emitted_insts sb sc) s = OK raw /\
-        (z with vs_inst_idx := LENGTH sc.cs_current_insts) =
-        (raw with vs_inst_idx := LENGTH sc.cs_current_insts)
-Proof
-  strip_tac >>
-  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts mid sc)` by
-    (Cases_on `ctor` >> fs[] >>
-     FIRST [drule code_ctor_copy_insts, drule code_copy_insts] >> strip_tac >>
-     fs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, EVERY_MEM] >>
-     rpt strip_tac >> res_tac >> gvs[is_terminator_def]) >>
-  drule unwrap_alloc_generated_code >> strip_tac >> gvs[] >>
-  fs[copy_runtime_frame_def] >>
-  `emitted_insts sb sc = emitted_insts sb mid ++ emitted_insts mid sc` by
-    (irule emitted_insts_append >> simp[]) >>
-  simp[run_inst_seq_def] >>
-  qpat_x_assum `run_inst_seq _ (_ with vs_inst_idx := _) = _` mp_tac >>
-  drule run_inst_seq_inst_idx >> disch_then (fn th => rewrite_tac[th]) >>
-  Cases_on `run_inst_seq (emitted_insts mid sc) u` >>
-  simp[instIdxIndepTheory.exec_result_map_def] >>
-  disch_then (SUBST1_TAC o SYM) >> simp[]
-QED
-
 (* Runtime data-section branch. *)
 Theorem unwrap_code_copy_runtime_origin_run:
   ~cenv.ce_is_ctor /\

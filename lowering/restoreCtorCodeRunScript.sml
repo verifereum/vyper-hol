@@ -5,4 +5,4 @@ Ancestors
   bodyFullExtCallCtorCopyReplay
 
 Theorem extcall_saved_ctor_copy_replay_run =
-  bodyFullExtCallCtorCopyReplayTheory.extcall_saved_ctor_copy_replay_run
+  bodyFullExtCallCtorCopyReplayTheory.extcall_saved_ctor_copy_replay_with_run

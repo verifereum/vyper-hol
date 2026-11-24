@@ -1,8 +1,9 @@
 (* The delayed constructor copy keeps its counted run and value at one endpoint. *)
 Theory bodyFullExtCallCtorCopyReplay
 Ancestors
-  bodyFullUnwrapCodeCopy bodyFullUnwrapCodeCtorRun bodyFullUnwrapCodeCtorSemantic
+  bodyFullUnwrapCodeCtorRun bodyFullUnwrapCodeCtorSemantic
   bodyFullUnwrapCodeCtorFrame exprPtrUnwrapCode exprPtrUnwrapCodeCopyShape
+  exprPtrUnwrapCodeCopySemantic
   exprPtrUnwrapAllocationFrame exprPtrUnwrapAllocEntry
   exprPtrUnwrapAllocation exprPtrUnwrapAllocSeparation
   fragGasOriginPtrDead bodyFieldMemoryProps bodyPtrEnvBuiltinsBoundary
@@ -63,7 +64,7 @@ Proof
   drule_all copy_ctor_run >> strip_tac >> fs[copy_runtime_frame_def] >> metis_tac[]
 QED
 
-Theorem extcall_saved_ctor_copy_replay_run:
+Theorem extcall_saved_ctor_copy_replay_with_run:
   lowered_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\ p.ptr_location = LocCode /\ ce.ce_is_ctor /\
   compile_expr ce (expr_type e) e si = (LocatedValue (expr_type e) p,sm) /\
@@ -289,8 +290,8 @@ Proof
   qexistsl [`z with vs_inst_idx := LENGTH sb.cs_current_insts`,`HG`,`tf`] >>
   conj_tac >-
     (qpat_assum `allocst = _` (fn th =>
-       qpat_assum `copy_runtime_frame mid allocst sb z`
-         (assume_tac o REWRITE_RULE [th])) >>
+       qpat_assum `copy_runtime_frame mid allocst _ z`
+         (assume_tac o REWRITE_RULE[th])) >>
      drule_all unwrap_code_copy_endpoint_run >> simp[]) >>
   asm_rewrite_tac[] >> simp[] >>
   conj_tac >-
@@ -355,10 +356,11 @@ Theorem extcall_saved_ctor_copy_replay_pure:
     wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
     expr_val_at ce cx (expr_type e) su sb ee v src z
 Proof
-  disch_tac >> mp_tac extcall_saved_ctor_copy_replay_run >>
-  impl_tac >- first_assum ACCEPT_TAC >>
-  disch_then (qx_choosel_then [`z`,`G'`,`tn'`] strip_assume_tac) >>
-  qexistsl [`z`,`G'`,`tn'`] >> asm_rewrite_tac[]
+  disch_tac >>
+  qpat_assum `P` (mp_tac o MATCH_MP (SPEC_ALL extcall_saved_ctor_copy_replay_with_run)) >>
+  disch_then (qx_choosel_then [`z`,`G'`,`tn'`]
+    (CONJUNCTS_THEN2 kall_tac assume_tac)) >>
+  qexistsl [`z`,`G'`,`tn'`] >> first_assum ACCEPT_TAC
 QED
 
 Theorem extcall_saved_ctor_copy_replay =
