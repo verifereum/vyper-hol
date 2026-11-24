@@ -10,7 +10,7 @@ Ancestors
   vyperInterpreter vyperState vyperStorageFootprint vyperStorageTrace
   exprLoweringProps moduleLowering compileEnv venomState vyperValue finite_map words list pair
   groupedKeywordSupplied calldataSourceSize vyperCalldata
-  selectedAcceptedFold fragGasOriginPtrLoop venomMemDefs
+  selectedAcceptedFold fragGasOriginPtrLoop venomMemDefs entryCreateDefaultSlotContinue
 
 val allocated_slot = ``\sa s G tn (aid,p,base,tv).
   aid < sa.cs_next_id /\ not_fresh_at sa p /\ base < dimword (:256) /\
@@ -21,28 +21,10 @@ val initialized_slot = ``\sa s G tn (aid,p,base,tv,v).
   ^allocated_slot sa s G tn (aid,p,base,tv) /\ value_has_type tv v /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v base mem)``;
 
-Theorem grouped_initializer_slot_kept[local]:
-  ci_mono sa sb /\
-  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-     FLOOKUP t.vs_allocas aid = SOME entry) /\
-  (!p w. not_fresh_at sa p /\ lookup_var p s = SOME w ==>
-     lookup_var p t = SOME w /\ FLOOKUP J p = FLOOKUP G p /\
-     op_taint tz (Var p) = op_taint tn (Var p)) /\
-  ^allocated_slot sa s G tn slot ==>
-  ^allocated_slot sb t J tz slot
-Proof
-  PairCases_on `slot` >> simp[] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_assum `!p w. _` (qspecl_then [`slot1`,`n2w slot2:256 word`] mp_tac) >>
-  asm_rewrite_tac[] >> strip_tac >>
-  fs[ci_mono_def, ptr_covers_def] >>
-  metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS, not_fresh_at_mono]
-QED
-
 val grouped_initializer_slot_tac = fn row =>
   mp_tac (SIMP_RULE (srw_ss()) []
     (Q.INST [`sb` |-> `last`, `t` |-> `tail_state`, `J` |-> `G1`,
-      `tz` |-> `tn1`, `slot` |-> row] (SPEC_ALL grouped_initializer_slot_kept))) >>
+      `tz` |-> `tn1`, `slot` |-> row] (SPEC_ALL grouped_initializer_allocated_slot_kept))) >>
   asm_rewrite_tac[];
 
 Theorem grouped_initializer_head_exit[local]:
@@ -144,15 +126,9 @@ Resume grouped_omitted_initializers[cons]:
   rename1 `compile_init_kwargs ce ((name,Var p,ty,e)::vars) off 0 hi sa = _` >>
   rename1 `aid < sa.cs_next_id` >>
   rename1 `evaluate_type (get_tenv cx) ty = SOME kw_tv` >>
-  `expr_body_pre (ce with ce_vars := FEMPTY) cx env e es` by metis_tac[] >>
-  mp_tac (Q.INST [`dst` |-> `Var p`] (SPEC_ALL grouped_default_initializer_intervals)) >>
-  impl_tac >- asm_rewrite_tac[] >>
+  mp_tac (SPEC_ALL grouped_initializer_head_inputs) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choosel_then [`op`,`mid`,`last`,`shmid`,`shlast`] strip_assume_tac) >>
-  `expr_sim_full_hypotheses (DF,0,NONE,ctx,shadow_ctx,PG,fn,shfn)
-    (ce with ce_vars := FEMPTY) cx ty e es (st0,sa,mid,sha,shmid,op,s,G,tn)` by
-    (simp[expr_sim_full_hypotheses_def, expr_sim_full_code_def, local_ptrs_reserved_def,
-          return_buf_frame_def, FLOOKUP_EMPTY] >>
-     metis_tac[expr_body_pre_gas_admissible]) >>
   `w2n (n2w h2':256 word) = h2'` by simp[wordsTheory.w2n_n2w] >>
   mp_tac (Q.INST [`dst` |-> `p`, `b` |-> `n2w h2':256 word`,
     `oid` |-> `aid`, `tv` |-> `kw_tv`, `shadow_fn` |-> `shfn`, `src` |-> `op`]
@@ -176,73 +152,23 @@ Resume grouped_omitted_initializers[cons]:
          ho_match_mp_tac compose >> conj_tac >- ACCEPT_TAC head
        end) >>
   qx_genl_tac [`marks`,`v`,`ee`,`G1`,`tn1`,`tail_state`] >> BETA_TAC >> strip_tac >>
-  `body_const_cells_agree [(NONE,tops)] cx env ee` by
-    (`well_typed_expr env e` by drule_then (ACCEPT_TAC o cj 2) expr_body_pre_static_facts >>
-     qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
-       (qspec_then `[]` (mp_then (Pos last) mp_tac
-         (Q.INST [`mods` |-> `[(NONE,tops)]`, `env` |-> `env`]
-           (SPEC_ALL body_const_cells_agree_expr_read)))) >>
-     simp[]) >>
-  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
-    fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
-    (drule_then strip_assume_tac) >>
-  `!f inst u. frag_reachable ctx fn tail_state f inst u ==> dalloca_fmp_headroom inst u` by
-    (qpat_assum `gas_origin_ptr_path _ _ marks (OK tail_state,_,_)` (fn path =>
-       qpat_assum `!bb. MEM bb fn.fn_blocks ==> _` (fn no_phi =>
-       qpat_assum `!f inst u. frag_reachable ctx fn s f inst u ==> _` (fn bounds =>
-         ACCEPT_TAC (MATCH_MP gas_origin_ptr_path_dalloca_fmp_headroom
-           (LIST_CONJ [path,no_phi,bounds])))))) >>
-  `EVERY (^allocated_slot last tail_state G1 tn1) t` by
-    (qpat_assum `EVERY _ t` mp_tac >>
-     simp_tac bool_ss [EVERY_MEM] >> strip_tac >> qx_gen_tac `row` >> strip_tac >>
-     qpat_assum `!x. MEM x t ==> _` (qspec_then `row` (drule_then assume_tac)) >>
-     grouped_initializer_slot_tac `row` >> simp[]) >>
-  `EVERY (^initialized_slot last tail_state G1 tn1) kept` by
-    (qpat_assum `EVERY _ kept` mp_tac >>
-     simp_tac bool_ss [EVERY_MEM] >> strip_tac >>
-     qx_gen_tac `row` >> PairCases_on `row` >> strip_tac >>
-     qpat_assum `!row. MEM row kept ==> _`
-       (qspec_then `(row0,row1,row2,row3,row4)` (drule_then mp_tac)) >>
-     simp_tac (srw_ss()) [] >> strip_tac >>
-     `row0 <> aid` by
-       (`MEM row0 (MAP FST kept)` by
-          (simp_tac bool_ss [MEM_MAP] >> qexists_tac `(row0,row1,row2,row3,row4)` >> simp[]) >>
-        strip_tac >>
-        qpat_assum `MEM row0 (MAP FST kept)` mp_tac >>
-        qpat_assum `~MEM aid (MAP FST kept)` (fn neg =>
-          qpat_assum `row0 = aid` (fn eq => simp_tac bool_ss [eq,neg]))) >>
-     `val_wf row3 row4` by (irule (cj 1 value_has_type_val_wf) >> first_assum ACCEPT_TAC) >>
-     `val_footprint row3 row4 <= type_memory_size row3` by simp[val_footprint_le] >>
-     conj_tac >-
-       (grouped_initializer_slot_tac `(row0,row1,row2,row3)` >> simp[]) >>
-     simp[] >>
-     qpat_assum `!id p old_base n otv x. id <> aid /\ _ ==> _`
-       (qspecl_then [`row0`,`row1`,`row2`,`type_memory_size row3`,`row3`,`row4`] mp_tac) >>
-     impl_tac >- asm_rewrite_tac[] >> disch_then ACCEPT_TAC) >>
-  qpat_assum `ci_mono sa last` (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >>
-  `aid < last.cs_next_id` by decide_tac >>
-  `not_fresh_at last p` by
-    (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
   qpat_assum `w2n (n2w h2':256 word) = h2'`
     (RULE_ASSUM_TAC o PURE_REWRITE_RULE o single) >>
-  `^initialized_slot last tail_state G1 tn1 (aid,p,h2',kw_tv,v)` by simp[] >>
-  `ALL_DISTINCT (MAP FST t ++ MAP FST ((aid,p,h2',kw_tv,v)::kept))` by
-    (MAP_EVERY (fn pat => qpat_assum pat mp_tac)
-       [`ALL_DISTINCT (MAP FST t ++ MAP FST kept)`,
-        `~MEM aid (MAP FST t)`,`~MEM aid (MAP FST kept)`] >>
-     POP_ASSUM_LIST (K all_tac) >> simp[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-    stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx ee tail_state /\
-    storage_well_formed_on cx ee (FST H) /\
-    ghost_inv_at (DF H) 0 NONE (ce with ce_vars := FEMPTY) cx ee G1 tn1 tail_state` by
-    (gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`slots` |-> `t`, `b0` |-> `h2'`, `tv` |-> `kw_tv`,
+    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+    (SPEC_ALL grouped_initializer_tail_inputs)) >>
+  (impl_tac >-
+    (fs[] >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+     gen_tac >> disch_tac >>
      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
-       (qspec_then `H` (drule_then strip_assume_tac)) >> asm_rewrite_tac[]) >>
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     asm_rewrite_tac[])) >>
+  disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
   qpat_assum `!slots kept sa sha es s G tn. compile_init_kwargs _ vars _ _ _ _ = _ /\ _ ==> _`
     (qspecl_then [`t`,`(aid,p,h2',kw_tv,v)::kept`,`last`,`shlast`,`ee`,
        `tail_state`,`G1`,`tn1`] mp_tac) >>
-  impl_tac >- asm_rewrite_tac[listTheory.EVERY_DEF] >>
+  (impl_tac >-
+    (simp_tac (srw_ss()) [] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >> irule gas_outcome_full_post_mono >>
   goal_assum (drule_at Any) >>
   qpat_assum `ee.scopes = es.scopes` mp_tac >>

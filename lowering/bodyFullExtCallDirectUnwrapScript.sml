@@ -1,6 +1,6 @@
 Theory bodyFullExtCallDirectUnwrap
 Ancestors
-  bodyFullExtCallDelayedSlot abiEncodeValuesSource bodyFullUnwrapSlotBand
+  bodyFullExtCallDelayedSlot abiEncodeValuesSource
   exprSafeOperand exprOperandVar fragGasOriginPtrDead freshWrites assignTuplePtrCopyLen localPtrsProps
   exprLoweringProps loweringPosts loweringStateRelDefs bodyPtrDefs
   compileEnv exprLowering context vyperValue vyperStorageFootprint
@@ -9,7 +9,8 @@ Libs pureFrameLib
 
 (* The row consumes the original saved value. A code-free unwrap retains
    its source allocation interval, while a copy owns its new interval. *)
-Theorem extcall_direct_saved_unwrap_band:
+Theorem extcall_direct_saved_unwrap_from_posts:
+  restore_copy_posts P (DF,lo,d,explicit,ctx,fn,PG) ce cx st0 ee e /\
   ty = lowered_value_type ce e /\
   ((?tag op0. saved = StackValue tag op0) \/
    (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
@@ -48,7 +49,7 @@ Theorem extcall_direct_saved_unwrap_band:
   alloca_history fn t /\ ~t.vs_halted /\ t.vs_current_bb = su.cs_current_bb /\
   t.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?z G' tn'.
-    pure_frame ce fn ee su t z /\
+    P su sb t z /\ pure_frame ce fn ee su t z /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
       stmt_state_rel H ctx fn ce cx ee z /\ storage_well_formed_on cx ee (FST H) /\
@@ -68,13 +69,11 @@ Theorem extcall_direct_saved_unwrap_band:
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn')) /\
     (~is_word_type ty ==>
       ((src = vv_operand saved /\ sb = su /\ expr_val_at ce cx ty si ss ee v src z) \/
-       expr_val_at ce cx ty su sb ee v src z)) /\
-    (unwrap_exit_phi_free fn sb ==> unwrap_band fn su sb t z)
+       expr_val_at ce cx ty su sb ee v src z))
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all extcall_slot_unwrap_band >>
-  disch_then (qspecl_then [`explicit`,`PG`]
-    (qx_choosel_then [`z`,`G'`,`tn'`] strip_assume_tac)) >>
+  drule_all extcall_slot_unwrap_from_posts >>
+  disch_then (qx_choosel_then [`z`,`G'`,`tn'`] strip_assume_tac) >>
   `!x. src = Var x ==> not_fresh_at sb x` by
     (qpat_assum `unwrap_value ce saved su = (src,sb)` mp_tac >>
      disch_tac >> drule_at (Pos hd) compiler_unwrap_value_var >>
@@ -154,10 +153,8 @@ Theorem extcall_direct_saved_unwrap_pure:
       ((src = vv_operand saved /\ sb = su /\ expr_val_at ce cx ty si ss ee v src z) \/
        expr_val_at ce cx ty su sb ee v src z))
 Proof
-  disch_tac >> mp_tac (SPEC_ALL extcall_direct_saved_unwrap_band) >>
-  impl_tac >- first_assum ACCEPT_TAC >>
-  disch_then (qx_choosel_then [`z`,`G'`,`tn'`] strip_assume_tac) >>
-  qexistsl [`z`,`G'`,`tn'`] >> asm_rewrite_tac[]
+  mp_tac (Q.INST [`P` |-> `\a b s t. T`] extcall_direct_saved_unwrap_from_posts) >>
+  simp_tac bool_ss [restore_copy_posts_true]
 QED
 
 Theorem extcall_direct_saved_unwrap =

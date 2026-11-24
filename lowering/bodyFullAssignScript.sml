@@ -4218,7 +4218,14 @@ Resume body_assign_storage_expr_cases[builtin]:
    >~ [`ECMul`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
    >~ [`Concat n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
    >~ [`Slice n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
-   >~ [`Uint2Str n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def]) >>
+   >~ [`Uint2Str n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
+   >~ [`NamedConst`] >-
+     (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+      pairarg_tac >> gvs[] >>
+      gvs[AllCaseEqs(), as_stack_val_def, as_ptr_val_def, mk_ptr_def])
+   >~ [`BoolChain _ _`] >-
+     (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+      rpt (pairarg_tac >> gvs[])) >>
    drule_at Any reason_builtin_scalar >> simp[reason_result_shape_def])
 QED
 

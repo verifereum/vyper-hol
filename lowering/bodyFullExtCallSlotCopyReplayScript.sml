@@ -3,10 +3,11 @@ Theory bodyFullExtCallSlotCopyReplay
 Ancestors
   bodyFullUnwrapSlot bodyFullHashKeccakFixed loweringPosts exprSimMemDefs
   fragGasOriginPtrExec fragGasOriginPtrDead context vyperState
-  bodyPtrDefs vyperStorageFootprint fragExec bodyFullUnwrapSlotBand
+  bodyPtrDefs vyperStorageFootprint fragExec
 Libs pureFrameLib
 
-Theorem extcall_saved_slot_copy_replay_band:
+Theorem extcall_saved_slot_copy_replay_side:
+  unwrap_slot_origin_side_producer ctx fn lo explicit PG Side /\
   lowered_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
@@ -31,7 +32,7 @@ Theorem extcall_saved_slot_copy_replay_band:
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) ==>
   ?z G' tn'.
-    pure_frame ce fn ee su t z /\
+    Side su sb t z /\ pure_frame ce fn ee su t z /\
     gas_origin_ptr_path
       (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
        lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
@@ -50,8 +51,7 @@ Theorem extcall_saved_slot_copy_replay_band:
        lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x)) /\
     wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
-    expr_val_at ce cx (expr_type e) su sb ee v src z /\
-    (unwrap_exit_phi_free fn sb ==> unwrap_band fn su sb t z)
+    expr_val_at ce cx (expr_type e) su sb ee v src z
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `post_value_type ce e = expr_type e` by metis_tac[post_value_type_lowered] >>
@@ -70,7 +70,7 @@ Proof
         (drule_at_then (Pat `ghost_kept_at`)
           (mp_tac o Q.INST [`rty` |-> `rt`, `explicit` |-> `explicit`, `PG` |-> `PG`] o SPEC_ALL))
         th))) (SIMP_RULE bool_ss []
-          (Q.INST [`vv` |-> `LocatedValue t p`] (SPEC_ALL unwrap_slot_copy_origin_ptr_no_dead_band))) >>
+          (Q.INST [`vv` |-> `LocatedValue t p`] (SPEC_ALL unwrap_slot_copy_origin_ptr_no_dead_side))) >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       gvs[contextTheory.vv_operand_def, contextTheory.vv_location_def,
@@ -146,9 +146,8 @@ Theorem extcall_saved_slot_copy_replay_pure:
     wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
     expr_val_at ce cx (expr_type e) su sb ee v src z
 Proof
-  disch_tac >> mp_tac (SPEC_ALL extcall_saved_slot_copy_replay_band) >>
-  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
-  qexistsl [`z`,`G'`,`tn'`] >> asm_rewrite_tac[]
+  MATCH_ACCEPT_TAC (SIMP_RULE bool_ss [unwrap_slot_origin_side_producer_true]
+    (Q.INST [`Side` |-> `\_ _ _ _. T`] (SPEC_ALL extcall_saved_slot_copy_replay_side)))
 QED
 
 Theorem extcall_saved_slot_copy_replay =
