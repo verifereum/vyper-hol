@@ -194,6 +194,7 @@ Theorem extcall_fetched_abort_path[local]:
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
   (!fuel. step_inst fuel ctx inst t = Abort a u) ==>
+  gas_origin_edge T explicit ctx func t [] (Abort a u) /\
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) [] (Abort a u,G,tn)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -217,13 +218,19 @@ Proof
      simp[below_frontier_CALL, below_frontier_STATICCALL, eval_operand_def,
           wordsTheory.w2n_eq_0] >>
      gvs[inst_dload_in_section_def, mk_inst_def, w2n_eq_0]) >>
+  `gas_events_step 0 ctx func.fn_name inst t = []` by
+    (Cases_on `stat` >> gvs[mk_inst_def, gas_events_step_def]) >>
+  conj_tac
+  >- (rewrite_tac[fragGasOriginTheory.gas_origin_edge_def] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`0`,`bb`,`inst`,`Abort a u`] >> simp[exit_result_def]) >>
   irule exit_inst_origin_ptr >> simp[exit_result_def] >>
   Cases_on `stat` >>
-  gvs[mk_inst_def, exit_result_def, gas_events_step_def, gas_count_step_def]
+  gvs[mk_inst_def, exit_result_def, gas_count_step_def]
 QED
 
 (* All errors before a successful take halt at the fetched instruction. *)
-Theorem extcall_fetched_select[local]:
+Theorem extcall_fetched_select_edge:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee t /\
@@ -243,8 +250,10 @@ Theorem extcall_fetched_select[local]:
       (\framed. eval_ext_call_effects cx target calldata framed source_gas ee.accounts)
       (ee with gas_obs := tail) =
       (INR (Error (RuntimeError err)),ee with gas_obs := tail)) /\
-    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) []
-      (Abort ExHalt_abort (halt_state (set_returndata [] t)),G,tn))) \/
+    gas_origin_edge T explicit ctx func t []
+      (Abort ExHalt_abort (halt_state (set_returndata [] t))) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) []
+      (Abort ExHalt_abort (halt_state (set_returndata [] t)),G,tn)))) \/
   (?framed rq oc consumed. frame_call_value cx value_opt ee = (INL framed,ee) /\
     take_call_outcome (OPTION_BIND source_gas dest_NumV) target calldata framed ee =
       (INL (rq,oc),consumed))
@@ -266,9 +275,11 @@ Proof
   `EVERY (\p. op_taint tn p = {}) inst.inst_operands` by
     (Cases_on `stat` >> fs[mk_inst_def,op_taint_def]) >>
   `(!fuel. step_inst fuel ctx inst t = Abort ExHalt_abort (halt_state (set_returndata [] t))) ==>
-    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) []
-      (Abort ExHalt_abort (halt_state (set_returndata [] t)),G,tn)` by
-    (rpt strip_tac >>
+    gas_origin_edge T explicit ctx func t []
+      (Abort ExHalt_abort (halt_state (set_returndata [] t))) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) []
+      (Abort ExHalt_abort (halt_state (set_returndata [] t)),G,tn))` by
+    (disch_tac >>
      `az <> 0w ==> ?p. off = Var p /\ ptr_covers G tn p t (w2n az)` by metis_tac[] >>
      Q.SUBGOAL_THEN `az = 0w \/ w2n ao + w2n az <= t.vs_alloca_next` ASSUME_TAC
      >- (Cases_on `az = 0w` >> fs[]) >>
@@ -319,6 +330,35 @@ Proof
         (fn th => simp[NoAsms,vyperStateTheory.bind_def,th])) >>
   qpat_assum `(!fuel. step_inst fuel _ _ _ = _) ==> _` irule >>
   simp[step_inst_non_invoke]
+QED
+
+Theorem extcall_fetched_select[local]:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr value gas buf off len cap target value_opt calldata has_default
+    default_op default_ty default_opt ee t /\
+  inst = mk_inst sp.cs_next_id (if stat then STATICCALL else CALL)
+    (if stat then [gas;addr;off;len;buf;Lit (n2w cap)]
+     else [gas;addr;value;off;len;buf;Lit (n2w cap)]) [out] /\
+  lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb t.vs_inst_idx = SOME inst /\
+  EVERY (\p. op_taint tn p = {}) [addr;value;gas;buf;off;len] /\
+  (!ao az. eval_operand off t = SOME ao /\ eval_operand len t = SOME az ==>
+    (az <> 0w ==> (?p. off = Var p /\ ptr_covers G tn p t (w2n az)) /\
+                  w2n ao + w2n az <= t.vs_alloca_next) /\
+    (!j. w2n ao <= j /\ j < w2n ao + w2n az ==> j NOTIN tn.t_mem)) /\
+  (cap <> 0 ==> ?p. buf = Var p /\ ptr_covers G tn p t cap) /\
+  allocas_from lo t ==>
+  ((?err. (!tail. bind (frame_call_value cx value_opt)
+      (\framed. eval_ext_call_effects cx target calldata framed source_gas ee.accounts)
+      (ee with gas_obs := tail) =
+      (INR (Error (RuntimeError err)),ee with gas_obs := tail)) /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) []
+      (Abort ExHalt_abort (halt_state (set_returndata [] t)),G,tn))) \/
+  (?framed rq oc consumed. frame_call_value cx value_opt ee = (INL framed,ee) /\
+    take_call_outcome (OPTION_BIND source_gas dest_NumV) target calldata framed ee =
+      (INL (rq,oc),consumed))
+Proof
+  strip_tac >> drule_all extcall_fetched_select_edge >> metis_tac[]
 QED
 
 (* The code check changes neither saved operand observations nor the
