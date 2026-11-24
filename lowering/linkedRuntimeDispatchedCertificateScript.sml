@@ -2518,7 +2518,7 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_fallth
      qpat_assum `nr /\ mut <> View ==> ~cx.txn.is_static` (fn static =>
        simp_tac (srw_ss()) [NoAsms, ptrDisciplineTheory.allocas_from_def,
          stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
-         loweringStateRelDefsTheory.call_ctx_rel_def, static])) >>
+         loweringStateRelDefsTheory.call_ctx_rel_def, static]) >>
      rpt strip_tac >> gvs[]) >>
   pop_assum (map_every assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`iv` |-> `mut = View`, `nkey` |-> `global_nonreentrant_slot`,
@@ -2550,7 +2550,7 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallthrough_
   conj_tac
   >- (qpat_assum `~final_env.ce_is_ctor` (fn runtime => simp[NoAsms, dead_lo_ok_def, runtime])) >>
   qpat_assum `ghost_inv_at_mods ((\H. cx_dead H cx) H) 0 NONE final_env cx _ G tn t`
-    (mp_tac o PURE_REWRITE_RULE [ghost_inv_at_mods_def]) >>
+    (mp_tac o PURE_REWRITE_RULE [bodyFullShadowBodyInvTheory.ghost_inv_at_mods_def]) >>
   simp[NoAsms]
 QED
 
