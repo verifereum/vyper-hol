@@ -138,14 +138,7 @@ Proof
   qexistsl_tac [`shadow_sa`,`shadow_sb`] >> simp[]
 QED
 
-Definition imm_target_place_sim_full_internal_def:
-  imm_target_place_sim_full p cenv cx env bt es <=>
-  imm_target_place_sim_judgment
-    (\bundle tops cx st0 sa sb. gas_outcome_full bundle tops cx st0)
-    p cenv cx env bt es
-End
-
-Theorem imm_target_place_sim_full_def:
+Definition imm_target_place_sim_full_def:
   imm_target_place_sim_full
     (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx env bt es <=>
     !st0 ty sa sb shadow_sa shadow_sb r s0 G0 tn0.
@@ -197,8 +190,16 @@ Theorem imm_target_place_sim_full_def:
         (\H res ee gt q.
           expr_exit res q /\ halt_exit H cx ee res q /\
           (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
+End
+
+Theorem imm_target_place_sim_full_internal_def:
+  imm_target_place_sim_full p cenv cx env bt es <=>
+  imm_target_place_sim_judgment
+    (\bundle tops cx st0 sa sb. gas_outcome_full bundle tops cx st0)
+    p cenv cx env bt es
 Proof
-  simp[imm_target_place_sim_full_internal_def, imm_target_place_sim_judgment_def]
+  PairCases_on `p` >>
+  simp[imm_target_place_sim_full_def, imm_target_place_sim_judgment_def]
 QED
 
 (* Keep the precondition and posts shared by the full and refined
@@ -271,13 +272,8 @@ Proof
   qexistsl_tac [`shadow_sa`,`shadow_sb`] >> simp[]
 QED
 
-Definition target_sim_full_internal_def:
-  target_sim_full p cenv cx env bt es <=>
-  target_sim_judgment (\F tops cx st0 sa sb. gas_outcome_full F tops cx st0)
-    p cenv cx env bt es
-End
-
-Theorem target_sim_full_def:
+(* New definition: target_sim_ptr over the joint judgment. *)
+Definition target_sim_full_def:
   target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env bt es <=>
     !st0 vt sa sb shadow_sa shadow_sb r s0 G0 tn0.
@@ -326,8 +322,14 @@ Theorem target_sim_full_def:
         (\H res ee gt q.
           expr_exit res q /\ halt_exit H cx ee res q /\
           (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
+End
+
+Theorem target_sim_full_internal_def:
+  target_sim_full p cenv cx env bt es <=>
+  target_sim_judgment (\F tops cx st0 sa sb. gas_outcome_full F tops cx st0)
+    p cenv cx env bt es
 Proof
-  simp[target_sim_full_internal_def, target_sim_judgment_def]
+  PairCases_on `p` >> simp[target_sim_full_def, target_sim_judgment_def]
 QED
 
 (* New definition: pop_target_frag_ptr over the joint judgment; a memory
