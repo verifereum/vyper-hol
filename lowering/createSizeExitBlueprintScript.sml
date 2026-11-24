@@ -255,14 +255,13 @@ Resume create_size_exit_blueprint[payload_join]:
      qp.gas_obs = gas_explicit (R j) (Obs j).vs_gas_readings ++ tail`
     suffices_by
       (disch_then (DISJ_CASES_THEN2 assume_tac
-        (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)))
+        (qx_choosel_then [`cvs`,`payload`,`paystate`,`Gp`,`tnp`]
+          (map_every assume_tac o CONJUNCTS)))
        >- (disj2_tac >> first_assum ACCEPT_TAC) >> suspend "keywords") >>
   Cases_on `raw` >- suspend "raw_payload" >> suspend "abi_payload"
 QED
 
 Resume create_size_exit_blueprint[keywords]:
-  rename [`eval_operand len (Obs j) = SOME (n2w (LENGTH payload))`,
-    `expr_sim_inv ce cx env paystate`, `LENGTH cvs = LENGTH ctors`] >>
   map_every (fn q => qpat_assum q (fn th => rule_assum_tac (REWRITE_RULE[th]) >> assume_tac th))
     [`SUC (SUC j) = j+2`,`SUC (j+2) = j+3`,`SUC (j+3) = j+4`,
      `C j = cprep`,`C (SUC j) = cm`,`C (j+2) = cn`,`C (j+3) = cb`,`C (j+4) = cf`] >>
@@ -295,7 +294,14 @@ Resume create_size_exit_blueprint[keywords]:
          disj1_tac >>
          qmatch_asmsub_rename_tac `origin_fold_value off_e = Literal lit_ty (IntL lit_i)` >>
          qexistsl_tac [`lit_ty`,`lit_i`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+  disj2_tac >> conj_tac
+  >- qpat_assum `lower_value compile_expr ce (expr_type off_e) off_e cn = (offset_op,cb)` ACCEPT_TAC >>
+  conj_tac
+  >- qpat_assum `lower_value compile_expr (gas_shadow_env T ce) _ (gas_shadow_expr off_e) scn = (offset_op,scb)` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `expr_sim_full_code (ctx,shctx,func,shadow_func) (cn,cb,scn,scb)` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `create_expr_prefix cn cb _ ctx func (Obs (j+2)) (M (j+2)) (Obs (j+3))` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `(Obs (j+3)).vs_current_bb = cb.cs_current_bb` ACCEPT_TAC >>
+  qpat_assum `(Obs (j+3)).vs_inst_idx = LENGTH cb.cs_current_insts` ACCEPT_TAC
 QED
 Resume create_size_exit_blueprint[keyword_apply]:
   qpat_assum `R j = M j ++ (M (SUC j) ++ _)` (fn schedule =>
@@ -316,7 +322,7 @@ Resume create_size_exit_blueprint[keyword_apply]:
     (!x w. not_fresh_at cprep x /\ lookup_var x (Obs j) = SOME w ==>
        lookup_var x (Obs (j+3)) = SOME w)` suffices_by
     (disch_then (DISJ_CASES_THEN2 assume_tac
-        (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)))
+        (qx_choosel_then [`kvs`,`qs`,`ops`,`ow`] (map_every assume_tac o CONJUNCTS)))
      >- (disj2_tac >> first_assum ACCEPT_TAC) >> suspend "extent") >>
   irule create_blueprint_keywords_at_cuts >> suspend "keyword_premises"
 QED
@@ -329,9 +335,6 @@ Resume create_size_exit_blueprint[keyword_premises]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Resume create_size_exit_blueprint[extent]:
-  rename [`ops.co_code_offset = SOME (w2n ow)`,
-    `(lookup_account (w2w aw) qs.accounts).code = _`,
-    `eval_create_operands _ _ _ _ _ _ (av::(cvs ++ kvs)) qs = _`] >>
   qpat_assum `create_blueprint_append_itinerary target_op offset_op code data len cf app offop sz`
     (fn itinerary => qpat_assum `n = j+4+LENGTH app` (fn length =>
       qpat_assum `!i. i < LENGTH app ==> C (j+5+i) = EL i app` (fn cuts =>
@@ -396,9 +399,17 @@ Resume create_size_exit_blueprint[extent_runs]:
     (qspecl_then [`i`,`k`] mp_tac) >> (impl_tac >- decide_tac) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `?x. ctor_segment_fetch func (Obs k) = SOME x /\ _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [ctor_segment_fetch_def,AllCaseEqs()]) >>
-  rename [`lookup_block (Obs k).vs_current_bb func.fn_blocks = SOME bb_end`,
-          `get_instruction bb_end (Obs k).vs_inst_idx = SOME x_end`] >>
+    (qx_choose_then `x_end` (map_every assume_tac o CONJUNCTS)) >>
+  Cases_on `lookup_block (Obs k).vs_current_bb func.fn_blocks`
+  >- (qpat_assum `lookup_block (Obs k).vs_current_bb func.fn_blocks = NONE` (fn block =>
+        qpat_assum `ctor_segment_fetch func (Obs k) = SOME x_end`
+          (mp_tac o REWRITE_RULE [ctor_segment_fetch_def,block,optionTheory.OPTION_BIND_def])) >>
+      simp[NoAsms]) >>
+  rename1 `lookup_block (Obs k).vs_current_bb func.fn_blocks = SOME bb_end` >>
+  `get_instruction bb_end (Obs k).vs_inst_idx = SOME x_end` by
+    (qpat_assum `lookup_block (Obs k).vs_current_bb func.fn_blocks = SOME bb_end` (fn block =>
+       qpat_assum `ctor_segment_fetch func (Obs k) = SOME x_end`
+         (ACCEPT_TAC o BETA_RULE o REWRITE_RULE [ctor_segment_fetch_def,block,optionTheory.OPTION_BIND_def]))) >>
   mp_tac (Q.INST [`i` |-> `i`, `k` |-> `k`, `C` |-> `C`, `Obs` |-> `Obs`,
     `a` |-> `a0`, `b` |-> `b0`, `fn` |-> `func`, `ctx` |-> `ctx`,
     `explicit` |-> `gas_explicit_sites ctx shctx`,
@@ -444,14 +455,13 @@ Resume create_size_exit_blueprint[extent_apply]:
 QED
 Resume create_size_exit_blueprint[extent_len]:
   `(Obs (j+3)).vs_labels = (Obs j).vs_labels` by
-    (map_every (fn (prefix,live,q) => q by
-         (qpat_assum prefix mp_tac >> qpat_assum live mp_tac >>
-          rpt (pop_assum kall_tac) >> metis_tac[create_prefix_labels]))
-       [(`create_expr_prefix _ _ _ _ _ (Obs j) _ (Obs (SUC j))`, `~(Obs j).vs_halted`,
+    (map_every (fn (prefix,q) => q by
+         qpat_assum prefix (ACCEPT_TAC o MATCH_MP create_prefix_labels))
+       [(`create_expr_prefix _ _ _ _ _ (Obs j) _ (Obs (SUC j))`,
          `(Obs (SUC j)).vs_labels = (Obs j).vs_labels`),
-        (`create_expr_prefix _ _ _ _ _ (Obs (SUC j)) _ (Obs (j+2))`, `~(Obs (SUC j)).vs_halted`,
+        (`create_expr_prefix _ _ _ _ _ (Obs (SUC j)) _ (Obs (j+2))`,
          `(Obs (j+2)).vs_labels = (Obs (SUC j)).vs_labels`),
-        (`create_expr_prefix _ _ _ _ _ (Obs (j+2)) _ (Obs (j+3))`, `~(Obs (j+2)).vs_halted`,
+        (`create_expr_prefix _ _ _ _ _ (Obs (j+2)) _ (Obs (j+3))`,
          `(Obs (j+3)).vs_labels = (Obs (j+2)).vs_labels`)] >>
      asm_rewrite_tac[]) >>
   `eval_operand len (Obs (j+3)) = SOME (n2w (LENGTH payload))` by
@@ -606,11 +616,12 @@ Resume create_size_exit_blueprint[raw_payload]:
     [`C 1 = ca`,`C 2 = c0`,`C 3 = c1`,`C 4 = c2`,`C 5 = c3`,`C 6 = cprep`,`C j = cprep`,`Obs 6 = Obs j`] >>
   pure_rewrite_tac[COND_CLAUSES] >>
   match_mp_tac (Q.INST [`H` |-> `H`, `raw_e` |-> `raw_e`] (SPEC_ALL blueprint_raw_payload_result)) >>
-  irule create_blueprint_raw_keyword_entry >> suspend "raw_premises"
-QED
-Resume create_size_exit_blueprint[raw_premises]:
-  rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE
-    (goal_assum (drule_at Any) >> simp[]))) >>
+  qpat_assum `expr_body_pre ce cx env (Call _ (CreateTarget (CreateFromBlueprint T) _ _ _) args _) _`
+    (mp_then (Pos (el 3)) mp_tac create_blueprint_raw_keyword_entry) >>
+  disch_then (fn entry =>
+    qpat_assum `args = target::amount::((if hs then [salt_e] else []) ++ off_e::ctors)`
+      (mp_then (Pat `args = _::_::_`) irule entry)) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl_tac [`G`,`Obs 5`,`ca`,`c3`,`c0`,`c1`,`c2`,`data`,`later`,
     `Obs 2`,`M 5`,`M 1`,`M 4`,`M 2`,`M 3`,`p`,`Obs 3`,`raw_op`,`Obs 1`,
     `saved`,`sca`,`h0`,`h1`,`h2`,`shctx`,`shadow_func`,`ssaved`,`tn`,`Obs 4`,`v`] >>
