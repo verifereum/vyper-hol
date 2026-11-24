@@ -51,6 +51,7 @@ Ancestors
   venomExecProps[qualified] linkedGroupedKeywordInitialize[qualified]
   entryRejectAllocationIds exprSafeOperand allocLimitsProps whitelistLinkedBodyCalls
   whitelistLinkedBodyData whitelistLinkedBodyTypes whitelistLinkedBodyEnv placeTypingProps
+  whitelistCheckerFnSigs[qualified] whitelistLinkedBodyExprs[qualified] supportedExprs[qualified] supportedStmts[qualified]
   moduleVariableKeyProps linkedStructMemorySize structFieldsProps linkedGetterConstantSubstitution
   linkedConstantReplacementTyping linkedConstantReplacementValue vyperTypeSystem vyperAST
   linkedEntryBodyTables linkedFlagCount linkedStructFields linkedStorageMetadataProps
@@ -2131,20 +2132,32 @@ val linked_registered_shadow_tac =
           (mp_tac o REWRITE_RULE [stmtSimPropsTheory.compile_stmts_env]) >>
         qpat_assum `rt = _` SUBST1_TAC >>
         Cases_on `ret = NoneT`
-        >- (qpat_assum `ret = NoneT` SUBST_ALL_TAC >>
-            drule_then assume_tac externalCallSelectedTheory.type_stmts_none_valued_return >>
+        >- (`~stmts_valued_return body_code` by
+              (qpat_assum `ret = NoneT` (fn none =>
+                 qpat_assum `type_stmts entry_types ret body_code = SOME after_body`
+                   (mp_tac o PURE_REWRITE_RULE [none])) >>
+               disch_then (ACCEPT_TAC o MATCH_MP externalCallSelectedTheory.type_stmts_none_valued_return)) >>
             qspecl_then [`MAP gas_shadow_stmt body_code`,`tops`,`bindings`,
               `gas_shadow_env T registered_env`,`NoLoop`,`NoneT`,`BaseT BoolT`] mp_tac
                stmtsEnvRetTyTheory.stmts_env_ret_ty_no_valued_return >>
-            impl_tac >- simp[gasShadowStmtEnvTheory.gas_shadow_supported_stmts,
-               gasShadowStmtEnvTheory.gas_shadow_valued_return] >>
-            disch_then (fn state => simp[NoAsms, state])) >>
+            impl_tac
+            >- (conj_tac
+                >- (qpat_assum `supported_stmts tops bindings body_code`
+                      (ACCEPT_TAC o MATCH_MP gasShadowStmtEnvTheory.gas_shadow_supported_stmts)) >>
+                PURE_REWRITE_TAC [gasShadowStmtEnvTheory.gas_shadow_valued_return] >>
+                first_assum ACCEPT_TAC) >>
+            qpat_assum `ret = NoneT` (fn none => disch_then (fn state =>
+              simp[NoAsms, state, none]))) >>
         qpat_assum `ret <> NoneT` (fn nonempty => simp[NoAsms, nonempty])) >>
      qspecl_then [`body_code`,`registered_env`,`NoLoop`,`ret`] mp_tac
        (Q.INST [`sd` |-> `T`] gasShadowStmtEnvTheory.gas_shadow_stmts_env_env) >>
      PURE_REWRITE_TAC [gas_shadow_compiles_env_def] >>
      disch_then (qspecl_then [`locked`,`shadow_locked`] mp_tac) >>
-     asm_simp_tac std_ss [FST, SND] >>
+     qpat_assum `gas_shadow_state locked shadow_locked` (fn pair =>
+       qpat_assum `stmts_env registered_env NoLoop ret body_code locked = (body_env,body_end)`
+         (fn raw => qpat_assum `SND (stmts_env (gas_shadow_env T registered_env) NoLoop ret
+               (MAP gas_shadow_stmt body_code) shadow_locked) = shadow_body_end`
+           (fn shadow => simp_tac bool_ss [pair, raw, shadow, FST, SND]))) >>
      disch_then (CONJUNCTS_THEN2 (assume_tac o SYM) assume_tac) >>
      simp_tac bool_ss [pairTheory.PAIR_FST_SND_EQ,FST,SND] >>
      rpt conj_tac >> first_assum ACCEPT_TAC);
@@ -3531,6 +3544,77 @@ val linked_getter_import_path_finish_tac =
        imported_value_type_refs_ok_def] >>
   rename1 `imported_type_refs_ok (ArrayT_type arr)` >> Cases_on `arr` >>
   gvs[is_ArrayT_def, ArrayT_type_def, imported_type_refs_ok_def];
+(* A getter can be checked with no function signatures: its expression has
+   no internal calls before or after the checked constant substitution. *)
+val linked_positional_getter_restrict_tac =
+  `int_calls_stmts fbody = []` by
+    drule_all_then ACCEPT_TAC selected_public_getter_body_int_calls_empty >>
+  `int_calls_stmts body_code = []` by
+    (qpat_assum `Abbrev (body_code = _)`
+       (fn body => PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] body]) >>
+     drule_then (strip_assume_tac o SPEC_ALL) checked_subst_consts_int_calls_mods >>
+     simp[]) >>
+  Q.SUBGOAL_THEN `type_stmts (entry_types with fn_sigs := FEMPTY) ret body_code =
+     SOME (after_body with fn_sigs := FEMPTY)` assume_tac
+  >- (mp_tac (Q.INST [`ks` |-> `{}`] (SPEC_ALL whitelistCheckerFnSigsTheory.type_stmt_fn_sigs_restrict)) >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!env ret ss. set (int_calls_stmts ss) SUBSET {} ==> _`
+        (qspecl_then [`entry_types`,`ret`,`body_code`] mp_tac) >>
+      (impl_tac >-
+        (qpat_assum `int_calls_stmts body_code = []` (fn calls => simp[NoAsms, calls]))) >>
+      qpat_assum `type_stmts entry_types ret body_code = SOME after_body`
+        (fn typed => simp[NoAsms, DRESTRICT_IS_FEMPTY, typed]));
+
+val linked_positional_getter_support_env_tac =
+  (Q.SUBGOAL_THEN `linked_body_data_env tops (src:num option)
+       (entry_types with fn_sigs := FEMPTY)` assume_tac
+   >- (simp[NoAsms, linked_body_data_env_def] >>
+       qpat_assum `linked_body_data_env tops src entry_types`
+         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [linked_body_data_env_def]))) >>
+  `linked_body_env tops (src:num option) (type_env_all_modules mods)
+      (entry_types with fn_sigs := FEMPTY)` by
+    (simp[NoAsms, linked_body_env_def, linked_body_calls_env_def] >>
+     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+       qpat_assum `entry_types.type_defs = get_tenv cx` SUBST1_TAC >> first_assum ACCEPT_TAC,
+       qpat_assum `entry_types.bare_global_assignable = FEMPTY` (fn empty => simp[NoAsms, empty])]) >>
+  `!name. ~MEM (StructDecl name []) tops` by
+    (qx_gen_tac `empty_struct` >> strip_tac >>
+     drule_all check_contract_toplevel_decl_MEM_checked >>
+     simp[NoAsms, check_toplevel_decl_def]);
+
+val linked_positional_getter_support_tac =
+  Q.SUBGOAL_THEN `((src:num option) = NONE \/ imported_stmts_refs_ok body_code) ==>
+     supported_stmts tops
+       (args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code)
+       body_code` assume_tac
+  >- (disch_tac >>
+     linked_positional_getter_restrict_tac >>
+     linked_positional_getter_support_env_tac >>
+     (Q.SUBGOAL_THEN `?e. body_code = [Return (SOME e)]`
+        (qx_choose_then `getter_code` assume_tac)
+      >- qpat_assum `body_code = [Return (SOME _)]` (irule_at Any)) >>
+     `well_typed_expr (entry_types with fn_sigs := FEMPTY) getter_code` by
+       (qpat_assum `body_code = [Return (SOME getter_code)]` (fn body =>
+          qpat_assum `type_stmts (entry_types with fn_sigs := FEMPTY) ret body_code = SOME _`
+            (mp_tac o PURE_REWRITE_RULE [body])) >>
+        simp[NoAsms, type_stmt_def, AllCaseEqs()]) >>
+     (Q.SUBGOAL_THEN `(src:num option) = NONE \/ imported_expr_refs_ok getter_code` assume_tac
+      >- (qpat_assum `body_code = [Return (SOME getter_code)]` (fn body =>
+            qpat_assum `src = NONE \/ imported_stmts_refs_ok body_code`
+              (mp_tac o PURE_REWRITE_RULE [body])) >>
+          simp[NoAsms, imported_stmt_refs_ok_def, imported_expr_refs_ok_def])) >>
+     mp_tac (Q.INST [`tenv` |-> `type_env_all_modules mods`]
+               (Q.ISPEC `(src:num option)` (Q.GEN `src`
+                 whitelistLinkedBodyExprsTheory.linked_well_typed_expr_supported))) >>
+     (impl_tac >- (disch_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     qpat_assum `!env e. well_typed_expr env e ==> _`
+       (qspecl_then [`entry_types with fn_sigs := FEMPTY`,`getter_code`] mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+     strip_tac >>
+     qpat_assum `body_code = [Return (SOME getter_code)]` SUBST1_TAC >>
+     simp[supportedStmtsTheory.supported_stmt_def, supportedExprsTheory.supported_expr_def]);
 
 (* Descending a synthesized getter adds only Subscripts and local Names. *)
 val linked_getter_guard_path_tac =
@@ -3720,6 +3804,7 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_subst
      simp[] >> rpt strip_tac >>
      qpat_assum `!E k r. EVERY _ E /\ _ ==> _` irule >>
      map_every qexists_tac [`consts_env_mods mods`,`k`] >> simp[]) >>
+  linked_positional_getter_support_tac >>
   cheat
 QED
 
@@ -3785,6 +3870,7 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsub
      POP_ASSUM_LIST (K ALL_TAC) >>
      rpt strip_tac >> Cases_on `src` >>
      fs[imported_stmt_refs_ok_def, imported_expr_refs_ok_def]) >>
+  linked_positional_getter_support_tac >>
   cheat
 QED
 
@@ -4891,6 +4977,22 @@ val linked_empty_entry_static_tac =
        (strip_assume_tac o PURE_REWRITE_RULE [contract_namespaces_ok_def]) >>
      first_assum ACCEPT_TAC);
 
+(* Normalize an empty registration cut for the common execution stages.
+   The caller supplies its own start, explicit sites, path, and resources. *)
+val linked_empty_registered_cut_tac =
+  rename1 `return_buf_frame NONE registered_env registered s0` >>
+  rename1 `gas_shadow_state registered shadow_registered` >>
+  rename1 `compile_guarded_body (gas_shadow_env T registered_env) nr key tr view
+    (MAP gas_shadow_stmt _) _ shadow_registered = ((),shadow_last)` >>
+  rename1 `fn_has_code shadow_registered shadow_last shadow_fn` >>
+  rename1 `compile_guarded_body registered_env nr key tr view body_code rt registered = ((),last)` >>
+  rename1 `compile_stmts registered_env NoLoop _ body_code locked = ((),body_end)` >>
+  rename1 `compile_stmts (gas_shadow_env T registered_env) NoLoop _
+    (MAP gas_shadow_stmt body_code) shadow_locked = ((),shadow_body_end)` >>
+  rename1 `type_stmts entry_types ret body_code = SOME after_body` >>
+  rename1 `!D. gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
+      (start,FEMPTY,entry_taint) [] (OK s0,G2,tn2)`;
+
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_body_guards]:
   linked_empty_body_types_tac >>
   linked_empty_body_support_tac >>
@@ -4911,7 +5013,86 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_bod
   linked_empty_return_plan_tac >>
   linked_empty_return_none_tac >>
   linked_empty_entry_static_tac >>
-  cheat
+  linked_empty_registered_cut_tac >>
+  linked_registered_stmts_env_tac >>
+  linked_registered_path_tac >>
+  linked_registered_lock_cases_tac
+    (suspend "linked_linear_fallback_lock_success")
+    (suspend "linked_linear_fallback_lock_abort")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_lock_abort]:
+  linked_registered_lock_abort_tac >>
+  linked_registered_lock_abort_source_tac >>
+  linked_registered_lock_abort_domain_tac >>
+  linked_registered_lock_abort_finish_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_lock_success]:
+  linked_registered_lock_success_tac >>
+  linked_registered_locked_horizon_tac >>
+  linked_registered_replay_tac >>
+  linked_registered_return_frame_tac >>
+  linked_registered_structs_tac >>
+  linked_registered_abi_targets_tac >>
+  linked_registered_fragment_tac >>
+  linked_registered_shadow_tac >>
+  linked_registered_admissible_tac >>
+  linked_registered_reachability_tac >>
+  linked_registered_immutable_frame_tac >>
+  linked_registered_storage_prefix_tac >>
+  linked_registered_run_tac >>
+  linked_registered_trace_inputs_tac >>
+  linked_registered_compose_tac
+    {horizon_tac = suspend "linked_linear_fallback_trace_horizon",
+     tails_tac = suspend "linked_linear_fallback_trace_tails",
+     exempt_tac = suspend "linked_linear_fallback_trace_exempt",
+     fallthrough_tac = suspend "linked_linear_fallback_fallthrough",
+     exit_tac = suspend "linked_linear_fallback_exit",
+     readings_tac = suspend "linked_linear_fallback_trace_readings",
+     finish_tac = suspend "linked_linear_fallback_finish"}
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_trace_horizon]:
+  linked_registered_trace_horizon_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_trace_tails]:
+  linked_registered_trace_tails_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_trace_exempt]:
+  linked_registered_trace_exempt_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_fallthrough]:
+  linked_registered_fallthrough_tac
+    (suspend "linked_linear_fallback_fallthrough_ghost")
+    (suspend "linked_linear_fallback_fallthrough_result")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_fallthrough_ghost]:
+  linked_registered_fallthrough_ghost_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_fallthrough_result]:
+  linked_registered_fallthrough_result_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_exit]:
+  linked_registered_trace_exit_tac (suspend "linked_linear_fallback_abort_or_halt")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_abort_or_halt]:
+  linked_registered_abort_or_halt_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_trace_readings]:
+  linked_registered_trace_readings_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_finish]:
+  linked_registered_finish_tac
 QED
 
 
