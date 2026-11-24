@@ -3376,7 +3376,159 @@ val linked_positional_getter_env_tac =
      disch_then (qspec_then `(param,ty)` mp_tac) >>
      simp[NoAsms] >> disch_then irule >> first_assum ACCEPT_TAC);
 
+(* Descending a synthesized getter adds only Subscripts and local Names. *)
+val linked_getter_guard_path_tac =
+  `!e kt vt n.
+     ~supportedExprTraverse$supported_expr_exists
+        (unallocated_bare_global_root registered_env entry_types) e ==>
+     ~supportedExprTraverse$supported_expr_exists
+        (unallocated_bare_global_root registered_env entry_types)
+        (SND (SND (build_getter e kt vt n)))` by
+    (POP_ASSUM_LIST (K ALL_TAC) >>
+     recInduct build_getter_ind >> rpt conj_tac >> rpt gen_tac >>
+     disch_tac >> disch_tac >> simp[Once build_getter_def] >>
+     Cases_on `is_ArrayT vt` >>
+     gvs[supportedExprTraverseTheory.supported_expr_exists_def,
+         unallocated_bare_global_root_def] >>
+     pairarg_tac >> gvs[] >> metis_tac[pairTheory.SND]);
+
+val linked_getter_guard_replacement_tac =
+  `(!e. supportedExprTraverse$supported_expr_exists
+          (unallocated_bare_global_root registered_env entry_types) e ==>
+        ?key. MEM (ReadAcc (StateRef key)) (accesses_expr e)) /\
+   (!t. supportedExprTraverse$supported_target_exists
+          (unallocated_bare_global_root registered_env entry_types) t ==>
+        ?key. MEM (ReadAcc (StateRef key)) (accesses_target t)) /\
+   (!es. supportedExprTraverse$supported_exprs_exists
+          (unallocated_bare_global_root registered_env entry_types) es ==>
+         ?key. MEM (ReadAcc (StateRef key)) (accesses_exprs es)) /\
+   (!opt. supportedExprTraverse$supported_opt_exists
+          (unallocated_bare_global_root registered_env entry_types) opt ==>
+          ?key. MEM (ReadAcc (StateRef key)) (accesses_opt opt)) /\
+   (!fields. supportedExprTraverse$supported_fields_exists
+          (unallocated_bare_global_root registered_env entry_types) fields ==>
+          ?key. MEM (ReadAcc (StateRef key)) (accesses_named_exprs fields))` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> ho_match_mp_tac accesses_expr_ind >>
+     simp[supportedExprTraverseTheory.supported_expr_exists_def,
+          unallocated_bare_global_root_def, accesses_expr_def, MEM_APPEND] >>
+     rpt strip_tac >> metis_tac[]);
+
+val linked_getter_guard_replacement_base_tac =
+  linked_getter_guard_replacement_tac >>
+  `~supportedExprTraverse$supported_expr_exists
+      (unallocated_bare_global_root registered_env entry_types) replacement` by
+    (strip_tac >>
+     qpat_assum `!e. supportedExprTraverse$supported_expr_exists _ e ==> _`
+       (qspec_then `replacement` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (qx_choose_then `read_key` assume_tac) >>
+     qpat_assum `!a. MEM a (accesses_expr replacement) ==> a = RiskyAcc`
+       (qspec_then `ReadAcc (StateRef read_key)` mp_tac) >>
+     simp[var_access_distinct]) >>
+  `!ty. ~supportedExprTraverse$supported_expr_exists
+      (unallocated_bare_global_root registered_env entry_types)
+      (subst_consts_expr_mods (consts_env_mods mods)
+        (TopLevelName ty (src,tx.function_name)))` by
+    (gen_tac >>
+     qpat_assum `ALOOKUP (consts_env_mods mods) (src,tx.function_name) = SOME replacement`
+       (fn found => simp[NoAsms, subst_consts_expr_mods_def, found]) >>
+     first_assum ACCEPT_TAC);
+
+(* The selected public declaration is a closure root in its actual module. *)
+val linked_getter_guard_live_tac =
+  `MEM (src,tx.function_name) (linked_main_roots mods ++ linked_export_roots exps)` by
+    (Cases_on `src` >> simp_tac bool_ss [MEM_APPEND]
+     >- (disj1_tac >>
+         qpat_assum `ALOOKUP mods NONE = SOME tops` (fn main =>
+           simp[NoAsms, linked_main_roots_def, main, contract_keys_def, MEM_APPEND]) >>
+         disj1_tac >> simp[NoAsms, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+         qexists_tac `top` >> conj_tac >- first_assum ACCEPT_TAC >>
+         qpat_assum `is_public_getter_decl _ top` mp_tac >>
+         Cases_on `top` >> simp[NoAsms, is_public_getter_decl_def] >>
+         Cases_on `v` >> simp[NoAsms, is_public_getter_decl_def,
+           external_name_keys_toplevel_def]) >>
+     disj2_tac >> simp[NoAsms, linked_export_roots_def, MEM_MAP, EXISTS_PROD] >>
+     qpat_assum `SOME _ = ALOOKUP exps tx.function_name`
+       (mp_tac o MATCH_MP ALOOKUP_MEM o SYM) >> disch_then ACCEPT_TAC) >>
+  `MEM (src,tx.function_name) (linked_live_functions mods exps)` by
+    (PURE_REWRITE_TAC [linked_live_functions_def, linked_live_functions_from_def, LET_THM] >>
+     BETA_TAC >> irule (cj 1 call_closure_from_roots) >> first_assum ACCEPT_TAC);
+
+val linked_getter_guard_owned_tac =
+  linked_getter_guard_live_tac >>
+  `check_linked_state_ownership am.layouts tx.target mods (linked_live_functions mods exps)` by
+    (PURE_REWRITE_TAC [GSYM linked_state_ownership_ok_def] >>
+     drule_all_then ACCEPT_TAC check_contract_linked_state_ownership_ok) >>
+  `MEM (src,tops) mods` by drule_then ACCEPT_TAC ALOOKUP_MEM >>
+  Q.SUBGOAL_THEN
+    `mods = [(NONE,tops)] \/ linked_state_ref_allocated am.layouts tx.target mods (src,tx.function_name)`
+    assume_tac
+  >- (qpat_assum `check_linked_state_ownership _ _ _ _` mp_tac >>
+     PURE_REWRITE_TAC [check_linked_state_ownership_def] >>
+     disch_then (DISJ_CASES_THEN2 mp_tac assume_tac)
+     >- (qpat_assum `ALOOKUP mods src = SOME tops` mp_tac >>
+         Cases_on `mods` >> simp[NoAsms] >> PairCases_on `h` >>
+         Cases_on `h0` >> Cases_on `t` >> simp[NoAsms, AllCaseEqs()]) >>
+     qpat_assum `EVERY _ mods` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then (qspec_then `(src,tops)` mp_tac) >>
+     qpat_assum `MEM (src,tops) mods` (fn member => simp[NoAsms, member, Once EVERY_MEM]) >>
+     disch_then (qspec_then `top` mp_tac) >>
+     qpat_assum `MEM top tops` (fn member => simp[NoAsms, member]) >>
+     qpat_assum `is_public_getter_decl tx.function_name top` mp_tac >>
+     qpat_assum `MEM (src,tx.function_name) (linked_live_functions mods exps)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `top` >> simp[is_public_getter_decl_def] >>
+     Cases_on `v` >> simp[is_public_getter_decl_def] >> rpt strip_tac >> gvs[]) >>
+  `immutable_section_layout_mods mods registered_env` by
+    drule_then ACCEPT_TAC contract_inv_immutable_section_layout;
+
+(* A matching constant declaration would have contributed its qualified key. *)
+val linked_getter_guard_const_keys_tac =
+  `!src tops E key.
+     MEM key (MAP FST E) \/
+     (?vis e id ty slot. key = (src,id) /\ MEM (VariableDecl vis (Constant e) id ty slot) tops) ==>
+     MEM key (MAP FST (module_consts_env_mods src tops E))` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> ho_match_mp_tac module_consts_env_mods_ind >>
+     simp[module_consts_env_mods_def, MEM_APPEND] >> metis_tac[]) >>
+  `!ms E key.
+     MEM key (MAP FST E) \/
+     (?s ts vis e id ty slot. key = (s,id) /\ MEM (s,ts) ms /\
+       MEM (VariableDecl vis (Constant e) id ty slot) ts) ==>
+     MEM key (MAP FST (consts_env_mods_acc ms E))` by
+    (qpat_assum `!s ts E key. _ ==> MEM key (MAP FST (module_consts_env_mods s ts E))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
+     Induct >> simp[consts_env_mods_acc_def, FORALL_PROD] >>
+     rpt strip_tac >> first_x_assum irule >> metis_tac[]);
+
+val linked_getter_allocation_guards_tac =
+  linked_getter_guard_path_tac >>
+  `~supported_stmts_expr_exists (unallocated_bare_global_root registered_env entry_types) body_code /\
+   (!key. MEM (WriteAcc (StateRef key)) (accesses_stmts body_code) /\
+          IS_SOME (FLOOKUP entry_types.bare_global_assignable key) ==>
+          IS_SOME (FLOOKUP registered_env.ce_module_vars key))` by
+    (reverse conj_tac
+     >- (qpat_assum `entry_types.bare_global_assignable = FEMPTY`
+           (fn empty => simp[NoAsms, empty])) >>
+     qpat_assum `body_code = [Return (SOME _)]` SUBST1_TAC >>
+     simp[NoAsms, supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+          supportedExprTraverseTheory.supported_expr_exists_def] >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`external_getter_tuple src top = SOME _`, `is_public_getter_decl tx.function_name top`,
+        `fbody = [Return (SOME getter_value)]`] >>
+     qpat_assum `!ty. ~supportedExprTraverse$supported_expr_exists _ (subst_consts_expr_mods _ _)`
+       mp_tac >>
+     qpat_assum `!e kt vt n. _ ==> ~supportedExprTraverse$supported_expr_exists _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `top` >> simp[external_getter_tuple_def, is_public_getter_decl_def] >>
+     Cases_on `v` >> simp[external_getter_tuple_def, is_public_getter_decl_def,
+       getter_def, AllCaseEqs()] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     rpt strip_tac >> gvs[] >>
+     metis_tac[build_getter_subst_mods, pairTheory.SND]);
+
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_substituted_typed]:
+  linked_getter_guard_replacement_base_tac >>
+  linked_getter_allocation_guards_tac >>
   linked_positional_getter_type_tac >>
   linked_positional_getter_lock_tac >>
   linked_positional_getter_return_tac >>
@@ -3385,6 +3537,52 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_subst
 QED
 
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsubstituted_typed]:
+  linked_getter_guard_owned_tac >>
+  linked_getter_guard_const_keys_tac >>
+  Q.SUBGOAL_THEN `!ty. ~supportedExprTraverse$supported_expr_exists
+      (unallocated_bare_global_root registered_env entry_types)
+      (subst_consts_expr_mods (consts_env_mods mods)
+        (TopLevelName ty (src,tx.function_name)))` assume_tac
+  >- (gen_tac >>
+      qpat_assum `ALOOKUP (consts_env_mods mods) (src,tx.function_name) = NONE`
+        (fn absent => simp[NoAsms, subst_consts_expr_mods_def, absent,
+          supportedExprTraverseTheory.supported_expr_exists_def, unallocated_bare_global_root_def]) >>
+      strip_tac >>
+      Cases_on `FLOOKUP entry_types.bare_globals (src,tx.function_name)` >> simp[NoAsms] >>
+      rename1 `FLOOKUP entry_types.bare_globals (src,tx.function_name) = SOME bare_type` >>
+      `FLOOKUP (build_contract_type_artifact F mods).cta_bare_globals (src,tx.function_name) = SOME bare_type` by
+        (qpat_assum `entry_types.bare_globals = art.cta_bare_globals` (fn static =>
+           qpat_assum `FLOOKUP entry_types.bare_globals (src,tx.function_name) = SOME bare_type`
+             (mp_tac o PURE_REWRITE_RULE [static])) >>
+         qpat_assum `check_contract F am.layouts tx.target mods = SOME art`
+           (fn checked => simp[NoAsms, MATCH_MP check_contract_nonsig_maps checked])) >>
+      drule_all_then (DISJ_CASES_THEN2
+        (qx_choosel_then [`origin_tops`,`imm_vis`,`imm_id`,`imm_slot`]
+          (map_every assume_tac o CONJUNCTS))
+        (qx_choosel_then [`origin_tops`,`const_vis`,`const_init`,`const_id`,`const_slot`]
+          (map_every assume_tac o CONJUNCTS))) build_contract_type_artifact_bare_globals_sound
+      >- (`origin_tops = tops` by
+            (qpat_assum `ALOOKUP mods src = SOME tops` (fn selected =>
+               qpat_assum `ALOOKUP mods src = SOME origin_tops` (mp_tac o PURE_REWRITE_RULE [selected])) >>
+             simp[NoAsms]) >>
+          qpat_x_assum `origin_tops = tops` SUBST_ALL_TAC >>
+          qpat_x_assum `tx.function_name = imm_id` (SUBST_ALL_TAC o SYM) >>
+          `?off. FLOOKUP registered_env.ce_module_vars (src,tx.function_name) = SOME (ImmutableLoc off)` by
+            drule_all_then ACCEPT_TAC linkedOwnedImmutableLocationTheory.linked_owned_immutable_location >>
+          qpat_assum `FLOOKUP registered_env.ce_module_vars (src,tx.function_name) = NONE`
+            (fn absent =>
+              qpat_assum `FLOOKUP registered_env.ce_module_vars (src,tx.function_name) = SOME _`
+                (CONTR_TAC o REWRITE_RULE [absent, optionTheory.NOT_NONE_SOME]))) >>
+      `MEM (src,tx.function_name) (MAP FST (consts_env_mods mods))` by
+        (qpat_x_assum `tx.function_name = const_id` (SUBST_ALL_TAC o SYM) >>
+         simp[NoAsms, consts_env_mods_def, consts_env_modules_order_eq] >>
+         qpat_assum `!ms E key. _ ==> MEM key (MAP FST (consts_env_mods_acc ms E))` irule >>
+         simp[NoAsms, MEM_constants_order] >>
+         qexistsl_tac [`origin_tops`,`const_vis`,`const_init`,`bare_type`,`const_slot`] >>
+         conj_tac >- drule_then ACCEPT_TAC ALOOKUP_MEM >> first_assum ACCEPT_TAC) >>
+      qpat_assum `ALOOKUP (consts_env_mods mods) (src,tx.function_name) = NONE`
+        (mp_tac o REWRITE_RULE [ALOOKUP_NONE]) >> simp[]) >>
+  linked_getter_allocation_guards_tac >>
   linked_positional_getter_type_tac >>
   linked_positional_getter_lock_tac >>
   linked_positional_getter_return_tac >>
