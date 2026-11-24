@@ -10,7 +10,7 @@ Ancestors
   accountsRelProps bodyPtrDefs loweringPosts fragGasPath vyperAST vyperStorageFootprint
   vyperTyping vyperValue integer_word valueEncoding loweringStateRelDefs ptrDiscipline
   bodySim loweringShapeDefs createExprSizeExitDefs createSizePrefixReplay
-  createSizeCopyReplay createSizeOperandPre
+  createSizeCopyReplay createSizeOperandPre entryCreateBlueprintReadCut
 
 Theorem blueprint_read_at_cut:
   body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
@@ -52,86 +52,10 @@ Theorem blueprint_read_at_cut:
       ghost_inv_at (DF h) lo d ce cx q G' tn' t) /\ ~t.vs_halted
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,fnc,PG)
-     tops cx st0 ca cb (bind (eval_expr cx e) (read_result cx)) (p,u,G,tn)
-     (expr_sim_full_post (DF,lo,d,ctx,fnc) ce cx e (p,ca,cb,u,op,G,tn))` by
-    (irule create_size_replay_value_cut >> simp[] >>
-     conj_tac >- (qexists_tac `env` >> simp[]) >>
-     qexistsl [`shfnc`, `sca`, `scb`, `expr_type e`] >>
-     fs[expr_sim_full_pre_def, expr_sim_full_code_def] >>
-     conj_tac >- (drule expr_body_pre_gas_admissible >> simp[]) >>
-     rpt gen_tac >> disch_tac >>
-     qpat_assum `!f i z. frag_reachable _ _ _ f i z ==> _` drule >> simp[]) >>
-  `gas_path ctx fnc u (LENGTH chunk) (OK t)` by
-    (qpat_assum `create_expr_prefix ca cb _ _ _ _ _ _`
-       (mp_then Any mp_tac create_prefix_gas_path) >> simp[]) >>
-  `p.gas_obs = gas_explicit chunk u.vs_gas_readings ++
-               (gas_explicit rest t.vs_gas_readings ++ tail)` by
-    (drule gas_explicit_append_path >> simp[APPEND_ASSOC]) >>
-  Cases_on `bind (eval_expr cx e) (read_result cx) p` >>
-  qmatch_asmsub_rename_tac `bind (eval_expr cx e) (read_result cx) p = (rr,mid)` >>
-  `valid_horizon cx st0 H mid.storage_trace` by
-    (Cases_on `rr` >> fs[bind_def] >> metis_tac[vyperStorageFootprintTheory.valid_horizon_frame]) >>
-  `p with gas_obs := gas_explicit chunk u.vs_gas_readings ++
-                       (gas_explicit rest t.vs_gas_readings ++ tail) = p`
-    by (qpat_assum `p.gas_obs = gas_explicit chunk _ ++ _`
-          (once_rewrite_tac o single o SYM) >> simp[]) >>
-  qhdtm_x_assum `gas_completed_operand` mp_tac >>
-  simp[gas_completed_operand_def] >>
-  disch_then (qspecl_then [`H`,`chunk`,`t`,
-    `gas_explicit rest t.vs_gas_readings ++ tail`,`rr`,`mid`] mp_tac) >>
-  simp[] >> strip_tac
-  >- (disj2_tac >>
-      `?v. rr = INL v` by
-        (qpat_assum `!h. valid_horizon _ _ h mid.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-           (qspec_then `H` mp_tac) >>
-         (impl_tac >- FIRST_ASSUM ACCEPT_TAC) >>
-         rewrite_tac[expr_sim_full_post_def] >> simp[] >> strip_tac >> metis_tac[]) >>
-      gvs[] >> rename1 `_ = (INL v,mid)` >>
-      `k v mid = (res,out)` by fs[bind_def] >>
-      drule_all (REWRITE_RULE[ETA_AX] bodySimStmtFactsTheory.expr_body_pre_eval) >>
-      simp[] >> strip_tac >>
-      qexistsl [`G'`, `tn'`] >> simp[] >>
-      `ci_mono ca cb` by
-        (qspecl_then [`ce`, `expr_type e`, `e`, `ca`] mp_tac
-           ci_mono_lower_value_compile_expr >> simp[]) >>
-      `ca.cs_next_var <= cb.cs_next_var` by fs[ci_mono_def] >>
-      `!h. valid_horizon cx st0 h mid.storage_trace ==>
-        gas_origin_ptr_path (DF h,lo,gas_explicit_sites ctx shctx,ctx,fnc,PG)
-          (u,G,tn) chunk (OK t,G',tn') /\
-        expr_post h ctx fnc ce cx e p ca cb u (mid with gas_obs := []) v op t /\
-        expr_sim_full_endpoint fnc cb u t /\
-        (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-        ghost_inv_at (DF h) lo d ce cx (mid with gas_obs := []) G' tn' t` by
-        (qx_gen_tac `h` >> disch_tac >>
-         qpat_assum `!h. valid_horizon _ _ h mid.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-           (qspec_then `h` mp_tac) >> (impl_tac >- FIRST_ASSUM ACCEPT_TAC) >>
-         disch_then (CONJUNCTS_THEN2 assume_tac
-           (strip_assume_tac o SIMP_RULE (srw_ss()) [expr_sim_full_post_def])) >> simp[]) >>
-      qpat_assum `!h. valid_horizon _ _ h mid.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-        (qspec_then `H` mp_tac) >> (impl_tac >- FIRST_ASSUM ACCEPT_TAC) >>
-      disch_then (strip_assume_tac o SIMP_RULE (srw_ss())
-        [expr_post_def, expr_sim_full_endpoint_def]) >>
-      `return_buf_frame d ce cb t` by
-        (irule return_buf_frame_frame >> qexistsl [`ce`,`u`,`ca`] >> simp[]) >>
-      `MEM fnc ctx.ctx_functions` by fs[expr_sim_full_code_def] >>
-      `!bb. MEM bb fnc.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0`
-        by metis_tac[body_inv_no_phi] >>
-      `!f i z. frag_reachable ctx fnc t f i z ==> dalloca_fmp_headroom i z` by
-        (drule gas_origin_ptr_path_dalloca_fmp_headroom >> simp[] >> metis_tac[]) >>
-      simp[] >> (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >> conj_tac
-      >- (qx_gen_tac `h` >> disch_tac >>
-          qpat_assum `!h. valid_horizon _ _ h mid.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-            (qspec_then `h` mp_tac) >> (impl_tac >- FIRST_ASSUM ACCEPT_TAC) >>
-          disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) [expr_post_def]) >>
-          conj_tac >- FIRST_ASSUM ACCEPT_TAC >> conj_tac
-          >- (irule (iffLR storage_well_formed_on_backends) >>
-              qexists_tac `mid with gas_obs := []` >> simp[]) >>
-          qpat_assum `ghost_inv_at (DF h) _ _ _ _ _ _ _ _`
-            (strip_assume_tac o SIMP_RULE (srw_ss()) [ghost_inv_at_def]) >>
-          simp[ghost_inv_at_def] >> FIRST_ASSUM ACCEPT_TAC) >>
-      drule gas_path_normal >> simp[]) >>
-  fs[bind_def] >> metis_tac[]
+  irule (Q.INST [`PG` |-> `[]:(num # num) option list`]
+    blueprint_read_at_cut_from_replay) >>
+  rpt (goal_assum (drule_at Any)) >>
+  simp[] >> metis_tac[create_size_replay_value_cut]
 QED
 
 Theorem blueprint_read_list_frame:
