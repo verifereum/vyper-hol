@@ -2276,7 +2276,7 @@ Resume pop_vv_full_of_target[memory_ghost]:
         (ASSUME ``not_fresh_at sa x``)))))
 QED
 
-Theorem pop_full_storage_static_path[local]:
+Theorem pop_slot_static_selected:
   ALL_DISTINCT [x0;x1;x2;x3;x4;x5;x6] /\
   (!q. hdr = Var q ==> ~MEM q [x0;x1;x2;x3;x4;x5;x6]) /\
   eval_operand hdr s = SOME slot /\ op_prov G hdr = NONE /\ op_taint tn hdr = {} /\
@@ -2288,9 +2288,20 @@ Theorem pop_full_storage_static_path[local]:
     (DROP s.vs_inst_idx bb.bb_instructions) /\
   get_instruction bb (s.vs_inst_idx+5) =
     SOME (mk_inst (id+5) (if tr then TSTORE else SSTORE) [hdr;Var x3] []) ==>
-  ?v G' tn'. !D.
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-      (Abort ExHalt_abort v,G',tn')
+  ?t u G' tn'.
+    (run_inst_seq (TAKE 5 (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6)) s = OK t /\
+     u = (t with vs_inst_idx := s.vs_inst_idx+5) /\
+     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+       (OK u,G',tn')) /\
+    (lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+     get_instruction bb u.vs_inst_idx =
+       SOME (mk_inst (id+5) (if tr then TSTORE else SSTORE) [hdr;Var x3] []) /\
+     ~u.vs_halted /\
+     (!fuel. step_inst fuel ctx
+       (mk_inst (id+5) (if tr then TSTORE else SSTORE) [hdr;Var x3] []) u =
+       Abort ExHalt_abort (halt_state (set_returndata [] u))) /\
+     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,G',tn') []
+       (Abort ExHalt_abort (halt_state (set_returndata [] u)),G',tn'))
 Proof
   strip_tac >>
   mp_tac (Q.INST [`out` |-> `x0`, `fn` |-> `func`]
@@ -2326,7 +2337,7 @@ Proof
   suspend "prefix"
 QED
 
-Resume pop_full_storage_static_path[prefix]:
+Resume pop_slot_static_selected[prefix]:
   qabbrev_tac `load = [mk_inst id (if tr then TLOAD else SLOAD) [hdr] [x0]]` >>
   qmatch_asmsub_abbrev_tac `run_inst_seq chunk s1 = OK s2` >>
   qabbrev_tac `prefix = load ++ chunk` >>
@@ -2370,14 +2381,15 @@ Resume pop_full_storage_static_path[prefix]:
      drule_all run_inst_seq_gas_origin_ptr_path >>
      Cases_on `tr` >> simp[Abbr `prefix`,Abbr `load`,Abbr `chunk`,mk_inst_def,
        nested_pop_suffix_def]) >>
-  qexistsl_tac [`halt_state (set_returndata [] (s2 with vs_inst_idx := s.vs_inst_idx+5))`,
-    `G2`,`tn2`] >> gen_tac >>
-  qpat_assum `!D. gas_origin_ptr_path _ _ [] _` (qspec_then `D` assume_tac) >>
-  irule gas_origin_ptr_path_trans >> goal_assum (drule_at Any) >>
+  qabbrev_tac `u = s2 with vs_inst_idx := s.vs_inst_idx+5` >>
+  qexistsl_tac [`s2`,`u`,`G2`,`tn2`] >> conj_tac
+  >- (simp[Abbr `u`] >>
+      qpat_assum `prefix = TAKE 5 _` (fn th => pure_rewrite_tac[GSYM th]) >>
+      first_assum ACCEPT_TAC) >>
   suspend "exit"
 QED
 
-Resume pop_full_storage_static_path[exit]:
+Resume pop_slot_static_selected[exit]:
   `s2.vs_call_ctx = s.vs_call_ctx /\ s2.vs_halted = s.vs_halted /\
    s2.vs_current_bb = s.vs_current_bb /\ s2.vs_labels = s.vs_labels /\
    allocas_from lo s2` by
@@ -2387,7 +2399,6 @@ Resume pop_full_storage_static_path[exit]:
   `eval_operand hdr s2 = SOME slot /\ op_taint tn2 hdr = {}` by
     (Cases_on `hdr` >> fs[eval_operand_def,op_taint_def,lookup_var_def,
        update_var_def,FLOOKUP_UPDATE] >> metis_tac[]) >>
-  qabbrev_tac `u = s2 with vs_inst_idx := s.vs_inst_idx+5` >>
   qabbrev_tac `i = mk_inst (id+5) (if tr then TSTORE else SSTORE) [hdr;Var x3] []` >>
   `eval_operand hdr u = SOME slot /\ eval_operand (Var x3) u = SOME (lenw-1w)` by
     (conj_tac
@@ -2402,6 +2413,15 @@ Resume pop_full_storage_static_path[exit]:
      qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s1` mp_tac >>
      simp[NoAsms, venom_state_component_equality, allocas_below_fmp_def] >>
      metis_tac[]) >>
+  `lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+   get_instruction bb u.vs_inst_idx = SOME i /\ ~u.vs_halted /\
+   (!fuel. step_inst fuel ctx i u = Abort ExHalt_abort (halt_state (set_returndata [] u)))` by
+    (Cases_on `tr` >> fs[Abbr `i`,Abbr `u`,step_inst_non_invoke,mk_inst_def]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[Abbr `i`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[Abbr `i`] >>
+  gen_tac >>
   `ptr_inst_ok D lo 0 ctx func G2 tn2 i u` by
     (Cases_on `tr` >>
      simp[ptrSafeRunTheory.ptr_inst_ok_def,access_ok_def,taint_ok_def,Abbr `i`,Abbr `u`,
@@ -2418,7 +2438,31 @@ Resume pop_full_storage_static_path[exit]:
   fs[GSYM mk_inst_def,step_inst_non_invoke]
 QED
 
-Finalise pop_full_storage_static_path[local]
+Finalise pop_slot_static_selected
+
+Theorem pop_full_storage_static_path[local]:
+  ALL_DISTINCT [x0;x1;x2;x3;x4;x5;x6] /\
+  (!q. hdr = Var q ==> ~MEM q [x0;x1;x2;x3;x4;x5;x6]) /\
+  eval_operand hdr s = SOME slot /\ op_prov G hdr = NONE /\ op_taint tn hdr = {} /\
+  key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
+  (if tr then tload slot s else sload slot s) <> 0w /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (TAKE 5 (nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6))
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  get_instruction bb (s.vs_inst_idx+5) =
+    SOME (mk_inst (id+5) (if tr then TSTORE else SSTORE) [hdr;Var x3] []) ==>
+  ?v G' tn'. !D.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (Abort ExHalt_abort v,G',tn')
+Proof
+  strip_tac >>
+  drule_all pop_slot_static_selected >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`t`,`u`,`G'`,`tn'`] strip_assume_tac)) >>
+  qexistsl_tac [`halt_state (set_returndata [] u)`,`G'`,`tn'`] >>
+  gen_tac >> irule gas_origin_ptr_path_trans >> metis_tac[]
+QED
 
 Resume pop_vv_full_of_target[storage_suffix]:
   rename1 `StoragePlace tr slot tv` >>
