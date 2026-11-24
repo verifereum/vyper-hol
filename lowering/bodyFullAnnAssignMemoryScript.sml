@@ -644,8 +644,9 @@ Resume annassign_memory_full_physical_rhs_from_entry[split]:
      simp[] >> metis_tac[]) >>
   `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
     (irule expr_body_pre_vv_gas_admissible >> goal_assum (drule_at Any)) >>
-  drule_at (Pat `expr_vv_sim_full _ _ _ _ _ _`)
-    annassign_memory_full_raw_rhs_from_entry >>
+  qpat_assum `expr_vv_sim_full _ ce cx _ e es`
+    (mp_then (Pat `expr_vv_sim_full _ _ _ _ _ _`) mp_tac
+      annassign_memory_full_raw_rhs_from_entry) >>
   disch_then (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_expr _ _ (gas_shadow_expr _) _ = _`)) >>
@@ -678,9 +679,11 @@ Resume annassign_memory_full_physical_rhs_from_entry[split]:
 QED
 
 Resume annassign_memory_full_physical_rhs_from_entry[read]:
-  qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`s`] >> BETA_TAC >> strip_tac >>
+  qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`s`] >>
+  disch_then (strip_assume_tac o BETA_RULE) >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
-    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    qpat_assum `storage_trace_domain cx st0 mid.storage_trace`
+      (ACCEPT_TAC o REWRITE_RULE [vyperStorageFootprintTheory.storage_trace_domain_def]) >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ _`
     (drule_then mp_tac) >>
   simp[Abbr `childQ`,NoAsms] >> strip_tac >>
@@ -711,7 +714,11 @@ Resume annassign_memory_full_physical_rhs_from_entry[read]:
      gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def]) >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
     metis_tac[cj 1 compiler_compile_var] >>
-  `!H. dead_lo_ok H (DF H) lo ce cx` by fs[dead_lo_ok_def] >>
+  `!H. dead_lo_ok H (DF H) lo ce cx` by
+    (rewrite_tac[dead_lo_ok_def] >>
+     qpat_assum `ce.ce_is_ctor = old.ce_is_ctor` (fn ctor =>
+       qpat_assum `!H. dead_lo_ok H (DF H) lo old cx`
+         (ACCEPT_TAC o REWRITE_RULE [dead_lo_ok_def, GSYM ctor]))) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
     vv_post H ctx func ce cx e es a sm entry mid tv vv s /\
     ghost_inv_at (DF H) lo d ce cx mid G1 tn1 s` by
@@ -756,7 +763,11 @@ Resume annassign_memory_full_physical_rhs_from_entry[unwrap]:
   `lookup_var p z = SOME w` by metis_tac[not_fresh_at_mono] >>
   `ptr_covers G' tn' p z (type_memory_bytes old typ)` by
     (irule ptr_covers_lookup_frame >> qexistsl_tac [`Ga`,`entry`,`tna`] >>
-     fs[ghost_kept_at_def]) >>
+     `lookup_var p z = lookup_var p entry` by asm_rewrite_tac[] >>
+     qpat_assum `ghost_kept_at lo ce es a Ga tna entry G' tn'`
+       (qspec_then `p` (drule_then strip_assume_tac) o cj 1 o
+        REWRITE_RULE [ghost_kept_at_def]) >>
+     asm_rewrite_tac[]) >>
   `~z.vs_halted` by
     (drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
      simp[exit_result_def] >> metis_tac[]) >>
@@ -834,7 +845,10 @@ Resume annassign_memory_full_physical_rhs_from_entry[physical_post]:
 QED
 
 Resume annassign_memory_full_physical_rhs_from_entry[physical_taint]:
-  fs[ghost_kept_at_def] >>
+  qpat_assum `ghost_kept_at lo old es sa G0 tn0 s0 Ga tna`
+    (assume_tac o cj 2 o REWRITE_RULE [ghost_kept_at_def]) >>
+  qpat_assum `ghost_kept_at lo ce es a Ga tna entry G' tn'`
+    (assume_tac o cj 2 o REWRITE_RULE [ghost_kept_at_def]) >>
   qpat_assum `alloca_frame old es sa s0 ce es entry`
     (mp_then Any mp_tac alloca_taint_kept_trans) >>
   disch_then (qspecl_then [`tn'`,`tna`,`tn0`,`a`] mp_tac) >>
@@ -1172,30 +1186,34 @@ Resume annassign_memory_full_execution[ordinary]:
   `expr_post (storage_trace_horizon mid.storage_trace) ctx func cenv' cx e
     (es with gas_obs := gas_explicit marks entry.vs_gas_readings) a b entry mid v op t` by
     simp[gasOutcomeInitialObsPtrTheory.expr_post_initial_obs] >>
+  `mid with gas_obs := [] = mid` by
+    (qpat_assum `mid.gas_obs = []` (fn th => simp[NoAsms, GSYM th])) >>
+  `bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := gas_explicit marks entry.vs_gas_readings) = (INL v,mid)` by
+    (qpat_assum `mid with gas_obs := [] = mid` (fn eq =>
+       qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
+         (qspec_then `[]` (ACCEPT_TAC o PURE_REWRITE_RULE [APPEND_NIL, eq])))) >>
   qpat_assum `expr_post _ _ _ _ _ _ (es with gas_obs := _) _ _ _ _ _ _ _`
     (mp_then Any mp_tac structlit_unwrapped_physical_inputs) >>
   disch_then (fn th => qpat_assum `ptr_val_ok _ _ _ _ G1 tn1 t`
     (mp_then Any mp_tac th)) >>
   disch_then (qspecl_then [`env`] mp_tac) >>
-  (impl_tac >- (
-    `mid with gas_obs := [] = mid` by
-      (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
-    CONV_TAC (DEPTH_CONV ETA_CONV) >>
-    simp[arithmeticTheory.ADD_COMM]
-    >~ [`bind (eval_expr cx e) (read_result cx) _ = _`]
-    >- (qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
-        (qspec_then `[]` mp_tac) >> pure_rewrite_tac[APPEND_NIL] >>
-        asm_rewrite_tac[]) >>
-    NO_TAC)) >>
+  (impl_tac >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
+    asm_simp_tac (srw_ss()) [arithmeticTheory.ADD_COMM])) >>
   disch_then (qx_choosel_then [`stv`,`sw`] strip_assume_tac) >>
   `0 < type_memory_size stv` by
     (qpat_assum `expr_body_pre cenv cx env e es`
-       (mp_then Any mp_tac annassign_memory_full_source_layout) >>
-     disch_then (qspec_then `typ` mp_tac) >>
-     (impl_tac >- simp[]) >>
-     qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type cenv' e) = SOME stv` mp_tac >>
-     qpat_assum `!e. lowered_value_type cenv' e = _` (qspec_then `e` mp_tac) >>
-     POP_ASSUM_LIST (K all_tac) >> metis_tac[optionTheory.SOME_11]) >>
+        (mp_then Any mp_tac annassign_memory_full_source_layout) >>
+      disch_then (qspec_then `typ` mp_tac) >>
+      (impl_tac >- (asm_simp_tac bool_ss [] >>
+        qpat_assum `lowered_value_type cenv e = expr_type e \/ _` mp_tac >>
+        tautLib.TAUT_TAC)) >>
+      disch_then (qx_choose_then `source_ty` (fn layout =>
+        qpat_assum `!e. lowered_value_type cenv' e = _` (fn ty_eq =>
+          qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type cenv' e) = SOME stv`
+            (fn ev => ACCEPT_TAC (REWRITE_RULE
+              [REWRITE_RULE [Q.SPEC `e` ty_eq, cj 1 layout, optionTheory.SOME_11] ev]
+              (cj 3 layout))))))) >>
   TRY (qpat_assum `type_memory_size stv = 0` (fn eq =>
     qpat_assum `0 < type_memory_size stv` mp_tac >> simp_tac std_ss [eq]) >> NO_TAC) >>
   qpat_assum `0 < type_memory_size stv ==> _` drule >> strip_tac >>
@@ -1203,22 +1221,20 @@ Resume annassign_memory_full_execution[ordinary]:
     (qpat_assum `ghost_inv_at _ lo d cenv' cx mid G1 tn1 t` mp_tac >>
      simp[ghost_inv_at_def, NoAsms] >> strip_tac >> simp[]) >>
   `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv' cx mid t` by
-    (qpat_assum `expr_post _ _ _ _ _ _ es a b entry mid v op t` mp_tac >>
-     simp[expr_post_def, NoAsms]) >>
+    qpat_assum `expr_post _ _ _ _ _ _ es a b entry mid v op t`
+      (ACCEPT_TAC o cj 1 o REWRITE_RULE [expr_post_def]) >>
   `t.vs_alloca_next < dimword (:256)` by
     (drule stmt_state_rel_alloca_room >> MATCH_ACCEPT_TAC alloca_room_next_lt) >>
   `lookup_var src t = SOME sw /\ not_fresh_at b src` by
-    (conj_tac >- fs[venomStateTheory.eval_operand_def] >>
+    (conj_tac
+     >- (qpat_assum `op = Var src` (fn op_eq =>
+           qpat_assum `eval_operand op t = SOME sw`
+             (ACCEPT_TAC o REWRITE_RULE [op_eq,venomStateTheory.eval_operand_def]))) >>
      qpat_assum `lower_value compile_expr cenv' (expr_type e) e a = (op,b)`
        (mp_then Any mp_tac compile_lower_value_var) >> simp[]) >>
   qabbrev_tac `exp_obs = es with gas_obs := gas_explicit marks entry.vs_gas_readings` >>
   `bind (eval_expr cx e) (read_result cx) exp_obs = (INL v,mid)` by
-    (`mid with gas_obs := [] = mid` by
-       (qpat_assum `mid.gas_obs = []` (fn th => simp[NoAsms, GSYM th])) >>
-     simp_tac std_ss [Abbr `exp_obs`] >>
-     qpat_assum `mid with gas_obs := [] = mid` (fn eq =>
-       qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
-         (qspec_then `[]` (ACCEPT_TAC o PURE_REWRITE_RULE [APPEND_NIL, eq])))) >>
+    (simp_tac std_ss [Abbr `exp_obs`] >> first_assum ACCEPT_TAC) >>
   `expr_body_pre cenv' cx env e exp_obs` by simp[Abbr `exp_obs`] >>
   `value_runtime_typed env typ v` by
     (qspecl_then [`cenv'`,`cx`,`env`,`e`,`exp_obs`,`v`,`mid`,`typ`]
