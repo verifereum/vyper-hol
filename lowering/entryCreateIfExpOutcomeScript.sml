@@ -459,9 +459,29 @@ Proof
     (qspec_then `sel` strip_assume_tac) >>
   qpat_x_assum `!marks mid G1 tn1 z. _ ==> expr_body_pre _ _ _ _ _ /\ _`
     (qspecl_then [`marks`,`n`,`G1`,`tn1`,`z`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  (impl_tac >-
+     (simp[] >> gen_tac >> strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H n.storage_trace ==> _ /\ _`
+        (drule_then strip_assume_tac) >>
+      qpat_assum `expr_sim_full_post _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[NoAsms, expr_sim_full_post_def])) >> strip_tac >>
   drule_all (SIMP_RULE bool_ss [LET_THM] ifexp_selected_jnz_arm_handoff) >> strip_tac >>
   irule stage_scoped_zero_prefix >> simp[storage_trace_frame_bind,
     evaluate_storage_trace_frame, storage_trace_frame_conditional_result] >>
-  FAIL_TAC "selected JNZ prefix"
+  conj_tac >- (qexists `ce` >> simp[]) >>
+  qexistsl [`G1`,`se`,`jump_to (if sel then tl else el) z`,`tn1`] >> simp[] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!sel mid st0 se sm shse shsm av u G1 tn1. _ ==>
+       scoped_operand_outcome _ _ _ _ _ _ _ _ _ _` (drule_all_then assume_tac) >>
+  irule (SIMP_RULE bool_ss [LET_THM] ifexp_scoped_arm_conditional) >>
+  qpat_assum `scoped_operand_outcome _ _ _ _ se sm _ _ _ _` (irule_at Any) >> simp[] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!right res ee G tn j. _ ==> ?raw v. _` mp_tac >>
+  simp[jump_to_def] >>
+  rpt strip_tac >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  qexistsl [`raw`,`v`] >> simp[] >>
+  rpt strip_tac >> first_x_assum (drule_all_then strip_assume_tac) >>
+  qexistsl [`m`,`Gm`,`tm`,`fin`,`Gf`,`tf`] >> simp[] >>
+  gen_tac >> strip_tac >> first_x_assum (drule_then strip_assume_tac) >> simp[]
 QED
