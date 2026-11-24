@@ -9,7 +9,17 @@ Ancestors
   exprLowering venomState loweringStateRelDefs context bodyFullExtCallSavedOperand
   ptrDiscipline exprSimUnwrap
 
-Theorem ctor_saved_rows_cons:
+(* Positional success is independent of the unused exception tag type. *)
+Theorem extcall_positional_post_INL:
+  extcall_positional_post p DF lo d ctx func ce cx env kw xs svs
+    sa sb es s g h H (INL vs : value list + 'a) ee G tn t <=>
+  extcall_positional_post p DF lo d ctx func ce cx env kw xs svs
+    sa sb es s g h H (INL vs : value list + exception) ee G tn t
+Proof
+  simp[extcall_positional_post_def]
+QED
+
+Theorem extcall_saved_rows_cons:
   body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv cut /\
   ci_mono sa cut /\ ci_mono cut sb /\ u.vs_labels = t.vs_labels /\
@@ -22,14 +32,14 @@ Theorem ctor_saved_rows_cons:
   (!K. valid_horizon cx st0 K mid.storage_trace ==>
        valid_horizon cx st0 K es.storage_trace) /\
   (!K. valid_horizon cx st0 K mid.storage_trace ==>
-       extcall_positional_post T DF lo d ctx func cenv cx env
-         xs [e] [sv] sa cut es s0 G0 tn0 K (INL [v]) mid G1 tn1 t) /\
+       extcall_positional_post keep_pure DF lo d ctx func cenv cx env
+         (xs ++ kw) [e] [sv] sa cut es s0 G0 tn0 K (INL [v]) mid G1 tn1 t) /\
   (!K. valid_horizon cx st0 K ee.storage_trace ==>
-       extcall_positional_post T DF lo d ctx func cenv cx env
-         [] xs svs cut sb mid t G1 tn1 K (INL vs) ee G2 tn2 u) /\
+       extcall_positional_post keep_pure DF lo d ctx func cenv cx env
+         kw xs svs cut sb mid t G1 tn1 K (INL vs) ee G2 tn2 u) /\
   valid_horizon cx st0 H ee.storage_trace ==>
-  extcall_positional_post T DF lo d ctx func cenv cx env
-    [] (e::xs) (sv::svs) sa sb es s0 G0 tn0 H (INL (v::vs)) ee G2 tn2 u
+  extcall_positional_post keep_pure DF lo d ctx func cenv cx env
+    kw (e::xs) (sv::svs) sa sb es s0 G0 tn0 H (INL (v::vs)) ee G2 tn2 u
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `valid_horizon cx st0 H mid.storage_trace` by
@@ -70,7 +80,7 @@ Proof
       (MAP_EVERY assume_tac o CONJUNCTS)) >>
   `~copy ==> ee.scopes = mid.scopes /\ ee.immutables = mid.immutables /\
             !tr. get_storage cx ee tr = get_storage cx mid tr` by
-    (strip_tac >> `~exprs_can_mutate cenv xs` by simp[] >>
+    (strip_tac >> `~exprs_can_mutate cenv xs` by fs[exprs_can_mutate_append] >>
      drule_all nonmutating_exprs_source_frame >>
      simp[machine_frame_def] >> strip_tac >> gen_tac >>
      Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
@@ -108,7 +118,7 @@ Proof
   >> metis_tac[]
 QED
 
-Resume ctor_saved_rows_cons[head]:
+Resume extcall_saved_rows_cons[head]:
   `vv_type (ext_call_arg_value (lowered_value_type cenv e) vv) =
       lowered_value_type cenv e` by drule_all_then ACCEPT_TAC extcall_operand_snapshot_type >>
   `si.cs_next_var <= ss.cs_next_var /\ si.cs_next_id <= sm.cs_next_id` by
@@ -165,7 +175,7 @@ Resume ctor_saved_rows_cons[head]:
   >> `p.ptr_location = LocCalldata` by (Cases_on `p.ptr_location` >> fs[] >> metis_tac[slot_loc_def]) >>
   fs[vv_holds_def]
 QED
-Resume ctor_saved_rows_cons[stack]:
+Resume extcall_saved_rows_cons[stack]:
   simp[vv_location_def, vv_storage_live_def] >>
   irule extcall_request_saved_stack_endpoint >>
   simp[] >> qexistsl_tac [`G1`,`func`,`lo`,`mid`,`ss`,`t`,`tn1`] >>
@@ -175,7 +185,7 @@ Resume ctor_saved_rows_cons[stack]:
   `~copy` by (Cases_on `copy` >> fs[vv_location_def]) >>
   disj2_tac >> qexistsl_tac [`env`,`H`,`H`,`ctx`] >> simp[]
 QED
-Resume ctor_saved_rows_cons[copy]:
+Resume extcall_saved_rows_cons[copy]:
   qpat_x_assum `tag = lowered_value_type cenv e` SUBST_ALL_TAC >>
   qpat_assum `_ ==> ?x w tv. vv_location (LocatedValue _ p) = SOME LocMemory /\ _`
     (mp_tac o REWRITE_RULE [vv_location_def, vv_operand_def]) >>
@@ -214,7 +224,7 @@ Resume ctor_saved_rows_cons[copy]:
      fs[vv_operand_def, regions_disjoint_def] >> metis_tac[]) >>
   simp[] >> qexists_tac `Value v` >> simp[]
 QED
-Resume ctor_saved_rows_cons[retain_memory]:
+Resume extcall_saved_rows_cons[retain_memory]:
   qpat_x_assum `tag = lowered_value_type cenv e` SUBST_ALL_TAC >>
   simp[vv_location_def, vv_storage_live_def] >>
   irule extcall_request_saved_memory_endpoint >>
@@ -223,7 +233,7 @@ Resume ctor_saved_rows_cons[retain_memory]:
   >- (qexists_tac `raw` >> simp[]) >>
   disj2_tac >> qexistsl_tac [`env`,`H`,`H`,`ctx`] >> simp[]
 QED
-Resume ctor_saved_rows_cons[slot]:
+Resume extcall_saved_rows_cons[slot]:
   qpat_x_assum `tag = lowered_value_type cenv e` SUBST_ALL_TAC >>
   qpat_x_assum `?tr. p.ptr_location = slot_loc tr` (qx_choose_then `tr` assume_tac) >>
   `slot_loc tr <> LocCode /\ slot_loc tr <> LocMemory` by
@@ -236,7 +246,7 @@ Resume ctor_saved_rows_cons[slot]:
   qexists_tac `tr` >> simp[vv_operand_def, Excl "vv_storage_live_def"] >>
   qexists_tac `raw` >> simp[GSYM AND_IMP_INTRO] >> metis_tac[]
 QED
-Resume ctor_saved_rows_cons[code]:
+Resume extcall_saved_rows_cons[code]:
   qpat_x_assum `tag = lowered_value_type cenv e` SUBST_ALL_TAC >>
   simp[vv_location_def, vv_storage_live_def, vv_operand_def] >>
   conj_asm1_tac
@@ -269,21 +279,26 @@ Resume ctor_saved_rows_cons[code]:
     (irule_at Any) >>
   simp[] >> qexists_tac `r` >> simp[]
 QED
-Resume ctor_saved_rows_cons[row]:
+Resume extcall_saved_rows_cons[row]:
   qexistsl_tac [`si`,`sm`,`ss`,`vv`,`r`,`copy`] >> simp[] >>
   `sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
    ss.cs_next_var <= sb.cs_next_var /\ ss.cs_next_id <= sb.cs_next_id` by
      (fs[ci_mono_def] >> decide_tac) >>
+  `~copy ==> ~exprs_can_mutate cenv kw` by
+    (strip_tac >> qpat_assum `~copy ==> ~exprs_can_mutate cenv (xs ++ kw)`
+       (drule_then (mp_tac o REWRITE_RULE [exprs_can_mutate_append])) >> simp[]) >>
   simp[expr_can_mutate_def] >> strip_tac >>
   qpat_assum `copy /\ _ ==> ?p w tv. _` mp_tac >>
   (impl_tac >- simp[]) >>
   disch_then (qx_choosel_then [`x`,`w`,`tv`] strip_assume_tac) >>
   qexistsl_tac [`x`,`w`,`tv`] >> simp[] >> rpt strip_tac >>
-  `local_region cenv mid.scopes t n b sz` by metis_tac[] >>
+  `local_region cenv mid.scopes t n b sz` by
+    (qpat_assum `!n b sz. local_region cenv mid.scopes t n b sz <=> _`
+       (qspecl_then [`n`,`b`,`sz`] SUBST1_TAC) >> first_assum ACCEPT_TAC) >>
   qpat_assum `!n b sz. local_region cenv mid.scopes t n b sz ==> _`
     (drule_then ACCEPT_TAC)
 QED
-Resume ctor_saved_rows_cons[tail]:
+Resume extcall_saved_rows_cons[tail]:
   irule LIST_REL_mono >>
   qpat_assum `LIST_REL _ (ZIP (xs,svs)) vs` (irule_at Any) >>
   `!a. cut.cs_next_var <= a.cs_next_var /\ cut.cs_next_id <= a.cs_next_id ==>
@@ -296,15 +311,19 @@ Resume ctor_saved_rows_cons[tail]:
     (K ALL_TAC)) >>
   qexistsl_tac [`si`,`sm`,`ss`,`vv`,`raw`,`copy`] >> simp[]
 QED
-Resume ctor_saved_rows_cons[pure]:
+Resume extcall_saved_rows_cons[pure]:
   strip_tac >> irule pure_frame_trans >> simp[] >>
   qexistsl_tac [`mid`,`cut`,`t`] >> fs[ci_mono_def] >> simp[EQ_SYM_EQ]
 QED
-Resume ctor_saved_rows_cons[vars]:
+Resume extcall_saved_rows_cons[vars]:
   rpt strip_tac >>
   rename1 `lookup_var x u = SOME w` >>
   `not_fresh_at cut x` by
     (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> fs[ci_mono_def]) >>
   `lookup_var x t = SOME w` by simp[] >> simp[]
 QED
-Finalise ctor_saved_rows_cons
+Finalise extcall_saved_rows_cons
+
+Theorem ctor_saved_rows_cons =
+  SIMP_RULE bool_ss [APPEND_NIL]
+    (Q.INST [`keep_pure` |-> `T`, `kw` |-> `[]`] extcall_saved_rows_cons)

@@ -10,6 +10,7 @@ Ancestors
   bodyFullTargetSubscript bodyFullTargetDefs bodySimFull targetPlaceSim
   bodyFullTargetMappingFacts bodyFullTargetMappingKey bodyFullTargetMappingScratch
   bodyFullTargetMappingRep bodyFullTargetMappingRun bodyFullTargetMappingOutcome
+  bodyFullMappingRunSeq bodyFullMappingSuffixExecution
   targetSubscriptMapping targetSubscriptSplit vyperStorageTrace
   gasOutcomeFull fragGasOriginPtr vyperStorageFootprint loweringPosts
   vyperTypeEnv vyperTypeSystem vyperInterpreter vyperState
@@ -56,7 +57,7 @@ Theorem target_mapping_tail_observed:
   ?bop hashed sp slot t G tn.
     (if is_bytestring_type kt then compile_keccak256_key iop F sn else (iop,sn)) = (hashed,sp) /\
     compile_mapping_subscript bop hashed sp = (slot,sb) /\
-    run_inst_seq (emitted_insts sn sb) t2 = OK (t with vs_inst_idx := t2.vs_inst_idx) /\
+    mapping_raw_endpoint sn sb t2 t /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     mapping_extension_observed (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       cx st0 (extend_place cx pv (ValueSubscript v)) (mid2,t2,G2,tn2) (t,G,tn)
@@ -117,6 +118,7 @@ Resume target_mapping_tail_observed[join]:
        (qspec_then `H` mp_tac) >>
      (impl_tac >- simp[]) >> strip_tac >> gvs[expr_post_def]) >>
   `?t HG tm.
+    mapping_raw_endpoint sn sb t2 t /\
     eval_operand slot t = SOME (hashmap_slot base_slot (encode_hashmap_key (expr_type e) v)) /\
     op_taint tm slot = {} /\ op_prov HG slot = NONE /\
     (!x. slot = Var x ==> not_fresh_at sb x) /\
@@ -128,14 +130,13 @@ Resume target_mapping_tail_observed[join]:
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func t /\ allocas_from lo t /\
     t2.vs_alloca_next <= t.vs_alloca_next /\
-    run_inst_seq (emitted_insts sn sb) t2 = OK (t with vs_inst_idx := t2.vs_inst_idx) /\
     (!H. valid_horizon cx st0 H mid2.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (t2,G2,tn2) [] (OK t,HG,tm) /\
       stmt_state_rel H ctx func cenv cx mid2 t /\
       ghost_inv_at (DF H) lo d cenv cx mid2 HG tm t)` by
     (qspecl_then [`iop`, `storage_trace_horizon mid2.storage_trace`]
-       ho_match_mp_tac (Q.GENL [`key`, `H0`] mapping_suffix_full_run_observed) >>
+       ho_match_mp_tac (Q.GENL [`key`, `H0`] mapping_suffix_full_run_with_execution) >>
      simp[] >> first_assum ACCEPT_TAC) >>
   `sa.cs_next_id <= sm.cs_next_id /\ sm.cs_next_id <= sn.cs_next_id` by
     (mp_tac (Q.SPECL [`bt`, `cenv`, `sa`] ci_mono_compile_get_target_ptr) >>

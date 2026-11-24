@@ -1,13 +1,14 @@
 Theory bodyFullTargetMappingScratch
 Ancestors
-  bodyFullTargetMappingScratchTail bodyFullAllocaFresh
+  bodyFullTargetMappingScratchTail bodyFullAllocaFresh bodyFullMappingRunSeq
+  abiBufferAllocationCode
   bodyFullUnwrapRun bodyFullUnwrapSlotPost exprSimMapKey
   fragGasOriginPtr fragGasOriginPtrLoop exprLoweringProps emitHelperProps
   emitHelper context compileEnv pair fragExec
   bodyPtrDefs loweringStateRelDefs venomState venomInst
   finite_map words pred_set list rich_list ASCIInumbers freshWrites
   ptrDiscipline fragGasCopyLoop venomExecSemantics loweringPosts venomMemDefs bodyMemoryDefs
-  bodyFullHashKeccakFixed[qualified,ignore_grammar] logInstSeqPtr
+  bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
 Theorem mapping_scratch_runtime_restore:
   code = [mk_inst is MSTORE [Var p;bop] [];
@@ -24,7 +25,7 @@ Proof
   simp_tac (srw_ss()) [Abbr `z`, update_var_def, mstore_def, LET_THM]
 QED
 
-Theorem mapping_slot_full_run_observed:
+Theorem mapping_slot_full_run_with_execution:
   compile_mapping_subscript bop key sa = (op,sb) /\
   (!x. bop = Var x \/ key = Var x ==> not_fresh_at sa x) /\
   eval_operand bop s = SOME w0 /\ eval_operand key s = SOME w1 /\
@@ -42,6 +43,7 @@ Theorem mapping_slot_full_run_observed:
      P H ==> stmt_state_rel H ctx func cenv cx es s /\
                  ghost_inv_at (DF H) lo d cenv cx es G tn s) ==>
   ?t HG tm.
+    mapping_raw_endpoint sa sb s t /\
     eval_operand op t = SOME (hashmap_slot w0 w1) /\
     op_taint tm op = {} /\ op_prov HG op = NONE /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
@@ -52,7 +54,6 @@ Theorem mapping_slot_full_run_observed:
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func t /\ allocas_from lo t /\
     s.vs_alloca_next <= t.vs_alloca_next /\
-    run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
     (!H. P H ==>
        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
           (OK t,HG,tm) /\
@@ -74,23 +75,15 @@ Proof
   drule_all (INST_TYPE [beta |-> alpha] alloc_buffer_origin_ptr_path_with_raw_endpoint) >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`] strip_assume_tac) >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK raw` >>
-  rename1 `t = raw with vs_inst_idx := LENGTH sm.cs_current_insts` >>
-  `run_inst_seq (emitted_insts sa sm) s = OK (t with vs_inst_idx := s.vs_inst_idx)` by
-    (`raw.vs_inst_idx = s.vs_inst_idx` by
-       (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >>
-        strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
-        qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK raw` mp_tac >>
-        simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
-             exec_alloca_def, AllCaseEqs(), update_var_def] >> strip_tac >> gvs[]) >>
-     simp[venom_state_component_equality]) >>
+  `mapping_raw_endpoint sa sm s t` by
+    (simp[mapping_raw_endpoint_def] >> qexists_tac `raw` >> simp[]) >>
   qpat_x_assum `t = raw with vs_inst_idx := _` kall_tac >>
-  qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK raw` kall_tac >>
-  qpat_x_assum `G' = step_prov _ _ _ raw` kall_tac >>
-  qpat_x_assum `tn' = step_taint _ _ raw _` kall_tac >>
+  qpat_x_assum `G' = step_prov _ _ _ _` kall_tac >>
+  qpat_x_assum `tn' = step_taint _ _ _ _` kall_tac >>
   suspend "tail"
 QED
 
-Resume mapping_slot_full_run_observed[tail]:
+Resume mapping_slot_full_run_with_execution[tail]:
   rename1 `lookup_var q t = SOME w` >>
   qabbrev_tac `qr = STRING #"%" (toString sm.cs_next_var)` >>
   qabbrev_tac `hr = STRING #"%" (toString (sm.cs_next_var+1))` >>
@@ -110,7 +103,7 @@ Resume mapping_slot_full_run_observed[tail]:
      rpt strip_tac >> gvs[Abbr `qr`, Abbr `hr`, Abbr `code`, APPEND_ASSOC]) >>
   suspend "allocated"
 QED
-Resume mapping_slot_full_run_observed[allocated]:
+Resume mapping_slot_full_run_with_execution[allocated]:
   `ALL_DISTINCT [q;qr;hr] /\
    (!x. not_fresh_at sm x ==> x <> qr /\ x <> hr)` by
     (gvs[ALL_DISTINCT, Abbr `qr`, Abbr `hr`, not_fresh_at_def, toString_inj] >>
@@ -129,9 +122,7 @@ Resume mapping_slot_full_run_observed[allocated]:
      Cases_on `bop` >> Cases_on `key` >>
      gvs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
   `lo <= t.vs_alloca_next /\ ~t.vs_halted` by
-    (qpat_assum `t with <|vs_vars := _; vs_allocas := _;
-        vs_alloca_next := _; vs_inst_idx := _|> = s` mp_tac >>
-     simp[venom_state_component_equality] >> decide_tac) >>
+    metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
   `?root cap. FLOOKUP G' q = SOME (root,cap) /\ root <= w2n w /\
      w2n w+64 <= root+cap /\ lo <= w2n w /\ op_taint tn' (Var q) = {}` by
     (fs[ptr_covers_def] >>
@@ -148,7 +139,7 @@ Resume mapping_slot_full_run_observed[allocated]:
      simp[]) >>
   suspend "apply_tail"
 QED
-Resume mapping_slot_full_run_observed[apply_tail]:
+Resume mapping_slot_full_run_with_execution[apply_tail]:
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
     metis_tac[exprSimAllocTheory.buffer_alloc_code] >>
@@ -177,11 +168,23 @@ Resume mapping_slot_full_run_observed[apply_tail]:
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   rename1 `run_inst_seq code t = OK u` >>
   qexistsl_tac [`u with vs_inst_idx := LENGTH sb.cs_current_insts`, `HG`, `tm`] >>
+  conj_tac >- (
+    drule abiBufferAllocationCodeTheory.compile_alloc_buffer_code >> strip_tac >>
+    `emitted_insts sm sb = code` by
+      (qpat_assum `sb.cs_current_insts = _` (fn th =>
+        simp[NoAsms, emitted_insts_def, th, rich_listTheory.DROP_LENGTH_APPEND])) >>
+    `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
+      simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+    irule mapping_raw_endpoint_join >> qexistsl_tac [`sm`, `t`] >>
+    rpt conj_tac >- first_assum ACCEPT_TAC
+    >- metis_tac[] >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+    pure_rewrite_tac[mapping_raw_endpoint_def] >> qexists_tac `u` >>
+    metis_tac[]) >>
   conj_tac >- (qpat_x_assum `eval_operand (Var hr) u = _` mp_tac >>
                 simp[eval_operand_def, lookup_var_def]) >>
   suspend "frames"
 QED
-Resume mapping_slot_full_run_observed[frames]:
+Resume mapping_slot_full_run_with_execution[frames]:
   `u with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|> = t` by
     (irule mapping_scratch_runtime_restore >> metis_tac[]) >>
   `u.vs_current_bb = t.vs_current_bb /\
@@ -205,7 +208,7 @@ Resume mapping_slot_full_run_observed[frames]:
   conj_tac >- suspend "kept" >>
   suspend "runtime"
 QED
-Resume mapping_slot_full_run_observed[wb]:
+Resume mapping_slot_full_run_with_execution[wb]:
   rewrite_tac[wb_frame_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- (simp_tac (srw_ss()) [] >> metis_tac[]) >>
@@ -219,7 +222,7 @@ Resume mapping_slot_full_run_observed[wb]:
   `b+sz <= w2n w \/ w2n w+64 <= b` by metis_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
   simp_tac (srw_ss()) [] >> metis_tac[]
 QED
-Resume mapping_slot_full_run_observed[pure]:
+Resume mapping_slot_full_run_with_execution[pure]:
   rewrite_tac[pure_frame_def] >> conj_tac
   >- (rpt strip_tac >>
       `regions_disjoint (w2n w) 64 b sz` by metis_tac[] >>
@@ -236,7 +239,7 @@ Resume mapping_slot_full_run_observed[pure]:
   `off+len <= w2n w \/ w2n w+64 <= off` by metis_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
   simp_tac (srw_ss()) [] >> metis_tac[]
 QED
-Resume mapping_slot_full_run_observed[kept]:
+Resume mapping_slot_full_run_with_execution[kept]:
   `!i. i IN tm.t_mem /\ i < s.vs_alloca_next ==> i IN tn.t_mem` by
     (qpat_assum `tm = _` (fn th => rewrite_tac[th]) >>
      simp_tac (srw_ss()) [IN_DIFF] >>
@@ -257,7 +260,7 @@ Resume mapping_slot_full_run_observed[kept]:
   rpt strip_tac >>
   `i < s.vs_alloca_next` by (res_tac >> decide_tac) >> metis_tac[]
 QED
-Resume mapping_slot_full_run_observed[runtime]:
+Resume mapping_slot_full_run_with_execution[runtime]:
   conj_tac >- (simp_tac (srw_ss()) [] >> metis_tac[]) >>
   conj_tac >- simp_tac (srw_ss()) [] >>
   conj_tac >-
@@ -271,33 +274,6 @@ Resume mapping_slot_full_run_observed[runtime]:
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- (simp[allocas_from_def] >> metis_tac[allocas_from_def]) >>
   conj_tac >- simp[] >>
-  conj_tac >-
-    (`sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm` by
-       (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >>
-        strip_tac >> drule emit_op_extends >> simp[]) >>
-     `s.vs_inst_idx + LENGTH (emitted_insts sa sm) = t.vs_inst_idx` by
-       (qpat_assum `sm.cs_current_insts = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
-     `emitted_insts sm sb = code` by
-       (pure_rewrite_tac[emitted_insts_def] >>
-        qpat_assum `sb.cs_current_insts = sm.cs_current_insts ++ code`
-          (fn th => pure_once_rewrite_tac[th]) >>
-        rewrite_tac[rich_listTheory.DROP_LENGTH_APPEND]) >>
-     `emitted_insts sa sb = emitted_insts sa sm ++ code` by
-       (qpat_assum `emitted_insts sm sb = code` (SUBST1_TAC o SYM) >>
-        irule emitted_insts_append >> metis_tac[]) >>
-     `EVERY (\i. ~is_terminator i.inst_opcode) code` by
-       simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
-     `run_inst_seq code ((t with vs_inst_idx := s.vs_inst_idx) with
-          vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sm)) = OK u` by
-       (`(t with vs_inst_idx := t.vs_inst_idx) = t` by simp[venom_state_component_equality] >>
-        qpat_assum `s.vs_inst_idx + LENGTH _ = t.vs_inst_idx` SUBST1_TAC >>
-        simp_tac (srw_ss()) [] >> qpat_assum `t with vs_inst_idx := t.vs_inst_idx = t` SUBST1_TAC >>
-        first_assum ACCEPT_TAC) >>
-     `run_inst_seq (emitted_insts sa sm ++ code) s =
-         OK (u with vs_inst_idx := (t with vs_inst_idx := s.vs_inst_idx).vs_inst_idx)` by
-       (irule run_inst_seq_append_advanced >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     qpat_assum `emitted_insts sa sb = _` SUBST1_TAC >>
-     qpat_assum `run_inst_seq (_ ++ _) s = _` mp_tac >> simp_tac (srw_ss()) []) >>
   gen_tac >> disch_tac >>
   qpat_assum `!H. P H ==> gas_origin_ptr_path _ _ _ _ /\ _` drule >>
   strip_tac >>
@@ -306,7 +282,7 @@ Resume mapping_slot_full_run_observed[runtime]:
      metis_tac[]) >>
   metis_tac[]
 QED
-Finalise mapping_slot_full_run_observed
+Finalise mapping_slot_full_run_with_execution
 
 Theorem mapping_slot_full_run:
   compile_mapping_subscript bop key sa = (op,sb) /\
@@ -342,7 +318,7 @@ Theorem mapping_slot_full_run:
        stmt_state_rel H ctx func cenv cx es t /\
        ghost_inv_at (DF H) lo d cenv cx es HG tm t)
 Proof
-  strip_tac >> drule_all mapping_slot_full_run_observed >>
+  strip_tac >> drule_all mapping_slot_full_run_with_execution >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`t`, `HG`, `tm`] >> simp[]
 QED

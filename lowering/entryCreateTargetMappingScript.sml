@@ -2,56 +2,13 @@
    computation. Its bad-storage focus stays at the index exit. *)
 Theory entryCreateTargetMapping
 Ancestors
-  bodyFullTargetMapping bodyFullTargetMappingOutcome entryCreateAdminSequence
+  bodyFullTargetMapping bodyFullTargetMappingOutcome entryCreateSubscriptMapRun
   entryCreatePathScope entryCreateFocusSpec entryCreateCompletedCut
   exprLoweringProps exprLowering emitHelper context abiEncoderProps compileEnv
   venomInst venomExecSemantics venomState fragExec fragGasOriginPtr gasSummary
   bodyFullTargetDefs bodySimFull bodySim loweringPosts bodyPtrDefs gasContext
   vyperTypeSystem vyperTypeEnv vyperInterpreter vyperState vyperStorageFootprint
   ptrDiscipline allocaHistory list rich_list pred_set arithmetic
-
-Theorem mapping_key_slot_inventory[local]:
-  (compile_keccak256_key key F a = (op,b) \/
-    compile_mapping_subscript bop key a = (op,b)) ==>
-  b.cs_current_bb = a.cs_current_bb /\
-  b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
-  a.cs_next_id <= b.cs_next_id /\
-  EVERY (\i. i.inst_id IN frag_ids a b /\ ~is_terminator i.inst_opcode /\
-             i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
-             i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (emitted_insts a b)
-Proof
-  strip_tac >>
-  gvs[compile_keccak256_key_def, compile_mapping_subscript_def,
-      compile_alloc_buffer_def, emit_op_def, emit_void_def, comp_bind_def,
-      comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def,
-      emitted_insts_def] >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
-  simp[frag_ids_def, mk_inst_def, is_terminator_def]
-QED
-
-Theorem mapping_tail_inventory[local]:
-  (if is_bytestring_type kt then compile_keccak256_key key F a else (key,a)) = (h,b) /\
-  compile_mapping_subscript bop h b = (op,c) ==>
-  c.cs_current_bb = a.cs_current_bb /\
-  c.cs_current_insts = a.cs_current_insts ++ emitted_insts a c /\
-  EVERY (\i. i.inst_id IN frag_ids a c /\ ~is_terminator i.inst_opcode /\
-             i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
-             i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (emitted_insts a c)
-Proof
-  strip_tac >> Cases_on `is_bytestring_type kt`
-  >- (gvs[] >>
-      drule_at (Pat `compile_keccak256_key _ _ _ = _`)
-        (cj 1 (REWRITE_RULE [DISJ_IMP_THM] mapping_key_slot_inventory)) >> strip_tac >>
-      drule_at (Pat `compile_mapping_subscript _ _ _ = _`)
-        (cj 2 (REWRITE_RULE [DISJ_IMP_THM] mapping_key_slot_inventory)) >> strip_tac >>
-      `emitted_insts a c = emitted_insts a b ++ emitted_insts b c` by
-        (irule emitted_insts_append >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      conj_tac >- metis_tac[] >>
-      conj_tac >- simp[APPEND_ASSOC] >>
-      qpat_assum `emitted_insts a c = _` SUBST1_TAC >>
-      gvs[EVERY_APPEND, EVERY_MEM, frag_ids_def] >> metis_tac[LESS_EQ_TRANS, LESS_LESS_EQ_TRANS]) >>
-  gvs[] >> metis_tac[mapping_key_slot_inventory]
-QED
 
 Theorem mapping_extension_scoped[local]:
   mapping_extension_observed (DF,lo,E,ctx,func,PG) cx st0
@@ -119,14 +76,9 @@ Theorem target_mapping_tail_scoped_cut:
 Proof
   strip_tac >> drule_all target_mapping_tail_observed >>
   disch_then (qspecl_then [`shadow_ctx`,`PG`] strip_assume_tac) >>
-  drule_all mapping_tail_inventory >> strip_tac >>
   `create_operand_at sn t2` by simp[create_operand_at_def] >>
   conj_tac
   >- (irule mapping_extension_scoped >> first_assum (irule_at Any) >>
-      `t = (t with vs_inst_idx := t2.vs_inst_idx) with
-           vs_inst_idx := LENGTH sb.cs_current_insts` by
-        simp[venom_state_component_equality] >>
-      pop_assum SUBST1_TAC >> irule create_admin_sequence_scope >>
-      first_assum (irule_at Any) >> gvs[EVERY_MEM]) >>
-  irule create_admin_sequence_cut >> gvs[EVERY_MEM]
+      irule mapping_suffix_raw_scope >> metis_tac[]) >>
+  irule mapping_suffix_visit_inventory >> metis_tac[]
 QED
