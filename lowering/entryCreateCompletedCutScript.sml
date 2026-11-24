@@ -134,7 +134,7 @@ Definition create_operand_full_scope_def:
         gas_origin_edge T explicit ctx func u last r
 End
 
-Theorem create_operand_full_scope_match[local]:
+Theorem create_operand_full_scope_match:
   (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   create_operand_full_scope sa sb explicit ctx func s0 witness r /\
   create_expr_prefix sa sb explicit ctx func s0 marks s /\
