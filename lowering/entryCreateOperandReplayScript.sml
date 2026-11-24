@@ -5,7 +5,7 @@ Ancestors
   gasContext gasOutcomeFull createSizeOperandCode createExprSizeExitDefs
   createSizeCutRegion createSizePrefixReplay bodyFullIfExpReach fragGasOrigin
 
-Theorem body_operand_full_judgments:
+Theorem entry_create_operand_full_judgments[local]:
   body_expr_full_ok cx e /\ body_inv tops ctx ce cx /\
   shadow_body_inv tops ctx shctx /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
@@ -33,7 +33,7 @@ Proof
   strip_tac >>
   `cx_tops cx = tops` by fs[body_inv_def, cx_tops_def] >>
   `expr_sim_full (DF,lo,d,ctx,shctx,PG,fnc,shfnc) ce cx ty e es` by
-    (drule_all body_operand_full_judgments >> simp[]) >>
+    (drule_all entry_create_operand_full_judgments >> simp[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
   simp[expr_sim_full_via_bundle, expr_sim_full_hypotheses_def,
        expr_sim_full_code_def] >>
@@ -84,7 +84,7 @@ Proof
   strip_tac >>
   `cx_tops cx = tops` by fs[body_inv_def, cx_tops_def] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shctx,PG,fnc,shfnc) ce cx ty e es` by
-    (drule_all body_operand_full_judgments >> simp[]) >>
+    (drule_all entry_create_operand_full_judgments >> simp[]) >>
   qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_vv_sim_full_eq] >> strip_tac >>
   first_x_assum drule >> simp[]

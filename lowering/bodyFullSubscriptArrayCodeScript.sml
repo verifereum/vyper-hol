@@ -2,7 +2,7 @@
 Theory bodyFullSubscriptArrayCode
 Ancestors vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ignore_grammar] exprSimHypsDefs[qualified,ignore_grammar]
   bodyFullShadowBodyInv
-  bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose
+  bodyFullOfVV bodyFullPreds bodyFullSimProjection bodySimFull gasOutcomeFullCompose
   bodyFullAttributeAdd bodyFullGhostFrame bodyFullPathHistory
   bodyFullSubscriptArrayCodeBounds bodyFullSubscriptArrayCodeOps
   bodyFullEmptyLeafData exprSimFullBundleProps
@@ -230,7 +230,7 @@ Proof
               exprSimTopLevelPropsTheory.array_slot_base_compile_location] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty e1 es` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   simp[expr_vv_sim_full_via_bundle,expr_vv_sim_full_hypotheses_def,
        expr_sim_full_code_def] >>
   qx_genl_tac [`st0`, `sa`, `sb`, `shadow_sa`, `shadow_sb`, `vv`, `s0`, `G0`, `tn0`] >>
@@ -344,7 +344,7 @@ Resume subscript_array_framed_code_full[after_base]:
      qexists_tac `ann` >> simp[]) >>
   `body_expr_full_ok cx e2` by metis_tac[] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e2 mid` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   `?shadow_st2. lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2)
       shadow_sm = (iop,shadow_st2) /\ gas_shadow_state st2 shadow_st2` by
     (`gas_shadow_compiles (lower_value compile_expr cenv ty e2)
