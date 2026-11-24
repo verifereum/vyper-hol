@@ -37,10 +37,15 @@ Theorem create_abi_cursor_finish_confined:
 Proof
   strip_tac >> drule_all abi_encode_values_finish_run >>
   disch_then (qspecl_then [`explicit`,`PG`]
-    (qx_choose_then `t` (qx_choose_then `G'` (qx_choose_then `tn'`
-      (qx_choose_then `raw` strip_assume_tac))))) >>
+    (qx_choosel_then [`t`,`G'`,`tn'`] strip_assume_tac)) >>
   qexistsl_tac [`t`,`G'`,`tn'`] >> conj_tac
-  >- (qpat_assum `t = raw with vs_inst_idx := _` SUBST1_TAC >>
+  >- (`t.vs_inst_idx = LENGTH en.cs_current_insts` by
+        metis_tac[window_phase_control] >>
+      `create_operand_full_scope st en explicit ctx func s []
+        (OK ((t with vs_inst_idx := s.vs_inst_idx) with
+             vs_inst_idx := LENGTH en.cs_current_insts))` suffices_by
+        (`(t with vs_inst_idx := LENGTH en.cs_current_insts) = t` by
+           simp[venom_state_component_equality] >> simp[]) >>
       drule emitted_insts_emit_op >> strip_tac >>
       drule emit_op_same_blocks >> strip_tac >>
       irule create_admin_sequence_scope >>

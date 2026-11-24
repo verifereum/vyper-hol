@@ -22,9 +22,7 @@ Theorem abi_encode_values_finish_run:
   (!i. d <= i /\ i < d + hl ==> i NOTIN tn.t_mem) /\
   (!i. d + hl <= i /\ i < d + hl + tl ==> i NOTIN tn.t_mem) /\
   bytes = enc (Tuple tys) (ListV vs) ==>
-  ?t G' tn' raw.
-    run_inst_seq (emitted_insts st en) s = OK raw /\
-    t = (raw with vs_inst_idx := LENGTH en.cs_current_insts) /\
+  ?t G' tn'.
     eval_operand out t = SOME (n2w (LENGTH bytes)) /\ op_taint tn' out = {} /\
     (!x. out = Var x ==> not_fresh_at en x) /\
     mem_bytes_at d (LENGTH bytes) t.vs_memory = bytes /\
@@ -34,15 +32,14 @@ Theorem abi_encode_values_finish_run:
       FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     tn'.t_imm = tn.t_imm /\ t.vs_memory = s.vs_memory /\
-    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    run_inst_seq (emitted_insts st en) s = OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >>
   drule_all abi_encode_values_output_ready >> strip_tac >>
   drule_all abi_encode_values_cursor_load_run >>
-  disch_then (qspecl_then [`explicit`,`PG`]
-    (qx_choose_then `t` (qx_choose_then `G'` (qx_choose_then `tn'`
-      (qx_choose_then `raw` strip_assume_tac))))) >>
-  qexistsl_tac [`t`,`G'`,`tn'`,`raw`] >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >>
   qpat_x_assum `hl = _` SUBST_ALL_TAC >>
   qpat_x_assum `tl = _` SUBST_ALL_TAC >>
   qpat_x_assum `bytes = _` SUBST_ALL_TAC >>
@@ -79,5 +76,7 @@ Theorem abi_encode_values_finish:
     tn'.t_imm = tn.t_imm /\ t.vs_memory = s.vs_memory /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
 Proof
-  strip_tac >> drule_all abi_encode_values_finish_run >> metis_tac[]
+  strip_tac >> drule_all abi_encode_values_finish_run >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED
