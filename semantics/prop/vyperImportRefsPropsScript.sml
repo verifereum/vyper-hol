@@ -151,7 +151,8 @@ Proof
   strip_tac >>
   `EVERY (\(key,rhs). FST key <> NONE ==> imported_expr_refs_ok rhs)
          (consts_env_mods mods)` by
-    (simp[consts_env_mods_def] >> irule consts_env_acc_imported_refs_ok >>
+    (simp[consts_env_mods_def, consts_env_modules_order_eq] >>
+     irule consts_env_acc_imported_refs_ok >>
      simp[] >> once_rewrite_tac[EVERY_MEM] >>
      simp[FORALL_PROD, MEM_constants_order] >>
      Cases >> simp[] >> rpt strip_tac >>
