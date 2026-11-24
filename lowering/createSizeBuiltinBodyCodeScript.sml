@@ -1,7 +1,7 @@
 (* Static ID and caller branch-target certificates for ordinary builtins. *)
 Theory createSizeBuiltinBodyCode
 Ancestors
-  createSizeCutCode createSizeCutOpens exprLowering exprCallBounds vyperAST context builtinStrings builtinMath
+  exprValueWrapperStateProps createSizeCutCode createSizeCutOpens exprLowering exprCallBounds vyperAST context builtinStrings builtinMath
   builtinHashing builtinSimple builtinBytes builtinMisc externalEntryShape
   pair list pred_set arithmetic emitHelper compileEnv venomInst
 
@@ -144,7 +144,7 @@ Proof
     clamp_and_return_def, compile_clamp_def, UNCURRY_VAR]
 QED
 
-val _ = augment_srw_ss [rewrites [create_cut_value_wrappers]];
+val _ = augment_srw_ss [rewrites [dalloca_windows_state_wrappers]];
 
 (* Pair lets sequence actions, while ordinary lets may select a type or
    compute metadata. Try the pair rule before eliminating UNCURRY. *)

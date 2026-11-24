@@ -80,9 +80,8 @@ Proof
            stmtExprAllocationPrePropsTheory.body_inv_stmt_expr_pre_singleton))) >>
      simp[supported_stmt_expr_exists_def, supported_assert_exists_def, int_calls_stmt_def, int_calls_assert_reason_def] >>
      disch_then irule >>
-     `~is_extcode e` by
-       (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-        qexists_tac `cenv` >> fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def]) >>
+     `alloc_limits_expr cenv e` by fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def] >>
+     `~is_extcode e` by metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode] >>
      mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`, `calls` |-> `[]`]
               stmt_expr_body_pre_main_mods) >>
      gvs[compileUnitTheory.main_module_def, alistTheory.ALOOKUP_def,
@@ -128,9 +127,8 @@ Proof
              stmtExprAllocationPrePropsTheory.body_inv_stmt_expr_pre_singleton) >>
      simp[supported_stmt_expr_exists_def, int_calls_stmt_def] >>
      disch_then irule >>
-     `~is_extcode e` by
-       (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-        qexists_tac `cenv` >> fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def]) >>
+     `alloc_limits_expr cenv e` by fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def] >>
+     `~is_extcode e` by metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode] >>
      mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`, `calls` |-> `[]`]
               stmt_expr_body_pre_main_mods) >>
      gvs[compileUnitTheory.main_module_def, alistTheory.ALOOKUP_def,
