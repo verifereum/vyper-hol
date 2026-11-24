@@ -7,7 +7,7 @@ Ancestors
   exprSimWordBuiltins exprSimSource exprSimHypsDefs exprLowering
   compileEnv exprLoweringProps vyperTyping vyperTypeSystem list finite_map
   gasShadowCompileStmtHelpers gasShadowState builtinMath fragExec wordArgsPtr
-  bodyFullIfExpReach
+  bodyFullIfExpReach bodyFullSimProjection
 
 val _ = Parse.hide "body";
 
@@ -110,13 +110,8 @@ Proof
       `body_expr_full_ok cx e1` by
         (fs[vyperContextTheory.builtin_args_length_ok_def, body_exprs_full_ok_def]) >>
       `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e1 es` by
-        (qpat_assum `body_expr_full_ok cx e1` mp_tac >>
-         qpat_assum `body_inv _ _ _ _` mp_tac >>
-         qpat_assum `expr_body_pre cenv cx env e1 es` mp_tac >>
-         qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
-         qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es` mp_tac >>
-         rpt (pop_assum kall_tac) >>
-         simp[body_expr_full_ok_def] >> metis_tac[]) >>
+        (irule (cj 1 body_expr_full_ok_simulations) >> simp[] >>
+         qexistsl [`env`, `tops`] >> asm_rewrite_tac[]) >>
       `!e. MEM e [e1;e2;e3] ==> expr_body_pre cenv cx env e es` by
         (gen_tac >> strip_tac >> drule expr_body_pre_builtin_arg >>
          disch_then (qspecl_then [`e`, `es`] mp_tac) >>
@@ -322,13 +317,8 @@ Proof
          goal_assum (drule_at Any) >>
          goal_assum (drule_at Any) >> simp[]) >>
       `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e2 mid` by
-        (qpat_assum `body_expr_full_ok cx e2` mp_tac >>
-         qpat_assum `body_inv _ _ _ _` mp_tac >>
-         qpat_assum `expr_body_pre cenv cx env e2 mid` mp_tac >>
-         qpat_assum `body_const_cells_agree [(NONE,tops)] cx env mid` mp_tac >>
-         qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
-         rpt (pop_assum kall_tac) >>
-         simp[body_expr_full_ok_def] >> metis_tac[]) >>
+        (irule (cj 1 body_expr_full_ok_simulations) >> simp[] >>
+         qexistsl [`env`, `tops`] >> asm_rewrite_tac[]) >>
       qpat_x_assum `expr_sim_full _ _ _ _ e2 mid`
         (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
       disch_then (qspecl_then [`st0`, `s1`, `s2`, `sh1`, `sh2`, `y`, `t`, `G1`, `tn1`] mp_tac) >>
@@ -446,13 +436,8 @@ Proof
          goal_assum (drule_at Any) >>
          goal_assum (drule_at Any) >> simp[]) >>
       `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e3 mid'` by
-        (qpat_assum `body_expr_full_ok cx e3` mp_tac >>
-         qpat_assum `body_inv _ _ _ _` mp_tac >>
-         qpat_assum `expr_body_pre cenv cx env e3 mid'` mp_tac >>
-         qpat_assum `body_const_cells_agree [(NONE,tops)] cx env mid'` mp_tac >>
-         qpat_assum `shadow_body_inv tops ctx shadow_ctx` mp_tac >>
-         rpt (pop_assum kall_tac) >>
-         simp[body_expr_full_ok_def] >> metis_tac[]) >>
+        (irule (cj 1 body_expr_full_ok_simulations) >> simp[] >>
+         qexistsl [`env`, `tops`] >> asm_rewrite_tac[]) >>
       `s1.cs_next_var <= s2.cs_next_var` by
         (qpat_assum `lower_value _ _ _ e2 s1 = _`
            (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o MATCH_MP (cj 2 compile_expr_grows))) >>
