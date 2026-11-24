@@ -2,6 +2,7 @@
 Theory entryCreateSendTail
 Ancestors
   bodyFullSendPost entryCreateSendSuffix entryCreatePendingScope
+  entryCreateCompletedCut entryCreateFocusSpec entryCreatePathScope
   gasOutcomeFull gasStorage gasSummary fragGasOriginPtr vyperStorageFootprint
   vyperState exprSimDefs
 
@@ -47,26 +48,26 @@ Proof
   rewrite_tac[scoped_operand_outcome_def] >> qexists_tac `[]` >>
   simp[gas_explicit_def]
   >- (disj1_tac >> simp[gas_bad_storage_at_def,gas_explicit_def] >>
-      conj_tac >- (irule create_operand_focus_scope_caller >> simp[]) >>
+      conj_tac >- (irule create_operand_focus_scope_caller >> qexists_tac `s` >> simp[]) >>
       qexistsl_tac [`storage_trace_horizon es1.storage_trace`,`fn`,`PG`,`G`,`tn`,`s`] >>
       simp[storage_trace_domain_def,gas_origin_ptr_focus_nil]) >>
   disj2_tac >> disj1_tac >>
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
   `create_operand_at sm s` by simp[create_operand_at_def] >>
   qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >> simp[] >>
-  conj_tac
-  >- (`valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
-        fs[storage_trace_domain_def] >>
-      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
-        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
-      impl_tac >- first_assum ACCEPT_TAC >>
-      strip_tac >>
-      drule gas_origin_ptr_path_projections >> strip_tac >>
-      gvs[] >>
-      (irule create_send_effect_ok_scope >> simp[] >> metis_tac[])
-      ORELSE
-      (irule create_send_effect_abort_scope >> simp[] >> metis_tac[])) >>
-  qx_gen_tac `H` >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
-    (qspec_then `H` mp_tac) >> simp[] >> metis_tac[]
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (CONJUNCTS_THEN2 strip_assume_tac (assume_tac o CONJUNCT1)) >>
+  drule gas_origin_ptr_path_projections >> strip_tac >>
+  qabbrev_tac `ops = [gas;addr;value;Lit 0w;Lit 0w;Lit 0w;Lit 0w]` >>
+  gvs[LET_THM]
+  >- (irule create_send_effect_abort_scope >> simp[] >>
+      qexistsl_tac [`ops`,`out`,`s3`] >> simp[])
+  >- (irule create_send_effect_abort_scope >> simp[] >>
+      qexistsl_tac [`ops`,`out`,`s3`] >> simp[] >>
+      disj2_tac >> qexists_tac `u` >> simp[]) >>
+  drule_all create_send_effect_ok_scope >> simp[]
 QED
