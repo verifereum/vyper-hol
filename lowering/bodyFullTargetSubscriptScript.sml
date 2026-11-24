@@ -15,7 +15,7 @@ Ancestors
   exprSimSubscriptArrayLiveImmutableView exprSimCopy vyperTypeValues vyperValue
   vyperPlaceResultTyping vyperTypeExprResult vyperTyping exprSimHyps
   vyperTypeInvariants targetSubscriptMemory tuplePlaceSourceHead loweringStateRelDefs
-  gasOutcomeFullCompose gasOutcomeFull bodyFullPreds
+  gasOutcomeFullCompose gasOutcomeFull bodyFullPreds bodyFullSimProjection
   bodySimFull bodyFullIfExpReach bodyFullHashKeccakFixed
   contextRawReachable ptrDiscipline unitMemInv
   targetPlaceSimCasesBase targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
@@ -314,7 +314,7 @@ Resume target_subscript_sim_full[index]:
     (fs[body_base_target_full_ok_def] >> first_x_assum irule >> metis_tac[]) >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cenv cx (expr_type e) e mid1` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   suspend "index_run"
 QED
 
@@ -717,7 +717,7 @@ Resume immutable_target_subscript_sim_full[index]:
   `target_indices_pre cenv cx env bt` by fs[target_indices_pre_def] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e mid1` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   suspend "index_run"
 QED
 

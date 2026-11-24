@@ -7158,7 +7158,8 @@ Proof
   simp[] >> strip_tac >>
   `op' = op /\ su' = shadow_su` by
     gvs[lower_value_def,comp_bind_def] >>
-  gvs[] >>
+  qpat_x_assum `op' = op` SUBST_ALL_TAC >>
+  qpat_x_assum `su' = shadow_su` SUBST_ALL_TAC >>
   Cases_on `compile_tuple_unpack (gas_shadow_env T cenv) (lowered_value_type cenv e)
     (is_memory_view e /\ vv_location shadow_vv = SOME LocMemory)
     (MAP gas_shadow_assignment gs) op shadow_su` >>
