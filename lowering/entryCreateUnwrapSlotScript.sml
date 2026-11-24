@@ -12,7 +12,8 @@ Ancestors
 Theorem unwrap_slot_copy_opcodes[local]:
   (opc = SLOAD \/ opc = TLOAD) /\
   MEM i (frag_code a (slot_copy_final a src dst n opc)) ==>
-  i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2
+  i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2 /\
+  i.inst_opcode <> GAS
 Proof
   Cases_on `opc = SLOAD` >>
   gvs[frag_code_def, slot_copy_emitted_blocks, slot_copy_blocks_def,
@@ -21,11 +22,12 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem unwrap_slot_ensure_opcodes[local]:
+Theorem unwrap_slot_ensure_opcodes:
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_ensure_in_memory src loc nb n ctor imm a = (op,b) /\
   MEM i (frag_code a b) ==>
-  i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2
+  i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2 /\
+  i.inst_opcode <> GAS
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all ensure_slot_memory_split >> strip_tac >>
