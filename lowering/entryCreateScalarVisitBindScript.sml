@@ -68,7 +68,10 @@ Theorem selected_scalar_replay_source[local]:
     (bind (eval_expr cx e) (read_result cx)) (es,s,G0,tn0) Q ==>
   gas_completed_operand (DF,lo,E,ctx,fn,PG) tops cx st0 a m
     (bind (eval_expr cx e) (read_result cx)) (es,s,G0,tn0)
-    (\H r mid G tn t. Q H r mid G tn t /\ scalar_visit_source_post tops ce cx env e r mid)
+    (\H r mid G tn t. Q H r mid G tn t /\
+      scalar_visit_source_post tops ce cx env e r mid /\
+      (!h. valid_horizon cx st0 h mid.storage_trace ==>
+           valid_horizon cx st0 h es.storage_trace))
 Proof
   simp[gas_completed_operand_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
   rfs[] >> first_x_assum drule_all >> strip_tac
@@ -82,6 +85,12 @@ Proof
         (irule body_const_cells_agree_expr_read >>
          qpat_assum `bind (eval_expr cx e) _ start = _` (irule_at Any) >>
          drule expr_body_pre_static_facts >> simp[]) >>
+      `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+        simp[storage_trace_frame_bind_all, cj 5 evaluate_storage_trace_frame,
+             storage_trace_frame_read_result] >>
+      `!h. valid_horizon cx st0 h ee.storage_trace ==>
+           valid_horizon cx st0 h es.storage_trace` by
+        (rpt strip_tac >> drule_all valid_horizon_frame >> simp[Abbr `start`]) >>
       simp[] >> gvs[] >>
       drule (CONV_RULE (DEPTH_CONV ETA_CONV) exprSimSourceTheory.eval_expr_read_INL) >>
       metis_tac[]) >>
@@ -123,13 +132,17 @@ Theorem scalar_visit_return[local]:
     gas_origin_ptr_path (DF H,lo,E,ctx,fn,PG) (s,G0,tn0) marks (OK t,G,tn) /\
     expr_sim_full_post (DF,lo,d,ctx,fn) ce cx e (es,a,m,s,op,G0,tn0)
       H (INL v : value + exception) (mid with gas_obs := []) G tn t /\
-    scalar_visit_source_post tops ce cx env e (INL v) (mid with gas_obs := [])) ==>
+    scalar_visit_source_post tops ce cx env e (INL v) (mid with gas_obs := []) /\
+    (!h. valid_horizon cx st0 h mid.storage_trace ==>
+         valid_horizon cx st0 h es.storage_trace)) ==>
   valid_horizon cx st0 H0 mid.storage_trace /\
   scalar_visit_entry DF lo d ctx fn ce cx st0 a es s G0 tn0 /\
   ci_mono a m /\
   (!bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) ==>
   scalar_visit_source_post tops ce cx env e (INL v) (mid with gas_obs := []) /\
   scalar_visit_entry DF lo d ctx fn ce cx st0 m (mid with gas_obs := []) t G tn /\
+  (!h. valid_horizon cx st0 h mid.storage_trace ==>
+       valid_horizon cx st0 h es.storage_trace) /\
   (!H. valid_horizon cx st0 H mid.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,E,ctx,fn,PG) (s,G0,tn0) marks (OK t,G,tn) /\
     expr_sim_full_post (DF,lo,d,ctx,fn) ce cx e (es,a,m,s,op,G0,tn0)
@@ -137,8 +150,8 @@ Theorem scalar_visit_return[local]:
 Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >>
   disch_then (mk_asm "row") >> strip_tac >>
-  conj_tac >- (asm "row" (qspec_then `H0` mp_tac) >> simp[]) >>
-  reverse conj_asm2_tac
+  asm "row" (qspec_then `H0` mp_tac) >> simp[] >> strip_tac >>
+  simp[] >> reverse conj_asm2_tac
   >- (qx_gen_tac `h` >> strip_tac >>
       asm "row" (qspec_then `h` mp_tac) >>
       impl_tac >- first_assum ACCEPT_TAC >>
@@ -148,7 +161,7 @@ Proof
   impl_tac >- first_assum ACCEPT_TAC >> simp[]
 QED
 
-Theorem scalar_visit_cons:
+Theorem scalar_visit_cons_horizon:
   scalar_visit_split tops ctx ce cx fn E /\
   scalar_visit_replay tops cx ctx fn E st0 DF lo PG /\
   E = gas_explicit_sites ctx shctx /\
@@ -169,6 +182,8 @@ Theorem scalar_visit_cons:
      valid_horizon cx st0 H0 mid.storage_trace /\
      scalar_visit_source_post tops ce cx env e (INL v : value + exception) (mid with gas_obs := []) /\
      scalar_visit_entry DF lo d ctx fn ce cx st0 m (mid with gas_obs := []) t G tn /\
+     (!h. valid_horizon cx st0 h mid.storage_trace ==>
+          valid_horizon cx st0 h es.storage_trace) /\
      (!H. valid_horizon cx st0 H mid.storage_trace ==>
        gas_origin_ptr_path (DF H,lo,E,ctx,fn,PG) (s,G0,tn0) marks (OK t,G,tn) /\
        expr_sim_full_post (DF,lo,d,ctx,fn) ce cx e (es,a,m,s,op,G0,tn0)
@@ -209,4 +224,47 @@ Proof
   disch_then (qspec_then `H0` mp_tac) >>
   impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >> strip_tac >>
   first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem scalar_visit_cons:
+  scalar_visit_split tops ctx ce cx fn E /\
+  scalar_visit_replay tops cx ctx fn E st0 DF lo PG /\
+  E = gas_explicit_sites ctx shctx /\
+  body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  scalar_visit_entry DF lo d ctx fn ce cx st0 a es s G0 tn0 /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  lower_value compile_expr ce (expr_type e) e a = (op,m) /\
+  lower_value compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) sha = (op,shm) /\
+  expr_sim_full_code (ctx,shctx,fn,shfn) (a,m,sha,shm) /\
+  create_cut_code {} a m /\ create_cut_code {} m b /\ fn_has_code m b fn /\
+  (expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,fn,shfn) ce cx (expr_type e) e es
+       (st0,a,m,sha,shm,op,s,G0,tn0) ==>
+    expr_sim_scoped (DF,lo,d,ctx,shctx,PG,fn,shfn) ce cx (expr_type e) e es /\
+    create_operand_cut a m E ctx fn tops cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s)) /\
+  (!v. storage_trace_frame (next v : evaluation_state -> (eval_result + exception) # evaluation_state)) /\
+  (!H0 marks v mid G tn t.
+     valid_horizon cx st0 H0 mid.storage_trace /\
+     scalar_visit_source_post tops ce cx env e (INL v : value + exception) (mid with gas_obs := []) /\
+     scalar_visit_entry DF lo d ctx fn ce cx st0 m (mid with gas_obs := []) t G tn /\
+     (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,E,ctx,fn,PG) (s,G0,tn0) marks (OK t,G,tn) /\
+       expr_sim_full_post (DF,lo,d,ctx,fn) ce cx e (es,a,m,s,op,G0,tn0)
+         H (INL v : value + exception) (mid with gas_obs := []) G tn t) ==>
+     create_operand_cut m b E ctx fn tops cx st0 (next v) (mid with gas_obs := [],t)) ==>
+  create_operand_cut a b E ctx fn tops cx st0
+    (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s)
+Proof
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac >>
+  irule (CONV_RULE (REDEPTH_CONV BETA_CONV) scalar_visit_cons_horizon) >>
+  simp[] >>
+  qpat_assum `expr_sim_full_code _ _` (irule_at Any) >>
+  qpat_assum `lower_value compile_expr ce _ e a = _` (irule_at Any) >>
+  qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `return_buf_frame d ce a s` (irule_at Any) >>
+  qexistsl [`tn0`, `lo`, `PG`, `G0`, `DF`] >>
+  gvs[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  qpat_x_assum `!H0 marks v mid G tn t. _ ==> create_operand_cut _ _ _ _ _ _ _ _ _ _`
+    mp_tac >>
+  rpt (pop_assum kall_tac) >> metis_tac[]
 QED

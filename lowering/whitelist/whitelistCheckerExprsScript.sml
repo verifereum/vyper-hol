@@ -297,7 +297,8 @@ Proof
 QED
 
 Theorem well_typed_builtin_agg_ok[local]:
-  well_typed_builtin_app ty blt ts /\ (!s b. blt <> MakeArray s b) ==>
+  well_typed_builtin_app ty blt ts /\ (!s b. blt <> MakeArray s b) /\
+  blt <> NamedConst ==>
   checker_agg_ok tops ty
 Proof
   Cases_on `ty` >> simp[checker_agg_ok_def] >>
@@ -308,7 +309,8 @@ QED
 
 Theorem well_typed_builtin_supported_form:
   well_typed_builtin_app ty blt (MAP expr_type es) /\
-  (!s b. blt = MakeArray s b ==> assignable_type (type_env tops) ty) ==>
+  (!s b. blt = MakeArray s b ==> assignable_type (type_env tops) ty) /\
+  (blt = NamedConst ==> checker_agg_ok tops ty) ==>
   supported_builtin_form tops ty blt es /\ checker_agg_ok tops ty
 Proof
   strip_tac >>
@@ -318,6 +320,7 @@ Proof
       Cases_on `s` >> Cases_on `b` >>
       gvs[supported_builtin_form_def, well_typed_builtin_app_def]) >>
   conj_tac >- metis_tac[well_typed_builtin_args_length_form] >>
+  Cases_on `blt = NamedConst` >- gvs[] >>
   irule well_typed_builtin_agg_ok >> metis_tac[]
 QED
 
@@ -506,6 +509,7 @@ QED
 Theorem checker_builtin_pure[local]:
   checker_env_ok tops env /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
   (!s b. blt = MakeArray s b ==> assignable_type env.type_defs ty) /\
+  (blt = NamedConst ==> checker_agg_ok tops ty) /\
   EVERY (supported_pure_expr tops) es ==>
   supported_pure_expr tops (Builtin ty blt es) /\ checker_agg_ok tops ty
 Proof
@@ -569,6 +573,26 @@ Proof
   Cases_on `l` >> simp[well_typed_literal_def]
 QED
 
+Theorem checker_named_const_operand_agg_ok[local]:
+  checker_env_ok tops env /\ well_typed_expr env e /\ named_const_operand e ==>
+  checker_agg_ok tops (expr_type e)
+Proof
+  strip_tac >>
+  `env.type_defs = type_env tops` by fs[checker_env_ok_def] >>
+  Cases_on `e` >> gvs[oneline named_const_operand_def]
+  >~ [`expr_type (Literal _ _)`] >-
+    (gvs[well_typed_expr_def, expr_type_def] >> drule literal_agg_ok >> simp[])
+  >~ [`expr_type (Builtin _ bi _)`] >-
+    (Cases_on `bi` >> gvs[well_typed_expr_def, expr_type_def] >>
+     simp[checker_agg_ok_assignable]) >>
+  rename1 `expr_type (TypeBuiltin _ tb _ args)` >>
+  Cases_on `tb` >> Cases_on `args` >> gvs[expr_type_def] >>
+  qpat_x_assum `well_typed_expr _ (TypeBuiltin _ _ _ _)` mp_tac >>
+  pure_rewrite_tac[well_typed_expr_def] >>
+  asm_rewrite_tac[] >> strip_tac >>
+  drule_all well_typed_type_builtin_supported_form >> simp[]
+QED
+
 Theorem every_pure_eta[local]:
   EVERY (\a. supported_pure_expr tops a) l <=> EVERY (supported_pure_expr tops) l
 Proof
@@ -630,6 +654,11 @@ Proof
       res_tac >>
       `!s b. blt = MakeArray s b ==> assignable_type env.type_defs ty` by
         (rw[] >> fs[]) >>
+      `(blt = NamedConst ==> checker_agg_ok tops ty)` by
+        (strip_tac >> gvs[] >> Cases_on `es` >> gvs[builtin_operands_ok_def] >>
+         rename1 `_ (e::rest)` >> Cases_on `rest` >>
+         gvs[builtin_operands_ok_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+         drule_all checker_named_const_operand_agg_ok >> simp[]) >>
       drule_all checker_builtin_pure >> simp[])
   >~ [`supported_pure_expr _ (TypeBuiltin _ _ _ _)`]
   >- (rpt strip_tac >> gvs[well_typed_expr_def,
