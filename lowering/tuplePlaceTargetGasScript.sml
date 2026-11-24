@@ -4,7 +4,8 @@ Ancestors
   tuplePlaceSourceHead exprSimHypsDefs gasContext targetPlaceSimCases
   vyperTypeEvalSoundness vyperTypeExprSoundness vyperExprNoControl
   targetPlaceSim exprSimSource supportedExprs supportedExprTraverse vyperTypeCallGraph
-  targetPlaceLive targetPlaceSimCasesBase exprBodyPreProps bodyInvSplit bodyInvCodeProps vyperAST list alist
+  targetPlaceLive targetPlaceSimCasesBase exprBodyPreProps bodyInvSplit
+  bodyCallSupport vyperAST list
 
 (* The static part of each index's expr_body_pre, collected over the
    target: no evm-run root and every internal call supported. *)
@@ -12,20 +13,15 @@ Theorem target_indices_pre_static_mods:
   !bt. contract_inv mods exps ctx cenv cx /\
   (!e. MEM e (target_indices bt) ==> expr_body_pre_mods mods cenv cx env e es) ==>
   ~supported_target_exists expr_evm_run_root bt /\
-  EVERY (\c. ?tops. ALOOKUP mods (FST c) = SOME tops /\
-                    supported_program tops /\
-                    IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
-    (int_calls_target bt)
+  EVERY (source_body_call_supported cx) (int_calls_target bt)
 Proof
   `!bt. int_calls_target bt = FLAT (MAP int_calls_expr (target_indices bt)) /\
        (supported_target_exists expr_evm_run_root bt <=>
         EXISTS (supported_expr_exists expr_evm_run_root) (target_indices bt))` by
     (recInduct base_assignment_target_induct >>
      simp[target_indices_def, int_calls_expr_def, supported_expr_exists_def]) >>
-  simp[EVERY_MEM, MEM_FLAT, MEM_MAP, EXISTS_MEM, PULL_EXISTS] >>
-  rpt gen_tac >> strip_tac >>
-  drule_then (fn th => fs[th, expr_body_pre_mods_def, expr_has_evm_run_def, EVERY_MEM])
-    contract_inv_module_codes >>
+  rw[EVERY_MEM, MEM_FLAT, MEM_MAP, EXISTS_MEM, PULL_EXISTS] >>
+  fs[expr_body_pre_mods_def, expr_has_evm_run_def, EVERY_MEM] >>
   metis_tac[]
 QED
 
