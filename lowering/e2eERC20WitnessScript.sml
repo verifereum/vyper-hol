@@ -2,7 +2,7 @@
 Theory e2eERC20Witness
 Ancestors
   e2eWitnessCompute e2eWitness e2eDefs e2eDeployDefs e2eCorrectness e2eLifecycle
-  e2eDeployCorrectness[qualified,ignore_grammar]
+  e2eDeployed
   e2eERC20Compile alist integer_word vyperStorageFootprint
   vyperInterpreter vyperHashMapStorage vfmCompute
   callTrace frameOutcome asmOptimizer accountsRelProps
@@ -588,19 +588,21 @@ local
     simp[erc20_dep_trace])
   val call_bound = prove (``LENGTH (call_trace erc20_es_transfer) < 2 ** 64``,
     simp[erc20_transfer_trace])
+  val call_premises = CONJUNCTS (REWRITE_RULE [call_premises_deployed]
+    (CONJ erc20_source_typing erc20_call_state))
 in
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `erc20_tops`,
       `erc20_deploy_bc`, `erc20_runtime_bc`, `erc20_initial_machine`,
-      `erc20_deploy_tx`, `erc20_es_dep`] e2eDeployCorrectnessTheory.e2e_deploy_correctness)
+      `erc20_deploy_tx`, `erc20_es_dep`] e2e_deploy_correctness_deployed)
     (LIST_CONJ [accepted, erc20_compile, erc20_deploy_typing,
                 erc20_deploy_state, dep_bound])
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `erc20_tops`,
       `erc20_deploy_bc`, `erc20_runtime_bc`, `erc20_am_call`,
-      `erc20_transfer_tx`, `erc20_es_transfer`, `^erc20_horizon`] vyper_call_correct)
-    (LIST_CONJ [accepted, erc20_compile, erc20_source_typing, erc20_call_state,
-                call_bound, SPEC ``erc20_am_call`` erc20_storage_ok, erc20_call_within])
+      `erc20_transfer_tx`, `erc20_es_transfer`, `^erc20_horizon`] vyper_call_correct_deployed)
+    (LIST_CONJ ([accepted, erc20_compile] @ call_premises @
+                [call_bound, SPEC ``erc20_am_call`` erc20_storage_ok, erc20_call_within]))
 end
 
 Theorem erc20_deploy_transfer_lifecycle:
