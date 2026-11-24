@@ -9538,6 +9538,39 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omi
   `tx.args = TAKE (LENGTH args - LENGTH ds) tx.args ++ values` by
     (qpat_assum `Abbrev (values = _)` (fn split =>
        simp[NoAsms, REWRITE_RULE [markerTheory.Abbrev_def] split, TAKE_DROP])) >>
+  qabbrev_tac `entry_types = function_entry_env art mods src External args` >>
+  `check_function_body am.layouts tx.target mods art src External mut nr args dflts ret selected_body` by
+    (`External <> Deploy` by simp[NoAsms] >>
+     drule_all_then ACCEPT_TAC check_contract_runtime_function_body_MEM) >>
+  `IS_SOME (type_stmts entry_types ret body_code)` by
+    (qpat_assum `check_function_body am.layouts tx.target mods art src External mut nr args dflts ret selected_body`
+       (mp_tac o SIMP_RULE bool_ss [check_function_body_def, LET_THM]) >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     qpat_assum `IS_SOME (type_stmts (function_entry_env art mods src External args) ret
+         (subst_consts_stmts_mods (consts_env_mods mods) selected_body))`
+       (fn typed =>
+          qpat_assum `Abbrev (entry_types = _)` (fn et =>
+            qpat_assum `Abbrev (body_code = _)` (fn code =>
+              simp[NoAsms, REWRITE_RULE [markerTheory.Abbrev_def] et,
+                REWRITE_RULE [markerTheory.Abbrev_def] code, typed])))) >>
+  `stmts_no_control_escape selected_body` by
+    (qpat_assum `check_function_body am.layouts tx.target mods art src External mut nr args dflts ret selected_body`
+       (mp_tac o SIMP_RULE bool_ss [check_function_body_def, LET_THM]) >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
+  `ret <> NoneT ==> stmts_no_fallthrough selected_body` by
+    (disch_then (fn nonempty =>
+       qpat_assum `check_function_body am.layouts tx.target mods art src External mut nr args dflts ret selected_body`
+         (strip_assume_tac o SIMP_RULE (srw_ss())
+           [check_function_body_def, LET_THM, nonempty])) >>
+     first_assum ACCEPT_TAC) >>
+  `custom_errors_stmts_ok mods body_code` by
+    (qpat_assum `Abbrev (body_code = _)` (fn code =>
+       PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] code]) >>
+     qpat_assum `check_contract F am.layouts tx.target mods = SOME art` (fn cc =>
+       qpat_assum `check_function_body am.layouts tx.target mods art src
+          External mut nr args dflts ret selected_body` (fn cb =>
+         ACCEPT_TAC (MATCH_MP checked_linked_custom_errors_after_substitution
+           (CONJ cc cb))))) >>
   suspend "linked_grouped_default_omitted_apply"
 QED
 
