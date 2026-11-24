@@ -2,32 +2,11 @@
    endpoints, before the choice of dead mask or storage horizon. *)
 Theory entryStageUnwrapScoped
 Ancestors
-  entryStageSlotUnwrap entryStageUnwrapOther bodyFullUnwrapSlot
+  entryStageSlotUnwrap entryStageUnwrapOther bodyFullUnwrapSlotSelectedPost
   bodyFullHashKeccakFixed createSizePrefixReplay createSizeCutRegion
   createSizeLocationCode venomExecSemantics fragGasOriginPtr loweringPosts
   bodyPtrDefs exprSimMemDefs venomMemDefs compileEnv context exprLowering
   ptrDiscipline vyperStorageFootprint finite_map
-
-Theorem stage_slot_exec_scoped[local]:
-  (!bb. lookup_block sc.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
-  (!bb i. lookup_block sc.cs_current_bb func.fn_blocks = SOME bb /\
-          get_instruction bb (LENGTH sc.cs_current_insts) = SOME i ==>
-          i.inst_id NOTIN frag_ids sb sc) ==>
-  unwrap_slot_exec (\z. create_expr_prefix sb sc explicit ctx func s [] z /\
-                       create_operand_at sc z) lo explicit ctx func PG cenv ee cx
-    s G tn src loc nb n sb sc op
-Proof
-  pure_rewrite_tac [unwrap_slot_exec_def] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all stage_ensure_slot_origin_scoped >>
-  disch_then (qspecl_then [`explicit`,`PG`,`G`]
-    (qx_choosel_then [`root`,`wd`,`a`,`G0`,`tn0`,`Gf`,`tnf`,`z`,`sm`,`buf`,`u`]
-      strip_assume_tac)) >>
-  qexistsl [`root`,`wd`,`a`,`G0`,`tn0`,`Gf`,`tnf`,`z`,`sm`,`buf`,`u`] >>
-  BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
 
 Theorem stage_unwrap_origin_ptr_scoped:
   compile_expr cenv ty e sa = (vv,sm) /\
@@ -125,12 +104,19 @@ Proof
       (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
      (impl_tac >- fs[storage_trace_domain_def]) >> simp[vv_post_def]) >>
   drule_then assume_tac stmt_state_rel_allocas_below_fmp >>
-  mp_tac (Q.INST [`R` |-> `\z. create_expr_prefix sb sc explicit ctx func s [] z /\
-                               create_operand_at sc z`] unwrap_slot_copy_origin_ptr_with_run) >>
-  (impl_tac >- (rpt conj_tac >>
-    FIRST [first_assum ACCEPT_TAC, irule stage_slot_exec_scoped >> simp[]])) >>
-  disch_then (qx_choosel_then [`v`,`z`,`G'`,`tn'`]
-    (strip_assume_tac o BETA_RULE)) >>
+  mp_tac (Q.INST [`exit_ok` |-> `\z. create_expr_prefix sb sc explicit ctx func s [] z /\
+                                     create_operand_at sc z`] unwrap_slot_copy_post_with_exit) >>
+  BETA_TAC >>
+  (impl_tac >-
+    (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     drule_all stage_ensure_slot_origin_scoped >>
+     disch_then (qspecl_then [`explicit`,`PG`,`G`]
+       (qx_choosel_then [`root`,`wd`,`a`,`G0`,`tn0`,`Gf`,`tnf`,`z`,`mid`,`buf`,`u`]
+         strip_assume_tac)) >>
+     qexistsl [`root`,`wd`,`a`,`G0`,`tn0`,`Gf`,`tnf`,`z`,`mid`,`buf`,`u`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choosel_then [`v`,`z`,`G'`,`tn'`] strip_assume_tac) >>
   qexistsl [`v`,`z`,`G'`,`tn'`] >> rpt conj_tac >>
   TRY (first_assum ACCEPT_TAC) >> simp[]
 QED
