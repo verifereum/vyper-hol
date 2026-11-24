@@ -24,6 +24,16 @@ Proof
   gvs[gas_shadow_unit_def]
 QED
 
+(* Use the same source binding and value check in each route projection. *)
+val dispatched_source_value_cases_tac =
+  drule_all dispatched_vyper_call_bind >>
+  disch_then (qx_choose_then `env` assume_tac) >>
+  namedCases_on `send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with <| outcomes := SOME vs.vs_outcomes; requests := [] |>)`
+    ["res es0"] >>
+  reverse (namedCases_on `res` ["u", "e"]);
+
 Theorem dispatched_call_correct_from_value_success:
   !tops rpolicy unit shadow_unit am tx ret vs mut nr args fbody.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -49,13 +59,7 @@ Proof
            source_unit_execution_correct_at_def] >>
       qpat_x_assum `?marks. _` (qx_choose_then `marks` assume_tac) >>
       qexistsl_tac [`marks`, `shadow_unit.cu_context`] >> simp[]) >>
-  drule_all dispatched_vyper_call_bind >>
-  disch_then (qx_choose_then `env` assume_tac) >>
-  namedCases_on `send_call_value mut
-    (initial_evaluation_context am.sources am.layouts tx NONE)
-    (initial_state am [env] with <| outcomes := SOME vs.vs_outcomes; requests := [] |>)`
-    ["res es0"] >>
-  reverse (namedCases_on `res` ["u", "e"])
+  dispatched_source_value_cases_tac
   >- (qexists_tac `[]` >>
       `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
         (drule_all legacy_runtime_shadow_context >> simp[]) >>
@@ -197,14 +201,7 @@ fun registered_body_endpoint_tac entry_ce =
      qpat_assum `!H. stmt_state_rel H _ _ _ _ _ _ /\ ghost_inv H _ _ _ _ _ _ _`
        (qspec_then `H` mp_tac) >> simp[]);
 
-val registered_body_result_tac =
-  mp_tac (Q.SPECL [`tops`,`rpolicy`,`unit`,`am`,`tx`,`ret`,`vs`,`mut`,
-    `T`,`args`,`[]`,`fbody`,`es0`] runtime_body_endpoint_correct) >>
-  impl_tac >-
-    (qunabbrev_tac `compiled_body` >> asm_rewrite_tac[]) >>
-  DISCH_THEN ACCEPT_TAC;
-
-Theorem dispatched_nonreentrant_result[local]:
+Triviality dispatched_nonreentrant_endpoint:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
     ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
@@ -226,17 +223,8 @@ Theorem dispatched_nonreentrant_result[local]:
     (initial_evaluation_context am.sources am.layouts tx NONE)
     (initial_state am [env] with
       <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) ==>
-  ?shadow_unit marks.
-    runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
-    source_unit_execution_correct_with shadow_unit.cu_context marks
-      tops ret am tx unit vs /\
-      ((?tail.
-          call_storage_ok am tx vs.vs_outcomes
-            (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
-       !tail.
-         FST (call_external (SOME vs.vs_outcomes)
-           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
-         INR (Error (RuntimeError "msg.gas: no gas reading")))
+  runtime_body_endpoint tops rpolicy unit am tx vs es0 mut T args [] ret
+    (subst_consts_stmts (module_consts_env tops []) fbody)
 Proof
   strip_tac >>
   drule default_dispatch_raw_cases >>
@@ -268,7 +256,8 @@ Proof
         `compiled_body`,`if ret = NoneT then NONE else SOME ret`,`sa`] >>
       impl_tac >- asm_simp_tac bool_ss [Abbr `compiled_body`] >>
       registered_body_endpoint_tac `cenv` >>
-      registered_body_result_tac) >>
+      qpat_x_assum `args = []` SUBST_ALL_TAC >>
+      qunabbrev_tac `compiled_body` >> first_assum ACCEPT_TAC) >>
   SUBGOAL_THEN (Term `?ts. FIND (\(name,ts). abi_method_id (type_env tops) name ts =
       cd_selector vs.vs_call_ctx.cc_calldata) (abi_external_signatures tops) =
       SOME (tx.function_name,ts)`) ASSUME_TAC
@@ -312,7 +301,95 @@ Proof
     `compiled_body`,`if ret = NoneT then NONE else SOME ret`,`st`] >>
   impl_tac >- asm_simp_tac bool_ss [Abbr `compiled_body`] >>
   registered_body_endpoint_tac `cenv0` >>
-  registered_body_result_tac
+  qunabbrev_tac `compiled_body` >> first_assum ACCEPT_TAC
+QED
+
+Theorem dispatched_nonreentrant_result[local]:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\ initial_venom_state_rel tops am tx vs /\
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
+  outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+  (ctx_has_dalloca unit.cu_context ==>
+    !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+      dalloca_fmp_headroom inst s) /\
+  calldata_dispatch tops vs.vs_call_ctx.cc_calldata =
+    SOME (tx.function_name,tx.args) /\
+  vyperInterpreter$lookup_function NONE tx.function_name External tops =
+    SOME (mut,T,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+      <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) ==>
+  ?shadow_unit marks.
+    runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+    source_unit_execution_correct_with shadow_unit.cu_context marks
+      tops ret am tx unit vs /\
+      ((?tail.
+          call_storage_ok am tx vs.vs_outcomes
+            (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+       !tail.
+         FST (call_external (SOME vs.vs_outcomes)
+           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+         INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  strip_tac >>
+  drule_all dispatched_nonreentrant_endpoint >> strip_tac >>
+  drule_all runtime_body_endpoint_correct >> simp[]
+QED
+
+(* Before body correctness: pass the selected value refusal or the actual
+   registered body endpoint to its own continuation. *)
+Theorem dispatched_selected_route_cases:
+  !tops rpolicy unit am tx ret vs mut nr args fbody Q.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
+    source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name, tx.args) /\
+    initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_fmp_headroom inst s) /\
+    vyperInterpreter$lookup_function NONE tx.function_name External tops =
+      SOME (mut,nr,args,[],ret,fbody) /\
+    (!env es0 e.
+       bind_arguments (type_env tops) args tx.args = SOME env /\
+       send_call_value mut (initial_evaluation_context am.sources am.layouts tx NONE)
+         (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
+         (INR e,es0) ==> Q) /\
+    (!env es0.
+       bind_arguments (type_env tops) args tx.args = SOME env /\
+       send_call_value mut (initial_evaluation_context am.sources am.layouts tx NONE)
+         (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
+         (INL (),es0) /\
+       runtime_body_endpoint tops rpolicy unit am tx vs es0 mut nr args [] ret
+         (subst_consts_stmts (module_consts_env tops []) fbody) ==> Q) ==>
+    Q
+Proof
+  rpt gen_tac >> strip_tac >> dispatched_source_value_cases_tac
+  >- (qpat_x_assum `!env es0 e. _`
+        (qspecl_then [`env`, `es0`, `e`] mp_tac) >> simp[]) >>
+  Cases_on `u` >>
+  `runtime_body_endpoint tops rpolicy unit am tx vs es0 mut nr args [] ret
+     (subst_consts_stmts (module_consts_env tops []) fbody)` by
+    (Cases_on `nr`
+     >- (drule_all dispatched_nonreentrant_endpoint >> simp[]) >>
+     `runtime_entry_endpoint tops rpolicy unit am tx vs es0 mut args ret
+       (subst_consts_stmts (module_consts_env tops []) fbody)` by
+       (Cases_on `tx.function_name = "__default__"`
+        >- (drule_all dispatched_entry_endpoint_default >> simp[]) >>
+        drule_all dispatched_entry_endpoint_selected >> simp[]) >>
+     drule_all runtime_entry_endpoint_body_endpoint >> simp[]) >>
+  qpat_x_assum `!env es0. _` (qspecl_then [`env`, `es0`] mp_tac) >> simp[]
 QED
 
 Triviality dispatched_call_readings_from_value_success:
@@ -351,13 +428,7 @@ Triviality dispatched_call_readings_from_value_success:
          INR (Error (RuntimeError "msg.gas: no gas reading")))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all dispatched_vyper_call_bind >>
-  disch_then (qx_choose_then `env` assume_tac) >>
-  namedCases_on `send_call_value mut
-    (initial_evaluation_context am.sources am.layouts tx NONE)
-    (initial_state am [env] with <| outcomes := SOME vs.vs_outcomes; requests := [] |>)`
-    ["res es0"] >>
-  reverse (namedCases_on `res` ["u", "e"])
+  dispatched_source_value_cases_tac
   >- (qexists_tac `[]` >>
       `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
         (drule_all legacy_runtime_shadow_context >> simp[]) >>

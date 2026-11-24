@@ -420,6 +420,28 @@ val runtime_shadow_body_inv_tac =
     assume_tac (MATCH_MP source_typing_ok_vtype_keys_distinct typing)) >>
   drule_all runtime_shadow_body_inv >> strip_tac;
 
+Theorem runtime_selected_body_loop_calls[local]:
+  source_typing_ok tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,dflts,ret,fbody) ==>
+  (!vis mut nr raw fn args dflts ret stmts.
+     MEM (FunctionDecl vis mut nr raw fn args dflts ret stmts) tops ==>
+     stmts_loop_calls_ok [(NONE,tops)] stmts) /\
+  stmts_loop_calls_ok [(NONE,tops)]
+    (subst_consts_stmts (module_consts_env tops []) fbody)
+Proof
+  strip_tac >>
+  `?art A. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
+      constants_fold_module [(NONE,tops)] (account_immutables am tx.target)
+        NONE tops FEMPTY = SOME A` by fs[source_typing_ok_def] >>
+  pop_assum strip_assume_tac >>
+  drule bodyLoopCallsTheory.checked_module_loop_calls_ok >> disch_then assume_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `stmts_loop_calls_ok [(NONE,tops)] fbody` by
+    (drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_external_body_loop_calls_ok) >>
+  drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_subst_consts_loop_calls_ok
+QED
+
 Theorem runtime_selected_body_frag_full[local]:
   !am tx mut nr args dflts fbody os gs es0 DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
    ret_ty lctx RetQ ss es.
@@ -451,16 +473,7 @@ Theorem runtime_selected_body_frag_full[local]:
       (eval_stmts cx ss) es
 Proof
   rpt gen_tac >> strip_tac >>
-  `?art A. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
-      constants_fold_module [(NONE,tops)] (account_immutables am tx.target)
-        NONE tops FEMPTY = SOME A` by fs[source_typing_ok_def] >>
-  pop_assum strip_assume_tac >>
-  drule bodyLoopCallsTheory.checked_module_loop_calls_ok >> disch_then assume_tac >>
-  `stmts_loop_calls_ok [(NONE,tops)] ss` by
-    (`stmts_loop_calls_ok [(NONE,tops)] fbody` by
-       (drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_external_body_loop_calls_ok) >>
-     qpat_assum `ss = subst_consts_stmts _ fbody` SUBST1_TAC >>
-     drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_subst_consts_loop_calls_ok) >>
+  drule_all runtime_selected_body_loop_calls >> strip_tac >>
   qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,`shadow_ctx`,
     `func`,`shadow_func`,`cenv`,`cx`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,
     `ss`,`es`] mp_tac body_stmts_sim_full >>
@@ -967,8 +980,12 @@ fun runtime_bound_unlock_tac return_type gas result state =
   strip_tac
   end;
 
-Theorem runtime_body_endpoint_correct:
-  !tops rpolicy unit am tx ret vs mut nr args dflts fbody es0.
+(* The registration cursor survives an early lock failure.  On success the
+   raw and shadow cursors and the ghost pair are fixed before any horizon
+   is chosen.  In particular the success arm is usable before running the
+   body, not just when the whole body has a simulated outcome. *)
+Theorem runtime_body_endpoint_prepare_with_cases:
+  !L tops rpolicy unit am tx ret vs mut nr args dflts fbody es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
@@ -980,27 +997,175 @@ Theorem runtime_body_endpoint_correct:
         dalloca_fmp_headroom inst s) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut,nr,args,dflts,ret,fbody) /\
-    runtime_body_endpoint tops rpolicy unit am tx vs es0 mut nr args dflts ret
-      (subst_consts_stmts (module_consts_env tops []) fbody) ==>
-    ?shadow_unit marks.
+    runtime_body_endpoint_with L tops rpolicy unit am tx vs es0 mut nr args dflts ret
+      (subst_consts_stmts (module_consts_env tops []) fbody) /\
+    (!a b c d. cs_extends a b /\ cs_extends b c /\ cs_extends c d /\ L a d ==>
+       L b c) ==>
+    (?shadow_unit marks0 func sa st' cenv s0 G0 tn0 exc es_abort a t G tn.
       runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
-      source_unit_execution_correct_with shadow_unit.cu_context marks
+      nr /\
+      (initial_evaluation_context am.sources am.layouts tx NONE).nonreentrant_slot =
+         SOME global_nonreentrant_slot /\
+      is_view_mut mut = (mut = View) /\
+      lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+        nr (is_view_mut mut) es0 = (INR exc,es_abort) /\
+      compile_guarded_body cenv T global_nonreentrant_slot T (mut = View)
+        (subst_consts_stmts (module_consts_env tops []) fbody)
+        (if ret = NoneT then NONE else SOME ret) sa = ((),st') /\
+      fn_has_code sa st' func /\
+      s0.vs_gas_readings = DROP (LENGTH marks0) vs.vs_gas_readings /\
+      (!H : (bool # bytes32 # type_value) list # num list.
+         stmt_state_rel H unit.cu_context func cenv
+           (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+         ghost_inv H NONE cenv
+           (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0) /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      fn_entry_label func = SOME "__entry" /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      ~s0.vs_halted /\
+      expr_exit (INR exc : unit + exception) (Abort a t) /\
+      (exc = Error (RuntimeError "nonreentrant lock") \/
+       exc = Error (RuntimeError "write in static context")) /\
+      (!D. gas_origin_ptr_path
+         (D,0,gas_explicit_sites unit.cu_context shadow_unit.cu_context,
+          unit.cu_context,func,[])
+         (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0|>,FEMPTY,entry_taint)
+         marks0 (OK s0,G0,tn0) /\
+           gas_origin_ptr_path
+         (D,0,gas_explicit_sites unit.cu_context shadow_unit.cu_context,
+          unit.cu_context,func,[])
+         (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0|>,FEMPTY,entry_taint)
+         marks0 (Abort a t,G,tn)) /\
+      source_unit_execution_correct_with shadow_unit.cu_context marks0
         tops ret am tx unit vs /\
-      ((?tail. call_storage_ok am tx vs.vs_outcomes
-          (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
-       !tail. FST (call_external (SOME vs.vs_outcomes)
-          (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
-        INR (Error (RuntimeError "msg.gas: no gas reading")))
+      (!tail. FST (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks0 vs.vs_gas_readings ++ tail) am tx) <>
+        INR (Error (RuntimeError "msg.gas: no gas reading")))) \/
+    (?shadow_unit marks0 es_lock.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+        nr (is_view_mut mut) es0 = (INL (),es_lock) /\
+      ~storage_trace_domain (initial_evaluation_context am.sources am.layouts tx NONE)
+        (initial_state am []) es_lock.storage_trace /\
+      (!tail. ~call_storage_ok am tx vs.vs_outcomes
+          (gas_explicit marks0 vs.vs_gas_readings ++ tail)) /\
+      source_unit_execution_correct_with shadow_unit.cu_context marks0
+        tops ret am tx unit vs) \/
+    (?cx compiled_body entry explicit prefix marks0 shadow_unit func shadow_func
+      cenv cenv' bindings env_t env' es_lock sa sl sb st' shadow_sl shadow_sb
+      s_b G_b tn_b.
+      cx = initial_evaluation_context am.sources am.layouts tx NONE /\
+      compiled_body = subst_consts_stmts (module_consts_env tops []) fbody /\
+      entry = (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                          vs_inst_idx := 0|>) /\
+      explicit = gas_explicit_sites unit.cu_context shadow_unit.cu_context /\
+      prefix = gas_explicit marks0 vs.vs_gas_readings /\
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__entry" /\
+      (!gx. external_entry_bound tops am tx vs.vs_outcomes (prefix ++ gx)
+        mut args dflts (es0 with gas_obs := gx)) /\
+      external_entry_bound tops am tx vs.vs_outcomes (prefix ++ es0.gas_obs)
+        mut args dflts es0 /\
+      lock_if_nr cx nr (is_view_mut mut) es0 = (INL (),es_lock) /\
+      (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
+              is_view_mut mut = (mut = View)) /\
+      global_nonreentrant_slot < dimword (:256) /\
+      (nr /\ mut <> View ==> ~tx.is_static) /\
+      (!gas. eval_stmts cx compiled_body (es_lock with gas_obs := gas) =
+             eval_stmts cx fbody (es_lock with gas_obs := gas)) /\
+      storage_trace_domain cx (initial_state am []) es_lock.storage_trace /\
+      body_inv tops unit.cu_context cenv cx /\
+      shadow_body_inv tops unit.cu_context shadow_unit.cu_context /\
+      struct_args_unique tops /\
+      supported_stmts tops bindings compiled_body /\
+      (!vis mut nr raw fn args dflts ret stmts.
+        MEM (FunctionDecl vis mut nr raw fn args dflts ret stmts) tops ==>
+        stmts_loop_calls_ok [(NONE,tops)] stmts) /\
+      stmts_loop_calls_ok [(NONE,tops)] compiled_body /\
+      (!tgt. supported_stmts_expr_exists (expr_abi_decode_target_root tgt)
+         compiled_body ==> occurs_abi_decode_target tgt tops) /\
+      body_const_cells_agree [(NONE,tops)] cx env_t es_lock /\
+      expr_sim_inv cenv cx env_t es_lock /\
+      ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
+      type_stmts env_t ret compiled_body = SOME env' /\
+      stmts_exprs_ok cenv compiled_body /\
+      call_evaluation_safe cx (int_calls_stmts compiled_body) /\
+      frame_ret_ok_full
+        ((\H. cx_dead H cx),0,NONE,unit.cu_context,shadow_unit.cu_context,[],func,shadow_func)
+        cx
+        (\H v ee gt r. ?tv v' us.
+           evaluate_type (type_env tops) ret = SOME tv /\
+           safe_cast tv v = SOME v' /\
+           unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),us) /\
+           external_call_result_rel H tops ret tx
+             (INL v', finalize_pending_deletions
+                (abstract_machine_from_state am.sources am.exports am.layouts us),
+              us.requests) r)
+        cenv ret /\
+      compile_guarded_body cenv nr global_nonreentrant_slot T (mut = View)
+        compiled_body (if ret = NoneT then NONE else SOME ret) sa = ((),st') /\
+      (if nr then compile_nonreentrant_lock global_nonreentrant_slot T (mut = View)
+       else comp_return ()) sa = ((),sl) /\
+      compile_stmts cenv NoLoop
+        (case (if ret = NoneT then NONE else SOME ret) of
+           NONE => BaseT BoolT | SOME ty => ty) compiled_body sl = ((),sb) /\
+      stmts_env cenv NoLoop ret compiled_body sl = (cenv',sb) /\
+      stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt compiled_body)
+        shadow_sl = (gas_shadow_env T cenv',shadow_sb) /\
+      gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
+      gas_shadow_context unit.cu_context shadow_unit.cu_context /\
+      ctx_inst_ids_distinct unit.cu_context /\ gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_unit.cu_context.ctx_functions /\
+      fn_has_code sl sb func /\ fn_has_code shadow_sl shadow_sb shadow_func /\
+      fn_has_code sb st' func /\ fn_inst_ids_distinct func /\
+      cx_tops cx = tops /\ ~cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
+      cenv.ce_ctor_exit_label = NONE /\ L sl sb /\
+      gas_path_mem unit.cu_context func entry (LENGTH marks0) (OK s_b) /\
+      alloca_history func s_b /\ return_buf_frame NONE cenv sl s_b /\
+      local_ptrs_reserved cenv sl /\ ~block_is_terminated sl /\
+      ~s_b.vs_halted /\ s_b.vs_current_bb = sl.cs_current_bb /\
+      s_b.vs_inst_idx = LENGTH sl.cs_current_insts /\
+      s_b.vs_gas_readings = DROP (LENGTH marks0) vs.vs_gas_readings /\
+      s_b.vs_code = vs.vs_code /\ s_b.vs_labels = vs.vs_labels /\
+      (!fn inst s. frag_reachable unit.cu_context func s_b fn inst s ==>
+        dalloca_fmp_headroom inst s) /\
+      (!H. valid_horizon cx (initial_state am []) H es_lock.storage_trace ==>
+        storage_well_formed_on cx es_lock (FST H)) /\
+      !H. valid_horizon cx (initial_state am []) H es_lock.storage_trace ==>
+        stmt_state_rel H unit.cu_context func cenv cx es_lock s_b /\
+        ghost_inv_at (cx_dead H cx) 0 NONE cenv cx es_lock G_b tn_b s_b /\
+        gas_origin_ptr_path (cx_dead H cx,0,explicit,unit.cu_context,func,[])
+          (entry,FEMPTY,entry_taint) marks0 (OK s_b,G_b,tn_b) /\
+        ((!fuel. ptr_safe_run (cx_dead H cx) 0 fuel
+                  unit.cu_context func [] G_b tn_b s_b) ==>
+         !fuel. ptr_safe_blocks (cx_dead H cx) 0 fuel
+           unit.cu_context func [] FEMPTY entry_taint entry))
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `compiled_body = subst_consts_stmts (module_consts_env tops []) fbody` >>
-  qpat_x_assum `runtime_body_endpoint _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [runtime_body_endpoint_def]) >>
+  qpat_x_assum `runtime_body_endpoint_with _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [runtime_body_endpoint_with_def]) >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
   qabbrev_tac `entry = vs with <|vs_prev_bb := NONE;
     vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
   qabbrev_tac `explicit = gas_explicit_sites unit.cu_context shadow_unit.cu_context` >>
   qabbrev_tac `prefix = gas_explicit marks0 vs.vs_gas_readings` >>
+  `cenv.ce_ctor_exit_label = NONE` by
+    (qpat_assum `cenv with ce_vars := _ = cenv0`
+       (mp_tac o AP_TERM ``compile_env_ce_ctor_exit_label``) >>
+     simp[] >> disch_then SUBST1_TAC >>
+     drule return_package_target_inversion >> strip_tac >>
+     qpat_x_assum `package_external_fn _ _ _ _ = _` mp_tac >>
+     simp[package_external_fn_def, update_cenv_nonreentrant_def] >>
+     strip_tac >> Cases_on `ret = NoneT` >>
+     gvs[update_cenv_ret_abi_def]) >>
   `nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
            is_view_mut mut = (mut = View)` by
     (strip_tac >> gvs[] >>
@@ -1040,9 +1205,15 @@ Proof
          disch_then (qx_choosel_then [`a`,`s`,`G`,`tn`] strip_assume_tac) >>
          qexistsl_tac [`a`,`s`,`G`,`tn`] >> simp[]) >>
       pop_assum strip_assume_tac >>
-      qexistsl_tac [`shadow_unit`,`marks0`] >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      mp_tac (Q.INST [`es_abort` |-> `es_lock`, `t` |-> `s_abort`,
+      disj1_tac >>
+      qexistsl_tac [`shadow_unit`,`marks0`,`func`,`sa`,`st'`,`cenv`,`s0`,
+        `G0`,`tn0`,`exc`,`es_lock`,`a`,`s_abort`,`G_abort`,`tn_abort`] >>
+      `source_unit_execution_correct_with shadow_unit.cu_context marks0
+         tops ret am tx unit vs /\
+       (!tail. FST (call_external (SOME vs.vs_outcomes)
+            (gas_explicit marks0 vs.vs_gas_readings ++ tail) am tx) <>
+          INR (Error (RuntimeError "msg.gas: no gas reading")))` by
+      (mp_tac (Q.INST [`es_abort` |-> `es_lock`, `t` |-> `s_abort`,
         `G` |-> `G_abort`, `tn` |-> `tn_abort`, `exc` |-> `exc`,
         `s0` |-> `s0`, `G0` |-> `G0`, `tn0` |-> `tn0`,
         `marks0` |-> `marks0`, `a` |-> `a`, `bb` |-> `bb`]
@@ -1051,7 +1222,9 @@ Proof
       >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
           fs[Abbr `cx`, Abbr `explicit`, Abbr `prefix`, Abbr `entry`] >>
           Cases_on `mut` >> gvs[]) >>
-      metis_tac[]) >>
+       disch_then ACCEPT_TAC) >>
+      fs[Abbr `cx`, Abbr `compiled_body`, Abbr `entry`, Abbr `explicit`] >>
+      rpt conj_tac >> rpt gen_tac >> first_assum ACCEPT_TAC) >>
   rename1 `_ = (INL answer,es_lock)` >> Cases_on `answer` >>
   reverse (Cases_on `storage_trace_domain cx (initial_state am []) es_lock.storage_trace`)
   >- (`!tail. ~call_storage_ok am tx vs.vs_outcomes (prefix ++ tail)` by
@@ -1059,8 +1232,12 @@ Proof
          impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
            fs[Abbr `cx`, Abbr `prefix`] >> Cases_on `nr` >> Cases_on `mut` >> gvs[]) >>
          disch_then ACCEPT_TAC) >>
-      qexistsl_tac [`shadow_unit`,`marks0`] >>
-      simp[Abbr `prefix`] >>
+      disj2_tac >> disj1_tac >>
+      qexistsl_tac [`shadow_unit`,`marks0`,`es_lock`] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- fs[Abbr `cx`] >>
+      conj_tac >- fs[Abbr `cx`] >>
+      conj_tac >- fs[Abbr `prefix`] >>
       pure_rewrite_tac [source_unit_execution_correct_with_def] >>
       qexistsl_tac [`func`,`shadow_func`] >> simp[] >>
       disj1_tac >>
@@ -1071,11 +1248,15 @@ Proof
          es0.storage_trace` by fs[storage_trace_domain_def] >>
       fs[Abbr `cx`, Abbr `entry`, Abbr `explicit`] >>
       metis_tac[]) >>
+  disj2_tac >> disj2_tac >> qmatch_abbrev_tac `prepared` >>
   runtime_bound_frame_tac >>
   qpat_assum `compile_guarded_body cenv nr _ T _ compiled_body _ sa = _`
-    (fn code => mp_tac (MATCH_MP nonreentrantEntryPathTheory.guarded_body_code_from_registration
+    (fn code => mp_tac (MATCH_MP nonreentrantEntryPathTheory.guarded_body_intervals_from_registration
       (CONJ code (ASSUME ``fn_has_code sa st' func``)))) >>
   disch_then (qx_choosel_then [`sl`,`sb`] strip_assume_tac) >>
+  `L sl sb` by
+    (qpat_assum `!a b c d. _ ==> L b c` (qspecl_then [`sa`,`sl`,`sb`,`st'`] mp_tac) >>
+     asm_simp_tac std_ss []) >>
   qpat_assum
     `compile_guarded_body _ nr _ T _ (MAP gas_shadow_stmt compiled_body) _ shadow_sa = _`
     (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
@@ -1241,6 +1422,255 @@ Proof
   `struct_args_unique tops` by
     (fs[source_typing_ok_def] >> metis_tac[checked_contract_struct_args_unique]) >>
   runtime_shadow_body_inv_tac >>
+  drule_all runtime_selected_body_loop_calls >> strip_tac >>
+  qunabbrev_tac `prepared` >>
+  qexistsl_tac [`cx`,`compiled_body`,`entry`,`explicit`,`prefix`,`marks0`,
+    `shadow_unit`,`func`,`shadow_func`,`cenv`,`cenv'`,`bindings`,`env_t`,`env'`,
+    `es_lock`,`sa`,`sl`,`sb`,`st'`,`shadow_sl`,`shadow_sb`,`s_b`,`G_b`,`tn_b`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  asm_simp_tac std_ss [markerTheory.Abbrev_def] >>
+  fs[Abbr `compiled_body`]
+QED
+
+(* The true decoration preserves the original CREATE preparation interface. *)
+local
+  val unrestricted_prepare =
+    Q.SPEC `\a b. T` runtime_body_endpoint_prepare_with_cases
+    |> PURE_REWRITE_RULE [GSYM runtime_body_endpoint_unrestricted_def]
+    |> CONV_RULE (DEPTH_CONV BETA_CONV)
+    |> PURE_REWRITE_RULE [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP]
+in
+Theorem runtime_body_endpoint_prepare_create_cases:
+  ^(concl unrestricted_prepare)
+Proof
+  ACCEPT_TAC unrestricted_prepare
+QED
+end
+
+Theorem runtime_body_endpoint_prepare_cases:
+  !tops rpolicy unit am tx ret vs mut nr args dflts fbody es0.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_fmp_headroom inst s) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut,nr,args,dflts,ret,fbody) /\
+    runtime_body_endpoint tops rpolicy unit am tx vs es0 mut nr args dflts ret
+      (subst_consts_stmts (module_consts_env tops []) fbody) ==>
+    (?shadow_unit marks0 func sa st' cenv s0 G0 tn0 exc es_abort a t G tn.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      nr /\
+      (initial_evaluation_context am.sources am.layouts tx NONE).nonreentrant_slot =
+         SOME global_nonreentrant_slot /\
+      is_view_mut mut = (mut = View) /\
+      lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+        nr (is_view_mut mut) es0 = (INR exc,es_abort) /\
+      compile_guarded_body cenv T global_nonreentrant_slot T (mut = View)
+        (subst_consts_stmts (module_consts_env tops []) fbody)
+        (if ret = NoneT then NONE else SOME ret) sa = ((),st') /\
+      fn_has_code sa st' func /\
+      s0.vs_gas_readings = DROP (LENGTH marks0) vs.vs_gas_readings /\
+      (!H : (bool # bytes32 # type_value) list # num list.
+         stmt_state_rel H unit.cu_context func cenv
+           (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+         ghost_inv H NONE cenv
+           (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0) /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      fn_entry_label func = SOME "__entry" /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      ~s0.vs_halted /\
+      expr_exit (INR exc : unit + exception) (Abort a t) /\
+      (exc = Error (RuntimeError "nonreentrant lock") \/
+       exc = Error (RuntimeError "write in static context")) /\
+      (!D. gas_origin_ptr_path
+         (D,0,gas_explicit_sites unit.cu_context shadow_unit.cu_context,
+          unit.cu_context,func,[])
+         (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0|>,FEMPTY,entry_taint)
+         marks0 (OK s0,G0,tn0) /\
+           gas_origin_ptr_path
+         (D,0,gas_explicit_sites unit.cu_context shadow_unit.cu_context,
+          unit.cu_context,func,[])
+         (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0|>,FEMPTY,entry_taint)
+         marks0 (Abort a t,G,tn)) /\
+      source_unit_execution_correct_with shadow_unit.cu_context marks0
+        tops ret am tx unit vs /\
+      (!tail. FST (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks0 vs.vs_gas_readings ++ tail) am tx) <>
+        INR (Error (RuntimeError "msg.gas: no gas reading")))) \/
+    (?shadow_unit marks0 es_lock.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      lock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
+        nr (is_view_mut mut) es0 = (INL (),es_lock) /\
+      ~storage_trace_domain (initial_evaluation_context am.sources am.layouts tx NONE)
+        (initial_state am []) es_lock.storage_trace /\
+      (!tail. ~call_storage_ok am tx vs.vs_outcomes
+          (gas_explicit marks0 vs.vs_gas_readings ++ tail)) /\
+      source_unit_execution_correct_with shadow_unit.cu_context marks0
+        tops ret am tx unit vs) \/
+    (?cx compiled_body entry explicit prefix marks0 shadow_unit func shadow_func
+      cenv cenv' bindings env_t env' es_lock sa sl sb st' shadow_sl shadow_sb
+      s_b G_b tn_b.
+      cx = initial_evaluation_context am.sources am.layouts tx NONE /\
+      compiled_body = subst_consts_stmts (module_consts_env tops []) fbody /\
+      entry = (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                          vs_inst_idx := 0|>) /\
+      explicit = gas_explicit_sites unit.cu_context shadow_unit.cu_context /\
+      prefix = gas_explicit marks0 vs.vs_gas_readings /\
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__entry" /\
+      (!gx. external_entry_bound tops am tx vs.vs_outcomes (prefix ++ gx)
+        mut args dflts (es0 with gas_obs := gx)) /\
+      external_entry_bound tops am tx vs.vs_outcomes (prefix ++ es0.gas_obs)
+        mut args dflts es0 /\
+      lock_if_nr cx nr (is_view_mut mut) es0 = (INL (),es_lock) /\
+      (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
+              is_view_mut mut = (mut = View)) /\
+      global_nonreentrant_slot < dimword (:256) /\
+      (nr /\ mut <> View ==> ~tx.is_static) /\
+      (!gas. eval_stmts cx compiled_body (es_lock with gas_obs := gas) =
+             eval_stmts cx fbody (es_lock with gas_obs := gas)) /\
+      storage_trace_domain cx (initial_state am []) es_lock.storage_trace /\
+      body_inv tops unit.cu_context cenv cx /\
+      shadow_body_inv tops unit.cu_context shadow_unit.cu_context /\
+      struct_args_unique tops /\
+      supported_stmts tops bindings compiled_body /\
+      (!vis mut nr raw fn args dflts ret stmts.
+        MEM (FunctionDecl vis mut nr raw fn args dflts ret stmts) tops ==>
+        stmts_loop_calls_ok [(NONE,tops)] stmts) /\
+      stmts_loop_calls_ok [(NONE,tops)] compiled_body /\
+      (!tgt. supported_stmts_expr_exists (expr_abi_decode_target_root tgt)
+         compiled_body ==> occurs_abi_decode_target tgt tops) /\
+      body_const_cells_agree [(NONE,tops)] cx env_t es_lock /\
+      expr_sim_inv cenv cx env_t es_lock /\
+      ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
+      type_stmts env_t ret compiled_body = SOME env' /\
+      stmts_exprs_ok cenv compiled_body /\
+      call_evaluation_safe cx (int_calls_stmts compiled_body) /\
+      frame_ret_ok_full
+        ((\H. cx_dead H cx),0,NONE,unit.cu_context,shadow_unit.cu_context,[],func,shadow_func)
+        cx
+        (\H v ee gt r. ?tv v' us.
+           evaluate_type (type_env tops) ret = SOME tv /\
+           safe_cast tv v = SOME v' /\
+           unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),us) /\
+           external_call_result_rel H tops ret tx
+             (INL v', finalize_pending_deletions
+                (abstract_machine_from_state am.sources am.exports am.layouts us),
+              us.requests) r)
+        cenv ret /\
+      compile_guarded_body cenv nr global_nonreentrant_slot T (mut = View)
+        compiled_body (if ret = NoneT then NONE else SOME ret) sa = ((),st') /\
+      (if nr then compile_nonreentrant_lock global_nonreentrant_slot T (mut = View)
+       else comp_return ()) sa = ((),sl) /\
+      compile_stmts cenv NoLoop
+        (case (if ret = NoneT then NONE else SOME ret) of
+           NONE => BaseT BoolT | SOME ty => ty) compiled_body sl = ((),sb) /\
+      stmts_env cenv NoLoop ret compiled_body sl = (cenv',sb) /\
+      stmts_env (gas_shadow_env T cenv) NoLoop ret (MAP gas_shadow_stmt compiled_body)
+        shadow_sl = (gas_shadow_env T cenv',shadow_sb) /\
+      gas_shadow_state sl shadow_sl /\ gas_shadow_state sb shadow_sb /\
+      gas_shadow_context unit.cu_context shadow_unit.cu_context /\
+      ctx_inst_ids_distinct unit.cu_context /\ gas_shadow_function func shadow_func /\
+      MEM func unit.cu_context.ctx_functions /\
+      MEM shadow_func shadow_unit.cu_context.ctx_functions /\
+      fn_has_code sl sb func /\ fn_has_code shadow_sl shadow_sb shadow_func /\
+      fn_has_code sb st' func /\ fn_inst_ids_distinct func /\
+      cx_tops cx = tops /\ ~cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
+      gas_path_mem unit.cu_context func entry (LENGTH marks0) (OK s_b) /\
+      alloca_history func s_b /\ return_buf_frame NONE cenv sl s_b /\
+      local_ptrs_reserved cenv sl /\ ~block_is_terminated sl /\
+      ~s_b.vs_halted /\ s_b.vs_current_bb = sl.cs_current_bb /\
+      s_b.vs_inst_idx = LENGTH sl.cs_current_insts /\
+      s_b.vs_gas_readings = DROP (LENGTH marks0) vs.vs_gas_readings /\
+      s_b.vs_code = vs.vs_code /\ s_b.vs_labels = vs.vs_labels /\
+      (!fn inst s. frag_reachable unit.cu_context func s_b fn inst s ==>
+        dalloca_fmp_headroom inst s) /\
+      (!H. valid_horizon cx (initial_state am []) H es_lock.storage_trace ==>
+        storage_well_formed_on cx es_lock (FST H)) /\
+      !H. valid_horizon cx (initial_state am []) H es_lock.storage_trace ==>
+        stmt_state_rel H unit.cu_context func cenv cx es_lock s_b /\
+        ghost_inv_at (cx_dead H cx) 0 NONE cenv cx es_lock G_b tn_b s_b /\
+        gas_origin_ptr_path (cx_dead H cx,0,explicit,unit.cu_context,func,[])
+          (entry,FEMPTY,entry_taint) marks0 (OK s_b,G_b,tn_b) /\
+        ((!fuel. ptr_safe_run (cx_dead H cx) 0 fuel
+                  unit.cu_context func [] G_b tn_b s_b) ==>
+         !fuel. ptr_safe_blocks (cx_dead H cx) 0 fuel
+           unit.cu_context func [] FEMPTY entry_taint entry))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all runtime_body_endpoint_prepare_create_cases >>
+  disch_then (DISJ_CASES_THEN2 assume_tac
+    (DISJ_CASES_THEN2 assume_tac
+      (qx_choosel_then [`cx`,`compiled_body`,`entry`,`explicit`,`prefix`,`marks0`,
+        `shadow_unit`,`func`,`shadow_func`,`cenv`,`cenv'`,`bindings`,`env_t`,`env'`,
+        `es_lock`,`sa`,`sl`,`sb`,`st'`,`shadow_sl`,`shadow_sb`,`s_b`,`G_b`,`tn_b`]
+        (MAP_EVERY ASSUME_TAC o CONJUNCTS))))
+  >- (disj1_tac >> first_assum ACCEPT_TAC)
+  >- (disj2_tac >> disj1_tac >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> disj2_tac >>
+  qexistsl_tac [`cx`,`compiled_body`,`entry`,`explicit`,`prefix`,`marks0`,
+    `shadow_unit`,`func`,`shadow_func`,`cenv`,`cenv'`,`bindings`,`env_t`,`env'`,
+    `es_lock`,`sa`,`sl`,`sb`,`st'`,`shadow_sl`,`shadow_sb`,`s_b`,`G_b`,`tn_b`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem runtime_body_endpoint_correct:
+  !tops rpolicy unit am tx ret vs mut nr args dflts fbody es0.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    (ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_fmp_headroom inst s) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut,nr,args,dflts,ret,fbody) /\
+    runtime_body_endpoint tops rpolicy unit am tx vs es0 mut nr args dflts ret
+      (subst_consts_stmts (module_consts_env tops []) fbody) ==>
+    ?shadow_unit marks.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      source_unit_execution_correct_with shadow_unit.cu_context marks
+        tops ret am tx unit vs /\
+      ((?tail. call_storage_ok am tx vs.vs_outcomes
+          (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+       !tail. FST (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+        INR (Error (RuntimeError "msg.gas: no gas reading")))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all runtime_body_endpoint_prepare_cases >>
+  disch_then (DISJ_CASES_THEN2
+    (qx_choosel_then [`shadow_unit`,`marks0`,`func`,`sa`,`st'`,`cenv`,`s0`,
+      `G0`,`tn0`,`exc`,`es_abort`,`a`,`t`,`G`,`tn`]
+      (MAP_EVERY ASSUME_TAC o CONJUNCTS))
+    (DISJ_CASES_THEN2 strip_assume_tac
+      (qx_choosel_then [`cx`,`compiled_body`,`entry`,`explicit`,`prefix`,`marks0`,
+        `shadow_unit`,`func`,`shadow_func`,`cenv`,`cenv'`,`bindings`,`env_t`,`env'`,
+        `es_lock`,`sa`,`sl`,`sb`,`st'`,`shadow_sl`,`shadow_sb`,`s_b`,`G_b`,`tn_b`]
+        (MAP_EVERY ASSUME_TAC o CONJUNCTS))))
+  >- (qexistsl_tac [`shadow_unit`,`marks0`] >> simp[])
+  >- (qexistsl_tac [`shadow_unit`,`marks0`] >> simp[] >> metis_tac[]) >>
+  MAP_EVERY (fn pat => qpat_x_assum pat
+    (assume_tac o CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))))
+    [`_ = initial_evaluation_context am.sources am.layouts tx NONE`,
+     `_ = subst_consts_stmts (module_consts_env tops []) fbody`,
+     `_ = (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0|>)`,
+     `_ = gas_explicit_sites unit.cu_context shadow_unit.cu_context`,
+     `_ = gas_explicit marks0 vs.vs_gas_readings`] >>
   runtime_selected_body_frag_tac `nr` `dflts` `prefix ++ es0.gas_obs` `es_lock` >>
   disch_then (mp_tac o REWRITE_RULE [stmt_frag_full_def]) >>
   disch_then (qspecl_then [`initial_state am []`, `sl`, `sb`, `shadow_sl`,
@@ -1473,11 +1903,11 @@ Proof
           >- (Cases_on `u` >> simp[]) >>
           Cases_on `e` >> simp[AllCaseEqs()] >> strip_tac >> gvs[])) >>
   disch_then (qx_choose_then `body_marks` ASSUME_TAC) >>
-  `!tail. prefix ++ gas_explicit body_marks
-            (DROP (LENGTH marks0) vs.vs_gas_readings) ++ tail =
+  `!tail. prefix ++ gas_explicit body_marks s_b.vs_gas_readings ++ tail =
           gas_explicit (marks0 ++ body_marks) vs.vs_gas_readings ++ tail` by
     simp[Abbr `prefix`, gas_explicit_append, APPEND_ASSOC] >>
-  qexists_tac `marks0 ++ body_marks` >>
+  qexistsl_tac [`shadow_unit`,`marks0 ++ body_marks`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qpat_x_assum `_ \/ _` mp_tac >>
   simp[call_external_trace_observations, Abbr `entry`, Abbr `explicit`, Abbr `cx`] >>
   qpat_assum `!tail. _ = gas_explicit (marks0 ++ body_marks) _ ++ tail`

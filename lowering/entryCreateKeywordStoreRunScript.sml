@@ -1,14 +1,12 @@
-(* Confined execution of omitted keyword initializers. *)
-Theory entryCreateDefaultInitScope
+(* The exact emitted keyword store gives a zero-mark prefix up to its cut. *)
+Theory entryCreateKeywordStoreRun
 Ancestors
-  groupedDefaultOmittedCut entryCreatePendingScope
-  bytesCopyCode fragGasSeqPtr fragExec exprSimAbiGasBridge emitHelperProps
-  createSizePrefixReplay venomExecSemantics venomExecProofs venomInst venomState
+  bytesCopyCode fragExec emitHelperProps
+  createSizePrefixReplay venomExecSemantics venomInst venomState
   fragGasSeqAbort exprLoweringProps venomInstProps fragGasOrigin gasEvents
   relation createMarkedPath entryCreatePathScope instIdxIndep
   createSizeCutCode createSizeTypedCopyCode abiEncoderProps context compileEnv
-  emitHelper exprLowering
-  arithmetic list rich_list pair pred_set
+  emitHelper arithmetic list rich_list pair pred_set
 
 (* A completed scalar or byte-copy store takes only the emitted sequence.
    Convert that exact run, not an unrestricted zero-GAS path, to the cut. *)
@@ -53,7 +51,7 @@ Proof
   simp[venom_state_fupdfupds]
 QED
 
-Theorem grouped_store_layout[local]:
+Theorem grouped_keyword_store_layout:
   (if is_word_type ty then emit_void MSTORE [dst;src]
    else if is_bytestring_type ty then compile_store_bytestring src dst
    else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes ce ty))])
@@ -83,4 +81,28 @@ Proof
     (`compile_store_memory ce src dst ty ty a = ((),b)` by simp[compile_store_memory_def] >>
      metis_tac[create_store_memory_cut_code, SND]) >>
   fs[same_blocks_def, bytes_copy_insts_def, mk_inst_def, is_terminator_def, frag_ids_def]
+QED
+
+Theorem grouped_keyword_store_run_prefix:
+  (if is_word_type ty then emit_void MSTORE [dst;src]
+   else if is_bytestring_type ty then compile_store_bytestring src dst
+   else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes ce ty))])
+    mid = ((),last) /\
+  fn_has_code mid last fn /\
+  ~t.vs_halted /\ t.vs_current_bb = mid.cs_current_bb /\
+  t.vs_inst_idx = LENGTH mid.cs_current_insts /\
+  run_inst_seq (emitted_insts mid last) t = OK (u with vs_inst_idx := t.vs_inst_idx) /\
+  u.vs_inst_idx = LENGTH last.cs_current_insts ==>
+  create_expr_prefix mid last explicit ctx fn t [] u
+Proof
+  strip_tac >> drule grouped_keyword_store_layout >> strip_tac >>
+  `?bb. lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts mid last) (DROP t.vs_inst_idx bb.bb_instructions)` by
+    (fs[fn_has_code_def, IS_PREFIX_APPEND] >> simp[DROP_APPEND]) >>
+  `t.vs_inst_idx + LENGTH (emitted_insts mid last) = LENGTH last.cs_current_insts` by simp[] >>
+  drule_all grouped_store_sequence_prefix >>
+  disch_then (qspecl_then [`explicit`,`ctx`] mp_tac) >>
+  simp[venom_state_fupdfupds] >>
+  `u with vs_inst_idx := LENGTH mid.cs_current_insts + LENGTH (emitted_insts mid last) = u` by
+    simp[venom_state_component_equality] >> simp[]
 QED

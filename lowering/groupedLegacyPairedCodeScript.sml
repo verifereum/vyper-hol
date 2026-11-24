@@ -14,7 +14,7 @@ val shadow_job = ``\job. case job of
                     ec_body := MAP gas_shadow_stmt common.ec_body |>)
     (MAP (\(n,p,ty,e). (n,p,ty,gas_shadow_expr e)) kwvars)``;
 
-Theorem grouped_legacy_paired_code:
+val paired_statement = ``
   MEM (ExternalLegacyJob (lbl,ce,pa,m,pay,nr,key,ut,view,ss,rt)) jobs /\
   compile_external_jobs jobs sd = ((),sx) /\
   compile_external_jobs (MAP ^shadow_job jobs) shd = ((),shx) /\
@@ -30,18 +30,26 @@ Theorem grouped_legacy_paired_code:
     fn_has_code sa done fn /\ gas_shadow_state sa sha /\
     compile_guarded_body (gas_shadow_env T cf) nr key ut view (MAP gas_shadow_stmt ss)
       rt sha = ((),shdone) /\
-    fn_has_code sha shdone shfn
+    fn_has_code sha shdone shfn``;
+
+val (paired_input, paired_output) = boolSyntax.dest_imp paired_statement;
+val (paired_witnesses, paired_facts) = boolSyntax.strip_exists paired_output;
+val paired_done = valOf (List.find (fn v => fst (dest_var v) = "done") paired_witnesses);
+
+Theorem grouped_legacy_paired_code_with_end:
+  ^paired_input ==>
+  ^(boolSyntax.list_mk_exists (paired_witnesses, ``^paired_facts /\ cs_extends ^paired_done se``))
 Proof
   strip_tac >>
   qpat_x_assum `MEM (ExternalLegacyJob _) jobs`
     (qx_choosel_then [`pre`,`post`] SUBST_ALL_TAC o REWRITE_RULE [Once MEM_SPLIT]) >>
-  drule_at (Pat `compile_external_jobs _ sd = _`) grouped_legacy_job_code >>
+  drule_at (Pat `compile_external_jobs _ sd = _`) grouped_legacy_job_code_with_end >>
   disch_then (qspecl_then [`se`,`fn`] mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choosel_then [`start`,`checks`,`reg`,`sa`,`done`,`cf`] strip_assume_tac) >>
   qpat_x_assum `compile_external_jobs (MAP _ _) shd = _`
     (assume_tac o SIMP_RULE (srw_ss()) [MAP_APPEND,gas_shadow_external_package_def]) >>
-  drule_at (Pat `compile_external_jobs _ shd = _`) grouped_legacy_job_code >>
+  drule_at (Pat `compile_external_jobs _ shd = _`) grouped_legacy_job_code_with_end >>
   disch_then (qspecl_then [`she`,`shfn`] mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choosel_then [`shstart`,`shchecks`,`shreg`,`sha`,`shdone`,`shcf`]
@@ -49,7 +57,7 @@ Proof
   suspend "synchronise"
 QED
 
-Resume grouped_legacy_paired_code[synchronise]:
+Resume grouped_legacy_paired_code_with_end[synchronise]:
   `gas_shadow_state start shstart` by
     (qspecl_then [`T`,`pre`]
        (drule_then (mp_tac o SPEC_ALL) o Q.SPECL [`sd`,`shd`] o
@@ -83,4 +91,12 @@ Resume grouped_legacy_paired_code[synchronise]:
   metis_tac[registration_noop_or_open]
 QED
 
-Finalise grouped_legacy_paired_code
+Finalise grouped_legacy_paired_code_with_end
+
+Theorem grouped_legacy_paired_code:
+  ^paired_statement
+Proof
+  disch_then (mp_tac o MATCH_MP grouped_legacy_paired_code_with_end) >>
+  disch_then (qx_choosel_then [`checks`,`reg`,`cf`,`sa`,`done`,`sha`,`shdone`] strip_assume_tac) >>
+  qexistsl_tac [`checks`,`reg`,`cf`,`sa`,`done`,`sha`,`shdone`] >> asm_rewrite_tac[]
+QED

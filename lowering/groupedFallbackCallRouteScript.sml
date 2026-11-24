@@ -13,7 +13,7 @@ Ancestors
   vyperLoweringCorrect loweringStateRelDefs venomInst venomState
   loweringPosts exprLoweringProps allocaFrontierRoom entryReachBodyFmp
   selectedEntryPrefixCode decoderOriginAllocationFrame fragFuel entryCompileIntervals
-  list pair finite_map words
+  groupedValueRejectSite entryCreateGroupedLayout list pair finite_map words
 
 val _ = Parse.hide "body";
 
@@ -190,7 +190,7 @@ Proof
        allocas_from_def] >> metis_tac[]
 QED
 
-Theorem grouped_fallback_call_route:
+Theorem grouped_fallback_call_route_with_reject_site:
   lower_vyper_runtime_unit tops rp = SOME unit /\ supported_program tops /\
   EXISTS external_has_defaults (FST (classify_functions tops)) /\
   runtime_gas_shadow_unit tops rp = SOME shadow_unit /\
@@ -207,7 +207,8 @@ Theorem grouped_fallback_call_route:
     SOME (mut,nr,args,ds,ret,fbody) ==>
   (?es. runtime_body_endpoint tops rp unit am tx vs es mut nr args ds ret
           (subst_consts_stmts (module_consts_env tops []) fbody)) \/
-  (?marks. source_unit_execution_correct_with shadow_unit.cu_context marks
+  (grouped_value_reject_site unit vs /\
+   ?marks. source_unit_execution_correct_with shadow_unit.cu_context marks
               tops ret am tx unit vs /\
     ((?tail. call_storage_ok am tx vs.vs_outcomes
                (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
@@ -229,7 +230,7 @@ Proof
   `?ce. fall = SOME (ce,mut = Payable,nr,global_nonreentrant_slot,T,mut = View,stmts,rt)` by
     simp[package_fallback_fn_def, set_fallback_package_target_def, Abbr `stmts`, Abbr `rt`] >>
   pop_assum strip_assume_tac >>
-  drule_all grouped_shadow_entry_dispatch >>
+  drule_all grouped_shadow_entry_dispatch_with_layout >>
   disch_then (qx_choosel_then [`shadow_installed`,`shadow_fn`,`sf`,`fallback`,`jobs`,
     `sd`,`shd`,`sx`,`shx`,`sn`,`shn`,`se`,`she`] (map_every assume_tac o CONJUNCTS)) >>
   `shadow_installed = shadow_unit` by metis_tac[optionTheory.SOME_11] >>
@@ -248,7 +249,7 @@ Proof
   suspend "guard"
 QED
 
-Resume grouped_fallback_call_route[guard]:
+Resume grouped_fallback_call_route_with_reject_site[guard]:
   `compile_fallback_body ce (mut = Payable) nr global_nonreentrant_slot T
     (mut = View) stmts rt sn = ((),se) /\
    compile_fallback_body (gas_shadow_env T ce) (mut = Payable) nr global_nonreentrant_slot T
@@ -285,6 +286,10 @@ Resume grouped_fallback_call_route[guard]:
   qpat_x_assum `compile_fallback_body _ _ _ _ _ _ (MAP gas_shadow_stmt _) _ _ = _` kall_tac >>
   drule_all grouped_fallback_guarded_code >>
   disch_then (qx_choose_then `sa` (map_every assume_tac o CONJUNCTS)) >>
+  `cs_extends sa se /\ ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se))` by
+    (irule selected_grouped_body_layout_at >> conj_tac
+     >- (goal_assum (drule_at Any)) >>
+     qexists_tac `se` >> simp[cs_extends_refl]) >>
   `gas_shadow_state sa sha` by
     (mp_tac (Q.INST [`min_cds` |-> `4`, `payable` |-> `mut = Payable`]
        gas_shadow_compiles_compile_entry_checks) >>
@@ -293,7 +298,7 @@ Resume grouped_fallback_call_route[guard]:
   suspend "value"
 QED
 
-Resume grouped_fallback_call_route[value]:
+Resume grouped_fallback_call_route_with_reject_site[value]:
   `gas_shadow_context unit.cu_context shadow_unit.cu_context /\
    MEM fn unit.cu_context.ctx_functions /\ MEM shadow_fn shadow_unit.cu_context.ctx_functions /\
    phi_prefix_length bb.bb_instructions = 0` by
@@ -309,7 +314,7 @@ Resume grouped_fallback_call_route[value]:
   suspend "rejected"
 QED
 
-Resume grouped_fallback_call_route[accepted]:
+Resume grouped_fallback_call_route_with_reject_site[accepted]:
   disj1_tac >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
   `?es. send_call_value mut cx (initial_state am [FEMPTY] with
@@ -333,7 +338,7 @@ Resume grouped_fallback_call_route[accepted]:
   fs[]
 QED
 
-Resume grouped_fallback_call_route[body]:
+Resume grouped_fallback_call_route_with_reject_site[body]:
   `selected_registration_frame vs entry_taint u tz` by
     fs[selected_registration_frame_def, Abbr `s`] >>
   `!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
@@ -391,7 +396,7 @@ Resume grouped_fallback_call_route[body]:
   simp[GSYM compile_env_component_equality, Abbr `s`]
 QED
 
-Resume grouped_fallback_call_route[rejected]:
+Resume grouped_fallback_call_route_with_reject_site[rejected]:
   `mut <> Payable /\ tx.value <> 0` by fs[] >>
   `t.vs_call_ctx.cc_callvalue <> 0w` by
     simp[wordsTheory.n2w_11, arithmeticTheory.LESS_MOD] >>
@@ -406,8 +411,42 @@ Resume grouped_fallback_call_route[rejected]:
   `t.vs_inst_idx = 0` by fs[] >>
   `MEM shadow_fn shadow_unit.cu_context.ctx_functions` by simp[] >>
   qpat_x_assum `compile_entry_checks _ _ shn = _` kall_tac >>
+  disj2_tac >> conj_tac
+  >- (irule grouped_value_reject_site_at >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`G`,`bb`,`sa`,`fn`,`4`,`sn`,`t`,`tn`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all grouped_entry_value_rejected >> strip_tac >>
-  disj2_tac >> qexists_tac `[]` >> simp[gas_explicit_def]
+  qexists_tac `[]` >> simp[gas_explicit_def]
 QED
 
-Finalise grouped_fallback_call_route
+Finalise grouped_fallback_call_route_with_reject_site
+
+Theorem grouped_fallback_call_route:
+  lower_vyper_runtime_unit tops rp = SOME unit /\ supported_program tops /\
+  EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  runtime_gas_shadow_unit tops rp = SOME shadow_unit /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
+  calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name,tx.args) /\
+  (LENGTH vs.vs_call_ctx.cc_calldata < 4 \/
+   FIND (\(n,ts). abi_method_id (type_env tops) n ts = cd_selector vs.vs_call_ctx.cc_calldata)
+     (abi_external_signatures tops) = NONE) /\
+  vyperInterpreter$lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,ds,ret,fbody) ==>
+  (?es. runtime_body_endpoint tops rp unit am tx vs es mut nr args ds ret
+          (subst_consts_stmts (module_consts_env tops []) fbody)) \/
+  (?marks. source_unit_execution_correct_with shadow_unit.cu_context marks
+              tops ret am tx unit vs /\
+    ((?tail. call_storage_ok am tx vs.vs_outcomes
+               (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+     !tail. FST (call_external (SOME vs.vs_outcomes)
+                    (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+            INR (Error (RuntimeError "msg.gas: no gas reading"))))
+Proof
+  disch_then (mp_tac o MATCH_MP grouped_fallback_call_route_with_reject_site) >>
+  strip_tac >> metis_tac[]
+QED
