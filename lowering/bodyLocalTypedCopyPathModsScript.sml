@@ -83,6 +83,9 @@ Theorem local_typed_copy_path_mods:
     local_ptrs_reserved ce sc /\
     (!name b len. local_region ce mid.scopes u name b len <=>
       local_region ce mid.scopes s name b len) /\
+    sa.cs_next_var <= sc.cs_next_var /\ sc.cs_next_var <= sf.cs_next_var /\
+    (!name a len i. local_region ce mid.scopes s name a len /\
+      a <= i /\ i < a + len /\ i IN tu.t_mem ==> i IN tn.t_mem) /\
     (!x. not_fresh_at sa x ==> not_fresh_at sc x /\ lookup_var x u = lookup_var x s /\
       FLOOKUP Gu x = FLOOKUP G x /\ op_taint tu (Var x) = op_taint tn (Var x)) /\
     lookup_var xd u = SOME dw /\ ptr_covers Gu tu xd u cap /\
@@ -124,6 +127,8 @@ Resume local_typed_copy_path_mods[direct]:
   `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
     (drule typed_copy_state_frame_allocas_below_fmp >> simp[]) >>
   `alloca_frame ce mid sa s ce mid s` by rw[alloca_frame_def] >>
+  `ci_mono sa sf` by metis_tac[ci_mono_compile_store_memory,pairTheory.SND] >>
+  `sa.cs_next_var <= sf.cs_next_var` by fs[ci_mono_def] >>
   qexistsl_tac [`s`,`sa`,`G`,`tn`,`t`,`Gf`,`tf`] >> simp[] >>
   suspend "direct_low"
 QED
@@ -242,9 +247,25 @@ Resume local_typed_copy_path_mods[store_post]:
      qpat_assum `!i. ~(w2n dw <= i /\ _) ==> (i IN tf.t_mem <=> i IN tu.t_mem)`
        (qspec_then `i` mp_tac) >>
      `i < w2n dw` by decide_tac >> simp[]) >>
+  `sc.cs_next_var <= sf.cs_next_var` by
+    (qpat_assum `ci_mono sc sf` (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >> simp[]) >>
+  `!name a len i. local_region ce mid.scopes s name a len /\
+      a <= i /\ i < a + len /\ i IN tu.t_mem ==> i IN tn.t_mem` by
+    (rpt strip_tac >>
+     `regions_disjoint b0 (type_memory_size stv) a len` by
+       (qpat_assum `!name a len. local_region ce mid.scopes s name a len ==> _`
+          (qspecl_then [`name`,`a`,`len`] mp_tac) >> simp[]) >>
+     qpat_assum `!i. ~(b0 <= i /\ _) ==> (i IN tu.t_mem <=> i IN tn.t_mem)`
+       (qspec_then `i` mp_tac) >>
+     `~(b0 <= i /\ i < b0 + type_memory_size stv)` by
+       (qpat_x_assum `regions_disjoint b0 _ a len` mp_tac >>
+        simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >> simp[]) >>
   qexistsl_tac [`u`,`sc`,`Gu`,`tu`,`t`,`Gf`,`tf`] >> simp[] >>
-  qpat_assum `!aid off len i. FLOOKUP s.vs_allocas aid = _ /\ _ ==> i IN tn.t_mem`
-    mp_tac >> simp[]
+  (conj_tac
+   >- (qpat_assum `!aid off len i. FLOOKUP s.vs_allocas aid = _ /\ _ ==> i IN tn.t_mem`
+         mp_tac >> simp[]) >>
+   qpat_assum `!name a len i. local_region ce mid.scopes s name a len /\ _ ==> i IN tn.t_mem`
+     ACCEPT_TAC)
 QED
 
 Finalise local_typed_copy_path_mods
