@@ -3793,6 +3793,96 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_typ
   suspend "linked_linear_fallback_body_guards"
 QED
 
+(* The allocation facts above the fallback cut may come from either
+   dispatcher. The source-body prerequisites below use the selected
+   declaration, not the selector program. *)
+val linked_empty_body_types_tac =
+  `linked_body_type_facts tops src (type_env_all_modules mods)` by
+    drule_all_then ACCEPT_TAC linked_checked_body_type_facts >>
+  `src = NONE ==> layouts_agree tops am tx` by
+    (strip_tac >>
+     `MEM (NONE,tops) mods` by
+       (qpat_assum `src = NONE` (fn main =>
+          qpat_assum `ALOOKUP mods src = SOME tops`
+            (ACCEPT_TAC o MATCH_MP ALOOKUP_MEM o PURE_REWRITE_RULE [main]))) >>
+     qpat_assum `layouts_agree_mods mods exps am tx` mp_tac >>
+     simp[NoAsms, layouts_agree_mods_def, layouts_agree_def, pairTheory.ELIM_UNCURRY] >>
+     disch_then (qspecl_then [`NONE`,`tops`] mp_tac o
+       CONJUNCT2 o CONJUNCT2 o CONJUNCT2) >>
+     qpat_assum `MEM (NONE,tops) mods` (fn member => simp[NoAsms, member])) >>
+  `fallback_types.type_defs = type_env_all_modules mods /\
+    fallback_types.event_fields = art.cta_event_fields` by
+    simp[NoAsms, Abbr `fallback_types`, artifact_env_def] >>
+  `linked_body_data_env tops src fallback_types` by
+    (MATCH_MP_TAC (Q.INST [`mode` |-> `F`, `am` |-> `am`, `tx` |-> `tx`,
+      `mods` |-> `mods`, `art` |-> `art`] linked_checked_data_env) >>
+     rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+       qpat_assum `fallback_types.bare_global_assignable = FEMPTY`
+         (fn empty => simp[NoAsms, empty] >> NO_TAC),
+       strip_tac >>
+       qpat_assum `src = NONE` (fn main =>
+         qpat_assum `linked_body_type_facts _ _ _`
+           (mp_tac o CONJUNCT1 o REWRITE_RULE [linked_body_type_facts_def]) >>
+         simp[NoAsms, main])]) >>
+  `linked_body_env tops src (type_env_all_modules mods) fallback_types` by
+    (PURE_REWRITE_TAC [linked_body_env_def] >>
+     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+       qpat_assum `fallback_types.var_types = FEMPTY`
+         (fn empty => simp[NoAsms, empty] >> NO_TAC),
+       qpat_assum `fallback_types.bare_global_assignable = FEMPTY`
+         (fn empty => simp[NoAsms, empty])]) >>
+  `ce_locals_declared ce fallback_types /\ locals_alloc_ok ce fallback_types /\
+    FDOM fallback_types.var_types = set (MAP FST (args:(string # type) list)) /\
+    ALL_DISTINCT (MAP FST args)` by
+    (PURE_REWRITE_TAC [ce_locals_declared_def, locals_alloc_ok_def] >>
+     map_every (fn pat => qpat_assum pat SUBST1_TAC)
+       [`ce.ce_vars = FEMPTY`,`fallback_types.var_types = FEMPTY`,`(args:(string # type) list) = []`] >>
+     simp[NoAsms]);
+
+val linked_empty_body_support_tac =
+  Q.SUBGOAL_THEN `src = NONE \/ imported_stmts_refs_ok fallback_code` assume_tac
+  >- (Cases_on `src` >> simp[NoAsms] >>
+      qpat_assum `ALOOKUP mods (SOME _) = SOME tops`
+        (assume_tac o MATCH_MP ALOOKUP_MEM) >>
+      simp_tac bool_ss [Abbr `fallback_code`] >>
+      drule_all_then (ACCEPT_TAC o CONJUNCT2)
+        check_contract_subst_imported_function_refs_ok) >>
+  `src = NONE ==> !name. ~MEM (StructDecl name []) tops` by
+    (strip_tac >> qx_gen_tac `empty_struct` >> strip_tac >>
+     drule_all_then mp_tac check_contract_toplevel_decl_MEM_checked >>
+     simp[NoAsms, check_toplevel_decl_def]) >>
+  qpat_assum `IS_SOME (type_stmts fallback_types ret fallback_code)`
+    (qx_choose_then `after_body` assume_tac o
+       PURE_REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
+  qpat_assum `body_const_cells_agree_mods mods cx fallback_types es0`
+    (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_mods_def]) >>
+  `!key r. ALOOKUP (consts_env_mods mods) key = SOME r ==>
+       subst_consts_expr_mods (consts_env_mods mods) r = r` by
+    (qx_genl_tac [`const_key`, `rhs`] >> PairCases_on `const_key` >> strip_tac >>
+     qpat_assum `!sid id r. ALOOKUP (consts_env_mods mods) (sid,id) = SOME r ==> _`
+       (drule_then (map_every assume_tac o CONJUNCTS)) >>
+     MATCH_MP_TAC (Q.INST [`mods` |-> `mods`]
+       (SPEC_ALL (cj 1 subst_consts_expr_mods_closed))) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `custom_errors_stmts_ok mods fallback_code` by
+    (simp_tac bool_ss [Abbr `fallback_code`] >>
+     drule_all_then ACCEPT_TAC checked_linked_custom_errors_after_substitution) >>
+  `IS_SOME (type_stmts fallback_types ret
+      (subst_consts_stmts_mods (consts_env_mods mods) fallback_code))` by
+    (`subst_consts_stmts_mods (consts_env_mods mods) fallback_code = fallback_code` by
+       (simp_tac bool_ss [Abbr `fallback_code`] >>
+        MATCH_MP_TAC subst_consts_stmts_mods_idempotent >> first_assum ACCEPT_TAC) >>
+     pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `supported_function_body tops External args fallback_code` by
+    drule_all_then MATCH_ACCEPT_TAC checked_linked_typed_body_supported >>
+  qabbrev_tac `bindings =
+    args ++ supported_stmts_bindings T fallback_code ++ supported_stmts_bindings F fallback_code` >>
+  `supported_stmts tops bindings fallback_code` by
+    (qpat_assum `supported_function_body tops External args fallback_code`
+       (strip_assume_tac o BETA_RULE o PURE_REWRITE_RULE [supported_function_body_def, LET_THM]) >>
+     simp[NoAsms, Abbr `bindings`] >> first_assum ACCEPT_TAC);
+
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_body_guards]:
   cheat
 QED
