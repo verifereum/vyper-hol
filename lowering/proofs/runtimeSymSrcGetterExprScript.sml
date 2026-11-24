@@ -104,9 +104,14 @@ Proof
   pure_rewrite_tac[LET_THM] >>
   BETA_TAC >> Cases_on `is_ArrayT vt` >> asm_rewrite_tac[] >>
   simp_tac std_ss [pairTheory.FORALL_PROD, pairTheory.EXISTS_PROD] >>
-  rpt (pairarg_tac >> gvs[IgnAsm `!vn. _`]) >> strip_tac >> gvs[]
+  rpt (pairarg_tac >>
+       qpat_assum `build_getter _ _ _ _ = (_,_,_)` (fn th =>
+         simp_tac std_ss [th, pairTheory.PAIR_EQ, pairTheory.UNCURRY_DEF])) >>
+  strip_tac >> qpat_x_assum `_ = exp` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `!vn. _` (mp_tac o Q.SPEC `num_to_dec_string n`) >>
+  asm_simp_tac std_ss [pairTheory.PAIR_EQ]
   >>~- ([`build_getter _ _ _ _ = _`],
-         qpat_x_assum `(_ ==> !ce ty s v s'. _)` ho_match_mp_tac >>
+         disch_then ho_match_mp_tac >>
          ho_match_mp_tac runtime_sym_getter_subscript_expr_raw >>
          conj_tac >- (first_assum ACCEPT_TAC) >>
          rpt gen_tac >> strip_tac >> drule_all runtime_sym_getter_name_raw >> simp[]) >>
