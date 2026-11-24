@@ -11,6 +11,7 @@ Ancestors
   ptrDiscipline venomExecSemantics venomState fragGasSeqPtr
   exprPtrCtorImmStore exprPtrCtorCodeLoad emitHelperProps venomInst decoderGhostFramePtr
   bodyPtrSignedConvertBool fragGasCopyLoop finite_map instSeqComposePtr exprSimPop words instIdxIndep
+  fragGasCopySeqLiftProps
   fragExecMem instMemFrontier memSafeRun fragGasEmitCtrl fragGasOriginPtrLoop
   bodyPtrBopAssert gasEvents gasCount unitTransformDefs contextCodegenRel codegenRel ptrSafetyTransport
   stmtReasonLitFragMemory exprSimPopNestedLocalProps vyperLookup
