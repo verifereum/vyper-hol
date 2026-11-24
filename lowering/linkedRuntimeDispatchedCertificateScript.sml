@@ -3128,11 +3128,128 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_no_re
   suspend "linked_linear_getter_unsubstituted_typed"
 QED
 
+(* Common source facts at either typed getter cut. *)
+val linked_positional_getter_type_tac =
+  `IS_SOME (type_stmts entry_types ret fbody)` by
+    (qpat_assum `type_stmts entry_types ret fbody = SOME _`
+       (fn typed => simp[NoAsms, typed])) >>
+  Q.SUBGOAL_THEN `?out. type_stmts entry_types ret body_code = SOME out`
+    (qx_choose_then `after_body` assume_tac)
+  >- (qpat_assum `type_stmts entry_types ret body_code = SOME _` (irule_at Any)) >>
+  `ret <> NoneT` by
+    (qpat_assum `fbody = [Return (SOME getter_value)]` (fn shape =>
+       qpat_assum `type_stmts entry_types ret fbody = SOME env_after`
+         (mp_tac o PURE_REWRITE_RULE [shape])) >>
+     simp[NoAsms, type_stmt_def, AllCaseEqs()]) >>
+  `stmts_no_control_escape fbody` by
+    (qpat_assum `fbody = [Return (SOME getter_value)]` (fn shape =>
+       simp[NoAsms, shape, stmt_no_control_escape_def])) >>
+  `qualified_stmts_decls_ok mods body_code` by
+    (qpat_assum `body_code = [Return (SOME _)]` (fn shape => simp[NoAsms, shape]));
+
+val linked_positional_getter_lock_tac =
+  `mut = View` by
+    (qpat_assum `external_getter_tuple src top = SOME _` mp_tac >>
+     qpat_assum `is_public_getter_decl tx.function_name top` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `top` >> simp[external_getter_tuple_def, is_public_getter_decl_def] >>
+     Cases_on `v` >> simp[external_getter_tuple_def, is_public_getter_decl_def,
+       getter_def, AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[]) >>
+  `~raw` by
+    (qspecl_then [`tops`,`src`,`tx.function_name`,`top`] mp_tac public_getter_raw_return_none >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then (fn no_raw =>
+       qpat_assum `lookup_raw_return_or_F src tx.function_name External tops = raw`
+         (mp_tac o REWRITE_RULE [lookup_raw_return_or_F_def, no_raw])) >>
+     simp[NoAsms]) >>
+  `raw ==> ?n. ret = BaseT (BytesT (Dynamic n))` by
+    (qpat_assum `~raw` (fn r => simp[NoAsms, r])) >>
+  `nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
+          is_view_mut mut = (mut = View)` by
+    (strip_tac >>
+     `lookup_nonreentrant_slot am.layouts tx.target = SOME 0` by
+       drule_all_then ACCEPT_TAC checked_selected_getter_lock_slot >>
+     qpat_assum `mut = View` (fn view =>
+       qpat_assum `lookup_nonreentrant_slot am.layouts tx.target = SOME 0` (fn lock =>
+         simp[NoAsms, Abbr `cx`, initial_evaluation_context_def, lock, view,
+           contextTheory.global_nonreentrant_slot_def, is_view_mut_def])));
+
+val linked_positional_getter_return_tac =
+  `assignable_type (get_tenv cx) ret` by
+    (`check_toplevel_decl mods art src top` by
+       drule_all_then ACCEPT_TAC check_contract_toplevel_decl_MEM_checked >>
+     `check_value_type (type_env_all_modules mods) (Type ret)` by
+       (map_every (fn p => qpat_assum p mp_tac)
+          [`check_toplevel_decl mods art src top`, `external_getter_tuple src top = SOME _`,
+           `is_public_getter_decl tx.function_name top`] >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        Cases_on `top` >> simp[is_public_getter_decl_def, external_getter_tuple_def] >>
+        Cases_on `v` >> simp[is_public_getter_decl_def, external_getter_tuple_def,
+          getter_def, AllCaseEqs()] >>
+        rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[check_toplevel_decl_def] >>
+        TRY (rename1 `is_ArrayT ty` >> Cases_on `v0` >> fs[check_toplevel_decl_def, check_value_type_def]) >>
+        TRY (rename1 `check_toplevel_decl _ _ _ (VariableDecl _ var_kind _ _ _)` >>
+          Cases_on `var_kind` >> fs[check_toplevel_decl_def, check_value_type_def]) >>
+        metis_tac[check_value_type_ArrayT_type, build_getter_ret_checked, check_value_type_def]) >>
+     qpat_assum `get_tenv cx = type_env_all_modules mods` (fn tenv =>
+       qpat_assum `check_value_type (type_env_all_modules mods) (Type ret)`
+         (ACCEPT_TAC o REWRITE_RULE [GSYM tenv, check_value_type_def]))) >>
+  `ret <> NoneT ==> assignable_type (get_tenv cx) ret` by
+    (strip_tac >> first_assum ACCEPT_TAC);
+
+val linked_positional_getter_env_tac =
+  `linked_body_type_facts tops src (type_env_all_modules mods)` by
+    drule_all_then ACCEPT_TAC linked_checked_body_type_facts >>
+  `src = NONE ==> layouts_agree tops am tx` by
+    (strip_tac >>
+     `MEM (NONE,tops) mods` by
+       (qpat_assum `src = NONE` (fn main =>
+          qpat_assum `ALOOKUP mods src = SOME tops`
+            (ACCEPT_TAC o MATCH_MP ALOOKUP_MEM o REWRITE_RULE [main]))) >>
+     qpat_assum `layouts_agree_mods mods exps am tx` mp_tac >>
+     simp[NoAsms, layouts_agree_mods_def, layouts_agree_def, pairTheory.ELIM_UNCURRY] >>
+     disch_then (qspecl_then [`NONE`,`tops`] mp_tac o
+       CONJUNCT2 o CONJUNCT2 o CONJUNCT2) >>
+     qpat_assum `MEM (NONE,tops) mods` (fn member => simp[NoAsms, member])) >>
+  `entry_types.event_fields = art.cta_event_fields` by
+    simp[NoAsms, Abbr `entry_types`, function_entry_env_def, artifact_env_def,
+         FOLDL_extend_local_args_static] >>
+  `linked_body_data_env tops src entry_types` by
+    (MATCH_MP_TAC (Q.INST [`mode` |-> `F`, `am` |-> `am`, `tx` |-> `tx`,
+      `mods` |-> `mods`, `art` |-> `art`] linked_checked_data_env) >>
+     rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+       qpat_assum `entry_types.type_defs = get_tenv cx` SUBST1_TAC >> first_assum ACCEPT_TAC,
+       qpat_assum `entry_types.bare_global_assignable = FEMPTY` (fn empty => simp[NoAsms, empty] >> NO_TAC),
+       strip_tac >>
+       qpat_assum `src = NONE` (fn main =>
+         qpat_assum `linked_body_type_facts _ _ _` (mp_tac o REWRITE_RULE [linked_body_type_facts_def]) >>
+         simp[NoAsms, main] >> strip_tac >> first_assum ACCEPT_TAC)]) >>
+  `!x ty. FLOOKUP entry_types.var_types x = SOME ty ==>
+      assignable_type (type_env_all_modules mods) ty` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!x ty. FLOOKUP entry_types.var_types x = SOME ty ==>
+       ?id. MEM (id,ty) args /\ x = id`
+       (drule_then (qx_choose_then `param` strip_assume_tac)) >>
+     qpat_assum `params_ok (type_env_all_modules mods) args`
+       (strip_assume_tac o REWRITE_RULE [params_ok_def]) >>
+     qpat_assum `EVERY _ args` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+     disch_then (qspec_then `(param,ty)` mp_tac) >>
+     simp[NoAsms] >> disch_then irule >> first_assum ACCEPT_TAC);
+
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_substituted_typed]:
+  linked_positional_getter_type_tac >>
+  linked_positional_getter_lock_tac >>
+  linked_positional_getter_return_tac >>
+  linked_positional_getter_env_tac >>
   cheat
 QED
 
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsubstituted_typed]:
+  linked_positional_getter_type_tac >>
+  linked_positional_getter_lock_tac >>
+  linked_positional_getter_return_tac >>
+  linked_positional_getter_env_tac >>
   cheat
 QED
 
