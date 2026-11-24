@@ -31,7 +31,7 @@ Ancestors
   appendStorageStageTransportPtr appendStorageStaticPtr fragGasCopyLoop instSeqPtrLo appendResolvedStorageRel
   fragGasCopySeqLiftProps
   vyperFiniteStoragePreservation assignTuplePtrLoadStep targetSubscriptStorage appendStorageGhostPtr
-  bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
+  bodyFullPreds bodyFullSimProjection bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   targetPlaceSimCases vyperExprNoControl vyperTypeCallGraph
@@ -5532,23 +5532,20 @@ Resume body_append_nested_frag_full[staged_cont]:
   qpat_assum `lookup_scopes id rhs_state.scopes = SOME entry` (irule_at Any) >>
   qpat_assum `read_memory_path entry path = INL (ArrayV (DynArrayV vs))` (irule_at Any) >>
   qpat_assum `lookup_var x staged = SOME addr` (irule_at Any) >>
-  simp[] >>
   qexistsl_tac [`lctx`,`env`,`d`,`RetQ`] >>
+  simp_tac bool_ss [venomStateTheory.operand_11] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qpat_assum `~is_word_type elem` (fn th => simp_tac bool_ss [th]) >>
+     qexists_tac `n2w b` >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     qpat_assum `w2n (n2w b) = b` (fn th => simp_tac bool_ss [th]) >>
+     first_assum ACCEPT_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   suspend "staged_conditions"
 QED
 
 Resume body_append_nested_frag_full[staged_conditions]:
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >-
-    (qx_gen_tac `final_horizon` >> strip_tac >>
-     qpat_assum `rhs_state.storage_trace = _` (fn eq =>
-       qpat_assum `!H. valid_horizon _ _ H rhs_state.storage_trace ==>
-         stmt_state_rel H ctx func cenv cx rhs_state staged /\ _`
-         (qspec_then `final_horizon` (mp_tac o PURE_REWRITE_RULE [eq]))) >>
-     (impl_tac >- simp[]) >> strip_tac >> first_assum ACCEPT_TAC) >>
-  simp[] >>
-  reverse conj_tac >- (rpt gen_tac >> strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qx_genl_tac [`final_horizon`,`ans`,`ee`,`Gf`,`tf`,`fin_state`] >>
   disch_then (qx_choose_then `cenvf` strip_assume_tac) >>
   qexists_tac `cenvf` >> simp[] >>
@@ -6198,7 +6195,7 @@ Resume body_append_storage_word_frag_full[rhs_code]:
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid` by
     (irule expr_body_pre_gas_admissible >> goal_assum (drule_at Any)) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx elem e mid` by
-    (fs[body_expr_full_ok_def] >> first_x_assum (irule o cj 1) >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`vop`,`s0`,`G0`,`tn0`] mp_tac) >>
