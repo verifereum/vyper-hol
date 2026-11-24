@@ -12,6 +12,7 @@ Ancestors
   vyperEvalExprPreservesScopesDom gasExemptCert typedMemoryCopy words venomState
   compileEnv exprLowering exprLoweringProps fragExec loweringPosts exprSimHypsDefs
   loweringShapeDefs bodyPtrDefs
+  bodyPtrIfExpBytesCounted bodyCopyMemory bodyDeclMemoryCounted abiTupleProps
 (* A robust value over a covering window has the memory pointer post. *)
 Theorem default_memory_post[local]:
   evaluate_type (get_tenv cx) ty = SOME tv /\
@@ -31,7 +32,7 @@ Proof
 QED
 
 (* Both stores write within the allocated destination capacity. *)
-Theorem default_store_dispatch[local]:
+val default_store_inputs = ``
   compile_store_memory ce src (Var dst) ty ty a = ((),b) /\
   ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v /\ val_wf tv v /\
@@ -51,13 +52,14 @@ Theorem default_store_dispatch[local]:
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code a b func /\ ~s.vs_halted /\
-  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
-  ?u Gf tm.
+  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts``;
+
+val default_store_post = ``
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
        (s,G,tn) [] (OK u,Gf,tm)) /\
     (!mem. mem_agree_outside tm.t_mem u.vs_memory mem ==>
        val_in_memory tv v (w2n dw) mem) /\
-    lookup_var dst u = SOME dw /\
+    lookup_var dst u = SOME (dw:256 word) /\
     typed_copy_state_frame a (w2n dw) (type_memory_size tv) s u /\
     (!x. not_fresh_at a x ==>
       lookup_var x u = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
@@ -66,9 +68,34 @@ Theorem default_store_dispatch[local]:
        (i IN tm.t_mem <=> i IN tn.t_mem)) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     u.vs_current_bb = b.cs_current_bb /\ u.vs_current_bb = s.vs_current_bb /\
-    u.vs_inst_idx = LENGTH b.cs_current_insts /\ ~u.vs_halted
+    u.vs_inst_idx = LENGTH b.cs_current_insts /\ ~u.vs_halted``;
+
+Theorem copied_head_store_observed:
+  ^default_store_inputs /\
+  (!u. same_blocks a b /\
+       b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
+       EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+                   ~is_terminator i.inst_opcode) (emitted_insts a b) /\
+       run_inst_seq (emitted_insts a b) s = OK (u with vs_inst_idx := s.vs_inst_idx) /\
+       u.vs_inst_idx = LENGTH b.cs_current_insts ==> R s u) ==>
+  ?u Gf tm. R s u /\ ^default_store_post
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >> Cases_on `is_bytestring_type ty`
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `same_blocks a b /\
+   b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+               ~is_terminator i.inst_opcode) (emitted_insts a b)` by
+    (Cases_on `is_bytestring_type ty`
+     >- (`compile_store_bytestring src (Var dst) a = ((),b)` by
+           fs[contextTheory.compile_store_memory_def] >>
+         drule exprSimBufferStoreTheory.buffer_store_bytestring_shape >> strip_tac >>
+         drule compile_store_bytestring_code >> simp[listTheory.EVERY_CONJ]) >>
+     `compile_copy_memory (Var dst) src (type_memory_bytes ce ty) a = ((),b)` by
+       fs[contextTheory.compile_store_memory_def] >>
+     drule compile_copy_memory_extends >> strip_tac >>
+     drule copy_memory_body_code >>
+     drule compile_copy_memory_no_gas >> simp[listTheory.EVERY_CONJ]) >>
+  Cases_on `is_bytestring_type ty`
   >- (`type_memory_size tv <> 0` by
         (drule_all bytestring_type_value >> strip_tac >>
          gvs[valueEncodingTheory.type_memory_size_def, vfmConstantsTheory.word_size_def]) >>
@@ -76,8 +103,9 @@ Proof
       gvs[eval_operand_def] >>
       `w2n sw + type_memory_size tv <= s.vs_alloca_next /\
        w2n dw + type_memory_size tv <= s.vs_alloca_next` by decide_tac >>
-      drule_all extcall_default_bytes_store_capacity_joint >>
+      drule_all extcall_default_bytes_store_capacity_joint_exact >>
       disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+      `R s u` by (first_x_assum irule >> simp[]) >>
       qexistsl_tac [`u`,`Gf`,`tm`] >> simp[] >>
       conj_tac
       >- (simp[typed_copy_state_frame_def, typed_copy_frame_def] >>
@@ -92,8 +120,20 @@ Proof
      w2n sw + type_memory_size tv <= s.vs_alloca_next /\
      w2n dw + type_memory_size tv <= s.vs_alloca_next /\
      s.vs_alloca_next < dimword (:256)` by simp[] >>
-  drule_all extcall_default_copy_capacity_joint >>
-  disch_then (qspecl_then [`explicit`,`PG`] ACCEPT_TAC)
+  drule_all extcall_default_copy_capacity_joint_exact >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `R s u` by (first_x_assum irule >> simp[]) >>
+  qexistsl_tac [`u`,`Gf`,`tm`] >> asm_rewrite_tac[] >>
+  fs[same_blocks_def]
+QED
+
+Theorem default_store_dispatch[local]:
+  ^default_store_inputs ==> ?u Gf tm. ^default_store_post
+Proof
+  disch_tac >>
+  mp_tac (BETA_RULE (Q.INST [`R` |-> `\(s:venom_state) (u:venom_state). T`]
+                    copied_head_store_observed)) >>
+  simp[]
 QED
 
 val extcall_materialized_post = ``

@@ -1,7 +1,8 @@
 (* Opcode-independent bound-label preservation for body compilation. *)
 Theory bodyBoundLabels
 Ancestors
-  helperBoundLabels boundLabelRules exprLowering stmtLowering emitHelper context compileEnv loweringShapeDefs
+  helperBoundLabels boundLabelRules boundLabelsBoolChainOps exprLowering
+  stmtLowering emitHelper context compileEnv loweringShapeDefs
 
 Theorem bound_labels_clamp:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
@@ -2025,6 +2026,21 @@ Proof
        bound_labels_builtin_ec, bound_labels_builtin_method_id,
        bound_labels_builtin_concat, bound_labels_builtin_makearray,
        bound_labels_builtin_slice, bound_labels_builtin_bop]
+  >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst _ _`]
+  >- (simp[compile_builtin_dispatch_body_def] >>
+      irule pair_let_snd_preserves >> reverse conj_tac
+      >- (irule bound_labels_lower_value >> simp[]) >>
+      rpt strip_tac >> simp[] >> IF_CASES_TAC >>
+      simp[bound_labels_as_stack_val, bound_labels_as_ptr_val]) >>
+  simp[compile_builtin_dispatch_body_def] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_primitives] >> rpt strip_tac >> simp[] >>
+  irule bound_labels_fresh_pair >> simp[] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_compile_bool_chain_ops >> simp[] >> rpt strip_tac >>
+      irule bound_labels_lower_value >> simp[]) >>
+  rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> simp[bound_labels_new_block]
 QED
 
 Theorem bound_labels_expr_mutual:
