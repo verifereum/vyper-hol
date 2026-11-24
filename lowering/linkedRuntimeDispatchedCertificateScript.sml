@@ -3187,6 +3187,25 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_suppo
 QED
 
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_value]:
+  `(?after_body. type_stmts entry_types ret body_code = SOME after_body) /\
+   IS_SOME (type_stmts entry_types ret fbody) /\
+   ret <> NoneT /\
+   stmts_no_control_escape fbody /\
+   qualified_stmts_decls_ok mods body_code /\
+   (raw ==> ?n. ret = BaseT (BytesT (Dynamic n))) /\
+   (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
+           is_view_mut mut = (mut = View)) /\
+   (ret <> NoneT ==> assignable_type (get_tenv cx) ret) /\
+   ~supported_stmts_expr_exists (unallocated_bare_global_root registered_env entry_types) body_code /\
+   (!key. MEM (WriteAcc (StateRef key)) (accesses_stmts body_code) /\
+          IS_SOME (FLOOKUP entry_types.bare_global_assignable key) ==>
+          IS_SOME (FLOOKUP registered_env.ce_module_vars key)) /\
+   supported_stmts tops
+     (args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code) body_code`
+    suffices_by
+    (disch_then (CONJUNCTS_THEN2 (qx_choose_then `after_body` assume_tac)
+        (map_every assume_tac o CONJUNCTS)) >>
+     suspend "linked_linear_getter_registered") >>
   Cases_on `ALOOKUP (consts_env_mods mods) (src,tx.function_name)`
   >- suspend "linked_linear_getter_no_replacement" >>
   rename1 `ALOOKUP (consts_env_mods mods) (src,tx.function_name) = SOME replacement` >>
@@ -3805,13 +3824,12 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_subst
      qpat_assum `!E k r. EVERY _ E /\ _ ==> _` irule >>
      map_every qexists_tac [`consts_env_mods mods`,`k`] >> simp[]) >>
   linked_positional_getter_support_tac >>
-  qabbrev_tac `bindings =
-    args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code` >>
-  `supported_stmts tops bindings body_code` by
-    (simp[NoAsms, Abbr `bindings`] >>
-     qpat_assum `(src = NONE \/ imported_stmts_refs_ok body_code) ==> supported_stmts _ _ body_code`
+  `supported_stmts tops
+     (args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code) body_code` by
+    (qpat_assum `(src = NONE \/ imported_stmts_refs_ok body_code) ==> supported_stmts _ _ body_code`
        (drule_then ACCEPT_TAC)) >>
-  cheat
+  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+    qexists_tac `after_body` >> first_assum ACCEPT_TAC]
 QED
 
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsubstituted_typed]:
@@ -3877,13 +3895,130 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsub
      rpt strip_tac >> Cases_on `src` >>
      fs[imported_stmt_refs_ok_def, imported_expr_refs_ok_def]) >>
   linked_positional_getter_support_tac >>
+  `supported_stmts tops
+     (args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code) body_code` by
+    (qpat_assum `(src = NONE \/ imported_stmts_refs_ok body_code) ==> supported_stmts _ _ body_code`
+       (drule_then ACCEPT_TAC)) >>
+  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+    qexists_tac `after_body` >> first_assum ACCEPT_TAC]
+QED
+
+(* The selected getter has a single Return regardless of whether its root
+   was replaced. The route supplies the registered code and path. *)
+val linked_positional_getter_registered_tac =
   qabbrev_tac `bindings =
     args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code` >>
   `supported_stmts tops bindings body_code` by
-    (simp[NoAsms, Abbr `bindings`] >>
-     qpat_assum `(src = NONE \/ imported_stmts_refs_ok body_code) ==> supported_stmts _ _ body_code`
+    (simp[NoAsms, Abbr `bindings`] >> first_assum ACCEPT_TAC) >>
+  `MEM (src,tops) mods` by drule_then ACCEPT_TAC ALOOKUP_MEM >>
+  `IS_SOME (check_contract F cx.layouts cx.txn.target mods)` by
+    (qpat_assum `check_contract F cx.layouts cx.txn.target mods = SOME art`
+      (fn checked => simp[NoAsms, checked])) >>
+  `ALL_DISTINCT (MAP FST mods)` by
+    (qpat_assum `contract_namespaces_ok F mods`
+      (strip_assume_tac o PURE_REWRITE_RULE [contract_namespaces_ok_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `ret <> NoneT ==> stmts_no_fallthrough fbody` by
+    (qpat_assum `fbody = [Return (SOME getter_value)]` (fn body =>
+       simp[NoAsms, body, stmt_no_fallthrough_def]));
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_registered]:
+  linked_positional_getter_registered_tac >>
+  linked_registered_frame_tac >>
+  linked_registered_stmts_env_tac >>
+  linked_linear_registered_route_tac >>
+  linked_registered_path_tac >>
+  linked_linear_registered_open_tac >>
+  linked_registered_lock_cases_tac
+    (suspend "linked_linear_getter_lock_success")
+    (suspend "linked_linear_getter_lock_abort")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_lock_abort]:
+  linked_registered_lock_abort_tac >>
+  linked_registered_lock_abort_source_tac >>
+  linked_registered_lock_abort_domain_tac >>
+  linked_registered_lock_abort_finish_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_lock_success]:
+  linked_registered_lock_success_tac >>
+  linked_registered_locked_horizon_tac >>
+  linked_registered_replay_tac >>
+  linked_registered_return_layout_tac >>
+  linked_registered_return_frame_tac >>
+  linked_registered_structs_tac >>
+  linked_registered_abi_targets_tac >>
+  linked_registered_fragment_tac >>
+  linked_registered_shadow_tac >>
+  linked_registered_admissible_tac >>
+  linked_registered_reachability_tac >>
+  `immutable_section_layout_mods mods registered_env` by
+    drule_then ACCEPT_TAC contract_inv_immutable_section_layout >>
+  linked_registered_immutable_frame_tac >>
+  linked_registered_storage_prefix_tac >>
+  linked_registered_run_tac >>
+  linked_registered_trace_inputs_tac >>
+  linked_registered_compose_tac
+    {horizon_tac = suspend "linked_linear_getter_trace_horizon",
+     tails_tac = suspend "linked_linear_getter_trace_tails",
+     exempt_tac = suspend "linked_linear_getter_trace_exempt",
+     fallthrough_tac = suspend "linked_linear_getter_fallthrough",
+     exit_tac = suspend "linked_linear_getter_exit",
+     readings_tac = suspend "linked_linear_getter_trace_readings",
+     finish_tac = suspend "linked_linear_getter_finish"}
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_trace_horizon]:
+  linked_registered_trace_horizon_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_trace_tails]:
+  linked_registered_trace_tails_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_trace_exempt]:
+  linked_registered_trace_exempt_tac
+QED
+
+val linked_positional_getter_no_fallthrough_tac =
+  qx_genl_tac [`gx`,`res`,`ee`,`t`] >> BETA_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H G tn. valid_horizon _ _ H _ /\
+     ?ce'. stmt_lands NoLoop body_end res t /\ _`
+    (qx_choosel_then [`H`,`G`,`tn`] (CONJUNCTS_THEN2 kall_tac
+       (qx_choose_then `final_env` (assume_tac o CONJUNCT1)))) >>
+  `res = INL ()` by
+    (qpat_assum `stmt_lands NoLoop body_end res t` mp_tac >>
+     simp[NoAsms, loweringPostsTheory.stmt_lands_def]) >>
+  linked_body_eval_tac >>
+  `stmts_no_fallthrough fbody` by
+    (qpat_assum `ret <> NoneT ==> stmts_no_fallthrough fbody`
        (drule_then ACCEPT_TAC)) >>
-  cheat
+  drule_then mp_tac (cj 2 vyperTypeEvalProofsTheory.no_fallthrough_eval_no_success) >>
+  disch_then (qspecl_then [`cx`,`es_lock with gas_obs := gx`,`ee with gas_obs := []`] mp_tac) >>
+  qpat_assum `res = INL ()` (fn success =>
+    qpat_assum `eval_stmts cx fbody (es_lock with gas_obs := gx) = _`
+      (fn eval => simp[NoAsms, eval, success]));
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_fallthrough]:
+  linked_positional_getter_no_fallthrough_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_exit]:
+  linked_registered_trace_exit_tac (suspend "linked_linear_getter_abort_or_halt")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_abort_or_halt]:
+  linked_registered_abort_or_halt_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_trace_readings]:
+  linked_registered_trace_readings_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_finish]:
+  linked_registered_finish_tac
 QED
 
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_accepted_fallback]:
