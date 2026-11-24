@@ -58,7 +58,10 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all_then strip_assume_tac subscript_local_cut_returned_paths >>
   `expr_body_pre ce cx env obj (es with gas_obs := gs1)` by
-    (drule_all expr_body_pre_array_subscript_base >> simp[]) >>
+    (`expr_body_pre ce cx env obj es` suffices_by simp[] >>
+     (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+        (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+      qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[])) >>
   drule_all_then strip_assume_tac expr_body_pre_place_metadata >>
   `expr_body_pre ce cx env (Subscript ann obj idx) (es with gas_obs := gs1)` by simp[] >>
   `expr_body_pre ce cx env idx (mid with gas_obs := gs2)` by

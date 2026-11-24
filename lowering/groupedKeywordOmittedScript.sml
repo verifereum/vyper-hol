@@ -8,9 +8,9 @@ Ancestors
   gasOutcomeFullCompose bodyFullPathHistory vyperStorageFootprint vyperTypeExprResult vyperTypeExprSoundness
   exprSimSource valueEncodingTyping vyperContext vyperAST vyperTypeContract
   vyperTypeInvariants loweringShapeDefs ptrDiscipline
-  venomState venomMemDefs compileEnv finite_map arithmetic
+  venomState venomMemDefs compileEnv finite_map arithmetic fragExec
 
-Theorem grouped_keyword_omitted_store:
+val omitted_store_inputs = ``
   runtime_constant_expr mods e /\ expr_type e = ty /\
   lower_value compile_expr (ce with ce_vars := FEMPTY) ty e sa = (src,mid) /\
   (if is_word_type ty then emit_void MSTORE [Var dst;src]
@@ -26,12 +26,13 @@ Theorem grouped_keyword_omitted_store:
   ptr_covers G tn dst s (type_memory_size tv) /\
   expr_sim_full_post (DF,0,NONE,ctx,fn) (ce with ce_vars := FEMPTY) cx e
     (es,sa,mid,s,src,G,tn) H (INL v) ee G1 tn1 t /\
-  expr_result_typed env e (Value v) /\ ~t.vs_halted ==>
-  ?u G2 tn2.
+  expr_result_typed env e (Value v) /\ ~t.vs_halted``;
+
+val omitted_store_post = ``
     (!D. gas_origin_ptr_path (D,0,explicit,ctx,fn,PG)
       (t,G1,tn1) [] (OK u,G2,tn2)) /\
     (!mem. mem_agree_outside tn2.t_mem u.vs_memory mem ==>
-      val_in_memory tv v (w2n b) mem) /\
+      val_in_memory tv v (w2n (b:256 word)) mem) /\
     value_has_type tv v /\ val_wf tv v /\
     ptr_covers G2 tn2 dst u (type_memory_size tv) /\
     typed_copy_state_frame mid (w2n b) (type_memory_size tv) t u /\
@@ -41,7 +42,13 @@ Theorem grouped_keyword_omitted_store:
        (i IN tn2.t_mem <=> i IN tn1.t_mem)) /\
     tn2.t_stor = tn1.t_stor /\ tn2.t_trans = tn1.t_trans /\ tn2.t_imm = tn1.t_imm /\
     u.vs_current_bb = last.cs_current_bb /\
-    u.vs_inst_idx = LENGTH last.cs_current_insts /\ ~u.vs_halted
+    u.vs_inst_idx = LENGTH last.cs_current_insts /\ ~u.vs_halted``;
+
+Theorem grouped_keyword_omitted_store_exact[local]:
+  ^omitted_store_inputs ==>
+  ?u G2 tn2.
+    run_inst_seq (emitted_insts mid last) t = OK (u with vs_inst_idx := t.vs_inst_idx) /\
+    ^omitted_store_post
 Proof
   strip_tac >>
   `post_value_type (ce with ce_vars := FEMPTY) e = ty` by
@@ -107,7 +114,7 @@ Proof
   qpat_assum `post_value_type _ e = ty` (RULE_ASSUM_TAC o REWRITE_RULE o single) >>
   mp_tac (Q.INST [`sa` |-> `mid`,`sb` |-> `last`,`s` |-> `t`,
     `G` |-> `G1`,`tn` |-> `tn1`,`lo` |-> `0`]
-    (SPEC_ALL grouped_keyword_store_value)) >>
+    (SPEC_ALL grouped_keyword_store_value_exact)) >>
   impl_tac >- asm_simp_tac (srw_ss()) [] >>
   disch_then (qx_choosel_then [`u`,`G2`,`tn2`] strip_assume_tac) >>
   `ptr_covers G2 tn2 dst u (type_memory_size tv)` by
@@ -131,6 +138,15 @@ Proof
   qexistsl_tac [`u`,`G2`,`tn2`] >>
   asm_rewrite_tac[] >>
   metis_tac[]
+QED
+
+Theorem grouped_keyword_omitted_store:
+  ^omitted_store_inputs ==> ?u G2 tn2. ^omitted_store_post
+Proof
+  disch_tac >> mp_tac (SPEC_ALL grouped_keyword_omitted_store_exact) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (qx_choosel_then [`u`,`G2`,`tn2`] (assume_tac o CONJUNCT2)) >>
+  qexistsl_tac [`u`,`G2`,`tn2`] >> first_assum ACCEPT_TAC
 QED
 
 Theorem grouped_keyword_store_runtime_state:
@@ -196,12 +212,14 @@ Proof
   simp[]
 QED
 
-Theorem grouped_keyword_omitted_expression:
+val omitted_expr_inputs = ``
   runtime_constant_expr mods e /\ expr_type e = ty /\
   body_inv tops ctx (ce with ce_vars := FEMPTY) cx /\ shadow_body_inv tops ctx shadow_ctx /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_body_pre (ce with ce_vars := FEMPTY) cx env e es /\
-  expr_sim_full_hypotheses (DF,0,NONE,ctx,shadow_ctx,PG,fn,shadow_fn)
+  expr_sim_full_hypotheses
+    ((DF:(bool # 256 word # type_value) list # num list -> dead),
+     0,NONE,ctx,shadow_ctx,(PG:(num # num) option list),fn,shadow_fn)
     (ce with ce_vars := FEMPTY) cx ty e es (st0,sa,mid,sha,shmid,src,s,G,tn) /\
   (if is_word_type ty then emit_void MSTORE [Var dst;src]
    else if is_bytestring_type ty then compile_store_bytestring src (Var dst)
@@ -214,10 +232,9 @@ Theorem grouped_keyword_omitted_expression:
   ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\ ce.ce_return_pc = NONE /\
   not_fresh_at sa dst /\ lookup_var dst s = SOME b /\
   FLOOKUP s.vs_allocas oid = SOME (w2n b,type_memory_size tv) /\
-  ptr_covers G tn dst s (type_memory_size tv) ==>
-  gas_outcome_full (DF,0,gas_explicit_sites ctx shadow_ctx,ctx,fn,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
-    (\H res ee J tz u.
+  ptr_covers G tn dst s (type_memory_size tv)``;
+
+val omitted_expr_store_post = ``\H (res:value + vyperState$exception) ee J tz u.
       ?v. res = INL v /\ value_has_type tv v /\ val_wf tv v /\
           (!mem. mem_agree_outside tz.t_mem u.vs_memory mem ==>
             val_in_memory tv v (w2n b) mem) /\
@@ -239,18 +256,39 @@ Theorem grouped_keyword_omitted_expression:
               val_in_memory otv x old_base mem) /\
           stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx ee u /\
           storage_well_formed_on cx ee (FST H) /\
-          ghost_inv_at (DF H) 0 NONE (ce with ce_vars := FEMPTY) cx ee J tz u /\
+          ghost_inv_at ((DF:(bool # 256 word # type_value) list # num list -> dead) H)
+            0 NONE (ce with ce_vars := FEMPTY) cx ee J tz u /\
           ee.scopes = es.scopes /\ expr_sim_inv (ce with ce_vars := FEMPTY) cx env ee /\
           alloca_history fn u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
           u.vs_current_bb = last.cs_current_bb /\
-          u.vs_inst_idx = LENGTH last.cs_current_insts /\ ~u.vs_halted)
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+          u.vs_inst_idx = LENGTH last.cs_current_insts /\ ~u.vs_halted``;
+
+val omitted_expr_normal_post = ``\H (res:value + vyperState$exception) ee G1 tn1 t.
+  expr_sim_full_post
+    ((DF:(bool # 256 word # type_value) list # num list -> dead),0,NONE,ctx,fn)
+    (ce with ce_vars := FEMPTY) cx e (es,sa,mid,s,src,G,tn) H res ee G1 tn1 t /\
+  ~t.vs_halted /\ ee.scopes = es.scopes /\
+  expr_sim_inv (ce with ce_vars := FEMPTY) cx env ee /\
+  !v. res = INL v ==> expr_result_typed env e (Value v)``;
+
+(* At the intrinsic horizon select the store once. The callback can retain
+   a horizon-independent property of the exact run and its two cursors. *)
+Theorem grouped_keyword_store_normal_witness:
+  ^omitted_expr_inputs /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ^omitted_expr_normal_post H res ee G1 tn1 t) /\
+  (!u. ~t.vs_halted /\ t.vs_current_bb = mid.cs_current_bb /\
+    t.vs_inst_idx = LENGTH mid.cs_current_insts /\
+    run_inst_seq (emitted_insts mid last) t = OK (u with vs_inst_idx := t.vs_inst_idx) /\
+    u.vs_inst_idx = LENGTH last.cs_current_insts ==> keep t u) ==>
+  ?u J tz. keep t u /\
+    !H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,0,gas_explicit_sites ctx shadow_ctx,ctx,fn,PG)
+        (t,G1,tn1) [] (OK u,J,tz) /\
+      ^omitted_expr_store_post H res ee J tz u
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all runtime_default_expr_full >> strip_tac >>
-  irule gas_outcome_full_zero_suffix >> goal_assum (drule_at Any) >> simp[] >>
-  rpt gen_tac >> strip_tac >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> strip_tac >>
   qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
   `valid_horizon cx st0 H0 ee.storage_trace` by
     fs[Abbr `H0`, storage_trace_domain_def] >>
@@ -265,13 +303,15 @@ Proof
   qpat_assum `res = INL v` SUBST_ALL_TAC >>
   mp_tac (Q.INST [`H` |-> `H0`, `v` |-> `v`, `G1` |-> `G1`, `tn1` |-> `tn1`,
     `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
-    (INST_TYPE [alpha |-> ``:256``] (SPEC_ALL grouped_keyword_omitted_store))) >>
+    (INST_TYPE [alpha |-> ``:256``] (SPEC_ALL grouped_keyword_omitted_store_exact))) >>
   impl_tac >-
     (asm_rewrite_tac[] >> simp[expr_sim_full_post_def] >>
      qexists_tac `v` >> asm_rewrite_tac[]) >>
   disch_then (qx_choosel_then [`u`,`J`,`tz`] strip_assume_tac) >>
-  qexistsl_tac [`u`,`J`,`tz`] >> gen_tac >> strip_tac >>
-  conj_tac
+  qexistsl_tac [`u`,`J`,`tz`] >> conj_tac
+  >- (first_assum match_mp_tac >>
+      drule expr_sim_full_endpoint_fields >> simp[]) >>
+  gen_tac >> strip_tac >> conj_tac
   >- (qpat_assum `!D. gas_origin_ptr_path _ _ [] _`
         (qspec_then `DF H` ACCEPT_TAC)) >>
   qexists_tac `v` >>
@@ -342,4 +382,21 @@ Proof
         `tn` |-> `tn1`, `G'` |-> `J`, `tn'` |-> `tz`, `tv` |-> `otv`,
         `v` |-> `x`] (SPEC_ALL grouped_keyword_store_owner_frame))) >>
       asm_rewrite_tac[] >> simp[]
+QED
+
+Theorem grouped_keyword_omitted_expression:
+  ^omitted_expr_inputs ==>
+  gas_outcome_full (DF,0,gas_explicit_sites ctx shadow_ctx,ctx,fn,PG)
+    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
+    ^omitted_expr_store_post
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all runtime_default_expr_full >> strip_tac >>
+  irule gas_outcome_full_zero_suffix >> goal_assum (drule_at Any) >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (SIMP_RULE bool_ss []
+    (Q.INST [`keep` |-> `\t u. T`] (SPEC_ALL grouped_keyword_store_normal_witness))) >>
+  asm_rewrite_tac[]
 QED

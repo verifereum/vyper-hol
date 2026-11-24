@@ -1,7 +1,7 @@
 Theory bodyFullAppendNestedFrames
 Ancestors
   keyUpdateFold[qualified,ignore_grammar]
-  appendStorageStageTransportPtr fragGasSeqPtrContext fragGasCopyLoop
+  appendStorageStageTransportPtr fragGasSeqPtrContext fragGasCopyLoop fragGasCopySeqLiftProps
   appendStorageAggregateRel[qualified,ignore_grammar]
   bodyFullStoreSlotsStatic[qualified,ignore_grammar]
   stmtReasonLitFragMemory exprLoweringProps venomInst venomState fragGasSeqPtr

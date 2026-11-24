@@ -2,7 +2,7 @@
 Theory abiDecodePtrWordJoint
 Ancestors
   abiEncoder abiDecoderClampedWord calldataClampPtr calldataWordLeaf entryHaltMem
-  instSeqComposePtr decoderGhostFramePtr freshWrites fragGasCopyLoop
+  instSeqComposePtr decoderGhostFramePtr freshWrites fragGasCopyLoop fragGasCopySeqLiftProps
   bodyPtrBytestringBuiltinsUintGhost stmtReasonMemory fragExecPtr
   logAbiPrefixPtr assignTuplePtrLocalBytesCopy bodyPtrPrecompileBuiltinsRecoveryInput
   abiDecodePtrMemberFrame allocaFootprint abiDecoderReentry
