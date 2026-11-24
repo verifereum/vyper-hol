@@ -380,7 +380,8 @@ Proof
   simp[LIST_EQ_REWRITE, EL_mem_bytes_at]
 QED
 
-Theorem compile_store_memory_word_origin_ptr_path:
+(* Expose the base execution selected by the joint pointer proof. *)
+Theorem compile_store_memory_word_origin_ptr_witness:
   compile_store_memory cenv src (Var xd) dty sty sa = ((),sb) /\
   is_word_type dty /\ evaluate_type tenv dty = SOME dtv /\ value_has_type dtv v /\
   eval_operand src s = SOME (typed_val_to_w256 dtv v) /\ op_taint tn src = {} /\
@@ -390,7 +391,10 @@ Theorem compile_store_memory_word_origin_ptr_path:
   fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t Gf tnf.
+  ?t Gf tnf raw.
+    emit_inst MSTORE [Var xd; src] [] sa = ((),sb) /\
+    step_inst_base (mk_inst sa.cs_next_id MSTORE [Var xd; src] []) s = OK raw /\
+    t = (raw with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
     val_in_memory dtv v (w2n dw) t.vs_memory /\
     typed_copy_state_frame sa (w2n dw) 32 s t /\
@@ -437,13 +441,16 @@ Proof
    tf.t_imm = tn.t_imm /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
    tf.t_mem = tn.t_mem DIFF {i | w2n dw <= i /\ i < w2n dw + 32}` by
     suspend "ghost" >>
-  qexistsl_tac [`r with vs_inst_idx := SUC s.vs_inst_idx`, `G`, `tf`] >>
+  qexistsl_tac [`r with vs_inst_idx := SUC s.vs_inst_idx`, `G`, `tf`, `r`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- fs[Abbr `inst`] >>
+  conj_tac >- simp[ADD1] >>
   conj_tac
   >- (gen_tac >> irule gas_origin_ptr_path_from_no_dead >> gvs[Abbr `inst`]) >>
   suspend "post"
 QED
 
-Resume compile_store_memory_word_origin_ptr_path[pointer]:
+Resume compile_store_memory_word_origin_ptr_witness[pointer]:
   `step_inst 0 ctx inst s = OK r` by
     (qpat_x_assum `step_inst_base inst s = _` (SUBST1_TAC o SYM) >>
      simp[venomExecSemanticsTheory.step_inst_non_invoke, Abbr `inst`,
@@ -464,7 +471,7 @@ Resume compile_store_memory_word_origin_ptr_path[pointer]:
       rpt strip_tac >> gvs[op_taint_def])
 QED
 
-Resume compile_store_memory_word_origin_ptr_path[ghost]:
+Resume compile_store_memory_word_origin_ptr_witness[ghost]:
   simp[Abbr `tf`, Abbr `inst`, Abbr `r`,
        step_prov_def, set_prov_def, out_prov_def, step_taint_def,
        venomInstTheory.mk_inst_def, set_var_taint_def,
@@ -477,7 +484,7 @@ Resume compile_store_memory_word_origin_ptr_path[ghost]:
        pred_setTheory.EXTENSION] >> metis_tac[]
 QED
 
-Resume compile_store_memory_word_origin_ptr_path[post]:
+Resume compile_store_memory_word_origin_ptr_witness[post]:
   `!mem. mem_word_at (w2n dw) mem = w ==> val_in_memory dtv v (w2n dw) mem` by
     (rpt strip_tac >> drule_all exprSimPropsTheory.val_in_memory_word >>
      strip_tac >> simp[Abbr `w`]) >>
@@ -500,4 +507,31 @@ Resume compile_store_memory_word_origin_ptr_path[post]:
   rpt strip_tac >> gvs[op_taint_def]
 QED
 
-Finalise compile_store_memory_word_origin_ptr_path
+Finalise compile_store_memory_word_origin_ptr_witness
+
+Theorem compile_store_memory_word_origin_ptr_path:
+  compile_store_memory cenv src (Var xd) dty sty sa = ((),sb) /\
+  is_word_type dty /\ evaluate_type tenv dty = SOME dtv /\ value_has_type dtv v /\
+  eval_operand src s = SOME (typed_val_to_w256 dtv v) /\ op_taint tn src = {} /\
+  lookup_var xd s = SOME dw /\ w2n dw + 32 < dimword (:256) /\
+  w2n dw + 32 <= s.vs_alloca_next /\ ptr_covers G tn xd s 32 /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
+    val_in_memory dtv v (w2n dw) t.vs_memory /\
+    typed_copy_state_frame sa (w2n dw) 32 s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + 32) ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+           val_in_memory dtv v (w2n dw) mem) /\
+    (!p. FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> drule_all compile_store_memory_word_origin_ptr_witness >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[]
+QED
