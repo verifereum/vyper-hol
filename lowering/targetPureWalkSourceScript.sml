@@ -2,7 +2,7 @@
 Theory targetPureWalkSource
 Ancestors
   targetPureWalkInternalFrame targetPureWalkTraversal vyperCallOutcomeFrame
-  bodySim gasContext abiEncodeArgsScopes
+  bodySim bodyTypedTargetScope gasContext abiEncodeArgsScopes
 
 val _ = Parse.hide "body";
 
@@ -16,6 +16,7 @@ Theorem nonmutating_exprs_source_frame:
 Proof
   strip_tac >>
   `cx_tops cx = tops` by metis_tac[body_inv_def, cx_tops_module] >>
+  drule_then assume_tac body_inv_qualified_module_absent >>
   `state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
        (eval_exprs cx es)` by
     (irule exprs_source_frame_from_internal >> conj_tac
@@ -36,6 +37,7 @@ Theorem target_walk_source_frame:
     MEM (FunctionDecl vis mut nr rr fn args dflts ret body) (cx_tops cx) ==>
     function_mutability_ok [(NONE, cx_tops cx)] vis mut nr dflts body) /\
   get_module_code cx NONE = SOME (cx_tops cx) /\
+  (!src. get_module_code cx (SOME src) = NONE) /\
   EVERY (\c. FST c = NONE /\ supported_program (cx_tops cx) /\
     IS_SOME (supported_function_decl (cx_tops cx) c Internal)) (int_calls_target bt) /\
   eval_base_place cx bt es = (INL pv,ee) ==>

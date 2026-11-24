@@ -1,7 +1,7 @@
 (* Uniform IfExp VV preparation, independent of the VV-to-expression conversion. *)
 Theory bodyFullIfExpPrepare
 Ancestors
-  bodyFullIfExpWiden bodyFullIfExpWidenCall
+  bodyFullIfExpObserve bodyFullIfExpWiden bodyFullIfExpWidenCall
   bodyFullIfExpFinish bodyFullIfExpShadow bodyFullAllocGeneric typedCopyOriginPtr
   bodyFullUnwrap bodyFullPreds bodyFullIfExpReach bodyFullHashKeccakFixed
   bodySimFull gasOutcomeFullCompose gasOutcomeFull gasOutcomeFullGuarded gasShadowCompile
@@ -375,7 +375,12 @@ Proof
   gvs[is_word_type_def, is_bytestring_type_def, vyperValueTheory.evaluate_type_def, vyperStateTheory.return_def, AllCaseEqs()]
 QED
 
-Theorem ifexp_selected_arm_step_full:
+Theorem ifexp_selected_arm_step_observed:
+  ifexp_observed_unwrap T obs DF lo explicit ctx func PG d cenv cx /\
+  ifexp_observed_alloc obs ctx func /\
+  ifexp_observed_bytes_store obs /\
+  ifexp_observed_typed_store obs /\
+  ifexp_observed_widening obs ctx func /\
   compile_expr cenv ty e sa = (vv,sm) /\
   (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
   compile_ifexp_arm cenv t (lowered_value_type cenv e) vv sm = (op,sb) /\
@@ -447,6 +452,7 @@ Theorem ifexp_selected_arm_step_full:
                        val_in_memory rt val (w2n w) mem)) /\
   ghost_kept_at lo cenv es1 sa G1 tn1 u G tn ==>
   ?v z' Gz tf.
+    obs ctx func sm sb z z' /\
     read_result cx tva ee = (INL v,ee) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
@@ -483,7 +489,7 @@ Proof
   suspend "nocopy"
 QED
 
-Resume ifexp_selected_arm_step_full[nocopy]:
+Resume ifexp_selected_arm_step_observed[nocopy]:
   markerLib.RESUME_TAC >>
   `unwrap_value cenv vv sm = (op,sb)` by
     (qpat_x_assum `compile_ifexp_arm _ _ _ _ _ = _` mp_tac >> simp[compile_ifexp_arm_def]) >>
@@ -498,8 +504,9 @@ Resume ifexp_selected_arm_step_full[nocopy]:
   `evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty` by metis_tac[] >>
   `!v. read_result cx tva ee = (INL v,ee) ==> value_has_type rty v` by metis_tac[] >>
   `sm.cs_next_var <= sm.cs_next_var /\ sm.cs_next_id <= sm.cs_next_id` by simp[] >>
-  drule_all unwrap_value_origin_ptr >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qpat_x_assum `ifexp_observed_unwrap T obs _ _ _ _ _ _ _ _ _`
+    (drule_all o SIMP_RULE bool_ss [ifexp_observed_unwrap_def]) >>
+  strip_tac >>
   `z'.vs_labels = z.vs_labels` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
@@ -553,7 +560,7 @@ Resume ifexp_selected_arm_step_full[nocopy]:
   simp[same_memory_layout_def] >> rpt strip_tac >> metis_tac[]
 QED
 
-Resume ifexp_selected_arm_step_full[physical]:
+Resume ifexp_selected_arm_step_observed[physical]:
   markerLib.RESUME_TAC >>
   `unwrap_value cenv vv sm = (op,sb)` by
     (qpat_x_assum `compile_ifexp_arm _ _ _ _ _ = _` mp_tac >>
@@ -573,8 +580,9 @@ Resume ifexp_selected_arm_step_full[physical]:
   `!v. read_result cx tva ee = (INL v,ee) ==> value_has_type stv v` by metis_tac[] >>
   `vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tva vv z` by metis_tac[] >>
   `sm.cs_next_var <= sm.cs_next_var /\ sm.cs_next_id <= sm.cs_next_id` by simp[] >>
-  drule_all unwrap_value_origin_ptr >>
-  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  qpat_x_assum `ifexp_observed_unwrap T obs _ _ _ _ _ _ _ _ _`
+    (drule_all o SIMP_RULE bool_ss [ifexp_observed_unwrap_def]) >>
+  strip_tac >>
   `~is_word_type (post_value_type cenv e)` by
     metis_tac[exprSimLayoutTransportTheory.compatible_word_type] >>
   `~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e` by
@@ -607,7 +615,7 @@ Resume ifexp_selected_arm_step_full[physical]:
   simp[] >> metis_tac[]
 QED
 
-Resume ifexp_selected_arm_step_full[nocopyown]:
+Resume ifexp_selected_arm_step_observed[nocopyown]:
   markerLib.RESUME_TAC >>
   `v' = v` by metis_tac[ifexp_conditional_value_eq] >>
   qpat_x_assum `v' = v` SUBST_ALL_TAC >>
@@ -657,23 +665,19 @@ Resume ifexp_selected_arm_step_full[nocopyown]:
   qexists `sm` >> simp[])
 QED
 
-Resume ifexp_selected_arm_step_full[widened]:
+Resume ifexp_selected_arm_step_observed[widened]:
   markerLib.RESUME_TAC >>
       (`!id path. tva <> PlaceR (MemoryPlace id path)` by metis_tac[] >>
       qpat_assum `!id path. tva <> PlaceR (MemoryPlace id path)`
         (fn th => SIMP_TAC bool_ss [th]) >>
-      mp_tac (Q.INST [`ptv` |-> `stv`] ifexp_widened_call_arm_step_full) >>
+      mp_tac (Q.INST [`ptv` |-> `stv`] ifexp_widened_call_arm_step_observed) >>
       impl_tac
       >- (rpt conj_tac >>
-      FIRST_PROVE [(rpt gen_tac >> strip_tac >>
-                    drule_all unwrap_value_origin_ptr >>
-                    disch_then (qspecl_then [`explicit`,`PG`]
-                      (qx_choosel_then [`readval`,`endstate`,`endG`,`endtn`] strip_assume_tac)) >>
-                    qexistsl [`readval`,`endstate`,`endG`,`endtn`] >> simp[] >> NO_TAC),
+      FIRST_PROVE [(irule ifexp_observed_unwrap_drop_own >> simp[]),
              MATCH_ACCEPT_TAC (GEN_ALL ifexp_alloca_origin_ptr_edge),
              MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_ghost_frame_at),
              MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_kept_frame_at),
-             MATCH_ACCEPT_TAC (GEN_ALL compile_store_memory_typed_origin_ptr_path),
+             (first_assum ACCEPT_TAC),
              (qpat_assum `post_value_type cenv e = lowered_value_type cenv e`
                 (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC),
              (asm_simp_tac bool_ss [] >> NO_TAC),
@@ -692,32 +696,58 @@ Resume ifexp_selected_arm_step_full[widened]:
       qexists `sm` >> simp[])
 QED
 
-Resume ifexp_selected_arm_step_full[bytes]:
+Resume ifexp_selected_arm_step_observed[bytes]:
   markerLib.RESUME_TAC >>
       `!id path. tva <> PlaceR (MemoryPlace id path)` by metis_tac[] >>
       qpat_assum `!id path. tva <> PlaceR (MemoryPlace id path)`
         (fn th => SIMP_TAC bool_ss [th]) >>
       qpat_assum `is_bytestring_type t` (fn th => SIMP_TAC bool_ss [th]) >>
-      irule ifexp_widen_arm_step_full >> rpt conj_tac >>
-      FIRST [(rpt gen_tac >> strip_tac >>
-              drule_all unwrap_value_origin_ptr >>
-              disch_then (qspecl_then [`explicit`,`PG`]
-                (qx_choosel_then [`readval`,`endstate`,`endG`,`endtn`] strip_assume_tac)) >>
-              qexistsl [`readval`,`endstate`,`endG`,`endtn`] >> simp[] >> NO_TAC),
+      irule ifexp_widen_arm_step_observed >> rpt conj_tac >>
+      FIRST_PROVE [(irule ifexp_observed_unwrap_drop_own >> simp[]),
              MATCH_ACCEPT_TAC (GEN_ALL ifexp_alloca_origin_ptr_edge),
              MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_ghost_frame_at),
              MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_kept_frame_at),
-             MATCH_ACCEPT_TAC (GEN_ALL compile_store_bytestring_origin_ptr_path),
+             first_assum ACCEPT_TAC,
              (asm_simp_tac bool_ss [] >> NO_TAC),
              first_assum MATCH_ACCEPT_TAC,
              (qexists_tac `rty` >> simp[] >> rpt strip_tac >>
               qpat_x_assum `!v. read_result cx tva ee = _ ==> _` drule >> simp[]),
              (irule valueCopyBytesTheory.is_bytestring_word_type >> first_assum MATCH_ACCEPT_TAC),
-             (qexistsl_tac [`e`,`sm`,`ty`,`vv`] >> gvs[]),
+             (qexistsl_tac [`e`,`ty`,`vv`] >> gvs[]),
              FAIL_TAC "bytes concrete"] >> gvs[]
 QED
 
-Finalise ifexp_selected_arm_step_full
+Finalise ifexp_selected_arm_step_observed
+
+Triviality ifexp_materialize_observation_true:
+  ifexp_observed_unwrap T (\_ _ _ _ _ _. T) DF lo explicit ctx func PG d cenv cx /\
+  ifexp_observed_alloc (\_ _ _ _ _ _. T) ctx func /\
+  ifexp_observed_bytes_store (\_ _ _ _ _ _. T) /\
+  ifexp_observed_typed_store (\_ _ _ _ _ _. T) /\
+  ifexp_observed_widening (\_ _ _ _ _ _. T) ctx func
+Proof
+  pure_rewrite_tac [ifexp_observed_unwrap_def, ifexp_observed_alloc_def,
+    ifexp_observed_bytes_store_def, ifexp_observed_typed_store_def,
+    ifexp_observed_widening_def] >> BETA_TAC >>
+  pure_rewrite_tac [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP] >>
+  rpt conj_tac >> rpt gen_tac >>
+  FIRST [MATCH_ACCEPT_TAC unwrap_value_origin_ptr,
+         MATCH_ACCEPT_TAC compile_store_bytestring_origin_ptr_path,
+         MATCH_ACCEPT_TAC compile_store_memory_typed_origin_ptr_path]
+QED
+
+(* Keep the ordinary arm step as the True specialization of the observed one. *)
+local
+  val arm_step_unobserved =
+    PURE_REWRITE_RULE [AND_CLAUSES, ifexp_materialize_observation_true]
+      (BETA_RULE (Q.INST [`obs` |-> `\_ _ _ _ _ _. T`] ifexp_selected_arm_step_observed))
+in
+Theorem ifexp_selected_arm_step_full:
+  ^(concl arm_step_unobserved)
+Proof
+  ACCEPT_TAC arm_step_unobserved
+QED
+end
 
 (* Source composition is independent of the proof of arm conversion.
    The conversion contract is specialized at the fixed compiler layout;

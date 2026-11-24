@@ -8,7 +8,7 @@ Theorem literal_chunks_non_dalloca[local]:
   !ptr bs off sa sb.
     compile_store_byte_chunks ptr bs off sa = ((),sb) ==>
     ?tail. sb.cs_current_insts = sa.cs_current_insts ++ tail /\
-           EVERY (\i. i.inst_opcode <> DALLOCA) tail
+           EVERY (\i. i.inst_opcode <> DALLOCA /\ ~MEM i.inst_opcode [CREATE;CREATE2]) tail
 Proof
   recInduct compile_store_byte_chunks_ind >> rpt gen_tac >> strip_tac
   >- (rpt gen_tac >> simp[compile_store_byte_chunks_def, comp_return_def]) >>
@@ -27,12 +27,12 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   drule emitted_insts_emit_void >> strip_tac >>
   asm_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
-  simp[mk_inst_def]
+  fs[mk_inst_def]
 QED
 
-Theorem literal_bytelike_emitted_non_dalloca:
+Theorem literal_bytelike_emitted_admin:
   compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) ==>
-  EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)
+  EVERY (\i. i.inst_opcode <> DALLOCA /\ ~MEM i.inst_opcode [CREATE;CREATE2]) (emitted_insts sa sb)
 Proof
   simp_tac (bool_ss ++ pairSimps.PAIR_ss)
     [compile_bytelike_literal_def, LET_THM, comp_bind_def,
@@ -54,4 +54,11 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   asm_rewrite_tac[emitted_insts_def, GSYM APPEND_ASSOC, APPEND] >>
   simp[DROP_LENGTH_APPEND, mk_inst_def]
+QED
+
+Theorem literal_bytelike_emitted_non_dalloca:
+  compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) ==>
+  EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts sa sb)
+Proof
+  strip_tac >> drule literal_bytelike_emitted_admin >> simp[EVERY_MEM]
 QED
