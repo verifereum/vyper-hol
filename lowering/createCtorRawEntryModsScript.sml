@@ -394,3 +394,179 @@ Resume raw_entry_add_step[registers]:
 QED
 
 Finalise raw_entry_add_step[local]
+
+(* The observed copy and address adjustment start at the matched allocation cut. *)
+Theorem raw_entry_after_alloc_mods:
+  compile_alloc_buffer capacity se = (buf,a) /\ fn_has_code se a func /\
+  compile_copy_memory_dynamic buf.buf_operand (Var src) (Var len) a = ((),b) /\
+  fn_has_code a b func /\ emit_op ADD [buf.buf_operand;Var len] b = (dst,c) /\
+  fn_has_code b c func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce se /\
+  capacity < dimword (:256) /\ w2n n <= capacity /\
+  not_fresh_at se src /\ not_fresh_at se len /\
+  lookup_var src s = SOME p /\ lookup_var len s = SOME n /\
+  ptr_covers G tn src s (w2n n) /\ op_taint tn (Var len) = {} /\
+  w2n p + w2n n <= s.vs_alloca_next /\
+  (!x z. ce.ce_return_buf = SOME (PtrVar (Var x) z) ==> not_fresh_at se x) /\
+  (!x z. ce.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at se x) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee s /\
+    immutable_frame_mods func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at_mods (DF H) lo d ce cx ee G tn s) /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = se.cs_current_bb /\ s.vs_inst_idx = LENGTH se.cs_current_insts /\
+  buf.buf_operand = Var root /\
+  inst = mk_inst se.cs_next_id ALLOCA [Lit (n2w capacity)] [root] /\
+  MEM inst (fn_insts func) /\ not_local_ptr ce ee.scopes root /\
+  abi_encode_saved_state_mods ctx func ce cx st0 ee DF lo d se s G tn
+    se.cs_next_id pbase capacity root root 0 [] a u Gu tu /\
+  u.vs_memory = s.vs_memory /\
+  (!x. not_fresh_at se x ==> lookup_var x u = lookup_var x s /\
+    FLOOKUP Gu x = FLOOKUP G x /\ op_taint tu (Var x) = op_taint tn (Var x)) /\
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,Gu,tu)) /\
+  gas_origin_edge F explicit ctx func u bm (OK t) /\
+  gas_origin_edge F explicit ctx func t cm (OK v) ==>
+  ?out Gv tv. dst = Var out /\
+    abi_encode_saved_state_mods ctx func ce cx st0 ee DF lo d se s G tn
+      se.cs_next_id pbase capacity root out (w2n n) [] c v Gv tv /\
+    pure_frame ce func ee se s v /\
+    (!x. not_fresh_at se x ==> lookup_var x v = lookup_var x s /\
+      FLOOKUP Gv x = FLOOKUP G x /\ op_taint tv (Var x) = op_taint tn (Var x)) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK v,Gv,tv))
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s` by
+    (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  `compile_copy_memory_dynamic (Var root) (Var src) (Var len) a = ((),b) /\
+   emit_op ADD [Var root;Var len] b = (dst,c)` by fs[] >>
+  `ci_mono se a /\ ci_mono a b /\ ci_mono b c` by
+    metis_tac[ci_mono_compile_alloc_buffer,ci_mono_compile_copy_memory_dynamic,
+      ci_mono_emit_op,pairTheory.SND] >>
+  `ci_mono se b` by metis_tac[ci_mono_trans] >>
+  `!x. not_fresh_at se x ==> not_fresh_at b x` by
+    metis_tac[ci_mono_def,not_fresh_at_mono] >>
+  `lookup_var src u = SOME p /\ eval_operand (Var len) u = SOME n /\
+   op_taint tu (Var len) = {} /\ ptr_covers Gu tu src u (w2n n)` by suspend "src" >>
+  `?tf. abi_encode_saved_state_mods ctx func ce cx st0 ee DF lo d se s G tn
+    se.cs_next_id pbase capacity root root 0 [] b t Gu tf /\
+   pure_frame ce func ee se u t /\ t.vs_allocas = u.vs_allocas /\
+   (!x. lookup_var x t = lookup_var x u /\ op_taint tf (Var x) = op_taint tu (Var x)) /\
+   (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK t,Gu,tf))`
+    suffices_by (disch_then (qx_choose_then `tf` strip_assume_tac) >> suspend "add") >>
+  suspend "copy"
+QED
+
+Resume raw_entry_after_alloc_mods[src]:
+  qpat_assum `!x. not_fresh_at se x ==> lookup_var x u = _ /\ _`
+    (fn th => map_every (fn x => qspec_then x (drule_then strip_assume_tac) th) [`src`,`len`]) >>
+  simp[eval_operand_def] >> irule ptr_covers_lookup_frame >> metis_tac[]
+QED
+
+Resume raw_entry_after_alloc_mods[copy]:
+  qpat_assum `abi_encode_saved_state_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ a _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [raw_entry_saved_view]) >>
+  drule_all abi_encode_saved_state_resources >> strip_tac >>
+  qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ a _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_encode_saved_state_def]) >>
+  `pbase + capacity <= u.vs_alloca_next` by metis_tac[allocaSiteResourceTheory.alloca_site_registered_below] >>
+  `pbase < dimword (:256) /\ w2n p + w2n n <= u.vs_alloca_next` by
+    (drule alloca_room_next_lt >> decide_tac) >>
+  `lookup_var root u = SOME (n2w pbase) /\ w2n (n2w pbase : bytes32) = pbase` by
+    fs[eval_operand_def,w2n_n2w] >>
+  `ptr_covers Gu tu root u (w2n n)` by
+    (irule reasonCopySourcePtrTheory.ptr_covers_mono >> metis_tac[]) >>
+  `w2n (n2w pbase : bytes32) + w2n n <= u.vs_alloca_next` by (simp[] >> decide_tac) >>
+  drule_all raw_entry_copy_step >> disch_then (qspec_then `PG` (qx_choose_then `tf` strip_assume_tac)) >>
+  `!x. op_taint tf (Var x) = op_taint tu (Var x)` by simp[op_taint_def] >>
+  `typed_copy_state_frame se pbase capacity u t` by suspend "copy_window" >>
+  `(pure_frame ce func ee se u t /\ wb_frame ce ee ee se u t) /\
+   abi_encode_saved_state_mods ctx func ce cx st0 ee DF lo d se s G tn
+     se.cs_next_id pbase capacity root root 0 [] b t Gu tf` by suspend "copy_saved" >>
+  `allocas_from lo u` by metis_tac[] >>
+  qexists_tac `tf` >> simp[]
+QED
+
+Resume raw_entry_after_alloc_mods[copy_window]:
+  irule typed_copy_state_frame_mono >> qexists_tac `a` >> simp[] >>
+  irule typed_copy_state_frame_subinterval >>
+  qpat_assum `typed_copy_state_frame a _ _ u t` (irule_at Any) >> simp[]
+QED
+
+Resume raw_entry_after_alloc_mods[copy_saved]:
+  irule raw_entry_saved_phase_mods >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (qexists_tac `inst` >> simp[mk_inst_def]) >>
+  qexistsl_tac [`Gu`,`PG`,`a`,`explicit`,`[(w2n (n2w pbase : bytes32),w2n n)]`,`tu`] >>
+  conj_tac
+  >- (gen_tac >> qpat_assum `!k D. allocas_from k u ==> _`
+        (qspecl_then [`0`,`D`] irule) >> simp[]) >>
+  gvs[] >> first_assum ACCEPT_TAC
+QED
+
+Resume raw_entry_after_alloc_mods[add]:
+  qpat_assum `abi_encode_saved_state_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ b _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [raw_entry_saved_view]) >>
+  drule_all abi_encode_saved_state_resources >> strip_tac >>
+  qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ b _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_encode_saved_state_def]) >>
+  `pbase + capacity < dimword (:256)` by
+    (`pbase + capacity <= t.vs_alloca_next` by
+       metis_tac[allocaSiteResourceTheory.alloca_site_registered_below] >>
+     drule alloca_room_next_lt >> decide_tac) >>
+  `lookup_var root t = SOME (n2w pbase) /\ eval_operand (Var len) t = SOME n /\
+   op_taint tf (Var len) = {}` by fs[eval_operand_def] >>
+  `allocas_from lo t` by metis_tac[] >>
+  drule_all raw_entry_add_step >>
+  disch_then (qspec_then `PG` (qx_choosel_then [`out`,`Gv`,`tv`] strip_assume_tac)) >>
+  `typed_copy_state_frame se pbase capacity t v` by
+    (irule typed_copy_state_frame_mono >> qexists_tac `b` >> simp[]) >>
+  `(pure_frame ce func ee se t v /\ wb_frame ce ee ee se t v) /\
+   abi_encode_saved_state_mods ctx func ce cx st0 ee DF lo d se s G tn
+     se.cs_next_id pbase capacity root root 0 [] c v Gv tv` by suspend "add_saved" >>
+  qexistsl_tac [`out`,`Gv`,`tv`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- suspend "shift"
+  >- suspend "pure_frame"
+  >- (rpt strip_tac >> fs[] >> metis_tac[]) >>
+  suspend "ghost_path"
+QED
+
+Resume raw_entry_after_alloc_mods[add_saved]:
+  irule raw_entry_saved_phase_mods >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (qexists_tac `inst` >> simp[mk_inst_def]) >>
+  qexistsl_tac [`Gu`,`PG`,`b`,`explicit`,`[]:(num # num) list`,`tf`] >>
+  conj_tac
+  >- (gen_tac >> qpat_assum `!k D. allocas_from k t ==> _`
+        (qspecl_then [`0`,`D`] irule) >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  qpat_assum `!x. not_fresh_at b x ==> lookup_var x v = _ /\ _` (drule_then strip_assume_tac) >>
+  simp[]
+QED
+
+Resume raw_entry_after_alloc_mods[shift]:
+  qpat_assum `abi_encode_saved_state_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ c _ _ _`
+     (strip_assume_tac o PURE_REWRITE_RULE [abi_encode_saved_state_mods_def]) >>
+  simp[abi_encode_saved_state_mods_def,read_memory_def] >> metis_tac[]
+QED
+
+Resume raw_entry_after_alloc_mods[pure_frame]:
+  `pure_frame ce func ee se s u` by simp[pure_frame_def] >>
+  `pure_frame ce func ee se s t` by
+    (irule pure_frame_trans >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`ee`,`se`,`u`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
+  irule pure_frame_trans >> conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`ee`,`se`,`t`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  fs[wb_frame_def] >> metis_tac[]
+QED
+
+Resume raw_entry_after_alloc_mods[ghost_path]:
+  gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+  qexistsl_tac [`Gu`,`t`,`tf`] >> simp[] >>
+  irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+  qexistsl_tac [`Gu`,`u`,`tu`] >> simp[]
+QED
+
+Finalise raw_entry_after_alloc_mods[local]
