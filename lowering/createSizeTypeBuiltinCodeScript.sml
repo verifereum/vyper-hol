@@ -53,6 +53,12 @@ Proof
   Cases_on `op` >> type_cut_steps [compile_type_convert_def, UNCURRY_VAR]
 QED
 
+Theorem compile_type_convert_cut_code:
+  create_cut_code exits a (SND (compile_type_convert v op a))
+Proof
+  simp[type_cut_type_convert]
+QED
+
 Theorem type_cut_clamp_return[local,simp]:
   create_cut_code exits a (SND (clamp_and_return v ty a))
 Proof
