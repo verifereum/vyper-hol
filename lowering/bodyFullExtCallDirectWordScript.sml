@@ -64,12 +64,11 @@ Theorem abi_encode_saved_word_row_pure_run:
   eval_operand src u = SOME (typed_val_to_w256 tv v) /\ op_taint tu src = {} /\
   (!x. src = Var x ==> not_fresh_at a x) /\ fn_has_code a c func ==>
   ?z Gz tz.
+    abi_word_row_run a c u z /\
     (pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
     abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
       shared pbase capacity root dst dst_offset prefix c z Gz tz /\
     abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot (SUC i) c z Gz tz /\
-    (?raw. run_inst_seq (emitted_insts a c) u = OK raw /\
-           z = raw with vs_inst_idx := LENGTH c.cs_current_insts) /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -91,12 +90,7 @@ Proof
     `s` |-> `u`, `G` |-> `Gu`, `tn` |-> `tu`] abi_encode_values_word_prefix_run) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[]) >> decide_tac) >>
   disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
-  qpat_x_assum `z = _ with vs_inst_idx := _` (mk_asm "word_cursor") >>
-  (Q.SUBGOAL_THEN
-    `?r. run_inst_seq (emitted_insts a c) u = OK r /\
-         z = r with vs_inst_idx := LENGTH c.cs_current_insts`
-    (mk_asm "word_run") >- (asm_x "word_cursor" assume_tac >> simp[])) >>
-  qexistsl_tac [`z`,`Gz`,`tz`] >> asm_x "word_run" (fn th => asm_rewrite_tac[th]) >>
+  qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[] >>
   irule abi_encode_saved_state_phase_pure >>
   qpat_assum `window_phase ctx func a c _ _ u z` (irule_at Any) >>
   qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>

@@ -8,19 +8,6 @@ Ancestors
   exprLowering context compileEnv venomState venomInst words list finite_map
   pred_set arithmetic pair
 
-Theorem compile_word_store_emit[local]:
-  is_word_type ty /\
-  compile_store_memory ce src (Var p) ty ty st = ((),en) ==>
-  emit_void MSTORE [Var p;src] st = ((),en)
-Proof
-  strip_tac >> gvs[compile_store_memory_def]
-QED
-Theorem emit_void_current_bb[local]:
-  emit_void opc ops st = ((),st') ==> st'.cs_current_bb = st.cs_current_bb
-Proof
-  strip_tac >> drule emit_void_same_blocks >> simp[same_blocks_def]
-QED
-
 Theorem create_abi_saved_word_row_confined:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo d se s G tn
     shared pbase capacity root dst dst_offset prefix su u Gu tu /\
@@ -66,47 +53,17 @@ Theorem create_abi_saved_word_row_confined:
       (u,Gu,tu) [] (OK z,Gz,tz)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule bodyFullExtCallDirectStateTheory.abi_encode_saved_state_resources >>
-  (impl_tac >- metis_tac[]) >> strip_tac >>
+  drule_all bodyFullExtCallDirectStateTheory.abi_encode_saved_state_resources >>
+  strip_tac >>
   drule_all abi_encode_saved_word_row_pure_run >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac)) >>
-  `~is_abi_dynamic ce.ce_struct_fields ty` by
-    metis_tac[entryDecodeStaticPropsTheory.word_type_dec_sizes] >>
-  drule_all abi_encode_value_rows_static_trace >>
-  disch_then (qx_choose_then `head` (qx_choose_then `prepared`
-    strip_assume_tac)) >>
-  gvs[unwrap_value_def, compile_abi_encode_value_rows_def, comp_return_def] >>
-  `head = Var (STRING #"%" (toString su.cs_next_var))` by
-    (qpat_assum `emit_op ADD _ su = _` (fn th =>
-       mp_tac (MATCH_MP placeMemoryCodeLayoutTheory.emit_op_next_var th) >>
-       simp[])) >>
-  qpat_x_assum `head = _` SUBST_ALL_TAC >>
-  drule_all compile_word_store_emit >> disch_then assume_tac >>
-  `en.cs_current_bb = su.cs_current_bb` by
-    (drule emit_void_current_bb >>
-     qpat_assum `emit_op ADD _ su = _` (fn th =>
-       mp_tac (MATCH_MP emit_op_facts th)) >> metis_tac[]) >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  drule emitted_insts_emit_void >> strip_tac >>
-  `prepared.cs_current_insts = su.cs_current_insts ++
-      emitted_insts su prepared` by simp[] >>
-  `en.cs_current_insts = prepared.cs_current_insts ++
-      emitted_insts prepared en` by simp[] >>
-  `emitted_insts su en = emitted_insts su prepared ++
-      emitted_insts prepared en` by metis_tac[emitted_insts_append] >>
-  `en.cs_current_insts = su.cs_current_insts ++
-      emitted_insts su en` by simp[APPEND_ASSOC] >>
-  `EVERY (\i. i.inst_id IN frag_ids su en /\ i.inst_opcode <> INVOKE /\
-      i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode)
-      (emitted_insts su en)` by
-    simp[frag_ids_def, mk_inst_def, is_terminator_def] >>
-  `create_operand_at su u` by simp[create_operand_at_def] >>
-  `create_operand_full_scope su en explicit ctx func u []
-      (OK (raw with vs_inst_idx := LENGTH en.cs_current_insts))` by
-    (irule create_admin_sequence_scope >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  qpat_x_assum `abi_word_row_run _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_word_row_run_def]) >>
+  `create_operand_full_scope su en explicit ctx func u [] (OK z)` by
+    (qpat_assum `z = _` SUBST1_TAC >>
+     irule create_admin_sequence_scope >> simp[create_operand_at_def]) >>
   qpat_assum `create_operand_full_scope _ _ _ _ _ _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [create_operand_full_scope_def]) >>
-  qexistsl_tac [`Gz`,`tz`] >> asm_rewrite_tac[]
+  qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[] >> metis_tac[]
 QED

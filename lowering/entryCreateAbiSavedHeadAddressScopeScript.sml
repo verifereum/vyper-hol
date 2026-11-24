@@ -4,7 +4,7 @@ Ancestors
   abiEncodeValuesPhases entryCreatePathScope emitHelperProps abiEncoderProps
   loweringShapeRules
   abiEncoderWindowPhase abiEncoderWindowSequence exprLoweringProps
-  compileEnv venomState venomInst words list finite_map pred_set arithmetic pair
+  compileEnv venomExecSemantics venomState venomInst words list finite_map pred_set arithmetic pair
 
 Theorem create_abi_saved_head_address_confined:
   emit_op ADD [Var dst;Lit (n2w off)] st = (head,en) /\
@@ -26,7 +26,7 @@ Theorem create_abi_saved_head_address_confined:
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,G',tn')
 Proof
-  strip_tac >> drule_all abi_encode_values_head_address_run >>
+  strip_tac >> drule_all abi_encode_values_head_address_endpoint >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choosel_then [`p`,`t`,`G'`,`tn'`] strip_assume_tac)) >>
   `create_operand_at st s` by simp[create_operand_at_def] >>
@@ -40,6 +40,13 @@ Proof
       i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode)
       (emitted_insts st en)` by
     (simp[frag_ids_def, mk_inst_def, is_terminator_def]) >>
+  qabbrev_tac `raw = update_var p (n2w b + n2w off) s` >>
+  `p = STRING #"%" (toString st.cs_next_var)` by metis_tac[operand_11] >>
+  `run_inst_seq (emitted_insts st en) s = OK raw` by
+    simp[Abbr `raw`, run_inst_seq_def, mk_inst_def, step_inst_base_opcode_eqs,
+         exec_pure2_def, eval_operand_def] >>
+  `t = raw with vs_inst_idx := LENGTH en.cs_current_insts` by
+    simp[Abbr `raw`, ADD1] >>
   `create_operand_full_scope st en explicit ctx func s [] (OK t)` by
     (qpat_assum `t = raw with vs_inst_idx := LENGTH en.cs_current_insts`
        (fn eq => PURE_REWRITE_TAC [eq]) >>
