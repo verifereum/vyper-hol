@@ -10,7 +10,7 @@ Ancestors
 
 (* The cursor site is distinct from the request allocation and is the
    only allocation touched by the loop's initialization and finish. *)
-Theorem abi_encode_saved_values_execute_observed:
+Theorem abi_encode_saved_values_execute_with_frame_and_path:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
     shared pbase capacity root payload_var dst_offset prefix st u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -165,12 +165,12 @@ QED
 Theorem abi_encode_saved_values_execute =
   PURE_REWRITE_RULE [abi_encode_values_observe_trivial, AND_CLAUSES, IMP_CLAUSES]
     (BETA_RULE (Q.INST [`track_frame` |-> `F`, `Obs` |-> `\a c u v. T`, `R` |-> `\u v. T`]
-      abi_encode_saved_values_execute_observed))
+      abi_encode_saved_values_execute_with_frame_and_path))
 
 Theorem abi_encode_saved_values_execute_pure =
   PURE_REWRITE_RULE [abi_encode_values_observe_trivial, AND_CLAUSES, IMP_CLAUSES]
     (BETA_RULE (Q.INST [`track_frame` |-> `T`, `Obs` |-> `\a c u v. T`, `R` |-> `\u v. T`]
-      abi_encode_saved_values_execute_observed))
+      abi_encode_saved_values_execute_with_frame_and_path))
 
 
 Theorem extcall_direct_values_execute:
