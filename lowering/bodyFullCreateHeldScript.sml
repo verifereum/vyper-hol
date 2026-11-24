@@ -7985,6 +7985,97 @@ Proof
             loweringShapeDefsTheory.not_fresh_at_mono]
 QED
 
+(* The optional salt returns at c. Extend the already selected scalar
+   path from b, keeping its two evaluated operands and the root frames. *)
+Theorem copy_salt_ready_handoff:
+  expr_body_pre cenv cx env salt ea /\
+  expr_result_typed env salt (Value sv) /\
+  expr_type salt = BaseT (BytesT (Fixed 32)) /\
+  lower_value compile_expr cenv (expr_type salt) salt b = (salt_op,c) /\
+  ptr_val_ok cx (post_value_type cenv salt) sv salt_op Gsalt tns ssalt /\
+  expr_sim_inv cenv cx env ew /\
+  storage_trace_domain cx st0 ew.storage_trace /\
+  (!H. valid_horizon cx st0 H ew.storage_trace ==>
+    expr_post H ctx func cenv cx salt ea b c samt ew sv salt_op ssalt /\
+    ghost_inv_at (DF H) lo d cenv cx ew Gsalt tns ssalt) /\
+  (!H. valid_horizon cx st0 H ew.storage_trace ==>
+    valid_horizon cx st0 H ea.storage_trace) /\
+  (!H. valid_horizon cx st0 H ea.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0) /\
+  (!H. valid_horizon cx st0 H ea.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s0,G0,tn0) (mt ++ ma) (OK samt,Gamt,tna)) /\
+  (!H. valid_horizon cx st0 H ew.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (samt,Gamt,tna) ms (OK ssalt,Gsalt,tns)) /\
+  wb_frame cenv es ea sa s0 samt /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 Gamt tna /\
+  ghost_kept_at lo cenv ea b Gamt tna samt Gsalt tns /\
+  local_ptrs_reserved cenv sa /\ ci_mono sa b /\ ci_mono b c /\
+  s0.vs_alloca_next <= samt.vs_alloca_next /\ samt.vs_alloca_next <= ssalt.vs_alloca_next /\
+  (!z n. cenv.ce_return_buf = SOME (PtrVar (Var z) n) ==> not_fresh_at b z) /\
+  (!z n. cenv.ce_return_pc = SOME (PtrVar (Var z) n) ==> not_fresh_at b z) /\
+  eval_operand x samt = SOME (typed_val_to_w256 (BaseTV AddressT) tv) /\ op_taint tna x = {} /\
+  eval_operand y samt = SOME (typed_val_to_w256 (BaseTV (UintT 256)) av) /\ op_taint tna y = {} /\
+  (!z. x = Var z ==> not_fresh_at b z) /\ (!l. x <> Label l) /\
+  (!z. y = Var z ==> not_fresh_at b z) /\ (!l. y <> Label l) ==>
+  dest_create_salt sv = SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) sv) /\
+  eval_operand salt_op ssalt = SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) sv) /\
+  op_taint tns salt_op = {} /\ (!z. salt_op = Var z ==> not_fresh_at c z) /\
+  eval_operand x ssalt = SOME (typed_val_to_w256 (BaseTV AddressT) tv) /\ op_taint tns x = {} /\
+  eval_operand y ssalt = SOME (typed_val_to_w256 (BaseTV (UintT 256)) av) /\ op_taint tns y = {} /\
+  (!z. x = Var z ==> not_fresh_at c z) /\ (!z. y = Var z ==> not_fresh_at c z) /\
+  (!z n. cenv.ce_return_buf = SOME (PtrVar (Var z) n) ==> not_fresh_at c z) /\
+  (!z n. cenv.ce_return_pc = SOME (PtrVar (Var z) n) ==> not_fresh_at c z) /\
+  local_ptrs_reserved cenv c /\ sa.cs_next_var <= c.cs_next_var /\
+  wb_frame cenv es ew sa s0 ssalt /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 Gsalt tns /\
+  s0.vs_alloca_next <= ssalt.vs_alloca_next /\
+  accounts_well_typed ew.accounts /\ outcomes_accounts_typed ew.outcomes /\ IS_SOME ew.outcomes /\
+  valid_horizon cx st0 (storage_trace_horizon ew.storage_trace) ew.storage_trace /\
+  (!H. valid_horizon cx st0 H ew.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    stmt_state_rel H ctx func cenv cx ew ssalt /\ storage_well_formed_on cx ew (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx ew Gsalt tns ssalt /\
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s0,G0,tn0) ((mt ++ ma) ++ ms) (OK ssalt,Gsalt,tns))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> simp[] >>
+  `is_word_type (BaseT (BytesT (Fixed 32)))` by simp[is_word_type_def] >>
+  drule_all create_word_cut_frame_facts >> strip_tac >>
+  `!H. valid_horizon cx st0 H ew.storage_trace ==> stmt_state_rel H ctx func cenv cx es s0` by
+    (gen_tac >> disch_tac >>
+     `valid_horizon cx st0 H ea.storage_trace` by first_assum (drule_then ACCEPT_TAC) >>
+     first_assum (drule_then ACCEPT_TAC)) >>
+  `valid_horizon cx st0 (storage_trace_horizon ew.storage_trace) ew.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  `stmt_state_rel (storage_trace_horizon ew.storage_trace) ctx func cenv cx es s0` by
+    first_assum (drule_then ACCEPT_TAC) >>
+  qpat_assum `stmt_state_rel _ _ _ _ _ es s0`
+    (mp_then Any (drule_all_then strip_assume_tac) create_cut_frames_trans) >>
+  qpat_assum `eval_operand x samt = SOME _`
+    (mp_then Any (drule_all_then strip_assume_tac) create_operand_cut_frame) >>
+  qpat_assum `eval_operand y samt = SOME _`
+    (mp_then Any (drule_all_then strip_assume_tac) create_operand_cut_frame) >>
+  `b.cs_next_var <= c.cs_next_var /\ sa.cs_next_var <= c.cs_next_var` by
+    (fs[ci_mono_def] >> decide_tac) >>
+  `accounts_well_typed ew.accounts /\ outcomes_accounts_typed ew.outcomes` by
+    fs[expr_sim_inv_def] >>
+  `IS_SOME ew.outcomes` by
+    (qpat_assum `!H. valid_horizon _ _ H ew.storage_trace ==> stmt_state_rel _ _ _ _ _ ew ssalt /\ _`
+       (drule_then strip_assume_tac) >> fs[stmt_state_rel_def,state_rel_def]) >>
+  simp[create_salt_word] >> rpt conj_tac
+  >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
+  >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
+  >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
+  >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
+  >- metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  gen_tac >> disch_tac >>
+  `valid_horizon cx st0 H ea.storage_trace` by first_assum (drule_then ACCEPT_TAC) >>
+  qpat_assum `!H. _ ==> gas_origin_ptr_path _ _ (mt ++ ma) _`
+    (drule_then (mp_then Any irule fragGasOriginPtrTheory.gas_origin_ptr_path_append)) >> simp[]
+QED
+
 Theorem create_copy_expr_full_ok:
   !cx ty s r ks es d.
     body_exprs_full_ok cx (create_operand_order CreateCopyOf s es) ==>
@@ -8142,80 +8233,22 @@ Resume create_copy_expr_full_ok[no_salt]:
 QED
 
 Resume create_copy_expr_full_ok[salt_frames]:
-  `valid_horizon cx st0 (storage_trace_horizon ew.storage_trace) ew.storage_trace`
-    by fs[storage_trace_domain_def] >>
-  `valid_horizon cx st0 (storage_trace_horizon ew.storage_trace) ea.storage_trace`
-    by (qpat_assum `!H. valid_horizon _ _ H ew.storage_trace ==> valid_horizon _ _ H ea.storage_trace`
-          (qspec_then `storage_trace_horizon ew.storage_trace` mp_tac) >> simp[]) >>
-  `valid_horizon cx st0 (storage_trace_horizon ew.storage_trace) et.storage_trace`
-    by (qpat_assum `!H. valid_horizon _ _ H ea.storage_trace ==> valid_horizon _ _ H et.storage_trace`
-          (qspec_then `storage_trace_horizon ew.storage_trace` mp_tac) >> simp[]) >>
-  `valid_horizon cx st0 (storage_trace_horizon ew.storage_trace) es'.storage_trace`
-    by (qpat_assum `!H. valid_horizon _ _ H et.storage_trace ==> valid_horizon _ _ H es'.storage_trace`
-          (qspec_then `storage_trace_horizon ew.storage_trace` mp_tac) >> simp[]) >>
-  `stmt_state_rel (storage_trace_horizon ew.storage_trace) ctx func cenv cx es' s0` by
-    (qpat_assum `!H. valid_horizon cx st0 H es'.storage_trace ==> _`
-       (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
-  qpat_assum `!H. valid_horizon _ _ H ew.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  `is_word_type (BaseT (BytesT (Fixed 32)))` by simp[is_word_type_def] >>
-  `lower_value compile_expr cenv (expr_type salt) salt b = (salt_op,c)` by simp[] >>
-  qpat_assum `expr_post _ _ _ _ _ salt _ _ _ _ _ _ _ _`
-    (mp_then Any (drule_all_then strip_assume_tac) create_word_cut_facts) >>
-  `wb_frame cenv ea ew b samt ssalt` by
-    (qpat_assum `expr_post _ _ _ _ _ salt _ _ _ _ _ _ _ _`
-      (mp_then Any ACCEPT_TAC exprSimWordArgsTheory.expr_post_frame)) >>
-  `sa.cs_next_var <= b.cs_next_var /\ sa.cs_next_id <= b.cs_next_id /\
-   b.cs_next_var <= c.cs_next_var` by (fs[ci_mono_def] >> decide_tac) >>
-  `wb_frame cenv es' ew sa s0 ssalt` by
-    (irule (INST_TYPE [``:'a`` |-> ``:256``] exprSimWordArgsTheory.wb_frame_trans) >> simp[] >>
-     conj_tac >- (qexistsl [`ea`,`b`,`samt`] >> simp[]) >>
-     qexistsl [`storage_trace_horizon ew.storage_trace`,`ctx`,`cx`,`func`] >> simp[]) >>
-  `ghost_kept_at lo cenv es' sa G0 tn0 s0 Gsalt tns` by
-    (irule (INST_TYPE [``:'b`` |-> ``:256``] wordArgsPtrTheory.ghost_kept_at_wb_trans) >>
-     qpat_assum `ghost_kept_at lo cenv ea b Gamt tna samt Gsalt tns` (irule_at Any) >>
-     simp[] >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  `eval_operand x ssalt = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\ op_taint tns x = {}` by
-    (qpat_assum `eval_operand x samt = SOME _`
-       (mp_then Any (drule_all_then ACCEPT_TAC) create_operand_cut_frame)) >>
-  `eval_operand y ssalt = SOME (typed_val_to_w256 (BaseTV (UintT 256)) av) /\ op_taint tns y = {}` by
-    (qpat_assum `eval_operand y samt = SOME _`
-       (mp_then Any (drule_all_then ACCEPT_TAC) create_operand_cut_frame)) >>
-  suspend "salt_finish"
-QED
-
-Resume create_copy_expr_full_ok[salt_finish]:
   qpat_x_assum `?marks. !H. _ ==> gas_origin_ptr_path _ _ marks (OK ssalt,_,_)`
     (qx_choose_then `ms` assume_tac) >>
-  `gas_origin_ptr_path (DF (storage_trace_horizon ew.storage_trace),lo,
-      gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (s0,G0,tn0)
-      ((mt ++ ma) ++ ms) (OK ssalt,Gsalt,tns)` by
-    (qpat_assum `!H. _ ==> gas_origin_ptr_path _ _ (mt ++ ma) _`
-      (drule_then (mp_then Any irule fragGasOriginPtrTheory.gas_origin_ptr_path_append)) >>
-     simp[]) >>
-  `!H. valid_horizon cx st0 H ew.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx ew ssalt /\ storage_well_formed_on cx ew (FST H) /\
-    ghost_inv_at (DF H) lo d' cenv cx ew Gsalt tns ssalt` by
+  `ci_mono sa b` by metis_tac[exprLoweringPropsTheory.ci_mono_trans] >>
+  `lower_value compile_expr cenv (expr_type salt) salt b = (salt_op,c)` by simp[] >>
+  `!H. valid_horizon cx st0 H ea.storage_trace ==> stmt_state_rel H ctx func cenv cx es' s0` by
     (gen_tac >> disch_tac >>
-     qpat_assum `!H. valid_horizon _ _ H ew.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-       (drule_then strip_assume_tac) >> fs[loweringPostsTheory.expr_post_def]) >>
-  `accounts_well_typed ew.accounts /\ outcomes_accounts_typed ew.outcomes` by
-    (qpat_assum `expr_sim_inv _ _ _ ew`
-       (mp_tac o REWRITE_RULE [expr_sim_inv_def]) >> simp[]) >>
-  `IS_SOME ew.outcomes` by
-    (qpat_assum `!H. valid_horizon _ _ H ew.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
-       (drule_then strip_assume_tac) >> fs[stmt_state_rel_def,state_rel_def]) >>
-  `sa.cs_next_var <= c.cs_next_var /\ s0.vs_alloca_next <= ssalt.vs_alloca_next` by decide_tac >>
-  qpat_assum `local_ptrs_reserved cenv sa` (fn reserved =>
-    qpat_assum `sa.cs_next_var <= c.cs_next_var`
-      (assume_tac o MATCH_MP exprLoweringPropsTheory.local_ptrs_reserved_next_var o CONJ reserved)) >>
-  `(!z n. cenv.ce_return_buf = SOME (PtrVar (Var z) n) ==> not_fresh_at c z) /\
-   (!z n. cenv.ce_return_pc = SOME (PtrVar (Var z) n) ==> not_fresh_at c z) /\
-   (!z. x = Var z ==> not_fresh_at c z) /\ (!z. y = Var z ==> not_fresh_at c z)` by
-    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+     `valid_horizon cx st0 H et.storage_trace` by first_assum (drule_then ACCEPT_TAC) >>
+     `valid_horizon cx st0 H es'.storage_trace` by first_assum (drule_then ACCEPT_TAC) >>
+     qpat_assum `!H. valid_horizon _ _ H es'.storage_trace ==> _`
+       (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  `s0.vs_alloca_next <= samt.vs_alloca_next` by decide_tac >>
+  qpat_assum `lower_value _ _ (expr_type salt) salt b = _`
+    (mp_then Any (drule_all_then strip_assume_tac) copy_salt_ready_handoff) >>
   qabbrev_tac `salt_word = typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) sv` >>
-  `dest_create_salt sv = SOME salt_word` by
-    (simp[Abbr `salt_word`] >> irule create_salt_word >> first_assum ACCEPT_TAC) >>
+  qpat_assum `!H. valid_horizon _ _ H ew.storage_trace ==> stmt_state_rel _ _ _ _ _ es' s0 /\ _`
+    (drule_then strip_assume_tac) >>
   irule (Q.INST [`sw` |-> `SOME salt_word`] create_copy_finish) >>
   qpat_assum `compile_create_copy x y (SOME salt_op) _ c = _` (irule_at Any) >>
   qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK ssalt,Gsalt,tns)` (irule_at Any) >>
