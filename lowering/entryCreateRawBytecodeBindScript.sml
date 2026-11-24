@@ -2,7 +2,7 @@
    supplies the source read and the input to the physical preparation. *)
 Theory entryCreateRawBytecodeBind
 Ancestors
-  entryCreateFocusSpec entryCreateCompositeFocus entryIntCallStageNeutral
+  entryCreateFocusSpec entryCreateScopedBind entryIntCallStageNeutral
   exprSimAggregateSource exprSimMemorySource gasStorage vyperStorageFootprint
   vyperInterpreter vyperState gasExemptCert vyperStorageTrace stmtSimProps
   entryCreateCompletedCut exprSimDefs s1PrefixDefs fragExec
@@ -28,40 +28,21 @@ Proof
   metis_tac[read_result_gas_obs]
 QED
 
-(* Record the continuation at the chosen normal return, before forgetting
-   the scope and all-horizon path in the generic cross-type bind. *)
-Theorem raw_create_vv_record_next[local]:
-  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 sa a
-    (eval_expr cx code) (es,s,G,tn) P (create_operand_exit_post C cx) /\
-  (!marks res ee G1 tn1 t.
-    storage_trace_domain cx st0 ee.storage_trace /\ ee.gas_obs = [] /\
-    create_operand_full_scope sa a E C f s marks (OK t) /\
-    (!tail. eval_expr cx code (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
-      (res,ee with gas_obs := tail)) /\
-    (!H. valid_horizon cx st0 H ee.storage_trace ==>
-      P H res ee G1 tn1 t /\
-      gas_origin_ptr_path (DF H,lo,E,C,f,PG) (s,G,tn) marks (OK t,G1,tn1)) ==>
-    ?raw. res = INL raw /\ next_ready raw ee G1 tn1 t) ==>
-  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 sa a
-    (eval_expr cx code) (es,s,G,tn)
-    (\H res ee G1 tn1 t. ?raw. res = INL raw /\ next_ready raw ee G1 tn1 t)
+(* The generic binder consumes the normal post with gas observations reset;
+   on a terminal return the exit post forces a source exception. *)
+Theorem raw_create_vv_bind_post[local]:
+  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 sa a source (es,s,G,tn)
+    P (create_operand_exit_post C cx) ==>
+  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 sa a source (es,s,G,tn)
+    (\H res ee G1 tn1 t. P H res ee G1 tn1 t /\ ee.gas_obs = [])
     (\H res ee gt r. ?exc. res = INR exc /\
-      create_operand_exit_post C cx H (INR exc : value + exception) ee gt r)
+      create_operand_exit_post C cx H (INR exc) ee gt r)
 Proof
-  simp[scoped_operand_outcome_def] >> disch_then (CONJUNCTS_THEN2 strip_assume_tac assume_tac) >>
-  qexists_tac `marks`
+  simp[scoped_operand_outcome_def] >> strip_tac >> qexists_tac `marks`
   >- (disj1_tac >> metis_tac[])
   >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >> simp[] >>
-      Cases_on `exit_result r`
-      >- (rpt strip_tac >> res_tac >> fs[exit_result_def] >> Cases_on `res` >>
-           fs[create_operand_exit_post_def,expr_exit_def,halt_exit_def,expr_exit_INR_type]) >>
-      `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
-        by fs[storage_trace_domain_def] >>
-      `?t. r = OK t` by metis_tac[] >> gvs[exit_result_def] >>
-      qpat_assum `!marks res ee G1 tn1 t. _ ==> _`
-        (qspecl_then [`marks`,`res`,`ee with gas_obs := []`,`G'`,`tn'`,`t`] mp_tac) >>
-      (impl_tac >- (simp[] >> rpt strip_tac >> res_tac >> fs[])) >>
-      rpt strip_tac >> res_tac >> simp[]) >>
+      rpt strip_tac >> res_tac >> fs[] >> Cases_on `res` >>
+      fs[create_operand_exit_post_def,expr_exit_def,halt_exit_def,expr_exit_INR_type]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
@@ -82,7 +63,7 @@ Theorem raw_create_bytecode_scoped_bind_of_handoff:
       (INL v,ee with gas_obs := tail)) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       create_operand_vv_post (DF,lo,d,C,f) ce cx code (es,sa,a,s,vv,G,tn)
-        H (INL raw) ee G1 tn1 t /\
+        H (INL raw : eval_result + exception) ee G1 tn1 t /\
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites C shC,C,f,PG) (s,G,tn) marks (OK t,G1,tn1)) ==>
     ?bs z Gz tz. v = BytesV bs /\ window marks bs ee z Gz tz /\
       create_operand_full_scope a b (gas_explicit_sites C shC) C f t [] (OK z) /\
@@ -117,7 +98,7 @@ Theorem raw_create_bytecode_scoped_bind_of_handoff:
     (create_operand_exit_post C cx)
 Proof
   strip_tac >> fs[expr_vv_sim_scoped_def] >> res_tac >>
-  rewrite_tac[bind_assoc] >> irule scoped_operand_bind >>
+  rewrite_tac[bind_assoc] >> irule scoped_operand_bind_all_mixed >>
   simp[evaluate_storage_trace_frame,storage_trace_frame_bind_all,storage_trace_frame_read_result] >>
   rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
@@ -126,35 +107,38 @@ Proof
   >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> simp[ignore_bind_def,bind_assoc] >>
       irule gas_exempt_cert_error_result >> first_assum ACCEPT_TAC) >>
-  qabbrev_tac `ready = \raw ee G1 tn1 t.
-    scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG) (cx_tops cx) cx st0 a c
-      (bind (read_result cx raw) next) (ee,t,G1,tn1) Q (create_operand_exit_post C cx)` >>
-  qexistsl_tac [`\H raw ee G1 tn1 t. ready raw ee G1 tn1 t`, `a`] >>
-  asm_rewrite_tac[] >> BETA_TAC >> reverse conj_tac
+  qexistsl_tac [`\H res ee G1 tn1 t.
+     (create_operand_vv_post (DF,lo,d,C,f) ce cx code (es,sa,a,s,vv,G,tn) H res ee G1 tn1 t /\
+       t.vs_current_bb = a.cs_current_bb /\ t.vs_inst_idx = LENGTH a.cs_current_insts) /\ ee.gas_obs = []`,
+    `a`] >> asm_rewrite_tac[] >> BETA_TAC >> reverse conj_tac
   >- (qpat_assum `scoped_operand_outcome _ _ _ _ sa a _ _ _ (create_operand_exit_post C cx)`
-        (mp_then Any mp_tac raw_create_vv_record_next) >>
-      disch_then (qspec_then `ready` mp_tac) >> BETA_TAC >>
-      (impl_tac >- (simp[Abbr `ready`] >> rpt strip_tac >>
-        `create_operand_at a t` by (fs[create_operand_full_scope_def,create_operand_at_def]) >>
-        `!H. valid_horizon cx st0 H ee.storage_trace ==>
-          create_operand_vv_post (DF,lo,d,C,f) ce cx code (es,sa,a,s,vv,G,tn)
-            H res ee G1 tn1 t /\
-          gas_origin_ptr_path (DF H,lo,gas_explicit_sites C shC,C,f,PG) (s,G,tn) marks (OK t,G1,tn1)`
-          by (rpt strip_tac >> res_tac) >>
-        `!H. valid_horizon cx st0 H ee.storage_trace ==>
-          create_operand_vv_post (DF,lo,d,C,f) ce cx code (es,sa,a,s,vv,G,tn)
-            H res ee G1 tn1 t` by (rpt strip_tac >> res_tac) >>
-        drule_all raw_create_scoped_bytecode_read >> strip_tac >>
-        qpat_x_assum `res = INL raw` SUBST_ALL_TAC >>
-        qpat_assum `!ms rv x ee g n t. _ ==> ?bs z Gz tz. x = BytesV bs /\ _`
-          (qspecl_then [`marks`,`raw`,`v`,`ee`,`G1`,`tn1`,`t`] mp_tac) >>
-        (impl_tac >- simp[]) >> strip_tac >>
-        qexists_tac `raw` >> simp[] >> irule stage_scoped_read_result >>
-        qexists_tac `BytesV bs` >> simp[] >>
-        `ee with gas_obs := [] = ee` by (Cases_on `ee` >> fs[]) >>
-        asm_rewrite_tac[] >> irule stage_scoped_zero_prefix >>
-        FAIL_TAC "physical prefix")) >>
-      disch_then ACCEPT_TAC) >>
-  rpt strip_tac >> `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
-    by fs[storage_trace_domain_def] >> metis_tac[]
+        (mp_then Any (MATCH_ACCEPT_TAC o BETA_RULE) raw_create_vv_bind_post)) >>
+  rpt strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
+    by fs[storage_trace_domain_def] >>
+  `mid.gas_obs = []` by
+    (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+       (drule_then mp_tac) >> simp[]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    create_operand_vv_post (DF,lo,d,C,f) ce cx code (es,sa,a,s,vv,G,tn)
+      H res mid G1 tn1 t` by (rpt strip_tac >> res_tac) >>
+  drule_all raw_create_scoped_bytecode_read >> strip_tac >>
+  qpat_x_assum `res = INL raw` SUBST_ALL_TAC >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    create_operand_vv_post (DF,lo,d,C,f) ce cx code (es,sa,a,s,vv,G,tn)
+      H (INL raw : eval_result + exception) mid G1 tn1 t /\
+    gas_origin_ptr_path (DF H,lo,gas_explicit_sites C shC,C,f,PG) (s,G,tn) marks (OK t,G1,tn1)`
+    by (rpt strip_tac >> res_tac) >>
+  qpat_assum `!ms rv x ee g n t. _ ==> ?bs z gz tz. x = BytesV bs /\ _`
+    (drule_all_then strip_assume_tac) >>
+  gvs[] >> irule stage_scoped_read_result >> qexists_tac `BytesV bs` >> simp[] >>
+  `mid with gas_obs := [] = mid` by
+    (simp[evaluation_state_component_equality]) >>
+  `body_inv (cx_tops cx) C ce cx` by metis_tac[bodyInvCodePropsTheory.body_inv_main_code] >>
+  `create_operand_at b z` by fs[create_operand_full_scope_def,create_operand_at_def] >>
+  asm_rewrite_tac[] >> irule stage_scoped_zero_prefix >>
+  simp[] >> conj_tac >- (qexists_tac `ce` >> simp[]) >>
+  qexistsl_tac [`Gz`,`b`,`z`,`tz`] >> simp[] >>
+  qpat_assum `!ms bs ee z gz tz. window ms bs ee z gz tz /\ _ ==> _`
+    (drule_all_then ACCEPT_TAC)
 QED
