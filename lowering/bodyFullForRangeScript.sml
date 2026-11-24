@@ -6369,7 +6369,8 @@ Proof
       well_typed_literal_def, vyperValueTheory.within_int_bound_def, LET_THM] >>
   irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
   goal_assum (drule_at (Pat `n < _`)) >>
-  simp[bitTheory.TWOEXP_MONO2] >> decide_tac
+  pure_once_rewrite_tac [GSYM (EVAL ``(2:num) ** 256``)] >>
+  irule bitTheory.TWOEXP_MONO2 >> decide_tac
 QED
 
 Theorem compile_for_range_frag_full:
@@ -6651,7 +6652,7 @@ Resume compile_for_range_frag_full[checked]:
      qpat_assum `~(?a1 m1 a2 m2. e1 = _ /\ e2 = _)` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[supported_iterator_def, AllCaseEqs()] >>
-     Cases_on `e1` >> Cases_on `e2` >> simp[] >>
+     Cases_on `e1` >> simp[] >> Cases_on `e2` >> simp[] >>
      simp[supportedExprsTheory.supported_pure_expr_def]) >>
   `cx_tops cx = tops` by
     (qpat_assum `body_inv tops ctx cenv cx`
