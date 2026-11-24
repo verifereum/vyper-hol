@@ -14,17 +14,14 @@ Theorem internal_call_lowered_bytestring:
   is_bytestring_type
     (lowered_value_type cenv (Call ty (IntCall id) args d))
 Proof
-  Cases_on `d` >> PairCases_on `id` >> strip_tac >>
+  PairCases_on `id` >> strip_tac >>
   drule_then strip_assume_tac expr_body_pre_static_facts >>
-  gvs[supported_expr_def, supported_pure_expr_def,
-      supported_effect_expr_def, AllCaseEqs()] >>
   gvs[well_typed_expr_def] >>
-  qpat_x_assum `IS_SOME _` mp_tac >>
-  Cases_on `supported_function_decl tops (id0,id1) Internal` >> simp[] >>
-  rename1 `supported_function_decl tops (id0,id1) Internal = SOME decl` >>
-  PairCases_on `decl` >>
-  drule_all supported_internal_signature_return >> strip_tac >>
-  simp[lowered_value_type_def] >>
+  `cenv.ce_func_return_type (nsid_to_string (id0,id1)) = sig.ret_ty` by
+    (`expr_sim_inv_mods [(NONE,cx_tops cx)] cenv cx env es` by
+       fs[expr_sim_inv_split_def] >>
+     drule_all expr_sim_inv_mods_return_type >> simp[]) >>
+  fs[lowered_value_type_def] >>
   metis_tac[type_widens_to_def, compileEnvTheory.arg_type_fits_bytestring_source]
 QED
 
