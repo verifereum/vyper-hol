@@ -2,7 +2,7 @@
 Theory e2eDeployModsDefs
 Ancestors
   e2eModsDefs e2eDefs e2eDeployDefs e2eGasSufficient[qualified]
-  ctorDeployDefs[qualified] compileUnit
+  ctorDeployDefs[qualified] compileUnit sourceExemptMods
   vyperInterpreter vyperTypeContract vyperTypeInvariants vyperContext vyperABI
   vyperStorageFootprint callTrace frameOutcome vfmExecution vfmState
   alist finite_map list
@@ -51,7 +51,6 @@ Definition deploy_typing_ok_mods_def:
       check_contract T am.layouts tx.target mods = SOME deploy_art /\
       check_contract F am.layouts tx.target mods = SOME runtime_art /\
       exports_ok am.layouts tx.target mods exps /\
-      linked_state_ownership_ok am.layouts tx.target mods exps /\
       machine_well_typed am /\ call_tx_well_typed tx
 End
 
