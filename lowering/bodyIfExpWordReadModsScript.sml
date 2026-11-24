@@ -102,7 +102,7 @@ Proof
 QED
 
 (* The physical slice determines the endpoint before any horizon is chosen. *)
-Theorem word_arm_loaded_path[local]:
+Theorem word_arm_loaded_path:
   compile_ptr_load ctor imm loc addr sm = (op,sb) /\ loc <> LocCalldata /\
   eval_operand addr s = SOME w /\
   ((loc = LocMemory \/ (loc = LocCode /\ ctor)) ==>
@@ -430,7 +430,7 @@ Proof
   decide_tac
 QED
 
-Theorem word_arm_location[local]:
+Theorem word_arm_location:
   vv_post_mods H ctx func ce cx e es sa sm s0 ee tv (LocatedValue j p) s /\
   post_value_type ce e = t /\ is_word_type t ==>
   j = t /\ p.ptr_location <> LocCalldata
@@ -440,7 +440,7 @@ Proof
   metis_tac[valueCopyBytesTheory.is_bytestring_word_type]
 QED
 
-Theorem word_arm_located_packet[local]:
+Theorem word_arm_located_packet:
   vv_post_mods H ctx func ce cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   post_value_type ce e = t /\ is_word_type t /\ p.ptr_location <> LocCalldata /\
   ptr_vv_ok cx t tv (LocatedValue t p) ee G tn s /\
