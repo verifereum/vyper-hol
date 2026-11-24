@@ -1,7 +1,8 @@
 # Compiler correctness statement dossiers
 
 The main dossier shows the single-module deployment and call correctness
-and gas sufficiency theorems. A separate dossier shows the open
+and gas sufficiency theorems, including the handoff through `deployed`.
+A separate dossier shows the open
 `vyper_call_correct_mods` target. Each page contains the statements,
 hypothesis explanations and a linked definition index.
 
