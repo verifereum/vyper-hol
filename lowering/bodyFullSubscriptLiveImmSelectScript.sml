@@ -869,6 +869,67 @@ Resume live_code_element_joint[fixed]:
 QED
 Finalise live_code_element_joint
 
+Theorem live_code_element_joint_observed[local]:
+  array_elem_ptr base_op idx dyn 32 esz sa = (dst,sb) /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  copy_old_operand sa base_op /\ copy_old_operand sa idx /\
+  (!l. base_op <> Label l /\ idx <> Label l) /\
+  eval_operand base_op s = SOME a /\ op_taint tn base_op = {} /\ op_prov G base_op = NONE /\
+  eval_operand idx s = SOME (n2w i) /\ op_taint tn idx = {} /\ op_prov G idx = NONE ==>
+  ?Gf tnf sf.
+    (?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
+         sf = (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    (!D lo explicit. allocas_from lo s ==>
+      gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
+    sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    eval_operand dst sf = SOME (a + n2w ((if dyn then 32 else 0) + i * esz)) /\
+    op_taint tnf dst = {} /\ op_prov Gf dst = NONE /\
+    sf.vs_immutables = s.vs_immutables /\ sf.vs_memory = s.vs_memory /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    sf.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!q. not_fresh_at sa q ==>
+      lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
+      op_taint tnf (Var q) = op_taint tn (Var q)) /\
+    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
+Proof
+  Cases_on `dyn` >>
+  simp[exprSimArrayIndexTheory.array_elem_ptr_def, compileEnvTheory.comp_bind_def,
+       compileEnvTheory.comp_return_def, copy_old_operand_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `(!l. base_op <> Label l) /\ (!l. idx <> Label l)` by simp[]
+  >- suspend "dynamic_observed" >> suspend "fixed_observed"
+QED
+
+Resume live_code_element_joint_observed[dynamic_observed]:
+  Cases_on `emit_op ADD [base_op;Lit 32w] sa` >> gvs[] >>
+  drule_all_then strip_assume_tac loweringShapeRulesTheory.emit_op_facts >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  qpat_assum `emit_op MUL _ _ = _` (strip_assume_tac o MATCH_MP loweringShapeRulesTheory.emit_op_facts) >> gvs[] >>
+  qpat_assum `emit_op ADD [Var _;Var _] _ = _` (strip_assume_tac o MATCH_MP loweringShapeRulesTheory.emit_op_facts) >>
+  gvs[] >>
+  drule_all bodyFullSubscriptArrayCodeOpsTheory.code_dynamic_address_joint_frame_observed >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl [`Gf`,`tnf`,`sf`] >> simp[venomStateTheory.eval_operand_def]
+QED
+
+Resume live_code_element_joint_observed[fixed_observed]:
+  pairarg_tac >> gvs[] >>
+  qpat_assum `emit_op MUL _ _ = _` (strip_assume_tac o MATCH_MP loweringShapeRulesTheory.emit_op_facts) >>
+  gvs[] >>
+  drule_then strip_assume_tac (Q.SPEC `ADD` loweringShapeRulesTheory.emit_op_facts) >>
+  gvs[] >>
+  drule_all bodyFullSubscriptArrayCodeOpsTheory.scalar_mul_add_joint_frame_observed >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl [`Gf`,`tnf`,`sf`] >> simp[venomStateTheory.eval_operand_def]
+QED
+Finalise live_code_element_joint_observed
+
 Theorem live_code_compiler_cuts[local]:
   compile_array_subscript arg idx dyn cnt 32 esz sgn
     (compile_ptr_load ctor imm LocCode) sa = (dst,sb) /\
@@ -971,6 +1032,7 @@ Proof
   `!l. arg <> Label l` by metis_tac[] >>
   `!l. idx <> Label l` by metis_tac[] >>
   `eval_operand arg h = SOME a /\ op_taint tnh arg = {} /\ op_prov Gh arg = NONE` by
+
     (Cases_on `arg` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
       ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
   `copy_old_operand sh idx /\ copy_old_operand sh arg` by
@@ -1032,6 +1094,86 @@ Resume live_code_select_joint[out_of_range]:
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 Finalise live_code_select_joint
+(* observed selector assembly *)
+Theorem live_code_select_joint_ctor_observed:
+  compile_array_subscript arg idx dyn (if dyn then 0 else cnt) 32 esz sgn
+    (compile_ptr_load ctor imm LocCode) sa = (dst,sb) /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  eval_operand arg s = SOME a /\ copy_old_operand sa arg /\
+  op_taint tn arg = {} /\ op_prov G arg = NONE /\
+  eval_operand idx s = SOME (n2w i) /\ copy_old_operand sa idx /\
+  op_taint tn idx = {} /\ op_prov G idx = NONE /\
+  (!l. arg <> Label l /\ idx <> Label l) /\
+  (dyn ==> immutable_copy_read ctor a s = n2w cnt /\
+    (ctor ==> w2n a + 32 <= lo /\ mem_word_taint tn.t_mem (w2n a) = {} /\
+      (!region. imm = SOME region ==> eval_operand region s = SOME 0w /\
+         copy_old_operand sa region /\ op_taint tn region = {} /\ op_prov G region = NONE)) /\
+    (~ctor ==> w2n a <= LENGTH s.vs_data_section)) ==>
+  ?Gf tnf q.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      ((if idx_in_range sgn (n2w i) (n2w cnt) then OK q else Abort Revert_abort q),Gf,tnf)) /\
+    q.vs_immutables = s.vs_immutables /\ q.vs_memory = s.vs_memory /\
+    q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next /\
+    q.vs_fmp = s.vs_fmp /\ q.vs_accounts = s.vs_accounts /\
+    q.vs_transient = s.vs_transient /\ q.vs_call_ctx = s.vs_call_ctx /\
+    q.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!v. not_fresh_at sa v ==> lookup_var v q = lookup_var v s /\
+      FLOOKUP Gf v = FLOOKUP G v /\ op_taint tnf (Var v) = op_taint tn (Var v)) /\
+    (idx_in_range sgn (n2w i) (n2w cnt) ==> 
+      q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~q.vs_halted /\
+      eval_operand dst q = SOME (a + n2w ((if dyn then 32 else 0) + i * esz)) /\
+      op_taint tnf dst = {} /\ op_prov Gf dst = NONE /\
+      !(H:(bool # bytes32 # type_value) list # num list) cenv cx es.
+        stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+        stmt_state_rel H ctx func cenv cx es q) /\
+    (ctor ==>
+      ((idx_in_range sgn (n2w i) (n2w cnt) ==>
+        (?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+                q = (raw with vs_inst_idx := LENGTH sb.cs_current_insts))) /\
+       (~idx_in_range sgn (n2w i) (n2w cnt) ==>
+        (?raw. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort raw))))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all live_code_compiler_cuts >>
+  simp[boolTheory.COND_EXPAND_IMP] >> strip_tac >>
+  `dyn ==> eval_operand arg s = SOME a /\ copy_old_operand sa arg /\
+    op_taint tn arg = {} /\ op_prov G arg = NONE /\
+    immutable_copy_read ctor a s = n2w cnt /\
+    (ctor ==> w2n a + 32 <= lo /\ mem_word_taint tn.t_mem (w2n a) = {} /\
+      (!region. imm = SOME region ==> eval_operand region s = SOME 0w /\
+        copy_old_operand sa region /\ op_taint tn region = {} /\ op_prov G region = NONE)) /\
+    (~ctor ==> w2n a <= LENGTH s.vs_data_section)` by simp[] >>
+  drule_all (INST_TYPE [Type.alpha |-> ``:256``] live_code_length_joint_ctor_observed) >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`Gh`,`tnh`,`h`] strip_assume_tac)) >>
+  `!l. arg <> Label l` by metis_tac[] >>
+  `!l. idx <> Label l` by metis_tac[] >>
+  `eval_operand arg h = SOME a /\ op_taint tnh arg = {} /\ op_prov Gh arg = NONE` by
+    (Cases_on `arg` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
+      ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
+  `copy_old_operand sh idx /\ copy_old_operand sh arg` by
+    metis_tac[copy_old_operand_mono] >>
+  `eval_operand idx h = SOME (n2w i) /\ op_taint tnh idx = {} /\ op_prov Gh idx = NONE` by
+    (Cases_on `idx` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
+      ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
+  `!v. idx = Var v \/ len = Var v ==> not_fresh_at sh v` by
+    fs[copy_old_operand_def, boolTheory.DISJ_IMP_THM] >>
+  `!l. idx <> Label l /\ len <> Label l` by simp[] >>
+  `allocas_from lo h` by (simp[ptrDisciplineTheory.allocas_from_def] >> metis_tac[ptrDisciplineTheory.allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp h` by
+    (`allocas_below_fmp h <=> allocas_below_fmp s` by
+       asm_rewrite_tac[ptrDisciplineTheory.allocas_below_fmp_def] >>
+     qpat_assum `allocas_below_fmp h <=> allocas_below_fmp s`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
+  Cases_on `idx_in_range sgn (n2w i) (n2w cnt)` >> simp[]
+  >- suspend "observed_in_range" >> suspend "observed_out_of_range"
+QED
+
 
 Theorem current_immutable_dynamic_header:
   stmt_state_rel H ctx func cenv cx fin s /\
