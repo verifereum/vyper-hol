@@ -1651,8 +1651,78 @@ Resume pop_vv_full_of_target[pop_suffix]:
   simp[target_post_def, place_ptr_rel_def]
 QED
 
-Resume pop_vv_full_of_target[memory_suffix]:
-  rename1 `MemoryPlace local_name local_path` >>
+(* The observer is independent of the storage horizon.  The normal rule
+   sees the typed straight-line run; the empty rule selects an observed
+   abort, for which there is no normal landing. *)
+Theorem pop_memory_suffix_observed:
+  !path_obs.
+  body_inv tops ctx cenv cx /\
+  expr_body_pre cenv cx env (Pop ann bt) es /\
+  compile_get_target_ptr compile_expr cenv bt sa = ((rb0,rb1,rb2),sm) /\
+  compile_expr cenv ty (Pop ann bt) sa = (vv,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\ ci_mono sa sm /\
+  local_ptrs_reserved cenv sa /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0 /\
+       storage_well_formed_on cx es (FST H) /\
+       ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
+  valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       target_post H ctx func cenv cx es sa sm s0 mid
+         (PlaceR (MemoryPlace local_name local_path)) (Type (ArrayT ann (Dynamic n)))
+         (rb0,rb1,rb2) t /\ ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t) /\
+  (?entry v. lookup_scopes local_name mid.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value local_path = INL v) /\
+  t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+  s0.vs_alloca_next <= t.vs_alloca_next /\
+  target_ptr_ok cenv (PlaceR (MemoryPlace local_name local_path)) (rb0,rb1,rb2) G1 tn1 t /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\ ~t.vs_halted /\ mid.gas_obs = [] /\
+  eval_target_place cx bt (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+    (INL (MemoryPlace local_name local_path),mid) /\
+  (!p x0 x1 x2 x3 x4 x5 x6 bb u G' tn'.
+     let code = memory_pop_insts (Var p) sm.cs_next_id (type_memory_bytes cenv ann)
+                  x0 x1 x2 x3 x4 x5 x6 in
+       sb.cs_current_bb = sm.cs_current_bb /\
+       sb.cs_current_insts = sm.cs_current_insts ++ code /\
+       lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+       isPREFIX code (DROP t.vs_inst_idx bb.bb_instructions) /\
+       run_inst_seq code t = OK u /\ run_inst_seq_mem_ok code t /\
+       (!D. inst_seq_ptr D lo ctx func PG G1 tn1 code t G' tn') ==>
+       path_obs (OK (u with vs_inst_idx := t.vs_inst_idx + 9)) G' tn') /\
+  (!p w bb x0 x1 x2.
+     ptr_covers G1 tn1 p t 32 /\ lookup_var p t = SOME w /\
+     mem_word_taint tn1.t_mem (w2n w) = {} /\
+     w2n w + 32 <= t.vs_alloca_next /\ mload (w2n w) t = 0w /\ allocas_from lo t /\
+     sb.cs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx + 3 < LENGTH sb.cs_current_insts /\
+     lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+     isPREFIX [mk_inst sm.cs_next_id MLOAD [Var p] [x0];
+       mk_inst (sm.cs_next_id+1) ISZERO [Var x0] [x1];
+       mk_inst (sm.cs_next_id+2) ISZERO [Var x1] [x2]] (DROP t.vs_inst_idx bb.bb_instructions) /\
+     get_instruction bb (t.vs_inst_idx+3) = SOME (mk_inst (sm.cs_next_id+3) ASSERT [Var x2] []) ==>
+     ?v G' tn'. path_obs (Abort Revert_abort v) G' tn' /\
+       !D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+             (t,G1,tn1) [] (Abort Revert_abort v,G',tn')) ==>
+  ?res fin r G' tn'.
+    (!tail. pop_place cx (MemoryPlace local_name local_path) (mid with gas_obs := tail) =
+          (res,fin with gas_obs := tail)) /\ path_obs r G' tn' /\
+    !H. valid_horizon cx st0 H fin.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (t,G1,tn1) [] (r,G',tn') /\
+      ((?u. r = OK u /\ expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (Pop ann bt)
+           (es,sa,sb,s0,vv,G0,tn0) H res (fin with gas_obs := []) G' tn' u) \/
+       (exit_result r /\ expr_exit res r /\ halt_exit H cx (fin with gas_obs := []) res r /\
+        (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u)))
+Proof
+  gen_tac >> strip_tac >>
+  qpat_x_assum `compile_expr cenv ty (Pop ann bt) sa = _` mp_tac >>
+  simp[Once nested_pop_compile_eq] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `expr_body_pre cenv cx env (Pop ann bt)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
+  drule_all pop_target_source_facts >> strip_tac >>
   `target_post (storage_trace_horizon mid.storage_trace) ctx func cenv cx
      es sa sm s0 mid (PlaceR (MemoryPlace local_name local_path))
      (Type (ArrayT ann (Dynamic n))) (rb0,rb1,rb2) t` by
@@ -1732,20 +1802,23 @@ Resume pop_vv_full_of_target[memory_suffix]:
        mload (w2n (b + n2w k)) t = 0w /\
        lookup_block t.vs_current_bb func.fn_blocks = SOME bb` by
         (simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-      drule_all pop_full_memory_empty_path >>
-      disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
+      qpat_assum `!p w bb x0 x1 x2. _ ==> ?v G' tn'. path_obs _ _ _ /\ _`
+        (qspecl_then [`hdr_var`, `b + n2w k`, `bb`, `x0`, `x1`, `x2`] mp_tac) >>
+      (impl_tac >- (simp[arithmeticTheory.ADD_COMM, memory_pop_insts_def] >>
+        qpat_assum `t.vs_inst_idx = LENGTH sm.cs_current_insts`
+          (PURE_REWRITE_TAC o single o SYM) >> conj_tac
+        >- (qpat_assum `isPREFIX [_;_;_] _` mp_tac >> simp[NoAsms]) >>
+        first_assum ACCEPT_TAC)) >>
+      strip_tac >>
       `!tail. pop_place cx (MemoryPlace local_name local_path)
           (mid with gas_obs := tail) =
         (INR (Error (RuntimeError "pop empty memory array")),
          mid with gas_obs := tail)` by
         (gen_tac >> drule lookup_scopes_find_containing_scope >> strip_tac >>
          irule pop_memory_place_live_empty >> simp[] >> metis_tac[]) >>
-      irule gas_outcome_full_exit >>
-      reverse conj_tac >- simp[] >>
-      qexistsl_tac [`G'`, `mid`, `Abort Revert_abort v`,
-        `INR (Error (RuntimeError "pop empty memory array"))`, `tn'`] >>
-      simp[exit_result_def] >> rpt strip_tac >>
-      simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
+      qexistsl_tac [`INR (Error (RuntimeError "pop empty memory array"))`, `mid`,
+        `Abort Revert_abort v`, `G'`, `tn'`] >>
+      simp[exit_result_def, exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
   `EVERY (\x. x <> hdr_var) [x0;x1;x2;x3;x4;x5;x6]` by
     (fs[] >> metis_tac[]) >>
   `well_formed_type_value (ArrayTV etv (Dynamic capacity))` by
@@ -1996,17 +2069,23 @@ Resume pop_vv_full_of_target[memory_suffix]:
      disch_then (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
      simp[Abbr `result`, Abbr `fin`, Abbr `updated_scopes`,
        evaluation_state_component_equality]) >>
-  irule gas_outcome_full_pure >>
-  reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G'`, `fin`, `INL result`,
-    `u with vs_inst_idx := t.vs_inst_idx + 9`, `tn'`] >>
-  simp[NoAsms] >> conj_tac >- first_assum ACCEPT_TAC >>
+  `path_obs (OK (u with vs_inst_idx := t.vs_inst_idx + 9)) G' tn'` by
+    (qpat_assum `!p x0 x1 x2 x3 x4 x5 x6 u G' tn'. _ ==> path_obs (OK _) _ _`
+       (qspecl_then [`hdr_var`, `x0`, `x1`, `x2`, `x3`, `x4`, `x5`, `x6`,
+          `u`, `G'`, `tn'`] mp_tac) >> simp[]) >>
+  qexistsl_tac [`INL result`, `fin`, `OK (u with vs_inst_idx := t.vs_inst_idx + 9)`,
+    `G'`, `tn'`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qx_gen_tac `H` >> strip_tac >>
   qpat_assum `(fin with gas_obs := []) = fin`
     (fn th => PURE_REWRITE_TAC [th]) >>
   conj_tac
   >- (qpat_assum `!D. gas_origin_ptr_path _ _ _ _`
         (qspec_then `DF H` ACCEPT_TAC)) >>
+  disj1_tac >>
+  qexists_tac `u with vs_inst_idx := t.vs_inst_idx + 9` >>
+  simp[NoAsms, expr_vv_sim_full_post_def, expr_sim_full_endpoint_def] >>
   `valid_horizon cx st0 H mid.storage_trace` by
     (qpat_assum `valid_horizon cx st0 H fin.storage_trace` mp_tac >>
      simp[NoAsms, Abbr `fin`]) >>
@@ -2067,12 +2146,12 @@ Resume pop_vv_full_of_target[memory_suffix]:
   conj_tac >- suspend "memory_alloca_history" >>
   conj_tac
   >- (qpat_assum `u = t with <|vs_vars := _; vs_memory := _|>`
+        (fn th => PURE_ONCE_REWRITE_TAC [th]) >> simp[]) >>
+  conj_tac
+  >- (qpat_assum `u = t with <|vs_vars := _; vs_memory := _|>`
         (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp t` mp_tac >>
       simp[NoAsms, allocas_below_fmp_def] >> metis_tac[]) >>
-  conj_tac
-  >- (qpat_assum `u = t with <|vs_vars := _; vs_memory := _|>`
-        (fn th => PURE_ONCE_REWRITE_TAC [th]) >> simp[]) >>
   conj_tac >- suspend "memory_ghost" >>
   conj_tac >- suspend "memory_pointer" >>
   conj_tac >- simp[Abbr `result`, NoAsms] >>
@@ -2085,7 +2164,7 @@ Resume pop_vv_full_of_target[memory_suffix]:
     (qspec_then `x` mp_tac) >> simp[]
 QED
 
-Resume pop_vv_full_of_target[memory_store_bound]:
+Resume pop_memory_suffix_observed[memory_store_bound]:
   `u.vs_alloca_next = t.vs_alloca_next` by
     (qpat_assum `u = t with <|vs_vars := _; vs_memory := _|>`
        (fn th => PURE_ONCE_REWRITE_TAC [th]) >> simp[]) >>
@@ -2104,7 +2183,7 @@ Resume pop_vv_full_of_target[memory_store_bound]:
   conj_tac >> gvs[]
 QED
 
-Resume pop_vv_full_of_target[memory_alloca_history]:
+Resume pop_memory_suffix_observed[memory_alloca_history]:
   `alloca_inv t` by
     (qpat_assum `stmt_state_rel H ctx func cenv cx mid t`
        (mp_tac o REWRITE_RULE [stmt_state_rel_def]) >>
@@ -2119,7 +2198,7 @@ Resume pop_vv_full_of_target[memory_alloca_history]:
   simp[memory_pop_insts_def, mk_inst_def, is_terminator_def]
 QED
 
-Resume pop_vv_full_of_target[memory_pointer]:
+Resume pop_memory_suffix_observed[memory_pointer]:
   qpat_assum `read_result cx result fin = (INL (LAST vs),fin)` mp_tac >>
   qpat_assum `evaluate_type (get_tenv cx) ann = SOME etv` mp_tac >>
   qpat_assum `op_taint tn' (Var x6) = {}` mp_tac >>
@@ -2141,7 +2220,7 @@ Resume pop_vv_full_of_target[memory_pointer]:
   gvs[]
 QED
 
-Resume pop_vv_full_of_target[memory_buffer]:
+Resume pop_memory_suffix_observed[memory_buffer]:
   qpat_assum `type_memory_bytes cenv ann = type_memory_size etv` mp_tac >>
   qpat_assum `FLOOKUP G' x6 = SOME (prov_base,prov_size)` mp_tac >>
   qpat_assum `eval_operand (Var x6) u = SOME _` mp_tac >>
@@ -2153,7 +2232,7 @@ Resume pop_vv_full_of_target[memory_buffer]:
   rpt gen_tac >> strip_tac >> gvs[] >> decide_tac
 QED
 
-Resume pop_vv_full_of_target[memory_ghost]:
+Resume pop_memory_suffix_observed[memory_ghost]:
   `local_ptrs_rel func cenv mid.scopes t` by
     (qpat_assum `stmt_state_rel H ctx func cenv cx mid t`
        (mp_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def]) >>
@@ -2275,6 +2354,50 @@ Resume pop_vv_full_of_target[memory_ghost]:
     (fn th => ACCEPT_TAC (REWRITE_RULE [lookup_var_def]
       (CONJUNCT1 (MATCH_MP (Q.SPEC `x` th)
         (ASSUME ``not_fresh_at sa x``)))))
+QED
+
+Finalise pop_memory_suffix_observed
+
+Resume pop_vv_full_of_target[memory_suffix]:
+  rename1 `MemoryPlace local_name local_path` >>
+  qabbrev_tac `vv = LocatedValue ann (mk_ptr elem
+    (case rb1 of NONE => LocMemory | SOME loc => loc))` >>
+  `compile_expr cenv ty (Pop ann bt) sa = (vv,sb)` by
+    (simp[Once nested_pop_compile_eq, Abbr `vv`] >> pairarg_tac >> simp[]) >>
+  `?res fin r G' tn'.
+      (!tail. pop_place cx (MemoryPlace local_name local_path) (mid with gas_obs := tail) =
+            (res,fin with gas_obs := tail)) /\
+      !H. valid_horizon cx st0 H fin.storage_trace ==>
+        gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+          (t,G1,tn1) [] (r,G',tn') /\
+        ((?u. r = OK u /\ expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (Pop ann bt)
+             (es,sa,sb,s0,vv,G0,tn0) H res (fin with gas_obs := []) G' tn' u) \/
+         (exit_result r /\ expr_exit res r /\ halt_exit H cx (fin with gas_obs := []) res r /\
+          (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u)))` by
+    (irule (SIMP_RULE bool_ss []
+       (Q.SPEC `\r g tm. T` pop_memory_suffix_observed)) >>
+     simp[LET_THM] >> rpt conj_tac >>
+     TRY (HINT_EXISTS_TAC >> simp[] >> NO_TAC)
+     >~ [`?env. expr_body_pre _ _ env _ _`] >- (qexists `env` >> simp[]) >>
+     qexists `n` >> reverse conj_tac
+     >- (rpt strip_tac >> first_x_assum (drule_then strip_assume_tac) >> simp[]) >>
+     rpt strip_tac >>
+     `isPREFIX [mk_inst sm.cs_next_id MLOAD [Var p] [x0];
+        mk_inst (sm.cs_next_id+1) ISZERO [Var x0] [x1];
+        mk_inst (sm.cs_next_id+2) ISZERO [Var x1] [x2]]
+        (DROP t.vs_inst_idx bb.bb_instructions)` by simp[] >>
+     `lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb (t.vs_inst_idx+3) =
+        SOME (mk_inst (sm.cs_next_id+3) ASSERT [Var x2] [])` by simp[] >>
+     drule_all pop_full_memory_empty_path >> simp[]) >>
+  Cases_on `storage_trace_domain cx st0 fin.storage_trace`
+  >- (rewrite_tac[gas_outcome_full_def] >> qexists `[]` >> disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `fin`, `r`, `G'`, `tn'`] >>
+      simp[] >> gen_tac >> disch_tac >>
+      first_x_assum (drule_then mp_tac) >>
+      simp[NoAsms, expr_vv_sim_full_post_def, expr_sim_full_endpoint_def, Abbr `vv`] >>
+      metis_tac[]) >>
+  irule gas_outcome_full_bad_nil >> simp[]
 QED
 
 Theorem pop_slot_static_selected:
