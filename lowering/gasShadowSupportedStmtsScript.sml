@@ -1,7 +1,7 @@
 (* Conditional support closure, independent of expression support proofs. *)
 Theory gasShadowSupportedStmts
 Ancestors
-  gasShadowShape supportedStmts supportedStmtTraverse supportedExprTraverse
+  gasShadowShape supportedIteratorProps supportedStmts supportedStmtTraverse supportedExprTraverse
   supportedTargets supportedExprs supportedExprForms gasShadowSupportedExpr
   gasShadow vyperExprEffects vyperAST vyperTypeContract constSubst list pair combin
 
@@ -75,15 +75,15 @@ QED
 
 Theorem shadow_custom_error_support[local]:
   (!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) /\
-  custom_error_resolved [(NONE,tops)] err /\
+  supported_custom_error tops err /\
   EVERY (supported_pure_expr tops) (custom_error_exprs err) ==>
-  custom_error_resolved [(NONE,tops)] (gas_shadow_custom_error err) /\
+  supported_custom_error tops (gas_shadow_custom_error err) /\
   EVERY (supported_pure_expr tops) (custom_error_exprs (gas_shadow_custom_error err))
 Proof
-  Cases_on `err` >> rename1 `custom_error_resolved _ (CustomError id pos kw)` >>
+  Cases_on `err` >> rename1 `supported_custom_error _ (CustomError id pos kw)` >>
   PairCases_on `id` >>
   simp[gas_shadow_custom_error_def, custom_error_exprs_def, MAP_MAP_o, o_DEF,
-       EVERY_MAP, EVERY_MEM, SF ETA_ss, custom_error_resolved_def,
+       EVERY_MAP, EVERY_MEM, SF ETA_ss, supported_custom_error_def, custom_error_resolved_def,
        shadow_custom_error_args] >>
   rpt (CASE_TAC >> gvs[MAP_MAP_o, o_DEF, SF ETA_ss]) >>
   simp[MEM_MAP] >> metis_tac[]
@@ -110,30 +110,17 @@ Theorem shadow_iterator_support[local]:
 Proof
   strip_tac >> Cases
   >- (rpt gen_tac >> rename1 `Array arr` >> simp[gas_shadow_iterator_def] >>
-      `!e. (!t nm. e <> Name t nm) /\ (!t nm. e <> TopLevelName t nm) ==>
-           (supported_iterator tops ty (Array e) n <=>
-            supported_expr tops e /\
-            (!t fid args drv. e = Call t (IntCall fid) args drv ==>
-               ?m nr rr ps ds b.
-                 supported_function_decl tops fid Internal =
-                   SOME (m,nr,rr,ps,ds,t,b)) /\
-            ?bd. expr_type e = ArrayT ty bd /\ bound_length bd <= n)`
-        by (Cases >> simp[supported_iterator_def]) >>
       Cases_on `?t nm. arr = Name t nm` >- gvs[gas_shadow_expr_def] >>
       Cases_on `?t nm. arr = TopLevelName t nm` >- gvs[gas_shadow_expr_def] >>
       `(!t nm. gas_shadow_expr arr <> Name t nm) /\
        (!t nm. gas_shadow_expr arr <> TopLevelName t nm)`
         by (Cases_on `arr` >> gvs[gas_shadow_expr_def]) >>
-      first_assum (qspec_then `arr` mp_tac) >> impl_tac >- fs[] >>
-      disch_then (fn th => REWRITE_TAC [th]) >>
-      first_x_assum (qspec_then `gas_shadow_expr arr` mp_tac) >>
-      impl_tac >- fs[] >>
-      disch_then (fn th => REWRITE_TAC [th]) >>
-      strip_tac >>
-      conj_tac >- metis_tac[] >>
-      conj_tac
+      `(!t nm. arr <> Name t nm) /\
+       (!t nm. arr <> TopLevelName t nm)` by metis_tac[] >>
+      asm_simp_tac bool_ss [supported_non_name_array_iterator] >>
+      strip_tac >> conj_tac
       >- (rpt gen_tac >> strip_tac >> Cases_on `arr` >>
-          gvs[gas_shadow_expr_def]) >>
+          gvs[gas_shadow_expr_def] >> res_tac) >>
       simp[] >> metis_tac[]) >>
   qpat_x_assum `!tops e. supported_expr _ _ ==> _` kall_tac >>
   rpt gen_tac >> rename1 `Range a b` >>
