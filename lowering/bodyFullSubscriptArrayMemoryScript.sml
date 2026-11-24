@@ -4,7 +4,7 @@ Ancestors exprBopSimProps[qualified,ignore_grammar] integer[qualified,ignore_gra
   bodyFullShadowBodyInv bodyFullFramedMemorySelectionSpec
   bodyFullTargetArraySuffix bodyPtrSignedConvertSourceFrame emitHelperProps
   bodyFullEmptyLeafData exprSimFullBundleProps
-  bodyFullSubscriptArrayMemoryFrame bodyFullSubscriptArrayCodeBounds
+  bodyFullSimProjection bodyFullSubscriptArrayMemoryFrame bodyFullSubscriptArrayCodeBounds
   bodyFullSubscriptArrayCodeOps bodyFullIfExpReach bodyFullHashKeccakFixed stateRelProj
   exprSimVVFrame exprSimIfExpWidenedAdapter assignBasePtrBoundary
   gasShadowCompileStmtHelpers compilerInstructionSuffix fragGasOriginPtrLoop
@@ -197,7 +197,7 @@ Proof
               exprSimTopLevelPropsTheory.array_slot_base_compile_location] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty e1 es` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (irule (cj 2 body_expr_full_ok_simulations) >> metis_tac[]) >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule_all framed_memory_subscript_compile_cuts >>
   disch_then (qx_choosel_then [`bvv`,`sm`,`iop`,`st2`,`dst`] strip_assume_tac) >>
@@ -299,7 +299,7 @@ Resume subscript_array_framed_memory_full_from_selection[after_base]:
      qexists_tac `ann` >> simp[]) >>
   `body_expr_full_ok cx e2` by metis_tac[] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e2 mid` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (irule (cj 1 body_expr_full_ok_simulations) >> metis_tac[]) >>
   `?shadow_st2. lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2)
       shadow_sm = (iop,shadow_st2) /\ gas_shadow_state st2 shadow_st2` by
     (`gas_shadow_compiles (lower_value compile_expr cenv ty e2)

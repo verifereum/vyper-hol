@@ -8,7 +8,8 @@ Theory bodyFullStructLit
 Ancestors
   bodyFullShadowBodyInv
   bodyFullIfExpReach[qualified,ignore_grammar]
-  bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose gasContext exprSimDefs
+  bodyFullOfVV bodyFullPreds bodyFullSimProjection bodySimFull
+  gasOutcomeFullCompose gasContext exprSimDefs
   gasShadowCompile bodyFullStructLitAdd bodyFullStructLitInputs
   bodyFullStructLitBytes bodyFullStructLitZeroStore
   bodyFullStructLitFrames bodyPtrDefs bodyPtrMakeArrayEmission
@@ -1581,9 +1582,13 @@ Proof
   `expr_body_pre ce cx env e es` by metis_tac[] >>
   `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
     metis_tac[expr_body_pre_vv_gas_admissible] >>
+  `body_expr_full_ok cx e` by
+    (qpat_assum `body_exprs_full_ok cx (e::_)`
+       (strip_assume_tac o REWRITE_RULE [body_exprs_full_ok_def]) >>
+     first_assum ACCEPT_TAC) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       ce cx (expr_type e) e es` by
-    (gvs[body_exprs_full_ok_def, body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   `inv' (storage_trace_horizon es.storage_trace) es si G0 tn0 s0 cells off` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> inv' _ _ _ _ _ _ _ _`
        (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>

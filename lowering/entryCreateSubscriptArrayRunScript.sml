@@ -112,6 +112,29 @@ Proof
             array_elem_selector_code]
 QED
 
+(* Join adjacent slices by reindexing only the result's instruction PC. *)
+Theorem array_selector_run_compose[local]:
+  array_selector_code a m /\ array_selector_code m b /\
+  run_inst_seq (emitted_insts a m) s = OK u /\
+  run_inst_seq (emitted_insts m b)
+    (u with vs_inst_idx := LENGTH m.cs_current_insts) = r ==>
+  run_inst_seq (emitted_insts a b) s =
+    exec_result_map (\v. v with vs_inst_idx := u.vs_inst_idx) r
+Proof
+  strip_tac >>
+  `emitted_insts a b = emitted_insts a m ++ emitted_insts m b` by
+    fs[array_selector_code_def, emitted_insts_append] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts m b)` by
+    fs[array_selector_code_def, EVERY_MEM] >>
+  `run_inst_seq (emitted_insts m b)
+     ((u with vs_inst_idx := LENGTH m.cs_current_insts) with vs_inst_idx := u.vs_inst_idx) =
+   exec_result_map (\v. v with vs_inst_idx := u.vs_inst_idx) r` by
+    (qpat_assum `run_inst_seq _ (u with vs_inst_idx := _) = r`
+       (fn th => pure_rewrite_tac[GSYM th]) >>
+     irule run_inst_seq_inst_idx >> simp[]) >>
+  fs[] >> metis_tac[run_inst_seq_append]
+QED
+
 Theorem array_selector_ok_scope:
   array_selector_code a b /\ fn_has_code a b f /\ create_operand_at a s /\
   ~s.vs_halted /\ run_inst_seq (emitted_insts a b) s = OK u ==>
@@ -240,5 +263,64 @@ Proof
   fs[array_bounds_native_run_def] >>
   `inst_extends a m /\ inst_extends m b` by fs[array_selector_code_def, inst_extends_def] >>
   drule_all run_inst_seq_abort_extends >> strip_tac >>
+  irule array_selector_oob_scope >> metis_tac[]
+QED
+
+(* a--h is empty for a literal length, or is the actual length load.
+   h--m checks the bound and m--b computes the element address. *)
+Theorem array_selector_ok_scope_itinerary:
+  array_selector_code a h /\ array_selector_code h m /\
+  array_selector_code m b /\ fn_has_code a b f /\ create_operand_at a s /\
+  ~s.vs_halted /\ run_inst_seq (emitted_insts a h) s = OK x /\
+  run_inst_seq (emitted_insts h m)
+    (x with vs_inst_idx := LENGTH h.cs_current_insts) = OK u /\
+  run_inst_seq (emitted_insts m b)
+    (u with vs_inst_idx := LENGTH m.cs_current_insts) = OK v ==>
+  create_operand_full_scope a b E C f s []
+    (OK (v with vs_inst_idx := LENGTH b.cs_current_insts))
+Proof
+  strip_tac >>
+  `run_inst_seq (emitted_insts a m) s = OK (u with vs_inst_idx := x.vs_inst_idx)` by
+    (irule (SIMP_RULE (srw_ss()) [exec_result_map_def]
+       (Q.INST [`r` |-> `OK result`] array_selector_run_compose)) >>
+     metis_tac[]) >>
+  `array_selector_code a m /\ array_selector_code a b` by
+    metis_tac[array_selector_code_join] >>
+  qabbrev_tac `mid = u with vs_inst_idx := x.vs_inst_idx` >>
+  `run_inst_seq (emitted_insts a b) s = OK (v with vs_inst_idx := mid.vs_inst_idx)` by
+    (irule (SIMP_RULE (srw_ss()) [exec_result_map_def]
+       (Q.INST [`r` |-> `OK result`] array_selector_run_compose)) >>
+     qexists `m` >> simp[Abbr `mid`]) >>
+  drule_all array_selector_ok_scope >> simp[]
+QED
+
+(* A rejected check never executes the address slice. The selected abort
+   path starts at the reindexed length-load result, not at an arbitrary
+   state satisfying the selector postcondition. *)
+Theorem array_selector_oob_scope_itinerary:
+  array_selector_code a h /\ array_selector_code h m /\
+  array_selector_code m b /\ fn_has_code a b f /\ create_operand_at a s /\
+  run_inst_seq (emitted_insts a h) s = OK x /\
+  run_inst_seq (emitted_insts h m)
+    (x with vs_inst_idx := LENGTH h.cs_current_insts) = Abort Revert_abort raw /\
+  gas_origin_path T E C f s []
+    (OK (x with vs_inst_idx := LENGTH h.cs_current_insts)) /\
+  gas_origin_path T E C f (x with vs_inst_idx := LENGTH h.cs_current_insts)
+    [] (Abort Revert_abort t) ==>
+  create_operand_full_scope a b E C f s [] (Abort Revert_abort t)
+Proof
+  strip_tac >>
+  `run_inst_seq (emitted_insts a m) s =
+   Abort Revert_abort (raw with vs_inst_idx := x.vs_inst_idx)` by
+    (irule (SIMP_RULE (srw_ss()) [exec_result_map_def]
+       (Q.INST [`r` |-> `Abort Revert_abort result`] array_selector_run_compose)) >>
+     metis_tac[]) >>
+  `array_selector_code a m /\ array_selector_code a b` by
+    metis_tac[array_selector_code_join] >>
+  `inst_extends a m /\ inst_extends m b` by
+    fs[array_selector_code_def, inst_extends_def] >>
+  drule_all run_inst_seq_abort_extends >> strip_tac >>
+  `gas_origin_path T E C f s [] (Abort Revert_abort t)` by
+    metis_tac[gas_origin_path_append, APPEND_NIL] >>
   irule array_selector_oob_scope >> metis_tac[]
 QED
