@@ -85,9 +85,9 @@ Proof
   irule gas_origin_ptr_path_append >> metis_tac[]
 QED
 
-Theorem scoped_operand_bind_all:
+Theorem scoped_operand_bind_all_mixed:
   scoped_operand_outcome (DF,lo,explicit,ctx,func,PG) tops cx st0 a m
-    source (es,s,G,tn) Q1 (\H res ee gt r. (?exc. res = INR exc) /\ R H res ee gt r) /\
+    source (es,s,G,tn) Q1 (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
   (!marks res mid G1 tn1 t.
      (!tail. source (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
          (res, mid with gas_obs := tail)) /\
@@ -139,7 +139,7 @@ Proof
   Cases_on `exit_result r`
   >- (`!H. valid_horizon cx st0 H ee.storage_trace ==>
            gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) marks (r,G',tn') /\
-           (?exc. res = INR exc) /\ R H res (ee with gas_obs := []) (G',tn') r` by
+           (?exc. res = INR exc /\ R H (INR exc) (ee with gas_obs := []) (G',tn') r)` by
          (rpt strip_tac >> res_tac >> fs[exit_result_def]) >>
       `?exc. res = INR exc` by metis_tac[storage_trace_domain_def] >> gvs[] >>
       rewrite_tac[scoped_operand_outcome_def] >> qexists_tac `marks` >>
@@ -158,4 +158,57 @@ Proof
   irule scoped_operand_bind_right >>
   first_assum (irule_at Any) >> simp[] >>
   rpt conj_tac >> metis_tac[scoped_horizon_at_start]
+QED
+
+Theorem scoped_operand_bind_all:
+  scoped_operand_outcome (DF,lo,explicit,ctx,func,PG) tops cx st0 a m
+    source (es,s,G,tn) Q1 (\H res ee gt r. (?exc. res = INR exc) /\ R H res ee gt r) /\
+  (!marks res mid G1 tn1 t.
+     (!tail. source (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
+         (res, mid with gas_obs := tail)) /\
+     storage_trace_domain cx st0 mid.storage_trace /\
+     create_operand_at m t /\
+     create_operand_full_scope a m explicit ctx func s marks (OK t) /\
+     (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       Q1 H res mid G1 tn1 t /\ gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+                                   (s,G,tn) marks (OK t,G1,tn1)) ==>
+     ?v. res = INL v /\ scoped_operand_outcome (DF,lo,explicit,ctx,func,PG)
+             tops cx st0 m b (next v) (mid,t,G1,tn1) Q R) /\
+  storage_trace_frame source /\ (!v. storage_trace_frame (next v)) /\
+  (!marks err ee leaf finish.
+     gas_exempt_cert T tops (ctx,func) (ignore_bind source (return ()))
+       (es,s) marks (err,ee) (leaf,finish) ==>
+     gas_exempt_cert T tops (ctx,func) (ignore_bind (bind source next) (return ()))
+       (es,s) marks (err,ee) (leaf,finish)) /\
+  (!left v mid t right err ee leaf finish.
+     gas_marked_exec T (ctx,func) source (es,s) left (INL v) mid (OK t) /\
+     gas_exempt_cert T tops (ctx,func) (ignore_bind (next v) (return ()))
+       (mid with gas_obs := [],t) right (err,ee) (leaf,finish) ==>
+     gas_exempt_cert T tops (ctx,func) (ignore_bind (bind source next) (return ()))
+       (es,s) (left ++ right) (err,ee) (leaf,finish)) /\
+  (!marks. create_operand_focus_scope a m explicit ctx func s marks ==>
+     create_operand_focus_scope a b explicit ctx func s marks) /\
+  (!marks r. exit_result r /\ create_operand_full_scope a m explicit ctx func s marks r ==>
+     create_operand_full_scope a b explicit ctx func s marks r) /\
+  (!left t right.
+     create_operand_full_scope a m explicit ctx func s left (OK t) /\
+     create_operand_focus_scope m b explicit ctx func t right ==>
+     create_operand_focus_scope a b explicit ctx func s (left ++ right)) /\
+  (!left t right r.
+     create_operand_full_scope a m explicit ctx func s left (OK t) /\
+     create_operand_full_scope m b explicit ctx func t right r ==>
+     create_operand_full_scope a b explicit ctx func s (left ++ right) r) ==>
+  scoped_operand_outcome (DF,lo,explicit,ctx,func,PG) tops cx st0 a b
+    (bind source next) (es,s,G,tn) Q R
+Proof
+  strip_tac >>
+  `(\H res ee gt r. (?exc. res = INR exc) /\ R H res ee gt r) =
+   (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r)` by
+    (simp[FUN_EQ_THM] >> metis_tac[]) >>
+  pop_assum (fn eq =>
+    qpat_x_assum `scoped_operand_outcome _ _ _ _ a m _ _ _ _`
+      (assume_tac o ONCE_REWRITE_RULE [eq])) >>
+  irule scoped_operand_bind_all_mixed >>
+  rpt (conj_tac ORELSE first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`Q1`,`m`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
