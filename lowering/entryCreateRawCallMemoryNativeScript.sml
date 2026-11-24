@@ -2,7 +2,7 @@
 Theory entryCreateRawCallMemoryNative
 Ancestors
   entryCreateNativeFirstExit entryCreateReplayBind entryCreateEffectFocus
-  entryCreateIntervalLayout entryCreateAdminSequence createSizeOperandCode
+  entryCreateRawCallPrepCode createSizeOperandCode
   exprSimRawCall exprSimAbiDecodeSiteCoverage exprSimAbiGasBridge exprLoweringProps
   createSizeCutRegion createSizeCutCode createSizePrefixReplay fragExec compileEnv emitHelperProps
   entryCreateBodyCut entryCreateFocusSpec entryCreateOperandReplay
@@ -16,39 +16,13 @@ Theorem raw_call_memory_header_code[local]:
   emit_op MLOAD [data] s2 = (len,s3) /\
   emit_op ADD [data; Lit 32w] s3 = (dp,s4) ==>
   create_cut_code {} s2 s4 /\
-  EVERY (\i. ~MEM i.inst_opcode [INVOKE; CREATE; CREATE2]) (frag_code s2 s4)
+  EVERY (\i. ~MEM i.inst_opcode [INVOKE; CREATE; CREATE2] /\ i.inst_opcode <> GAS)
+    (frag_code s2 s4)
 Proof
-  strip_tac >>
-  `create_cut_code {} s2 s3` by
-    (`create_cut_code {} s2 (SND (emit_op MLOAD [data] s2))` by
-       simp[create_cut_code_emit_op, create_cut_targets_def] >>
-     qpat_x_assum `create_cut_code {} _ (SND _)` mp_tac >> simp[]) >>
-  `create_cut_code {} s3 s4` by
-    (`create_cut_code {} s3 (SND (emit_op ADD [data; Lit 32w] s3))` by
-       simp[create_cut_code_emit_op, create_cut_targets_def] >>
-     qpat_x_assum `create_cut_code {} _ (SND _)` mp_tac >> simp[]) >>
-  conj_tac >- metis_tac[create_cut_code_join] >>
-  `cs_extends s2 s3 /\ cs_extends s3 s4` by fs[create_cut_code_def] >>
-  drule_all abi_decode_frag_code_compose >> strip_tac >>
-  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
+  strip_tac >> drule_all raw_call_header_code >> strip_tac >>
+  imp_res_tac emit_op_extends >>
   fs[same_blocks_def, frag_code_def, emitted_blocks_def, mk_inst_def,
-     DROP_LENGTH_NIL, EVERY_MEM] >> rpt strip_tac >> gvs[]
-QED
-
-Theorem raw_call_memory_gas_code[local]:
-  (case go of SOME g => (g,s5) | NONE => emit_op GAS [] s5) = (gas,s6) ==>
-  create_cut_code {} s5 s6 /\
-  EVERY (\i. ~MEM i.inst_opcode [INVOKE; CREATE; CREATE2]) (frag_code s5 s6)
-Proof
-  Cases_on `go`
-  >- (simp[] >> strip_tac >> conj_tac
-      >- (`create_cut_code {} s5 (SND (emit_op GAS [] s5))` by
-            simp[create_cut_code_emit_op, create_cut_targets_def] >>
-     qpat_x_assum `create_cut_code {} _ (SND _)` mp_tac >> simp[]) >>
-      drule emitted_insts_emit_op >> drule emit_op_extends >>
-      simp[same_blocks_def, frag_code_def, emitted_blocks_def, mk_inst_def,
-           DROP_LENGTH_NIL]) >>
-  simp[frag_code_def, emitted_blocks_def, emitted_insts_def]
+     DROP_LENGTH_NIL]
 QED
 
 Theorem raw_call_memory_inventory_join[local]:
@@ -74,9 +48,7 @@ Theorem raw_call_memory_installed_splits:
   compile_raw_call_finish addr dp len gas valop ct n rof ov optr s7 = (result,sb) /\
   fn_has_code sa sb f /\
   create_cut_code {} s4 s5 /\
-  create_cut_code {} s6 s7 /\
   create_cut_code {} s7 sb /\
-  EVERY (\i. ~MEM i.inst_opcode [INVOKE; CREATE; CREATE2]) (frag_code s6 s7) /\
   EVERY (\i. ~MEM i.inst_opcode [INVOKE; CREATE; CREATE2]) (frag_code s7 sb) ==>
   (create_cut_code {} sa s1 /\ fn_has_code sa s1 f) /\
   (create_cut_code {} s1 s2 /\ fn_has_code s1 s2 f) /\
@@ -89,14 +61,16 @@ Theorem raw_call_memory_installed_splits:
   (create_cut_code {} s2 sb /\ fn_has_code s2 sb f) /\
   (create_cut_code {} s4 sb /\ fn_has_code s4 sb f) /\
   (create_cut_code {} s5 sb /\ fn_has_code s5 sb f) /\
-  EVERY (\i. ~MEM i.inst_opcode [INVOKE; CREATE; CREATE2]) (frag_code s2 s4) /\
+  EVERY (\i. ~MEM i.inst_opcode [INVOKE; CREATE; CREATE2] /\ i.inst_opcode <> GAS)
+    (frag_code s2 s4) /\
   EVERY (\i. ~MEM i.inst_opcode [INVOKE; CREATE; CREATE2]) (frag_code s5 sb)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `create_cut_code {} sa s1 /\ create_cut_code {} s1 s2` by
     metis_tac[cj 2 create_operand_cut_code, SND] >>
   drule_all raw_call_memory_header_code >> strip_tac >>
-  drule raw_call_memory_gas_code >> strip_tac >>
+  drule raw_call_optional_gas_code >> strip_tac >>
+  drule raw_call_outbuf_code >> strip_tac >>
   `create_cut_code {} s6 sb` by metis_tac[create_cut_code_join] >>
   `create_cut_code {} s5 sb` by metis_tac[create_cut_code_join] >>
   `create_cut_code {} s4 sb` by metis_tac[create_cut_code_join] >>
