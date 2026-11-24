@@ -268,7 +268,6 @@ QED
 
   val accepted = prove (``asm_opt_finalizer IN accepted_finalizers``,
     simp[asmOptimizerTheory.accepted_finalizers_def])
-  val runtime_not_ef = prove (``~(?t. ^runtime_bc = 0xEFw :: t)``, simp[])
   val compiler_args =
     [``asm_opt_finalizer``, ``o1_policy all_capabilities``, tops, deploy_bc, runtime_bc]
   val common_premises = [accepted, compile]
@@ -281,7 +280,7 @@ QED
     (LIST_CONJ (deploy_premises @ [dep_bound]))
   val _ = MATCH_MP
     (SPECL deploy_args e2eGasSufficientTopTheory.e2e_deploy_gas_sufficient)
-    (LIST_CONJ (deploy_premises @ [runtime_not_ef]))
+    (LIST_CONJ deploy_premises)
 
   fun check_call (horizon, tx, es, entry_facts, storage_facts) =
     let
