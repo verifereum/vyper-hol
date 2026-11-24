@@ -4395,10 +4395,16 @@ Resume range_full_init[checked_init]:
        (qspec_then `x` mp_tac) >> simp[]) >>
   irule gasOutcomeFullStmtsTheory.gas_outcome_full_zero_prefix >>
   qexistsl_tac [`GA`, `sA`, `tnA`] >> conj_tac >- simp[] >>
-  drule_all range_checked_entry_full >> simp[LET_THM] >>
-  disch_then (qspecl_then [`explicit`, `PG`, `tops`, `RetQ`] (fn th =>
-    irule gas_outcome_full_post_mono >> irule_at Any th)) >>
-  qexists_tac `RetQ` >> BETA_TAC >>
+  qspecl_then
+    [`DF`, `lo`, `explicit`, `d`, `ctx`, `func`, `PG`, `tops`, `cx`, `st0`,
+     `RetQ`, `cenv`, `env`, `es`, `sa`, `s0`, `G0`, `tn0`, `ea`, `sA`,
+     `GA`, `tnA`, `st`, `sb0`, `entry_lbl`, `cond_lbl`, `op1`, `op2`, `p`,
+     `cv`, `rv`, `g1`, `z1`, `g2`, `z2`, `ev`, `bound`, `fty`, `tyv`,
+     `n1`, `n2`, `w`, `sz`, `id`] mp_tac range_checked_entry_full >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[LET_THM] >>
+  disch_then (fn th => irule gas_outcome_full_post_mono >> irule_at Any th) >>
+  BETA_TAC >>
   reverse conj_tac >- (rpt gen_tac >> disch_then ACCEPT_TAC) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qexists_tac `GENLIST (\j. Value (IntV (n1 + &j))) N` >>
@@ -5535,9 +5541,12 @@ Proof
     (qx_gen_tac `H` >> strip_tac >>
      asm "inv_cons" (qspec_then `H` (drule_then strip_assume_tac)) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  asm_x "enter_cons" (drule_all_then
-    (strip_assume_tac o CONV_RULE (TOP_DEPTH_CONV BETA_CONV) o
-     PURE_REWRITE_RULE [LET_THM])) >>
+  asm_x "enter_cons" (qspecl_then
+    [`st0`, `es0`, `s0`, `G0`, `tn0`, `n1`, `n2`, `N`, `k`, `a`, `rs`,
+     `es`, `s`, `G`, `tn`, `w`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (strip_assume_tac o CONV_RULE (TOP_DEPTH_CONV BETA_CONV) o
+    PURE_REWRITE_RULE [LET_THM]) >>
   qmatch_asmsub_abbrev_tac `expr_sim_inv bc cx (extend_local env id typ F) ep` >>
   qmatch_asmsub_abbrev_tac `ret_pc_ok bc sb0 t` >>
   qabbrev_tac `s_eq = update_var dv (bool_to_word F) s` >>
@@ -6142,7 +6151,10 @@ Resume range_full_round[backedge]:
        (irule body_const_cells_agree_stmts >>
         qpat_assum `eval_stmts cx body epH = (rawH,prepop)` (irule_at Any) >>
         qexists_tac `ret_ty` >> simp[]) >>
-     fs[Abbr `prepop`]) >>
+     qpat_assum
+       `body_const_cells_agree _ cx (extend_local env id typ F) prepop` mp_tac >>
+     simp[NoAsms, Abbr `prepop`, body_const_cells_agree_extend_local,
+          body_const_cells_agree_state_updates]) >>
   `expr_sim_inv cenv cx env ee` by
     (qpat_assum `prepop with scopes := ee.scopes = ee` (SUBST1_TAC o SYM) >>
      irule bodyExprPreFactsTheory.expr_sim_inv_for_pop >>
