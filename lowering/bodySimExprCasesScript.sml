@@ -20,7 +20,7 @@ Ancestors
   bodySimIfExpWidened bodySimStructLitWidened bodySimMakeArrayWidened
   bodySimBopInLiteralWord bodySimBopHeld
   bodySimConvertWidened
-  exprSimSource
+  exprSimSource exprSimBoolChain boolChainOperandsGuarded
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
   exprSimPlaces exprSimMapDefs exprSimSubscriptMap exprSimPopNested bodyPopNestedTargetFrag targetPlaceSim exprSimAggregates exprSimSend exprSimBuiltins exprSimECArith vyperAST
@@ -65,6 +65,10 @@ Theorem body_expr_ok_of_case:
     (!ann obj field. e = Attribute ann obj field ==> body_expr_ok cx obj) /\
     (!ann nsid fields. e = StructLit ann nsid fields ==>
        body_exprs_ok cx (MAP SND fields)) /\
+    (!t c a b. e = IfExp t c a b ==>
+       body_expr_ok cx c /\
+       ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
+        body_expr_ok cx a /\ body_expr_ok cx b)) /\
     (!tops ctx func cenv.
        body_inv tops ctx cenv cx ==>
        expr_sim_case F ctx func cenv cx e /\
@@ -76,6 +80,24 @@ Proof
   >- (drule body_expr_ok_map_other >>
       simp[expr_map_case_def] >> metis_tac[]) >>
   fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
+QED
+
+Theorem body_bool_chain_case:
+  !cx ann d n e. body_expr_ok cx e ==>
+    body_expr_ok cx (Builtin ann (BoolChain d n) [e])
+Proof
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `!k x. body_expr_ok cx x ==>
+     bool_chain_case F ctx func cenv cx (bool_chain_operands d k x)` by
+    (match_mp_tac (Q.INST
+       [`G` |-> `\c. ?s tv s'. eval_expr cx c s = (INL tv,s')`]
+       bool_chain_operands_guarded) >>
+     BETA_TAC >> rpt conj_tac
+     >- (simp[bool_chain_case_def] >> metis_tac[body_expr_ok_case])
+     >- (rpt gen_tac >> MATCH_ACCEPT_TAC body_ifexp_children_ok) >>
+     simp[bool_chain_case_def] >> metis_tac[body_expr_ok_case]) >>
+  irule compile_bool_chain_case >> simp[]
 QED
 
 Theorem body_exprs_ok_case:
@@ -95,7 +117,9 @@ Theorem body_ifexp_case:
     body_expr_ok cx e1 ==>
     body_expr_ok cx (IfExp v5 e1 e2 e3)
 Proof
-  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> simp[] >>
+  conj_tac >- (strip_tac >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `!e. (e = e2 \/ e = e3) ==>
     (int_calls_expr e = [] \/
      same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
