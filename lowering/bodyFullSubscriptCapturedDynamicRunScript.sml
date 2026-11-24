@@ -94,14 +94,25 @@ Theorem captured_dynamic_load_safety[local]:
   op_taint (step_taint (mk_inst sn.cs_next_id MLOAD [bop] [out]) u
     (update_var out (mload (w2n a) u) u) tn) (Var out) = {}
 Proof
-  strip_tac >>
-  simp[array_length_step_ok_def, op_taint_def, op_prov_def, step_taint_def,
-       step_prov_def, mk_inst_def, set_prov_def, set_var_taint_def, FLOOKUP_UPDATE,
-       mem_taint_def, mem_read_ops_def, mem_write_ops_def, out_taint_def,
-       out_prov_def, FLOOKUP_DRESTRICT, step_inst_base_def, exec_read1_def,
-       access_ok_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
-       taint_ok_def, inst_mem_below_frontier_def] >>
-  Cases_on `bop` >> gvs[op_prov_def, op_taint_def]
+  strip_tac >> conj_tac
+  >- (simp[array_length_step_ok_def] >>
+      rpt conj_tac
+      >- simp[mk_inst_def, step_inst_base_def, exec_read1_def]
+      >- (Cases_on `bop` >>
+          gvs[mk_inst_def, access_ok_def, source_memory_read_ranges_def,
+              source_memory_write_ranges_def, op_prov_def, mem_read_ops_def,
+              mem_write_ops_def] >> metis_tac[])
+      >- simp[mk_inst_def, taint_ok_def, mem_taint_def, mem_read_ops_def,
+              mem_write_ops_def]
+      >> simp[mk_inst_def, inst_mem_below_frontier_def,
+              source_memory_read_ranges_def, source_memory_write_ranges_def])
+  >> conj_tac
+  >- simp[op_prov_def, step_prov_def, mk_inst_def, set_prov_def,
+          out_prov_def, FLOOKUP_DRESTRICT]
+  >> simp[op_taint_def, step_taint_def, mk_inst_def, set_var_taint_def,
+          FLOOKUP_UPDATE, mem_taint_def, mem_read_ops_def, mem_write_ops_def,
+          out_taint_def] >>
+  Cases_on `bop` >> gvs[op_taint_def]
 QED
 
 (* The concrete loader packet fixes the load endpoint independently of D. *)
