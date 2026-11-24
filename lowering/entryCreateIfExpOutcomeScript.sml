@@ -269,161 +269,65 @@ Proof
   qexistsl [`G0`,`c`,`ce`,`d`,`es`,`marks`,`cop`,`s0`,`sa`,`t`,`tn0`] >>
   fs[] >> metis_tac[]
 QED
-(* Only the scope of the selected administrative edges and the physical
-   materialization/finish observers are supplied. The selected continuation
-   is assembled here from the guarded children. *)
-Theorem ifexp_selected_vv_scoped_intro:
+
+Theorem ifexp_selected_jnz_arm_handoff:
   let E = gas_explicit_sites ctx shctx;
       F = (DF,lo,d,ctx,shctx,PG,f,shf);
-      source = bind (eval_expr cx c) (read_result cx);
-      root = IfExp t c a b;
-      R = create_operand_exit_post ctx cx;
-      post = (\e es st_start st_stop u av G tn H res ee G' tn' z.
-        create_operand_vv_post (DF,lo,d,ctx,f) ce cx e
-          (es,st_start,st_stop,u,av,G,tn) H res ee G' tn' z /\
-        create_operand_at st_stop z)
-  in
-  body_inv (cx_tops cx) ctx ce cx /\ shadow_body_inv (cx_tops cx) ctx shctx /\
-  expr_body_pre ce cx env root es /\
-  (!st0 sa sc sha shsc cop s0 G0 tn0.
-    expr_body_pre ce cx env c es /\ L sa sc /\
-    expr_sim_full_pre F ce cx (BaseT BoolT) c es
-      (st0,sa,sc,sha,shsc,cop,s0,G0,tn0) ==>
-    scoped_operand_outcome (DF,lo,E,ctx,f,PG) (cx_tops cx) cx st0 sa sc source
-      (es,s0,G0,tn0)
-      (expr_sim_full_post (DF,lo,d,ctx,f) ce cx c (es,sa,sc,s0,cop,G0,tn0))
-      (create_operand_exit_post ctx cx)) /\
-  (!sel mid st0 se sm shse shsm av u G1 tn1.
-    let e = if sel then a else b in
-    expr_body_pre ce cx env e mid /\ L se sm /\
-    expr_vv_sim_full_pre F ce cx ty e mid (st0,se,sm,shse,shsm,av,u,G1,tn1) ==>
-    scoped_operand_outcome (DF,lo,E,ctx,f,PG) (cx_tops cx) cx st0 se sm
-      (eval_expr cx e) (mid,u,G1,tn1) (post e mid se sm u av G1 tn1) R) /\
-  (!st0 sa sb sha shb vv s0 G0 tn0.
-    expr_vv_sim_full_pre F ce cx ty root es (st0,sa,sb,sha,shb,vv,s0,G0,tn0) /\ L sa sb ==>
-    ?cop sc shsc sj sn tl el.
-      L sa sc /\ expr_sim_full_pre F ce cx (BaseT BoolT) c es
-        (st0,sa,sc,sha,shsc,cop,s0,G0,tn0) /\
-      emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\ fn_has_code sj sn f /\
-      sj.cs_current_bb = sc.cs_current_bb /\ sj.cs_current_insts = sc.cs_current_insts /\
-      (!marks. create_operand_focus_scope sa sc E ctx f s0 marks ==>
-        create_operand_focus_scope sa sb E ctx f s0 marks) /\
-      (!marks r. exit_result r /\ create_operand_full_scope sa sc E ctx f s0 marks r ==>
-        create_operand_full_scope sa sb E ctx f s0 marks r) /\
-      (!left z right. create_operand_full_scope sa sc E ctx f s0 left (OK z) /\
-        create_operand_focus_scope sc sb E ctx f z right ==>
-        create_operand_focus_scope sa sb E ctx f s0 (left ++ right)) /\
-      (!left z right r. create_operand_full_scope sa sc E ctx f s0 left (OK z) /\
-        create_operand_full_scope sc sb E ctx f z right r ==>
-        create_operand_full_scope sa sb E ctx f s0 (left ++ right) r) /\
-      !sel. ?se sm sx sy shse shsm av op rv.
-        let e = if sel then a else b;
-            lbl = if sel then tl else el in
-        L se sm /\ se.cs_current_bb = lbl /\ se.cs_current_insts = [] /\
-        compile_expr ce ty e se = (av,sm) /\
-        compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) shse = (av,shsm) /\
-        gas_shadow_state se shse /\ gas_shadow_state sm shsm /\
-        fn_has_code se sm f /\ fn_has_code shse shsm shf /\
-        local_ptrs_reserved ce se /\ sa.cs_next_var <= se.cs_next_var /\
-        compile_ifexp_arm ce t (lowered_value_type ce e) av sm = (op,sx) /\
-        emit_inst ASSIGN [op] [rv] sx = ((),sy) /\ fn_has_code sm sx f /\ fn_has_code sx sy f /\
-        sc.cs_next_id <= se.cs_next_id /\ se.cs_next_id <= sb.cs_next_id /\
-        (!bb inst. lookup_block sb.cs_current_bb f.fn_blocks = SOME bb /\
-          get_instruction bb (LENGTH sb.cs_current_insts) = SOME inst ==>
-          inst.inst_id NOTIN frag_ids sc se) /\
-        create_cut_code {} se sb /\ fn_has_code se sb f /\
-        !marks mid G1 tn1 z.
-          let u = jump_to lbl z in
-          (!tail. source (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
-            (INL (BoolV sel),mid with gas_obs := tail)) /\
-          storage_trace_domain cx st0 mid.storage_trace /\ mid.gas_obs = [] /\
-          create_operand_at sc z /\ create_operand_full_scope sa sc E ctx f s0 marks (OK z) /\
-          (!H. valid_horizon cx st0 H mid.storage_trace ==>
-            expr_sim_full_post (DF,lo,d,ctx,f) ce cx c (es,sa,sc,s0,cop,G0,tn0)
-              H (INL (BoolV sel)) mid G1 tn1 z /\
-            gas_origin_ptr_path (DF H,lo,E,ctx,f,PG) (s0,G0,tn0) marks (OK z,G1,tn1)) ==>
-          expr_body_pre ce cx env e mid /\
-          create_operand_full_scope sc se E ctx f z [] (OK u) /\ create_cut_region se sb u /\
-          (!right. create_operand_focus_scope se sm E ctx f u right ==>
-            create_operand_focus_scope se sb E ctx f u right) /\
-          (!right r. exit_result r /\ create_operand_full_scope se sm E ctx f u right r ==>
-            create_operand_full_scope se sb E ctx f u right r) /\
-          (!left j right. create_operand_full_scope se sm E ctx f u left (OK j) /\
-            create_operand_focus_scope sm sb E ctx f j right ==>
-            create_operand_focus_scope se sb E ctx f u (left ++ right)) /\
-          (!left j right r. create_operand_full_scope se sm E ctx f u left (OK j) /\
-            create_operand_full_scope sm sb E ctx f j right r ==>
-            create_operand_full_scope se sb E ctx f u (left ++ right) r) /\
-          (!right res ee G tn j.
-            (!tail. eval_expr cx e (mid with gas_obs := gas_explicit right u.vs_gas_readings ++ tail) =
-              (res,ee with gas_obs := tail)) /\
-            storage_trace_domain cx st0 ee.storage_trace /\ create_operand_at sm j /\
-            create_operand_full_scope se sm E ctx f u right (OK j) /\
-            (!H. valid_horizon cx st0 H ee.storage_trace ==>
-              post e mid se sm u av G1 tn1 H res ee G tn j /\
-              gas_origin_ptr_path (DF H,lo,E,ctx,f,PG) (u,G1,tn1) right (OK j,G,tn)) ==>
-            ?raw v. res = INL raw /\ read_result cx raw ee = (INL v,ee) /\
-              !tv. (!tail. conditional_result cx raw (ee with gas_obs := tail) =
-                    (INL tv,ee with gas_obs := tail)) /\ read_result cx tv ee = (INL v,ee) ==>
-                ?m Gm tm fin Gf tf.
-                  create_operand_at sx m /\
-                  create_operand_full_scope sm sx E ctx f j [] (OK m) /\
-                  create_operand_full_scope sx sb E ctx f m [] (OK fin) /\
-                  create_operand_full_scope sm sb E ctx f j [] (OK fin) /\
-                  !H. valid_horizon cx st0 H ee.storage_trace ==>
-                    gas_origin_ptr_path (DF H,lo,E,ctx,f,PG) (j,G,tn) [] (OK m,Gm,tm) /\
-                    gas_origin_ptr_path (DF H,lo,E,ctx,f,PG) (m,Gm,tm) [] (OK fin,Gf,tf) /\
-                    post root es sa sb s0 vv G0 tn0 H (INL tv) (ee with gas_obs := []) Gf tf fin)) ==>
-  !st0 sa sb sha shb vv s0 G0 tn0.
-    expr_vv_sim_full_pre F ce cx ty root es (st0,sa,sb,sha,shb,vv,s0,G0,tn0) /\ L sa sb ==>
-    scoped_operand_outcome (DF,lo,E,ctx,f,PG) (cx_tops cx) cx st0 sa sb
-      (eval_expr cx root) (es,s0,G0,tn0) (post root es sa sb s0 vv G0 tn0) R
-Proof
-  simp_tac bool_ss [LET_THM] >> strip_tac >> rpt gen_tac >> strip_tac >>
-  drule ifexp_body_pre_children >> strip_tac >>
-  qpat_x_assum `!st0 sa sb sha shb vv s0 G0 tn0. _ ==> ?cop sc shsc sj sn tl el. _`
-    (drule_all_then strip_assume_tac) >>
-  qpat_x_assum `!st0 sa sc sha shsc cop s0 G0 tn0. _ ==> scoped_operand_outcome _ _ _ _ _ _ _ _ _ _`
-    (drule_all_then assume_tac) >>
-  `gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
-   MEM f ctx.ctx_functions` by fs[expr_vv_sim_full_pre_def] >>
-  irule (SIMP_RULE bool_ss [LET_THM] ifexp_scoped_test_then_arm) >>
-  qpat_assum `scoped_operand_outcome _ _ _ _ _ _ (bind _ (read_result _)) _ _ _`
-    (irule_at Any) >> simp[] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qx_genl_tac [`marks`,`sel`,`mid`,`G1`,`tn1`,`z`] >> strip_tac >>
-  qpat_x_assum `!sel. ?se sm sx sy shse shsm av op rv. _`
-    (qspec_then `sel` strip_assume_tac) >>
-  `!tail. bind (eval_expr cx c) (read_result cx)
-      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
-      (INL (BoolV sel),(mid with gas_obs := []) with gas_obs := tail)` by simp[] >>
-  `storage_trace_domain cx st0 (mid with gas_obs := []).storage_trace /\
-   (mid with gas_obs := []).gas_obs = []` by simp[] >>
-  `!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
+      e = if sel then a else b;
+      lbl = if sel then tl else el;
+      u = jump_to lbl z in
+  expr_body_pre ce cx env (IfExp t c a b) es /\
+  expr_vv_sim_full_pre F ce cx ty (IfExp t c a b) es
+    (st0,sa,sb,sha,shb,vv,s0,G0,tn0) /\
+  (!tail. vyperState$bind (eval_expr cx c) (read_result cx)
+    (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+    (INL (BoolV sel),n with gas_obs := tail)) /\
+  storage_trace_domain cx st0 n.storage_trace /\ n.gas_obs = [] /\
+  (!H. valid_horizon cx st0 H n.storage_trace ==>
     expr_sim_full_post (DF,lo,d,ctx,f) ce cx c (es,sa,sc,s0,cop,G0,tn0)
-      H (INL (BoolV sel)) (mid with gas_obs := []) G1 tn1 z /\
-    gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shctx,ctx,f,PG)
-      (s0,G0,tn0) marks (OK z,G1,tn1)` by
-    (`(mid with gas_obs := []).storage_trace = mid.storage_trace` by simp[] >>
-     pop_assum (pure_rewrite_tac o single) >>
-     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_sim_full_post _ _ _ _ _ _ _ _ _ _ _ /\ gas_origin_ptr_path _ _ _ _`
-       mp_tac >> simp[]) >>
+      H (INL (BoolV sel)) n G1 tn1 z /\
+    gas_origin_ptr_path (DF H,lo,E,ctx,f,PG) (s0,G0,tn0) marks (OK z,G1,tn1)) /\
+  emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\ fn_has_code sj sn f /\
+  sj.cs_current_bb = sc.cs_current_bb /\ sj.cs_current_insts = sc.cs_current_insts /\
+  se.cs_current_bb = lbl /\ se.cs_current_insts = [] /\
+  compile_expr ce ty e se = (av,sm) /\
+  compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) shse = (av,shsm) /\
+  gas_shadow_state se shse /\ gas_shadow_state sm shsm /\
+  fn_has_code se sm f /\ fn_has_code shse shsm shf /\
+  local_ptrs_reserved ce se /\ sa.cs_next_var <= se.cs_next_var /\
+  compile_ifexp_arm ce t (lowered_value_type ce e) av sm = (op,sx) /\
+  emit_inst ASSIGN [op] [rv] sx = ((),sy) /\ fn_has_code sm sx f /\ fn_has_code sx sy f /\
+  L se sm /\ create_operand_full_scope sc se E ctx f z [] (OK u) /\
+  create_cut_region se sb u ==>
+  expr_body_pre ce cx env e n /\
+  expr_vv_sim_full_pre F ce cx ty e n (st0,se,sm,shse,shsm,av,u,G1,tn1) /\
+  create_operand_full_scope sc se E ctx f z [] (OK u) /\
+  (!H. valid_horizon cx st0 H n.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,E,ctx,f,PG) (z,G1,tn1) [] (OK u,G1,tn1)) /\
+  L se sm /\ create_cut_region se sb u
+Proof
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule ifexp_body_pre_children >> strip_tac >>
+  `expr_sim_inv ce cx env n` by
+    (`n with gas_obs := [] = n` by simp[evaluation_state_component_equality] >>
+     pop_assum (fn eq =>
+       qpat_assum `!tail. _ = (_,n with gas_obs := tail)`
+         (qspec_then `[]` (assume_tac o REWRITE_RULE [APPEND_NIL,eq]))) >>
+     `expr_body_pre ce cx env c
+       (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
+     drule_all (REWRITE_RULE [ETA_AX] exprSimSourceTheory.expr_body_pre_eval) >> simp[]) >>
   `~z.vs_halted` by
-    (`valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
-       fs[storage_trace_domain_def] >>
-     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ _`
-       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-     drule gas_origin_ptr_path_exec >> simp[exit_result_def]) >>
-  qpat_x_assum `!tail. _ = (_,mid with gas_obs := tail)` kall_tac >>
-  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ _` kall_tac >>
-  qabbrev_tac `mid0 = mid with gas_obs := []` >>
-  qpat_x_assum `!marks mid G1 tn1 z. _ ==> expr_body_pre _ _ _ _ _ /\ _`
-    (drule_all_then strip_assume_tac) >>
-  drule_all ifexp_selected_arm_after_test >> simp[] >> strip_tac >>
-  qpat_x_assum `!sel mid st0 se sm shse shsm av u G1 tn1. _ ==>
-     scoped_operand_outcome _ _ _ _ _ _ _ _ _ _`
-    (drule_all_then assume_tac) >>
-  irule stage_scoped_zero_prefix >> simp[] >>
-  FAIL_TAC "JNZ scope and arm bind"
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_sim_full_post _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `storage_trace_horizon n.storage_trace` mp_tac) >>
+     (impl_tac >- fs[storage_trace_domain_def]) >> strip_tac >>
+     drule gas_origin_ptr_path_projections >> strip_tac >>
+     drule fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted >> simp[]) >>
+  conj_tac
+  >- (qpat_assum `!es'. expr_sim_inv _ _ _ es' ==> _`
+        (drule_then strip_assume_tac) >> Cases_on `sel` >> simp[]) >>
+  irule ifexp_selected_arm_after_test >> simp[] >>
+  qpat_assum `expr_vv_sim_full_pre _ _ _ _ (IfExp _ _ _ _) _ _` (irule_at Any) >>
+  qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `emit_inst ASSIGN _ _ _ = _` (irule_at Any) >> simp[] >>
+  qexistsl [`sel`,`sc`,`marks`] >> simp[]
 QED
