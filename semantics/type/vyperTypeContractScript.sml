@@ -1022,6 +1022,12 @@ Proof
   simp[IN_DEF]
 QED
 
+Theorem IN_runtime_fn_sig_keys:
+  k IN (\key. SND key <> "__init__") <=> SND k <> "__init__"
+Proof
+  simp[IN_DEF]
+QED
+
 Definition check_value_type_def:
   check_value_type tenv (Type ty) = assignable_type tenv ty /\
   check_value_type tenv (HashMapT kt vt) =
@@ -1202,12 +1208,13 @@ Definition check_toplevel_body_def:
         function_live layouts addr mods live (src,fn) /\
         check_function_body_in_mode in_deploy vis ==>
         check_function_body layouts addr mods art src vis mut nr args dflts ret body /\
-        (* The pin permits immutable projections only in the constructor, not
-           in external/internal runtime functions, even during deploy checking.
-           Retain the ordinary body judgment for existing transport clients. *)
+        (* Non-constructor bodies cannot write immutables or call constructors.
+           Keep the ordinary body judgment for existing transport clients. *)
         (vis <> Deploy ==>
          check_function_body layouts addr mods
-           (art with cta_bare_global_assignable := FEMPTY)
+           ((if in_deploy then art with cta_fn_sigs :=
+               DRESTRICT art.cta_fn_sigs (\key. SND key <> "__init__")
+             else art) with cta_bare_global_assignable := FEMPTY)
            src vis mut nr args dflts ret body)
     | VariableDecl (Public nr) _ fn _ _ =>
         function_live layouts addr mods live (src,fn) ==>
