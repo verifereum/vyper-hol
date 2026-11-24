@@ -34,6 +34,67 @@ Proof
   drule_all eval_expr_force_value >> simp[]
 QED
 
+(* The semantic stack post depends only on the physical endpoint and the
+   lowered layout, not on the path summary used to get to that endpoint. *)
+Theorem expr_stack_value_post:
+  compile_expr cenv ty e sa = (StackValue ann op,sb) /\
+  (~is_word_type (post_value_type cenv e) ==>
+    !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvt ==>
+          type_memory_size tvt = 0) /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
+  expr_store_bound cx (post_value_type cenv e) v op t ==>
+  vv_post H ctx func cenv cx e es sa sb s0 ee (Value v) (StackValue ann op) t /\
+  vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e)
+    ee (Value v) (StackValue ann op) t /\
+  (~is_word_type (post_value_type cenv e) /\ ~is_bytestring_type (post_value_type cenv e) ==>
+   vv_own cenv cx (post_value_type cenv e) sa sb ee (Value v) (StackValue ann op) t)
+Proof
+  strip_tac >> conj_tac
+  >- (gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
+          read_result_def, return_def] >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (irule vv_store_bound_stack_value >> simp[]) >>
+  simp[vv_own_def, read_result_def, return_def, expr_val_own_def] >>
+  rpt strip_tac >>
+  `post_value_type cenv e = lowered_value_type cenv e` by
+    (qpat_x_assum `compile_expr cenv ty e sa = _` mp_tac >>
+     qpat_x_assum `~is_word_type _` mp_tac >>
+     qpat_x_assum `~is_bytestring_type _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     map_every qid_spec_tac [`sa`, `ty`, `e`, `cenv`] >>
+     ho_match_mp_tac lowered_value_type_ind >>
+     rw[post_value_type_def, lowered_value_type_def,
+        vyperASTTheory.expr_type_def, is_bytestring_type_def]
+     >~ [`compile_expr _ _ (Builtin _ (Concat _) _) _ = _`]
+     >- (qpat_x_assum `compile_expr _ _ (Builtin _ (Concat _) _) _ = _` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         `!n args. ~exprSimHypsDefs$names_builtin (Concat n) args` by
+           (`!bt args. exprSimHypsDefs$names_builtin bt args ==>
+                       !n. bt <> Concat n` suffices_by metis_tac[] >>
+            ho_match_mp_tac exprSimHypsDefsTheory.names_builtin_ind >>
+            simp[exprSimHypsDefsTheory.names_builtin_def]) >>
+         simp[exprSimHypsDefsTheory.compile_expr_builtin_dispatch] >>
+         ONCE_REWRITE_TAC [compile_builtin_dispatch_component_eq] >>
+         simp[] >> strip_tac >> rpt (pairarg_tac >> gvs[])) >>
+     qpat_x_assum `compile_expr _ _ (TypeBuiltin _ (AbiEncode _ _) _ _) _ = _`
+       mp_tac >> rpt (pop_assum kall_tac) >>
+     ONCE_REWRITE_TAC [compile_expr_component_eq] >>
+     simp[vyperASTTheory.expr_type_def, vyperASTTheory.expr_size_def] >>
+     ONCE_REWRITE_TAC [compile_type_builtin_dispatch_component_eq] >>
+     simp[AllCaseEqs(), as_ptr_val_def] >> rpt strip_tac >>
+     rpt (pairarg_tac >> gvs[as_ptr_val_def]) >>
+     qmatch_asmsub_abbrev_tac `as_ptr_val _ _ encoded` >>
+     Cases_on `encoded` >> gvs[as_ptr_val_def]) >>
+  `type_memory_size tv = 0` by metis_tac[] >>
+  `val_footprint tv v = 0` by
+    (Cases_on `v` >> simp[val_footprint_def] >>
+     Cases_on `tv` >> gvs[valueEncodingTheory.type_memory_size_def] >>
+     rename1 `BaseTV bt` >> Cases_on `bt` >>
+     gvs[valueEncodingTheory.type_memory_size_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     gvs[valueEncodingTheory.type_memory_size_def]) >>
+  gvs[expr_post_def, expr_val_rel_def]
+QED
+
 (* The full twin of exprStackPtr's expr_vv_sim_stack_ptr.  As in the memory
    twin (exprSimMemoryStack's body_expr_vv_sim_mem_stack), a non-word stack
    value's lowered type must take no memory: expr_sim_full bounds only the
@@ -69,54 +130,9 @@ Proof
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
       qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
+      drule_all expr_stack_value_post >> strip_tac >>
       simp[ptr_vv_ok_def, vv_location_def, read_result_def, return_def] >>
-      conj_tac
-      >- (gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
-              read_result_def, return_def] >> first_assum ACCEPT_TAC) >>
-      conj_tac
-      >- (irule vv_store_bound_stack_value >> simp[]) >>
-      strip_tac >>
-      simp[vv_own_def, read_result_def, return_def, expr_val_own_def] >>
-      rpt strip_tac >>
-      `post_value_type cenv e = lowered_value_type cenv e` by
-        (qpat_x_assum `compile_expr cenv ty e sa = _` mp_tac >>
-         qpat_x_assum `~is_word_type _` mp_tac >>
-         qpat_x_assum `~is_bytestring_type _` mp_tac >>
-         rpt (pop_assum kall_tac) >>
-         map_every qid_spec_tac [`sa`, `ty`, `e`, `cenv`] >>
-         ho_match_mp_tac lowered_value_type_ind >>
-         rw[post_value_type_def, lowered_value_type_def,
-            vyperASTTheory.expr_type_def, is_bytestring_type_def]
-         >~ [`compile_expr _ _ (Builtin _ (Concat _) _) _ = _`]
-         >- (qpat_x_assum `compile_expr _ _ (Builtin _ (Concat _) _) _ = _` mp_tac >>
-             rpt (pop_assum kall_tac) >>
-             `!n args. ~exprSimHypsDefs$names_builtin (Concat n) args` by
-               (`!bt args. exprSimHypsDefs$names_builtin bt args ==>
-                           !n. bt <> Concat n` suffices_by metis_tac[] >>
-                ho_match_mp_tac exprSimHypsDefsTheory.names_builtin_ind >>
-                simp[exprSimHypsDefsTheory.names_builtin_def]) >>
-             simp[exprSimHypsDefsTheory.compile_expr_builtin_dispatch] >>
-             ONCE_REWRITE_TAC [compile_builtin_dispatch_component_eq] >>
-             simp[] >> strip_tac >> rpt (pairarg_tac >> gvs[])) >>
-         qpat_x_assum `compile_expr _ _ (TypeBuiltin _ (AbiEncode _ _) _ _) _ = _`
-           mp_tac >> rpt (pop_assum kall_tac) >>
-         ONCE_REWRITE_TAC [compile_expr_component_eq] >>
-         simp[vyperASTTheory.expr_type_def, vyperASTTheory.expr_size_def] >>
-         ONCE_REWRITE_TAC [compile_type_builtin_dispatch_component_eq] >>
-         simp[AllCaseEqs(), as_ptr_val_def] >> rpt strip_tac >>
-         rpt (pairarg_tac >> gvs[as_ptr_val_def]) >>
-         qmatch_asmsub_abbrev_tac `as_ptr_val _ _ encoded` >>
-         Cases_on `encoded` >> gvs[as_ptr_val_def]) >>
-      `type_memory_size tv = 0` by metis_tac[] >>
-      `val_footprint tv v = 0` by
-        (Cases_on `v` >> simp[val_footprint_def] >>
-         Cases_on `tv` >>
-         gvs[valueEncodingTheory.type_memory_size_def] >>
-         rename1 `BaseTV bt` >> Cases_on `bt` >>
-         gvs[valueEncodingTheory.type_memory_size_def] >>
-         rename1 `BytesT bd` >> Cases_on `bd` >>
-         gvs[valueEncodingTheory.type_memory_size_def]) >>
-      gvs[expr_post_def, expr_val_rel_def]) >>
+      metis_tac[]) >>
   rpt strip_tac >> gvs[AllCaseEqs(), expr_exit_success_map, halt_exit_def] >>
   rename1 `expr_exit (INR exc) result` >>
   Cases_on `result` >> Cases_on `exc` >> gvs[expr_exit_def] >>
