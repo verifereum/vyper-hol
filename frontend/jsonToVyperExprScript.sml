@@ -1008,15 +1008,25 @@ Definition pin_bool_values_def:
   pin_bool_values _ = NONE
 End
 
+(* A chain of 3 or more operands is marked BoolChain around the nested IfExp
+   it desugars to, so the lowering can follow the pinned compiler's
+   lower_BoolOp; `(b and c) if a else False` has the same IfExp and lowers as
+   a ternary. *)
+Definition bool_chain_def:
+  bool_chain is_and es e =
+    if 3 <= LENGTH es then Builtin (BaseT BoolT) (BoolChain is_and (LENGTH es)) [e]
+    else e
+End
+
 Definition translate_boolop_def:
   translate_boolop JBoolop_And es =
     (case pin_bool_values (MAP origin_fold_value es) of
      | SOME bs => Literal (BaseT BoolT) (BoolL (EVERY I bs))
-     | NONE => boolop_and es) /\
+     | NONE => bool_chain T es (boolop_and es)) /\
   translate_boolop JBoolop_Or es =
     (case pin_bool_values (MAP origin_fold_value es) of
      | SOME bs => Literal (BaseT BoolT) (BoolL (EXISTS I bs))
-     | NONE => boolop_or es)
+     | NONE => bool_chain F es (boolop_or es))
 End
 
 
@@ -1340,9 +1350,41 @@ Definition expr_origin_key_def:
   expr_origin_key _ _ = NONE
 End
 
+(* The constant-origin table's entry for a constant reference.  Besides
+   literal trees the table holds the empty(T) constants
+   (module_origin_constants), which only assign_value reads. *)
+Definition lookup_origin_entry_def:
+  lookup_origin_entry ctx source =
+    OPTION_BIND (expr_origin_key ctx source) (ALOOKUP (expr_origins ctx))
+End
+
 Definition lookup_origin_pair_def:
   lookup_origin_pair ctx source =
-    OPTION_BIND (expr_origin_key ctx source) (ALOOKUP (expr_origins ctx))
+    case lookup_origin_entry ctx source of
+    | SOME (v, origin) => if pin_literal_tree v then SOME (v, origin) else NONE
+    | NONE => NONE
+End
+
+(* The right operand r' (translated from r) of an in / not in.  Where the
+   source names a constant array, or r' is an array the frontend folded
+   from something other than a list literal (a subscript of a constant,
+   NESTED[0]), it is marked NamedConst: the pinned compiler unrolls a
+   membership only over a list literal (lower_Compare) and loops over any
+   other array.  A named constant is marked around its value, not its name:
+   the checker types the body before constants are substituted, and
+   NamedConst takes only a value (named_const_operand). *)
+Definition membership_operand_def:
+  membership_operand ctx r r' =
+    case lookup_origin_pair ctx r of
+    | SOME (Builtin a (MakeArray (SOME t) n) es, _) =>
+        Builtin (expr_type r') NamedConst
+          [origin_retype (expr_type r') (Builtin a (MakeArray (SOME t) n) es)]
+    | _ =>
+      case (r, r') of
+      | (JE_List _ _, _) => r'
+      | (_, Builtin _ (MakeArray (SOME _) _) _) =>
+          Builtin (expr_type r') NamedConst [r']
+      | _ => r'
 End
 
 (* A subscript or attribute is typed at the element's or field's own type:
@@ -1459,7 +1501,9 @@ Definition translate_expr_with_policy_def:
   (translate_expr_with_policy resolve ctx (JE_Compare l op r) =
     let l' = translate_expr_with_policy resolve ctx l in
     let r' = translate_expr_with_policy resolve ctx r in
-    let original = Builtin (BaseT BoolT) (Bop (translate_binop op)) [l';r'] in
+    let r'' = if MEM op [JBop_In; JBop_NotIn]
+              then membership_operand ctx r r' else r' in
+    let original = Builtin (BaseT BoolT) (Bop (translate_binop op)) [l';r''] in
     if ~MEM op [JBop_In; JBop_NotIn; JBop_Eq; JBop_NotEq]
     then fold_pin_constant original else
     let lv = origin_fold_value
@@ -1936,6 +1980,31 @@ End
 
 (* Local bindings enter the context after their initializer and stay within
    their block; loop binders are visible only in the loop body. *)
+(* The values the pinned compiler's empty-value shortcut takes when they
+   are written out (stmt.py _is_empty_value): [], b"" and empty(T); the
+   shapes of the lowering's is_empty_value_expr. *)
+Definition empty_value_tree_def:
+  empty_value_tree (Builtin _ (MakeArray (SOME _) _) []) = T /\
+  empty_value_tree (Literal _ (BytesL [])) = T /\
+  empty_value_tree (TypeBuiltin _ Empty _ _) = T /\
+  empty_value_tree _ = F
+End
+
+(* An assignment's value val' (translated from val).  Where the source names
+   an empty constant, it is marked NamedConst: the pinned compiler's
+   shortcut looks only at how the value is written, and copies a name's
+   value in full.  As in membership_operand, the mark wraps the constant's
+   value. *)
+Definition assign_value_def:
+  assign_value ctx val val' =
+    case lookup_origin_entry ctx val of
+    | SOME (v, _) =>
+        if empty_value_tree v then
+          Builtin (expr_type val') NamedConst [origin_retype (expr_type val') v]
+        else val'
+    | NONE => val'
+End
+
 Definition translate_stmt_def:
   (translate_stmt nominal_index all_import_maps ctx JS_Pass = Pass) /\
   (translate_stmt nominal_index all_import_maps ctx JS_Break = Break) /\
@@ -1978,11 +2047,12 @@ Definition translate_stmt_def:
         (get_iter_bound ctx iter)
         (translate_stmts nominal_index all_import_maps body_ctx body)) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Assign tgt val) =
-    Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
+    Assign (translate_target ctx tgt)
+      (assign_value ctx val (translate_expr ctx val))) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_AnnAssign var ty ann val) =
     AnnAssign var
       (canonical_decl_type nominal_index all_import_maps ctx ty ann)
-      (translate_expr ctx val)) /\
+      (assign_value ctx val (translate_expr ctx val))) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_AugAssign tgt op val) =
     let val' = exponent_operand op (translate_expr ctx val) in
     AugAssign (expr_type val') (translate_base_target ctx tgt)
