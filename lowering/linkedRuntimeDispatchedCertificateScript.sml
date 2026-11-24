@@ -2895,8 +2895,84 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
   suspend "linked_linear_declared_lock_abort_certificate"
 QED
 
+(* Terminal paths determine the erased execution and safety at every fuel. *)
+fun linked_terminal_abort_path_tac marks result =
+  `gas_origin_path T explicit unit.cu_context fn start ^marks ^result` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (start,_,_) ^marks (^result,_,_)`
+      (qspec_then `ARB` (ACCEPT_TAC o CONJUNCT1 o
+        MATCH_MP (SPEC_ALL gas_origin_ptr_path_projections)))) >>
+  `!D fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint start` by
+    (rpt gen_tac >> irule entryDispatchPtrTheory.ptr_safe_blocks_from_phi_free_run >>
+     (reverse conj_tac >-
+       (simp[NoAsms, Abbr `start`] >> qexists_tac `entry_bb` >>
+        conj_tac >> first_assum ACCEPT_TAC)) >>
+     qpat_assum `!D. gas_origin_ptr_path _ (start,_,_) ^marks (^result,_,_)`
+       (qspec_then `D` (mp_tac o MATCH_MP fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec)) >>
+     simp[NoAsms, exit_result_def] >>
+     disch_then (qx_choose_then `run_fuel` strip_assume_tac) >>
+     irule fragExecPtrTheory.ptr_safe_run_all_fuel >> qexists_tac `run_fuel` >>
+     qpat_assum `run_from run_fuel _ _ start = ^result` (fn ran => simp[NoAsms, ran]) >>
+     first_assum ACCEPT_TAC);
+
+(* Package a terminal path and an exact source trace in the matched-result case. *)
+fun linked_terminal_execution_tac shadow result trace_witnesses result_rel_tac =
+  rewrite_tac [source_unit_execution_correct_with_mods_def] >>
+  qexistsl_tac [`fn`,shadow] >>
+  qpat_assum `lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn`
+    (assume_tac o MATCH_MP lookup_function_MEM) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  disj2_tac >> qexistsl_tac trace_witnesses >>
+  simp[NoAsms] >> (conj_tac >- first_assum ACCEPT_TAC) >>
+  disj2_tac >> qexists_tac result >>
+  qpat_assum `Abbrev (start = _)` (fn start =>
+    qpat_assum `Abbrev (explicit = _)` (fn sites =>
+      PURE_REWRITE_TAC (map (GSYM o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) [start, sites]))) >>
+  simp[NoAsms, exit_result_def] >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> disch_tac >> (conj_tac >- result_rel_tac) >>
+  first_assum (fn th => MATCH_ACCEPT_TAC (SPEC_ALL th));
+
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock_abort_certificate]:
-  cheat
+  `es0.storage_trace = []` by
+    (qpat_assum `send_call_value mut (initial_evaluation_context am.sources am.layouts tx src)
+       _ = (INL (),es0)` (mp_tac o MATCH_MP (SPEC_ALL send_call_value_accounts)) >>
+     simp[NoAsms, initial_state_def]) >>
+  `es_lock.storage_trace = [StorageLock global_nonreentrant_slot]` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`lock_if_nr cx T (is_view_mut mut) es0 = _`,
+        `cx.nonreentrant_slot = SOME global_nonreentrant_slot`, `es0.storage_trace = []`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     qpat_x_assum `lock_if_nr _ _ _ _ = _` mp_tac >>
+     simp[lock_if_nr_def, vyperTypeEvalStoragePreservationTheory.acquire_nonreentrant_lock_eq] >>
+     Cases_on `lookup_storage (n2w global_nonreentrant_slot)
+       (lookup_transient_storage cx.txn.target es0.tStorage) = 1w` >>
+     Cases_on `is_view_mut mut` >> Cases_on `cx.txn.is_static` >>
+     simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperTypeEvalStoragePreservationTheory.acquire_nonreentrant_lock_eq,
+       vyperStateTheory.return_def, vyperStateTheory.check_not_static_def,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def, vyperStateTheory.raise_def] >>
+     strip_tac >> gvs[vyperStateTheory.assert_def, vyperStateTheory.raise_def]) >>
+  `storage_trace_domain (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am []) es_lock.storage_trace` by
+    (qpat_assum `es_lock.storage_trace = _` SUBST1_TAC >>
+     simp[NoAsms, storage_trace_domain_def, valid_horizon_def, storage_trace_horizon_def,
+       storage_trace_regions_def, storage_trace_locks_def, regions_consistent_def,
+       storage_locks_separated_def, storage_well_formed_on_def, storage_observations_ok_def,
+       storage_roots_fit_def, storage_trace_backends_well_formed_def, arithmeticTheory.ADD1] >>
+     qpat_assum `global_nonreentrant_slot < dimword (:256)` mp_tac >> decide_tac) >>
+  linked_terminal_abort_path_tac ``[]:bool list`` ``Abort abort s_abort`` >>
+  qexists_tac `[]` >> reverse conj_tac
+  >- (disch_tac >> qx_gen_tac `tail` >>
+      qpat_assum `!tail. call_external_trace _ tail am tx = (INR lock_err,_,_,_)`
+        (qspec_then `tail` (fn trace =>
+          simp[NoAsms, CONJUNCT1 (MATCH_MP call_external_trace_result trace)])) >>
+      qpat_assum `lock_err = _ \/ lock_err = _` (DISJ_CASES_THEN SUBST1_TAC) >>
+      simp[NoAsms]) >>
+  linked_terminal_execution_tac `shadow_fn` `Abort abort s_abort`
+    [`INR lock_err`,`am`,`es_lock.requests`,`es_lock.storage_trace`]
+    (qpat_assum `lock_err = _ \/ lock_err = _` (DISJ_CASES_THEN SUBST1_TAC) >>
+     simp[NoAsms, external_call_result_rel_mods_def, LET_THM])
 QED
 
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_support]:
