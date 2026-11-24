@@ -15,6 +15,7 @@ Ancestors
   vyperInterpreter vyperValueOperation vyperStatePreservation
   vyperTypeSystem vyperTyping vyperValue vyperAST allocLimits vyperContext
   exprSimHypsDefs list exprSafeOperand vyperTypeCallGraph
+  bodyFullPostsMods valueTypingMemoryProps
 Libs monadsyntax
 
 (* A well-typed argument read keeps the linked invariant for the next read. *)
@@ -502,5 +503,61 @@ Theorem ctor_materialize_unwrap_physical_mods:
      mem_bytes_at b n z.vs_memory = mem_bytes_at b n a.vs_memory /\
      (!i. b <= i /\ i < b+n /\ i IN tz.t_mem ==> i IN ta.t_mem))
 Proof
-  cheat
+  strip_tac >> conj_tac
+  >- (`expr_sim_inv_mods mods ce cx env es /\ well_typed_expr env e /\
+       alloc_limits_expr ce e /\ call_evaluation_safe cx (int_calls_expr e)` by
+        fs[expr_body_pre_mods_def] >>
+      `env.type_defs = get_tenv cx` by
+        metis_tac[expr_sim_inv_mods_env, env_consistent_type_defs_get_tenv] >>
+      `bind (eval_expr cx e) (read_result cx) es = (INL v,ee)` by simp[bind_def] >>
+      drule ctor_physical_static_mods >> strip_tac >>
+      `!u. well_typed_expr env u ==>
+           arg_type_fits (lowered_value_type ce u) (expr_type u)` by metis_tac[] >>
+      drule_all ctor_physical_read_mods >>
+      simp[value_runtime_typed_def] >>
+      disch_then (qx_choose_then `stv` strip_assume_tac) >>
+      `~is_word_type (post_value_type ce e)` by
+        metis_tac[is_bytestring_word_type] >>
+      `?ptv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv` by
+        (Cases_on `post_value_type ce e = lowered_value_type ce e` >> simp[] >>
+         drule_all ctor_read_annotation_mods >>
+         simp[value_runtime_typed_def] >> metis_tac[]) >>
+      `?sw. eval_operand op z = SOME sw` by
+        fs[expr_post_mods_def, expr_post_def, expr_val_rel_def] >>
+      `type_memory_bytes ce (lowered_value_type ce e) = type_memory_size stv` by
+        metis_tac[ctor_physical_memory_size_mods] >>
+      `op_taint tz op = {}` by fs[ptr_val_ok_def] >>
+      `!mem. mem_agree_outside tz.t_mem z.vs_memory mem ==>
+             val_in_memory ptv v (w2n sw) mem` by fs[ptr_val_ok_def, ptr_mem_ok_def] >>
+      `!mem. mem_agree_outside tz.t_mem z.vs_memory mem ==>
+             val_in_memory stv v (w2n sw) mem` by
+        (Cases_on `post_value_type ce e = lowered_value_type ce e`
+         >- gvs[] >>
+         rpt strip_tac >> irule bytestring_val_in_memory_transfer >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qexistsl_tac [`post_value_type ce e`, `lowered_value_type ce e`, `get_tenv cx`, `ptv`] >>
+         simp[] >> metis_tac[]) >>
+      qexistsl_tac [`stv`, `sw`] >> simp[value_has_type_memory_wf] >>
+      conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >> strip_tac >>
+      irule assignBasePtrBoundaryTheory.ptr_buf_ok_read_covers >>
+      simp[] >>
+      qexistsl_tac [`ce`, `e`] >> simp[]) >>
+  qpat_x_assum `wb_frame _ _ _ _ _ _` (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+  qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
+  simp[regions_disjoint_def] >> rpt gen_tac >> strip_tac >>
+  `lookup_var p z = SOME w /\ FLOOKUP Gz p = FLOOKUP Ga p /\
+   op_taint tz (Var p) = op_taint ta (Var p)` by metis_tac[] >>
+  `ptr_covers Gz tz p z n` by
+    (irule assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame >>
+     qexistsl_tac [`Ga`,`a`,`ta`] >> simp[]) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >~ [`mem_bytes_at b n z.vs_memory = _`] >-
+    (qpat_assum `!aid off sz. _ ==> mem_bytes_at off sz z.vs_memory = _`
+       (qspecl_then [`aid`, `b`, `n`] mp_tac) >> simp[] >>
+     disch_then MATCH_MP_TAC >> first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  qpat_assum `!aid off sz i. _ ==> i IN ta.t_mem`
+    (qspecl_then [`aid`, `b`, `n`, `i`] mp_tac) >> simp[] >>
+  disch_then MATCH_MP_TAC >> first_assum ACCEPT_TAC
 QED
