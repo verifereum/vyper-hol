@@ -258,3 +258,93 @@ Proof
     simp[evaluation_state_component_equality] >>
   gvs[] >> first_assum ACCEPT_TAC
 QED
+
+(* The source pop changes the visible locals, not the target cursor. The
+   two allocation frames retain their own entry states and id frontiers. *)
+Theorem range_body_pop_frame_mods:
+  eval_stmts cx body ei = (raw,ee with scopes := sc :: ee.scopes) /\
+  ei.scopes <> [] /\
+  (!n. n IN FDOM (HD ei.scopes) ==> lookup_scopes n (TL ei.scopes) = NONE) /\
+  cenv_top_ext cenv bc ei.scopes /\ cenv_top_ext bc cb (sc :: ee.scopes) /\
+  sa.cs_next_id <= sb0.cs_next_id /\ sa.cs_next_var <= sb0.cs_next_var /\
+  ret_pc_ok cenv sa u /\ return_buf_frame d bc sb0 u /\
+  s0.vs_alloca_next <= u.vs_alloca_next /\
+  (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==> lookup_var x u = SOME v) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
+  (!x. not_fresh_at sa x ==>
+       FLOOKUP G x = FLOOKUP G0 x /\ op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+  alloca_frame cenv es0 sa s0 bc ei u /\
+  (!aid off z i.
+     FLOOKUP s0.vs_allocas aid = SOME (off,z) /\ aid < sa.cs_next_id /\
+     (!n b z'. local_region cenv es0.scopes s0 n b z' ==>
+                off + z <= b \/ b + z' <= off) /\
+     off <= i /\ i < off + z /\ i IN tn.t_mem ==> i IN tn0.t_mem) /\
+  stmt_state_rel H ctx func cb cx (ee with scopes := sc :: ee.scopes) t /\
+  immutable_frame_mods func cb cx (ee with scopes := sc :: ee.scopes) t /\
+  storage_well_formed_on cx (ee with scopes := sc :: ee.scopes) (FST H) /\
+  return_buf_sep d cb (ee with scopes := sc :: ee.scopes) t /\
+  ghost_inv_at_mods (DF H) lo d cb cx (ee with scopes := sc :: ee.scopes) G1 tn1 t /\
+  alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+  u.vs_alloca_next <= t.vs_alloca_next /\
+  (!x v. not_fresh_at sb0 x /\ lookup_var x u = SOME v ==> lookup_var x t = SOME v) /\
+  (!aid b. FLOOKUP u.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+  (!x. not_fresh_at sb0 x ==>
+       FLOOKUP G1 x = FLOOKUP G x /\ op_taint tn1 (Var x) = op_taint tn (Var x)) /\
+  alloca_frame bc ei sb0 u cb (ee with scopes := sc :: ee.scopes) t /\
+  (!aid off z i.
+     FLOOKUP u.vs_allocas aid = SOME (off,z) /\ aid < sb0.cs_next_id /\
+     (!n b z'. local_region bc ei.scopes u n b z' ==>
+                off + z <= b \/ b + z' <= off) /\
+     off <= i /\ i < off + z /\ i IN tn1.t_mem ==> i IN tn.t_mem) ==>
+  stmt_state_rel H ctx func cenv cx ee t /\
+  immutable_frame_mods func cenv cx ee t /\
+  storage_well_formed_on cx ee (FST H) /\
+  return_buf_sep d cenv ee t /\
+  ghost_inv_at_mods (DF H) lo d cenv cx ee G1 tn1 t /\
+  ret_pc_ok cenv sa t /\ return_buf_frame d cenv sb0 t /\
+  range_outer_frame_mods ctx func cenv sa es0 s0 G0 tn0 ee G1 tn1 t
+Proof
+  strip_tac >> drule_all_then strip_assume_tac range_scope_cleanup >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sb0 x` by
+    (gen_tac >> strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[]) >>
+  `!x v. not_fresh_at sa x /\ lookup_var x u = SOME v ==> lookup_var x t = SOME v` by
+    (rpt strip_tac >> qpat_assum `!x v. not_fresh_at sb0 x /\ _ ==> _`
+       irule >> simp[]) >>
+  conj_tac
+  >- (qpat_assum `stmt_state_rel H ctx func cb cx _ t`
+        (mp_then Any mp_tac stmt_state_rel_pop_top_ext) >>
+      disch_then (qspecl_then [`cenv`, `sc`, `ee.scopes`] mp_tac) >>
+      simp[evaluation_state_component_equality]) >>
+  conj_tac >- (drule_all range_pop_immutable >> simp[]) >>
+  conj_tac
+  >- (irule (iffRL storage_well_formed_on_backends) >>
+      qexists_tac `ee with scopes := sc :: ee.scopes` >> simp[]) >>
+  conj_tac >- (drule_all return_buf_sep_pop >> simp[]) >>
+  conj_tac >- (drule_all range_pop_ghost >> simp[]) >>
+  conj_tac
+  >- (irule ret_pc_ok_frame >> goal_assum (drule_at (Pat `ret_pc_ok _ _ _`)) >> simp[]) >>
+  conj_tac
+  >- (irule return_buf_frame_frame >>
+      goal_assum (drule_at (Pat `return_buf_frame _ _ _ _`)) >>
+      simp[] >> qpat_assum `cenv_top_ext cenv bc ei.scopes`
+        (mp_tac o MATCH_MP cenv_top_ext_return_buf) >> simp[]) >>
+  suspend "original_frame"
+QED
+
+Resume range_body_pop_frame_mods[original_frame]:
+  `alloca_frame cenv es0 sa s0 cb (ee with scopes := sc :: ee.scopes) t` by
+    (irule alloca_frame_trans >>
+     goal_assum (drule_at (Pat `alloca_frame cenv es0 sa s0 _ _ _`)) >>
+     goal_assum (drule_at (Pat `alloca_frame bc ei _ u cb _ t`)) >> simp[]) >>
+  `alloca_frame cenv es0 sa s0 cenv ee t` by
+    (qpat_assum `alloca_frame cenv es0 sa s0 cb _ t` (mp_then Any mp_tac alloca_frame_pop) >>
+     disch_then (qspecl_then [`sc`, `ee.scopes`, `cenv`] mp_tac) >>
+     simp[evaluation_state_component_equality]) >>
+  simp[range_outer_frame_mods_def] >>
+  match_mp_tac (Q.INST [`c1` |-> `bc`, `e1` |-> `ei`, `s1` |-> `u`,
+                          `sa1` |-> `sb0`, `tn1` |-> `tn`] alloca_taint_kept_trans) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise range_body_pop_frame_mods
