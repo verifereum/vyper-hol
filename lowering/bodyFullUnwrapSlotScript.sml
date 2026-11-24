@@ -6,6 +6,7 @@ Ancestors
   bodyPtrEnvBuiltinsEdges bodyPtrDefs loweringPosts exprSimMemDefs
   exprLowering compileEnv context
   bodyFullUnwrapSlotSelectedPost bodyFullUnwrapSlotOrigin bodyFullUnwrapSlotPost
+  bodyFullUnwrapSlotBand
   bodyFullUnwrapRun fragGasOriginPtrDead exprLoweringProps localPtrsProps
   exprSimProps loweringStateRelDefs ptrDiscipline finite_map pred_set
   vyperStorageFootprint exprSimFieldLayout valueEncodingProps words
@@ -72,6 +73,19 @@ Proof
     qx_gen_tac `g` >>
     mp_tac (Q.INST [`G` |-> `g`]
       (MATCH_MP unwrap_ensure_slot_origin_execution pre))) >>
+  simp_tac bool_ss []
+QED
+
+Theorem unwrap_slot_origin_side_producer_band:
+  unwrap_slot_origin_side_producer ctx func lo explicit PG
+    (\a b s t. unwrap_exit_phi_free func b ==> unwrap_band func a b s t)
+Proof
+  pure_rewrite_tac[unwrap_slot_origin_side_producer_def] >>
+  rpt gen_tac >>
+  disch_then (fn pre =>
+    qx_gen_tac `g` >>
+    mp_tac (Q.INST [`G` |-> `g`]
+      (MATCH_MP unwrap_ensure_slot_origin_execution_band pre))) >>
   simp_tac bool_ss []
 QED
 
