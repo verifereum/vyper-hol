@@ -295,15 +295,13 @@ Resume assign_name_widened_success_resources_mods[floor]:
 QED
 Finalise assign_name_widened_success_resources_mods
 
-Theorem assign_name_widened_route_mods:
+Theorem assign_name_different_rhs_route_mods:
   linked_assign_name_context_mods mods exps cx id e
     (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     src tops bindings cenv env env' ret_ty RetQ es /\
   body_expr_full_ok_mods mods exps cx e /\
   FLOOKUP env.var_types id = SOME ty /\ ~is_word_type ty /\
   0 < type_memory_bytes cenv ty /\
-  (expr_type e = ty \/ lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
-   has_length_word (expr_type e) /\ is_empty_value_expr e) /\
   ~(lowered_value_type cenv e = expr_type e \/
     is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type cenv e) /\
     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
@@ -315,7 +313,6 @@ Theorem assign_name_widened_route_mods:
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `expr_type e = ty \/ _` kall_tac >>
   drule_all_then strip_assume_tac linked_assign_name_setup_mods >>
   `ty' = ty` by metis_tac[optionTheory.SOME_11] >>
   qpat_x_assum `ty' = ty` SUBST_ALL_TAC >>
@@ -347,7 +344,7 @@ Proof
   qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ childQ _` (irule_at Any) >> simp[]
 QED
 
-Resume assign_name_widened_route_mods[shadow]:
+Resume assign_name_different_rhs_route_mods[shadow]:
   qpat_x_assum `stmt_env _ _ _ (Assign _ e) sa = _` kall_tac >>
   qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
   pure_rewrite_tac[gasShadowTheory.gas_shadow_stmt_def,
@@ -360,7 +357,7 @@ Resume assign_name_widened_route_mods[shadow]:
   qpat_x_assum `lower_value _ _ _ (gas_shadow_expr e) _ = _` mp_tac >> simp[]
 QED
 
-Resume assign_name_widened_route_mods[continue]:
+Resume assign_name_different_rhs_route_mods[continue]:
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   rpt (qhdtm_x_assum `gas_outcome_full_mods` kall_tac) >>
   qunabbrev_tac `childQ` >> rule_assum_tac BETA_RULE >>
@@ -399,7 +396,7 @@ Resume assign_name_widened_route_mods[continue]:
   suspend "path"
 QED
 
-Resume assign_name_widened_route_mods[path]:
+Resume assign_name_different_rhs_route_mods[path]:
   `vv_location vv = SOME LocMemory ==>
     expr_val_at cenv cx (lowered_value_type cenv e) sa sB mid v' (Var xs) u /\
     ?b len. b <= w2n dw /\ w2n dw + type_memory_size dtv <= b + len /\
@@ -429,7 +426,7 @@ Resume assign_name_widened_route_mods[path]:
   suspend "horizon"
 QED
 
-Resume assign_name_widened_route_mods[horizon]:
+Resume assign_name_different_rhs_route_mods[horizon]:
   `valid_horizon cx st0 H mid.storage_trace` by
     (qpat_assum `ff.storage_trace = mid.storage_trace` (fn eq =>
        qpat_assum `valid_horizon cx st0 H ff.storage_trace`
@@ -509,7 +506,7 @@ Resume assign_name_widened_route_mods[horizon]:
   suspend "install_result"
 QED
 
-Resume assign_name_widened_route_mods[install_premises]:
+Resume assign_name_different_rhs_route_mods[install_premises]:
   conj_tac >-
     (strip_tac >> irule local_copy_immutable_frame_mods >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
@@ -537,7 +534,7 @@ Resume assign_name_widened_route_mods[install_premises]:
   suspend "snapshot_alloca"
 QED
 
-Resume assign_name_widened_route_mods[snapshot_separation]:
+Resume assign_name_different_rhs_route_mods[snapshot_separation]:
   irule (INST_TYPE [alpha |-> ``:256``] return_buf_sep_locals_kept) >>
   conj_tac >-
     (rpt gen_tac >> disch_tac >> PURE_REWRITE_TAC[ptrDisciplineTheory.allocas_from_def] >>
@@ -559,7 +556,7 @@ Resume assign_name_widened_route_mods[snapshot_separation]:
   SIMP_TAC (srw_ss()) []
 QED
 
-Resume assign_name_widened_route_mods[snapshot_kept]:
+Resume assign_name_different_rhs_route_mods[snapshot_kept]:
   `ghost_kept_at lo cenv mid sB Gi ti u Gs ts` by
     (pure_rewrite_tac[ghost_kept_at_def] >> rpt conj_tac >>
      FIRST [first_assum ACCEPT_TAC,
@@ -580,7 +577,7 @@ Resume assign_name_widened_route_mods[snapshot_kept]:
   drule_then ACCEPT_TAC exprSimWordArgsTheory.expr_post_frame
 QED
 
-Resume assign_name_widened_route_mods[snapshot_alloca]:
+Resume assign_name_different_rhs_route_mods[snapshot_alloca]:
   irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_expr_prefix) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   reverse conj_tac >- (qexistsl_tac [`H`,`ctx`,`cx`,`func`] >> first_assum ACCEPT_TAC) >>
@@ -590,9 +587,35 @@ Resume assign_name_widened_route_mods[snapshot_alloca]:
   SIMP_TAC (srw_ss()) []
 QED
 
-Resume assign_name_widened_route_mods[install_result]:
+Resume assign_name_different_rhs_route_mods[install_result]:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qexists_tac `cenv` >> SIMP_TAC bool_ss [] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Finalise assign_name_widened_route_mods
+Finalise assign_name_different_rhs_route_mods
+
+Theorem assign_name_widened_route_mods:
+  linked_assign_name_context_mods mods exps cx id e
+    (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    src tops bindings cenv env env' ret_ty RetQ es /\
+  body_expr_full_ok_mods mods exps cx e /\
+  FLOOKUP env.var_types id = SOME ty /\ ~is_word_type ty /\
+  0 < type_memory_bytes cenv ty /\
+  (expr_type e = ty \/ lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
+   has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+  ~(lowered_value_type cenv e = expr_type e \/
+    is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type cenv e) /\
+    arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
+  stmt_frag_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ cenv
+    (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty
+      (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
+    (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule assign_name_different_rhs_route_mods >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`bindings`,`env`,`env'`,`exps`,`mods`,`src`,`tops`,`ty`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
