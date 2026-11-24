@@ -9807,6 +9807,80 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omi
   `tx.args = TAKE (LENGTH args - LENGTH ds) tx.args ++ values` by
     (qpat_assum `Abbrev (values = _)` (fn split =>
        simp[NoAsms, REWRITE_RULE [markerTheory.Abbrev_def] split, TAKE_DROP])) >>
+  Q.SUBGOAL_THEN
+    `!defaults envb lock_err es_lock.
+       init_res = INL defaults /\
+       bind_arguments (type_env_all_modules mods) args (tx.args ++ defaults) = SOME envb /\
+       lock_if_nr cx nr (is_view_mut mut) (seed with scopes := [envb]) = (INR lock_err,es_lock) /\
+       (lock_err = Error (RuntimeError "nonreentrant lock") \/
+        lock_err = Error (RuntimeError "write in static context")) ==>
+       !tail. call_external_trace (SOME vs.vs_outcomes)
+         (gas_explicit init_marks vs.vs_gas_readings ++ tail) am tx =
+         (INR lock_err,am,es_lock.requests,es_lock.storage_trace)` assume_tac
+  >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      Q.SUBGOAL_THEN `~cx.in_deploy` (mk_asm "default_lock_runtime")
+      >- simp[NoAsms, Abbr `cx`, initial_evaluation_context_def] >>
+      Q.SUBGOAL_THEN `~(LENGTH tx.args > LENGTH args) /\
+        ~(LENGTH args > LENGTH dflts + LENGTH tx.args)` (mk_asm "default_lock_arity")
+      >- (map_every (fn pat => qpat_assum pat mp_tac)
+            [`LENGTH tx.args <= LENGTH args`, `LENGTH args - LENGTH tx.args <= LENGTH dflts`] >>
+          decide_tac) >>
+      qx_gen_tac `tail` >>
+      qpat_assum `!gs. send_call_value mut cx _ = (INL (),seed with gas_obs := gs)`
+        (qspec_then `gas_explicit init_marks vs.vs_gas_readings ++ tail` (mk_asm "default_lock_paid")) >>
+      qpat_assum `LENGTH tx.args <= LENGTH args` (fn len =>
+        qpat_assum `init_res = INL defaults` (fn success =>
+          qpat_assum `!tail. eval_external_defaults cx _ _ = (init_res,_)`
+            (qspec_then `tail` (mk_asm "default_lock_defaults" o
+             PURE_REWRITE_RULE [success, MATCH_MP arithmeticTheory.SUB_SUB len])))) >>
+      qpat_assum `bind_arguments (type_env_all_modules mods) args (tx.args ++ defaults) = SOME envb`
+        (mk_asm "default_lock_bind") >>
+      qpat_assum `lock_if_nr cx nr _ _ = (INR lock_err,es_lock)`
+        (assume_tac o Q.INST [`obs` |-> `tail`] o
+         MATCH_MP (SPEC_ALL externalCallSelectedTheory.lock_if_nr_with_gas_obs)) >>
+      Q.SUBGOAL_THEN
+        `lock_if_nr cx nr (is_view_mut mut) ((seed with gas_obs := tail) with scopes := [envb]) =
+         (INR lock_err,es_lock with gas_obs := tail)` (mk_asm "default_lock_gas")
+      >- (`(seed with gas_obs := tail) with scopes := [envb] =
+           (seed with scopes := [envb]) with gas_obs := tail` by
+             simp[NoAsms, evaluation_state_component_equality] >>
+          pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+      Q.SUBGOAL_THEN
+        `set_scopes [envb] (seed with gas_obs := tail) =
+         (INL (), (seed with gas_obs := tail) with scopes := [envb])` (mk_asm "default_lock_scope")
+      >- simp[NoAsms,vyperStateTheory.set_scopes_def,vyperStateTheory.return_def,
+              evaluation_state_component_equality] >>
+      `call_external_function_trace (SOME vs.vs_outcomes)
+         (gas_explicit init_marks vs.vs_gas_readings ++ tail) am cx
+         nr mut selected_tops mods args dflts tx.args selected_body ret =
+         (INR lock_err,am,es_lock.requests,es_lock.storage_trace)` by
+        (simp[NoAsms, call_external_function_trace_def, LET_THM,
+              markerLib.L "default_lock_runtime", markerLib.L "default_lock_arity",
+              markerLib.L "default_lock_paid", markerLib.L "default_lock_defaults",
+              markerLib.L "default_lock_bind", markerLib.L "default_lock_scope",
+              markerLib.L "default_lock_gas", vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+              Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "is_view_mut_def"] >>
+         qpat_assum `lock_err = _ \/ lock_err = _` (DISJ_CASES_THEN SUBST1_TAC) >>
+         simp[NoAsms]) >>
+      qpat_assum `find_function_module am tx.target tx.function_name = src` (fn find_src =>
+        qpat_assum `Abbrev (cx = _)` (fn cx =>
+          PURE_REWRITE_TAC [call_external_trace_def, LET_THM, find_src,
+            GSYM (REWRITE_RULE [markerTheory.Abbrev_def] cx)])) >>
+      `(case src of NONE => get_self_code cx
+                   | SOME src_id => get_module_code cx (SOME src_id)) = SOME selected_tops` by
+        (Cases_on `src` >> simp_tac (srw_ss()) [get_self_code_def] >>
+         first_assum ACCEPT_TAC) >>
+      CONV_TAC (DEPTH_CONV BETA_CONV) >>
+      qpat_assum `Abbrev (cx = _)` (fn cx =>
+        PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] cx)]) >>
+      qpat_assum `ALOOKUP am.sources tx.target = SOME mods` (fn mods_eq =>
+        qpat_assum `(case src of NONE => get_self_code cx | SOME i => _) = SOME selected_tops`
+          (fn tops_eq =>
+            qpat_assum `lookup_exported_function cx am tx.function_name = _` (fn lookup =>
+              qpat_assum `call_external_function_trace _ _ am cx _ _ _ _ _ _ _ _ _ = _`
+                (fn trace => simp[NoAsms, mods_eq, tops_eq, lookup, trace])))) >>
+      qpat_assum `lock_err = _ \/ lock_err = _` (DISJ_CASES_THEN SUBST1_TAC) >>
+      simp[NoAsms]) >>
   suspend "linked_grouped_default_omitted_apply"
 QED
 
