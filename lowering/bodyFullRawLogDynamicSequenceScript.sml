@@ -4,7 +4,7 @@ Ancestors
   venomExecSemantics venomState instIdxIndep ptrSafeRun ptrDiscipline contextCodegenRel
   words list rich_list arithmetic venomInst instMemFrontier ghostPcTransportPtr
 
-Theorem raw_log_dynamic_sequence_path:
+Theorem raw_log_dynamic_sequence_path_run:
   emit_op MLOAD [data_op] sm = (len_op,s1) /\
   emit_op ADD [data_op;Lit 32w] s1 = (ptr_op,s2) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [] s2 = ((),sb) /\
@@ -18,6 +18,7 @@ Theorem raw_log_dynamic_sequence_path:
    step_inst_base i t = OK v /\ inst_mem_below_frontier i t /\
    inst_dload_in_section i t /\ ptr_inst_ok D lo 0 ctx func G1 tn1 i t /\
    step_prov PG G1 i v = G1 /\ step_taint i t v tn1 = tn1) ==>
+  run_inst_seq (emitted_insts sm sb) s = OK v /\
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (v with vs_inst_idx := LENGTH sb.cs_current_insts),G1,tn1) /\
   (v with vs_inst_idx := LENGTH sb.cs_current_insts).vs_current_bb = sb.cs_current_bb /\
@@ -41,6 +42,11 @@ Proof
          comp_return_def, fresh_var_def, fresh_id_def, emit_def, Abbr `i`] >>
      simp[emitted_insts_def, APPEND_ASSOC, DROP_LENGTH_APPEND] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND, APPEND] >> simp[mk_inst_def, is_terminator_def]) >>
+  conj_tac
+  >- (`emitted_insts sm sb = emitted_insts sm s2 ++ [i]` suffices_by simp[] >>
+      CONV_TAC (LAND_CONV (REWR_CONV emitted_insts_def)) >>
+      qpat_assum `sb.cs_current_insts = _` (fn th => pure_once_rewrite_tac[th]) >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> REFL_TAC) >>
   `?bb. lookup_block sm.cs_current_bb func.fn_blocks = SOME bb /\
         isPREFIX sb.cs_current_insts bb.bb_instructions` by
     (gvs[fn_has_code_def] >> metis_tac[]) >>
@@ -107,4 +113,26 @@ Proof
   simp[] >> strip_tac >>
   drule_all exec_block_run_inst_seq >>
   disch_then (qspecl_then [`0`, `ctx`] mp_tac) >> simp[]
+QED
+
+Theorem raw_log_dynamic_sequence_path:
+  emit_op MLOAD [data_op] sm = (len_op,s1) /\
+  emit_op ADD [data_op;Lit 32w] s1 = (ptr_op,s2) /\
+  emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [] s2 = ((),sb) /\
+  fn_has_code sm sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  run_inst_seq (emitted_insts sm s2) s = OK t /\
+  run_inst_seq_mem_ok (emitted_insts sm s2) s /\
+  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sm s2) s G1 tn1 /\
+  (let i = mk_inst s2.cs_next_id LOG
+     (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [] in
+   step_inst_base i t = OK v /\ inst_mem_below_frontier i t /\
+   inst_dload_in_section i t /\ ptr_inst_ok D lo 0 ctx func G1 tn1 i t /\
+   step_prov PG G1 i v = G1 /\ step_taint i t v tn1 = tn1) ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (v with vs_inst_idx := LENGTH sb.cs_current_insts),G1,tn1) /\
+  (v with vs_inst_idx := LENGTH sb.cs_current_insts).vs_current_bb = sb.cs_current_bb /\
+  (v with vs_inst_idx := LENGTH sb.cs_current_insts).vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (mp_tac o MATCH_MP raw_log_dynamic_sequence_path_run) >> simp[]
 QED
