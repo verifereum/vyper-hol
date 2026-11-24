@@ -185,7 +185,7 @@ Triviality create_abi_selected_continuation:
   vyperState$bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) = (INL v,es1) /\
   (!H. valid_horizon cx st0 H es1.storage_trace ==>
       expr_sim_full_post (DF,lo,delta,ctx,func) ce cx e (es,sa,start,s0,data,G0,tn0)
-        H (INL v) es1 G tn s) ==>
+        H (INL v : value + vyperState$exception) es1 G tn s) ==>
   scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,func,PG)
     (cx_tops cx) cx st0 start final
     (vyperState$bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [v]))
@@ -214,7 +214,10 @@ Proof
     Q.INST [`ann` |-> `ty`, `explicit` |-> `gas_explicit_sites ctx shctx`] o SPEC_ALL) >>
   impl_tac >-
     (conj_tac >- (irule (BETA_RULE (Q.INST [`env` |-> `env`, `n` |-> `n`]
-       abi_decode_caller_entry_from_child)) >> simp[]) >> simp[]) >>
+       abi_decode_caller_entry_from_child)) >> simp[] >> fs[expr_sim_full_post_def] >>
+       rpt strip_tac >>
+       qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+         (qspec_then `H` mp_tac) >> simp[]) >> simp[]) >>
   disch_tac >>
   qmatch_assum_abbrev_tac `scoped_operand_outcome _ _ _ _ _ _ _ _ post_old exit_old` >>
   qmatch_goalsub_abbrev_tac `scoped_operand_outcome _ _ _ _ _ _ _ _ post_new exit_new` >>
@@ -225,3 +228,113 @@ Proof
   `exit_old = exit_new` by simp[Abbr `exit_old`,Abbr `exit_new`,create_operand_exit_post_def,FUN_EQ_THM] >>
   gvs[]
 QED
+
+(* Split the installed fragment before invoking the child's scoped judgment.
+   The normal continuation is entered only at that child's actual exit. *)
+Theorem create_abi_decode_vv_from_tail:
+  ^decode_selected_tail /\ ^decode_tail_inventory /\
+  body_inv tops ctx ce cx /\
+  expr_body_pre ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
+  expr_type e = BaseT (BytesT (Dynamic n)) /\
+  expr_vv_sim_full_pre (DF,lo,delta,ctx,shctx,PG,func,shfunc) ce cx ty0
+    (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es
+    (st0,sa,sb,sha,shb,vv,s0,G0,tn0) /\ create_layout sa sb /\
+  (!start shstart data.
+    expr_sim_full_pre (DF,lo,delta,ctx,shctx,PG,func,shfunc) ce cx (expr_type e) e es
+      (st0,sa,start,sha,shstart,data,s0,G0,tn0) /\ create_layout sa start ==>
+    scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,func,PG)
+      (cx_tops cx) cx st0 sa start (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+      (expr_sim_full_post (DF,lo,delta,ctx,func) ce cx e (es,sa,start,s0,data,G0,tn0))
+      (create_operand_exit_post ctx cx) /\
+    create_operand_cut sa start (gas_explicit_sites ctx shctx) ctx func tops cx st0
+      (bind (eval_expr cx e) (read_result cx)) (es,s0)) ==>
+  scoped_operand_outcome (DF,lo,gas_explicit_sites ctx shctx,ctx,func,PG)
+    (cx_tops cx) cx st0 sa sb (eval_expr cx (TypeBuiltin ty (AbiDecode unwrap) ty [e]))
+    (es,s0,G0,tn0)
+    (\H res ee G tn t. create_operand_vv_post (DF,lo,delta,ctx,func) ce cx
+      (TypeBuiltin ty (AbiDecode unwrap) ty [e]) (es,sa,sb,s0,vv,G0,tn0) H res ee G tn t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (create_operand_exit_post ctx cx) /\
+  create_operand_cut sa sb (gas_explicit_sites ctx shctx) ctx func tops cx st0
+    (eval_expr cx (TypeBuiltin ty (AbiDecode unwrap) ty [e])) (es,s0)
+Proof
+  disch_then (CONJUNCTS_THEN2 (mk_asm "decode") (CONJUNCTS_THEN2 (mk_asm "inventory")
+    (REPEAT_TCL CONJUNCTS_THEN assume_tac))) >>
+  drule_all create_abi_decode_child_site >> strip_tac >> gvs[LET_THM] >>
+  `create_cut_code {} sa start` by
+    (qpat_assum `expr_sim_full_pre _ _ _ _ _ _ (_,sa,start,_,_,_,_,_,_)`
+       (mp_then Any ACCEPT_TAC operand_value_cut_code)) >>
+  `create_cut_code {} start sb /\ EVERY (\i. ~MEM i.inst_opcode [INVOKE;CREATE;CREATE2])
+     (frag_code start sb)` by (asm "inventory" (drule_then ACCEPT_TAC)) >>
+  `create_layout sa start /\ create_layout start sb` by
+    (`cs_extends sa start /\ cs_extends start sb` by fs[create_cut_code_def] >>
+     conj_tac >> irule create_layout_subinterval >>
+     simp[cs_extends_refl] >> qexistsl [`sa`,`sb`] >> simp[cs_extends_refl]) >>
+  qpat_assum `!start shstart data. _ ==> _ /\ _` (drule_all_then strip_assume_tac) >>
+  `MEM func ctx.ctx_functions /\ fn_has_code sa start func /\ create_operand_at sa s0` by
+    fs[expr_sim_full_pre_def,create_operand_at_def] >>
+  rewrite_tac[abi_decode_singleton_source] >>
+  reverse conj_tac >- suspend "visit" >>
+  drule_all create_abi_scope_geometry >>
+  disch_then (qspec_then `gas_explicit_sites ctx shctx` strip_assume_tac) >>
+  irule scoped_operand_bind >>
+  simp[storage_trace_frame_bind_all,evaluate_storage_trace_frame,storage_trace_frame_read_result,
+       storage_trace_frame_lifts,storage_trace_frame_return] >>
+  rpt conj_tac
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> simp[stmtSimForcedTheory.ignore_bind_bind_value] >>
+      irule gas_exempt_cert_bind_value >>
+      qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` (irule_at Any) >>
+      simp[GSYM ignore_bind_def, GSYM stmtSimForcedTheory.ignore_bind_bind_value])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> simp[stmtSimForcedTheory.ignore_bind_bind_value] >>
+      irule gas_exempt_cert_error_value >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`\H v ee G tn t. expr_sim_full_post (DF,lo,delta,ctx,func) ce cx e
+    (es,sa,start,s0,data,G0,tn0) H (INL v : value + vyperState$exception) ee G tn t /\ ~t.vs_halted`, `start`] >>
+  conj_tac >- suspend "continuation" >>
+  asm_x "decode" kall_tac >> asm_x "inventory" kall_tac >> simp[] >>
+  rpt (conj_tac ORELSE first_assum ACCEPT_TAC) >>
+  qpat_assum `scoped_operand_outcome _ _ _ _ _ start _ _ _ _`
+    (mp_then Any mp_tac create_abi_scope_child_post) >>
+  impl_tac >- (simp[expr_sim_full_post_def] >> metis_tac[]) >>
+  disch_then ACCEPT_TAC
+QED
+
+Resume create_abi_decode_vv_from_tail[visit]:
+  asm_x "decode" kall_tac >> asm_x "inventory" kall_tac >>
+  simp[create_operand_cut_def] >> rpt gen_tac >> disch_tac >>
+  drule_all create_interior_visit_first_exit >> strip_tac
+  >- (irule create_cut_bind_left >>
+      simp[storage_trace_frame_bind_all,storage_trace_frame_lifts,storage_trace_frame_return] >>
+      qpat_assum `create_operand_cut _ _ _ _ _ _ _ _ _ _`
+        (mp_then Any irule (iffLR create_operand_cut_def)) >> first_assum (irule_at Any)) >>
+  qpat_assum `create_interior_visit start sb _ _ _ _ _ _`
+    (mp_then Any strip_assume_tac create_interior_visit_cases) >>
+  `create_cut_region start sb t` by
+    (fs[create_operand_at_def] >> metis_tac[cj 1 create_cut_region_rules]) >>
+  rename1 `create_operand_fetch start sb func u inst` >>
+  `create_cut_region start sb u` by metis_tac[create_expr_prefix_cut_region] >>
+  `MEM inst (frag_code start sb)` by
+    (fs[create_operand_fetch_def,create_operand_at_def] >> metis_tac[cj 2 create_cut_region_rules]) >>
+  gvs[EVERY_MEM,create_body_cut_def,inst_create_size_ok_def] >> metis_tac[]
+QED
+
+Resume create_abi_decode_vv_from_tail[continuation]:
+  qx_genl_tac [`marks`,`v`,`mid`,`G`,`tn`,`s`] >> BETA_TAC >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  `~s.vs_halted` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
+  `cx_tops cx = tops` by drule_then (ACCEPT_TAC o cj 2) body_inv_main_code >>
+  qpat_assum `!tail. _ = _` (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
+  qpat_assum `expr_type e = _`
+    (fn th => irule (REWRITE_RULE [th,LET_THM] create_abi_selected_continuation)) >>
+  qpat_assum `expr_sim_full_pre _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
+  qexists `gas_explicit marks s0.vs_gas_readings` >>
+  conj_tac >- asm "decode" ACCEPT_TAC >>
+  simp[] >> rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Finalise create_abi_decode_vv_from_tail
