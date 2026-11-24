@@ -221,6 +221,26 @@ QED
 
 (* ===== Storage to memory ===== *)
 
+(* The observer sees installed instructions before their cursor increments,
+   and sees a branch's selected landing rather than a fall-through state. *)
+val copy_span_law = ``
+  !p q bb code. ~p.vs_halted /\
+    lookup_block p.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX code (DROP p.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. first_id <= i.inst_id /\ i.inst_id < limit_id /\
+      i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    run_inst_seq code p = OK q ==>
+    R p (q with vs_inst_idx := p.vs_inst_idx + LENGTH code)``;
+
+val copy_branch_law = ``
+  !p bb i lbl. ~p.vs_halted /\
+    lookup_block p.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb p.vs_inst_idx = SOME i /\
+    first_id <= i.inst_id /\ i.inst_id < limit_id /\
+    (i.inst_opcode = JMP \/ i.inst_opcode = JNZ) /\
+    step_inst_base i p = OK (jump_to lbl p) ==>
+    R p (jump_to lbl p)``;
+
 Theorem storage_copy_init_origin_ptr[local]:
   MEM cv ds /\ dst <> cv /\ (!x. src = Var x ==> x <> cv) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ ~s.vs_halted /\
@@ -229,8 +249,12 @@ Theorem storage_copy_init_origin_ptr[local]:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   DROP s.vs_inst_idx bb.bb_instructions =
-    [mk_inst id ASSIGN [Lit 0w] [cv]; mk_inst (id+1) JMP [Label hdr] []] ==>
+    [mk_inst id ASSIGN [Lit 0w] [cv]; mk_inst (id+1) JMP [Label hdr] []] /\
+  first_id <= id /\ id+1 < limit_id /\
+  ^copy_span_law /\ ^copy_branch_law /\
+  (!p q r. R p q /\ R q r ==> R p r) ==>
   !loc D explicit PG. ?t G1 tn1.
+    R s t /\
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1) /\
     (toplevel_copy_inv cv ds dst src loc a b n s G tn 0 G1 tn1 t /\
      allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t)) /\
@@ -282,7 +306,19 @@ Proof
     (irule jmp_origin_ptr_path >>
      simp[Abbr `t0`, Abbr `u0`, update_var_def] >>
      gvs[allocas_from_def, allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
+  `R s t0` by
+    (qpat_assum `!p q bb code. _ ==> R p _`
+       (qspecl_then [`s`,`u0`,`bb`,`[i0]`] mp_tac) >>
+     simp[Abbr `t0`, Abbr `i0`, mk_inst_def, is_terminator_def] >>
+     metis_tac[DECIDE ``i+1 < n ==> i<n``]) >>
+  `R t0 (jump_to hdr t0)` by
+    (qpat_assum `!p bb i lbl. _ ==> R p _`
+       (qspecl_then [`t0`,`bb`,`mk_inst (id+1) JMP [Label hdr] []`,`hdr`] mp_tac) >>
+     simp[Abbr `t0`, Abbr `u0`, update_var_def, Abbr `i0`, mk_inst_def,
+          stepInstBaseLib.simp_opcode_clause ``JMP``] >>
+     metis_tac[DECIDE ``a:num <= b ==> a <= b+1``]) >>
   qexistsl_tac [`jump_to hdr t0`, `G1`, `tn1`] >>
+  conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[origin_ptr_path_then] >>
   simp[Abbr `t0`, Abbr `u0`, Abbr `G1`, Abbr `tn1`, Abbr `i0`] >>
   rpt conj_tac
@@ -299,8 +335,12 @@ Theorem storage_copy_header_origin_ptr[local]:
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id EQ [Var cv;Lit (n2w n)] [tv];
     mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []]
-    (DROP s.vs_inst_idx bb.bb_instructions) ==>
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  first_id <= id /\ id+1 < limit_id /\
+  ^copy_span_law /\ ^copy_branch_law /\
+  (!p q r. R p q /\ R q r ==> R p r) ==>
   !D explicit PG. ?r G1 tn1.
+    R s r /\
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK r,G1,tn1) /\
     (toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G1 tn1 r /\
      allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r)) /\
@@ -332,13 +372,36 @@ Proof
     (irule copy_jump_origin_ptr >> simp[] >>
      qexistsl_tac [`bb`, `mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []`] >>
      simp[mk_inst_def] >> gvs[mk_inst_def]) >>
+  `R s t` by
+    (qpat_assum `!p q bb code. _ ==> R p _`
+       (qspecl_then [`s`,`u`,`bb`,`[mk_inst id EQ [Var cv;Lit (n2w n)] [tv]]`] mp_tac) >>
+     simp[Abbr `t`, mk_inst_def, is_terminator_def] >>
+     metis_tac[DECIDE ``i+1 < n ==> i<n``]) >>
+  `R t (jump_to (if k=n then exit_lbl else body_lbl) t)` by
+    (qpat_assum `!p bb i lbl. _ ==> R p _`
+       (qspecl_then [`t`,`bb`,`mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []`,
+                     `if k=n then exit_lbl else body_lbl`] mp_tac) >>
+     simp[mk_inst_def] >>
+     metis_tac[DECIDE ``a:num <= b ==> a <= b+1``]) >>
   qexistsl_tac [`jump_to (if k=n then exit_lbl else body_lbl) t`, `G1`, `tn1`] >>
+  conj_tac >- metis_tac[] >>
   conj_tac >- (irule origin_ptr_path_then >> qexistsl_tac [`G1`, `t`, `tn1`] >>
                gvs[]) >>
   gvs[jump_to_def, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
 QED
 
-Theorem storage_copy_loop_origin_ptr:
+Theorem copy_span_widen[local]:
+  EVERY (\i. a <= i.inst_id /\ i.inst_id < b) code /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+  EVERY (\i. i.inst_opcode <> GAS) code /\
+  low <= a /\ b <= high ==>
+  EVERY (\i. low <= i.inst_id /\ i.inst_id < high /\
+             i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code
+Proof
+  simp[EVERY_MEM] >> metis_tac[LESS_EQ_TRANS,LESS_LESS_EQ_TRANS]
+QED
+
+Theorem storage_copy_loop_origin_ptr_observed:
   compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) /\
   fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
@@ -347,14 +410,18 @@ Theorem storage_copy_loop_origin_ptr:
   lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
   n < 2**256 /\ b + 32*n < 2**256 /\ b + 32*n <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!p q r. R p q /\ R q r ==> R p r) /\
+  (\first_id limit_id. ^copy_span_law /\ ^copy_branch_law)
+      sa.cs_next_id sb.cs_next_id ==>
   ?t Gf tnf cv ds.
+    R s t /\
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
     toplevel_copy_inv cv ds dst src loc a b n s G tn n Gf tnf t /\
     (!x. not_fresh_at sa x ==> ~MEM x ds) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  BETA_TAC >> rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all toplevel_copy_compile_blocks >> strip_tac >>
   drule_all toplevel_copy_layout_freshness >> strip_tac >>
   drule_all toplevel_copy_layout_lookups >> strip_tac >>
@@ -369,6 +436,7 @@ Proof
    DROP s.vs_inst_idx bb.bb_instructions =
      [mk_inst sa.cs_next_id ASSIGN [Lit 0w] [cv];
       mk_inst (sa.cs_next_id+1) JMP [Label hdr] []]` by simp[] >>
+  `sa.cs_next_id <= sa.cs_next_id /\ sa.cs_next_id+1 < sb.cs_next_id` by simp[] >>
   drule_all storage_copy_init_origin_ptr >>
   disch_then (qspecl_then [`loc`, `D`, `explicit`, `PG`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `toplevel_copy_inv cv ds dst src loc a b n s G tn 0 G1 tn1 t` >>
@@ -376,14 +444,15 @@ Proof
   qpat_x_assum `fn_has_code _ _ _` kall_tac >>
   qpat_x_assum `emitted_blocks _ _ = _` kall_tac >>
   qpat_x_assum `_ = GENLIST _ _` kall_tac >>
+  `sa.cs_next_id <= sa.cs_next_id+2 /\ (sa.cs_next_id+2)+1 < sb.cs_next_id` by simp[] >>
   `!j Gj tj q. j <= n /\
      (toplevel_copy_inv cv ds dst src loc a b n s G tn j Gj tj q /\
-      allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q)) /\
+      allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q) /\ R s q) /\
      ~q.vs_halted /\ q.vs_current_bb = hdr /\ q.vs_inst_idx = 0 ==>
      ?r Gr tr. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q,Gj,tj) []
          (OK r,Gr,tr) /\
        (toplevel_copy_inv cv ds dst src loc a b n s G tn j Gr tr r /\
-        allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r)) /\
+        allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r) /\ R s r) /\
        ~r.vs_halted /\ r.vs_inst_idx = 0 /\
        r.vs_current_bb = (if j=n then exit else loop_body)` by
     (rpt strip_tac >>
@@ -397,16 +466,17 @@ Proof
      `lookup_block q.vs_current_bb func.fn_blocks =
         SOME <|bb_label := hdr; bb_instructions := hdr_code|>` by metis_tac[] >>
      drule storage_copy_header_origin_ptr >> disch_then drule_all >>
-     disch_then (qspecl_then [`D`, `explicit`, `PG`] strip_assume_tac) >>
-     metis_tac[]) >>
+     disch_then (qspecl_then [`D`, `explicit`, `PG`]
+       (qx_choosel_then [`r`,`Gr`,`tr`] strip_assume_tac)) >>
+     qexistsl_tac [`r`,`Gr`,`tr`] >> simp[] >> metis_tac[]) >>
   `!j Gj tj q. j < n /\
      (toplevel_copy_inv cv ds dst src loc a b n s G tn j Gj tj q /\
-      allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q)) /\
+      allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q) /\ R s q) /\
      ~q.vs_halted /\ q.vs_current_bb = loop_body /\ q.vs_inst_idx = 0 ==>
      ?r Gr tr. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q,Gj,tj) []
          (OK r,Gr,tr) /\
        (toplevel_copy_inv cv ds dst src loc a b n s G tn (j+1) Gr tr r /\
-        allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r)) /\
+        allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r) /\ R s r) /\
        ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0` by
     (rpt strip_tac >>
      `ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
@@ -433,11 +503,42 @@ Proof
        storage_copy_body_origin_path >>
      disch_then drule_all >>
      disch_then (qspecl_then [`D`, `explicit`, `PG`]
-       (qx_choosel_then [`r`, `Gf`, `tnf`]
-         (strip_assume_tac))) >>
-     qexistsl_tac [`r`, `Gf`, `tnf`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       (qx_choosel_then [`r`, `Gf`, `tnf`] (map_every assume_tac o CONJUNCTS))) >>
+     pop_assum (qx_choosel_then [`code`,`raw`,`prejump`,`body_bb`] strip_assume_tac) >>
+     `EVERY (\i. i.inst_opcode <> GAS) code` by
+       (`EVERY (\i. i.inst_opcode <> GAS) body_bb.bb_instructions` by
+          (qpat_assum `lookup_block q.vs_current_bb _ = SOME <|bb_label := _; bb_instructions := _|>`
+             (fn th => qpat_assum `lookup_block q.vs_current_bb _ = SOME body_bb`
+               (mp_tac o REWRITE_RULE [th])) >>
+           simp[] >> disch_then (SUBST1_TAC o SYM) >>
+           Cases_on `loc = LocStorage` >> simp[mk_inst_def]) >>
+        qpat_assum `q.vs_inst_idx = 0` (fn pos =>
+          qpat_assum `isPREFIX code _`
+            (qx_choose_then `tail_code` (fn th =>
+              qpat_assum `EVERY _ body_bb.bb_instructions`
+                (mp_tac o REWRITE_RULE [th])) o
+             SIMP_RULE bool_ss [pos,DROP,IS_PREFIX_APPEND])) >> simp[]) >>
+     `R q prejump` by
+       (qpat_assum `!p u bb code. _ ==> R p _`
+          (qspecl_then [`q`,`raw`,`body_bb`,`code`] mp_tac) >>
+        simp[] >> disch_then irule >> irule copy_span_widen >>
+        simp[] >> qexistsl_tac [`sa.cs_next_id+4`,`(sa.cs_next_id+4)+7`] >> simp[]) >>
+     `~prejump.vs_halted` by
+       (qpat_assum `r = jump_to hdr prejump`
+          (fn th => qpat_assum `~r.vs_halted` (mp_tac o REWRITE_RULE [th])) >>
+        simp[jump_to_def]) >>
+     `R prejump (jump_to hdr prejump)` by
+       (qpat_assum `!p bb i lbl. _ ==> R p _`
+          (qspecl_then [`prejump`,`body_bb`,`mk_inst ((sa.cs_next_id+4)+7) JMP [Label hdr] []`,
+                        `hdr`] mp_tac) >>
+        `lookup_block prejump.vs_current_bb func.fn_blocks = SOME body_bb` by
+          (qpat_assum `prejump.vs_current_bb = q.vs_current_bb` SUBST1_TAC >>
+           first_assum ACCEPT_TAC) >>
+        simp[mk_inst_def, stepInstBaseLib.simp_opcode_clause ``JMP``]) >>
+     `R s r` by metis_tac[] >>
+     qexistsl_tac [`r`, `Gf`, `tnf`] >> asm_rewrite_tac[]) >>
   qspecl_then [`\j Gj tj q. toplevel_copy_inv cv ds dst src loc a b n s G tn j Gj tj q /\
-                            allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q)`,
+                            allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q) /\ R s q`,
                `(D,lo,explicit,ctx,func,PG)`, `n`, `hdr`, `loop_body`, `exit`,
                `n`, `0`, `G1`, `tn1`, `t`] mp_tac copy_loop_iterate_origin_ptr >>
   BETA_TAC >> impl_tac
@@ -445,6 +546,28 @@ Proof
   disch_then (qx_choosel_then [`t2`, `Gf`, `tnf`] strip_assume_tac) >>
   qexistsl_tac [`t2`, `Gf`, `tnf`, `cv`, `ds`] >> simp[] >>
   metis_tac[origin_ptr_path_then]
+QED
+
+Theorem storage_copy_loop_origin_ptr:
+  compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) /\
+  fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
+  not_fresh_at sa dst /\ (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
+  n < 2**256 /\ b + 32*n < 2**256 /\ b + 32*n <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf cv ds.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    toplevel_copy_inv cv ds dst src loc a b n s G tn n Gf tnf t /\
+    (!x. not_fresh_at sa x ==> ~MEM x ds) /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  irule (SIMP_RULE bool_ss []
+    (Q.INST [`R` |-> `\p q. T`] storage_copy_loop_origin_ptr_observed)) >>
+  simp[] >> qexists_tac `u` >> simp[]
 QED
 
 (* ===== Memory to storage ===== *)
