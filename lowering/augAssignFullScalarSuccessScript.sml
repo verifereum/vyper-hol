@@ -2,6 +2,7 @@
 Theory augAssignFullScalarSuccess
 Ancestors
   augAssignPtrScalarRun augAssignPtrScalarCertificate fragGasSeqPtr fragGasCopyLoop
+  fragGasCopySeqLiftProps
   ptrDiscipline ptrSafeRun fragExec fragExecMem venomExecSemantics
   venomState venomInst finite_map pred_set list rich_list
 
