@@ -40,6 +40,19 @@ Proof
   Cases_on `tr` >> fs[compile_expr_def, slot_loc_def, expr_type_def]
 QED
 
+(* A nil lookup changes only the source GAS observation field. *)
+Theorem toplevel_map_nil_frame:
+  stmt_state_rel H ctx func ce cx es s /\ storage_well_formed_on cx es (FST H) /\
+  ghost_inv_at D lo d ce cx es G tn s ==>
+  stmt_state_rel H ctx func ce cx (es with gas_obs := tail) s /\
+  storage_well_formed_on cx (es with gas_obs := tail) (FST H) /\
+  ghost_inv_at D lo d ce cx (es with gas_obs := tail) G tn s
+Proof
+  strip_tac >> fs[stmt_state_rel_start_gas_obs, ghost_inv_at_def, storage_well_formed_on_def,
+                  boolTheory.FORALL_BOOL, vyperStorageBackendTheory.get_storage_def] >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem toplevel_map_sim_full[local]:
   expr_map_pre cenv cx env (TopLevelName ann (src,id)) es ==>
   expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -60,15 +73,8 @@ Proof
   simp[gas_origin_ptr_path_rules] >> gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> disch_then strip_assume_tac >>
-  simp[mk_ptr_def, eval_operand_def, op_taint_def, op_prov_def,
-       ghost_kept_at_refl, stmt_state_rel_start_gas_obs] >>
-  conj_tac
-  >- (qpat_assum `storage_well_formed_on cx es _` mp_tac >>
-      simp[NoAsms, storage_well_formed_on_def, boolTheory.FORALL_BOOL,
-           vyperStorageBackendTheory.get_storage_def]) >>
-  qpat_assum `ghost_inv_at _ _ _ _ _ es _ _ _` mp_tac >>
-  simp[NoAsms, ghost_inv_at_def] >>
-  disch_then (ACCEPT_TAC o CONJUNCT1)
+  drule_all toplevel_map_nil_frame >> disch_then (qspec_then `[]` strip_assume_tac) >>
+  simp[mk_ptr_def, eval_operand_def, op_taint_def, op_prov_def, ghost_kept_at_refl]
 QED
 
 Theorem body_expr_full_ok_map:
