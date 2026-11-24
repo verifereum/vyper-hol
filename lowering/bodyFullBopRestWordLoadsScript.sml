@@ -142,6 +142,10 @@ Proof
   gvs[SRULE [] membership_loop_layout] >>
   fs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
   gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  qpat_x_assum `lookup_block (fresh_label_output "in_body" _) _ = _`
+    (fn body_lookup =>
+      rpt (qpat_x_assum `lookup_block _ fn.fn_blocks = SOME _` kall_tac) >>
+      assume_tac body_lookup) >>
   Cases_on `0 < skip` >> Cases_on `loc` >> gvs[] >>
   gvs[scalar_code_def, scalar_shape_def, scalar_binary_def,
     scalar_available_def, mk_inst_def, is_terminator_def] >>
