@@ -6,7 +6,7 @@ Ancestors
   vyperAST vyperContext vyperValue exprLowering
   whitelistLinkedExprFormProps whitelistCheckerExprs whitelistCheckerTypes supportedExprs supportedExprForms
   supportedTypes supportedGetterProps finite_map alist list pair option
-  whitelistStructFieldProps
+  whitelistStructFieldProps whitelistLinkedBodyEnv
 
 (* The constant typing lemmas are phrased for a context containing the unit.
    Only the source-table lookup is used here. *)
@@ -34,14 +34,7 @@ QED
 
 Triviality closed_typed_const_supported_mutual:
   check_contract F layouts addr mods = SOME art /\
-  (!ty. assignable_type (type_env_all_modules mods) ty /\
-        (src <> NONE ==> imported_type_refs_ok ty) ==>
-        supported_place_type tops ty) /\
-  (!k fs. FLOOKUP (type_env_all_modules mods) k = SOME (StructArgs fs) ==>
-          EVERY (assignable_type (type_env_all_modules mods) o SND) fs /\
-          (well_formed_type (type_env_all_modules mods) (StructT k) ==>
-           assignable_type (type_env_all_modules mods) (StructT k)) /\
-          (src = NONE /\ FST k = NONE ==> supported_struct_fields tops k = SOME fs)) /\
+  linked_body_type_facts tops src (type_env_all_modules mods) /\
   (!b. constant_expr mods b /\ const_local_refs b = [] ==>
        (qualified_place_root b \/ supported_place_info tops b = ValPT (expr_type b)) /\
        (supported_pure_expr tops b ==> supported_place_expr tops b)) ==>
@@ -58,7 +51,7 @@ Triviality closed_typed_const_supported_mutual:
         (src <> NONE ==> imported_field_refs_ok fs) ==>
         supported_pure_fields tops fs)
 Proof
-  strip_tac >>
+  strip_tac >> fs[linked_body_type_facts_def] >>
   (* Retain aggregate support while traversing the builtin argument list. *)
   `(!e. constant_expr mods e /\ const_local_refs e = [] /\
         well_typed_expr (artifact_env art mods src) e /\
@@ -91,11 +84,15 @@ Proof
   >~ [`supported_pure_expr _ (StructLit _ _ _)`] >-
     (gvs[well_typed_expr_def, artifact_env_def, supported_pure_expr_def,
          checker_agg_ok_def, supported_struct_elements_def] >>
-     qpat_x_assum `!k fs. FLOOKUP _ _ = _ ==> _` drule >> strip_tac >>
+     qpat_assum `!k fs. FLOOKUP _ k = SOME (StructArgs fs) ==> EVERY _ fs /\ _`
+       (drule_then strip_assume_tac) >>
      `supported_place_type tops (StructT ns)` by
-       (first_x_assum irule >> gvs[imported_type_refs_ok_def]) >>
+       (first_x_assum irule >> gvs[imported_type_refs_ok_def] >> metis_tac[]) >>
      simp[] >> disch_tac >>
-     `src = NONE` by metis_tac[] >> gvs[structlit_fields_lookup])
+     `src = NONE` by metis_tac[] >>
+     `supported_struct_fields tops ns = SOME args` by
+       (first_x_assum irule >> simp[]) >>
+     simp[structlit_fields_lookup])
   >~ [`supported_pure_expr _ (Subscript _ _ _)`] >-
     (rename1 `Subscript ty b ix` >>
      `?cx. ALOOKUP cx.sources cx.txn.target = SOME mods` by simp[const_unit_context] >>
@@ -119,7 +116,8 @@ Proof
      Cases_on `expr_type b` >>
      gvs[attribute_type_ok_def, attribute_type_def, AllCaseEqs()] >>
      rename1 `FLOOKUP _ k = SOME (StructArgs fs)` >>
-     qpat_x_assum `!k fs. FLOOKUP _ _ = _ ==> _` drule >> strip_tac >>
+     qpat_assum `!k fs. FLOOKUP _ k = SOME (StructArgs fs) ==> EVERY _ fs /\ _`
+       (drule_then strip_assume_tac) >>
      `assignable_type (type_env_all_modules mods) ty` by
        (drule_then assume_tac ALOOKUP_MEM >>
         qpat_x_assum `EVERY _ fs` mp_tac >> simp[EVERY_MEM] >>
@@ -127,6 +125,8 @@ Proof
      `supported_place_type tops ty` by metis_tac[] >>
      simp[supported_pure_expr_def, checker_agg_ok_def, supported_field_place_def] >>
      Cases_on `FST k = NONE` >> gvs[imported_type_refs_ok_def] >>
+     `supported_struct_fields tops k = SOME fs` by
+       (first_x_assum irule >> simp[]) >>
      drule ALOOKUP_MEM >> simp[MEM_MAP, EXISTS_PROD] >> metis_tac[])
   >~ [`supported_pure_expr _ (Builtin _ _ _)`] >-
     (rename1 `Builtin ty bt es` >>
@@ -149,14 +149,7 @@ QED
 
 Theorem closed_typed_const_supported:
   check_contract F layouts addr mods = SOME art /\
-  (!ty. assignable_type (type_env_all_modules mods) ty /\
-        (src <> NONE ==> imported_type_refs_ok ty) ==>
-        supported_place_type tops ty) /\
-  (!k fs. FLOOKUP (type_env_all_modules mods) k = SOME (StructArgs fs) ==>
-          EVERY (assignable_type (type_env_all_modules mods) o SND) fs /\
-          (well_formed_type (type_env_all_modules mods) (StructT k) ==>
-           assignable_type (type_env_all_modules mods) (StructT k)) /\
-          (src = NONE /\ FST k = NONE ==> supported_struct_fields tops k = SOME fs)) /\
+  linked_body_type_facts tops src (type_env_all_modules mods) /\
   (!b. constant_expr mods b /\ const_local_refs b = [] ==>
        (qualified_place_root b \/ supported_place_info tops b = ValPT (expr_type b)) /\
        (supported_pure_expr tops b ==> supported_place_expr tops b)) ==>
