@@ -7,7 +7,8 @@ Ancestors
 
 Theorem linked_builtin_form:
   well_typed_builtin_app ty bi (MAP expr_type es) /\
-  (!s b. bi = MakeArray s b ==> supported_place_type tops ty) ==>
+  (!s b. bi = MakeArray s b ==> supported_place_type tops ty) /\
+  (bi = NamedConst ==> checker_agg_ok tops ty) ==>
   supported_builtin_form tops ty bi es /\ checker_agg_ok tops ty
 Proof
   strip_tac >> Cases_on `?s b. bi = MakeArray s b`
