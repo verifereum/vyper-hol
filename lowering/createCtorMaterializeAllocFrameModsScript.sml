@@ -7,7 +7,7 @@ Ancestors
   bodyPtrIfExpAllocSource revertReasonPrefixPtr bodyFullHashKeccakFixed
   bodyMemoryDefs stateRelProj allocaSiteResource logValueFramePtr
   exprSimProps exprSimMemDefs loweringPosts stmtSimDefs loweringStateRelDefs
-  exprLoweringProps bodyPtrDefs context ptrDiscipline venomState vyperStorageFootprint words finite_map
+  exprLoweringProps bodyPtrDefs context ptrDiscipline venomState vyperStorageFootprint words finite_map bodyFullPostsMods bodyFullShadowBodyInv
 
 Theorem ctor_materialize_alloc_vv_frame_mods:
   read_result cx pv ee = (INL v,ee) /\
@@ -76,5 +76,62 @@ Theorem ctor_materialize_alloc_vv_frame_mods:
   (!aid off len i. FLOOKUP s.vs_allocas aid = SOME (off,len) /\
     off <= i /\ i < off + len /\ i IN ta.t_mem ==> i IN tn.t_mem)
 Proof
-  cheat
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
+  `valid_horizon cx st0 H0 ee.storage_trace` by fs[Abbr `H0`,storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H0` (fn th => first_assum (strip_assume_tac o MATCH_MP th))) >>
+  `stmt_state_rel H0 ctx func ce cx ee s /\
+   vv_at ce cx (post_value_type ce e) sa sm ee pv vv s` by fs[vv_post_mods_def] >>
+  `lo <= s.vs_alloca_next` by fs[ghost_inv_at_mods_def] >>
+  `~a.vs_halted /\ a.vs_memory = s.vs_memory /\ a.vs_labels = s.vs_labels /\
+   a.vs_accounts = s.vs_accounts /\ a.vs_transient = s.vs_transient /\
+   a.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `a with <|vs_vars := _; vs_allocas := _;
+                           vs_alloca_next := _; vs_inst_idx := _|> = s`
+       mp_tac >> simp[venom_state_component_equality] >> strip_tac >> simp[]) >>
+  `eval_operand (vv_operand vv) a = eval_operand (vv_operand vv) s` by
+    (Cases_on `vv_operand vv` >> fs[eval_operand_def]) >>
+  `(!x. vv_operand vv = Var x ==> FLOOKUP Ga x = FLOOKUP G x) /\
+   op_taint ta (vv_operand vv) = op_taint tn (vv_operand vv) /\
+   op_prov Ga (vv_operand vv) = op_prov G (vv_operand vv)` by
+    (Cases_on `vv_operand vv` >> fs[op_taint_def,op_prov_def]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x a = lookup_var x s /\
+        FLOOKUP Ga x = FLOOKUP G x /\ op_taint ta (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >> `not_fresh_at sm x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >> fs[]) >>
+  `sm.cs_next_var <= mid.cs_next_var` by
+    (drule loweringHaltTheory.compile_alloc_buffer_parts >> simp[]) >>
+  `local_ptrs_rel func ce ee.scopes s /\ alloca_inv s` by
+    (drule stmt_state_rel_local_ptrs_alloca >> simp[]) >>
+  `!aid off len. FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
+        off + len <= s.vs_alloca_next` by
+    (rpt strip_tac >> drule_all alloca_site_registered_below >> simp[]) >>
+  `!i. i < s.vs_alloca_next /\ i IN ta.t_mem ==> i IN tn.t_mem` by
+    (simp[] >> rpt strip_tac >> fs[]) >>
+  `!name off len. local_region ce ee.scopes s name off len ==>
+        off + len <= s.vs_alloca_next` by
+    (rpt strip_tac >> drule_all body_local_region_frontier >> simp[]) >>
+  conj_tac >- suspend "horizon" >>
+  conj_tac >- (irule vv_store_bound_frame_mem_src >> qexists_tac `s` >> simp[]) >>
+  conj_tac >- suspend "pointer" >>
+  conj_tac >- (rpt strip_tac >> fs[vv_operand_def] >>
+    irule ptr_buf_ok_frame >> qexistsl_tac [`G`,`s`] >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> fs[vv_operand_def] >>
+    irule ptr_buf_ok_frame >> qexistsl_tac [`G`,`s`] >> simp[]) >>
+  conj_tac >- suspend "constructor" >>
+  conj_tac >- suspend "entry_kept" >>
+  conj_tac >- (irule return_buf_frame_frame >> qexistsl_tac [`ce`,`s`,`sm`] >> simp[]) >>
+  conj_tac >- metis_tac[local_ptrs_reserved_next_var] >>
+  conj_tac
+  >- (`stmt_state_rel H0 ctx func ce cx ee a` by simp[] >>
+      drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
+  simp[] >> conj_tac >- suspend "rhs_kept" >>
+  qpat_assum `vv_post_mods _ _ _ _ _ _ _ _ _ _ _ _ _ s`
+    (strip_assume_tac o REWRITE_RULE [vv_post_mods_def]) >>
+  conj_tac
+  >- (qpat_assum `stmt_state_rel H0 _ _ _ _ _ s`
+      (mp_then Any irule alloca_frame_of_mem_frame) >> simp[]) >>
+  rpt strip_tac >> `off + len <= s.vs_alloca_next` by metis_tac[] >>
+  `i < s.vs_alloca_next` by decide_tac >> fs[]
 QED
+
