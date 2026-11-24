@@ -14,12 +14,12 @@ Ancestors
   unitTransformDefs[qualified,ignore_grammar]
 
 (* Retagging a word pointer changes no instruction emitted by unwrap_value. *)
-Theorem word_snapshot_unwrap[local]:
+Theorem word_snapshot_unwrap_copy:
   post_value_type ce e = expr_type e /\
   arg_type_fits (lowered_value_type ce e) (expr_type e) /\
   vv_holds ce cx (post_value_type ce e) raw vv ee t /\
   is_word_type (vv_type (ext_call_arg_value (lowered_value_type ce e) vv)) ==>
-  compile_snapshot_vv ce F (ext_call_arg_value (lowered_value_type ce e) vv) =
+  compile_snapshot_vv ce copy (ext_call_arg_value (lowered_value_type ce e) vv) =
     comp_bind (unwrap_value ce vv) (\op. comp_return
       (StackValue (vv_type (ext_call_arg_value (lowered_value_type ce e) vv)) op))
 Proof
@@ -202,7 +202,7 @@ Resume extcall_request_snapshot_word_owned_full[normal]:
      irule post_value_type_not_int_call >> metis_tac[]) >>
   `vv_holds cenv cx (post_value_type cenv e) tv shadow_vv ee t` by
     metis_tac[vv_post_def] >>
-  drule_all word_snapshot_unwrap >> strip_tac >>
+  drule_all (Q.INST [`copy` |-> `F`] word_snapshot_unwrap_copy) >> strip_tac >>
   gvs[comp_bind_def, comp_return_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` kall_tac >>
