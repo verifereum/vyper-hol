@@ -9,6 +9,72 @@ Ancestors fragExecPtr exprPtrCtorImmStore
   wordLoadStorePtr fragGasSeqPtr bodyPtrDefs ptrCoverage ptrSafetyTransport
   ghostPcTransportPtr compileEnv contextCodegenRel ptrSafeRun ptrDiscipline
   venomExecSemantics venomState venomInst words list arithmetic finite_map
+  abiEncoderWindowBytesMem abiBytesEncoderJointGhost exprSimAbiEncodeFramedLeaves
+  abiEncoderRounding abiEncoderBytes abiBytestringCode reasonCopySourcePtr
+  rich_list abiEncoderWindowSequence memoryReadProps venomMemDefs loweringStateRelDefs fragExec
+
+(* Expose the exact straight-line run at the endpoint shared with the ghosts. *)
+Definition encoder_leaf_trace_def:
+  encoder_leaf_trace st en s t <=>
+    ?raw. t = (raw with vs_inst_idx := LENGTH en.cs_current_insts) /\
+      run_inst_seq (emitted_insts st en) s = OK raw /\
+      inst_extends st en /\ en.cs_current_bb = st.cs_current_bb /\
+      EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+        (emitted_insts st en) /\
+      FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en) = []
+End
+
+Definition encoder_leaf_pre_def:
+  encoder_leaf_pre ei dst src st out en ctx func s at av sb cap d G tn lo <=>
+    compile_abi_encode_to_buf dst src ei st = (out,en) /\
+    abi_encoder_admissible ei /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      abi_encoder_window_input ei at av sb cap mem) /\
+    eval_operand src s = SOME (n2w sb) /\
+    eval_operand dst s = SOME (n2w d) /\
+    op_taint tn src = {} /\ op_taint tn dst = {} /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+    fn_has_code st en func /\ fn_inst_ids_distinct func /\
+    alloca_inv s /\ alloca_room ctx func s /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    (0 < cap ==>
+      sb + cap <= s.vs_alloca_next /\
+      venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH (contractABI$enc at av)) /\
+      ?p. src = Var p /\ ptr_covers G tn p s cap) /\
+    d + LENGTH (contractABI$enc at av) <= s.vs_alloca_next /\
+    (0 < LENGTH (contractABI$enc at av) ==>
+      ?p. dst = Var p /\ ptr_covers G tn p s (LENGTH (contractABI$enc at av))) /\
+    (!inst b sz.
+      MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_id IN frag_ids st en /\
+      FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+      sz = 32 /\
+      (0 < cap ==> venomMemDefs$regions_disjoint (sb,cap) (b,sz)) /\
+      venomMemDefs$regions_disjoint (d,LENGTH (contractABI$enc at av)) (b,sz)) /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts
+End
+
+Definition encoder_leaf_post_def:
+  encoder_leaf_post ctx func st en out at av d s t G tn G' tn' lo explicit PG <=>
+    window_strong_result ctx func st en out at av d s t /\
+    abi_encode_exec_frame func s t /\
+    op_taint tn' out = {} /\
+    (!x. out = Var x ==> not_fresh_at en x) /\
+    (!i. d <= i /\ i < d + LENGTH (contractABI$enc at av) ==>
+      i NOTIN tn'.t_mem) /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!i. (i < d \/ d + LENGTH (contractABI$enc at av) <= i) /\
+      (!id b sz. id IN window_alloca_sites func (frag_ids st en) /\
+        FLOOKUP t.vs_allocas id = SOME (b,sz) ==> i < b \/ b + sz <= i) ==>
+      (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')
+End
 
 Theorem window_word_joint_path_strong:
   compile_abi_encode_to_buf (Var dst) (Var src) AbiPrimWord st = (out,en) /\
@@ -190,53 +256,12 @@ Proof
 QED
 
 (* Word constructor of the approved joint ABI-window contract. *)
-Theorem compile_abi_encode_to_buf_word_window_joint:
-  compile_abi_encode_to_buf dst src AbiPrimWord st = (out,en) /\
-  abi_encoder_admissible AbiPrimWord /\
-  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-    abi_encoder_window_input AbiPrimWord at av sb cap mem) /\
-  eval_operand src s = SOME (n2w sb) /\
-  eval_operand dst s = SOME (n2w d) /\
-  op_taint tn src = {} /\ op_taint tn dst = {} /\
-  (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
-  fn_has_code st en func /\ fn_inst_ids_distinct func /\
-  alloca_inv s /\ alloca_room ctx func s /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  (0 < cap ==>
-    sb + cap <= s.vs_alloca_next /\
-    venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH (contractABI$enc at av)) /\
-    ?p. src = Var p /\ ptr_covers G tn p s cap) /\
-  d + LENGTH (contractABI$enc at av) <= s.vs_alloca_next /\
-  (0 < LENGTH (contractABI$enc at av) ==>
-    ?p. dst = Var p /\
-      ptr_covers G tn p s (LENGTH (contractABI$enc at av))) /\
-  (!inst b sz.
-    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-    inst.inst_id IN frag_ids st en /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
-    sz = 32 /\
-    (0 < cap ==> venomMemDefs$regions_disjoint (sb,cap) (b,sz)) /\
-    venomMemDefs$regions_disjoint (d,LENGTH (contractABI$enc at av)) (b,sz)) /\
-  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
-  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t G' tn'.
-    window_strong_result ctx func st en out at av d s t /\
-    abi_encode_exec_frame func s t /\
-    op_taint tn' out = {} /\
-    (!x. out = Var x ==> not_fresh_at en x) /\
-    (!i. d <= i /\ i < d + LENGTH (contractABI$enc at av) ==>
-      i NOTIN tn'.t_mem) /\
-    (!x. not_fresh_at st x ==>
-      FLOOKUP G' x = FLOOKUP G x /\
-      op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    (!i. (i < d \/ d + LENGTH (contractABI$enc at av) <= i) /\
-      (!id b sz. id IN window_alloca_sites func (frag_ids st en) /\
-        FLOOKUP t.vs_allocas id = SOME (b,sz) ==> i < b \/ b + sz <= i) ==>
-      (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
-    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-      (s,G,tn) [] (OK t,G',tn')
+Theorem compile_abi_encode_to_buf_word_window_joint_trace:
+  encoder_leaf_pre AbiPrimWord dst src st out en ctx func s at av sb cap d G tn lo ==>
+  ?t G' tn'. encoder_leaf_trace st en s t /\
+     encoder_leaf_post ctx func st en out at av d s t G tn G' tn' lo explicit PG
 Proof
+  pure_rewrite_tac[encoder_leaf_pre_def, encoder_leaf_post_def] >>
   strip_tac >>
   `abi_encoder_window_input AbiPrimWord at av sb cap s.vs_memory` by
     (first_x_assum irule >> simp[mem_agree_outside_def]) >>
@@ -272,6 +297,15 @@ Proof
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   drule_all window_word_strong_endpoint >> strip_tac >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `G'`, `tn'`] >>
+  conj_tac >-
+    (simp_tac bool_ss [encoder_leaf_trace_def] >> qexists_tac `t` >>
+     asm_rewrite_tac[] >>
+     drule abi_encode_word_trace >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >>
+     drule emitted_insts_emit_void >> strip_tac >>
+     `emitted_insts st en = emitted_insts st loaded_st ++ emitted_insts loaded_st en` by
+       metis_tac[emitted_insts_append, inst_extends_emit_op, inst_extends_emit_void] >>
+     simp[mk_inst_def]) >>
   conj_tac >- metis_tac[] >>
   conj_tac >-
     (qpat_x_assum `t = _` SUBST1_TAC >>
@@ -298,54 +332,12 @@ Proof
   rpt conj_tac >> metis_tac[]
 QED
 
-(* Copy constructor of the approved joint ABI-window contract. *)
-Theorem compile_abi_encode_to_buf_copy_window_joint:
-  compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,en) /\
-  abi_encoder_admissible (AbiCopy sz) /\
-  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-    abi_encoder_window_input (AbiCopy sz) at av sb cap mem) /\
-  eval_operand src s = SOME (n2w sb) /\
-  eval_operand dst s = SOME (n2w d) /\
-  op_taint tn src = {} /\ op_taint tn dst = {} /\
-  (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
-  fn_has_code st en func /\ fn_inst_ids_distinct func /\
-  alloca_inv s /\ alloca_room ctx func s /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  (0 < cap ==>
-    sb + cap <= s.vs_alloca_next /\
-    venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH (contractABI$enc at av)) /\
-    ?p. src = Var p /\ ptr_covers G tn p s cap) /\
-  d + LENGTH (contractABI$enc at av) <= s.vs_alloca_next /\
-  (0 < LENGTH (contractABI$enc at av) ==>
-    ?p. dst = Var p /\
-      ptr_covers G tn p s (LENGTH (contractABI$enc at av))) /\
-  (!inst b sz.
-    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-    inst.inst_id IN frag_ids st en /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
-    sz = 32 /\
-    (0 < cap ==> venomMemDefs$regions_disjoint (sb,cap) (b,sz)) /\
-    venomMemDefs$regions_disjoint (d,LENGTH (contractABI$enc at av)) (b,sz)) /\
-  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
-  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t G' tn'.
-    window_strong_result ctx func st en out at av d s t /\
-    abi_encode_exec_frame func s t /\
-    op_taint tn' out = {} /\
-    (!x. out = Var x ==> not_fresh_at en x) /\
-    (!i. d <= i /\ i < d + LENGTH (contractABI$enc at av) ==>
-      i NOTIN tn'.t_mem) /\
-    (!x. not_fresh_at st x ==>
-      FLOOKUP G' x = FLOOKUP G x /\
-      op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    (!i. (i < d \/ d + LENGTH (contractABI$enc at av) <= i) /\
-      (!id b sz. id IN window_alloca_sites func (frag_ids st en) /\
-        FLOOKUP t.vs_allocas id = SOME (b,sz) ==> i < b \/ b + sz <= i) ==>
-      (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
-    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-      (s,G,tn) [] (OK t,G',tn')
+Theorem compile_abi_encode_to_buf_copy_window_joint_trace:
+  encoder_leaf_pre (AbiCopy sz) dst src st out en ctx func s at av sb cap d G tn lo ==>
+  ?t G' tn'. encoder_leaf_trace st en s t /\
+     encoder_leaf_post ctx func st en out at av d s t G tn G' tn' lo explicit PG
 Proof
+  pure_rewrite_tac[encoder_leaf_pre_def, encoder_leaf_post_def] >>
   strip_tac >>
   `abi_encoder_window_input (AbiCopy sz) at av sb cap s.vs_memory` by
     (first_x_assum irule >> simp[mem_agree_outside_def]) >>
@@ -376,7 +368,7 @@ Proof
   suspend "joint_assembly"
 QED
 
-Resume compile_abi_encode_to_buf_copy_window_joint[zero_endpoint]:
+Resume compile_abi_encode_to_buf_copy_window_joint_trace[zero_endpoint]:
   `cap = 0 /\ sz = 0 /\ enc at av = []` by
     (conj_asm1_tac >- decide_tac >>
      conj_asm1_tac >- decide_tac >>
@@ -408,7 +400,7 @@ Resume compile_abi_encode_to_buf_copy_window_joint[zero_endpoint]:
   simp[venomExecSemanticsTheory.mcopy_def,
     venomStateTheory.write_memory_with_expansion_def]
 QED
-Resume compile_abi_encode_to_buf_copy_window_joint[joint_assembly]:
+Resume compile_abi_encode_to_buf_copy_window_joint_trace[joint_assembly]:
   `!i. a <= i /\ i < a + sz ==> i NOTIN tn.t_mem` by
     (Cases_on `sz = 0` >- simp[] >>
      `a = sb` by simp[] >>
@@ -432,6 +424,9 @@ Resume compile_abi_encode_to_buf_copy_window_joint[joint_assembly]:
      asm_simp_tac std_ss [w2n_n2w, Abbr `copy_inst`, Abbr `u`, Abbr `tn2`] >>
      suspend "ghost_clean") >>
   qexistsl_tac [`u with vs_inst_idx := LENGTH en.cs_current_insts`, `G`, `tn2`] >>
+  conj_tac >-
+    (simp_tac bool_ss [encoder_leaf_trace_def] >> qexists_tac `u` >>
+     simp[Abbr `u`, Abbr `copy_inst`, mk_inst_def]) >>
   conj_tac >- simp[Abbr `u`] >>
   conj_tac >- simp[Abbr `u`] >>
   conj_tac >- simp[op_taint_def] >>
@@ -444,7 +439,7 @@ Resume compile_abi_encode_to_buf_copy_window_joint[joint_assembly]:
     imm_taint_def, mk_inst_def, step_writes_def] >>
   suspend "copy_path"
 QED
-Resume compile_abi_encode_to_buf_copy_window_joint[ghost_clean]:
+Resume compile_abi_encode_to_buf_copy_window_joint_trace[ghost_clean]:
   strip_tac >>
   `!i. i < sz ==> a + i NOTIN tn.t_mem` by
     (gen_tac >> disch_tac >>
@@ -452,7 +447,7 @@ Resume compile_abi_encode_to_buf_copy_window_joint[ghost_clean]:
   simp_tac (srw_ss()) [pred_setTheory.EXTENSION, pred_setTheory.IN_DIFF,
     pred_setTheory.IN_UNION] >> metis_tac[]
 QED
-Resume compile_abi_encode_to_buf_copy_window_joint[copy_path]:
+Resume compile_abi_encode_to_buf_copy_window_joint_trace[copy_path]:
   `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
      isPREFIX [copy_inst] (DROP s.vs_inst_idx bb.bb_instructions)` by
     (qpat_assum `fn_has_code st en func` mp_tac >>
@@ -509,4 +504,282 @@ Resume compile_abi_encode_to_buf_copy_window_joint[copy_path]:
           unitTransformDefsTheory.dalloca_no_wrap_def]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
 QED
-Finalise compile_abi_encode_to_buf_copy_window_joint
+Finalise compile_abi_encode_to_buf_copy_window_joint_trace
+
+Theorem compile_abi_encode_to_buf_word_window_joint:
+  compile_abi_encode_to_buf dst src AbiPrimWord st = (out,en) /\
+  abi_encoder_admissible AbiPrimWord /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    abi_encoder_window_input AbiPrimWord at av sb cap mem) /\
+  eval_operand src s = SOME (n2w sb) /\
+  eval_operand dst s = SOME (n2w d) /\
+  op_taint tn src = {} /\ op_taint tn dst = {} /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
+  alloca_inv s /\ alloca_room ctx func s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (0 < cap ==>
+    sb + cap <= s.vs_alloca_next /\
+    venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH (contractABI$enc at av)) /\
+    ?p. src = Var p /\ ptr_covers G tn p s cap) /\
+  d + LENGTH (contractABI$enc at av) <= s.vs_alloca_next /\
+  (0 < LENGTH (contractABI$enc at av) ==>
+    ?p. dst = Var p /\
+      ptr_covers G tn p s (LENGTH (contractABI$enc at av))) /\
+  (!inst b sz.
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids st en /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+    sz = 32 /\
+    (0 < cap ==> venomMemDefs$regions_disjoint (sb,cap) (b,sz)) /\
+    venomMemDefs$regions_disjoint (d,LENGTH (contractABI$enc at av)) (b,sz)) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t G' tn'.
+    window_strong_result ctx func st en out at av d s t /\
+    abi_encode_exec_frame func s t /\
+    op_taint tn' out = {} /\
+    (!x. out = Var x ==> not_fresh_at en x) /\
+    (!i. d <= i /\ i < d + LENGTH (contractABI$enc at av) ==>
+      i NOTIN tn'.t_mem) /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!i. (i < d \/ d + LENGTH (contractABI$enc at av) <= i) /\
+      (!id b sz. id IN window_alloca_sites func (frag_ids st en) /\
+        FLOOKUP t.vs_allocas id = SOME (b,sz) ==> i < b \/ b + sz <= i) ==>
+      (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')
+Proof
+  strip_tac >>
+  `encoder_leaf_pre AbiPrimWord dst src st out en ctx func s at av sb cap d G tn lo`
+    by asm_rewrite_tac[encoder_leaf_pre_def] >>
+  drule compile_abi_encode_to_buf_word_window_joint_trace >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >>
+  qhdtm_assum `encoder_leaf_post`
+    (ACCEPT_TAC o PURE_REWRITE_RULE [encoder_leaf_post_def])
+QED
+
+Theorem compile_abi_encode_to_buf_copy_window_joint:
+  compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,en) /\
+  abi_encoder_admissible (AbiCopy sz) /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    abi_encoder_window_input (AbiCopy sz) at av sb cap mem) /\
+  eval_operand src s = SOME (n2w sb) /\
+  eval_operand dst s = SOME (n2w d) /\
+  op_taint tn src = {} /\ op_taint tn dst = {} /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
+  alloca_inv s /\ alloca_room ctx func s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (0 < cap ==>
+    sb + cap <= s.vs_alloca_next /\
+    venomMemDefs$regions_disjoint (sb,cap) (d,LENGTH (contractABI$enc at av)) /\
+    ?p. src = Var p /\ ptr_covers G tn p s cap) /\
+  d + LENGTH (contractABI$enc at av) <= s.vs_alloca_next /\
+  (0 < LENGTH (contractABI$enc at av) ==>
+    ?p. dst = Var p /\
+      ptr_covers G tn p s (LENGTH (contractABI$enc at av))) /\
+  (!inst b sz.
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids st en /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+    sz = 32 /\
+    (0 < cap ==> venomMemDefs$regions_disjoint (sb,cap) (b,sz)) /\
+    venomMemDefs$regions_disjoint (d,LENGTH (contractABI$enc at av)) (b,sz)) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t G' tn'.
+    window_strong_result ctx func st en out at av d s t /\
+    abi_encode_exec_frame func s t /\
+    op_taint tn' out = {} /\
+    (!x. out = Var x ==> not_fresh_at en x) /\
+    (!i. d <= i /\ i < d + LENGTH (contractABI$enc at av) ==>
+      i NOTIN tn'.t_mem) /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!i. (i < d \/ d + LENGTH (contractABI$enc at av) <= i) /\
+      (!id b sz. id IN window_alloca_sites func (frag_ids st en) /\
+        FLOOKUP t.vs_allocas id = SOME (b,sz) ==> i < b \/ b + sz <= i) ==>
+      (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')
+Proof
+  strip_tac >>
+  `encoder_leaf_pre (AbiCopy sz) dst src st out en ctx func s at av sb cap d G tn lo`
+    by asm_rewrite_tac[encoder_leaf_pre_def] >>
+  drule compile_abi_encode_to_buf_copy_window_joint_trace >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >>
+  qhdtm_assum `encoder_leaf_post`
+    (ACCEPT_TAC o PURE_REWRITE_RULE [encoder_leaf_post_def])
+QED
+
+Theorem compile_abi_encode_to_buf_bytes_window_joint_trace:
+  encoder_leaf_pre (AbiBytestring maxlen) dst src st out en ctx func s at av sb cap d G tn lo ==>
+  ?t G' tn'. encoder_leaf_trace st en s t /\
+     encoder_leaf_post ctx func st en out at av d s t G tn G' tn' lo explicit PG
+Proof
+  pure_rewrite_tac[encoder_leaf_pre_def, encoder_leaf_post_def] >> strip_tac >>
+  `abi_encoder_window_input (AbiBytestring maxlen) at av sb cap s.vs_memory` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  qpat_assum `abi_encoder_window_input _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_bytes_iff]) >>
+  qpat_x_assum `av = BytesV bs` SUBST_ALL_TAC >>
+  `LENGTH (enc at (BytesV bs)) = 32+contractABI$ceil32 (LENGTH bs)` by
+    metis_tac[abi_encoder_bytes_encoding] >>
+  `0 < cap /\ 0 < LENGTH (enc at (BytesV bs))` by decide_tac >>
+  `sb+cap <= s.vs_alloca_next /\
+   regions_disjoint (sb,cap) (d,LENGTH (enc at (BytesV bs))) /\
+   (?sp. src = Var sp /\ ptr_covers G tn sp s cap) /\
+   (?dp. dst = Var dp /\ ptr_covers G tn dp s (LENGTH (enc at (BytesV bs))))` by
+    metis_tac[] >>
+  `abi_encoder_window_pre ctx func st en dst src (AbiBytestring maxlen)
+    at (BytesV bs) sb cap d s` by
+    (simp_tac bool_ss [abi_encoder_window_pre_def] >> metis_tac[]) >>
+  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    mem_word_at sb mem = n2w (LENGTH bs) /\
+    mem_bytes_at (sb+32) (LENGTH bs) mem = bs` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!mem. _ ==> abi_encoder_window_input _ _ _ _ _ mem`
+       (qspec_then `mem` mp_tac) >>
+     qpat_assum `mem_agree_outside tn.t_mem s.vs_memory mem` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     gvs[abi_encoder_window_bytes_iff]) >>
+  `!i. sb <= i /\ i < sb+32 ==> i NOTIN tn.t_mem` by
+    (mp_tac (Q.SPECL [`tn.t_mem`, `s.vs_memory`, `sb`,
+       `n2w (LENGTH (bs:8 word list)):256 word`] robust_mem_word_at_clean) >>
+     impl_tac >- metis_tac[] >> simp[]) >>
+  `!i. sb+32 <= i /\ i < sb+32+LENGTH bs ==> i NOTIN tn.t_mem` by
+    (mp_tac (Q.SPECL [`tn.t_mem`, `s.vs_memory`, `sb+32`,
+       `LENGTH (bs:8 word list)`, `bs:8 word list`] robust_mem_bytes_at_clean) >>
+     impl_tac >- metis_tac[] >> simp[]) >>
+  `!i. sb <= i /\ i < sb+32+LENGTH bs ==> i NOTIN tn.t_mem` by
+    (rpt strip_tac >> Cases_on `i < sb+32` >> metis_tac[NOT_LESS]) >>
+  `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  `LENGTH bs <= contractABI$ceil32 (LENGTH bs)` by
+    metis_tac[abi_encoder_ceil32_bounds] >>
+  `sb < dimword (:256) /\ d < dimword (:256) /\
+   LENGTH bs+31 < dimword (:256) /\
+   d+contractABI$ceil32 (LENGTH bs) < dimword (:256) /\
+   32+LENGTH bs < dimword (:256) /\
+   sb+32+LENGTH bs <= s.vs_alloca_next /\
+   d+32+contractABI$ceil32 (LENGTH bs) <= s.vs_alloca_next /\
+   sb+32+LENGTH bs < dimword (:256) /\
+   d+32+contractABI$ceil32 (LENGTH bs) < dimword (:256)` by decide_tac >>
+  `mload sb s = n2w (LENGTH bs) /\ read_memory (sb+32) (LENGTH bs) s = bs` by
+    metis_tac[mem_word_at_eq_mload, read_memory_eq_mem_bytes_at] >>
+  `regions_disjoint (sb,32+LENGTH bs) (d,32+contractABI$ceil32 (LENGTH bs))` by
+    (qpat_assum `regions_disjoint (sb,cap) _` mp_tac >>
+     qpat_assum `LENGTH (enc at (BytesV bs)) = _` mp_tac >>
+     qpat_assum `32+LENGTH bs <= cap` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     qpat_assum `LENGTH (enc at (BytesV bs)) = _`
+       (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+     fs[venomMemDefsTheory.regions_disjoint_def, Excl "enc_def"] >> decide_tac) >>
+  drule_all abi_encode_framed_bytes_endpoint >> strip_tac >>
+  rename1 `window_seq st en s raw` >>
+  `run_inst_seq (emitted_insts st en) s = OK raw` by
+    (qpat_assum `window_seq st en s raw` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp_tac bool_ss [window_seq_def]) >>
+  qpat_x_assum `src = Var sp` SUBST_ALL_TAC >>
+  qpat_x_assum `dst = Var dp` SUBST_ALL_TAC >>
+  `ptr_covers G tn sp s (32+LENGTH bs)` by
+    (irule reasonCopySourcePtrTheory.ptr_covers_mono >>
+     qexists_tac `cap` >> asm_rewrite_tac[]) >>
+  `ptr_covers G tn dp s (32+contractABI$ceil32 (LENGTH bs))` by metis_tac[] >>
+  `not_fresh_at st sp /\ not_fresh_at st dp` by metis_tac[] >>
+  `w2n (n2w sb : 256 word) = sb /\ w2n (n2w d : 256 word) = d` by
+    simp[w2n_n2w, LESS_MOD] >>
+  mp_tac (Q.INST [`dst` |-> `Var dp`, `src` |-> `Var sp`,
+    `cnt` |-> `LENGTH (bs:8 word list)`, `db` |-> `d`, `sb` |-> `sb`,
+    `final` |-> `en`] (SPEC_ALL window_bytes_mem_checks)) >>
+  (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >> strip_tac >>
+  mp_tac (Q.INST [`src` |-> `sp:string`, `dst` |-> `dp:string`,
+    `p` |-> `(n2w sb : 256 word)`, `q` |-> `(n2w d : 256 word)`]
+    (SPEC_ALL bytes_encoder_joint_ghosts)) >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+  drule compile_abi_bytestring_code >> strip_tac >>
+  `!x. out = Var x ==> not_fresh_at en x` by
+    (qpat_assum `out = Var (EL 8 _)` mp_tac >>
+     qpat_assum `en.cs_next_var = st.cs_next_var+9` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[compiler_var_names_EL, not_fresh_at_def]) >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en) = []` by
+    (qpat_assum `emitted_insts st en = _` (fn th => rewrite_tac[th]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac (bool_ss ++ numSimps.REDUCE_ss)
+       [bytestring_encoder_insts_def, listTheory.FILTER,
+        emitHelperPropsTheory.mk_inst_opcode,
+        venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st en)` by
+    (qpat_assum `emitted_insts st en = _` (fn th => rewrite_tac[th]) >>
+     MATCH_ACCEPT_TAC bytestring_encoder_straight) >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (emitted_insts st en)` by
+    (qpat_assum `emitted_insts st en = _` (fn th => rewrite_tac[th]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac (bool_ss ++ numSimps.REDUCE_ss)
+       [EVERY_MEM, MEM, bytestring_encoder_insts_def, mk_inst_def] >>
+     rpt strip_tac >>
+     gvs[EVERY_MEM, MEM, bytestring_encoder_insts_def, mk_inst_def,
+       venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm]) >>
+  `ctx_has_dalloca ctx ==>
+    !pre i post u. emitted_insts st en = pre ++ i::post /\
+      run_inst_seq pre s = OK u ==> dalloca_no_wrap i u` by
+    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
+     qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM, MEM_APPEND]) >>
+  `s.vs_inst_idx + LENGTH (emitted_insts st en) = LENGTH en.cs_current_insts` by
+    (qpat_assum `en.cs_current_insts = st.cs_current_insts ++ _` mp_tac >>
+     qpat_assum `s.vs_inst_idx = LENGTH st.cs_current_insts` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[LENGTH_APPEND]) >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts st en) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_assum `fn_has_code st en func` mp_tac >>
+     qpat_assum `same_blocks st en` mp_tac >>
+     qpat_assum `en.cs_current_insts = st.cs_current_insts ++ _` mp_tac >>
+     qpat_assum `s.vs_current_bb = st.cs_current_bb` mp_tac >>
+     qpat_assum `s.vs_inst_idx = LENGTH st.cs_current_insts` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac bool_ss [fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
+     rpt strip_tac >> qexists_tac `bb` >>
+     asm_rewrite_tac[] >> metis_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) []
+    (OK (raw with vs_inst_idx := LENGTH en.cs_current_insts),G',tn')` by
+    (gen_tac >>
+     qpat_assum `!D. inst_seq_ptr D _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `D` assume_tac) >>
+     mp_tac (Q.SPECL [`emitted_insts st en`, `s`, `raw`, `G`, `tn`,
+       `G'`, `tn'`, `ctx`, `func`, `bb`] run_inst_seq_gas_origin_ptr_path) >>
+     (impl_tac >- asm_rewrite_tac[]) >>
+     qpat_assum `FILTER _ (emitted_insts st en) = []` mp_tac >>
+     qpat_assum `s.vs_inst_idx + LENGTH (emitted_insts st en) = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> metis_tac[MAP]) >>
+  `!i. d <= i /\ i < d + (32 + ceil32 (LENGTH bs)) ==> i NOTIN tn'.t_mem` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!i. w2n _ <= i /\ _ ==> i NOTIN tn'.t_mem`
+       (qspec_then `i` mp_tac) >>
+     impl_tac >- (asm_rewrite_tac[] >> decide_tac) >> simp[]) >>
+  `!i. i < d \/ d + (32 + ceil32 (LENGTH bs)) <= i ==>
+       (i IN tn'.t_mem <=> i IN tn.t_mem)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!i. (i < w2n _ \/ _) ==> _` (qspec_then `i` mp_tac) >>
+     impl_tac >- (asm_rewrite_tac[] >> decide_tac) >> simp[]) >>
+  `encoder_leaf_trace st en s (raw with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (simp_tac bool_ss [encoder_leaf_trace_def] >> qexists_tac `raw` >>
+     qhdtm_assum `window_seq` (strip_assume_tac o PURE_REWRITE_RULE [window_seq_def]) >>
+     asm_rewrite_tac[]) >>
+  qexistsl_tac [`raw with vs_inst_idx := LENGTH en.cs_current_insts`, `G'`, `tn'`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_assum `LENGTH (enc at (BytesV bs)) = _`
+    (fn th => PURE_REWRITE_TAC [th]) >> TRY (first_assum ACCEPT_TAC) >>
+  gen_tac >> disch_then (assume_tac o CONJUNCT1) >>
+  qpat_assum `!i. i < d \/ _ ==> (i IN tn'.t_mem <=> _)` irule >>
+  first_assum ACCEPT_TAC
+QED
