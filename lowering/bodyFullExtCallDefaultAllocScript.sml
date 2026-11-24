@@ -6,9 +6,9 @@ Ancestors
   bodyFullHashKeccakFixed abiCallerAllocation abiCallerLocalScratch
   vyperStorageFootprint loweringPosts fragGasOriginPtr bodySimFull
   compileEnv exprLowering venomState venomExecSemantics venomMemDefs
-  finite_map words freshWrites
+  finite_map words freshWrites abiBuiltinAllocation emitHelperProps exprLoweringProps
 
-Theorem extcall_default_alloc_cut:
+val default_alloc_inputs = ``
   compile_alloc_buffer n sm = (buf,sn) /\ fn_has_code sm sn func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\
   n < dimword (:256) /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -27,8 +27,9 @@ Theorem extcall_default_alloc_cut:
   alloca_history func s /\ allocas_from lo s /\
   lo <= s.vs_alloca_next /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?q w u Ga ta.
+  s.vs_inst_idx = LENGTH sm.cs_current_insts``;
+
+val default_alloc_post = ``
     buf.buf_operand = Var q /\ not_fresh_at sn q /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
            (s,G,tn) [] (OK u,Ga,ta)) /\
@@ -62,7 +63,14 @@ Theorem extcall_default_alloc_cut:
          i IN tn.t_mem \/ (s.vs_alloca_next <= i /\ i < w2n w + n)) /\
     (!x. not_fresh_at sm x ==>
          lookup_var x u = lookup_var x s /\ FLOOKUP Ga x = FLOOKUP G x /\
-         op_taint ta (Var x) = op_taint tn (Var x))
+         op_taint ta (Var x) = op_taint tn (Var x))``;
+
+Theorem extcall_default_alloc_cut_step:
+  ^default_alloc_inputs ==>
+  ?q w u Ga ta.
+    (?r. step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w n)] [q]) s = OK r /\
+         u = r with vs_inst_idx := SUC s.vs_inst_idx) /\
+    ^default_alloc_post
 Proof
   strip_tac >>
   `stmt_state_rel (storage_trace_horizon ee.storage_trace)
@@ -73,10 +81,17 @@ Proof
   `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
     metis_tac[stmt_state_rel_allocas_below_fmp] >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``]
-    (SPEC_ALL alloc_buffer_origin_ptr_path_exact)) >>
+    (SPEC_ALL alloc_buffer_origin_ptr_path_with_raw_endpoint)) >>
   disch_then (qspecl_then [`tn`, `explicit`, `PG`, `G`]
-    (qx_choose_then `q` (qx_choose_then `w` (qx_choose_then `u`
-      (qx_choose_then `Ga` (qx_choose_then `ta` strip_assume_tac)))))) >>
+    (qx_choosel_then [`q`,`w`,`u`,`Ga`,`ta`,`r`]
+       (map_every assume_tac o CONJUNCTS))) >>
+  `emit_op ALLOCA [Lit (n2w n)] sm = (Var q,sn)` by
+    (drule abi_builtin_alloc_buffer_shape >> simp[]) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w n)] [q]) s = OK r` by
+    (qpat_x_assum `run_inst_seq _ _ = OK r` mp_tac >>
+     fs[run_inst_seq_def, AllCaseEqs()]) >>
+  `u = r with vs_inst_idx := SUC s.vs_inst_idx` by simp[arithmeticTheory.ADD1] >>
   `u.vs_halted = s.vs_halted /\ u.vs_memory = s.vs_memory /\
    contract_storage u = contract_storage s /\
    contract_transient u = contract_transient s` by
@@ -97,13 +112,18 @@ Proof
   `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ ee u`
        (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp) >> simp[]) >>
-  qexistsl [`q`, `w`, `u`, `Ga`, `ta`] >> simp[] >>
-  conj_tac >- suspend "horizon_post" >>
+  qexistsl [`q`, `w`, `u`, `Ga`, `ta`] >>
+  conj_tac >- (qexists `r` >> simp[]) >>
+  qpat_x_assum `u = r with vs_inst_idx := SUC _` kall_tac >>
+  qpat_x_assum `u = r with vs_inst_idx := LENGTH _` kall_tac >>
+  qpat_x_assum `Ga = step_prov _ _ _ _` kall_tac >>
+  qpat_x_assum `ta = step_taint _ _ _ _` kall_tac >>
+  simp[] >> conj_tac >- suspend "horizon_post" >>
   reverse conj_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "caller_ghost"
 QED
 
-Resume extcall_default_alloc_cut[horizon_post]:
+Resume extcall_default_alloc_cut_step[horizon_post]:
   qx_gen_tac `H` >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
     (qspec_then `H` (strip_assume_tac o UNDISCH)) >>
@@ -127,7 +147,7 @@ Resume extcall_default_alloc_cut[horizon_post]:
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 
-Resume extcall_default_alloc_cut[caller_ghost]:
+Resume extcall_default_alloc_cut_step[caller_ghost]:
   qpat_assum `stmt_state_rel H0 _ _ _ _ es s0`
     (strip_assume_tac o MATCH_MP stmt_state_rel_local_ptrs_alloca) >>
   `!aid b len. FLOOKUP s0.vs_allocas aid = SOME (b,len) ==>
@@ -147,4 +167,13 @@ Resume extcall_default_alloc_cut[caller_ghost]:
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 
-Finalise extcall_default_alloc_cut
+Finalise extcall_default_alloc_cut_step
+
+Theorem extcall_default_alloc_cut:
+  ^default_alloc_inputs ==> ?q w u Ga ta. ^default_alloc_post
+Proof
+  disch_tac >> mp_tac (SPEC_ALL extcall_default_alloc_cut_step) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`q`,`w`,`u`,`Ga`,`ta`] (assume_tac o CONJUNCT2)) >>
+  qexistsl_tac [`q`,`w`,`u`,`Ga`,`ta`] >> first_assum ACCEPT_TAC
+QED
