@@ -58,7 +58,22 @@ Triviality closed_typed_const_supported_mutual:
         (src <> NONE ==> imported_field_refs_ok fs) ==>
         supported_pure_fields tops fs)
 Proof
-  strip_tac >> ho_match_mp_tac const_local_refs_ind >>
+  strip_tac >>
+  (* Retain aggregate support while traversing the builtin argument list. *)
+  `(!e. constant_expr mods e /\ const_local_refs e = [] /\
+        well_typed_expr (artifact_env art mods src) e /\
+        (src <> NONE ==> imported_expr_refs_ok e) ==>
+        supported_pure_expr tops e /\ checker_agg_ok tops (expr_type e)) /\
+   (!es. EVERY (constant_expr mods) es /\ const_local_exprs es = [] /\
+         well_typed_exprs (artifact_env art mods src) es /\
+         (src <> NONE ==> imported_exprs_refs_ok es) ==>
+         supported_pure_exprs tops es /\
+         EVERY (\e. checker_agg_ok tops (expr_type e)) es) /\
+   (!fs. EVERY (constant_expr mods) (MAP SND fs) /\ const_local_fields fs = [] /\
+         well_typed_named_exprs (artifact_env art mods src) fs /\
+         (src <> NONE ==> imported_field_refs_ok fs) ==>
+         supported_pure_fields tops fs)` suffices_by metis_tac[] >>
+  ho_match_mp_tac const_local_refs_ind >>
   simp[constant_expr_def, const_local_refs_def, imported_expr_refs_ok_def,
        expr_type_def, SF ETA_ss] >>
   rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
@@ -116,8 +131,11 @@ Proof
   >~ [`supported_pure_expr _ (Builtin _ _ _)`] >-
     (rename1 `Builtin ty bt es` >>
      gvs[well_typed_expr_def, artifact_env_def, supported_pure_expr_def] >>
-     `supported_pure_exprs tops es` by metis_tac[] >> simp[] >>
-     irule linked_builtin_form >> simp[] >> rpt strip_tac >> gvs[] >> metis_tac[])
+     `supported_pure_exprs tops es /\ EVERY (\e. checker_agg_ok tops (expr_type e)) es`
+       by metis_tac[] >>
+     simp[] >> irule linked_builtin_form >> simp[] >> conj_tac
+     >- (rpt strip_tac >> gvs[] >> metis_tac[])
+     >> strip_tac >> gvs[well_typed_builtin_app_def, MAP_EQ_CONS])
   >~ [`supported_pure_expr _ (TypeBuiltin _ _ _ _)`] >-
     (rename1 `TypeBuiltin ty tb target es` >>
      gvs[well_typed_expr_def, artifact_env_def, supported_pure_expr_def] >>

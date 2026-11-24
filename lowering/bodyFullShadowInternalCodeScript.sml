@@ -268,6 +268,50 @@ Proof
   gvs[internal_fn_descriptors_def, EL_APPEND_EQN]
 QED
 
+Theorem extract_context_selected_internal_segment:
+  extract_context_with_internals entry
+    (xs ++ [(label,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret)] ++ ys)
+    final = SOME (ctx,data) /\
+  ALL_DISTINCT (MAP (\f. f.fn_name) ctx.ctx_functions) /\
+  EVERY (\f. ALL_DISTINCT (MAP (\bb. bb.bb_label) f.fn_blocks)) ctx.ctx_functions /\
+  ctx_inst_ids_distinct ctx /\
+  compile_internal_fn_bodies
+    (xs ++ [(label,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret)] ++ ys)
+    start = ((),final) /\
+  EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks start) /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors
+    (xs ++ [(label,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret)] ++ ys)) /\
+  ALL_DISTINCT (MAP FST (internal_fn_descriptors
+    (xs ++ [(label,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret)] ++ ys))) ==>
+  ?func before old st0 after.
+    lookup_function label ctx.ctx_functions = SOME func /\
+    (?u. compile_internal_fn_bodies xs start = (u,before)) /\
+    new_block label before = (old,st0) /\
+    compile_internal_function ce params has_buf nr key trans view ctor imm_len
+      ss ret st0 = ((),after) /\
+    fn_has_code st0 after func /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks) /\
+    ctx_inst_ids_distinct ctx /\
+    all_blocks after = all_blocks before ++ func.fn_blocks
+Proof
+  strip_tac >>
+  drule compile_internal_fn_bodies_selected_segments >> strip_tac >>
+  drule extract_context_selected_segment_lookup >>
+  disch_then (qspecl_then [`start`, `seg`, `pre`, `post`, `before`, `after`] mp_tac) >>
+  simp[] >>
+  simp[internal_fn_descriptors_def] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `lookup_function label _ = SOME func` >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks) /\
+   ctx_inst_ids_distinct ctx` by
+    (fs[lowering_context_ok_def, EVERY_MEM, fn_labels_def] >>
+     drule lookup_function_MEM >> strip_tac >> simp[]) >>
+  `all_blocks after = all_blocks before ++ func.fn_blocks` by
+    simp[Abbr `func`, mk_internal_function_def, mk_raw_function_def] >>
+  fs[] >> drule_all internal_singleton_code >> strip_tac >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem extract_context_selected_internal_code:
   extract_context_with_internals entry
     (xs ++ [(label,ce,params,has_buf,nr,key,trans,view,ctor,imm_len,ss,ret)] ++ ys)
@@ -293,22 +337,8 @@ Theorem extract_context_selected_internal_code:
     ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks) /\
     ctx_inst_ids_distinct ctx
 Proof
-  strip_tac >>
-  drule compile_internal_fn_bodies_selected_segments >> strip_tac >>
-  drule extract_context_selected_segment_lookup >>
-  disch_then (qspecl_then [`start`, `seg`, `pre`, `post`, `before`, `after`] mp_tac) >>
-  simp[] >>
-  simp[internal_fn_descriptors_def] >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `lookup_function label _ = SOME func` >>
-  `ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks) /\
-   ctx_inst_ids_distinct ctx` by
-    (fs[lowering_context_ok_def, EVERY_MEM, fn_labels_def] >>
-     drule lookup_function_MEM >> strip_tac >> simp[]) >>
-  `all_blocks after = all_blocks before ++ func.fn_blocks` by
-    simp[Abbr `func`, mk_internal_function_def, mk_raw_function_def] >>
-  fs[] >> drule_all internal_singleton_code >> strip_tac >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any)
+  strip_tac >> drule_all extract_context_selected_internal_segment >>
+  strip_tac >> metis_tac[]
 QED
 
 Theorem extract_context_internal_names:
@@ -326,7 +356,7 @@ Proof
   PairCases_on `desc` >> gvs[internal_fn_matches_descriptor_def, EL_MAP]
 QED
 
-Theorem selected_internal_shadow_code:
+Theorem selected_internal_shadow_layout:
   pkg = (label,ce,params,has_rb,nr,key,trans,view,ctor,ilen,ss,rt) /\
   ips = xs ++ [pkg] ++ ys /\ sips = MAP gas_shadow_internal_package ips /\
   compile_internal_fn_bodies ips start = ((),run_end) /\
@@ -357,7 +387,8 @@ Theorem selected_internal_shadow_code:
     compile_internal_function (gas_shadow_env T ce) params has_rb nr key trans view ctor ilen
       (MAP gas_shadow_stmt ss) rt entryS = ((),finalS) /\
     gas_shadow_state entry entryS /\ gas_shadow_state final finalS /\
-    fn_has_code entryS finalS sf
+    fn_has_code entryS finalS sf /\
+    ALL_DISTINCT (final.cs_current_bb :: MAP (\bb. bb.bb_label) (emitted_blocks entry final))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   qpat_x_assum `sips = _` SUBST_ALL_TAC >>
@@ -371,10 +402,11 @@ Proof
     compile_internal_function ce params has_rb nr key trans view ctor ilen
       ss rt real_entry = ((),real_final) /\
     fn_has_code real_entry real_final real_callee /\
-    ALL_DISTINCT (MAP (\bb. bb.bb_label) real_callee.fn_blocks)` by
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) real_callee.fn_blocks) /\
+    all_blocks real_final = all_blocks real_before ++ real_callee.fn_blocks` by
     (mp_tac (Q.INST [`entry` |-> `name`, `final` |-> `run_end`,
        `has_buf` |-> `has_rb`, `imm_len` |-> `ilen`, `ret` |-> `rt`]
-       extract_context_selected_internal_code) >>
+       extract_context_selected_internal_segment) >>
      simp[internal_fn_descriptors_def, oneTheory.one] >> metis_tac[]) >>
   `?shadow_callee shadow_before shadow_old shadow_entry shadow_final.
     lookup_function label sctx.ctx_functions = SOME shadow_callee /\
@@ -415,7 +447,54 @@ Proof
      qpat_x_assum `gas_shadow_compiles _ _`
        (qspecl_then [`real_entry`, `shadow_entry`] mp_tac o
          REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >>
+  `cs_extends real_entry real_final` by
+    (qspecl_then [`ce`, `params`, `has_rb`, `nr`, `key`, `trans`, `view`,
+       `ctor`, `ilen`, `ss`, `rt`, `real_entry`] mp_tac
+       compile_internal_function_labels >> simp[]) >>
+  `ALL_DISTINCT (real_final.cs_current_bb ::
+      MAP (\bb. bb.bb_label) (emitted_blocks real_entry real_final))` by
+    (drule_all internal_block_segment_labels >> strip_tac >>
+     qpat_x_assum `ALL_DISTINCT (MAP _ callee.fn_blocks)` mp_tac >>
+     qpat_assum `callee.fn_blocks = _` (pure_rewrite_tac o single) >>
+     simp[MAP_REVERSE, ALL_DISTINCT_APPEND]) >>
   qexistsl_tac [`real_before`, `real_old`, `real_entry`, `real_final`, `shadow_callee`,
     `shadow_before`, `shadow_old`, `shadow_entry`, `shadow_final`] >>
   fs[]
+QED
+
+Theorem selected_internal_shadow_code:
+  pkg = (label,ce,params,has_rb,nr,key,trans,view,ctor,ilen,ss,rt) /\
+  ips = xs ++ [pkg] ++ ys /\ sips = MAP gas_shadow_internal_package ips /\
+  compile_internal_fn_bodies ips start = ((),run_end) /\
+  compile_internal_fn_bodies sips startS = ((),run_endS) /\
+  extract_context_with_internals name ips run_end = SOME (ctx,data) /\
+  extract_context_with_internals name sips run_endS = SOME (sctx,sdata) /\
+  gas_shadow_state start startS /\ gas_shadow_context ctx sctx /\
+  EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks start) /\
+  EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks startS) /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips) /\
+  ALL_DISTINCT (MAP FST (internal_fn_descriptors ips)) /\
+  ALL_DISTINCT (MAP (\f. f.fn_name) ctx.ctx_functions) /\
+  ALL_DISTINCT (MAP (\f. f.fn_name) sctx.ctx_functions) /\
+  EVERY (\f. ALL_DISTINCT (MAP (\bb. bb.bb_label) f.fn_blocks))
+    ctx.ctx_functions /\
+  EVERY (\f. ALL_DISTINCT (MAP (\bb. bb.bb_label) f.fn_blocks))
+    sctx.ctx_functions /\
+  ctx_inst_ids_distinct ctx /\ ctx_inst_ids_distinct sctx /\
+  lookup_function label ctx.ctx_functions = SOME callee ==>
+  ?before old entry final sf beforeS oldS entryS finalS.
+    new_block label before = (old,entry) /\
+    compile_internal_function ce params has_rb nr key trans view ctor ilen
+      ss rt entry = ((),final) /\
+    fn_has_code entry final callee /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
+    MEM sf sctx.ctx_functions /\ gas_shadow_function callee sf /\
+    new_block label beforeS = (oldS,entryS) /\
+    compile_internal_function (gas_shadow_env T ce) params has_rb nr key trans view ctor ilen
+      (MAP gas_shadow_stmt ss) rt entryS = ((),finalS) /\
+    gas_shadow_state entry entryS /\ gas_shadow_state final finalS /\
+    fn_has_code entryS finalS sf
+Proof
+  disch_then (mp_tac o MATCH_MP selected_internal_shadow_layout) >>
+  strip_tac >> metis_tac[]
 QED
