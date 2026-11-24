@@ -5532,23 +5532,20 @@ Resume body_append_nested_frag_full[staged_cont]:
   qpat_assum `lookup_scopes id rhs_state.scopes = SOME entry` (irule_at Any) >>
   qpat_assum `read_memory_path entry path = INL (ArrayV (DynArrayV vs))` (irule_at Any) >>
   qpat_assum `lookup_var x staged = SOME addr` (irule_at Any) >>
-  simp[] >>
   qexistsl_tac [`lctx`,`env`,`d`,`RetQ`] >>
+  simp_tac bool_ss [venomStateTheory.operand_11] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qpat_assum `~is_word_type elem` (fn th => simp_tac bool_ss [th]) >>
+     qexists_tac `n2w b` >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     qpat_assum `w2n (n2w b) = b` (fn th => simp_tac bool_ss [th]) >>
+     first_assum ACCEPT_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   suspend "staged_conditions"
 QED
 
 Resume body_append_nested_frag_full[staged_conditions]:
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >-
-    (qx_gen_tac `final_horizon` >> strip_tac >>
-     qpat_assum `rhs_state.storage_trace = _` (fn eq =>
-       qpat_assum `!H. valid_horizon _ _ H rhs_state.storage_trace ==>
-         stmt_state_rel H ctx func cenv cx rhs_state staged /\ _`
-         (qspec_then `final_horizon` (mp_tac o PURE_REWRITE_RULE [eq]))) >>
-     (impl_tac >- simp[]) >> strip_tac >> first_assum ACCEPT_TAC) >>
-  simp[] >>
-  reverse conj_tac >- (rpt gen_tac >> strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qx_genl_tac [`final_horizon`,`ans`,`ee`,`Gf`,`tf`,`fin_state`] >>
   disch_then (qx_choose_then `cenvf` strip_assume_tac) >>
   qexists_tac `cenvf` >> simp[] >>
