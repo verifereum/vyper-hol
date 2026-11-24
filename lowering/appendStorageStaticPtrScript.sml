@@ -3,6 +3,7 @@ Theory appendStorageStaticPtr
 Ancestors
   appendStorageRel appendStorageStageTransportPtr stmtAppendStorageSuffixPtr
   stmtAppendStoragePathPtr stmtSimAppendStorage fragGasCopyLoop fragGasSeqPtr fragExecMem
+  fragGasCopySeqLiftProps
   exprLowering emitHelper contextCodegenRel freshWrites
   instMemFrontier emittedSeqComposePtr ptrSafeRun ptrDiscipline
   exprLoweringProps emitHelperProps stateFrame venomInst venomState

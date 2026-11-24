@@ -1,5 +1,6 @@
 Theory createSizeBlueprintAbiKeywords
 Ancestors
+  bodySingletonCallSupport[qualified,ignore_grammar]
   gasShadowCompileBase
   abiEncoderProps e2eDefs exprSimFullBundleProps fragExec fragGasOrigin fragGasOriginPtr
   gasExplicitSites gasSummary venomExecSemantics venomInst venomState vyperCreate vyperState
@@ -314,18 +315,13 @@ Resume create_blueprint_abi_keyword_entry[payload]:
 QED
 
 Resume create_blueprint_abi_keyword_entry[calls]:
-  qpat_assum `expr_body_pre ce cx env (Call _ _ _ _) entry`
-    (mp_tac o REWRITE_RULE [expr_body_pre_split_def]) >>
-  strip_tac >> drule expr_body_pre_mods_int_calls >> strip_tac >>
-  drule body_inv_main_code >> strip_tac >>
+  drule_all_then assume_tac bodySingletonCallSupportTheory.body_inv_expr_pre_calls >>
   simp[EVERY_MEM] >> qx_gen_tac `call` >> disch_tac >>
   `MEM call (int_calls_expr (Call ann (CreateTarget (CreateFromBlueprint F) hs rof ks) args df))` by
     (Cases_on `hs` >> gvs[int_calls_expr_def]) >>
-  qpat_assum `EVERY (\c. FST c = NONE) _`
-    (qspec_then `call` (drule_then assume_tac) o REWRITE_RULE[EVERY_MEM]) >>
-  qpat_assum `EVERY (\c. ?tops. _) _`
-    (qspec_then `call` (drule_then strip_assume_tac) o REWRITE_RULE[EVERY_MEM]) >>
-  Cases_on `call` >> gvs[]
+  qpat_assum `EVERY _ (int_calls_expr (Call _ _ _ _))`
+    (qspec_then `call` mp_tac o SIMP_RULE bool_ss [EVERY_MEM]) >>
+  simp[]
 QED
 
 Resume create_blueprint_abi_keyword_entry[producer_pre]:
