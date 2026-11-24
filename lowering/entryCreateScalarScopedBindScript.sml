@@ -3,30 +3,18 @@ Theory entryCreateScalarScopedBind
 Ancestors
   entryCreateScopedBind entryCreateFocusSpec entryCreateCompletedCut
   exprSimFullBundleProps bodySim exprSimDefs gasContext
-  gasExemptCert vyperStorageTrace vyperStorageFootprint
-
-Theorem scalar_exit_is_exception[local]:
-  create_operand_exit_post ctx cx H res ee gt r ==>
-  ?exc. res = INR exc
-Proof
-  Cases_on `res` >> Cases_on `r` >>
-  simp[create_operand_exit_post_def, expr_exit_def]
-QED
+  gasExemptCert vyperStorageTrace vyperStorageFootprint vyperState
 
 Theorem scalar_scoped_exception_post[local]:
-  scoped_operand_outcome env tops cx st0 a m source (es,s,G,tn) Q
-    (create_operand_exit_post ctx cx) ==>
-  scoped_operand_outcome env tops cx st0 a m source (es,s,G,tn) Q
-    (\H res ee gt r. (?exc. res = INR exc) /\ create_operand_exit_post ctx cx H res ee gt r)
+  (\H (res : 'a + exception) ee gt r. ?exc. res = INR exc /\
+    create_operand_exit_post ctx cx H (INR exc : 'b + exception) ee gt r) =
+  create_operand_exit_post ctx cx
 Proof
-  PairCases_on `env` >>
-  simp_tac bool_ss [scoped_operand_outcome_def] >>
-  disch_then (qx_choose_then `marks` strip_assume_tac) >> qexists_tac `marks`
-  >- metis_tac[]
-  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >>
-      simp[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
-      simp[] >> metis_tac[scalar_exit_is_exception]) >>
-  metis_tac[]
+  simp[FUN_EQ_THM] >> rpt gen_tac >>
+  Cases_on `res` >- simp[create_operand_exit_post_def] >>
+  rename1 `INR ex` >> Cases_on `ex` >> Cases_on `r` >>
+  simp[create_operand_exit_post_def, halt_exit_def, expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED
 
 Theorem create_body_operand_scoped_bind:
@@ -96,21 +84,22 @@ Proof
   disch_then (drule_then assume_tac) >>
   `cx_tops cx = tops` by fs[body_inv_def, cx_tops_def] >>
   qpat_x_assum `cx_tops cx = tops` SUBST_ALL_TAC >>
-  drule scalar_scoped_exception_post >> disch_tac >>
-  qpat_assum `scoped_operand_outcome _ _ _ _ _ _ _ _ _ (\H res ee gt r. _ /\ _)`
-    (mp_then (Pat `scoped_operand_outcome _ _ _ _ _ _ _ _ _ _`)
-      (qspecl_then [`next`,`b`,`Q`] mp_tac o SIMP_RULE bool_ss [])
-      scoped_operand_bind_all) >>
-  (impl_tac >- (
-    simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
-         storage_trace_frame_read_result] >>
-    rpt conj_tac
-    >~ [`gas_marked_exec _ _ _ _ _ _ _ _`] >-
-      (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
-       goal_assum (drule_at Any) >> simp[])
-    >~ [`gas_exempt_cert _ _ _ _ _ _ _`] >-
-      (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
-    suspend "normal")) >> simp[]
+  irule scoped_operand_bind_all_mixed >>
+  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+       storage_trace_frame_read_result] >>
+  rpt conj_tac
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`] >-
+    (rpt strip_tac >> pure_rewrite_tac[ignore_bind_def] >>
+     pure_once_rewrite_tac[bind_assoc] >> irule gas_exempt_cert_bind_value >>
+     qexistsl_tac [`mid`,`t`,`v`] >> fs[ignore_bind_def])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _`] >-
+    (rpt strip_tac >> pure_rewrite_tac[ignore_bind_def] >>
+     pure_once_rewrite_tac[bind_assoc] >> irule gas_exempt_cert_error_value >>
+     simp[ignore_bind_def]) >>
+  qexistsl_tac [`expr_sim_full_post (DF,lo,d,ctx,func) ce cx e (es,a,m,s,op,G,tn)`, `m`] >>
+  (rpt conj_tac >> TRY (first_assum ACCEPT_TAC))
+  >- suspend "normal" >>
+  pure_rewrite_tac[scalar_scoped_exception_post] >> first_assum ACCEPT_TAC
 QED
 
 Resume create_body_operand_scoped_bind[normal]:
@@ -120,8 +109,30 @@ Resume create_body_operand_scoped_bind[normal]:
     by fs[storage_trace_domain_def] >>
   `?v. res = INL v` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_sim_full_post _ _ _ _ _ H _ _ _ _ _ /\ _`
-       (drule_then mp_tac) >> simp[expr_sim_full_post_def] >> metis_tac[]) >>
-  pop_assum strip_assume_tac >> gvs[] >>
-  FAIL_TAC "normal callback"
+       (drule_then (strip_assume_tac o SIMP_RULE bool_ss [expr_sim_full_post_def])) >>
+     goal_assum (drule_at Any)) >>
+  qpat_x_assum `res = INL v` SUBST_ALL_TAC >>
+  qexists_tac `v` >> simp_tac bool_ss [] >>
+  qpat_x_assum `expr_sim_full_pre _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [s1PrefixDefsTheory.expr_sim_full_pre_def]) >>
+  qpat_x_assum `!marks v ee G1 tn1 t. body_inv _ _ _ _ /\ _ ==> _`
+    (qspecl_then [`marks`,`v`,`mid`,`G1`,`tn1`,`t`] mp_tac) >>
+  (impl_tac >- (rpt (first_assum ACCEPT_TAC ORELSE conj_tac) >>
+    qx_gen_tac `H` >> disch_tac >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> expr_sim_full_post _ _ _ _ _ H _ _ _ _ _ /\ _`
+      (qspec_then `H` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    rpt (pop_assum kall_tac) >>
+    simp_tac bool_ss [expr_sim_full_post_def, sumTheory.INL_11] >> metis_tac[])) >>
+  disch_tac >>
+  qpat_x_assum `!marks v ee G1 tn1 t. _ ==> scoped_operand_outcome _ _ _ _ _ _ _ _ _ _`
+    (qspecl_then [`marks`,`v`,`mid`,`G1`,`tn1`,`t`] mp_tac) >>
+  (impl_tac >- (rpt (first_assum ACCEPT_TAC ORELSE conj_tac) >>
+    qx_gen_tac `H` >> disch_tac >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> expr_sim_full_post _ _ _ _ _ H _ _ _ _ _ /\ _`
+      (qspec_then `H` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    rpt (pop_assum kall_tac) >> metis_tac[])) >>
+  disch_then ACCEPT_TAC
 QED
 Finalise create_body_operand_scoped_bind
