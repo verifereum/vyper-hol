@@ -1,6 +1,6 @@
 (* Source-side preconditions for finite-horizon AugAssign composition. *)
 Theory augAssignFullEntryPre
-Ancestors vyperTypeEnv compileEnv targetPlaceSimCasesBase
+Ancestors bodySingletonCallSupport vyperTypeEnv compileEnv targetPlaceSimCasesBase
   bodyAugPlaceTarget bodyExprPreFacts bodyStorageCases stmtSimAugAssignPlace stmtSimAugAssignPlaceMemory
   bodySim exprSimHypsDefs targetPlaceSim targetPlaceLive gasContext
   supportedStmts supportedTargets supportedExprTraverse supportedStmtTraverse
@@ -65,6 +65,10 @@ Theorem augassign_entry_target_indices_pre:
   target_indices_pre cenv cx env t
 Proof
   strip_tac >>
+  `call_evaluation_safe cx (int_calls_target t)` by
+    (qpat_assum `call_evaluation_safe cx (int_calls_stmt (AugAssign _ _ _ _))`
+      (ACCEPT_TAC o MATCH_MP call_evaluation_safe_append_left o
+       PURE_REWRITE_RULE [int_calls_stmt_def])) >>
   Cases_on `(?bt fld. t = AttributeTarget bt fld) \/
             (?bt k. t = SubscriptTarget bt k)`
   >- (
@@ -79,16 +83,21 @@ Proof
       fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
     `EVERY (\e. ~is_extcode e) (target_indices t)` by
       metis_tac[alloc_limits_target_indices_not_extcode] >>
+    `IS_SOME (type_place_target env t)` by simp[] >>
+    drule_all_then assume_tac body_inv_typed_target_calls_main >>
     mp_tac (Q.SPECL [`tops`, `bindings`, `t`] supported_target_info_main_calls) >>
     simp[] >> strip_tac >>
     `~supported_target_exists (const_name_root cx) t` by
       (drule_all body_inv_stmt_const_name_free >>
        simp[supported_stmt_expr_exists_def]) >>
-    irule aug_place_target_indices_pre >>
+    irule (Q.INST [`tops` |-> `tops`, `bindings` |-> `bindings`]
+      aug_place_target_indices_pre) >>
     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         alloc_limits_stmt_def, int_calls_stmt_def] >>
     simp[optionTheory.IS_SOME_EXISTS] >>
-    metis_tac[call_evaluation_safe_append_left]) >>
+    fs[EVERY_MEM] >> qexists_tac `bindings` >> conj_tac
+    >- (qexists_tac `pt` >> simp[]) >>
+    rpt strip_tac >> res_tac >> fs[optionTheory.IS_SOME_EXISTS]) >>
   Cases_on `t` >> gvs[target_indices_pre_def]
 QED
 
