@@ -4,9 +4,9 @@ Ancestors
   bodyFullBuiltinEnvReadsStep bodyPtrDefs exprSimMemDefs loweringPosts
   bodyFullExprGeneric bodyFullPreds bodySimFull exprSimHypsDefs
   bodyFullGhostFrame gasOutcomeFullCompose fragGasSeqPtr
-  exprSimSource exprSimProps exprLoweringProps emitHelperProps
+  exprSimSource exprSimProps exprLoweringProps emitHelperProps exprSimFullBundleProps
   compileEnv exprLowering vyperTypeBuiltins vyperTypeSystem vyperContext vyperState
-  vyperInterpreter vyperAST vyperValue valueEncoding words list
+  vyperInterpreter vyperAST vyperValue valueEncoding words list vyperStorageTrace vyperStorageFootprint
 
 val _ = Parse.hide "body";
 
@@ -33,6 +33,62 @@ Proof
   simp_tac (srw_ss() ++ wordsLib.SIZES_ss) []
 QED
 
+(* Export the run premise before the full outcome hides the selected endpoint. *)
+Theorem env_reads_value_run:
+  item <> PrevHash /\ item <> MsgGas /\
+  expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty
+    (Builtin (env_item_type item) (Env item) []) es
+    (st0,sa,sb,shadow_sa,shadow_sb,op,s0,G0,tn0) /\
+  storage_trace_domain cx st0 es.storage_trace ==>
+  ?raw v G' tn'.
+    run_inst_seq (emitted_insts sa sb) s0 = OK raw /\
+    (!tail. bind (eval_expr cx (Builtin (env_item_type item) (Env item) []))
+       (read_result cx) (es with gas_obs := tail) = (INL v,es with gas_obs := tail)) /\
+    !H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (s0,G0,tn0) [] (OK (raw with vs_inst_idx := LENGTH sb.cs_current_insts),G',tn') /\
+      expr_sim_full_post (DF,lo,d,ctx,func) cenv cx
+        (Builtin (env_item_type item) (Env item) []) (es,sa,sb,s0,op,G0,tn0)
+        H (INL v : value + exception) (es with gas_obs := []) G' tn'
+        (raw with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  simp_tac bool_ss [expr_sim_full_hypotheses_def, expr_sim_full_code_def] >>
+  strip_tac >> drule_all env_reads_source >>
+  disch_then (qspecl_then [`es`,`cx`] strip_assume_tac) >>
+  drule lower_value_env >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0` by metis_tac[] >>
+  drule_all env_reads_step_full_run >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`]
+    strip_assume_tac) >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  first_assum (drule_then strip_assume_tac) >>
+  `t with vs_inst_idx := LENGTH sb.cs_current_insts = t` by
+    metis_tac[venomStateTheory.venom_state_fupdselfid] >>
+  qexistsl_tac [`t with vs_inst_idx := s0.vs_inst_idx`,`v`,`G'`,`tn'`] >>
+  simp[] >> gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> (_ /\ gas_origin_ptr_path _ _ _ _) /\ _`
+    (drule_then strip_assume_tac) >>
+  simp[expr_sim_full_post_def, expr_sim_full_endpoint_def,
+       expr_type_def, expr_store_bound_def, ptr_val_ok_def, ghost_kept_at_def] >>
+  conj_tac
+  >- (simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+           expr_type_def, stmt_state_rel_start_gas_obs,
+           locals_kept_def, pure_frame_def, popped_kept_def,
+           vyperEvalScopesProgressTheory.scopes_progress_refl] >>
+      `storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+      gvs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+      rpt gen_tac >> Cases_on `b` >>
+      gvs[vyperStorageBackendTheory.get_storage_def] >>
+      metis_tac[vyperStorageBackendTheory.get_storage_def]) >>
+  conj_tac
+  >- (qpat_assum `stmt_state_rel H ctx func cenv cx es t`
+        (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  gvs[ghost_inv_at_def] >> metis_tac[]
+QED
+
 Theorem env_reads_sim_full:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (?i. bt = Env i /\ i <> PrevHash /\ i <> MsgGas) /\
@@ -55,36 +111,15 @@ Proof
          well_typed_builtin_app_def]) >>
   gvs[] >>
   conj_asm1_tac
-  >- (rw[expr_sim_full_def] >>
-      drule_all env_reads_source >>
-      disch_then (qspecl_then [`es`, `cx`] strip_assume_tac) >>
-      drule lower_value_env >> strip_tac >>
-      `!H. valid_horizon cx st0 H es.storage_trace ==>
-        stmt_state_rel H ctx func cenv cx es s0 /\
-        ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0` by metis_tac[] >>
-      drule_all env_reads_step_full >>
-      disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`]
-        strip_assume_tac) >>
-      irule gas_outcome_full_pure >> (reverse conj_tac >- simp[]) >>
-      qexistsl_tac [`G'`, `es`, `INL v`, `t`, `tn'`] >>
-      simp[] >> gen_tac >> strip_tac >>
-      first_x_assum drule >> strip_tac >>
-      simp[expr_type_def, expr_store_bound_def, ptr_val_ok_def,
-           ghost_kept_at_def] >>
-      conj_tac
-      >- (simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
-               expr_type_def, stmt_state_rel_start_gas_obs,
-               locals_kept_def, pure_frame_def, popped_kept_def,
-               vyperEvalScopesProgressTheory.scopes_progress_refl] >>
-          `storage_well_formed_on cx es (FST H)` by metis_tac[] >>
-          gvs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
-          rpt gen_tac >> Cases_on `b` >>
-          gvs[vyperStorageBackendTheory.get_storage_def] >>
-          metis_tac[vyperStorageBackendTheory.get_storage_def]) >>
-      conj_tac
-      >- (qpat_assum `stmt_state_rel H ctx func cenv cx es t`
-            (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
-      gvs[ghost_inv_at_def] >> metis_tac[]) >>
+  >- (rw[expr_sim_full_via_bundle] >> irule gas_outcome_full_initial_domain >>
+      simp[storage_trace_frame_bind, evaluate_storage_trace_frame,
+           storage_trace_frame_read_result] >> conj_tac
+      >- fs[expr_sim_full_hypotheses_def] >>
+      strip_tac >> drule_all env_reads_value_run >> strip_tac >>
+      irule gas_outcome_full_pure >> reverse conj_tac
+      >- fs[expr_sim_full_hypotheses_def] >>
+      qexistsl_tac [`G'`,`es`,`INL v`,`raw with vs_inst_idx := LENGTH sb.cs_current_insts`,`tn'`] >>
+      simp[] >> metis_tac[]) >>
   irule expr_vv_sim_stack_full >> simp[expr_type_def] >>
   conj_tac
   >- (gen_tac >> simp[compile_expr_def] >>
