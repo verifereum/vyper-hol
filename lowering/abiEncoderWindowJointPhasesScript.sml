@@ -74,7 +74,22 @@ Proof
   simp[allocas_below_fmp_def] >> rpt strip_tac >> res_tac >> decide_tac
 QED
 
-Theorem window_cursor_init_joint:
+Theorem cursor_init_silent_edge[local]:
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\ i.inst_opcode <> INVOKE /\
+  i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode /\
+  step_inst_base i s = OK u ==>
+  gas_origin_edge F explicit ctx func s []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `step_inst 0 ctx i s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted` by metis_tac[step_preserves_halted] >>
+  simp[fragGasOriginTheory.gas_origin_edge_def] >> qexists_tac `0` >>
+  simp[frameGasEventsTheory.gas_events_step_plain]
+QED
+
+Theorem window_cursor_init_joint_edges:
   emit_op ALLOCA [Lit 32w] st = (cursor,mid) /\
   emit_void MSTORE [cursor;value_op] mid = ((),en) /\
   fn_has_code st en func /\
@@ -90,6 +105,16 @@ Theorem window_cursor_init_joint:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t b p G' tn'.
+    (?v bb a m.
+      v.vs_inst_idx = SUC s.vs_inst_idx /\
+      LENGTH en.cs_current_insts = s.vs_inst_idx + 2 /\
+      lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+      lookup_block v.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb s.vs_inst_idx = SOME a /\
+      get_instruction bb v.vs_inst_idx = SOME m /\
+      a.inst_id = st.cs_next_id /\ m.inst_id = mid.cs_next_id /\
+      gas_origin_edge F explicit ctx func s [] (OK v) /\
+      gas_origin_edge F explicit ctx func v [] (OK t)) /\
     run_inst_seq (emitted_insts st en) s =
       OK (t with vs_inst_idx := s.vs_inst_idx) /\
     window_phase ctx func st en {st.cs_next_id} [] s t /\
@@ -274,16 +299,16 @@ Proof
      Cases_on `step_inst_base si u` >> simp_tac (srw_ss()) []) >>
   `step_inst_base si u = OK raw` by
     metis_tac[markerTheory.Abbrev_def] >>
+  `step_inst_base si (u with vs_inst_idx := SUC s.vs_inst_idx) =
+     OK (raw with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (simp_tac (srw_ss()) [instIdxIndepTheory.step_inst_inst_idx_indep,
+       Abbr `si`, mk_inst_def, is_terminator_def] >>
+     qpat_assum `step_inst_base si u = OK raw` mp_tac >>
+     simp_tac (srw_ss()) [mk_inst_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[instIdxIndepTheory.exec_result_map_def]) >>
   `!D. inst_seq_ptr D lo ctx func PG G tn [ai;si] s Ga tf` by
     (gen_tac >>
-     `step_inst_base si (u with vs_inst_idx := SUC s.vs_inst_idx) =
-       OK (raw with vs_inst_idx := SUC s.vs_inst_idx)` by
-       (simp_tac (srw_ss()) [instIdxIndepTheory.step_inst_inst_idx_indep,
-          Abbr `si`, mk_inst_def, is_terminator_def] >>
-        qpat_assum `step_inst_base si u = OK raw` mp_tac >>
-        simp_tac (srw_ss()) [mk_inst_def] >>
-        POP_ASSUM_LIST (K ALL_TAC) >>
-        simp[instIdxIndepTheory.exec_result_map_def]) >>
      qpat_assum `step_inst_base ai s = OK u` mp_tac >>
      qpat_assum `step_inst_base si (u with vs_inst_idx := _) = _` mp_tac >>
      qpat_assum `!D. ptr_inst_ok D lo 0 ctx func G tn ai s` mp_tac >>
@@ -341,8 +366,46 @@ Proof
      drule_all run_inst_seq_gas_origin_ptr_path >>
      simp_tac (srw_ss()) [Abbr `ai`, Abbr `si`, mk_inst_def] >>
      asm_rewrite_tac[] >> metis_tac[]) >>
+  qabbrev_tac `v = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `LENGTH en.cs_current_insts = s.vs_inst_idx + 2` by simp[] >>
+  `v.vs_inst_idx = SUC s.vs_inst_idx /\ ~v.vs_halted /\
+    v.vs_current_bb = s.vs_current_bb` by
+    (`step_inst 0 ctx ai s = OK u` by
+       simp[step_inst_non_invoke, Abbr `ai`, mk_inst_def] >>
+     `~is_terminator ai.inst_opcode` by simp[Abbr `ai`, mk_inst_def, is_terminator_def] >>
+     imp_res_tac step_preserves_control_flow >> imp_res_tac step_preserves_halted >>
+     simp[Abbr `v`]) >>
+  `isPREFIX [ai;si] (DROP s.vs_inst_idx bb.bb_instructions)` by
+    metis_tac[markerTheory.Abbrev_def] >>
+  `get_instruction bb s.vs_inst_idx = SOME ai /\
+    get_instruction bb v.vs_inst_idx = SOME si` by
+    (drule fragGasSeqAbortTheory.instruction_prefix_cursor >> strip_tac >>
+     drule fragGasSeqAbortTheory.instruction_prefix_cursor >> simp[]) >>
+  `gas_origin_edge F explicit ctx func s [] (OK v)` by
+    (qpat_x_assum `Abbrev (v = _)` (SUBST_ALL_TAC o REWRITE_RULE[markerTheory.Abbrev_def]) >>
+     irule cursor_init_silent_edge >> conj_tac >- first_assum ACCEPT_TAC >>
+     map_every qexists_tac [`bb`, `ai`] >>
+     asm_rewrite_tac[] >> simp[Abbr `ai`, mk_inst_def, is_terminator_def]) >>
+  `lookup_block v.vs_current_bb func.fn_blocks = SOME bb` by
+    (qpat_assum `v.vs_current_bb = _` (fn th => pure_rewrite_tac[th]) >>
+     first_assum ACCEPT_TAC) >>
+  `step_inst_base si v = OK (raw with vs_inst_idx := v.vs_inst_idx)` by
+    (qpat_assum `v.vs_inst_idx = _` (fn th => pure_rewrite_tac[th]) >>
+     first_assum ACCEPT_TAC) >>
+  `gas_origin_edge F explicit ctx func v []
+    (OK (raw with vs_inst_idx := LENGTH en.cs_current_insts))` by
+    (`(raw with vs_inst_idx := LENGTH en.cs_current_insts) =
+       ((raw with vs_inst_idx := v.vs_inst_idx) with vs_inst_idx := SUC v.vs_inst_idx)` by
+       simp[arithmeticTheory.ADD1] >> pop_assum SUBST1_TAC >>
+     irule cursor_init_silent_edge >> conj_tac >- first_assum ACCEPT_TAC >>
+     map_every qexists_tac [`bb`, `si`] >>
+     asm_rewrite_tac[] >> simp[Abbr `si`, mk_inst_def, is_terminator_def]) >>
   qexistsl_tac [`raw with vs_inst_idx := LENGTH en.cs_current_insts`,
     `b`, `p`, `Ga`, `tf`] >>
+  conj_tac >-
+    (qexistsl_tac [`v`, `bb`, `ai`, `si`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp[Abbr `ai`, Abbr `si`, mk_inst_def]) >>
   qpat_x_assum `raw = mstore b w u` kall_tac >>
   qpat_x_assum `u.vs_allocas = _` kall_tac >>
   qpat_x_assum `u.vs_alloca_next = _` kall_tac >>
@@ -358,7 +421,7 @@ Proof
   rpt strip_tac >> irule fresh_var_distinct >> decide_tac
 QED
 
-Resume window_cursor_init_joint[allocation_alignment]:
+Resume window_cursor_init_joint_edges[allocation_alignment]:
   `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w 32)] [p]) s = OK u` by
     metis_tac[markerTheory.Abbrev_def] >>
   `FLOOKUP u.vs_allocas st.cs_next_id = SOME (b,32)` by metis_tac[] >>
@@ -428,10 +491,54 @@ Resume window_cursor_init_joint[allocation_alignment]:
   asm_rewrite_tac[] >> simp_tac (srw_ss()) []
 QED
 
-Finalise window_cursor_init_joint
+Finalise window_cursor_init_joint_edges
+
+Theorem window_cursor_init_joint:
+  emit_op ALLOCA [Lit 32w] st = (cursor,mid) /\
+  emit_void MSTORE [cursor;value_op] mid = ((),en) /\
+  fn_has_code st en func /\
+  alloca_inv s /\ alloca_room ctx func s /\
+  (!b sz. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz) ==>
+    sz = 32) /\
+  eval_operand value_op s = SOME w /\
+  op_taint tn value_op = {} /\
+  (!x. value_op = Var x ==> not_fresh_at st x) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t b p G' tn'.
+    run_inst_seq (emitted_insts st en) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    window_phase ctx func st en {st.cs_next_id} [] s t /\
+    abi_encode_exec_frame func s t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    cursor = Var p /\ not_fresh_at en p /\
+    eval_operand cursor t = SOME (n2w b) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
+    b + 32 <= t.vs_alloca_next /\ b < dimword (:256) /\
+    mem_word_at b t.vs_memory = w /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    ptr_covers G' tn' p t 32 /\
+    G' = G |+ (p,(b,32)) /\
+    tn'.t_var = tn.t_var |+ (p,{}) /\
+    tn'.t_mem = tn.t_mem DIFF {i | b <= i /\ i < b + 32} /\
+    tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')
+Proof
+  strip_tac >> drule_all window_cursor_init_joint_edges >>
+  disch_then (qspecl_then [`explicit`, `PG`, `G`]
+    (qx_choose_then `t` (qx_choose_then `b`
+      (qx_choose_then `p` (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac)))))) >>
+  qexistsl_tac [`t`,`b`,`p`,`G'`,`tn'`] >> simp[]
+QED
 
 
-Theorem window_array_root_prefix_joint_strong:
+Theorem window_array_root_prefix_joint_counted:
   window_array_root ctx func st ids ei asz msz active ty avs
     src dst sb cap d s /\
   abi_encode_array_prefix src dst st = ((pp,count_op),en) /\
@@ -446,6 +553,7 @@ Theorem window_array_root_prefix_joint_strong:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t b p G' tn'.
+    run_inst_seq (emitted_insts st en) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
     window_phase ctx func st en {st.cs_next_id} [(d,32)] s t /\
     window_array_transition ctx func st
       {st.cs_next_id} [(d,32)] s t /\
@@ -509,7 +617,7 @@ Proof
   suspend "after_cursor"
 QED
 
-Resume window_array_root_prefix_joint_strong[after_cursor]:
+Resume window_array_root_prefix_joint_counted[after_cursor]:
   rename1 `src = Var sp` >> rename1 `dst = Var dp` >>
   rename1 `pp = Var cursor_var` >>
   rename1 `ptr_covers Gi ti cursor_var u 32` >>
@@ -541,7 +649,7 @@ Resume window_array_root_prefix_joint_strong[after_cursor]:
   suspend "word_pre"
 QED
 
-Resume window_array_root_prefix_joint_strong[word_pre]:
+Resume window_array_root_prefix_joint_counted[word_pre]:
   `32 <= cap /\ mem_word_at sb u.vs_memory = n2w (LENGTH avs)` by
     (qpat_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ u` mp_tac >>
      simp_tac bool_ss [window_array_root_def] >> strip_tac >>
@@ -587,7 +695,7 @@ Resume window_array_root_prefix_joint_strong[word_pre]:
   suspend "word_endpoint"
 QED
 
-Resume window_array_root_prefix_joint_strong[word_endpoint]:
+Resume window_array_root_prefix_joint_counted[word_endpoint]:
   qmatch_asmsub_abbrev_tac `gas_origin_ptr_path _ (u,Gi,ti) [] (OK t,Gf,tf)` >>
   `sb < dimword (:256) /\ d < dimword (:256)` by decide_tac >>
   `!x. dst = Var x ==> not_fresh_at c1 x` by simp[] >>
@@ -595,6 +703,26 @@ Resume window_array_root_prefix_joint_strong[word_endpoint]:
   rename1 `run_inst_seq (emitted_insts c1 en) u = OK raw` >>
   `t = raw with vs_inst_idx := LENGTH en.cs_current_insts` by
     simp[Abbr `t`] >>
+  `emitted_insts st en = emitted_insts st c1 ++ emitted_insts c1 en /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c1 en)` by
+    (conj_tac
+     >- (irule emitted_insts_append >> rewrite_tac[GSYM inst_extends_def] >>
+         drule abi_decode_index_init_shape >> simp[]) >>
+     qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ _) (emitted_insts c1 en)` mp_tac >>
+     simp[NoAsms, EVERY_MEM]) >>
+  `run_inst_seq (emitted_insts st en) s = OK (t with vs_inst_idx := s.vs_inst_idx)` by
+    (`run_inst_seq (emitted_insts c1 en) (u with vs_inst_idx := s.vs_inst_idx) =
+        OK (raw with vs_inst_idx := s.vs_inst_idx)` by
+       simp[run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
+     qpat_assum `run_inst_seq (emitted_insts st c1) s = _`
+       (mp_then Any mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then `emitted_insts c1 en` assume_tac) >>
+     qpat_assum `emitted_insts st en = _ ++ _` SUBST1_TAC >>
+     qpat_assum `run_inst_seq (_ ++ _) s = _` (fn th => once_rewrite_tac[th]) >>
+     qpat_assum `run_inst_seq _ (u with vs_inst_idx := _) = OK _`
+       (fn th => once_rewrite_tac[th]) >>
+     qpat_assum `t = raw with vs_inst_idx := _` SUBST1_TAC >>
+     simp[NoAsms]) >>
   `alloca_inv raw /\ alloca_room ctx func raw /\
    (!x. not_fresh_at c1 x ==> lookup_var x raw = lookup_var x u) /\
    window_alloca_growth u raw` by
@@ -622,7 +750,7 @@ Resume window_array_root_prefix_joint_strong[word_endpoint]:
   suspend "observations"
 QED
 
-Resume window_array_root_prefix_joint_strong[observations]:
+Resume window_array_root_prefix_joint_counted[observations]:
   `window_phase ctx func st en {st.cs_next_id} [(d,32)] s t` by
     (irule window_phase_chain >>
      qexistsl_tac [`{st.cs_next_id}`, `[]`, `c1`, `{}`, `[(d,32)]`, `u`] >>
@@ -664,7 +792,7 @@ Resume window_array_root_prefix_joint_strong[observations]:
   suspend "finish"
 QED
 
-Resume window_array_root_prefix_joint_strong[finish]:
+Resume window_array_root_prefix_joint_counted[finish]:
   `count_op = Var (STRING #"%" (toString c1.cs_next_var))` by
     (qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> simp[]) >>
   `op_prov Gf count_op = NONE` by simp[] >>
@@ -760,7 +888,57 @@ Resume window_array_root_prefix_joint_strong[finish]:
   qexistsl_tac [`t`, `b`, `cursor_var`, `Gf`, `tf`] >> asm_rewrite_tac[]
 QED
 
-Finalise window_array_root_prefix_joint_strong
+Finalise window_array_root_prefix_joint_counted
+
+Theorem window_array_root_prefix_joint_strong:
+  window_array_root ctx func st ids ei asz msz active ty avs
+    src dst sb cap d s /\
+  abi_encode_array_prefix src dst st = ((pp,count_op),en) /\
+  st.cs_next_id IN ids /\
+  fn_has_code st en func /\
+  (?p. src = Var p /\ ptr_covers G tn p s 32) /\
+  (?p. dst = Var p /\ ptr_covers G tn p s 32) /\
+  (!i. sb <= i /\ i < sb + 32 ==> i NOTIN tn.t_mem) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t b p G' tn'.
+    window_phase ctx func st en {st.cs_next_id} [(d,32)] s t /\
+    window_array_transition ctx func st
+      {st.cs_next_id} [(d,32)] s t /\
+    window_array_root ctx func st ids ei asz msz active ty avs
+      src dst sb cap d t /\
+    abi_encoder_array_prefix ty avs 0 d t.vs_memory /\
+    window_array_cursor T en pp st.cs_next_id b 0 sb cap d
+      (LENGTH (enc (Array NONE ty) (ListV avs))) t /\
+    abi_encode_exec_frame func s t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    pp = Var p /\ ptr_covers G' tn' p t 32 /\
+    eval_operand count_op t = SOME (n2w (LENGTH avs)) /\
+    (!x. count_op = Var x ==> not_fresh_at en x) /\
+    op_taint tn' count_op = {} /\
+    op_prov G' count_op = NONE /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    tn'.t_mem =
+      tn.t_mem DIFF
+        ({i | b <= i /\ i < b + 32} UNION
+         {i | d <= i /\ i < d + 32}) /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')
+Proof
+  disch_then (mp_tac o MATCH_MP window_array_root_prefix_joint_counted) >>
+  disch_then (qx_choose_then `t` (qx_choose_then `b` (qx_choose_then `p`
+    (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac))))) >>
+  qexistsl_tac [`t`, `b`, `p`, `G'`, `tn'`] >> asm_rewrite_tac[]
+QED
 
 Theorem window_array_root_prefix_joint:
   window_array_root ctx func st ids ei asz msz active ty avs
