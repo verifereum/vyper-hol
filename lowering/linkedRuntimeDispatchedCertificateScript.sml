@@ -3237,11 +3237,198 @@ val linked_positional_getter_env_tac =
      disch_then (qspec_then `(param,ty)` mp_tac) >>
      simp[NoAsms] >> disch_then irule >> first_assum ACCEPT_TAC);
 
+(* Imported declarations give the path annotations; qualified constants
+   preserve the same reference discipline when a getter root is inlined. *)
+val linked_getter_path_refs_tac =
+  Q.SUBGOAL_THEN
+    `!e kt vt n. imported_expr_refs_ok e /\ imported_type_refs_ok kt /\
+       imported_value_type_refs_ok vt ==>
+       imported_expr_refs_ok (SND (SND (build_getter e kt vt n)))`
+    assume_tac
+  >- (POP_ASSUM_LIST (K ALL_TAC) >> ho_match_mp_tac build_getter_ind >>
+      rpt conj_tac >> rpt gen_tac >> disch_tac >> strip_tac >>
+      simp[Once build_getter_def] >>
+      TRY (Cases_on `is_ArrayT vt` >> fs[]) >>
+      simp[pairTheory.UNCURRY, imported_expr_refs_ok_def,
+        imported_type_refs_ok_def, imported_value_type_refs_ok_def,
+        getter_vtype_annotation_def] >>
+      gvs[imported_value_type_refs_ok_def, AllCaseEqs()] >>
+      TRY (rename1 `is_ArrayT arr` >> Cases_on `arr` >>
+           gvs[is_ArrayT_def, ArrayT_type_def, imported_type_refs_ok_def]) >>
+      rpt (pairarg_tac >> gvs[]) >>
+      gvs[imported_expr_refs_ok_def, imported_type_refs_ok_def] >>
+      fs[getter_vtype_annotation_def, imported_type_refs_ok_def]);
+
+
+(* Only lookups at qualified keys are needed for inlining an imported
+   getter.  The main module's unqualified expressions are not restricted. *)
+val linked_getter_import_fold_tac =
+  `!ty bi es. imported_type_refs_ok ty /\ imported_builtin_refs_ok bi /\
+    imported_exprs_refs_ok es ==> imported_expr_refs_ok (fold_const_builtin ty bi es)` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >> strip_tac >>
+     Cases_on `bi` >> simp[fold_const_builtin_def, imported_expr_refs_ok_def] >>
+     Cases_on `es` >> simp[imported_expr_refs_ok_def] >>
+     Cases_on `t` >> simp[imported_expr_refs_ok_def] >>
+     Cases_on `h` >> simp[imported_expr_refs_ok_def] >>
+     rename1 `Literal _ lit` >> Cases_on `lit` >> simp[imported_expr_refs_ok_def]) >>
+  `(!e. imported_expr_refs_ok e ==> imported_expr_refs_ok (fold_const_expr e)) /\
+   (!t. imported_base_target_refs_ok t ==> imported_base_target_refs_ok (fold_const_btarget t)) /\
+   (!es. imported_exprs_refs_ok es ==> imported_exprs_refs_ok (fold_const_exprs es)) /\
+   (!o'. imported_optional_expr_refs_ok o' ==> imported_optional_expr_refs_ok (fold_const_opt o')) /\
+   (!fs. imported_field_refs_ok fs ==> imported_field_refs_ok (fold_const_fields fs))` by
+    (qpat_assum `!ty bi es. _ ==> imported_expr_refs_ok (fold_const_builtin ty bi es)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >> ho_match_mp_tac fold_const_expr_ind >>
+     simp[fold_const_expr_def, imported_expr_refs_ok_def] >> metis_tac[]);
+
+val linked_getter_import_subst_tac =
+  `(!E e. (!k r. FST k <> NONE /\ ALOOKUP E k = SOME r ==> imported_expr_refs_ok r) ==>
+      imported_expr_refs_ok e ==> imported_expr_refs_ok (subst_consts_expr_mods E e)) /\
+   (!E t. (!k r. FST k <> NONE /\ ALOOKUP E k = SOME r ==> imported_expr_refs_ok r) ==>
+      imported_base_target_refs_ok t ==> imported_base_target_refs_ok (subst_consts_btarget_mods E t)) /\
+   (!E es. (!k r. FST k <> NONE /\ ALOOKUP E k = SOME r ==> imported_expr_refs_ok r) ==>
+      imported_exprs_refs_ok es ==> imported_exprs_refs_ok (subst_consts_exprs_mods E es)) /\
+   (!E o'. (!k r. FST k <> NONE /\ ALOOKUP E k = SOME r ==> imported_expr_refs_ok r) ==>
+      imported_optional_expr_refs_ok o' ==> imported_optional_expr_refs_ok (subst_consts_opt_mods E o')) /\
+   (!E fs. (!k r. FST k <> NONE /\ ALOOKUP E k = SOME r ==> imported_expr_refs_ok r) ==>
+      imported_field_refs_ok fs ==> imported_field_refs_ok (subst_consts_fields_mods E fs))` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> ho_match_mp_tac subst_consts_expr_mods_ind >>
+     simp[subst_consts_expr_mods_def, imported_expr_refs_ok_def] >> rpt strip_tac
+     >~ [`ALOOKUP _ (_,_)`]
+     >- (rename1 `ALOOKUP constants (source,key)` >>
+         Cases_on `ALOOKUP constants (source,key)` >> simp[imported_expr_refs_ok_def] >>
+         qpat_assum `!key replacement. _` (qspec_then `(source,key)` mp_tac) >> simp[]) >>
+     qpat_assum `!key replacement. _` (fn ok => fs[EQT_INTRO ok]));
+
+val linked_getter_import_acc_tac =
+  `!(E:(nsid # expr) list) k r. EVERY (\(key,rhs). FST key <> NONE ==> imported_expr_refs_ok rhs) E /\
+      FST k <> NONE /\ ALOOKUP E k = SOME r ==> imported_expr_refs_ok r` by
+    (POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt gen_tac >> PairCases_on `k` >> simp[EVERY_MEM, FORALL_PROD] >>
+     rpt strip_tac >> drule_then assume_tac ALOOKUP_MEM >>
+     qpat_assum `!s name value. MEM ((s,name),value) E ==> _` drule >> simp[]);
+
+val linked_getter_import_module_goal_tac =
+  Q.SUBGOAL_THEN
+    `!ts owner E. (owner <> NONE ==> EVERY imported_toplevel_refs_ok ts) /\
+       EVERY (\(k,r). FST k <> NONE ==> imported_expr_refs_ok r) E ==>
+       EVERY (\(k,r). FST k <> NONE ==> imported_expr_refs_ok r)
+         (module_consts_env_mods owner ts E)` assume_tac;
+
+val linked_getter_import_module_setup_tac =
+  map_every (fn p => qpat_assum p mp_tac)
+    [`!E k r. EVERY _ E /\ _ ==> _`,
+     `!E e. _ ==> _ ==> imported_expr_refs_ok (subst_consts_expr_mods E e)`,
+     `!e. imported_expr_refs_ok e ==> imported_expr_refs_ok (fold_const_expr e)`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >> ntac 3 strip_tac;
+
+val linked_getter_import_module_induct_tac =
+  Induct >> simp[module_consts_env_mods_def] >>
+  Cases_on `h` >> simp[module_consts_env_mods_def] >>
+  rename1 `VariableDecl vis mut key ty slot` >>
+  Cases_on `mut` >> simp[module_consts_env_mods_def] >> rpt strip_tac >>
+  qpat_assum `!owner E. _ ==> EVERY _ (module_consts_env_mods owner _ E)` irule >>
+  simp[EVERY_APPEND] >> rpt strip_tac;
+
+val linked_getter_import_module_finish_tac =
+  qpat_assum `!e. imported_expr_refs_ok e ==> imported_expr_refs_ok (fold_const_expr e)` irule >>
+  qpat_assum `!E e. _ ==> _ ==> imported_expr_refs_ok (subst_consts_expr_mods E e)` irule >>
+  fs[imported_toplevel_refs_ok_def] >> rpt strip_tac;
+
+val linked_getter_import_all_goal_tac =
+  Q.SUBGOAL_THEN
+    `!owners E. EVERY (\(owner,ts). owner <> NONE ==> EVERY imported_toplevel_refs_ok ts) owners /\
+      EVERY (\(k,r). FST k <> NONE ==> imported_expr_refs_ok r) E ==>
+      EVERY (\(k,r). FST k <> NONE ==> imported_expr_refs_ok r) (consts_env_mods_acc owners E)`
+    assume_tac;
+
+val linked_getter_import_all_induct_tac =
+  qpat_assum `!ts owner E. _ ==> EVERY _ (module_consts_env_mods owner ts E)` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
+  Induct >> simp[consts_env_mods_acc_def] >> Cases_on `h` >>
+  simp[consts_env_mods_acc_def] >> rpt strip_tac >>
+  qpat_assum `!E. _ ==> EVERY _ (consts_env_mods_acc _ E)` irule >> simp[];
+
+val linked_getter_import_all_modules_tac =
+  `EVERY (\(k,r). FST k <> NONE ==> imported_expr_refs_ok r) (consts_env_mods mods)` by
+    (simp[NoAsms, consts_env_mods_def, consts_env_modules_order_eq] >>
+     qpat_assum `!owners E. _ ==> EVERY _ (consts_env_mods_acc owners E)` irule >>
+     simp[] >> once_rewrite_tac[EVERY_MEM] >> simp[FORALL_PROD, MEM_constants_order] >>
+     Cases >> simp[] >> rpt strip_tac >>
+     drule_all_then ACCEPT_TAC check_contract_imported_toplevel_refs_ok);
+
+val linked_getter_import_decl_tac =
+  `src <> NONE ==> imported_toplevel_refs_ok top` by
+    (map_every (fn p => qpat_assum p mp_tac)
+       [`MEM top tops`,`ALOOKUP mods src = SOME tops`,
+        `check_contract F am.layouts tx.target mods = SOME art`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule_then assume_tac ALOOKUP_MEM >> Cases_on `src` >> fs[] >>
+     drule_all check_contract_imported_toplevel_refs_ok >>
+     simp[EVERY_MEM]);
+
+val linked_getter_import_original_goal_tac =
+  Q.SUBGOAL_THEN `src <> NONE ==> imported_expr_refs_ok getter_value` assume_tac;
+
+val linked_getter_import_original_shape_tac =
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`external_getter_tuple src top = SOME _`,
+     `is_public_getter_decl tx.function_name top`,
+     `fbody = [Return (SOME getter_value)]`,
+     `src <> NONE ==> imported_toplevel_refs_ok top`,
+     `!e kt vt n. _ ==> imported_expr_refs_ok (SND (SND (build_getter e kt vt n)))`] >>
+  POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
+  Cases_on `top` >> simp[external_getter_tuple_def, is_public_getter_decl_def] >>
+  Cases_on `v` >> simp[external_getter_tuple_def, is_public_getter_decl_def,
+    getter_def, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  gvs[imported_toplevel_refs_ok_def, imported_expr_refs_ok_def];
+
+val linked_getter_import_path_finish_tac =
+  qpat_assum `build_getter _ _ _ _ = _`
+    (mp_tac o AP_TERM ``\x : (string # type) list # type # expr. SND (SND x)``) >>
+  simp[NoAsms] >> disch_then (SUBST1_TAC o SYM) >>
+  first_x_assum irule >>
+  simp[imported_expr_refs_ok_def, imported_type_refs_ok_def,
+       imported_value_type_refs_ok_def] >>
+  rename1 `imported_type_refs_ok (ArrayT_type arr)` >> Cases_on `arr` >>
+  gvs[is_ArrayT_def, ArrayT_type_def, imported_type_refs_ok_def];
+
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_substituted_typed]:
   linked_positional_getter_type_tac >>
   linked_positional_getter_lock_tac >>
   linked_positional_getter_return_tac >>
   linked_positional_getter_env_tac >>
+  linked_getter_path_refs_tac >>
+  linked_getter_import_decl_tac >>
+  linked_getter_import_original_goal_tac
+  >- (linked_getter_import_original_shape_tac >> linked_getter_import_path_finish_tac) >>
+  linked_getter_import_fold_tac >>
+  linked_getter_import_subst_tac >>
+  linked_getter_import_acc_tac >>
+  linked_getter_import_module_goal_tac
+  >- (linked_getter_import_module_setup_tac >>
+      linked_getter_import_module_induct_tac >>
+      linked_getter_import_module_finish_tac >>
+      qpat_assum `!E k r. _ ==> imported_expr_refs_ok r`
+        (qspecl_then [`E`,`k`,`r`] mp_tac) >> simp[]) >>
+  linked_getter_import_all_goal_tac
+  >- (linked_getter_import_all_induct_tac >>
+      qpat_assum `!ts owner E. _ ==> EVERY _ (module_consts_env_mods owner ts E)` irule >>
+      simp[]) >>
+  linked_getter_import_all_modules_tac >>
+  `src = NONE \/ imported_stmts_refs_ok body_code` by
+    (map_every (fn p => qpat_assum p mp_tac)
+       [`body_code = [Return (SOME (subst_consts_expr_mods (consts_env_mods mods) getter_value))]`,
+        `src <> NONE ==> imported_expr_refs_ok getter_value`,
+        `!E e. _ ==> _ ==> imported_expr_refs_ok (subst_consts_expr_mods E e)`,
+        `!E k r. EVERY _ E /\ _ ==> _`,
+        `EVERY _ (consts_env_mods mods)`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     Cases_on `src` >> fs[imported_stmt_refs_ok_def, imported_expr_refs_ok_def] >>
+     qpat_assum `!E e. _ ==> _ ==> imported_expr_refs_ok (subst_consts_expr_mods E e)` irule >>
+     simp[] >> rpt strip_tac >>
+     qpat_assum `!E k r. EVERY _ E /\ _ ==> _` irule >>
+     map_every qexists_tac [`consts_env_mods mods`,`k`] >> simp[]) >>
   cheat
 QED
 
@@ -3250,6 +3437,17 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsub
   linked_positional_getter_lock_tac >>
   linked_positional_getter_return_tac >>
   linked_positional_getter_env_tac >>
+  linked_getter_path_refs_tac >>
+  linked_getter_import_decl_tac >>
+  linked_getter_import_original_goal_tac
+  >- (linked_getter_import_original_shape_tac >> linked_getter_import_path_finish_tac) >>
+  `src = NONE \/ imported_stmts_refs_ok body_code` by
+    (map_every (fn p => qpat_assum p mp_tac)
+       [`body_code = fbody`, `fbody = [Return (SOME getter_value)]`,
+        `src <> NONE ==> imported_expr_refs_ok getter_value`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt strip_tac >> Cases_on `src` >>
+     fs[imported_stmt_refs_ok_def, imported_expr_refs_ok_def]) >>
   cheat
 QED
 
