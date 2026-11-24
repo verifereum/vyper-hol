@@ -2,6 +2,7 @@
 Theory bodyFullExtCallCtorCopyReplay
 Ancestors
   bodyFullUnwrapCodeCtorRun bodyFullUnwrapCodeCtorSemantic
+  createCtorImmutableCopyBand createCtorSegmentArrival relation
   bodyFullUnwrapCodeCtorFrame exprPtrUnwrapCode exprPtrUnwrapCodeCopyShape
   exprPtrUnwrapAllocationFrame exprPtrUnwrapAllocEntry
   exprPtrUnwrapAllocation exprPtrUnwrapAllocSeparation
@@ -63,7 +64,7 @@ Proof
   drule_all copy_ctor_run >> strip_tac >> fs[copy_runtime_frame_def] >> metis_tac[]
 QED
 
-Theorem extcall_saved_ctor_copy_replay_pure:
+Theorem extcall_saved_ctor_copy_replay_band:
   lowered_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\ p.ptr_location = LocCode /\ ce.ce_is_ctor /\
   compile_expr ce (expr_type e) e si = (LocatedValue (expr_type e) p,sm) /\
@@ -109,7 +110,10 @@ Theorem extcall_saved_ctor_copy_replay_pure:
        lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x)) /\
     wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
-    expr_val_at ce cx (expr_type e) su sb ee v src z
+    expr_val_at ce cx (expr_type e) su sb ee v src z /\
+    RTC (\r q. ?i. ctor_segment_fetch fn r = SOME i /\
+                     su.cs_next_id <= i.inst_id /\ i.inst_id < sb.cs_next_id /\
+                     i.inst_opcode <> INVOKE /\ ctor_segment_next fn r i = SOME q) t z
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by simp[post_value_type_lowered] >>
@@ -169,6 +173,7 @@ Proof
     strip_assume_tac) >>
   rename1 `copy_runtime_frame mid allocst sb z` >>
   rename1 `lookup_var root allocst = SOME dst` >>
+  drule_all immutable_copy_band >> disch_tac >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
     expr_post H ctx fn ce cx e ee si sb t ee v buf.buf_operand z` by
     (rpt strip_tac >>
@@ -298,6 +303,59 @@ Proof
      disch_then strip_assume_tac >> first_assum ACCEPT_TAC) >>
   simp[expr_store_bound_def, blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
   gvs[] >> decide_tac
+QED
+
+Theorem extcall_saved_ctor_copy_replay_pure:
+  lowered_value_type ce e = expr_type e /\
+  ~is_word_type (expr_type e) /\ p.ptr_location = LocCode /\ ce.ce_is_ctor /\
+  compile_expr ce (expr_type e) e si = (LocatedValue (expr_type e) p,sm) /\
+  sm.cs_next_var <= su.cs_next_var /\ sm.cs_next_id <= su.cs_next_id /\
+  unwrap_value ce (LocatedValue (expr_type e) p) su = (src,sb) /\
+  local_ptrs_reserved ce si /\ local_ptrs_reserved ce sm /\
+  si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id /\
+  fn_has_code su sb fn /\ fn_inst_ids_distinct fn /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME rt /\
+  type_memory_bytes ce (expr_type e) = type_memory_size rt /\
+  type_memory_size rt < 2**64 /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  ptr_vv_ok cx (expr_type e) (Value v) (LocatedValue (expr_type e) p) ee G tn t /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    vv_post H ctx fn ce cx e ee si sm t ee (Value v) (LocatedValue (expr_type e) p) t /\
+    ghost_inv_at (DF H) lo d ce cx ee G tn t) /\
+  alloca_history fn t /\ ~t.vs_halted /\ t.vs_current_bb = su.cs_current_bb /\
+  t.vs_inst_idx = LENGTH su.cs_current_insts /\
+  (!w. eval_operand p.ptr_operand t = SOME w ==>
+    w2n w + type_memory_size rt <= lo /\
+    (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
+      val_in_memory rt v (w2n w) mem)) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) ==>
+  ?z G' tn'.
+    pure_frame ce fn ee su t z /\
+    gas_origin_ptr_path
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>,
+       lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (t,G,tn) [] (OK z,G',tn') /\
+      stmt_state_rel H ctx fn ce cx ee z /\ storage_well_formed_on cx ee (FST H) /\
+      ghost_inv_at (DF H) lo d ce cx ee G' tn' z) /\
+    expr_val_rel cx (expr_type e) v src z /\ ptr_val_ok cx (expr_type e) v src G' tn' z /\
+    expr_store_bound cx (expr_type e) v src z /\ ptr_buf_ok ce e src G' z /\
+    (!w. eval_operand src z = SOME w ==>
+      type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) /\
+    alloca_history fn z /\ t.vs_alloca_next <= z.vs_alloca_next /\
+    ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at su x ==>
+       lookup_var x z = lookup_var x t /\ FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    wb_frame ce ee ee su t z /\ ghost_kept_at lo ce ee su G tn t G' tn' /\
+    expr_val_at ce cx (expr_type e) su sb ee v src z
+Proof
+  disch_tac >> mp_tac (SPEC_ALL extcall_saved_ctor_copy_replay_band) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  qexistsl [`z`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED
 
 Theorem extcall_saved_ctor_copy_replay =
