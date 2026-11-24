@@ -85,6 +85,32 @@ Proof
   metis_tac[FST,SND]
 QED
 
+(* Recover memory validity only on the last edge of the selected path. *)
+Theorem create_prefix_selected_terminal_edge:
+  (!bb. MEM bb f.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+  create_expr_prefix a b E ctx f s [] u /\
+  gas_origin_edge F E ctx f u [] r /\ exit_result r /\
+  gas_origin_path T E ctx f s [] r ==>
+  gas_origin_edge T E ctx f u [] r
+Proof
+  simp[create_expr_prefix_marked] >> strip_tac >>
+  `!v. gas_origin_path T E ctx f v [] r ==>
+        gas_origin_edge T E ctx f v [] r \/
+        ?w. gas_origin_edge T E ctx f v [] (OK w) /\
+            gas_origin_path T E ctx f w [] r` by
+    (gen_tac >> disch_then (mp_tac o ONCE_REWRITE_RULE[gas_origin_path_cases]) >>
+     simp[] >> strip_tac >> gvs[exit_result_def] >> metis_tac[]) >>
+  `!x y. RTC (create_marked_edge (create_prefix_step a b E ctx f)) x y ==>
+         SND y = [] ==> gas_origin_path T E ctx f (FST x) [] r ==>
+                        gas_origin_path T E ctx f (FST y) [] r` by
+    (ho_match_mp_tac RTC_INDUCT_RIGHT1 >> simp[] >>
+     simp[FORALL_PROD,create_marked_edge_def,create_prefix_step_def] >>
+     rpt strip_tac >> gvs[] >>
+     metis_tac[origin_edge_unique,exit_result_def,exec_result_11]) >>
+  `gas_origin_path T E ctx f u [] r` by metis_tac[FST,SND] >>
+  metis_tac[origin_edge_unique,exit_result_def]
+QED
+
 (* A focus can stop at a caller cursor, or inside its pending INVOKE.
    In the latter case its remaining events are an initial part of the marks
    of the returned caller edge, if that edge completes. *)
@@ -134,7 +160,7 @@ Definition create_operand_full_scope_def:
         gas_origin_edge T explicit ctx func u last r
 End
 
-Theorem create_operand_full_scope_match[local]:
+Theorem create_operand_full_scope_match:
   (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   create_operand_full_scope sa sb explicit ctx func s0 witness r /\
   create_expr_prefix sa sb explicit ctx func s0 marks s /\
@@ -257,4 +283,44 @@ Proof
   disch_then (CONJUNCTS_THEN2 (qspec_then `suffix` mp_tac) strip_assume_tac) >>
   fs[ignore_bind_def,bind_def] >>
   Cases_on `res` >> simp[return_def] >> metis_tac[]
+QED
+
+(* Retain the source equation used to build the normal witness, not just
+   its specialization to the tail in the completed-operand query. *)
+Theorem scoped_completed_operand_landing:
+  (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+  scoped_operand_outcome (DF,lo,explicit,ctx,func,PG) tops cx st0 sa sb
+    source (es,s0,G0,tn0) Q R ==>
+  gas_completed_operand (DF,lo,explicit,ctx,func,PG) tops cx st0 sa sb
+    source (es,s0,G0,tn0)
+    (\H res ee G tn t. Q H res ee G tn t /\
+      !left. create_expr_prefix sa sb explicit ctx func s0 left t /\
+             t.vs_current_bb = sb.cs_current_bb /\
+             t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+        (!tail. source (es with gas_obs := gas_explicit left s0.vs_gas_readings ++ tail) =
+                  (res, ee with gas_obs := tail)) /\
+        storage_trace_domain cx st0 ee.storage_trace /\
+        !H'. valid_horizon cx st0 H' ee.storage_trace ==>
+          gas_origin_ptr_path (DF H',lo,explicit,ctx,func,PG)
+            (s0,G0,tn0) left (OK t,G,tn) /\
+          Q H' res ee G tn t)
+Proof
+  strip_tac >> irule scoped_outcome_completed_operand >> simp[] >>
+  qexists_tac `R` >>
+  qpat_x_assum `scoped_operand_outcome _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE[scoped_operand_outcome_def]) >>
+  simp[scoped_operand_outcome_def] >>
+  disch_then (qx_choose_then `marks` assume_tac) >>
+  qexists_tac `marks` >>
+  qpat_x_assum `_ \/ _` (DISJ_CASES_THEN2 assume_tac
+    (DISJ_CASES_THEN2 strip_assume_tac assume_tac))
+  >- simp[]
+  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >>
+      simp[] >> gen_tac >> disch_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+        (drule_then strip_assume_tac) >> gvs[exit_result_def] >>
+      gen_tac >> strip_tac >>
+      drule_all create_operand_full_scope_match >> strip_tac >>
+      gvs[exit_result_def]) >>
+  simp[]
 QED

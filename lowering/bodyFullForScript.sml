@@ -107,6 +107,8 @@ Resume compile_for_frag_full[array]:
 QED
 
 Resume compile_for_frag_full[nested_array]:
+  `well_typed_expr env e` by
+    fs[Once type_stmt_def, well_typed_iterator_def, AllCaseEqs()] >>
   `supported_expr tops e` by
     (drule_then strip_assume_tac bodyFullForFactsTheory.supported_stmt_for_projection >>
      Cases_on `e` >> gvs[supportedStmtsTheory.supported_iterator_def,
