@@ -1,6 +1,7 @@
 Theory bodyFullLiteralWord
 Ancestors
-  bodySimFull gasOutcomeFullCompose exprSimSource
+  bodySimFull gasOutcomeFullCompose exprSimSource bodyFullEmptyLeafData
+  bodyLiteralMemory exprSimFullBundleProps
   exprSimLiteralWord exprSimProps exprSimHypsDefs exprLoweringProps
   exprLowering vyperTyping vyperTypeSystem loweringPosts valueEncoding
   vyperValueOperation exprSimMemDefs bodyPtrDefs gasShadow fragGasOriginPtr
@@ -31,18 +32,27 @@ val literal_word_vv_finish =
        vyperASTTheory.expr_type_def] >> strip_tac >> gvs[] >>
   literal_word_posts;
 
-Theorem literal_word_value_full:
-  expr_body_pre cenv cx env (Literal ann l) es /\ is_word_type ann ==>
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Literal ann l) es
+Theorem literal_word_value_nil:
+  expr_body_pre cenv cx env (Literal ann l) es /\ is_word_type ann /\
+  expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Literal ann l) es (st0,sa,sb,sha,shb,op,s0,G0,tn0) ==>
+  sb = sa /\
+  (!tail. bind (eval_expr cx (Literal ann l)) (read_result cx) (es with gas_obs := tail) =
+          (INL (evaluate_literal l), es with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       expr_sim_full_post (DF,lo,d,ctx,func) cenv cx (Literal ann l)
+         (es,sa,sb,s0,op,G0,tn0) H (INL (evaluate_literal l) : value + exception)
+         (es with gas_obs := []) G0 tn0 s0)
 Proof
-  rw[expr_sim_full_def] >>
+  simp[expr_sim_full_hypotheses_def, expr_sim_full_code_def] >> strip_tac >>
   `expr_sim_pre cenv cx env (Literal ann l) es` by
     simp[expr_sim_pre_body, vyperTypeCallGraphTheory.int_calls_expr_def] >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G0`, `es`, `INL (evaluate_literal l)`, `s0`, `tn0`] >>
-  conj_tac >- simp[literal_read_all_tails] >>
-  BETA_TAC >> gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  conj_tac
+  >- (`?arg. compile_expr cenv ty (Literal ann l) sa = (StackValue ann arg,sa)` by
+        (irule body_literal_word_compile >> metis_tac[]) >>
+      gvs[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def]) >>
+  simp[literal_read_all_tails, expr_sim_full_post_def, expr_sim_full_endpoint_def] >>
+  gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
@@ -68,18 +78,27 @@ Proof
   literal_word_finish
 QED
 
-Theorem literal_word_vv_full:
-  expr_body_pre cenv cx env (Literal ann l) es /\ is_word_type ann ==>
-  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Literal ann l) es
+Theorem literal_word_vv_nil:
+  expr_body_pre cenv cx env (Literal ann l) es /\ is_word_type ann /\
+  expr_vv_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Literal ann l) es (st0,sa,sb,sha,shb,vv,s0,G0,tn0) ==>
+  sb = sa /\
+  (!tail. eval_expr cx (Literal ann l) (es with gas_obs := tail) =
+          (INL (Value (evaluate_literal l)), es with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (Literal ann l)
+         (es,sa,sb,s0,vv,G0,tn0) H (INL (Value (evaluate_literal l)) : eval_result + exception)
+         (es with gas_obs := []) G0 tn0 s0)
 Proof
-  rw[expr_vv_sim_full_def] >>
+  simp[expr_vv_sim_full_hypotheses_def, expr_sim_full_code_def] >> strip_tac >>
   `expr_sim_pre cenv cx env (Literal ann l) es` by
     simp[expr_sim_pre_body, vyperTypeCallGraphTheory.int_calls_expr_def] >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G0`, `es`, `INL (Value (evaluate_literal l))`, `s0`, `tn0`] >>
+  conj_tac
+  >- (`?arg. compile_expr cenv ty (Literal ann l) sa = (StackValue ann arg,sa)` by
+        (irule body_literal_word_compile >> metis_tac[]) >> gvs[]) >>
   conj_tac >- simp[Once evaluate_def, return_def] >>
-  BETA_TAC >> gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  simp[expr_vv_sim_full_post_def, expr_sim_full_endpoint_def] >>
+  gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
@@ -102,4 +121,26 @@ Proof
   all_tac >~ [`BytesT bd`] >- (Cases_on `bd` >> gvs[is_word_type_def] >> literal_word_vv_finish) >>
   all_tac >~ [`BoolL b`] >- (Cases_on `b` >> literal_word_vv_finish) >>
   literal_word_vv_finish
+QED
+
+Theorem literal_word_value_full:
+  expr_body_pre cenv cx env (Literal ann l) es /\ is_word_type ann ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Literal ann l) es
+Proof
+  rw[expr_sim_full_via_bundle] >>
+  drule_all literal_word_value_nil >> strip_tac >>
+  irule gas_outcome_full_unchanged >>
+  fs[expr_sim_full_hypotheses_def] >> gvs[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem literal_word_vv_full:
+  expr_body_pre cenv cx env (Literal ann l) es /\ is_word_type ann ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Literal ann l) es
+Proof
+  rw[expr_vv_sim_full_via_bundle] >>
+  drule_all literal_word_vv_nil >> strip_tac >>
+  irule gas_outcome_full_unchanged >>
+  fs[expr_vv_sim_full_hypotheses_def] >> gvs[] >> first_assum ACCEPT_TAC
 QED
