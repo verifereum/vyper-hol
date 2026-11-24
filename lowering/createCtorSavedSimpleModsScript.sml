@@ -9,10 +9,9 @@ Ancestors
   context compileEnv bodyMemoryDefs bodyFullAssign abiEncodeArgsCase abiEncodeArgsSim abiEncodeMaterialize
   aggregateEvaluatedLayout exprPtrUnwrapStorageShape vyperEvalExprPreservesScopesDom
   vyperTypeExprSoundness vyperStorageFootprint vyperState freshWrites
-  createCtorStorageBaseOriginMods createCtorStorageSelectorOriginMods
-  exprBodyPreTypingProps exprBodyPreCallSafetyProps vyperTypeSoundness
-  vyperFiniteStoragePreservation vyperTypeExtCallCore vyperStoragePlaceObserved accountsRelProps
-  vyperTypeInvariants loweringStateRelDefs
+  createCtorSnapshotReadTypeMods createCtorSnapshotByteRetagMods
+  exprSimIfExpCompat createCtorStorageBaseOriginMods createCtorStorageSelectorOriginMods exprBodyPreTypingProps exprBodyPreCallSafetyProps
+  vyperTypeEvalSoundness vyperTypeEvalCaseProofs vyperTypeSystem valueCopyBytes vyperTypeSoundness vyperFiniteStoragePreservation vyperTypeExtCallCore vyperStoragePlaceObserved accountsRelProps vyperTypeInvariants loweringStateRelDefs
 
 (* The word snapshot is exactly the scalar child fragment, including
    any instructions emitted by unwrapping a located word. *)
@@ -103,7 +102,60 @@ Theorem ctor_retained_representation_mods[local]:
     ptr_vv_ok cx (lowered_value_type ce e) saved sv ee G tn t /\
     vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e) ee saved sv t
 Proof
-  cheat
+  strip_tac >> drule ctor_snapshot_word_types_mods >> strip_tac >>
+  `~is_word_type (expr_type e)` by metis_tac[] >>
+  drule expr_body_pre_mods_inv >> strip_tac >>
+  drule expr_body_pre_mods_well_typed >> strip_tac >>
+  drule expr_sim_inv_mods_env >> strip_tac >>
+  `env.type_defs = get_tenv cx` by metis_tac[env_consistent_type_defs_get_tenv] >>
+  `!id ty. FLOOKUP env.var_types id = SOME ty ==> well_formed_type env.type_defs ty` by
+    metis_tac[logArgumentTypeEvalTheory.consistent_variable_type_well_formed] >>
+  `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by fs[expr_sim_inv_mods_def] >>
+  `!fid sg. FLOOKUP env.fn_sigs fid = SOME sg ==>
+            ce.ce_func_return_type (nsid_to_string fid) = sg.ret_ty` by
+    metis_tac[expr_sim_inv_mods_return_type] >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    (drule_all ifexp_lowered_type_classify >> strip_tac >> simp[] >>
+     PairCases_on `fid` >>
+     gvs[well_typed_expr_def, lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+     qpat_x_assum `!fid sg. _` (drule_then SUBST1_TAC) >>
+     fs[type_widens_to_def]) >>
+  drule_all_then assume_tac materialize_post_lowered_classify >>
+  `~is_word_type (post_value_type ce e)` by metis_tac[is_bytestring_word_type] >>
+  `vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e) ee raw vv t` by
+    (irule extcall_saved_physical_store_bound >> conj_tac
+     >- (qexists_tac `v` >> simp[]) >> qexists_tac `post_value_type ce e` >> simp[]) >>
+  Cases_on `?tag p. vv = LocatedValue tag p /\ p.ptr_location <> LocMemory`
+  >- (gvs[] >>
+      `lowered_value_type ce e = expr_type e` by metis_tac[compile_nonmemory_lowered_value_type] >>
+      `post_value_type ce e = expr_type e` by simp[post_value_type_lowered] >>
+      `tag = expr_type e` by (Cases_on `p.ptr_location = LocCode` >> fs[vv_holds_mods_def, vv_holds_def]) >>
+      gvs[ext_call_arg_value_def] >> qexists_tac `raw` >> simp[]) >>
+  Cases_on `post_value_type ce e = lowered_value_type ce e`
+  >- (Cases_on `vv` >> gvs[ext_call_arg_value_def] >> qexists_tac `raw` >>
+      gvs[vv_holds_mods_def, vv_holds_def, vv_at_def, ptr_vv_ok_def, vv_store_bound_def]) >>
+  `post_value_type ce e = expr_type e` by
+    (Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+     >- (gvs[vyperASTTheory.expr_type_def] >> IF_CASES_TAC >> gvs[])
+     >> metis_tac[post_value_type_not_int_call]) >>
+  `vyperState$bind (eval_expr cx e) (read_result cx) es = (INL v,ee)` by simp[bind_def] >>
+  `?a. evaluate_type (get_tenv cx) (expr_type e) = SOME a /\ value_has_type a v` by
+    (drule expr_body_pre_mods_runtime_typing >> strip_tac >>
+     drule expr_body_pre_mods_call_evaluation_safe >> strip_tac >>
+     drule_at (Pat `vyperState$bind _ _ _ = _`) (REWRITE_RULE [ETA_AX] eval_expr_read_type_sound) >>
+     disch_then (qspec_then `env` mp_tac) >> simp[runtime_consistent_def, value_runtime_typed_def] >>
+     fs[runtime_consistent_def]) >>
+  drule_all_then strip_assume_tac ctor_snapshot_read_physical_type_mods >>
+  `(?tag op. vv = StackValue tag op) \/ (?tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory)` by
+    (Cases_on `vv` >> gvs[]) >>
+  `vv_holds_mods ce cx (lowered_value_type ce e) (Value v) sv ee t /\
+   vv_at ce cx (lowered_value_type ce e) sa sb ee (Value v) sv t /\
+   ptr_vv_ok cx (lowered_value_type ce e) (Value v) sv ee G tn t /\
+   vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e) ee (Value v) sv t` by
+    (qpat_x_assum `sv = _` SUBST_ALL_TAC >>
+     irule ctor_snapshot_bytes_retag_mods >> metis_tac[]) >>
+  Cases_on `vv` >> gvs[ext_call_arg_value_def] >>
+  qexists_tac `Value v` >> simp[read_result_def, return_def]
 QED
 
 Theorem ctor_retained_storage_live_mods[local]:
@@ -191,8 +243,85 @@ Theorem ctor_saved_head_retained_mods:
   extcall_positional_post_mods mods T DF lo d ctx func ce cx env xs [e] [sv]
     sa sb es s0 G0 tn0 H (INL [v]) ee G tn t
 Proof
-  cheat
+  strip_tac >>
+  `~is_word_type (expr_type e)` by
+    metis_tac[ctor_snapshot_word_types_mods] >>
+  `reason_uniform_shape compile_expr ce (expr_type e) e` by
+    (irule compile_expr_reason_uniform >> qexists_tac `env` >>
+     drule expr_body_pre_mods_inv >> fs[expr_sim_inv_mods_def] >>
+     metis_tac[expr_body_pre_mods_well_typed]) >>
+  `~is_word_type (vv_type (ext_call_arg_value (lowered_value_type ce e) vv))` by
+    (fs[reason_uniform_shape_def] >> first_x_assum drule >>
+     Cases_on `vv` >>
+     gvs[reason_result_shape_def, ext_call_arg_value_def, vv_type_def] >>
+     metis_tac[ctor_snapshot_word_types_mods]) >>
+  `sm = sb /\ sv = ext_call_arg_value (lowered_value_type ce e) vv` by
+    (gvs[compile_snapshot_vv_def, comp_return_def]) >>
+  qpat_x_assum `sm = sb` SUBST_ALL_TAC >>
+  qpat_x_assum `sv = _` SUBST_ALL_TAC >>
+  `expr_body_pre_mods mods ce cx env e (es with gas_obs := gs)` by simp[] >>
+  `vyperState$bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee)` by
+    simp[bind_def] >>
+  `!tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv ==> val_wf tv v` by
+    (rpt strip_tac >>
+     drule_all_then strip_assume_tac ctor_snapshot_read_physical_type_mods >>
+     `tv = tv'` by
+       (qpat_x_assum `evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv` mp_tac >>
+        qpat_x_assum `evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv'` mp_tac >>
+        simp[]) >>
+     qpat_x_assum `tv = tv'` SUBST1_TAC >>
+     metis_tac[valueEncodingTypingTheory.value_has_type_val_wf]) >>
+  drule_all ctor_retained_storage_live_mods >> strip_tac >>
+  drule compile_expr_extends >> strip_tac >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sb x` by
+    metis_tac[cj 1 compiler_compile_var] >>
+  fs[vv_post_mods_def] >>
+  `return_buf_frame d ce sb t` by
+    (irule return_buf_frame_frame >> qexistsl [`ce`,`s0`,`sa`] >> simp[]) >>
+  `wb_frame ce es ee sa s0 t` by
+    (rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv ==> val_wf tv v` by simp[] >>
+  qabbrev_tac `sv = ext_call_arg_value (lowered_value_type ce e) vv` >>
+  `vv_storage_live H cx sv ee t /\
+   (!x. vv_operand sv = Var x ==> not_fresh_at sb x) /\
+   (!tag op. sv = StackValue tag op ==> ptr_buf_ok ce e op G t) /\
+   (!tag p. sv = LocatedValue tag p /\ p.ptr_location = LocMemory ==> ptr_buf_ok ce e p.ptr_operand G t) /\
+   (ce.ce_is_ctor /\ vv_location sv = SOME LocCode ==>
+    !rt w. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME rt /\
+           eval_operand (vv_operand sv) t = SOME w ==>
+      w2n w + type_memory_size rt <= lo /\
+      (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
+             val_in_memory rt v (w2n w) mem))` by
+    (qunabbrev_tac `sv` >> Cases_on `vv` >>
+     gvs[ext_call_arg_value_def, vv_operand_def, vv_location_def] >>
+     Cases_on `p.ptr_location = LocMemory` >> gvs[] >>
+     `lowered_value_type ce e = expr_type e` by metis_tac[compile_nonmemory_lowered_value_type] >>
+     `post_value_type ce e = expr_type e` by simp[post_value_type_lowered] >>
+     rename1 `compile_expr _ _ _ _ = (LocatedValue tag p,sb)` >>
+     `tag = expr_type e` by
+       (fs[reason_uniform_shape_def] >> first_x_assum drule >>
+        gvs[reason_result_shape_def] >> simp[]) >>
+     gvs[]) >>
+  `expr_body_pre_mods mods ce cx env e (es with gas_obs := gs)` by simp[] >>
+  `sv = ext_call_arg_value (lowered_value_type ce e) vv` by simp[Abbr `sv`] >>
+  drule_at (Pat `eval_expr _ _ _ = _`) ctor_retained_representation_mods >>
+  disch_then drule_all >> suspend "saved"
 QED
+Resume ctor_saved_head_retained_mods[saved]:
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  qpat_x_assum `Abbrev _` kall_tac >>
+  `compile_snapshot_vv ce F (ext_call_arg_value (lowered_value_type ce e) vv) sb = (sv,sb)` by
+    (qpat_x_assum `sv = _` (fn th => once_rewrite_tac [GSYM th]) >> gvs[]) >>
+  qpat_x_assum `sv = _` kall_tac >>
+  simp[extcall_positional_post_mods_def] >>
+  reverse conj_tac
+  >- (drule_all ctor_snapshot_source_frame_mods >> simp[])
+  >- (conj_tac
+      >- (qexistsl [`sa`,`sb`,`sb`,`vv`,`saved`,`F`] >> simp[])
+      >- (qpat_x_assum `ce.ce_is_ctor /\ vv_location sv = SOME LocCode ==> _` mp_tac >> simp[]))
+QED
+Finalise ctor_saved_head_retained_mods[local]
+
 
 Theorem ctor_saved_head_simple_mods:
   contract_inv mods exps ctx ce cx /\
@@ -234,5 +363,35 @@ Theorem ctor_saved_head_simple_mods:
   extcall_positional_post_mods mods T DF lo d ctx func ce cx env xs [e] [sv]
     sa sb es s0 G0 tn0 H (INL [v]) ee G tn t
 Proof
-  cheat
+  Cases_on `is_word_type (lowered_value_type ce e)` >> simp[] >> strip_tac
+  >- (drule_all ctor_snapshot_word_lower_value_mods >> strip_tac >>
+      irule ctor_saved_head_word_mods >> simp[] >> qexists_tac `gs` >> simp[]) >>
+  `read_result cx raw ee = (INL v,ee)` by fs[bind_def] >>
+  `~is_word_type (post_value_type ce e)` by
+    (drule expr_body_pre_mods_inv >> strip_tac >>
+     drule expr_body_pre_mods_well_typed >> strip_tac >>
+     drule expr_sim_inv_mods_env >> strip_tac >>
+     `env.type_defs = get_tenv cx` by metis_tac[env_consistent_type_defs_get_tenv] >>
+     `!id ty. FLOOKUP env.var_types id = SOME ty ==> well_formed_type env.type_defs ty` by
+       metis_tac[logArgumentTypeEvalTheory.consistent_variable_type_well_formed] >>
+     `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by fs[expr_sim_inv_mods_def] >>
+     `!fid sg. FLOOKUP env.fn_sigs fid = SOME sg ==>
+               ce.ce_func_return_type (nsid_to_string fid) = sg.ret_ty` by
+       metis_tac[expr_sim_inv_mods_return_type] >>
+     `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+       (drule_all ifexp_lowered_type_classify >> strip_tac >> simp[] >>
+        PairCases_on `fid` >>
+        gvs[well_typed_expr_def, lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+        qpat_x_assum `!fid sg. _` (drule_then SUBST1_TAC) >>
+        fs[type_widens_to_def]) >>
+     `~is_word_type (expr_type e)` by metis_tac[ctor_snapshot_word_types_mods] >>
+     drule_all_then assume_tac materialize_post_lowered_classify >>
+     metis_tac[is_bytestring_word_type]) >>
+  irule ctor_saved_head_retained_mods >>
+  qpat_assum `eval_expr _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_expr _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `contract_inv _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `module_body_inv _ _ _ _ _` (irule_at Any) >>
+  simp[] >>
+  qpat_x_assum `_ /\ vv_location vv = SOME LocCode ==> _` mp_tac >> simp[]
 QED
