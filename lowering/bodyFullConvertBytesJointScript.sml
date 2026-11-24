@@ -291,6 +291,26 @@ Proof
   qexistsl_tac [`b`,`sz`] >> simp[] >> decide_tac
 QED
 
+Theorem eval_expr_convert_vv_action:
+  eval_expr cx (TypeBuiltin ann Convert dst [e]) =
+    bind (bind (eval_expr cx e) (read_result cx))
+      (\v ee. (sum_CASE (convert_result cx (expr_type e) dst v)
+         (\w. INL (Value w)) INR, ee))
+Proof
+  simp[FUN_EQ_THM] >> qx_gen_tac `start` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+    assert_def, return_def, raise_def, type_builtin_args_length_ok_def] >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_expr cx e start` >> rename1 `_ = (raw,ee)` >>
+  Cases_on `raw` >> simp[] >> rename1 `_ = (INL tv,ee)` >>
+  Cases_on `read_result cx tv ee` >> rename1 `_ = (res,fin)` >>
+  Cases_on `res` >> simp[] >> rename1 `_ = (INL val,fin)` >>
+  simp[Once evaluate_def, bind_def, return_def, lift_sum_def,
+    convert_result_def, evaluate_type_builtin_def] >>
+  Cases_on `evaluate_convert_from (get_tenv cx) (expr_type e) val dst` >>
+  simp[return_def, raise_def]
+QED
+
 Theorem convert_bytes_vv_sim_full:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
@@ -382,23 +402,7 @@ Proof
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
-  `eval_expr cx (TypeBuiltin ann Convert ann [e]) =
-    bind (bind (eval_expr cx e) (read_result cx))
-      (\v ee. (sum_CASE (convert_result cx (expr_type e) ann v)
-         (\w. INL (Value w)) INR, ee))` by
-    (simp[FUN_EQ_THM] >> gen_tac >>
-     simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, type_builtin_args_length_ok_def] >>
-     simp[Once evaluate_def, bind_def, return_def] >>
-     Cases_on `eval_expr cx e x'` >> rename1 `_ = (raw,ee)` >>
-     Cases_on `raw` >> simp[] >> rename1 `_ = (INL tv,ee)` >>
-     Cases_on `read_result cx tv ee` >> rename1 `_ = (res,fin)` >>
-     Cases_on `res` >> simp[] >> rename1 `_ = (INL val,fin)` >>
-     simp[Once evaluate_def, bind_def, return_def, lift_sum_def,
-       convert_result_def, evaluate_type_builtin_def] >>
-     Cases_on `evaluate_convert_from (get_tenv cx) (expr_type e) val ann` >>
-     simp[return_def, raise_def]) >>
-  pop_assum SUBST1_TAC >>
+  PURE_REWRITE_TAC [eval_expr_convert_vv_action] >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all >>
   rpt conj_tac
   >- simp[vyperStorageTraceTheory.storage_trace_frame_def]
