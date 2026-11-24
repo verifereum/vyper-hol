@@ -13,11 +13,11 @@ Ancestors
   selectedAcceptedFold fragGasOriginPtrLoop venomMemDefs
   groupedKeywordInitialize linkedGroupedKeywordOmitted linkedDefaultEvaluation
   constSubstCorrect
-  gasOutcomeFullModsSource bodyFullPostsMods bodyFullPredsMods
+  gasOutcomeFullPostMods bodyFullPostsMods bodyFullPredsMods
   bodyFullShadowBodyInv bodyInvCodeProps bodyInvSplit exprSimHypsDefs
   gasStorage gasContext gasSummary gasOutcomeFullMods
   vyperTypeEvalSoundness vyperTypeExprSoundness vyperExprNoControl vyperTypeInvariants
-  exprBodyPreCallSafetyProps
+  exprBodyPreCallSafetyProps linkedDefaultSourceFrame constSubst
 
 val allocated_slot = ``\sa s G tn (aid,p,base,tv).
   aid < sa.cs_next_id /\ not_fresh_at sa p /\ base < dimword (:256) /\
@@ -60,7 +60,10 @@ Theorem grouped_omitted_initializers_mods:
     module_body_inv mods src tops (ce with ce_vars := FEMPTY) cx /\
     shadow_body_inv_mods mods exps ctx shadow_ctx /\
     EVERY (body_expr_full_ok_mods mods exps cx) (MAP (\(_,_,_,e). e) vars) /\
-    body_const_cells_agree mods cx env es /\
+    body_const_cells_agree_mods mods cx env es /\
+    check_contract F layouts addr mods = SOME art /\
+    ALOOKUP cx.sources cx.txn.target = SOME mods /\
+    no_sha256_exprs (MAP (\(_,_,_,e). e) vars) /\
     env.type_defs = get_tenv cx /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
     ce.ce_return_pc = NONE /\ ce.ce_return_buf = NONE /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -243,16 +246,28 @@ Resume grouped_omitted_initializers_mods[store]:
          ho_match_mp_tac compose >> conj_tac >- ACCEPT_TAC head
        end) >>
   qx_genl_tac [`marks`,`v`,`ee`,`G1`,`tn1`,`tail_state`] >> BETA_TAC >> strip_tac >>
-  `body_const_cells_agree mods cx env ee` by
-    (`body_const_cells_agree mods cx env (ee with gas_obs := [])` by
-       (irule body_const_cells_agree_expr_read >>
-        qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
-          (qspec_then `[]` (irule_at Any)) >>
-        simp[] >>
-        qpat_assum `body_const_cells_agree mods cx env es` mp_tac >>
-        simp[NoAsms, body_const_cells_agree_def, const_cells_agree_def]) >>
-     qpat_assum `body_const_cells_agree mods cx env (ee with gas_obs := [])` mp_tac >>
-     simp[NoAsms, body_const_cells_agree_def, const_cells_agree_def]) >>
+  `ee.immutables = es.immutables` by
+    (qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
+       (qspec_then `[]` assume_tac) >>
+     `eval_exprs cx [e]
+        (es with gas_obs := gas_explicit marks s.vs_gas_readings) =
+        (INL [v],ee with gas_obs := [])` by
+       (rewrite_tac[eval_exprs_cons_action, APPEND_NIL] >>
+        qpat_assum `bind (eval_expr cx e) (read_result cx) _ = (INL v,_)`
+          (fn head => ONCE_REWRITE_TAC [bind_def] >>
+            PURE_REWRITE_TAC [SIMP_RULE bool_ss [APPEND_NIL] head]) >>
+        simp[NoAsms, evaluate_def, bind_return, return_def]) >>
+     `no_sha256_exprs [e]` by
+       (qpat_assum `no_sha256_exprs (e::_)`
+          (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [no_sha256_expr_def]) >>
+        simp_tac bool_ss [no_sha256_expr_def]) >>
+     `EVERY (runtime_constant_expr mods) [e]` by simp[] >>
+     drule_all grouped_checked_default_source_frame_mods >>
+     simp[evaluation_state_component_equality]) >>
+  `body_const_cells_agree_mods mods cx env ee` by
+    (qpat_assum `body_const_cells_agree_mods mods cx env es` mp_tac >>
+     qpat_assum `ee.immutables = es.immutables` (fn frame =>
+       simp[NoAsms, body_const_cells_agree_mods_def, const_cells_agree_def, frame])) >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
@@ -313,7 +328,10 @@ Resume grouped_omitted_initializers_mods[store]:
   qpat_assum `!slots kept sa sha es s G tn. compile_init_kwargs _ vars _ _ _ _ = _ /\ _ ==> _`
     (qspecl_then [`t`,`(aid,p,h2',kw_tv,v)::kept`,`last`,`shlast`,`ee`,
        `tail_state`,`G1`,`tn1`] mp_tac) >>
-  impl_tac >- asm_rewrite_tac[listTheory.EVERY_DEF] >>
+  impl_tac
+  >- (asm_rewrite_tac [listTheory.EVERY_DEF] >>
+      qpat_assum `no_sha256_exprs (e::_)`
+        (ACCEPT_TAC o CONJUNCT2 o PURE_REWRITE_RULE [no_sha256_expr_def])) >>
   strip_tac >> irule gas_outcome_full_mods_post_source >>
   goal_assum (drule_at Any) >>
   qpat_assum `ee.scopes = es.scopes` mp_tac >>

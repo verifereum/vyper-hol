@@ -3,27 +3,8 @@ Theory dispatchedCallAssemblyMods
 Ancestors
   dispatchedValuePrefix dispatchedSelectionMods dispatchedRejectCodeMods
   dispatchedRejectCertificateMods e2eModsDefs entryRejectCode sourceUnitExecutionMods
-  sourceValueRejection vyperContext vyperInterpreter vyperState
-
-Triviality source_dispatched_value_reject_trace_mods:
-  source_deployment_rel_mods mods exps am tx /\
-  ALOOKUP mods (ALOOKUP exps tx.function_name) = SOME tops /\
-  lookup_function (ALOOKUP exps tx.function_name) tx.function_name External tops =
-    SOME (mut,nr,args,[],ret,fbody) /\
-  LENGTH args = LENGTH tx.args /\
-  tx.value <> 0 /\ mut <> Payable ==>
-  !gobs. call_external_trace (SOME os) gobs am tx =
-    (INR (Error (RuntimeError "not Payable")),am,[],[])
-Proof
-  simp[LET_THM, source_deployment_rel_mods_def] >> strip_tac >>
-  Cases_on `ALOOKUP am.exports tx.target` >> gvs[] >>
-  Cases_on `ALOOKUP exps tx.function_name` >>
-  gvs[call_external_trace_def, find_function_module_def,
-      lookup_exported_function_def, get_self_code_def, get_module_code_def,
-      initial_evaluation_context_def, call_external_function_trace_def,
-      send_call_value_def, bind_def, ignore_bind_def, check_def, assert_def,
-      initial_state_def]
-QED
+  sourceValueRejection linkedRuntimeValueRejection
+  vyperContext vyperInterpreter vyperState
 
 Theorem dispatched_call_correct_with_readings_mods:
   !execution_ok. execution_ok = (\marks.
@@ -81,9 +62,11 @@ Proof
   simp[initial_evaluation_context_def] >> strip_tac >>
   drule_at (Pat `bind_arguments _ _ _ = SOME _`)
     vyperCallTheory.bind_arguments_length >> strip_tac >>
+  `LENGTH tx.args <= LENGTH args /\ LENGTH args - LENGTH tx.args <= LENGTH ([]:expr list)` by simp[] >>
   `!os gobs. call_external_trace (SOME os) gobs am tx =
      (INR (Error (RuntimeError "not Payable")),am,[],[])` by
-    (drule_all (SIMP_RULE pure_ss [LET_THM] source_dispatched_value_reject_trace_mods) >> simp[]) >>
+    (gen_tac >> drule_all linked_external_value_reject_trace >>
+     disch_then (qspec_then `SOME os` ACCEPT_TAC)) >>
   qexists_tac `[]` >> conj_tac
   >- (drule_all (SIMP_RULE pure_ss [LET_THM] linked_routed_reject_code) >>
       strip_tac >>

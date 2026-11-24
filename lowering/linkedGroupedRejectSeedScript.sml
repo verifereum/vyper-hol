@@ -38,7 +38,7 @@ Theorem row22_omitted_seed_path_mods:
     module_body_inv mods src tops (ce with ce_vars := FEMPTY) cx /\
     shadow_body_inv_mods mods exps ctx shadow_ctx /\
     EVERY (body_expr_full_ok_mods mods exps cx) (MAP (\(_,_,_,e). e) vars) /\
-    body_const_cells_agree mods cx env es /\
+    body_const_cells_agree_mods mods cx env es /\
     env.type_defs = get_tenv cx /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
     ce.ce_return_pc = NONE /\ ce.ce_return_buf = NONE /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

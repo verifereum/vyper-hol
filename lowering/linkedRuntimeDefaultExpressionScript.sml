@@ -1,7 +1,7 @@
 (* The linked source post of a runtime-constant default. *)
 Theory linkedRuntimeDefaultExpression
 Ancestors
-  gasOutcomeFullModsSource runtimeDefaultExpression bodySimStmtFacts
+  gasOutcomeFullPostMods runtimeDefaultExpression bodySimStmtFacts
   abiEncodeArgsScopes vyperScopePreservation exprSimHypsDefs
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
   vyperInterpreter vyperState venomState

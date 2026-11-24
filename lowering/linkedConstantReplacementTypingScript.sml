@@ -4,7 +4,7 @@ Ancestors
   linkedBodyLoopCalls constSubstCorrect constSubstMods constSubst
   vyperTypeContract vyperTypeConstantFold vyperTypeContractStaticMaps
   vyperConstantFoldReplay vyperLinkedConstantFoldTrace
-  vyperTypeSystem vyperContext vyperAST list alist finite_map pair option
+  vyperTypeSystem vyperContext vyperInterpreter[qualified] vyperAST list alist finite_map pair option
 
 Theorem checked_linked_constant_replacements_typed:
   check_contract mode layouts addr mods = SOME art /\
@@ -59,6 +59,15 @@ Proof
              gvs[power_operands_ok_def, no_neg_exp_expr_def] >>
              rpt strip_tac >> gvs[] >> metis_tac[]) >>
          asm "literal" (fn th => metis_tac[th])) >>
+     Cases_on `bi = NamedConst`
+     >- (gvs[] >> Cases_on `es` >> gvs[builtin_operands_ok_def] >>
+         Cases_on `t` >> gvs[builtin_operands_ok_def, subst_consts_expr_mods_def] >>
+         Cases_on `h` >> gvs[named_const_operand_def, subst_consts_expr_mods_def]
+         >~ [`Builtin _ bi _`] >-
+           (Cases_on `bi` >> gvs[named_const_operand_def]) >>
+         qpat_x_assum `named_const_operand (TypeBuiltin _ _ _ _)` mp_tac >>
+         rename1 `named_const_operand (TypeBuiltin _ bi _ children) ==> _` >>
+         Cases_on `bi` >> Cases_on `children` >> gvs[named_const_operand_def, subst_consts_expr_mods_def]) >>
      Cases_on `bi` >> gvs[builtin_operands_ok_def] >>
      Cases_on `b` >> gvs[builtin_operands_ok_def]) >>
   pop_assum (mk_asm "operands") >>
@@ -205,10 +214,16 @@ Proof
   pop_assum (mk_asm "units") >>
   `ALL_DISTINCT (MAP FST mods)` by
     (drule vyperTypeContractContextTheory.check_contract_namespaces_ok >> simp[contract_namespaces_ok_def]) >>
+  `!ns tops. MEM (ns,tops) (vyperInterpreter$constants_order mods) ==>
+     ALOOKUP mods ns = SOME tops` by
+    (simp[vyperInterpreterTheory.MEM_constants_order] >>
+     rpt strip_tac >> irule ALOOKUP_ALL_DISTINCT_MEM >> simp[]) >>
   `EVERY good (consts_env_mods mods)` by
-    (asm "units" (qspecl_then [`constants_order mods`,`[]`] mp_tac) >>
-     simp[GSYM consts_env_mods_def, Abbr `guard`] >>
-     disch_then irule >> rpt strip_tac >>
-     irule ALOOKUP_ALL_DISTINCT_MEM >> fs[vyperInterpreterTheory.MEM_constants_order]) >>
+    (asm "units" (qspecl_then [`vyperInterpreter$constants_order mods`,`[]`] mp_tac) >>
+     qpat_assum `guard (consts_env_mods mods)`
+       (assume_tac o PURE_REWRITE_RULE [consts_env_mods_def,
+          vyperInterpreterTheory.consts_env_modules_order_eq]) >>
+     simp[consts_env_mods_def, vyperInterpreterTheory.consts_env_modules_order_eq,
+          Abbr `guard`]) >>
   asm "entry" drule_all >> strip_tac >> simp[]
 QED

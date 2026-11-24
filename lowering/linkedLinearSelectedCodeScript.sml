@@ -17,6 +17,7 @@ Theorem linked_linear_selected_registration_code:
     unit.cu_context.ctx_entry = SOME "__entry" /\
     venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME "__entry" /\ fn_inst_ids_distinct fn /\
+    fresh_label "fallback" (initial_compile_state "__entry") = (fl,ds) /\
     compile_selector_dispatch_linear
       (MAP (\(sel,l,z). (sel,l))
         (build_selectors (type_env_all_modules mods) (MAP SND exts)))
@@ -30,7 +31,13 @@ Theorem linked_linear_selected_registration_code:
     compile_register_positional_args ce pos 4 checked = (registered_env,registered) /\
     compile_guarded_body registered_env nr key tr view body_code rt registered = ((),last) /\
     fn_has_code opened checked fn /\ fn_has_code checked registered fn /\
-    fn_has_code registered last fn /\ cs_extends opened checked /\ cs_extends checked registered
+    fn_has_code registered last fn /\ cs_extends opened checked /\ cs_extends checked registered /\
+    (?pre post before.
+      MAP (set_external_package_target rp.rpol_target o
+           package_external_fn_unit mods T (K global_nonreentrant_slot)) exts =
+        pre ++ (lbl,ce,pos,mc,pay,nr,key,tr,view,body_code,rt)::post /\
+      compile_external_fn_bodies pre de = ((),before) /\
+      new_block lbl before = (before.cs_current_bb,opened))
 
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -55,5 +62,6 @@ Proof
     `registered_env`,`registered`,`last`] strip_assume_tac) >>
   qexistsl_tac [`fn`,`fl`,`ds`,`de`,`opened`,`checked`,
     `registered_env`,`registered`,`last`] >>
-  fs[block_is_terminated_def]
+  fs[block_is_terminated_def] >>
+  qexistsl_tac [`pre`, `post`, `before`] >> simp[]
 QED

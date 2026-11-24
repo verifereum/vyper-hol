@@ -96,7 +96,7 @@ Proof
   imp_res_tac pack_dret_dynamic_data_section >> gvs[]
 QED
 
-Theorem eval_phis_data_section[local]:
+Theorem eval_phis_data_section:
   !insts s s'. eval_phis s insts = OK s' ==>
                s'.vs_data_section = s.vs_data_section
 Proof
@@ -106,7 +106,7 @@ QED
 
 (* An instruction that continues the block or returns from the function
    leaves the data section alone; an INVOKE keeps the caller's. *)
-Theorem step_inst_data_section[local]:
+Theorem step_inst_data_section:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' \/
     (?r. step_inst fuel ctx inst s = IntRet r s') ==>

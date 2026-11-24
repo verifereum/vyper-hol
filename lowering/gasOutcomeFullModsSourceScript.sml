@@ -1,39 +1,8 @@
-(* Strengthen linked outcomes using the source evaluation equation. *)
+(* Extend linked outcomes by a zero-gas suffix. *)
 Theory gasOutcomeFullModsSource
 Ancestors
   gasOutcomeFullMods fragGasOriginPtr fragGasOrigin fragGasPath fragGasMode
   gasStorage fragExec vyperStorageFootprint vyperState venomState list
-
-Theorem gas_outcome_full_mods_post_source:
-  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
-    (es, s, G, tn) Q R /\
-  (!H res ee G' tn' t.
-     (?xs. !tail. source (es with gas_obs := xs ++ tail) =
-                  (res, ee with gas_obs := tail)) /\
-     ee.gas_obs = [] /\ ~t.vs_halted /\
-     valid_horizon cx st0 H ee.storage_trace /\ Q H res ee G' tn' t ==>
-     Q' H res ee G' tn' t) /\
-  (!H res ee gt r. R H res ee gt r ==> R' H res ee gt r) ==>
-  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
-    (es, s, G, tn) Q' R'
-Proof
-  strip_tac >>
-  qpat_x_assum `gas_outcome_full_mods _ _ _ _ _ _ _ _`
-    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_mods_def]) >>
-  rewrite_tac[gas_outcome_full_mods_def] >> qexists_tac `marks`
-  >- (disj1_tac >> metis_tac[])
-  >- (disj2_tac >> disj1_tac >>
-      qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >>
-      rpt conj_tac >- fs[] >- fs[] >>
-      rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
-      >- (disj1_tac >> first_x_assum irule >> simp[] >> rpt conj_tac
-          >~ [`~t.vs_halted`]
-          >- metis_tac[gas_origin_ptr_path_projections, gas_origin_path_erase,
-                       gas_marked_path_exec, gas_path_normal] >>
-          qexists_tac `gas_explicit marks s.vs_gas_readings` >> simp[]) >>
-      disj2_tac >> metis_tac[]) >>
-  disj2_tac >> disj2_tac >> metis_tac[]
-QED
 
 Theorem gas_outcome_full_mods_zero_suffix:
   gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source

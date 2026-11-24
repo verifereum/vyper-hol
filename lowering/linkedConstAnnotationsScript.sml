@@ -237,18 +237,17 @@ Proof
   drule type_stmt_preserve_nonlocal_fields >> metis_tac[]
 QED
 
-Theorem checked_qualified_body_decl_resolution:
+Theorem checked_linked_custom_errors_after_substitution:
   check_contract dep layouts addr mods = SOME art /\
   check_function_body layouts addr mods art src vis mut nr args dflts ret ss ==>
-  qualified_stmts_decls_ok mods (subst_consts_stmts_mods (consts_env_mods mods) ss)
+  custom_errors_stmts_ok mods (subst_consts_stmts_mods (consts_env_mods mods) ss)
 Proof
   simp[check_function_body_def, LET_THM, optionTheory.IS_SOME_EXISTS] >>
   strip_tac >>
   qabbrev_tac `env = function_entry_env art mods src vis args` >>
   `env.bare_globals = art.cta_bare_globals /\
    env.toplevel_vtypes = art.cta_toplevel_vtypes /\
-   env.type_defs = type_env_all_modules mods /\
-   env.event_fields = art.cta_event_fields` by
+   env.type_defs = type_env_all_modules mods` by
     simp[Abbr `env`, function_entry_env_def, artifact_env_def,
          FOLDL_extend_local_args_static] >>
   `!env err.
@@ -258,11 +257,25 @@ Proof
     well_typed_custom_error env err /\ custom_error_resolved mods err ==>
     custom_error_resolved mods (subst_consts_error_mods (consts_env_mods mods) err)` by
     (rpt strip_tac >> drule_all checked_custom_error_subst >> simp[]) >>
-  `custom_errors_stmts_ok mods
-      (subst_consts_stmts_mods (consts_env_mods mods) ss)` by
-    (drule checked_custom_errors_stmts_subst >>
-     disch_then (qspecl_then [`env`,`ret`,`ss`] mp_tac o CONJUNCT2) >>
-     disch_then drule >> simp[]) >>
+  drule checked_custom_errors_stmts_subst >>
+  disch_then (qspecl_then [`env`,`ret`,`ss`] mp_tac o CONJUNCT2) >>
+  disch_then drule >> simp[]
+QED
+
+Theorem checked_qualified_body_decl_resolution:
+  check_contract dep layouts addr mods = SOME art /\
+  check_function_body layouts addr mods art src vis mut nr args dflts ret ss ==>
+  qualified_stmts_decls_ok mods (subst_consts_stmts_mods (consts_env_mods mods) ss)
+Proof
+  strip_tac >>
+  drule_all_then assume_tac checked_linked_custom_errors_after_substitution >>
+  qpat_x_assum `check_function_body _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[check_function_body_def, LET_THM, optionTheory.IS_SOME_EXISTS] >>
+  strip_tac >>
+  qabbrev_tac `env = function_entry_env art mods src vis args` >>
+  `env.event_fields = art.cta_event_fields` by
+    simp[Abbr `env`, function_entry_env_def, artifact_env_def,
+         FOLDL_extend_local_args_static] >>
   rename1 `type_stmts env ret (subst_consts_stmts_mods _ ss) = SOME inlined_out` >>
   drule checked_body_qualified_stmt_decls >> disch_then irule >> simp[] >>
   map_every qexists_tac [`env`,`inlined_out`,`ret`] >> simp[]

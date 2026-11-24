@@ -61,8 +61,9 @@ Proof
         (!a. MEM a (vyperSubscriptOverlap$accesses_named_exprs
             (subst_consts_fields_mods A fs)) ==> a = vyperSubscriptOverlap$RiskyAcc)))` by
     (rpt gen_tac >> strip_tac >> ho_match_mp_tac subst_consts_expr_mods_ind >>
-     simp[constant_expr_def, subst_consts_expr_mods_def, constant_value_def,
-          vyperSubscriptOverlapTheory.accesses_expr_def, expr_type_def, SF ETA_ss] >>
+     simp[constant_expr_def, subst_consts_expr_mods_def, expr_type_def, SF ETA_ss] >>
+     simp[constant_value_def] >>
+     simp[vyperSubscriptOverlapTheory.accesses_expr_def] >>
      rpt strip_tac >> gvs[]
      >>~- ([`well_typed_expr _ (TopLevelName _ _)`],
             qpat_assum `!src id v. declared_constant _ _ _ /\ _ ==> _`
@@ -353,8 +354,9 @@ Resume checked_linked_constant_replacement_value[checked_ordered_fold]:
        (strip_assume_tac o REWRITE_RULE[declared_constant_def]) >>
      drule_all vyperTypeConstantCellsTheory.checked_initial_immutables_constant_absent >> simp[]) >>
   `prefix_ok last (consts_env_mods mods)` by
-    (simp[consts_env_mods_def] >> first_x_assum irule >>
-     simp[EVERY_MEM, MEM_constants_order] >> qexists_tac `ini` >> simp[]) >>
+    (qpat_assum `!rest seed last E. constants_fold mods seed rest = SOME last /\ _ ==> _`
+       (qspecl_then [`constants_order mods`,`ini`,`last`,`[]`] mp_tac) >>
+     simp[consts_env_mods_def, consts_env_modules_order_eq, EVERY_MEM, MEM_constants_order]) >>
   `good src id r` by fs[Abbr `prefix_ok`, Abbr `closed`] >>
   qpat_x_assum `good src id r` mp_tac >> markerLib.UNABBREV_TAC "good" >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >> strip_tac >>
