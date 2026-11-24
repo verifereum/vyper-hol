@@ -10,7 +10,7 @@ Ancestors
 
 (* The cursor site is distinct from the request allocation and is the
    only allocation touched by the loop's initialization and finish. *)
-Theorem abi_encode_saved_values_execute_with_frame[local]:
+Theorem abi_encode_saved_values_execute_observed:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
     shared pbase capacity root payload_var dst_offset prefix st u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -24,6 +24,9 @@ Theorem abi_encode_saved_values_execute_with_frame[local]:
   LIST_REL (\row at. abi_embedded_static_size ce.ce_struct_fields (SND row) =
     abi_member_head_size at) rows ats /\ LIST_REL abi_encoder_layout_valid ats avs /\
   hl = head_lengths ats 0 /\ bytes = enc (Tuple ats) (ListV avs) /\
+  abi_encode_values_init_observes ctx func lo explicit PG Obs /\
+  abi_encode_values_finish_observes ctx func lo explicit PG Obs /\
+  abi_encode_values_observer st en Obs R /\
   (!ci r. MEM ci (fn_insts func) /\ ci.inst_id = st.cs_next_id /\
     ci.inst_opcode = ALLOCA /\ ci.inst_outputs = [r] /\ not_local_ptr ce ee.scopes r ==>
     !i a c v Gv tv cursor slot.
@@ -39,6 +42,7 @@ Theorem abi_encode_saved_values_execute_with_frame[local]:
       abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
         shared pbase capacity root payload_var dst_offset prefix c z Gz tz /\
       abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor st.cs_next_id slot (SUC i) c z Gz tz /\
+      Obs a c v z /\
       !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (v,Gv,tv) [] (OK z,Gz,tz)) ==>
   ?z Gz tz.
     (track_frame ==> pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
@@ -48,6 +52,7 @@ Theorem abi_encode_saved_values_execute_with_frame[local]:
     (!x. alen = Var x ==> not_fresh_at en x) /\
     mem_bytes_at (pbase+dst_offset) (LENGTH bytes) z.vs_memory = bytes /\
     (!j. pbase+dst_offset <= j /\ j < pbase+dst_offset + LENGTH bytes ==> j NOTIN tz.t_mem) /\
+    R u z /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -88,7 +93,7 @@ Proof
           (track_frame ==> pure_frame ce func ee se u v /\ wb_frame ce ee ee se u v) /\
           abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
             shared pbase capacity root payload_var dst_offset prefix a v Gv tv`]
-    abi_encode_values_execute) >>
+    abi_encode_values_execute_observed) >>
   pop_assum (assume_tac o BETA_RULE) >>
   pop_assum (mp_tac o SIMP_RULE bool_ss [GSYM CONJ_ASSOC]) >>
   impl_tac
@@ -158,12 +163,14 @@ Proof
 QED
 
 Theorem abi_encode_saved_values_execute =
-  PURE_REWRITE_RULE [boolTheory.IMP_CLAUSES, boolTheory.AND_CLAUSES]
-    (Q.INST [`track_frame` |-> `F`] abi_encode_saved_values_execute_with_frame)
+  PURE_REWRITE_RULE [abi_encode_values_observe_trivial, AND_CLAUSES, IMP_CLAUSES]
+    (BETA_RULE (Q.INST [`track_frame` |-> `F`, `Obs` |-> `\a c u v. T`, `R` |-> `\u v. T`]
+      abi_encode_saved_values_execute_observed))
 
 Theorem abi_encode_saved_values_execute_pure =
-  PURE_REWRITE_RULE [boolTheory.IMP_CLAUSES, boolTheory.AND_CLAUSES]
-    (Q.INST [`track_frame` |-> `T`] abi_encode_saved_values_execute_with_frame)
+  PURE_REWRITE_RULE [abi_encode_values_observe_trivial, AND_CLAUSES, IMP_CLAUSES]
+    (BETA_RULE (Q.INST [`track_frame` |-> `T`, `Obs` |-> `\a c u v. T`, `R` |-> `\u v. T`]
+      abi_encode_saved_values_execute_observed))
 
 
 Theorem extcall_direct_values_execute:
