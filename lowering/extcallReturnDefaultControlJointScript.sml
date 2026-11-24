@@ -1,7 +1,7 @@
 (* Counted control edges for the default-return shell. *)
 Theory extcallReturnDefaultControlJoint
 Ancestors
-  extcallReturnDefaultRouting fragGasCopyLoop context emitHelper
+  extcallReturnDefaultRouting fragGasCopyLoop fragGasCopySeqLiftProps context emitHelper
   emitHelperProps fragExec fragExecPtr fragExecMem venomMemDefs venomState
   venomInst venomExecSemantics ptrDiscipline compileEnv ptrSafeRun
   contextCodegenRel codegenRel list fragGasOriginPtr bodyFullUnwrapRun

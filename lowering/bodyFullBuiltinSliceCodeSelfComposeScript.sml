@@ -208,9 +208,8 @@ Proof
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
   `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
-    (qpat_assum `local_ptrs_reserved cenv shadow_sa` mp_tac >>
-     pure_rewrite_tac[local_ptrs_reserved_def,gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
-     simp[]) >>
+    (irule bodyFullSharedTheory.local_ptrs_reserved_gas_shadow >>
+     qexists_tac `sa` >> conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_assum `compile_slice_code start_op' len_op' _ st2' = _`
     (mp_then Any drule_all slice_self_compilation_context) >> strip_tac >>
   `start_op' = start_op /\ gas_shadow_state st1 st1'` by
