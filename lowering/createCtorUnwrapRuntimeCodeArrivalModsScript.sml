@@ -99,7 +99,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ctor_unwrap_runtime_code_arrival_mods:
+Theorem ctor_unwrap_runtime_code_arrival_strong_mods:
   ~cenv.ce_is_ctor /\
   vv = LocatedValue t p /\ p.ptr_location = LocCode /\ ~is_word_type t /\
   compile_expr cenv ty e sa = (vv,sm) /\
@@ -148,7 +148,11 @@ Theorem ctor_unwrap_runtime_code_arrival_mods:
     (!x. not_fresh_at sb x ==>
          lookup_var x z = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
          op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    wb_frame cenv ee ee sb s z /\ ghost_kept_at lo cenv ee sb G tn s G' tn'
+    wb_frame cenv ee ee sb s z /\ ghost_kept_at lo cenv ee sb G tn s G' tn' /\
+    pure_frame cenv func ee sb s z /\
+    expr_val_at cenv cx (post_value_type cenv e) sb sc ee v op z /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+           (s,G,tn) [] (OK z,G',tn'))
 Proof
   strip_tac >> gvs[] >>
   qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
@@ -227,13 +231,14 @@ Proof
     (drule compile_nonmemory_lowered_value_type >> simp[]) >>
   `post_value_type cenv e = expr_type e` by metis_tac[post_value_type_lowered] >>
   `type_memory_bytes cenv (lowered_value_type cenv e) <= type_memory_size rty` by fs[] >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK q,HG,tf)` by
+    (gen_tac >> irule gas_origin_ptr_path_from_no_dead >> first_assum ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
-     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK q,HG,tf)` by
-    (rpt strip_tac >> irule gas_origin_ptr_path_from_no_dead >> first_assum ACCEPT_TAC) >>
+     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK q,HG,tf)` by simp[] >>
   suspend "linked_posts"
 QED
 
-Resume ctor_unwrap_runtime_code_arrival_mods[linked_posts]:
+Resume ctor_unwrap_runtime_code_arrival_strong_mods[linked_posts]:
   markerLib.RESUME_TAC >>
   `!x. p.ptr_operand = Var x ==> x <> root` by
     metis_tac[unwrap_alloc_old_operand_distinct] >>
@@ -275,13 +280,40 @@ Resume ctor_unwrap_runtime_code_arrival_mods[linked_posts]:
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
       ghost_inv_at_mods (DF H) lo d cenv cx ee HG tf q` by
     suspend "linked_ghost" >>
+  `ci_mono mid sc` by
+    (qpat_assum `compile_imm_copy_to_memory F _ _ (Var root) _ _ mid = ((),sc)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ci_mono_compile_imm_copy_to_memory, pairTheory.SND]) >>
+  `sb.cs_next_id < sc.cs_next_id` by
+    (drule compile_alloc_buffer_parts >> strip_tac >> fs[ci_mono_def] >> decide_tac) >>
+  `FLOOKUP q.vs_allocas sb.cs_next_id = SOME (w2n dst,type_memory_size rty)` by
+    (drule_all unwrap_alloc_semantic_frames >> strip_tac >>
+     `q.vs_allocas = u.vs_allocas` by
+       (qpat_assum `z.vs_allocas = allocst.vs_allocas` (fn th =>
+          simp_tac (srw_ss()) [Abbr `q`, th]) >>
+        qpat_assum `allocst = u with vs_inst_idx := _` (fn th =>
+          simp_tac (srw_ss()) [th])) >>
+     qpat_assum `q.vs_allocas = u.vs_allocas` (fn th => pure_rewrite_tac[th]) >>
+     first_assum ACCEPT_TAC) >>
+  `!name b len. local_region cenv ee.scopes q name b len ==>
+     w2n dst + type_memory_size rty <= b \/ b+len <= w2n dst` by
+    (rpt strip_tac >>
+     `!x. not_fresh_at sb x ==> lookup_var x q = lookup_var x s` by
+       (qpat_assum `!x. not_fresh_at sb x ==> lookup_var x z = _ /\ _` mp_tac >>
+        UNABBREV_ALL_TAC >> POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[lookup_var_def]) >>
+     `local_region cenv ee.scopes s name b len` by
+       (qpat_assum `!x. not_fresh_at sb x ==> lookup_var x q = _` mp_tac >>
+        qpat_assum `local_ptrs_reserved cenv sb` mp_tac >>
+        qpat_assum `local_region cenv ee.scopes q name b len` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[copy_buffer_local_region_frame]) >>
+     drule_all unwrap_alloc_local_separation >> simp[]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
       expr_post_mods H ctx func cenv cx e es sa sc s0 ee v (Var root) q` by
     suspend "linked_expr_post" >>
   suspend "runtime_value"
 QED
 
-Resume ctor_unwrap_runtime_code_arrival_mods[linked_ghost]:
+Resume ctor_unwrap_runtime_code_arrival_strong_mods[linked_ghost]:
   markerLib.RESUME_TAC >>
   rpt strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _`
@@ -314,7 +346,7 @@ Resume ctor_unwrap_runtime_code_arrival_mods[linked_ghost]:
   strip_tac >> rpt gen_tac >> strip_tac >> first_x_assum irule >> decide_tac
 QED
 
-Resume ctor_unwrap_runtime_code_arrival_mods[linked_expr_post]:
+Resume ctor_unwrap_runtime_code_arrival_strong_mods[linked_expr_post]:
   markerLib.RESUME_TAC >>
   rpt strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _`
@@ -345,19 +377,6 @@ Resume ctor_unwrap_runtime_code_arrival_mods[linked_expr_post]:
          qpat_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = mem_bytes_at off len allocst.vs_memory`
            irule >> decide_tac) >>
      first_assum ACCEPT_TAC) >>
-  `!name b len. local_region cenv ee.scopes q name b len ==>
-     w2n dst + type_memory_size rty <= b \/ b+len <= w2n dst` by
-    (rpt strip_tac >>
-     `local_region cenv ee.scopes z name b len` by
-       fs[Abbr `q`, local_region_def, lookup_var_def] >>
-     `local_region cenv ee.scopes allocst name b len` by
-       metis_tac[copy_buffer_local_region_frame] >>
-     metis_tac[]) >>
-  `ci_mono mid sc` by
-    (qpat_assum `compile_imm_copy_to_memory F _ _ (Var root) _ _ mid = ((),sc)` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ci_mono_compile_imm_copy_to_memory, pairTheory.SND]) >>
-  `sb.cs_next_id < sc.cs_next_id` by
-    (drule compile_alloc_buffer_parts >> strip_tac >> fs[ci_mono_def] >> decide_tac) >>
   `wb_frame cenv es ee sa s0 s` by
     (qpat_assum `vv_post_mods H _ _ _ _ _ _ _ _ _ _ _ _ s`
        (strip_assume_tac o REWRITE_RULE [vv_post_mods_def]) >>
@@ -377,9 +396,7 @@ Resume ctor_unwrap_runtime_code_arrival_mods[linked_expr_post]:
       qpat_assum `vv_post_mods H _ _ _ _ _ _ _ _ _ _ _ _ s`
         (strip_assume_tac o REWRITE_RULE [vv_post_mods_def]) >>
       irule copy_buffer_expr_post >>
-      `(q:venom_state).vs_memory = z.vs_memory /\ q.vs_allocas = allocst.vs_allocas` by
-        (qpat_assum `Abbrev(q = _)` (fn th => simp_tac (srw_ss()) [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
-         first_assum ACCEPT_TAC) >>
+      `(q:venom_state).vs_memory = z.vs_memory` by simp[Abbr `q`] >>
       `stmt_state_rel H ctx func cenv cx ee q` by
         (qpat_assum `Abbrev(q = _)` (fn th => pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th, stmt_state_rel_inst_idx]) >>
          first_assum ACCEPT_TAC) >>
@@ -405,7 +422,7 @@ Resume ctor_unwrap_runtime_code_arrival_mods[linked_expr_post]:
        immutable_alloca_sep_mods_def, immutable_alloca_sep_def, immutable_decl_sep_def]
 QED
 
-Resume ctor_unwrap_runtime_code_arrival_mods[compose_wb]:
+Resume ctor_unwrap_runtime_code_arrival_strong_mods[compose_wb]:
   markerLib.RESUME_TAC >>
   qpat_assum `wb_frame cenv es ee sa s0 s` (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
   qpat_assum `wb_frame cenv ee ee sb s q` (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
@@ -423,7 +440,7 @@ Resume ctor_unwrap_runtime_code_arrival_mods[compose_wb]:
   fs[Abbr `q`, regions_disjoint_def] >> metis_tac[]
 QED
 
-Resume ctor_unwrap_runtime_code_arrival_mods[runtime_value]:
+Resume ctor_unwrap_runtime_code_arrival_strong_mods[runtime_value]:
   markerLib.RESUME_TAC >>
   `expr_post H0 ctx func cenv cx e es sa sc s0 ee v (Var root) q` by
     fs[expr_post_mods_def] >>
@@ -434,8 +451,72 @@ Resume ctor_unwrap_runtime_code_arrival_mods[runtime_value]:
        (mp_then (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
           expr_store_bound_capacity) >>
      simp[] >> disch_then irule >> rpt strip_tac >> gvs[Abbr `q`]) >>
+  `expr_val_at cenv cx (post_value_type cenv e) sb sc ee v (Var root) q` by
+    (simp[expr_val_at_def] >>
+     disj1_tac >> qexistsl_tac [`sb.cs_next_id`, `w2n dst`, `type_memory_size rty`] >>
+     simp[] >>
+     qpat_assum `!n b len. local_region cenv ee.scopes q n b len ==> _` mp_tac >>
+     simp[] >> strip_tac >> rpt gen_tac >> strip_tac >>
+     first_x_assum drule >> decide_tac) >>
   qexistsl_tac [`q`,`HG`,`tf`] >>
   gvs[Abbr `q`,eval_operand_def,lookup_var_def] >> decide_tac
 QED
 
-Finalise ctor_unwrap_runtime_code_arrival_mods
+Finalise ctor_unwrap_runtime_code_arrival_strong_mods
+
+(* The ordinary interface forgets only the extra endpoint projections. *)
+Theorem ctor_unwrap_runtime_code_arrival_mods:
+  ~cenv.ce_is_ctor /\
+  vv = LocatedValue t p /\ p.ptr_location = LocCode /\ ~is_word_type t /\
+  compile_expr cenv ty e sa = (vv,sm) /\
+  sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
+  unwrap_value cenv vv sb = (op,sc) /\
+  local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty /\
+  type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rty /\
+  type_memory_size rty < 2**64 /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post_mods H ctx func cenv cx e es sa sm s0 ee tv vv s /\
+     ghost_inv_at_mods (DF H) lo d cenv cx ee G tn s) /\
+  alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn s /\
+  ghost_kept_at lo cenv es sa Gi ti s0 G tn /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+  ?v z G' tn'.
+    read_result cx tv ee = (INL v, ee) /\
+    RTC (\u v. ?i. ctor_segment_fetch func u = SOME i /\
+                    sb.cs_next_id <= i.inst_id /\ i.inst_id < sc.cs_next_id /\
+                    i.inst_opcode <> INVOKE /\ ctor_segment_next func u i = SOME v) s z /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+         (s, G, tn) [] (OK z, G', tn') /\
+       expr_post_mods H ctx func cenv cx e es sa sc s0 ee v op z /\
+       ghost_inv_at_mods (DF H) lo d cenv cx ee G' tn' z) /\
+    expr_store_bound cx (post_value_type cenv e) v op z /\
+    ~z.vs_halted /\ z.vs_current_bb = sc.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sc.cs_current_insts /\
+    alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
+    s0.vs_alloca_next <= z.vs_alloca_next /\
+    ptr_val_ok cx (post_value_type cenv e) v op G' tn' z /\
+    ptr_buf_ok cenv e op G' z /\
+    (!rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
+            eval_operand op z = SOME w ==>
+            type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) /\
+    ghost_kept_at lo cenv es sa Gi ti s0 G' tn' /\
+    (!x. not_fresh_at sb x ==>
+         lookup_var x z = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+         op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    wb_frame cenv ee ee sb s z /\ ghost_kept_at lo cenv ee sb G tn s G' tn'
+Proof
+  strip_tac >> drule_all ctor_unwrap_runtime_code_arrival_strong_mods >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`v`,`z`,`G'`,`tn'`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
