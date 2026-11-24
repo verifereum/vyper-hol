@@ -66,7 +66,7 @@ Proof
        memSafeRunTheory.inst_dload_in_section_def]
 QED
 
-Theorem slot_length_stage[local]:
+Theorem slot_length_stage_run:
   (if dyn then compile_ptr_load ctor imm (slot_loc tr) bop
    else comp_return (Lit (n2w cnt))) sa = (len,sl) /\
   fn_has_code sa sl fn /\ eval_operand bop s = SOME slot /\ op_taint tn bop = {} /\
@@ -81,12 +81,17 @@ Theorem slot_length_stage[local]:
     t.vs_inst_idx = LENGTH sl.cs_current_insts /\
     op_taint tn' len = {} /\ op_prov G' len = NONE /\
     (!x. len = Var x ==> not_fresh_at sl x) /\
-    array_length_frame sa s G tn t G' tn'
+    array_length_frame sa s G tn t G' tn' /\
+    (?raw. run_inst_seq (emitted_insts sa sl) s = OK raw /\
+           t = (raw with vs_inst_idx := LENGTH sl.cs_current_insts))
 Proof
   reverse (Cases_on `dyn`)
   >- (simp[comp_return_def] >> strip_tac >> gvs[] >>
       qexistsl [`s`,`G`,`tn`] >>
-      simp[eval_operand_def, op_prov_def, op_taint_def, array_length_frame_def] >>
+      simp[eval_operand_def, op_prov_def, op_taint_def, array_length_frame_def,
+           emitted_insts_def, run_inst_seq_def] >>
+      (reverse conj_tac >-
+        (qpat_assum `s.vs_inst_idx = _` (SUBST1_TAC o SYM) >> simp[])) >>
       gen_tac >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
   simp[] >> strip_tac >>
   `emit_op (if tr then TLOAD else SLOAD) [bop] sa = (len,sl)` by
@@ -119,8 +124,13 @@ Proof
   (conj_tac
    >- simp[step_taint_def, set_var_taint_def, out_taint_def, op_taint_def,
            mk_inst_def, FLOOKUP_UPDATE, pred_setTheory.EXTENSION]) >>
-  irule step_prov_out_none >> simp[mk_inst_def] >>
-  irule out_prov_other_none >> simp[mk_inst_def]
+  (conj_tac
+   >- (irule step_prov_out_none >> simp[mk_inst_def] >>
+       irule out_prov_other_none >> simp[mk_inst_def])) >>
+  gvs[array_length_step_ok_def] >>
+  qpat_assum `!f G. step_inst_base _ _ = _ /\ _`
+    (qspecl_then [`fn`,`G`] strip_assume_tac) >>
+  simp[emitted_insts_def, DROP_LENGTH_APPEND, run_inst_seq_def]
 QED
 
 (* The optional load and the two scalar stages are in one basic block. *)
@@ -174,6 +184,103 @@ Proof
   metis_tac[same_blocks_trans]
 QED
 
+(* Keep the load and scalar itineraries on the same witnesses as the post. *)
+Theorem subscript_slot_array_execution_run:
+  compile_array_subscript bop iop dyn cnt 1 (type_slot_size etv) sgn
+    (compile_ptr_load ctor imm (slot_loc tr)) sn = (dst,sb) /\
+  fn_has_code sn sb fn /\
+  eval_operand bop u = SOME slot /\ eval_operand iop u = SOME iw /\
+  nw = (if dyn then (if tr then tload slot u else sload slot u) else n2w cnt) /\
+  op_taint tn bop = {} /\ op_taint tn iop = {} /\ op_prov G iop = NONE /\
+  (dyn ==> key_taint (if tr then tn.t_trans else tn.t_stor) slot = {}) /\
+  (!x. bop = Var x ==> not_fresh_at sn x) /\
+  (!x. iop = Var x ==> not_fresh_at sn x) /\
+  allocas_from lo u /\ alloca_history fn u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+  ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
+  u.vs_inst_idx = LENGTH sn.cs_current_insts ==>
+  ?q H tm.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u,G,tn) []
+      (if idx_in_range sgn iw nw then OK q else Abort Revert_abort q,H,tm)) /\
+    (idx_in_range sgn iw nw ==>
+      ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+      q.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history fn q /\
+      eval_operand dst q = SOME
+        ((if dyn then slot + 1w else slot) + iw * n2w (type_slot_size etv)) /\
+      op_prov H dst = op_prov G bop /\ op_taint tm dst = {} /\
+      array_length_frame sn u G tn q H tm) /\
+    (?len sl sc ul Gl tl raw.
+      (if dyn then compile_ptr_load ctor imm (slot_loc tr) bop
+       else comp_return (Lit (n2w cnt))) sn = (len,sl) /\
+      array_bounds_check iop len sgn sl = ((),sc) /\
+      array_elem_ptr bop iop dyn 1 (type_slot_size etv) sc = (dst,sb) /\
+      run_inst_seq (emitted_insts sn sl) u = OK raw /\
+      ul = (raw with vs_inst_idx := LENGTH sl.cs_current_insts) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u,G,tn) [] (OK ul,Gl,tl)) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (ul,Gl,tl) []
+        (if idx_in_range sgn iw nw then OK q else Abort Revert_abort q,H,tm)) /\
+      (if idx_in_range sgn iw nw then
+         ?checked addr. run_inst_seq (emitted_insts sl sc) ul = OK checked /\
+           run_inst_seq (emitted_insts sc sb)
+             (checked with vs_inst_idx := LENGTH sc.cs_current_insts) = OK addr /\
+           q = (addr with vs_inst_idx := LENGTH sb.cs_current_insts)
+       else ?aborted. array_abort_itinerary (emitted_insts sl sc) fn ul
+                       Revert_abort aborted q))
+Proof
+  strip_tac >>
+  drule_all_then strip_assume_tac slot_emission_cut >>
+  drule_all slot_length_stage_run >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >>
+  rename [ `array_length_frame sn u G tn ul Gl tl` ] >>
+  `(!x. bop = Var x ==> not_fresh_at sl x) /\
+   (!x. iop = Var x ==> not_fresh_at sl x)` by metis_tac[not_fresh_at_mono] >>
+  `eval_operand bop ul = SOME slot /\ eval_operand iop ul = SOME iw /\
+   op_prov Gl bop = op_prov G bop /\ op_prov Gl iop = NONE /\
+   op_taint tl bop = {} /\ op_taint tl iop = {} /\ allocas_from lo ul` by
+    (Cases_on `bop` >> Cases_on `iop` >>
+     gvs[array_length_frame_def, eval_operand_def, op_prov_def, op_taint_def] >>
+     qpat_x_assum `ul with <|vs_vars := _; vs_inst_idx := _|> = u` mp_tac >>
+     simp[venom_state_component_equality, allocas_from_def] >>
+     metis_tac[allocas_from_def]) >>
+  `eval_operand len ul = SOME nw` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp ul` by
+    (qpat_assum `array_length_frame _ u _ _ ul _ _`
+       (strip_assume_tac o SRULE [] o Q.AP_TERM `\st. (st.vs_allocas, st.vs_initial_fmp, st.vs_fmp)` o
+        cj 1 o REWRITE_RULE [array_length_frame_def]) >>
+     strip_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` drule >>
+     simp[allocas_below_fmp_def] >> metis_tac[]) >>
+  drule_all array_tail_scalar_uniform_observed >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl [`t`,`H`,`tm`] >>
+  conj_tac >- metis_tac[gas_origin_ptr_path_trans] >>
+  reverse conj_tac
+  >- (qexistsl [`len`,`sl`,`sc`,`ul`,`Gl`,`tl`,`raw`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[] >> strip_tac >>
+  `array_length_frame sn u G tn t H tm` by
+    (fs[array_length_frame_def, lookup_var_def] >>
+     conj_tac >- gvs[venom_state_component_equality] >>
+     rpt strip_tac >>
+     `not_fresh_at sl x` by metis_tac[not_fresh_at_mono] >>
+     qpat_assum `!y. not_fresh_at sl y ==> _` (qspec_then `x` mp_tac) >>
+     qpat_assum `!y. not_fresh_at sn y ==> _` (qspec_then `x` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  simp[] >>
+  `t.vs_allocas = u.vs_allocas /\ t.vs_current_bb = u.vs_current_bb` by
+    (qpat_assum `array_length_frame sn u G tn t H tm`
+      (mp_tac o CONJUNCT1 o REWRITE_RULE [array_length_frame_def]) >>
+     simp[venom_state_component_equality]) >>
+  `sb.cs_current_bb = sn.cs_current_bb` by fs[same_blocks_def] >>
+  drule_all_then strip_assume_tac fn_has_code_code >>
+  fs[IS_PREFIX_APPEND] >>
+  `t.vs_inst_idx = u.vs_inst_idx + LENGTH (emitted_insts sn sb)` by
+    (qpat_assum `sb.cs_current_insts = sn.cs_current_insts ++ _`
+      (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
+  `alloca_history fn (t with vs_inst_idx := t.vs_inst_idx)` suffices_by simp[] >>
+  qpat_assum `t.vs_inst_idx = u.vs_inst_idx + _` SUBST1_TAC >>
+  irule alloca_history_no_alloca_slice >> simp[] >> qexistsl [`bb`,`l`] >> simp[]
+QED
+
 Theorem subscript_slot_array_execution:
   compile_array_subscript bop iop dyn cnt 1 (type_slot_size etv) sgn
     (compile_ptr_load ctor imm (slot_loc tr)) sn = (dst,sb) /\
@@ -198,54 +305,7 @@ Theorem subscript_slot_array_execution:
       op_prov H dst = op_prov G bop /\ op_taint tm dst = {} /\
       array_length_frame sn u G tn q H tm)
 Proof
-  strip_tac >>
-  drule_all_then strip_assume_tac slot_emission_cut >>
-  drule_all slot_length_stage >>
-  disch_then (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >>
-  rename [ `array_length_frame sn u G tn ul Gl tl` ] >>
-  `(!x. bop = Var x ==> not_fresh_at sl x) /\
-   (!x. iop = Var x ==> not_fresh_at sl x)` by metis_tac[not_fresh_at_mono] >>
-  `eval_operand bop ul = SOME slot /\ eval_operand iop ul = SOME iw /\
-   op_prov Gl bop = op_prov G bop /\ op_prov Gl iop = NONE /\
-   op_taint tl bop = {} /\ op_taint tl iop = {} /\ allocas_from lo ul` by
-    (Cases_on `bop` >> Cases_on `iop` >>
-     gvs[array_length_frame_def, eval_operand_def, op_prov_def, op_taint_def] >>
-     qpat_x_assum `ul with <|vs_vars := _; vs_inst_idx := _|> = u` mp_tac >>
-     simp[venom_state_component_equality, allocas_from_def] >>
-     metis_tac[allocas_from_def]) >>
-  `eval_operand len ul = SOME nw` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp ul` by
-    (qpat_assum `array_length_frame _ u _ _ ul _ _`
-       (strip_assume_tac o SRULE [] o Q.AP_TERM `\st. (st.vs_allocas, st.vs_initial_fmp, st.vs_fmp)` o
-        cj 1 o REWRITE_RULE [array_length_frame_def]) >>
-     strip_tac >>
-     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp u` drule >>
-     simp[allocas_below_fmp_def] >> metis_tac[]) >>
-  drule_all array_tail_scalar_uniform >>
+  strip_tac >> drule_all subscript_slot_array_execution_run >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  qexistsl [`t`,`H`,`tm`] >> simp[] >>
-  conj_tac >- metis_tac[gas_origin_ptr_path_trans] >>
-  strip_tac >>
-  `array_length_frame sn u G tn t H tm` by
-    (fs[array_length_frame_def, lookup_var_def] >>
-     conj_tac >- gvs[venom_state_component_equality] >>
-     rpt strip_tac >>
-     `not_fresh_at sl x` by metis_tac[not_fresh_at_mono] >>
-     qpat_assum `!y. not_fresh_at sl y ==> _` (qspec_then `x` mp_tac) >>
-     qpat_assum `!y. not_fresh_at sn y ==> _` (qspec_then `x` mp_tac) >>
-     simp[] >> metis_tac[]) >>
-  simp[] >>
-  `t.vs_allocas = u.vs_allocas /\ t.vs_current_bb = u.vs_current_bb` by
-    (qpat_assum `array_length_frame sn u G tn t H tm`
-      (mp_tac o CONJUNCT1 o REWRITE_RULE [array_length_frame_def]) >>
-     simp[venom_state_component_equality]) >>
-  `sb.cs_current_bb = sn.cs_current_bb` by fs[same_blocks_def] >>
-  drule_all_then strip_assume_tac fn_has_code_code >>
-  fs[IS_PREFIX_APPEND] >>
-  `t.vs_inst_idx = u.vs_inst_idx + LENGTH (emitted_insts sn sb)` by
-    (qpat_assum `sb.cs_current_insts = sn.cs_current_insts ++ _`
-      (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
-  `alloca_history fn (t with vs_inst_idx := t.vs_inst_idx)` suffices_by simp[] >>
-  qpat_assum `t.vs_inst_idx = u.vs_inst_idx + _` SUBST1_TAC >>
-  irule alloca_history_no_alloca_slice >> simp[] >> qexistsl [`bb`,`l`] >> simp[]
+  qexistsl [`q`,`H`,`tm`] >> simp[]
 QED
