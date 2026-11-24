@@ -33,7 +33,8 @@ Proof
 QED
 
 Theorem ifexp_arm_conditional_from_step_mods:
-  (!ee tv z G tn.
+  (!gs ee tv z G tn.
+    eval_expr cx e (es1 with gas_obs := gs) = (INL tv,ee) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
     MAP FDOM es1.scopes = MAP FDOM ee.scopes /\
     (!id path. tv = PlaceR (MemoryPlace id path) ==>
@@ -217,8 +218,8 @@ Resume ifexp_arm_conditional_from_step_mods[selected]:
     (rpt strip_tac >> gvs[] >> drule ifexp_raw_place_layout >> simp[]) >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> (?tv. _) /\ _`
     (assume_tac o SIMP_RULE (srw_ss()) [FORALL_AND_THM, IMP_CONJ_THM]) >>
-  qpat_x_assum `!ee tv z G tn. _`
-    (qspecl_then [`ee`,`tv`,`z`,`G`,`tn`] mp_tac) >>
+  qpat_x_assum `!gs ee tv z G tn. _`
+    (qspecl_then [`gas_explicit marks u.vs_gas_readings`,`ee`,`tv`,`z`,`G`,`tn`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   suspend "pure"
 QED
