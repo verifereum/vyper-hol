@@ -644,3 +644,120 @@ Resume range_body_suffix_mods[cleanup]:
 QED
 
 Finalise range_body_suffix_mods
+
+(* Expose the replay on the same run as the linked body post. *)
+Theorem for_body_suffix_replay_mods[local]:
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+    (eval_stmts cx body) (ei,u,G,tn) Q R /\
+  (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+  (!fn inst v. frag_reachable ctx func u fn inst v ==> dalloca_fmp_headroom inst v) ==>
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+    (eval_stmts cx body) (ei,u,G,tn)
+    (\H raw pre G1 tn1 t. Q H raw pre G1 tn1 t /\ ~t.vs_halted /\
+      (!fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_fmp_headroom inst v) /\
+      ?gs. eval_stmts cx body (ei with gas_obs := gs) = (raw,pre)) R
+Proof
+  strip_tac >>
+  irule gas_outcome_full_mods_post_source >>
+  qexistsl_tac [`\H raw pre G1 tn1 t. Q H raw pre G1 tn1 t /\
+    !fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_fmp_headroom inst v`, `R`] >>
+  rpt conj_tac
+  >- (simp[NoAsms] >> rpt gen_tac >> strip_tac >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >> qexists_tac `xs` >>
+      qpat_assum `!tail. eval_stmts _ _ _ = _`
+        (qspec_then `[]` (mp_tac o REWRITE_RULE [APPEND_NIL])) >>
+      `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
+      simp[])
+  >- simp[] >>
+  irule range_suffix_headroom >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+(* The machine suffix must choose one endpoint before varying the horizon.
+   Interpret Break/Continue only after appending that suffix to the raw run. *)
+Theorem for_raw_body_cleanup_suffix_mods:
+  ei.scopes <> [] /\
+  (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+  (!fn inst v. frag_reachable ctx func u fn inst v ==> dalloca_fmp_headroom inst v) /\
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+    (eval_stmts cx body) (ei,u,G,tn) Q
+    (\H raw pre gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (pre with gas_obs := tail) raw gt r) /\
+      halt_exit H cx pre raw r /\
+      (ctx_has_dalloca ctx ==> !z. (r = Halt z \/ ?ir. r = IntRet ir z) ==> allocas_below_fmp z)) /\
+  (!gs raw pre sc rest G1 tn1 t.
+     eval_stmts cx body (ei with gas_obs := gs) = (raw,pre) /\
+     pre.scopes = sc::rest /\ ~t.vs_halted /\
+     storage_trace_domain cx st0 pre.storage_trace /\
+     (!H. valid_horizon cx st0 H pre.storage_trace ==>
+       Q H raw pre G1 tn1 t /\
+       !fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_fmp_headroom inst v) ==>
+     ?z G2 tn2. !H. valid_horizon cx st0 H pre.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G1,tn1) [] (OK z,G2,tn2) /\
+       (if raw = INR BreakException then Done H (pre with scopes := rest) G2 tn2 z
+        else (raw = INL () \/ raw = INR ContinueException) /\
+             Next H (pre with scopes := rest) G2 tn2 z)) ==>
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+    (finally (try (ignore_bind (eval_stmts cx body) (return F))
+                  handle_loop_exception) pop_scope) (ei,u,G,tn)
+    (\H res ee G1 tn1 t. ee.gas_obs = [] /\ ~t.vs_halted /\ ?b. res = INL b /\
+      (b ==> Done H ee G1 tn1 t) /\ (~b ==> Next H ee G1 tn1 t))
+    (\H res ee gt r. ?ex. res = INR ex /\
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r) /\
+      halt_exit H cx ee (INR ex : unit + exception) r /\
+      (ctx_has_dalloca ctx ==> !z. (r = Halt z \/ ?ir. r = IntRet ir z) ==> allocas_below_fmp z))
+Proof
+  strip_tac >>
+  qmatch_assum_abbrev_tac `gas_outcome_full_mods _ _ _ _ _ _ Q bodyR` >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full_mods _ _ _ _ _ _ roundQ roundR` >>
+  qabbrev_tac `rawQ = \H raw pre G1 tn1 t.
+    if raw = INR BreakException then Done H (pre with scopes := TL pre.scopes) G1 tn1 t
+    else (raw = INL () \/ raw = INR ContinueException) /\
+         Next H (pre with scopes := TL pre.scopes) G1 tn1 t` >>
+  `gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+     (eval_stmts cx body) (ei,u,G,tn) rawQ bodyR` by suspend "raw_suffix" >>
+  irule gas_outcome_full_mods_post_source >>
+  qexistsl_tac [`\H res ee G1 tn1 t. ?raw sc gs.
+      res = range_loop_result_mods raw /\
+      eval_stmts cx body (ei with gas_obs := gs) = (raw,ee with scopes := sc::ee.scopes) /\
+      rawQ H raw (ee with scopes := sc::ee.scopes) G1 tn1 t`,
+    `\H res ee gt r. ?raw sc. res = range_loop_result_mods raw /\
+                         bodyR H raw (ee with scopes := sc::ee.scopes) gt r`] >>
+  rpt conj_tac
+  >- (simp[Abbr `rawQ`, Abbr `roundQ`, NoAsms] >> rpt gen_tac >> strip_tac >>
+      Cases_on `raw = INR BreakException` >> gvs[range_loop_result_mods_def] >>
+      qpat_x_assum `raw = INL () \/ _` strip_assume_tac >> gvs[range_loop_result_mods_def])
+  >- (simp[Abbr `bodyR`, Abbr `roundR`, NoAsms, evaluation_state_fupdcanon] >>
+      rpt gen_tac >> strip_tac >>
+      irule range_exit_after_pop >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`raw`,`sc`] >>
+      simp[NoAsms, evaluation_state_fupdcanon] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  irule range_cleanup_outcome_mods >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume for_raw_body_cleanup_suffix_mods[raw_suffix]:
+  irule gas_outcome_full_mods_zero_suffix_mono >>
+  qexistsl_tac [`\H raw pre G1 tn1 t. Q H raw pre G1 tn1 t /\ ~t.vs_halted /\
+    (!fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_fmp_headroom inst v) /\
+    ?gs. eval_stmts cx body (ei with gas_obs := gs) = (raw,pre)`, `bodyR`] >>
+  simp[NoAsms] >> reverse conj_tac
+  >- (irule for_body_suffix_replay_mods >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `storage_trace_domain cx st0 pre.storage_trace` >>
+  `valid_horizon cx st0 (storage_trace_horizon pre.storage_trace) pre.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  `?sc rest. pre.scopes = sc::rest` by
+    (irule range_cleanup_nonempty >> goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >> simp[]) >>
+  first_x_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >>
+  disch_then (qspecl_then [`sc`,`rest`] mp_tac) >>
+  simp[Abbr `rawQ`] >>
+  disch_then irule >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+    (drule_then strip_assume_tac) >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise for_raw_body_cleanup_suffix_mods
