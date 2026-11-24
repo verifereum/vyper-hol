@@ -209,8 +209,8 @@ Theorem range_literal_start_mods:
 Proof
   strip_tac >> simp[LET_THM] >>
   `allocas_from lo s` by fs[ghost_inv_at_mods_def] >>
-  drule_all (SIMP_RULE std_ss [LET_THM] range_literal_start_core) >>
-  disch_then (Q.ISPECL_THEN [`explicit`,`body`,`PG`,`DF`] strip_assume_tac) >>
+  drule_all_then (Q.ISPECL_THEN [`explicit`,`body`,`PG`,`DF`] strip_assume_tac)
+    (SIMP_RULE std_ss [LET_THM] range_literal_start_core) >>
   simp[] >> qexistsl [`t`,`G'`,`tn'`] >> simp[]
 QED
 
@@ -259,8 +259,8 @@ Proof
        fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
      qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
      fs[ghost_inv_at_mods_def]) >>
-  drule_all (SIMP_RULE std_ss [LET_THM] range_literal_start_core) >>
-  disch_then (Q.ISPECL_THEN [`explicit`,`body`,`PG`,`DF`] strip_assume_tac) >>
+  drule_all_then (Q.ISPECL_THEN [`explicit`,`body`,`PG`,`DF`] strip_assume_tac)
+    (SIMP_RULE std_ss [LET_THM] range_literal_start_core) >>
   simp[] >> qexistsl [`t`,`G'`,`tn'`] >> simp[] >>
   qx_gen_tac `H` >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
