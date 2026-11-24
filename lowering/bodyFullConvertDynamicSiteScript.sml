@@ -1,14 +1,14 @@
 (* The real and shadow Convert share the forced child and suffix split. *)
 Theory bodyFullConvertDynamicSite
 Ancestors
-  s1PrefixDefs bodyFullShadowBodyInv exprSimConvert exprSimConvertFromBytes
+  bodyFullEmptyLeafData exprSimFullBundleProps bodyFullShadowBodyInv exprSimConvert exprSimConvertFromBytes
   gasShadowCompile gasShadowState exprLoweringProps compileEnv exprSimSource
   typeBuiltinPrereqs exprSimHyps exprLowering vyperAST
 
 Theorem convert_dynamic_child_site:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
   is_bytestring_type (expr_type e) /\ ~is_bytestring_type dst /\
-  expr_vv_sim_full_pre (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+  expr_vv_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TypeBuiltin ann Convert dst [e]) es
     (st0,sa,sb,shadow_sa,shadow_sb,vv,s0,G0,tn0) ==>
   ann = dst /\ (?bt. dst = BaseT bt) /\ is_word_type dst /\
@@ -22,7 +22,7 @@ Theorem convert_dynamic_child_site:
         type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
         type_memory_size rt < 2**64) /\
   ?x sm shadow_sm.
-    expr_sim_full_pre (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type e) e es (st0,sa,sm,shadow_sa,shadow_sm,x,s0,G0,tn0) /\
     cs_extends sa sm /\ cs_extends shadow_sa shadow_sm /\
     cs_extends sm sb /\ cs_extends shadow_sm shadow_sb /\
@@ -52,7 +52,7 @@ Proof
       drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
       strip_tac >> gvs[] >> metis_tac[]) >>
   conj_tac >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
-  gvs[expr_vv_sim_full_pre_def] >>
+  gvs[expr_vv_sim_full_hypotheses_def, expr_sim_full_code_def] >>
   qpat_x_assum `compile_expr cenv ty (TypeBuiltin _ _ _ _) sa = _` mp_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def] >>
   simp[Once (CONJUNCT2 (CONJUNCT2 compile_expr_raw_def)),
@@ -90,7 +90,7 @@ Proof
     metis_tac[convert_operand_admissible,
       exprSimStackTheory.eval_expr_force_admissible, eval_expr_type_builtin_value] >>
   qexistsl_tac [`x`,`sm`,`shadow_sm`] >>
-  simp[expr_sim_full_pre_def] >>
+  simp[expr_sim_full_hypotheses_def, expr_sim_full_code_def] >>
   conj_tac >- metis_tac[fragExecTheory.fn_has_code_split] >>
   conj_tac >- metis_tac[fragExecTheory.fn_has_code_split] >>
   conj_tac >- metis_tac[fragExecTheory.fn_has_code_split] >>
