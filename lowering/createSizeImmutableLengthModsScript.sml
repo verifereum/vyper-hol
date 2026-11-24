@@ -11,6 +11,14 @@ Ancestors
 (* The later stores do not affect the first word, even for a copy whose
    constructor source and destination overlap. *)
 
+Theorem create_size_stmt_state_rel_immutable_frame_singleton:
+  cenv.ce_modules = [(NONE,tops)] /\ cenv.ce_module = NONE /\
+  stmt_state_rel H ctx func cenv cx es s ==>
+  immutable_frame_mods func cenv cx es s
+Proof
+  cheat
+QED
+
 Theorem create_snapshot_code_length_word_mods:
   vv_location vv = SOME LocCode /\
   stmt_state_rel H ctx func ce cx es s /\
