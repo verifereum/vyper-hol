@@ -87,7 +87,7 @@ Proof
   drule_all entryCreatePathScopeTheory.create_expr_prefix_append >> simp[]
 QED
 
-Theorem unwrap_code_list_scope[local]:
+Theorem unwrap_code_list_scope:
   same_blocks a b /\ b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
   create_cut_code {} a b /\ fn_has_code a b f /\
   EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;ILOAD;DLOAD;MSTORE]) (emitted_insts a b) /\
