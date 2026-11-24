@@ -10,26 +10,72 @@ Ancestors
   bodyFullTargetSubscript bodyFullTargetDefs bodySimFull targetPlaceSim
   bodyFullTargetMappingFacts bodyFullTargetMappingKey bodyFullTargetMappingScratch
   bodyFullTargetMappingRep bodyFullTargetMappingRun bodyFullTargetMappingOutcome
+  bodyFullMappingRunSeq bodyFullMappingSuffixExecution
   targetSubscriptMapping targetSubscriptSplit vyperStorageTrace
   gasOutcomeFull fragGasOriginPtr vyperStorageFootprint loweringPosts
-  vyperTypeSystem vyperInterpreter vyperState
+  vyperTypeEnv vyperTypeSystem vyperInterpreter vyperState
   bodyPtrDefs exprOperandVar exprLoweringProps compileEnv ptrDiscipline loweringStateRelDefs
   stmtLoweringMono vyperEvalExprPreservesScopesDom exprSimWordArgs
 
-Theorem target_mapping_tail_full:
+Theorem target_mapping_tail_observed:
   body_inv tops ctx cenv cx /\
   target_pre cenv cx env (SubscriptTarget bt e) es /\
-  type_place_target env bt = SOME (HashMapT kt vt) ==>
-  subscript_tail_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-    cenv cx env bt e es
+  type_place_target env bt = SOME (HashMapT kt vt) /\
+  type_place_target env (SubscriptTarget bt e) = SOME et /\
+  compile_get_target_ptr compile_expr cenv bt sa = (rb, sm) /\
+  lower_value compile_expr cenv (expr_type e) e sm = (iop, sn) /\
+  compile_get_target_ptr compile_expr cenv (SubscriptTarget bt e) sa = (r, sb) /\
+  fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  expr_sim_inv cenv cx env mid1 /\
+  eval_base_place cx bt (es with gas_obs := base_gas) = (INL pv, mid1) /\
+  bind (eval_expr cx e) (read_result cx)
+    (mid1 with gas_obs := index_gas) = (INL v, mid2) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
+  gas_admissible (extend_place cx pv (ValueSubscript v)) target_res_ok mid2 /\
+  storage_trace_domain cx st0 mid2.storage_trace /\ mid2.gas_obs = [] /\
+  ~t2.vs_halted /\ t2.vs_current_bb = sn.cs_current_bb /\
+  t2.vs_inst_idx = LENGTH sn.cs_current_insts /\ alloca_history func t2 /\
+  s0.vs_alloca_next <= t1.vs_alloca_next /\ t1.vs_alloca_next <= t2.vs_alloca_next /\
+  (!H. valid_horizon cx st0 H mid2.storage_trace ==>
+    target_post H ctx func cenv cx es sa sm s0 mid1 pv (HashMapT kt vt) rb t1 /\
+    ghost_inv_at (DF H) lo d cenv cx mid1 G1 tn1 t1 /\
+    target_ptr_ok cenv pv rb G1 tn1 t1 /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+    expr_post H ctx func cenv cx e mid1 sm sn t1 mid2 v iop t2 /\
+    expr_store_bound cx (expr_type e) v iop t2 /\
+    ghost_inv_at (DF H) lo d cenv cx mid2 G2 tn2 t2 /\
+    ptr_val_ok cx (post_value_type cenv e) v iop G2 tn2 t2 /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e iop G2 t2) /\
+    ghost_kept_at lo cenv mid1 sm G1 tn1 t1 G2 tn2) ==>
+  ?bop hashed sp slot t G tn.
+    (if is_bytestring_type kt then compile_keccak256_key iop F sn else (iop,sn)) = (hashed,sp) /\
+    compile_mapping_subscript bop hashed sp = (slot,sb) /\
+    mapping_raw_endpoint sn sb t2 t /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    mapping_extension_observed (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cx st0 (extend_place cx pv (ValueSubscript v)) (mid2,t2,G2,tn2) (t,G,tn)
+      (\H res ee G tn t. ?pv'. res = INL pv' /\
+        target_post H ctx func cenv cx es sa sb s0 ee pv' et r t /\
+        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+        ghost_inv_at (DF H) lo d cenv cx ee G tn t /\ target_ptr_ok cenv pv' r G tn t /\
+        ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
 Proof
-  strip_tac >> simp[subscript_tail_full_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace)
      mid2.storage_trace` by gvs[storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid2.storage_trace` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   drule_all target_mapping_source_cut >> strip_tac >> gvs[] >>
+  rename1 `eval_base_place _ _ _ = (INL (HashMapRef tr base_slot _ vt),mid1)` >>
   drule_all target_mapping_compile_cut >> strip_tac >>
   Cases_on `extend_place cx (HashMapRef tr base_slot (expr_type e) vt)
     (ValueSubscript v) mid2` >> rename1 `extend_place _ _ _ _ = (res,ee)` >>
@@ -44,7 +90,7 @@ Proof
   suspend "join"
 QED
 
-Resume target_mapping_tail_full[join]:
+Resume target_mapping_tail_observed[join]:
   qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid2.storage_trace` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -72,6 +118,7 @@ Resume target_mapping_tail_full[join]:
        (qspec_then `H` mp_tac) >>
      (impl_tac >- simp[]) >> strip_tac >> gvs[expr_post_def]) >>
   `?t HG tm.
+    mapping_raw_endpoint sn sb t2 t /\
     eval_operand slot t = SOME (hashmap_slot base_slot (encode_hashmap_key (expr_type e) v)) /\
     op_taint tm slot = {} /\ op_prov HG slot = NONE /\
     (!x. slot = Var x ==> not_fresh_at sb x) /\
@@ -89,7 +136,7 @@ Resume target_mapping_tail_full[join]:
       stmt_state_rel H ctx func cenv cx mid2 t /\
       ghost_inv_at (DF H) lo d cenv cx mid2 HG tm t)` by
     (qspecl_then [`iop`, `storage_trace_horizon mid2.storage_trace`]
-       ho_match_mp_tac (Q.GENL [`key`, `H0`] mapping_suffix_full_run) >>
+       ho_match_mp_tac (Q.GENL [`key`, `H0`] mapping_suffix_full_run_with_execution) >>
      simp[] >> first_assum ACCEPT_TAC) >>
   `sa.cs_next_id <= sm.cs_next_id /\ sm.cs_next_id <= sn.cs_next_id` by
     (mp_tac (Q.SPECL [`bt`, `cenv`, `sa`] ci_mono_compile_get_target_ptr) >>
@@ -136,12 +183,27 @@ Resume target_mapping_tail_full[join]:
    ghost_kept_at lo cenv es sa G0 tn0 s0 HG tm` by
     (irule (INST_TYPE [Type.beta |-> ``:256``] mapping_suffix_frames_join) >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   qpat_x_assum `r = _` SUBST_ALL_TAC >>
-  irule mapping_extension_full_outcome >>
-  simp[] >> qexistsl_tac [`HG`, `t`, `tm`] >>
+  qexistsl_tac [`bop`, `hashed`, `sp`, `slot`, `t`, `HG`, `tm`] >>
+  simp[] >> irule mapping_extension_full_outcome_observed >>
   simp[] >> rpt strip_tac >>
   `valid_horizon cx st0 H mid2.storage_trace` by
     metis_tac[valid_horizon_frame, storage_trace_frame_extend_place] >>
   metis_tac[]
 QED
 
-Finalise target_mapping_tail_full
+Finalise target_mapping_tail_observed
+
+Theorem target_mapping_tail_full:
+  body_inv tops ctx cenv cx /\
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  type_place_target env bt = SOME (HashMapT kt vt) ==>
+  subscript_tail_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    cenv cx env bt e es
+Proof
+  strip_tac >> simp[subscript_tail_full_def] >> rpt gen_tac >> strip_tac >>
+  gvs[] >>
+  irule mapping_extension_observed_full >>
+  drule_all target_mapping_tail_observed >>
+  disch_then (qspecl_then [`shadow_ctx`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`G`,`t`,`tn`] >> first_assum ACCEPT_TAC
+QED

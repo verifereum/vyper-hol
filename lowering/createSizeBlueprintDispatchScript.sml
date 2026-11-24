@@ -7,9 +7,7 @@ Ancestors
   exprLoweringProps exprBodyPreProps rich_list exprSimHypsDefs vyperTypeSystem bodyPtrDefs
   loweringPosts context vyperAST vyperStorageFootprint vyperValue exprSimSend integer_word
   createCtorSegmentArrival loweringStateRelDefs ptrDiscipline bodySim
-  createSizeBlueprintOuterPairedCode createSizeBlueprintRawPayloadCode
-  createSizeBlueprintAbiPayloadCode createExprSizeExitDefs createSizePrefixCuts
-  createSizeBlueprintAddress createSizeBlueprintObserved
+  createExprSizeExitDefs createSizeBlueprintAddress entryCreateBlueprintDispatchLayout
 
 Theorem create_blueprint_payload_inputs_at_dispatch:
   body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
@@ -129,190 +127,23 @@ Theorem create_blueprint_payload_inputs_at_dispatch:
          expr_sim_full_code (ctx,shctx,fnc,shfnc) (EL i cs,EL (SUC i) cs,EL i hcs,EL (SUC i) hcs)))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_assum `expr_vv_sim_full_pre _ _ _ _ _ _ _`
-    (map_every assume_tac o CONJUNCTS o REWRITE_RULE[expr_vv_sim_full_pre_def]) >>
-  `?result. compile_create_call compile_expr ce (CreateFromBlueprint raw) hs rof args sa = (result,sb)` by
-    (qpat_assum `compile_expr _ _ (Call _ _ _ _) _ = _` mp_tac >>
-     rewrite_tac[exprSimSendTheory.compile_expr_call,compile_call_def] >>
-     Cases_on `compile_create_call compile_expr ce (CreateFromBlueprint raw) hs rof args sa` >>
-     simp[as_stack_val_def]) >>
-  `MEM inst.inst_opcode [CREATE;CREATE2]` by fs[] >>
-  drule_all create_size_prefix_cuts >>
-  strip_tac >>
-  suspend "layout"
-QED
-
-Resume create_blueprint_payload_inputs_at_dispatch[layout]:
-
-  `value' = value /\ bufop = offop /\ len = sz /\ inst.inst_id = sc.cs_next_id /\ inst.inst_opcode <> PHI` by
-    (Cases_on `salt` >> qpat_x_assum `inst = _` (SUBST_ALL_TAC o SIMP_RULE (srw_ss()) []) >>
-     fs[mk_inst_def]) >>
-  map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
-    [`value' = value`,`bufop = offop`,`len = sz`] >>
-  qpat_x_assum `create_call_itinerary _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o SIMP_RULE bool_ss
-       [create_call_itinerary_def,vyperASTTheory.create_kind_case_def,create_blueprint_itinerary_def]) >>
-  qabbrev_tac `later = value_e::TAKE (if hs then 2 else 1) rest` >>
-  qabbrev_tac `suffix = if hs then TL rest else rest` >>
-  `?se oe ctors. args = target_e::value_e::((if hs then [se] else []) ++ oe::ctors) /\
-    TL suffix = ctors /\ HD suffix = oe /\
-    later = value_e::((if hs then [se] else []) ++ [oe]) /\
-    (if hs then SOME (HD rest) else NONE) = (if hs then SOME se else NONE)` by
-    (Cases_on `hs` >> Cases_on `rest` >> fs[Abbr `later`,Abbr `suffix`] >>
-     TRY (Cases_on `t` >> fs[])) >>
-  map_every (fn q => qpat_x_assum q (fn h => rule_assum_tac (PURE_REWRITE_RULE[h])))
-    [`TL suffix = ctors`,`HD suffix = oe`,
-     `(if hs then SOME (HD rest) else NONE) = (if hs then SOME se else NONE)`] >>
-  `LAST app = sc` by
-    (`app <> []` by
-       (qpat_assum `create_blueprint_append_itinerary _ _ _ _ _ _ app _ _` mp_tac >>
-        POP_ASSUM_LIST (K all_tac) >> Cases_on `args_len = Lit 0w` >>
-        simp[create_blueprint_append_itinerary_def, PULL_EXISTS] >> metis_tac[NOT_CONS_NIL]) >>
-     `sa::cuts = (sa::a::(prep ++ [c;d';e;f])) ++ app` by simp[APPEND_ASSOC] >>
-     qpat_assum `LAST (sa::cuts) = sc` (mp_tac o SYM) >>
-     qpat_assum `sa::cuts = _` (pure_rewrite_tac o single) >> simp[LAST_APPEND_NOT_NIL]) >>
-  `expr_sim_full_code (ctx,shctx,fnc,shfnc) (sa,sb,hsa,hsb)` by simp[expr_sim_full_code_def] >>
-  drule_all create_blueprint_outer_paired_code >>
-  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
-  suspend "observed"
-QED
-
-Resume create_blueprint_payload_inputs_at_dispatch[observed]:
-  qmatch_asmsub_rename_tac `marks = FLAT mark_rows` >>
-  qabbrev_tac `C = \i. EL i (sa::cuts)` >>
-  qabbrev_tac `Obs = \i. EL i states` >>
-  qabbrev_tac `M = \i. EL i mark_rows` >>
-  qabbrev_tac `R = \i. FLAT (DROP i mark_rows)` >>
-  qabbrev_tac `n = LENGTH cuts` >> qabbrev_tac `j = SUC (LENGTH prep)` >>
-  `!i. i < n ==> create_expr_prefix (C i) (C (SUC i)) (gas_explicit_sites ctx shctx) ctx fnc
-    (Obs i) (M i) (Obs (SUC i))` by
-    (qpat_assum `!i. i < n ==> create_expr_prefix _ _ _ _ _ _ _ _` mp_tac >>
-     simp_tac bool_ss [Abbr `C`,Abbr `Obs`,Abbr `M`,Abbr `n`,EL,HD,TL]) >>
-  map_every (fn q => qpat_assum q (assume_tac o REWRITE_RULE[markerTheory.Abbrev_def]))
-    [`Abbrev (C = _)`,`Abbrev (Obs = _)`,`Abbrev (M = _)`,`Abbrev (R = _)`,
-     `Abbrev (n = _)`,`Abbrev (j = _)`] >>
-  `ctor_segment_fetch fnc s = SOME inst` by
-    (qpat_assum `lookup_block s.vs_current_bb _ = SOME bb` (fn th =>
-       simp_tac bool_ss [ctor_segment_fetch_def,th,optionTheory.OPTION_BIND_def]) >>
-     first_assum ACCEPT_TAC) >>
-  drule_all create_blueprint_observed_bands >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  suspend "address"
-QED
-
-Resume create_blueprint_payload_inputs_at_dispatch[address]:
-  `1 <= n` by decide_tac >>
-  qpat_assum `!i. i <= n ==> ~(Obs i).vs_halted /\ _`
-    (qspec_then `1` (drule_then (map_every assume_tac o CONJUNCTS))) >>
-  qpat_assum `C 1 = a` (fn th =>
-    map_every (fn q => qpat_assum q (assume_tac o REWRITE_RULE[th]))
-      [`(Obs 1).vs_current_bb = _`,`(Obs 1).vs_inst_idx = _`]) >>
+  drule_all blueprint_dispatch_layout >>
+  disch_then (qx_choosel_then
+    [`target`,`amount`,`salt`,`off`,`ctors`,`later`,`target_op`,
+     `ca`,`cprep`,`cm`,`cn`,`cb`,`cf`,`sc`,`sca`,`scprep`,`scm`,`scn`,`scb`,
+     `data`,`len`,`offset_op`,`code`,`prep`,`app`,`salt_op`,`C`,`Obs`,`M`,`R`,`n`,`j`]
+    (map_every assume_tac o CONJUNCTS)) >>
   qpat_assum `marks = M 0 ++ R 1` (fn th =>
     qpat_assum `eval_expr cx (Call ann _ args df) _ = _`
       (assume_tac o ONCE_REWRITE_RULE[th])) >>
   drule_all create_blueprint_address_at_cut >>
   disch_then (DISJ_CASES_THEN2 assume_tac
-    (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)))
+    (qx_choosel_then [`av`,`aw`,`p`,`G`,`tn`] (map_every assume_tac o CONJUNCTS)))
   >- (disj1_tac >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> suspend "pack"
-QED
-Resume create_blueprint_payload_inputs_at_dispatch[pack]:
-  `n = j+4+LENGTH app` by
-    (qpat_assum `n = LENGTH cuts` (pure_rewrite_tac o single) >>
-     qpat_assum `cuts = _` (pure_rewrite_tac o single) >>
-     qpat_assum `j = SUC (LENGTH prep)` (pure_rewrite_tac o single) >>
-     POP_ASSUM_LIST (K all_tac) >> simp[LENGTH_APPEND] >> decide_tac) >>
-  `!i. i < LENGTH app ==> C (j+5+i) = EL i app` by
-    (rpt strip_tac >>
-     `j+5+i = SUC (i+(j+4))` by
-       (POP_ASSUM_LIST (K all_tac) >> simp[arithmeticTheory.ADD1] >> decide_tac) >>
-     qpat_assum `C = _` (pure_rewrite_tac o single) >>
-     qpat_assum `j+5+i = _` (pure_rewrite_tac o single) >>
-     simp_tac bool_ss [EL,TL] >>
-     qpat_assum `DROP (j+4) cuts = app` (pure_rewrite_tac o single o SYM) >>
-     sym_tac >> irule listTheory.EL_DROP >>
-     qpat_assum `n = LENGTH cuts` (pure_rewrite_tac o single o SYM) >>
-     qpat_assum `n = j+4+LENGTH app` (pure_rewrite_tac o single) >>
-     qpat_assum `i < LENGTH app` mp_tac >> POP_ASSUM_LIST (K all_tac) >> decide_tac) >>
-  qexistsl_tac [`target_e`,`value_e`,`se`,`oe`,`ctors`,`later`,`target`,`a`,`b`,`c`,`d'`,`e`,`f`,`sc`,
-    `hca`,`hb`,`hc`,`hd`,`he`,`args_buf`,`args_len`,`off`,`code`,`prep`,`app`,`salt`,
-    `C`,`Obs`,`M`,`R`,`n`,`j`,`av`,`aw`,`p`,`G`,`tn`] >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  suspend "payload"
-QED
-Resume create_blueprint_payload_inputs_at_dispatch[payload]:
-  Cases_on `raw` >> simp_tac bool_ss [COND_CLAUSES]
-  >- suspend "raw" >>
-  Cases_on `ctors = []`
-  >- (qpat_assum `ctors = []` (simp_tac bool_ss o single) >> suspend "empty") >>
-  qpat_assum `ctors <> []` (simp_tac bool_ss o single) >> suspend "abi"
-QED
-
-Resume create_blueprint_payload_inputs_at_dispatch[raw]:
-  `?ex. ctors = [ex]` by
-    (drule expr_body_pre_static_facts >> disch_then (assume_tac o cj 2) >>
-     qpat_assum `args = target_e::value_e::_` mp_tac >>
-     qpat_assum `well_typed_expr _ (Call _ _ _ _)` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> Cases_on `hs` >>
-     simp[well_typed_expr_def,create_arg_types_ok_def,MAP_EQ_CONS] >>
-     rpt strip_tac >> gvs[MAP_EQ_CONS] >> metis_tac[]) >>
-  qpat_assum `ctors = [ex]` (fn th =>
-    qpat_assum `create_blueprint_args_itinerary _ T _ ctors _ _ _ _ _`
-      (mp_tac o SIMP_RULE (srw_ss()) [create_blueprint_args_itinerary_def,th]) >>
-    qpat_assum `compile_create_blueprint_args _ _ T _ ctors _ = _`
-      (assume_tac o REWRITE_RULE[th]) >>
-    qpat_assum `compile_create_blueprint_args _ _ T _ (MAP gas_shadow_expr ctors) _ = _`
-      (assume_tac o REWRITE_RULE[th,MAP])) >>
-  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
-  qpat_assum `!cm cs cu cl. prep = [cm;cs;cu;cl;b] ==> _`
-    (fn th => drule th >> disch_then (map_every assume_tac o CONJUNCTS)) >>
-  drule_all create_blueprint_raw_payload_paired_code >>
-  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
-  qmatch_asmsub_rename_tac `compile_expr ce (expr_type ex) ex a = (v0,k0)` >>
-  qmatch_asmsub_rename_tac `compile_snapshot_vv ce (exprs_can_mutate ce later) v0 k0 = (snap0,k1)` >>
-  qmatch_asmsub_rename_tac `unwrap_value ce snap0 k1 = (ptr0,k2)` >>
-  qmatch_asmsub_rename_tac `emit_op MLOAD [ptr0] k2 = (args_len,k3)` >>
-  qmatch_asmsub_rename_tac `compile_expr (gas_shadow_env T ce) (expr_type ex) (gas_shadow_expr ex) hca = (v0,sk0)` >>
-  qmatch_asmsub_rename_tac `compile_snapshot_vv ce (exprs_can_mutate ce (MAP gas_shadow_expr later)) v0 sk0 = (ssnap0,sk1)` >>
-  qmatch_asmsub_rename_tac `unwrap_value ce ssnap0 sk1 = (ptr0,sk2)` >>
-  qexistsl_tac [`ex`,`v0`,`snap0`,`ptr0`,`sk0`,`ssnap0`,`sk1`,`sk2`] >>
-  map_every (fn q => qpat_assum q (pure_rewrite_tac o single))
-    [`C 2 = _`,`C 3 = _`,`C 4 = _`,`C 5 = _`] >>
+  disj2_tac >>
+  qexistsl_tac [`target`,`amount`,`salt`,`off`,`ctors`,`later`,`target_op`,
+    `ca`,`cprep`,`cm`,`cn`,`cb`,`cf`,`sc`,`sca`,`scprep`,`scm`,`scn`,`scb`,
+    `data`,`len`,`offset_op`,`code`,`prep`,`app`,`salt_op`,`C`,`Obs`,`M`,`R`,`n`,`j`,
+    `av`,`aw`,`p`,`G`,`tn`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-Resume create_blueprint_payload_inputs_at_dispatch[empty]:
-  qpat_assum `ctors = []` (fn th =>
-    qpat_assum `create_blueprint_args_itinerary _ F _ ctors _ _ _ _ _`
-      (map_every assume_tac o CONJUNCTS o SIMP_RULE (srw_ss()) [create_blueprint_args_itinerary_def,th])) >>
-  conj_tac >-
-    (map_every (fn q => qpat_assum q (pure_rewrite_tac o single))
-       [`j = SUC (LENGTH prep)`,`prep = []`] >> EVAL_TAC) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Resume create_blueprint_payload_inputs_at_dispatch[abi]:
-  qpat_assum `ctors <> []` (fn th =>
-    qpat_assum `create_blueprint_args_itinerary _ F _ ctors _ _ _ _ _`
-      (mp_tac o SIMP_RULE (srw_ss()) [create_blueprint_args_itinerary_def,th])) >>
-  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
-  qpat_assum `args_buf = _` (fn th =>
-    qpat_assum `compile_create_blueprint_args _ _ F _ (MAP gas_shadow_expr ctors) _ = _`
-      (assume_tac o REWRITE_RULE[th])) >>
-  drule_all create_blueprint_abi_payload_paired_code >>
-  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
-  `1+2*LENGTH ctors = 1+2*LENGTH ctors` by REFL_TAC >>
-  qpat_assum `!vals k cs mid vv a' p. create_itinerary_ctor_rows _ _ _ _ _ _ _ _ /\ _ ==> _`
-    (fn th => drule_all th >> disch_then (map_every assume_tac o CONJUNCTS)) >>
-  qexistsl_tac [`vals`,`cs`,`mid`,`vs`,`buf`,`hk`,`hm`,`hcs`,`hmid`] >>
-  map_every (fn q => qpat_assum q (pure_rewrite_tac o single))
-    [`C (1+2*LENGTH ctors) = k`,`C (SUC (1+2*LENGTH ctors)) = m`] >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  qx_gen_tac `i` >> disch_tac >>
-  qpat_assum `!i. i < LENGTH ctors ==> C (SUC (1+2*i)) = _ /\ _`
-    (qspec_then `i` (drule_then (map_every assume_tac o CONJUNCTS))) >>
-  qpat_assum `!i. i < LENGTH ctors ==> compile_expr _ _ _ _ = _ /\ _`
-    (qspec_then `i` (drule_then (map_every assume_tac o CONJUNCTS))) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-Finalise create_blueprint_payload_inputs_at_dispatch

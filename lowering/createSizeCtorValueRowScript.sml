@@ -103,9 +103,37 @@ QED
 
 (* The value-view post is at the expression cut, not at the private copy's
    return. Only the next row's entry uses the copy's new ghosts. *)
-Theorem blueprint_ctor_vv_row:
+Theorem blueprint_ctor_vv_row_at:
   body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
-  expr_body_pre ce cx env e p /\ create_operand_completed_ok cx e /\
+  expr_body_pre ce cx env e p /\
+  (expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG:(num # num) option list,func,shfunc)
+     ce cx (expr_type e) e p (st0,a,m,sha,shm,vv,s,G,tn) ==>
+   gas_completed_operand (DF,lo,gas_explicit_sites ctx shctx,ctx,func,PG)
+     tops cx st0 a m (eval_expr cx e) (p,s,G,tn)
+     (\H res ee G' tn' t. ?tv. res = INL tv /\
+        vv_post H ctx func ce cx e p a m s ee tv vv t /\
+        vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee tv vv t /\
+        alloca_history func t /\
+        (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+        s.vs_alloca_next <= t.vs_alloca_next /\
+        ghost_inv_at (DF H) lo d ce cx ee G' tn' t /\
+        ptr_vv_ok cx (post_value_type ce e) tv vv ee G' tn' t /\
+        (!v. tv = Value v /\ ~is_word_type (post_value_type ce e) /\
+           ~is_bytestring_type (post_value_type ce e) ==>
+           vv_own ce cx (post_value_type ce e) a m ee tv vv t /\
+           (!t' p. vv = LocatedValue t' p ==> p.ptr_location = LocMemory)) /\
+        (ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+         ?val. read_result cx tv ee = (INL val,ee) /\
+           !rt w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rt /\
+             eval_operand (vv_operand vv) t = SOME w ==>
+             w2n w + type_memory_size rt <= lo /\
+             (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
+                val_in_memory rt val (w2n w) mem)) /\
+        (!tag op. vv = StackValue tag op /\ ~is_word_type (post_value_type ce e) ==>
+           ptr_buf_ok ce e op G' t) /\
+        (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
+           ptr_buf_ok ce e p.ptr_operand G' t) /\
+        ghost_kept_at lo ce p a G tn s G' tn')) /\
   ~is_word_type (lowered_value_type ce e) /\
   compile_expr ce (expr_type e) e a = (vv,m) /\
   compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) sha = (vv,shm) /\
@@ -176,7 +204,8 @@ Proof
      ce cx (expr_type e) e p (st0,a,m,sha,shm,vv,s,G,tn)` by
     (fs[expr_vv_sim_full_pre_def, expr_sim_full_code_def] >>
      metis_tac[expr_body_pre_vv_gas_admissible]) >>
-  drule_all create_size_replay_vv_cut >> strip_tac >>
+  qpat_x_assum `expr_vv_sim_full_pre _ _ _ _ _ _ _ ==> _`
+    (drule_then assume_tac) >>
   Cases_on `eval_expr cx e p` >>
   qmatch_asmsub_rename_tac `eval_expr cx e p = (rv,rq)` >>
   `rq = q` by (Cases_on `rv` >> fs[bind_def] >> metis_tac[read_result_state]) >>
@@ -194,7 +223,7 @@ Proof
   suspend "read"
 QED
 
-Resume blueprint_ctor_vv_row[read]:
+Resume blueprint_ctor_vv_row_at[read]:
   qpat_x_assum `!h. _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
     (assume_tac o BETA_RULE) >>
   qpat_assum `!h. _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
@@ -217,7 +246,7 @@ Resume blueprint_ctor_vv_row[read]:
   qexistsl [`tv`,`ann`] >> simp[] >>
   suspend "advance"
 QED
-Resume blueprint_ctor_vv_row[advance]:
+Resume blueprint_ctor_vv_row_at[advance]:
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     (fs[expr_sim_full_code_def] >> metis_tac[body_inv_no_phi]) >>
   `!f i z. frag_reachable ctx func mid f i z ==> dalloca_fmp_headroom i z` by
@@ -227,7 +256,7 @@ Resume blueprint_ctor_vv_row[advance]:
   >- suspend "copy" >>
   suspend "retain"
 QED
-Resume blueprint_ctor_vv_row[retain]:
+Resume blueprint_ctor_vv_row_at[retain]:
   `vv_type (ext_call_arg_value (lowered_value_type ce e) vv) = lowered_value_type ce e`
      by metis_tac[extcall_operand_snapshot_type] >>
   `b = m` by
@@ -252,7 +281,7 @@ Resume blueprint_ctor_vv_row[retain]:
   simp_tac (srw_ss()) [ghost_inv_at_def,ghost_inv_def,local_region_def] >>
   strip_tac >> first_assum ACCEPT_TAC
 QED
-Resume blueprint_ctor_vv_row[copy]:
+Resume blueprint_ctor_vv_row_at[copy]:
   qpat_x_assum `exprs_can_mutate ce xs ==> _` (drule_then strip_assume_tac) >>
   qpat_assum `create_expr_prefix m b _ _ _ mid snap t`
     (assume_tac o MATCH_MP blueprint_ctor_segment_rtc) >>
@@ -290,7 +319,7 @@ Resume blueprint_ctor_vv_row[copy]:
   disch_then (strip_assume_tac o SPEC_ALL) >>
   suspend "copied_entry"
 QED
-Resume blueprint_ctor_vv_row[copied_entry]:
+Resume blueprint_ctor_vv_row_at[copied_entry]:
   qmatch_asmsub_rename_tac `gas_origin_ptr_path _ (mid,G',tn') [] (OK t,Gout,tout)` >>
   qpat_assum `!h. _ ==> gas_origin_ptr_path _ (mid,_,_) [] _ /\ _`
     (qspec_then `H` (drule_then strip_assume_tac)) >>
@@ -327,4 +356,79 @@ Resume blueprint_ctor_vv_row[copied_entry]:
         (drule_then strip_assume_tac) >> gvs[]) >>
   first_assum ACCEPT_TAC
 QED
-Finalise blueprint_ctor_vv_row
+Finalise blueprint_ctor_vv_row_at
+
+Theorem blueprint_ctor_vv_row:
+  body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
+  expr_body_pre ce cx env e p /\ create_operand_completed_ok cx e /\
+  ~is_word_type (lowered_value_type ce e) /\
+  compile_expr ce (expr_type e) e a = (vv,m) /\
+  compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) sha = (vv,shm) /\
+  expr_sim_full_code (ctx,shctx,func,shfunc) (a,m,sha,shm) /\
+  compile_snapshot_vv ce (exprs_can_mutate ce xs)
+    (ext_call_arg_value (lowered_value_type ce e) vv) m = (saved,b) /\
+  local_ptrs_reserved ce a /\ (!h. dead_lo_ok h (DF h) lo ce cx) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+  return_buf_frame d ce a s /\ alloca_history func s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (!f i z. frag_reachable ctx func s f i z ==> dalloca_fmp_headroom i z) /\
+  (!h. valid_horizon cx st0 h p.storage_trace ==>
+     stmt_state_rel h ctx func ce cx p s /\ storage_well_formed_on cx p (FST h) /\
+     ghost_inv_at (DF h) lo d ce cx p G tn s) /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  create_expr_prefix a m (gas_explicit_sites ctx shctx) ctx func s chunk mid /\
+  mid.vs_current_bb = m.cs_current_bb /\ mid.vs_inst_idx = LENGTH m.cs_current_insts /\
+  create_expr_prefix m b (gas_explicit_sites ctx shctx) ctx func mid snap t /\
+  t.vs_current_bb = b.cs_current_bb /\ t.vs_inst_idx = LENGTH b.cs_current_insts /\
+  (exprs_can_mutate ce xs ==>
+    fn_has_code m b func /\
+    (?j. ctor_segment_fetch func t = SOME j /\ j.inst_opcode <> PHI /\
+         b.cs_next_id <= j.inst_id) /\
+    (gas_origin_path T (gas_explicit_sites ctx shctx) ctx func mid [] (OK t) ==> snap = [])) /\
+  bind (eval_expr cx e) (read_result cx) p = (rr,q) /\
+  valid_horizon cx st0 H q.storage_trace /\
+  p.gas_obs = gas_explicit (chunk ++ (snap ++ rest)) s.vs_gas_readings ++ tail ==>
+  (?err. rr = INR (Error err) /\ unspecified_behaviour_exempt tops err) \/
+  ?v raw Gm tm tv ann Gt tt.
+    rr = INL v /\ eval_expr cx e p = (INL raw,q) /\ read_result cx raw q = (INL v,q) /\
+    evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME ann /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e) /\
+    value_has_type tv v /\ value_has_type ann v /\
+    (!h. valid_horizon cx st0 h q.storage_trace ==>
+       vv_post h ctx func ce cx e p a m s (q with gas_obs := []) raw vv mid /\
+       vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e)
+         (q with gas_obs := []) raw vv mid /\
+       ptr_vv_ok cx (post_value_type ce e) raw vv (q with gas_obs := []) Gm tm mid /\
+       alloca_history func mid /\ s.vs_alloca_next <= mid.vs_alloca_next /\
+       ghost_inv_at (DF h) lo d ce cx (q with gas_obs := []) Gm tm mid /\
+       ghost_kept_at lo ce p a G tn s Gm tm /\
+       (!tag op. vv = StackValue tag op /\ ~is_word_type (post_value_type ce e) ==>
+         ptr_buf_ok ce e op Gm mid) /\
+       (!tag p0. vv = LocatedValue tag p0 /\ p0.ptr_location = LocMemory ==>
+         ptr_buf_ok ce e p0.ptr_operand Gm mid) /\
+       (ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+         ?val. read_result cx raw (q with gas_obs := []) = (INL val,q with gas_obs := []) /\
+           !rt w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rt /\
+             eval_operand (vv_operand vv) mid = SOME w ==>
+             w2n w + type_memory_size rt <= lo /\
+             (!mem. mem_agree_outside tm.t_mem mid.vs_memory mem ==>
+                val_in_memory rt val (w2n w) mem))) /\
+    q.gas_obs = gas_explicit rest t.vs_gas_readings ++ tail /\
+    expr_sim_inv ce cx env q /\ return_buf_frame d ce b t /\ alloca_history func t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    (!f i z. frag_reachable ctx func t f i z ==> dalloca_fmp_headroom i z) /\
+    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts /\
+    (!h. valid_horizon cx st0 h q.storage_trace ==>
+      stmt_state_rel h ctx func ce cx q t /\ storage_well_formed_on cx q (FST h) /\
+      ghost_inv_at (DF h) lo d ce cx q Gt tt t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (SPEC_ALL blueprint_ctor_vv_row_at) >>
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+                strip_tac >> drule_all_then ACCEPT_TAC create_size_replay_vv_cut)) >>
+  disch_then ACCEPT_TAC
+QED
