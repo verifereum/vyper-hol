@@ -27,6 +27,46 @@ Proof
   qexists_tac `(row0,row1,row2,row3,h)::kept` >> simp[]
 QED
 
+Theorem grouped_omitted_kept_inputs:
+  !P. LIST_REL (\(aid,p,base,tv) v. P (aid,p,base,tv,v)) (TAKE k slots) supplied_vals /\
+  ALL_DISTINCT (MAP FST slots) ==>
+  ?kept. EVERY P kept /\ ALL_DISTINCT (MAP FST (DROP k slots) ++ MAP FST kept) /\
+    !Q. EVERY Q kept <=> LIST_REL (\(aid,p,base,tv) v. Q (aid,p,base,tv,v))
+      (TAKE k slots) supplied_vals
+Proof
+  gen_tac >> strip_tac >>
+  `LENGTH (TAKE k slots) = LENGTH supplied_vals` by fs[LIST_REL_EL_EQN] >>
+  drule_then (qx_choose_then `kept` strip_assume_tac) grouped_omitted_kept_rows >>
+  qexists_tac `kept` >> simp[] >>
+  `ALL_DISTINCT (MAP FST (TAKE k slots) ++ MAP FST (DROP k slots))` by
+    (pure_once_rewrite_tac[GSYM MAP_APPEND] >>
+     pure_rewrite_tac[TAKE_DROP] >> first_assum ACCEPT_TAC) >>
+  fs[ALL_DISTINCT_APPEND] >> metis_tac[]
+QED
+
+Theorem grouped_omitted_decoder_inputs:
+  es.scopes = [FEMPTY] /\ tn.t_imm = {} /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx es s /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) 0 NONE (ce with ce_vars := FEMPTY) cx es G tn s) /\
+  selected_registration_frame s tn t tz /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
+  ce.ce_return_pc = NONE /\ selected_registration_resources ctx fn site 0 last t /\
+  fn_inst_ids_distinct fn /\
+  (!D exp. gas_origin_ptr_path (D,0,exp,ctx,fn,PG) (s,G,tn) [] (OK t,J,tz)) ==>
+  !H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx es t /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) 0 NONE (ce with ce_vars := FEMPTY) cx es J tz t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  qpat_assum `!D exp. gas_origin_ptr_path _ _ [] _`
+    (qspecl_then [`DF H`,`{}`] assume_tac) >>
+  drule_all grouped_empty_scope_decoder_frame >> simp[]
+QED
+
 Theorem grouped_default_omitted_cut:
   compile_init_kwargs ce (DROP k vars) off 0 hi last = ((),sb) /\
   compile_init_kwargs (gas_shadow_env T ce)
@@ -90,28 +130,11 @@ Theorem grouped_default_omitted_cut:
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx fn (ce with ce_vars := FEMPTY) cx es t /\
-    storage_well_formed_on cx es (FST H) /\
-    ghost_inv_at (DF H) 0 NONE (ce with ce_vars := FEMPTY) cx es J tz t` by
-    (gen_tac >> strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> _`
-       (qspec_then `H` (drule_then strip_assume_tac)) >>
-     qpat_assum `!D exp. gas_origin_ptr_path _ _ [] _`
-       (qspecl_then [`DF H`,`gas_explicit_sites ctx shadow_ctx`] assume_tac) >>
-     drule_all grouped_empty_scope_decoder_frame >> simp[]) >>
-  `LENGTH (TAKE k slots) = LENGTH supplied_vals` by fs[LIST_REL_EL_EQN] >>
-  drule_then (qx_choose_then `kept` strip_assume_tac) grouped_omitted_kept_rows >>
-  `EVERY (^omitted_cut_initialized last t J tz) kept` by
-    (qpat_assum `!P. EVERY _ kept <=> _`
-       (qspec_then `^omitted_cut_initialized last t J tz` (pure_once_rewrite_tac o single)) >>
-     first_assum ACCEPT_TAC) >>
-  `ALL_DISTINCT (MAP FST (DROP k slots) ++ MAP FST kept)` by
-    (`ALL_DISTINCT (MAP FST (TAKE k slots) ++ MAP FST (DROP k slots))` by
-       (pure_once_rewrite_tac[GSYM MAP_APPEND] >>
-        pure_rewrite_tac[TAKE_DROP] >> first_assum ACCEPT_TAC) >>
-     qpat_x_assum `ALL_DISTINCT (_ ++ _)` mp_tac >>
-     simp[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  mp_tac (SPEC_ALL grouped_omitted_decoder_inputs) >>
+  (impl_tac >- asm_rewrite_tac[]) >> disch_then assume_tac >>
+  qspec_then `^omitted_cut_initialized last t J tz` mp_tac grouped_omitted_kept_inputs >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  disch_then (qx_choose_then `kept` (map_every assume_tac o CONJUNCTS)) >>
   qpat_assum `selected_registration_resources _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [selected_registration_resources_def]) >>
   qpat_assum `MAP _ vars = ds` (SUBST1_TAC o SYM) >>

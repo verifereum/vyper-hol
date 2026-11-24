@@ -45,6 +45,12 @@ Proof
     lower_value_labels, compile_expr_labels, compile_store_bytestring_labels]
 QED
 
+Theorem compile_init_kwargs_extends:
+  compile_init_kwargs ce vars off k hi a = ((),b) ==> cs_extends a b
+Proof
+  metis_tac[group_init_kwarg_labels, SND]
+QED
+
 Theorem compile_init_kwargs_supplied_intervals:
   0 < k /\
   compile_init_kwargs ce ((name,dst,ty,default_e)::vars) off k hi sa = ((),sb) /\
