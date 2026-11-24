@@ -2,6 +2,8 @@
 Theory bodyForRangeBodySuffixMods
 Ancestors
   bodyForRangeHeaderMods bodyFullForRange bodyFullForControl
+  bodyForRangePopTypingMods bodyForRangePopCellsMods bodyForRangeLandingMods
+  gasOutcomeFullPostMods
   gasOutcomeIfSuffixMods gasOutcomeFullMods gasExemptCertMods gasSummaryCompose gasStorage
   fragGasOriginPtr fragExec list finite_map
   bodyFullShadowBodyInv bodyFullPostsMods bodyFullShared bodyPtrDefs bodyMemoryDefs
@@ -348,3 +350,297 @@ Resume range_body_pop_frame_mods[original_frame]:
 QED
 
 Finalise range_body_pop_frame_mods
+
+(* The body post and reachability must use the same target execution. *)
+Theorem range_suffix_headroom[local]:
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0 source
+    (ei,u,G,tn) Q R /\
+  (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+  (!fn inst v. frag_reachable ctx func u fn inst v ==> dalloca_fmp_headroom inst v) ==>
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0 source
+    (ei,u,G,tn)
+    (\H raw ee G1 tn1 t. Q H raw ee G1 tn1 t /\
+      !fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_fmp_headroom inst v) R
+Proof
+  strip_tac >>
+  qhdtm_x_assum `gas_outcome_full_mods`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_mods_def]) >>
+  rewrite_tac [gas_outcome_full_mods_def] >> qexists_tac `marks`
+  >- (disj1_tac >> metis_tac[])
+  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >>
+      rpt conj_tac >- simp[] >- simp[] >>
+      rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
+      >- (disj1_tac >> simp[] >>
+          qpat_assum `gas_origin_ptr_path _ _ _ (OK _,_,_)`
+            (mp_then (Pos hd) mp_tac gas_origin_ptr_path_dalloca_fmp_headroom) >>
+          qpat_assum `!fn inst v. frag_reachable ctx func u fn inst v ==> _`
+            (pure_rewrite_tac o single o EQT_INTRO) >> simp[]) >>
+      disj2_tac >> simp[]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
+QED
+
+Theorem range_body_suffix_mods:
+  ei = es with <|scopes := (FEMPTY |+ (id,<|assignable := F; type := tyv;
+                                  value := IntV (n1 + &k); popped := []|>)) :: es.scopes;
+                 gas_obs := []|> /\
+  expr_sim_inv_mods mods cenv cx env es /\ body_const_cells_agree_mods mods cx env es /\
+  lookup_scopes id es.scopes = NONE /\ id NOTIN FDOM env.var_types /\
+  evaluate_type (get_tenv cx) typ = SOME tyv /\ value_has_type tyv (IntV (n1 + &k)) /\
+  type_stmts (extend_local env id typ F) ret_ty body = SOME env_b /\
+  call_evaluation_safe cx (int_calls_stmts body) /\
+  cenv_top_ext cenv bc ei.scopes /\
+  sa.cs_next_id <= sb0.cs_next_id /\ sa.cs_next_var <= sb0.cs_next_var /\
+  ret_pc_ok cenv sa u /\ return_buf_frame d bc sb0 u /\
+  s0.vs_alloca_next <= u.vs_alloca_next /\
+  (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==> lookup_var x u = SOME v) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
+  (!x. not_fresh_at sa x ==>
+       FLOOKUP G x = FLOOKUP G0 x /\ op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+  alloca_frame cenv es0 sa s0 bc ei u /\
+  (!aid off z i.
+     FLOOKUP s0.vs_allocas aid = SOME (off,z) /\ aid < sa.cs_next_id /\
+     (!n b z'. local_region cenv es0.scopes s0 n b z' ==>
+                off + z <= b \/ b + z' <= off) /\
+     off <= i /\ i < off + z /\ i IN tn.t_mem ==> i IN tn0.t_mem) /\
+  (~block_is_terminated sb1 ==>
+    sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
+    sj.cs_current_insts = sb1.cs_current_insts ++
+      [mk_inst sb1.cs_next_id JMP [Label incr_lbl] []] /\ fn_has_code sb1 sj func) /\
+  sb.cs_current_bb = exit_lbl /\ sb.cs_current_insts = [] /\
+  sb0.cs_next_var <= sb.cs_next_var /\
+  (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+  (!fn inst v. frag_reachable ctx func u fn inst v ==> dalloca_fmp_headroom inst v) /\
+  not_fresh_at sb0 p /\ not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\
+  lookup_var cv u = SOME (i2w (n1 + &k)) /\ lookup_var ev u = SOME (i2w n2) /\
+  lookup_var p u = SOME w /\ FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
+  ptr_covers G tn p u sz /\
+  op_taint tn (Var cv) = {} /\ op_prov G (Var cv) = NONE /\
+  op_taint tn (Var ev) = {} /\ op_prov G (Var ev) = NONE /\
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+    (eval_stmts cx body) (ei,u,G,tn)
+    (\H raw pre G1 tn1 t. ?cb.
+      stmt_lands (InLoop exit_lbl incr_lbl) sb1 raw t /\ ~t.vs_halted /\
+      (raw = INL () ==> ~block_is_terminated sb1 /\ cb = bc_out) /\
+      cenv_top_ext bc cb pre.scopes /\
+      stmt_state_rel H ctx func cb cx pre t /\ immutable_frame_mods func cb cx pre t /\
+      storage_well_formed_on cx pre (FST H) /\ return_buf_frame d cb sb1 t /\
+      alloca_history func t /\ return_buf_sep d cb pre t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ u.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at_mods (DF H) lo d cb cx pre G1 tn1 t /\
+      (!x v. not_fresh_at sb0 x /\ lookup_var x u = SOME v ==> lookup_var x t = SOME v) /\
+      (!a b. FLOOKUP u.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b) /\
+      (!x. not_fresh_at sb0 x ==>
+           FLOOKUP G1 x = FLOOKUP G x /\ op_taint tn1 (Var x) = op_taint tn (Var x)) /\
+      alloca_frame bc ei sb0 u cb pre t /\
+      (!aid off z i.
+         FLOOKUP u.vs_allocas aid = SOME (off,z) /\ aid < sb0.cs_next_id /\
+         (!n b z'. local_region bc ei.scopes u n b z' ==>
+                    off + z <= b \/ b + z' <= off) /\
+         off <= i /\ i < off + z /\ i IN tn1.t_mem ==> i IN tn.t_mem))
+    (\H raw pre gt r.
+      (!tail. stmt_exit_ptr (RetQ H) (pre with gas_obs := tail) raw gt r) /\
+      halt_exit H cx pre raw r /\
+      (ctx_has_dalloca ctx ==> !z. (r = Halt z \/ ?ir. r = IntRet ir z) ==> allocas_below_fmp z)) /\
+  (!H ee G1 tn1 land.
+    land.vs_current_bb = incr_lbl /\ land.vs_inst_idx = 0 /\ ~land.vs_halted /\
+    lookup_var cv land = SOME (i2w (n1 + &k)) /\ lookup_var ev land = SOME (i2w n2) /\
+    lookup_var p land = SOME w /\ FLOOKUP land.vs_allocas aid = SOME (w2n w,sz) /\
+    ptr_covers G1 tn1 p land sz /\
+    op_taint tn1 (Var cv) = {} /\ op_prov G1 (Var cv) = NONE /\
+    op_taint tn1 (Var ev) = {} /\ op_prov G1 (Var ev) = NONE /\
+    body_const_cells_agree_mods mods cx env ee /\ expr_sim_inv_mods mods cenv cx env ee /\
+    lookup_scopes id ee.scopes = NONE /\ storage_trace_domain cx st0 ee.storage_trace /\
+    stmt_state_rel H ctx func cenv cx ee land /\ immutable_frame_mods func cenv cx ee land /\
+    storage_well_formed_on cx ee (FST H) /\ ret_pc_ok cenv sa land /\
+    return_buf_frame d cenv sb0 land /\ return_buf_sep d cenv ee land /\
+    ghost_inv_at_mods (DF H) lo d cenv cx ee G1 tn1 land /\
+    (!fn inst v. frag_reachable ctx func land fn inst v ==> dalloca_fmp_headroom inst v) /\
+    range_outer_frame_mods ctx func cenv sa es0 s0 G0 tn0 ee G1 tn1 land ==>
+    let v = i2w (n1 + &k) + 1w;
+        t = jump_to cond_lbl (update_var cv v (update_var nv v land));
+        G2 = DRESTRICT (DRESTRICT G1 (COMPL {nv})) (COMPL {cv});
+        tn2 = tn1 with t_var := tn1.t_var |+ (nv,{}) |+ (cv,{})
+    in
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (land,G1,tn1) [] (OK t,G2,tn2) /\
+      range_header_mods mods DF lo d ctx func cenv cx env id tyv st0
+        sa sb0 es0 s0 G0 tn0 n1 n2 bound cond_lbl cv ev p aid sz w H rs ee G2 tn2 t) ==>
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+    (finally (try (ignore_bind (eval_stmts cx body) (return F)) handle_loop_exception) pop_scope)
+    (ei,u,G,tn)
+    (\H res ee G1 tn1 t. ee.gas_obs = [] /\ ~t.vs_halted /\ ?b. res = INL b /\
+      (b ==> range_done_mods DF lo d ctx func cenv cx lctx sa sb es0 s0 G0 tn0 H ee G1 tn1 t) /\
+      (~b ==> range_header_mods mods DF lo d ctx func cenv cx env id tyv st0
+        sa sb0 es0 s0 G0 tn0 n1 n2 bound cond_lbl cv ev p aid sz w H rs ee G1 tn1 t))
+    (\H res ee gt r. ?ex. res = INR ex /\
+      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r) /\
+      halt_exit H cx ee (INR ex : unit + exception) r /\
+      (ctx_has_dalloca ctx ==> !z. (r = Halt z \/ ?ir. r = IntRet ir z) ==> allocas_below_fmp z))
+Proof
+  strip_tac >>
+  `ei.scopes <> [] /\ (!n. n IN FDOM (HD ei.scopes) ==> lookup_scopes n (TL ei.scopes) = NONE)` by
+    simp[FDOM_FUPDATE] >>
+  qmatch_assum_abbrev_tac `gas_outcome_full_mods _ _ _ _ _ _ bodyQ bodyR` >>
+  qabbrev_tac `replayQ = \H raw pre G1 tn1 t. bodyQ H raw pre G1 tn1 t /\ ~t.vs_halted /\
+    (!fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_fmp_headroom inst v) /\
+    ?gs. eval_stmts cx body (ei with gas_obs := gs) = (raw,pre)` >>
+  `gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+    (eval_stmts cx body) (ei,u,G,tn) replayQ bodyR` by suspend "replay" >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full_mods _ _ _ _ _ _ roundQ roundR` >>
+  qabbrev_tac `rawQ = \H raw pre G1 tn1 t.
+     (if raw = INR BreakException then
+       range_done_mods DF lo d ctx func cenv cx lctx sa sb es0 s0 G0 tn0
+         H (pre with scopes := TL pre.scopes) G1 tn1 t
+      else (raw = INL () \/ raw = INR ContinueException) /\
+       range_header_mods mods DF lo d ctx func cenv cx env id tyv st0
+         sa sb0 es0 s0 G0 tn0 n1 n2 bound cond_lbl cv ev p aid sz w
+         H rs (pre with scopes := TL pre.scopes) G1 tn1 t)` >>
+  `gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+    (eval_stmts cx body) (ei,u,G,tn) rawQ bodyR` by suspend "suffix" >>
+  suspend "cleanup"
+QED
+
+Resume range_body_suffix_mods[replay]:
+  irule gas_outcome_full_mods_post_source >>
+  qexistsl_tac [`\H raw pre G1 tn1 t. bodyQ H raw pre G1 tn1 t /\
+    !fn inst v. frag_reachable ctx func t fn inst v ==> dalloca_fmp_headroom inst v`, `bodyR`] >>
+  rpt conj_tac
+  >- (simp[Abbr `replayQ`, NoAsms] >> rpt gen_tac >> strip_tac >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+      qexists_tac `xs` >>
+      `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
+      qpat_x_assum `ei = _` kall_tac >>
+      qpat_assum `!tail. eval_stmts _ _ _ = _`
+        (qspec_then `[]` (mp_tac o REWRITE_RULE [APPEND_NIL])) >>
+      qpat_assum `ee with gas_obs := [] = ee` (pure_rewrite_tac o single) >> simp[])
+  >- simp[] >>
+  irule range_suffix_headroom >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume range_body_suffix_mods[suffix]:
+  irule gas_outcome_full_mods_zero_suffix_mono >> qexistsl_tac [`replayQ`,`bodyR`] >>
+  simp[NoAsms] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `!H. valid_horizon cx st0 H pre.storage_trace ==> replayQ H raw pre G1 tn1 t` >>
+  qabbrev_tac `land = if raw = INL () then jump_to incr_lbl t else t` >>
+  qabbrev_tac `v = i2w (n1 + &k) + (1w:bytes32)` >>
+  qabbrev_tac `back = jump_to cond_lbl (update_var cv v (update_var nv v land))` >>
+  qabbrev_tac `G2 = DRESTRICT (DRESTRICT G1 (COMPL {nv})) (COMPL {cv})` >>
+  qabbrev_tac `tn2 = tn1 with t_var := tn1.t_var |+ (nv,{}) |+ (cv,{})` >>
+  qexistsl_tac [`if raw = INR BreakException then land else back`,
+                `if raw = INR BreakException then G1 else G2`,
+                `if raw = INR BreakException then tn1 else tn2`] >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> replayQ _ _ _ _ _ _` (drule_then mp_tac) >>
+  simp[Abbr `replayQ`, Abbr `bodyQ`, NoAsms] >> strip_tac >>
+  `?sc rest. pre.scopes = sc::rest` by
+    (irule range_cleanup_nonempty >> goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >> simp[]) >>
+  qabbrev_tac `ee = pre with scopes := rest` >>
+  suspend "pop_frame"
+QED
+
+Resume range_body_suffix_mods[pop_frame]:
+  `pre = ee with scopes := sc::ee.scopes` by
+    simp[Abbr `ee`, evaluation_state_component_equality] >>
+  `stmt_state_rel H ctx func cenv cx ee t /\ immutable_frame_mods func cenv cx ee t /\
+   storage_well_formed_on cx ee (FST H) /\ return_buf_sep d cenv ee t /\
+   ghost_inv_at_mods (DF H) lo d cenv cx ee G1 tn1 t /\ ret_pc_ok cenv sa t /\
+   return_buf_frame d cenv sb0 t /\ range_outer_frame_mods ctx func cenv sa es0 s0 G0 tn0 ee G1 tn1 t` by
+    (irule range_body_pop_frame_mods >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     qexistsl_tac [`G`,`bc`,`body`,`cb`,`ei with gas_obs := gs`,`raw`,`sc`,`tn`,`u`] >>
+     qpat_assum `pre = ee with scopes := _` (pure_rewrite_tac o single o SYM) >>
+     simp[NoAsms] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     qpat_assum `cenv_top_ext bc cb pre.scopes` mp_tac >>
+     qpat_assum `pre.scopes = sc::rest` (pure_rewrite_tac o single) >> simp[Abbr `ee`, NoAsms]) >>
+  suspend "land"
+QED
+
+Resume range_body_suffix_mods[land]:
+  `raw = INL () ==> ~block_is_terminated sb1` by (strip_tac >> fs[]) >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G1,tn1) [] (OK land,G1,tn1) /\
+   (if raw = INR BreakException then
+      range_done_mods DF lo d ctx func cenv cx lctx sa sb es0 s0 G0 tn0 H ee G1 tn1 land
+    else (raw = INL () \/ raw = INR ContinueException) /\
+      land.vs_current_bb = incr_lbl /\ land.vs_inst_idx = 0 /\ ~land.vs_halted /\
+      lookup_var cv land = SOME (i2w (n1 + &k)) /\ lookup_var ev land = SOME (i2w n2) /\
+      lookup_var p land = SOME w /\ FLOOKUP land.vs_allocas aid = SOME (w2n w,sz) /\
+      ptr_covers G1 tn1 p land sz /\
+      op_taint tn1 (Var cv) = {} /\ op_prov G1 (Var cv) = NONE /\
+      op_taint tn1 (Var ev) = {} /\ op_prov G1 (Var ev) = NONE /\
+      stmt_state_rel H ctx func cenv cx ee land /\ immutable_frame_mods func cenv cx ee land /\
+      storage_well_formed_on cx ee (FST H) /\ ret_pc_ok cenv sa land /\
+      return_buf_frame d cenv sb0 land /\ return_buf_sep d cenv ee land /\
+      ghost_inv_at_mods (DF H) lo d cenv cx ee G1 tn1 land /\
+      (!fn inst v. frag_reachable ctx func land fn inst v ==> dalloca_fmp_headroom inst v) /\
+      range_outer_frame_mods ctx func cenv sa es0 s0 G0 tn0 ee G1 tn1 land)` by
+    suspend "landing_rule" >>
+  Cases_on `raw = INR BreakException`
+  >- gvs[Abbr `land`, Abbr `rawQ`, Abbr `ee`] >>
+  qpat_assum `raw <> INR BreakException` (fn not_break =>
+    qpat_x_assum `(if raw = INR BreakException then _ else _)`
+      (REPEAT_TCL CONJUNCTS_THEN assume_tac o REWRITE_RULE [not_break])) >>
+  suspend "backedge"
+QED
+
+Resume range_body_suffix_mods[landing_rule]:
+  qpat_assum `Abbrev (land = _)` (pure_rewrite_tac o single o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  irule (CONV_RULE (DEPTH_CONV BETA_CONV) (PURE_REWRITE_RULE [LET_THM] range_body_landing_mods)) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+  >- (qexistsl_tac [`exit_lbl`,`sb1`,`sj`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`G`,`tn`,`u`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume range_body_suffix_mods[backedge]:
+  qpat_assum `eval_stmts cx body (ei with gas_obs := gs) = _` mp_tac >>
+  qpat_assum `ei = _` (pure_rewrite_tac o single) >>
+  simp[NoAsms, evaluation_state_fupdcanon] >> strip_tac >>
+  `body_const_cells_agree_mods mods cx env (pre with scopes := rest)` by
+    (irule range_body_pop_cells_mods >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+     >- (qexists_tac `sc` >> first_assum ACCEPT_TAC) >>
+     simp[NoAsms, evaluation_state_fupdcanon] >>
+     goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `type_stmts _ _ _ = _`)) >> first_assum ACCEPT_TAC) >>
+  `expr_sim_inv_mods mods cenv cx env (pre with scopes := rest) /\ lookup_scopes id rest = NONE` by
+    (irule range_body_pop_typing_mods >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+     >- (qexists_tac `sc` >> first_assum ACCEPT_TAC) >>
+     simp[NoAsms, evaluation_state_fupdcanon] >>
+     goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `type_stmts _ _ _ = _`)) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `storage_trace_domain cx st0 ee.storage_trace` by simp[Abbr `ee`] >>
+  qpat_assum `!H ee G1 tn1 land. _ ==> let _ = _ in _`
+    (qspecl_then [`H`,`ee`,`G1`,`tn1`,`land`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> simp[Abbr `ee`])) >>
+  simp[LET_THM, Excl "DRESTRICT_DRESTRICT", NoAsms] >> strip_tac >>
+  simp[Abbr `rawQ`] >>
+  conj_tac
+  >- (qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) [] (OK land,G1,tn1)`
+        (mp_then (Pos hd) mp_tac gas_origin_ptr_path_append) >>
+      simp[Abbr `back`, Abbr `G2`, Abbr `tn2`]) >>
+  fs[Abbr `back`, Abbr `G2`, Abbr `tn2`, Abbr `ee`]
+QED
+
+Resume range_body_suffix_mods[cleanup]:
+  irule gas_outcome_full_mods_post_source >>
+  qexistsl_tac [`\H res ee G1 tn1 t. ?raw sc gs.
+      res = range_loop_result_mods raw /\
+      eval_stmts cx body (ei with gas_obs := gs) = (raw,ee with scopes := sc::ee.scopes) /\
+      rawQ H raw (ee with scopes := sc::ee.scopes) G1 tn1 t`,
+    `\H res ee gt r. ?raw sc. res = range_loop_result_mods raw /\
+                         bodyR H raw (ee with scopes := sc::ee.scopes) gt r`] >>
+  rpt conj_tac
+  >- (simp[Abbr `rawQ`, Abbr `roundQ`, NoAsms] >> rpt gen_tac >> strip_tac >>
+      Cases_on `raw = INR BreakException` >> gvs[range_loop_result_mods_def] >>
+      qpat_x_assum `raw = INL () \/ _` strip_assume_tac >> gvs[range_loop_result_mods_def])
+  >- (simp[Abbr `bodyR`, Abbr `roundR`, NoAsms, evaluation_state_fupdcanon] >>
+      rpt gen_tac >> strip_tac >>
+      irule range_exit_after_pop >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`raw`,`sc`] >>
+      simp[NoAsms, evaluation_state_fupdcanon] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  irule range_cleanup_outcome_mods >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise range_body_suffix_mods
