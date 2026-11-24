@@ -93,7 +93,7 @@ Proof
        metis_tac[deploy_ctor_entry_selection_agrees] >>
      qpat_x_assum `body = _` SUBST_ALL_TAC >>
      `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
-       fs[deploy_source_ok_def, deploy_typing_ok_def] >>
+       fs[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
      pop_assum strip_assume_tac >>
      drule_all deploy_ctor_constant_cells >> strip_tac >>
      `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
@@ -101,7 +101,7 @@ Proof
      drule_all checked_const_substitution_abi_decode_target >>
      metis_tac[lookup_function_abi_decode_target_occurs]) >>
   `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
-    fs[deploy_source_ok_def, deploy_typing_ok_def] >>
+    fs[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
   pop_assum strip_assume_tac >>
   drule bodyLoopCallsTheory.checked_module_loop_calls_ok >> disch_then assume_tac >>
   `stmts_loop_calls_ok [(NONE,tops)] body` by

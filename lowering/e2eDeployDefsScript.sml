@@ -12,6 +12,7 @@ Ancestors
   e2eDefs supportedStmtTraverse vyperTypeEntryReadiness
   vyperTypeContractSoundness vyperTypeDeploymentSoundness
   vyperTypeDeploymentMachine vyperTypeInvariants vyperTypeInitialState
+  vyperTypeContractModes[qualified]
   vyperStorageLayoutSafety
   vyperInterpreter vyperABI vfmExecution vfmExecutionProp frameOutcome
   list immutableSectionRel compileEnv callTrace vyperStorageFootprint
@@ -73,19 +74,14 @@ Proof
   simp[value_transfer_ok_def, accounts_after_transfer_def]
 QED
 
-(* Runtime readiness must NOT be required of the uninstalled source target.
- * The checked deployment/runtime artifact pair used by
- * load_contract_establishes_machine_well_typed, plus well-typed inputs. This
- * is an input typing/setup boundary, not a hypothesis that deployment already
- * succeeded. The initial immutables and the pre-constant deployment readiness
- * on the machine load_contract builds follow from it
+(* The deployment check and well-typed inputs supply both checker artifacts,
+ * initial immutables and pre-constant readiness for load_contract
  * (deploy_typing_ok_constants_ready).
  *)
 Definition deploy_typing_ok_def:
   deploy_typing_ok tops am tx <=>
-    ?deploy_art runtime_art.
+    ?deploy_art.
       check_contract T am.layouts tx.target [(NONE, tops)] = SOME deploy_art /\
-      check_contract F am.layouts tx.target [(NONE, tops)] = SOME runtime_art /\
       machine_well_typed am /\ call_tx_well_typed tx
 End
 
@@ -115,6 +111,8 @@ Theorem deploy_typing_ok_constants_ready:
 Proof
   simp[deploy_typing_ok_def] >> eq_tac >> strip_tac >- (
     drule check_contract_initial_immutables >> strip_tac >>
+    drule_then strip_assume_tac
+      vyperTypeContractModesTheory.check_contract_deploy_implies_runtime >>
     qexistsl [`deploy_art`, `runtime_art`, `imms`] >> simp[] >>
     `context_well_typed (deploy_evaluation_context tops am tx)` by
       gvs[deploy_evaluation_context_def, call_tx_well_typed_def,

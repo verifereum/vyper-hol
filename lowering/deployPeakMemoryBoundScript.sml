@@ -155,7 +155,7 @@ Theorem lower_vyper_deploy_unit_dalloca_windows_for:
     dalloca_windows window bb.bb_instructions
 Proof
   strip_tac >>
-  fs[deploy_typing_ok_def] >>
+  fs[deploy_typing_ok_constants_ready] >>
   `~(!chunk. create_blueprint_dalloca_chunk chunk 1 ==> window chunk 1) ==>
     !mut nr rr name args ds ret ss.
     MEM (FunctionDecl Internal mut nr rr name args ds ret ss) source_tops ==>

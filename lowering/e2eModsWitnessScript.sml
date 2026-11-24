@@ -137,7 +137,7 @@ Triviality linked_witness_deploy_typing:
   deploy_typing_ok_mods linked_witness_mods linked_witness_exports
     linked_witness_initial_machine linked_witness_deploy_tx
 Proof
-  rewrite_tac[deploy_typing_ok_mods_def, linked_check_deploy, linked_check_runtime] >>
+  rewrite_tac[deploy_typing_ok_mods_def, linked_check_deploy] >>
   simp ([linked_witness_initial_machine_def, linked_witness_deploy_tx_def,
          p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
          vyperInterpreterTheory.initial_machine_state_def, linked_deploy_length] @

@@ -717,7 +717,7 @@ Theorem deploy_typing_ok_supported_programs:
   deploy_typing_ok tops am tx /\ layouts_agree tops am tx ==>
   supported_program tops /\ supported_program_deploy tops
 Proof
-  rw[deploy_typing_ok_def] >>
+  rw[deploy_typing_ok_constants_ready] >>
   metis_tac[check_contract_supported_program,
             check_contract_supported_program_deploy]
 QED
