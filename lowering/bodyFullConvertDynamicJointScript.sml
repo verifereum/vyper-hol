@@ -2,7 +2,7 @@ Theory bodyFullConvertDynamicJoint
 Ancestors
   bodyFullShadowBodyInv
   haltExitProj typeBuiltinPrereqs
-  bodyFullPreds bodySimFull exprLowering bodyFullOfVV bodyFullExprGeneric
+  bodyFullPreds bodyFullSimProjection bodySimFull exprLowering bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertChildRead bodyFullPathHistory exprSafeOperand bodyPtrSignedConvertSourceTyping
   valueCopyBytes bodyPtrMakeArrayBytesTransport bodyPtrTypeBuiltinsBytesWordInputs
   bodyFullConvertBytesWordSuffix bodyFullConvertDynamicEmpty
@@ -131,7 +131,7 @@ Proof
   `post_value_type cenv e = expr_type e` by simp[] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by
-    (gvs[body_expr_full_ok_def] >> metis_tac[]) >>
+    metis_tac[body_expr_full_ok_simulations] >>
   `!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
         ~is_word_type (post_value_type cenv e) ==>
         type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
