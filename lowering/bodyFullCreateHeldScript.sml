@@ -36,7 +36,7 @@ Ancestors
   bodyPtrMakeArrayEmission[qualified] bodyPtrEnvBuiltinsEdges[qualified]
   ptrDisciplineEmptyTaint[qualified]
   fragGasOriginPtrLoop[qualified] fragGasOriginPtr[qualified] fragExec[qualified]
-  fragGasOrigin[qualified] fragGasPathPtr[qualified]
+  fragGasOrigin[qualified] fragGasPathPtr[qualified] rawCreateAdminSpine
   bodyFullAbiEncodeSetupTail[qualified] bodyFullAllocaFresh[qualified]
   bodyMemEcArithTransfers[qualified] bodyFullBuiltinECArithTransfers[qualified]
   stmtReasonLitFragMemory[qualified] bodyFullHashKeccakFixed[qualified]
@@ -4941,6 +4941,32 @@ QED
 
 (* The two checks are separate: pointer provenance and the permitted
    memory interval both refer to the fetched instruction. *)
+Theorem create_checked_step_path_and_edge[local]:
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode /\
+  ptr_inst_ok D lo 0 ctx func G tn i s /\ mem_safe_step 0 ctx i s /\
+  step_inst_base i s = OK u ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G i u,step_taint i s u tn) /\
+  fragGasOrigin$gas_origin_edge T explicit ctx func s []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+      step_prov PG G i u,step_taint i s u tn)` by
+    (irule bodyFullRawCallCallOriginTheory.non_gas_mem_safe_origin_ptr_edge >> simp[]) >>
+  reverse conj_tac
+  >- fs[fragGasOriginPtrTheory.gas_origin_ptr_edge_def] >>
+  drule (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >>
+  disch_then (qspec_then `[]` mp_tac) >> simp[] >> disch_then irule >>
+  irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >> simp[] >>
+  `step_inst 0 ctx i s = OK u` by simp[step_inst_non_invoke] >>
+  metis_tac[venomInstProofsTheory.step_preserves_halted]
+QED
+
 Theorem create_checked_step_path[local]:
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME i /\
@@ -4951,16 +4977,7 @@ Theorem create_checked_step_path[local]:
     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
      step_prov PG G i u,step_taint i s u tn)
 Proof
-  strip_tac >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
-      step_prov PG G i u,step_taint i s u tn)` by
-    (irule bodyFullRawCallCallOriginTheory.non_gas_mem_safe_origin_ptr_edge >> simp[]) >>
-  drule (cj 2 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >>
-  disch_then (qspec_then `[]` mp_tac) >> simp[] >> disch_then irule >>
-  irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >> simp[] >>
-  `step_inst 0 ctx i s = OK u` by simp[step_inst_non_invoke] >>
-  metis_tac[venomInstProofsTheory.step_preserves_halted]
+  metis_tac[create_checked_step_path_and_edge]
 QED
 
 Theorem create_dynamic_mstore_path[local]:
@@ -6300,6 +6317,7 @@ Theorem create_blueprint_add_path[local]:
     t = (update_var out (a+b) s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     t.vs_current_bb = sb.cs_current_bb /\
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    (!explicit. fragGasOrigin$gas_origin_edge T explicit ctx func s [] (OK t)) /\
     eval_operand dst t = SOME (a+b) /\
     FLOOKUP G' out = op_prov G left /\ op_taint tn' dst = {} /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
@@ -6317,11 +6335,13 @@ Proof
   qexistsl [`tmp`,`u with vs_inst_idx := LENGTH sb.cs_current_insts`,`gf`,`tf`] >>
   `not_fresh_at sb tmp` by simp[loweringShapeRulesTheory.fresh_output_props] >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-    (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),gf,tf)` by
+    (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),gf,tf) /\
+    fragGasOrigin$gas_origin_edge T explicit ctx func s []
+      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (rpt gen_tac >> simp[Abbr `gf`,Abbr `tf`] >>
      qpat_assum `SUC s.vs_inst_idx = LENGTH sb.cs_current_insts`
        (PURE_ONCE_REWRITE_TAC o single o SYM) >>
-     irule create_checked_step_path >> simp[] >>
+     irule create_checked_step_path_and_edge >> simp[] >>
      `ptr_inst_ok D lo 0 ctx func G tn i s` by
        (simp[Abbr `i`] >> irule ptrSafetyTransportTheory.ptr_inst_ok_lower_bound_transport >>
         simp[] >> qexists `0` >> simp[typedCopyPtrTheory.ptr_inst_ok_copy_len_binop]) >>
@@ -8105,6 +8125,7 @@ Theorem create_clean_mload_path[local]:
     t = (update_var x (mload (w2n w) s) s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     t.vs_current_bb = sb.cs_current_bb /\
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    (!explicit. fragGasOrigin$gas_origin_edge T explicit ctx func s [] (OK t)) /\
     eval_operand op t = SOME (mload (w2n w) s) /\ op_prov G' op = NONE /\ op_taint tn' op = {} /\
     (tn' with t_var := tn.t_var) = tn /\
     (!q. q <> x ==> lookup_var q t = lookup_var q s /\
@@ -8119,11 +8140,13 @@ Proof
   qabbrev_tac `gf = step_prov PG G i u` >>
   qabbrev_tac `tf = step_taint i s u tn` >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-    (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),gf,tf)` by
+    (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),gf,tf) /\
+    fragGasOrigin$gas_origin_edge T explicit ctx func s []
+      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (rpt gen_tac >> simp[Abbr `gf`,Abbr `tf`] >>
      qpat_assum `SUC s.vs_inst_idx = LENGTH sb.cs_current_insts`
        (PURE_ONCE_REWRITE_TAC o single o SYM) >>
-     irule create_checked_step_path >> simp[] >>
+     irule create_checked_step_path_and_edge >> simp[] >>
      gvs[Abbr `i`,Abbr `u`,emitHelperPropsTheory.step_MLOAD,
          exprPtrCtorImmStoreTheory.ptr_inst_ok_mload_lo,
          mk_inst_def,is_terminator_def,mem_safe_step_non_invoke,inst_mem_below_frontier_def,
@@ -8142,7 +8165,7 @@ Proof
        finite_mapTheory.FLOOKUP_DRESTRICT] >> metis_tac[]
 QED
 
-Theorem blueprint_raw_header_path:
+Theorem blueprint_raw_header_path_spine:
   emit_op MLOAD [Var p] sa = (len,sm) /\ emit_op ADD [Var p;Lit 32w] sm = (data,sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\ not_fresh_at sa p /\
   eval_operand (Var p) s = SOME (n2w b) /\ mload b s = n2w (LENGTH bs) /\
@@ -8154,6 +8177,7 @@ Theorem blueprint_raw_header_path:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?l q z Gz tz. len = Var l /\ data = Var q /\ not_fresh_at sb l /\ not_fresh_at sb q /\
+    (!E. admin_ok_spine sa sb E ctx func s z) /\
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,Gz,tz)) /\
     eval_operand len z = SOME (n2w (LENGTH bs)) /\ op_prov Gz len = NONE /\ op_taint tz len = {} /\
     eval_operand data z = SOME (n2w (b + 32)) /\ op_prov Gz data = op_prov G (Var p) /\
@@ -8190,6 +8214,26 @@ Proof
    ~u.vs_halted /\ u.vs_inst_idx = LENGTH sm.cs_current_insts` by simp[update_var_def] >>
   drule_all create_blueprint_add_path >>
   disch_then (qspec_then `PG` (qx_choosel_then [`q`,`z`,`Gz`,`tz`] strip_assume_tac)) >>
+  `!E. admin_ok_spine sa sb E ctx func s z` by
+    (gen_tac >>
+     qpat_assum `emit_op MLOAD _ _ = _`
+       (mp_then Any (drule_all_then strip_assume_tac)
+         bodyPtrMakeArrayEmissionTheory.emit_op_fetch_boundary) >>
+     qpat_assum `emit_op ADD _ _ = _`
+       (mp_then Any (drule_all_then strip_assume_tac)
+         bodyPtrMakeArrayEmissionTheory.emit_op_fetch_boundary) >>
+     qpat_assum `emit_op MLOAD _ _ = _`
+       (strip_assume_tac o MATCH_MP entryDecodeStructureTheory.emit_op_next_id) >>
+     qpat_assum `emit_op ADD _ _ = _`
+       (strip_assume_tac o MATCH_MP entryDecodeStructureTheory.emit_op_next_id) >>
+     irule admin_ok_spine_trans >> qexists `u` >>
+     conj_tac
+     >- (irule admin_ok_spine_single >>
+         qpat_assum `get_instruction _ s.vs_inst_idx = SOME _` (irule_at Any) >>
+         simp[abiEncoderPropsTheory.frag_ids_def,mk_inst_def] >> decide_tac) >>
+     irule admin_ok_spine_single >>
+     qpat_assum `get_instruction _ u.vs_inst_idx = SOME _` (irule_at Any) >>
+     simp[abiEncoderPropsTheory.frag_ids_def,mk_inst_def] >> decide_tac) >>
   `sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sb.cs_next_var` by
     metis_tac[ci_mono_emit_op,ci_mono_def,pairTheory.SND] >>
   `l <> q /\ not_fresh_at sb l` by metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
@@ -8221,6 +8265,35 @@ Proof
   `tu.t_mem = tn.t_mem` by
     (qpat_assum `tu with t_var := _ = tn` mp_tac >> simp[taint_component_equality]) >>
   qx_gen_tac `k` >> strip_tac >> `b <= k /\ k < b + 32 + LENGTH bs` by decide_tac >> metis_tac[]
+QED
+
+Theorem blueprint_raw_header_path:
+  emit_op MLOAD [Var p] sa = (len,sm) /\ emit_op ADD [Var p;Lit 32w] sm = (data,sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sb func /\ not_fresh_at sa p /\
+  eval_operand (Var p) s = SOME (n2w b) /\ mload b s = n2w (LENGTH bs) /\
+  ptr_covers G tn p s (32 + LENGTH bs) /\ b + 32 < dimword (:256) /\
+  b + 32 + LENGTH bs <= s.vs_alloca_next /\
+  mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
+  (!i. b <= i /\ i < b + 32 + LENGTH bs ==> i NOTIN tn.t_mem) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?l q z Gz tz. len = Var l /\ data = Var q /\ not_fresh_at sb l /\ not_fresh_at sb q /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,Gz,tz)) /\
+    eval_operand len z = SOME (n2w (LENGTH bs)) /\ op_prov Gz len = NONE /\ op_taint tz len = {} /\
+    eval_operand data z = SOME (n2w (b + 32)) /\ op_prov Gz data = op_prov G (Var p) /\
+    ptr_covers Gz tz q z (LENGTH bs) /\
+    mem_bytes_at (b + 32) (LENGTH bs) z.vs_memory = bs /\
+    (!i. b + 32 <= i /\ i < b + 32 + LENGTH bs ==> i NOTIN tz.t_mem) /\
+    z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (z with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+    (tz with t_var := tn.t_var) = tn /\
+    (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s /\
+      FLOOKUP Gz x = FLOOKUP G x /\ op_taint tz (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all blueprint_raw_header_path_spine >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl [`l`,`q`,`z`,`Gz`,`tz`] >> asm_rewrite_tac[]
 QED
 
 (* A folded offset performs no target instructions, but does contribute
