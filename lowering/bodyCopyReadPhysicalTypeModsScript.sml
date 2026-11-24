@@ -69,7 +69,7 @@ fun named_literal_fits_tac ty =
   simp[lowered_value_type_def, expr_type_def, GSYM event_arg_compatible_alias_def,
        event_arg_compatible_reflexive];
 
-Theorem copy_lowered_fits_mods[local]:
+Theorem copy_lowered_fits_mods:
   !ce e. expr_sim_inv_mods mods ce cx env es /\ well_typed_expr env e ==>
     arg_type_fits (lowered_value_type ce e) (expr_type e)
 Proof
@@ -192,7 +192,7 @@ val copy_named_literal_read_tac =
       compatible_bound_def] >>
   imp_res_tac word_size_monotone >> decide_tac;
 
-Theorem copy_read_lowered_type_mods[local]:
+Theorem copy_read_lowered_type_mods:
   !ce e es v ee.
     expr_sim_inv_mods mods ce cx env es /\ well_typed_expr env e /\
     alloc_limits_expr ce e /\ call_evaluation_safe cx (int_calls_expr e) /\
