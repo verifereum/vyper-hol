@@ -2132,20 +2132,32 @@ val linked_registered_shadow_tac =
           (mp_tac o REWRITE_RULE [stmtSimPropsTheory.compile_stmts_env]) >>
         qpat_assum `rt = _` SUBST1_TAC >>
         Cases_on `ret = NoneT`
-        >- (qpat_assum `ret = NoneT` SUBST_ALL_TAC >>
-            drule_then assume_tac externalCallSelectedTheory.type_stmts_none_valued_return >>
+        >- (`~stmts_valued_return body_code` by
+              (qpat_assum `ret = NoneT` (fn none =>
+                 qpat_assum `type_stmts entry_types ret body_code = SOME after_body`
+                   (mp_tac o PURE_REWRITE_RULE [none])) >>
+               disch_then (ACCEPT_TAC o MATCH_MP externalCallSelectedTheory.type_stmts_none_valued_return)) >>
             qspecl_then [`MAP gas_shadow_stmt body_code`,`tops`,`bindings`,
               `gas_shadow_env T registered_env`,`NoLoop`,`NoneT`,`BaseT BoolT`] mp_tac
                stmtsEnvRetTyTheory.stmts_env_ret_ty_no_valued_return >>
-            impl_tac >- simp[gasShadowStmtEnvTheory.gas_shadow_supported_stmts,
-               gasShadowStmtEnvTheory.gas_shadow_valued_return] >>
-            disch_then (fn state => simp[NoAsms, state])) >>
+            impl_tac
+            >- (conj_tac
+                >- (qpat_assum `supported_stmts tops bindings body_code`
+                      (ACCEPT_TAC o MATCH_MP gasShadowStmtEnvTheory.gas_shadow_supported_stmts)) >>
+                PURE_REWRITE_TAC [gasShadowStmtEnvTheory.gas_shadow_valued_return] >>
+                first_assum ACCEPT_TAC) >>
+            qpat_assum `ret = NoneT` (fn none => disch_then (fn state =>
+              simp[NoAsms, state, none]))) >>
         qpat_assum `ret <> NoneT` (fn nonempty => simp[NoAsms, nonempty])) >>
      qspecl_then [`body_code`,`registered_env`,`NoLoop`,`ret`] mp_tac
        (Q.INST [`sd` |-> `T`] gasShadowStmtEnvTheory.gas_shadow_stmts_env_env) >>
      PURE_REWRITE_TAC [gas_shadow_compiles_env_def] >>
      disch_then (qspecl_then [`locked`,`shadow_locked`] mp_tac) >>
-     asm_simp_tac std_ss [FST, SND] >>
+     qpat_assum `gas_shadow_state locked shadow_locked` (fn pair =>
+       qpat_assum `stmts_env registered_env NoLoop ret body_code locked = (body_env,body_end)`
+         (fn raw => qpat_assum `SND (stmts_env (gas_shadow_env T registered_env) NoLoop ret
+               (MAP gas_shadow_stmt body_code) shadow_locked) = shadow_body_end`
+           (fn shadow => simp_tac bool_ss [pair, raw, shadow, FST, SND]))) >>
      disch_then (CONJUNCTS_THEN2 (assume_tac o SYM) assume_tac) >>
      simp_tac bool_ss [pairTheory.PAIR_FST_SND_EQ,FST,SND] >>
      rpt conj_tac >> first_assum ACCEPT_TAC);
@@ -4768,6 +4780,22 @@ val linked_empty_entry_static_tac =
        (strip_assume_tac o PURE_REWRITE_RULE [contract_namespaces_ok_def]) >>
      first_assum ACCEPT_TAC);
 
+(* Normalize an empty registration cut for the common execution stages.
+   The caller supplies its own start, explicit sites, path, and resources. *)
+val linked_empty_registered_cut_tac =
+  rename1 `return_buf_frame NONE registered_env registered s0` >>
+  rename1 `gas_shadow_state registered shadow_registered` >>
+  rename1 `compile_guarded_body (gas_shadow_env T registered_env) nr key tr view
+    (MAP gas_shadow_stmt _) _ shadow_registered = ((),shadow_last)` >>
+  rename1 `fn_has_code shadow_registered shadow_last shadow_fn` >>
+  rename1 `compile_guarded_body registered_env nr key tr view body_code rt registered = ((),last)` >>
+  rename1 `compile_stmts registered_env NoLoop _ body_code locked = ((),body_end)` >>
+  rename1 `compile_stmts (gas_shadow_env T registered_env) NoLoop _
+    (MAP gas_shadow_stmt body_code) shadow_locked = ((),shadow_body_end)` >>
+  rename1 `type_stmts entry_types ret body_code = SOME after_body` >>
+  rename1 `!D. gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
+      (start,FEMPTY,entry_taint) [] (OK s0,G2,tn2)`;
+
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_body_guards]:
   linked_empty_body_types_tac >>
   linked_empty_body_support_tac >>
@@ -4788,7 +4816,86 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_bod
   linked_empty_return_plan_tac >>
   linked_empty_return_none_tac >>
   linked_empty_entry_static_tac >>
-  cheat
+  linked_empty_registered_cut_tac >>
+  linked_registered_stmts_env_tac >>
+  linked_registered_path_tac >>
+  linked_registered_lock_cases_tac
+    (suspend "linked_linear_fallback_lock_success")
+    (suspend "linked_linear_fallback_lock_abort")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_lock_abort]:
+  linked_registered_lock_abort_tac >>
+  linked_registered_lock_abort_source_tac >>
+  linked_registered_lock_abort_domain_tac >>
+  linked_registered_lock_abort_finish_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_lock_success]:
+  linked_registered_lock_success_tac >>
+  linked_registered_locked_horizon_tac >>
+  linked_registered_replay_tac >>
+  linked_registered_return_frame_tac >>
+  linked_registered_structs_tac >>
+  linked_registered_abi_targets_tac >>
+  linked_registered_fragment_tac >>
+  linked_registered_shadow_tac >>
+  linked_registered_admissible_tac >>
+  linked_registered_reachability_tac >>
+  linked_registered_immutable_frame_tac >>
+  linked_registered_storage_prefix_tac >>
+  linked_registered_run_tac >>
+  linked_registered_trace_inputs_tac >>
+  linked_registered_compose_tac
+    {horizon_tac = suspend "linked_linear_fallback_trace_horizon",
+     tails_tac = suspend "linked_linear_fallback_trace_tails",
+     exempt_tac = suspend "linked_linear_fallback_trace_exempt",
+     fallthrough_tac = suspend "linked_linear_fallback_fallthrough",
+     exit_tac = suspend "linked_linear_fallback_exit",
+     readings_tac = suspend "linked_linear_fallback_trace_readings",
+     finish_tac = suspend "linked_linear_fallback_finish"}
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_trace_horizon]:
+  linked_registered_trace_horizon_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_trace_tails]:
+  linked_registered_trace_tails_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_trace_exempt]:
+  linked_registered_trace_exempt_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_fallthrough]:
+  linked_registered_fallthrough_tac
+    (suspend "linked_linear_fallback_fallthrough_ghost")
+    (suspend "linked_linear_fallback_fallthrough_result")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_fallthrough_ghost]:
+  linked_registered_fallthrough_ghost_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_fallthrough_result]:
+  linked_registered_fallthrough_result_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_exit]:
+  linked_registered_trace_exit_tac (suspend "linked_linear_fallback_abort_or_halt")
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_abort_or_halt]:
+  linked_registered_abort_or_halt_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_trace_readings]:
+  linked_registered_trace_readings_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallback_finish]:
+  linked_registered_finish_tac
 QED
 
 
