@@ -8,7 +8,7 @@ Ancestors
   exprLoweringProps loweringPosts exprSimDefs allocaHistory venomState
   exprSimMemDefs bodyMemoryDefs bodyPtrDefs gasExplicitSites gasContext bodyFullPreds
   compileEnv vyperState entryCreateIfExpMidpoint entryIntCallStageNeutral haltExitProj fragGasOriginPtrExec
-  createSizeCutRegion createSizeCutCode fragExec venomExecSemantics
+  createSizeCutRegion createSizeCutCode fragExec venomExecSemantics entryCreateIfExpNormalCallback
 
 (* The source step consumes nothing. Both physical suffixes are on the
    same execution that supplies the materialization and final VV posts. *)
@@ -330,4 +330,138 @@ Proof
   qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
   qpat_assum `emit_inst ASSIGN _ _ _ = _` (irule_at Any) >> simp[] >>
   qexistsl [`sel`,`sc`,`marks`] >> simp[]
+QED
+
+(* The selected continuation is assembled from the guarded children and
+   the observed physical suffix, with a single source midpoint. *)
+Theorem ifexp_selected_vv_scoped_intro:
+  let E = gas_explicit_sites ctx shctx;
+      F = (DF,lo,d,ctx,shctx,PG,f,shf);
+      source = bind (eval_expr cx c) (read_result cx);
+      root = IfExp t c a b;
+      R = create_operand_exit_post ctx cx;
+      post = (\e es st_start st_stop u av G tn H res ee G' tn' z.
+        create_operand_vv_post (DF,lo,d,ctx,f) ce cx e
+          (es,st_start,st_stop,u,av,G,tn) H res ee G' tn' z /\
+        create_operand_at st_stop z)
+  in
+  body_inv (cx_tops cx) ctx ce cx /\ shadow_body_inv (cx_tops cx) ctx shctx /\
+  expr_body_pre ce cx env root es /\
+  (!st0 sa sc sha shsc cop s0 G0 tn0.
+    expr_body_pre ce cx env c es /\ L sa sc /\
+    expr_sim_full_pre F ce cx (BaseT BoolT) c es
+      (st0,sa,sc,sha,shsc,cop,s0,G0,tn0) ==>
+    scoped_operand_outcome (DF,lo,E,ctx,f,PG) (cx_tops cx) cx st0 sa sc source
+      (es,s0,G0,tn0)
+      (expr_sim_full_post (DF,lo,d,ctx,f) ce cx c (es,sa,sc,s0,cop,G0,tn0))
+      (create_operand_exit_post ctx cx)) /\
+  (!sel mid st0 se sm shse shsm av u G1 tn1.
+    let e = if sel then a else b in
+    expr_body_pre ce cx env e mid /\ L se sm /\
+    expr_vv_sim_full_pre F ce cx ty e mid (st0,se,sm,shse,shsm,av,u,G1,tn1) ==>
+    scoped_operand_outcome (DF,lo,E,ctx,f,PG) (cx_tops cx) cx st0 se sm
+      (eval_expr cx e) (mid,u,G1,tn1) (post e mid se sm u av G1 tn1) R) /\
+  (!st0 sa sb sha shb vv s0 G0 tn0.
+    expr_vv_sim_full_pre F ce cx ty root es (st0,sa,sb,sha,shb,vv,s0,G0,tn0) /\ L sa sb ==>
+    ?cop sc shsc sj sn tl el.
+      L sa sc /\ expr_sim_full_pre F ce cx (BaseT BoolT) c es
+        (st0,sa,sc,sha,shsc,cop,s0,G0,tn0) /\
+      emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\ fn_has_code sj sn f /\
+      sj.cs_current_bb = sc.cs_current_bb /\ sj.cs_current_insts = sc.cs_current_insts /\
+      (!marks. create_operand_focus_scope sa sc E ctx f s0 marks ==>
+        create_operand_focus_scope sa sb E ctx f s0 marks) /\
+      (!marks r. exit_result r /\ create_operand_full_scope sa sc E ctx f s0 marks r ==>
+        create_operand_full_scope sa sb E ctx f s0 marks r) /\
+      (!left z right. create_operand_full_scope sa sc E ctx f s0 left (OK z) /\
+        create_operand_focus_scope sc sb E ctx f z right ==>
+        create_operand_focus_scope sa sb E ctx f s0 (left ++ right)) /\
+      (!left z right r. create_operand_full_scope sa sc E ctx f s0 left (OK z) /\
+        create_operand_full_scope sc sb E ctx f z right r ==>
+        create_operand_full_scope sa sb E ctx f s0 (left ++ right) r) /\
+      !sel. ?se sm sx sy shse shsm av op rv.
+        let e = if sel then a else b;
+            lbl = if sel then tl else el in
+        L se sm /\ se.cs_current_bb = lbl /\ se.cs_current_insts = [] /\
+        compile_expr ce ty e se = (av,sm) /\
+        compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) shse = (av,shsm) /\
+        gas_shadow_state se shse /\ gas_shadow_state sm shsm /\
+        fn_has_code se sm f /\ fn_has_code shse shsm shf /\
+        local_ptrs_reserved ce se /\ sa.cs_next_var <= se.cs_next_var /\
+        compile_ifexp_arm ce t (lowered_value_type ce e) av sm = (op,sx) /\
+        emit_inst ASSIGN [op] [rv] sx = ((),sy) /\ fn_has_code sm sx f /\ fn_has_code sx sy f /\
+        sc.cs_next_id <= se.cs_next_id /\ se.cs_next_id <= sb.cs_next_id /\
+        (!bb inst. lookup_block sb.cs_current_bb f.fn_blocks = SOME bb /\
+          get_instruction bb (LENGTH sb.cs_current_insts) = SOME inst ==>
+          inst.inst_id NOTIN frag_ids sc se) /\
+        create_cut_code {} se sb /\ fn_has_code se sb f /\
+        !marks mid G1 tn1 z.
+          let u = jump_to lbl z in
+          (!tail. source (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+            (INL (BoolV sel),mid with gas_obs := tail)) /\
+          storage_trace_domain cx st0 mid.storage_trace /\ mid.gas_obs = [] /\
+          create_operand_at sc z /\ create_operand_full_scope sa sc E ctx f s0 marks (OK z) /\
+          (!H. valid_horizon cx st0 H mid.storage_trace ==>
+            expr_sim_full_post (DF,lo,d,ctx,f) ce cx c (es,sa,sc,s0,cop,G0,tn0)
+              H (INL (BoolV sel)) mid G1 tn1 z /\
+            gas_origin_ptr_path (DF H,lo,E,ctx,f,PG) (s0,G0,tn0) marks (OK z,G1,tn1)) ==>
+          expr_body_pre ce cx env e mid /\
+          create_operand_full_scope sc se E ctx f z [] (OK u) /\ create_cut_region se sb u /\
+          (!right. create_operand_focus_scope se sm E ctx f u right ==>
+            create_operand_focus_scope se sb E ctx f u right) /\
+          (!right r. exit_result r /\ create_operand_full_scope se sm E ctx f u right r ==>
+            create_operand_full_scope se sb E ctx f u right r) /\
+          (!left j right. create_operand_full_scope se sm E ctx f u left (OK j) /\
+            create_operand_focus_scope sm sb E ctx f j right ==>
+            create_operand_focus_scope se sb E ctx f u (left ++ right)) /\
+          (!left j right r. create_operand_full_scope se sm E ctx f u left (OK j) /\
+            create_operand_full_scope sm sb E ctx f j right r ==>
+            create_operand_full_scope se sb E ctx f u (left ++ right) r) /\
+          (!right res ee G tn j.
+            (!tail. eval_expr cx e (mid with gas_obs := gas_explicit right u.vs_gas_readings ++ tail) =
+              (res,ee with gas_obs := tail)) /\
+            storage_trace_domain cx st0 ee.storage_trace /\ create_operand_at sm j /\
+            create_operand_full_scope se sm E ctx f u right (OK j) /\
+            (!H. valid_horizon cx st0 H ee.storage_trace ==>
+              post e mid se sm u av G1 tn1 H res ee G tn j /\
+              gas_origin_ptr_path (DF H,lo,E,ctx,f,PG) (u,G1,tn1) right (OK j,G,tn)) ==>
+            ?raw v. res = INL raw /\ read_result cx raw ee = (INL v,ee) /\
+              !tv. (!tail. conditional_result cx raw (ee with gas_obs := tail) =
+                    (INL tv,ee with gas_obs := tail)) /\ read_result cx tv ee = (INL v,ee) ==>
+                ?m Gm tm fin Gf tf.
+                  create_operand_at sx m /\
+                  create_operand_full_scope sm sx E ctx f j [] (OK m) /\
+                  create_operand_full_scope sx sb E ctx f m [] (OK fin) /\
+                  create_operand_full_scope sm sb E ctx f j [] (OK fin) /\
+                  !H. valid_horizon cx st0 H ee.storage_trace ==>
+                    gas_origin_ptr_path (DF H,lo,E,ctx,f,PG) (j,G,tn) [] (OK m,Gm,tm) /\
+                    gas_origin_ptr_path (DF H,lo,E,ctx,f,PG) (m,Gm,tm) [] (OK fin,Gf,tf) /\
+                    post root es sa sb s0 vv G0 tn0 H (INL tv) (ee with gas_obs := []) Gf tf fin)) ==>
+  !st0 sa sb sha shb vv s0 G0 tn0.
+    expr_vv_sim_full_pre F ce cx ty root es (st0,sa,sb,sha,shb,vv,s0,G0,tn0) /\ L sa sb ==>
+    scoped_operand_outcome (DF,lo,E,ctx,f,PG) (cx_tops cx) cx st0 sa sb
+      (eval_expr cx root) (es,s0,G0,tn0) (post root es sa sb s0 vv G0 tn0) R
+Proof
+  simp_tac bool_ss [LET_THM] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule ifexp_body_pre_children >> strip_tac >>
+  qpat_x_assum `!st0 sa sb sha shb vv s0 G0 tn0. _ ==> ?cop sc shsc sj sn tl el. _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!st0 sa sc sha shsc cop s0 G0 tn0. _ ==> scoped_operand_outcome _ _ _ _ _ _ _ _ _ _`
+    (drule_all_then assume_tac) >>
+  `gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
+   MEM f ctx.ctx_functions` by fs[expr_vv_sim_full_pre_def] >>
+  irule (SIMP_RULE bool_ss [LET_THM] ifexp_scoped_test_then_arm) >>
+  qpat_assum `scoped_operand_outcome _ _ _ _ _ _ (bind _ (read_result _)) _ _ _`
+    (irule_at Any) >> simp[] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM] ifexp_selected_callback_normalize) >>
+  qx_genl_tac [`marks`,`sel`,`n`,`G1`,`tn1`,`z`] >> strip_tac >>
+  qpat_x_assum `!sel. ?se sm sx sy shse shsm av op rv. _`
+    (qspec_then `sel` strip_assume_tac) >>
+  qpat_x_assum `!marks mid G1 tn1 z. _ ==> expr_body_pre _ _ _ _ _ /\ _`
+    (qspecl_then [`marks`,`n`,`G1`,`tn1`,`z`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [LET_THM] ifexp_selected_jnz_arm_handoff) >> strip_tac >>
+  irule stage_scoped_zero_prefix >> simp[storage_trace_frame_bind,
+    evaluate_storage_trace_frame, storage_trace_frame_conditional_result] >>
+  FAIL_TAC "selected JNZ prefix"
 QED
