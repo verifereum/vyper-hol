@@ -13,7 +13,7 @@ Ancestors
   valueEncodingProps valueEncodingDefs venomExecSemantics venomState venomInst venomMemDefs
   words byte finite_map pred_set arithmetic list pair
 
-Theorem abi_encode_values_head_address:
+Theorem abi_encode_values_head_address_run:
   emit_op ADD [Var dst;Lit (n2w off)] st = (head,en) /\
   eval_operand (Var dst) s = SOME (n2w b) /\ ptr_covers G tn dst s cap /\
   off + n <= cap /\ b + cap <= s.vs_alloca_next /\ fn_has_code st en func /\
@@ -29,6 +29,8 @@ Theorem abi_encode_values_head_address:
       FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     tn'.t_imm = tn.t_imm /\ t.vs_memory = s.vs_memory /\
+    (?raw. run_inst_seq (emitted_insts st en) s = OK raw /\
+           t = raw with vs_inst_idx := LENGTH en.cs_current_insts) /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
 Proof
   strip_tac >>
@@ -65,8 +67,36 @@ Proof
   `abi_encode_exec_frame func s t` by
     (qpat_assum `t = raw with vs_inst_idx := _` (fn th => PURE_REWRITE_TAC [th]) >>
      PURE_REWRITE_TAC [abi_encode_exec_frame_inst_idx] >> first_assum ACCEPT_TAC) >>
+  `run_inst_seq (emitted_insts st en) s = OK raw` by
+    (qpat_assum `window_pure_seq st en s raw`
+       (ACCEPT_TAC o cj 1 o REWRITE_RULE [window_pure_seq_def, window_seq_def])) >>
   qexistsl_tac [`p`,`t`,`G'`,`tn'`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (qexists_tac `raw` >> asm_rewrite_tac[] >> NO_TAC) >> metis_tac[]
+QED
+
+Theorem abi_encode_values_head_address:
+  emit_op ADD [Var dst;Lit (n2w off)] st = (head,en) /\
+  eval_operand (Var dst) s = SOME (n2w b) /\ ptr_covers G tn dst s cap /\
+  off + n <= cap /\ b + cap <= s.vs_alloca_next /\ fn_has_code st en func /\
+  alloca_inv s /\ alloca_room ctx func s /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?p t G' tn'.
+    head = Var p /\ not_fresh_at en p /\ ptr_covers G' tn' p t n /\
+    eval_operand head t = SOME (n2w (b+off)) /\
+    window_phase ctx func st en {} [] s t /\ abi_encode_exec_frame func s t /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\ t.vs_memory = s.vs_memory /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
+Proof
+  strip_tac >> drule_all abi_encode_values_head_address_run >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`p`,`t`,`G'`,`tn'`] strip_assume_tac)) >>
+  qexistsl_tac [`p`,`t`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED
 
 (* Delayed materialization keeps cursor and destination allocations that
@@ -145,7 +175,7 @@ Proof
   fs[eval_operand_def, lookup_var_def, GSYM mem_word_at_eq_mload]
 QED
 
-Theorem abi_encode_values_head_store:
+Theorem abi_encode_values_head_store_run:
   emit_void MSTORE [Var head;src] st = ((),en) /\
   eval_operand (Var head) s = SOME (n2w d) /\
   eval_operand src s = SOME w /\ op_taint tn src = {} /\
@@ -160,6 +190,8 @@ Theorem abi_encode_values_head_store:
     tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     tn'.t_mem = tn.t_mem DIFF {i | d <= i /\ i < d + 32} /\
+    (?raw. run_inst_seq (emitted_insts st en) s = OK raw /\
+           t = raw with vs_inst_idx := LENGTH en.cs_current_insts) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G,tn'))
 Proof
   strip_tac >>
@@ -183,9 +215,40 @@ Proof
     (unabbrev_all_tac >> irule window_store_phase >>
      simp[abi_encoder_output_store] >>
      qexistsl_tac [`Var head`,`src`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st en) s = OK (mstore d w s)` by
+    (drule emitted_insts_emit_void >> strip_tac >>
+     `step_inst_base (mk_inst st.cs_next_id MSTORE [Var head;src] []) s =
+        OK (mstore d w s)` by
+       (mp_tac (Q.SPECL [`Var head`,`src`,`n2w d`,`w`,`st.cs_next_id`,`s`] step_MSTORE) >>
+        simp[w2n_n2w]) >>
+     simp[run_inst_seq_def]) >>
   qexistsl_tac [`t`, `tn'`] >>
   drule_all mstore_ghost_frame >> simp[Abbr `t`, Abbr `tn'`, w2n_n2w,
-    mem_bytes_at_mstore_same, step_taint_def, imm_taint_def, mk_inst_def]
+    mem_bytes_at_mstore_same, step_taint_def, imm_taint_def, mk_inst_def] >>
+  qexists_tac `mstore d w s` >> asm_rewrite_tac[]
+QED
+
+Theorem abi_encode_values_head_store:
+  emit_void MSTORE [Var head;src] st = ((),en) /\
+  eval_operand (Var head) s = SOME (n2w d) /\
+  eval_operand src s = SOME w /\ op_taint tn src = {} /\
+  ptr_covers G tn head s 32 /\ d + 32 <= s.vs_alloca_next /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t tn'.
+    mem_bytes_at d 32 t.vs_memory = word_to_bytes w T /\
+    window_phase ctx func st en {} [(d,32)] s t /\ abi_encode_exec_frame func s t /\
+    tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    tn'.t_mem = tn.t_mem DIFF {i | d <= i /\ i < d + 32} /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G,tn'))
+Proof
+  strip_tac >> drule_all abi_encode_values_head_store_run >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`t`,`tn'`] strip_assume_tac)) >>
+  qexistsl_tac [`t`,`tn'`] >> asm_rewrite_tac[]
 QED
 
 Theorem abi_encode_values_word_head:
