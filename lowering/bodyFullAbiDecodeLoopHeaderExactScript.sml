@@ -6,6 +6,7 @@ Ancestors
   typedCopyOriginPtrBase typedMemoryCopy bodyPtrMakeArrayEmission bodyFullShared bodyPtrDefs
   allocaFootprint gasOriginPtrLabels instSeqPtrLo fragGasOriginPtrDead
   fragGasOriginPtrLoop fragGasCopyLoop stmtReasonLitFragMemory fragExec fragGasPath stmtSimProps
+  fragGasCopySeqLiftProps
   stateFrame emitHelperProps loweringShapeRules
   fragGasSeqPtrContext[qualified]
   compileEnv emitHelper venomInst venomExecSemantics venomState
