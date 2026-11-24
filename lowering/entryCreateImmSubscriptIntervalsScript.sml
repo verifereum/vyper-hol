@@ -415,3 +415,28 @@ Proof
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`Idx p mid t G1 tn1`,`sn`] >> simp[] >> first_assum ACCEPT_TAC
 QED
+
+Theorem create_selected_bind_at_interval:
+  immutable_scoped_bind_law (:'a) (:'b) /\ immutable_replay_bind_law (:'a) (:'b) /\
+  body_inv tops C ce cx /\ MEM f C.ctx_functions /\ create_operand_at a s /\ ~s.vs_halted /\
+  create_cut_code {} a m /\ create_cut_code {} m b /\
+  fn_has_code a m f /\ fn_has_code m b f /\ create_layout a b /\
+  storage_trace_frame source /\ (!v. storage_trace_frame (next v)) /\
+  immutable_subscript_bind_certs tops C f source next es s /\
+  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a m
+    (source : evaluation_state -> 'a evaluation_result) (es,s,G,tn)
+    (\H res ee G1 tn1 t. ?v. res = INL v /\ P H v ee G1 tn1 t)
+    (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
+  create_operand_cut a m E C f tops cx st0 source (es,s) /\
+  (!left v mid t G1 tn1.
+    immutable_subscript_return (DF,lo,E,C,f,PG) cx st0 a m source (es,s,G,tn)
+      P left v (mid,t,G1,tn1) ==>
+    scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 m b
+      ((next : 'a -> evaluation_state -> 'b evaluation_result) v) (mid,t,G1,tn1) Q R /\
+    create_operand_cut m b E C f tops cx st0 (next v) (mid,t)) ==>
+  scoped_operand_outcome (DF,lo,E,C,f,PG) tops cx st0 a b
+    (bind source next) (es,s,G,tn) Q R /\
+  create_operand_cut a b E C f tops cx st0 (bind source next) (es,s)
+Proof
+  ACCEPT_TAC immutable_bind_at_interval
+QED
