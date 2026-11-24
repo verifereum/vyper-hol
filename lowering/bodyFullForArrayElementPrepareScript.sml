@@ -1,6 +1,7 @@
 (* Indexed non-slot array element preparation at the live body-entry cursor. *)
 Theory bodyFullForArrayElementPrepare
 Ancestors bodyInvSplit bodyInvCodeProps bodyInvMetadataProps bodyInvExecutionProps compileUnit alist exprSimHyps[qualified,ignore_grammar]
+  bodySingletonCallSupport vyperTypeCallGraph[qualified,ignore_grammar]
   bodyFullForMemoryElementDispatch bodyFullForImmutableElementInput bodyFullForArray
   typedCopyOriginPtrBase typedMemoryCopy stmtReasonLitFragMemory
   stmtSimForArrayLoop whitelistForIterDynLoop fragGasSeqPtr fragExecMem fragExec
@@ -584,8 +585,17 @@ Resume for_nonslot_array_element_prepare_full[at_copy]:
         drule_then assume_tac contract_inv_return_types >>
         fs[compileUnitTheory.build_func_return_type_mods_singleton]) >> simp[] >>
      rpt gen_tac >> disch_then SUBST_ALL_TAC >>
+     `well_typed_expr env (Call t (IntCall fid) args drv)` by
+       fs[vyperTypeSystemTheory.well_typed_iterator_def] >>
+     `FST fid = NONE` by
+       (drule_all_then mp_tac (Q.INST [`e` |-> `Call t (IntCall fid) args drv`]
+          body_inv_typed_calls_main) >>
+        simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
      qpat_x_assum `supported_iterator _ _ (Array _) _` mp_tac >>
-     simp[supportedStmtsTheory.supported_iterator_def]) >>
+     Cases_on `supported_function_decl tops fid Internal` >>
+     simp[supportedStmtsTheory.supported_iterator_def] >>
+     rename1 `supported_function_decl _ _ _ = SOME decl` >>
+     PairCases_on `decl` >> simp[]) >>
   `type_memory_bytes c fty = type_memory_size dtv` by
     ((drule_all exprSimHypsTheory.expr_sim_inv_memory_size >> simp[] >> (metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size]))) >>
   `stride = type_memory_size dtv` by
