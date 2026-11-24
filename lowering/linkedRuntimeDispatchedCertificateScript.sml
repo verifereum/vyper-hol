@@ -3163,11 +3163,15 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
   linked_registered_lock_abort_finish_tac
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_support]:
+(* Source-only preparation for a positional public getter.  Both
+   dispatchers supply the selected declaration and the registered frame. *)
+val linked_positional_getter_original_type_tac =
   `?env_after. type_stmts entry_types ret fbody = SOME env_after` by
     (drule_all checked_public_getter_body_typing_package >>
      simp[NoAsms, Abbr `entry_types`] >>
-     disch_then (ACCEPT_TAC o cj 2)) >>
+     disch_then (ACCEPT_TAC o cj 2));
+
+val linked_positional_getter_return_shape_tac =
   `?e. fbody = [Return (SOME e)]` by
     (map_every (fn pat => qpat_assum pat mp_tac)
        [`external_getter_tuple src top = SOME _`,`is_public_getter_decl tx.function_name top`] >>
@@ -3182,11 +3186,17 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_suppo
       (subst_consts_expr_mods (consts_env_mods mods) getter_value))]` by
     (qpat_assum `fbody = [Return (SOME getter_value)]` (fn body =>
        simp[NoAsms, Abbr `body_code`, body,
-            subst_consts_stmt_mods_def, subst_consts_expr_mods_def])) >>
+            subst_consts_stmt_mods_def, subst_consts_expr_mods_def]));
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_support]:
+  linked_positional_getter_original_type_tac >>
+  linked_positional_getter_return_shape_tac >>
   suspend "linked_linear_getter_value"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_value]:
+(* The continuation receives the same source facts from both getter branches.
+   The remaining goal proves those facts, not any dispatcher-specific step. *)
+fun linked_positional_getter_properties_tac continue_tac =
   `(?after_body. type_stmts entry_types ret body_code = SOME after_body) /\
    IS_SOME (type_stmts entry_types ret fbody) /\
    ret <> NoneT /\
@@ -3205,10 +3215,14 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_value
     suffices_by
     (disch_then (CONJUNCTS_THEN2 (qx_choose_then `after_body` assume_tac)
         (map_every assume_tac o CONJUNCTS)) >>
-     suspend "linked_linear_getter_registered") >>
+     continue_tac);
+
+fun linked_positional_getter_cases_tac absent_tac =
   Cases_on `ALOOKUP (consts_env_mods mods) (src,tx.function_name)`
-  >- suspend "linked_linear_getter_no_replacement" >>
-  rename1 `ALOOKUP (consts_env_mods mods) (src,tx.function_name) = SOME replacement` >>
+  >- absent_tac >>
+  rename1 `ALOOKUP (consts_env_mods mods) (src,tx.function_name) = SOME replacement`;
+
+val linked_positional_getter_replacement_owner_tac =
   `well_typed_expr (artifact_env art mods src) replacement` by
     (drule_all checked_linked_constant_replacements_typed >>
      disch_then (qspec_then `src` ACCEPT_TAC)) >>
@@ -3220,7 +3234,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_value
     (qpat_assum `ALOOKUP mods src = SOME tops` (fn owner =>
        qpat_assum `ALOOKUP mods src = SOME owner_tops`
          (ACCEPT_TAC o SYM o REWRITE_RULE [owner,optionTheory.SOME_11]))) >>
-  qpat_x_assum `owner_tops = tops` SUBST_ALL_TAC >>
+  qpat_x_assum `owner_tops = tops` SUBST_ALL_TAC;
+
+val linked_positional_getter_replacement_decl_tac =
   `top = VariableDecl const_visibility (Constant initializer) tx.function_name const_ty slot` by
     (`ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops))` by
        (qpat_assum `ALOOKUP mods src = SOME tops`
@@ -3244,7 +3260,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_value
   >- (qpat_assum `top = VariableDecl _ _ _ _ _` (fn decl =>
       qpat_assum `is_public_getter_decl tx.function_name top`
         (mp_tac o REWRITE_RULE [decl])) >>
-     Cases_on `const_visibility` >> simp[NoAsms, is_public_getter_decl_def]) >>
+     Cases_on `const_visibility` >> simp[NoAsms, is_public_getter_decl_def]);
+
+val linked_positional_getter_replacement_type_tac =
   `well_typed_expr entry_types replacement` by
     (qpat_assum `Abbrev (entry_types = _)` (fn env_def =>
        simp_tac bool_ss [REWRITE_RULE [markerTheory.Abbrev_def] env_def]) >>
@@ -3264,7 +3282,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_value
   `!id ty. MEM (id,ty) args ==> FLOOKUP entry_types.var_types id = SOME ty` by
     (rpt gen_tac >> strip_tac >>
      qpat_assum `!id ty. MEM (id,ty) args ==> _ /\ _`
-       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+       (drule_then (ACCEPT_TAC o CONJUNCT1)));
+
+val linked_positional_getter_replacement_body_tac =
   `?env_after. type_stmts entry_types ret body_code = SOME env_after` by
     (qpat_assum `Abbrev (body_code = _)` (fn body =>
       PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] body]) >>
@@ -3272,11 +3292,19 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_value
        qpat_assum `external_getter_tuple src top = SOME _`
          (assume_tac o PURE_REWRITE_RULE [decl])) >>
      qexists_tac `env_after` >>
-     drule_all_then ACCEPT_TAC constant_public_getter_typing_mods) >>
+     drule_all_then ACCEPT_TAC constant_public_getter_typing_mods);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_value]:
+  linked_positional_getter_properties_tac (suspend "linked_linear_getter_registered") >>
+  linked_positional_getter_cases_tac (suspend "linked_linear_getter_no_replacement") >>
+  linked_positional_getter_replacement_owner_tac >>
+  linked_positional_getter_replacement_decl_tac >>
+  linked_positional_getter_replacement_type_tac >>
+  linked_positional_getter_replacement_body_tac >>
   suspend "linked_linear_getter_substituted_typed"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_no_replacement]:
+val linked_positional_getter_no_replacement_tac =
   `body_code = fbody` by
     (qpat_assum `Abbrev (body_code = _)`
        (fn body => PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] body]) >>
@@ -3295,7 +3323,10 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_no_re
        strip_tac >> gvs[])) >>
   `?env_after. type_stmts entry_types ret body_code = SOME env_after` by
     (qpat_assum `body_code = fbody` SUBST1_TAC >>
-     qexists_tac `env_after` >> first_assum ACCEPT_TAC) >>
+     qexists_tac `env_after` >> first_assum ACCEPT_TAC);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_no_replacement]:
+  linked_positional_getter_no_replacement_tac >>
   suspend "linked_linear_getter_unsubstituted_typed"
 QED
 
@@ -3785,31 +3816,25 @@ val linked_getter_allocation_guards_tac =
      rpt strip_tac >> gvs[] >>
      metis_tac[build_getter_subst_mods, pairTheory.SND]);
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_substituted_typed]:
-  linked_getter_guard_replacement_base_tac >>
-  linked_getter_allocation_guards_tac >>
-  linked_positional_getter_type_tac >>
-  linked_positional_getter_lock_tac >>
-  linked_positional_getter_return_tac >>
-  linked_positional_getter_env_tac >>
-  linked_getter_path_refs_tac >>
-  linked_getter_import_decl_tac >>
+val linked_positional_getter_original_import_tac =
   linked_getter_import_original_goal_tac
-  >- (linked_getter_import_original_shape_tac >> linked_getter_import_path_finish_tac) >>
-  linked_getter_import_fold_tac >>
-  linked_getter_import_subst_tac >>
-  linked_getter_import_acc_tac >>
+  >- (linked_getter_import_original_shape_tac >> linked_getter_import_path_finish_tac);
+
+val linked_positional_getter_import_module_tac =
   linked_getter_import_module_goal_tac
   >- (linked_getter_import_module_setup_tac >>
       linked_getter_import_module_induct_tac >>
       linked_getter_import_module_finish_tac >>
       qpat_assum `!E k r. _ ==> imported_expr_refs_ok r`
-        (qspecl_then [`E`,`k`,`r`] mp_tac) >> simp[]) >>
+        (qspecl_then [`E`,`k`,`r`] mp_tac) >> simp[]);
+
+val linked_positional_getter_import_all_tac =
   linked_getter_import_all_goal_tac
   >- (linked_getter_import_all_induct_tac >>
       qpat_assum `!ts owner E. _ ==> EVERY _ (module_consts_env_mods owner ts E)` irule >>
-      simp[]) >>
-  linked_getter_import_all_modules_tac >>
+      simp[]);
+
+val linked_positional_getter_replacement_refs_tac =
   Q.SUBGOAL_THEN `src = NONE \/ imported_stmts_refs_ok body_code` assume_tac
   >- (map_every (fn p => qpat_assum p mp_tac)
        [`body_code = [Return (SOME (subst_consts_expr_mods (consts_env_mods mods) getter_value))]`,
@@ -3822,19 +3847,38 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_subst
      qpat_assum `!E e. _ ==> _ ==> imported_expr_refs_ok (subst_consts_expr_mods E e)` irule >>
      simp[] >> rpt strip_tac >>
      qpat_assum `!E k r. EVERY _ E /\ _ ==> _` irule >>
-     map_every qexists_tac [`consts_env_mods mods`,`k`] >> simp[]) >>
-  linked_positional_getter_support_tac >>
+     map_every qexists_tac [`consts_env_mods mods`,`k`] >> simp[]);
+
+val linked_positional_getter_properties_finish_tac =
   `supported_stmts tops
      (args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code) body_code` by
     (qpat_assum `(src = NONE \/ imported_stmts_refs_ok body_code) ==> supported_stmts _ _ body_code`
        (drule_then ACCEPT_TAC)) >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-    qexists_tac `after_body` >> first_assum ACCEPT_TAC]
+    qexists_tac `after_body` >> first_assum ACCEPT_TAC];
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_substituted_typed]:
+  linked_getter_guard_replacement_base_tac >>
+  linked_getter_allocation_guards_tac >>
+  linked_positional_getter_type_tac >>
+  linked_positional_getter_lock_tac >>
+  linked_positional_getter_return_tac >>
+  linked_positional_getter_env_tac >>
+  linked_getter_path_refs_tac >>
+  linked_getter_import_decl_tac >>
+  linked_positional_getter_original_import_tac >>
+  linked_getter_import_fold_tac >>
+  linked_getter_import_subst_tac >>
+  linked_getter_import_acc_tac >>
+  linked_positional_getter_import_module_tac >>
+  linked_positional_getter_import_all_tac >>
+  linked_getter_import_all_modules_tac >>
+  linked_positional_getter_replacement_refs_tac >>
+  linked_positional_getter_support_tac >>
+  linked_positional_getter_properties_finish_tac
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsubstituted_typed]:
-  linked_getter_guard_owned_tac >>
-  linked_getter_guard_const_keys_tac >>
+val linked_positional_getter_unsubstituted_root_tac =
   Q.SUBGOAL_THEN `!ty. ~supportedExprTraverse$supported_expr_exists
       (unallocated_bare_global_root registered_env entry_types)
       (subst_consts_expr_mods (consts_env_mods mods)
@@ -3877,7 +3921,21 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsub
          qexistsl_tac [`origin_tops`,`const_vis`,`const_init`,`bare_type`,`const_slot`] >>
          conj_tac >- drule_then ACCEPT_TAC ALOOKUP_MEM >> first_assum ACCEPT_TAC) >>
       qpat_assum `ALOOKUP (consts_env_mods mods) (src,tx.function_name) = NONE`
-        (mp_tac o REWRITE_RULE [ALOOKUP_NONE]) >> simp[]) >>
+        (mp_tac o REWRITE_RULE [ALOOKUP_NONE]) >> simp[]);
+
+val linked_positional_getter_unsubstituted_refs_tac =
+  Q.SUBGOAL_THEN `src = NONE \/ imported_stmts_refs_ok body_code` assume_tac
+  >- (map_every (fn p => qpat_assum p mp_tac)
+       [`body_code = fbody`, `fbody = [Return (SOME getter_value)]`,
+        `src <> NONE ==> imported_expr_refs_ok getter_value`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt strip_tac >> Cases_on `src` >>
+     fs[imported_stmt_refs_ok_def, imported_expr_refs_ok_def]);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsubstituted_typed]:
+  linked_getter_guard_owned_tac >>
+  linked_getter_guard_const_keys_tac >>
+  linked_positional_getter_unsubstituted_root_tac >>
   linked_getter_allocation_guards_tac >>
   linked_positional_getter_type_tac >>
   linked_positional_getter_lock_tac >>
@@ -3885,22 +3943,10 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsub
   linked_positional_getter_env_tac >>
   linked_getter_path_refs_tac >>
   linked_getter_import_decl_tac >>
-  linked_getter_import_original_goal_tac
-  >- (linked_getter_import_original_shape_tac >> linked_getter_import_path_finish_tac) >>
-  Q.SUBGOAL_THEN `src = NONE \/ imported_stmts_refs_ok body_code` assume_tac
-  >- (map_every (fn p => qpat_assum p mp_tac)
-       [`body_code = fbody`, `fbody = [Return (SOME getter_value)]`,
-        `src <> NONE ==> imported_expr_refs_ok getter_value`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     rpt strip_tac >> Cases_on `src` >>
-     fs[imported_stmt_refs_ok_def, imported_expr_refs_ok_def]) >>
+  linked_positional_getter_original_import_tac >>
+  linked_positional_getter_unsubstituted_refs_tac >>
   linked_positional_getter_support_tac >>
-  `supported_stmts tops
-     (args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code) body_code` by
-    (qpat_assum `(src = NONE \/ imported_stmts_refs_ok body_code) ==> supported_stmts _ _ body_code`
-       (drule_then ACCEPT_TAC)) >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-    qexists_tac `after_body` >> first_assum ACCEPT_TAC]
+  linked_positional_getter_properties_finish_tac
 QED
 
 (* The selected getter has a single Return regardless of whether its root
