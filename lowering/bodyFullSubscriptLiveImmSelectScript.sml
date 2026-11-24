@@ -707,6 +707,74 @@ QED
 
 (* Literal lengths and the two code loaders have the same interface to the
    bounds check.  In constructor mode the header is a safe memory read. *)
+Theorem live_code_length_joint_ctor_observed:
+  (if dyn then compile_imm_load_word ctor imm arg
+   else comp_return (Lit (n2w cnt))) sa = (len,sb) /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (dyn ==> eval_operand arg s = SOME a /\ copy_old_operand sa arg /\
+    op_taint tn arg = {} /\ op_prov G arg = NONE /\
+    immutable_copy_read ctor a s = n2w cnt /\
+    (ctor ==> w2n a + 32 <= lo /\ mem_word_taint tn.t_mem (w2n a) = {} /\
+      (!region. imm = SOME region ==> eval_operand region s = SOME 0w /\
+         copy_old_operand sa region /\ op_taint tn region = {} /\ op_prov G region = NONE)) /\
+    (~ctor ==> w2n a <= LENGTH s.vs_data_section)) ==>
+  ?Gf tnf t.
+    (ctor ==> ?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+                   t = raw with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+    eval_operand len t = SOME (n2w cnt) /\ op_taint tnf len = {} /\ op_prov Gf len = NONE /\
+    copy_old_operand sb len /\ (!l. len <> Label l) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_immutables = s.vs_immutables /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_initial_fmp = s.vs_initial_fmp /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es t)
+Proof
+  Cases_on `dyn` >> simp[compileEnvTheory.comp_return_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS)
+  >- (Cases_on `ctor` >- suspend "constructor" >> suspend "runtime") >>
+  gvs[] >> qexistsl [`G`,`tn`,`s`] >>
+  (conj_tac >-
+    (strip_tac >> qexists `s` >>
+     simp[exprLoweringPropsTheory.emitted_insts_refl,
+          exprLoweringPropsTheory.run_inst_seq_def,
+          venomStateTheory.venom_state_component_equality])) >>
+  simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules,
+       venomStateTheory.eval_operand_def, copy_old_operand_def,
+       ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def]
+QED
+
+Resume live_code_length_joint_ctor_observed[constructor]:
+  gvs[] >>
+  drule_all live_ctor_length_joint_run >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`Gf`,`tnf`,`t`] strip_assume_tac)) >>
+  qexistsl [`Gf`,`tnf`,`t`] >> simp[]
+QED
+
+Resume live_code_length_joint_ctor_observed[runtime]:
+  gvs[immutable_copy_read_def] >>
+  drule_all compile_imm_load_word_runtime_joint_frame >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qpat_x_assum `!G. ?out Gf tnf sf. _` (qspec_then `G` strip_assume_tac) >>
+  qexistsl [`Gf`,`tnf`,`sf`] >>
+  `not_fresh_at sb out` by
+    (fs[contextTheory.compile_imm_load_word_runtime] >>
+     drule emitHelperPropsTheory.emitted_insts_emit_op >>
+     simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     metis_tac[]) >>
+  gvs[venomStateTheory.eval_operand_def, copy_old_operand_def]
+QED
+Finalise live_code_length_joint_ctor_observed
+
 Theorem live_code_length_joint[local]:
   (if dyn then compile_imm_load_word ctor imm arg
    else comp_return (Lit (n2w cnt))) sa = (len,sb) /\
@@ -736,37 +804,10 @@ Theorem live_code_length_joint[local]:
     (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
       stmt_state_rel H ctx func cenv cx es t)
 Proof
-  Cases_on `dyn` >> simp[compileEnvTheory.comp_return_def] >>
-  disch_then (map_every assume_tac o CONJUNCTS)
-  >- (Cases_on `ctor` >- suspend "constructor" >> suspend "runtime") >>
-  gvs[] >> qexistsl [`G`,`tn`,`s`] >>
-  simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules,
-       venomStateTheory.eval_operand_def, copy_old_operand_def,
-       ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def]
-QED
-
-Resume live_code_length_joint[constructor]:
-  gvs[] >>
-  drule_all live_ctor_length_joint_run >>
-  disch_then (qspecl_then [`explicit`,`PG`]
-    (qx_choosel_then [`Gf`,`tnf`,`t`] strip_assume_tac)) >>
+  strip_tac >> drule_all live_code_length_joint_ctor_observed >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   qexistsl [`Gf`,`tnf`,`t`] >> simp[]
 QED
-
-Resume live_code_length_joint[runtime]:
-  gvs[immutable_copy_read_def] >>
-  drule_all compile_imm_load_word_runtime_joint_frame >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
-  qpat_x_assum `!G. ?out Gf tnf sf. _` (qspec_then `G` strip_assume_tac) >>
-  qexistsl [`Gf`,`tnf`,`sf`] >>
-  `not_fresh_at sb out` by
-    (fs[contextTheory.compile_imm_load_word_runtime] >>
-     drule emitHelperPropsTheory.emitted_insts_emit_op >>
-     simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
-     metis_tac[]) >>
-  gvs[venomStateTheory.eval_operand_def, copy_old_operand_def]
-QED
-Finalise live_code_length_joint
 
 (* The final code-address calculation is independent of the length loader. *)
 Theorem live_code_element_joint[local]:

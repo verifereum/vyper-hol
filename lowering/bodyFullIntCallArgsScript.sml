@@ -1736,6 +1736,7 @@ Proof
      first_x_assum drule >> Cases_on `vv` >>
      gvs[reason_result_shape_def, vv_type_def] >> metis_tac[]) >>
   Cases_on `lowered_value_type cenv e = expr_type e` >- gvs[] >>
+  `~is_bytestring_type (expr_type e)` by metis_tac[type_widens_from_bytestring] >>
   `(?n s. e = Literal (BaseT (StringT n)) (StringL s)) \/
    (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) \/
    (?n bs. e = Literal (BaseT (BytesT (Dynamic n))) (HexBytesL bs)) \/
@@ -1752,19 +1753,25 @@ Proof
          rename1 `BytesT bound` >> Cases_on `bound` >>
          simp[lowered_value_type_def])
      >~ [`Builtin t b l`]
-     >- (Cases_on `b` >> simp[lowered_value_type_def])
+     >- (Cases_on `b = NamedConst`
+         >- (gvs[] >>
+             qpat_x_assum `~is_bytestring_type (expr_type (Builtin _ NamedConst _))`
+               mp_tac >>
+             Cases_on `t` >> simp[expr_type_def, is_bytestring_type_def] >>
+             TRY (rename1 `~is_bytestring_type (BaseT bt) ==> _` >>
+                  Cases_on `bt` >> simp[is_bytestring_type_def]) >>
+             TRY (rename1 `~is_bytestring_type (BaseT (BytesT bound)) ==> _` >>
+                  Cases_on `bound` >> simp[is_bytestring_type_def]) >>
+             simp[Once (oneline lowered_value_type_def), expr_type_def] >>
+             rpt (BasicProvers.TOP_CASE_TAC >> simp[expr_type_def])) >>
+         Cases_on `b` >> fs[lowered_value_type_def])
      >~ [`TypeBuiltin ann tb tys args`]
      >- (Cases_on `tb` >> simp[lowered_value_type_def]) >>
      rename1 `Call ann target args dret` >> Cases_on `target` >>
      simp[lowered_value_type_def]) >>
-  pop_assum mp_tac >> strip_tac >> gvs[expr_type_def]
-  >- (drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
-  >- (drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
-  >- (drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
-  >- (gvs[well_typed_expr_def, well_typed_builtin_app_def] >>
-      drule type_widens_from_bytestring >> simp[is_bytestring_type_def])
-  >- (gvs[well_typed_expr_def, type_builtin_result_ok_def] >>
-      drule type_widens_from_bytestring >> simp[is_bytestring_type_def]) >>
+  pop_assum mp_tac >> strip_tac >> gvs[expr_type_def, is_bytestring_type_def]
+  >- gvs[well_typed_expr_def, well_typed_builtin_app_def, is_bytestring_type_def]
+  >- gvs[well_typed_expr_def, type_builtin_result_ok_def, is_bytestring_type_def] >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   rewrite_tac[compile_expr_call] >> strip_tac >>
   drule reason_compile_call >> Cases_on `vv` >>
