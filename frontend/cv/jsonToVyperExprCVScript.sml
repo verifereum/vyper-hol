@@ -49,7 +49,9 @@ QED
 
 val () = cv_auto_trans origin_retype_def;
 val () = cv_auto_trans expr_origin_key_def;
+val () = cv_auto_trans lookup_origin_entry_def;
 val () = cv_auto_trans lookup_origin_pair_def;
+val () = cv_auto_trans membership_operand_def;
 
 val () = cv_auto_trans find_keyword_def;
 fun cv_equation name =
@@ -280,6 +282,8 @@ val () = cv_auto_trans translate_custom_error_compute;
 (* The frontend's statement-list recursion threads lexical bindings itself.
    Retain that mutual recursion rather than translating each statement under
    one unchanged context. *)
+val () = cv_auto_trans empty_value_tree_def;
+val () = cv_auto_trans assign_value_def;
 val translate_stmt_compute = save_thm ("translate_stmt_compute",
   PURE_REWRITE_RULE [GSYM translate_expr_list_map] translate_stmt_def);
 
