@@ -2,7 +2,7 @@
 Theory bodyFullSubscriptLiveImmSelect
 Ancestors
   exprBodyPreCallSafetyProps exprBodyPreTypingProps
-  bodyInvCodeProps bodyInvSplit bodyInvExecutionProps exprBodyPreProps alist
+  bodyInvCodeProps bodyInvSplit bodyCallSupport exprBodyPreProps alist
   bodyFullExtCallPosTransport bodySimFull loweringPosts
   exprSimSubscriptArrayLiveImmutableSuffix exprSimSubscriptArrayLiveImmutableView
   exprSimSubscriptArrayLiveImmutableMetadata exprSimWordArgs exprSimSource
@@ -240,8 +240,9 @@ Proof
   rpt strip_tac >>
   drule_then (assume_tac o Q.SPEC `src`) contract_inv_module_codes >>
   `ALOOKUP mods src = SOME ts` by fs[] >>
-  drule_all_then assume_tac contract_inv_supported_module >>
-  fs[lookup_callable_function_def, supported_program_def,
+  `supported_module_headers ts` by
+    (fs[bodyInvSplitTheory.contract_inv_def] >> res_tac) >>
+  fs[lookup_callable_function_def, bodyCallSupportTheory.supported_module_headers_def,
      supported_declaration_names_def, AllCaseEqs()] >>
   metis_tac[lookup_function_Internal_SOME_MEM, lookup_function_Deploy_SOME_cases,
             find_function_distinct_decl]
