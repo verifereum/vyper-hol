@@ -114,21 +114,37 @@ Theorem immutable_target_array_tail_scoped_cut:
              (ValueSubscript (IntV i))) get_place) (ee,s)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `cenv.ce_is_ctor` >>
+  TRY (qpat_assum `~cenv.ce_is_ctor` (fn _ => gvs[])) >>
   reverse conj_tac
-  >- (irule immutable_array_suffix_cut >> simp[create_operand_at_def] >>
-      goal_assum (drule_at Any) >> simp[]) >>
+  >- (Cases_on `cenv.ce_is_ctor` >> gvs[] >>
+      irule (Q.INST [`arg` |-> `arg`, `idx` |-> `iop`,
+        `dyn` |-> `(case bd of Fixed _ => F | Dynamic _ => T)`,
+        `cnt` |-> `(case bd of Fixed n => n | Dynamic _ => 0)`,
+        `esz` |-> `type_memory_size etv`, `sgn` |-> `sgn`,
+        `imm` |-> `cenv.ce_imm_alloca`, `dst` |-> `dst`]
+        immutable_array_suffix_cut) >>
+      simp[create_operand_at_def] >> rpt strip_tac >>
+      first_x_assum (irule_at Any) >> simp[]) >>
   mp_tac (BETA_RULE (Q.INST [`observe_result` |-> `\r.
     (?raw. run_inst_seq (emitted_insts sn sb) s = OK raw /\
            r = OK (raw with vs_inst_idx := LENGTH sb.cs_current_insts)) \/
     (?raw q. run_inst_seq (emitted_insts sn sb) s = Abort Revert_abort raw /\
              r = Abort Revert_abort q)`] immutable_target_array_tail_selected_by)) >>
   (impl_tac >-
-    (asm_rewrite_tac[] >> rpt gen_tac >> strip_tac >>
-     irule (REWRITE_RULE [wordsTheory.n2w_w2n]
-       (Q.INST [`i` |-> `w2n (iw:bytes32)`] live_code_select_joint_ctor_observed)) >>
-     simp[] >> qexistsl [`arg`,`cenv.ce_is_ctor`,`iop`,`cenv.ce_imm_alloca`] >>
-     fs[AC ADD_ASSOC ADD_COMM, boolTheory.COND_EXPAND_IMP] >>
-     rpt strip_tac >> simp[] >> goal_assum (drule_at Any) >> simp[])) >>
+    (simp[AC ADD_ASSOC ADD_COMM] >>
+     conj_tac >- metis_tac[] >>
+     rpt gen_tac >> strip_tac >>
+     drule (SIMP_RULE (srw_ss()) [wordsTheory.n2w_w2n]
+       (Q.INST [`ctor` |-> `T`, `i` |-> `w2n (iw:bytes32)`]
+         live_code_select_joint_ctor_observed)) >>
+     disch_then (qspecl_then [`tn`,`s`,`lo`,`iw`,`func`,`explicit`,`ctx`,
+       `n2w (off+k):bytes32`,`PG`,`G`] mp_tac) >>
+     (impl_tac >- fs[AC ADD_ASSOC ADD_COMM]) >>
+     disch_then (qx_choosel_then [`Gf`,`tnf`,`q`] strip_assume_tac) >>
+     qexistsl [`Gf`,`tnf`,`q`] >>
+     Cases_on `idx_in_range sgn iw (n2w cnt)` >>
+     fs[AC ADD_ASSOC ADD_COMM] >> metis_tac[])) >>
   disch_then (qx_choosel_then [`res`,`fin`,`r`,`Gf`,`tnf`] strip_assume_tac) >>
   `gas_origin_path T explicit ctx func s [] r` by
     (`valid_horizon cx st0 (storage_trace_horizon fin.storage_trace) fin.storage_trace` by
@@ -137,11 +153,14 @@ Proof
        (drule_then strip_assume_tac) >>
      drule_then (strip_assume_tac o CONJUNCT1) gas_origin_ptr_path_projections) >>
   `create_operand_full_scope sn sb explicit ctx func s [] r` by
-    (irule immutable_array_selected_scope >> simp[create_operand_at_def] >>
-     goal_assum (drule_at Any) >> simp[]) >>
+    (Cases_on `cenv.ce_is_ctor` >> gvs[] >>
+     irule immutable_array_selected_scope >> simp[create_operand_at_def] >>
+     qexistsl [`arg`,`(case bd of Fixed n => n | Dynamic _ => 0)`,`dst`,
+       `(case bd of Fixed _ => F | Dynamic _ => T)`,
+       `type_memory_size etv`,`iop`,`cenv.ce_imm_alloca`,`sgn`] >> simp[]) >>
   rewrite_tac[scoped_operand_outcome_def] >> qexists_tac `[]` >>
   disj2_tac >> disj1_tac >> qexistsl [`res`,`fin`,`r`,`Gf`,`tnf`] >>
-  simp[gas_explicit_def] >> rpt strip_tac >>
-  qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> _`
-    (drule_then strip_assume_tac) >> simp[]
+  PURE_REWRITE_TAC[gas_explicit_nil,APPEND] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  asm_rewrite_tac[]
 QED
