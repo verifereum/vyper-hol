@@ -9,6 +9,58 @@ Ancestors
   assignTuplePtrCopyLen[qualified] loweringStateRelDefs vyperState
   vyperTypeExprSoundness valueCopyBytes finite_map pred_set
 
+Theorem ctor_physical_static_mods[local]:
+  expr_sim_inv_mods mods ce cx env es ==>
+  !e. well_typed_expr env e ==>
+    arg_type_fits (lowered_value_type ce e) (expr_type e) /\
+    (post_value_type ce e = expr_type e \/
+     post_value_type ce e = lowered_value_type ce e) /\
+    (post_value_type ce e = lowered_value_type ce e \/
+     is_bytestring_type (post_value_type ce e) /\
+     is_bytestring_type (lowered_value_type ce e))
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  `!fid sg. FLOOKUP env.fn_sigs fid = SOME sg ==>
+            ce.ce_func_return_type (nsid_to_string fid) = sg.ret_ty` by
+    metis_tac[expr_sim_inv_mods_return_type] >>
+  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- (pop_assum strip_assume_tac >> gvs[] >> PairCases_on `fid` >>
+      gvs[vyperTypeSystemTheory.well_typed_expr_def, lowered_value_type_def,
+          vyperASTTheory.expr_type_def] >>
+      first_x_assum (drule_then SUBST1_TAC) >>
+      rename1 `type_widens_to env.type_defs sg.ret_ty ty` >>
+      `arg_type_fits sg.ret_ty ty` by
+        fs[vyperTypeSystemTheory.type_widens_to_def] >>
+      Cases_on `is_word_type ty` >> simp[]
+      >- metis_tac[compileEnvTheory.type_widens_to_word] >>
+      Cases_on `is_bytestring_type ty` >> simp[] >>
+      disj2_tac >> irule compileEnvTheory.arg_type_fits_bytestring_source >>
+      goal_assum drule >> simp[]) >>
+  `env_consistent env cx es` by metis_tac[expr_sim_inv_mods_env] >>
+  `env.type_defs = get_tenv cx` by
+    fs[vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `!id t. FLOOKUP env.var_types id = SOME t ==>
+          well_formed_type env.type_defs t` by
+    metis_tac[exprSimSourceTheory.env_consistent_var_type_evaluates,
+              vyperTypeSystemTheory.well_formed_type_def] >>
+  `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
+    fs[exprSimHypsDefsTheory.expr_sim_inv_mods_def] >>
+  `post_value_type ce e = expr_type e` by
+    metis_tac[post_value_type_not_int_call] >>
+  drule_all exprSimIfExpCompatTheory.ifexp_lowered_type_classify >>
+  strip_tac >> gvs[]
+QED
+
+Theorem ctor_physical_memory_size_mods[local]:
+  expr_sim_inv_mods mods ce cx env es /\
+  evaluate_type (get_tenv cx) ty = SOME rt ==>
+  type_memory_bytes ce ty = type_memory_size rt
+Proof
+  strip_tac >> irule typedMemoryCopyTheory.typed_copy_memory_size >>
+  qexists_tac `get_tenv cx` >> fs[exprSimHypsDefsTheory.expr_sim_inv_mods_def] >> metis_tac[]
+QED
+
 Theorem ctor_materialize_unwrap_retag_mods:
   expr_body_pre_mods mods ce cx env e es /\
   compile_expr ce ty e sa = (vv,sm) /\
