@@ -17,11 +17,11 @@ Ancestors
   robustCopyTransportPtr valueEncoding valueEncodingDefs codegenRel
   typedCopyOriginPtr layoutStoreProps memoryLayoutSource memoryLayoutRel
   memoryValueEncoding exprSimProps typedCopyOriginPtrDynArray
-  valueEncodingProofs list memoryValueFrame
+  valueEncodingProofs list memoryValueFrame memoryStoreCode exprLoweringProps
 
 (* compile_copy_memory copies n bytes holding a robust value to a disjoint
    destination; the copy holds the value robustly. *)
-Theorem compile_copy_memory_origin_ptr_path:
+Theorem compile_copy_memory_origin_ptr_path_run:
   compile_copy_memory (Var xd) (Var xs) n sa = ((),sb) /\
   val_wf tv v /\ val_footprint tv v <= n /\
   not_fresh_at sa xs /\ not_fresh_at sa xd /\
@@ -40,6 +40,8 @@ Theorem compile_copy_memory_origin_ptr_path:
   ?t Gf tnf.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,Gf,tnf)) /\
+    (?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+           t = raw with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     val_in_memory tv v (w2n dw) t.vs_memory /\
     typed_copy_state_frame sa (w2n dw) n s t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -58,6 +60,8 @@ Proof
        (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
            d_ret := K {} |>,lo,explicit,ctx,func,PG)
        (s,G,tn) [] (OK t,Gf,tnf) /\
+     (?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+            t = raw with vs_inst_idx := LENGTH sb.cs_current_insts) /\
      val_in_memory tv v (w2n dw) t.vs_memory /\
      typed_copy_state_frame sa (w2n dw) n s t /\
      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -77,7 +81,7 @@ Proof
   suspend "positive"
 QED
 
-Resume compile_copy_memory_origin_ptr_path[zero]:
+Resume compile_copy_memory_origin_ptr_path_run[zero]:
   fs[contextTheory.compile_copy_memory_def, compileEnvTheory.comp_return_def] >>
   `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
      val_in_memory tv v (w2n dw) mem` by
@@ -88,10 +92,13 @@ Resume compile_copy_memory_origin_ptr_path[zero]:
      simp[mem_bytes_at_def]) >>
   qexistsl_tac [`s`, `G`, `tn`] >> simp[typed_copy_state_frame_def] >>
   conj_tac >- (irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
+  conj_tac >-
+    (qexists_tac `s` >> gvs[emitted_insts_refl, run_inst_seq_def,
+                             venomStateTheory.venom_state_component_equality]) >>
   fs[mem_agree_outside_def, venomStateTheory.venom_state_component_equality]
 QED
 
-Resume compile_copy_memory_origin_ptr_path[positive]:
+Resume compile_copy_memory_origin_ptr_path_run[positive]:
   qabbrev_tac `inst = mk_inst sa.cs_next_id MCOPY
     [Var xd; Var xs; Lit (n2w n)] []` >>
   qabbrev_tac `sc = mcopy (w2n dw) (w2n sw) n s` >>
@@ -105,6 +112,10 @@ Resume compile_copy_memory_origin_ptr_path[positive]:
      {w2n dw + i | i < n /\ w2n sw + i IN tn.t_mem}` by suspend "ghost" >>
   qexistsl_tac [`sc with vs_inst_idx := LENGTH sb.cs_current_insts`, `G`, `tf`] >>
   conj_tac >- suspend "path" >>
+  conj_tac >-
+    (`emitted_insts sa sb = [inst]` by
+       (drule compile_copy_memory_code >> simp[Abbr `inst`]) >>
+     qexists_tac `sc` >> simp[run_inst_seq_def]) >>
   `!mem. mem_agree_outside tf.t_mem sc.vs_memory mem ==>
      val_in_memory tv v (w2n dw) mem` by
     (rpt strip_tac >> irule robust_val_in_memory_copy_transport >>
@@ -115,7 +126,7 @@ Resume compile_copy_memory_origin_ptr_path[positive]:
   suspend "post"
 QED
 
-Resume compile_copy_memory_origin_ptr_path[ghost]:
+Resume compile_copy_memory_origin_ptr_path_run[ghost]:
   simp[Abbr `tf`, Abbr `inst`, Abbr `sc`,
        step_prov_def, set_prov_def, out_prov_def, step_taint_def,
        venomInstTheory.mk_inst_def, set_var_taint_def,
@@ -129,7 +140,7 @@ Resume compile_copy_memory_origin_ptr_path[ghost]:
        pred_setTheory.EXTENSION] >> metis_tac[]
 QED
 
-Resume compile_copy_memory_origin_ptr_path[path]:
+Resume compile_copy_memory_origin_ptr_path_run[path]:
   `sb.cs_current_bb = sa.cs_current_bb /\
    sb.cs_current_insts = sa.cs_current_insts ++ [inst] /\
    sb.cs_blocks = sa.cs_blocks` by
@@ -173,13 +184,13 @@ Resume compile_copy_memory_origin_ptr_path[path]:
   irule (cj 1 gas_origin_ptr_path_rules) >> simp[]
 QED
 
-Resume compile_copy_memory_origin_ptr_path[instruction]:
+Resume compile_copy_memory_origin_ptr_path_run[instruction]:
   markerLib.RESUME_TAC >>
   gvs[rich_listTheory.IS_PREFIX_APPEND, venomInstTheory.get_instruction_def,
       listTheory.EL_APPEND_EQN]
 QED
 
-Resume compile_copy_memory_origin_ptr_path[pointer]:
+Resume compile_copy_memory_origin_ptr_path_run[pointer]:
   gvs[ptr_covers_def] >>
   simp[ptr_inst_ok_def, Abbr `inst`, venomInstTheory.mk_inst_def,
        venomExecSemanticsTheory.step_inst_def, taint_ok_def, op_taint_def,
@@ -188,7 +199,7 @@ Resume compile_copy_memory_origin_ptr_path[pointer]:
   suspend "access"
 QED
 
-Resume compile_copy_memory_origin_ptr_path[post]:
+Resume compile_copy_memory_origin_ptr_path_run[post]:
   `sb.cs_current_bb = sa.cs_current_bb` by
     (qpat_x_assum `compile_copy_memory _ _ _ _ = _` mp_tac >>
      Cases_on `n` >>
@@ -205,7 +216,7 @@ Resume compile_copy_memory_origin_ptr_path[post]:
     arithmeticTheory.LESS_MONO_ADD, arithmeticTheory.ADD_COMM]
 QED
 
-Resume compile_copy_memory_origin_ptr_path[access]:
+Resume compile_copy_memory_origin_ptr_path_run[access]:
   markerLib.RESUME_TAC >> (
   simp[access_ok_def, source_memory_write_ranges_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
@@ -218,11 +229,46 @@ Resume compile_copy_memory_origin_ptr_path[access]:
   qx_gen_tac `operand` >> Cases_on `operand` >> simp[] >> metis_tac[])
 QED
 
-Finalise compile_copy_memory_origin_ptr_path
+Finalise compile_copy_memory_origin_ptr_path_run
+
+Theorem compile_copy_memory_origin_ptr_path:
+  compile_copy_memory (Var xd) (Var xs) n sa = ((),sb) /\
+  val_wf tv v /\ val_footprint tv v <= n /\
+  not_fresh_at sa xs /\ not_fresh_at sa xd /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv v (w2n sw) mem) /\
+  w2n sw + n < dimword (:256) /\ w2n dw + n < dimword (:256) /\
+  (n = 0 \/ w2n sw + n <= s.vs_alloca_next) /\
+  (n = 0 \/ w2n dw + n <= s.vs_alloca_next) /\
+  (w2n sw + n <= w2n dw \/ w2n dw + n <= w2n sw) /\
+  ptr_covers G tn xs s n /\ ptr_covers G tn xd s n /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf)) /\
+    val_in_memory tv v (w2n dw) t.vs_memory /\
+    typed_copy_state_frame sa (w2n dw) n s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + n) ==>
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+      val_in_memory tv v (w2n dw) mem) /\
+    (!p. not_fresh_at sa p ==>
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  disch_then (fn h => mp_tac (MATCH_MP compile_copy_memory_origin_ptr_path_run h)) >>
+  strip_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> asm_rewrite_tac[]
+QED
 
 (* A layout-preserving copy turns a robust source-typed value into a robust
    destination-typed one. *)
-Theorem robust_val_in_memory_layout_rel[local]:
+Theorem robust_val_in_memory_layout_rel:
   memory_layout_rel dtv stv /\ value_has_type stv v /\ value_has_type dtv v /\
   (!mem. mem_agree_outside tn m0 mem ==> val_in_memory stv v a mem) ==>
   !mem. mem_agree_outside tn m0 mem ==> val_in_memory dtv v a mem
