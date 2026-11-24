@@ -3791,8 +3791,8 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_subst
       qpat_assum `!ts owner E. _ ==> EVERY _ (module_consts_env_mods owner ts E)` irule >>
       simp[]) >>
   linked_getter_import_all_modules_tac >>
-  `src = NONE \/ imported_stmts_refs_ok body_code` by
-    (map_every (fn p => qpat_assum p mp_tac)
+  Q.SUBGOAL_THEN `src = NONE \/ imported_stmts_refs_ok body_code` assume_tac
+  >- (map_every (fn p => qpat_assum p mp_tac)
        [`body_code = [Return (SOME (subst_consts_expr_mods (consts_env_mods mods) getter_value))]`,
         `src <> NONE ==> imported_expr_refs_ok getter_value`,
         `!E e. _ ==> _ ==> imported_expr_refs_ok (subst_consts_expr_mods E e)`,
@@ -3805,6 +3805,12 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_subst
      qpat_assum `!E k r. EVERY _ E /\ _ ==> _` irule >>
      map_every qexists_tac [`consts_env_mods mods`,`k`] >> simp[]) >>
   linked_positional_getter_support_tac >>
+  qabbrev_tac `bindings =
+    args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code` >>
+  `supported_stmts tops bindings body_code` by
+    (simp[NoAsms, Abbr `bindings`] >>
+     qpat_assum `(src = NONE \/ imported_stmts_refs_ok body_code) ==> supported_stmts _ _ body_code`
+       (drule_then ACCEPT_TAC)) >>
   cheat
 QED
 
@@ -3863,14 +3869,20 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsub
   linked_getter_import_decl_tac >>
   linked_getter_import_original_goal_tac
   >- (linked_getter_import_original_shape_tac >> linked_getter_import_path_finish_tac) >>
-  `src = NONE \/ imported_stmts_refs_ok body_code` by
-    (map_every (fn p => qpat_assum p mp_tac)
+  Q.SUBGOAL_THEN `src = NONE \/ imported_stmts_refs_ok body_code` assume_tac
+  >- (map_every (fn p => qpat_assum p mp_tac)
        [`body_code = fbody`, `fbody = [Return (SOME getter_value)]`,
         `src <> NONE ==> imported_expr_refs_ok getter_value`] >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      rpt strip_tac >> Cases_on `src` >>
      fs[imported_stmt_refs_ok_def, imported_expr_refs_ok_def]) >>
   linked_positional_getter_support_tac >>
+  qabbrev_tac `bindings =
+    args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code` >>
+  `supported_stmts tops bindings body_code` by
+    (simp[NoAsms, Abbr `bindings`] >>
+     qpat_assum `(src = NONE \/ imported_stmts_refs_ok body_code) ==> supported_stmts _ _ body_code`
+       (drule_then ACCEPT_TAC)) >>
   cheat
 QED
 
