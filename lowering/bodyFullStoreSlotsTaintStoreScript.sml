@@ -1,6 +1,6 @@
 Theory bodyFullStoreSlotsTaintStore
 Ancestors
-  assignBasePtrWordStore fragGasCopyLoop bodyFullStoreSlotsRetired
+  assignBasePtrWordStore fragGasCopyLoop fragGasCopySeqLiftProps bodyFullStoreSlotsRetired
   fragGasSeqPtr fragGasSeqPtrContext fragGasOriginPtr fragExecMem exprLoweringProps
   emitHelperProps emitHelper compileEnv venomExecSemantics venomState
   venomInst ptrDiscipline contextCodegenRel codegenRel unitTransformDefs
