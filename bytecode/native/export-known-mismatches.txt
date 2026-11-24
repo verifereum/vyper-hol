@@ -6,8 +6,6 @@
 # A reason is an issue (#543), or several joined by +:
 #   decode-guards  the HOL ABI decoder's bounded-decode guards
 #                  (bytecode/pending-bounded-decode-guards.md)
-#   map-key-copy   the pin copies a bytestring map key before hashing it; the
-#                  HOL lowering hashes it in place (shorter code)
 # Reasons were attributed from the source's features (folded expressions,
 # and/or chains of 3+ operands, external calls, logs, abi_decode) and the
 # rest by reading the bytecode diff. A contract can have causes beyond the
@@ -215,8 +213,6 @@ b40db517797a4ebc bytes decode-guards  # functional/codegen/calling_convention/te
 acbe9dbde44b2195 bytes decode-guards  # functional/codegen/features/decorators/test_nonreentrant::test_multi_function_nonreentrant
 c85fd2480b6b37bf bytes decode-guards  # functional/codegen/features/decorators/test_raw_return::test_raw_return_zero_bytes
 0720ffc524ac64e2 bytes decode-guards  # functional/codegen/features/test_assert::test_assert_staticcall
-dba5cc3ba73c95eb bytes map-key-copy  # functional/codegen/features/test_bytes_map_keys::test_bytes_key_storage
-7972b2b989bfb396 bytes map-key-copy  # functional/codegen/features/test_bytes_map_keys::test_struct_bytes_key_storage
 3ad42e85d3270903 bytes decode-guards  # functional/codegen/features/test_transient::test_nested_dynarray_transient
 d3490afdfdeef5c0 bytes decode-guards  # functional/codegen/features/test_transient::test_view_function_transient
 a8eb4dbb2dbfb1ab bytes decode-guards  # functional/codegen/test_interfaces::test_external_interface_bytes_clampers
