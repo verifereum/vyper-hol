@@ -85,6 +85,32 @@ Proof
   metis_tac[FST,SND]
 QED
 
+(* Recover memory validity only on the last edge of the selected path. *)
+Theorem create_prefix_selected_terminal_edge:
+  (!bb. MEM bb f.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+  create_expr_prefix a b E ctx f s [] u /\
+  gas_origin_edge F E ctx f u [] r /\ exit_result r /\
+  gas_origin_path T E ctx f s [] r ==>
+  gas_origin_edge T E ctx f u [] r
+Proof
+  simp[create_expr_prefix_marked] >> strip_tac >>
+  `!v. gas_origin_path T E ctx f v [] r ==>
+        gas_origin_edge T E ctx f v [] r \/
+        ?w. gas_origin_edge T E ctx f v [] (OK w) /\
+            gas_origin_path T E ctx f w [] r` by
+    (gen_tac >> disch_then (mp_tac o ONCE_REWRITE_RULE[gas_origin_path_cases]) >>
+     simp[] >> strip_tac >> gvs[exit_result_def] >> metis_tac[]) >>
+  `!x y. RTC (create_marked_edge (create_prefix_step a b E ctx f)) x y ==>
+         SND y = [] ==> gas_origin_path T E ctx f (FST x) [] r ==>
+                        gas_origin_path T E ctx f (FST y) [] r` by
+    (ho_match_mp_tac RTC_INDUCT_RIGHT1 >> simp[] >>
+     simp[FORALL_PROD,create_marked_edge_def,create_prefix_step_def] >>
+     rpt strip_tac >> gvs[] >>
+     metis_tac[origin_edge_unique,exit_result_def,exec_result_11]) >>
+  `gas_origin_path T E ctx f u [] r` by metis_tac[FST,SND] >>
+  metis_tac[origin_edge_unique,exit_result_def]
+QED
+
 (* A focus can stop at a caller cursor, or inside its pending INVOKE.
    In the latter case its remaining events are an initial part of the marks
    of the returned caller edge, if that edge completes. *)
@@ -134,7 +160,7 @@ Definition create_operand_full_scope_def:
         gas_origin_edge T explicit ctx func u last r
 End
 
-Theorem create_operand_full_scope_match[local]:
+Theorem create_operand_full_scope_match:
   (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   create_operand_full_scope sa sb explicit ctx func s0 witness r /\
   create_expr_prefix sa sb explicit ctx func s0 marks s /\

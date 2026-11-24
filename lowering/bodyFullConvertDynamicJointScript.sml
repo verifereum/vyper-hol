@@ -3,7 +3,7 @@ Ancestors
   bodyFullShadowBodyInv bodyFullConvertDynamicSource bodyFullConvertDynamicSite
   bodyFullConvertDynamicOriginRule bodyFullEmptyLeafData exprSimFullBundleProps
   haltExitProj typeBuiltinPrereqs
-  bodyFullPreds bodySimFull exprLowering bodyFullOfVV bodyFullExprGeneric
+  bodyFullPreds bodyFullSimProjection bodySimFull exprLowering bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertChildRead bodyFullPathHistory exprSafeOperand bodyPtrSignedConvertSourceTyping
   valueCopyBytes bodyPtrMakeArrayBytesTransport bodyPtrTypeBuiltinsBytesWordInputs
   bodyFullConvertBytesWordSuffix bodyFullConvertDynamicEmpty
@@ -335,7 +335,7 @@ Proof
   rename1 `is_word_type (BaseT bt)` >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    metis_tac[body_expr_full_ok_simulations] >>
   qpat_assum `expr_sim_full_hypotheses _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_sim_full_hypotheses_def, expr_sim_full_code_def]) >>
   mp_tac (Q.INST [`ty` |-> `expr_type e`] (SPEC_ALL expr_sim_full_of_vv_post_buffer_exit)) >>
