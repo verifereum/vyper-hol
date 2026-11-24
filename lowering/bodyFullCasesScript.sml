@@ -873,7 +873,8 @@ Proof
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >>
      simp[supported_stmt_expr_exists_def, supported_expr_exists_def]) >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  `well_typed_expr env e` by fs[type_stmt_def] >>
+  drule_all_then strip_assume_tac bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     drule_then ACCEPT_TAC body_inv_main_support >>
   `cx_tops cx = tops` by (drule_then (ACCEPT_TAC o CONJUNCT2) body_inv_main_code) >>
