@@ -2261,6 +2261,75 @@ Proof
   qexistsl [`e`, `res`, `es with gas_obs := prefix`] >> fs[]
 QED
 
+(* Derive continuation facts at the actual scalar return. The replay
+   equation, path and post can come from either full or scoped simulation. *)
+Theorem create_scalar_return_handoff:
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
+  expr_body_pre cenv cx env e es /\
+  lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
+  return_buf_frame d cenv sa s /\
+  (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!tail. bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
+    (INL v,ee with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s,G,tn) marks (OK t,G1,tn1)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa sb s ee v op t /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    s.vs_alloca_next <= t.vs_alloca_next /\ ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t /\
+    ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t /\
+    ghost_kept_at lo cenv es sa G tn s G1 tn1) ==>
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa sb s ee v op t /\
+    ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t) /\
+  t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  ~t.vs_halted /\ alloca_history func t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+  s.vs_alloca_next <= t.vs_alloca_next /\
+  ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t /\
+  ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
+  return_buf_frame d cenv sb t /\
+  (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
+  body_const_cells_agree [(NONE,tops)] cx env ee /\
+  expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value v) /\
+  (?a tv b a' v' b'. eval_expr cx e a = (INL tv,b) /\
+                      read_result cx tv a' = (INL v',b')) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace)
+Proof
+  strip_tac >>
+  qpat_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >>
+  drule_all create_operand_read_post >> simp[] >>
+  disch_then (qspec_then `st0` strip_assume_tac) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
+    by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. _ ==> gas_origin_ptr_path _ _ _ _`
+    (drule_then assume_tac) >>
+  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  `~t.vs_halted` by
+    (drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
+     simp[fragExecTheory.exit_result_def]) >>
+  `return_buf_frame d cenv sb t` by
+    (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+     qpat_assum `return_buf_frame d cenv sa s` (irule_at Any) >>
+     fs[loweringPostsTheory.expr_post_def] >>
+     metis_tac[ci_mono_lower_value_compile_expr,ci_mono_def,pairTheory.SND]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+  `!f i z. frag_reachable ctx func t f i z ==> dalloca_fmp_headroom i z` by
+    (rpt gen_tac >> strip_tac >>
+     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >> simp[]) >>
+  `body_const_cells_agree [(NONE,tops)] cx env ee`
+    by (irule create_operand_const_cells_replay >> rpt (goal_assum (drule_at Any))) >>
+  simp[] >> metis_tac[]
+QED
+
 (* A cut evaluates exactly one operand. The continuation receives the
    typing and IH guard from replay, and all horizon facts from that run. *)
 Theorem create_body_operand_cut_replay:
@@ -2352,32 +2421,8 @@ Proof
   reverse conj_tac
   >- (irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >>
       simp[] >> rpt strip_tac >> qexists `v` >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >>
-  drule_all create_operand_read_post >> simp[] >>
-  disch_then (qspec_then `st0` strip_assume_tac) >>
-  rule_assum_tac BETA_RULE >>
-  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
-    by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. _ ==> gas_origin_ptr_path _ _ _ _`
-    (drule_then assume_tac) >>
-  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  `~t.vs_halted` by
-    (drule fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec >>
-     simp[fragExecTheory.exit_result_def]) >>
-  `return_buf_frame d cenv sb t` by
-    (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-     qpat_assum `return_buf_frame d cenv sa s` (irule_at Any) >>
-     fs[loweringPostsTheory.expr_post_def] >>
-     metis_tac[ci_mono_lower_value_compile_expr,ci_mono_def,pairTheory.SND]) >>
-  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-    metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-  `!f i z. frag_reachable ctx func t f i z ==> dalloca_fmp_headroom i z` by
-    (rpt gen_tac >> strip_tac >>
-     drule_all bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom >> simp[]) >>
-  `body_const_cells_agree [(NONE,tops)] cx env ee`
-    by (irule create_operand_const_cells_replay >> rpt (goal_assum (drule_at Any))) >>
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  drule_all create_scalar_return_handoff >> strip_tac >>
   qpat_assum `!v ee G1 tn1 t. _ ==> gas_outcome_full _ _ _ _ _ _ _ _` irule >>
   simp[] >> metis_tac[]
 QED
@@ -5524,8 +5569,9 @@ Proof
        bodyPtrBopScalarSeqTheory.bop_scalar_seq_def,not_fresh_at_def]
 QED
 
-(* Empty marks exclude GAS events, so the flag is immaterial. *)
-Theorem create_copy_prealloc_path:
+(* Empty marks exclude GAS events, so the flag is immaterial. Retain the
+   normal guard landing and the scalar run to the indexed prealloc state. *)
+Theorem create_copy_prealloc_path_parts:
   emit_op EXTCODESIZE [target] sa = (sz,a1) /\
   emit_void ASSERT [sz] a1 = ((),a2) /\
   emit_op SHL [Lit 56w;sz] a2 = (shift,a3) /\
@@ -5537,15 +5583,23 @@ Theorem create_copy_prealloc_path:
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  if code = [] then
+  sz = Var (STRING #"%" (toString sa.cs_next_var)) /\
+  (if code = [] then
     ?p. sz = Var p /\
       !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
         (Abort Revert_abort (revert_state (set_returndata []
             (update_var p 0w s with vs_inst_idx := SUC s.vs_inst_idx))),
          G \\ p, tn with t_var := tn.t_var |+ (p,{}))
   else
-    ?t Gt tt.
+    ?t Gt tt u r.
       (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gt,tt)) /\
+      u = (update_var (STRING #"%" (toString sa.cs_next_var)) (n2w (LENGTH code)) s
+            with vs_inst_idx := LENGTH a2.cs_current_insts) /\
+      (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (OK u,G \\ (STRING #"%" (toString sa.cs_next_var)),
+         tn with t_var := tn.t_var |+ (STRING #"%" (toString sa.cs_next_var),{}))) /\
+      run_inst_seq (emitted_insts a2 a5) u = OK r /\
+      t = (r with vs_inst_idx := LENGTH a5.cs_current_insts) /\
       eval_operand sz t = SOME (n2w (LENGTH code)) /\
       eval_operand pre t = SOME (0x620000003d81600b3d39f3w || (n2w (LENGTH code) << 56)) /\
       eval_operand req t = SOME (n2w (LENGTH code + 32)) /\
@@ -5555,13 +5609,14 @@ Theorem create_copy_prealloc_path:
       t.vs_inst_idx = LENGTH a5.cs_current_insts /\
       tt.t_mem = tn.t_mem /\ tt.t_stor = tn.t_stor /\ tt.t_trans = tn.t_trans /\ tt.t_imm = tn.t_imm /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-        FLOOKUP Gt x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x))
+        FLOOKUP Gt x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)))
 Proof
   strip_tac >>
   `compile_extcodesize_check target sa = ((),a2)` by
     simp[compile_extcodesize_check_def,comp_bind_def] >>
   `sz = Var (STRING #"%" (toString sa.cs_next_var))` by
     metis_tac[cj 2 emitHelperPropsTheory.emitted_insts_emit_op] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   drule_all bodyFullExtCallPrecheckTheory.extcall_codesize_checked_path >>
   `w2n (n2w (LENGTH code):bytes32) = LENGTH code` by
     (simp[wordsTheory.w2n_n2w,wordsTheory.dimword_def] >> decide_tac) >>
@@ -5603,13 +5658,14 @@ Proof
   disch_then (qspecl_then [`{}`,`PG`] (qx_choosel_then [`H`,`tf`] strip_assume_tac)) >>
   drule_all bodyPtrBopScalarOutcomeTheory.bop_scalar_seq_runtime_frame >> strip_tac >>
   qabbrev_tac `v = t with vs_inst_idx := LENGTH a5.cs_current_insts` >>
-  qexistsl_tac [`v`,`H`,`tf`] >> conj_tac
+  qexistsl_tac [`H`,`tf`,`t`] >> conj_tac
   >- (rpt gen_tac >>
       irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
       qexistsl_tac [`G \\ p`,`u`,`tm`] >> conj_tac >- simp[] >>
       irule abiDecodeValidFiniteLoopTheory.finite_array_empty_path_explicit >> qexists `{}` >>
       `LENGTH a5.cs_current_insts = u.vs_inst_idx + LENGTH (emitted_insts a2 a5)` by simp[] >>
       metis_tac[Abbr `v`]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   `op_taint tf (Var p) = {} /\ op_taint tf pre = {} /\ op_taint tf req = {}` by
     (qpat_assum `!op. op IN {req;pre;shift;Var p;Lit _;Lit _;Lit _} ==> _` mp_tac >>
      simp[DISJ_IMP_THM, FORALL_AND_THM]) >>
@@ -5630,6 +5686,47 @@ Proof
   qpat_assum `!x. x IN _ ==> FLOOKUP t.vs_vars x = _` (qspec_then `x` mp_tac) >>
   simp[Abbr `u`,lookup_var_def,update_var_def,op_taint_def,
        finite_mapTheory.FLOOKUP_UPDATE,finite_mapTheory.DOMSUB_FLOOKUP_THM]
+QED
+
+Theorem create_copy_prealloc_path:
+  emit_op EXTCODESIZE [target] sa = (sz,a1) /\
+  emit_void ASSERT [sz] a1 = ((),a2) /\
+  emit_op SHL [Lit 56w;sz] a2 = (shift,a3) /\
+  emit_op OR [Lit 0x620000003d81600b3d39f3w;shift] a3 = (pre,a4) /\
+  emit_op ADD [sz;Lit 32w] a4 = (req,a5) /\
+  fn_has_code sa a2 func /\ fn_has_code a2 a5 func /\
+  eval_operand target s = SOME aw /\ op_taint tn target = {} /\
+  (lookup_account (w2w aw) s.vs_accounts).code = code /\ LENGTH code <= 24576 /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  if code = [] then
+    ?p. sz = Var p /\
+      !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (Abort Revert_abort (revert_state (set_returndata []
+            (update_var p 0w s with vs_inst_idx := SUC s.vs_inst_idx))),
+         G \\ p, tn with t_var := tn.t_var |+ (p,{}))
+  else
+    ?t Gt tt.
+      (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gt,tt)) /\
+      eval_operand sz t = SOME (n2w (LENGTH code)) /\
+      eval_operand pre t = SOME (0x620000003d81600b3d39f3w || (n2w (LENGTH code) << 56)) /\
+      eval_operand req t = SOME (n2w (LENGTH code + 32)) /\
+      op_taint tt sz = {} /\ op_taint tt pre = {} /\ op_taint tt req = {} /\
+      (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+      ~t.vs_halted /\ t.vs_current_bb = a5.cs_current_bb /\
+      t.vs_inst_idx = LENGTH a5.cs_current_insts /\
+      tt.t_mem = tn.t_mem /\ tt.t_stor = tn.t_stor /\ tt.t_trans = tn.t_trans /\ tt.t_imm = tn.t_imm /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+        FLOOKUP Gt x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all create_copy_prealloc_path_parts >>
+  disch_then (qspecl_then [`PG`,`G`] mp_tac) >>
+  Cases_on `code = []` >> pure_asm_rewrite_tac[REFL_CLAUSE,COND_CLAUSES] >>
+  disch_then (CONJUNCTS_THEN2 (K ALL_TAC) assume_tac)
+  >- first_assum ACCEPT_TAC >>
+  pop_assum (qx_choosel_then [`landing`,`Gout`,`tout`,`guard`,`raw`] strip_assume_tac) >>
+  qexistsl_tac [`landing`,`Gout`,`tout`] >> simp[]
 QED
 
 Theorem create_dalloca_cut_bound[local]:

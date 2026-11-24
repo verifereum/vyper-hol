@@ -32,6 +32,68 @@ Proof
 QED
 
 (* Physical and ghost endpoints are selected before any dead mask. *)
+Theorem scalar_convert_origin_path_run:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  evaluate_type (get_tenv cx) src = SOME tv /\
+  evaluate_type (get_tenv cx) dst = SOME tout /\ value_has_type tv v /\
+  (!name n. dst = FlagT name /\ FLOOKUP (get_tenv cx) name = SOME (FlagArgs n) ==>
+    cenv.ce_flag_n_members (nsid_to_string name) = n) /\
+  compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst) sa = (out,sb) /\
+  eval_operand x s = SOME (typed_val_to_w256 tv v) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next ==>
+  ((!vout. convert_result cx src dst v = INL vout ==>
+    ?dtv t Gf tnf.
+      evaluate_type (get_tenv cx) dst = SOME dtv /\ value_has_type dtv vout /\
+      eval_operand out t = SOME (typed_val_to_w256 dtv vout) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
+      state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (!z. not_fresh_at sa z ==>
+        lookup_var z t = lookup_var z s /\ FLOOKUP Gf z = FLOOKUP G z /\
+        op_taint tnf (Var z) = op_taint tn (Var z)) /\
+      tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+      tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+      op_prov Gf out = NONE /\ op_taint tnf out = {} /\
+      (?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
+           t = u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+   (!exc. convert_result cx src dst v = INR exc ==>
+    (?msg. exc = Error (RuntimeError msg)) /\
+    ?err t Gf tnf.
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (Abort err t,Gf,tnf)) /\
+      (?u. run_inst_seq (emitted_insts sa sb) s = Abort err u)))
+Proof
+  strip_tac >>
+  drule_all scalar_convert_typed_run >> strip_tac >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!vout. _` drule >> strip_tac >>
+      drule_at (Pat `run_inst_seq _ _ = _`) scalar_convert_run_origin >>
+      disch_then (drule_all o SRULE []) >>
+      disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+      drule_all bodyPtrTypeBuiltinsScalarRawOutcomeTheory.scalar_dispatch_straight_fresh >>
+      disch_then (qspecl_then [`x`,`cenv`] (mp_tac o SRULE [straight_fresh_def])) >>
+      disch_then drule >> strip_tac >>
+      qexistsl_tac [`dtv`,`t with vs_inst_idx := LENGTH sb.cs_current_insts`,`H`,`th`] >>
+      gvs[exec_result_map_def, eval_operand_def, lookup_var_def,
+          state_frame_def, venom_state_component_equality] >> metis_tac[]) >>
+  gen_tac >> disch_tac >> qpat_x_assum `!exc. _` drule >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  drule_at (Pat `run_inst_seq _ _ = _`) scalar_convert_run_origin >>
+  disch_then (drule_all o SRULE []) >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`err`,`t with vs_inst_idx := j`,`H`,`th`] >>
+  fs[exec_result_map_def]
+QED
+
 Theorem scalar_convert_origin_path:
   valid_conversion src dst /\ ~is_bytestring_type src /\
   evaluate_type (get_tenv cx) src = SOME tv /\
@@ -68,25 +130,7 @@ Theorem scalar_convert_origin_path:
     ?err t Gf tnf.
       !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (Abort err t,Gf,tnf)))
 Proof
-  strip_tac >>
-  drule_all scalar_convert_typed_run >> strip_tac >>
-  conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!vout. _` drule >> strip_tac >>
-      drule_at (Pat `run_inst_seq _ _ = _`) scalar_convert_run_origin >>
-      disch_then (drule_all o SRULE []) >>
-      disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-      drule_all bodyPtrTypeBuiltinsScalarRawOutcomeTheory.scalar_dispatch_straight_fresh >>
-      disch_then (qspecl_then [`x`,`cenv`] (mp_tac o SRULE [straight_fresh_def])) >>
-      disch_then drule >> strip_tac >>
-      qexistsl_tac [`dtv`,`t with vs_inst_idx := LENGTH sb.cs_current_insts`,`H`,`th`] >>
-      gvs[exec_result_map_def, eval_operand_def, lookup_var_def,
-          state_frame_def, venom_state_component_equality] >> metis_tac[]) >>
-  gen_tac >> disch_tac >> qpat_x_assum `!exc. _` drule >> strip_tac >>
-  conj_tac >- metis_tac[] >>
-  drule_at (Pat `run_inst_seq _ _ = _`) scalar_convert_run_origin >>
-  disch_then (drule_all o SRULE []) >>
+  strip_tac >> drule_all scalar_convert_origin_path_run >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  qexistsl_tac [`err`,`t with vs_inst_idx := j`,`H`,`th`] >>
-  fs[exec_result_map_def]
+  conj_tac >> gen_tac >> disch_tac >> first_x_assum drule >> metis_tac[]
 QED
