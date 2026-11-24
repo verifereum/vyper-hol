@@ -15,7 +15,7 @@ Ancestors
   list rich_list arithmetic finite_map option pair pred_set
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
   vyperEvent vyperTypeSystem vyperTypeCallGraph vyperABIEntries constSubstMods
-  vyperSubscriptOverlap
+  vyperSubscriptOverlap vyperImportRefs
 Libs
   wordsLib
 
@@ -194,6 +194,7 @@ End
 
 Definition contract_namespaces_ok_def:
   contract_namespaces_ok in_deploy mods <=>
+    IS_SOME (ALOOKUP mods NONE) /\
     ALL_DISTINCT (MAP FST mods) /\
     ALL_DISTINCT (contract_keys (fn_sig_keys_toplevel in_deploy) mods) /\
     ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods) /\
@@ -204,7 +205,18 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys external_name_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys self_member_keys_toplevel mods) /\
     EVERY (\(src,tls).
-      ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls)) mods
+      ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls) /\
+      ALL_DISTINCT (abi_external_method_ids (type_env tls) tls) /\
+      (src = NONE \/ EVERY imported_toplevel_refs_ok tls)) mods /\
+    EVERY (\(_,tls). EVERY (\tl. ~MEM #"." (case tl of
+        FunctionDecl _ _ _ _ name _ _ _ _ => name
+      | VariableDecl _ _ name _ _ => name
+      | HashMapDecl _ _ name _ _ _ => name
+      | StructDecl name _ => name
+      | EventDecl name _ => name
+      | ErrorDecl name _ => name
+      | FlagDecl name _ => name
+      | InterfaceDecl name _ => name)) tls) mods
 End
 
 Definition custom_error_resolved_def:
@@ -310,6 +322,7 @@ Definition constant_builtin_def:
   constant_builtin (Bop op) = constant_binop op /\
   constant_builtin MethodId = T /\
   constant_builtin PowMod256 = T /\
+  constant_builtin NamedConst = T /\
   constant_builtin _ = F
 End
 
@@ -521,6 +534,8 @@ Definition runtime_constant_builtin_def:
     (constant_binop op /\ op <> Min /\ op <> Max) /\
   runtime_constant_builtin (Env item) = (item <> SelfAddr) /\
   runtime_constant_builtin (Acc item) = (item <> Code) /\
+  runtime_constant_builtin NamedConst = T /\
+  runtime_constant_builtin (BoolChain _ _) = T /\
   runtime_constant_builtin _ = F
 End
 
