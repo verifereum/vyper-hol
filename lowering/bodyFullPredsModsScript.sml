@@ -1,9 +1,10 @@
 (* Full-body induction predicates for a linked contract and its active module. *)
 Theory bodyFullPredsMods
 Ancestors
-  bodyFullPreds bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit bodySim
+  bodyCallSupport bodyFullPreds bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit bodySim
   exprSimHypsDefs exprSimMapDefs supportedStmts supportedProgram
-  supportedExprTraverse allocLimits placeTypingProps compileEnv exprLowering
+  supportedExprTraverse allocLimits allocLimitsProps[qualified] placeTypingProps
+  compileEnv exprLowering
   gasShadow gasContext bodySimFull vyperInterpreter vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperState vyperContext vyperAST
   vyperTypeInvariants list alist option pair finite_map
@@ -22,10 +23,16 @@ Definition body_expr_full_ok_mods_def[nocompute]:
         cenv cx ty e es /\
       expr_vv_sim_full_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es) /\
-    (!a t n elems.
-      e = Builtin a (MakeArray t n) elems /\
-      builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-      body_exprs_full_ok_mods mods exps cx elems) /\
+    ((!a t n elems.
+       e = Builtin a (MakeArray t n) elems /\
+       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+       body_exprs_full_ok_mods mods exps cx elems) /\
+     (!t c a b.
+       e = IfExp t c a b ==>
+       body_expr_full_ok_mods mods exps cx c /\
+       ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
+        body_expr_full_ok_mods mods exps cx a /\
+        body_expr_full_ok_mods mods exps cx b))) /\
     (!ann e1 e2 DF lo d PG src tops ctx shadow_ctx func shadow_func cenv env ty es.
       e = Subscript ann e1 e2 /\
       contract_inv mods exps ctx cenv cx /\
@@ -157,6 +164,22 @@ End
 Theorem body_exprs_full_ok_mods_def =
   CONJUNCT2 body_expr_full_ok_mods_def;
 
+(* A conditional's test is ok, and its arms are when the test evaluates. *)
+Theorem body_ifexp_children_full_ok_mods:
+  !mods exps cx t c a b.
+    body_expr_full_ok_mods mods exps cx (IfExp t c a b) ==>
+    body_expr_full_ok_mods mods exps cx c /\
+    ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
+     body_expr_full_ok_mods mods exps cx a /\
+     body_expr_full_ok_mods mods exps cx b)
+Proof
+  rpt gen_tac >>
+  disch_then (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_mods_def]) >>
+  qpat_x_assum `!t' c' a' b'. IfExp _ _ _ _ = IfExp t' c' a' b' ==> _`
+    (qspecl_then [`t`, `c`, `a`, `b`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem contract_inv_singleton_pins[local]:
   contract_inv [(NONE,tops)] [] ctx cenv cx ==>
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
@@ -197,13 +220,12 @@ QED
 
 Theorem int_calls_expr_main_singleton[local]:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-  EVERY (\c. ?ts. get_module_code cx (FST c) = SOME ts /\
-                 supported_program ts /\
-                 IS_SOME (supported_function_decl ts (NONE,SND c) Internal))
+  EVERY (source_body_call_supported cx)
     (int_calls_expr e) ==>
   EVERY (\c. FST c = NONE) (int_calls_expr e)
 Proof
-  simp[EVERY_MEM, FORALL_PROD, get_module_code_def, ALOOKUP_def] >>
+  simp[EVERY_MEM, FORALL_PROD, source_body_call_supported_def,
+       get_module_code_def, ALOOKUP_def] >>
   rpt strip_tac >> res_tac >> gvs[AllCaseEqs()]
 QED
 
@@ -213,7 +235,7 @@ fun expr_pre_mods_singleton_tac split_def mods_def =
   simp[split_def] >>
   qpat_assum `ALOOKUP cx.sources _ = _`
     (assume_tac o MATCH_MP int_calls_expr_main_singleton) >>
-  simp[mods_def, expr_sim_inv_mods_singleton,
+  simp[mods_def, expr_sim_inv_mods_singleton, source_body_calls_main,
        type_env_def, type_env_all_modules_def, FUNION_FEMPTY_2,
        SF CONJ_ss] >>
   metis_tac[];
@@ -251,15 +273,27 @@ Proof
       ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
       (body_exprs_full_ok_mods mods exps cx es <=> body_exprs_full_ok cx es))` by
     (ho_match_mp_tac body_expr_full_ok_mods_ind >> rpt conj_tac >>
-     rpt strip_tac >> gvs[] >>
-     ASSUM_LIST (MAP_EVERY assume_tac o mapfilter (MATCH_MP body_inv_singleton)) >>
+     rpt strip_tac >> gvs[]
+     >- (rename1 `body_expr_full_ok_mods _ _ cx' e <=> _` >>
+         `!t c a b. e = IfExp t c a b ==>
+            (((?s tv s'. eval_expr cx' c s = (INL tv,s')) ==>
+              body_expr_full_ok_mods [(NONE,tops)] [] cx' a /\
+              body_expr_full_ok_mods [(NONE,tops)] [] cx' b) <=>
+             ((?s tv s'. eval_expr cx' c s = (INL tv,s')) ==>
+              body_expr_full_ok cx' a /\ body_expr_full_ok cx' b))` by
+           (rpt gen_tac >> disch_tac >>
+            Cases_on `?s tv s'. eval_expr cx' c s = (INL tv,s')` >>
+            simp[] >> metis_tac[]) >>
+         drule body_inv_singleton >> strip_tac >>
+         once_rewrite_tac[body_expr_full_ok_mods_def, body_expr_full_ok_def] >>
+         simp[module_body_inv_def, ALOOKUP_def] >>
+         simp[FORALL_OPTION, GSYM shadow_body_inv_split_def, GSYM AND_IMP_INTRO] >>
+         once_rewrite_tac[contract_inv_singleton_guard] >>
+         simp[expr_body_pre_mods_singleton, expr_map_pre_mods_singleton,
+             expr_sim_full_mods_singleton, expr_vv_sim_full_mods_singleton,
+             expr_map_sim_full_mods_singleton]) >>
      once_rewrite_tac[body_expr_full_ok_mods_def, body_expr_full_ok_def] >>
-     simp[module_body_inv_def, ALOOKUP_def] >>
-     simp[FORALL_OPTION, GSYM shadow_body_inv_split_def, GSYM AND_IMP_INTRO] >>
-     once_rewrite_tac[contract_inv_singleton_guard] >>
-     simp[expr_body_pre_mods_singleton, expr_map_pre_mods_singleton,
-         expr_sim_full_mods_singleton, expr_vv_sim_full_mods_singleton,
-         expr_map_sim_full_mods_singleton] >>
+     simp[] >>
      Cases_on `?s tv t s1 v t1. eval_expr cx' e s = (INL tv,t) /\
                               read_result cx' tv s1 = (INL v,t1)` >>
      simp[] >>
@@ -381,11 +415,14 @@ Proof
     gvs[expr_body_pre_mods_def, expr_sim_inv_mods_def] >>
   gvs[expr_body_pre_mods_def, Once well_typed_expr_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
-      expr_has_evm_run_thm, EVERY_APPEND]
-  >- (drule_all place_type_well_typed_on_defined >> simp[]) >>
+      expr_has_evm_run_thm, EVERY_APPEND] >>
+  (* the value-typed base contradicts the map place type, slot base or not *)
+  TRY (drule_all place_type_well_typed_on_defined >> simp[] >> NO_TAC) >>
   drule_all place_type_checked_place_on_defined >> strip_tac >>
   rename1 `type_place_expr env obj = SOME bty` >>
   Cases_on `bty` >> gvs[value_type_place_def] >>
+  drule_then assume_tac allocLimitsPropsTheory.type_place_hashmap_not_array_slot_base >>
+  gvs[] >>
   simp[expr_map_pre_mods_def] >>
   gvs[supported_expr_exists_def] >>
   metis_tac[call_evaluation_safe_append_left]

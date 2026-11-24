@@ -30,21 +30,6 @@ Proof
   simp[gas_shadow_compiles_bind]
 QED
 
-Theorem gas_shadow_compiles_compile_register_positional_args:
-  !args cenv offset.
-  gas_shadow_compiles (compile_register_positional_args cenv args offset)
-    (compile_register_positional_args cenv args offset)
-Proof
-  Induct >> simp[compile_register_positional_args_def, gas_shadow_compiles_return] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  simp[compile_register_positional_args_def] >>
-  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
-  Cases_on `var_location_memory_size x` >>
-  simp[comp_ignore_bind_def, gas_shadow_compiles_bind,
-       gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_return,
-       gas_shadow_compiles_decode_args]
-QED
-
 Theorem gas_shadow_compiles_compile_entry_checks:
   gas_shadow_compiles (compile_entry_checks min_cds payable)
     (compile_entry_checks min_cds payable)
