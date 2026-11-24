@@ -11,7 +11,7 @@ Ancestors
   loweringShapeDefs
   arithmetic list rich_list relation pred_set pair
 
-Theorem unwrap_code_copy_layout[local]:
+Theorem unwrap_code_copy_layout:
   unwrap_value ce (LocatedValue ty p) a = (op,b) /\
   p.ptr_location = LocCode /\ ~is_word_type ty ==>
   same_blocks a b /\
