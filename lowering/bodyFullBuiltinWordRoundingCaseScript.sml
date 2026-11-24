@@ -3,6 +3,7 @@ Theory bodyFullBuiltinWordRoundingCase
 Ancestors
   bodyFullShadowBodyInv
   bodyFullBuiltinWordRounding bodyFullShared bodyFullPreds bodySimFull
+  bodyFullSimProjection
   gasOutcomeFullCompose gasOutcomeFullStmts exprSimWordBuiltins
   exprSimUnopProps exprSimUnopComposeProps exprSimSource
   gasShadowCompileStmtHelpers allocaHistoryFragment
@@ -296,10 +297,12 @@ Proof
          Cases_on `compile_expr cenv ty (Builtin (BaseT (IntT 256)) bt [e]) sa` >>
          drule_all compile_rounding_stack >> strip_tac >> metis_tac[]) >>
      metis_tac[eval_expr_builtin_value]) >>
+  `builtin_args_length_ok bt 1` by
+    (Cases_on `bt = Ceil` >> gvs[builtin_args_length_ok_def]) >>
+  `body_expr_full_ok cx e` by fs[body_exprs_full_ok_def] >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty e es` by
-    (gvs[builtin_args_length_ok_def, body_exprs_full_ok_def,
-         body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule_all lower_value_rounding >> strip_tac >>
   rename1 `(if bt = Ceil then compile_ceil x 10000000000 else compile_floor x 10000000000) s1 = (op,sb)` >>
