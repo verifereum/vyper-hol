@@ -113,6 +113,17 @@ Proof
   ext_cut_route >> simp[]
 QED
 
+Theorem create_default_return_path_cut_code:
+  (!x y rt dt b. create_cut_code {} b
+    (SND (compile_store_memory cenv x y rt dt b))) /\
+  (!dst off src len info b. create_cut_code {} b
+    (SND (compile_abi_decode_to_buf dst off MLOAD src len info b))) ==>
+  create_cut_code {} a
+    (SND (compile_default_return_path cenv rt dt buf result def addr skip mn mx info a))
+Proof
+  simp[ext_cut_default]
+QED
+
 (* Keep each prefix cut symbolic to avoid expanding earlier states into
    every argument and both arms of the remaining template. *)
 Theorem ext_cut_ignore_on[local]:
