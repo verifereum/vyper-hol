@@ -7,7 +7,7 @@
  *)
 Theory exprSimMapDefs
 Ancestors
-  exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext
+  bodyCallSupport exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext
   vyperStoragePlaceProvenance exprLowering vyperInterpreter vyperState
   vyperTypeCallGraph vyperTypeSystem vyperContext option pair finite_map list
   supportedExprTraverse
@@ -75,10 +75,7 @@ Definition expr_map_pre_mods_def[nocompute]:
     call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
     ~supported_expr_exists (const_name_root_mods mods) e /\
     ~supported_expr_exists (unallocated_bare_global_root cenv env) e /\
-    EVERY (\c. ?tops. get_module_code cx (FST c) = SOME tops /\
-                      supported_program tops /\
-                      IS_SOME (supported_function_decl tops (NONE,SND c) Internal))
-          (int_calls_expr e) /\
+    EVERY (source_body_call_supported cx) (int_calls_expr e) /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
               EXISTS (occurs_abi_decode_target target o SND) mods) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
@@ -114,7 +111,7 @@ Theorem expr_map_pre_def:
               is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
 Proof
   simp[expr_map_pre_split_def, expr_map_pre_mods_def,
-       int_calls_expr_main_split, const_name_root_mods_singleton,
+       GSYM source_body_calls_main, const_name_root_mods_singleton,
        type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
   eq_tac >> strip_tac >> simp[] >>
   `expr_sim_inv_mods [(NONE,cx_tops cx)] cenv cx env es` by

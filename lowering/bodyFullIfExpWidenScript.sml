@@ -6,7 +6,7 @@
    they land. *)
 Theory bodyFullIfExpWiden
 Ancestors
-  vyperStorageFootprint bodySimFull fragGasOriginPtrExec fragGasOriginPtr exprSimIfExp exprSimDefs exprSimMemDefs
+  bodyFullIfExpObserve vyperStorageFootprint bodySimFull fragGasOriginPtrExec fragGasOriginPtr exprSimIfExp exprSimDefs exprSimMemDefs
   bodyPtrDefs loweringPosts exprLowering exprLoweringProps fragExec
   emitHelper compileEnv allocaHistory stmtSimDefs vyperAST
   vyperInterpreter vyperState venomState fragGasSeqPtr fragGasEmitCtrl
@@ -676,80 +676,8 @@ Proof
       word_size_def, wordsTheory.dimword_def]
 QED
 
-Theorem ifexp_widen_arm_step_full:
-  (* The shared joint unwrap_value lemma on H (r8, family form), here a
-     premise until it lands. *)
-  (!ty e sa vv sm sb op sc es ee s0 s tv rty G tn Gi ti st0.
-    compile_expr cenv ty e sa = (vv,sm) /\
-    sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
-    unwrap_value cenv vv sb = (op,sc) /\
-    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-    sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-    fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
-    (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
-      ~is_word_type (post_value_type cenv e) ==>
-      type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
-      type_memory_size rt < 2**64) /\
-    evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty /\
-    (!v. read_result cx tv ee = (INL v,ee) ==> value_has_type rty v) /\
-    storage_trace_domain cx st0 ee.storage_trace /\
-    (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
-       ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
-    vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv s /\
-    alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
-    ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn s /\
-    (!t op0. vv = StackValue t op0 /\ ~is_word_type (post_value_type cenv e) ==>
-      ptr_buf_ok cenv e op0 G s) /\
-    (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
-      ptr_buf_ok cenv e p.ptr_operand G s) /\
-    (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-     ?val. read_result cx tv ee = (INL val, ee) /\
-           !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
-                  eval_operand (vv_operand vv) s = SOME w ==>
-                  w2n w + type_memory_size rt <= lo /\
-                  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-                         val_in_memory rt val (w2n w) mem)) /\
-    ghost_kept_at lo cenv es sa Gi ti s0 G tn /\
-    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-    ?v z G' tn'.
-      read_result cx tv ee = (INL v, ee) /\
-      (!H. valid_horizon cx st0 H ee.storage_trace ==>
-         gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
-           (s, G, tn) [] (OK z, G', tn') /\
-         expr_post H ctx func cenv cx e es sa sc s0 ee v op z /\
-         ghost_inv_at (DF H) lo d cenv cx ee G' tn' z) /\
-      (~is_word_type (post_value_type cenv e) ==>
-       vv_at cenv cx (post_value_type cenv e) sa sc ee tv
-         (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
-      (~is_word_type (post_value_type cenv e) ==>
-       vv_at cenv cx (post_value_type cenv e) sa sm ee tv
-         (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z \/
-       vv_at cenv cx (post_value_type cenv e) sb sc ee tv
-         (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
-      expr_store_bound cx (post_value_type cenv e) v op z /\
-      z.vs_current_bb = sc.cs_current_bb /\
-      z.vs_inst_idx = LENGTH sc.cs_current_insts /\
-      alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
-      s0.vs_alloca_next <= z.vs_alloca_next /\
-      ptr_val_ok cx (post_value_type cenv e) v op G' tn' z /\
-      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G' z) /\
-      (~is_word_type (post_value_type cenv e) ==>
-       !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
-              eval_operand op z = SOME w ==>
-              type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) /\
-      ghost_kept_at lo cenv es sa Gi ti s0 G' tn' /\
-      (!x. not_fresh_at sb x ==>
-           lookup_var x z = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
-           op_taint tn' (Var x) = op_taint tn (Var x)) /\
-      wb_frame cenv ee ee sb s z /\
-      ghost_kept_at lo cenv ee sb G tn s G' tn') /\
+Theorem ifexp_widen_arm_step_observed:
+  ifexp_observed_unwrap F obs DF lo explicit ctx func PG d cenv cx /\
   (* ifexp_alloca_origin_ptr_edge *)
   (!s ctx lo fn bb id n p u D explicit PG G tn.
     ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ allocas_from lo s /\
@@ -789,34 +717,9 @@ Theorem ifexp_widen_arm_step_full:
       ghost_kept_at lo cenv es sa G0 tn0 s0
         (step_prov PG G (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) u)
         (step_taint (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s u tn)) /\
-  (* compile_store_bytestring_origin_ptr_path *)
-  (!lo explicit ctx fn PG sa sb src dst G tn s a b len n bb.
-      compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
-      not_fresh_at sa src /\ not_fresh_at sa dst /\
-      lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
-      n = 32 + 32 * ((len+31) DIV 32) /\
-      len+31 < dimword(:256) /\ n < dimword(:256) /\
-      mload (w2n a) s = n2w len /\
-      ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
-      (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
-      allocas_from lo s /\ lo <= s.vs_alloca_next /\
-      run_inst_seq_mem_ok (emitted_insts sa sb) s /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
-      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-      isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-      ?Gf tnf sf.
-        (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-          (OK (sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),Gf,tnf)) /\
-        run_inst_seq (emitted_insts sa sb) s = OK sf /\
-        tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
-        sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
-        sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
-        tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
-        tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+n}) UNION
-          {w2n b+i | i < n /\ w2n a+i IN tn.t_mem} /\
-        (!p. not_fresh_at sa p ==>
-          lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-          op_taint tnf (Var p) = op_taint tn (Var p))) /\
+  ifexp_observed_bytes_store obs /\
+  ifexp_observed_alloc obs ctx func /\
+  ifexp_observed_widening obs ctx func /\
   compile_expr cenv ty e sa = (vv,sm) /\
   (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
   compile_ifexp_arm cenv t (lowered_value_type cenv e) vv sm = (op,sb) /\
@@ -860,6 +763,7 @@ Theorem ifexp_widen_arm_step_full:
                        val_in_memory rt val (w2n w) mem)) /\
   ghost_kept_at lo cenv es1 sa G1 tn1 u G tn ==>
   ?v z' Gz tf.
+    obs ctx func sm sb z z' /\
     read_result cx tva ee = (INL v,ee) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
@@ -882,11 +786,12 @@ Theorem ifexp_widen_arm_step_full:
             w2n w + type_memory_size rt <= z'.vs_alloca_next) /\
     ghost_kept_at lo cenv es1 sa G1 tn1 u Gz tf
 Proof
-  disch_then (CONJUNCTS_THEN2 (mk_asm "unwrap")
+  disch_then (CONJUNCTS_THEN2 (mk_asm "unwrap" o
+      SIMP_RULE bool_ss [ifexp_observed_unwrap_def])
     (CONJUNCTS_THEN2 (mk_asm "edge")
       (CONJUNCTS_THEN2 (mk_asm "alloc_ghost")
         (CONJUNCTS_THEN2 (mk_asm "alloc_kept")
-          (CONJUNCTS_THEN2 (mk_asm "copy")
+          (CONJUNCTS_THEN2 (mk_asm "copy" o REWRITE_RULE [ifexp_observed_bytes_store_def])
             (map_every assume_tac o CONJUNCTS)))))) >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     gvs[storage_trace_domain_def] >>
@@ -1368,6 +1273,25 @@ Proof
        comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def] >>
      rpt strip_tac >> gvs[]) >>
   qabbrev_tac `final = sf with vs_inst_idx := su.vs_inst_idx + LENGTH (emitted_insts sn sb)` >>
+  `obs ctx func sn sb su final` by (simp[Abbr `final`]) >>
+  `obs ctx func sm salloc z q` by
+    (qpat_x_assum `ifexp_observed_alloc obs ctx func` mp_tac >>
+     rewrite_tac[ifexp_observed_alloc_def] >>
+     disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+     disch_then (drule_at (Pat `fn_has_code sm salloc func`)) >>
+     disch_then (drule_at (Pat `buf.buf_operand = Var _`)) >>
+     disch_then (qspecl_then [`z`,`az`] mp_tac) >>
+     simp[Abbr `ai`, Abbr `q`]) >>
+  `obs ctx func sm sb z final` by
+    (qpat_x_assum `ifexp_observed_widening obs ctx func` mp_tac >>
+     rewrite_tac[ifexp_observed_widening_def] >>
+     disch_then (drule_at (Pat `compile_alloc_buffer _ sm = _`)) >>
+     disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
+     disch_then (drule_at (Pat `obs ctx func sm salloc z q`)) >>
+     disch_then (drule_at (Pat `obs ctx func salloc sn q su`)) >>
+     disch_then (drule_at (Pat `obs ctx func sn sb su final`)) >>
+     disch_then (qspecl_then [`t`,`lowered_value_type cenv e`] mp_tac) >>
+     simp[]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      expr_post H ctx func cenv cx (IfExp t c a b) es1 sa sb u ee v (Var p) final /\
      vv_at cenv cx t sa sb ee tva (LocatedValue t (mk_ptr (Var p) LocMemory)) final /\
@@ -1552,3 +1476,19 @@ Proof
   simp[rich_listTheory.IS_PREFIX_APPEND] >>
   rpt strip_tac >> gvs[listTheory.DROP_APPEND1]
 QED
+
+(* Erasing the observation gives the pre-existing arm-step interface. *)
+local
+  val arm_step_unobserved =
+    PURE_REWRITE_RULE [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP]
+      (BETA_RULE (PURE_REWRITE_RULE
+        [ifexp_observed_unwrap_def, ifexp_observed_bytes_store_def,
+         ifexp_observed_alloc_def, ifexp_observed_widening_def]
+        (Q.INST [`obs` |-> `\_ _ _ _ _ _. T`] ifexp_widen_arm_step_observed)))
+in
+Theorem ifexp_widen_arm_step_full:
+  ^(concl arm_step_unobserved)
+Proof
+  ACCEPT_TAC arm_step_unobserved
+QED
+end
