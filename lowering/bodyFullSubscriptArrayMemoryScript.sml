@@ -1,7 +1,7 @@
 (* Finite-horizon composition for a framed fixed memory array. *)
 Theory bodyFullSubscriptArrayMemory
 Ancestors exprBopSimProps[qualified,ignore_grammar] integer[qualified,ignore_grammar] arithmetic[qualified,ignore_grammar] bodyPtrBopHashFootprint[qualified,ignore_grammar] exprSimBopRestWordLoads[qualified,ignore_grammar] exprSimHypsDefs[qualified,ignore_grammar] vyperTypeInvariants[qualified,ignore_grammar] exprSimIfExpCompat[qualified,ignore_grammar]
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyFullSimProjection
   bodyFullSubscriptArrayMemoryFrame bodyFullSubscriptArrayCodeBounds
   bodyFullSubscriptArrayCodeOps bodyFullIfExpReach bodyFullHashKeccakFixed stateRelProj
   exprSimVVFrame exprSimIfExpWidenedAdapter assignBasePtrBoundary
@@ -18,9 +18,40 @@ Ancestors exprBopSimProps[qualified,ignore_grammar] integer[qualified,ignore_gra
   vyperStorageTrace vyperStorageFootprint vyperEvalExprPreservesScopesDom
   bodyPtrDefs loweringPosts compileEnv vyperInterpreter vyperState vyperAST
 
+(* The selector's two paths use the same installed bounds and address cuts.
+   Only the normal path executes the address calculation. *)
+Theorem fixed_memory_selector_layout:
+  compile_array_subscript bop idx F n ws elem_size sgn loader sa = (dst,sb) ==>
+  ?sc sm offset out.
+    array_bounds_check idx (Lit (n2w n)) sgn sa = ((),sc) /\
+    emit_op MUL [idx; Lit (n2w elem_size)] sc = (Var offset,sm) /\
+    emit_op ADD [bop; Var offset] sm = (Var out,sb) /\ dst = Var out /\
+    array_elem_ptr bop idx F ws elem_size sc = (dst,sb)
+Proof
+  simp[compile_array_subscript_split, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> pairarg_tac >> gvs[oneTheory.one] >> strip_tac >>
+  qpat_x_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
+  simp[array_elem_ptr_def, comp_bind_def, comp_return_def,
+       loweringShapeRulesTheory.emit_op_eq] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem fixed_memory_bounds_mono[local]:
+  array_bounds_check idx (Lit (n2w n)) sgn sa = ((),sc) ==> ci_mono sa sc
+Proof
+  simp[array_bounds_check_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >> strip_tac >>
+  rename1 `array_bounds_valid _ _ _ sa = (valid,sv)` >>
+  `ci_mono sa sv` by
+    (qpat_x_assum `array_bounds_valid _ _ _ _ = _` mp_tac >>
+     Cases_on `sgn` >> simp[array_bounds_valid_def, comp_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+     metis_tac[ci_mono_emit_op, pairTheory.SND, ci_mono_trans]) >>
+  metis_tac[ci_mono_emit_void, pairTheory.SND, ci_mono_trans]
+QED
+
 (* One uniform endpoint for fixed-literal bounds checking followed by address
    arithmetic. The final ADD retains the captured base's provenance. *)
-Theorem fixed_memory_selector_joint_ok[local]:
+Theorem fixed_memory_selector_joint_ok:
   array_bounds_check idx (Lit (n2w n)) sgn sa = ((),sc) /\
   emit_op MUL [idx;Lit (n2w elem_size)] sc = (Var offset,sm) /\
   emit_op ADD [base_op;Var offset] sm = (Var out,sb) /\ fn_has_code sa sb func /\
@@ -50,20 +81,18 @@ Theorem fixed_memory_selector_joint_ok[local]:
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
     (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf) /\
+    (?scheck Gcheck tncheck.
+       scheck.vs_current_bb = sc.cs_current_bb /\
+       scheck.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~scheck.vs_halted /\
+       (!D lo explicit. allocas_from lo s ==>
+          gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+            (OK scheck,Gcheck,tncheck) /\
+          gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (scheck,Gcheck,tncheck) []
+            (OK sf,Gf,tnf)))
 Proof
   strip_tac >>
-  `ci_mono sa sc` by
-    (qpat_x_assum `array_bounds_check _ _ _ _ = _` mp_tac >>
-     simp[array_bounds_check_def, comp_bind_def] >>
-     pairarg_tac >> gvs[] >> strip_tac >>
-     rename1 `array_bounds_valid _ _ _ sa = (valid,sv)` >>
-     `ci_mono sa sv` by
-       (qpat_x_assum `array_bounds_valid _ _ _ _ = _` mp_tac >>
-        Cases_on `sgn` >> simp[array_bounds_valid_def, comp_bind_def, comp_return_def] >>
-        rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-        metis_tac[ci_mono_emit_op, pairTheory.SND, ci_mono_trans]) >>
-     metis_tac[ci_mono_emit_void, pairTheory.SND, ci_mono_trans]) >>
+  drule_then assume_tac fixed_memory_bounds_mono >>
   `ci_mono sc sm /\ ci_mono sm sb` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
   `fn_has_code sa sc func /\ fn_has_code sc sb func` by
     metis_tac[fn_has_code_split, ci_mono_def, cs_extends_trans] >>
@@ -98,8 +127,45 @@ Proof
   >- (rpt strip_tac >>
       `not_fresh_at sc q` by metis_tac[ci_mono_def, loweringShapeDefsTheory.not_fresh_at_mono] >>
       metis_tac[]) >>
-  rpt strip_tac >>
-  `local_ptrs_reserved cenv sc` by metis_tac[ci_mono_def, local_ptrs_reserved_next_var] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `local_ptrs_reserved cenv sc` by metis_tac[ci_mono_def, local_ptrs_reserved_next_var] >>
+      metis_tac[]) >>
+  qexistsl_tac [`s1`,`G1`,`tn1`] >> simp[] >>
+  rpt strip_tac >> gvs[allocas_from_def] >> first_assum irule >> first_assum ACCEPT_TAC
+QED
+
+(* Keep the installed base, index and fixed selector cuts in one view. *)
+Theorem framed_memory_subscript_compile_cuts:
+  compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
+  place_type cenv obj = ValPT (ArrayT et (Fixed n)) /\
+  ~copies_subscript_base cenv obj idx /\
+  (!ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory) /\
+  fn_has_code sa sb func ==>
+  ?bvv sm iop st2 dst.
+    compile_expr cenv ty obj sa = (bvv,sm) /\
+    lower_value compile_expr cenv ty idx sm = (iop,st2) /\
+    vv_location bvv = SOME LocMemory /\
+    compile_array_subscript (vv_operand bvv) iop F n (word_scale LocMemory)
+      (elem_size_in_location cenv LocMemory et) (is_signed_type (expr_type idx))
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) st2 = (dst,sb) /\
+    vv = LocatedValue ann (mk_ptr dst LocMemory) /\
+    cs_extends sa sm /\ cs_extends sm st2 /\ cs_extends st2 sb /\
+    fn_has_code sa sm func /\ fn_has_code sm st2 func /\ fn_has_code st2 sb func
+Proof
+  strip_tac >> drule_all compile_expr_array_subscript >> strip_tac >>
+  rename1 `compile_expr cenv ty obj sa = (bvv,sm)` >>
+  `vv_location bvv = SOME LocMemory` by metis_tac[pairTheory.FST] >> gvs[] >>
+  drule_then assume_tac compile_expr_extends >>
+  drule_then strip_assume_tac (cj 2 compile_expr_grows) >>
+  `cs_extends st2 sb` by
+    (`ci_mono st2 sb` suffices_by simp[ci_mono_def] >>
+     qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
+       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
+     irule ci_mono_compile_array_subscript >> simp[ci_mono_compile_ptr_load]) >>
+  `cs_extends sm sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sm func /\ fn_has_code sm st2 func /\ fn_has_code st2 sb func` by
+    metis_tac[fn_has_code_split] >>
   metis_tac[]
 QED
 
@@ -128,22 +194,15 @@ Proof
               exprSimTopLevelPropsTheory.array_slot_base_compile_location] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty e1 es` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (irule (cj 2 body_expr_full_ok_simulations) >> metis_tac[]) >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  drule_all compile_expr_array_subscript >> strip_tac >>
-  rename1 `compile_expr cenv ty e1 sa = (bvv,sm)` >>
-  `vv_location bvv = SOME LocMemory` by metis_tac[pairTheory.FST] >>
-  `loc = LocMemory` by simp[] >> gvs[] >>
-  drule compile_expr_extends >> strip_tac >>
-  drule (cj 2 compile_expr_grows) >> strip_tac >>
-  `cs_extends st2 sb` by
-    (`ci_mono st2 sb` suffices_by simp[ci_mono_def] >>
-     qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
-       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
-     irule ci_mono_compile_array_subscript >> simp[ci_mono_compile_ptr_load]) >>
-  `cs_extends sm sb` by
-    (irule cs_extends_trans >> qexists_tac `st2` >> simp[]) >>
-  drule_all fn_has_code_split >> strip_tac >>
+  drule_all framed_memory_subscript_compile_cuts >>
+  disch_then (qx_choosel_then [`bvv`,`sm`,`iop`,`st2`,`dst`] strip_assume_tac) >>
+  `cs_extends sm sb` by metis_tac[cs_extends_trans] >>
+  qpat_assum `compile_expr cenv ty e1 sa = _`
+    (mp_then Any strip_assume_tac compile_expr_extends) >>
+  qpat_assum `lower_value compile_expr _ _ e2 sm = _`
+    (mp_then Any strip_assume_tac (cj 2 compile_expr_grows)) >> gvs[] >>
   `?shadow_sm. compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa =
       (bvv,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
     (`gas_shadow_compiles (compile_expr cenv ty e1)
@@ -234,7 +293,7 @@ Resume subscript_array_framed_memory_full[after_base]:
      qexists_tac `ann` >> simp[]) >>
   `body_expr_full_ok cx e2` by metis_tac[] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e2 mid` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (irule (cj 1 body_expr_full_ok_simulations) >> metis_tac[]) >>
   `?shadow_st2. lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2)
       shadow_sm = (iop,shadow_st2) /\ gas_shadow_state st2 shadow_st2` by
     (`gas_shadow_compiles (lower_value compile_expr cenv ty e2)
@@ -529,22 +588,9 @@ Resume subscript_array_framed_memory_full[selector]:
      irule (cj 3 (iffLR ci_mono_def)) >>
      irule ci_mono_compile_array_subscript >>
      simp[ci_mono_compile_ptr_load]) >>
-  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _` mp_tac >>
-  simp[exprSimArrayIndexTheory.compile_array_subscript_split,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  pairarg_tac >> strip_tac >> gvs[oneTheory.one] >>
-  qpat_x_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
-  simp[exprSimArrayIndexTheory.array_elem_ptr_def,
-       comp_bind_def, comp_return_def] >>
-  pairarg_tac >> strip_tac >>
-  `?off. offset = Var off` by
-    (qpat_x_assum `emit_op MUL _ _ = _` mp_tac >>
-     pure_rewrite_tac[loweringShapeRulesTheory.emit_op_eq, pairTheory.PAIR_EQ] >>
-     strip_tac >> gvs[]) >> gvs[] >>
-  `?out. dst = Var out` by
-    (qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
-     pure_rewrite_tac[loweringShapeRulesTheory.emit_op_eq, pairTheory.PAIR_EQ] >>
-     strip_tac >> gvs[]) >> gvs[] >>
+  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
+    (mp_then Any mp_tac fixed_memory_selector_layout) >>
+  disch_then (qx_choosel_then [`sc`,`s_mul`,`off`,`out`] strip_assume_tac) >> gvs[] >>
   `fn_has_code st2 sb func` by metis_tac[fn_has_code_split] >>
   `!q. p.ptr_operand = Var q ==> not_fresh_at st2 q` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
@@ -881,24 +927,11 @@ Resume subscript_array_framed_memory_full[rejected_selection]:
       (fin with gas_obs := tail) =
       (INR (Error (RuntimeError "evaluate_subscripts array_index")),fin with gas_obs := tail)` by
     simp[select_result_nonstorage_gas_obs] >>
-  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _` mp_tac >>
-  simp[exprSimArrayIndexTheory.compile_array_subscript_split,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  pairarg_tac >> strip_tac >> gvs[oneTheory.one] >>
-  `ci_mono st2 cs'` by
-    (qpat_x_assum `array_bounds_check _ _ _ _ = _`
-       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
-     simp[exprSimArrayIndexTheory.array_bounds_check_def,
-          exprSimArrayIndexTheory.array_bounds_valid_def] >>
-     rpt (FIRST [irule ci_mono_bind >> conj_tac,
-                 gen_tac >> BETA_TAC, irule ci_mono_emit_op,
-                 irule ci_mono_emit_void, irule ci_mono_comp_return, IF_CASES_TAC])) >>
-  `ci_mono cs' sb` by
-    (qpat_x_assum `array_elem_ptr _ _ _ _ _ _ = _`
-       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
-     simp[exprSimArrayIndexTheory.array_elem_ptr_def] >>
-     rpt (FIRST [irule ci_mono_bind >> conj_tac,
-                 gen_tac >> BETA_TAC, irule ci_mono_emit_op, irule ci_mono_comp_return])) >>
+  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
+    (mp_then Any mp_tac fixed_memory_selector_layout) >>
+  disch_then (qx_choosel_then [`cs'`,`s_mul`,`off`,`out`] strip_assume_tac) >> gvs[] >>
+  drule_then assume_tac fixed_memory_bounds_mono >>
+  `ci_mono cs' sb` by metis_tac[ci_mono_emit_op, pairTheory.SND, ci_mono_trans] >>
   `fn_has_code st2 cs' func` by metis_tac[fn_has_code_split, ci_mono_def] >>
   `op_taint tni iop = {} /\ op_prov Gi iop = NONE` by fs[ptr_val_ok_def] >>
   `eval_operand (Lit (n2w n)) it = SOME (n2w n) /\
