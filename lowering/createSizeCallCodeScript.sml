@@ -193,7 +193,7 @@ Proof
   call_cut_steps [compile_select_def]
 QED
 
-Theorem call_cut_raw_finish[local,simp]:
+Theorem call_cut_raw_finish[simp]:
   create_cut_code {} a (SND (compile_raw_call_finish addr data_ptr data_len gas_op value_op
                                       call_ty n rof ov optr a))
 Proof

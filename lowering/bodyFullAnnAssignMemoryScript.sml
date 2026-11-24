@@ -675,10 +675,7 @@ Resume annassign_memory_full_physical_rhs_from_entry[split]:
       simp[Abbr `childR`] >> rpt gen_tac >> Cases_on `res` >>
       simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def] >>
       ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``] stmtSimPropsTheory.expr_exit_INR_type] >>
-      simp[]) >> suspend "read"
-QED
-
-Resume annassign_memory_full_physical_rhs_from_entry[read]:
+      simp[]) >>
   qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`s`] >>
   disch_then (strip_assume_tac o BETA_RULE) >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -915,7 +912,11 @@ Proof
     s0.vs_alloca_next + pending_alloca_size func s0 <= w2n s0.vs_initial_fmp` by
     (strip_tac >>
      `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
-       metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+       (qpat_assum `storage_trace_domain cx st0 es.storage_trace` (fn domain =>
+          qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+            (fn post => ACCEPT_TAC (cj 1 (MATCH_MP
+              (Q.SPEC `storage_trace_horizon es.storage_trace` post)
+              (REWRITE_RULE [vyperStorageFootprintTheory.storage_trace_domain_def] domain)))))) >>
      conj_tac >- metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
      drule stmt_state_rel_fmp_room >> simp[fmp_room_def] >> decide_tac) >>
   drule_all annassign_full_alloc_entry >>
@@ -1201,19 +1202,22 @@ Resume annassign_memory_full_execution[ordinary]:
   (impl_tac >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
     asm_simp_tac (srw_ss()) [arithmeticTheory.ADD_COMM])) >>
   disch_then (qx_choosel_then [`stv`,`sw`] strip_assume_tac) >>
-  `0 < type_memory_size stv` by
-    (qpat_assum `expr_body_pre cenv cx env e es`
-        (mp_then Any mp_tac annassign_memory_full_source_layout) >>
-      disch_then (qspec_then `typ` mp_tac) >>
-      (impl_tac >- (asm_simp_tac bool_ss [] >>
-        qpat_assum `lowered_value_type cenv e = expr_type e \/ _` mp_tac >>
-        tautLib.TAUT_TAC)) >>
-      disch_then (qx_choose_then `source_ty` (fn layout =>
-        qpat_assum `!e. lowered_value_type cenv' e = _` (fn ty_eq =>
-          qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type cenv' e) = SOME stv`
-            (fn ev => ACCEPT_TAC (REWRITE_RULE
-              [REWRITE_RULE [Q.SPEC `e` ty_eq, cj 1 layout, optionTheory.SOME_11] ev]
-              (cj 3 layout))))))) >>
+  (Q.SUBGOAL_THEN `?stv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+      type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv /\
+      0 < type_memory_size stv /\ type_memory_size stv <= type_memory_bytes cenv typ`
+    (qx_choose_then `source_ty` (map_every assume_tac o CONJUNCTS))
+   >- (match_mp_tac (Q.INST [`env` |-> `env`,`es` |-> `es`]
+         annassign_memory_full_source_layout) >>
+       asm_simp_tac bool_ss [] >>
+       qpat_assum `lowered_value_type cenv e = expr_type e \/ _` mp_tac >>
+       tautLib.TAUT_TAC)) >>
+  (Q.SUBGOAL_THEN `0 < type_memory_size stv` assume_tac
+   >- (qpat_assum `!e. lowered_value_type cenv' e = _` (fn ty_eq =>
+         qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME source_ty` (fn src =>
+           qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type cenv' e) = SOME stv`
+             (fn ev => qpat_assum `0 < type_memory_size source_ty`
+                (ACCEPT_TAC o REWRITE_RULE
+                   [REWRITE_RULE [Q.SPEC `e` ty_eq, src, optionTheory.SOME_11] ev])))))) >>
   TRY (qpat_assum `type_memory_size stv = 0` (fn eq =>
     qpat_assum `0 < type_memory_size stv` mp_tac >> simp_tac std_ss [eq]) >> NO_TAC) >>
   qpat_assum `0 < type_memory_size stv ==> _` drule >> strip_tac >>
