@@ -9,6 +9,10 @@ Ancestors
   context compileEnv bodyMemoryDefs bodyFullAssign abiEncodeArgsCase abiEncodeArgsSim abiEncodeMaterialize
   aggregateEvaluatedLayout exprPtrUnwrapStorageShape vyperEvalExprPreservesScopesDom
   vyperTypeExprSoundness vyperStorageFootprint vyperState freshWrites
+  createCtorStorageBaseOriginMods createCtorStorageSelectorOriginMods
+  exprBodyPreTypingProps exprBodyPreCallSafetyProps vyperTypeSoundness
+  vyperFiniteStoragePreservation vyperTypeExtCallCore vyperStoragePlaceObserved accountsRelProps
+  vyperTypeInvariants loweringStateRelDefs
 
 (* The word snapshot is exactly the scalar child fragment, including
    any instructions emitted by unwrapping a located word. *)
@@ -111,7 +115,48 @@ Theorem ctor_retained_storage_live_mods[local]:
   vv_post_mods H ctx func ce cx e es sa sb s0 ee raw vv t ==>
   vv_storage_live H cx vv ee t
 Proof
-  cheat
+  Cases_on `vv` >- simp[] >> strip_tac >>
+  rename1 `vv_storage_live _ _ (LocatedValue tag p) _ _` >>
+  Cases_on `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient`
+  >- (`tag = expr_type e /\ (!v. raw <> Value v)` by
+        (drule_at (Pat `contract_inv _ _ _ _ _`) ctor_storage_origin_from_base_mods >>
+         disch_then (drule_at (Pat `module_body_inv _ _ _ _ _`)) >>
+         disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+         disch_then (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+         simp[] >> strip_tac >>
+         first_x_assum irule >> rpt gen_tac >> disch_tac >>
+         drule ctor_storage_base_origin_mods >> disch_then irule >>
+         metis_tac[]) >>
+      drule_then strip_assume_tac expr_body_pre_mods_runtime_typing >>
+      drule_then assume_tac expr_body_pre_mods_call_evaluation_safe >>
+      `eval_result_typed (env,cx,ee) raw (Type (expr_type e))` by
+        (irule (cj 2 typed_expr_success_preserves_type) >>
+         qpat_assum `runtime_consistent _ _ _`
+           (strip_assume_tac o REWRITE_RULE [runtime_consistent_def]) >>
+         asm_rewrite_tac[] >> qexists_tac `es with gas_obs := gs` >>
+         asm_rewrite_tac[]) >>
+      `env.type_defs = get_tenv cx` by metis_tac[runtime_consistent_get_tenv] >>
+      `vv_place_ptr_mods ce cx ee t raw (LocatedValue tag p)` by
+        fs[vv_post_mods_def] >>
+      Cases_on `raw` >> gvs[eval_result_typed_def] >>
+      rename1 `runtime_place_typed cx ee place tv` >>
+      Cases_on `place` >>
+      gvs[vv_place_ptr_mods_def, vv_place_ptr_def, runtime_place_typed_def,
+          place_type_value_def, return_def] >>
+      rename1 `eval_expr _ _ _ = (INL (PlaceR (StoragePlace tr slot leaf)),_)` >>
+      `storage_read_live H tr (get_storage cx ee tr) slot leaf` by
+        (Cases_on `type_slot_size leaf = 0`
+         >- simp[storage_read_live_def, wordsTheory.w2n_lt,
+                  arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
+         drule_all eval_expr_observed_region >> strip_tac >>
+         `MEM (tr,n2w offset,tv) (FST H)` by
+           (irule storage_observations_ok_root >>
+            fs[valid_horizon_def] >> metis_tac[]) >>
+         irule storage_place_observed_read_live >>
+         simp[storage_place_observed_def] >>
+         qexistsl [`n2w offset`, `tv`, `path`, `delta`] >> simp[]) >>
+      Cases_on `tr` >> gvs[slot_loc_def]) >>
+  gvs[]
 QED
 
 Theorem ctor_saved_head_retained_mods:
