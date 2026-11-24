@@ -7002,11 +7002,58 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_shad
          (ACCEPT_TAC o REWRITE_RULE [markerTheory.Abbrev_def])]) >>
      qpat_assum `run_grouped_lowering grouped_shadow_groups _ _ _ _ = SOME shadow_unit`
        (fn compiled => simp[NoAsms, compiled, optionTheory.SOME_11])) >>
+  suspend "linked_grouped_legacy_registered_cut"
+QED
+
+(* Normalize the package and retain the actual grouped prefix; it need not
+   be a PC-only path after visiting the preceding groups. *)
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_registered_cut]:
+  qpat_x_assum `dflts = []` SUBST_ALL_TAC >>
+  qpat_x_assum `ds = []` SUBST_ALL_TAC >>
+  `MEM (src,(mut,nr,raw,tx.function_name,args,[],ret,body_code)) exts` by
+    (qpat_assum `entry_key = (src,mut,nr,raw,tx.function_name,args,[],ret,body_code)`
+       (PURE_ONCE_REWRITE_TAC o single o SYM) >> first_assum ACCEPT_TAC) >>
+  qabbrev_tac `lbl = "fn_" ++ tx.function_name` >>
+  qabbrev_tac `name = tx.function_name` >>
+  `external_return_buffer_ok (lbl,ce,pos,mc,pay,nr,key,tr,view,body_code,rt)` by
+    (qpat_assum `EVERY external_return_buffer_ok (MAP _ exts)`
+       (MATCH_MP_TAC o PURE_REWRITE_RULE [EVERY_MEM]) >>
+     simp_tac bool_ss [MEM_MAP, combinTheory.o_DEF] >>
+     qexists_tac `(src,(mut,nr,raw,name,args,[],ret,body_code))` >>
+     conj_tac >- (sym_tac >> first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `Abbrev (name = tx.function_name)` (fn selected =>
+    map_every (fn pat => qpat_assum pat
+      (assume_tac o PURE_REWRITE_RULE [REWRITE_RULE [markerTheory.Abbrev_def] selected]))
+      [`src = ALOOKUP exps name`,
+       `vyperInterpreter$lookup_function src name External tops = SOME (mut,nr,args,[],ret,fbody)`,
+       `lookup_raw_return_or_F src name External tops = raw`]) >>
+  `cx.txn = tx` by simp[NoAsms, Abbr `cx`, initial_evaluation_context_def] >>
+  qpat_assum `compile_guarded_body registered_env nr key tr view body_code rt registered = ((),last)`
+    (fn compiled => qpat_assum `fn_has_code registered last fn`
+       (mp_tac o MATCH_MP guarded_body_code_from_registration o CONJ compiled)) >>
+  disch_then (qx_choosel_then [`locked`,`body_end`] (map_every assume_tac o CONJUNCTS)) >>
+  suspend "linked_grouped_legacy_shadow_intervals"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_shadow_intervals]:
+  rename1 `gas_shadow_function fn shadow_fn` >>
+  qpat_assum `compile_guarded_body (gas_shadow_env T registered_env) nr key tr view
+       (MAP gas_shadow_stmt body_code) rt shadow_registered = ((),shadow_last)`
+    (fn compiled => qpat_assum `fn_has_code shadow_registered shadow_last shadow_fn`
+       (mp_tac o MATCH_MP guarded_body_code_from_registration o CONJ compiled)) >>
+  disch_then (qx_choosel_then [`shadow_locked`,`shadow_body_end`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qabbrev_tac `explicit = gas_explicit_sites unit.cu_context shadow_unit.cu_context` >>
+  `!D. gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
+      (start,FEMPTY,entry_taint) [] (OK s0,G2,tn2)` by
+    (gen_tac >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) [] (OK s0,G2,tn2)`
+       (qspecl_then [`D`,`explicit`] ACCEPT_TAC)) >>
+  linked_registered_path_tac >>
   suspend "linked_grouped_legacy_value_accepted"
 QED
 
-(* At this cut, start-to-s0 is the actual grouped zero-mark path and the
-   selected scope/state relations hold at the paired guarded-body code. *)
 Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_value_accepted]:
   cheat
 QED
