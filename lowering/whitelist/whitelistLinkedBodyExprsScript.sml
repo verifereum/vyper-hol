@@ -293,7 +293,34 @@ Theorem linked_well_typed_expr_supported:
      linked_body_env tops src tenv env /\ (src = NONE \/ imported_field_refs_ok kes) ==>
      EVERY (supported_pure_expr tops o SND) kes)
 Proof
-  strip_tac >> ho_match_mp_tac well_typed_expr_ind >> rpt conj_tac >> rpt gen_tac
+  strip_tac >>
+  (* Keep the aggregate facts for a builtin's arguments in the list IH. *)
+  `(!env e. well_typed_expr env e ==>
+      linked_body_env tops src tenv env /\ (src = NONE \/ imported_expr_refs_ok e) ==>
+      supported_pure_expr tops e /\ checker_agg_ok tops (expr_type e) /\
+      supported_place_expr tops e /\
+      (~qualified_place_root e ==> supported_place_info tops e = ValPT (expr_type e))) /\
+   (!env e. IS_SOME (type_place_expr env e) ==>
+      linked_body_env tops src tenv env /\ (src = NONE \/ imported_expr_refs_ok e) ==>
+      supported_place_expr tops e /\
+      check_value_type env.type_defs (THE (type_place_expr env e)) /\
+      (~qualified_place_root e ==>
+       src = NONE /\ supported_place_info tops e = value_type_place (THE (type_place_expr env e)))) /\
+   (!env tgt. IS_SOME (type_place_target env tgt) ==>
+      linked_body_env tops src tenv env /\ (src = NONE \/ imported_base_target_refs_ok tgt) ==>
+      EVERY (supported_pure_expr tops) (target_indices tgt)) /\
+   (!env es. well_typed_exprs env es ==>
+      linked_body_env tops src tenv env /\ (src = NONE \/ imported_exprs_refs_ok es) ==>
+      EVERY (supported_pure_expr tops) es /\
+      EVERY (\e. checker_agg_ok tops (expr_type e)) es) /\
+   (!env opt. well_typed_opt env opt ==>
+      linked_body_env tops src tenv env /\ (src = NONE \/ imported_optional_expr_refs_ok opt) ==>
+      case opt of NONE => T | SOME e => supported_pure_expr tops e) /\
+   (!env kes. well_typed_named_exprs env kes ==>
+      linked_body_env tops src tenv env /\ (src = NONE \/ imported_field_refs_ok kes) ==>
+      EVERY (supported_pure_expr tops o SND) kes)`
+    suffices_by (strip_tac >> asm_rewrite_tac[] >> metis_tac[]) >>
+  ho_match_mp_tac well_typed_expr_ind >> rpt conj_tac >> rpt gen_tac
   >~ [`supported_pure_expr _ (Name _ _)`]
   >- (simp[well_typed_expr_def, imported_expr_refs_ok_def, supported_pure_expr_def,
            supported_place_info_def, place_type_def, qualified_place_root_def,
@@ -325,6 +352,8 @@ Proof
       rpt (disch_then strip_assume_tac) >> res_tac >> fs[] >>
       `!s b. blt = MakeArray s b ==> supported_place_type tops ty` by
         (rw[] >> fs[] >> metis_tac[linked_expr_place_type]) >>
+      `(blt = NamedConst ==> checker_agg_ok tops ty)` by
+        (rw[] >> gvs[well_typed_builtin_app_def, MAP_EQ_CONS]) >>
       drule_all linked_builtin_form >> simp[])
   >~ [`supported_pure_expr _ (TypeBuiltin _ _ _ _)`]
   >- (simp[well_typed_expr_def, imported_expr_refs_ok_def, supported_pure_expr_def,
