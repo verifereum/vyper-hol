@@ -1324,6 +1324,27 @@ Proof
           expr_type_def, arg_type_fits_def, compatible_bound_def,
           type_slot_size_def] >>
       imp_res_tac word_size_monotone >> decide_tac)
+  >~ [`Builtin _ NamedConst [Literal _ (StringL _)]`]
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
+      gvs[well_typed_literal_def, well_formed_type_def, evaluate_type_def,
+          lowered_value_type_def, expr_type_def, arg_type_fits_def,
+          compatible_bound_def, type_slot_size_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
+  >~ [`Builtin _ NamedConst [Literal _ (BytesL _)]`]
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
+      gvs[well_typed_literal_def, well_formed_type_def, evaluate_type_def,
+          lowered_value_type_def, expr_type_def, arg_type_fits_def,
+          compatible_bound_def, type_slot_size_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
+  >~ [`Builtin _ NamedConst [Literal _ (HexBytesL _)]`]
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
+      gvs[well_typed_literal_def, well_formed_type_def, evaluate_type_def,
+          lowered_value_type_def, expr_type_def, arg_type_fits_def,
+          compatible_bound_def, type_slot_size_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
   >~ [`Builtin _ (Concat _) _`]
   >- (rpt strip_tac >> drule_all expr_sim_inv_type_evaluates >> simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
       rename1 `well_typed_expr env (Builtin ty (Concat n) args)` >>
@@ -1549,6 +1570,39 @@ Proof
       simp[value_runtime_typed_def, evaluate_type_def,
            vyperTypingTheory.value_has_type_def, compatible_bound_def] >>
       gvs[type_slot_size_def, compatible_bound_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
+  >~ [`Builtin _ NamedConst [Literal _ (StringL _)]`]
+  >- (rpt gen_tac >> simp[lowered_value_type_def] >> strip_tac >>
+      gvs[evaluate_def, bind_def, ignore_bind_def, return_def, read_result_def,
+          type_check_def, assert_def, builtin_args_length_ok_def, get_accounts_def,
+          is_self_codesize_def, lift_sum_def, evaluate_builtin_def, precompile_builtin_def,
+          vyperValueOperationTheory.evaluate_literal_def] >>
+      gvs[well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
+      gvs[well_typed_literal_def, well_formed_type_def, evaluate_type_def,
+          value_runtime_typed_def, vyperTypingTheory.value_has_type_def,
+          type_slot_size_def, compatible_bound_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
+  >~ [`Builtin _ NamedConst [Literal _ (BytesL _)]`]
+  >- (rpt gen_tac >> simp[lowered_value_type_def] >> strip_tac >>
+      gvs[evaluate_def, bind_def, ignore_bind_def, return_def, read_result_def,
+          type_check_def, assert_def, builtin_args_length_ok_def, get_accounts_def,
+          is_self_codesize_def, lift_sum_def, evaluate_builtin_def, precompile_builtin_def,
+          vyperValueOperationTheory.evaluate_literal_def] >>
+      gvs[well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
+      gvs[well_typed_literal_def, well_formed_type_def, evaluate_type_def,
+          value_runtime_typed_def, vyperTypingTheory.value_has_type_def,
+          type_slot_size_def, compatible_bound_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
+  >~ [`Builtin _ NamedConst [Literal _ (HexBytesL _)]`]
+  >- (rpt gen_tac >> simp[lowered_value_type_def] >> strip_tac >>
+      gvs[evaluate_def, bind_def, ignore_bind_def, return_def, read_result_def,
+          type_check_def, assert_def, builtin_args_length_ok_def, get_accounts_def,
+          is_self_codesize_def, lift_sum_def, evaluate_builtin_def, precompile_builtin_def,
+          vyperValueOperationTheory.evaluate_literal_def] >>
+      gvs[well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
+      gvs[well_typed_literal_def, well_formed_type_def, evaluate_type_def,
+          value_runtime_typed_def, vyperTypingTheory.value_has_type_def,
+          type_slot_size_def, compatible_bound_def] >>
       imp_res_tac word_size_monotone >> decide_tac)
   >~ [`Builtin _ (Concat _) _`]
   >- (rpt strip_tac >> simp[lowered_value_type_def] >>
