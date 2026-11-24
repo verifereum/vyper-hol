@@ -51,6 +51,7 @@ Ancestors
   venomExecProps[qualified] linkedGroupedKeywordInitialize[qualified]
   entryRejectAllocationIds exprSafeOperand allocLimitsProps whitelistLinkedBodyCalls
   whitelistLinkedBodyData whitelistLinkedBodyTypes whitelistLinkedBodyEnv placeTypingProps
+  whitelistCheckerFnSigs[qualified] whitelistLinkedBodyExprs[qualified] supportedExprs[qualified] supportedStmts[qualified]
   moduleVariableKeyProps linkedStructMemorySize structFieldsProps linkedGetterConstantSubstitution
   linkedConstantReplacementTyping linkedConstantReplacementValue vyperTypeSystem vyperAST
   linkedEntryBodyTables linkedFlagCount linkedStructFields linkedStorageMetadataProps
@@ -3376,11 +3377,84 @@ val linked_positional_getter_env_tac =
      disch_then (qspec_then `(param,ty)` mp_tac) >>
      simp[NoAsms] >> disch_then irule >> first_assum ACCEPT_TAC);
 
+(* A getter can be checked with no function signatures: its expression has
+   no internal calls before or after the checked constant substitution. *)
+val linked_positional_getter_restrict_tac =
+  `int_calls_stmts fbody = []` by
+    drule_all_then ACCEPT_TAC selected_public_getter_body_int_calls_empty >>
+  `int_calls_stmts body_code = []` by
+    (qpat_assum `Abbrev (body_code = _)`
+       (fn body => PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] body]) >>
+     drule_then (strip_assume_tac o SPEC_ALL) checked_subst_consts_int_calls_mods >>
+     simp[]) >>
+  Q.SUBGOAL_THEN `type_stmts (entry_types with fn_sigs := FEMPTY) ret body_code =
+     SOME (after_body with fn_sigs := FEMPTY)` assume_tac
+  >- (mp_tac (Q.INST [`ks` |-> `{}`] (SPEC_ALL whitelistCheckerFnSigsTheory.type_stmt_fn_sigs_restrict)) >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!env ret ss. set (int_calls_stmts ss) SUBSET {} ==> _`
+        (qspecl_then [`entry_types`,`ret`,`body_code`] mp_tac) >>
+      (impl_tac >-
+        (qpat_assum `int_calls_stmts body_code = []` (fn calls => simp[NoAsms, calls]))) >>
+      qpat_assum `type_stmts entry_types ret body_code = SOME after_body`
+        (fn typed => simp[NoAsms, DRESTRICT_IS_FEMPTY, typed]));
+
+val linked_positional_getter_support_env_tac =
+  (Q.SUBGOAL_THEN `linked_body_data_env tops (src:num option)
+       (entry_types with fn_sigs := FEMPTY)` assume_tac
+   >- (simp[NoAsms, linked_body_data_env_def] >>
+       qpat_assum `linked_body_data_env tops src entry_types`
+         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [linked_body_data_env_def]))) >>
+  `linked_body_env tops (src:num option) (type_env_all_modules mods)
+      (entry_types with fn_sigs := FEMPTY)` by
+    (simp[NoAsms, linked_body_env_def, linked_body_calls_env_def] >>
+     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+       qpat_assum `entry_types.type_defs = get_tenv cx` SUBST1_TAC >> first_assum ACCEPT_TAC,
+       qpat_assum `entry_types.bare_global_assignable = FEMPTY` (fn empty => simp[NoAsms, empty])]) >>
+  `!name. ~MEM (StructDecl name []) tops` by
+    (qx_gen_tac `empty_struct` >> strip_tac >>
+     drule_all check_contract_toplevel_decl_MEM_checked >>
+     simp[NoAsms, check_toplevel_decl_def]);
+
+val linked_positional_getter_support_tac =
+  Q.SUBGOAL_THEN `((src:num option) = NONE \/ imported_stmts_refs_ok body_code) ==>
+     supported_stmts tops
+       (args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code)
+       body_code` assume_tac
+  >- (disch_tac >>
+     linked_positional_getter_restrict_tac >>
+     linked_positional_getter_support_env_tac >>
+     (Q.SUBGOAL_THEN `?e. body_code = [Return (SOME e)]`
+        (qx_choose_then `getter_code` assume_tac)
+      >- qpat_assum `body_code = [Return (SOME _)]` (irule_at Any)) >>
+     `well_typed_expr (entry_types with fn_sigs := FEMPTY) getter_code` by
+       (qpat_assum `body_code = [Return (SOME getter_code)]` (fn body =>
+          qpat_assum `type_stmts (entry_types with fn_sigs := FEMPTY) ret body_code = SOME _`
+            (mp_tac o PURE_REWRITE_RULE [body])) >>
+        simp[NoAsms, type_stmt_def, AllCaseEqs()]) >>
+     (Q.SUBGOAL_THEN `(src:num option) = NONE \/ imported_expr_refs_ok getter_code` assume_tac
+      >- (qpat_assum `body_code = [Return (SOME getter_code)]` (fn body =>
+            qpat_assum `src = NONE \/ imported_stmts_refs_ok body_code`
+              (mp_tac o PURE_REWRITE_RULE [body])) >>
+          simp[NoAsms, imported_stmt_refs_ok_def, imported_expr_refs_ok_def])) >>
+     mp_tac (Q.INST [`tenv` |-> `type_env_all_modules mods`]
+               (Q.ISPEC `(src:num option)` (Q.GEN `src`
+                 whitelistLinkedBodyExprsTheory.linked_well_typed_expr_supported))) >>
+     (impl_tac >- (disch_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     qpat_assum `!env e. well_typed_expr env e ==> _`
+       (qspecl_then [`entry_types with fn_sigs := FEMPTY`,`getter_code`] mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+     strip_tac >>
+     qpat_assum `body_code = [Return (SOME getter_code)]` SUBST1_TAC >>
+     simp[supportedStmtsTheory.supported_stmt_def, supportedExprsTheory.supported_expr_def]);
+
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_substituted_typed]:
   linked_positional_getter_type_tac >>
   linked_positional_getter_lock_tac >>
   linked_positional_getter_return_tac >>
   linked_positional_getter_env_tac >>
+  linked_positional_getter_support_tac >>
   cheat
 QED
 
@@ -3389,6 +3463,7 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_unsub
   linked_positional_getter_lock_tac >>
   linked_positional_getter_return_tac >>
   linked_positional_getter_env_tac >>
+  linked_positional_getter_support_tac >>
   cheat
 QED
 
