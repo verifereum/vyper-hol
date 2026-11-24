@@ -14,9 +14,10 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   bodyFullIntCallDefs bodyFullIntCallByteFrame bodyFullPreds
   constSubst constSubstStmtsPreserve bodyFullIntCallCheckedBody
   vyperTypeContractFunction bodySimFull[qualified]
-  bodyInvSplit bodyInvCodeProps bodyInvExecutionProps bodyInvMetadataProps
+  bodyInvSplit bodyCallSupport[qualified,ignore_grammar] bodyInvCodeProps bodyInvExecutionProps bodyInvMetadataProps
   bodyInvIntCallPinsProps contractInvContextProps
   moduleVariableKeyProps compileUnit bodyFullPostsMods[qualified,ignore_grammar]
+  bodyQualifiedStmtSupport linkedConstAnnotations constSubstMods[qualified]
   bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
   ctorDeployLoweringSource nonreentrantEquiv internalReturnMemoryMem
   internalReturnStackAggregate[qualified,ignore_grammar]
@@ -2324,7 +2325,8 @@ Theorem intcall_callee_body_bounds[local]:
   (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
   env_consistent env cx locked /\
   type_stmts env ret ss = SOME env' /\ ~body_ce.ce_is_external /\
-  ~supported_stmts_expr_exists (const_name_root_mods body_ce.ce_modules) ss ==>
+  ~supported_stmts_expr_exists (const_name_root_mods body_ce.ce_modules) ss /\
+  qualified_stmts_decls_ok body_ce.ce_modules ss ==>
   locals_alloc_ok body_ce env /\ stmts_exprs_ok body_ce ss
 Proof
   strip_tac >> drule_all allocLimitsPropsTheory.fn_allocs_ok_body >> strip_tac >>
@@ -2381,8 +2383,14 @@ Proof
   gvs[immutable_section_layout_mods_def] >>
   conj_tac >- (rpt strip_tac >> res_tac) >>
   conj_tac >- (qexistsl [`policy`, `unit`] >> simp[]) >>
+  conj_tac
+  >- (simp[NoAsms, bodyCallSupportTheory.linked_body_calls_resolved_def,
+           vyperTypeInvariantsTheory.context_function_live_context] >>
+      qpat_assum `linked_body_calls_resolved _ cx`
+        (ACCEPT_TAC o SIMP_RULE (srw_ss()) [bodyCallSupportTheory.linked_body_calls_resolved_def])) >>
   conj_tac >- (rpt strip_tac >> res_tac) >>
-  conj_tac >> first_assum ACCEPT_TAC
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >> res_tac
 QED
 
 Theorem intcall_callee_body_metadata[local]:
@@ -2681,6 +2689,16 @@ Proof
      irule intcall_checked_body_const_name_free >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
   `type_stmts env ret ss_comp = SOME env_after` by simp[] >>
+  `qualified_stmts_decls_ok body_ce.ce_modules ss_comp` by
+    (`body_ce.ce_modules = [(NONE,tops)]` by
+       (qpat_assum `body_inv tops _ body_ce _`
+         (ACCEPT_TAC o MATCH_MP contract_inv_cenv_modules o
+          MATCH_MP bodySimTheory.body_inv_contract)) >>
+     drule_all (SIMP_RULE (srw_ss())
+       [constSubstModsTheory.consts_env_mods_singleton,
+        constSubstModsTheory.subst_consts_mods_singleton]
+       (Q.INST [`mods` |-> `[(NONE,tops)]`]
+         checked_qualified_body_decl_resolution)) >> simp[]) >>
   drule_all intcall_callee_body_bounds >> strip_tac >>
   drule_all intcall_callee_locked_body >> strip_tac >>
   `?bindings. supported_stmts tops bindings ss_comp` by
