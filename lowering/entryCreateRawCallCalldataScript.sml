@@ -5,6 +5,9 @@ Ancestors
   bodyFullRawCallCalldata entryCreateNativeFirstExit entryCreateBodyCut
   entryCreateStmtCases entryCreateFocusSpec entryCreatePathScope createSizeCutRegion
   exprSimAbiDecodeSiteCoverage createSizeCutCode vyperStorageTrace
+  entryCreateRawCallWords entryCreateRawCallCalldataInstall entryCreateRawCallCalldataRun
+  entryCreateRawCallGeneratedPrefix
+  s1PrefixDefs exprSimFullBundleProps bodyFullEmptyLeafData
   vyperInterpreter vyperState list
 
 Theorem raw_call_calldata_suffix_join[local]:
@@ -84,4 +87,45 @@ Proof
       fs[create_operand_cut_def] >> metis_tac[]) >>
   drule_all raw_call_calldata_suffix_hit >> strip_tac >>
   gvs[] >> irule create_cut_noncreate_visit >> simp[]
+QED
+
+
+Theorem raw_call_calldata_selected_site:
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_body_pre cenv cx env
+    (Call ann (RawCallCalldataTarget flags) args dflt) es /\
+  expr_vv_sim_full_hypotheses
+    (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty
+    (Call ann (RawCallCalldataTarget flags) args dflt) es
+    (st0,sa,sb,shadow_sa,shadow_sb,vv,s0,G0,tn0) ==>
+  scoped_operand_outcome
+    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0 sa sb
+    (eval_expr cx (Call ann (RawCallCalldataTarget flags) args dflt))
+    (es,s0,G0,tn0)
+    (\H res ee G tn t.
+       create_operand_vv_post (DF,lo,dframe,ctx,func) cenv cx
+         (Call ann (RawCallCalldataTarget flags) args dflt)
+         (es,sa,sb,s0,vv,G0,tn0) H res ee G tn t /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (create_operand_exit_post ctx cx) /\
+  create_operand_cut sa sb (gas_explicit_sites ctx shadow_ctx) ctx func
+    (cx_tops cx) cx st0
+    (eval_expr cx (Call ann (RawCallCalldataTarget flags) args dflt))
+    (es,s0)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  conj_tac
+  >- (qpat_x_assum `expr_vv_sim_full_hypotheses
+          (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty
+          (Call ann (RawCallCalldataTarget flags) args dflt) es
+          (st0,sa,sb,shadow_sa,shadow_sb,vv,s0,G0,tn0)`
+        (qspecl_then [`vv`,`ty`,`shadow_sb`,`shadow_sa`,`shadow_func`,`sb`,`sa`,`func`]
+          (strip_assume_tac o BETA_RULE o REWRITE_RULE
+            [expr_vv_sim_full_hypotheses_def,expr_sim_full_code_def])) >>
+      drule raw_call_calldata_word_schedule >>
+      FAIL_TAC "schedule")
+  >- FAIL_TAC "cut"
 QED
