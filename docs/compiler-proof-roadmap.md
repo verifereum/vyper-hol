@@ -258,9 +258,9 @@ The identity case composes the stage bounds S1b
 `e2e_deploy_gas_sufficient` uses the deploy unit's fuel bound
 (`deploy_unit_fns_fuel_stable` with `run_context_uniform_fuel`),
 `run_venom_pipeline_run_bounded_raw` and the proved S7g-d
-`deploy_frame_gas_sufficient`. It assumes the runtime bytes don't start with
-`0xEF`, which `compile_vyper_runtime_not_ef` derives from compile success with
-an accepted finalizer. Under `deploy_storage_ok` for every
+`deploy_frame_gas_sufficient`. Its proof uses `compile_vyper_runtime_not_ef`
+to derive that the runtime bytecode does not start with `0xEF` from successful
+compilation with an accepted finalizer. Under `deploy_storage_ok` for every
 gas filling, no exempt source observation and fewer than 2⁶⁴ trace entries on
 the raised-gas run, its OutOfGas conclusion allows oversized deposited code or
 a reached `RETURNDATACOPY`;
