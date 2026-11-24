@@ -2638,8 +2638,8 @@ Resume eval_storage_well_formed_on_mutual[Expr_Builtin]:
           simp_tac(srw_ss())[AllCaseEqs(), return_def, raise_def] >>
           strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
           Cases_on `x` >> TRY (Cases_on `h`) >> TRY (Cases_on `t`) >>
-          gvs[vyperContextTheory.evaluate_self_codesize_def,
-              bind_def, return_def, raise_def] >>
+          FIRST [gvs[vyperContextTheory.evaluate_self_codesize_def,
+                     bind_def, return_def, raise_def]] >>
           irule (iffRL storage_well_formed_on_backends) >> qexists `ast` >>
           simp_tac(srw_ss())[] >>
           `storage_observations_ok cx H ast.storage_trace` by
@@ -3267,8 +3267,10 @@ Resume eval_storage_well_formed_on_mutual[Expr_Call_IntCall]:
     [type_check_def, assert_def, return_def, raise_def]) >>
   ntac 2
     (first_x_assum (drule_at (Pat `type_check _ "recursion" _ = _`)) >>
-     disch_then (drule_at (Pat `lift_option_type (get_module_code _ _) _ _ = _`)) >>
-     disch_then (drule_at (Pat `lift_option_type (lookup_callable_function _ _ _) _ _ = _`)) >>
+     disch_then (qpat_assum `lift_option_type (get_module_code _ _) _ _ = _` o
+       mp_then (Pat `lift_option_type (get_module_code _ _) _ _ = _`) mp_tac) >>
+     disch_then (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ _ = _` o
+       mp_then (Pat `lift_option_type (lookup_callable_function _ _ _) _ _ = _`) mp_tac) >>
      disch_then (assume_tac o SRULE
        [type_check_def, assert_def, return_def, raise_def, get_scopes_def,
         set_scopes_def, push_function_def])) >>
