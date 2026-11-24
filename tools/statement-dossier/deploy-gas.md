@@ -17,7 +17,3 @@ The checker accepts the module in deployment and runtime mode. The source machin
 ## deploy_state_rel
 
 The EVM starts in a fresh creation frame at the target, with the deployment bytecode and encoded constructor arguments. The frame matches the source transaction and its post-transfer state.
-
-## runtime_bc
-
-The compiled runtime bytecode does not begin with the byte `0xEF`.
