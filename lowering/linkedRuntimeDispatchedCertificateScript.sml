@@ -1349,7 +1349,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_selected_sup
   suspend "linked_linear_getter_support"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_support_env]:
+(* Source-side preparation for an explicit selected declaration. These
+   stages do not use the machine route that reached its registration. *)
+val linked_declared_support_env_tac =
   qpat_assum `!fn. MEM (FunctionDecl External _ _ _ _ _ _ _ _) tops ==>
     check_function_body am.layouts tx.target mods art src _ _ _ _ _ _ _`
     (drule_then assume_tac) >>
@@ -1383,8 +1385,11 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_sup
        strip_tac >>
        qpat_assum `src = NONE` (fn main =>
          qpat_assum `linked_body_type_facts _ _ _`
-           (mp_tac o CONJUNCT1 o REWRITE_RULE [linked_body_type_facts_def]) >>
-         simp[NoAsms, main])]) >>
+           (strip_assume_tac o REWRITE_RULE [linked_body_type_facts_def]) >>
+         qpat_assum `!ty. assignable_type _ ty /\ _ ==> supported_place_type _ ty`
+           mp_tac >> simp[NoAsms, main])]);
+
+val linked_declared_body_calls_tac =
   Q.SUBGOAL_THEN
     `check_contract F am.layouts tx.target mods = SOME art /\
      ALOOKUP mods src = SOME tops /\
@@ -1395,11 +1400,15 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_sup
   >- (simp[NoAsms] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_assum `Abbrev (entry_types = _)` (fn alias =>
     simp[NoAsms, GSYM (REWRITE_RULE [markerTheory.Abbrev_def] alias)]) >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  disch_then (map_every assume_tac o CONJUNCTS);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_support_env]:
+  linked_declared_support_env_tac >>
+  linked_declared_body_calls_tac >>
   suspend "linked_linear_declared_body_supported"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_supported]:
+val linked_declared_body_env_tac =
   `!x ty. FLOOKUP entry_types.var_types x = SOME ty ==>
       assignable_type (type_env_all_modules mods) ty` by
     (rpt gen_tac >> strip_tac >>
@@ -1419,7 +1428,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
        qpat_assum `entry_types.bare_global_assignable = FEMPTY`
          (fn empty => simp[NoAsms, empty])]) >>
   `FDOM entry_types.var_types = set (MAP FST args)` by
-    simp[NoAsms, Abbr `entry_types`, function_entry_env_var_types_fdom] >>
+    simp[NoAsms, Abbr `entry_types`, function_entry_env_var_types_fdom];
+
+val linked_declared_body_typed_tac =
   Q.SUBGOAL_THEN `src = NONE \/ imported_stmts_refs_ok body_code` assume_tac
   >- (Cases_on `src` >> simp[NoAsms] >>
      qpat_assum `ALOOKUP mods (SOME _) = SOME tops`
@@ -1444,11 +1455,15 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
           typed))) >>
   `IS_SOME (check_contract F cx.layouts cx.txn.target mods)` by
     (qpat_assum `check_contract F am.layouts tx.target mods = SOME art`
-       (fn cc => simp[NoAsms, Abbr `cx`, initial_evaluation_context_def, cc])) >>
+       (fn cc => simp[NoAsms, Abbr `cx`, initial_evaluation_context_def, cc]));
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_supported]:
+  linked_declared_body_env_tac >>
+  linked_declared_body_typed_tac >>
   suspend "linked_linear_declared_body_guards"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_guards]:
+val linked_declared_body_const_guards_tac =
   qpat_assum `body_const_cells_agree_mods mods cx entry_types es0`
     (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_mods_def]) >>
   `!key r. ALOOKUP (consts_env_mods mods) key = SOME r ==>
@@ -1477,19 +1492,27 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
       (subst_consts_stmts_mods (consts_env_mods mods) body_code))` by
     (qpat_assum `subst_consts_stmts_mods _ body_code = body_code` (fn stable =>
        qpat_assum `type_stmts entry_types ret body_code = SOME after_body`
-         (fn typed => simp[NoAsms, stable, typed]))) >>
+         (fn typed => simp[NoAsms, stable, typed])));
+
+val linked_declared_supported_tac =
   `supported_function_body tops External args body_code` by
-    drule_all_then MATCH_ACCEPT_TAC checked_linked_typed_body_supported >>
+    drule_all_then MATCH_ACCEPT_TAC checked_linked_typed_body_supported;
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_guards]:
+  linked_declared_body_const_guards_tac >>
+  linked_declared_supported_tac >>
   suspend "linked_linear_declared_exec"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_exec]:
+val linked_declared_exec_bindings_tac =
   qabbrev_tac `bindings =
     args ++ supported_stmts_bindings T body_code ++ supported_stmts_bindings F body_code` >>
   `supported_stmts tops bindings body_code` by
     (qpat_assum `supported_function_body tops External args body_code`
        (strip_assume_tac o BETA_RULE o PURE_REWRITE_RULE [supported_function_body_def, LET_THM]) >>
-     simp[NoAsms, Abbr `bindings`] >> first_assum ACCEPT_TAC) >>
+     simp[NoAsms, Abbr `bindings`] >> first_assum ACCEPT_TAC);
+
+val linked_declared_owner_live_tac =
   `check_linked_state_ownership am.layouts tx.target mods (linked_live_functions mods exps)` by
     (PURE_REWRITE_TAC [GSYM linked_state_ownership_ok_def] >>
      drule_all_then ACCEPT_TAC check_contract_linked_state_ownership_ok) >>
@@ -1511,7 +1534,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_exe
        (mp_tac o MATCH_MP ALOOKUP_MEM o SYM) >> disch_then ACCEPT_TAC) >>
   `MEM (src,tx.function_name) (linked_live_functions mods exps)` by
     (PURE_REWRITE_TAC [linked_live_functions_def, linked_live_functions_from_def, LET_THM] >>
-     BETA_TAC >> irule (cj 1 call_closure_from_roots) >> first_assum ACCEPT_TAC) >>
+     BETA_TAC >> irule (cj 1 call_closure_from_roots) >> first_assum ACCEPT_TAC);
+
+val linked_declared_immutable_guards_tac =
   `immutable_section_layout_mods mods registered_env` by
     drule_then ACCEPT_TAC contract_inv_immutable_section_layout >>
   `entry_types.bare_global_assignable = art.cta_bare_global_assignable` by
@@ -1523,11 +1548,16 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_exe
            IS_SOME (FLOOKUP registered_env.ce_module_vars key))` by
     (qpat_assum `Abbrev (body_code = _)`
        (PURE_ONCE_REWRITE_TAC o single o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     drule_all_then ACCEPT_TAC linkedEntryImmutableGuardsTheory.linked_checked_body_immutable_guards) >>
+     drule_all_then ACCEPT_TAC linkedEntryImmutableGuardsTheory.linked_checked_body_immutable_guards);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_exec]:
+  linked_declared_exec_bindings_tac >>
+  linked_declared_owner_live_tac >>
+  linked_declared_immutable_guards_tac >>
   suspend "linked_linear_declared_frame"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_frame]:
+val linked_declared_lock_metadata_tac =
   `MEM (src,tops) mods` by drule_then ACCEPT_TAC ALOOKUP_MEM >>
   `function_header_ok External mut nr raw tx.function_name args [] ret` by
     drule_all_then ACCEPT_TAC check_contract_function_header >>
@@ -1557,7 +1587,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_fra
      qpat_assum `nr = T` (fn enabled =>
        qpat_assum `function_header_ok External mut nr raw tx.function_name args [] ret`
          (mp_tac o MATCH_MP function_header_nonreentrant_view o PURE_REWRITE_RULE [enabled])) >>
-     simp[NoAsms, is_view_mut_def]) >>
+     simp[NoAsms, is_view_mut_def]);
+
+val linked_declared_return_metadata_tac =
   `raw ==> ?n. ret = BaseT (BytesT (Dynamic n))` by
     (qpat_assum `function_header_ok External mut nr raw tx.function_name args [] ret` mp_tac >>
      simp[NoAsms, function_header_ok_def]) >>
@@ -1565,7 +1597,11 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_fra
     (strip_tac >>
      drule_all_then mp_tac check_contract_function_return_type >>
      qpat_assum `get_tenv cx = type_env_all_modules mods` (fn tenv =>
-       qpat_assum `ret <> NoneT` (fn nonempty => simp[NoAsms, tenv, nonempty]))) >>
+       qpat_assum `ret <> NoneT` (fn nonempty => simp[NoAsms, tenv, nonempty])));
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_frame]:
+  linked_declared_lock_metadata_tac >>
+  linked_declared_return_metadata_tac >>
   suspend "linked_linear_declared_frame_ready"
 QED
 
@@ -1842,7 +1878,7 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
   suspend "linked_linear_declared_locked_body"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_locked_body]:
+val linked_declared_locked_source_tac =
   `ALL_DISTINCT (MAP FST mods)` by
     (qpat_assum `contract_namespaces_ok F mods`
        (strip_assume_tac o PURE_REWRITE_RULE [contract_namespaces_ok_def]) >>
@@ -1865,7 +1901,10 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
          External mut nr args [] ret fbody`
          (strip_assume_tac o SIMP_RULE (srw_ss())
            [check_function_body_def, LET_THM, nonempty])) >>
-     first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_locked_body]:
+  linked_declared_locked_source_tac >>
   suspend "linked_linear_declared_replay_ready"
 QED
 
