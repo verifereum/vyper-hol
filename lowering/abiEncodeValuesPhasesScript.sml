@@ -119,7 +119,7 @@ Proof
   `b <= i /\ i < b + sz` by decide_tac >> metis_tac[]
 QED
 
-Theorem abi_encode_values_cursor_load:
+Theorem abi_encode_values_cursor_load_run:
   emit_op MLOAD [Var cursor] st = (out,en) /\
   eval_operand (Var cursor) s = SOME (n2w b) /\
   ptr_covers G tn cursor s 32 /\ b + 32 <= s.vs_alloca_next /\
@@ -136,7 +136,8 @@ Theorem abi_encode_values_cursor_load:
       FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     tn'.t_imm = tn.t_imm /\ t.vs_memory = s.vs_memory /\
-    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn'))
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    run_inst_seq (emitted_insts st en) s = OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >>
   `b < dimword (:256)` by
@@ -163,8 +164,32 @@ Proof
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
     (s,G,tn) [] (OK (raw with vs_inst_idx := LENGTH en.cs_current_insts),GF,tf)` by
     (rpt strip_tac >> first_x_assum irule >> simp[w2n_n2w]) >>
-  Cases_on `out` >>
-  fs[eval_operand_def, lookup_var_def, GSYM mem_word_at_eq_mload]
+  Cases_on `out` >> fs[eval_operand_def, lookup_var_def, GSYM mem_word_at_eq_mload] >>
+  fs[window_pure_seq_def, venom_state_component_equality]
+QED
+
+Theorem abi_encode_values_cursor_load:
+  emit_op MLOAD [Var cursor] st = (out,en) /\
+  eval_operand (Var cursor) s = SOME (n2w b) /\
+  ptr_covers G tn cursor s 32 /\ b + 32 <= s.vs_alloca_next /\
+  (!i. b <= i /\ i < b + 32 ==> i NOTIN tn.t_mem) /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t G' tn'.
+    eval_operand out t = SOME (mem_word_at b s.vs_memory) /\
+    (!x. out = Var x ==> not_fresh_at en x) /\ op_taint tn' out = {} /\
+    window_phase ctx func st en {} [] s t /\ abi_encode_exec_frame func s t /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\ t.vs_memory = s.vs_memory /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn'))
+Proof
+  strip_tac >> drule_all abi_encode_values_cursor_load_run >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED
 
 Theorem abi_encode_values_head_store_endpoint:
