@@ -417,7 +417,7 @@ Proof
   metis_tac[eval_create_operands_success_value]
 QED
 
-Triviality proxy_pre_args:
+Theorem proxy_pre_args:
   expr_body_pre cenv cx env
     (Call ann (CreateTarget CreateMinimalProxy salted rof ks) args dflt) es ==>
   ann = BaseT AddressT /\
@@ -465,7 +465,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
 QED
 
-Triviality create_eval_read:
+Theorem create_eval_read:
   bind (eval_expr cx (Call ann (CreateTarget kind salted rof ks) args dflt))
     (read_result cx) =
   bind (eval_exprs cx (create_operand_order kind salted args))
@@ -475,7 +475,7 @@ Proof
   simp[Once evaluate_def, bind_assoc]
 QED
 
-Triviality create_operand_pre:
+Theorem create_operand_pre:
   expr_body_pre cenv cx env (Call ann (CreateTarget kind salted rof ks) args dflt) es /\
   MEM e args /\ expr_sim_inv cenv cx env ee ==>
   expr_body_pre cenv cx env e ee
@@ -2098,7 +2098,7 @@ QED
 
 (* In oracle mode, a well-decoded proxy has no source-code or size
    validation branch between its operands and the shared create action. *)
-Theorem create_proxy_read_prepared[local]:
+Theorem create_proxy_read_prepared:
   IS_SOME es.outcomes /\ dest_AddressV target = SOME addr /\
   dest_NumV amount = SOME value /\
   dest_optional_salt salt = SOME salt_word /\
@@ -2185,7 +2185,7 @@ Proof
   simp[]
 QED
 
-Theorem proxy_compile_cuts[local]:
+Theorem proxy_compile_cuts:
   gas_shadow_state sa sh /\
   lower_value compile_expr cenv ty
     (Call ann (CreateTarget CreateMinimalProxy salted rof ks)
@@ -2537,7 +2537,7 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-Theorem proxy_cut_code[local]:
+Theorem proxy_cut_code:
   lower_value compile_expr cenv ty e sa = (x,a) /\
   lower_value compile_expr cenv ty' e' a = (y,b) /\
   compile_create_proxy_buf x b = (buf,c) /\
