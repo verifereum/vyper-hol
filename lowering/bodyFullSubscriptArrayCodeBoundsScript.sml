@@ -278,3 +278,161 @@ Proof
   disch_then (qspec_then `PG` (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac)) >>
   qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[]
 QED
+
+(* The observation, physical result and ghost frame share the scalar witness. *)
+Theorem code_bounds_ok_frame_observed:
+  (!idx len sgn sa sb s iw nw G tn lo ctx func explicit PG.
+    array_bounds_check idx len sgn sa = ((),sb) /\
+    eval_operand idx s = SOME iw /\ eval_operand len s = SOME nw /\
+    (!x. idx = Var x ==> not_fresh_at sa x) /\
+    (!x. len = Var x ==> not_fresh_at sa x) /\
+    op_prov G idx = NONE /\ op_prov G len = NONE /\
+    op_taint tn idx = {} /\ op_taint tn len = {} /\
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    fn_has_code sa sb func /\
+    EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+                  ~is_terminator ins.inst_opcode) (emitted_insts sa sb) /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t j H tm.
+      run_inst_seq (emitted_insts sa sb) s =
+        (if idx_in_range sgn iw nw then OK t else Abort Revert_abort t) /\
+      B sa sb s (if idx_in_range sgn iw nw then
+        OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+        else Abort Revert_abort (t with vs_inst_idx := j)) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (if idx_in_range sgn iw nw then
+          (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,tm)
+        else (Abort Revert_abort (t with vs_inst_idx := j),H,tm))) /\
+      tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+      tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+      (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+        FLOOKUP tm.t_var x = FLOOKUP tn.t_var x /\
+        FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
+      (t with vs_vars := s.vs_vars) =
+        (if idx_in_range sgn iw nw then s else revert_state (set_returndata [] s))) ==>
+  array_bounds_check idx len sgn sa = ((),sb) /\ fn_has_code sa sb func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand idx s = SOME a /\ eval_operand len s = SOME b /\
+  idx_in_range sgn a b /\ allocas_from lo s /\
+  op_taint tn idx = {} /\ op_taint tn len = {} /\
+  op_prov G idx = NONE /\ op_prov G len = NONE /\
+  (!q. idx = Var q \/ len = Var q ==> not_fresh_at sa q) /\
+  (!l. idx <> Label l /\ len <> Label l) ==>
+  ?Gf tnf sf.
+    B sa sb s (OK sf) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_immutables = s.vs_immutables /\
+    sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
+    sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_initial_fmp = s.vs_initial_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    sf.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!q. not_fresh_at sa q ==>
+      lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
+      op_taint tnf (Var q) = op_taint tn (Var q)) /\
+    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
+Proof
+  disch_then (mk_asm "intro") >> strip_tac >>
+  drule_all bounds_suffix_layout >> disch_then (qspec_then `s` strip_assume_tac) >>
+  `(!x. idx = Var x ==> not_fresh_at sa x) /\
+   (!x. len = Var x ==> not_fresh_at sa x)` by metis_tac[] >>
+  `EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+                ~is_terminator ins.inst_opcode) (emitted_insts sa sb)` by fs[EVERY_CONJ] >>
+  asm "intro" drule_all >>
+  disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
+  asm_simp_tac std_ss [] >>
+  disch_then (qx_choosel_then [`t`,`Gf`,`tnf`] strip_assume_tac) >>
+  qabbrev_tac `sf = t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  qexistsl_tac [`Gf`,`tnf`,`sf`] >>
+  `sf = s with <|vs_vars := sf.vs_vars; vs_inst_idx := sf.vs_inst_idx|>` by
+    fs[Abbr `sf`, venom_state_component_equality] >>
+  `!q. not_fresh_at sa q ==> lookup_var q sf = lookup_var q s /\
+     FLOOKUP Gf q = FLOOKUP G q /\ op_taint tnf (Var q) = op_taint tn (Var q)` by
+    simp[Abbr `sf`, lookup_var_def, op_taint_def] >>
+  `!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+     local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf` by
+    (rpt strip_tac >> irule stmt_state_rel_readonly_vars_pc >>
+     qexistsl [`s`,`sa`] >> metis_tac[]) >>
+  fs[Abbr `sf`, venom_state_component_equality]
+QED
+
+Theorem code_bounds_oob_frame_observed:
+  (!idx len sgn sa sb s iw nw G tn lo ctx func explicit PG.
+    array_bounds_check idx len sgn sa = ((),sb) /\
+    eval_operand idx s = SOME iw /\ eval_operand len s = SOME nw /\
+    (!x. idx = Var x ==> not_fresh_at sa x) /\
+    (!x. len = Var x ==> not_fresh_at sa x) /\
+    op_prov G idx = NONE /\ op_prov G len = NONE /\
+    op_taint tn idx = {} /\ op_taint tn len = {} /\
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    fn_has_code sa sb func /\
+    EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+                  ~is_terminator ins.inst_opcode) (emitted_insts sa sb) /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t j H tm.
+      run_inst_seq (emitted_insts sa sb) s =
+        (if idx_in_range sgn iw nw then OK t else Abort Revert_abort t) /\
+      B sa sb s (if idx_in_range sgn iw nw then
+        OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+        else Abort Revert_abort (t with vs_inst_idx := j)) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (if idx_in_range sgn iw nw then
+          (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,tm)
+        else (Abort Revert_abort (t with vs_inst_idx := j),H,tm))) /\
+      tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+      tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+      (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+        FLOOKUP tm.t_var x = FLOOKUP tn.t_var x /\
+        FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
+      (t with vs_vars := s.vs_vars) =
+        (if idx_in_range sgn iw nw then s else revert_state (set_returndata [] s))) ==>
+  array_bounds_check idx len sgn sa = ((),sb) /\ fn_has_code sa sb func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand idx s = SOME a /\ eval_operand len s = SOME b /\
+  ~idx_in_range sgn a b /\ allocas_from lo s /\
+  op_taint tn idx = {} /\ op_taint tn len = {} /\
+  op_prov G idx = NONE /\ op_prov G len = NONE /\
+  (!q. idx = Var q \/ len = Var q ==> not_fresh_at sa q) /\
+  (!l. idx <> Label l /\ len <> Label l) ==>
+  ?Gf tnf sf.
+    B sa sb s (Abort Revert_abort sf) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (Abort Revert_abort sf,Gf,tnf)) /\
+    sf.vs_immutables = s.vs_immutables /\
+    sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
+    sf.vs_alloca_next = s.vs_alloca_next /\ sf.vs_data_section = s.vs_data_section /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    sf.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!q. not_fresh_at sa q ==>
+      lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
+      op_taint tnf (Var q) = op_taint tn (Var q))
+Proof
+  disch_then (mk_asm "intro") >> strip_tac >>
+  drule_all bounds_suffix_layout >> disch_then (qspec_then `s` strip_assume_tac) >>
+  `(!x. idx = Var x ==> not_fresh_at sa x) /\
+   (!x. len = Var x ==> not_fresh_at sa x)` by metis_tac[] >>
+  `EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+                ~is_terminator ins.inst_opcode) (emitted_insts sa sb)` by fs[EVERY_CONJ] >>
+  asm "intro" drule_all >>
+  disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >> asm_simp_tac std_ss [] >>
+  disch_then (qx_choosel_then [`t`,`j`,`Gf`,`tnf`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`,`tnf`,`t with vs_inst_idx := j`] >>
+  fs[revert_state_def, set_returndata_def, venom_state_component_equality,
+     lookup_var_def, op_taint_def]
+QED
