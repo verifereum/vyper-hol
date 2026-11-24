@@ -11,7 +11,8 @@ Theory bodyFullAttribute
 Ancestors
   bodyFullAttributeAdd bodyFullAttributeFields bodyPtrAttributeSelection
   bodyAttributeMemory gasOutcomeFullCompose exprSimHyps exprLoweringProps
-  bodyFullOfVV bodyFullPreds bodySimFull exprSimAttribute exprSimHypsDefs gasShadow
+  bodyFullOfVV bodyFullPreds bodyFullSimProjection bodySimFull
+  exprSimAttribute exprSimHypsDefs gasShadow
   gasShadowState gasShadowCompile gasExemptCert vyperStorageTrace vyperStorageFootprint
   emitHelperProps fragExec exprSimUnwrap
   loweringPosts compileEnv valueEncoding vyperTyping
@@ -518,7 +519,7 @@ Proof
   drule attr_pre_base >> strip_tac >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty e es` by
-    (gvs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty (Attribute v9 e id) es` by
     (irule attribute_vv_sim_full >> metis_tac[]) >>
