@@ -52,7 +52,7 @@ QED
 
 (* The ADD of a field offset, from the base target's endpoint, on a
    zero-mark path at every horizon. *)
-Theorem target_add_suffix_full:
+Theorem target_add_suffix_endpoint:
   !rb off sm dst sb func ctx cenv sa t s0 w0 cx st0 trace es pv vt DF lo d ee
    G tn pv' G0 tn0 vt' explicit PG.
   emit_op ADD [FST rb; Lit (n2w off)] sm = (dst, sb) /\
@@ -74,6 +74,8 @@ Theorem target_add_suffix_full:
   place_ptr_rel cenv cx t pv' (w0 + n2w off) (FST (SND rb)) vt' /\
   place_readable cx ee pv' ==>
   ?u G' tn'.
+    (?out. dst = Var out /\
+      u = (update_var out (w0 + n2w off) t with vs_inst_idx := SUC t.vs_inst_idx)) /\
     !H. valid_horizon cx st0 H trace ==>
       gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
         (t, G, tn) [] (OK u, G', tn') /\
@@ -101,6 +103,8 @@ Proof
           [STRING #"%" (toString sm.cs_next_var)]) t
        (update_var (STRING #"%" (toString sm.cs_next_var)) (w0 + n2w off) t)
        tn`] >>
+  conj_tac >- (qexists_tac `STRING #"%" (toString sm.cs_next_var)` >>
+              simp[arithmeticTheory.ADD1]) >>
   gen_tac >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
   `op_taint tn (FST rb) = {}` by fs[target_ptr_ok_def] >>
@@ -146,7 +150,7 @@ Proof
   suspend "parts"
 QED
 
-Resume target_add_suffix_full[parts]:
+Resume target_add_suffix_endpoint[parts]:
   `inst_seq_ptr (DF H) lo ctx func PG G tn [inst] t
      (step_prov PG G inst u0) (step_taint inst t u0 tn)` by
     (simp[inst_seq_ptr_def] >> simp[Abbr `inst`] >>
@@ -199,7 +203,49 @@ Resume target_add_suffix_full[parts]:
   pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >> simp[]
 QED
 
-Finalise target_add_suffix_full
+Finalise target_add_suffix_endpoint
+
+Theorem target_add_suffix_full:
+  !rb off sm dst sb func ctx cenv sa t s0 w0 cx st0 trace es pv vt DF lo d ee
+   G tn pv' G0 tn0 vt' explicit PG.
+  emit_op ADD [FST rb; Lit (n2w off)] sm = (dst, sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+  eval_operand (FST rb) t = SOME w0 /\
+  (!H. valid_horizon cx st0 H trace ==>
+     target_post H ctx func cenv cx es sa sm s0 ee pv vt rb t /\
+     ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+     target_ptr_ok cenv pv' rb G tn t /\
+     ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) /\
+  place_ptr_rel cenv cx t pv' (w0 + n2w off) (FST (SND rb)) vt' /\
+  place_readable cx ee pv' ==>
+  ?u G' tn'.
+    !H. valid_horizon cx st0 H trace ==>
+      gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+        (t, G, tn) [] (OK u, G', tn') /\
+      target_post H ctx func cenv cx es sa sb s0 ee pv' vt'
+        (dst, FST (SND rb), SOME (value_type_place vt')) u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ee G' tn' u /\
+      target_ptr_ok cenv pv' (dst, FST (SND rb), SOME (value_type_place vt'))
+        G' tn' u /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn'
+Proof
+  rpt gen_tac >>
+  disch_then (mp_tac o MATCH_MP (SPEC_ALL target_add_suffix_endpoint)) >>
+  disch_then (qx_choosel_then [`u`,`G'`,`tn'`]
+    (CONJUNCTS_THEN2 (K ALL_TAC) assume_tac)) >>
+  qexistsl_tac [`u`,`G'`,`tn'`] >> first_assum ACCEPT_TAC
+QED
 
 Theorem target_attribute_sim_full:
   target_pre cenv cx env (AttributeTarget bt fld) es /\
@@ -424,6 +470,8 @@ Theorem immutable_target_field_add[local]:
     ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) ==>
   ?u G' tn'.
+    (?out. dst = Var out /\ u = (update_var out
+       ((n2w (off+k):bytes32) + n2w field_off) t with vs_inst_idx := SUC t.vs_inst_idx)) /\
     !H. valid_horizon cx st0 H ee.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G,tn) [] (OK u,G',tn') /\
       imm_target_post H ctx func cenv cx es sa sb s0 ee id path' fty
@@ -447,12 +495,14 @@ Proof
      `a` |-> `n2w (off+k):bytes32`,`b` |-> `n2w field_off:bytes32`,
      `left` |-> `FST (rb : operand # data_location option # place_ty option)`,`right` |-> `Lit (n2w field_off)`,`sa` |-> `sm`,
      `s` |-> `t`,`out` |-> `out`,`PG` |-> `PG`]
-     (INST_TYPE [``:'a`` |-> ``:256``] scalar_binop_joint_frame)) >>
+     (INST_TYPE [``:'a`` |-> ``:256``] scalar_binop_joint_frame_endpoint)) >>
   impl_tac >- simp[Abbr `out`] >> strip_tac >>
   rename1 `lookup_var out u = SOME _` >>
   rename1 `op_taint tn' (Var out) = _` >>
   rename1 `op_prov G' (Var out) = _` >>
-  qexistsl [`u`,`G'`,`tn'`] >> gen_tac >> strip_tac >>
+  qexistsl [`u`,`G'`,`tn'`] >>
+  conj_tac >- (qexists_tac `out` >> simp[Abbr `out`]) >>
+  gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
   `allocas_from lo t` by fs[ghost_inv_at_def] >>
   `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G,tn) [] (OK u,G',tn')` by simp[] >>
