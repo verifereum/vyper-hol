@@ -80,6 +80,15 @@ Proof
   type_cut_steps [compile_extract32_load_def, compile_assert_slice_bounds_def]
 QED
 
+Theorem extract32_tail_cut_code:
+  compile_extract32_load len src off a = (raw,m) /\
+  compile_clamp_basetype raw ty m = (op,b) ==>
+  create_cut_code exits a b
+Proof
+  strip_tac >> irule create_cut_code_join >> qexists_tac `m` >>
+  metis_tac[type_cut_extract32,type_cut_clamp_basetype,SND]
+QED
+
 Theorem type_cut_encode[local]:
   (!dst a. create_cut_code {} a (SND (encode dst a))) ==>
   create_cut_code {} a (SND (lower_abi_encode mid n encode a))
