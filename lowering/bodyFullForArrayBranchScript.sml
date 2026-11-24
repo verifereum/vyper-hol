@@ -1,7 +1,8 @@
 (* Source composition for the non-slot Array branch of For. *)
 Theory bodyFullForArrayBranch
 Ancestors
-  bodyInvCodeProps bodyInvExecutionProps
+  bodyInvCodeProps bodyInvExecutionProps bodyCallSupport[qualified,ignore_grammar]
+  bodyTypedTargetScope[qualified,ignore_grammar]
   bodyFullShadowBodyInv constSubst bodyStorageMetadata vyperSubscriptOverlap
   bodyFullForArrayRound gasOutcomeFull gasOutcomeFullCompose gasExemptCert
   gasContext gasSummary stmtSimForRounds stmtSimDefs exprSimDefs bodyPtrDefs
@@ -121,12 +122,10 @@ Proof
   drule_then assume_tac bodyMainModulePropsTheory.contract_inv_main_module >>
   drule_then assume_tac bodyInvMetadataPropsTheory.contract_inv_type_env >>
   `~expr_has_evm_run e /\
-    EVERY (\call. ?tops. get_module_code cx (FST call) = SOME tops /\
-                        supported_program tops /\
-                        IS_SOME (supported_function_decl tops (NONE,SND call) Internal))
-      (int_calls_expr e)` by
+    EVERY (bodyCallSupport$source_body_call_supported cx) (int_calls_expr e)` by
     (Cases_on `supported_expr (main_module mods) e`
-     >- drule_all_then ACCEPT_TAC supported_expr_body_calls_mods >>
+     >- (`well_typed_expr env e` by fs[vyperTypeSystemTheory.well_typed_iterator_def] >>
+         drule_all_then ACCEPT_TAC supported_expr_body_calls_mods) >>
      Cases_on `e` >>
      gvs[supported_iterator_def, vyperTypeCallGraphTheory.int_calls_expr_def,
          supportedExprTraverseTheory.expr_has_evm_run_thm]) >>
@@ -209,7 +208,8 @@ Theorem nonslot_iterator_bare_immutable_mods[local]:
   expr_type e = ArrayT typ bd /\
   ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
              supported_storage_value (main_module mods) nid (ArrayT typ bd)) /\
-  ~supported_expr_exists (const_name_root_mods mods) e ==>
+  ~supported_expr_exists (const_name_root_mods mods) e /\
+  (!nid. e = TopLevelName (expr_type e) nid ==> FST nid = NONE) ==>
   !nid. e = TopLevelName (expr_type e) nid ==>
     ?tops. ALOOKUP mods (FST nid) = SOME tops /\
       IS_SOME (supported_immutable_type tops (NONE,SND nid))
@@ -217,6 +217,7 @@ Proof
   strip_tac >>
   drule_then assume_tac bodyMainModulePropsTheory.contract_inv_main_module >>
   rpt strip_tac >>
+  `FST nid = NONE` by metis_tac[] >>
   qpat_assum `e = TopLevelName _ _` SUBST_ALL_TAC >>
   gvs[supported_iterator_def,vyperASTTheory.expr_type_def] >>
   PairCases_on `nid` >> Cases_on `nid0` >>
@@ -293,6 +294,16 @@ Proof
   `?bd. expr_type e = ArrayT typ bd /\ bound_length bd = n` by
     (drule_then strip_assume_tac vyperTypeSystemTheory.type_stmt_for_array_bound >>
      simp[bound_length_def]) >>
+  `!nid. e = TopLevelName (expr_type e) nid ==> FST nid = NONE` by
+    (drule_then strip_assume_tac bodyFullForFactsTheory.type_stmt_for_projection >>
+     qpat_assum `well_typed_iterator env typ (Array e)`
+       (assume_tac o CONJUNCT1 o REWRITE_RULE [vyperTypeSystemTheory.well_typed_iterator_def]) >>
+     rpt strip_tac >> PairCases_on `nid` >>
+     `well_typed_expr env (TopLevelName (expr_type e) (nid0,nid1))` by
+       (qpat_assum `e = TopLevelName _ _` (fn th => REWRITE_TAC [GSYM th]) >>
+        first_assum ACCEPT_TAC) >>
+     PURE_REWRITE_TAC [pairTheory.FST] >>
+     drule_all_then ACCEPT_TAC bodyTypedTargetScopeTheory.body_inv_toplevel_read_main) >>
   `!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)` by
     (qpat_assum `body_inv tops ctx cenv cx`
@@ -306,8 +317,11 @@ Proof
      fs[compileUnitTheory.main_module_def, alistTheory.ALOOKUP_def,
         GSYM exprSimHypsDefsTheory.const_name_root_mods_singleton] >>
      strip_tac >> rpt gen_tac >> strip_tac >>
-     qpat_assum `!nid. _ ==> FST nid = NONE /\ _`
-       (qspec_then `nid` (drule_then strip_assume_tac)) >>
+     `FST nid = NONE` by
+       (qpat_assum `!nid. e = TopLevelName (expr_type e) nid ==> FST nid = NONE`
+          (qspec_then `nid` mp_tac) >> simp[]) >>
+     qpat_assum `!nid. _ ==> IS_SOME (supported_immutable_type tops (NONE,SND nid))`
+       (qspec_then `nid` mp_tac) >>
      PairCases_on `nid` >> gvs[]) >>
   mp_tac (Q.INST [`c` |-> `cenv`,`sty` |-> `typ`,`fty` |-> `typ`,
       `loop_body` |-> `body'`,`sa0` |-> `sa`,`shadow_sa0` |-> `shadow_sa`]
