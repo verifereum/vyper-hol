@@ -465,6 +465,19 @@ Proof
   strip_tac >> irule (cj 1 alloca_suffix_typed_memory_family) >> simp[]
 QED
 
+Theorem compile_store_memory_typed_added_id:
+  compile_store_memory_typed ce dst dt src st a = ((),b) /\
+  id IN frag_ids a b ==>
+  ?j. MEM j (added_insts a b) /\ j.inst_id = id
+Proof
+  strip_tac >>
+  `alloca_suffix 0 a (SND (compile_store_memory_typed ce dst dt src st a))` by
+    simp[alloca_suffix_store_memory_typed] >>
+  qpat_x_assum `alloca_suffix _ _ _` mp_tac >>
+  asm_simp_tac bool_ss [pairTheory.SND, alloca_suffix_def] >>
+  metis_tac[]
+QED
+
 Theorem alloca_suffix_store_memory[local]:
   k <= a.cs_next_var ==>
   alloca_suffix k a
