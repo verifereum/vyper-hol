@@ -103,6 +103,28 @@ Proof
   metis_tac[RTC_RULES_RIGHT1]
 QED
 
+(* Once a selected PC is in a closed suffix, keep all the native edges,
+   rebasing just the accumulator.  The original stop does not change. *)
+Theorem create_native_closed_suffix_rebase:
+  body_inv tops ctx ce cx /\ MEM fn ctx.ctx_functions /\
+  create_cut_code {} a b /\ fn_has_code a b fn ==>
+  !x y. RTC (create_operand_native_step l b E ctx fn p) x y ==>
+  !d k s front d' k' u whole.
+    x = (d,k,s,front) /\ y = (d',k',u,whole) /\ create_operand_at a s ==>
+    ?tail. whole = front ++ tail /\ create_cut_region a b u /\
+      RTC (create_operand_native_step a b E ctx fn p) (d,k,s,[]) (d',k',u,tail)
+Proof
+  strip_tac >> ho_match_mp_tac RTC_INDUCT_RIGHT1 >> conj_tac
+  >- (simp[] >> metis_tac[create_region_at_entry]) >>
+  simp_tac bool_ss [FORALL_PROD] >> rpt strip_tac >> gvs[] >>
+  rename1 `create_operand_native_step l b E ctx fn p (dc,kc,c,front ++ tail) (dv,kv,v,out)` >>
+  `~create_operand_at b c` by metis_tac[create_native_before_exit] >>
+  `?right. out = front ++ right /\ create_cut_region a b v /\
+     create_operand_native_step a b E ctx fn p (dc,kc,c,tail) (dv,kv,v,right)` by
+     (irule create_native_restrict_rebase >> simp[] >> metis_tac[]) >>
+  qexists_tac `right` >> simp[] >> metis_tac[RTC_RULES_RIGHT1]
+QED
+
 (* Preserve the original suffix by cancelling the completed left trace. *)
 Theorem create_native_right_visit[local]:
   RTC (create_operand_native_step a m E ctx fn p) (d,k,s,[]) (d1,k1,t,front) /\
