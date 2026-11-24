@@ -6,7 +6,8 @@ Ancestors
   exprPtrUnwrapMarked abiDecodeStaticProps exprLowering exprLoweringProps emitHelperProps
   compileEnv context venomInst vyperStorageFootprint exprSimMemDefs loweringPosts
   bodyPtrDefs fragGasOriginPtr ptrDiscipline allocaHistory
-  venomMemDefs valueCopyBytes
+  venomMemDefs valueCopyBytes bodyFullUnwrapSlotOrigin exprPtrUnwrapEnsureShape
+  abiBufferAllocationCode copyExecution list
 
 Theorem copied_head_word_load_straight[local]:
   compile_ptr_load ctor imm loc src sb = (op,sc) ==>
@@ -36,6 +37,58 @@ Proof
   simp[mk_inst_def]
 QED
 
+(* The loop appends three blocks, unlike the singleton allocation and copy. *)
+Theorem straight_slot_copy_single[local]:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  compile_ensure_in_memory src loc nb n ctor imm sa = (op,sb) /\
+  dec_straight sa sb ==> n = 1
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  Cases_on `n = 1` >> simp[] >>
+  qpat_assum `n <> 1` (fn th =>
+    drule_all ensure_slot_memory_split >>
+    disch_then (qx_choosel_then [`buf`,`sm`] (strip_assume_tac o REWRITE_RULE [th]))) >>
+  `sb.cs_blocks = sa.cs_blocks` by
+    (qpat_assum `dec_straight _ _` (mp_tac o REWRITE_RULE [dec_straight_def]) >> simp[]) >>
+  drule compile_alloc_buffer_code >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `sm.cs_blocks = sa.cs_blocks` by
+    (qpat_assum `same_blocks _ _` (mp_tac o REWRITE_RULE [same_blocks_def]) >> simp[]) >>
+  drule_all compile_slot_to_memory_boundary >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `sb = slot_copy_final _ _ _ _ _` (mp_tac o Q.AP_TERM `\x. LENGTH x.cs_blocks`) >>
+  simp[slot_copy_final_def, slot_copy_blocks_def]
+QED
+
+(* Attach the singleton list execution to the very same low-level witness
+   that supplies the origin/pointer path to the integrated slot post. *)
+Theorem straight_slot_origin_side[local]:
+  unwrap_slot_origin_side_producer ctx func lo explicit PG
+    (\sa sb s t. dec_straight sa sb ==>
+      ?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+            t = raw with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  pure_rewrite_tac[unwrap_slot_origin_side_producer_def] >> rpt gen_tac >>
+  disch_then (fn pre =>
+    map_every assume_tac (CONJUNCTS pre) >> qx_gen_tac `g` >>
+    mp_tac (Q.INST [`G` |-> `g`] (MATCH_MP unwrap_ensure_slot_origin_execution pre))) >>
+  disch_then (qx_choosel_then [`root`,`dst`,`a`,`G0`,`tn0`,`Gf`,`tnf`,`t`,`sm`,`buf`,`u`]
+    (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+  qexistsl [`root`,`dst`,`a`,`G0`,`tn0`,`Gf`,`tnf`,`t`,`sm`,`buf`,`u`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  BETA_TAC >> disch_tac >>
+  `n = 1` by (irule straight_slot_copy_single >> metis_tac[]) >>
+  qpat_assum `n = 1` (fn th =>
+    qpat_assum `compile_ensure_in_memory _ _ _ _ _ _ _ = _`
+      (assume_tac o REWRITE_RULE [th])) >>
+  qpat_assum `(n = 1 ==> t = _ /\ _)` (drule_then strip_assume_tac) >>
+  irule ctor_single_unwrap_endpoint_run >>
+  conj_tac
+  >- (qexistsl [`a`,`buf`,`ctor`,`dst`,`imm`,`p`,`loc`,`nb`,`op`,`root`,`sm`,`src`,`u`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexists_tac `func` >> first_assum ACCEPT_TAC
+QED
+
 (* Instantiate a producer with the current VV. Its concrete endpoint is
    also the witness for the supplied observation law. *)
 val UNWRAP_PIECE_TAC = fn th =>
@@ -46,7 +99,7 @@ val UNWRAP_PIECE_TAC = fn th =>
   qexistsl [`v`,`z`,`G'`,`tn'`] >>
   conj_tac
   >- ((simp[] >> NO_TAC) ORELSE
-      (TRY (qpat_assum `(_ = 1 ==> ?u. run_inst_seq _ _ = OK u /\ _)`
+      (TRY (qpat_assum `(dec_straight _ _ ==> ?u. run_inst_seq _ _ = OK u /\ _)`
         (drule_then assume_tac)) >>
        qpat_assum `?u. run_inst_seq _ _ = OK u /\ _`
          (qx_choose_then `raw` strip_assume_tac) >>
@@ -189,7 +242,11 @@ Resume copied_head_straight_unwrap_observed[single_slot]:
      Cases_on `p.ptr_location` >> gvs[] >> strip_tac >>
      qpat_assum `compile_ensure_in_memory _ _ _ _ _ _ _ = _`
        (mp_then Any mp_tac ctor_single_unwrap_straight_free) >> simp[]) >>
-  UNWRAP_PIECE_TAC (Q.INST [`vv` |-> `LocatedValue t p`]
-    unwrap_slot_copy_origin_ptr_no_dead_pure_single_run)
+  UNWRAP_PIECE_TAC (SIMP_RULE bool_ss [straight_slot_origin_side]
+    (Q.INST [`vv` |-> `LocatedValue t p`,
+      `Side` |-> `\a b u v. dec_straight a b ==>
+        ?raw. run_inst_seq (emitted_insts a b) u = OK raw /\
+              v = raw with vs_inst_idx := LENGTH b.cs_current_insts`]
+      unwrap_slot_copy_origin_ptr_no_dead_side))
 QED
 Finalise copied_head_straight_unwrap_observed
