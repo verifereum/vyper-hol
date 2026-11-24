@@ -13,6 +13,8 @@ Ancestors
   compileEnv exprLowering exprLoweringProps fragExec loweringPosts exprSimHypsDefs
   loweringShapeDefs bodyPtrDefs
   bodyPtrIfExpBytesCounted bodyCopyMemory bodyDeclMemoryCounted abiTupleProps
+Libs ctorCopyObservationLib
+
 (* A robust value over a covering window has the memory pointer post. *)
 Theorem default_memory_post[local]:
   evaluate_type (get_tenv cx) ty = SOME tv /\
@@ -168,8 +170,28 @@ val extcall_materialized_post = ``
          (!n b sz. local_region cenv ee.scopes t n b sz ==>
             regions_disjoint (w2n w) (type_memory_size tv) b sz))``;
 
+(* Keep the read-facing sequents on the compiler cuts selected below. *)
+val (read_prefix_pre,read_prefix_tail) = dest_imp
+  (concl (INST_TYPE [alpha |-> ``:256``]
+    extcall_default_prefix_store_entry_observed));
+val (_,read_prefix_tail) = dest_imp read_prefix_tail;
+val (_,read_prefix_tail) = dest_imp read_prefix_tail;
+val (_,read_prefix_post) = dest_imp read_prefix_tail;
+val fixed_prefix_rule = mk_imp (read_prefix_pre,read_prefix_post)
+  |> ctorCopyObservationLib.rename "G" "G1"
+  |> ctorCopyObservationLib.rename "tn" "tn1"
+  |> ctorCopyObservationLib.rename "Gi" "G0"
+  |> ctorCopyObservationLib.rename "ti" "tn0";
+val read_prefix_rule = list_mk_forall
+  (map (C ctorCopyObservationLib.named (free_vars fixed_prefix_rule)) ["ptv","ltv"],
+   fixed_prefix_rule);
+
+val read_store_rule = ctorCopyObservationLib.close_except
+  ["R","ctx","func","cx","lo","ce","src","dst","ty","a","b","explicit","PG"]
+  ``^default_store_inputs ==> ?u Gf tm. R s u /\ ^default_store_post``;
+
 (* Administrative suffix on a fixed, successful VV evaluation. *)
-Theorem extcall_operand_materialized_read:
+val materialized_read_inputs = ``
   body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
   ~is_word_type (expr_type e) /\ dt = lowered_value_type cenv e /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
@@ -205,14 +227,34 @@ Theorem extcall_operand_materialized_read:
     ptr_buf_ok cenv e op0 G1 s) /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok cenv e p.ptr_operand G1 s) /\
-  ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 ==>
-  ?v u Gf tm.
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1``;
+
+val materialized_read_post = ``
     read_result cx tv ee = (INL v,ee) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G1,tn1) [] (OK u,Gf,tm) /\
-      (^extcall_materialized_post) H (INL v) ee Gf tm u)
+      (^extcall_materialized_post) H (INL v) ee Gf tm u)``;
+
+Theorem extcall_operand_materialized_read_observed_of_segments:
+  ^materialized_read_inputs ==>
+  (!buf sn op sc.
+    compile_alloc_buffer (type_memory_bytes cenv (lowered_value_type cenv e)) sm = (buf,sn) /\
+    unwrap_value cenv vv sn = (op,sc) /\
+    compile_store_memory cenv op buf.buf_operand (lowered_value_type cenv e)
+      (lowered_value_type cenv e) sc = ((),sb) ==>
+    (\ty H0. ^read_prefix_rule) (expr_type e) (storage_trace_horizon es.storage_trace)) ==>
+  (!buf sn src sc dst.
+    compile_alloc_buffer (type_memory_bytes cenv (lowered_value_type cenv e)) sm = (buf,sn) /\
+    unwrap_value cenv vv sn = (src,sc) /\ buf.buf_operand = Var dst /\
+    compile_store_memory cenv src (Var dst) (lowered_value_type cenv e)
+      (lowered_value_type cenv e) sc = ((),sb) ==>
+    (\ce ty a b. ^read_store_rule) cenv (lowered_value_type cenv e) sc sb) ==>
+  (!p q r. R p q /\ R q r ==> R p r) ==>
+  ?v u Gf tm. R s u /\ ^materialized_read_post
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >> BETA_TAC >> gvs[] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> BETA_TAC >>
+  disch_then (mk_asm "read_prefix") >> disch_then (mk_asm "read_store") >>
+  strip_tac >> gvs[] >>
   Cases_on `compile_alloc_buffer (type_memory_bytes cenv (lowered_value_type cenv e)) sm` >>
   rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
   Cases_on `unwrap_value cenv vv mid` >>
@@ -260,7 +302,7 @@ Proof
   metis_tac[exprSimUnwrapTheory.vv_post_failed_read]
 QED
 
-Resume extcall_operand_materialized_read[typing]:
+Resume extcall_operand_materialized_read_observed_of_segments[typing]:
   `expr_body_pre cenv cx env e
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
   `bind (eval_expr cx e) (read_result cx)
@@ -284,7 +326,7 @@ Resume extcall_operand_materialized_read[typing]:
   suspend "prefix"
 QED
 
-Resume extcall_operand_materialized_read[prefix]:
+Resume extcall_operand_materialized_read_observed_of_segments[prefix]:
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
@@ -313,20 +355,9 @@ Resume extcall_operand_materialized_read[prefix]:
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      qhdtm_assum `ghost_inv_at` (mp_tac o REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >>
      rpt strip_tac >> first_assum ACCEPT_TAC) >>
-  let
-    fun feed pat next rule = qpat_assum pat (mp_then Any next rule)
-  in
-    feed `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0`
-    (feed `compile_expr _ _ e sa = _`
-    (feed `compile_alloc_buffer _ sm = (buf,mid)`
-    (feed `unwrap_value cenv vv mid = (src,sc)`
-    (feed `!H. _ ==> vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\ _`
-    (feed `ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1`
-    (feed `evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv`
-    (feed `evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv`
-      mp_tac))))))) extcall_default_prefix_store_entry
-  end >>
-  disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
+  asm_x "read_prefix" (qspecl_then [`buf`,`mid`,`src`,`sc`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
+  disch_then (qspecl_then [`ptv`,`ltv`] mp_tac) >>
   (impl_tac >-
     (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]) >>
      rpt strip_tac >>
@@ -339,7 +370,7 @@ Resume extcall_operand_materialized_read[prefix]:
   suspend "store"
 QED
 
-Resume extcall_operand_materialized_read[store]:
+Resume extcall_operand_materialized_read_observed_of_segments[store]:
   `~is_word_type (lowered_value_type cenv e)` by
     metis_tac[arg_type_fits_word_type] >>
   `compile_store_memory cenv src (Var dst) (lowered_value_type cenv e)
@@ -348,18 +379,17 @@ Resume extcall_operand_materialized_read[store]:
   qpat_x_assum `v' = v` SUBST_ALL_TAC >>
   `ptr_mem_ok cx (lowered_value_type cenv e) v src G' tn' z` by
     (irule default_memory_post >> qexistsl_tac [`ltv`,`sw`] >> simp[]) >>
-  drule_at (Pat `compile_store_memory _ _ (Var dst) _ _ _ = _`) default_store_dispatch >>
-  disch_then (drule_at (Pat `ptr_mem_ok _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
-  disch_then (drule_at (Pat `eval_operand src z = _`)) >>
-  disch_then (drule_at (Pat `lookup_var dst z = _`)) >>
-  disch_then (drule_at (Pat `allocas_from lo z`)) >>
-  disch_then (drule_at (Pat `fn_has_code sc sb func`)) >>
-  disch_then (qspecl_then [`explicit`,`ctx`,`PG`] mp_tac) >>
+  asm_x "read_store" (qspecl_then [`buf`,`mid`,`src`,`sc`,`dst`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
+  disch_then (drule_at (Pat `ptr_mem_ok _ _ v src G' tn' z`) o SPEC_ALL) >>
+  disch_then (drule_at (Pat `evaluate_type _ (lowered_value_type cenv e) = SOME ltv`)) >>
+  disch_then (drule_at (Pat `eval_operand src z = SOME sw`)) >>
+  disch_then (drule_at (Pat `lookup_var dst z = SOME dw`)) >>
   (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
   disch_then (foldr (uncurry qx_choose_then) (map_every assume_tac o CONJUNCTS)
     [`u`,`Gf`,`tm`]) >>
   qexistsl_tac [`u`,`Gf`,`tm`] >>
+  conj_tac >- (first_x_assum irule >> qexists_tac `z` >> simp[]) >>
   qx_gen_tac `H` >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
     drule >> strip_tac >>
@@ -372,7 +402,7 @@ Resume extcall_operand_materialized_read[store]:
   simp[] >> suspend "post"
 QED
 
-Resume extcall_operand_materialized_read[post]:
+Resume extcall_operand_materialized_read_observed_of_segments[post]:
   qpat_assum `expr_post H ctx func cenv cx e es sa sc s0 ee v src z`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [expr_post_def]) >>
   qpat_assum `typed_copy_state_frame sc _ _ z u`
@@ -427,7 +457,7 @@ Resume extcall_operand_materialized_read[post]:
   suspend "frames"
 QED
 
-Resume extcall_operand_materialized_read[frames]:
+Resume extcall_operand_materialized_read_observed_of_segments[frames]:
   conj_tac
   >- (irule place_typed_copy_alloca_state_frame >>
       qpat_assum `typed_copy_state_frame sc _ _ z u` (irule_at Any) >>
@@ -448,7 +478,7 @@ Resume extcall_operand_materialized_read[frames]:
   simp[] >> suspend "exterior"
 QED
 
-Resume extcall_operand_materialized_read[exterior]:
+Resume extcall_operand_materialized_read_observed_of_segments[exterior]:
   conj_tac >- fs[] >>
   `lo <= w2n dw` by
     (qpat_assum `allocas_from lo z` (mp_tac o REWRITE_RULE [ptrDisciplineTheory.allocas_from_def]) >>
@@ -497,7 +527,7 @@ Resume extcall_operand_materialized_read[exterior]:
   suspend "ghost"
 QED
 
-Resume extcall_operand_materialized_read[ghost]:
+Resume extcall_operand_materialized_read_observed_of_segments[ghost]:
   `!name b sz. local_region cenv es.scopes s0 name b sz ==>
      b+sz <= w2n dw \/ w2n dw + type_memory_size ltv <= b` by
     (rpt gen_tac >> strip_tac >>
@@ -525,7 +555,7 @@ Resume extcall_operand_materialized_read[ghost]:
   simp[] >> suspend "purity"
 QED
 
-Resume extcall_operand_materialized_read[purity]:
+Resume extcall_operand_materialized_read_observed_of_segments[purity]:
   `wb_frame cenv es ee sa s0 z` by
     (qpat_assum `expr_post H ctx func cenv cx e es sa sc s0 ee v src z`
        (ACCEPT_TAC o MATCH_MP exprSimWordArgsTheory.expr_post_frame)) >>
@@ -568,7 +598,22 @@ Resume extcall_operand_materialized_read[purity]:
   first_assum ACCEPT_TAC
 QED
 
-Finalise extcall_operand_materialized_read
+Finalise extcall_operand_materialized_read_observed_of_segments
+
+Theorem extcall_operand_materialized_read:
+  ^materialized_read_inputs ==> ?v u Gf tm. ^materialized_read_post
+Proof
+  disch_tac >>
+  mp_tac (Q.INST [`R` |-> `\p q. T`]
+    extcall_operand_materialized_read_observed_of_segments) >>
+  BETA_TAC >> REWRITE_TAC[] >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >- (rpt gen_tac >> disch_tac >> rpt gen_tac >>
+    MATCH_ACCEPT_TAC extcall_default_prefix_store_entry)) >>
+  (impl_tac >- (rpt gen_tac >> disch_tac >> rpt gen_tac >>
+    MATCH_ACCEPT_TAC default_store_dispatch)) >>
+  disch_then ACCEPT_TAC
+QED
 
 Theorem extcall_operand_materialized_full:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
