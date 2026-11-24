@@ -4831,6 +4831,18 @@ Proof
   simp[ci_mono_as_ptr_val, ci_mono_lower_abi_decode]
 QED
 
+Theorem ci_mono_compile_bool_chain_ops:
+  ∀es st.
+    (∀e s. ci_mono s (SND (lower_value f cenv (BaseT BoolT) e s))) ⇒
+    ci_mono st (SND (compile_bool_chain_ops f cenv is_and result exit_lbl es st))
+Proof
+  Induct_on `es`
+  >- simp[compile_bool_chain_ops_def, ci_mono_comp_return] >>
+  rpt gen_tac >> strip_tac >> Cases_on `es` >>
+  simp[Once compile_bool_chain_ops_def] >>
+  ci_mono_chain_tac [ci_mono_emit_inst, ci_mono_new_block, ci_mono_fresh_label]
+QED
+
 Theorem ci_mono_compile_builtin_dispatch_body[local]:
   (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
   ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
@@ -4841,6 +4853,17 @@ Proof
        ci_mono_builtin_environment, ci_mono_builtin_hash, ci_mono_builtin_bop,
        ci_mono_builtin_ec, ci_mono_builtin_concat, ci_mono_builtin_makearray,
        ci_mono_builtin_slice]
+  >- (Cases_on `is_word_type ret_ty` >>
+      simp[compile_builtin_dispatch_body_def, LET_THM] >>
+      irule ci_mono_uncurry >>
+      simp[ci_mono_as_stack_val, ci_mono_as_ptr_val, ci_mono_refl,
+           ci_mono_lower_value_cfn]) >>
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_fresh_var, ci_mono_fresh_label, ci_mono_new_block,
+               ci_mono_compile_bool_chain_ops, ci_mono_lower_value_cfn]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_refl]
 QED
 
 Theorem ci_mono_compile_type_builtin_dispatch_body[local]:
