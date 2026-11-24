@@ -8,7 +8,46 @@ Ancestors
   emitHelper emitHelperProps compileEnv venomState venomExecSemantics
   instMemFrontier memSafeRun unitTransformDefs contextCodegenRel codegenRel
   words arithmetic finite_map pred_set ptrDiscipline venomInst bodyPtrDefs pair freshWrites
-  loweringStateRelDefs
+  loweringStateRelDefs logInstSeqPtr
+
+Theorem abi_encode_setup_add_run[local]:
+  emit_op ADD [Var root;Lit (n2w off)] a = (Var q,b) /\
+  lookup_var root s = SOME w ==>
+  run_inst_seq (emitted_insts a b) s = OK (update_var q (w+n2w off) s)
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_pure2_def, eval_operand_def]
+QED
+
+Theorem abi_encode_setup_store_run[local]:
+  emit_void MSTORE [Var root;Lit w] a = ((),b) /\
+  lookup_var root s = SOME (n2w p) /\ p < dimword(:256) ==>
+  run_inst_seq (emitted_insts a b) s = OK (mstore p w s)
+Proof
+  strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_write2_def, eval_operand_def, w2n_n2w]
+QED
+
+Theorem abi_encode_setup_run_join[local]:
+  b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
+  c.cs_current_insts = b.cs_current_insts ++ emitted_insts b c /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts b c) /\
+  run_inst_seq (emitted_insts a b) s = OK x /\
+  m = (x with vs_inst_idx := LENGTH b.cs_current_insts) /\
+  run_inst_seq (emitted_insts b c) m = OK y ==>
+  ?raw. run_inst_seq (emitted_insts a c) s = OK raw /\
+        (y with vs_inst_idx := LENGTH c.cs_current_insts) =
+        (raw with vs_inst_idx := LENGTH c.cs_current_insts)
+Proof
+  strip_tac >> drule_all emitted_insts_append >> strip_tac >>
+  `LENGTH b.cs_current_insts = s.vs_inst_idx + LENGTH (emitted_insts a b)` by
+    simp[] >>
+  qexists_tac `y with vs_inst_idx := x.vs_inst_idx` >> simp[] >>
+  irule run_inst_seq_append_advanced >> gvs[]
+QED
 
 Theorem abi_encode_payload_word_origin:
   emit_void MSTORE [Var dst;value] a = ((),b) /\ fn_has_code a b func /\
@@ -88,7 +127,7 @@ Finalise abi_encode_payload_word_origin
 
 (* The selector occupies a full MSTORE word, even though only four bytes are
    included in the encoded payload.  Allocation is deliberately a caller step. *)
-Theorem abi_encode_setup_tail_origin:
+Theorem abi_encode_setup_tail_origin_run:
   k = (case mid of NONE => 0 | SOME w => 4) /\
   N = 32 + 32 * word_size (maxlen+k) /\
   write_len = (case mid of NONE => 0 | SOME w => 32) /\
@@ -102,6 +141,8 @@ Theorem abi_encode_setup_tail_origin:
   ptr_covers G tn root s N /\ lo <= p /\
   p+N <= s.vs_alloca_next /\ p+N < dimword(:256) ==>
   ?dp t G' tn'.
+    (?raw. run_inst_seq (emitted_insts a ready) s = OK raw /\
+           t = (raw with vs_inst_idx := LENGTH ready.cs_current_insts)) /\
     data = Var dp /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,G',tn')) /\
@@ -152,7 +193,7 @@ Proof
   >- suspend "none" >> suspend "some"
 QED
 
-Resume abi_encode_setup_tail_origin[none]:
+Resume abi_encode_setup_tail_origin_run[none]:
   gvs[abi_builtin_encode_method_id_def, comp_return_def] >>
   `32+maxlen <= 32+32*word_size maxlen` by
     (mp_tac (Q.SPEC `maxlen` le_word_size_mul) >> decide_tac) >>
@@ -179,6 +220,10 @@ Resume abi_encode_setup_tail_origin[none]:
   `allocas_from lo t` by
     (gvs[Abbr `t`, update_var_def, allocas_from_def] >> metis_tac[]) >>
   qexistsl_tac [`dp`, `t`, `G'`, `tn'`] >>
+  conj_tac >-
+    (qexists_tac `update_var dp (n2w p + 32w) s` >>
+     conj_tac >- (irule abi_encode_setup_add_run >> qexists_tac `root` >> simp[]) >>
+     simp[Abbr `t`]) >>
   asm_rewrite_tac[] >>
   simp[Abbr `t`, update_var_def, eval_operand_def] >>
   conj_tac >- suspend "none_frame" >>
@@ -188,32 +233,32 @@ Resume abi_encode_setup_tail_origin[none]:
   suspend "none_kept"
 QED
 
-Resume abi_encode_setup_tail_origin[none_frame]:
+Resume abi_encode_setup_tail_origin_run[none_frame]:
   simp[typed_copy_state_frame_def, typed_copy_frame_def, lookup_var_def,
     FLOOKUP_UPDATE, venom_state_component_equality] >> rpt strip_tac >> metis_tac[]
 QED
 
-Resume abi_encode_setup_tail_origin[none_history]:
+Resume abi_encode_setup_tail_origin_run[none_history]:
   rpt strip_tac >> gvs[update_var_def] >>
   metis_tac[body_full_path_alloca_history]
 QED
 
-Resume abi_encode_setup_tail_origin[none_locals]:
+Resume abi_encode_setup_tail_origin_run[none_locals]:
   rpt strip_tac >> irule local_ptrs_rel_mem_agree >> qexists_tac `s` >>
   simp[lookup_var_def, FLOOKUP_UPDATE] >>
   reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> `p' <> dp` by metis_tac[] >> simp[]
 QED
 
-Resume abi_encode_setup_tail_origin[none_inv]:
+Resume abi_encode_setup_tail_origin_run[none_inv]:
   rpt strip_tac >> gvs[update_var_def] >> first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
-Resume abi_encode_setup_tail_origin[none_kept]:
+Resume abi_encode_setup_tail_origin_run[none_kept]:
   rpt strip_tac >> gvs[update_var_def] >> first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
-Resume abi_encode_setup_tail_origin[some]:
+Resume abi_encode_setup_tail_origin_run[some]:
   gvs[abi_builtin_encode_method_id_def, comp_bind_def, comp_ignore_bind_def] >>
   pairarg_tac >> gvs[] >>
   rename1 `emit_op ADD [Var root;Lit 32w] a = (midop,store_st)` >>
@@ -318,13 +363,56 @@ Resume abi_encode_setup_tail_origin[some]:
      drule_all body_full_path_alloca_history >> simp[]) >>
   `32*word_size (maxlen+4)+32-36 = 32*word_size (maxlen+4)-4` by decide_tac >>
   qexistsl_tac [`dp`,`t`,`G'`,`tn'`] >>
+  conj_tac >- suspend "some_run" >>
   qpat_assum `32*word_size (maxlen+4)+32-36 = _` (fn th =>
     simp[NoAsms, arithmeticTheory.ADD_ASSOC, th]) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   suspend "some_posts"
 QED
 
-Resume abi_encode_setup_tail_origin[some_posts]:
+Resume abi_encode_setup_tail_origin_run[some_run]:
+  qpat_assum `emit_op ADD _ a = _` (strip_assume_tac o MATCH_MP emit_op_extends) >>
+  qpat_assum `emit_void MSTORE _ store_st = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >>
+  qpat_assum `emit_op ADD _ method_st = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+  `lookup_var mp s1 = SOME (n2w (p+32))` by simp[Abbr `s1`, update_var_def, lookup_var_def,
+      FLOOKUP_UPDATE, GSYM word_add_n2w] >>
+  `run_inst_seq (emitted_insts a store_st) s = OK (update_var mp (n2w p + 32w) s)` by
+    (irule abi_encode_setup_add_run >> qexists_tac `root` >> asm_rewrite_tac[]) >>
+  `run_inst_seq (emitted_insts store_st method_st) s1 = OK (mstore (p+32) (x << 224) s1)` by
+    (irule abi_encode_setup_store_run >> conj_tac >- decide_tac >>
+     qexists_tac `mp` >> asm_rewrite_tac[]) >>
+  `s1 = (update_var mp (n2w p + 32w) s with vs_inst_idx := LENGTH store_st.cs_current_insts)` by
+    simp[Abbr `s1`] >>
+  `?raw. run_inst_seq (emitted_insts a method_st) s = OK raw /\
+         s2 = (raw with vs_inst_idx := LENGTH method_st.cs_current_insts)` by
+    (qpat_assum `s2 = _` SUBST1_TAC >>
+     `SUC s1.vs_inst_idx = LENGTH method_st.cs_current_insts` by
+       (qpat_assum `s2.vs_inst_idx = _` mp_tac >> simp[]) >>
+     qpat_assum `SUC s1.vs_inst_idx = _` (pure_once_rewrite_tac o single) >>
+     irule abi_encode_setup_run_join >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`store_st`, `s1`, `update_var mp (n2w p + 32w) s`] >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  `method_st.cs_current_insts = a.cs_current_insts ++ emitted_insts a method_st` by
+    (pure_rewrite_tac[emitted_insts_def] >>
+     qpat_assum `method_st.cs_current_insts = _` (pure_rewrite_tac o single) >>
+     qpat_assum `store_st.cs_current_insts = _` (pure_once_rewrite_tac o single) >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     REFL_TAC) >>
+  `run_inst_seq (emitted_insts method_st ready) s2 = OK (update_var dp (n2w p + 36w) s2)` by
+    (irule abi_encode_setup_add_run >> qexists_tac `root` >> conj_tac
+     >- first_assum ACCEPT_TAC >>
+     qpat_assum `data = Var dp` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  qpat_assum `t = _` SUBST1_TAC >>
+  `SUC s2.vs_inst_idx = LENGTH ready.cs_current_insts` by
+    (qpat_assum `t.vs_inst_idx = _` mp_tac >> simp[]) >>
+  qpat_assum `SUC s2.vs_inst_idx = _` (pure_once_rewrite_tac o single) >>
+  irule abi_encode_setup_run_join >> conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`method_st`, `s2`, `raw`] >> simp[mk_inst_def, is_terminator_def]
+QED
+
+Resume abi_encode_setup_tail_origin_run[some_posts]:
   conj_tac >- suspend "some_frame" >>
   conj_tac >- simp[mstore_def, Abbr `s1`, update_var_def] >>
   conj_tac >- simp[mstore_def, Abbr `s1`, update_var_def] >>
@@ -345,7 +433,7 @@ Resume abi_encode_setup_tail_origin[some_posts]:
   suspend "some_kept"
 QED
 
-Resume abi_encode_setup_tail_origin[some_frame]:
+Resume abi_encode_setup_tail_origin_run[some_frame]:
   irule typed_copy_state_frame_trans >> qexists_tac `s2` >> conj_tac
   >- (irule typed_copy_state_frame_trans >> qexists_tac `s1` >>
       reverse conj_tac >- simp[typed_copy_mstore_state_frame] >>
@@ -357,7 +445,7 @@ Resume abi_encode_setup_tail_origin[some_frame]:
   rpt strip_tac >> metis_tac[]
 QED
 
-Resume abi_encode_setup_tail_origin[some_operands]:
+Resume abi_encode_setup_tail_origin_run[some_operands]:
   qx_gen_tac `operand` >> strip_tac >>
   `!x. operand = Var x ==> not_fresh_at method_st x` by
     metis_tac[not_fresh_at_mono] >>
@@ -373,7 +461,7 @@ Resume abi_encode_setup_tail_origin[some_operands]:
   asm_rewrite_tac[]
 QED
 
-Resume abi_encode_setup_tail_origin[some_old_cover]:
+Resume abi_encode_setup_tail_origin_run[some_old_cover]:
   qx_genl_tac [`old`,`n`] >> strip_tac >>
   `old <> dp /\ old <> mp` by metis_tac[] >>
   qpat_assum `!x. x <> dp ==> lookup_var x t = _ /\ _`
@@ -388,7 +476,7 @@ Resume abi_encode_setup_tail_origin[some_old_cover]:
   qexistsl_tac [`G`,`s`,`tn`] >> asm_rewrite_tac[]
 QED
 
-Resume abi_encode_setup_tail_origin[some_locals]:
+Resume abi_encode_setup_tail_origin_run[some_locals]:
   rpt strip_tac >>
   `not_scope_ptr ce es.scopes mp /\ not_scope_ptr ce es.scopes dp` by
     (simp[NoAsms, not_scope_ptr_def] >> metis_tac[]) >>
@@ -417,7 +505,7 @@ Resume abi_encode_setup_tail_origin[some_locals]:
   irule local_ptrs_rel_update_var >> asm_rewrite_tac[]
 QED
 
-Resume abi_encode_setup_tail_origin[some_inv]:
+Resume abi_encode_setup_tail_origin_run[some_inv]:
   rpt strip_tac >>
   `ghost_inv_at D lo d ce cx es G1 tn1 s1` by
     (qpat_assum `!D d ce cx es. _ ==> ghost_inv_at D lo d ce cx es G1 tn1 s1`
@@ -453,7 +541,7 @@ Resume abi_encode_setup_tail_origin[some_inv]:
   disch_then ACCEPT_TAC
 QED
 
-Resume abi_encode_setup_tail_origin[some_kept]:
+Resume abi_encode_setup_tail_origin_run[some_kept]:
   rpt strip_tac >>
   `ghost_kept_at lo ce es origin G0 tn0 s0 G1 tn1` by
     (first_assum irule >> simp[] >> metis_tac[]) >>
@@ -461,4 +549,72 @@ Resume abi_encode_setup_tail_origin[some_kept]:
   first_assum irule >> simp[] >> metis_tac[]
 QED
 
-Finalise abi_encode_setup_tail_origin
+Finalise abi_encode_setup_tail_origin_run
+
+Theorem abi_encode_setup_tail_origin:
+  k = (case mid of NONE => 0 | SOME w => 4) /\
+  N = 32 + 32 * word_size (maxlen+k) /\
+  write_len = (case mid of NONE => 0 | SOME w => 32) /\
+  abi_builtin_encode_method_id mid (Var root) a = ((),method_st) /\
+  emit_op ADD [Var root;Lit (n2w (32+k))] method_st = (data,ready) /\
+  fn_has_code a ready func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  allocas_from lo s /\ alloca_inv s /\
+  lookup_var root s = SOME (n2w p) /\ not_fresh_at a root /\
+  ptr_covers G tn root s N /\ lo <= p /\
+  p+N <= s.vs_alloca_next /\ p+N < dimword(:256) ==>
+  ?dp t G' tn'.
+    data = Var dp /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    ~t.vs_halted /\ t.vs_current_bb = ready.cs_current_bb /\
+    t.vs_inst_idx = LENGTH ready.cs_current_insts /\
+    eval_operand data t = SOME (n2w (p+32+k)) /\
+    ptr_covers G' tn' dp t (N-(32+k)) /\
+    ptr_covers G' tn' root t N /\
+    eval_operand (Var root) t = SOME (n2w p) /\ not_fresh_at ready dp /\
+    (case mid of NONE => T | SOME w =>
+      !mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
+        mem_word_at (p+32) mem = w << 224) /\
+    typed_copy_state_frame a (p+32) write_len s t /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    alloca_inv t /\ allocas_from lo t /\
+    tn'.t_mem = tn.t_mem DIFF {i | p+32 <= i /\ i < p+32+write_len} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!op. (!x. op = Var x ==> not_fresh_at a x) ==>
+      eval_operand op t = eval_operand op s /\
+      op_taint tn' op = op_taint tn op /\ op_prov G' op = op_prov G op) /\
+    (!x n. not_fresh_at a x /\ ptr_covers G tn x s n ==>
+      ptr_covers G' tn' x t n) /\
+    (!code. abi_alloca_history code s ==> abi_alloca_history code t) /\
+    (fn_inst_ids_distinct func /\ alloca_history func s ==> alloca_history func t) /\
+    (!ce es.
+      local_ptrs_rel func ce es.scopes s /\
+      (!name x sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz) ==>
+        not_fresh_at a x) /\
+      (!name b sz. local_region ce es.scopes s name b sz ==>
+        regions_disjoint (p+32) write_len b sz) ==>
+      local_ptrs_rel func ce es.scopes t) /\
+    (!D d ce cx es.
+      ghost_inv_at D lo d ce cx es G tn s /\ local_ptrs_rel func ce es.scopes s /\
+      (!name x sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz) ==>
+        not_fresh_at a x) /\
+      (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+      (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+      (!x. lo <> 0 /\ ce.ce_imm_alloca = SOME (Var x) ==> not_fresh_at a x) /\
+      (!name b sz. local_region ce es.scopes s name b sz ==>
+        regions_disjoint (p+32) write_len b sz) ==>
+      ghost_inv_at D lo d ce cx es G' tn' t) /\
+    (!ce es origin G0 tn0 s0.
+      ghost_kept_at lo ce es origin G0 tn0 s0 G tn /\
+      (!x. not_fresh_at origin x ==> not_fresh_at a x) ==>
+      ghost_kept_at lo ce es origin G0 tn0 s0 G' tn')
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`explicit` |-> `explicit`, `PG` |-> `PG`]
+    abi_encode_setup_tail_origin_run) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (qx_choosel_then [`dp`,`t`,`G'`,`tn'`] strip_assume_tac) >>
+  qexistsl_tac [`dp`,`t`,`G'`,`tn'`] >> asm_rewrite_tac[]
+QED

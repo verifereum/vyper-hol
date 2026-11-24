@@ -16,7 +16,8 @@
 Theory fragFuelExpr
 Ancestors
   fragFuel fragFuelStmtGlue fragFuelContextBase fragFuelContext
-  fragFuelExprHelpers fragFuelBuiltins fragFuelAbi fragFuelExprCfn exprLowering exprCallBounds
+  fragFuelExprHelpers fragFuelBuiltins fragFuelAbi fragFuelExprCfn fragFuelBoolChain
+  exprLowering exprCallBounds
   compileEnv emitHelper context venomInst pair
 Libs
   fragFuelLib
@@ -456,7 +457,9 @@ Proof
   FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
   FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
   FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
-  FIRST [ea]
+  FIRST [ea] >>
+  irule fuel_ok_compile_bool_chain_ops >> simp[] >> rpt strip_tac >>
+  irule fuel_ok_lower_value >> first_assum ACCEPT_TAC
 QED
 
 Theorem fuel_ok_compile_type_builtin_dispatch_body:

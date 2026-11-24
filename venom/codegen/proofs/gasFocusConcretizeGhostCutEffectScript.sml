@@ -109,17 +109,9 @@ Theorem focus_cut_ghost_memory_next:
             a.po_inst.inst_opcode = ISTORE) /\ a.po_inst.inst_operands = [d;v] ==>
        eval_operand d at.po_state = eval_operand d a.po_state) /\
     (MEM a.po_inst.inst_opcode [CALL;DELEGATECALL;CREATE;CREATE2] ==>
-      ((~at.po_state.vs_call_ctx.cc_static /\
-        zt.po_state.vs_requests <> at.po_state.vs_requests /\
-        ~computed_precompile (LAST zt.po_state.vs_requests) /\
-        zt.po_state.vs_outcomes <> at.po_state.vs_outcomes /\
-        ((HD at.po_state.vs_outcomes).co_success \/
+      ((adopt_guard at.po_state.vs_call_ctx.cc_static at.po_state zt.po_state ((HD at.po_state.vs_outcomes).co_success \/
          MEM a.po_inst.inst_opcode [CREATE;CREATE2])) =
-       (~a.po_state.vs_call_ctx.cc_static /\
-        z.po_state.vs_requests <> a.po_state.vs_requests /\
-        ~computed_precompile (LAST z.po_state.vs_requests) /\
-        z.po_state.vs_outcomes <> a.po_state.vs_outcomes /\
-        ((HD a.po_state.vs_outcomes).co_success \/
+       (adopt_guard a.po_state.vs_call_ctx.cc_static a.po_state z.po_state ((HD a.po_state.vs_outcomes).co_success \/
          MEM a.po_inst.inst_opcode [CREATE;CREATE2]))))) ==>
   (!i. (i < lo \/ dyn_floor C vs <= i) ==>
     i IN (EL (SUC q) ht).po_taint.t_mem ==>

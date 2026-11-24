@@ -1,22 +1,37 @@
 Theory placeTypingBuildProps
 Ancestors
   placeTypingProps vyperTypeContract vyperTypeContractStaticMaps
+  vyperTypeContractContext
   compileVyper compileEnv list finite_map
 
-(* A single-module checker does not reject dots in declaration identifiers,
-   so a main-module "0.m" spells like the imported (SOME 0,"m").  The
-   compile env keys module variables by nsid, so the two stay apart. *)
+(* Reject parsed names that can spell a compiler-qualified namespace. *)
+val collision_map_tops =
+  ``[HashMapDecl Private F "0.m" (BaseT (UintT 256))
+       (Type (BaseT (UintT 256))) (SOME 0)]``
+
 Theorem map_namespace_collision_probe:
-  let tops = [HashMapDecl Private F "0.m" (BaseT (UintT 256))
-                (Type (BaseT (UintT 256))) (SOME 0)] in
-  let mods = [(NONE,tops)] in
-  let layouts = [(0w, ([( (NONE,"0.m"), 0)], []))] in
-  IS_SOME (check_contract F layouts 0w mods) /\
-  build_hashmap_info tops (SOME 0,"m") = NONE /\
-  FLOOKUP (build_contract_type_artifact F mods).cta_toplevel_vtypes
+  check_contract F [(0w, ([( (NONE,"0.m"), 0)], []))] 0w
+    [(NONE,^collision_map_tops)] = NONE /\
+  build_hashmap_info ^collision_map_tops (SOME 0,"m") = NONE /\
+  FLOOKUP (build_contract_type_artifact F [(NONE,^collision_map_tops)]).cta_toplevel_vtypes
     (SOME 0,"m") = NONE
 Proof
   EVAL_TAC
+QED
+
+val collision_field_type = ``BaseT (UintT 256)``
+val collision_arg_type = ``StructT (NONE,"0.Foo")``
+val collision_struct_modules =
+  ``[(NONE,[StructDecl "0.Foo" [("a",^collision_field_type); ("b",^collision_field_type)];
+            FunctionDecl External View F F "get" [("arg",^collision_arg_type)] [] ^collision_field_type
+              [Return (SOME (Attribute ^collision_field_type (Name ^collision_arg_type "arg") "a"))]]);
+     (SOME 0,[StructDecl "Foo" [("b",^collision_field_type); ("a",^collision_field_type)]])]``
+
+Theorem struct_namespace_collision_rejected:
+  check_contract F [] (2w : 160 word) ^collision_struct_modules = NONE /\
+  check_contract T [] (2w : 160 word) ^collision_struct_modules = NONE
+Proof
+  simp[check_contract_def, contract_namespaces_ok_def]
 QED
 
 Theorem add_toplevel_vtypes_deploy:
