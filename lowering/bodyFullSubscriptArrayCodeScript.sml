@@ -2,7 +2,7 @@
 Theory bodyFullSubscriptArrayCode
 Ancestors vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ignore_grammar] exprSimHypsDefs[qualified,ignore_grammar]
   bodyFullShadowBodyInv
-  bodyFullOfVV bodyFullPreds bodySimFull gasOutcomeFullCompose
+  bodyFullOfVV bodyFullPreds bodyFullSimProjection bodySimFull gasOutcomeFullCompose
   bodyFullAttributeAdd bodyFullGhostFrame bodyFullPathHistory
   bodyFullSubscriptArrayCodeBounds bodyFullSubscriptArrayCodeOps
   bodyFullEmptyLeafData exprSimFullBundleProps
@@ -230,7 +230,7 @@ Proof
               exprSimTopLevelPropsTheory.array_slot_base_compile_location] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty e1 es` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   simp[expr_vv_sim_full_via_bundle,expr_vv_sim_full_hypotheses_def,
        expr_sim_full_code_def] >>
   qx_genl_tac [`st0`, `sa`, `sb`, `shadow_sa`, `shadow_sb`, `vv`, `s0`, `G0`, `tn0`] >>
@@ -344,7 +344,7 @@ Resume subscript_array_framed_code_full[after_base]:
      qexists_tac `ann` >> simp[]) >>
   `body_expr_full_ok cx e2` by metis_tac[] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e2 mid` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   `?shadow_st2. lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e2)
       shadow_sm = (iop,shadow_st2) /\ gas_shadow_state st2 shadow_st2` by
     (`gas_shadow_compiles (lower_value compile_expr cenv ty e2)
@@ -723,7 +723,7 @@ Resume subscript_array_framed_code_full[fixed_selection]:
            simp[ptrDisciplineTheory.allocas_below_fmp_def, allocas, fmp, initial] >>
            metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.scalar_mul_add_joint_frame_run) >>
+    bodyFullSubscriptArrayCodeOpsTheory.scalar_mul_add_joint_frame_observed) >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`]
     (CONJUNCTS_THEN2 (mk_asm "address_run") strip_assume_tac)) >>
@@ -843,11 +843,12 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
      simp[] ) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame_run) >>
+    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_run) >>
   disch_then (qspecl_then [`PG`, `Gi`] mp_tac) >>
   disch_then (qx_choosel_then [`lenvar`, `Gl`, `tnl`, `il`]
       (CONJUNCTS_THEN2 assume_tac
-        (CONJUNCTS_THEN2 (mk_asm "length_run") strip_assume_tac))) >>
+        (CONJUNCTS_THEN2 assume_tac
+          (CONJUNCTS_THEN2 (mk_asm "length_run") strip_assume_tac)))) >>
   `word_of_bytes T (0w:bytes32)
       (TAKE 32 (DROP (w2n w) it.vs_data_section ++ REPLICATE 32 0w)) =
       n2w (array_length (ArrayTV etv (Dynamic n)) av)` by
@@ -897,9 +898,14 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
      gvs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
          ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
   `eval_operand iop ib = SOME iw /\ op_taint tnb iop = {} /\ op_prov Gb iop = NONE` by
-    (Cases_on `iop` >>
-     gvs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
-         ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`eval_operand iop it = SOME iw`, `op_taint tni iop = {}`,
+        `op_prov Gi iop = NONE`, `!q. iop = Var q ==> not_fresh_at st2 q`,
+        `!l. iop <> Label l`,
+        `!q. not_fresh_at st2 q ==> lookup_var q ib = lookup_var q it /\ _ /\ _`] >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `iop` >>
+     simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
+          ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
   `fn_has_code cs'' sb func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
   qpat_x_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
   simp[exprSimArrayIndexTheory.array_elem_ptr_def,
@@ -930,7 +936,7 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
            simp[ptrDisciplineTheory.allocas_below_fmp_def, allocas, fmp, initial] >>
            metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.code_dynamic_address_joint_frame_run) >>
+    bodyFullSubscriptArrayCodeOpsTheory.code_dynamic_address_joint_frame_observed) >>
   disch_then (qspec_then `PG` mp_tac) >>
   disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`]
     (CONJUNCTS_THEN2 (mk_asm "address_run") strip_assume_tac)) >>
@@ -1125,11 +1131,12 @@ Resume subscript_array_framed_code_full[dynamic_rejection]:
     (drule_all exprSimBopRestWordLoadSafetyTheory.rest_word_immutable_region_bound >> simp[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame_run) >>
+    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_run) >>
   disch_then (qspecl_then [`PG`, `Gi`] mp_tac) >>
   disch_then (qx_choosel_then [`lenvar`, `Gl`, `tnl`, `il`]
       (CONJUNCTS_THEN2 assume_tac
-        (CONJUNCTS_THEN2 (mk_asm "length_run") strip_assume_tac))) >>
+        (CONJUNCTS_THEN2 assume_tac
+          (CONJUNCTS_THEN2 (mk_asm "length_run") strip_assume_tac)))) >>
   `word_of_bytes T (0w:bytes32)
       (TAKE 32 (DROP (w2n w) it.vs_data_section ++ REPLICATE 32 0w)) =
       n2w (array_length (ArrayTV etv (Dynamic n)) av)` by
