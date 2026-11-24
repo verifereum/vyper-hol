@@ -2168,7 +2168,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
 QED
 
-Theorem copy_compile_cuts[local]:
+Theorem copy_compile_cuts:
   gas_shadow_state sa sh /\
   lower_value compile_expr cenv ty
     (Call ann (CreateTarget CreateCopyOf salted rof ks)
@@ -7051,7 +7051,7 @@ QED
 
 Finalise create_blueprint_prepared_path
 
-Theorem copy_pre_args[local]:
+Theorem copy_pre_args:
   expr_body_pre cenv cx env
     (Call ann (CreateTarget CreateCopyOf salted rof ks) args dflt) es ==>
   ann = BaseT AddressT /\
@@ -7069,7 +7069,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem copy_cut_code[local]:
+Theorem copy_cut_code:
   lower_value compile_expr cenv ty e sa = (x,a) /\
   lower_value compile_expr cenv ty' e' a = (y,b) /\
   compile_create_salt compile_expr cenv salt b = (sop,c) /\
@@ -7094,7 +7094,7 @@ Proof
   metis_tac[fragExecTheory.fn_has_code_split]
 QED
 
-Theorem copy_read_prepared[local]:
+Theorem copy_read_prepared:
   IS_SOME es.outcomes /\ dest_AddressV target = SOME addr /\
   dest_NumV amount = SOME value /\ dest_optional_salt salt = SOME sw /\
   LENGTH ts = (if IS_SOME salt then 3 else 2) /\
