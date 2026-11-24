@@ -289,7 +289,7 @@ Proof
   simp[GSYM ignore_bind_def]
 QED
 
-Theorem immutable_bind_at_interval[local]:
+Theorem immutable_bind_at_interval:
   immutable_scoped_bind_law (:'a) (:'b) /\ immutable_replay_bind_law (:'a) (:'b) /\
   body_inv tops C ce cx /\ MEM f C.ctx_functions /\ create_operand_at a s /\ ~s.vs_halted /\
   create_cut_code {} a m /\ create_cut_code {} m b /\
