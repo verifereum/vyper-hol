@@ -8,13 +8,14 @@
 Theory bodyFullTargetSubscript
 Ancestors
   bodyFullShadowBodyInv bodySim bodyInvMetadataProps targetSubscriptContinuation
+  bodyFullImmSubscriptIndexPre exprSimFullBundleProps
   bodyFullTargetDefs bodyFullTargetRoots bodyFullTargetImmutableArray bodyFullTargetImmutableWrite
   bodyFullSubscriptLiveImmSelect bodySimAugPlaceLoad immutableDeployAssignFacts
   exprWordOperand exprSimSource targetSubscriptSplit gasShadowCompileStmtHelpers
   exprSimSubscriptArrayLiveImmutableView exprSimCopy vyperTypeValues vyperValue
   vyperPlaceResultTyping vyperTypeExprResult vyperTyping exprSimHyps
   vyperTypeInvariants targetSubscriptMemory tuplePlaceSourceHead loweringStateRelDefs
-  gasOutcomeFullCompose gasOutcomeFull bodyFullPreds
+  gasOutcomeFullCompose gasOutcomeFull bodyFullPreds bodyFullSimProjection
   bodySimFull bodyFullIfExpReach bodyFullHashKeccakFixed
   contextRawReachable ptrDiscipline unitMemInv
   targetPlaceSimCasesBase targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
@@ -313,7 +314,7 @@ Resume target_subscript_sim_full[index]:
     (fs[body_base_target_full_ok_def] >> first_x_assum irule >> metis_tac[]) >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cenv cx (expr_type e) e mid1` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   suspend "index_run"
 QED
 
@@ -625,9 +626,10 @@ Proof
 QED
 
 Resume immutable_target_subscript_sim_full[base]:
-  drule_then (fn th => RULE_ASSUM_TAC (REWRITE_RULE[th, GSYM bind_assoc]) >>
-                       REWRITE_TAC[th, GSYM bind_assoc])
-    immutable_target_subscript_source >>
+  drule_then (fn th =>
+    qpat_assum `gas_admissible (eval_target_place _ (SubscriptTarget _ _)) _ _`
+      (assume_tac o REWRITE_RULE [th,GSYM bind_assoc]) >>
+    REWRITE_TAC[th,GSYM bind_assoc]) immutable_target_subscript_source >>
   `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
     (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
      simp[gas_admissible_def, bind_def] >> rpt strip_tac >>
@@ -678,82 +680,55 @@ Resume immutable_target_subscript_sim_full[index]:
     (qspec_then `storage_trace_horizon mid1.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[] >>
   qabbrev_tac `p = ImmutablePlace NONE id path` >>
-  `mid1 with gas_obs := [] = mid1` by
-    simp[evaluation_state_component_equality] >>
+  `expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (sm,sn,shadow_sm,shadow_sn)` by
+    simp[expr_sim_full_code_def] >>
+  `IS_SOME (type_place_target env bt)` by simp[] >>
+  `!H. valid_horizon cx st0 H mid1.storage_trace ==>
+    imm_target_post H ctx func cenv cx es sa sm s0 mid1 id path (ArrayT et bd) rb t1 /\
+    t1.vs_current_bb = sm.cs_current_bb /\ t1.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    alloca_history func t1 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t1) /\
+    s0.vs_alloca_next <= t1.vs_alloca_next /\
+    ghost_inv_at (DF H) lo d cenv cx mid1 G1 tn1 t1 /\
+    gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (s0,G0,tn0) marks (OK t1,G1,tn1)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
+       imm_target_post H ctx func cenv cx es sa sm s0 mid1 id path _ rb t1 /\ _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==> gas_origin_ptr_path _ _ _ _`
+       (drule_then assume_tac) >> simp[]) >>
+  `eval_base_place cx bt (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+      (INL (PlaceR p),mid1) /\
+    body_const_cells_agree [(NONE,tops)] cx env mid1 /\
+    expr_sim_inv cenv cx env mid1 /\ expr_body_pre cenv cx env e mid1 /\
+    body_expr_full_ok cx e /\
+    expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx (expr_type e) e mid1 (st0,sm,sn,shadow_sm,shadow_sn,iop,t1,G1,tn1)` by
+    (simp[Abbr `p`] >> irule immutable_subscript_index_pre >>
+     simp[] >> metis_tac[]) >>
+  `mid1 with gas_obs := [] = mid1` by simp[evaluation_state_component_equality] >>
   `eval_target_place cx bt
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-     (INL p, mid1)`
-    by (qpat_assum `!tail. eval_target_place _ _ _ = _`
-          (qspec_then `[]` (mp_tac o REWRITE_RULE [listTheory.APPEND_NIL])) >>
-        qpat_assum `mid1 with gas_obs := [] = mid1` (fn th => rewrite_tac[th]) >>
-        simp[Abbr `p`]) >>
-  `eval_base_place cx bt (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-      (INL (PlaceR p),mid1)` by
-    (irule tuplePlaceSourceHeadTheory.tuple_place_target_base_inversion >> simp[]) >>
+     (INL p, mid1)` by
+    (qpat_assum `!tail. eval_target_place _ _ _ = _`
+       (qspec_then `[]` (mp_tac o REWRITE_RULE [APPEND_NIL])) >>
+     qpat_assum `mid1 with gas_obs := [] = mid1` (fn th => rewrite_tac[th]) >>
+     simp[Abbr `p`]) >>
   `target_indices_pre cenv cx env bt` by fs[target_indices_pre_def] >>
-  `body_const_cells_agree [(NONE,tops)] cx env mid1` by
-    (irule body_const_cells_agree_base >>
-     qpat_assum `eval_base_place cx bt _ = (INL (PlaceR p),mid1)` (irule_at Any) >>
-     simp[]) >>
-  `expr_sim_inv cenv cx env mid1` by
-    (mp_tac (Q.INST [`s` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-       `s'` |-> `mid1`,`t` |-> `bt`,`r` |-> `INL p`] aug_place_target_inv) >>
-     simp[expr_sim_inv_gas_obs]) >>
-  `expr_body_pre cenv cx env e mid1` by
-    fs[target_indices_pre_def] >>
-  `body_expr_full_ok cx e` by
-    (fs[body_base_target_full_ok_def] >> first_x_assum irule >> metis_tac[]) >>
-  `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e mid1` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   suspend "index_run"
 QED
 
 Resume immutable_target_subscript_sim_full[index_run]:
-  `!fn inst s. frag_reachable ctx func t1 fn inst s ==>
-    dalloca_fmp_headroom inst s` by
-    (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-       metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-     qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
-       gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t1,G1,tn1)`
-       (qspec_then `storage_trace_horizon mid1.storage_trace` mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >>
-     strip_tac >>
-     metis_tac[bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom]) >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid1` by
-    (simp[gas_admissible_def] >> rpt strip_tac >>
-     Cases_on `res` >- simp[expr_res_ok_def] >> rename1 `INR ex` >>
-     `target_place_res_ok (INR ex : place + exception)` suffices_by
-       simp[target_place_res_ok_def, expr_res_ok_def] >>
-     qpat_x_assum `gas_admissible (bind (eval_target_place _ _) _) _ _`
-       (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
-     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs`
-                   mp_tac) >>
-     qpat_assum `!tail. eval_target_place _ _ _ = _`
-       (qspec_then `gs` assume_tac) >>
-     simp[Once bind_def] >>
-     `mid1 with gas_obs := gs = mid1 with gas_obs := gs` by simp[] >>
-     simp[Once bind_def] >> gvs[]) >>
-  `local_ptrs_reserved cenv sm` by
-    metis_tac[local_ptrs_reserved_next_var] >>
-  `return_buf_frame d cenv sm t1` by
-    (irule return_buf_frame_frame >>
-     qexistsl_tac [`cenv`, `s0`, `sa`] >>
-     fs[imm_target_post_def] >> metis_tac[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`, `sm`, `sn`, `shadow_sm`, `shadow_sn`, `iop`,
-                           `t1`, `G1`, `tn1`] mp_tac) >>
-  impl_tac
-  >- (asm_rewrite_tac[] >> rpt conj_tac
-      >- metis_tac[not_fresh_at_mono]
-      >- metis_tac[not_fresh_at_mono] >>
-      gen_tac >> strip_tac >>
-      qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
-        imm_target_post H ctx func cenv cx es sa sm s0 mid1 id path _ rb t1 /\ _`
-        (qspec_then `H` (drule_then strip_assume_tac)) >>
-      fs[imm_target_post_def]) >>
-  strip_tac >>
+    (strip_assume_tac o REWRITE_RULE [expr_sim_full_via_bundle]) >>
+  qpat_x_assum `!st0 sa sb sha shb op s0 G0 tn0. expr_sim_full_hypotheses _ _ _ _ _ _ _ ==> _`
+    (qspecl_then [`st0`,`sm`,`sn`,`shadow_sm`,`shadow_sn`,`iop`,`t1`,`G1`,`tn1`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (strip_assume_tac o REWRITE_RULE [expr_sim_full_post_def,
+      expr_sim_full_endpoint_def]) >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ (bind (eval_expr cx e) _) _ idxQ idxR` >>
   irule gas_outcome_full_bind_all >>
