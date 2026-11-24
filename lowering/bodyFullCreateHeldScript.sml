@@ -2514,7 +2514,7 @@ QED
 
 (* The private allocation and operand evaluation precede a prepared dispatch.
    The dispatch continuation is independent of how the byte window was built. *)
-Theorem create_salt_word[local]:
+Theorem create_salt_word:
   value_has_type (BaseTV (BytesT (Fixed 32))) v ==>
   dest_create_salt v = SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) v)
 Proof
@@ -2563,7 +2563,7 @@ Proof
   qexists `sa` >> fs[ghost_kept_at_def]
 QED
 
-Theorem create_eval_exprs_cons_replay[local]:
+Theorem create_eval_exprs_cons_replay:
   (!tail. bind (eval_expr cx e) (read_result cx)
      (es with gas_obs := xs ++ tail) = (INL v,em with gas_obs := tail)) /\
   (!tail. eval_exprs cx rest (em with gas_obs := ys ++ tail) = (INL vs,ee with gas_obs := tail)) ==>
@@ -2597,7 +2597,7 @@ QED
 
 (* Project the typed word and the write-back and horizon frames from the
    same operand run. The scalar continuations use both views of the post. *)
-Theorem create_word_cut_frame_facts[local]:
+Theorem create_word_cut_frame_facts:
   expr_body_pre cenv cx env e es /\ expr_result_typed env e (Value v) /\
   expr_type e = BaseT bt /\ is_word_type (BaseT bt) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
@@ -2628,7 +2628,7 @@ Proof
   fs[loweringPostsTheory.expr_post_def]
 QED
 
-Theorem create_cut_frames_keep_operand[local]:
+Theorem create_cut_frames_keep_operand:
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   ci_mono sa sm /\ wb_frame cenv es em sa s m /\ wb_frame cenv em ee sm m t /\
   ghost_kept_at lo cenv es sa G tn s Gm tm /\ ghost_kept_at lo cenv em sm Gm tm m G1 tn1 /\
