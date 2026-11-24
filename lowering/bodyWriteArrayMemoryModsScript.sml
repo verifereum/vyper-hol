@@ -193,7 +193,7 @@ QED
 
 (* Carry just the final typed entry through the recursive target walk.
    The index can change this entry when the saved prefix is fixed-shape. *)
-Theorem write_memory_base_live[local]:
+Theorem write_memory_base_live:
   !bt cenv cx env st s t id path entry root vt tv.
     expr_sim_inv_mods mods cenv cx env st /\ alloc_limits_target cenv bt /\
     type_place_target env bt = SOME vt /\
