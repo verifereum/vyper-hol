@@ -1,7 +1,7 @@
 (* Saving a constructor operand that needs no private aggregate copy. *)
 Theory createCtorSavedSimpleMods
 Ancestors
-  createCtorSavedSimple createExprSizeExitDefsMods
+  createCtorSavedSimple createExprSizeExitDefsMods createCtorSnapshotTypingMods bodyFullPostsMods
   bodyFullExtCallPosList bodyFullExtCallPosAggregate bodyFullExtCallPosTransport
   exprSimFullBundleProps exprBodyPreProps exprSimSource exprSimUnwrap
   exprReasonOperand exprOperandVar exprSimWordArgs exprSimProps exprSimMemDefs
@@ -22,7 +22,18 @@ Theorem ctor_snapshot_word_lower_value_mods:
   ?op. lower_value compile_expr ce (expr_type e) e sa = (op,sb) /\
        sv = StackValue (expr_type e) op
 Proof
-  cheat
+  strip_tac >> drule ctor_snapshot_word_types_mods >> strip_tac >> gvs[] >>
+  `reason_uniform_shape compile_expr ce (expr_type e) e` by
+    (irule compile_expr_reason_uniform >> qexists_tac `env` >>
+     drule expr_body_pre_mods_inv >> fs[expr_sim_inv_mods_def] >>
+     metis_tac[expr_body_pre_mods_well_typed]) >>
+  `vv_type vv = expr_type e` by
+    (fs[reason_uniform_shape_def] >> first_x_assum drule >>
+     Cases_on `vv` >> gvs[reason_result_shape_def, vv_type_def]) >>
+  `ext_call_arg_value (expr_type e) vv = vv` by
+    (Cases_on `vv` >> gvs[ext_call_arg_value_def, vv_type_def]) >>
+  Cases_on `unwrap_value ce vv sm` >>
+  gvs[lower_value_def, compile_snapshot_vv_def, comp_bind_def, comp_return_def]
 QED
 
 Theorem ctor_saved_head_word_mods[local]:
@@ -43,7 +54,28 @@ Theorem ctor_saved_head_word_mods[local]:
   extcall_positional_post_mods mods T DF lo d ctx func ce cx env xs [e] [sv]
     sa sb es s0 G0 tn0 H (INL [v]) ee G tn t
 Proof
-  cheat
+  strip_tac >> drule ctor_snapshot_word_types_mods >> strip_tac >> gvs[] >>
+  `ci_mono sm sb` by
+    (qspecl_then [`ce`, `exprs_can_mutate ce xs`,
+       `ext_call_arg_value (expr_type e) vv`, `sm`] mp_tac
+       ci_mono_compile_snapshot_vv >> simp[]) >>
+  `!id ty. FLOOKUP env.var_types id = SOME ty ==>
+            well_formed_type env.type_defs ty` by
+    metis_tac[expr_body_pre_mods_inv, expr_sim_inv_mods_env,
+              logArgumentTypeEvalTheory.consistent_variable_type_well_formed] >>
+  drule_then assume_tac expr_body_pre_mods_well_typed >>
+  drule_all_then strip_assume_tac exprWordOperandTheory.lower_value_word_shape >>
+  `expr_body_pre_mods mods ce cx env e (es with gas_obs := gs)` by simp[] >>
+  drule_all_then strip_assume_tac ctor_snapshot_source_frame_mods >>
+  gvs[expr_sim_full_post_mods_def, expr_sim_full_endpoint_def, expr_post_mods_def] >>
+  drule expr_post_frame >> strip_tac >>
+  fs[expr_post_def] >>
+  `return_buf_frame d ce sb t` by
+    (irule return_buf_frame_frame >> qexistsl [`ce`,`s0`,`sa`] >> simp[]) >>
+  simp[extcall_positional_post_mods_def, vv_operand_def, vv_location_def] >>
+  map_every qexists_tac [`sa`,`sm`,`sb`,`vv`,`Value v`,`exprs_can_mutate ce xs`] >>
+  gvs[ci_mono_def, vv_holds_mods_def, vv_holds_def, vv_at_def, ptr_vv_ok_def,
+      vv_store_bound_def, read_result_def, return_def]
 QED
 
 Theorem ctor_retained_representation_mods[local]:
