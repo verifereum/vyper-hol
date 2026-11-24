@@ -68,6 +68,8 @@ Ancestors
   linkedRuntimeSourceLookup[qualified]
   gasPathDataSection[qualified] bodyFullHashKeccakFixed[qualified]
   linkedRuntimeSelectedTrace[qualified] unitExecutionComposeResult[qualified]
+  linkedRuntimeDefaultReplay[qualified] linkedDefaultSourceFrame[qualified]
+  linkedDefaultError[qualified] gasExemptCertMods[qualified] gasOutcomeFullMods[qualified]
   loweringHalt[qualified] nonreentrantExit[qualified] sourceUnitExecution[qualified]
   stmtFragPtr[qualified] vyperCallFiniteStorageSupport[qualified] vyperEvalReadingErrors[qualified]
 
@@ -4603,9 +4605,379 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_valu
       qexists_tac `[]` >> conj_tac
       >- linked_grouped_reject_execution_tac >>
       linked_grouped_reject_no_gas_tac) >>
+  suspend "linked_grouped_legacy_passing_checks"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_passing_checks]:
+  rename1 `eval_operand (Var mid) dispatch_u = SOME (calldata_method_id cd)` >>
+  rename1 `compile_register_positional_args ce pos 4 checked = (registered_env,registered)` >>
+  `set_external_package_target rpolicy.rpol_target
+      (package_external_fn_unit mods T (K global_nonreentrant_slot)
+        (src,(mut,nr,selected_raw,tx.function_name,args,([]:expr list),ret,body_code))) =
+      ("fn_" ++ tx.function_name,ce,pos,mc,pay,nr,key,tr,view,body_code,rt)` by
+    (qpat_assum `Abbrev (pkg = _)`
+       (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `fn_allocs_ok_unit mods (src,(mut,nr,selected_raw,tx.function_name,args,[],ret,body_code))` by
+    (qpat_assum `entry_key = (src,_)` (SUBST1_TAC o SYM) >>
+     qpat_assum `EVERY (fn_allocs_ok_unit mods) exts`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >> disch_then drule >> simp[]) >>
+  `contract_namespaces_ok F mods` by drule_then ACCEPT_TAC check_contract_namespaces_ok >>
+  drule_all (Q.INST [`dflts` |-> `[]:expr list`] linked_registration_package_inputs) >>
+  disch_then (CONJUNCTS_THEN2 kall_tac (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac
+      (qx_choose_then `package_tys` (map_every assume_tac o CONJUNCTS))))) >>
+  `OPT_MMAP (evaluate_type (type_env_all_modules mods)) (MAP SND args) = SOME decoded_tys` by
+    (qpat_assum `tys = MAP SND prefix` (fn tys =>
+       qpat_assum `prefix = args` (fn pref =>
+         PURE_REWRITE_TAC [GSYM (REWRITE_RULE [pref] tys)])) >>
+     first_assum ACCEPT_TAC) >>
+  `package_tys = decoded_tys` by
+    (qpat_assum `OPT_MMAP _ (MAP SND args) = SOME package_tys` mp_tac >>
+     qpat_assum `OPT_MMAP _ (MAP SND args) = SOME decoded_tys`
+       (fn decoded => simp[NoAsms, decoded])) >>
+  qpat_x_assum `package_tys = decoded_tys` SUBST_ALL_TAC >>
+  `hit.vs_call_ctx.cc_calldata = cd` by simp[Abbr `cd`] >>
+  qpat_assum `((pay \/ hit.vs_call_ctx.cc_callvalue = 0w) /\ _ /\ _ ==> ?s G tn. _)` mp_tac >>
+  impl_tac
+  >- (conj_tac
+      >- (qpat_assum `pay = _` SUBST1_TAC >>
+          qpat_assum `hit.vs_call_ctx.cc_callvalue = _` SUBST1_TAC >>
+          qpat_assum `~(mut <> Payable /\ tx.value <> 0)` mp_tac >>
+          simp[NoAsms, DE_MORGAN_THM] >> disch_then (DISJ_CASES_THEN (fn eq => simp[NoAsms, eq]))) >>
+      qpat_assum `hit.vs_call_ctx.cc_calldata = cd` SUBST1_TAC >>
+      qpat_assum `mc = 4 + SUM _` SUBST1_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_assum `LENGTH cd < 18446744073709551616` mp_tac >>
+      simp[NoAsms, dimword_def] >> decide_tac) >>
+  disch_then (qx_choosel_then [`u`,`G1`,`tn1`] (map_every assume_tac o CONJUNCTS)) >>
+  suspend "linked_grouped_legacy_positional_register"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_positional_register]:
+  qpat_assum `selected_registration_frame vs entry_taint u tn1`
+    (strip_assume_tac o PURE_REWRITE_RULE [selected_registration_frame_def]) >>
+  `calldata_decode_args u.vs_call_ctx.cc_calldata decoded_tys 0 = SOME tx.args` by
+    (qpat_assum `u.vs_call_ctx = vs.vs_call_ctx` SUBST1_TAC >>
+     qpat_assum `Abbrev (cd = _)`
+       (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `?env. bind_arguments (type_env_all_modules mods) args tx.args = SOME env` by
+    (irule dispatchedDecodedBindModsTheory.decoded_parameters_bind >>
+     qexistsl_tac [`cd`,`decoded_tys`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `alloca_history fn start /\ alloca_inv start` by
+    (conj_tac
+     >- (irule alloca_history_empty >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
+  `alloca_history fn u` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) [] (OK u,G1,tn1)`
+       (qspecl_then [`ARB`,`ARB`] assume_tac) >>
+     drule_all_then ACCEPT_TAC body_full_path_alloca_history) >>
+  `LENGTH args = LENGTH decoded_tys /\ LENGTH args = LENGTH tx.args` by
+    (conj_tac
+     >- (qpat_assum `OPT_MMAP _ (MAP SND args) = SOME decoded_tys`
+           (mp_tac o MATCH_MP (SPEC_ALL vyperTypeABITheory.OPT_MMAP_LENGTH)) >> simp[NoAsms]) >>
+     drule_then ACCEPT_TAC bind_arguments_length) >>
+  `LIST_REL (\ty tv. evaluate_type (type_env_all_modules mods) ty = SOME tv)
+     (MAP SND args) decoded_tys` by
+    (qpat_assum `OPT_MMAP _ (MAP SND args) = SOME decoded_tys`
+       (ACCEPT_TAC o MATCH_MP (SPEC_ALL vyperTypeABITheory.OPT_MMAP_LIST_REL))) >>
+  `!i. i < LENGTH args ==>
+     abi_decoder_coherent ce (type_env_all_modules mods) ce.ce_struct_fields
+       (SND (EL i args)) (EL i decoded_tys) /\
+     (?loc. FLOOKUP ce.ce_vars (FST (EL i args)) = SOME loc /\
+       var_location_memory_size loc = SOME (type_memory_size (EL i decoded_tys))) /\
+     type_memory_size (EL i decoded_tys) < dimword (:256)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `LIST_REL _ args (ZIP (MAP SND args,decoded_tys))`
+       (mp_tac o Q.SPEC `i` o CONJUNCT2 o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+     qpat_assum `LENGTH args = LENGTH decoded_tys` (fn len =>
+       qpat_assum `i < LENGTH args` (fn bound =>
+         Cases_on `EL i args` >>
+         qpat_assum `EL i args = _` (fn arg =>
+           simp[NoAsms, bound, GSYM len, EL_ZIP, EL_MAP, arg])))) >>
+  `!ce' i. i < LENGTH args /\ ce' = ce with ce_vars := ce'.ce_vars ==>
+      selected_slot_accepts ce' (type_env_all_modules mods) ce'.ce_struct_fields
+        (SND (EL i args)) (EL i decoded_tys) /\
+      abi_decoder_coherent ce' (type_env_all_modules mods) ce'.ce_struct_fields
+        (SND (EL i args)) (EL i decoded_tys)` by
+    (rpt gen_tac >> strip_tac >>
+     `abi_decoder_coherent ce' (type_env_all_modules mods) ce'.ce_struct_fields
+        (SND (EL i args)) (EL i decoded_tys)` by
+       (qpat_assum `ce' = _` SUBST1_TAC >>
+        simp[ctor_decoder_coherent_vars]) >>
+     simp[] >> irule selected_register_one >>
+     irule selected_argument_decoder_accepts >> first_assum ACCEPT_TAC) >>
+  suspend "linked_grouped_legacy_positional_resources"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_positional_resources]:
+  `ce.ce_imm_alloca = NONE /\ ce.ce_vars =
+     FST (allocate_args (get_struct_fields (make_struct_fields_map_mods mods))
+       args 0 FEMPTY)` by
+    (qpat_assum `set_external_package_target _ _ = _` mp_tac >>
+     simp[NoAsms, set_external_package_target_def, package_external_fn_unit_def,
+          update_cenv_nonreentrant_def] >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     qpat_assum `(if _ then _ else _) with
+         <|ce_target := _; ce_nonreentrant := _|> = ce`
+       (mp_tac o AP_TERM ``\ce:compile_env. (ce.ce_imm_alloca,ce.ce_vars)``) >>
+     Cases_on `ret = NoneT` >>
+     pop_assum (fn ret_case =>
+       simp[NoAsms, ret_case, update_cenv_ret_abi_def, build_compile_env_unit_def,
+            pairTheory.ELIM_UNCURRY, pairTheory.FST, LET_THM])) >>
+  `(!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE) /\
+    EVERY (\a. ?off. FLOOKUP ce.ce_vars (FST a) =
+      SOME (MemLoc off (type_mem_bytes (get_struct_fields (make_struct_fields_map_mods mods))
+         (SND a)))) args` by
+    (qpat_assum `ce.ce_vars = _` SUBST1_TAC >>
+     drule_then
+       (qspecl_then [`get_struct_fields (make_struct_fields_map_mods mods)`,`0`,`FEMPTY`] mp_tac)
+       allocate_args_lookup >> simp[NoAsms, FLOOKUP_EMPTY]) >>
+  `!n p sz. FLOOKUP ce.ce_vars n <> SOME (PtrVar (Var p) sz)` by
+    (rpt gen_tac >> Cases_on `MEM n (MAP FST args)`
+     >- (qpat_assum `MEM n (MAP FST args)`
+          (qx_choose_then `arg` strip_assume_tac o REWRITE_RULE [MEM_MAP]) >>
+         qpat_assum `EVERY (\a. ?off. FLOOKUP ce.ce_vars (FST a) = _) args`
+           (qspec_then `arg` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+         impl_tac >- first_assum ACCEPT_TAC >>
+         BETA_TAC >>
+         disch_then (qx_choose_then `off` (fn lookup =>
+           qpat_assum `n = FST arg` (fn name =>
+             simp[NoAsms, name, lookup, var_location_distinct])))) >>
+     qpat_assum `!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE`
+       (drule_then (fn absent => simp[NoAsms, absent]))) >>
+  `compile_register_positional_args ce (build_positional_args ce args) 4 checked =
+    (registered_env,registered)` by
+    (qpat_assum `pos = build_positional_args _ _` (SUBST1_TAC o SYM) >>
+     first_assum ACCEPT_TAC) >>
+  suspend "linked_grouped_legacy_positional_fold"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_positional_fold]:
+  `local_ptrs_reserved registered_env registered` by
+    (qspecl_then [`build_positional_args ce args`,`ce`,`4`,`checked`,
+                    `registered_env`,`registered`] mp_tac
+       compile_register_positional_args_reserved >>
+     impl_tac
+     >- (rpt conj_tac
+         >- first_assum ACCEPT_TAC
+         >- (simp[NoAsms, build_positional_args_names] >> rpt strip_tac >>
+             CCONTR_TAC >>
+             qpat_assum `!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE`
+               (drule_then (fn outside =>
+                  qpat_assum `FLOOKUP ce.ce_vars n = SOME _`
+                    (CONTR_TAC o REWRITE_RULE [outside, optionTheory.NOT_NONE_SOME]))))
+         >- (rpt strip_tac >>
+             qpat_assum `FLOOKUP ce.ce_vars _ = SOME (PtrVar (Var _) _)`
+               (fn lookup => qpat_assum
+                 `!n p sz. FLOOKUP ce.ce_vars n <> SOME (PtrVar (Var p) sz)`
+                 (CONTR_TAC o (fn excluded => MATCH_MP (SPEC_ALL excluded) lookup)))) >>
+         qpat_assum `ce.ce_imm_alloca = NONE` (fn imm => simp[NoAsms, imm])) >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+  `4 + SUM (MAP tv_abi_size decoded_tys) < dimword (:256)` by
+    (qpat_assum `mc = 4 + SUM _` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  `fresh_vars_wrt checked u` by
+    (qpat_assum `selected_registration_resources _ _ _ 0 checked u`
+       (strip_assume_tac o PURE_REWRITE_RULE [selected_registration_resources_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `fresh_vars_wrt registered u` by
+    (irule fresh_vars_wrt_mono >> qexists_tac `checked` >>
+     qpat_assum `compile_register_positional_args _ _ _ checked = (_,registered)`
+       (mp_tac o MATCH_MP compile_register_positional_args_next_var) >>
+     asm_rewrite_tac [arithmeticTheory.GREATER_EQ]) >>
+  drule_at (Pat `calldata_decode_args u.vs_call_ctx.cc_calldata _ _ = _`)
+    (Q.INST [`PG` |-> `[]`] (SPEC_ALL selected_registration_fold)) >>
+  disch_then (drule_at (Pat `compile_register_positional_args _ (build_positional_args _ _) _ _ = _`)) >>
+  disch_then (drule_at (Pat `selected_registration_resources _ _ _ _ checked u`)) >>
+  disch_then (drule_at (Pat `bind_arguments _ _ _ = _`)) >>
+  disch_then (qspecl_then [`tn1`,`registered`,`G1`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
+  disch_then (qx_choosel_then [`s0`,`G2`,`tn2`] (map_every assume_tac o CONJUNCTS)) >>
+  suspend "linked_grouped_legacy_registered_path"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_registered_path]:
+  `!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
+    (start,FEMPTY,entry_taint) [] (OK s0,G2,tn2)` by
+    (rpt gen_tac >> irule gas_origin_ptr_path_trans >>
+     qexistsl_tac [`G1`,`u`,`tn1`] >> asm_rewrite_tac[]) >>
+  qpat_assum `selected_registration_frame u tn1 s0 tn2`
+    (strip_assume_tac o PURE_REWRITE_RULE [selected_registration_frame_def]) >>
+  `selected_registration_frame vs entry_taint s0 tn2` by
+    (pure_rewrite_tac [selected_registration_frame_def] >>
+     asm_rewrite_tac[]) >>
+  qpat_assum `selected_registration_frame vs entry_taint s0 tn2`
+    (strip_assume_tac o PURE_REWRITE_RULE [selected_registration_frame_def]) >>
+  `tn2.t_stor = {} /\ tn2.t_trans = {} /\ tn2.t_imm = {}` by
+    (qpat_assum `tn2.t_stor = entry_taint.t_stor` SUBST1_TAC >>
+     qpat_assum `tn2.t_trans = entry_taint.t_trans` SUBST1_TAC >>
+     qpat_assum `tn2.t_imm = entry_taint.t_imm` SUBST1_TAC >> simp[NoAsms, entry_taint_def]) >>
+  `s0.vs_initial_fmp = vs.vs_initial_fmp` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) [] (OK s0,G2,tn2)`
+       (qspecl_then [`ARB`,`ARB`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >> simp[NoAsms, Abbr `start`]) >>
+  qpat_assum `selected_registration_resources _ fn _ 0 registered s0`
+    (strip_assume_tac o PURE_REWRITE_RULE [selected_registration_resources_def]) >>
+  `fmp_room unit.cu_context fn s0` by
+    (irule entry_frontier_fmp_room >> conj_tac
+     >- asm_rewrite_tac[] >>
+     conj_tac
+     >- (qpat_assum `s0.vs_initial_fmp = vs.vs_initial_fmp` SUBST1_TAC >>
+         qpat_assum `ctx_has_dalloca unit.cu_context ==> unit_alloca_budget _ <= _ /\ _`
+           mp_tac >> simp[NoAsms]) >>
+     qexists_tac `ARB:instruction` >> first_assum ACCEPT_TAC) >>
+  `!j. j < LENGTH args ==> ?aid q p n.
+    FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP registered_env.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+    lookup_var q s0 = SOME (n2w p) /\ ptr_covers G2 tn2 q s0 n /\
+    (!mem. mem_agree_outside tn2.t_mem s0.vs_memory mem ==>
+      val_in_memory (EL j decoded_tys) (EL j tx.args) p mem)` by
+    (rpt strip_tac >>
+     qpat_assum `selected_registration_owners _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `j` mp_tac o REWRITE_RULE [selected_registration_owners_def]) >>
+     qpat_assum `j < LENGTH args` (fn bound => simp[NoAsms, bound, EL_MAP]) >>
+     strip_tac >> rename1 `FLOOKUP s0.vs_allocas aid = SOME (addr,n)` >>
+     qexistsl_tac [`aid`,`q`,`addr`,`n`] >> asm_rewrite_tac[]) >>
+  suspend "linked_grouped_legacy_registered_source"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_registered_source]:
+  rename1 `ALOOKUP mods src = SOME tops` >>
+  rename1 `Abbrev (body_code = subst_consts_stmts_mods _ fbody)` >>
+  rename1 `fn_allocs_ok_unit mods (src,mut,nr,raw,_,args,[],ret,body_code)` >>
+  `vyperInterpreter$lookup_function src tx.function_name External tops =
+    SOME (mut,nr,args,[],ret,fbody)` by
+    (qpat_assum `dflts = []` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  `src = ALOOKUP exps tx.function_name` by simp[NoAsms, Abbr `src`] >>
+  `lookup_raw_return_or_F src tx.function_name External tops = raw` by
+    (qpat_assum `dflts = []` SUBST_ALL_TAC >>
+     qpat_assum `(_ /\ top = FunctionDecl _ _ _ _ _ _ _ _ _) \/ public_getter_src _ top = _`
+       (DISJ_CASES_THEN2 strip_assume_tac
+         (strip_assume_tac o REWRITE_RULE [tagged_getter_source_tuple]))
+     >- (`MEM (src,tx.function_name) (external_name_keys_toplevel src top)` by
+           (qpat_assum `top = FunctionDecl _ _ _ _ _ _ _ _ _` SUBST1_TAC >>
+            simp[NoAsms, external_name_keys_toplevel_def]) >>
+         qpat_assum `vyperInterpreter$lookup_function src tx.function_name External tops = _`
+           (mp_tac o MATCH_MP (SPEC_ALL lookup_function_external_raw_cases)) >>
+         disch_then (DISJ_CASES_THEN strip_assume_tac)
+         >- (`top = FunctionDecl External mut nr rr tx.function_name args [] ret fbody` by
+              (qspecl_then [`tops`, `external_name_keys_toplevel src`, `top`,
+                 `FunctionDecl External mut nr rr tx.function_name args [] ret fbody`,
+                 `(src,tx.function_name)`] mp_tac all_distinct_flat_map_unique >>
+               impl_tac >- (rpt conj_tac >>
+                 (first_assum ACCEPT_TAC ORELSE simp[NoAsms, external_name_keys_toplevel_def])) >>
+               disch_then ACCEPT_TAC) >>
+             qpat_assum `lookup_raw_return src tx.function_name External tops = SOME rr` (fn ret =>
+               qpat_assum `top = FunctionDecl External mut nr raw tx.function_name args [] _ _` (fn left =>
+                 qpat_assum `top = FunctionDecl External mut nr rr tx.function_name args [] _ _`
+                   (mp_tac o REWRITE_RULE [left]) >>
+                 simp[NoAsms, lookup_raw_return_or_F_def, ret]))) >>
+         `public_getter_src src decl = SOME (mut,nr,F,tx.function_name,args,
+            ([]:expr list),ret,fbody)` by
+           (simp[NoAsms, tagged_getter_source_tuple] >>
+            rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         `MEM (src,tx.function_name) (external_name_keys_toplevel src decl)` by
+           (drule tagged_getter_name_key >> simp[NoAsms, fn_decl_name_def]) >>
+         `top = decl` by
+           (qspecl_then [`tops`, `external_name_keys_toplevel src`, `top`, `decl`,
+              `(src,tx.function_name)`] mp_tac all_distinct_flat_map_unique >>
+            impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+            disch_then ACCEPT_TAC) >>
+         qpat_assum `top = FunctionDecl _ _ _ _ _ _ _ _ _` (fn decl =>
+           qpat_assum `top = decl` (fn same =>
+             qpat_assum `is_public_getter_decl _ decl`
+               (CONTR_TAC o REWRITE_RULE [GSYM same, decl, is_public_getter_decl_def])))) >>
+     qspecl_then [`tops`,`src`,`tx.function_name`,`top`] mp_tac public_getter_raw_return_none >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then (fn none => asm_rewrite_tac [lookup_raw_return_or_F_def, none, optionTheory.option_case_def])) >>
+  suspend "linked_grouped_legacy_registered_relations"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_registered_relations]:
+  `set_external_package_target rpolicy.rpol_target
+      (package_external_fn_unit mods T (K global_nonreentrant_slot)
+        (src,subst_consts_fn_mods (consts_env_mods mods)
+          (mut,nr,lookup_raw_return_or_F src tx.function_name External tops,
+           tx.function_name,args,[],ret,fbody))) =
+      ("fn_" ++ tx.function_name,ce,pos,mc,pay,nr,key,tr,view,body_code,rt)` by
+    (qpat_assum `lookup_raw_return_or_F _ _ _ _ = raw` (fn rr =>
+       qpat_assum `Abbrev (body_code = _)` (fn body =>
+         PURE_REWRITE_TAC [rr, subst_consts_fn_mods_def, subst_consts_expr_mods_def,
+              GSYM (REWRITE_RULE [markerTheory.Abbrev_def] body)])) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `initial_venom_state_rel_mods _ _ _ vs`
+    (strip_assume_tac o PURE_REWRITE_RULE [initial_venom_state_rel_mods_def]) >>
+  `?es0. send_call_value mut cx
+    (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
+    (INL (),es0)` by
+    (Cases_on `send_call_value mut cx
+      (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>)` >>
+     rename1 `send_call_value mut cx _ = (paid,estate)` >>
+     Cases_on `paid`
+     >- (qexists_tac `estate` >> qpat_assum `send_call_value mut cx _ = _`
+           (fn send => simp[NoAsms, send])) >>
+     `value_transfer_ok cx.txn
+       (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>).accounts` by
+       (simp[NoAsms, Abbr `cx`, initial_evaluation_context_def, initial_state_def] >>
+        first_assum ACCEPT_TAC) >>
+     drule_all send_call_value_reject_condition >>
+     qpat_assum `~(mut <> Payable /\ tx.value <> 0)` (fn accepted =>
+       simp[NoAsms, Abbr `cx`, initial_evaluation_context_def, CONJ_COMM, accepted])) >>
+  `send_call_value mut (initial_evaluation_context am.sources am.layouts tx src)
+      (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
+      (INL (),es0)` by
+    (qpat_assum `Abbrev (cx = _)` (fn cx =>
+       PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] cx)]) >>
+     first_assum ACCEPT_TAC) >>
+  `vars_pc_only (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+            vs_inst_idx := 0|>) vs` by
+    simp[NoAsms, vars_pc_only_def, venomStateTheory.venom_state_component_equality] >>
+  `!H:(bool # 256 word # type_value) list # num list.
+    stmt_state_rel H unit.cu_context fn registered_env cx es0 s0 /\
+    ghost_inv H NONE registered_env cx es0 G2 tn2 s0` by
+    (gen_tac >>
+     qpat_assum `Abbrev (cx = _)` (fn cx =>
+       PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] cx]) >>
+     mp_tac (Q.INST [`efn` |-> `fn`, `cenv0` |-> `ce`,
+       `pos_args` |-> `pos`, `mincd` |-> `mc`, `ut'` |-> `tr`, `iv` |-> `view`,
+       `lowered_body` |-> `body_code`, `st` |-> `checked`,
+       `cenv` |-> `registered_env`, `sa` |-> `registered`,
+       `elbl` |-> `"__entry"`, `s1` |-> `vs`, `tvs` |-> `decoded_tys`,
+       `G0` |-> `G2`, `tn0` |-> `tn2`, `lbl` |-> `"fn_" ++ tx.function_name`,
+       `site` |-> `ARB:instruction`]
+        (Q.INST_TYPE [`:'a` |-> `:256`]
+          registration_actual_endpoint_relations_from_prefix_mods)) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  suspend "linked_grouped_legacy_shadow_support"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_shadow_support]:
+  `shadow_body_inv_mods mods exps unit.cu_context shadow_unit.cu_context` by
+    (map_every (fn pattern =>
+       qpat_assum pattern (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]))
+       [`Abbrev (groups = _)`,`Abbrev (ips = _)`,`Abbrev (fall = _)`] >>
+     qmatch_asmsub_abbrev_tac
+       `run_grouped_lowering grouped_shadow_groups
+         (MAP gas_shadow_internal_package ips) (OPTION_MAP gas_shadow_fallback_package fall)
+         rpolicy "__entry" = SOME shadow_unit` >>
+     qpat_assum `check_contract F am.layouts tx.target mods = SOME art`
+       (mp_then Any mp_tac (Q.INST [`shadow_groups` |-> `grouped_shadow_groups`,
+          `rp` |-> `rpolicy`] grouped_runtime_shadow_body_inv_mods)) >>
+     disch_then (qspecl_then [`unit`,`rpolicy`,`ips`,`ints`,`imp_ctors`,
+       `groups`,`grouped_shadow_groups`,`fb`,`fall`,`exts`,`exps`,`ctor`] mp_tac) >>
+     impl_tac
+     >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+       qpat_assum `Abbrev (grouped_shadow_groups = _)`
+         (ACCEPT_TAC o REWRITE_RULE [markerTheory.Abbrev_def])]) >>
+     qpat_assum `run_grouped_lowering grouped_shadow_groups _ _ _ _ = SOME shadow_unit`
+       (fn compiled => simp[NoAsms, compiled, optionTheory.SOME_11])) >>
   suspend "linked_grouped_legacy_value_accepted"
 QED
 
+(* At this cut, start-to-s0 is the actual grouped zero-mark path and the
+   selected scope/state relations hold at the paired guarded-body code. *)
 Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_value_accepted]:
   cheat
 QED
@@ -5942,6 +6314,201 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omi
          (print ("OMITTED INPUT: " ^ term_to_string conclusion ^ "\n"); ALL_TAC goal)) >>
       NO_TAC) >>
   disch_then (mk_asm "omitted_execution") >>
+  suspend "linked_grouped_default_omitted_replay"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omitted_replay]:
+  `LENGTH tx.args = LENGTH args - LENGTH dflts + k` by
+    (`LENGTH tx.args = LENGTH prefix` by
+       (qpat_assum `calldata_decode_args cd decoded_tys 0 = SOME tx.args`
+          (mp_tac o MATCH_MP (SPEC_ALL calldata_decode_args_length)) >>
+        qpat_assum `OPT_MMAP _ tys = SOME decoded_tys`
+          (mp_tac o MATCH_MP (SPEC_ALL OPT_MMAP_LENGTH)) >>
+        qpat_assum `tys = MAP SND prefix` (fn types => simp[NoAsms, types])) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`LENGTH tx.args = LENGTH prefix`, `LENGTH ds = LENGTH dflts`,
+        `LENGTH ds <= LENGTH args`, `k <= LENGTH dflts`] >>
+     qpat_assum `prefix = TAKE (LENGTH args - LENGTH dflts + k) args`
+       (fn pref => simp[NoAsms, pref, LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF]) >>
+     decide_tac) >>
+  `LENGTH tx.args <= LENGTH args /\ LENGTH args - LENGTH tx.args <= LENGTH dflts /\
+    LENGTH dflts - (LENGTH args - LENGTH tx.args) = k` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`LENGTH tx.args = LENGTH args - LENGTH dflts + k`, `LENGTH ds = LENGTH dflts`,
+        `LENGTH ds <= LENGTH args`, `k <= LENGTH dflts`] >> decide_tac) >>
+  `EVERY (runtime_constant_expr mods) dflts /\ well_typed_exprs initializer_env dflts` by
+    (`External <> Deploy` by simp[NoAsms] >>
+     drule_all vyperTypeContractContextTheory.check_contract_runtime_function_body_MEM >>
+     qpat_assum `Abbrev (initializer_env = _)` (fn ien =>
+       simp_tac bool_ss [check_function_body_def, LET_THM, defaults_env_function_entry_env,
+         GSYM (REWRITE_RULE [markerTheory.Abbrev_def] ien)]) >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `MAP (\(_,_,_,e). e) (DROP k vars) =
+     subst_consts_exprs_mods (consts_env_mods mods) (DROP k dflts)` by
+    (qpat_assum `MAP _ (DROP k vars) = DROP k ds` SUBST1_TAC >>
+     qpat_assum `ds = subst_consts_exprs_mods _ _` SUBST1_TAC >>
+     `!es. subst_consts_exprs_mods (consts_env_mods mods) es =
+       MAP (subst_consts_expr_mods (consts_env_mods mods)) es` by
+       (POP_ASSUM_LIST (K ALL_TAC) >> Induct >> simp[subst_consts_expr_mods_def]) >>
+     pop_assum (fn eq => simp[NoAsms, eq, MAP_DROP])) >>
+  `!gs. eval_external_defaults cx (DROP k dflts) (seed with gas_obs := gs) =
+     eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars)) (seed with gas_obs := gs)` by
+    (gen_tac >>
+     `eval_external_defaults cx
+        (subst_consts_exprs_mods (consts_env_mods mods) (DROP k dflts)) (seed with gas_obs := gs) =
+      eval_external_defaults cx (DROP k dflts) (seed with gas_obs := gs)` by
+       (qpat_assum `body_const_cells_agree_mods mods cx initializer_env seed`
+          (qx_choosel_then [`roots`,`cell_art`,`imms`] (map_every assume_tac o CONJUNCTS) o
+           REWRITE_RULE [body_const_cells_agree_mods_def]) >>
+        irule (cj 2 linkedRuntimeDefaultReplayTheory.const_subst_runtime_default_exprs_mods) >>
+        qexistsl_tac [`cell_art`,`initializer_env`,`mods`,`roots`] >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+        TRY (irule EVERY_DROP >> first_assum ACCEPT_TAC) >>
+        TRY (irule vyperTypeEvalProofsTheory.well_typed_exprs_DROP >> first_assum ACCEPT_TAC) >>
+        qpat_assum `const_cells_agree roots seed`
+           (mp_tac o PURE_REWRITE_RULE [const_cells_agree_def]) >>
+        simp[NoAsms,const_cells_agree_def]) >>
+     qpat_assum `eval_external_defaults cx (subst_consts_exprs_mods _ _) _ = _`
+       (fn replay => PURE_ONCE_REWRITE_TAC [GSYM replay]) >>
+     qpat_assum `MAP _ (DROP k vars) = subst_consts_exprs_mods _ _`
+       (fn eq => PURE_REWRITE_TAC [GSYM eq]) >>
+     namedCases_on `eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+                          (seed with gas_obs := gs)` ["res endpoint"] >>
+     `endpoint with gas_obs := [] = (seed with gas_obs := gs) with gas_obs := []` by
+       drule_all_then ACCEPT_TAC linkedDefaultSourceFrameTheory.grouped_checked_default_source_frame_mods >>
+     `endpoint.scopes = [FEMPTY]` by
+       (pop_assum (mp_tac o Q.AP_TERM `\s:evaluation_state. s.scopes`) >>
+        qpat_assum `seed.scopes = [FEMPTY]` (fn sc => simp[NoAsms,sc])) >>
+     `(seed with gas_obs := gs) with scopes := [FEMPTY] = seed with gas_obs := gs` by
+       (qpat_assum `seed.scopes = [FEMPTY]` (fn sc =>
+          simp[NoAsms,sc,evaluation_state_component_equality])) >>
+     `endpoint with scopes := [FEMPTY] = endpoint` by
+       (qpat_assum `endpoint.scopes = [FEMPTY]` (fn sc =>
+          simp[NoAsms,sc,evaluation_state_component_equality])) >>
+     PURE_REWRITE_TAC [eval_external_defaults_run, LET_THM] >>
+     qpat_assum `(seed with gas_obs := gs) with scopes := [FEMPTY] = _`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `eval_exprs cx (MAP _ (DROP k vars)) (seed with gas_obs := gs) = _`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `seed.scopes = [FEMPTY]` (fn sc =>
+       qpat_assum `endpoint with scopes := [FEMPTY] = endpoint`
+         (fn ep => simp[NoAsms,sc,ep]))) >>
+  `!gs. (SND (eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+        (seed with gas_obs := gs))).storage_trace = seed.storage_trace` by
+    (gen_tac >>
+     namedCases_on `eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+                          (seed with gas_obs := gs)` ["res endpoint"] >>
+     `endpoint with gas_obs := [] = (seed with gas_obs := gs) with gas_obs := []` by
+       drule_all_then ACCEPT_TAC linkedDefaultSourceFrameTheory.grouped_checked_default_source_frame_mods >>
+     pop_assum (mp_tac o Q.AP_TERM `\s:evaluation_state. s.storage_trace`) >>
+     simp[NoAsms]) >>
+  asm_x "omitted_execution"
+    (qx_choose_then `init_marks` (DISJ_CASES_THEN2 strip_assume_tac
+      (DISJ_CASES_THEN2 (qx_choosel_then [`init_res`,`init_ee`,`init_result`,`Ginit`,`tninit`]
+          (map_every assume_tac o CONJUNCTS)) strip_assume_tac)) o
+       BETA_RULE o REWRITE_RULE [gasOutcomeFullModsTheory.gas_outcome_full_mods_def])
+  >- (qpat_assum `gas_bad_storage_at _ _ _ _ _ _`
+        (qspec_then `[]:bytes32 list` mp_tac o REWRITE_RULE [gasStorageTheory.gas_bad_storage_at_def]) >>
+      qpat_assum `!gs. (SND (eval_exprs cx _ _)).storage_trace = seed.storage_trace`
+        (qspec_then `gas_explicit init_marks supplied.vs_gas_readings ++ []` (fn tr =>
+          qpat_assum `storage_trace_domain cx (initial_state am []) seed.storage_trace`
+            (fn dom => PURE_REWRITE_TAC [tr,dom]))) >> simp[NoAsms])
+  >- suspend "linked_grouped_default_omitted_run" >>
+  drule_then (map_every assume_tac o CONJUNCTS)
+    gasExemptCertModsTheory.gas_exempt_cert_execution_mods >>
+  `eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+      (seed with gas_obs := gas_explicit init_marks supplied.vs_gas_readings) =
+    (INR (Error err), ee with gas_obs := [])` by
+    (qpat_assum `!tail. ignore_bind (eval_exprs cx _) _ _ = _`
+       (qspec_then `[]:bytes32 list`
+         (mp_tac o MATCH_MP vyperStatePreservationTheory.ignore_bind_split o
+          REWRITE_RULE [APPEND_NIL])) >>
+     disch_then (DISJ_CASES_THEN strip_assume_tac)
+     >- (qpat_assum `return () _ = _` mp_tac >> simp[NoAsms,return_def]) >>
+     qpat_assum `INR (Error err) = INR _` mp_tac >>
+     qpat_assum `eval_exprs cx _ _ = (INR _,_)` mp_tac >>
+     simp[NoAsms, pairTheory.ELIM_UNCURRY] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  drule_all_then (fn no_exempt =>
+    qpat_assum `unspecified_behaviour_exempt_mods mods err`
+      (CONTR_TAC o MP (NOT_ELIM no_exempt)))
+    linkedDefaultErrorTheory.runtime_constant_defaults_no_exempt_mods
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omitted_run]:
+  qpat_assum `!tail. eval_exprs cx _ _ = (init_res,_)`
+    (qspec_then `[]:bytes32 list` (assume_tac o PURE_REWRITE_RULE [pairTheory.ELIM_UNCURRY])) >>
+  `init_ee with gas_obs := [] = seed` by
+    (map_every (fn pat => qpat_assum pat
+       (assume_tac o SIMP_RULE bool_ss [pairTheory.ELIM_UNCURRY]))
+       [`EVERY (runtime_constant_expr mods) (MAP _ (DROP k vars))`,
+        `no_sha256_exprs (MAP _ (DROP k vars))`,
+        `eval_exprs cx _ _ = (init_res,_)`] >>
+     drule_all_then mp_tac linkedDefaultSourceFrameTheory.grouped_checked_default_source_frame_mods >>
+     qpat_assum `seed.gas_obs = []` (fn gas =>
+       simp[NoAsms, GSYM gas, evaluation_state_component_equality])) >>
+  `!tail. eval_external_defaults cx
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts)
+      (seed with gas_obs := gas_explicit init_marks vs.vs_gas_readings ++ tail) =
+      (init_res,seed with gas_obs := tail)` by
+    (gen_tac >>
+     map_every (fn pat => qpat_assum pat (fn eq => PURE_REWRITE_TAC [eq]))
+       [`LENGTH dflts - (LENGTH args - LENGTH tx.args) = k`,
+        `!gs. eval_external_defaults cx (DROP k dflts) _ = _`] >>
+     qpat_assum `!tail. eval_exprs cx _ _ = (init_res,_)`
+       (qspec_then `tail` mp_tac) >>
+     qpat_assum `supplied.vs_gas_readings = vs.vs_gas_readings`
+       (fn gas => simp[NoAsms,gas,pairTheory.ELIM_UNCURRY]) >>
+     qpat_assum `init_ee with gas_obs := [] = seed` (SUBST1_TAC o SYM) >>
+     simp[NoAsms]) >>
+  `!H. valid_horizon cx (initial_state am []) H seed.storage_trace ==>
+     gas_origin_ptr_path (cx_dead H cx,0,
+       gas_explicit_sites unit.cu_context shadow_unit.cu_context,unit.cu_context,fn,[])
+       (start,FEMPTY,entry_taint) init_marks (init_result,Ginit,tninit)` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx (initial_state am []) H init_ee.storage_trace` by
+       (qpat_assum `init_ee with gas_obs := [] = seed`
+          (mp_tac o Q.AP_TERM `\s:evaluation_state. s.storage_trace`) >>
+        simp[NoAsms] >> disch_then SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     qpat_assum `!H. valid_horizon cx (initial_state am []) H init_ee.storage_trace ==> _`
+       (drule_then (CONJUNCTS_THEN2 assume_tac kall_tac)) >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) []
+       (OK supplied,Gsupplied,tnsupplied)` (qspecl_then
+         [`cx_dead H cx`,`gas_explicit_sites unit.cu_context shadow_unit.cu_context`]
+         (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+     simp[NoAsms] >> disch_then irule >> first_assum ACCEPT_TAC) >>
+  `!P defaults.
+      EVERY (\(aid,p,base,tv,v). P (aid,p,base,tv) v) kept /\
+      LIST_REL P (DROP k slots) defaults ==>
+      LIST_REL P slots (values ++ defaults)` by
+    (rpt gen_tac >> strip_tac >>
+     `LIST_REL P (TAKE k slots) values` by
+       (qpat_assum `EVERY _ kept` mp_tac >>
+        qpat_assum `LENGTH (TAKE k slots) = LENGTH values` (fn len =>
+          simp[NoAsms, Abbr `kept`, LIST_REL_EVERY_ZIP, EVERY_MAP,
+               EVERY_MEM, FORALL_PROD, len])) >>
+     `LIST_REL P (TAKE k slots ++ DROP k slots) (values ++ defaults)` by
+       (irule LIST_REL_APPEND_suff >> conj_tac >> first_assum ACCEPT_TAC) >>
+     pop_assum (ACCEPT_TAC o PURE_REWRITE_RULE [TAKE_DROP])) >>
+  `find_function_module am tx.target tx.function_name = src /\
+    get_module_code cx src = SOME selected_tops /\
+    lookup_exported_function cx am tx.function_name = SOME (mut,nr,args,dflts,ret,selected_body)` by
+    (qpat_assum `Abbrev (cx = _)` (assume_tac o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     drule_all linkedRuntimeSourceLookupTheory.linked_runtime_source_lookup >>
+     qpat_assum `vyperInterpreter$lookup_function src tx.function_name External selected_tops = _`
+       (fn lookup => simp[NoAsms,lookup])) >>
+  `!gs. send_call_value mut cx
+      (initial_state am [FEMPTY] with
+       <|outcomes := SOME vs.vs_outcomes; requests := []; gas_obs := gs; storage_trace := []|>) =
+      (INL (),seed with gas_obs := gs)` by
+    (qpat_assum `send_call_value mut cx
+      (initial_state am [FEMPTY] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) = _`
+        (mp_tac o MATCH_MP externalEntryBoundTheory.send_call_value_with_gas_obs) >>
+     simp[NoAsms, initial_state_def, evaluation_state_accfupds]) >>
+  `tx.args = TAKE (LENGTH args - LENGTH ds) tx.args ++ values` by
+    (qpat_assum `Abbrev (values = _)` (fn split =>
+       simp[NoAsms, REWRITE_RULE [markerTheory.Abbrev_def] split, TAKE_DROP])) >>
   suspend "linked_grouped_default_omitted_apply"
 QED
 
