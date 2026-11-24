@@ -172,7 +172,7 @@ Proof
   qexistsl [`target`,`amount`] >> simp[]
 QED
 
-Theorem raw_call_calldata_eval[local]:
+Theorem raw_call_calldata_eval:
   eval_expr cx (Call ann (RawCallCalldataTarget flags) args NONE) =
   bind (eval_exprs cx args) (\vs. do
     type_check (LENGTH vs = 1 + LENGTH flags.rcf_kws) "raw_call calldata args";

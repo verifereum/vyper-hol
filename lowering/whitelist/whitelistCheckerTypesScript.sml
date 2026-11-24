@@ -583,5 +583,9 @@ Proof
   simp[Once type_stmt_def, well_typed_iterator_def] >> rpt strip_tac >>
   `bound_length bd = n` by res_tac >>
   Cases_on `e` >> gvs[supported_iterator_def, expr_type_def] >>
-  rename1 `ArrayT typ bd` >> Cases_on `bd` >> gvs[]
+  rename1 `ArrayT typ bd` >> Cases_on `bd` >> gvs[] >>
+  Cases_on `c` >> gvs[] >>
+  qpat_assum `?m nr rr ps ds b. supported_function_decl _ _ Internal = _`
+    strip_assume_tac >>
+  simp[]
 QED

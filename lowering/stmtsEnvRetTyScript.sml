@@ -59,14 +59,3 @@ Proof
     (rpt strip_tac >> irule (cj 1 compile_stmt_ret_ty) >> simp[] >> metis_tac[]) >>
   simp[]
 QED
-
-Theorem stmts_env_ret_ty:
-  !ss tops bindings ctx cenv cx lctx ty ty'.
-    supported_stmts tops bindings ss /\ body_inv tops ctx cenv cx /\
-    ~stmts_valued_return ss ==>
-    stmts_env cenv lctx ty ss = stmts_env cenv lctx ty' ss
-Proof
-  rpt strip_tac >>
-  irule stmts_env_ret_ty_no_valued_return >> simp[] >>
-  qexistsl_tac [`bindings`, `tops`] >> simp[]
-QED
