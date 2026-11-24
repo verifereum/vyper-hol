@@ -2,6 +2,7 @@
 Theory bodyFullAssignToplevelSetup
 Ancestors
   augAssignPtrToplevelMetadata bodyStorageMetadata bodyExprPreFacts bodySim
+  bodyTypedTargetScope bodySingletonCallSupport
   supportedDecls bodyInvCodeProps bodyInvMetadataProps
   bodyMainModuleProps linkedStorageMetadataProps exprBodyPreProps bodyInvSplit alist compileUnit
   exprSimHypsDefs exprSimHyps supportedStmts supportedExprs supportedExprForms
@@ -44,9 +45,8 @@ Proof
   `~supported_expr_exists (const_name_root_mods mods) e` by
     (drule stmt_exprs_ok_module_const_name_free >>
      simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
-  `~is_extcode e` by
-    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-     qexists_tac `cenv` >> fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
+  `alloc_limits_expr cenv e` by fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `~is_extcode e` by metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode] >>
   conj_tac
   >- (mp_tac (Q.INST [`calls` |-> `[]`] stmt_expr_body_pre_main_mods) >>
       fs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, supported_assignment_exists_def,
@@ -89,11 +89,10 @@ Theorem body_assign_toplevel_word_full_setup:
     is_word_type (expr_type e)
 Proof
   Cases_on `nsid` >> rename1 `(src,id)` >> strip_tac >>
-  drule_then strip_assume_tac supported_scalar_target_decl >> gvs[] >>
+  `src = NONE` by metis_tac[body_inv_toplevel_target_main, optionTheory.IS_SOME_EXISTS] >>
+  gvs[] >>
   drule_then strip_assume_tac body_inv_main_code >>
   drule_then assume_tac body_inv_contract >>
-  `supported_expr tops e` by fs[supported_stmt_def, supported_assignment_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >>
      simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
@@ -107,5 +106,5 @@ Proof
   fs[expr_body_pre_split_def, vyperContextTheory.type_env_all_modules_def,
      vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2,
      supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
-  metis_tac[]
+  metis_tac[body_inv_typed_calls_main, expr_body_pre_mods_well_typed]
 QED
