@@ -451,6 +451,24 @@ Proof
   qexists_tac `get_tenv cx` >> fs[exprSimHypsDefsTheory.expr_sim_inv_mods_def] >> metis_tac[]
 QED
 
+Theorem ctor_physical_bound_read_type_mods:
+  expr_body_pre_mods mods ce cx env e st /\
+  bind (eval_expr cx e) (read_result cx) st = (INL v,ee) ==>
+  ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+       value_has_type tv v
+Proof
+  strip_tac >>
+  `expr_sim_inv_mods mods ce cx env st /\ well_typed_expr env e /\
+   alloc_limits_expr ce e /\ call_evaluation_safe cx (int_calls_expr e)` by
+    fs[expr_body_pre_mods_def] >>
+  `env.type_defs = get_tenv cx` by
+    metis_tac[expr_sim_inv_mods_env, env_consistent_type_defs_get_tenv] >>
+  drule ctor_physical_static_mods >> strip_tac >>
+  `!u. well_typed_expr env u ==>
+       arg_type_fits (lowered_value_type ce u) (expr_type u)` by metis_tac[] >>
+  drule_all ctor_physical_read_mods >> simp[value_runtime_typed_def]
+QED
+
 Theorem ctor_materialize_unwrap_retag_mods:
   expr_body_pre_mods mods ce cx env e es /\
   compile_expr ce ty e sa = (vv,sm) /\
