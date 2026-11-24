@@ -11,6 +11,7 @@ Ancestors
   venomCompilerTypes sorting constSubstStmtsPreserve supportedNameRoot
   vyperTypeContractStaticMaps e2eDeployDefs bodySim ctorDeployShape
   bodyInvSplit bodySimModsProps
+  bodyCallSupport
   compileUnit constSubstMods groupedInternalLabels alist pair loweringShapeRules
   context emitHelper stmtLowering
   vyperGetter publicGetterProps supportedNames supportedStmts supportedStmtTraverse
@@ -361,6 +362,8 @@ Theorem two_module_unit_invariants[local]:
       ctx.ctx_functions = SOME lib
 Proof
   strip_tac >>
+  `supported_module_headers [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]]` by
+    metis_tac[foo_supported, supported_program_module_headers] >>
   `mods = [(NONE,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]]);
            (SOME 1,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]])]`
     by fs[] >>
@@ -388,11 +391,20 @@ Proof
        add_annotated_immutables_src_def, compute_immutables_len_unit_def,
        annotated_immutables_len_def] >>
   rpt strip_tac >> gvs[foo_supported, toplevel_vtype_keys_toplevel_def,
-    function_mutability_ok_def, stmt_mutability_ok_def, listTheory.APPEND_EQ_SING] >>
-  qexistsl_tac [`<| rpol_target := all_capabilities;
-                   rpol_frontend_dispatch := Linear;
-                   rpol_final_assembly := FAP_Optimize |>`, `unit`] >>
-  simp[]
+    function_mutability_ok_def, stmt_mutability_ok_def, listTheory.APPEND_EQ_SING,
+    linked_body_calls_resolved_def, function_int_calls_def,
+    supported_declaration_body_def, supported_function_body_def,
+    supported_stmt_bindings_def, supported_stmt_def, body_stmts_safe_iff, body_stmt_safe_def,
+    supported_stmt_expr_exists_def, int_calls_stmt_def]
+  >- (qexistsl_tac [`<| rpol_target := all_capabilities;
+                     rpol_frontend_dispatch := Linear;
+                     rpol_final_assembly := FAP_Optimize |>`, `unit`] >>
+     simp[EQ_SYM_EQ]) >>
+  rpt strip_tac >> gvs[AllCaseEqs(), function_mutability_ok_def,
+    stmt_mutability_ok_def, function_int_calls_def, supported_declaration_body_def,
+    supported_function_body_def, supported_stmt_def, body_stmts_safe_iff,
+    body_stmt_safe_def, supported_stmt_bindings_def, supported_stmt_expr_exists_def,
+    int_calls_stmt_def, int_calls_expr_def, supported_pure_expr_def, LET_THM]
 QED
 
 Theorem linked_two_module_internal_code:

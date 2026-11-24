@@ -146,13 +146,8 @@ Proof
      pure_rewrite_tac[gasShadowTheory.gas_shadow_expr_def,gasShadowTheory.gas_shadow_builtin_def,MAP] >> simp[]) >>
   gvs[] >>
   `local_ptrs_reserved (gas_shadow_env T cenv) shadow_sa` by
-    (`local_ptrs_reserved cenv shadow_sa` by
-       (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
-        qexists_tac `sa` >> fs[gasShadowStateTheory.gas_shadow_state_def]) >>
-     qpat_assum `local_ptrs_reserved cenv shadow_sa` mp_tac >>
-     pure_rewrite_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def,
-       gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
-     disch_then ACCEPT_TAC) >>
+    (irule bodyFullSharedTheory.local_ptrs_reserved_gas_shadow >>
+     qexists_tac `sa` >> conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_assum `as_ptr_val _ _ (compile_slice_extcode _ _ _ _ _) = (_,shadow_sb)`
     (mp_then Any mp_tac exprSimSliceExtcodeContextTheory.slice_extcode_pipeline_context) >>
   disch_then drule_all >> strip_tac >>
