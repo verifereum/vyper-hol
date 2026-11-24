@@ -68,6 +68,8 @@ Ancestors
   linkedRuntimeSourceLookup[qualified]
   gasPathDataSection[qualified] bodyFullHashKeccakFixed[qualified]
   linkedRuntimeSelectedTrace[qualified] unitExecutionComposeResult[qualified]
+  linkedRuntimeDefaultReplay[qualified] linkedDefaultSourceFrame[qualified]
+  linkedDefaultError[qualified] gasExemptCertMods[qualified] gasOutcomeFullMods[qualified]
   loweringHalt[qualified] nonreentrantExit[qualified] sourceUnitExecution[qualified]
   stmtFragPtr[qualified] vyperCallFiniteStorageSupport[qualified] vyperEvalReadingErrors[qualified]
 
@@ -5693,6 +5695,201 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omi
          (print ("OMITTED INPUT: " ^ term_to_string conclusion ^ "\n"); ALL_TAC goal)) >>
       NO_TAC) >>
   disch_then (mk_asm "omitted_execution") >>
+  suspend "linked_grouped_default_omitted_replay"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omitted_replay]:
+  `LENGTH tx.args = LENGTH args - LENGTH dflts + k` by
+    (`LENGTH tx.args = LENGTH prefix` by
+       (qpat_assum `calldata_decode_args cd decoded_tys 0 = SOME tx.args`
+          (mp_tac o MATCH_MP (SPEC_ALL calldata_decode_args_length)) >>
+        qpat_assum `OPT_MMAP _ tys = SOME decoded_tys`
+          (mp_tac o MATCH_MP (SPEC_ALL OPT_MMAP_LENGTH)) >>
+        qpat_assum `tys = MAP SND prefix` (fn types => simp[NoAsms, types])) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`LENGTH tx.args = LENGTH prefix`, `LENGTH ds = LENGTH dflts`,
+        `LENGTH ds <= LENGTH args`, `k <= LENGTH dflts`] >>
+     qpat_assum `prefix = TAKE (LENGTH args - LENGTH dflts + k) args`
+       (fn pref => simp[NoAsms, pref, LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF]) >>
+     decide_tac) >>
+  `LENGTH tx.args <= LENGTH args /\ LENGTH args - LENGTH tx.args <= LENGTH dflts /\
+    LENGTH dflts - (LENGTH args - LENGTH tx.args) = k` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`LENGTH tx.args = LENGTH args - LENGTH dflts + k`, `LENGTH ds = LENGTH dflts`,
+        `LENGTH ds <= LENGTH args`, `k <= LENGTH dflts`] >> decide_tac) >>
+  `EVERY (runtime_constant_expr mods) dflts /\ well_typed_exprs initializer_env dflts` by
+    (`External <> Deploy` by simp[NoAsms] >>
+     drule_all vyperTypeContractContextTheory.check_contract_runtime_function_body_MEM >>
+     qpat_assum `Abbrev (initializer_env = _)` (fn ien =>
+       simp_tac bool_ss [check_function_body_def, LET_THM, defaults_env_function_entry_env,
+         GSYM (REWRITE_RULE [markerTheory.Abbrev_def] ien)]) >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `MAP (\(_,_,_,e). e) (DROP k vars) =
+     subst_consts_exprs_mods (consts_env_mods mods) (DROP k dflts)` by
+    (qpat_assum `MAP _ (DROP k vars) = DROP k ds` SUBST1_TAC >>
+     qpat_assum `ds = subst_consts_exprs_mods _ _` SUBST1_TAC >>
+     `!es. subst_consts_exprs_mods (consts_env_mods mods) es =
+       MAP (subst_consts_expr_mods (consts_env_mods mods)) es` by
+       (POP_ASSUM_LIST (K ALL_TAC) >> Induct >> simp[subst_consts_expr_mods_def]) >>
+     pop_assum (fn eq => simp[NoAsms, eq, MAP_DROP])) >>
+  `!gs. eval_external_defaults cx (DROP k dflts) (seed with gas_obs := gs) =
+     eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars)) (seed with gas_obs := gs)` by
+    (gen_tac >>
+     `eval_external_defaults cx
+        (subst_consts_exprs_mods (consts_env_mods mods) (DROP k dflts)) (seed with gas_obs := gs) =
+      eval_external_defaults cx (DROP k dflts) (seed with gas_obs := gs)` by
+       (qpat_assum `body_const_cells_agree_mods mods cx initializer_env seed`
+          (qx_choosel_then [`roots`,`cell_art`,`imms`] (map_every assume_tac o CONJUNCTS) o
+           REWRITE_RULE [body_const_cells_agree_mods_def]) >>
+        irule (cj 2 linkedRuntimeDefaultReplayTheory.const_subst_runtime_default_exprs_mods) >>
+        qexistsl_tac [`cell_art`,`initializer_env`,`mods`,`roots`] >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+        TRY (irule EVERY_DROP >> first_assum ACCEPT_TAC) >>
+        TRY (irule vyperTypeEvalProofsTheory.well_typed_exprs_DROP >> first_assum ACCEPT_TAC) >>
+        qpat_assum `const_cells_agree roots seed`
+           (mp_tac o PURE_REWRITE_RULE [const_cells_agree_def]) >>
+        simp[NoAsms,const_cells_agree_def]) >>
+     qpat_assum `eval_external_defaults cx (subst_consts_exprs_mods _ _) _ = _`
+       (fn replay => PURE_ONCE_REWRITE_TAC [GSYM replay]) >>
+     qpat_assum `MAP _ (DROP k vars) = subst_consts_exprs_mods _ _`
+       (fn eq => PURE_REWRITE_TAC [GSYM eq]) >>
+     namedCases_on `eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+                          (seed with gas_obs := gs)` ["res endpoint"] >>
+     `endpoint with gas_obs := [] = (seed with gas_obs := gs) with gas_obs := []` by
+       drule_all_then ACCEPT_TAC linkedDefaultSourceFrameTheory.grouped_checked_default_source_frame_mods >>
+     `endpoint.scopes = [FEMPTY]` by
+       (pop_assum (mp_tac o Q.AP_TERM `\s:evaluation_state. s.scopes`) >>
+        qpat_assum `seed.scopes = [FEMPTY]` (fn sc => simp[NoAsms,sc])) >>
+     `(seed with gas_obs := gs) with scopes := [FEMPTY] = seed with gas_obs := gs` by
+       (qpat_assum `seed.scopes = [FEMPTY]` (fn sc =>
+          simp[NoAsms,sc,evaluation_state_component_equality])) >>
+     `endpoint with scopes := [FEMPTY] = endpoint` by
+       (qpat_assum `endpoint.scopes = [FEMPTY]` (fn sc =>
+          simp[NoAsms,sc,evaluation_state_component_equality])) >>
+     PURE_REWRITE_TAC [eval_external_defaults_run, LET_THM] >>
+     qpat_assum `(seed with gas_obs := gs) with scopes := [FEMPTY] = _`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `eval_exprs cx (MAP _ (DROP k vars)) (seed with gas_obs := gs) = _`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `seed.scopes = [FEMPTY]` (fn sc =>
+       qpat_assum `endpoint with scopes := [FEMPTY] = endpoint`
+         (fn ep => simp[NoAsms,sc,ep]))) >>
+  `!gs. (SND (eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+        (seed with gas_obs := gs))).storage_trace = seed.storage_trace` by
+    (gen_tac >>
+     namedCases_on `eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+                          (seed with gas_obs := gs)` ["res endpoint"] >>
+     `endpoint with gas_obs := [] = (seed with gas_obs := gs) with gas_obs := []` by
+       drule_all_then ACCEPT_TAC linkedDefaultSourceFrameTheory.grouped_checked_default_source_frame_mods >>
+     pop_assum (mp_tac o Q.AP_TERM `\s:evaluation_state. s.storage_trace`) >>
+     simp[NoAsms]) >>
+  asm_x "omitted_execution"
+    (qx_choose_then `init_marks` (DISJ_CASES_THEN2 strip_assume_tac
+      (DISJ_CASES_THEN2 (qx_choosel_then [`init_res`,`init_ee`,`init_result`,`Ginit`,`tninit`]
+          (map_every assume_tac o CONJUNCTS)) strip_assume_tac)) o
+       BETA_RULE o REWRITE_RULE [gasOutcomeFullModsTheory.gas_outcome_full_mods_def])
+  >- (qpat_assum `gas_bad_storage_at _ _ _ _ _ _`
+        (qspec_then `[]:bytes32 list` mp_tac o REWRITE_RULE [gasStorageTheory.gas_bad_storage_at_def]) >>
+      qpat_assum `!gs. (SND (eval_exprs cx _ _)).storage_trace = seed.storage_trace`
+        (qspec_then `gas_explicit init_marks supplied.vs_gas_readings ++ []` (fn tr =>
+          qpat_assum `storage_trace_domain cx (initial_state am []) seed.storage_trace`
+            (fn dom => PURE_REWRITE_TAC [tr,dom]))) >> simp[NoAsms])
+  >- suspend "linked_grouped_default_omitted_run" >>
+  drule_then (map_every assume_tac o CONJUNCTS)
+    gasExemptCertModsTheory.gas_exempt_cert_execution_mods >>
+  `eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+      (seed with gas_obs := gas_explicit init_marks supplied.vs_gas_readings) =
+    (INR (Error err), ee with gas_obs := [])` by
+    (qpat_assum `!tail. ignore_bind (eval_exprs cx _) _ _ = _`
+       (qspec_then `[]:bytes32 list`
+         (mp_tac o MATCH_MP vyperStatePreservationTheory.ignore_bind_split o
+          REWRITE_RULE [APPEND_NIL])) >>
+     disch_then (DISJ_CASES_THEN strip_assume_tac)
+     >- (qpat_assum `return () _ = _` mp_tac >> simp[NoAsms,return_def]) >>
+     qpat_assum `INR (Error err) = INR _` mp_tac >>
+     qpat_assum `eval_exprs cx _ _ = (INR _,_)` mp_tac >>
+     simp[NoAsms, pairTheory.ELIM_UNCURRY] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  drule_all_then (fn no_exempt =>
+    qpat_assum `unspecified_behaviour_exempt_mods mods err`
+      (CONTR_TAC o MP (NOT_ELIM no_exempt)))
+    linkedDefaultErrorTheory.runtime_constant_defaults_no_exempt_mods
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omitted_run]:
+  qpat_assum `!tail. eval_exprs cx _ _ = (init_res,_)`
+    (qspec_then `[]:bytes32 list` (assume_tac o PURE_REWRITE_RULE [pairTheory.ELIM_UNCURRY])) >>
+  `init_ee with gas_obs := [] = seed` by
+    (map_every (fn pat => qpat_assum pat
+       (assume_tac o SIMP_RULE bool_ss [pairTheory.ELIM_UNCURRY]))
+       [`EVERY (runtime_constant_expr mods) (MAP _ (DROP k vars))`,
+        `no_sha256_exprs (MAP _ (DROP k vars))`,
+        `eval_exprs cx _ _ = (init_res,_)`] >>
+     drule_all_then mp_tac linkedDefaultSourceFrameTheory.grouped_checked_default_source_frame_mods >>
+     qpat_assum `seed.gas_obs = []` (fn gas =>
+       simp[NoAsms, GSYM gas, evaluation_state_component_equality])) >>
+  `!tail. eval_external_defaults cx
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts)
+      (seed with gas_obs := gas_explicit init_marks vs.vs_gas_readings ++ tail) =
+      (init_res,seed with gas_obs := tail)` by
+    (gen_tac >>
+     map_every (fn pat => qpat_assum pat (fn eq => PURE_REWRITE_TAC [eq]))
+       [`LENGTH dflts - (LENGTH args - LENGTH tx.args) = k`,
+        `!gs. eval_external_defaults cx (DROP k dflts) _ = _`] >>
+     qpat_assum `!tail. eval_exprs cx _ _ = (init_res,_)`
+       (qspec_then `tail` mp_tac) >>
+     qpat_assum `supplied.vs_gas_readings = vs.vs_gas_readings`
+       (fn gas => simp[NoAsms,gas,pairTheory.ELIM_UNCURRY]) >>
+     qpat_assum `init_ee with gas_obs := [] = seed` (SUBST1_TAC o SYM) >>
+     simp[NoAsms]) >>
+  `!H. valid_horizon cx (initial_state am []) H seed.storage_trace ==>
+     gas_origin_ptr_path (cx_dead H cx,0,
+       gas_explicit_sites unit.cu_context shadow_unit.cu_context,unit.cu_context,fn,[])
+       (start,FEMPTY,entry_taint) init_marks (init_result,Ginit,tninit)` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx (initial_state am []) H init_ee.storage_trace` by
+       (qpat_assum `init_ee with gas_obs := [] = seed`
+          (mp_tac o Q.AP_TERM `\s:evaluation_state. s.storage_trace`) >>
+        simp[NoAsms] >> disch_then SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     qpat_assum `!H. valid_horizon cx (initial_state am []) H init_ee.storage_trace ==> _`
+       (drule_then (CONJUNCTS_THEN2 assume_tac kall_tac)) >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) []
+       (OK supplied,Gsupplied,tnsupplied)` (qspecl_then
+         [`cx_dead H cx`,`gas_explicit_sites unit.cu_context shadow_unit.cu_context`]
+         (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+     simp[NoAsms] >> disch_then irule >> first_assum ACCEPT_TAC) >>
+  `!P defaults.
+      EVERY (\(aid,p,base,tv,v). P (aid,p,base,tv) v) kept /\
+      LIST_REL P (DROP k slots) defaults ==>
+      LIST_REL P slots (values ++ defaults)` by
+    (rpt gen_tac >> strip_tac >>
+     `LIST_REL P (TAKE k slots) values` by
+       (qpat_assum `EVERY _ kept` mp_tac >>
+        qpat_assum `LENGTH (TAKE k slots) = LENGTH values` (fn len =>
+          simp[NoAsms, Abbr `kept`, LIST_REL_EVERY_ZIP, EVERY_MAP,
+               EVERY_MEM, FORALL_PROD, len])) >>
+     `LIST_REL P (TAKE k slots ++ DROP k slots) (values ++ defaults)` by
+       (irule LIST_REL_APPEND_suff >> conj_tac >> first_assum ACCEPT_TAC) >>
+     pop_assum (ACCEPT_TAC o PURE_REWRITE_RULE [TAKE_DROP])) >>
+  `find_function_module am tx.target tx.function_name = src /\
+    get_module_code cx src = SOME selected_tops /\
+    lookup_exported_function cx am tx.function_name = SOME (mut,nr,args,dflts,ret,selected_body)` by
+    (qpat_assum `Abbrev (cx = _)` (assume_tac o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     drule_all linkedRuntimeSourceLookupTheory.linked_runtime_source_lookup >>
+     qpat_assum `vyperInterpreter$lookup_function src tx.function_name External selected_tops = _`
+       (fn lookup => simp[NoAsms,lookup])) >>
+  `!gs. send_call_value mut cx
+      (initial_state am [FEMPTY] with
+       <|outcomes := SOME vs.vs_outcomes; requests := []; gas_obs := gs; storage_trace := []|>) =
+      (INL (),seed with gas_obs := gs)` by
+    (qpat_assum `send_call_value mut cx
+      (initial_state am [FEMPTY] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) = _`
+        (mp_tac o MATCH_MP externalEntryBoundTheory.send_call_value_with_gas_obs) >>
+     simp[NoAsms, initial_state_def, evaluation_state_accfupds]) >>
+  `tx.args = TAKE (LENGTH args - LENGTH ds) tx.args ++ values` by
+    (qpat_assum `Abbrev (values = _)` (fn split =>
+       simp[NoAsms, REWRITE_RULE [markerTheory.Abbrev_def] split, TAKE_DROP])) >>
   suspend "linked_grouped_default_omitted_apply"
 QED
 
