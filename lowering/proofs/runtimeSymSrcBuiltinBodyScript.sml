@@ -7,7 +7,8 @@ Ancestors
   runtimeSymSrcBuiltinMisc runtimeSymSrcBuiltinByteSimple
   runtimeSymSrcBuiltinHash runtimeSymSrcBuiltinData
   builtinHashing stackPlanTypes vyperContext runtimeSymSrcContext exprCallbackContracts
-  runtimeSymSrcContextCopy runtimeSymSrcBlockEmission
+  runtimeSymSrcContextCopy runtimeSymSrcBlockEmission runtimeSymSrcBoolChainOps
+  boolChainOperandsGuarded
 
 Theorem runtime_sym_builtin_child:
   (!e ty. expr_size e < list_size expr_size args ==>
@@ -653,6 +654,71 @@ Proof
   >~ [`Slice n`] >-
     (irule (runtime_sym_builtin_slice |> SRULE [runtime_sym_builtin_contract_def]) >>
      simp[] >> metis_tac[])
+  >~ [`NamedConst`] >-
+    (runtime_sym_unary_args_tac >>
+     qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[NoAsms, compile_builtin_dispatch_body_def] >>
+     pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+     rename1 `lower_value _ _ _ _ _ = (op0,st1)` >>
+     qpat_x_assum `!t s op s'. _ /\ lower_value _ _ _ _ _ = _ ==> _`
+       drule_all >> strip_tac >>
+     Cases_on `is_word_type rt` >> Cases_on `op0` >>
+     gvs[as_stack_val_def, as_ptr_val_def, runtime_sym_value_def,
+         mk_ptr_def, is_label_operand_def])
+  >~ [`BoolChain is_and n`] >-
+    (runtime_sym_unary_args_tac >>
+     qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[NoAsms, compile_builtin_dispatch_body_def] >>
+     rpt (pairarg_tac >> simp[]) >>
+     strip_tac >> gvs[] >>
+     `~supported_expr_exists is_self_code a` by
+       (qpat_x_assum `~supported_exprs_exists is_self_code [a]` mp_tac >>
+        simp[supported_expr_exists_def]) >>
+     `EVERY (\e. supported_pure_expr tops e /\
+                    ~supported_expr_exists is_self_code e /\
+                    expr_size e < list_size expr_size [a])
+        (bool_chain_operands is_and (n - 1) a)` by
+       (irule (Q.INST [`P` |-> `\e. supported_pure_expr tops e /\
+                              ~supported_expr_exists is_self_code e /\
+                              expr_size e < list_size expr_size [a]`,
+                         `Q` |-> `EVERY (\e. supported_pure_expr tops e /\
+                              ~supported_expr_exists is_self_code e /\
+                              expr_size e < list_size expr_size [a])`,
+                         `G` |-> `\c. T`] bool_chain_operands_guarded) >>
+        conj_tac
+        >- gvs[supported_expr_exists_def, expr_size_def]
+        >- (conj_tac >>
+            simp[supported_pure_expr_def, supported_expr_exists_def,
+                 expr_size_def])) >>
+     `!e ss vv ss'. MEM e (bool_chain_operands is_and (n - 1) a) /\
+        EVERY runtime_sym_inst (state_insts ss) /\
+        lower_value cfn ce (BaseT BoolT) e ss = (vv,ss') ==>
+        EVERY runtime_sym_inst (state_insts ss') /\ ~is_label_operand vv` by
+       (rpt gen_tac >> strip_tac >>
+        qpat_x_assum `EVERY (\z. supported_pure_expr tops z /\
+          ~supported_expr_exists is_self_code z /\
+          expr_size z < list_size expr_size [a])
+          (bool_chain_operands is_and (n - 1) a)` mp_tac >>
+        simp[EVERY_MEM] >> disch_then drule >> strip_tac >>
+        drule runtime_sym_generators_lower_value >>
+        pure_rewrite_tac[runtime_sym_lower_value_clause_def] >> disch_tac >>
+        pure_rewrite_tac[runtime_sym_expr_contract_def] >>
+        first_x_assum (qspecl_then
+          [`cfn`,`ce`,`BaseT BoolT`,`e`,`ss`,`vv`,`ss'`] mp_tac) >>
+        disch_tac >>
+        `supported_expr tops e` by
+          simp[supported_expr_def, supported_pure_expr_def] >>
+        qpat_x_assum `runtime_sym_expr_contract _ _ _ _ _ /\ _ ==> _` mp_tac >>
+        disch_tac >>
+        gvs[EVERY_MEM] ) >>
+     imp_res_tac runtime_sym_fresh_var >>
+     imp_res_tac runtime_sym_fresh_label >>
+     `EVERY runtime_sym_inst (state_insts st3)` by
+       (drule_at (Pat `compile_bool_chain_ops _ _ _ _ _ _ _ = _`)
+          runtime_sym_compile_bool_chain_ops >>
+        simp[] >> disch_then irule >> first_assum ACCEPT_TAC) >>
+     imp_res_tac runtime_sym_new_block_result >>
+     gvs[runtime_sym_value_def] )
   >~ [`Bop bop`] >- suspend "bop"
   >~ [`Env item`] >- (irule (runtime_sym_builtin_env |> SRULE [runtime_sym_builtin_contract_def]) >> simp[] >> metis_tac[])
   >~ [`Neg`] >- suspend "neg"
