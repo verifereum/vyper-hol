@@ -178,7 +178,7 @@ Proof
   strip_tac >> drule check_contract_external_method_ids_distinct >>
   disch_then (qspecl_then [`tops`, `NONE`] mp_tac) >>
   simp[exports_ok_def, abi_deployed_signatures_def,
-       abi_external_method_ids_def]
+       abi_external_method_ids_def, check_linked_state_ownership_def]
 QED
 
 (* ===== Deployment to call ===== *)
