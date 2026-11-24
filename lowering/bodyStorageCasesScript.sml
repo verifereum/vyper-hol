@@ -51,16 +51,16 @@ QED
 
 Theorem supported_pure_main_calls:
   (!tops e. supported_pure_expr tops e ==>
-    EVERY (\c. FST c = NONE /\
+    EVERY (\c. FST c = NONE ==>
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) /\
   (!tops es. supported_pure_exprs tops es ==>
-    EVERY (\c. FST c = NONE /\
+    EVERY (\c. FST c = NONE ==>
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)) /\
   (!tops fields. supported_pure_fields tops fields ==>
-    EVERY (\c. FST c = NONE /\
+    EVERY (\c. FST c = NONE ==>
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_named_exprs fields)) /\
   (!tops e. supported_place_expr tops e ==>
-    EVERY (\c. FST c = NONE /\
+    EVERY (\c. FST c = NONE ==>
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
@@ -76,10 +76,10 @@ QED
 
 Theorem supported_effect_main_calls:
   (!tops e. supported_effect_expr tops e ==>
-    EVERY (\c. FST c = NONE /\
+    EVERY (\c. FST c = NONE ==>
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) /\
   (!tops e. supported_effect_place_expr tops e ==>
-    EVERY (\c. FST c = NONE /\
+    EVERY (\c. FST c = NONE ==>
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
 Proof
   ho_match_mp_tac supported_effect_expr_ind >>
@@ -96,7 +96,7 @@ Proof
 QED
 
 Theorem supported_expr_main_calls:
-  supported_expr tops e ==> EVERY (\c. FST c = NONE /\
+  supported_expr tops e ==> EVERY (\c. FST c = NONE ==>
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)
 Proof
   simp[supported_expr_def] >>
@@ -107,7 +107,7 @@ Theorem supported_target_info_main_calls:
   !tops bindings t.
     IS_SOME (supported_target_info tops bindings t) ==>
     ~supported_target_exists expr_evm_run_root t /\
-    EVERY (\c. FST c = NONE /\
+    EVERY (\c. FST c = NONE ==>
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t)
 Proof
   rpt gen_tac >>
