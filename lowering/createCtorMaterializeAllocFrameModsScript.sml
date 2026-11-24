@@ -45,6 +45,8 @@ Theorem ctor_materialize_alloc_vv_frame_mods:
     stmt_state_rel H' ctx func ce cx ee s ==> stmt_state_rel H' ctx func ce cx ee a) /\
   allocas_from lo a /\ s.vs_alloca_next <= a.vs_alloca_next /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> FLOOKUP a.vs_allocas aid = SOME entry) /\
+  (!aid b sz. FLOOKUP a.vs_allocas aid = SOME (b,sz) /\ FLOOKUP s.vs_allocas aid = NONE ==>
+     s.vs_alloca_next <= b) /\
   ta.t_stor = tn.t_stor /\ ta.t_trans = tn.t_trans /\ ta.t_imm = tn.t_imm /\
   (!i. i IN ta.t_mem <=> i IN tn.t_mem \/
      (s.vs_alloca_next <= i /\ i < w2n w + capacity)) /\
