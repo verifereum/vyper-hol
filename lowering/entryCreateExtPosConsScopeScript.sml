@@ -59,17 +59,27 @@ Proof
   pure_rewrite_tac[eval_exprs_cons_action] >> irule scoped_operand_bind_all_mixed >>
   simp[evaluate_storage_trace_frame,storage_trace_frame_read_result,
        storage_trace_frame_return,storage_trace_frame_bind_all] >>
+  conj_tac
+  >- (rpt strip_tac >> pure_rewrite_tac[ignore_bind_def] >>
+      pure_once_rewrite_tac[bind_assoc] >>
+      drule_then irule gas_exempt_cert_bind_value >> simp[GSYM ignore_bind_def]) >>
+  conj_tac
+  >- (rpt strip_tac >> pure_rewrite_tac[ignore_bind_def] >>
+      pure_once_rewrite_tac[bind_assoc] >>
+      irule gas_exempt_cert_error_value >> simp[]) >>
   qexistsl_tac [`\H res mid G1 tn1 t. mid.gas_obs = [] /\ P H res mid G1 tn1 t`,`m`] >>
-  simp[] >>
-  rpt conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      `?H. valid_horizon cx st0 H mid.storage_trace` by fs[storage_trace_domain_def] >>
+  simp[] >> rpt conj_tac
+  >- (map_every qx_gen_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
+      `?H. valid_horizon cx st0 H mid.storage_trace` by metis_tac[storage_trace_domain_def] >>
       `mid.gas_obs = [] /\ ?v. res = INL v` by metis_tac[] >> gvs[] >>
-      first_x_assum irule >>
-      qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >> simp[] >>
-      strip_tac >> qexistsl_tac [`gas_explicit marks s.vs_gas_readings`,`marks`] >> simp[]) 
-  >- (rpt strip_tac >> simp[ignore_bind_def,bind_assoc] >>
-      irule gas_exempt_cert_error_result >> simp[GSYM ignore_bind_def]) >>
-  rpt strip_tac >> simp[ignore_bind_def,bind_assoc] >>
-  drule_then irule gas_exempt_cert_bind_result >> simp[GSYM ignore_bind_def]
+      `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
+      qpat_assum `mid with gas_obs := [] = mid` (SUBST1_TAC o SYM) >>
+      qpat_assum `!obs marks v mid G1 tn1 t. _` irule >>
+      conj_tac >- (qexists_tac `marks` >> simp[]) >>
+      conj_tac >- metis_tac[] >>
+      qexists_tac `gas_explicit marks s.vs_gas_readings` >>
+      qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+      qpat_assum `mid with gas_obs := [] = mid`
+        (fn th => rewrite_tac[listTheory.APPEND_NIL, th])) >>
+  metis_tac[]
 QED
