@@ -21,7 +21,7 @@ local
   val (setup, rest) = boolSyntax.dest_conj premises
   val (guarded, rest) = boolSyntax.dest_conj rest
   val (selector, rest) = boolSyntax.dest_conj rest
-  val (endpoint, entry) = boolSyntax.dest_conj rest
+  val (endpoint, _) = boolSyntax.dest_conj rest
   val _ = if null (free_vars guarded) andalso null (free_vars selector) then ()
           else raise Fail "ABI decoder producer hypotheses must be closed"
 in
@@ -29,8 +29,12 @@ in
   val decode_cut_selector = selector
   val decode_setup_producer = setup
   val decode_endpoint_producer = endpoint
-  val decode_caller_requirements = entry
 end
+
+val decode_caller_requirements =
+  let val normalized = CONV_RULE (REPEATC (REWR_CONV boolTheory.LET_THM THENC BETA_CONV))
+        bodyFullAbiDecodeCallerFullTheory.abi_decode_caller_full_conditional
+  in funpow 4 rand (lhand (concl normalized)) end
 
 Theorem abi_decode_singleton_compile:
   compile_expr ce ty0 (TypeBuiltin ty (AbiDecode unwrap) ty [e]) sa = (vv,final) /\
