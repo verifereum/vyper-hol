@@ -6,14 +6,6 @@ Ancestors
 Libs
   cv_transLib blastLib dep_rewrite
 
-(* vfmTypes supplies these shared byte/numeral translations. *)
-val () = List.app cv_rep_delete
-  ["keccak.cv_l2n_thm",
-   "keccak.cv_word_to_bytes_thm",
-   "keccak.cv_word_to_bytes_aux_thm",
-   "keccak.cv_get_byte_thm",
-   "keccak.cv_byte_index_thm"];
-
 (* Miscellaneous definitions/theorems/translations that need to be organised
  * and upstreamed to HOL where appropriate *)
 
