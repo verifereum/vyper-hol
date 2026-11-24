@@ -7079,7 +7079,7 @@ Theorem create_copy_expr_full_ok:
     body_exprs_full_ok cx (create_operand_order CreateCopyOf s es) ==>
     body_expr_full_ok cx (Call ty (CreateTarget CreateCopyOf s r ks) es d)
 Proof
-  rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_full_ok_def] >>
+  rpt gen_tac >> disch_tac >> rewrite_tac[Once body_expr_full_ok_def] >>
   reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
   Q.SUBGOAL_THEN `ty = BaseT AddressT` SUBST_ALL_TAC
   >- (drule copy_pre_args >> simp[]) >>
@@ -10521,7 +10521,7 @@ Theorem create_blueprint_expr_full_ok:
     body_expr_full_ok cx
       (Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)
 Proof
-  rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_full_ok_def] >>
+  rpt gen_tac >> disch_tac >> rewrite_tac[Once body_expr_full_ok_def] >>
   reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
   Q.SUBGOAL_THEN `ty = BaseT AddressT` SUBST_ALL_TAC
   >- (drule blueprint_pre_args >> simp[]) >>
@@ -13629,7 +13629,7 @@ Theorem raw_create_expr_full_ok:
     body_expr_full_ok cx (Call ty (CreateTarget RawCreate s r ks) es d)
 Proof
   map_every qx_gen_tac [`cx`,`ann`,`salted`,`rof`,`ks`,`args`,`dflt`] >>
-  disch_tac >> rewrite_tac[body_expr_full_ok_def] >>
+  disch_tac >> rewrite_tac[Once body_expr_full_ok_def] >>
   reverse conj_tac >- simp[] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule raw_create_pre_args >>
