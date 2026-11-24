@@ -15,12 +15,13 @@ Ancestors
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeEvalSoundness vyperTypeSystem
   exprPtrCtorCodeLoad exprSimCopy bodyFullUnwrapRun exprSimBopRestWordLoadSafety
   immutableCopyExecution entrySinkExtraction fragGasOriginPtrDead exprSimStorageCopy
-  bodyFullSubscriptArrayCodeOps bodyFullSubscriptArrayCodeBounds
+  bodyFullSubscriptArrayCodeOps bodyFullSubscriptArrayCodeBounds arrayAbortItinerary
   bodyPtrSignedConvertSourceFrame exprSimSubscriptArrayEndpoint
   exprSimSubscriptArrayCompose bodyFullGhostFrame bodyFullPathHistory
   targetSubscriptMemory vyperStorageFootprint
   exprSimSubscriptArraySuffix gasOutcomeFullCompose compileEnv bodyPtrDefs
   freshWrites wordArgsPtr gasSummary fragExec exprSimMemDefs venomState
+  emitHelper exprLoweringProps list rich_list venomInst
 
 Theorem selected_constructor_code_read[local]:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env fin /\
@@ -707,6 +708,74 @@ QED
 
 (* Literal lengths and the two code loaders have the same interface to the
    bounds check.  In constructor mode the header is a safe memory read. *)
+Theorem live_code_length_joint_run[local]:
+  (if dyn then compile_imm_load_word ctor imm arg
+   else comp_return (Lit (n2w cnt))) sa = (len,sb) /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  (dyn ==> eval_operand arg s = SOME a /\ copy_old_operand sa arg /\
+    op_taint tn arg = {} /\ op_prov G arg = NONE /\
+    immutable_copy_read ctor a s = n2w cnt /\
+    (ctor ==> w2n a + 32 <= lo /\ mem_word_taint tn.t_mem (w2n a) = {} /\
+      (!region. imm = SOME region ==> eval_operand region s = SOME 0w /\
+         copy_old_operand sa region /\ op_taint tn region = {} /\ op_prov G region = NONE)) /\
+    (~ctor ==> w2n a <= LENGTH s.vs_data_section)) ==>
+  ?Gf tnf t.
+    (?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+           t = raw with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+    eval_operand len t = SOME (n2w cnt) /\ op_taint tnf len = {} /\ op_prov Gf len = NONE /\
+    copy_old_operand sb len /\ (!l. len <> Label l) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_immutables = s.vs_immutables /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_initial_fmp = s.vs_initial_fmp /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es t)
+Proof
+  Cases_on `dyn` >> simp[compileEnvTheory.comp_return_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS)
+  >- (Cases_on `ctor` >- suspend "constructor" >> suspend "runtime") >>
+  gvs[] >> qexistsl [`G`,`tn`,`s`] >>
+  (conj_tac >-
+    (qexists `s` >>
+     simp[exprLoweringPropsTheory.emitted_insts_refl,
+          exprLoweringPropsTheory.run_inst_seq_def,
+          venomStateTheory.venom_state_component_equality])) >>
+  simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules,
+       venomStateTheory.eval_operand_def, copy_old_operand_def,
+       ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def]
+QED
+
+Resume live_code_length_joint_run[constructor]:
+  gvs[] >>
+  drule_all live_ctor_length_joint_run >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`Gf`,`tnf`,`t`] strip_assume_tac)) >>
+  qexistsl [`Gf`,`tnf`,`t`] >> simp[]
+QED
+
+Resume live_code_length_joint_run[runtime]:
+  gvs[immutable_copy_read_def] >>
+  drule_all compile_imm_load_word_runtime_joint_run >>
+  disch_then (qspecl_then [`PG`,`G`]
+    (qx_choosel_then [`out`,`Gf`,`tnf`,`sf`] strip_assume_tac)) >>
+  qexistsl [`Gf`,`tnf`,`sf`] >>
+  `not_fresh_at sb out` by
+    (fs[contextTheory.compile_imm_load_word_runtime] >>
+     drule emitHelperPropsTheory.emitted_insts_emit_op >>
+     simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     metis_tac[]) >>
+  gvs[venomStateTheory.eval_operand_def, copy_old_operand_def]
+QED
+Finalise live_code_length_joint_run[local]
+
 Theorem live_code_length_joint_ctor_observed:
   (if dyn then compile_imm_load_word ctor imm arg
    else comp_return (Lit (n2w cnt))) sa = (len,sb) /\
@@ -738,75 +807,10 @@ Theorem live_code_length_joint_ctor_observed:
     (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
       stmt_state_rel H ctx func cenv cx es t)
 Proof
-  Cases_on `dyn` >> simp[compileEnvTheory.comp_return_def] >>
-  disch_then (map_every assume_tac o CONJUNCTS)
-  >- (Cases_on `ctor` >- suspend "constructor" >> suspend "runtime") >>
-  gvs[] >> qexistsl [`G`,`tn`,`s`] >>
-  (conj_tac >-
-    (strip_tac >> qexists `s` >>
-     simp[exprLoweringPropsTheory.emitted_insts_refl,
-          exprLoweringPropsTheory.run_inst_seq_def,
-          venomStateTheory.venom_state_component_equality])) >>
-  simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules,
-       venomStateTheory.eval_operand_def, copy_old_operand_def,
-       ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def]
-QED
-
-Resume live_code_length_joint_ctor_observed[constructor]:
-  gvs[] >>
-  drule_all live_ctor_length_joint_run >>
+  strip_tac >> drule_all live_code_length_joint_run >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choosel_then [`Gf`,`tnf`,`t`] strip_assume_tac)) >>
-  qexistsl [`Gf`,`tnf`,`t`] >> simp[]
-QED
-
-Resume live_code_length_joint_ctor_observed[runtime]:
-  gvs[immutable_copy_read_def] >>
-  drule_all compile_imm_load_word_runtime_joint_frame >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
-  qpat_x_assum `!G. ?out Gf tnf sf. _` (qspec_then `G` strip_assume_tac) >>
-  qexistsl [`Gf`,`tnf`,`sf`] >>
-  `not_fresh_at sb out` by
-    (fs[contextTheory.compile_imm_load_word_runtime] >>
-     drule emitHelperPropsTheory.emitted_insts_emit_op >>
-     simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
-     metis_tac[]) >>
-  gvs[venomStateTheory.eval_operand_def, copy_old_operand_def]
-QED
-Finalise live_code_length_joint_ctor_observed
-
-Theorem live_code_length_joint[local]:
-  (if dyn then compile_imm_load_word ctor imm arg
-   else comp_return (Lit (n2w cnt))) sa = (len,sb) /\
-  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\
-  (dyn ==> eval_operand arg s = SOME a /\ copy_old_operand sa arg /\
-    op_taint tn arg = {} /\ op_prov G arg = NONE /\
-    immutable_copy_read ctor a s = n2w cnt /\
-    (ctor ==> w2n a + 32 <= lo /\ mem_word_taint tn.t_mem (w2n a) = {} /\
-      (!region. imm = SOME region ==> eval_operand region s = SOME 0w /\
-         copy_old_operand sa region /\ op_taint tn region = {} /\ op_prov G region = NONE)) /\
-    (~ctor ==> w2n a <= LENGTH s.vs_data_section)) ==>
-  ?Gf tnf t.
-    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
-    eval_operand len t = SOME (n2w cnt) /\ op_taint tnf len = {} /\ op_prov Gf len = NONE /\
-    copy_old_operand sb len /\ (!l. len <> Label l) /\
-    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    t.vs_immutables = s.vs_immutables /\ t.vs_fmp = s.vs_fmp /\
-    t.vs_initial_fmp = s.vs_initial_fmp /\
-    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_requests = s.vs_requests /\
-    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
-    (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\
-    (!H cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-      stmt_state_rel H ctx func cenv cx es t)
-Proof
-  strip_tac >> drule_all live_code_length_joint_ctor_observed >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  qexistsl [`Gf`,`tnf`,`t`] >> simp[]
+  qexistsl [`Gf`,`tnf`,`t`] >> simp[] >> metis_tac[]
 QED
 
 (* The final code-address calculation is independent of the length loader. *)
@@ -819,6 +823,8 @@ Theorem live_code_element_joint[local]:
   eval_operand base_op s = SOME a /\ op_taint tn base_op = {} /\ op_prov G base_op = NONE /\
   eval_operand idx s = SOME (n2w i) /\ op_taint tn idx = {} /\ op_prov G idx = NONE ==>
   ?Gf tnf sf.
+    (?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+           sf = (raw with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     (!D lo explicit. allocas_from lo s ==>
       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK sf,Gf,tnf)) /\
     sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
@@ -851,7 +857,7 @@ Resume live_code_element_joint[dynamic]:
   qpat_assum `emit_op MUL _ _ = _` (strip_assume_tac o MATCH_MP loweringShapeRulesTheory.emit_op_facts) >> gvs[] >>
   qpat_assum `emit_op ADD [Var _;Var _] _ = _` (strip_assume_tac o MATCH_MP loweringShapeRulesTheory.emit_op_facts) >>
   gvs[] >>
-  drule_all code_dynamic_address_joint_frame >>
+  drule_all code_dynamic_address_joint_frame_observed >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`Gf`,`tnf`,`sf`] >> simp[venomStateTheory.eval_operand_def]
 QED
@@ -862,7 +868,7 @@ Resume live_code_element_joint[fixed]:
   gvs[] >>
   drule_then strip_assume_tac (Q.SPEC `ADD` loweringShapeRulesTheory.emit_op_facts) >>
   gvs[] >>
-  drule_all scalar_mul_add_joint_frame >>
+  drule_all scalar_mul_add_joint_frame_observed >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`Gf`,`tnf`,`sf`] >> simp[venomStateTheory.eval_operand_def]
 QED
@@ -916,8 +922,188 @@ Proof
             compileEnvTheory.cs_extends_trans]
 QED
 
+Theorem live_code_bounds_installed[local]:
+  array_bounds_check idx len sgn sa = ((),sb) /\ fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  (?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)) /\
+  EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS)
+    (emitted_insts sa sb)
+Proof
+  strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+   EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS)
+     (emitted_insts sa sb)` by
+    (qpat_x_assum `array_bounds_check _ _ _ _ = _` mp_tac >>
+     Cases_on `sgn` >>
+     simp[exprSimArrayIndexTheory.array_bounds_check_def,
+          exprSimArrayIndexTheory.array_bounds_valid_def,
+          emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+          fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+     strip_tac >> gvs[emitted_insts_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[DROP_LENGTH_APPEND, is_terminator_def]) >>
+  simp[] >>
+  fs[fn_has_code_def, IS_PREFIX_APPEND] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]
+QED
+
 (* The length read, bounds check and address arithmetic form one no-mark
-   path.  The abort branch stops before executing the address arithmetic. *)
+   path. The physical slices and the frame certify the same result. *)
+Theorem live_code_select_joint_run:
+  compile_array_subscript arg idx dyn (if dyn then 0 else cnt) 32 esz sgn
+    (compile_ptr_load ctor imm LocCode) sa = (dst,sb) /\
+  fn_has_code sa sb func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  eval_operand arg s = SOME a /\ copy_old_operand sa arg /\
+  op_taint tn arg = {} /\ op_prov G arg = NONE /\
+  eval_operand idx s = SOME (n2w i) /\ copy_old_operand sa idx /\
+  op_taint tn idx = {} /\ op_prov G idx = NONE /\
+  (!l. arg <> Label l /\ idx <> Label l) /\
+  (dyn ==> immutable_copy_read ctor a s = n2w cnt /\
+    (ctor ==> w2n a + 32 <= lo /\ mem_word_taint tn.t_mem (w2n a) = {} /\
+      (!region. imm = SOME region ==> eval_operand region s = SOME 0w /\
+         copy_old_operand sa region /\ op_taint tn region = {} /\ op_prov G region = NONE)) /\
+    (~ctor ==> w2n a <= LENGTH s.vs_data_section)) ==>
+  ?Gf tnf q.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      ((if idx_in_range sgn (n2w i) (n2w cnt) then OK q else Abort Revert_abort q),Gf,tnf)) /\
+    (?len sh sk rawh h Gh tnh.
+      (if dyn then compile_imm_load_word ctor imm arg
+       else comp_return (Lit (n2w cnt))) sa = (len,sh) /\
+      array_bounds_check idx len sgn sh = ((),sk) /\
+      array_elem_ptr arg idx dyn 32 esz sk = (dst,sb) /\
+      fn_has_code sa sh func /\ fn_has_code sh sk func /\ fn_has_code sk sb func /\
+      run_inst_seq (emitted_insts sa sh) s = OK rawh /\
+      h = (rawh with vs_inst_idx := LENGTH sh.cs_current_insts) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK h,Gh,tnh)) /\
+      (if idx_in_range sgn (n2w i) (n2w cnt) then
+         ?k rawq. array_bounds_native_run sh sk h T k /\
+           run_inst_seq (emitted_insts sk sb) k = OK rawq /\
+           q = (rawq with vs_inst_idx := LENGTH sb.cs_current_insts)
+       else
+         ?raw. run_inst_seq (emitted_insts sh sk) h = Abort Revert_abort raw /\
+           array_abort_itinerary (emitted_insts sh sk) func h Revert_abort raw q /\
+           (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (h,Gh,tnh) []
+                  (Abort Revert_abort q,Gf,tnf)))) /\
+    q.vs_immutables = s.vs_immutables /\ q.vs_memory = s.vs_memory /\
+    q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next /\
+    q.vs_fmp = s.vs_fmp /\ q.vs_accounts = s.vs_accounts /\
+    q.vs_transient = s.vs_transient /\ q.vs_call_ctx = s.vs_call_ctx /\
+    q.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!v. not_fresh_at sa v ==> lookup_var v q = lookup_var v s /\
+      FLOOKUP Gf v = FLOOKUP G v /\ op_taint tnf (Var v) = op_taint tn (Var v)) /\
+    (idx_in_range sgn (n2w i) (n2w cnt) ==>
+      q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~q.vs_halted /\
+      eval_operand dst q = SOME (a + n2w ((if dyn then 32 else 0) + i * esz)) /\
+      op_taint tnf dst = {} /\ op_prov Gf dst = NONE /\
+      !(H:(bool # bytes32 # type_value) list # num list) cenv cx es.
+        stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+        stmt_state_rel H ctx func cenv cx es q)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all live_code_compiler_cuts >>
+  simp[boolTheory.COND_EXPAND_IMP] >> strip_tac >>
+  `dyn ==> eval_operand arg s = SOME a /\ copy_old_operand sa arg /\
+    op_taint tn arg = {} /\ op_prov G arg = NONE /\
+    immutable_copy_read ctor a s = n2w cnt /\
+    (ctor ==> w2n a + 32 <= lo /\ mem_word_taint tn.t_mem (w2n a) = {} /\
+      (!region. imm = SOME region ==> eval_operand region s = SOME 0w /\
+        copy_old_operand sa region /\ op_taint tn region = {} /\ op_prov G region = NONE)) /\
+    (~ctor ==> w2n a <= LENGTH s.vs_data_section)` by simp[] >>
+  drule_all (INST_TYPE [Type.alpha |-> ``:256``] live_code_length_joint_run) >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`Gh`,`tnh`,`h`] strip_assume_tac)) >>
+  `!l. arg <> Label l` by metis_tac[] >>
+  `!l. idx <> Label l` by metis_tac[] >>
+  `eval_operand arg h = SOME a /\ op_taint tnh arg = {} /\ op_prov Gh arg = NONE` by
+    (Cases_on `arg` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
+      ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
+  `copy_old_operand sh idx /\ copy_old_operand sh arg` by
+    metis_tac[copy_old_operand_mono] >>
+  `eval_operand idx h = SOME (n2w i) /\ op_taint tnh idx = {} /\ op_prov Gh idx = NONE` by
+    (Cases_on `idx` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
+      ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
+  `!v. idx = Var v \/ len = Var v ==> not_fresh_at sh v` by
+    fs[copy_old_operand_def, boolTheory.DISJ_IMP_THM] >>
+  `!l. idx <> Label l /\ len <> Label l` by simp[] >>
+  `allocas_from lo h` by (simp[ptrDisciplineTheory.allocas_from_def] >> metis_tac[ptrDisciplineTheory.allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp h` by
+    (`allocas_below_fmp h <=> allocas_below_fmp s` by
+       asm_rewrite_tac[ptrDisciplineTheory.allocas_below_fmp_def] >>
+     qpat_assum `allocas_below_fmp h <=> allocas_below_fmp s`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
+  Cases_on `idx_in_range sgn (n2w i) (n2w cnt)` >> simp[]
+  >- suspend "in_range" >> suspend "out_of_range"
+QED
+
+Resume live_code_select_joint_run[in_range]:
+  drule_all (INST_TYPE [Type.alpha |-> ``:256``] array_bounds_check_read_only_joint_ok_frame_run) >>
+  disch_then (qspec_then `PG` (qx_choosel_then [`Gk`,`tnk`,`k`] strip_assume_tac)) >>
+  `copy_old_operand sk idx /\ copy_old_operand sk arg` by
+    metis_tac[copy_old_operand_mono] >>
+  `eval_operand idx k = SOME (n2w i) /\ op_taint tnk idx = {} /\ op_prov Gk idx = NONE` by
+    (Cases_on `idx` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
+      ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
+  `eval_operand arg k = SOME a /\ op_taint tnk arg = {} /\ op_prov Gk arg = NONE` by
+    (Cases_on `arg` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
+      ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
+  `allocas_from lo k` by (simp[ptrDisciplineTheory.allocas_from_def] >> metis_tac[ptrDisciplineTheory.allocas_from_def]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp k` by
+    (`allocas_below_fmp k <=> allocas_below_fmp h` by
+       asm_rewrite_tac[ptrDisciplineTheory.allocas_below_fmp_def] >>
+     qpat_assum `allocas_below_fmp k <=> allocas_below_fmp h`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     first_assum ACCEPT_TAC) >>
+  drule_all (INST_TYPE [Type.alpha |-> ``:256``] live_code_element_joint) >>
+  disch_then (qspec_then `PG` (qx_choosel_then [`Gq`,`tnq`,`q`] strip_assume_tac)) >>
+  qexistsl [`Gq`,`tnq`,`q`] >> simp[] >>
+  conj_tac
+  >- (gen_tac >> metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
+  conj_tac
+  >- (rename1 `run_inst_seq (emitted_insts sk sb) k = OK rawq` >>
+      qexistsl [`Gh`,`tnh`] >>
+      qpat_x_assum `h = _` (SUBST_ALL_TAC o SYM) >>
+      conj_tac >- simp[] >> qexistsl [`k`,`rawq`] >> simp[]) >>
+  `!v. not_fresh_at sa v ==> not_fresh_at sh v /\ not_fresh_at sk v` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  conj_tac >- metis_tac[] >> rpt strip_tac >>
+  `local_ptrs_reserved cenv sh /\ local_ptrs_reserved cenv sk` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  metis_tac[]
+QED
+
+Resume live_code_select_joint_run[out_of_range]:
+  drule_all array_bounds_check_joint_oob_frame_run >>
+  disch_then (qspec_then `PG` (qx_choosel_then [`Gq`,`tnq`,`q`] strip_assume_tac)) >>
+  qexistsl [`Gq`,`tnq`,`q`] >> simp[] >>
+  conj_tac
+  >- (gen_tac >> metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
+  conj_tac
+  >- (qpat_x_assum `array_bounds_native_run _ _ _ F _`
+        (strip_assume_tac o SIMP_RULE (srw_ss()) [array_bounds_native_run_def]) >>
+      rename1 `run_inst_seq (emitted_insts sh sk) h = Abort Revert_abort abort_raw` >>
+      `array_abort_itinerary (emitted_insts sh sk) func h Revert_abort abort_raw q` by
+        (drule_all live_code_bounds_installed >> strip_tac >>
+         `gas_origin_path T explicit ctx func h [] (Abort Revert_abort q)` by
+           (qpat_assum `!D lo explicit. allocas_from lo h ==> gas_origin_ptr_path _ _ _ _`
+              (qspecl_then [`ARB`,`lo`,`explicit`] mp_tac) >>
+            impl_tac >- first_assum ACCEPT_TAC >>
+            disch_then (mp_tac o MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_projections) >>
+            simp[]) >>
+         irule run_inst_seq_abort_itinerary >> metis_tac[]) >>
+      qexistsl [`Gh`,`tnh`] >>
+      qpat_x_assum `h = _` (SUBST_ALL_TAC o SYM) >>
+      conj_tac >- simp[] >> qexists `abort_raw` >> simp[]) >>
+  metis_tac[freshWritesTheory.not_fresh_at_mono]
+QED
+Finalise live_code_select_joint_run
+
 Theorem live_code_select_joint:
   compile_array_subscript arg idx dyn (if dyn then 0 else cnt) 32 esz sgn
     (compile_ptr_load ctor imm LocCode) sa = (dst,sb) /\
@@ -954,83 +1140,11 @@ Theorem live_code_select_joint:
         stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
         stmt_state_rel H ctx func cenv cx es q)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all live_code_compiler_cuts >>
-  simp[boolTheory.COND_EXPAND_IMP] >> strip_tac >>
-  `dyn ==> eval_operand arg s = SOME a /\ copy_old_operand sa arg /\
-    op_taint tn arg = {} /\ op_prov G arg = NONE /\
-    immutable_copy_read ctor a s = n2w cnt /\
-    (ctor ==> w2n a + 32 <= lo /\ mem_word_taint tn.t_mem (w2n a) = {} /\
-      (!region. imm = SOME region ==> eval_operand region s = SOME 0w /\
-        copy_old_operand sa region /\ op_taint tn region = {} /\ op_prov G region = NONE)) /\
-    (~ctor ==> w2n a <= LENGTH s.vs_data_section)` by simp[] >>
-  drule_all (INST_TYPE [Type.alpha |-> ``:256``] live_code_length_joint) >>
+  strip_tac >> drule_all live_code_select_joint_run >>
   disch_then (qspecl_then [`explicit`,`PG`]
-    (qx_choosel_then [`Gh`,`tnh`,`h`] strip_assume_tac)) >>
-  `!l. arg <> Label l` by metis_tac[] >>
-  `!l. idx <> Label l` by metis_tac[] >>
-  `eval_operand arg h = SOME a /\ op_taint tnh arg = {} /\ op_prov Gh arg = NONE` by
-    (Cases_on `arg` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
-      ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
-  `copy_old_operand sh idx /\ copy_old_operand sh arg` by
-    metis_tac[copy_old_operand_mono] >>
-  `eval_operand idx h = SOME (n2w i) /\ op_taint tnh idx = {} /\ op_prov Gh idx = NONE` by
-    (Cases_on `idx` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
-      ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
-  `!v. idx = Var v \/ len = Var v ==> not_fresh_at sh v` by
-    fs[copy_old_operand_def, boolTheory.DISJ_IMP_THM] >>
-  `!l. idx <> Label l /\ len <> Label l` by simp[] >>
-  `allocas_from lo h` by (simp[ptrDisciplineTheory.allocas_from_def] >> metis_tac[ptrDisciplineTheory.allocas_from_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp h` by
-    (`allocas_below_fmp h <=> allocas_below_fmp s` by
-       asm_rewrite_tac[ptrDisciplineTheory.allocas_below_fmp_def] >>
-     qpat_assum `allocas_below_fmp h <=> allocas_below_fmp s`
-       (fn th => PURE_REWRITE_TAC [th]) >>
-     first_assum ACCEPT_TAC) >>
-  Cases_on `idx_in_range sgn (n2w i) (n2w cnt)` >> simp[]
-  >- suspend "in_range" >> suspend "out_of_range"
+    (qx_choosel_then [`Gf`,`tnf`,`q`] (map_every assume_tac o CONJUNCTS))) >>
+  qexistsl [`Gf`,`tnf`,`q`] >> simp[]
 QED
-
-Resume live_code_select_joint[in_range]:
-  drule_all (INST_TYPE [Type.alpha |-> ``:256``] array_bounds_check_read_only_joint_ok_frame) >>
-  disch_then (qspec_then `PG` (qx_choosel_then [`Gk`,`tnk`,`k`] strip_assume_tac)) >>
-  `copy_old_operand sk idx /\ copy_old_operand sk arg` by
-    metis_tac[copy_old_operand_mono] >>
-  `eval_operand idx k = SOME (n2w i) /\ op_taint tnk idx = {} /\ op_prov Gk idx = NONE` by
-    (Cases_on `idx` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
-      ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
-  `eval_operand arg k = SOME a /\ op_taint tnk arg = {} /\ op_prov Gk arg = NONE` by
-    (Cases_on `arg` >> fs[copy_old_operand_def, venomStateTheory.eval_operand_def,
-      ptrDisciplineTheory.op_taint_def, ptrDisciplineTheory.op_prov_def] >> metis_tac[]) >>
-  `allocas_from lo k` by (simp[ptrDisciplineTheory.allocas_from_def] >> metis_tac[ptrDisciplineTheory.allocas_from_def]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp k` by
-    (`allocas_below_fmp k <=> allocas_below_fmp h` by
-       asm_rewrite_tac[ptrDisciplineTheory.allocas_below_fmp_def] >>
-     qpat_assum `allocas_below_fmp k <=> allocas_below_fmp h`
-       (fn th => PURE_REWRITE_TAC [th]) >>
-     first_assum ACCEPT_TAC) >>
-  drule_all (INST_TYPE [Type.alpha |-> ``:256``] live_code_element_joint) >>
-  disch_then (qspec_then `PG` (qx_choosel_then [`Gq`,`tnq`,`q`] strip_assume_tac)) >>
-  qexistsl [`Gq`,`tnq`,`q`] >> simp[] >>
-  conj_tac
-  >- (gen_tac >> metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
-  `!v. not_fresh_at sa v ==> not_fresh_at sh v /\ not_fresh_at sk v` by
-    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  conj_tac >- metis_tac[] >> rpt strip_tac >>
-  `local_ptrs_reserved cenv sh /\ local_ptrs_reserved cenv sk` by
-    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
-  metis_tac[]
-QED
-
-Resume live_code_select_joint[out_of_range]:
-  drule_all array_bounds_check_joint_oob_frame >>
-  disch_then (qspec_then `PG` (qx_choosel_then [`Gq`,`tnq`,`q`] strip_assume_tac)) >>
-  qexistsl [`Gq`,`tnq`,`q`] >> simp[] >>
-  conj_tac
-  >- (gen_tac >> metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans]) >>
-  metis_tac[freshWritesTheory.not_fresh_at_mono]
-QED
-Finalise live_code_select_joint
 
 Theorem current_immutable_dynamic_header:
   stmt_state_rel H ctx func cenv cx fin s /\
