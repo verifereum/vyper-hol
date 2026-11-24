@@ -11,6 +11,7 @@ Ancestors
   bodyPtrBopScalarOutcome rich_list emitHelper venomInst exprLoweringProps
   abiDecoderReentryAddress abiDecoderRange abiDecoderDynamicLoopSetup placeMemoryCodeLayout
   entryDecoderHistoryFrame fragExecMem instMemFrontier memSafeRun fragGasCopyLoop fragGasSeqPtr
+  fragGasCopySeqLiftProps
   abiMalformedConstructorContract abiMalformedBulkConstructor abiMalformedMemberSetup
   abiMalformedRecursiveInterface abiDecodePtrMemberFrame decoderGhostFramePtr fragGasOriginPtrLoop
 
