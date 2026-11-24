@@ -4,6 +4,7 @@ Ancestors
   abiDecoderComplexGuard abiDecoderComplexHead abiEncoder
   bodyPtrBopScalarSeq bodyPtrBopScalarOutcome entryDecoderHistoryFrame
   fragGasCopyLoop fragGasSeqPtr fragExecMem instMemFrontier memSafeRun ptrDiscipline allocasBelowFmpUpdatesProps
+  fragGasCopySeqLiftProps
   emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   abiDecodePtrMemberFrame abiValidAllocatedMembers abiValidAllocatedContract abiValidMembers
   abiDecoderMemberInfos abiDecoderContract abiMalformedRecursiveInterface

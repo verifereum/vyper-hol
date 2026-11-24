@@ -50,6 +50,7 @@ Theorem compile_expr_ifexp_layout[local]:
             else LocatedValue t (mk_ptr (Var rv) LocMemory)) /\
       s5.cs_current_bb = s1.cs_current_bb /\
       s5.cs_current_insts = s1.cs_current_insts /\
+      s5.cs_next_id = s1.cs_next_id /\
       s7.cs_current_bb = tl /\ s11.cs_current_bb = el /\
       st'.cs_current_bb = xl /\ s7.cs_current_insts = [] /\
       s11.cs_current_insts = [] /\ st'.cs_current_insts = [] /\
@@ -116,7 +117,7 @@ QED
 
 (* The spine premises pair the condition, arm expression and conversion
    at the real and shadow compiler environments. *)
-Theorem ifexp_shadow_code_layout:
+Theorem ifexp_shadow_code_layout_chain:
   compile_expr cenv ty (IfExp t c a b) st = (vv,st') /\
   compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (IfExp t c a b)) shadow_st =
     (vv,shadow_st') /\
@@ -159,7 +160,45 @@ Theorem ifexp_shadow_code_layout:
     st.cs_next_var <= sc.cs_next_var /\ st.cs_next_id <= sc.cs_next_id /\
     sc.cs_next_var <= se.cs_next_var /\ sc.cs_next_id <= se.cs_next_id /\
     se.cs_next_var <= sea.cs_next_var /\ se.cs_next_id <= sea.cs_next_id /\
-    sx.cs_next_id <= st'.cs_next_id /\ (!x. not_fresh_at st x ==> x <> rv)
+    sx.cs_next_id <= st'.cs_next_id /\ (!x. not_fresh_at st x ==> x <> rv) /\
+    (cs_extends st sc /\ cs_extends sc sj /\ cs_extends sj sn /\
+     cs_extends sn se /\ cs_extends se sea /\ cs_extends sea sx /\
+     cs_extends sx sy /\ cs_extends sy sz /\ cs_extends sz st') /\
+    (sc.cs_next_id = sj.cs_next_id /\ sj.cs_next_id <= sn.cs_next_id /\
+     sn.cs_next_id <= se.cs_next_id /\ sea.cs_next_id <= sx.cs_next_id /\
+     sx.cs_next_id <= sy.cs_next_id /\ sy.cs_next_id <= sz.cs_next_id /\
+     sz.cs_next_id <= st'.cs_next_id) /\
+    sn.cs_blocks <> se.cs_blocks /\ sz.cs_blocks <> st'.cs_blocks /\
+    (?s2 s3 s4 x6 s7 tav s7a taop s8 s9 s10 x10 s11 fav s11a faop s12 s13 s14 x14.
+       fresh_var sc = (rv,s2) /\
+       fresh_label "then" s2 = (tl,s3) /\
+       fresh_label "else" s3 = (el,s4) /\
+       fresh_label "exit" s4 = (xl,sj) /\
+       new_block tl sn = (x6,s7) /\
+       compile_expr cenv ty a s7 = (tav,s7a) /\
+       compile_ifexp_arm cenv t (lowered_value_type cenv a) tav s7a = (taop,s8) /\
+       emit_inst ASSIGN [taop] [rv] s8 = ((),s9) /\
+       emit_inst JMP [Label xl] [] s9 = ((),s10) /\
+       new_block el s10 = (x10,s11) /\
+       compile_expr cenv ty b s11 = (fav,s11a) /\
+       compile_ifexp_arm cenv t (lowered_value_type cenv b) fav s11a = (faop,s12) /\
+       emit_inst ASSIGN [faop] [rv] s12 = ((),s13) /\
+       emit_inst JMP [Label xl] [] s13 = ((),s14) /\
+       new_block xl s14 = (x14,st') /\
+       (cs_extends sc s2 /\ cs_extends s2 s3 /\ cs_extends s3 s4 /\
+        cs_extends s4 sj /\ cs_extends sn s7 /\ cs_extends s7 s7a /\
+        cs_extends s7a s8 /\ cs_extends s8 s9 /\ cs_extends s9 s10 /\
+        cs_extends s10 s11 /\ cs_extends s11 s11a /\ cs_extends s11a s12 /\
+        cs_extends s12 s13 /\ cs_extends s13 s14 /\ cs_extends s14 st') /\
+       (sn.cs_next_id = s7.cs_next_id /\ s7.cs_next_id <= s7a.cs_next_id /\
+        s7a.cs_next_id <= s8.cs_next_id /\ s8.cs_next_id <= s9.cs_next_id /\
+        s9.cs_next_id <= s10.cs_next_id /\ s10.cs_next_id = s11.cs_next_id /\
+        s11.cs_next_id <= s11a.cs_next_id /\ s11a.cs_next_id <= s12.cs_next_id /\
+        s12.cs_next_id <= s13.cs_next_id /\ s13.cs_next_id <= s14.cs_next_id /\
+        s14.cs_next_id = st'.cs_next_id) /\
+       (se,sea,av,aop,sx,sy,sz) =
+         (if sel then (s7,s7a,tav,taop,s8,s9,s10)
+                 else (s11,s11a,fav,faop,s12,s13,s14)))
 Proof
   strip_tac >>
   qpat_assum `compile_expr _ _ (IfExp _ _ _ _) st = _`
@@ -227,9 +266,96 @@ Proof
   `fn_has_code shadow_st h1 shadow_func /\
    fn_has_code h7 h7a shadow_func /\ fn_has_code h11 h11a shadow_func` by
     metis_tac[fn_has_code_mid, fn_has_code_split, cs_extends_trans] >>
+  `cs_extends s1 s2 /\ cs_extends s2 s3 /\ cs_extends s3 s4 /\
+   cs_extends s4 s5` by metis_tac[cs_extends_fresh_var, cs_extends_fresh_label] >>
+  `cs_extends s6 s11 /\ cs_extends s10 st'` by metis_tac[cs_extends_trans] >>
+  `s7a.cs_next_id <= s8.cs_next_id /\ s11a.cs_next_id <= s12.cs_next_id` by
+    metis_tac[ci_mono_compile_ifexp_arm, ci_mono_def, pairTheory.SND] >>
+  imp_res_tac emit_inst_extends >> imp_res_tac new_block_props >>
+  `s6.cs_next_id <= s11.cs_next_id /\ s10.cs_next_id <= st'.cs_next_id` by
+    decide_tac >>
+  `!p q. cs_extends p q ==> LENGTH p.cs_blocks <= LENGTH q.cs_blocks` by
+    (simp[cs_extends_def] >> rpt strip_tac >> simp[]) >>
+  `LENGTH s6.cs_blocks <= LENGTH s10.cs_blocks /\
+   LENGTH s10.cs_blocks <= LENGTH s14.cs_blocks` by
+    metis_tac[cs_extends_trans] >>
+  `!l p r q. new_block l p = (r,q) ==>
+      LENGTH p.cs_blocks < LENGTH q.cs_blocks` by
+    (rpt gen_tac >> disch_then (strip_assume_tac o MATCH_MP new_block_props) >> simp[]) >>
+  `LENGTH s6.cs_blocks < LENGTH s7.cs_blocks /\
+   LENGTH s10.cs_blocks < LENGTH s11.cs_blocks /\
+   LENGTH s14.cs_blocks < LENGTH st'.cs_blocks` by metis_tac[] >>
+  `LENGTH s6.cs_blocks < LENGTH s11.cs_blocks /\
+   LENGTH s10.cs_blocks < LENGTH st'.cs_blocks` by decide_tac >>
+  `!xs ys : basic_block list. LENGTH xs < LENGTH ys ==> xs <> ys` by
+    (rpt strip_tac >> qpat_x_assum `LENGTH _ < LENGTH _` mp_tac >> simp[]) >>
+  `s6.cs_blocks <> s7.cs_blocks /\ s6.cs_blocks <> s11.cs_blocks /\
+   s10.cs_blocks <> st'.cs_blocks /\ s14.cs_blocks <> st'.cs_blocks` by
+    (rpt conj_tac >>
+     qpat_assum `!xs ys. LENGTH xs < LENGTH ys ==> xs <> ys` irule >>
+     first_assum ACCEPT_TAC) >>
   Cases_on `sel`
   >- (qexistsl_tac [`s5`,`s6`,`tl`,`el`,`rv`,`s7`,`h7`,`av`,`s7a`,
-        `h7a`,`aop`,`s8`,`s9`,`s10`] >> simp[]) >>
+        `h7a`,`aop`,`s8`,`s9`,`s10`] >> simp[] >>
+      qexistsl_tac [`s2`,`s3`,`s4`,`x6`,`s7`,`av`,`s7a`,`aop`,`s8`,`s9`,`s10`,
+                    `x10`,`s11`,`bv`,`s11a`,`bop`,`s12`,`s13`,`s14`,`x14`] >> simp[]) >>
   qexistsl_tac [`s5`,`s6`,`tl`,`el`,`rv`,`s11`,`h11`,`bv`,`s11a`,
-        `h11a`,`bop`,`s12`,`s13`,`s14`] >> simp[]
+        `h11a`,`bop`,`s12`,`s13`,`s14`] >> simp[] >>
+  qexistsl_tac [`s2`,`s3`,`s4`,`x6`,`s7`,`av`,`s7a`,`aop`,`s8`,`s9`,`s10`,
+                `x10`,`s11`,`bv`,`s11a`,`bop`,`s12`,`s13`,`s14`,`x14`] >> simp[]
+QED
+
+(* Clients that do not need the closure order retain the original interface. *)
+Theorem ifexp_shadow_code_layout:
+  compile_expr cenv ty (IfExp t c a b) st = (vv,st') /\
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (IfExp t c a b)) shadow_st =
+    (vv,shadow_st') /\
+  gas_shadow_state st shadow_st /\
+  fn_has_code st st' func /\ fn_has_code shadow_st shadow_st' shadow_func /\
+  local_ptrs_reserved cenv st /\
+  (!ty' e. gas_shadow_compiles (compile_expr cenv ty' e)
+             (compile_expr (gas_shadow_env T cenv) ty' (gas_shadow_expr e))) /\
+  (!ty' e. gas_shadow_compiles (lower_value compile_expr cenv ty' e)
+             (lower_value compile_expr (gas_shadow_env T cenv) ty' (gas_shadow_expr e))) /\
+  (!rt at av. gas_shadow_compiles (compile_ifexp_arm cenv rt at av)
+                (compile_ifexp_arm (gas_shadow_env T cenv) rt at av)) ==>
+  ?cop sc shadow_sc sj sn tl el xl rv se shadow_se av sea shadow_sea aop
+   sx sy sz.
+    lower_value compile_expr cenv (BaseT BoolT) c st = (cop,sc) /\
+    lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT) (gas_shadow_expr c)
+      shadow_st = (cop,shadow_sc) /\
+    gas_shadow_state sc shadow_sc /\
+    emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\
+    sj.cs_current_bb = sc.cs_current_bb /\
+    sj.cs_current_insts = sc.cs_current_insts /\
+    compile_expr cenv ty (if sel then a else b) se = (av,sea) /\
+    compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (if sel then a else b)) shadow_se =
+      (av,shadow_sea) /\
+    gas_shadow_state se shadow_se /\ gas_shadow_state sea shadow_sea /\
+    compile_ifexp_arm cenv t (lowered_value_type cenv (if sel then a else b))
+      av sea = (aop,sx) /\
+    emit_inst ASSIGN [aop] [rv] sx = ((),sy) /\
+    emit_inst JMP [Label xl] [] sy = ((),sz) /\
+    se.cs_current_bb = (if sel then tl else el) /\ se.cs_current_insts = [] /\
+    st'.cs_current_bb = xl /\ st'.cs_current_insts = [] /\
+    vv = (if is_word_type t then StackValue t (Var rv)
+          else LocatedValue t (mk_ptr (Var rv) LocMemory)) /\
+    fn_has_code st sc func /\ fn_has_code shadow_st shadow_sc shadow_func /\
+    fn_has_code sj sn func /\
+    fn_has_code se sea func /\ fn_has_code shadow_se shadow_sea shadow_func /\
+    fn_has_code sea sx func /\
+    fn_has_code sx sy func /\ fn_has_code sy sz func /\
+    local_ptrs_reserved cenv se /\ cs_extends sc st' /\ cs_extends se sx /\
+    st.cs_next_var <= sc.cs_next_var /\ st.cs_next_id <= sc.cs_next_id /\
+    sc.cs_next_var <= se.cs_next_var /\ sc.cs_next_id <= se.cs_next_id /\
+    se.cs_next_var <= sea.cs_next_var /\ se.cs_next_id <= sea.cs_next_id /\
+    sx.cs_next_id <= st'.cs_next_id /\ (!x. not_fresh_at st x ==> x <> rv)
+Proof
+  strip_tac >> drule_all ifexp_shadow_code_layout_chain >>
+  disch_then (qspec_then `sel` (qx_choosel_then
+    [`cop`,`sc`,`shadow_sc`,`sj`,`sn`,`tl`,`el`,`xl`,`rv`,`se`,`shadow_se`,`av`,
+     `sea`,`shadow_sea`,`aop`,`sx`,`sy`,`sz`] strip_assume_tac)) >>
+  qexistsl_tac [`cop`,`sc`,`shadow_sc`,`sj`,`sn`,`tl`,`el`,`xl`,`rv`,`se`,
+    `shadow_se`,`av`,`sea`,`shadow_sea`,`aop`,`sx`,`sy`,`sz`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED

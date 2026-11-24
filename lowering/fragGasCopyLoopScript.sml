@@ -6,15 +6,14 @@
  * TOP-LEVEL:
  *   storage_copy_loop_origin_ptr -- SLOAD/TLOAD + MSTORE per slot
  *   memory_copy_loop_origin_ptr -- MLOAD + SSTORE/TSTORE per slot
- *   inst_seq_ptr_lower_bound_transport -- a pointer-checked straight-line
- *     run at a lower reserved bound is checked at a higher one
  *)
 Theory fragGasCopyLoop
 Ancestors
   emitHelperProps stmtSimStoreCopy bodyMemAssignTopCopyCompiler
   bodyMemAssignTopCopyLoop fragGasPathPtr wordLoadStorePtr assignBasePtrWordStore codegenRel
   contextCodegenRel exprSimPtrTopLevelStorageCopy exprSimPtrTopLevelCopy exprSimStorageCopy
-  bodyStorageCopyMemory bodyMemAssignTopCopyPaths fragGasStorageCopyBodyProps fragGasStorageCopyHeaderProps
+  bodyStorageCopyMemory bodyMemAssignTopCopyPaths fragGasCopySeqLiftProps
+  fragGasStorageCopyBodyProps fragGasStorageCopyHeaderProps
   fragGasSeqPtrContext fragGasSeqPtr fragGasSeqAbort fragGasOriginPtr fragGasOriginPtrLoop fragGasOrigin
   ptrSafetyTransport instMemFrontier fragExecMem fragExec memSafeRun checkedPrefixCursor
   gasEvents gasCount ptrSafeRun ptrDiscipline bodyPtrDefs typedCopyPtr
@@ -24,78 +23,6 @@ Ancestors
   words arithmetic list rich_list finite_map pred_set pair
 
 (* ===== Generic pieces ===== *)
-
-Theorem inst_seq_ptr_lower_bound_transport:
-  !code s G tn G' tn'.
-    lo0 <= lo /\ allocas_from lo s /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> ALLOCA) code /\
-    inst_seq_ptr D lo0 ctx fn PG G tn code s G' tn' ==>
-    inst_seq_ptr D lo ctx fn PG G tn code s G' tn'
-Proof
-  Induct >> simp[inst_seq_ptr_def] >> rpt gen_tac >> strip_tac >>
-  conj_tac >- (irule ptr_inst_ok_lower_bound_transport >> metis_tac[]) >>
-  Cases_on `step_inst_base h s` >> gvs[] >>
-  rename1 `step_inst_base h s = OK u` >>
-  first_x_assum irule >> simp[] >>
-  `u.vs_allocas = s.vs_allocas` by
-    metis_tac[venomMemPropsTheory.step_inst_base_preserves_allocas] >>
-  gvs[allocas_from_def] >> metis_tac[]
-QED
-
-Theorem run_inst_seq_allocas_from[local]:
-  !code s t.
-    allocas_from lo s /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> ALLOCA) code /\
-    run_inst_seq code s = OK t ==>
-    allocas_from lo t
-Proof
-  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `step_inst_base h s` >> gvs[] >>
-  rename1 `step_inst_base h s = OK u` >>
-  first_x_assum irule >> simp[] >> qexists_tac `u` >> simp[] >>
-  `u.vs_allocas = s.vs_allocas` by
-    metis_tac[venomMemPropsTheory.step_inst_base_preserves_allocas] >>
-  gvs[allocas_from_def] >> metis_tac[]
-QED
-
-(* A checked straight-line run without GAS, ALLOCA or calls, checked at the
-   reserved bound 0, is a zero-mark joint path at any bound lo below every
-   ALLOCA site. *)
-Theorem run_inst_seq_origin_ptr_lift:
-  ~s.vs_halted /\
-  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-  isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-             i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) code /\
-  run_inst_seq_mem_ok code s /\
-  (ptrDiscipline$ctx_has_dalloca ctx ==>
-    !pre i post u. code = pre ++ i::post /\
-      run_inst_seq pre s = OK u ==>
-      unitTransformDefs$dalloca_no_wrap i u) /\
-  allocas_from lo s /\
-  inst_seq_ptr D 0 ctx func PG G tn code s G' tn' /\
-  run_inst_seq code s = OK t ==>
-  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-    (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code),G',tn') /\
-  allocas_from lo t
-Proof
-  strip_tac >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> ALLOCA) code /\
-   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
-    fs[EVERY_MEM] >>
-  reverse conj_tac >- metis_tac[run_inst_seq_allocas_from] >>
-  `FILTER (\i. i.inst_opcode = GAS) code = []` by
-    (simp[FILTER_EQ_NIL] >> fs[EVERY_MEM]) >>
-  `inst_seq_ptr D lo ctx func PG G tn code s G' tn'` by
-    (irule inst_seq_ptr_lower_bound_transport >> simp[] >>
-     qexists_tac `0` >> simp[]) >>
-  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn)
-     (MAP (\i. (func.fn_name, i.inst_id) IN explicit)
-        (FILTER (\i. i.inst_opcode = GAS) code))
-     (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code),G',tn')` by
-    (irule run_inst_seq_gas_origin_ptr_path >> metis_tac[]) >>
-  gvs[]
-QED
 
 (* The abort cursor is fixed from the executed instruction prefix before
    considering any dead set or pointer ghosts. *)
@@ -411,74 +338,6 @@ Proof
   gvs[jump_to_def, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
 QED
 
-Theorem storage_copy_body_origin_ptr[local]:
-  (loc = LocStorage \/ loc = LocTransient) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-  allocas_from lo s /\
-  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
-  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
-  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
-  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
-  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
-  ~s.vs_halted /\ s.vs_inst_idx = 0 /\
-  lookup_block s.vs_current_bb func.fn_blocks = SOME
-    <|bb_label := s.vs_current_bb; bb_instructions :=
-      [mk_inst id ADD [src;Var cv] [sv];
-       mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
-       mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
-       mk_inst (id+3) ADD [Var dst;Var mv] [dv];
-       mk_inst (id+4) MSTORE [Var dv;Var vv] [];
-       mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
-       mk_inst (id+6) ASSIGN [Var nv] [cv];
-       mk_inst (id+7) JMP [Label hdr] []]|> ==>
-  !D explicit PG. ?r G1 tn1.
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK r,G1,tn1) /\
-    (toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 (k+1) G1 tn1 r /\
-     allocas_from lo r /\ (ctx_has_dalloca ctx ==> allocas_below_fmp r)) /\
-    ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0
-Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >>
-  qabbrev_tac `code =
-      [mk_inst id ADD [src;Var cv] [sv];
-       mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
-       mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
-       mk_inst (id+3) ADD [Var dst;Var mv] [dv];
-       mk_inst (id+4) MSTORE [Var dv;Var vv] [];
-       mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
-       mk_inst (id+6) ASSIGN [Var nv] [cv]]` >>
-  RULE_ASSUM_TAC (REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  drule_all storage_copy_body_ptr_run >>
-  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
-  `isPREFIX code (DROP s.vs_inst_idx
-     (code ++ [mk_inst (id+7) JMP [Label hdr] []]))` by simp[] >>
-  `lookup_block s.vs_current_bb func.fn_blocks = SOME
-     <|bb_label := s.vs_current_bb;
-       bb_instructions := code ++ [mk_inst (id+7) JMP [Label hdr] []]|>` by
-    (qpat_x_assum `code = _` SUBST1_TAC >> simp[]) >>
-  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-     (OK (r with vs_inst_idx := s.vs_inst_idx + LENGTH code),Gf,tnf) /\
-   allocas_from lo r` by
-    (irule run_inst_seq_origin_ptr_lift >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     qexists_tac `<|bb_label := s.vs_current_bb;
-       bb_instructions := code ++ [mk_inst (id+7) JMP [Label hdr] []]|>` >>
-     fs[]) >>
-  qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) [] _` mp_tac >>
-  asm_rewrite_tac[ADD_CLAUSES] >> strip_tac >>
-  qabbrev_tac `t = r with vs_inst_idx := LENGTH code` >>
-  `~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = 7 /\
-   allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t)` by
-    (simp[Abbr `t`] >> gvs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
-  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,Gf,tnf) []
-     (OK (jump_to hdr t),Gf,tnf)` by
-    (irule jmp_origin_ptr_path >> simp[] >>
-     qexists_tac `id+7` >> simp[get_instruction_def] >>
-     qpat_x_assum `code = _` SUBST1_TAC >> simp[]) >>
-  qexistsl_tac [`jump_to hdr t`, `Gf`, `tnf`] >>
-  conj_tac >- (irule origin_ptr_path_then >> qexistsl_tac [`Gf`, `t`, `tnf`] >>
-               gvs[Abbr `t`]) >>
-  gvs[Abbr `t`, jump_to_def, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]
-QED
-
 Theorem storage_copy_loop_origin_ptr:
   compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) /\
   fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
@@ -571,10 +430,12 @@ Proof
            mk_inst ((sa.cs_next_id+4)+7) JMP [Label hdr] []]|>` by
        (simp[Abbr `body_code`] >> metis_tac[]) >>
      drule_at (Pat `lookup_block _ _ = SOME <|bb_label := _; bb_instructions := _|>`)
-       storage_copy_body_origin_ptr >>
+       storage_copy_body_origin_path >>
      disch_then drule_all >>
-     disch_then (qspecl_then [`D`, `explicit`, `PG`] strip_assume_tac) >>
-     metis_tac[]) >>
+     disch_then (qspecl_then [`D`, `explicit`, `PG`]
+       (qx_choosel_then [`r`, `Gf`, `tnf`]
+         (strip_assume_tac))) >>
+     qexistsl_tac [`r`, `Gf`, `tnf`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qspecl_then [`\j Gj tj q. toplevel_copy_inv cv ds dst src loc a b n s G tn j Gj tj q /\
                             allocas_from lo q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q)`,
                `(D,lo,explicit,ctx,func,PG)`, `n`, `hdr`, `loop_body`, `exit`,
