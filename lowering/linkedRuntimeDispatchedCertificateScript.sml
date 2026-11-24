@@ -73,6 +73,8 @@ Ancestors
   linkedDefaultError[qualified] gasExemptCertMods[qualified] gasOutcomeFullMods[qualified]
   loweringHalt[qualified] nonreentrantExit[qualified] sourceUnitExecution[qualified]
   stmtFragPtr[qualified] vyperCallFiniteStorageSupport[qualified] vyperEvalReadingErrors[qualified]
+  linkedFuelPackage[qualified] fragFuelRuntime[qualified] fragFuelPackage[qualified]
+  fragFuelCtx[qualified] fragFuelExpr[qualified] fragFuelStmt[qualified]
 
 val _ = Parse.hide "tops";
 
@@ -7854,6 +7856,229 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omi
        simp[NoAsms, REWRITE_RULE [markerTheory.Abbrev_def] split, TAKE_DROP])) >>
   suspend "linked_grouped_default_omitted_apply"
 QED
+
+(* At an earlier visit to the cut, the next normal edge would enter the
+   common body, from which the actual keyword endpoint is unreachable. *)
+fun linked_default_stopped_rtc_tac termq =
+  Q.SUBGOAL_THEN `!u n. fragFuel$at_point keyword_end u /\
+      fragGasPath$gas_path unit.cu_context fn u n (OK keyword_state) ==>
+      u = keyword_state` ASSUME_TAC
+  >- (qx_genl_tac [`at_src`,`remaining`] >> strip_tac >>
+      qpat_x_assum `fragGasPath$gas_path _ _ at_src remaining (OK keyword_state)`
+        (strip_assume_tac o SIMP_RULE (srw_ss()) [exit_result_def] o
+         ONCE_REWRITE_RULE [fragGasPathTheory.gas_path_cases])
+      >- (sym_tac >> first_assum ACCEPT_TAC) >>
+      rename1 `fragGasPath$gas_path _ _ next rest (OK keyword_state)` >>
+      qpat_assum `fragGasPath$gas_path_edge unit.cu_context fn at_src _ (OK next)`
+        (mp_then Any (qspecl_then [termq,`keyword_end`,`common_entry.cs_current_bb`] mp_tac)
+           groupedEntryCutTheory.grouped_entry_cut_jumps_common) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      strip_tac >>
+      qpat_assum `!v m. v.vs_current_bb = common_entry.cs_current_bb /\
+         v.vs_inst_idx = 0 ==> ~fragGasPath$gas_path _ _ v m (OK keyword_state)`
+        (drule_all_then strip_assume_tac) >>
+      qpat_assum `fragGasPath$gas_path _ _ next rest (OK keyword_state)` (fn yes =>
+        qpat_x_assum `!m. ~fragGasPath$gas_path _ _ next m (OK keyword_state)`
+          (qspec_then `rest` mp_tac) >> simp[NoAsms,yes])) >>
+  Cases_on `fragFuel$at_point keyword_end decode_start`
+  >- (`decode_start = keyword_state` by
+        (qpat_assum `!u n. _ ==> u = keyword_state` (fn at_cut =>
+           qpat_assum `fragGasPath$gas_path _ _ decode_start _ (OK keyword_state)`
+             (mp_then Any match_mp_tac at_cut)) >>
+         first_assum ACCEPT_TAC) >>
+      qpat_assum `decode_start = keyword_state` (fn eq => simp[NoAsms,eq,relationTheory.RTC_REFL])) >>
+  qpat_assum `fragGasPath$gas_path unit.cu_context fn decode_start _ (OK keyword_state)`
+    (mp_tac o MATCH_MP (SPEC_ALL fragFuelConfinementTheory.gas_path_first_outside)) >>
+  disch_then (qspecl_then [`keyword_state`,`\u. ~fragFuel$at_point keyword_end u`] mp_tac) >>
+  qpat_assum `~fragFuel$at_point keyword_end decode_start` (fn bef =>
+    qpat_assum `fragFuel$at_point keyword_end keyword_state` (fn hit =>
+      simp[NoAsms,bef,hit])) >>
+  disch_then (qx_choosel_then [`before`,`atcut`,`cost`,`suffix`] strip_assume_tac) >>
+  `atcut = keyword_state` by
+    (qpat_assum `!u n. _ ==> u = keyword_state` (qspecl_then [`atcut`,`suffix`] match_mp_tac) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `atcut = keyword_state` (SUBST1_TAC o SYM) >>
+  irule (cj 2 relationTheory.RTC_RULES_RIGHT1) >> qexists_tac `before` >>
+  conj_tac
+  >- (BETA_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `cost` >> first_assum ACCEPT_TAC) >>
+  first_assum ACCEPT_TAC;
+
+(* Preserve the marked paths; their erasures are only for the first-cut
+   counter argument. *)
+fun linked_default_decode_normal_path_tac horiz =
+  `fragGasPath$gas_path unit.cu_context fn decode_start 0 (OK supplied)` by
+    (qpat_assum `!D exp. gas_origin_ptr_path _ (decode_start,_,_) [] (OK supplied,_,_)`
+       (qspecl_then [`cx_dead (` @ horiz @ `) cx`,
+                     `gas_explicit_sites unit.cu_context shadow_unit.cu_context`] mp_tac) >>
+     disch_then (mp_tac o MATCH_MP (SPEC_ALL gas_origin_ptr_path_projections)) >>
+     simp[NoAsms] >> disch_then (ACCEPT_TAC o MATCH_MP (SPEC_ALL fragGasPathPtrTheory.gas_path_ptr_erase) o CONJUNCT2)) >>
+  `fragGasPath$gas_path unit.cu_context fn supplied (LENGTH init_marks) (OK keyword_state)` by
+    (qpat_assum `gas_origin_ptr_path _ (supplied,_,_) init_marks (OK keyword_state,_,_)`
+       (mp_tac o MATCH_MP (SPEC_ALL gas_origin_ptr_path_projections)) >>
+     disch_then (ACCEPT_TAC o MATCH_MP (SPEC_ALL fragGasPathPtrTheory.gas_path_ptr_erase) o CONJUNCT2)) >>
+  qpat_assum `fragGasPath$gas_path _ _ decode_start 0 (OK supplied)`
+    (mp_then Any mp_tac fragGasPathTheory.gas_path_then) >>
+  disch_then (qspecl_then [`OK keyword_state`,`LENGTH init_marks`] mp_tac) >>
+  simp[NoAsms] >> disch_then irule >> first_assum ACCEPT_TAC;
+
+fun linked_default_prefix_fuel_tac () =
+  qunabbrev_tac `entry_prefix` >>
+  match_mp_tac (SIMP_RULE (srw_ss()) [fragFuelExprTheory.fuel_ok_compile_expr,
+    fragFuelStmtTheory.fuel_okS_compile_stmt]
+    fragFuelRuntimeTheory.fuel_okS_grouped_runtime_entry_prefix) >>
+  conj_tac
+  >- (simp[NoAsms,Abbr `groups`,EVERY_MAP,EVERY_MEM] >>
+      POP_ASSUM_LIST (K ALL_TAC) >> qx_gen_tac `pkg` >> strip_tac >> PairCases_on `pkg` >>
+      Cases_on `NULL pkg6` >> Cases_on `pkg7 = NoneT` >>
+      simp[package_external_group_unit_def,package_external_fn_unit_def,
+           set_external_package_target_def,update_cenv_nonreentrant_def,
+           update_cenv_ret_abi_def,fragFuelStmtBaseTheory.cenv_ptrs_below_def,
+           linkedFuelPackageTheory.build_compile_env_unit_fuel_ok] >>
+      rewrite_tac[GSYM fragFuelStmtBaseTheory.cenv_ptrs_below_def] >>
+      simp[NoAsms,linkedFuelPackageTheory.build_compile_env_unit_fuel_ok]) >>
+  conj_tac
+  >- (simp[NoAsms,Abbr `groups`,EVERY_MAP,EVERY_MEM] >>
+      POP_ASSUM_LIST (K ALL_TAC) >> qx_gen_tac `pkg` >> strip_tac >> PairCases_on `pkg` >>
+      Cases_on `NULL pkg6` >>
+      simp[package_external_group_unit_def,package_external_fn_unit_def,
+           set_external_package_target_def,compute_selector_def]) >>
+  simp[NoAsms,Abbr `fall`] >> POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `fb`
+  >- simp[package_fallback_fn_unit_def,set_fallback_package_target_def] >>
+  rename1 `package_fallback_fn_unit _ _ _ (SOME fb_pkg)` >>
+  PairCases_on `fb_pkg` >> Cases_on `fb_pkg7 = NoneT` >>
+  simp[package_fallback_fn_unit_def,set_fallback_package_target_def,
+       update_cenv_nonreentrant_def,update_cenv_ret_abi_def,
+       fragFuelStmtBaseTheory.cenv_ptrs_below_def,
+       linkedFuelPackageTheory.build_compile_env_unit_fuel_ok] >>
+  rewrite_tac[GSYM fragFuelStmtBaseTheory.cenv_ptrs_below_def] >>
+  simp[NoAsms,linkedFuelPackageTheory.build_compile_env_unit_fuel_ok];
+
+(* The raw linked unit supplies the stable callees for the common body.
+   Reuse the retained grouped entry prefix and separated internal bodies. *)
+fun linked_default_entry_stable_tac () =
+  Q.SUBGOAL_THEN `?G. fragFuel$callees_stable G unit.cu_context fn`
+    (qx_choose_then `callee_bound` ASSUME_TAC)
+  >- (qpat_assum `compile_generate_grouped_runtime groups [] fall _ = _`
+        (mp_tac o REWRITE_RULE [fragFuelRuntimeTheory.compile_generate_grouped_runtime_split]) >>
+      qmatch_goalsub_abbrev_tac `comp_ignore_bind entry_prefix (comp_bind (compile_internal_fn_bodies []) _) _` >>
+      disch_tac >>
+      Q.SUBGOAL_THEN `entry_prefix (initial_compile_state "__entry") = ((),compiled)` ASSUME_TAC
+      >- (qpat_assum `comp_ignore_bind entry_prefix _ _ = _` mp_tac >>
+          Cases_on `entry_prefix (initial_compile_state "__entry")` >>
+          qpat_assum `entry_prefix (initial_compile_state "__entry") = _`
+            (fn eq => simp[NoAsms,eq,compile_internal_fn_bodies_def,comp_ignore_bind_def,
+                            comp_bind_def,comp_return_def])) >>
+      qspecl_then [`unit.cu_context`,`"__entry"`,`fn`] match_mp_tac
+        fragFuelCtxTheory.ctx_entry_callees_stable >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      match_mp_tac (GEN_ALL (Q.INST [`pre` |-> `entry_prefix`, `P0` |-> `\st:compile_state. T`,
+        `P` |-> `\st:compile_state. T`, `Wv` |-> `UNIV`]
+        (INST_TYPE [alpha |-> ``:unit``]
+          (SPEC_ALL fragFuelPackageTheory.extract_context_fuel_stable_from_labels)))) >>
+      qexistsl_tac [`final`,`()`,`compiled`,`"__entry"`,`ips`,`entry_prefix`,`data`,`()`] >>
+      simp[NoAsms,fragFuelTheory.next_stable_def] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- linked_default_prefix_fuel_tac () >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- (drule_all_then ACCEPT_TAC compileUnitPackageShapeTheory.extract_context_descriptors_distinct) >>
+      conj_tac >- (simp[NoAsms,EVERY_MEM] >> gen_tac >> disch_tac >> conj_tac
+        >- (qpat_assum `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips)`
+              (drule_then ACCEPT_TAC o SIMP_RULE bool_ss [EVERY_MEM])) >>
+        strip_tac >> qpat_x_assum `MEM _ (MAP _ (all_blocks compiled))`
+          (strip_assume_tac o SIMP_RULE bool_ss [MEM_MAP]) >>
+        qpat_assum `EVERY (\bb. ~internal_label_ok bb.bb_label) (all_blocks compiled)`
+          (drule_then mp_tac o SIMP_RULE bool_ss [EVERY_MEM]) >>
+        qpat_assum `FST _ = _.bb_label` (fn eq => simp[NoAsms,GSYM eq]) >>
+        qpat_assum `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips)`
+          (drule_then (fn th => simp[NoAsms,th]) o SIMP_RULE bool_ss [EVERY_MEM])) >>
+      conj_tac >- simp[NoAsms,Abbr `ips`,linkedFuelPackageTheory.package_internal_fns_unit_fuel] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_assum `lowering_context_ok unit.cu_context` mp_tac >>
+      simp[NoAsms,lowering_context_ok_def,EVERY_MEM]);
+
+fun linked_default_common_env_fuel_tac () =
+  Q.SUBGOAL_THEN `fragFuelStmtBase$cenv_ptrs_below 0 common.ec_env /\
+    common.ec_env.ce_ctor_exit_label = NONE` (map_every assume_tac o CONJUNCTS)
+  >- (qpat_assum `set_external_package_target _
+        (package_external_fn_unit _ _ _ (_,_,_,_,_,_,[],_,_)) =
+         (_,common.ec_env,_,_,_,_,_,_,_,_,_)` mp_tac >>
+      simp[NoAsms,set_external_package_target_def,package_external_fn_unit_def,
+           update_cenv_nonreentrant_def] >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `(if _ then _ else _) with <|ce_target := _; ce_nonreentrant := _|> = common.ec_env`
+        (fn eq => PURE_ONCE_REWRITE_TAC [GSYM eq]) >>
+      Cases_on `ret = NoneT` >> pop_assum (fn ret_case =>
+        simp[NoAsms,ret_case,update_cenv_ret_abi_def,fragFuelStmtBaseTheory.cenv_ptrs_below_def,
+             linkedFuelPackageTheory.build_compile_env_unit_fuel_ok]) >>
+      rewrite_tac[GSYM fragFuelStmtBaseTheory.cenv_ptrs_below_def] >>
+      simp[NoAsms,linkedFuelPackageTheory.build_compile_env_unit_fuel_ok]);
+
+fun linked_default_retained_labels_tac () =
+  Q.SUBGOAL_THEN `ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se))` ASSUME_TAC
+  >- (drule_all entryRejectCodeTheory.run_grouped_lowering_dispatch_code >>
+      disch_then (qx_choosel_then [`sf1`,`fall_lbl1`,`jobs1`,`sd1`,`sx1`,`sn1`,`se1`] strip_assume_tac) >>
+      map_every (fn pat => qpat_x_assum pat mp_tac)
+        [`fresh_label "fallback" _ = (fall_lbl1,sf1)`,
+         `compile_group_dispatch_linear groups fall_lbl1 sf1 = (jobs1,sd1)`,
+         `compile_external_jobs jobs1 sd1 = ((),sx1)`,
+         `new_block fall_lbl1 sx1 = (_,sn1)`,
+         `_ sn1 = ((),se1)`,
+         `ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se1))`] >>
+      map_every (fn pat => qpat_assum pat mp_tac)
+        [`fresh_label "fallback" _ = (fall_lbl,sf)`,
+         `compile_group_dispatch_linear groups fall_lbl sf = (jobs,sd)`,
+         `compile_external_jobs jobs sd = ((),sx)`,
+         `new_block fall_lbl sx = (_,sn)`,
+         `_ sn = ((),se)`] >>
+      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[]);
+
+(* Compile-side inputs for the no-reentry argument are the actual
+   common body interval and raw linked package, not shadow metadata. *)
+fun linked_default_body_no_reentry_tac () =
+  `cs_extends body_end se` by
+    (irule cs_extends_trans >> qexists_tac `sx` >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `fn_has_code common_entry body_end fn` by
+    (irule entryCodeOwnershipTheory.fn_has_code_retained_interval >>
+     conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `se` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks body_end))` by
+    (qpat_assum `cs_extends body_end se` (mp_then Any (fn labels =>
+       qpat_assum `ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se))`
+         (mp_tac o PURE_REWRITE_RULE [labels])) externalEntryShapeTheory.cs_extends_labels) >>
+     simp[NoAsms,ALL_DISTINCT_APPEND]) >>
+  `fragFuelStmtBase$cenv_ptrs_below common_entry.cs_next_var
+     (compile_register_kwarg_vars common.ec_env vars)` by
+    (irule (cj 2 fragFuelRuntimeBodyTheory.compile_register_kwarg_vars_ptrs) >>
+     reverse conj_tac >- (irule fragFuelStmtBaseTheory.cenv_ptrs_below_le >>
+       qexists_tac `0` >> simp[NoAsms] >> first_assum ACCEPT_TAC) >>
+     simp[NoAsms,EVERY_MEM,FORALL_PROD] >> rpt gen_tac >> disch_tac >> gen_tac >>
+     disch_then (mk_asm "default_var") >>
+     qpat_assum `!name op ty e. MEM (name,op,ty,e) vars ==> ?id q base.
+       op = Var q /\ not_fresh_at init q /\ _`
+       (drule_then strip_assume_tac) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`not_fresh_at init _`, `init.cs_next_var <= common_entry.cs_next_var`, `_ = Var _`] >>
+     asm "default_var" mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[fragFuelTheory.var_below_def,not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `fragFuel$no_phi_fn fn` by
+    (simp[NoAsms,fragFuelTheory.no_phi_fn_def,EVERY_MEM] >> first_assum ACCEPT_TAC) >>
+  `!label bb. lookup_block label fn.fn_blocks = SOME bb ==> phi_prefix_length bb.bb_instructions = 0` by
+    (rpt gen_tac >> disch_then (mp_tac o MATCH_MP (SPEC_ALL venomExecPropsTheory.lookup_block_MEM)) >>
+     qpat_assum `!bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0`
+       (fn phi => simp[NoAsms,phi])) >>
+  `MEM keyword_state.vs_current_bb (MAP (\bb. bb.bb_label) common_entry.cs_blocks)` by
+    (qpat_assum `fragFuel$at_point keyword_end keyword_state` (strip_assume_tac o REWRITE_RULE [fragFuelTheory.at_point_def]) >>
+     qpat_assum `keyword_state.vs_current_bb = keyword_end.cs_current_bb` SUBST1_TAC >>
+     drule_all_then ACCEPT_TAC groupedEntryCutTheory.grouped_initializer_closed_label) >>
+  `!v m. v.vs_current_bb = common_entry.cs_current_bb /\ v.vs_inst_idx = 0 ==>
+        ~fragGasPath$gas_path unit.cu_context fn v m (OK keyword_state)` by
+    (rpt gen_tac >> strip_tac >> strip_tac >>
+     drule_all_then mp_tac groupedEntryCutTheory.grouped_common_body_no_reentry >>
+     qpat_assum `MEM keyword_state.vs_current_bb _` (fn hit => simp[NoAsms,hit]));
 
 Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omitted_apply]:
   cheat
