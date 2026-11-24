@@ -125,12 +125,19 @@ Proof
                              `s`,`G`,`tn`,`t`,`Gf`,`tnf`] mp_tac) >>
      simp[] >> impl_tac >-
        (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-        irule store_observer_joint_step_fetch >> qexists_tac `id` >>
+        irule store_observer_joint_step_fetch >>
+        rpt (conj_tac >- first_assum ACCEPT_TAC) >> qexists_tac `id` >>
         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
         rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
         qpat_assum `!i l. MEM i (frag_code sa sb) /\ _ ==> _`
           (drule_all_then strip_assume_tac) >> metis_tac[]) >>
      simp[]) >>
   qexistsl_tac [`t`,`Gf`,`tnf`] >>
-  fs[create_operand_at_def, FORALL_AND_THM]
+  conj_tac >-
+    (qx_gen_tac `mask` >>
+     first_x_assum (qspec_then `mask` strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (first_x_assum (qspec_then `ARB` strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  rewrite_tac[create_operand_at_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
