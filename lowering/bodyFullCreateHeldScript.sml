@@ -3889,6 +3889,133 @@ QED
 
 Finalise create_ctor_borrowed_row
 
+Definition create_ctor_borrowed_head_post_def:
+  create_ctor_borrowed_head_post (DF,lo,d,ctx,func) cenv cx e
+      (es,sa,sb,s0,vv,sv,G0,tn0) H res ee G tn t <=>
+    ?v. res = INL v /\
+      ((?tag op. sv = StackValue tag op) \/
+       (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location = LocMemory) \/
+       (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location <> LocMemory /\
+            lowered_value_type cenv e = expr_type e /\ sv = vv)) /\
+      (?raw. read_result cx raw ee = (INL v,ee) /\
+        vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
+        vv_at cenv cx (lowered_value_type cenv e) sa sb ee raw sv t /\
+        ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G tn t /\
+        vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t) /\
+      vv_storage_live H cx sv ee t /\
+      ((case sv of StackValue _ _ => T | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+         ptr_buf_ok cenv e (vv_operand sv) G t) /\
+      (cenv.ce_is_ctor /\ vv_location sv = SOME LocCode ==>
+        !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
+          eval_operand (vv_operand sv) t = SOME w ==>
+          w2n w + type_memory_size rt <= lo /\
+          (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==> val_in_memory rt v (w2n w) mem)) /\
+      stmt_state_rel H ctx func cenv cx ee t /\ storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv sb t /\ ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      wb_frame cenv es ee sa s0 t /\ MAP FDOM ee.scopes = MAP FDOM es.scopes /\
+      (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
+      (~expr_has_effect e ==>
+       (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
+       (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>))
+End
+
+Theorem create_ctor_borrowed_head_endpoint:
+  expr_body_pre cenv cx env e es /\ body_inv tops ctx cenv cx /\
+  compile_expr cenv (expr_type e) e sa = (vv,sb) /\
+  sv = ext_call_arg_value (lowered_value_type cenv e) vv /\
+  ~is_word_type (lowered_value_type cenv e) /\
+  eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\
+  read_result cx tv ee = (INL v,ee) /\
+  bodyFullAttribute$field_vv_post (DF,lo,d,ctx,func) cenv cx e
+    (es,sa,sb,s0,vv,G0,tn0) H (INL tv : eval_result + exception) ee G1 tn1 t /\
+  return_buf_frame d cenv sa s0 /\ ~t.vs_halted /\
+  valid_horizon cx st0 H ee.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    storage_well_formed_on cx es (FST H)) ==>
+  create_ctor_borrowed_head_post (DF,lo,d,ctx,func) cenv cx e
+    (es,sa,sb,s0,vv,sv,G0,tn0) H (INL v) ee G1 tn1 t
+Proof
+  strip_tac >>
+  qpat_x_assum `bodyFullAttribute$field_vv_post _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE bool_ss
+      [bodyFullAttributeTheory.field_vv_post_def, sumTheory.INL_11]) >>
+  simp[create_ctor_borrowed_head_post_def,NoAsms] >>
+  qabbrev_tac `entry = es with gas_obs := gs` >>
+  `expr_body_pre cenv cx env e entry` by simp[Abbr `entry`] >>
+  `valid_horizon cx entry H ee.storage_trace` by
+    (qpat_assum `eval_expr cx e entry = (INL tv,ee)`
+       (mp_then Any mp_tac valid_horizon_frame) >>
+     simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame] >> disch_tac >>
+     `valid_horizon cx st0 H es.storage_trace` by fs[Abbr `entry`] >>
+     `(storage_well_formed_on cx entry (FST H) <=> storage_well_formed_on cx es (FST H))` by
+       (irule storage_well_formed_on_backends >> simp[Abbr `entry`]) >>
+     fs[valid_horizon_def]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
+     simp[Abbr `entry`]) >>
+  `~expr_has_effect e ==>
+    (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
+    (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)` by
+    (strip_tac >> drule_all targetPureSourceFrameTheory.effect_free_source_projection >>
+     simp[Abbr `entry`]) >>
+  `vv_storage_live H cx vv ee t` by
+    (`vv_post H ctx func cenv cx e entry sa sb s0 ee tv vv t` by
+       simp[Abbr `entry`,exprSimPropsTheory.vv_post_initial_gas] >>
+     qpat_assum `expr_body_pre cenv cx env e entry`
+       (strip_assume_tac o MATCH_MP expr_body_pre_static_facts) >>
+     qpat_assum `expr_body_pre cenv cx env e entry`
+       (assume_tac o MATCH_MP exprBodyPreCallSafetyPropsTheory.expr_body_pre_call_evaluation_safe) >>
+     `runtime_consistent env cx entry /\ functions_well_typed cx` by
+       fs[expr_sim_inv_def,runtime_consistent_def] >>
+     irule bodyFullAssignTheory.body_assign_rhs_storage_live >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`cenv`,`ctx`,`e`,`env`,`entry`,`func`,`tv`,`s0`,`sa`,`sb`,`tops`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
+  `wb_frame cenv es ee sa s0 t` by
+    (rewrite_tac[loweringPostsTheory.wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `return_buf_frame d cenv sb t` by
+    (irule bodyMemoryDefsTheory.return_buf_frame_frame >> qexistsl [`cenv`,`s0`,`sa`] >>
+     qpat_assum `compile_expr _ _ e sa = _`
+       (mp_then Any mp_tac exprSimUnwrapTheory.compile_expr_extends) >>
+     simp[] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `~is_word_type (post_value_type cenv e)` by
+    (drule exprSimHypsTheory.expr_body_pre_lowered_fits >> strip_tac >>
+     `~is_word_type (expr_type e)` by metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type] >>
+     drule_all (Q.SPECL [`cenv`,`e`] abiEncodeMaterializeTheory.materialize_post_lowered_classify) >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
+  `((?tag op. sv = StackValue tag op) \/
+    (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location = LocMemory) \/
+    (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location <> LocMemory /\
+        lowered_value_type cenv e = expr_type e /\ sv = vv)) /\
+    (?raw. read_result cx raw ee = (INL v,ee) /\
+       vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
+       vv_at cenv cx (lowered_value_type cenv e) sa sb ee raw sv t /\
+       ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G1 tn1 t /\
+       vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t)`
+    suffices_by (disch_then (map_every assume_tac o CONJUNCTS) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >> suspend "representation") >>
+  match_mp_tac (Q.GENL [`env`,`es`,`raw`,`vv`] create_ctor_borrowed_row) >>
+  qexistsl [`env`,`entry`,`tv`] >> simp[]
+QED
+
+Resume create_ctor_borrowed_head_endpoint[representation]:
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  Cases_on `vv` >> gvs[ext_call_arg_value_def, vv_operand_def, vv_location_def,
+                       loweringPostsTheory.vv_storage_live_def] >>
+  strip_tac >>
+  drule_all exprPtrUnwrapStorageShapeTheory.compile_nonmemory_lowered_value_type >> strip_tac >>
+  gvs[loweringPostsTheory.post_value_type_lowered, arithmeticTheory.ADD_COMM]
+QED
+
+Finalise create_ctor_borrowed_head_endpoint
+
 (* Reading a borrowed aggregate adds no target instruction. Its source
    read still runs immediately, before evaluating any later argument. *)
 Theorem create_ctor_borrowed_head_outcome:
@@ -4028,102 +4155,37 @@ Resume create_ctor_borrowed_head_outcome[package]:
   conj_tac
   >- (irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >>
       first_assum ACCEPT_TAC) >>
-  BETA_TAC >> qexists `v` >> rewrite_tac[] >>
-  rule_assum_tac BETA_RULE >>
-  qpat_assum `!H. _ ==> (?p. INL tv = INL p /\ _) /\ _`
-    (drule_then (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
+  BETA_TAC >> rule_assum_tac BETA_RULE >>
   suspend "endpoint"
 QED
 
 Resume create_ctor_borrowed_head_outcome[endpoint]:
-  qabbrev_tac `entry = es with gas_obs := gas_explicit marks s0.vs_gas_readings` >>
-  `expr_body_pre cenv cx env e entry` by simp[Abbr `entry`] >>
-  `valid_horizon cx entry H ee.storage_trace` by
-    (qpat_assum `eval_expr cx e entry = (INL tv,ee)`
-       (mp_then Any mp_tac valid_horizon_frame) >>
-     simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame] >> disch_tac >>
-     `valid_horizon cx st0 H es.storage_trace` by fs[Abbr `entry`] >>
-     qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _` (drule_then strip_assume_tac) >>
-     `(storage_well_formed_on cx entry (FST H) <=> storage_well_formed_on cx es (FST H))` by
-       (irule storage_well_formed_on_backends >> simp[Abbr `entry`]) >>
-     fs[valid_horizon_def]) >>
-  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
-    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
-     simp[Abbr `entry`]) >>
-  `~expr_has_effect e ==>
-    (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
-    (es with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>)` by
-    (strip_tac >> drule_all targetPureSourceFrameTheory.effect_free_source_projection >>
-     simp[Abbr `entry`]) >>
-  `vv_storage_live H cx vv ee t` by
-    (`vv_post H ctx func cenv cx e entry sa sb s0 ee tv vv t` by
-       simp[Abbr `entry`,exprSimPropsTheory.vv_post_initial_gas] >>
-     qpat_assum `expr_body_pre cenv cx env e entry`
-       (strip_assume_tac o MATCH_MP expr_body_pre_static_facts) >>
-     qpat_assum `expr_body_pre cenv cx env e entry`
-       (assume_tac o MATCH_MP exprBodyPreCallSafetyPropsTheory.expr_body_pre_call_evaluation_safe) >>
-     `runtime_consistent env cx entry /\ functions_well_typed cx` by
-       fs[expr_sim_inv_def,runtime_consistent_def] >>
-     irule bodyFullAssignTheory.body_assign_rhs_storage_live >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl [`cenv`,`ctx`,`e`,`env`,`entry`,`func`,`tv`,`s0`,`sa`,`sb`,`tops`] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
-  `wb_frame cenv es ee sa s0 t` by
-    (rewrite_tac[loweringPostsTheory.wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `return_buf_frame d cenv sb t` by
-    (irule bodyMemoryDefsTheory.return_buf_frame_frame >> qexistsl [`cenv`,`s0`,`sa`] >>
-     qpat_assum `compile_expr _ _ e sa = _`
-       (mp_then Any mp_tac exprSimUnwrapTheory.compile_expr_extends) >>
-     simp[] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `create_ctor_borrowed_head_post (DF,lo,d,ctx,func) cenv cx e
+    (es,sa,sb,s0,vv,sv,G0,tn0) H (INL v : value + exception) ee G1 tn1 t`
+    suffices_by simp[create_ctor_borrowed_head_post_def] >>
+  irule create_ctor_borrowed_head_endpoint >>
   `sv = ext_call_arg_value (lowered_value_type cenv e) vv` by
     fs[compile_snapshot_vv_def, comp_return_def] >>
-  `~is_word_type (post_value_type cenv e)` by
-    (drule exprSimHypsTheory.expr_body_pre_lowered_fits >> strip_tac >>
-     `~is_word_type (expr_type e)` by metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type] >>
-     drule_all (Q.SPECL [`cenv`,`e`] abiEncodeMaterializeTheory.materialize_post_lowered_classify) >>
-     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
-  qpat_x_assum `!H. _ ==> (?p. INL tv = INL p /\ _) /\ _` kall_tac >>
-  qpat_x_assum `!gs pv st tag p. eval_expr _ _ _ = _ /\ _ ==> _` kall_tac >>
-  `((?tag op. sv = StackValue tag op) \/
-    (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location = LocMemory) \/
-    (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location <> LocMemory /\
-        lowered_value_type cenv e = expr_type e /\ sv = vv)) /\
-    (?raw. read_result cx raw ee = (INL v,ee) /\
-       vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
-       vv_at cenv cx (lowered_value_type cenv e) sa sb ee raw sv t /\
-       ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G1 tn1 t /\
-       vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t)`
-    suffices_by (disch_then (map_every assume_tac o CONJUNCTS) >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- first_assum ACCEPT_TAC >> suspend "representation") >>
-  match_mp_tac (Q.GENL [`env`,`es`,`raw`,`vv`] create_ctor_borrowed_row) >>
-  qexistsl [`env`,`entry`,`tv`] >> simp[]
+  simp[] >> rpt conj_tac
+  >- (qexists `tops` >> first_assum ACCEPT_TAC)
+  >- (qexists `st0` >> simp[] >> rpt strip_tac >>
+      qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+        (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC)
+  >- (qexists `env` >> first_assum ACCEPT_TAC) >>
+  qexistsl [`gas_explicit marks s0.vs_gas_readings`,`tv`] >> simp[] >>
+  qpat_assum `!H. _ ==> (?p. INL tv = INL p /\ _) /\ _`
+    (drule_then mp_tac) >>
+  pure_rewrite_tac[bodyFullAttributeTheory.field_vv_post_def] >>
+  disch_then (ACCEPT_TAC o CONJUNCT1)
 QED
 
 Resume create_ctor_borrowed_head_outcome[representation]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  map_every (fn pat => qpat_assum pat mp_tac)
-    [`sv = ext_call_arg_value _ vv`,
-     `vv_storage_live H cx vv ee t`,
-     `!tag op. vv = StackValue tag op /\ _ ==> ptr_buf_ok cenv e op G1 t`,
-     `!tag p. vv = LocatedValue tag p /\ _ ==> ptr_buf_ok cenv e p.ptr_operand G1 t`,
-     `~is_word_type (post_value_type cenv e)`,
-     `compile_expr cenv (expr_type e) e sa = (vv,sb)`,
-     `cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-       ?v. read_result cx tv ee = (INL v,ee) /\ _`,
-     `read_result cx tv ee = (INL v,ee)`,
-     `(?tag op. sv = StackValue tag op) \/ _`,
-     `~expr_has_effect e ==> _ = _`] >>
-  rpt (pop_assum kall_tac) >> ntac 10 disch_tac >>
-  Cases_on `vv` >>
-  gvs[ext_call_arg_value_def,vv_operand_def,vv_location_def,
-      loweringPostsTheory.vv_storage_live_def] >>
+  Cases_on `vv` >> gvs[ext_call_arg_value_def, vv_operand_def, vv_location_def,
+                       loweringPostsTheory.vv_storage_live_def] >>
   strip_tac >>
-  qpat_assum `lowered_value_type cenv e = expr_type e`
-    (assume_tac o MATCH_MP (SPEC_ALL loweringPostsTheory.post_value_type_lowered)) >>
-  fs[arithmeticTheory.ADD_COMM]
+  drule_all exprPtrUnwrapStorageShapeTheory.compile_nonmemory_lowered_value_type >> strip_tac >>
+  gvs[loweringPostsTheory.post_value_type_lowered, arithmeticTheory.ADD_COMM]
 QED
 
 Finalise create_ctor_borrowed_head_outcome
