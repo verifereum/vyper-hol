@@ -49,7 +49,8 @@ Theorem abi_encode_values_cursor_init_edges:
       FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
     tn'.t_mem = tn.t_mem DIFF {i | slot <= i /\ i < slot + 32} /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    run_inst_seq (emitted_insts st en) s = OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >>
   `eval_operand (Lit (n2w hl)) s = SOME (n2w hl) /\
@@ -77,6 +78,45 @@ Proof
   qexistsl_tac [`t`,`slot`,`p`,`G'`,`tn'`] >>
   asm_rewrite_tac[] >> simp[op_taint_def, FLOOKUP_UPDATE] >>
   metis_tac[window_phase_vars]
+QED
+
+Theorem abi_encode_values_cursor_init_run:
+  emit_op ALLOCA [Lit 32w] st = (cursor,mid) /\
+  emit_void MSTORE [cursor; Lit (n2w hl)] mid = ((),en) /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  (!b sz. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz) ==> sz = 32) /\
+  FLOOKUP s.vs_allocas dst_site = SOME (dst_base,capacity) /\ dst_site < st.cs_next_id /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+     s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t slot p G' tn'.
+    cursor = Var p /\ not_fresh_at en p /\
+    eval_operand cursor t = SOME (n2w slot) /\ ptr_covers G' tn' p t 32 /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (slot,32) /\ st.cs_next_id < en.cs_next_id /\
+    FLOOKUP t.vs_allocas dst_site = SOME (dst_base,capacity) /\
+    venomMemDefs$regions_disjoint (dst_base,capacity) (slot,32) /\
+    slot + 32 <= t.vs_alloca_next /\ mem_word_at slot t.vs_memory = n2w hl /\
+    (!i. slot <= i /\ i < slot + 32 ==> i NOTIN tn'.t_mem) /\
+    window_phase ctx func st en {st.cs_next_id} [] s t /\ abi_encode_exec_frame func s t /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t /\
+      t.vs_alloca_next + pending_alloca_size func t <= w2n t.vs_initial_fmp) /\
+    (!x w. not_fresh_at st x /\ lookup_var x s = SOME w ==>
+      lookup_var x t = SOME w) /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem DIFF {i | slot <= i /\ i < slot + 32} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    run_inst_seq (emitted_insts st en) s = OK (t with vs_inst_idx := s.vs_inst_idx)
+Proof
+  strip_tac >> drule_all abi_encode_values_cursor_init_edges >>
+  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
+    (qx_choose_then `t` (qx_choose_then `slot`
+      (qx_choose_then `p` (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac)))))) >>
+  qexistsl_tac [`t`,`slot`,`p`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED
 
 Theorem abi_encode_values_cursor_init:
@@ -110,9 +150,7 @@ Theorem abi_encode_values_cursor_init:
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
 Proof
-  strip_tac >> drule_all abi_encode_values_cursor_init_edges >>
-  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
-    (qx_choose_then `t` (qx_choose_then `slot`
-      (qx_choose_then `p` (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac)))))) >>
+  strip_tac >> drule_all abi_encode_values_cursor_init_run >>
+  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`] strip_assume_tac) >>
   qexistsl_tac [`t`,`slot`,`p`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED

@@ -21,8 +21,23 @@ Proof
   strip_tac >> gvs[emitted_insts_def, DROP_APPEND1]
 QED
 
-(* Only the rounded window's padding can gain taint. *)
-Theorem calldata_memory_joint_run:
+(* Run the suffix from its base-interpreter cursor rather than from the
+   reindexed state used for fetching the next installed instruction. *)
+Theorem calldata_run_cons_reindexed[local]:
+  step_inst_base i s = OK v /\
+  EVERY (\i. ~is_terminator i.inst_opcode) is /\
+  run_inst_seq is (v with vs_inst_idx := j) = OK u ==>
+  run_inst_seq (i::is) s = OK (u with vs_inst_idx := v.vs_inst_idx)
+Proof
+  strip_tac >> simp[run_inst_seq_def] >>
+  qspecl_then [`is`,`v with vs_inst_idx := j`,`v.vs_inst_idx`] mp_tac
+    run_inst_seq_inst_idx >>
+  simp[instIdxIndepTheory.exec_result_map_def]
+QED
+
+(* Only the rounded window's padding can gain taint. The base interpreter
+   traversal is retained at the very landing used by the joint path. *)
+Theorem calldata_memory_joint_run_with_seq:
   compile_msg_data_to_memory sa = ((dp,dl),sb) /\
   fn_has_code sa sb func /\ body_inv tops ctx cenv cx /\
   MEM func ctx.ctx_functions /\ ctx_has_dalloca ctx /\
@@ -36,6 +51,7 @@ Theorem calldata_memory_joint_run:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
   ?t G' tn' p.
+    run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,G',tn')) /\
     dp = Var p /\ eval_operand dp t = SOME s.vs_fmp /\
@@ -113,7 +129,7 @@ Proof
   suspend "allocate"
 QED
 
-Resume calldata_memory_joint_run[allocate]:
+Resume calldata_memory_joint_run_with_seq[allocate]:
   `gas_origin_ptr_path (D0,lo,explicit0,ctx,func,PG)
        (s0,G0,tn0) marks (OK s1,G1,tn1)` by
     (drule gas_origin_ptr_path_append >>
@@ -177,7 +193,7 @@ Resume calldata_memory_joint_run[allocate]:
   suspend "copy_inst"
 QED
 
-Resume calldata_memory_joint_run[copy_inst]:
+Resume calldata_memory_joint_run_with_seq[copy_inst]:
   qabbrev_tac `u = write_memory_with_expansion (w2n s.vs_fmp) s.vs_call_ctx.cc_calldata s2` >>
   `step_inst_base copy_inst s2 = OK u` by
     (simp[Abbr `u`, Abbr `copy_inst`, GSYM step_inst_non_invoke, mk_inst_def] >>
@@ -230,11 +246,40 @@ Resume calldata_memory_joint_run[copy_inst]:
      simp[eval_operand_def, w2n_n2w]) >>
   qexistsl [`u with vs_inst_idx := SUC s2.vs_inst_idx`, `G2`,
      `step_taint copy_inst s2 u tn2`, `ptrreg`] >>
+  conj_tac >- suspend "sequence" >>
   conj_tac >- suspend "path" >>
   suspend "post"
 QED
 
-Resume calldata_memory_joint_run[path]:
+Resume calldata_memory_joint_run_with_seq[sequence]:
+  qabbrev_tac `w = update_var ptrreg s1.vs_fmp
+    (s1 with vs_fmp := s1.vs_fmp + n2w (venomLayout$ceil32 (w2n (n2w n : bytes32))))` >>
+  `s2 = w with vs_inst_idx := SUC s1.vs_inst_idx` by
+    simp[Abbr `w`, GSYM (markerTheory.Abbrev_def)] >>
+  `step_inst 0 ctx alloc_inst s1 = OK w` by
+    simp[Abbr `w`, lowerDloadPtrDallocaTheory.dalloca_step_success] >>
+  `step_inst_base alloc_inst s1 = OK w` by
+    gvs[step_inst_non_invoke] >>
+  `run_inst_seq [alloc_inst;copy_inst] s1 = OK (u with vs_inst_idx := w.vs_inst_idx)` by
+    (irule calldata_run_cons_reindexed >> reverse conj_tac
+     >- simp[Abbr `copy_inst`, mk_inst_def, is_terminator_def] >>
+     qexists_tac `SUC s1.vs_inst_idx` >>
+     qpat_assum `s2 = w with vs_inst_idx := _` (fn th => REWRITE_TAC [GSYM th]) >>
+     simp[run_inst_seq_def]) >>
+  qpat_assum `emitted_insts sa sb = _` (fn th => REWRITE_TAC [th]) >>
+  `run_inst_seq [size_inst;alloc_inst;copy_inst] s =
+     OK ((u with vs_inst_idx := w.vs_inst_idx) with vs_inst_idx := v.vs_inst_idx)` by
+    (irule calldata_run_cons_reindexed >> reverse conj_tac
+     >- simp[Abbr `alloc_inst`, Abbr `copy_inst`, mk_inst_def, is_terminator_def] >>
+     qexists_tac `SUC s.vs_inst_idx` >>
+     qpat_assum `Abbrev (s1 = _)`
+       (fn th => REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `run_inst_seq [size_inst;alloc_inst;copy_inst] s = _` mp_tac >>
+  simp[Abbr `v`, update_var_def]
+QED
+
+Resume calldata_memory_joint_run_with_seq[path]:
   rpt gen_tac >>
   `ptr_inst_ok D lo 0 ctx func G2 tn2 copy_inst s2` by
     (irule ptr_inst_ok_lower_bound_transport >> conj_tac >- first_assum ACCEPT_TAC >>
@@ -271,7 +316,7 @@ Resume calldata_memory_joint_run[path]:
   first_assum ACCEPT_TAC
 QED
 
-Resume calldata_memory_joint_run[post]:
+Resume calldata_memory_joint_run_with_seq[post]:
   `tn1.t_mem = tn.t_mem` by
     (simp[Abbr `tn1`] >> irule step_taint_no_memory_effect >>
      simp[Abbr `size_inst`, Abbr `v`, source_memory_write_ranges_def,
@@ -370,7 +415,49 @@ Resume calldata_memory_joint_run[post]:
   first_assum (ACCEPT_TAC o SIMP_RULE (srw_ss()) [eval_operand_def])
 QED
 
-Finalise calldata_memory_joint_run
+Finalise calldata_memory_joint_run_with_seq
+
+Theorem calldata_memory_joint_run:
+  compile_msg_data_to_memory sa = ((dp,dl),sb) /\
+  fn_has_code sa sb func /\ body_inv tops ctx cenv cx /\
+  MEM func ctx.ctx_functions /\ ctx_has_dalloca ctx /\
+  gas_origin_ptr_path (D0,lo,explicit0,ctx,func,PG)
+    (s0,G0,tn0) marks (OK s,G,tn) /\
+  (!fn inst v. contextRawReachable$frag_reachable ctx func s0 fn inst v ==>
+     dalloca_fmp_headroom inst v) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ allocas_below_fmp s /\
+  w2n s.vs_initial_fmp <= w2n s.vs_fmp /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
+  ?t G' tn' p.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    dp = Var p /\ eval_operand dp t = SOME s.vs_fmp /\
+    eval_operand dl t = SOME (n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
+    ptr_covers G' tn' p t (LENGTH s.vs_call_ctx.cc_calldata) /\
+    op_taint tn' dl = {} /\ op_taint tn' dp = {} /\ op_prov G' dl = NONE /\
+    read_memory (w2n s.vs_fmp) (LENGTH s.vs_call_ctx.cc_calldata) t =
+      s.vs_call_ctx.cc_calldata /\
+    w2n t.vs_fmp = w2n s.vs_fmp + venomLayout$ceil32 (LENGTH s.vs_call_ctx.cc_calldata) /\
+    t.vs_memory =
+      (write_memory_with_expansion (w2n s.vs_fmp) s.vs_call_ctx.cc_calldata s).vs_memory /\
+    (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx;
+              vs_memory := s.vs_memory; vs_fmp := s.vs_fmp|>) = s /\
+    tn'.t_mem =
+      (tn.t_mem UNION {i | w2n s.vs_fmp <= i /\ i < w2n t.vs_fmp})
+        DIFF {i | w2n s.vs_fmp <= i /\
+                    i < w2n s.vs_fmp + LENGTH s.vs_call_ctx.cc_calldata} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ allocas_below_fmp t
+Proof
+  disch_then (strip_assume_tac o MATCH_MP calldata_memory_joint_run_with_seq) >>
+  qexistsl_tac [`t`,`G'`,`tn'`,`p`] >> simp[]
+QED
 
 Theorem calldata_memory_frames:
   ctx_has_dalloca ctx /\
