@@ -5246,10 +5246,20 @@ Resume tuple_runtime_loop_suffix[round]:
     (`lookup_var src r = lookup_var src s /\ FLOOKUP Gr src = FLOOKUP G src /\
       op_taint tr (Var src) = op_taint tn (Var src)` by
        (qpat_assum `!p. p <> tv ==> _` (qspec_then `src` mp_tac) >>
-        fs[Excl "isPREFIX"]) >>
+        qpat_assum `ALL_DISTINCT (src::tv::_)` mp_tac >>
+        simp[NoAsms]) >>
      qpat_assum `!op. _ ==> eval_operand op r = _ /\ _` (qspec_then `dst` mp_tac) >>
      qpat_assum `!op. _ ==> eval_operand op r = _ /\ _` (qspec_then `Var cv` mp_tac) >>
-     fs[ptr_covers_def, Excl "isPREFIX"] >> gvs[Excl "isPREFIX"]) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`ALL_DISTINCT (src::tv::cv::_)`, `~MEM dst (MAP Var (tv::_))`,
+        `eval_operand (Var cv) s = SOME (n2w i)`, `op_prov G (Var cv) = NONE`,
+        `op_taint tn (Var cv) = {}`, `eval_operand dst s = SOME bw`,
+        `op_prov G dst = NONE`, `op_taint tn dst = {}`,
+        `lookup_var src r = lookup_var src s`, `FLOOKUP Gr src = FLOOKUP G src`,
+        `op_taint tr (Var src) = op_taint tn (Var src)`,
+        `lookup_var src s = SOME a`, `ptr_covers G tn src s capacity`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_covers_def] >>
+     rpt strip_tac >> gvs[]) >>
   `case extra of
      NONE => arg = Var dv /\ bw = n2w dest /\ extra_code = [] /\ outs = []
    | SOME (region,rwrd,av) =>
@@ -5462,7 +5472,9 @@ Resume tuple_runtime_loop_from_entry[apply_suffix]:
 QED
 
 Resume tuple_runtime_loop_from_entry[header]:
-  `cnt <> Var cv /\ dst <> Var cv` by fs[Excl "isPREFIX"] >>
+  `cnt <> Var cv /\ dst <> Var cv` by
+    (qpat_assum `~MEM cnt (MAP Var (tv::cv::_))` mp_tac >>
+     qpat_assum `~MEM dst (MAP Var (tv::cv::_))` mp_tac >> simp[NoAsms]) >>
   qpat_assum `!op. op <> Var cv ==> _` (qspec_then `cnt` mp_tac) >>
   qpat_assum `!op. op <> Var cv ==> _` (qspec_then `dst` mp_tac) >>
   simp[Excl "isPREFIX"] >> rpt strip_tac >>
@@ -8879,11 +8891,12 @@ Proof
     simp[Abbr `written`]) >>>
   HEADGOAL conj_tac >>>
   HEADGOAL (
-    mp_tac (Q.INST [`etv` |-> `stv`,`dtv` |-> `stv`,`v` |-> `vi`,
-      `off` |-> `w2n (w':256 word)`,`dirty` |-> `tmid.t_mem`,`s` |-> `m`]
-      assignTuplePtrStoreWordTheory.store_lays_out_robust_ptr) >>
-    impl_tac >- first_assum ACCEPT_TAC >>
-    simp[Abbr `written`]) >>>
+    qpat_assum `store_lays_out stv stv vi` (fn layout =>
+      mp_tac (MATCH_MP (Q.INST [`etv` |-> `stv`,`dtv` |-> `stv`,`v` |-> `vi`,
+        `off` |-> `w2n (w':256 word)`,`dirty` |-> `tmid.t_mem`,`s` |-> `m`]
+        assignTuplePtrStoreWordTheory.store_lays_out_robust_ptr) layout)) >>
+    qpat_assum `word_store_ghost.t_mem = _` (fn dirty =>
+      simp[NoAsms, dirty, Abbr `written`])) >>>
   HEADGOAL (sg `word_store_ghost.t_imm = tmid.t_imm`) >>>
   HEADGOAL (
     qpat_assum `Abbrev (word_store_ghost = _)`
@@ -11817,8 +11830,12 @@ Resume tuple_assign_exact_with_borrowed_frame[nested_immutable]:
     `well_typed_target env bt sty` by
       (qpat_assum `well_typed_atarget env (BaseTarget bt) sty` mp_tac >>
        simp[NoAsms,well_typed_atarget_def]) >>
-    `IS_SOME (type_place_target env bt)` by fs[well_typed_target_def] >>
-    drule_all bodyFullTargetRootsTheory.typed_immutable_target_root >>
+    `IS_SOME (type_place_target env bt)` by
+      (qpat_assum `well_typed_target env bt sty` mp_tac >>
+       simp[NoAsms,well_typed_target_def]) >>
+    mp_tac (Q.INST [`bt` |-> `bt`, `es` |-> `src`]
+      bodyFullTargetRootsTheory.typed_immutable_target_root) >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
     disch_then (qx_choosel_then [`id`,`root_ty`] (map_every assume_tac o CONJUNCTS))) >>>
   HEADGOAL (
     drule_all tuple_immutable_target_code >>
@@ -17271,15 +17288,17 @@ Resume tuple_assign_widened_with_immutable_paths[normalized]:
    (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
        simp[venomStateTheory.eval_operand_def])) >>
    disch_then (qx_choosel_then [`q`,`Gq`,`tq`] assume_tac) >>
-   drule_all (Q.INST [`H0` |-> `H0 : (bool # bytes32 # type_value) list # num list`,
+   mp_tac (Q.INST [`H0` |-> `H0 : (bool # bytes32 # type_value) list # num list`,
       `ce` |-> `cenv`,`mid` |-> `mid`,`fin` |-> `ff`,
       `s` |-> `norm_state`,`G` |-> `Gn`,`tn` |-> `tt`,
       `sa` |-> `norm_cs`,`sb` |-> `write_cs`,`v` |-> `EL i vs`,`id` |-> `id`,
       `ity` |-> `root_ty`,`ptv` |-> `ptv`,`itv` |-> `itv`,`off` |-> `off`,`k` |-> `leaf_off`,
       `path` |-> `path`,`tops` |-> `tops`,`env` |-> `env`,
+      `explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
       `p` |-> `w2n (w:bytes32)`,`n` |-> `type_memory_size_list tvs`]
      tuple_immutable_path_store_success) >>
-   disch_then (qspecl_then [`tvs`,`d`] (map_every assume_tac o CONJUNCTS)) >>
+   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+   disch_then (map_every assume_tac o CONJUNCTS) >>
    qexistsl [`q`,`Gq`,`tq`] >>
    (conj_tac >- (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
      qpat_assum `!D. gas_origin_ptr_path _ (sp,Gp,tp) [] (OK norm_state,Gn,tt)`
