@@ -55,6 +55,23 @@ Proof
   gvs[return_buf_ptr_def]
 QED
 
+(* local_ptrs_reserved reads only ce_vars, which the shadow env keeps, and
+   the variable counter, which a shadow state keeps. *)
+Theorem local_ptrs_reserved_gas_shadow:
+  !sa shadow_sa cenv sd.
+    gas_shadow_state sa shadow_sa /\ local_ptrs_reserved cenv sa ==>
+    local_ptrs_reserved (gas_shadow_env sd cenv) shadow_sa
+Proof
+  rpt strip_tac >>
+  `local_ptrs_reserved cenv shadow_sa` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
+     fs[gas_shadow_state_def]) >>
+  pop_assum mp_tac >>
+  pure_rewrite_tac[local_ptrs_reserved_def,
+    gasShadowCompileBaseTheory.gas_shadow_env_fields] >>
+  disch_then ACCEPT_TAC
+QED
+
 Theorem gas_shadow_step:
   gas_shadow_compiles f g /\ gas_shadow_state s t /\
   f s = (x, s') /\ g t = (y, t') ==>
