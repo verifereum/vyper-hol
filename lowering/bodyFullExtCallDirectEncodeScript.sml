@@ -10,7 +10,7 @@ Ancestors
 
 (* The cursor site is distinct from the request allocation and is the
    only allocation touched by the loop's initialization and finish. *)
-Theorem abi_encode_saved_values_execute_with_frame[local]:
+Theorem abi_encode_saved_values_execute_with_frame_and_path[local]:
   abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
     shared pbase capacity root payload_var dst_offset prefix st u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -39,7 +39,9 @@ Theorem abi_encode_saved_values_execute_with_frame[local]:
       abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
         shared pbase capacity root payload_var dst_offset prefix c z Gz tz /\
       abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor st.cs_next_id slot (SUC i) c z Gz tz /\
-      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (v,Gv,tv) [] (OK z,Gz,tz)) ==>
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (v,Gv,tv) [] (OK z,Gz,tz)) /\
+      R a c v z) /\
+  abi_encode_values_path_laws R func st en u hl alen ==>
   ?z Gz tz.
     (track_frame ==> pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
     abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
@@ -48,7 +50,8 @@ Theorem abi_encode_saved_values_execute_with_frame[local]:
     (!x. alen = Var x ==> not_fresh_at en x) /\
     mem_bytes_at (pbase+dst_offset) (LENGTH bytes) z.vs_memory = bytes /\
     (!j. pbase+dst_offset <= j /\ j < pbase+dst_offset + LENGTH bytes ==> j NOTIN tz.t_mem) /\
-    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)) /\
+    R st en u z
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -88,7 +91,7 @@ Proof
           (track_frame ==> pure_frame ce func ee se u v /\ wb_frame ce ee ee se u v) /\
           abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
             shared pbase capacity root payload_var dst_offset prefix a v Gv tv`]
-    abi_encode_values_execute) >>
+    abi_encode_values_execute_with_path) >>
   pop_assum (assume_tac o BETA_RULE) >>
   pop_assum (mp_tac o SIMP_RULE bool_ss [GSYM CONJ_ASSOC]) >>
   impl_tac
@@ -115,7 +118,8 @@ Proof
             (qpat_assum `ids SUBSET {st.cs_next_id}`
               (ACCEPT_TAC o SIMP_RULE bool_ss [SUBSET_DEF, IN_SING])) >>
           `shared NOTIN ids /\ (!aid. aid IN ids ==> se.cs_next_id <= aid)` by
-            (rpt conj_tac >> rpt strip_tac >> res_tac >> decide_tac) >>
+            (rpt conj_tac >> rpt strip_tac >>
+             qpat_assum `!aid. aid IN ids ==> _` (drule_then assume_tac) >> decide_tac) >>
           `(pure_frame ce func ee se u' v /\ wb_frame ce ee ee se u' v) /\
             abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
               shared pbase capacity root payload_var dst_offset prefix c v Gv tv` by
@@ -157,16 +161,21 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
+val no_path = `\(a:compile_state) (b:compile_state) (u:venom_state) (v:venom_state). T`;
+
 Theorem abi_encode_saved_values_execute =
-  PURE_REWRITE_RULE [boolTheory.IMP_CLAUSES, boolTheory.AND_CLAUSES]
-    (Q.INST [`track_frame` |-> `F`] abi_encode_saved_values_execute_with_frame)
+  (PURE_REWRITE_RULE [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP] o BETA_RULE o
+   PURE_REWRITE_RULE [abi_encode_values_path_laws_def])
+    (BETA_RULE (Q.INST [`track_frame` |-> `F`, `R` |-> no_path]
+      abi_encode_saved_values_execute_with_frame_and_path))
 
 Theorem abi_encode_saved_values_execute_pure =
-  PURE_REWRITE_RULE [boolTheory.IMP_CLAUSES, boolTheory.AND_CLAUSES]
-    (Q.INST [`track_frame` |-> `T`] abi_encode_saved_values_execute_with_frame)
+  (PURE_REWRITE_RULE [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP] o BETA_RULE o
+   PURE_REWRITE_RULE [abi_encode_values_path_laws_def])
+    (BETA_RULE (Q.INST [`track_frame` |-> `T`, `R` |-> no_path]
+      abi_encode_saved_values_execute_with_frame_and_path))
 
-
-Theorem extcall_direct_values_execute:
+Theorem extcall_direct_values_execute_with_path:
   extcall_direct_state ctx func ce cx st0 ee DF lo disp se s G tn
     shared pbase capacity root payload_var selector st u Gu tu /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -194,7 +203,9 @@ Theorem extcall_direct_values_execute:
       extcall_direct_state ctx func ce cx st0 ee DF lo disp se s G tn
         shared pbase capacity root payload_var selector c z Gz tz /\
       abi_encode_values_prefix_at ats avs hl (pbase+32) cursor st.cs_next_id slot (SUC i) c z Gz tz /\
-      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (v,Gv,tv) [] (OK z,Gz,tz)) ==>
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (v,Gv,tv) [] (OK z,Gz,tz)) /\
+      R a c v z) /\
+  abi_encode_values_path_laws R func st en u hl alen ==>
   ?z Gz tz.
     extcall_direct_state ctx func ce cx st0 ee DF lo disp se s G tn
       shared pbase capacity root payload_var selector en z Gz tz /\
@@ -202,15 +213,21 @@ Theorem extcall_direct_values_execute:
     (!x. alen = Var x ==> not_fresh_at en x) /\
     mem_bytes_at (pbase+32) (LENGTH bytes) z.vs_memory = bytes /\
     (!j. pbase+32 <= j /\ j < pbase+32 + LENGTH bytes ==> j NOTIN tz.t_mem) /\
-    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)) /\
+    R st en u z
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `32 <= capacity` (fn cap =>
     drule_then (fn len =>
       mp_tac (SIMP_RULE bool_ss [MATCH_MP abi_encode_saved_state_extcall len,cap]
-        (Q.INST [`dst_offset` |-> `32`,`prefix` |-> `selector`]
-          abi_encode_saved_values_execute)))
+        (Q.INST [`dst_offset` |-> `32`,`prefix` |-> `selector`,`track_frame` |-> `F`]
+          abi_encode_saved_values_execute_with_frame_and_path)))
       extcall_direct_state_selector_length) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   asm_rewrite_tac[]
 QED
+
+Theorem extcall_direct_values_execute =
+  (PURE_REWRITE_RULE [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP] o BETA_RULE o
+   PURE_REWRITE_RULE [abi_encode_values_path_laws_def])
+    (BETA_RULE (Q.INST [`R` |-> no_path] extcall_direct_values_execute_with_path))
