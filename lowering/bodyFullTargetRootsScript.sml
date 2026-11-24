@@ -28,12 +28,26 @@ Proof
   simp[ghost_inv_at_def]
 QED
 
-Theorem target_name_sim_full:
+(* The roots have no emitted instructions. Keep their exact empty-run
+   witness so that a scoped client need not infer confinement from a post. *)
+Definition target_root_outcome_def:
+  target_root_outcome bundle tops cx st0 sa sb source (es,s,G,tn) Q R <=>
+    sb = sa /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    ?res ee.
+      (!tail. source (es with gas_obs := tail) = (res,ee with gas_obs := tail)) /\
+      (!H. valid_horizon cx st0 H ee.storage_trace ==>
+           Q H res (ee with gas_obs := []) G tn s)
+End
+
+Theorem target_name_root_outcome:
   target_pre cenv cx env (NameTarget id) es ==>
-  target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+  target_sim_judgment target_root_outcome
+    (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env (NameTarget id) es
 Proof
-  rw[target_sim_full_def, target_pre_def] >>
+  rw[target_sim_judgment_def, target_pre_def] >>
   qpat_x_assum `type_place_target _ _ = _` mp_tac >>
   simp[Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   drule_all expr_sim_inv_local >> strip_tac >>
@@ -41,8 +55,8 @@ Proof
   qpat_x_assum `compile_get_target_ptr _ _ (NameTarget _) sa = _` mp_tac >>
   simp[compile_get_target_ptr_def, comp_return_def] >> strip_tac >> gvs[] >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G0`, `es`, `INL (PlaceR (MemoryPlace id []))`, `s0`, `tn0`] >>
+  simp[target_root_outcome_def] >>
+  qexistsl_tac [`INL (PlaceR (MemoryPlace id []))`, `es`] >>
   conj_tac
   >- simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
           type_check_def, assert_def, return_def] >>
@@ -73,30 +87,49 @@ Proof
        evaluate_subscripts_def, wordsTheory.WORD_ADD_0]
 QED
 
-Theorem target_toplevel_sim_full:
+Theorem compile_target_name_no_code:
+  compile_get_target_ptr cfn cenv (NameTarget id) sa = (r,sb) ==> sb = sa
+Proof
+  simp[compile_get_target_ptr_def] >> Cases_on `FLOOKUP cenv.ce_vars id`
+  >- simp[comp_return_def] >>
+  rename1 `FLOOKUP _ _ = SOME loc` >> Cases_on `loc` >> simp[comp_return_def]
+QED
+
+Theorem compile_target_toplevel_no_code:
+  compile_get_target_ptr cfn cenv (TopLevelNameTarget nsid) sa = (r,sb) ==>
+  sb = sa
+Proof
+  simp[compile_get_target_ptr_def, LET_THM] >>
+  Cases_on `FLOOKUP cenv.ce_module_vars nsid`
+  >- simp[comp_return_def] >>
+  rename1 `FLOOKUP _ _ = SOME loc` >> Cases_on `loc` >> simp[comp_return_def]
+QED
+
+Theorem target_toplevel_root_outcome:
   target_pre cenv cx env (TopLevelNameTarget (src,id)) es ==>
-  target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+  target_sim_judgment target_root_outcome
+    (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env (TopLevelNameTarget (src,id)) es
 Proof
-  rw[target_sim_full_def, target_pre_def] >>
+  rw[target_sim_judgment_def, target_pre_def] >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
   `!ts. get_module_code cx src = SOME ts ==>
         find_var_decl_by_name id ts <> NONE` by
     (fs[immutable_root_def, target_root_def] >> metis_tac[]) >>
+  drule compile_target_toplevel_no_code >> strip_tac >> gvs[] >>
   drule_all toplevel_target_decl >> strip_tac >> gvs[]
   >- suspend "storage" >>
   suspend "mapping"
 QED
 
-Resume target_toplevel_sim_full[storage]:
+Resume target_toplevel_root_outcome[storage]:
   `cenv.ce_hashmap_info (src,id) = NONE /\
    cenv.ce_module_var_type (src,id) = SOME ty` by
     metis_tac[toplevel_target_env] >>
   qabbrev_tac `es1 = es with storage_trace :=
                  es.storage_trace ++ [StorageRoot tr slot tv]` >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G0`, `es1`, `INL (PlaceR (StoragePlace tr (n2w slot) tv))`,
-                `s0`, `tn0`] >>
+  simp[target_root_outcome_def] >>
+  qexistsl_tac [`INL (PlaceR (StoragePlace tr (n2w slot) tv))`, `es1`] >>
   conj_tac
   >- (gen_tac >> asm_simp_tac (srw_ss()) [Once evaluate_def, lookup_global_def,
         bind_def, ignore_bind_def, record_storage_event_def,
@@ -129,12 +162,11 @@ Resume target_toplevel_sim_full[storage]:
   simp[] >> strip_tac >> fs[ghost_inv_at_def] >> metis_tac[]
 QED
 
-Resume target_toplevel_sim_full[mapping]:
+Resume target_toplevel_root_outcome[mapping]:
   `?tr'. cenv.ce_hashmap_info (src,id) = SOME (tr',kt,vt')` by
     metis_tac[toplevel_target_env] >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G0`, `es`, `INL (HashMapRef tr (n2w slot) kt vt')`,
-                `s0`, `tn0`] >>
+  simp[target_root_outcome_def] >>
+  qexistsl_tac [`INL (HashMapRef tr (n2w slot) kt vt')`, `es`] >>
   conj_tac
   >- (gen_tac >> asm_simp_tac (srw_ss()) [Once evaluate_def, lookup_global_def,
         bind_def, lift_option_type_def, return_def, LET_THM]) >>
@@ -164,7 +196,40 @@ Resume target_toplevel_sim_full[mapping]:
   simp[] >> strip_tac >> fs[ghost_inv_at_def] >> metis_tac[]
 QED
 
-Finalise target_toplevel_sim_full
+Finalise target_toplevel_root_outcome
+
+Theorem target_root_outcome_full:
+  target_root_outcome (DF,lo,explicit,ctx,func,PG) tops cx st0 sa sb
+    source (es,s,G,tn) Q R ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    source (es,s,G,tn) Q R
+Proof
+  rw[target_root_outcome_def] >> irule gas_outcome_full_pure >> simp[] >>
+  qexistsl_tac [`G`, `ee`, `res`, `s`, `tn`] >>
+  simp[gas_origin_ptr_path_rules]
+QED
+
+Theorem target_name_sim_full:
+  target_pre cenv cx env (NameTarget id) es ==>
+  target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    cenv cx env (NameTarget id) es
+Proof
+  strip_tac >> simp[target_sim_full_internal_def] >>
+  irule target_sim_judgment_mono >> qexists_tac `target_root_outcome` >>
+  simp[target_name_root_outcome, pairTheory.FORALL_PROD] >>
+  rpt strip_tac >> drule target_root_outcome_full >> simp[]
+QED
+
+Theorem target_toplevel_sim_full:
+  target_pre cenv cx env (TopLevelNameTarget (src,id)) es ==>
+  target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    cenv cx env (TopLevelNameTarget (src,id)) es
+Proof
+  strip_tac >> simp[target_sim_full_internal_def] >>
+  irule target_sim_judgment_mono >> qexists_tac `target_root_outcome` >>
+  simp[target_toplevel_root_outcome, pairTheory.FORALL_PROD] >>
+  rpt strip_tac >> drule target_root_outcome_full >> simp[]
+QED
 
 Theorem base_target_root_eq_target_root[local]:
   !bt. base_target_root bt = target_root bt
@@ -220,13 +285,14 @@ Proof
   metis_tac[module_immutable_constant_names_distinct]
 QED
 
-Theorem immutable_toplevel_target_sim_full:
+Theorem immutable_toplevel_target_root_outcome:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   immutable_root cx (TopLevelNameTarget (NONE,id)) /\ ~cx_const_name cx (NONE,id) ==>
-  imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+  imm_target_place_sim_judgment target_root_outcome
+    (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx env (TopLevelNameTarget (NONE,id)) es
 Proof
-  strip_tac >> simp[imm_target_place_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> simp[imm_target_place_sim_judgment_def] >> rpt gen_tac >> strip_tac >>
   `IS_SOME (type_place_target env (TopLevelNameTarget (NONE,id)))` by simp[] >>
   drule_all_then strip_assume_tac typed_immutable_target_root >>
   gvs[target_root_def, type_place_target_TopLevelNameTarget] >>
@@ -243,8 +309,8 @@ Proof
   Cases_on `FLOOKUP (get_source_immutables NONE imms) id` >>
   gvs[get_source_immutables_def] >>
   rename1 `_ = SOME entry` >> PairCases_on `entry` >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G0`,`es`,`INL (ImmutablePlace NONE id [])`,`s0`,`tn0`] >>
+  simp[target_root_outcome_def] >>
+  qexistsl_tac [`INL (ImmutablePlace NONE id [])`,`es`] >>
   conj_tac >-
     (simp[Once evaluate_def, bind_def] >>
      simp[Once evaluate_def, lookup_global_def, get_immutables_def,
@@ -265,6 +331,21 @@ Proof
        stmt_state_rel_start_gas_obs, eval_operand_def, target_root_def,
        mem_path_offset_def, evaluate_subscripts_def, get_source_immutables_def,
        fixed_shape_path_def]
+QED
+
+Theorem immutable_toplevel_target_sim_full:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  immutable_root cx (TopLevelNameTarget (NONE,id)) /\ ~cx_const_name cx (NONE,id) ==>
+  imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx env (TopLevelNameTarget (NONE,id)) es
+Proof
+  strip_tac >> simp[imm_target_place_sim_full_internal_def] >>
+  irule imm_target_place_sim_judgment_mono >>
+  qexists_tac `target_root_outcome` >>
+  simp[pairTheory.FORALL_PROD] >>
+  conj_tac
+  >- metis_tac[target_root_outcome_full] >>
+  irule immutable_toplevel_target_root_outcome >> metis_tac[]
 QED
 
 Theorem immutable_target_place_type:
