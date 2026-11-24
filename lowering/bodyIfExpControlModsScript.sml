@@ -239,8 +239,9 @@ QED
 
 (* The conversion supplier is called with the arm's actual compiled interval
    and with the full entry resources at the JNZ landing. *)
-val reached_arm = ``!sel mid st0 se shadow_se av sea shadow_sea aop sx lbl z G1 tn1.
+val reached_arm = ``!gs sel mid st0 se shadow_se av sea shadow_sea aop sx lbl z G1 tn1.
   let e = if sel then a else b in
+  bind (eval_expr cx c) (read_result cx) (es with gas_obs := gs) = (INL (BoolV sel),mid) /\
   expr_vv_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e mid /\
   expr_type e = t /\
   (!gs raw ee. eval_expr cx e (mid with gas_obs := gs) = (INL raw,ee) ==>
@@ -426,11 +427,13 @@ Resume ifexp_vv_from_stages_mods[landing]:
      qpat_assum `expr_post_mods H _ _ _ _ c _ _ _ _ _ _ _ z` mp_tac >>
      simp[NoAsms,expr_post_mods_def,expr_post_def] >> strip_tac >>
      simp[stmt_state_rel_jump_to, ifexp_jump_frame_mods, ifexp_jump_ghost_mods]) >>
-  qpat_assum `!sel mid st0 se shadow_se av sea shadow_sea aop sx lbl z G1 tn1. _`
-    (qspecl_then [`sel`,`mid`,`st0`,`se`,`shadow_se`,`av`,`sea`,`shadow_sea`,
+  qpat_assum `!gs sel mid st0 se shadow_se av sea shadow_sea aop sx lbl z G1 tn1. _`
+    (qspecl_then [`gas_explicit marks s0.vs_gas_readings`,
+      `sel`,`mid`,`st0`,`se`,`shadow_se`,`av`,`sea`,`shadow_sea`,
       `aop`,`sx`,`lbl`,`z`,`G1`,`tn1`] (mp_tac o CONV_RULE (DEPTH_CONV BETA_CONV) o REWRITE_RULE [LET_THM])) >>
   (impl_tac >-
-    (SUBGOAL_THEN ``(if sel then a:expr else b) = a \/ (if sel then a else b) = b`` ASSUME_TAC
+    (conj_tac >- first_assum ACCEPT_TAC >>
+     SUBGOAL_THEN ``(if sel then a:expr else b) = a \/ (if sel then a else b) = b`` ASSUME_TAC
      >- (Cases_on `sel` >> simp[]) >>
      `(mid with gas_obs := []) = mid` by simp[evaluation_state_component_equality] >>
      `!x. not_fresh_at sa x ==> not_fresh_at se x` by
