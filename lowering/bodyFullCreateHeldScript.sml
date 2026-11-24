@@ -11,6 +11,7 @@
 Theory bodyFullCreateHeld
 Ancestors
   bodySingletonCallSupport
+  rawCreateAdminSpine[qualified] rawCreateCodeCopySpine[qualified]
   blueprintLiteralOffsetProps[qualified,ignore_grammar]
   bodyFullForArrayRound[qualified,ignore_grammar]
   abiDecodeValidFiniteLoop[qualified,ignore_grammar]
@@ -11955,7 +11956,7 @@ Finalise raw_create_snapshot_slot_path
 
 (* The code-source count is computed from the located tag. Its physical
    span equals the destination capacity in this branch. *)
-Theorem raw_create_snapshot_code_path:
+Theorem raw_create_snapshot_code_path_spine:
   compile_create_snapshot ce (LocatedValue tag p) (BaseT (BytesT (Dynamic k))) sa = (out,sb) /\
   p.ptr_location = LocCode /\ eval_operand p.ptr_operand s = SOME src /\
   exprSimCopy$copy_old_operand sa p.ptr_operand /\
@@ -11997,6 +11998,7 @@ Theorem raw_create_snapshot_code_path:
     return_buf_frame d ce sb z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
     ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
     z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    rawCreateAdminSpine$admin_ok_spine sa sb explicit ctx func s z /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       stmt_state_rel H ctx func ce cx ee z /\ storage_well_formed_on cx ee (FST H) /\
       ghost_inv_at (DF H) lo d ce cx ee Gz tz z /\
@@ -12036,10 +12038,13 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
   drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> strip_tac >>
   drule_all (INST_TYPE [``:'b`` |-> ``:256``]
-    bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_exact) >>
+    bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_with_raw_endpoint) >>
   disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
-    (qx_choosel_then [`root`,`w`,`u`,`Gu`,`tu`]
+    (qx_choosel_then [`root`,`w`,`u`,`Gu`,`tu`,`alloc`]
       (map_every assume_tac o CONJUNCTS))) >>
+  qpat_x_assum `u = alloc with vs_inst_idx := _` (mk_asm "alloc_pc") >>
+  qpat_x_assum `Gu = step_prov _ _ _ alloc` kall_tac >>
+  qpat_x_assum `tu = step_taint _ s alloc tn` kall_tac >>
   qabbrev_tac `b = w2n (w:bytes32)` >>
   `u.vs_memory = s.vs_memory /\ u.vs_data_section = s.vs_data_section /\
    u.vs_labels = s.vs_labels /\ u.vs_halted = s.vs_halted /\ u.vs_accounts = s.vs_accounts /\
@@ -12083,7 +12088,7 @@ Proof
   suspend "code_finish"
 QED
 
-Resume raw_create_snapshot_code_path[code_copy]:
+Resume raw_create_snapshot_code_path_spine[code_copy]:
   `eval_operand (Var root) u = SOME w /\ exprSimCopy$copy_old_operand sm (Var root)` by
     simp[eval_operand_def,exprSimCopyTheory.copy_old_operand_def] >>
   `~u.vs_halted` by simp[] >>
@@ -12139,8 +12144,22 @@ Resume raw_create_snapshot_code_path[code_copy]:
   simp[CONJ_COMM]
 QED
 
-Resume raw_create_snapshot_code_path[code_finish]:
+Resume raw_create_snapshot_code_path_spine[code_finish]:
   rename1 `exprSimCopy$copy_runtime_frame sm u sb r` >>
+  `rawCreateAdminSpine$admin_ok_spine sa sb explicit ctx func s z` by
+    (qpat_assum `z = r with vs_inst_idx := _` SUBST1_TAC >>
+     irule rawCreateCodeCopySpineTheory.raw_code_copy_spine >>
+     qpat_assum `compile_alloc_buffer cap sa = (buf,sm)` (irule_at Any) >>
+     qpat_assum `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK alloc` (irule_at Any) >>
+     qpat_assum `exprSimCopy$copy_runtime_frame sm u sb r` (irule_at Any) >>
+     asm "alloc_pc" (irule_at Any) >>
+     asm_rewrite_tac[] >> conj_tac
+     >- (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) [] (OK u,Gu,tu)`
+           (qspec_then `<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`
+             (mp_tac o MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_projections)) >> simp[]) >>
+     qpat_assum `gas_origin_ptr_path _ (u,Gu,tu) [] (OK _,Gz,tz)`
+       (mp_tac o MATCH_MP fragGasOriginPtrTheory.gas_origin_ptr_path_projections) >> simp[]) >>
   `z.vs_inst_idx = LENGTH sb.cs_current_insts /\ z.vs_memory = r.vs_memory` by simp[] >>
   `z with <|vs_vars := u.vs_vars;vs_memory := u.vs_memory;vs_prev_bb := u.vs_prev_bb;
             vs_current_bb := u.vs_current_bb;vs_inst_idx := u.vs_inst_idx|> = u` by
@@ -12250,7 +12269,7 @@ Resume raw_create_snapshot_code_path[code_finish]:
   qpat_assum `z = r with vs_inst_idx := _` SUBST1_TAC >> simp[]
 QED
 
-Resume raw_create_snapshot_code_path[code_content]:
+Resume raw_create_snapshot_code_path_spine[code_content]:
   `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic k))) = SOME (BaseTV (BytesT (Dynamic k)))` by
     (qpat_assum `immutable_holds _ _ _ _ _ _ s` (mp_tac o REWRITE_RULE [loweringPostsTheory.immutable_holds_def]) >>
      strip_tac >>
@@ -12275,7 +12294,7 @@ Resume raw_create_snapshot_code_path[code_content]:
   drule_all exprSimCopyTheory.runtime_code_copy_memory_frame >> simp[] >> metis_tac[]
 QED
 
-Resume raw_create_snapshot_code_path[code_clean]:
+Resume raw_create_snapshot_code_path_spine[code_clean]:
   gen_tac >> strip_tac >> strip_tac >>
   `i < b+cap` by intLib.COOPER_TAC >>
   qabbrev_tac `j = w2n src + (i-b)` >>
@@ -12308,7 +12327,7 @@ Resume raw_create_snapshot_code_path[code_clean]:
   qpat_assum `j < w2n src+32+LENGTH bs` mp_tac >> simp[NoAsms]
 QED
 
-Resume raw_create_snapshot_code_path[code_wb]:
+Resume raw_create_snapshot_code_path_spine[code_wb]:
   irule raw_create_snapshot_wb >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (qexistsl [`b`,`cap`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -12316,7 +12335,7 @@ Resume raw_create_snapshot_code_path[code_wb]:
   first_assum ACCEPT_TAC
 QED
 
-Resume raw_create_snapshot_code_path[code_kept]:
+Resume raw_create_snapshot_code_path_spine[code_kept]:
   irule raw_create_snapshot_kept >>
   qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ s` (irule_at Any) >>
   qpat_assum `ci_mono sa sm` (irule_at Any) >>
@@ -12325,7 +12344,7 @@ Resume raw_create_snapshot_code_path[code_kept]:
          qexistsl [`z`,`u`,`tu`,`cap`,`b`,`Gu`] >> rpt conj_tac >> first_assum ACCEPT_TAC]
 QED
 
-Resume raw_create_snapshot_code_path[code_horizon]:
+Resume raw_create_snapshot_code_path_spine[code_horizon]:
   qx_gen_tac `H` >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ s /\ _`
     (drule_then strip_assume_tac) >>
@@ -12351,7 +12370,60 @@ Resume raw_create_snapshot_code_path[code_horizon]:
       first_assum ACCEPT_TAC)
 QED
 
-Finalise raw_create_snapshot_code_path
+Finalise raw_create_snapshot_code_path_spine
+
+Theorem raw_create_snapshot_code_path:
+  compile_create_snapshot ce (LocatedValue tag p) (BaseT (BytesT (Dynamic k))) sa = (out,sb) /\
+  p.ptr_location = LocCode /\ eval_operand p.ptr_operand s = SOME src /\
+  exprSimCopy$copy_old_operand sa p.ptr_operand /\
+  op_taint tn p.ptr_operand = {} /\ op_prov G p.ptr_operand = NONE /\
+  immutable_holds ce cx (BaseT (BytesT (Dynamic k))) (Value (BytesV bs)) src ee s /\
+  cap = type_memory_bytes ce (BaseT (BytesT (Dynamic k))) /\
+  cap = type_memory_size (BaseTV (BytesT (Dynamic k))) /\
+  32 * ((type_memory_bytes ce tag + 31) DIV 32) = cap /\
+  32 + LENGTH bs <= cap /\ cap < dimword (:256) /\
+  (ce.ce_is_ctor ==> w2n src + cap <= lo /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+       val_in_memory (BaseTV (BytesT (Dynamic k))) (BytesV bs) (w2n src) mem)) /\
+  (!region. ce.ce_is_ctor /\ ce.ce_imm_alloca = SOME region ==>
+    eval_operand region s = SOME 0w /\ exprSimCopy$copy_old_operand sa region /\
+    op_taint tn region = {} /\ op_prov G region = NONE) /\
+  (~ce.ce_is_ctor ==> w2n src + cap <= LENGTH s.vs_data_section /\
+    w2n src + cap < dimword (:256)) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d ce cx ee G tn s) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  return_buf_frame d ce sa s /\ alloca_history func s /\ allocas_from lo s /\
+  lo <= s.vs_alloca_next /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?root b inst z Gz tz.
+    out = Var root /\ MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id = sa.cs_next_id /\ inst.inst_outputs = [root] /\
+    not_local_ptr ce ee.scopes root /\ not_fresh_at sb root /\
+    FLOOKUP z.vs_allocas inst.inst_id = SOME (b,cap) /\
+    eval_operand out z = SOME (n2w b) /\ ptr_covers Gz tz root z cap /\
+    b+cap < dimword (:256) /\ b+cap <= z.vs_alloca_next /\
+    mload b z = n2w (LENGTH bs) /\ read_memory (b+32) (LENGTH bs) z = bs /\
+    (!i. b <= i /\ i < b+32+LENGTH bs ==> i NOTIN tz.t_mem) /\
+    wb_frame ce ee ee sa s z /\ ghost_kept_at lo ce ee sa G tn s Gz tz /\
+    alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\ allocas_from lo z /\
+    return_buf_frame d ce sb z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+    ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func ce cx ee z /\ storage_well_formed_on cx ee (FST H) /\
+      ghost_inv_at (DF H) lo d ce cx ee Gz tz z /\
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,Gz,tz))
+Proof
+  disch_then (mp_tac o MATCH_MP raw_create_snapshot_code_path_spine) >>
+  disch_then (qx_choosel_then [`root`,`b`,`inst`,`z`,`Gz`,`tz`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qexistsl [`root`,`b`,`inst`,`z`,`Gz`,`tz`] >> asm_rewrite_tac[]
+QED
 
 (* The memory branch copies the live header and payload, not the padded
    capacity. The source is already represented by a reached pointer. *)
