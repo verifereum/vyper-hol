@@ -3753,6 +3753,15 @@ Proof
         gvs[power_operands_ok_def, no_neg_exp_expr_def] >>
         rpt strip_tac >> gvs[] >> metis_tac[]) >>
       metis_tac[const_subst_literal_forms, optionTheory.IS_SOME_EXISTS]) >>
+  Cases_on `bt = NamedConst`
+  >- (gvs[] >> Cases_on `es` >> gvs[builtin_operands_ok_def] >>
+      Cases_on `t` >> gvs[builtin_operands_ok_def, subst_consts_expr_def] >>
+      Cases_on `h` >> gvs[named_const_operand_def, subst_consts_expr_def]
+      >~ [`Builtin _ bi _`] >-
+        (Cases_on `bi` >> gvs[named_const_operand_def]) >>
+      qpat_x_assum `named_const_operand (TypeBuiltin _ _ _ _)` mp_tac >>
+      rename1 `named_const_operand (TypeBuiltin _ bi _ children) ==> _` >>
+      Cases_on `bi` >> Cases_on `children` >> gvs[named_const_operand_def, subst_consts_expr_def]) >>
   Cases_on `bt` >> gvs[builtin_operands_ok_def] >>
   Cases_on `b` >> gvs[builtin_operands_ok_def]
 QED
@@ -3841,11 +3850,21 @@ Proof
             (Cases_on `lit` >> gvs[] >> Cases_on `tl` >> gvs[]) >>
           Cases_on `tl` >> gvs[]) >>
       metis_tac[fold_const_literal_forms, optionTheory.IS_SOME_EXISTS]) >>
+  Cases_on `bt = NamedConst`
+  >- (gvs[] >> Cases_on `es` >> gvs[builtin_operands_ok_def] >>
+      Cases_on `t` >> gvs[builtin_operands_ok_def, fold_const_expr_def] >>
+      Cases_on `h` >> gvs[named_const_operand_def, fold_const_expr_def]
+      >~ [`fold_const_builtin _ bi _`] >-
+        (Cases_on `bi` >>
+         gvs[named_const_operand_def, fold_const_builtin_def, list_case_compute]) >>
+      qpat_x_assum `named_const_operand (TypeBuiltin _ _ _ _)` mp_tac >>
+      rename1 `named_const_operand (TypeBuiltin _ bi _ children) ==> _` >>
+      Cases_on `bi` >> Cases_on `children` >> gvs[named_const_operand_def, fold_const_expr_def]) >>
   Cases_on `bt` >> gvs[builtin_operands_ok_def] >>
   Cases_on `b` >> gvs[builtin_operands_ok_def]
 QED
 
-Theorem fold_const_int_case[local]:
+Theorem fold_const_int_case:
   (case fold_const_expr e of Literal ty (IntL n) => P n | _ => q) =
   (case e of Literal ty (IntL n) => P n | _ => q)
 Proof
