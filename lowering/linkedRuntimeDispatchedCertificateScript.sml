@@ -68,6 +68,8 @@ Ancestors
   linkedRuntimeSourceLookup[qualified]
   gasPathDataSection[qualified] bodyFullHashKeccakFixed[qualified]
   linkedRuntimeSelectedTrace[qualified] unitExecutionComposeResult[qualified]
+  linkedRuntimeDefaultReplay[qualified] linkedDefaultSourceFrame[qualified]
+  linkedDefaultError[qualified] gasExemptCertMods[qualified] gasOutcomeFullMods[qualified]
   loweringHalt[qualified] nonreentrantExit[qualified] sourceUnitExecution[qualified]
   stmtFragPtr[qualified] vyperCallFiniteStorageSupport[qualified] vyperEvalReadingErrors[qualified]
 
@@ -1563,6 +1565,14 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_fra
      drule_all_then mp_tac check_contract_function_return_type >>
      qpat_assum `get_tenv cx = type_env_all_modules mods` (fn tenv =>
        qpat_assum `ret <> NoneT` (fn nonempty => simp[NoAsms, tenv, nonempty]))) >>
+  suspend "linked_linear_declared_frame_ready"
+QED
+
+(* Registered-body stages use registered/locked/body_end/last and their
+   shadow counterparts for the paired intervals. The entry route supplies
+   the path to (s0,G2,tn2), the binding env, and the selected source tuple
+   at src in cx. Source-specific body facts are prepared by the caller. *)
+val linked_registered_frame_tac =
   `type_memory_bytes registered_env ret < 2 ** 64` by
     (qpat_assum `type_memory_bytes registered_env = type_memory_bytes alloc_env` SUBST1_TAC >>
      qpat_assum `fn_allocs_ok_unit mods (src,(mut,nr,raw,name,args,[],ret,body_code))`
@@ -1585,7 +1595,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_fra
      Cases_on `ret = NoneT` >>
      pop_assum (fn ret_case =>
        simp[NoAsms, ret_case, update_cenv_nonreentrant_def, update_cenv_ret_abi_def]) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC);
+
+val linked_registered_stmts_env_tac =
   `SND (stmts_env registered_env NoLoop ret body_code locked) = body_end` by
     (qpat_assum `compile_stmts registered_env NoLoop _ body_code locked = ((),body_end)`
        (mp_tac o ONCE_REWRITE_RULE [stmtSimPropsTheory.compile_stmts_env]) >>
@@ -1602,11 +1614,17 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_fra
   `stmts_env registered_env NoLoop ret body_code locked = (body_env,body_end)` by
     (simp[NoAsms, Abbr `body_env`] >> sym_tac >>
      qpat_assum `SND (stmts_env registered_env NoLoop ret body_code locked) = body_end`
-       (SUBST1_TAC o SYM) >> simp[NoAsms, pairTheory.PAIR]) >>
+       (SUBST1_TAC o SYM) >> simp[NoAsms, pairTheory.PAIR]);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_frame_ready]:
+  linked_registered_frame_tac >>
+  linked_registered_stmts_env_tac >>
   suspend "linked_linear_declared_lock"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock]:
+(* Linear callers establish the route cut in two small stages. Grouped
+   callers provide the corresponding path and open block from their cut. *)
+val linked_linear_registered_route_tac =
   qabbrev_tac `start =
     vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
   qabbrev_tac `explicit = gas_explicit_sites unit.cu_context shadow_unit.cu_context` >>
@@ -1632,7 +1650,14 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
      disch_then (qspecl_then [`u`,`G1`,`tn1`,`[]`,`OK s0`,`G2`,`tn2`] mp_tac) >>
      simp_tac bool_ss [APPEND] >> disch_then MATCH_MP_TAC >>
      qpat_assum `!D explicit. gas_origin_ptr_path _ (u,G1,tn1) [] (OK s0,G2,tn2)`
-       (qspecl_then [`D`,`explicit`] ACCEPT_TAC)) >>
+       (qspecl_then [`D`,`explicit`] ACCEPT_TAC));
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock]:
+  linked_linear_registered_route_tac >>
+  suspend "linked_linear_declared_path_ready"
+QED
+
+val linked_registered_path_tac =
   `gas_path_mem unit.cu_context fn start 0 (OK s0)` by
     qpat_assum `!D. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) [] (OK s0,G2,tn2)`
       (qspec_then `ARB` (ACCEPT_TAC o MATCH_MP selectedAcceptedInterfacesTheory.selected_zero_path_mem)) >>
@@ -1671,11 +1696,14 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
      conj_tac >- (simp[NoAsms, Abbr `start`] >> first_assum ACCEPT_TAC) >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- simp[NoAsms, Abbr `start`] >>
-     first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_path_ready]:
+  linked_registered_path_tac >>
   suspend "linked_linear_declared_lock_result"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock_result]:
+val linked_linear_registered_open_tac =
   `~block_is_terminated registered` by
     (`~block_is_terminated checked` by
        (irule selectedEntryPrefixCodeTheory.compile_entry_checks_open >>
@@ -1684,7 +1712,14 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
      qpat_assum `compile_register_positional_args ce pos 4 checked = _`
        (DISJ_CASES_THEN2 SUBST1_TAC ACCEPT_TAC o
         MATCH_MP (SPEC_ALL registration_noop_or_open)) >>
-     first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock_result]:
+  linked_linear_registered_open_tac >>
+  suspend "linked_linear_declared_lock_ready"
+QED
+
+fun linked_registered_lock_cases_tac success_tac abort_tac =
   `return_buf_frame NONE registered_env registered s0` by
     (PURE_REWRITE_TAC [loweringPostsTheory.return_buf_frame_def] >>
      first_assum ACCEPT_TAC) >>
@@ -1692,12 +1727,15 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
     simp[NoAsms, contextTheory.global_nonreentrant_slot_def, wordsTheory.dimword_def] >>
   Cases_on `lock_if_nr cx nr (is_view_mut mut) es0` >>
   rename1 `lock_if_nr cx nr (is_view_mut mut) es0 = (lock_answer,es_lock)` >>
-  Cases_on `lock_answer`
-  >- suspend "linked_linear_declared_lock_success" >>
-  suspend "linked_linear_declared_lock_abort"
+  Cases_on `lock_answer` >- success_tac >> abort_tac;
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock_ready]:
+  linked_registered_lock_cases_tac
+    (suspend "linked_linear_declared_lock_success")
+    (suspend "linked_linear_declared_lock_abort")
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock_success]:
+val linked_registered_lock_success_tac =
   rename1 `lock_if_nr cx nr (is_view_mut mut) es0 = (INL lock_value,es_lock)` >>
   Cases_on `lock_value` >>
   `?s_b G_b tn_b.
@@ -1770,11 +1808,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
        qpat_assum `body_const_cells_agree_mods mods cx entry_types es0`
          (mp_tac o PURE_REWRITE_RULE [body_const_cells_agree_mods_def, const_cells_agree_def]) >>
        PURE_REWRITE_TAC [body_const_cells_agree_mods_def, const_cells_agree_def, immutables] >>
-       disch_then ACCEPT_TAC)) >>
-  suspend "linked_linear_declared_after_lock"
-QED
+       disch_then ACCEPT_TAC));
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_after_lock]:
+val linked_registered_locked_horizon_tac =
   `!H. valid_horizon cx (initial_state am []) H es_lock.storage_trace ==>
      storage_well_formed_on cx es_lock (FST H)` by
     (gen_tac >>
@@ -1797,7 +1833,11 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_aft
        `cx` |-> `cx`, `nr` |-> `nr`, `res` |-> `INL ()`, `view` |-> `is_view_mut mut`]
        (SPEC_ALL vyperExternalEntryStorageFrameTheory.lock_if_nr_preserves_storage_well_formed_on)) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     disch_then ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock_success]:
+  linked_registered_lock_success_tac >>
+  linked_registered_locked_horizon_tac >>
   suspend "linked_linear_declared_locked_body"
 QED
 
@@ -1812,6 +1852,23 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
      impl_tac >- first_assum ACCEPT_TAC >>
      disch_then (mp_tac o PURE_REWRITE_RULE [check_function_body_def, LET_THM]) >>
      simp[NoAsms, Abbr `entry_types`] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `stmts_no_control_escape fbody` by
+    (qpat_assum `check_function_body am.layouts tx.target mods art src
+         External mut nr args [] ret fbody`
+       (map_every assume_tac o CONJUNCTS o SIMP_RULE bool_ss
+         [check_function_body_def, LET_THM]) >>
+     first_assum ACCEPT_TAC) >>
+  `ret <> NoneT ==> stmts_no_fallthrough fbody` by
+    (disch_then (fn nonempty =>
+       qpat_assum `check_function_body am.layouts tx.target mods art src
+         External mut nr args [] ret fbody`
+         (strip_assume_tac o SIMP_RULE (srw_ss())
+           [check_function_body_def, LET_THM, nonempty])) >>
+     first_assum ACCEPT_TAC) >>
+  suspend "linked_linear_declared_replay_ready"
+QED
+
+val linked_registered_replay_tac =
   `!gs. eval_stmts cx body_code (es_lock with gas_obs := gs) =
          eval_stmts cx fbody (es_lock with gas_obs := gs)` by
     (qpat_assum `Abbrev (body_code = _)`
@@ -1825,11 +1882,29 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
      conj_tac
      >- (qexistsl_tac [`cx.txn.target`, `art`, `F`, `cx.layouts`] >>
          first_assum ACCEPT_TAC) >>
-     first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_replay_ready]:
+  linked_registered_replay_tac >>
   suspend "linked_linear_declared_guarded_frag"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_guarded_frag]:
+(* Install the linked external Return frame. Only the selected source
+   lookup needs route-specific normalization. *)
+fun linked_return_frame_tac retq ce cx ret source_lookup_tac =
+  simp_tac bool_ss [Abbr retq] >>
+  irule linkedExternalFrameRetTheory.linked_external_frame_ret_ok_full >>
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC,
+    qpat_assum (`(` @ ce @ `).ce_type_env = type_env_all_modules mods`) SUBST1_TAC >>
+      first_assum (ACCEPT_TAC o SYM),
+    qpat_assum (`get_tenv (` @ cx @ `) = type_env_all_modules mods`) (ACCEPT_TAC o SYM),
+    strip_tac >> rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+      qpat_assum (`(` @ ret @ `) <> NoneT`) (fn nonempty =>
+        first_assum (ACCEPT_TAC o C MATCH_MP nonempty))],
+    source_lookup_tac];
+
+val linked_registered_return_layout_tac =
   `registered_env.ce_struct_fields = (base_env with ce_raw_return := raw).ce_struct_fields` by
     (qpat_assum `registered_env.ce_struct_fields = make_struct_fields_map_mods mods` SUBST1_TAC >>
      simp[NoAsms, Abbr `base_env`, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY]) >>
@@ -1895,7 +1970,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_gua
                qpat_assum `~raw` (fn not_raw =>
                  simp[NoAsms, selected, raw_eq, ret_eq, none, not_raw, tx_return_bytes_mods_def,
                    return_bytes_mods_def, LET_THM,
-                   GSYM src_eq])))))) ) >>
+                   GSYM src_eq])))))) );
+
+val linked_registered_return_frame_tac =
   qabbrev_tac `RetQ = \(H:(bool # bytes32 # type_value) list # num list) v ee
       (gt:(string |-> num # num) # taint) r. ?tv v' us.
     evaluate_type (get_tenv cx) ret = SOME tv /\ safe_cast tv v = SOME v' /\
@@ -1918,24 +1995,17 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_gua
   `frame_ret_ok_full_mods mods
        ((\H. cx_dead H cx),0,NONE,unit.cu_context,shadow_unit.cu_context,[],fn,shadow_fn)
        cx RetQ registered_env ret` by
-    (simp_tac bool_ss [Abbr `RetQ`] >>
-     irule linkedExternalFrameRetTheory.linked_external_frame_ret_ok_full >>
-     rpt conj_tac >>
-     FIRST [first_assum ACCEPT_TAC,
-       qpat_assum `registered_env.ce_type_env = type_env_all_modules mods` SUBST1_TAC >>
-         first_assum (ACCEPT_TAC o SYM),
-       qpat_assum `get_tenv cx = type_env_all_modules mods` (ACCEPT_TAC o SYM),
-       strip_tac >> rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-         qpat_assum `ret <> NoneT` (fn nonempty =>
-           first_assum (ACCEPT_TAC o C MATCH_MP nonempty))],
-       qpat_assum `cx.txn = tx` SUBST1_TAC >> first_assum ACCEPT_TAC,
-       qpat_assum `cx.txn = tx` SUBST1_TAC >>
+    linked_return_frame_tac `RetQ` `registered_env` `cx` `ret`
+      (FIRST [qpat_assum `cx.txn = tx` SUBST1_TAC >> first_assum ACCEPT_TAC,
+        qpat_assum `cx.txn = tx` SUBST1_TAC >>
          qpat_assum `src = ALOOKUP exps tx.function_name` (fn src_eq =>
            PURE_REWRITE_TAC [GSYM src_eq]) >>
          qpat_assum `registered_env.ce_raw_return = raw` SUBST1_TAC >>
          qexists_tac `tops` >>
          conj_tac >- first_assum (ACCEPT_TAC o SYM) >>
-         first_assum ACCEPT_TAC]) >>
+         first_assum ACCEPT_TAC]);
+
+val linked_registered_structs_tac =
   `EVERY (struct_args_unique o SND) mods` by
     (simp[NoAsms, EVERY_MEM, FORALL_PROD] >> rpt strip_tac >>
      rename1 `MEM (owner,ts) mods` >>
@@ -1956,7 +2026,12 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_gua
      simp[NoAsms, EVERY_MEM, FORALL_PROD] >>
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `exports_ok cx.layouts cx.txn.target mods exps` by
-    (simp[NoAsms, Abbr `cx`, initial_evaluation_context_def] >> first_assum ACCEPT_TAC) >>
+    (simp[NoAsms, Abbr `cx`, initial_evaluation_context_def] >> first_assum ACCEPT_TAC);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_guarded_frag]:
+  linked_registered_return_layout_tac >>
+  linked_registered_return_frame_tac >>
+  linked_registered_structs_tac >>
   `qualified_stmts_decls_ok mods body_code` by
     drule_then ACCEPT_TAC (ASSUME
       ``MEM (FunctionDecl External mut nr raw tx.function_name args [] ret fbody) tops ==>
@@ -1964,7 +2039,25 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_gua
   suspend "linked_linear_declared_body_abi_targets"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_abi_targets]:
+(* Select a premise by its predicate (or the left-hand head of an equation). *)
+fun linked_premise_head t = fst (strip_comb (if is_eq t then lhs t else t));
+fun linked_select_premise head =
+  valOf o List.find (fn t => same_const (linked_premise_head t) head) o strip_conj;
+
+(* Infer the linked source witnesses from the caller's support, typing,
+   contract and selected-module facts, not from the order of the binders. *)
+fun linked_body_fragment_tac source_facts =
+  let fun supply pat = qpat_assum pat (fn th =>
+        part_match_exists_tac (linked_select_premise (linked_premise_head (concl th)))
+          (concl th))
+  in
+    irule bodySimFullMainTheory.body_stmts_sim_full_mods >>
+    rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC,
+      map_every supply source_facts >> rpt conj_tac >> first_assum ACCEPT_TAC]
+  end;
+
+val linked_registered_abi_targets_tac =
   `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body_code ==>
             EXISTS (occurs_abi_decode_target target o SND) mods` by
     (gen_tac >> strip_tac >>
@@ -1977,9 +2070,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
      simp[NoAsms, EXISTS_MEM] >>
      qexists_tac `(src,tops)` >>
      simp_tac bool_ss [SND] >> conj_tac >- first_assum ACCEPT_TAC >>
-     drule_all_then ACCEPT_TAC bodyAbiDecodeTargetTheory.lookup_function_abi_decode_target_occurs) >>
-  `exports_ok cx.layouts cx.txn.target mods exps` by
-    (simp[NoAsms, Abbr `cx`, initial_evaluation_context_def] >> first_assum ACCEPT_TAC) >>
+     drule_all_then ACCEPT_TAC bodyAbiDecodeTargetTheory.lookup_function_abi_decode_target_occurs);
+
+val linked_registered_fragment_tac =
   `stmts_exprs_ok registered_env body_code` by
     (MATCH_MP_TAC stmt_exprs_ok_from_traversal_bounds >>
      qpat_assum `registered_env.ce_modules = mods` (fn eq =>
@@ -1992,17 +2085,25 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
        strip_tac >> drule_all_then ACCEPT_TAC (ASSUME
          ``stmts_valued_return body_code /\ ~registered_env.ce_raw_return ==>
            return_buffer_ok registered_env``)]) >>
-  mp_tac (Q.SPECL
-    [`\H. cx_dead H cx`,`0`,`NONE`,`[]`,`mods`,`exps`,`src`,`tops`,`bindings`,
-     `unit.cu_context`,`shadow_unit.cu_context`,`fn`,`shadow_fn`,`registered_env`,
-     `cx`,`entry_types`,`after_body`,`ret`,`NoLoop`,`RetQ`,`body_code`,`es_lock`]
-    bodySimFullMainTheory.body_stmts_sim_full_mods) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then assume_tac >>
+  `stmt_frag_full_mods
+      ((\H. cx_dead H cx),0,NONE,unit.cu_context,shadow_unit.cu_context,[],fn,shadow_fn)
+      cx NoLoop RetQ registered_env
+      (stmts_env registered_env NoLoop ret body_code)
+      (stmts_env (gas_shadow_env T registered_env) NoLoop ret (MAP gas_shadow_stmt body_code))
+      (eval_stmts cx body_code) es_lock` by
+    linked_body_fragment_tac
+      [`supported_stmts tops bindings body_code`,
+       `type_stmts entry_types ret body_code = SOME after_body`,
+       `contract_inv mods exps unit.cu_context registered_env cx`,
+       `module_body_inv mods src tops registered_env cx`];
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_abi_targets]:
+  linked_registered_abi_targets_tac >>
+  linked_registered_fragment_tac >>
   suspend "linked_linear_declared_body_shadow"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_shadow]:
+val linked_registered_shadow_tac =
   `gas_shadow_state locked shadow_locked` by
     (qpat_assum `key = global_nonreentrant_slot` (fn key =>
        qpat_assum `tr` (fn tr => qpat_assum `view = (mut = View)` (fn view =>
@@ -2046,11 +2147,14 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
      asm_simp_tac std_ss [FST, SND] >>
      disch_then (CONJUNCTS_THEN2 (assume_tac o SYM) assume_tac) >>
      simp_tac bool_ss [pairTheory.PAIR_FST_SND_EQ,FST,SND] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_shadow]:
+  linked_registered_shadow_tac >>
   suspend "linked_linear_declared_body_execute"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_execute]:
+val linked_registered_admissible_tac =
   `gas_admissible (eval_stmts cx body_code) (stmt_res_ok NoLoop) es_lock` by
     (PURE_REWRITE_TAC [gasContextTheory.gas_admissible_def] >>
      qx_genl_tac [`gs`,`res`,`ee`] >> strip_tac >>
@@ -2064,12 +2168,6 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
         rpt conj_tac >> first_assum ACCEPT_TAC) >>
      Cases_on `res` >- simp[NoAsms, stmtSimDefsTheory.stmt_res_ok_def] >>
      rename1 `eval_stmts _ _ _ = (INR exc,ee)` >>
-     `stmts_no_control_escape fbody` by
-       (qpat_assum `check_function_body am.layouts tx.target mods art src
-            External mut nr args [] ret fbody`
-          (map_every assume_tac o CONJUNCTS o SIMP_RULE bool_ss
-            [check_function_body_def, LET_THM]) >>
-        first_assum ACCEPT_TAC) >>
      `exc <> BreakException /\ exc <> ContinueException` by
        (qpat_assum `!gas. eval_stmts cx body_code _ = eval_stmts cx fbody _`
           (qspec_then `gs` (fn replay =>
@@ -2085,7 +2183,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
      qpat_assum `exc <> ContinueException` mp_tac >>
      Cases_on `exc` >> simp[NoAsms, stmtSimDefsTheory.stmt_res_ok_def] >>
      rename1 `(!msg. err <> TypeError msg) ==> _` >>
-     Cases_on `err` >> simp[NoAsms]) >>
+     Cases_on `err` >> simp[NoAsms]);
+
+val linked_registered_reachability_tac =
   `ctx_inst_ids_distinct unit.cu_context` by
     (drule lowering_context_ok_static_integrity >> strip_tac >> first_assum ACCEPT_TAC) >>
   `MEM fn unit.cu_context.ctx_functions /\
@@ -2121,11 +2221,15 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
      disch_then (qspec_then `callee` mp_tac) >>
      qpat_assum `MEM callee unit.cu_context.ctx_functions` (fn mem => simp[NoAsms, mem]) >>
      disch_then (qspec_then `inst` mp_tac) >>
-     qpat_assum `MEM inst (fn_insts callee)` (fn mem => simp[NoAsms, mem])) >>
+     qpat_assum `MEM inst (fn_insts callee)` (fn mem => simp[NoAsms, mem]));
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_execute]:
+  linked_registered_admissible_tac >>
+  linked_registered_reachability_tac >>
   suspend "linked_linear_declared_body_frame"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_frame]:
+val linked_registered_immutable_frame_tac =
   `fn_inst_ids_distinct fn` by
     (drule_all ctx_inst_ids_distinct_fn >>
      simp[NoAsms, fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_map_id]) >>
@@ -2147,7 +2251,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
          qpat_assum `s_b.vs_data_section = vs.vs_data_section` (fn section =>
            simp[NoAsms, locked_imms, imms, section, Abbr `cx`, initial_evaluation_context_def,
                 GSYM account_immutables_def]))) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC);
+
+val linked_registered_storage_prefix_tac =
   `es0.storage_trace = []` by
     (qpat_assum `send_call_value mut (initial_evaluation_context am.sources am.layouts tx src)
          (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
@@ -2187,7 +2293,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
      impl_tac >- first_assum ACCEPT_TAC >>
      disch_then (CONJUNCTS_THEN2
        (MATCH_ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)
-       kall_tac)) >>
+       kall_tac));
+
+val linked_registered_run_tac =
   qpat_assum `stmt_frag_full_mods _ cx NoLoop RetQ registered_env _ _ _ es_lock`
     (mp_tac o REWRITE_RULE [stmt_frag_full_mods_def]) >>
   disch_then (qspecl_then [`initial_state am []`,`locked`,`body_end`,
@@ -2214,11 +2322,16 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
   qpat_assum `registered_env.ce_modules = mods` (fn linked =>
     qpat_assum `Abbrev (explicit = _)` (fn exp =>
       PURE_REWRITE_TAC [linked, GSYM (REWRITE_RULE [markerTheory.Abbrev_def] exp)])) >>
-  disch_then assume_tac >>
+  disch_then assume_tac;
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_frame]:
+  linked_registered_immutable_frame_tac >>
+  linked_registered_storage_prefix_tac >>
+  linked_registered_run_tac >>
   suspend "linked_linear_declared_body_compose"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_compose]:
+val linked_registered_trace_inputs_tac =
   `cx = initial_evaluation_context am.sources am.layouts tx src` by
     simp[NoAsms, Abbr `cx`] >>
   drule_all linkedRuntimeSourceLookupTheory.linked_runtime_source_lookup >>
@@ -2270,29 +2383,41 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
          impl_tac >- first_assum ACCEPT_TAC >>
          disch_then (qx_choose_then `eu` strip_assume_tac) >>
          qexists_tac `eu` >> first_assum ACCEPT_TAC) >>
-     simp[NoAsms, unlock_if_nr_def, return_def]) >>
+     simp[NoAsms, unlock_if_nr_def, return_def]);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_body_compose]:
+  linked_registered_trace_inputs_tac >>
   suspend "linked_linear_declared_compose_result"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_compose_result]:
+(* Match the body's outcome before specializing the remaining call boundary.
+   Thus the caller proves the horizon transfers and all-tail replay for its
+   selected entry, including any marks already consumed on the entry path. *)
+fun linked_compose_result_tac {outcome, property, start, trace, relation, exempt, prefix} =
+  qpat_assum outcome (fn body_outcome =>
+    PART_MATCH
+      (linked_select_premise ``gas_outcome_full_mods`` o fst o dest_imp)
+      (Q.ISPEC property unitExecutionComposeResultTheory.unit_execution_compose_result_horizon_mods)
+      (concl body_outcome) |>
+    Q.GENL [`vs0`,`CT`,`REL`,`EX`,`marks0`] |>
+    Q.ISPECL [start, trace, relation, exempt, prefix] |>
+    BETA_RULE |> PURE_REWRITE_RULE [APPEND] |> mp_tac);
+
+fun linked_registered_compose_tac {horizon_tac, tails_tac, exempt_tac,
+    fallthrough_tac, exit_tac, readings_tac, finish_tac} =
   `!gobs. eval_external_defaults cx [] (es0 with
        <|scopes := [FEMPTY]; gas_obs := gobs|>) =
        (INL [],es0 with <|scopes := [FEMPTY]; gas_obs := gobs|>)` by
     simp[NoAsms, eval_external_defaults_def, return_def] >>
-  qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ _ _` (fn body_outcome =>
-    PART_MATCH
-      (valOf o List.find (fn t => same_const (fst (strip_comb t)) ``gas_outcome_full_mods``)
-       o strip_conj o fst o dest_imp)
-      (Q.ISPEC `\(cr : value + exception).
-         cr <> INR (Error (RuntimeError "msg.gas: no gas reading"))`
-         unitExecutionComposeResultTheory.unit_execution_compose_result_horizon_mods)
-      (concl body_outcome) |>
-    Q.GENL [`vs0`,`CT`,`REL`,`EX`,`marks0`] |>
-    Q.ISPECL [`start:venom_state`, `\gs. call_external_trace (SOME vs.vs_outcomes) gs am tx`,
-      `\(H:(bool # bytes32 # type_value) list # num list) c r.
-         external_call_result_rel_mods H mods exps ret tx c r`,
-      `source_exempt_mods mods`, `[]:bool list`] |>
-    BETA_RULE |> PURE_REWRITE_RULE [APPEND] |> mp_tac) >>
+  linked_compose_result_tac
+    {outcome = `gas_outcome_full_mods _ _ _ _ _ _ _ _`,
+     property = `\(cr : value + exception).
+       cr <> INR (Error (RuntimeError "msg.gas: no gas reading"))`,
+     start = `start:venom_state`,
+     trace = `\gs. call_external_trace (SOME vs.vs_outcomes) gs am tx`,
+     relation = `\(H:(bool # bytes32 # type_value) list # num list) c r.
+       external_call_result_rel_mods H mods exps ret tx c r`,
+     exempt = `source_exempt_mods mods`, prefix = `[]:bool list`} >>
   impl_tac
   >- (conj_tac >- simp[NoAsms, vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
       conj_tac >- first_assum ACCEPT_TAC >>
@@ -2306,20 +2431,30 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_com
         qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ _ _`
           (ACCEPT_TAC o PURE_REWRITE_RULE [APPEND] o BETA_RULE)) >>
       conj_tac
-      >- suspend "linked_linear_trace_horizon" >>
+      >- horizon_tac >>
       conj_tac
-      >- suspend "linked_linear_trace_gas_tail" >>
+      >- tails_tac >>
       conj_tac
-      >- suspend "linked_linear_trace_exempt" >>
+      >- exempt_tac >>
       conj_tac
-      >- suspend "linked_linear_trace_fallthrough" >>
+      >- fallthrough_tac >>
       conj_tac
-      >- suspend "linked_linear_trace_exit" >>
-      suspend "linked_linear_trace_readings") >>
-  suspend "linked_linear_body_compose_finish"
+      >- exit_tac >>
+      readings_tac) >>
+  finish_tac;
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_compose_result]:
+  linked_registered_compose_tac
+    {horizon_tac = suspend "linked_linear_trace_horizon",
+     tails_tac = suspend "linked_linear_trace_gas_tail",
+     exempt_tac = suspend "linked_linear_trace_exempt",
+     fallthrough_tac = suspend "linked_linear_trace_fallthrough",
+     exit_tac = suspend "linked_linear_trace_exit",
+     readings_tac = suspend "linked_linear_trace_readings",
+     finish_tac = suspend "linked_linear_body_compose_finish"}
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_horizon]:
+val linked_registered_trace_horizon_tac =
   qx_genl_tac [`gobs`,`res`,`ee`] >> BETA_TAC >> strip_tac >>
   qpat_assum `!gas. eval_stmts cx body_code _ = eval_stmts cx fbody _`
     (qspec_then `gobs` (fn replay =>
@@ -2346,10 +2481,13 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_horizo
       disch_then ACCEPT_TAC) >>
   qpat_assum `_ ==> call_obs = ee.storage_trace` (fn out =>
     first_assum (SUBST1_TAC o MATCH_MP out)) >>
-  simp[NoAsms]
+  simp[NoAsms];
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_horizon]:
+  linked_registered_trace_horizon_tac
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_exempt]:
+val linked_registered_trace_exempt_tac =
   qx_genl_tac [`gx`,`err`,`ee`,`cr`,`am'`,`rqs`,`obs`] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `res = (INR (Error err) : unit + exception)` >>
@@ -2368,10 +2506,13 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_exempt
     (qspec_then `Error err` mp_tac) >>
   simp[NoAsms, Abbr `res`] >> strip_tac >>
   qpat_assum `call_res = INR (Error err)` SUBST1_TAC >>
-  simp[]
+  simp[];
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_exempt]:
+  linked_registered_trace_exempt_tac
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_gas_tail]:
+val linked_registered_trace_tails_tac =
   qx_genl_tac [`gx`,`res`,`ee`] >> BETA_TAC >> strip_tac >>
   linked_body_eval_tac >>
   linked_unlock_at_empty_gas_tac >>
@@ -2406,10 +2547,13 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_gas_ta
   namedCases_on `res` ["u","exc"]
   >- (Cases_on `u` >> simp[abstract_machine_from_state_def] >> strip_tac >> simp[]) >>
   Cases_on `exc` >> simp[abstract_machine_from_state_def] >>
-  rpt strip_tac >> gvs[] >> metis_tac[PAIR_EQ]
+  rpt strip_tac >> gvs[] >> metis_tac[PAIR_EQ];
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_gas_tail]:
+  linked_registered_trace_tails_tac
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_readings]:
+val linked_registered_trace_readings_tac =
   qx_genl_tac [`gx`,`res`,`ee`,`cr`,`am'`,`rqs`,`obs`] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   linked_body_eval_tac >>
@@ -2437,10 +2581,13 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_readin
   POP_ASSUM_LIST (K ALL_TAC) >>
   namedCases_on `res` ["u","exc"]
   >- (Cases_on `u` >> simp[] >> rpt strip_tac >> simp[]) >>
-  Cases_on `exc` >> simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  Cases_on `exc` >> simp[AllCaseEqs()] >> rpt strip_tac >> gvs[];
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_readings]:
+  linked_registered_trace_readings_tac
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_exit]:
+fun linked_registered_trace_exit_tac abort_or_halt_tac =
   qx_genl_tac [`gx`,`res`,`ee`,`H`,`gt`,`r`,`cr`,`am'`,`rqs`,`obs`] >>
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
   linked_body_eval_tac >>
@@ -2457,7 +2604,7 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_exit]:
   PURE_REWRITE_TAC [stmt_exit_ptr_def] >>
   disch_then (DISJ_CASES_THEN2 assume_tac
     (qx_choose_then `v` (map_every assume_tac o CONJUNCTS)))
-  >- suspend "linked_linear_trace_abort_or_halt" >>
+  >- abort_or_halt_tac >>
   qpat_assum `Abbrev (RetQ = _)` (fn retq =>
     qpat_assum `RetQ H _ _ _ _` (strip_assume_tac o
       SIMP_RULE (srw_ss()) [Excl "unlock_if_nr_def", Excl "is_view_mut_def"] o
@@ -2482,10 +2629,13 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_exit]:
       qpat_assum `(call_res,call_am) = _`
         (strip_assume_tac o SIMP_RULE (srw_ss()) [ty, cast]))) >>
   qpat_x_assum `external_call_result_rel_mods H mods exps ret cx.txn _ r` mp_tac >>
-  asm_simp_tac (srw_ss()) [abstract_machine_from_state_def]
+  asm_simp_tac (srw_ss()) [abstract_machine_from_state_def];
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_exit]:
+  linked_registered_trace_exit_tac (suspend "linked_linear_trace_abort_or_halt")
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_abort_or_halt]:
+val linked_registered_abort_or_halt_tac =
   `stmt_res_ok NoLoop res` by
     (qpat_assum `gas_admissible (eval_stmts cx body_code) (stmt_res_ok NoLoop) es_lock`
        (mp_tac o PURE_REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
@@ -2529,10 +2679,13 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_abort_
   Cases_on `r` >>
   simp[exprSimDefsTheory.expr_exit_def, stmtSimDefsTheory.stmt_res_ok_def] >>
   rpt strip_tac >> gvs[exprSimDefsTheory.expr_exit_def] >>
-  simp[external_call_result_rel_mods_def, LET_THM]
+  simp[external_call_result_rel_mods_def, LET_THM];
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_abort_or_halt]:
+  linked_registered_abort_or_halt_tac
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_fallthrough]:
+fun linked_registered_fallthrough_tac ghost_tac result_tac =
   qx_genl_tac [`gx`,`res`,`ee`,`t`] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `res = INL () /\ ~block_is_terminated body_end /\ ~t.vs_halted /\
@@ -2551,12 +2704,8 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_fallth
   `ret = NoneT` by
     (CCONTR_TAC >>
      `stmts_no_fallthrough fbody` by
-       (qpat_assum `ret <> NoneT` (fn nonempty =>
-          qpat_assum `check_function_body am.layouts tx.target mods art src
-            External mut nr args [] ret fbody`
-            (strip_assume_tac o SIMP_RULE (srw_ss())
-               [check_function_body_def, LET_THM, nonempty])) >>
-        first_assum ACCEPT_TAC) >>
+       (qpat_assum `ret <> NoneT ==> stmts_no_fallthrough fbody` drule >>
+        disch_then ACCEPT_TAC) >>
      qpat_assum `stmts_no_fallthrough fbody` (fn nofall =>
        qspecl_then [`fbody`,`cx`,`es_lock with gas_obs := gx`,`ee with gas_obs := []`]
          (mp_tac o C MATCH_MP nofall)
@@ -2619,11 +2768,16 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_fallth
   >- (qpat_assum `!H explicit. _ ==> gas_origin_ptr_path _ _ [] (Halt ss,G,tn_out)`
         (qspecl_then [`H`,`explicit`] mp_tac) >>
       BETA_TAC >> disch_then irule >>
-      suspend "linked_linear_fallthrough_ghost") >>
-  suspend "linked_linear_fallthrough_result"
+      ghost_tac) >>
+  result_tac;
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_trace_fallthrough]:
+  linked_registered_fallthrough_tac
+    (suspend "linked_linear_fallthrough_ghost")
+    (suspend "linked_linear_fallthrough_result")
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallthrough_ghost]:
+val linked_registered_fallthrough_ghost_tac =
   `~final_env.ce_is_ctor` by
     (qpat_assum `cenv_top_ext registered_env final_env _`
        (mp_tac o MATCH_MP stmtFragPtrTheory.cenv_top_ext_is_ctor) >>
@@ -2634,10 +2788,13 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallthrough_
       (fn runtime => simp[NoAsms, dead_lo_ok_def, runtime]),
     qpat_assum `ghost_inv_at_mods (cx_dead H cx) 0 NONE final_env cx _ G tn t`
       (strip_assume_tac o PURE_REWRITE_RULE [bodyFullShadowBodyInvTheory.ghost_inv_at_mods_def]) >>
-    first_assum ACCEPT_TAC]
+    first_assum ACCEPT_TAC];
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallthrough_ghost]:
+  linked_registered_fallthrough_ghost_tac
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallthrough_result]:
+val linked_registered_fallthrough_result_tac =
   qx_genl_tac [`cr`,`am'`,`rqs`,`obs`] >> strip_tac >>
   linked_unlock_at_empty_gas_tac >>
   linked_selected_trace_ret_tac `NoneT` [`call_res`,`call_am`,`call_rqs`,`call_obs`]
@@ -2687,10 +2844,13 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallthrough_
   POP_ASSUM_LIST (K ALL_TAC) >>
   simp[external_call_result_rel_mods_def, tx_return_bytes_mods_def, LET_THM,
     logs_correspond_def, LIST_REL_EL_EQN, log_entry_corresponds_concrete_event] >>
-  rpt strip_tac >> simp[LET_THM]
+  rpt strip_tac >> simp[LET_THM];
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_fallthrough_result]:
+  linked_registered_fallthrough_result_tac
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_body_compose_finish]:
+val linked_registered_finish_tac =
   disch_then (qx_choose_then `body_marks` assume_tac) >>
   `s_b.vs_gas_readings = vs.vs_gas_readings` by
     (qpat_assum `s_b.vs_gas_readings = s0.vs_gas_readings` SUBST1_TAC >>
@@ -2772,10 +2932,13 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_body_compose
     (qspec_then `tail` (strip_assume_tac o MATCH_MP call_external_trace_result)) >>
   qpat_assum `call_external _ _ _ _ = (out,out_am,out_rqs)`
     (fn call => simp[NoAsms, call]) >>
-  first_assum ACCEPT_TAC
+  first_assum ACCEPT_TAC;
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_body_compose_finish]:
+  linked_registered_finish_tac
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock_abort]:
+val linked_registered_lock_abort_tac =
   rename1 `lock_if_nr cx nr (is_view_mut mut) es0 = (INR lock_err,es_lock)` >>
   `nr = T` by
     (Cases_on `nr` >> simp[NoAsms] >>
@@ -2803,11 +2966,14 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
   simp_tac bool_ss [LENGTH, DROP_0] >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`abort`,`s_abort`,`G_abort`,`tn_abort`]
-    (map_every assume_tac o CONJUNCTS)) >>
+    (map_every assume_tac o CONJUNCTS));
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock_abort]:
+  linked_registered_lock_abort_tac >>
   suspend "linked_linear_declared_lock_abort_source"
 QED
 
-Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock_abort_source]:
+val linked_registered_lock_abort_source_tac =
   `cx.txn.target = tx.target /\ ~cx.in_deploy` by
     simp[NoAsms, Abbr `cx`, initial_evaluation_context_def] >>
   `find_function_module am tx.target tx.function_name = src /\
@@ -2891,12 +3057,97 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_loc
              qpat_assum `!tail. call_external_function_trace _ tail am cx _ _ _ _ _ _ _ _ _ = _`
                (qspec_then `tail` (fn trace => simp[NoAsms, mods_eq, tops_eq, lookup, trace]))))) >>
      qpat_assum `lock_err = _ \/ lock_err = _` (DISJ_CASES_THEN SUBST1_TAC) >>
-     simp[NoAsms]) >>
+     simp[NoAsms]);
+
+Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock_abort_source]:
+  linked_registered_lock_abort_source_tac >>
   suspend "linked_linear_declared_lock_abort_certificate"
 QED
 
+(* Terminal paths determine the erased execution and safety at every fuel. *)
+fun linked_terminal_abort_path_tac marks result =
+  `gas_origin_path T explicit unit.cu_context fn start ^marks ^result` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (start,_,_) ^marks (^result,_,_)`
+      (qspec_then `ARB` (ACCEPT_TAC o CONJUNCT1 o
+        MATCH_MP (SPEC_ALL gas_origin_ptr_path_projections)))) >>
+  `!D fuel. ptr_safe_blocks D 0 fuel unit.cu_context fn [] FEMPTY entry_taint start` by
+    (rpt gen_tac >> irule entryDispatchPtrTheory.ptr_safe_blocks_from_phi_free_run >>
+     (reverse conj_tac >-
+       (simp[NoAsms, Abbr `start`] >> qexists_tac `entry_bb` >>
+        conj_tac >> first_assum ACCEPT_TAC)) >>
+     qpat_assum `!D. gas_origin_ptr_path _ (start,_,_) ^marks (^result,_,_)`
+       (qspec_then `D` (mp_tac o MATCH_MP fragGasOriginPtrExecTheory.gas_origin_ptr_path_exec)) >>
+     simp[NoAsms, exit_result_def] >>
+     disch_then (qx_choose_then `run_fuel` strip_assume_tac) >>
+     irule fragExecPtrTheory.ptr_safe_run_all_fuel >> qexists_tac `run_fuel` >>
+     qpat_assum `run_from run_fuel _ _ start = ^result` (fn ran => simp[NoAsms, ran]) >>
+     first_assum ACCEPT_TAC);
+
+(* Package a terminal path and an exact source trace in the matched-result case. *)
+fun linked_terminal_execution_tac shadow result trace_witnesses result_rel_tac =
+  rewrite_tac [source_unit_execution_correct_with_mods_def] >>
+  qexistsl_tac [`fn`,shadow] >>
+  qpat_assum `lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn`
+    (assume_tac o MATCH_MP lookup_function_MEM) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  disj2_tac >> qexistsl_tac trace_witnesses >>
+  simp[NoAsms] >> (conj_tac >- first_assum ACCEPT_TAC) >>
+  disj2_tac >> qexists_tac result >>
+  qpat_assum `Abbrev (start = _)` (fn start =>
+    qpat_assum `Abbrev (explicit = _)` (fn sites =>
+      PURE_REWRITE_TAC (map (GSYM o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) [start, sites]))) >>
+  simp[NoAsms, exit_result_def] >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> disch_tac >> (conj_tac >- result_rel_tac) >>
+  first_assum (fn th => MATCH_ACCEPT_TAC (SPEC_ALL th));
+
+val linked_registered_lock_abort_domain_tac =
+  `es0.storage_trace = []` by
+    (qpat_assum `send_call_value mut (initial_evaluation_context am.sources am.layouts tx src)
+       _ = (INL (),es0)` (mp_tac o MATCH_MP (SPEC_ALL send_call_value_accounts)) >>
+     simp[NoAsms, initial_state_def]) >>
+  `es_lock.storage_trace = [StorageLock global_nonreentrant_slot]` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`lock_if_nr cx T (is_view_mut mut) es0 = _`,
+        `cx.nonreentrant_slot = SOME global_nonreentrant_slot`, `es0.storage_trace = []`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     qpat_x_assum `lock_if_nr _ _ _ _ = _` mp_tac >>
+     simp[lock_if_nr_def, vyperTypeEvalStoragePreservationTheory.acquire_nonreentrant_lock_eq] >>
+     Cases_on `lookup_storage (n2w global_nonreentrant_slot)
+       (lookup_transient_storage cx.txn.target es0.tStorage) = 1w` >>
+     Cases_on `is_view_mut mut` >> Cases_on `cx.txn.is_static` >>
+     simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperTypeEvalStoragePreservationTheory.acquire_nonreentrant_lock_eq,
+       vyperStateTheory.return_def, vyperStateTheory.check_not_static_def,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def, vyperStateTheory.raise_def] >>
+     strip_tac >> gvs[vyperStateTheory.assert_def, vyperStateTheory.raise_def]) >>
+  `storage_trace_domain (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am []) es_lock.storage_trace` by
+    (qpat_assum `es_lock.storage_trace = _` SUBST1_TAC >>
+     simp[NoAsms, storage_trace_domain_def, valid_horizon_def, storage_trace_horizon_def,
+       storage_trace_regions_def, storage_trace_locks_def, regions_consistent_def,
+       storage_locks_separated_def, storage_well_formed_on_def, storage_observations_ok_def,
+       storage_roots_fit_def, storage_trace_backends_well_formed_def, arithmeticTheory.ADD1] >>
+     qpat_assum `global_nonreentrant_slot < dimword (:256)` mp_tac >> decide_tac);
+
+val linked_registered_lock_abort_finish_tac =
+  linked_terminal_abort_path_tac ``[]:bool list`` ``Abort abort s_abort`` >>
+  qexists_tac `[]` >> reverse conj_tac
+  >- (disch_tac >> qx_gen_tac `tail` >>
+      qpat_assum `!tail. call_external_trace _ tail am tx = (INR lock_err,_,_,_)`
+        (qspec_then `tail` (fn trace =>
+          simp[NoAsms, CONJUNCT1 (MATCH_MP call_external_trace_result trace)])) >>
+      qpat_assum `lock_err = _ \/ lock_err = _` (DISJ_CASES_THEN SUBST1_TAC) >>
+      simp[NoAsms]) >>
+  linked_terminal_execution_tac `shadow_fn` `Abort abort s_abort`
+    [`INR lock_err`,`am`,`es_lock.requests`,`es_lock.storage_trace`]
+    (qpat_assum `lock_err = _ \/ lock_err = _` (DISJ_CASES_THEN SUBST1_TAC) >>
+     simp[NoAsms, external_call_result_rel_mods_def, LET_THM]);
+
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_lock_abort_certificate]:
-  cheat
+  linked_registered_lock_abort_domain_tac >>
+  linked_registered_lock_abort_finish_tac
 QED
 
 Resume linked_runtime_dispatched_readings_certificate[linked_linear_getter_support]:
@@ -4842,9 +5093,379 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_valu
       qexists_tac `[]` >> conj_tac
       >- linked_grouped_reject_execution_tac >>
       linked_grouped_reject_no_gas_tac) >>
+  suspend "linked_grouped_legacy_passing_checks"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_passing_checks]:
+  rename1 `eval_operand (Var mid) dispatch_u = SOME (calldata_method_id cd)` >>
+  rename1 `compile_register_positional_args ce pos 4 checked = (registered_env,registered)` >>
+  `set_external_package_target rpolicy.rpol_target
+      (package_external_fn_unit mods T (K global_nonreentrant_slot)
+        (src,(mut,nr,selected_raw,tx.function_name,args,([]:expr list),ret,body_code))) =
+      ("fn_" ++ tx.function_name,ce,pos,mc,pay,nr,key,tr,view,body_code,rt)` by
+    (qpat_assum `Abbrev (pkg = _)`
+       (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `fn_allocs_ok_unit mods (src,(mut,nr,selected_raw,tx.function_name,args,[],ret,body_code))` by
+    (qpat_assum `entry_key = (src,_)` (SUBST1_TAC o SYM) >>
+     qpat_assum `EVERY (fn_allocs_ok_unit mods) exts`
+       (mp_tac o REWRITE_RULE [EVERY_MEM]) >> disch_then drule >> simp[]) >>
+  `contract_namespaces_ok F mods` by drule_then ACCEPT_TAC check_contract_namespaces_ok >>
+  drule_all (Q.INST [`dflts` |-> `[]:expr list`] linked_registration_package_inputs) >>
+  disch_then (CONJUNCTS_THEN2 kall_tac (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac
+      (qx_choose_then `package_tys` (map_every assume_tac o CONJUNCTS))))) >>
+  `OPT_MMAP (evaluate_type (type_env_all_modules mods)) (MAP SND args) = SOME decoded_tys` by
+    (qpat_assum `tys = MAP SND prefix` (fn tys =>
+       qpat_assum `prefix = args` (fn pref =>
+         PURE_REWRITE_TAC [GSYM (REWRITE_RULE [pref] tys)])) >>
+     first_assum ACCEPT_TAC) >>
+  `package_tys = decoded_tys` by
+    (qpat_assum `OPT_MMAP _ (MAP SND args) = SOME package_tys` mp_tac >>
+     qpat_assum `OPT_MMAP _ (MAP SND args) = SOME decoded_tys`
+       (fn decoded => simp[NoAsms, decoded])) >>
+  qpat_x_assum `package_tys = decoded_tys` SUBST_ALL_TAC >>
+  `hit.vs_call_ctx.cc_calldata = cd` by simp[Abbr `cd`] >>
+  qpat_assum `((pay \/ hit.vs_call_ctx.cc_callvalue = 0w) /\ _ /\ _ ==> ?s G tn. _)` mp_tac >>
+  impl_tac
+  >- (conj_tac
+      >- (qpat_assum `pay = _` SUBST1_TAC >>
+          qpat_assum `hit.vs_call_ctx.cc_callvalue = _` SUBST1_TAC >>
+          qpat_assum `~(mut <> Payable /\ tx.value <> 0)` mp_tac >>
+          simp[NoAsms, DE_MORGAN_THM] >> disch_then (DISJ_CASES_THEN (fn eq => simp[NoAsms, eq]))) >>
+      qpat_assum `hit.vs_call_ctx.cc_calldata = cd` SUBST1_TAC >>
+      qpat_assum `mc = 4 + SUM _` SUBST1_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_assum `LENGTH cd < 18446744073709551616` mp_tac >>
+      simp[NoAsms, dimword_def] >> decide_tac) >>
+  disch_then (qx_choosel_then [`u`,`G1`,`tn1`] (map_every assume_tac o CONJUNCTS)) >>
+  suspend "linked_grouped_legacy_positional_register"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_positional_register]:
+  qpat_assum `selected_registration_frame vs entry_taint u tn1`
+    (strip_assume_tac o PURE_REWRITE_RULE [selected_registration_frame_def]) >>
+  `calldata_decode_args u.vs_call_ctx.cc_calldata decoded_tys 0 = SOME tx.args` by
+    (qpat_assum `u.vs_call_ctx = vs.vs_call_ctx` SUBST1_TAC >>
+     qpat_assum `Abbrev (cd = _)`
+       (SUBST1_TAC o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `?env. bind_arguments (type_env_all_modules mods) args tx.args = SOME env` by
+    (irule dispatchedDecodedBindModsTheory.decoded_parameters_bind >>
+     qexistsl_tac [`cd`,`decoded_tys`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `alloca_history fn start /\ alloca_inv start` by
+    (conj_tac
+     >- (irule alloca_history_empty >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
+  `alloca_history fn u` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) [] (OK u,G1,tn1)`
+       (qspecl_then [`ARB`,`ARB`] assume_tac) >>
+     drule_all_then ACCEPT_TAC body_full_path_alloca_history) >>
+  `LENGTH args = LENGTH decoded_tys /\ LENGTH args = LENGTH tx.args` by
+    (conj_tac
+     >- (qpat_assum `OPT_MMAP _ (MAP SND args) = SOME decoded_tys`
+           (mp_tac o MATCH_MP (SPEC_ALL vyperTypeABITheory.OPT_MMAP_LENGTH)) >> simp[NoAsms]) >>
+     drule_then ACCEPT_TAC bind_arguments_length) >>
+  `LIST_REL (\ty tv. evaluate_type (type_env_all_modules mods) ty = SOME tv)
+     (MAP SND args) decoded_tys` by
+    (qpat_assum `OPT_MMAP _ (MAP SND args) = SOME decoded_tys`
+       (ACCEPT_TAC o MATCH_MP (SPEC_ALL vyperTypeABITheory.OPT_MMAP_LIST_REL))) >>
+  `!i. i < LENGTH args ==>
+     abi_decoder_coherent ce (type_env_all_modules mods) ce.ce_struct_fields
+       (SND (EL i args)) (EL i decoded_tys) /\
+     (?loc. FLOOKUP ce.ce_vars (FST (EL i args)) = SOME loc /\
+       var_location_memory_size loc = SOME (type_memory_size (EL i decoded_tys))) /\
+     type_memory_size (EL i decoded_tys) < dimword (:256)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `LIST_REL _ args (ZIP (MAP SND args,decoded_tys))`
+       (mp_tac o Q.SPEC `i` o CONJUNCT2 o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+     qpat_assum `LENGTH args = LENGTH decoded_tys` (fn len =>
+       qpat_assum `i < LENGTH args` (fn bound =>
+         Cases_on `EL i args` >>
+         qpat_assum `EL i args = _` (fn arg =>
+           simp[NoAsms, bound, GSYM len, EL_ZIP, EL_MAP, arg])))) >>
+  `!ce' i. i < LENGTH args /\ ce' = ce with ce_vars := ce'.ce_vars ==>
+      selected_slot_accepts ce' (type_env_all_modules mods) ce'.ce_struct_fields
+        (SND (EL i args)) (EL i decoded_tys) /\
+      abi_decoder_coherent ce' (type_env_all_modules mods) ce'.ce_struct_fields
+        (SND (EL i args)) (EL i decoded_tys)` by
+    (rpt gen_tac >> strip_tac >>
+     `abi_decoder_coherent ce' (type_env_all_modules mods) ce'.ce_struct_fields
+        (SND (EL i args)) (EL i decoded_tys)` by
+       (qpat_assum `ce' = _` SUBST1_TAC >>
+        simp[ctor_decoder_coherent_vars]) >>
+     simp[] >> irule selected_register_one >>
+     irule selected_argument_decoder_accepts >> first_assum ACCEPT_TAC) >>
+  suspend "linked_grouped_legacy_positional_resources"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_positional_resources]:
+  `ce.ce_imm_alloca = NONE /\ ce.ce_vars =
+     FST (allocate_args (get_struct_fields (make_struct_fields_map_mods mods))
+       args 0 FEMPTY)` by
+    (qpat_assum `set_external_package_target _ _ = _` mp_tac >>
+     simp[NoAsms, set_external_package_target_def, package_external_fn_unit_def,
+          update_cenv_nonreentrant_def] >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     qpat_assum `(if _ then _ else _) with
+         <|ce_target := _; ce_nonreentrant := _|> = ce`
+       (mp_tac o AP_TERM ``\ce:compile_env. (ce.ce_imm_alloca,ce.ce_vars)``) >>
+     Cases_on `ret = NoneT` >>
+     pop_assum (fn ret_case =>
+       simp[NoAsms, ret_case, update_cenv_ret_abi_def, build_compile_env_unit_def,
+            pairTheory.ELIM_UNCURRY, pairTheory.FST, LET_THM])) >>
+  `(!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE) /\
+    EVERY (\a. ?off. FLOOKUP ce.ce_vars (FST a) =
+      SOME (MemLoc off (type_mem_bytes (get_struct_fields (make_struct_fields_map_mods mods))
+         (SND a)))) args` by
+    (qpat_assum `ce.ce_vars = _` SUBST1_TAC >>
+     drule_then
+       (qspecl_then [`get_struct_fields (make_struct_fields_map_mods mods)`,`0`,`FEMPTY`] mp_tac)
+       allocate_args_lookup >> simp[NoAsms, FLOOKUP_EMPTY]) >>
+  `!n p sz. FLOOKUP ce.ce_vars n <> SOME (PtrVar (Var p) sz)` by
+    (rpt gen_tac >> Cases_on `MEM n (MAP FST args)`
+     >- (qpat_assum `MEM n (MAP FST args)`
+          (qx_choose_then `arg` strip_assume_tac o REWRITE_RULE [MEM_MAP]) >>
+         qpat_assum `EVERY (\a. ?off. FLOOKUP ce.ce_vars (FST a) = _) args`
+           (qspec_then `arg` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+         impl_tac >- first_assum ACCEPT_TAC >>
+         BETA_TAC >>
+         disch_then (qx_choose_then `off` (fn lookup =>
+           qpat_assum `n = FST arg` (fn name =>
+             simp[NoAsms, name, lookup, var_location_distinct])))) >>
+     qpat_assum `!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE`
+       (drule_then (fn absent => simp[NoAsms, absent]))) >>
+  `compile_register_positional_args ce (build_positional_args ce args) 4 checked =
+    (registered_env,registered)` by
+    (qpat_assum `pos = build_positional_args _ _` (SUBST1_TAC o SYM) >>
+     first_assum ACCEPT_TAC) >>
+  suspend "linked_grouped_legacy_positional_fold"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_positional_fold]:
+  `local_ptrs_reserved registered_env registered` by
+    (qspecl_then [`build_positional_args ce args`,`ce`,`4`,`checked`,
+                    `registered_env`,`registered`] mp_tac
+       compile_register_positional_args_reserved >>
+     impl_tac
+     >- (rpt conj_tac
+         >- first_assum ACCEPT_TAC
+         >- (simp[NoAsms, build_positional_args_names] >> rpt strip_tac >>
+             CCONTR_TAC >>
+             qpat_assum `!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE`
+               (drule_then (fn outside =>
+                  qpat_assum `FLOOKUP ce.ce_vars n = SOME _`
+                    (CONTR_TAC o REWRITE_RULE [outside, optionTheory.NOT_NONE_SOME]))))
+         >- (rpt strip_tac >>
+             qpat_assum `FLOOKUP ce.ce_vars _ = SOME (PtrVar (Var _) _)`
+               (fn lookup => qpat_assum
+                 `!n p sz. FLOOKUP ce.ce_vars n <> SOME (PtrVar (Var p) sz)`
+                 (CONTR_TAC o (fn excluded => MATCH_MP (SPEC_ALL excluded) lookup)))) >>
+         qpat_assum `ce.ce_imm_alloca = NONE` (fn imm => simp[NoAsms, imm])) >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+  `4 + SUM (MAP tv_abi_size decoded_tys) < dimword (:256)` by
+    (qpat_assum `mc = 4 + SUM _` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  `fresh_vars_wrt checked u` by
+    (qpat_assum `selected_registration_resources _ _ _ 0 checked u`
+       (strip_assume_tac o PURE_REWRITE_RULE [selected_registration_resources_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `fresh_vars_wrt registered u` by
+    (irule fresh_vars_wrt_mono >> qexists_tac `checked` >>
+     qpat_assum `compile_register_positional_args _ _ _ checked = (_,registered)`
+       (mp_tac o MATCH_MP compile_register_positional_args_next_var) >>
+     asm_rewrite_tac [arithmeticTheory.GREATER_EQ]) >>
+  drule_at (Pat `calldata_decode_args u.vs_call_ctx.cc_calldata _ _ = _`)
+    (Q.INST [`PG` |-> `[]`] (SPEC_ALL selected_registration_fold)) >>
+  disch_then (drule_at (Pat `compile_register_positional_args _ (build_positional_args _ _) _ _ = _`)) >>
+  disch_then (drule_at (Pat `selected_registration_resources _ _ _ _ checked u`)) >>
+  disch_then (drule_at (Pat `bind_arguments _ _ _ = _`)) >>
+  disch_then (qspecl_then [`tn1`,`registered`,`G1`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
+  disch_then (qx_choosel_then [`s0`,`G2`,`tn2`] (map_every assume_tac o CONJUNCTS)) >>
+  suspend "linked_grouped_legacy_registered_path"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_registered_path]:
+  `!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
+    (start,FEMPTY,entry_taint) [] (OK s0,G2,tn2)` by
+    (rpt gen_tac >> irule gas_origin_ptr_path_trans >>
+     qexistsl_tac [`G1`,`u`,`tn1`] >> asm_rewrite_tac[]) >>
+  qpat_assum `selected_registration_frame u tn1 s0 tn2`
+    (strip_assume_tac o PURE_REWRITE_RULE [selected_registration_frame_def]) >>
+  `selected_registration_frame vs entry_taint s0 tn2` by
+    (pure_rewrite_tac [selected_registration_frame_def] >>
+     asm_rewrite_tac[]) >>
+  qpat_assum `selected_registration_frame vs entry_taint s0 tn2`
+    (strip_assume_tac o PURE_REWRITE_RULE [selected_registration_frame_def]) >>
+  `tn2.t_stor = {} /\ tn2.t_trans = {} /\ tn2.t_imm = {}` by
+    (qpat_assum `tn2.t_stor = entry_taint.t_stor` SUBST1_TAC >>
+     qpat_assum `tn2.t_trans = entry_taint.t_trans` SUBST1_TAC >>
+     qpat_assum `tn2.t_imm = entry_taint.t_imm` SUBST1_TAC >> simp[NoAsms, entry_taint_def]) >>
+  `s0.vs_initial_fmp = vs.vs_initial_fmp` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) [] (OK s0,G2,tn2)`
+       (qspecl_then [`ARB`,`ARB`] assume_tac) >>
+     drule_all decoder_origin_path_allocation_frame >> simp[NoAsms, Abbr `start`]) >>
+  qpat_assum `selected_registration_resources _ fn _ 0 registered s0`
+    (strip_assume_tac o PURE_REWRITE_RULE [selected_registration_resources_def]) >>
+  `fmp_room unit.cu_context fn s0` by
+    (irule entry_frontier_fmp_room >> conj_tac
+     >- asm_rewrite_tac[] >>
+     conj_tac
+     >- (qpat_assum `s0.vs_initial_fmp = vs.vs_initial_fmp` SUBST1_TAC >>
+         qpat_assum `ctx_has_dalloca unit.cu_context ==> unit_alloca_budget _ <= _ /\ _`
+           mp_tac >> simp[NoAsms]) >>
+     qexists_tac `ARB:instruction` >> first_assum ACCEPT_TAC) >>
+  `!j. j < LENGTH args ==> ?aid q p n.
+    FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP registered_env.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+    lookup_var q s0 = SOME (n2w p) /\ ptr_covers G2 tn2 q s0 n /\
+    (!mem. mem_agree_outside tn2.t_mem s0.vs_memory mem ==>
+      val_in_memory (EL j decoded_tys) (EL j tx.args) p mem)` by
+    (rpt strip_tac >>
+     qpat_assum `selected_registration_owners _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `j` mp_tac o REWRITE_RULE [selected_registration_owners_def]) >>
+     qpat_assum `j < LENGTH args` (fn bound => simp[NoAsms, bound, EL_MAP]) >>
+     strip_tac >> rename1 `FLOOKUP s0.vs_allocas aid = SOME (addr,n)` >>
+     qexistsl_tac [`aid`,`q`,`addr`,`n`] >> asm_rewrite_tac[]) >>
+  suspend "linked_grouped_legacy_registered_source"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_registered_source]:
+  rename1 `ALOOKUP mods src = SOME tops` >>
+  rename1 `Abbrev (body_code = subst_consts_stmts_mods _ fbody)` >>
+  rename1 `fn_allocs_ok_unit mods (src,mut,nr,raw,_,args,[],ret,body_code)` >>
+  `vyperInterpreter$lookup_function src tx.function_name External tops =
+    SOME (mut,nr,args,[],ret,fbody)` by
+    (qpat_assum `dflts = []` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  `src = ALOOKUP exps tx.function_name` by simp[NoAsms, Abbr `src`] >>
+  `lookup_raw_return_or_F src tx.function_name External tops = raw` by
+    (qpat_assum `dflts = []` SUBST_ALL_TAC >>
+     qpat_assum `(_ /\ top = FunctionDecl _ _ _ _ _ _ _ _ _) \/ public_getter_src _ top = _`
+       (DISJ_CASES_THEN2 strip_assume_tac
+         (strip_assume_tac o REWRITE_RULE [tagged_getter_source_tuple]))
+     >- (`MEM (src,tx.function_name) (external_name_keys_toplevel src top)` by
+           (qpat_assum `top = FunctionDecl _ _ _ _ _ _ _ _ _` SUBST1_TAC >>
+            simp[NoAsms, external_name_keys_toplevel_def]) >>
+         qpat_assum `vyperInterpreter$lookup_function src tx.function_name External tops = _`
+           (mp_tac o MATCH_MP (SPEC_ALL lookup_function_external_raw_cases)) >>
+         disch_then (DISJ_CASES_THEN strip_assume_tac)
+         >- (`top = FunctionDecl External mut nr rr tx.function_name args [] ret fbody` by
+              (qspecl_then [`tops`, `external_name_keys_toplevel src`, `top`,
+                 `FunctionDecl External mut nr rr tx.function_name args [] ret fbody`,
+                 `(src,tx.function_name)`] mp_tac all_distinct_flat_map_unique >>
+               impl_tac >- (rpt conj_tac >>
+                 (first_assum ACCEPT_TAC ORELSE simp[NoAsms, external_name_keys_toplevel_def])) >>
+               disch_then ACCEPT_TAC) >>
+             qpat_assum `lookup_raw_return src tx.function_name External tops = SOME rr` (fn ret =>
+               qpat_assum `top = FunctionDecl External mut nr raw tx.function_name args [] _ _` (fn left =>
+                 qpat_assum `top = FunctionDecl External mut nr rr tx.function_name args [] _ _`
+                   (mp_tac o REWRITE_RULE [left]) >>
+                 simp[NoAsms, lookup_raw_return_or_F_def, ret]))) >>
+         `public_getter_src src decl = SOME (mut,nr,F,tx.function_name,args,
+            ([]:expr list),ret,fbody)` by
+           (simp[NoAsms, tagged_getter_source_tuple] >>
+            rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         `MEM (src,tx.function_name) (external_name_keys_toplevel src decl)` by
+           (drule tagged_getter_name_key >> simp[NoAsms, fn_decl_name_def]) >>
+         `top = decl` by
+           (qspecl_then [`tops`, `external_name_keys_toplevel src`, `top`, `decl`,
+              `(src,tx.function_name)`] mp_tac all_distinct_flat_map_unique >>
+            impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+            disch_then ACCEPT_TAC) >>
+         qpat_assum `top = FunctionDecl _ _ _ _ _ _ _ _ _` (fn decl =>
+           qpat_assum `top = decl` (fn same =>
+             qpat_assum `is_public_getter_decl _ decl`
+               (CONTR_TAC o REWRITE_RULE [GSYM same, decl, is_public_getter_decl_def])))) >>
+     qspecl_then [`tops`,`src`,`tx.function_name`,`top`] mp_tac public_getter_raw_return_none >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then (fn none => asm_rewrite_tac [lookup_raw_return_or_F_def, none, optionTheory.option_case_def])) >>
+  suspend "linked_grouped_legacy_registered_relations"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_registered_relations]:
+  `set_external_package_target rpolicy.rpol_target
+      (package_external_fn_unit mods T (K global_nonreentrant_slot)
+        (src,subst_consts_fn_mods (consts_env_mods mods)
+          (mut,nr,lookup_raw_return_or_F src tx.function_name External tops,
+           tx.function_name,args,[],ret,fbody))) =
+      ("fn_" ++ tx.function_name,ce,pos,mc,pay,nr,key,tr,view,body_code,rt)` by
+    (qpat_assum `lookup_raw_return_or_F _ _ _ _ = raw` (fn rr =>
+       qpat_assum `Abbrev (body_code = _)` (fn body =>
+         PURE_REWRITE_TAC [rr, subst_consts_fn_mods_def, subst_consts_expr_mods_def,
+              GSYM (REWRITE_RULE [markerTheory.Abbrev_def] body)])) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `initial_venom_state_rel_mods _ _ _ vs`
+    (strip_assume_tac o PURE_REWRITE_RULE [initial_venom_state_rel_mods_def]) >>
+  `?es0. send_call_value mut cx
+    (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
+    (INL (),es0)` by
+    (Cases_on `send_call_value mut cx
+      (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>)` >>
+     rename1 `send_call_value mut cx _ = (paid,estate)` >>
+     Cases_on `paid`
+     >- (qexists_tac `estate` >> qpat_assum `send_call_value mut cx _ = _`
+           (fn send => simp[NoAsms, send])) >>
+     `value_transfer_ok cx.txn
+       (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>).accounts` by
+       (simp[NoAsms, Abbr `cx`, initial_evaluation_context_def, initial_state_def] >>
+        first_assum ACCEPT_TAC) >>
+     drule_all send_call_value_reject_condition >>
+     qpat_assum `~(mut <> Payable /\ tx.value <> 0)` (fn accepted =>
+       simp[NoAsms, Abbr `cx`, initial_evaluation_context_def, CONJ_COMM, accepted])) >>
+  `send_call_value mut (initial_evaluation_context am.sources am.layouts tx src)
+      (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
+      (INL (),es0)` by
+    (qpat_assum `Abbrev (cx = _)` (fn cx =>
+       PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] cx)]) >>
+     first_assum ACCEPT_TAC) >>
+  `vars_pc_only (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+            vs_inst_idx := 0|>) vs` by
+    simp[NoAsms, vars_pc_only_def, venomStateTheory.venom_state_component_equality] >>
+  `!H:(bool # 256 word # type_value) list # num list.
+    stmt_state_rel H unit.cu_context fn registered_env cx es0 s0 /\
+    ghost_inv H NONE registered_env cx es0 G2 tn2 s0` by
+    (gen_tac >>
+     qpat_assum `Abbrev (cx = _)` (fn cx =>
+       PURE_REWRITE_TAC [REWRITE_RULE [markerTheory.Abbrev_def] cx]) >>
+     mp_tac (Q.INST [`efn` |-> `fn`, `cenv0` |-> `ce`,
+       `pos_args` |-> `pos`, `mincd` |-> `mc`, `ut'` |-> `tr`, `iv` |-> `view`,
+       `lowered_body` |-> `body_code`, `st` |-> `checked`,
+       `cenv` |-> `registered_env`, `sa` |-> `registered`,
+       `elbl` |-> `"__entry"`, `s1` |-> `vs`, `tvs` |-> `decoded_tys`,
+       `G0` |-> `G2`, `tn0` |-> `tn2`, `lbl` |-> `"fn_" ++ tx.function_name`,
+       `site` |-> `ARB:instruction`]
+        (Q.INST_TYPE [`:'a` |-> `:256`]
+          registration_actual_endpoint_relations_from_prefix_mods)) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  suspend "linked_grouped_legacy_shadow_support"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_shadow_support]:
+  `shadow_body_inv_mods mods exps unit.cu_context shadow_unit.cu_context` by
+    (map_every (fn pattern =>
+       qpat_assum pattern (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]))
+       [`Abbrev (groups = _)`,`Abbrev (ips = _)`,`Abbrev (fall = _)`] >>
+     qmatch_asmsub_abbrev_tac
+       `run_grouped_lowering grouped_shadow_groups
+         (MAP gas_shadow_internal_package ips) (OPTION_MAP gas_shadow_fallback_package fall)
+         rpolicy "__entry" = SOME shadow_unit` >>
+     qpat_assum `check_contract F am.layouts tx.target mods = SOME art`
+       (mp_then Any mp_tac (Q.INST [`shadow_groups` |-> `grouped_shadow_groups`,
+          `rp` |-> `rpolicy`] grouped_runtime_shadow_body_inv_mods)) >>
+     disch_then (qspecl_then [`unit`,`rpolicy`,`ips`,`ints`,`imp_ctors`,
+       `groups`,`grouped_shadow_groups`,`fb`,`fall`,`exts`,`exps`,`ctor`] mp_tac) >>
+     impl_tac
+     >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+       qpat_assum `Abbrev (grouped_shadow_groups = _)`
+         (ACCEPT_TAC o REWRITE_RULE [markerTheory.Abbrev_def])]) >>
+     qpat_assum `run_grouped_lowering grouped_shadow_groups _ _ _ _ = SOME shadow_unit`
+       (fn compiled => simp[NoAsms, compiled, optionTheory.SOME_11])) >>
   suspend "linked_grouped_legacy_value_accepted"
 QED
 
+(* At this cut, start-to-s0 is the actual grouped zero-mark path and the
+   selected scope/state relations hold at the paired guarded-body code. *)
 Resume linked_runtime_dispatched_readings_certificate[linked_grouped_legacy_value_accepted]:
   cheat
 QED
@@ -6181,6 +6802,201 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omi
          (print ("OMITTED INPUT: " ^ term_to_string conclusion ^ "\n"); ALL_TAC goal)) >>
       NO_TAC) >>
   disch_then (mk_asm "omitted_execution") >>
+  suspend "linked_grouped_default_omitted_replay"
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omitted_replay]:
+  `LENGTH tx.args = LENGTH args - LENGTH dflts + k` by
+    (`LENGTH tx.args = LENGTH prefix` by
+       (qpat_assum `calldata_decode_args cd decoded_tys 0 = SOME tx.args`
+          (mp_tac o MATCH_MP (SPEC_ALL calldata_decode_args_length)) >>
+        qpat_assum `OPT_MMAP _ tys = SOME decoded_tys`
+          (mp_tac o MATCH_MP (SPEC_ALL OPT_MMAP_LENGTH)) >>
+        qpat_assum `tys = MAP SND prefix` (fn types => simp[NoAsms, types])) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`LENGTH tx.args = LENGTH prefix`, `LENGTH ds = LENGTH dflts`,
+        `LENGTH ds <= LENGTH args`, `k <= LENGTH dflts`] >>
+     qpat_assum `prefix = TAKE (LENGTH args - LENGTH dflts + k) args`
+       (fn pref => simp[NoAsms, pref, LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF]) >>
+     decide_tac) >>
+  `LENGTH tx.args <= LENGTH args /\ LENGTH args - LENGTH tx.args <= LENGTH dflts /\
+    LENGTH dflts - (LENGTH args - LENGTH tx.args) = k` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`LENGTH tx.args = LENGTH args - LENGTH dflts + k`, `LENGTH ds = LENGTH dflts`,
+        `LENGTH ds <= LENGTH args`, `k <= LENGTH dflts`] >> decide_tac) >>
+  `EVERY (runtime_constant_expr mods) dflts /\ well_typed_exprs initializer_env dflts` by
+    (`External <> Deploy` by simp[NoAsms] >>
+     drule_all vyperTypeContractContextTheory.check_contract_runtime_function_body_MEM >>
+     qpat_assum `Abbrev (initializer_env = _)` (fn ien =>
+       simp_tac bool_ss [check_function_body_def, LET_THM, defaults_env_function_entry_env,
+         GSYM (REWRITE_RULE [markerTheory.Abbrev_def] ien)]) >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `MAP (\(_,_,_,e). e) (DROP k vars) =
+     subst_consts_exprs_mods (consts_env_mods mods) (DROP k dflts)` by
+    (qpat_assum `MAP _ (DROP k vars) = DROP k ds` SUBST1_TAC >>
+     qpat_assum `ds = subst_consts_exprs_mods _ _` SUBST1_TAC >>
+     `!es. subst_consts_exprs_mods (consts_env_mods mods) es =
+       MAP (subst_consts_expr_mods (consts_env_mods mods)) es` by
+       (POP_ASSUM_LIST (K ALL_TAC) >> Induct >> simp[subst_consts_expr_mods_def]) >>
+     pop_assum (fn eq => simp[NoAsms, eq, MAP_DROP])) >>
+  `!gs. eval_external_defaults cx (DROP k dflts) (seed with gas_obs := gs) =
+     eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars)) (seed with gas_obs := gs)` by
+    (gen_tac >>
+     `eval_external_defaults cx
+        (subst_consts_exprs_mods (consts_env_mods mods) (DROP k dflts)) (seed with gas_obs := gs) =
+      eval_external_defaults cx (DROP k dflts) (seed with gas_obs := gs)` by
+       (qpat_assum `body_const_cells_agree_mods mods cx initializer_env seed`
+          (qx_choosel_then [`roots`,`cell_art`,`imms`] (map_every assume_tac o CONJUNCTS) o
+           REWRITE_RULE [body_const_cells_agree_mods_def]) >>
+        irule (cj 2 linkedRuntimeDefaultReplayTheory.const_subst_runtime_default_exprs_mods) >>
+        qexistsl_tac [`cell_art`,`initializer_env`,`mods`,`roots`] >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+        TRY (irule EVERY_DROP >> first_assum ACCEPT_TAC) >>
+        TRY (irule vyperTypeEvalProofsTheory.well_typed_exprs_DROP >> first_assum ACCEPT_TAC) >>
+        qpat_assum `const_cells_agree roots seed`
+           (mp_tac o PURE_REWRITE_RULE [const_cells_agree_def]) >>
+        simp[NoAsms,const_cells_agree_def]) >>
+     qpat_assum `eval_external_defaults cx (subst_consts_exprs_mods _ _) _ = _`
+       (fn replay => PURE_ONCE_REWRITE_TAC [GSYM replay]) >>
+     qpat_assum `MAP _ (DROP k vars) = subst_consts_exprs_mods _ _`
+       (fn eq => PURE_REWRITE_TAC [GSYM eq]) >>
+     namedCases_on `eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+                          (seed with gas_obs := gs)` ["res endpoint"] >>
+     `endpoint with gas_obs := [] = (seed with gas_obs := gs) with gas_obs := []` by
+       drule_all_then ACCEPT_TAC linkedDefaultSourceFrameTheory.grouped_checked_default_source_frame_mods >>
+     `endpoint.scopes = [FEMPTY]` by
+       (pop_assum (mp_tac o Q.AP_TERM `\s:evaluation_state. s.scopes`) >>
+        qpat_assum `seed.scopes = [FEMPTY]` (fn sc => simp[NoAsms,sc])) >>
+     `(seed with gas_obs := gs) with scopes := [FEMPTY] = seed with gas_obs := gs` by
+       (qpat_assum `seed.scopes = [FEMPTY]` (fn sc =>
+          simp[NoAsms,sc,evaluation_state_component_equality])) >>
+     `endpoint with scopes := [FEMPTY] = endpoint` by
+       (qpat_assum `endpoint.scopes = [FEMPTY]` (fn sc =>
+          simp[NoAsms,sc,evaluation_state_component_equality])) >>
+     PURE_REWRITE_TAC [eval_external_defaults_run, LET_THM] >>
+     qpat_assum `(seed with gas_obs := gs) with scopes := [FEMPTY] = _`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `eval_exprs cx (MAP _ (DROP k vars)) (seed with gas_obs := gs) = _`
+       (fn th => PURE_REWRITE_TAC [th]) >>
+     qpat_assum `seed.scopes = [FEMPTY]` (fn sc =>
+       qpat_assum `endpoint with scopes := [FEMPTY] = endpoint`
+         (fn ep => simp[NoAsms,sc,ep]))) >>
+  `!gs. (SND (eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+        (seed with gas_obs := gs))).storage_trace = seed.storage_trace` by
+    (gen_tac >>
+     namedCases_on `eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+                          (seed with gas_obs := gs)` ["res endpoint"] >>
+     `endpoint with gas_obs := [] = (seed with gas_obs := gs) with gas_obs := []` by
+       drule_all_then ACCEPT_TAC linkedDefaultSourceFrameTheory.grouped_checked_default_source_frame_mods >>
+     pop_assum (mp_tac o Q.AP_TERM `\s:evaluation_state. s.storage_trace`) >>
+     simp[NoAsms]) >>
+  asm_x "omitted_execution"
+    (qx_choose_then `init_marks` (DISJ_CASES_THEN2 strip_assume_tac
+      (DISJ_CASES_THEN2 (qx_choosel_then [`init_res`,`init_ee`,`init_result`,`Ginit`,`tninit`]
+          (map_every assume_tac o CONJUNCTS)) strip_assume_tac)) o
+       BETA_RULE o REWRITE_RULE [gasOutcomeFullModsTheory.gas_outcome_full_mods_def])
+  >- (qpat_assum `gas_bad_storage_at _ _ _ _ _ _`
+        (qspec_then `[]:bytes32 list` mp_tac o REWRITE_RULE [gasStorageTheory.gas_bad_storage_at_def]) >>
+      qpat_assum `!gs. (SND (eval_exprs cx _ _)).storage_trace = seed.storage_trace`
+        (qspec_then `gas_explicit init_marks supplied.vs_gas_readings ++ []` (fn tr =>
+          qpat_assum `storage_trace_domain cx (initial_state am []) seed.storage_trace`
+            (fn dom => PURE_REWRITE_TAC [tr,dom]))) >> simp[NoAsms])
+  >- suspend "linked_grouped_default_omitted_run" >>
+  drule_then (map_every assume_tac o CONJUNCTS)
+    gasExemptCertModsTheory.gas_exempt_cert_execution_mods >>
+  `eval_exprs cx (MAP (\(_,_,_,e). e) (DROP k vars))
+      (seed with gas_obs := gas_explicit init_marks supplied.vs_gas_readings) =
+    (INR (Error err), ee with gas_obs := [])` by
+    (qpat_assum `!tail. ignore_bind (eval_exprs cx _) _ _ = _`
+       (qspec_then `[]:bytes32 list`
+         (mp_tac o MATCH_MP vyperStatePreservationTheory.ignore_bind_split o
+          REWRITE_RULE [APPEND_NIL])) >>
+     disch_then (DISJ_CASES_THEN strip_assume_tac)
+     >- (qpat_assum `return () _ = _` mp_tac >> simp[NoAsms,return_def]) >>
+     qpat_assum `INR (Error err) = INR _` mp_tac >>
+     qpat_assum `eval_exprs cx _ _ = (INR _,_)` mp_tac >>
+     simp[NoAsms, pairTheory.ELIM_UNCURRY] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  drule_all_then (fn no_exempt =>
+    qpat_assum `unspecified_behaviour_exempt_mods mods err`
+      (CONTR_TAC o MP (NOT_ELIM no_exempt)))
+    linkedDefaultErrorTheory.runtime_constant_defaults_no_exempt_mods
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omitted_run]:
+  qpat_assum `!tail. eval_exprs cx _ _ = (init_res,_)`
+    (qspec_then `[]:bytes32 list` (assume_tac o PURE_REWRITE_RULE [pairTheory.ELIM_UNCURRY])) >>
+  `init_ee with gas_obs := [] = seed` by
+    (map_every (fn pat => qpat_assum pat
+       (assume_tac o SIMP_RULE bool_ss [pairTheory.ELIM_UNCURRY]))
+       [`EVERY (runtime_constant_expr mods) (MAP _ (DROP k vars))`,
+        `no_sha256_exprs (MAP _ (DROP k vars))`,
+        `eval_exprs cx _ _ = (init_res,_)`] >>
+     drule_all_then mp_tac linkedDefaultSourceFrameTheory.grouped_checked_default_source_frame_mods >>
+     qpat_assum `seed.gas_obs = []` (fn gas =>
+       simp[NoAsms, GSYM gas, evaluation_state_component_equality])) >>
+  `!tail. eval_external_defaults cx
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts)
+      (seed with gas_obs := gas_explicit init_marks vs.vs_gas_readings ++ tail) =
+      (init_res,seed with gas_obs := tail)` by
+    (gen_tac >>
+     map_every (fn pat => qpat_assum pat (fn eq => PURE_REWRITE_TAC [eq]))
+       [`LENGTH dflts - (LENGTH args - LENGTH tx.args) = k`,
+        `!gs. eval_external_defaults cx (DROP k dflts) _ = _`] >>
+     qpat_assum `!tail. eval_exprs cx _ _ = (init_res,_)`
+       (qspec_then `tail` mp_tac) >>
+     qpat_assum `supplied.vs_gas_readings = vs.vs_gas_readings`
+       (fn gas => simp[NoAsms,gas,pairTheory.ELIM_UNCURRY]) >>
+     qpat_assum `init_ee with gas_obs := [] = seed` (SUBST1_TAC o SYM) >>
+     simp[NoAsms]) >>
+  `!H. valid_horizon cx (initial_state am []) H seed.storage_trace ==>
+     gas_origin_ptr_path (cx_dead H cx,0,
+       gas_explicit_sites unit.cu_context shadow_unit.cu_context,unit.cu_context,fn,[])
+       (start,FEMPTY,entry_taint) init_marks (init_result,Ginit,tninit)` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx (initial_state am []) H init_ee.storage_trace` by
+       (qpat_assum `init_ee with gas_obs := [] = seed`
+          (mp_tac o Q.AP_TERM `\s:evaluation_state. s.storage_trace`) >>
+        simp[NoAsms] >> disch_then SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     qpat_assum `!H. valid_horizon cx (initial_state am []) H init_ee.storage_trace ==> _`
+       (drule_then (CONJUNCTS_THEN2 assume_tac kall_tac)) >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (start,FEMPTY,entry_taint) []
+       (OK supplied,Gsupplied,tnsupplied)` (qspecl_then
+         [`cx_dead H cx`,`gas_explicit_sites unit.cu_context shadow_unit.cu_context`]
+         (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+     simp[NoAsms] >> disch_then irule >> first_assum ACCEPT_TAC) >>
+  `!P defaults.
+      EVERY (\(aid,p,base,tv,v). P (aid,p,base,tv) v) kept /\
+      LIST_REL P (DROP k slots) defaults ==>
+      LIST_REL P slots (values ++ defaults)` by
+    (rpt gen_tac >> strip_tac >>
+     `LIST_REL P (TAKE k slots) values` by
+       (qpat_assum `EVERY _ kept` mp_tac >>
+        qpat_assum `LENGTH (TAKE k slots) = LENGTH values` (fn len =>
+          simp[NoAsms, Abbr `kept`, LIST_REL_EVERY_ZIP, EVERY_MAP,
+               EVERY_MEM, FORALL_PROD, len])) >>
+     `LIST_REL P (TAKE k slots ++ DROP k slots) (values ++ defaults)` by
+       (irule LIST_REL_APPEND_suff >> conj_tac >> first_assum ACCEPT_TAC) >>
+     pop_assum (ACCEPT_TAC o PURE_REWRITE_RULE [TAKE_DROP])) >>
+  `find_function_module am tx.target tx.function_name = src /\
+    get_module_code cx src = SOME selected_tops /\
+    lookup_exported_function cx am tx.function_name = SOME (mut,nr,args,dflts,ret,selected_body)` by
+    (qpat_assum `Abbrev (cx = _)` (assume_tac o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     drule_all linkedRuntimeSourceLookupTheory.linked_runtime_source_lookup >>
+     qpat_assum `vyperInterpreter$lookup_function src tx.function_name External selected_tops = _`
+       (fn lookup => simp[NoAsms,lookup])) >>
+  `!gs. send_call_value mut cx
+      (initial_state am [FEMPTY] with
+       <|outcomes := SOME vs.vs_outcomes; requests := []; gas_obs := gs; storage_trace := []|>) =
+      (INL (),seed with gas_obs := gs)` by
+    (qpat_assum `send_call_value mut cx
+      (initial_state am [FEMPTY] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) = _`
+        (mp_tac o MATCH_MP externalEntryBoundTheory.send_call_value_with_gas_obs) >>
+     simp[NoAsms, initial_state_def, evaluation_state_accfupds]) >>
+  `tx.args = TAKE (LENGTH args - LENGTH ds) tx.args ++ values` by
+    (qpat_assum `Abbrev (values = _)` (fn split =>
+       simp[NoAsms, REWRITE_RULE [markerTheory.Abbrev_def] split, TAKE_DROP])) >>
   suspend "linked_grouped_default_omitted_apply"
 QED
 
