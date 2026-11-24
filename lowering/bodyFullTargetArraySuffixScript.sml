@@ -2,7 +2,7 @@
 Theory bodyFullTargetArraySuffix
 Ancestors
   bodyFullTargetSubscript bodyFullTargetArraySource bodyFullTargetArrayLoad
-  bodyFullTargetArrayScalar bodyFullTargetAttribute targetSubscriptMemory
+  bodyFullTargetArrayScalar arrayAbortItinerary bodyFullTargetAttribute targetSubscriptMemory
   targetSubscriptStorage bodyPtrDefs loweringPosts freshWrites fragGasOriginPtrDead
   targetSubscriptContinuation exprLowering exprSimArrayIndex
   finite_map pair list bodyFullTargetDefs venomState ptrDiscipline exprLoweringProps
@@ -1090,18 +1090,25 @@ Theorem array_tail_scalar_tape[local]:
       op_prov H p = op_prov G bop /\ op_taint tm p = {}) /\
     run_inst_seq (emitted_insts sa sb) s =
       (if idx_in_range sgn iw nw then OK (t with vs_inst_idx := s.vs_inst_idx)
-       else Abort Revert_abort (t with vs_inst_idx := s.vs_inst_idx))
+       else Abort Revert_abort (t with vs_inst_idx := s.vs_inst_idx)) /\
+    (if idx_in_range sgn iw nw then
+       ?u v. run_inst_seq (emitted_insts sa sc) s = OK u /\
+             run_inst_seq (emitted_insts sc sb)
+               (u with vs_inst_idx := LENGTH sc.cs_current_insts) = OK v /\
+             t = (v with vs_inst_idx := LENGTH sb.cs_current_insts)
+     else ?raw. array_abort_itinerary (emitted_insts sa sc) func s Revert_abort raw t)
 Proof
   strip_tac >>
   `sc.cs_current_bb = sa.cs_current_bb` by fs[same_blocks_def] >>
-  drule_all array_bounds_check_nonalias_uniform >>
+  drule_all array_bounds_check_nonalias_uniform_observed >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
   reverse (Cases_on `idx_in_range sgn iw nw`) >> fs[]
   >- (`run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t` by
         (drule_all emitted_insts_append >> simp[run_inst_seq_append_err]) >>
       qexistsl [`t with vs_inst_idx := j`, `H`, `tm`] >> simp[] >>
       qpat_x_assum `t with vs_vars := s.vs_vars = _` mp_tac >>
-      simp[venom_state_component_equality, revert_state_def, set_returndata_def]) >>
+      simp[venom_state_component_equality, revert_state_def, set_returndata_def] >>
+      disch_tac >> qexists `t` >> simp[]) >>
   `ci_mono sa sc` by metis_tac[array_tail_scalar_compiler_mono] >>
   `(!x. bop = Var x ==> not_fresh_at sc x) /\
    (!x. idx = Var x ==> not_fresh_at sc x)` by
@@ -1155,6 +1162,10 @@ Proof
     (irule (SIMP_RULE (srw_ss()) [instIdxIndepTheory.exec_result_map_def]
        (Q.INST [`r` |-> `OK t'`] array_admin_run_join)) >>
      qexistsl [`sc`,`sg`] >> fs[EVERY_MEM]) >>
+  `~t'.vs_halted /\ t'.vs_current_bb = sb.cs_current_bb` by
+    (qpat_assum `t' with vs_vars := sg.vs_vars = sg` mp_tac >>
+     simp[Abbr `sg`, venom_state_component_equality, same_blocks_def] >>
+     gvs[same_blocks_def]) >>
   qexistsl [`t' with vs_inst_idx := LENGTH sb.cs_current_insts`, `H'`, `tm'`] >>
   simp[instIdxIndepTheory.eval_op_inst_idx] >>
   conj_tac
@@ -1165,10 +1176,66 @@ Proof
   conj_tac
   >- (rpt strip_tac >> fs[ci_mono_def, Abbr `sg`] >>
       metis_tac[not_fresh_at_mono]) >>
-  qpat_x_assum `t' with vs_vars := sg.vs_vars = sg` mp_tac >>
-  qpat_x_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
-  simp[Abbr `sg`, venom_state_component_equality, same_blocks_def] >>
-  rpt strip_tac >> gvs[same_blocks_def]
+  conj_tac
+  >- (qpat_x_assum `t' with vs_vars := sg.vs_vars = sg` mp_tac >>
+      qpat_x_assum `t with vs_vars := s.vs_vars = s` mp_tac >>
+      simp[Abbr `sg`, venom_state_component_equality, same_blocks_def] >>
+      rpt strip_tac >> gvs[same_blocks_def]) >>
+  qexists `t'` >> simp[] >>
+  `LENGTH sa.cs_current_insts + LENGTH (emitted_insts sa sc) =
+   LENGTH sc.cs_current_insts` by gvs[] >>
+  qpat_assum `LENGTH sa.cs_current_insts + _ = LENGTH sc.cs_current_insts`
+    (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `run_inst_seq (emitted_insts sc sb) sg = OK t'` mp_tac >>
+  simp[Abbr `sg`]
+QED
+
+Theorem array_tail_scalar_uniform_observed:
+  array_bounds_check idx len sgn sa = ((),sc) /\
+  array_elem_ptr bop idx dyn ws esz sc = (p,sb) /\
+  eval_operand bop s = SOME b /\ eval_operand idx s = SOME iw /\
+  eval_operand len s = SOME nw /\
+  (!x. bop = Var x ==> not_fresh_at sa x) /\
+  (!x. idx = Var x ==> not_fresh_at sa x) /\
+  (!x. len = Var x ==> not_fresh_at sa x) /\
+  op_taint tn bop = {} /\ op_taint tn idx = {} /\ op_taint tn len = {} /\
+  op_prov G idx = NONE /\ op_prov G len = NONE /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  same_blocks sa sc /\ same_blocks sc sb /\
+  sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc /\
+  sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb /\
+  fn_has_code sa sc func /\ fn_has_code sc sb func /\
+  EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+               ~is_terminator ins.inst_opcode) (emitted_insts sa sc) /\
+  EVERY (\ins. ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+               ~is_terminator ins.inst_opcode) (emitted_insts sc sb) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t H tm.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (if idx_in_range sgn iw nw then OK t else Abort Revert_abort t,H,tm)) /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP H x = FLOOKUP G x /\ FLOOKUP tm.t_var x = FLOOKUP tn.t_var x /\
+      FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
+    (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) =
+      (if idx_in_range sgn iw nw then s else revert_state (set_returndata [] s)) /\
+    (idx_in_range sgn iw nw ==>
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      eval_operand p t = SOME ((if dyn then b + n2w ws else b) + iw * n2w esz) /\
+      op_prov H p = op_prov G bop /\ op_taint tm p = {}) /\
+    (if idx_in_range sgn iw nw then
+       ?u v. run_inst_seq (emitted_insts sa sc) s = OK u /\
+             run_inst_seq (emitted_insts sc sb)
+               (u with vs_inst_idx := LENGTH sc.cs_current_insts) = OK v /\
+             t = (v with vs_inst_idx := LENGTH sb.cs_current_insts)
+     else ?raw. array_abort_itinerary (emitted_insts sa sc) func s Revert_abort raw t)
+Proof
+  strip_tac >> drule_all array_tail_scalar_tape >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl [`t`,`H`,`tm`] >> simp[]
 QED
 
 Theorem array_tail_scalar_uniform:
@@ -1208,9 +1275,9 @@ Theorem array_tail_scalar_uniform:
       eval_operand p t = SOME ((if dyn then b + n2w ws else b) + iw * n2w esz) /\
       op_prov H p = op_prov G bop /\ op_taint tm p = {})
 Proof
-  strip_tac >> drule_all array_tail_scalar_tape >>
+  strip_tac >> drule_all array_tail_scalar_uniform_observed >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  qexistsl [`t`,`H`,`tm`] >> simp[]
+  qexistsl_tac [`t`,`H`,`tm`] >> simp[]
 QED
 
 Theorem array_tail_packet_finite_tape[local]:
@@ -1298,6 +1365,7 @@ Proof
      fs[allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
   drule_all array_tail_scalar_tape >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
+  qpat_x_assum `if idx_in_range _ _ _ then (?u v. _) else _` kall_tac >>
   `run_inst_seq (emitted_insts sn sb) t2 =
       (if idx_in_range (is_signed_type (expr_type e)) iw w
        then OK (t' with vs_inst_idx := t2.vs_inst_idx)
