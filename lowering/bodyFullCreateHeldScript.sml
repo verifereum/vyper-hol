@@ -127,7 +127,7 @@ Proof
   rpt (goal_assum (drule_at Any))
 QED
 
-Theorem blueprint_compile_cuts[local]:
+Theorem blueprint_compile_cuts:
   gas_shadow_state sa sh /\
   lower_value compile_expr cenv ty
     (Call ann (CreateTarget (CreateFromBlueprint raw) salted rof ks)
@@ -7896,7 +7896,7 @@ Resume create_copy_expr_full_ok[salt_finish]:
 QED
 Finalise create_copy_expr_full_ok
 
-Theorem blueprint_pre_args[local]:
+Theorem blueprint_pre_args:
   expr_body_pre cenv cx env
     (Call ann (CreateTarget (CreateFromBlueprint raw) salted rof ks) args dflt) es ==>
   ann = BaseT AddressT /\
@@ -7920,7 +7920,7 @@ Proof
   metis_tac[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]
 QED
 
-Theorem blueprint_read_prepared[local]:
+Theorem blueprint_read_prepared:
   IS_SOME ee.outcomes /\ dest_AddressV target = SOME addr /\
   dest_NumV amount = SOME value /\ dest_NumV offset = SOME off /\
   dest_optional_salt salt = SOME sw /\
@@ -7966,7 +7966,7 @@ Proof
   Cases_on `cx.txn.is_static` >> simp[]
 QED
 
-Theorem blueprint_cut_code[local]:
+Theorem blueprint_cut_code:
   lower_value compile_expr cenv ty target sa = (x,a) /\
   compile_create_blueprint_args compile_expr cenv raw later ctor a = ((p,n),b) /\
   lower_value compile_expr cenv ty' amount b = (y,c) /\
@@ -11144,7 +11144,7 @@ Proof
   strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem blueprint_scalar_source_split[local]:
+Theorem blueprint_scalar_source_split:
   LENGTH salts = (if salted then 1 else 0) ==>
   bind (eval_exprs cx (amount::(salts ++ [offset]))) (next:value list -> evaluation_state -> 'a evaluation_result) =
   bind (eval_exprs cx (amount::(salts ++ [offset])))
