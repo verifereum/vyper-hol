@@ -126,13 +126,9 @@ Definition ricf_call_taint_def:
   ricf_call_taint tn rq s r ro rs =
     tn with <|t_mem := tn.t_mem DIFF
       {i | ro <= i /\ i < ro + LENGTH (TAKE rs r.vs_returndata)};
-      t_stor := if ~rq.cr_static /\ r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\
-        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_stor := if adopt_guard rq.cr_static s r (HD s.vs_outcomes).co_success
         then {} else tn.t_stor;
-      t_trans := if ~rq.cr_static /\ r.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST r.vs_requests) /\
-        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+      t_trans := if adopt_guard rq.cr_static s r (HD s.vs_outcomes).co_success
         then {} else tn.t_trans|>
 End
 

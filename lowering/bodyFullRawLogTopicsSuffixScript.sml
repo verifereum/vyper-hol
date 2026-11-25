@@ -202,10 +202,28 @@ Proof
      conj_tac
      >- (qspecl_then [`gas_shadow_env T cenv`,`expr_type e`,`gas_shadow_expr e`,`shadow_sa`] mp_tac ci_mono_lower_value_compile_expr >> simp[]) >>
      qspecl_then [`compile_expr`,`gas_shadow_env T cenv`,`MAP gas_shadow_expr rest`,`shadow_sm`] mp_tac ci_mono_compile_multi_exprs >> simp[compile_expr_ci_mono]) >>
-  `fn_has_code sa sm func /\ fn_has_code sm last func /\
-   fn_has_code shadow_sa shadow_sm shadow_func /\
+  (* Split the concrete and shadow code at their respective midpoints. *)
+  `fn_has_code sa sm func /\ fn_has_code sm last func` by
+    (MATCH_MP_TAC (Q.SPECL [`sa`, `sm`, `last`, `func`]
+                     fragExecTheory.fn_has_code_split) >>
+     rpt conj_tac
+     >- qpat_assum `ci_mono sa sm`
+          (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ci_mono_def])
+     >- qpat_assum `ci_mono sm last`
+          (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ci_mono_def]) >>
+     qpat_assum `last = sb` (fn eq => rewrite_tac[eq]) >>
+     first_assum ACCEPT_TAC) >>
+  `fn_has_code shadow_sa shadow_sm shadow_func /\
    fn_has_code shadow_sm shadow_last shadow_func` by
-    (fs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]) >>
+    (MATCH_MP_TAC (Q.SPECL [`shadow_sa`, `shadow_sm`, `shadow_last`, `shadow_func`]
+                     fragExecTheory.fn_has_code_split) >>
+     rpt conj_tac
+     >- qpat_assum `ci_mono shadow_sa shadow_sm`
+          (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ci_mono_def])
+     >- qpat_assum `ci_mono shadow_sm shadow_last`
+          (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ci_mono_def]) >>
+     qpat_assum `shadow_last = shadow_sb` (fn eq => rewrite_tac[eq]) >>
+     first_assum ACCEPT_TAC) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_exprs_full_ok cx (e::rest)`
@@ -261,8 +279,17 @@ Proof
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `headR`] >> rpt strip_tac >>
-  Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
-  metis_tac[expr_exit_INR_type]
+  Cases_on `res`
+  >- (qpat_assum `expr_exit (INL _) _` mp_tac >>
+      simp_tac bool_ss [exprSimDefsTheory.expr_exit_INL]) >>
+  rename1 `expr_exit (INR raised) r` >>
+  qexists_tac `raised` >> simp_tac bool_ss [] >>
+  conj_tac
+  >- qpat_assum `expr_exit (INR raised) r`
+       (MATCH_ACCEPT_TAC o MATCH_MP (fst (EQ_IMP_RULE
+         (SPEC_ALL expr_exit_INR_type)))) >>
+  qpat_assum `halt_exit _ _ _ (INR raised) r` mp_tac >>
+  simp_tac bool_ss [exprSimDefsTheory.halt_exit_def, sumTheory.INR_11]
 QED
 
 Resume raw_log_topics_suffix_full_under_compose[continue]:
@@ -385,8 +412,17 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
   qpat_assum `gas_outcome_full _ _ _ _ (eval_exprs cx rest) _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `tailR`] >> rpt strip_tac >>
-  Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
-  metis_tac[expr_exit_INR_type]
+  Cases_on `res`
+  >- (qpat_assum `expr_exit (INL _) _` mp_tac >>
+      simp_tac bool_ss [exprSimDefsTheory.expr_exit_INL]) >>
+  rename1 `expr_exit (INR raised) r` >>
+  qexists_tac `raised` >> simp_tac bool_ss [] >>
+  conj_tac
+  >- qpat_assum `expr_exit (INR raised) r`
+       (MATCH_ACCEPT_TAC o MATCH_MP (fst (EQ_IMP_RULE
+         (SPEC_ALL expr_exit_INR_type)))) >>
+  qpat_assum `halt_exit _ _ _ (INR raised) r` mp_tac >>
+  simp_tac bool_ss [exprSimDefsTheory.halt_exit_def, sumTheory.INR_11]
 QED
 
 Resume raw_log_topics_suffix_full_under_compose[return_cons]:

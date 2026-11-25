@@ -15,13 +15,9 @@ Theorem ld_consume_call_outcome_shared_effects:
                t_trans := if s1.vs_transient <> s.vs_transient then {} else tn.t_trans|>)
     s1 t1 /\
   ld_shared_agree D A
-    (tn with <|t_stor := if ~rq1.cr_static /\ s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\
-                    s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+    (tn with <|t_stor := if adopt_guard rq1.cr_static s s1 (HD s.vs_outcomes).co_success
                   then {} else tn.t_stor;
-               t_trans := if ~rq1.cr_static /\ s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\
-                    s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+               t_trans := if adopt_guard rq1.cr_static s s1 (HD s.vs_outcomes).co_success
                   then {} else tn.t_trans|>) s1 t1
 Proof
   strip_tac >>
