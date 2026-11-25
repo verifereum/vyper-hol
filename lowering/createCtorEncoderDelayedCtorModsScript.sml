@@ -226,8 +226,12 @@ Resume ctor_encoder_delayed_ctor_mods[copied_value]:
     simp[Abbr `q`,eval_operand_def,lookup_var_def] >>
   `ptr_val_ok cx (expr_type e) v src HG tf q` by metis_tac[] >>
   `val_in_memory rt v (w2n dst) q.vs_memory` by
-    (drule_all delayed_ctor_ptr_read >> first_assum ACCEPT_TAC ORELSE
-     metis_tac[delayed_ctor_ptr_read]) >>
+    (qpat_assum `ptr_val_ok cx (expr_type e) v src HG tf q` (fn h1 =>
+     qpat_assum `~is_word_type (expr_type e)` (fn h2 =>
+     qpat_assum `evaluate_type (get_tenv cx) (expr_type e) = SOME rt` (fn h3 =>
+     qpat_assum `eval_operand src q = SOME dst` (fn h4 =>
+       ACCEPT_TAC (MATCH_MP delayed_ctor_ptr_read
+         (CONJ h1 (CONJ h2 (CONJ h3 h4))))))))) >>
   suspend "assemble"
 QED
 
