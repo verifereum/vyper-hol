@@ -5,7 +5,7 @@ Ancestors
   bodyFullBopBytestringCuts bodyFullBopBytestringChild bodyFullBopBytestringIntervals
   bodyFullBopBytestringPost bodyFullBopBytestringFinalPost
   bodyFullBopBytestringHash bodyFullBopBytestringDigest bodyFullBopBytestringFinish
-  bodyFullBopBytestringChild bodyFullExprCore
+  bodyFullBopBytestringChild
   gasOutcomeFullBindMods gasOutcomeFullPostMods gasOutcomeFullPostPathMods
   gasExemptCertMods bodyMemoryDefs exprSimFullBundleProps exprBodyPreProps
   exprSimHypsDefs exprLoweringProps loweringPosts bodyPtrDefs
@@ -25,5 +25,5 @@ Theorem bop_bytestring_eq_value_sim_mods:
     expr_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> FAIL_TAC "probe"
 QED
