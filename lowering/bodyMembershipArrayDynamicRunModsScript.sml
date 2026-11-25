@@ -2,6 +2,7 @@
 Theory bodyMembershipArrayDynamicRunMods
 Ancestors
   bodyMembershipArrayHeaderMods bodyFullBopRestWordFullControl
+  bodyMembershipArrayDynamicAdapterMods
   bodyPtrBopInLoopContract bodyPtrBopInElementLoad
   bodyFullPostsMods loweringPosts exprLowering compileEnv
   context venomState ptrDiscipline list words
@@ -127,38 +128,39 @@ Proof
       ~q.vs_halted /\ allocas_from lo q /\
       q.vs_current_bb = ct.cs_current_bb /\
       q.vs_inst_idx = LENGTH ct.cs_current_insts` by
-    (irule (Q.INST [`arr` |-> `vv_operand vv`,
-      `cap` |-> `cap`, `cenv` |-> `cenv`, `ety` |-> `ety`, `vv` |-> `vv`,
-      `bound` |-> `SOME cap`, `imm` |-> `cenv.ce_imm_alloca`,
-      `is_ctor` |-> `cenv.ce_is_ctor`, `len` |-> `len`,
-      `loc` |-> `(case vv_location vv of NONE => LocMemory | SOME l => l)`,
-      `needle` |-> `needle`,
-      `skip` |-> `word_scale (case vv_location vv of NONE => LocMemory | SOME l => l)`,
-      `stride` |-> `elem_size_in_location cenv
-        (case vv_location vv of NONE => LocMemory | SOME l => l) ety`]
-      rest_word_membership_loop_const_full_horizon_joint_all) >>
-      simp[] >> rpt conj_tac
-      >- (gen_tac >> disch_tac >>
-          qpat_assum `!H. guard H ==> _`
-            (qspec_then `H` (drule_then strip_assume_tac)) >> simp[])
-      >- (qexistsl_tac [`cap`,`cenv`,`ety`,`len`,`needle`,`vv`] >> simp[] >>
-          conj_tac
-          >- (gen_tac >> disch_tac >>
-              qpat_assum `!H. guard H ==> _`
-                (qspec_then `H` (drule_then strip_assume_tac)) >> simp[])
-          >- (qx_gen_tac `i` >> qx_gen_tac `s` >>
-              qx_gen_tac `Gs` >> qx_gen_tac `Ts` >> disch_tac >>
-              metis_tac[rest_word_membership_loop_const_full_horizon_joint_all,
-                arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM])
-          )
-      >- first_assum ACCEPT_TAC
-      >- first_assum ACCEPT_TAC) >>
-  last_x_assum (qx_choose_then `q`
-    (qx_choose_then `Gf` (qx_choose_then `Tf` strip_assume_tac))) >>
-  qexistsl_tac [`q`,`Gf`,`Tf`] >> gen_tac >> disch_tac >>
-  qpat_assum `!H. guard H ==> _` (qspec_then `H` (drule_then strip_assume_tac)) >>
-  qpat_assum `!H. guard H ==> _` (qspec_then `H` (drule_then strip_assume_tac)) >>
-  conj_tac >- metis_tac[fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans] >>
-  conj_tac >- metis_tac[bodyPtrBopInLoopContractTheory.membership_loop_frame_source] >>
-  metis_tac[]
+    (irule rest_word_membership_loop_const_full_horizon_joint_all >>
+     qpat_assum `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`
+       (irule_at Any) >>
+     conj_tac
+     >- (gen_tac >> disch_tac >>
+         qpat_assum `!H. guard H ==> gas_origin_ptr_path _ (u,Gu,Tu) _ _ /\ _`
+           (drule_then strip_assume_tac) >> asm_rewrite_tac[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (gen_tac >> disch_tac >>
+         qpat_assum `!H. guard H ==> gas_origin_ptr_path _ (u,Gu,Tu) _ _ /\ _`
+           (drule_then strip_assume_tac) >> asm_rewrite_tac[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (pure_rewrite_tac[GSYM dynamic_loop_bound_some_offset_adapter] >>
+         asm "loop" ACCEPT_TAC) >>
+     simp[]) >>
+  qmatch_asmsub_rename_tac
+    `gas_origin_ptr_path _ (sh,Gh,Th) _ (OK qf,Gf,Tf)` >>
+  qexistsl_tac [`qf`,`Gf`,`Tf`] >> gen_tac >> disch_tac >>
+  qpat_x_assum `!H. guard H ==> gas_origin_ptr_path _ (sh,Gh,Th) _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  qpat_x_assum `!H. guard H ==> gas_origin_ptr_path _ (u,Gu,Tu) _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  conj_tac
+  >- (irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+      qpat_assum `gas_origin_ptr_path _ (sh,Gh,Th) _ (OK qf,Gf,Tf)`
+        (irule_at Any) >> asm_rewrite_tac[]) >>
+  conj_tac
+  >- (irule membership_loop_frame_source >>
+      qpat_assum `membership_loop_frame sl Gh Th sh Gf Tf qf` (irule_at Any) >>
+      asm_rewrite_tac[] >> rpt strip_tac >>
+      irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sm` >> simp[]) >>
+  asm_rewrite_tac[]
 QED
