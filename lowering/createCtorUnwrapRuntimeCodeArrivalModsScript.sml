@@ -407,9 +407,20 @@ Resume ctor_unwrap_runtime_code_arrival_strong_mods[linked_expr_post]:
          disch_then ACCEPT_TAC) >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       qexistsl_tac [`sb.cs_next_id`, `type_memory_size rty`,`rty`,`dst`] >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      (first_assum (fn th => pure_rewrite_tac[th] >> first_assum ACCEPT_TAC) ORELSE
-       metis_tac[])) >>
+      conj_tac >- qpat_assum `sb.cs_next_id < sc.cs_next_id` ACCEPT_TAC >>
+      conj_tac >- qpat_assum `sa.cs_next_id <= sb.cs_next_id` ACCEPT_TAC >>
+      conj_tac >- qpat_assum `!name b len. local_region cenv ee.scopes q name b len ==> _` ACCEPT_TAC >>
+      conj_tac >- qpat_assum `val_footprint rty v <= type_memory_size rty` ACCEPT_TAC >>
+      conj_tac >- qpat_assum `eval_operand (Var root) q = SOME dst` ACCEPT_TAC >>
+      conj_tac >- qpat_assum `FLOOKUP q.vs_allocas sb.cs_next_id = SOME _` ACCEPT_TAC >>
+      conj_tac
+      >- (qpat_assum `post_value_type cenv e = expr_type e`
+            (fn th => pure_rewrite_tac[GSYM th]) >>
+          qpat_assum `evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty`
+            ACCEPT_TAC) >>
+      conj_tac >- qpat_assum `val_wf rty v` ACCEPT_TAC >>
+      qpat_assum `q.vs_memory = z.vs_memory` (fn th => pure_rewrite_tac[th]) >>
+      qpat_assum `val_in_memory rty v (w2n dst) z.vs_memory` ACCEPT_TAC) >>
   qpat_assum `vv_post_mods H _ _ _ _ _ _ _ _ _ _ _ _ s`
     (strip_assume_tac o REWRITE_RULE [vv_post_mods_def]) >>
   qpat_assum `immutable_frame_mods func cenv cx ee s` mp_tac >>

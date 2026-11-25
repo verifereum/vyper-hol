@@ -168,11 +168,26 @@ Proof
      `allocas_from lo v` by (drule_all exec_alloca_preserves_allocas_from >> simp[]) >>
      drule exec_alloca_alloca_next_mono >> simp[]) >>
   `!H. valid_horizon cx st0 H p.storage_trace ==> stmt_state_rel H ctx func ce cx ee r` by
-    (rpt strip_tac >> irule copy_buffer_state_rel_frame >>
+    (qx_gen_tac `h` >> disch_tac >>
+     `stmt_state_rel h ctx func ce cx ee v` by
+       (qpat_assum `!h. valid_horizon _ _ h _ ==> stmt_state_rel h _ _ _ _ _ v`
+          (qspec_then `h` mp_tac) >> simp[]) >>
+     irule copy_buffer_state_rel_frame >>
      qexistsl_tac [`snapshot_base`,`mk_inst a.cs_next_id ALLOCA [Lit (n2w cap)] [root]`,`v`,`a`,`cap`] >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     TRY (qpat_assum `!H. valid_horizon _ _ _ _ ==> stmt_state_rel _ _ _ _ _ _ _` irule >> simp[] >> NO_TAC) >>
-     simp_tac (srw_ss()) [mk_inst_def] >> metis_tac[ADD_COMM]) >>
+     rpt conj_tac
+     >- qpat_assum `!name b n. local_region ce ee.scopes v name b n ==> _` ACCEPT_TAC
+     >- qpat_assum `!x. not_fresh_at a x ==> lookup_var x r = lookup_var x v` ACCEPT_TAC
+     >- (rpt gen_tac >> disch_tac >>
+         qpat_assum `!off k. _ ==> mem_bytes_at off k r.vs_memory = _` irule >>
+         decide_tac)
+     >- qpat_assum `LENGTH v.vs_memory <= LENGTH r.vs_memory` ACCEPT_TAC
+     >- qpat_assum `(mk_inst _ _ _ _).inst_opcode = ALLOCA` ACCEPT_TAC
+     >- (qpat_assum `(mk_inst _ _ _ _).inst_id = _` (fn th => pure_rewrite_tac[th]) >>
+         qpat_assum `FLOOKUP v.vs_allocas _ = SOME _` ACCEPT_TAC)
+     >- qpat_assum `copy_static r = copy_static v` ACCEPT_TAC
+     >- qpat_assum `MEM (mk_inst _ _ _ _) (fn_insts func)` ACCEPT_TAC
+     >- qpat_assum `local_ptrs_reserved ce a` ACCEPT_TAC >>
+     qpat_assum `stmt_state_rel h ctx func ce cx ee v` ACCEPT_TAC) >>
   `!x. not_fresh_at a x ==> lookup_var x r = lookup_var x u` by metis_tac[] >>
   `return_buf_frame d ce ac r` by
     (drule copy_static_fields >> strip_tac >> irule return_buf_frame_frame >>
@@ -673,11 +688,11 @@ Proof
      ?tr. vv_location vv = SOME (slot_loc tr)` assume_tac
   >- (Cases_on `vv` >> simp[vv_location_def] >>
       qmatch_goalsub_rename_tac `pp.ptr_location = LocMemory` >>
-      Cases_on `pp.ptr_location` >> simp[slot_loc_def] >>
-      FIRST [qexists_tac `F` >> simp[] >> NO_TAC,
-             qexists_tac `T` >> simp[] >> NO_TAC,
-             qpat_x_assum `vv_holds_mods _ _ _ _ (LocatedValue _ pp) _ _` mp_tac >>
-             simp[vv_holds_mods_def, vv_holds_def]]) >>
+      Cases_on `pp.ptr_location` >> simp[slot_loc_def]
+      >- (qexists_tac `F` >> simp[])
+      >- (qexists_tac `T` >> simp[]) >>
+      qpat_x_assum `vv_holds_mods _ _ _ _ (LocatedValue _ pp) _ _` mp_tac >>
+      simp[vv_holds_mods_def, vv_holds_def]) >>
   qabbrev_tac `cap = type_memory_bytes ce (lowered_value_type ce e)` >>
   qabbrev_tac `B = buffer_allocation_base u a.cs_next_id` >>
   Cases_on `compile_alloc_buffer cap a` >> rename1 `_ = (buf,m)` >>
