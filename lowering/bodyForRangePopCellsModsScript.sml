@@ -8,7 +8,8 @@ Theorem range_cells_static_cong[local]:
   env1.type_defs = env.type_defs /\
   env1.bare_globals = env.bare_globals /\
   env1.bare_global_assignable = env.bare_global_assignable /\
-  env1.fn_sigs = env.fn_sigs /\ env1.toplevel_vtypes = env.toplevel_vtypes ==>
+  env1.fn_sigs = env.fn_sigs /\ env1.toplevel_vtypes = env.toplevel_vtypes /\
+  env1.event_fields = env.event_fields ==>
   (body_const_cells_agree_mods mods cx env1 es <=>
    body_const_cells_agree_mods mods cx env es)
 Proof
@@ -42,6 +43,7 @@ Proof
      >- (qexists_tac `env_b` >> simp[]) >>
      qexistsl_tac [`mid`, `raw`] >> simp[]) >>
   drule_then strip_assume_tac type_stmt_env_preserved_static >>
+  drule_then assume_tac type_stmt_preserves_event_fields >>
   drule_all_then (fn th => fs[th]) range_cells_static_cong
 QED
 
