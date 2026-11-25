@@ -119,3 +119,4 @@ Resume create_raw_total_add_entry_at_cuts_mods[ghost]:
       qexistsl_tac [`G`,`p`,`t`,`a`,`tn`] >> simp[]) >>
   rpt strip_tac >> metis_tac[]
 QED
+Finalise create_raw_total_add_entry_at_cuts_mods
