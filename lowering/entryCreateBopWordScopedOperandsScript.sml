@@ -124,7 +124,6 @@ Theorem create_bop_word_scoped_operands:
     (st0,s1,s2,shadow_s1,shadow_s2,y,t,G1,tn1) in
   let success = ?p tv q p' v' q'. eval_expr cx e1 p = (INL tv,q) /\
                          read_result cx tv p' = (INL v',q') in
-  word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   body_inv (cx_tops cx) ctx ce cx /\ body_const_cells_agree [(NONE,cx_tops cx)] cx env es /\
   expr_body_pre ce cx env exp es /\
   expr_sim_full_pre params ce cx ty exp es (st0,sa,sb,shadow_sa,shadow_sb,op,s0,G0,tn0) /\
