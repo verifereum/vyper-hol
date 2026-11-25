@@ -22,6 +22,8 @@ Theorem create_raw_encoder_at_cuts_mods:
   module_body_inv mods module_src tops ce cx /\ (!K. dead_lo_ok_mods K (DF K) lo ce cx) /\
   EVERY (source_body_call_supported cx)
     (int_calls_exprs args) /\
+  (!i. i < LENGTH args /\ ~exprs_can_mutate ce (DROP (SUC i) args) ==>
+    !tr. get_storage cx (E (LENGTH args)) tr = get_storage cx (E (SUC i)) tr) /\
   (?H. valid_horizon cx st0 H (E (LENGTH args)).storage_trace) /\
   fn_inst_ids_distinct func /\
   (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\

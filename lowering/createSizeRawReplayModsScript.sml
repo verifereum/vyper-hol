@@ -12,6 +12,20 @@ Ancestors
   createExprSizeExitDefs createSizePrefixReplayMods createSizeCopyReplayMods
   createSizeBlueprintKeywordReplayMods createSizeOperandPreMods
 
+Theorem raw_decoded_keywords_mods[local]:
+  dest_NumV av = SOME amount /\
+  (if hs then ?sv w. svs = [sv] /\ dest_create_salt sv = SOME w else svs = []) ==>
+  ?ops. dest_create_args RawCreate hs
+    (create_operand_layout RawCreate hs (BytesV code::(cvs ++ av::svs))) = SOME ops /\
+    ops.co_code_src = BytecodeCodeSource code /\ ops.co_ctor_args = cvs
+Proof
+  Cases_on `hs` >> simp[] >> strip_tac >>
+  gvs[create_operand_layout_def, dest_create_args_def, make_create_operands_def,
+      dest_BytesV_def, dest_optional_num_def, dest_optional_salt_def,
+      DROP_PREFIX, TAKE_APPEND1, FRONT_APPEND, LAST_APPEND_CONS]
+QED
+
+
 Theorem create_raw_keywords_at_cuts_mods:
   contract_inv mods exps ctx ce cx /\
   module_body_inv mods src tops ce cx /\ shadow_body_inv_mods mods exps ctx shctx /\
@@ -60,7 +74,44 @@ Theorem create_raw_keywords_at_cuts_mods:
     ca.cs_next_var <= cm.cs_next_var /\
     (!x w. not_fresh_at cm x /\ lookup_var x m = SOME w ==> lookup_var x n = SOME w)
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `kfinal = \kvs. eval_create_operands cx RawCreate hs rof
+    (MAP expr_type args) (blueprint_literal_offset cx hs args) (BytesV code::(cvs ++ kvs))` >>
+  `!kvs. storage_trace_frame (kfinal kvs)` by simp[Abbr `kfinal`, storage_trace_frame_create_operands] >>
+  `create_operand_completed_ok_mods mods exps cx av /\ (hs ==> create_operand_completed_ok_mods mods exps cx salt)` by
+    (qpat_assum `args = _` (fn th => qhdtm_assum `EVERY` (mp_tac o REWRITE_RULE[th])) >>
+     Cases_on `hs` >> simp[create_operand_order_def, EVERY_APPEND,
+                          DROP_PREFIX, TAKE_APPEND1]) >>
+  `expr_type av = BaseT (UintT 256) /\ (hs ==> expr_type salt = BaseT (BytesT (Fixed 32)))` by
+    (drule exprBodyPreTypingPropsTheory.expr_body_pre_mods_runtime_typing >> strip_tac >>
+     Cases_on `hs` >> gvs[well_typed_expr_def, create_arg_types_ok_def,
+                          LAST_APPEND_CONS, FRONT_APPEND]) >>
+  `expr_body_pre_mods mods ce cx env av p` by
+    (irule create_call_operand_body_pre_mods >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  qabbrev_tac `ka = \v. bind (eval_exprs cx (if hs then [salt] else [])) (\vs. kfinal (v::vs))` >>
+  `bind (bind (eval_expr cx av) (read_result cx)) ka p = (res,out)` by
+    fs[Abbr `ka`, createSizeCopyReplayTheory.create_copy_source_cons] >>
+  `!v. storage_trace_frame (ka v)` by simp[Abbr `ka`, createSizeBlueprintKeywordReplayTheory.blueprint_read_list_frame] >>
+  drule_all blueprint_read_at_cut_mods >> strip_tac >- metis_tac[] >>
+  rename1 `bind (eval_expr cx av) (read_result cx) p = (INL avalue,pa)` >>
+  drule_all createSizeBlueprintKeywordReplayTheory.blueprint_keyword_mono >> strip_tac >>
+  `hs ==> expr_body_pre_mods mods ce cx env salt pa /\ create_operand_completed_ok_mods mods exps cx salt /\
+      expr_type salt = BaseT (BytesT (Fixed 32))` by
+    (strip_tac >> simp[] >> irule create_call_operand_body_pre_mods >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  qabbrev_tac `ksalt = \svs. kfinal (avalue::svs)` >>
+  `bind (eval_exprs cx (if hs then [salt] else [])) ksalt pa = (res,out)` by
+    fs[Abbr `ka`, Abbr `ksalt`] >>
+  `!svs. storage_trace_frame (ksalt svs)` by simp[Abbr `ksalt`] >>
+  drule_all (SIMP_RULE (srw_ss()) [] (Q.INST [`rest` |-> `[]`] createSizeBlueprintKeywordReplayModsTheory.blueprint_optional_salt_at_cut_mods)) >>
+  strip_tac >- metis_tac[] >>
+  `?amt. dest_NumV avalue = SOME amt` by
+    (qpat_assum `expr_type av = _` (fn th =>
+       qpat_assum `value_runtime_typed env (expr_type av) avalue`
+         (mp_tac o MATCH_MP createSizeBlueprintKeywordReplayTheory.blueprint_keyword_uint o REWRITE_RULE[th])) >> metis_tac[]) >>
+  drule_all raw_decoded_keywords_mods >> disch_then (qspecl_then [`cvs`,`code`] strip_assume_tac) >>
+  disj2_tac >> qexistsl [`BytesV code::(cvs ++ avalue::svs)`,`ops`,`q`] >>
+  Cases_on `hs` >> gvs[create_arg_ctor_types_def, FRONT_APPEND]
 QED
 
 Theorem create_raw_first_full_pre_mods[local]:
