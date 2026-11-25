@@ -3,7 +3,7 @@
 Theory entryCreateExprList
 Ancestors
   entryCreateScopedBind entryCreateCompositeFocus entryCreatePendingScope
-  entryCreateFocusSpec entryCreateCompletedCut entryCreateBodyCut entryCreateIntervalLayout
+  entryCreateFocusSpec entryCreateCompletedCut entryCreateBodyCut entryCreateIntervalLayout entryCreateWordArgsGeometry
   entryCreateNativeFirstExit entryCreateReplayBind createExprSizeExitDefs bodyFullExtCallPackingReady[qualified,ignore_grammar] bodyFullWordArgs createSizeOperandCode createSizeCutCode exprSimFullBundleProps wordArgsPtr
   bodyFullPreds exprSimSource exprSimPrecompiles gasShadowCompileStmtHelpers
   exprLoweringProps gasShadowState s1PrefixDefs exprBodyPreProps
@@ -608,4 +608,61 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
   `post_value_type ce e = expr_type e` by simp[] >>
   gvs[expr_sim_full_post_def]
+QED
+
+
+Theorem create_word_args_scoped_cut:
+  (!e ee st x y hx hy op' u K n.
+    MEM e todo /\ expr_sim_inv ce cx env ee /\ expr_body_pre ce cx env e ee /\
+    body_const_cells_agree [(NONE,tops)] cx env ee /\ is_word_type (expr_type e) /\
+    create_layout x y /\
+    expr_sim_full_pre (DF,lo,d,C,shC,PG,f,shf) ce cx (tyf e) e ee
+      (st,x,y,hx,hy,op',u,K,n) ==>
+    scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG) tops cx st x y
+      (bind (eval_expr cx e) (read_result cx)) (ee,u,K,n)
+      (expr_sim_full_post (DF,lo,d,C,f) ce cx e (ee,x,y,u,op',K,n))
+      (create_operand_exit_post C cx) /\
+    create_operand_cut x y (gas_explicit_sites C shC) C f tops cx st
+      (bind (eval_expr cx e) (read_result cx)) (ee,u)) /\
+  create_layout a b /\
+  create_word_args_pre (DF,lo,d,C,shC,PG,f,shf) tops ce env cx tyf todo
+    (es,st0,a,b,ha,hb,xs,s,G,tn) ==>
+  scoped_operand_outcome (DF,lo,gas_explicit_sites C shC,C,f,PG) tops cx st0 a b
+    (eval_exprs cx todo) (es,s,G,tn)
+    (create_word_args_post (DF,lo,d,C,f) ce cx (es,a,b,s,G,tn) todo xs)
+    (create_word_args_exit C cx) /\
+  create_operand_cut a b (gas_explicit_sites C shC) C f tops cx st0
+    (eval_exprs cx todo) (es,s)
+Proof
+  map_every qid_spec_tac [`tn`,`G`,`s`,`xs`,`hb`,`ha`,`b`,`a`,`st0`,`es`] >>
+  Induct_on `todo` >-
+  (simp[] >> rpt gen_tac >>
+   disch_then (map_every assume_tac o CONJUNCTS) >>
+   metis_tac[create_word_args_pre_nil]) >>
+  pop_assum (fn ih =>
+    let val rows = CONV_RULE (REWR_CONV IMP_CONJ_THM) (SPEC_ALL ih) in
+      mk_asm "tail_scoped" (GEN_ALL (CONJUNCT1 rows)) >>
+      mk_asm "tail_native" (GEN_ALL (CONJUNCT2 rows))
+    end) >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (irule create_word_args_cons_scoped_step >>
+      rpt conj_tac
+      >- (simp[] >> rpt gen_tac >> strip_tac >>
+          irule create_word_args_scope_embeddings >> metis_tac[])
+      >- first_assum ACCEPT_TAC
+      >- (qexistsl_tac [`env`,`ha`,`hb`,`shf`,`tyf`] >>
+          rpt conj_tac
+          >- (rpt gen_tac >> strip_tac >> asm "tail_scoped" irule >>
+              qpat_assum `create_word_args_pre _ _ _ _ _ _ todo _` (irule_at Any) >>
+              rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+              rpt strip_tac >> metis_tac[MEM])
+          >- (rpt gen_tac >> strip_tac >> metis_tac[])
+          >- first_assum ACCEPT_TAC))
+  >- (irule create_word_args_cons_native_step >>
+      qpat_assum `create_word_args_pre _ _ _ _ _ _ (_::_) _` (irule_at Any) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+      rpt gen_tac >> strip_tac >> asm "tail_native" irule >>
+      qpat_assum `create_word_args_pre _ _ _ _ _ _ todo _` (irule_at Any) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+      rpt strip_tac >> metis_tac[MEM])
 QED
