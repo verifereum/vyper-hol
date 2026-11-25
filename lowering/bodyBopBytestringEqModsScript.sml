@@ -6,7 +6,7 @@ Ancestors
   bodyFullBopBytestringPost bodyFullBopBytestringFinalPost
   bodyFullBopBytestringHash bodyFullBopBytestringDigest bodyFullBopBytestringFinish
   bodyBopBytestringOperandRunMods bodyBopBytestringPrepareMods
-  bodyBopBytestringBindMods bodyBopBytestringDigestMods bodyBopBytestringFinalMods
+  bodyBopBytestringBindMods bodyBopBytestringEndpointMods
   bodyFullIfExpReach vyperTypeBuiltins bodyMemBopHeldFacts
   gasOutcomeFullBindMods gasOutcomeFullPostMods gasOutcomeFullPostPathMods
   gasExemptCertMods bodyMemoryDefs exprSimFullBundleProps exprBodyPreProps
@@ -123,11 +123,32 @@ QED
 Resume bop_bytestring_eq_value_sim_mods[compare]:
   qx_genl_tac [`m1`,`v1`,`mid`,`G1`,`tn1`,`t`,`m2`,`v2`,`ee`,`G2`,`tn2`,`u`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `sa.cs_next_id <= sh1.cs_next_id` by
+    (drule_all_then strip_assume_tac
+       (Q.INST [`e` |-> `e1`,`sz` |-> `sh1`] bop_bytestring_child_cut_mods) >>
+     first_assum ACCEPT_TAC) >>
+  drule_all_then (qspec_then `st0` strip_assume_tac) bop_bytestring_operand_source_mods >>
+  `expr_body_pre_mods mods cenv cx env e2 mid` by simp[] >>
+  drule_all_then (qspec_then `st0` strip_assume_tac)
+    (Q.INST [`e` |-> `e2`,`es` |-> `mid`,`ee` |-> `ee`] bop_bytestring_operand_source_mods) >>
   qpat_x_assum `expr_type e2 = expr_type e1` SUBST_ALL_TAC >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) mid.storage_trace` by simp[] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> (?v bs. _) /\ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` (drule_then
+      (qx_choose_then `vl` (qx_choose_then `contents1` (map_every assume_tac o CONJUNCTS)) o CONJUNCT1))) >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> (?v bs. _) /\ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` (drule_then
+      (qx_choose_then `vr` (qx_choose_then `contents2` (map_every assume_tac o CONJUNCTS)) o CONJUNCT1))) >>
+  qpat_x_assum `INL v1 = INL vl` (SUBST_ALL_TAC o SYM o REWRITE_RULE [sumTheory.INL_11]) >>
+  qpat_x_assum `INL v2 = INL vr` (SUBST_ALL_TAC o SYM o REWRITE_RULE [sumTheory.INL_11]) >>
+  qabbrev_tac `w1 = word_of_bytes_be (Keccak_256_w64 contents1) : bytes32` >>
+  qabbrev_tac `w2 = word_of_bytes_be (Keccak_256_w64 contents2) : bytes32` >>
   irule gas_outcome_full_mods_post_source >>
   qexistsl_tac
     [`\H res ee' Gf tnf t.
-       res = INL (BoolV (if bop = Eq then w1 = w2 else w1 <> w2)) /\
+       res = INL (BoolV (if bop = Eq then (w1:bytes32) = w2 else w1 <> w2)) /\
        ee' = (ee with gas_obs := []) /\
        eval_operand op t = SOME (bool_to_word (if bop = Eq then w1 = w2 else w1 <> w2)) /\
        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -145,13 +166,83 @@ Resume bop_bytestring_eq_value_sim_mods[compare]:
        expr_exit res r /\ halt_exit H cx ee' res r /\
        (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u)`] >>
   rpt conj_tac
-  >- (irule (Q.INST [`ann` |-> `BaseT BoolT`, `bty` |-> `expr_type e1`,
-                       `es` |-> `ee`, `s` |-> `u`, `G` |-> `G2`, `tn` |-> `tn2`,
-                       `sa` |-> `sh2`, `mods` |-> `cenv.ce_modules`,
-                       `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
-                      bop_bytestring_digest_suffix_mods) >> FAIL_TAC "digest sub")
-  >- FAIL_TAC "post adapter"
-  >- FAIL_TAC "exit adapter"
+  >- suspend "normal_endpoint"
+  >- (BETA_TAC >> rpt gen_tac >> MATCH_ACCEPT_TAC bop_bytestring_compare_exit_endpoint_mods) >>
+  irule_at Any bop_bytestring_compare_digest_endpoint_mods >> suspend "digest_requirements"
+QED
+
+Resume bop_bytestring_eq_value_sim_mods[normal_endpoint]:
+  qx_genl_tac [`H`,`res`,`ef`,`Gf`,`tnf`,`ss`] >> BETA_TAC >>
+  disch_then (map_every strip_assume_tac o CONJUNCTS) >>
+  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
+  qpat_x_assum `ef = _` SUBST_ALL_TAC >>
+  qpat_x_assum `res = _` SUBST_ALL_TAC >>
+  qexists_tac `BoolV (if bop = Eq then w1 = w2 else w1 <> w2)` >>
+  rewrite_tac[post_value_type_def] >>
+  irule (REWRITE_RULE [post_value_type_def] bop_bytestring_compare_final_post_endpoint_mods) >>
+  qpat_assum `ee with gas_obs := [] = ee`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
+  `valid_horizon cx st0 H ee.storage_trace` by fs[] >>
+  `valid_horizon cx st0 H mid.storage_trace` by simp[] >>
+  `valid_horizon cx st0 H es.storage_trace` by simp[] >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> (?v bs. _) /\ _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> (?v bs. _) /\ _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  `sa.cs_next_var <= sh2.cs_next_var` by decide_tac >>
+  `local_ptrs_reserved cenv sh2` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `!z. not_fresh_at sa z ==> not_fresh_at sh2 z` by
+    (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`G1`,`G2`,`mid`,`h1`,`h2`,`raw`,`raw`,`sh1`,`sh2`,`t`,`tn1`,`tn2`,`u`] >>
+  simp[]
+QED
+
+Resume bop_bytestring_eq_value_sim_mods[digest_requirements]:
+  `eval_operand h1 u = SOME w1 /\ op_prov G2 h1 = NONE /\ op_taint tn2 h1 = {}` by
+    (qpat_assum `wb_frame cenv mid ee sh1 t u`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [wb_frame_def]) >>
+     qpat_assum `ghost_kept_at lo cenv mid sh1 G1 tn1 t G2 tn2`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [ghost_kept_at_def]) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`eval_operand h1 t = SOME w1`, `op_prov G1 h1 = NONE`,
+        `op_taint tn1 h1 = {}`, `!z. h1 = Var z ==> not_fresh_at sh1 z`,
+        `!l. h1 <> Label l`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `h1` >>
+     simp[venomStateTheory.eval_operand_def,ptrDisciplineTheory.op_prov_def,
+          ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  `!z. h1 = Var z ==> not_fresh_at sh2 z` by
+    (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
+     qexists_tac `sh1` >> simp[]) >>
+  `allocas_from lo u` by
+    (qpat_assum `ghost_inv_at_mods _ lo _ cenv cx ee G2 tn2 u`
+       (mp_tac o REWRITE_RULE [ghost_inv_at_mods_def]) >> simp[]) >>
+  `env.type_defs = get_tenv cx` by
+    (qpat_assum `expr_sim_inv_mods mods cenv cx env ee`
+       (mp_then Any assume_tac expr_sim_inv_mods_env) >>
+     drule vyperTypeEvalCaseProofsTheory.env_consistent_type_defs_get_tenv >> simp[]) >>
+  conj_tac
+  >- (drule_all held_bytestring_eqne_types >>
+      simp[] >> disch_then (DISJ_CASES_THEN (qx_choose_then `cap` assume_tac)) >>
+      qexists_tac `cap` >> simp[]) >>
+  simp[] >> conj_tac
+  >- (qexistsl_tac [`h1`,`h2`] >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `v1 = BytesV contents1 \/ _` strip_assume_tac >>
+      simp[Abbr `w1`,byteTheory.word_of_bytes_be_def]) >>
+  conj_tac
+  >- (qpat_x_assum `v2 = BytesV contents2 \/ _` strip_assume_tac >>
+      simp[Abbr `w2`,byteTheory.word_of_bytes_be_def]) >>
+  qpat_x_assum `value_runtime_typed env _ v1` mp_tac >>
+  qpat_x_assum `value_runtime_typed env _ v2` mp_tac >>
+  simp[vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
+  disch_then (qx_choose_then `tv` (map_every assume_tac o CONJUNCTS)) >>
+  disch_then (qx_choose_then `tv'` (map_every assume_tac o CONJUNCTS)) >>
+  `tv' = tv` by fs[] >>
+  qexists_tac `tv` >> fs[]
 QED
 
 Finalise bop_bytestring_eq_value_sim_mods
