@@ -122,8 +122,7 @@ Triviality optimized_getters_deploy_typing:
   deploy_typing_ok ^tops ^am_dep ^tx_dep
 Proof
   simp ([deploy_typing_ok_def, init_am, p23_deploy_tx_def, empty_tx,
-         tx_wt, SIMP_RULE (srw_ss()) [init_am] check_dep,
-         SIMP_RULE (srw_ss()) [init_am] check_run] @ machine_wt @ account_simps)
+         tx_wt, SIMP_RULE (srw_ss()) [init_am] check_dep] @ machine_wt @ account_simps)
 QED
 
 Triviality optimized_getters_deploy_state:

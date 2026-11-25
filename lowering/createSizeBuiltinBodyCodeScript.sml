@@ -134,7 +134,7 @@ Proof
              create_ptr_load_cut_code]
 QED
 
-Theorem builtin_binop_code[local]:
+Theorem builtin_binop_code:
   create_cut_code exits a (SND (compile_binop bop x y ty bl el a))
 Proof
   Cases_on `bop` >>

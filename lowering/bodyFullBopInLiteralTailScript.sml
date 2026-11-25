@@ -246,6 +246,111 @@ Proof
   simp[ptr_val_ok_def, is_word_type_def]
 QED
 
+Theorem bop_in_literal_continuation_run:
+  (bop = In \/ bop = NotIn) /\
+  (if bop = In then compile_list_membership_in needle xs
+   else compile_list_membership_notin needle xs) sm = (op,sb) /\
+  is_word_type et /\ evaluate_type (get_tenv cx) et = SOME tv /\
+  value_has_type tv v /\ EVERY (value_has_type tv) vs /\
+  LIST_REL (\x v. eval_operand x s = SOME (typed_val_to_w256 tv v)) xs vs /\
+  eval_operand needle s = SOME (typed_val_to_w256 tv v) /\
+  EVERY (\x. !p. x = Var p ==> not_fresh_at sm p) (needle::xs) /\
+  op_prov G needle = NONE /\ op_taint tn needle = {} /\
+  EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  sa.cs_next_var <= sm.cs_next_var /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s /\
+    storage_well_formed_on cx (ee with gas_obs := []) (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) G tn s /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+    wb_frame cenv es (ee with gas_obs := []) sa s0 s /\
+    (~expr_has_effect e1 /\ EVERY ($~ o expr_has_effect) elems ==>
+      pure_frame cenv func es sa s0 s)) ==>
+  ?u G' tn'.
+    run_inst_seq (emitted_insts sm sb) s = OK u /\
+    let z = u with vs_inst_idx := LENGTH sb.cs_current_insts in
+    let b = BoolV (if bop = In then MEM v vs else ~MEM v vs) in
+    ~z.vs_halted /\
+    (!tail. return b (ee with gas_obs := tail) =
+      (INL b, ee with gas_obs := tail)) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,G',tn') /\
+      expr_post H ctx func cenv cx
+        (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray t n) elems])
+        es sa sb s0 (ee with gas_obs := []) b op z /\
+      expr_store_bound cx (BaseT BoolT) b op z /\
+      z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+      s0.vs_alloca_next <= z.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) G' tn' z /\
+      ptr_val_ok cx (BaseT BoolT) b op G' tn' z /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn')
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all bop_in_literal_actual_uniform >>
+  disch_then (qspecl_then [`func`,`PG`] strip_assume_tac) >>
+  `sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
+   same_blocks sm sb /\ writes_fresh sm (emitted_insts sm sb)` by
+    (Cases_on `bop = In` >> gvs[] >>
+     metis_tac[literal_membership_straight, straight_fresh_def, same_blocks_def]) >>
+  qabbrev_tac `z = u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  `z = u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)` by
+    simp[Abbr `z`] >>
+  `!p. not_fresh_at sm p ==> lookup_var p z = lookup_var p s` by
+    (drule_all run_inst_seq_writes_fresh >> strip_tac >>
+     simp[Abbr `z`, lookup_var_def]) >>
+  `eval_operand op z = SOME (bool_to_word (if bop = In then MEM v vs else ~MEM v vs))` by
+    simp[Abbr `z`, eval_operand_def, lookup_var_def] >>
+  `~z.vs_halted` by gvs[Abbr `z`, venom_state_component_equality] >>
+  qexistsl_tac [`u`,`G'`,`tn'`] >>
+  conj_tac >- simp[] >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  qpat_assum `Abbrev (z = _)`
+    (fn th => pure_rewrite_tac [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[return_def] >>
+  qx_gen_tac `H` >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `local_ptrs_reserved cenv sm` by
+    (gvs[local_ptrs_reserved_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) G' tn' z /\
+   ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn' /\
+   ptr_val_ok cx (BaseT BoolT)
+     (BoolV (if bop = In then MEM v vs else ~MEM v vs)) op G' tn' z` by
+    (irule bop_in_literal_suffix_ghost >> metis_tac[]) >>
+  `expr_post H ctx func cenv cx
+    (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray t n) elems])
+    es sa sb s0 (ee with gas_obs := [])
+    (BoolV (if bop = In then MEM v vs else ~MEM v vs)) op z /\
+   expr_store_bound cx (BaseT BoolT)
+    (BoolV (if bop = In then MEM v vs else ~MEM v vs)) op z /\
+   z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+   alloca_history func z /\ s0.vs_alloca_next <= z.vs_alloca_next` by
+    (irule bop_in_literal_suffix_post >> metis_tac[]) >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,G',tn')` by
+    (qpat_assum `z = u with vs_inst_idx := s.vs_inst_idx + _`
+       (fn th => once_rewrite_tac[th]) >>
+     irule bop_in_literal_origin_uniform >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     conj_tac >- gvs[ghost_inv_at_def] >>
+     gvs[fn_has_code_def, same_blocks_def] >>
+     qpat_x_assum `isPREFIX (_ ++ _) _`
+       (strip_assume_tac o REWRITE_RULE [rich_listTheory.IS_PREFIX_APPEND]) >>
+     simp[DROP_APPEND, rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    first_assum (ACCEPT_TAC o MATCH_MP
+      bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
+      CONJUNCT1 o REWRITE_RULE [expr_post_def]) >>
+  gvs[] >> gvs[Abbr `z`]
+QED
+
 Theorem bop_in_literal_continuation_full_exit:
   (bop = In \/ bop = NotIn) /\
   (if bop = In then compile_list_membership_in needle xs
@@ -291,58 +396,17 @@ Theorem bop_in_literal_continuation_full_exit:
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
     R
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all bop_in_literal_actual_uniform >>
-  disch_then (qspecl_then [`func`,`PG`] strip_assume_tac) >>
-  `sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
-   same_blocks sm sb /\ writes_fresh sm (emitted_insts sm sb)` by
-    (Cases_on `bop = In` >> gvs[] >>
-     metis_tac[literal_membership_straight, straight_fresh_def, same_blocks_def]) >>
-  qabbrev_tac `z = u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  `z = u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)` by
-    simp[Abbr `z`] >>
-  `!p. not_fresh_at sm p ==> lookup_var p z = lookup_var p s` by
-    (drule_all run_inst_seq_writes_fresh >> strip_tac >>
-     simp[Abbr `z`, lookup_var_def]) >>
-  `eval_operand op z = SOME (bool_to_word (if bop = In then MEM v vs else ~MEM v vs))` by
-    simp[Abbr `z`, eval_operand_def, lookup_var_def] >>
+  disch_then (fn th =>
+    mp_tac (MATCH_MP bop_in_literal_continuation_run th) >>
+    map_every assume_tac (CONJUNCTS th)) >>
+  disch_then (strip_assume_tac o BETA_RULE o REWRITE_RULE [LET_THM]) >>
   irule gas_outcome_full_intro >>
   qexistsl_tac [`G'`,`ee`,`[]`,
-    `OK z`,`INL (BoolV (if bop = In then MEM v vs else ~MEM v vs))`,`tn'`] >>
-  simp[return_def] >>
+    `OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)`,
+    `INL (BoolV (if bop = In then MEM v vs else ~MEM v vs))`,`tn'`] >>
+  simp[is_word_type_def] >>
   qx_gen_tac `H` >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  `local_ptrs_reserved cenv sm` by
-    (gvs[local_ptrs_reserved_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) G' tn' z /\
-   ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn' /\
-   ptr_val_ok cx (BaseT BoolT)
-     (BoolV (if bop = In then MEM v vs else ~MEM v vs)) op G' tn' z` by
-    (irule bop_in_literal_suffix_ghost >> metis_tac[]) >>
-  `expr_post H ctx func cenv cx
-    (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray t n) elems])
-    es sa sb s0 (ee with gas_obs := [])
-    (BoolV (if bop = In then MEM v vs else ~MEM v vs)) op z /\
-   expr_store_bound cx (BaseT BoolT)
-    (BoolV (if bop = In then MEM v vs else ~MEM v vs)) op z /\
-   z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-   alloca_history func z /\ s0.vs_alloca_next <= z.vs_alloca_next` by
-    (irule bop_in_literal_suffix_post >> metis_tac[]) >>
-  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,G',tn')` by
-    (qpat_assum `z = u with vs_inst_idx := s.vs_inst_idx + _`
-       (fn th => once_rewrite_tac[th]) >>
-     irule bop_in_literal_origin_uniform >>
-     simp[] >> conj_tac >- metis_tac[] >>
-     conj_tac >- gvs[ghost_inv_at_def] >>
-     gvs[fn_has_code_def, same_blocks_def] >>
-     qpat_x_assum `isPREFIX (_ ++ _) _`
-       (strip_assume_tac o REWRITE_RULE [rich_listTheory.IS_PREFIX_APPEND]) >>
-     simp[DROP_APPEND, rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[APPEND_ASSOC]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
-    first_assum (ACCEPT_TAC o MATCH_MP
-      bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
-      CONJUNCT1 o REWRITE_RULE [expr_post_def]) >>
-  gvs[is_word_type_def] >> gvs[Abbr `z`]
+  first_x_assum drule >> simp[]
 QED
 
 Theorem bop_in_literal_continuation_full:
