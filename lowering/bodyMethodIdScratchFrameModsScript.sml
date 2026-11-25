@@ -18,7 +18,7 @@ Theorem method_id_scratch_ghost[local]:
   ghost_inv_at D 0 d ce cx es G' tn' z /\
   local_ptrs_reserved ce k /\
   (!x. not_fresh_at k x ==> FLOOKUP G' x = FLOOKUP G x) /\
-  (!x. not_fresh_at k x ==> FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x) /\
+  (!x. not_fresh_at k x ==> op_taint tn' (Var x) = op_taint tn (Var x)) /\
   tn'.t_mem SUBSET tn.t_mem /\
   s.vs_alloca_next <= z.vs_alloca_next /\
   (!aid a sz. FLOOKUP z.vs_allocas aid = SOME (a,sz) ==>
@@ -32,7 +32,7 @@ Proof
      qpat_assum `!aid a sz. FLOOKUP z.vs_allocas aid = _ ==> _`
        (drule_then strip_assume_tac) >- metis_tac[] >> decide_tac) >>
   fs[ghost_inv_at_mods_def, ghost_inv_at_def] >>
-  gvs[SUBSET_DEF, op_taint_def, local_ptrs_reserved_def] >> metis_tac[]
+  gvs[SUBSET_DEF, local_ptrs_reserved_def] >> metis_tac[]
 QED
 
 Theorem method_id_scratch_sep[local]:
@@ -75,14 +75,14 @@ Proof
     (drule_all_then mp_tac) >> simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
-Theorem method_id_scratch_frame_mods:
+Theorem method_id_scratch_frame_op_taint_mods:
   ghost_inv_at_mods D lo d ce cx es G tn s /\
   immutable_frame_mods func ce cx es s /\
   ghost_inv_at D 0 d ce cx es G' tn' z /\
   local_ptrs_reserved ce k /\
   (!x. not_fresh_at k x ==> lookup_var x z = lookup_var x s /\
                            FLOOKUP G' x = FLOOKUP G x /\
-                           FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x) /\
+                           op_taint tn' (Var x) = op_taint tn (Var x)) /\
   tn'.t_mem SUBSET tn.t_mem /\
   z.vs_data_section = s.vs_data_section /\
   LENGTH s.vs_memory <= LENGTH z.vs_memory /\
@@ -106,4 +106,34 @@ Proof
   reverse conj_asm2_tac
   >- (drule_all method_id_scratch_sep >> simp[]) >>
   drule_all method_id_scratch_immutables >> simp[]
+QED
+
+(* The exact finite-map observation implies operand-taint agreement. *)
+Theorem method_id_scratch_frame_mods:
+  ghost_inv_at_mods D lo d ce cx es G tn s /\
+  immutable_frame_mods func ce cx es s /\
+  ghost_inv_at D 0 d ce cx es G' tn' z /\
+  local_ptrs_reserved ce k /\
+  (!x. not_fresh_at k x ==> lookup_var x z = lookup_var x s /\
+                           FLOOKUP G' x = FLOOKUP G x /\
+                           FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x) /\
+  tn'.t_mem SUBSET tn.t_mem /\
+  z.vs_data_section = s.vs_data_section /\
+  LENGTH s.vs_memory <= LENGTH z.vs_memory /\
+  s.vs_alloca_next <= z.vs_alloca_next /\
+  (!aid a sz. FLOOKUP z.vs_allocas aid = SOME (a,sz) ==>
+      FLOOKUP s.vs_allocas aid = SOME (a,sz) \/ s.vs_alloca_next <= a) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP z.vs_allocas inst.inst_id = SOME (b,n) /\ lo <= b /\
+  (!a sz. a + sz <= b \/ b + n <= a ==>
+      mem_bytes_at a sz z.vs_memory = mem_bytes_at a sz s.vs_memory) ==>
+  ghost_inv_at_mods D lo d ce cx es G' tn' z /\
+  immutable_frame_mods func ce cx es z
+Proof
+  strip_tac >>
+  `!x. not_fresh_at k x ==> lookup_var x z = lookup_var x s /\
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> disch_tac >> first_x_assum (drule_then strip_assume_tac) >>
+     simp[op_taint_def]) >>
+  drule_all method_id_scratch_frame_op_taint_mods >> simp[]
 QED
