@@ -295,8 +295,13 @@ Resume ctor_encoder_delayed_ctor_mods[ownership]:
   pop_assum SUBST1_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `dst` >> conj_tac >- first_assum ACCEPT_TAC >>
   disj1_tac >> qexistsl_tac [`su.cs_next_id`,`w2n dst`,`nb`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >>
-  rpt strip_tac >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- decide_tac
+  >- decide_tac
+  >- decide_tac
+  >- decide_tac
+  >> rpt strip_tac >>
   qpat_assum `!name b len. local_region ce ee.scopes q name b len <=> _`
     (fn th => fs[th]) >> metis_tac[]
 QED
