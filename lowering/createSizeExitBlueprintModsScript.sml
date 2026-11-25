@@ -777,6 +777,7 @@ Resume create_size_exit_blueprint_mods[extent_reject]:
      `run_inst_seq (emitted_insts cf ca1) (Obs (j+4)) = OK pre`,
      `run_inst_seq (emitted_insts ca1 sc) pre = OK tf`,
      `emit_void EXTCODECOPY _ ca2 = ((),ca3)`] >>
+  qexistsl_tac [`data`,`len`,`aw`] >>
   rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE REFL_TAC)
 QED
 
