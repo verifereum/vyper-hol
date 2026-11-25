@@ -2,6 +2,7 @@ Theory bodyFullBuiltinWordNot
 Ancestors
   bodyFullShadowBodyInv
   bodyFullPreds bodySimFull bodyFullGhostFrame exprSimWordBuiltins exprSimHypsDefs
+  exprSimFullBundleProps
   exprSimUnopProps exprSimUnopCompose gasOutcomeFullCompose
   gasShadowCompileStmtHelpers gasExemptCert vyperStorageTrace exprSimDefs
   fragGasSeqPtr fragGasOriginPtr exprSimSource
@@ -51,6 +52,8 @@ Theorem word_not_typed_suffix[local]:
     stmt_state_rel H ctx func cenv cx es s /\
     ghost_inv_at (DF H) lo d cenv cx es G tn s) ==>
   ?v' t G' tn'.
+    (?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+           t = raw with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     unop_result cx ann Not tys v es = INL v' /\
     alloca_history func t /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
@@ -175,7 +178,12 @@ Proof
        ptrDisciplineTheory.allocas_below_fmp_def] >>
      metis_tac[ptrDisciplineTheory.allocas_below_fmp_def]) >>
   qexistsl_tac [`v'`, `z`, `step_prov PG G inst u`,
-    `step_taint inst s u tn`] >> simp[] >>
+    `step_taint inst s u tn`] >> conj_tac
+  >- (qexists_tac `u` >> conj_tac
+      >- (simp[] >> irule run_inst_seq_sing_ok >>
+          simp[Abbr `inst`, Abbr `u`, Abbr `out`]) >>
+      simp[Abbr `z`, arithmeticTheory.ADD1]) >>
+  simp[] >>
   conj_tac
   >- (rpt strip_tac >>
       `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
@@ -242,6 +250,136 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
+(* The endpoint, continuation result and parent post for a selected Not operand. *)
+Theorem word_not_continuation_selected:
+  (is_bool_type (expr_type e) \/ is_uint256_type (expr_type e) \/
+   is_bytes32_type (expr_type e) \/ is_flag_type (expr_type e)) /\
+  is_word_type (expr_type e) /\ expr_body_pre cenv cx env e es /\
+  (if expr_type e = BaseT BoolT then emit_op ISZERO [x]
+   else compile_invert x (expr_type e) cenv) s1 = (op,sb) /\
+  fn_has_code s1 sb func /\ fn_inst_ids_distinct func /\
+  sa.cs_next_var <= s1.cs_next_var /\ local_ptrs_reserved cenv s1 /\
+  (!y sz. cenv.ce_return_buf = SOME (PtrVar (Var y) sz) ==>
+    not_fresh_at s1 y) /\
+  (!y sz. cenv.ce_return_pc = SOME (PtrVar (Var y) sz) ==>
+    not_fresh_at s1 y) /\
+  (!tail. bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := reads ++ tail) = (res,mid with gas_obs := tail)) /\
+  storage_trace_domain cx st0 mid.storage_trace /\ ~t.vs_halted /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    expr_sim_full_post (DF,lo,d,ctx,func) cenv cx e (es,sa,s1,s0,x,G0,tn0)
+      H res mid G1 tn1 t) ==>
+  ?v v' z G2 tn2.
+    res = INL v /\
+    (?raw. run_inst_seq (emitted_insts s1 sb) t = OK raw /\
+           z = raw with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    (!tail. unop_result cx (expr_type e) Not [expr_type e] v
+              (mid with gas_obs := tail) = INL v') /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+        (t,G1,tn1) [] (OK z,G2,tn2) /\
+      expr_sim_full_post (DF,lo,d,ctx,func) cenv cx
+        (Builtin (expr_type e) Not [e]) (es,sa,sb,s0,op,G0,tn0)
+        H (INL v') (mid with gas_obs := []) G2 tn2 z)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+     mid.storage_trace` by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  simp[NoAsms, exprSimFullBundlePropsTheory.expr_sim_full_post_def,
+       exprSimFullBundlePropsTheory.expr_sim_full_endpoint_def] >>
+  disch_then (qx_choose_then `v` (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `res = INL v` SUBST_ALL_TAC >>
+  `bind (eval_expr cx e) (read_result cx) (es with gas_obs := reads) =
+     (INL v,mid with gas_obs := [])` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     pure_rewrite_tac[APPEND_NIL] >> disch_then ACCEPT_TAC) >>
+  `expr_body_pre cenv cx env e (es with gas_obs := reads)` by simp[] >>
+  drule_at (Pos last) (CONV_RULE (DEPTH_CONV ETA_CONV)
+    exprSimSourceTheory.expr_body_pre_eval) >>
+  disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    (qpat_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     pure_rewrite_tac[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+                      vyperTypeInvariantsTheory.env_context_consistent_def] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  `?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+        value_has_type tv v` by
+    (qpat_x_assum `!v'. INL v = INL v' ==> _` (qspec_then `v` mp_tac) >>
+     simp[vyperTypeExprResultTheory.expr_result_typed_def,
+       vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+       vyperTypeInvariantsTheory.value_result_typed_def]) >>
+  `eval_operand x t = SOME (typed_val_to_w256 tv v)` by
+    (irule exprBopSimPropsTheory.expr_val_rel_typed >>
+     qexistsl_tac [`cx`, `expr_type e`] >> simp[] >>
+     qpat_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _`
+       (mp_tac o cj 3 o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >> simp[]) >>
+  `allocas_from lo t` by
+    (qpat_assum `ghost_inv_at _ _ _ _ _ mid _ _ t`
+       (mp_tac o REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >> simp[]) >>
+  `op_taint tn1 x = {}` by
+    (qpat_assum `ptr_val_ok _ _ _ x _ _ _`
+       (mp_tac o REWRITE_RULE [bodyPtrDefsTheory.ptr_val_ok_def]) >> simp[]) >>
+  `alloca_inv t` by
+    (qpat_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _`
+       (mp_tac o cj 1 o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
+     simp[exprLoweringPropsTheory.stmt_state_rel_def]) >>
+  `!nsid m. expr_type e = FlagT nsid /\ tv = FlagTV m ==>
+     cenv.ce_flag_n_members (nsid_to_string nsid) = m` by
+    (qpat_assum `expr_sim_inv _ _ _ _`
+       (mp_tac o REWRITE_RULE [expr_sim_inv_def]) >>
+     disch_then (map_every assume_tac o CONJUNCTS) >> rpt strip_tac >>
+     qpat_x_assum `evaluate_type (get_tenv cx) _ = SOME _` mp_tac >>
+     asm_rewrite_tac[vyperValueTheory.evaluate_type_def] >>
+     simp[AllCaseEqs()] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx mid t /\
+     ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_sim_full_post _ _ _ _ _ H _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     simp[NoAsms, expr_sim_full_post_def, loweringPostsTheory.expr_post_def] >>
+     strip_tac >> simp[]) >>
+  drule_all (word_not_typed_suffix |> Q.INST
+    [`tys` |-> `[expr_type e]`, `explicit` |-> `explicit`, `PG` |-> `PG`]) >>
+  disch_then (qspecl_then [`explicit`, `e`, `PG`]
+    (qx_choose_then `v'` (qx_choose_then `z` (qx_choose_then `G2`
+      (qx_choose_then `tn2` (map_every assume_tac o CONJUNCTS)))))) >>
+  qexistsl_tac [`v`, `v'`, `z`, `G2`, `tn2`] >>
+  simp[exprSimUnopComposePropsTheory.unop_result_gas_obs] >>
+  qx_gen_tac `H` >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_sim_full_post _ _ _ _ _ H _ _ _ _ _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  simp[NoAsms, expr_sim_full_post_def] >> strip_tac >>
+  simp[expr_sim_full_endpoint_def] >>
+  `expr_val_rel cx (expr_type e) v' op z` by
+    (simp[loweringPostsTheory.expr_val_rel_def] >> metis_tac[]) >>
+  conj_tac
+  >- (irule word_not_parent_post >> simp[] >>
+      qexistsl_tac [`s1`, `t`, `v`, `x`] >> simp[] >>
+      metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  simp[vyperASTTheory.expr_type_def, exprSimMemDefsTheory.expr_store_bound_def,
+       loweringPostsTheory.post_value_type_def] >>
+  conj_tac
+  >- (qpat_assum `!H. valid_horizon _ _ H _ ==> ghost_inv_at _ _ _ _ _ _ G2 tn2 z`
+        (qspec_then `H` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >>
+      simp[NoAsms, bodyPtrDefsTheory.ghost_inv_at_def] >>
+      rpt strip_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (irule bodyPtrDefsTheory.ptr_val_ok_word >> simp[]) >>
+  qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ G1 tn1` mp_tac >>
+  simp[bodyPtrDefsTheory.ghost_kept_at_def] >>
+  strip_tac >> reverse conj_tac
+  >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  `not_fresh_at s1 x'` by metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+  metis_tac[]
+QED
 Theorem word_not_sim_full:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
@@ -350,123 +488,45 @@ Proof
      strip_tac >>
      `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
         mid.storage_trace` by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >>
-     qunabbrev_tac `childQ` >> BETA_TAC >> strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-       (assume_tac o SIMP_RULE (srw_ss()) []) >>
-     qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
-     disj1_tac >> qexists_tac `v` >> simp[] >>
-     `bind (eval_expr cx e) (read_result cx)
-        (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-        (INL v, mid with gas_obs := [])` by
-       (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
-        pure_rewrite_tac[APPEND_NIL] >> disch_then ACCEPT_TAC) >>
-     `expr_body_pre cenv cx env e
-        (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
-     drule_at (Pos last) (CONV_RULE (DEPTH_CONV ETA_CONV)
-       exprSimSourceTheory.expr_body_pre_eval) >>
-     disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-     `env.type_defs = get_tenv cx` by
-       (qpat_assum `expr_sim_inv _ _ _ _` mp_tac >>
-        pure_rewrite_tac[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
-                         vyperTypeInvariantsTheory.env_context_consistent_def] >>
-        strip_tac >> first_assum ACCEPT_TAC) >>
-     `?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-           value_has_type tv v` by
-       (qpat_x_assum `!v'. INL v = INL v' ==> _` (qspec_then `v` mp_tac) >>
-        simp[vyperTypeExprResultTheory.expr_result_typed_def,
-          vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-          vyperTypeInvariantsTheory.value_result_typed_def]) >>
-     `eval_operand x t = SOME (typed_val_to_w256 tv v)` by
-       (irule exprBopSimPropsTheory.expr_val_rel_typed >>
-        qexistsl_tac [`cx`, `expr_type e`] >> simp[] >>
-        qpat_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _`
-          (mp_tac o cj 3 o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
-        simp[]) >>
+     `~t.vs_halted` by
+       (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+          (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+        (impl_tac >- first_assum ACCEPT_TAC) >>
+        disch_then (ACCEPT_TAC o cj 2 o BETA_RULE)) >>
+     `!H. valid_horizon cx st0 H mid.storage_trace ==>
+        expr_sim_full_post (DF,lo,d,ctx,func) cenv cx e (es,sa,s1,s0,x,G0,tn0)
+          H res mid G1 tn1 t` by
+       (gen_tac >> disch_tac >>
+        qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+          (qspec_then `H` mp_tac) >>
+        (impl_tac >- first_assum ACCEPT_TAC) >>
+        disch_then (mp_tac o cj 1 o BETA_RULE) >>
+        simp[Abbr `childQ`, expr_sim_full_post_def, expr_sim_full_endpoint_def,
+             AC CONJ_ASSOC CONJ_COMM]) >>
      `local_ptrs_reserved cenv s1` by
        metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
-     `allocas_from lo t` by
-       (qpat_assum `ghost_inv_at _ _ _ _ _ mid _ _ t`
-          (mp_tac o REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >>
-        simp[]) >>
-     `op_taint tn1 x = {}` by
-       (qpat_assum `ptr_val_ok _ _ _ x _ _ _`
-          (mp_tac o REWRITE_RULE [bodyPtrDefsTheory.ptr_val_ok_def]) >>
-        simp[]) >>
-     `stmt_state_rel (storage_trace_horizon mid.storage_trace)
-        ctx func cenv cx mid t` by
-       (qpat_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _`
-          (mp_tac o cj 1 o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
-        simp[]) >>
-     `alloca_inv t` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
-     `!nsid m. expr_type e = FlagT nsid /\ tv = FlagTV m ==>
-        cenv.ce_flag_n_members (nsid_to_string nsid) = m` by
-       (qpat_assum `expr_sim_inv _ _ _ _`
-          (mp_tac o REWRITE_RULE [expr_sim_inv_def]) >>
-        disch_then (map_every assume_tac o CONJUNCTS) >>
-        rpt strip_tac >>
-        qpat_x_assum `evaluate_type (get_tenv cx) _ = SOME _` mp_tac >>
-        asm_rewrite_tac[vyperValueTheory.evaluate_type_def] >>
-        simp[AllCaseEqs()] >> metis_tac[]) >>
      `!y sz. cenv.ce_return_buf = SOME (PtrVar (Var y) sz) ==>
         not_fresh_at s1 y` by
        metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
      `!y sz. cenv.ce_return_pc = SOME (PtrVar (Var y) sz) ==>
         not_fresh_at s1 y` by
        metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-     `!H. valid_horizon cx st0 H mid.storage_trace ==>
-        stmt_state_rel H ctx func cenv cx mid t /\
-        ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t` by
-       (rpt strip_tac >>
-        qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-          (qspec_then `H` mp_tac) >> simp[] >>
-        metis_tac[cj 1 loweringPostsTheory.expr_post_def]) >>
-     drule_all (word_not_typed_suffix |> SPEC_ALL |> Q.INST
-       [`tys` |-> `[expr_type e]`, `explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
-        `DF` |-> `DF`, `st0` |-> `st0`, `PG` |-> `PG`]) >>
-     disch_then (qspecl_then [`shadow_ctx`, `e`, `PG`] strip_assume_tac) >>
+     drule_all word_not_continuation_selected >>
+     disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`]
+       (qx_choose_then `v` (qx_choose_then `v'` (qx_choose_then `z`
+         (qx_choose_then `G2` (qx_choose_then `tn2`
+           (map_every assume_tac o CONJUNCTS))))))) >>
+     disj1_tac >> qexists_tac `v` >> simp[] >>
      irule gas_outcome_full_pure >>
-     reverse conj_tac >- simp[] >>
-     qexistsl_tac [`G'`, `mid`, `INL v'`, `t'`, `tn'`] >>
-     simp[] >> conj_tac
-     >- (gen_tac >> simp[exprSimUnopComposePropsTheory.unop_result_gas_obs]) >>
-     qx_gen_tac `H` >> strip_tac >> simp[] >>
-     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
-       (?v. _) /\ _`
-       (qspec_then `H` mp_tac) >>
-     (impl_tac >- simp[]) >>
-     disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-     `expr_val_rel cx (expr_type e) v' op t'` by
-       (simp[loweringPostsTheory.expr_val_rel_def] >> metis_tac[]) >>
-     conj_tac
-     >- (irule word_not_parent_post >> simp[] >>
-         qexistsl_tac [`s1`, `t`, `v`, `x`] >> simp[] >>
-         metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
-     simp[vyperASTTheory.expr_type_def, exprSimMemDefsTheory.expr_store_bound_def,
-          loweringPostsTheory.post_value_type_def] >>
-     conj_tac
-     >- (qpat_assum `!H. valid_horizon _ _ H _ ==> ghost_inv_at _ _ _ _ _ _ G' tn' t'`
-           (qspec_then `H` mp_tac) >>
-         (impl_tac >- first_assum ACCEPT_TAC) >>
-         simp[NoAsms, bodyPtrDefsTheory.ghost_inv_at_def] >>
-         rpt strip_tac >> first_assum ACCEPT_TAC) >>
-     conj_tac
-     >- (irule bodyPtrDefsTheory.ptr_val_ok_word >> simp[]) >>
-     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> (?v. _) /\ _`
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`G2`, `mid`, `INL v'`, `z`, `tn2`] >>
+     conj_tac >- simp[] >>
+     qx_gen_tac `H` >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
        (qspec_then `H` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >>
-     disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-     qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ G1 tn1` mp_tac >>
-     simp[bodyPtrDefsTheory.ghost_kept_at_def] >>
-     strip_tac >> reverse conj_tac
-     >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     rpt strip_tac >>
-     `not_fresh_at s1 x'` by
-       metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
-     metis_tac[]) >>
+     simp[NoAsms, expr_sim_full_post_def, expr_sim_full_endpoint_def,
+          AC CONJ_ASSOC CONJ_COMM]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   first_x_assum (irule o SPEC_ALL) >>
   simp[vyperASTTheory.expr_type_def] >>
