@@ -18,6 +18,8 @@ Theorem ctor_saved_rows_cons_mods:
   (!K. dead_lo_ok_mods K (DF K) lo cenv cx) /\
   EVERY (source_body_call_supported cx)
     (int_calls_exprs xs) /\
+  (~exprs_can_mutate cenv xs ==>
+    !tr. get_storage cx ee tr = get_storage cx mid tr) /\
   eval_exprs cx xs (mid with gas_obs := obs) = (INL vs,ee with gas_obs := out) /\
   (!K. valid_horizon cx st0 K es.storage_trace ==>
        stmt_state_rel K ctx func cenv cx es s0) /\
