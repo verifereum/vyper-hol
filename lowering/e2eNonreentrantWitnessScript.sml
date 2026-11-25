@@ -1,7 +1,7 @@
 Theory e2eNonreentrantWitness
 Ancestors
   e2eWitnessCompute e2eDefs e2eDeployDefs e2eCorrectness
-  e2eDeployCorrectness[qualified,ignore_grammar]
+  e2eDeployed e2eDeployEntry
   immutableSectionRel alist integer_word option vyperStorageFootprint
   compileVyper e2eProducers vfmRunCall callTrace
   vyperCalldata vyperInterpreter
@@ -122,8 +122,7 @@ Triviality optimized_getters_deploy_typing:
   deploy_typing_ok ^tops ^am_dep ^tx_dep
 Proof
   simp ([deploy_typing_ok_def, init_am, p23_deploy_tx_def, empty_tx,
-         tx_wt, SIMP_RULE (srw_ss()) [init_am] check_dep,
-         SIMP_RULE (srw_ss()) [init_am] check_run] @ machine_wt @ account_simps)
+         tx_wt, SIMP_RULE (srw_ss()) [init_am] check_dep] @ machine_wt @ account_simps)
 QED
 
 Triviality optimized_getters_deploy_state:
@@ -158,7 +157,8 @@ Proof
           [init_am, contextTheory.global_nonreentrant_slot_def] check_run, tx_wt,
          global_cells_typed_def, account_immutables_def,
          vyperTypeContractTheory.constants_fold_module_def] @ machine_wt) >>
-  rpt gen_tac >> Cases_on `addr = 2w` >> simp account_simps
+  rpt gen_tac >> Cases_on `addr = 2w` >>
+  simp (vfmExecutionTheory.process_deletions_def :: account_simps)
 QED
 
 Triviality optimized_getters_accounts:
@@ -251,7 +251,7 @@ QED
     let
       val dispatch = EVAL ``calldata_dispatch ^tops (^tx).calldata``
       val storage = prove (``storage_ok ^horizon ^am_call ^tx``,
-        simp[storage_ok_def, regions_consistent_def, storage_locks_separated_def,
+        simp[storage_ok_def, horizon_ok_def, regions_consistent_def, storage_locks_separated_def,
              storage_well_formed_on_def])
       val within = prove (``call_within ^horizon ^tops ^am_call ^tx ^es``,
         simp[call_within_def, dispatch, trace] >> gen_tac >> EVAL_TAC)
@@ -267,30 +267,72 @@ QED
 
   val accepted = prove (``asm_opt_finalizer IN accepted_finalizers``,
     simp[asmOptimizerTheory.accepted_finalizers_def])
-  val runtime_not_ef = prove (``~(?t. ^runtime_bc = 0xEFw :: t)``, simp[])
   val compiler_args =
     [``asm_opt_finalizer``, ``o1_policy all_capabilities``, tops, deploy_bc, runtime_bc]
   val common_premises = [accepted, compile]
   val deploy_args = compiler_args @ [am_dep, tx_dep, es_dep]
   val deploy_premises =
     common_premises @ [optimized_getters_deploy_typing, optimized_getters_deploy_state]
+  val dep_horizon = prove
+    (``horizon_ok ^get_horizon``,
+     simp[horizon_ok_def, regions_consistent_def, storage_locks_separated_def])
+  val dep_evm_state = prove
+    (``evm_state_ok ^es_dep``,
+     irule (MATCH_MP deploy_state_rel_evm_state_ok optimized_getters_deploy_state) >>
+     simp[p23_frame_def,
+          vfmReturndataBoundTheory.returndata_bounded_def,
+          vfmCalldataBoundTheory.calldata_bounded_def,
+          vfmCalldataBoundTheory.memory_paid_def,
+          vfmCalldataBoundTheory.frames_paid_def,
+          vfmCalldataBoundTheory.outputs_fit_def])
+  val dep_h_storage = prove
+    (``(lookup_account (^tx_dep).target (^am_dep).accounts).storage = empty_storage``,
+     simp ([dep_tx_eval, tx_wt, init_am] @ account_simps))
+  val dep_h_transient = prove
+    (``(^am_dep).tStorage (^tx_dep).target = empty_storage``,
+     simp ([dep_tx_eval, tx_wt, init_am] @ account_simps @
+           [vfmContextTheory.empty_transient_storage_def]))
+  val dep_load_trace_eval = EVAL
+    ``SND (load_contract_trace (SOME []) gs ^am_dep ^tx_dep
+        [(NONE, ^tops)] [])``
+  val dep_load_trace = prove
+    (``!gs. SND (load_contract_trace (SOME []) gs ^am_dep ^tx_dep
+        [(NONE, ^tops)] []) = []``,
+     gen_tac >> PURE_REWRITE_TAC [dep_load_trace_eval] >> REFL_TAC)
+  val dep_within = prove
+    (``deploy_within ^get_horizon ^tops ^am_dep ^tx_dep ^es_dep``,
+     simp[deploy_within_def, deploy_storage_trace_def,
+          dep_trace, dep_load_trace,
+          storage_observations_ok_def, storage_trace_regions_def,
+          storage_trace_locks_def, storage_roots_fit_def,
+          storage_trace_backends_well_formed_def])
+  val dep_entry = prove
+    (``deploy_entry_rel ^tops ^deploy_bc ^am_dep ^tx_dep ^es_dep``,
+     rewrite_tac[deploy_entry_rel_state] >>
+     metis_tac[optimized_getters_deploy_state, dep_evm_state, dep_h_storage,
+               dep_h_transient])
 
   val _ = MATCH_MP
-    (SPECL deploy_args e2eDeployCorrectnessTheory.e2e_deploy_correctness)
-    (LIST_CONJ (deploy_premises @ [dep_bound]))
+    (SPECL (deploy_args @ [get_horizon]) e2e_deploy_correctness_deployed)
+    (LIST_CONJ (common_premises @ [optimized_getters_deploy_typing,
+                                   dep_entry, dep_bound, dep_horizon, dep_within]))
   val _ = MATCH_MP
-    (SPECL deploy_args e2eGasSufficientTopTheory.e2e_deploy_gas_sufficient)
-    (LIST_CONJ (deploy_premises @ [runtime_not_ef]))
+    (SPECL (deploy_args @ [get_horizon])
+       e2eGasSufficientTopTheory.e2e_deploy_gas_sufficient)
+    (LIST_CONJ (common_premises @ [optimized_getters_deploy_typing,
+                                   dep_entry, dep_horizon]))
 
   fun check_call (horizon, tx, es, entry_facts, storage_facts) =
     let
       val args = compiler_args @ [am_call, tx, es]
-      val premises = common_premises @ entry_facts
-      val _ = MATCH_MP (SPECL (args @ [horizon]) vyper_call_correct)
+      val call_premises = CONJUNCTS (REWRITE_RULE [call_premises_deployed]
+        (LIST_CONJ entry_facts))
+      val premises = common_premises @ call_premises
+      val _ = MATCH_MP (SPECL (args @ [horizon]) vyper_call_correct_deployed)
         (LIST_CONJ (premises @ storage_facts))
       val _ = MATCH_MP
-        (SPECL args e2eGasSufficientTopTheory.vyper_call_gas_sufficient)
-        (LIST_CONJ premises)
+        (SPECL (args @ [horizon]) vyper_call_gas_sufficient_deployed)
+        (LIST_CONJ (premises @ [List.nth (storage_facts, 1)]))
     in
       ()
     end

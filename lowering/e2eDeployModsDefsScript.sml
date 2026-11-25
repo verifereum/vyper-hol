@@ -1,7 +1,8 @@
 (* Creation boundary and gas exemptions for linked units. *)
 Theory e2eDeployModsDefs
 Ancestors
-  e2eModsDefs e2eDefs e2eDeployDefs e2eGasSufficient[qualified]
+  e2eModsDefs e2eDefs e2eDeployDefs e2eDeployEntry[qualified,ignore_grammar]
+  e2eGasSufficient[qualified]
   ctorDeployDefs[qualified] compileUnit sourceExemptMods
   vyperInterpreter vyperTypeContract vyperTypeInvariants vyperContext vyperABI
   vyperStorageFootprint callTrace frameOutcome vfmExecution vfmState
@@ -43,13 +44,12 @@ Proof
   simp[deploy_evaluation_context_mods_def, deploy_evaluation_context_def]
 QED
 
-(* The constructor and runtime checker artifacts are for the full unit.
+(* The deploy checker covers the full unit.
    Deployment runs before the target has installed source or constant cells. *)
 Definition deploy_typing_ok_mods_def:
   deploy_typing_ok_mods mods exps am tx <=>
-    ?deploy_art runtime_art.
+    ?deploy_art.
       check_contract T am.layouts tx.target mods = SOME deploy_art /\
-      check_contract F am.layouts tx.target mods = SOME runtime_art /\
       exports_ok am.layouts tx.target mods exps /\
       machine_well_typed am /\ call_tx_well_typed tx
 End
@@ -140,10 +140,7 @@ Definition deploy_result_rel_mods_def:
           frame_outcome es r es' NONE [] am'.logs /\
           (lookup_account tx.target es'.rollback.accounts).code = [] /\
           MEM tx.target es'.rollback.toDelete /\
-          accounts_agree H tx.target am'.accounts
-            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-          transient_agree H tx.target am'.tStorage es'.rollback.tStorage /\
-          LIST_REL (request_agree H tx.target) rqs (call_requests es)
+          effects_agree H tx (am', rqs) es es'
         else
           ?section.
             immutables_section_rel_mods mods (account_immutables am' tx.target)
@@ -159,14 +156,7 @@ Definition deploy_result_rel_mods_def:
                     es'.rollback.accounts)) /\
             transient_agree H tx.target am'.tStorage es'.rollback.tStorage /\
             LIST_REL (request_agree H tx.target) rqs (call_requests es)
-    | INR (AssertException s) =>
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                      (exc = Reverted \/ s = "UNREACHABLE")
-    | INR (Error e) =>
-        unspecified_behaviour_exempt_mods mods e \/
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                      (!d. e = RevertData d ==> exc = Reverted)
-    | INR _ => F
+    | INR exc => exception_outcome_rel_mods mods exc es r es'
 End
 
 Theorem deploy_result_rel_mods_singleton:
@@ -174,7 +164,7 @@ Theorem deploy_result_rel_mods_singleton:
   deploy_result_rel H tops runtime_bc tx es r es' src
 Proof
   simp[deploy_result_rel_mods_def, deploy_result_rel_def,
-       immutables_section_rel_mods_singleton, unspecified_behaviour_exempt_mods_singleton] >>
+       immutables_section_rel_mods_singleton, exception_outcome_rel_mods_singleton] >>
   BasicProvers.EVERY_CASE_TAC >> simp[]
 QED
 
@@ -228,4 +218,44 @@ Theorem deploy_gas_source_exempt_mods_singleton:
 Proof
   simp[deploy_gas_source_exempt_mods_def, e2eGasSufficientTheory.deploy_gas_source_exempt_def,
        deploy_source_exempt_mods_singleton]
+QED
+
+(* The fresh creation frame and empty target storage for a linked unit. *)
+Definition deploy_entry_rel_mods_def:
+  deploy_entry_rel_mods mods exps deploy_bc am tx es <=>
+    ?ctxt rb args_bytes.
+      es.contexts = [(ctxt, rb)] /\
+      evm_state_ok es /\
+      (?d. es.msdomain = Collect d) /\
+      frame_fresh ctxt /\ ctxt.msgParams.outputTo = Code tx.target /\
+      frame_tx_rel tx es ctxt /\ world_rel am tx es /\
+      ctxt.msgParams.code = deploy_bc ++ args_bytes /\
+      constructor_args_encode_mods mods tx args_bytes /\ tx.calldata = [] /\
+      tx.function_name = "__init__" /\ ~tx.is_static /\ tx.created_in_tx /\
+      layouts_agree_mods mods exps am tx /\
+      e2eDeployEntry$deploy_target_fresh_rel am tx
+End
+
+Theorem deploy_entry_rel_mods_singleton:
+  deploy_entry_rel_mods [(NONE, tops)] [] deploy_bc am tx es <=>
+  e2eDeployEntry$deploy_entry_rel tops deploy_bc am tx es
+Proof
+  simp[deploy_entry_rel_mods_def, e2eDeployEntryTheory.deploy_entry_rel_def,
+       constructor_args_encode_mods_singleton, layouts_agree_mods_singleton]
+QED
+
+(* One storage horizon covers every filling of the constructor readings. *)
+Definition deploy_within_mods_def:
+  deploy_within_mods H mods exps am tx es <=>
+    let cx = deploy_evaluation_context_mods mods am tx in
+    !gs. storage_observations_ok cx H
+      (deploy_storage_trace_mods (SOME (MAP SND (call_trace es))) gs am tx mods exps)
+End
+
+Theorem deploy_within_mods_singleton:
+  deploy_within_mods H [(NONE, tops)] [] am tx es <=>
+  e2eDeployEntry$deploy_within H tops am tx es
+Proof
+  simp[deploy_within_mods_def, e2eDeployEntryTheory.deploy_within_def,
+       deploy_evaluation_context_mods_singleton, deploy_storage_trace_mods_singleton]
 QED

@@ -137,7 +137,7 @@ Triviality linked_witness_deploy_typing:
   deploy_typing_ok_mods linked_witness_mods linked_witness_exports
     linked_witness_initial_machine linked_witness_deploy_tx
 Proof
-  rewrite_tac[deploy_typing_ok_mods_def, linked_check_deploy, linked_check_runtime] >>
+  rewrite_tac[deploy_typing_ok_mods_def, linked_check_deploy] >>
   simp ([linked_witness_initial_machine_def, linked_witness_deploy_tx_def,
          p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
          vyperInterpreterTheory.initial_machine_state_def, linked_deploy_length] @
@@ -483,7 +483,8 @@ val linked_horizon =
 Triviality linked_witness_storage:
   e2eCorrectness$storage_ok ^linked_horizon linked_witness_am_call linked_witness_call_tx
 Proof
-  rewrite_tac[e2eCorrectnessTheory.storage_ok_def, linked_call_machine,
+  rewrite_tac[e2eCorrectnessTheory.storage_ok_def, e2eCorrectnessTheory.horizon_ok_def,
+              linked_call_machine,
               linked_source_machine] >>
   simp[vyperStorageFootprintTheory.regions_consistent_def,
        vyperStorageFootprintTheory.storage_locks_separated_def,

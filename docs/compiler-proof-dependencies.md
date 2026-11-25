@@ -86,7 +86,7 @@ preserves its historical schema.
 |---|---|---|
 | `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 (`compile_vyper_runtime_phases`, `K SOME`) or `compile_vyper_runtime_phases_asm_opt` extracts raw phases and the exact assembled runtime bytes (`assemble prog'` of the optimized `prog'` for `asm_opt_finalizer`). The runtime lowering (`lower_vyper_runtime_unit` and its `_mods` form) refuses an unfolded `sha256` in external defaults (`external_defaults_no_sha256`). No universal success producer. |
 | `source_typing_ok tops am tx` | boundary + environmental | `check_contract F` acceptance, `global_cells_typed`, the folded constants inside the target's constant cells (`constants_fold_module … = SOME cenv`, `cenv SUBMAP …`), `machine_well_typed am`, `call_tx_well_typed tx`. With `call_state_rel`'s `source_deployment_rel` it gives `supported_program tops` (`source_typing_ok_supported_program`, through `check_contract_supported_program`), so the whitelist is not a public premise. Checker artifact; partial `load_contract_establishes_checked_contract_runtime_ready`, `load_contract_establishes_machine_well_typed`, `checked_call_external_preserves_machine_well_typed`. No complete arbitrary-environment producer. |
-| `storage_ok H am tx`, `call_within H tops am tx es` | environmental storage horizon | The caller fixes the regions `H`. When calldata dispatch selects a function and the frame is not resource-starved, `call_result_rel H` gives `storage_ok H` again after the call. No producer of `call_within`, and no deployment/transaction producer of `storage_ok`. |
+| `storage_ok H am tx`, `call_within H tops am tx es` | environmental storage horizon | The caller fixes the regions `H`. When calldata dispatch selects a function and the frame is not resource-starved, `call_result_rel H` gives `storage_ok H` again after the call. The deployment headline gives `storage_ok H` on `next_source_machine` for later transactions targeting the deployed address. No producer of `call_within`, and no general producer of `storage_ok`. |
 | `call_state_rel tops runtime_bc am tx es` | environmental | No general producer or satisfiability theorem. L6/L8 **consume**, not produce, it; transaction corollary deferred to Milestone 7. |
 | `LENGTH (call_trace es) < 2 ** 64` | environmental call-count bound | No producer. The frame's observed calls, computed precompiles included, number fewer than `2 ** 64`. |
 
@@ -202,14 +202,16 @@ is proved, reaches no admitted lemma, and assumes no whitelist: `deploy_typing_o
 `supported_program` and `supported_program_deploy` from `deploy_typing_ok` and
 the `layouts_agree` inside `deploy_state_rel`. Its premises are
 `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME
-(deploy_bc, runtime_bc)`, `deploy_typing_ok` (both `check_contract` acceptances, `machine_well_typed`,
-`call_tx_well_typed`; pre-constant deployment readiness follows from it,
-`deploy_typing_ok_constants_ready`), `deploy_state_rel` (canonical arguments,
-an uninstalled source target, an empty target account in
-`es.originalAccounts`, among others) and a call trace of fewer than 2⁶⁴
-entries. Storage is not a premise: `deploy_storage_ok` guards each gas
-filling inside `deploy_call_result_rel`. It concludes a `run_call` result that
-is `creation_resource_starved` or satisfies `deploy_call_result_rel`. Success
+(deploy_bc, runtime_bc)`, `deploy_typing_ok` (successful deploy-mode
+`check_contract T`, `machine_well_typed` and `call_tx_well_typed`),
+`deploy_state_rel` (canonical arguments, an uninstalled source target,
+an empty target account in `es.originalAccounts`, among others) and a call
+trace of fewer than 2⁶⁴ entries. `check_contract_deploy_implies_runtime`
+gives runtime acceptance, and `deploy_typing_ok_constants_ready` packages
+the runtime checker artifact with pre-constant deployment readiness.
+`deploy_storage_ok` guards each gas filling inside `deploy_call_result_rel`.
+The theorem concludes a `run_call` result that is `creation_resource_starved`
+or satisfies `deploy_call_result_rel`. Success
 compares, when the source installs the target, returned/installed
 `runtime_bc ++ section` satisfying `immutables_section_rel`; in both the
 installation and the self-destruct case it compares accounts after pending

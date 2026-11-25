@@ -3,8 +3,7 @@
  * sufficient-gas theorem S7g: an instruction that touches memory only
  * below H costs at most frame_op_gas H, so with that much gas left it
  * doesn't run out of gas, and a call leaves the frame at least a 64th of
- * what is left after that cost.  RETURNDATACOPY, whose size the callee
- * sets, is the exception.
+ * what is left after that cost.
  *
  * TOP-LEVEL:
  *   frame_op_gas       - the gas bound of one instruction under H
@@ -31,7 +30,6 @@ Theorem asm_frame_gas_step_call:
   !prog data es0 a es H.
     asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
     a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
-    EL a.as_pc prog <> AsmOp "RETURNDATACOPY" /\
     asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
     frame_op_gas H <= frame_gas_left es /\
     (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL" \/
@@ -117,7 +115,6 @@ Theorem asm_frame_gas_step_noncall:
   !prog data es0 a es H.
     asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
     a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
-    EL a.as_pc prog <> AsmOp "RETURNDATACOPY" /\
     asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
     frame_op_gas H <= frame_gas_left es /\
     EL a.as_pc prog <> AsmOp "CALL" /\
@@ -142,17 +139,19 @@ Resume asm_frame_gas_step_noncall[raw]:
   rule_assum_tac (PURE_REWRITE_RULE [frame_op_gas_def]) >>
   rpt gen_tac >> strip_tac >>
   Cases_on `?name. EL a.as_pc prog = AsmOp name /\
+    MEM name ["CALLDATACOPY";"CODECOPY";"RETURNDATACOPY";"EXTCODECOPY";"MCOPY";
+      "LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]`
+  >- (irule asm_frame_copy_raw_gas >> simp[GSYM frame_op_gas_def] >>
+      metis_tac[listTheory.MEM]) >>
+  `EL a.as_pc prog <> AsmOp "RETURNDATACOPY"` by
+    (strip_tac >> fs[] >> qexists_tac `"RETURNDATACOPY"` >> simp[]) >>
+  Cases_on `?name. EL a.as_pc prog = AsmOp name /\
     MEM name ["SLOAD";"SSTORE";"TLOAD";"TSTORE"]`
   >- (irule asm_noncall_storage_gas >> simp[GSYM frame_op_gas_def] >>
       metis_tac[listTheory.MEM]) >>
   Cases_on `?name. EL a.as_pc prog = AsmOp name /\
     MEM name ["MLOAD";"MSTORE";"MSTORE8";"SHA3";"RETURN";"REVERT"]`
   >- (irule asm_frame_memory_raw_gas >> simp[GSYM frame_op_gas_def] >>
-      metis_tac[listTheory.MEM]) >>
-  Cases_on `?name. EL a.as_pc prog = AsmOp name /\
-    MEM name ["CALLDATACOPY";"CODECOPY";"EXTCODECOPY";"MCOPY";
-      "LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]`
-  >- (irule asm_frame_copy_raw_gas >> simp[GSYM frame_op_gas_def] >>
       metis_tac[listTheory.MEM]) >>
   irule asm_noncall_cheap_gas >> simp[GSYM frame_op_gas_def] >>
   gvs[listTheory.MEM] >> metis_tac[]
@@ -231,7 +230,7 @@ Proof
 QED
 
 (* The frame's step at es, an instruction of prog that is
-   asm_inst_gas_ok H and not RETURNDATACOPY, with frame_op_gas H gas left:
+   asm_inst_gas_ok H with frame_op_gas H gas left:
    step_inst doesn't run out of gas at our depth and uses at most
    frame_op_gas H there (a call or create leaves at least a 64th of what
    is left after that), and at the frame's next state an instruction that
@@ -241,7 +240,6 @@ Theorem asm_frame_gas_step:
   !prog data es0 a es H.
     asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
     a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
-    EL a.as_pc prog <> AsmOp "RETURNDATACOPY" /\
     asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
     frame_op_gas H <= frame_gas_left es ==>
     (!op r s'.

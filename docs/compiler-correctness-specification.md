@@ -136,16 +136,12 @@ The exact observation type/relation is a phase-2 deliverable. It should support 
 
 ### Revert data
 
-The current theorems relate frame failure to source exceptions. For a source
-`AssertException s`, `exception_outcome_rel`
-(`lowering/e2eDefsScript.sml`) requires a failed frame outcome that is `Reverted`
-and raised by the frame itself (`frame_raises es Reverted`), or any failure when
-`s = "UNREACHABLE"`. The deploy relation `deploy_result_rel`
-(`lowering/e2eDeployDefsScript.sml`) requires `Reverted` or, for
-`"UNREACHABLE"`, any failure. A source
-`Error (RevertData d)`, such as a bubbled `extcall` failure, requires a
-`Reverted` frame outcome in both the call and deploy theorems. The call
-relation also requires `frame_raises es Reverted`. For other source errors,
+Call and deployment use `exception_outcome_rel`
+(`lowering/e2eDefsScript.sml`) for frame failures. A source `AssertException s`
+requires a `Reverted` frame outcome and `frame_raises es Reverted`, with any
+failed frame outcome allowed for `s = "UNREACHABLE"`. A source
+`Error (RevertData d)`, such as a bubbled `extcall` failure, also requires a
+`Reverted` frame outcome raised by the frame itself. For other source errors,
 both relations accept any failed frame outcome. When
 `unspecified_behaviour_exempt tops e` holds (see the exemption under
 [Observations, resources and limits](#observations-resources-and-limits)),
@@ -355,16 +351,20 @@ The result relation ties source gas observations to the frame's EVM gas readings
   Callee-return rejection can be exempt only when it produces that same message
   in such a program. Exempt runs still have an actual EVM run but no result/effect
   correspondence obligation.
-- The resource alternative is genuine frame OutOfGas/StackOverflow. A
+- The shared `frame_starved` alternative requires the frame to raise
+  `OutOfGas` or `StackOverflow`. In the published call and deploy correctness theorems, StackOverflow
+  requires that no fuel makes `bytecode_stack_check` pass at `stack_limit`
+  on the entry frame's actual code. This uses installed code including
+  immutables for a call and initcode including constructor arguments for
+  deployment. A
   value-zero computed precompile that the EVM fails for lack of gas is not an
   alternative: its failure is the call's oracle outcome, which the source and
   Venom both take. The call theorem gives no gas bound or guarantee of
-  success regardless of resources; the companion `vyper_call_gas_sufficient`
-  does: with enough gas the run exists. On unmatched calldata that run runs
-  out of gas only if it reaches a `RETURNDATACOPY` instruction
-  (`frame_inst_at`). When `calldata_dispatch` selects a source call, the same
-  holds provided the raised-gas run's call trace has `call_storage_ok` for
-  every gas filling of its outcomes, no exempt source observation
+  success regardless of resources; the companion `vyper_call_gas_sufficient_deployed`
+  guarantees a run with enough added gas. On unmatched calldata the entry
+  frame cannot raise OutOfGas. When `calldata_dispatch` selects a source call, the same
+  holds for a fixed horizon with `storage_ok H` at entry and `call_within H`
+  on the raised-gas run, with no exempt source observation
   (`~gas_source_exempt`) and fewer than 2⁶⁴ entries. The identity
   case composes proved lowering, O1 fuel/memory and codegen gas bounds. The
   assembly-optimizer case is proved from the same stages. The general
@@ -375,10 +375,12 @@ The result relation ties source gas observations to the frame's EVM gas readings
   `e2e_deploy_gas_sufficient` similarly composes proved stage bounds and
   reaches exactly one admitted lemma, `deploy_entry_reachable_create_size_ok`,
   the same claim at the deploy entry; with enough added gas, and under
-  its source-exemption, storage and trace-length (fewer than 2⁶⁴ entries)
-  conditions on that raised-gas run, OutOfGas implies that the code to deposit
-  is oversized or that the frame reached a `RETURNDATACOPY` instruction.
-  Both deploy finalizer cases include these alternatives.
+  `deploy_entry_rel` and `horizon_ok H` at entry, plus `deploy_within H`, no
+  exempt source observation and fewer than 2⁶⁴ trace entries on the raised-gas
+  run, OutOfGas implies that the code to deposit exceeds the runtime code-size
+  limit. Both finalizers' gas bounds cover
+  `RETURNDATACOPY` and the execution that follows it. These bounds use the
+  EVM model's unbounded natural-number gas budget.
 - msg.gas beyond `gas_readings_rel`, `gas=` beyond its forwarded operand and
   arbitrary unsupported programs are outside this runtime contract. Static entry
   (`ctxt.msgParams.static = tx.is_static`), runtime immutables (`installed_code_rel`

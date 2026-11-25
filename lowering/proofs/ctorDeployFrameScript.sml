@@ -144,9 +144,10 @@ Proof
   rpt strip_tac >>
   `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
     simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_def] >>
-  `?c0 rb0. es.contexts = [(c0,rb0)] /\
+  `wf_state es /\ ?c0 rb0. es.contexts = [(c0,rb0)] /\
             c0.msgParams.outputTo = Code tx.target`
     by gvs[deploy_state_rel_def] >>
+  pop_assum strip_assume_tac >>
   `call_requests (shadow_root es) = call_requests es` by
     simp[callTraceTheory.call_requests_def, callTraceTheory.call_trace_def,
          shadow_root_frame_obs] >>
@@ -170,7 +171,7 @@ Proof
               strip_tac >> gvs[]
               >- (disj1_tac >> irule creation_resource_starved_single_transfer >>
                   metis_tac[]) >>
-              disj2_tac >> simp[deploy_result_rel_def] >>
+              disj2_tac >> simp[deploy_result_rel_def, e2eDefsTheory.effects_agree_def] >>
               simp[lookup_account_def, update_account_def,
                    combinTheory.APPLY_UPDATE_THM] >>
               conj_tac
@@ -197,7 +198,8 @@ Proof
               combinTheory.APPLY_UPDATE_THM] >>
           irule frame_outcome_single_transfer_none >> metis_tac[]) >>
       Cases_on `y` >>
-      gvs[deploy_venom_result_rel_def, deploy_result_rel_def] >>
+      gvs[deploy_venom_result_rel_def, deploy_result_rel_def,
+          e2eDefsTheory.exception_outcome_rel_def] >>
       Cases_on `handle_step NONE mid` >> gvs[])
   >~ [`Abort ab vs'`]
   >- (Cases_on `src`
@@ -206,8 +208,14 @@ Proof
       Cases_on `ab` >> gvs[] >>
       drule_all deploy_frame_exception >> strip_tac >>
       first_assum (irule_at (Pos hd)) >>
+      TRY (qpat_assum `!lgs'. frame_outcome es r es' (SOME Reverted) _ lgs'`
+             (qspec_then `[]` assume_tac) >>
+           `LENGTH es.contexts = 1 /\ ~vfmExecution$vfm_abort (SOME Reverted)`
+             by simp[vfmExecutionTheory.vfm_abort_def] >>
+           drule_all run_call_root_frame_outcome_raises >> strip_tac) >>
       Cases_on `y` >>
-      gvs[deploy_venom_result_rel_def, deploy_result_rel_def] >>
+      gvs[deploy_venom_result_rel_def, deploy_result_rel_def,
+          e2eDefsTheory.exception_outcome_rel_def] >>
       metis_tac[]) >>
   drule deploy_venom_result_rel_terminates >> simp[terminates_def]
 QED
@@ -387,8 +395,7 @@ Proof
   gvs[shadow_root_def, shadow_root_contexts_def, shadow_root_contexts_length]
 QED
 
-(* Reserve gas for the code deposit. Revert-data copying has its own
-   escape because a failed call can return more bytes than the caller can copy. *)
+(* Reserve gas for depositing any runtime code within the size limit. *)
 Theorem deploy_frame_gas_sufficient:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan fuel M.
     deploy_phases policy tops (deploy_bc, runtime_bc)
@@ -417,8 +424,7 @@ Theorem deploy_frame_gas_sufficient:
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
         (r = INR (SOME OutOfGas) ==>
-         max_code_size < LENGTH runtime_bc + imm_len tops \/
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+         max_code_size < LENGTH runtime_bc + imm_len tops)
 Proof
   rpt gen_tac >> strip_tac >>
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
@@ -431,8 +437,6 @@ Proof
                `code_deposit_cost * max_code_size`] mp_tac codegen_gas_surplus >>
   impl_tac >- fs[] >> disch_then (qx_choose_then `g` assume_tac) >>
   qexists_tac `g` >> rpt strip_tac >>
-  Cases_on `?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy`
-  >- metis_tac[run_call_total] >>
   `?c0 rb0. es.contexts = [(c0, rb0)]` by
     (fs[deploy_state_rel_def] >> metis_tac[add_frame_gas_single_context]) >>
   drule shadow_root_add_frame_gas >> disch_then (qspec_then `g'` assume_tac) >>
@@ -445,10 +449,6 @@ Proof
   drule_all deploy_entry_state_ok >> strip_tac >>
   qabbrev_tac `vs = deploy_entry_state prog cplan tops (add_frame_gas g' es)` >>
   qabbrev_tac `sh = shadow_root (add_frame_gas g' es)` >>
-  `!t. ~frame_inst_at sh t ReturnDataCopy` by
-    (rpt strip_tac >> fs[Abbr `sh`] >>
-     `(add_frame_gas g' es).contexts <> []` by simp[] >>
-     drule_all shadow_root_frame_inst_at >> simp[]) >>
   `!s op r s'. frame_inst_at sh s op /\ step_inst op s = (r, s') /\
                LENGTH s'.contexts = LENGTH s.contexts ==>
                r <> INR (SOME OutOfGas) /\

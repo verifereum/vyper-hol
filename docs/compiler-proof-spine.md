@@ -17,9 +17,9 @@ use.
 
 | Theorem | Script |
 |---|---|
-| `e2eCorrectness.vyper_call_correct` | `lowering/e2eCorrectnessScript.sml` |
-| `e2eDeployCorrectness.e2e_deploy_correctness` | `lowering/e2eDeployCorrectnessScript.sml` |
-| `e2eGasSufficientTop.vyper_call_gas_sufficient` | `lowering/e2eGasSufficientTopScript.sml` |
+| `e2eDeployed.vyper_call_correct_deployed` | `lowering/e2eDeployedScript.sml` |
+| `e2eDeployed.e2e_deploy_correctness_deployed` | `lowering/e2eDeployedScript.sml` |
+| `e2eDeployed.vyper_call_gas_sufficient_deployed` | `lowering/e2eDeployedScript.sml` |
 | `e2eGasSufficientTop.e2e_deploy_gas_sufficient` | `lowering/e2eGasSufficientTopScript.sml` |
 
 The call theorem composes the stages in `lowering/e2eCorrectnessScript.sml`,

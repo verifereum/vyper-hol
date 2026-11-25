@@ -16,7 +16,7 @@ Ancestors
   callRawVariant callDynamicMemory[qualified,ignore_grammar] sourceUnitExitSafe exprSimHypsDefs
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeSource runtimeLabelReadiness fragFuelUnit
-  e2eDeployRawFmp e2eDeployAtMarks e2eDeployDefs
+  e2eDeployRawFmp e2eDeployAtMarks e2eDeployDefs e2eDeployEntry
   ctorDeployDefs ctorDeployDefsReach ctorDeployRawEntryFacts whitelistCheckerGate
   ctorDeployFrame ctorDeployShape ctorDeployDead ctorDeployRunBounded
   ctorDeployInitcodeAsm ctorDeployMemoryFrontier ctorDeployLoweringSource
@@ -103,8 +103,7 @@ Theorem vyper_call_gas_sufficient_asm_opt:
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        (frame_raises (add_frame_gas g' es) OutOfGas ==>
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+        ~frame_raises (add_frame_gas g' es) OutOfGas
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
@@ -321,8 +320,7 @@ Theorem e2e_deploy_gas_sufficient_asm_opt:
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
         (r = INR (SOME OutOfGas) ==>
-         max_code_size < LENGTH runtime_bc + imm_len tops \/
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+         max_code_size < LENGTH runtime_bc + imm_len tops)
 Proof
   rpt strip_tac >>
   drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
@@ -360,17 +358,12 @@ Proof
   `?c0 rb0. es.contexts = [(c0, rb0)] /\ wf_state es` by
     fs[deploy_state_rel_def] >>
   qabbrev_tac `eg = add_frame_gas g' es` >>
-  Cases_on `?s. frame_inst_at eg s ReturnDataCopy`
-  >- (qspec_then `eg` strip_assume_tac run_call_total >> metis_tac[]) >>
   `deploy_state_rel tops (assemble prog') am tx eg` by
     (simp[Abbr`eg`] >> irule deploy_state_rel_add_frame_gas >> simp[]) >>
   qpat_x_assum `deploy_state_rel _ _ _ _ es` kall_tac >>
   `?ctxt rb. eg.contexts = [(ctxt, rb)] /\
              ctxt.msgParams.outputTo = Code tx.target /\ wf_state eg` by
     fs[deploy_state_rel_def] >>
-  `!t. ~frame_inst_at (shadow_root eg) t ReturnDataCopy` by
-    (rpt strip_tac >> `eg.contexts <> []` by simp[] >>
-     drule_all shadow_root_frame_inst_at >> metis_tac[]) >>
   `shadow_root eg = add_frame_gas g' (shadow_root es)` by
     (simp[Abbr`eg`] >> irule shadow_root_add_frame_gas >> fs[]) >>
   `wf_state (shadow_root eg)` by simp[shadow_root_wf_state] >>
@@ -551,9 +544,8 @@ Theorem vyper_call_gas_sufficient:
                  (tx with <| function_name := f; args := vals |>)
                  (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
                     obs am (tx with <| function_name := f; args := vals |>))) /\
-              LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64) /\
-         frame_raises (add_frame_gas g' es) OutOfGas ==>
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+              LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64) ==>
+         ~frame_raises (add_frame_gas g' es) OutOfGas)
 Proof
   rpt gen_tac >> strip_tac >>
   `supported_program tops` by (
@@ -574,8 +566,7 @@ Proof
      ==>
      ?r es'.
        run_call (add_frame_gas g' es) = SOME (r, es') /\
-       (frame_raises (add_frame_gas g' es) OutOfGas ==>
-        ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)` by
+       ~frame_raises (add_frame_gas g' es) OutOfGas` by
     (`fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
      pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
      >- (drule_all vyper_call_gas_sufficient_identity >> simp[])
@@ -590,17 +581,15 @@ Proof
   strip_tac >> metis_tac[]
 QED
 
-(* TOP-LEVEL: one theorem over the accepted finalizers, with
-   e2e_deploy_correctness's finalizer premises.  The RETURNDATACOPY escape is
-   for constructors that call out; with today's call-free constructors only
-   the code-size escape is taken. *)
-Theorem e2e_deploy_gas_sufficient:
+(* The per-filling gas companion, with
+   e2e_deploy_correctness's finalizer premises. The code deposit can
+   still fail for runtime code above the size limit. *)
+Theorem e2e_deploy_gas_sufficient_guarded:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     deploy_typing_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    ~(?t. runtime_bc = 0xEFw :: t)
+    deploy_state_rel tops deploy_bc am tx es
     ==>
     ?g. !g'.
       g <= g' ==>
@@ -613,10 +602,10 @@ Theorem e2e_deploy_gas_sufficient:
                obs am tx [(NONE, tops)] [])) /\
          LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
          r = INR (SOME OutOfGas) ==>
-         max_code_size < LENGTH runtime_bc + imm_len tops \/
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+         max_code_size < LENGTH runtime_bc + imm_len tops)
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_all compile_vyper_runtime_not_ef >> strip_tac >>
   `supported_program tops /\ supported_program_deploy tops` by (
     irule deploy_typing_ok_supported_programs >>
     fs[deploy_state_rel_def] >> metis_tac[]) >>
@@ -632,8 +621,7 @@ Proof
      ?r es'.
        run_call (add_frame_gas g' es) = SOME (r, es') /\
        (r = INR (SOME OutOfGas) ==>
-        max_code_size < LENGTH runtime_bc + imm_len tops \/
-        ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)` by
+        max_code_size < LENGTH runtime_bc + imm_len tops)` by
     (`fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
      pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
      >- (drule_all e2e_deploy_gas_sufficient_identity >> simp[])
@@ -645,6 +633,38 @@ Proof
   qexistsl_tac [`r`, `es'`] >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!g'. g <= g' /\ _ ==> _` (qspec_then `g'` mp_tac) >>
   impl_tac >- simp[] >>
-  strip_tac >> gvs[] >>
-  DISJ2_TAC >> qexists_tac `s` >> first_assum ACCEPT_TAC
+  strip_tac >> gvs[]
+QED
+
+(* TOP-LEVEL: deployment gas sufficiency over a fixed storage horizon. *)
+Theorem e2e_deploy_gas_sufficient:
+  !fin policy tops deploy_bc runtime_bc am tx es H.
+    fin IN accepted_finalizers /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    deploy_typing_ok tops am tx /\
+    deploy_entry_rel tops deploy_bc am tx es /\
+    horizon_ok H
+    ==>
+    ?g. !g'.
+      g <= g' ==>
+      ?r es'.
+        run_call (add_frame_gas g' es) = SOME (r, es') /\
+        (deploy_within H tops am tx (add_frame_gas g' es) /\
+         (!obs. ~deploy_gas_source_exempt tops
+            (load_contract (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+               obs am tx [(NONE, tops)] [])) /\
+         LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
+         r = INR (SOME OutOfGas) ==>
+         max_code_size < LENGTH runtime_bc + imm_len tops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[deploy_entry_rel_state] >>
+  drule_all e2e_deploy_gas_sufficient_guarded >>
+  disch_then (qx_choose_then `g` assume_tac) >>
+  qexists_tac `g` >> rpt strip_tac >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >> strip_tac >>
+  first_x_assum irule >>
+  simp[] >> irule deploy_storage_ok_from_within >>
+  metis_tac[]
 QED

@@ -240,32 +240,33 @@ exhaustion. `unitShapeDefs.opaque_use_ok` restricts return-address uses.
 `gas_readings_rel` constrains source gas fillings using the EVM readings
 and allows slots with no corresponding reading. The
 [fixed-storage call theorem](compiler-correctness-specification.md#fixed-storage-regions)
-gives a `run_call` result that either is frame-resource-starved or satisfies
-`calldata_result_rel H`, including the unmatched-calldata case.
+gives a `run_call` result. Either the entry frame raises `OutOfGas` or
+`StackOverflow`, or the run satisfies `calldata_result_rel H`, including the
+unmatched-calldata case. The published
+call and deploy correctness theorems permit `StackOverflow` only if no fuel
+makes `bytecode_stack_check` succeed at `stack_limit` on the actual entry code.
+That code includes immutables for calls and constructor arguments for deploys.
 
-The companion `vyper_call_gas_sufficient`
-(`lowering/e2eGasSufficientTopScript.sml`) gives a threshold `g` such that
-adding any `g' >= g` gas to the frame yields a run. When
-`calldata_dispatch` selects a source call, the gas guarantee requires the
-raised-gas trace length to be below `2 ** 64`, `call_storage_ok` for every
-gas filling of its outcomes, and `~gas_source_exempt` for every source
-observation of that call. Under those conditions, an OutOfGas run reaches
-a `RETURNDATACOPY` instruction (`frame_inst_at`). The same OutOfGas
-conclusion applies to unmatched calldata.
+The companion `vyper_call_gas_sufficient_deployed`
+(`lowering/e2eDeployedScript.sml`) takes a fixed horizon with `storage_ok H`
+at entry. It gives a threshold `g` such that adding any `g' >= g` gas to the
+frame yields a run. When `calldata_dispatch` selects a source call, the gas
+guarantee requires `call_within H` on the raised-gas run, a trace length below
+`2 ** 64`, and `~gas_source_exempt` for every source observation of that call. Under those conditions, the entry frame cannot
+raise `OutOfGas`. The same guarantee applies to unmatched calldata.
 The identity case composes the stage bounds S1b
 (`lower_vyper_runtime_unit_run_bounded`), S6b
 (`run_venom_pipeline_run_bounded`) and S7g (`codegen_gas_sufficient`). The deploy twin
 `e2e_deploy_gas_sufficient` uses the deploy unit's fuel bound
 (`deploy_unit_fns_fuel_stable` with `run_context_uniform_fuel`),
 `run_venom_pipeline_run_bounded_raw` and the proved S7g-d
-`deploy_frame_gas_sufficient`. It assumes the runtime bytes don't start with
-`0xEF`, which `compile_vyper_runtime_not_ef` derives from compile success with
-an accepted finalizer. Under `deploy_storage_ok` for every
-gas filling, no exempt source observation and fewer than 2⁶⁴ trace entries on
-the raised-gas run, its OutOfGas conclusion allows oversized deposited code or
-a reached `RETURNDATACOPY`;
-its per-finalizer cases (`e2e_deploy_gas_sufficient_identity`,
-`e2e_deploy_gas_sufficient_asm_opt`) allow the same two alternatives.
+`deploy_frame_gas_sufficient`. Its proof uses `compile_vyper_runtime_not_ef`
+to derive that the runtime bytecode does not start with `0xEF` from successful
+compilation with an accepted finalizer. The theorem takes `deploy_entry_rel`
+and `horizon_ok H` at entry. Under `deploy_within H`, no exempt source
+observation and fewer than 2⁶⁴ trace entries on the raised-gas run, `OutOfGas` implies that the code to deposit exceeds the
+runtime code-size limit. The call and deploy gas bounds cover
+`RETURNDATACOPY` and its revert-forwarding tail under both finalizers.
 Each companion rests on one admitted lemma, its entry's held create-size
 claim (`call_entry_reachable_create_size_ok`,
 `deploy_entry_reachable_create_size_ok`, marked `GATE_ADMISSION`); no other
@@ -309,7 +310,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall was **not admitted** at Milestone 1; the current gate admits a `NoneT` external return (`supported_external_return_type`). | 6 |
 | D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects OK/IntRet and other Errors, relates a failed external call's `RevertData` to a Revert abort, and requires terminating run; `call_result_rel_at` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
 | D9 | Exact unspecified-behaviour exemptions, not weakened source checks | `unspecified_behaviour_exempt`, `occurs_abi_decode_target` inspect function bodies for dynamic decoding. Exact decode message also admits matching return rejection in such a program; not arbitrary ReturnReject. | 6 |
-| D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker acceptance, typed constant cells, machine and tx typing; `supported_program` depends on tops alone and is no longer a premise: the tops derive it from the checker acceptance and `layouts_agree` (`check_contract_supported_program`), which `source_deployment_rel` supplies for calls and `deploy_state_rel` for deployment; for the deploy pair `deploy_typing_ok` supplies both `check_contract F` and `check_contract T` (`deploy_typing_ok_supported_programs`). Partial readiness producers are not the whole premise. | 7 |
+| D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker acceptance, typed constant cells, machine and tx typing; `supported_program` depends on tops alone and is no longer a premise: the tops derive it from the checker acceptance and `layouts_agree` (`check_contract_supported_program`), which `source_deployment_rel` supplies for calls and `deploy_state_rel` for deployment; for the deploy pair `deploy_typing_ok` supplies `check_contract T` and `check_contract_deploy_implies_runtime` derives runtime acceptance (`deploy_typing_ok_supported_programs`). Partial readiness producers are not the whole premise. | 7 |
 | D11 | Whitelist, not open-ended exclusions | `supportedProgram` combines headers/names/body predicates; 101 named fixture membership proofs. The whitelist has since been widened to what `check_contract` accepts and is derived, not assumed, by the tops; forms it newly accepts are proved, bar the two held create-size claims under the gas companions. No universal compile-success witness. | 6 / 7 |
 | D12 | Ten source/type corrections, not remove fixtures | Invalid EC RuntimeError; Pop length-only storage update; empty codehash zero; decimal bound-before-truncate; bytes->address/decimal/narrow-zero-tail conversions; UnsafeDiv0 zero; minimum decimal Mul; abi_encode size rule. Actual owners `vyperContext`, `vyperState`, `vyperValueOperation`, `vyperTypeSystem`; historical source checkpoint retained. | 6 comparison proof |
 | D13 | Literal endpoint range checks + allocation-budget compiler check | `stmtLowering` tests both literal endpoints; five fixture bounds corrected historically. `vyperCompiler.lowering_context_ok` checks `unit_alloca_budget < dimword(:256)`. This is not a proof that every raw access is valid. | 5 / 6 |
@@ -327,7 +328,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D25 | Exact External call/count/binding; no fallback/defaults | `valid_vyper_call` implemented via real lookup; no general producer. `vyper_call_correct` covers fallback invocation: unmatched calldata dispatches to a declared `__default__` (`calldata_dispatch`), and `calldata_result_rel` covers that call. | 7 |
 | D26 | Initial and outcome storage validity | `vyper_call_correct` takes fixed regions that decode at the entry state (`storage_ok H`) and against which, when calldata dispatch selects a function, every gas filling's source storage observations are checked (`call_within H`, `storage_observations_ok`); `call_storage_ok` is the per-gas-filling guard over the trace's own horizon, which decodes at the entry state and in every adopted backend; `call_outcomes_ok` holds only return-data and account bounds. Account/code guard alone is insufficient. The storage guards have no producer for arbitrary EVM callees; `closed_world_call_outcomes_ok` gives `call_storage_ok` only under its closed-world premises, for the gas observations related to the EVM readings, unless the frame is resource-starved. | 7 |
 | D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements. The creation-frame theorem was introduced as a separate statement and has since been proved. | every proof owner |
-| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` is proved, reaching no admitted lemma, for canonical args, checked deployment and runtime artifacts (pre-constant readiness follows from them), an uninstalled source target and an empty target account in `es.originalAccounts`. Constructors may make supported calls and take outcomes from their creation frame's trace. | 6 item7 |
+| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` is proved, reaching no admitted lemma, for canonical args, `deploy_typing_ok` (deploy-mode acceptance and machine and transaction typing), an uninstalled source target and an empty target account in `es.originalAccounts`. Runtime acceptance and pre-constant deployment readiness follow from `deploy_typing_ok_constants_ready`. Constructors may make supported calls and take outcomes from their creation frame's trace. | 6 item7 |
 | D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; proved; S7's `codegen_correct` uses it. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
 | D30 | Fresh output labels proved; unused false local claims retired | `fresh_label_output_inj` / output-state `fresh_label_produces_external` proved. Assign/zero-pad/generate-runtime correctness claims retired with provenance, not rewritten under the same names; Assign belongs to statement induction, runtime to S1. | 6 |
 | D31 | Do not claim call_state_rel satisfiable in Milestone1 | No general producer or satisfiability theorem; focused checks are not a compiled-program witness. Top-level transaction construction is explicitly future work. | 7 |
@@ -780,13 +781,15 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    including the computed precompile builtins (sha256, ecrecover, ecadd and
    ecmul). The source run uses the creation frame's call outcomes.
 
-   Inputs are canonical tuple ABI argument bytes (no selector), actual checked
-   deployment/runtime artifacts (`deploy_typing_ok`, from which
-   `deploy_typing_ok_constants_ready` gives **pre-constant deployment
-   readiness**), an uninstalled source target, an empty target account in `es.originalAccounts`,
+   Inputs are canonical tuple ABI argument bytes (no selector),
+   `deploy_typing_ok` (successful deploy-mode checking and well-typed machine
+   and transaction inputs), an uninstalled source target, an empty target
+   account in `es.originalAccounts`,
    and exactly one fresh nonstatic Code frame with
    `deploy_bc ++ args_bytes`, empty calldata/memory and live transfer (that the
    runtime has no 0xEF prefix is proved, `compile_vyper_runtime_not_ef`).
+   `deploy_typing_ok_constants_ready` derives the runtime checker artifact
+   and **pre-constant deployment readiness**.
    The frame's call trace has fewer than 2⁶⁴ entries. Source reads of `self.code`
    use the creation frame's code, including in the assembly-optimizer case.
    Successful installation returns and deposits `runtime_bc ++ section`

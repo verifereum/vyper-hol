@@ -1,4 +1,4 @@
-(* One-step inversion at a non-creation root. *)
+(* One-step inversion at the root. *)
 Theory frameRootTerminal
 Ancestors
   frameGas vfmContextLength vfmRunCall vfmDecreasesGas vfmStoragePredicates vfmWfState
@@ -42,13 +42,11 @@ Proof
   drule_all root_handle_exception >> simp[]
 QED
 
-Theorem root_inner_terminal[local]:
-  wf_state s /\ s.contexts = [(c,rb)] /\
-  (!a. c.msgParams.outputTo <> Code a) /\
-  step s = (INR e',t) ==>
+Theorem root_inner_terminal_source[local]:
+  wf_state s /\ s.contexts = [(c,rb)] /\ step s = (INR e',t) ==>
   ?e u c1 rb1. step_inner s = (INR e,u) /\
-    u.contexts = [(c1,rb1)] /\ e' = e /\
-    (e = NONE ==> t = u)
+    u.contexts = [(c1,rb1)] /\ wf_context c1 /\
+    handle_step e u = (INR e',t)
 Proof
   strip_tac >>
   qpat_x_assum `step s = _` mp_tac >>
@@ -75,6 +73,18 @@ Proof
     (Cases_on `u.contexts` >> gvs[] >>
      rename1 `u.contexts = h::cs` >> Cases_on `cs` >> gvs[] >>
      Cases_on `h` >> simp[]) >>
+  qexistsl_tac [`c1`, `rb1`] >> gvs[]
+QED
+
+Theorem root_inner_terminal[local]:
+  wf_state s /\ s.contexts = [(c,rb)] /\
+  (!a. c.msgParams.outputTo <> Code a) /\
+  step s = (INR e',t) ==>
+  ?e u c1 rb1. step_inner s = (INR e,u) /\
+    u.contexts = [(c1,rb1)] /\ e' = e /\
+    (e = NONE ==> t = u)
+Proof
+  strip_tac >> drule_all root_inner_terminal_source >> strip_tac >>
   `same_frame_rel s u` by
     (irule (INST_TYPE [alpha |-> ``:unit``] same_frame_or_grow_eq_length) >>
      gvs[] >> qexistsl_tac [`step_inner`,`INR e`] >> simp[]) >>
@@ -82,7 +92,7 @@ Proof
     gvs[same_frame_rel_def] >>
   `wf_context c1` by gvs[] >>
   drule_all root_handle_step >> strip_tac >>
-  qexistsl_tac [`c1`,`rb1`] >> gvs[]
+  qexistsl_tac [`e`, `u`, `c1`, `rb1`] >> gvs[]
 QED
 
 Theorem root_step_ends_at_inst:
@@ -100,4 +110,30 @@ Proof
   drule_at (Pat `step_inner _ = _`) step_inner_terminal_inst >> simp[] >>
   strip_tac >>
   goal_assum $ drule_at Any >> gvs[]
+QED
+
+(* Root settlement re-raises the result of handle_create, while run_frame
+   stops immediately after handle_create. This also covers a creation root. *)
+Theorem root_step_exception_raises:
+  wf_state s /\ s.contexts = [(c,rb)] /\
+  ~vfm_abort (SOME exc) /\ step s = (INR (SOME exc),t) ==>
+  frame_raises s exc
+Proof
+  strip_tac >> drule_all root_inner_terminal_source >> strip_tac >>
+  `~vfm_abort e` by
+    (strip_tac >> gvs[handle_step_def, reraise_def]) >>
+  `?err pre. handle_create e u = (INR err : unit + exception option,pre)`
+    by simp[handle_create_INR] >>
+  `LENGTH pre.contexts = 1` by
+    (drule handle_create_preserves_length >> simp[]) >>
+  `?c2 rb2. pre.contexts = [(c2,rb2)]` by
+    (Cases_on `pre.contexts` >> gvs[] >> Cases_on `h` >> simp[]) >>
+  `wf_context c2` by
+    (drule_at (Pat `handle_create _ _ = _`)
+       handle_create_preserves_wf_contexts >> simp[]) >>
+  `handle_exception err pre = (INR (SOME exc),t)` by
+    gvs[handle_step_def, handle_def] >>
+  drule_all root_handle_exception >> strip_tac >>
+  simp[frame_raises_def] >> qexists_tac `pre` >>
+  irule run_frame_terminal >> qexistsl_tac [`e`, `u`] >> gvs[]
 QED
