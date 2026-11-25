@@ -30,5 +30,5 @@ The EVM starts in a fresh frame for this transaction, with the entry value trans
 ## storage_ok
 
 The regions in `H` fit and are pairwise identical or disjoint within each storage
-kind. They are clear of the transient lock slots, and the initial storage decodes
+kind. Transient regions avoid the transient lock slots, and the initial storage decodes
 on them. This predicate does not read `tx.function_name` or `tx.args`.

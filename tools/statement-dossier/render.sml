@@ -38,16 +38,20 @@ val exporterInfo = if exporterRevision = "" then
   \in its mutual-recursion block."
   else " Dossier exporter patch `" ^ exporterRevision ^ "`."
 
-val config : statementDossierLib.config = {
+val boundaryStops =
+  List.filter (fn {Thy, ...} => List.exists (fn a => a = Thy) ancestors) stops
+
+fun config expand_theories expand_consts stop_consts
+  : statementDossierLib.config = {
   title = if target then "Vyper module-list call correctness target" else "Vyper compiler correctness",
   preamble = intro ^ "\n\n[vyper-hol " ^ sourceRevision ^ "]" ^
              "(https://github.com/verifereum/vyper-hol/tree/" ^ sourceRevision ^ ")" ^
              " · HOL `" ^ holRevision ^ "`." ^ exporterInfo,
   theorems = map #theorem sections,
-  expand_theories = expandTheories,
-  expand_consts = [],
+  expand_theories = expand_theories,
+  expand_consts = expand_consts,
   stop_theories = [],
-  stop_consts = List.filter (fn {Thy, ...} => List.exists (fn a => a = Thy) ancestors) stops,
+  stop_consts = stop_consts,
   equation_lemmas = [],
   source_dirs = [("", projectRoot)],
   outputs = [(statementDossierLib.Html, htmlOutput)],
@@ -56,10 +60,63 @@ val config : statementDossierLib.config = {
   supporting = []
 }
 
+(* The theorems and the definitions of exactly these constants *)
+fun statements_expanding consts =
+  statementDossierLib.statement_sections (config [] consts boundaryStops)
+
+(* The project constants the sections' statements name *)
+fun named_constants (sections : (string * (statementDossierLib.name * Thm.thm) list) list) =
+  let
+    fun consts th =
+      List.concat (map (HolKernel.find_terms Term.is_const) (Thm.concl th :: Thm.hyp th))
+    fun project c =
+      let val {Thy, Name, ...} = Term.dest_thy_const c in
+        if Lib.mem Thy expandTheories then SOME {Thy = Thy, Name = Name} else NONE
+      end
+  in
+    Lib.mk_set (List.mapPartial project
+      (List.concat (map (consts o #2) (List.concat (map #2 sections)))))
+  end
+
+(* statementDossierLib's anchor of a definition section *)
+fun def_anchor ({Thy, Name} : statementDossierLib.name) =
+  let
+    fun safe ch =
+      if Char.isAlphaNum ch orelse ch = #"_" then String.str ch
+      else "-" ^ StringCvt.padLeft #"0" 2 (Int.fmt StringCvt.HEX (ord ch))
+  in
+    "def-" ^ String.translate safe Thy ^ "-" ^ String.translate safe Name
+  end
+
+(* The constants with a definition section just below the depth cut, []
+   if there are none.  A theorem names the constants at depth 1, their
+   definitions name those at depth 2, and so on.  `within` holds the
+   project constants within depth k. *)
+fun below_cut k within =
+  let val next = named_constants (statements_expanding within) in
+    if length next = length within then []
+    else if k < depth then below_cut (k + 1) next
+    else
+      let val anchors = map #1 (statements_expanding next) in
+        List.filter (fn n => not (Lib.mem n within) andalso
+                             Lib.mem (def_anchor n) anchors) next
+      end
+  end
+
+val cut = below_cut 0 []
+
+val cutAbout = if null cut then "" else
+  " This page also stops " ^ Int.toString depth ^ " definition steps below \
+  \the theorems: a theorem names the constants at step 1, their definitions \
+  \name those at step 2, and so on. The " ^ Int.toString (length cut) ^
+  " constants at the next step are listed as not expanded and link to their \
+  \sources. Render with a larger `--depth` for the full index."
+
 val () = statementDossierLib.run_with_presentation {
   about = "Definitions stop at the compiler, contract checker, source interpreter entry \
-          \points, verifereum, and the HOL libraries. The boundary index links to their sources.",
+          \points, verifereum, and the HOL libraries. The boundary index links to their sources." ^
+          cutAbout,
   omit_types = [],
   reader_view = true,
   theory_sources = theorySources
-} config
+} (config expandTheories [] (boundaryStops @ cut))
