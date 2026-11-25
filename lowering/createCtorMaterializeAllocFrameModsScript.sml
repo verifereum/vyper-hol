@@ -176,23 +176,32 @@ Resume ctor_materialize_alloc_vv_frame_mods[horizon]:
           qpat_x_assum `!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> _`
             (qspecl_then [`aid`,`x`] mp_tac) >> fs[]) >>
       conj_tac
-      >- (Cases_on `vv` >> fs[vv_holds_mods_def, vv_operand_def] >>
-          TRY (rename1 `p.ptr_location = LocCode` >> Cases_on `p.ptr_location = LocCode`) >>
-          gvs[vv_holds_mods_def] >>
-          (irule exprSimVVFrameTheory.vv_holds_vars_frame >>
-           qexists_tac `s` >> simp[vv_operand_def,contract_storage_def,contract_transient_def]
-           ORELSE
-           fs[immutable_holds_mods_def] >>
-           qexistsl_tac [`src`,`tops`] >> simp[] >>
-           qpat_x_assum `immutable_holds _ _ _ _ _ _ s` mp_tac >>
-           simp[immutable_holds_def])) >>
+      >- (Cases_on `vv`
+          >- (fs[vv_holds_mods_def,vv_operand_def] >>
+              irule exprSimVVFrameTheory.vv_holds_vars_frame >>
+              qexists_tac `s` >> simp[vv_operand_def,contract_storage_def,contract_transient_def]) >>
+          rename1 `LocatedValue _ p` >> Cases_on `p.ptr_location = LocCode`
+          >- (gvs[vv_holds_mods_def,vv_operand_def,immutable_holds_mods_def] >>
+              qexistsl_tac [`src`,`tops`] >> simp[] >>
+              qpat_x_assum `immutable_holds _ _ _ _ _ _ s` mp_tac >>
+              simp[immutable_holds_def]) >>
+          fs[vv_holds_mods_def,vv_operand_def] >>
+          irule exprSimVVFrameTheory.vv_holds_vars_frame >>
+          qexists_tac `s` >> simp[vv_operand_def,contract_storage_def,contract_transient_def]) >>
       conj_tac
       >- (irule materialize_vv_at_alloc_frame >> qexistsl_tac [`s`,`sm`] >> simp[]) >>
       conj_tac
-      >- (Cases_on `vv` >> Cases_on `pv` >> gvs[vv_place_ptr_mods_def,vv_operand_def] >>
-          TRY (rename1 `PlaceR place` >> Cases_on `place` >> gvs[vv_place_ptr_mods_def]) >>
-          irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[vv_operand_def] >>
-          first_assum ACCEPT_TAC) >>
+      >- (`vv_place_ptr ce cx ee s pv vv ==>
+            vv_place_ptr ce cx ee a pv vv` by
+            (strip_tac >> irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[] >>
+             first_assum ACCEPT_TAC) >>
+          Cases_on `vv`
+          >- (Cases_on `pv` >> fs[vv_place_ptr_mods_def]) >>
+          Cases_on `pv` >- fs[vv_place_ptr_mods_def]
+          >- (rename1 `PlaceR pl` >> Cases_on `pl` >> fs[vv_place_ptr_mods_def] >>
+              irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[] >>
+              first_assum ACCEPT_TAC) >>
+          fs[vv_place_ptr_mods_def]) >>
       conj_tac
       >- (strip_tac >> irule exprSimIfExpWidenedAdapterTheory.vv_own_alloc_mono_frame >>
           qexistsl_tac [`s`,`sm`] >> simp[]) >>

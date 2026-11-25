@@ -385,9 +385,32 @@ Resume ctor_unwrap_ctor_code_arrival_mods[plain_post]:
   irule copy_buffer_expr_post >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qexistsl [`sb.cs_next_id`,`type_memory_size rty`,`rty`,`dst`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  (first_assum (fn th => pure_rewrite_tac[th] >> first_assum ACCEPT_TAC) ORELSE
-   metis_tac[])
+  conj_tac >- qpat_assum `sb.cs_next_id < sc.cs_next_id` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `sa.cs_next_id <= sb.cs_next_id` ACCEPT_TAC >>
+  conj_tac >-
+    (rpt strip_tac >>
+     qpat_assum `!name b len. local_region cenv ee.scopes q name b len <=>
+       local_region cenv ee.scopes s name b len`
+       (qspecl_then [`name`,`b`,`len`] assume_tac) >>
+     qpat_assum `!name b len. local_region cenv ee.scopes s name b len ==> _`
+       (qspecl_then [`name`,`b`,`len`] assume_tac) >>
+     metis_tac[]) >>
+  conj_tac >- qpat_assum `val_footprint rty v <= type_memory_size rty` ACCEPT_TAC >>
+  conj_tac >-
+    ((bossLib.gvs [])) >>
+  conj_tac >-
+    (qpat_assum `q.vs_allocas = u.vs_allocas`
+       (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `FLOOKUP a.vs_allocas sb.cs_next_id = SOME _` mp_tac >>
+     qpat_assum `a = u with vs_inst_idx := _`
+       (fn th => simp_tac (srw_ss()) [th])) >>
+  conj_tac
+  >- (qpat_assum `post_value_type cenv e = expr_type e`
+        (fn th => pure_rewrite_tac[GSYM th]) >>
+      qpat_assum `evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty`
+        ACCEPT_TAC) >>
+  conj_tac >- qpat_assum `val_wf rty v` ACCEPT_TAC >>
+  (bossLib.simp [])
 QED
 
 Resume ctor_unwrap_ctor_code_arrival_mods[linked_ghost]:
