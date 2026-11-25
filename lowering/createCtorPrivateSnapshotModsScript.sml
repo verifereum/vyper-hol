@@ -8,7 +8,8 @@ Ancestors
   abiEncodeArgsCase exprSimSource exprSimProps exprBodyPreProps exprOperandVar
   exprLowering exprLoweringProps exprSimHypsDefs exprReasonOperand
   exprNamedConstResult exprSimConcatResult abiBuiltinDispatchCorrect
-  createCtorSnapshotTypingMods stmtLoweringMono bodyMemoryDefs
+  createCtorSnapshotTypingMods createCtorSourceReadinessMods createCtorSourceGasTransportMods
+  stmtLoweringMono bodyMemoryDefs
   loweringPosts loweringStateRelDefs bodyPtrDefs stateRelProj
   exprSimWordArgs wordArgsPtr bodyFullPathHistory fragGasOriginPtrLoop fragExec
   context compileEnv vyperState vyperStorageTrace vyperStorageFootprint valueEncodingProps
@@ -172,13 +173,18 @@ Proof
     (`is_word_type (lowered_value_type ce e) <=> is_word_type (expr_type e)` by
        metis_tac[ctor_snapshot_word_types_mods] >>
      metis_tac[]) >>
-  drule_all (REWRITE_RULE [ETA_AX] abi_args_success_ready) >> simp[] >> strip_tac >>
+  drule_all (REWRITE_RULE [ETA_AX] ctor_source_readiness_mods) >> simp[] >> strip_tac >>
   `local_ptrs_reserved ce sm /\ return_buf_frame d ce sm s` by
     (fs[ci_mono_def] >> conj_tac
      >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[])
      >> irule return_buf_frame_frame >> qexistsl_tac [`ce`,`s0`,`sa`] >> simp[]) >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
     metis_tac[cj 1 compiler_compile_var] >>
+  `expr_body_pre_mods mods ce cx env e (es with gas_obs := gs) /\
+   vyperState$bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee)` by simp[] >>
+  drule ctor_snapshot_source_frame_mods >> simp[] >> strip_tac >>
+  `MAP FDOM (es with gas_obs := gs).scopes = MAP FDOM ee.scopes` by
+    (simp[] >> metis_tac[]) >>
   suspend "source"
 QED
 
@@ -186,7 +192,10 @@ Resume ctor_private_snapshot_actual_mods[source]:
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
     vv_post_mods H ctx func ce cx e (es with gas_obs := gs) sa sm s0 ee raw vv s /\
     ghost_inv_at_mods (DF H) lo d ce cx ee G tn s` by
-    simp[vv_post_initial_gas] >>
+    (gen_tac >> disch_then assume_tac >>
+     qpat_assum `!h. valid_horizon _ _ h _ ==> vv_post_mods h _ _ _ _ _ es _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` (drule_then strip_assume_tac)) >>
+     simp[ctor_vv_post_initial_gas_mods]) >>
   `ghost_kept_at lo ce (es with gas_obs := gs) sa G0 tn0 s0 G tn` by
     (simp[ghost_kept_at_def] >> fs[ghost_kept_at_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -208,7 +217,11 @@ Resume ctor_private_snapshot_actual_mods[store]:
                     else type_memory_size rt` >>
   `HP H0` by simp[Abbr `HP`] >>
   `!H. HP H ==> stmt_state_rel H ctx func ce cx ee z /\
-                ghost_inv_at_mods (DF H) lo d ce cx ee Gz tz z` by simp[Abbr `HP`] >>
+                immutable_frame_mods func ce cx ee z /\
+                ghost_inv_at_mods (DF H) lo d ce cx ee Gz tz z` by
+    (simp[Abbr `HP`, NoAsms] >> gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ (s,G,tn) [] (OK z,Gz,tz) /\ _`
+       (drule_then strip_assume_tac) >> simp[]) >>
   `(0 < n ==> w2n sw + n <= z.vs_alloca_next /\
               ?x. src = Var x /\ ptr_covers Gz tz x z n)` by suspend "coverage" >>
   `!name b len. local_region ce ee.scopes z name b len ==>
@@ -321,7 +334,7 @@ Resume ctor_private_snapshot_actual_mods[pack]:
        w2n dw + type_memory_size rt <= b \/ b + len <= w2n dw) /\
     read_result cx (Value v) ee = (INL v,ee) /\
     vv_holds ce cx (lowered_value_type ce e) (Value v) saved ee u /\
-    vv_at ce cx (lowered_value_type ce e) sb ee (Value v) saved u /\
+    vv_at ce cx (lowered_value_type ce e) sa sb ee (Value v) saved u /\
     ptr_vv_ok cx (lowered_value_type ce e) (Value v) saved ee Gu tu u /\
     vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e) ee (Value v) saved u /\
     ptr_buf_ok ce e (Var p) Gu u` by suspend "representation" >>
@@ -349,26 +362,27 @@ Resume ctor_private_snapshot_actual_mods[representation]:
 QED
 
 Resume ctor_private_snapshot_actual_mods[result]:
-  qexistsl_tac [`p`,`dw`,`rt`,`Gu`,`tu`] >>
-  simp[] >> conj_tac
-  >- first_assum ACCEPT_TAC >>
-  gen_tac >> strip_tac >> conj_tac
+  `rt = tv` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `rt = tv` SUBST_ALL_TAC >>
+  qexistsl_tac [`p`,`dw`,`Gu`,`tu`] >>
+  simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> strip_tac >>
+  `valid_horizon cx st0 H ee.storage_trace` by fs[Abbr `HP`] >>
+  conj_tac
   >- (irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gz`,`z`,`tz`] >>
-      qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ _ _ _`
-        (qspec_then `H` mp_tac) >> fs[Abbr `HP`]) >>
+      qpat_assum `!h. valid_horizon _ _ h _ ==> gas_origin_ptr_path _ (s,G,tn) [] (OK z,Gz,tz) /\ _`
+        (drule_then strip_assume_tac) >> simp[]) >>
   gen_tac >>
   `storage_well_formed_on cx ee (FST H)` by
-    (qpat_assum `!h. valid_horizon cx st0 h ee.storage_trace ==>
-       vv_post_mods h ctx func ce cx e es sa sm s0 ee raw vv s /\ _`
-       (qspec_then `H` mp_tac) >>
-     (impl_tac >- fs[Abbr `HP`]) >>
-     disch_then (ACCEPT_TAC o cj 2 o REWRITE_RULE [bodyFullPostsModsTheory.vv_post_mods_def] o cj 1)) >>
+    (qpat_assum `!h. valid_horizon _ _ h _ ==> vv_post_mods h _ _ _ _ _ es _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >> fs[bodyFullPostsModsTheory.vv_post_mods_def]) >>
   qpat_assum `!h. HP h ==> stmt_state_rel h ctx func ce cx ee u /\ _`
-    (qspec_then `H` (drule_then strip_assume_tac)) >>
+    (drule_then strip_assume_tac) >>
   simp[extcall_positional_post_mods_def,vv_location_def,vv_operand_def,mk_ptr_def,eval_operand_def] >>
   conj_tac >-
     (qexistsl_tac [`sa`,`sm`,`sb`,`vv`,`Value v`,`T`] >>
-     gvs[mk_ptr_def,ci_mono_def] >> first_assum ACCEPT_TAC) >>
+     gvs[mk_ptr_def,ci_mono_def,bodyFullPostsModsTheory.vv_holds_mods_def] >>
+     first_assum ACCEPT_TAC) >>
   fs[wb_frame_def]
 QED
 Finalise ctor_private_snapshot_actual_mods
