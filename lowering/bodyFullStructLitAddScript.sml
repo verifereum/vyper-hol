@@ -1,11 +1,7 @@
 (* The destination ADD runs between the child expression and its unwrap. *)
 Theory bodyFullStructLitAdd
 Ancestors
-  bodyFullAttributeAdd bodyPtrMakeArrayAddFrame bodyPtrMakeArrayEmission
-  exprSimMemDefs assignBasePtrOffset exprSimVVFrame
-  bodySimFull bodyPtrDefs allocaHistory emitHelperProps emitHelper
-  loweringStateRelDefs compileEnv context venomInst venomState
-  venomExecSemantics ptrDiscipline typedCopyPtr finite_map list arithmetic
+  bodyFullStructLitAddEndpoint
 
 Theorem structlit_child_add_full:
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var out,sn) /\
@@ -57,69 +53,8 @@ Theorem structlit_child_add_full:
       op_taint tn' (Var p) = op_taint tn (Var p)) /\
     ptr_covers G' tn' out t n /\ lookup_var out t = SOME (a+n2w off)
 Proof
-  strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by simp[] >>
-  drule_all emit_op_fetch_boundary >> strip_tac >>
-  `out = STRING #"%" (toString sm.cs_next_var)` by fs[] >>
-  `!p. not_fresh_at sm p ==> p <> out` by metis_tac[] >>
-  qabbrev_tac `i = mk_inst sm.cs_next_id ADD [Var root; Lit (n2w off)] [out]` >>
-  qabbrev_tac `u = update_var out (a+n2w off) s` >>
-  qabbrev_tac `t = u with vs_inst_idx := SUC s.vs_inst_idx` >>
-  qabbrev_tac `G' = step_prov PG G i u` >>
-  qabbrev_tac `tn' = step_taint i s u tn` >>
-  `(!D lo' explicit. allocas_from lo' s ==>
-     gas_origin_ptr_path (D,lo',explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
-   FLOOKUP G' out = FLOOKUP G root /\ op_taint tn' (Var out) = {} /\
-   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
-   tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-   (!p. p <> out ==> FLOOKUP G' p = FLOOKUP G p /\
-     op_taint tn' (Var p) = op_taint tn (Var p))` by
-    (`eval_operand (Var root) s = SOME a` by simp[eval_operand_def] >>
-     rule_assum_tac (REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     drule_all attribute_add_full_frame >> simp[op_prov_def]) >>
-  `(!D lo' d cx ee. ghost_inv_at D lo' d ce cx ee G tn s ==>
-      ghost_inv_at D lo' d ce cx ee G' tn' t) /\
-   ghost_kept_at lo ce es si Gi ti s0 G' tn'` by
-    (mp_tac (attribute_fresh_full_ghost_update |> Q.INST
-      [`sa` |-> `si`, `cenv` |-> `ce`, `w` |-> `a+n2w off`,
-       `n` |-> `SUC s.vs_inst_idx`]) >>
-     simp[Abbr `t`, Abbr `u`] >> metis_tac[]) >>
-  `eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s` by
-    (Cases_on `vv_operand vv` >>
-     simp[Abbr `t`, Abbr `u`, eval_operand_def, lookup_var_def,
-          update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
-  `alloca_history func t` by
-    (`step_inst_base i s = OK u` by
-       simp[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs,
-            mk_inst_def, exec_pure2_def, eval_operand_def] >>
-     `get_instruction bb s.vs_inst_idx = SOME i` by fs[Abbr `i`] >>
-     drule_all alloca_history_base_step >>
-     simp[Abbr `i`, mk_inst_def, is_terminator_def, Abbr `t`]) >>
-  qexistsl_tac [`t`, `G'`, `tn'`] >> simp[] >>
-  conj_tac
-  >- (rpt strip_tac >> simp[Abbr `t`, Abbr `u`] >>
-      irule vv_post_update_var >> simp[] >>
-      qexists_tac `sm` >> simp[not_fresh_at_def] >> metis_tac[]) >>
-  conj_tac
-  >- (irule vv_store_bound_frame_mem_src >> qexists_tac `s` >>
-      simp[Abbr `t`, Abbr `u`, update_var_def]) >>
-  conj_tac
-  >- (unabbrev_all_tac >>
-      irule binop_source_ptr_vv_ok >> simp[] >> metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      unabbrev_all_tac >>
-      irule binop_source_ptr_buf_ok >> simp[] >> gvs[vv_operand_def] >> metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      unabbrev_all_tac >>
-      irule binop_source_ptr_buf_ok >> simp[] >> gvs[vv_operand_def] >> metis_tac[]) >>
-  simp[Abbr `t`, Abbr `u`, update_var_def] >>
-  conj_tac
-  >- (rpt strip_tac >> simp[lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
-  reverse conj_tac >- simp[lookup_var_def, FLOOKUP_UPDATE] >>
-  irule assign_base_ptr_covers_offset_address >>
-  conj_tac >- metis_tac[] >>
-  qexistsl_tac [`G`, `region_base`, `cap`, `off`, `root`, `s`, `tn`, `capacity`, `a`] >>
-  fs[lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+  strip_tac >> drule_all structlit_child_add_full_endpoint >>
+  disch_then (qspec_then `PG`
+    (qx_choose_then `t` (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac)))) >>
+  qexistsl_tac [`t`, `G'`, `tn'`] >> asm_rewrite_tac[]
 QED

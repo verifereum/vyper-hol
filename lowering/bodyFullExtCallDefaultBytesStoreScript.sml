@@ -176,7 +176,7 @@ Proof
   qexistsl_tac [`u`,`Gf`,`tm`] >> first_assum ACCEPT_TAC
 QED
 
-Theorem extcall_default_bytes_store_capacity_joint:
+val bytestring_capacity_inputs = ``
   compile_store_memory ce (Var src) (Var dst) rt sty sa = ((),sb) /\
   is_bytestring_type rt /\ is_bytestring_type sty /\
   evaluate_type (get_tenv cx) rt = SOME tv /\
@@ -194,31 +194,27 @@ Theorem extcall_default_bytes_store_capacity_joint:
   allocas_from lo s /\ lo <= s.vs_alloca_next /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts``;
+
+Theorem extcall_default_bytes_store_capacity_joint_exact:
+  ^bytestring_capacity_inputs ==>
   ?u Gf tm.
-    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-       (s,G,tn) [] (OK u,Gf,tm)) /\
-    (!mem. mem_agree_outside tm.t_mem u.vs_memory mem ==>
-       val_in_memory tv v (w2n dw) mem) /\
-    lookup_var dst u = SOME dw /\
-    (!x. not_fresh_at sa x ==>
-      lookup_var x u = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x)) /\
-    (!off k. off+k <= w2n dw \/ w2n dw+type_memory_size tv <= off ==>
-      mem_bytes_at off k u.vs_memory = mem_bytes_at off k s.vs_memory) /\
-    (!i. i < w2n dw \/ w2n dw+type_memory_size tv <= i ==>
-      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
-    LENGTH s.vs_memory <= LENGTH u.vs_memory /\
-    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
-              vs_inst_idx := s.vs_inst_idx|>) = s /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted
+    run_inst_seq (emitted_insts sa sb) s = OK (u with vs_inst_idx := s.vs_inst_idx) /\
+    ^bytestring_store_post
 Proof
   strip_tac >>
   `val_store_size stv v <= type_memory_size stv` by simp[exprSimPropsTheory.val_store_size_le] >>
-  irule bytestring_store_extent_joint >> asm_rewrite_tac[] >>
+  irule bytestring_store_extent_joint_exact >> asm_rewrite_tac[] >>
   qexistsl_tac [`ce`,`cx`,`rt`,`src`,`stv`,`sty`,`sw`] >> asm_rewrite_tac[] >>
   conj_tac >- decide_tac >>
   irule ptr_covers_mono >> qexists_tac `type_memory_size stv` >> asm_rewrite_tac[]
+QED
+
+Theorem extcall_default_bytes_store_capacity_joint:
+  ^bytestring_capacity_inputs ==> ?u Gf tm. ^bytestring_store_post
+Proof
+  disch_tac >> mp_tac (SPEC_ALL extcall_default_bytes_store_capacity_joint_exact) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`u`,`Gf`,`tm`] (assume_tac o CONJUNCT2)) >>
+  qexistsl_tac [`u`,`Gf`,`tm`] >> first_assum ACCEPT_TAC
 QED

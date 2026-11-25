@@ -6,9 +6,9 @@ Ancestors
   context contextCodegenRel codegenRel unitTransformDefs instMemFrontier
   memSafeRun fragExec emitHelper emitHelperProps compileEnv
   venomExecSemantics venomInst venomState valueEncoding valueEncodingDefs
-  valueEncodingProps exprSimProps finite_map pred_set list rich_list words
+  valueEncodingProps exprSimProps exprLoweringProps finite_map pred_set list rich_list words
 
-Theorem body_full_memory_copy_frame_path:
+val memory_copy_inputs = ``
   compile_copy_memory (Var xd) (Var xs) n sa = ((),sb) /\
   type_memory_size tv = n /\ val_wf tv v /\
   not_fresh_at sa xs /\ not_fresh_at sa xd /\
@@ -22,11 +22,12 @@ Theorem body_full_memory_copy_frame_path:
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t Gf tf.
+  s.vs_inst_idx = LENGTH sa.cs_current_insts``;
+
+val memory_copy_frame_post = ``
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,Gf,tf)) /\
-    val_in_memory tv v (w2n dw) t.vs_memory /\
+    val_in_memory tv v (w2n (dw:256 word)) t.vs_memory /\
     (!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
       val_in_memory tv v (w2n dw) mem) /\
     typed_copy_state_frame sa (w2n dw) n s t /\
@@ -38,7 +39,13 @@ Theorem body_full_memory_copy_frame_path:
       (i IN tf.t_mem <=> i IN tn.t_mem)) /\
     (!x. not_fresh_at sa x ==>
       lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
-      op_taint tf (Var x) = op_taint tn (Var x))
+      op_taint tf (Var x) = op_taint tn (Var x))``;
+
+Theorem body_full_memory_copy_frame_path_exact:
+  ^memory_copy_inputs ==>
+  ?t Gf tf.
+    run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    ^memory_copy_frame_post
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `val_footprint tv v <= n` by metis_tac[val_footprint_le] >>
@@ -49,7 +56,8 @@ Proof
         (rpt strip_tac >> irule valueCopyTheory.val_in_memory_relocate >>
          simp[] >> qexistsl_tac [`w2n sw`,`0`,`mem`] >> simp[mem_bytes_at_def]) >>
       qexistsl_tac [`s`,`G`,`tn`] >>
-      simp[typed_copy_state_frame_refl, gas_origin_ptr_path_rules] >>
+      simp[typed_copy_state_frame_refl, gas_origin_ptr_path_rules,
+           emitted_insts_def, run_inst_seq_def, venom_state_component_equality] >>
       first_x_assum irule >> simp[mem_agree_outside_def]) >>
   `0 < n /\ n < dimword (:256)` by decide_tac >>
   qabbrev_tac `inst = mk_inst sa.cs_next_id MCOPY
@@ -80,17 +88,22 @@ Proof
   `!i. ~(w2n dw <= i /\ i < w2n dw+n) ==>
     (i IN tf.t_mem <=> i IN tn.t_mem)` by suspend "exterior" >>
   qexistsl_tac [`sc with vs_inst_idx := LENGTH sb.cs_current_insts`,`G`,`tf`] >>
+  conj_tac >-
+    (`sc.vs_inst_idx = s.vs_inst_idx` by
+       simp[Abbr `sc`, mcopy_def, write_memory_with_expansion_def] >>
+     simp[emitted_insts_def, listTheory.DROP_APPEND, run_inst_seq_def,
+          venom_state_component_equality]) >>
   conj_tac >- suspend "path" >>
   simp[op_taint_def] >>
   simp[Abbr `sc`,mcopy_def,write_memory_with_expansion_def,lookup_var_def]
 QED
 
-Resume body_full_memory_copy_frame_path[exterior]:
+Resume body_full_memory_copy_frame_path_exact[exterior]:
   qpat_x_assum `tf.t_mem = _` SUBST1_TAC >>
   rw[EQ_IMP_THM] >> gvs[] >> decide_tac
 QED
 
-Resume body_full_memory_copy_frame_path[ghost]:
+Resume body_full_memory_copy_frame_path_exact[ghost]:
   simp[Abbr `tf`,Abbr `inst`,Abbr `sc`,step_prov_def,set_prov_def,out_prov_def,
        step_taint_def,mk_inst_def,set_var_taint_def,DRESTRICT_UNIV,
        store_taint_def,adopt_reset_def,mem_taint_def,imm_taint_def,
@@ -100,14 +113,14 @@ Resume body_full_memory_copy_frame_path[ghost]:
        eval_operand_def,FLOOKUP_DEF,pred_setTheory.EXTENSION] >> metis_tac[]
 QED
 
-Resume body_full_memory_copy_frame_path[code]:
+Resume body_full_memory_copy_frame_path_exact[code]:
   qpat_x_assum `compile_copy_memory _ _ _ _ = _` mp_tac >> Cases_on `n` >>
   simp[compile_copy_memory_def,emit_void_def,emit_inst_def,comp_bind_def,
        fresh_id_def,emit_def,comp_return_def,Abbr `inst`] >>
   strip_tac >> gvs[]
 QED
 
-Resume body_full_memory_copy_frame_path[path]:
+Resume body_full_memory_copy_frame_path_exact[path]:
   gen_tac >>
   `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME inst` by
@@ -134,7 +147,7 @@ Resume body_full_memory_copy_frame_path[path]:
   irule (cj 1 gas_origin_ptr_path_rules) >> simp[]
 QED
 
-Resume body_full_memory_copy_frame_path[pointer]:
+Resume body_full_memory_copy_frame_path_exact[pointer]:
   gvs[ptr_covers_def] >>
   simp[ptr_inst_ok_def,Abbr `inst`,mk_inst_def,step_inst_def,taint_ok_def,
        op_taint_def,Abbr `sc`,mcopy_def,write_memory_with_expansion_def,
@@ -147,7 +160,16 @@ Resume body_full_memory_copy_frame_path[pointer]:
   qx_gen_tac `operand` >> Cases_on `operand` >> simp[] >> metis_tac[]
 QED
 
-Finalise body_full_memory_copy_frame_path
+Finalise body_full_memory_copy_frame_path_exact
+
+Theorem body_full_memory_copy_frame_path:
+  ^memory_copy_inputs ==> ?t Gf tf. ^memory_copy_frame_post
+Proof
+  disch_tac >> mp_tac (SPEC_ALL body_full_memory_copy_frame_path_exact) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`t`,`Gf`,`tf`] (assume_tac o CONJUNCT2)) >>
+  qexistsl_tac [`t`,`Gf`,`tf`] >> first_assum ACCEPT_TAC
+QED
 
 Theorem body_full_memory_copy_path:
   compile_copy_memory (Var xd) (Var xs) n sa = ((),sb) /\

@@ -6,7 +6,7 @@ Ancestors exprBopSimProps[qualified,ignore_grammar] exprSimProps[qualified,ignor
   vyperInterpreter vyperState fragGasEmitCtrl fragGasOriginPtr
   venomInst venomInstProps venomExecSemantics ptrDiscipline finite_map
   bodyFullRawCallCallOrigin fragGasOriginPtrLoop fragExec list bodyFullRawCallFailure exprSimRawCallCalldata emitHelper context rich_list
-  bodyFullRawCallCallFrame bodyFullRawCallCallStorage bodyPtrDefs
+  bodyFullRawCallCallFrame bodyFullRawCallCallStorage bodyPtrDefs extCallStatusSteps
   ghostPcTransportPtr bodyFullShared memLocDefs codegenRel unitTransformDefs pred_set
   decoderGhostFramePtr contextCodegenRel loweringStateRelDefs
   vyperStorageTrace vyperStorageFootprint vyperFiniteStoragePreservation exprSimRawCall extCallOracleStep
@@ -165,33 +165,7 @@ Theorem extcall_dispatch_status_path:
       (OK (jump_to (if success then cont_lbl else fail_lbl) (next_inst u)),
        step_prov PG G inst u, step_taint inst s u tn)
 Proof
-  strip_tac >> gen_tac >> strip_tac >>
-  `step_inst 0 ctx inst s = OK u /\ ~is_terminator inst.inst_opcode` by
-    (Cases_on `stat` >> simp[step_inst_non_invoke, is_terminator_def]) >>
-  drule_all step_preserves_control_flow >> strip_tac >>
-  `~u.vs_halted` by metis_tac[step_preserves_halted] >>
-  `op_taint (step_taint inst s u tn) (Var out) = {}` by
-    (Cases_on `stat` >> simp[step_taint_def, out_taint_def,
-       set_var_taint_def, op_taint_def, FLOOKUP_UPDATE]) >>
-  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-      (OK (next_inst u),step_prov PG G inst u,step_taint inst s u tn)` by
-    (simp[next_inst_def, GSYM arithmeticTheory.ADD1] >>
-     irule raw_call_step_origin_full >>
-     simp[] >>
-     qexistsl [`ao`,`az`,`dl`,`dp`,`g`,`rp`,`rn`,`ro`,`rl`,`a`,`v`] >>
-     Cases_on `stat` >> simp[]) >>
-  `eval_operand (Var out) (next_inst u) = SOME (if success then 1w else 0w)` by
-    simp[next_inst_def, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  qpat_x_assum `u = update_var _ _ _` kall_tac >>
-  irule gas_origin_ptr_path_trans >> goal_assum drule >>
-  irule emit_jnz_origin_ptr >>
-  simp[] >>
-  `allocas_from lo (next_inst u) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp (next_inst u))` by
-    (gvs[next_inst_def, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
-  `(next_inst u).vs_current_bb = sj.cs_current_bb /\
-   (next_inst u).vs_inst_idx = LENGTH sj.cs_current_insts /\ ~(next_inst u).vs_halted` by
-    simp[next_inst_def, GSYM arithmeticTheory.ADD1] >>
-  simp[] >> qexistsl [`Var out`,`sj`,`se`] >> simp[]
+  strip_tac >> mp_tac extcall_dispatch_status_edges >> simp[]
 QED
 
 Theorem extcall_dispatch_failure_path:

@@ -15,7 +15,7 @@ Ancestors
   fragGasOriginPtr venomExecSemantics selectedAcceptedFold constSubst
   gasShadowRuntimeBodies gasShadowModuleDefs gasShadow
   entryValueRejectFacts loweringStateRelDefs vyperState vyperCall finite_map
-  groupedValueRejectSite
+  groupedValueRejectSite entryCreateGroupedLayout
 
 Theorem grouped_legacy_checked_route_with_reject_site:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -119,7 +119,7 @@ Proof
   disch_then (qx_choosel_then [`groups`,`ips`,`fall`,`shunit`,`fn`,`bb`]
     (map_every assume_tac o CONJUNCTS)) >>
   `shunit = shadow_unit` by fs[] >> gvs[] >>
-  drule_all grouped_shadow_entry_dispatch >>
+  drule_all grouped_shadow_entry_dispatch_with_layout >>
   disch_then (qx_choosel_then
     [`shunit`,`shfn`,`sf`,`fall_lbl`,`jobs`,`sd`,`shd`,`sx`,`shx`,`sn`,`shn`,`se`,`she`]
     (map_every assume_tac o CONJUNCTS)) >>
@@ -197,8 +197,9 @@ QED
 
 Resume grouped_legacy_checked_route_with_reject_site[installed]:
   PairCases_on `pkg` >>
-  drule_all grouped_legacy_paired_code >>
+  drule_all grouped_legacy_paired_code_with_end >>
   disch_then (qx_choosel_then [`checks`,`reg`,`cf`,`sa`,`done`,`sha`,`shdone`] strip_assume_tac) >>
+  drule_all_then strip_assume_tac selected_grouped_body_layout_at >>
   `MEM (mut,nr,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
      tx.function_name,args,[],ret,subst_consts_stmts (module_consts_env tops []) fbody)
      (FST (classify_functions tops))` by simp[] >>

@@ -9,7 +9,8 @@ Ancestors
   ptrSafeRun ptrDiscipline instMemFrontier memSafeRun
   words list finite_map
 
-Theorem env_reads_step_full:
+(* Keep the base execution that supplies the marked physical step. *)
+Theorem env_reads_step_full_run:
   item <> PrevHash /\ item <> MsgGas /\
   compile_env_var item sa = (op,sb) /\
   evaluate_builtin cx es.accounts (env_item_type item) (Env item) [] [] = INL v /\
@@ -24,7 +25,8 @@ Theorem env_reads_step_full:
     stmt_state_rel H ctx func cenv cx es s0 /\
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) ==>
   ?t G' tn'. !H. valid_horizon cx st0 H es.storage_trace ==>
-    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s0,G0,tn0) [] (OK t,G',tn') /\
+    (run_inst_seq (emitted_insts sa sb) s0 = OK (t with vs_inst_idx := s0.vs_inst_idx) /\
+     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s0,G0,tn0) [] (OK t,G',tn')) /\
     stmt_state_rel H ctx func cenv cx es t /\
     eval_operand op t = SOME (val_to_w256 v) /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -77,7 +79,12 @@ Proof
     (first_x_assum (qspec_then `0` mp_tac) >>
      simp[Abbr `inst`, Abbr `out`]) >>
   conj_tac
-  >- (`inst.inst_opcode <> GAS` by simp[Abbr `inst`, Abbr `opc`, mk_inst_def] >>
+  >- (conj_tac
+      >- (`emitted_insts sa sb = [inst]` by simp[Abbr `inst`, Abbr `out`] >>
+          simp[run_inst_seq_def] >>
+          `u.vs_inst_idx = s0.vs_inst_idx` by simp[Abbr `u`, update_var_def] >>
+          metis_tac[venomStateTheory.venom_state_fupdselfid]) >>
+      `inst.inst_opcode <> GAS` by simp[Abbr `inst`, Abbr `opc`, mk_inst_def] >>
       `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s0,G0,tn0)
         (if inst.inst_opcode = GAS then [(func.fn_name, inst.inst_id) IN explicit] else [])
         (OK (u with vs_inst_idx := SUC s0.vs_inst_idx),
@@ -131,4 +138,37 @@ Proof
        codegenRelTheory.source_memory_write_ranges_def,
        FLOOKUP_DRESTRICT] >>
   simp[FLOOKUP_DEF, pred_setTheory.EXTENSION] >> metis_tac[])
+QED
+
+Theorem env_reads_step_full:
+  item <> PrevHash /\ item <> MsgGas /\
+  compile_env_var item sa = (op,sb) /\
+  evaluate_builtin cx es.accounts (env_item_type item) (Env item) [] [] = INL v /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  alloca_history func s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) ==>
+  ?t G' tn'. !H. valid_horizon cx st0 H es.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s0,G0,tn0) [] (OK t,G',tn') /\
+    stmt_state_rel H ctx func cenv cx es t /\
+    eval_operand op t = SOME (val_to_w256 v) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func t /\ t.vs_memory = s0.vs_memory /\
+    t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+    tn'.t_mem = tn0.t_mem /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s0 /\ FLOOKUP G' x = FLOOKUP G0 x /\
+      op_taint tn' (Var x) = op_taint tn0 (Var x)) /\
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
+    ghost_inv_at (DF H) lo d cenv cx es G' tn' t
+Proof
+  strip_tac >> drule_all env_reads_step_full_run >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >> rpt strip_tac >> res_tac
 QED

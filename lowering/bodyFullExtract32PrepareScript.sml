@@ -103,7 +103,8 @@ Proof
        pred_setTheory.EXTENSION] >> simp[FLOOKUP_DEF] >> metis_tac[]
 QED
 
-Theorem extract32_prepare_full:
+(* Keep the straight-line run that produces the snapshot landing. *)
+Theorem extract32_prepare_observed:
   compile_bytestring_src (Var sv) sm = ((lenop,dataop),sn) /\
   not_fresh_at sm sv /\ local_ptrs_reserved cenv sm /\
   sa.cs_next_var <= sm.cs_next_var /\
@@ -124,7 +125,9 @@ Theorem extract32_prepare_full:
     ptr_buf_ok cenv src (Var sv) G s /\
     ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) ==>
-  ?p u G2 tn2 len data.
+  ?p u G2 tn2 len data raw.
+    run_inst_seq (emitted_insts sm sn) s = OK raw /\
+    u = raw with vs_inst_idx := LENGTH sn.cs_current_insts /\
     lenop = Var len /\ dataop = Var data /\
     not_fresh_at sn sv /\ not_fresh_at sn len /\ not_fresh_at sn data /\
     op_taint tn2 (Var len) = {} /\ op_prov G2 (Var len) = NONE /\
@@ -165,7 +168,7 @@ Proof
   suspend "physical"
 QED
 
-Resume extract32_prepare_full[physical]:
+Resume extract32_prepare_observed[physical]:
   `ptr_covers G tn sv s (32+LENGTH bs)` by
     (gvs[ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
   drule_all compile_bytestring_src_shape_fresh >> strip_tac >>
@@ -193,12 +196,12 @@ Resume extract32_prepare_full[physical]:
     (simp[Abbr `v`, NoAsms] >> irule emitted_alloca_history >> simp[] >>
      qexistsl_tac [`emitted_insts sm sn`,`s`,`sm`] >>
      simp[mk_inst_def, is_terminator_def]) >>
-  qexistsl_tac [`p`,`v`,`G2`,`tn2`,`len`,`data`] >>
+  qexistsl_tac [`p`,`v`,`G2`,`tn2`,`len`,`data`,`u`] >>
   simp[Abbr `v`, eval_operand_def, lookup_var_def] >>
   suspend "posts"
 QED
 
-Resume extract32_prepare_full[posts]:
+Resume extract32_prepare_observed[posts]:
   gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
@@ -248,4 +251,59 @@ Resume extract32_prepare_full[posts]:
   metis_tac[]
 QED
 
-Finalise extract32_prepare_full
+Finalise extract32_prepare_observed
+
+Theorem extract32_prepare_full:
+  compile_bytestring_src (Var sv) sm = ((lenop,dataop),sn) /\
+  not_fresh_at sm sv /\ local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  alloca_history func s /\ alloca_inv s /\
+  expr_type src = BaseT (BytesT (Dynamic m)) /\
+  evaluate_type (get_tenv cx) (expr_type src) = SOME (BaseTV (BytesT (Dynamic m))) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx src es sa sm s0 ee (BytesV bs) (Var sv) s /\
+    expr_store_bound cx (expr_type src) (BytesV bs) (Var sv) s /\
+    ptr_val_ok cx (expr_type src) (BytesV bs) (Var sv) G tn s /\
+    ptr_buf_ok cenv src (Var sv) G s /\
+    ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) ==>
+  ?p u G2 tn2 len data.
+    lenop = Var len /\ dataop = Var data /\
+    not_fresh_at sn sv /\ not_fresh_at sn len /\ not_fresh_at sn data /\
+    op_taint tn2 (Var len) = {} /\ op_prov G2 (Var len) = NONE /\
+    u.vs_memory = s.vs_memory /\ u.vs_alloca_next = s.vs_alloca_next /\
+    tn2.t_mem = tn.t_mem /\
+    eval_operand (Var sv) u = SOME (n2w p) /\
+    eval_operand lenop u = SOME (n2w (LENGTH bs)) /\
+    eval_operand dataop u = SOME (n2w (p+32)) /\
+    mem_word_at p u.vs_memory = n2w (LENGTH bs) /\
+    mem_bytes_at (p+32) (LENGTH bs) u.vs_memory = bs /\
+    p+32 < dimword(:256) /\ LENGTH bs < dimword(:256) /\
+    p+32+LENGTH bs <= u.vs_alloca_next /\
+    (!n. 0 < LENGTH bs /\ n <= LENGTH bs ==> ptr_covers G2 tn2 data u n) /\
+    u.vs_current_bb = sn.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sn.cs_current_insts /\ alloca_history func u /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+        (s,G,tn) [] (OK u,G2,tn2) /\
+      expr_post H ctx func cenv cx src es sa sn s0 ee (BytesV bs) (Var sv) u /\
+      expr_store_bound cx (expr_type src) (BytesV bs) (Var sv) u /\
+      ptr_val_ok cx (expr_type src) (BytesV bs) (Var sv) G2 tn2 u /\
+      ptr_buf_ok cenv src (Var sv) G2 u /\
+      ghost_inv_at (DF H) lo d cenv cx ee G2 tn2 u /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2)
+Proof
+  strip_tac >> drule_all extract32_prepare_observed >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`p`,`u`,`G2`,`tn2`,`len`,`data`] >> asm_simp_tac bool_ss [] >>
+  gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >> gvs[]
+QED

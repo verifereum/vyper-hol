@@ -35,6 +35,16 @@ Theorem send_tail_path_full[local]:
       read_result cx tv od) es1 = (res,es') /\
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   ?G' tn' r. !H. valid_horizon cx st0 H es'.storage_trace ==>
+    (?out. success = Var out /\
+      let i = mk_inst sm.cs_next_id CALL
+        [gas;addr;value;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out] in
+      (step_inst_base i s = r /\
+       r = Abort ExHalt_abort (halt_state (set_returndata [] s))) \/
+      (?u. step_inst_base i s = OK u /\ eval_operand (Var out) u = SOME 0w /\
+        r = Abort Revert_abort (revert_state
+          (set_returndata [] (u with vs_inst_idx := SUC s.vs_inst_idx)))) \/
+      (?u. step_inst_base i s = OK u /\ eval_operand (Var out) u = SOME 1w /\
+        r = OK (u with vs_inst_idx := SUC (SUC s.vs_inst_idx)))) /\
     gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,tn) [] (r,G',tn') /\
     ((?z. r = OK z /\ res = INL NoneV /\
       expr_post H ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w) z /\
@@ -88,9 +98,10 @@ Resume send_tail_path_full[halt]:
   qexistsl_tac [`G`,`tn`,
     `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
   qpat_x_assum `res = _ \/ res = _` strip_assume_tac >>
-  rpt strip_tac >> res_tac >>
-  gvs[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
-       exprSimDefsTheory.halt_exit_def]
+  qx_gen_tac `H` >> strip_tac >>
+  conj_tac >- (qexists_tac `out` >> fs[Abbr `inst`]) >>
+  res_tac >> gvs[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
+                 exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume send_tail_path_full[failed]:
@@ -98,9 +109,10 @@ Resume send_tail_path_full[failed]:
   qexistsl_tac [`step_prov PG G inst u`,`step_taint inst s u tn`,
     `Abort Revert_abort (revert_state
       (set_returndata [] (u with vs_inst_idx := SUC s.vs_inst_idx)))`] >>
-  rpt strip_tac >> res_tac >>
-  gvs[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
-       exprSimDefsTheory.halt_exit_def]
+  qx_gen_tac `H` >> strip_tac >>
+  conj_tac >- (fs[Abbr `inst`,Abbr `u`] >> metis_tac[]) >>
+  res_tac >> gvs[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
+                 exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume send_tail_path_full[normal]:
@@ -119,6 +131,7 @@ Resume send_tail_path_full[normal]:
   qexistsl_tac [`step_prov PG G inst u`,`step_taint inst s u tn`,
     `OK (u with vs_inst_idx := SUC (SUC s.vs_inst_idx))`] >>
   qx_gen_tac `H` >> strip_tac >>
+  conj_tac >- (fs[Abbr `inst`,Abbr `u`] >> metis_tac[]) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> state_rel _ _ _ _ _ _ /\ _`
     (qspec_then `H` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
@@ -170,6 +183,102 @@ QED
 
 Finalise send_tail_path_full[local]
 
+Theorem send_tail_outcome_selected:
+  expr_has_effect e /\
+  emit_op CALL [gas;addr;value;Lit 0w;Lit 0w;Lit 0w;Lit 0w] sm = (success,s3) /\
+  emit_void ASSERT [success] s3 = (void,sb) /\ fn_has_code sm sb fn /\
+  fn_inst_ids_distinct fn /\ alloca_history fn s /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!H. valid_horizon cx st0 H es1.storage_trace ==>
+    stmt_state_rel H ctx fn cenv cx es1 s /\
+    storage_well_formed_on cx es1 (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx es1 G tn s) /\
+  wb_frame cenv es es1 sa s0 s /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
+  op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
+  eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
+  eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\ es1.gas_obs = [] ==>
+  ?res ee. ee.gas_obs = [] /\
+    (!tail. (do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);
+                read_result cx tv od) (es1 with gas_obs := tail) =
+             (res,ee with gas_obs := tail)) /\
+    (~storage_trace_domain cx st0 ee.storage_trace \/
+     (storage_trace_domain cx st0 ee.storage_trace /\
+      ?G' tn' r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+        (?out. success = Var out /\
+          let i = mk_inst sm.cs_next_id CALL
+            [gas;addr;value;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out] in
+          (step_inst_base i s = r /\
+           r = Abort ExHalt_abort (halt_state (set_returndata [] s))) \/
+          (?u. step_inst_base i s = OK u /\ eval_operand (Var out) u = SOME 0w /\
+            r = Abort Revert_abort (revert_state
+              (set_returndata [] (u with vs_inst_idx := SUC s.vs_inst_idx)))) \/
+          (?u. step_inst_base i s = OK u /\ eval_operand (Var out) u = SOME 1w /\
+            r = OK (u with vs_inst_idx := SUC (SUC s.vs_inst_idx)))) /\
+        gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,tn) [] (r,G',tn') /\
+        ((?z. r = OK z /\ res = INL NoneV /\
+          expr_post H ctx fn cenv cx e es sa sb s0 ee NoneV (Lit 0w) z /\
+          ghost_inv_at (DF H) lo d cenv cx ee G' tn' z /\
+          ghost_kept_at lo cenv es1 sm G tn s G' tn' /\
+          z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          alloca_history fn z /\ z.vs_alloca_next = s.vs_alloca_next /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp z)) \/
+         (exit_result r /\ expr_exit res r /\ halt_exit H cx ee res r /\
+          (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))))
+Proof
+  strip_tac >>
+  qabbrev_tac `src = do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);
+                       read_result cx tv od` >>
+  Cases_on `src es1` >> rename1 `src es1 = (res,ee)` >>
+  `ee.gas_obs = es1.gas_obs /\
+   !gs. src (es1 with gas_obs := gs) = (res,ee with gas_obs := gs)` by
+    (fs[Abbr `src`,SF ETA_ss] >>
+     qspec_then `read_result cx` mp_tac (GEN_ALL send_bind_gas_frame) >>
+     simp[vyperStateTheory.read_result_def,vyperStateTheory.return_def,SF ETA_ss] >>
+     disch_then drule >> simp[]) >>
+  qexistsl_tac [`res`,`ee`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- fs[Abbr `src`] >>
+  `(do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);
+       read_result cx tv od) es1 = (res,ee)` by fs[Abbr `src`] >>
+  reverse (Cases_on `storage_trace_domain cx st0 ee.storage_trace`)
+  >- simp[] >>
+  disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  `storage_trace_frame src` by
+    (simp[Abbr `src`] >>
+     irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_send,
+          vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx fn cenv cx es1 s /\
+    storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx es1 G tn s` by
+    (qx_gen_tac `H` >> strip_tac >>
+     `valid_horizon cx st0 H es1.storage_trace` by
+       metis_tac[vyperStorageFootprintTheory.valid_horizon_frame] >>
+     qpat_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     drule eval_send_read >> strip_tac >>
+     irule vyperFiniteStoragePreservationTheory.eval_send_preserves_storage_well_formed_on >>
+     conj_tac >- fs[vyperStorageFootprintTheory.valid_horizon_def] >>
+     qexistsl_tac [`has_gas`,`r`,`es1`,`to_v::amount_v::gas_vs`] >> simp[]) >>
+  drule_all send_tail_path_full >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`G'`,`tn'`,`r`] >> first_assum ACCEPT_TAC
+QED
+
 Theorem send_tail_outcome_full:
   expr_has_effect e /\
   emit_op CALL [gas;addr;value;Lit 0w;Lit 0w;Lit 0w;Lit 0w] sm = (success,s3) /\
@@ -207,47 +316,15 @@ Theorem send_tail_outcome_full:
     (\H res ee gt r. exprSimDefs$expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
-  strip_tac >>
-  qabbrev_tac `src = do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);
-                       read_result cx tv od` >>
-  Cases_on `src es1` >> rename1 `src es1 = (res,ee)` >>
-  `ee.gas_obs = es1.gas_obs /\
-   !gs. src (es1 with gas_obs := gs) = (res,ee with gas_obs := gs)` by
-    (fs[Abbr `src`,SF ETA_ss] >>
-     qspec_then `read_result cx` mp_tac (GEN_ALL send_bind_gas_frame) >>
-     simp[vyperStateTheory.read_result_def,vyperStateTheory.return_def,SF ETA_ss] >>
-     disch_then drule >> simp[]) >>
+  strip_tac >> drule_all send_tail_outcome_selected >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac)
+  >- (irule gas_outcome_full_bad_nil >> simp[]) >>
   `ee with gas_obs := [] = ee` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
-  `(do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);
-       read_result cx tv od) es1 = (res,ee)` by fs[Abbr `src`] >>
-  reverse (Cases_on `storage_trace_domain cx st0 ee.storage_trace`)
-  >- (irule gas_outcome_full_bad_nil >> fs[Abbr `src`]) >>
-  `storage_trace_frame src` by
-    (simp[Abbr `src`] >>
-     irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-     simp[vyperStorageTraceTheory.storage_trace_frame_send,
-          vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-    stmt_state_rel H ctx fn cenv cx es1 s /\
-    storage_well_formed_on cx ee (FST H) /\
-    ghost_inv_at (DF H) lo d cenv cx es1 G tn s` by
-    (qx_gen_tac `H` >> strip_tac >>
-     `valid_horizon cx st0 H es1.storage_trace` by
-       metis_tac[vyperStorageFootprintTheory.valid_horizon_frame] >>
-     qpat_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     reverse conj_tac >- first_assum ACCEPT_TAC >>
-     drule eval_send_read >> strip_tac >>
-     irule vyperFiniteStoragePreservationTheory.eval_send_preserves_storage_well_formed_on >>
-     conj_tac >- fs[vyperStorageFootprintTheory.valid_horizon_def] >>
-     qexistsl_tac [`has_gas`,`r`,`es1`,`to_v::amount_v::gas_vs`] >> simp[]) >>
-  drule_all send_tail_path_full >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   irule gas_outcome_full_intro >>
   qexistsl_tac [`G'`,`ee`,`[]`,`r`,`res`,`tn'`] >>
   simp[gasSummaryTheory.gas_explicit_def] >>
-  rpt strip_tac >> res_tac >> gvs[] >> metis_tac[]
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >> simp[]
 QED
