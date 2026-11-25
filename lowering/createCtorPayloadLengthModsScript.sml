@@ -131,6 +131,7 @@ Theorem create_ctor_payload_length_mods:
     EVERY (source_body_call_supported cx)
       (int_calls_exprs args) /\
     (!i. i < LENGTH args /\ ~exprs_can_mutate ce (DROP (SUC i) args) ==>
+      (E (LENGTH args)).immutables = (E (SUC i)).immutables /\
       !tr. get_storage cx (E (LENGTH args)) tr = get_storage cx (E (SUC i)) tr) /\
     (?H. valid_horizon cx st0 H (E (LENGTH args)).storage_trace) /\
     fn_inst_ids_distinct func /\

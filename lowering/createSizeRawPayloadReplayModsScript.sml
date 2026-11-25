@@ -21,6 +21,7 @@ Theorem create_raw_payload_at_cuts_mods:
     (create_operand_order RawCreate hs (e::av::(args ++ (if hs then [saltE] else [])))) /\
   (!i s vs s'. i < LENGTH args /\ ~exprs_can_mutate ce (DROP (SUC i) args) /\
     eval_exprs cx (DROP (SUC i) args) s = (INL vs,s') ==>
+    s'.immutables = s.immutables /\
     !tr. get_storage cx s' tr = get_storage cx s tr) /\
   tys = MAP expr_type (e::av::(args ++ (if hs then [saltE] else []))) /\
   lit = blueprint_literal_offset cx hs (e::av::(args ++ (if hs then [saltE] else []))) /\
