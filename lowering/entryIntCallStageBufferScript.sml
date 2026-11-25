@@ -3,10 +3,11 @@ Theory entryIntCallStageBuffer
 Ancestors
   entryCreateEffectFocus entryCreatePathScope entryCreateAdminSequence
   createSizeCutCode createSizeCutOpens createSizeLocationCode createSizeTypedCopyCode
-  typedCopyGasOps exprSimAbiEncodeObliviousCode exprSimAbiGasBridge
+  entryCreatePosSnapshotCode typedCopyGasOps exprSimAbiEncodeObliviousCode exprSimAbiGasBridge
   exprLowering compileEnv context emitHelper venomInst fragExec list pair
 
 val buffer_safe = ``\opc. opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2``;
+val buffer_gas_safe = ``\opc. opc <> GAS /\ opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE``;
 
 fun buffer_actions ths =
   let val rules = ths @ [LET_THM, code_action_return, code_action_emit_inst,
@@ -111,5 +112,7 @@ Proof
   `code_step ^buffer_safe a d` by
     (irule code_step_trans >> qexists_tac `b` >> simp[] >>
      irule code_step_trans >> qexists_tac `c` >> simp[]) >>
-  irule create_effect_suffix_cut >> fs[code_step_def] >> metis_tac[]
+  irule create_effect_suffix_cut >> simp[] >> conj_tac
+  >- (qpat_x_assum `code_step _ a d` mp_tac >> simp[code_step_def]) >>
+  qexists_tac `ce` >> simp[]
 QED
