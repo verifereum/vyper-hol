@@ -38,8 +38,9 @@ Proof
   simp[immutable_holds_def] >> strip_tac >> gvs[sub_layout_def] >>
   first_x_assum drule_all >> strip_tac >>
   `off + k < dimword (:256)` by decide_tac >>
-  simp[] >> rpt conj_tac >> TRY decide_tac >>
-  metis_tac[value_has_type_val_wf, ADD_COMM]
+  simp[] >> conj_tac
+  >- (irule (cj 1 value_has_type_val_wf) >> first_assum ACCEPT_TAC)
+  >> once_rewrite_tac[ADD_COMM] >> first_x_assum irule >> first_assum ACCEPT_TAC
 QED
 
 Theorem runtime_loccode_copy_contents[local]:
