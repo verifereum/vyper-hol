@@ -18,6 +18,7 @@ Ancestors
   (* passes: call-frame allocation, effect and abort order in DFT, FMP aliasing, DSE checks *)
   concretizeCallFrameRegression concretizeEscapeOrderRegression
   dftEffectOrderTest dftAbortOrderTest fmpAliasProbe dsePassChecks
+  o1CreateSizeTransport
   mem2varWitness functionInlinerReturnPcWitness phiElimNonVacuity
   assertCombinerNonVacuity
   (* branch_opt's output checker accepts and runs a rewritten function *)

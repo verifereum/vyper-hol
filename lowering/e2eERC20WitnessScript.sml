@@ -624,13 +624,8 @@ local
      simp[storage_ok_def])
   val dep_evm_state = prove
     (``evm_state_ok erc20_es_dep``,
-     irule (MATCH_MP deploy_state_rel_evm_state_ok erc20_deploy_state) >>
-     simp[erc20_es_dep_def, p23_frame_def,
-          vfmReturndataBoundTheory.returndata_bounded_def,
-          vfmCalldataBoundTheory.calldata_bounded_def,
-          vfmCalldataBoundTheory.memory_paid_def,
-          vfmCalldataBoundTheory.frames_paid_def,
-          vfmCalldataBoundTheory.outputs_fit_def])
+     irule (iffRL (MATCH_MP deploy_state_rel_evm_state_ok erc20_deploy_state)) >>
+     simp[erc20_es_dep_def, p23_frame_def])
   val dep_h_storage = prove
     (``(lookup_account erc20_deploy_tx.target
           erc20_initial_machine.accounts).storage = empty_storage``,
