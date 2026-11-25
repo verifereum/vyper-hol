@@ -5306,7 +5306,8 @@ val linked_empty_body_types_tac =
        strip_tac >>
        qpat_assum `src = NONE` (fn main =>
          qpat_assum `linked_body_type_facts _ _ _`
-           (mp_tac o CONJUNCT1 o REWRITE_RULE [linked_body_type_facts_def]) >>
+           (map_every assume_tac o CONJUNCTS o REWRITE_RULE [linked_body_type_facts_def]) >>
+         qpat_assum `!ty. assignable_type _ ty /\ _ ==> supported_place_type _ ty` mp_tac >>
          simp[NoAsms, main])]) >>
   `linked_body_env tops src (type_env_all_modules mods) fallback_types` by
     (PURE_REWRITE_TAC [linked_body_env_def] >>
@@ -6414,7 +6415,7 @@ val linked_grouped_fallback_bindings_tac =
      qpat_assum `_ = ce` (SUBST1_TAC o SYM) >>
      simp[NoAsms, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY]);
 
-val linked_grouped_fallback_invariant_tac =
+val linked_grouped_fallback_base_inv_tac =
   qabbrev_tac `fallback_base =
     build_compile_env_unit mods src External mut "__default__" args ret fallback_code T` >>
   `contract_inv mods exps unit.cu_context
@@ -6422,7 +6423,9 @@ val linked_grouped_fallback_invariant_tac =
     (qpat_assum `!mut args ret ss. contract_inv _ _ _ _ _`
        (qspecl_then [`mut`,`args`,`ret`,`fallback_code`] mp_tac) >>
      qpat_assum `tx.function_name = "__default__"` (fn name =>
-       simp[NoAsms, name, Abbr `fallback_base`])) >>
+       simp[NoAsms, name, Abbr `fallback_base`]));
+
+val linked_grouped_fallback_env_eq_tac =
   `ce = update_cenv_nonreentrant
       (if ret = NoneT then fallback_base with ce_raw_return :=
         lookup_raw_return_or_F src "__default__" External tops
@@ -6441,13 +6444,17 @@ val linked_grouped_fallback_invariant_tac =
              package_fallback_fn_unit_def, set_fallback_package_target_def,
              combinTheory.K_THM, LET_THM]))) >>
      disch_then (map_every assume_tac o CONJUNCTS) >>
-     first_assum (ACCEPT_TAC o SYM)) >>
+     first_assum (ACCEPT_TAC o SYM));
+
+val linked_grouped_fallback_module_inv_tac =
   `module_body_inv mods src tops ce cx` by
     (qpat_assum `ce = _` SUBST1_TAC >> Cases_on `ret = NoneT` >>
      pop_assum (fn none => simp[NoAsms, none, module_body_inv_def,
        Abbr `fallback_base`, Abbr `src`, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY,
        update_cenv_nonreentrant_def, update_cenv_ret_abi_def]) >>
-     first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC);
+
+val linked_grouped_fallback_contract_inv_tac =
   `contract_inv mods exps unit.cu_context ce cx` by
     (qpat_assum `contract_inv mods exps _ (fallback_base with ce_target := _) cx` mp_tac >>
      qpat_assum `ce = _` SUBST1_TAC >> Cases_on `ret = NoneT` >>
@@ -6556,7 +6563,9 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_fallback]:
   linked_grouped_fallback_transfer_tac >> linked_grouped_fallback_send_tac >>
   linked_grouped_fallback_resources_tac >>
   linked_grouped_fallback_env_tac >>
-  linked_grouped_fallback_bindings_tac >> linked_grouped_fallback_invariant_tac >>
+  linked_grouped_fallback_bindings_tac >> linked_grouped_fallback_base_inv_tac >>
+  linked_grouped_fallback_env_eq_tac >> linked_grouped_fallback_module_inv_tac >>
+  linked_grouped_fallback_contract_inv_tac >>
   linked_empty_source_frame_tac >> linked_empty_source_declaration_tac >>
   linked_empty_source_checked_tac >> linked_empty_source_static_env_tac >>
   linked_empty_source_typed_tac >> linked_empty_body_types_tac >>
@@ -6628,14 +6637,42 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_fallback_lo
   linked_registered_immutable_frame_tac >> linked_registered_storage_prefix_tac >>
   linked_registered_run_tac >> linked_registered_trace_inputs_tac >>
   linked_registered_compose_tac
-    {horizon_tac = linked_registered_trace_horizon_tac,
-     tails_tac = linked_registered_trace_tails_tac,
-     exempt_tac = linked_registered_trace_exempt_tac,
-     fallthrough_tac = linked_registered_fallthrough_tac
-       linked_registered_fallthrough_ghost_tac linked_registered_fallthrough_result_tac,
-     exit_tac = linked_registered_trace_exit_tac linked_registered_abort_or_halt_tac,
-     readings_tac = linked_registered_trace_readings_tac,
-     finish_tac = linked_registered_finish_tac}
+    {horizon_tac = suspend "linked_grouped_fallback_trace_horizon",
+     tails_tac = suspend "linked_grouped_fallback_trace_tails",
+     exempt_tac = suspend "linked_grouped_fallback_trace_exempt",
+     fallthrough_tac = suspend "linked_grouped_fallback_trace_fallthrough",
+     exit_tac = suspend "linked_grouped_fallback_trace_exit",
+     readings_tac = suspend "linked_grouped_fallback_trace_readings",
+     finish_tac = suspend "linked_grouped_fallback_finish"}
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_fallback_trace_horizon]:
+  linked_registered_trace_horizon_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_fallback_trace_tails]:
+  linked_registered_trace_tails_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_fallback_trace_exempt]:
+  linked_registered_trace_exempt_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_fallback_trace_fallthrough]:
+  linked_registered_fallthrough_tac
+    linked_registered_fallthrough_ghost_tac linked_registered_fallthrough_result_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_fallback_trace_exit]:
+  linked_registered_trace_exit_tac linked_registered_abort_or_halt_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_fallback_trace_readings]:
+  linked_registered_trace_readings_tac
+QED
+
+Resume linked_runtime_dispatched_readings_certificate[linked_grouped_fallback_finish]:
+  linked_registered_finish_tac
 QED
 
 Resume linked_runtime_dispatched_readings_certificate[linked_grouped_signature]:
@@ -8658,10 +8695,10 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omi
     (qpat_assum `common.ec_env = _` (fn package =>
       simp[NoAsms, Abbr `default_env`, package]) >>
      Cases_on `ret = NoneT` >>
-     pop_assum (fn ret_case =>
-       simp[NoAsms, ret_case, Abbr `grouped_base`, build_compile_env_unit_def,
-            pairTheory.ELIM_UNCURRY, update_cenv_nonreentrant_def,
-            update_cenv_ret_abi_def, LET_THM])) >>
+     pop_assum (fn ret_case => PURE_REWRITE_TAC [ret_case, COND_CLAUSES]) >>
+     simp[NoAsms, update_cenv_nonreentrant_def, update_cenv_ret_abi_def, LET_THM] >>
+     simp[NoAsms, Abbr `grouped_base`, build_compile_env_unit_def,
+          pairTheory.ELIM_UNCURRY]) >>
   `immutable_section_layout_mods mods default_env` by
     drule_then ACCEPT_TAC contract_inv_immutable_section_layout >>
   `ALL_DISTINCT (MAP FST mods) /\
