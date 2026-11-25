@@ -40,14 +40,17 @@ fun sha_suffix_no_wrap_tac g = (
      fs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM])
 ) g;
 
-fun sha_memory_prepare_tac g = (
+fun sha_memory_prepare_tac1 g = (
   `eval_operand (Var p) s = SOME (n2w b)` by simp[eval_operand_def] >>
   `b+32+LENGTH bs <= b'+sz'` by decide_tac >>
   `!i. b <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn1.t_mem` by
     (rpt strip_tac >>
      qpat_assum `!i. _ ==> i NOTIN tn1.t_mem` (qspec_then `i` mp_tac) >>
      (impl_tac >- decide_tac) >> simp[]) >>
-  `op_taint tn1 (Var p) = {}` by fs[op_taint_def] >>
+  `op_taint tn1 (Var p) = {}` by fs[op_taint_def]
+) g;
+
+fun sha_memory_prepare_tac2 g = (
   `fn_has_code sm sn func` by metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
   `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid s` by
@@ -57,7 +60,10 @@ fun sha_memory_prepare_tac g = (
     metis_tac[loweringStateRelDefsTheory.not_fresh_at_def, arithmeticTheory.LE_TRANS] >>
   `MEM (mk_inst (sm.cs_next_id+2) ALLOCA [Lit 32w]
      [STRING #"%" (toString (sm.cs_next_var+2))]) (fn_insts func)` by
-    metis_tac[hash_sha256_memory_alloca_code] >>
+    metis_tac[hash_sha256_memory_alloca_code]
+) g;
+
+fun sha_memory_prepare_tac3 g = (
   `sn.cs_current_bb = sm.cs_current_bb /\
    sn.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sn /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -72,7 +78,10 @@ fun sha_memory_prepare_tac g = (
      qexists_tac `bb` >> gvs[rich_listTheory.IS_PREFIX_APPEND] >>
      pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
        rich_listTheory.DROP_LENGTH_APPEND] >> metis_tac[]) >>
-  sha_suffix_no_wrap_tac >>
+  sha_suffix_no_wrap_tac
+) g;
+
+fun sha_memory_prepare_tac4 g = (
   `run_inst_seq_mem_ok (emitted_insts sm sn) s` by
     (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
        expr_post H ctx func cenv cx e es sa sm s0 mid _ (Var p) s /\ _`
@@ -135,17 +144,29 @@ fun sha_memory_abort_origin_tac g = (
   drule_all sha_setup_gas_origin_abort_uniform >> strip_tac
 ) g;
 
-fun sha_memory_abort_post_tac g = (
-drule_all hash_sha256_source_failure >> strip_tac >>
+fun sha_memory_abort_post_setup_tac g = (
+  drule_all hash_sha256_source_failure >> strip_tac
+) g;
+
+fun sha_memory_abort_post_frame_tac g = (
   `!H. valid_horizon cx st0 H ef.storage_trace <=>
        valid_horizon cx st0 H mid.storage_trace` by
-    (gen_tac >> Cases_on `s.vs_outcomes` >> gvs[]) >>
+    (gen_tac >> Cases_on `s.vs_outcomes` >> gvs[])
+) g;
+
+fun sha_memory_abort_post_domain_tac g = (
   `storage_trace_domain cx st0 ef.storage_trace` by
-    (Cases_on `s.vs_outcomes` >> gvs[storage_trace_domain_def]) >>
+    (Cases_on `s.vs_outcomes` >> gvs[storage_trace_domain_def])
+) g;
+
+fun sha_memory_abort_post_gas_tac g = (
   `gas_explicit [F] s.vs_gas_readings = []` by
     ACCEPT_TAC (REWRITE_RULE [EVAL ``REPLICATE 1 F``]
       (Q.SPECL [`1`, `s.vs_gas_readings`]
-        gasSummaryTheory.gas_explicit_replicate_false)) >>
+        gasSummaryTheory.gas_explicit_replicate_false))
+) g;
+
+fun sha_memory_abort_post_intro_tac g = (
   irule gas_outcome_full_intro >>
   qexistsl_tac [`Gf`, `ef`, `[F]`, `Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort) (t with vs_inst_idx := j)`,
     `INR (Error (RuntimeError "precompile failed"))`, `tf`] >>
@@ -154,7 +175,10 @@ drule_all hash_sha256_source_failure >> strip_tac >>
      qpat_assum `expr_type e = _` (fn ty_eq =>
        qpat_assum `ef = _` (fn state_eq =>
          qpat_assum `!tail. _ = (INR _,ef with gas_obs := tail)`
-           (ACCEPT_TAC o SIMP_RULE (srw_ss()) [ty_eq,state_eq])))) >>
+           (ACCEPT_TAC o SIMP_RULE (srw_ss()) [ty_eq,state_eq]))))
+) g;
+
+fun sha_memory_abort_post_finish_tac g = (
   rpt strip_tac >>
   simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
        exprSimDefsTheory.halt_exit_def] >>
@@ -715,14 +739,20 @@ Resume sha_vv_sim_full[dynamic]:
 QED
 
 Resume sha_vv_sim_full[string_memory]:
-  sha_memory_prepare_tac >>
+  sha_memory_prepare_tac1 >>
+  sha_memory_prepare_tac2 >>
+  sha_memory_prepare_tac3 >>
+  sha_memory_prepare_tac4 >>
   Cases_on `?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success`
   >- suspend "string_memory_success" >>
   suspend "string_memory_abort"
 QED
 
 Resume sha_vv_sim_full[dynamic_memory]:
-  sha_memory_prepare_tac >>
+  sha_memory_prepare_tac1 >>
+  sha_memory_prepare_tac2 >>
+  sha_memory_prepare_tac3 >>
+  sha_memory_prepare_tac4 >>
   Cases_on `?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success`
   >- suspend "dynamic_memory_success" >>
   suspend "dynamic_memory_abort"
@@ -730,12 +760,22 @@ QED
 
 Resume sha_vv_sim_full[string_memory_abort]:
   sha_memory_abort_origin_tac >>
-  sha_memory_abort_post_tac
+  sha_memory_abort_post_setup_tac >>
+  sha_memory_abort_post_frame_tac >>
+  sha_memory_abort_post_domain_tac >>
+  sha_memory_abort_post_gas_tac >>
+  sha_memory_abort_post_intro_tac >>
+  sha_memory_abort_post_finish_tac
 QED
 
 Resume sha_vv_sim_full[dynamic_memory_abort]:
   sha_memory_abort_origin_tac >>
-  sha_memory_abort_post_tac
+  sha_memory_abort_post_setup_tac >>
+  sha_memory_abort_post_frame_tac >>
+  sha_memory_abort_post_domain_tac >>
+  sha_memory_abort_post_gas_tac >>
+  sha_memory_abort_post_intro_tac >>
+  sha_memory_abort_post_finish_tac
 QED
 
 Resume sha_vv_sim_full[string_memory_success]:
