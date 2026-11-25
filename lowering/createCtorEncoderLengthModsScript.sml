@@ -241,11 +241,16 @@ Resume ctor_encoder_length_witness_mods[row_index]:
    LIST_REL abi_encoder_layout_valid (TAKE i ats) (TAKE i avs)` by
     (irule (INST_TYPE [alpha |-> ``:vyper_value``, beta |-> ``:string``, gamma |-> ``:num``]
        abi_encode_values_index_bounds) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     TRY (simp_tac bool_ss [Abbr `off`] >> NO_TAC) >>
-     TRY (simp[] >> NO_TAC) >>
+     simp_tac bool_ss [] >>
+     conj_tac >- (qpat_assum `bytes = enc _ _` (rewrite_tac o single)) >>
+     conj_tac >- simp_tac bool_ss [Abbr `off`] >>
+     conj_tac >- qpat_assum `LIST_REL abi_encoder_layout_valid ats avs` ACCEPT_TAC >>
      qexistsl_tac [`rows`,`ce.ce_struct_fields`] >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp_tac bool_ss [Abbr `h`]) >>
+     conj_tac
+     >- (qpat_assum `LENGTH rows = LENGTH args` (rewrite_tac o single) >>
+         qpat_assum `i < LENGTH args` ACCEPT_TAC) >>
+     conj_tac >- simp_tac bool_ss [Abbr `h`] >>
+     qpat_assum `LIST_REL _ rows ats` ACCEPT_TAC) >>
   `off <= capacity-dst_offset /\
    (is_dynamic (EL i ats) ==> off + LENGTH (enc (EL i ats) (EL i avs)) <= capacity-dst_offset)` by
     (conj_tac >- decide_tac >> strip_tac >>
