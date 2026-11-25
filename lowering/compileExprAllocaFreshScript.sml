@@ -275,6 +275,18 @@ Proof
   simp[alloca_suffix_return, alloca_suffix_ensure_in_memory]
 QED
 
+Theorem unwrap_value_added_id:
+  unwrap_value ce vv a = (op,b) /\ id IN frag_ids a b ==>
+  ?i. MEM i (added_insts a b) /\ i.inst_id = id
+Proof
+  strip_tac >>
+  `alloca_suffix 0 a (SND (unwrap_value ce vv a))` by
+    simp[alloca_suffix_unwrap_value] >>
+  qpat_x_assum `alloca_suffix _ _ _` mp_tac >>
+  asm_simp_tac bool_ss [pairTheory.SND, alloca_suffix_def] >>
+  metis_tac[]
+QED
+
 Theorem alloca_suffix_lower_value[local]:
   (!a. k <= a.cs_next_var ==>
     alloca_suffix k a (SND (cfn cenv ty e a))) ==>
