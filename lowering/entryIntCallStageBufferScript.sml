@@ -3,28 +3,81 @@ Theory entryIntCallStageBuffer
 Ancestors
   entryCreateEffectFocus entryCreatePathScope entryCreateAdminSequence
   createSizeCutCode createSizeCutOpens createSizeLocationCode createSizeTypedCopyCode
-  entryCreatePosSnapshotCode exprSimAbiEncodeObliviousCode exprSimAbiGasBridge
+  entryCreatePosSnapshotCode typedCopyGasOps exprSimAbiEncodeObliviousCode exprSimAbiGasBridge
   exprLowering compileEnv context emitHelper venomInst fragExec list pair
 
 val buffer_safe = ``\opc. opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2``;
 val buffer_gas_safe = ``\opc. opc <> GAS /\ opc <> CREATE /\ opc <> CREATE2 /\ opc <> INVOKE``;
 
-Theorem buffer_admin_action_weaken[local]:
-  code_action ^buffer_gas_safe m ==> code_action ^buffer_safe m
+fun buffer_actions ths =
+  let val rules = ths @ [LET_THM, code_action_return, code_action_emit_inst,
+       code_action_emit_op, code_action_emit_void, code_action_new_block,
+       code_action_fresh_var, code_action_fresh_label]
+  in rpt (FIRST [CHANGED_TAC (simp rules), irule code_action_bind,
+                  irule code_action_ignore_bind, conj_tac, gen_tac])
+  end;
+
+Theorem buffer_ptr_actions[local,simp]:
+  code_action ^buffer_safe (compile_ptr_load ctor imm loc p) /\
+  code_action ^buffer_safe (compile_ptr_store ctor imm loc p v) /\
+  code_action ^buffer_safe (compile_imm_load_word ctor imm p)
 Proof
-  simp[code_action_def, code_step_def, EVERY_MEM] >> metis_tac[]
+  Cases_on `loc` >> Cases_on `imm` >>
+  simp[compile_ptr_load_def, compile_ptr_store_def, compile_imm_load_word_def,
+       compile_imm_store_word_def] >>
+  rpt (IF_CASES_TAC >> gvs[]) >> rpt conj_tac >> buffer_actions []
+QED
+
+Theorem buffer_word_copy_action[local,simp]:
+  code_action ^buffer_safe (compile_word_copy_loop_base src dst n ll sl ctor imm)
+Proof
+  Cases_on `word_scale ll = 1` >> Cases_on `word_scale sl = 1` >>
+  simp[compile_word_copy_loop_base_def, comp_ignore_bind_def, buffer_ptr_actions] >> buffer_actions []
+QED
+
+Theorem buffer_imm_copy_action[local,simp]:
+  !n off. code_action ^buffer_safe (compile_imm_copy_to_memory ctor imm src dst n off)
+Proof
+  `!p off. code_action ^buffer_safe (compile_lit_byte_offset p off)` by
+    (rpt gen_tac >> Cases_on `off = 0` >> Cases_on `p` >>
+     simp[compile_lit_byte_offset_def] >> buffer_actions []) >>
+  pop_assum (fn th => Induct >> simp[compile_imm_copy_to_memory_def] >>
+      buffer_actions [th, buffer_ptr_actions])
+QED
+
+Theorem buffer_ensure_action[local,simp]:
+  code_action ^buffer_safe (compile_ensure_in_memory src loc bytes n ctor imm)
+Proof
+  Cases_on `loc` >> Cases_on `n = 1` >>
+  simp[compile_ensure_in_memory_def, compile_alloc_buffer_def,
+       compile_storage_to_memory_def, compile_transient_to_memory_def,
+       compile_slot_to_memory_def, compile_word_copy_loop_def,
+       compile_word_copy_loop_op_def, comp_ignore_bind_def] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  buffer_actions [buffer_ptr_actions, buffer_word_copy_action, buffer_imm_copy_action,
+                  code_action_alloc_buffer]
 QED
 
 Theorem buffer_unwrap_action:
   code_action ^buffer_safe (unwrap_value ce vv)
 Proof
-  irule buffer_admin_action_weaken >> simp[admin_unwrap_code_action]
+  Cases_on `vv` >> simp[unwrap_value_def, code_action_return, buffer_ptr_actions] >>
+  rename1 `is_word_type ty` >> Cases_on `is_word_type ty` >> simp[buffer_ptr_actions] >>
+  Cases_on `p.ptr_location` >>
+  simp[code_action_return, buffer_ensure_action]
 QED
 
 Theorem buffer_store_action:
   code_action ^buffer_safe (compile_store_memory ce src dst dt st)
 Proof
-  irule buffer_admin_action_weaken >> simp[admin_store_code_action]
+  `!ce dst dt src st. code_action ^buffer_safe (compile_store_memory_typed ce dst dt src st)` by
+    (qspec_then `^buffer_safe` mp_tac typed_copy_code_family >> simp[]) >>
+  `!n. code_action ^buffer_safe (compile_copy_memory dst src n)` by
+    (Cases >> simp[compile_copy_memory_def, code_action_return, code_action_emit_void]) >>
+  `code_action ^buffer_safe (compile_store_bytestring src dst)` by
+    (simp[compile_store_bytestring_def, compile_bytestring_copy_len_def] >> buffer_actions [buffer_ptr_actions]) >>
+  simp[compile_store_memory_def] >> rpt IF_CASES_TAC >>
+  simp[code_action_emit_void]
 QED
 
 (* These actions are also used after a saved external-call argument. *)
