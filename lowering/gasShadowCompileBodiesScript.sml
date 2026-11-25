@@ -3,8 +3,8 @@ Ancestors
   gasShadowCompileBase gasShadowCompilePure gasShadowCompileHelpers
   gasShadowCompileConvert gasShadowCompileNames
   gasShadowCompileAbi gasShadowCompileBuiltinAbi gasShadowCompileExternal
-  gasShadowCompileBuiltinBytes exprLowering gasShadow gasShadowState compileEnv
-  list pair
+  gasShadowCompileBuiltinBytes gasShadowBoolChainOperands gasShadowCompileBoolChainOps
+  exprLowering gasShadow gasShadowState compileEnv list pair
 
 Theorem as_ptr_val_action[local]:
   (\s. as_ptr_val ty loc (f s)) =
@@ -1123,7 +1123,40 @@ Theorem gas_shadow_compiles_builtin_body:
 Proof
   strip_tac >> Cases_on `bi`
   >~ [`Env item`] >- irule gas_shadow_compiles_builtin_body_env >>
-  simp[gas_shadow_builtin_def] >>
+  simp[gas_shadow_builtin_def]
+  >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst _`]
+  >- (qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
+        gas_shadow_HD_alternative >>
+      Cases_on `is_word_type ret_ty` >>
+      CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
+      simp[compile_builtin_dispatch_body_def, as_stack_val_def, as_ptr_val_def,
+           GSYM comp_return_def, comp_bind_uncurry] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      match_mp_tac gas_shadow_compiles_bind >>
+      (conj_tac
+       >- (irule gas_shadow_compiles_lower_value_env >> simp[])
+       >> simp[gas_shadow_compiles_return]))
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (BoolChain _ _) _`]
+  >- (qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
+        gas_shadow_HD_alternative >>
+      CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
+      simp[compile_builtin_dispatch_body_def, comp_bind_uncurry,
+           GSYM comp_return_def] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      match_mp_tac gas_shadow_compiles_bind >>
+      conj_tac >- simp[gas_shadow_compiles_fresh_var] >>
+      gen_tac >> BETA_TAC >> match_mp_tac gas_shadow_compiles_bind >>
+      conj_tac >- simp[gas_shadow_compiles_fresh_label] >>
+      gen_tac >> BETA_TAC >> match_mp_tac gas_shadow_compiles_bind >>
+      conj_tac
+      >- (`!e. gas_shadow_compiles (lower_value f cenv (BaseT BoolT) e)
+                (lower_value g (gas_shadow_env sd cenv) (BaseT BoolT)
+                  (if selected then gas_shadow_expr e else e))`
+            by (gen_tac >> irule gas_shadow_compiles_lower_value_env >> simp[]) >>
+          Cases_on `selected` >> gvs[gas_shadow_bool_chain_operands] >>
+          metis_tac[gas_shadow_compiles_bool_chain_ops, COND_CLAUSES]) >>
+      simp[gas_shadow_compiles_bind, gas_shadow_compiles_new_block,
+           gas_shadow_compiles_return]) >>
   FIRST (map (fn tac => tac >> NO_TAC)
     [irule gas_shadow_compiles_builtin_body_simple >> simp[],
      irule gas_shadow_compiles_builtin_body_modular >> simp[],
