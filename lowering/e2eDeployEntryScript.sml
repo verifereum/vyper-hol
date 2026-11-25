@@ -57,9 +57,24 @@ QED
 
 Theorem deploy_state_rel_evm_state_ok:
   deploy_state_rel tops deploy_bc am tx es ==>
-  returndata_bounded es /\ calldata_bounded es ==> evm_state_ok es
+  (evm_state_ok es <=> (FST (HD es.contexts)).msgParams.gasLimit < 2 ** 64)
 Proof
-  rw[deploy_state_rel_def, evm_state_ok_def] >> first_assum ACCEPT_TAC
+  rw[deploy_state_rel_def, evm_state_ok_def] >>
+  eq_tac >> strip_tac
+  >- gvs[vfmCalldataBoundTheory.calldata_bounded_def]
+  >- (gvs[vfmReturndataBoundTheory.returndata_bounded_def,
+         vfmCalldataBoundTheory.calldata_bounded_def,
+         vfmCalldataBoundTheory.memory_paid_def,
+         vfmCalldataBoundTheory.frames_paid_def,
+         vfmCalldataBoundTheory.outputs_fit_def,
+         vfmBufferTheory.LENGTH_buffer_to_list] >>
+      conj_tac
+      >- (qpat_x_assum `buffer_to_list ctxt.msgParams.data = []`
+            (mp_tac o Q.AP_TERM `LENGTH`) >>
+          simp[vfmBufferTheory.LENGTH_buffer_to_list])
+      >- (qpat_x_assum `buffer_to_list ctxt.memory = []`
+            (mp_tac o Q.AP_TERM `LENGTH`) >>
+          simp[vfmBufferTheory.LENGTH_buffer_to_list]))
 QED
 
 (* Every gas filling of the constructor stays inside one fixed storage

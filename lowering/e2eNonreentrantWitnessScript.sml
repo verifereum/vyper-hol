@@ -278,13 +278,9 @@ QED
      simp[horizon_ok_def, regions_consistent_def, storage_locks_separated_def])
   val dep_evm_state = prove
     (``evm_state_ok ^es_dep``,
-     irule (MATCH_MP deploy_state_rel_evm_state_ok optimized_getters_deploy_state) >>
-     simp[p23_frame_def,
-          vfmReturndataBoundTheory.returndata_bounded_def,
-          vfmCalldataBoundTheory.calldata_bounded_def,
-          vfmCalldataBoundTheory.memory_paid_def,
-          vfmCalldataBoundTheory.frames_paid_def,
-          vfmCalldataBoundTheory.outputs_fit_def])
+     irule (iffRL
+              (MATCH_MP deploy_state_rel_evm_state_ok optimized_getters_deploy_state)) >>
+     simp[p23_frame_def])
   val dep_h_storage = prove
     (``(lookup_account (^tx_dep).target (^am_dep).accounts).storage = empty_storage``,
      simp ([dep_tx_eval, tx_wt, init_am] @ account_simps))
