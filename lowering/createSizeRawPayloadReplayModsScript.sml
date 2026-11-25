@@ -173,20 +173,23 @@ Proof
 QED
 
 Resume create_raw_payload_at_cuts_mods[replay_premises]:
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_assum `!i s vs s'. _ ==> s'.immutables = _ /\ _`
-    (drule_all_then (ACCEPT_TAC o CONJUNCT2))
+  ntac 6 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!i s vs s'. _ ==> s'.immutables = _ /\ _`
+        (drule_all_then (ACCEPT_TAC o CONJUNCT2))) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume create_raw_payload_at_cuts_mods[encoder]:
   `!i. i <= LENGTH args ==>
      eval_exprs cx (DROP i args) (E i) = (INL (DROP i vs),E (LENGTH args))` by
     (gen_tac >> disch_tac >> irule ctor_rows_source_mods >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-     gen_tac >> disch_tac >>
-     qpat_assum `!i. i < LENGTH args ==> vyperState$bind _ _ (E i) = _ /\ _`
-       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+     conj_tac
+     >- (gen_tac >> disch_tac >>
+         qpat_assum `!i. i < LENGTH args ==> vyperState$bind _ _ (E i) = _ /\ _`
+           (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `!i. i < LENGTH args /\ ~exprs_can_mutate ce (DROP (SUC i) args) ==>
      (E (LENGTH args)).immutables = (E (SUC i)).immutables /\
      !tr. get_storage cx (E (LENGTH args)) tr = get_storage cx (E (SUC i)) tr` by
@@ -224,23 +227,37 @@ Resume create_raw_payload_at_cuts_mods[encoder]:
 QED
 
 Resume create_raw_payload_at_cuts_mods[encoder_premises]:
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  TRY (sym_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
-  TRY (qexists_tac `H` >> first_assum ACCEPT_TAC >> NO_TAC) >>
-  TRY (REFL_TAC >> NO_TAC) >>
-  TRY (pure_asm_rewrite_tac[] >> NO_TAC) >>
-  TRY (qpat_assum `E 0 = p0` (fn h => pure_rewrite_tac[h]) >> first_assum ACCEPT_TAC >> NO_TAC) >>
-  TRY (qpat_assum `s = St _` (pure_rewrite_tac o single) >>
-       qpat_assum `!i. i <= LENGTH args ==> (E i).gas_obs = _ /\ _`
-         (qspec_then `LENGTH args` (map_every assume_tac o CONJUNCTS o REWRITE_RULE[LESS_EQ_REFL])) >>
-       first_assum ACCEPT_TAC >> NO_TAC) >>
-  TRY (map_every qx_gen_tac [`i`,`g`,`h`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
-       qpat_assum `!i. i < LENGTH args ==> vyperState$bind _ _ (E i) = _ /\ _`
-         (qspec_then `i` (drule_then (map_every assume_tac o CONJUNCTS))) >>
-       first_assum (qspecl_then [`g`,`h`] mp_tac) >>
-       (impl_tac >- first_assum ACCEPT_TAC) >>
-       disch_then ACCEPT_TAC >> NO_TAC) >>
-  qx_gen_tac `i` >> disch_tac >> suspend "encoder_rows"
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (sym_tac >> first_assum ACCEPT_TAC) >>
+  ntac 7 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (qx_gen_tac `i` >> disch_tac >> suspend "encoder_rows") >>
+  conj_tac
+  >- (qpat_assum `E 0 = p0` (pure_rewrite_tac o single) >>
+      first_assum ACCEPT_TAC) >>
+  ntac 6 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (map_every qx_gen_tac [`i`,`g`,`h`] >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!i. i < LENGTH args ==> vyperState$bind _ _ (E i) = _ /\ _`
+        (qspec_then `i` (drule_then (map_every assume_tac o CONJUNCTS))) >>
+      qpat_assum `!g h. (!K. valid_horizon _ _ K (E i).storage_trace ==>
+         _ /\ _ /\ ghost_inv_at_mods _ _ _ _ _ (E i) g h (St i)) ==> _`
+        (qspecl_then [`g`,`h`] mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- REFL_TAC >>
+  (* Allocation and copy, encoder entry, then the dispatch itinerary. *)
+  ntac 13 (conj_tac >- first_assum ACCEPT_TAC) >>
+  ntac 8 (conj_tac >- first_assum ACCEPT_TAC) >>
+  ntac 15 (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_assum `s = St _` (pure_rewrite_tac o single) >>
+  qpat_assum `!i. i <= LENGTH args ==> (E i).gas_obs = _ /\ _`
+    (qspec_then `LENGTH args`
+      (map_every assume_tac o CONJUNCTS o REWRITE_RULE[LESS_EQ_REFL])) >>
+  qpat_assum `!f j z. frag_reachable ctx func (St (LENGTH args)) f j z ==>
+    dalloca_fmp_headroom j z` ACCEPT_TAC
 QED
 
 Resume create_raw_payload_at_cuts_mods[encoder_rows]:
@@ -249,9 +266,12 @@ Resume create_raw_payload_at_cuts_mods[encoder_rows]:
   qpat_assum `!i. i < LENGTH args ==> vyperState$bind _ _ (E i) = _ /\ _`
     (qspec_then `i` (drule_then (map_every assume_tac o CONJUNCTS))) >>
   drule_all createSizeBlueprintKeywordReplayTheory.blueprint_keyword_mono >> strip_tac >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  TRY (disch_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
-  strip_tac >>
+  (* Compilation, snapshot and read, then the conditional body precondition. *)
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (disch_tac >> first_assum ACCEPT_TAC) >>
+  (* Types, reservations, and the post-snapshot labels and PC. *)
+  ntac 8 (conj_tac >- first_assum ACCEPT_TAC) >>
+  disch_tac >>
   qpat_x_assum `if exprs_can_mutate ce (DROP (SUC i) args) then _ else _` mp_tac >>
   Cases_on `exprs_can_mutate ce (DROP (SUC i) args)`
   >- (qpat_assum `exprs_can_mutate ce (DROP (SUC i) args)` (simp_tac bool_ss o single) >>
@@ -301,11 +321,15 @@ Resume create_raw_payload_at_cuts_mods[finish]:
     (qpat_assum `eval_operand size_op uval = SOME (code_word + payload_word)` mp_tac >>
      asm_rewrite_tac [word_add_n2w]) >>
   disj2_tac >> qexistsl_tac [`vs`,`bytes`,`E (LENGTH args)`,`Gv`,`tv`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+  ntac 17 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
   >- (qpat_assum `wb_frame ce (E 0) _ _ _ _`
         (ACCEPT_TAC o cj 1 o REWRITE_RULE[wb_frame_def])) >>
-  qpat_assum `size_op = Var sumvar` (fn h => pure_rewrite_tac [h,operand_11]) >>
-  gen_tac >> disch_then (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (qpat_assum `size_op = Var sumvar` (fn h => pure_rewrite_tac [h,operand_11]) >>
+      gen_tac >> disch_then (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  first_assum ACCEPT_TAC
 QED
 
 Finalise create_raw_payload_at_cuts_mods
