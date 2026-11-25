@@ -162,7 +162,7 @@ Theorem deploy_result_rel_code_update[local]:
 Proof
   Cases_on `src`
   >- (rename1 `INL p` >> PairCases_on `p` >>
-      simp[deploy_result_rel_def,
+      simp[deploy_result_rel_def, e2eDefsTheory.effects_agree_def,
            initial_evaluation_context_def]) >>
   rename1 `INR exc` >> Cases_on `exc` >> simp[deploy_result_rel_def]
 QED
@@ -173,7 +173,8 @@ Theorem deploy_exempt_result_rel[local]:
 Proof
   Cases_on `src` >> simp[deploy_source_exempt_def] >>
   rename1 `INR exc` >> Cases_on `exc` >>
-  simp[deploy_source_exempt_def, deploy_result_rel_def]
+  simp[deploy_source_exempt_def, deploy_result_rel_def,
+       e2eDefsTheory.exception_outcome_rel_def]
 QED
 
 (* The bridges at the deployment entry: the S4 memory facts of vs from its

@@ -114,10 +114,10 @@ QED
 
 (* Root settlement re-raises the result of handle_create, while run_frame
    stops immediately after handle_create. This also covers a creation root. *)
-Theorem root_step_stack_overflow_raises:
+Theorem root_step_exception_raises:
   wf_state s /\ s.contexts = [(c,rb)] /\
-  step s = (INR (SOME StackOverflow),t) ==>
-  frame_raises s StackOverflow
+  ~vfm_abort (SOME exc) /\ step s = (INR (SOME exc),t) ==>
+  frame_raises s exc
 Proof
   strip_tac >> drule_all root_inner_terminal_source >> strip_tac >>
   `~vfm_abort e` by
@@ -131,7 +131,7 @@ Proof
   `wf_context c2` by
     (drule_at (Pat `handle_create _ _ = _`)
        handle_create_preserves_wf_contexts >> simp[]) >>
-  `handle_exception err pre = (INR (SOME StackOverflow),t)` by
+  `handle_exception err pre = (INR (SOME exc),t)` by
     gvs[handle_step_def, handle_def] >>
   drule_all root_handle_exception >> strip_tac >>
   simp[frame_raises_def] >> qexists_tac `pre` >>

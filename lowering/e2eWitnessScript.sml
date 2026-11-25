@@ -3,7 +3,7 @@
 Theory e2eWitness
 Ancestors
   e2eWitnessCompute e2eDefs e2eDeployDefs
-  e2eDeployed
+  e2eDeployed e2eDeployEntry
   immutableSectionRel alist integer_word option vyperStorageFootprint
   compileVyper e2eProducers e2eCorrectness callTrace frameOutcome
   vyperCalldata vyperInterpreter
@@ -350,7 +350,7 @@ Theorem p23_call_result:
 Proof
   simp[call_result_rel_def, p23_call_trace] >>
   irule gas_readings_rel_empty >>
-  simp[p23_src_call_eval, storage_ok_def, regions_consistent_def,
+  simp[p23_src_call_eval, storage_ok_def, horizon_ok_def, regions_consistent_def,
        storage_locks_separated_def, storage_well_formed_on_def] >>
   gen_tac >>
   simp[call_result_rel_at_def, p23_call_trace, LET_THM] >>
@@ -381,7 +381,7 @@ QED
 Theorem p23_storage_ok[local]:
   storage_ok ([], []) p23_am_call p23_call_tx
 Proof
-  simp[storage_ok_def, regions_consistent_def, storage_locks_separated_def,
+  simp[storage_ok_def, horizon_ok_def, regions_consistent_def, storage_locks_separated_def,
        storage_well_formed_on_def]
 QED
 
@@ -407,13 +407,18 @@ local
     simp[p23_call_trace])
   val call_premises = CONJUNCTS (REWRITE_RULE [call_premises_deployed]
     (CONJ p23_source_typing p23_call_state))
-  val dep_h_regions = prove
-    (``regions_consistent ([] : (bool # bytes32 # type_value) list)``,
-     simp[regions_consistent_def])
-  val dep_h_locks = prove
-    (``storage_locks_separated
-        ([] : (bool # bytes32 # type_value) list) ([] : num list)``,
-     simp[storage_locks_separated_def])
+  val dep_horizon = prove
+    (``horizon_ok ([], [])``,
+     simp[horizon_ok_def, regions_consistent_def, storage_locks_separated_def])
+  val dep_evm_state = prove
+    (``evm_state_ok p23_es_dep``,
+     irule (MATCH_MP deploy_state_rel_evm_state_ok p23_deploy_state) >>
+     simp[p23_es_dep_def, p23_frame_def,
+          vfmReturndataBoundTheory.returndata_bounded_def,
+          vfmCalldataBoundTheory.calldata_bounded_def,
+          vfmCalldataBoundTheory.memory_paid_def,
+          vfmCalldataBoundTheory.frames_paid_def,
+          vfmCalldataBoundTheory.outputs_fit_def])
   val dep_h_storage = prove
     (``(lookup_account p23_deploy_tx.target
           initial_machine_state.accounts).storage = empty_storage``,
@@ -434,10 +439,9 @@ in
     (``deploy_entry_rel p23_tops p23_deploy_bc initial_machine_state
         p23_deploy_tx p23_es_dep``,
      rewrite_tac[deploy_entry_rel_state] >>
-     metis_tac[p23_deploy_state, dep_h_storage, dep_h_transient])
+     metis_tac[p23_deploy_state, dep_evm_state, dep_h_storage, dep_h_transient])
   val dep_prem = SIMP_RULE (srw_ss()) [] (LIST_CONJ [accepted, p23_compile,
-                p23_deploy_typing, dep_entry, dep_bound, dep_h_regions,
-                dep_h_locks, p23_deploy_within])
+                p23_deploy_typing, dep_entry, dep_bound, dep_horizon, p23_deploy_within])
   val _ = MATCH_MP dep_thm dep_prem
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `p23_tops`,
