@@ -84,9 +84,36 @@ Proof
   strip_tac >> Cases_on `i.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def] >>
   qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
-  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def, AllCaseEqs()] >>
+  (* Select one opcode equation before working through its evaluator. *)
+  (let
+     val rules = CONJUNCTS step_inst_base_opcode_eqs
+   in
+     qpat_assum `i.inst_opcode = _` (fn eq =>
+       PURE_ONCE_REWRITE_TAC [MATCH_MP (valOf (List.find
+         (fn th => aconv (rhs (fst (dest_imp (snd (strip_forall (concl th))))))
+                         (rhs (concl eq))) rules)) eq])
+   end)
+  >>~- ([`exec_pure1 _ _ _`],
+    simp_tac std_ss [exec_pure1_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[abi_encode_semantic_obs_def, update_var_def])
+  >>~- ([`exec_pure2 _ _ _`],
+    simp_tac std_ss [exec_pure2_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[abi_encode_semantic_obs_def, update_var_def])
+  >>~- ([`exec_pure3 _ _ _`],
+    simp_tac std_ss [exec_pure3_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[abi_encode_semantic_obs_def, update_var_def])
+  >>~- ([`exec_read0 _ _ _`],
+    simp_tac std_ss [exec_read0_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[abi_encode_semantic_obs_def, update_var_def])
+  >>~- ([`exec_read1 _ _ _`],
+    simp_tac std_ss [exec_read1_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[abi_encode_semantic_obs_def, update_var_def])
+  >>~- ([`exec_write2 _ _ _`],
+    simp_tac std_ss [exec_write2_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[abi_encode_semantic_obs_def, update_var_def] >>
+    gvs[mstore_def, mstore8_def, mcopy_def, sstore_def, tstore_def,
+        write_memory_with_expansion_def, AllCaseEqs(), update_var_def]) >>
+  simp_tac std_ss [AllCaseEqs()] >>
   rpt strip_tac >> gvs[abi_encode_semantic_obs_def, update_var_def] >>
   gvs[mstore_def, mstore8_def, mcopy_def, sstore_def, tstore_def,
       write_memory_with_expansion_def, exec_gas_def, AllCaseEqs(), update_var_def]

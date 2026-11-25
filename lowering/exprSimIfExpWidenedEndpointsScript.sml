@@ -1,6 +1,7 @@
 Theory exprSimIfExpWidenedEndpoints
 Ancestors
   exprSimIfExpWidenedAdapter exprLowering vyperAST exprSimConcatResult
+  exprNamedConstResult
 
 Theorem compile_changed_ifexp_copy_endpoints:
   compile_expr ce ty e s0 = (vv,sa) /\
@@ -36,10 +37,17 @@ Proof
          rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
          simp[unwrap_value_def, contextTheory.base_ptr_def,
               compileEnvTheory.comp_return_def])
-     >- (Cases_on `b` >> gvs[oneline lowered_value_type_def, expr_type_def] >>
-         drule concat_compile_shape >> strip_tac >> gvs[] >>
-         simp[unwrap_value_def, contextTheory.base_ptr_def,
-              compileEnvTheory.comp_return_def])
+     >- (Cases_on `b = NamedConst`
+         >- (gvs[] >> drule_all named_const_nonword_compile_shape >>
+             strip_tac >>
+             gvs[unwrap_value_def, contextTheory.mk_ptr_def,
+                 compileEnvTheory.comp_return_def]) >>
+         Cases_on `?n. b = Concat n`
+         >- (gvs[] >> drule concat_compile_shape >> strip_tac >>
+             gvs[unwrap_value_def, contextTheory.base_ptr_def,
+                 compileEnvTheory.comp_return_def]) >>
+         qpat_x_assum `lowered_value_type _ (Builtin _ _ _) <> _` mp_tac >>
+         Cases_on `b` >> gvs[lowered_value_type_def, expr_type_def])
      >- (Cases_on `t0` >> gvs[lowered_value_type_def, expr_type_def] >>
          qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
          simp[Once compile_expr_raw_def, compile_expr_body_def, expr_type_def,
