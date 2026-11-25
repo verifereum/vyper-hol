@@ -273,10 +273,44 @@ QED
   val deploy_args = compiler_args @ [am_dep, tx_dep, es_dep]
   val deploy_premises =
     common_premises @ [optimized_getters_deploy_typing, optimized_getters_deploy_state]
+  val dep_h_regions = prove
+    (``regions_consistent (FST ^get_horizon)``,
+     simp[regions_consistent_def])
+  val dep_h_locks = prove
+    (``storage_locks_separated (FST ^get_horizon) (SND ^get_horizon)``,
+     simp[storage_locks_separated_def])
+  val dep_h_storage = prove
+    (``(lookup_account (^tx_dep).target (^am_dep).accounts).storage = empty_storage``,
+     simp ([dep_tx_eval, tx_wt, init_am] @ account_simps))
+  val dep_h_transient = prove
+    (``(^am_dep).tStorage (^tx_dep).target = empty_storage``,
+     simp ([dep_tx_eval, tx_wt, init_am] @ account_simps @
+           [vfmContextTheory.empty_transient_storage_def]))
+  val dep_load_trace_eval = EVAL
+    ``SND (load_contract_trace (SOME []) gs ^am_dep ^tx_dep
+        [(NONE, ^tops)] [])``
+  val dep_load_trace = prove
+    (``!gs. SND (load_contract_trace (SOME []) gs ^am_dep ^tx_dep
+        [(NONE, ^tops)] []) = []``,
+     gen_tac >> PURE_REWRITE_TAC [dep_load_trace_eval] >> REFL_TAC)
+  val dep_within = prove
+    (``deploy_within ^get_horizon ^tops ^am_dep ^tx_dep ^es_dep``,
+     simp[deploy_within_def, deploy_storage_trace_def,
+          dep_trace, dep_load_trace,
+          storage_observations_ok_def, storage_trace_regions_def,
+          storage_trace_locks_def, storage_roots_fit_def,
+          storage_trace_backends_well_formed_def])
+  val dep_entry = prove
+    (``deploy_entry_rel ^tops ^deploy_bc ^am_dep ^tx_dep ^es_dep``,
+     rewrite_tac[deploy_entry_rel_state] >>
+     metis_tac[optimized_getters_deploy_state, dep_h_storage,
+               dep_h_transient])
 
   val _ = MATCH_MP
-    (SPECL deploy_args e2e_deploy_correctness_deployed)
-    (LIST_CONJ (deploy_premises @ [dep_bound]))
+    (SPECL (deploy_args @ [get_horizon]) e2e_deploy_correctness_deployed)
+    (LIST_CONJ (common_premises @ [optimized_getters_deploy_typing,
+                                   dep_entry, dep_bound, dep_h_regions,
+                                   dep_h_locks, dep_within]))
   val _ = MATCH_MP
     (SPECL deploy_args e2eGasSufficientTopTheory.e2e_deploy_gas_sufficient)
     (LIST_CONJ deploy_premises)
