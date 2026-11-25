@@ -610,7 +610,8 @@ Resume source_owned_complex_suffix_ptr[step]:
     (asm "navigation_record" (fn eq => PURE_ONCE_REWRITE_TAC[eq]) >>
      qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _` mp_tac >>
      simp_tac (srw_ss()) [allocas_below_fmp_def, pending_alloca_size_def] >>
-     metis_tac[]) >>
+     disch_then (fn frame => disch_then (fn enabled =>
+       ACCEPT_TAC (CONJUNCT2 (CONJUNCT1 (MATCH_MP frame enabled)))))) >>
   asm "child" (qspec_then `k` (drule_at (Pos (el 2)))) >>
   disch_then (qspecl_then [`r`,`H`,`u`,
     `d + SUM (MAP type_memory_size (TAKE k tvs))`,
