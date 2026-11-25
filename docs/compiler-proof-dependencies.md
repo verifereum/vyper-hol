@@ -202,14 +202,16 @@ is proved, reaches no admitted lemma, and assumes no whitelist: `deploy_typing_o
 `supported_program` and `supported_program_deploy` from `deploy_typing_ok` and
 the `layouts_agree` inside `deploy_state_rel`. Its premises are
 `fin IN accepted_finalizers`, `compile_vyper fin policy tops = SOME
-(deploy_bc, runtime_bc)`, `deploy_typing_ok` (both `check_contract` acceptances, `machine_well_typed`,
-`call_tx_well_typed`; pre-constant deployment readiness follows from it,
-`deploy_typing_ok_constants_ready`), `deploy_state_rel` (canonical arguments,
-an uninstalled source target, an empty target account in
-`es.originalAccounts`, among others) and a call trace of fewer than 2⁶⁴
-entries. Storage is not a premise: `deploy_storage_ok` guards each gas
-filling inside `deploy_call_result_rel`. It concludes a `run_call` result that
-is `creation_resource_starved` or satisfies `deploy_call_result_rel`. Success
+(deploy_bc, runtime_bc)`, `deploy_typing_ok` (successful deploy-mode
+`check_contract T`, `machine_well_typed` and `call_tx_well_typed`),
+`deploy_state_rel` (canonical arguments, an uninstalled source target,
+an empty target account in `es.originalAccounts`, among others) and a call
+trace of fewer than 2⁶⁴ entries. `check_contract_deploy_implies_runtime`
+gives runtime acceptance, and `deploy_typing_ok_constants_ready` packages
+the runtime checker artifact with pre-constant deployment readiness.
+`deploy_storage_ok` guards each gas filling inside `deploy_call_result_rel`.
+The theorem concludes a `run_call` result that is `creation_resource_starved`
+or satisfies `deploy_call_result_rel`. Success
 compares, when the source installs the target, returned/installed
 `runtime_bc ++ section` satisfying `immutables_section_rel`; in both the
 installation and the self-destruct case it compares accounts after pending
