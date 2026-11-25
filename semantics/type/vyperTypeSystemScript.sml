@@ -246,7 +246,18 @@ Definition power_operands_ok_def:
      case exponent of Literal _ (IntL n) => 0 <= n | _ => T)
 End
 
+(* The values the frontend marks NamedConst: an array literal, a literal and
+   empty(T), each a fresh value rather than a place. *)
+Definition named_const_operand_def:
+  named_const_operand (Builtin _ (MakeArray _ _) _) = T /\
+  named_const_operand (Literal _ _) = T /\
+  named_const_operand (TypeBuiltin _ Empty _ []) = T /\
+  named_const_operand _ = F
+End
+
 Definition builtin_operands_ok_def:
+  builtin_operands_ok ty NamedConst es =
+    (case es of [e] => named_const_operand e | _ => F) /\
   builtin_operands_ok ty (Bop Exp) es =
     (case es of [base_e; exponent] => power_operands_ok ty base_e exponent
               | _ => F) /\
@@ -434,7 +445,10 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty PowMod256 ts =
     (ts = [BaseT (UintT 256); BaseT (UintT 256)] /\ ty = BaseT (UintT 256)) /\
   well_typed_builtin_app ty Abs ts =
-    (ty = BaseT (IntT 256) /\ ts = [BaseT (IntT 256)])
+    (ty = BaseT (IntT 256) /\ ts = [BaseT (IntT 256)]) /\
+  well_typed_builtin_app ty NamedConst ts = (ts = [ty]) /\
+  well_typed_builtin_app ty (BoolChain _ _) ts =
+    (ts = [BaseT BoolT] /\ ty = BaseT BoolT)
 End
 
 Definition well_formed_type_def:
