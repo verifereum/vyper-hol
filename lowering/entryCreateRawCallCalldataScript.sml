@@ -5,6 +5,9 @@ Ancestors
   bodyFullRawCallCalldata entryCreateNativeFirstExit entryCreateBodyCut
   entryCreateStmtCases entryCreateFocusSpec entryCreatePathScope createSizeCutRegion
   exprSimAbiDecodeSiteCoverage createSizeCutCode vyperStorageTrace
+  entryCreateRawCallWords entryCreateRawCallCalldataInstall entryCreateRawCallCalldataRun
+  entryCreateRawCallGeneratedPrefix
+  s1PrefixDefs exprSimFullBundleProps bodyFullEmptyLeafData
   vyperInterpreter vyperState list
 
 Theorem raw_call_calldata_suffix_join[local]:
@@ -84,4 +87,19 @@ Proof
       fs[create_operand_cut_def] >> metis_tac[]) >>
   drule_all raw_call_calldata_suffix_hit >> strip_tac >>
   gvs[] >> irule create_cut_noncreate_visit >> simp[]
+QED
+
+Theorem raw_call_calldata_selected_hypotheses[local]:
+  expr_vv_sim_full_hypotheses
+    (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es
+    (st0,sa,sb,shadow_sa,shadow_sb,vv,s0,G0,tn0) ==>
+  compile_expr cenv ty e sa = (vv,sb) /\
+  compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e) shadow_sa =
+    (vv,shadow_sb) /\
+  gas_shadow_state sa shadow_sa /\
+  fn_has_code sa sb func /\
+  fn_has_code shadow_sa shadow_sb shadow_func
+Proof
+  simp_tac bool_ss [expr_vv_sim_full_hypotheses_def,expr_sim_full_code_def] >>
+  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
