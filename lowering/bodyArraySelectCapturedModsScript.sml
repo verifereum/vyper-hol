@@ -172,22 +172,14 @@ Resume array_select_captured_mods[post]:
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> simp[]) >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st2 x` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> simp[]) >>
-  `q.vs_alloca_next = it.vs_alloca_next /\ q.vs_memory = it.vs_memory /\
-   q.vs_allocas = it.vs_allocas /\ (allocas_below_fmp it ==> allocas_below_fmp q)` by
-    (qpat_assum `array_length_frame st2 _ _ _ _ _ _` mp_tac >>
-     rpt (pop_assum kall_tac) >>
-     simp[array_length_frame_def,venom_state_component_equality,allocas_below_fmp_def] >>
-     rw[]) >>
-  (* The suffix's internal theorem does not require equality of absent
-     variables across the prefix.  Use that weaker interface here. *)
-  FAIL_TAC "waiting for the weaker readonly suffix interface" >>
+  drule_all_then strip_assume_tac (GEN_ALL array_select_readonly_suffix_mods) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
   qexists `r'` >> unabbrev_all_tac >>
   qpat_assum `wb_frame cenv es fin sa s0 q`
     (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
-  simp[mk_ptr_def,vv_location_def,expr_type_def,lowered_value_type_def,
-       vv_post_mods_def,vv_holds_mods_def,vv_place_ptr_mods_def] >>
-  rpt conj_tac >- decide_tac >>
-  strip_tac >> drule_then (fn th => simp[th]) pure_frame_state_cong
+  fs[mk_ptr_def,vv_location_def,expr_type_def,lowered_value_type_def,
+     vv_post_mods_def,vv_holds_mods_def,vv_place_ptr_mods_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise array_select_captured_mods
