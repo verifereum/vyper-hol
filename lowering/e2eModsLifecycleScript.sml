@@ -163,8 +163,11 @@ Proof
   metis_tac[check_contract_linked_state_ownership_ok]
 QED
 
-Theorem call_preserves_call_ready_mods:
-  call_ready_mods mods exps runtime_bc am tx.target /\ call_tx_well_typed tx /\
+Theorem call_frame_preserves_call_ready_mods:
+  (!tx2. tx2.target = tx.target /\ call_tx_well_typed tx2 ==>
+     source_typing_ok_mods mods exps am tx2 /\
+     source_deployment_rel_mods mods exps am tx2) /\
+  call_tx_well_typed tx /\
   runtime_bc <> [] /\
   call_state_rel_mods mods exps runtime_bc am tx es /\ LENGTH es.contexts = 1 /\
   balance_bounded (2 ** 256 - 1) es /\
@@ -174,8 +177,7 @@ Theorem call_preserves_call_ready_mods:
 Proof
   strip_tac >>
   `source_typing_ok_mods mods exps am tx /\
-   source_deployment_rel_mods mods exps am tx` by
-    fs[call_ready_mods_def] >>
+   source_deployment_rel_mods mods exps am tx` by fs[] >>
   `am'.immutables = am.immutables` by
     (irule call_external_runtime_mods_preserves_immutables >>
      fs[source_typing_ok_mods_def, source_deployment_rel_mods_def] >>
@@ -202,8 +204,7 @@ Proof
   >- (gvs[lookup_account_process_deletions] >> fs[account_immutables_def]) >>
   qx_gen_tac `tx2` >> strip_tac >>
   `source_typing_ok_mods mods exps am tx2 /\
-   source_deployment_rel_mods mods exps am tx2` by
-    fs[call_ready_mods_def] >>
+   source_deployment_rel_mods mods exps am tx2` by fs[] >>
   `linked_state_ownership_ok (next_source_machine am' es').layouts
      tx2.target mods exps` by
     (irule call_preserves_linked_ownership >> metis_tac[]) >>
@@ -213,6 +214,21 @@ Proof
   fs[source_typing_ok_mods_def, source_deployment_rel_mods_def,
      account_immutables_def] >>
   gvs[]
+QED
+
+Theorem call_preserves_call_ready_mods:
+  call_ready_mods mods exps runtime_bc am tx.target /\ call_tx_well_typed tx /\
+  runtime_bc <> [] /\
+  call_state_rel_mods mods exps runtime_bc am tx es /\ LENGTH es.contexts = 1 /\
+  balance_bounded (2 ** 256 - 1) es /\
+  run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete /\
+  call_external orc gobs am tx = (res, am', rqs) ==>
+  call_ready_mods mods exps runtime_bc (next_source_machine am' es') tx.target
+Proof
+  strip_tac >>
+  qpat_x_assum `call_ready_mods _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [call_ready_mods_def]) >>
+  drule_all call_frame_preserves_call_ready_mods >> simp[]
 QED
 
 Theorem call_external_next_source_machine_mods:
