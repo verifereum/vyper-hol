@@ -483,7 +483,8 @@ val linked_horizon =
 Triviality linked_witness_storage:
   e2eCorrectness$storage_ok ^linked_horizon linked_witness_am_call linked_witness_call_tx
 Proof
-  rewrite_tac[e2eCorrectnessTheory.storage_ok_def, linked_call_machine,
+  rewrite_tac[e2eCorrectnessTheory.storage_ok_def, e2eCorrectnessTheory.horizon_ok_def,
+              linked_call_machine,
               linked_source_machine] >>
   simp[vyperStorageFootprintTheory.regions_consistent_def,
        vyperStorageFootprintTheory.storage_locks_separated_def,

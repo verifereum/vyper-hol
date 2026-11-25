@@ -4,7 +4,7 @@
  *)
 Theory frameRunRaises
 Ancestors
-  frameGas frameRootReach frameRootTerminal
+  frameGas frameOutcome frameRootReach frameRootTerminal
   vfmExecution vfmExecutionProp vfmContext vfmAccountFrame relation
 
 (* With one context whose output does not go to code (no deposit), a run
@@ -39,19 +39,28 @@ Proof
   goal_assum $ drule_at Any >> simp[]
 QED
 
-Theorem run_call_root_stack_overflow_raises:
+Theorem run_call_root_exception_raises:
   wf_state es /\ LENGTH es.contexts = 1 /\
-  run_call es = SOME (INR (SOME StackOverflow),es') ==>
-  frame_raises es StackOverflow
+  ~vfm_abort (SOME exc) /\ run_call es = SOME (INR (SOME exc),es') ==>
+  frame_raises es exc
 Proof
   strip_tac >>
-  `~vfm_abort (SOME StackOverflow)` by simp[] >>
   drule_all root_run_nonabort_terminal_source >> strip_tac >>
   `?c rb. s.contexts = [(c,rb)]` by
     (Cases_on `s.contexts` >> gvs[] >> Cases_on `h` >> simp[]) >>
-  drule_all root_step_stack_overflow_raises >> strip_tac >>
+  drule_all root_step_exception_raises >> strip_tac >>
   `es.contexts <> []` by (Cases_on `es.contexts` >> gvs[]) >>
   `run_frame es = run_frame s` by
     (irule run_frame_prefix >> gvs[run_call_reaches_def, arithmeticTheory.GREATER_EQ]) >>
   gvs[frame_raises_def]
+QED
+
+Theorem run_call_root_frame_outcome_raises:
+  wf_state es /\ LENGTH es.contexts = 1 /\ ~vfm_abort (SOME exc) /\
+  run_call es = SOME (r,es') /\ frame_outcome es r es' (SOME exc) out lgs ==>
+  frame_raises es exc
+Proof
+  strip_tac >>
+  `r = INR (SOME exc)` by gvs[frame_outcome_def] >>
+  metis_tac[run_call_root_exception_raises]
 QED

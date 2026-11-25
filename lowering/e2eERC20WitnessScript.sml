@@ -2,7 +2,7 @@
 Theory e2eERC20Witness
 Ancestors
   e2eWitnessCompute e2eWitness e2eDefs e2eDeployDefs e2eCorrectness e2eLifecycle
-  e2eDeployed
+  e2eDeployed e2eDeployEntry
   e2eERC20Compile alist integer_word vyperStorageFootprint
   vyperInterpreter vyperHashMapStorage vfmCompute
   callTrace frameOutcome asmOptimizer accountsRelProps
@@ -211,7 +211,7 @@ val erc20_horizon =
 Theorem erc20_storage_ok[local]:
   !am. storage_ok ^erc20_horizon am erc20_transfer_tx
 Proof
-  simp[storage_ok_def, regions_consistent_def, storage_locks_separated_def,
+  simp[storage_ok_def, horizon_ok_def, regions_consistent_def, storage_locks_separated_def,
        storage_well_formed_on_def] >>
   rw[] >> gvs[] >>
   rewrite_tac[erc20_sender_slot_def, erc20_recipient_slot_eval] >>
@@ -618,14 +618,19 @@ local
     simp[erc20_transfer_trace])
   val call_premises = CONJUNCTS (REWRITE_RULE [call_premises_deployed]
     (CONJ erc20_source_typing erc20_call_state))
-  val dep_h_regions = prove
-    (``regions_consistent (FST ^erc20_horizon)``,
+  val dep_horizon = prove
+    (``horizon_ok ^erc20_horizon``,
      mp_tac (SPEC ``erc20_am_call`` erc20_storage_ok) >>
-     simp[storage_ok_def] >> metis_tac[])
-  val dep_h_locks = prove
-    (``storage_locks_separated (FST ^erc20_horizon) (SND ^erc20_horizon)``,
-     mp_tac (SPEC ``erc20_am_call`` erc20_storage_ok) >>
-     simp[storage_ok_def] >> metis_tac[])
+     simp[storage_ok_def])
+  val dep_evm_state = prove
+    (``evm_state_ok erc20_es_dep``,
+     irule (MATCH_MP deploy_state_rel_evm_state_ok erc20_deploy_state) >>
+     simp[erc20_es_dep_def, p23_frame_def,
+          vfmReturndataBoundTheory.returndata_bounded_def,
+          vfmCalldataBoundTheory.calldata_bounded_def,
+          vfmCalldataBoundTheory.memory_paid_def,
+          vfmCalldataBoundTheory.frames_paid_def,
+          vfmCalldataBoundTheory.outputs_fit_def])
   val dep_h_storage = prove
     (``(lookup_account erc20_deploy_tx.target
           erc20_initial_machine.accounts).storage = empty_storage``,
@@ -648,9 +653,9 @@ in
                   (``deploy_entry_rel erc20_tops erc20_deploy_bc
                       erc20_initial_machine erc20_deploy_tx erc20_es_dep``,
                    rewrite_tac[deploy_entry_rel_state] >>
-                   metis_tac[erc20_deploy_state, dep_h_storage,
+                   metis_tac[erc20_deploy_state, dep_evm_state, dep_h_storage,
                              dep_h_transient])),
-                dep_bound, dep_h_regions, dep_h_locks, erc20_deploy_within])
+                dep_bound, dep_horizon, erc20_deploy_within])
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `erc20_tops`,
       `erc20_deploy_bc`, `erc20_runtime_bc`, `erc20_am_call`,

@@ -139,10 +139,7 @@ Definition deploy_result_rel_mods_def:
           frame_outcome es r es' NONE [] am'.logs /\
           (lookup_account tx.target es'.rollback.accounts).code = [] /\
           MEM tx.target es'.rollback.toDelete /\
-          accounts_agree H tx.target am'.accounts
-            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-          transient_agree H tx.target am'.tStorage es'.rollback.tStorage /\
-          LIST_REL (request_agree H tx.target) rqs (call_requests es)
+          effects_agree H tx (am', rqs) es es'
         else
           ?section.
             immutables_section_rel_mods mods (account_immutables am' tx.target)
@@ -158,14 +155,7 @@ Definition deploy_result_rel_mods_def:
                     es'.rollback.accounts)) /\
             transient_agree H tx.target am'.tStorage es'.rollback.tStorage /\
             LIST_REL (request_agree H tx.target) rqs (call_requests es)
-    | INR (AssertException s) =>
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                      (exc = Reverted \/ s = "UNREACHABLE")
-    | INR (Error e) =>
-        unspecified_behaviour_exempt_mods mods e \/
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                      (!d. e = RevertData d ==> exc = Reverted)
-    | INR _ => F
+    | INR exc => exception_outcome_rel_mods mods exc es r es'
 End
 
 Theorem deploy_result_rel_mods_singleton:
@@ -173,7 +163,7 @@ Theorem deploy_result_rel_mods_singleton:
   deploy_result_rel H tops runtime_bc tx es r es' src
 Proof
   simp[deploy_result_rel_mods_def, deploy_result_rel_def,
-       immutables_section_rel_mods_singleton, unspecified_behaviour_exempt_mods_singleton] >>
+       immutables_section_rel_mods_singleton, exception_outcome_rel_mods_singleton] >>
   BasicProvers.EVERY_CASE_TAC >> simp[]
 QED
 

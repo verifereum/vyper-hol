@@ -2702,13 +2702,17 @@ Proof
   strip_tac >> simp[external_return_type_def] >> metis_tac[]
 QED
 
+Definition horizon_ok_def:
+  horizon_ok H <=>
+    regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H)
+End
+
 (* The fixed persistent and transient regions decode in the source state,
    with consistent layouts and separated nonreentrant locks. *)
 Definition storage_ok_def:
   storage_ok H am tx <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-      regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
-      storage_well_formed_on cx (initial_state am []) (FST H)
+      horizon_ok H /\ storage_well_formed_on cx (initial_state am []) (FST H)
 End
 
 (* Every gas filling of the dispatched call stays within the fixed regions. *)
@@ -2741,7 +2745,7 @@ Definition calldata_result_rel_def:
         call_result_rel H tops am (tx with <| function_name := f; args := vals |>) es r es'
 End
 
-Triviality valid_horizon_for_dispatch:
+Theorem valid_horizon_for_dispatch:
   storage_ok H am tx /\ call_within H tops am tx es /\
   calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
   valid_horizon
@@ -2751,7 +2755,7 @@ Triviality valid_horizon_for_dispatch:
     (source_storage_trace am (tx with <| function_name := f; args := vals |>)
        (MAP SND (call_trace es)) gobs)
 Proof
-  simp[storage_ok_def, call_within_def, valid_horizon_def] >>
+  simp[storage_ok_def, horizon_ok_def, call_within_def, valid_horizon_def] >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `storage_well_formed_on cx _ _` >>
   qmatch_goalsub_abbrev_tac `storage_well_formed_on dispatched_cx _ _` >>
@@ -2791,7 +2795,7 @@ Proof
    storage_well_formed_on (initial_evaluation_context am.sources am.layouts tx NONE)
      (initial_state am' []) (FST H)` by
     (irule storage_well_formed_on_target >> simp[initial_evaluation_context_def]) >>
-  fs[storage_ok_def, valid_horizon_def]
+  fs[storage_ok_def, horizon_ok_def, valid_horizon_def]
 QED
 
 (* TOP-LEVEL: single-call compiler correctness with fixed storage regions. *)

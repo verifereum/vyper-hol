@@ -213,10 +213,7 @@ Definition deploy_result_rel_def:
           frame_outcome es r es' NONE [] am'.logs /\
           (lookup_account tx.target es'.rollback.accounts).code = [] /\
           MEM tx.target es'.rollback.toDelete /\
-          accounts_agree H tx.target am'.accounts
-            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-          transient_agree H tx.target am'.tStorage es'.rollback.tStorage /\
-          LIST_REL (request_agree H tx.target) rqs (call_requests es)
+          effects_agree H tx (am', rqs) es es'
         else
           ?section.
             immutables_section_rel tops (account_immutables am' tx.target)
@@ -232,14 +229,7 @@ Definition deploy_result_rel_def:
                     es'.rollback.accounts)) /\
             transient_agree H tx.target am'.tStorage es'.rollback.tStorage /\
             LIST_REL (request_agree H tx.target) rqs (call_requests es)
-    | INR (AssertException s) =>
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                      (exc = Reverted \/ s = "UNREACHABLE")
-    | INR (Error e) =>
-        unspecified_behaviour_exempt tops e \/
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                      (!d. e = RevertData d ==> exc = Reverted)
-    | INR _ => F
+    | INR exc => exception_outcome_rel tops exc es r es'
 End
 
 (* The deployment relation at every gas filling, with the source run on the

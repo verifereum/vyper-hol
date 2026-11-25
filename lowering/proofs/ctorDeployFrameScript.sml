@@ -144,9 +144,10 @@ Proof
   rpt strip_tac >>
   `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
     simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_def] >>
-  `?c0 rb0. es.contexts = [(c0,rb0)] /\
+  `wf_state es /\ ?c0 rb0. es.contexts = [(c0,rb0)] /\
             c0.msgParams.outputTo = Code tx.target`
     by gvs[deploy_state_rel_def] >>
+  pop_assum strip_assume_tac >>
   `call_requests (shadow_root es) = call_requests es` by
     simp[callTraceTheory.call_requests_def, callTraceTheory.call_trace_def,
          shadow_root_frame_obs] >>
@@ -170,7 +171,7 @@ Proof
               strip_tac >> gvs[]
               >- (disj1_tac >> irule creation_resource_starved_single_transfer >>
                   metis_tac[]) >>
-              disj2_tac >> simp[deploy_result_rel_def] >>
+              disj2_tac >> simp[deploy_result_rel_def, e2eDefsTheory.effects_agree_def] >>
               simp[lookup_account_def, update_account_def,
                    combinTheory.APPLY_UPDATE_THM] >>
               conj_tac
@@ -197,7 +198,8 @@ Proof
               combinTheory.APPLY_UPDATE_THM] >>
           irule frame_outcome_single_transfer_none >> metis_tac[]) >>
       Cases_on `y` >>
-      gvs[deploy_venom_result_rel_def, deploy_result_rel_def] >>
+      gvs[deploy_venom_result_rel_def, deploy_result_rel_def,
+          e2eDefsTheory.exception_outcome_rel_def] >>
       Cases_on `handle_step NONE mid` >> gvs[])
   >~ [`Abort ab vs'`]
   >- (Cases_on `src`
@@ -206,8 +208,14 @@ Proof
       Cases_on `ab` >> gvs[] >>
       drule_all deploy_frame_exception >> strip_tac >>
       first_assum (irule_at (Pos hd)) >>
+      TRY (qpat_assum `!lgs'. frame_outcome es r es' (SOME Reverted) _ lgs'`
+             (qspec_then `[]` assume_tac) >>
+           `LENGTH es.contexts = 1 /\ ~vfmExecution$vfm_abort (SOME Reverted)`
+             by simp[vfmExecutionTheory.vfm_abort_def] >>
+           drule_all run_call_root_frame_outcome_raises >> strip_tac) >>
       Cases_on `y` >>
-      gvs[deploy_venom_result_rel_def, deploy_result_rel_def] >>
+      gvs[deploy_venom_result_rel_def, deploy_result_rel_def,
+          e2eDefsTheory.exception_outcome_rel_def] >>
       metis_tac[]) >>
   drule deploy_venom_result_rel_terminates >> simp[terminates_def]
 QED
