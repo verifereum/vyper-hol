@@ -247,13 +247,12 @@ call and deploy correctness theorems permit `StackOverflow` only if no fuel
 makes `bytecode_stack_check` succeed at `stack_limit` on the actual entry code.
 That code includes immutables for calls and constructor arguments for deploys.
 
-The companion `vyper_call_gas_sufficient`
-(`lowering/e2eGasSufficientTopScript.sml`) gives a threshold `g` such that
-adding any `g' >= g` gas to the frame yields a run. When
-`calldata_dispatch` selects a source call, the gas guarantee requires the
-raised-gas trace length to be below `2 ** 64`, `call_storage_ok` for every
-gas filling of its outcomes, and `~gas_source_exempt` for every source
-observation of that call. Under those conditions, the entry frame cannot
+The companion `vyper_call_gas_sufficient_deployed`
+(`lowering/e2eDeployedScript.sml`) takes a fixed horizon with `storage_ok H`
+at entry. It gives a threshold `g` such that adding any `g' >= g` gas to the
+frame yields a run. When `calldata_dispatch` selects a source call, the gas
+guarantee requires `call_within H` on the raised-gas run, a trace length below
+`2 ** 64`, and `~gas_source_exempt` for every source observation of that call. Under those conditions, the entry frame cannot
 raise `OutOfGas`. The same guarantee applies to unmatched calldata.
 The identity case composes the stage bounds S1b
 (`lower_vyper_runtime_unit_run_bounded`), S6b
@@ -263,9 +262,9 @@ The identity case composes the stage bounds S1b
 `run_venom_pipeline_run_bounded_raw` and the proved S7g-d
 `deploy_frame_gas_sufficient`. Its proof uses `compile_vyper_runtime_not_ef`
 to derive that the runtime bytecode does not start with `0xEF` from successful
-compilation with an accepted finalizer. Under `deploy_storage_ok` for every
-gas filling, no exempt source observation and fewer than 2⁶⁴ trace entries on
-the raised-gas run, `OutOfGas` implies that the code to deposit exceeds the
+compilation with an accepted finalizer. The theorem takes `deploy_entry_rel`
+and `horizon_ok H` at entry. Under `deploy_within H`, no exempt source
+observation and fewer than 2⁶⁴ trace entries on the raised-gas run, `OutOfGas` implies that the code to deposit exceeds the
 runtime code-size limit. The call and deploy gas bounds cover
 `RETURNDATACOPY` and its revert-forwarding tail under both finalizers.
 Each companion rests on one admitted lemma, its entry's held create-size

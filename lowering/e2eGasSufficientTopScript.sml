@@ -16,7 +16,7 @@ Ancestors
   callRawVariant callDynamicMemory[qualified,ignore_grammar] sourceUnitExitSafe exprSimHypsDefs
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeSource runtimeLabelReadiness fragFuelUnit
-  e2eDeployRawFmp e2eDeployAtMarks e2eDeployDefs
+  e2eDeployRawFmp e2eDeployAtMarks e2eDeployDefs e2eDeployEntry
   ctorDeployDefs ctorDeployDefsReach ctorDeployRawEntryFacts whitelistCheckerGate
   ctorDeployFrame ctorDeployShape ctorDeployDead ctorDeployRunBounded
   ctorDeployInitcodeAsm ctorDeployMemoryFrontier ctorDeployLoweringSource
@@ -581,10 +581,10 @@ Proof
   strip_tac >> metis_tac[]
 QED
 
-(* TOP-LEVEL: one theorem over the accepted finalizers, with
+(* The per-filling gas companion, with
    e2e_deploy_correctness's finalizer premises. The code deposit can
    still fail for runtime code above the size limit. *)
-Theorem e2e_deploy_gas_sufficient:
+Theorem e2e_deploy_gas_sufficient_guarded:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
@@ -634,4 +634,37 @@ Proof
   qpat_x_assum `!g'. g <= g' /\ _ ==> _` (qspec_then `g'` mp_tac) >>
   impl_tac >- simp[] >>
   strip_tac >> gvs[]
+QED
+
+(* TOP-LEVEL: deployment gas sufficiency over a fixed storage horizon. *)
+Theorem e2e_deploy_gas_sufficient:
+  !fin policy tops deploy_bc runtime_bc am tx es H.
+    fin IN accepted_finalizers /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    deploy_typing_ok tops am tx /\
+    deploy_entry_rel tops deploy_bc am tx es /\
+    horizon_ok H
+    ==>
+    ?g. !g'.
+      g <= g' ==>
+      ?r es'.
+        run_call (add_frame_gas g' es) = SOME (r, es') /\
+        (deploy_within H tops am tx (add_frame_gas g' es) /\
+         (!obs. ~deploy_gas_source_exempt tops
+            (load_contract (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+               obs am tx [(NONE, tops)] [])) /\
+         LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64 /\
+         r = INR (SOME OutOfGas) ==>
+         max_code_size < LENGTH runtime_bc + imm_len tops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[deploy_entry_rel_state] >>
+  drule_all e2e_deploy_gas_sufficient_guarded >>
+  disch_then (qx_choose_then `g` assume_tac) >>
+  qexists_tac `g` >> rpt strip_tac >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >> strip_tac >>
+  first_x_assum irule >>
+  simp[] >> irule deploy_storage_ok_from_within >>
+  metis_tac[]
 QED
