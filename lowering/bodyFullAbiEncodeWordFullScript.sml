@@ -3,7 +3,7 @@ Ancestors
   bodySimFull bodyFullAbiEncodeAllocOrigin
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullAbiEncodeStore bodyFullAbiEncodeSuffix bodyFullAbiEncodeUniformTranslation
-  bodyFullAbiEncodeWordPack
+  bodyFullAbiEncodeWordPack bodyFullAbiEncodeWordLayout
   exprSimAbiEncodeBytesOwnership exprSimAbiEncodeCapacity bodyFullAbiEncodeResultResources
   bodyFullAbiEncodeSetupTail bodyFullAbiEncodeFinish gasShadowCompile
   exprSimSource exprSimHyps gasExemptCert valueEncodingDefs vyperTypeABI freshWrites gasShadowCompileStmtHelpers
@@ -22,103 +22,16 @@ Theorem abi_encode_word_vv_full_from_packaging:
     ce cx cty (TypeBuiltin ann (AbiEncode F mid) ty [e]) es
 Proof
   strip_tac >> rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  `expr_body_pre ce cx env e es` by
-    (irule abi_encode_body_arg_pre >> goal_assum (drule_at Any) >> simp[]) >>
-  Cases_on `lower_value compile_expr ce (expr_type e) e sa` >>
-  rename1 `lower_value _ _ _ e sa = (op,sm)` >>
-  `lowered_value_type ce e = expr_type e` by
-    metis_tac[expr_body_pre_lowered_fits, arg_type_fits_prim_word,
-              membership_element_word_boundary] >>
-  `abi_size_bound ce.ce_struct_fields (lowered_value_type ce e) = 32` by
-    metis_tac[abi_encode_word_size_bound] >>
-  `reason_uniform_shape compile_expr ce (expr_type e) e` by
-    (irule compile_expr_reason_uniform >> qexists_tac `env` >>
-     fs[exprSimHypsDefsTheory.expr_body_pre_def, exprSimHypsDefsTheory.expr_sim_inv_def]) >>
-  `?loc. reason_result_shape (expr_type e) loc (FST (compile_expr ce (expr_type e) e sa))` by
-    (qpat_assum `reason_uniform_shape _ _ _ _`
-       (strip_assume_tac o PURE_REWRITE_RULE [reason_uniform_shape_def]) >>
-     qexists_tac `loc` >> Cases_on `compile_expr ce (expr_type e) e sa` >>
-     metis_tac[pairTheory.FST]) >>
-  drule_all compile_abi_encode_word_direct >> strip_tac >>
+  drule_all abi_encode_word_child_layout >>
+  disch_then (qx_choosel_then [`op`,`sm`,`shadow_sm`,`out`] strip_assume_tac) >>
+  qpat_assum `ci_mono sa sm`
+    (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >>
+  `abi_size_bound ce.ce_struct_fields (expr_type e) = 32` by metis_tac[] >>
   qabbrev_tac `meth = OPTION_MAP bytes_method_id_word mid` >>
   qabbrev_tac `encode = \dst. comp_ignore_bind
     (emit_void MSTORE [dst;op]) (comp_return (Lit 32w))` >>
-  Cases_on `lower_abi_encode meth 32 encode sm` >>
-  rename1 `lower_abi_encode meth 32 encode sm = (out,final)` >>
-  `compile_expr ce cty (TypeBuiltin ann (AbiEncode F mid) ty [e]) sa =
-    (LocatedValue ann (mk_ptr out LocMemory),final)` by
-    fs[Abbr `meth`, Abbr `encode`, as_ptr_val_def] >>
-  `ci_mono sm final` by
-    (mp_tac (Q.INST [`encode` |-> `encode`, `mid` |-> `meth`, `st` |-> `sm`,
-       `maxlen` |-> `32`] ci_mono_lower_abi_encode) >>
-     simp[Abbr `encode`, ci_mono_ignore_bind, ci_mono_emit_void, ci_mono_comp_return]) >>
-  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
-    metis_tac[ci_mono_lower_value_compile_expr, ci_mono_def, pairTheory.SND] >>
-  `sb = final` by
-    (qpat_assum `compile_expr ce cty (TypeBuiltin ann _ _ _) sa = (vv,sb)` mp_tac >>
-     qpat_assum `compile_expr ce cty (TypeBuiltin ann _ _ _) sa =
-        (LocatedValue ann (mk_ptr out LocMemory),final)`
-       (fn th => simp_tac (srw_ss()) [th])) >>
-  qpat_x_assum `sb = final` SUBST_ALL_TAC >>
-  `fn_has_code sa sm func /\ fn_has_code sm final func` by
-    (match_mp_tac (Q.SPECL [`sa`,`sm`,`final`,`func`] fn_has_code_split) >>
-     qpat_assum `ci_mono sm final` (strip_assume_tac o PURE_REWRITE_RULE [ci_mono_def]) >>
-     asm_rewrite_tac[]) >>
-  Cases_on `lower_value compile_expr (gas_shadow_env T ce) (expr_type e)
-             (gas_shadow_expr e) shadow_sa` >>
-  rename1 `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = (shop,shadow_sm)` >>
-  `shop = op /\ gas_shadow_state sm shadow_sm` by
-    (`gas_shadow_compiles (lower_value compile_expr ce (expr_type e) e)
-        (lower_value compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e))`
-       by irule gas_shadow_stmt_lower_value_env >>
-     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
-                REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >>
-  qpat_x_assum `shop = op` SUBST_ALL_TAC >>
-  `FST (compile_expr ce (expr_type e) e sa) =
-   FST (compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_sa)` by
-    (`gas_shadow_compiles (compile_expr ce (expr_type e) e)
-        (compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e))`
-       by irule gas_shadow_stmt_compile_expr_env >>
-     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
-                REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >>
-  `reason_result_shape (expr_type e) loc
-      (FST (compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) shadow_sa))` by
-    (qpat_assum `FST (compile_expr ce (expr_type e) e sa) = _` (fn th =>
-       rewrite_tac[GSYM th]) >>
-     first_assum ACCEPT_TAC) >>
-  `abi_size_bound ce.ce_struct_fields (expr_type e) = 32` by metis_tac[] >>
-  `compile_expr (gas_shadow_env T ce) cty
-      (gas_shadow_expr (TypeBuiltin ann (AbiEncode F mid) ty [e])) shadow_sa =
-      as_ptr_val ann LocMemory (lower_abi_encode meth 32 encode shadow_sm)` by
-    (drule_all (SIMP_RULE (srw_ss())
-       [gasShadowTheory.gas_shadow_expr_type, gas_shadow_lowered_value_type]
-       (Q.INST [`ce` |-> `gas_shadow_env T ce`, `e` |-> `gas_shadow_expr e`]
-         compile_abi_encode_word_direct)) >>
-     disch_then (fn th => simp_tac (srw_ss())
-       [th, gasShadowTheory.gas_shadow_expr_def, Abbr `meth`, Abbr `encode`]) >>
-     asm_rewrite_tac[]) >>
-  `shadow_sb = SND (lower_abi_encode meth 32 encode shadow_sm)` by
-    (qpat_x_assum `compile_expr _ cty (gas_shadow_expr (TypeBuiltin _ _ _ _)) shadow_sa =
-        as_ptr_val _ _ _` (fn eq =>
-       qpat_assum `compile_expr _ cty (gas_shadow_expr (TypeBuiltin _ _ _ _)) shadow_sa = (_,shadow_sb)`
-         (mp_tac o PURE_REWRITE_RULE [eq])) >>
-     Cases_on `lower_abi_encode meth 32 encode shadow_sm` >>
-     simp_tac (srw_ss()) [as_ptr_val_def]) >>
-  `cs_extends shadow_sa shadow_sm` by metis_tac[cj 2 compile_expr_grows] >>
-  `cs_extends shadow_sm shadow_sb` by
-    (qpat_assum `shadow_sb = _` SUBST1_TAC >>
-     irule (cj 1 (iffLR ci_mono_def)) >>
-     irule ci_mono_lower_abi_encode >>
-     simp[Abbr `encode`, ci_mono_ignore_bind, ci_mono_emit_void, ci_mono_comp_return]) >>
-  `fn_has_code shadow_sa shadow_sm shadow_func` by
-    (mp_tac (Q.SPECL [`shadow_sa`,`shadow_sm`,`shadow_sb`,`shadow_func`]
-       fn_has_code_split) >> asm_rewrite_tac[] >>
-     disch_then (ACCEPT_TAC o cj 1)) >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
-    metis_tac[expr_body_pre_gas_admissible] >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
-  simp[expr_sim_full_def] >> disch_then drule_all >>
-  simp[] >> strip_tac >>
+  simp[expr_sim_full_def] >> disch_then drule_all >> simp[] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   simp[exprSimAbiEncodeNonwordCaseTheory.eval_expr_singleton_type_builtin_action,
        type_builtin_args_length_ok_def] >>

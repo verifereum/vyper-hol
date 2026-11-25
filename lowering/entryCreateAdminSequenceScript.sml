@@ -3,12 +3,12 @@ Theory entryCreateAdminSequence
 Ancestors
   entryCreateFocusSpec entryCreatePathScope entryCreateStmtCases
   entryCreateCompletedCut createSizePrefixReplay createMarkedPath
-  fragExec fragGasSeq fragGasOrigin exprLoweringProps instIdxIndep
+  fragExec fragGasSeq fragGasSeqAbort fragGasOrigin exprLoweringProps instIdxIndep
   venomExecSemantics venomInstProps venomState venomInst
-  list relation arithmetic
+  list rich_list relation arithmetic
 
 Theorem admin_sequence_edge[local]:
-  ~s.vs_halted /\ s.vs_inst_idx < LENGTH sb.cs_current_insts /\
+  ~s.vs_halted /\ ~create_operand_at sb s /\
   lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME i /\ i.inst_id IN frag_ids sa sb /\
   i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
@@ -16,39 +16,41 @@ Theorem admin_sequence_edge[local]:
   create_expr_prefix sa sb E C f s [] (v with vs_inst_idx := SUC s.vs_inst_idx)
 Proof
   strip_tac >>
-  `s.vs_inst_idx <> LENGTH sb.cs_current_insts` by decide_tac >>
   `gas_path_edge C f s 0 (OK (v with vs_inst_idx := SUC s.vs_inst_idx))` by
     (drule_all tuple_straight_line_edge >> simp[]) >>
   drule gas_path_edge_zero_origin >> strip_tac >>
   simp[create_expr_prefix_marked] >> irule RTC_SINGLE >>
-  simp[create_marked_edge_def, create_prefix_step_def] >>
+  fs[create_marked_edge_def, create_prefix_step_def, create_operand_at_def] >>
   metis_tac[]
 QED
 
 (* The base interpreter retains its PC at each step; the confined native
-   path instead advances at every fetch, so reindex the recursive run. *)
-Theorem admin_sequence_prefix_run[local]:
+   path instead advances at every fetch, so reindex the recursive run. The
+   enclosing exit is excluded at each source PC, not at the endpoint. *)
+Theorem create_admin_sequence_prefix_run:
   !is s u bb.
     ~s.vs_halted /\ lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
-    LENGTH sb.cs_current_insts = s.vs_inst_idx + LENGTH is /\
+    isPREFIX is (DROP s.vs_inst_idx bb.bb_instructions) /\
     (!j. j < LENGTH is ==>
-         get_instruction bb (s.vs_inst_idx + j) = SOME (EL j is)) /\
+         (s.vs_current_bb,s.vs_inst_idx+j) <>
+         (sb.cs_current_bb,LENGTH sb.cs_current_insts)) /\
     EVERY (\i. i.inst_id IN frag_ids sa sb /\ i.inst_opcode <> INVOKE /\
                i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode) is /\
     run_inst_seq is s = OK u ==>
     create_expr_prefix sa sb E C f s []
-      (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+      (u with vs_inst_idx := s.vs_inst_idx + LENGTH is) /\
     u.vs_current_bb = s.vs_current_bb
 Proof
   Induct_on `is`
-  >- simp[run_inst_seq_def] >>
+  >- (simp[run_inst_seq_def] >> simp[venom_state_component_equality]) >>
   rpt gen_tac >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
   Cases_on `step_inst_base h s` >> gvs[run_inst_seq_def] >>
   rename1 `step_inst_base h s = OK v` >>
-  `get_instruction bb s.vs_inst_idx = SOME h` by
-    (qpat_assum `!j. _ ==> get_instruction bb _ = _`
-       (qspec_then `0` (mp_tac o SIMP_RULE (srw_ss()) [])) >> simp[]) >>
-  `s.vs_inst_idx < LENGTH sb.cs_current_insts` by decide_tac >>
+  `~create_operand_at sb s` by
+    (simp_tac bool_ss [create_operand_at_def, DE_MORGAN_THM, GSYM IMP_DISJ_THM] >>
+     qpat_assum `!j. j < SUC _ ==> _` (qspec_then `0`
+       (ACCEPT_TAC o SIMP_RULE bool_ss [ADD_CLAUSES, DECIDE ``!n:num. 0 < SUC n``]))) >>
   drule_all admin_sequence_edge >> strip_tac >>
   `step_inst 0 C h s = OK v` by simp[step_inst_non_invoke] >>
   `~v.vs_halted /\ v.vs_current_bb = s.vs_current_bb` by
@@ -61,7 +63,7 @@ Proof
     [`t`,`u with vs_inst_idx := SUC s.vs_inst_idx`,`bb`] mp_tac) >>
   impl_tac
   >- (simp[Abbr `t`] >> rpt strip_tac >>
-      qpat_assum `!j. _ ==> get_instruction bb _ = _`
+      qpat_assum `!j. j < SUC _ ==> _`
         (qspec_then `SUC j` (mp_tac o SIMP_RULE (srw_ss()) [ADD_CLAUSES])) >>
       simp[ADD_CLAUSES]) >>
   strip_tac >> fs[Abbr `t`, ADD_CLAUSES] >>
@@ -81,15 +83,20 @@ Theorem create_admin_sequence_scope:
   create_operand_full_scope sa sb E C f s []
     (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))
 Proof
-  strip_tac >> drule_all fn_has_code_same_block >> strip_tac >>
-  fs[create_operand_at_def] >>
-  `create_expr_prefix sa sb E C f s []
-     (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-   u.vs_current_bb = s.vs_current_bb` by
-    (irule admin_sequence_prefix_run >>
-     first_assum (irule_at Any) >> qexists_tac `bb` >> simp[]) >>
-  qpat_x_assum `create_expr_prefix _ _ _ _ _ _ _ _` mp_tac >>
-  simp[create_operand_full_scope_def]
+  strip_tac >>
+  `?bb. lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (fs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND, create_operand_at_def] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+     qexists_tac `l` >> REFL_TAC) >>
+  `s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
+    fs[create_operand_at_def] >>
+  `!j. j < LENGTH (emitted_insts sa sb) ==>
+       (s.vs_current_bb,s.vs_inst_idx+j) <> (sb.cs_current_bb,LENGTH sb.cs_current_insts)` by
+    (qpat_assum `_ + _ = LENGTH sb.cs_current_insts` (SUBST1_TAC o SYM) >>
+     simp[] >> decide_tac) >>
+  drule_all create_admin_sequence_prefix_run >>
+  fs[create_operand_full_scope_def, create_operand_at_def]
 QED
 
 (* Any completed edge from this fetch advances one slot, independently

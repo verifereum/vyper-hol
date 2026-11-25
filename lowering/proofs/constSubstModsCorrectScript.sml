@@ -2,7 +2,8 @@
 Theory constSubstModsCorrect
 Ancestors
   alist finite_map list option pair rich_list
-  constSubst constSubstMods vyperAST vyperContext vyperCreate
+  constSubst constSubstMods constSubstCorrect[qualified,ignore_grammar]
+  vyperAST vyperContext vyperCreate
   vyperInterpreter vyperTypeConstantCells vyperTypeContract
   vyperTypeContractStaticMaps vyperTypeInitialState vyperTypeSystem vyperState
 
@@ -166,24 +167,6 @@ Theorem successful_initializer_closed_mods:
   constant_expr [] (fold_const_expr (subst_consts_expr_mods env e))
 Proof
   rpt strip_tac >>
-  `(!x. constant_expr [] x ==> constant_expr [] (fold_const_expr x)) /\
-   (!t:base_assignment_target. T) /\
-   (!es. EVERY (constant_expr []) es ==>
-         EVERY (constant_expr []) (fold_const_exprs es)) /\
-   (!d:expr option. T) /\
-   (!fs. EVERY (constant_expr []) (MAP SND fs) ==>
-         EVERY (constant_expr []) (MAP SND (fold_const_fields fs)))` by
-    (ho_match_mp_tac fold_const_expr_ind >>
-     simp[constant_expr_def, fold_const_expr_def, SF ETA_ss] >>
-     rpt strip_tac >>
-     `EVERY (constant_expr []) (fold_const_exprs es)` by simp[] >>
-     qmatch_goalsub_abbrev_tac `fold_const_builtin ty bi args` >>
-     Cases_on `bi` >> gvs[fold_const_builtin_def, constant_expr_def, SF ETA_ss] >>
-     Cases_on `args` >> gvs[constant_expr_def, SF ETA_ss] >>
-     rename1 `_ :: rest` >> Cases_on `rest` >> gvs[constant_expr_def, SF ETA_ss] >>
-     rename1 `[arg]` >> Cases_on `arg` >> gvs[constant_expr_def, SF ETA_ss] >>
-     rename1 `Literal aty lit` >> Cases_on `lit` >>
-     gvs[constant_expr_def, SF ETA_ss]) >>
   `(!x. constant_expr mods x /\ IS_SOME (constant_value mods imms x) ==>
         constant_expr [] (subst_consts_expr_mods env x)) /\
    (!t:base_assignment_target. T) /\
@@ -193,7 +176,7 @@ Proof
    (!fs. EVERY (constant_expr mods) (MAP SND fs) /\
          IS_SOME (constant_values mods imms (MAP SND fs)) ==>
          EVERY (constant_expr []) (MAP SND (subst_consts_fields_mods env fs)))`
-     suffices_by simp[] >>
+     suffices_by simp[constSubstCorrectTheory.fold_const_expr_constant] >>
   qpat_x_assum `constant_expr mods e` kall_tac >>
   qpat_x_assum `IS_SOME (constant_value mods imms e)` kall_tac >>
   ho_match_mp_tac fold_const_expr_ind >>

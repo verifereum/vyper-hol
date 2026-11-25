@@ -9,7 +9,7 @@ Ancestors
   contextCodegenRel codegenRel unitTransformDefs ptrSafeRun bodyFullRawCallCall
   exprSimRawCall exprSimHyps exprSimSource
   gasOutcomeFullCompose vyperStorageTrace bodyFullIntCallReturnHalt exprLoweringProps
-  bodyFullHashKeccakFixed bodyFullWordArgs
+  bodyFullHashKeccakFixed bodyFullWordArgs bodyFullRawCallAdapter
 Libs
   monadsyntax
 
@@ -43,6 +43,8 @@ Theorem raw_call_fetched_early_exit[local]:
   allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ ~t.vs_halted /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst ==>
+  gas_origin_edge T explicit ctx func t []
+    (Abort ExHalt_abort (halt_state (set_returndata [] t))) /\
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) []
     (Abort ExHalt_abort (halt_state (set_returndata [] t)),G,tn)
 Proof
@@ -106,6 +108,8 @@ Proof
    gas_count_step 0 ctx inst t = 0` by
     (Cases_on `call_ty` >> simp[mk_inst_def, gas_events_step_def, gas_count_step_def]) >>
   qpat_x_assum `inst = mk_inst _ _ _ _` kall_tac >>
+  conj_tac
+  >- (simp[fragGasOriginTheory.gas_origin_edge_def,exit_result_def] >> qexists_tac `0` >> simp[] >> metis_tac[]) >>
   irule exit_inst_origin_ptr >> simp[exit_result_def]
 QED
 
@@ -176,9 +180,175 @@ in
     end
 end
 
+(* The post-call supplier can retain an observation about its chosen endpoint.
+   Its physical state and ghosts are shared with the ordinary return post. *)
+Definition raw_call_finish_rule_def:
+  raw_call_finish_rule finish_ok <=>
+  !to_op dp dl gas_op val_op call_ty n rev ov op sa result sb ok sc success s
+   tn G func ctx lo H0 cenv cx es es0 sf s0 G0 tn0 e explicit PG dep ann.
+  compile_raw_call_finish to_op dp dl gas_op val_op
+    call_ty n rev ov op sa = (result,sb) /\
+  (case call_ty of
+    RegularCall => emit_op CALL [gas_op;to_op;val_op;dp;dl;op;Lit (n2w n)]
+  | StaticCall => emit_op STATICCALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]
+  | DelegateCall => emit_op DELEGATECALL [gas_op;to_op;dp;dl;op;Lit (n2w n)]) sa = (ok,sc) /\
+  eval_operand ok s = SOME (if success then 1w else 0w) /\
+  op_taint tn ok = {} /\ op_prov G ok = NONE /\
+  fn_has_code sc sb func /\ fn_inst_ids_distinct func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+    s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s /\
+  ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts /\ LENGTH (s.vs_returndata) < dimword (:256) /\
+  stmt_state_rel (H0:(bool # 256 word # type_value) list # num list) ctx func cenv cx es s /\
+  wb_frame cenv es0 es sf s0 s /\
+  ghost_kept_at lo cenv es0 sf G0 tn0 s0 G tn /\
+  (!a sz. cenv.ce_return_buf = SOME (PtrVar (Var a) sz) ==> not_fresh_at sf a) /\
+  (!a sz. cenv.ce_return_pc = SOME (PtrVar (Var a) sz) ==> not_fresh_at sf a) /\
+  expr_has_effect e /\ post_value_type cenv e = expr_type e /\
+  lowered_value_type cenv e = expr_type e /\ expr_type e = (if n = 0 then (if rev then NoneT else BaseT
+    BoolT) else if rev then BaseT (BytesT (Dynamic n)) else TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]) /\
+  (0 < n /\ (~rev \/ success) ==>
+    ?x w alloc q pre (ro:bytes32) old_tn.
+      ov = Var x /\ n < dimword (:256) /\ 32 + (32 + ((n + 31) DIV 32) * 32) < dimword (:256) /\
+      MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
+      alloc.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
+      FLOOKUP s.vs_allocas alloc.inst_id = SOME (w2n w,(32 + ((n + 31) DIV 32) * 32)) /\
+      local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sc /\
+      sf.cs_next_var <= sc.cs_next_var /\ sf.cs_next_id <= alloc.inst_id /\
+      alloc.inst_id < sc.cs_next_id /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+      not_fresh_at sc x /\ lookup_var x s = SOME w /\ ptr_covers G tn x s (32 + ((n + 31) DIV 32) * 32) /\
+      w2n ro = w2n w + 32 /\
+      s.vs_memory = (write_memory_with_expansion (w2n ro) (TAKE n (s.vs_returndata)) pre).vs_memory /\
+      tn.t_mem = old_tn.t_mem DIFF
+        {i | i | w2n ro <= i /\ i < w2n ro + LENGTH (TAKE n (s.vs_returndata))} /\
+      (~rev ==> safe_operand sc ok /\ evaluate_type (get_tenv cx) (if n = 0 then (if rev then NoneT else
+        BaseT BoolT) else if rev then BaseT (BytesT (Dynamic n)) else TupleT [BaseT BoolT;BaseT (BytesT
+        (Dynamic n))]) =
+        SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))]))) ==>
+  ?r Gf tnf.
+    finish_ok sc sb explicit ctx func s r /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (r,Gf,tnf)) /\
+    (if rev /\ ~success then
+       ?u. r = Abort Revert_abort u /\ u.vs_returndata = s.vs_returndata /\
+           expr_exit (INR (Error (RevertData s.vs_returndata)) : eval_result + vyperState$exception) r /\
+           !H:(bool # 256 word # type_value) list # num list. halt_exit H cx es
+             (INR (Error (RevertData s.vs_returndata)) : eval_result + vyperState$exception) r
+     else
+       ?u. r = OK u /\ ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history func u /\
+       ghost_kept_at lo cenv es0 sf G0 tn0 s0 Gf tnf /\
+       (!D. ghost_inv_at D lo dep cenv cx es G tn s ==>
+         ghost_inv_at D lo dep cenv cx es Gf tnf u) /\
+       ptr_vv_ok cx (post_value_type cenv e) (Value (if n = 0 then (if rev then NoneV else BoolV success)
+         else if rev then BytesV (TAKE n (s.vs_returndata)) else ArrayV (TupleV [BoolV success;BytesV (TAKE
+         n (s.vs_returndata))]))) (if n = 0 then StackValue ann result else LocatedValue (if n = 0 then (if
+         rev then NoneT else BaseT BoolT) else if rev then BaseT (BytesT (Dynamic n)) else TupleT [BaseT
+         BoolT;BaseT (BytesT (Dynamic n))]) (mk_ptr result LocMemory)) es Gf tnf u /\
+       (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e result Gf u) /\
+       (!H:(bool # 256 word # type_value) list # num list.
+         stmt_state_rel H ctx func cenv cx es s /\
+            storage_well_formed_on cx es (FST H) ==>
+         vv_post H ctx func cenv cx e es0 sf sb s0 es (Value (if n = 0 then (if rev then NoneV else BoolV
+           success) else if rev then BytesV (TAKE n (s.vs_returndata)) else ArrayV (TupleV [BoolV success;
+           BytesV (TAKE n (s.vs_returndata))]))) (if n = 0 then StackValue ann result else LocatedValue (if
+           n = 0 then (if rev then NoneT else BaseT BoolT) else if rev then BaseT (BytesT (Dynamic n)) else
+           TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]) (mk_ptr result LocMemory)) u /\
+         vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e)
+           es (Value (if n = 0 then (if rev then NoneV else BoolV success) else if rev then BytesV (TAKE n
+             (s.vs_returndata)) else ArrayV (TupleV [BoolV success;BytesV (TAKE n (s.vs_returndata))]))) (if
+             n = 0 then StackValue ann result else LocatedValue (if n = 0 then (if rev then NoneT else
+             BaseT BoolT) else if rev then BaseT (BytesT (Dynamic n)) else TupleT [BaseT BoolT;BaseT (BytesT
+             (Dynamic n))]) (mk_ptr result LocMemory)) u /\
+         vv_own cenv cx (post_value_type cenv e) sf sb es (Value (if n = 0 then (if rev then NoneV else
+           BoolV success) else if rev then BytesV (TAKE n (s.vs_returndata)) else ArrayV (TupleV [BoolV
+           success;BytesV (TAKE n (s.vs_returndata))]))) (if n = 0 then StackValue ann result else
+           LocatedValue (if n = 0 then (if rev then NoneT else BaseT BoolT) else if rev then BaseT (BytesT
+           (Dynamic n)) else TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]) (mk_ptr result LocMemory)) u))
+End
+
+Theorem raw_call_finish_rule_plain[local]:
+  raw_call_finish_rule (\sc sb E C f s r. T)
+Proof
+  simp_tac bool_ss [raw_call_finish_rule_def] >> rpt gen_tac >>
+  rename1 `gas_origin_ptr_path (_,_,sites,_,_,_) _ _ _` >>
+  disch_then (mp_tac o MATCH_MP (SIMP_RULE bool_ss []
+    (Q.INST [`explicit` |-> `sites`] raw_call_finish_continuation_full))) >>
+  Cases_on `rev /\ ~success` >> simp[exprSimDefsTheory.halt_exit_def] >>
+  strip_tac >> qexistsl_tac [`r`,`Gf`,`tnf`] >> simp[] >>
+  gvs[exprSimDefsTheory.expr_exit_def] >> metis_tac[]
+QED
+
+(* A no-GAS action either leaves the storage domain at once or retains an
+   observation on exactly the result paired with its source run and ghosts. *)
+Definition raw_call_observed_outcome_def:
+  raw_call_observed_outcome accept (DF,lo,explicit,ctx,func,PG) cx st0
+    source (es,s,G,tn) Q R <=>
+  (~s.vs_halted /\ (!tail. ~storage_trace_domain cx st0
+    (SND (source (es with gas_obs := tail))).storage_trace)) \/
+  ?res ee r Gf tnf.
+    accept r /\
+    (!tail. source (es with gas_obs := tail) = (res,ee with gas_obs := tail)) /\
+    storage_trace_domain cx st0 ee.storage_trace /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,Gf,tnf) /\
+       ((?t. r = OK t /\ Q H res (ee with gas_obs := []) Gf tnf t) \/
+        (exit_result r /\ R H res (ee with gas_obs := []) (Gf,tnf) r)))
+End
+
+Theorem raw_call_observed_bad[local]:
+  ~s.vs_halted /\
+  (!tail. ~storage_trace_domain cx st0
+          (SND (source (es with gas_obs := tail))).storage_trace) ==>
+  raw_call_observed_outcome accept (DF,lo,E,C,f,PG) cx st0 source (es,s,G,tn) Q R
+Proof
+  simp[raw_call_observed_outcome_def]
+QED
+
+Theorem raw_call_observed_intro[local]:
+  accept r /\
+  (!tail. source (es with gas_obs := tail) = (res,ee with gas_obs := tail)) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,E,C,f,PG) (s,G,tn) [] (r,Gf,tnf) /\
+       ((?t. r = OK t /\ Q H res (ee with gas_obs := []) Gf tnf t) \/
+        (exit_result r /\ R H res (ee with gas_obs := []) (Gf,tnf) r))) ==>
+  raw_call_observed_outcome accept (DF,lo,E,C,f,PG) cx st0 source (es,s,G,tn) Q R
+Proof
+  simp[raw_call_observed_outcome_def] >> metis_tac[]
+QED
+
+Theorem raw_call_observed_exit[local]:
+  ~s.vs_halted /\
+  (!tail. source (es with gas_obs := tail) = (res,ee with gas_obs := tail)) /\
+  exit_result r /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,E,C,f,PG) (s,G,tn) [] (r,Gf,tnf) /\
+       R H res (ee with gas_obs := []) (Gf,tnf) r /\ accept r) ==>
+  raw_call_observed_outcome accept (DF,lo,E,C,f,PG) cx st0 source (es,s,G,tn) Q R
+Proof
+  strip_tac >> Cases_on `storage_trace_domain cx st0 ee.storage_trace`
+  >- (irule raw_call_observed_intro >>
+      qexistsl_tac [`Gf`,`ee`,`r`,`res`,`tnf`] >> simp[] >>
+      fs[vyperStorageFootprintTheory.storage_trace_domain_def] >> metis_tac[]) >>
+  irule raw_call_observed_bad >> simp[]
+QED
+
+Theorem raw_call_observed_plain:
+  raw_call_observed_outcome accept (DF,lo,explicit,ctx,func,PG) cx st0
+    source (es,s,G,tn) Q R ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source (es,s,G,tn) Q R
+Proof
+  simp[raw_call_observed_outcome_def] >> strip_tac
+  >- (irule gas_outcome_full_bad_nil >> simp[]) >>
+  irule gas_outcome_full_intro >>
+  qexistsl_tac [`Gf`,`ee`,`[]`,`r`,`res`,`tnf`] >> simp[gasSummaryTheory.gas_explicit_def]
+QED
+
 (* After evaluating its input, either lowering uses the same call and result
    continuation. The input range can come from ALLOCA or DALLOCA. *)
-Theorem raw_call_continuation_full:
+Theorem raw_call_continuation_observed:
   expr_has_effect e /\ post_value_type cenv e = expr_type e /\
   lowered_value_type cenv e = expr_type e /\
   expr_type e = raw_call_return_type flags /\ type_alloc_ok cenv (expr_type e) /\
@@ -258,10 +428,18 @@ Theorem raw_call_continuation_full:
       NONE => Lit 0w | SOME p => p);ov;op] /\
   (!x. MEM (Var x)
     [addr;len;dp;gas;(case ext_call_kwarg EKValue flags.rcf_kws xs of
-      NONE => Lit 0w | SOME p => p);ov;op] ==> not_fresh_at s7 x)
+      NONE => Lit 0w | SOME p => p);ov;op] ==> not_fresh_at s7 x) /\
+  raw_call_finish_rule finish_ok /\
+  (!r. exit_result r /\ gas_origin_edge T (gas_explicit_sites ctx shadow_ctx) ctx func t7 [] r ==>
+       accept r) /\
+  (!opc ops ok sc u r.
+     emit_op opc ops s7 = (ok,sc) /\ MEM opc [CALL;STATICCALL;DELEGATECALL] /\
+     fn_has_code s7 sc func /\ run_inst_seq (emitted_insts s7 sc) t7 = OK u /\
+     finish_ok sc sb (gas_explicit_sites ctx shadow_ctx) ctx func
+       (u with vs_inst_idx := LENGTH sc.cs_current_insts) r ==> accept r)
   ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  raw_call_observed_outcome accept (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cx st0
     (eval_raw_call cx flags target bs amount (ext_call_kwarg EKGas flags.rcf_kws kvs))
     (esK,t7,G7,tn7)
         (\H res ee G tn t. ?tv. res = INL tv /\
@@ -356,7 +534,7 @@ Proof
      Cases_on `call_ty` >>
      simp[NoAsms, Abbr `inst`,Abbr `ops`,Abbr `opc`,mk_inst_def] >>
      tautLib.TAUT_TAC) >>
-  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ QS RS` >>
+  qmatch_goalsub_abbrev_tac `raw_call_observed_outcome accept _ _ _ _ _ QS RS` >>
   qabbrev_tac `round = 32 * ((cap + 31) DIV 32)` >>
   qabbrev_tac `ro = if cap = 0 then ob else ob + 32` >>
   `cap <= round` by simp[Abbr `round`,spillSimTheory.n_le_round_up_32] >>
@@ -445,12 +623,12 @@ Proof
            qpat_assum `t7.vs_outcomes = [] \/ (cx.txn.is_static /\ amount <> 0)` mp_tac >>
            POP_ASSUM_LIST (K ALL_TAC) >>
            Cases_on `delegate` >> Cases_on `stat` >> simp[] >> tautLib.TAUT_TAC) >>
-      irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
+      irule raw_call_observed_exit >> reverse conj_tac >- simp[] >>
       qexistsl_tac [`G7`,`esK`,`Abort ExHalt_abort (halt_state (set_returndata [] t7))`,
                     `INR (Error (RuntimeError err))`,`tn7`] >>
       simp[exit_result_def,Abbr `RS`,exprSimDefsTheory.expr_exit_def,
            exprSimDefsTheory.halt_exit_def] >>
-      rpt strip_tac >>
+      rpt (gen_tac ORELSE disch_tac) >>
       `inst = mk_inst s7.cs_next_id (case call_ty of
            RegularCall => CALL | StaticCall => STATICCALL | DelegateCall => DELEGATECALL)
          (if call_ty = RegularCall then [gas;addr;vop;dp;len;op;Lit (n2w cap)]
@@ -475,7 +653,9 @@ Proof
          TRY (first_assum ACCEPT_TAC) >>
          TRY (qpat_assum `!j. ib <= j /\ j < _ ==> _` ACCEPT_TAC) >>
          TRY (qpat_assum `(cap <> 0 ==> _)` ACCEPT_TAC)) >>
-      simp[]) >>
+      strip_tac >> simp[] >>
+      qpat_assum `!r. exit_result r /\ gas_origin_edge _ _ _ _ _ _ r ==> _`
+        irule >> simp[exit_result_def]) >>
   `(cx.txn.is_static ==> amount = 0) /\ esK.outcomes <> SOME []` by
     (qpat_assum `~(t7.vs_outcomes = [] \/ _)` mp_tac >>
      qpat_assum `esK.outcomes = _` (fn th => rewrite_tac [th]) >>
@@ -983,6 +1163,7 @@ Proof
           >> mp_tac (MATCH_MP stateRelProjTheory.stmt_state_rel_fmp_room rel)) >>
      qpat_assum `ctx_has_dalloca ctx` (fn has =>
        simp[NoAsms,fmp_room_def,has]) >> decide_tac) >>
+  qpat_assum `raw_call_finish_rule finish_ok` (fn finish =>
   mp_tac (SIMP_RULE bool_ss [LET_THM]
     (Q.INST [`n` |-> `cap`,`rev` |-> `rev`,`call_ty` |-> `call_ty`,
       `success` |-> `outcome.co_success`,`s` |-> `q`,
@@ -994,8 +1175,7 @@ Proof
       `G` |-> `Gq`,`tn` |-> `tnq`,`dep` |-> `dframe`,
       `ann` |-> `raw_call_return_type flags`,
       `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
-      (INST_TYPE [alpha |-> ``:256``]
-         bodyFullRawCallFinishPostTheory.raw_call_finish_continuation_full))) >>
+      (SPEC_ALL (REWRITE_RULE [raw_call_finish_rule_def] finish))))) >>
   impl_tac >-
     (qpat_assum `Abbrev (payload = _)`
        (fn th => rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
@@ -1014,7 +1194,7 @@ Proof
   `es2 with gas_obs := [] = es2` by
     (qpat_assum `es2.gas_obs = []` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
   Cases_on `~storage_trace_domain cx st0 es2.storage_trace`
-  >- (irule gas_outcome_full_bad_nil >> rpt conj_tac >>
+  >- (irule raw_call_observed_bad >> rpt conj_tac >>
       TRY (first_assum ACCEPT_TAC) >>
       qx_gen_tac `tail` >>
       qpat_assum `!gs. eval_raw_call _ _ _ _ _ _ (esK with gas_obs := gs) = _`
@@ -1024,8 +1204,14 @@ Proof
     (FIRST [first_assum ACCEPT_TAC,
       qpat_assum `~~storage_trace_domain cx st0 es2.storage_trace`
         (ACCEPT_TAC o REWRITE_RULE [NOT_CLAUSES])]) >>
-  irule gas_outcome_full_intro >>
-  qexistsl_tac [`Gf`,`es2`,`[]`,`r`,
+  `accept r` by
+    (qpat_assum `!opc ops ok sc u r. emit_op _ _ _ = _ /\ _ ==> _` irule >>
+     qexistsl_tac [`ok`,`opc`,`ops`,`sc`,`u`] >>
+     qpat_assum `Abbrev (q = _)` (fn th => simp[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+     simp[Abbr `opc`] >>
+     Cases_on `call_ty` >> simp[]) >>
+  irule raw_call_observed_intro >>
+  qexistsl_tac [`Gf`,`es2`,`r`,
     `FST (eval_raw_call cx flags target bs amount (ext_call_kwarg EKGas flags.rcf_kws kvs) esK)`,
     `tnf`] >>
   simp[NoAsms,gasSummaryTheory.gas_explicit_def] >>
@@ -1171,43 +1357,177 @@ Proof
     (drule_then (ACCEPT_TAC o CONJUNCT1))
 QED
 
-Theorem raw_call_expr_vv_full:
+Theorem raw_call_continuation_full:
+  expr_has_effect e /\ post_value_type cenv e = expr_type e /\
+  lowered_value_type cenv e = expr_type e /\
+  expr_type e = raw_call_return_type flags /\ type_alloc_ok cenv (expr_type e) /\
+  ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+  (flags.rcf_is_delegate ==> amount = 0) /\
+  (flags.rcf_is_static ==> amount = 0) /\
+  amount < dimword (:256) /\ flags.rcf_max_outsize < dimword (:256) /\
+  expr_sim_inv cenv cx env esK /\ esK.gas_obs = [] /\
+  storage_trace_domain cx st0 esK.storage_trace /\
+  fn_has_code sa sb func /\ fn_has_code s6 sout func /\ fn_inst_ids_distinct func /\
+  ci_mono sa s6 /\ ci_mono s6 s7 /\ ci_mono sout s7 /\ ci_mono sa s7 /\
+  compile_raw_call_outbuf flags.rcf_max_outsize s6 = ((ov,op),sout) /\
+  compile_raw_call_finish addr dp len gas
+    (case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME p => p)
+    (if flags.rcf_is_delegate then DelegateCall
+     else if flags.rcf_is_static then StaticCall else RegularCall)
+    flags.rcf_max_outsize flags.rcf_revert_on_failure ov op s7 = (result,sb) /\
+  vv = (if flags.rcf_max_outsize = 0
+        then StackValue (raw_call_return_type flags) result
+        else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. valid_horizon cx st0 H esK.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0) /\
+  (!H. valid_horizon cx st0 H esK.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx esK t7 /\
+    storage_well_formed_on cx esK (FST H) /\
+    ghost_inv_at (DF H) lo dframe cenv cx esK G7 tn7 t7) /\
+  return_buf_frame dframe cenv sa t7 /\
+  wb_frame cenv es esK sa s0 t7 /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G7 tn7 /\
+  ~t7.vs_halted /\ t7.vs_current_bb = s7.cs_current_bb /\
+  t7.vs_inst_idx = LENGTH s7.cs_current_insts /\ alloca_history func t7 /\
+  s0.vs_alloca_next <= t7.vs_alloca_next /\ lo <= t7.vs_alloca_next /\ allocas_from lo t7 /\
+  eval_operand addr t7 = SOME (w2w target) /\
+  eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME p => p) t7 = SOME (n2w amount) /\
+  eval_operand gas t7 = SOME gw /\
+  (!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
+       g = w2n gw) /\
+  eval_operand dp t7 = SOME (n2w ib) /\ eval_operand len t7 = SOME (n2w (LENGTH bs)) /\
+  ib < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+  (LENGTH bs = 0 \/ ib + LENGTH bs <= t7.vs_alloca_next \/
+   ctx_has_dalloca ctx /\
+   w2n t7.vs_initial_fmp <= ib /\ ib + LENGTH bs <= w2n t7.vs_fmp) /\
+  read_memory ib (LENGTH bs) t7 = bs /\
+  (!j. ib <= j /\ j < ib + LENGTH bs ==> j NOTIN tn7.t_mem) /\
+  (bs <> [] ==> ?p. dp = Var p /\ ptr_covers G7 tn7 p t7 (LENGTH bs)) /\
+  eval_operand ov t7 = SOME (n2w ob) /\
+  eval_operand op t7 = SOME (n2w (if flags.rcf_max_outsize = 0 then ob else ob + 32)) /\
+  (flags.rcf_max_outsize = 0 ==> ov = op) /\
+  ob + (if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32) < dimword (:256) /\
+  FLOOKUP t7.vs_allocas s6.cs_next_id = SOME (ob,(if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32)) /\
+  op_prov G7 ov = SOME (ob,(if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32)) /\
+  op_prov G7 op = SOME (ob,(if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32)) /\
+  op_taint tn7 ov = {} /\ op_taint tn7 op = {} /\
+  (!name lb sz. local_region cenv esK.scopes t7 name lb sz ==>
+    regions_disjoint ob (if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32) lb sz) /\
+  (cenv.ce_is_ctor ==> !name tv v off.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint off (type_memory_size tv) ob (if flags.rcf_max_outsize = 0 then 0
+      else 32 * ((flags.rcf_max_outsize + 31) DIV 32) + 32)) /\
+  EVERY (\x. op_taint tn7 x = {})
+    [addr;len;dp;gas;(case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME p => p)] /\
+  EVERY (safe_operand s7)
+    [addr;len;dp;gas;(case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME p => p);ov;op] /\
+  (!x. MEM (Var x)
+    [addr;len;dp;gas;(case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME p => p);ov;op] ==> not_fresh_at s7 x)
+  ==>
+  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0
+    (eval_raw_call cx flags target bs amount (ext_call_kwarg EKGas flags.rcf_kws kvs))
+    (esK,t7,G7,tn7)
+        (\H res ee G tn t. ?tv. res = INL tv /\
+          vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
+          vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e)
+            ee tv vv t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          alloca_history func t /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+          s0.vs_alloca_next <= t.vs_alloca_next /\
+          ghost_inv_at (DF H) lo dframe cenv cx ee G tn t /\
+          ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn t /\
+          (!v. tv = Value v /\ ~is_word_type (post_value_type cenv e) /\
+               ~is_bytestring_type (post_value_type cenv e) ==>
+               vv_own cenv cx (post_value_type cenv e) sa sb ee (Value v) vv t /\
+               (!t' p. vv = LocatedValue t' p ==>
+                       p.ptr_location = LocMemory)) /\
+          (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+           ?val. read_result cx tv ee = (INL val, ee) /\
+                 !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) =
+                          SOME rt /\
+                        eval_operand (vv_operand vv) t = SOME w ==>
+                        w2n w + type_memory_size rt <= lo /\
+                        (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
+                               val_in_memory rt val (w2n w) mem)) /\
+          (!t' op. vv = StackValue t' op /\
+                   ~is_word_type (post_value_type cenv e) ==>
+                   ptr_buf_ok cenv e op G t) /\
+          (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+                  ptr_buf_ok cenv e p.ptr_operand G t) /\
+          ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
+        (\H res ee gt r.
+          expr_exit res r /\ halt_exit H cx ee res r /\
+          (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule raw_call_observed_plain >> qexists_tac `\r. T` >>
+  irule (BETA_RULE (Q.INST
+    [`finish_ok` |-> `\sc sb E C f s r. T`, `accept` |-> `\r. T`]
+    raw_call_continuation_observed)) >>
+  simp_tac bool_ss [raw_call_finish_rule_plain] >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC) >>
+  TRY (qpat_assum `~(_ /\ _)` (ACCEPT_TAC o REWRITE_RULE [DE_MORGAN_THM])) >>
+  ((qexistsl_tac [`addr`,`dp`,`gas`,`gw`,`ib`,`len`,`ob`,`op`,`ov`,`result`,
+                  `s6`,`s7`,`sout`,`xs`] >> rpt conj_tac >> first_assum ACCEPT_TAC)
+   ORELSE (qexists_tac `env` >> rpt conj_tac >> first_assum ACCEPT_TAC))
+QED
+
+Theorem raw_call_expr_vv_by:
   body_exprs_full_ok cx args /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
-  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
+  raw_call_vv_pre (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann (RawCallTarget flags) args dflt) es
+    (st0,sa,sb,shadow_sa,shadow_sb,vv,s0,G0,tn0) /\
+  raw_call_vv_answer_rules A ctx /\
+  raw_call_vv_prefix_rule A (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+    (tops,cenv,env,cx,ty,ann,flags,es)
+    (st0,sa,sb,shadow_sa,shadow_sb,vv,s0,G0,tn0) /\
+  raw_call_vv_request_rule A (DF,lo,dframe,ctx,func)
+    (cenv,env,cx,flags,st0) (es,sa,sb,s0,G0,tn0) ==>
+  A sa (eval_expr cx (Call ann (RawCallTarget flags) args dflt)) (es,s0,G0,tn0)
+    (raw_call_vv_answer_post (DF,lo,dframe,ctx,func) cenv cx
+      (Call ann (RawCallTarget flags) args dflt) (es,sa,sb,s0,vv,G0,tn0))
+    (raw_call_vv_answer_exit ctx cx)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  strip_tac >>
   drule raw_call_pre_operands >> strip_tac >>
   drule raw_call_pre_flags >> strip_tac >> gvs[] >>
-  rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `raw_call_vv_pre _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [raw_call_vv_pre_def]) >>
   drule compile_expr_raw_call >> strip_tac >>
   drule raw_call_kwargs_types >> simp[] >> strip_tac >>
   drule_all raw_call_kwargs_word_args >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
-  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-  qexistsl_tac [`Q`, `\H res ee gt r.
-    (expr_exit res r /\ halt_exit H cx ee res r) /\
-    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
-  BETA_TAC >> simp[Abbr `R`] >>
-  qunabbrev_tac `Q` >>
-  irule (BETA_RULE (Q.SPEC
-    `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r`
-    (Q.GEN `R` gas_outcome_full_halt_room))) >>
+  irule raw_call_vv_answer_basic_exit >> conj_tac >- first_assum ACCEPT_TAC >>
   CONV_TAC (SIMP_CONV bool_ss [raw_call_eval_action]) >>
-  irule (BETA_RULE (Q.ISPEC `\av dv kvs.
-    do
-      type_check (LENGTH (av::dv::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
-      target <- lift_option_type (dest_AddressV av) "raw_call target";
-      data <- lift_option_type (dest_BytesV dv) "raw_call data";
-      amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
-      eval_raw_call cx flags target data amount (ext_call_kwarg EKGas flags.rcf_kws kvs)
-    od` (Q.GEN `k` (SPEC_ALL raw_call_prefix_prepared_full)))) >>
-  first_assum (irule_at (Pat `compile_expr _ _ (Call _ _ _ _) _ = _`)) >>
-  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+  qpat_x_assum `raw_call_vv_prefix_rule _ _ _ _`
+    (irule o BETA_RULE o Q.ISPEC `\av dv kvs.
+      do
+        type_check (LENGTH (av::dv::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
+        target <- lift_option_type (dest_AddressV av) "raw_call target";
+        data <- lift_option_type (dest_BytesV dv) "raw_call data";
+        amount <- lift_option_type (raw_call_value flags.rcf_kws kvs) "raw_call value";
+        eval_raw_call cx flags target data amount (ext_call_kwarg EKGas flags.rcf_kws kvs)
+      od` o Q.GEN `k` o SPEC_ALL o REWRITE_RULE [raw_call_vv_prefix_rule_def]) >>
   first_assum (irule_at (Pat `lower_value _ _ _ a _ = _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ d _ = _`)) >>
   first_assum (irule_at (Pat `emit_op MLOAD _ _ = _`)) >>
@@ -1216,14 +1536,8 @@ Proof
   first_assum (irule_at (Pat `lower_word_args _ _ _ _ = _`)) >>
   first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
   first_assum (irule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  first_assum (irule_at (Pat `compile_expr _ _ (gas_shadow_expr _) _ = _`)) >>
-  first_assum (irule_at (Pat `return_buf_frame _ _ _ _`)) >>
-  first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
-  first_assum (irule_at (Pat `gas_shadow_function _ _`)) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
-  >- (rpt gen_tac >> strip_tac >> conj_tac
-      >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
-      metis_tac[haltExitProjTheory.halt_exit_INR_type])
+  >~ [`storage_trace_frame _`]
   >- (rpt gen_tac >> irule storage_trace_frame_ignore_bind >>
       simp[storage_trace_frame_checks] >>
       irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac >>
@@ -1324,8 +1638,7 @@ Proof
        disch_then (ACCEPT_TAC o SYM))) >>
   `fn_has_code s6 s7 func` by
     (`cs_extends s7 sb` by metis_tac[ci_mono_compile_raw_call_finish,ci_mono_def,pairTheory.SND] >>
-     irule fn_has_code_mid >>
-     conj_tac >-
+     irule fn_has_code_mid >> conj_tac >-
        qpat_assum `ci_mono s6 s7` (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ci_mono_def]) >>
      qexistsl [`sb`,`sa`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      qpat_assum `ci_mono sa s6` (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [ci_mono_def])) >>
@@ -1337,31 +1650,32 @@ Proof
     (strip_tac >> qpat_assum `bs <> [] ==> _` drule >>
      qpat_assum `eval_operand dp t7 = _` mp_tac >>
      qpat_assum `op_taint tn7 dp = {}` mp_tac >>
-     qpat_assum `b + 32 < _` (mp_tac o REWRITE_RULE [GSYM (EVAL ``dimword (:256)``)]) >>
+     qpat_assum `b + 32 < _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      Cases_on `dp` >> simp[op_prov_def,eval_operand_def,ptr_covers_def,w2n_n2w] >>
      rpt strip_tac >> simp[] >> decide_tac) >>
   `read_memory (b + 32) (LENGTH bs) t7 = bs` by
     simp[memoryReadPropsTheory.read_memory_eq_mem_bytes_at] >>
   qpat_x_assum `vo = _` SUBST_ALL_TAC >>
-  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Qout Rout` >>
-  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-  qexistsl [`Qout`, `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-    (ctx_has_dalloca ctx ==> !h. r = Halt h ==> allocas_below_fmp h)`] >>
-  BETA_TAC >> simp[Abbr `Rout`,NoAsms] >>
-  qunabbrev_tac `Qout` >>
-  PURE_ONCE_REWRITE_TAC [Q.SPECL [`type_memory_size rt`,`w2n (w:bytes32)`]
-     arithmeticTheory.ADD_COMM] >>
-  mp_tac (REWRITE_RULE [loweringPostsTheory.post_value_type_def]
-    (Q.INST [`e` |-> `Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`,
-      `vv` |-> `if flags.rcf_max_outsize = 0 then StackValue (raw_call_return_type flags) result
-        else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)`,
-      `ib` |-> `b + 32`, `sout` |-> `s7`] raw_call_continuation_full)) >>
+  qpat_assum `raw_call_vv_answer_rules _ _`
+    (irule o cj 1 o REWRITE_RULE [raw_call_vv_answer_rules_def]) >>
+  qexistsl_tac [`raw_call_vv_answer_post (DF,lo,dframe,ctx,func) cenv cx
+      (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)
+      (es,sa,sb,s0,(if flags.rcf_max_outsize = 0 then StackValue (raw_call_return_type flags) result
+          else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)),G0,tn0)`,
+    `raw_call_vv_answer_exit ctx cx`] >>
+  simp[raw_call_vv_answer_exit_def,NoAsms] >>
+  qpat_assum `raw_call_vv_request_rule _ _ _ _`
+    (mp_tac o Q.INST [`e` |-> `Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`,
+       `vv` |-> `if flags.rcf_max_outsize = 0 then StackValue (raw_call_return_type flags) result
+         else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)`,
+       `ib` |-> `b + 32`, `sout` |-> `s7`] o SPEC_ALL o
+       REWRITE_RULE [raw_call_vv_request_rule_def]) >>
   (impl_tac >- suspend "continuation") >>
-  disch_then ACCEPT_TAC
+  simp[raw_call_vv_answer_exit_def]
 QED
 
-Resume raw_call_expr_vv_full[continuation]:
+Resume raw_call_expr_vv_by[continuation]:
   simp[NoAsms,ci_mono_refl,loweringPostsTheory.expr_has_effect_thm,
        exprLoweringTheory.lowered_value_type_def,vyperASTTheory.expr_type_def] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -1371,13 +1685,110 @@ Resume raw_call_expr_vv_full[continuation]:
        rpt conj_tac >> first_assum ACCEPT_TAC) >>
   TRY (qpat_assum `~(flags.rcf_is_delegate /\ flags.rcf_is_static)`
          (ACCEPT_TAC o REWRITE_RULE [DE_MORGAN_THM])) >>
-  TRY (qpat_assum `amount < dimword (:256)` (ACCEPT_TAC o REWRITE_RULE [EVAL ``dimword (:256)``])) >>
   TRY (qpat_assum `!g. OPTION_BIND (ext_call_kwarg EKGas _ _) _ = SOME g ==> _`
          (ACCEPT_TAC o SIMP_RULE (srw_ss()) [])) >>
   TRY (disj2_tac >> disj1_tac >> first_assum ACCEPT_TAC) >>
+  TRY (qpat_assum `amount < dimword (:256)`
+         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [])) >>
   PURE_ONCE_REWRITE_TAC [Q.SPECL [`LENGTH bs`,`32`] arithmeticTheory.ADD_COMM] >>
   PURE_REWRITE_TAC [arithmeticTheory.ADD_ASSOC] >>
   first_assum ACCEPT_TAC
 QED
 
-Finalise raw_call_expr_vv_full
+Finalise raw_call_expr_vv_by
+
+Theorem raw_call_vv_prefix_rule_full[local]:
+  raw_call_vv_prefix_rule
+    (\i source x Q R. gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 source x Q R)
+    (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func) (tops,cenv,env,cx,ty,ann,flags,es)
+    (st0,sa,sb,shadow_sa,shadow_sb,vv,s0,G0,tn0)
+Proof
+  simp_tac bool_ss [raw_call_vv_prefix_rule_def, raw_call_vv_pre_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule raw_call_prefix_prepared_full >>
+  first_assum (irule_at (Pat `compile_expr _ _ (Call _ _ _ _) _ = _`)) >>
+  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ a _ = _`)) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ d _ = _`)) >>
+  first_assum (irule_at (Pat `emit_op MLOAD _ _ = _`)) >>
+  first_assum (irule_at (Pat `emit_op ADD _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `lower_word_args _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_expr _ _ (gas_shadow_expr _) _ = _`)) >>
+  first_assum (irule_at (Pat `return_buf_frame _ _ _ _`)) >>
+  first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
+  first_assum (irule_at (Pat `gas_shadow_function _ _`)) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!H exc ee gt r. _ ==> R H (INR exc) ee gt r` irule >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type,haltExitProjTheory.halt_exit_INR_type]
+QED
+
+Theorem raw_call_vv_request_rule_full[local]:
+  raw_call_vv_request_rule
+    (\i source x Q R. gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 source x Q R)
+    (DF,lo,dframe,ctx,func) (cenv,env,cx,flags,st0) (es,sa,sb,s0,G0,tn0)
+Proof
+  simp_tac bool_ss [raw_call_vv_request_rule_def, raw_call_vv_answer_exit_fun] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qmatch_goalsub_abbrev_tac `raw_call_vv_answer_post _ _ _ _ (_,_,_,_,out,_,_)` >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q _` >>
+  `Q = (\H res ee G tn t. raw_call_vv_answer_post (DF,lo,dframe,ctx,func) cenv cx e
+                             (es,sa,sb,s0,out,G0,tn0) H res ee G tn t)` by
+    simp[Abbr `Q`, FUN_EQ_THM] >>
+  pop_assum SUBST1_TAC >>
+  pure_rewrite_tac [raw_call_vv_answer_post_def, GSYM CONJ_ASSOC] >>
+  irule (PURE_REWRITE_RULE [GSYM CONJ_ASSOC] raw_call_continuation_full) >>
+  first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `eval_operand dp _ = _`)) >>
+  first_assum (irule_at (Pat `eval_operand gas _ = _`)) >>
+  first_assum (irule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+  first_assum (irule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+  qexistsl_tac [`ib`,`gw`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  simp[Abbr `out`, DE_MORGAN_THM]
+QED
+
+Theorem raw_call_vv_answer_rules_full[local]:
+  raw_call_vv_answer_rules
+    (\i source x Q R. gas_outcome_full (DF,lo,E,ctx,func,PG) tops cx st0 source x Q R) ctx
+Proof
+  simp[raw_call_vv_answer_rules_def] >> conj_tac >>
+  rpt gen_tac >> PairCases_on `x` >>
+  metis_tac[gasOutcomeFullTheory.gas_outcome_full_post_mono,gas_outcome_full_halt_room]
+QED
+
+Theorem raw_call_expr_vv_full:
+  body_exprs_full_ok cx args /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
+  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Call ann (RawCallTarget flags) args dflt) es
+Proof
+  rpt (disch_then (CONJUNCTS_THEN2 assume_tac mp_tac)) >> disch_tac >>
+  simp_tac bool_ss [expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
+  `Q = raw_call_vv_answer_post (DF,lo,dframe,ctx,func) cenv cx
+         (Call ann (RawCallTarget flags) args dflt) (es,sa,sb,s0,vv,G0,tn0)` by
+    simp[Abbr `Q`, FUN_EQ_THM, raw_call_vv_answer_post_def] >>
+  `R = raw_call_vv_answer_exit ctx cx` by
+    simp[Abbr `R`, FUN_EQ_THM, raw_call_vv_answer_exit_def] >>
+  simp[] >>
+  irule (BETA_RULE (Q.ISPEC
+    `\(i:compile_state)
+       (source:evaluation_state -> (eval_result + vyperState$exception) # evaluation_state)
+       x Q R.
+       gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (cx_tops cx) cx st0 source x Q R` (Q.GEN `A` raw_call_expr_vv_by))) >>
+  first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
+  qexistsl_tac [`ty`,`tops`,`shadow_sb`,`shadow_sa`,`shadow_func`] >>
+  simp[raw_call_vv_prefix_rule_full,raw_call_vv_request_rule_full,raw_call_vv_answer_rules_full,
+       raw_call_vv_pre_def] >>
+  first_assum ACCEPT_TAC
+QED

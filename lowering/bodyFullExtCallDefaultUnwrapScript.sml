@@ -10,6 +10,7 @@ Ancestors
   exprSimMemDefs exprLoweringProps vyperStorageFootprint logValueFramePtr
   exprOperandVar valueCopyBytes fragGasPathFrameMem fragGasSeqPtr
   decoderGhostFramePtr venomMemDefs allocaHistory
+Libs ctorCopyObservationLib
 
 Theorem default_alloc_robust_frame[local]:
   val_wf tv v /\ u.vs_memory = s.vs_memory /\
@@ -87,7 +88,7 @@ QED
 
 (* ALLOCA may reuse a site. The frame needed for the child is agreement
    below its old allocation frontier, not freshness of the destination. *)
-Theorem extcall_default_unwrap_store_entry:
+val default_unwrap_entry = ``
   compile_expr cenv ty e sa = (vv,sm) /\
   unwrap_value cenv vv sn = (op,sc) /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -176,7 +177,18 @@ Theorem extcall_default_unwrap_store_entry:
        (?x. op = Var x /\ ptr_covers G' tn' x z (type_memory_size ltv)) /\
        w2n sw + type_memory_size ltv <= z.vs_alloca_next) /\
     (val_footprint ptv v = 0 \/
-     regions_disjoint (w2n dw) n (w2n sw) (val_footprint ptv v))
+     regions_disjoint (w2n dw) n (w2n sw) (val_footprint ptv v))``;
+
+val unwrap_observer_law =
+  ctorCopyObservationLib.close_except
+    ["R","ctx","func","cenv","e","sa","sm","sn","sc","vv","op","explicit","PG"]
+    (ctorCopyObservationLib.rename "sb" "sn"
+      (ctorCopyObservationLib.observe "s" "z" NONE (concl unwrap_value_origin_ptr)));
+val (default_unwrap_pre,default_unwrap_post_observed) = dest_imp
+  (ctorCopyObservationLib.observe "u" "z" NONE default_unwrap_entry);
+
+Theorem extcall_default_unwrap_store_entry_observed:
+  ^default_unwrap_pre ==> ^unwrap_observer_law ==> ^default_unwrap_post_observed
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee s /\
@@ -236,14 +248,12 @@ Proof
         type_memory_size rt < 2**64` by (simp[] >> (gvs[])) >>
   `!v. read_result cx tv ee = (INL v,ee) ==> value_has_type ptv v` by metis_tac[] >>
   `sm.cs_next_id <= sn.cs_next_id` by decide_tac >>
-  drule_all unwrap_value_origin_ptr >>
-  disch_then (qspecl_then [`explicit`,`PG`]
-    (qx_choose_then `v` (qx_choose_then `z` (qx_choose_then `G'`
-      (qx_choose_then `tn'` strip_assume_tac))))) >>
+  disch_then drule_all >>
+  disch_then (qx_choosel_then [`v`,`z`,`G'`,`tn'`] strip_assume_tac) >>
   suspend "store_entry"
 QED
 
-Resume extcall_default_unwrap_store_entry[store_entry]:
+Resume extcall_default_unwrap_store_entry_observed[store_entry]:
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
@@ -298,11 +308,11 @@ Resume extcall_default_unwrap_store_entry[store_entry]:
   suspend "separation"
 QED
 
-Resume extcall_default_unwrap_store_entry[locals_reserved]:
+Resume extcall_default_unwrap_store_entry_observed[locals_reserved]:
   metis_tac[local_ptrs_reserved_next_var]
 QED
 
-Resume extcall_default_unwrap_store_entry[layout]:
+Resume extcall_default_unwrap_store_entry_observed[layout]:
   rpt strip_tac >>
   qpat_x_assum `post_value_type cenv e = lowered_value_type cenv e \/ _`
     strip_assume_tac
@@ -313,7 +323,7 @@ Resume extcall_default_unwrap_store_entry[layout]:
   simp[]
 QED
 
-Resume extcall_default_unwrap_store_entry[capacity]:
+Resume extcall_default_unwrap_store_entry_observed[capacity]:
   strip_tac >> conj_tac
   >- (irule assignBasePtrBoundaryTheory.ptr_buf_ok_read_covers >> simp[] >>
       qexistsl [`cenv`,`e`] >> simp[]) >>
@@ -323,7 +333,7 @@ Resume extcall_default_unwrap_store_entry[capacity]:
   fs[] >> decide_tac
 QED
 
-Resume extcall_default_unwrap_store_entry[separation]:
+Resume extcall_default_unwrap_store_entry_observed[separation]:
   (* A zero-footprint result need not supply an owning region. *)
   Cases_on `val_footprint ptv v = 0` >- simp[] >> disj2_tac >>
   `alloca_inv z` by
@@ -356,4 +366,14 @@ Resume extcall_default_unwrap_store_entry[separation]:
    strip_tac >> decide_tac)
 QED
 
-Finalise extcall_default_unwrap_store_entry
+Finalise extcall_default_unwrap_store_entry_observed
+
+Theorem extcall_default_unwrap_store_entry:
+  ^default_unwrap_entry
+Proof
+  disch_then (mp_tac o MATCH_MP
+    (Q.INST [`R` |-> `\p q. T`] extcall_default_unwrap_store_entry_observed)) >>
+  BETA_TAC >> REWRITE_TAC [] >>
+  (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC unwrap_value_origin_ptr)) >>
+  disch_then ACCEPT_TAC
+QED

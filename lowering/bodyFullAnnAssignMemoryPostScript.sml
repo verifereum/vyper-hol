@@ -1203,7 +1203,12 @@ Proof
        qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
        ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
          (LIST_CONJ [path,phi,safe]))))))) >>
-  drule_all annassign_full_rhs_from_entry >> strip_tac >>
+  qpat_assum `alloca_frame old es sa s0 ce es entry`
+    (mp_then Any
+      (fn rhs => qpat_assum `lower_value compile_expr ce (expr_type e) e a = (op,b)`
+        (mp_then (Pat `lower_value _ _ _ _ _ = _`) drule_all rhs))
+      annassign_full_rhs_from_entry) >>
+  strip_tac >>
   qexistsl_tac [`w`,`entry`,`Ga`,`tna`] >> asm_rewrite_tac[] >>
   gen_tac >> first_x_assum irule
 QED

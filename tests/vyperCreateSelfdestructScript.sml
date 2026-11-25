@@ -413,6 +413,27 @@ Proof
   EVAL_TAC
 QED
 
+(* The signed literal guard accepts the wrapped two-byte copy. A runtime
+   offset guard would reject this call before CREATE. *)
+Theorem blueprint_imported_constant_offset_executes:
+  case eval_expr
+    (blueprint_test_context with sources :=
+      [(41w, [(NONE, []);
+              (SOME 1, [VariableDecl Private
+                (Constant (Literal (BaseT (UintT 256)) (IntL (&(2 ** 256 - 1)))))
+                "OFFSET" (BaseT (UintT 256)) NONE])])])
+    (blueprint_test_offset_expr (TopLevelName (BaseT (UintT 256)) (SOME 1,"OFFSET")))
+    ((blueprint_test_state [0w]) with immutables :=
+      [(41w, [(SOME 1, FEMPTY |+ ("OFFSET", (BaseTV (UintT 256), IntV (&(2 ** 256 - 1)))))])])
+  of (INL result, final) =>
+    result = Value (AddressV (vfmContext$address_for_create 41w 2)) /\
+    (lookup_account (vfmContext$address_for_create 41w 2) final.accounts).nonce = 1 /\
+    (lookup_account (vfmContext$address_for_create 41w 2) final.accounts).code = []
+  | _ => F
+Proof
+  CONV_TAC (REWRITE_CONV [vyperSmallStepTheory.eval_expr_eq_cont_cps] THENC cv_eval)
+QED
+
 Definition blueprint_flag_runtime_rejected_def:
   blueprint_flag_runtime_rejected =
     let st = blueprint_test_state [0w] in

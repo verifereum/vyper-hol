@@ -9,7 +9,8 @@ Ancestors
 Libs
   pairLib
 
-Theorem raw_log_fixed_alloc_full:
+(* The raw run and the horizon-uniform post use the same endpoint. *)
+Theorem raw_log_fixed_alloc_run:
   expr_type data = BaseT (BytesT (Fixed 32)) /\
   compile_call compile_expr cenv ret_ty ty RawLog [topics;data] dflt call_sa = (vv,call_sb) /\
   compile_alloc_buffer 32 sm = (buf,sd) /\ fn_has_code sm sd func /\
@@ -22,6 +23,8 @@ Theorem raw_log_fixed_alloc_full:
     alloca_history func s /\ ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts) ==>
   ?u Gu tnu p w. !H. valid_horizon cx st0 H ee.storage_trace ==>
+    (?t. run_inst_seq (emitted_insts sm sd) s = OK t /\
+         u = (t with vs_inst_idx := LENGTH sd.cs_current_insts)) /\
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,Gu,tnu) /\
     stmt_state_rel H ctx func cenv cx ee u /\ storage_well_formed_on cx ee (FST H) /\
     ghost_inv_at (DF H) lo d cenv cx ee Gu tnu u /\
@@ -46,7 +49,7 @@ Proof
   gvs[]
 QED
 
-Resume raw_log_fixed_alloc_full[allocate]:
+Resume raw_log_fixed_alloc_run[allocate]:
   pop_assum strip_assume_tac >>
   rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
   `stmt_state_rel H0 ctx func cenv cx ee s` by metis_tac[] >>
@@ -58,7 +61,7 @@ Resume raw_log_fixed_alloc_full[allocate]:
   suspend "endpoint"
 QED
 
-Resume raw_log_fixed_alloc_full[endpoint]:
+Resume raw_log_fixed_alloc_run[endpoint]:
   `sd.cs_current_bb = sm.cs_current_bb /\
    LENGTH sd.cs_current_insts = SUC (LENGTH sm.cs_current_insts) /\
    emitted_insts sm sd = [mk_inst sm.cs_next_id ALLOCA [Lit 32w] [p]] /\
@@ -81,11 +84,12 @@ Resume raw_log_fixed_alloc_full[endpoint]:
     return_buf_frame d cenv sm s /\ alloca_history func s /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts` by metis_tac[] >>
+  conj_tac >- (qexists_tac `t` >> simp[]) >>
   conj_tac >- suspend "path" >>
   suspend "post"
 QED
 
-Resume raw_log_fixed_alloc_full[path]:
+Resume raw_log_fixed_alloc_run[path]:
   `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
      get_instruction bb s.vs_inst_idx = SOME inst` by
     (drule_all fragExecTheory.fn_has_code_same_block >> simp[]) >>
@@ -122,7 +126,7 @@ Resume raw_log_fixed_alloc_full[path]:
   irule (cj 1 gas_origin_ptr_path_rules) >> simp[]
 QED
 
-Resume raw_log_fixed_alloc_full[post]:
+Resume raw_log_fixed_alloc_run[post]:
   `stmt_state_rel H ctx func cenv cx ee t` by
     (drule_all literal_alloc_buffer_run >> strip_tac >>
      gvs[]) >>
@@ -149,7 +153,7 @@ Resume raw_log_fixed_alloc_full[post]:
   suspend "coverage_and_frame"
 QED
 
-Resume raw_log_fixed_alloc_full[history]:
+Resume raw_log_fixed_alloc_run[history]:
   `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
      get_instruction bb s.vs_inst_idx = SOME inst` by
     (drule_all fragExecTheory.fn_has_code_same_block >> simp[]) >>
@@ -158,7 +162,7 @@ Resume raw_log_fixed_alloc_full[history]:
   simp[Abbr `inst`, mk_inst_def, is_terminator_def]
 QED
 
-Resume raw_log_fixed_alloc_full[coverage_and_frame]:
+Resume raw_log_fixed_alloc_run[coverage_and_frame]:
   conj_tac
   >- (`ptr_covers (step_prov PG G inst t) (step_taint inst s t tn) p t 32` by
         (qpat_assum `stmt_state_rel H ctx func cenv cx ee s`
@@ -176,11 +180,11 @@ Resume raw_log_fixed_alloc_full[coverage_and_frame]:
   suspend "kept"
 QED
 
-Resume raw_log_fixed_alloc_full[ghost]:
+Resume raw_log_fixed_alloc_run[ghost]:
   suspend "ghost_fields"
 QED
 
-Resume raw_log_fixed_alloc_full[kept]:
+Resume raw_log_fixed_alloc_run[kept]:
   `!x. not_fresh_at sm x ==> x <> p` by
     (gvs[not_fresh_at_def] >> rpt strip_tac >> gvs[]) >>
   `lo <= s.vs_alloca_next` by gvs[ghost_inv_at_def] >>
@@ -225,7 +229,7 @@ Resume raw_log_fixed_alloc_full[kept]:
   `i < s.vs_alloca_next` by decide_tac >> metis_tac[]
 QED
 
-Resume raw_log_fixed_alloc_full[ghost_fields]:
+Resume raw_log_fixed_alloc_run[ghost_fields]:
   `!x. not_fresh_at sm x ==> x <> p` by
     (gvs[not_fresh_at_def] >> rpt strip_tac >> gvs[]) >>
   `!x. not_fresh_at sm x ==>
@@ -242,7 +246,7 @@ Resume raw_log_fixed_alloc_full[ghost_fields]:
   suspend "ghost_rest"
 QED
 
-Resume raw_log_fixed_alloc_full[ghost_locals]:
+Resume raw_log_fixed_alloc_run[ghost_locals]:
   rpt gen_tac >> strip_tac >>
   rename1 `FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var q) sz)` >>
   `not_fresh_at sm q` by metis_tac[local_ptrs_reserved_def] >>
@@ -271,7 +275,7 @@ Resume raw_log_fixed_alloc_full[ghost_locals]:
   simp[] >> metis_tac[]
 QED
 
-Resume raw_log_fixed_alloc_full[ghost_rest]:
+Resume raw_log_fixed_alloc_run[ghost_rest]:
   conj_tac
   >- (Cases_on `d` >> simp[return_buf_ptr_def] >>
       PairCases_on `x` >> fs[return_buf_ptr_def] >>
@@ -288,7 +292,7 @@ Resume raw_log_fixed_alloc_full[ghost_rest]:
   suspend "ghost_low"
 QED
 
-Resume raw_log_fixed_alloc_full[ghost_storage]:
+Resume raw_log_fixed_alloc_run[ghost_storage]:
   `t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
    t.vs_transient = s.vs_transient /\ t.vs_immutables = s.vs_immutables` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
@@ -298,7 +302,7 @@ Resume raw_log_fixed_alloc_full[ghost_storage]:
     store_taint_def, imm_taint_def, mk_inst_def, adopt_reset_def]
 QED
 
-Resume raw_log_fixed_alloc_full[ghost_low]:
+Resume raw_log_fixed_alloc_run[ghost_low]:
   conj_tac
   >- (`!i. i < s.vs_alloca_next ==> i NOTIN new_site_bytes s t` by
         (fs[Abbr `inst`] >> Cases_on `FLOOKUP s.vs_allocas sm.cs_next_id`
@@ -320,5 +324,45 @@ Resume raw_log_fixed_alloc_full[ghost_low]:
   gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Finalise raw_log_fixed_alloc_full
+Finalise raw_log_fixed_alloc_run
+
+Theorem raw_log_fixed_alloc_full:
+  expr_type data = BaseT (BytesT (Fixed 32)) /\
+  compile_call compile_expr cenv ret_ty ty RawLog [topics;data] dflt call_sa = (vv,call_sb) /\
+  compile_alloc_buffer 32 sm = (buf,sd) /\ fn_has_code sm sd func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx ee G tn s /\ return_buf_frame d cenv sm s /\
+    alloca_history func s /\ ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts) ==>
+  ?u Gu tnu p w. !H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,Gu,tnu) /\
+    stmt_state_rel H ctx func cenv cx ee u /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx ee Gu tnu u /\
+    return_buf_frame d cenv sd u /\ alloca_history func u /\
+    s.vs_alloca_next <= u.vs_alloca_next /\ ~u.vs_halted /\
+    u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
+    buf.buf_operand = Var p /\ not_fresh_at sd p /\
+    eval_operand buf.buf_operand u = SOME w /\ ptr_covers Gu tnu p u 32 /\
+    FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,32) /\
+    w2n w + 32 < dimword (:256) /\ u.vs_memory = s.vs_memory /\
+    tnu.t_mem = tn.t_mem UNION new_site_bytes s u /\
+    (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!aid b n. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,n) ==>
+      regions_disjoint (w2n w) 32 b n) /\
+    (!name b n. local_region cenv ee.scopes u name b n ==> regions_disjoint (w2n w) 32 b n) /\
+    ghost_kept_at lo cenv ee sm G tn s Gu tnu
+Proof
+  strip_tac >> drule_all raw_log_fixed_alloc_run >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`u`, `Gu`, `tnu`, `p`, `w`] >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> (?t. _) /\ _`
+    (drule_then strip_assume_tac) >>
+  asm_rewrite_tac[]
+QED
 
