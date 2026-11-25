@@ -25,6 +25,7 @@ Theorem create_blueprint_abi_keyword_entry_mods:
   EVERY (create_operand_completed_ok_mods mods exps cx) (create_operand_order (CreateFromBlueprint F) hs args) /\
   (!i s vs s'. i < LENGTH ctors /\ ~exprs_can_mutate ce (DROP (SUC i) ctors) /\
     eval_exprs cx (DROP (SUC i) ctors) s = (INL vs,s') ==>
+    s'.immutables = s.immutables /\
     !tr. get_storage cx s' tr = get_storage cx s tr) /\
   MEM func ctx.ctx_functions /\ fn_inst_ids_distinct func /\
   later = amount::((if hs then [salt] else []) ++ [off]) /\

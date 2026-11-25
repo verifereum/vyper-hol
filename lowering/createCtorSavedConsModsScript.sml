@@ -19,6 +19,7 @@ Theorem ctor_saved_rows_cons_mods:
   EVERY (source_body_call_supported cx)
     (int_calls_exprs xs) /\
   (~exprs_can_mutate cenv xs ==>
+    ee.immutables = mid.immutables /\
     !tr. get_storage cx ee tr = get_storage cx mid tr) /\
   eval_exprs cx xs (mid with gas_obs := obs) = (INL vs,ee with gas_obs := out) /\
   (!K. valid_horizon cx st0 K es.storage_trace ==>

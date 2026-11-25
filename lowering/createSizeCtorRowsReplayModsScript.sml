@@ -95,7 +95,22 @@ Theorem blueprint_ctor_row_dispatch_mods[local]:
               (!mem. mem_agree_outside tm.t_mem mid.vs_memory mem ==>
                  val_in_memory rt val (w2n w) mem)))
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `is_word_type (lowered_value_type ce e)`
+  >- (qpat_x_assum `is_word_type _ ==> _` (drule_then (map_every assume_tac o CONJUNCTS)) >>
+      drule_all createSizeCtorWordRowModsTheory.blueprint_ctor_word_row_mods >> strip_tac
+      >- (disj1_tac >> qexists_tac `err` >> simp[]) >>
+      disj2_tac >> qexistsl [`v`,`G'`,`tn'`] >> simp[] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+      TRY (qexistsl [`G'`,`tn'`] >> first_assum ACCEPT_TAC) >>
+      TRY (metis_tac [])) >>
+  qpat_x_assum `~is_word_type _ ==> _` (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  qpat_assum `p.gas_obs = _` (assume_tac o REWRITE_RULE [GSYM APPEND_ASSOC]) >>
+  drule_all createSizeCtorValueRowModsTheory.blueprint_ctor_vv_row_mods >> strip_tac
+  >- (disj1_tac >> qexists_tac `err` >> simp[]) >>
+  disj2_tac >> qexistsl_tac [`v`,`Gt'`,`tt`] >> asm_rewrite_tac[] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`Gm`,`tm`,`raw`] >> asm_rewrite_tac[]
 QED
 
 Theorem create_ctor_rows_at_cuts_mods:
@@ -210,5 +225,103 @@ Theorem create_ctor_rows_at_cuts_mods:
                 (!mem. mem_agree_outside h'.t_mem (Mid i).vs_memory mem ==>
                   val_in_memory rt val (w2n w) mem)))))
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `Entry = \i p g h.
+    p.gas_obs = gas_explicit (R i) (St i).vs_gas_readings ++ tail /\
+    expr_sim_inv_mods mods ce cx env p /\ return_buf_frame d ce (C i) (St i) /\
+    alloca_history func (St i) /\ (ctx_has_dalloca ctx ==> allocas_below_fmp (St i)) /\
+    (!f j z. frag_reachable ctx func (St i) f j z ==> dalloca_fmp_headroom j z) /\
+    ~(St i).vs_halted /\ (St i).vs_current_bb = (C i).cs_current_bb /\
+    (St i).vs_inst_idx = LENGTH (C i).cs_current_insts /\
+    (!K. valid_horizon cx st0 K p.storage_trace ==>
+      stmt_state_rel K ctx func ce cx p (St i) /\ immutable_frame_mods func ce cx p (St i) /\
+      storage_well_formed_on cx p (FST K) /\
+      ghost_inv_at_mods (DF K) lo d ce cx p g h (St i))` >>
+  `Entry 0 p0 G0 tn0` by
+    (simp[Abbr `Entry`] >> conj_tac >- first_assum ACCEPT_TAC >> metis_tac[]) >>
+  `valid_horizon cx st0 H p0.storage_trace` by
+    (qpat_assum `bind (eval_exprs cx args) k p0 = _`
+       (mp_then Any irule vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[evaluate_storage_trace_frame,storage_trace_frame_bind_all]) >>
+  qabbrev_tac `P = \i p. valid_horizon cx st0 H p.storage_trace /\ ?g h. Entry i p g h` >>
+  `P 0 p0` by (simp[Abbr `P`] >> qexistsl [`G0`,`tn0`] >> first_assum ACCEPT_TAC) >>
+  qspecl_then [`mods`,`LENGTH args`,`0`,`p0`,`k`] mp_tac
+    (Q.INST [`es` |-> `args`] createSizeCtorValueRowModsTheory.blueprint_ctor_source_walk_mods) >>
+  simp[] >>
+  (impl_tac >- suspend "step") >> strip_tac
+  >- (disj1_tac >> qexists_tac `err` >> simp[]) >>
+  suspend "success"
 QED
+
+Resume create_ctor_rows_at_cuts_mods[step]:
+  map_every qx_gen_tac [`i`,`p`,`l`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `P i p` mp_tac >> simp[Abbr `P`,Abbr `Entry`] >> strip_tac >>
+  qpat_x_assum `!i. _ ==> compile_expr _ _ _ _ = _ /\ _`
+    (qspec_then `i` (drule_then (map_every assume_tac o CONJUNCTS))) >>
+  `expr_body_pre_mods mods ce cx env (EL i args) p` by metis_tac[] >>
+  `create_operand_completed_ok_mods mods exps cx (EL i args)` by simp[] >>
+  `p.gas_obs = gas_explicit ((Chunk i ++ Snap i) ++ R (SUC i)) (St i).vs_gas_readings ++ tail`
+    by fs[] >>
+  `?rr q. bind (eval_expr cx (EL i args)) (read_result cx) p = (rr,q)` by
+    (Cases_on `bind (eval_expr cx (EL i args)) (read_result cx) p` >> simp[]) >>
+  `valid_horizon cx st0 H q.storage_trace` by
+    (qpat_assum `bind (bind _ _) l p = _` mp_tac >> pure_once_rewrite_tac[bind_def] >>
+     Cases_on `rr` >> simp[] >> strip_tac >>
+     qpat_assum `l _ q = _` (mp_then Any irule vyperStorageFootprintTheory.valid_horizon_frame) >> simp[]) >>
+  drule_all blueprint_ctor_row_dispatch_mods >> strip_tac
+  >- (disj1_tac >> qexists_tac `err` >> fs[bind_def]) >>
+  disj2_tac >> qexistsl_tac [`v`,`q`] >> simp[] >>
+  conj_tac
+  >- (qpat_assum `bind (bind _ _) l p = _` mp_tac >> pure_once_rewrite_tac[bind_def] >> simp[]) >>
+  qexistsl_tac [`Gt'`,`tt`] >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >> first_x_assum (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC
+QED
+
+Resume create_ctor_rows_at_cuts_mods[success]:
+  `!i. i <= LENGTH args ==> valid_horizon cx st0 H (E i).storage_trace /\
+     ?g h. Entry i (E i) g h` by fs[Abbr `P`] >>
+  `valid_horizon cx st0 H (E (LENGTH args)).storage_trace` by simp[] >>
+  `?g h. Entry (LENGTH args) (E (LENGTH args)) g h` by simp[] >>
+  disj2_tac >> qexistsl_tac [`vs`,`E`,`g`,`h`] >> asm_rewrite_tac[] >>
+  conj_tac
+  >- (gen_tac >> disch_tac >>
+      qpat_assum `!i. _ ==> _ /\ ?g h. Entry i _ _ _` (qspec_then `i` mp_tac) >>
+      simp[Abbr `Entry`] >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_assum `Entry (LENGTH args) _ g h` mp_tac >>
+      simp[Abbr `Entry`] >> metis_tac[]) >>
+  suspend "callbacks"
+QED
+
+Resume create_ctor_rows_at_cuts_mods[callbacks]:
+  qx_gen_tac `i` >> disch_tac >>
+  `i <= LENGTH args /\ SUC i <= LENGTH args` by decide_tac >>
+  `valid_horizon cx st0 H (E (SUC i)).storage_trace` by simp[] >>
+  qpat_assum `!i. i < LENGTH args ==> bind _ _ _ = _`
+    (qspec_then `i` (drule_then assume_tac)) >>
+  qpat_x_assum `!i. _ ==> compile_expr _ _ _ _ = _ /\ _`
+    (qspec_then `i` (drule_then (map_every assume_tac o CONJUNCTS))) >>
+  `?g h. Entry i (E i) g h` by simp[] >>
+  qpat_x_assum `Entry i (E i) _ _` mp_tac >> simp[Abbr `Entry`] >> strip_tac >>
+  `expr_body_pre_mods mods ce cx env (EL i args) (E i)` by metis_tac[] >>
+  `create_operand_completed_ok_mods mods exps cx (EL i args)` by simp[] >>
+  `(E i).gas_obs = gas_explicit ((Chunk i ++ Snap i) ++ R (SUC i)) (St i).vs_gas_readings ++ tail`
+    by fs[] >>
+  qpat_assum `bind _ _ (E i) = _` (fn th => rewrite_tac [th]) >>
+  qpat_assum `expr_body_pre_mods _ _ _ _ _ _` (fn th => rewrite_tac [th]) >>
+  conj_tac
+  >- (drule_all blueprint_ctor_row_dispatch_mods >> strip_tac >- fs[] >>
+      qexistsl_tac [`tv`,`ann`] >> fs[]) >>
+  qpat_x_assum `!K. _ ==> stmt_state_rel K _ _ _ _ (E i) _ /\ _` (mk_asm "row_entry") >>
+  map_every qx_gen_tac [`Ga`,`ta`] >> disch_tac >>
+  `!K. valid_horizon cx st0 K (E i).storage_trace ==>
+    stmt_state_rel K ctx func ce cx (E i) (St i) /\
+    immutable_frame_mods func ce cx (E i) (St i) /\
+    storage_well_formed_on cx (E i) (FST K) /\
+    ghost_inv_at_mods (DF K) lo d ce cx (E i) Ga ta (St i)` by
+    (asm "row_entry" mp_tac >> metis_tac[]) >>
+  drule_all blueprint_ctor_row_dispatch_mods >> strip_tac >- fs[] >>
+  gvs[AC ADD_ASSOC ADD_COMM]
+QED
+
+Finalise create_ctor_rows_at_cuts_mods
