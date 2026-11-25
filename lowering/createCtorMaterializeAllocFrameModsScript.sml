@@ -146,6 +146,9 @@ Resume ctor_materialize_alloc_vv_frame_mods[horizon]:
   `!name p sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
                not_fresh_at sm p` by
     (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `!id q sz w. FLOOKUP ce.ce_vars id = SOME (PtrVar (Var q) sz) /\
+       lookup_var q s = SOME w ==> lookup_var q a = SOME w` by
+    (rpt strip_tac >> `not_fresh_at sm q` by metis_tac[] >> fs[]) >>
   conj_tac
   >- (qpat_x_assum `vv_post_mods H _ _ _ _ _ _ _ _ _ _ _ _ s`
         (strip_assume_tac o REWRITE_RULE [vv_post_mods_def]) >>
@@ -188,10 +191,8 @@ Resume ctor_materialize_alloc_vv_frame_mods[horizon]:
       conj_tac
       >- (Cases_on `vv` >> Cases_on `pv` >> gvs[vv_place_ptr_mods_def,vv_operand_def] >>
           TRY (rename1 `PlaceR place` >> Cases_on `place` >> gvs[vv_place_ptr_mods_def]) >>
-          (irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[vv_operand_def] >>
-           rpt strip_tac >> `not_fresh_at sm q` by metis_tac[] >> fs[]
-           ORELSE
-           fs[vv_place_ptr_def])) >>
+          irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[vv_operand_def] >>
+          first_assum ACCEPT_TAC) >>
       conj_tac
       >- (strip_tac >> irule exprSimIfExpWidenedAdapterTheory.vv_own_alloc_mono_frame >>
           qexistsl_tac [`s`,`sm`] >> simp[]) >>

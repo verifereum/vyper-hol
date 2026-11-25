@@ -673,15 +673,23 @@ Resume ctor_unwrap_slot_endpoint_post_mods[writeback]:
 QED
 
 Resume ctor_unwrap_slot_endpoint_post_mods[kept_current]:
-  rewrite_tac[ghost_kept_at_def] >> rpt conj_tac
+  rewrite_tac[ghost_kept_at_def] >> conj_tac
   >- (rpt strip_tac >>
       qpat_assum `!x. not_fresh_at sb x ==> lookup_var _ _ = _ /\ _` drule >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (map_every qx_gen_tac [`aid`,`off`,`sz`,`i`] >> strip_tac >>
+      qpat_assum `!q. _ /\ q IN tnf.t_mem ==> q IN tn.t_mem` irule >>
+      (reverse conj_tac >- qpat_assum `i IN tnf.t_mem` ACCEPT_TAC) >>
+      qpat_assum `!aid b len. FLOOKUP s.vs_allocas aid = _ /\ _ ==> _`
+        (qspecl_then [`aid`,`off`,`sz`] mp_tac) >>
+      (impl_tac >- simp[]) >>
+      qpat_assum `i < off + sz` mp_tac >> qpat_assum `off <= i` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  map_every qx_gen_tac [`name`,`off`,`sz`,`i`] >> strip_tac >>
   qpat_assum `!q. _ /\ q IN tnf.t_mem ==> q IN tn.t_mem` irule >>
-  (reverse conj_tac >- first_assum ACCEPT_TAC) >>
-  (qpat_assum `!aid b len. FLOOKUP s.vs_allocas aid = _ /\ _ ==> _` (drule_all_then mp_tac) ORELSE
-   qpat_assum `!name b len. local_region cenv ee.scopes s name b len ==> _` (drule_then mp_tac)) >>
-  qpat_assum `i < _ + _` mp_tac >> qpat_assum `_ <= i` mp_tac >>
+  (reverse conj_tac >- qpat_assum `i IN tnf.t_mem` ACCEPT_TAC) >>
+  qpat_assum `!name b len. local_region cenv ee.scopes s name b len ==> _` (drule_then mp_tac) >>
+  qpat_assum `i < off + sz` mp_tac >> qpat_assum `off <= i` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> decide_tac
 QED
 
