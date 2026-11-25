@@ -270,6 +270,27 @@ Proof
   simp[p23_dso_eval]
 QED
 
+val p23_load_trace_eval = EVAL
+  ``SND (load_contract_trace (SOME []) gs initial_machine_state
+      p23_deploy_tx [(NONE, p23_tops)] [])``;
+
+Theorem p23_load_trace[local]:
+  !gs. SND (load_contract_trace (SOME []) gs initial_machine_state
+      p23_deploy_tx [(NONE, p23_tops)] []) = []
+Proof
+  gen_tac >> PURE_REWRITE_TAC [p23_load_trace_eval] >> REFL_TAC
+QED
+
+Theorem p23_deploy_within[local]:
+  deploy_within ([], []) p23_tops initial_machine_state p23_deploy_tx p23_es_dep
+Proof
+  simp[deploy_within_def, deploy_storage_trace_def,
+       p23_load, p23_load_trace, p23_dep_trace,
+       storage_observations_ok_def, storage_trace_regions_def,
+       storage_trace_locks_def, storage_roots_fit_def,
+       storage_trace_backends_well_formed_def]
+QED
+
 Theorem gas_readings_rel_empty[local]:
   (!gs. P gs) ==> gas_readings_rel [] P
 Proof
@@ -386,12 +407,38 @@ local
     simp[p23_call_trace])
   val call_premises = CONJUNCTS (REWRITE_RULE [call_premises_deployed]
     (CONJ p23_source_typing p23_call_state))
+  val dep_h_regions = prove
+    (``regions_consistent ([] : (bool # bytes32 # type_value) list)``,
+     simp[regions_consistent_def])
+  val dep_h_locks = prove
+    (``storage_locks_separated
+        ([] : (bool # bytes32 # type_value) list) ([] : num list)``,
+     simp[storage_locks_separated_def])
+  val dep_h_storage = prove
+    (``(lookup_account p23_deploy_tx.target
+          initial_machine_state.accounts).storage = empty_storage``,
+     simp[p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
+          vyperInterpreterTheory.initial_machine_state_def,
+          vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,
+          vfmStateTheory.empty_account_state_def])
+  val dep_h_transient = prove
+    (``initial_machine_state.tStorage p23_deploy_tx.target = empty_storage``,
+     simp[p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
+          vyperInterpreterTheory.initial_machine_state_def,
+          vfmContextTheory.empty_transient_storage_def])
 in
-  val _ = MATCH_MP
-    (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `p23_tops`,
+  val dep_thm = SIMP_RULE (srw_ss()) [] (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `p23_tops`,
       `p23_deploy_bc`, `p23_runtime_bc`, `initial_machine_state`,
-      `p23_deploy_tx`, `p23_es_dep`] e2e_deploy_correctness_deployed)
-    (LIST_CONJ [accepted, p23_compile, p23_deploy_typing, p23_deploy_state, dep_bound])
+      `p23_deploy_tx`, `p23_es_dep`, `([], [])`] e2e_deploy_correctness_deployed)
+  val dep_entry = prove
+    (``deploy_entry_rel p23_tops p23_deploy_bc initial_machine_state
+        p23_deploy_tx p23_es_dep``,
+     rewrite_tac[deploy_entry_rel_state] >>
+     metis_tac[p23_deploy_state, dep_h_storage, dep_h_transient])
+  val dep_prem = SIMP_RULE (srw_ss()) [] (LIST_CONJ [accepted, p23_compile,
+                p23_deploy_typing, dep_entry, dep_bound, dep_h_regions,
+                dep_h_locks, p23_deploy_within])
+  val _ = MATCH_MP dep_thm dep_prem
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `p23_tops`,
       `p23_deploy_bc`, `p23_runtime_bc`, `p23_am_call`, `p23_call_tx`,

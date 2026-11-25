@@ -88,6 +88,52 @@ Proof
   metis_tac[call_source_premises]
 QED
 
+(* The target has no source installation and starts with empty persistent and
+   transient storage.  The creation account fact itself is part of
+   frame_tx_rel, through tx.created_in_tx. *)
+Definition deploy_target_fresh_rel_def:
+  deploy_target_fresh_rel am tx <=>
+    ALOOKUP am.sources tx.target = NONE /\
+    (lookup_account tx.target am.accounts).storage = empty_storage /\
+    am.tStorage tx.target = empty_storage
+End
+
+(* The grouped entry relation used by the deployment headline. *)
+Definition deploy_entry_rel_def:
+  deploy_entry_rel tops deploy_bc am tx es <=>
+    ?ctxt rb args_bytes.
+      es.contexts = [(ctxt, rb)] /\
+      wf_state es /\ balance_bounded (2 ** 256 - 1) es /\
+      (?d. es.msdomain = Collect d) /\
+      frame_fresh ctxt /\ ctxt.msgParams.outputTo = Code tx.target /\
+      frame_tx_rel tx es ctxt /\ world_rel am tx es /\
+      ctxt.msgParams.code = deploy_bc ++ args_bytes /\
+      ctxt.msgParams.parsed = parse_code 0 FEMPTY (deploy_bc ++ args_bytes) /\
+      constructor_args_encode tops tx args_bytes /\ tx.calldata = [] /\
+      tx.function_name = "__init__" /\ ~tx.is_static /\ tx.created_in_tx /\
+      layouts_agree tops am tx /\ deploy_target_fresh_rel am tx
+End
+
+(* The grouping is a pure restatement of the old relation plus the two
+   entry-storage facts. *)
+Theorem deploy_entry_rel_state:
+  deploy_entry_rel tops deploy_bc am tx es <=>
+    deploy_state_rel tops deploy_bc am tx es /\
+    (lookup_account tx.target am.accounts).storage = empty_storage /\
+    am.tStorage tx.target = empty_storage
+Proof
+  rw[deploy_entry_rel_def, deploy_target_fresh_rel_def,
+     deploy_state_rel_def, frame_fresh_def,
+     frame_tx_rel_def, world_rel_def] >>
+  eq_tac >> strip_tac
+  >- (conj_tac
+      >- (qexistsl_tac [`ctxt`, `rb`, `args_bytes`] >>
+          metis_tac[])
+      >> simp[]) >>
+  qexistsl_tac [`ctxt`, `rb`, `args_bytes`] >>
+  metis_tac[]
+QED
+
 (* The constructor result at one filling of the observed gas readings. *)
 Definition deploy_result_rel_at_def:
   deploy_result_rel_at gs tops runtime_bc am tx es r es' <=>
@@ -111,7 +157,7 @@ Proof
 QED
 
 (* TOP-LEVEL: constructor correctness and readiness of a surviving contract. *)
-Theorem e2e_deploy_correctness_deployed:
+Theorem e2e_deploy_correctness_deployed_guarded:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
@@ -152,6 +198,304 @@ Proof
                    `r`, `rqs`] >>
      gvs[]) >>
   fs[call_ready_deployed]
+QED
+
+(* Every gas filling of the constructor stays inside one fixed storage
+   horizon.  The starting storage is supplied separately by the headline. *)
+Definition deploy_within_def:
+  deploy_within H tops am tx es <=>
+    let cx = deploy_evaluation_context tops am tx in
+    !gs. storage_observations_ok cx H
+      (deploy_storage_trace (SOME (MAP SND (call_trace es))) gs am tx tops)
+End
+
+Triviality deploy_storage_ok_from_within:
+  regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
+  (lookup_account tx.target am.accounts).storage = empty_storage /\
+  am.tStorage tx.target = empty_storage /\
+  deploy_within H tops am tx es ==>
+  !gs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) gs
+Proof
+  strip_tac >> qx_gen_tac `gs` >>
+  rw[deploy_storage_ok_def] >>
+  simp[deploy_within_def, storage_trace_horizon_def, LET_THM] >>
+  conj_tac
+  >- (qpat_x_assum `deploy_within _ _ _ _ _` mp_tac >>
+      simp[deploy_within_def, storage_observations_ok_def, storage_trace_horizon_def,
+           storage_trace_regions_def, storage_trace_locks_def, listTheory.EVERY_MEM] >>
+      metis_tac[]) >>
+  conj_tac
+  >- (qpat_x_assum `deploy_within _ _ _ _ _` mp_tac >>
+      simp[deploy_within_def, storage_observations_ok_def, storage_trace_horizon_def,
+           storage_trace_regions_def, storage_trace_locks_def, listTheory.EVERY_MEM] >>
+      metis_tac[regions_consistent_def]) >>
+  conj_tac
+  >- (qpat_x_assum `deploy_within _ _ _ _ _` mp_tac >>
+      simp[deploy_within_def, storage_observations_ok_def, storage_trace_horizon_def,
+           storage_trace_regions_def, storage_trace_locks_def, listTheory.EVERY_MEM] >>
+      metis_tac[storage_locks_separated_def]) >>
+  conj_tac
+  >- (irule deploy_empty_storage_well_formed_on >> simp[]) >>
+  qpat_x_assum `deploy_within _ _ _ _ _` mp_tac >>
+  simp[deploy_within_def, storage_observations_ok_def,
+       storage_trace_backends_well_formed_def, storage_well_formed_on_def,
+       storage_trace_regions_def, listTheory.EVERY_MEM,
+       storage_trace_horizon_def, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  strip_tac >> gen_tac >> strip_tac >>
+  Cases_on `observation` >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!gs. _` (qspecl_then [`gs`] mp_tac) >> strip_tac >>
+  Cases_on `observation` >> gvs[]
+  >- (rename1 `StorageRoot b n t` >>
+      rename1 `StorageBackend f f0` >>
+      qpat_x_assum `!region. _` (qspecl_then [`(b,n2w n,t)`] mp_tac) >>
+      impl_tac >- (qexists_tac `[(b,n2w n,t)]` >> conj_tac
+                   >- (qexists_tac `StorageRoot b n t` >> simp[])
+                   >> simp[]) >>
+      simp[] >>
+      qpat_x_assum `!observation. _`
+        (qspecl_then [`StorageBackend f f0`] mp_tac) >>
+      simp[] >> strip_tac >>
+      qpat_x_assum `!b slot tv. _`
+        (qspecl_then [`b`,`n2w n`,`t`] mp_tac) >> simp[])
+  >> metis_tac[]
+QED
+
+Triviality deploy_post_storage_ok:
+  deploy_typing_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
+  regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
+  (lookup_account tx.target am.accounts).storage = empty_storage /\
+  am.tStorage tx.target = empty_storage /\
+  deploy_within H tops am tx es /\
+  load_contract (SOME (MAP SND (call_trace es))) gs am tx
+    [(NONE, tops)] [] = INL (am', rqs) ==>
+  storage_ok H am' tx
+Proof
+  strip_tac >>
+  qabbrev_tac `obs = deploy_storage_trace
+    (SOME (MAP SND (call_trace es))) gs am tx tops` >>
+  `?obs'. load_contract_trace (SOME (MAP SND (call_trace es))) gs am tx
+      [(NONE, tops)] [] = (INL (am', rqs), obs')` by
+    (qexists_tac `SND (load_contract_trace (SOME (MAP SND (call_trace es)))
+      gs am tx [(NONE, tops)] [])` >>
+    qpat_x_assum `load_contract _ _ _ _ _ _ = _` mp_tac >>
+    simp[load_contract_def] >>
+    Cases_on `load_contract_trace (SOME (MAP SND (call_trace es))) gs am tx
+      [(NONE, tops)] []` >> gvs[]) >>
+  `obs' = obs` by simp[Abbr `obs`, deploy_storage_trace_def] >>
+  `load_contract_trace (SOME (MAP SND (call_trace es))) gs am tx
+      [(NONE, tops)] [] = (INL (am', rqs), obs)` by
+    (qpat_x_assum `load_contract_trace _ _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `obs' = obs` mp_tac >> simp[]) >>
+  `valid_horizon (deploy_evaluation_context tops am tx)
+      (initial_state am []) H obs` by
+    (simp[valid_horizon_def, storage_trace_horizon_def] >> BETA_TAC >>
+    conj_tac >- (irule deploy_empty_storage_well_formed_on >> simp[]) >>
+    qpat_x_assum `deploy_within _ _ _ _ _` mp_tac >>
+    simp[deploy_within_def, Abbr `obs`]) >>
+  `storage_well_formed_on (deploy_evaluation_context tops am tx)
+      (initial_state am' []) (FST H)` by
+    (simp[deploy_evaluation_context_def] >>
+     irule vyperCallFiniteStorageTheory.load_contract_storage_well_formed_on >>
+     qpat_x_assum `deploy_typing_ok _ _ _`
+       (strip_assume_tac o REWRITE_RULE [deploy_typing_ok_def]) >>
+     `?runtime_art. check_contract F am.layouts tx.target
+          [(NONE, tops)] = SOME runtime_art` by
+       (qpat_x_assum `check_contract T _ _ _ = SOME _` mp_tac >>
+        metis_tac[vyperTypeContractModesTheory.check_contract_deploy_implies_runtime]) >>
+     conj_tac >- (gvs[call_tx_well_typed_def,
+                       vyperTypeInvariantsTheory.context_well_typed_def,
+                       initial_evaluation_context_def]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (qexists_tac `runtime_art` >> first_assum ACCEPT_TAC) >>
+     conj_tac >- (qexists_tac `deploy_art` >> first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`[]`, `gs`, `obs`,
+                   `SOME (MAP SND (call_trace es))`, `rqs`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_x_assum `valid_horizon _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [valid_horizon_def]) >>
+     simp[valid_horizon_def] >>
+     conj_tac >-
+       (qpat_x_assum `storage_well_formed_on _ _ _` mp_tac >>
+        simp[deploy_evaluation_context_def, initial_evaluation_context_def,
+             vyperCallFiniteStorageSupportTheory.storage_well_formed_on_target]) >>
+     qpat_x_assum `storage_observations_ok _ _ _` mp_tac >>
+     simp[deploy_evaluation_context_def, initial_evaluation_context_def,
+          vyperCallFiniteStorageSupportTheory.storage_observations_ok_target]) >>
+  `storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am' []) (FST H)` by
+    (qpat_x_assum `storage_well_formed_on _ _ _` mp_tac >>
+     strip_tac >>
+     irule (iffRL vyperCallFiniteStorageSupportTheory.storage_well_formed_on_target) >>
+     qexists_tac `deploy_evaluation_context tops am tx` >>
+     conj_tac >- simp[deploy_evaluation_context_def, initial_evaluation_context_def] >>
+     first_assum ACCEPT_TAC) >>
+  `storage_well_formed_on
+      (initial_evaluation_context am'.sources am'.layouts tx NONE)
+      (initial_state am' []) (FST H)` by
+    (irule (iffRL vyperCallFiniteStorageSupportTheory.storage_well_formed_on_target) >>
+     qexists_tac `initial_evaluation_context am.sources am.layouts tx NONE` >>
+     conj_tac >- simp[initial_evaluation_context_def] >>
+     first_assum ACCEPT_TAC) >>
+  simp[storage_ok_def] >> metis_tac[]
+QED
+
+Triviality deploy_next_storage_ok:
+  deploy_typing_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
+  regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
+  (lookup_account tx.target am.accounts).storage = empty_storage /\
+  am.tStorage tx.target = empty_storage /\
+  deploy_within H tops am tx es /\
+  deploy_result_rel_at gs tops runtime_bc am tx es r es' /\
+  ~MEM tx.target es'.rollback.toDelete /\
+  load_contract (SOME (MAP SND (call_trace es))) gs am tx
+    [(NONE, tops)] [] = INL (am', rqs) ==>
+  !tx'. tx'.target = tx.target ==>
+    storage_ok H (next_source_machine am' es') tx'
+Proof
+  strip_tac >> qx_gen_tac `tx'` >> strip_tac >>
+  `storage_ok H am' tx` by
+    (irule deploy_post_storage_ok >> metis_tac[]) >>
+  qabbrev_tac `H0 = storage_trace_horizon
+    (deploy_storage_trace (SOME (MAP SND (call_trace es))) gs am tx tops)` >>
+  `accounts_agree H0 tx.target am'.accounts
+      (process_deletions es'.rollback.toDelete
+        (update_account tx.target
+          (lookup_account tx.target es'.rollback.accounts with
+             code := (lookup_account tx.target am'.accounts).code)
+          es'.rollback.accounts))` by
+    (qpat_x_assum `deploy_result_rel_at _ _ _ _ _ _ _ _` mp_tac >>
+     simp[deploy_result_rel_at_def, deploy_result_rel_def] >>
+     strip_tac >>
+     simp[Abbr `H0`] >>
+     first_assum ACCEPT_TAC) >>
+  `!region. MEM region (FST H0) ==> MEM region (FST H)` by
+    (rpt strip_tac >>
+     qpat_x_assum `deploy_within _ _ _ _ _`
+       (strip_assume_tac o BETA_RULE o
+        REWRITE_RULE [deploy_within_def, LET_THM]) >>
+     qpat_x_assum `!gs. _` (qspecl_then [`gs`] assume_tac) >>
+     qpat_x_assum `storage_observations_ok _ _ _`
+       (strip_assume_tac o BETA_RULE o
+        REWRITE_RULE [storage_observations_ok_def, LET_THM]) >>
+     qpat_x_assum `EVERY (\region. MEM region (FST H)) _`
+       (strip_assume_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
+     qpat_x_assum `!region. _` (qspecl_then [`region`] mp_tac) >>
+     simp[storage_trace_regions_def,
+          storage_trace_horizon_def, Abbr `H0`] >>
+     simp[] >> strip_tac >>
+     qpat_x_assum `MEM region _ ==> MEM region (FST H)` irule >>
+     gvs[storage_trace_horizon_def, storage_trace_regions_def]) >>
+  `!j b. storage_dead H0 F
+       (lookup_account tx.target am'.accounts).storage j b ==>
+       storage_dead H F (lookup_account tx.target am'.accounts).storage j b` by
+    (rpt strip_tac >>
+     qpat_x_assum `storage_dead H0 F _ _ _` mp_tac >>
+     simp[loweringStateRelDefsTheory.storage_dead_def] >>
+     strip_tac >> qexistsl_tac [`slot`, `tv`] >>
+     qpat_x_assum `regions_consistent (FST H)`
+       (strip_assume_tac o REWRITE_RULE [regions_consistent_def]) >>
+     conj_tac >-
+       (qpat_x_assum `!region. MEM region (FST H0) ==> MEM region (FST H)`
+          (qspecl_then [`(F,slot,tv)`] mp_tac) >> simp[] >> metis_tac[]) >>
+     conj_tac >- metis_tac[] >>
+     rpt gen_tac >> strip_tac >> metis_tac[]) >>
+  qabbrev_tac `D = storage_dead H0 F
+    (lookup_account tx.target am'.accounts).storage` >>
+  `storage_agree D (lookup_account tx.target am'.accounts).storage
+      (lookup_account tx.target es'.rollback.accounts).storage` by
+    (qpat_x_assum `accounts_agree H0 _ _ _`
+       (strip_assume_tac o REWRITE_RULE
+        [loweringStateRelDefsTheory.accounts_agree_def]) >>
+     `((process_deletions es'.rollback.toDelete
+          (update_account tx.target
+             (lookup_account tx.target es'.rollback.accounts with
+              code := (lookup_account tx.target am'.accounts).code)
+             es'.rollback.accounts) tx.target).storage =
+        (lookup_account tx.target es'.rollback.accounts).storage)` by
+       (rw[GSYM lookup_account_def, lookup_account_process_deletions] >>
+        rw[lookup_account_def, update_account_def,
+           combinTheory.APPLY_UPDATE_THM] >>
+        rw[] >> gvs[]) >>
+     qpat_x_assum `(process_deletions _ _ _).storage = _`
+       (fn h =>
+          qpat_x_assum `storage_agree _ _ _`
+            (strip_assume_tac o REWRITE_RULE [h])) >>
+     rw[Abbr `D`] >>
+     metis_tac[lookup_account_def]) >>
+  `!j b slot tv. D j b /\ MEM (F,slot,tv) (FST H) /\
+      w2n slot <= j /\ j < w2n slot + type_slot_size tv ==>
+      dead_bytes (lookup_account tx.target am'.accounts).storage
+        (w2n slot) tv j b` by
+    (rw[Abbr `D`] >>
+     rpt gen_tac >>
+     qpat_x_assum `!j b. _` (qspecl_then [`j`, `b`] mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     drule accountsRelPropsTheory.observed_storage_region_read_live >>
+     simp[loweringStateRelDefsTheory.storage_read_live_def] >> metis_tac[]) >>
+  qpat_x_assum `storage_ok H am' tx`
+    (strip_assume_tac o REWRITE_RULE [storage_ok_def]) >>
+  rw[storage_ok_def] >>
+  simp[] >>
+  mp_tac (Q.INST
+    [`cx` |-> `initial_evaluation_context am'.sources am'.layouts tx NONE`,
+     `R1` |-> `FST (H : (bool # bytes32 # type_value) list # num list)`,
+     `R2` |-> `FST (H : (bool # bytes32 # type_value) list # num list)`,
+     `cx2` |-> `initial_evaluation_context am'.sources am'.layouts tx' NONE`,
+     `D` |-> `D`] storage_well_formed_on_horizon_extension) >>
+  impl_tac >- gvs[initial_evaluation_context_def] >>
+  metis_tac[]
+QED
+
+(* TOP-LEVEL: constructor correctness over one fixed storage horizon. *)
+Theorem e2e_deploy_correctness_deployed:
+  !fin policy tops deploy_bc runtime_bc am tx es H.
+    fin IN accepted_finalizers /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    deploy_typing_ok tops am tx /\
+    deploy_entry_rel tops deploy_bc am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H) /\
+    deploy_within H tops am tx es
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (creation_resource_starved es r es' \/
+       gas_readings_rel (gas_readings es)
+         (\gs. deploy_result_rel_at gs tops runtime_bc am tx es r es' /\
+               (~MEM tx.target es'.rollback.toDelete ==>
+                !am' rqs.
+                  load_contract (SOME (MAP SND (call_trace es))) gs am tx
+                    [(NONE, tops)] [] = INL (am', rqs) ==>
+                  deployed tops runtime_bc (next_source_machine am' es')
+                    tx.target /\
+                  (!tx'. tx'.target = tx.target ==>
+                    storage_ok H (next_source_machine am' es') tx'))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `deploy_state_rel tops deploy_bc am tx es /\
+   (lookup_account tx.target am.accounts).storage = empty_storage /\
+   am.tStorage tx.target = empty_storage` by
+    metis_tac[deploy_entry_rel_state] >>
+  `!gs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) gs` by
+    (irule deploy_storage_ok_from_within >> metis_tac[]) >>
+  drule_all e2e_deploy_correctness_deployed_guarded >>
+  disch_then (qx_choose_then `r` (qx_choose_then `es'` strip_assume_tac)) >>
+  qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >> DISJ2_TAC >>
+  drule gas_readings_rel_mono >>
+  disch_then irule >>
+  qx_gen_tac `gs` >> BETA_TAC >> strip_tac >>
+  qpat_x_assum `!gs. deploy_storage_ok _ _ _ _ gs`
+    (qspecl_then [`gs`] assume_tac) >>
+  conj_tac >- simp[] >>
+  strip_tac >> qx_genl_tac [`am'`, `rqs`] >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  match_mp_tac deploy_next_storage_ok >> metis_tac[]
 QED
 
 (* TOP-LEVEL: call correctness in the world supplied by deployment. *)
