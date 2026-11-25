@@ -1,5 +1,5 @@
 (* Linked inputs for the checked calldata window. *)
-Theory bodyCalldataSliceRouteMods
+Theory bodyCalldataSliceInputsMods
 Ancestors
   bodyFullPredsMods exprBodyPreProps exprSimCalldataSlice exprSimSource list
   supportedExprTraverse allocLimits vyperTypeSystem vyperTypeCallGraph
