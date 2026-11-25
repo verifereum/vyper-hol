@@ -1,7 +1,8 @@
 (* Creation boundary and gas exemptions for linked units. *)
 Theory e2eDeployModsDefs
 Ancestors
-  e2eModsDefs e2eDefs e2eDeployDefs e2eGasSufficient[qualified]
+  e2eModsDefs e2eDefs e2eDeployDefs e2eDeployEntry[qualified,ignore_grammar]
+  e2eGasSufficient[qualified]
   ctorDeployDefs[qualified] compileUnit sourceExemptMods
   vyperInterpreter vyperTypeContract vyperTypeInvariants vyperContext vyperABI
   vyperStorageFootprint callTrace frameOutcome vfmExecution vfmState
@@ -217,4 +218,44 @@ Theorem deploy_gas_source_exempt_mods_singleton:
 Proof
   simp[deploy_gas_source_exempt_mods_def, e2eGasSufficientTheory.deploy_gas_source_exempt_def,
        deploy_source_exempt_mods_singleton]
+QED
+
+(* The fresh creation frame and empty target storage for a linked unit. *)
+Definition deploy_entry_rel_mods_def:
+  deploy_entry_rel_mods mods exps deploy_bc am tx es <=>
+    ?ctxt rb args_bytes.
+      es.contexts = [(ctxt, rb)] /\
+      evm_state_ok es /\
+      (?d. es.msdomain = Collect d) /\
+      frame_fresh ctxt /\ ctxt.msgParams.outputTo = Code tx.target /\
+      frame_tx_rel tx es ctxt /\ world_rel am tx es /\
+      ctxt.msgParams.code = deploy_bc ++ args_bytes /\
+      constructor_args_encode_mods mods tx args_bytes /\ tx.calldata = [] /\
+      tx.function_name = "__init__" /\ ~tx.is_static /\ tx.created_in_tx /\
+      layouts_agree_mods mods exps am tx /\
+      e2eDeployEntry$deploy_target_fresh_rel am tx
+End
+
+Theorem deploy_entry_rel_mods_singleton:
+  deploy_entry_rel_mods [(NONE, tops)] [] deploy_bc am tx es <=>
+  e2eDeployEntry$deploy_entry_rel tops deploy_bc am tx es
+Proof
+  simp[deploy_entry_rel_mods_def, e2eDeployEntryTheory.deploy_entry_rel_def,
+       constructor_args_encode_mods_singleton, layouts_agree_mods_singleton]
+QED
+
+(* One storage horizon covers every filling of the constructor readings. *)
+Definition deploy_within_mods_def:
+  deploy_within_mods H mods exps am tx es <=>
+    let cx = deploy_evaluation_context_mods mods am tx in
+    !gs. storage_observations_ok cx H
+      (deploy_storage_trace_mods (SOME (MAP SND (call_trace es))) gs am tx mods exps)
+End
+
+Theorem deploy_within_mods_singleton:
+  deploy_within_mods H [(NONE, tops)] [] am tx es <=>
+  e2eDeployEntry$deploy_within H tops am tx es
+Proof
+  simp[deploy_within_mods_def, e2eDeployEntryTheory.deploy_within_def,
+       deploy_evaluation_context_mods_singleton, deploy_storage_trace_mods_singleton]
 QED
