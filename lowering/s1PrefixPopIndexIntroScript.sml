@@ -26,6 +26,6 @@ Proof
     body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
     body_const_cells_agree [(NONE,tops)] cx env st /\
     expr_body_pre ce cx env (Pop ann bt) st`
-  >- (irule pop_expr_prefix_ok >> simp[] >> metis_tac[]) >>
+  >- (irule body_pop_case_prefix >> simp[] >> metis_tac[]) >>
   simp[Once body_expr_prefix_ok_def] >> rpt strip_tac >> metis_tac[]
 QED

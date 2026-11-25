@@ -5,6 +5,7 @@ Ancestors vyperCreate[qualified,ignore_grammar] rich_list[qualified,ignore_gramm
   s1PrefixRawLogCompose s1PrefixRawRevertValue s1PrefixSelfdestruct
   s1PrefixCheckedContextFull s1PrefixPreds exprCallBounds vyperAST
   gasShadowCompile gasShadowCompileHelpers bodyFullRawLog exprSimCallRawLog
+  s1PrefixBoolChainHeadMakeArray[qualified,ignore_grammar]
 
 Theorem bool_chain_head_other_call_prefix_ok:
   !cx ann target args dr.
@@ -16,17 +17,12 @@ Theorem bool_chain_head_other_call_prefix_ok:
 Proof
   rpt gen_tac >> strip_tac >> simp[Once body_expr_prefix_ok_def] >>
   rpt gen_tac >> strip_tac >>
-  `!xs. (!a. MEM a xs ==> body_expr_prefix_ok cx a) ==>
-       body_exprs_prefix_ok cx xs` by
-    (Induct_on `xs` >> simp[body_exprs_prefix_ok_def] >>
-     rpt strip_tac >> metis_tac[]) >>
   `!a. MEM a args ==> body_expr_prefix_ok cx a` by
     (gen_tac >> strip_tac >>
      qpat_assum `!a. expr_size a < _ ==> body_expr_prefix_ok cx a` irule >>
      irule expr_call_arg_bound >> first_assum ACCEPT_TAC) >>
   `body_exprs_prefix_ok cx args` by
-    (qpat_assum `!xs. (!a. MEM a xs ==> body_expr_prefix_ok cx a) ==>
-          body_exprs_prefix_ok cx xs` (qspec_then `args` irule) >>
+    (irule s1PrefixBoolChainHeadMakeArrayTheory.prefix_list_from_members >>
      first_assum ACCEPT_TAC) >>
   drule_then strip_assume_tac checked_context_full_exprs >>
   Cases_on `target` >> gvs[]
@@ -95,9 +91,7 @@ Proof
          (drule rich_listTheory.MEM_DROP_IMP ORELSE
           drule rich_listTheory.MEM_TAKE) >> (simp[vyperCreateTheory.create_operand_order_def, rich_listTheory.MEM_DROP_IMP, rich_listTheory.MEM_TAKE]))) >>
       `body_exprs_prefix_ok cx (create_operand_order c b args)` by
-        (qpat_assum `!xs. (!a. MEM a xs ==> body_expr_prefix_ok cx a) ==>
-              body_exprs_prefix_ok cx xs`
-          (qspec_then `create_operand_order c b args` irule) >>
+        (irule s1PrefixBoolChainHeadMakeArrayTheory.prefix_list_from_members >>
          gen_tac >> strip_tac >>
          qpat_assum `!a. MEM a args ==> body_expr_prefix_ok cx a` irule >>
          first_x_assum irule >> first_assum ACCEPT_TAC) >>

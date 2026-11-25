@@ -83,11 +83,14 @@ Proof
                 `Type (ArrayT ann (Dynamic n))`] >> simp[]
 QED
 
-Theorem pop_expr_prefix_ok:
-  body_base_target_full_ok cx bt /\ body_base_target_prefix_ok cx bt ==>
-  body_expr_prefix_ok cx (Pop ann bt)
+Theorem body_pop_case_prefix:
+  !cx v10 bt.
+  body_base_target_full_ok cx bt /\
+  body_base_target_prefix_ok cx bt ==>
+  body_expr_prefix_ok cx (Pop v10 bt)
 Proof
-  strip_tac >> simp[Once body_expr_prefix_ok_def] >> rpt gen_tac >> strip_tac >>
+  map_every qx_gen_tac [`cx`,`ann`,`bt`] >> strip_tac >>
+  simp[Once body_expr_prefix_ok_def] >> rpt gen_tac >> strip_tac >>
   `expr_vv_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty (Pop ann bt) es` by (irule pop_vv_sim_prefix >> metis_tac[]) >>
   simp[expr_sim_prefix_of_vv]

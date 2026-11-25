@@ -188,15 +188,6 @@ Proof
   MATCH_MP_TAC ifexp_prefix_from_child_cases >> asm_rewrite_tac[]
 QED
 
-Theorem body_pop_case_prefix:
-  !cx v10 bt.
-  body_base_target_full_ok cx bt /\
-  body_base_target_prefix_ok cx bt ==>
-  body_expr_prefix_ok cx (Pop v10 bt)
-Proof
-  simp[pop_expr_prefix_ok]
-QED
-
 Theorem body_raw_call_calldata_case_prefix:
   !cx ty flags es v19.
   body_exprs_full_ok cx es /\

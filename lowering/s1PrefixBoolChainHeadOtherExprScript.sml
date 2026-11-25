@@ -4,13 +4,7 @@ Ancestors
   s1PrefixAtomicExprIntro s1PrefixAttribute s1PrefixStructLit
   s1PrefixCheckedContextFull s1PrefixPopFullGuard s1PrefixPopIndexIntro
   s1PrefixTypeBuiltinGuarded s1PrefixPreds exprCallBounds vyperAST list
-
-Theorem exprs_prefix_from_members[local]:
-  !es. (!e. MEM e es ==> body_expr_prefix_ok cx e) ==>
-       body_exprs_prefix_ok cx es
-Proof
-  Induct >> simp[body_exprs_prefix_ok_def]
-QED
+  s1PrefixBoolChainHeadMakeArray[qualified,ignore_grammar]
 
 Theorem bool_chain_head_other_expr_prefix_ok:
   !cx h.
@@ -34,12 +28,15 @@ Proof
   drule_then strip_assume_tac checked_context_full_exprs
   >- (rename1 `body_expr_prefix_ok cx (StructLit ann nsid fields)` >>
       Cases_on `nsid` >> irule structlit_expr_prefix_ok >> simp[] >>
-      irule exprs_prefix_from_members >> simp[MEM_MAP, pairTheory.EXISTS_PROD] >>
+      irule s1PrefixBoolChainHeadMakeArrayTheory.prefix_list_from_members >>
+      simp[MEM_MAP, pairTheory.EXISTS_PROD] >>
       rpt strip_tac >> first_x_assum irule >>
       drule (SIMP_RULE (srw_ss()) [] expr_struct_field_bound) >> simp[])
   >- (irule attribute_expr_prefix_ok >> simp[expr_attribute_child_bound]) >>
   irule body_type_builtin_case_prefix >> simp[] >>
-  rpt strip_tac >> irule exprs_prefix_from_members >> rpt strip_tac >>
+  rpt strip_tac >>
+  irule s1PrefixBoolChainHeadMakeArrayTheory.prefix_list_from_members >>
+  rpt strip_tac >>
   first_x_assum irule >>
   drule expr_list_member_bound >> decide_tac
 QED

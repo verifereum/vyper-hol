@@ -4,7 +4,7 @@ Ancestors
   s1PrefixCases s1PrefixAtomicExprIntro[qualified] s1PrefixIntCallRank s1PrefixAttribute s1PrefixStructLit
   s1PrefixBoolChainSelectedStmtCasePorts
   s1PrefixTypeBuiltinGuarded[qualified]
-  s1PrefixSubscriptCase[qualified]
+  s1PrefixSubscriptCase[qualified] s1PrefixPop[qualified,ignore_grammar]
   s1PrefixSend s1PrefixCreateHeld s1PrefixPreds bodySimFullMain bodyFullPreds
   vyperInterpreter vyperState vyperContext vyperAST vyperTypeCallGraph
   vyperTypeContract[qualified,ignore_grammar] constSubst bodyLoopCalls alist list
@@ -309,7 +309,7 @@ Proof
       >- direct s1PrefixSubscriptCaseTheory.body_subscript_case_prefix
       >- direct attribute_expr_prefix_ok
       >- conditional 4
-      >- direct body_pop_case_prefix
+      >- direct s1PrefixPopTheory.body_pop_case_prefix
       >- direct s1PrefixTypeBuiltinGuardedTheory.body_type_builtin_case_prefix
       >- direct body_send_case_prefix
       >- direct body_extcall_case_prefix
