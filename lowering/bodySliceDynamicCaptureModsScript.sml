@@ -58,7 +58,7 @@ Proof
   gvs[eval_operand_def,mem_word_at_eq_mload_proof] >> decide_tac
 QED
 
-Theorem slice_dynamic_capture_source_mods:
+Theorem slice_dynamic_capture_source_run_mods:
   compile_bytestring_src op sm = ((limit,data),sc) /\
   fn_has_code sm sc func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sm /\ (!x. op = Var x ==> not_fresh_at sm x) /\
@@ -75,6 +75,9 @@ Theorem slice_dynamic_capture_source_mods:
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t G' tn' lp dp p bs.
+    (?q raw. eval_operand op s = SOME q /\ p = q + 32w /\
+       w2n p = w2n q + 32 /\ run_inst_seq (emitted_insts sm sc) s = OK raw /\
+       t = (raw with vs_inst_idx := LENGTH sc.cs_current_insts)) /\
     (v = BytesV bs \/ (?str. v = StringV str /\ bs = MAP (n2w o ORD) str)) /\
     limit = Var lp /\ data = Var dp /\ not_fresh_at sc lp /\ not_fresh_at sc dp /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
@@ -125,10 +128,12 @@ Proof
      simp[] >> strip_tac >>
      qpat_x_assum `?l r. limit = Var l /\ _` strip_assume_tac >>
      gvs[]) >>
-  qexistsl_tac [`t`,`G'`,`tn'`,`lp`,`dp`,`p+32w`,`bs`] >> suspend "finish"
+  qexistsl_tac [`t`,`G'`,`tn'`,`lp`,`dp`,`p+32w`,`bs`] >>
+  conj_tac >- (qexistsl_tac [`p`,`u`] >> fs[Abbr `t`,eval_operand_def]) >>
+  suspend "finish"
 QED
 
-Resume slice_dynamic_capture_source_mods[history]:
+Resume slice_dynamic_capture_source_run_mods[history]:
   qunabbrev_tac `t` >> irule emitted_alloca_history >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`emitted_insts sm sc`,`s`,`sm`] >> simp[] >>
@@ -136,7 +141,7 @@ Resume slice_dynamic_capture_source_mods[history]:
   drule slice_bytestring_src_zero_code >> simp[EVERY_MEM]
 QED
 
-Resume slice_dynamic_capture_source_mods[return]:
+Resume slice_dynamic_capture_source_run_mods[return]:
   irule return_buf_frame_frame >>
   qexistsl_tac [`ce`,`s`,`sm`] >>
   `ci_mono sm sc` by
@@ -146,7 +151,7 @@ Resume slice_dynamic_capture_source_mods[return]:
   qpat_assum `u = s with vs_vars := _` (mp_tac o AP_TERM ``\z. z.vs_alloca_next``) >> simp[]
 QED
 
-Resume slice_dynamic_capture_source_mods[finish]:
+Resume slice_dynamic_capture_source_run_mods[finish]:
   `!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s /\
     FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)` by
     (qsuff_tac `!x. lookup_var x t = lookup_var x u` >- metis_tac[] >>
@@ -158,7 +163,7 @@ Resume slice_dynamic_capture_source_mods[finish]:
   suspend "finish_reduced"
 QED
 
-Resume slice_dynamic_capture_source_mods[finish_reduced]:
+Resume slice_dynamic_capture_source_run_mods[finish_reduced]:
   conj_tac >- fs[eval_operand_def,lookup_var_def] >>
   gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ _ _ ==> _` (drule_then strip_assume_tac) >>
@@ -173,4 +178,47 @@ Resume slice_dynamic_capture_source_mods[finish_reduced]:
   qexistsl_tac [`G`,`es`,`s`,`sm`,`tn`] >> simp[lookup_var_def] >> metis_tac[lookup_var_def]
 QED
 
-Finalise slice_dynamic_capture_source_mods
+Finalise slice_dynamic_capture_source_run_mods
+
+Theorem slice_dynamic_capture_source_mods:
+  compile_bytestring_src op sm = ((limit,data),sc) /\
+  fn_has_code sm sc func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sm /\ (!x. op = Var x ==> not_fresh_at sm x) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  return_buf_frame d ce sm s /\ alloca_history func s /\
+  expr_type e = BaseT bt /\ is_bytestring_type (BaseT bt) /\
+  evaluate_type (get_tenv cx) (BaseT bt) = SOME tv /\ value_has_type tv v /\
+  ptr_val_ok cx (BaseT bt) v op G tn s /\
+  storage_trace_domain cx st0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    expr_post_mods H ctx func ce cx e es0 sa sm s0 es v op s /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv_at_mods (DF H) lo d ce cx es G tn s) /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?t G' tn' lp dp p bs.
+    (v = BytesV bs \/ (?str. v = StringV str /\ bs = MAP (n2w o ORD) str)) /\
+    limit = Var lp /\ data = Var dp /\ not_fresh_at sc lp /\ not_fresh_at sc dp /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sc.cs_current_insts /\ alloca_history func t /\
+    eval_operand limit t = SOME (n2w (LENGTH bs)) /\
+    op_taint tn' limit = {} /\ op_prov G' limit = NONE /\
+    lookup_var dp t = SOME p /\ ptr_covers G' tn' dp t (LENGTH bs) /\
+    w2n p + LENGTH bs < dimword (:256) /\ w2n p + LENGTH bs <= t.vs_alloca_next /\
+    mem_bytes_at (w2n p) (LENGTH bs) t.vs_memory = bs /\
+    (!i. w2n p <= i /\ i < w2n p+LENGTH bs ==> i NOTIN tn'.t_mem) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\ tn'.t_mem = tn.t_mem /\
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    return_buf_frame d ce sc t /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func ce cx es t /\ immutable_frame_mods func ce cx es t /\
+      storage_well_formed_on cx es (FST H) /\ ghost_inv_at_mods (DF H) lo d ce cx es G' tn' t)
+Proof
+  disch_then (mp_tac o MATCH_MP (SPEC_ALL slice_dynamic_capture_source_run_mods)) >>
+  disch_then (qx_choosel_then [`t`,`G'`,`tn'`,`lp`,`dp`,`p`,`bs`]
+    (assume_tac o CONJUNCT2)) >>
+  qexistsl_tac [`t`,`G'`,`tn'`,`lp`,`dp`,`p`,`bs`] >> first_assum ACCEPT_TAC
+QED

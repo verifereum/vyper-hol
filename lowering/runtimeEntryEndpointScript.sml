@@ -14,7 +14,7 @@
 Theory runtimeEntryEndpoint
 Ancestors
   externalEntryJoint runtimeBodyStartDefs entryDispatchProps constSubst
-  externalEntryBound bodySim exprSimHypsDefs stmtSimDefs vyperTypeCallGraph
+  externalEntryBound bodyFullPreds bodySim exprSimHypsDefs stmtSimDefs vyperTypeCallGraph
   gasShadowRunLowering gasShadowUnit gasShadowState gasShadow gasSummary
 
 Definition runtime_entry_endpoint_def:
@@ -128,6 +128,8 @@ Definition runtime_body_endpoint_def:
       (?bindings env_t env'.
          supported_stmts tops bindings fbody /\
          expr_sim_inv cenv
+           (initial_evaluation_context am.sources am.layouts tx NONE) env_t es /\
+         body_const_cells_agree [(NONE,tops)]
            (initial_evaluation_context am.sources am.layouts tx NONE) env_t es /\
          ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
          type_stmts env_t ret fbody = SOME env' /\
