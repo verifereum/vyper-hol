@@ -1,7 +1,7 @@
 (* Interpret the accepted saved-values fold with the actual operand scope. *)
 Theory entryCreateSavedValuesScope
 Ancestors
-  bodyFullExtCallDirectEncode entryCreateFocusSpec
+  bodyFullExtCallDirectEncode bodyFullExtCallDirectState entryCreateFocusSpec entryCreateCompletedCut
   abiEncodeValuesRun abiEncodeValuesCode exprLoweringProps exprSimAbiEncodeExecFrame
   stateRelProj bodyPtrDefs loweringPosts loweringStateRelDefs fragGasOriginPtr fragExec
   abiEncoderWindowPhase exprLowering compileEnv context contractABI
@@ -38,9 +38,13 @@ Theorem abi_encode_saved_values_scoped_from_rows:
       abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor st.cs_next_id slot (SUC i) c z Gz tz /\
       (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (v,Gv,tv) [] (OK z,Gz,tz)) /\
       create_operand_full_scope a c explicit ctx func v [] (OK z)) /\
-  abi_encode_values_path_laws
+  abi_encode_values_init_observes ctx func lo explicit PG
+    (\a c v z. create_operand_full_scope a c explicit ctx func v [] (OK z)) /\
+  abi_encode_values_finish_observes ctx func lo explicit PG
+    (\a c v z. create_operand_full_scope a c explicit ctx func v [] (OK z)) /\
+  abi_encode_values_observer st en
     (\a c v z. create_operand_full_scope a c explicit ctx func v [] (OK z))
-    func st en u hl alen ==>
+    (\v z. create_expr_prefix st en explicit ctx func v [] z) ==>
   ?z Gz tz.
     (track_frame ==> pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z) /\
     abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
@@ -53,10 +57,25 @@ Theorem abi_encode_saved_values_scoped_from_rows:
     create_operand_full_scope st en explicit ctx func u [] (OK z)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  mp_tac (Q.INST
-    [`R` |-> `\a c v z. create_operand_full_scope a c explicit ctx func v [] (OK z)`]
-    abi_encode_saved_values_execute_with_frame_and_path) >>
-  impl_tac >- (rpt conj_tac >> metis_tac[]) >>
-  disch_then (qx_choosel_then [`z`,`Gz`,`tz`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
-  qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[] >> BETA_TAC >> metis_tac[]
+  mp_tac (BETA_RULE (Q.INST
+    [`Obs` |-> `\a c v z. create_operand_full_scope a c explicit ctx func v [] (OK z)`,
+     `R` |-> `\v z. create_expr_prefix st en explicit ctx func v [] z`]
+    abi_encode_saved_values_execute_with_frame_and_path)) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      map_every qx_gen_tac [`ci`,`r`] >> disch_tac >>
+      qpat_assum `!ci (r:string). MEM ci (fn_insts func) /\ _ ==> _`
+        (qspecl_then [`ci`,`r`] mp_tac) >>
+      impl_tac >- first_assum ACCEPT_TAC >>
+      disch_then (fn row =>
+        map_every qx_gen_tac [`i`,`a`,`c`,`v`,`Gv`,`tv`,`cursor`,`slot`] >>
+        disch_tac >> qspecl_then [`i`,`a`,`c`,`v`,`Gv`,`tv`,`cursor`,`slot`] mp_tac row) >>
+      impl_tac >- first_assum ACCEPT_TAC >>
+      disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
+      qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[]) >>
+  disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
+  qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[] >>
+  qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ en z _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_def]) >>
+  fs[create_operand_full_scope_def]
 QED
