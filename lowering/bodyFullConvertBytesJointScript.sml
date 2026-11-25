@@ -10,7 +10,34 @@ Ancestors
   exprSimConvertBytes exprSimConvert exprSimHyps exprSimSource
   bodyPtrSignedConvertSourceTyping
   gasShadowCompile gasShadowState exprLowering exprLoweringProps compileEnv
-  vyperContext vyperInterpreter vyperState vyperAST
+  vyperContext vyperInterpreter vyperState vyperAST bodyFullEmptyLeafData
+
+(* The memory result carries the extra buffer coverage needed by clients of
+   the located VV. Keep it with the physical endpoint of the conversion. *)
+Definition convert_bytes_vv_post_def:
+  convert_bytes_vv_post (DF,lo,d,ctx,func) ce cx ann e
+    (es,sa,sb,s0,out,G0,tn0) H res ee G tn t <=>
+    expr_vv_sim_full_post (DF,lo,d,ctx,func) ce cx (TypeBuiltin ann Convert ann [e])
+      (es,sa,sb,s0,LocatedValue ann (mk_ptr out LocMemory),G0,tn0) H res ee G tn t /\
+    ptr_buf_ok ce (TypeBuiltin ann Convert ann [e]) out G t
+End
+
+Definition convert_bytes_vv_suffix_def:
+  convert_bytes_vv_suffix (DF,lo,d,ctx,func,explicit,PG) ce cx ann e st0
+      (es,sa,sm,sb,s0,out,G0,tn0) (v,mid,t,G1,tn1) <=>
+    ?G2 tn2 r res.
+      res = sum_CASE (convert_result cx (expr_type e) ann v) (\w. INL (Value w)) INR /\
+      (!H. valid_horizon cx st0 H mid.storage_trace ==>
+           gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G1,tn1) [] (r,G2,tn2)) /\
+      ((?u raw. r = OK u /\
+          run_inst_seq (emitted_insts sm sb) t = OK raw /\
+          u = raw with vs_inst_idx := LENGTH sb.cs_current_insts /\
+          !H. valid_horizon cx st0 H mid.storage_trace ==>
+              convert_bytes_vv_post (DF,lo,d,ctx,func) ce cx ann e
+                (es,sa,sb,s0,out,G0,tn0) H res mid G2 tn2 u) \/
+       (?u raw msg. r = Abort Revert_abort u /\ res = INR (Error (RuntimeError msg)) /\
+          run_inst_seq (emitted_insts sm sb) t = Abort Revert_abort raw))
+End
 
 Theorem convert_memory_vv_post[local]:
   expr_post H ctx func cenv cx (TypeBuiltin typ Convert typ [e])
@@ -264,6 +291,26 @@ Proof
   qexistsl_tac [`b`,`sz`] >> simp[] >> decide_tac
 QED
 
+Theorem eval_expr_convert_vv_action:
+  eval_expr cx (TypeBuiltin ann Convert dst [e]) =
+    bind (bind (eval_expr cx e) (read_result cx))
+      (\v ee. (sum_CASE (convert_result cx (expr_type e) dst v)
+         (\w. INL (Value w)) INR, ee))
+Proof
+  simp[FUN_EQ_THM] >> qx_gen_tac `start` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+    assert_def, return_def, raise_def, type_builtin_args_length_ok_def] >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_expr cx e start` >> rename1 `_ = (raw,ee)` >>
+  Cases_on `raw` >> simp[] >> rename1 `_ = (INL tv,ee)` >>
+  Cases_on `read_result cx tv ee` >> rename1 `_ = (res,fin)` >>
+  Cases_on `res` >> simp[] >> rename1 `_ = (INL val,fin)` >>
+  simp[Once evaluate_def, bind_def, return_def, lift_sum_def,
+    convert_result_def, evaluate_type_builtin_def] >>
+  Cases_on `evaluate_convert_from (get_tenv cx) (expr_type e) val dst` >>
+  simp[return_def, raise_def]
+QED
+
 Theorem convert_bytes_vv_sim_full:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
@@ -357,23 +404,7 @@ Proof
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
-  `eval_expr cx (TypeBuiltin ann Convert ann [e]) =
-    bind (bind (eval_expr cx e) (read_result cx))
-      (\v ee. (sum_CASE (convert_result cx (expr_type e) ann v)
-         (\w. INL (Value w)) INR, ee))` by
-    (simp[FUN_EQ_THM] >> gen_tac >>
-     simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, type_builtin_args_length_ok_def] >>
-     simp[Once evaluate_def, bind_def, return_def] >>
-     Cases_on `eval_expr cx e x'` >> rename1 `_ = (raw,ee)` >>
-     Cases_on `raw` >> simp[] >> rename1 `_ = (INL tv,ee)` >>
-     Cases_on `read_result cx tv ee` >> rename1 `_ = (res,fin)` >>
-     Cases_on `res` >> simp[] >> rename1 `_ = (INL val,fin)` >>
-     simp[Once evaluate_def, bind_def, return_def, lift_sum_def,
-       convert_result_def, evaluate_type_builtin_def] >>
-     Cases_on `evaluate_convert_from (get_tenv cx) (expr_type e) val ann` >>
-     simp[return_def, raise_def]) >>
-  pop_assum SUBST1_TAC >>
+  PURE_REWRITE_TAC [eval_expr_convert_vv_action] >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all >>
   rpt conj_tac
   >- simp[vyperStorageTraceTheory.storage_trace_frame_def]
@@ -396,14 +427,51 @@ Proof
   metis_tac[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_INR_type]
 QED
 
-Resume convert_bytes_vv_sim_full[continuation]:
-  qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >> fs[] >>
+Theorem convert_bytes_selected_suffix:
+  body_inv tops ctx cenv cx /\
+  expr_body_pre cenv cx env (TypeBuiltin ann Convert ann [e]) es /\
+  expr_body_pre cenv cx env e es /\
+  valid_conversion (expr_type e) ann /\
+  is_bytestring_type ann /\ is_bytestring_type (expr_type e) /\ ~is_word_type ann /\
+  (!n. ann <> FlagT n) /\
+  lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+  (if type_memory_bytes cenv (lowered_value_type cenv e) < type_memory_bytes cenv ann then
+     compile_bytestring_widen_copy (type_memory_bytes cenv ann) x
+       (type_memory_bytes cenv (lowered_value_type cenv e)) sm
+   else compile_type_convert x (mk_convert_op (expr_type e) ann) sm) = (out,sb) /\
+  cs_extends sa sm /\ cs_extends sm sb /\ fn_has_code sa sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H)) /\
+  (!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+        ~is_word_type (post_value_type cenv e) ==>
+        type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
+        type_memory_size rt < 2**64) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME rty /\
+  (!gs tv ee v. eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\
+      read_result cx tv ee = (INL v,ee) ==> value_has_type rty v) /\
+  (!tail. bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+      (INL v,mid with gas_obs := tail)) /\
+  storage_trace_domain cx st0 mid.storage_trace /\ ~t.vs_halted /\ mid.gas_obs = [] /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      expr_sim_full_post (DF,lo,d,ctx,func) cenv cx e (es,sa,sm,s0,x,G0,tn0)
+        H (INL v) mid G1 tn1 t /\
+      (!rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
+             eval_operand x t = SOME w ==>
+             type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= t.vs_alloca_next)) ==>
+  convert_bytes_vv_suffix (DF,lo,d,ctx,func,explicit,PG) cenv cx ann e st0
+    (es,sa,sm,sb,s0,out,G0,tn0) (v,mid,t,G1,tn1)
+Proof
+  strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
-    gvs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  `childQ (storage_trace_horizon mid.storage_trace) res mid G1 tn1 t /\
-    ~t.vs_halted /\ mid.gas_obs = []` by metis_tac[] >>
-  qpat_x_assum `childQ _ _ _ _ _ _` mp_tac >>
-  simp[Abbr `childQ`, NoAsms] >> strip_tac >> gvs[] >>
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  fs[exprSimFullBundlePropsTheory.expr_sim_full_post_def,
+     exprSimFullBundlePropsTheory.expr_sim_full_endpoint_def] >>
   `bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL v,mid)` by
     (qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >> simp[] >>
@@ -453,12 +521,12 @@ Resume convert_bytes_vv_sim_full[continuation]:
   suspend "cast"
 QED
 
-Resume convert_bytes_vv_sim_full[cast]:
+Resume convert_bytes_selected_suffix[cast]:
   markerLib.RESUME_TAC >> (gvs[] >>
   `~is_word_type (expr_type e)` by metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
   `32 <= type_memory_bytes cenv (lowered_value_type cenv e)` by
     metis_tac[bytestring_memory_header_bound] >>
-  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> (expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _) /\ _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
@@ -504,14 +572,14 @@ Resume convert_bytes_vv_sim_full[cast]:
   `fn_has_code sm sb func` by metis_tac[fragExecTheory.fn_has_code_split] >>
   `compile_type_convert (Var src) (ConvBytestringCast n i) sm = (out,sb)` by metis_tac[] >>
   drule_at (Pat `compile_type_convert _ (ConvBytestringCast _ _) _ = _`)
-    convert_cast_origin_path >>
-  disch_then (qspecl_then [`tn1`,`t`,`lo`,`func`,`gas_explicit_sites ctx shadow_ctx`,`ctx`,
+    convert_cast_origin_path_observed >>
+  disch_then (qspecl_then [`tn1`,`t`,`lo`,`func`,`explicit`,`ctx`,
     `type_memory_size tv`,`a`,`PG`,`L`,`G1`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   suspend "cast_dispatch")
 QED
 
-Resume convert_bytes_vv_sim_full[cast_dispatch]:
+Resume convert_bytes_selected_suffix[cast_dispatch]:
   markerLib.RESUME_TAC >> (Cases_on `L <= n`
   >- suspend "cast_success" >>
   `?exc. convert_result cx (expr_type e) ann v = INR exc /\
@@ -521,13 +589,11 @@ Resume convert_bytes_vv_sim_full[cast_dispatch]:
        exprSimConvertBytesTheory.convert_result_string_to_bytestring]) >>
   `n < L` by decide_tac >>
   qpat_x_assum `n < L ==> _` drule >> strip_tac >>
-  irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >>
-  conj_tac >- (qexistsl_tac [`H`,`mid`,`Abort Revert_abort t'`,`INR (Error (RuntimeError msg))`,`th`] >>
-    simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
-         halt_exit_not_halt]) >> simp[])
+  simp[convert_bytes_vv_suffix_def] >>
+  qexistsl_tac [`H`,`th`,`Abort Revert_abort t'`] >> metis_tac[])
 QED
 
-Resume convert_bytes_vv_sim_full[cast_success]:
+Resume convert_bytes_selected_suffix[cast_success]:
   markerLib.RESUME_TAC >> (
   qpat_x_assum `L <= n ==> _` drule >> strip_tac >>
   `?vout. convert_result cx (expr_type e) ann v = INL vout` by
@@ -535,12 +601,15 @@ Resume convert_bytes_vv_sim_full[cast_success]:
      rpt strip_tac >> simp
        [exprSimConvertBytesTheory.convert_result_bytes_to_bytestring,
         exprSimConvertBytesTheory.convert_result_string_to_bytestring]) >>
-  irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
-  conj_tac >- (qexistsl_tac [`H`,`mid`,`INL (Value vout)`,`t'`,`th`] >>
-    simp[] >> gen_tac >> disch_tac >>
-    `mid with gas_obs := [] = mid` by
-      (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
-    pop_assum SUBST1_TAC >>
+  rewrite_tac[convert_bytes_vv_suffix_def] >>
+  qexistsl_tac [`H`,`th`,`OK t'`,`INL (Value vout)`] >>
+  conj_tac >- simp[] >> conj_tac >- metis_tac[] >>
+  disj1_tac >> qexistsl_tac [`t'`,`raw`] >>
+  conj_tac >- REFL_TAC >> ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_x_assum `t' = raw with vs_inst_idx := _` kall_tac >>
+  qx_gen_tac `H'` >> strip_tac >>
+  simp[convert_bytes_vv_post_def, expr_vv_sim_full_post_def,
+       exprSimFullBundlePropsTheory.expr_sim_full_endpoint_def] >> (
     `?tout. evaluate_type (get_tenv cx) ann = SOME tout /\
        type_memory_bytes cenv ann = type_memory_size tout` by
       (`IS_SOME (evaluate_type (get_tenv cx) ann)` by
@@ -586,12 +655,12 @@ Resume convert_bytes_vv_sim_full[cast_success]:
         contextTheory.vv_operand_def, contextTheory.mk_ptr_def]) >> simp[])
 QED
 
-Resume convert_bytes_vv_sim_full[widen]:
+Resume convert_bytes_selected_suffix[widen]:
   markerLib.RESUME_TAC >> gvs[] >>
   `~is_word_type (expr_type e)` by metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
   `32 <= type_memory_bytes cenv (lowered_value_type cenv e)` by
     metis_tac[bytestring_memory_header_bound] >>
-  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> (expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _) /\ _`
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `post_value_type cenv e = expr_type e` by simp[] >>
@@ -629,7 +698,7 @@ Resume convert_bytes_vv_sim_full[widen]:
     (map (fn ty => ty |-> ``:256``)
       (type_vars_in_term (concl convert_widen_copy_origin_ptr_path)))
     convert_widen_copy_origin_ptr_path) >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   `?tout. evaluate_type (get_tenv cx) ann = SOME tout` by
     metis_tac[expr_body_pre_type_evaluates, expr_type_def, optionTheory.IS_SOME_EXISTS] >>
   `val_footprint rty v <= type_memory_size tv` by
@@ -640,14 +709,15 @@ Resume convert_bytes_vv_sim_full[widen]:
   drule_all convert_bytestring_memory >>
   disch_then (qspecl_then [`w2n a`,`t.vs_memory`] strip_assume_tac) >>
   `val_footprint tout vout <= type_memory_size tv` by simp[] >>
-  simp[] >> irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
-  reverse conj_tac >- simp[] >>
-  qexistsl_tac [`Gf`,`mid`,`INL (Value vout)`,`q`,`tnf`] >>
-  conj_tac >- simp[] >>
+  rewrite_tac[convert_bytes_vv_suffix_def] >>
+  qexistsl_tac [`Gf`,`tnf`,`OK q`,`INL (Value vout)`] >>
+  conj_tac >- simp[] >> conj_tac >- metis_tac[] >>
+  disj1_tac >> qexistsl_tac [`q`,`u`] >>
+  conj_tac >- REFL_TAC >> ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_x_assum `q = u with vs_inst_idx := _` (fn th => mk_asm "q_raw" th) >>
   qx_gen_tac `H` >> strip_tac >>
-  conj_tac >- simp[] >>
-  BETA_TAC >> qexists_tac `Value vout` >>
-  simp[NoAsms, sumTheory.INL_11] >>
+  simp[convert_bytes_vv_post_def, expr_vv_sim_full_post_def,
+       exprSimFullBundlePropsTheory.expr_sim_full_endpoint_def] >>
   `expr_post H ctx func cenv cx e es sa sm s0 mid v (Var src) t /\
    ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t` by metis_tac[] >>
   `stmt_state_rel H ctx func cenv cx mid t /\ storage_well_formed_on cx mid (FST H)` by
@@ -657,7 +727,7 @@ Resume convert_bytes_vv_sim_full[widen]:
   `expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) mid sm sb t
      mid vout (Var dst) q` by
     (irule convert_widen_copy_endpoint_post >>
-     simp[expr_type_def] >>
+     asm "q_raw" (fn th => simp[expr_type_def,th]) >>
      qexistsl_tac [`a`,`type_memory_bytes cenv ann`,`type_memory_size tv`,`Var src`] >>
      simp[venomStateTheory.eval_operand_def]) >>
   `stmt_state_rel H ctx func cenv cx es s0` by
@@ -692,7 +762,7 @@ Resume convert_bytes_vv_sim_full[widen]:
   `q = (mcopy (w2n dw) (w2n a) (type_memory_size tv) z) with
        vs_inst_idx := LENGTH sb.cs_current_insts` by
     (`type_memory_size tv < dimword(:256)` by decide_tac >>
-     drule_all widen_copy_same_endpoint >> simp[]) >>
+     asm_x "q_raw" assume_tac >> drule_all widen_copy_same_endpoint >> simp[]) >>
   `type_memory_bytes cenv ann = type_memory_size tout` by
     metis_tac[expr_type_def, exprSimHypsTheory.expr_body_pre_copy_ok] >>
   `val_store_size tout vout <= type_memory_bytes cenv ann` by
@@ -752,7 +822,60 @@ Resume convert_bytes_vv_sim_full[widen]:
   qpat_assum `s0.vs_alloca_next <= t.vs_alloca_next` mp_tac >>
   qpat_assum `t.vs_alloca_next <= q.vs_alloca_next` mp_tac >>
   simp[lowered_value_type_def, expr_type_def, vyperStateTheory.read_result_def] >>
-  gvs[vyperStateTheory.return_def, bodyPtrDefsTheory.ptr_val_ok_def]
+  gvs[vyperStateTheory.return_def, bodyPtrDefsTheory.ptr_val_ok_def,
+      exprSimMemDefsTheory.vv_store_bound_def, contextTheory.mk_ptr_def]
+QED
+
+Finalise convert_bytes_selected_suffix
+
+Resume convert_bytes_vv_sim_full[continuation]:
+  qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >> fs[] >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `childQ (storage_trace_horizon mid.storage_trace) res mid G1 tn1 t /\
+    ~t.vs_halted /\ mid.gas_obs = []` by metis_tac[] >>
+  qpat_x_assum `childQ _ _ _ _ _ _` mp_tac >>
+  simp[Abbr `childQ`, NoAsms] >> strip_tac >> gvs[] >>
+  `~is_word_type (expr_type e)` by metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (`stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid t` by
+       (res_tac >> fs[loweringPostsTheory.expr_post_def]) >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx mid t`
+        (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    expr_sim_full_post (DF,lo,d,ctx,func) cenv cx e (es,sa,sm,s0,x,G0,tn0)
+      H (INL v) mid G1 tn1 t /\
+    (!rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
+       eval_operand x t = SOME w ==>
+       type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= t.vs_alloca_next)` by
+    (rpt strip_tac >> res_tac >>
+     fs[exprSimFullBundlePropsTheory.expr_sim_full_post_def,
+         exprSimFullBundlePropsTheory.expr_sim_full_endpoint_def] >>
+     metis_tac[]) >>
+  `convert_bytes_vv_suffix (DF,lo,d,ctx,func,gas_explicit_sites ctx shadow_ctx,PG)
+    cenv cx ann e st0 (es,sa,sm,sb,s0,out,G0,tn0) (v,mid,t,G1,tn1)` by
+    (irule convert_bytes_selected_suffix >>
+     simp[loweringPostsTheory.post_value_type_def] >> rpt conj_tac >> metis_tac[]) >>
+  `mid with gas_obs := [] = mid` by
+    (qpat_assum `mid.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
+  qpat_x_assum `convert_bytes_vv_suffix _ _ _ _ _ _ _ _` mp_tac >>
+  simp[convert_bytes_vv_suffix_def] >> strip_tac >> gvs[]
+  >- (irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
+      reverse conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`G2`,`mid`,`sum_CASE (convert_result cx (expr_type e) ann v)
+        (\w. INL (Value w)) INR`,`raw with vs_inst_idx := LENGTH sb.cs_current_insts`,`tn2`] >>
+      simp[] >> rpt strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> convert_bytes_vv_post _ _ _ _ _ _ _ _ _ _ _ _`
+        (drule_then (strip_assume_tac o SIMP_RULE (srw_ss())
+          [convert_bytes_vv_post_def, expr_vv_sim_full_post_def,
+           exprSimFullBundlePropsTheory.expr_sim_full_endpoint_def,
+           contextTheory.mk_ptr_def, contextTheory.vv_location_def])) >>
+      gvs[loweringPostsTheory.post_value_type_def, expr_type_def,
+          contextTheory.mk_ptr_def, contextTheory.vv_location_def]) >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`G2`,`mid`,`Abort Revert_abort u`,`INR (Error (RuntimeError msg))`,`tn2`] >>
+  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def, halt_exit_not_halt]
 QED
 
 Finalise convert_bytes_vv_sim_full

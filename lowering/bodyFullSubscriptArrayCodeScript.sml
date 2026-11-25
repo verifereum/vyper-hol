@@ -5,6 +5,7 @@ Ancestors vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ig
   bodyFullOfVV bodyFullPreds bodyFullSimProjection bodySimFull gasOutcomeFullCompose
   bodyFullAttributeAdd bodyFullGhostFrame bodyFullPathHistory
   bodyFullSubscriptArrayCodeBounds bodyFullSubscriptArrayCodeOps
+  bodyFullEmptyLeafData exprSimFullBundleProps
   bodyFullIfExpReach bodyFullHashKeccakFixed stateRelProj exprSimSubscriptArraySuffix
   gasShadowCompileStmtHelpers bodyPtrPrecompileBuiltinsGhost
   exprSimSubscriptArrayEndpoint exprSimSubscriptArrayOrigin
@@ -133,8 +134,45 @@ Proof
   conj_tac >- metis_tac[] >> metis_tac[]
 QED
 
+(* The selector supplies the ordinary post at its chosen landing, before
+   that landing is hidden by the existential in gas_outcome_full. *)
+Theorem code_array_selected_landing:
+  ~cenv.ce_is_ctor /\ fin.gas_obs = [] /\
+  (!tail. select_result cx (ArrayT et bd) tv (ValueSubscript (IntV i))
+     (fin with gas_obs := tail) = (INL child,fin with gas_obs := tail)) /\
+  (!v. child <> Value v) /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (it,Gi,tni) [] (OK sf,Gf,tnf) /\
+    vv_post H ctx func cenv cx (Subscript et obj idx) es sa sb s0 fin child
+      (LocatedValue et (mk_ptr out LocCode)) sf /\
+    ghost_inv_at (DF H) lo d cenv cx fin Gf tnf sf) /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 Gf tnf /\
+  expr_sim_full_endpoint func sb s0 sf /\
+  op_taint tnf out = {} /\ op_prov Gf out = NONE ==>
+  (!tail. select_result cx (ArrayT et bd) tv (ValueSubscript (IntV i))
+     (fin with gas_obs := tail) = (INL child,fin with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (it,Gi,tni) [] (OK sf,Gf,tnf) /\
+    expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (Subscript et obj idx)
+      (es,sa,sb,s0,LocatedValue et (mk_ptr out LocCode),G0,tn0)
+      H (INL child : eval_result + exception) fin Gf tnf sf)
+Proof
+  strip_tac >> conj_tac >- simp[] >> qx_gen_tac `H` >> strip_tac >>
+  first_x_assum (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sf` by
+    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[NoAsms,vv_post_def] >> strip_tac >>
+     first_assum (ACCEPT_TAC o MATCH_MP
+       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  simp[expr_vv_sim_full_post_def,expr_type_def,contextTheory.mk_ptr_def,
+       exprSimMemDefsTheory.vv_store_bound_nonmem,ptr_vv_ok_def] >>
+  fs[contextTheory.mk_ptr_def]
+QED
+
 Theorem code_array_selected_outcome_tail[local]:
-  ~it.vs_halted /\ fin.gas_obs = [] /\
+  ~it.vs_halted /\ ~cenv.ce_is_ctor /\ fin.gas_obs = [] /\
   (!tail. select_result cx (ArrayT et bd) tv (ValueSubscript (IntV i))
      (fin with gas_obs := tail) = (INL child,fin with gas_obs := tail)) /\
   (!v. child <> Value v) /\
@@ -152,46 +190,19 @@ Theorem code_array_selected_outcome_tail[local]:
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (select_result cx (ArrayT et bd) tv (ValueSubscript (IntV i)))
     (fin,it,Gi,tni)
-    (\H res' ee G tn t'. ?tv'. res' = INL tv' /\
-      vv_post H ctx func cenv cx (Subscript et obj idx) es sa sb s0 ee tv'
-        (LocatedValue et (mk_ptr out LocCode)) t' /\
-      vv_store_bound cx (expr_type (Subscript et obj idx))
-        (lowered_value_type cenv (Subscript et obj idx)) ee tv'
-        (LocatedValue et (mk_ptr out LocCode)) t' /\
-      t'.vs_current_bb = sb.cs_current_bb /\
-      t'.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history func t' /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp t') /\
-      s0.vs_alloca_next <= t'.vs_alloca_next /\
-      ghost_inv_at (DF H) lo d cenv cx ee G tn t' /\
-      ptr_vv_ok cx (expr_type (Subscript et obj idx)) tv'
-        (LocatedValue et (mk_ptr out LocCode)) ee G tn t' /\
-      (!v'. tv' = Value v' /\ ~is_word_type (expr_type (Subscript et obj idx)) /\
-        ~is_bytestring_type (expr_type (Subscript et obj idx)) ==>
-        vv_own cenv cx (expr_type (Subscript et obj idx)) sa sb ee (Value v')
-          (LocatedValue et (mk_ptr out LocCode)) t' /\
-        (mk_ptr out LocCode).ptr_location = LocMemory) /\
-      ((mk_ptr out LocCode).ptr_location = LocMemory ==>
-        ptr_buf_ok cenv (Subscript et obj idx) (mk_ptr out LocCode).ptr_operand G t') /\
-      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) R
+    (expr_vv_sim_full_post (DF,lo,d,ctx,func) cenv cx (Subscript et obj idx)
+      (es,sa,sb,s0,LocatedValue et (mk_ptr out LocCode),G0,tn0)) R
 Proof
-  strip_tac >> irule gas_outcome_full_pure >>
-  reverse conj_tac >- simp[] >>
+  strip_tac >>
+  `expr_sim_full_endpoint func sb s0 sf` by simp[expr_sim_full_endpoint_def] >>
+  drule_all code_array_selected_landing >> strip_tac >>
+  irule gas_outcome_full_pure >> simp[] >>
   qexistsl_tac [`Gf`, `fin`, `INL child`, `sf`, `tnf`] >>
-  simp[NoAsms] >> conj_tac >- simp[] >>
-  qx_gen_tac `H` >> strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp sf` by
-    (qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==>
-       gas_origin_ptr_path _ _ _ _ /\ _`
-       (qspec_then `H` (drule_then mp_tac)) >>
-     simp[NoAsms, vv_post_def] >> strip_tac >>
-     first_assum (ACCEPT_TAC o MATCH_MP
-       bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   `fin with gas_obs := [] = fin` by
     (qpat_x_assum `fin.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>
-  pop_assum SUBST1_TAC >>
-  simp[expr_type_def, contextTheory.mk_ptr_def,
-       exprSimMemDefsTheory.vv_store_bound_nonmem, ptr_vv_ok_def] >>
-  metis_tac[]
+  simp[] >> rpt strip_tac >>
+  qpat_assum `!K. valid_horizon _ _ K _ ==> _ /\ expr_vv_sim_full_post _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H` mp_tac) >> simp[]
 QED
 
 Theorem subscript_array_framed_code_full:
@@ -220,8 +231,10 @@ Proof
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty e1 es` by
     (drule_all body_expr_full_ok_simulations >> simp[]) >>
-  simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  drule_all compile_expr_array_subscript >> strip_tac >>
+  simp[expr_vv_sim_full_via_bundle,expr_vv_sim_full_hypotheses_def,
+       expr_sim_full_code_def] >>
+  qx_genl_tac [`st0`, `sa`, `sb`, `shadow_sa`, `shadow_sb`, `vv`, `s0`, `G0`, `tn0`] >>
+  strip_tac >> drule_all compile_expr_array_subscript >> strip_tac >>
   rename1 `compile_expr cenv ty e1 sa = (bvv,sm)` >>
   drule compile_expr_extends >> strip_tac >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
@@ -710,9 +723,10 @@ Resume subscript_array_framed_code_full[fixed_selection]:
            simp[ptrDisciplineTheory.allocas_below_fmp_def, allocas, fmp, initial] >>
            metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.scalar_mul_add_joint_frame) >>
+    bodyFullSubscriptArrayCodeOpsTheory.scalar_mul_add_joint_frame_observed) >>
   disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`]
+    (CONJUNCTS_THEN2 (mk_asm "address_run") strip_assume_tac)) >>
   `!q. not_fresh_at st2 q ==> not_fresh_at cs' q` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `st2` >> fs[ci_mono_def, cs_extends_def]) >>
@@ -829,9 +843,12 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
      simp[] ) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame) >>
+    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_run) >>
   disch_then (qspecl_then [`PG`, `Gi`] mp_tac) >>
-  disch_then (qx_choosel_then [`lenvar`, `Gl`, `tnl`, `il`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`lenvar`, `Gl`, `tnl`, `il`]
+      (CONJUNCTS_THEN2 assume_tac
+        (CONJUNCTS_THEN2 assume_tac
+          (CONJUNCTS_THEN2 (mk_asm "length_run") strip_assume_tac)))) >>
   `word_of_bytes T (0w:bytes32)
       (TAKE 32 (DROP (w2n w) it.vs_data_section ++ REPLICATE 32 0w)) =
       n2w (array_length (ArrayTV etv (Dynamic n)) av)` by
@@ -881,9 +898,14 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
      gvs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
          ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
   `eval_operand iop ib = SOME iw /\ op_taint tnb iop = {} /\ op_prov Gb iop = NONE` by
-    (Cases_on `iop` >>
-     gvs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
-         ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`eval_operand iop it = SOME iw`, `op_taint tni iop = {}`,
+        `op_prov Gi iop = NONE`, `!q. iop = Var q ==> not_fresh_at st2 q`,
+        `!l. iop <> Label l`,
+        `!q. not_fresh_at st2 q ==> lookup_var q ib = lookup_var q it /\ _ /\ _`] >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `iop` >>
+     simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
+          ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
   `fn_has_code cs'' sb func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
   qpat_x_assum `array_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
   simp[exprSimArrayIndexTheory.array_elem_ptr_def,
@@ -914,9 +936,10 @@ Resume subscript_array_framed_code_full[dynamic_selection]:
            simp[ptrDisciplineTheory.allocas_below_fmp_def, allocas, fmp, initial] >>
            metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.code_dynamic_address_joint_frame) >>
+    bodyFullSubscriptArrayCodeOpsTheory.code_dynamic_address_joint_frame_observed) >>
   disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`]
+    (CONJUNCTS_THEN2 (mk_asm "address_run") strip_assume_tac)) >>
   `!q. not_fresh_at st2 q ==>
     lookup_var q sf = lookup_var q it /\ FLOOKUP Gf q = FLOOKUP Gi q /\
     op_taint tnf (Var q) = op_taint tni (Var q)` by metis_tac[] >>
@@ -1057,7 +1080,7 @@ Resume subscript_array_framed_code_full[fixed_rejection]:
   `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``] array_bounds_check_joint_oob_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] (map_every assume_tac o CONJUNCTS)) >>
   irule gas_outcome_full_exit >> simp[] >>
   qexistsl_tac [`Gf`, `fin`, `Abort Revert_abort sf`,
      `INR (Error (RuntimeError "evaluate_subscripts array_index"))`, `tnf`] >>
@@ -1108,9 +1131,12 @@ Resume subscript_array_framed_code_full[dynamic_rejection]:
     (drule_all exprSimBopRestWordLoadSafetyTheory.rest_word_immutable_region_bound >> simp[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp it` by simp[] >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``]
-    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_frame) >>
+    bodyFullSubscriptArrayCodeOpsTheory.compile_imm_load_word_runtime_joint_run) >>
   disch_then (qspecl_then [`PG`, `Gi`] mp_tac) >>
-  disch_then (qx_choosel_then [`lenvar`, `Gl`, `tnl`, `il`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`lenvar`, `Gl`, `tnl`, `il`]
+      (CONJUNCTS_THEN2 assume_tac
+        (CONJUNCTS_THEN2 assume_tac
+          (CONJUNCTS_THEN2 (mk_asm "length_run") strip_assume_tac)))) >>
   `word_of_bytes T (0w:bytes32)
       (TAKE 32 (DROP (w2n w) it.vs_data_section ++ REPLICATE 32 0w)) =
       n2w (array_length (ArrayTV etv (Dynamic n)) av)` by
@@ -1143,7 +1169,7 @@ Resume subscript_array_framed_code_full[dynamic_rejection]:
            metis_tac[])))) >>
   drule_all (INST_TYPE [``:'a`` |-> ``:256``] array_bounds_check_joint_oob_frame) >>
   disch_then (qspec_then `PG` mp_tac) >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`sf`] (map_every assume_tac o CONJUNCTS)) >>
   irule gas_outcome_full_exit >> simp[] >>
   qexistsl_tac [`Gf`, `fin`, `Abort Revert_abort sf`,
      `INR (Error (RuntimeError "evaluate_subscripts array_index"))`, `tnf`] >>
