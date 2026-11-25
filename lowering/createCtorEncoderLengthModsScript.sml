@@ -373,12 +373,11 @@ Resume ctor_encoder_length_witness_mods[dynamic_row]:
     (irule_at Any) >>
   qpat_assum `evaluate_type (get_tenv cx) ty = SOME tv` (irule_at Any) >>
   qpat_assum `vyper_to_abi (get_tenv cx) ty v = _` (irule_at Any) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
   qexistsl_tac [`cr`,`off`,`inst`,`ci`,`EL i ats`,`H0`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
-  TRY (simp_tac bool_ss [Abbr `off`] >> NO_TAC) >>
-  qpat_assum `is_dynamic _ ==> off + _ <= capacity - dst_offset`
-    (drule_then ACCEPT_TAC)
+  `off + LENGTH (enc (EL i ats) (EL i avs)) <= capacity - dst_offset` by
+    (qpat_assum `is_dynamic _ ==> off + _ <= capacity - dst_offset`
+      (drule_then ACCEPT_TAC)) >>
+  simp_tac bool_ss [Abbr `off`] >> asm_rewrite_tac[]
 QED
 
 Resume ctor_encoder_length_witness_mods[static_row]:
@@ -387,19 +386,18 @@ Resume ctor_encoder_length_witness_mods[static_row]:
     (irule_at Any) >>
   qpat_assum `evaluate_type (get_tenv cx) ty = SOME tv` (irule_at Any) >>
   qpat_assum `vyper_to_abi (get_tenv cx) ty v = _` (irule_at Any) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
   qexistsl_tac [`off`,`inst`,`EL i ats`,`H0`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
-  TRY (simp_tac bool_ss [Abbr `off`] >> NO_TAC) >>
+  qpat_x_assum `ats = vyper_to_abi_types _ _` kall_tac >>
+  simp_tac bool_ss [Abbr `off`] >> asm_rewrite_tac[] >>
   qx_genl_tac [`su`,`sb`,`sop`,`ru`,`Gru`,`tru`] >> disch_tac >>
   qpat_assum `!su sb src ru Gru tru. unwrap_value ce sv su = _ /\ _ ==> _`
     (qspecl_then [`su`,`sb`,`sop`,`ru`,`Gru`,`tru`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choosel_then [`q`,`Gq`,`tq`] (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
-  qexistsl_tac [`q`,`Gq`,`tq`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`q`,`Gq`,`tq`] >> asm_rewrite_tac[] >>
   qpat_assum `?first last. expr_val_at ce cx ty first last ee v sop q /\ _`
     (qx_choosel_then [`first`,`last`] (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
-  qexistsl_tac [`first`,`last`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+  qexistsl_tac [`first`,`last`] >> asm_rewrite_tac[]
 QED
 
 Resume ctor_encoder_length_witness_mods[restore]:
@@ -423,27 +421,29 @@ Resume ctor_encoder_length_witness_mods[restore]:
       (?first last. expr_val_at ce cx ty first last ee v sop z /\
         last.cs_next_id <= sb.cs_next_id /\
         (shared < first.cs_next_id \/ last.cs_next_id <= shared)) /\
-      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (ru,Gru,tru) [] (OK z,Gz,tz)` by
-    (irule ctor_encoder_restore_row_from_advanced_mods >>
-     qpat_assum `unwrap_value ce sv su = _` (irule_at Any) >>
-     qpat_assum `compile_expr ce (expr_type e) e si = _` (irule_at Any) >>
-     qpat_assum `compile_snapshot_vv ce copy _ sm = _` (irule_at Any) >>
-     qpat_assum `read_result cx raw ee = _` (irule_at Any) >>
-     qpat_assum `evaluate_type (get_tenv cx) ty = SOME tv` (irule_at Any) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     qexistsl_tac [`inst`,`cr`,`ci`,`H0`] >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     FIRST [qpat_assum `h = LENGTH _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
-              first_assum ACCEPT_TAC,
-            qpat_assum `Abbrev (off = _)` (fn th =>
-              pure_once_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >>
-              pure_once_rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
-              first_assum ACCEPT_TAC,
-            simp_tac bool_ss [Abbr `ty`] >> NO_TAC]) >>
-  qexistsl_tac [`z`,`Gz`,`tz`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`first`,`last`] >> rpt conj_tac >>
-  FIRST [first_assum ACCEPT_TAC, disj1_tac >> first_assum ACCEPT_TAC,
-         disj2_tac >> first_assum ACCEPT_TAC]
+      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (ru,Gru,tru) [] (OK z,Gz,tz)` suffices_by
+    (disch_then (qx_choosel_then [`z`,`Gz`,`tz`]
+       (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+     qexistsl_tac [`z`,`Gz`,`tz`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  irule ctor_encoder_restore_row_from_advanced_mods >>
+  qpat_assum `unwrap_value ce sv su = _` (irule_at Any) >>
+  qpat_assum `compile_expr ce (expr_type e) e si = _` (irule_at Any) >>
+  qpat_assum `compile_snapshot_vv ce copy _ sm = _` (irule_at Any) >>
+  qpat_assum `read_result cx raw ee = _` (irule_at Any) >>
+  qpat_assum `evaluate_type (get_tenv cx) ty = SOME tv` (irule_at Any) >>
+  qexistsl_tac [`inst`,`cr`,`ci`,`H0`] >>
+  `pbase + dst_offset + LENGTH (FLAT (abi_tuple_heads (head_lengths ats 0) 0
+      (TAKE i ats) (TAKE i avs))) <= pbase + capacity` by
+    (qpat_assum `h = LENGTH _` (pure_once_rewrite_tac o single o GSYM) >>
+     qpat_assum `pbase + dst_offset + h <= _` ACCEPT_TAC) >>
+  `pbase + dst_offset + head_lengths ats 0 + LENGTH (FLAT (abi_tuple_tails
+      (TAKE i ats) (TAKE i avs))) <= pbase + capacity` by
+    (pure_once_rewrite_tac [GSYM arithmeticTheory.ADD_ASSOC] >>
+     qpat_assum `Abbrev (off = _)`
+       (pure_once_rewrite_tac o single o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     qpat_assum `pbase + dst_offset + off <= _` ACCEPT_TAC) >>
+  `ty = lowered_value_type ce e` by simp_tac bool_ss [Abbr `ty`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise ctor_encoder_length_witness_mods

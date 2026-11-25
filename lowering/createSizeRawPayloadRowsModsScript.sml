@@ -152,32 +152,44 @@ Proof
 QED
 
 Resume create_raw_payload_replay_rows_mods[row_premises]:
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+  conj_tac >- qpat_assum `contract_inv _ _ _ _ _` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `module_body_inv _ _ _ _ _` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `shadow_body_inv_mods _ _ _ _` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `!K. dead_lo_ok_mods _ _ _ _ _` ACCEPT_TAC >>
+  conj_tac
   >- (qpat_x_assum `EVERY (create_operand_completed_ok_mods mods exps cx) _` mp_tac >>
       Cases_on `hs` >> simp[create_operand_order_def,EVERY_APPEND,DROP_PREFIX,TAKE_APPEND1] >>
-      metis_tac[EVERY_MEM,EL_MEM])
+      metis_tac[EVERY_MEM,EL_MEM]) >>
+  conj_tac
   >- (rpt strip_tac >> irule create_call_operand_body_pre_mods >> simp[EL_MEM] >>
       goal_assum (drule_at Any) >> simp[EL_MEM]) >>
-  qx_gen_tac `i` >> disch_tac >>
-  qpat_assum `!i. i < LENGTH args ==> compile_expr _ _ _ _ = _ /\ _`
-    (qspec_then `i` (drule_then (map_every assume_tac o CONJUNCTS))) >>
-  drule_all blueprint_keyword_mono >> strip_tac >>
-  qpat_assum `explicit = _` (fn he => rule_assum_tac (PURE_REWRITE_RULE[he])) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
-  >- (strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  strip_tac >> fs[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  disch_tac >> irule ctor_observed_cut_silent >>
-  qexistsl [`ctx`,`((C (SUC i)).cs_current_bb,LENGTH (C (SUC i)).cs_current_insts)`,
-    `gas_explicit_sites ctx shctx`,`func`,`St (SUC i)`,`Mid i`] >>
-  conj_tac >- simp[] >>
-  conj_tac >- simp[] >>
   conj_tac
-  >- (irule RTC_MONOTONE >>
-      qpat_assum `create_expr_prefix (M i) (C (SUC i)) _ _ _ _ _ _`
-        (irule_at Any o REWRITE_RULE [create_expr_prefix_marked]) >>
-      simp[FORALL_PROD,create_marked_edge_def,create_prefix_step_def,PULL_EXISTS]) >>
-  simp[]
+  >- (qx_gen_tac `i` >> disch_tac >>
+      qpat_assum `!i. i < LENGTH args ==> compile_expr _ _ _ _ = _ /\ _`
+        (qspec_then `i` (drule_then (map_every assume_tac o CONJUNCTS))) >>
+      drule_all blueprint_keyword_mono >> strip_tac >>
+      qpat_assum `explicit = _` (fn he => rule_assum_tac (PURE_REWRITE_RULE[he])) >>
+      ntac 9 (conj_tac >- first_assum ACCEPT_TAC) >>
+      conj_tac >- (disch_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_tac >> ntac 5 (conj_tac >- first_assum ACCEPT_TAC) >>
+      disch_tac >>
+      qpat_assum `if exprs_can_mutate ce (DROP (SUC i) args) then _ else _`
+        (mp_tac o PURE_REWRITE_RULE []) >>
+      simp[] >>
+      conj_tac >- (gvs[]) >>
+      conj_tac >- (gvs[]) >>
+      disch_tac >> irule ctor_observed_cut_silent >>
+      qexistsl [`ctx`,`((C (SUC i)).cs_current_bb,LENGTH (C (SUC i)).cs_current_insts)`,
+        `gas_explicit_sites ctx shctx`,`func`,`St (SUC i)`,`Mid i`] >>
+      conj_tac >- simp[] >>
+      conj_tac >- simp[] >>
+      conj_tac
+      >- (irule RTC_MONOTONE >>
+          qpat_assum `create_expr_prefix (M i) (C (SUC i)) _ _ _ _ _ _`
+            (irule_at Any o REWRITE_RULE [create_expr_prefix_marked]) >>
+          simp[FORALL_PROD,create_marked_edge_def,create_prefix_step_def,PULL_EXISTS]) >>
+      simp[]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume create_raw_payload_replay_rows_mods[suffix_storage]:
