@@ -332,19 +332,33 @@ Resume ctor_unwrap_runtime_code_arrival_strong_mods[linked_ghost]:
          UNABBREV_ALL_TAC >> POP_ASSUM_LIST (K ALL_TAC) >> simp[allocas_from_def]) >>
      fs[Abbr `q`] >> decide_tac) >>
   irule runtime_loccode_ghost_frame >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- qpat_assum `lo <= q.vs_alloca_next` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `allocas_from lo q` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `stor_taint_ok_at (DF H) tf q` ACCEPT_TAC >>
   qexistsl_tac [`G`, `func`, `type_memory_size rty`, `s`, `sb`, `w2n dst`, `tn`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (rpt strip_tac >> qpat_assum `!x sz. cenv.ce_return_buf = _ ==> _` drule >>
-      strip_tac >> drule_all not_fresh_at_mono >> simp[])
-  >- (rpt strip_tac >> qpat_assum `!x sz. cenv.ce_return_pc = _ ==> _` drule >>
-      strip_tac >> drule_all not_fresh_at_mono >> simp[])
+  conj_tac
+  >- qpat_assum `!name b len. local_region cenv ee.scopes s name b len ==> _` ACCEPT_TAC >>
+  conj_tac
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >>
+      conj_tac >- qpat_assum `sa.cs_next_var <= sb.cs_next_var` ACCEPT_TAC >>
+      qpat_assum `!x sz. cenv.ce_return_buf = _ ==> _` (drule_then ACCEPT_TAC)) >>
+  conj_tac
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >>
+      conj_tac >- qpat_assum `sa.cs_next_var <= sb.cs_next_var` ACCEPT_TAC >>
+      qpat_assum `!x sz. cenv.ce_return_pc = _ ==> _` (drule_then ACCEPT_TAC)) >>
+  conj_tac
   >- (qpat_assum `!x. not_fresh_at sb x ==> lookup_var x z = _ /\ _` mp_tac >>
       UNABBREV_ALL_TAC >> POP_ASSUM_LIST (K ALL_TAC) >> simp[lookup_var_def]) >>
-  qpat_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory`
-    mp_tac >>
-  UNABBREV_ALL_TAC >> POP_ASSUM_LIST (K ALL_TAC) >> simp[] >>
-  strip_tac >> rpt gen_tac >> strip_tac >> first_x_assum irule >> decide_tac
+  conj_tac
+  >- (qpat_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory`
+        mp_tac >>
+      UNABBREV_ALL_TAC >> POP_ASSUM_LIST (K ALL_TAC) >> simp[] >>
+      strip_tac >> rpt gen_tac >> strip_tac >> first_x_assum irule >> decide_tac) >>
+  conj_tac >- qpat_assum `!j. _ ==> (j IN tf.t_mem <=> j IN tn.t_mem)` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `lo <= w2n dst` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `local_ptrs_reserved cenv sb` ACCEPT_TAC >>
+  conj_tac >- qpat_assum `local_ptrs_rel func cenv ee.scopes s` ACCEPT_TAC >>
+  qpat_assum `ghost_inv_at_mods (DF H) lo d cenv cx ee G tn s` ACCEPT_TAC
 QED
 
 Resume ctor_unwrap_runtime_code_arrival_strong_mods[linked_expr_post]:
@@ -372,25 +386,51 @@ Resume ctor_unwrap_runtime_code_arrival_strong_mods[linked_expr_post]:
      qexistsl_tac [`w2n dst`,
       `mk_inst sb.cs_next_id ALLOCA [Lit (n2w (type_memory_size rty))] [root]`,
       `allocst`, `mid`, `type_memory_size rty`] >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     simp_tac (srw_ss()) [mk_inst_def]
+     conj_tac
+     >- qpat_assum `!name b len. local_region cenv ee.scopes allocst name b len ==> _`
+          ACCEPT_TAC >>
+     conj_tac
+     >- qpat_assum `!x. not_fresh_at mid x ==> lookup_var x z = lookup_var x allocst`
+          ACCEPT_TAC >>
+     conj_tac
      >- (rpt gen_tac >> strip_tac >>
          qpat_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = mem_bytes_at off len allocst.vs_memory`
            irule >> decide_tac) >>
-     first_assum ACCEPT_TAC) >>
+     conj_tac >- qpat_assum `LENGTH allocst.vs_memory <= LENGTH z.vs_memory` ACCEPT_TAC >>
+     conj_tac >- simp[mk_inst_def] >>
+     conj_tac
+     >- (simp_tac (srw_ss()) [mk_inst_def] >>
+         qpat_assum `FLOOKUP allocst.vs_allocas sb.cs_next_id = SOME _` ACCEPT_TAC) >>
+     conj_tac >- qpat_assum `copy_static z = copy_static allocst` ACCEPT_TAC >>
+     conj_tac >- qpat_assum `MEM (mk_inst sb.cs_next_id ALLOCA _ _) (fn_insts func)` ACCEPT_TAC >>
+     conj_tac >- qpat_assum `local_ptrs_reserved cenv mid` ACCEPT_TAC >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx ee allocst` ACCEPT_TAC) >>
   `wb_frame cenv es ee sa s0 s` by
     (qpat_assum `vv_post_mods H _ _ _ _ _ _ _ _ _ _ _ _ s`
        (strip_assume_tac o REWRITE_RULE [vv_post_mods_def]) >>
      rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es ee sa s0 q` by suspend "compose_wb" >>
   `(~expr_has_effect e ==> pure_frame cenv func es sa s0 q)` by
-    (strip_tac >> irule pure_frame_trans >> conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl_tac [`ee`,`sb`,`s`] >>
+    (strip_tac >>
      qpat_assum `vv_post_mods H _ _ _ _ _ _ _ _ _ _ _ _ s`
        (strip_assume_tac o REWRITE_RULE [vv_post_mods_def]) >>
      qpat_assum `wb_frame cenv ee ee sb s q`
        (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
-     rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE (first_x_assum irule >> first_assum ACCEPT_TAC))) >>
+     `pure_frame cenv func es sa s0 s` by
+       qpat_assum `~expr_has_effect e ==> pure_frame cenv func es sa s0 s`
+         (drule_then ACCEPT_TAC) >>
+     irule pure_frame_trans >> conj_tac >- qpat_assum `local_ptrs_reserved cenv sa` ACCEPT_TAC >>
+     qexistsl_tac [`ee`,`sb`,`s`] >>
+     conj_tac >- qpat_assum `sa.cs_next_id <= sb.cs_next_id` ACCEPT_TAC >>
+     conj_tac >- qpat_assum `MAP FDOM es.scopes = MAP FDOM ee.scopes` ACCEPT_TAC >>
+     conj_tac
+     >- qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x s = SOME w`
+          ACCEPT_TAC >>
+     conj_tac
+     >- qpat_assum `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP q.vs_allocas aid = SOME b`
+          ACCEPT_TAC >>
+     conj_tac >- qpat_assum `pure_frame cenv func es sa s0 s` ACCEPT_TAC >>
+     qpat_assum `pure_frame cenv func ee sb s q` ACCEPT_TAC) >>
   simp[expr_post_mods_def] >> conj_tac
   >- (qpat_assum `wb_frame cenv es ee sa s0 q`
         (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
@@ -405,7 +445,22 @@ Resume ctor_unwrap_runtime_code_arrival_strong_mods[linked_expr_post]:
         (qpat_assum `~is_word_type (post_value_type cenv e)` mp_tac >>
          qpat_assum `post_value_type cenv e = expr_type e` (fn th => pure_rewrite_tac[th]) >>
          disch_then ACCEPT_TAC) >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      conj_tac
+      >- qpat_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x q = SOME w`
+           ACCEPT_TAC >>
+      conj_tac
+      >- qpat_assum `!id off len. _ ==> mem_bytes_at off len q.vs_memory = mem_bytes_at off len s0.vs_memory`
+           ACCEPT_TAC >>
+      conj_tac
+      >- qpat_assum `!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==> FLOOKUP q.vs_allocas id = SOME entry`
+           ACCEPT_TAC >>
+      conj_tac >- qpat_assum `~is_word_type (expr_type e)` ACCEPT_TAC >>
+      conj_tac >- qpat_assum `post_value_type cenv e = expr_type e` ACCEPT_TAC >>
+      conj_tac >- qpat_assum `~expr_has_effect e ==> pure_frame cenv func es sa s0 q` ACCEPT_TAC >>
+      conj_tac >- qpat_assum `storage_well_formed_on cx ee (FST H)` ACCEPT_TAC >>
+      reverse conj_tac
+      >- (conj_tac >- qpat_assum `locals_kept cenv es ee s0 q` ACCEPT_TAC >>
+          qpat_assum `stmt_state_rel H ctx func cenv cx ee q` ACCEPT_TAC) >>
       qexistsl_tac [`sb.cs_next_id`, `type_memory_size rty`,`rty`,`dst`] >>
       conj_tac >- qpat_assum `sb.cs_next_id < sc.cs_next_id` ACCEPT_TAC >>
       conj_tac >- qpat_assum `sa.cs_next_id <= sb.cs_next_id` ACCEPT_TAC >>
