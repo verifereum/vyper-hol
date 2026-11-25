@@ -400,7 +400,7 @@ Proof
   gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
       expr_res_ok_def] >>
   Cases_on `v2` >>
-  gvs[evaluate_binop_def, expr_res_ok_def] >>
+  gvs[] >>
   rpt IF_CASES_TAC >> gvs[word_value_def] >>
   `n = i` by ARITH_TAC >> simp[]
 QED

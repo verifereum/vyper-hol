@@ -18,7 +18,7 @@ Ancestors
   stmtSimReason stmtSimDefs stmtSimProps stmtSimIfProps exprSimDefs bodyMemoryDefs bodyPtrDefs bodyExprPreFacts exprSimSource
   valueEncoding allocaHistory vyperStorageTrace vyperStorageFootprint
   venomExecSemantics venomState
-  bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
+  bodyFullPreds bodyFullSimProjection bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   reasonSourceProps loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
 val _ = Parse.hide "body";
@@ -75,7 +75,8 @@ Proof
   `expr_type e = BaseT BoolT` by fs[type_stmt_assert_reason] >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx (BaseT BoolT) e es` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (irule (CONJUNCT1 (UNDISCH body_expr_full_ok_simulations) |> DISCH_ALL) >>
+     metis_tac[]) >>
   rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   fs[gas_shadow_stmt_def, gas_shadow_assert_reason_def] >>
   drule_all compile_assert_reason_layout_full >> strip_tac >> gvs[] >>
