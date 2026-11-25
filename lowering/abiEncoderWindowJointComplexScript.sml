@@ -4632,6 +4632,12 @@ QED
 Finalise compile_abi_encode_to_buf_complex_window_joint_payload
 
 (* The original callback remains sufficient when no geometry is requested. *)
+Triviality members_payload_trivial:
+  abi_members_path_laws (\ctx func explicit a b s t. T)
+Proof
+  simp[abi_members_path_laws_def]
+QED
+
 Theorem compile_abi_encode_to_buf_complex_window_joint:
   (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==>
     !dst src st out en ctx func s at av sb cap d G tn lo explicit PG.
@@ -4743,8 +4749,11 @@ Theorem compile_abi_encode_to_buf_complex_window_joint:
       !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
         (s,G,tn) [] (OK t,G',tn')
 Proof
-  MATCH_ACCEPT_TAC
-    (SIMP_RULE bool_ss [abi_members_path_laws_def]
-      (Q.INST [`P` |-> `\ctx func explicit a b s t. T`]
-        compile_abi_encode_to_buf_complex_window_joint_payload))
+  ACCEPT_TAC
+    (PURE_REWRITE_RULE [AND_CLAUSES]
+      (BETA_RULE
+        (MATCH_MP
+          (Q.INST [`P` |-> `\ctx func explicit a b s t. T`]
+            compile_abi_encode_to_buf_complex_window_joint_payload)
+          members_payload_trivial)))
 QED

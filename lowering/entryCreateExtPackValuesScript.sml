@@ -2,6 +2,7 @@
 Theory entryCreateExtPackValues
 Ancestors
   bodyFullExtCallDirectEncode bodyFullExtCallDirectState abiEncodeValuesRun entryCreateAdminSequence
+  abiEncodeValuesCursorInit abiEncodeValuesFinish abiEncoderWindowPhase
   loweringStateRelDefs loweringShapeDefs bodyPtrDefs loweringPosts context
   entryCreatePathScope bodyPtrMakeArrayPrimitiveInstall bodyPtrMakeArrayEmission
   entryIntCallStageBuffer exprSimAbiEncodeObliviousFacts exprSimAbiEncodeObliviousSimulation
@@ -82,24 +83,46 @@ Proof
   simp[create_operand_at_def, mk_inst_def, frag_ids_def, is_terminator_def]
 QED
 
-Theorem encode_in_band_laws[local]:
-  (!bb i. lookup_block en.cs_current_bb func.fn_blocks = SOME bb /\
-    get_instruction bb (LENGTH en.cs_current_insts) = SOME i ==>
-    i.inst_id NOTIN frag_ids st en) ==>
-  abi_encode_values_path_laws (encode_in_band st en explicit ctx func)
-    func st en u hl alen
+Triviality abi_encode_values_init_observes_from_scope:
+  (!a c u v. create_operand_full_scope a c explicit ctx func u [] (OK v) ==>
+    Obs a c u v) ==>
+  abi_encode_values_init_observes ctx func lo explicit PG Obs
 Proof
-  strip_tac >> simp_tac bool_ss [abi_encode_values_path_laws_def] >>
-  rpt conj_tac
-  >- simp[encode_in_band_def]
-  >- (simp[encode_in_band_def, ci_mono_def] >> rpt strip_tac >>
-      irule (Q.INST [`left` |-> `[]`,`right` |-> `[]`]
-        create_expr_prefix_append |> SIMP_RULE bool_ss [APPEND]) >>
-      qexists_tac `v` >> metis_tac[LESS_EQ_TRANS])
-  >- (rpt strip_tac >> irule encode_in_band_scope >>
-      metis_tac[encode_cursor_init_scope])
-  >> rpt strip_tac >> irule encode_in_band_scope >>
-  metis_tac[encode_cursor_finish_scope]
+  strip_tac >> simp_tac bool_ss [abi_encode_values_init_observes_def] >>
+  rpt gen_tac >> strip_tac >> drule_all abi_encode_values_cursor_init_run >>
+  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
+    (qx_choosel_then [`t`,`slot`,`p`,`G'`,`tn'`] strip_assume_tac)) >>
+  qexistsl_tac [`t`,`slot`,`p`,`G'`,`tn'`] >> asm_rewrite_tac[] >>
+  qpat_assum `!a c u v. _ ==> Obs a c u v` irule >>
+  irule (Q.INST [`b` |-> `mid`, `hl` |-> `hl`, `p` |-> `cursor`]
+    encode_cursor_init_scope) >>
+  drule_then strip_assume_tac window_phase_control >>
+  asm_rewrite_tac[] >> simp[] >> qexists_tac `hl` >> fs[]
+QED
+
+Triviality abi_encode_values_finish_observes_from_scope:
+  (!a c u v. create_operand_full_scope a c explicit ctx func u [] (OK v) ==>
+    Obs a c u v) ==>
+  abi_encode_values_finish_observes ctx func lo explicit PG Obs
+Proof
+  strip_tac >> PURE_REWRITE_TAC [abi_encode_values_finish_observes_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_values_finish_run >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`t`,`G'`,`tn'`] strip_assume_tac)) >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >> asm_rewrite_tac[] >>
+  qpat_assum `!a c u v. _ ==> Obs a c u v` irule >>
+  irule encode_cursor_finish_scope >>
+  drule_then strip_assume_tac window_phase_control >>
+  asm_rewrite_tac[] >> qexistsl_tac [`out`, `Var cursor`] >> asm_rewrite_tac[]
+QED
+
+Theorem encode_in_band_observer[local]:
+  abi_encode_values_observer st en (encode_in_band st en explicit ctx func)
+    (\u v. create_expr_prefix st en explicit ctx func u [] v)
+Proof
+  simp[abi_encode_values_observer_def, encode_in_band_def, ci_mono_def] >>
+  rpt strip_tac >> drule_all create_expr_prefix_append >> simp[]
 QED
 
 Theorem extcall_direct_values_scoped_from_rows:
@@ -153,11 +176,22 @@ Proof
      qpat_assum `!i. i < LENGTH _ ==> get_instruction _ _ = _`
        (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
      rpt strip_tac >> gvs[frag_ids_def, mk_inst_def]) >>
-  mp_tac (Q.INST [`R` |-> `encode_in_band st en explicit ctx func`]
-     extcall_direct_values_execute_with_path) >>
+  qpat_assum `32 <= capacity` (fn cap =>
+    drule_then (fn len =>
+      mp_tac (SIMP_RULE bool_ss [MATCH_MP abi_encode_saved_state_extcall len, cap]
+        (BETA_RULE (Q.INST
+          [`dst_offset` |-> `32`, `prefix` |-> `selector`, `track_frame` |-> `F`,
+           `Obs` |-> `encode_in_band st en explicit ctx func`,
+           `R` |-> `\u v. create_expr_prefix st en explicit ctx func u [] v`]
+          abi_encode_saved_values_execute_with_frame_and_path))))
+      extcall_direct_state_selector_length) >>
   impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      TRY (irule encode_in_band_laws >> first_assum ACCEPT_TAC) >>
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+      >- (irule abi_encode_values_init_observes_from_scope >> rpt strip_tac >>
+          irule encode_in_band_scope >> asm_rewrite_tac[])
+      >- (irule abi_encode_values_finish_observes_from_scope >> rpt strip_tac >>
+          irule encode_in_band_scope >> asm_rewrite_tac[])
+      >- ACCEPT_TAC encode_in_band_observer >>
       map_every qx_gen_tac [`ci`,`r`] >> disch_tac >>
       qpat_assum `!ci (r:string). MEM ci (fn_insts func) /\ _ ==> _`
         (qspecl_then [`ci`,`r`] mp_tac) >>
@@ -173,7 +207,7 @@ Proof
   qexistsl [`z`,`Gz`,`tz`] >> asm_rewrite_tac[] >>
   qpat_assum `extcall_direct_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ selector en z _ _`
     (strip_assume_tac o REWRITE_RULE [extcall_direct_state_def]) >>
-  fs[encode_in_band_def, create_operand_full_scope_def]
+  fs[create_operand_full_scope_def]
 QED
 
 (* Lift the encoder's existing opcode preservation to its own fragment,
