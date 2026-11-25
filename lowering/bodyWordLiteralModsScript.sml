@@ -66,7 +66,7 @@ val word_literal_shadow_tac =
     (irule word_literal_shadow_compile >> simp[] >> qexists_tac `sa` >> simp[]);
 
 (* The empty path keeps the physical and ghost states on the same landing. *)
-Theorem word_literal_pure_outcome[local]:
+Theorem word_literal_pure_outcome:
   ~s.vs_halted /\
   (!tail. source (es with gas_obs := tail) = (res, es with gas_obs := tail)) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
