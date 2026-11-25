@@ -13,6 +13,7 @@ Ancestors
   compileVyper immutableLocationProps checkedCopyAcyclic whitelistCheckerDecls
   runtimeConstantSubstitutionProps
   vyperTypeExternalDefaults publicGetterProps loweringShapeProps loweringShapeSource
+  ctorCallFreeBoolChain boolChainOperandsSupported runtimeConstBoolChainOperands
 
 Libs runtimeDefaultRejectSyntaxLib
 
@@ -298,7 +299,60 @@ Resume runtime_default_expr_terminal_opcodes[builtin]:
       suspend "bop",
      qmatch_goalsub_abbrev_tac `compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _ _` >>
       suspend "make_array",
+     qmatch_goalsub_rename_tac `compile_builtin_dispatch_body _ _ _ _ NamedConst _ _` >>
+      suspend "named_const",
+     qmatch_goalsub_rename_tac `compile_builtin_dispatch_body _ _ _ _ (BoolChain d n) _ _` >>
+      suspend "bool_chain",
      suspend "simple_builtins"]
+QED
+
+Resume runtime_default_expr_terminal_opcodes[named_const]:
+  gvs[LENGTH_EQ_NUM_compute, Excl "expr_child_callback_def"] >>
+  simp[compile_builtin_dispatch_body_def, Excl "expr_child_callback_def"] >>
+  pairarg_tac >>
+  simp[exprBopLoweringTheory.as_stack_val_pair, exprBopLoweringTheory.as_ptr_val_pair,
+       COND_RAND, COND_RATOR, Excl "expr_child_callback_def"] >>
+  metis_tac[SND]
+QED
+
+Resume runtime_default_expr_terminal_opcodes[bool_chain]:
+  gvs[LENGTH_EQ_NUM_compute, Excl "expr_child_callback_def"] >>
+  rename1 `compile_builtin_dispatch_body _ _ _ _ (BoolChain d n) [arg] _` >>
+  `~supported_expr_exists (^checked_default_expr ce) arg` by
+    fs[supported_exprs_exists_every] >>
+  `EVERY (runtime_constant_expr mods) (bool_chain_operands d (n - 1) arg)` by
+    simp[runtime_constant_bool_chain_operands] >>
+  `EVERY (\e. ~supported_expr_exists (^checked_default_expr ce) e)
+     (bool_chain_operands d (n - 1) arg)` by simp[bool_chain_operands_supported] >>
+  `!r exit_lbl st. ^default_code st ==>
+     ^default_code (SND (compile_bool_chain_ops (expr_child_callback lim compile_expr)
+       ce d r exit_lbl (bool_chain_operands d (n - 1) arg) st))` by
+    (rpt gen_tac >> simp[Excl "expr_child_callback_def"] >> strip_tac >>
+     irule (default_ops opcode_every_bool_chain_ops) >>
+     simp[Excl "expr_child_callback_def"] >>
+     once_rewrite_tac[EVERY_MEM] >> qx_gen_tac `e` >> strip_tac >> BETA_TAC >>
+     qx_gen_tac `st'` >> strip_tac >>
+     `expr_size e <= expr_size arg` by metis_tac[bool_chain_operand_size] >>
+     `cenv_defaults_size ce + expr_size e < lim` by (simp[Abbr `lim`] >> decide_tac) >>
+     `expr_size e + cenv_defaults_size ce < lim` by decide_tac >>
+     `runtime_constant_expr mods e /\ ~supported_expr_exists (^checked_default_expr ce) e` by
+       (conj_tac
+        >- (qpat_assum `EVERY (runtime_constant_expr mods) (bool_chain_operands _ _ _)`
+              (qspec_then `e` mp_tac o REWRITE_RULE [EVERY_MEM]) >> simp[])
+        >> qpat_assum `EVERY (\x. ~supported_expr_exists _ x) (bool_chain_operands _ _ _)`
+             (qspec_then `e` mp_tac o REWRITE_RULE [EVERY_MEM]) >> simp[]) >>
+     qpat_x_assum `~supported_expr_exists _ e` (assume_tac o SRULE []) >>
+     irule (SRULE [] runtime_default_lower_value_opcodes) >>
+     simp[Excl "expr_child_callback_def"] >> qx_gen_tac `cs` >> strip_tac >>
+     simp[expr_child_callback_def] >>
+     qpat_assum `!child env ty st. _ ==> _ ==> _`
+       (qspecl_then [`e`, `ce`, `BaseT BoolT`, `cs`] mp_tac) >> simp[]) >>
+  simp[compile_builtin_dispatch_body_def, pairTheory.ELIM_UNCURRY,
+       Excl "expr_child_callback_def"] >>
+  irule (default_insts every_state_insts_new_block) >>
+  first_assum (irule o SRULE []) >>
+  irule (default_insts every_state_insts_fresh_label) >>
+  irule (default_insts every_state_insts_fresh_var) >> simp[]
 QED
 
 val default_builtin_step =
