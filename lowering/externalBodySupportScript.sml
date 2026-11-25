@@ -477,7 +477,11 @@ Proof
   Cases_on `classify_functions tops` >>
   rename1 `classify_functions tops = (exts,tail)` >> PairCases_on `tail` >>
   drule_all lower_vyper_runtime_unit_consts_guard >> strip_tac >>
-  drule_all external_lookup_body_typing >> strip_tac >>
+  drule_all external_lookup_body_typing_canonical >>
+  disch_then (qx_choosel_then [`art`, `env_t`, `env'`] strip_assume_tac) >>
+  `env_t.event_fields = art.cta_event_fields` by
+    fs[vyperTypeEventLookupTheory.function_entry_env_event_fields] >>
+  qpat_x_assum `env_t = function_entry_env _ _ _ _ _` kall_tac >>
   drule source_typing_ok_consts_ready >> strip_tac >> gvs[] >>
   `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]` by
     fs[source_deployment_rel_def] >>
