@@ -84,7 +84,7 @@ Proof
   fs[EVERY_MEM, mapping_admin_inst_def]
 QED
 
-Theorem mapping_suffix_raw_scope[local]:
+Theorem mapping_suffix_raw_scope:
   (if is_bytestring_type kt then compile_keccak256_key key F sn
    else (key,sn)) = (hashed,sp) /\
   compile_mapping_subscript bop hashed sp = (slot,sb) /\
