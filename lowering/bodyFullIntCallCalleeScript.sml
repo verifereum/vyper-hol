@@ -8,7 +8,7 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   bodyFullGhostFrame[qualified,ignore_grammar] augAssignFullStoreGhost[qualified,ignore_grammar]
   ghostPcTransportPtr[qualified,ignore_grammar]
   bodyIntCallSeams fragGasFocus gasOutcomeFullCompose gasOutcomeFull gasStorage
-  vyperStorageFootprint vyperStorageTrace vyperState venomState
+  vyperStorageFootprint vyperStorageTrace vyperState venomState createSizeExit[qualified]
   contextRawReachable contextCodegenRel contextCodegenRelProps
   vyperInterpreter gasContext stmtSimDefs exprSimDefs compileEnv
   bodyFullIntCallDefs bodyFullIntCallByteFrame bodyFullPreds
@@ -2134,11 +2134,14 @@ Theorem intcall_callee_lock_run[local]:
   (?e u. lock_if_nr cx T view es = (INR (Error (RuntimeError "nonreentrant lock")),e) /\
           run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort u) \/
   (?e u. lock_if_nr cx T view es = (INR (Error (RuntimeError "write in static context")),e) /\
-          run_inst_seq (emitted_insts sa sb) s = Abort ExHalt_abort u)
+          run_inst_seq (emitted_insts sa sb) s = Abort ExHalt_abort u /\
+          u.vs_call_ctx.cc_static)
 Proof
   strip_tac >> drule_then assume_tac transientLockPropsTheory.compile_nonreentrant_lock_transient_code >>
   Cases_on `tload (n2w key) s = 1w` >> Cases_on `view` >> Cases_on `cx.txn.is_static` >>
-  simp[transientLockPropsTheory.transient_lock_code_execution, lock_if_nr_def,
+  simp[transientLockPropsTheory.transient_lock_code_execution,
+       transientLockPropsTheory.transient_lock_checked_state_def,
+       update_var_def, halt_state_def, set_returndata_def, lock_if_nr_def,
        acquire_nonreentrant_lock_execution, ignore_bind_def, bind_def,
        return_def, check_not_static_def, check_def, assert_def, raise_def]
 QED
@@ -2148,7 +2151,8 @@ Theorem intcall_callee_lock_abort[local]:
   ~s.vs_halted /\
   lock_if_nr cx nr (is_view_mut mut) es = (INR (Error (RuntimeError msg)),ee) /\
   (!H. gas_origin_ptr_path (DF H,lo,explicit,ctx,callee,PG) (s,G,tn) []
-         (Abort ab u,Gl,tnl)) ==>
+         (Abort ab u,Gl,tnl)) /\
+  ~oversized_create_abort ctx (Abort ab u) ==>
   gas_outcome_full (DF,lo,explicit,ctx,callee,PG) (cx_tops cx) cx st0
     (intcall_callee_src cx name mut nr ss) (es,s,G,tn) Q
     (\H res ee gt r. intcall_callee_exit_full (DF,lo) H func cenv cx mut nr
@@ -5284,7 +5288,8 @@ Proof
            (?e u. lock_if_nr cx T view es1 = (INR (Error (RuntimeError "nonreentrant lock")),e) /\
                    run_inst_seq (emitted_insts prologue a) at_pro = Abort Revert_abort u) \/
            (?e u. lock_if_nr cx T view es1 = (INR (Error (RuntimeError "write in static context")),e) /\
-                   run_inst_seq (emitted_insts prologue a) at_pro = Abort ExHalt_abort u)` by
+                   run_inst_seq (emitted_insts prologue a) at_pro = Abort ExHalt_abort u /\
+                   u.vs_call_ctx.cc_static)` by
     (disch_tac >>
      `compile_nonreentrant_lock key T view prologue = ((),a)` by simp[] >>
      irule intcall_callee_lock_run >> conj_tac >- simp[] >>
@@ -5297,7 +5302,8 @@ Proof
       qpat_assum `nr ==> ?Gl tnl. _` drule >> strip_tac >>
       `?msg ee ab u. lock_if_nr cx nr (is_view_mut mut) es1 =
                        (INR (Error (RuntimeError msg)),ee) /\
-                     run_inst_seq (emitted_insts prologue a) at_pro = Abort ab u` by
+                     run_inst_seq (emitted_insts prologue a) at_pro = Abort ab u /\
+                     (ab = Revert_abort \/ u.vs_call_ctx.cc_static)` by
         (qpat_assum `nr ==> (?e u. _) \/ _` drule >>
          qpat_assum `nr` (pure_rewrite_tac o single) >>
          qpat_assum `view = is_view_mut mut` (pure_rewrite_tac o single) >>
@@ -5306,16 +5312,22 @@ Proof
              qpat_assum `nr` (pure_rewrite_tac o single) >>
              qpat_assum `lock_if_nr cx T _ es1 = (INL (),_)` mp_tac >>
              POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
-         goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+         goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
       qpat_assum `!ab u. run_inst_seq _ at_pro = Abort ab u ==> ?j. _` drule >>
       disch_then (qx_choose_then `j` assume_tac) >>
-      irule intcall_callee_lock_abort >> conj_tac
-      >- (qexistsl_tac [`Gl`,`ab`,`tnl`,`u with vs_inst_idx := j`] >>
-          gen_tac >> irule gas_origin_ptr_path_trans >>
-          qexistsl_tac [`Gpro`,`at_pro`,`tnpro`] >>
-          conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`ee`,`msg`] >> first_assum ACCEPT_TAC) >>
+      irule intcall_callee_lock_abort >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+      FIRST
+        [qexistsl_tac [`ee`,`msg`] >> first_assum ACCEPT_TAC >> NO_TAC,
+         qexistsl_tac [`Gl`,`ab`,`tnl`,`u with vs_inst_idx := j`] >>
+         conj_tac
+         >- (gen_tac >> irule gas_origin_ptr_path_trans >>
+             qexistsl_tac [`Gpro`,`at_pro`,`tnpro`] >>
+             conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+         FIRST
+           [qpat_assum `ab = Revert_abort` (fn eq => simp[eq]),
+            qpat_assum `u.vs_call_ctx.cc_static` (fn static =>
+              simp[static, createSizeExitTheory.oversized_create_abort_def])]]) >>
   pop_assum strip_assume_tac >>
   `~nr ==> locked = es1` by
     (strip_tac >> qpat_x_assum `lock_if_nr _ _ _ es1 = (INL (),locked)` mp_tac >>
@@ -6070,6 +6082,14 @@ Proof
             (mp_tac o REWRITE_RULE [eq,exit_result_def])) >> simp[NoAsms]) >>
       conj_tac >- first_assum ACCEPT_TAC >>
       BETA_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac
+      >- (simp[NoAsms, createSizeExitTheory.create_size_exit_ok_def, Abbr `vres`] >>
+          disch_then (fn oversize =>
+            qpat_assum `create_size_exit_ok ctx res r` (fn valid =>
+              let
+                val eq = MATCH_MP
+                  (REWRITE_RULE [createSizeExitTheory.create_size_exit_ok_def] valid) oversize
+              in simp[NoAsms, eq, handle_function_def, raise_def] end))) >>
       qpat_assum `!tail. stmt_exit_ptr (RetQ Hfinal) _ res _ r`
         (qspec_then `[]` mp_tac) >>
       pure_rewrite_tac[bodyPtrDefsTheory.stmt_exit_ptr_def] >> strip_tac
