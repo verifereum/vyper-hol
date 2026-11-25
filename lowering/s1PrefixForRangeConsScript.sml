@@ -109,7 +109,9 @@ Proof
      simp[NoAsms, storage_trace_frame_return, cj 2 evaluate_storage_trace_frame]) >>
   Cases_on `storage_trace_domain cx st0 es.storage_trace`
   >- (rangeRoundEntryLib.establish_invariant >>
-      rangeRoundEntryLib.prepare_frame >> suspend "scoped_frame") >>
+      rangeRoundEntryLib.enter_round >>
+      rangeRoundEntryLib.name_frame >>
+      rangeRoundEntryLib.frame_at_horizons >> suspend "scoped_frame") >>
   irule gas_prefix_full_invalid_trace_domain >>
   asm_rewrite_tac [] >>
   irule storage_trace_frame_bind_all >>

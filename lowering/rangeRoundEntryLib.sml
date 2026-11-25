@@ -28,10 +28,12 @@ fun assume_layout pkg =
 
 val choose_layout = qx_choosel_then layout_names assume_layout
 
-  val prepare_frame =
+  val enter_round =
     asm_x "enter_cons" (drule_all_then
       (strip_assume_tac o CONV_RULE (TOP_DEPTH_CONV BETA_CONV) o
-       PURE_REWRITE_RULE [LET_THM])) >>
+       PURE_REWRITE_RULE [LET_THM]));
+
+  val name_frame =
     qmatch_asmsub_abbrev_tac `expr_sim_inv bc cx (extend_local env id typ F) ep` >>
     qmatch_asmsub_abbrev_tac `ret_pc_ok bc sb0 t` >>
     qabbrev_tac `s_eq = update_var dv (bool_to_word F) s` >>
@@ -46,7 +48,9 @@ val choose_layout = qx_choosel_then layout_names assume_layout
          (s_eq with vs_inst_idx := 1) s_jnz
          (step_taint (mk_inst j1 EQ [Var cv;Var ev] [dv]) s s_eq tn))` >>
     `ep.storage_trace = es.storage_trace /\ ep.scopes <> [] /\ ep.gas_obs = []` by
-      simp[Abbr `ep`] >>
+      simp[Abbr `ep`];
+
+  val frame_at_horizons =
     `!H. valid_horizon cx st0 H ep.storage_trace ==>
        stmt_state_rel H ctx func bc cx ep t /\ storage_well_formed_on cx ep (FST H) /\
        ghost_inv_at (DF H) lo d bc cx ep Gentry tt t` by
@@ -152,6 +156,6 @@ val choose_layout = qx_choosel_then layout_names assume_layout
        rpt conj_tac >> first_assum ACCEPT_TAC);
 
   fun from_invariant separation_path allocated_local continuation =
-    establish_invariant >> prepare_frame >>
+    establish_invariant >> enter_round >> name_frame >> frame_at_horizons >>
     prepare_locals separation_path allocated_local >> continuation
 end
