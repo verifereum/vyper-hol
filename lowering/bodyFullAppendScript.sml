@@ -4492,7 +4492,7 @@ Proof
   strip_tac >> gvs[] >> drule emitHelperPropsTheory.emitted_insts_emit_op >> metis_tac[]
 QED
 
-Theorem append_resolved_rhs_code_full[local]:
+Theorem append_resolved_rhs_code_full:
   stmt_env cenv lctx ty (Append bt e) sa = (cenv,sf) /\
   compile_get_target_ptr compile_expr cenv bt sa =
     ((bop,SOME loc,SOME (ValPT (ArrayT elem (Dynamic cap)))),sp) /\

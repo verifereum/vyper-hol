@@ -136,7 +136,7 @@ QED
 Finalise compile_for_storage_subplace_array_frag_full
 
 (* A code-backed iterator needs only the selected array, not a frame for its root. *)
-Theorem selected_array_code_frame[local]:
+Theorem selected_array_code_frame:
   !body. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   loop_iterator_place e = SOME tgt /\
   vyperTypeSystem$place_access tgt [] = (TopLevelNameTarget (src,name),attrs) /\

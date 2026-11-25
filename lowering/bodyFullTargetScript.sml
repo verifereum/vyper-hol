@@ -28,7 +28,7 @@ val _ = Parse.hide "body";
 
 (* The element suffix exists for both kinds of subscriptable base; any
    other base has no subscript type. *)
-Theorem subscript_tail_full_ok[local]:
+Theorem subscript_tail_full_ok:
   body_inv tops ctx cenv cx /\
   target_pre cenv cx env (SubscriptTarget bt e) es ==>
   subscript_tail_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

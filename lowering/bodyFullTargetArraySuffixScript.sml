@@ -1157,7 +1157,7 @@ QED
 
 (* The same encoded length used by the finite run decides the actual
    source extension.  In particular it is the post-index storage header. *)
-Theorem array_tail_packet_extend_result[local]:
+Theorem array_tail_packet_extend_result:
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\

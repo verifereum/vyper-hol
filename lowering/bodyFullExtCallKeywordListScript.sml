@@ -70,7 +70,7 @@ Proof
 QED
 
 (* The scalar and materialized cases agree on the frame for the suffix. *)
-Theorem extcall_keyword_head_outcome[local]:
+Theorem extcall_keyword_head_outcome:
   body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
   body_const_cells_agree [(NONE,tops)] cx env es /\

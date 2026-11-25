@@ -27,7 +27,7 @@ Proof
   simp[vyperStateTheory.return_def]
 QED
 
-Theorem subscript_value_base_type[local]:
+Theorem subscript_value_base_type:
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
   place_type cenv obj = ValPT bt ==>
   bt = expr_type obj
