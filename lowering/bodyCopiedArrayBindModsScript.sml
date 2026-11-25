@@ -214,7 +214,8 @@ QED
 Theorem copied_array_children_bind_mods:
   subscript_reads_base cx obj idx /\ expr_type obj = ArrayT et bd /\
   gas_admissible (eval_expr cx obj) expr_vv_res_ok es /\
-  (!bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+  (MEM fn ctx.ctx_functions ==>
+   !bb. MEM bb fn.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   expr_vv_sim_full_mods (DF,lo,d,ctx,shctx,PG,fn,shfn) ce cx ty obj es /\
   (!xs raw mid saved. eval_expr cx obj (es with gas_obs := xs) = (INL raw,mid) /\
     read_result cx raw mid = (INL saved,mid) ==>
@@ -274,6 +275,8 @@ Theorem copied_array_children_bind_mods:
 Proof
   BETA_TAC >> strip_tac >> rewrite_tac[copied_located_vv_mods_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM fn ctx.ctx_functions ==> !bb. _`
+    (drule_then assume_tac) >>
   qpat_x_assum `!st0 sa sb sha shb vv s0 G0 tn0. _ ==> ?bvv sm shm cvv sc shc iop si shi. _`
     (qspecl_then [`st0`,`sa`,`sb`,`sha`,`shb`,`vv`,`s0`,`G0`,`tn0`] mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
