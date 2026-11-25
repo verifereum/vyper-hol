@@ -10336,7 +10336,7 @@ QED
 
 Finalise e2e_deploy_correctness_mods
 
-Theorem deploy_entry_rel_state_mods[local]:
+Theorem deploy_entry_rel_state_mods:
   check_contract T am.layouts tx.target mods = SOME art /\
   deploy_entry_rel_mods mods exps deploy_bc am tx es ==>
   deploy_state_rel_mods mods exps deploy_bc am tx es /\
@@ -10361,7 +10361,7 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem deploy_storage_ok_from_within_mods[local]:
+Theorem deploy_storage_ok_from_within_mods:
   horizon_ok H /\
   (lookup_account tx.target am.accounts).storage = empty_storage /\
   am.tStorage tx.target = empty_storage /\
