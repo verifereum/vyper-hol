@@ -6,6 +6,7 @@ Ancestors
   e2eTransactionWorld
   vyperContext vyperInterpreter vyperState vyperTypeContract
   vyperTypeContractSoundness vyperTypeDeploymentMachine
+  vyperTypeContractModes[qualified]
   vyperTypeInitialState vyperTypeInvariants vyperDeployConstantsFoldMods
   vfmState vfmExecution vfmRunCall vfmTotalBalance callTrace
   e2eCodeFrame vyperLinkedRuntimeImmutables alist finite_map
@@ -47,7 +48,8 @@ Triviality deploy_typing_mods_checker:
     exports_ok am.layouts tx.target mods exps /\
     machine_well_typed am /\ call_tx_well_typed tx
 Proof
-  simp[deploy_typing_ok_mods_def] >> metis_tac[]
+  simp[deploy_typing_ok_mods_def] >>
+  metis_tac[vyperTypeContractModesTheory.check_contract_deploy_implies_runtime]
 QED
 
 Triviality deploy_typing_mods_ownership:
