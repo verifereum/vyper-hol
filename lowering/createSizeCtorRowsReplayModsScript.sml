@@ -100,10 +100,9 @@ Proof
   >- (qpat_x_assum `is_word_type _ ==> _` (drule_then (map_every assume_tac o CONJUNCTS)) >>
       drule_all createSizeCtorWordRowModsTheory.blueprint_ctor_word_row_mods >> strip_tac
       >- (disj1_tac >> qexists_tac `err` >> simp[]) >>
-      disj2_tac >> qexistsl [`v`,`G'`,`tn'`] >> simp[] >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-      TRY (qexistsl [`G'`,`tn'`] >> first_assum ACCEPT_TAC) >>
-      TRY (metis_tac [])) >>
+      disj2_tac >> qexistsl [`v`,`G'`,`tn'`] >> asm_rewrite_tac[] >>
+      conj_tac >- (qexistsl [`tv`,`ann`] >> asm_rewrite_tac[]) >>
+      qexistsl [`G'`,`tn'`] >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `~is_word_type _ ==> _` (drule_then (map_every assume_tac o CONJUNCTS)) >>
   qpat_assum `p.gas_obs = _` (assume_tac o REWRITE_RULE [GSYM APPEND_ASSOC]) >>
   drule_all createSizeCtorValueRowModsTheory.blueprint_ctor_vv_row_mods >> strip_tac
