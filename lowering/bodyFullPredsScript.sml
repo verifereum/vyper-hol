@@ -233,10 +233,15 @@ Definition body_expr_full_ok_def:
         cenv cx ty e es /\
       expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es) /\
-    (!a t n elems.
-      e = Builtin a (MakeArray t n) elems /\
-      builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-      body_exprs_full_ok cx elems) /\
+    ((!a t n elems.
+       e = Builtin a (MakeArray t n) elems /\
+       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+       body_exprs_full_ok cx elems) /\
+     (!t c a b.
+       e = IfExp t c a b ==>
+       body_expr_full_ok cx c /\
+       ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
+        body_expr_full_ok cx a /\ body_expr_full_ok cx b))) /\
     (!ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
       e = Subscript ann e1 e2 /\
       body_inv tops ctx cenv cx /\
@@ -269,8 +274,24 @@ Theorem body_make_array_children_full_ok:
 Proof
   rpt strip_tac >>
   qpat_x_assum `body_expr_full_ok _ _`
-    (mp_tac o CONJUNCT1 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+    (mp_tac o CONJUNCT1 o CONJUNCT1 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
   simp[]
+QED
+
+(* A conditional's test is ok, and its arms are when the test evaluates. *)
+Theorem body_ifexp_children_full_ok:
+  !cx t c a b.
+    body_expr_full_ok cx (IfExp t c a b) ==>
+    body_expr_full_ok cx c /\
+    ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
+     body_expr_full_ok cx a /\ body_expr_full_ok cx b)
+Proof
+  rpt gen_tac >>
+  disch_then (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+  qpat_x_assum `!t' c' a' b'. IfExp _ _ _ _ = IfExp t' c' a' b' ==> _`
+    (qspecl_then [`t`, `c`, `a`, `b`] mp_tac) >>
+  simp[] >> metis_tac[]
 QED
 
 Definition body_stmt_full_ok_def:
