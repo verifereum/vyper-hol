@@ -894,8 +894,10 @@ Resume ecadd_staging_full_from_transfers[before_copy_ghost]:
            `tnp.t_imm = tna.t_imm`,`tp.vs_accounts = ta.vs_accounts`,
            `tp.vs_transient = ta.vs_transient`,`tp.vs_call_ctx = ta.vs_call_ctx`,
            `tp.vs_immutables = ta.vs_immutables`] >>
-        fs[bodyPtrDefsTheory.ghost_inv_at_def,
-          bodyPtrDefsTheory.stor_taint_ok_at_def]) >>
+        qpat_assum `ghost_inv_at (DF H) lo d cenv cx es2 Ga tna ta`
+          (strip_assume_tac o PURE_REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >>
+        qpat_assum `stor_taint_ok_at (DF H) tna ta`
+          (ACCEPT_TAC o PURE_REWRITE_RULE [bodyPtrDefsTheory.stor_taint_ok_at_def])) >>
      drule_all (Q.INST [`sa` |-> `ca`,`start` |-> `w2n (wi:256 word)`,
        `nb` |-> `128`,`z` |-> `tp`]
        bodyFullUnwrapSlotPostTheory.unwrap_slot_copy_ghost_inv_at) >> simp[]) >>
@@ -952,7 +954,8 @@ QED
 
 Resume ecadd_staging_full_from_transfers[after_output_ghost]:
   `not_fresh_at sp src` by
-    (fs[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+    (irule stmtFragPtrTheory.not_fresh_at_mono >> qexists_tac `cm` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `lookup_var src tp = SOME wi /\ ptr_covers Gp tnp src tp 128` by
     (qpat_assum `!z. not_fresh_at ca z ==> lookup_var z tp = _ /\ _`
        (qspec_then `src` (drule_all_then strip_assume_tac)) >>
@@ -981,7 +984,12 @@ Resume ecadd_staging_full_from_transfers[after_output_ghost]:
      op_taint tnu (Var z) = op_taint tn2 (Var z)` by
     (gen_tac >> strip_tac >>
      `not_fresh_at ca z /\ not_fresh_at sp z` by
-       (fs[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+       (conj_tac >-
+          (irule stmtFragPtrTheory.not_fresh_at_mono >> qexists_tac `s2` >>
+           conj_tac >> first_assum ACCEPT_TAC) >>
+        irule stmtFragPtrTheory.not_fresh_at_mono >> qexists_tac `s2` >>
+        simp[] >> irule arithmeticTheory.LESS_EQ_TRANS >>
+        qexists_tac `ca.cs_next_var` >> simp[]) >>
      qpat_assum `!x. not_fresh_at s2 x ==> lookup_var x ta = _ /\ _`
        (qspec_then `z` mp_tac) >>
      qpat_assum `!x. not_fresh_at ca x ==> lookup_var x tp = _ /\ _`
@@ -1017,7 +1025,8 @@ Resume ecadd_staging_full_from_transfers[after_ghost_kept]:
   `!z. not_fresh_at s2 z ==> lookup_var z tp = lookup_var z t2` by
     (gen_tac >> strip_tac >>
      `not_fresh_at ca z` by
-       (fs[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+       (irule stmtFragPtrTheory.not_fresh_at_mono >> qexists_tac `s2` >>
+        conj_tac >> first_assum ACCEPT_TAC) >>
      qpat_assum `!x. not_fresh_at s2 x ==> lookup_var x ta = _ /\ _`
        (qspec_then `z` mp_tac) >> simp[] >> strip_tac >>
      qpat_assum `!x. not_fresh_at ca x ==> lookup_var x tp = _ /\ _`

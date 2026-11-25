@@ -128,6 +128,9 @@ current series contains:
   codegen, instead of comparing the operands' memory pointers.
 - `5389-abi-encode-standalone-value.patch`, vyperlang/vyper#5389 (open):
   `abi_encode(t, ensure_tuple=False)` encodes a tuple as one value.
+- `5397-bytestring-copy-size.patch`, vyperlang/vyper#5397: a bytestring
+  copied into memory for hashing uses the value's own type for its size.
+  Map keys and comparison operands can have wider expression annotations.
 - `local-dft-create-abort.patch`, not upstream: makes Python's DFT schedule as
   the HOL pass does where it deliberately departs from upstream:
   `create`/`create2` count as aborts. Its name sorts after the PR files it
