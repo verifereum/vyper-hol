@@ -243,18 +243,9 @@ Resume create_copy_expr_prefix_ok[salt_finish]:
   qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK ssalt,Gsalt,tns)` (irule_at Any) >>
   qpat_assum `eval_operand x ssalt = SOME _` (irule_at Any) >>
   qpat_assum `eval_operand y ssalt = SOME _` (irule_at Any) >>
-  simp[expr_type_def,post_value_type_def,is_word_type_def,
-       supportedExprTraverseTheory.expr_has_effect_def,
-       supportedExprTraverseTheory.supported_expr_exists_def,
-       supportedExprTraverseTheory.expr_effect_root_def,
-       storage_trace_frame_bind_all,storage_trace_frame_read_result,
+  simp[storage_trace_frame_bind_all,storage_trace_frame_read_result,
        storage_trace_frame_create_operands,Abbr `salt_word`] >>
-  qexistsl [`tops`,`sa`,`es'`,
-    `Call (BaseT AddressT) (CreateTarget CreateCopyOf T r ks) [target;amount;salt] d`,
-    `d'`,`cenv`] >>
-  simp[expr_type_def,post_value_type_def,is_word_type_def,
-       supportedExprTraverseTheory.supported_expr_exists_def,
-       supportedExprTraverseTheory.expr_effect_root_def] >>
+  qexistsl [`tops`,`sa`,`es'`,`d'`,`cenv`] >> simp[] >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
       irule (Q.INST [`sw` |-> `SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) sv)`]
@@ -293,18 +284,9 @@ Resume create_copy_expr_prefix_ok[no_salt]:
     (drule_then (irule_at Any)) >>
   qpat_assum `eval_operand x samt = SOME _` (irule_at Any) >>
   qpat_assum `eval_operand y samt = SOME _` (irule_at Any) >>
-  simp[expr_type_def,post_value_type_def,is_word_type_def,
-       supportedExprTraverseTheory.expr_has_effect_def,
-       supportedExprTraverseTheory.supported_expr_exists_def,
-       supportedExprTraverseTheory.expr_effect_root_def,
-       storage_trace_frame_bind_all,storage_trace_frame_read_result,
+  simp[storage_trace_frame_bind_all,storage_trace_frame_read_result,
        storage_trace_frame_create_operands] >>
-  qexistsl [`tops`,`sa`,`es'`,
-    `Call (BaseT AddressT) (CreateTarget CreateCopyOf F r ks) [target;amount] d`,
-    `d'`,`cenv`] >>
-  simp[expr_type_def,post_value_type_def,is_word_type_def,
-       supportedExprTraverseTheory.supported_expr_exists_def,
-       supportedExprTraverseTheory.expr_effect_root_def] >>
+  qexistsl [`tops`,`sa`,`es'`,`d'`,`cenv`] >> simp[] >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
       irule (Q.INST [`sw` |-> `NONE`] create_dispatch_prefix) >>

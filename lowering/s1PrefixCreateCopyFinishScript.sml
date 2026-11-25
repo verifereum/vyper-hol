@@ -61,7 +61,6 @@ Theorem create_copy_finish_prefix_from_dispatch:
     ?w. sw = SOME w /\ eval_operand op s = SOME w /\ op_taint tn op = {}) /\
   (!x. target = Var x \/ amount = Var x \/ sop = SOME (Var x) ==> not_fresh_at sm x) /\
   code = (lookup_account (word_of_bytes_be bs) ee.accounts).code /\
-  post_value_type cenv e = BaseT AddressT /\ expr_has_effect e /\
   storage_trace_frame source /\
   (!tail. source (ee with gas_obs := tail) =
     if code = [] then (INR (Error (RuntimeError "create source has no deployable code")),
