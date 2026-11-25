@@ -6,6 +6,8 @@ Ancestors
   bodyCallSupport bodyFullShadowBodyInv sourceExemptMods bodySim contractInvContextProps
   bodyFullExtCallPosList bodyFullExtCallDirectState alist list option
   compileEnv loweringPosts loweringStateRelDefs exprLoweringProps vyperContext gasContext
+  bodySingletonCallSupport bodyStorageCases targetPureWalkSource
+  vyperTypeCallGraph vyperMachineFrame vyperStorageBackend
   vfmConstants venomInst venomState words integer_word finite_map
 
 Definition expr_sim_full_pre_mods_def:
@@ -159,6 +161,17 @@ Definition create_expr_size_exit_mods_def:
       module_body_inv mods src tops cenv cx /\
       shadow_body_inv_mods mods exps ctx shadow_ctx /\
       expr_body_pre_mods mods cenv cx env e es /\
+      (!ctors.
+        ((?ann hs rof ks code amount salt df.
+          e = Call ann (CreateTarget RawCreate hs rof ks)
+            (code::amount::(ctors ++ (if hs then [salt] else []))) df) \/
+         (?ann hs rof ks target amount salt off df.
+          e = Call ann (CreateTarget (CreateFromBlueprint F) hs rof ks)
+            (target::amount::((if hs then [salt] else []) ++ off::ctors)) df)) ==>
+        !i s vs s'. i < LENGTH ctors /\
+          ~exprs_can_mutate cenv (DROP (SUC i) ctors) /\
+          eval_exprs cx (DROP (SUC i) ctors) s = (INL vs,s') ==>
+          !tr. get_storage cx s' tr = get_storage cx s tr) /\
       expr_vv_sim_full_pre_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es (st0, sa, sb, shadow_sa, shadow_sb, vv, s0, G0, tn0) ==>
       !H marks s bb inst value off sz salt w tail res ee.
@@ -401,6 +414,36 @@ Proof
        ghost_inv_at_mods_singleton]
 QED
 
+Theorem create_size_suffix_storage_frame_singleton[local]:
+  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
+  !ctors.
+    ((?ann hs rof ks code amount salt df.
+      e = Call ann (CreateTarget RawCreate hs rof ks)
+        (code::amount::(ctors ++ (if hs then [salt] else []))) df) \/
+     (?ann hs rof ks target amount salt off df.
+      e = Call ann (CreateTarget (CreateFromBlueprint F) hs rof ks)
+        (target::amount::((if hs then [salt] else []) ++ off::ctors)) df)) ==>
+    !i s vs s'. i < LENGTH ctors /\
+      ~exprs_can_mutate cenv (DROP (SUC i) ctors) /\
+      eval_exprs cx (DROP (SUC i) ctors) s = (INL vs,s') ==>
+      !tr. get_storage cx s' tr = get_storage cx s tr
+Proof
+  strip_tac >>
+  drule_all_then assume_tac body_inv_expr_pre_calls >>
+  `!xs ys. int_calls_exprs (xs ++ ys) =
+    int_calls_exprs xs ++ int_calls_exprs ys` by
+    (Induct >> simp[int_calls_expr_def, APPEND_ASSOC]) >>
+  rpt strip_tac >>
+  `EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_exprs ctors)` by
+    (Cases_on `hs` >> gvs[int_calls_expr_def, EVERY_APPEND]) >>
+  `EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_exprs (DROP (SUC i) ctors))` by
+    (irule int_calls_exprs_DROP_EVERY >> first_assum ACCEPT_TAC) >>
+  drule_all_then mp_tac nonmutating_exprs_source_frame >>
+  Cases_on `tr` >> simp[machine_frame_def, get_storage_def]
+QED
+
 Theorem create_expr_size_exit_mods_singleton:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
   (create_expr_size_exit_mods [(NONE,tops)] [] cx e <=>
@@ -420,7 +463,12 @@ Proof
       `ctx`, `shadow_ctx`, `func`, `shadow_func`, `cenv`, `env`, `ty`, `es`,
       `st0`, `sa`, `sb`, `shadow_sa`, `shadow_sb`, `vv`, `s0`, `G0`, `tn0`] mp_tac)
   ] >>
-  simp[expr_vv_sim_full_pre_mods_singleton, unspecified_behaviour_exempt_mods_singleton]
+  simp[expr_vv_sim_full_pre_mods_singleton, unspecified_behaviour_exempt_mods_singleton] >>
+  disch_then MATCH_MP_TAC >>
+  qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+    qpat_assum `expr_body_pre cenv cx env e es` (fn pre =>
+      ACCEPT_TAC (REWRITE_RULE[CONJ_ASSOC]
+        (MATCH_MP create_size_suffix_storage_frame_singleton (CONJ inv pre)))))
 QED
 
 Theorem extcall_positional_post_mods_singleton:
