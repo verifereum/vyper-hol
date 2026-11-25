@@ -309,7 +309,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall was **not admitted** at Milestone 1; the current gate admits a `NoneT` external return (`supported_external_return_type`). | 6 |
 | D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects OK/IntRet and other Errors, relates a failed external call's `RevertData` to a Revert abort, and requires terminating run; `call_result_rel_at` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
 | D9 | Exact unspecified-behaviour exemptions, not weakened source checks | `unspecified_behaviour_exempt`, `occurs_abi_decode_target` inspect function bodies for dynamic decoding. Exact decode message also admits matching return rejection in such a program; not arbitrary ReturnReject. | 6 |
-| D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker acceptance, typed constant cells, machine and tx typing; `supported_program` depends on tops alone and is no longer a premise: the tops derive it from the checker acceptance and `layouts_agree` (`check_contract_supported_program`), which `source_deployment_rel` supplies for calls and `deploy_state_rel` for deployment; for the deploy pair `deploy_typing_ok` supplies both `check_contract F` and `check_contract T` (`deploy_typing_ok_supported_programs`). Partial readiness producers are not the whole premise. | 7 |
+| D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker acceptance, typed constant cells, machine and tx typing; `supported_program` depends on tops alone and is no longer a premise: the tops derive it from the checker acceptance and `layouts_agree` (`check_contract_supported_program`), which `source_deployment_rel` supplies for calls and `deploy_state_rel` for deployment; for the deploy pair `deploy_typing_ok` supplies `check_contract T` and `check_contract_deploy_implies_runtime` derives runtime acceptance (`deploy_typing_ok_supported_programs`). Partial readiness producers are not the whole premise. | 7 |
 | D11 | Whitelist, not open-ended exclusions | `supportedProgram` combines headers/names/body predicates; 101 named fixture membership proofs. The whitelist has since been widened to what `check_contract` accepts and is derived, not assumed, by the tops; forms it newly accepts are proved, bar the two held create-size claims under the gas companions. No universal compile-success witness. | 6 / 7 |
 | D12 | Ten source/type corrections, not remove fixtures | Invalid EC RuntimeError; Pop length-only storage update; empty codehash zero; decimal bound-before-truncate; bytes->address/decimal/narrow-zero-tail conversions; UnsafeDiv0 zero; minimum decimal Mul; abi_encode size rule. Actual owners `vyperContext`, `vyperState`, `vyperValueOperation`, `vyperTypeSystem`; historical source checkpoint retained. | 6 comparison proof |
 | D13 | Literal endpoint range checks + allocation-budget compiler check | `stmtLowering` tests both literal endpoints; five fixture bounds corrected historically. `vyperCompiler.lowering_context_ok` checks `unit_alloca_budget < dimword(:256)`. This is not a proof that every raw access is valid. | 5 / 6 |
@@ -780,13 +780,15 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    including the computed precompile builtins (sha256, ecrecover, ecadd and
    ecmul). The source run uses the creation frame's call outcomes.
 
-   Inputs are canonical tuple ABI argument bytes (no selector), actual checked
-   deployment/runtime artifacts (`deploy_typing_ok`, from which
-   `deploy_typing_ok_constants_ready` gives **pre-constant deployment
-   readiness**), an uninstalled source target, an empty target account in `es.originalAccounts`,
+   Inputs are canonical tuple ABI argument bytes (no selector),
+   `deploy_typing_ok` (successful deploy-mode checking and well-typed machine
+   and transaction inputs), an uninstalled source target, an empty target
+   account in `es.originalAccounts`,
    and exactly one fresh nonstatic Code frame with
    `deploy_bc ++ args_bytes`, empty calldata/memory and live transfer (that the
    runtime has no 0xEF prefix is proved, `compile_vyper_runtime_not_ef`).
+   `deploy_typing_ok_constants_ready` derives the runtime checker artifact
+   and **pre-constant deployment readiness**.
    The frame's call trace has fewer than 2⁶⁴ entries. Source reads of `self.code`
    use the creation frame's code, including in the assembly-optimizer case.
    Successful installation returns and deposits `runtime_bc ++ section`
