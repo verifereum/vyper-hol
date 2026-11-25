@@ -21,7 +21,10 @@ Theorem ctor_rows_fold_mods[local]:
   contract_inv mods exps ctx ce cx /\
   module_body_inv mods src tops ce cx /\ (!K. dead_lo_ok_mods K (DF K) lo ce cx) /\
   EVERY (source_body_call_supported cx)
-    (int_calls_exprs args) /\ (?H. valid_horizon cx st0 H (E (LENGTH args)).storage_trace) /\
+    (int_calls_exprs args) /\
+  (!i. i < LENGTH args /\ ~exprs_can_mutate ce (DROP (SUC i) args) ==>
+    !tr. get_storage cx (E (LENGTH args)) tr = get_storage cx (E (SUC i)) tr) /\
+  (?H. valid_horizon cx st0 H (E (LENGTH args)).storage_trace) /\
   (!i. i <= LENGTH args ==>
     eval_exprs cx (DROP i args) (E i) = (INL (DROP i vs), E (LENGTH args))) /\
   (!i K. i < LENGTH args /\ valid_horizon cx st0 K (E (SUC i)).storage_trace ==>
@@ -57,7 +60,10 @@ Theorem ctor_saved_rows_at_last_cut_mods:
   contract_inv mods exps ctx ce cx /\
   module_body_inv mods src tops ce cx /\ (!K. dead_lo_ok_mods K (DF K) lo ce cx) /\
   EVERY (source_body_call_supported cx)
-    (int_calls_exprs args) /\ (?H. valid_horizon cx st0 H (E (LENGTH args)).storage_trace) /\
+    (int_calls_exprs args) /\
+  (!i. i < LENGTH args /\ ~exprs_can_mutate ce (DROP (SUC i) args) ==>
+    !tr. get_storage cx (E (LENGTH args)) tr = get_storage cx (E (SUC i)) tr) /\
+  (?H. valid_horizon cx st0 H (E (LENGTH args)).storage_trace) /\
   (!i. i < LENGTH args ==>
     compile_expr ce (expr_type (EL i args)) (EL i args) (C i) = (V i,M i) /\
     compile_snapshot_vv ce (exprs_can_mutate ce (DROP (SUC i) args))
