@@ -78,7 +78,7 @@ Proof
   >- (drule_all checked_public_getter_params_ok >> simp[params_ok_def])
 QED
 
-Theorem linked_section_runtime_relation[local]:
+Theorem linked_section_runtime_relation:
   immutable_section_layout_mods mods ce /\
   immutables_section_rel_mods mods
     (case ALOOKUP es.immutables addr of
@@ -108,7 +108,7 @@ Theorem linked_registration_endpoint_from_frame:
   vs.vs_pending_deletions = am.pending_deletions /\
   immutables_section_rel_mods mods (account_immutables am tx.target)
     vs.vs_data_section /\
-  bind_arguments (type_env_all_modules mods) args tx.args = SOME env /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME env /\
   send_call_value mut (initial_evaluation_context am.sources am.layouts tx src)
     (initial_state am [env] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
     (INL (),es0) /\
@@ -122,7 +122,7 @@ Theorem linked_registration_endpoint_from_frame:
     FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
     lookup_var q s0 = SOME (n2w p) /\ ptr_covers G0 tn0 q s0 n /\
     (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
-      val_in_memory (EL j tvs) (EL j tx.args) p mem)) /\
+      val_in_memory (EL j tvs) (EL j vals) p mem)) /\
   alloca_inv s0 /\ alloca_frontier_inv ctx efn site s0 /\
   tn0.t_stor = {} /\ tn0.t_trans = {} /\ tn0.t_imm = {} /\
   s0.vs_call_ctx = s1.vs_call_ctx /\ s0.vs_accounts = s1.vs_accounts /\
@@ -144,7 +144,7 @@ Proof
   `es0.scopes = [env]` by simp[initial_state_def] >>
   conj_tac >- suspend "linked_stmt" >>
   irule registration_indexed_locals_ghost >> simp[] >>
-  qexistsl_tac [`args`, `type_env_all_modules mods`, `tvs`, `tx.args`] >> simp[] >>
+  qexistsl_tac [`args`, `type_env_all_modules mods`, `tvs`, `vals`] >> simp[] >>
   rpt strip_tac >>
   qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n. _`
     (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
@@ -178,7 +178,7 @@ Resume linked_registration_endpoint_from_frame[linked_state]:
        accounts_agree_def, transient_agree_def]
 QED
 
-Finalise linked_registration_endpoint_from_frame[local]
+Finalise linked_registration_endpoint_from_frame
 
 Theorem registration_actual_endpoint_relations_from_prefix_mods:
   lower_vyper_runtime_unit_mods mods exps rpolicy = SOME unit /\

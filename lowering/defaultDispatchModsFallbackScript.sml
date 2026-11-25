@@ -26,7 +26,7 @@ Proof
   simp_tac std_ss [] >> metis_tac[]
 QED
 
-Theorem exported_fallback_slot[local]:
+Theorem exported_fallback_slot:
   !exps src f.
     exported_fallback mods exps = SOME (src,f) ==>
     ?n tops. src = SOME n /\ MEM ("__default__",n) exps /\

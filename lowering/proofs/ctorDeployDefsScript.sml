@@ -34,7 +34,7 @@ Proof
   Cases_on `vis` >> rw[]
 QED
 
-Theorem classify_fold_ctor_mem[local]:
+Theorem classify_fold_ctor_mem:
   !tops mut nr rr fname args defaults ret body.
     SND (SND (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) =
       SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
@@ -63,7 +63,7 @@ Proof
   qspec_then `tops` mp_tac classify_fold_ctor_mem >> simp[] >> metis_tac[]
 QED
 
-Theorem classify_fold_ctor_lookup[local]:
+Theorem classify_fold_ctor_lookup:
   !tops src name.
     case SND (SND (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) of
       NONE => lookup_function src name Deploy tops = SOME (Payable,F,[],[],NoneT,[])

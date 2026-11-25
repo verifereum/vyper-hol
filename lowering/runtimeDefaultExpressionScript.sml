@@ -53,7 +53,7 @@ Proof
   Cases_on `es` >> fs[builtin_args_length_ok_def, type_check_def, assert_def]
 QED
 
-Theorem runtime_constant_expr_no_mutation[local]:
+Theorem runtime_constant_expr_no_mutation:
   runtime_constant_expr mods e ==> ~expr_can_mutate ce e
 Proof
   completeInduct_on `expr_size e` >> Cases_on `e` >> rpt strip_tac >>

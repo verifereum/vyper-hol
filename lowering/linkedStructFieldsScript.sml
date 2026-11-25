@@ -180,3 +180,22 @@ Proof
   gvs[built_struct_fields_names, built_struct_fields_types] >>
   irule linked_struct_type_lookup >> simp[] >> qexists_tac `tops` >> simp[]
 QED
+
+Theorem make_struct_fields_map_mods_lookup:
+  contract_namespaces_ok dep mods /\
+  FLOOKUP (type_env_all_modules mods) nsid = SOME (StructArgs args) ==>
+  FLOOKUP (make_struct_fields_map_mods mods) (nsid_to_string nsid) =
+    SOME (build_struct_fields_one (type_env_all_modules mods) args)
+Proof
+  strip_tac >>
+  PairCases_on `nsid` >>
+  drule_then (qx_choose_then `tops` strip_assume_tac) linked_struct_type_origin >>
+  rewrite_tac[make_struct_fields_map_mods_def] >>
+  irule struct_fields_map_mods_lookup >>
+  `ALL_DISTINCT (MAP FST mods) /\
+    ALL_DISTINCT (contract_keys type_def_keys_toplevel mods)` by
+    fs[contract_namespaces_ok_def] >>
+  simp[] >> conj_tac
+  >- metis_tac[linked_struct_name_no_dot] >>
+  qexists_tac `tops` >> simp[]
+QED

@@ -304,7 +304,7 @@ Proof
   simp[Abbr `dense`, EL_GENLIST, EVERY_MEM, FORALL_PROD] >> metis_tac[]
 QED
 
-Theorem ctor_evaluated_abi_inverse[local]:
+Theorem ctor_evaluated_abi_inverse:
   (!env ty. !tv v av.
     assignable_type env ty /\ evaluate_type env ty = SOME tv /\
     value_has_type tv v /\ val_wf tv v /\
@@ -562,7 +562,7 @@ Proof
   first_x_assum irule >> qexists `v` >> simp[] >> metis_tac[]
 QED
 
-Theorem ctor_evaluated_abi_valid[local]:
+Theorem ctor_evaluated_abi_valid:
   (!env ty. !tv v av.
     assignable_type env ty /\ evaluate_type env ty = SOME tv /\
     value_has_type tv v /\ val_wf tv v /\

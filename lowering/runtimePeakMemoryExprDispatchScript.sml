@@ -41,7 +41,7 @@ fun finish_window_state thms =
        gen_tac :: conj_tac :: strip_tac :: first_assum irule :: stages))
   end;
 
-Theorem dalloca_windows_acc[local]:
+Theorem dalloca_windows_acc:
   preserves_dalloca_windows window (cfn cenv (BaseT AddressT) e) ==>
   preserves_dalloca_windows window (compile_acc cfn cenv e item)
 Proof
@@ -50,14 +50,14 @@ Proof
   rpt strip_tac >> finish_window_state []
 QED
 
-Theorem dalloca_windows_array_membership[local]:
+Theorem dalloca_windows_array_membership:
   preserves_dalloca_windows window (compile_var_array_membership cenv n vv ty is_in)
 Proof
   simp[compile_var_array_membership_def] >>
   windows_tac [dalloca_windows_array_membership_loop]
 QED
 
-Theorem dalloca_windows_bytestring_widen_copy[local]:
+Theorem dalloca_windows_bytestring_widen_copy:
   preserves_dalloca_windows window (compile_bytestring_widen_copy dst_sz v src_sz)
 Proof
   simp[compile_bytestring_widen_copy_def] >> windows_tac [dalloca_windows_copy_memory]
@@ -198,7 +198,7 @@ Proof
   first_assum irule >> simp[] >> metis_tac[]
 QED
 
-Theorem dalloca_windows_modular_names[local]:
+Theorem dalloca_windows_modular_names:
   preserves_dalloca_windows window (compile_addmod_names cenv rt aty a bty b mty m) /\
   preserves_dalloca_windows window (compile_mulmod_names cenv rt aty a bty b mty m) /\
   preserves_dalloca_windows window (compile_powmod256_names cenv rt aty a bty b)
@@ -298,7 +298,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem dalloca_windows_invalid_expr_call[local]:
+Theorem dalloca_windows_invalid_expr_call:
   preserves_dalloca_windows window (invalid_expr_call ty)
 Proof
   simp[dalloca_windows_result_state, invalid_expr_call_def, LET_THM, pairTheory.UNCURRY] >>

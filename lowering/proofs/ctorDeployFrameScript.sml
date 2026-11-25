@@ -17,7 +17,7 @@ Ancestors
 
 (* Single-frame outcomes depend on the start state only through its one
    context's logs and the transaction parameters. *)
-Theorem frame_outcome_single_transfer_none[local]:
+Theorem frame_outcome_single_transfer_none:
   es.contexts = [(c0,rb0)] /\ mid.contexts = [(c1,rb1)] /\
   mid.txParams = es.txParams /\ c1.logs = c0.logs ++ lgs /\
   frame_outcome mid r es' NONE out [] ==>
@@ -26,7 +26,7 @@ Proof
   rw[frame_outcome_def] >> gvs[]
 QED
 
-Theorem creation_resource_starved_single_transfer[local]:
+Theorem creation_resource_starved_single_transfer:
   es.contexts = [(c0,rb0)] /\ mid.contexts = [(c1,rb1)] /\
   mid.txParams = es.txParams /\ creation_resource_starved mid r es' ==>
   creation_resource_starved es r es'
@@ -48,7 +48,7 @@ Proof
 QED
 
 (* An exceptional shadow run is the real run, outcome included. *)
-Theorem deploy_frame_exception[local]:
+Theorem deploy_frame_exception:
   es.contexts = [(c0,rb0)] /\
   run_call (shadow_root es) = SOME (r,g) /\
   frame_outcome (shadow_root es) r g (SOME exc) out lgs ==>
@@ -102,7 +102,7 @@ Proof
 QED
 
 (* A halting shadow run is the real run up to the root's halt handler. *)
-Theorem deploy_frame_halt_mid[local]:
+Theorem deploy_frame_halt_mid:
   es.contexts = [(c0,rb0)] /\
   run_call (shadow_root es) = SOME (r,g) /\
   frame_outcome (shadow_root es) r g NONE out lgs ==>

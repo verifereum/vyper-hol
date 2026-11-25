@@ -20,7 +20,7 @@ val _ = Parse.hide "body";
 (* A constructor deploy run with a non-view lock flag, for any body and
    internal packages, is compile_generate_deploy's constructor branch laid
    out step by step. *)
-Theorem run_deploy_lowering_ctor_trace[local]:
+Theorem run_deploy_lowering_ctor_trace:
   !rpolicy bc cap args ifns cenv0 body pay nr nkey ut u lnr lkey lut.
     cenv0.ce_nonreentrant = (lnr,lkey,lut,F) /\
     run_deploy_lowering T rpolicy bc cap args 0 ifns cenv0 body pay nr nkey

@@ -44,7 +44,7 @@ Proof
   rpt conj_tac >> windows_tac []
 QED
 
-Theorem dalloca_windows_generate_deploy[local]:
+Theorem dalloca_windows_generate_deploy:
   (has ==>
     (!env. env.ce_func_defaults = ce.ce_func_defaults ==>
       preserves_dalloca_windows window (compile_stmts env NoLoop NoneT fbody)) /\
@@ -74,7 +74,7 @@ Proof
   first_assum irule >> simp[]
 QED
 
-Theorem run_deploy_lowering_dalloca_windows[local]:
+Theorem run_deploy_lowering_dalloca_windows:
   run_deploy_lowering has rpolicy bc ilen args data_size ints ce ss pay nr key tr lbl =
     SOME dunit /\
   preserves_dalloca_windows window

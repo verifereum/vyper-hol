@@ -7,7 +7,7 @@ Ancestors
   entryStatementStoreCode stmtLowering exprLowering supportedStmtTraverse
   supportedExprTraverse compileEnv context emitHelper venomInst vyperAST list fragFuel
 
-Theorem dalloca_windows_bind_declare_local[local]:
+Theorem dalloca_windows_bind_declare_local:
   (!ce'. ce'.ce_func_defaults = ce.ce_func_defaults ==>
      preserves_dalloca_windows window (f ce')) ==>
   preserves_dalloca_windows window (comp_bind (declare_local ce id ty) f)
@@ -17,7 +17,7 @@ Proof
   simp[dalloca_windows_declare_local, declare_local_defaults]
 QED
 
-Theorem dalloca_windows_bind_declare_stmt_local[local]:
+Theorem dalloca_windows_bind_declare_stmt_local:
   (!ce'. ce'.ce_func_defaults = ce.ce_func_defaults ==>
      preserves_dalloca_windows window (f ce')) ==>
   preserves_dalloca_windows window (comp_bind (declare_stmt_local ce s) f)

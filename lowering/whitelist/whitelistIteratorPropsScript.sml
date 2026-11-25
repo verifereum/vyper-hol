@@ -3,7 +3,7 @@ Ancestors
   constSubst vyperAST vyperTypeSystem supportedStmts supportedExprs option
   whitelistCheckerDecls
 
-Theorem lit_pair_case_other:
+Theorem lit_pair_case_other[local]:
   (!ta s tb e. ~(x = Literal ta (IntL s) /\ y = Literal tb (IntL e))) ==>
   (case (x, y) of (Literal _ (IntL s), Literal _ (IntL e)) => P s e | _ => d) = d
 Proof

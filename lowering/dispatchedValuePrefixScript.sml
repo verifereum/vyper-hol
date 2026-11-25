@@ -66,7 +66,7 @@ Proof
        dalloca_no_wrap_def, exit_result_def]
 QED
 
-Theorem value_check_origin_mem[local]:
+Theorem value_check_origin_mem:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id CALLVALUE [] [cv]) /\
   get_instruction bb (s.vs_inst_idx + 1) =

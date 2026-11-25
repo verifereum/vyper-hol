@@ -1,7 +1,7 @@
 (* Find a concrete source expression error in the checked default suffix. *)
 Theory groupedRejectSourceError
 Ancestors
-  e2eDefs ptrDiscipline vyperTypeContract list pred_set venomInst venomState
+  runtimeDefaultErrorDescent e2eDefs ptrDiscipline vyperTypeContract list pred_set venomInst venomState
   callRejectMemory[ignore_grammar] compileEnv vyperContext finite_map rich_list words
   gasExemptCert[qualified,ignore_grammar] vyperInterpreter[qualified,ignore_grammar]
   vyperState[qualified,ignore_grammar] vyperValue[qualified,ignore_grammar]
@@ -25,21 +25,18 @@ Theorem row22_source_no_exempt_if_descent:
 Proof
   disch_then (mk_asm "descent") >> rpt gen_tac >> strip_tac >>
   rpt gen_tac >> disch_tac >> strip_tac >>
-  `!e a b. runtime_constant_expr mods e /\ no_sha256_expr e ==>
-    eval_expr cx e a <> (INR (Error err),b)` by
-    (gen_tac >> completeInduct_on `expr_size e` >> rpt strip_tac >>
-     `eval_exprs cx [e] a = (INR (Error err),b)` by
-       simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def] >>
-     `eval_exprs cx [e] a <> (INR (Error err),b)` suffices_by simp[] >>
-     asm "descent" irule >> rpt conj_tac
-     >- simp[constSubstTheory.no_sha256_expr_def]
-     >- (qexists_tac `mods` >> simp[] >> metis_tac[])
-     >> qexists_tac `cx_tops cx` >> simp[]) >>
-  `eval_exprs cx ds st <> (INR (Error err),ee)` suffices_by simp[] >>
-  asm "descent" irule >> rpt conj_tac
-  >- simp[]
-  >- (qexists_tac `mods` >> simp[] >> metis_tac[])
-  >> qexists_tac `cx_tops cx` >> simp[]
+  `!st ee. eval_exprs cx ds st <> (INR (Error err),ee)` by
+    (irule default_eval_error_if_descent >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `mods` >> simp[] >>
+     qx_genl_tac [`ds'`,`st'`,`ee'`] >> strip_tac >>
+     asm "descent" (qspecl_then [`cx_tops cx`,`err`,`mods`,`ds'`,`cx`,`st'`,`ee'`]
+       match_mp_tac) >>
+     asm_rewrite_tac[]) >>
+  qpat_assum `!st ee. eval_exprs cx ds st <> _`
+    (qspecl_then [`st`,`ee`] (fn excluded =>
+       qpat_assum `eval_exprs cx ds st = (INR (Error err),ee)`
+         (ACCEPT_TAC o MP (NOT_ELIM excluded))))
 QED
 
 Theorem grouped_default_bind_error[local]:

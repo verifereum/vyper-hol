@@ -15,11 +15,11 @@ Proof
   Cases_on `v` >> simp[abi_decl_signatures_def, external_name_keys_toplevel_def]
 QED
 
-Theorem deployed_signature_selected_decl:
+Theorem deployed_signature_selected_module:
   source_typing_ok_mods mods exps am tx /\
-  ALOOKUP mods (ALOOKUP exps name) = SOME tops /\
   MEM (name,tys) (abi_deployed_signatures mods exps) ==>
-  ?top. MEM top tops /\ MEM (name,tys) (abi_decl_signatures top)
+  ?tops top. ALOOKUP mods (ALOOKUP exps name) = SOME tops /\
+             MEM top tops /\ MEM (name,tys) (abi_decl_signatures top)
 Proof
   simp[] >> strip_tac >>
   qpat_x_assum `MEM _ (abi_deployed_signatures _ _)` mp_tac >>
@@ -41,4 +41,13 @@ Proof
     (fs[source_typing_ok_mods_def] >> metis_tac[exports_ok_names]) >>
   `ALOOKUP exps name = SOME s` by metis_tac[ALOOKUP_ALL_DISTINCT_MEM] >>
   gvs[abi_external_signatures_def,MEM_FLAT,MEM_MAP,PULL_EXISTS] >> metis_tac[]
+QED
+
+Theorem deployed_signature_selected_decl:
+  source_typing_ok_mods mods exps am tx /\
+  ALOOKUP mods (ALOOKUP exps name) = SOME tops /\
+  MEM (name,tys) (abi_deployed_signatures mods exps) ==>
+  ?top. MEM top tops /\ MEM (name,tys) (abi_decl_signatures top)
+Proof
+  strip_tac >> drule_all deployed_signature_selected_module >> simp[]
 QED

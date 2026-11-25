@@ -212,7 +212,7 @@ Proof
   metis_tac[build_compile_env_blueprint_free, build_compile_env_builtin_arity])
 QED
 
-Theorem run_lowering_dalloca_windows[local]:
+Theorem run_lowering_dalloca_windows:
   run_lowering selectors exts ints fb policy 0 0 [] info lbl = SOME unit /\
   preserves_dalloca_windows window
     (compile_generate_runtime selectors exts ints fb policy.rpol_frontend_dispatch 0 0 [] info) ==>
@@ -225,7 +225,7 @@ Proof
             dalloca_windows_initial]
 QED
 
-Theorem run_grouped_lowering_dalloca_windows[local]:
+Theorem run_grouped_lowering_dalloca_windows:
   run_grouped_lowering groups ints fb policy lbl = SOME unit /\
   preserves_dalloca_windows window (compile_generate_grouped_runtime groups ints fb) ==>
   !fn bb. MEM fn unit.cu_context.ctx_functions /\ MEM bb fn.fn_blocks ==>

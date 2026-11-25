@@ -13,7 +13,7 @@ Proof
   strip_tac >> simp[EVERY_MEM, FORALL_PROD] >> rpt gen_tac >> strip_tac >>
   rename1 `MEM (id,r) (module_consts_env tops [])` >>
   drule_all linked_checked_body_type_facts >>
-  disch_then (strip_assume_tac o REWRITE_RULE [linked_body_type_facts_def]) >>
+  disch_then assume_tac >>
   `!b. constant_expr mods b /\ const_local_refs b = [] ==>
        (qualified_place_root b \/ supported_place_info tops b = ValPT (expr_type b)) /\
        (supported_pure_expr tops b ==> supported_place_expr tops b)` by
@@ -27,7 +27,6 @@ Proof
   `supported_pure_expr tops r /\ checker_agg_ok tops (expr_type r)` by
     (irule closed_typed_const_supported >> conj_tac >- simp[] >>
      map_every qexists_tac [`addr`, `art`, `layouts`, `mods`, `src`] >>
-     asm_rewrite_tac [] >> rpt strip_tac >> res_tac >>
-     Cases_on `src` >> gvs[]) >>
+     asm_rewrite_tac []) >>
   simp[]
 QED
