@@ -2,7 +2,7 @@
    Coverage of the numerical band is supplied by the snapshot compiler. *)
 Theory entryCreatePosSnapshotBand
 Ancestors
-  entryCreateFocusSpec createCtorSegmentArrival compileExprAllocaFresh
+  entryCreateFocusSpec entryCreateIntervalLayout createCtorSegmentArrival compileExprAllocaFresh
   exprSimAbiEncodeSiteResources exprSimAbiGasBridge loweringShapeDefs fragExec
   fragFuel venomExecSemantics venomExecProofs venomInstIdsProps venomWf
   externalEntryShape exprLoweringProps abiEncoderProps compileEnv loweringStateRelDefs
@@ -45,14 +45,11 @@ QED
 
 Theorem snapshot_exit_not_generated[local]:
   fn_has_code a b f /\ fn_inst_ids_distinct f /\
-  ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks b)) /\
+  ~MEM b.cs_current_bb (MAP (\bb. bb.bb_label) (emitted_blocks a b)) /\
   MEM i (frag_code a b) /\ ctor_segment_fetch f x = SOME i ==>
   ~create_operand_at b x
 Proof
   strip_tac >> strip_tac >>
-  `~MEM b.cs_current_bb (MAP (\bb. bb.bb_label) (emitted_blocks a b))` by
-    (fs[all_blocks_def, ALL_DISTINCT_APPEND, MAP_REVERSE, MEM_REVERSE, MEM_MAP,
-        emitted_blocks_def] >> metis_tac[MEM_TAKE]) >>
   `?endbb. lookup_block b.cs_current_bb f.fn_blocks = SOME endbb /\
            get_instruction endbb (LENGTH b.cs_current_insts) = SOME i` by
     fs[ctor_segment_fetch_def, create_operand_at_def, AllCaseEqs()] >>
@@ -88,10 +85,10 @@ Proof
   gvs[] >> metis_tac[step_inst_base_OK_preserves_halted, eval_phis_preserves_halted]
 QED
 
-Theorem pos_materialized_snapshot_live_band:
+Theorem pos_materialized_snapshot_live_band_interval:
   compile_snapshot_vv ce T input a = (saved,b) /\ ~is_word_type (vv_type input) /\
   fn_has_code a b f /\ fn_inst_ids_distinct f /\
-  ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks b)) /\
+  create_layout a b /\
   EVERY (\i. ~MEM i.inst_opcode [GAS; CREATE; CREATE2; INVOKE]) (frag_code a b) /\
   create_operand_at a s /\ ~s.vs_halted /\
   RTC (\x y. ?i. ctor_segment_fetch f x = SOME i /\
@@ -118,7 +115,7 @@ Proof
      qpat_x_assum `i = j` SUBST_ALL_TAC >>
      conj_tac >- first_assum ACCEPT_TAC >>
      irule snapshot_exit_not_generated >> simp[] >>
-     qexistsl_tac [`a`,`f`,`j`] >> simp[]) >>
+     qexistsl_tac [`a`,`f`,`j`] >> fs[create_layout_def]) >>
   qpat_x_assum `create_operand_at a s` kall_tac >>
   qpat_x_assum `~s.vs_halted` mp_tac >>
   qpat_x_assum `RTC _ s u` mp_tac >>
@@ -131,4 +128,24 @@ Proof
   `~y.vs_halted` by metis_tac[snapshot_segment_halted] >>
   `i.inst_opcode <> GAS` by (fs[EVERY_MEM] >> metis_tac[]) >>
   qexists_tac `y` >> simp[] >> metis_tac[]
+QED
+
+Theorem pos_materialized_snapshot_live_band:
+  compile_snapshot_vv ce T input a = (saved,b) /\ ~is_word_type (vv_type input) /\
+  fn_has_code a b f /\ fn_inst_ids_distinct f /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks b)) /\
+  EVERY (\i. ~MEM i.inst_opcode [GAS; CREATE; CREATE2; INVOKE]) (frag_code a b) /\
+  create_operand_at a s /\ ~s.vs_halted /\
+  RTC (\x y. ?i. ctor_segment_fetch f x = SOME i /\
+                 a.cs_next_id <= i.inst_id /\ i.inst_id < b.cs_next_id /\
+                 i.inst_opcode <> INVOKE /\ ctor_segment_next f x i = SOME y) s u ==>
+  RTC (\x y. ~x.vs_halted /\ ~y.vs_halted /\ ~create_operand_at b x /\
+             ?i. ctor_segment_fetch f x = SOME i /\ i.inst_id IN frag_ids a b /\
+                 i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+                 ctor_segment_next f x i = SOME y) s u
+Proof
+  strip_tac >>
+  `cs_extends a b` by metis_tac[compile_snapshot_vv_labels, pairTheory.SND] >>
+  `create_layout a b` by (irule create_layout_of_all_blocks >> simp[]) >>
+  metis_tac[pos_materialized_snapshot_live_band_interval]
 QED

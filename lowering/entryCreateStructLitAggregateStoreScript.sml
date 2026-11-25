@@ -111,11 +111,8 @@ Proof
   metis_tac[structlit_bulk_store_scope]
 QED
 
-Theorem structlit_nonbytes_store_site:
-  (!ce tenv sty dty stv dtv v sa sb ctx func lo s G tn xs xd sw dw E PG.
-    compile_store_memory_typed ce (Var xd) dty (Var xs) sty sa = ((),sb) /\
-    structlit_aggregate_store_pre ce tenv sty dty stv dtv v sa sb ctx func lo
-      s G tn xs xd sw dw ==>
+Theorem structlit_nonbytes_store_here:
+  (compile_store_memory_typed ce (Var xd) dty (Var xs) sty sa = ((),sb) ==>
     ?t Gf tnf.
       structlit_aggregate_store_post lo E ctx func PG s G tn sa sb dtv v dw t Gf tnf /\
       create_operand_full_scope sa sb E ctx func s [] (OK t) /\
@@ -141,4 +138,27 @@ Proof
   `memory_layout_rel dtv stv` by
     (irule memory_layout_key_evaluated >> fs[structlit_aggregate_store_pre_def] >> metis_tac[]) >>
   irule structlit_bulk_store_site >> rpt (first_assum (irule_at Any))
+QED
+
+Theorem structlit_nonbytes_store_site:
+  (!ce tenv sty dty stv dtv v sa sb ctx func lo s G tn xs xd sw dw E PG.
+    compile_store_memory_typed ce (Var xd) dty (Var xs) sty sa = ((),sb) /\
+    structlit_aggregate_store_pre ce tenv sty dty stv dtv v sa sb ctx func lo
+      s G tn xs xd sw dw ==>
+    ?t Gf tnf.
+      structlit_aggregate_store_post lo E ctx func PG s G tn sa sb dtv v dw t Gf tnf /\
+      create_operand_full_scope sa sb E ctx func s [] (OK t) /\
+      create_operand_cut sa sb E ctx func tops cx st0 source (es,s)) /\
+  compile_store_memory ce (Var xs) (Var xd) dty sty sa = ((),sb) /\
+  ~is_word_type dty /\ ~is_bytestring_type dty /\ 0 < type_memory_size stv /\
+  type_memory_bytes ce dty = type_memory_size dtv /\
+  structlit_aggregate_store_pre ce tenv sty dty stv dtv v sa sb ctx func lo
+    s G tn xs xd sw dw ==>
+  ?t Gf tnf.
+    structlit_aggregate_store_post lo E ctx func PG s G tn sa sb dtv v dw t Gf tnf /\
+    create_operand_full_scope sa sb E ctx func s [] (OK t) /\
+    create_operand_cut sa sb E ctx func tops cx st0 source (es,s)
+Proof
+  strip_tac >> irule structlit_nonbytes_store_here >>
+  rpt (first_assum (irule_at Any)) >> metis_tac[]
 QED
