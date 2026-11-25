@@ -114,7 +114,7 @@ Proof
   drule_all mem_path_offset_dynarray_apart >> simp[]
 QED
 
-Theorem extract_local_window_apart[local]:
+Theorem extract_local_window_apart:
   expr_sim_inv_mods mods cenv cx env es /\
   local_val_at cenv cx n k (BaseTV bt) v /\
   val_wf (BaseTV bt) v /\ dynarray_len_at cenv n j ==>
