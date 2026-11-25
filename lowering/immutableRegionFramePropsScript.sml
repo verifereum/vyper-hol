@@ -110,3 +110,27 @@ Proof
   mp_tac (Q.INST [`src` |-> `cenv.ce_module`] immutable_region_mem_frame_mods) >>
   simp[]
 QED
+
+Theorem qualified_immutable_ctor_frame_mods:
+  contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env entry /\
+  cenv.ce_is_ctor /\ dead_lo_ok_mods H D lo cenv cx /\
+  es.immutables = entry.immutables /\
+  ALOOKUP cenv.ce_modules src = SOME tops /\
+  immutables_rel_mods cenv cx.txn.target cenv.ce_is_ctor es s /\
+  ghost_inv_at_mods D lo d cenv cx es G tn s /\
+  FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+  ALOOKUP es.immutables cx.txn.target = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) id = SOME (rt,v) ==>
+  off + type_memory_size rt <= lo /\
+  !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory rt v off mem
+Proof
+  strip_tac >>
+  `ALOOKUP entry.immutables cx.txn.target = SOME imms` by metis_tac[] >>
+  drule_all_then strip_assume_tac immutable_region_value_layout_mods >>
+  qpat_x_assum `immutables_rel_mods _ _ _ _ _`
+    (drule_then mp_tac o REWRITE_RULE [immutables_rel_mods_def]) >>
+  simp[immutables_rel_def] >>
+  disch_then (qspecl_then [`id`,`rt`,`v`,`off`] mp_tac) >>
+  simp[] >> strip_tac >>
+  mp_tac immutable_region_mem_frame_mods >> simp[]
+QED
