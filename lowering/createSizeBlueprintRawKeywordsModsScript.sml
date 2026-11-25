@@ -83,5 +83,75 @@ Theorem create_blueprint_raw_keyword_entry_mods:
     t.vs_inst_idx = LENGTH cprep.cs_current_insts /\
     q.gas_obs = gas_explicit rest t.vs_gas_readings ++ tail
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?k. ctors = [e] /\ expr_type e = BaseT (BytesT (Dynamic k))` by
+    (drule expr_body_pre_mods_well_typed >> strip_tac >>
+     Cases_on `hs` >> fs[well_typed_expr_def,create_arg_types_ok_def,MAP_EQ_CONS] >>
+     gvs[] >> metis_tac[]) >>
+  qpat_x_assum `e = HD ctors` kall_tac >>
+  `create_operand_completed_ok_mods mods exps cx e` by
+    (qpat_assum `args = _` (fn th => qhdtm_assum `EVERY` (mp_tac o REWRITE_RULE[th])) >>
+     qpat_assum `ctors = [e]` (fn th => pure_rewrite_tac[th]) >>
+     rpt (pop_assum kall_tac) >> Cases_on `hs` >> simp[create_operand_order_def]) >>
+  `expr_body_pre_mods mods ce cx env e p` by
+    (irule create_call_operand_body_pre_mods >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic k))) =
+     SOME (BaseTV (BytesT (Dynamic k)))` by
+    (qpat_assum `expr_body_pre_mods _ _ _ _ e p`
+       (mp_then Any assume_tac expr_body_pre_mods_well_typed) >>
+     drule_then assume_tac expr_sim_inv_mods_env >>
+     drule_then assume_tac vyperTypeEvalCaseProofsTheory.env_consistent_type_defs_get_tenv >>
+     `!id t. FLOOKUP env.var_types id = SOME t ==> well_formed_type env.type_defs t` by
+       (simp[well_formed_type_def] >> metis_tac[exprSimSourceTheory.env_consistent_var_type_evaluates]) >>
+     drule_all exprSafeOperandTheory.well_typed_expr_type_well_formed >>
+     simp[well_formed_type_def,evaluate_type_def]) >>
+  `fn_has_code cu cl fnc` by
+    metis_tac[fn_has_code_split,exprSimAccountsTheory.emit_op_extends_next_var] >>
+  `!bb. MEM bb fnc.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (`MEM fnc ctx.ctx_functions` by fs[expr_sim_full_code_def] >>
+     drule body_inv_no_phi_mods >> disch_then drule >> simp[]) >>
+  `compile_create_blueprint_args compile_expr ce T later [e] ca = ((data,len),cprep)` by
+    (qpat_x_assum `later = _` kall_tac >>
+     qpat_x_assum `expr_type e = _` kall_tac >>
+     simp[compile_create_blueprint_args_def,comp_bind_def,comp_return_def]) >>
+  qabbrev_tac `kont = \v. bind (eval_exprs cx later)
+    (\vs. eval_create_operands cx (CreateFromBlueprint T) hs rof
+      (MAP expr_type args) (blueprint_literal_offset cx hs args) (av::v::vs))` >>
+  `!v. storage_trace_frame (kont v)` by
+    simp[Abbr `kont`,evaluate_storage_trace_frame,storage_trace_frame_bind_all,
+         storage_trace_frame_create_operands] >>
+  `bind (bind (eval_expr cx e) (read_result cx)) kont p = (res,out)` by
+    fs[Abbr `kont`,createSizeCopyReplayTheory.create_copy_source_cons] >>
+  `(?err. res = INR (Error err) /\ unspecified_behaviour_exempt_mods mods err) \/
+   ?bs q G tn.
+     kont (BytesV bs) q = (res,out) /\ valid_horizon cx st0 H q.storage_trace /\
+     q.gas_obs = gas_explicit (ml ++ ma ++ rest) u.vs_gas_readings ++ tail /\
+     expr_val_rel cx (BaseT (BytesT (Dynamic k))) (BytesV bs) raw_op u /\
+     eval_operand target_op u = SOME aw /\ (!x. target_op = Var x ==> not_fresh_at cu x) /\
+     expr_sim_inv_mods mods ce cx env q /\ local_ptrs_reserved ce cu /\
+     (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at cu x) /\
+     (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at cu x) /\
+     return_buf_frame d ce cu u /\ alloca_history fnc u /\
+     (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+     (!f i z. frag_reachable ctx fnc u f i z ==> dalloca_fmp_headroom i z) /\
+     (!h. valid_horizon cx st0 h q.storage_trace ==>
+       stmt_state_rel h ctx fnc ce cx q u /\
+       immutable_frame_mods fnc ce cx q u /\ storage_well_formed_on cx q (FST h) /\
+       ghost_inv_at_mods (DF h) lo d ce cx q G tn u) /\ ~u.vs_halted` by
+    (Cases_on `exprs_can_mutate ce later`
+     >- (rev_drule_all blueprint_raw_copied_at_cut_mods >> strip_tac
+         >- (disj1_tac >> qexists_tac `err` >> simp[]) >>
+         disj2_tac >> qexistsl_tac [`bs`,`q`,`G`,`tn`] >>
+         rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+     rev_drule_all blueprint_raw_retained_at_cut_mods >> strip_tac
+     >- (disj1_tac >> qexists_tac `err` >> simp[]) >>
+     disj2_tac >> qexistsl_tac [`bs`,`q`,`G'`,`tn'`] >>
+     rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+  pop_assum strip_assume_tac >- (disj1_tac >> goal_assum (drule_at Any) >> simp[]) >>
+  drule_all blueprint_raw_finish_at_cut_mods >> strip_tac >>
+  disj2_tac >> qexistsl_tac [`bs`,`q`,`G`,`tn`] >>
+  conj_tac >- FIRST_ASSUM ACCEPT_TAC >>
+  conj_tac
+  >- (qpat_x_assum `later = _` SUBST_ALL_TAC >> fs[Abbr `kont`]) >>
+  rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC
 QED

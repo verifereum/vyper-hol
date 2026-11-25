@@ -1,6 +1,7 @@
 Theory createSizeBlueprintKeywordsMods
 Ancestors
   createSizeBlueprintKeywords createExprSizeExitDefsMods
+  createSizeCopyReplay createSizeBlueprintKeywordReplay createSizePrefixReplay
   gasShadowCompileBase
   e2eDefs exprSimFullBundleProps gasExplicitSites gasSummary venomState vyperCreate
   vyperState relation list words pair arithmetic exprLowering vfmConstants exprLoweringProps
@@ -69,5 +70,85 @@ Theorem create_blueprint_keywords_at_cuts_mods:
     (lookup_account (w2w aw) q.accounts).code = (lookup_account (w2w aw) t.vs_accounts).code /\
     (!x w. not_fresh_at ca x /\ lookup_var x u = SOME w ==> lookup_var x t = SOME w)
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `kfinal = \kvs. eval_create_operands cx (CreateFromBlueprint raw) hs rof
+      (MAP expr_type args) (blueprint_literal_offset cx hs args) (av::(cvs ++ kvs))` >>
+  `!kvs. storage_trace_frame (kfinal kvs)` by simp[Abbr `kfinal`, storage_trace_frame_create_operands] >>
+  `create_operand_completed_ok_mods mods exps cx amount /\
+   (hs ==> create_operand_completed_ok_mods mods exps cx salt) /\
+   create_operand_completed_ok_mods mods exps cx off` by
+    (qpat_assum `args = _` (fn th => qhdtm_assum `EVERY` (mp_tac o REWRITE_RULE[th])) >>
+     Cases_on `hs` >> simp[create_operand_order_def, EVERY_APPEND]) >>
+  `expr_type amount = BaseT (UintT 256) /\ (hs ==> expr_type salt = BaseT (BytesT (Fixed 32)))` by
+    (drule expr_body_pre_mods_well_typed >>
+     Cases_on `hs` >> gvs[well_typed_expr_def, create_arg_types_ok_def]) >>
+  `expr_body_pre_mods mods ce cx env amount p` by
+    (irule create_call_operand_body_pre_mods >>
+     qpat_assum `expr_body_pre_mods _ _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
+  qabbrev_tac `ka = \v. bind (eval_exprs cx ((if hs then [salt] else []) ++ [off])) (\vs. kfinal (v::vs))` >>
+  `bind (bind (eval_expr cx amount) (read_result cx)) ka p = (res,out)` by fs[Abbr `ka`,create_copy_source_cons] >>
+  `!v. storage_trace_frame (ka v)` by simp[Abbr `ka`, blueprint_read_list_frame] >>
+  drule_all blueprint_read_at_cut_mods >> strip_tac
+  >- (disj1_tac >> qexists_tac `err` >> simp[]) >>
+  rename1 `bind (eval_expr cx amount) (read_result cx) p = (INL avalue,pa)` >>
+  drule_all blueprint_keyword_mono >> strip_tac >>
+  `hs ==> expr_body_pre_mods mods ce cx env salt pa /\ create_operand_completed_ok_mods mods exps cx salt /\
+      expr_type salt = BaseT (BytesT (Fixed 32))` by
+    (strip_tac >> simp[] >> irule create_call_operand_body_pre_mods >>
+     qpat_assum `expr_body_pre_mods _ _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
+  qabbrev_tac `ksalt = \svs. bind (eval_exprs cx [off]) (\ovs. kfinal (avalue::(svs ++ ovs)))` >>
+  `bind (eval_exprs cx (if hs then [salt] else [])) ksalt pa = (res,out)` by
+    fs[Abbr `ka`, Abbr `ksalt`, blueprint_eval_salt_offset] >>
+  `!svs. storage_trace_frame (ksalt svs)` by
+    simp[Abbr `ksalt`, evaluate_storage_trace_frame, storage_trace_frame_bind_all] >>
+  drule_all blueprint_optional_salt_at_cut_mods >> strip_tac
+  >- (disj1_tac >> qexists_tac `err` >> simp[]) >>
+  rename1 `eval_exprs cx (if hs then [salt] else []) pa = (INL salts,ps)` >>
+  `ca.cs_next_var <= cn.cs_next_var` by decide_tac >>
+  drule_all (Q.INST [`cb` |-> `cn`] blueprint_keyword_mono) >> strip_tac >>
+  `n.vs_current_bb = cn.cs_current_bb /\ n.vs_inst_idx = LENGTH cn.cs_current_insts` by
+    (qpat_assum `if hs then _ else _` mp_tac >> Cases_on `hs` >> simp[] >> metis_tac[]) >>
+  qabbrev_tac `koff = \ov. kfinal (avalue::(salts ++ [ov]))` >>
+  `bind (bind (eval_expr cx off) (read_result cx)) koff ps = (res,out)` by
+    fs[Abbr `ksalt`, Abbr `koff`, create_copy_source_cons, cj 49 vyperInterpreterTheory.evaluate_def, bind_return] >>
+  `!ov. storage_trace_frame (koff ov)` by simp[Abbr `koff`] >>
+  drule_all blueprint_offset_at_cut_mods >> strip_tac
+  >- (disj1_tac >> qexists_tac `err` >> simp[]) >>
+  rename1 `bind (eval_expr cx off) (read_result cx) ps = (INL ov,qp)` >>
+  `eval_exprs cx [off] ps = (INL [ov],qp)` by
+    (irule blueprint_eval_join_cons >> simp[eval_exprs_nil]) >>
+  drule_all blueprint_eval_join_salt_offset >> strip_tac >>
+  `?amt. dest_NumV avalue = SOME amt` by
+    (qpat_assum `value_runtime_typed env (expr_type amount) avalue` mp_tac >>
+     qpat_assum `expr_type amount = _` (pure_rewrite_tac o single) >>
+     disch_then (strip_assume_tac o MATCH_MP blueprint_keyword_uint) >> metis_tac[]) >>
+  `?ops. dest_create_args (CreateFromBlueprint raw) hs
+       (create_operand_layout (CreateFromBlueprint raw) hs (av::(cvs ++ avalue::(salts ++ [ov])))) = SOME ops /\
+     ops.co_code_src = AddressCodeSource (w2w aw) /\ ops.co_ctor_args = cvs /\
+     ops.co_code_offset = SOME (w2n w)` by
+    (irule blueprint_decoded_keywords >> simp[] >> metis_tac[]) >>
+  `!x w. not_fresh_at ca x /\ lookup_var x u = SOME w ==> lookup_var x t = SOME w` by
+    (rpt gen_tac >> strip_tac >>
+     `not_fresh_at cm x /\ not_fresh_at cn x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+     metis_tac[]) >>
+  `m.vs_labels = u.vs_labels` by
+    (qpat_assum `create_expr_prefix ca cm _ _ _ u ma m` (mp_then Any mp_tac create_prefix_labels) >> simp[]) >>
+  `n.vs_labels = m.vs_labels` by
+    (qpat_x_assum `if hs then lower_value _ _ _ salt cm = _ /\ _ else _` mp_tac >>
+     reverse (Cases_on `hs`) >> pure_rewrite_tac[COND_CLAUSES]
+     >- (strip_tac >> fs[]) >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     qpat_assum `create_expr_prefix cm cn _ _ _ m ms n`
+       (mp_then Any mp_tac create_prefix_labels) >> simp[]) >>
+  `t.vs_labels = n.vs_labels` by
+    (qpat_x_assum `(?oty i. origin_fold_value off = _ /\ _) \/ _` strip_assume_tac
+     >- simp[] >>
+     qpat_assum `create_expr_prefix cn cb _ _ _ n mo t`
+       (mp_then Any mp_tac create_prefix_labels) >> simp[]) >>
+  `eval_operand target_op t = SOME aw` by
+    (irule blueprint_eval_operand_frame >> qexistsl [`ca`,`u`] >> simp[] >>
+     FIRST_ASSUM ACCEPT_TAC) >>
+  disj2_tac >> qexistsl [`avalue::(salts ++ [ov])`, `qp`, `ops`, `w`] >> simp[] >>
+  conj_tac >- (irule blueprint_eval_join_cons >> qexists_tac `pa` >> simp[]) >>
+  drule blueprint_lookup_code >> simp[]
 QED

@@ -23,6 +23,9 @@ Theorem create_blueprint_abi_keyword_entry_mods:
   expr_body_pre_mods mods ce cx env (Call ann (CreateTarget (CreateFromBlueprint F) hs rof ks) args df) entry /\
   args = target::amount::((if hs then [salt] else []) ++ off::ctors) /\
   EVERY (create_operand_completed_ok_mods mods exps cx) (create_operand_order (CreateFromBlueprint F) hs args) /\
+  (!i s vs s'. i < LENGTH ctors /\ ~exprs_can_mutate ce (DROP (SUC i) ctors) /\
+    eval_exprs cx (DROP (SUC i) ctors) s = (INL vs,s') ==>
+    !tr. get_storage cx s' tr = get_storage cx s tr) /\
   MEM func ctx.ctx_functions /\ fn_inst_ids_distinct func /\
   later = amount::((if hs then [salt] else []) ++ [off]) /\
   eval_operand target_op (St 0) = SOME aw /\ (!x. target_op = Var x ==> not_fresh_at (C 0) x) /\

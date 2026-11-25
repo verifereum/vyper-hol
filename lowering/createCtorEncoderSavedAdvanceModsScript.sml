@@ -6,7 +6,8 @@ Ancestors
   exprPtrUnwrapStorageFacts stmtSimAssignStorageCopy accountsRelProps
   stateRelProj exprSimSubscriptArrayFrame exprSimProps exprSimMemDefs
   exprBopSimProps loweringPosts loweringStateRelDefs bodyPtrDefs freshWrites
-  bodyFullPostsMods bodyFullShadowBodyInv valueTypingMemoryProps
+  bodyFullPostsMods immutableRegionFrameProps bodyFullShadowBodyInv valueTypingMemoryProps
+  createCtorEncoderImmutableRootMods createCtorEncoderImmutableMemFrameMods
   valueEncodingProofs valueEncodingDefs exprLoweringProps ptrDiscipline venomState
   vyperStorageBackend vyperStorageFootprint sourceUnitExecution vfmState
   compileEnv context finite_map pred_set words
@@ -321,4 +322,107 @@ Proof
   qpat_assum `mem_agree_outside tu.t_mem u.vs_memory mem` (irule_at Any) >>
   qpat_assum `mem_bytes_at 0 lo u.vs_memory = _` (irule_at Any) >>
   qexists_tac `tn` >> simp[]
+QED
+
+
+Theorem ctor_encoder_saved_advance_current_mods:
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
+  local_ptrs_reserved ce si /\ local_ptrs_reserved ce se /\
+  ss.cs_next_var <= se.cs_next_var /\ ss.cs_next_id <= se.cs_next_id /\
+  (!l. vv_operand saved <> Label l) /\
+  (vv_location saved = SOME LocMemory ==> ~is_word_type ty) /\
+  (!tag p. saved = LocatedValue tag p ==> tag = ty) /\
+  read_result cx raw ee = (INL v,ee) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
+  vv_holds_mods ce cx ty raw saved ee s /\ vv_at ce cx ty si ss ee raw saved s /\
+  ptr_vv_ok cx ty raw saved ee G tn s /\ vv_store_bound cx ty ty ee raw saved s /\
+  ((case saved of StackValue tag op => ~is_word_type ty
+      | LocatedValue tag p => p.ptr_location = LocMemory) ==>
+    ptr_buf_ok ce e (vv_operand saved) G s) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee s /\ vv_storage_live H cx saved ee s) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. dead_lo_ok_mods H (DF H) lo ce cx) /\
+  abi_encode_saved_state_mods ctx func ce cx st0 ee DF lo d se s G tn
+    shared pbase capacity root dst dst_offset prefix su u Gu tu /\
+  (contract_inv mods exps ctx ce cx /\
+   expr_sim_inv_mods mods ce cx env ee) ==>
+  vv_holds_mods ce cx ty raw saved ee u /\ vv_at ce cx ty si ss ee raw saved u /\
+  ptr_vv_ok cx ty raw saved ee Gu tu u /\ vv_store_bound cx ty ty ee raw saved u /\
+  ((case saved of StackValue tag op => ~is_word_type ty
+      | LocatedValue tag p => p.ptr_location = LocMemory) ==>
+    ptr_buf_ok ce e (vv_operand saved) Gu u) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee u /\ immutable_frame_mods func ce cx ee u /\
+    storage_well_formed_on cx ee (FST H) /\
+    vv_storage_live H cx saved ee u /\ ghost_inv_at_mods (DF H) lo d ce cx ee Gu tu u) /\
+  (!x. vv_operand saved = Var x ==> not_fresh_at su x) /\
+  (ce.ce_is_ctor /\ vv_location saved = SOME LocCode ==>
+    !w. eval_operand (vv_operand saved) u = SOME w ==>
+      w2n w + type_memory_size tv <= lo /\
+      (!mem. mem_agree_outside tu.t_mem u.vs_memory mem ==>
+        val_in_memory tv v (w2n w) mem))
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qhdtm_assum `abi_encode_saved_state_mods`
+    (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_mods_def]) >>
+  qpat_x_assum `?H. valid_horizon cx st0 H ee.storage_trace`
+    (qx_choose_then `hz` assume_tac) >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ s /\ _`
+    (qspec_then `hz` (drule_then strip_assume_tac)) >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ u /\ _`
+    (qspec_then `hz` (drule_then strip_assume_tac)) >>
+  `!x. vv_operand saved = Var x ==> not_fresh_at ss x` by
+    metis_tac[extcall_saved_operand_not_fresh] >>
+  `!x. vv_operand saved = Var x ==> not_fresh_at se x` by metis_tac[not_fresh_at_mono] >>
+  `!x. vv_operand saved = Var x ==> not_fresh_at su x` by metis_tac[not_fresh_at_mono] >>
+  `?w. eval_operand (vv_operand saved) s = SOME w` by
+    (drule_then ACCEPT_TAC saved_eval_exists) >>
+  `eval_operand (vv_operand saved) u = eval_operand (vv_operand saved) s /\
+   op_taint tu (vv_operand saved) = op_taint tn (vv_operand saved) /\
+   op_prov Gu (vv_operand saved) = op_prov G (vv_operand saved) /\
+   (!x. vv_operand saved = Var x ==> FLOOKUP Gu x = FLOOKUP G x)` by
+    (irule saved_operand_frame >> simp[] >>
+     qpat_assum `wb_frame ce ee ee se s u` (irule_at Any) >>
+     qpat_assum `ghost_kept_at lo ce ee se G tn s Gu tu` (irule_at Any) >> simp[]) >>
+  `wb_frame ce ee ee ss s u /\ ghost_kept_at lo ce ee ss G tn s Gu tu` by
+    (irule saved_snapshot_frames >> qexists_tac `se` >> simp[]) >>
+  `vv_holds_mods ce cx ty raw saved ee u` by
+    (irule saved_holds_frame >> qexistsl_tac [`hz`,`ctx`,`func`,`s`,`si`,`ss`] >> simp[]) >>
+  `vv_at ce cx ty si ss ee raw saved u` by
+    (qpat_assum `stmt_state_rel hz ctx func ce cx ee s`
+       (mp_then Any strip_assume_tac stmt_state_rel_local_ptrs_alloca) >>
+     irule vv_at_alloc_map_frame >> qexistsl_tac [`s`,`ss`] >> simp[] >>
+     conj_tac >- metis_tac[local_region_wb_frame] >> fs[wb_frame_def]) >>
+  `!H:(bool # bytes32 # type_value) list # num list.
+     vv_storage_live H cx saved ee s ==> vv_storage_live H cx saved ee u` by
+    (rpt strip_tac >> irule target_saved_storage_live_frame >> qexists_tac `s` >> simp[]) >>
+  `dead_lo_ok_mods hz (DF hz) lo ce cx` by simp[] >>
+  `vv_storage_live hz cx saved ee u` by simp[] >>
+  `ptr_vv_ok cx ty raw saved ee Gu tu u` by
+    (drule_all_then ACCEPT_TAC saved_ptr_frame) >>
+  simp[] >> rpt conj_tac
+  >- metis_tac[vv_store_bound_frame_mem_src]
+  >- (disch_tac >> irule ptr_buf_ok_frame >> qexistsl_tac [`G`,`s`] >> simp[]) >>
+  strip_tac >>
+  Cases_on `saved` >> gvs[vv_location_def, vv_operand_def, vv_holds_mods_def,
+    immutable_holds_mods_def, immutable_holds_def] >>
+  Cases_on `ce.ce_is_ctor` >> gvs[] >>
+  Cases_on `ALOOKUP ee.immutables cx.txn.target` >> gvs[] >>
+  `dead_lo_ok_mods hz (DF hz) lo ce cx` by simp[] >>
+  drule_all_then strip_assume_tac linked_immutable_root_value_mods >>
+  drule_all_then strip_assume_tac immutable_region_value_layout_mods >>
+  rename1 `val_in_memory rt rv off0 u.vs_memory` >>
+  qpat_x_assum `sub_layout rt rv off1 tv v`
+    (strip_assume_tac o REWRITE_RULE [sub_layout_def]) >>
+  rename1 `off1 + type_memory_size tv <= type_memory_size rt` >>
+  `off1 + off0 < dimword (:256)` by decide_tac >>
+  simp[arithmeticTheory.LESS_MOD] >>
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H _ _ _ _ _ u /\ _`
+    (qspec_then `hz` (drule_then strip_assume_tac)) >>
+  drule_all_then strip_assume_tac immutable_region_mem_frame_linked_mods >>
+  qpat_assum `!b mem. val_in_memory rt rv b mem ==> _` irule >>
+  simp[]
 QED
