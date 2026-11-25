@@ -147,12 +147,12 @@ Proof
        u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp`
        (drule_then (assume_tac o cj 1)) >>
      first_assum ACCEPT_TAC) >>
+  `off <= capacity-dst_offset` by decide_tac >>
   mp_tac (Q.INST [`d` |-> `pbase+dst_offset`,`ho` |-> `h`,`dp` |-> `p`,
     `bound` |-> `capacity-dst_offset`,`st` |-> `su`,`en` |-> `su1`,
     `ops` |-> `(head_op,off0,tail_op)`,`s` |-> `u`,`G` |-> `Gu`,`tn` |-> `tu`]
     window_child_prefix_joint) >>
-  impl_tac >- (rpt conj_tac >>
-    TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >> TRY (asm_rewrite_tac[])) >>
+  impl_tac >- asm_rewrite_tac[] >>
   disch_then (qx_choosel_then [`u1`,`G1`,`t1`,`hp`,`tp`]
     (strip_assume_tac o SIMP_RULE bool_ss [FST,SND])) >>
   qpat_x_assum `head_op = Var _` SUBST_ALL_TAC >>
@@ -278,9 +278,9 @@ Proof
     `b` |-> `pbase`,`d` |-> `pbase+dst_offset`,`sb` |-> `w2n (w:bytes32)`,
     `cap` |-> `val_footprint rt v`,`bs` |-> `enc at av`]
     abi_encode_values_dynamic_prefix_input) >>
-  impl_tac >- (rpt conj_tac >>
-    (first_assum ACCEPT_TAC ORELSE REFL_TAC ORELSE
-     (qexistsl_tac [`ct`,`rv`] >> asm_rewrite_tac[]) ORELSE decide_tac)) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+    >- (qexistsl_tac [`ct`,`rv`] >> asm_rewrite_tac[]) >>
+    simp[NoAsms, LESS_EQ_ADD]) >>
   disch_then (qx_choosel_then [`z`,`Gz`,`tz`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
   `!aid. aid IN window_alloca_sites func (frag_ids su2 mid) ==> su2.cs_next_id <= aid` by
     simp[NoAsms, window_alloca_sites_def, frag_ids_def] >>
@@ -313,8 +313,9 @@ Proof
     (qspecl_then [`su2`,`en`,`loc INSERT window_alloca_sites func (frag_ids su2 mid)`,
       `[(pbase+dst_offset+h,32);(pbase+dst_offset+off,LENGTH (enc at av))]`,
       `u2`,`G2`,`t2`,`z`,`Gz`,`tz`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    simp_tac (srw_ss()) [EVERY_DEF] >> rpt conj_tac >> TRY (decide_tac >> NO_TAC) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+    >- (simp_tac (srw_ss()) [EVERY_DEF] >> conj_tac >> decide_tac) >>
+    simp_tac (srw_ss()) [EVERY_DEF] >>
     qx_gen_tac `j` >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
     qpat_assum `!i. _ /\ _ /\ _ ==> (i IN tz.t_mem <=> i IN t2.t_mem)` (qspec_then `j` mp_tac) >>
     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -324,8 +325,11 @@ Proof
   `pure_frame ce func ee se u u2 /\ wb_frame ce ee ee se u u2` by
     (mp_tac (Q.INST [`H` |-> `hz`,`a` |-> `su1`,`v` |-> `u1`,`z` |-> `u2`]
       abi_encode_saved_frames_trans) >>
-     impl_tac >- (qpat_assum `ci_mono su su1` (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >>
-       rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE decide_tac)) >>
+     impl_tac >- (
+       qpat_assum `ci_mono su su1` (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >>
+       `se.cs_next_var <= su1.cs_next_var` by decide_tac >>
+       `se.cs_next_id <= su1.cs_next_id` by decide_tac >>
+       asm_rewrite_tac[]) >>
      disch_then ACCEPT_TAC) >>
   `pure_frame ce func ee se u z /\ wb_frame ce ee ee se u z` by
     (mp_tac (Q.INST [`H` |-> `hz`,`a` |-> `se`,`v` |-> `u2`] abi_encode_saved_frames_trans) >>
