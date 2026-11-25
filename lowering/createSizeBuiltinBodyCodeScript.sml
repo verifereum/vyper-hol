@@ -1,7 +1,8 @@
 (* Static ID and caller branch-target certificates for ordinary builtins. *)
 Theory createSizeBuiltinBodyCode
 Ancestors
-  exprValueWrapperStateProps createSizeCutCode createSizeCutOpens exprLowering exprCallBounds vyperAST context builtinStrings builtinMath
+  exprValueWrapperStateProps createSizeCutCode createSizeCutOpens createSizeBoolChainCutCode
+  exprLowering exprCallBounds vyperAST context builtinStrings builtinMath
   builtinHashing builtinSimple builtinBytes builtinMisc externalEntryShape
   pair list pred_set arithmetic emitHelper compileEnv venomInst
 
@@ -302,6 +303,8 @@ Proof
   >~ [`compile_keccak256_bytesm _ _ _`] >- suspend "keccak"
   >~ [`compile_sha256_bytesm _ _ _`] >- suspend "sha"
   >~ [`compile_builtin_len _ _ _ _ _`] >- suspend "len"
+  >~ [`compile_bool_chain_ops _ _ _ _ _ _ _`] >- suspend "chain"
+  >~ [`is_word_type ret_ty`] >- suspend "named"
   >> rpt (irule create_cut_code_pair >> conj_tac >>
        simp (cut_prims @ [create_alloc_buffer_cut_code, Excl "expr_child_callback_def"])) >>
   simp[builtin_uint2str_code, builtin_slices_code, builtin_acc_code,
@@ -375,6 +378,27 @@ Resume create_builtin_body_cut_code[sha]:
   COND_CASES_TAC
   >- builtin_steps [create_alloc_buffer_cut_code, compile_sha256_bytes_def] >>
   builtin_hash_cases [builtin_sha_word_code]
+QED
+
+Resume create_builtin_body_cut_code[named]:
+  irule create_cut_code_pair >> simp[Excl "expr_child_callback_def"] >>
+  COND_CASES_TAC >> simp[]
+QED
+
+Resume create_builtin_body_cut_code[chain]:
+  ntac 2 (match_mp_tac create_cut_code_pair >>
+    (conj_tac >- simp[]) >> BETA_TAC) >>
+  Cases_on `fresh_label "bool_exit" (SND (fresh_var a))` >>
+  fs[UNCURRY_VAR, Excl "expr_child_callback_def"] >>
+  rename1 `SND (new_block exit_lbl _)` >>
+  match_mp_tac (Q.INST [`pending` |-> `{exit_lbl}`, `opened` |-> `{exit_lbl}`]
+    create_cut_opens_close) >>
+  reverse conj_tac >- simp[] >>
+  qmatch_goalsub_abbrev_tac `new_block exit_lbl chain_state` >>
+  match_mp_tac create_cut_opens_prepend >> qexists_tac `chain_state` >>
+  reverse conj_tac >- simp[create_cut_opens_block, builtin_labels_open] >>
+  simp[Abbr `chain_state`, compile_bool_chain_ops_cut_code,
+       Excl "expr_child_callback_def"]
 QED
 
 Finalise create_builtin_body_cut_code

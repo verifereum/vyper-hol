@@ -544,9 +544,13 @@ Proof
                  pending_deletions updated_by APPEND x5|>)` by
       (irule runtime_consistent_call_frame >> simp[] >> qexists_tac `st` >>
        simp[evaluation_state_component_equality]) >>
-    Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
-    Cases_on `flags.rcf_max_outsize = 0` >>
-    simp[] >> RAW_CALL_FINISH_TAC))
+    Cases_on `x0` >-
+     (Cases_on `flags.rcf_revert_on_failure` >-
+       (Cases_on `flags.rcf_max_outsize = 0` >> simp[] >> RAW_CALL_FINISH_TAC) >>
+      Cases_on `flags.rcf_max_outsize = 0` >> simp[] >> RAW_CALL_FINISH_TAC) >>
+    Cases_on `flags.rcf_revert_on_failure` >-
+     (Cases_on `flags.rcf_max_outsize = 0` >> simp[] >> RAW_CALL_FINISH_TAC) >>
+    Cases_on `flags.rcf_max_outsize = 0` >> simp[] >> RAW_CALL_FINISH_TAC))
 QED
 
 Theorem raw_log_args_runtime_typed_dest:
