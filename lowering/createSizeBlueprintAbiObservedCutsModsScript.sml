@@ -164,15 +164,22 @@ QED
 
 Resume blueprint_abi_observed_ctor_cuts_mods[fetch]:
   rpt strip_tac >>
+  `i + (LENGTH ctors - i) = LENGTH ctors` by decide_tac >>
   `?j. ctor_segment_fetch func (St i) = SOME j /\ (C i).cs_next_id <= j.inst_id` by
     (irule blueprint_abi_rows_fetch >>
      qexistsl [`Chunk`,`M`,`Mid`,`LENGTH ctors`,`Snap`,`ctx`,`gas_explicit_sites ctx shctx`,`LENGTH ctors - i`] >>
-     rpt conj_tac >> TRY (decide_tac >> NO_TAC) >>
-     TRY (qx_gen_tac `row` >> disch_tac >>
-          qpat_assum `!i. i < LENGTH ctors ==> compile_expr _ _ _ _ = _ /\ _`
-            (qspec_then `row` (drule_then (map_every assume_tac o CONJUNCTS))) >>
-          simp[] >> NO_TAC) >>
-     metis_tac[]) >>
+     conj_tac
+     >- (qx_gen_tac `k` >> disch_tac >>
+         qpat_assum `!i. i < LENGTH ctors ==> compile_expr _ _ _ _ = _ /\ _`
+           (qspec_then `k` (drule_then (map_every assume_tac o CONJUNCTS))) >>
+         qpat_assum `!i. i < LENGTH ctors ==> (C i).cs_next_id <= _ /\ _`
+           (qspec_then `k` (drule_then strip_assume_tac)) >>
+         simp[]) >>
+     qmatch_asmsub_rename_tac `ctor_segment_fetch func s = SOME terminal` >>
+     simp[] >> qexists_tac `terminal` >>
+     qpat_assum `s = St (LENGTH ctors)` (SUBST1_TAC o SYM) >>
+     qpat_assum `se = C (LENGTH ctors)` (SUBST1_TAC o SYM) >>
+     simp[]) >>
   drule_all_then assume_tac blueprint_abi_fetch_non_phi >>
   qmatch_asmsub_rename_tac `ctor_segment_fetch func (St i) = SOME next` >>
   qexists_tac `next` >> simp[]
