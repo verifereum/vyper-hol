@@ -327,10 +327,10 @@ Theorem gas_outcome_full_exit:
   ~s.vs_halted /\
   (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
   exit_result r /\
-  create_size_exit_ok ctx res r /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
        (s, G, tn) [] (r, G', tn') /\
+     create_size_exit_ok ctx res r /\
      R H res (ee with gas_obs := []) (G', tn') r) ==>
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
     (es, s, G, tn) Q R

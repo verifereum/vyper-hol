@@ -352,6 +352,7 @@ Theorem raw_log_fixed_static_tail_path:
       EVERY (\op. op_taint tn op = {}) ops /\ ~s.vs_halted /\
       s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts) ==>
     ?u G2 tn2. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      u.vs_call_ctx.cc_static /\
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
         (Abort ExHalt_abort u,G2,tn2)
 Proof
@@ -379,6 +380,7 @@ Proof
   `s.vs_call_ctx.cc_static` by
     gvs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
         loweringStateRelDefsTheory.call_ctx_rel_def] >>
+  conj_tac >- simp[Abbr `t1`, Abbr `t`, mstore_def, halt_state_def, set_returndata_def] >>
   `eval_operands ops t1 = SOME (MAP event_value_to_word vals) /\
    eval_operand buf.buf_operand t1 = SOME w` by
     (`!xs. eval_operands xs t1 = eval_operands xs s` by
