@@ -28,10 +28,10 @@ Proof
 QED
 
 Theorem type_env_for_module_struct_lookup:
-  ∀tops name args.
-    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) ∧
+  ∀tops src name args.
+    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel src) tops)) ∧
     MEM (StructDecl name args) tops ⇒
-    FLOOKUP (type_env_for_module NONE tops) (NONE, name) =
+    FLOOKUP (type_env_for_module src tops) (src, name) =
       SOME (StructArgs args)
 Proof
   Induct >> simp[] >> Cases >>
