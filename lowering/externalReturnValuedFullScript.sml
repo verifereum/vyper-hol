@@ -1943,18 +1943,21 @@ Resume return_selected_valued_frag_full_core[raw_typed_copy]:
   `is_bytestring_type (lowered_value_type ce e)` by
     (Cases_on `?ann ctgt cargs drv. e = Call ann ctgt cargs drv`
      >- (gvs[] >> rename1 `well_typed_expr env (Call ann ctgt cargs drv)` >>
-         Cases_on `ctgt` >>
-         fs[exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def] >>
-         rename1 `well_typed_expr env (Call ann (IntCall fid) cargs drv)` >>
-         mp_tac (Q.INST [`ce` |-> `ce`,
-           `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
-           `env` |-> `env`, `es` |-> `es`, `ty` |-> `ann`,
-           `fid` |-> `fid`, `args` |-> `cargs`, `drv` |-> `drv`]
-           return_intcall_lowered_widens) >>
-         impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-         fs[exprLoweringTheory.lowered_value_type_def, vyperTypeSystemTheory.type_widens_to_def,
-            vyperASTTheory.expr_type_def] >>
-         metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]) >>
+         Cases_on `ctgt`
+         >- (rename1 `well_typed_expr env (Call ann (IntCall fid) cargs drv)` >>
+             mp_tac (Q.INST [`ce` |-> `ce`,
+               `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
+               `env` |-> `env`, `es` |-> `es`, `ty` |-> `ann`,
+               `fid` |-> `fid`, `args` |-> `cargs`, `drv` |-> `drv`]
+               return_intcall_lowered_widens) >>
+             impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+             qpat_assum `is_bytestring_type (expr_type (Call ann (IntCall fid) cargs drv))`
+               mp_tac >>
+             POP_ASSUM_LIST (K ALL_TAC) >>
+             simp[vyperASTTheory.expr_type_def, vyperTypeSystemTheory.type_widens_to_def] >>
+             metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]) >>
+         qpat_assum `is_bytestring_type (expr_type (Call _ _ _ _))` mp_tac >>
+         simp[NoAsms, exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]) >>
      `!ann ctgt cargs drv. e <> Call ann ctgt cargs drv` by metis_tac[] >>
      drule_all lowered_value_type_bytestring_iff >> simp[]) >>
   `(!x. op = Var x ==> not_fresh_at sm x)` by metis_tac[compile_lower_value_var] >>
@@ -2424,13 +2427,18 @@ Resume return_selected_valued_frag_full_core[raw_terminal_resources]:
   `allocas_from lo raw_end /\ ~raw_end.vs_halted /\
    raw_end.vs_current_bb = sc.cs_current_bb /\
    raw_end.vs_inst_idx = LENGTH sc.cs_current_insts` by
-    (qpat_assum `allocas_from lo raw_alloc` mp_tac >>
-     qpat_assum `~raw_alloc.vs_halted` mp_tac >>
-     qpat_assum `same_blocks sr sc` mp_tac >>
-     qpat_assum `sc.cs_current_insts = sr.cs_current_insts ++ emitted_insts sr sc` mp_tac >>
-     simp[Abbr `raw_end`,ptrDisciplineTheory.allocas_from_def,same_blocks_def] >>
-     fs[ptrDisciplineTheory.allocas_from_def,same_blocks_def] >>
-     first_assum ACCEPT_TAC) >>
+    (qpat_assum `Abbrev (raw_end = _)`
+       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`allocas_from lo raw_alloc`, `~raw_alloc.vs_halted`,
+        `same_blocks sr sc`, `sc.cs_current_insts = sr.cs_current_insts ++ emitted_insts sr sc`,
+        `raw_copy_state.vs_allocas = raw_alloc.vs_allocas`,
+        `raw_copy_state.vs_halted <=> raw_alloc.vs_halted`,
+        `raw_copy_state.vs_current_bb = raw_alloc.vs_current_bb`,
+        `raw_alloc.vs_current_bb = sr.cs_current_bb`,
+        `raw_alloc.vs_inst_idx = LENGTH sr.cs_current_insts`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[ptrDisciplineTheory.allocas_from_def,same_blocks_def]) >>
   `not_fresh_at sc raw_dst` by
     metis_tac[stmtFragPtrTheory.not_fresh_at_mono,ci_mono_def] >>
   `lookup_var raw_dst raw_copy_state = lookup_var raw_dst raw_alloc /\
@@ -2454,7 +2462,10 @@ Resume return_selected_valued_frag_full_core[raw_terminal_resources]:
        simp[exprSimPropsTheory.le_word_size_mul] >>
      `ptr_covers raw_copy_G raw_copy_tn raw_dst raw_copy_state (32 + LENGTH bs)` by
        metis_tac[reasonCopySourcePtrTheory.ptr_covers_mono] >>
-     fs[Abbr `raw_end`,ptr_covers_def,venomStateTheory.lookup_var_def]) >>
+     qpat_assum `Abbrev (raw_end = _)`
+       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     PURE_ONCE_REWRITE_TAC [ghostPcTransportPtrTheory.ptr_covers_inst_idx] >>
+     first_assum ACCEPT_TAC) >>
   suspend "raw_terminal_clean"
 QED
 
