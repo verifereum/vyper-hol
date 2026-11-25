@@ -19,6 +19,7 @@ Ancestors
   evalCompilerSiblingScopeTypes
   (* Linked runtime dispatch and entry proofs. *)
   defaultDispatchMods dispatchedCallAssemblyMods
+  entryCreateNativeCut entryCreateReject loweringCreateSize
   (* exact Python parity for every retained raw-system and creation fixture *)
   evalCompilerRawSystem evalCompilerCreateBuiltins
   (* branch_opt's output checker on a sample of the parity fixtures'
