@@ -5,6 +5,7 @@ Ancestors
   bodyFullPredsMods bodyFullPostsMods bodyFullShadowBodyInv bodyPtrDefs bodyInvSplit
   bodyBranchCellFrameMods bodyFullForRange bodyFullShared bodyFullPathHistory
   bodyFullIfExpReach forConsBodyGas bodyExprPreFacts bodyMemoryDefs
+  exprSimMemorySource[qualified]
   bodyFullForFacts exprSimHypsDefs constSubstCorrect placeTypingProps
   exprLoweringProps loweringStateRelDefs loweringSlice compileEnv exprSimAbiEncodeMemoryLength
   ghostPcTransportPtr wordLoadStorePtr valueEncodingProps valueEncodingTyping
@@ -106,6 +107,39 @@ Proof
   >- (qpat_assum `ep = _` SUBST1_TAC >> irule captured_storage_body_admissible >>
       simp[] >> qexistsl_tac [`Value (IntV z)`, `lctx`, `stmt_res_ok lctx`, `rs`] >>
       simp[read_result_def, return_def]) >>
+  simp[range_cell_extend_mods] >>
+  `ep.immutables = es.immutables` by simp[] >>
+  drule body_const_cells_agree_mods_immutables >> simp[]
+QED
+
+(* A copied iterator item and its source binding use the same reached value. *)
+Theorem for_item_push_source_mods:
+  read_result cx a es = (INL v,es) /\
+  gas_admissible (eval_for cx tyv id body (a::rs)) (stmt_res_ok lctx) es /\
+  lookup_scopes id es.scopes = NONE /\
+  expr_sim_inv_mods mods cenv cx env es /\ body_const_cells_agree_mods mods cx env es /\
+  id NOTIN FDOM env.var_types /\
+  evaluate_type (get_tenv cx) typ = SOME tyv /\ value_has_type tyv v /\
+  declare_local cenv id typ st = (bc,st1) /\ cenv.ce_alloca_locals /\
+  ep = es with <|scopes := (FEMPTY |+ (id,<|assignable := F; type := tyv;
+                                           value := v; popped := []|>)) :: es.scopes;
+                 gas_obs := []|> ==>
+  (!tail. bind (read_result cx a) (push_scope_with_var id tyv)
+       (es with gas_obs := tail) = (INL (),ep with gas_obs := tail)) /\
+  gas_admissible (eval_stmts cx body) (stmt_res_ok (InLoop exit_lbl incr_lbl)) ep /\
+  expr_sim_inv_mods mods bc cx (extend_local env id typ F) ep /\
+  body_const_cells_agree_mods mods cx (extend_local env id typ F) ep
+Proof
+  strip_tac >> conj_tac
+  >- (drule_then assume_tac exprSimMemorySourceTheory.read_result_gas_obs >>
+      simp[bind_def, push_scope_with_var_def, return_def,
+           evaluation_state_component_equality]) >>
+  conj_tac
+  >- (qpat_assum `ep = _` SUBST1_TAC >> irule captured_storage_body_admissible >>
+      simp[] >> qexistsl_tac [`a`,`lctx`,`stmt_res_ok lctx`,`rs`] >> simp[]) >>
+  conj_tac
+  >- (qpat_assum `ep = _` SUBST1_TAC >> irule range_scope_inv_mods >>
+      simp[] >> qexistsl_tac [`cenv`,`st`,`st1`] >> simp[]) >>
   simp[range_cell_extend_mods] >>
   `ep.immutables = es.immutables` by simp[] >>
   drule body_const_cells_agree_mods_immutables >> simp[]

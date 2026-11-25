@@ -1,0 +1,348 @@
+Theory bodyUint2StrControlMods
+Ancestors
+  bodyFullBuiltinUint2StrBlocks bodyFullGhostFrame bodyFullUnwrapRun
+  exprSimUint2Str bodyPtrDefs ptrDiscipline venomState venomInst
+  finite_map words list pred_set fragGasSeqPtr fragGasOriginPtrLoop
+  exprLoweringProps emitHelperProps ptrSafeRun codegenRel contextCodegenRel
+  venomExecSemantics fragExecMem unitTransformDefs memSafeRun
+  bodyFullHashKeccakFixed
+
+(* Ghost validity is checked at zero, but the control instructions run at lo.
+   They preserve the allocation table, so the actual floor is retained. *)
+Theorem u2s_compare_control_mods:
+  valid_horizon cx st0 H0 es.storage_trace /\
+  not_fresh_at a p /\ local_ptrs_reserved cenv a /\
+  (!r len. cenv.ce_return_buf = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
+  (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
+  2 <= k /\ x < dimword(:256) /\
+  lookup_var (u2s_var a 0) s = SOME (n2w x) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
+    ghost_inv_at (DF H) 0 d cenv cx es G tn s) /\
+  ghost_kept_at lo cenv es a G0 tn0 s0 G tn /\
+  FLOOKUP G p = SOME (b,sz) /\ op_taint tn (Var p) = {} /\
+  (!i. i < 2 ==> FLOOKUP G (u2s_var a i) = NONE /\
+    op_taint tn (Var (u2s_var a i)) = {}) /\
+  allocas_from lo s /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions =
+    [u2s_inst a iid EQ [Var (u2s_var a 0); Lit 0w] [u2s_var a k];
+     u2s_inst a jid JNZ [Var (u2s_var a k); Label yes; Label no] []] /\
+  s.vs_inst_idx = 0 ==>
+  ?t G' tn'.
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    (!n X str. u2s_digits a b n X x str s ==> u2s_digits a b n X x str t) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr t /\
+      ghost_inv_at (DF H) 0 d cenv cx es G' tn' t) /\
+    ghost_kept_at lo cenv es a G0 tn0 s0 G' tn' /\
+    FLOOKUP G' p = SOME (b,sz) /\ op_taint tn' (Var p) = {} /\
+    (!i. i < 2 ==> FLOOKUP G' (u2s_var a i) = NONE /\
+      op_taint tn' (Var (u2s_var a i)) = {} /\
+      lookup_var (u2s_var a i) t = lookup_var (u2s_var a i) s) /\
+    tn'.t_mem = tn.t_mem /\ allocas_from lo t /\
+    t.vs_current_bb = (if x = 0 then yes else no) /\
+    t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  qabbrev_tac `u = update_var (u2s_var a k) (bool_to_word (x = 0)) s` >>
+  qabbrev_tac `G1 = DRESTRICT G (COMPL {u2s_var a k})` >>
+  qabbrev_tac `tn1 = tn with t_var := tn.t_var |+ (u2s_var a k,{})` >>
+  qabbrev_tac `t = jump_to (if x = 0 then yes else no) u` >>
+  `!r. not_fresh_at a r ==> r <> u2s_var a k` by metis_tac[u2s_var_fresh] >>
+  `p <> u2s_var a k` by metis_tac[] >>
+  `!r. not_fresh_at a r ==>
+     lookup_var r t = lookup_var r s /\ FLOOKUP G1 r = FLOOKUP G r /\
+     op_taint tn1 (Var r) = op_taint tn (Var r)` by
+    simp[Abbr `t`, Abbr `u`, Abbr `G1`, Abbr `tn1`, lookup_var_def,
+      update_var_def, jump_to_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, op_taint_def] >>
+  `allocas_from lo t` by
+    (qpat_x_assum `allocas_from lo s` mp_tac >>
+     simp[Abbr `t`, Abbr `u`, allocas_from_def, update_var_def, jump_to_def]) >>
+  qexistsl_tac [`t`, `G1`, `tn1`] >>
+  conj_tac >- suspend "path" >>
+  conj_tac >- simp[Abbr `t`, Abbr `u`, u2s_digits_jump, u2s_digits_update] >>
+  conj_tac >- suspend "invariants" >>
+  conj_tac
+  >- (irule ghost_kept_at_clean_suffix >> qexistsl_tac [`G`, `tn`] >>
+      simp[Abbr `tn1`]) >>
+  simp[Abbr `G1`, Abbr `tn1`, Abbr `t`, Abbr `u`,
+       FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, op_taint_def, update_var_def, jump_to_def,
+       lookup_var_def] >>
+  rpt strip_tac >> gvs[u2s_var_injective] >> fs[op_taint_def]
+QED
+
+Resume u2s_compare_control_mods[invariants]:
+  rpt strip_tac
+  >- (simp[Abbr `t`, Abbr `u`] >> irule u2s_safe_jump >>
+      irule u2s_safe_update >> metis_tac[]) >>
+  irule ghost_inv_at_exterior_frame >>
+  qexistsl_tac [`G`, `es`, `s`, `a`, `tn`] >>
+  simp[Abbr `t`, Abbr `u`, Abbr `tn1`, update_var_def, jump_to_def]
+QED
+
+Resume u2s_compare_control_mods[path]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (`stmt_state_rel H0 ctx fn cenv cx es s` by
+       (fs[u2s_safe_def] >> metis_tac[]) >>
+     drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
+  `FLOOKUP G (u2s_var a 0) = NONE /\ op_taint tn (Var (u2s_var a 0)) = {}` by simp[] >>
+  `run_inst_seq [u2s_inst a iid EQ [Var (u2s_var a 0); Lit 0w] [u2s_var a k]] s = OK u` by
+    (simp[Abbr `u`] >> irule u2s_eq_run >> simp[]) >>
+  `!D. inst_seq_ptr D lo ctx fn PG G tn
+    [u2s_inst a iid EQ [Var (u2s_var a 0); Lit 0w] [u2s_var a k]] s G1 tn1` by
+    (gen_tac >> simp[u2s_inst_def, Abbr `G1`, Abbr `tn1`] >>
+     irule u2s_clean_scalar_seq_cons >>
+     simp[op_prov_def, op_taint_def, inst_seq_ptr_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+     fs[op_taint_def] >>
+     qexists_tac `bool_to_word (x = 0)` >>
+     simp[mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def, n2w_11]) >>
+  `run_inst_seq_mem_ok [u2s_inst a iid EQ [Var (u2s_var a 0); Lit 0w] [u2s_var a k]] s` by
+    simp[run_inst_seq_mem_ok_last, u2s_inst_def, mk_inst_def,
+      inst_mem_below_frontier_def, inst_dload_in_section_def,
+      source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := 1),G1,tn1)` by
+    (gen_tac >>
+     `u with vs_inst_idx := 1 = u with vs_inst_idx := s.vs_inst_idx + 1` by simp[] >>
+     pop_assum SUBST1_TAC >>
+     irule (SRULE [u2s_inst_def, mk_inst_def, is_terminator_def]
+       (Q.SPEC `[u2s_inst a iid EQ [Var (u2s_var a 0); Lit 0w] [u2s_var a k]]`
+         run_inst_seq_gas_origin_ptr_path)) >>
+     simp[] >> qexistsl_tac [`a`, `iid`, `k`] >>
+     fs[u2s_inst_def, mk_inst_def, APPEND_EQ_CONS, dalloca_no_wrap_non_dalloca]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (u with vs_inst_idx := 1,G1,tn1) [] (OK t,G1,tn1)` by
+    (gen_tac >> simp[Abbr `t`] >>
+     `jump_to (if x = 0 then yes else no) u =
+      jump_to (if x = 0 then yes else no) (u with vs_inst_idx := 1)` by simp[jump_to_def] >>
+     pop_assum SUBST1_TAC >>
+     `(if x = 0 then yes else no) =
+      (if bool_to_word (x = 0) <> 0w then yes else no)` by
+       (Cases_on `x = 0` >> simp[bool_to_word_def]) >>
+     pop_assum SUBST1_TAC >> irule jnz_origin_ptr_path >>
+     simp[Abbr `u`, Abbr `tn1`, u2s_inst_def, mk_inst_def,
+       get_instruction_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+       eval_operand_def, op_taint_def, allocas_from_def, bool_to_word_def] >>
+     fs[allocas_from_def, ptrDisciplineTheory.allocas_below_fmp_def]) >>
+  rpt strip_tac >> metis_tac[gas_origin_ptr_path_trans]
+QED
+
+Finalise u2s_compare_control_mods[local]
+
+Theorem u2s_cond_control_mods:
+  valid_horizon cx st0 H0 es.storage_trace /\
+  not_fresh_at a p /\ local_ptrs_reserved cenv a /\
+  (!r len. cenv.ce_return_buf = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
+  (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
+  x < dimword(:256) /\
+  lookup_var (u2s_var a 0) s = SOME (n2w x) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
+    ghost_inv_at (DF H) 0 d cenv cx es G tn s) /\
+  ghost_kept_at lo cenv es a G0 tn0 s0 G tn /\
+  FLOOKUP G p = SOME (b,sz) /\ op_taint tn (Var p) = {} /\
+  (!i. i < 2 ==> FLOOKUP G (u2s_var a i) = NONE /\
+    op_taint tn (Var (u2s_var a i)) = {}) /\
+  allocas_from lo s /\ ~s.vs_halted /\
+  lookup_block (u2s_label a 1) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|> /\
+  s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 ==>
+  ?t G' tn'.
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    (!n X str. u2s_digits a b n X x str s ==> u2s_digits a b n X x str t) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr t /\
+      ghost_inv_at (DF H) 0 d cenv cx es G' tn' t) /\
+    ghost_kept_at lo cenv es a G0 tn0 s0 G' tn' /\
+    FLOOKUP G' p = SOME (b,sz) /\ op_taint tn' (Var p) = {} /\
+    (!i. i < 2 ==> FLOOKUP G' (u2s_var a i) = NONE /\
+      op_taint tn' (Var (u2s_var a i)) = {} /\
+      lookup_var (u2s_var a i) t = lookup_var (u2s_var a i) s) /\
+    tn'.t_mem = tn.t_mem /\ allocas_from lo t /\
+    t.vs_current_bb = (if x = 0 then u2s_label a 4 else u2s_label a 2) /\
+    t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  irule (Q.INST [`k` |-> `4`, `iid` |-> `6`, `jid` |-> `7`]
+    (SPEC_ALL u2s_compare_control_mods)) >>
+  simp[] >>
+  conj_tac >- simp[u2s_cond_def] >>
+  metis_tac[]
+QED
+
+Theorem u2s_check_control_mods:
+  valid_horizon cx st0 H0 es.storage_trace /\
+  not_fresh_at a p /\ local_ptrs_reserved cenv a /\
+  (!r len. cenv.ce_return_buf = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
+  (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
+  x < dimword(:256) /\
+  lookup_var (u2s_var a 0) s = SOME (n2w x) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
+    ghost_inv_at (DF H) 0 d cenv cx es G tn s) /\
+  ghost_kept_at lo cenv es a G0 tn0 s0 G tn /\
+  FLOOKUP G p = SOME (b,sz) /\ op_taint tn (Var p) = {} /\
+  (!i. i < 2 ==> FLOOKUP G (u2s_var a i) = NONE /\
+    op_taint tn (Var (u2s_var a i)) = {}) /\
+  allocas_from lo s /\ ~s.vs_halted /\
+  lookup_block (u2s_label a 0) fn.fn_blocks =
+    SOME <|bb_label := u2s_label a 0; bb_instructions := u2s_check a|> /\
+  s.vs_current_bb = u2s_label a 0 /\ s.vs_inst_idx = 0 ==>
+  ?t G' tn'.
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    (!n X str. u2s_digits a b n X x str s ==> u2s_digits a b n X x str t) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr t /\
+      ghost_inv_at (DF H) 0 d cenv cx es G' tn' t) /\
+    ghost_kept_at lo cenv es a G0 tn0 s0 G' tn' /\
+    FLOOKUP G' p = SOME (b,sz) /\ op_taint tn' (Var p) = {} /\
+    (!i. i < 2 ==> FLOOKUP G' (u2s_var a i) = NONE /\
+      op_taint tn' (Var (u2s_var a i)) = {} /\
+      lookup_var (u2s_var a i) t = lookup_var (u2s_var a i) s) /\
+    tn'.t_mem = tn.t_mem /\ allocas_from lo t /\
+    t.vs_current_bb = (if x = 0 then u2s_label a 3 else u2s_label a 1) /\
+    t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  irule (Q.INST [`k` |-> `3`, `iid` |-> `4`, `jid` |-> `5`]
+    (SPEC_ALL u2s_compare_control_mods)) >>
+  simp[] >>
+  conj_tac >- simp[u2s_check_def] >>
+  metis_tac[]
+QED
+
+Theorem u2s_setup_control_mods:
+  valid_horizon cx st0 H0 es.storage_trace /\
+  not_fresh_at a p /\ local_ptrs_reserved cenv a /\
+  (!r len. cenv.ce_return_buf = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
+  (!r len. cenv.ce_return_pc = SOME (PtrVar (Var r) len) ==> not_fresh_at a r) /\
+  eval_operand op s = SOME (n2w X) /\ op_prov G op = NONE /\ op_taint tn op = {} /\
+  (!k. op <> Var (u2s_var a k)) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
+    ghost_inv_at (DF H) 0 d cenv cx es G tn s) /\
+  ghost_kept_at lo cenv es a G0 tn0 s0 G tn /\
+  FLOOKUP G p = SOME (b,sz) /\ lookup_var p s = SOME (n2w b) /\
+  op_taint tn (Var p) = {} /\ allocas_from lo s /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = pre ++ u2s_setup a op (Var p) /\
+  s.vs_inst_idx = LENGTH pre ==>
+  ?t G' tn'.
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G',tn')) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr t /\
+      ghost_inv_at (DF H) 0 d cenv cx es G' tn' t) /\
+    ghost_kept_at lo cenv es a G0 tn0 s0 G' tn' /\
+    FLOOKUP G' p = SOME (b,sz) /\ op_taint tn' (Var p) = {} /\
+    FLOOKUP G' (u2s_var a 2) = SOME (b,sz) /\
+    op_taint tn' (Var (u2s_var a 2)) = {} /\
+    lookup_var (u2s_var a 2) t = SOME (n2w b) /\
+    (!i. i < 2 ==> FLOOKUP G' (u2s_var a i) = NONE /\
+      op_taint tn' (Var (u2s_var a i)) = {}) /\
+    lookup_var (u2s_var a 0) t = SOME (n2w X) /\
+    lookup_var (u2s_var a 1) t = SOME 0w /\
+    tn'.t_mem = tn.t_mem /\ allocas_from lo t /\
+    t.vs_current_bb = u2s_label a 0 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  qabbrev_tac `u = update_var (u2s_var a 2) (n2w b)
+    (update_var (u2s_var a 1) 0w (update_var (u2s_var a 0) (n2w X) s))` >>
+  qabbrev_tac `G1 = DRESTRICT (DRESTRICT G (COMPL {u2s_var a 0})) (COMPL {u2s_var a 1}) |+
+    (u2s_var a 2,(b,sz))` >>
+  qabbrev_tac `tn1 = tn with t_var := tn.t_var |+ (u2s_var a 0,{}) |+
+    (u2s_var a 1,{}) |+ (u2s_var a 2,{})` >>
+  qabbrev_tac `t = jump_to (u2s_label a 0) u` >>
+  `!r k. not_fresh_at a r ==> r <> u2s_var a k` by metis_tac[u2s_var_fresh] >>
+  `!k. p <> u2s_var a k` by metis_tac[] >>
+  `!r. not_fresh_at a r ==>
+    lookup_var r t = lookup_var r s /\ FLOOKUP G1 r = FLOOKUP G r /\
+    op_taint tn1 (Var r) = op_taint tn (Var r)` by
+    simp[Abbr `t`, Abbr `u`, Abbr `G1`, Abbr `tn1`, lookup_var_def,
+      update_var_def, jump_to_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, op_taint_def] >>
+  `allocas_from lo t` by
+    (qpat_x_assum `allocas_from lo s` mp_tac >>
+     simp[Abbr `t`, Abbr `u`, allocas_from_def, update_var_def, jump_to_def]) >>
+  qexistsl_tac [`t`, `G1`, `tn1`] >>
+  conj_tac >- suspend "path" >>
+  conj_tac >- suspend "invariants" >>
+  conj_tac >- (irule ghost_kept_at_clean_suffix >> qexistsl_tac [`G`, `tn`] >>
+    simp[Abbr `tn1`]) >>
+  simp[Abbr `t`, Abbr `u`, Abbr `G1`, Abbr `tn1`, lookup_var_def,
+    update_var_def, jump_to_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, op_taint_def,
+    u2s_var_injective]
+QED
+
+Resume u2s_setup_control_mods[invariants]:
+  rpt strip_tac
+  >- (simp[Abbr `t`] >> irule u2s_safe_jump >> simp[Abbr `u`] >>
+      irule u2s_setup_safe >> metis_tac[]) >>
+  irule ghost_inv_at_exterior_frame >>
+  qexistsl_tac [`G`, `es`, `s`, `a`, `tn`] >>
+  simp[Abbr `t`, Abbr `u`, Abbr `tn1`, update_var_def, jump_to_def]
+QED
+
+Resume u2s_setup_control_mods[path]:
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (`stmt_state_rel H0 ctx fn cenv cx es s` by
+       (fs[u2s_safe_def] >> metis_tac[]) >>
+     drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
+  `run_inst_seq (TAKE 3 (u2s_setup a op (Var p))) s = OK u` by
+    (simp[Abbr `u`] >> irule u2s_setup_run >> simp[eval_operand_def]) >>
+  `!D. inst_seq_ptr D lo ctx fn PG G tn (TAKE 3 (u2s_setup a op (Var p))) s G1 tn1` by
+    (gen_tac >> simp[u2s_setup_def, u2s_inst_def] >>
+     irule u2s_clean_assign_seq_cons >>
+     simp[Abbr `G1`, Abbr `tn1`, u2s_step_assign] >>
+     qexists_tac `n2w X` >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def] >> simp[GSYM mk_inst_def] >>
+     irule u2s_clean_assign_seq_cons >>
+     simp[op_prov_def, op_taint_def, allocas_from_def, update_var_def] >>
+     qexists_tac `0w` >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, update_var_def] >> simp[GSYM mk_inst_def] >>
+     irule u2s_pointer_assign_seq_cons >>
+     simp[op_prov_def, op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
+       u2s_var_injective, allocas_from_def, update_var_def] >>
+     fs[op_taint_def, allocas_from_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `n2w b` >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
+       lookup_var_def, FLOOKUP_UPDATE, inst_seq_ptr_def, update_var_def] >>
+     fs[lookup_var_def]) >>
+  `run_inst_seq_mem_ok (TAKE 3 (u2s_setup a op (Var p))) s` by
+    simp[u2s_setup_def, run_inst_seq_mem_ok_last, u2s_inst_def, mk_inst_def,
+      inst_mem_below_frontier_def, inst_dload_in_section_def,
+      source_memory_write_ranges_def, source_memory_read_ranges_def,
+      step_inst_base_opcode_eqs, eval_operand_def, update_var_def,
+      run_inst_seq_mem_ok_def] >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := s.vs_inst_idx + 3),G1,tn1)` by
+    (gen_tac >>
+     irule (SRULE [u2s_setup_def, u2s_inst_def, mk_inst_def, is_terminator_def]
+       (Q.INST [`code` |-> `TAKE 3 (u2s_setup a op (Var p))`]
+         (SPEC_ALL run_inst_seq_gas_origin_ptr_path))) >>
+     simp[GSYM u2s_inst_def, GSYM u2s_setup_def] >>
+     qexistsl_tac [`a`, `op`, `p`] >>
+     fs[u2s_setup_def, u2s_inst_def, mk_inst_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+     disch_tac >> map_every qx_gen_tac [`prefix`, `i`, `suffix`, `v`] >> strip_tac >>
+     irule dalloca_no_wrap_non_dalloca >>
+     `EVERY (\j. j.inst_opcode <> DALLOCA) (prefix ++ [i] ++ suffix)` by
+       (qpat_assum `_ = prefix ++ [i] ++ suffix` (SUBST1_TAC o SYM) >> simp[]) >>
+     fs[EVERY_APPEND]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (u with vs_inst_idx := s.vs_inst_idx + 3,G1,tn1) [] (OK t,G1,tn1)` by
+    (gen_tac >>
+     `t = jump_to (u2s_label a 0) (u with vs_inst_idx := s.vs_inst_idx + 3)` by
+       simp[Abbr `t`, jump_to_def] >>
+     pop_assum SUBST1_TAC >> irule jmp_origin_ptr_path >>
+     simp[Abbr `u`, update_var_def, get_instruction_def, EL_APPEND_EQN,
+       u2s_setup_def, u2s_inst_def, allocas_from_def] >>
+     fs[allocas_from_def, ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
+  rpt strip_tac >> metis_tac[gas_origin_ptr_path_trans]
+QED
+
+Finalise u2s_setup_control_mods
