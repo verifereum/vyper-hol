@@ -8,7 +8,7 @@ Ancestors
   abiEncodeArgsCase exprSimSource exprSimProps exprBodyPreProps exprOperandVar
   exprLowering exprLoweringProps exprSimHypsDefs exprReasonOperand
   exprNamedConstResult exprSimConcatResult abiBuiltinDispatchCorrect
-  createCtorSnapshotTypingMods stmtLoweringMono bodyMemoryDefs
+  createCtorSnapshotTypingMods createCtorSourceReadinessMods stmtLoweringMono bodyMemoryDefs
   loweringPosts loweringStateRelDefs bodyPtrDefs stateRelProj
   exprSimWordArgs wordArgsPtr bodyFullPathHistory fragGasOriginPtrLoop fragExec
   context compileEnv vyperState vyperStorageTrace vyperStorageFootprint valueEncodingProps
@@ -172,13 +172,20 @@ Proof
     (`is_word_type (lowered_value_type ce e) <=> is_word_type (expr_type e)` by
        metis_tac[ctor_snapshot_word_types_mods] >>
      metis_tac[]) >>
-  drule_all (REWRITE_RULE [ETA_AX] abi_args_success_ready) >> simp[] >> strip_tac >>
+  `expr_body_pre_mods mods ce cx env e (es with gas_obs := gs) /\
+   vyperState$bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee)` by simp[] >>
+  drule ctor_source_readiness_mods >> simp[] >> strip_tac >>
   `local_ptrs_reserved ce sm /\ return_buf_frame d ce sm s` by
     (fs[ci_mono_def] >> conj_tac
      >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[])
      >> irule return_buf_frame_frame >> qexistsl_tac [`ce`,`s0`,`sa`] >> simp[]) >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
     metis_tac[cj 1 compiler_compile_var] >>
+  `expr_body_pre_mods mods ce cx env e (es with gas_obs := gs) /\
+   vyperState$bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee)` by simp[] >>
+  drule ctor_snapshot_source_frame_mods >> simp[] >> strip_tac >>
+  `MAP FDOM (es with gas_obs := gs).scopes = MAP FDOM ee.scopes` by
+    (simp[] >> metis_tac[]) >>
   suspend "source"
 QED
 
@@ -186,7 +193,17 @@ Resume ctor_private_snapshot_actual_mods[source]:
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
     vv_post_mods H ctx func ce cx e (es with gas_obs := gs) sa sm s0 ee raw vv s /\
     ghost_inv_at_mods (DF H) lo d ce cx ee G tn s` by
-    simp[vv_post_initial_gas] >>
+    gen_tac >> disch_then assume_tac >>
+    first_x_assum (qspec_then `H` (drule_then strip_assume_tac)) >>
+    conj_tac
+    >- (fs[bodyFullPostsModsTheory.vv_post_mods_def,
+           bodyFullPostsModsTheory.immutable_frame_mods_def,
+           bodyFullPostsModsTheory.vv_holds_mods_def,
+           bodyFullPostsModsTheory.vv_place_ptr_mods_def,
+           loweringPostsTheory.vv_at_def,
+           loweringPostsTheory.locals_kept_def] >>
+        metis_tac[])
+    >> first_assum ACCEPT_TAC >>
   `ghost_kept_at lo ce (es with gas_obs := gs) sa G0 tn0 s0 G tn` by
     (simp[ghost_kept_at_def] >> fs[ghost_kept_at_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
