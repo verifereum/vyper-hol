@@ -30,9 +30,6 @@ Theorem codegen_gas_surplus_finalized_own:
       venom_run_bounded fuel M unit.cu_context vs /\
       mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
       frame_inst_at (add_frame_gas g' es) s op /\
-      (!t. frame_inst_at (add_frame_gas g' es) t ReturnDataCopy ==>
-           ~RTC (\a b. LENGTH a.contexts >= LENGTH s.contexts /\
-                       step a = (INL (), b)) t s) /\
       step_inst op s = (r, s') /\ LENGTH s'.contexts = LENGTH s.contexts
       ==>
       r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'

@@ -25,6 +25,18 @@ Proof
     (conj_tac >- (rpt gen_tac >> irule dalloca_windows_concat >> simp[]) >>
      conj_tac >- (rpt gen_tac >> irule dalloca_windows_make_tuple >> simp[]) >>
      rpt gen_tac >> irule dalloca_windows_make_array >> simp[]) >>
+  `!es d result exit_lbl. preserves_dalloca_windows window
+      (compile_bool_chain_ops cfn ce d result exit_lbl es)` by
+    (Induct_on `es` >- simp[compile_bool_chain_ops_def, dalloca_windows_return] >>
+     Cases_on `es` >> simp[compile_bool_chain_ops_def] >> rpt gen_tac >>
+     rpt (FIRST
+       [CHANGED_TAC (simp[LET_THM, pairTheory.UNCURRY_DEF,
+          dalloca_windows_emit_helpers, dalloca_windows_new_block,
+          dalloca_windows_fresh, dalloca_windows_return]),
+        irule dalloca_windows_bind >> conj_tac,
+        irule dalloca_windows_ignore_bind >> conj_tac,
+        gen_tac, first_assum ACCEPT_TAC,
+        COND_CASES_TAC, BasicProvers.TOP_CASE_TAC])) >>
   RULE_ASSUM_TAC (REWRITE_RULE [dalloca_windows_result_state]) >>
   Cases_on `bi` >>
   simp[compile_builtin_dispatch_body_def, dalloca_windows_result_state,
@@ -54,7 +66,8 @@ Proof
      val emit_rules = map DISCH_ALL (CONJUNCTS (UNDISCH dalloca_windows_emit_helpers))
      val state_step = FIRST (first_assum irule ::
        map (irule o state_rule)
-         (dalloca_windows_acc :: emit_rules @ List.concat (map CONJUNCTS operations)))
+         (dalloca_windows_acc :: dalloca_windows_new_block ::
+         CONJUNCTS dalloca_windows_fresh @ emit_rules @ List.concat (map CONJUNCTS operations)))
    in
      rpt (state_step >> simp[])
    end)

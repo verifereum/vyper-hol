@@ -17,7 +17,8 @@ Theorem valid_horizon_for_dispatch_mods:
     (source_storage_trace am (tx with <| function_name := f; args := vals |>)
        (MAP SND (call_trace es)) gobs)
 Proof
-  simp[e2eCorrectnessTheory.storage_ok_def, call_within_mods_def, valid_horizon_def] >>
+  simp[e2eCorrectnessTheory.storage_ok_def, e2eCorrectnessTheory.horizon_ok_def,
+       call_within_mods_def, valid_horizon_def] >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `storage_well_formed_on cx _ _` >>
   qmatch_goalsub_abbrev_tac `storage_well_formed_on selected_cx _ _` >>
@@ -56,5 +57,6 @@ Proof
   `valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
      (initial_state am []) H obs` by fs[] >>
   drule_all call_external_storage_well_formed_on >> strip_tac >>
-  fs[e2eCorrectnessTheory.storage_ok_def, valid_horizon_def]
+  fs[e2eCorrectnessTheory.storage_ok_def, e2eCorrectnessTheory.horizon_ok_def,
+     valid_horizon_def]
 QED
