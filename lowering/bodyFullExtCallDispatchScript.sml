@@ -168,7 +168,7 @@ Proof
   strip_tac >> mp_tac extcall_dispatch_status_edges >> simp[]
 QED
 
-Theorem extcall_dispatch_failure_path:
+Theorem extcall_dispatch_failure_steps[local]:
   new_block fail_lbl se = (old_lbl,sf) /\
   emit_op RETURNDATASIZE [] sf = (zop,sz) /\
   compile_alloc_buffer 0 sz = (rb,sp) /\
@@ -178,11 +178,19 @@ Theorem extcall_dispatch_failure_path:
     u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp) /\
   allocas_from lo u /\ lo <= u.vs_alloca_next /\
   LENGTH u.vs_returndata < dimword (:256) ==>
-  ?t Gf tnf. t.vs_returndata = u.vs_returndata /\
+  let s = jump_to fail_lbl (next_inst u) in
+  ?t Gf tnf a1 b2 v. t.vs_returndata = u.vs_returndata /\
+    a1.vs_current_bb = fail_lbl /\ a1.vs_inst_idx = 1 /\
+    b2.vs_current_bb = fail_lbl /\ b2.vs_inst_idx = 2 /\
+    v.vs_current_bb = fail_lbl /\ v.vs_inst_idx = 3 /\
+    gas_origin_edge F explicit ctx func s [] (OK a1) /\
+    gas_origin_edge F explicit ctx func a1 [] (OK b2) /\
+    gas_origin_edge F explicit ctx func b2 [] (OK v) /\
+    gas_origin_edge T explicit ctx func v [] (Abort Revert_abort t) /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-      (jump_to fail_lbl (next_inst u),G,tn) [] (Abort Revert_abort t,Gf,tnf)
+      (s,G,tn) [] (Abort Revert_abort t,Gf,tnf)
 Proof
-  strip_tac >>
+  strip_tac >> SIMP_TAC std_ss [LET_THM] >>
   qabbrev_tac `s = jump_to fail_lbl (next_inst u)` >>
   `s.vs_current_bb = sf.cs_current_bb /\
    s.vs_inst_idx = LENGTH sf.cs_current_insts` by
@@ -216,8 +224,30 @@ Proof
      PURE_REWRITE_TAC[GSYM APPEND_ASSOC] >> simp[DROP_LENGTH_APPEND] >>
      qpat_assum `s.vs_returndata = _` (SUBST1_TAC o SYM) >>
      irule raw_call_revert_run >> simp[ASCIInumbersTheory.toString_11]) >>
-  qexists_tac `t with vs_inst_idx := s.vs_inst_idx + 3` >>
-  simp[] >> metis_tac[raw_call_failure_block_origin_ptr]
+  `LENGTH s.vs_returndata < dimword (:256)` by simp[] >>
+  drule_all rawCallFailureStepsTheory.raw_call_failure_block_steps >>
+  disch_then (qspecl_then [`PG`,`explicit`,`G`,`tn`] strip_assume_tac) >>
+  qexistsl_tac [`t with vs_inst_idx := s.vs_inst_idx + 3`, `Gf`, `tnf`, `a1`, `b2`, `v`] >>
+  `s.vs_inst_idx = 0 /\ s.vs_current_bb = fail_lbl` by simp[NoAsms,Abbr `s`,jump_to_def] >>
+  fs[]
+QED
+
+Theorem extcall_dispatch_failure_path:
+  new_block fail_lbl se = (old_lbl,sf) /\
+  emit_op RETURNDATASIZE [] sf = (zop,sz) /\
+  compile_alloc_buffer 0 sz = (rb,sp) /\
+  emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;zop] sp = ((),sc) /\
+  emit_inst REVERT [rb.buf_operand;zop] [] sc = ((),sb) /\
+  fn_has_code sf sb func /\ ~u.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp) /\
+  allocas_from lo u /\ lo <= u.vs_alloca_next /\
+  LENGTH u.vs_returndata < dimword (:256) ==>
+  ?t Gf tnf. t.vs_returndata = u.vs_returndata /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (jump_to fail_lbl (next_inst u),G,tn) [] (Abort Revert_abort t,Gf,tnf)
+Proof
+  strip_tac >> mp_tac extcall_dispatch_failure_steps >> simp[LET_THM] >>
+  metis_tac[]
 QED
 
 (* Recover the concrete oracle execution and its allocation frame from the
@@ -480,6 +510,56 @@ QED
 
 (* The failed status jump and REVERT share the oracle's physical returndata.
    The source consumes the result without adopting it. *)
+Theorem extcall_dispatch_abort_steps[local]:
+  take_call_outcome (OPTION_BIND gas dest_NumV) target calldata value_opt ee =
+    (INL (rq,oc),consumed) /\ ~oc.co_success /\
+  outcomes_accounts_typed ee.outcomes /\
+  new_block fail_lbl se = (old_lbl,sf) /\
+  emit_op RETURNDATASIZE [] sf = (zop,sz) /\
+  compile_alloc_buffer 0 sz = (rb,sp) /\
+  emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;zop] sp = ((),sc) /\
+  emit_inst REVERT [rb.buf_operand;zop] [] sc = ((),sb) /\
+  fn_has_code sf sb func /\ ~u.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp) /\
+  allocas_from lo u /\ lo <= u.vs_alloca_next /\
+  u.vs_returndata = oc.co_returnData /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (OK (jump_to fail_lbl (next_inst u)),Gu,tu)) ==>
+  let p = jump_to fail_lbl (next_inst u) in
+  ?f Gf tf a1 b2 v. f.vs_returndata = oc.co_returnData /\
+    a1.vs_current_bb = fail_lbl /\ a1.vs_inst_idx = 1 /\
+    b2.vs_current_bb = fail_lbl /\ b2.vs_inst_idx = 2 /\
+    v.vs_current_bb = fail_lbl /\ v.vs_inst_idx = 3 /\
+    gas_origin_edge F explicit ctx func p [] (OK a1) /\
+    gas_origin_edge F explicit ctx func a1 [] (OK b2) /\
+    gas_origin_edge F explicit ctx func b2 [] (OK v) /\
+    gas_origin_edge T explicit ctx func v [] (Abort Revert_abort f) /\
+    (!H. valid_horizon cx st0 H consumed.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (Abort Revert_abort f,Gf,tf)) /\
+    (!tail. eval_ext_call_effects cx target calldata value_opt gas ee.accounts
+      (ee with gas_obs := tail) =
+      (INR (Error (RevertData oc.co_returnData)), consumed with gas_obs := tail))
+Proof
+  strip_tac >>
+  `LENGTH u.vs_returndata < dimword (:256)` by
+    (simp[] >> metis_tac[calldata_take_call_outcome_bound]) >>
+  drule_all extcall_dispatch_failed_source >> disch_tac >>
+  drule_all extcall_dispatch_failure_steps >>
+  disch_then (qspecl_then [`tu`,`explicit`,`PG`,`Gu`]
+    (strip_assume_tac o SIMP_RULE std_ss [LET_THM])) >>
+  SIMP_TAC std_ss [LET_THM] >>
+  qexistsl_tac [`t`,`Gf`,`tnf`,`a1`,`b2`,`v`] >> simp[] >>
+  gen_tac >> disch_tac >>
+  `valid_horizon cx st0 H ee.storage_trace` by
+    (qpat_assum `take_call_outcome _ _ _ _ _ = _`
+       (mp_then (Pat `_ _ = (_,_)`) mp_tac valid_horizon_frame) >>
+     simp[storage_trace_frame_take_call]) >>
+  irule gas_origin_ptr_path_trans >>
+  qexistsl_tac [`Gu`,`jump_to fail_lbl (next_inst u)`,`tu`] >> simp[]
+QED
+
 Theorem extcall_dispatch_abort:
   take_call_outcome (OPTION_BIND gas dest_NumV) target calldata value_opt ee =
     (INL (rq,oc),consumed) /\ ~oc.co_success /\
@@ -504,20 +584,8 @@ Theorem extcall_dispatch_abort:
       (ee with gas_obs := tail) =
       (INR (Error (RevertData oc.co_returnData)), consumed with gas_obs := tail))
 Proof
-  strip_tac >>
-  `LENGTH u.vs_returndata < dimword (:256)` by
-    (simp[] >> metis_tac[calldata_take_call_outcome_bound]) >>
-  drule_all extcall_dispatch_failed_source >> disch_tac >>
-  drule_all extcall_dispatch_failure_path >>
-  disch_then (qspecl_then [`tu`,`explicit`,`PG`,`Gu`] strip_assume_tac) >>
-  qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[] >>
-  gen_tac >> disch_tac >>
-  `valid_horizon cx st0 H ee.storage_trace` by
-    (qpat_assum `take_call_outcome _ _ _ _ _ = _`
-       (mp_then (Pat `_ _ = (_,_)`) mp_tac valid_horizon_frame) >>
-     simp[storage_trace_frame_take_call]) >>
-  irule gas_origin_ptr_path_trans >>
-  qexistsl_tac [`Gu`,`jump_to fail_lbl (next_inst u)`,`tu`] >> simp[]
+  strip_tac >> mp_tac extcall_dispatch_abort_steps >> simp[LET_THM] >>
+  metis_tac[]
 QED
 
 Theorem extcall_dispatch_live_frame[local]:
@@ -659,6 +727,11 @@ Theorem extcall_dispatch_counted_status[local]:
   u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
   u.vs_initial_fmp = s.vs_initial_fmp ==>
   alloca_history func u /\
+  gas_origin_edge F explicit ctx func s [] (OK (next_inst u)) /\
+  (next_inst u).vs_current_bb = sj.cs_current_bb /\
+  (next_inst u).vs_inst_idx = LENGTH sj.cs_current_insts /\
+  gas_origin_edge F explicit ctx func (next_inst u) []
+    (OK (jump_to (if success then cont_lbl else fail_lbl) (next_inst u))) /\
   !H. valid_horizon cx st0 H ee.storage_trace /\ stor_taint_ok_at (DF H) tn s ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
       (OK (jump_to (if success then cont_lbl else fail_lbl) (next_inst u)),
@@ -698,15 +771,28 @@ Proof
        memory_range_of_operands_def] >> Cases_on `az = 0w` >> fs[] >> decide_tac) >>
   `EVERY (\p. op_taint tn p = {}) inst.inst_operands` by
     (Cases_on `stat` >> fs[op_taint_def]) >>
-  gen_tac >> strip_tac >>
-  irule extcall_dispatch_status_path >>
+  `gas_origin_edge F explicit ctx func s [] (OK (next_inst u)) /\
+   (next_inst u).vs_current_bb = sj.cs_current_bb /\
+   (next_inst u).vs_inst_idx = LENGTH sj.cs_current_insts /\
+   (?jb. lookup_block (next_inst u).vs_current_bb func.fn_blocks = SOME jb /\
+     get_instruction jb (next_inst u).vs_inst_idx =
+       SOME (mk_inst sj.cs_next_id JNZ [Var out;Label cont_lbl;Label fail_lbl] [])) /\
+   gas_origin_edge F explicit ctx func (next_inst u) []
+     (OK (jump_to (if success then cont_lbl else fail_lbl) (next_inst u))) /\
+   !D. stor_taint_ok_at D tn s ==>
+     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+       (OK (jump_to (if success then cont_lbl else fail_lbl) (next_inst u)),
+        step_prov PG G inst u, step_taint inst s u tn)` suffices_by
+    (strip_tac >> simp[]) >>
+  irule extcall_dispatch_status_edges >>
   ASM_SIMP_TAC bool_ss [] >>
   rpt conj_tac
   >- (qexists_tac `bb` >> simp[NoAsms] >> metis_tac[])
+  >- (qexists_tac `t` >> simp[])
   >- (qexistsl_tac [`addr`,`ao`,`az`,`len`,`off`,`gas`,`Lit (n2w cap)`,
                     `n2w cap`,`ro`,`buf`,`stat`,`value`] >>
       ASM_SIMP_TAC bool_ss [w2n_n2w] >> metis_tac[])
-  >> qexistsl_tac [`out`,`se`,`sj`,`t`] >> ASM_SIMP_TAC bool_ss []
+  >> qexists_tac `se` >> simp[]
 QED
 
 (* Only the status output can change provenance or operand taint. The
@@ -787,7 +873,7 @@ QED
 
 (* At the post-precheck CALL, select its physical successor once, then either
    forward the failed outcome or enter the return block with the live frame. *)
-Theorem extcall_dispatch_selected:
+Theorem extcall_dispatch_selected_steps:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee s /\
@@ -840,7 +926,10 @@ Theorem extcall_dispatch_selected:
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> ghost_inv_at (DF H) lo d cenv cx ee G tn s) ==>
   if oc.co_success then
-    ?ee' z Gu tu.
+    ?ee' z Gu tu j.
+      (j.vs_current_bb = s.vs_current_bb /\ j.vs_inst_idx = SUC s.vs_inst_idx /\
+       gas_origin_edge F explicit ctx func s [] (OK j) /\
+       gas_origin_edge F explicit ctx func j [] (OK z)) /\
       adopt_call_outcome rq oc consumed = (INL (),ee') /\
       extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr buf cap target
         has_default default_op default_ty default_opt oc.co_returnData ee' z /\
@@ -871,7 +960,18 @@ Theorem extcall_dispatch_selected:
           eval_operand buf z = SOME w /\ b <= w2n w /\ w2n w + cap <= b + k /\
           (!i. w2n w <= i /\ i < w2n w + MIN cap (LENGTH oc.co_returnData) ==> i NOTIN tu.t_mem))
   else
-    ?f Gf tf. f.vs_returndata = oc.co_returnData /\
+    ?f Gf tf j p a1 b2 v. f.vs_returndata = oc.co_returnData /\
+      (j.vs_current_bb = s.vs_current_bb /\ j.vs_inst_idx = SUC s.vs_inst_idx /\
+       p.vs_current_bb = fail_lbl /\ p.vs_inst_idx = 0 /\
+       a1.vs_current_bb = fail_lbl /\ a1.vs_inst_idx = 1 /\
+       b2.vs_current_bb = fail_lbl /\ b2.vs_inst_idx = 2 /\
+       v.vs_current_bb = fail_lbl /\ v.vs_inst_idx = 3 /\
+       gas_origin_edge F explicit ctx func s [] (OK j) /\
+       gas_origin_edge F explicit ctx func j [] (OK p) /\
+       gas_origin_edge F explicit ctx func p [] (OK a1) /\
+       gas_origin_edge F explicit ctx func a1 [] (OK b2) /\
+       gas_origin_edge F explicit ctx func b2 [] (OK v) /\
+       gas_origin_edge T explicit ctx func v [] (Abort Revert_abort f)) /\
       (!H. valid_horizon cx st0 H consumed.storage_trace ==>
         valid_horizon cx st0 H ee.storage_trace /\
         gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
@@ -923,9 +1023,16 @@ Proof
             `u.vs_fmp = s.vs_fmp`, `u.vs_initial_fmp = s.vs_initial_fmp`] >>
          qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s /\ _`
            (ACCEPT_TAC o PURE_REWRITE_RULE [allocas_below_fmp_def, pending_alloca_size_def])) >>
-      drule_all extcall_dispatch_abort >> strip_tac >>
-      qexistsl_tac [`f`,`Gf`,`tf`] >> simp[] >>
-      rpt strip_tac >>
+      drule_all (SIMP_RULE std_ss [LET_THM] extcall_dispatch_abort_steps) >> strip_tac >>
+      qexistsl_tac [`f`,`Gf`,`tf`,`next_inst u`,`jump_to fail_lbl (next_inst u)`,`a1`,`b2`,`v`] >>
+      `(jump_to fail_lbl (next_inst u)).vs_current_bb = fail_lbl /\
+       (jump_to fail_lbl (next_inst u)).vs_inst_idx = 0` by simp[NoAsms,jump_to_def] >>
+      conj_tac >- simp[] >>
+      conj_tac
+      >- (qpat_assum `~oc.co_success` (fn hs =>
+            qpat_assum `gas_origin_edge F _ _ _ (next_inst u) [] _`
+              (assume_tac o SIMP_RULE bool_ss [hs])) >> simp[]) >>
+      simp[] >> rpt strip_tac >>
       qpat_assum `take_call_outcome _ _ _ _ _ = _`
         (mp_then (Pat `_ _ = (_,_)`) mp_tac valid_horizon_frame) >>
       simp[storage_trace_frame_take_call]) >>
@@ -1005,7 +1112,11 @@ Proof
        (qpat_assum `!p. safe_operand sp p ==> eval_operand p z = _`
           (drule_then ACCEPT_TAC)) >>
      qexistsl_tac [`w`,`aid`,`tv`] >> simp[] >> decide_tac) >>
-  qexistsl_tac [`ea`,`z`,`Gu`,`tu`] >>
+  qexistsl_tac [`ea`,`z`,`Gu`,`tu`,`next_inst u`] >>
+  conj_tac
+  >- (qpat_assum `oc.co_success` (fn hs =>
+        qpat_assum `gas_origin_edge F _ _ _ (next_inst u) [] _`
+          (assume_tac o SIMP_RULE bool_ss [hs])) >> simp[Abbr `z`]) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- (qx_gen_tac `h` >> disch_tac >>
       `valid_horizon cx st0 h ee.storage_trace` by
@@ -1025,4 +1136,107 @@ Proof
       first_assum ACCEPT_TAC) >>
   qpat_assum `cap <> 0 ==> ?p b sz w. _` mp_tac >>
   SIMP_TAC bool_ss [arithmeticTheory.ADD_COMM]
+QED
+
+Theorem extcall_dispatch_selected:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr value gas buf off len cap target value_opt calldata has_default
+    default_op default_ty default_opt ee s /\
+  (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+    ?w aid tv. eval_operand default_op s = SOME w /\
+      evaluate_type (get_tenv cx) default_ty = SOME tv /\
+      FLOOKUP s.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+      aid < sp.cs_next_id) /\
+  emit_op (if stat then STATICCALL else CALL)
+    (if stat then [gas;addr;off;len;buf;Lit (n2w cap)]
+     else [gas;addr;value;off;len;buf;Lit (n2w cap)]) sp = (Var out,sj) /\
+  inst = mk_inst sp.cs_next_id (if stat then STATICCALL else CALL)
+    (if stat then [gas;addr;off;len;buf;Lit (n2w cap)]
+     else [gas;addr;value;off;len;buf;Lit (n2w cap)]) [out] /\
+  ~not_fresh_at sp out /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  sj.cs_current_bb = s.vs_current_bb /\ LENGTH sj.cs_current_insts = SUC s.vs_inst_idx /\
+  emit_inst JNZ [Var out;Label cont_lbl;Label fail_lbl] [] sj = ((),se) /\
+  fn_has_code sj se func /\
+  new_block fail_lbl se = (old_fail,sf) /\
+  emit_op RETURNDATASIZE [] sf = (zop,sz) /\
+  compile_alloc_buffer 0 sz = (rb,sb0) /\
+  emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;zop] sb0 = ((),sc) /\
+  emit_inst REVERT [rb.buf_operand;zop] [] sc = ((),sb) /\
+  fn_has_code sf sb func /\
+  new_block cont_lbl sb = (old_cont,sr) /\
+  sp.cs_next_var <= sr.cs_next_var /\ sp.cs_next_id <= sr.cs_next_id /\
+  eval_operand gas s = SOME gw /\
+  (!g. OPTION_BIND source_gas dest_NumV = SOME g ==> g = w2n gw) /\
+  frame_call_value cx value_opt ee = (INL framed_value,ee) /\
+  take_call_outcome (OPTION_BIND source_gas dest_NumV) target calldata framed_value ee =
+    (INL (rq,oc),consumed) /\
+  EVERY (\p. op_taint tn p = {}) [addr;value;gas;buf;off;len;default_op] /\
+  (!ao az. eval_operand off s = SOME ao /\ eval_operand len s = SOME az ==>
+    (az <> 0w ==> (?p. off = Var p /\ ptr_covers G tn p s (w2n az)) /\
+                  w2n ao + w2n az <= s.vs_alloca_next) /\
+    (!j. w2n ao <= j /\ j < w2n ao + w2n az ==> j NOTIN tn.t_mem)) /\
+  (cap <> 0 ==> ?p. buf = Var p /\ ptr_covers G tn p s cap) /\
+  (!dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
+    ptr_mem_ok cx default_ty dv default_op G tn s /\
+    (type_memory_bytes cenv default_ty <> 0 ==>
+      (?p. default_op = Var p /\ ptr_covers G tn p s (type_memory_bytes cenv default_ty)) /\
+      (!w. eval_operand default_op s = SOME w ==>
+          w2n w + type_memory_bytes cenv default_ty <= s.vs_alloca_next))) /\
+  allocas_from lo s /\ alloca_history func s /\
+  lo <= s.vs_alloca_next /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==> ghost_inv_at (DF H) lo d cenv cx ee G tn s) ==>
+  if oc.co_success then
+    ?ee' z Gu tu.
+      adopt_call_outcome rq oc consumed = (INL (),ee') /\
+      extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr buf cap target
+        has_default default_op default_ty default_opt oc.co_returnData ee' z /\
+      (IS_SOME default_opt /\ ~is_word_type default_ty ==>
+        ?w aid tv. eval_operand default_op z = SOME w /\
+          evaluate_type (get_tenv cx) default_ty = SOME tv /\
+          FLOOKUP z.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+          aid < sr.cs_next_id) /\
+      (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+        valid_horizon cx st0 H ee.storage_trace /\
+        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,Gu,tu) /\
+        ghost_inv_at (DF H) lo d cenv cx ee' Gu tu z) /\
+      (!tail. eval_ext_call_effects cx target calldata framed_value source_gas ee.accounts
+        (ee with gas_obs := tail) = (INL oc.co_returnData,ee' with gas_obs := tail)) /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 Gu tu /\
+      alloca_history func z /\ allocas_from lo z /\
+      lo <= z.vs_alloca_next /\ s0.vs_alloca_next <= z.vs_alloca_next /\
+      EVERY (\p. op_taint tu p = {}) [addr;buf;default_op] /\
+      (!dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
+        ptr_mem_ok cx default_ty dv default_op Gu tu z /\
+        (type_memory_bytes cenv default_ty <> 0 ==>
+          ?p b k w. default_op = Var p /\ FLOOKUP Gu p = SOME (b,k) /\
+            eval_operand default_op z = SOME w /\ b <= w2n w /\
+            w2n w + type_memory_bytes cenv default_ty <= b + k /\
+            w2n w + type_memory_bytes cenv default_ty <= z.vs_alloca_next)) /\
+      (cap <> 0 ==>
+        ?p b k w. buf = Var p /\ FLOOKUP Gu p = SOME (b,k) /\
+          eval_operand buf z = SOME w /\ b <= w2n w /\ w2n w + cap <= b + k /\
+          (!i. w2n w <= i /\ i < w2n w + MIN cap (LENGTH oc.co_returnData) ==> i NOTIN tu.t_mem))
+  else
+    ?f Gf tf. f.vs_returndata = oc.co_returnData /\
+      (!H. valid_horizon cx st0 H consumed.storage_trace ==>
+        valid_horizon cx st0 H ee.storage_trace /\
+        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+          (Abort Revert_abort f,Gf,tf)) /\
+      (!tail. eval_ext_call_effects cx target calldata framed_value source_gas ee.accounts
+        (ee with gas_obs := tail) =
+        (INR (Error (RevertData oc.co_returnData)),consumed with gas_obs := tail))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac extcall_dispatch_selected_steps >> ASM_REWRITE_TAC [] >>
+  Cases_on `oc.co_success` >> simp[] >> strip_tac
+  >- (rename1 `adopt_call_outcome _ _ _ = (INL (),ea)` >>
+      rename1 `ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn'` >>
+      rename1 `gas_origin_edge F explicit ctx func j [] (OK z)` >>
+      qexistsl_tac [`ea`,`z`,`G'`,`tn'`] >> ASM_REWRITE_TAC []) >>
+  qexistsl_tac [`f`,`Gf`,`tf`] >> ASM_REWRITE_TAC []
 QED
