@@ -130,7 +130,7 @@ Proof
   rpt strip_tac >> first_x_assum (qspec_then `s` mp_tac) >> simp[]
 QED
 
-Theorem target_subscript_compile_cut[local]:
+Theorem target_subscript_compile_cut:
   !cfn ce bt e st rb sm iop sn r sb.
     (!ce ty e st. ci_mono st (SND (cfn ce ty e st))) /\
     compile_get_target_ptr cfn ce bt st = (rb, sm) /\
@@ -171,13 +171,41 @@ Proof
   TRY (rename1 `Error er` >> Cases_on `er` >> simp[expr_exit_def])
 QED
 
-Theorem gas_shadow_compile_result[local]:
+Theorem gas_shadow_compile_result:
   gas_shadow_compiles f g ==>
   f s = (x,s') /\ gas_shadow_state s t ==>
   ?t'. g t = (x,t') /\ gas_shadow_state s' t'
 Proof
   strip_tac >> strip_tac >>
   Cases_on `g t` >> drule_all gas_shadow_step >> simp[]
+QED
+
+Theorem target_subscript_index_post_type:
+  well_typed_expr env e /\ subscript_vtype bvt (expr_type e) = SOME vt ==>
+  post_value_type cenv e = expr_type e
+Proof
+  strip_tac >>
+  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- (gvs[] >> rename1 `Call ity (IntCall fid) args drv` >>
+      PairCases_on `fid` >> fs[well_typed_expr_def, expr_type_def] >>
+      qpat_assum `well_formed_type env.type_defs ity` mp_tac >>
+      qpat_assum `subscript_vtype bvt ity = SOME vt` mp_tac >>
+      rpt (pop_assum kall_tac) >> rpt strip_tac >>
+      `is_int_type ity \/ hashmap_key_type ity` by
+        (Cases_on `bvt`
+         >- (rename1 `Type bty` >> Cases_on `bty` >>
+             gvs[subscript_vtype_def, AllCaseEqs()]) >>
+         gvs[subscript_vtype_def, AllCaseEqs()]) >>
+      Cases_on `ity` >>
+      gvs[is_int_type_def, hashmap_key_type_def, post_value_type_def,
+          is_word_type_def, is_bytestring_type_def] >>
+      rename1 `BaseT key` >> Cases_on `key` >>
+      gvs[is_int_type_def, hashmap_key_type_def, post_value_type_def,
+          is_word_type_def, is_bytestring_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      gvs[is_word_type_def, is_bytestring_type_def, well_formed_type_def,
+          evaluate_type_def, AllCaseEqs()]) >>
+  irule post_value_type_not_int_call >> metis_tac[]
 QED
 
 Theorem target_subscript_sim_full:
@@ -394,27 +422,7 @@ QED
 
 Resume target_subscript_sim_full[tail]:
   `post_value_type cenv e = expr_type e` by
-    (Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
-     >- (gvs[] >> rename1 `Call ity (IntCall fid) args drv` >>
-         PairCases_on `fid` >> fs[well_typed_expr_def, expr_type_def] >>
-         qpat_assum `well_formed_type env.type_defs ity` mp_tac >>
-         qpat_assum `subscript_vtype bvt ity = SOME vt` mp_tac >>
-         rpt (pop_assum kall_tac) >> rpt strip_tac >>
-         `is_int_type ity \/ hashmap_key_type ity` by
-           (Cases_on `bvt`
-            >- (rename1 `Type bty` >> Cases_on `bty` >>
-                gvs[subscript_vtype_def, AllCaseEqs()]) >>
-            gvs[subscript_vtype_def, AllCaseEqs()]) >>
-         Cases_on `ity` >>
-         gvs[is_int_type_def, hashmap_key_type_def, post_value_type_def,
-             is_word_type_def, is_bytestring_type_def] >>
-         rename1 `BaseT key` >> Cases_on `key` >>
-         gvs[is_int_type_def, hashmap_key_type_def, post_value_type_def,
-             is_word_type_def, is_bytestring_type_def] >>
-         rename1 `BytesT bd` >> Cases_on `bd` >>
-         gvs[is_word_type_def, is_bytestring_type_def, well_formed_type_def,
-             evaluate_type_def, AllCaseEqs()]) >>
-     irule post_value_type_not_int_call >> metis_tac[]) >>
+    (irule target_subscript_index_post_type >> metis_tac[]) >>
   qx_genl_tac [`marks2`, `res2`, `mid2`, `G2`, `tn2`, `t2`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
   qunabbrev_tac `idxQ` >> RULE_ASSUM_TAC BETA_RULE >>

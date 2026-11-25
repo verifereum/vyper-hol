@@ -153,7 +153,7 @@ Proof
   simp[]
 QED
 
-Theorem nonslot_iterator_expr_pre[local]:
+Theorem nonslot_iterator_expr_pre:
   body_inv tops ctx c cx /\ supported_iterator tops typ (Array e) n /\
   expr_type e = ArrayT typ bd /\ well_typed_iterator env typ (Array e) /\
   expr_sim_inv c cx env es /\ stmt_exprs_ok c (For id typ (Array e) n loop_body) /\
@@ -202,7 +202,7 @@ Proof
   simp[Abbr `acc'`]
 QED
 
-Theorem nonslot_iterator_bare_immutable_mods[local]:
+Theorem nonslot_iterator_bare_immutable_mods:
   contract_inv mods exps ctx c cx /\
   supported_iterator (main_module mods) typ (Array e) n /\
   expr_type e = ArrayT typ bd /\

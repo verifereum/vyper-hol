@@ -163,7 +163,7 @@ Proof
 QED
 
 
-Theorem raw_log_eval_value[local]:
+Theorem raw_log_eval_value:
   eval_expr cx (Call ann RawLog args dflt) es = (INL tv, es') ==>
   tv = Value NoneV
 Proof

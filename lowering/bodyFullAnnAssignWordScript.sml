@@ -381,7 +381,7 @@ Proof
   rpt strip_tac >> qexists_tac `v` >> simp[]
 QED
 
-Theorem annassign_word_full_declared_layout[local]:
+Theorem annassign_word_full_declared_layout:
   declare_local old id (expr_type e) sa = (ce,r) /\
   compile_stmt ce lctx ret_ty (AnnAssign id (expr_type e) e) r = ((),sf) /\
   old.ce_alloca_locals /\ FLOOKUP old.ce_vars id = NONE /\

@@ -531,7 +531,7 @@ Proof
   Cases_on `b` >> simp[]
 QED
 
-Triviality request_frame_primitives:
+Theorem request_frame_primitives:
   requests_outcomes_frame (return v) /\
   requests_outcomes_frame (\s. return (f s) s) /\
   requests_outcomes_frame (\s. (INL (IS_SOME s.outcomes),s)) /\
@@ -777,7 +777,7 @@ Proof
   pure_rewrite_tac[pop_place_def] >> rpt REQUEST_PLACE_STEP
 QED
 
-Triviality request_frame_raw_call:
+Theorem request_frame_raw_call:
   requests_outcomes_frame (eval_raw_call cx flags target calldata amount gas)
 Proof
   pure_rewrite_tac[eval_raw_call_def] >> rpt REQUEST_PRIMITIVE_STEP

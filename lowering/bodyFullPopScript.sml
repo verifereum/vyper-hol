@@ -25,7 +25,7 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem pop_full_target_pre[local]:
+Theorem pop_full_target_pre:
   !cenv cx env ann bt es.
     expr_body_pre cenv cx env (Pop ann bt) es ==>
     target_pre cenv cx env bt es
