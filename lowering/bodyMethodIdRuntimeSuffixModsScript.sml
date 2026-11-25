@@ -6,7 +6,7 @@ Ancestors
   bodyMethodIdRuntimePostsMods bodyMemBiMethodIdEndpoint bodyFullUnwrapRun
   builtinHashing bodyMemoryDefs
   bodyFullShadowBodyInv bodyFullPostsMods bodyInvSplit bodyPtrDefs exprSimHash
-  exprSimMemDefs exprSimVVFrame exprLoweringProps emitHelperProps valueEncoding
+  exprSimMemDefs exprSimVVFrame exprLowering exprLoweringProps emitHelperProps valueEncoding context
   fragGasOriginPtrLoop storageCopyBodyPtr loweringPosts stateRelProj compileEnv freshWrites rich_list
   vyperAST vyperTypeSystem vyperValue vyperState vyperInterpreter vyperStorageTrace
   vyperStorageFootprint venomMemDefs venomState venomInst list finite_map pred_set words arithmetic
@@ -331,3 +331,317 @@ Resume method_id_selected_word_landing_mods[compose]:
 QED
 
 Finalise method_id_selected_word_landing_mods[local]
+
+
+val method_arg_post = ``
+  expr_post_mods (H : (bool # 256 word # type_value) list # num list) ctx func cenv cx e es sa sm s0 mid v x t /\
+  expr_store_bound cx (expr_type e) v x t /\ alloca_history func t /\
+  s0.vs_alloca_next <= t.vs_alloca_next /\ ghost_inv_at_mods (DF (H : (bool # 256 word # type_value) list # num list)) lo d cenv cx mid G tn t /\
+  ptr_val_ok cx (post_value_type cenv e) v x G tn t /\
+  (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e x G t) /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn``;
+val method_expr = ``Builtin ann MethodId [e]``;
+val method_vv = ``if fixed then StackValue ann op else LocatedValue ann (mk_ptr op LocMemory)``;
+val method_value_post = ``
+  expr_post_mods (H : (bool # 256 word # type_value) list # num list) ctx func cenv cx ^method_expr es sa sb s0 mid r op z /\
+  expr_store_bound cx ann r op z /\
+  z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  alloca_history func z /\
+  s0.vs_alloca_next <= z.vs_alloca_next /\ ghost_inv_at_mods (DF (H : (bool # 256 word # type_value) list # num list)) lo d cenv cx mid G' tn' z /\
+  ptr_val_ok cx ann r op G' tn' z /\ (~fixed ==> ptr_buf_ok cenv ^method_expr op G' z) /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn'``;
+val method_vv_post = ``
+  vv_post_mods (H : (bool # 256 word # type_value) list # num list) ctx func cenv cx ^method_expr es sa sb s0 mid (Value r) ^method_vv z /\
+  vv_store_bound cx ann (lowered_value_type cenv ^method_expr) mid (Value r) ^method_vv z /\
+  ptr_vv_ok cx ann (Value r) ^method_vv mid G' tn' z``;
+val method_tail = ``\v (mid:evaluation_state).
+  ((case builtin_result cx mid.accounts ann MethodId [expr_type e] [v] of
+    INL r => INL ((encode:value -> 'a) r) | INR ex => INR ex),mid)``;
+val method_suffix = ``
+  !DF lo d explicit ctx func PG exps src tops cenv cx env ann e es sa sm sb s0 st0
+     mid v x t G0 tn0 G tn fixed op.
+    contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
+    expr_body_pre_mods mods cenv cx env ^method_expr es /\
+    ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)) /\
+    lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+    compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    (!H. dead_lo_ok_mods (H : (bool # 256 word # type_value) list # num list) (DF H) lo cenv cx) /\ local_ptrs_reserved cenv sa /\
+    (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+    (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+    return_buf_frame d cenv sa s0 /\ storage_trace_domain cx st0 mid.storage_trace /\
+    (?xs. !tail. bind (eval_expr cx e) (read_result cx) (es with gas_obs := xs ++ tail) =
+      (INL v, mid with gas_obs := tail)) /\
+    mid.gas_obs = [] /\ ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==> ^method_arg_post) ==>
+    ?r z G' tn'.
+      builtin_result cx mid.accounts ann MethodId [expr_type e] [v] = INL r /\
+      (!H. valid_horizon cx st0 H mid.storage_trace ==>
+        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G,tn) [] (OK z,G',tn') /\
+        ^method_value_post /\ ^method_vv_post)``;
+
+(* Typed posts observe the location and operand, not the ptr_buf field. *)
+Theorem method_typed_memory_posts[local]:
+  (vv_post H ctx func cenv cx e es sa sb s0 mid v
+     (if fixed then StackValue ft op else LocatedValue dt
+       <|ptr_location := LocMemory; ptr_operand := op|>) z <=>
+   vv_post H ctx func cenv cx e es sa sb s0 mid v
+     (if fixed then StackValue ft op else LocatedValue dt (mk_ptr op LocMemory)) z) /\
+  (vv_store_bound cx ty lty mid v
+     (if fixed then StackValue ft op else LocatedValue dt
+       <|ptr_location := LocMemory; ptr_operand := op|>) z <=>
+   vv_store_bound cx ty lty mid v
+     (if fixed then StackValue ft op else LocatedValue dt (mk_ptr op LocMemory)) z)
+Proof
+  Cases_on `fixed` >>
+  simp[mk_ptr_def, vv_post_def, vv_holds_def, vv_at_def, vv_place_ptr_def,
+       vv_own_def, vv_storage_live_def, vv_store_bound_def]
+QED
+
+Theorem method_cursor_posts[local]:
+  vv_post H ctx func cenv cx e es sa sb s0 mid v vv raw /\
+  vv_store_bound cx ty lty mid v vv raw /\
+  z = (raw with vs_inst_idx := idx) ==>
+  vv_post H ctx func cenv cx e es sa sb s0 mid v vv z /\
+  vv_store_bound cx ty lty mid v vv z
+Proof
+  strip_tac >> gvs[vv_post_inst_idx, vv_store_bound_def,
+                   ghostPcTransportPtrTheory.eval_operand_inst_idx] >>
+  conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+QED
+
+Theorem method_id_runtime_suffix_mods:
+  ^method_suffix
+Proof
+  rpt gen_tac >> disch_tac >>
+  pop_assum (map_every assume_tac o CONJUNCTS) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    expr_post_mods H ctx func cenv cx e es sa sm s0 mid v x t /\
+    s0.vs_alloca_next <= t.vs_alloca_next` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+       (drule_then strip_assume_tac) >> simp[]) >>
+  drule_all_then strip_assume_tac method_id_runtime_input_mods >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+      mid.storage_trace` by fs[storage_trace_domain_def] >>
+  `alloca_history func t` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum MATCH_ACCEPT_TAC) >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    expr_post_mods H ctx func cenv cx e es sa sm s0 mid v x t /\
+    expr_store_bound cx (expr_type e) v x t /\
+    ghost_inv_at_mods (DF H) lo d cenv cx mid G tn t /\
+    ptr_val_ok cx (post_value_type cenv e) v x G tn t /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e x G t) /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G tn` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ expr_store_bound _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >> simp[]) >>
+  drule_all method_id_selected_word_landing_mods >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  `?raw' z Gz tnz.
+     run_inst_seq (emitted_insts sm sb) t = OK raw' /\
+     z = (raw' with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+     z.vs_current_bb = sb.cs_current_bb /\
+     z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+     alloca_history func z /\ s0.vs_alloca_next <= z.vs_alloca_next /\
+     expr_store_bound cx ann (BytesV bs) op z /\
+     ptr_val_ok cx ann (BytesV bs) op Gz tnz z /\
+     ptr_vv_ok cx ann (Value (BytesV bs)) ^method_vv mid Gz tnz z /\
+     (~fixed ==> ptr_buf_ok cenv ^method_expr op Gz z) /\
+     ghost_kept_at lo cenv es sa G0 tn0 s0 Gz tnz /\
+     (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G,tn) [] (OK z,Gz,tnz) /\
+       ghost_inv_at_mods (DF H) lo d cenv cx mid Gz tnz z /\
+       immutable_frame_mods func cenv cx mid z)` by
+    (Cases_on `fixed` >- suspend "fixed" >> suspend "dynamic") >>
+  suspend "posts"
+QED
+
+Resume method_id_runtime_suffix_mods[fixed]:
+  rule_assum_tac (REWRITE_RULE [COND_CLAUSES]) >>
+  qpat_x_assum `op = word /\ sb = sp` strip_assume_tac >>
+  map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
+    [`ann = _`, `op = word`, `sb = sp`] >>
+  pure_rewrite_tac[COND_CLAUSES, NOT_CLAUSES, F_IMP, AND_CLAUSES] >>
+  `s0.vs_alloca_next <= u.vs_alloca_next` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ s0.vs_alloca_next <= _`
+       (drule_then strip_assume_tac) >> decide_tac) >>
+  qexistsl [`raw`, `u`, `Gu`, `tnu`] >>
+  rpt (conj_tac THEN1 (first_assum ACCEPT_TAC)) >>
+  (conj_tac >- simp[expr_store_bound_def, is_word_type_def]) >>
+  (conj_tac >- (irule ptr_val_ok_word >> simp[is_word_type_def])) >>
+  (conj_tac >- simp[ptr_vv_ok_def, read_result_def, return_def, ptr_val_ok_def, is_word_type_def]) >>
+  (conj_tac >- simp[]) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >> simp[]
+QED
+
+Resume method_id_runtime_suffix_mods[dynamic]:
+  rule_assum_tac (REWRITE_RULE [COND_CLAUSES]) >>
+  qpat_x_assum `?buf su data sd st. compile_alloc_buffer 64 _ = _ /\ _` strip_assume_tac >>
+  map_every (fn q => qpat_x_assum q SUBST_ALL_TAC) [`ann = _`, `op = _`] >>
+  pure_rewrite_tac[COND_CLAUSES, NOT_CLAUSES, AND_CLAUSES] >>
+  rename1 `compile_alloc_buffer 64 sp = (buf,sbuf)` >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx mid u /\
+    ghost_inv_at (DF H) 0 d cenv cx mid Gu tnu u` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     imp_res_tac method_id_ghost_at_zero >> simp[]) >>
+  `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx mid u` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ u /\ _`
+       (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+    u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp` by
+    (disch_tac >> conj_tac
+     >- (drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
+     drule stmt_state_rel_fmp_room >>
+     qpat_assum `ctx_has_dalloca ctx` (fn th => simp_tac bool_ss [fmp_room_def, th]) >>
+     disch_then (assume_tac o CONJUNCT1) >>
+     irule LESS_EQ_TRANS >> goal_assum (drule_at Any) >> simp[]) >>
+  `allocas_from lo u /\ lo <= u.vs_alloca_next` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >> fs[ghost_inv_at_mods_def]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==> stmt_state_rel H ctx func cenv cx mid u` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ u /\ _`
+       (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==> ghost_inv_at (DF H) 0 d cenv cx mid Gu tnu u` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ u /\ _`
+       (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  drule_all method_id_output_buffer_scratch_run >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts sp sb) u = OK rawbuf` >>
+  rename1 `z = rawbuf with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  rename1 `ptr_mem_ok cx _ _ buf.buf_operand Gz tnz z` >>
+  `sb.cs_current_insts = sp.cs_current_insts ++ emitted_insts sp sb /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sp sb)` by
+    suspend "output_layout" >>
+  drule_all method_cursor_join >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sb) t = OK whole` >>
+  `ghost_kept_at lo cenv es sa G0 tn0 s0 Gz tnz` by
+    (irule method_clean_keep >> qexistsl [`Gu`, `u`, `sp`, `tnu`, `z`] >> asm_rewrite_tac[]) >>
+  `s0.vs_alloca_next <= z.vs_alloca_next` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ s0.vs_alloca_next <= _`
+       (drule_then strip_assume_tac) >> decide_tac) >>
+  suspend "output_frame"
+QED
+
+Resume method_id_runtime_suffix_mods[output_layout]:
+  drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
+  qpat_assum `emit_void MSTORE _ sbuf = _` (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >>
+  qpat_assum `emit_op ADD _ _ = _` (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+  qpat_assum `emit_void MSTORE _ sd = _` (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >>
+  pure_rewrite_tac[emitted_insts_def] >>
+  map_every (fn q => qpat_assum q (pure_once_rewrite_tac o single))
+    [`sb.cs_current_insts = _`, `sd.cs_current_insts = _`,
+     `st.cs_current_insts = _`, `sbuf.cs_current_insts = _`] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[NoAsms, mk_inst_def, is_terminator_def]
+QED
+
+Resume method_id_runtime_suffix_mods[output_frame]:
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G,tn) [] (OK z,Gz,tnz) /\
+    ghost_inv_at_mods (DF H) lo d cenv cx mid Gz tnz z /\
+    immutable_frame_mods func cenv cx mid z` by suspend "output_linked" >>
+  `w2n p + 64 <= z.vs_alloca_next` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ z /\ _`
+       (drule_then strip_assume_tac) >>
+     drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
+     irule allocaSiteResourceTheory.alloca_site_registered_below >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists `sp.cs_next_id` >> asm_rewrite_tac[]) >>
+  qexistsl [`whole`, `z`, `Gz`, `tnz`] >>
+  rpt (conj_tac THEN1 (first_assum ACCEPT_TAC)) >>
+  (conj_tac >-
+     (map_every (fn q => qpat_assum q mp_tac)
+        [`w2n p + 64 <= z.vs_alloca_next`, `LENGTH bs = 4`,
+         `eval_operand buf.buf_operand z = SOME p`] >>
+      simp[NoAsms, expr_store_bound_def, is_word_type_def, evaluate_type_def,
+           exprSimPropsTheory.val_store_size_def, vfmConstantsTheory.word_size_def,
+           vyperValueTheory.type_slot_size_def, dimword_def])) >>
+  (conj_tac >- simp[ptr_val_ok_def, is_word_type_def]) >>
+  (conj_tac >-
+     (simp[NoAsms, ptr_vv_ok_def, mk_ptr_def, read_result_def, return_def] >>
+      conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC)) >>
+  (conj_tac >-
+     (map_every (fn q => qpat_assum q mp_tac)
+        [`eval_operand buf.buf_operand z = SOME p`, `buf.buf_operand = Var q`,
+         `FLOOKUP Gz q = SOME (w2n p,64)`] >>
+      simp[NoAsms, ptr_buf_ok_def, lowered_value_type_def, expr_type_def,
+           type_memory_bytes_def])) >>
+  conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+QED
+
+Resume method_id_runtime_suffix_mods[output_linked]:
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ (OK u,_,_) /\ _`
+    (drule_then strip_assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ z /\ _`
+    (drule_then strip_assume_tac) >>
+  conj_tac
+  >- (irule gas_origin_ptr_path_trans >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+  irule method_id_scratch_frame_op_taint_mods >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`Gu`, `w2n p`, `mk_inst sp.cs_next_id ALLOCA [Lit 64w] [q]`,
+            `sp`, `64`, `u`, `tnu`] >>
+  rpt (qpat_x_assum `z = _ with vs_inst_idx := _` kall_tac) >>
+  asm_rewrite_tac[] >> simp[NoAsms, mk_inst_def] >> first_assum ACCEPT_TAC
+QED
+
+Resume method_id_runtime_suffix_mods[posts]:
+  rename1 `run_inst_seq (emitted_insts sm sb) t = OK raw'` >>
+  rename1 `ghost_kept_at lo cenv es sa G0 tn0 s0 Gz tnz` >>
+  rename1 `z = raw' with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  qexistsl [`BytesV bs`, `z`, `Gz`, `tnz`] >>
+  conj_tac >- simp[] >>
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ (OK z,_,_) /\ _`
+    (drule_then strip_assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ expr_store_bound _ _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  `expr_post H ctx func cenv cx e es sa sm s0 mid v x t` by fs[expr_post_mods_def] >>
+  drule_all_then strip_assume_tac method_id_runtime_typed_post_run_mem_any_block >>
+  rename1 `vv_post H ctx func cenv cx _ es sa sb s0 mid (Value r) _ raw_t` >>
+  `raw_t = raw'` by
+    (qpat_assum `run_inst_seq (emitted_insts sm sb) t = OK raw_t` mp_tac >>
+     qpat_assum `run_inst_seq (emitted_insts sm sb) t = OK raw'`
+       (fn th => simp_tac bool_ss [th, venomExecSemanticsTheory.exec_result_11])) >>
+  pop_assum SUBST_ALL_TAC >>
+  `r = BytesV bs` by
+    (qpat_assum `builtin_result _ _ _ MethodId _ _ = INL r` mp_tac >>
+     qpat_assum `!ann. builtin_result _ _ ann MethodId _ _ = _`
+       (qspec_then `BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))`
+         (fn th => simp_tac (srw_ss()) [th]))) >>
+  pop_assum SUBST_ALL_TAC >>
+  qpat_x_assum `ann = _` SUBST_ALL_TAC >>
+  rule_assum_tac (REWRITE_RULE [method_typed_memory_posts]) >>
+  suspend "post_transport"
+QED
+
+Resume method_id_runtime_suffix_mods[post_transport]:
+  drule_all_then strip_assume_tac method_cursor_posts >>
+  `if fixed then ptr_vv_ok cx (BaseT (BytesT (Fixed 4))) (Value (BytesV bs))
+      (StackValue (BaseT (BytesT (Fixed 4))) op) mid Gz tnz z
+   else ptr_vv_ok cx (BaseT (BytesT (Dynamic 4))) (Value (BytesV bs))
+      (LocatedValue (BaseT (BytesT (Dynamic 4))) (mk_ptr op LocMemory)) mid Gz tnz z /\
+      ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [e]) op Gz z` by
+    (Cases_on `fixed` >>
+     qpat_assum `ptr_vv_ok cx _ _ _ mid Gz tnz z` mp_tac >>
+     qpat_assum `~_ ==> ptr_buf_ok cenv _ op Gz z` mp_tac >> simp[NoAsms]) >>
+  drule_all_then strip_assume_tac method_id_runtime_endpoint_posts_mods >>
+  Cases_on `fixed` >>
+  rule_assum_tac (REWRITE_RULE [COND_CLAUSES]) >>
+  simp[NoAsms, lowered_value_type_def, expr_type_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise method_id_runtime_suffix_mods
