@@ -10,7 +10,7 @@ Ancestors
   exprSimMemDefs ptrDiscipline createCtorObservedSilence createCtorPayloadLengthMods
   bodyFullExtCallDirectState bodyPtrMakeArrayPrimitiveInstall bodyPtrMakeArrayEmission
   venomInstProofs1 gasEvents bodySim loweringShapeDefs createExprSizeExitDefs
-  createSizePrefixReplayMods
+  createSizePrefixReplayMods createSizeRawEncoderObservedCutsMods
 
 (* A straight prologue instruction accounts for both the observed marks and
    the successor PC, without replacing the observed machine state. *)
@@ -157,5 +157,52 @@ Theorem create_raw_encoder_at_cuts_mods:
       immutable_frame_mods func ce cx ee t /\ storage_well_formed_on cx ee (FST K) /\
       ghost_inv_at_mods (DF K) lo d ce cx ee Gt tt t)
 Proof
-  cheat
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  mp_tac (PURE_REWRITE_RULE [COND_CLAUSES,AND_CLAUSES,IMP_CLAUSES,NOT_CLAUSES]
+    (Q.INST [`raw` |-> `T`] create_ctor_payload_length_mods)) >>
+  (impl_tac >-
+    (qpat_assum `args <> []` (simp_tac bool_ss o single) >>
+     pure_rewrite_tac [GSYM raw_encoder_prefix_rtc] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  qpat_assum `args <> []` (simp_tac bool_ss o single) >>
+  disch_then strip_assume_tac >>
+  rename1 `encode_create_ctor_args _ _ _ = SOME bytes` >>
+  qpat_assum `!D. gas_origin_ptr_path _ _ [] _ /\ _`
+    (qspec_then `ARB` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  qmatch_asmsub_rename_tac `gas_origin_ptr_path _ (u,_,_) [] (OK t,Gexit,texit)` >>
+  `gas_origin_path T explicit ctx func u [] (OK t)` by
+    (qpat_assum `gas_origin_ptr_path _ (u,_,_) [] (OK t,_,_)`
+      (ACCEPT_TAC o CONJUNCT1 o MATCH_MP gas_origin_ptr_path_projections)) >>
+  mp_tac (Q.INST [`N` |-> `LENGTH (args:expr list)`] raw_encoder_observed_cuts_mods) >>
+  (impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+     >- (pure_rewrite_tac [GSYM arithmeticTheory.NOT_ZERO_LT_ZERO, LENGTH_NIL] >> first_assum ACCEPT_TAC) >>
+     gen_tac >> disch_tac >>
+     qpat_assum `!i. i < LENGTH args ==> compile_expr _ _ _ _ = _ /\ _`
+       (qspec_then `i` (drule_then (MAP_EVERY assume_tac o CONJUNCTS))) >>
+     simp[])) >>
+  disch_then strip_assume_tac >>
+  ntac 4 (conj_tac >- (first_assum ACCEPT_TAC ORELSE (first_assum irule >> first_assum ACCEPT_TAC))) >>
+  qexistsl [`bytes`,`Gexit`,`texit`] >>
+  qhdtm_assum `abi_encode_saved_state_mods`
+    (MAP_EVERY assume_tac o CONJUNCTS o REWRITE_RULE [abi_encode_saved_state_mods_def]) >>
+  `lookup_var len t = SOME nword` by
+    (qpat_assum `wb_frame ce (E 0) ee (C 0) (St 0) t`
+      (irule o cj 1 o REWRITE_RULE [wb_frame_def]) >> simp[]) >>
+  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z` by
+    (qpat_assum `gas_origin_ptr_path _ _ [] (OK u,_,_)`
+      (mp_then Any mp_tac gas_origin_ptr_path_dalloca_fmp_headroom) >> asm_rewrite_tac[]) >>
+  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z` by
+    (qpat_assum `gas_origin_ptr_path _ _ [] (OK t,_,_)`
+      (mp_then Any mp_tac gas_origin_ptr_path_dalloca_fmp_headroom) >> asm_rewrite_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `ee = E _` (fn he =>
+       qpat_assum `?H. valid_horizon cx st0 H (E _).storage_trace`
+         (qx_choose_then `hz` (assume_tac o PURE_REWRITE_RULE [GSYM he]))) >>
+     qpat_assum `!K. valid_horizon cx st0 K ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ t /\ _`
+       (qspec_then `hz` (drule_then
+          (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp o CONJUNCT1)))) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `se` >> simp[]) >>
+  rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `se` >> simp[]
 QED
