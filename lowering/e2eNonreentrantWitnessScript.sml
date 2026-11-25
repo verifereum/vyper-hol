@@ -1,7 +1,7 @@
 Theory e2eNonreentrantWitness
 Ancestors
   e2eWitnessCompute e2eDefs e2eDeployDefs e2eCorrectness
-  e2eDeployCorrectness[qualified,ignore_grammar]
+  e2eDeployed
   immutableSectionRel alist integer_word option vyperStorageFootprint
   compileVyper e2eProducers vfmRunCall callTrace
   vyperCalldata vyperInterpreter
@@ -122,8 +122,7 @@ Triviality optimized_getters_deploy_typing:
   deploy_typing_ok ^tops ^am_dep ^tx_dep
 Proof
   simp ([deploy_typing_ok_def, init_am, p23_deploy_tx_def, empty_tx,
-         tx_wt, SIMP_RULE (srw_ss()) [init_am] check_dep,
-         SIMP_RULE (srw_ss()) [init_am] check_run] @ machine_wt @ account_simps)
+         tx_wt, SIMP_RULE (srw_ss()) [init_am] check_dep] @ machine_wt @ account_simps)
 QED
 
 Triviality optimized_getters_deploy_state:
@@ -158,7 +157,8 @@ Proof
           [init_am, contextTheory.global_nonreentrant_slot_def] check_run, tx_wt,
          global_cells_typed_def, account_immutables_def,
          vyperTypeContractTheory.constants_fold_module_def] @ machine_wt) >>
-  rpt gen_tac >> Cases_on `addr = 2w` >> simp account_simps
+  rpt gen_tac >> Cases_on `addr = 2w` >>
+  simp (vfmExecutionTheory.process_deletions_def :: account_simps)
 QED
 
 Triviality optimized_getters_accounts:
@@ -267,7 +267,6 @@ QED
 
   val accepted = prove (``asm_opt_finalizer IN accepted_finalizers``,
     simp[asmOptimizerTheory.accepted_finalizers_def])
-  val runtime_not_ef = prove (``~(?t. ^runtime_bc = 0xEFw :: t)``, simp[])
   val compiler_args =
     [``asm_opt_finalizer``, ``o1_policy all_capabilities``, tops, deploy_bc, runtime_bc]
   val common_premises = [accepted, compile]
@@ -276,20 +275,22 @@ QED
     common_premises @ [optimized_getters_deploy_typing, optimized_getters_deploy_state]
 
   val _ = MATCH_MP
-    (SPECL deploy_args e2eDeployCorrectnessTheory.e2e_deploy_correctness)
+    (SPECL deploy_args e2e_deploy_correctness_deployed)
     (LIST_CONJ (deploy_premises @ [dep_bound]))
   val _ = MATCH_MP
     (SPECL deploy_args e2eGasSufficientTopTheory.e2e_deploy_gas_sufficient)
-    (LIST_CONJ (deploy_premises @ [runtime_not_ef]))
+    (LIST_CONJ deploy_premises)
 
   fun check_call (horizon, tx, es, entry_facts, storage_facts) =
     let
       val args = compiler_args @ [am_call, tx, es]
-      val premises = common_premises @ entry_facts
-      val _ = MATCH_MP (SPECL (args @ [horizon]) vyper_call_correct)
+      val call_premises = CONJUNCTS (REWRITE_RULE [call_premises_deployed]
+        (LIST_CONJ entry_facts))
+      val premises = common_premises @ call_premises
+      val _ = MATCH_MP (SPECL (args @ [horizon]) vyper_call_correct_deployed)
         (LIST_CONJ (premises @ storage_facts))
       val _ = MATCH_MP
-        (SPECL args e2eGasSufficientTopTheory.vyper_call_gas_sufficient)
+        (SPECL args vyper_call_gas_sufficient_deployed)
         (LIST_CONJ premises)
     in
       ()
