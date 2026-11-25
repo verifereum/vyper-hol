@@ -2,7 +2,7 @@
    Each extension starts at the supplied occurrence of its PC. *)
 Theory entryCreateEncoderArraySteps
 Ancestors
-  abiEncoderArrayLoopCode abiEncoderArrayHeader abiDecoderExecution
+  abiEncoderArrayLoopCode abiEncoderArrayHeader abiDecoderExecution entryCreateEncoderArrayLinear
   entryCreateAdminSequence entryCreatePathScope createSizePrefixReplay
   entryCreateCompletedCut entryCreateFocusSpec
   createMarkedPath createExprSizeExitDefs abiEncoderProps
@@ -242,6 +242,29 @@ QED
    three successive actual witnesses: preparation, recursive child, and
    publication of that child's result. At the final test (including n=0)
    none of those hypotheses nor a backedge is needed. *)
+
+Theorem encoder_array_exhausted_test_scoped:
+  abi_encoder_array_loop_code fn owner body_st bend exit_st ip count_op labels /\
+  encoder_array_band a b fn owner bend /\
+  s.vs_current_bb = FST labels /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  iv = STRING #"%" (toString owner.cs_next_var) /\
+  cmp = STRING #"%" (toString (owner.cs_next_var+1)) /\
+  done = STRING #"%" (toString (owner.cs_next_var+2)) /\
+  count_op <> Var iv /\ eval_operand ip s = SOME p /\
+  eval_operand count_op s = SOME (n2w n) /\ mload (w2n p) s = n2w n /\
+  n < dimword (:256) /\
+  branch = jump_to (SND (SND labels))
+    (abi_encode_array_header_state iv cmp done n n s) ==>
+  create_expr_prefix a b E C fn s [] branch /\
+  create_operand_at exit_st branch /\ ~branch.vs_halted
+Proof
+  strip_tac >>
+  conj_tac
+  >- (`n <= n` by simp[] >> drule_all encoder_array_header_segment >> simp[]) >>
+  fs[abi_encoder_array_loop_code_def, create_operand_at_def,
+    jump_to_def, abi_encode_array_header_state_def, update_var_def]
+QED
+
 Theorem encoder_array_control_scoped_from_steps:
   abi_encoder_array_loop_code fn owner body_st bend exit_st ip count_op labels /\
   encoder_array_band a b fn owner bend /\

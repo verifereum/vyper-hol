@@ -100,7 +100,7 @@ QED
 
 (* The two installed instructions share the same intermediate state in
    the ghost path, the terminal fetch, and the successful base run. *)
-Theorem extcall_codesize_checked_steps:
+Theorem extcall_codesize_checked_edges:
   compile_extcodesize_check addr a = ((),b) /\ fn_has_code a b func /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
@@ -120,8 +120,11 @@ Theorem extcall_codesize_checked_steps:
   step_inst_base (mk_inst a.cs_next_id EXTCODESIZE [addr] [out]) s = OK v /\
   (w <> 0w ==> run_inst_seq (emitted_insts a b) s = OK v /\
                 t = v with vs_inst_idx := LENGTH b.cs_current_insts) /\
-  (!D explicit. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G \\ out,tm) /\
-    (w = 0w ==> gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (u,G \\ out,tm) [] (abort,G \\ out,tm)) /\
+  u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = SUC s.vs_inst_idx /\
+  (!D explicit.
+    gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G \\ out,tm) /\
+    gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (u,G \\ out,tm) []
+      (if w = 0w then abort else OK t,G \\ out,tm) /\
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (if w = 0w then abort else OK t,G \\ out,tm))
 Proof
@@ -160,6 +163,7 @@ Proof
         simp[eval_operand_def,update_var_def,lookup_var_def,FLOOKUP_UPDATE] >>
       simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
            step_ASSERT_ok, Abbr `u`]) >>
+  ntac 2 (conj_tac >- simp[Abbr `u`, update_var_def]) >>
   `SUC u.vs_inst_idx = LENGTH b.cs_current_insts` by simp[Abbr `u`, update_var_def] >>
   rpt gen_tac >>
   `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G \\ out,tm)` by
@@ -171,6 +175,7 @@ Proof
      irule precheck_assert_edge >> metis_tac[]) >>
   `tm = tn with t_var := tn.t_var |+ (out,{})` by simp[Abbr `tm`] >>
   qpat_assum `tm = _` (PURE_ONCE_REWRITE_TAC o single o SYM) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   Cases_on `w = 0w` >>
   qpat_x_assum `gas_origin_ptr_edge _ (u,_,_) [] _` mp_tac
@@ -194,6 +199,41 @@ Proof
   qpat_assum `gas_origin_ptr_edge _ (s,_,_) [] _`
     (mp_then Any mp_tac (cj 2 gas_origin_ptr_path_rules)) >>
   disch_then drule >> simp_tac bool_ss [listTheory.APPEND]
+QED
+
+Theorem extcall_codesize_checked_steps:
+  compile_extcodesize_check addr a = ((),b) /\ fn_has_code a b func /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_operand addr s = SOME aw /\ op_taint tn addr = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  let out = STRING #"%" (toString a.cs_next_var) in
+  let w = n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code) : bytes32 in
+  let v = update_var out w s in
+  let u = v with vs_inst_idx := SUC s.vs_inst_idx in
+  let t = u with vs_inst_idx := LENGTH b.cs_current_insts in
+  let abort = Abort Revert_abort (revert_state (set_returndata [] u)) in
+  let tm = tn with t_var := tn.t_var |+ (out,{}) in
+  (?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+        get_instruction bb s.vs_inst_idx = SOME (mk_inst a.cs_next_id EXTCODESIZE [addr] [out]) /\
+        get_instruction bb u.vs_inst_idx = SOME (mk_inst (a.cs_next_id + 1) ASSERT [Var out] [])) /\
+  step_inst_base (mk_inst a.cs_next_id EXTCODESIZE [addr] [out]) s = OK v /\
+  (w <> 0w ==> run_inst_seq (emitted_insts a b) s = OK v /\
+                t = v with vs_inst_idx := LENGTH b.cs_current_insts) /\
+  (!D explicit. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G \\ out,tm) /\
+    (w = 0w ==> gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (u,G \\ out,tm) [] (abort,G \\ out,tm)) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (if w = 0w then abort else OK t,G \\ out,tm))
+Proof
+  strip_tac >> drule_all extcall_codesize_checked_edges >>
+  disch_then (qspecl_then [`PG`, `G`] mp_tac) >>
+  rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  conj_tac >- (qexists_tac `bb` >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> first_x_assum (qspecl_then [`D`, `explicit`] strip_assume_tac) >>
+  rpt conj_tac >> simp[] >> strip_tac >> gvs[]
 QED
 
 (* A single physical endpoint, including on rejection. *)
@@ -239,7 +279,7 @@ Proof
        n2w_11, listTheory.LENGTH_NIL]
 QED
 
-Theorem extcall_optional_precheck_path[local]:
+Theorem extcall_optional_precheck_steps[local]:
   (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr
    else comp_return ()) a = ((),b) /\ fn_has_code a b func /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
@@ -248,39 +288,58 @@ Theorem extcall_optional_precheck_path[local]:
   accounts_runtime_well_typed ee.accounts /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
     stmt_state_rel H ctx func cenv cx ee s /\ allocas_from lo s) ==>
-  !H. valid_horizon cx st0 H ee.storage_trace ==>
-    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
-      (if ext_call_precheck_ok skip ret_type target ee.accounts then
-         OK (if ret_type = NoneT /\ ~skip then
-               update_var (STRING #"%" (toString a.cs_next_var))
-                 (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)) s
-               with vs_inst_idx := LENGTH b.cs_current_insts
-             else s)
-       else Abort Revert_abort (revert_state (set_returndata []
-           (update_var (STRING #"%" (toString a.cs_next_var))
-              (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)) s
-            with vs_inst_idx := SUC s.vs_inst_idx))),
-       (if ret_type = NoneT /\ ~skip then G \\ (STRING #"%" (toString a.cs_next_var)) else G),
-       (if ret_type = NoneT /\ ~skip then
-          tn with t_var := tn.t_var |+ (STRING #"%" (toString a.cs_next_var),{})
-        else tn))
+  let checked = (ret_type = NoneT /\ ~skip) in
+  let out = STRING #"%" (toString a.cs_next_var) in
+  let w = n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code) : bytes32 in
+  let v = update_var out w s in
+  let r = if ext_call_precheck_ok skip ret_type target ee.accounts then
+            OK (if checked then v with vs_inst_idx := LENGTH b.cs_current_insts else s)
+          else Abort Revert_abort (revert_state
+                 (set_returndata [] (v with vs_inst_idx := SUC s.vs_inst_idx))) in
+  let G1 = if checked then G \\ out else G in
+  let tn1 = if checked then tn with t_var := tn.t_var |+ (out,{}) else tn in
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,G1,tn1)) /\
+  (if checked then
+    ?u. u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = SUC s.vs_inst_idx /\
+        !H. valid_horizon cx st0 H ee.storage_trace ==>
+          gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G1,tn1) /\
+          gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (u,G1,tn1) [] (r,G1,tn1)
+   else r = OK s /\ G1 = G /\ tn1 = tn)
 Proof
   strip_tac >> rewrite_tac[LET_THM] >> BETA_TAC >>
-  Cases_on `ret_type = NoneT /\ ~skip` >> simp[Excl "n2w_eq_0"]
-  >- (fs[] >> rpt strip_tac >>
-      `stmt_state_rel H ctx func cenv cx ee s /\ allocas_from lo s` by metis_tac[] >>
-      `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
-        (qpat_assum `stmt_state_rel H ctx func cenv cx ee s`
+  reverse (Cases_on `ret_type = NoneT /\ ~skip`)
+  >- (`ext_call_precheck_ok skip ret_type target ee.accounts` by
+        (Cases_on `ret_type` >> fs[vyperInterpreterTheory.ext_call_precheck_ok_def]) >>
+      simp[] >> rpt strip_tac >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
+  gvs[Excl "n2w_eq_0"] >>
+  qabbrev_tac `out = STRING #"%" (toString a.cs_next_var)` >>
+  qabbrev_tac `w = n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code) : bytes32` >>
+  qabbrev_tac `u = update_var out w s with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `tm = tn with t_var := tn.t_var |+ (out,{})` >>
+  qmatch_goalsub_abbrev_tac `gas_origin_ptr_path _ _ [] (r,_,_)` >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G \\ out,tm) /\
+     gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (u,G \\ out,tm) [] (r,G \\ out,tm) /\
+     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,G \\ out,tm)` by
+    (gen_tac >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx ee s /\ allocas_from lo s` by metis_tac[] >>
+     `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+       (qpat_assum `stmt_state_rel H ctx func cenv cx ee s`
           (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
-      drule_all extcall_codesize_checked_path >>
-      disch_then (qspecl_then [`explicit`,`PG`,`G`] mp_tac) >>
-      rewrite_tac[LET_THM] >> BETA_TAC >>
-      disch_then (qspec_then `DF H` mp_tac) >>
-      drule_all precheck_guard_agrees >>
-      Cases_on `ext_call_precheck_ok F NoneT target ee.accounts` >> gvs[Excl "n2w_eq_0"])
-  >> `ext_call_precheck_ok skip ret_type target ee.accounts` by
-       (Cases_on `ret_type` >> fs[vyperInterpreterTheory.ext_call_precheck_ok_def]) >>
-  simp[] >> rpt strip_tac >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]
+     drule_all extcall_codesize_checked_edges >>
+     disch_then (qspecl_then [`PG`,`G`] mp_tac) >>
+     rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+     qpat_x_assum `!D explicit. _` (qspecl_then [`DF H`,`explicit`] strip_assume_tac) >>
+     `(n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code) : bytes32) <> 0w <=>
+       ext_call_precheck_ok F NoneT (w2w aw) ee.accounts` by
+       metis_tac[precheck_guard_agrees] >>
+     Cases_on `ext_call_precheck_ok F NoneT (w2w aw) ee.accounts` >>
+     fs[Excl "n2w_eq_0", Abbr `r`, Abbr `u`, Abbr `tm`, Abbr `out`, Abbr `w`] >>
+     qpat_assum `s.vs_inst_idx = LENGTH _` (fn th => fs[th])) >>
+  conj_tac >- metis_tac[] >>
+  qexists_tac `u` >> conj_tac >- simp[Abbr `u`,update_var_def] >>
+  conj_tac >- simp[Abbr `u`] >> metis_tac[]
 QED
 
 Theorem precheck_scalar_observations[local]:
@@ -374,6 +433,121 @@ QED
 
 (* The successful precheck leaves the request and its operands intact at the
    new compiler cut. Rejection instead exits before fetching the call. *)
+Theorem extcall_precheck_to_call_steps:
+  (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr
+   else comp_return ()) sp = ((),sb) /\ fn_has_code sp sb func /\
+  emit_op (if stat then STATICCALL else CALL)
+    (if stat then [gas;addr;off;len;buf;Lit (n2w cap)]
+     else [gas;addr;value;off;len;buf;Lit (n2w cap)]) sb = (success,sc) /\
+  fn_has_code sb sc func /\
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr value gas buf off len cap target value_opt calldata has_default
+    default_op default_ty default_opt ee s /\
+  op_taint tn addr = {} /\ allocas_from lo s /\
+  lo <= s.vs_alloca_next /\ fn_inst_ids_distinct func /\ alloca_history func s /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==> stor_taint_ok_at (DF H) tn s) ==>
+  ?r G1 tn1.
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,G1,tn1)) /\
+    (if ret_type = NoneT /\ ~skip then
+      ?u. u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = SUC s.vs_inst_idx /\
+          !H. valid_horizon cx st0 H ee.storage_trace ==>
+            gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G1,tn1) /\
+            gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (u,G1,tn1) [] (r,G1,tn1)
+     else r = OK s /\ G1 = G /\ tn1 = tn) /\
+    if ext_call_precheck_ok skip ret_type target ee.accounts then
+      ?t out bb. r = OK t /\ success = Var out /\ ~not_fresh_at sb out /\
+        lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+        get_instruction bb t.vs_inst_idx = SOME
+          (mk_inst sb.cs_next_id (if stat then STATICCALL else CALL)
+             (if stat then [gas;addr;off;len;buf;Lit (n2w cap)]
+              else [gas;addr;value;off;len;buf;Lit (n2w cap)]) [out]) /\
+        t.vs_current_bb = sc.cs_current_bb /\ SUC t.vs_inst_idx = LENGTH sc.cs_current_insts /\
+        extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sb stat
+          addr value gas buf off len cap target value_opt calldata has_default
+          default_op default_ty default_opt ee t /\
+        allocas_from lo t /\ lo <= t.vs_alloca_next /\ alloca_history func t /\
+        t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+        t.vs_alloca_next = s.vs_alloca_next /\ tn1.t_mem = tn.t_mem /\
+        ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+        (!H. valid_horizon cx st0 H ee.storage_trace ==> stor_taint_ok_at (DF H) tn1 t) /\
+        ((!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+         (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+         !H. valid_horizon cx st0 H ee.storage_trace /\
+             ghost_inv_at (DF H) lo d cenv cx ee G tn s ==>
+             ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t) /\
+        (!x. not_fresh_at sp x ==> lookup_var x t = lookup_var x s /\
+          FLOOKUP G1 x = FLOOKUP G x /\ op_taint tn1 (Var x) = op_taint tn (Var x)) /\
+        (!op. safe_operand sp op ==> eval_operand op t = eval_operand op s /\
+          op_taint tn1 op = op_taint tn op /\
+          (!x. op = Var x ==> FLOOKUP G1 x = FLOOKUP G x)) /\
+        (!ty v op. safe_operand sp op /\ ptr_mem_ok cx ty v op G tn s ==>
+          ptr_mem_ok cx ty v op G1 tn1 t)
+    else exit_result r /\ expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
+Proof
+  strip_tac >>
+  qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [extcall_request_ready_def]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s /\ allocas_from lo s` by metis_tac[] >>
+  mp_tac (Q.INST [`a` |-> `sp`, `b` |-> `sb`] extcall_optional_precheck_steps) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  rewrite_tac[LET_THM] >> BETA_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `chk_out = STRING #"%" (toString sp.cs_next_var)` >>
+  qabbrev_tac `w = (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code) : bytes32)` >>
+  qabbrev_tac `t0 = if ret_type = NoneT /\ ~skip then
+    update_var chk_out w s with vs_inst_idx := LENGTH sb.cs_current_insts else s` >>
+  qabbrev_tac `Gc = if ret_type = NoneT /\ ~skip then G \\ chk_out else G` >>
+  qabbrev_tac `tc = if ret_type = NoneT /\ ~skip then
+    tn with t_var := tn.t_var |+ (chk_out,{}) else tn` >>
+  reverse (Cases_on `ext_call_precheck_ok skip ret_type target ee.accounts`)
+  >- (qexistsl_tac [`Abort Revert_abort (revert_state (set_returndata []
+                    (update_var chk_out w s with vs_inst_idx := SUC s.vs_inst_idx)))`,`Gc`,`tc`] >>
+      fs[exit_result_def,exprSimDefsTheory.expr_exit_def] >>
+      qexists_tac `u` >> qpat_assum `s.vs_inst_idx = LENGTH _` (fn th => fs[th])) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t0,Gc,tc)` by fs[] >>
+  `alloca_history func t0` by
+    (`stmt_state_rel H ctx func cenv cx ee s` by metis_tac[] >>
+     drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
+     `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t0,Gc,tc)` by simp[] >>
+     drule_all body_full_path_alloca_history >> simp[]) >>
+  `~not_fresh_at sp chk_out` by simp[Abbr `chk_out`,not_fresh_at_def] >>
+  qpat_x_assum `stat <=> value_opt = NONE` kall_tac >>
+  `extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sb stat
+      addr value gas buf off len cap target value_opt calldata has_default
+      default_op default_ty default_opt ee t0` by
+    (Cases_on `ret_type = NoneT /\ ~skip`
+     >- (simp[Abbr `t0`] >> irule precheck_request_scalar >> qexists_tac `sp` >>
+         `compile_extcodesize_check addr sp = ((),sb)` by fs[] >>
+         drule precheck_code_shape >> fs[]) >>
+     `sb = sp` by (Cases_on `ret_type = NoneT` >> Cases_on `skip` >> fs[comp_return_def]) >>
+     simp[Abbr `t0`] >> metis_tac[]) >>
+  pop_assum $ mk_asm "after_check" >>
+  `t0.vs_current_bb = sb.cs_current_bb /\ t0.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (asm "after_check" (strip_assume_tac o REWRITE_RULE [extcall_request_ready_def]) >> simp[]) >>
+  drule_all emit_op_fetch_boundary >>
+  disch_then (qx_choose_then `call_out` (qx_choose_then `call_bb` strip_assume_tac)) >>
+  `~not_fresh_at sb call_out` by metis_tac[] >>
+  qexistsl_tac [`OK t0`,`Gc`,`tc`] >> asm "after_check" (fn th => simp[th]) >>
+  reverse (Cases_on `ret_type = NoneT /\ ~skip`)
+  >- (Cases_on `ret_type = NoneT` >> Cases_on `skip` >>
+      gvs[Abbr `t0`, Abbr `Gc`, Abbr `tc`]) >>
+  drule_all precheck_scalar_observations >>
+  disch_then (strip_assume_tac o SIMP_RULE bool_ss [FORALL_AND_THM]) >>
+  gvs[Abbr `t0`, Abbr `Gc`, Abbr `tc`] >>
+  fs[update_var_def, allocas_from_def, bodyPtrDefsTheory.stor_taint_ok_at_def] >>
+  rpt strip_tac
+  >~ [`ghost_inv_at _ _ _ _ _ _ _ _ _`]
+  >- (irule ghost_inv_at_exterior_frame >>
+      goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
+      qexists_tac `sp` >> simp[update_var_def] >>
+      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  metis_tac[]
+QED
+
 Theorem extcall_precheck_to_call:
   (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr
    else comp_return ()) sp = ((),sb) /\ fn_has_code sp sb func /\
@@ -421,61 +595,10 @@ Theorem extcall_precheck_to_call:
           ptr_mem_ok cx ty v op G1 tn1 t)
     else exit_result r /\ expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
 Proof
-  strip_tac >>
-  qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [extcall_request_ready_def]) >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx ee s /\ allocas_from lo s` by metis_tac[] >>
-  mp_tac (Q.INST [`a` |-> `sp`, `b` |-> `sb`] extcall_optional_precheck_path) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
-  qabbrev_tac `chk_out = STRING #"%" (toString sp.cs_next_var)` >>
-  qabbrev_tac `w = (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code) : bytes32)` >>
-  qabbrev_tac `t0 = if ret_type = NoneT /\ ~skip then
-    update_var chk_out w s with vs_inst_idx := LENGTH sb.cs_current_insts else s` >>
-  qabbrev_tac `Gc = if ret_type = NoneT /\ ~skip then G \\ chk_out else G` >>
-  qabbrev_tac `tc = if ret_type = NoneT /\ ~skip then
-    tn with t_var := tn.t_var |+ (chk_out,{}) else tn` >>
-  reverse (Cases_on `ext_call_precheck_ok skip ret_type target ee.accounts`)
-  >- (qexistsl_tac [`Abort Revert_abort (revert_state (set_returndata []
-                    (update_var chk_out w s with vs_inst_idx := SUC s.vs_inst_idx)))`,`Gc`,`tc`] >>
-      fs[exit_result_def,exprSimDefsTheory.expr_exit_def]) >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t0,Gc,tc)` by fs[] >>
-  `alloca_history func t0` by
-    (`stmt_state_rel H ctx func cenv cx ee s` by metis_tac[] >>
-     drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
-     `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t0,Gc,tc)` by simp[] >>
-     drule_all body_full_path_alloca_history >> simp[]) >>
-  `~not_fresh_at sp chk_out` by simp[Abbr `chk_out`,not_fresh_at_def] >>
-  qpat_x_assum `stat <=> value_opt = NONE` kall_tac >>
-  `extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sb stat
-      addr value gas buf off len cap target value_opt calldata has_default
-      default_op default_ty default_opt ee t0` by
-    (Cases_on `ret_type = NoneT /\ ~skip`
-     >- (simp[Abbr `t0`] >> irule precheck_request_scalar >> qexists_tac `sp` >>
-         `compile_extcodesize_check addr sp = ((),sb)` by fs[] >>
-         drule precheck_code_shape >> fs[]) >>
-     `sb = sp` by (Cases_on `ret_type = NoneT` >> Cases_on `skip` >> fs[comp_return_def]) >>
-     simp[Abbr `t0`] >> metis_tac[]) >>
-  pop_assum $ mk_asm "after_check" >>
-  `t0.vs_current_bb = sb.cs_current_bb /\ t0.vs_inst_idx = LENGTH sb.cs_current_insts` by
-    (asm "after_check" (strip_assume_tac o REWRITE_RULE [extcall_request_ready_def]) >> simp[]) >>
-  drule_all emit_op_fetch_boundary >>
-  disch_then (qx_choose_then `call_out` (qx_choose_then `call_bb` strip_assume_tac)) >>
-  `~not_fresh_at sb call_out` by metis_tac[] >>
-  qexistsl_tac [`OK t0`,`Gc`,`tc`] >> asm "after_check" (fn th => simp[th]) >>
-  reverse (Cases_on `ret_type = NoneT /\ ~skip`)
-  >- (Cases_on `ret_type = NoneT` >> Cases_on `skip` >>
-      gvs[Abbr `t0`, Abbr `Gc`, Abbr `tc`]) >>
-  drule_all precheck_scalar_observations >>
-  disch_then (strip_assume_tac o SIMP_RULE bool_ss [FORALL_AND_THM]) >>
-  gvs[Abbr `t0`, Abbr `Gc`, Abbr `tc`] >>
-  fs[update_var_def, allocas_from_def, bodyPtrDefsTheory.stor_taint_ok_at_def] >>
-  rpt strip_tac
-  >~ [`ghost_inv_at _ _ _ _ _ _ _ _ _`]
-  >- (irule ghost_inv_at_exterior_frame >>
-      goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
-      qexists_tac `sp` >> simp[update_var_def] >>
-      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  metis_tac[]
+  strip_tac >> mp_tac extcall_precheck_to_call_steps >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `r` (qx_choose_then `G1` (qx_choose_then `tn1`
+    (map_every assume_tac o CONJUNCTS)))) >>
+  qexistsl_tac [`r`,`G1`,`tn1`] >> simp_tac bool_ss [] >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
