@@ -40,7 +40,9 @@ Theorem live_memory_array_current_view:
 Proof
   strip_tac >>
   `expr_body_pre cenv cx env obj es` by
-    metis_tac[expr_body_pre_array_subscript_base] >>
+    (irule expr_body_pre_array_subscript_base_eval >>
+     qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[] >>
+     metis_tac[]) >>
   drule_all expr_body_pre_place_metadata >> strip_tac >>
   gvs[runtime_place_typed_memory] >>
   `wb_frame cenv t ee sb u s` by metis_tac[expr_post_frame] >>

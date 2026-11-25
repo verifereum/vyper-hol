@@ -30,6 +30,18 @@ Proof
   disch_then (rewrite_tac o single o SYM) >> wordsLib.WORD_DECIDE_TAC
 QED
 
+Theorem extcall_singleton_source:
+  eval_exprs cx [e] st =
+    (sum_CASE (FST (bind (eval_expr cx e) (read_result cx) st))
+       (\v. INL [v]) INR,
+     SND (bind (eval_expr cx e) (read_result cx) st))
+Proof
+  rewrite_tac[eval_exprs_cons_action] >>
+  Cases_on `bind (eval_expr cx e) (read_result cx) st` >>
+  rename1 `bind (eval_expr cx e) (read_result cx) st = (raw,mid)` >>
+  Cases_on `raw` >> simp[Once bind_def, bind_def, return_def, eval_exprs_nil]
+QED
+
 Theorem singleton_source_map[local]:
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn) Q R ==>
@@ -41,10 +53,56 @@ Theorem singleton_source_map[local]:
 Proof
   strip_tac >> ho_match_mp_tac (GEN_ALL gas_outcome_full_source_map) >>
   qexists_tac `bind (eval_expr cx e) (read_result cx)` >> simp[] >>
-  qx_gen_tac `st` >> rewrite_tac[eval_exprs_cons_action] >>
-  Cases_on `bind (eval_expr cx e) (read_result cx) st` >>
-  rename1 `bind (eval_expr cx e) (read_result cx) st = (raw,mid)` >>
-  Cases_on `raw` >> simp[Once bind_def, bind_def, return_def, eval_exprs_nil]
+  simp[extcall_singleton_source]
+QED
+
+Definition extcall_address_post_def:
+  extcall_address_post (DF,lo,d,ctx,func) cenv cx env addr
+    (es,sa,sb,s0,ao,G0,tn0) H res ee G tn t <=>
+    ?v target aw.
+      res = INL [v] /\ dest_AddressV v = SOME target /\
+      eval_operand ao t = SOME aw /\ w2w aw = target /\ safe_operand sb ao /\
+      expr_sim_inv cenv cx env ee /\
+      expr_post H ctx func cenv cx addr es sa sb s0 ee v ao t /\
+      expr_store_bound cx (BaseT AddressT) v ao t /\
+      ptr_val_ok cx (BaseT AddressT) v ao G tn t /\
+      return_buf_frame d cenv sb t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+      ~t.vs_halted /\ ee.gas_obs = []
+End
+
+Theorem extcall_address_post_intro:
+  expr_type addr = BaseT AddressT /\ expr_body_pre cenv cx env addr es /\
+  lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
+  return_buf_frame d cenv sa s0 /\
+  bind (eval_expr cx addr) (read_result cx) (es with gas_obs := obs) = (INL v,ee) /\
+  ee.gas_obs = [] /\ ~t.vs_halted /\
+  expr_post H ctx func cenv cx addr es sa sb s0 ee v ao t /\
+  expr_store_bound cx (BaseT AddressT) v ao t /\
+  ptr_val_ok cx (BaseT AddressT) v ao G tn t /\
+  t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+  ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn ==>
+  extcall_address_post (DF,lo,d,ctx,func) cenv cx env addr
+    (es,sa,sb,s0,ao,G0,tn0) H (INL [v]) ee G tn t
+Proof
+  strip_tac >>
+  `expr_body_pre cenv cx env addr (es with gas_obs := obs)` by simp[] >>
+  `expr_sim_inv cenv cx env ee /\ value_has_type (BaseTV AddressT) v` by
+    metis_tac[expr_body_pre_base_result] >>
+  `is_word_type (expr_type addr)` by simp[is_word_type_def] >>
+  drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
+  qhdtm_assum `expr_post`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `return_buf_frame d cenv sb t` by
+    (irule return_buf_frame_frame >> qexistsl [`cenv`,`s0`,`sa`] >> simp[]) >>
+  gvs[extcall_address_post_def] >> drule_all target_word_decode >> strip_tac >>
+  qexists_tac `aw` >> gvs[safe_operand_def]
 QED
 
 Theorem extcall_request_head_halt_outcome:
@@ -125,18 +183,15 @@ Proof
     (qspec_then `[]` (strip_assume_tac o MATCH_MP eval_exprs_cons_cases)) >>
   gvs[eval_exprs_nil] >>
   `(ee with gas_obs := []) = ee` by simp[evaluation_state_component_equality] >>
-  `expr_body_pre cenv cx env addr (es with gas_obs := xs)` by simp[] >>
-  `expr_sim_inv cenv cx env ee /\ value_has_type (BaseTV AddressT) v` by
-    metis_tac[expr_body_pre_base_result] >>
-  `is_word_type (expr_type addr)` by simp[is_word_type_def] >>
-  drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
-  qhdtm_assum `expr_post`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  `return_buf_frame d cenv sb t` by
-    (irule return_buf_frame_frame >> qexistsl [`cenv`,`s0`,`sa`] >> simp[]) >>
-  gvs[] >> drule_all target_word_decode >> strip_tac >>
-  qexists_tac `aw` >> gvs[safe_operand_def]
+  `post_value_type cenv addr = BaseT AddressT` by
+    simp[post_value_type_word,is_word_type_def] >>
+  fs[] >>
+  `extcall_address_post (DF,lo,d,ctx,func) cenv cx env addr
+     (es,sa,sb,s0,ao,G0,tn0) H (INL [v]) ee G' tn' t` by
+    (irule extcall_address_post_intro >> simp[] >> qexists_tac `xs` >>
+     qpat_assum `bind (eval_expr cx addr) _ _ = (INL _,_)`
+       (ACCEPT_TAC o CONV_RULE (DEPTH_CONV ETA_CONV))) >>
+  fs[extcall_address_post_def]
 QED
 
 (* The non-owning prefixes only need the ordinary exit projection. *)

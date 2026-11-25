@@ -2,7 +2,7 @@
 Theory defaultBytesGuardPrelude
 Ancestors moduleLowering abiDecoderGuard  emitHelperProps emitHelper compileEnv
   exprLoweringProps bodyPtrBopScalarCompile bodyPtrBopScalarSeq
-  fragGasSeqPtr fragGasOriginPtrLoop fragGasCopyLoop fragExecMem
+  fragGasSeqPtr fragGasOriginPtrLoop fragGasCopyLoop fragGasCopySeqLiftProps fragExecMem
   bodyPtrDefs ptrDiscipline ptrSafeRun venomState venomExecSemantics venomInst
   finite_map pred_set words list rich_list arithmetic fragExec
   ctorDeployMemoryRunMemEntryRegistration ctorDeployMemoryRunMemEntryCompositeSetup abiDecoderReentry

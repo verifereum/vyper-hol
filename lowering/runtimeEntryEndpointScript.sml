@@ -215,6 +215,32 @@ Definition runtime_body_endpoint_def:
             marks0 (OK s0, G0, tn0)
 End
 
+(* Decorate the selected registration interval within the same existential
+   witnesses. Reuse the public endpoint's body so the other facts stay in sync. *)
+local
+  val (witnesses, endpoint_body) = boolSyntax.strip_exists
+    (boolSyntax.rhs (concl (SPEC_ALL runtime_body_endpoint_def)))
+  fun witness name =
+    valOf (List.find (fn v => fst (dest_var v) = name) witnesses)
+  val sa = witness "sa"
+  val st = witness "st'"
+  val decorated_body = boolSyntax.list_mk_exists
+    (witnesses, ``L ^sa ^st /\ ^endpoint_body``)
+in
+Definition runtime_body_endpoint_with_def:
+  runtime_body_endpoint_with L tops rpolicy unit am tx vs es mut nr args dflts ret fbody <=>
+    ^decorated_body
+End
+end
+
+Theorem runtime_body_endpoint_unrestricted_def:
+  runtime_body_endpoint tops rpolicy unit am tx vs es mut nr args dflts ret fbody <=>
+    runtime_body_endpoint_with (\a b. T) tops rpolicy unit am tx vs es mut nr
+      args dflts ret fbody
+Proof
+  simp[runtime_body_endpoint_def, runtime_body_endpoint_with_def]
+QED
+
 Theorem external_entry_joint_endpoint:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\

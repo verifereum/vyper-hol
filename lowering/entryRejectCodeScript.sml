@@ -90,27 +90,28 @@ Theorem runtime_packaged_entry_retains[local]:
   EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
   package_internal_blocks (internal_fn_descriptors ints) (all_blocks sz) =
     SOME (eb,fs) ==>
-  ?se. compile_generate_runtime sels exts [] fb Linear bc mb db ei
+  ?se rest. compile_generate_runtime sels exts [] fb Linear bc mb db ei
     (initial_compile_state "__entry") = ((),se) /\
-    (!bb. MEM bb (all_blocks se) ==> MEM bb eb)
+    eb = all_blocks se ++ rest
 Proof
   strip_tac >> drule compile_runtime_without_internals_prefix >> strip_tac >>
   `!d. MEM d (internal_fn_descriptors ints) ==>
     ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks se))` by
     (metis_tac[runtime_entry_delimiter_exclusion]) >>
   drule internal_fn_bodies_all_blocks_prefix >> strip_tac >>
-  qexists_tac `se` >> simp[] >> rpt strip_tac >>
-  irule package_internal_blocks_prefix_mem >> simp[] >>
+  qexists_tac `se` >> simp[] >>
+  irule package_internal_blocks_prefix >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem run_lowering_retained_entry:
+Theorem run_lowering_retained_entry_distinct:
   run_lowering sels exts ints fb rp bc mb db ei "__entry" = SOME u /\
   EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) exts /\
   EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
   lookup_function "__entry" u.cu_context.ctx_functions = SOME efn ==>
   ?se. compile_generate_runtime sels exts [] fb Linear bc mb db ei
     (initial_compile_state "__entry") = ((),se) /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se)) /\
     (!bb. MEM bb (all_blocks se) ==>
       lookup_block bb.bb_label efn.fn_blocks = SOME bb)
 Proof
@@ -128,8 +129,22 @@ Proof
   fs[GSYM all_blocks_def] >>
   drule_all runtime_packaged_entry_retains >> strip_tac >>
   `efn.fn_blocks = entry_blocks` by (drule_all extracted_entry_blocks >> simp[]) >>
-  qexists_tac `se` >> simp[] >> rpt strip_tac >>
-  irule MEM_lookup_block >> gvs[]
+  qexists_tac `se` >> simp[] >> conj_tac
+  >- gvs[MAP_APPEND, ALL_DISTINCT_APPEND] >>
+  rpt strip_tac >> irule MEM_lookup_block >> gvs[MEM_APPEND]
+QED
+
+Theorem run_lowering_retained_entry:
+  run_lowering sels exts ints fb rp bc mb db ei "__entry" = SOME u /\
+  EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) exts /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
+  lookup_function "__entry" u.cu_context.ctx_functions = SOME efn ==>
+  ?se. compile_generate_runtime sels exts [] fb Linear bc mb db ei
+    (initial_compile_state "__entry") = ((),se) /\
+    (!bb. MEM bb (all_blocks se) ==>
+      lookup_block bb.bb_label efn.fn_blocks = SOME bb)
+Proof
+  strip_tac >> drule_all run_lowering_retained_entry_distinct >> metis_tac[]
 QED
 
 Theorem run_grouped_lowering_retained_entry_prefix:

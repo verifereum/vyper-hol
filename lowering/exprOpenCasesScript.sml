@@ -76,12 +76,11 @@ QED
 
 Theorem supported_storage_value_runtime_lookup:
   !tops src id ann.
-    supported_storage_value tops (src,id) ann ==>
-    src = NONE /\ ?decl key. find_var_decl_by_name id tops = SOME (decl,key)
+    src = NONE /\ supported_storage_value tops (src,id) ann ==>
+    ?decl key. find_var_decl_by_name id tops = SOME (decl,key)
 Proof
-  rpt gen_tac >> simp[supported_storage_value_def] >>
-  strip_tac >>
-  Cases_on `supported_variable_decl tops (src,id)` >> gvs[] >>
+  rpt gen_tac >> strip_tac >> gvs[supported_storage_value_def] >>
+  Cases_on `supported_variable_decl tops (NONE,id)` >> gvs[] >>
   rename1 `supported_variable_decl _ _ = SOME decl_info` >>
   PairCases_on `decl_info` >>
   rename1 `supported_variable_decl _ _ = SOME (vis,mut,declared,slot)` >>
@@ -91,7 +90,7 @@ QED
 
 Theorem compile_expr_toplevel_open:
   !tops cenv cx ann src id es tv es1 ty sa vv sb.
-    supported_storage_value tops (src,id) ann /\
+    src = NONE /\ supported_storage_value tops (src,id) ann /\
     get_module_code cx NONE = SOME tops /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     eval_expr cx (TopLevelName ann (src,id)) es = (INL tv,es1) /\
@@ -100,7 +99,7 @@ Theorem compile_expr_toplevel_open:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> strip_tac >>
-  drule supported_storage_value_runtime_lookup >> strip_tac >> gvs[] >>
+  drule_all supported_storage_value_runtime_lookup >> strip_tac >> gvs[] >>
   drule_all eval_toplevel_decl_bound >> strip_tac >>
   gvs[compile_expr_def]
 QED

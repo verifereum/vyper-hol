@@ -8,6 +8,7 @@ Ancestors
   compileEnv ptrDiscipline emitHelper loweringStateRelDefs
   wordLoadStorePtr venomMemProps allocationPtr valueEncodingProps
   ptrSafeRun bodyPtrDefs abiEncoderPathProps
+  exprLoweringProps fragExec instIdxIndep list
 
 Theorem abi_encode_finish_add_origin[local]:
   emit_op ADD [left;Lit off] a = (dst,b) /\ fn_has_code a b func /\
@@ -125,6 +126,250 @@ QED
 
 Finalise abi_encode_finish_store_origin
 
+Theorem abi_encode_finish_add_run[local]:
+  emit_op ADD [left;Lit off] a = (Var q,b) /\
+  eval_operand left s = SOME w /\
+  u = (update_var q (w+off) s with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  run_inst_seq (emitted_insts a b) s = OK (u with vs_inst_idx := s.vs_inst_idx)
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  `eval_operand (Lit off) s = SOME off` by simp[eval_operand_def] >>
+  `step_inst_base (mk_inst a.cs_next_id ADD [left;Lit off] [q]) s =
+     OK (update_var q (w+off) s)` by (irule step_ADD >> simp[]) >>
+  gvs[run_inst_seq_def, update_var_def]
+QED
+
+Theorem abi_encode_finish_store_run[local]:
+  emit_void MSTORE [Var root;value] a = ((),b) /\
+  lookup_var root s = SOME (n2w p) /\ p < dimword(:256) /\
+  eval_operand value s = SOME w /\
+  t = (mstore p w s with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  run_inst_seq (emitted_insts a b) s = OK (t with vs_inst_idx := s.vs_inst_idx)
+Proof
+  strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  `eval_operand (Var root) s = SOME (n2w p)` by simp[eval_operand_def] >>
+  `step_inst_base (mk_inst a.cs_next_id MSTORE [Var root;value] []) s =
+     OK (mstore (w2n (n2w p:256 word)) w s)` by (irule step_MSTORE >> simp[]) >>
+  gvs[run_inst_seq_def, mstore_def]
+QED
+
+(* Preserve the unindexed base execution of the very state chosen for the
+   memory, framing and origin postconditions. *)
+Theorem abi_encode_finish_origin_run:
+  abi_builtin_encode_finish (Var root) lenop k a = ((),b) /\
+  fn_has_code a b func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  allocas_from lo s /\ alloca_inv s /\
+  lookup_var root s = SOME (n2w p) /\ p < dimword(:256) /\ lo <= p /\
+  p+32 <= s.vs_alloca_next /\ ptr_covers G tn root s 32 /\
+  eval_operand lenop s = SOME (n2w len) /\ op_taint tn lenop = {} /\
+  not_fresh_at a root /\ (!x. lenop = Var x ==> not_fresh_at a x) /\
+  len+k < dimword(:256) ==>
+  ?t G' tn'.
+    run_inst_seq (emitted_insts a b) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+       (s,G,tn) [] (OK t,G',tn')) /\
+    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts /\
+    mload p t = n2w (len+k) /\
+    eval_operand (Var root) t = SOME (n2w p) /\ ptr_covers G' tn' root t 32 /\
+    (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
+       mem_word_at p mem = n2w (len+k)) /\
+    typed_copy_state_frame a p 32 s t /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    tn'.t_mem = tn.t_mem DIFF {i | p <= i /\ i < p+32} /\
+    (!x. not_fresh_at a x ==> lookup_var x t = lookup_var x s /\
+       FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!op. (!x. op = Var x ==> not_fresh_at a x) ==>
+       eval_operand op t = eval_operand op s /\
+       op_taint tn' op = op_taint tn op /\ op_prov G' op = op_prov G op) /\
+    (!x n. not_fresh_at a x /\ ptr_covers G tn x s n ==> ptr_covers G' tn' x t n) /\
+    (fn_inst_ids_distinct func /\ alloca_history func s ==> alloca_history func t) /\
+    (!D d ce cx es origin G0 tn0 s0.
+       ghost_inv_at D lo d ce cx es G tn s /\
+       ghost_kept_at lo ce es origin G0 tn0 s0 G tn /\
+       local_ptrs_rel func ce es.scopes s /\
+       (!name x sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at a x) /\
+       (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+       (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+       (!x. lo <> 0 /\ ce.ce_imm_alloca = SOME (Var x) ==> not_fresh_at a x) /\
+       (!x. not_fresh_at origin x ==> not_fresh_at a x) /\
+       (!name off sz. local_region ce es.scopes s name off sz ==>
+          regions_disjoint p 32 off sz) ==>
+       ghost_inv_at D lo d ce cx es G' tn' t /\
+       ghost_kept_at lo ce es origin G0 tn0 s0 G' tn')
+Proof
+  strip_tac >> Cases_on `0 < k`
+  >- suspend "positive" >>
+  `k = 0` by decide_tac >> gvs[abi_builtin_encode_finish_def] >>
+  drule_all abi_encode_finish_store_origin >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `run_inst_seq (emitted_insts a b) s = OK (t with vs_inst_idx := s.vs_inst_idx)`
+    by (irule abi_encode_finish_store_run >>
+        qexistsl_tac [`p`,`root`,`lenop`,`n2w len`] >> simp[]) >>
+  qexistsl_tac [`t`,`G`,`tn'`] >> gvs[] >>
+  conj_tac >- suspend "zero_operands" >>
+  conj_tac >- metis_tac[body_full_path_alloca_history] >>
+  suspend "zero_ghost"
+QED
+
+Resume abi_encode_finish_origin_run[zero_operands]:
+  simp[lookup_var_def, mstore_def]
+QED
+
+Resume abi_encode_finish_origin_run[zero_ghost]:
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `lookup_var _ _ = _`) abi_encode_mstore_frame_at >>
+  simp[] >> metis_tac[]
+QED
+
+Resume abi_encode_finish_origin_run[positive]:
+  gvs[abi_builtin_encode_finish_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >>
+  rename1 `emit_op ADD [lenop;Lit (n2w k)] a = (dst,mid)` >>
+  `cs_extends a mid /\ cs_extends mid b` by
+    (gvs[emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_def,
+       compileEnvTheory.cs_extends_def]) >>
+  `fn_has_code a mid func /\ fn_has_code mid b func` by metis_tac[fragExecTheory.fn_has_code_split] >>
+  drule_all abi_encode_finish_add_origin >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G`]
+    (qx_choose_then `q` (qx_choose_then `u` (qx_choose_then `G1`
+      (qx_choose_then `tn1` strip_assume_tac))))) >>
+  suspend "positive_after_add"
+QED
+
+Resume abi_encode_finish_origin_run[positive_after_add]:
+  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+   u.vs_alloca_next = s.vs_alloca_next /\ allocas_from lo u` by
+    (gvs[update_var_def, allocas_from_def] >> (gvs[update_var_def, allocas_from_def])) >>
+  `lookup_var root u = SOME (n2w p) /\ ptr_covers G1 tn1 root u 32` by
+    (simp[ptr_covers_def] >> gvs[ptr_covers_def] >> metis_tac[]) >>
+  `p+32 <= u.vs_alloca_next` by simp[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `u = (update_var _ _ s with vs_inst_idx := _)`
+       SUBST1_TAC >>
+     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
+  drule_all abi_encode_finish_store_origin >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `t` (qx_choose_then `tn2` strip_assume_tac))) >>
+  `run_inst_seq (emitted_insts a mid) s = OK (u with vs_inst_idx := s.vs_inst_idx)` by
+    (irule abi_encode_finish_add_run >>
+     qexistsl_tac [`lenop`,`n2w k`,`q`,`n2w len`] >> simp[]) >>
+  `run_inst_seq (emitted_insts mid b) u = OK (t with vs_inst_idx := u.vs_inst_idx)` by
+    (irule abi_encode_finish_store_run >>
+     qexistsl_tac [`p`,`root`,`dst`,`n2w len + n2w k`] >> simp[IgnAsm `u = _`]) >>
+  `run_inst_seq (emitted_insts a b) s = OK (t with vs_inst_idx := s.vs_inst_idx)` by
+    (drule emit_op_extends >> drule emit_void_extends >> rpt strip_tac >>
+     drule_all run_inst_seq_chain >> disch_then (CONJUNCTS_THEN2 SUBST1_TAC kall_tac) >>
+     drule emitted_insts_emit_void >> strip_tac >>
+     simp[run_inst_seq_inst_idx, exec_result_map_def, mk_inst_def, is_terminator_def,
+          IgnAsm `u = _`, IgnAsm `t = _`]) >>
+  qexistsl_tac [`t`,`G1`,`tn2`] >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+     (s,G,tn) [] (OK t,G1,tn2)` by
+    (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
+     qexistsl_tac [`G1`,`u`,`tn1`] >> simp[]) >>
+  simp[GSYM word_add_n2w, WORD_ADD_COMM,
+    IgnAsm `u = _`, IgnAsm `t = _`, IgnAsm `tn2 = _`] >>
+  conj_tac >- suspend "positive_frame" >>
+  conj_tac >- suspend "positive_vars" >>
+  conj_tac >- suspend "positive_operands" >>
+  conj_tac >- suspend "positive_covers" >>
+  conj_tac >- metis_tac[body_full_path_alloca_history] >>
+  suspend "positive_ghost"
+QED
+
+Resume abi_encode_finish_origin_run[positive_frame]:
+  gvs[typed_copy_state_frame_def, typed_copy_frame_def] >>
+  conj_tac >- gvs[venom_state_component_equality, update_var_def, mstore_def] >>
+  conj_tac >- (rpt strip_tac >>
+    simp[lookup_var_def, mstore_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+  gvs[update_var_def] >> metis_tac[]
+QED
+
+Resume abi_encode_finish_origin_run[positive_vars]:
+  rpt strip_tac >> gvs[lookup_var_def, mstore_def, update_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Resume abi_encode_finish_origin_run[positive_operands]:
+  gen_tac >> Cases_on `op` >>
+  simp[eval_operand_def, op_prov_def, op_taint_def] >>
+  strip_tac >> metis_tac[eval_operand_def, op_taint_def]
+QED
+
+Resume abi_encode_finish_origin_run[positive_covers]:
+  rpt strip_tac >>
+  `x <> q` by metis_tac[] >>
+  qpat_assum `!p. p <> q ==> lookup_var p u = _ /\ _`
+    (qspec_then `x` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `ptr_covers G1 tn1 x u n` by fs[ptr_covers_def] >>
+  qpat_assum `!p n. ptr_covers G1 tn1 p u n ==> _`
+    (qspecl_then [`x`, `n`] MATCH_MP_TAC) >>
+  first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_finish_origin_run[positive_ghost]:
+  rpt gen_tac >> strip_tac >>
+  `ghost_inv_at D lo d ce cx es G1 tn1 u` by suspend "add_inv" >>
+  `ghost_kept_at lo ce es origin G0 tn0 s0 G1 tn1` by
+    (gvs[ghost_kept_at_def] >> metis_tac[]) >>
+  `local_ptrs_rel func ce es.scopes u` by
+    (simp[localPtrsPropsTheory.local_ptrs_rel_inst_idx] >>
+     irule localPtrsPropsTheory.local_ptrs_rel_update_var >>
+     simp[not_scope_ptr_def] >> metis_tac[]) >>
+  `!name off sz. local_region ce es.scopes u name off sz ==>
+      regions_disjoint p 32 off sz` by
+    (gvs[local_region_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     metis_tac[]) >>
+  qpat_assum `lookup_var root u = _`
+    (mp_then Any mp_tac abi_encode_mstore_frame_at) >>
+  disch_then (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
+  disch_then (qspec_then `mid.cs_next_id` mp_tac) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  simp[IgnAsm `u = _`, IgnAsm `t = _`, IgnAsm `tn2 = _`] >>
+  strip_tac >> gvs[] >> first_x_assum drule >> simp[]
+QED
+
+Resume abi_encode_finish_origin_run[add_inv]:
+  `!x n. x <> q /\ ptr_covers G tn x s n ==> ptr_covers G1 tn1 x u n` by
+    (rpt strip_tac >>
+     qpat_x_assum `!x. x <> q ==> _` (qspec_then `x` mp_tac) >>
+     simp[IgnAsm `u = _`] >> strip_tac >>
+     gvs[ptr_covers_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[ghost_inv_at_def] >> strip_tac >>
+  rewrite_tac[ghost_inv_at_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `p' <> q` by metis_tac[] >>
+      conj_tac >- metis_tac[] >>
+      rpt gen_tac >> strip_tac >>
+      `lookup_var p' s = SOME w` by metis_tac[lookup_var_def] >>
+      first_x_assum drule_all >> gvs[]) >>
+  conj_tac
+  >- (Cases_on `d` >> simp[return_buf_ptr_def, IgnAsm `u = _`] >>
+      PairCases_on `x` >>
+      fs[return_buf_ptr_def, IgnAsm `u = _`] >>
+      metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- gvs[stor_taint_ok_at_def, update_var_def] >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[lookup_var_def]) >>
+  conj_tac >- metis_tac[] >>
+  gvs[update_var_def, allocas_from_def] >> metis_tac[]
+QED
+
+Finalise abi_encode_finish_origin_run
+
 Theorem abi_encode_finish_origin:
   abi_builtin_encode_finish (Var root) lenop k a = ((),b) /\
   fn_has_code a b func /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
@@ -172,154 +417,7 @@ Theorem abi_encode_finish_origin:
        ghost_inv_at D lo d ce cx es G' tn' t /\
        ghost_kept_at lo ce es origin G0 tn0 s0 G' tn')
 Proof
-  strip_tac >> Cases_on `0 < k`
-  >- suspend "positive" >>
-  `k = 0` by decide_tac >> gvs[abi_builtin_encode_finish_def] >>
-  drule_all abi_encode_finish_store_origin >>
-  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  qexistsl_tac [`t`,`G`,`tn'`] >> gvs[] >>
-  conj_tac >- suspend "zero_operands" >>
-  conj_tac >- metis_tac[body_full_path_alloca_history] >>
-  suspend "zero_ghost"
+  strip_tac >> drule_all abi_encode_finish_origin_run >>
+  disch_then (qspecl_then [`explicit`,`PG`] (qx_choosel_then [`t`,`G'`,`tn'`] strip_assume_tac)) >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >> simp[] >> first_assum ACCEPT_TAC
 QED
-
-Resume abi_encode_finish_origin[zero_operands]:
-  simp[lookup_var_def, mstore_def]
-QED
-
-Resume abi_encode_finish_origin[zero_ghost]:
-  rpt gen_tac >> strip_tac >>
-  drule_at (Pat `lookup_var _ _ = _`) abi_encode_mstore_frame_at >>
-  simp[] >> metis_tac[]
-QED
-
-Resume abi_encode_finish_origin[positive]:
-  gvs[abi_builtin_encode_finish_def, comp_bind_def] >>
-  pairarg_tac >> gvs[] >>
-  rename1 `emit_op ADD [lenop;Lit (n2w k)] a = (dst,mid)` >>
-  `cs_extends a mid /\ cs_extends mid b` by
-    (gvs[emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_def,
-       compileEnvTheory.cs_extends_def]) >>
-  `fn_has_code a mid func /\ fn_has_code mid b func` by metis_tac[fragExecTheory.fn_has_code_split] >>
-  drule_all abi_encode_finish_add_origin >>
-  disch_then (qspecl_then [`explicit`,`PG`,`G`]
-    (qx_choose_then `q` (qx_choose_then `u` (qx_choose_then `G1`
-      (qx_choose_then `tn1` strip_assume_tac))))) >>
-  suspend "positive_after_add"
-QED
-
-Resume abi_encode_finish_origin[positive_after_add]:
-  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
-   u.vs_alloca_next = s.vs_alloca_next /\ allocas_from lo u` by
-    (gvs[update_var_def, allocas_from_def] >> (gvs[update_var_def, allocas_from_def])) >>
-  `lookup_var root u = SOME (n2w p) /\ ptr_covers G1 tn1 root u 32` by
-    (simp[ptr_covers_def] >> gvs[ptr_covers_def] >> metis_tac[]) >>
-  `p+32 <= u.vs_alloca_next` by simp[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
-    (qpat_assum `u = (update_var _ _ s with vs_inst_idx := _)`
-       SUBST1_TAC >>
-     qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp s` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[allocas_below_fmp_def, update_var_def] >> metis_tac[]) >>
-  drule_all abi_encode_finish_store_origin >>
-  disch_then (qspecl_then [`explicit`,`PG`]
-    (qx_choose_then `t` (qx_choose_then `tn2` strip_assume_tac))) >>
-  qexistsl_tac [`t`,`G1`,`tn2`] >>
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-     (s,G,tn) [] (OK t,G1,tn2)` by
-    (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
-     qexistsl_tac [`G1`,`u`,`tn1`] >> simp[]) >>
-  simp[GSYM word_add_n2w, WORD_ADD_COMM,
-    IgnAsm `u = _`, IgnAsm `t = _`, IgnAsm `tn2 = _`] >>
-  conj_tac >- suspend "positive_frame" >>
-  conj_tac >- suspend "positive_vars" >>
-  conj_tac >- suspend "positive_operands" >>
-  conj_tac >- suspend "positive_covers" >>
-  conj_tac >- metis_tac[body_full_path_alloca_history] >>
-  suspend "positive_ghost"
-QED
-
-Resume abi_encode_finish_origin[positive_frame]:
-  gvs[typed_copy_state_frame_def, typed_copy_frame_def] >>
-  conj_tac >- gvs[venom_state_component_equality, update_var_def, mstore_def] >>
-  conj_tac >- (rpt strip_tac >>
-    simp[lookup_var_def, mstore_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
-  gvs[update_var_def] >> metis_tac[]
-QED
-
-Resume abi_encode_finish_origin[positive_vars]:
-  rpt strip_tac >> gvs[lookup_var_def, mstore_def, update_var_def, FLOOKUP_UPDATE] >>
-  metis_tac[]
-QED
-
-Resume abi_encode_finish_origin[positive_operands]:
-  gen_tac >> Cases_on `op` >>
-  simp[eval_operand_def, op_prov_def, op_taint_def] >>
-  strip_tac >> metis_tac[eval_operand_def, op_taint_def]
-QED
-
-Resume abi_encode_finish_origin[positive_covers]:
-  rpt strip_tac >>
-  `x <> q` by metis_tac[] >>
-  qpat_assum `!p. p <> q ==> lookup_var p u = _ /\ _`
-    (qspec_then `x` mp_tac) >>
-  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
-  `ptr_covers G1 tn1 x u n` by fs[ptr_covers_def] >>
-  qpat_assum `!p n. ptr_covers G1 tn1 p u n ==> _`
-    (qspecl_then [`x`, `n`] MATCH_MP_TAC) >>
-  first_assum ACCEPT_TAC
-QED
-
-Resume abi_encode_finish_origin[positive_ghost]:
-  rpt gen_tac >> strip_tac >>
-  `ghost_inv_at D lo d ce cx es G1 tn1 u` by suspend "add_inv" >>
-  `ghost_kept_at lo ce es origin G0 tn0 s0 G1 tn1` by
-    (gvs[ghost_kept_at_def] >> metis_tac[]) >>
-  `local_ptrs_rel func ce es.scopes u` by
-    (simp[localPtrsPropsTheory.local_ptrs_rel_inst_idx] >>
-     irule localPtrsPropsTheory.local_ptrs_rel_update_var >>
-     simp[not_scope_ptr_def] >> metis_tac[]) >>
-  `!name off sz. local_region ce es.scopes u name off sz ==>
-      regions_disjoint p 32 off sz` by
-    (gvs[local_region_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-     metis_tac[]) >>
-  qpat_assum `lookup_var root u = _`
-    (mp_then Any mp_tac abi_encode_mstore_frame_at) >>
-  disch_then (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
-  disch_then (qspec_then `mid.cs_next_id` mp_tac) >>
-  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
-  simp[IgnAsm `u = _`, IgnAsm `t = _`, IgnAsm `tn2 = _`] >>
-  strip_tac >> gvs[] >> first_x_assum drule >> simp[]
-QED
-
-Resume abi_encode_finish_origin[add_inv]:
-  `!x n. x <> q /\ ptr_covers G tn x s n ==> ptr_covers G1 tn1 x u n` by
-    (rpt strip_tac >>
-     qpat_x_assum `!x. x <> q ==> _` (qspec_then `x` mp_tac) >>
-     simp[IgnAsm `u = _`] >> strip_tac >>
-     gvs[ptr_covers_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
-  qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[ghost_inv_at_def] >> strip_tac >>
-  rewrite_tac[ghost_inv_at_def] >> conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      `p' <> q` by metis_tac[] >>
-      conj_tac >- metis_tac[] >>
-      rpt gen_tac >> strip_tac >>
-      `lookup_var p' s = SOME w` by metis_tac[lookup_var_def] >>
-      first_x_assum drule_all >> gvs[]) >>
-  conj_tac
-  >- (Cases_on `d` >> simp[return_buf_ptr_def, IgnAsm `u = _`] >>
-      PairCases_on `x` >>
-      fs[return_buf_ptr_def, IgnAsm `u = _`] >>
-      metis_tac[]) >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- gvs[stor_taint_ok_at_def, update_var_def] >>
-  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[lookup_var_def]) >>
-  conj_tac >- metis_tac[] >>
-  gvs[update_var_def, allocas_from_def] >> metis_tac[]
-QED
-
-Finalise abi_encode_finish_origin

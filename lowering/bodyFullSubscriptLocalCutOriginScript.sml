@@ -86,7 +86,10 @@ Theorem subscript_local_cut_returned_paths:
       live_memory_result fin (PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV i)])))
 Proof
   strip_tac >>
-  `expr_body_pre cenv cx env obj es` by metis_tac[expr_body_pre_array_subscript_base] >>
+  `expr_body_pre cenv cx env obj es` by
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+     qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[]) >>
   drule_all marked_base_initial_local >> strip_tac >>
   `expr_body_pre cenv cx env (Subscript ann obj idx) (es with gas_obs := gs1)` by simp[] >>
   `expr_body_pre cenv cx env idx (mid with gas_obs := gs2)` by

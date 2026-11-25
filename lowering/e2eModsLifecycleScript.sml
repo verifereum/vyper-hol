@@ -54,7 +54,8 @@ Triviality deploy_typing_mods_ownership:
   deploy_typing_ok_mods mods exps am tx ==>
   linked_state_ownership_ok am.layouts tx.target mods exps
 Proof
-  simp[deploy_typing_ok_mods_def] >> metis_tac[]
+  simp[deploy_typing_ok_mods_def] >>
+  metis_tac[check_contract_linked_state_ownership_ok]
 QED
 
 Triviality layouts_agree_mods_cong:
@@ -156,7 +157,8 @@ Triviality call_preserves_linked_ownership:
   linked_state_ownership_ok (next_source_machine am' es').layouts tx.target
     mods exps
 Proof
-  simp[source_typing_ok_mods_def] >> metis_tac[]
+  simp[source_typing_ok_mods_def] >>
+  metis_tac[check_contract_linked_state_ownership_ok]
 QED
 
 Theorem call_preserves_call_ready_mods:

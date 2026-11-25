@@ -7,7 +7,7 @@ Ancestors
   bodyPtrPrecompileBuiltinsCompilerStages bodyPtrPrecompileBuiltinsSeq
   exprSimPrecompiles exprSimAlloc exprSimLiteralBuffer exprSimWordArgs
   exprSimPtrLiteralBuffer bodyMemoryDefs bodyPtrDefs loweringPosts
-  fragGasCopyLoop fragGasSeqPtr fragGasOriginPtr fragExecMem fragExec
+  fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeqPtr fragGasOriginPtr fragExecMem fragExec
   logTopicScalarPtr wordLoadStorePtr allocaFootprint stmtSimProps
   ptrSafetyTransport ptrDiscipline ghostPcTransportPtr instIdxIndep
   exprLoweringProps emitHelperProps emitHelper context compileEnv freshWrites

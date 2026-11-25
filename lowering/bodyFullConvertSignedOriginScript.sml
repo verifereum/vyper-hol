@@ -137,7 +137,9 @@ Proof
   simp[Excl "state_frame_def"] >> metis_tac[]
 QED
 
-Theorem signed_convert_origin_path:
+(* Keep the successful base run and the failure witness beside the
+   corresponding indexed origin path and its chosen ghost pair. *)
+Theorem signed_convert_origin_path_selected:
   is_bytestring_type src /\ valid_conversion src dst /\
   ((?k. dst = BaseT (IntT k)) \/ dst = BaseT DecimalT) /\
   well_formed_type (get_tenv cx) dst /\
@@ -167,11 +169,15 @@ Theorem signed_convert_origin_path:
         FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\
       tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
       tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
-      op_prov Gf out = NONE /\ op_taint tnf out = {}) /\
+      op_prov Gf out = NONE /\ op_taint tnf out = {} /\
+      (?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+             t = (raw with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)))) /\
    (!exc. convert_result cx src dst v = INR exc ==>
     (?msg. exc = Error (RuntimeError msg)) /\
-    ?err t Gf tnf. !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
-      (s,G,tn) [] (Abort err t,Gf,tnf)))
+    ?t Gf tnf.
+      (?raw. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort raw) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+        (s,G,tn) [] (Abort Revert_abort t,Gf,tnf))))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all signed_compiler_normalize >>
@@ -256,7 +262,7 @@ Proof
   conj_tac >- suspend "success" >> suspend "abort"
 QED
 
-Resume signed_convert_origin_path[success]:
+Resume signed_convert_origin_path_selected[success]:
   rpt strip_tac >> drule_all bytes_word_conversion_run_actual >>
   qpat_assum `convert_result cx src dst v = INL vout`
     (fn th => simp_tac std_ss [th]) >>
@@ -303,10 +309,14 @@ Resume signed_convert_origin_path[success]:
   qexistsl_tac [`sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)`,`H`,`th'`] >>
   simp[eval_operand_def, lookup_var_def] >>
   qpat_assum `sf = s with vs_vars := _` (fn eq => once_rewrite_tac[eq]) >>
-  simp[lookup_var_def] >> metis_tac[]
+  simp[lookup_var_def] >> qexists_tac `sf` >>
+  conj_tac >-
+    (qpat_assum `emitted_insts sa sb = _ ++ _` (fn eq => PURE_REWRITE_TAC [SYM eq]) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `sf = s with vs_vars := _` (fn eq => once_rewrite_tac[eq]) >> simp[]
 QED
 
-Resume signed_convert_origin_path[abort]:
+Resume signed_convert_origin_path_selected[abort]:
   rpt strip_tac >> drule_all bytes_word_conversion_run_actual >>
   qpat_assum `convert_result cx src dst v = INR exc`
     (fn th => simp_tac std_ss [th]) >>
@@ -336,10 +346,55 @@ Resume signed_convert_origin_path[abort]:
     (emitted_insts sa sb)` by (fs[EVERY_MEM] >> metis_tac[]) >>
   drule_all fragGasCopyLoopTheory.run_inst_seq_abort_origin_ptr_uniform >>
   strip_tac >>
-  qexistsl_tac [`Revert_abort`,`sf with vs_inst_idx := j`,`H`,`th'`] >>
+  qexistsl_tac [`sf with vs_inst_idx := j`,`H`,`th'`] >>
+  conj_tac >-
+    (qexists_tac `sf` >>
+     qpat_assum `emitted_insts sa sb = _ ++ _` (fn eq => PURE_REWRITE_TAC [SYM eq]) >>
+     first_assum ACCEPT_TAC) >>
   gen_tac >> first_x_assum irule >>
   qpat_x_assum `!D q. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) _ H th'`
     (qspecl_then [`D`,`s.vs_inst_idx`] mp_tac) >> simp[]
 QED
 
-Finalise signed_convert_origin_path
+Finalise signed_convert_origin_path_selected
+
+Theorem signed_convert_origin_path:
+  is_bytestring_type src /\ valid_conversion src dst /\
+  ((?k. dst = BaseT (IntT k)) \/ dst = BaseT DecimalT) /\
+  well_formed_type (get_tenv cx) dst /\
+  evaluate_type (get_tenv cx) src = SOME tv /\ value_has_type tv v /\
+  compile_type_convert (Var z) (mk_convert_op src dst) sa = (out,sb) /\
+  not_fresh_at sa z /\ lookup_var z s = SOME a /\
+  val_in_memory tv v (w2n a) s.vs_memory /\
+  ptr_covers G tn z s capacity /\ 64 <= capacity /\
+  w2n a+64 <= dimword(:256) /\
+  mload (w2n a) s = n2w n /\ n <= 32 /\
+  (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  alloca_inv s /\ w2n a+64 <= s.vs_alloca_next ==>
+  ((!vout. convert_result cx src dst v = INL vout ==>
+    ?dtv t Gf tnf.
+      evaluate_type (get_tenv cx) dst = SOME dtv /\ value_has_type dtv vout /\
+      eval_operand out t = SOME (typed_val_to_w256 dtv vout) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+        (s,G,tn) [] (OK t,Gf,tnf)) /\
+      state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+        FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\
+      tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+      tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+      op_prov Gf out = NONE /\ op_taint tnf out = {}) /\
+   (!exc. convert_result cx src dst v = INR exc ==>
+    (?msg. exc = Error (RuntimeError msg)) /\
+    ?err t Gf tnf. !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (Abort err t,Gf,tnf)))
+Proof
+  disch_then (mp_tac o MATCH_MP signed_convert_origin_path_selected) >>
+  strip_tac >> conj_tac >> rpt gen_tac >> disch_tac >>
+  first_x_assum (drule_then strip_assume_tac) >> metis_tac[]
+QED

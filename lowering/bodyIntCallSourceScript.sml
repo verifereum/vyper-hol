@@ -3,7 +3,8 @@ Theory bodyIntCallSource
 Ancestors
   bodySim supportedProgram supportedDecls
   vyperTypeContractStaticMaps vyperInterpreter list exprSimHypsDefs
-  intCallLookup exprBodyPreProps bodyInvCodeProps
+  intCallLookup exprBodyPreProps bodyInvCodeProps bodyCallSupport
+  vyperTypeContract supportedExprs
 
 Theorem supported_runtime_callable:
   supported_program tops /\
@@ -39,6 +40,35 @@ Proof
   gvs[lookup_callable_function_def] >>
   drule_all (REWRITE_RULE [lookup_callable_function_F] supported_runtime_callable) >>
   simp[]
+QED
+
+Theorem supported_linked_callable[local]:
+  source_body_call_supported cx (src,name) /\
+  get_module_code cx src = SOME tops /\
+  lookup_callable_function cx.in_deploy name tops =
+    SOME (mut,nr,args,dflts,ret,ss) ==>
+  ?vis rr. (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+    MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+    supported_pure_exprs tops dflts /\
+    EVERY (supported_default_expression tops) dflts /\
+    supported_function_body tops vis args ss
+Proof
+  Cases_on `src` >> simp[source_body_call_supported_def] >>
+  strip_tac >> gvs[]
+  >- (fs[supported_linked_callee_def] >>
+      drule_all_then strip_assume_tac supported_internal_callable >>
+      qexists_tac `rr` >> simp[]) >>
+  rename1 `MEM (FunctionDecl vis mut nr raw name args dflts ret ss) tops` >>
+  Cases_on `vis` >>
+  gvs[include_fn_sig_def, supported_declaration_body_def,
+      supported_deploy_declaration_def]
+  >- (qexists_tac `Internal` >> simp[] >> qexists_tac `raw` >> simp[]) >>
+  `supported_declaration_header tops
+     (FunctionDecl Deploy mut nr raw name args dflts ret ss)` by
+    (fs[supported_module_headers_def, EVERY_MEM] >>
+     res_tac >> gvs[supported_module_declaration_header_def]) >>
+  fs[supported_function_header_contract, listTheory.NULL_EQ] >> gvs[] >>
+  qexists_tac `Deploy` >> simp[] >> qexists_tac `raw` >> simp[supported_pure_expr_def]
 QED
 
 Theorem expr_body_pre_intcall_main:
@@ -109,7 +139,7 @@ QED
 Theorem body_intcall_source_selection_mods:
   contract_inv mods exps ctx cenv cx /\
   expr_body_pre_mods mods cenv cx env (Call ty (IntCall (src,name)) es dflt) st ==>
-  ?callee_tops mut nr args dflts ret ss.
+  ?callee_tops vis mut nr args dflts ret ss.
     ALOOKUP mods src = SOME callee_tops /\
     get_module_code cx src = SOME callee_tops /\
     lookup_callable_function cx.in_deploy name callee_tops =
@@ -119,23 +149,20 @@ Theorem body_intcall_source_selection_mods:
     LIST_REL (type_widens_to env.type_defs) (MAP expr_type es)
       (TAKE (LENGTH es) (MAP SND args)) /\
     type_widens_to env.type_defs ret ty /\
-    (?rr. MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) callee_tops) /\
+    (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+    (?rr. MEM (FunctionDecl vis mut nr rr name args dflts ret ss) callee_tops) /\
     supported_pure_exprs callee_tops dflts /\
     EVERY (supported_default_expression callee_tops) dflts /\
-    supported_function_body callee_tops Internal args ss
+    supported_function_body callee_tops vis args ss
 Proof
   strip_tac >>
-  `?callee_tops. ALOOKUP mods src = SOME callee_tops /\
-     supported_program callee_tops /\
-     IS_SOME (supported_function_decl callee_tops (NONE,name) Internal)` by
+  `source_body_call_supported cx (src,name)` by
     (drule expr_body_pre_mods_int_calls >>
-     drule contract_inv_module_codes >>
      simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
-  pop_assum strip_assume_tac >>
   drule expr_body_pre_intcall_signature_mods >> strip_tac >>
-  drule contract_inv_module_codes >> strip_tac >> gvs[] >>
-  drule_all supported_internal_callable >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  drule contract_inv_module_codes >> strip_tac >>
+  drule_all supported_linked_callable >> strip_tac >>
+  goal_assum (drule_at Any) >> gvs[] >> metis_tac[]
 QED
 
 Theorem body_intcall_source_selection:
@@ -159,7 +186,8 @@ Proof
   strip_tac >> drule expr_body_pre_intcall_main >> strip_tac >> gvs[] >>
   drule_all body_inv_expr_body_pre_mods >> strip_tac >>
   drule body_inv_contract >> strip_tac >>
-  drule_all body_intcall_source_selection_mods >> simp[alistTheory.ALOOKUP_def]
+  drule_all body_intcall_source_selection_mods >>
+  simp[alistTheory.ALOOKUP_def] >> metis_tac[]
 QED
 
 Theorem typed_internal_call_occurrences:

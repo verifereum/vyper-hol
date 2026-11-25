@@ -12,7 +12,7 @@ Ancestors
   dispatchedValueSelection dispatchedValueSource fallbackEntryEndpoint
   loweringCalldataCorrect registrationGuardRejectOrigin
   dispatchedEntryValueRevert
-  e2eLifecycle e2eTransactionWorld
+  e2eDeployed e2eLifecycle e2eTransactionWorld
   e2eModsLifecycle
   e2eCodeFrame ownSymSrcUnit
   runtimeSymSrcDynarrayAppend runtimeSymSrcModuleArgPreservation runtimeSymSrcRuntimeBoundary runtimeSymSrcStatements
@@ -69,6 +69,7 @@ Ancestors
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem
   loweringMemCorrect
+  linkedUnitMemory
   asmSymBridge
   asmSymBridgeOwn
   asmDataEnv
@@ -108,3 +109,5 @@ Ancestors
   logBytesRobustSeqPtr logBytesSeqPtr revertReasonPrefixPtr
   reasonCompilerProps reasonLiteralBufferPtr reasonSourceProps
   reasonTypingProps revertReasonSuffixPathPtr
+  (* and/or chains (BoolChain) *)
+  exprSimBoolChain bodyFullBoolChain

@@ -622,8 +622,8 @@ Proof
         SOME t => t | NONE => BaseT BoolT) fbody sa` by
     (Cases_on `ret = NoneT` >> gvs[] >>
      drule type_stmts_none_valued_return >> strip_tac >>
-     drule_all stmts_env_ret_ty >>
-     disch_then (qspecl_then [`NoLoop`, `NoneT`, `BaseT BoolT`]
+     drule_all stmts_env_ret_ty_no_valued_return >>
+     disch_then (qspecl_then [`cenv`, `NoLoop`, `NoneT`, `BaseT BoolT`]
                    SUBST1_TAC) >> simp[]) >>
   gvs[compile_stmts_env] >>
   Cases_on `stmts_env cenv NoLoop

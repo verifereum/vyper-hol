@@ -118,7 +118,7 @@ Proof
   qexistsl [`H`,`th`] >> simp[]
 QED
 
-Theorem convert_cast_origin_path:
+Theorem convert_cast_origin_path_observed:
   compile_type_convert (Var src) (ConvBytestringCast n i) sa = (out,sb) /\
   not_fresh_at sa src /\ lookup_var src s = SOME a /\
   mload (w2n a) s = n2w L /\ L <= i /\
@@ -132,6 +132,8 @@ Theorem convert_cast_origin_path:
   allocas_from lo s /\ lo <= s.vs_alloca_next ==>
   out = Var src /\
   (L <= n ==> ?t H th.
+    (?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+      t = raw with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,H,th)) /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -140,7 +142,9 @@ Theorem convert_cast_origin_path:
       FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p)) /\
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm) /\
-  (n < L ==> ?t H th.
+  (n < L ==> ?t H th raw j.
+    run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort raw /\
+    t = raw with vs_inst_idx := j /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
       (Abort Revert_abort t,H,th))
 Proof
@@ -180,7 +184,7 @@ Proof
   conj_tac >- suspend "success" >> suspend "abort"
 QED
 
-Resume convert_cast_origin_path[success]:
+Resume convert_cast_origin_path_observed[success]:
   strip_tac >> drule_all convert_cast_run_frame >> strip_tac >>
   `FILTER (\ins. ins.inst_opcode = GAS) (emitted_insts sa sb) = []` by
     (fs[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
@@ -192,6 +196,9 @@ Resume convert_cast_origin_path[success]:
        (emitted_insts sa sb)` by (fs[EVERY_MEM] >> metis_tac[]) >>
      drule_all run_inst_seq_gas_origin_ptr_path >> simp[]) >>
   qexistsl [`tt with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)`,`H`,`th`] >>
+  conj_tac
+  >- (qexists_tac `tt` >> gvs[same_blocks_def, emitted_insts_def,
+         rich_listTheory.IS_PREFIX_APPEND, rich_listTheory.DROP_LENGTH_APPEND]) >>
   simp[] >>
   qpat_x_assum `tt = s with vs_vars := _` (fn eq => once_rewrite_tac[eq]) >>
   simp[same_blocks_def, lookup_var_def] >>
@@ -199,10 +206,45 @@ Resume convert_cast_origin_path[success]:
      same_blocks_def, lookup_var_def]
 QED
 
-Resume convert_cast_origin_path[abort]:
+Resume convert_cast_origin_path_observed[abort]:
   strip_tac >> drule_all convert_cast_abort_run >> strip_tac >>
   drule_all run_inst_seq_abort_origin_ptr_uniform >> strip_tac >>
-  qexistsl [`tt with vs_inst_idx := j`,`H`,`th`] >> metis_tac[]
+  qexistsl [`H`,`th`,`tt`,`j`] >> simp[] >> metis_tac[]
 QED
 
-Finalise convert_cast_origin_path
+Finalise convert_cast_origin_path_observed
+
+Theorem convert_cast_origin_path:
+  compile_type_convert (Var src) (ConvBytestringCast n i) sa = (out,sb) /\
+  not_fresh_at sa src /\ lookup_var src s = SOME a /\
+  mload (w2n a) s = n2w L /\ L <= i /\
+  i < dimword(:256) /\ n < dimword(:256) /\
+  ptr_covers G tn src s capacity /\ 32 <= capacity /\
+  (!j. w2n a <= j /\ j < w2n a+32 ==> j NOTIN tn.t_mem) /\
+  w2n a+32 <= s.vs_alloca_next /\ fn_has_code sa sb fn /\
+  ~s.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next ==>
+  out = Var src /\
+  (L <= n ==> ?t H th.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,H,th)) /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
+    (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p)) /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm) /\
+  (n < L ==> ?t H th.
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+      (Abort Revert_abort t,H,th))
+Proof
+  strip_tac >> drule_all convert_cast_origin_path_observed >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  conj_tac >- first_assum ACCEPT_TAC >> conj_tac >> strip_tac
+  >- (qpat_x_assum `L <= n ==> _` (drule_then strip_assume_tac) >>
+      qexistsl_tac [`t`,`H`,`th`] >> asm_rewrite_tac[]) >>
+  qpat_x_assum `n < L ==> _` (drule_then strip_assume_tac) >>
+  qexistsl_tac [`t`,`H`,`th`] >> simp[]
+QED

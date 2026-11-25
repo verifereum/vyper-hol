@@ -1,7 +1,7 @@
 (* A scalar abort has one cursor and one ghost endpoint for every bound. *)
 Theory augAssignFullScalarAbort
 Ancestors
-  augAssignPtrScalarRun fragGasCopyLoop fragGasSeqPtr
+  augAssignPtrScalarRun fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeqPtr
   ptrDiscipline ptrSafeRun venomExecSemantics venomState venomInst
   finite_map pred_set list rich_list
 

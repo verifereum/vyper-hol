@@ -4,7 +4,8 @@ Ancestors
   createCtorStraightBand exprSimAbiEncodeObliviousCode exprPtrUnwrapCodeCopySemantic
   exprPtrUnwrapCodeCopyShape exprPtrUnwrapCode immutableCopyExecution
   loweringHalt fragExec instIdxIndep context compileEnv exprLowering
-  exprSimCopy exprLoweringProps
+  exprSimCopy exprLoweringProps exprPtrUnwrapAllocation createSizeLocationCode
+  createSizeCutCode abiEncoderProps
   venomState venomInst venomExecSemantics list rich_list relation words arithmetic
 
 Theorem immutable_copy_range_action[local]:
@@ -68,5 +69,68 @@ Proof
         isPREFIX (emitted_insts sb sc) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (qpat_assum `fn_has_code sb sc func` (strip_assume_tac o REWRITE_RULE [fn_has_code_def]) >>
      qexists_tac `bb` >> gvs[IS_PREFIX_APPEND] >> simp[DROP_APPEND]) >>
+  drule_all ctor_straight_band_run >> simp[]
+QED
+
+Theorem unwrap_code_copy_layout:
+  unwrap_value ce (LocatedValue ty p) a = (op,b) /\
+  p.ptr_location = LocCode /\ ~is_word_type ty ==>
+  same_blocks a b /\
+  b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
+  EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;ILOAD;DLOAD;MSTORE])
+    (emitted_insts a b)
+Proof
+  strip_tac >> qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+  simp[unwrap_value_def, compile_ensure_in_memory_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `compile_alloc_buffer _ a = (buf,mid)` >>
+  `same_blocks a mid` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emitHelperTheory.emit_op_def, same_blocks_def,
+          fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[]) >>
+  drule unwrap_alloc_generated_code >> strip_tac >>
+  Cases_on `ce.ce_is_ctor` >> fs[] >>
+  FIRST [drule code_ctor_copy_insts, drule code_copy_insts] >> strip_tac >>
+  `emitted_insts mid b = is` by
+    (qpat_assum `b.cs_current_insts = _` (fn th =>
+       pure_rewrite_tac[emitted_insts_def, th, DROP_LENGTH_APPEND]) >> REFL_TAC) >>
+  `emitted_insts a b = emitted_insts a mid ++ emitted_insts mid b` by
+    (irule emitted_insts_append >> simp[]) >>
+  (conj_tac >- metis_tac[same_blocks_trans] >>
+   conj_tac >- (pure_rewrite_tac[APPEND_ASSOC] >> simp[]) >>
+   fs[EVERY_MEM, mk_inst_def] >> rpt strip_tac >> gvs[] >>
+   qpat_x_assum `!j. MEM j (emitted_insts _ _) ==> _`
+     (qspec_then `i` mp_tac) >> simp[] >> strip_tac >> simp[])
+QED
+
+(* The recorded list execution is over the actual fetched instruction band. *)
+Theorem immutable_unwrap_run_band:
+  unwrap_value ce (LocatedValue ty p) a = (op,b) /\
+  p.ptr_location = LocCode /\ ~is_word_type ty /\ fn_has_code a b func /\
+  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  run_inst_seq (emitted_insts a b) s = OK r ==>
+  RTC (\u v. ?i. ctor_segment_fetch func u = SOME i /\
+                  a.cs_next_id <= i.inst_id /\ i.inst_id < b.cs_next_id /\
+                  i.inst_opcode <> INVOKE /\ ctor_segment_next func u i = SOME v)
+      s (r with vs_inst_idx := LENGTH b.cs_current_insts)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all unwrap_code_copy_layout >> strip_tac >>
+  `frag_code a b = emitted_insts a b` by fs[same_blocks_def,frag_code_open] >>
+  `create_cut_code {} a b` by
+    (mp_tac (Q.INST [`vv` |-> `LocatedValue ty p`] create_unwrap_cut_code) >> simp[]) >>
+  `EVERY (\i. a.cs_next_id <= i.inst_id /\ i.inst_id < b.cs_next_id)
+     (emitted_insts a b)` by fs[create_cut_code_def,EVERY_MEM,frag_ids_def] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts a b)` by
+    (fs[EVERY_MEM] >> rpt strip_tac >>
+     qpat_assum `!i. MEM i _ ==> i.inst_opcode = ALLOCA \/ _`
+       (drule_then strip_assume_tac) >> fs[is_terminator_def]) >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts a b) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_assum `fn_has_code a b func` (strip_assume_tac o REWRITE_RULE [fn_has_code_def]) >>
+     qexists_tac `bb` >> gvs[same_blocks_def,IS_PREFIX_APPEND] >> simp[DROP_APPEND]) >>
   drule_all ctor_straight_band_run >> simp[]
 QED

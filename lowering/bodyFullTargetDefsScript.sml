@@ -67,6 +67,77 @@ Definition imm_target_post_def:
     locals_kept cenv es ee s0 t
 End
 
+Definition imm_target_place_sim_judgment_def:
+  imm_target_place_sim_judgment outcome
+    (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx env bt es <=>
+    !st0 ty sa sb shadow_sa shadow_sb r s0 G0 tn0.
+      type_place_target env bt = SOME (Type ty) /\
+      compile_get_target_ptr compile_expr cenv bt sa = (r,sb) /\
+      compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+        (gas_shadow_target bt)
+        shadow_sa = (r,shadow_sb) /\
+      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+      gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
+      fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
+      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
+      return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H) /\
+        ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      outcome
+        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
+        (cx_tops cx) cx st0 sa sb (eval_target_place cx bt) (es,s0,G0,tn0)
+        (\H res ee G tn t. ?id path. res = INL (ImmutablePlace NONE id path) /\
+          target_root bt = TopLevelNameTarget (NONE,id) /\
+          imm_target_post H ctx func cenv cx es sa sb s0 ee id path ty r t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          alloca_history func t /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+          s0.vs_alloca_next <= t.vs_alloca_next /\
+          ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+          target_ptr_ok cenv (PlaceR (ImmutablePlace NONE id path)) r G tn t /\
+          op_prov G (FST r) = NONE /\
+          (!itv iv. ~target_through_dynarray cenv bt /\
+             FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+               | SOME imms => get_source_immutables NONE imms) id = SOME (itv,iv)
+             ==> fixed_shape_path itv path) /\
+          ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
+        (\H res ee gt q.
+          expr_exit res q /\ halt_exit H cx ee res q /\
+          (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
+End
+
+Theorem imm_target_place_sim_judgment_mono:
+  imm_target_place_sim_judgment outcome
+    (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx env bt es /\
+  (!tops cx st0 sa sb source seed Q R.
+    outcome (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      tops cx st0 sa sb source seed Q R ==>
+    outcome' (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      tops cx st0 sa sb source seed Q R) ==>
+  imm_target_place_sim_judgment outcome'
+    (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx env bt es
+Proof
+  simp[imm_target_place_sim_judgment_def] >> rpt strip_tac >>
+  first_x_assum irule >> first_x_assum irule >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`shadow_sa`,`shadow_sb`] >> simp[]
+QED
+
 Definition imm_target_place_sim_full_def:
   imm_target_place_sim_full
     (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx env bt es <=>
@@ -121,6 +192,86 @@ Definition imm_target_place_sim_full_def:
           (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
 End
 
+Theorem imm_target_place_sim_full_internal_def:
+  imm_target_place_sim_full p cenv cx env bt es <=>
+  imm_target_place_sim_judgment
+    (\bundle tops cx st0 sa sb. gas_outcome_full bundle tops cx st0)
+    p cenv cx env bt es
+Proof
+  PairCases_on `p` >>
+  simp[imm_target_place_sim_full_def, imm_target_place_sim_judgment_def]
+QED
+
+(* Keep the precondition and posts shared by the full and refined
+   witness producers. The outcome receives the two compile cursors. *)
+Definition target_sim_judgment_def:
+  target_sim_judgment outcome (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    cenv cx env bt es <=>
+    !st0 vt sa sb shadow_sa shadow_sb r s0 G0 tn0.
+      type_place_target env bt = SOME vt /\
+      compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
+      compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+        (gas_shadow_target bt)
+        shadow_sa = (r, shadow_sb) /\
+      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+      gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func ctx.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      fn_has_code sa sb func /\
+      fn_has_code shadow_sa shadow_sb shadow_func /\
+      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      gas_admissible (eval_base_place cx bt) target_res_ok es /\
+      return_buf_frame d cenv sa s0 /\
+      alloca_history func s0 /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H) /\
+        ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      outcome
+        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
+        (cx_tops cx) cx st0 sa sb (eval_base_place cx bt) (es, s0, G0, tn0)
+        (\H res ee G tn t. ?pv. res = INL pv /\
+          target_post H ctx func cenv cx es sa sb s0 ee pv vt r t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          alloca_history func t /\
+          (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+          s0.vs_alloca_next <= t.vs_alloca_next /\
+          ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+          target_ptr_ok cenv pv r G tn t /\
+          ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
+        (\H res ee gt q.
+          expr_exit res q /\ halt_exit H cx ee res q /\
+          (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
+End
+
+Theorem target_sim_judgment_mono:
+  target_sim_judgment outcome (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    cenv cx env bt es /\
+  (!tops cx st0 sa sb source seed Q R.
+    outcome (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      tops cx st0 sa sb source seed Q R ==>
+    outcome' (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      tops cx st0 sa sb source seed Q R) ==>
+  target_sim_judgment outcome' (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    cenv cx env bt es
+Proof
+  simp[target_sim_judgment_def] >> rpt strip_tac >>
+  first_x_assum irule >> first_x_assum irule >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`shadow_sa`,`shadow_sb`] >> simp[]
+QED
+
 (* New definition: target_sim_ptr over the joint judgment. *)
 Definition target_sim_full_def:
   target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -172,6 +323,14 @@ Definition target_sim_full_def:
           expr_exit res q /\ halt_exit H cx ee res q /\
           (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
 End
+
+Theorem target_sim_full_internal_def:
+  target_sim_full p cenv cx env bt es <=>
+  target_sim_judgment (\F tops cx st0 sa sb. gas_outcome_full F tops cx st0)
+    p cenv cx env bt es
+Proof
+  PairCases_on `p` >> simp[target_sim_full_def, target_sim_judgment_def]
+QED
 
 (* New definition: pop_target_frag_ptr over the joint judgment; a memory
    place is live in the local's current value (targetLocalLive). *)

@@ -57,7 +57,8 @@ Definition supported_struct_elements_def:
     supported_place_type tops ty /\
     case ty of
       StructT id =>
-        (case supported_struct_fields tops id of
+        (FST id <> NONE \/
+         case supported_struct_fields tops id of
            SOME declared =>
              EVERY (\(name,e). IS_SOME (ALOOKUP declared name)) fields
          | NONE => F)
@@ -96,23 +97,26 @@ End
 Definition supported_storage_scalar_def:
   supported_storage_scalar tops id ty <=>
     supported_storage_type tops ty /\
-    case supported_variable_decl tops id of
+    (FST id <> NONE \/
+     case supported_variable_decl tops id of
       SOME (vis, Storage, declared, SOME slot) => declared = ty
     | SOME (vis, Transient, declared, SOME slot) => declared = ty
-    | _ => F
+    | _ => F)
 End
 
 Definition supported_storage_value_def:
   supported_storage_value tops id ty <=>
     supported_storage_type tops ty /\
-    case supported_variable_decl tops id of
+    (FST id <> NONE \/
+     case supported_variable_decl tops id of
       SOME (vis, Storage, declared, SOME slot) => declared = ty
     | SOME (vis, Transient, declared, SOME slot) => declared = ty
-    | _ => F
+    | _ => F)
 End
 
 Definition supported_storage_array_def:
   supported_storage_array tops id <=>
+    FST id <> NONE \/
     case supported_variable_decl tops id of
       SOME (vis, Storage, ArrayT elem bd, SOME slot) =>
         supported_storage_type tops (ArrayT elem bd)
@@ -123,6 +127,7 @@ End
 
 Definition supported_storage_dynamic_array_def:
   supported_storage_dynamic_array tops id <=>
+    FST id <> NONE \/
     case supported_variable_decl tops id of
       SOME (vis, Storage, ArrayT elem (Dynamic n), SOME slot) =>
         supported_storage_type tops elem
@@ -154,6 +159,7 @@ End
 
 Definition supported_storage_field_read_def:
   supported_storage_field_read tops id field <=>
+    FST id <> NONE \/
     case supported_storage_fields tops id of
       SOME fields => MEM field (MAP FST fields)
     | NONE => F
@@ -168,6 +174,7 @@ End
 
 Definition supported_place_root_def:
   supported_place_root tops id <=>
+    FST id <> NONE \/
     case supported_variable_decl tops id of
       SOME (vis, Storage, ty, SOME slot) => supported_storage_type tops ty
     | SOME (vis, Transient, ty, SOME slot) => supported_storage_type tops ty
@@ -181,8 +188,17 @@ Definition supported_place_root_def:
          | _ => F)
 End
 
+(* A qualified root's descriptor is resolved in the checked unit. *)
+Definition qualified_place_root_def:
+  qualified_place_root (TopLevelName ty id) = (FST id <> NONE) /\
+  qualified_place_root (Subscript ty base key) = qualified_place_root base /\
+  qualified_place_root (Attribute ty base field) = qualified_place_root base /\
+  qualified_place_root _ = F
+End
+
 Definition supported_subscript_place_def:
   supported_subscript_place tops base <=>
+    qualified_place_root base \/
     case supported_place_info tops base of
       MapPT kt vt => supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
     | ValPT (ArrayT elem bd) => supported_place_type tops (ArrayT elem bd)
@@ -197,7 +213,8 @@ Definition supported_field_place_def:
   supported_field_place tops ty field <=>
     case ty of
       StructT id =>
-        (case supported_struct_fields tops id of
+        (FST id <> NONE \/
+         case supported_struct_fields tops id of
            SOME fields => MEM field (MAP FST fields)
          | NONE => F)
     | _ => F

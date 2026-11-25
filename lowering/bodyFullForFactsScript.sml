@@ -19,7 +19,6 @@ QED
 
 Theorem supported_stmt_for_projection:
   supported_stmt tops bindings (For id typ it n body) ==>
-  supported_type_namespace typ /\
   supported_iterator tops typ it n
 Proof
   simp[Once supported_stmt_def]
