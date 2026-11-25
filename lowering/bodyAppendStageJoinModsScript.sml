@@ -4,6 +4,8 @@ Theory bodyAppendStageJoinMods
 Ancestors
   bodyWriteTargetStageMods bodyPlacePairedStagesMods bodyFullPredsMods
   bodyAppendStorageFacts gasOutcomeFullBindMods gasOutcomeFullPostMods
+  gasOutcomeFullPostPathMods bodyFullIfExpReach fragGasOriginPtr bodyFullShared
+  venomExecSemantics venomInst
   gasExemptCertMods gasContext exprSimDefs stmtSimDefs haltExitProj
   vyperExprNoControl vyperStorageTrace vyperStorageFootprint
   popTargetPre bodySim allocLimits exprLowering targetPlaceSimCases
@@ -61,7 +63,9 @@ Theorem append_typed_place_bind_mods[local]:
                 evaluate_subscripts entry.type entry.value path = INL v) /\
     (!H. valid_horizon cx st0 H mid.storage_trace ==>
       write_target_post_mods H (DF H) lo d ctx func cenv cx bt es sa sp s0
-        mid (PlaceR p) (Type (ArrayT elem (Dynamic cap))) dst G0 tn0 Gm tm t) ==>
+        mid (PlaceR p) (Type (ArrayT elem (Dynamic cap))) dst G0 tn0 Gm tm t /\
+      ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+             (s0,G0,tn0) cm (OK t,Gm,tm)) ==>
     gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       cenv.ce_modules cx st0
       (bind (bind (eval_expr cx e) (read_result cx)) (append_place cx p))
@@ -89,9 +93,14 @@ Proof
   >~ [`!p. storage_trace_frame (bind (bind (eval_expr cx e) (read_result cx)) (append_place cx p))`]
   >- simp[storage_trace_frame_bind, evaluate_storage_trace_frame,
           storage_trace_frame_read_result, storage_trace_frame_append_place] >>
-  qexists `\H res ee G tn t. ChildQ H res ee G tn t /\ ee.gas_obs = []` >>
+  qexists `\H res ee G tn t. (ChildQ H res ee G tn t /\ ee.gas_obs = []) /\
+    ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (s0,G0,tn0) cm (OK t,G,tn)` >>
   reverse conj_tac
-  >- (irule gas_outcome_full_mods_post_source >> first_assum (irule_at Any) >>
+  >- (irule gas_outcome_full_mods_post_path >>
+      qexistsl_tac [`\H res ee G tn t. ChildQ H res ee G tn t /\ ee.gas_obs = []`] >>
+      conj_tac >- (simp[] >> metis_tac[]) >>
+      irule gas_outcome_full_mods_post_source >> first_assum (irule_at Any) >>
       conj_tac >- simp[] >>
       simp[Abbr `ChildR`, Excl "AND_IMP_INTRO"] >>
       rpt gen_tac >> disch_tac >> irule append_expr_exit_mods >> simp[]) >>
@@ -145,7 +154,9 @@ Theorem append_rhs_bind_mods[local]:
         (INL v,ee with gas_obs := tail)) /\
     storage_trace_domain cx st0 ee.storage_trace /\ ee.gas_obs = [] /\ ~u.vs_halted /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       append_rhs_post_mods DF lo d ctx func cenv cx e mid sp sm t op Gm tm H v ee G tn u) ==>
+       append_rhs_post_mods DF lo d ctx func cenv cx e mid sp sm t op Gm tm H v ee G tn u /\
+       ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+             (t,Gm,tm) cm (OK u,G,tn)) ==>
     gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       cenv.ce_modules cx st0 (append_place cx p v) (ee,u,G,tn) Q
       (append_exit_mods ctx cx RetQ)) ==>
@@ -167,9 +178,14 @@ Proof
           storage_trace_frame_read_result]
   >~ [`!v. storage_trace_frame (append_place cx p v)`]
   >- simp[storage_trace_frame_append_place] >>
-  qexists `\H res ee G tn u. ChildQ H res ee G tn u /\ ee.gas_obs = [] /\ ~u.vs_halted` >>
+  qexists `\H res ee G tn u. (ChildQ H res ee G tn u /\ ee.gas_obs = [] /\ ~u.vs_halted) /\
+    ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (t,Gm,tm) cm (OK u,G,tn)` >>
   reverse conj_tac
-  >- (irule gas_outcome_full_mods_post_source >> first_assum (irule_at Any) >>
+  >- (irule gas_outcome_full_mods_post_path >>
+      qexists `\H res ee G tn u. ChildQ H res ee G tn u /\ ee.gas_obs = [] /\ ~u.vs_halted` >>
+      conj_tac >- (simp[] >> metis_tac[]) >>
+      irule gas_outcome_full_mods_post_source >> first_assum (irule_at Any) >>
       conj_tac >- simp[] >>
       simp[Abbr `ChildR`, Excl "AND_IMP_INTRO"] >>
       rpt gen_tac >> disch_tac >> irule append_expr_exit_mods >> simp[]) >>
@@ -386,7 +402,8 @@ Proof
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
     fs[storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-    (drule_then assume_tac) >>
+    (fn th => assume_tac (SIMP_RULE bool_ss [FORALL_AND_THM] th |> cj 1) >>
+              drule_then strip_assume_tac th) >>
   drule_all_then (CONJUNCTS_THEN2 assume_tac (mk_asm "place_route")) append_place_routes_mods >>
   suspend "landing"
 QED
@@ -411,9 +428,169 @@ Resume append_staged_routes_mods[landing]:
      Cases_on `is_word_type elem`
      >- (qexists `\p. is_word_type elem /\ ?tr slot tv. p = StoragePlace tr slot tv` >> simp[]) >>
      qexists `\p. ~is_word_type elem /\ ?tr slot tv. p = StoragePlace tr slot tv` >> simp[]) >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> append_rhs_post_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (assume_tac o cj 1 o SIMP_RULE bool_ss [FORALL_AND_THM]) >>
   qpat_x_assum `append_landing_rule_mods _ cenv cx bt e elem cap es
      st0 sa sp sm sb dst op s0 G0 tn0 RetQ Q selected`
     (drule_all_then ACCEPT_TAC o REWRITE_RULE [append_landing_rule_mods_def])
 QED
 
 Finalise append_staged_routes_mods
+
+(* Take the two machine segments at the same horizon before using the
+   statement-entry return-buffer resources. *)
+Theorem append_path_floor[local]:
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!tail. bind (eval_expr cx e) (read_result cx)
+    (mid with gas_obs := reads ++ tail) = (INL v,ee with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    ?cm. gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s0,G0,tn0) cm (OK t,Gm,tm)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ?cm. gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (t,Gm,tm) cm (OK u,G,tn)) /\
+  return_buf_frame d cenv sa s0 /\ return_buf_sep d cenv es s0 ==>
+  !bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) u
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `H = storage_trace_horizon ee.storage_trace` >>
+  `valid_horizon cx st0 H ee.storage_trace` by fs[Abbr `H`,storage_trace_domain_def] >>
+  `valid_horizon cx st0 H mid.storage_trace` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     disch_then (mp_then (Pat `f st = _`) mp_tac valid_horizon_frame) >>
+     simp[storage_trace_frame_bind,evaluate_storage_trace_frame,storage_trace_frame_read_result]) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (drule_then (qx_choose_then `left` assume_tac)) >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (drule_then (qx_choose_then `right` assume_tac)) >>
+  `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s0,G0,tn0) (left ++ right) (OK u,G,tn)` by
+    (irule gas_origin_ptr_path_append >> rpt (first_assum (irule_at Any)) >> simp[]) >>
+  qpat_assum `gas_origin_ptr_path _ _ (left ++ right) _`
+    (mp_then (Pos hd) mp_tac return_buf_allocas_path) >>
+  disch_then (qspecl_then [`sa`,`es`,`d`,`cenv`] mp_tac) >> simp[]
+QED
+
+Theorem append_staged_store_mods:
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  type_place_target env bt = SOME (Type (ArrayT elem (Dynamic cap))) /\
+  stmt_exprs_ok cenv (Append bt e) /\
+  (!s p s'. eval_target_place cx bt s = (INL p,s') ==> body_expr_full_ok_mods mods exps cx e) /\
+  write_place_sim_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx env bt es /\
+  write_target_entry_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx bt es st0 sa sp shadow_sa shadow_sp dst s0 G0 tn0 /\
+  ci_mono sa sp /\ return_buf_sep d cenv es s0 /\
+  gas_admissible (eval_stmt cx (Append bt e)) (stmt_res_ok lctx) es /\
+  (let loc = (case FST (SND dst) of NONE => LocMemory | SOME l => l) in
+   let et = (case SND (SND dst) of SOME (ValPT (ArrayT ty _)) => ty | _ => BaseT (UintT 256)) in
+   let n = (case SND (SND dst) of SOME (ValPT (ArrayT _ (Dynamic n))) => n | _ => 0) in
+     append_rhs_code_mods cenv e et sp sm shadow_sp shadow_sm op func shadow_func /\
+     append_store_code_mods cenv e dst loc et n op sm sb func) /\
+  (!marks p mid Gm tm t.
+    (!tail. eval_target_place cx bt
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+        (INL p,mid with gas_obs := tail)) /\
+    storage_trace_domain cx st0 mid.storage_trace /\ mid.gas_obs = [] /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      write_target_post_mods H (DF H) lo d ctx func cenv cx bt es sa sp s0
+        mid (PlaceR p) (Type (ArrayT elem (Dynamic cap))) dst G0 tn0 Gm tm t) ==>
+    body_const_cells_agree_mods mods cx env mid /\ expr_body_pre_mods mods cenv cx env e mid) /\
+  (!l marks p mid Gm tm t rhsmarks v ee G tn u.
+    (!tail. eval_target_place cx bt
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+        (INL p,mid with gas_obs := tail)) /\
+    storage_trace_domain cx st0 mid.storage_trace /\ mid.gas_obs = [] /\
+    (!id path. p = MemoryPlace id path ==>
+      ?entry w. lookup_scopes id mid.scopes = SOME entry /\
+                evaluate_subscripts entry.type entry.value path = INL w) /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      write_target_post_mods H (DF H) lo d ctx func cenv cx bt es sa sp s0
+        mid (PlaceR p) (Type (ArrayT elem (Dynamic cap))) dst G0 tn0 Gm tm t) /\
+    (!tail. bind (eval_expr cx e) (read_result cx)
+      (mid with gas_obs := gas_explicit rhsmarks t.vs_gas_readings ++ tail) =
+        (INL v,ee with gas_obs := tail)) /\
+    storage_trace_domain cx st0 ee.storage_trace /\ ee.gas_obs = [] /\ ~u.vs_halted /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      append_rhs_post_mods DF lo d ctx func cenv cx e mid sp sm t op Gm tm H v ee G tn u) /\
+    expr_body_pre_mods mods cenv cx env e mid /\
+    append_rhs_code_mods cenv e elem sp sm shadow_sp shadow_sm op func shadow_func /\
+    append_store_code_mods cenv e dst l elem cap op sm sb func /\
+    ((?id path. p = MemoryPlace id path /\ l = LocMemory) \/
+     (?tr slot tv. p = StoragePlace tr slot tv /\ l = slot_loc tr)) /\
+    FST (SND dst) = SOME l /\
+    (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) u) ==>
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (append_place cx p v) (ee,u,G,tn) Q
+      (append_exit_mods ctx cx RetQ)) ==>
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (eval_stmt cx (Append bt e))
+    (es,s0,G0,tn0) Q (append_exit_mods ctx cx RetQ)
+Proof
+  strip_tac >> irule append_typed_place_bind_mods >>
+  conj_tac >- (qexists `lctx` >> simp[]) >>
+  qexistsl_tac [`cap`,`d`,`dst`,`elem`,`env`,`sa`,`shadow_func`,`shadow_sa`,`shadow_sp`,`sp`] >> simp[] >>
+  qx_genl_tac [`marks`,`p`,`mid`,`Gm`,`tm`,`t`] >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (fn th => assume_tac (SIMP_RULE bool_ss [FORALL_AND_THM] th |> cj 1) >>
+              drule_then strip_assume_tac th) >>
+  drule_all_then (CONJUNCTS_THEN2 assume_tac (mk_asm "place_route")) append_place_routes_mods >>
+  `?l. FST (SND dst) = SOME l` by (asm "place_route" strip_assume_tac >> metis_tac[]) >>
+  `append_rhs_code_mods cenv e elem sp sm shadow_sp shadow_sm op func shadow_func /\
+   append_store_code_mods cenv e dst l elem cap op sm sb func` by
+    (qpat_x_assum `let _ = _ in _` mp_tac >> simp[]) >>
+  `body_const_cells_agree_mods mods cx env mid /\ expr_body_pre_mods mods cenv cx env e mid` by
+    (qpat_assum `!marks p mid Gm tm t. _ ==> body_const_cells_agree_mods _ _ _ _ /\ _`
+       (drule_all_then ACCEPT_TAC)) >>
+  suspend "rhs"
+QED
+
+Resume append_staged_store_mods[rhs]:
+  qhdtm_assum `write_target_entry_mods`
+    (strip_assume_tac o REWRITE_RULE [write_target_entry_mods_def]) >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (rpt strip_tac >> irule body_inv_no_phi_mods >>
+     qhdtm_assum `contract_inv` (irule_at Any) >> qexists_tac `func` >> simp[]) >>
+  `!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s` by
+    (qx_genl_tac [`f`,`i`,`z`] >> disch_tac >>
+     qpat_assum `gas_origin_ptr_path _ _ cm (OK t,Gm,tm)`
+       (mp_then (Pos hd) mp_tac gas_origin_ptr_path_dalloca_fmp_headroom) >>
+     disch_then (qspecl_then [`f`,`i`,`z`] mp_tac) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]) >>
+  drule_all_then assume_tac append_rhs_from_place_mods >>
+  irule append_rhs_bind_mods >> qexistsl_tac [`d`,`op`,`sm`,`sp`] >> simp[] >>
+  qx_genl_tac [`rhsmarks`,`v`,`ee`,`G`,`tn`,`u`] >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ (?cm. gas_origin_ptr_path _ _ cm _)`
+    (fn th =>
+      let val both = SIMP_RULE bool_ss [FORALL_AND_THM] th in
+        assume_tac (cj 1 both) >> assume_tac (cj 2 both)
+      end) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ (?cm. gas_origin_ptr_path _ _ cm _)`
+    (assume_tac o cj 2 o SIMP_RULE bool_ss [FORALL_AND_THM]) >>
+  (* Match the RHS path first; either segment would fit an unconstrained path premise. *)
+  `!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) u` by
+    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> ?cm. gas_origin_ptr_path _ (t,Gm,tm) cm (OK u,G,tn)`
+       (mp_then (Pos (el 4)) mp_tac append_path_floor) >>
+     disch_then (fn th =>
+       qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> ?cm. gas_origin_ptr_path _ (s0,G0,tn0) cm (OK t,Gm,tm)`
+         (mp_then Any mp_tac th)) >>
+     disch_then (fn th =>
+       qpat_assum `!tail. bind _ _ _ = (INL v,_)` (mp_then Any mp_tac th)) >>
+     disch_then (fn th => qhdtm_assum `return_buf_frame` (mp_then Any mp_tac th)) >>
+     disch_then (fn th => qhdtm_assum `return_buf_sep` (mp_then Any mp_tac th)) >>
+     simp[]) >>
+  `(?id path. p = MemoryPlace id path /\ l = LocMemory) \/
+   (?tr slot tv. p = StoragePlace tr slot tv /\ l = slot_loc tr)` by
+    (qpat_assum `FST (SND dst) = SOME l` mp_tac >>
+     asm "place_route" mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[optionTheory.SOME_11]) >>
+  qpat_assum `!l marks p mid Gm tm t rhsmarks v ee G tn u. _ ==> _` irule >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  (qexistsl_tac [`Gm`,`marks`,`mid`,`rhsmarks`,`t`,`tm`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC
+   ORELSE (qexists_tac `l` >> simp[]))
+QED
+
+Finalise append_staged_store_mods
