@@ -52,7 +52,7 @@ local
   fun run_post th =
     snd (pairSyntax.dest_pair (optionSyntax.dest_some (rhs (concl th))))
   val es_dep_post = run_post dep_run
-  val load = EVAL ``load_contract (SOME []) [] ^am_dep ^tx_dep [(NONE,^tops)] []``
+  val load = EVAL ``load_contract (SOME []) gs ^am_dep ^tx_dep [(NONE,^tops)] []``
   val (am_dep_post, _) = pairSyntax.dest_pair (fst (sumSyntax.dest_inl (rhs (concl load))))
   val am_call = ``next_source_machine ^am_dep_post ^es_dep_post``
   val call_tx = ``\name data. p23_call_tx with
@@ -256,12 +256,12 @@ QED
       val within = prove (``call_within ^horizon ^tops ^am_call ^tx ^es``,
         simp[call_within_def, dispatch, trace] >> gen_tac >> EVAL_TAC)
     in
-      [trace_bound es trace, storage, within]
+      (trace_bound es trace, storage, within)
     end
 
-  val get_storage =
+  val (get_bound, get_storage, get_within) =
     call_storage_facts (get_horizon, get_tx, get_es, get_trace)
-  val locked_storage =
+  val (locked_bound, locked_storage, locked_within) =
     call_storage_facts (locked_horizon, locked_tx, locked_es, locked_trace)
   val dep_bound = trace_bound es_dep dep_trace
 
@@ -273,8 +273,8 @@ QED
   val deploy_args = compiler_args @ [am_dep, tx_dep, es_dep]
   val deploy_premises =
     common_premises @ [optimized_getters_deploy_typing, optimized_getters_deploy_state]
-  val dep_horizon = prove
-    (``horizon_ok ^get_horizon``,
+  fun dep_horizon horizon = prove
+    (``horizon_ok ^horizon``,
      simp[horizon_ok_def, regions_consistent_def, storage_locks_separated_def])
   val dep_evm_state = prove
     (``evm_state_ok ^es_dep``,
@@ -295,8 +295,8 @@ QED
     (``!gs. SND (load_contract_trace (SOME []) gs ^am_dep ^tx_dep
         [(NONE, ^tops)] []) = []``,
      gen_tac >> PURE_REWRITE_TAC [dep_load_trace_eval] >> REFL_TAC)
-  val dep_within = prove
-    (``deploy_within ^get_horizon ^tops ^am_dep ^tx_dep ^es_dep``,
+  fun dep_within horizon = prove
+    (``deploy_within ^horizon ^tops ^am_dep ^tx_dep ^es_dep``,
      simp[deploy_within_def, deploy_storage_trace_def,
           dep_trace, dep_load_trace,
           storage_observations_ok_def, storage_trace_regions_def,
@@ -308,32 +308,67 @@ QED
      metis_tac[optimized_getters_deploy_state, dep_evm_state, dep_h_storage,
                dep_h_transient])
 
-  val _ = MATCH_MP
-    (SPECL (deploy_args @ [get_horizon]) e2e_deploy_correctness_deployed)
-    (LIST_CONJ (common_premises @ [optimized_getters_deploy_typing,
-                                   dep_entry, dep_bound, dep_horizon, dep_within]))
+  val dep_not_starved = prove
+    (``~frame_starved ^es_dep (INR NONE) ^es_dep_post``,
+     simp[frame_starved_def, frameOutcomeTheory.frame_outcome_def])
+  val dep_target = EVAL ``(^tx_dep).target``
+  val dep_survives = EQT_ELIM ((REWRITE_CONV [dep_target] THENC EVAL)
+    ``~MEM (^tx_dep).target (^es_dep_post).rollback.toDelete``)
+
+  (* Each getter uses the handoff at its own storage horizon. *)
+  fun deploy_handoff (horizon, tx) =
+    let
+      val dep_result = MATCH_MP
+        (SPECL (deploy_args @ [horizon]) e2e_deploy_correctness_deployed)
+        (LIST_CONJ (common_premises @ [optimized_getters_deploy_typing,
+          dep_entry, dep_bound, dep_horizon horizon, dep_within horizon]))
+      val call_target = EVAL ``(^tx).target``
+    in
+      prove
+        (``deployed ^tops ^runtime_bc ^am_call (^tx).target /\
+           storage_ok ^horizon ^am_call ^tx``,
+         mp_tac dep_result >>
+         (* Keep the evaluated records in the form used by the run and load facts. *)
+         SIMP_TAC bool_ss [dep_run, dep_trace, dep_not_starved, dep_survives,
+                           optionTheory.SOME_11, pairTheory.PAIR_EQ, listTheory.MAP] >>
+         disch_then (mp_tac o REWRITE_RULE [gas_readings_rel_def]) >>
+         (* Fill the observed slots with their values and use an empty tail. *)
+         disch_then (qx_choosel_then [`slots`, `unused`]
+           (qspecl_then [`MAP THE slots`, `[]`] mp_tac o CONJUNCT2)) >>
+         impl_tac
+         >- (simp[listTheory.LIST_REL_MAP2] >> irule listTheory.EVERY2_refl >>
+             Cases >> simp[]) >>
+         SIMP_TAC bool_ss [listTheory.APPEND_NIL] >>
+         disch_then (qspecl_then [`^am_dep_post`, `[]`] mp_tac o CONJUNCT2) >>
+         SIMP_TAC bool_ss [load] >>
+         disch_then (CONJUNCTS_THEN2 mp_tac (qspec_then `^tx` mp_tac)) >>
+         SIMP_TAC bool_ss [call_target, dep_target])
+    end
+
   val _ = MATCH_MP
     (SPECL (deploy_args @ [get_horizon])
        e2eGasSufficientTopTheory.e2e_deploy_gas_sufficient)
     (LIST_CONJ (common_premises @ [optimized_getters_deploy_typing,
-                                   dep_entry, dep_horizon]))
+                                   dep_entry, dep_horizon get_horizon]))
 
-  fun check_call (horizon, tx, es, entry_facts, storage_facts) =
+  fun check_call (horizon, tx, es, entry_facts, bound, within) =
     let
       val args = compiler_args @ [am_call, tx, es]
-      val call_premises = CONJUNCTS (REWRITE_RULE [call_premises_deployed]
-        (LIST_CONJ entry_facts))
-      val premises = common_premises @ call_premises
+      val call_entry_premises = CONJUNCTS (CONJUNCT2
+        (REWRITE_RULE [call_premises_deployed] (LIST_CONJ entry_facts)))
+      val handoff = deploy_handoff (horizon, tx)
+      val premises = common_premises @ [CONJUNCT1 handoff] @ call_entry_premises
       val _ = MATCH_MP (SPECL (args @ [horizon]) vyper_call_correct_deployed)
-        (LIST_CONJ (premises @ storage_facts))
+        (LIST_CONJ (premises @ [bound, CONJUNCT2 handoff, within]))
       val _ = MATCH_MP
         (SPECL (args @ [horizon]) vyper_call_gas_sufficient_deployed)
-        (LIST_CONJ (premises @ [List.nth (storage_facts, 1)]))
+        (LIST_CONJ (premises @ [CONJUNCT2 handoff]))
     in
       ()
     end
-  val () = check_call (get_horizon, get_tx, get_es, get_facts, get_storage)
-  val () = check_call (locked_horizon, locked_tx, locked_es, locked_facts, locked_storage)
+  val () = check_call (get_horizon, get_tx, get_es, get_facts, get_bound, get_within)
+  val () = check_call (locked_horizon, locked_tx, locked_es, locked_facts,
+                      locked_bound, locked_within)
 
   val witnesses = [
     ``o1_policy all_capabilities``, tops, deploy_bc, runtime_bc, am_dep,
@@ -399,7 +434,9 @@ Proof
   rewrite_tac (deploy_premises @ [dep_bound, deploy_guard,
          dep_run, dep_trace, load, get_trace, get_run, optimized_getter_valid,
          locked_trace, locked_run] @
-        get_facts @ locked_facts @ get_storage @ locked_storage @ call_facts) >>
+        get_facts @ locked_facts @
+        [get_bound, get_storage, get_within, locked_bound, locked_storage, locked_within] @
+        call_facts) >>
   simp[]
 QED
 

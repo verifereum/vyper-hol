@@ -609,6 +609,7 @@ Proof
   EVAL_TAC
 QED
 
+(* Check the live deployment-to-call handoff without storing its instances. *)
 local
   val accepted = prove (``(K SOME) IN accepted_finalizers``,
     simp[accepted_finalizers_def])
@@ -616,8 +617,9 @@ local
     simp[erc20_dep_trace])
   val call_bound = prove (``LENGTH (call_trace erc20_es_transfer) < 2 ** 64``,
     simp[erc20_transfer_trace])
-  val call_premises = CONJUNCTS (REWRITE_RULE [call_premises_deployed]
-    (CONJ erc20_source_typing erc20_call_state))
+  val call_entry_premises = CONJUNCTS (CONJUNCT2
+    (REWRITE_RULE [call_premises_deployed]
+      (CONJ erc20_source_typing erc20_call_state)))
   val dep_horizon = prove
     (``horizon_ok ^erc20_horizon``,
      mp_tac (SPEC ``erc20_am_call`` erc20_storage_ok) >>
@@ -638,8 +640,14 @@ local
      simp[erc20_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
           erc20_initial_machine_def, vyperInterpreterTheory.initial_machine_state_def,
           vfmContextTheory.empty_transient_storage_def])
+  val dep_not_starved = prove
+    (``~frame_starved erc20_es_dep (INR NONE) erc20_es_dep_post``,
+     simp[frame_starved_def, frame_outcome_def, erc20_es_dep_def])
+  val dep_survives = prove
+    (``~MEM erc20_deploy_tx.target erc20_es_dep_post.rollback.toDelete``,
+     simp[erc20_dep_target, EQT_ELIM erc20_dep_facts])
 in
-  val _ = MATCH_MP
+  val dep_result = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `erc20_tops`,
       `erc20_deploy_bc`, `erc20_runtime_bc`, `erc20_initial_machine`,
       `erc20_deploy_tx`, `erc20_es_dep`, `^erc20_horizon`] e2e_deploy_correctness_deployed)
@@ -651,12 +659,30 @@ in
                    metis_tac[erc20_deploy_state, dep_evm_state, dep_h_storage,
                              dep_h_transient])),
                 dep_bound, dep_horizon, erc20_deploy_within])
+  val handoff = prove
+    (``deployed erc20_tops erc20_runtime_bc erc20_am_call erc20_transfer_tx.target /\
+       storage_ok ^erc20_horizon erc20_am_call erc20_transfer_tx``,
+     mp_tac dep_result >>
+     simp[erc20_dep_run, erc20_dep_trace, dep_not_starved, dep_survives,
+          pairTheory.PAIR_EQ] >>
+     disch_then (mp_tac o REWRITE_RULE [gas_readings_rel_def]) >>
+     (* Fill the observed slots with their values and use an empty tail. *)
+     disch_then (qx_choosel_then [`slots`, `unused`]
+       (qspecl_then [`MAP THE slots`, `[]`] mp_tac o CONJUNCT2)) >>
+     impl_tac
+     >- (simp[listTheory.LIST_REL_MAP2] >> irule listTheory.EVERY2_refl >>
+         Cases >> simp[]) >>
+     simp[] >>
+     disch_then (qspecl_then [`erc20_am_dep_post`, `[]`] mp_tac o CONJUNCT2) >>
+     simp[erc20_load] >>
+     disch_then (CONJUNCTS_THEN2 mp_tac (qspec_then `erc20_transfer_tx` mp_tac)) >>
+     simp[erc20_am_call_def, erc20_transfer_target, erc20_dep_target])
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `erc20_tops`,
       `erc20_deploy_bc`, `erc20_runtime_bc`, `erc20_am_call`,
       `erc20_transfer_tx`, `erc20_es_transfer`, `^erc20_horizon`] vyper_call_correct_deployed)
-    (LIST_CONJ ([accepted, erc20_compile] @ call_premises @
-                [call_bound, SPEC ``erc20_am_call`` erc20_storage_ok, erc20_call_within]))
+    (LIST_CONJ ([accepted, erc20_compile, CONJUNCT1 handoff] @ call_entry_premises @
+                [call_bound, CONJUNCT2 handoff, erc20_call_within]))
 end
 
 Theorem erc20_deploy_transfer_lifecycle:
