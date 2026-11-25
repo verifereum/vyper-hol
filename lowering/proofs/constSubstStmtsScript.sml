@@ -16,11 +16,13 @@ Theorem const_subst_context_static:
   const_subst_context roots cx env E mods art /\
   env'.type_defs = env.type_defs /\ env'.bare_globals = env.bare_globals /\
   env'.bare_global_assignable = env.bare_global_assignable /\
-  env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.fn_sigs = env.fn_sigs ==>
+  env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.fn_sigs = env.fn_sigs /\
+  env'.event_fields = env.event_fields ==>
   const_subst_context roots cx env' E mods art
 Proof
   simp[const_subst_context_def, checked_frame_context_def, frame_maps_def] >>
-  metis_tac[]
+  strip_tac >> rpt conj_tac >> rpt strip_tac >> res_tac >> fs[] >>
+  goal_assum (drule_at Any)
 QED
 
 Theorem const_subst_context_checked_artifact:
@@ -42,6 +44,7 @@ Theorem const_subst_context_type_stmt:
   const_subst_context roots cx env' E mods art
 Proof
   strip_tac >> drule type_stmt_env_preserved_static >> strip_tac >>
+  drule type_stmt_preserves_event_fields >> strip_tac >>
   irule const_subst_context_static >> simp[] >> metis_tac[]
 QED
 
