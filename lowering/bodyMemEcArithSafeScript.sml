@@ -10,6 +10,7 @@ Ancestors
   builtinMisc venomInst exprLoweringProps venomExecSemantics venomState
   vyperTypeSystem vyperContext valueEncoding vyperTyping valueEncodingProofs
   vyperTypeBuiltins vyperValueOperation vyperValue vyperAssignPreservesType compileEnv
+  exprSimNamesBuiltinTyping exprSimSubscriptArrayOrigin
 
 Theorem lower_value_name_safe_operand[local]:
   expr_body_pre cenv cx env (Name ann id) es /\
@@ -28,45 +29,6 @@ Proof
   >- (gvs[] >> drule compile_ptr_load_safe_operand >> simp[]) >>
   gvs[comp_return_def, safe_operand_def] >>
   metis_tac[environment_var_not_fresh]
-QED
-
-Theorem ec_point_builtin_cases[local]:
-  well_typed_builtin_app (ArrayT (BaseT (UintT 256)) (Fixed 2)) bi ts ==>
-  bi = ECAdd \/ bi = ECMul \/
-  bi = MakeArray (SOME (BaseT (UintT 256))) (Fixed 2)
-Proof
-  Cases_on `bi` >>
-  simp[well_typed_builtin_app_def, is_numeric_type_def, is_bool_type_def,
-       is_uint256_type_def, is_bytes32_type_def, is_flag_type_def]
-  >~ [`MakeArray et bd`] >- (Cases_on `et` >> gvs[well_typed_builtin_app_def])
-  >~ [`well_typed_binop _ bop _ _`] >-
-    (Cases_on `bop` >> simp[well_typed_binop_def, is_numeric_type_def,
-                          is_int_type_def, is_bool_type_def, is_flag_type_def])
-  >~ [`env_item_type ei`] >- (Cases_on `ei` >> simp[env_item_type_def]) >>
-  rename1 `account_item_type ai` >> Cases_on `ai` >> simp[account_item_type_def]
-QED
-
-Theorem ec_point_builtin_not_label[local]:
-  well_typed_expr env (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bi args) /\
-  compile_builtin_dispatch_body cfn cenv
-    (ArrayT (BaseT (UintT 256)) (Fixed 2)) ty bi args sa = (vv,sb) ==>
-  !l. vv_operand vv <> Label l
-Proof
-  strip_tac >>
-  `bi = ECAdd \/ bi = ECMul \/
-   bi = MakeArray (SOME (BaseT (UintT 256))) (Fixed 2)` by
-    (irule ec_point_builtin_cases >>
-     gvs[well_typed_expr_def] >> metis_tac[]) >>
-  gvs[compile_builtin_dispatch_body_def, as_ptr_val_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  FIRST [qmatch_asmsub_abbrev_tac `as_stack_val _ res`,
-         qmatch_asmsub_abbrev_tac `as_ptr_val _ _ res`] >>
-  Cases_on `res` >>
-  gvs[as_stack_val_def, as_ptr_val_def,
-      contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
-  fs[markerTheory.Abbrev_def] >>
-  metis_tac[ec_arith_result_not_label,
-            compiler_make_array_result, alloc_buffer_not_label]
 QED
 
 Theorem ec_point_type_builtin_cases[local]:
@@ -235,23 +197,16 @@ QED
 Resume ec_point_lower_value_safe_operand[builtin]:
   `well_typed_expr env (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bi args)` by
     gvs[expr_body_pre_def] >>
-  `bi = ECAdd \/ bi = ECMul \/ bi = MakeArray (SOME (BaseT (UintT 256))) (Fixed 2)` by
-    (irule ec_point_builtin_cases >> gvs[well_typed_expr_def] >> metis_tac[]) >>
   `~names_builtin bi args` by
-    (gvs[] >> namedCases_on `args` ["", "a rest"] >> simp[names_builtin_def] >>
-     Cases_on `a` >> simp[names_builtin_def] >>
-     namedCases_on `rest` ["", "b rest2"] >> simp[names_builtin_def] >>
-     Cases_on `b` >> simp[names_builtin_def] >>
-     namedCases_on `rest2` ["", "d rest3"] >> simp[names_builtin_def] >>
-     Cases_on `d` >> simp[names_builtin_def] >>
-     Cases_on `rest3` >> simp[names_builtin_def]) >>
+    (irule non_uint256_not_names_builtin >>
+     qexistsl_tac [`env`, `ArrayT (BaseT (UintT 256)) (Fixed 2)`] >> simp[]) >>
   gvs[lower_value_def, comp_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[compile_expr_builtin_dispatch] >>
   pure_rewrite_tac[CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)] >>
   strip_tac >>
-  `!l. vv_operand vv <> Label l` by metis_tac[ec_point_builtin_not_label] >>
+  `!l. vv_operand vv <> Label l` by metis_tac[builtin_array_not_label] >>
   `!l. op <> Label l` by metis_tac[unwrap_value_not_label] >>
   Cases_on `op` >> gvs[safe_operand_def]
 QED
