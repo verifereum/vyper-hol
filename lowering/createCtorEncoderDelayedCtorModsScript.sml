@@ -339,11 +339,20 @@ Resume ctor_encoder_delayed_ctor_mods[state_rel]:
     (fn th => pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th,stmt_state_rel_inst_idx]) >>
   irule copy_buffer_state_rel_frame >>
   qexistsl_tac [`w2n dst`,`mk_inst su.cs_next_id ALLOCA [Lit (n2w nb)] [root]`,`a`,`mid`,`nb`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (simp[NoAsms,mk_inst_def] >> TRY (first_assum ACCEPT_TAC) >> NO_TAC) >>
-  rpt gen_tac >> disch_tac >>
-  qpat_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = mem_bytes_at off len a.vs_memory`
-    irule >> decide_tac
+  rpt conj_tac
+  >- qpat_assum `!name b len. local_region ce ee.scopes a name b len ==> _` ACCEPT_TAC
+  >- qpat_assum `!x. not_fresh_at mid x ==> lookup_var x z = lookup_var x a` ACCEPT_TAC
+  >- (rpt gen_tac >> disch_tac >>
+      qpat_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = mem_bytes_at off len a.vs_memory`
+        irule >> decide_tac)
+  >- qpat_assum `LENGTH a.vs_memory <= LENGTH z.vs_memory` ACCEPT_TAC
+  >- simp[NoAsms,mk_inst_def]
+  >- (simp[NoAsms,mk_inst_def] >>
+      qpat_assum `FLOOKUP a.vs_allocas su.cs_next_id = SOME _` ACCEPT_TAC)
+  >- qpat_assum `copy_static z = copy_static a` ACCEPT_TAC
+  >- qpat_assum `MEM (mk_inst _ ALLOCA _ _) (fn_insts fn)` ACCEPT_TAC
+  >- qpat_assum `local_ptrs_reserved ce mid` ACCEPT_TAC >>
+  qpat_assum `stmt_state_rel H ctx fn ce cx ee a` ACCEPT_TAC
 QED
 
 Resume ctor_encoder_delayed_ctor_mods[immutable_frame]:
@@ -362,11 +371,20 @@ Resume ctor_encoder_delayed_ctor_mods[immutable_frame]:
   rename1 `val_in_memory vt value off t.vs_memory` >>
   `mem_bytes_at off (type_memory_size vt) q.vs_memory =
    mem_bytes_at off (type_memory_size vt) t.vs_memory` by suspend "immutable_bytes" >>
-  asm_rewrite_tac[] >> irule val_in_memory_mem_agree >>
-  conj_tac >- (irule (cj 1 immutable_admissible_val_wf) >> first_assum ACCEPT_TAC) >>
+  conj_tac >- qpat_assum `immutable_value_admissible vt value` ACCEPT_TAC >>
+  reverse conj_tac
+  >- (qpat_assum `mem_bytes_at off (type_memory_size vt) q.vs_memory = _`
+        (fn th => pure_rewrite_tac[th]) >>
+      qpat_assum `immutable_value_bytes_rel vt value _` ACCEPT_TAC) >>
+  irule val_in_memory_mem_agree >>
+  conj_tac
+  >- (irule (cj 1 immutable_admissible_val_wf) >>
+      qpat_assum `immutable_value_admissible vt value` ACCEPT_TAC) >>
   qexistsl_tac [`type_memory_size vt`,`t.vs_memory`] >>
-  simp[NoAsms] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  sym_tac >> (metis_tac[])
+  conj_tac >- simp[NoAsms] >>
+  conj_tac
+  >- (sym_tac >> qpat_assum `mem_bytes_at off (type_memory_size vt) q.vs_memory = _` ACCEPT_TAC) >>
+  qpat_assum `val_in_memory vt value off t.vs_memory` ACCEPT_TAC
 QED
 
 Resume ctor_encoder_delayed_ctor_mods[immutable_allocas]:
