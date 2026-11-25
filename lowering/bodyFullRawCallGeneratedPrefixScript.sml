@@ -5,7 +5,7 @@ Ancestors
   gasExemptCert gasSummary gasSummaryCompose gasStorage
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState list
 
-Theorem raw_call_exempt_generated_prefix[local]:
+Theorem raw_call_exempt_generated_prefix:
   gas_path_mem ctx func s0 n (OK s1) /\
   gas_exempt_cert T tops (ctx,func) source (es,s1) marks (err,ee) (leaf,target_end) ==>
   gas_exempt_cert T tops (ctx,func) source (es,s0)

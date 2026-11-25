@@ -18,7 +18,7 @@ Ancestors
 Libs
   pairLib
 
-Theorem raw_log_typed_shape[local]:
+Theorem raw_log_typed_shape:
   well_typed_expr env (Call ann RawLog args dflt) ==>
   ?topics data n.
     ann = NoneT /\ dflt = NONE /\ n <= 4 /\

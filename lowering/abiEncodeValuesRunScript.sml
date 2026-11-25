@@ -32,8 +32,246 @@ Definition abi_encode_values_path_def[local]:
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK v,Gv,tv)
 End
 
-(* The caller proves its frame through pure phases and supplies the
-   materialization rule for a singleton at the original argument index. *)
+(* Each phase supplies an observation of its own selected witness. The
+   fold lifts these local observations to one fixed ambient relation. *)
+Definition abi_encode_values_observer_def:
+  abi_encode_values_observer st en Obs R <=>
+    (!u. R u u) /\
+    (!u v z. R u v /\ R v z ==> R u z) /\
+    (!a c u v. ci_mono st a /\ ci_mono c en /\ Obs a c u v ==> R u v)
+End
+
+Definition abi_encode_values_init_observes_def:
+  abi_encode_values_init_observes ctx func lo explicit PG Obs <=>
+  !st mid en cursor hl s G tn owner b cap.
+    emit_op ALLOCA [Lit 32w] st = (cursor,mid) /\
+    emit_void MSTORE [cursor; Lit (n2w hl)] mid = ((),en) /\
+    fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+    (!p n. FLOOKUP s.vs_allocas st.cs_next_id = SOME (p,n) ==> n = 32) /\
+    FLOOKUP s.vs_allocas owner = SOME (b,cap) /\ owner < st.cs_next_id /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?t slot p G' tn'.
+      cursor = Var p /\ not_fresh_at en p /\
+      eval_operand cursor t = SOME (n2w slot) /\ ptr_covers G' tn' p t 32 /\
+      FLOOKUP t.vs_allocas st.cs_next_id = SOME (slot,32) /\ st.cs_next_id < en.cs_next_id /\
+      slot + 32 <= t.vs_alloca_next /\ mem_word_at slot t.vs_memory = n2w hl /\
+      (!i. slot <= i /\ i < slot + 32 ==> i NOTIN tn'.t_mem) /\
+      window_phase ctx func st en {st.cs_next_id} [] s t /\ abi_encode_exec_frame func s t /\
+      (!x. not_fresh_at st x ==>
+        FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+      tn'.t_mem = tn.t_mem DIFF {i | slot <= i /\ i < slot + 32} /\
+      tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+      Obs st en s t /\
+      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
+End
+
+Definition abi_encode_values_finish_observes_def:
+  abi_encode_values_finish_observes ctx func lo explicit PG Obs <=>
+  !st en cursor out s G tn slot hl tl tys vs d bytes.
+    emit_op MLOAD [Var cursor] st = (out,en) /\
+    eval_operand (Var cursor) s = SOME (n2w slot) /\ ptr_covers G tn cursor s 32 /\
+    slot + 32 <= s.vs_alloca_next /\ mem_word_at slot s.vs_memory = n2w (hl + tl) /\
+    (!i. slot <= i /\ i < slot + 32 ==> i NOTIN tn.t_mem) /\
+    fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+    allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    LIST_REL abi_encoder_layout_valid tys vs /\
+    hl = head_lengths tys 0 /\ tl = LENGTH (FLAT (abi_tuple_tails tys vs)) /\
+    abi_encoder_tuple_prefix hl tys vs d s.vs_memory /\
+    (!i. d <= i /\ i < d + hl ==> i NOTIN tn.t_mem) /\
+    (!i. d + hl <= i /\ i < d + hl + tl ==> i NOTIN tn.t_mem) /\
+    bytes = enc (Tuple tys) (ListV vs) ==>
+    ?t G' tn'.
+      eval_operand out t = SOME (n2w (LENGTH bytes)) /\ op_taint tn' out = {} /\
+      (!x. out = Var x ==> not_fresh_at en x) /\
+      mem_bytes_at d (LENGTH bytes) t.vs_memory = bytes /\
+      (!i. d <= i /\ i < d + LENGTH bytes ==> i NOTIN tn'.t_mem) /\
+      window_phase ctx func st en {} [] s t /\ abi_encode_exec_frame func s t /\
+      (!x. not_fresh_at st x ==>
+        FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+      tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+      tn'.t_imm = tn.t_imm /\ Obs st en s t /\
+      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
+End
+
+Theorem abi_encode_values_observe_trivial[simp]:
+  abi_encode_values_observer st en (\a c u v. T) (\u v. T) /\
+  abi_encode_values_init_observes ctx func lo explicit PG (\a c u v. T) /\
+  abi_encode_values_finish_observes ctx func lo explicit PG (\a c u v. T)
+Proof
+  PURE_REWRITE_TAC [abi_encode_values_observer_def, abi_encode_values_init_observes_def,
+                    abi_encode_values_finish_observes_def] >>
+  BETA_TAC >> PURE_REWRITE_TAC [AND_CLAUSES, IMP_CLAUSES, FORALL_SIMP] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> drule_all abi_encode_values_cursor_init >>
+      disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
+        (qx_choosel_then [`t`,`slot`,`p`,`G'`,`tn'`] strip_assume_tac)) >>
+      qexistsl [`t`,`slot`,`p`,`G'`,`tn'`] >> asm_rewrite_tac[]) >>
+  rpt gen_tac >> strip_tac >> drule_all abi_encode_values_finish >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`t`,`G'`,`tn'`] strip_assume_tac)) >>
+  qexistsl [`t`,`G'`,`tn'`] >> asm_rewrite_tac[]
+QED
+
+Theorem abi_encode_values_execute_observed:
+  compile_abi_encode_values_to_buf ce dst rows st = (out,en) /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
+  LIST_REL (\row at. abi_embedded_static_size ce.ce_struct_fields (SND row) =
+    abi_member_head_size at) rows ats /\ LIST_REL abi_encoder_layout_valid ats avs /\
+  hl = head_lengths ats 0 /\ bytes = enc (Tuple ats) (ListV avs) /\
+  FLOOKUP s.vs_allocas owner = SOME (b,cap) /\ owner < st.cs_next_id /\
+  P st s G tn /\
+  (!a u Gu tu. P a u Gu tu ==>
+    alloca_inv u /\ alloca_room ctx func u /\ allocas_from lo u /\ lo <= u.vs_alloca_next /\
+    ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\
+    u.vs_inst_idx = LENGTH a.cs_current_insts /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u /\
+      u.vs_alloca_next + pending_alloca_size func u <= w2n u.vs_initial_fmp)) /\
+  (!p n. FLOOKUP s.vs_allocas st.cs_next_id = SOME (p,n) ==> n = 32) /\
+  (!a c ids u Gu tu v Gv tv.
+    P a u Gu tu /\ ci_mono a c /\ window_phase ctx func a c ids [] u v /\
+    abi_encode_exec_frame func u v /\ ids SUBSET {st.cs_next_id} /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK v,Gv,tv)) /\
+    (!x. not_fresh_at a x ==>
+      FLOOKUP Gv x = FLOOKUP Gu x /\ op_taint tv (Var x) = op_taint tu (Var x)) /\
+    tv.t_stor = tu.t_stor /\ tv.t_trans = tu.t_trans /\ tv.t_imm = tu.t_imm /\
+    tv.t_mem SUBSET tu.t_mem ==>
+    P c v Gv tv) /\
+  abi_encode_values_init_observes ctx func lo explicit PG Obs /\
+  abi_encode_values_finish_observes ctx func lo explicit PG Obs /\
+  abi_encode_values_observer st en Obs R /\
+  (!i a c u Gu tu cursor slot.
+    i < LENGTH rows /\ P a u Gu tu /\
+    abi_encode_values_prefix_at ats avs hl d cursor st.cs_next_id slot i a u Gu tu /\
+    compile_abi_encode_value_rows ce dst cursor
+      (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields o SND) (TAKE i rows)))
+      [EL i rows] a = ((),c) /\ fn_has_code a c func ==>
+    ?v Gv tv. P c v Gv tv /\
+      abi_encode_values_prefix_at ats avs hl d cursor st.cs_next_id slot (SUC i) c v Gv tv /\
+      Obs a c u v /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK v,Gv,tv))) ==>
+  ?t G' tn'.
+    P en t G' tn' /\ eval_operand out t = SOME (n2w (LENGTH bytes)) /\ op_taint tn' out = {} /\
+    (!x. out = Var x ==> not_fresh_at en x) /\
+    mem_bytes_at d (LENGTH bytes) t.vs_memory = bytes /\
+    (!j. d <= j /\ j < d + LENGTH bytes ==> j NOTIN tn'.t_mem) /\ R s t /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `abi_encode_values_observer _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encode_values_observer_def]) >>
+  `LENGTH rows = LENGTH ats /\ LENGTH ats = LENGTH avs` by metis_tac[LIST_REL_LENGTH] >>
+  `abi_static_size ce.ce_struct_fields (TupleT (MAP SND rows)) = hl` by
+    metis_tac[abi_encode_value_rows_head_total] >>
+  mp_tac (Q.INST
+        [`x` |-> `(s,G,tn)`,
+         `row_inv` |-> `\cursor i a (u,Gu,tu).
+           ci_mono st a /\ P a u Gu tu /\ ?slot.
+             abi_encode_values_prefix_at ats avs hl d cursor st.cs_next_id slot i a u Gu tu`,
+         `row_step` |-> `\a c (u,Gu,tu) (v,Gv,tv).
+           ci_mono a c /\ R u v /\ abi_encode_values_path lo explicit ctx func PG (u,Gu,tu) (v,Gv,tv)`,
+         `Q` |-> `\out (u,Gu,tu). P en u Gu tu /\
+           eval_operand out u = SOME (n2w (LENGTH bytes)) /\ op_taint tu out = {} /\
+           (!x. out = Var x ==> not_fresh_at en x) /\ mem_bytes_at d (LENGTH bytes) u.vs_memory = bytes /\
+           (!j. d <= j /\ j < d + LENGTH bytes ==> j NOTIN tu.t_mem)`]
+        (INST_TYPE [alpha |-> ``:venom_state # (string |-> num # num) # taint``]
+          abi_encode_values_to_buf_indexed)) >>
+  qpat_assum `compile_abi_encode_values_to_buf ce dst rows st = (out,en)`
+    (fn th => simp_tac (bool_ss ++ pairSimps.PAIR_ss) [th, FORALL_PROD, EXISTS_PROD]) >>
+  impl_tac
+  >- (rpt conj_tac
+      >- (rpt gen_tac >> strip_tac >>
+          `ci_mono st a /\ ci_mono a b'` by
+            metis_tac[ci_mono_emit_op, ci_mono_emit_void, pairTheory.SND] >>
+          `ci_mono b' last /\ ci_mono last en` by
+            metis_tac[ci_mono_compile_abi_encode_value_rows, ci_mono_emit_op, pairTheory.SND] >>
+          `fn_has_code st b' func` by metis_tac[ci_mono_def, ci_mono_trans, fn_has_code_split] >>
+          qpat_assum `!a u Gu tu. P a u Gu tu ==> _` (drule_then strip_assume_tac) >>
+          `emit_void MSTORE [cursor;Lit (n2w hl)] a = ((),b')` by
+            (qpat_assum `abi_static_size _ _ = hl` (fn th =>
+               qpat_assum `emit_void MSTORE _ a = _` (ACCEPT_TAC o REWRITE_RULE [th]))) >>
+          qpat_assum `abi_encode_values_init_observes _ _ _ _ _ _`
+            (drule_all o REWRITE_RULE [abi_encode_values_init_observes_def]) >>
+          disch_then (qspecl_then [`G`,`tn`]
+            (qx_choosel_then [`v`,`slot`,`p`,`Gv`,`tv`] strip_assume_tac)) >>
+          `P b' v Gv tv` by
+            (qpat_assum `!a c ids u Gu tu v Gv tv. P a u Gu tu /\ _ ==> P c v Gv tv`
+               (qspecl_then [`st`,`b'`,`{st.cs_next_id}`,`s`,`G`,`tn`,`v`,`Gv`,`tv`]
+                 MATCH_MP_TAC) >>
+             rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+             >- metis_tac[ci_mono_trans] >>
+             simp[SUBSET_DEF, IN_DIFF]) >>
+          `ci_mono st b' /\ ci_mono b' en` by metis_tac[ci_mono_trans] >>
+          `R s v` by metis_tac[ci_mono_refl] >>
+          qexistsl_tac [`v`,`Gv`,`tv`] >> asm_rewrite_tac[abi_encode_values_path_def] >>
+          qexists_tac `slot` >> simp[abi_encode_values_prefix_at_def,
+            abi_tuple_heads_def, abi_tuple_tails_def] >> metis_tac[])
+      >- (rpt gen_tac >> strip_tac >>
+          rename1 `P a u Gu tu` >>
+          `ci_mono a b'` by metis_tac[ci_mono_compile_abi_encode_value_rows, pairTheory.SND] >>
+          `ci_mono b' last /\ ci_mono last en` by
+            metis_tac[ci_mono_compile_abi_encode_value_rows, ci_mono_emit_op, pairTheory.SND] >>
+          `fn_has_code a b' func` by metis_tac[ci_mono_def, ci_mono_trans, fn_has_code_split] >>
+          qpat_assum `!i a c u Gu tu cursor slot. _`
+            (qspecl_then [`i`,`a`,`b'`,`u`,`Gu`,`tu`,`cursor`,`slot`] mp_tac) >>
+          impl_tac >- asm_rewrite_tac[] >>
+          disch_then (qx_choosel_then [`v`,`Gv`,`tv`] strip_assume_tac) >>
+          `ci_mono st b' /\ ci_mono b' en` by metis_tac[ci_mono_trans] >>
+          `R u v` by metis_tac[] >>
+          qexistsl_tac [`v`,`Gv`,`tv`] >> asm_rewrite_tac[abi_encode_values_path_def] >>
+          qexists_tac `slot` >>
+          qpat_assum `hl = head_lengths ats 0` (fn th => PURE_ONCE_REWRITE_TAC [GSYM th]) >>
+          first_assum ACCEPT_TAC)
+      >- (rpt gen_tac >> strip_tac >>
+          rename1 `P a u Gu tu` >>
+          `ci_mono a en` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+          `fn_has_code a en func` by metis_tac[ci_mono_def, fn_has_code_split] >>
+          qpat_assum `!a u Gu tu. P a u Gu tu ==> _` (drule_then strip_assume_tac) >>
+          `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+            (strip_tac >> res_tac) >>
+          qpat_x_assum `abi_encode_values_prefix_at _ _ _ _ _ _ _ _ _ _ _ _`
+            (strip_assume_tac o SIMP_RULE (srw_ss()) [abi_encode_values_prefix_at_def]) >>
+          `TAKE (LENGTH rows) ats = ats /\ TAKE (LENGTH rows) avs = avs` by
+            simp[TAKE_LENGTH_ID_rwt] >>
+          qpat_x_assum `cursor = Var p` SUBST_ALL_TAC >>
+          qpat_x_assum `TAKE (LENGTH rows) ats = ats`
+            (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+          qpat_x_assum `TAKE (LENGTH rows) avs = avs`
+            (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+          `LENGTH (FLAT (abi_tuple_heads hl 0 ats avs)) = hl` by
+            simp[abi_encoder_open_heads_length, abiDecodeRangesTheory.head_lengths_acc] >>
+          qpat_x_assum `LENGTH (FLAT (abi_tuple_heads hl 0 ats avs)) = hl`
+            (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+          qpat_assum `abi_encode_values_finish_observes _ _ _ _ _ _`
+            (qspecl_then [`a`,`en`,`p`,`out`,`u`,`Gu`,`tu`,`slot`,`hl`,
+                           `LENGTH (FLAT (abi_tuple_tails ats avs))`,`ats`,`avs`,`d`,`bytes`] mp_tac o
+             REWRITE_RULE [abi_encode_values_finish_observes_def]) >>
+          (impl_tac >- asm_rewrite_tac[]) >>
+          disch_then (qx_choosel_then [`v`,`Gv`,`tv`] strip_assume_tac) >>
+          `P en v Gv tv` by
+            (qpat_assum `!a c ids u Gu tu v Gv tv. P a u Gu tu /\ _ ==> P c v Gv tv`
+               (qspecl_then [`a`,`en`,`{}`,`u`,`Gu`,`tu`,`v`,`Gv`,`tv`] MATCH_MP_TAC) >>
+             rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+             simp[SUBSET_DEF]) >>
+          `R u v` by metis_tac[ci_mono_refl] >>
+          qexistsl_tac [`v`,`Gv`,`tv`] >> asm_rewrite_tac[abi_encode_values_path_def])
+      >- simp[ci_mono_refl, abi_encode_values_path_def] >>
+      rpt gen_tac >> strip_tac >>
+      conj_tac >- metis_tac[ci_mono_trans] >>
+      conj_tac >- metis_tac[] >>
+      fs[abi_encode_values_path_def] >> metis_tac[gas_origin_ptr_path_trans]) >>
+  `~s.vs_halted` by (qpat_assum `!a u Gu tu. P a u Gu tu ==> _`
+    (drule_then (ACCEPT_TAC o cj 5))) >>
+  simp_tac bool_ss [abi_encode_values_path_def] >>
+  metis_tac[cj 1 gas_origin_ptr_path_rules]
+QED
+
+(* The ordinary executor forgets the selected-witness observation. *)
 Theorem abi_encode_values_execute:
   compile_abi_encode_values_to_buf ce dst rows st = (out,en) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
@@ -74,107 +312,7 @@ Theorem abi_encode_values_execute:
     (!j. d <= j /\ j < d + LENGTH bytes ==> j NOTIN tn'.t_mem) /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn')
 Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `LENGTH rows = LENGTH ats /\ LENGTH ats = LENGTH avs` by metis_tac[LIST_REL_LENGTH] >>
-  `abi_static_size ce.ce_struct_fields (TupleT (MAP SND rows)) = hl` by
-    metis_tac[abi_encode_value_rows_head_total] >>
-  mp_tac (Q.INST
-        [`x` |-> `(s,G,tn)`,
-         `row_inv` |-> `\cursor i a (u,Gu,tu).
-           ci_mono st a /\ P a u Gu tu /\ ?slot.
-             abi_encode_values_prefix_at ats avs hl d cursor st.cs_next_id slot i a u Gu tu`,
-         `row_step` |-> `\a c (u,Gu,tu) (v,Gv,tv).
-           ci_mono a c /\ abi_encode_values_path lo explicit ctx func PG (u,Gu,tu) (v,Gv,tv)`,
-         `Q` |-> `\out (u,Gu,tu). P en u Gu tu /\
-           eval_operand out u = SOME (n2w (LENGTH bytes)) /\ op_taint tu out = {} /\
-           (!x. out = Var x ==> not_fresh_at en x) /\ mem_bytes_at d (LENGTH bytes) u.vs_memory = bytes /\
-           (!j. d <= j /\ j < d + LENGTH bytes ==> j NOTIN tu.t_mem)`]
-        (INST_TYPE [alpha |-> ``:venom_state # (string |-> num # num) # taint``]
-          abi_encode_values_to_buf_indexed)) >>
-  qpat_assum `compile_abi_encode_values_to_buf ce dst rows st = (out,en)`
-    (fn th => simp_tac (srw_ss()) [th, FORALL_PROD, EXISTS_PROD]) >>
-  impl_tac
-  >- (rpt conj_tac
-      >- (rpt gen_tac >> strip_tac >>
-          `ci_mono st a /\ ci_mono a b'` by
-            metis_tac[ci_mono_emit_op, ci_mono_emit_void, pairTheory.SND] >>
-          `ci_mono b' last /\ ci_mono last en` by
-            metis_tac[ci_mono_compile_abi_encode_value_rows, ci_mono_emit_op, pairTheory.SND] >>
-          `fn_has_code st b' func` by metis_tac[ci_mono_def, ci_mono_trans, fn_has_code_split] >>
-          qpat_assum `!a u Gu tu. P a u Gu tu ==> _` (drule_then strip_assume_tac) >>
-          mp_tac (Q.INST [`mid` |-> `a`, `en` |-> `b'`, `dst_site` |-> `owner`,
-            `dst_base` |-> `b`, `capacity` |-> `cap`] abi_encode_values_cursor_init) >>
-          impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-            >- (qpat_assum `abi_static_size _ _ = hl` (fn th =>
-                  qpat_assum `emit_void MSTORE _ a = _` (ACCEPT_TAC o REWRITE_RULE [th])))
-            >> asm_rewrite_tac[]) >>
-          disch_then (qx_choosel_then [`v`,`slot`,`p`,`Gv`,`tv`] strip_assume_tac) >>
-          `P b' v Gv tv` by
-            (qpat_assum `!a c ids u Gu tu v Gv tv. P a u Gu tu /\ _ ==> P c v Gv tv`
-               (qspecl_then [`st`,`b'`,`{st.cs_next_id}`,`s`,`G`,`tn`,`v`,`Gv`,`tv`]
-                 MATCH_MP_TAC) >>
-             rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-             >- metis_tac[ci_mono_trans] >>
-             simp[SUBSET_DEF, IN_DIFF]) >>
-          `ci_mono st b'` by metis_tac[ci_mono_trans] >>
-          qexistsl_tac [`v`,`Gv`,`tv`] >> asm_rewrite_tac[abi_encode_values_path_def] >>
-          qexists_tac `slot` >> simp[abi_encode_values_prefix_at_def,
-            abi_tuple_heads_def, abi_tuple_tails_def] >> metis_tac[])
-      >- (rpt gen_tac >> strip_tac >>
-          rename1 `P a u Gu tu` >>
-          `ci_mono a b'` by metis_tac[ci_mono_compile_abi_encode_value_rows, pairTheory.SND] >>
-          `ci_mono b' last /\ ci_mono last en` by
-            metis_tac[ci_mono_compile_abi_encode_value_rows, ci_mono_emit_op, pairTheory.SND] >>
-          `fn_has_code a b' func` by metis_tac[ci_mono_def, ci_mono_trans, fn_has_code_split] >>
-          qpat_assum `!i a c u Gu tu cursor slot. _`
-            (qspecl_then [`i`,`a`,`b'`,`u`,`Gu`,`tu`,`cursor`,`slot`] mp_tac) >>
-          impl_tac >- asm_rewrite_tac[] >>
-          disch_then (qx_choosel_then [`v`,`Gv`,`tv`] strip_assume_tac) >>
-          `ci_mono st b'` by metis_tac[ci_mono_trans] >>
-          qexistsl_tac [`v`,`Gv`,`tv`] >> asm_rewrite_tac[abi_encode_values_path_def] >>
-          qexists_tac `slot` >>
-          qpat_assum `hl = head_lengths ats 0` (fn th => PURE_ONCE_REWRITE_TAC [GSYM th]) >>
-          first_assum ACCEPT_TAC)
-      >- (rpt gen_tac >> strip_tac >>
-          rename1 `P a u Gu tu` >>
-          `ci_mono a en` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
-          `fn_has_code a en func` by metis_tac[ci_mono_def, fn_has_code_split] >>
-          qpat_assum `!a u Gu tu. P a u Gu tu ==> _` (drule_then strip_assume_tac) >>
-          `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
-            (strip_tac >> res_tac) >>
-          qpat_x_assum `abi_encode_values_prefix_at _ _ _ _ _ _ _ _ _ _ _ _`
-            (strip_assume_tac o SIMP_RULE (srw_ss()) [abi_encode_values_prefix_at_def]) >>
-          `TAKE (LENGTH rows) ats = ats /\ TAKE (LENGTH rows) avs = avs` by
-            simp[TAKE_LENGTH_ID_rwt] >>
-          qpat_x_assum `cursor = Var p` SUBST_ALL_TAC >>
-          qpat_x_assum `TAKE (LENGTH rows) ats = ats`
-            (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-          qpat_x_assum `TAKE (LENGTH rows) avs = avs`
-            (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-          `LENGTH (FLAT (abi_tuple_heads hl 0 ats avs)) = hl` by
-            simp[abi_encoder_open_heads_length, abiDecodeRangesTheory.head_lengths_acc] >>
-          qpat_x_assum `LENGTH (FLAT (abi_tuple_heads hl 0 ats avs)) = hl`
-            (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-          mp_tac (Q.INST [`s` |-> `u`, `st` |-> `a`, `G` |-> `Gu`, `tn` |-> `tu`,
-            `cursor` |-> `p`,
-            `tys` |-> `ats`, `vs` |-> `avs`, `tl` |-> `LENGTH (FLAT (abi_tuple_tails ats avs))`]
-            abi_encode_values_finish) >>
-          impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-            TRY REFL_TAC >> TRY (asm_rewrite_tac[]) >>
-            POP_ASSUM_LIST (K ALL_TAC) >> NO_TAC) >>
-          disch_then (qx_choosel_then [`v`,`Gv`,`tv`] strip_assume_tac) >>
-          `P en v Gv tv` by
-            (qpat_assum `!a c ids u Gu tu v Gv tv. P a u Gu tu /\ _ ==> P c v Gv tv`
-               (qspecl_then [`a`,`en`,`{}`,`u`,`Gu`,`tu`,`v`,`Gv`,`tv`] MATCH_MP_TAC) >>
-             rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-             simp[SUBSET_DEF]) >>
-          qexistsl_tac [`v`,`Gv`,`tv`] >> asm_rewrite_tac[abi_encode_values_path_def])
-      >- simp[ci_mono_refl, abi_encode_values_path_def] >>
-      rpt gen_tac >> strip_tac >>
-      conj_tac >- metis_tac[ci_mono_trans] >>
-      fs[abi_encode_values_path_def] >> metis_tac[gas_origin_ptr_path_trans]) >>
-  `~s.vs_halted` by (qpat_assum `!a u Gu tu. P a u Gu tu ==> _`
-    (drule_then (ACCEPT_TAC o cj 5))) >>
-  simp_tac bool_ss [abi_encode_values_path_def] >>
-  metis_tac[cj 1 gas_origin_ptr_path_rules]
+  ACCEPT_TAC (PURE_REWRITE_RULE [abi_encode_values_observe_trivial, AND_CLAUSES]
+    (BETA_RULE (Q.INST [`Obs` |-> `\a c u v. T`, `R` |-> `\u v. T`]
+      abi_encode_values_execute_observed)))
 QED
