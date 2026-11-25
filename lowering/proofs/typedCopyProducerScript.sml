@@ -9,12 +9,12 @@ Ancestors
 
 Theorem struct_decl_type_key_member:
   MEM (StructDecl name args) tops ==>
-  MEM ((NONE:num option),name)
-      (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))
+  MEM (src,name) (FLAT (MAP (type_def_keys_toplevel src) tops))
 Proof
-  Induct_on `tops` >> simp[] >> rpt strip_tac >> gvs[]
-  >- simp[type_def_keys_toplevel_def]
-  >> Cases_on `h` >> simp[type_def_keys_toplevel_def] >> metis_tac[]
+  strip_tac >> simp[MEM_FLAT] >>
+  qexists_tac `type_def_keys_toplevel src (StructDecl name args)` >>
+  simp[MEM_MAP, type_def_keys_toplevel_def] >>
+  qexists_tac `StructDecl name args` >> simp[type_def_keys_toplevel_def]
 QED
 
 Theorem distinct_type_keys_struct_args_unique:
