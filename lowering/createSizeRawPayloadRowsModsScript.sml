@@ -170,11 +170,14 @@ Resume create_raw_payload_replay_rows_mods[row_premises]:
   disch_tac >> irule ctor_observed_cut_silent >>
   qexistsl [`ctx`,`((C (SUC i)).cs_current_bb,LENGTH (C (SUC i)).cs_current_insts)`,
     `gas_explicit_sites ctx shctx`,`func`,`St (SUC i)`,`Mid i`] >>
-  rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
-  irule RTC_MONOTONE >>
-  qpat_assum `create_expr_prefix (M i) (C (SUC i)) _ _ _ _ _ _`
-    (irule_at Any o REWRITE_RULE [create_expr_prefix_marked]) >>
-  simp[create_marked_edge_def,create_prefix_step_def,FORALL_PROD,PAIR_EQ] >> metis_tac[]
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac
+  >- (irule RTC_MONOTONE >>
+      qpat_assum `create_expr_prefix (M i) (C (SUC i)) _ _ _ _ _ _`
+        (irule_at Any o REWRITE_RULE [create_expr_prefix_marked]) >>
+      simp[FORALL_PROD,create_marked_edge_def,create_prefix_step_def,PULL_EXISTS]) >>
+  simp[]
 QED
 
 Resume create_raw_payload_replay_rows_mods[suffix_storage]:
