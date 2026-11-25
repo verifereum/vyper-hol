@@ -227,8 +227,13 @@ Proof
     metis_tac[asm_steps_code_preserved] >>
   `asm_sym_rel_own lo prog env fixed as' ss' /\
    sym_frame_inv_own lo prog env fixed ctx cpl fn ret srest labs0 arranged mid sms` by
-    (Cases_on `allow_own` >>
-     gvs[Abbr `fixed`, asm_sym_rel_own_canonical, sym_frame_inv_canonical_own]) >>
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`(if allow_own then asm_sym_rel_own _ _ _ _ else asm_sym_rel _ _) as' ss'`,
+        `(if allow_own then sym_frame_inv_own _ _ _ _ else sym_frame_inv _ _)
+           ctx cpl fn ret srest labs0 arranged mid sms`,
+        `if allow_own then code_labels_agree prog lo else lo = _`] >>
+     Cases_on `allow_own` >> simp[NoAsms, Abbr `fixed`] >>
+     strip_tac >> simp[asm_sym_rel_own_canonical, sym_frame_inv_canonical_own]) >>
   drule_at (Pat `fresh_label _ _ = _`)
     symFrameInvokeSupportTheory.sym_invoke_return_frame_from_callee_own >>
   disch_then drule_all >> strip_tac >>
@@ -252,7 +257,7 @@ Proof
        qpat_assum `EVERY _ ops` (mp_tac o PURE_REWRITE_RULE [th])) >>
      simp_tac bool_ss [EVERY_APPEND] >> simp[]) >>
   drule invoke_called_plan_fields >> strip_tac >>
-  `spill_alloc_layout_wf called.ps_alloc called.ps_spilled` by gvs[] >>
+  `spill_alloc_layout_wf called.ps_alloc called.ps_spilled` by simp[] >>
   qspecl_then [
     `ctx`, `cpl`, `lo`, `o2pc`, `prog`, `fn`, `ra`, `rest`, `mem0`,
     `arranged`, `arg_ops`, `args`, `vs`, `mid`, `saved`, `ret'.iret_values`,

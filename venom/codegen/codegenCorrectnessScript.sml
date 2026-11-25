@@ -7,8 +7,7 @@
  *
  * TOP-LEVEL:
  *   codegen_correct    — planned S7 (run_context vs run_call/frame outcome)
- *   codegen_gas_sufficient — planned S7g: a resource-bounded Venom run needs
- *     bounded gas, except for a RETURNDATACOPY of a callee's data
+ *   codegen_gas_sufficient — S7g: a resource-bounded Venom run needs bounded gas
  *   initial_ctx_rel, venom_frame_rel — exact initial/terminal frame interfaces
  *   TASK056: obsolete positioned codegen admission retired (inactive archive).
  *
@@ -200,11 +199,9 @@ QED
 (* S7g's surplus form, for the stages that need gas left over after our
    frame's steps (D).  Given the Venom run's resource bound (fuel and memory,
    venom_run_bounded), some gas g, independent of the EVM state, is
-   enough: with g' >= g more gas, each step of our frame that no
-   RETURNDATACOPY of it (whose size the callee sets) comes at or before
-   doesn't run out of gas at our depth and leaves at least D.  The generated code runs
-   RETURNDATACOPY only to forward a failed callee's revert data, followed
-   by the REVERT's operands and the REVERT.  Proof idea: an instance of
+   enough: with g' >= g more gas, each step at our depth avoids OutOfGas
+   and leaves at least D. This includes
+   forwarding a failed callee's revert data. The proof instantiates
    the program-generic asm_frame_gas_surplus (asmFrameSurplus) at the N
    and H of codegen_entry_asm_bounded (whose memory premise comes from
    venom_run_bounded's mem_inv, conjoined with Inv), from the entry
@@ -224,9 +221,6 @@ Theorem codegen_gas_surplus:
       venom_run_bounded fuel M unit.cu_context vs /\
       mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
       frame_inst_at (add_frame_gas g' es) s op /\
-      (!t. frame_inst_at (add_frame_gas g' es) t ReturnDataCopy ==>
-           ~RTC (\a b. LENGTH a.contexts >= LENGTH s.contexts /\
-                       step a = (INL (), b)) t s) /\
       step_inst op s = (r, s') /\ LENGTH s'.contexts = LENGTH s.contexts
       ==>
       r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
@@ -288,9 +282,7 @@ Proof
   drule_all asm_frame_no_returndatacopy >> metis_tac[]
 QED
 
-(* S7g (sufficient gas), next to S7: codegen_gas_surplus with D = 0.  With
-   g' >= g more gas, our frame runs out of gas only once it has run a
-   RETURNDATACOPY, whose size the callee sets. *)
+(* S7g (sufficient gas): codegen_gas_surplus with D = 0. *)
 Theorem codegen_gas_sufficient:
   !rpolicy unit cp prog fuel M.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -307,8 +299,7 @@ Theorem codegen_gas_sufficient:
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+        ~(?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op)
 Proof
   rpt strip_tac >>
   drule_all codegen_gas_surplus >>
@@ -317,7 +308,6 @@ Proof
   drule_all codegen_asm_run_call >> strip_tac >>
   qexistsl_tac [`r`, `es'`] >> simp[] >>
   rpt strip_tac >> gvs[frame_inst_raises_def] >>
-  CCONTR_TAC >>
   `wf_state (add_frame_gas g' es) /\
    g' <= frame_gas_left (add_frame_gas g' es)` by
     metis_tac[add_frame_gas_wf_state, wf_state_frame_gas_left] >>
