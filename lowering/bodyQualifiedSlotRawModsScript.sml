@@ -201,3 +201,71 @@ Proof
   disch_tac >> gen_tac >> disch_tac >>
   first_x_assum (qspec_then `H` (drule_then strip_assume_tac)) >> simp[]
 QED
+
+(* Array bases need the declared slot and its evaluated type, not an
+   allocation bound for materializing the array. *)
+Theorem qualified_array_slot_raw_mods:
+  expr_sim_inv_mods mods cenv cx env es /\
+  well_typed_expr env (TopLevelName (ArrayT et bd) (src,id)) /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME rt /\
+  (!H. dead_lo_ok_mods H (DF H) lo cenv cx) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s /\
+       immutable_frame_mods func cenv cx es s /\
+       storage_well_formed_on cx es (FST H) /\
+       ghost_inv_at_mods (DF H) lo d cenv cx es G tn s) ==>
+  let obs = es.storage_trace ++ [StorageRoot tr slot rt];
+      ann = ArrayT et bd;
+      e = TopLevelName ann (src,id);
+      vv = LocatedValue ann (mk_ptr (Lit (n2w slot)) (slot_loc tr));
+      tv = PlaceR (StoragePlace tr (n2w slot) rt);
+      ee = es with <|storage_trace := obs; gas_obs := []|>
+  in
+    type_memory_bytes cenv ann = type_memory_size rt /\
+    (!tail. eval_expr cx e (es with gas_obs := tail) =
+            (INL tv,ee with gas_obs := tail)) /\
+    (storage_trace_domain cx st0 obs ==>
+     ?v. compile_expr cenv ty e sa = (vv,sa) /\ value_has_type rt v /\
+         read_storage_slot cx tr (n2w slot) rt es = (INL v,es) /\
+         (!tail. read_result cx tv (ee with gas_obs := tail) =
+                 (INL v,ee with gas_obs := tail)) /\
+         !H. valid_horizon cx st0 H obs ==>
+             MEM (tr,n2w slot,rt) (FST H) /\
+             (!st. storage_read_live H tr st (n2w slot) rt) /\
+             w2n (n2w slot:bytes32) + type_slot_size rt <= dimword (:256) /\
+             vv_post_mods H ctx func cenv cx e es sa sa s ee tv vv s /\
+             vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv s /\
+             ghost_inv_at_mods (DF H) lo d cenv cx ee G tn s /\
+             ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn s)
+Proof
+  strip_tac >>
+  drule_then assume_tac expr_sim_inv_mods_env >>
+  drule_all_then SUBST_ALL_TAC TopLevelName_storage_decl_type_eq >>
+  simp[LET_THM] >> conj_tac
+  >- (irule typed_copy_memory_size >> qexists_tac `get_tenv cx` >>
+      fs[expr_sim_inv_mods_def] >> rpt strip_tac >>
+      qpat_assum `!n fs. FLOOKUP cenv.ce_struct_fields n = SOME fs ==> _`
+        (drule_then strip_assume_tac) >> simp[]) >>
+  conj_tac
+  >- simp[Once evaluate_def, lookup_global_def, bind_def, ignore_bind_def,
+          record_storage_event_def, lift_option_type_def, return_def, raise_def] >>
+  simp[storage_trace_domain_def] >> strip_tac >>
+  drule_then strip_assume_tac slot_horizon_props >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  drule_then strip_assume_tac stmt_state_rel_vars_rels >>
+  drule_all_then assume_tac toplevel_storage_ce_vars >>
+  `well_formed_type_value rt` by metis_tac[evaluate_type_well_formed_type_value] >>
+  `?v. read_storage_slot cx tr (n2w slot) rt es = (INL v,es) /\ value_has_type rt v` by
+    (irule slot_read_typed >> fs[storage_well_formed_on_def]) >>
+  qexists_tac `v` >> simp[] >> conj_tac
+  >- (Cases_on `tr` >> simp[compile_expr_def, slot_loc_def, expr_type_def]) >>
+  conj_tac >- (drule slot_read_traced >> simp[]) >>
+  drule_all_then (qspecl_then [`src`,`sa`,`id`] mp_tac) slot_raw_good >>
+  simp_tac (srw_ss()) [LET_THM, arithmeticTheory.ADD_COMM] >>
+  disch_tac >> gen_tac >> disch_tac >>
+  first_x_assum (qspec_then `H` (drule_then strip_assume_tac)) >> simp[]
+QED

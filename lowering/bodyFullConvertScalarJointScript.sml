@@ -2,7 +2,7 @@ Theory bodyFullConvertScalarJoint
 Ancestors
   bodyFullShadowBodyInv
   haltExitProj
-  bodyFullPreds bodySimFull bodyFullOfVV bodyFullExprGeneric
+  bodyFullPreds bodyFullSimProjection bodySimFull bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertScalarSuffix bodyFullConvertScalarFrame bodyFullPathHistory
   bodyFullConvertEndpointPosts
   exprSimConvert exprSimHyps exprSimSource gasShadowCompile gasShadowState
@@ -64,7 +64,7 @@ Proof
     metis_tac[fragExecTheory.fn_has_code_split] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type e) e es` by
-    (gvs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[convert_operand_admissible,
       exprSimStackTheory.eval_expr_force_admissible, eval_expr_type_builtin_value] >>
