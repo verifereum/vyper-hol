@@ -2123,6 +2123,15 @@ val () = List.app (fn deploy => List.app (fn layouts =>
         [((NONE,"$.nonreentrant_key"),0)] : storage_layout))]``])
   [false,true]
 
+Theorem check_contract_deploy_rejects_external_constructor_call:
+  check_contract T ^empty_layouts ^zero_address
+    [(NONE,[FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT [Pass];
+            FunctionDecl External Nonpayable F F "run" [] [] NoneT
+              [Expr (Call NoneT (IntCall (NONE,"__init__")) [] NONE)]])] = NONE
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
 val () = List.app (fn in_deploy =>
   (List.app (fn (name, expect) => let
      val layouts =

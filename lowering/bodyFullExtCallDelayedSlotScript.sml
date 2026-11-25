@@ -9,6 +9,7 @@ Ancestors
   loweringPosts exprSimMemDefs vyperValue vyperStorageFootprint
   exprLowering exprSimWordArgs fragGasOriginPtr vyperState
   stateRelProj exprSimVVFrame bodyFullExtCallSavedOperand
+  bodyFullUnwrapSlot bodyFullUnwrapSlotBand createCtorImmutableCopyBand
 Libs pureFrameLib
 
 (* The slot address is computed before the saved argument is unwrapped. *)
@@ -233,6 +234,40 @@ Proof
   `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient` by metis_tac[] >>
   irule extcall_saved_slot_copy_replay_pure >> simp[] >>
   qexistsl [`p`,`si`,`sm`] >> simp[]
+QED
+
+(* Select the same endpoints as the ordinary physical-copy suppliers,
+   retaining the native band on a PHI-free exit. *)
+Theorem restore_copy_posts_band:
+  restore_copy_posts (\a b s t. unwrap_exit_phi_free fn b ==> unwrap_band fn a b s t)
+    (DF,lo,d,explicit,ctx,fn,PG) ce cx st0 ee e
+Proof
+  simp_tac std_ss [restore_copy_posts_def,unwrap_band_refl] >> rpt gen_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  Cases_on `p.ptr_location = LocCode`
+  >- (let fun observe th =
+        mp_tac (Q.INST [`su` |-> `a`,`sb` |-> `b`,`t` |-> `s`] (SPEC_ALL th)) >>
+        (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE fs[]))) >>
+        disch_then (qx_choosel_then [`z`,`G'`,`tn'`] (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+        qexistsl [`z`,`G'`,`tn'`] >> asm_rewrite_tac[] >> disch_tac >>
+        qpat_x_assum `?raw. run_inst_seq _ _ = OK raw /\ _`
+          (qx_choose_then `raw` (CONJUNCTS_THEN assume_tac)) >>
+        qpat_x_assum `z = raw with vs_inst_idx := _` SUBST1_TAC >>
+        simp_tac bool_ss [unwrap_band_def] >>
+        drule_all immutable_unwrap_run_band >> simp[]
+      in
+        Cases_on `ce.ce_is_ctor`
+        >- observe extcall_saved_ctor_copy_replay_with_run >>
+        observe extcall_saved_runtime_copy_replay_with_run
+      end) >>
+  (Q.SUBGOAL_THEN `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient`
+    ASSUME_TAC >- metis_tac[]) >>
+  mp_tac (Q.INST [`su` |-> `a`,`sb` |-> `b`,`t` |-> `s`,
+    `Side` |-> `\a b s t. unwrap_exit_phi_free fn b ==> unwrap_band fn a b s t`]
+    (SPEC_ALL extcall_saved_slot_copy_replay_side)) >>
+  simp_tac bool_ss [unwrap_slot_origin_side_producer_band] >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE fs[]))) >>
+  disch_then ACCEPT_TAC
 QED
 
 (* Adapt physical-cut suppliers to the expression-specific interface without
