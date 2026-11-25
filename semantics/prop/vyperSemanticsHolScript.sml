@@ -7,6 +7,7 @@ Ancestors
   vyperEvalPureExpr
   vyperEvalOutcomeReplace
   vyperTypeSoundness
+  vyperTypeContractModes
   vyperABIValid
   vyperABIRoundtrip
   vyperTypeDeploymentMachine

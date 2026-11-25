@@ -15,7 +15,7 @@ CONFIG = Path(__file__).resolve().parent
 ROOT = CONFIG.parent.parent
 THEORY = "compilerCorrectnessDossierTarget"
 VYPER_URL = "https://github.com/verifereum/vyper-hol"
-PROVED = ["e2eCorrectness", "e2eDeployCorrectness", "e2eGasSufficientTop"]
+PROVED = ["e2eDeployed", "e2eGasSufficientTop"]
 
 
 def output(*command: str) -> str:

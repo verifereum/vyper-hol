@@ -3,7 +3,7 @@
 Theory e2eWitness
 Ancestors
   e2eWitnessCompute e2eDefs e2eDeployDefs
-  e2eDeployCorrectness[qualified,ignore_grammar]
+  e2eDeployed
   immutableSectionRel alist integer_word option vyperStorageFootprint
   compileVyper e2eProducers e2eCorrectness callTrace frameOutcome
   vyperCalldata vyperInterpreter
@@ -384,18 +384,20 @@ local
     simp[p23_dep_trace])
   val call_bound = prove (``LENGTH (call_trace p23_es_call) < 2 ** 64``,
     simp[p23_call_trace])
+  val call_premises = CONJUNCTS (REWRITE_RULE [call_premises_deployed]
+    (CONJ p23_source_typing p23_call_state))
 in
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `p23_tops`,
       `p23_deploy_bc`, `p23_runtime_bc`, `initial_machine_state`,
-      `p23_deploy_tx`, `p23_es_dep`] e2eDeployCorrectnessTheory.e2e_deploy_correctness)
+      `p23_deploy_tx`, `p23_es_dep`] e2e_deploy_correctness_deployed)
     (LIST_CONJ [accepted, p23_compile, p23_deploy_typing, p23_deploy_state, dep_bound])
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `p23_tops`,
       `p23_deploy_bc`, `p23_runtime_bc`, `p23_am_call`, `p23_call_tx`,
-      `p23_es_call`, `([], [])`] vyper_call_correct)
-    (LIST_CONJ [accepted, p23_compile, p23_source_typing, p23_call_state,
-                call_bound, p23_storage_ok, p23_call_within])
+      `p23_es_call`, `([], [])`] vyper_call_correct_deployed)
+    (LIST_CONJ ([accepted, p23_compile] @ call_premises @
+                [call_bound, p23_storage_ok, p23_call_within]))
 end
 
 (* ===== The witness ===== *)

@@ -265,8 +265,10 @@ QED
 
 (* ===== Call to call ===== *)
 
-Theorem call_preserves_call_ready:
-  call_ready tops runtime_bc am tx.target /\ call_tx_well_typed tx /\
+Theorem call_frame_preserves_call_ready:
+  (!tx2. tx2.target = tx.target /\ call_tx_well_typed tx2 ==>
+         source_typing_ok tops am tx2 /\ source_deployment_rel tops am tx2) /\
+  call_tx_well_typed tx /\
   runtime_bc <> [] /\
   call_state_rel tops runtime_bc am tx es /\ LENGTH es.contexts = 1 /\
   balance_bounded (2 ** 256 - 1) es /\
@@ -276,7 +278,7 @@ Theorem call_preserves_call_ready:
 Proof
   strip_tac >>
   `source_typing_ok tops am tx /\ source_deployment_rel tops am tx` by
-    fs[call_ready_def] >>
+    fs[] >>
   drule_all source_typing_ok_runtime_ready >> strip_tac >>
   `am'.immutables = am.immutables` by
     (irule call_external_runtime_preserves_immutables >>
@@ -301,13 +303,28 @@ Proof
   >- (gvs[lookup_account_process_deletions] >> fs[account_immutables_def]) >>
   qx_gen_tac `tx2` >> strip_tac >>
   `source_typing_ok tops am tx2 /\ source_deployment_rel tops am tx2` by
-    fs[call_ready_def] >>
+    fs[] >>
   `machine_well_typed (next_source_machine am' es')` by
     (irule next_source_machine_well_typed >>
      fs[source_typing_ok_def, machine_well_typed_def]) >>
   fs[source_typing_ok_def, source_deployment_rel_def, layouts_agree_def,
      checked_contract_runtime_ready_def, account_immutables_def] >>
   gvs[]
+QED
+
+Theorem call_preserves_call_ready:
+  call_ready tops runtime_bc am tx.target /\ call_tx_well_typed tx /\
+  runtime_bc <> [] /\
+  call_state_rel tops runtime_bc am tx es /\ LENGTH es.contexts = 1 /\
+  balance_bounded (2 ** 256 - 1) es /\
+  run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete /\
+  call_external orc gobs am tx = (res, am', rqs) ==>
+  call_ready tops runtime_bc (next_source_machine am' es') tx.target
+Proof
+  strip_tac >>
+  qpat_x_assum `call_ready _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [call_ready_def]) >>
+  drule_all call_frame_preserves_call_ready >> simp[]
 QED
 
 (* ===== Initial storage ===== *)
