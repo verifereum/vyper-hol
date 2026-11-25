@@ -26,6 +26,7 @@ Proof
 QED
 
 (* The read contract holds at the delayed cut, before allocating the copy. *)
+val _ = HolbuildProofRuntime.trace_all_ref := true (* trace C1.6.8-2 *)
 Theorem ctor_encoder_delayed_ctor_mods:
   p.ptr_location = LocCode /\ ce.ce_is_ctor /\
   lowered_value_type ce e = expr_type e /\ ~is_word_type (expr_type e) /\
