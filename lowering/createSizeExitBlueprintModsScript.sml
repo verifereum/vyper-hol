@@ -502,8 +502,9 @@ Resume create_size_exit_blueprint_mods[keyword_apply]:
 QED
 
 Resume create_size_exit_blueprint_mods[keyword_premises]:
-  rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE
-    (qexistsl_tac [`ctors`,`target`] >> rpt conj_tac >> first_assum ACCEPT_TAC))) >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (qexistsl_tac [`ctors`,`target`] >> conj_tac >> first_assum ACCEPT_TAC) >>
+  ntac 4 (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl_tac [`DF`,`Gp`,`H`,`value`,`ty`,`ce`,`cm`,`cn`,`ctx`,`depr`,`d`,`es`,`env`,`exps`,`func`,`ks`,`lo`] >>
   qexistsl_tac [`Obs (SUC j)`,`M j`,`M (j+2)`,`M (SUC j)`,`Obs (j+2)`,`R (j+3)`,`sop`,
     `scprep`,`scb`,`scm`,`scn`,`shctx`,`shadow_func`,`src`,`st0`,`tail`,`tnp`,`tops`] >>
@@ -522,43 +523,44 @@ Resume create_size_exit_blueprint_mods[extent]:
     suffices_by (disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
       rename [`C (j+5) = ca1`,`compile_alloc_dynamic sz ca1 = (offop,ca2)`,
         `emit_void EXTCODECOPY _ ca2 = ((),ca3)`] >> suspend "extent_geometry") >>
-  qpat_assum `create_blueprint_append_itinerary target_op _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE[create_blueprint_append_itinerary_def]) >>
-  rename [`emit_op ADD [code;len] cf = (sz,ca1)`,
-    `compile_alloc_dynamic sz ca1 = (offop,ca2)`, `emit_void EXTCODECOPY _ ca2 = ((),ca3)`] >>
-  qexistsl_tac [`ca1`,`ca2`,`ca3`] >>
   suspend "append_cuts"
 QED
 
 Resume create_size_exit_blueprint_mods[append_cuts]:
-  Cases_on `len = Lit 0w` >>
-  FIRST (map (fn pat => qpat_assum pat (fn h =>
-    qpat_assum `if len = Lit 0w then app = _ else _`
-      (strip_assume_tac o REWRITE_RULE[h,COND_CLAUSES])))
-    [`len = Lit 0w`,`len <> Lit 0w`]) >>
-  `LENGTH app = 3 \/ LENGTH app = 5` by simp[] >>
-  `0 < LENGTH app /\ LENGTH app - 1 < LENGTH app /\
-    j + 5 + (LENGTH app - 1) = n /\ j + 5 <= n` by decide_tac >>
-  `C (j+5) = ca1` by
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`create_blueprint_append_itinerary target_op _ _ _ _ _ _ _ _`,
+     `C n = sc`, `n = j+4+LENGTH app`,
+     `!i. i < LENGTH app ==> C (j+5+i) = EL i app`] >>
+  POP_ASSUM_LIST (K all_tac) >>
+  rpt (disch_then assume_tac) >>
+  qpat_x_assum `create_blueprint_append_itinerary target_op _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE[create_blueprint_append_itinerary_def]) >>
+  rename [`emit_op ADD [code;len] cf = (sz,ca1)`,
+    `compile_alloc_dynamic sz ca1 = (offop,ca2)`,
+    `emit_void EXTCODECOPY _ ca2 = ((),ca3)`] >>
+  qexistsl_tac [`ca1`,`ca2`,`ca3`] >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_x_assum `if len = Lit 0w then app = [ca1;ca2;ca3] else _` mp_tac >>
+  Cases_on `len = Lit 0w` >> simp[] >> strip_tac >>
+  (`C (j+5) = ca1` by
     (qpat_assum `!i. i < LENGTH app ==> C (j+5+i) = EL i app`
-      (qspec_then `0` (drule_then mp_tac)) >>
-     qpat_assum `app = ca1::ca2::ca3::_` (fn th => simp_tac (srw_ss()) [th])) >>
-  `C n = EL (LENGTH app - 1) app` by
-    (qpat_assum `!i. i < LENGTH app ==> C (j+5+i) = EL i app`
-       (qspec_then `LENGTH app - 1` mp_tac) >> simp_tac bool_ss [] >>
-     disch_then drule >> disch_then (fn th =>
-       qpat_assum `j + 5 + (LENGTH app - 1) = n` (ACCEPT_TAC o C (REWRITE_RULE o single) th))) >>
-  `sc = EL (LENGTH app - 1) app` by
-    (qpat_assum `C n = sc` (fn th => pop_assum (ACCEPT_TAC o REWRITE_RULE[th]))) >>
-  qpat_assum `app = ca1::ca2::ca3::_` (fn th =>
-    pop_assum (assume_tac o SIMP_RULE (srw_ss()) [th])) >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  FIRST (map (fn pat => qpat_assum pat (pure_rewrite_tac o single))
-    [`len = Lit 0w`,`len <> Lit 0w`]) >>
-  simp_tac bool_ss [COND_CLAUSES] >>
-  (first_assum ACCEPT_TAC ORELSE
-   (goal_assum (drule_at Any) >> qpat_assum `sc = _` (pure_rewrite_tac o single) >>
-    first_assum ACCEPT_TAC))
+       (qspec_then `0` assume_tac) >> gvs[]))
+  >- (`n = j+4+3` by simp[] >>
+      `j+5+2 = n` by decide_tac >>
+      `C n = ca3` by
+        (qpat_assum `!i. i < LENGTH app ==> C (j+5+i) = EL i app`
+           (qspec_then `2` mp_tac) >> gvs[]) >>
+      gvs[])
+  >- (`n = j+4+5` by simp[] >>
+      `j+5+4 = n` by decide_tac >>
+      rename1 `app = [ca1;ca2;ca3;q;last]` >>
+      `C n = last` by
+        (qpat_assum `!i. i < LENGTH app ==> C (j+5+i) = EL i app`
+           (qspec_then `4` mp_tac) >> gvs[]) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- simp[] >>
+      rename1 `emit_op ADD [offop;code] ca3 = (dest,q)` >>
+      qexistsl_tac [`dest`,`q`] >> gvs[])
 QED
 
 Resume create_size_exit_blueprint_mods[extent_geometry]:
