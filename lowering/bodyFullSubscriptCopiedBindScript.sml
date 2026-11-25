@@ -171,6 +171,126 @@ Proof
                      `s.vs_memory`, `u.vs_memory`] >> simp[])
 QED
 
+(* Carry the snapshot chosen at the pre-index read through the actual
+   successful index evaluation. The selector still uses the saved value. *)
+Theorem copied_subscript_saved_index_frame:
+  eval_expr cx obj (es with gas_obs := gs) = (INL raw,mid) /\
+  read_result cx raw mid = (INL saved,mid) /\
+  bind (eval_expr cx idx) (read_result cx) (mid with gas_obs := ic) = (INL key,fin) /\
+  compile_expr ce ty obj sa = (bvv,sm) /\
+  compile_snapshot_vv ce T bvv sm = (cvv,sc) /\
+  lower_value compile_expr ce ty idx sc = (iop,si) /\
+  cvv = LocatedValue aty (mk_ptr (Var q) LocMemory) /\
+  storage_trace_domain cx st0 fin.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==> stmt_state_rel H ctx func ce cx es s0) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       vv_post H ctx func ce cx obj es sa sm s0 mid raw bvv s /\
+       stmt_state_rel H ctx func ce cx mid u) /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+       expr_post H ctx func ce cx idx mid sc si u fin key iop z /\
+       ghost_inv_at (DF H) lo d ce cx fin Gi tni z) /\
+  local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sc /\
+  (frames ==> wb_frame ce es mid sa s0 u /\
+     (~expr_has_effect obj ==> pure_frame ce func es sa s0 u)) /\
+  ghost_kept_at lo ce es sa G0 tn0 s0 Gc tnc /\
+  ghost_kept_at lo ce mid sc Gc tnc u Gi tni /\
+  (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> FLOOKUP u.vs_allocas aid = SOME entry) /\
+  s0.vs_alloca_next <= s.vs_alloca_next /\
+  s.vs_alloca_next <= u.vs_alloca_next /\ u.vs_alloca_next <= z.vs_alloca_next /\
+  lookup_var q u = SOME w /\ not_fresh_at sc q /\
+  evaluate_type (get_tenv cx) aty = SOME atv /\ val_wf atv saved /\
+  ptr_covers Gc tnc q u (type_memory_size atv) /\
+  vv_own ce cx aty sm sc mid (Value saved) cvv u /\
+  (!m. mem_agree_outside tnc.t_mem u.vs_memory m ==> val_in_memory atv saved (w2n w) m) ==>
+  lookup_var q z = SOME w /\ not_fresh_at si q /\
+  ptr_covers Gi tni q z (type_memory_size atv) /\
+  vv_own ce cx aty sm sc fin (Value saved) cvv z /\
+  (!m. mem_agree_outside tni.t_mem z.vs_memory m ==> val_in_memory atv saved (w2n w) m) /\
+  (frames ==> wb_frame ce es fin sa s0 z /\
+     (~expr_has_effect obj /\ ~expr_has_effect idx ==> pure_frame ce func es sa s0 z)) /\
+  ghost_kept_at lo ce es sa G0 tn0 s0 Gi tni /\
+  s0.vs_alloca_next <= z.vs_alloca_next /\ local_ptrs_reserved ce si /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es s0 /\
+       vv_post H ctx func ce cx obj es sa sm s0 mid raw bvv s /\
+       expr_post H ctx func ce cx idx mid sc si u fin key iop z /\
+       ghost_inv_at (DF H) lo d ce cx fin Gi tni z)
+Proof
+  strip_tac >>
+  `!H. valid_horizon cx st0 H fin.storage_trace ==> valid_horizon cx st0 H mid.storage_trace` by
+    (rpt strip_tac >>
+     qpat_assum `bind (eval_expr cx idx) _ _ = _`
+       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[storage_trace_frame_bind_all, cj 5 evaluate_storage_trace_frame,
+          storage_trace_frame_read_result]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==> valid_horizon cx st0 H es.storage_trace` by
+    (rpt strip_tac >>
+     qpat_assum `eval_expr cx obj _ = _`
+       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[cj 5 evaluate_storage_trace_frame]) >>
+  `MAP FDOM mid.scopes = MAP FDOM fin.scopes` by
+    (drule (SRULE [SF ETA_ss] exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom) >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+    (qpat_assum `eval_expr cx obj _ = _`
+       (mp_then Any mp_tac vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom) >> simp[]) >>
+  `sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id /\
+   sc.cs_next_var <= si.cs_next_var` by
+    (mp_tac (Q.SPECL [`ce`,`ty`,`obj`,`sa`] (cj 1 compile_expr_ci_mono)) >>
+     mp_tac (Q.SPECL [`ce`,`T`,`bvv`,`sm`] ci_mono_compile_snapshot_vv) >>
+     mp_tac (Q.SPECL [`ce`,`ty`,`idx`,`sc`] ci_mono_lower_value_compile_expr) >>
+     simp[ci_mono_def]) >>
+  qabbrev_tac `Hfin = storage_trace_horizon fin.storage_trace` >>
+  `valid_horizon cx st0 Hfin fin.storage_trace` by
+    fs[Abbr `Hfin`, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel Hfin ctx func ce cx mid u /\ stmt_state_rel Hfin ctx func ce cx es s0 /\
+   expr_post Hfin ctx func ce cx idx mid sc si u fin key iop z` by simp[] >>
+  `lookup_var q z = SOME w /\ ptr_covers Gi tni q z (type_memory_size atv) /\
+   vv_own ce cx aty sm sc fin (Value saved) cvv z /\
+   (!m. mem_agree_outside tni.t_mem z.vs_memory m ==> val_in_memory atv saved (w2n w) m)` by
+    (gvs[] >> irule (INST_TYPE [alpha |-> ``:256``] copied_array_index_frame) >>
+     simp[] >> qexistsl [`Gc`,`Hfin`,`ctx`,`func`,`idx`,`iop`,`key`,`lo`,`mid`,`u`,`si`,`tnc`] >> simp[]) >>
+  `wb_frame ce es mid sa s0 s` by
+    (`vv_post Hfin ctx func ce cx obj es sa sm s0 mid raw bvv s` by simp[] >>
+     qpat_assum `vv_post Hfin _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+     pure_rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `ghost_kept_at lo ce es sa G0 tn0 s0 Gi tni` by
+    (irule ghost_kept_at_trans >> qexistsl [`Gc`,`mid`,`u`,`sc`,`tnc`] >> simp[] >>
+     conj_tac
+     >- (`!n b sz. local_region ce es.scopes s0 n b sz <=> local_region ce mid.scopes s n b sz` by
+           (drule_all wb_frame_local_regions >> simp[]) >>
+         rpt gen_tac >> qpat_assum `!n b sz. local_region _ es.scopes _ _ _ _ <=> _`
+           (pure_once_rewrite_tac o single) >>
+         irule exprSimCopyTheory.copy_buffer_local_region_frame >> qexists `sm` >>
+         simp[] >>
+         mp_tac (Q.SPECL [`ce`,`ty`,`obj`,`sa`] (cj 1 compile_expr_ci_mono)) >>
+         simp[ci_mono_def] >> metis_tac[local_ptrs_reserved_next_var]) >>
+     qpat_assum `wb_frame ce es mid sa s0 s`
+       (assume_tac o cj 2 o REWRITE_RULE [wb_frame_def]) >>
+     rpt strip_tac >> first_assum irule >> first_assum irule >> simp[]) >>
+  `s0.vs_alloca_next <= z.vs_alloca_next` by decide_tac >>
+  `not_fresh_at si q` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists `sc` >> simp[]) >>
+  `local_ptrs_reserved ce si` by metis_tac[local_ptrs_reserved_next_var] >>
+  simp[] >> strip_tac >>
+  qpat_assum `frames ==> wb_frame _ _ _ _ _ _ /\ _` drule >> strip_tac >>
+  qpat_assum `expr_post Hfin _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `wb_frame ce mid fin sc u z` by
+    (pure_rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (irule (INST_TYPE [alpha |-> ``:256``] exprSimWordArgsTheory.wb_frame_trans) >>
+      simp[] >> conj_tac
+      >- (qexistsl [`mid`,`sc`,`u`] >> simp[]) >>
+      qexistsl [`Hfin`,`ctx`,`cx`,`func`] >> simp[]) >>
+  strip_tac >>
+  qpat_assum `wb_frame ce es mid sa s0 u`
+    (assume_tac o cj 1 o REWRITE_RULE [wb_frame_def]) >>
+  irule exprSimPropsTheory.pure_frame_trans >> simp[] >>
+  qexistsl [`mid`,`sc`,`u`] >> simp[]
+QED
+
 (* The two continuation interfaces are kept explicit: the snapshot runs at
    the pre-index read, and the array selection uses its saved Value.
    The frames flag lets the selector request the caller's composed frames. *)
@@ -501,91 +621,30 @@ Resume subscript_copied_bind_caller_frames[index_success]:
        (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [listTheory.APPEND_NIL])) >>
      `fin with gas_obs := [] = fin` by simp[vyperStateTheory.evaluation_state_component_equality] >>
      metis_tac[]) >>
-  `MAP FDOM mid.scopes = MAP FDOM fin.scopes` by
-    (drule (SRULE [SF ETA_ss] exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom) >> simp[]) >>
-  `!H'. valid_horizon cx st0 H' fin.storage_trace ==>
-         valid_horizon cx st0 H' mid.storage_trace` by
-    (gen_tac >> strip_tac >>
-     qpat_assum `bind (eval_expr cx idx) _ _ = _`
-       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
-     simp[storage_trace_frame_bind_all, cj 5 evaluate_storage_trace_frame,
-          storage_trace_frame_read_result]) >>
-  `lookup_var q it = SOME w /\ ptr_covers Gi tni q it (type_memory_size atv) /\
+  `lookup_var q it = SOME w /\ not_fresh_at si q /\
+   ptr_covers Gi tni q it (type_memory_size atv) /\
    vv_own ce cx (ArrayT et bd) sm sc fin (Value saved)
      (LocatedValue (ArrayT et bd) (mk_ptr (Var q) LocMemory)) it /\
-   (!m. mem_agree_outside tni.t_mem it.vs_memory m ==> val_in_memory atv saved (w2n w) m)` by
-    (irule (INST_TYPE [alpha |-> ``:256``] copied_array_index_frame) >> simp[] >>
-     qexistsl [`Gc`,`storage_trace_horizon fin.storage_trace`,`ctx`,`func`,`idx`,
-               `iop`,`v`,`lo`,`mid`,`u`,`si`,`tnc`] >>
-     simp[contextTheory.mk_ptr_def] >> metis_tac[]) >>
-  `!H'. valid_horizon cx st0 H' mid.storage_trace ==>
-         valid_horizon cx st0 H' es.storage_trace` by
-    (gen_tac >> strip_tac >>
-     qpat_assum `eval_expr cx obj _ = _`
-       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
-     simp[cj 5 evaluate_storage_trace_frame]) >>
-  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
-    (qpat_assum `eval_expr cx obj _ = _`
-       (mp_then Any mp_tac vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom) >>
-     simp[]) >>
-  `sa.cs_next_id <= sc.cs_next_id` by
-    (mp_tac (Q.SPECL [`ce`,`ty`,`obj`,`sa`] (cj 1 compile_expr_ci_mono)) >>
-     mp_tac (Q.SPECL [`ce`,`T`,`bvv`,`sm`] ci_mono_compile_snapshot_vv) >>
-     simp[ci_mono_def]) >>
-  qabbrev_tac `Hmid = storage_trace_horizon mid.storage_trace` >>
-  `stmt_state_rel Hmid ctx func ce cx es s0 /\
-   vv_post Hmid ctx func ce cx obj es sa sm s0 mid tv bvv t` by simp[] >>
-  `wb_frame ce es mid sa s0 t` by
-    (qpat_assum `vv_post Hmid _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
-     pure_rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
-               FLOOKUP u.vs_allocas aid = SOME entry` by
-    (qpat_assum `wb_frame _ _ _ _ _ _`
-       (assume_tac o cj 2 o REWRITE_RULE [wb_frame_def]) >>
-     rpt strip_tac >> first_assum irule >> first_assum irule >> simp[]) >>
-  `!n b sz. local_region ce es.scopes s0 n b sz <=>
-            local_region ce mid.scopes t n b sz` by
-    (drule_all wb_frame_local_regions >> simp[]) >>
-  `local_ptrs_reserved ce sm /\ local_ptrs_reserved ce si` by
-    (mp_tac (Q.SPECL [`ce`,`ty`,`obj`,`sa`] (cj 1 compile_expr_ci_mono)) >>
-     simp[ci_mono_def] >> metis_tac[local_ptrs_reserved_next_var]) >>
-  `!n b sz. local_region ce mid.scopes u n b sz <=>
-            local_region ce es.scopes s0 n b sz` by
-    (rpt gen_tac >> qpat_assum `!n b sz. local_region _ es.scopes _ _ _ _ <=> _`
-       (pure_once_rewrite_tac o single) >>
-     irule exprSimCopyTheory.copy_buffer_local_region_frame >>
-     qexists `sm` >> simp[]) >>
-  `ghost_kept_at lo ce es sa G0 tn0 s0 Gi tni` by
-    (irule ghost_kept_at_trans >> qexistsl [`Gc`,`mid`,`u`,`sc`,`tnc`] >> simp[]) >>
-  `s0.vs_alloca_next <= it.vs_alloca_next` by decide_tac >>
-  `not_fresh_at si q` by
-    (irule freshWritesTheory.not_fresh_at_mono >> qexists `sc` >> simp[]) >>
-  `frames ==> wb_frame ce es fin sa s0 it /\
-      (~expr_has_effect obj /\ ~expr_has_effect idx ==> pure_frame ce func es sa s0 it)` by
-    (strip_tac >>
-     qpat_assum `frames ==> wb_frame _ _ _ _ _ _ /\ _` drule >> strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-       (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >>
-     disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-     `wb_frame ce mid fin sc u it` by
-       (pure_rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     conj_tac
-     >- (irule (INST_TYPE [alpha |-> ``:256``] exprSimWordArgsTheory.wb_frame_trans) >>
-         simp[] >> conj_tac
-         >- (qexistsl [`mid`,`sc`,`u`] >> simp[]) >>
-         qexistsl [`Hmid`,`ctx`,`cx`,`func`] >> simp[]) >>
-     strip_tac >>
-     qpat_assum `wb_frame ce es mid sa s0 u`
-       (assume_tac o cj 1 o REWRITE_RULE [wb_frame_def]) >>
-     irule exprSimPropsTheory.pure_frame_trans >> simp[] >>
-     qexistsl [`mid`,`sc`,`u`] >> simp[]) >>
+   (!m. mem_agree_outside tni.t_mem it.vs_memory m ==> val_in_memory atv saved (w2n w) m) /\
+   (frames ==> wb_frame ce es fin sa s0 it /\
+      (~expr_has_effect obj /\ ~expr_has_effect idx ==> pure_frame ce func es sa s0 it)) /\
+   ghost_kept_at lo ce es sa G0 tn0 s0 Gi tni /\
+   s0.vs_alloca_next <= it.vs_alloca_next /\ local_ptrs_reserved ce si /\
+   (!H. valid_horizon cx st0 H fin.storage_trace ==>
+        stmt_state_rel H ctx func ce cx es s0 /\
+        vv_post H ctx func ce cx obj es sa sm s0 mid tv bvv t /\
+        expr_post H ctx func ce cx idx mid sc si u fin v iop it /\
+        ghost_inv_at (DF H) lo d ce cx fin Gi tni it)` by
+    (irule copied_subscript_saved_index_frame >> simp[contextTheory.mk_ptr_def] >>
+     rpt conj_tac
+     >- goal_assum (drule_at (Pat `eval_expr cx obj _ = _`))
+     >- goal_assum (drule_at (Pat `bind (eval_expr cx idx) _ _ = (INL v,fin)`))
+     >- (qexists `ty` >> simp[]) >>
+     qexistsl [`Gc`,`tnc`] >> simp[]) >>
   first_assum irule >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   goal_assum (drule_at (Pat `compile_expr ce ty obj sa = _`)) >>
   goal_assum (drule_at (Pat `compile_snapshot_vv ce T bvv sm = _`)) >>
   rpt (goal_assum (drule_at Any)) >> simp[contextTheory.mk_ptr_def] >>
-  qexistsl [`t`,`u`] >> simp[contextTheory.mk_ptr_def] >>
   qpat_assum `vv_own _ _ _ _ _ _ _ (LocatedValue _ (mk_ptr _ _)) _`
     (ACCEPT_TAC o REWRITE_RULE [contextTheory.mk_ptr_def])
 QED
