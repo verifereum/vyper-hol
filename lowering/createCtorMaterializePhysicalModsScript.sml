@@ -15,6 +15,7 @@ Ancestors
   vyperInterpreter vyperValueOperation vyperStatePreservation
   vyperTypeSystem vyperTyping vyperValue vyperAST allocLimits vyperContext
   exprSimHypsDefs list exprSafeOperand vyperTypeCallGraph
+  bodyFullPostsMods valueTypingMemoryProps
 Libs monadsyntax
 
 (* A well-typed argument read keeps the linked invariant for the next read. *)
@@ -450,6 +451,24 @@ Proof
   qexists_tac `get_tenv cx` >> fs[exprSimHypsDefsTheory.expr_sim_inv_mods_def] >> metis_tac[]
 QED
 
+Theorem ctor_physical_bound_read_type_mods:
+  expr_body_pre_mods mods ce cx env e st /\
+  bind (eval_expr cx e) (read_result cx) st = (INL v,ee) ==>
+  ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+       value_has_type tv v
+Proof
+  strip_tac >>
+  `expr_sim_inv_mods mods ce cx env st /\ well_typed_expr env e /\
+   alloc_limits_expr ce e /\ call_evaluation_safe cx (int_calls_expr e)` by
+    fs[expr_body_pre_mods_def] >>
+  `env.type_defs = get_tenv cx` by
+    metis_tac[expr_sim_inv_mods_env, env_consistent_type_defs_get_tenv] >>
+  drule ctor_physical_static_mods >> strip_tac >>
+  `!u. well_typed_expr env u ==>
+       arg_type_fits (lowered_value_type ce u) (expr_type u)` by metis_tac[] >>
+  drule_all ctor_physical_read_mods >> simp[value_runtime_typed_def]
+QED
+
 Theorem ctor_materialize_unwrap_retag_mods:
   expr_body_pre_mods mods ce cx env e es /\
   compile_expr ce ty e sa = (vv,sm) /\
@@ -465,7 +484,59 @@ Theorem ctor_materialize_unwrap_retag_mods:
         type_memory_bytes ce (post_value_type ce e) = type_memory_size rty /\
         type_memory_size rty < 2 ** 64
 Proof
-  cheat
+  strip_tac >>
+  `expr_sim_inv_mods mods ce cx env es /\ well_typed_expr env e /\
+   alloc_limits_expr ce e /\ call_evaluation_safe cx (int_calls_expr e)` by
+    fs[expr_body_pre_mods_def] >>
+  drule ctor_physical_static_mods >>
+  disch_then (fn th => assume_tac th >> qspec_then `e` drule th) >>
+  disch_then (CONJUNCTS_THEN assume_tac) >>
+  `~is_word_type (post_value_type ce e)` by
+    metis_tac[is_bytestring_word_type] >>
+  `unwrap_value ce vv mid = (op,su)` by
+    (Cases_on `vv` >- fs[ext_call_arg_value_def] >>
+     rename1 `LocatedValue tag p` >>
+     `p.ptr_location <> LocMemory ==> tag = lowered_value_type ce e` by
+       (strip_tac >>
+        `post_value_type ce e = lowered_value_type ce e` by
+          (drule snapshot_changed_type_location >> fs[vv_location_def]) >>
+        fs[bodyFullPostsModsTheory.vv_post_mods_def,
+           bodyFullPostsModsTheory.vv_holds_mods_def, vv_holds_def] >>
+        Cases_on `p.ptr_location = LocCode` >> gvs[]) >>
+     Cases_on `p.ptr_location = LocMemory`
+     >- (`~is_word_type tag` by
+           (fs[bodyFullPostsModsTheory.vv_post_mods_def,
+               bodyFullPostsModsTheory.vv_holds_mods_def, vv_holds_def] >>
+            metis_tac[is_bytestring_word_type]) >>
+         gvs[ext_call_arg_value_def, unwrap_value_def]) >>
+     gvs[ext_call_arg_value_def]) >>
+  `bind (eval_expr cx e) (read_result cx) es = (INL v,ee)` by simp[bind_def] >>
+  `value_runtime_typed env (expr_type e) v` by
+    (drule_all ctor_read_annotation_mods >> simp[]) >>
+  `value_runtime_typed env (lowered_value_type ce e) v` by
+    (irule ctor_physical_read_mods >> simp[] >>
+     metis_tac[]) >>
+  `env.type_defs = get_tenv cx` by
+    (drule expr_sim_inv_mods_env >> simp[env_consistent_def, env_context_consistent_def]) >>
+  `value_runtime_typed env (post_value_type ce e) v` by metis_tac[] >>
+  `arg_type_fits (post_value_type ce e) (expr_type e)` by
+    metis_tac[ifexp_arg_type_fits_refl] >>
+  qpat_x_assum `value_runtime_typed _ (expr_type _) _` mp_tac >>
+  simp[value_runtime_typed_def] >>
+  disch_then (qx_choose_then `aty` strip_assume_tac) >>
+  qpat_x_assum `value_runtime_typed _ (post_value_type _ _) _` mp_tac >>
+  simp[value_runtime_typed_def] >>
+  disch_then (qx_choose_then `rty` strip_assume_tac) >>
+  qexists_tac `rty` >> simp[] >>
+  `type_memory_bytes ce (post_value_type ce e) = type_memory_size rty` by
+    metis_tac[ctor_physical_memory_size_mods] >>
+  `type_memory_bytes ce (expr_type e) = type_memory_size aty` by
+    metis_tac[ctor_physical_memory_size_mods] >>
+  `type_memory_size rty <= type_memory_size aty` by
+    metis_tac[cj 1 arg_fits_evaluated_memory_size] >>
+  drule alloc_limits_expr_type_alloc_ok >>
+  `~is_word_type (expr_type e)` by metis_tac[arg_type_fits_word_type] >>
+  simp[type_alloc_ok_def]
 QED
 
 Theorem ctor_materialize_unwrap_physical_mods:
@@ -502,5 +573,61 @@ Theorem ctor_materialize_unwrap_physical_mods:
      mem_bytes_at b n z.vs_memory = mem_bytes_at b n a.vs_memory /\
      (!i. b <= i /\ i < b+n /\ i IN tz.t_mem ==> i IN ta.t_mem))
 Proof
-  cheat
+  strip_tac >> conj_tac
+  >- (`expr_sim_inv_mods mods ce cx env es /\ well_typed_expr env e /\
+       alloc_limits_expr ce e /\ call_evaluation_safe cx (int_calls_expr e)` by
+        fs[expr_body_pre_mods_def] >>
+      `env.type_defs = get_tenv cx` by
+        metis_tac[expr_sim_inv_mods_env, env_consistent_type_defs_get_tenv] >>
+      `bind (eval_expr cx e) (read_result cx) es = (INL v,ee)` by simp[bind_def] >>
+      drule ctor_physical_static_mods >> strip_tac >>
+      `!u. well_typed_expr env u ==>
+           arg_type_fits (lowered_value_type ce u) (expr_type u)` by metis_tac[] >>
+      drule_all ctor_physical_read_mods >>
+      simp[value_runtime_typed_def] >>
+      disch_then (qx_choose_then `stv` strip_assume_tac) >>
+      `~is_word_type (post_value_type ce e)` by
+        metis_tac[is_bytestring_word_type] >>
+      `?ptv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv` by
+        (Cases_on `post_value_type ce e = lowered_value_type ce e` >> simp[] >>
+         drule_all ctor_read_annotation_mods >>
+         simp[value_runtime_typed_def] >> metis_tac[]) >>
+      `?sw. eval_operand op z = SOME sw` by
+        fs[expr_post_mods_def, expr_post_def, expr_val_rel_def] >>
+      `type_memory_bytes ce (lowered_value_type ce e) = type_memory_size stv` by
+        metis_tac[ctor_physical_memory_size_mods] >>
+      `op_taint tz op = {}` by fs[ptr_val_ok_def] >>
+      `!mem. mem_agree_outside tz.t_mem z.vs_memory mem ==>
+             val_in_memory ptv v (w2n sw) mem` by fs[ptr_val_ok_def, ptr_mem_ok_def] >>
+      `!mem. mem_agree_outside tz.t_mem z.vs_memory mem ==>
+             val_in_memory stv v (w2n sw) mem` by
+        (Cases_on `post_value_type ce e = lowered_value_type ce e`
+         >- gvs[] >>
+         rpt strip_tac >> irule bytestring_val_in_memory_transfer >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qexistsl_tac [`post_value_type ce e`, `lowered_value_type ce e`, `get_tenv cx`, `ptv`] >>
+         simp[] >> metis_tac[]) >>
+      qexistsl_tac [`stv`, `sw`] >> simp[value_has_type_memory_wf] >>
+      conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >> strip_tac >>
+      irule assignBasePtrBoundaryTheory.ptr_buf_ok_read_covers >>
+      simp[] >>
+      qexistsl_tac [`ce`, `e`] >> simp[]) >>
+  qpat_x_assum `wb_frame _ _ _ _ _ _` (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+  qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
+  simp[regions_disjoint_def] >> rpt gen_tac >> strip_tac >>
+  `lookup_var p z = SOME w /\ FLOOKUP Gz p = FLOOKUP Ga p /\
+   op_taint tz (Var p) = op_taint ta (Var p)` by metis_tac[] >>
+  `ptr_covers Gz tz p z n` by
+    (irule assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame >>
+     qexistsl_tac [`Ga`,`a`,`ta`] >> simp[]) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >~ [`mem_bytes_at b n z.vs_memory = _`] >-
+    (qpat_assum `!aid off sz. _ ==> mem_bytes_at off sz z.vs_memory = _`
+       (qspecl_then [`aid`, `b`, `n`] mp_tac) >> simp[] >>
+     disch_then MATCH_MP_TAC >> first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  qpat_assum `!aid off sz i. _ ==> i IN ta.t_mem`
+    (qspecl_then [`aid`, `b`, `n`, `i`] mp_tac) >> simp[] >>
+  disch_then MATCH_MP_TAC >> first_assum ACCEPT_TAC
 QED
