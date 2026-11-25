@@ -11,6 +11,8 @@ Ancestors
   valueEncoding loweringStateRelDefs exprSimMemDefs ptrDiscipline bodySim
   createExprSizeExitDefs createSizePrefixReplayMods createSizeCopyReplayMods
   createSizeBlueprintKeywordReplayMods createSizeOperandPreMods
+  createSizeRawGasAdmissibleMods createCtorSnapshotTypingMods
+  exprBodyPreTypingProps createSizeRawSource
 
 Theorem raw_decoded_keywords_mods[local]:
   dest_NumV av = SOME amount /\
@@ -124,7 +126,9 @@ Theorem create_raw_first_full_pre_mods[local]:
   expr_vv_sim_full_pre_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     ce cx (expr_type e) e es (st0,sa,a,shadow_sa,shadow_a,vv,s0,G0,tn0)
 Proof
-  cheat
+  strip_tac >> drule create_raw_gas_admissible_mods >> strip_tac >>
+  fs[expr_vv_sim_full_pre_mods_def] >>
+  metis_tac[]
 QED
 
 Theorem create_raw_bytecode_replay_mods:
@@ -175,5 +179,47 @@ Theorem create_raw_bytecode_replay_mods:
                ptr_buf_ok ce e ptr.ptr_operand G u) /\
       ghost_kept_at lo ce es sa G0 tn0 s0 G tn
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_body_pre_mods mods ce cx env e es` by
+    (irule create_call_operand_body_pre_mods >> conj_tac
+     >- metis_tac[expr_body_pre_mods_inv] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `create_operand_completed_ok_mods mods exps cx e` by fs[create_operand_order_def] >>
+  drule_all create_raw_first_full_pre_mods >> strip_tac >>
+  drule_all create_size_replay_vv_cut_mods >> strip_tac >>
+  qpat_x_assum `eval_expr _ (Call _ _ _ _) _ = _`
+    (assume_tac o REWRITE_RULE[create_raw_call_split]) >>
+  qmatch_asmsub_abbrev_tac `es with gas_obs := gs` >>
+  `?head_res p. eval_expr cx e (es with gas_obs := gs) = (head_res,p)` by
+    (Cases_on `eval_expr cx e (es with gas_obs := gs)` >> simp[]) >>
+  `valid_horizon cx st0 H p.storage_trace` by metis_tac[create_raw_cont_horizon] >>
+  `gs = gas_explicit ms s0.vs_gas_readings ++ (gas_explicit later u.vs_gas_readings ++ tail)` by
+    (drule create_prefix_readings >> simp[Abbr `gs`, gas_explicit_append, APPEND_ASSOC]) >>
+  qpat_x_assum `gas_completed_operand_mods _ _ _ _ _ _ _ _ _`
+    (qspecl_then [`H`,`ms`,`u`,`gas_explicit later u.vs_gas_readings ++ tail`,`head_res`,`p`] mp_tac
+      o REWRITE_RULE[gas_completed_operand_mods_def]) >>
+  (impl_tac >- (qpat_assum `gs = gas_explicit _ _ ++ (_ ++ _)`
+      (fn th => PURE_REWRITE_TAC[GSYM th]) >> simp[])) >>
+  strip_tac
+  >- (qpat_assum `expr_body_pre_mods _ _ _ _ (Call _ _ _ _) _`
+        (strip_assume_tac o MATCH_MP expr_body_pre_mods_runtime_typing) >>
+      drule create_raw_first_type >> strip_tac >>
+      qpat_assum `!h. valid_horizon _ _ h _ ==> _`
+        (mp_tac o BETA_RULE o Q.SPEC `H`) >>
+      asm_rewrite_tac[] >> disch_then strip_assume_tac >>
+      qpat_x_assum `head_res = INL _` SUBST_ALL_TAC >>
+      drule_all create_raw_read_bytes_mods >> strip_tac >>
+      `expr_sim_inv_mods mods ce cx env p` by
+        (`expr_body_pre_mods mods ce cx env e (es with gas_obs := gs)` by simp[] >>
+         `bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL (BytesV code),p)` by
+           simp[bind_def] >>
+         drule_all (REWRITE_RULE [ETA_THM] expr_body_pre_eval_mods) >> simp[]) >>
+      disj2_tac >> qexistsl [`p`,`tv`,`code`,`G`,`tn`,`n`] >>
+      simp[] >> conj_tac
+      >- (qpat_x_assum `bind (eval_expr _ _) _ _ = _` mp_tac >>
+          simp[bind_def]) >>
+      rpt strip_tac >>
+      first_x_assum (drule_then strip_assume_tac) >> gvs[]) >>
+  disj1_tac >> qexists `err` >>
+  qpat_x_assum `bind (eval_expr _ _) _ _ = _` mp_tac >> simp[bind_def]
 QED
