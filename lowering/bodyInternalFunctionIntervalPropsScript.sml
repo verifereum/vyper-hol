@@ -29,3 +29,15 @@ Proof
   irule fn_has_code_block_suffix >> goal_assum (drule_at Any) >>
   gvs[new_block_def, all_blocks_def, APPEND_ASSOC]
 QED
+
+(* This is the chronological suffix, including the final open occurrence.
+   Earlier packages may have an unrelated block-label history. *)
+Theorem internal_block_segment_labels:
+  new_block label before = (old,entry) /\ cs_extends entry final /\
+  all_blocks final = all_blocks before ++ func.fn_blocks ==>
+  func.fn_blocks = REVERSE (emitted_blocks entry final) ++
+    [<|bb_label := final.cs_current_bb; bb_instructions := final.cs_current_insts|>]
+Proof
+  strip_tac >> gvs[cs_extends_def, emitted_blocks_def, TAKE_APPEND1] >>
+  gvs[new_block_def, all_blocks_def, APPEND_ASSOC]
+QED

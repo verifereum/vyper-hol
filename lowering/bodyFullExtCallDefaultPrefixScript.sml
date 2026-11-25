@@ -7,8 +7,9 @@ Ancestors
   bodyPtrIfExpAllocCompiler abiBuiltinAllocation loweringShapeRules
   loweringPosts vyperStorageFootprint exprLoweringProps ptrDiscipline
   freshWrites words finite_map
+Libs ctorCopyObservationLib
 
-Theorem extcall_default_prefix_store_entry:
+val default_prefix_entry = ``
   compile_expr cenv ty e sa = (vv,sm) /\
   compile_alloc_buffer (type_memory_bytes cenv (lowered_value_type cenv e)) sm = (buf,sn) /\
   unwrap_value cenv vv sn = (op,sc) /\
@@ -91,7 +92,21 @@ Theorem extcall_default_prefix_store_entry:
        (?x. op = Var x /\ ptr_covers G' tn' x z (type_memory_size ltv)) /\
        w2n sw + type_memory_size ltv <= z.vs_alloca_next) /\
     (val_footprint ptv v = 0 \/
-     regions_disjoint (w2n dw) (type_memory_size ltv) (w2n sw) (val_footprint ptv v))
+     regions_disjoint (w2n dw) (type_memory_size ltv) (w2n sw) (val_footprint ptv v))``;
+
+val prefix_alloc_law = ctorCopyObservationLib.close_except
+  ["R","ctx","func","sm","sn","buf","explicit","PG"]
+  (ctorCopyObservationLib.observe "s" "u" NONE (concl extcall_default_alloc_cut));
+val prefix_unwrap_law = fst (dest_imp (snd (dest_imp
+  (concl extcall_default_unwrap_store_entry_observed))));
+val (default_prefix_pre,default_prefix_post_observed) = dest_imp
+  (ctorCopyObservationLib.observe "s" "z" NONE default_prefix_entry);
+
+Theorem extcall_default_prefix_store_entry_observed:
+  ^default_prefix_pre ==>
+  ^prefix_alloc_law ==> ^prefix_unwrap_law ==>
+  (!p q r. R p q /\ R q r ==> R p r) ==>
+  ^default_prefix_post_observed
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `compile_alloc_buffer (type_memory_size ltv) sm = (buf,sn)` by
@@ -99,11 +114,9 @@ Proof
        (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
   `sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id < sn.cs_next_id` by
     (drule abi_builtin_alloc_buffer_shape >> simp[emit_op_eq] >> strip_tac >> gvs[]) >>
-  drule_all extcall_default_alloc_cut >>
-  disch_then (qspecl_then [`explicit`,`PG`]
-    (qx_choose_then `q` (qx_choose_then `dw` (qx_choose_then `u`
-      (qx_choose_then `Ga` (qx_choose_then `ta`
-        (map_every assume_tac o CONJUNCTS))))))) >>
+  disch_then drule_all >>
+  disch_then (qx_choosel_then [`q`,`dw`,`u`,`Ga`,`ta`]
+    (map_every assume_tac o CONJUNCTS)) >>
   `vv_post (storage_trace_horizon ee.storage_trace)
        ctx func cenv cx e es sa sm s0 ee tv vv s` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\ _`
@@ -111,13 +124,13 @@ Proof
      (impl_tac >- fs[storage_trace_domain_def]) >> simp[]) >>
   `!i. i < s.vs_alloca_next ==> (i IN ta.t_mem <=> i IN tn.t_mem)` by
     (rpt strip_tac >> simp[]) >>
+  disch_then (mk_asm "unwrap") >>
   mp_tac (Q.INST [`n` |-> `type_memory_size ltv`]
-    extcall_default_unwrap_store_entry) >>
-  impl_tac >- asm_rewrite_tac[] >>
-  disch_then
-    (qx_choose_then `v` (qx_choose_then `z` (qx_choose_then `G'`
-      (qx_choose_then `tn'` (qx_choose_then `sw`
-        (map_every assume_tac o CONJUNCTS)))))) >>
+    extcall_default_unwrap_store_entry_observed) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  asm_x "unwrap" (fn law => disch_then (mp_tac o C MATCH_MP law)) >>
+  disch_then (qx_choosel_then [`v`,`z`,`G'`,`tn'`,`sw`]
+    (map_every assume_tac o CONJUNCTS)) >>
   `!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x s /\
         FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)` by
     (rpt gen_tac >> strip_tac >>
@@ -152,6 +165,18 @@ Proof
      qpat_assum `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,Ga,ta)`
        (qspec_then `DF H` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
      disch_then (qspecl_then [`u`,`Ga`,`ta`,`[]`,`OK z`,`G'`,`tn'`] mp_tac) >> simp[]) >>
-  qexistsl [`q`, `dw`, `v`, `z`, `G'`, `tn'`, `sw`] >>
+  disch_tac >> qexistsl [`q`, `dw`, `v`, `z`, `G'`, `tn'`, `sw`] >>
+  conj_tac >- (first_x_assum irule >> qexists_tac `u` >> simp[]) >>
   simp[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem extcall_default_prefix_store_entry:
+  ^default_prefix_entry
+Proof
+  disch_then (mp_tac o MATCH_MP
+    (Q.INST [`R` |-> `\p q. T`] extcall_default_prefix_store_entry_observed)) >>
+  BETA_TAC >> REWRITE_TAC [] >>
+  (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC extcall_default_alloc_cut)) >>
+  (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC bodyFullUnwrapTheory.unwrap_value_origin_ptr)) >>
+  disch_then ACCEPT_TAC
 QED

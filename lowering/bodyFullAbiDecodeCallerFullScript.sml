@@ -377,7 +377,7 @@ val caller_full_cut_selector = boolSyntax.list_mk_forall o
           b d ops ready r0 Gs ts r Gf tnf /\
         (^caller_cut_certificate) start final func ctx s r``;
 
-Theorem abi_decode_caller_full_conditional:
+val caller_full_hyps = ``
   (^caller_full_setup_producer) /\ (^caller_full_guarded_producer) /\
   (^caller_full_cut_selector) /\ (^caller_full_endpoint_producer) /\
   (^caller_full_context) (TypeBuiltin ann (AbiDecode unwrap) ty [e]) (type_to_abi_dec_info
@@ -396,48 +396,72 @@ Theorem abi_decode_caller_full_conditional:
     (abi_size_bound ce.ce_struct_fields
       (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
     (type_memory_bytes ce
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
-    (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty
-      [expr_type e] [BytesV bs])) (\v. return (Value v))) (es1,s,G,tn)
-    (\H res ee G' tn' t. ?v. res = INL v /\
-      vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0 ee v
-        (LocatedValue ann (mk_ptr out LocMemory)) t /\
-      vv_store_bound cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
-        (lowered_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
-        ee v (LocatedValue ann (mk_ptr out LocMemory)) t /\
-      t.vs_current_bb = final.cs_current_bb /\
-      t.vs_inst_idx = LENGTH final.cs_current_insts /\
-      alloca_history func t /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-      s0.vs_alloca_next <= t.vs_alloca_next /\
-      ghost_inv_at (DF H) lo delta ce cx ee G' tn' t /\
-      ptr_vv_ok cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) v (LocatedValue ann
-        (mk_ptr out LocMemory)) ee G' tn' t /\
-      (!w. v = Value w /\ ~is_word_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
-        /\
-        ~is_bytestring_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
-        vv_own ce cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) sa final ee v
-          (LocatedValue ann (mk_ptr out LocMemory)) t /\
-        (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p ==> p.ptr_location =
-          LocMemory)) /\
-      (ce.ce_is_ctor /\ vv_location (LocatedValue ann (mk_ptr out LocMemory)) = SOME LocCode ==>
-        ?val. read_result cx v ee = (INL val,ee) /\
-          !rt w. evaluate_type (get_tenv cx) (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty
-            [e])) = SOME rt /\
-            eval_operand (vv_operand (LocatedValue ann (mk_ptr out LocMemory))) t = SOME w ==>
-            w2n w + type_memory_size rt <= lo /\
-            (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
-              val_in_memory rt val (w2n w) mem)) /\
-      (!t' op. (LocatedValue ann (mk_ptr out LocMemory)) = StackValue t' op /\ ~is_word_type
-        (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
-        ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) op G' t) /\
-      (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p /\ p.ptr_location = LocMemory
-        ==>
-        ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) p.ptr_operand G' t) /\
-      ghost_kept_at lo ce es sa G0 tn0 s0 G' tn')
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))``;
+
+val caller_decode_source = ``bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty
+  [expr_type e] [BytesV bs])) (\v. return (Value v))``;
+
+val caller_decode_normal = ``\H (res:eval_result + vyperState$exception) ee G' tn' t.
+  ?v. res = INL v /\
+  vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0 ee v
+    (LocatedValue ann (mk_ptr out LocMemory)) t /\
+  vv_store_bound cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
+    (lowered_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
+    ee v (LocatedValue ann (mk_ptr out LocMemory)) t /\
+  t.vs_current_bb = final.cs_current_bb /\
+  t.vs_inst_idx = LENGTH final.cs_current_insts /\
+  alloca_history func t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+  s0.vs_alloca_next <= t.vs_alloca_next /\
+  ghost_inv_at ((DF : (bool # 256 word # type_value) list # num list -> dead) H)
+    lo delta ce cx ee G' tn' t /\
+  ptr_vv_ok cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) v (LocatedValue ann
+    (mk_ptr out LocMemory)) ee G' tn' t /\
+  (!w. v = Value w /\ ~is_word_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
+    /\
+    ~is_bytestring_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
+    vv_own ce cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) sa final ee v
+      (LocatedValue ann (mk_ptr out LocMemory)) t /\
+    (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p ==> p.ptr_location =
+      LocMemory)) /\
+  (ce.ce_is_ctor /\ vv_location (LocatedValue ann (mk_ptr out LocMemory)) = SOME LocCode ==>
+    ?val. read_result cx v ee = (INL val,ee) /\
+      !rt w. evaluate_type (get_tenv cx) (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty
+        [e])) = SOME rt /\
+        eval_operand (vv_operand (LocatedValue ann (mk_ptr out LocMemory))) t = SOME w ==>
+        w2n w + type_memory_size rt <= lo /\
+        (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
+          val_in_memory rt val (w2n w) mem)) /\
+  (!t' op. (LocatedValue ann (mk_ptr out LocMemory)) = StackValue t' op /\ ~is_word_type
+    (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
+    ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) op G' t) /\
+  (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p /\ p.ptr_location = LocMemory
+    ==>
+    ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) p.ptr_operand G' t) /\
+  ghost_kept_at lo ce es sa G0 tn0 s0 G' tn'``;
+
+val caller_decode_exit = ``\(H:(bool # 256 word # type_value) list # num list)
+    (res:eval_result + vyperState$exception) ee (gt:(string |-> num # num) # taint) r.
+  expr_exit res r /\ halt_exit H cx ee res r /\
+  (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)``;
+
+(* Keep the stopped-observer run attached to the same answer and ghosts
+   as the origin path used by the full simulation. *)
+Theorem abi_decode_caller_full_observed:
+  (^caller_full_hyps) ==>
+  ?res r Gf tnf.
+    (!tail. (^caller_decode_source) (es1 with gas_obs := tail) =
+      (res, es1 with gas_obs := tail)) /\
+    storage_trace_domain cx st0 es1.storage_trace /\
+    data <> Label start.cs_current_bb /\
+    (!obs. fn_has_code start final obs ==> gas_path ctx obs s 0 r) /\
+    ((?t. r = OK t /\ ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
+          t.vs_inst_idx = LENGTH final.cs_current_insts) \/
+     (?a. r = Abort Revert_abort a)) /\
+    !H. valid_horizon cx st0 H es1.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,Gf,tnf) /\
+      ((?t. r = OK t /\ (^caller_decode_normal) H res (es1 with gas_obs := []) Gf tnf t) \/
+       (exit_result r /\ (^caller_decode_exit) H res (es1 with gas_obs := []) (Gf,tnf) r))
 Proof
   PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
   qabbrev_tac `V = \(H:(bool # 256 word # type_value) list # num list). valid_horizon cx st0 H es1.storage_trace` >>
@@ -655,7 +679,7 @@ Proof
   >- suspend "normal_post" >> suspend "decoder_abort"
 QED
 
-Resume abi_decode_caller_full_conditional[normal_post]:
+Resume abi_decode_caller_full_observed[normal_post]:
   Q_TAC (fn tm => SUBGOAL_THEN tm (mk_asm "control"))
     `(?z. r = OK z /\ ~z.vs_halted /\
         z.vs_current_bb = final.cs_current_bb /\ z.vs_inst_idx = LENGTH final.cs_current_insts) \/
@@ -789,16 +813,18 @@ Resume abi_decode_caller_full_conditional[normal_post]:
            (abi_static_size ce.ce_struct_fields (if wrapped then TupleT [ty] else ty))
            (abi_size_bound ce.ce_struct_fields (if wrapped then TupleT [ty] else ty))`,
            `d`, `cap`] >> simp[] >> (gvs[]))) >>
-      irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-      qexistsl [`Gf`, `es1`, `INL (Value v)`, `t`, `tnf`] >>
+      qexistsl [`INL (Value v)`, `r`, `Gf`, `tnf`] >>
       conj_tac >- simp[lift_sum_def, bind_def, return_def] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- asm "control" ACCEPT_TAC >>
       qx_gen_tac `H` >> strip_tac >>
       `V H` by fs[Abbr `V`] >>
-      conj_tac >-
-        (asm "semantic_normal" (SUBST1_TAC o SYM) >>
-         asm "joint_path" (qspec_then `H` MATCH_MP_TAC) >>
-         first_assum ACCEPT_TAC) >>
-      BETA_TAC >> qexists `Value v` >>
+      conj_tac >- simp[L "joint_path"] >>
+      disj1_tac >> qexists `t` >>
+      conj_tac >- asm "semantic_normal" ACCEPT_TAC >>
+      qexists `Value v` >>
       simp[exprSimSubscriptArrayComposeTheory.vv_post_final_gas, vv_location_def] >>
       conj_tac >-
         ((qpat_assum `vv_store_bound cx _ _ es1 (Value v) _ t` mp_tac >>
@@ -836,20 +862,24 @@ val caller_revert_post =
    `evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs] =
       INR (RuntimeError err)` by
      (irule (cj 1 exprSimAbiDecodeRejectTheory.abi_decode_builtin_reject) >> simp[]) >>
-   irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
-   qexistsl [`Gf`, `es1`, `Abort Revert_abort a`,
-             `INR (Error (RuntimeError err))`, `tnf`] >>
-   simp[lift_sum_def, bind_def, vyperStateTheory.raise_def,
-        fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
-        exprSimDefsTheory.halt_exit_def] >>
+   qexistsl [`INR (Error (RuntimeError err))`, `r`, `Gf`, `tnf`] >>
+   conj_tac >- simp[lift_sum_def, bind_def, vyperStateTheory.raise_def] >>
+   conj_tac >- first_assum ACCEPT_TAC >>
+   conj_tac >- first_assum ACCEPT_TAC >>
+   conj_tac >- first_assum ACCEPT_TAC >>
+   conj_tac >- (disj2_tac >> qexists `a` >> first_assum ACCEPT_TAC) >>
    qx_gen_tac `H` >> disch_tac >>
-   asm "joint_path" (qspec_then `H` mp_tac) >> simp[]);
+   `V H` by fs[Abbr `V`] >>
+   conj_tac >- simp[L "joint_path"] >>
+   disj2_tac >>
+   simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
+        exprSimDefsTheory.halt_exit_def]);
 
-Resume abi_decode_caller_full_conditional[decoder_abort]:
+Resume abi_decode_caller_full_observed[decoder_abort]:
   caller_revert_post
 QED
 
-Resume abi_decode_caller_full_conditional[setup_abort]:
+Resume abi_decode_caller_full_observed[setup_abort]:
   qpat_assum `r0 = Abort Revert_abort a` (fn th =>
     qpat_assum `r = r0` (assume_tac o PURE_REWRITE_RULE [th])) >>
   asm "setup_path" (fn th =>
@@ -867,4 +897,14 @@ Resume abi_decode_caller_full_conditional[setup_abort]:
   caller_revert_post
 QED
 
-Finalise abi_decode_caller_full_conditional
+Finalise abi_decode_caller_full_observed
+
+Theorem abi_decode_caller_full_conditional:
+  (^caller_full_hyps) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (^caller_decode_source) (es1,s,G,tn) (^caller_decode_normal) (^caller_decode_exit)
+Proof
+  disch_then (strip_assume_tac o MATCH_MP abi_decode_caller_full_observed) >>
+  irule gas_outcome_full_intro >>
+  qexistsl [`Gf`, `es1`, `[]`, `r`, `res`, `tnf`] >> simp[]
+QED

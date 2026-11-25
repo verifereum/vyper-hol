@@ -60,7 +60,7 @@ Proof
                    update_var_def, wordsTheory.w2n_n2w]
 QED
 
-Theorem abi_encode_alloc_origin_exact:
+Theorem abi_encode_alloc_origin_run:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   n < dimword (:256) /\
@@ -69,6 +69,8 @@ Theorem abi_encode_alloc_origin_exact:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?q w t G' tn'.
+    (?raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
+           t = raw with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     buf.buf_operand = Var q /\ not_fresh_at sb q /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
            (s,G,tn) [] (OK t,G',tn')) /\
@@ -165,6 +167,7 @@ Proof
      simp[GSYM mk_inst_def] >> metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca]) >>
   qexistsl_tac [`q`, `n2w b`, `t with vs_inst_idx := LENGTH sb.cs_current_insts`,
                 `step_prov PG G ins t`, `step_taint ins s t tn`] >>
+  conj_tac >- (qexists_tac `t` >> simp[]) >>
   simp[op_prov_def] >>
   conj_tac >- gvs[] >>
   simp[] >>
@@ -195,4 +198,52 @@ Proof
       qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x t = _`
         drule >> simp[lookup_var_def]) >>
   fs[op_prov_def, markerLib.L "alloc_fields"]
+QED
+
+Theorem abi_encode_alloc_origin_exact:
+  compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  n < dimword (:256) /\
+  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?q w t G' tn'.
+    buf.buf_operand = Var q /\ not_fresh_at sb q /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+           (s,G,tn) [] (OK t,G',tn')) /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t with <| vs_vars := s.vs_vars; vs_allocas := s.vs_allocas;
+              vs_alloca_next := s.vs_alloca_next;
+              vs_inst_idx := s.vs_inst_idx |> = s /\
+    (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+          stmt_state_rel H' ctx func cenv cx es t) /\
+    alloca_history func t /\
+    allocas_from lo t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    lookup_var q t = SOME w /\ ptr_covers G' tn' q t n /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+    w2n w + n < dimword (:256) /\ w2n w + n <= t.vs_alloca_next /\
+    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
+             FLOOKUP t.vs_allocas aid = SOME e) /\
+    (!aid b len. aid < sa.cs_next_id /\
+                 FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+                 regions_disjoint (w2n w) n b len) /\
+    (!name b len. local_region cenv es.scopes t name b len ==>
+                  regions_disjoint (w2n w) n b len) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!i. i IN tn'.t_mem <=>
+         i IN tn.t_mem \/ (s.vs_alloca_next <= i /\ i < w2n w + n)) /\
+    (!x. not_fresh_at sa x ==>
+         lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+         op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP G' q = SOME (w2n w,n) /\
+    t.vs_allocas = (abi_builtin_allocate_state sa.cs_next_id n s).vs_allocas /\
+    t.vs_alloca_next = (abi_builtin_allocate_state sa.cs_next_id n s).vs_alloca_next
+Proof
+  strip_tac >> drule_all abi_encode_alloc_origin_run >>
+  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`]
+    (qx_choosel_then [`q`,`w`,`t`,`G'`,`tn'`] strip_assume_tac)) >>
+  qexistsl_tac [`q`,`w`,`t`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED

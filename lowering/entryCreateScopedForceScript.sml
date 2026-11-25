@@ -431,8 +431,7 @@ Proof
   irule create_force_scoped_bind >>
   qpat_assum `expr_vv_sim_full_pre _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_sim_full_pre _ _ _ _ _ _ _` (irule_at Any) >>
-  simp[] >> rpt conj_tac
-  >~ [`value_has_type rty _`] >- first_assum ACCEPT_TAC
+  qexists_tac `rty` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >~ [`create_operand_full_scope a b _ _ _ _ _ _`]
   >- (rpt strip_tac >>
       qpat_x_assum `create_operand_full_scope _ _ _ _ _ s0 left (OK t)`
