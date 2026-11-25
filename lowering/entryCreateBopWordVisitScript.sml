@@ -75,6 +75,10 @@ Proof
   rpt strip_tac >> fs[expr_sim_full_post_def]
 QED
 
+(* This cut is deliberately type-agnostic: the same bind/replay result is
+   consumed by fixed-Bytes comparison sites, whose own geometry supplies the
+   operand type guards.  In particular, no word_value_type premise belongs
+   here. *)
 Theorem create_bop_word_operand_cut:
   body_inv (cx_tops cx) ctx ce cx /\
   expr_body_pre ce cx env (Builtin ann (Bop bop) [e1;e2]) es /\
