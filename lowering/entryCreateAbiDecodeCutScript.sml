@@ -8,6 +8,9 @@ Ancestors
   bodyFullAbiDecodeCallerOperands bodyFullAbiDecodeCallerCutChoice exprSimAbiGasBridgeEdge
   builtinAbi context compileEnv emitHelper emitHelperProps createSizeCutCode
   createSizeCutOpens fragExec exprLoweringProps exprSimAbiGasBridge venomInst rich_list list pair
+  entryCreateAbiDecodeObserverItinerary entryCreateCompletedCut entryCreateFocusSpec
+  bodyFullAbiDecodeCallerFull bodyFullAbiDecodeCallerSetupOrigin bodyFullAbiDecodeCallerCutEndpoint
+  bodyFullAbiDecodeRecursive bodyFullIfExpReach fragGasOriginPtr fragGasPath vyperStorageFootprint
 
 Theorem abi_decode_setup_cut_code[local]:
   abi_builtin_decode_setup data mn mx cap start = (ops,ready) ==>
@@ -98,4 +101,84 @@ Proof
     simp[opened_labels_def, NULL_EQ, MEM_APPEND, MAP_REVERSE] >>
   drule_all lower_abi_decode_unopened_operand >>
   fs[frag_gas_free_def, frag_ops_free_def, EVERY_MEM] >> metis_tac[]
+QED
+
+(* Reuse the ordinary caller's context, entry handoff and posts. The four
+   closed producer premises are discharged by the checked decoder below. *)
+local
+  val caller = CONV_RULE (REPEATC (REWR_CONV boolTheory.LET_THM THENC BETA_CONV))
+    abi_decode_caller_full_conditional
+  val caller_pre = funpow 4 rand (lhand (concl caller))
+  val (_, [params,tops,cx,st0,source,init,q,r]) = strip_comb (rand (concl caller))
+in
+  val scoped_decode_tail = ``^caller_pre /\ create_layout start final ==>
+    scoped_operand_outcome ^params ^tops ^cx ^st0 start final ^source ^init ^q ^r``
+end
+
+Theorem create_abi_decode_selected_tail:
+  ^scoped_decode_tail
+Proof
+  BETA_TAC >> disch_then (CONJUNCTS_THEN2 (mk_asm "entry") assume_tac) >>
+  mp_tac (BETA_RULE abi_decode_caller_full_observed) >>
+  impl_tac >-
+    (conj_tac >-
+       (POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >>
+        disch_then (map_every assume_tac o CONJUNCTS) >>
+        mp_tac (SPEC_ALL (BETA_RULE abi_decode_caller_setup_origin_observed)) >>
+        simp[CONJ_ASSOC] >>
+        (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_then ACCEPT_TAC) >>
+     conj_tac >-
+       (POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >>
+        mp_tac (SPEC_ALL (INST_TYPE [alpha |-> ``:256``] abi_decode_guarded_to_buf_joint)) >>
+        CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+        pure_rewrite_tac [GSYM CONJ_ASSOC] >> disch_then ACCEPT_TAC) >>
+     conj_tac >- ACCEPT_TAC (BETA_RULE abi_decode_caller_cut_choice) >>
+     conj_tac >-
+       (POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >>
+        mp_tac (SPEC_ALL abi_decode_caller_endpoint_committed) >>
+        simp[boolTheory.LET_THM, CONJ_ASSOC] >> disch_then ACCEPT_TAC) >>
+     asm "entry" ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`res`,`r`,`Gf`,`tnf`] (map_every assume_tac o CONJUNCTS)) >>
+  `create_operand_at start s` by
+    (asm "entry" (CONJUNCTS_THEN2 kall_tac strip_assume_tac) >>
+     pure_rewrite_tac[create_operand_at_def] >> conj_tac >> first_assum ACCEPT_TAC) >>
+  asm_x "entry" (CONJUNCTS_THEN2 (map_every assume_tac o CONJUNCTS) kall_tac) >>
+  drule create_abi_decode_tail_code >> strip_tac >>
+  drule_all create_abi_decode_tail_regular >> strip_tac >>
+  `gas_path ctx (frag_observer start final func 0) s 0 r` by
+    (first_x_assum irule >> irule frag_observer_has_code >> simp[]) >>
+  `create_operand_full_scope start final explicit ctx func s [] r` by
+    (Q_TAC (fn tm => SUBGOAL_THEN tm assume_tac)
+       `(?t. r = OK t /\ create_operand_at final t) \/ (?v. r = Abort Revert_abort v)`
+     >- (qpat_assum `(_ : bool) \/ (?v. r = Abort Revert_abort v)` mp_tac >>
+         simp_tac std_ss [create_operand_at_def] >> metis_tac[]) >>
+     drule_all (SIMP_RULE std_ss [LET_THM] create_regular_observer_itinerary) >>
+     disch_then (qspec_then `explicit` (DISJ_CASES_THEN strip_assume_tac))
+     >- (qpat_assum `r = OK _` SUBST1_TAC >>
+         fs[create_operand_full_scope_def,create_operand_at_def]) >>
+     `gas_origin_path T explicit ctx func s [] r` by
+       (`valid_horizon cx st0 (storage_trace_horizon es1.storage_trace) es1.storage_trace` by
+          (pure_rewrite_tac[GSYM storage_trace_domain_def] >> first_assum ACCEPT_TAC) >>
+        qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+          (drule_then (CONJUNCTS_THEN2 assume_tac kall_tac)) >>
+        drule_then (ACCEPT_TAC o CONJUNCT1) gas_origin_ptr_path_projections) >>
+     `exit_result r` by simp[exit_result_def] >>
+     `gas_origin_edge T explicit ctx func u [] r` by
+       (irule create_prefix_selected_terminal_edge >>
+        conj_tac >- (gen_tac >> disch_tac >> drule_all body_inv_no_phi >> simp[]) >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        qexistsl [`start`,`final`,`s`] >> conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `r = Abort Revert_abort _` (fn th =>
+       SUBST1_TAC th >> simp[create_operand_full_scope_def, NoAsms] >>
+       qexists `u` >> pure_rewrite_tac[GSYM th]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (qpat_assum `~create_operand_at final u` mp_tac >>
+       simp_tac std_ss [create_operand_at_def] >> metis_tac[]) >>
+     first_assum ACCEPT_TAC) >>
+  pure_rewrite_tac[scoped_operand_outcome_def] >>
+  qexists `[]` >> disj2_tac >> disj1_tac >>
+  qexistsl [`res`,`es1`,`r`,`Gf`,`tnf`] >>
+  pure_rewrite_tac[gasSummaryTheory.gas_explicit_nil, listTheory.APPEND] >>
+  BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED

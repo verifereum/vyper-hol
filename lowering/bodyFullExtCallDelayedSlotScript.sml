@@ -9,6 +9,7 @@ Ancestors
   loweringPosts exprSimMemDefs vyperValue vyperStorageFootprint
   exprLowering exprSimWordArgs fragGasOriginPtr vyperState
   stateRelProj exprSimVVFrame bodyFullExtCallSavedOperand
+  bodyFullUnwrapSlot bodyFullUnwrapSlotBand createCtorImmutableCopyBand
 Libs pureFrameLib
 
 (* The slot address is computed before the saved argument is unwrapped. *)
@@ -124,6 +125,42 @@ Proof
   metis_tac[]
 QED
 
+(* A supplier has the existing physical-copy contract and adds P at that
+   very same normal endpoint.  Form the signatures from the pure replay
+   contracts so the frame and horizon clauses are kept single-sourced. *)
+local
+  fun with_side th =
+    let
+      val (pre, post) = boolSyntax.dest_imp (concl (SPEC_ALL th))
+      val (ws, body) = boolSyntax.strip_exists post
+      fun arg name = List.find (fn v => #1 (dest_var v) = name) (free_vars pre)
+      val pred = ``P:compile_state -> compile_state -> venom_state -> venom_state -> bool``
+      val side = list_mk_comb (pred, List.map (valOf o arg) ["su", "sb", "t"] @ [hd ws])
+      val result = boolSyntax.mk_imp (pre,
+        boolSyntax.list_mk_exists (ws, boolSyntax.mk_conj (side, body)))
+      val fixed = pred :: List.map (valOf o arg) ["ctx", "fn", "su", "sb"] @
+        List.filter (fn v => #1 (dest_var v) = "explicit") (free_vars result)
+    in boolSyntax.list_mk_forall
+         (List.filter (fn v => not (List.exists (aconv v) fixed)) (free_vars result), result)
+    end
+in
+  val slot_copy_side = with_side extcall_saved_slot_copy_replay_pure
+  val runtime_copy_side = with_side extcall_saved_runtime_copy_replay_pure
+  val ctor_copy_side = with_side extcall_saved_ctor_copy_replay_pure
+end
+
+Definition saved_restore_copy_laws_def:
+  saved_restore_copy_laws ctx fn explicit su sb P <=> ^slot_copy_side /\ ^runtime_copy_side /\ ^ctor_copy_side
+End
+
+Theorem saved_restore_copy_laws_true:
+  saved_restore_copy_laws ctx fn explicit su sb (\a b u z. T)
+Proof
+  simp_tac bool_ss [saved_restore_copy_laws_def] >>
+  conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC extcall_saved_slot_copy_replay_pure) >>
+  conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC extcall_saved_runtime_copy_replay_pure) >>
+  rpt gen_tac >> MATCH_ACCEPT_TAC extcall_saved_ctor_copy_replay_pure
+QED
 (* Replay suppliers must attach the extra post to the same state that
    carries the value, frame and horizon-uniform ghost facts. *)
 Definition restore_copy_posts_def:
@@ -197,6 +234,84 @@ Proof
   `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient` by metis_tac[] >>
   irule extcall_saved_slot_copy_replay_pure >> simp[] >>
   qexistsl [`p`,`si`,`sm`] >> simp[]
+QED
+
+(* Select the same endpoints as the ordinary physical-copy suppliers,
+   retaining the native band on a PHI-free exit. *)
+Theorem restore_copy_posts_band:
+  restore_copy_posts (\a b s t. unwrap_exit_phi_free fn b ==> unwrap_band fn a b s t)
+    (DF,lo,d,explicit,ctx,fn,PG) ce cx st0 ee e
+Proof
+  simp_tac std_ss [restore_copy_posts_def,unwrap_band_refl] >> rpt gen_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  Cases_on `p.ptr_location = LocCode`
+  >- (let fun observe th =
+        mp_tac (Q.INST [`su` |-> `a`,`sb` |-> `b`,`t` |-> `s`] (SPEC_ALL th)) >>
+        (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE fs[]))) >>
+        disch_then (qx_choosel_then [`z`,`G'`,`tn'`] (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+        qexistsl [`z`,`G'`,`tn'`] >> asm_rewrite_tac[] >> disch_tac >>
+        qpat_x_assum `?raw. run_inst_seq _ _ = OK raw /\ _`
+          (qx_choose_then `raw` (CONJUNCTS_THEN assume_tac)) >>
+        qpat_x_assum `z = raw with vs_inst_idx := _` SUBST1_TAC >>
+        simp_tac bool_ss [unwrap_band_def] >>
+        drule_all immutable_unwrap_run_band >> simp[]
+      in
+        Cases_on `ce.ce_is_ctor`
+        >- observe extcall_saved_ctor_copy_replay_with_run >>
+        observe extcall_saved_runtime_copy_replay_with_run
+      end) >>
+  (Q.SUBGOAL_THEN `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient`
+    ASSUME_TAC >- metis_tac[]) >>
+  mp_tac (Q.INST [`su` |-> `a`,`sb` |-> `b`,`t` |-> `s`,
+    `Side` |-> `\a b s t. unwrap_exit_phi_free fn b ==> unwrap_band fn a b s t`]
+    (SPEC_ALL extcall_saved_slot_copy_replay_side)) >>
+  simp_tac bool_ss [unwrap_slot_origin_side_producer_band] >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE fs[]))) >>
+  disch_then ACCEPT_TAC
+QED
+
+(* Adapt physical-cut suppliers to the expression-specific interface without
+   changing the chosen endpoint or the horizon-uniform ghost pair. *)
+Theorem restore_copy_posts_from_laws[local]:
+  (!a u. ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\
+    u.vs_inst_idx = LENGTH a.cs_current_insts ==> P a a u u) /\
+  (!a b. saved_restore_copy_laws ctx fn explicit a b P) ==>
+  restore_copy_posts P (DF,lo,d,explicit,ctx,fn,PG) ce cx st0 ee e
+Proof
+  strip_tac >> PURE_REWRITE_TAC [restore_copy_posts_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `!a b. saved_restore_copy_laws ctx fn explicit a b P`
+    (qspecl_then [`su`,`sb`] assume_tac) >>
+  Cases_on `p.ptr_location = LocCode`
+  >- (Cases_on `ce.ce_is_ctor`
+      >- (qpat_x_assum `saved_restore_copy_laws _ _ _ _ _ P`
+            (irule o cj 3 o REWRITE_RULE [saved_restore_copy_laws_def]) >>
+          simp[] >> qexistsl [`p`,`si`,`sm`] >> fs[]) >>
+      qpat_x_assum `saved_restore_copy_laws _ _ _ _ _ P`
+        (irule o cj 2 o REWRITE_RULE [saved_restore_copy_laws_def]) >>
+      simp[] >> qexistsl [`p`,`si`,`sm`] >> simp[]) >>
+  `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient` by metis_tac[] >>
+  qpat_x_assum `saved_restore_copy_laws _ _ _ _ _ P`
+    (irule o cj 1 o REWRITE_RULE [saved_restore_copy_laws_def]) >>
+  simp[] >> qexistsl [`p`,`si`,`sm`] >> simp[]
+QED
+
+Theorem restore_copy_posts_guarded:
+  saved_restore_copy_laws ctx fn explicit su sb P /\
+  (!a u. ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\
+    u.vs_inst_idx = LENGTH a.cs_current_insts ==> P a a u u) ==>
+  restore_copy_posts (\a b u z. a = su /\ b = sb ==> P a b u z)
+    (DF,lo,d,explicit,ctx,fn,PG) ce cx st0 ee e
+Proof
+  strip_tac >> irule restore_copy_posts_from_laws >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  reverse conj_tac >- metis_tac[] >>
+  qx_gen_tac `a` >> qx_gen_tac `b` >>
+  Cases_on `a = su /\ b = sb`
+  >- (gvs[] >> qpat_x_assum `saved_restore_copy_laws _ _ _ _ _ P` mp_tac >>
+      simp_tac bool_ss [saved_restore_copy_laws_def]) >>
+  mp_tac (Q.INST [`su` |-> `a`, `sb` |-> `b`] saved_restore_copy_laws_true) >>
+  asm_simp_tac bool_ss [saved_restore_copy_laws_def]
 QED
 
 Theorem extcall_slot_nonmemory_unwrap_from_posts[local]:
