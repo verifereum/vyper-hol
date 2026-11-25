@@ -599,8 +599,7 @@ Theorem e2e_deploy_gas_sufficient:
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     deploy_typing_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    ~(?t. runtime_bc = 0xEFw :: t)
+    deploy_state_rel tops deploy_bc am tx es
     ==>
     ?g. !g'.
       g <= g' ==>
@@ -617,6 +616,7 @@ Theorem e2e_deploy_gas_sufficient:
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_all compile_vyper_runtime_not_ef >> strip_tac >>
   `supported_program tops /\ supported_program_deploy tops` by (
     irule deploy_typing_ok_supported_programs >>
     fs[deploy_state_rel_def] >> metis_tac[]) >>
