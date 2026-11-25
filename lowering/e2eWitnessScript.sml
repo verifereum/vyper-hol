@@ -412,13 +412,8 @@ local
      simp[horizon_ok_def, regions_consistent_def, storage_locks_separated_def])
   val dep_evm_state = prove
     (``evm_state_ok p23_es_dep``,
-     irule (MATCH_MP deploy_state_rel_evm_state_ok p23_deploy_state) >>
-     simp[p23_es_dep_def, p23_frame_def,
-          vfmReturndataBoundTheory.returndata_bounded_def,
-          vfmCalldataBoundTheory.calldata_bounded_def,
-          vfmCalldataBoundTheory.memory_paid_def,
-          vfmCalldataBoundTheory.frames_paid_def,
-          vfmCalldataBoundTheory.outputs_fit_def])
+     irule (iffRL (MATCH_MP deploy_state_rel_evm_state_ok p23_deploy_state)) >>
+     simp[p23_es_dep_def, p23_frame_def])
   val dep_h_storage = prove
     (``(lookup_account p23_deploy_tx.target
           initial_machine_state.accounts).storage = empty_storage``,
