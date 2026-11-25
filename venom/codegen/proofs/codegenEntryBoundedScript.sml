@@ -2,8 +2,7 @@
  * The Venom-to-assembly half of codegen_correct, with resource bounds,
  * for the sufficient-gas theorem S7g: a context run that terminates
  * within fuel, with memory accesses below M, is simulated by an
- * assembly run of bounded length whose steps before a RETURNDATACOPY
- * touch memory only below a bound.
+ * assembly run of bounded length whose steps touch memory only below a bound.
  *
  * TOP-LEVEL:
  *   codegen_entry_asm_bounded - asm_run_bounded from entry_asm_state

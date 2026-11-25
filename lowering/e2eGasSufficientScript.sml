@@ -3,12 +3,8 @@
  * are joined.  The companions themselves are stated separately.
  *
  * vyper_call_correct_guarded holds for any gas, so it lets the frame run out of gas.
- * Here: some amount of gas is enough.  With at least that much more gas,
- * our frame runs out of gas only once it has run a RETURNDATACOPY.  That
- * exemption is needed: when a call fails, the compiled code copies the
- * callee's revert data and reverts with it, and a callee holding all but
- * 1/64 of our gas can return more data than the rest pays to copy, or
- * leave us too little for the REVERT after the copy.
+ * Here, sufficient extra gas prevents OutOfGas at the entry frame's depth.
+ * The bound charges revert-data copying and the following steps.
  *
  * Contents:
  *   vyper_call_gas_sufficient_identity -- the call case, identity finalizer
@@ -20,8 +16,7 @@
  * The call case joins uniform runtime-unit fuel, the dispatch rejection
  * or selected-call certificate, the O1 bound, and codegen gas sufficiency.
  *
- * The RETURNDATACOPY escape applies to deployment as well. A code deposit
- * larger than max_code_size also causes OutOfGas at any gas.
+ * A code deposit larger than max_code_size causes OutOfGas at any gas.
  *
  * The call theorem, S1b and S6b rely on the lowering's bounded ABI decoder
  * checking each range before it loads from it, as it does today.
@@ -598,8 +593,7 @@ Theorem vyper_call_gas_sufficient_identity:
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        (frame_raises (add_frame_gas g' es) OutOfGas ==>
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+        ~frame_raises (add_frame_gas g' es) OutOfGas
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
@@ -901,8 +895,7 @@ Theorem e2e_deploy_gas_sufficient_identity:
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
         (r = INR (SOME OutOfGas) ==>
-         max_code_size < LENGTH runtime_bc + imm_len tops \/
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+         max_code_size < LENGTH runtime_bc + imm_len tops)
 Proof
   rpt strip_tac >>
   drule compile_vyper_deploy_phases >> strip_tac >>

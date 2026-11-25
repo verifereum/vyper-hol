@@ -355,14 +355,18 @@ The result relation ties source gas observations to the frame's EVM gas readings
   Callee-return rejection can be exempt only when it produces that same message
   in such a program. Exempt runs still have an actual EVM run but no result/effect
   correspondence obligation.
-- The resource alternative is genuine frame OutOfGas/StackOverflow. A
+- The resource alternative is genuine frame OutOfGas/StackOverflow.
+  In the published call and deploy correctness theorems, StackOverflow
+  requires that no fuel makes `bytecode_stack_check` pass at `stack_limit`
+  on the entry frame's actual code. This uses installed code including
+  immutables for a call and initcode including constructor arguments for
+  deployment. A
   value-zero computed precompile that the EVM fails for lack of gas is not an
   alternative: its failure is the call's oracle outcome, which the source and
   Venom both take. The call theorem gives no gas bound or guarantee of
   success regardless of resources; the companion `vyper_call_gas_sufficient`
-  does: with enough gas the run exists. On unmatched calldata that run runs
-  out of gas only if it reaches a `RETURNDATACOPY` instruction
-  (`frame_inst_at`). When `calldata_dispatch` selects a source call, the same
+  guarantees a run with enough added gas. On unmatched calldata the entry
+  frame cannot raise OutOfGas. When `calldata_dispatch` selects a source call, the same
   holds provided the raised-gas run's call trace has `call_storage_ok` for
   every gas filling of its outcomes, no exempt source observation
   (`~gas_source_exempt`) and fewer than 2⁶⁴ entries. The identity
@@ -377,8 +381,9 @@ The result relation ties source gas observations to the frame's EVM gas readings
   the same claim at the deploy entry; with enough added gas, and under
   its source-exemption, storage and trace-length (fewer than 2⁶⁴ entries)
   conditions on that raised-gas run, OutOfGas implies that the code to deposit
-  is oversized or that the frame reached a `RETURNDATACOPY` instruction.
-  Both deploy finalizer cases include these alternatives.
+  exceeds the runtime code-size limit. Both finalizers' gas bounds cover
+  `RETURNDATACOPY` and the execution that follows it. These bounds use the
+  EVM model's unbounded natural-number gas budget.
 - msg.gas beyond `gas_readings_rel`, `gas=` beyond its forwarded operand and
   arbitrary unsupported programs are outside this runtime contract. Static entry
   (`ctxt.msgParams.static = tx.is_static`), runtime immutables (`installed_code_rel`

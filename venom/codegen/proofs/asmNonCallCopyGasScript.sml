@@ -37,7 +37,8 @@ Theorem copy_to_memory_gas_budget:
   !es c rb rest src address szn offset sourceOffset H gas B r s'.
   es.contexts = (c,rb)::rest /\ wf_context c /\
   (src = NONE \/ src = SOME get_call_data \/
-   src = SOME get_current_code \/ src = SOME (get_code address)) /\
+   src = SOME get_current_code \/ src = SOME (get_code address) \/
+   src = SOME (get_return_data_check sourceOffset szn)) /\
   (szn = 0 \/ offset + szn <= H) /\
   (src = NONE ==> szn = 0 \/ sourceOffset + szn <= H) /\
   gas + 3 * H + memory_cost H <= B /\
@@ -64,17 +65,22 @@ Proof
      Cases_on `szn = 0` >> simp[] >>
      once_rewrite_tac[arithmeticTheory.MULT_COMM] >>
      irule memory_expansion_cost_bound >> gvs[]) >>
+  qpat_x_assum `src = NONE \/ _`
+    (REPEAT_TCL DISJ_CASES_THEN SUBST_ALL_TAC) >>
   Cases_on `max_expansion_range (offset,szn) (sourceOffset,szn)` >>
   gvs[copy_to_memory_def, memory_expansion_info_def,
       LET_THM, bind_def, ignore_bind_def, get_current_context_def,
       return_def, set_current_context_def, assert_def, fail_def,
       memory_copy_cost_def] >>
-  gvs[consume_gas_def, expand_memory_def, read_memory_def, write_memory_def,
-      get_call_data_def, get_current_code_def, get_code_def, get_accounts_def,
-      bind_def, ignore_bind_def, get_current_context_def, return_def,
-      set_current_context_def, assert_def, fail_def, LET_THM,
-      wf_context_def, AllCaseEqs()] >>
-  gvs[frame_gas_left_def] >> decide_tac
+  gvs[consume_gas_def, bind_def, ignore_bind_def, get_current_context_def, return_def,
+      set_current_context_def, assert_def, fail_def, LET_THM, wf_context_def] >>
+  gvs[get_call_data_def, get_current_code_def, get_code_def, get_accounts_def,
+      get_return_data_check_def, get_return_data_def, bind_def, ignore_bind_def,
+      get_current_context_def, return_def, assert_def, fail_def] >>
+  gvs[expand_memory_def, read_memory_def, write_memory_def, bind_def,
+      get_current_context_def, set_current_context_def, return_def, fail_def] >>
+  gvs[frame_gas_left_def] >>
+  gvs[AllCaseEqs(), fail_def, return_def, frame_gas_left_def] >> decide_tac
 QED
 
 Theorem step_copy_to_memory_gas_budget:
@@ -112,6 +118,43 @@ Proof
      frame_gas_left es' <= frame_gas_left s' + B` >- gvs[]) >>
   irule copy_to_memory_gas_budget >>
   gvs[Abbr `es'`, wf_context_def, static_gas_def] >>
+  qexistsl_tac [`H`, `0w`] >> goal_assum (drule_at Any) >>
+  gvs[asm_inst_gas_ok_def, asm_mem_ranges_def]
+QED
+
+(* The return-data source check can fault after the copy charge. *)
+Theorem step_return_data_copy_gas_budget:
+  es.contexts = (c,rb)::rest /\ wf_context c /\
+  asm_inst_gas_ok H (AsmOp "RETURNDATACOPY") c.stack /\
+  3 + 3 * H + memory_cost H <= B /\
+  B <= c.msgParams.gasLimit - c.gasUsed /\
+  step_return_data_copy es = (r,s') ==>
+  r <> INR (SOME OutOfGas) /\
+  frame_gas_left es <= frame_gas_left s' + B
+Proof
+  strip_tac >> Cases_on `c.stack`
+  >- gvs[step_return_data_copy_def, pop_stack_def, bind_def, ignore_bind_def,
+         get_current_context_def, assert_def, fail_def, return_def,
+         frame_gas_left_def] >>
+  rename1 `c.stack = off::stk` >> Cases_on `stk`
+  >- gvs[step_return_data_copy_def, pop_stack_def, bind_def, ignore_bind_def,
+         get_current_context_def, assert_def, fail_def, return_def,
+         frame_gas_left_def] >>
+  rename1 `c.stack = off::so::stk'` >> Cases_on `stk'`
+  >- gvs[step_return_data_copy_def, pop_stack_def, bind_def, ignore_bind_def,
+         get_current_context_def, assert_def, fail_def, return_def,
+         frame_gas_left_def] >>
+  rename1 `c.stack = off::so::sz::tail` >>
+  gvs[step_return_data_copy_def, pop_stack_def, bind_def, ignore_bind_def,
+      get_current_context_def, assert_def, fail_def, return_def,
+      set_current_context_def] >>
+  qmatch_asmsub_abbrev_tac `copy_to_memory _ _ _ _ _ popped = _` >>
+  `frame_gas_left popped = frame_gas_left es` by
+    simp[Abbr `popped`, frame_gas_left_def] >>
+  (qsuff_tac `r <> INR (SOME OutOfGas) /\
+     frame_gas_left popped <= frame_gas_left s' + B` >- gvs[]) >>
+  irule copy_to_memory_gas_budget >>
+  gvs[Abbr `popped`, wf_context_def, static_gas_def] >>
   qexistsl_tac [`H`, `0w`] >> goal_assum (drule_at Any) >>
   gvs[asm_inst_gas_ok_def, asm_mem_ranges_def]
 QED
@@ -190,11 +233,12 @@ QED
 Theorem asm_frame_copy_decode[local]:
   asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp name /\
-  MEM name ["CALLDATACOPY";"CODECOPY";"EXTCODECOPY";"MCOPY";
+  MEM name ["CALLDATACOPY";"CODECOPY";"RETURNDATACOPY";"EXTCODECOPY";"MCOPY";
             "LOG0";"LOG1";"LOG2";"LOG3";"LOG4"] ==>
   next_opcode (FST (HD es.contexts)) = SOME
     (if name = "CALLDATACOPY" then CallDataCopy else
      if name = "CODECOPY" then CodeCopy else
+     if name = "RETURNDATACOPY" then ReturnDataCopy else
      if name = "EXTCODECOPY" then ExtCodeCopy else
      if name = "MCOPY" then MCopy else
      if name = "LOG0" then Log 0 else if name = "LOG1" then Log 1 else
@@ -212,13 +256,12 @@ Theorem asm_frame_copy_raw_gas:
   !prog data es0 a es H.
     asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
     a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
-    EL a.as_pc prog <> AsmOp "RETURNDATACOPY" /\
     asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
     50000 + 8 * H + memory_cost H <= frame_gas_left es /\
     EL a.as_pc prog <> AsmOp "CALL" /\
     EL a.as_pc prog <> AsmOp "STATICCALL" /\
     (?name. EL a.as_pc prog = AsmOp name /\
-      MEM name ["CALLDATACOPY";"CODECOPY";"EXTCODECOPY";"MCOPY";
+      MEM name ["CALLDATACOPY";"CODECOPY";"RETURNDATACOPY";"EXTCODECOPY";"MCOPY";
                 "LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]) ==>
     !op r s'.
       next_opcode (FST (HD es.contexts)) = SOME op /\
@@ -242,6 +285,9 @@ Proof
   (qsuff_tac `r <> INR (SOME OutOfGas) /\
     frame_gas_left es <= frame_gas_left s' + (50000 + 8 * H + memory_cost H)`
    >- (strip_tac >> gvs[] >> decide_tac))
+  >~ [`step_return_data_copy es = (r,s')`]
+    >- (irule step_return_data_copy_gas_budget >> simp[] >>
+        qexists_tac `H` >> simp[])
   >~ [`step_ext_code_copy es = (r,s')`]
     >- (irule step_ext_code_copy_gas_budget >> simp[] >> qexists_tac `H` >> simp[])
   >~ [`step_copy_to_memory CallDataCopy _ es = (r,s')`]

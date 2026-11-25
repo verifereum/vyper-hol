@@ -5,7 +5,7 @@
 Theory frameRunRaises
 Ancestors
   frameGas frameRootReach frameRootTerminal
-  vfmExecution vfmExecutionProp vfmContext
+  vfmExecution vfmExecutionProp vfmContext vfmAccountFrame relation
 
 (* With one context whose output does not go to code (no deposit), a run
    that ends in OutOfGas has an instruction of that frame raising it: a
@@ -37,4 +37,21 @@ Proof
   simp[frame_inst_raises_def] >>
   goal_assum $ drule_at Any >>
   goal_assum $ drule_at Any >> simp[]
+QED
+
+Theorem run_call_root_stack_overflow_raises:
+  wf_state es /\ LENGTH es.contexts = 1 /\
+  run_call es = SOME (INR (SOME StackOverflow),es') ==>
+  frame_raises es StackOverflow
+Proof
+  strip_tac >>
+  `~vfm_abort (SOME StackOverflow)` by simp[] >>
+  drule_all root_run_nonabort_terminal_source >> strip_tac >>
+  `?c rb. s.contexts = [(c,rb)]` by
+    (Cases_on `s.contexts` >> gvs[] >> Cases_on `h` >> simp[]) >>
+  drule_all root_step_stack_overflow_raises >> strip_tac >>
+  `es.contexts <> []` by (Cases_on `es.contexts` >> gvs[]) >>
+  `run_frame es = run_frame s` by
+    (irule run_frame_prefix >> gvs[run_call_reaches_def, arithmeticTheory.GREATER_EQ]) >>
+  gvs[frame_raises_def]
 QED
