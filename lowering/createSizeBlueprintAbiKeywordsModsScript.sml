@@ -243,8 +243,17 @@ Resume create_blueprint_abi_keyword_entry_mods[producer_row]:
     (drule_then assume_tac create_prefix_labels >>
      qpat_assum `create_expr_prefix (C i) (M i) _ _ _ _ _ _`
        (mp_tac o MATCH_MP create_prefix_labels) >> simp[]) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  TRY (rpt strip_tac >> first_x_assum drule >> simp[] >> NO_TAC) >>
+  `!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at (C i) x` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!x. not_fresh_at (C 0) x ==> not_fresh_at (C i) x` irule >>
+     qpat_assum `!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at (C 0) x`
+       (drule_then ACCEPT_TAC)) >>
+  `!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at (C i) x` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!x. not_fresh_at (C 0) x ==> not_fresh_at (C i) x` irule >>
+     qpat_assum `!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at (C 0) x`
+       (drule_then ACCEPT_TAC)) >>
+  asm_rewrite_tac[] >>
   disch_tac >> Cases_on `exprs_can_mutate ce (DROP (SUC i) ctors)` >> asm_rewrite_tac[]
   >- (conj_tac
       >- (irule raw_observed_prefix_live >>
