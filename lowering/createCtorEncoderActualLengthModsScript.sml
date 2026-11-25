@@ -74,5 +74,68 @@ Theorem ctor_encoder_length_at_marked_cut_mods:
     (!j. pbase+dst_offset <= j /\ j < pbase+dst_offset + LENGTH bytes ==> j NOTIN tt.t_mem) /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK t,Gt,tt)
 Proof
-  cheat
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`z`,`Gz`,`tz`] (MAP_EVERY assume_tac o CONJUNCTS)))
+    ctor_encoder_length_witness_mods >>
+  `(z.vs_current_bb,z.vs_inst_idx) = (en.cs_current_bb,LENGTH en.cs_current_insts)` by
+    (qhdtm_assum `abi_encode_saved_state_mods`
+       (mp_tac o REWRITE_RULE[abi_encode_saved_state_mods_def]) >> simp[]) >>
+  `gas_origin_path T explicit ctx func u [] (OK z)` by
+    (qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H` assume_tac) >>
+     qpat_assum `!D. gas_origin_ptr_path (D,_,_,_,_,_) _ _ _`
+       (qspec_then `DF H` (mp_tac o MATCH_MP gas_origin_ptr_path_projections)) >> simp[]) >>
+  `z = t` by suspend "identify" >>
+  qpat_x_assum `z = t` SUBST_ALL_TAC >>
+  qexistsl_tac [`Gz`,`tz`] >> asm_rewrite_tac[]
 QED
+
+Resume ctor_encoder_length_at_marked_cut_mods[identify]:
+  qabbrev_tac `A = \p q. (p.vs_current_bb,p.vs_inst_idx) <>
+    (en.cs_current_bb,LENGTH en.cs_current_insts) /\
+    ?ms. gas_origin_edge F explicit ctx func p ms (OK q)` >>
+  qabbrev_tac `B = \p q. ?bb i ms.
+    lookup_block p.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb p.vs_inst_idx = SOME i /\
+    en.cs_next_id <= i.inst_id /\ gas_origin_edge F explicit ctx func p ms (OK q)` >>
+  `RTC A u t` by
+    (drule_then irule ctor_marked_project >> simp[Abbr `A`] >> metis_tac[]) >>
+  `RTC B t bad` by suspend "suffix" >>
+  `!p q. A p q \/ B p q ==> ?ms. gas_origin_edge F explicit ctx func p ms (OK q)` by
+    (simp[Abbr `A`, Abbr `B`] >> metis_tac[]) >>
+  `!ms q. ~gas_origin_edge T explicit ctx func bad ms (OK q)` by
+    (drule_all ctor_oversized_no_ok >> simp[]) >>
+  `ctor_segment_fetch func bad = SOME dispatch /\ dispatch.inst_opcode <> PHI` by
+    (simp[ctor_segment_fetch_def] >> fs[]) >>
+  `?i. ctor_segment_fetch func t = SOME i /\ i.inst_opcode <> PHI` by
+    (qpat_assum `RTC B t bad` (strip_assume_tac o ONCE_REWRITE_RULE[RTC_CASES1])
+     >- gvs[] >>
+     qpat_x_assum `B t _` mp_tac >> simp[Abbr `B`, ctor_segment_fetch_def] >>
+     rw[gas_origin_edge_def, exit_result_def] >> metis_tac[step_inst_ok_imp_not_phi]) >>
+  `?i. ctor_segment_fetch func z = SOME i /\ i.inst_opcode <> PHI` by
+    (fs[ctor_segment_fetch_def] >> metis_tac[]) >>
+  `RTC A z t \/ RTC B t z` by
+    (drule_all_then strip_assume_tac ctor_path_split_at_sink >> simp[]) >>
+  drule_all_then (qx_choosel_then [`end_bb`,`pred`,`last`] strip_assume_tac)
+    ctor_encoder_finish_position >>
+  irule ctor_encoder_cut_occurrence >>
+  qexistsl_tac [`A`,`B`,`end_bb`,`ctx`,`explicit`,`func`,`en.cs_next_id`,`last`,`pred`] >>
+  asm_rewrite_tac[] >> simp[Abbr `A`, Abbr `B`]
+QED
+
+Resume ctor_encoder_length_at_marked_cut_mods[suffix]:
+  qpat_x_assum `r n = bad` (SUBST1_TAC o SYM) >>
+  qpat_assum `r 0 = t` (SUBST1_TAC o SYM) >>
+  `!m. m <= n ==> en.cs_next_id <= (c m).cs_next_id /\ RTC B (r 0) (r m)` by
+    (Induct >- simp[] >> strip_tac >>
+     `m <= n /\ m < n` by decide_tac >>
+     qpat_x_assum `m <= n ==> _` (drule_then strip_assume_tac) >>
+     qpat_assum `!k. k < n ==> _` (qspec_then `m` (drule_then strip_assume_tac)) >>
+     conj_tac >- metis_tac[LESS_EQ_TRANS] >>
+     irule RTC_TRANS >> qexists_tac `r m` >> simp[] >>
+     drule_then irule ctor_marked_project >>
+     simp[Abbr `B`, frag_ids_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  first_x_assum (qspec_then `n` mp_tac) >> simp[]
+QED
+
+Finalise ctor_encoder_length_at_marked_cut_mods
