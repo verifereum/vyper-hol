@@ -13,7 +13,7 @@ Ancestors
   loweringCalldataCorrect registrationGuardRejectOrigin
   dispatchedEntryValueRevert
   e2eDeployed e2eLifecycle e2eTransactionWorld
-  e2eModsLifecycle
+  e2eModsLifecycle e2eModsDeployed
   e2eCodeFrame ownSymSrcUnit
   runtimeSymSrcDynarrayAppend runtimeSymSrcModuleArgPreservation runtimeSymSrcRuntimeBoundary runtimeSymSrcStatements
   (* definitions *)

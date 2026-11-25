@@ -39,7 +39,7 @@ Proof
   simp[call_ready_def, deployed_def]
 QED
 
-Triviality accounts_after_transfer_code:
+Theorem accounts_after_transfer_code:
   (lookup_account a (accounts_after_transfer tx accounts)).code =
   (lookup_account a accounts).code
 Proof
@@ -236,53 +236,21 @@ Proof
   simp[storage_ok_def, horizon_ok_def] >> metis_tac[]
 QED
 
-Triviality deploy_next_storage_ok:
-  deploy_typing_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  regions_consistent (FST H) /\
-  storage_locks_separated (FST H) (SND H) /\
-  (lookup_account tx.target am.accounts).storage = empty_storage /\
-  am.tStorage tx.target = empty_storage /\
-  deploy_within H tops am tx es /\
-  deploy_result_rel_at gs tops runtime_bc am tx es r es' /\
-  ~MEM tx.target es'.rollback.toDelete /\
-  load_contract (SOME (MAP SND (call_trace es))) gs am tx
-    [(NONE, tops)] [] = INL (am', rqs) ==>
-  !tx'. tx'.target = tx.target ==>
-    storage_ok H (next_source_machine am' es') tx'
+(* Transfer the source's storage invariant to the EVM-backed next machine. *)
+Theorem deploy_next_storage_ok_from_agreement:
+  storage_ok H am' tx /\
+  accounts_agree H0 tx.target am'.accounts
+    (process_deletions es'.rollback.toDelete
+      (update_account tx.target
+        (lookup_account tx.target es'.rollback.accounts with
+          code := (lookup_account tx.target am'.accounts).code)
+        es'.rollback.accounts)) /\
+  (!region. MEM region (FST H0) ==> MEM region (FST H)) /\
+  ~MEM tx.target es'.rollback.toDelete /\ tx'.target = tx.target ==>
+  storage_ok H (next_source_machine am' es') tx'
 Proof
-  strip_tac >> qx_gen_tac `tx'` >> strip_tac >>
-  `storage_ok H am' tx` by
-    (irule deploy_post_storage_ok >> metis_tac[]) >>
-  qabbrev_tac `H0 = storage_trace_horizon
-    (deploy_storage_trace (SOME (MAP SND (call_trace es))) gs am tx tops)` >>
-  `accounts_agree H0 tx.target am'.accounts
-      (process_deletions es'.rollback.toDelete
-        (update_account tx.target
-          (lookup_account tx.target es'.rollback.accounts with
-             code := (lookup_account tx.target am'.accounts).code)
-          es'.rollback.accounts))` by
-    (qpat_x_assum `deploy_result_rel_at _ _ _ _ _ _ _ _` mp_tac >>
-     simp[deploy_result_rel_at_def, deploy_result_rel_def] >>
-     strip_tac >>
-     simp[Abbr `H0`] >>
-     first_assum ACCEPT_TAC) >>
-  `!region. MEM region (FST H0) ==> MEM region (FST H)` by
-    (rpt strip_tac >>
-     qpat_x_assum `deploy_within _ _ _ _ _`
-       (strip_assume_tac o BETA_RULE o
-        REWRITE_RULE [deploy_within_def, LET_THM]) >>
-     qpat_x_assum `!gs. _` (qspecl_then [`gs`] assume_tac) >>
-     qpat_x_assum `storage_observations_ok _ _ _`
-       (strip_assume_tac o BETA_RULE o
-        REWRITE_RULE [storage_observations_ok_def, LET_THM]) >>
-     qpat_x_assum `EVERY (\region. MEM region (FST H)) _`
-       (strip_assume_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
-     qpat_x_assum `!region. _` (qspecl_then [`region`] mp_tac) >>
-     simp[storage_trace_regions_def,
-          storage_trace_horizon_def, Abbr `H0`] >>
-     simp[] >> strip_tac >>
-     qpat_x_assum `MEM region _ ==> MEM region (FST H)` irule >>
-     gvs[storage_trace_horizon_def, storage_trace_regions_def]) >>
+  strip_tac >>
+  `regions_consistent (FST H)` by fs[storage_ok_def, horizon_ok_def] >>
   `!j b. storage_dead H0 F
        (lookup_account tx.target am'.accounts).storage j b ==>
        storage_dead H F (lookup_account tx.target am'.accounts).storage j b` by
@@ -331,7 +299,7 @@ Proof
      drule accountsRelPropsTheory.observed_storage_region_read_live >>
      simp[loweringStateRelDefsTheory.storage_read_live_def] >> metis_tac[]) >>
   qpat_x_assum `storage_ok H am' tx`
-    (strip_assume_tac o REWRITE_RULE [storage_ok_def, horizon_ok_def]) >>
+    (strip_assume_tac o SIMP_RULE bool_ss [storage_ok_def, horizon_ok_def, LET_THM]) >>
   rw[storage_ok_def, horizon_ok_def] >>
   simp[] >>
   mp_tac (Q.INST
@@ -342,6 +310,57 @@ Proof
      `D` |-> `D`] storage_well_formed_on_horizon_extension) >>
   impl_tac >- gvs[initial_evaluation_context_def] >>
   metis_tac[]
+QED
+
+Triviality deploy_next_storage_ok:
+  deploy_typing_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
+  regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
+  (lookup_account tx.target am.accounts).storage = empty_storage /\
+  am.tStorage tx.target = empty_storage /\
+  deploy_within H tops am tx es /\
+  deploy_result_rel_at gs tops runtime_bc am tx es r es' /\
+  ~MEM tx.target es'.rollback.toDelete /\
+  load_contract (SOME (MAP SND (call_trace es))) gs am tx
+    [(NONE, tops)] [] = INL (am', rqs) ==>
+  !tx'. tx'.target = tx.target ==>
+    storage_ok H (next_source_machine am' es') tx'
+Proof
+  strip_tac >> qx_gen_tac `tx'` >> strip_tac >>
+  `storage_ok H am' tx` by
+    (irule deploy_post_storage_ok >> metis_tac[]) >>
+  qabbrev_tac `H0 = storage_trace_horizon
+    (deploy_storage_trace (SOME (MAP SND (call_trace es))) gs am tx tops)` >>
+  `accounts_agree H0 tx.target am'.accounts
+      (process_deletions es'.rollback.toDelete
+        (update_account tx.target
+          (lookup_account tx.target es'.rollback.accounts with
+             code := (lookup_account tx.target am'.accounts).code)
+          es'.rollback.accounts))` by
+    (qpat_x_assum `deploy_result_rel_at _ _ _ _ _ _ _ _` mp_tac >>
+     simp[deploy_result_rel_at_def, deploy_result_rel_def] >>
+     strip_tac >>
+     simp[Abbr `H0`] >>
+     first_assum ACCEPT_TAC) >>
+  `!region. MEM region (FST H0) ==> MEM region (FST H)` by
+    (rpt strip_tac >>
+     qpat_x_assum `deploy_within _ _ _ _ _`
+       (strip_assume_tac o BETA_RULE o
+        REWRITE_RULE [deploy_within_def, LET_THM]) >>
+     qpat_x_assum `!gs. _` (qspecl_then [`gs`] assume_tac) >>
+     qpat_x_assum `storage_observations_ok _ _ _`
+       (strip_assume_tac o BETA_RULE o
+        REWRITE_RULE [storage_observations_ok_def, LET_THM]) >>
+     qpat_x_assum `EVERY (\region. MEM region (FST H)) _`
+       (strip_assume_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
+     qpat_x_assum `!region. _` (qspecl_then [`region`] mp_tac) >>
+     simp[storage_trace_regions_def,
+          storage_trace_horizon_def, Abbr `H0`] >>
+     simp[] >> strip_tac >>
+     qpat_x_assum `MEM region _ ==> MEM region (FST H)` irule >>
+     gvs[storage_trace_horizon_def, storage_trace_regions_def]) >>
+  irule deploy_next_storage_ok_from_agreement >>
+  qexistsl_tac [`H0`, `tx`] >> asm_rewrite_tac[]
 QED
 
 Triviality deploy_entry_stack_check:
@@ -423,7 +442,7 @@ Proof
   match_mp_tac deploy_next_storage_ok >> fs[horizon_ok_def] >> metis_tac[]
 QED
 
-Triviality call_entry_stack_check:
+Theorem call_entry_stack_check:
   call_entry_rel am tx es /\
   bytecode_stack_check fuel stack_limit (FST (HD es.contexts)).msgParams.code ==>
   ~frame_raises es StackOverflow
