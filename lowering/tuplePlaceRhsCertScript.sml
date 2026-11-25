@@ -11,7 +11,9 @@ Proof
   rpt strip_tac >> Cases_on `e` >>
   gvs[vyperASTTheory.expr_type_def, lowered_value_type_def,
       post_value_type_def]
-  >- (Cases_on `b` >> gvs[lowered_value_type_def, concat_buffer_type_def, expr_type_def])
+  >- (Cases_on `b` >>
+      gvs[lowered_value_type_def, concat_buffer_type_def, expr_type_def] >>
+      gvs[oneline lowered_value_type_def, expr_type_def, AllCaseEqs()])
   >- (Cases_on `t0` >> gvs[lowered_value_type_def, expr_type_def]) >>
   rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
   gvs[lowered_value_type_def, post_value_type_def, is_word_type_def,
