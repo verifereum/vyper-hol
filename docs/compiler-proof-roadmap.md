@@ -240,8 +240,12 @@ exhaustion. `unitShapeDefs.opaque_use_ok` restricts return-address uses.
 `gas_readings_rel` constrains source gas fillings using the EVM readings
 and allows slots with no corresponding reading. The
 [fixed-storage call theorem](compiler-correctness-specification.md#fixed-storage-regions)
-gives a `run_call` result that either is frame-resource-starved or satisfies
-`calldata_result_rel H`, including the unmatched-calldata case.
+gives a `run_call` result. Either the entry frame raises `OutOfGas` or
+`StackOverflow`, or the run satisfies `calldata_result_rel H`, including the
+unmatched-calldata case. The published
+call and deploy correctness theorems permit `StackOverflow` only if no fuel
+makes `bytecode_stack_check` succeed at `stack_limit` on the actual entry code.
+That code includes immutables for calls and constructor arguments for deploys.
 
 The companion `vyper_call_gas_sufficient`
 (`lowering/e2eGasSufficientTopScript.sml`) gives a threshold `g` such that
@@ -249,9 +253,8 @@ adding any `g' >= g` gas to the frame yields a run. When
 `calldata_dispatch` selects a source call, the gas guarantee requires the
 raised-gas trace length to be below `2 ** 64`, `call_storage_ok` for every
 gas filling of its outcomes, and `~gas_source_exempt` for every source
-observation of that call. Under those conditions, an OutOfGas run reaches
-a `RETURNDATACOPY` instruction (`frame_inst_at`). The same OutOfGas
-conclusion applies to unmatched calldata.
+observation of that call. Under those conditions, the entry frame cannot
+raise `OutOfGas`. The same guarantee applies to unmatched calldata.
 The identity case composes the stage bounds S1b
 (`lower_vyper_runtime_unit_run_bounded`), S6b
 (`run_venom_pipeline_run_bounded`) and S7g (`codegen_gas_sufficient`). The deploy twin
@@ -262,10 +265,9 @@ The identity case composes the stage bounds S1b
 to derive that the runtime bytecode does not start with `0xEF` from successful
 compilation with an accepted finalizer. Under `deploy_storage_ok` for every
 gas filling, no exempt source observation and fewer than 2⁶⁴ trace entries on
-the raised-gas run, its OutOfGas conclusion allows oversized deposited code or
-a reached `RETURNDATACOPY`;
-its per-finalizer cases (`e2e_deploy_gas_sufficient_identity`,
-`e2e_deploy_gas_sufficient_asm_opt`) allow the same two alternatives.
+the raised-gas run, `OutOfGas` implies that the code to deposit exceeds the
+runtime code-size limit. The call and deploy gas bounds cover
+`RETURNDATACOPY` and its revert-forwarding tail under both finalizers.
 Each companion rests on one admitted lemma, its entry's held create-size
 claim (`call_entry_reachable_create_size_ok`,
 `deploy_entry_reachable_create_size_ok`, marked `GATE_ADMISSION`); no other
