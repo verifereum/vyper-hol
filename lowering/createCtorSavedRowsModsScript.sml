@@ -5,6 +5,8 @@ Ancestors
   createCtorSavedSimpleMods createCtorSavedConsMods bodyFullExtCallPosList
   bodyStorageCases exprSimWordArgs exprLoweringProps vyperStorageTrace
   vyperStorageFootprint vyperState list rich_list
+  createCtorRowCutsMods createCtorRowSuffixFoldMods
+  createCtorRowCompletedHeadMods createCtorRowPostAdvanceMods
 
 Theorem ctor_rows_post_INL_mods[local]:
   extcall_positional_post_mods mods p DF lo d ctx func ce cx env kw xs svs
@@ -12,7 +14,7 @@ Theorem ctor_rows_post_INL_mods[local]:
   extcall_positional_post_mods mods p DF lo d ctx func ce cx env kw xs svs
     sa sb es s g h H (INL vs : value list + exception) ee G tn t
 Proof
-  cheat
+  simp[extcall_positional_post_mods_def]
 QED
 
 Theorem ctor_rows_fold_mods[local]:
@@ -53,7 +55,40 @@ Theorem ctor_rows_fold_mods[local]:
       (C 0) (C (LENGTH args)) (E 0) (St 0) G0 tn0 K (INL vs : value list + exception)
       (E (LENGTH args)) G tn (St (LENGTH args))
 Proof
-  cheat
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `!i. i < LENGTH args ==> !g h. J i g h ==>
+    ?G tn. !K. valid_horizon cx st0 K (E (LENGTH args)).storage_trace ==>
+      extcall_positional_post_mods mods T DF lo d ctx func ce cx env
+        [] (DROP i args) (DROP i svs) (C i) (C (LENGTH args)) (E i) (St i) g h K
+        (INL (DROP i vs) : value list + exception) (E (LENGTH args)) G tn (St (LENGTH args))`
+    suffices_by (disch_then (qspec_then `0` mp_tac) >> simp[]) >>
+  ho_match_mp_tac ctor_rows_suffix_fold_by_step_mods >> simp[] >>
+  rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H` assume_tac) >>
+      qexists_tac `H` >>
+      `SUC i <= LENGTH args` by decide_tac >>
+      qpat_assum `!j. j <= LENGTH args ==> _` (drule_then assume_tac) >>
+      drule_all_then ACCEPT_TAC ctor_rows_horizon_mods)
+  >- (rpt strip_tac >>
+      qpat_assum `!i. _ ==> !g h. J i g h ==> _`
+        (qspec_then `i` (drule_then (qspecl_then [`g`,`h`] (drule_then (ACCEPT_TAC o CONJUNCT1))))))
+  >- first_assum ACCEPT_TAC
+  >> rpt strip_tac >>
+  `i < LENGTH args /\ SUC i <= LENGTH args` by decide_tac >>
+  `!j. j < LENGTH args ==> ci_mono (C j) (C (SUC j)) /\
+      (St (SUC j)).vs_labels = (St j).vs_labels` by simp[] >>
+  drule_then (qspec_then `SUC i` (drule_then strip_assume_tac)) ctor_rows_suffix_cuts_mods >>
+  irule ctor_saved_rows_cons_mods >>
+  qpat_assum `contract_inv _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `module_body_inv _ _ _ _ _` (irule_at Any) >>
+  `EVERY (source_body_call_supported cx) (int_calls_exprs (DROP (SUC i) args))` by
+    (irule int_calls_exprs_DROP_EVERY >> first_assum ACCEPT_TAC) >>
+  qexistsl [`b`,`St (SUC i)`,`st0`,`(E (LENGTH args)).gas_obs`,
+            `(E (SUC i)).gas_obs`,`E (SUC i)`,`C (SUC i)`,`a`] >>
+  simp[ctor_rows_post_INL_mods] >>
+  qpat_assum `!i g h. J i g h ==> _`
+    (qspecl_then [`i`,`g`,`h`] (drule_then ACCEPT_TAC))
 QED
 
 Theorem ctor_saved_rows_at_last_cut_mods:
@@ -136,5 +171,38 @@ Theorem ctor_saved_rows_at_last_cut_mods:
       (C 0) (C (LENGTH args)) (E 0) (St 0) G0 tn0 K (INL vs : value list + exception)
       (E (LENGTH args)) G tn (St (LENGTH args))
 Proof
-  cheat
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qabbrev_tac `J = \i g h. expr_sim_inv_mods mods ce cx env (E i) /\
+    return_buf_frame d ce (C i) (St i) /\ alloca_history func (St i) /\
+    ~(St i).vs_halted /\ (St i).vs_current_bb = (C i).cs_current_bb /\
+    (St i).vs_inst_idx = LENGTH (C i).cs_current_insts /\
+    (!K. valid_horizon cx st0 K (E i).storage_trace ==>
+      stmt_state_rel K ctx func ce cx (E i) (St i) /\
+      storage_well_formed_on cx (E i) (FST K) /\
+      ghost_inv_at_mods (DF K) lo d ce cx (E i) g h (St i))` >>
+  irule ctor_rows_fold_mods >>
+  qpat_assum `contract_inv _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `module_body_inv _ _ _ _ _` (irule_at Any) >>
+  simp[] >>
+  qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H` assume_tac) >>
+  qexistsl [`J`,`H`] >> simp[] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!i. i < LENGTH args ==> compile_expr _ _ _ _ = _ /\ _`
+        (qspec_then `i` (drule_then strip_assume_tac)) >>
+      drule_all_then ACCEPT_TAC ctor_rows_read_horizon_mods)
+  >- (ho_match_mp_tac ctor_rows_source_mods >> simp[])
+  >- (rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+      drule_all_then mp_tac ctor_row_post_advance_mods >> simp[Abbr `J`])
+  >- simp[Abbr `J`]
+  >- (rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >>
+      qpat_assum `!i. i < LENGTH args ==> compile_expr _ _ _ _ = _ /\ _`
+        (qspec_then `i` (drule_then (MAP_EVERY assume_tac o CONJUNCTS))) >>
+      qpat_assum `!i g h. _ ==> _` (qspecl_then [`i`,`g`,`h`] mp_tac) >>
+      (impl_tac >- fs[Abbr `J`]) >>
+      disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> fs[Abbr `J`] >>
+      irule ctor_row_completed_head_mods >>
+      qpat_assum `compile_expr _ _ _ _ = _` (irule_at Any) >>
+      qpat_assum `contract_inv _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `module_body_inv _ _ _ _ _` (irule_at Any) >> simp[])
+  >> simp[Abbr `J`]
 QED
