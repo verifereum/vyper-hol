@@ -212,8 +212,20 @@ Proof
   qpat_x_assum `!a c ids outs v Gv tv z Gz tz. _`
     (qspecl_then [`su2`,`en`,`{}`,`[(pbase+dst_offset+h,hs)]`,`u2`,`G2`,`t2`,`z`,`Gz`,`tz`] mp_tac) >>
   impl_tac >- (simp_tac (srw_ss()) [EVERY_DEF, NoAsms] >>
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    TRY (qexistsl_tac [`inst`,`root`] >> asm_rewrite_tac[] >> NO_TAC) >> decide_tac) >>
+    rpt conj_tac
+    >- qpat_assum `abi_encode_saved_state_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ su2 u2 G2 t2` ACCEPT_TAC
+    >- qpat_assum `ci_mono su2 en` ACCEPT_TAC
+    >- qpat_assum `window_phase ctx func su2 en {} _ u2 z` ACCEPT_TAC
+    >- qpat_assum `abi_encode_exec_frame func u2 z` ACCEPT_TAC
+    >- qpat_assum `!D. gas_origin_ptr_path _ (u2,G2,t2) [] (OK z,Gz,tz)` ACCEPT_TAC
+    >- qpat_assum `!x. not_fresh_at su2 x ==> FLOOKUP Gz x = _ /\ _` ACCEPT_TAC
+    >- qpat_assum `tz.t_stor = t2.t_stor` ACCEPT_TAC
+    >- qpat_assum `tz.t_trans = t2.t_trans` ACCEPT_TAC
+    >- qpat_assum `tz.t_imm = t2.t_imm` ACCEPT_TAC
+    >- qpat_assum `pbase+dst_offset+h+hs <= pbase+capacity` ACCEPT_TAC
+    >- (qpat_assum `!aid. aid IN {shared} ==> _`
+          (qspec_then `shared` (ACCEPT_TAC o SIMP_RULE (srw_ss()) [])))
+    >- qpat_assum `!j. _ /\ j IN tz.t_mem ==> j IN t2.t_mem` ACCEPT_TAC) >>
   strip_tac >>
   `abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot (SUC i) en z Gz tz` by
     (irule abi_encode_values_static_prefix >>
