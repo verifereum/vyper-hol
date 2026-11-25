@@ -4,6 +4,7 @@ Ancestors
   listZipProps
   runtimeLabelExprCallbacks runtimeLabelExprPrimitives runtimeLabelPrimitives
   runtimeLabelBuiltinCore runtimeLabelBuiltinSystem runtimeLabelBuiltinArithmetic runtimeLabelBuiltins runtimeLabelABI runtimeLabelInvariant runtimeLabelValues
+  runtimeLabelBoolChain
   exprLowering exprLoweringProps exprCallBounds
 
 Theorem rb_as_ptr_val_for[local]:
@@ -180,6 +181,9 @@ Proof
   >~ [`compile_invert`] >- suspend "not"
   >~ [`compile_builtin_len`] >- suspend "len"
   >~ [`compile_make_tuple`] >- suspend "array"
+  >~ [`as_ptr_val _ LocMemory ((case _ of Label _ => _ | _ => _), _)`] >-
+    suspend "namedconst"
+  >~ [`compile_bool_chain_ops`] >- suspend "boolchain"
   >> suspend "bop"
 QED
 
@@ -485,6 +489,42 @@ Resume rb_compile_builtin_dispatch_body_for[hashing]:
     (Q.ISPEC `(rb_operand_ok_for source_checks)` (Q.GEN `P` (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >> BETA_TAC >>
   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_emit_op_for]) >>
   gen_tac >> strip_tac >> irule rb_as_stack_val_for >> simp[rb_emit_op_for]
+QED
+Resume rb_compile_builtin_dispatch_body_for[namedconst]:
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+    (Q.ISPEC `rb_operand_ok_for source_checks` (Q.GEN `P`
+      (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC
+        ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >>
+  BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >> simp[rb_lower_value_for]) >>
+  gen_tac >> strip_tac >>
+  rename1 `rb_operand_ok_for source_checks op` >>
+  Cases_on `is_word_type ret_ty` >> Cases_on `op` >>
+  simp[rb_step_for_def, as_stack_val_def, as_ptr_val_def,
+       rb_value_ok_for_def, rb_mk_ptr_for, rb_operand_ok_for_def]
+QED
+
+Resume rb_compile_builtin_dispatch_body_for[boolchain]:
+  let
+    fun bind_step pred =
+      ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM, SF ETA_ss]
+        (Q.ISPEC pred (Q.GEN `P`
+          (CONV_RULE (RAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX) THENC
+            ABS_CONV (REWR_CONV compileEnvTheory.comp_bind_def)))) rb_step_bind_for)))) >>
+      BETA_TAC
+    val normalize = CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV))
+  in
+    bind_step `K T` >> conj_tac >- (normalize >> simp[rb_fresh_var_for]) >>
+    gen_tac >>
+    bind_step `\l. rb_operand_ok_for source_checks (Label l)` >>
+    conj_tac >- (normalize >> simp[SRULE [rb_operand_ok_for_def] rb_fresh_label_for]) >>
+    gen_tac >> strip_tac >>
+    bind_step `K T` >> conj_tac >-
+      (normalize >> irule rb_compile_bool_chain_ops_for >> simp[rb_lower_value_for]) >>
+    gen_tac >>
+    bind_step `K T` >> conj_tac >- (normalize >> simp[rb_new_block_for]) >>
+    simp[rb_step_for_def, rb_value_ok_for_def]
+  end
 QED
 Finalise rb_compile_builtin_dispatch_body_for
 

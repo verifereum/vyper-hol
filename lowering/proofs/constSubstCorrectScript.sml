@@ -3331,7 +3331,7 @@ Proof
   simp[constant_roots_provenance_def, MEM_APPEND] >> metis_tac[]
 QED
 
-Theorem constant_expr_read_accesses_aux:
+Theorem constant_expr_read_accesses_aux[local]:
   (!e. constant_expr mods e /\ no_sha256_expr e ==>
     int_calls_expr e = [] /\
     EVERY (\a. ?r. a = vyperSubscriptOverlap$ReadAcc r)
@@ -3753,6 +3753,15 @@ Proof
         gvs[power_operands_ok_def, no_neg_exp_expr_def] >>
         rpt strip_tac >> gvs[] >> metis_tac[]) >>
       metis_tac[const_subst_literal_forms, optionTheory.IS_SOME_EXISTS]) >>
+  Cases_on `bt = NamedConst`
+  >- (gvs[] >> Cases_on `es` >> gvs[builtin_operands_ok_def] >>
+      Cases_on `t` >> gvs[builtin_operands_ok_def, subst_consts_expr_def] >>
+      Cases_on `h` >> gvs[named_const_operand_def, subst_consts_expr_def]
+      >~ [`Builtin _ bi _`] >-
+        (Cases_on `bi` >> gvs[named_const_operand_def]) >>
+      qpat_x_assum `named_const_operand (TypeBuiltin _ _ _ _)` mp_tac >>
+      rename1 `named_const_operand (TypeBuiltin _ bi _ children) ==> _` >>
+      Cases_on `bi` >> Cases_on `children` >> gvs[named_const_operand_def, subst_consts_expr_def]) >>
   Cases_on `bt` >> gvs[builtin_operands_ok_def] >>
   Cases_on `b` >> gvs[builtin_operands_ok_def]
 QED
@@ -3841,11 +3850,21 @@ Proof
             (Cases_on `lit` >> gvs[] >> Cases_on `tl` >> gvs[]) >>
           Cases_on `tl` >> gvs[]) >>
       metis_tac[fold_const_literal_forms, optionTheory.IS_SOME_EXISTS]) >>
+  Cases_on `bt = NamedConst`
+  >- (gvs[] >> Cases_on `es` >> gvs[builtin_operands_ok_def] >>
+      Cases_on `t` >> gvs[builtin_operands_ok_def, fold_const_expr_def] >>
+      Cases_on `h` >> gvs[named_const_operand_def, fold_const_expr_def]
+      >~ [`fold_const_builtin _ bi _`] >-
+        (Cases_on `bi` >>
+         gvs[named_const_operand_def, fold_const_builtin_def, list_case_compute]) >>
+      qpat_x_assum `named_const_operand (TypeBuiltin _ _ _ _)` mp_tac >>
+      rename1 `named_const_operand (TypeBuiltin _ bi _ children) ==> _` >>
+      Cases_on `bi` >> Cases_on `children` >> gvs[named_const_operand_def, fold_const_expr_def]) >>
   Cases_on `bt` >> gvs[builtin_operands_ok_def] >>
   Cases_on `b` >> gvs[builtin_operands_ok_def]
 QED
 
-Theorem fold_const_int_case[local]:
+Theorem fold_const_int_case:
   (case fold_const_expr e of Literal ty (IntL n) => P n | _ => q) =
   (case e of Literal ty (IntL n) => P n | _ => q)
 Proof
@@ -4753,7 +4772,8 @@ Definition const_subst_context_def:
       checked_frame_context cx mods art src id env) /\
     (!id r. ALOOKUP E id = SOME r ==>
       (?tops. get_module_code cx NONE = SOME tops /\
-        ALOOKUP (module_consts_env tops []) id = SOME r) /\
+        ALOOKUP (module_consts_env tops []) id = SOME r /\
+        ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]) /\
       constant_expr mods r /\ const_local_refs r = [] /\
       FLOOKUP env.bare_globals (NONE,id) = SOME (expr_type r) /\
       FLOOKUP env.toplevel_vtypes (NONE,id) = SOME (Type (expr_type r)) /\
@@ -4824,11 +4844,24 @@ Theorem const_subst_blueprint_literal_offset:
   blueprint_literal_offset cx has_salt (subst_consts_exprs E es) =
   blueprint_literal_offset cx has_salt es
 Proof
-  strip_tac >>
-  simp[blueprint_literal_offset_def, subst_consts_exprs_map,
-       GSYM MAP_DROP] >>
+  Cases_on `E` >- simp[subst_consts_expr_empty] >>
+  rename1 `const_subst_context roots cx env (entry::rest) mods art` >>
+  Cases_on `entry` >> strip_tac >>
+  rename1 `const_subst_context roots cx env ((id,r)::rest) mods art` >>
+  `?tops. get_module_code cx NONE = SOME tops /\
+          ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+    (qpat_assum `const_subst_context _ _ _ _ _ _`
+       (mp_tac o CONJUNCT2 o CONJUNCT2 o REWRITE_RULE [const_subst_context_def]) >>
+     disch_then (qspecl_then [`id`, `r`] mp_tac) >>
+     simp[ALOOKUP_def] >> metis_tac[]) >>
+  `!e. subst_consts_expr (module_consts_env tops []) (subst_consts_expr ((id,r)::rest) e) =
+       subst_consts_expr (module_consts_env tops []) e` by
+    (drule const_subst_normalized_expr >> simp[]) >>
+  qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+    (fn code => simp[MATCH_MP blueprint_literal_offset_singleton code,
+                     subst_consts_exprs_map, GSYM MAP_DROP]) >>
   Cases_on `DROP (if has_salt then 3 else 2) es` >>
-  simp[] >> metis_tac[const_subst_normalized_expr]
+  simp[]
 QED
 
 Theorem const_subst_typed_annotation:
@@ -5041,7 +5074,7 @@ Proof
   metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_mutual]
 QED
 
-Theorem constant_expr_exhausted_no_sha256:
+Theorem constant_expr_exhausted_no_sha256[local]:
   (!e. constant_expr mods e ==>
     !cx st pv st'. st.outcomes = SOME [] /\
       eval_expr cx e st = (INL pv,st') ==> no_sha256_expr e) /\
@@ -5102,7 +5135,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem const_results_related_capture:
+Theorem const_results_related_capture[local]:
   const_results_related roots cx ty p q /\ const_cells_agree roots st /\
   (c = d \/ ?v. const_result_at roots cx ty p v /\
                  const_result_at roots cx ty q v) ==>
@@ -5294,7 +5327,7 @@ Proof
   simp[overlap_constant_decl_MEM] >> metis_tac[]
 QED
 
-Theorem constant_expr_nonconstant_reads:
+Theorem constant_expr_nonconstant_reads[local]:
   ALL_DISTINCT (MAP FST mods) ==>
   ((!e. constant_expr mods e ==>
     vyperSubscriptOverlap$nonconstant_reads mods
@@ -5464,7 +5497,7 @@ Proof
   metis_tac[closed_constant_no_local_place]
 QED
 
-Theorem changed_subscript_capture_spine:
+Theorem changed_subscript_capture_spine[local]:
   expr_type a' = expr_type a /\
   vyperSubscriptOverlap$nonconstant_reads mods
     (vyperSubscriptOverlap$expr_accesses mods a') =
@@ -5522,7 +5555,7 @@ Proof
   metis_tac[const_result_at_select]
 QED
 
-Theorem value_or_const_subscript_success:
+Theorem value_or_const_subscript_success[local]:
   ((?v. p = Value v) \/ (?v. const_result_at roots cx ct p v)) /\
   const_cells_agree roots st /\ subscript_type_ok ct ie ty /\
   vyperTypeExprResult$subscript_index_matches ct ie idx /\
@@ -5541,7 +5574,7 @@ Proof
   metis_tac[value_or_const_select_success]
 QED
 
-Theorem value_or_const_attribute_success:
+Theorem value_or_const_attribute_success[local]:
   ((?v. p = Value v) \/ (?v. const_result_at roots cx ct p v)) /\
   const_cells_agree roots st /\
   attribute_type (get_tenv cx) ct id = SOME ty /\
@@ -6426,6 +6459,7 @@ Theorem checked_module_consts_subst_context:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   EVERY (no_sha256_expr o SND) (module_consts_env tops []) /\
@@ -6448,7 +6482,8 @@ Proof
   qexists `roots ++ roots'` >>
   simp[const_cells_agree_append, const_subst_context_def, get_module_code_def] >>
   conj_tac
-  >- (drule get_tenv_sources >> simp[artifact_env_def]) >>
+  >- (simp[artifact_env_def] >> irule EQ_SYM >>
+      irule get_tenv_sources >> first_assum ACCEPT_TAC) >>
   conj_tac
   >- (gvs[constant_roots_provenance_def, checked_frame_context_def,
           frame_maps_def, artifact_env_def] >> metis_tac[]) >>
@@ -6475,6 +6510,7 @@ Theorem checked_module_consts_substitution:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   EVERY (no_sha256_expr o SND) (module_consts_env tops []) /\
