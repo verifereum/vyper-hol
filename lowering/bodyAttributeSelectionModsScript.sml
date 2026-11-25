@@ -1,7 +1,7 @@
 (* Connect the source selector to the read at the linked machine endpoint. *)
 Theory bodyAttributeSelectionMods
 Ancestors
-  bodyAttributeTypedSelectionMods bodyAttributePreMods bodyFullAttributeMods
+  bodyAttributeTypedSelectionMods bodyAttributePreMods bodyAttributeReadOperandMods
   bodyFullPostsMods exprBodyPreTypingProps exprBodyPreCallSafetyProps
   exprSimDefs vyperTypeEvalSoundness vyperTypeExprSoundness vyperTypeInvariants
   vyperInterpreter vyperState vyperExprNoControl
@@ -52,7 +52,8 @@ Proof
   drule_then assume_tac attribute_pre_child_mods >>
   qhdtm_assum `vv_post_mods`
     (strip_assume_tac o REWRITE_RULE [vv_post_mods_def]) >>
-  drule_then strip_assume_tac attribute_vv_holds_read_operand_mods >>
+  drule_then strip_assume_tac
+    bodyAttributeReadOperandModsTheory.attribute_read_operand_mods >>
   `expr_vv_res_ok (FST (eval_expr cx (Attribute ann obj fld) es0))` by
     (Cases_on `eval_expr cx (Attribute ann obj fld) es0` >>
      simp[] >> drule_all_then ACCEPT_TAC attribute_result_admissible) >>
