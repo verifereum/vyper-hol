@@ -491,37 +491,94 @@ Resume create_ctor_payload_length_mods[entry]:
 QED
 
 Resume create_ctor_payload_length_mods[prep]:
-  irule ctor_payload_preparation_mods >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
-  >- (qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
+  irule ctor_payload_preparation_mods >>
+  rpt conj_tac
+  >- qpat_assum `!x z. ce.ce_return_buf = _ ==> not_fresh_at se x` ACCEPT_TAC
+  >- qpat_assum `!x z. ce.ce_return_pc = _ ==> not_fresh_at se x` ACCEPT_TAC
+  >- qpat_assum `!K. valid_horizon cx st0 K ee.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _` ACCEPT_TAC
+  >- (qexists_tac `H0` >> qpat_assum `valid_horizon cx st0 H0 ee.storage_trace` ACCEPT_TAC)
+  >- qpat_assum `fn_inst_ids_distinct func` ACCEPT_TAC
+  >- qpat_assum `~s.vs_halted` ACCEPT_TAC
+  >- qpat_assum `capacity < dimword (:256)` ACCEPT_TAC
+  >- qpat_assum `s.vs_current_bb = se.cs_current_bb` ACCEPT_TAC
+  >- qpat_assum `s.vs_inst_idx = LENGTH se.cs_current_insts` ACCEPT_TAC
+  >- qpat_assum `alloca_history func s` ACCEPT_TAC
+  >- qpat_assum `local_ptrs_reserved ce se` ACCEPT_TAC >>
   qexistsl_tac [`a`,`am`,`b`,`bm`,`cm`,`len`,`p`,`su`,`sv`,`src`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  rpt conj_tac
+  >- qpat_assum `compile_alloc_buffer capacity se = (buf,a)` ACCEPT_TAC
+  >- suspend "prep_copy"
+  >- qpat_assum `fn_has_code se a func` ACCEPT_TAC
+  >- qpat_assum `gas_origin_edge F explicit ctx func s am (OK su)` ACCEPT_TAC
+QED
+
+Resume create_ctor_payload_length_mods[prep_copy]:
   Cases_on `raw` >> simp_tac bool_ss []
   >- (qpat_x_assum `if T then _ else _` (strip_assume_tac o SIMP_RULE bool_ss []) >>
       qpat_x_assum `capacity = _` (assume_tac o SIMP_RULE bool_ss []) >>
       `w2n nword <= capacity` by decide_tac >>
       `lookup_var src s = SOME p /\ lookup_var len s = SOME nword` by
-        (rpt conj_tac >> first_assum irule >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+        (conj_tac
+         >- (qpat_assum `!x w. not_fresh_at (C 0) x /\ _ ==> lookup_var x s = _` irule >>
+             qpat_assum `not_fresh_at (C 0) src` (irule_at Any) >>
+             qpat_assum `lookup_var src (St 0) = SOME p` ACCEPT_TAC) >>
+         qpat_assum `!x w. not_fresh_at (C 0) x /\ _ ==> lookup_var x s = _` irule >>
+         qpat_assum `not_fresh_at (C 0) len` (irule_at Any) >>
+         qpat_assum `lookup_var len (St 0) = SOME nword` ACCEPT_TAC) >>
+      pop_assum (MAP_EVERY assume_tac o CONJUNCTS) >>
       qpat_assum `ghost_kept_at _ _ _ _ _ _ _ _ _` (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
-      `FLOOKUP G src = FLOOKUP G0 src /\ op_taint tn (Var src) = op_taint tn0 (Var src)` by
-        (first_assum irule >> first_assum ACCEPT_TAC) >>
+      `FLOOKUP G src = FLOOKUP G0 src /\
+       op_taint tn (Var src) = op_taint tn0 (Var src)` by
+        (qpat_assum `!x. not_fresh_at (C 0) x ==> FLOOKUP _ x = _ /\ _`
+           (qspec_then `src` mp_tac) >>
+         impl_tac >- qpat_assum `not_fresh_at (C 0) src` ACCEPT_TAC >>
+         disch_then ACCEPT_TAC) >>
       pop_assum (MAP_EVERY assume_tac o CONJUNCTS) >>
       `op_taint tn (Var len) = {}` by
         (qpat_assum `!x. not_fresh_at (C 0) x ==> FLOOKUP _ x = _ /\ _`
-          (qspec_then `len` (drule_then (SUBST1_TAC o CONJUNCT2))) >> first_assum ACCEPT_TAC) >>
+           (qspec_then `len` mp_tac) >>
+         impl_tac >- qpat_assum `not_fresh_at (C 0) len` ACCEPT_TAC >>
+         disch_then (SUBST1_TAC o CONJUNCT2) >>
+         qpat_assum `op_taint tn0 (Var len) = {}` ACCEPT_TAC) >>
       `ptr_covers G tn src s (w2n nword)` by
-        (irule ptr_covers_lookup_frame >> qexistsl_tac [`G0`,`St 0`,`tn0`] >>
-         rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
-           (qpat_assum `lookup_var src s = SOME p` (fn h1 =>
-            qpat_assum `lookup_var src (St 0) = SOME p` (fn h2 => simp_tac bool_ss [h1,h2]))))) >>
+        (`ptr_covers G0 tn0 src (St 0) (w2n nword) /\
+          lookup_var src s = lookup_var src (St 0) /\
+          FLOOKUP G src = FLOOKUP G0 src /\
+          op_taint tn (Var src) = op_taint tn0 (Var src)` suffices_by
+           (disch_then (ACCEPT_TAC o MATCH_MP ptr_covers_lookup_frame)) >>
+         rpt conj_tac
+         >- qpat_assum `ptr_covers G0 tn0 src (St 0) (w2n nword)` ACCEPT_TAC
+         >- (qpat_assum `lookup_var src s = SOME p` (fn h1 =>
+             qpat_assum `lookup_var src (St 0) = SOME p`
+               (fn h2 => simp_tac bool_ss [h1,h2])))
+         >- qpat_assum `FLOOKUP G src = FLOOKUP G0 src` ACCEPT_TAC
+         >- qpat_assum `op_taint tn (Var src) = op_taint tn0 (Var src)` ACCEPT_TAC) >>
       `((C 0):compile_state).cs_next_var <= se.cs_next_var` by
         (qpat_assum `ci_mono (C 0) se` (ACCEPT_TAC o cj 2 o REWRITE_RULE [ci_mono_def])) >>
       `not_fresh_at se src /\ not_fresh_at se len` by
-        (rpt conj_tac >> irule freshWritesTheory.not_fresh_at_mono >>
-         qexists_tac `C 0` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+        (conj_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+         qexists_tac `C 0` >>
+         simp_tac bool_ss [] >>
+         qpat_assum `((C 0):compile_state).cs_next_var <= se.cs_next_var` (simp_tac bool_ss o single) >>
+         asm_rewrite_tac[]) >>
+      pop_assum (MAP_EVERY assume_tac o CONJUNCTS) >>
       `w2n p + w2n nword <= s.vs_alloca_next` by decide_tac >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `if F then _ else _` (strip_assume_tac o SIMP_RULE bool_ss []) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+      rpt conj_tac
+      >- qpat_assum `compile_copy_memory_dynamic _ _ _ a = ((),b)` ACCEPT_TAC
+      >- qpat_assum `fn_has_code a b func` ACCEPT_TAC
+      >- qpat_assum `emit_op ADD _ b = (dst_op,st)` ACCEPT_TAC
+      >- qpat_assum `fn_has_code b st func` ACCEPT_TAC
+      >- qpat_assum `w2n nword <= capacity` ACCEPT_TAC
+      >- qpat_assum `not_fresh_at se src` ACCEPT_TAC
+      >- qpat_assum `not_fresh_at se len` ACCEPT_TAC
+      >- qpat_assum `lookup_var src s = SOME p` ACCEPT_TAC
+      >- qpat_assum `lookup_var len s = SOME nword` ACCEPT_TAC
+      >- qpat_assum `ptr_covers G tn src s (w2n nword)` ACCEPT_TAC
+      >- qpat_assum `op_taint tn (Var len) = {}` ACCEPT_TAC
+      >- qpat_assum `w2n p + w2n nword <= s.vs_alloca_next` ACCEPT_TAC
+      >- qpat_assum `gas_origin_edge F explicit ctx func su bm (OK sv)` ACCEPT_TAC
+      >- qpat_assum `gas_origin_edge F explicit ctx func sv cm (OK u)` ACCEPT_TAC) >>
+  qpat_assum `if F then _ else _` (ACCEPT_TAC o SIMP_RULE bool_ss [])
 QED
 
 Resume create_ctor_payload_length_mods[finish]:
@@ -537,7 +594,10 @@ Resume create_ctor_payload_length_mods[finish]:
     (gen_tac >> disch_tac >>
      qpat_assum `!i. i < LENGTH args ==> ?tv ann. _`
        (qspec_then `i` (drule_then (qx_choosel_then [`tv`,`ann`] strip_assume_tac))) >>
-     qexistsl_tac [`tv`,`ann`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`tv`,`ann`] >> rpt conj_tac
+     >- qpat_assum `evaluate_type (get_tenv cx) (lowered_value_type ce (EL i args)) = SOME tv` ACCEPT_TAC
+     >- qpat_assum `evaluate_type (get_tenv cx) (expr_type (EL i args)) = SOME ann` ACCEPT_TAC
+     >- qpat_assum `value_has_type tv (EL i vs)` ACCEPT_TAC) >>
   qpat_assum `dst_op = Var dst` (fn h => qpat_x_assum `compile_abi_encode_values_to_buf ce dst_op _ st = _`
      (assume_tac o PURE_REWRITE_RULE [h])) >>
   `?Genc tenc.
@@ -550,17 +610,36 @@ Resume create_ctor_payload_length_mods[finish]:
      (!j. pbase + (if raw then w2n nword else 0) <= j /\
           j < pbase + (if raw then w2n nword else 0) + LENGTH bytes ==> j NOTIN tenc.t_mem) /\
      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK t,Genc,tenc)`
-    by suspend "marked_cut" >>
-  qpat_assum `abi_encode_saved_state_mods ctx func ce cx st0 ee DF lo d se s G tn
-    _ _ _ _ _ _ _ en t Genc tenc`
-    (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_mods_def]) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  qexistsl_tac [`G`,`tn`,`Genc`,`tenc`,`pbase`,`root`,`dst`,`Gu`,`tu`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
-  >- suspend "writeback"
-  >- suspend "return_frame"
-  >- decide_tac
-  >> gen_tac >> conj_tac >> first_assum irule
+    suffices_by
+    (disch_then (qx_choosel_then [`Genc`,`tenc`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
+     qpat_assum `abi_encode_saved_state_mods ctx func ce cx st0 ee DF lo d se s G tn
+       _ _ _ _ _ _ _ en t Genc tenc`
+       (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_mods_def]) >>
+     conj_tac >- qpat_assum `eval_operand alen t = SOME (n2w (LENGTH bytes))` ACCEPT_TAC >>
+     conj_tac >- qpat_assum `!x. alen = Var x ==> not_fresh_at en x` ACCEPT_TAC >>
+     qexistsl_tac [`G`,`tn`,`Genc`,`tenc`,`pbase`,`root`,`dst`,`Gu`,`tu`] >>
+     rpt conj_tac
+     >- qpat_assum `buf.buf_operand = Var root` ACCEPT_TAC
+     >- qpat_assum `dst_op = Var dst` ACCEPT_TAC
+     >- qpat_assum `op_taint tenc alen = {}` ACCEPT_TAC
+     >- qpat_assum `pure_frame ce func ee se u t` ACCEPT_TAC
+     >- qpat_assum `wb_frame ce ee ee se u t` ACCEPT_TAC
+     >- suspend "writeback"
+     >- suspend "return_frame"
+     >- qpat_assum `expr_sim_inv_mods mods ce cx env ee` ACCEPT_TAC
+     >- decide_tac
+     >- qpat_assum `mem_bytes_at _ (LENGTH bytes) t.vs_memory = bytes` ACCEPT_TAC
+     >- qpat_assum `!j. pbase + (if raw then w2n nword else 0) <= j /\
+          j < pbase + (if raw then w2n nword else 0) + LENGTH bytes ==> j NOTIN tenc.t_mem`
+          ACCEPT_TAC
+     >- qpat_assum `abi_encode_saved_state_mods ctx func ce cx st0 ee DF lo d se s G tn
+                      _ _ _ _ _ _ _ en t Genc tenc` ACCEPT_TAC >>
+     gen_tac >> conj_tac
+     >- qpat_assum `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,Gu,tu)`
+           (qspec_then `D` ACCEPT_TAC)
+     >- qpat_assum `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK t,Genc,tenc)`
+           (qspec_then `D` ACCEPT_TAC)) >>
+  suspend "marked_cut"
 QED
 
 (* Match an intact quantified premise, rather than resolving its body. *)
