@@ -10,7 +10,7 @@ Ancestors exprSimSubscriptArraySource[qualified,ignore_grammar] exprSimPopNested
 
 (* A successful array-length frame changes only fresh variables and the
    instruction cursor.  The linked frames therefore survive the suffix. *)
-Theorem array_select_readonly_suffix_mods[local]:
+Theorem array_select_readonly_suffix_mods:
   array_length_frame st2 it Gi tni q Gq tq /\
   stmt_state_rel H ctx func cenv cx fin it /\
   immutable_frame_mods func cenv cx fin it /\
