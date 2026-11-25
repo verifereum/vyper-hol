@@ -6,7 +6,15 @@ Ancestors
   bodyFullPredsMods gasOutcomeFullZeroPrefixMods exprSimSliceSource
   bodyPtrBytestringBuiltinsSlice bodyPtrBytestringBuiltinsBuffer
   freshWrites localPtrsProps stateRelProj ptrDiscipline compileEnv fragExec
-Libs horizonTypeLib
+  bodySliceSelfCompileMods bodySliceCodeTailMods bodySliceCodeOperandPreMods
+  bodySliceExternalSourceMods exprSimSliceSelfCode exprSimFullBundleProps
+  exprBodyPreProps exprSimSliceOrdinaryContinue bodyInvCodeProps
+  gasOutcomeFullPostMods vyperStorageTrace vyperStorageFootprint vyperState
+  exprLoweringProps exprSimHypsDefs bodyFullHashKeccakFixed
+  loweringStateRelDefs venomExecSemantics venomInst
+  bodyForcedStorageFrameMods exprSimWordArgs wordArgsPtr loweringPosts words
+  exprLowering context bodyFullPostsMods
+Libs horizonTypeLib monadsyntax
 
 Theorem slice_self_suffix_mods:
   emit_op query_op query_ops sa = (limit,sc) /\
@@ -231,3 +239,287 @@ Resume slice_self_suffix_mods[normal]:
 QED
 
 Finalise slice_self_suffix_mods
+
+
+val self_suffix_src = ``\v w. do
+  acc <- get_accounts;
+  r <- lift_sum (evaluate_slice (BytesV cx.txn.code) v w n);
+  return (Value r)
+  od``;
+
+Triviality self_suffix_eval:
+  !st. ^self_suffix_src (IntV (&i)) (IntV (&k)) st =
+    ((case evaluate_slice (BytesV cx.txn.code) (IntV (&i)) (IntV (&k)) n of
+        INL v => INL (Value v) | INR err => INR (Error err)), st)
+Proof
+  BETA_TAC >> Cases_on `evaluate_slice (BytesV cx.txn.code) (IntV (&i)) (IntV (&k)) n` >>
+  simp[get_accounts_def,bind_def,lift_sum_def,return_def,raise_def]
+QED
+
+Triviality self_launch:
+  expr_sim_inv_mods mods cenv cx env fin /\
+  stmt_state_rel H ctx func cenv cx fin t2 ==>
+  LENGTH cx.txn.code < dimword (:256) /\
+  step_inst_base (mk_inst s2.cs_next_id CODESIZE []
+    [STRING #"%" (toString s2.cs_next_var)]) t2 =
+    OK (update_var (STRING #"%" (toString s2.cs_next_var))
+      (n2w (LENGTH cx.txn.code)) t2) /\
+  (!v wd. i+k <= LENGTH cx.txn.code /\
+    v.vs_code = t2.vs_code /\ eval_operand data v = SOME wd /\
+    eval_operand x v = SOME (n2w i) /\ eval_operand y v = SOME (n2w k) /\
+    i < dimword (:256) /\ k < dimword (:256) ==>
+    step_inst_base (mk_inst se.cs_next_id CODECOPY [data;x;y] []) v =
+      OK (write_memory_with_expansion (w2n wd) (TAKE k (DROP i cx.txn.code)) v)) /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t2 /\
+     t2.vs_alloca_next + pending_alloca_size func t2 <= w2n t2.vs_initial_fmp)
+Proof
+  strip_tac >>
+  `t2.vs_code = cx.txn.code` by
+    (drule stmt_state_rel_state_rel >> simp[state_rel_def,accounts_rel_def]) >>
+  conj_tac
+  >- fs[expr_sim_inv_mods_def,vyperTypeInvariantsTheory.context_well_typed_def,dimword_def] >>
+  conj_tac
+  >- simp[step_inst_base_opcode_eqs,mk_inst_def,exec_read0_def] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `TAKE k (DROP i cx.txn.code ++ REPLICATE k 0w) = TAKE k (DROP i cx.txn.code)` by
+        (irule rich_listTheory.TAKE_APPEND1 >> simp[]) >>
+      simp[step_inst_base_opcode_eqs,mk_inst_def,exec_write2_def,w2n_n2w]) >>
+  strip_tac >> drule_then assume_tac stmt_state_rel_allocas_below_fmp >>
+  drule stmt_state_rel_fmp_room >> simp[fmp_room_def] >> decide_tac
+QED
+
+Triviality self_slice_read_frame:
+  (!tail. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs ++ tail) =
+    (INL v,mid with gas_obs := tail)) /\ valid_horizon cx st0 H mid.storage_trace ==>
+  valid_horizon cx st0 H es.storage_trace /\ MAP FDOM es.scopes = MAP FDOM mid.scopes
+Proof
+  strip_tac >>
+  qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+  conj_tac
+  >- (qpat_assum `bind _ _ _ = _` (mp_then (Pat `f st = _`) mp_tac valid_horizon_frame) >>
+      simp[bodyForcedStorageFrameModsTheory.bop_forced_storage_frame]) >>
+  drule (SRULE [SF ETA_ss] forced_eval_expr_preserves_scopes_dom) >> simp[]
+QED
+
+Triviality self_slice_memory_post:
+  vv_post_mods H ctx func cenv cx e es sa sb s0 ee (Value (BytesV bs))
+    (LocatedValue ann (mk_ptr out LocMemory)) t <=>
+  vv_post H ctx func cenv cx e es sa sb s0 ee (Value (BytesV bs))
+    (LocatedValue ann (mk_ptr out LocMemory)) t /\ immutable_frame_mods func cenv cx ee t
+Proof
+  simp[vv_post_mods_def,vv_post_def,vv_holds_mods_def,vv_place_ptr_mods_def,mk_ptr_def] >>
+  metis_tac[]
+QED
+
+Triviality self_slice_ghost_rebase:
+  expr_post (H:(bool # 256 word # type_value) list # num list)
+    ctx func cenv cx e es sa sm s0 mid v op s /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM mid.scopes /\ ci_mono sa sm /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+  ghost_kept_at lo cenv mid sm G1 tn1 s HG tm ==>
+  ghost_kept_at lo cenv es sa G0 tn0 s0 HG tm
+Proof
+  strip_tac >> drule_then assume_tac expr_post_frame >>
+  fs[ci_mono_def] >> drule_all ghost_kept_at_wb_trans >> simp[]
+QED
+
+Theorem slice_self_from_tail_mods:
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty
+    a n args es code_ty addr.
+    (builtin_args_length_ok (Slice n) (LENGTH args) ==>
+       case code_slice_source (Slice n) args of
+         NONE => body_exprs_full_ok_mods mods exps cx args
+       | SOME (code_ty,addr) =>
+           body_exprs_full_ok_mods mods exps cx (TL args) /\
+           (!s tail_vs t. eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
+              body_exprs_full_ok_mods mods exps cx [addr])) /\
+    contract_inv mods exps ctx cenv cx /\
+    module_body_inv mods src tops cenv cx /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree_mods mods cx env es /\
+    expr_body_pre_mods mods cenv cx env
+      (Builtin a (Slice n) args) es /\
+    code_slice_source (Slice n) args = SOME (code_ty,addr) /\
+    is_self_code (Builtin code_ty (Acc Code) [addr]) /\
+    (!cenv' cx' env' a' n' ct addr' start len es' ee e' tops' ctx'
+       DF' lo' d' shadow_ctx' PG' func' shadow_func' ty'.
+       expr_body_pre_mods mods cenv' cx' env'
+         (Builtin a' (Slice n') [Builtin ct (Acc Code) [addr'];start;len]) es' /\
+       body_const_cells_agree_mods mods cx' env' ee /\
+       expr_sim_inv_mods mods cenv' cx' env' ee /\
+       (e' = start \/ e' = len \/ e' = addr') /\
+       body_expr_full_ok_mods mods exps cx' e' /\
+       contract_inv mods exps ctx' cenv' cx' /\
+       module_body_inv mods src tops' cenv' cx' /\
+       shadow_body_inv_mods mods exps ctx' shadow_ctx' ==>
+       expr_sim_full_mods (DF',lo',d',ctx',shadow_ctx',PG',func',shadow_func')
+         cenv' cx' ty' e' ee /\
+       expr_vv_sim_full_mods (DF',lo',d',ctx',shadow_ctx',PG',func',shadow_func')
+         cenv' cx' ty' e' ee) ==>
+    expr_vv_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Builtin a (Slice n) args) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all_then (qx_choosel_then [`start`,`len`] strip_assume_tac)
+    slice_code_operand_pre_mods >>
+  qpat_assum `args = _` SUBST_ALL_TAC >>
+  `body_exprs_full_ok_mods mods exps cx [start;len]` by
+    (qpat_x_assum `builtin_args_length_ok _ _ ==> _` mp_tac >>
+     simp[vyperContextTheory.builtin_args_length_ok_def,
+          vyperInterpreterTheory.code_slice_source_def] >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+  `?at. addr = Builtin at (Env SelfAddr) []` by
+    (`!e. is_self_code e ==>
+          ?ct st. e = Builtin ct (Acc Code) [Builtin st (Env SelfAddr) []]` by
+       (ho_match_mp_tac exprLoweringTheory.is_self_code_ind >>
+        simp[exprLoweringTheory.is_self_code_def]) >>
+     first_x_assum (drule_then strip_assume_tac) >> gvs[]) >>
+  gvs[] >> drule_then strip_assume_tac slice_external_source_mods >>
+  gvs[vyperASTTheory.expr_type_def] >>
+  rewrite_tac[bodyFullPostsModsTheory.expr_vv_sim_full_mods_def] >>
+  qx_genl_tac [`st0`,`sa`,`sb`,`sha`,`shb`,`vv`,`s0`,`G0`,`tn0`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (sa,sb,sha,shb)` by
+    simp[expr_sim_full_code_def] >>
+  drule_all_then (qx_choosel_then
+    [`x`,`s1`,`y`,`s2`,`sh1`,`sh2`,`out`,`sc`,`sd`,`se`,`sf`,`limit`,`data`]
+    (map_every assume_tac o CONJUNCTS)) (BETA_RULE slice_self_compile_mods) >>
+  qpat_assum `vv = _` SUBST_ALL_TAC >>
+  qpat_x_assum `gas_admissible (eval_expr cx _) _ _`
+    (assume_tac o REWRITE_RULE [slice_self_code_actions]) >>
+  rewrite_tac[slice_self_code_actions] >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full_mods _ _ _ _ _ _ Q R` >>
+  suspend "join"
+QED
+
+Resume slice_self_from_tail_mods[join]:
+  irule (BETA_RULE (Q.INST [`k` |-> `^self_suffix_src`] slice_code_tail_mods)) >>
+  qpat_assum `expr_body_pre_mods _ _ _ _ (Builtin _ (Slice _) _) _` (irule_at Any) >>
+  qpat_assum `lower_value compile_expr cenv ty start _ = _` (irule_at Any) >>
+  qpat_assum `lower_value compile_expr cenv ty len _ = _` (irule_at Any) >>
+  asm_rewrite_tac[] >>
+  qexistsl_tac [`tops`,`src`,`shadow_func`,`sha`,`sh2`,`sh1`,`exps`,`d`] >>
+  asm_rewrite_tac[] >> conj_tac >- simp[Abbr `R`] >>
+  conj_tac
+  >- (rpt gen_tac >>
+      irule storage_trace_frame_bind_all >> simp[storage_trace_frame_state_reads] >>
+      irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_lifts,storage_trace_frame_return]) >>
+  qx_genl_tac [`marks1`,`v1`,`mid`,`G1`,`tn1`,`t1`,
+               `marks2`,`v2`,`fin`,`G2`,`tn2`,`t2`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  suspend "suffix"
+QED
+
+Resume slice_self_from_tail_mods[suffix]:
+  `valid_horizon cx st0 (storage_trace_horizon fin.storage_trace) fin.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> expr_post_mods _ _ _ _ _ len _ _ _ _ _ _ _ _ /\ _`
+    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  qabbrev_tac `i = w2n (val_to_w256 v1)` >>
+  qabbrev_tac `k = w2n (val_to_w256 v2)` >>
+  `i < dimword (:256) /\ k < dimword (:256) /\
+   eval_operand x t2 = SOME (n2w i) /\ eval_operand y t2 = SOME (n2w k)` by
+    simp[Abbr `i`,Abbr `k`,w2n_lt] >>
+  `0 < k /\ k <= n` by
+    (qpat_assum `!tail. bind (eval_expr cx len) _ _ = _` (qspec_then `[]` mp_tac) >>
+     qpat_assum `v2 = IntV _` (fn th => pure_once_rewrite_tac [th]) >>
+     disch_tac >> qpat_assum `!st ee k. _ ==> 0 < k /\ k <= n`
+       (drule_then ACCEPT_TAC)) >>
+  qpat_assum `stmt_state_rel _ _ _ _ _ fin t2`
+    (mp_then Any (drule_then strip_assume_tac) self_launch) >>
+  irule gas_outcome_full_mods_post_source >>
+  irule_at Any (Q.INST [`code` |-> `cx.txn.code`] slice_self_suffix_mods) >>
+  qpat_assum `emit_op CODESIZE [] s2 = _` (irule_at Any) >>
+  qpat_assum `compile_assert_slice_bounds x y limit sc = _` (irule_at Any) >>
+  qpat_assum `compile_slice_out_buf _ sd = ((out,data),se)` (irule_at Any) >>
+  qpat_assum `emit_void CODECOPY _ se = _` (irule_at Any) >>
+  qpat_assum `emit_void MSTORE _ sf = _` (irule_at Any) >>
+  qpat_assum `eval_operand x t2 = SOME (n2w i)` (irule_at Any) >>
+  qpat_assum `eval_operand y t2 = SOME (n2w k)` (irule_at Any) >>
+  qexistsl_tac [`tops`,`src`,`shadow_ctx`,`n`,`exps`,`env`,
+    `Builtin (BaseT (BytesT (Dynamic n))) (Slice n)
+      [Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code)
+        [Builtin (BaseT AddressT) (Env SelfAddr) []];start;len]`,
+    `d`,`cenv`,`[Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code)
+        [Builtin (BaseT AddressT) (Env SelfAddr) []];start;len]`,`x`] >>
+  qpat_assum `contract_inv mods _ _ _ _`
+    (assume_tac o MATCH_MP contract_inv_cenv_modules) >>
+  `(!z. (x = Var z \/ y = Var z) ==> not_fresh_at s2 z) /\
+    (!l. x <> Label l /\ y <> Label l)` by simp[DISJ_IMP_THM,FORALL_AND_THM] >>
+  asm_simp_tac (srw_ss()) [Abbr `R`] >>
+  conj_tac >- simp[DISJ_IMP_THM] >>
+  conj_tac >- (once_rewrite_tac[arithmeticTheory.ADD_COMM] >> first_assum ACCEPT_TAC) >>
+  conj_tac >- simp[BETA_RULE self_suffix_eval] >>
+  qx_genl_tac [`H`,`ee`,`HG`,`tm`,`t`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ee = fin` by
+    (qpat_assum `?xs. !tail. _ = _` strip_assume_tac >>
+     qpat_assum `!tail. _ (fin with gas_obs := xs ++ tail) = _`
+       (qspec_then `[]` mp_tac) >>
+     simp_tac bool_ss [BETA_RULE self_suffix_eval,pairTheory.PAIR_EQ] >>
+     disch_then (mp_tac o CONJUNCT2) >>
+     disch_then (mp_tac o Q.AP_TERM `\z:evaluation_state. z with gas_obs := []`) >>
+     `fin with gas_obs := [] = fin /\ ee with gas_obs := [] = ee` by
+       simp[evaluation_state_component_equality] >> simp[]) >>
+  qpat_assum `ee = fin` SUBST_ALL_TAC >>
+  suspend "rebase"
+QED
+
+Resume slice_self_from_tail_mods[rebase]:
+  qpat_assum `!tail. bind (eval_expr cx len) _ _ = _`
+    (mp_then Any (drule_then strip_assume_tac) self_slice_read_frame) >>
+  qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
+    (mp_then Any (drule_then strip_assume_tac) self_slice_read_frame) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> expr_post_mods _ _ _ _ _ len _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  qpat_x_assum `expr_post_mods H _ _ _ _ start _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_mods_def]) >>
+  qpat_x_assum `expr_post_mods H _ _ _ _ len _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_mods_def]) >>
+  qpat_x_assum `vv_post_mods H _ _ _ _ _ fin _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [self_slice_memory_post]) >>
+  `stmt_state_rel H ctx func cenv cx mid t1` by
+    (qpat_assum `expr_post H _ _ _ _ start _ _ _ _ _ _ _ _`
+      (mp_then Any ACCEPT_TAC expr_post_state)) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp t` by
+    (qpat_assum `vv_post H _ _ _ _ _ fin _ _ _ _ _ _ _`
+      (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+     qpat_assum `stmt_state_rel H _ _ _ _ fin t`
+       (mp_then Any ACCEPT_TAC stmt_state_rel_allocas_below_fmp)) >>
+  `s0.vs_alloca_next <= t.vs_alloca_next` by
+    (qpat_assum `s0.vs_alloca_next <= t1.vs_alloca_next` mp_tac >>
+     qpat_assum `t1.vs_alloca_next <= t2.vs_alloca_next` mp_tac >>
+     qpat_assum `t2.vs_alloca_next <= t.vs_alloca_next` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  simp[Abbr `Q`,self_slice_memory_post,vyperASTTheory.expr_type_def,
+       lowered_value_type_def,mk_ptr_def,vv_location_def,is_bytestring_type_def] >>
+  conj_tac
+  >- (pure_rewrite_tac[GSYM mk_ptr_def,self_slice_memory_post] >> simp[] >>
+      qpat_assum `expr_post H _ _ _ _ start _ _ _ _ _ _ _ _`
+        (mp_then (Pat `expr_post _ _ _ _ _ start _ _ _ _ _ _ _ _`) match_mp_tac
+          slice_two_operand_post_rebase) >>
+      qpat_assum `expr_post H _ _ _ _ len _ _ _ _ _ _ _ _` (irule_at Any) >>
+      fs[ci_mono_def]) >>
+  conj_tac >- (pure_rewrite_tac[GSYM mk_ptr_def] >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (pure_rewrite_tac[GSYM mk_ptr_def] >> first_assum ACCEPT_TAC) >>
+  `ghost_kept_at lo cenv mid s1 G1 tn1 t1 HG tm` by
+    (irule self_slice_ghost_rebase >>
+     qpat_assum `expr_post H _ _ _ _ len _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `ghost_kept_at lo cenv fin s2 G2 tn2 t2 HG tm` (irule_at Any) >>
+     simp[]) >>
+  irule self_slice_ghost_rebase >>
+  qpat_assum `expr_post H _ _ _ _ start _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ghost_kept_at lo cenv mid s1 G1 tn1 t1 HG tm` (irule_at Any) >>
+  simp[]
+QED
+
+Finalise slice_self_from_tail_mods
