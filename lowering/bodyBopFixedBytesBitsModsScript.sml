@@ -7,8 +7,9 @@ Ancestors
   bodySimStmtFacts gasShadowCompileStmtHelpers exprSimFullBundleProps
   gasOutcomeFullPostMods exprBopSimProps exprBopLowering exprSimSource
   exprLoweringProps vyperTypeSystem vyperTypeBuiltins vyperTypeInvariants
-  vyperTypeEvalCaseProofs vyperTypeExprSoundness vyperStorageTrace gasStorage compileEnv
+  vyperTypeEvalCaseProofs vyperTypeExprSoundness vyperStorageTrace vyperStorageFootprint gasStorage compileEnv
   bodyFullPostsMods loweringPosts fragExec exprBopSimDefs freshWrites
+  bodyBopFixedBitsOperandCutsMods bodyBopScalarNormalOutcomeMods
   exprSimHypsDefs list
 Libs monadsyntax
 
@@ -143,3 +144,93 @@ Proof
   goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
   qexistsl_tac [`expr_type e2`,`get_tenv cx`,`tv`,`tv'`] >> simp[] >> metis_tac[]
 QED
+
+
+Theorem bop_rest_bits_value_sim_mods:
+  bop <> In /\ bop <> NotIn /\
+  ~((bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1)) /\
+  ~(word_value_type (expr_type e1) /\ word_value_type (expr_type e2)) /\
+  ~((bop = Eq \/ bop = NotEq) /\
+    (expr_type e1 = BaseT AddressT \/ ?m. expr_type e1 = BaseT (BytesT (Fixed m)))) /\
+  body_exprs_full_ok_mods mods exps cx [e1;e2] /\
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree_mods mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es ==>
+  expr_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Builtin ann (Bop bop) [e1;e2]) es
+Proof
+  strip_tac >> drule_all_then strip_assume_tac fixed_bits_typing >>
+  rw[expr_sim_full_mods_def] >>
+  `expr_sim_full_code (ctx,shadow_ctx,func,shadow_func)
+     (sa,sb,shadow_sa,shadow_sb)` by simp[expr_sim_full_code_def] >>
+  mp_tac (Q.INST [`out` |-> `op`, `b` |-> `sb`]
+    bop_fixed_bits_operand_cuts_mods) >>
+  (impl_tac >- (rpt conj_tac >>
+    (qpat_assum `MEM bop _` ACCEPT_TAC ORELSE first_assum ACCEPT_TAC))) >> strip_tac >>
+  irule bop_operands_cps_exit_mods >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qexistsl_tac [`d`,`s1`,`s2`,`sa`,`shadow_func`,`sh1`,`sh2`,
+        `shadow_sa`,`x`,`y`] >> simp[] >>
+      conj_tac >- suspend "reached" >>
+      conj_tac
+      >- (gen_tac >> strip_tac >>
+          qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+            (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC)
+      >- (rpt conj_tac >>
+          (first_assum ACCEPT_TAC ORELSE
+           (qpat_assum `expr_type e1 = _`
+              (fn th => once_rewrite_tac[GSYM th]) >> first_assum ACCEPT_TAC)))) >>
+  qexistsl_tac [`env`,`exps`,`mods`,`src`,`tops`] >> simp[]
+QED
+
+
+Resume bop_rest_bits_value_sim_mods[reached]:
+  rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace /\
+   valid_horizon cx st0 (storage_trace_horizon fin.storage_trace) fin.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then strip_assume_tac)) >>
+  qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon fin.storage_trace` (drule_then strip_assume_tac)) >>
+  `mid with gas_obs := [] = mid` by simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `fin with gas_obs := [] = fin` by simp[vyperStateTheory.evaluation_state_component_equality] >>
+  qpat_assum `mid with gas_obs := [] = mid` (fn frame =>
+    qpat_assum `!tail. bind (eval_expr cx e1) _ _ = _`
+      (qspec_then `[]` (assume_tac o PURE_REWRITE_RULE [APPEND_NIL,frame]))) >>
+  qpat_assum `fin with gas_obs := [] = fin` (fn frame =>
+    qpat_assum `!tail. bind (eval_expr cx e2) _ _ = _`
+      (qspec_then `[]` (assume_tac o PURE_REWRITE_RULE [APPEND_NIL,frame]))) >>
+  drule_all_then strip_assume_tac fixed_bits_raw_run >>
+  `bop <> Exp` by (qpat_assum `MEM bop _` mp_tac >> simp[] >> strip_tac >> gvs[]) >>
+  `?B. bop_scalar_seq {z | not_fresh_at s2 z} ({x;y} UNION IMAGE Lit UNIV)
+         (emitted_insts s2 sb) B /\ op IN B` by
+    (irule bop_scalar_binop_certificate >> simp[] >>
+     qpat_assum `compile_binop _ _ _ _ _ _ s2 = _` (irule_at Any) >>
+     qpat_assum `well_typed_binop _ _ _ _` (irule_at Any) >> simp[]) >>
+  qpat_assum `expr_type e1 = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  irule (SRULE [LET_THM,post_value_type_word] bop_scalar_normal_outcome_mods) >>
+  asm_rewrite_tac[] >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+        (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`B`,`G1`,`left`,`mid`,`r`,`right`,`s1`,`s2`,`t`,`tn1`,`v`,`x`,`y`] >>
+  asm_rewrite_tac[post_value_type_word] >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> _`
+        (drule_then strip_assume_tac) >> simp[post_value_type_word]) >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+        (drule_then strip_assume_tac) >>
+      `post_value_type cenv e1 = expr_type e1` by simp[post_value_type_word] >>
+      asm_rewrite_tac[]) >>
+  qpat_assum `expr_type e1 = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Finalise bop_rest_bits_value_sim_mods
