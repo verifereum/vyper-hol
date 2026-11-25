@@ -4,7 +4,8 @@ Ancestors
   createSizeExit entryCreateReject requestCutEntryFacts stepWriteFootprintBase
   o1LowerDloadRunnerBoundary lowerDloadPtrRawReachable fragExec
   contextRawReachable contextCodegenRel venomRunBounded venomWf venomState
-  venomInst arithmetic words list
+  venomInst arithmetic words list ctorDeployRunBounded actualDecoderPackaging
+  venomCompilerWf o1PipelineCorrect passSimulationDefs
 
 Theorem raw_reachable_call_context[local]:
   !vs ctx fn inst s. raw_reachable vs ctx fn inst s ==>
@@ -39,4 +40,46 @@ Proof
   simp[oversized_create_abort_def] >>
   qexistsl_tac [`fn`, `bb`, `inst`, `v`, `off`, `sz`, `salt`, `sz_w`] >>
   Cases_on `sz` >> fs[halt_state_def, set_returndata_def, eval_operand_def, lookup_var_def]
+QED
+
+(* A safe terminating run rules out every reachable oversized CREATE.
+   For a static call, an ExHalt_abort would contradict the selected run
+   even though the size-specific clause does not constrain static aborts. *)
+Theorem selected_raw_create_size_ok:
+  EVERY wf_function ctx.ctx_functions /\
+  ALL_DISTINCT (FLAT (MAP fn_labels ctx.ctx_functions)) /\
+  run_context fuel ctx vs = r /\ exit_result r /\
+  create_size_exit_ok ctx res r /\
+  res <> INR (Error (RuntimeError "create initcode too large")) /\
+  (vs.vs_call_ctx.cc_static ==>
+   ~(!n. terminates (run_context n ctx vs) ==>
+        ?u. run_context n ctx vs = Abort ExHalt_abort u)) ==>
+  !fn inst s. raw_reachable vs ctx fn inst s ==> inst_create_size_ok inst s
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >> CCONTR_TAC >>
+  Cases_on `vs.vs_call_ctx.cc_static`
+  >- (`!err. run_context fuel ctx vs <> Error err` by
+        metis_tac[exit_result_not_error] >>
+      drule_all raw_reached_oversized_create_terminal >> strip_tac >>
+      `terminates (run_context fuel ctx vs)` by simp[terminates_def] >>
+      `!n. terminates (run_context n ctx vs) ==>
+           ?u. run_context n ctx vs = Abort ExHalt_abort u` by
+        (rpt strip_tac >> qexists_tac `halt_state (set_returndata [] s)` >>
+         Cases_on `n <= fuel` >>
+         metis_tac[run_context_terminates_mono, arithmeticTheory.NOT_LESS_EQUAL,
+                   arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+      metis_tac[]) >>
+  drule_all raw_reachable_oversized_create_abort >>
+  fs[create_size_exit_ok_def] >> metis_tac[]
+QED
+
+Theorem create_size_raw_unit_wf:
+  o1PipelineCorrect$o1_pipeline rp unit = SOME out ==>
+  EVERY wf_function unit.cu_context.ctx_functions /\
+  ALL_DISTINCT (FLAT (MAP fn_labels unit.cu_context.ctx_functions))
+Proof
+  simp[o1PipelineCorrectTheory.o1_pipeline_def] >>
+  disch_then (mp_tac o MATCH_MP checked_pipeline_input_wf) >>
+  simp[unit_wf_def, unit_labels_wf_def, unit_label_namespace_def,
+       venom_wf_def, EVERY_MEM] >> metis_tac[]
 QED
