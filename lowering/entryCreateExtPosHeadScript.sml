@@ -83,7 +83,7 @@ Theorem pos_snapshot_read_continuation[local]:
   compile_snapshot_vv ce (exprs_can_mutate ce rest)
     (ext_call_arg_value (lowered_value_type ce e) vv) m = (sv,b) /\
   fn_has_code m b f /\ fn_inst_ids_distinct f /\
-  ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks b)) /\
+  create_layout m b /\
   (!bb. MEM bb f.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
   local_ptrs_reserved ce a /\ return_buf_frame d ce a s0 /\
@@ -143,7 +143,7 @@ Resume pos_snapshot_read_continuation[alloc]:
   `~is_word_type (vv_type (ext_call_arg_value (lowered_value_type ce e) vv))` by
     metis_tac[extcall_operand_snapshot_type] >>
   drule_then assume_tac pos_snapshot_opcode_inventory >>
-  drule_all_then assume_tac pos_materialized_snapshot_live_band >>
+  drule_all_then assume_tac pos_materialized_snapshot_live_band_interval >>
   `create_operand_at b u` by simp[create_operand_at_def] >>
   drule_all_then assume_tac pos_snapshot_scope >>
   irule pos_read_scoped_success >>
@@ -198,7 +198,7 @@ Theorem pos_snapshot_bind[local]:
   compile_snapshot_vv ce (exprs_can_mutate ce rest)
     (ext_call_arg_value (lowered_value_type ce e) vv) m = (sv,b) /\
   fn_has_code m b f /\ fn_inst_ids_distinct f /\
-  ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks b)) /\
+  create_layout m b /\
   (!bb. MEM bb f.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
   local_ptrs_reserved ce a /\ return_buf_frame d ce a s0 /\
@@ -285,7 +285,6 @@ Theorem extcall_pos_snapshot_scoped_cut:
   MEM f C.ctx_functions /\ MEM shf shC.ctx_functions /\
   gas_shadow_context C shC /\ ctx_inst_ids_distinct C /\ gas_shadow_function f shf /\
   fn_inst_ids_distinct f /\ create_layout a b /\
-  ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks b)) /\
   gas_shadow_state a sha /\ gas_shadow_state m shm /\ gas_shadow_state b shb /\
   compile_expr ce (expr_type e) e a = (vv,m) /\
   compile_expr (gas_shadow_env T ce) (expr_type e) (gas_shadow_expr e) sha = (vv,shm) /\
@@ -334,7 +333,8 @@ Proof
     metis_tac[cj 1 compile_expr_ci_mono,ci_mono_compile_snapshot_vv,pairTheory.SND] >>
   `fn_has_code a m f /\ fn_has_code m b f /\ fn_has_code sha shm shf /\ fn_has_code shm shb shf` by
     metis_tac[ci_mono_def,fn_has_code_split] >>
-  `create_layout a m` by metis_tac[ci_mono_def,create_layout_subinterval,cs_extends_refl] >>
+  `create_layout a m /\ create_layout m b` by
+    metis_tac[ci_mono_def,create_layout_subinterval,cs_extends_refl] >>
   `create_cut_code {} a m` by metis_tac[cj 1 create_operand_cut_code,pairTheory.SND] >>
   `!bb. MEM bb f.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[body_inv_no_phi] >>
