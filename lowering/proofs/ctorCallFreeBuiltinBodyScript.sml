@@ -5,6 +5,7 @@ Ancestors
   emitHelper context exprLowering exprCallBounds exprCallbackContracts
   ctorCallFreeRules ctorCallFreeCallbacks supportedExprTraverse e2eDeployDefs
   exprBopLowering abiBuiltinDispatchCorrect ctorCallFreeValues builtinHashing builtinMisc
+  ctorCallFreeBoolChain
 
 Theorem builtin_lower_value_child[local]:
   (!e ety st. expr_size e < list_size expr_size args /\
@@ -558,6 +559,24 @@ Proof
     all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ AddMod args`] >- branch "mod3" >>
     all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ MulMod args`] >- branch "mod3" >>
     all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ PowMod256 args`] >- branch "mod2" >>
+    all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst args`] >- (
+      Cases_on `args` >- gvs[] >> rename1 `arg::rest` >>
+      child_facts [`arg`] >> Cases_on `is_word_type ret_ty` >>
+      simp[compile_builtin_dispatch_body_def, as_stack_val_pair, as_ptr_val_pair,
+           LET_THM, pairTheory.UNCURRY]) >>
+    all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ (BoolChain d n) args`] >- (
+      Cases_on `args` >- gvs[] >> rename1 `arg::rest` >>
+      rename1 `compile_builtin_dispatch_body cfn cenv ret_ty ty (BoolChain d n) (arg::rest)` >>
+      drule array_membership_frame_chain_opcodes >> strip_tac >>
+      `EVERY (\e. !st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+        EVERY (\i. P i.inst_opcode) (state_insts
+          (SND (lower_value cfn cenv (BaseT BoolT) e st))))
+        (bool_chain_operands d (n - 1) arg)` by (
+        ho_match_mp_tac (Q.INST [`R` |-> `R`, `Q` |-> `root2`, `args` |-> `arg::rest`]
+          opcode_every_bool_chain_children) >> simp[]) >>
+      simp[compile_builtin_dispatch_body_def, LET_THM, pairTheory.UNCURRY,
+           every_state_insts_new_block, opcode_every_bool_chain_ops,
+           every_state_insts_fresh_label, every_state_insts_fresh_var]) >>
     all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ (Acc item) args`] >- (
       Cases_on `args` >- gvs[] >> rename1 `arg::rest` >>
       simp[compile_builtin_dispatch_body_def, as_stack_val_pair] >> rpt strip_tac >>
