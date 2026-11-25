@@ -1,5 +1,9 @@
 # Deployment hypotheses
 
+The constructor result and the handoff use the same gas filling when its storage
+condition holds. The handoff establishes `deployed` after successful source
+deployment if the target is not queued for deletion.
+
 ## IN
 
 The finalizer is one of the accepted finalizers.

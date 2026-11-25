@@ -87,6 +87,7 @@ val checker_defs =
    finite_mapTheory.DRESTRICT_FUPDATE,
    IN_function_live,
    IN_var_allocated,
+   IN_runtime_fn_sig_keys,
    constant_expr_def,
    constant_binop_def,
    constant_builtin_def,
