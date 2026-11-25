@@ -10,6 +10,9 @@ Ancestors
   fragGasOriginPtr gasContext vyperStorageFootprint exprOperandVar freshWrites
   bodyMakeSlotVvFrameMods loweringStateRelDefs bodyForRangeScalarFrameMods
   bodyFullUnwrapRun context exprSimMemDefs vyperState logValueFramePtr
+  bodyMakeSlotReadWindowMods bodyMakeSlotNonwordStoreMods bodyMakeSlotStoreCutMods
+  bodyMakeSlotStoreWindowMods bodyStructFieldCutsMods vyperInterpreter
+  exprBodyPreProps exprSimMemorySource
 
 val _ = Parse.hide "base";
 
@@ -312,3 +315,122 @@ Proof
   simp[arithmeticTheory.ADD_COMM] >>
   qpat_x_assum `compile_store_memory cenv op dst dty _ sc = _` mp_tac >> simp[]
 QED
+
+(* The child path supplies the read cut.  Only the read and store paths
+   belong to the continuation returned here. *)
+Theorem make_slot_nonword_from_transfer_mods:
+  ^(boolSyntax.list_mk_forall (free_vars (concl make_element_transfer_mods), concl make_element_transfer_mods)) ==>
+  make_slot_landing_mods (\ty. ~is_word_type ty)
+Proof
+  disch_tac >> simp_tac bool_ss [make_slot_landing_mods_def] >> rpt gen_tac >> strip_tac >>
+  drule_all_then (qx_choosel_then [`dst`,`op`,`sc`,`v`,`z`,`gz`,`tz`] strip_assume_tac)
+    make_slot_nonword_read_mods >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    expr_post_mods H ctx func cenv cx h es sa sc s mid v op z /\
+    ghost_inv_at_mods (DF H) lo d cenv cx mid gz tz z /\
+    gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (s,G,tn) marks (OK z,gz,tz)` by suspend "read_path" >>
+  drule_all_then strip_assume_tac make_slot_read_window_mods >>
+  qhdtm_assum `make_slot_entry_mods`
+    (strip_assume_tac o PURE_REWRITE_RULE[make_slot_entry_mods_def,make_elements_entry_mods_def]) >>
+  `expr_body_pre_mods mods cenv cx env h es` by simp[] >>
+  `body_exprs_full_ok_mods mods exps cx xs /\
+   expr_sim_inv_mods mods cenv cx env mid /\
+   body_const_cells_agree_mods mods cx env mid /\
+   value_runtime_typed env (expr_type h) v /\
+   make_elements_admissible_mods cx xs mid` by suspend "source" >>
+  `bind (eval_expr cx h) (read_result cx)
+     (es with gas_obs := gas_explicit marks s.vs_gas_readings) = (INL v,mid)` by suspend "bind" >>
+  `aid < sa.cs_next_id /\
+   (!name b n. local_region cenv es.scopes s name b n ==>
+      loweringStateRelDefs$regions_disjoint base cap b n)` by suspend "entry" >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    expr_post_mods H ctx func cenv cx h es sa sc s mid v op z` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  `~is_word_type (post_value_type cenv h) ==> ptr_buf_ok cenv h op gz z` by simp[] >>
+  `~is_word_type (post_value_type cenv h) ==>
+    !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv h) = SOME rt /\
+      eval_operand op z = SOME w ==>
+      type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next` by simp[] >>
+  `?t gf tf.
+    (!D. gas_origin_ptr_path
+      (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (z,gz,tz) [] (OK t,gf,tf)) /\
+    struct_store_effects func (sc,gz,tz,z) (sb,gf,tf,t) (base+off,dtv,v) /\
+    value_has_type dtv v /\ val_wf dtv v` by suspend "store" >>
+  `make_elements_cut_mods DF lo d ctx func cenv cx st0
+     (csbase,ebase,sbase,Gbase,tnbase) (aid,base,cap,q) sb mid t gf tf` by suspend "cut" >>
+  drule_all_then strip_assume_tac make_slot_store_window_mods >>
+  suspend "finish"
+QED
+
+Resume make_slot_nonword_from_transfer_mods[read_path]:
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ (u,_,_) _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ (s,_,_) _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  qpat_assum `gas_origin_ptr_path _ (s,_,_) _ _`
+    (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+  disch_then (qspecl_then [`u`,`g1`,`tt1`,`[]`] mp_tac) >> simp[]
+QED
+
+Resume make_slot_nonword_from_transfer_mods[source]:
+  qhdtm_assum `make_elements_admissible_mods`
+    (assume_tac o PURE_REWRITE_RULE[make_elements_admissible_mods_def]) >>
+  drule_all struct_fields_source_cuts_mods >>
+  simp[make_elements_admissible_mods_def]
+QED
+
+Resume make_slot_nonword_from_transfer_mods[bind]:
+  qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` (assume_tac o SRULE [])) >>
+  `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
+  simp[bind_def]
+QED
+
+Resume make_slot_nonword_from_transfer_mods[entry]:
+  qpat_assum `make_elements_cut_mods _ _ _ _ _ _ _ _ _ _ sa es s _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE[make_elements_cut_mods_def]) >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume make_slot_nonword_from_transfer_mods[store]:
+  drule_all make_slot_nonword_store_mods >> simp[]
+QED
+
+Resume make_slot_nonword_from_transfer_mods[cut]:
+  `make_elements_static_mods mods exps src tops cenv cx env
+    (DF,lo,ctx,shadow_ctx,func,shadow_func) st0 csbase ebase sbase aid sc` by
+    (qhdtm_assum `make_elements_static_mods`
+       (strip_assume_tac o PURE_REWRITE_RULE[make_elements_static_mods_def]) >>
+     `local_ptrs_reserved cenv sc` by
+       (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
+     simp[make_elements_static_mods_def] >> decide_tac) >>
+  `env_consistent env cx mid` by (drule expr_sim_inv_mods_env >> simp[]) >>
+  drule_all make_slot_store_cut_mods >> simp[]
+QED
+
+Resume make_slot_nonword_from_transfer_mods[finish]:
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  `~u.vs_halted` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ (s,_,_) _ (OK u,_,_) /\ _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `gas_origin_ptr_path _ (s,_,_) _ (OK u,_,_)`
+       (mp_then Any strip_assume_tac gas_origin_ptr_path_projections) >>
+     drule gas_path_ptr_ok_not_halted >> simp[]) >>
+  rewrite_tac[make_elements_run_mods_def] >> irule gas_outcome_full_mods_pure >>
+  simp[] >> qexistsl [`gf`,`mid`,`INL v`,`t`,`tf`] >>
+  `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
+  conj_tac >- (drule read_result_gas_obs >> simp[]) >>
+  gen_tac >> disch_tac >> conj_tac
+  >- (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ (u,_,_) _ _ /\ _`
+        (drule_then strip_assume_tac) >>
+      qpat_assum `gas_origin_ptr_path _ (u,_,_) _ _`
+        (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+      disch_then (irule o SIMP_RULE (srw_ss()) []) >> simp[]) >>
+  simp[make_slot_post_mods_def]
+QED
+
+Finalise make_slot_nonword_from_transfer_mods
