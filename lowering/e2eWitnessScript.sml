@@ -397,7 +397,7 @@ Proof
        storage_trace_backends_well_formed_def]
 QED
 
-(* Check the live statements without storing their instances. *)
+(* Check the live deployment-to-call handoff without storing its instances. *)
 local
   val accepted = prove (``(K SOME) IN accepted_finalizers``,
     simp[asmOptimizerTheory.accepted_finalizers_def])
@@ -405,8 +405,9 @@ local
     simp[p23_dep_trace])
   val call_bound = prove (``LENGTH (call_trace p23_es_call) < 2 ** 64``,
     simp[p23_call_trace])
-  val call_premises = CONJUNCTS (REWRITE_RULE [call_premises_deployed]
-    (CONJ p23_source_typing p23_call_state))
+  val call_entry_premises = CONJUNCTS (CONJUNCT2
+    (REWRITE_RULE [call_premises_deployed]
+      (CONJ p23_source_typing p23_call_state)))
   val dep_horizon = prove
     (``horizon_ok ([], [])``,
      simp[horizon_ok_def, regions_consistent_def, storage_locks_separated_def])
@@ -426,6 +427,17 @@ local
      simp[p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
           vyperInterpreterTheory.initial_machine_state_def,
           vfmContextTheory.empty_transient_storage_def])
+  val dep_not_starved = prove
+    (``~frame_starved p23_es_dep (INR NONE) p23_es_dep_post``,
+     simp[frame_starved_def, frame_outcome_def, p23_es_dep_def])
+  val dep_survives = prove
+    (``~MEM p23_deploy_tx.target p23_es_dep_post.rollback.toDelete``,
+     simp[p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
+          p23_es_dep_post_def])
+  val call_target = prove
+    (``p23_call_tx.target = p23_deploy_tx.target``,
+     simp[p23_call_tx_def, p23_deploy_tx_def,
+          vyperContextTheory.empty_call_txn_def])
 in
   val dep_thm = SIMP_RULE (srw_ss()) [] (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `p23_tops`,
       `p23_deploy_bc`, `p23_runtime_bc`, `initial_machine_state`,
@@ -437,13 +449,31 @@ in
      metis_tac[p23_deploy_state, dep_evm_state, dep_h_storage, dep_h_transient])
   val dep_prem = SIMP_RULE (srw_ss()) [] (LIST_CONJ [accepted, p23_compile,
                 p23_deploy_typing, dep_entry, dep_bound, dep_horizon, p23_deploy_within])
-  val _ = MATCH_MP dep_thm dep_prem
+  val dep_result = MATCH_MP dep_thm dep_prem
+  val handoff = prove
+    (``deployed p23_tops p23_runtime_bc p23_am_call p23_call_tx.target /\
+       storage_ok ([], []) p23_am_call p23_call_tx``,
+     mp_tac dep_result >>
+     simp[p23_dep_run, p23_dep_trace, dep_not_starved, dep_survives,
+          pairTheory.PAIR_EQ] >>
+     disch_then (mp_tac o REWRITE_RULE [gas_readings_rel_def]) >>
+     (* Fill the observed slots with their values and use an empty tail. *)
+     disch_then (qx_choosel_then [`slots`, `unused`]
+       (qspecl_then [`MAP THE slots`, `[]`] mp_tac o CONJUNCT2)) >>
+     impl_tac
+     >- (simp[listTheory.LIST_REL_MAP2] >> irule listTheory.EVERY2_refl >>
+         Cases >> simp[]) >>
+     simp[] >>
+     disch_then (qspecl_then [`p23_am_dep_post`, `[]`] mp_tac o CONJUNCT2) >>
+     simp[p23_load] >>
+     disch_then (CONJUNCTS_THEN2 mp_tac (qspec_then `p23_call_tx` mp_tac)) >>
+     simp[p23_am_call_def, call_target])
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `p23_tops`,
       `p23_deploy_bc`, `p23_runtime_bc`, `p23_am_call`, `p23_call_tx`,
       `p23_es_call`, `([], [])`] vyper_call_correct_deployed)
-    (LIST_CONJ ([accepted, p23_compile] @ call_premises @
-                [call_bound, p23_storage_ok, p23_call_within]))
+    (LIST_CONJ ([accepted, p23_compile, CONJUNCT1 handoff] @ call_entry_premises @
+                [call_bound, CONJUNCT2 handoff, p23_call_within]))
 end
 
 (* ===== The witness ===== *)
