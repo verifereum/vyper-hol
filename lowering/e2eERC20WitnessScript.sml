@@ -221,6 +221,34 @@ Proof
   REFL_TAC
 QED
 
+val erc20_load_trace_eval = EVAL
+  ``SND (load_contract_trace (SOME []) gs erc20_initial_machine
+      erc20_deploy_tx [(NONE, erc20_tops)] [])``;
+
+Theorem erc20_load_trace[local]:
+  !gs. SND (load_contract_trace (SOME []) gs erc20_initial_machine
+      erc20_deploy_tx [(NONE, erc20_tops)] []) =
+    [StorageRoot F 75506153327051474587906755573858019282972751592871715030499431892688993766217
+       (BaseTV (UintT 256))]
+Proof
+  gen_tac >> PURE_REWRITE_TAC [erc20_load_trace_eval] >> REFL_TAC
+QED
+
+Theorem erc20_deploy_within[local]:
+  deploy_within ^erc20_horizon erc20_tops erc20_initial_machine
+    erc20_deploy_tx erc20_es_dep
+Proof
+  simp[deploy_within_def, deploy_storage_trace_def,
+       erc20_dep_trace, erc20_load_trace,
+       erc20_sender_slot_def, erc20_sender_slot_eval,
+       erc20_recipient_slot_eval,
+       storage_observations_ok_def, storage_trace_regions_def,
+       storage_trace_locks_def, storage_roots_fit_def,
+       storage_trace_backends_well_formed_def,
+       vyperValueTheory.type_slot_size_def, wordsTheory.dimword_def] >>
+  decide_tac
+QED
+
 val erc20_balances_eval =
   (REWRITE_CONV [erc20_sender_slot_eval, erc20_recipient_slot_eval] THENC cv_eval)
   ``lookup_storage (hashmap_slot_for 0w (BaseT AddressT) (AddressV 1w))
@@ -590,13 +618,39 @@ local
     simp[erc20_transfer_trace])
   val call_premises = CONJUNCTS (REWRITE_RULE [call_premises_deployed]
     (CONJ erc20_source_typing erc20_call_state))
+  val dep_h_regions = prove
+    (``regions_consistent (FST ^erc20_horizon)``,
+     mp_tac (SPEC ``erc20_am_call`` erc20_storage_ok) >>
+     simp[storage_ok_def] >> metis_tac[])
+  val dep_h_locks = prove
+    (``storage_locks_separated (FST ^erc20_horizon) (SND ^erc20_horizon)``,
+     mp_tac (SPEC ``erc20_am_call`` erc20_storage_ok) >>
+     simp[storage_ok_def] >> metis_tac[])
+  val dep_h_storage = prove
+    (``(lookup_account erc20_deploy_tx.target
+          erc20_initial_machine.accounts).storage = empty_storage``,
+     simp[erc20_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
+          erc20_initial_machine_def, vyperInterpreterTheory.initial_machine_state_def,
+          vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,
+          vfmStateTheory.empty_account_state_def])
+  val dep_h_transient = prove
+    (``erc20_initial_machine.tStorage erc20_deploy_tx.target = empty_storage``,
+     simp[erc20_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
+          erc20_initial_machine_def, vyperInterpreterTheory.initial_machine_state_def,
+          vfmContextTheory.empty_transient_storage_def])
 in
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `erc20_tops`,
       `erc20_deploy_bc`, `erc20_runtime_bc`, `erc20_initial_machine`,
-      `erc20_deploy_tx`, `erc20_es_dep`] e2e_deploy_correctness_deployed)
+      `erc20_deploy_tx`, `erc20_es_dep`, `^erc20_horizon`] e2e_deploy_correctness_deployed)
     (LIST_CONJ [accepted, erc20_compile, erc20_deploy_typing,
-                erc20_deploy_state, dep_bound])
+                (prove
+                  (``deploy_entry_rel erc20_tops erc20_deploy_bc
+                      erc20_initial_machine erc20_deploy_tx erc20_es_dep``,
+                   rewrite_tac[deploy_entry_rel_state] >>
+                   metis_tac[erc20_deploy_state, dep_h_storage,
+                             dep_h_transient])),
+                dep_bound, dep_h_regions, dep_h_locks, erc20_deploy_within])
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `erc20_tops`,
       `erc20_deploy_bc`, `erc20_runtime_bc`, `erc20_am_call`,
