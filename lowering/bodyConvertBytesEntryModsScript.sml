@@ -44,6 +44,29 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
+Theorem bytes_convert_memory_shape_mods:
+  is_bytestring_type dst /\ is_bytestring_type (expr_type e) ==>
+  !sa. ?out sb. compile_expr ce ty (TypeBuiltin dst Convert dst [e]) sa =
+    (LocatedValue dst (mk_ptr out LocMemory),sb)
+Proof
+  strip_tac >> gen_tac >>
+  Cases_on `lower_value compile_expr ce (expr_type e) e sa` >>
+  rename1 `_ = (op,sm)` >>
+  `compile_expr ce ty (TypeBuiltin dst Convert dst [e]) sa =
+    as_ptr_val dst LocMemory
+      (if type_memory_bytes ce (lowered_value_type ce e) < type_memory_bytes ce dst
+       then compile_bytestring_widen_copy (type_memory_bytes ce dst) op
+         (type_memory_bytes ce (lowered_value_type ce e)) sm
+       else compile_type_convert op (mk_convert_op (expr_type e) dst) sm)` by
+    (irule bytes_convert_compile_cut >> simp[]) >>
+  Cases_on `type_memory_bytes ce (lowered_value_type ce e) < type_memory_bytes ce dst`
+  >- (Cases_on `compile_bytestring_widen_copy (type_memory_bytes ce dst) op
+          (type_memory_bytes ce (lowered_value_type ce e)) sm` >>
+      gvs[as_ptr_val_def, contextTheory.mk_ptr_def])
+  >- (Cases_on `compile_type_convert op (mk_convert_op (expr_type e) dst) sm` >>
+      gvs[as_ptr_val_def, contextTheory.mk_ptr_def])
+QED
+
 Theorem bytes_convert_paired_cut_mods:
   is_bytestring_type dst /\ is_bytestring_type (expr_type e) /\
   compile_expr ce ty (TypeBuiltin dst Convert dst [e]) sa = (vv,sb) /\
