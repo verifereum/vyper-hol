@@ -29,6 +29,13 @@ file in a browser. Use the same vyper-hol commit and draft commit to
 regenerate a page. Update the Markdown files here when the hypotheses
 change. The renderer checks that every hypothesis has a matching gloss.
 
+Both pages expand definitions only down to `--depth` steps below the
+theorems, 4 by default. A theorem names the constants at step 1, their
+definitions name those at step 2, and so on. Constants at the next step
+are listed as not expanded and link to their source files at the
+checked-out commit. A depth past the deepest definition, such as
+`--depth 1000`, renders the full index.
+
 `holbuild` builds the necessary theories at the project's HOL pin. The
 pinned HOL executable then reads the built objects and uses `pandoc`
 locally for the HTML. For the target only, the renderer keeps a temporary

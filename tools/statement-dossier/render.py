@@ -98,7 +98,11 @@ def main() -> None:
     parser.add_argument("--draft", metavar="REVISION:PATH", help="render the module-list target from a Git object")
     parser.add_argument("--exporter", type=Path, help="use statementDossierLib.sml from this HOL checkout's HEAD")
     parser.add_argument("--output", required=True, type=Path, help="HTML file to write")
+    parser.add_argument("--depth", type=int, default=4,
+                        help="expand only definitions this many steps below the theorems (default 4)")
     args = parser.parse_args()
+    if args.depth < 1:
+        raise SystemExit(f"--depth must be at least 1, not {args.depth}")
     target, draft_source = draft_statement(args.draft) if args.draft else ("", "")
     patch = ""
     exporter_revision = ""
@@ -113,12 +117,8 @@ def main() -> None:
     hol, hol_url, hol_revision = package(context, "hol")
     vfm, vfm_url, _ = package(context, "verifereum")
     links = [*source_links(vfm, vfm_url), *source_links(hol / "src", hol_url + "/src")]
-    links += [
-        ("compileUnit", f"{VYPER_URL}/blob/{revision}/lowering/defs/compileUnitScript.sml"),
-        ("compileVyper", f"{VYPER_URL}/blob/{revision}/lowering/defs/compileVyperScript.sml"),
-        ("vyperTypeContract", f"{VYPER_URL}/blob/{revision}/semantics/type/vyperTypeContractScript.sml"),
-        ("vyperInterpreter", f"{VYPER_URL}/blob/{revision}/semantics/vyperInterpreterScript.sml"),
-    ]
+    links += [(Path(path).name.removesuffix("Script.sml"), f"{VYPER_URL}/blob/{revision}/{path}")
+              for path in output("git", "ls-files", "*Script.sml").splitlines()]
     sources = ",\n  ".join(f"({sml_string(theory)}, {sml_string(url)})" for theory, url in links)
     destination = args.output.resolve()
     scratch = target_script(target) if target else nullcontext()
@@ -144,6 +144,7 @@ val holRevision = {sml_string(hol_revision)}
 val exporterRevision = {sml_string(exporter_revision)}
 val draftSource = {sml_string(draft_source)}
 val draftTheory = {sml_string(THEORY)}
+val depth = {args.depth}
 val theorySources = [
   {sources}]
 
