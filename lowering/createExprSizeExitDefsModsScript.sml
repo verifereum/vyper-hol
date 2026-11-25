@@ -171,6 +171,7 @@ Definition create_expr_size_exit_mods_def:
         !i s vs s'. i < LENGTH ctors /\
           ~exprs_can_mutate cenv (DROP (SUC i) ctors) /\
           eval_exprs cx (DROP (SUC i) ctors) s = (INL vs,s') ==>
+          s'.immutables = s.immutables /\
           !tr. get_storage cx s' tr = get_storage cx s tr) /\
       expr_vv_sim_full_pre_mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es (st0, sa, sb, shadow_sa, shadow_sb, vv, s0, G0, tn0) ==>
@@ -426,6 +427,7 @@ Theorem create_size_suffix_storage_frame_singleton[local]:
     !i s vs s'. i < LENGTH ctors /\
       ~exprs_can_mutate cenv (DROP (SUC i) ctors) /\
       eval_exprs cx (DROP (SUC i) ctors) s = (INL vs,s') ==>
+      s'.immutables = s.immutables /\
       !tr. get_storage cx s' tr = get_storage cx s tr
 Proof
   strip_tac >>
@@ -441,7 +443,8 @@ Proof
      (int_calls_exprs (DROP (SUC i) ctors))` by
     (irule int_calls_exprs_DROP_EVERY >> first_assum ACCEPT_TAC) >>
   drule_all_then mp_tac nonmutating_exprs_source_frame >>
-  Cases_on `tr` >> simp[machine_frame_def, get_storage_def]
+  simp[machine_frame_def] >>
+  Cases_on `tr` >> simp[get_storage_def]
 QED
 
 Theorem create_expr_size_exit_mods_singleton:

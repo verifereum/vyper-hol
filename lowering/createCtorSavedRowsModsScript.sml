@@ -23,6 +23,7 @@ Theorem ctor_rows_fold_mods[local]:
   EVERY (source_body_call_supported cx)
     (int_calls_exprs args) /\
   (!i. i < LENGTH args /\ ~exprs_can_mutate ce (DROP (SUC i) args) ==>
+    (E (LENGTH args)).immutables = (E (SUC i)).immutables /\
     !tr. get_storage cx (E (LENGTH args)) tr = get_storage cx (E (SUC i)) tr) /\
   (?H. valid_horizon cx st0 H (E (LENGTH args)).storage_trace) /\
   (!i. i <= LENGTH args ==>
@@ -62,6 +63,7 @@ Theorem ctor_saved_rows_at_last_cut_mods:
   EVERY (source_body_call_supported cx)
     (int_calls_exprs args) /\
   (!i. i < LENGTH args /\ ~exprs_can_mutate ce (DROP (SUC i) args) ==>
+    (E (LENGTH args)).immutables = (E (SUC i)).immutables /\
     !tr. get_storage cx (E (LENGTH args)) tr = get_storage cx (E (SUC i)) tr) /\
   (?H. valid_horizon cx st0 H (E (LENGTH args)).storage_trace) /\
   (!i. i < LENGTH args ==>
