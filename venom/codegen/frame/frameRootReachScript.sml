@@ -46,6 +46,24 @@ Proof
   simp[]
 QED
 
+(* A non-abort terminal step of a singleton run occurs at the root. *)
+Theorem root_run_nonabort_terminal_source:
+  wf_state es /\ LENGTH es.contexts = 1 /\
+  run_call es = SOME (INR e,es') /\ ~vfm_abort e ==>
+  ?s. run_call_reaches es s /\ wf_state s /\
+      LENGTH s.contexts = 1 /\ step s = (INR e,es')
+Proof
+  strip_tac >> drule root_run_last_step >> strip_tac >>
+  drule_all root_reaches_bottom_msgParams >> strip_tac >>
+  `outputTo_consistent s` by
+    metis_tac[outputTo_consistent_stack_imp_consistent,
+              vfmExecutionPropTheory.wf_state_def] >>
+  `~(LENGTH s.contexts >= 2)` by
+    (strip_tac >> drule step_ge2_inr_is_abort >> simp[]) >>
+  `LENGTH s.contexts = 1` by decide_tac >>
+  qexists_tac `s` >> simp[]
+QED
+
 Theorem root_run_terminal_source:
   !es c rb r es'.
     wf_state es /\ es.contexts = [(c,rb)] /\
@@ -58,17 +76,10 @@ Theorem root_run_terminal_source:
       wf_state s /\ s.contexts = [(c1,rb1)] /\
       (!a. c1.msgParams.outputTo <> Code a) /\ step s = (r,es')
 Proof
-  rpt gen_tac >> strip_tac >>
-  `?e. r = INR e /\ ~vfm_abort e`
-    by (gvs[vfmExecutionTheory.vfm_abort_def]) >>
-  gvs[] >> drule root_run_last_step >> strip_tac >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_at (Pat `run_call _ = _`) root_run_nonabort_terminal_source >>
+  simp[] >> strip_tac >>
   drule_all root_reaches_bottom_msgParams >> strip_tac >>
-  `outputTo_consistent s`
-    by metis_tac[outputTo_consistent_stack_imp_consistent,
-                 vfmExecutionPropTheory.wf_state_def] >>
-  `~(LENGTH s.contexts >= 2)`
-    by (strip_tac >> drule step_ge2_inr_is_abort >>
-        simp[vfmExecutionTheory.vfm_abort_def]) >>
   `?c1 rb1. s.contexts = [(c1,rb1)]`
     by (Cases_on `s.contexts` >> gvs[] >>
         rename1 `s.contexts = h::cs` >> Cases_on `cs` >> gvs[] >>

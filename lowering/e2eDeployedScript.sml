@@ -6,7 +6,8 @@ Ancestors
   e2eGasSufficientTop[qualified,ignore_grammar]
   compileVyper asmOptimizer vyperTypeContractSoundness
   immutableSectionRel vfmState vfmRunCall callTrace frameOutcome frameGas
-  vyperInterpreter vyperStorageFootprint
+  vyperInterpreter vyperStorageFootprint stackBoundSoundness stackBoundDefs
+  vfmConstants vfmExecutionProp frameRunRaises
 
 (* Deployment installs the code and establishes the source facts at a.
    The transaction quantifier lets us reuse the existing source relations. *)
@@ -108,7 +109,6 @@ Definition deploy_entry_rel_def:
       frame_fresh ctxt /\ ctxt.msgParams.outputTo = Code tx.target /\
       frame_tx_rel tx es ctxt /\ world_rel am tx es /\
       ctxt.msgParams.code = deploy_bc ++ args_bytes /\
-      ctxt.msgParams.parsed = parse_code 0 FEMPTY (deploy_bc ++ args_bytes) /\
       constructor_args_encode tops tx args_bytes /\ tx.calldata = [] /\
       tx.function_name = "__init__" /\ ~tx.is_static /\ tx.created_in_tx /\
       layouts_agree tops am tx /\ deploy_target_fresh_rel am tx
@@ -126,7 +126,12 @@ Proof
      deploy_state_rel_def, frame_fresh_def,
      frame_tx_rel_def, world_rel_def] >>
   eq_tac >> strip_tac
-  >- (conj_tac
+  >- (`ctxt.msgParams.parsed = parse_code 0 FEMPTY (deploy_bc ++ args_bytes)`
+        by (qpat_assum `wf_state es` (mp_tac o cj 3 o REWRITE_RULE [wf_state_def]) >>
+            qpat_assum `es.contexts = [(ctxt,rb)]` (fn contexts =>
+              qpat_assum `ctxt.msgParams.code = deploy_bc ++ args_bytes` (fn code =>
+                simp[NoAsms, wf_context_def, contexts, code]))) >>
+      conj_tac
       >- (qexistsl_tac [`ctxt`, `rb`, `args_bytes`] >>
           metis_tac[])
       >> simp[]) >>
@@ -451,7 +456,25 @@ Proof
   metis_tac[]
 QED
 
-(* TOP-LEVEL: constructor correctness over one fixed storage horizon. *)
+Triviality deploy_entry_stack_check:
+  deploy_state_rel tops deploy_bc am tx es /\
+  run_call es = SOME (r, es') /\
+  frame_outcome es r es' (SOME StackOverflow) out lgs ==>
+  ~(?fuel. bytecode_stack_check fuel stack_limit (FST (HD es.contexts)).msgParams.code)
+Proof
+  rw[deploy_state_rel_def] >>
+  rename1 `es.contexts = [(ctxt, rb)]` >>
+  `r = INR (SOME StackOverflow)` by
+    (qpat_x_assum `frame_outcome _ _ _ _ _ _` mp_tac >>
+     simp[frame_outcome_def]) >>
+  `frame_raises es StackOverflow` by
+    (irule run_call_root_stack_overflow_raises >> simp[] >> metis_tac[]) >>
+  qspecl_then [`fuel`, `stack_limit`, `ctxt.msgParams.code`, `es`]
+    mp_tac bytecode_stack_check_no_overflow >>
+  simp[]
+QED
+
+(* TOP-LEVEL: constructor correctness over a fixed storage horizon. *)
 Theorem e2e_deploy_correctness_deployed:
   !fin policy tops deploy_bc runtime_bc am tx es H.
     fin IN accepted_finalizers /\
@@ -465,7 +488,12 @@ Theorem e2e_deploy_correctness_deployed:
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
-      (creation_resource_starved es r es' \/
+      ((?exc out lgs.
+          (exc = OutOfGas \/
+           exc = StackOverflow /\
+           ~(?fuel. bytecode_stack_check fuel stack_limit
+                      (FST (HD es.contexts)).msgParams.code)) /\
+          frame_outcome es r es' (SOME exc) out lgs) \/
        gas_readings_rel (gas_readings es)
          (\gs. deploy_result_rel_at gs tops runtime_bc am tx es r es' /\
                (~MEM tx.target es'.rollback.toDelete ==>
@@ -486,7 +514,13 @@ Proof
     (irule deploy_storage_ok_from_within >> metis_tac[]) >>
   drule_all e2e_deploy_correctness_deployed_guarded >>
   disch_then (qx_choose_then `r` (qx_choose_then `es'` strip_assume_tac)) >>
-  qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >> DISJ2_TAC >>
+  qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[]
+  >- (DISJ1_TAC >>
+      qpat_x_assum `creation_resource_starved _ _ _`
+        (strip_assume_tac o REWRITE_RULE [creation_resource_starved_def]) >>
+      qexistsl_tac [`exc`, `out`, `lgs`] >>
+      metis_tac[deploy_entry_stack_check]) >>
+  DISJ2_TAC >>
   drule gas_readings_rel_mono >>
   disch_then irule >>
   qx_gen_tac `gs` >> BETA_TAC >> strip_tac >>
@@ -496,6 +530,20 @@ Proof
   strip_tac >> qx_genl_tac [`am'`, `rqs`] >> strip_tac >>
   conj_tac >- metis_tac[] >>
   match_mp_tac deploy_next_storage_ok >> metis_tac[]
+QED
+
+Triviality call_entry_stack_check:
+  call_entry_rel am tx es /\
+  bytecode_stack_check fuel stack_limit (FST (HD es.contexts)).msgParams.code ==>
+  ~frame_raises es StackOverflow
+Proof
+  rw[call_entry_rel_def, evm_state_ok_def, frame_fresh_def] >>
+  rename1 `es.contexts = (ctxt, rb) :: rest` >>
+  `bytecode_stack_check fuel stack_limit ctxt.msgParams.code` by
+    (qpat_x_assum `bytecode_stack_check _ _ _` mp_tac >> simp[]) >>
+  qspecl_then [`fuel`, `stack_limit`, `ctxt.msgParams.code`, `es`]
+    mp_tac bytecode_stack_check_no_overflow >>
+  simp[]
 QED
 
 (* TOP-LEVEL: call correctness in the world supplied by deployment. *)
@@ -511,13 +559,25 @@ Theorem vyper_call_correct_deployed:
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
+      ((?exc out lgs.
+          (exc = OutOfGas \/
+           exc = StackOverflow /\
+           ~(?fuel. bytecode_stack_check fuel stack_limit
+                      (FST (HD es.contexts)).msgParams.code)) /\
+          frame_outcome es r es' (SOME exc) out lgs /\ frame_raises es exc) \/
        calldata_result_rel H tops am tx es r es')
 Proof
   rpt gen_tac >> strip_tac >>
   `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es` by
     simp[call_premises_deployed] >>
-  drule_all e2eCorrectnessTheory.vyper_call_correct >> simp[]
+  drule_all e2eCorrectnessTheory.vyper_call_correct >>
+  disch_then (qx_choosel_then [`r`, `es'`] strip_assume_tac) >>
+  qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
+  DISJ1_TAC >>
+  qpat_x_assum `frame_resource_starved _ _ _`
+    (strip_assume_tac o REWRITE_RULE [frame_resource_starved_def]) >>
+  qexistsl_tac [`exc`, `out`, `lgs`] >>
+  metis_tac[call_entry_stack_check]
 QED
 
 Theorem call_preserves_deployed:
@@ -557,9 +617,8 @@ Theorem vyper_call_gas_sufficient_deployed:
                  (tx with <| function_name := f; args := vals |>)
                  (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
                     obs am (tx with <| function_name := f; args := vals |>))) /\
-              LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64) /\
-         frame_raises (add_frame_gas g' es) OutOfGas ==>
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+              LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64) ==>
+         ~frame_raises (add_frame_gas g' es) OutOfGas)
 Proof
   rpt gen_tac >> strip_tac >>
   `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es` by

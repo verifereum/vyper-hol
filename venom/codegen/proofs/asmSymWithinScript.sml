@@ -2,10 +2,9 @@
  * Bounded assembly runs against bounded symbolic runs
  *
  * The sufficient-gas proof bounds a concrete assembly run (asm_run_bounded:
- * it ends or reaches a RETURNDATACOPY within N steps, each step before that
- * touching memory below H). asm_refines_within carries the bound through the
- * finalizer on the symbolic side (sym_run_within). This theory moves the
- * bound between the two sides, as asmSymBridge moves terminal runs.
+ * it ends within N steps, each step touching memory below H). The finalizer
+ * preserves the symbolic bound through asm_refines_within. This theory
+ * moves the bound between concrete and symbolic runs.
  *
  * TOP-LEVEL:
  *   sym_gas_ok             - asm_inst_gas_ok on a symbolic stack
@@ -40,13 +39,12 @@ Proof
 QED
 
 Theorem sym_within_ok_gas[local]:
-  sym_within_ok (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY")
+  sym_within_ok (sym_gas_ok H) (λi. F)
 Proof
   simp[sym_within_ok_def, sym_gas_ok_def] >> rpt strip_tac
   >- (rename1 `asm_plain_inst inst` >> Cases_on `inst` >>
-      gvs[asm_plain_inst_def, asm_inst_gas_ok_def, asm_mem_ranges_def])
-  >- gvs[asm_plain_inst_def]
-  >> metis_tac[map_sval_word]
+      gvs[asm_plain_inst_def, asm_inst_gas_ok_def, asm_mem_ranges_def]) >>
+  metis_tac[map_sval_word]
 QED
 
 (* ===== One step: the memory operands are words ===== *)
@@ -301,14 +299,13 @@ Theorem asm_run_bounded_sym_within_mode:
     (∀fuel msg. within_run allow_own p env own fuel ss ≠ SymBad msg) ∧
     asm_run_bounded lo (build_offset_to_pc p) p H k cs ⇒
     sym_run_within_for (within_step allow_own p env own)
-      (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY") p k ss
+      (sym_gas_ok H) (λi. F) p k ss
 Proof
   Induct >- simp[asm_run_bounded_def] >>
   rpt gen_tac >> strip_tac >>
   `ss.sym_base.as_pc = cs.as_pc` by fs[asm_sym_rel_own_def] >>
   qpat_x_assum `asm_run_bounded _ _ _ _ _ _` mp_tac >>
   simp[asm_run_bounded_def, sym_run_within_for_def] >>
-  Cases_on `EL cs.as_pc p = AsmOp "RETURNDATACOPY"` >> simp[] >>
   strip_tac >>
   `MEM (EL cs.as_pc p) p` by simp[EL_MEM] >>
   `∀msg. within_step allow_own p env own (EL cs.as_pc p) ss ≠ SymBad msg` by
@@ -332,7 +329,7 @@ Theorem sym_within_asm_run_bounded_mode:
     (¬allow_own ⇒ lo = SND (compute_label_offsets p)) ∧
     asm_sym_rel_own lo p env own cs ss ∧
     sym_run_within_for (within_step allow_own p env own)
-      (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY") p k ss ⇒
+      (sym_gas_ok H) (λi. F) p k ss ⇒
     asm_run_bounded lo (build_offset_to_pc p) p H k cs
 Proof
   Induct >- simp[sym_run_within_for_def] >>
@@ -340,7 +337,6 @@ Proof
   `ss.sym_base.as_pc = cs.as_pc` by fs[asm_sym_rel_own_def] >>
   qpat_x_assum `sym_run_within_for _ _ _ _ _ _` mp_tac >>
   simp[asm_run_bounded_def, sym_run_within_for_def] >>
-  Cases_on `EL cs.as_pc p = AsmOp "RETURNDATACOPY"` >> simp[] >>
   strip_tac >>
   `MEM (EL cs.as_pc p) p` by simp[EL_MEM] >>
   `(∀e. within_step allow_own p env own (EL cs.as_pc p) ss ≠ SymError e) ∧
@@ -363,7 +359,7 @@ Theorem asm_run_bounded_sym_within_rel[local]:
     (∀fuel msg. sym_run p env fuel ss ≠ SymBad msg) ∧
     asm_run_bounded (SND (compute_label_offsets p)) (build_offset_to_pc p)
       p H k cs ⇒
-    sym_run_within (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY")
+    sym_run_within (sym_gas_ok H) (λi. F)
       p env k ss
 Proof
   rpt gen_tac >> strip_tac >>
@@ -377,7 +373,7 @@ QED
 Theorem sym_within_asm_run_bounded_rel[local]:
   ∀k cs ss.
     asm_static_wf p ∧ asm_sym_rel p env cs ss ∧
-    sym_run_within (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY")
+    sym_run_within (sym_gas_ok H) (λi. F)
       p env k ss ⇒
     asm_run_bounded (SND (compute_label_offsets p)) (build_offset_to_pc p)
       p H k cs
@@ -397,7 +393,7 @@ Theorem asm_run_bounded_sym_within[local]:
   asm_data_env_ok p env s.as_code ∧
   asm_run_bounded (SND (compute_label_offsets p)) (build_offset_to_pc p)
     p H k s ⇒
-  sym_run_within (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY")
+  sym_run_within (sym_gas_ok H) (λi. F)
     p env k (sym_init s)
 Proof
   rw[label_disciplined_def] >> irule asm_run_bounded_sym_within_rel >>
@@ -407,7 +403,7 @@ QED
 (* A bounded symbolic run is a bounded concrete one. *)
 Theorem sym_within_asm_run_bounded[local]:
   asm_static_wf p ∧ s.as_pc = 0 ∧ asm_data_env_ok p env s.as_code ∧
-  sym_run_within (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY")
+  sym_run_within (sym_gas_ok H) (λi. F)
     p env k (sym_init s) ⇒
   asm_run_bounded (SND (compute_label_offsets p)) (build_offset_to_pc p)
     p H k s
@@ -431,11 +427,11 @@ Theorem asm_refines_run_bounded:
 Proof
   strip_tac >> fs[asm_refines_def, asm_refines_within_def] >>
   qexists_tac `c` >> rpt strip_tac >>
-  `sym_run_within (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY") p
+  `sym_run_within (sym_gas_ok H) (λi. F) p
      (asm_data_env p (assemble p ++ x)) k (sym_init s)`
     by (irule asm_run_bounded_sym_within >>
         simp[asm_data_env_ok_asm_data_env]) >>
-  `sym_run_within (sym_gas_ok H) (λi. i = AsmOp "RETURNDATACOPY") p'
+  `sym_run_within (sym_gas_ok H) (λi. F) p'
      (asm_data_env p (assemble p ++ x)) (c * k) (sym_init s)`
     by (first_x_assum irule >> simp[sym_within_ok_gas]) >>
   `asm_data_env p (assemble p ++ x) = asm_data_env p' (assemble p' ++ x)`
@@ -469,13 +465,13 @@ Proof
    asm_sym_rel_own lo' q env s.as_code s (sym_init s)` by
     metis_tac[asm_sym_rel_own_init] >>
   `sym_run_within_for (sym_step_own p env s.as_code) (sym_gas_ok H)
-    (λi. i = AsmOp "RETURNDATACOPY") p k (sym_init s)` by
+    (λi. F) p k (sym_init s)` by
     (mp_tac (Q.INST [`allow_own` |-> `T`, `own` |-> `s.as_code`]
        asm_run_bounded_sym_within_mode) >>
      disch_then (qspecl_then [`k`, `s`, `sym_init s`] mp_tac) >>
      fs[label_disciplined_own_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
   qpat_x_assum `∀P Q env own s k. _`
-    (qspecl_then [`sym_gas_ok H`, `λi. i = AsmOp "RETURNDATACOPY"`,
+    (qspecl_then [`sym_gas_ok H`, `λi. F`,
       `env`, `s.as_code`, `s`, `k`] mp_tac) >>
   simp[sym_within_ok_gas] >> strip_tac >>
   mp_tac (Q.INST [`allow_own` |-> `T`, `own` |-> `s.as_code`,

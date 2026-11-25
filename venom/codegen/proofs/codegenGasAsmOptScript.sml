@@ -122,9 +122,6 @@ Theorem codegen_gas_surplus_asm_opt:
       venom_run_bounded fuel M unit.cu_context vs /\
       mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
       frame_inst_at (add_frame_gas g' es) s op /\
-      (!t. frame_inst_at (add_frame_gas g' es) t ReturnDataCopy ==>
-           ~RTC (\a b. LENGTH a.contexts >= LENGTH s.contexts /\
-                       step a = (INL (), b)) t s) /\
       step_inst op s = (r, s') /\ LENGTH s'.contexts = LENGTH s.contexts
       ==>
       r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
@@ -216,8 +213,7 @@ Theorem codegen_gas_sufficient_asm_opt:
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+        ~(?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op)
 Proof
   rpt strip_tac >>
   drule_all codegen_gas_surplus_asm_opt >>
@@ -227,7 +223,6 @@ Proof
   rename1 `run_call _ = SOME res` >> PairCases_on `res` >>
   qexistsl_tac [`res0`, `res1`] >> simp[] >>
   rpt strip_tac >> gvs[frame_inst_raises_def] >>
-  CCONTR_TAC >>
   `wf_state (add_frame_gas g' es) /\
    g' <= frame_gas_left (add_frame_gas g' es)` by
     metis_tac[add_frame_gas_wf_state, wf_state_frame_gas_left] >>
@@ -336,9 +331,6 @@ Theorem codegen_gas_surplus_asm_opt_own:
       venom_run_bounded fuel M unit.cu_context vs /\
       mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
       frame_inst_at (add_frame_gas g' es) s op /\
-      (!t. frame_inst_at (add_frame_gas g' es) t ReturnDataCopy ==>
-           ~RTC (\a b. LENGTH a.contexts >= LENGTH s.contexts /\
-                       step a = (INL (), b)) t s) /\
       step_inst op s = (r, s') /\ LENGTH s'.contexts = LENGTH s.contexts
       ==>
       r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
@@ -389,8 +381,7 @@ Theorem codegen_gas_sufficient_asm_opt_own:
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+        ~(?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op)
 Proof
   rpt strip_tac >>
   drule_all codegen_gas_surplus_asm_opt_own >>
@@ -400,7 +391,6 @@ Proof
   rename1 `run_call _ = SOME res` >> PairCases_on `res` >>
   qexistsl_tac [`res0`, `res1`] >> simp[] >>
   rpt strip_tac >> gvs[frame_inst_raises_def] >>
-  CCONTR_TAC >>
   `wf_state (add_frame_gas g' es) /\
    g' <= frame_gas_left (add_frame_gas g' es)` by
     metis_tac[add_frame_gas_wf_state, wf_state_frame_gas_left] >>
