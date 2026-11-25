@@ -8,7 +8,7 @@ Ancestors
   vyperInterpreter vyperState context bodyWriteSubscriptSourceMods
   bodyAttributeReadOperandMods bodyAttributeSelectionMods bodyAttributePlacePtrMods
   bodyAttributeNoncodeFieldMods bodyAttributeCodePostMods bodyAttributeCodeFieldMods
-  bodyAttributeAddFrameMods bodyAttributeGasBindExactMods
+  bodyAttributeAddFrameMods bodyAttributeGasBindExactMods bodyAttributeValueOfVVMods
 Libs monadsyntax
 
 Theorem attribute_paired_cut_mods:
@@ -269,3 +269,25 @@ Resume attribute_vv_sim_full_mods_of_child[noncode_field]:
 QED
 
 Finalise attribute_vv_sim_full_mods_of_child
+
+Theorem attribute_sim_full_mods_of_child:
+  !mods exps cx v9 e id DF lo d PG src tops ctx shadow_ctx func shadow_func
+     cenv env ty es.
+    contract_inv mods exps ctx cenv cx /\
+    module_body_inv mods src tops cenv cx /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree_mods mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Attribute v9 e id) es /\
+    expr_body_pre_mods mods cenv cx env e es /\
+    expr_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es /\
+    expr_vv_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es ==>
+    expr_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Attribute v9 e id) es /\
+    expr_vv_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Attribute v9 e id) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all_then assume_tac attribute_vv_sim_full_mods_of_child >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  drule_all_then ACCEPT_TAC attribute_value_of_vv_mods
+QED
