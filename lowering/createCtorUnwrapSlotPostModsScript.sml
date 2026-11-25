@@ -501,13 +501,19 @@ Resume ctor_unwrap_slot_endpoint_post_mods[semantics]:
   >- decide_tac
   >- (qexists `mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]` >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[venomInstTheory.mk_inst_def]) >>
+  `sb.cs_next_var <= mid.cs_next_var` by simp[] >>
+  `LENGTH u.vs_memory <= LENGTH z.vs_memory` by
+    (qpat_assum `allocated.vs_memory = u.vs_memory` (SUBST1_TAC o SYM) >>
+     first_assum ACCEPT_TAC) >>
+  `!off len. off+len <= w2n dst \/ w2n dst+nb <= off ==>
+     mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory` by
+    (qpat_assum `u.vs_memory = s.vs_memory` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   qexistsl [`mid`, `nb`, `rty`, `u`, `dst`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (decide_tac >> NO_TAC) >>
-  TRY (qpat_assum `allocated.vs_memory = u.vs_memory` (SUBST1_TAC o SYM) >>
-       first_assum ACCEPT_TAC >> NO_TAC) >>
   rpt strip_tac >>
-  qpat_assum `!x. not_fresh_at mid x ==> _` (drule_then strip_assume_tac) >> simp[]
+  qpat_assum `!x. not_fresh_at mid x ==> lookup_var x z = _ /\ _`
+    (drule_then (SUBST1_TAC o CONJUNCT1)) >>
+  qpat_assum `!x. lookup_var x allocated = lookup_var x u` irule
 QED
 
 Resume ctor_unwrap_slot_endpoint_post_mods[frames]:
@@ -694,16 +700,34 @@ Resume ctor_unwrap_slot_endpoint_post_mods[kept_original]:
        (irule local_region_frame_fwd >> qexistsl [`s0`,`sa`,`es.scopes`] >> fs[vv_post_def]) >>
      qpat_assum `!name b len. local_region cenv ee.scopes s name b len ==> _`
        (drule_then ACCEPT_TAC)) >>
-  irule unwrap_slot_copy_ghost_kept_at >> qexistsl [`G`,`tn`] >> rpt conj_tac
-  >> TRY (first_assum ACCEPT_TAC) >> rpt strip_tac
-  >> TRY (`not_fresh_at sb x` by (irule not_fresh_at_mono >> qexists `sa` >> conj_tac >- decide_tac >> first_assum ACCEPT_TAC) >>
-       qpat_assum `!x. not_fresh_at sb x ==> lookup_var _ _ = _ /\ _` drule >> simp[] >> NO_TAC) >>
-  qpat_assum `!q. _ /\ q IN tnf.t_mem ==> q IN tn.t_mem` irule >>
-  (reverse conj_tac >- first_assum ACCEPT_TAC) >>
-  TRY (decide_tac >> NO_TAC) >>
-  (qpat_assum `!aid off len. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _` (drule_all_then strip_assume_tac) ORELSE
-   qpat_assum `!name off len. local_region cenv es.scopes s0 name off len ==> _` (drule_then strip_assume_tac)) >>
-  decide_tac
+  `!x. not_fresh_at sa x ==>
+     FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >>
+     `not_fresh_at sb x` by
+       (irule not_fresh_at_mono >> qexists `sa` >> conj_tac
+        >- decide_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `!x. not_fresh_at sb x ==> lookup_var _ _ = _ /\ _` drule >> simp[]) >>
+  `!aid off len i. FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id /\
+     (!name b sz. local_region cenv es.scopes s0 name b sz ==> off+len <= b \/ b+sz <= off) /\
+     off <= i /\ i < off+len /\ i IN tnf.t_mem ==> i IN tn.t_mem` by
+    (rpt strip_tac >>
+     qpat_assum `!q. _ /\ q IN tnf.t_mem ==> q IN tn.t_mem` irule >>
+     (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+     qpat_assum `!aid off len. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
+       (drule_all_then strip_assume_tac) >> decide_tac) >>
+  `!name b sz i. local_region cenv es.scopes s0 name b sz /\
+     b <= i /\ i < b+sz /\ i IN tnf.t_mem ==> i IN tn.t_mem` by
+    (rpt strip_tac >>
+     qpat_assum `!q. _ /\ q IN tnf.t_mem ==> q IN tn.t_mem` irule >>
+     (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+     qpat_assum `!name off len. local_region cenv es.scopes s0 name off len ==> _`
+       (drule_then strip_assume_tac) >> decide_tac) >>
+  `!i. i < lo /\ i IN tnf.t_mem ==> i IN tn.t_mem` by
+    (rpt strip_tac >>
+     qpat_assum `!q. _ /\ q IN tnf.t_mem ==> q IN tn.t_mem` irule >>
+     (reverse conj_tac >- first_assum ACCEPT_TAC) >> decide_tac) >>
+  irule unwrap_slot_copy_ghost_kept_at >> qexistsl [`G`,`tn`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume ctor_unwrap_slot_endpoint_post_mods[finish]:
