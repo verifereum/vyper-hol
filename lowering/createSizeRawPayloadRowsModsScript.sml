@@ -197,11 +197,14 @@ Resume create_raw_payload_replay_rows_mods[suffix_storage]:
   `SUC i <= LENGTH args` by decide_tac >>
   `eval_exprs cx (DROP (SUC i) args) (E (SUC i)) =
      (INL (DROP (SUC i) vs), E (LENGTH args))` by
-    (irule ctor_rows_source_mods >> rpt conj_tac >>
-     TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-     gen_tac >> disch_tac >>
-     qpat_assum `!j. j < LENGTH args ==> vyperState$bind _ _ (E j) = _ /\ _`
-       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+    (irule ctor_rows_source_mods >>
+     (conj_tac
+      >- (gen_tac >> disch_tac >>
+          qpat_assum `!j. j < LENGTH args ==> vyperState$bind _ _ (E j) = _ /\ _`
+            (drule_then (ACCEPT_TAC o CONJUNCT1)))
+      >> (conj_tac
+          >- (qpat_assum `SUC i <= LENGTH args` ACCEPT_TAC)
+          >> (qpat_assum `LENGTH vs = LENGTH args` ACCEPT_TAC)))) >>
   qpat_assum `!i s vs s'. _ ==> !tr. get_storage _ _ tr = _`
     (qspecl_then [`i`,`E (SUC i)`,`DROP (SUC i) vs`,`E (LENGTH args)`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
