@@ -11,6 +11,20 @@ Ancestors
   createExprSizeExitDefs createSizeCopyReplayMods createSizeBlueprintKeywordReplayMods
   createSizeOperandPreMods
 
+Theorem create_blueprint_address_gas_obs_mods[local,simp]:
+  (expr_sim_inv_mods mods ce cx env (es with gas_obs := gs) <=>
+   expr_sim_inv_mods mods ce cx env es) /\
+  (expr_body_pre_mods mods ce cx env e (es with gas_obs := gs) <=>
+   expr_body_pre_mods mods ce cx env e es) /\
+  (immutable_frame_mods func ce cx (es with gas_obs := gs) s <=>
+   immutable_frame_mods func ce cx es s)
+Proof
+  simp[expr_body_pre_mods_def,expr_sim_inv_mods_def,
+       bodyFullPostsModsTheory.immutable_frame_mods_def,
+       bodyInvSplitTheory.immutables_rel_mods_def,immutables_rel_def,
+       bodyInvSplitTheory.immutable_alloca_sep_mods_def,immutable_alloca_sep_def]
+QED
+
 (* Replay the first operand on the observed address cut. The returned source
    state still carries the marks of the unexecuted payload and keywords. *)
 
