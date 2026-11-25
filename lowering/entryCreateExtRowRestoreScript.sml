@@ -3,6 +3,10 @@
 Theory entryCreateExtRowRestore
 Ancestors
   entryCreateAbiRestoreScope entryCreateCompletedCut bodyFullExtCallDirectState
+  bodyFullExtCallDirectRow bodyFullExtCallDirectMaterialize bodyFullUnwrapSlotBand
+  entryCreatePathScope createSizeCutCode createSizeTypedCopyCode createSizeEncodeCoreCode
+  createSizeLocationCode abiEncoderChildCode abiEncoderProps
+  bodyFullIfExpReach exprLoweringProps venomInst arithmetic pair
 
 Theorem abi_encode_saved_restore_row_scoped:
   (!bb j. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb /\
@@ -73,4 +77,120 @@ Proof
   qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ sb z _ _`
     (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_def]) >>
   simp[create_operand_full_scope_def]
+QED
+
+(* At a zero-code store the PC may be unchanged. In that case the
+   enclosing row's installed exit fence applies at the restore exit too. *)
+Theorem abi_restore_exit_fence:
+  create_cut_code {} sb en /\ fn_has_code sb en func /\
+  (!bb j. lookup_block en.cs_current_bb func.fn_blocks = SOME bb /\
+     get_instruction bb (LENGTH en.cs_current_insts) = SOME j ==>
+     en.cs_next_id <= j.inst_id) ==>
+  !bb j. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb /\
+     get_instruction bb (LENGTH sb.cs_current_insts) = SOME j ==>
+     sb.cs_next_id <= j.inst_id
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `sb.cs_current_bb <> en.cs_current_bb \/
+            LENGTH sb.cs_current_insts <> LENGTH en.cs_current_insts`
+  >- metis_tac[create_cut_continuation_fetch] >>
+  fs[] >> qpat_assum `create_cut_code {} sb en`
+    (strip_assume_tac o REWRITE_RULE[create_cut_code_def]) >>
+  decide_tac
+QED
+
+Theorem abi_restore_dynamic_suffix_code:
+  compile_abi_encode_to_buf tail src info sb = (len,encoded) /\
+  abi_encode_child_suffix head cursor off len encoded = (len,en) ==>
+  create_cut_code {} sb en
+Proof
+  strip_tac >> irule create_cut_code_join >> qexists_tac `encoded` >>
+  conj_tac >- metis_tac[create_encode_to_buf_cut_code,SND] >>
+  `create_cut_code {} encoded
+     (SND (abi_encode_child_suffix head cursor off len encoded))` by
+    (pure_rewrite_tac[abi_encode_child_suffix_def] >>
+     rpt (FIRST [irule create_cut_code_bind, irule create_cut_code_ignore_bind,
+       conj_tac, CHANGED_TAC (simp[create_cut_code_emit_op,create_cut_code_emit_void,
+                                  create_cut_targets_def])])) >>
+  metis_tac[SND]
+QED
+
+Theorem abi_packed_restore_guarded:
+  ty = lowered_value_type ce e /\
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
+  ((?tag op0. saved = StackValue tag op0) \/
+   (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location = LocMemory) \/
+   (?p. saved = LocatedValue ty p /\ ~is_word_type ty /\ p.ptr_location <> LocMemory /\
+        ty = expr_type e /\ saved = vv)) /\
+  local_ptrs_reserved ce si /\ sm.cs_next_var <= se.cs_next_var /\ sm.cs_next_id <= se.cs_next_id /\
+  ss.cs_next_var <= se.cs_next_var /\ ss.cs_next_id <= se.cs_next_id /\
+  local_ptrs_reserved ce se /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
+  (~is_word_type ty ==> ~is_word_type (expr_type e)) /\
+  (!l. vv_operand saved <> Label l) /\
+  read_result cx raw ee = (INL v,ee) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ type_memory_bytes ce ty = type_memory_size tv /\
+  type_memory_size tv < 2**64 /\ value_has_type tv v /\
+  vv_holds ce cx ty raw saved ee s /\ vv_at ce cx ty si ss ee raw saved s /\
+  ptr_vv_ok cx ty raw saved ee G tn s /\ vv_store_bound cx ty ty ee raw saved s /\
+  ((case saved of StackValue tag op0 => ~is_word_type ty
+      | LocatedValue tag p => p.ptr_location = LocMemory) ==>
+    ptr_buf_ok ce e (vv_operand saved) G s) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee s /\ vv_storage_live H cx saved ee s) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = shared /\
+  inst.inst_outputs = [root] /\ not_local_ptr ce ee.scopes root /\
+  MEM cursor_inst (fn_insts func) /\ cursor_inst.inst_id = loc /\
+  cursor_inst.inst_outputs = [cursor_var] /\ not_local_ptr ce ee.scopes cursor_var /\
+  pbase+dst_offset+LENGTH (FLAT (abi_tuple_heads hl 0 (TAKE i ats) (TAKE i avs))) <= pbase+capacity /\
+  pbase+dst_offset+hl+LENGTH (FLAT (abi_tuple_tails (TAKE i ats) (TAKE i avs))) <= pbase+capacity /\
+  fn_inst_ids_distinct func /\
+  ~is_word_type ty ==>
+  abi_static_row_restore
+    (\a b u z. create_cut_code {} a b /\ fn_has_code a b func /\
+      ((!bb j. lookup_block b.cs_current_bb func.fn_blocks = SOME bb /\
+         get_instruction bb (LENGTH b.cs_current_insts) = SOME j ==>
+         b.cs_next_id <= j.inst_id) ==>
+       create_operand_full_scope a b explicit ctx func u [] (OK z)))
+    ctx func ce cx st0 ee DF lo explicit PG d se s G tn
+    shared pbase capacity root dst dst_offset prefix saved ty v ats avs hl cursor loc slot i
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  simp_tac bool_ss [abi_static_row_restore_def] >>
+  map_every qx_gen_tac [`a`,`b`,`u`,`Gu`,`tu`,`src`] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `create_cut_code {} a b` by
+    metis_tac[create_unwrap_cut_code,SND] >>
+  Cases_on `!bb j. lookup_block b.cs_current_bb func.fn_blocks = SOME bb /\
+                    get_instruction bb (LENGTH b.cs_current_insts) = SOME j ==>
+                    b.cs_next_id <= j.inst_id`
+  >- (`unwrap_exit_phi_free func b` by
+        (qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H` assume_tac) >>
+         `stmt_state_rel H ctx func ce cx ee s` by
+           (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ s /\ _`
+              (drule_then (ACCEPT_TAC o cj 1))) >>
+         `MEM func ctx.ctx_functions` by
+           metis_tac[stmt_state_rel_def, alloca_room_def, lookup_function_MEM] >>
+         simp[unwrap_exit_phi_free_def] >>
+         metis_tac[venomExecProofsTheory.lookup_block_MEM, body_inv_no_phi]) >>
+      `!bb j. lookup_block b.cs_current_bb func.fn_blocks = SOME bb /\
+               get_instruction bb (LENGTH b.cs_current_insts) = SOME j ==>
+               j.inst_id NOTIN frag_ids a b` by
+        (rpt strip_tac >>
+         qpat_assum `!bb j. _ ==> b.cs_next_id <= j.inst_id` (drule_all_then assume_tac) >>
+         fs[frag_ids_def] >> decide_tac) >>
+      mp_tac (Q.INST [`su` |-> `a`, `sb` |-> `b`] abi_encode_saved_restore_row_scoped) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then (qx_choosel_then [`z`,`Gz`,`tz`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
+      qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[]) >>
+  mp_tac (Q.INST [`su` |-> `a`, `sb` |-> `b`] abi_encode_saved_restore_row_pure) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`z`,`Gz`,`tz`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  qexistsl_tac [`z`,`Gz`,`tz`] >> asm_rewrite_tac[]
 QED

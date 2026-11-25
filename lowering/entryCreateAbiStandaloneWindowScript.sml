@@ -9,6 +9,11 @@ Ancestors
   context finite_map contractABI fragGasOriginPtr venomState venomInst
   abiEncoderWindowContract abiEncoderProps fragGasOriginPtrLoop list pred_set
   entryCreateEffectFocus createSizeCutCode exprSimAbiEncodeSiteResources
+  entryCreateAbiRestoreScope entryCreateAbiPackagingSuffix entryCreatePosSnapshotCode
+  entryCreateStructLitExitFetch exprSimAbiEncodeObliviousCode compileExprAllocaFresh
+  bodyFullIfExpReach bodyFullUnwrapSlotBand bodyFullAbiEncodeArgs venomExecProofs
+  entryCreateIntervalLayout createSizeLocationCode createSizeEncodeCoreCode
+  exprLoweringProps fragExec pair
 
 Theorem abi_standalone_payload_split:
   ~is_word_type ty /\
@@ -142,4 +147,72 @@ Proof
   >- (rpt strip_tac >> fs[create_cut_code_def] >>
       metis_tac[abi_encode_frag_code_members]) >>
   qexists_tac `ce` >> simp[]
+QED
+
+Theorem abi_standalone_installed_restore[local]:
+  unwrap_value ce saved ready = (src,cut) /\
+  create_layout ready cut /\ fn_has_code ready cut func /\
+  fn_inst_ids_distinct func /\ body_inv tops ctx ce cx /\ MEM func ctx.ctx_functions /\
+  ~is_word_type (lowered_value_type ce e) ==>
+  abi_packaging_restore_law (abi_packaging_segment explicit ctx func)
+    ctx func explicit PG lo ce cx st0 DF d front ready cut e saved src
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `!bb j. lookup_block cut.cs_current_bb func.fn_blocks = SOME bb /\
+           get_instruction bb (LENGTH cut.cs_current_insts) = SOME j ==>
+           j.inst_id NOTIN frag_ids ready cut` by
+    (mp_tac (Q.INST [`a` |-> `ready`, `b` |-> `cut`, `f` |-> `func`]
+        installed_covered_exit_fetch) >>
+     impl_tac
+     >- (asm_rewrite_tac[] >> conj_tac
+         >- (mp_tac (Q.INST [`ce` |-> `ce`, `vv` |-> `saved`] admin_unwrap_code_action) >>
+             simp[code_action_def, code_step_def] >> disch_then drule >> simp[]) >>
+         metis_tac[unwrap_value_added_id]) >>
+     disch_then ACCEPT_TAC) >>
+  `unwrap_exit_phi_free func cut` by
+    (simp[unwrap_exit_phi_free_def] >> metis_tac[body_inv_no_phi, lookup_block_MEM]) >>
+  pure_rewrite_tac[abi_packaging_restore_law_def] >>
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  mp_tac (Q.INST [`su` |-> `ready`, `sb` |-> `cut`] abi_standalone_restore_scoped) >>
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, metis_tac[]]) >>
+  disch_then (qx_choosel_then [`z`,`Gz`,`tz`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  qexistsl_tac [`z`,`Gz`,`tz`] >>
+  asm_rewrite_tac[abi_packaging_segment_def, create_operand_at_def]
+QED
+
+Theorem abi_standalone_installed_payload_phases:
+  ~is_word_type (lowered_value_type ce e) /\
+  compile_abi_encode_payload ce T [saved] [lowered_value_type ce e] dst ready =
+    (len,body_end) /\
+  cs_extends st ready /\ cs_extends body_end fin_cs /\
+  create_layout st fin_cs /\ fn_has_code st fin_cs func /\
+  fn_inst_ids_distinct func /\ body_inv tops ctx ce cx /\ MEM func ctx.ctx_functions /\
+  (!src cut. compile_abi_encode_to_buf dst src
+       (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e)) cut =
+       (len,body_end) ==>
+     abi_packaging_window_law (abi_packaging_segment explicit ctx func)
+       ctx func explicit PG lo cut body_end dst src
+       (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e)) len) ==>
+  abi_packaging_payload_phases (abi_packaging_segment explicit ctx func) RowSide
+    ctx func explicit PG lo ce cx st0 DF d T [lowered_value_type ce e] [e] [saved]
+    k N st ready dst len body_end
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_standalone_payload_split >>
+  disch_then (qx_choosel_then [`src`,`cut`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  `cs_extends ready cut /\ cs_extends cut body_end` by
+    metis_tac[ci_mono_def,ci_mono_unwrap_value,cj 2 ci_mono_compile_abi_encode,SND] >>
+  `cs_extends cut fin_cs /\ cs_extends st cut` by metis_tac[cs_extends_trans] >>
+  `create_layout ready cut` by metis_tac[create_layout_subinterval] >>
+  `fn_has_code ready cut func` by
+    metis_tac[fn_has_code_split,cs_extends_trans] >>
+  simp[abi_packaging_payload_phases_def] >>
+  asm_rewrite_tac[] >> rpt conj_tac
+  >- metis_tac[create_unwrap_cut_code,SND]
+  >- metis_tac[create_encode_to_buf_cut_code,SND]
+  >- (irule abi_standalone_installed_restore >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qexists_tac `tops` >> first_assum ACCEPT_TAC) >>
+  qpat_assum `!src cut. compile_abi_encode_to_buf _ src _ cut = _ ==> _`
+    (qspecl_then [`src`,`cut`] mp_tac) >> asm_rewrite_tac[]
 QED
