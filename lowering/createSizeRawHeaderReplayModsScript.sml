@@ -12,6 +12,7 @@ Ancestors
   createSizeRawCodeSiteBoundMods createSizeRawHeaderGeometryMods reasonEndpointResourcesPtr
   createBlueprintRawCopyLayoutMods bodySim createExprSizeExitDefs createSizePrefixReplayMods
   createSizeRawReplayMods createSizeOperandPreMods
+  createSizeRawHeaderCutBandsMods createSizeRawHeaderSuccessLengthMods
 
 Theorem create_raw_bytecode_header_at_cuts_mods:
   contract_inv mods exps ctx ce cx /\
@@ -88,5 +89,33 @@ Theorem create_raw_bytecode_header_at_cuts_mods:
                ptr_buf_ok ce e ptr.ptr_operand G u) /\
       ghost_kept_at lo ce es sa G0 tn0 s0 G tn
 Proof
-  cheat
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all (Q.INST [`later` |-> `msS ++ msL ++ msD ++ later`] create_raw_bytecode_replay_mods) >>
+  strip_tac >- (disj1_tac >> qexists_tac `err` >> simp[]) >>
+  `expr_body_pre_mods mods ce cx env e es` by
+    (irule create_call_operand_body_pre_mods >> conj_tac
+     >- metis_tac[expr_body_pre_mods_inv] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  qpat_assum `!h. valid_horizon _ _ h _ ==> _` (drule_then strip_assume_tac) >>
+  `MEM func ctx.ctx_functions /\ fn_inst_ids_distinct func` by fs[expr_sim_full_code_def] >>
+  `local_ptrs_reserved ce sa` by fs[expr_vv_sim_full_pre_mods_def] >>
+  `local_ptrs_reserved ce a` by
+    metis_tac[local_ptrs_reserved_next_var, compile_expr_ci_mono, ci_mono_def, SND] >>
+  drule_all create_raw_header_cut_bands_mods >> strip_tac >>
+  `(vv_location vv = NONE \/ vv_location vv = SOME LocMemory \/ vv_location vv = SOME LocCode) ==>
+   run_inst_seq (emitted_insts a c) u = OK (l with vs_inst_idx := u.vs_inst_idx)` by
+    (disch_tac >> qpat_assum `_ ==> run_inst_seq (emitted_insts a b) _ = _ /\ _`
+       (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
+  `eval_operand len l = SOME (n2w (LENGTH code))` by
+    (drule_all create_raw_header_success_length_mods >> simp[]) >>
+  disj2_tac >> qexistsl_tac [`p`,`tv`,`code`,`G`,`tn`,`n`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (qpat_x_assum `eval_expr _ e _ = (INL _,_)` mp_tac >> simp[])
+  >- (qpat_x_assum `p.gas_obs = _` mp_tac >> simp[])
+  >- (disch_tac >> qpat_assum `_ ==> run_inst_seq (emitted_insts a b) _ = _ /\ _`
+        (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+  rpt strip_tac >>
+  qpat_assum `!tr. vv_location vv = SOME (slot_loc tr) ==> _`
+    (drule_then strip_assume_tac) >>
+  qexistsl_tac [`buf`,`sm`,`x`,`exit`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
