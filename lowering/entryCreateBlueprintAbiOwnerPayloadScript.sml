@@ -266,20 +266,14 @@ Resume blueprint_agreed_abi_payload[nonempty]:
 QED
 
 Resume blueprint_agreed_abi_payload[calls]:
-  qpat_assum `expr_body_pre ce cx env (Call _ _ _ _) entry`
-    (strip_assume_tac o REWRITE_RULE [expr_body_pre_split_def]) >>
-  drule expr_body_pre_mods_int_calls >> strip_tac >>
-  drule body_inv_main_code >> strip_tac >>
+  drule_all_then assume_tac bodySingletonCallSupportTheory.body_inv_expr_pre_calls >>
   simp[EVERY_MEM] >> qx_gen_tac `call` >> disch_tac >>
   `MEM call (int_calls_expr (Call ann (CreateTarget (CreateFromBlueprint F) hs rof ks)
       (target::amount::((if hs then [salt] else []) ++ off::ctors)) df))` by
     (Cases_on `hs` >> gvs[int_calls_expr_def]) >>
-  `FST call = NONE` by
-    (qpat_assum `EVERY (\p. FST p = NONE) _` (mp_tac o REWRITE_RULE[EVERY_MEM]) >>
-     disch_then (qspec_then `call` mp_tac) >> fs[]) >>
-  qpat_assum `EVERY (\p. ?ts. _) _` (mp_tac o REWRITE_RULE[EVERY_MEM]) >>
-  disch_then (qspec_then `call` mp_tac) >> simp[] >> strip_tac >>
-  Cases_on `call` >> gvs[]
+  qpat_assum `EVERY _ (int_calls_expr (Call _ _ _ _))`
+    (qspec_then `call` mp_tac o SIMP_RULE bool_ss [EVERY_MEM]) >>
+  simp[]
 QED
 
 Resume blueprint_agreed_abi_payload[payload_length]:

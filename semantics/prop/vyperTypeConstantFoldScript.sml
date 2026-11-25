@@ -1339,6 +1339,9 @@ Theorem contract_namespaces_ok_constants_order:
 Proof
   `ALL_DISTINCT (MAP FST (constants_order mods)) <=> ALL_DISTINCT (MAP FST mods)` by (
     irule ALL_DISTINCT_PERM >> irule PERM_MAP >> simp[PERM_constants_order]) >>
+  `IS_SOME (ALOOKUP (constants_order mods) NONE) <=>
+    IS_SOME (ALOOKUP mods NONE)` by
+    simp[IS_SOME_EQ_NOT_NONE, ALOOKUP_NONE, MEM_MAP, MEM_constants_order] >>
   Cases_on `ALL_DISTINCT (MAP FST mods)` >>
   simp[contract_namespaces_ok_def, ALL_DISTINCT_contract_keys_constants_order,
        type_env_all_modules_constants_order,

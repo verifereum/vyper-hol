@@ -2,7 +2,7 @@
 Theory runtimePeakMemoryExpr
 Ancestors
   runtimePeakMemoryCode runtimePeakMemorySourceGate runtimePeakMemoryAbi
-  exprLowering exprLoweringProps supportedExprTraverse
+  exprValueWrapperStateProps exprLowering exprLoweringProps supportedExprTraverse
   compileEnv context builtinSystem builtinCreate emitHelper venomInst list rich_list
 
 fun windows_tac thms =
@@ -674,13 +674,6 @@ Proof
   rpt strip_tac >>
   Cases_on `compile_create_call cfn cenv (CreateFromBlueprint raw) salted rof args st` >>
   gvs[as_stack_val_def] >> metis_tac[]
-QED
-
-Theorem dalloca_windows_state_wrappers:
-  SND (as_stack_val t (op_st:operand # compile_state)) = SND op_st /\
-  SND (as_ptr_val t loc op_st) = SND op_st
-Proof
-  Cases_on `op_st` >> simp[as_stack_val_def, as_ptr_val_def]
 QED
 
 Theorem dalloca_windows_compile_call:

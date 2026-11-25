@@ -69,6 +69,7 @@ Ancestors
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem
   loweringMemCorrect
+  linkedUnitMemory
   asmSymBridge
   asmSymBridgeOwn
   asmDataEnv
@@ -108,3 +109,5 @@ Ancestors
   logBytesRobustSeqPtr logBytesSeqPtr revertReasonPrefixPtr
   reasonCompilerProps reasonLiteralBufferPtr reasonSourceProps
   reasonTypingProps revertReasonSuffixPathPtr
+  (* and/or chains (BoolChain) *)
+  exprSimBoolChain bodyFullBoolChain

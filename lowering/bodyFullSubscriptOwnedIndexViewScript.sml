@@ -95,7 +95,9 @@ Proof
   drule_all_then strip_assume_tac owned_value_memory_guarantees >>
   `evaluate_type (get_tenv cx) (post_value_type ce obj) = SOME (ArrayTV etv bd)` by gvs[] >>
   `expr_body_pre ce cx env obj es` by
-    (drule_all exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base >> simp[]) >>
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+     qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[]) >>
   `value_has_type (ArrayTV etv bd) av` by
     (drule_all_then strip_assume_tac exprSimSourceTheory.expr_body_pre_runtime_typed >>
      gvs[read_result_def, return_def]) >>

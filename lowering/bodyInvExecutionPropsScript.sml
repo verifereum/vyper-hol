@@ -26,7 +26,7 @@ Proof
 QED
 
 Theorem contract_inv_supported_module:
-  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods src = SOME tops ==>
+  contract_inv mods exps ctx cenv cx /\ ALOOKUP mods NONE = SOME tops ==>
   supported_program tops
 Proof
   rw[contract_inv_def] >> res_tac

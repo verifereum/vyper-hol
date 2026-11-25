@@ -42,6 +42,7 @@ Ancestors
   vyperTypeCallGraph vyperTypeCallStackSoundness immutableRelation
   immutableLocationProps exprSimMapDefs supportedNameRoot
   supportedExprForms supportedDecls
+  bodyQualifiedStmtSupport
 Libs
   monadsyntax
 
@@ -255,9 +256,16 @@ Proof
        build_flag_info_mods_singleton, lookup_custom_error_args_mods_singleton] >>
   eq_tac >> strip_tac >> simp[]
   >- (fs[cenv_module_pins_def] >> metis_tac[]) >>
+  conj_tac >- metis_tac[bodyCallSupportTheory.supported_program_module_headers] >>
   rpt conj_tac
   >- (qexistsl [`rpolicy`, `unit`] >> simp[])
-  >- (rpt strip_tac >> gvs[] >> res_tac) >>
+  >- (rpt strip_tac >> gvs[] >>
+      gvs[supported_program_deploy_def, EVERY_MEM, supported_deploy_declaration_def] >>
+      res_tac >> gvs[])
+  >- (rpt strip_tac >> gvs[] >>
+      imp_res_tac supported_program_declaration >>
+      gvs[supported_program_deploy_def, EVERY_MEM, supported_deploy_declaration_def] >>
+      res_tac >> gvs[]) >>
   irule singleton_immutable_section_layout >>
   simp[cenv_module_pins_def, type_env_def]
 QED
@@ -347,8 +355,9 @@ Theorem body_inv_const_name_not_root:
   (!ty. ~supported_storage_value tops nsid ty) /\
   supported_immutable_type tops nsid = NONE
 Proof
+  Cases_on `nsid` >>
   metis_tac[body_inv_contract, body_inv_module, body_inv_main_module,
-    cx_const_name_split_def, body_inv_const_name_not_root_mods]
+    cx_const_name_def, cx_const_name_split_def, body_inv_const_name_not_root_mods]
 QED
 
 (* The compile env's modules are the source's, the main module alone, whose
@@ -398,7 +407,8 @@ Definition stmt_exprs_ok_def:
     alloc_limits_stmt cenv s /\
     (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
        return_buffer_ok cenv) /\
-    ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s
+    ~supported_stmt_expr_exists (const_name_root_mods cenv.ce_modules) s /\
+    qualified_stmt_decls_ok cenv.ce_modules s
 End
 
 Theorem body_inv_const_name_roots:
@@ -512,7 +522,12 @@ Definition body_expr_ok_def:
       e = Attribute ann obj field ==> body_expr_ok cx obj) /\
     (!ann nsid fields.
       e = StructLit ann nsid fields ==>
-      body_exprs_ok cx (MAP SND fields))) /\
+      body_exprs_ok cx (MAP SND fields)) /\
+    (!t c a b.
+      e = IfExp t c a b ==>
+      body_expr_ok cx c /\
+      ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
+       body_expr_ok cx a /\ body_expr_ok cx b))) /\
   body_exprs_ok cx [] = T /\
   body_exprs_ok cx (e::es) =
     (body_expr_ok cx e /\
@@ -584,9 +599,24 @@ Theorem body_structlit_children_ok:
 Proof
   rpt gen_tac >>
   disch_then
-    (mp_tac o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
-      ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
+      CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
   simp[]
+QED
+
+(* A conditional's test is ok, and its arms are when the test evaluates. *)
+Theorem body_ifexp_children_ok:
+  !cx t c a b.
+    body_expr_ok cx (IfExp t c a b) ==>
+    body_expr_ok cx c /\
+    ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
+     body_expr_ok cx a /\ body_expr_ok cx b)
+Proof
+  rpt gen_tac >>
+  disch_then
+    (mp_tac o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
+      CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  simp[] >> metis_tac[]
 QED
 
 (* Only a top-level name and a subscript name a mapping. *)

@@ -23,7 +23,7 @@ Proof
       metis_tac[]) >>
   PairCases_on `x` >> Cases_on `x0` >>
   all_tac >~ [`find_var_decl_by_name _ _ = SOME (StorageVarDecl _ _,_)`]
-  >- (irule toplevel_storage_vv_nil >> metis_tac[]) >>
+  >- (irule toplevel_storage_vv_nil >> fs[expr_body_pre_def] >> metis_tac[]) >>
   fs[expr_body_pre_def, expr_sim_pre_def, expr_sim_inv_def] >>
   metis_tac[TopLevelName_Type_HashMapVarDecl_impossible]
 QED

@@ -1,12 +1,16 @@
-(* An exempt source error starts at an actual compiled TypeBuiltin and
-   retains its normal child's complete postcondition and target landing. *)
+(* The full origin for the singleton source unit. *)
 Theory gasExemptOrigin
 Ancestors
-  gasNormalPrefix typeBuiltinSource selfdestructHalt gasSummary e2eDefs
-  exprLowering exprLoweringProps vyperInterpreter vyperContext vyperState
-  vyperValue vyperAST
+  gasExemptOriginMods sourceExemptMods e2eDefs gasNormalPrefix gasSummary
+  selfdestructHalt supportedProgram exprLowering exprLoweringProps
+  vyperInterpreter vyperContext vyperState vyperValue vyperABI vyperAST
 
-Definition gas_exempt_origin_def:
+Definition gas_exempt_origin_singleton_def:
+  gas_exempt_origin memory tops p source start marks out endpoint <=>
+    gas_exempt_origin_mods memory [(NONE,tops)] p source start marks out endpoint
+End
+
+Theorem gas_exempt_origin_def:
   gas_exempt_origin memory tops (ctx, func) source (es, s0)
     marks (err, ee) t <=>
     (?(H : (bool # bytes32 # type_value) list # num list)
@@ -34,17 +38,18 @@ Definition gas_exempt_origin_def:
       dest_AddressV v = SOME a /\ ~cx.txn.is_static /\
       selfdestruct_overflows cx a ee.accounts /\
       err = RuntimeError "transfer_value recipient overflow")
-End
+Proof
+  simp[gas_exempt_origin_singleton_def, gas_exempt_origin_mods_def,
+       unspecified_behaviour_exempt_mods_singleton, unspecified_behaviour_exempt_def]
+QED
 
 Theorem gas_exempt_origin_from_mem:
   gas_exempt_origin T tops p source start marks out endpoint ==>
   gas_exempt_origin memory tops p source start marks out endpoint
 Proof
-  PairCases_on `p` >> PairCases_on `start` >> PairCases_on `out` >>
-  simp[gas_exempt_origin_def, gasNormalPrefixTheory.gas_value_prefix_def] >>
-  metis_tac[gas_marked_exec_from_mem]
+  simp[gas_exempt_origin_singleton_def,
+       gas_exempt_origin_from_mem_mods]
 QED
-
 
 Theorem gas_exempt_origin_execution:
   gas_exempt_origin memory tops (ctx, func) source (es, s0)
@@ -52,17 +57,8 @@ Theorem gas_exempt_origin_execution:
   gas_marked_exec memory (ctx, func) source (es, s0)
     marks (INR (Error err)) ee (OK t)
 Proof
-  rw[gas_exempt_origin_def] >>
-  fs[gas_value_prefix_def, gas_marked_exec_def] >>
-  gen_tac >> first_x_assum (qspec_then `tail` assume_tac)
-  >- (drule_all (SIMP_RULE (srw_ss()) [type_builtin_args_length_ok_def]
-        (Q.SPECL [`cx`, `ann`, `AbiDecode unwrap`, `ty`, `e`]
-          eval_type_builtin_singleton_error)) >>
-      simp[ignore_bind_def, bind_def]) >>
-  drule eval_selfdestruct_overflow >>
-  disch_then (qspecl_then [`a`, `ann`, `dflt`] mp_tac) >>
-  (impl_tac >- fs[]) >>
-  simp[ignore_bind_def, bind_def]
+  rewrite_tac[gas_exempt_origin_singleton_def] >>
+  MATCH_ACCEPT_TAC gas_exempt_origin_execution_mods
 QED
 
 Theorem gas_exempt_origin_classified:
@@ -70,6 +66,7 @@ Theorem gas_exempt_origin_classified:
     marks (err, ee) t ==>
   unspecified_behaviour_exempt tops err
 Proof
-  rw[gas_exempt_origin_def] >>
-  simp[unspecified_behaviour_exempt_def] >> metis_tac[]
+  rewrite_tac[gas_exempt_origin_singleton_def,
+              GSYM unspecified_behaviour_exempt_mods_singleton] >>
+  MATCH_ACCEPT_TAC gas_exempt_origin_classified_mods
 QED

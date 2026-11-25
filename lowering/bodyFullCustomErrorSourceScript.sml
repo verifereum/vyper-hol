@@ -8,6 +8,7 @@ Ancestors
   bodyStorageCases bodyFullPreds bodySimFull reasonSourceProps stmtSimDefs
   gasContext gasOutcome vyperExprNoControl vyperState stmtSimIfProps exprSimDefs
   compileVyper vyperTypeCallStackSoundness
+  bodyQualifiedStmtSupport
 Libs
   monadsyntax
 
@@ -38,12 +39,16 @@ Theorem custom_error_raise_source:
       expr_body_pre cenv cx env e st
 Proof
   strip_tac >>
-  `custom_error_resolved [(NONE,tops)] (CustomError id pos kw) /\
-   EVERY (supported_pure_expr tops) (custom_error_exprs (CustomError id pos kw))` by
-    fs[Once supported_stmt_def, supported_raise_reason_def] >>
   `get_module_code cx NONE = SOME tops /\ cenv_module_pins tops cenv` by
     fs[body_inv_def] >>
-  PairCases_on `id` >> Cases_on `id0` >>
+  `FST id = NONE` by
+    (PairCases_on `id` >> Cases_on `id0` >>
+     fs[stmt_exprs_ok_def, cenv_module_pins_def,
+        custom_error_resolved_def, ALOOKUP_def]) >>
+  PairCases_on `id` >> gvs[] >>
+  `custom_error_resolved [(NONE,tops)] (CustomError (NONE,id1) pos kw) /\
+   EVERY (supported_pure_expr tops) (custom_error_exprs (CustomError (NONE,id1) pos kw))` by
+    fs[Once supported_stmt_def, supported_raise_reason_def, supported_custom_error_def] >>
   gvs[custom_error_resolved_def, ALOOKUP_def] >>
   rename1 `lookup_custom_error_args_in name tops` >>
   Cases_on `lookup_custom_error_args_in name tops` >> gvs[] >>
@@ -196,6 +201,7 @@ expr_sim_inv cenv cx env (mid with gas_obs := []) /\
   call_evaluation_safe cx (int_calls_stmt (Raise (RaiseCustomError err)))
 Proof
   strip_tac >>
+  Cases_on `err` >>
   qpat_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >> fs[] >>
   `expr_body_pre cenv cx env e (es with gas_obs := xs)` by simp[] >>
   qpat_x_assum `expr_body_pre _ _ _ _ es` kall_tac >>
@@ -230,10 +236,10 @@ Proof
   `~supported_expr_exists (const_name_root cx) e` by
     (drule_all body_inv_stmt_const_name_free >> simp[supported_stmt_expr_exists_def]) >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module, body_inv_def] >>
-  drule supported_expr_body_calls >> strip_tac >>
-  `~is_extcode e` by
-    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-     qexists_tac `cenv` >> fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
+  `well_typed_expr env e` by fs[type_stmt_assert_custom] >>
+  drule_all_then strip_assume_tac bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
+  `alloc_limits_expr cenv e` by fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `~is_extcode e` by metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode] >>
   irule stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       type_stmt_assert_custom, int_calls_stmt_def, body_inv_def] >>

@@ -237,6 +237,19 @@ Definition create_proxy_itinerary_def[local]:
       cuts = [a;b;c;sc] /\ len = Lit 54w
 End
 
+Theorem create_proxy_itinerary_eq:
+  create_proxy_itinerary ce salted args sa cuts value salt buf len <=>
+    ?target_e value_e rest target a b c sc.
+      args = target_e::value_e::rest /\ (salted ==> rest <> []) /\
+      lower_value compile_expr ce (expr_type target_e) target_e sa = (target,a) /\
+      lower_value compile_expr ce (expr_type value_e) value_e a = (value,b) /\
+      compile_create_proxy_buf target b = (buf,c) /\
+      create_itinerary_salt ce (if salted then SOME (HD rest) else NONE) c salt sc /\
+      cuts = [a;b;c;sc] /\ len = Lit 54w
+Proof
+  simp[create_proxy_itinerary_def]
+QED
+
 Definition create_copy_itinerary_def:
   create_copy_itinerary ce salted args sa cuts value salt buf len <=>
     ?target_e value_e rest target a b c code a1 a2 shifted a3 preamble a4 size a5

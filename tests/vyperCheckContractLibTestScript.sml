@@ -1756,6 +1756,62 @@ Proof
   CONV_TAC vyperCheckContractLib.check_contract_conv
 QED
 
+(* Main and exported entry points can reach the same imported state through
+   different call paths. A pure export from that import uses no state. *)
+fun immutable_ownership_modules slot main =
+  ``[(NONE, ^main);
+     (SOME 1,
+      [VariableDecl Private Immutable "imm" ^u256 ^slot;
+       FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT
+         [Assign (BaseTarget (TopLevelNameTarget (SOME 1,"imm"))) ^(uint 7)];
+       FunctionDecl Internal View F F "read" [] [] ^u256
+         [Return (SOME (TopLevelName ^u256 (SOME 1,"imm")))];
+       FunctionDecl External View F F "exported_read" [] [] ^u256
+         [Return (SOME (Call ^u256 (IntCall (SOME 1,"read")) [] NONE))];
+       FunctionDecl External Pure F F "entry" [] [] ^u256
+         [Return (SOME ^(uint 5))]])] : (num option # toplevel list) list``
+
+val main_reads_import =
+  ``[FunctionDecl External View F F "main_read" [] [] ^u256
+       [Return (SOME (Call ^u256 (IntCall (SOME 1,"read")) [] NONE))]]``
+
+val () = check_rejects empty_layouts
+  (immutable_ownership_modules ``NONE : num option`` main_reads_import)
+val () = check_accepts "main reads allocated imported immutable" false
+  empty_layouts (immutable_ownership_modules ``SOME 0 : num option`` main_reads_import)
+
+val constructor_reads_import =
+  ``[FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT
+       [AnnAssign "x" ^u256 (Call ^u256 (IntCall (SOME 1,"read")) [] NONE)]]``
+
+val () = List.app (fn deploy =>
+  check_rejects_in deploy empty_layouts
+    (immutable_ownership_modules ``NONE : num option`` constructor_reads_import))
+  [``F``, ``T``]
+
+val dormant_immutable =
+  immutable_ownership_modules ``NONE : num option`` ``[] : toplevel list``
+val allocated_immutable =
+  immutable_ownership_modules ``SOME 0 : num option`` ``[] : toplevel list``
+
+fun immutable_getter_module slot =
+  ``[(NONE, []); (SOME 1, [VariableDecl (Public F) Immutable "getter" ^u256 ^slot])]
+    : (num option # toplevel list) list``
+
+Theorem exports_ok_imported_immutable_ownership:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address ^dormant_immutable) /\
+  IS_SOME (check_contract T ^empty_layouts ^zero_address ^dormant_immutable) /\
+  exports_ok ^empty_layouts ^zero_address ^dormant_immutable [("entry",1)] /\
+  ~exports_ok ^empty_layouts ^zero_address ^dormant_immutable [("exported_read",1)] /\
+  exports_ok ^empty_layouts ^zero_address ^allocated_immutable [("exported_read",1)] /\
+  ~exports_ok ^empty_layouts ^zero_address
+    ^(immutable_getter_module ``NONE : num option``) [("getter",1)] /\
+  exports_ok ^empty_layouts ^zero_address
+    ^(immutable_getter_module ``SOME 0``) [("getter",1)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
 (* burn(uint256) and collate_propagate_storage(bytes16) share 0x42966c68. *)
 fun selector_main name =
   ``FunctionDecl External Pure F F ^(stringSyntax.fromMLstring name)
@@ -1971,6 +2027,39 @@ Theorem inactive_public_getter_needs_no_lock:
 Proof
   simp[check_toplevel_body_def, function_live_def]
 QED
+
+val imported_lock_entry =
+  ``FunctionDecl External View T F "locked" [] [] NoneT [Pass]``
+val declaration_free_lock_module =
+  ``[(NONE, []); (SOME 1, [^imported_lock_entry])]
+     : (num option # toplevel list) list``
+val unallocated_lock_module =
+  ``[(NONE, []);
+     (SOME 1, [VariableDecl Private Storage "x" ^u256 NONE;
+               ^imported_lock_entry])] : (num option # toplevel list) list``
+val lock_only_layout =
+  ``[((0w : address), ([], [((NONE,"$.nonreentrant_key"),0)]))]
+     : (address # (storage_layout # storage_layout)) list``
+fun immutable_lock_module slot =
+  ``[(NONE, []);
+     (SOME 1, [VariableDecl Private Immutable "x" ^u256 ^slot;
+               ^imported_lock_entry])] : (num option # toplevel list) list``
+val unallocated_immutable_lock_module = immutable_lock_module ``NONE : num option``
+
+Theorem imported_lock_liveness:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address ^unallocated_lock_module) /\
+  ~IS_SOME (check_contract F ^lib_x_layouts ^zero_address ^unallocated_lock_module) /\
+  IS_SOME (check_contract F ^lock_only_layout ^zero_address
+             ^declaration_free_lock_module) /\
+  exports_ok ^lock_only_layout ^zero_address ^declaration_free_lock_module [("locked",1)] /\
+  IS_SOME (check_contract F ^lock_only_layout ^zero_address
+             ^unallocated_immutable_lock_module) /\
+  ~exports_ok ^lock_only_layout ^zero_address ^unallocated_immutable_lock_module [("locked",1)] /\
+  exports_ok ^lock_only_layout ^zero_address ^(immutable_lock_module ``SOME 0``) [("locked",1)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
 (* Each collision has an accepted control differing only in its getter name
    or omitted-default prefix. Check the full checker in both modes. *)
 fun check_selector_decls in_deploy layouts decls =
@@ -2097,7 +2186,82 @@ val () = List.app (fn in_deploy =>
         self_member_hashmap ``Private``, self_member_hashmap ``Public F``])
        [``Internal``, ``External``]))) [false, true]
 
+(* An imported body must keep its source id on calls, even if main
+   declares a function of the same name. *)
+fun import_call_modules source =
+  ``[(NONE,
+       [FunctionDecl Internal Pure F F "helper" [] [] NoneT [Pass];
+        FunctionDecl External Pure F F "entry" [] [] NoneT
+          [Expr (Call NoneT (IntCall (SOME 1,"run")) [] NONE)]]);
+      (SOME 1,
+       [FunctionDecl Internal Pure F F "helper" [] [] NoneT [Pass];
+        FunctionDecl Internal Pure F F "run" [] [] NoneT
+          [Expr (Call NoneT (IntCall (^source,"helper")) [] NONE)]])]
+    : (num option # toplevel list) list``
+
+val () = check_accepts "qualified internal call in import" false
+  empty_layouts (import_call_modules ``SOME 1``)
+val () = check_rejects empty_layouts (import_call_modules ``NONE : num option``)
+
+(* Linked units must have a main entry, even when all storage and code
+   belong to imports. *)
+val () = let
+  val layouts =
+    ``[(^zero_address,
+        ([((SOME 1,"s"),1)] : storage_layout, [] : storage_layout))]``
+  val imports =
+    ``[(SOME 1,
+         [VariableDecl Private Storage "s" ^u256 (SOME 1);
+          FunctionDecl External Nonpayable F F "entry" [] [] ^u256
+            [Return (SOME (Literal ^u256 (IntL 101)))]]);
+       (SOME 2,[VariableDecl Private Storage "s" ^u256 NONE])]
+      : (num option # toplevel list) list``
+  val with_main = ``(NONE, []) :: ^imports``
+in
+  check_rejects_in ``F`` layouts imports;
+  check_rejects_in ``T`` layouts imports;
+  check_accepts "imports with empty main (runtime)" false layouts with_main;
+  check_accepts "imports with empty main (deploy)" true layouts with_main
+end
+
 val () = cv_auto_trans contract_namespaces_ok_def;
+
+(* In the local ABI environment the qualified struct becomes an empty tuple,
+   causing a collision at 0x3a3b86bc. The linked environment instead resolves
+   the struct to a tuple containing uint256. *)
+local
+  fun imported_selectors name =
+    ``[StructDecl "Arg" [("value", ^u256)];
+       FunctionDecl External Pure F F "struct_input_45647"
+         [("a", StructT (SOME 1, "Arg"))] [] NoneT [];
+       ^(selector_main name)]``
+  val colliding = imported_selectors "uint_input_59157"
+  fun linked tls = ``[(NONE, []); (SOME 1, ^tls)]``
+in
+Theorem imported_selectors_collide_only_in_local_type_env:
+  ~ALL_DISTINCT (abi_external_method_ids (type_env ^colliding) ^colliding) /\
+  ALL_DISTINCT
+    (abi_external_method_ids (type_env_all_modules ^(linked colliding)) ^colliding)
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val () = check_rejects empty_layouts (linked colliding)
+val () = check_accepts "distinct imported selectors" false empty_layouts
+  (linked (imported_selectors "uint_input_59158"))
+end
+
+(* The struct keys are distinct pairs. A dot in the main name would make
+   their lowered names coincide. The control changes only that name. *)
+local
+  fun dotted_name_modules name =
+    ``[(NONE, [StructDecl ^(stringSyntax.fromMLstring name) [("value", ^u256)]]);
+       (SOME 1, [StructDecl "foo" [("value", ^u256)]])]``
+in
+val () = check_rejects empty_layouts (dotted_name_modules "1.foo")
+val () = check_accepts "dot-free main and imported declarations" false
+  empty_layouts (dotted_name_modules "foo")
+end
 
 Theorem cross_visibility_self_member_clash_cv:
   ~contract_namespaces_ok F

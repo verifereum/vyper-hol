@@ -172,7 +172,10 @@ Proof
       Cases_on `(?t v. e = Name t v) \/ (?t nid. e = TopLevelName t nid)`
       >- (pop_assum strip_assume_tac >>
           gvs[supported_expr_exists_def] >> strip_tac >> res_tac >> gvs[] >>
-          Cases_on `t` >> gvs[] >> imp_res_tac supported_constant_type_place_root) >>
+          Cases_on `t` >> gvs[] >>
+          Cases_on `FST id = NONE` >> gvs[] >>
+          imp_res_tac supported_constant_type_place_root >>
+          gvs[supported_place_root_def]) >>
       `supported_expr tops e` by (Cases_on `e` >> gvs[]) >>
       metis_tac[supported_expr_no_name_root]) >>
   strip_tac >> drule supported_range_bounds >> strip_tac >>
@@ -238,6 +241,8 @@ Theorem supported_constant_decl_not_root:
   ~supported_storage_value tops id ty' /\
   supported_immutable_type tops id = NONE
 Proof
+  PairCases_on `id` >> Cases_on `id0` >>
+  simp[supported_lookup_other_module] >>
   Cases_on `vis` >> Cases_on `slot` >>
   simp[supported_storage_value_def, supported_immutable_type_def]
 QED

@@ -21,6 +21,7 @@ Theorem target_walk_callee_frames[local]:
   supported_program (cx_tops cx) /\
   IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
   get_module_code cx NONE = SOME (cx_tops cx) /\
+  (!src. get_module_code cx (SOME src) = NONE) /\
   lookup_callable_function cx.in_deploy name (cx_tops cx) =
      SOME (mut,nr,args,dflts,ret,body) /\
   (mut = View \/ mut = Pure) ==>
@@ -30,13 +31,14 @@ Theorem target_walk_callee_frames[local]:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   mp_tac (Q.SPECL [`get_module_code cx`, `cx.in_deploy`, `[(NONE,cx_tops cx)]`,
-    `\c. FST c = NONE /\ IS_SOME (supported_function_decl (cx_tops cx) c Internal)`]
+    `\c. FST c = NONE ==> IS_SOME (supported_function_decl (cx_tops cx) c Internal)`]
     evaluate_read_only_calls) >>
   impl_tac
   >- (mp_tac (Q.INST [`tops` |-> `cx_tops cx`,
         `module_code` |-> `get_module_code cx`, `in_deploy` |-> `cx.in_deploy`]
         target_walk_supported_call_context) >>
-      simp[CONJ_ASSOC] >> metis_tac[]) >>
+      simp[CONJ_ASSOC] >>
+      disch_then (fn th => first_assum (ACCEPT_TAC o MATCH_MP th))) >>
   strip_tac >>
   drule_all target_walk_read_only_syntax >> strip_tac >>
   rpt gen_tac >> conj_tac >> first_assum irule >>
@@ -49,7 +51,8 @@ Theorem target_walk_internal_frame:
   (!vis mut nr rr fn args dflts ret body.
      MEM (FunctionDecl vis mut nr rr fn args dflts ret body) (cx_tops cx) ==>
      function_mutability_ok [(NONE,cx_tops cx)] vis mut nr dflts body) /\
-  get_module_code cx NONE = SOME (cx_tops cx) ==>
+  get_module_code cx NONE = SOME (cx_tops cx) /\
+  (!src. get_module_code cx (SOME src) = NONE) ==>
   !ty name actuals fallback.
     supported_program (cx_tops cx) /\
     IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
@@ -130,7 +133,8 @@ Theorem target_walk_internal_frame_nested:
   (!vis mut nr rr fn args dflts ret body.
      MEM (FunctionDecl vis mut nr rr fn args dflts ret body) (cx_tops cx) ==>
      function_mutability_ok [(NONE,cx_tops cx)] vis mut nr dflts body) /\
-  get_module_code cx NONE = SOME (cx_tops cx) ==>
+  get_module_code cx NONE = SOME (cx_tops cx) /\
+  (!src. get_module_code cx (SOME src) = NONE) ==>
   !ty name actuals fallback.
     supported_program (cx_tops cx) /\
     IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\

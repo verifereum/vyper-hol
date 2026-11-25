@@ -1,5 +1,5 @@
 (* A live array selector returns or aborts without consuming a GAS mark.
-   certifieseep the source equation and a single result and ghost pair, rather than
+   Keep the source equation and a single result and ghost pair, rather than
    committing the witness to a particular outcome constructor. *)
 Theory bodyFullSubscriptLiveLanding
 Ancestors

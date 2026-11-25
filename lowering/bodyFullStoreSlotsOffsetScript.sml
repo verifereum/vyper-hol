@@ -1,6 +1,6 @@
 Theory bodyFullStoreSlotsOffset
 Ancestors
-  immutableOffsetPtr fragGasCopyLoop typedCopyOriginPtrBase
+  immutableOffsetPtr fragGasCopyLoop fragGasCopySeqLiftProps typedCopyOriginPtrBase
   context compileEnv exprSimCopy fragGasOriginPtr venomExecSemantics
   ptrDiscipline venomState words venomInst fragExec instMemFrontier
   logTopicScalarPtr typedCopyPtr fragGasSeqPtr fragExecMem

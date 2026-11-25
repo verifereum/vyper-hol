@@ -7,6 +7,7 @@ Ancestors
   abiDecodeMemReentry abiDecodePtrReentry abiDecodePtrReentryObservations
   abiDecoderReentry abiDecoderVarSequence abiDecoderVarExtend abiDecodePtrMemberFrame
   fragGasCopyLoop fragGasOriginPtr bodyFullPathHistory calldataTypedRobustPtr
+  fragGasCopySeqLiftProps
   stateRelProj exprLoweringProps emitHelperProps compileEnv freshWrites
   bodyPtrDefs ptrDiscipline loweringStateRelDefs venomState venomInst
   contractABI vyperTypeABI list words arithmetic finite_map pred_set

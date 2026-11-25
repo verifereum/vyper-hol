@@ -117,7 +117,10 @@ Proof
     fs[Abbr `H0`, storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
     (drule_then (map_every assume_tac o CONJUNCTS)) >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `expr_body_pre cenv cx env e1 es` by
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+     qpat_assum `eval_expr cx e1 _ = (INL _,_)` (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env e1 (es with gas_obs := gs1)` by simp[] >>
   drule_all_then strip_assume_tac expr_body_pre_runtime_typed >>
   `?etv. evaluate_type (get_tenv cx) et = SOME etv /\

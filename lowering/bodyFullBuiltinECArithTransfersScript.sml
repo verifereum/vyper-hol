@@ -7,7 +7,7 @@ Ancestors
   ptrSafetyTransport ptrDiscipline fragExecPtr ghostPcTransportPtr instIdxIndep
   emitHelper compileEnv exprLoweringProps
 
-Theorem ec_scalar_store_origin_ptr_path:
+Theorem ec_scalar_store_origin_ptr_path_with_raw_endpoint:
   (do dst <- emit_op ADD [Var bp; Lit (n2w pd)];
       emit_void MSTORE [dst; scalar] od) sa = ((),sb) /\
   lookup_var bp s = SOME bw /\ eval_operand scalar s = SOME sw /\
@@ -22,6 +22,8 @@ Theorem ec_scalar_store_origin_ptr_path:
   ?t G' tn'.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,G',tn')) /\
+    (?r. run_inst_seq (emitted_insts sa sb) s = OK r /\
+         t = r with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
     t.vs_memory = (mstore (w2n bw + pd) sw s).vs_memory /\
     tn'.t_mem = tn.t_mem DIFF {i | w2n bw + pd <= i /\ i < w2n bw + pd + 32} /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
@@ -129,6 +131,36 @@ Proof
        (mp_tac o Q.AP_TERM `\z. z.vs_inst_idx`) >> simp[]) >>
   qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s`
     (mp_tac o Q.AP_TERM `\z. z with vs_inst_idx := s.vs_inst_idx`) >> simp[]
+QED
+
+Theorem ec_scalar_store_origin_ptr_path:
+  (do dst <- emit_op ADD [Var bp; Lit (n2w pd)];
+      emit_void MSTORE [dst; scalar] od) sa = ((),sb) /\
+  lookup_var bp s = SOME bw /\ eval_operand scalar s = SOME sw /\
+  ptr_covers G tn bp s nd /\ op_taint tn scalar = {} /\
+  not_fresh_at sa bp /\
+  (!x. scalar = Var x ==> not_fresh_at sa x) /\
+  pd + 32 <= nd /\ w2n bw + nd < dimword (:256) /\
+  w2n bw + nd <= s.vs_alloca_next /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t G' tn'.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    t.vs_memory = (mstore (w2n bw + pd) sw s).vs_memory /\
+    tn'.t_mem = tn.t_mem DIFF {i | w2n bw + pd <= i /\ i < w2n bw + pd + 32} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sa sb) /\
+    t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+             vs_inst_idx := s.vs_inst_idx|> = s
+Proof
+  strip_tac >> drule_all ec_scalar_store_origin_ptr_path_with_raw_endpoint >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >> asm_rewrite_tac[]
 QED
 
 Theorem ec_point_word_load_origin_ptr_path:

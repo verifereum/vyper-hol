@@ -11,7 +11,7 @@ Ancestors
   stmtSimDeclStore vyperTypeEvalSoundness vyperTypeInvariants exprReasonOperand
   compileVyper supportedTypes supportedDecls stmtSimAssignAttr memoryLocalRhsProps
   exprOpenMain gasContext exprLowering vyperCompiler
-  bodyInvCodeProps exprBodyPreProps linkedStorageMetadataProps alist
+  bodyTypedTargetScope bodyInvCodeProps exprBodyPreProps linkedStorageMetadataProps alist
   bodyLoweringTargetProps vyperEvalOutcomeSuffix vyperTypeExprResult
   option tupleTargetStoreProps vyperTypeEnv accountsRelProps
   exprSimUnwrap exprSimFieldLayout exprSimAttributeFields vyperPlaceResultTyping
@@ -204,7 +204,10 @@ Theorem body_tuple_target_field_aligned[local]:
     (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) ty tv
 Proof
   Cases_on `nsid` >> rename1 `(src, id)` >> rpt strip_tac >>
-  drule supported_storage_field_write_decl >> strip_tac >> gvs[] >>
+  `src = NONE` by
+    metis_tac[body_inv_toplevel_target_main,
+      vyperTypeEnvTheory.type_place_target_AttributeTarget, optionTheory.IS_SOME_EXISTS] >>
+  drule_all supported_storage_field_write_decl >> strip_tac >> gvs[] >>
   drule_then assume_tac body_inv_contract >>
   `!v m d i. MEM (VariableDecl v m id d i) tops ==>
      cenv.ce_module_var_type (NONE,id) = SOME d /\
@@ -272,8 +275,9 @@ Proof
       metis_tac[body_tuple_target_local_room])
   >- (irule body_tuple_target_local_layout >>
       simp[well_typed_atarget_def, well_typed_target_def] >> metis_tac[])
-  >- (Cases_on `nsid` >>
-      drule_then strip_assume_tac supported_scalar_target_decl >> gvs[] >>
+  >- (Cases_on `nsid` >> rename1 `(src,id)` >>
+      `src = NONE` by metis_tac[body_inv_toplevel_target_main, optionTheory.IS_SOME_EXISTS] >>
+      gvs[] >>
       drule_then strip_assume_tac body_inv_main_code >>
       drule_then assume_tac body_inv_contract >>
       fs[expr_sim_inv_split_def] >>

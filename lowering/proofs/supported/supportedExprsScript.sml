@@ -37,7 +37,7 @@ Definition supported_pure_expr_def:
     (supported_pure_expr tops c /\
      supported_pure_expr tops a /\ supported_pure_expr tops b) /\
   supported_pure_expr tops (StructLit ty id fields) =
-    (supported_main_nsid id /\ supported_struct_elements tops ty fields /\
+    (supported_struct_elements tops ty fields /\
      supported_pure_fields tops fields) /\
   supported_pure_expr tops (Subscript ty base key) =
     (supported_place_type tops ty /\ supported_subscript_place tops base /\
@@ -55,7 +55,8 @@ Definition supported_pure_expr_def:
     EVERY (supported_pure_expr tops) (target_indices target) /\
   supported_pure_expr tops (Call ty target es default) =
     ((case target of
-        IntCall id => IS_SOME (supported_function_decl tops id Internal)
+        IntCall id => FST id <> NONE \/
+                      IS_SOME (supported_function_decl tops id Internal)
       | _ => T) /\
      supported_pure_exprs tops es /\
      (case default of NONE => T | SOME d => supported_pure_expr tops d)) /\
@@ -87,7 +88,7 @@ End
 
 Definition supported_effect_expr_def:
   supported_effect_expr tops (Call ty (IntCall id) args default) =
-    (IS_SOME (supported_function_decl tops id Internal) /\
+    ((FST id <> NONE \/ IS_SOME (supported_function_decl tops id Internal)) /\
      supported_pure_exprs tops args /\
      (case default of NONE => T | SOME d => supported_pure_expr tops d)) /\
   (* Operands: target :: positional args ++ keyword operands in source
@@ -153,7 +154,7 @@ Definition supported_effect_free_expr_def:
     (supported_effect_free_expr tops c /\
      supported_effect_free_expr tops a /\ supported_effect_free_expr tops b) /\
   supported_effect_free_expr tops (StructLit ty id fields) =
-    (supported_main_nsid id /\ supported_struct_elements tops ty fields /\
+    (supported_struct_elements tops ty fields /\
      supported_effect_free_fields tops fields) /\
   supported_effect_free_expr tops (Subscript ty base key) =
     (supported_place_type tops ty /\ supported_subscript_place tops base /\

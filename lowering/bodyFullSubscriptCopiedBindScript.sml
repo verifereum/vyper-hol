@@ -2,7 +2,7 @@
 Theory bodyFullSubscriptCopiedBind
 Ancestors
   bodyFullShadowBodyInv
-  bodyFullPreds bodySimFull bodyFullShared bodyFullSubscriptCapturedPlace
+  bodyFullPreds bodyFullSimProjection bodySimFull bodyFullShared bodyFullSubscriptCapturedPlace
   gasOutcomeFullCompose gasOutcomeFullGuarded gasShadowCompile
   gasShadowCompileConvert gasShadowCompileStmtHelpers
   exprSimSubscriptArray exprSimSubscriptArraySource
@@ -56,7 +56,7 @@ Proof
   simp[ci_mono_compile_array_subscript, ci_mono_compile_ptr_load]
 QED
 
-Theorem copied_array_cuts[local]:
+Theorem copied_array_cuts:
   compile_expr ce ty (Subscript ann obj idx) sa = (vv,sb) /\
   compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr (Subscript ann obj idx)) sha = (vv,shb) /\
   gas_shadow_state sa sha /\
@@ -306,9 +306,14 @@ Theorem subscript_copied_bind_caller_frames:
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty (Subscript ann obj idx) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  `~array_slot_base ce obj` by
+    (drule exprSimSubscriptArraySourceTheory.copies_subscript_base_not_array_slot_base >> simp[]) >>
+  `expr_body_pre ce cx env obj es` by
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base) >>
+     simp[]) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty obj es` by
-    (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule_all copied_array_cuts >> strip_tac >>
   `cs_extends sm sb /\ cs_extends sc sb /\
@@ -394,8 +399,7 @@ Resume subscript_copied_bind_caller_frames[base_success]:
          (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
      drule_all expr_body_pre_array_subscript_index_after_base >> simp[]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty idx mid` by
-    (qpat_x_assum `body_expr_full_ok cx idx` mp_tac >>
-     simp[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   `sa.cs_next_var <= sc.cs_next_var /\ sc.cs_next_var <= si.cs_next_var` by
     (mp_tac (Q.SPECL [`ce`,`ty`,`obj`,`sa`] (cj 1 compile_expr_ci_mono)) >>
      mp_tac (Q.SPECL [`ce`,`T`,`bvv`,`sm`] ci_mono_compile_snapshot_vv) >>

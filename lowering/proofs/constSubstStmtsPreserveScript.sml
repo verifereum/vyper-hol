@@ -2,7 +2,7 @@
    internal calls when every inlined constant is free of them. *)
 Theory constSubstStmtsPreserve
 Ancestors
-  supportedNameRoot constSubstCorrect constSubstStmts constSubst supportedProgram supportedStmts
+  supportedNameRoot supportedIteratorProps constSubstCorrect constSubstStmts constSubst supportedProgram supportedStmts
   supportedTargets supportedStmtTraverse supportedExprTraverse supportedExprs
   supportedExprForms supportedDecls vyperTypeContract vyperTypeCallGraph vyperAST
   exprSimHypsDefs exprLowering compileVyper vyperTypeSystem vyperTypeEnv
@@ -818,6 +818,17 @@ Proof
   metis_tac[vyperTypeContractStaticMapsTheory.check_contract_bare_global_toplevel_vtype]
 QED
 
+Triviality const_subst_qualified_place_root:
+  !e. qualified_place_root e ==> qualified_place_root (subst_consts_expr E e)
+Proof
+  measureInduct_on `expr_size e` >> Cases_on `e` >>
+  simp[qualified_place_root_def, subst_consts_expr_def, expr_size_def] >>
+  rpt strip_tac
+  >~ [`TopLevelName _ _`] >- (PairCases_on `p` >> Cases_on `p0` >>
+                              gvs[subst_consts_expr_def, qualified_place_root_def]) >>
+  first_x_assum irule >> simp[expr_size_def]
+QED
+
 Theorem const_subst_supported_pure[local]:
   (!E e.
     const_subst_supported_replacements tops E /\
@@ -861,7 +872,8 @@ Proof
            supported_pure_expr_def, const_subst_supported_replacements_def] >>
        res_tac >> gvs[] >> NO_TAC) >>
   metis_tac[const_subst_preserves_expr_type, const_subst_supported_builtin_form,
-            const_subst_supported_type_builtin_form, const_subst_supported_struct_elements]
+            const_subst_supported_type_builtin_form, const_subst_supported_struct_elements,
+            const_subst_qualified_place_root]
 QED
 
 Theorem const_subst_supported_expr[local]:
@@ -956,14 +968,14 @@ QED
 Theorem const_subst_supported_custom_error[local]:
   const_subst_supported_replacements tops E /\
   ~supported_exprs_exists (const_subst_changes_type E) (custom_error_exprs err) /\
-  custom_error_resolved [(NONE,tops)] err /\
+  supported_custom_error tops err /\
   EVERY (supported_pure_expr tops) (custom_error_exprs err) ==>
-  custom_error_resolved [(NONE,tops)] (subst_consts_error E err) /\
+  supported_custom_error tops (subst_consts_error E err) /\
   EVERY (supported_pure_expr tops) (custom_error_exprs (subst_consts_error E err))
 Proof
   strip_tac >> conj_tac
   >- (Cases_on `err` >> PairCases_on `p` >> Cases_on `p0` >>
-      fs[custom_error_resolved_def, subst_consts_error_def,
+      fs[supported_custom_error_def, custom_error_resolved_def, subst_consts_error_def,
          order_custom_error_args_subst] >>
       Cases_on `lookup_custom_error_args_in p1 tops` >> fs[] >>
       Cases_on `order_custom_error_args x (CustomError (NONE,p1) l l0)` >> fs[] >>
@@ -995,18 +1007,6 @@ Proof
   metis_tac[const_subst_supported_string_reason, const_subst_supported_custom_error]
 QED
 
-Theorem const_subst_supported_array_form[local]:
-  (!t name. e <> Name t name) /\ (!t id. e <> TopLevelName t id) ==>
-  (supported_iterator tops ty (Array e) n <=>
-   supported_expr tops e /\
-   (!t fid args drv. e = Call t (IntCall fid) args drv ==>
-      ?m nr rr ps ds b.
-        supported_function_decl tops fid Internal = SOME (m,nr,rr,ps,ds,t,b)) /\
-   ?bd. expr_type e = ArrayT ty bd /\ bound_length bd <= n)
-Proof
-  Cases_on `e` >> simp[supported_iterator_def]
-QED
-
 Theorem const_subst_supported_array[local]:
   const_subst_supported_replacements tops E /\
   ~supported_expr_exists (const_subst_changes_type E) e /\
@@ -1020,7 +1020,7 @@ Proof
       gvs[subst_consts_expr_def] >> Cases_on `ALOOKUP E id1` >> gvs[] >>
       fs[const_subst_supported_replacements_def] >>
       first_x_assum drule >> strip_tac >>
-      simp[const_subst_supported_array_form, supported_expr_def] >>
+      simp[supported_non_name_array_iterator, supported_expr_def] >>
       drule const_subst_preserves_expr_type >>
       Cases_on `t` >> simp[supported_iterator_def, expr_type_def] >>
       rpt strip_tac >> gvs[supported_iterator_def, subst_consts_expr_def] >>
@@ -1030,7 +1030,7 @@ Proof
    (!t fid args drv. subst_consts_expr E e = Call t (IntCall fid) args drv ==>
       ?args' drv'. e = Call t (IntCall fid) args' drv')` by
      (Cases_on `e` >> gvs[subst_consts_expr_def]) >>
-  fs[const_subst_supported_array_form] >>
+  fs[supported_non_name_array_iterator] >>
   metis_tac[const_subst_preserves_expr_type, const_subst_supported_expr]
 QED
 

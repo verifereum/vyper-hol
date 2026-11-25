@@ -2,8 +2,10 @@
 Theory runtimePeakMemoryExprDispatch
 Ancestors
   runtimePeakMemoryExpr runtimePeakMemoryArity runtimePeakMemorySourceGate runtimePeakMemoryBuiltins
+  exprValueWrapperStateProps
   runtimePeakMemoryAbi runtimePeakMemoryCode exprLowering exprCallBounds
-  exprCallbackContracts exprSimHypsDefs exprCallbackSupport loweringShapeProps supportedExprTraverse vyperAST
+  exprCallbackContracts exprSimHypsDefs exprCallbackSupport loweringShapeProps
+  boolChainOperandsSupported supportedExprTraverse vyperAST
   builtinSimple compileEnv context emitHelper venomInst list arithmetic
 
 fun windows_tac thms =
@@ -67,11 +69,34 @@ Theorem dalloca_windows_builtin_dispatch_body:
   (!ct e. MEM e args /\ is_extcode e ==>
     preserves_dalloca_windows window (cfn cenv ct (extcode_addr_expr e))) /\
   (!ann el_ty bnd elems. MEM (Builtin ann (MakeArray el_ty bnd) elems) args ==>
-    preserves_dalloca_windows window (compile_multi_exprs cfn cenv elems)) ==>
+    preserves_dalloca_windows window (compile_multi_exprs cfn cenv elems)) /\
+  (!d n e. bi = BoolChain d n /\ MEM e (bool_chain_operands d (n - 1) (HD args)) ==>
+    preserves_dalloca_windows window (cfn cenv (BaseT BoolT) e)) ==>
   preserves_dalloca_windows window (compile_builtin_dispatch_body cfn cenv rt ty bi args)
 Proof
+  `!es d result exit_lbl.
+     (!e. MEM e es ==> preserves_dalloca_windows window (cfn cenv (BaseT BoolT) e)) ==>
+     preserves_dalloca_windows window (compile_bool_chain_ops cfn cenv d result exit_lbl es)` by
+    (Induct_on `es` >- simp[compile_bool_chain_ops_def, dalloca_windows_return] >>
+     Cases_on `es` >> simp[] >> rpt strip_tac >>
+     simp[compile_bool_chain_ops_def] >>
+     windows_tac [dalloca_windows_lower_value] >>
+     first_x_assum irule >> rpt strip_tac >> first_assum irule >> gvs[MEM]) >>
+  Cases_on `bi = NamedConst`
+  >- (gvs[dalloca_windows_result_state, compile_builtin_dispatch_body_def, builtin_arity_def,
+          dalloca_windows_state_wrappers, LET_THM, pairTheory.UNCURRY] >>
+      rpt strip_tac >> Cases_on `is_word_type rt` >>
+      finish_window_state []) >>
+  Cases_on `?d n. bi = BoolChain d n`
+  >- (gvs[] >> rpt strip_tac >>
+      `preserves_dalloca_windows window
+         (compile_bool_chain_ops cfn cenv d result exit_lbl
+            (bool_chain_operands d (n - 1) (HD args)))` by metis_tac[] >>
+      simp[dalloca_windows_result_state, compile_builtin_dispatch_body_def, LET_THM,
+           pairTheory.UNCURRY] >>
+      finish_window_state []) >>
   Cases_on `bi` >>
-  simp[dalloca_windows_result_state, compile_builtin_dispatch_body_def, builtin_arity_def,
+  gvs[dalloca_windows_result_state, compile_builtin_dispatch_body_def, builtin_arity_def,
        dalloca_windows_state_wrappers, LET_THM, pairTheory.UNCURRY] >>
   rpt strip_tac >>
   TRY (`MEM (HD args) args` by simp[builtin_operand_members]) >>
@@ -318,6 +343,19 @@ Proof
   `!e ct. MEM e args ==> preserves_dalloca_windows window (cfn cenv ct e)` by
     metis_tac[supported_exprs_exists_every, EXISTS_MEM] >>
   irule dalloca_windows_builtin_dispatch_body >> simp[] >> conj_tac
+  >- (rpt strip_tac >> gvs[builtin_arity_def] >>
+      `MEM (HD args) args` by simp[builtin_operand_members] >>
+      qpat_assum `!e ct. (_ /\ _) ==> preserves_dalloca_windows window (cfn cenv ct e)` irule >>
+      `!p. ~supported_exprs_exists p args ==> ~supported_expr_exists p e` by
+        (gen_tac >> disch_tac >>
+         `~supported_expr_exists p (HD args)` by
+           metis_tac[supported_exprs_exists_every, EXISTS_MEM] >>
+         `EVERY (\child. ~supported_expr_exists p child)
+            (bool_chain_operands d (n - 1) (HD args))` by
+           (irule bool_chain_operands_supported >> simp[]) >>
+         fs[EVERY_MEM]) >>
+      metis_tac[]) >>
+  conj_tac
   >- (rpt strip_tac >>
       qpat_assum `!e ct. (_ /\ _) ==> preserves_dalloca_windows window (cfn cenv ct e)` irule >>
       metis_tac[expr_shape_extcode_addr, supported_exprs_exists_every, EXISTS_MEM]) >>

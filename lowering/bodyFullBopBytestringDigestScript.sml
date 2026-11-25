@@ -1,7 +1,7 @@
 Theory bodyFullBopBytestringDigest
 Ancestors
   exprBopSimProps bodyPtrBopScalarCompile bodyPtrBopScalarSeq
-  fragGasCopyLoop fragGasSeqPtr fragExecMem bodyPtrIfExpBytesFrame
+  fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeqPtr fragExecMem bodyPtrIfExpBytesFrame
   ptrDiscipline emitHelper emitHelperProps exprLoweringProps exprLowering compileEnv
   venomInst venomState finite_map pred_set list loweringStateRelDefs
   unitTransformDefs memSafeRun contextCodegenRel codegenRel

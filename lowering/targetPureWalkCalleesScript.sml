@@ -49,9 +49,9 @@ Theorem target_walk_read_only_syntax:
   (mut = View \/ mut = Pure) ==>
   EVERY (expr_mutability_ok [(NONE,tops)] View) dflts /\
   stmts_mutability_ok [(NONE,tops)] View body /\
-  EVERY (\c. FST c = NONE /\
+  EVERY (\c. FST c = NONE ==>
              IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs dflts) /\
-  EVERY (\c. FST c = NONE /\
+  EVERY (\c. FST c = NONE ==>
              IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts body)
 Proof
   strip_tac >> drule_all supported_internal_callable >> strip_tac >>
@@ -90,9 +90,10 @@ Theorem target_walk_supported_call_context:
   (!vis mut nr rr fn args dflts ret body.
      MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops ==>
      function_mutability_ok [(NONE,tops)] vis mut nr dflts body) /\
-  supported_program tops /\ module_code NONE = SOME tops ==>
-  !src fn ts. FST (src,fn) = NONE /\
-     IS_SOME (supported_function_decl tops (src,fn) Internal) /\
+  supported_program tops /\ module_code NONE = SOME tops /\
+  (!src. module_code (SOME src) = NONE) ==>
+  !src fn ts. (src = NONE ==>
+     IS_SOME (supported_function_decl tops (src,fn) Internal)) /\
      module_code src = SOME ts ==>
     ALOOKUP [(NONE,tops)] src = SOME ts /\
     lookup_callable_function in_deploy fn ts = lookup_callable_function F fn ts /\
@@ -101,12 +102,12 @@ Theorem target_walk_supported_call_context:
        (mut = View \/ mut = Pure) ==>
        EVERY (expr_mutability_ok [(NONE,tops)] View) dflts /\
        stmts_mutability_ok [(NONE,tops)] View body /\
-       EVERY (\c. FST c = NONE /\
+       EVERY (\c. FST c = NONE ==>
                   IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs dflts) /\
-       EVERY (\c. FST c = NONE /\
+       EVERY (\c. FST c = NONE ==>
                   IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts body))
 Proof
-  strip_tac >> rpt gen_tac >> simp[] >> strip_tac >> gvs[] >>
+  strip_tac >> rpt gen_tac >> Cases_on `src` >> simp[] >> strip_tac >> gvs[] >>
   conj_tac
   >- (Cases_on `supported_function_decl tops (NONE,fn) Internal` >>
       gvs[] >> PairCases_on `x` >>

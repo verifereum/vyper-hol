@@ -6,7 +6,8 @@ Ancestors
   bodySim allocLimits compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness
   gasOutcome gasContext stmtSimDefs supportedStmts supportedStmtTraverse
   vyperInterpreter vyperState vyperTypeSystem vyperAST list
-  bodyInvCodeProps bodyInvSplit bodyInvMetadataProps exprSimHypsDefs compileUnit alist
+  bodyInvCodeProps bodyInvSplit bodyInvMetadataProps exprSimHypsDefs exprBodyPreProps
+  bodySingletonCallSupport compileUnit alist
 
 Theorem type_stmt_assert_reason:
   type_stmt env ret_ty (Assert e (AssertReason r)) =
@@ -107,9 +108,8 @@ Proof
     (drule_then assume_tac contract_inv_cenv_modules >>
      drule stmt_exprs_ok_module_const_name_free >>
      simp[supported_stmt_expr_exists_def]) >>
-  `~is_extcode e` by
-    (irule allocLimitsPropsTheory.alloc_limits_expr_not_extcode >>
-     qexists_tac `cenv` >> fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
+  `alloc_limits_expr cenv e` by fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `~is_extcode e` by metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode] >>
   mp_tac (Q.INST [`calls` |-> `int_calls_assert_reason (AssertReason r)`]
     stmt_expr_body_pre_main_mods) >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
@@ -144,5 +144,6 @@ Proof
      supported_stmt_expr_exists_def] >>
   `supported_expr tops e` by
     (fs[supported_stmt_assert_reason] >> simp[supportedExprsTheory.supported_expr_def]) >>
-  metis_tac[supported_expr_body_calls]
+  metis_tac[bodySingletonCallSupportTheory.body_inv_typed_calls_main,
+            expr_body_pre_mods_well_typed]
 QED

@@ -4,6 +4,7 @@ Theory forStorageLiteralCapture
 Ancestors
   bodyInvCodeProps moduleVariableKeyProps
   bodyStorageMetadata
+  bodyTypedTargetScope vyperTypeSystem
   bodySim exprBodyPreProps exprSimHypsDefs exprSimTopLevelProps stateRelProj
   gasOutcomeFull whitelistVisibility supportedExprForms
   vyperTypeEnv vyperTypeInvariants vyperTypeGlobalLookupSoundness vyperTypeValues
@@ -31,18 +32,11 @@ Proof
 QED
 
 Theorem literal_storage_decl[local]:
-  body_inv tops ctx c cx /\ supported_storage_value tops nid ty ==>
+  body_inv tops ctx c cx /\ FST nid = NONE /\ supported_storage_value tops nid ty ==>
   ?tr name. nid = (NONE,name) /\ get_module_code cx NONE = SOME tops /\
     find_var_decl_by_name name tops = SOME (StorageVarDecl tr ty,name)
 Proof
-  strip_tac >>
-  `?name. nid = (NONE,name)` by
-    (PairCases_on `nid` >>
-     Cases_on `supported_variable_decl tops (nid0,nid1)` >>
-     gvs[supported_storage_value_def] >>
-     rename1 `supported_variable_decl _ _ = SOME info` >>
-     PairCases_on `info` >> drule_then (ACCEPT_TAC o CONJUNCT1)
-       supported_variable_decl_mem) >>
+  PairCases_on `nid` >> strip_tac >>
   gvs[] >> drule_then assume_tac body_inv_contract >>
   drule_all_then strip_assume_tac (SIMP_RULE (srw_ss()) [alistTheory.ALOOKUP_def]
     (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`]
@@ -65,8 +59,11 @@ Theorem for_storage_literal_capture:
     MEM (StorageRoot tr off (ArrayTV tyv bd)) em.storage_trace /\
     storage_subregion (ArrayTV tyv bd) [] 0 (ArrayTV tyv bd)
 Proof
-  strip_tac >> drule_all_then strip_assume_tac literal_storage_decl >> gvs[] >>
+  strip_tac >>
   drule_then strip_assume_tac expr_body_pre_static_facts >>
+  `FST nid = NONE` by
+    (PairCases_on `nid` >> gvs[] >> metis_tac[body_inv_toplevel_read_main]) >>
+  drule_all_then strip_assume_tac literal_storage_decl >> gvs[] >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
   drule_all_then strip_assume_tac TopLevelName_toplevel_vtypes_Type >>
   `FLOOKUP env.bare_globals (NONE,name) = NONE` by

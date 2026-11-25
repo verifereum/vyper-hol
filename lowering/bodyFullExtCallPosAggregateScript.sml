@@ -11,7 +11,7 @@ Ancestors
   vyperStorageFootprint vyperState stmtSimProps exprSimDefs context exprSimMemDefs
   exprSimHypsDefs abiEncodeArgsCase abiEncodeArgsSim abiEncodeMaterialize aggregateEvaluatedLayout
   valueCopyBytes exprReasonOperand bodyFullAssign vyperEvalExprPreservesScopesDom
-  vyperTypeExprSoundness vyperTypeInvariants exprSimConcatResult
+  vyperTypeExprSoundness vyperTypeInvariants exprSimConcatResult exprNamedConstResult
   exprSimSend[qualified,ignore_grammar] abiBuiltinDispatchCorrect
   list[qualified,ignore_grammar]
 
@@ -53,7 +53,14 @@ Proof
          rename1 `BytesT bound` >> Cases_on `bound` >>
          simp[lowered_value_type_def])
      >~ [`Builtin ann bt args`]
-     >- (Cases_on `bt` >> simp[lowered_value_type_def])
+     >- (Cases_on `bt` >> simp[lowered_value_type_def] >>
+         Cases_on `is_word_type ann`
+         >- (`is_word_type (expr_type (Builtin ann NamedConst args))` by
+               simp[vyperASTTheory.expr_type_def] >>
+             irule vyperTypeArgFitsTheory.arg_type_fits_prim_word >>
+             simp[membership_element_word_boundary] >>
+             irule expr_body_pre_lowered_fits >> metis_tac[]) >>
+         drule_all named_const_nonword_compile_shape >> simp[])
      >~ [`TypeBuiltin ann tb tys args`]
      >- (Cases_on `tb` >> simp[lowered_value_type_def]) >>
      rename1 `Call ann tgt args dr` >> Cases_on `tgt` >>
@@ -190,6 +197,110 @@ Proof
      (gvs[ptr_vv_ok_def, ptr_val_ok_def] >> metis_tac[snapshot_bytes_ptr_retag])) >>
   gvs[vv_store_bound_def]
 QED
+
+(* The retained row is a property of the chosen child endpoint. It is
+   shared by the full outcome and the first-exit scoped outcome. *)
+Theorem extcall_pos_aggregate_read_at:
+  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
+  compile_expr cenv (expr_type e) e sa = (vv,sb) /\
+  sv = ext_call_arg_value (lowered_value_type cenv e) vv /\
+  ~is_word_type (vv_type sv) /\
+  eval_expr cx e (es with gas_obs := obs) = (INL tv,ee) /\
+  read_result cx tv ee = (INL v,ee) /\
+  valid_horizon cx (es with gas_obs := obs) H ee.storage_trace /\
+  vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
+  vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv t /\
+  ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn t /\
+  (!tag op. vv = StackValue tag op /\ ~is_word_type (post_value_type cenv e) ==>
+    ptr_buf_ok cenv e op G t) /\
+  (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
+    ptr_buf_ok cenv e p.ptr_operand G t) /\
+  (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+    !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+      eval_operand (vv_operand vv) t = SOME w ==>
+      w2n w + type_memory_size rt <= lo /\
+      (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
+        val_in_memory rt v (w2n w) mem)) ==>
+  ((?tag op0. sv = StackValue tag op0) \/
+   (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
+     ~is_word_type (lowered_value_type cenv e) /\ p.ptr_location = LocMemory) \/
+   (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
+     ~is_word_type (lowered_value_type cenv e) /\ p.ptr_location <> LocMemory /\
+     lowered_value_type cenv e = expr_type e /\ sv = vv)) /\
+  (?raw. read_result cx raw ee = (INL v,ee) /\
+    vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
+    vv_at cenv cx (lowered_value_type cenv e) sa sb ee raw sv t /\
+    ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G tn t /\
+    vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee raw sv t) /\
+  vv_storage_live H cx sv ee t /\
+  (!tag op. sv = StackValue tag op /\ ~is_word_type (lowered_value_type cenv e) ==>
+    ptr_buf_ok cenv e op G t) /\
+  (!tag p. sv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
+    ptr_buf_ok cenv e p.ptr_operand G t) /\
+  (cenv.ce_is_ctor /\ vv_location sv = SOME LocCode ==>
+    !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
+      eval_operand (vv_operand sv) t = SOME w ==>
+      w2n w + type_memory_size rt <= lo /\
+      (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
+        val_in_memory rt v (w2n w) mem))
+Proof
+  strip_tac >>
+  `vv_storage_live H cx vv ee t` by
+    (`functions_well_typed cx` by fs[expr_body_pre_def, expr_sim_inv_def] >>
+     irule body_assign_rhs_storage_live >> simp[] >>
+     qexistsl [`cenv`,`ctx`,`e`,`env`,`es with gas_obs := obs`,
+               `func`,`tv`,`s0`,`sa`,`sb`,`tops`] >>
+     `expr_body_pre cenv cx env e (es with gas_obs := obs)` by simp[] >>
+     qpat_x_assum `expr_body_pre _ _ _ _ (_ with gas_obs := _)`
+       (strip_assume_tac o REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
+     simp[exprSimPropsTheory.vv_post_initial_gas, runtime_consistent_def]) >>
+  qpat_x_assum `vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t`
+    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+  `arg_type_fits (lowered_value_type cenv e) (expr_type e)` by
+    metis_tac[expr_body_pre_lowered_fits] >>
+  `(is_word_type (lowered_value_type cenv e) <=> is_word_type (expr_type e))` by
+    metis_tac[arg_type_fits_word_type] >>
+  namedCases_on `vv` ["tag op", "tag p"] >>
+  gvs[ext_call_arg_value_def, vv_type_def, vv_location_def, vv_operand_def]
+  >- (Cases_on `lowered_value_type cenv e = post_value_type cenv e` >> gvs[]
+      >- (qexists `tv` >> simp[]) >> suspend "retag") >>
+  Cases_on `p.ptr_location = LocMemory`
+  >- (gvs[] >> Cases_on `lowered_value_type cenv e = post_value_type cenv e` >> gvs[]
+      >- (qexists `tv` >> gvs[vv_holds_def, vv_at_def, ptr_vv_ok_def,
+                            vv_store_bound_def]) >> suspend "retag") >>
+  `lowered_value_type cenv e = expr_type e` by
+    (irule compile_nonmemory_lowered_value_type >>
+     qpat_assum `compile_expr _ _ e sa = (LocatedValue _ p,sb)`
+       (irule_at Any) >> simp[]) >>
+  `post_value_type cenv e = expr_type e` by simp[post_value_type_lowered] >>
+  `tag = expr_type e` by fs[vv_holds_def] >>
+  gvs[] >> qexists `tv` >> simp[]
+QED
+
+Resume extcall_pos_aggregate_read_at[retag]:
+  markerLib.RESUME_TAC >>
+  `post_value_type cenv e <> lowered_value_type cenv e` by metis_tac[] >>
+  `~is_word_type (expr_type e)` by
+    (strip_tac >>
+     `lowered_value_type cenv e = expr_type e` by (irule abi_args_word_fits_eq >> simp[]) >>
+     fs[post_value_type_word]) >>
+  `post_value_type cenv e = expr_type e` by
+    (Cases_on `e` >> simp[post_value_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+     fs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+     IF_CASES_TAC >> gvs[]) >>
+  drule_all (Q.SPECL [`cenv`,`e`] materialize_post_lowered_classify) >> simp[] >> strip_tac >>
+  `expr_body_pre cenv cx env e (es with gas_obs := obs)` by simp[] >>
+  qmatch_asmsub_abbrev_tac `vv_holds cenv cx _ tv vv0 ee t` >>
+  mp_tac (Q.INST [`ce` |-> `cenv`, `cx` |-> `cx`, `env` |-> `env`, `e` |-> `e`,
+    `es` |-> `es with gas_obs := obs`, `ee` |-> `ee`, `raw` |-> `tv`, `v` |-> `v`,
+    `vv` |-> `vv0`, `s` |-> `t`, `G` |-> `G`, `tn` |-> `tn`] snapshot_bytes_retag) >>
+  impl_tac >- (fs[Abbr `vv0`] >> metis_tac[]) >>
+  simp[Abbr `vv0`, ext_call_arg_value_def] >> strip_tac >>
+  TRY (qexists_tac `Value v`) >> fs[read_result_def, return_def]
+QED
+
+Finalise extcall_pos_aggregate_read_at
 
 Theorem extcall_horizon_gas[local]:
   valid_horizon cx (es with gas_obs := gs) H obs <=>
@@ -352,84 +463,31 @@ Resume extcall_pos_aggregate_outcome[package]:
     (strip_tac >> drule_all effect_free_source_projection >> simp[]) >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
     (drule eval_expr_preserves_scopes_dom >> simp[]) >>
-  `vv_storage_live H cx vv ee t` by
+  `valid_horizon cx (es with gas_obs := gas_explicit marks s0.vs_gas_readings)
+        H ee.storage_trace` by
     (qpat_assum `eval_expr cx e (es with gas_obs := _) = (INL tv,ee)`
        (mp_then Any mp_tac valid_horizon_frame) >>
      simp[cj 5 evaluate_storage_trace_frame] >> strip_tac >>
      `valid_horizon cx st0 H es.storage_trace` by metis_tac[] >>
      `storage_well_formed_on cx es (FST H)` by metis_tac[] >>
-     `valid_horizon cx (es with gas_obs := gas_explicit marks s0.vs_gas_readings)
-        H ee.storage_trace` by
-       fs[extcall_horizon_gas, valid_horizon_def] >>
-     `functions_well_typed cx` by
-       (qpat_assum `expr_body_pre _ _ _ _ _`
-          (strip_assume_tac o REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
-        first_assum ACCEPT_TAC) >>
-     irule body_assign_rhs_storage_live >>
-     simp[] >> qexistsl_tac
-       [`cenv`,`ctx`,`e`,`env`,`es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-        `func`,`tv`,`s0`,`sa`,`sb`,`tops`] >>
-     `expr_body_pre cenv cx env e
-        (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
-     qpat_x_assum `expr_body_pre _ _ _ _ (_ with gas_obs := _)`
-       (strip_assume_tac o REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
-     simp[exprSimPropsTheory.vv_post_initial_gas, runtime_consistent_def]) >>
-  `sa.cs_next_var <= sb.cs_next_var` by
-    (qpat_assum `compile_expr _ _ e sa = _`
-       (mp_then Any mp_tac compile_expr_extends) >> simp[]) >>
-  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+     fs[extcall_horizon_gas, valid_horizon_def]) >>
+  `cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+   !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
+     eval_operand (vv_operand vv) t = SOME w ==>
+     w2n w + type_memory_size rt <= lo /\
+     (!mem. mem_agree_outside tn1.t_mem t.vs_memory mem ==>
+       val_in_memory rt v (w2n w) mem)` by fs[arithmeticTheory.ADD_COMM] >>
+  drule_all (REWRITE_RULE [] (Q.INST
+    [`sv` |-> `ext_call_arg_value (lowered_value_type cenv e) vv`]
+    extcall_pos_aggregate_read_at)) >> strip_tac >>
+  `sa.cs_next_var <= sb.cs_next_var` by metis_tac[compile_expr_extends] >>
+  qpat_x_assum `vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   `wb_frame cenv es ee sa s0 t` by
     (rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `return_buf_frame d cenv sb t` by
     (irule return_buf_frame_frame >> qexistsl [`cenv`,`s0`,`sa`] >> simp[]) >>
-  gvs[] >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `!H. _ ==> vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _` kall_tac >>
-  `arg_type_fits (lowered_value_type cenv e) (expr_type e)` by
-    metis_tac[expr_body_pre_lowered_fits] >>
-  `(is_word_type (lowered_value_type cenv e) <=> is_word_type (expr_type e))` by
-    metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type] >>
-  namedCases_on `vv` ["tag op", "tag p"] >> gvs[ext_call_arg_value_def, vv_type_def, vv_location_def, vv_operand_def]
-  >- (Cases_on `lowered_value_type cenv e = post_value_type cenv e` >> gvs[]
-      >- (qexists `tv` >> simp[]) >> suspend "retag") >>
-  Cases_on `p.ptr_location = LocMemory`
-  >- (gvs[] >> Cases_on `lowered_value_type cenv e = post_value_type cenv e` >> gvs[]
-      >- (qexists `tv` >> gvs[vv_holds_def, vv_at_def, ptr_vv_ok_def,
-             vv_store_bound_def]) >> suspend "retag") >>
-  `lowered_value_type cenv e = expr_type e` by
-    (irule compile_nonmemory_lowered_value_type >>
-     qpat_assum `compile_expr _ _ e sa = (LocatedValue _ p,sb)`
-       (irule_at Any) >> simp[]) >>
-  `post_value_type cenv e = expr_type e` by simp[post_value_type_lowered] >>
-  `tag = expr_type e` by fs[vv_holds_def] >>
-  gvs[arithmeticTheory.ADD_COMM] >> qexists `tv` >> simp[]
-QED
-
-Resume extcall_pos_aggregate_outcome[retag]:
-  markerLib.RESUME_TAC >>
-  `post_value_type cenv e <> lowered_value_type cenv e` by
-    (qpat_assum `lowered_value_type cenv e <> post_value_type cenv e`
-       (ACCEPT_TAC o ONCE_REWRITE_RULE [EQ_SYM_EQ])) >>
-  `~is_word_type (expr_type e)` by
-    (strip_tac >>
-     `lowered_value_type cenv e = expr_type e` by (irule abi_args_word_fits_eq >> simp[]) >>
-     fs[post_value_type_word]) >>
-  `post_value_type cenv e = expr_type e` by
-    (Cases_on `e` >> simp[post_value_type_def] >>
-     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
-     fs[post_value_type_def, vyperASTTheory.expr_type_def] >>
-     IF_CASES_TAC >> gvs[]) >>
-  drule_all (Q.SPECL [`cenv`,`e`] materialize_post_lowered_classify) >> simp[] >> strip_tac >>
-  `expr_body_pre cenv cx env e (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
-  qmatch_asmsub_abbrev_tac `vv_holds cenv cx _ tv vv0 ee t` >>
-  mp_tac (Q.INST [`ce` |-> `cenv`, `cx` |-> `cx`, `env` |-> `env`, `e` |-> `e`,
-    `es` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-    `ee` |-> `ee`, `raw` |-> `tv`, `v` |-> `v`, `vv` |-> `vv0`,
-    `s` |-> `t`, `G` |-> `G1`, `tn` |-> `tn1`] snapshot_bytes_retag) >>
-  impl_tac >- (fs[Abbr `vv0`] >> metis_tac[]) >>
-  simp[Abbr `vv0`, ext_call_arg_value_def] >> strip_tac >>
-  TRY (qexists_tac `Value v`) >> fs[read_result_def, return_def]
+  gvs[] >> qexists_tac `raw` >> simp[]
 QED
 
 Finalise extcall_pos_aggregate_outcome

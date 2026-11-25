@@ -14,6 +14,7 @@ Ancestors bodyFullShadowBodyInv bodyFullRaiseCustomError bodyFullAssertCustomErr
   bodyFullCases bodyFullCreateHeld bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph typedCopyMetadata alist list
   vyperTypeContract[qualified,ignore_grammar] constSubst bodyLoopCalls
+  contractInvContextProps
 
 val _ = Parse.hide "body";
 
@@ -213,76 +214,75 @@ Theorem body_sim_full_mutual_ranked[local]:
 Proof
   completeInduct_on `rank` >>
   mp_tac body_ind >> impl_tac
-  >- (rpt conj_tac >|
-    (map without_smaller_rank [
-    (* 0 *) full_case body_pass_case_full,
-    (* 1 *) full_case body_continue_case_full,
-    (* 2 *) full_case body_break_case_full,
-    (* 3 *) full_case body_return_none_case_full,
-    (* 4 *) full_case body_return_case_full,
-    (* 5 *) full_case body_raise_bare_case_full,
-    (* 6 *) full_case body_raise_unreachable_case_full,
-    (* 7 *) full_case body_raise_reason_case_full,
-    (* 8 *) full_case body_raise_custom_case_full,
-    (* 9 *) full_case body_assert_case_full,
-    (* 10 *) full_case body_assert_unreachable_case_full,
-    (* 11 *) full_case body_assert_reason_case_full,
-    (* 12 *) full_case body_assert_custom_case_full,
-    (* 13 *) full_case body_log_case_full,
-    (* 14 *) full_case body_annassign_case_full,
-    (* 15 *) full_case body_append_case_full,
-    (* 16 *) full_case body_assign_case_full,
-    (* 17 *) full_case body_assign_tuple_case_full,
-    (* 18 *) full_case body_augassign_case_full,
-    (* 19 *) full_loop_case body_if_case_full,
-    (* 20 *) full_loop_case body_for_case_full,
-    (* 21 *) full_case body_expr_stmt_case_full,
-    (* 22 *) full_case body_stmts_nil_case_full,
-    (* 23 *) full_loop_case body_stmts_cons_case_full,
-    (* 24 *) simp[body_iterator_full_ok_def],
-    (* 25 *) rpt strip_tac >> fs[] >> rw[body_iterator_full_ok_def] >> metis_tac[],
-    (* 26 *) simp[body_for_full_ok_def],
-    (* 27 *) rpt strip_tac >> fs[] >> rw[body_for_full_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def] >> metis_tac[],
-    (* 28 *) rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[],
-    (* 29 *) rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[],
-    (* 30 *) rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[],
-    (* 31 *) full_case body_ifexp_case_full,
-    (* 32 *) rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[],
-    (* 33 *) full_case body_structlit_case_full,
-    (* 34 *) full_case body_subscript_case_full,
-    (* 35 *) full_case body_attribute_case_full,
-    (* 36 *) full_case body_builtin_case_full,
-    (* 37 *) full_case body_pop_case_full,
-    (* 38 *) full_case body_type_builtin_case_full,
-    (* 39 *) full_case body_send_case_full,
-    (* 40 *) full_case body_extcall_case_full
-  ] @ [suspend "intcall"] @ map without_smaller_rank [
-    (* 42 *) full_case body_raw_call_case_full,
-    (* 43 *) full_case body_raw_call_calldata_case_full,
-    (* 44 *) full_case body_raw_log_case_full,
-    (* 45 *) full_case body_raw_revert_case_full,
-    (* 46 *) full_case body_selfdestruct_case_full,
-    (* 47 *) rpt gen_tac >> Cases_on `kind` >>
+  >- (rpt conj_tac
+      >- without_smaller_rank (full_case body_pass_case_full)
+      >- without_smaller_rank (full_case body_continue_case_full)
+      >- without_smaller_rank (full_case body_break_case_full)
+      >- without_smaller_rank (full_case body_return_none_case_full)
+      >- without_smaller_rank (full_case body_return_case_full)
+      >- without_smaller_rank (full_case body_raise_bare_case_full)
+      >- without_smaller_rank (full_case body_raise_unreachable_case_full)
+      >- without_smaller_rank (full_case body_raise_reason_case_full)
+      >- without_smaller_rank (full_case body_raise_custom_case_full)
+      >- without_smaller_rank (full_case body_assert_case_full)
+      >- without_smaller_rank (full_case body_assert_unreachable_case_full)
+      >- without_smaller_rank (full_case body_assert_reason_case_full)
+      >- without_smaller_rank (full_case body_assert_custom_case_full)
+      >- without_smaller_rank (full_case body_log_case_full)
+      >- without_smaller_rank (full_case body_annassign_case_full)
+      >- without_smaller_rank (full_case body_append_case_full)
+      >- without_smaller_rank (full_case body_assign_case_full)
+      >- without_smaller_rank (full_case body_assign_tuple_case_full)
+      >- without_smaller_rank (full_case body_augassign_case_full)
+      >- without_smaller_rank (full_loop_case body_if_case_full)
+      >- without_smaller_rank (full_loop_case body_for_case_full)
+      >- without_smaller_rank (full_case body_expr_stmt_case_full)
+      >- without_smaller_rank (full_case body_stmts_nil_case_full)
+      >- without_smaller_rank (full_loop_case body_stmts_cons_case_full)
+      >- without_smaller_rank (simp[body_iterator_full_ok_def])
+      >- without_smaller_rank (rpt strip_tac >> fs[] >> rw[body_iterator_full_ok_def] >> metis_tac[])
+      >- without_smaller_rank (simp[body_for_full_ok_def])
+      >- without_smaller_rank (rpt strip_tac >> fs[] >> rw[body_for_full_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def] >> metis_tac[])
+      >- without_smaller_rank (rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[])
+      >- without_smaller_rank (rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[])
+      >- without_smaller_rank (rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[])
+      >- without_smaller_rank (full_case body_ifexp_case_full)
+      >- without_smaller_rank (rpt strip_tac >> irule body_expr_full_ok_leaf >> simp[])
+      >- without_smaller_rank (full_case body_structlit_case_full)
+      >- without_smaller_rank (full_case body_subscript_case_full)
+      >- without_smaller_rank (full_case body_attribute_case_full)
+      >- without_smaller_rank (full_case body_builtin_case_full)
+      >- without_smaller_rank (full_case body_pop_case_full)
+      >- without_smaller_rank (full_case body_type_builtin_case_full)
+      >- without_smaller_rank (full_case body_send_case_full)
+      >- without_smaller_rank (full_case body_extcall_case_full)
+      >- suspend "intcall"
+      >- without_smaller_rank (full_case body_raw_call_case_full)
+      >- without_smaller_rank (full_case body_raw_call_calldata_case_full)
+      >- without_smaller_rank (full_case body_raw_log_case_full)
+      >- without_smaller_rank (full_case body_raw_revert_case_full)
+      >- without_smaller_rank (full_case body_selfdestruct_case_full)
+      >- without_smaller_rank (rpt gen_tac >> Cases_on `kind` >>
           rpt strip_tac >> full_simp_tac bool_ss full_case_simps >>
           FIRST [irule create_minimal_proxy_expr_full_ok,
                  irule create_copy_expr_full_ok,
                  irule create_blueprint_expr_full_ok,
                  irule raw_create_expr_full_ok] >>
-          asm_rewrite_tac[] >> metis_tac[],
-    (* 48 *) simp[body_exprs_full_ok_def],
-    (* 49 *) rpt strip_tac >> fs[] >> rw[body_exprs_full_ok_def] >> metis_tac[],
-    (* 50 *) simp[body_base_target_full_ok_def],
-    (* 51 *) simp[body_base_target_full_ok_def],
-    (* 52 *) simp[body_base_target_full_ok_def],
-    (* 53 *) rpt strip_tac >> fs[] >> rw[body_base_target_full_ok_def] >> metis_tac[],
-    (* 54 *) simp[],
-    (* 55 *) simp[body_tuple_target_full_ok_def],
-    (* 56 *) simp[body_tuple_target_full_ok_def],
-    (* 57 *) simp[body_tuple_target_full_ok_def],
-    (* 58 *) rpt strip_tac >> fs[] >> rw[body_tuple_target_full_ok_def] >> metis_tac[],
-    (* 59 *) simp[body_tuple_target_full_ok_def],
-    (* 60 *) simp[body_tuple_target_full_ok_def]
-  ]) >> rpt strip_tac >> metis_tac[]) >>
+          asm_rewrite_tac[] >> metis_tac[])
+      >- without_smaller_rank (simp[body_exprs_full_ok_def])
+      >- without_smaller_rank (rpt strip_tac >> fs[] >> rw[body_exprs_full_ok_def] >> metis_tac[])
+      >- without_smaller_rank (simp[body_base_target_full_ok_def])
+      >- without_smaller_rank (simp[body_base_target_full_ok_def])
+      >- without_smaller_rank (simp[body_base_target_full_ok_def])
+      >- without_smaller_rank (rpt strip_tac >> fs[] >> rw[body_base_target_full_ok_def] >> metis_tac[])
+      >- without_smaller_rank (simp[])
+      >- without_smaller_rank (simp[body_tuple_target_full_ok_def])
+      >- without_smaller_rank
+           (simp[body_tuple_target_full_ok_def] >> rpt strip_tac >> metis_tac[])
+      >- without_smaller_rank (simp[body_tuple_target_full_ok_def])
+      >- without_smaller_rank (rpt strip_tac >> fs[] >> rw[body_tuple_target_full_ok_def] >> metis_tac[])
+      >- without_smaller_rank (simp[body_tuple_target_full_ok_def])
+      >> without_smaller_rank (simp[body_tuple_target_full_ok_def])) >>
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -431,6 +431,8 @@ Proof
            MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
            stmts_loop_calls_ok [(NONE,ts)]
              (subst_consts_stmts (module_consts_env ts []) body)) /\
-        stmts_loop_calls_ok [(NONE,ts)] ss` by (fs[body_inv_def] >> metis_tac[]) >>
+        stmts_loop_calls_ok [(NONE,ts)] ss` by (drule_then assume_tac body_inv_contract >>
+          drule_then assume_tac contract_inv_singleton_source_modules >>
+          simp[] >> first_assum ACCEPT_TAC) >>
   metis_tac[body_sim_full_mutual, body_stmts_full_ok_def]
 QED
