@@ -1,7 +1,7 @@
 (* Preserve the actual data window at the ordinary Slice capture cut. *)
-Theory bodySliceCaptureMods
+Theory bodySliceDynamicCaptureMods
 Ancestors
-  bodyFullBuiltinSliceDynamicCapture bodyFullBuiltinSliceFixedCapture
+  bodyFullBuiltinSliceDynamicCapture
   bodyFullUnwrapRun stateRelProj list
   bodyForRangeScalarFrameMods bodyFullPostsMods bodyFullShadowBodyInv
   bodyPtrBytestringBuiltinsCalldataReserved exprSimHashBoundary
@@ -14,7 +14,7 @@ Ancestors
 Theorem slice_dynamic_input_mods[local]:
   expr_post (H:(bool # bytes32 # type_value) list # num list)
     ctx func ce cx e es0 sa sm s0 es v op s /\
-  expr_type e = BaseT bt /\ 
+  expr_type e = BaseT bt /\
   is_bytestring_type (BaseT bt) /\
   evaluate_type (get_tenv cx) (BaseT bt) = SOME tv /\ value_has_type tv v /\
   ptr_val_ok cx (BaseT bt) v op G tn s ==>
