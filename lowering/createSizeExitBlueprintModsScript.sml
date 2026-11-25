@@ -812,9 +812,11 @@ Resume create_size_exit_blueprint_mods[source_reject]:
      qpat_assum `dest_create_args (CreateFromBlueprint raw) hs xs = SOME ops` (irule_at Any) >>
      qpat_assum `create_arg_ctor_types (CreateFromBlueprint raw) hs _ = SOME _` (irule_at Any) >>
      qexists_tac `payload` >>
-     rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE simp[Abbr `xs`])) >>
+     conj_tac
+     >- qpat_assum `2 * max_code_size < code_n + LENGTH payload` ACCEPT_TAC >>
+     conj_tac >- simp_tac bool_ss [Abbr `xs`] >>
      qpat_assum `ops.co_ctor_args = cvs` (pure_rewrite_tac o single) >>
-     first_assum ACCEPT_TAC) >>
+     qpat_assum `if raw then cvs = [BytesV payload] else _` ACCEPT_TAC) >>
   disj1_tac >>
   qpat_assum `eval_create_operands _ _ _ _ _ _ _ qs = (res,out)` mp_tac >>
   qpat_assum `eval_create_operands _ _ _ _ _ _ _ qs = (INR _,qs)`
