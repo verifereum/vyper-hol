@@ -106,7 +106,7 @@ Proof
   cut_chain [emit_membership_eqs_def, fold_membership_or_def, fold_membership_and_def]
 QED
 
-Theorem builtin_list_membership_code[local]:
+Theorem builtin_list_membership_code:
   create_cut_code exits a (SND (compile_list_membership_in needle xs a)) /\
   create_cut_code exits a (SND (compile_list_membership_notin needle xs a))
 Proof
