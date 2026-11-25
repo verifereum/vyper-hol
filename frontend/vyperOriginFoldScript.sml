@@ -29,8 +29,8 @@ val () = cv_auto_trans origin_fold_builtin_def;
 Theorem origin_fold_builtin_type[local,simp]:
   expr_type (origin_fold_builtin ty b es) = ty
 Proof
-  Cases_on `b` >> rw[origin_fold_builtin_def, AllCaseEqs(), expr_type_def] >>
-  BasicProvers.every_case_tac >> gvs[expr_type_def]
+  Cases_on `b` >> simp[origin_fold_builtin_def] >>
+  rw[] >> BasicProvers.every_case_tac >> simp[expr_type_def]
 QED
 
 (* Source-approved selectors and equalities reduce before this traversal. *)
