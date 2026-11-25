@@ -585,7 +585,8 @@ QED
 Resume compile_array_vv_type[type_output]:
   markerLib.RESUME_TAC >>
   gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
-  strip_tac >> gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[])
+  strip_tac >> simp[] >>
+  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[])
 QED
 Resume compile_array_vv_type[call]:
   rename1 `compile_call _ _ _ _ call_target _ _ _ = _` >>
@@ -1064,7 +1065,14 @@ Resume compile_subscript_array_copied_base_case[base_normal]:
      gvs[vyperASTTheory.expr_type_def, lowered_value_type_def]
      >~ [`Builtin _ bi _`] >-
        (Cases_on `bi` >>
-        gvs[lowered_value_type_def, concat_buffer_type_def, vyperASTTheory.expr_type_def] >>
+        gvs[lowered_value_type_def, concat_buffer_type_def, vyperASTTheory.expr_type_def]
+        >~ [`Builtin _ NamedConst _`] >-
+          (rename1 `Builtin _ NamedConst args` >>
+           simp[Once (oneline lowered_value_type_def), vyperASTTheory.expr_type_def] >>
+           qspec_then `args` (DISJ_CASES_THEN2 SUBST_ALL_TAC
+             (qx_choose_then `arg` (qx_choose_then `rest` SUBST_ALL_TAC))) list_CASES
+           >- simp[] >>
+           simp[] >> Cases_on `arg` >> simp[]) >>
         gvs[expr_body_pre_def] >>
         qpat_x_assum `well_typed_expr env (Builtin _ _ _)` mp_tac >>
         simp[Once well_typed_expr_def, well_typed_builtin_app_def,

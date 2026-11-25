@@ -6,9 +6,7 @@ Ancestors concretizePtrRequestHistory venomCallOracleDefs concretizePtrSharedFie
 (* This is the source guard in step_taint, not outcome-store equality. *)
 Definition ptr_call_adopted_def:
   ptr_call_adopted s u <=>
-    ~s.vs_call_ctx.cc_static /\ u.vs_requests <> s.vs_requests /\
-    ~computed_precompile (LAST u.vs_requests) /\
-    u.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+    adopt_guard s.vs_call_ctx.cc_static s u (HD s.vs_outcomes).co_success
 End
 
 Theorem ptr_history_call_shell:
