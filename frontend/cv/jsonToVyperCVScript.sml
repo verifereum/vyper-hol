@@ -13,28 +13,28 @@ val () = cv_auto_trans translate_toplevel_compute;
 
 (* The module traversals' MAP over toplevels, as first-order recursion. *)
 Definition translate_toplevels_def:
-  (translate_toplevels ni im ec tc nr declaration_only [] = []) /\
-  (translate_toplevels ni im ec tc nr declaration_only (top::tops) =
-    (if declaration_only ∧ is_function_toplevel top then NONE
+  (translate_toplevels ni im ec tc nr declaration_only stdlib_math [] = []) /\
+  (translate_toplevels ni im ec tc nr declaration_only stdlib_math (top::tops) =
+    (if skip_imported_toplevel declaration_only stdlib_math top then NONE
      else translate_toplevel ni im ec tc nr top) ::
-    translate_toplevels ni im ec tc nr declaration_only tops)
+    translate_toplevels ni im ec tc nr declaration_only stdlib_math tops)
 End
 
 val () = cv_auto_trans translate_toplevels_def;
 
 Theorem translate_toplevels_map:
-  translate_toplevels ni im ec tc nr declaration_only tops =
-    MAP (λtop. if declaration_only ∧ is_function_toplevel top then NONE
+  translate_toplevels ni im ec tc nr declaration_only stdlib_math tops =
+    MAP (λtop. if skip_imported_toplevel declaration_only stdlib_math top then NONE
                else translate_toplevel ni im ec tc nr top) tops
 Proof
   Induct_on `tops` >> simp[translate_toplevels_def]
 QED
 
 Theorem translate_toplevels_implementation:
-  translate_toplevels ni im ec tc nr F tops =
+  translate_toplevels ni im ec tc nr F F tops =
     MAP (translate_toplevel ni im ec tc nr) tops
 Proof
-  simp[translate_toplevels_map] >>
+  simp[translate_toplevels_map, skip_imported_toplevel_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC
 QED
 

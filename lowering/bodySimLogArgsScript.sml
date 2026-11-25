@@ -1,6 +1,6 @@
 (* Shared event metadata and pure argument readiness for the Log cases. *)
 Theory bodySimLogArgs
-Ancestors
+Ancestors bodyCallSupport bodySingletonCallSupport
   allocLimits allocLimitsProps
   exprSimSource bodyExprPreFacts exprSimHypsDefs list bodySim stmtSimLog exprSimHyps
   bodyStorageCases bodyInvSplit bodyInvCodeProps bodyInvExecutionProps
@@ -11,7 +11,7 @@ Ancestors
   vyperABI vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallGraph
   vyperTypeCallStackSoundness exprLowering
   vyperValue valueEncodingProps placeMemoryTypeInterfaces structFieldsProps exprSimProps arithmetic
-  aggregateEvaluatedLayout valueCopyBytes vyperEventArgCompat
+  aggregateEvaluatedLayout valueCopyBytes vyperEventArgCompat checkedTypeNamespace
   vyperTypeExprResult retAbiPlanProps abiDecoderMembers finite_map pred_set
 
 (* Expression readiness comes directly from exprSimSource; the statement
@@ -67,7 +67,8 @@ Theorem supported_nested_abi_env:
   !leaf fuel tops ty.
     (!t. leaf t ==> supported_event_leaf_type t) ==>
     !large removed.
-      supported_nested_type leaf fuel tops ty /\ type_env tops SUBMAP large ==>
+      supported_nested_type leaf fuel tops ty /\ type_env tops SUBMAP large /\
+      (!k fields. FLOOKUP large k = SOME (StructArgs fields) ==> FST k = NONE) ==>
       vyper_to_abi_type (DRESTRICT (type_env tops) (COMPL removed)) ty =
       vyper_to_abi_type (DRESTRICT large (COMPL removed)) ty
 Proof
@@ -82,7 +83,14 @@ Proof
   simp[Once supported_nested_type_def, supported_scalar_type_def,
        supported_word_type_def, supported_string_type_def] >> strip_tac
   >~ [`FLOOKUP _ p`]
-  >- (Cases_on `supported_struct_fields tops p` >> gvs[] >>
+  >- (Cases_on `FST p = NONE`
+      >| [ALL_TAC,
+          PairCases_on `p` >> Cases_on `p0` >> gvs[] >>
+          Cases_on `(SOME x,p1) IN removed` >>
+          gvs[type_env_qualified_lookup, FLOOKUP_DRESTRICT] >>
+          Cases_on `FLOOKUP large (SOME x,p1)` >> gvs[] >>
+          Cases_on `x'` >> gvs[] >> res_tac >> gvs[]] >>
+      Cases_on `supported_struct_fields tops p` >> gvs[] >>
       rename1 `supported_struct_fields tops p = SOME fields` >>
       drule supported_struct_fields_type_env >> strip_tac >>
       `FLOOKUP large p = SOME (StructArgs fields)` by
@@ -106,6 +114,7 @@ Theorem supported_nested_evaluated_assignable:
     (!t. leaf t ==> supported_event_leaf_type t) ==>
     !large removed tv.
       supported_nested_type leaf fuel tops ty /\ type_env tops SUBMAP large /\
+      (!k fields. FLOOKUP large k = SOME (StructArgs fields) ==> FST k = NONE) /\
       evaluate_type (DRESTRICT large (COMPL removed)) ty = SOME tv ==>
       assignable_type (DRESTRICT large (COMPL removed)) ty
 Proof
@@ -139,6 +148,10 @@ Proof
         simp[well_formed_type_def] >>
       simp[assignable_type_def] >> Cases_on `bd` >>
       gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
+  Cases_on `FST p = NONE`
+  >| [ALL_TAC,
+      gvs[vyperValueTheory.evaluate_type_def, FLOOKUP_DRESTRICT, AllCaseEqs()] >>
+      metis_tac[]] >>
   Cases_on `supported_struct_fields tops p` >> gvs[] >>
   rename1 `supported_struct_fields tops p = SOME fields` >>
   drule supported_struct_fields_type_env >> strip_tac >>
@@ -165,6 +178,7 @@ QED
 Theorem supported_place_evaluated_assignable:
   !tops tenv ty tv.
     supported_place_type tops ty /\ type_env tops SUBMAP tenv /\
+    (!k fields. FLOOKUP tenv k = SOME (StructArgs fields) ==> FST k = NONE) /\
     evaluate_type tenv ty = SOME tv ==>
     assignable_type tenv ty
 Proof
@@ -178,7 +192,8 @@ QED
 
 Theorem supported_place_abi_env:
   !tops cx ty.
-    get_module_code cx NONE = SOME tops /\ supported_place_type tops ty ==>
+    get_module_code cx NONE = SOME tops /\ supported_place_type tops ty /\
+    (!k fields. FLOOKUP (get_tenv cx) k = SOME (StructArgs fields) ==> FST k = NONE) ==>
     vyper_to_abi_type (type_env tops) ty = vyper_to_abi_type (get_tenv cx) ty
 Proof
   rpt strip_tac >> drule body_main_type_env_submap >> strip_tac >>
@@ -284,7 +299,8 @@ Theorem log_arg_body_pre[local]:
     well_typed_expr env e /\
     ~supported_expr_exists
        (\e. ~is_extcode e /\
-            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+            ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) e /\
+    alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
               occurs_abi_decode_target target tops) /\
@@ -292,9 +308,9 @@ Theorem log_arg_body_pre[local]:
     expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
-  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
-      int_calls_stmt_def, listTheory.EVERY_CONJ, GSYM expr_has_evm_run_def]) >>
+  `supported_expr tops e` by
+    simp[supported_expr_def, supported_effect_free_pure] >>
+  drule_all_then strip_assume_tac supported_singleton_expr_body_calls >>
   drule_then strip_assume_tac body_inv_main_support >>
   drule_then strip_assume_tac body_inv_main_code >>
   drule_then assume_tac body_inv_contract >>
@@ -303,7 +319,7 @@ Proof
     fs[type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
   qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
     irule stmt_expr_body_pre >>
-  simp[] >> metis_tac[supported_pure_expr_effect_free, no_effect_call_operands]
+  simp[] >> qexists_tac `calls` >> first_assum ACCEPT_TAC
 QED
 
 Theorem body_log_snapshot_expr_pre_mods:
@@ -311,7 +327,8 @@ Theorem body_log_snapshot_expr_pre_mods:
   contract_inv mods exps ctx cenv cx /\ supported_pure_exprs (main_module mods) args /\
   well_typed_exprs env args /\
   ~supported_exprs_exists
-     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) args /\
+  alloc_limits_exprs cenv args /\
   ~supported_exprs_exists (const_name_root_mods mods) args /\
   call_evaluation_safe cx (int_calls_exprs args) /\
   (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
@@ -324,12 +341,13 @@ Proof
   `supported_pure_expr (main_module mods) e /\ ~is_extcode e /\
    ~supported_expr_exists (const_name_root_mods mods) e /\
    ~supported_expr_exists
-     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) e /\
    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
       occurs_abi_decode_target target (main_module mods))` by
     (fs[supported_pure_exprs_every, EVERY_MEM, supported_exprs_exists_every,
         EXISTS_MEM] >> metis_tac[]) >>
   `supported_expr (main_module mods) e` by simp[supported_expr_def] >>
+  `alloc_limits_expr cenv e` by metis_tac[exprSimSourceTheory.alloc_limits_exprs_mem] >>
   mp_tac (Q.INST [`calls` |-> `[]`, `es` |-> `st`] stmt_expr_body_pre_main_mods) >>
   simp[] >> metis_tac[well_typed_exprs_member, call_evaluation_safe_exprs_mem]
 QED
@@ -339,7 +357,8 @@ Theorem body_log_snapshot_expr_pre:
   body_inv tops ctx cenv cx /\ supported_pure_exprs tops args /\
   well_typed_exprs env args /\
   ~supported_exprs_exists
-     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+     (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) args /\
+  alloc_limits_exprs cenv args /\
   ~supported_exprs_exists (const_name_root cx) args /\
   call_evaluation_safe cx (int_calls_exprs args) /\
   (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
@@ -360,12 +379,12 @@ Proof
     (mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
       body_log_snapshot_expr_pre_mods) >>
      simp[main_module_def, ALOOKUP_def]) >>
-  `supported_pure_expr tops e` by metis_tac[supported_pure_exprs_every, EVERY_MEM] >>
-  drule_then strip_assume_tac (CONJUNCT1 supported_pure_main_calls) >>
   drule_then assume_tac contract_inv_type_env >>
-  fs[expr_body_pre_split_def, type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2,
-     listTheory.EVERY_CONJ, supported_exprs_exists_every, EXISTS_MEM] >>
-  metis_tac[]
+  drule_then assume_tac contract_inv_module_codes >>
+  fs[expr_body_pre_split_def, expr_body_pre_mods_def, type_env_all_modules_def,
+     type_env_def, FUNION_FEMPTY_2, EVERY_MEM, pairTheory.FORALL_PROD,
+     supported_exprs_exists_every, EXISTS_MEM, source_body_call_supported_def] >>
+  rpt strip_tac >> res_tac >> gvs[ALOOKUP_def]
 QED
 
 (* Body safety and root allocation checks give each argument expr_body_pre;
@@ -378,7 +397,8 @@ Theorem body_log_args_ready:
     ~supported_exprs_exists (const_name_root cx) args /\
     ~supported_exprs_exists
        (\e. ~is_extcode e /\
-            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+            ~(byte_widths_expr e /\ (array_slot_base cenv e \/ alloc_limits_expr cenv e))) args /\
+    alloc_limits_exprs cenv args /\
     call_evaluation_safe cx (int_calls_exprs args) /\
     (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
               occurs_abi_decode_target target tops) ==>
@@ -394,6 +414,8 @@ Proof
     SIMP_RULE std_ss [Once well_typed_expr_def]) >>
   qpat_x_assum `~supported_exprs_exists (\e. ~is_extcode e /\ _) (h::args)`
     (strip_assume_tac o SIMP_RULE std_ss [Once supported_expr_exists_def, DE_MORGAN_THM]) >>
+  qpat_x_assum `alloc_limits_exprs _ (h::args)`
+    (strip_assume_tac o SIMP_RULE std_ss [Once alloc_limits_expr_def]) >>
   qpat_x_assum `call_evaluation_safe _ _` (assume_tac o
     SIMP_RULE std_ss [Once int_calls_expr_def]) >>
   qpat_x_assum `!target. supported_exprs_exists _ _ ==> _` (strip_assume_tac o

@@ -659,6 +659,12 @@ Definition module_origin_constants_def:
        let value = origin_retype declared_ty (origin_fold_value
          (translate_expr_with_policy T ctx init)) in
        let origins =
+         case value of
+         | TypeBuiltin ty Empty _ [] =>
+             if ty = declared_ty then
+               ((expr_current_nsid ctx,name),(value,init)) :: expr_origins ctx
+             else expr_origins ctx
+         | _ =>
          case resolved_origin_expr T ctx init value of
          | SOME origin =>
              if pin_literal_tree value /\ expr_type value = declared_ty then
@@ -1262,8 +1268,38 @@ Definition is_function_toplevel_def:
   is_function_toplevel _ = F
 End
 
+(* FunctionAnalyzer annotates every local declaration target it visits.
+   Signatures are present even when pinned Vyper never analyzes the body. *)
+Definition has_untyped_local_decl_def:
+  has_untyped_local_decl [] = F ∧
+  has_untyped_local_decl (JS_AnnAssign _ ty _ _ :: rest) =
+    (ty = JT_None ∨ has_untyped_local_decl rest) ∧
+  has_untyped_local_decl (JS_For _ ty _ _ body :: rest) =
+    (ty = JT_None ∨ has_untyped_local_decl body ∨
+     has_untyped_local_decl rest) ∧
+  has_untyped_local_decl (JS_If _ body orelse :: rest) =
+    (has_untyped_local_decl body ∨ has_untyped_local_decl orelse ∨
+     has_untyped_local_decl rest) ∧
+  has_untyped_local_decl (_ :: rest) = has_untyped_local_decl rest
+Termination
+  WF_REL_TAC `measure (list_size json_stmt_size)` >> simp[]
+End
+
+Definition skip_imported_toplevel_def:
+  skip_imported_toplevel declaration_only stdlib_math top =
+    ((declaration_only ∧ is_function_toplevel top) ∨
+     (stdlib_math ∧
+       case top of
+       | JTL_FunctionDef _ decs _ _ _ _ _ body =>
+           translate_visibility decs = Internal ∧ has_untyped_local_decl body
+       | _ => F))
+End
+
 (* Imported interfaces contribute declarations and nominal identities, but their
-   ellipsis-bodied function stubs are not executable module implementations. *)
+   ellipsis-bodied function stubs are not executable module implementations.
+   Both functions of math.vy, the pin's only executable builtin module, have
+   local declarations. Match its path because builtin source IDs can be
+   rewritten when a unit imports several builtins. *)
 Definition translate_imported_module_def:
   translate_imported_module nominal_index all_import_maps all_toplevel_types
       override_map constants origins main_src_id
@@ -1273,9 +1309,11 @@ Definition translate_imported_module_def:
                      all_toplevel_types override_map constants) origins in
     let type_ctx = expr_type_ctx expr_ctx in
     let declaration_only = is_interface_path path in
+    let stdlib_math = is_prefix (REVERSE "/vyper/builtins/stdlib/math.vy")
+      (REVERSE ("/" ++ path)) in
     (SOME nsid, filter_some
       (MAP (λtop.
-        if declaration_only ∧ is_function_toplevel top then NONE
+        if skip_imported_toplevel declaration_only stdlib_math top then NONE
         else translate_toplevel nominal_index all_import_maps expr_ctx type_ctx
           nr_default top) (order_module_constants body)))
 End

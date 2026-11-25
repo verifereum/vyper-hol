@@ -4,7 +4,7 @@
 Theory bodyFullTargetMappingKey
 Ancestors
   bodyPtrPopTargetSimMapKeyRun bodyFullGhostFrame bodyFullUnwrapRun
-  fragGasCopyLoop fragGasSeqPtr fragExecMem instMemFrontier
+  fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeqPtr fragExecMem instMemFrontier
   exprSimMapKey exprSimHashBoundary bodyPtrDefs loweringPosts compileEnv exprLoweringProps
   codegenRel contextCodegenRel valueEncodingProps
   unitTransformDefs memSafeRun venomMemDefs venomExecSemantics venomState

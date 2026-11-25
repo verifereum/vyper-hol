@@ -1,5 +1,6 @@
 Theory bodyFullTargetMappingRun
 Ancestors
+  bodyFullMappingSuffixExecution
   bodyFullTargetMappingKey bodyFullTargetMappingScratch targetSubscriptMapping
   exprOperandVar exprSimWordArgs exprSimProps exprSimMapKey
   bodyPtrDefs loweringPosts exprLoweringProps fragGasOriginPtr
@@ -53,128 +54,10 @@ Theorem mapping_suffix_full_run:
       stmt_state_rel H ctx func cenv cx es t /\
       ghost_inv_at (DF H) lo d cenv cx es HG tm t)
 Proof
-  strip_tac >>
-  `ci_mono sn sp` by
-    (Cases_on `is_bytestring_type kt`
-     >- (gvs[] >> metis_tac[ci_mono_compile_keccak256_key, SND]) >>
-     gvs[ci_mono_def, cs_extends_def]) >>
-  `ci_mono sp sb` by metis_tac[ci_mono_compile_mapping_subscript, SND] >>
-  `fn_has_code sn sp func /\ fn_has_code sp sb func` by
-    metis_tac[fn_has_code_split, ci_mono_def] >>
-  `!x. key = Var x ==> not_fresh_at sn x` by metis_tac[] >>
-  `!x. bop = Var x \/ hashed = Var x ==> not_fresh_at sp x` by
-    (Cases_on `is_bytestring_type kt` >> gvs[]
-     >- (drule (cj 1 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >>
-         strip_tac >>
-         qpat_x_assum `sp.cs_current_insts = _` kall_tac >>
-         rpt strip_tac >> gvs[] >>
-         irule compiler_ci_mono_not_fresh >> qexists_tac `sn` >> simp[]) >>
-     metis_tac[]) >>
-  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
-    (drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
-  drule_all mapping_key_prefix_full_run >>
+  strip_tac >> drule_all mapping_suffix_full_run_with_execution >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
-  suspend "slot"
+  qexistsl_tac [`t`, `HG`, `tm`] >> simp[]
 QED
-Resume mapping_suffix_full_run[slot]:
-  rename1 `run_inst_seq (emitted_insts sn sp) s = OK u` >>
-  `sp.cs_current_bb = sn.cs_current_bb /\
-   sp.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sp /\
-   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sn sp)` by
-    (Cases_on `is_bytestring_type kt` >> gvs[]
-     >- (drule (cj 1 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >>
-         gvs[same_blocks_def, EVERY_MEM]) >>
-     simp[emitted_insts_def]) >>
-  `u.vs_current_bb = s.vs_current_bb /\
-   u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
-   u.vs_memory = s.vs_memory /\ u.vs_labels = s.vs_labels /\ ~u.vs_halted` by
-    (qpat_assum `u with vs_vars := _ = s` mp_tac >>
-     simp[venom_state_component_equality] >> metis_tac[]) >>
-  `eval_operand bop (u with vs_inst_idx := LENGTH sp.cs_current_insts) = SOME base_slot /\
-   op_taint tm bop = {}` by
-    (Cases_on `bop` >> gvs[eval_operand_def, lookup_var_def, op_taint_def] >> metis_tac[]) >>
-  `local_ptrs_reserved cenv sp /\
-   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sp x) /\
-   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sp x)` by
-    metis_tac[local_ptrs_reserved_next_var, compiler_ci_mono_not_fresh, ci_mono_def] >>
-  `stmt_state_rel H0 ctx func cenv cx es
-     (u with vs_inst_idx := LENGTH sp.cs_current_insts)` by metis_tac[] >>
-  `alloca_history func (u with vs_inst_idx := LENGTH sp.cs_current_insts)` by
-    (irule emitted_alloca_history >> conj_tac >- simp[] >>
-     qexistsl_tac [`emitted_insts sn sp`, `s`, `sn`] >>
-     simp[] >> metis_tac[stmt_state_rel_def]) >>
-  `allocas_from lo (u with vs_inst_idx := LENGTH sp.cs_current_insts)` by
-    (simp[allocas_from_def] >> metis_tac[allocas_from_def]) >>
-  `eval_operand hashed (u with vs_inst_idx := LENGTH sp.cs_current_insts) =
-     SOME (encode_hashmap_key kt v)` by gvs[eval_operand_def] >>
-  `~(u with vs_inst_idx := LENGTH sp.cs_current_insts).vs_halted /\
-   (u with vs_inst_idx := LENGTH sp.cs_current_insts).vs_current_bb = sp.cs_current_bb /\
-   (u with vs_inst_idx := LENGTH sp.cs_current_insts).vs_inst_idx = LENGTH sp.cs_current_insts /\
-   lo <= (u with vs_inst_idx := LENGTH sp.cs_current_insts).vs_alloca_next` by simp[] >>
-  `!H. P H ==> stmt_state_rel H ctx func cenv cx es
-      (u with vs_inst_idx := LENGTH sp.cs_current_insts) /\
-    ghost_inv_at (DF H) lo d cenv cx es HG tm
-      (u with vs_inst_idx := LENGTH sp.cs_current_insts)` by metis_tac[] >>
-  drule_all mapping_slot_full_run >>
-  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
-  suspend "join"
-QED
-Resume mapping_suffix_full_run[join]:
-  rename1 `eval_operand slot t = SOME _` >>
-  qexistsl_tac [`t`, `HG'`, `tm'`] >>
-  simp[] >>
-  conj_tac >- metis_tac[target_mapping_suffix_shape] >>
-  conj_tac >- (rpt strip_tac >>
-    `not_fresh_at sp x` by metis_tac[compiler_ci_mono_not_fresh] >>
-    qpat_assum `!x. not_fresh_at sp x ==> _` drule >>
-    qpat_assum `!x. not_fresh_at sn x ==> FLOOKUP _ _ = _ /\ _` drule >>
-    qpat_assum `!x. not_fresh_at sn x ==> lookup_var _ _ = _` drule >>
-    gvs[compiler_ci_mono_not_fresh, lookup_var_def]) >>
-  suspend "frames"
-QED
-Resume mapping_suffix_full_run[frames]:
-  qmatch_asmsub_abbrev_tac `wb_frame cenv es es sp a t` >>
-  `wb_frame cenv es es sn s a` by
-    (irule wb_frame_readonly_tail >>
-     qexistsl_tac [`sn`, `s`] >>
-     simp[wb_frame_refl, Abbr `a`, lookup_var_def] >>
-     metis_tac[lookup_var_def]) >>
-  `sn.cs_next_var <= sp.cs_next_var /\ sn.cs_next_id <= sp.cs_next_id` by
-    gvs[ci_mono_def, cs_extends_def] >>
-  conj_tac >- (irule wb_frame_trans >> simp[] >> conj_tac
-    >- (qexistsl_tac [`es`, `sp`, `a`] >> simp[]) >> metis_tac[]) >>
-  `!n b sz. local_region cenv es.scopes a n b sz <=>
-     local_region cenv es.scopes s n b sz` by
-    (rpt gen_tac >> irule local_region_lookup_cong >>
-     simp[Abbr `a`, lookup_var_def] >>
-     metis_tac[local_ptrs_reserved_def, lookup_var_def]) >>
-  conj_tac >- (qpat_x_assum `pure_frame cenv func es sp a t` mp_tac >>
-    simp[pure_frame_def, Abbr `a`] >> strip_tac >>
-    conj_tac >- metis_tac[] >>
-    rpt strip_tac >>
-    qpat_x_assum `!off len. _ ==> mem_bytes_at off len t.vs_memory = _` irule >>
-    metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  conj_tac >- (
-    qpat_x_assum `ghost_kept_at lo cenv es sp HG tm a HG' tm'` mp_tac >>
-    simp[ghost_kept_at_def] >> strip_tac >>
-    simp[ghost_kept_at_def] >> rpt conj_tac
-    >- metis_tac[compiler_ci_mono_not_fresh]
-    >- (gvs[Abbr `a`] >> rpt strip_tac >>
-        qpat_x_assum `!aid off sz i. FLOOKUP s.vs_allocas aid = _ /\ _ ==> _` irule >>
-        conj_tac >- (qexistsl_tac [`aid`, `off`, `sz`] >> gvs[] >> first_assum ACCEPT_TAC) >> simp[])
-    >- metis_tac[] >> metis_tac[]) >>
-  conj_tac >- gvs[Abbr `a`] >>
-  rpt strip_tac >>
-  qpat_x_assum `!H. P H ==> gas_origin_ptr_path _ (s,G,tn) _ _ /\ _` drule >>
-  qpat_x_assum `!H. P H ==> gas_origin_ptr_path _ (a,HG,tm) _ _ /\ _` drule >>
-  rpt strip_tac >>
-  qpat_x_assum `gas_origin_ptr_path _ (s,G,tn) [] _`
-    (mp_then Any mp_tac gas_origin_ptr_path_append) >>
-  disch_then (qspecl_then [`a`, `HG`, `tm`, `[]`, `OK t`, `HG'`, `tm'`] mp_tac) >>
-  simp[]
-QED
-Finalise mapping_suffix_full_run
 
 (* Apply twice: first to base/index, then to their combined frame and the
    mapping suffix. No effect-free premise is required of the index. *)

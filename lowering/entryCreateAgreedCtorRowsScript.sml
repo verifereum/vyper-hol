@@ -36,7 +36,7 @@ Overload ctor_replay_vv_post[local] = ``\DF lo d ctx func ce cx e p a m s vv G t
      ptr_buf_ok ce e p.ptr_operand G' t) /\
   ghost_kept_at lo ce p a G tn s G' tn'``
 
-Theorem agreed_ctor_row_replay[local]:
+Theorem agreed_ctor_row_replay:
   body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
   expr_body_pre ce cx env e p /\
   (!op. expr_sim_full_pre (DF,lo,d,ctx,shctx,PG,func,shfunc)

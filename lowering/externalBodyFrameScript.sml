@@ -4,6 +4,7 @@ Ancestors
   entryDispatchProps constSubst constSubstCorrect constSubstStmts constSubstStmtsPreserve
   bodyFullPreds gasContext supportedGetterProps externalRawReturnType externalReturnPackage externalEntryBound
   externalBodyWidths externalBodySupport memoryLocalRhsProps
+  bodyQualifiedStmtSupport linkedConstAnnotations constSubstMods
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
   list pair finite_map alist arithmetic combin integer option pred_set rich_list
@@ -21,6 +22,7 @@ Ancestors
   vyperTypeEvalSoundness vyperTypeExprSoundness vyperTypeInvariants
   vyperTypeContractFunction vyperTypeContractSoundness vyperTypeContractContext
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeExternalDefaults
+  vyperTypeContractGetter vyperGetter
   vyperTypeInitialState vyperTypeBindArguments
   vyperTypeEvalStoragePreservation vyperTypeStoragePreservation
   vyperStorageLayoutSafety vyperStorageBackend vyperPlaceInvariants
@@ -396,6 +398,7 @@ Theorem external_body_support_bounds_from_allocs[local]:
   EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
   type_stmts env ret ss = SOME env' /\
   ~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules) ss /\
+  qualified_stmts_decls_ok cenv.ce_modules ss /\
   (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
    return_buffer_ok cenv) ==>
   locals_alloc_ok cenv env /\ stmts_exprs_ok cenv ss /\
@@ -1115,13 +1118,35 @@ Proof
      metis_tac[]) >>
   `~supported_stmts_expr_exists (const_name_root_mods cenv.ce_modules)
      (subst_consts_stmts (module_consts_env tops []) fbody)` by
-    (`cenv.ce_modules = [(NONE,tops)]` by
-       (qpat_assum `body_inv tops _ cenv _`
-          (ACCEPT_TAC o MATCH_MP contract_inv_cenv_modules o MATCH_MP body_inv_contract)) >>
-     simp[] >>
+    (qpat_assum `body_inv tops _ cenv _`
+       (fn inv => REWRITE_TAC
+         [MATCH_MP contract_inv_cenv_modules (MATCH_MP body_inv_contract inv)]) >>
      irule (INST_TYPE [alpha |-> ``:160 word``]
        checked_const_substitution_const_name_free) >>
      metis_tac[]) >>
+  `qualified_stmts_decls_ok cenv.ce_modules
+     (subst_consts_stmts (module_consts_env tops []) fbody)` by
+    (qpat_assum `body_inv tops _ cenv _`
+       (fn inv => REWRITE_TAC
+         [MATCH_MP contract_inv_cenv_modules (MATCH_MP body_inv_contract inv)]) >>
+     drule lookup_function_External_cases >> strip_tac
+     >- (`module_allocated am.layouts tx.target NONE tops` by
+           (drule check_contract_main_module_allocated >> simp[]) >>
+         `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
+             External mut nr args dflts ret fbody` by
+           (irule check_contract_runtime_function_body_MEM >> simp[] >>
+            qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
+         drule_all (SIMP_RULE (srw_ss())
+           [consts_env_mods_singleton, subst_consts_mods_singleton]
+           (Q.INST [`mods` |-> `[(NONE,tops)]`]
+             checked_qualified_body_decl_resolution)) >> simp[]) >>
+     `?exp. fbody = [Return (SOME exp)]` by
+       (Cases_on `decl` >>
+        gvs[is_public_getter_decl_def, external_getter_tuple_def] >>
+        Cases_on `v` >>
+        gvs[external_getter_tuple_def, getter_def, AllCaseEqs()] >>
+        rpt (pairarg_tac >> gvs[]) >> metis_tac[]) >>
+     gvs[subst_consts_stmt_def]) >>
   drule_all external_body_support_bounds_from_allocs >> strip_tac >>
   `ce_locals_declared cenv env_t` by
     (rw[ce_locals_declared_def] >>

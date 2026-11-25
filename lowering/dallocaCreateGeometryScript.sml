@@ -139,11 +139,23 @@ Proof
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   PURE_REWRITE_TAC [GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[DROP_APPEND, DROP_LENGTH_TOO_LONG] >> strip_tac >>
-  gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
-      exec_pure2_def, bind_outputs_def, eval_operand_def,
-      lookup_var_update_var, update_var_def, lookup_var_def,
-      finite_mapTheory.FLOOKUP_UPDATE, fresh_var_distinct,
-      mcopy_def, write_memory_with_expansion_def, AllCaseEqs()]
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  simp[NoAsms, run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def] >>
+  simp (memory_field_rewrites @ [NoAsms, exec_pure2_def, bind_outputs_def,
+        eval_operand_def, lookup_var_update_var, update_var_def, lookup_var_def,
+        finite_mapTheory.FLOOKUP_UPDATE, fresh_var_distinct]) >>
+  simp[NoAsms, AllCaseEqs()] >> strip_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  PURE_REWRITE_TAC
+    (memory_field_rewrites @
+     map (SIMP_CONV (srw_ss()) [mcopy_def, write_memory_with_expansion_def])
+       [``(mcopy dst src len st).vs_vars``,
+        ``(mcopy dst src len st).vs_fmp``,
+        ``(mcopy dst src len st).vs_accounts``,
+        ``(mcopy dst src len st).vs_call_ctx``]) >>
+  qpat_assum `FLOOKUP pre.vs_vars _ = SOME sz` (fn th =>
+    simp (memory_field_rewrites @
+          [NoAsms, th, finite_mapTheory.FLOOKUP_UPDATE, fresh_var_distinct]))
 QED
 
 Theorem create_blueprint_create_prefix:

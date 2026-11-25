@@ -8,6 +8,7 @@
 Theory typedCopyMetadata
 Ancestors
   typedCopyDomain compileVyper compileEnv structLayoutProps supportedTypes supportedDecls
+  checkedTypeNamespace supportedStmtTraverse
   vyperAST finite_map list pair combin arithmetic pred_set
 
 Definition shallow_copy_type_def:
@@ -211,38 +212,33 @@ Proof
 QED
 
 Theorem nested_metadata_fields:
-  struct_metadata_types_match tops sf /\
+  struct_metadata_types_match tops sf /\ supported_main_nsid nsid /\
   supported_nested_type supported_scalar_type fuel tops (StructT nsid) ==>
   0 < fuel /\
   EVERY (supported_nested_type supported_scalar_type (fuel - 1) tops o
          FST o SND) (get_struct_fields sf (nsid_to_string nsid))
 Proof
+  PairCases_on `nsid` >>
   simp[Once supported_nested_type_def, supported_scalar_type_def,
-       supported_word_type_def, supported_string_type_def] >>
-  Cases_on `nsid` >> rename1 `(modid,name)` >> Cases_on `modid` >>
-  simp[supported_struct_fields_other_module, nsid_to_string_def] >>
-  Cases_on `supported_struct_fields tops (NONE,name)` >> simp[] >>
-  rpt strip_tac >> simp[get_struct_fields_def] >>
-  Cases_on `FLOOKUP sf name` >> simp[] >>
-  fs[struct_metadata_types_match_def] >>
-  first_x_assum drule_all >> strip_tac >>
+       supported_word_type_def, supported_string_type_def, supported_main_nsid_def] >>
+  strip_tac >> gvs[nsid_to_string_def] >>
+  Cases_on `supported_struct_fields tops (NONE,nsid1)` >> gvs[] >>
+  simp[get_struct_fields_def] >>
+  Cases_on `FLOOKUP sf nsid1` >> simp[] >>
+  fs[struct_metadata_types_match_def] >> res_tac >>
   fs[GSYM EVERY_MAP, MAP_MAP_o, o_DEF]
 QED
 
 Theorem nested_metadata_agrees_fields:
-  nested_metadata_agrees tops sf sub fuel /\
+  nested_metadata_agrees tops sf sub fuel /\ supported_main_nsid nsid /\
   supported_nested_type supported_scalar_type fuel tops (StructT nsid) ==>
   get_struct_fields sub (nsid_to_string nsid) =
   get_struct_fields sf (nsid_to_string nsid)
 Proof
-  Cases_on `nsid` >> rename1 `(modid,name)` >> Cases_on `modid`
-  >- (rw[nsid_to_string_def] >>
-      fs[nested_metadata_agrees_def] >>
-      first_x_assum (qspecl_then [`fuel`, `name`] mp_tac) >>
-      simp[] >> rw[get_struct_fields_def]) >>
-  simp[Once supported_nested_type_def, supported_scalar_type_def,
-       supported_word_type_def, supported_string_type_def,
-       supported_struct_fields_other_module]
+  PairCases_on `nsid` >> rw[nsid_to_string_def, supported_main_nsid_def] >>
+  fs[nested_metadata_agrees_def] >>
+  first_x_assum (qspecl_then [`fuel`, `nsid1`] mp_tac) >>
+  simp[] >> rw[get_struct_fields_def]
 QED
 
 Theorem nested_type_rank_metadata_invariant:
@@ -250,6 +246,7 @@ Theorem nested_type_rank_metadata_invariant:
     struct_metadata_types_match tops sf /\
     struct_metadata_types_match tops sub /\
     supported_nested_type supported_scalar_type fuel tops ty /\
+    unqualified_struct_metadata sf /\ supported_type_namespace ty /\
     nested_metadata_agrees tops sf sub fuel ==>
     type_rank sub ty = type_rank sf ty
 Proof
@@ -259,23 +256,29 @@ Proof
       qpat_x_assum `supported_nested_type _ _ _ (ArrayT _ _)` mp_tac >>
       simp[Once supported_nested_type_def, supported_scalar_type_def,
            supported_word_type_def, supported_string_type_def] >> strip_tac >>
-      simp[type_rank_def] >>
+      fs[type_rank_def, supported_type_namespace_def] >>
       first_x_assum irule >> qexistsl_tac [`fuel`, `tops`] >> simp[])
   >- (rpt strip_tac >>
       qpat_x_assum `supported_nested_type _ _ _ (TupleT _)` mp_tac >>
       simp[Once supported_nested_type_def, supported_scalar_type_def,
            supported_word_type_def, supported_string_type_def] >> strip_tac >>
-      simp[type_rank_def] >>
+      fs[type_rank_def, supported_type_namespace_def] >>
+      `EVERY supported_type_namespace tys` by
+        fs[supported_types_namespace_every] >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[] >> rpt strip_tac >>
       first_x_assum irule >> simp[] >>
-      qexistsl_tac [`fuel`, `tops`] >> fs[EVERY_MEM])
+      conj_tac >- (fs[EVERY_MEM] >> res_tac) >>
+      qexistsl_tac [`fuel`, `tops`] >> fs[EVERY_MEM] >> res_tac)
   >- (rpt strip_tac >>
+      fs[supported_type_namespace_def, supported_main_nsid_def] >>
+      drule_then (qspec_then `nsid_to_string nsid` assume_tac)
+        unqualified_struct_metadata_lookup >>
       drule_all nested_metadata_fields >> strip_tac >>
       drule_all nested_metadata_agrees_fields >> strip_tac >>
       simp[type_rank_def] >> AP_TERM_TAC >> irule MAP_CONG >> simp[] >>
       rpt strip_tac >> qmatch_goalsub_rename_tac `FST (SND triple)` >>
       first_x_assum irule >> simp[] >>
-      conj_tac >- (qexists_tac `triple` >> simp[]) >>
+      conj_tac >- (fs[EVERY_MEM] >> res_tac) >>
       qexistsl_tac [`fuel - 1`, `tops`] >>
       simp[struct_metadata_types_match_delete] >>
       fs[EVERY_MEM] >> irule nested_metadata_agrees_delete >>
@@ -300,7 +303,7 @@ QED
    blocked by an interface declaration, which never resolve as structs. *)
 Theorem nested_fields_rank:
   !fuel tops sf name fields.
-    struct_metadata_types_match tops sf /\
+    struct_metadata_types_match tops sf /\ unqualified_struct_metadata sf /\
     FLOOKUP sf name = SOME fields /\
     EVERY (supported_nested_type supported_scalar_type fuel tops o
            FST o SND) fields ==>
@@ -311,25 +314,29 @@ Proof
   Cases_on `?n. n <= fuel /\
     supported_nested_type supported_scalar_type n tops (StructT (NONE,name))`
   >- (pop_assum strip_assume_tac >>
-      drule_all nested_metadata_fields >> strip_tac >>
+      drule_all (SIMP_RULE std_ss [supported_main_nsid_def] (Q.INST [`nsid` |-> `(NONE,name)`] nested_metadata_fields)) >> strip_tac >>
       first_x_assum irule >> simp[] >>
       qexistsl_tac [`n - 1`, `tops`] >>
       gvs[get_struct_fields_def, nsid_to_string_def]) >>
   `nested_metadata_agrees tops sf (sf \\ name) fuel` by
     (irule nested_metadata_agrees_delete_unreachable >>
      first_assum ACCEPT_TAC) >>
+  `EVERY (supported_type_namespace o FST o SND) fields` by
+    (drule_then (qspec_then `name` mp_tac) unqualified_struct_metadata_lookup >>
+     simp[get_struct_fields_def]) >>
   `MAP (type_rank (sf \\ name) o FST o SND) fields =
    MAP (type_rank sf o FST o SND) fields` by
     (irule MAP_CONG >> simp[] >> rpt strip_tac >>
      irule nested_type_rank_metadata_invariant >>
+     fs[EVERY_MEM] >>
      qexistsl_tac [`fuel`, `tops`] >>
-     simp[struct_metadata_types_match_delete] >> fs[EVERY_MEM]) >>
+     simp[struct_metadata_types_match_delete] >> res_tac) >>
   simp[type_rank_def, nsid_to_string_def, get_struct_fields_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> gvs[]
 QED
 
 Theorem nested_copy_metadata_acyclic:
-  struct_metadata_types_match tops sf /\
+  struct_metadata_types_match tops sf /\ unqualified_struct_metadata sf /\
   FEVERY (λ(name,fields).
     EVERY (supported_nested_type supported_scalar_type fuel tops o
            FST o SND) fields) sf ==>
@@ -340,21 +347,25 @@ Proof
   qexistsl_tac [`fuel`, `tops`] >> simp[]
 QED
 
-(* Producer for the actual builder. The two source premises are checkable:
-   namespace uniqueness and the supported declaration whitelist. No premise
-   assumes anything about a compile_env, ranks, or termination. *)
+(* The builder uses unique declarations with supported, unqualified field types. *)
 Theorem make_struct_fields_map_acyclic:
-  struct_args_unique tops /\ supported_declaration_headers tops ==>
+  struct_args_unique tops /\ supported_declaration_headers tops /\
+  (!name fields. MEM (StructDecl name fields) tops ==>
+    EVERY (supported_type_namespace o SND) fields) ==>
   acyclic_struct_metadata (make_struct_fields_map tops)
 Proof
   strip_tac >> irule nested_copy_metadata_acyclic >>
+  conj_tac
+  >- (simp[unqualified_struct_metadata_def, make_struct_fields_map_def] >>
+      irule built_struct_fields_every >> simp[FEVERY_FEMPTY] >>
+      first_assum ACCEPT_TAC) >>
   qexistsl_tac [`LENGTH tops`, `tops`] >>
   simp[make_struct_fields_map_types_match] >>
   simp[make_struct_fields_map_def] >> irule built_struct_fields_every >>
   simp[FEVERY_FEMPTY] >> rpt strip_tac >>
   fs[supported_declaration_headers_def, EVERY_MEM] >>
-  first_x_assum drule >>
-  simp[supported_declaration_header_def, supported_place_type_def, EVERY_MEM]
+  res_tac >>
+  fs[supported_declaration_header_def, supported_place_type_def, EVERY_MEM]
 QED
 
 (* Regression: forward references, arrays of tuples, and non-word fields
@@ -367,14 +378,17 @@ Theorem make_nested_struct_fields_acyclic_probe:
      StructDecl "Inner"
        [("values", ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 3))]])
 Proof
-  irule make_struct_fields_map_acyclic >> EVAL_TAC >> rw[] >> gvs[]
+  irule make_struct_fields_map_acyclic >> EVAL_TAC >> rw[] >>
+  gvs[supported_type_namespace_def, supported_main_nsid_def]
 QED
 
 Theorem build_compile_env_struct_metadata_acyclic:
-  struct_args_unique tops /\ supported_declaration_headers tops ==>
+  struct_args_unique tops /\ supported_declaration_headers tops /\
+  (!name fields. MEM (StructDecl name fields) tops ==>
+    EVERY (supported_type_namespace o SND) fields) ==>
   acyclic_struct_metadata
     (build_compile_env tops vis mut name args ret stmts use_transient).ce_struct_fields
 Proof
   simp[build_compile_env_ce_struct_fields] >> strip_tac >>
-  irule make_struct_fields_map_acyclic >> simp[]
+  drule_all make_struct_fields_map_acyclic >> simp[]
 QED

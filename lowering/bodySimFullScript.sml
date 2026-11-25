@@ -211,8 +211,9 @@ Definition return_buf_sep_def:
              loweringStateRelDefs$regions_disjoint (w2n bw) capacity b sz)
 End
 
-(* Both compilations include local declarations and return the same
-   environment, as stmt_env and stmts_env do. *)
+(* Both compilations include local declarations: the original returns
+   cenv', as stmt_env and stmts_env do, and the shadow returns
+   gas_shadow_env T cenv'. *)
 Definition stmt_frag_full_def:
   stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cx lctx RetQ cenv

@@ -34,7 +34,7 @@
 Theory retAbiPlanProps
 Ancestors
   abiTypeBoundProps compileVyper compileEnv loweringStateRelDefs exprLowering abiEncoderProps structFieldsProps
-  typedCopyProducer supportedTypes
+  typedCopyProducer supportedTypes checkedTypeNamespace
   vyperTypeSystem vyperContext vyperValue vyperABI contractABI
   valueEncoding finite_map list rich_list option pair combin
 
@@ -656,6 +656,13 @@ Proof
   ho_match_mp_tac assignable_type_ind >> rpt conj_tac >> rpt gen_tac
   >~ [`StructT nsid`]
   >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
+      `FST nsid = NONE` by
+        (PairCases_on `nsid` >> Cases_on `nsid0` >> simp[] >>
+         Cases_on `FLOOKUP tenv (SOME x,nsid1)` >>
+         gvs[well_formed_type_def, evaluate_type_def, SUBMAP_FLOOKUP_EQN] >>
+         qpat_x_assum `!k v. FLOOKUP tenv k = SOME v ==> _`
+           (drule_then mp_tac) >>
+         simp[type_env_qualified_lookup]) >>
       qpat_x_assum `supported_nested_type _ _ _ _` mp_tac >>
       simp[Once supported_nested_type_def, supported_scalar_type_def,
            supported_word_type_def, supported_string_type_def, AllCaseEqs()] >>

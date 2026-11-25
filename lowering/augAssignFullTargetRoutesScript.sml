@@ -1,6 +1,6 @@
 Theory augAssignFullTargetRoutes
 Ancestors
-  bodyInvCodeProps moduleVariableKeyProps linkedStorageMetadataProps
+  bodyTypedTargetScope bodyInvCodeProps moduleVariableKeyProps linkedStorageMetadataProps
   bodyAugPlaceTarget supportedStmts supportedTargets supportedTypes
   supportedExprForms supportedDecls bodySim targetPlaceSim list alist
   exprSimHypsDefs vyperTypeSystem
@@ -39,7 +39,7 @@ Proof
 QED
 
 Theorem augassign_scalar_target_route:
-  body_inv tops ctx cenv cx /\
+  body_inv tops ctx cenv cx /\ FST nsid = NONE /\
   supported_scalar_target tops nsid ==>
   ?vis ity slot mut.
     supported_variable_decl tops nsid = SOME (vis,mut,ity,SOME slot) /\
@@ -49,7 +49,6 @@ Theorem augassign_scalar_target_route:
     ~immutable_root cx (TopLevelNameTarget nsid)
 Proof
   PairCases_on `nsid` >> strip_tac >>
-  drule_then strip_assume_tac supported_scalar_target_decl >>
   gvs[] >> drule_then assume_tac body_inv_contract >>
   mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
                   `ctx` |-> `ctx`, `src` |-> `NONE`, `id` |-> `nsid1`]

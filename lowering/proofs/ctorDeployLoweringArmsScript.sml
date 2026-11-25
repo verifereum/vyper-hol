@@ -212,7 +212,7 @@ Theorem deploy_ctor_constant_cells:
 Proof
   strip_tac >>
   `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
-    fs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_def] >>
+    fs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
   pop_assum strip_assume_tac >>
   `contract_constants_ok [(NONE,tops)]` by
     (qpat_x_assum `check_contract F _ _ _ = _` mp_tac >>

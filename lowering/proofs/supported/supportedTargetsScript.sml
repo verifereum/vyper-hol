@@ -10,12 +10,14 @@ Ancestors
    root is a supported place root, and every index is supported. The
    lowering resolves each layer's type from its own scoped environment, so
    a local's binding type is not consulted (sibling scopes may redeclare a
-   name at another type). *)
+   name at another type). The marker for a qualified root carries no type
+   information. The linked lookup supplies its descriptor. *)
 Definition supported_target_info_def:
   supported_target_info tops bindings (NameTarget name) =
     OPTION_MAP ValPT (ALOOKUP bindings name) /\
   supported_target_info tops bindings (TopLevelNameTarget id) =
-    (if supported_place_root tops id then
+    (if FST id <> NONE then SOME (ValPT NoneT)
+     else if supported_place_root tops id then
        case supported_hashmap_decl tops id of
          SOME (_, _, kt, vt, _) => SOME (MapPT kt vt)
        | NONE =>

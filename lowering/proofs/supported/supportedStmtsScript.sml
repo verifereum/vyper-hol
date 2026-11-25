@@ -16,6 +16,7 @@ End
 
 Definition supported_scalar_target_def:
   supported_scalar_target tops id <=>
+    FST id <> NONE \/
     case supported_variable_decl tops id of
       SOME (vis, Storage, ty, SOME slot) => supported_storage_type tops ty
     | SOME (vis, Transient, ty, SOME slot) => supported_storage_type tops ty
@@ -24,6 +25,7 @@ End
 
 Definition supported_storage_field_write_def:
   supported_storage_field_write tops id fname <=>
+    FST id <> NONE \/
     case supported_storage_fields tops id of
       SOME fields => MEM fname (MAP FST fields)
     | NONE => F
@@ -76,12 +78,18 @@ Definition supported_string_reason_def:
      case expr_type e of BaseT (StringT _) => T | _ => F)
 End
 
+Definition supported_custom_error_def:
+  supported_custom_error tops (CustomError id positional kwargs) <=>
+    FST id <> NONE \/
+    custom_error_resolved [(NONE,tops)] (CustomError id positional kwargs)
+End
+
 Definition supported_assert_reason_def:
   supported_assert_reason tops AssertBare = T /\
   supported_assert_reason tops AssertUnreachable = T /\
   supported_assert_reason tops (AssertReason e) = supported_string_reason tops e /\
   supported_assert_reason tops (AssertCustomError err) =
-    (custom_error_resolved [(NONE, tops)] err /\
+    (supported_custom_error tops err /\
      EVERY (supported_pure_expr tops) (custom_error_exprs err))
 End
 
@@ -90,7 +98,7 @@ Definition supported_raise_reason_def:
   supported_raise_reason tops RaiseUnreachable = T /\
   supported_raise_reason tops (RaiseReason e) = supported_string_reason tops e /\
   supported_raise_reason tops (RaiseCustomError err) =
-    (custom_error_resolved [(NONE, tops)] err /\
+    (supported_custom_error tops err /\
      EVERY (supported_pure_expr tops) (custom_error_exprs err))
 End
 
@@ -106,9 +114,10 @@ End
 Definition supported_log_def:
   supported_log tops id es <=>
     supported_pure_exprs tops es /\
-    case supported_event_fields tops id of
+    (FST id <> NONE \/
+     case supported_event_fields tops id of
       SOME fields => LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) es fields
-    | NONE => F
+    | NONE => F)
 End
 
 (* Literal ranges have exactly Num(b-a), including zero. The other range
@@ -145,15 +154,18 @@ Definition supported_iterator_def:
      | Name _ _ => F
      | TopLevelName (ArrayT elem bd) nid =>
          elem = ty /\ bound_length bd <= n /\
-         (IS_SOME (supported_immutable_type tops nid) \/
+         (FST nid <> NONE \/ IS_SOME (supported_immutable_type tops nid) \/
           supported_storage_value tops nid (ArrayT elem bd) \/
           supported_constant_type tops nid = SOME (ArrayT elem bd))
      | TopLevelName _ _ => F
      | _ => supported_expr tops e /\
-            (!t fid args drv. e = Call t (IntCall fid) args drv ==>
-               ?m nr rr ps ds b.
-                 supported_function_decl tops fid Internal =
-                   SOME (m,nr,rr,ps,ds,t,b)) /\
+            (case e of
+               Call t (IntCall fid) _ _ =>
+                 FST fid <> NONE \/
+                 (case supported_function_decl tops fid Internal of
+                    SOME (_,_,_,_,_,ret,_) => ret = t
+                  | NONE => F)
+             | _ => T) /\
             ?bd. expr_type e = ArrayT ty bd /\ bound_length bd <= n)
 End
 
@@ -182,7 +194,7 @@ Definition supported_stmt_def:
   supported_stmt tops bindings (Raise reason) = supported_raise_reason tops reason /\
   supported_stmt tops bindings (Log id es) = supported_log tops id es /\
   supported_stmt tops bindings (For name ty iter n loop_body) =
-    (supported_type_namespace ty /\ supported_iterator tops ty iter n /\
+    (supported_iterator tops ty iter n /\
      supported_stmts tops bindings loop_body) /\
   supported_stmts tops bindings [] = T /\
   supported_stmts tops bindings (s::ss) =

@@ -490,6 +490,8 @@ Proof
      Cases_on `idx` >> gvs[] >> rename1 `Literal _ l` >> Cases_on `l` >> gvs[] >>
      rename1 `IntL n` >>
      qexists_tac `Num n` >> simp[integerTheory.INT_OF_NUM]) >>
+  `~array_slot_base cenv obj` by
+    (strip_tac >> drule allocLimitsPropsTheory.array_slot_base_is_ArrayT >> simp[]) >>
   gvs[expr_body_pre_def, well_typed_expr_def,
       vyperTypeCallGraphTheory.int_calls_expr_def, byte_widths_expr_def,
       allocLimitsTheory.alloc_limits_expr_def,

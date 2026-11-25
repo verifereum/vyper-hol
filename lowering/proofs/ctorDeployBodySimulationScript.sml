@@ -34,7 +34,7 @@ Proof
   fs[const_cells_agree_def]
 QED
 
-Theorem deploy_ctor_body_frag_full_plain_defaults[local]:
+Theorem deploy_ctor_body_frag_full_base[local]:
   !policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final
    func mut source_body am_c es0 shadow_ctx shadow_func.
@@ -93,7 +93,7 @@ Proof
        metis_tac[deploy_ctor_entry_selection_agrees] >>
      qpat_x_assum `body = _` SUBST_ALL_TAC >>
      `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
-       fs[deploy_source_ok_def, deploy_typing_ok_def] >>
+       fs[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
      pop_assum strip_assume_tac >>
      drule_all deploy_ctor_constant_cells >> strip_tac >>
      `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
@@ -101,7 +101,7 @@ Proof
      drule_all checked_const_substitution_abi_decode_target >>
      metis_tac[lookup_function_abi_decode_target_occurs]) >>
   `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
-    fs[deploy_source_ok_def, deploy_typing_ok_def] >>
+    fs[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
   pop_assum strip_assume_tac >>
   drule bodyLoopCallsTheory.checked_module_loop_calls_ok >> disch_then assume_tac >>
   `stmts_loop_calls_ok [(NONE,tops)] body` by
@@ -153,7 +153,7 @@ Theorem deploy_ctor_body_internal_constant_defaults:
       (eval_stmts (deploy_evaluation_context tops am tx) body)
       (es0 with outcomes := SOME vs.vs_outcomes)
 Proof
-  metis_tac[deploy_ctor_body_frag_full_plain_defaults]
+  metis_tac[deploy_ctor_body_frag_full_base]
 QED
 
 Theorem deploy_ctor_body_frag_full:
@@ -183,5 +183,5 @@ Theorem deploy_ctor_body_frag_full:
       (eval_stmts (deploy_evaluation_context tops am tx) body)
       (es0 with outcomes := SOME vs.vs_outcomes)
 Proof
-  metis_tac[deploy_ctor_body_frag_full_plain_defaults]
+  metis_tac[deploy_ctor_body_frag_full_base]
 QED

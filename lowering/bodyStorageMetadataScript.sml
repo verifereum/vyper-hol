@@ -107,14 +107,14 @@ QED
    transient struct of the main module, tops. *)
 Theorem supported_storage_field_write_decl:
   !tops src id fld.
-    supported_storage_field_write tops (src, id) fld ==>
+    src = NONE /\ supported_storage_field_write tops (src, id) fld ==>
     src = NONE /\ find_var_decl_by_name id tops <> NONE /\
     ?vis mut sid slot. MEM (VariableDecl vis mut id (StructT sid) slot) tops
 Proof
-  rpt gen_tac >>
+  rpt gen_tac >> Cases_on `src` >> simp[] >>
   simp[supported_storage_field_write_def,
        supportedExprFormsTheory.supported_storage_fields_def] >>
-  Cases_on `supported_variable_decl tops (src, id)` >> simp[] >>
+  Cases_on `supported_variable_decl tops (NONE, id)` >> simp[] >>
   rename1 `SOME x` >> PairCases_on `x` >>
   drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
   Cases_on `x0` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >> simp[] >>

@@ -17,6 +17,7 @@ Ancestors
   bodyPtrBopScalarCompile bodyPtrBopScalarOutcome abiMalformedBulkArray
   abiDecoderAbortReentry abiDecoderReentry abiDecoderVarSequence abiDecoderContract
   fragGasOriginPtrDead instIdxIndep
+  fragGasCopySeqLiftProps
 
 Theorem abi_decode_array_header_success_joint:
   abi_decode_array_header (Var output) (Var addr) MLOAD sa = (cnt,sb) /\
@@ -758,7 +759,7 @@ Proof
   `inst_seq_ptr
     <|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>
     lo ctx func PG G tn (emitted_insts sa sb) s H th` by
-    (irule (fragGasCopyLoopTheory.inst_seq_ptr_lower_bound_transport |> Q.INST [`lo0` |-> `0`]) >> simp[]) >>
+    (irule (fragGasCopySeqLiftPropsTheory.inst_seq_ptr_lower_bound_transport |> Q.INST [`lo0` |-> `0`]) >> simp[]) >>
   `!explicit. gas_origin_ptr_path
      (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
       lo,explicit,ctx,func,PG) (s,G,tn) []

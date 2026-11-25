@@ -13,7 +13,7 @@ Ancestors
   contextCodegenRel codegenRel unitTransformDefs memSafeRun
   vyperTypeSystem vyperTypeBuiltins list finite_map emitHelper compileEnv
   fragExec venomInst venomState
-  bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  bodyFullHashKeccakFixed[qualified,ignore_grammar] exprSimFullBundleProps fragGasSeq
 
 Theorem calldatalen_full_path:
   lower_value compile_expr cenv ty (Builtin (BaseT (UintT 256)) CalldataLen []) sa = (op,sb) /\
@@ -52,71 +52,55 @@ Proof
   disch_then (qx_choose_then `out` strip_assume_tac) >> gvs[]
 QED
 
-Theorem calldatalen_builtin_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
-    bt = CalldataLen /\ builtin_args_length_ok bt (LENGTH args) /\
-    (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>
-     body_exprs_full_ok cx args) /\
-    (builtin_args_length_ok bt (LENGTH args) /\ bt = Len ==>
-     body_expr_full_ok cx (HD args)) /\
-    body_inv tops ctx cenv cx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt args) es ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin a bt args) es /\
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin a bt args) es
+Theorem calldatalen_full_witness:
+  expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Builtin (BaseT (UintT 256)) CalldataLen []) es
+    (st0,sa,sb,shadow_sa,shadow_sb,op,s0,G0,tn0) /\
+  storage_trace_domain cx st0 es.storage_trace ==>
+  ?t G' tn'.
+    run_inst_seq (emitted_insts sa sb) s0 = OK (t with vs_inst_idx := s0.vs_inst_idx) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (s0,G0,tn0) [] (OK t,G',tn') /\
+      expr_sim_full_post (DF,lo,d,ctx,func) cenv cx (Builtin (BaseT (UintT 256)) CalldataLen [])
+        (es,sa,sb,s0,op,G0,tn0) H (INL (IntV &LENGTH cx.txn.calldata))
+        (es with gas_obs := []) G' tn' t)
 Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  `args = [] /\ a = BaseT (UintT 256)` by
-    gvs[expr_body_pre_def, expr_sim_pre_def, cj 9 well_typed_expr_def,
-        well_typed_builtin_app_def] >>
-  gvs[] >>
-  conj_asm1_tac
-  >- (rw[expr_sim_full_def] >>
-      irule gas_outcome_full_initial_domain >>
-      simp[storage_trace_frame_bind, cj 5 evaluate_storage_trace_frame,
-           storage_trace_frame_read_result] >>
-      strip_tac >>
-      `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
-        gvs[storage_trace_domain_def] >>
-      `allocas_from lo s0` by metis_tac[ghost_inv_at_def] >>
-      `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
-        metis_tac[stateRelProjTheory.stmt_state_rel_state_rel,
-                  stateRelProjTheory.state_rel_call_ctx_rel] >>
-      `!out. step_inst_base (mk_inst sa.cs_next_id CALLDATASIZE [] [out]) s0 =
-         OK (update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0)` by
-        (simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
-         fs[call_ctx_rel_def,
-            val_to_w256_def, integer_wordTheory.i2w_def] >> metis_tac[]) >>
-      drule_all calldatalen_full_path >>
-      disch_then (qspecl_then [`tn0`, `gas_explicit_sites ctx shadow_ctx`, `PG`, `G0`]
-        strip_assume_tac) >>
-      irule gas_outcome_full_pure >> simp[] >>
-      qexistsl_tac [`G'`, `es`, `INL (IntV &LENGTH cx.txn.calldata)`, `t`, `tn'`] >>
-      simp[calldata_source_all_tails] >>
-      qx_gen_tac `H` >> strip_tac >>
-      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
-        (drule_then strip_assume_tac) >>
-      gvs[lower_value_calldata_len] >>
-      drule emitted_insts_emit_op >> strip_tac >>
-      `sb.cs_current_bb = sa.cs_current_bb` by
-        gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
-            comp_ignore_bind_def, comp_return_def, emit_def] >>
-      simp[expr_store_bound_def, vyperASTTheory.expr_type_def, is_word_type_def,
-           update_var_def, alloca_history_def] >>
-      `!x. not_fresh_at sa x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
-        (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-      conj_tac >- suspend "word_post" >>
-      conj_tac >- suspend "history" >>
-      suspend "ghosts") >>
-  irule expr_vv_sim_stack_full >>
-  simp[vyperASTTheory.expr_type_def, is_word_type_def,
-       compile_calldata_len_stack] >>
-  MATCH_ACCEPT_TAC exprLoweringPropsTheory.eval_expr_builtin_value
+  simp_tac bool_ss [expr_sim_full_hypotheses_def, expr_sim_full_code_def] >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    gvs[storage_trace_domain_def] >>
+  `allocas_from lo s0` by metis_tac[ghost_inv_at_def] >>
+  `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
+    metis_tac[stateRelProjTheory.stmt_state_rel_state_rel,
+              stateRelProjTheory.state_rel_call_ctx_rel] >>
+  `!out. step_inst_base (mk_inst sa.cs_next_id CALLDATASIZE [] [out]) s0 =
+     OK (update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0)` by
+    (simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
+     fs[call_ctx_rel_def,val_to_w256_def, integer_wordTheory.i2w_def] >> metis_tac[]) >>
+  drule_all calldatalen_full_path >>
+  disch_then (qspecl_then [`tn0`, `gas_explicit_sites ctx shadow_ctx`, `PG`, `G0`]
+    strip_assume_tac) >>
+  qexistsl_tac [`t`,`G'`,`tn'`] >>
+  gvs[lower_value_calldata_len] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  conj_tac >- simp[run_inst_seq_def, update_var_def, venom_state_component_equality] >>
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  simp[expr_sim_full_post_def, expr_sim_full_endpoint_def, expr_store_bound_def,
+       vyperASTTheory.expr_type_def, is_word_type_def, update_var_def, alloca_history_def] >>
+  `!x. not_fresh_at sa x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
+    (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  conj_tac >- suspend "word_post" >>
+  conj_tac >- fs[alloca_history_def] >>
+  conj_tac >- suspend "history" >>
+  conj_tac >- (Cases_on `ctx_has_dalloca ctx` >> fs[allocas_below_fmp_def] >> first_assum ACCEPT_TAC) >>
+  suspend "ghosts"
 QED
 
-Resume calldatalen_builtin_sim_full[word_post]:
+Resume calldatalen_full_witness[word_post]:
   irule expr_post_word_intro >>
   simp[vyperASTTheory.expr_type_def, is_word_type_def, word_value_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
@@ -146,7 +130,7 @@ Resume calldatalen_builtin_sim_full[word_post]:
   metis_tac[stmt_state_rel_inst_idx]
 QED
 
-Resume calldatalen_builtin_sim_full[history]:
+Resume calldatalen_full_witness[history]:
   fs[alloca_history_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `k < LENGTH sa.cs_current_insts`
   >- metis_tac[] >>
@@ -156,7 +140,7 @@ Resume calldatalen_builtin_sim_full[history]:
   simp[] >> strip_tac >> gvs[mk_inst_def]
 QED
 
-Resume calldatalen_builtin_sim_full[ghosts]:
+Resume calldatalen_full_witness[ghosts]:
   reverse conj_tac
   >- (simp[ptr_val_ok_def, is_word_type_def, ghost_kept_at_def,
           step_prov_def, out_prov_def, set_prov_def, op_prov_def,
@@ -179,7 +163,43 @@ Resume calldatalen_builtin_sim_full[ghosts]:
   simp[pred_setTheory.EXTENSION, flookup_thm] >> metis_tac[]
 QED
 
-Finalise calldatalen_builtin_sim_full
+Finalise calldatalen_full_witness
+
+Theorem calldatalen_builtin_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+    bt = CalldataLen /\ builtin_args_length_ok bt (LENGTH args) /\
+    (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>
+     body_exprs_full_ok cx args) /\
+    (builtin_args_length_ok bt (LENGTH args) /\ bt = Len ==>
+     body_expr_full_ok cx (HD args)) /\
+    body_inv tops ctx cenv cx /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    expr_body_pre cenv cx env (Builtin a bt args) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a bt args) es /\
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a bt args) es
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `args = [] /\ a = BaseT (UintT 256)` by
+    gvs[expr_body_pre_def, expr_sim_pre_def, cj 9 well_typed_expr_def,
+        well_typed_builtin_app_def] >>
+  gvs[] >> conj_asm1_tac
+  >- (rw[expr_sim_full_via_bundle] >>
+      `~s0.vs_halted` by fs[expr_sim_full_hypotheses_def] >>
+      irule gas_outcome_full_initial_domain >>
+      simp[storage_trace_frame_bind, cj 5 evaluate_storage_trace_frame,
+           storage_trace_frame_read_result] >> strip_tac >>
+      drule_all calldatalen_full_witness >> strip_tac >>
+      irule gas_outcome_full_pure >> simp[] >>
+      qexistsl_tac [`G'`,`es`,`INL (IntV &LENGTH cx.txn.calldata)`,`t`,`tn'`] >>
+      simp[calldata_source_all_tails] >> rpt strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+      fs[expr_sim_full_post_def]) >>
+  irule expr_vv_sim_stack_full >>
+  simp[vyperASTTheory.expr_type_def, is_word_type_def, compile_calldata_len_stack] >>
+  MATCH_ACCEPT_TAC exprLoweringPropsTheory.eval_expr_builtin_value
+QED
 
 Theorem length_builtin_sim_full:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.

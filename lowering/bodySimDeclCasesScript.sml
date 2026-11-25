@@ -27,7 +27,7 @@
 
 Theory bodySimDeclCases
 Ancestors
-  stmtExprAllocationPreProps bodyInvCodeProps compileUnit alist
+  stmtExprAllocationPreProps bodyInvCodeProps bodySingletonCallSupport compileUnit alist
   bodyInvExecutionProps exprBodyPreProps
   supportedExprTraverse allocLimitsProps
   annassignRelayoutFrag annassignRelayoutSource assignRelayoutCaller
@@ -1026,6 +1026,12 @@ Proof
      rename1 `Range _ (Literal a' lit')` >> Cases_on `lit'` >> gvs[]) >>
   `supported_expr tops e1 /\ supported_expr tops e2` by
     simp[supportedExprsTheory.supported_expr_def] >>
+  `~expr_has_evm_run e1 /\ EVERY (\c. FST c = NONE) (int_calls_expr e1) /\
+   EVERY (\c. IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e1)` by
+    (irule supported_singleton_expr_body_calls >> metis_tac[]) >>
+  `~expr_has_evm_run e2 /\ EVERY (\c. FST c = NONE) (int_calls_expr e2) /\
+   EVERY (\c. IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e2)` by
+    (irule supported_singleton_expr_body_calls >> metis_tac[]) >>
   drule_then strip_assume_tac body_inv_main_support >>
   drule_then strip_assume_tac body_inv_main_code >>
   `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>

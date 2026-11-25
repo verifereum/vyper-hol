@@ -1,6 +1,6 @@
 Theory bodyInvSplit
 Ancestors
-  compileUnit compileEnv compileVyper immSectionDead
+  bodyCallSupport compileUnit compileEnv compileVyper immSectionDead
   exprLoweringProps loweringStateRelDefs immutableLocationProps
   supportedProgram vyperTypeContract vyperTypeSystem vyperTypeConstantFold
   vyperAST vyperContext vyperABI moduleLowering venomInst
@@ -123,10 +123,11 @@ Definition contract_inv_def[nocompute]:
     ALOOKUP cx.sources cx.txn.target = SOME mods /\
     IS_SOME (ALOOKUP mods NONE) /\
     ALL_DISTINCT (MAP FST mods) /\
-    EVERY (supported_program o SND) mods /\
     (!src tops. ALOOKUP mods src = SOME tops ==>
-       supported_program tops /\
-       (cx.in_deploy ==> supported_program_deploy tops) /\
+       supported_module_headers tops /\
+       (src = NONE ==>
+          supported_program tops /\
+          (cx.in_deploy ==> supported_program_deploy tops)) /\
        ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops))) /\
     ALL_DISTINCT (FLAT (MAP (\(src,tops).
        FLAT (MAP (toplevel_vtype_keys_toplevel src) tops)) mods)) /\
@@ -139,6 +140,7 @@ Definition contract_inv_def[nocompute]:
        IS_SOME (FST (SND (SND (SND (classify_functions_unit mods exps)))))) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
               is_dynamic (vyper_to_abi_type (type_env_all_modules mods) target)) /\
+    linked_body_calls_resolved mods cx /\
     cenv_module_pins_mods mods cenv /\
     cenv.ce_func_ids = build_func_ids_mods 0 mods /\
     cenv.ce_func_param_types = build_func_param_types_mods mods /\
@@ -158,9 +160,19 @@ Definition contract_inv_def[nocompute]:
        ALOOKUP (build_func_defaults_mods mods) (nsid_to_string (src,name))) /\
     (!src tops vis mut nr rr name args dflts ret ss.
        ALOOKUP mods src = SOME tops /\
-       MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops ==>
+       MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+       (src = NONE \/ MEM (src,name) (linked_live_functions mods exps)) ==>
        function_mutability_ok mods vis mut nr dflts ss /\
-       (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot)) /\
+       (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot) /\
+       (cx.in_deploy /\ vis = Deploy ==> EVERY (supported_value_type tops o SND) args)) /\
+    (!src tops vis mut nr rr name args dflts ret ss.
+       ALOOKUP mods src = SOME tops /\
+       MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+       (src = NONE \/ context_function_live cx (src,name)) ==>
+       supported_declaration_body tops
+         (FunctionDecl vis mut nr rr name args dflts ret ss) /\
+       (cx.in_deploy ==> supported_deploy_declaration tops
+         (FunctionDecl vis mut nr rr name args dflts ret ss))) /\
     immutable_section_layout_mods mods cenv
 End
 
@@ -171,7 +183,7 @@ Definition module_body_inv_def[nocompute]:
 End
 
 Theorem contract_inv_module_gate:
-  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx ==>
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods NONE tops cenv cx ==>
   supported_program tops /\ (cx.in_deploy ==> supported_program_deploy tops)
 Proof
   rw[contract_inv_def, module_body_inv_def] >>

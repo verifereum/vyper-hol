@@ -13,7 +13,7 @@ Ancestors
   vyperLoweringCorrect loweringStateRelDefs venomInst venomState
   loweringPosts exprLoweringProps allocaFrontierRoom entryReachBodyFmp
   selectedEntryPrefixCode decoderOriginAllocationFrame fragFuel entryCompileIntervals
-  groupedValueRejectSite list pair finite_map words
+  groupedValueRejectSite entryCreateGroupedLayout list pair finite_map words
 
 val _ = Parse.hide "body";
 
@@ -230,7 +230,7 @@ Proof
   `?ce. fall = SOME (ce,mut = Payable,nr,global_nonreentrant_slot,T,mut = View,stmts,rt)` by
     simp[package_fallback_fn_def, set_fallback_package_target_def, Abbr `stmts`, Abbr `rt`] >>
   pop_assum strip_assume_tac >>
-  drule_all grouped_shadow_entry_dispatch >>
+  drule_all grouped_shadow_entry_dispatch_with_layout >>
   disch_then (qx_choosel_then [`shadow_installed`,`shadow_fn`,`sf`,`fallback`,`jobs`,
     `sd`,`shd`,`sx`,`shx`,`sn`,`shn`,`se`,`she`] (map_every assume_tac o CONJUNCTS)) >>
   `shadow_installed = shadow_unit` by metis_tac[optionTheory.SOME_11] >>
@@ -286,6 +286,10 @@ Resume grouped_fallback_call_route_with_reject_site[guard]:
   qpat_x_assum `compile_fallback_body _ _ _ _ _ _ (MAP gas_shadow_stmt _) _ _ = _` kall_tac >>
   drule_all grouped_fallback_guarded_code >>
   disch_then (qx_choose_then `sa` (map_every assume_tac o CONJUNCTS)) >>
+  `cs_extends sa se /\ ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se))` by
+    (irule selected_grouped_body_layout_at >> conj_tac
+     >- (goal_assum (drule_at Any)) >>
+     qexists_tac `se` >> simp[cs_extends_refl]) >>
   `gas_shadow_state sa sha` by
     (mp_tac (Q.INST [`min_cds` |-> `4`, `payable` |-> `mut = Payable`]
        gas_shadow_compiles_compile_entry_checks) >>

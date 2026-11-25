@@ -714,7 +714,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_assum `!H. P H ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (drule_then strip_assume_tac) >>
-  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  drule_all_then assume_tac expr_body_pre_array_subscript_base_eval >>
   drule_all_then assume_tac expr_body_pre_array_subscript_index_after_base >>
   drule_all_then strip_assume_tac expr_body_pre_runtime_typed >>
   `value_has_type tvt iv` by metis_tac[] >>
