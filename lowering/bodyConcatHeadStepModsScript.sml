@@ -3,8 +3,9 @@ Theory bodyConcatHeadStepMods
 Ancestors
   bodyConcatCutsMods list
   bodyConcatCompileCutsMods bodyConcatHeadSourceMods bodyConcatChildFrameMods
-  bodyConcatFrameLawsMods bodyConcatCopyFrameMods bodyConcatBytesCopyMods
-  bodyConcatFixedCopyMods gasOutcomeFullPostMods exprBodyPreTypingProps
+  bodyConcatRegionFrameMods bodyConcatCopyFrameMods bodyConcatReachedCopyMods
+  bodyFullIfExpReach bodyFullHashKeccakFixed exprLoweringProps
+  gasOutcomeFullPostMods exprBodyPreTypingProps
   exprBodyPreCallSafetyProps exprSimDefs vyperState exprSimFullBundleProps
   bodyFullPostsMods bodyFullPredsMods exprOperandVar
   vyperStorageTrace vyperStorageFootprint
@@ -139,10 +140,96 @@ Resume concat_head_step_mods[success]:
   `concat_old_frame_mods (func,cenv,lo,pure)
      (scratch0,scratch1,scratch2,scratch3,scratch4,scratch5,scratch6)
      (anchor0,anchor1,anchor2,anchor3,anchor4) (mid,sc,t,G1,tn1)` by
-    (irule concat_old_frame_compose_mods >>
+    (irule concat_old_frame_compose_regions_mods >>
      qpat_assum `concat_old_frame_mods _ _ (es,sa,s,G,tn) (mid,sc,t,G1,tn1)` (irule_at Any) >>
-     asm_rewrite_tac[] >> FAIL_TAC "reservation at the anchor") >>
-  FAIL_TAC "assemble reached copy"
+     asm_rewrite_tac[]) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` drule) >> strip_tac >>
+  qpat_assum `expr_sim_full_code _ (sc,s2,shadow_sc,shadow_s2)`
+    (strip_assume_tac o MATCH_MP expr_sim_full_code_fields) >>
+  qpat_x_assum `LET _ _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [MAP] o BETA_RULE o
+       REWRITE_RULE [LET_THM,pairTheory.UNCURRY,pairTheory.pair_case_thm]) >>
+  qpat_assum `concat_head_post_mods _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac concat_reached_copy_mods) >>
+  disch_then (fn copy =>
+    qpat_assum `concat_live_mods _ _ (mid,sc,t,G1,tn1) bs`
+      (mp_then Any mp_tac copy)) >>
+  disch_then (fn copy =>
+    qpat_assum `arm sc = ((),s2)` (mp_then Any mp_tac copy)) >>
+  disch_then (qspecl_then [`MAP expr_type args`,`tv`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`P`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[MAP]) >> strip_tac >>
+  rename1 `concat_copy_effect_mods _ _ _ (s2,u,G2,tn2) bs _` >>
+  suspend "tail"
+QED
+
+Resume concat_head_step_mods[tail]:
+  `sc.cs_next_var <= s2.cs_next_var /\ sc.cs_next_id <= s2.cs_next_id` by
+    (qpat_assum `ci_mono sc s2` (mp_tac o REWRITE_RULE [ci_mono_def]) >> simp[]) >>
+  `32 + LENGTH (bs ++ concat_payload_mods v) <= scratch6` by
+    (qpat_assum `32 + P + SUM _ <= scratch6` (mp_tac o REWRITE_RULE [SUM]) >>
+     simp[NoAsms,LENGTH_APPEND] >> decide_tac) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+       concat_live_mods (func,cenv,lo)
+         (scratch0,scratch1,scratch2,scratch3,scratch4,scratch5,scratch6)
+         (mid,s2,u,G2,tn2) (bs ++ concat_payload_mods v) /\
+       concat_old_frame_mods (func,cenv,lo,pure)
+         (scratch0,scratch1,scratch2,scratch3,scratch4,scratch5,scratch6)
+         (anchor0,anchor1,anchor2,anchor3,anchor4) (mid,s2,u,G2,tn2) /\
+       concat_horizon_mods (ctx,func,cenv,cx,lo,d) (H,DF H) (mid,s2,u,G2,tn2) /\
+       return_buf_frame d cenv s2 u` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> concat_live_mods _ _ _ _ /\ _`
+       (drule_then (strip_assume_tac o REWRITE_RULE [concat_horizon_mods_def])) >>
+     drule_all concat_copy_frame_mods >>
+     rewrite_tac[concat_horizon_mods_def] >> strip_tac >> asm_rewrite_tac[]) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> concat_live_mods _ _ (mid,s2,_,_,_) _ /\ _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` drule) >> strip_tac >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    (rpt strip_tac >> drule_all body_inv_no_phi_mods >> simp[]) >>
+  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) marks (OK t,G1,tn1)`
+       (mp_then Any mp_tac gas_origin_ptr_path_dalloca_fmp_headroom) >> asm_rewrite_tac[]) >>
+  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,G2,tn2)`
+       (qspec_then `DF (storage_trace_horizon mid.storage_trace)`
+         (mp_then Any mp_tac gas_origin_ptr_path_dalloca_fmp_headroom)) >> asm_rewrite_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (qpat_assum `concat_horizon_mods _ _ (mid,s2,u,G2,tn2)`
+       (strip_assume_tac o REWRITE_RULE [concat_horizon_mods_def]) >>
+     drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
+  `(mid with gas_obs := []) = mid` by
+    (qpat_assum `mid.gas_obs = []` (fn th => simp[NoAsms,GSYM th])) >>
+  pop_assum (fn eq => rule_assum_tac (REWRITE_RULE [eq])) >>
+  qexistsl_tac [`tv`,`u`,`G2`,`tn2`] >>
+  asm_rewrite_tac[concat_loop_entry_mods_def,concat_loop_code_mods_def] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_assum `!e ee. MEM e (_::args) /\ _ ==> expr_body_pre_mods _ _ _ _ e ee` irule >>
+      simp[]) >>
+  conj_tac
+  >- (qpat_assum `pure ==> ~EXISTS expr_has_effect (e::args)` mp_tac >> simp[EXISTS_DEF]) >>
+  conj_tac
+  >- (simp[NoAsms,LET_THM,LENGTH_APPEND] >> conj_tac >- decide_tac >>
+      conj_tac
+      >- (qpat_assum `32 + P + SUM _ <= scratch6` (mp_tac o REWRITE_RULE [SUM]) >> decide_tac) >>
+      qpat_x_assum `32 + concat_data_bound P _ <= scratch6` mp_tac >>
+      Cases_on `is_bytestring_type (expr_type e)` >>
+      asm_simp_tac bool_ss [exprLoweringTheory.concat_data_bound_def,LET_THM]
+      >- decide_tac >>
+      rewrite_tac[arithmeticTheory.MAX_DEF] >> IF_CASES_TAC >> decide_tac) >>
+  conj_tac >- (irule local_ptrs_reserved_next_var >> qexists `sc` >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists `sc` >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists `sc` >> simp[]) >>
+  rpt strip_tac >>
+  `valid_horizon cx st0 H mid.storage_trace` by simp[] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> concat_live_mods _ _ (mid,s2,_,_,_) _ /\ _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >>
+  first_assum ACCEPT_TAC
 QED
 
 Finalise concat_head_step_mods
