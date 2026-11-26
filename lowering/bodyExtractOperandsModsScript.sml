@@ -11,25 +11,25 @@ Ancestors
 Libs monadsyntax
 
 Theorem extract32_from_cuts_mods:
-  !exps src tops DF lo d ctx shadow_ctx PG func shadow_func cenv env cx ty ann args es.
+  !exps src tops DF lo d ctx shadow_ctx PG func shadow_func cenv env cx ty ann ret args es.
     (type_builtin_args_length_ok Extract32 (LENGTH args) ==>
       body_exprs_full_ok_mods mods exps cx args) /\
     contract_inv mods exps ctx cenv cx /\
     module_body_inv mods src tops cenv cx /\
     shadow_body_inv_mods mods exps ctx shadow_ctx /\
     body_const_cells_agree_mods mods cx env es /\
-    expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Extract32 ty args) es ==>
+    expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Extract32 ret args) es ==>
     expr_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (TypeBuiltin ann Extract32 ty args) es /\
+      cenv cx ty (TypeBuiltin ann Extract32 ret args) es /\
     expr_vv_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (TypeBuiltin ann Extract32 ty args) es
+      cenv cx ty (TypeBuiltin ann Extract32 ret args) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_then (qx_choosel_then [`src0`,`off`,`m`,`k`,`bt`] strip_assume_tac)
     extract32_operand_shape_mods >>
   qpat_x_assum `args = _` SUBST_ALL_TAC >>
   qpat_x_assum `ann = _` SUBST_ALL_TAC >>
-  qpat_x_assum `ty = _` SUBST_ALL_TAC >>
+  qpat_x_assum `ret = _` SUBST_ALL_TAC >>
   `is_word_type (BaseT bt)` by
     (Cases_on `bt` >> fs[extract32_result_base_ok_def,is_word_type_def] >>
      rename1 `BytesT b` >> Cases_on `b` >> fs[extract32_result_base_ok_def,is_word_type_def]) >>
@@ -91,7 +91,7 @@ Resume extract32_from_cuts_mods[reached]:
   qx_genl_tac [`marks`,`bs`,`mid`,`G1`,`tn1`,`s`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (BaseT bt) off mid` by
+     cenv cx ty off mid` by
     (qpat_assum `body_expr_full_ok_mods _ _ _ off`
        (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_mods_def]) >>
      qpat_assum `!DF lo d PG src tops ctx shadow_ctx func shadow_func cenv env ty es.
@@ -143,7 +143,7 @@ Resume extract32_from_cuts_mods[prepare]:
           storage_trace_frame_lifts,storage_trace_frame_return] >>
   (* These are the original frame, the reached source state, and the paired cuts. *)
   qexistsl_tac [`G0`,`bs`,`d`,`dataop`,`es`,`lenop`,`m`,`offop`,`s0`,`sa`,
-                `shadow_func`,`shn`,`shq`,`sm`,`sn`,`sq`,`src0`,`srcop`,`tn0`,`BaseT bt`] >>
+                `shadow_func`,`shn`,`shq`,`sm`,`sn`,`sq`,`src0`,`srcop`,`tn0`,`ty`] >>
   asm_rewrite_tac[] >> suspend "prepared"
 QED
 
@@ -169,7 +169,7 @@ Resume extract32_from_cuts_mods[prepared]:
   >- (qexists_tac `m` >> conj_tac >> first_assum ACCEPT_TAC)
   >- (qexistsl_tac [`env`,`mods`] >> conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`G1`,`data`,`dataop`,`len`,`lenop`,`offop`,`p`,`raw`,
-                `s`,`sm`,`sn`,`sq`,`sr`,`sv`,`tn1`,`BaseT bt`] >>
+                `s`,`sm`,`sn`,`sq`,`sr`,`sv`,`tn1`,`ty`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qpat_assum `expr_type src0 = _` (fn th => pure_rewrite_tac[th]) >>
   first_assum ACCEPT_TAC
