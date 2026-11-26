@@ -44,8 +44,9 @@ Proof
      first_assum ACCEPT_TAC) >>
   rewrite_tac[array_select_outcome_mods_def, LET_THM] >> BETA_TAC >>
   irule gas_outcome_full_mods_exit_revert >> simp[] >>
-  qexistsl_tac [`Gf`,`fin`,`Abort Revert_abort sf`,
-                `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tnf`] >>
+  qexistsl_tac [`Gf`,`fin`,
+                `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,
+                `tnf`,`sf`] >>
   simp[exit_result_def,expr_exit_def,halt_exit_def] >>
   gen_tac >> strip_tac >>
   `allocas_from lo it` by
