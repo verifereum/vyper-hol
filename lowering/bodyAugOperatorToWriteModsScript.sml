@@ -240,15 +240,12 @@ Resume augassign_operator_to_selected_write_mods[abort]:
        w.vs_allocas = q.vs_allocas /\ w.vs_alloca_next = q.vs_alloca_next /\
        allocas_from lo w /\ lo <= w.vs_alloca_next` by
     suspend "operator_error" >>
-  irule gas_outcome_full_mods_exit >>
+  irule gas_outcome_full_mods_exit_revert >>
   (reverse conj_tac >- first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`Gw`,`ee`,`Abort Revert_abort w`,`INR (Error (RuntimeError msg))`,`tnw`] >>
+  qexistsl_tac [`Gw`,`ee`,`INR (Error (RuntimeError msg))`,`tnw`,`w`] >>
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
   simp[lift_sum_def,bind_def,raise_def,fragExecTheory.exit_result_def,
-       stmt_exit_ptr_def,exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def] >>
-  qx_gen_tac `H` >> strip_tac >>
-  qpat_assum `!H. _ ==> gas_origin_ptr_path _ _ [] (Abort Revert_abort w,_,_) /\ _`
-    (qspec_then `H` (drule_then strip_assume_tac)) >> first_assum ACCEPT_TAC
+       stmt_exit_ptr_def,exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def]
 QED
 
 Resume augassign_operator_to_selected_write_mods[operator_error]:
