@@ -2,6 +2,7 @@
 Theory bodyWordRoundPrefixMods
 Ancestors
   bodyFullPredsMods bodyFullPostsMods bodyFullShadowBodyInv exprBodyPreProps
+  bodyScalarStackVVMods
   exprSimWordBuiltins exprWordOperand exprSimUnopProps exprSimUnopComposeProps exprSimSource
   gasShadowCompileStmtHelpers gasShadowState gasShadow gasExemptCertMods
   gasOutcomeFullBindMods gasOutcomeFullPostMods vyperStorageTrace
@@ -239,14 +240,6 @@ QED
 Theorem word_rounding_prefix_mods:
   ^round_k ==>
   !mods exps DF lo d PG src tops ctx shadow_ctx func shadow_func cenv env cx ty a bt args es.
-    (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
-       (~is_word_type (expr_type e) ==>
-        !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
-                SOME tvt ==> type_memory_size tvt = 0) /\
-       expr_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es /\
-       (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
-       (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
-       expr_vv_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es) /\
     (bt = Ceil \/ bt = Floor) /\
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
     contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
@@ -274,7 +267,10 @@ Proof
   conj_asm1_tac
   >- (asm "continue" (mp_tac o MATCH_MP round_sim_value) >>
       disch_then irule >> simp[] >> qexistsl_tac [`env`,`mods`] >> simp[]) >>
-  first_x_assum irule >> simp[expr_type_def, is_word_type_def] >>
+  `is_word_type (post_value_type cenv (Builtin (BaseT (IntT 256)) bt [e]))` by
+    (dep_rewrite.DEP_REWRITE_TAC [post_value_type_word] >>
+     simp[expr_type_def, is_word_type_def]) >>
+  irule scalar_stack_vv_sim_full_mods >> simp[] >>
   conj_tac
   >- (gen_tac >> Cases_on `compile_expr cenv ty (Builtin (BaseT (IntT 256)) bt [e]) sa` >>
       drule_all_then strip_assume_tac round_stack >> simp[]) >>
