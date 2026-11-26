@@ -39,13 +39,14 @@ Triviality slice_runtime_no_calls:
   (!es. EVERY (runtime_constant_expr mods) es ==> int_calls_exprs es = []) /\
   (!fs. EVERY (runtime_constant_expr mods) (MAP SND fs) ==> int_calls_named_exprs fs = [])
 Proof
-  `(!e. runtime_constant_expr mods e ==> int_calls_expr e = []) /\
-   (!t:base_assignment_target. (\x. T) t) /\
-   (!es. EVERY (runtime_constant_expr mods) es ==> int_calls_exprs es = []) /\
-   (!opt:expr option. (\x. T) opt) /\
-   (!fs. EVERY (runtime_constant_expr mods) (MAP SND fs) ==> int_calls_named_exprs fs = [])`
-    suffices_by simp[] >>
-  ho_match_mp_tac int_calls_expr_ind >>
+  match_mp_tac
+    (SIMP_RULE bool_ss [] (Q.SPECL
+      [`\e. runtime_constant_expr mods e ==> int_calls_expr e = []`,
+       `\t:base_assignment_target. T`,
+       `\es. EVERY (runtime_constant_expr mods) es ==> int_calls_exprs es = []`,
+       `\opt:expr option. T`,
+       `\fs. EVERY (runtime_constant_expr mods) (MAP SND fs) ==> int_calls_named_exprs fs = []`]
+      int_calls_expr_ind)) >>
   simp[runtime_constant_expr_def, int_calls_expr_def, SF ETA_ss] >>
   rpt strip_tac >> gvs[SF ETA_ss] >>
   metis_tac[constant_expr_no_internal_calls]
