@@ -252,12 +252,6 @@ Definition inliner_shape_check_def:
       (reachable_ctx C).ctx_functions
 End
 
-Theorem lookup_function_SOME_name[local]:
-  !fns. lookup_function a fns = SOME f ==> MEM f fns /\ f.fn_name = a
-Proof
-  Induct >> rw[lookup_function_def, FIND_thm] >> gvs[lookup_function_def]
-QED
-
 Theorem inliner_inst_check_sound[local]:
   inliner_fn_shape_check R rank fn /\ MEM inst (fn_insts fn) ==>
   label_positions_ok inst /\
@@ -335,7 +329,8 @@ Proof
       `inliner_fn_shape_check R rank fn` by res_tac >>
       drule_all inliner_invoke_check_sound >> gvs[])
   >> qexists_tac `rank` >> rw[fn_directly_calls_def] >>
-  drule lookup_function_SOME_name >> strip_tac >>
+  imp_res_tac lookup_function_MEM >>
+  imp_res_tac vyperCompilerTheory.lookup_function_result_name >> gvs[] >>
   `inliner_fn_shape_check R rank func` by res_tac >>
   drule_all inliner_invoke_check_sound >> gvs[]
 QED

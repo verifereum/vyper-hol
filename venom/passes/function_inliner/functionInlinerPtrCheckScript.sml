@@ -174,6 +174,8 @@ Definition inline_ptr_ok_check_def:
   inline_ptr_ok_check C <=> inline_ptr_ok_check_with (ctx_write_params C) C
 End
 
+(* Restates the first conjunct of ptrOkCheck's local ptr_roots_lists;
+   it goes away when that theory exports it. *)
 Theorem inline_root_list_set:
   set (opcode_root_list ALLOCA func ++ opcode_root_list DALLOCA func ++
        param_root_list (PL func.fn_name) func) =

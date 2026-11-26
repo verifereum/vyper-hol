@@ -101,6 +101,8 @@ Definition witness_join_out_def:
     HD (function_inliner_ctx 0 (witness_join_ctx arg access)).ctx_functions
 End
 
+(* Restates the second conjunct of ptrOkCheck's local ptr_roots_lists;
+   it goes away when that theory exports it. *)
 Theorem witness_alloca_roots_list:
   alloca_roots fn = set (opcode_root_list ALLOCA fn)
 Proof
