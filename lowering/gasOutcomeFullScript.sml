@@ -7,7 +7,7 @@
    of its endpoint joins it. *)
 Theory gasOutcomeFull
 Ancestors
-  gasOutcomeFullMods fragGasOriginPtr fragGasOrigin gasOutcome gasStorage gasExemptCert
+  createSizeExit gasOutcomeFullMods fragGasOriginPtr fragGasOrigin gasOutcome gasStorage gasExemptCert
   gasSummary fragGasMode fragGasPathPtr vyperStorageFootprint
   vyperInterpreter vyperState venomState
 
@@ -36,7 +36,8 @@ Theorem gas_outcome_full_def:
           gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
             (s, G, tn) marks (r, G', tn') /\
           ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
-           (exit_result r /\ R H res (ee with gas_obs := []) (G', tn') r))) \/
+           (exit_result r /\ create_size_exit_ok ctx res r /\
+            R H res (ee with gas_obs := []) (G', tn') r))) \/
       (?err ee leaf leaf_pg leaf_g leaf_tn finish.
         gas_exempt_cert T tops (ctx, func)
           (ignore_bind source (return ()))
