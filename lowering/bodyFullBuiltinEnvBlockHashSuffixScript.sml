@@ -52,7 +52,8 @@ Theorem blockhash_full_suffix:
        (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
           FLOOKUP G' p = FLOOKUP G p /\
           op_taint tn' (Var p) = op_taint tn (Var p))
-   | INR ex => expr_exit (INR ex) r /\ halt_exit H cx mid (INR ex) r)
+   | INR ex => expr_exit (INR ex) r /\ halt_exit H cx mid (INR ex) r /\
+               create_size_exit_ok ctx (INR ex) r)
 Proof
  rpt gen_tac >> strip_tac >>
  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)

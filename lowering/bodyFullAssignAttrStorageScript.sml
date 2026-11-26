@@ -271,6 +271,7 @@ Resume compile_assign_attr_storage_full[continue]:
           qpat_assum `gas_origin_ptr_path _ (z,Gu,tu) [] _` mp_tac >>
           rpt (pop_assum kall_tac) >> rpt strip_tac >>
           metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+      conj_tac >- simp[halt_state_def, set_returndata_def] >>
       simp[stmt_exit_ptr_def, expr_exit_def, halt_exit_def]) >>
   `~z.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
