@@ -357,6 +357,7 @@ Theorem deploy_joint_terminal_with[local]:
      (gas_explicit marks vs.vs_gas_readings ++ tail) am tx
      [(NONE, tops)] [] = (src, obs)) /\
   exit_result r /\
+  create_size_exit_ok dunit.cu_context src r /\
   storage_trace_domain (deploy_evaluation_context tops am tx)
     (initial_state am []) obs /\
   (!H. valid_horizon (deploy_evaluation_context tops am tx)
@@ -828,6 +829,7 @@ Proof
         abstract_machine_from_state_def,
         vyperStateTheory.evaluation_state_fupdcanon]) >>
   `?r1 G1 tn1. exit_result r1 /\
+    create_size_exit_ok dunit.cu_context src_result r1 /\
     !H. valid_horizon (deploy_evaluation_context tops am tx)
         (initial_state am []) H ee.storage_trace ==>
       gas_origin_ptr_path
@@ -901,6 +903,12 @@ Proof
            `ee with gas_obs := []`, `final`, `H`] mp_tac deploy_ctor_return >>
          impl_tac >- gvs[vyperStateTheory.evaluation_state_fupdcanon] >>
          simp[Abbr `src_result`, deploy_ctor_finish_gas_obs]) >>
+     (* Only the oversized-CREATE error must survive constructor finishing. *)
+     `create_size_exit_ok dunit.cu_context src_result r` by
+       (simp[createSizeExitTheory.create_size_exit_ok_def] >> strip_tac >>
+        `res = INR (Error (RuntimeError "create initcode too large"))` by
+          fs[createSizeExitTheory.create_size_exit_ok_def] >>
+        simp[Abbr `src_result`, deploy_ctor_finish_def]) >>
      (* body exit: its H-indexed return predicate already covers the suffix *)
      qexistsl_tac [`r`, `G'`, `tn'`] >> simp[] >>
      gen_tac >> strip_tac >>

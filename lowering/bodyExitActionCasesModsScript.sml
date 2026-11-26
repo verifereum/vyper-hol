@@ -2,7 +2,7 @@
    source state alone. A loop landing preserves every module's frame. *)
 Theory bodyExitActionCasesMods
 Ancestors
-  bodyFullPredsMods bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit
+  createSizeExit bodyFullPredsMods bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit
   bodyFullShared bodyMemoryDefs bodyPtrDefs bodySimFull gasOutcomeFullMods
   gasOutcomeFull gasStorage gasSummary gasContext fragGasEmitCtrl fragExec
   exprLoweringProps stmtLowering exprLowering compileEnv gasShadow
@@ -17,7 +17,8 @@ Theorem gas_outcome_mods_unchanged[local]:
      gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
        (s, G, tn) [] (r, G', tn') /\
      ((?t. r = OK t /\ Q H res (es with gas_obs := []) G' tn' t) \/
-      (exit_result r /\ R H res (es with gas_obs := []) (G', tn') r))) ==>
+      (exit_result r /\ create_size_exit_ok ctx res r /\
+       R H res (es with gas_obs := []) (G', tn') r))) ==>
   gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
     (es, s, G, tn) Q R
 Proof
@@ -130,10 +131,19 @@ Proof
   qx_gen_tac `H` >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
   `allocas_from lo s0` by fs[ghost_inv_at_mods_def] >>
-  irule emit_abort_origin_ptr >> simp[] >>
-  qexistsl_tac [`opc`, `ops`, `sa`, `sb`] >> simp[] >>
-  qpat_x_assum `rk = RaiseBare \/ rk = RaiseUnreachable` (DISJ_CASES_THEN SUBST_ALL_TAC) >>
-  gvs[Abbr `opc`, Abbr `ops`]
+  conj_tac
+  >- (irule emit_abort_origin_ptr >> simp[] >>
+      qexistsl_tac [`opc`, `ops`, `sa`, `sb`] >> simp[] >>
+      qpat_x_assum `rk = RaiseBare \/ rk = RaiseUnreachable` (DISJ_CASES_THEN SUBST_ALL_TAC) >>
+      gvs[Abbr `opc`, Abbr `ops`])
+  >- (`create_size_exit_ok ctx (INR (AssertException msg)) (Abort a t)` by
+        (irule emit_abort_create_size_exit_ok >> simp[] >>
+         qexistsl_tac [`func`, `opc`, `ops`, `s0`, `sa`, `sb`] >> simp[] >>
+         qpat_x_assum `rk = RaiseBare \/ rk = RaiseUnreachable`
+           (DISJ_CASES_THEN SUBST_ALL_TAC) >>
+         gvs[Abbr `opc`, Abbr `ops`]) >>
+      qpat_x_assum `create_size_exit_ok _ _ _` mp_tac >>
+      simp[create_size_exit_ok_def])
 QED
 
 Theorem body_break_case_full_mods:
