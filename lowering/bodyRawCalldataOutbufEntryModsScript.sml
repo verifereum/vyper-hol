@@ -184,7 +184,7 @@ val calldata_out_endpoint = ``\tout Gout tnout ob gw.
   (!p. safe_operand s2 p ==> eval_operand p tout = eval_operand p tk /\
     op_prov Gout p = op_prov GK p /\ op_taint tnout p = op_taint tnK p) /\
   (case go of NONE => T | SOME p => eval_operand p tk = SOME gw) /\
-  eval_operand gas tout = SOME gw /\ op_taint tnout gas = {} /\ op_prov Gout gas = NONE /\
+  eval_operand gas tout = SOME gw /\ op_taint tnout gas = {} /\
   eval_operand ov tout = SOME (n2w ob) /\
   eval_operand op tout = SOME (n2w (if M = 0 then ob else ob + 32)) /\
   (M = 0 ==> ov = op) /\ ob + payload < dimword (:256) /\

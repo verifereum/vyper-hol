@@ -583,6 +583,7 @@ Resume augassign_storage_writeback_full[storage_static]:
   conj_tac
   >- (irule storage_emit_static_origin_ptr >> simp[] >>
       goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >> simp[]) >>
+  conj_tac >- simp[halt_state_def, set_returndata_def] >>
   simp[stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def, halt_exit_not_halt]
 QED
 
