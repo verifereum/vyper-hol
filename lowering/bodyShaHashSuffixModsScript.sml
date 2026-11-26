@@ -2,7 +2,7 @@
 Theory bodyShaHashSuffixMods
 Ancestors
   bodyShaSuffixCodeMods bodyShaImplicitEndpointMods bodyShaUniformRunMods
-  bodyShaFixedMachineMods bodyShaMemoryMachineMods
+  bodyShaFixedMachineMods bodyShaMemoryMachineMods bodyFullHashShaExitCursor
   bodyShaSuccessCertificateMods bodyShaAbortCertificateMods
   bodyForcedStorageFrameMods bodyWriteSubscriptSourceMods bodySimStmtFacts
   exprBodyPreProps exprSimHypsDefs exprSimHash exprSimWordArgs
@@ -411,6 +411,25 @@ Resume sha_hash_suffix_mods[abort]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
     (drule_then strip_assume_tac) >>
   (conj_tac >- first_assum ACCEPT_TAC) >> disj2_tac >>
+  (Q.SUBGOAL_THEN `compile_sha256_bytes x sm = (op,sb) \/
+     (?m. compile_sha256_bytesm x m sm = (op,sb))` assume_tac
+   >- (drule_all sha_type_route >>
+     disch_then (DISJ_CASES_THEN2 strip_assume_tac (CONJUNCTS_THEN assume_tac))
+     >- (disj2_tac >> qexists_tac `m` >>
+         qpat_assum `expr_type e = BaseT bty` (fn ty_eq =>
+           qpat_assum `bty = BytesT (Fixed m)` (fn fixed_eq =>
+             qpat_assum `(if _ then compile_sha256_bytes x sm else _) = _`
+               (mp_tac o REWRITE_RULE [ty_eq,fixed_eq]))) >>
+         simp[NoAsms, is_bytestring_type_def]) >>
+     disj1_tac >>
+     qpat_assum `is_bytestring_type (expr_type e)` (fn is_bytes =>
+       qpat_assum `(if _ then compile_sha256_bytes x sm else _) = _`
+         (ACCEPT_TAC o REWRITE_RULE [is_bytes])))) >>
+  `create_size_exit_ok ctx
+     (INR (Error (RuntimeError "precompile failed")):eval_result + exception)
+     (Abort (^sha_abort) (z with vs_inst_idx := j))` by
+    (drule_all (Q.INST_TYPE [`:'a` |-> `:eval_result`] sha_abort_path_exit_size) >>
+     disch_then irule) >>
   simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def, exit_result_def]
 QED
 

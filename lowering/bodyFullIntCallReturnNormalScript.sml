@@ -820,7 +820,7 @@ Theorem intcall_return_normal_owned:
            (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
            (entered,FEMPTY,tn with t_var := FEMPTY) marks (r,Gc,tc) /\
          ((?u. r = OK u /\ F) \/
-          (exit_result r /\
+          (exit_result r /\ create_size_exit_ok ctx res r /\
            intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc
              (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
              sa.cs_next_id sm.cs_next_id t tn res (ee with gas_obs := []) (Gc,tc) r))) ==>
@@ -929,7 +929,12 @@ Resume intcall_return_normal_owned[abort]:
     (DF H',lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (t,G,tn) marks (r,G,tn)` by metis_tac[] >>
   conj_tac >- simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules] >>
-  simp[] >>
+  `create_size_exit_ok ctx (INR ex : eval_result + exception) r` by
+    (`valid_horizon cx st0 H' ee.storage_trace` by metis_tac[] >>
+     qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     fs[]) >>
+  fs[] >>
   `expr_exit (INR ex : eval_result + exception) r` by
     (Cases_on `r` >> Cases_on `ex` >> gvs[expr_exit_def] >>
      rename1 `expr_exit (INR (Error err)) _` >>
