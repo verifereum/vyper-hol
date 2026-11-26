@@ -4,7 +4,7 @@ Ancestors
   bodyFullHashShaAlloc bodyFullHashShaPrefix bodyFullHashShaTail bodyFullHashShaOrigin
   bodyFullHashShaFixedSuccess bodyPtrHashBuiltinsShaFixed
   bodyFullHashShaGas bodyFullHashShaFixedAbort bodyFullHashShaAbortOrigin
-  bodyFullHashShaLayout fragGasSeqPtr
+  bodyFullHashShaLayout bodyFullHashShaExitCursor fragGasSeqPtr
   bodyFullHashShaBytesSuccess bodyPtrHashBuiltinsShaStringInput
   bodyPtrHashBuiltinsInputWindow
   bodyFullHashKeccakBytes allocaHistoryFragment venomInstProps ghostPcTransportPtr
@@ -105,6 +105,31 @@ fun sha_memory_prepare_tac4 g = (
      metis_tac[])
 ) g;
 
+fun sha_abort_origin_uniform_tac g = (
+  `?j. !H. valid_horizon cx st0 H mid.storage_trace ==>
+     gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       (s,G1,tn1) [F]
+       (Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort)
+         (t with vs_inst_idx := j),Gf,tf)` by
+    (qpat_assum `emitted_insts sm sn = _` SUBST_ALL_TAC >>
+     drule_all sha_setup_gas_origin_abort_uniform >> simp[])
+) g;
+
+fun sha_abort_size_tac g = (
+  `create_size_exit_ok ctx (INR (Error (RuntimeError "precompile failed")) : eval_result + exception)
+     (Abort (if s.vs_outcomes = [] then ExHalt_abort else Revert_abort)
+       (t with vs_inst_idx := j))` by
+    (`?arg. compile_sha256_bytes arg sm = (op,sn) \/
+       (?m. compile_sha256_bytesm arg m sm = (op,sn))` suffices_by
+       (disch_then (qx_choose_then `arg` assume_tac) >>
+        qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _`
+          (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then assume_tac)) >>
+        drule_all (Q.INST_TYPE [`:'a` |-> `:eval_result`] sha_abort_path_exit_size) >>
+        disch_then (qspec_then `INR (Error (RuntimeError "precompile failed"))` ACCEPT_TAC)) >>
+     FIRST [qexists_tac `v` >> disj2_tac >> goal_assum (drule_at Any),
+            qexists_tac `Var p` >> disj1_tac >> first_assum ACCEPT_TAC])
+) g;
+
 fun sha_memory_abort_origin_tac g = (
 `!outcome rest. s.vs_outcomes = outcome::rest ==> ~outcome.co_success` by
     (qpat_assum `~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success)` mp_tac >>
@@ -140,8 +165,7 @@ fun sha_memory_abort_origin_tac g = (
        (mp_then Any mp_tac sha_bytes_gas_emitted) >> strip_tac >>
      qpat_assum `MAP _ (FILTER _ (emitted_insts sm sn)) = [F]` mp_tac >>
      simp[venomInstTheory.mk_inst_def]) >>
-  qpat_assum `emitted_insts sm sn = _` SUBST_ALL_TAC >>
-  drule_all sha_setup_gas_origin_abort_uniform >> strip_tac
+  sha_abort_origin_uniform_tac >> sha_abort_size_tac
 ) g;
 
 fun sha_memory_abort_post_setup_tac g = (
@@ -588,8 +612,7 @@ Resume sha_vv_sim_full[fixed_abort]:
        (mp_then Any mp_tac sha_fixed_gas_emitted) >> strip_tac >>
      qpat_assum `MAP _ (FILTER _ (emitted_insts sm sn)) = [F]` mp_tac >>
      simp[venomInstTheory.mk_inst_def]) >>
-  qpat_assum `emitted_insts sm sn = _` SUBST_ALL_TAC >>
-  drule_all sha_setup_gas_origin_abort_uniform >> strip_tac >>
+  sha_abort_origin_uniform_tac >> sha_abort_size_tac >>
   `builtin_result cx mid.accounts (BaseT (BytesT (Fixed 32))) Sha256
      [expr_type e] [BytesV bs] =
      INL (BytesV (word_to_bytes (SHA_256_bytes bs) T))` by

@@ -5,7 +5,7 @@ Ancestors
   bodyFullLogSuffix bodyAbiEncodePackedPostMods eventLogSplitProps
   stmtSimLogTopics stmtLowering exprSafeOperand venomExecSemantics list pair words
   fragGasOriginPtr ptrDiscipline loweringStateRelDefs compileEnv vyperEvent
-  supportedTypes venomState
+  supportedTypes venomState bodyLogSavedRowAdvanceMods bodyLogCaptureOperandMods
 
 Theorem log_split_saved_projection[local]:
   LENGTH flags = LENGTH rows ==>
@@ -48,6 +48,8 @@ QED
 Theorem log_topic_list_mods:
   LENGTH flags = LENGTH rows /\
   LIST_REL (\((e,sv),ty) v. ty = lowered_value_type ce e /\
+    expr_body_pre_mods mods ce cx env e entry /\
+    (!x. vv_operand sv = Var x ==> not_fresh_at front x) /\
     !H. valid_horizon cx st0 H ee.storage_trace ==>
       ?si sm ss vv copy. abi_encode_saved_row_mods lo ce cx origin front
         e sv v si sm ss vv copy H ee G tn s) rows vs /\
@@ -57,12 +59,15 @@ Theorem log_topic_list_mods:
   compile_log_saved_topics ce
     (FST (split_log_ops (MAP (\((e,sv),ty). (sv,ty)) rows) flags)) front = (ops,last) /\
   fn_has_code front last func /\ ~s.vs_halted /\ P front s G tn /\
-  (!a u Gu tu e sv v si sm ss vv copy H.
-     P a u Gu tu /\ valid_horizon cx st0 H ee.storage_trace /\
-     abi_encode_saved_row_mods lo ce cx origin front e sv v si sm ss vv copy
-       H ee G tn s ==>
-     abi_encode_saved_row_mods lo ce cx origin a e sv v si sm ss vv copy
-       H ee Gu tu u) /\
+  local_ptrs_reserved ce front /\ contract_inv mods exps ctx ce cx /\
+  expr_sim_inv_mods mods ce cx env ee /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee s /\ dead_lo_ok_mods H (DF H) lo ce cx) /\
+  (!a u Gu tu H. P a u Gu tu /\ valid_horizon cx st0 H ee.storage_trace ==>
+    front.cs_next_id <= a.cs_next_id /\ front.cs_next_var <= a.cs_next_var /\
+    wb_frame ce ee ee front s u /\ ghost_kept_at lo ce ee front G tn s Gu tu /\
+    s.vs_alloca_next <= u.vs_alloca_next /\ stmt_state_rel H ctx func ce cx ee u /\
+    immutable_frame_mods func ce cx ee u /\ ghost_inv_at_mods (DF H) lo d ce cx ee Gu tu u) /\
   (!e sv ty v hashed w a b u Gu tu op. ty = lowered_value_type ce e /\
     hashed = is_bytestring_type ty /\ supported_event_leaf_type ty /\
     encode_event_topic ty v = SOME w /\
@@ -91,9 +96,29 @@ Theorem log_topic_list_mods:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `R0 = \((e,sv),ty) v. ty = lowered_value_type ce e /\
+    expr_body_pre_mods mods ce cx env e entry /\
+    (!x. vv_operand sv = Var x ==> not_fresh_at front x) /\
     !H. valid_horizon cx st0 H ee.storage_trace ==>
       ?si sm ss vv copy. abi_encode_saved_row_mods lo ce cx origin front
         e sv v si sm ss vv copy H ee G tn s` >>
+  `!a u Gu tu e sv v si sm ss vv copy H.
+     P a u Gu tu /\ valid_horizon cx st0 H ee.storage_trace /\
+     expr_body_pre_mods mods ce cx env e entry /\
+     (!x. vv_operand sv = Var x ==> not_fresh_at front x) /\
+     abi_encode_saved_row_mods lo ce cx origin front e sv v si sm ss vv copy
+       H ee G tn s ==>
+     abi_encode_saved_row_mods lo ce cx origin a e sv v si sm ss vv copy
+       H ee Gu tu u` by
+    (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `!a u Gu tu H. P a u Gu tu /\ _ ==> _`
+       (drule_all_then strip_assume_tac) >>
+     `!l. vv_operand sv <> Label l` by
+       (qpat_assum `abi_encode_saved_row_mods _ _ _ _ front _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [abi_encode_saved_row_mods_def]) >>
+        drule_all_then ACCEPT_TAC log_capture_operand_not_label_mods) >>
+     drule_all_then ACCEPT_TAC log_saved_row_advance_mods) >>
   `LIST_REL R0 rows vs` by simp[Abbr `R0`] >>
   qabbrev_tac `RI = \row v. supported_event_leaf_type (SND row) /\ R0 row v` >>
   `LIST_REL (\(flag,row) v. flag ==> RI row v) (ZIP (flags,rows)) vs` by
@@ -130,7 +155,8 @@ Resume log_topic_list_mods[compose]:
      gen_tac >> disch_tac >>
      qpat_assum `!H. valid_horizon _ _ H _ ==> ?si sm ss vv copy. _`
        (drule_then (qx_choosel_then [`si`,`sm`,`ss`,`vv`,`copy`] assume_tac)) >>
-     qexistsl_tac [`si`,`sm`,`ss`,`vv`,`copy`] >> first_x_assum irule >> simp[])) >>
+     qexistsl_tac [`si`,`sm`,`ss`,`vv`,`copy`] >>
+     qpat_assum `!a u Gu tu e sv v si sm ss vv copy H. _` irule >> simp[])) >>
   disch_then (drule_all_then strip_assume_tac) >>
   suspend "data"
 QED
@@ -145,7 +171,8 @@ Resume log_topic_list_mods[data]:
   gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> ?si sm ss vv copy. _`
     (drule_then (qx_choosel_then [`si`,`sm`,`ss`,`vv`,`copy`] assume_tac)) >>
-  qexistsl_tac [`si`,`sm`,`ss`,`vv`,`copy`] >> first_x_assum irule >> simp[]
+  qexistsl_tac [`si`,`sm`,`ss`,`vv`,`copy`] >>
+     qpat_assum `!a u Gu tu e sv v si sm ss vv copy H. _` irule >> simp[]
 QED
 
 Finalise log_topic_list_mods
