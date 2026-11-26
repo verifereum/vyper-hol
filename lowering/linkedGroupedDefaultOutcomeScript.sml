@@ -39,7 +39,9 @@ Proof
          simp[evaluation_state_accfupds]) >>
       asm_rewrite_tac[] >> qexistsl_tac [`r`,`G'`,`tn'`] >>
       qpat_assum `ee.storage_trace = es.storage_trace` (fn th => pure_rewrite_tac [SYM th]) >>
-      first_assum ACCEPT_TAC) >>
+      rpt strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
+      simp[] >> metis_tac[]) >>
   qmatch_asmsub_rename_tac `gas_origin_ptr_focus _ _ _ (leaf,leaf_pg,leaf_g,leaf_tn,target)` >>
   drule gas_exempt_cert_execution_mods >> strip_tac >>
   `!tail. eval_exprs cx ds

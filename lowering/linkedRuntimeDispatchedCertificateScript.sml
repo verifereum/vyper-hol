@@ -70,6 +70,7 @@ Ancestors
   gasPathDataSection[qualified] bodyFullHashKeccakFixed[qualified]
   linkedRuntimeSelectedTrace[qualified] unitExecutionComposeResult[qualified]
   linkedRuntimeDefaultReplay[qualified] linkedDefaultSourceFrame[qualified]
+  runtimeBodyComposeCreateSize[qualified]
   groupedEntryCommon[qualified] calldataRegistrationLocals[qualified]
   groupedRegisteredBody[qualified] stateRelProj[qualified]
   groupedEntryResources[qualified] fragGasOriginPtrDead[qualified]
@@ -2931,18 +2932,24 @@ Resume linked_runtime_dispatched_readings_certificate[linked_linear_declared_bod
   suspend "linked_linear_declared_compose_result"
 QED
 
-(* Match the body's outcome before specializing the remaining call boundary.
-   Thus the caller proves the horizon transfers and all-tail replay for its
-   selected entry, including any marks already consumed on the entry path. *)
+(* Keep the folded size clause in R so the existing composition rule passes
+   it to the exit callback for the same body result and terminal. The caller
+   supplies the horizon transfer and all-tail replay for its selected entry. *)
 fun linked_compose_result_tac {outcome, property, start, trace, relation, exempt, prefix} =
-  qpat_assum outcome (fn body_outcome =>
-    PART_MATCH
-      (linked_select_premise ``gas_outcome_full_mods`` o fst o dest_imp)
-      (Q.ISPEC property unitExecutionComposeResultTheory.unit_execution_compose_result_horizon_mods)
-      (concl body_outcome) |>
-    Q.GENL [`vs0`,`CT`,`REL`,`EX`,`marks0`] |>
-    Q.ISPECL [start, trace, relation, exempt, prefix] |>
-    BETA_RULE |> PURE_REWRITE_RULE [APPEND] |> mp_tac);
+  qpat_assum outcome (fn raw_outcome =>
+    let
+      val body_outcome = CONV_RULE (REWR_CONV (GSYM
+        runtimeBodyComposeCreateSizeTheory.gas_outcome_full_mods_record_create_size)) raw_outcome
+    in
+      assume_tac (BETA_RULE body_outcome) >>
+      (PART_MATCH
+        (linked_select_premise ``gas_outcome_full_mods`` o fst o dest_imp)
+        (Q.ISPEC property unitExecutionComposeResultTheory.unit_execution_compose_result_horizon_mods)
+        (concl body_outcome) |>
+      Q.GENL [`vs0`,`CT`,`REL`,`EX`,`marks0`] |>
+      Q.ISPECL [start, trace, relation, exempt, prefix] |>
+      BETA_RULE |> PURE_REWRITE_RULE [APPEND, FST] |> mp_tac)
+    end);
 
 fun linked_registered_compose_tac {horizon_tac, tails_tac, exempt_tac,
     fallthrough_tac, exit_tac, readings_tac, finish_tac} =
@@ -2957,6 +2964,7 @@ fun linked_registered_compose_tac {horizon_tac, tails_tac, exempt_tac,
      start = `start:venom_state`,
      trace = `\gs. call_external_trace (SOME vs.vs_outcomes) gs am tx`,
      relation = `\(H:(bool # bytes32 # type_value) list # num list) c r.
+       create_size_exit_ok unit.cu_context (FST c) r /\
        external_call_result_rel_mods H mods exps ret tx c r`,
      exempt = `source_exempt_mods mods`, prefix = `[]:bool list`} >>
   impl_tac
@@ -2969,8 +2977,7 @@ fun linked_registered_compose_tac {horizon_tac, tails_tac, exempt_tac,
               qpat_assum `!D. (!fuel. ptr_safe_run _ _ _ _ _ _ G_b tn_b s_b) ==> _`
                 (qspec_then `cx_dead H cx` (fn ptr => ACCEPT_TAC (CONJ start_path ptr)))))) >>
       conj_tac >- (BETA_TAC >>
-        qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ _ _`
-          (ACCEPT_TAC o PURE_REWRITE_RULE [APPEND] o BETA_RULE)) >>
+        first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [APPEND] o BETA_RULE)) >>
       conj_tac
       >- horizon_tac >>
       conj_tac
@@ -3146,6 +3153,16 @@ fun linked_registered_trace_exit_with_tac replay_trace fullgas abort_or_halt_tac
   linked_unlock_at_empty_gas_tac >>
   replay_trace `gx` `res` `ee with gas_obs := []` `eu` >>
   linked_trace_match_tac fullgas (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  conj_tac
+  >- (rewrite_tac [createSizeExitTheory.create_size_exit_ok_def] >> strip_tac >>
+      qpat_assum `create_size_exit_ok unit.cu_context res r`
+        (mp_tac o PURE_REWRITE_RULE [createSizeExitTheory.create_size_exit_ok_def]) >>
+      impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_tac >> qpat_assum `cr = call_res` SUBST1_TAC >>
+      qpat_assum `res = INR (Error (RuntimeError "create initcode too large"))` (fn res_eq =>
+        qpat_assum `!e. res = INR e /\ _ ==> call_res = _ /\ _`
+          (qspec_then `Error (RuntimeError "create initcode too large")` mp_tac) >>
+        simp[NoAsms, res_eq])) >>
   `cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn = tx` by
     simp[NoAsms, Abbr `cx`, initial_evaluation_context_def] >>
   pop_assum (map_every assume_tac o CONJUNCTS) >>
@@ -3352,6 +3369,7 @@ QED
 
 fun linked_registered_fallthrough_result_with_tac replay_trace fullgas =
   qx_genl_tac [`cr`,`am'`,`rqs`,`obs`] >> strip_tac >>
+  simp_tac bool_ss [createSizeExitTheory.create_size_exit_ok_non_exhalt] >>
   linked_unlock_at_empty_gas_tac >>
   replay_trace `gx` `res` `ee with gas_obs := []` `eu` >>
   linked_trace_match_tac fullgas (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -3479,7 +3497,24 @@ fun linked_registered_finish_with_tac shadow_name result_marks prepare_tac norma
                 PURE_REWRITE_TAC (map GSYM [horizon,domain,dead] @
                   map (GSYM o PURE_REWRITE_RULE
                     [markerTheory.Abbrev_def]) [start, sites])))))) >>
-      first_assum ACCEPT_TAC) >>
+      qpat_x_assum `(_ /\ ?H l p g t f. gas_origin_ptr_focus _ _ _ _) \/
+                     (?r. exit_result r /\ _)`
+        (DISJ_CASES_THEN2 assume_tac (qx_choose_then `out_r` strip_assume_tac))
+      >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+      disj2_tac >> qexists_tac `out_r` >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      `valid_horizon cx (initial_state am []) (storage_trace_horizon out_obs) out_obs` by
+        (qpat_assum `storage_trace_domain cx _ out_obs`
+          (ACCEPT_TAC o PURE_REWRITE_RULE [storage_trace_domain_def])) >>
+      conj_tac
+      >- (qpat_assum `!H. valid_horizon cx _ H out_obs ==> _`
+            (qspec_then `storage_trace_horizon out_obs` drule) >>
+          strip_tac >> first_assum ACCEPT_TAC) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      gen_tac >> disch_tac >>
+      qpat_assum `!H. valid_horizon cx _ H out_obs ==> _` drule >>
+      strip_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
   disch_tac >> qx_gen_tac `tail` >>
   qpat_assum `!tail. call_external_trace (SOME vs.vs_outcomes) _ am tx =
     (out,out_am,out_rqs,out_obs)`
@@ -3660,6 +3695,13 @@ fun linked_terminal_execution_tac shadow result trace_witnesses result_rel_tac =
     qpat_assum `Abbrev (explicit = _)` (fn sites =>
       PURE_REWRITE_TAC (map (GSYM o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) [start, sites]))) >>
   simp[NoAsms, exit_result_def] >>
+  (conj_tac >-
+     (qpat_assum `abort = Revert_abort \/
+                  (abort = ExHalt_abort /\ s_abort.vs_call_ctx.cc_static)`
+        (DISJ_CASES_THEN strip_assume_tac) >>
+      simp[createSizeExitTheory.create_size_exit_ok_def,
+           createSizeExitTheory.oversized_create_abort_non_exhalt,
+           createSizeExitTheory.oversized_create_abort_static])) >>
   (conj_tac >- first_assum ACCEPT_TAC) >>
   (conj_tac >- first_assum ACCEPT_TAC) >>
   rpt gen_tac >> disch_tac >> (conj_tac >- result_rel_tac) >>
@@ -10231,7 +10273,8 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_omi
   disch_then (DISJ_CASES_THEN2
     (qx_choose_then `keyword_state` (CONJUNCTS_THEN2 assume_tac
       (qx_choose_then `defaults` (map_every assume_tac o CONJUNCTS))))
-    (CONJUNCTS_THEN2 assume_tac (qx_choose_then `init_ex` (map_every assume_tac o CONJUNCTS))))
+    (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
+      (qx_choose_then `init_ex` (map_every assume_tac o CONJUNCTS)))))
   >- suspend "linked_grouped_default_continue" >>
   suspend "linked_grouped_default_exit"
 QED
@@ -10318,6 +10361,11 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_exi
   conj_tac >- first_assum ACCEPT_TAC >>
   disj2_tac >> qexists_tac `init_result` >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qpat_assum `init_res = INR init_ex` (fn eq =>
+        qpat_assum `create_size_exit_ok unit.cu_context init_res init_result`
+          (mp_tac o PURE_REWRITE_RULE [eq]) >>
+        simp[NoAsms, createSizeExitTheory.create_size_exit_ok_inr])) >>
   qpat_assum `Abbrev (start = _)` (fn start =>
     PURE_REWRITE_TAC [GSYM (PURE_REWRITE_RULE [markerTheory.Abbrev_def] start)]) >>
   `!(H:(bool # bytes32 # type_value) list # num list). cx_dead H cx =
@@ -10390,8 +10438,8 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_exi
         (qspec_then `H` (drule_then (CONJUNCTS_THEN2 kall_tac mp_tac))) >>
       disch_then (DISJ_CASES_THEN2
         (qx_choose_then `st` (CONJUNCTS_THEN2 assume_tac kall_tac))
-        (CONJUNCTS_THEN2 kall_tac
-          (qx_choose_then `ex` (map_every assume_tac o CONJUNCTS))))
+        (CONJUNCTS_THEN2 kall_tac (CONJUNCTS_THEN2 kall_tac
+          (qx_choose_then `ex` (map_every assume_tac o CONJUNCTS)))))
       >- (qpat_assum `exit_result init_result` mp_tac >>
           qpat_assum `init_result = OK st` (fn eq => simp[NoAsms,eq,exit_result_def])) >>
       `ex = HaltException` by
@@ -11952,6 +12000,7 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_loc
      start = `start:venom_state`,
      trace = `\gs. call_external_trace (SOME vs.vs_outcomes) (init_gas ++ gs) am tx`,
      relation = `\(H:(bool # bytes32 # type_value) list # num list) c r.
+       create_size_exit_ok unit.cu_context (FST c) r /\
        external_call_result_rel_mods H mods exps ret tx c r`,
      exempt = `source_exempt_mods mods`, prefix = `init_marks:bool list`} >>
   impl_tac
@@ -11965,8 +12014,7 @@ Resume linked_runtime_dispatched_readings_certificate[linked_grouped_default_loc
                 (qspec_then `cx_dead H cx` (fn ptr => ACCEPT_TAC (CONJ start_path ptr)))))) >>
       conj_tac
       >- (BETA_TAC >>
-          qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ _ _`
-            (ACCEPT_TAC o PURE_REWRITE_RULE [APPEND] o BETA_RULE)) >>
+          first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [APPEND] o BETA_RULE)) >>
       conj_tac >- suspend "linked_grouped_default_lock_horizon" >>
       conj_tac >- suspend "linked_grouped_default_lock_tails" >>
       conj_tac >- suspend "linked_grouped_default_lock_exempt" >>

@@ -26,6 +26,14 @@ Proof
   >- (disj1_tac >> fs[gas_bad_storage_at_def] >> metis_tac[])
   >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`f res`, `ee`, `r`, `G'`, `tn'`] >> simp[] >>
-      rpt strip_tac >> res_tac >> simp[] >> metis_tac[])
+      gen_tac >> disch_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >>
+      disch_then strip_assume_tac
+      >- (disj1_tac >> qexists_tac `t` >> (conj_tac >- simp[]) >>
+          qexists_tac `res` >> simp[]) >>
+      disj2_tac >> (conj_tac >- first_assum ACCEPT_TAC) >>
+      conj_tac
+      >- (irule createSizeExitTheory.create_size_exit_ok_map >> simp[]) >>
+      qexists_tac `res` >> simp[])
   >> disj2_tac >> disj2_tac >> metis_tac[]
 QED

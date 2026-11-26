@@ -720,7 +720,8 @@ Proof
                ?u. run_context n unit.cu_context vi = Abort ExHalt_abort u)))` by
     suspend "variants" >>
   qexistsl_tac [`D`,`fmp`] >>
-  asm_rewrite_tac[calldata_dispatch_mods_singleton, gas_source_exempt_mods_singleton]
+  pure_rewrite_tac[calldata_dispatch_mods_singleton, gas_source_exempt_mods_singleton] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume call_entry_create_size_inputs[entry]:
@@ -860,7 +861,12 @@ Theorem call_entry_reachable_create_size_ok:
     mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
       out.po_unit.cu_context vs
 Proof
-  metis_tac[call_entry_create_size_inputs, call_entry_reachable_create_size_ok_mods]
+  rpt gen_tac >>
+  disch_then (strip_assume_tac o MATCH_MP call_entry_create_size_inputs) >>
+  irule call_entry_reachable_create_size_ok_mods >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`D`,`am`,`[]`,`fmp`,`[(NONE,tops)]`,`rpolicy`,`tx`,`unit`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem call_state_rel_add_frame_gas_raises:
