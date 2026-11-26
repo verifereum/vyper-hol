@@ -168,7 +168,7 @@ Proof
 QED
 
 Resume slot_copy_empty_header_mods[static]:
-  irule gas_outcome_full_mods_exit >>
+  irule gas_outcome_full_mods_exit_static >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`G`,`es`,`Abort ExHalt_abort (halt_state (set_returndata [] s))`,
     `INR (Error (RuntimeError "write in static context"))`,`tn`] >>

@@ -36,7 +36,7 @@ Proof
      Abort Revert_abort (revert_state (set_returndata [] p))` by simp[] >>
   drule_all bytestring_slice_bounds_full_abort >>
   disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
-  irule gas_outcome_full_mods_exit >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule gas_outcome_full_mods_exit_revert >> reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`G'`, `es`,
     `Abort Revert_abort
       (revert_state (set_returndata [] p) with vs_inst_idx := s.vs_inst_idx+5)`,

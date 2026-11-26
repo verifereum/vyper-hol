@@ -268,7 +268,7 @@ Resume word_abs_bind_mods[abort]:
   fs[] >> drule_all abs_suffix_abort_nonfresh_full >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
     (qx_choosel_then [`u`,`G'`,`tn'`] strip_assume_tac)) >>
-  irule gas_outcome_full_mods_exit >> reverse conj_tac >- simp[] >>
+  irule gas_outcome_full_mods_exit_revert >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G'`,`mid`, `Abort Revert_abort (u with vs_inst_idx := t.vs_inst_idx + 5)`,
     `INR (Error (RuntimeError m))`,`tn'`] >>
   simp[Abbr `childR`, unop_result_gas_obs, exit_result_def, expr_exit_def, halt_exit_def] >>

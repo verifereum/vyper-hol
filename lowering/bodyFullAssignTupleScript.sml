@@ -1405,7 +1405,7 @@ Theorem body_assign_tuple_static_head_full_exit[local]:
     s.vs_inst_idx = LENGTH st.cs_current_insts /\ cx.txn.is_static ==>
     ?r Gf tf.
       (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,Gf,tf)) /\
-      exit_result r /\
+      exit_result r /\ ~oversized_create_abort ctx r /\
       (!H tail. stmt_exit (RetQ H) (ee with gas_obs := tail)
         (INR (Error (RuntimeError "write in static context"))) r) /\
       (!H tail. stmt_exit_ptr (RetP H) (ee with gas_obs := tail)
@@ -1422,6 +1422,8 @@ Proof
         (Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>
       `eval_operand (Lit (n2w k)) s = SOME (n2w k) /\
        op_taint tn (Lit (n2w k)) = {}` by simp[eval_operand_def,op_taint_def] >>
+      `~oversized_create_abort ctx (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+        simp[venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def] >>
       qexistsl_tac [`Abort ExHalt_abort (halt_state (set_returndata [] s))`,`G`,`tn`] >>
       simp[exit_result_def,stmt_exit_def,stmt_exit_ptr_def,expr_exit_def] >>
       gen_tac >> irule storage_emit_static_origin_ptr >> metis_tac[]) >>
@@ -1454,6 +1456,8 @@ Proof
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (mid,Gm,tm) []
     (Abort ExHalt_abort (halt_state (set_returndata [] mid)),Gm,tm)` by
     (gen_tac >> irule storage_emit_static_origin_ptr >> metis_tac[]) >>
+  `~oversized_create_abort ctx (Abort ExHalt_abort (halt_state (set_returndata [] mid)))` by
+    simp[venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def] >>
   qexistsl_tac [`Abort ExHalt_abort (halt_state (set_returndata [] mid))`,`Gm`,`tm`] >>
   simp[exit_result_def,stmt_exit_def,stmt_exit_ptr_def,expr_exit_def] >>
   gen_tac >> metis_tac[gas_origin_ptr_path_append,APPEND]
@@ -1540,6 +1544,7 @@ Theorem body_assign_tuple_store_targets_full_path:
             ghost_inv_at D lo d cenv cx es G tn s ==>
             stmt_state_rel H ctx func cenv cx es' t /\ ghost_inv_at D lo d cenv cx es' Gf tf t)) \/
        (res = INR (Error (RuntimeError "write in static context")) /\ exit_result r /\
+        ~oversized_create_abort ctx r /\
         (!H tail. stmt_exit (RetQ H) (es' with gas_obs := tail) res r) /\
         (!H tail. stmt_exit_ptr (RetP H) (es' with gas_obs := tail) res (Gf,tf) r)))
 Proof
@@ -14500,11 +14505,14 @@ Proof
         `!H. valid_horizon cx st0 H mid.storage_trace ==>
           gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
             (sp,Gp,tp) [] (Abort ExHalt_abort (halt_state (set_returndata [] q)),Gq,tq) /\
+          create_size_exit_ok ctx (INR (Error (RuntimeError "write in static context")) : unit + exception)
+            (Abort ExHalt_abort (halt_state (set_returndata [] q))) /\
           stmtR H (INR (Error (RuntimeError "write in static context"))) (mid with gas_obs := [])
             (Gq,tq) (Abort ExHalt_abort (halt_state (set_returndata [] q)))` by
           (qx_gen_tac `H` >> disch_tac >> conj_tac
            >- (qpat_assum `!D. gas_origin_ptr_path _ (sp,Gp,tp) [] (Abort _ _,Gq,tq)`
                  (qspec_then `DF H` ACCEPT_TAC)) >>
+           conj_tac >- simp[venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def] >>
            simp[Abbr `stmtR`,stmt_exit_ptr_def,expr_exit_def,halt_exit_def]) >>
         qpat_assum `Abbrev (cfg = _)`
           (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>

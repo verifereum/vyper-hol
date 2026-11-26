@@ -6679,6 +6679,7 @@ Theorem args_lock_abort_callee[local]:
     (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?r Gc tc.
     (?a t. r = Abort a t) /\
+    ~oversized_create_abort ctx r /\
     !H. valid_horizon cx st0 H failed.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,callee,MAP (op_prov G) ops)
         (entered,FEMPTY,tn with t_var := FEMPTY) [] (r,Gc,tc)
@@ -6713,6 +6714,7 @@ Theorem args_failed_lock_caller_outcome[local]:
   get_instruction bb u.vs_inst_idx = SOME inst /\
   inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (label,ops) /\
   gas_invoke_entry (ctx,caller) u callee entered /\
+  ~oversized_create_abort ctx (Abort a t) /\
   (!H. valid_horizon cx st0 H failed.storage_trace ==>
     ptr_inst_ok (DF H) lo 0 ctx caller G tn inst u /\
     gas_origin_ptr_path (DF H,lo,explicit,ctx,callee,MAP (op_prov G) ops)

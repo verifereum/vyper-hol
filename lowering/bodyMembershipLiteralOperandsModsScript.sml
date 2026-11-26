@@ -117,7 +117,8 @@ Proof
   >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`case res of INL vs => INL (v::vs) | INR ex => INR ex`,`ee`,`r`,`G'`,`tn'`] >>
       conj_tac >- (gen_tac >> simp[bind_def, return_def] >> Cases_on `res` >> simp[]) >>
-      simp[] >> rpt strip_tac >> res_tac >> simp[] >> metis_tac[])
+      simp[] >> rpt strip_tac >> res_tac >> simp[] >>
+      metis_tac[createSizeExitTheory.create_size_exit_ok_map])
   >> disj2_tac >> disj2_tac >> metis_tac[]
 QED
 

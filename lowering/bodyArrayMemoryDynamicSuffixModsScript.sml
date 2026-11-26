@@ -196,7 +196,7 @@ Proof
 QED
 
 Resume array_memory_dynamic_suffix_mods[reject]:
-  fs[] >> irule gas_outcome_full_mods_exit >> simp[] >>
+  fs[] >> irule gas_outcome_full_mods_exit_revert >> simp[] >>
   qexistsl [`H`,`fin`,`Abort Revert_abort q`,
             `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tm`] >>
   simp[exit_result_def, expr_exit_def, halt_exit_def]

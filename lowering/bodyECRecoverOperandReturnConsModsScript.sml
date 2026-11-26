@@ -33,6 +33,6 @@ Proof
       conj_tac >- (gen_tac >> simp[bind_def, return_def] >> Cases_on `res` >> simp[]) >>
       simp[] >> rpt strip_tac >>
       qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
-      simp[] >> metis_tac[])
+      simp[] >> metis_tac[createSizeExitTheory.create_size_exit_ok_map])
   >> disj2_tac >> disj2_tac >> metis_tac[]
 QED

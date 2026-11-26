@@ -303,7 +303,7 @@ Proof
   drule_all word_neg_run_nonfresh >> simp[] >> strip_tac >>
   drule_all word_neg_abort_origin >>
   disch_then (qspecl_then [`explicit`,`PG`,`G1`] strip_assume_tac) >>
-  irule gas_outcome_full_mods_exit >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule gas_outcome_full_mods_exit_revert >> reverse conj_tac >- first_assum ACCEPT_TAC >>
   rename1 `run_inst_seq _ t = Abort Revert_abort u` >>
   qexistsl_tac [`G'`,`mid`,`Abort Revert_abort (u with vs_inst_idx := SUC t.vs_inst_idx)`,
     `INR (Error (RuntimeError m))`,`tn'`] >>

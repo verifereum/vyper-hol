@@ -240,7 +240,7 @@ Resume augassign_operator_to_selected_write_mods[abort]:
        w.vs_allocas = q.vs_allocas /\ w.vs_alloca_next = q.vs_alloca_next /\
        allocas_from lo w /\ lo <= w.vs_alloca_next` by
     suspend "operator_error" >>
-  irule gas_outcome_full_mods_exit >>
+  irule gas_outcome_full_mods_exit_revert >>
   (reverse conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl_tac [`Gw`,`ee`,`Abort Revert_abort w`,`INR (Error (RuntimeError msg))`,`tnw`] >>
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>

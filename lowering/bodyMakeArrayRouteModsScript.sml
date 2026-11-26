@@ -90,8 +90,9 @@ Resume array_outcome_map[result]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >> simp[]
   >- (qpat_assum `!H r ee g tt u. Q H r ee g tt u ==> ISL r` drule >> simp[]) >>
   disj2_tac >> qpat_x_assum `(\h rr e g r. _) H (INR y) _ _ _` mp_tac >> BETA_TAC >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:eval_result``] expr_exit_INR_type,
-                    INST_TYPE [beta |-> ``:eval_result``] halt_exit_INR_type] >> simp[]
+      ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:eval_result``] expr_exit_INR_type,
+                        INST_TYPE [beta |-> ``:eval_result``] halt_exit_INR_type] >>
+      simp[createSizeExitTheory.create_size_exit_ok_def]
 QED
 
 Finalise array_outcome_map

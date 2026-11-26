@@ -192,6 +192,7 @@ Resume raw_log_dynamic_data_full[selected]:
         CONJUNCT1 o MATCH_MP (iffLR expr_post_def) o CONJUNCT1)) >>
   Cases_on `cx.txn.is_static`
   >- (`?u G2 tn2. !H. valid_horizon cx st0 H mid.storage_trace ==>
+      u.vs_call_ctx.cc_static /\
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (t,G1,tn1) [] (Abort ExHalt_abort u,G2,tn2)` by
       (match_mp_tac bodyFullRawLogDynamicTailPathTheory.raw_log_dynamic_static_tail_path >>
@@ -205,7 +206,8 @@ Resume raw_log_dynamic_data_full[selected]:
         `INR (Error (RuntimeError "write in static context"))`, `tn2`] >>
       simp[bind_def, lift_option_type_def, lift_option_def, dest_BytesV_def,
            ignore_bind_def, type_check_def, assert_def, return_def,
-           fragExecTheory.exit_result_def, expr_exit_def, halt_exit_def, Abbr `dataR`]) >>
+           fragExecTheory.exit_result_def, expr_exit_def, halt_exit_def, Abbr `dataR`] >>
+      rpt strip_tac >> res_tac >> simp[]) >>
   `?u G2 tn2. !H. valid_horizon cx st0 H mid.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (t,G1,tn1) [] (OK u,G2,tn2) /\

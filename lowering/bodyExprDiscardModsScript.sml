@@ -89,7 +89,10 @@ Proof
       conj_tac >- (gen_tac >> irule expr_discard_eval >> simp[] >> metis_tac[]) >>
       conj_tac >- first_assum ACCEPT_TAC >>
       gen_tac >> disch_tac >> first_x_assum drule >> strip_tac >> simp[] >>
-      first_x_assum strip_assume_tac >> gvs[] >> metis_tac[]) >>
+      first_x_assum strip_assume_tac >> gvs[] >>
+      TRY (metis_tac[]) >>
+      Cases_on `res` >> simp[createSizeExitTheory.create_size_exit_ok_def, exit_result_def] >>
+      metis_tac[createSizeExitTheory.create_size_exit_ok_map]) >>
   disj2_tac >> disj2_tac >>
   drule_then assume_tac expr_discard_exempt >> metis_tac[]
 QED

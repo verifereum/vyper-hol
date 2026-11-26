@@ -166,7 +166,7 @@ Resume slot_word_writeback_mods[static]:
     (qpat_x_assum `write_place _ _ _ _ = _` mp_tac >>
      simp[write_place_def, write_storage_slot_def, check_not_static_def,
           check_def, assert_def, ignore_bind_def, bind_def, raise_def]) >>
-  irule gas_outcome_full_mods_exit >>
+  irule gas_outcome_full_mods_exit_static >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`G`, `es`, `Abort ExHalt_abort (halt_state (set_returndata [] s))`, `res`, `tn`] >>
   simp[IgnAsm `u = _`, IgnAsm `un = _`, exit_result_def] >>

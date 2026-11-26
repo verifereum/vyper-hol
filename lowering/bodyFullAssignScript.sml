@@ -1803,6 +1803,8 @@ Resume body_assign_toplevel_copy_after_rhs_frame[static]:
   >- (asm_rewrite_tac[] >> simp[eval_operand_def,op_taint_def] >> metis_tac[]) >>
   simp[] >>
   disch_then (qx_choose_then `u` (qx_choose_then `Gf` (qx_choose_then `tnf` strip_assume_tac))) >>
+  `~oversized_create_abort ctx (Abort ExHalt_abort (halt_state (set_returndata [] u)))` by
+    simp[halt_state_def, set_returndata_def] >>
   irule gas_outcome_full_intro >>
   qexistsl [`Gf`,`ef`,`[]`,`Abort ExHalt_abort (halt_state (set_returndata [] u))`,
            `INR (Error (RuntimeError "write in static context"))`,`tnf`] >>
@@ -6973,6 +6975,8 @@ Resume body_assign_other_direct_slots_write_full[static]:
     (SPEC_ALL body_assign_slots_full_static_exit)) >>
   (impl_tac >- (pure_asm_rewrite_tac[] >> simp[])) >> simp[] >>
   disch_then (qx_choose_then `u` (qx_choose_then `Gf` (qx_choose_then `tnf` strip_assume_tac))) >>
+  `~oversized_create_abort ctx (Abort ExHalt_abort (halt_state (set_returndata [] u)))` by
+    simp[halt_state_def, set_returndata_def] >>
   irule gas_outcome_full_intro >>
   qexistsl [`Gf`,`ee`,`[]`,`Abort ExHalt_abort (halt_state (set_returndata [] u))`,
            `INR (Error (RuntimeError "write in static context"))`,`tnf`] >>
@@ -7158,6 +7162,8 @@ Resume body_assign_other_bytes_slots_write_full[static]:
     (SPEC_ALL bodyFullAssignTopCopyTailTheory.body_assign_slots_full_static_exit)) >>
   (impl_tac >- (pure_asm_rewrite_tac[] >> simp[])) >> simp[] >>
   disch_then (qx_choose_then `u` (qx_choose_then `Gf` (qx_choose_then `tnf` strip_assume_tac))) >>
+  `~oversized_create_abort ctx (Abort ExHalt_abort (halt_state (set_returndata [] u)))` by
+    simp[halt_state_def, set_returndata_def] >>
   irule gas_outcome_full_intro >>
   qexistsl [`Gf`,`ee`,`[]`,`Abort ExHalt_abort (halt_state (set_returndata [] u))`,
            `INR (Error (RuntimeError "write in static context"))`,`tnf`] >>
