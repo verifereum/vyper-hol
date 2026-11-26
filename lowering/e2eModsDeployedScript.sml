@@ -3,7 +3,7 @@ Theory e2eModsDeployed
 Ancestors
   e2eDeployed e2eModsLifecycle e2eModsDefs e2eDeployModsDefs
   e2eModsTopsDraft[qualified,ignore_grammar]
-  e2eDefs e2eCorrectness e2eComposition linkedCallStorage compileUnit
+  e2eDefs e2eGasSufficient e2eCorrectness e2eComposition linkedCallStorage compileUnit
   asmOptimizer vyperInterpreter vyperContext vyperStorageFootprint
   vyperTypeContractSoundness vyperTypeInitialState vyperTypeInvariants
   vyperTypeContractModes[qualified] vyperCallFiniteStorage
