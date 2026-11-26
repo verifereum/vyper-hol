@@ -6,6 +6,9 @@ Ancestors
   gasShadow gasShadowCompileStmtHelpers stmtSimAssertProps stmtSimDefs
   compileEnv exprLoweringProps exprSimDefs stmtSimProps loweringPosts bodyPtrDefs fragExec
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState
+  fragGasEmitCtrl fragGasOriginPtrLoop stmtSimIfProps emitHelperProps
+  venomExecSemantics venomInst venomState bodyMemoryDefs ptrDiscipline
+  bodyFullShadowBodyInv
 
 Theorem compile_assert_frag_full_mods:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty e ak es.
@@ -128,20 +131,64 @@ Resume compile_assert_frag_full_mods[selected]:
     (qspecl_then [`shadow_ctx`,`PG`] (qx_choose_then `b` strip_assume_tac))) >>
   qpat_x_assum `v = BoolV _` SUBST_ALL_TAC >>
   `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
-  Cases_on `b` >> fs[] >>
-  FIRST
-  [ qmatch_goalsub_rename_tac `gas_outcome_full_mods _ _ _ _ (return ()) _ _ _` >>
-    irule gas_outcome_full_mods_pure >> simp[] >>
-    qexistsl_tac [`G1`,`mid`,`INL ()`,`jump_to sb.cs_current_bb t`,`tn1`] >>
-    simp[return_def] >> qx_gen_tac `H` >> disch_tac >>
-    qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-      (qspec_then `H` mp_tac) >>
-    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[] >>
-    first_assum ACCEPT_TAC,
-    qmatch_goalsub_rename_tac `raise (AssertException msg)` >>
-    irule gas_outcome_full_mods_exit >> simp[] >>
-    qexistsl_tac [`G1`,`mid`,`Abort a u`,`INR (AssertException msg)`,`tn1`] >>
-    gvs[raise_def, exit_result_def, stmt_exit_ptr_def, halt_exit_def] ]
+  Cases_on `b`
+  >- (fs[] >>
+      qmatch_goalsub_rename_tac `gas_outcome_full_mods _ _ _ _ (return ()) _ _ _` >>
+      irule gas_outcome_full_mods_pure >> simp[] >>
+      qexistsl_tac [`G1`,`mid`,`INL ()`,`jump_to sb.cs_current_bb t`,`tn1`] >>
+      simp[return_def] >> qx_gen_tac `H` >> disch_tac >>
+      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+        (qspec_then `H` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[] >>
+      first_assum ACCEPT_TAC) >>
+  suspend "selected_abort"
+QED
+
+Resume compile_assert_frag_full_mods[selected_abort]:
+  (* Keep the emitted abort step available for the endpoint certificate. *)
+  simp[] >>
+  qabbrev_tac `opc = if ak = AssertBare then REVERT else INVALID` >>
+  qabbrev_tac `ops = if ak = AssertBare then [Lit 0w; Lit 0w] else []` >>
+  qabbrev_tac `msg = if ak = AssertBare then "" else "UNREACHABLE"` >>
+  qabbrev_tac `sfail = jump_to fl t` >>
+  `?a' u'. step_inst_base (mk_inst s5.cs_next_id opc ops []) sfail = Abort a' u' /\
+          expr_exit (INR (AssertException msg) : unit + exception) (Abort a' u')` by
+    (qpat_assum `ak = _ \/ _` strip_assume_tac
+     >- (qexists_tac `Revert_abort` >>
+         simp[Abbr `opc`, Abbr `ops`, Abbr `msg`, expr_exit_def, step_revert_zero]) >>
+     qexists_tac `ExHalt_abort` >>
+     simp[Abbr `opc`, Abbr `ops`, Abbr `msg`, expr_exit_def, step_invalid]) >>
+  `sfail.vs_current_bb = s5.cs_current_bb /\
+   sfail.vs_inst_idx = LENGTH s5.cs_current_insts /\ ~sfail.vs_halted` by
+    simp[Abbr `sfail`, jump_to_def] >>
+  `create_size_exit_ok ctx (INR (AssertException msg) : unit + exception) (Abort a' u')` by
+    (irule emit_abort_create_size_exit_ok >>
+     qexistsl_tac [`func`,`opc`,`ops`,`sfail`,`s5`,`s6`] >>
+     simp[Abbr `opc`, Abbr `ops`] >>
+     qpat_assum `ak = _ \/ _` strip_assume_tac >> simp[]) >>
+  irule gas_outcome_full_mods_exit >> simp[] >>
+  qexistsl_tac [`G1`,`mid`,`Abort a' u'`,`INR (AssertException msg)`,`tn1`] >>
+  simp[raise_def, exit_result_def, stmt_exit_ptr_def, halt_exit_def] >>
+  qx_gen_tac `H` >> strip_tac >>
+  `eval_operand op t = SOME 0w` by
+    (qhdtm_assum `expr_post_mods`
+       (strip_assume_tac o PURE_REWRITE_RULE [expr_post_mods_def]) >>
+     drule_all if_condition_operand >> simp[valueEncodingTheory.val_to_w256_def]) >>
+  `op_taint tn1 op = {} /\ allocas_from lo t` by
+    fs[ptr_val_ok_def, ghost_inv_at_mods_def] >>
+  irule gas_origin_ptr_path_trans >> qexistsl_tac [`G1`,`sfail`,`tn1`] >>
+  conj_tac
+  >- (qunabbrev_tac `sfail` >>
+      irule (REWRITE_RULE [COND_CLAUSES]
+        (Q.INST [`b` |-> `F`] emit_jnz_origin_ptr)) >>
+      simp[] >> qexistsl_tac [`ok`,`op`,`s3`,`s4`] >> simp[]) >>
+  irule emit_abort_origin_ptr >>
+  `(allocas_from lo sfail <=> allocas_from lo t)` by
+    simp[NoAsms, Abbr `sfail`, jump_to_def, allocas_from_def] >>
+  `(allocas_below_fmp sfail <=> allocas_below_fmp t)` by
+    simp[NoAsms, Abbr `sfail`, jump_to_def, allocas_below_fmp_def] >>
+  simp[] >> qexistsl_tac [`opc`,`ops`,`s5`,`s6`] >> simp[] >>
+  qpat_assum `ak = _ \/ _` strip_assume_tac >> simp[Abbr `opc`, Abbr `ops`]
 QED
 
 Finalise compile_assert_frag_full_mods
