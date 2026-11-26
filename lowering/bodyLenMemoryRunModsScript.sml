@@ -8,7 +8,7 @@ Ancestors
   loweringStateRelDefs builtinSimple context compileEnv
   venomState venomInst fragGasOriginPtr ptrDiscipline
   vyperStorageFootprint valueEncodingDefs vyperTypeSystem vyperTyping
-  list finite_map words arithmetic pred_set
+  list finite_map words arithmetic pred_set bodyLenMemoryRunCoreMods
 
 Theorem len_memory_run_mods:
   !DF lo d explicit ctx func PG cenv cx env e es st0 sa sm sb s0
@@ -61,138 +61,9 @@ Theorem len_memory_run_mods:
       tn2.t_trans = tn.t_trans /\ tn2.t_imm = tn.t_imm
 Proof
   rpt gen_tac >> strip_tac >>
-  `emit_op MLOAD [a] sm = (op,sb)` by
-    (qpat_x_assum `compile_builtin_len _ _ _ _ _ = _` mp_tac >>
-     simp[builtinSimpleTheory.compile_builtin_len_def,
-          contextTheory.compile_ptr_load_def,
-          contextTheory.compile_imm_load_word_runtime]) >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  `sb.cs_current_bb = sm.cs_current_bb` by
-    gvs[emitHelperTheory.emit_op_def, compileEnvTheory.comp_bind_def,
-        compileEnvTheory.fresh_var_def, compileEnvTheory.fresh_id_def,
-        compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
-        compileEnvTheory.emit_def] >>
-  qabbrev_tac `x = STRING #"%" (toString sm.cs_next_var)` >>
-  qabbrev_tac `i = mk_inst sm.cs_next_id MLOAD [a] [x]` >>
-  qabbrev_tac `raw = update_var x (mload (w2n w) t) t` >>
-  qabbrev_tac `z = raw with vs_inst_idx := SUC t.vs_inst_idx` >>
-  qabbrev_tac `G2 = step_prov PG G i raw` >>
-  qabbrev_tac `tn2 = step_taint i t raw tn` >>
-  qexistsl_tac [`z`,`G2`,`tn2`] >>
-  simp[Abbr `z`,Abbr `G2`,Abbr `tn2`,Abbr `raw`,Abbr `i`,Abbr `x`] >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-       ptr_inst_ok (DF H) lo 0 ctx func G tn
-         (mk_inst sm.cs_next_id MLOAD [a]
-           [STRING #"%" (toString sm.cs_next_var)]) t /\
-       w2n w + 32 <= t.vs_alloca_next` by
-    (qx_gen_tac `H` >> disch_tac >>
-     qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
-       (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
-     `allocas_from lo t` by fs[bodyFullShadowBodyInvTheory.ghost_inv_at_mods_def] >>
-     `vv_holds_mods cenv cx (post_value_type cenv e) tv vv ee t` by
-       fs[vv_post_mods_def] >>
-     `is_sized_type (post_value_type cenv e)` by
-       metis_tac[sized_type_widens_source] >>
-     `~is_word_type (post_value_type cenv e)` by
-       (qpat_x_assum `is_sized_type (post_value_type cenv e)` mp_tac >>
-        disch_then (strip_assume_tac o MATCH_MP sized_type_cases) >>
-        gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
-            compileEnvTheory.is_word_type_def]) >>
-     `?v. ptr_val_ok cx (post_value_type cenv e) v a G tn t` by
-       (Cases_on `vv`
-        >- (gvs[ptr_vv_ok_def, vv_holds_mods_def, loweringPostsTheory.vv_holds_def,
-               contextTheory.vv_location_def, contextTheory.vv_operand_def,
-               ptr_val_ok_def] >> qexists_tac `v` >> simp[])
-        >- (rename1 `LocatedValue t' p` >>
-            `p.ptr_location = LocMemory` by
-              (qpat_x_assum `_ = LocMemory` mp_tac >>
-               simp[contextTheory.vv_location_def]) >>
-            gvs[ptr_vv_ok_def, vv_holds_mods_def, loweringPostsTheory.vv_holds_def,
-                contextTheory.vv_location_def, contextTheory.vv_operand_def,
-                ptr_val_ok_def] >> qexists_tac `v` >> simp[])) >>
-     `!v. 32 <= val_footprint pvt v /\
-             ~is_word_type (post_value_type cenv e)` by
-       (qx_gen_tac `v0` >>
-        qpat_x_assum `is_sized_type (post_value_type cenv e)` mp_tac >>
-        disch_then (strip_assume_tac o MATCH_MP sized_type_cases) >>
-        gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
-            compileEnvTheory.is_word_type_def] >>
-        Cases_on `v0` >>
-        simp[loweringPostsTheory.val_footprint_def,
-             valueEncodingTheory.type_memory_size_def]) >>
-     reverse conj_tac
-     >- (`!v. 32 <= val_store_size pvt v` by
-           (qx_gen_tac `vv0` >> irule LESS_EQ_TRANS >>
-            qexists_tac `val_footprint pvt vv0` >>
-            simp[exprSimPropsTheory.val_footprint_le_store_size]) >>
-         Cases_on `vv` >>
-         gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def,
-             vv_holds_mods_def, loweringPostsTheory.vv_holds_def,
-             loweringPostsTheory.expr_val_rel_def,
-             exprSimMemDefsTheory.vv_store_bound_def] >>
-         rename1 `read_result cx tv ee = (INL loaded,ee)` >>
-         qpat_x_assum `!v. 32 <= val_store_size pvt v`
-           (qspec_then `loaded` assume_tac) >> decide_tac) >>
-     `?v. ptr_val_ok cx (post_value_type cenv e) v a G tn t /\
-          32 <= val_footprint pvt v` by metis_tac[] >>
-     `?p. a = Var p /\ ptr_covers G tn p t 32` by
-       (irule representationCleanPtrTheory.ptr_val_ok_read_covers >>
-        conj_tac >- metis_tac[] >>
-        qexistsl_tac [`cx`,`pvt`,`post_value_type cenv e`,`v'`] >> simp[] >>
-        qpat_x_assum `!v. 32 <= val_footprint pvt v`
-          (qspec_then `v'` strip_assume_tac) >> decide_tac) >>
-     gvs[] >>
-     qpat_x_assum `Var p = vv_operand vv`
-       (fn th => rewrite_tac[SYM th]) >>
-     irule exprPtrCtorImmStoreTheory.ptr_inst_ok_mload_lo >>
-     simp[]) >>
-  `!j. w2n w <= j /\ j < w2n w + 32 ==> j NOTIN tn.t_mem` by
-    (drule robust_mem_word_at_clean >> simp[]) >>
-  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
-  qpat_x_assum `!i. i < LENGTH [_] ==> _` (qspec_then `0` mp_tac) >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `a = vv_operand vv` SUBST_ALL_TAC >>
-  conj_tac
-  >- (qx_gen_tac `H` >> disch_tac >>
-      qpat_assum `!H. valid_horizon _ _ H _ ==> ptr_inst_ok _ _ _ _ _ _ _ _ _ /\ _`
-        (qspec_then `H` (drule_then (map_every assume_tac o CONJUNCTS))) >>
-      qpat_assum `t.vs_inst_idx = _` (pure_rewrite_tac o single o SYM) >>
-      irule decoderNavigationPtrTheory.navigation_instruction_origin >>
-      drule_then (fn th => simp[instMemFrontierTheory.below_frontier_MLOAD,th])
-        step_MLOAD >>
-      simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
-           memSafeRunTheory.inst_dload_in_section_other,
-           unitTransformDefsTheory.dalloca_no_wrap_def] >>
-      qexistsl_tac [`sm`,`sb`] >> simp[venomInstTheory.mk_inst_def]) >>
-  qabbrev_tac `out = STRING #"%" (toString sm.cs_next_var)` >>
-  qabbrev_tac `inst = mk_inst sm.cs_next_id MLOAD [vv_operand vv] [out]` >>
-  qabbrev_tac `u = update_var out (n2w n) t` >>
-  qabbrev_tac `tn1 = step_taint inst t u tn` >>
-  `op_taint tn1 (Var out) = {} /\ tn1.t_mem = tn.t_mem /\
-   tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans` by
-    (simp[Abbr `tn1`, Abbr `inst`, Abbr `u`] >>
-     qpat_assum `mload _ _ = _` (SUBST1_TAC o SYM) >>
-     irule wordLoadStorePtrTheory.mload_ghost_clean >> simp[]) >>
-  `tn1.t_imm = tn.t_imm` by
-    simp[Abbr `tn1`, Abbr `inst`, venomInstTheory.mk_inst_def,
-         decoderGhostFramePtrTheory.step_taint_nonmemory_frame] >>
-  `op_prov (step_prov PG G inst u) (Var out) = NONE` by
-    simp[Abbr `inst`, mk_inst_def, op_prov_def, step_prov_def,
-         out_prov_def, set_prov_def, FLOOKUP_DRESTRICT] >>
-  simp[Abbr `u`, update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  conj_tac
-  >- (simp[allocaHistoryTheory.alloca_history_def] >> strip_tac >>
-      rpt gen_tac >> strip_tac >>
-      rename1 `get_instruction _ k = SOME j` >>
-      Cases_on `k < LENGTH sm.cs_current_insts`
-      >- metis_tac[] >>
-      `k = LENGTH sm.cs_current_insts` by decide_tac >>
-      gvs[Abbr `inst`, mk_inst_def]) >>
-  qx_gen_tac `q` >> disch_tac >>
-  `q <> out` by
-    (simp[Abbr `out`] >> fs[not_fresh_at_def] >>
-     first_x_assum (qspec_then `sm.cs_next_var` mp_tac) >> simp[]) >>
-  simp[Abbr `tn1`, Abbr `inst`, mk_inst_def,
-       decoderGhostFramePtrTheory.step_prov_other_output,
-       decoderGhostFramePtrTheory.step_taint_other_output]
+  irule len_memory_run_core_mods >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`G0`,`a`,`cenv`,`d`,`e`,`env`,`es`,`pvt`,`s0`,`sa`,
+               `tn0`,`tv`,`tvt`,`vv`,`w`] >>
+  asm_rewrite_tac[]
 QED

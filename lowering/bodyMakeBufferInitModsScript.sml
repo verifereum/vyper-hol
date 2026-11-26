@@ -75,7 +75,9 @@ Proof
   metis_tac[]
 QED
 
-Theorem make_buffer_init_mods:
+(* Expose the allocation's raw endpoint and variable frame on the same
+   witness as the linked post, for clients that immediately write the buffer. *)
+Theorem make_buffer_init_frame_mods:
   compile_alloc_buffer cap sa = (buf,sm) /\
   compile_alloc_buffer cap sha = (shbuf,shm) /\ gas_shadow_state sa sha /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
@@ -89,6 +91,12 @@ Theorem make_buffer_init_mods:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?root addr t G tn.
+    (!x. not_fresh_at sa x ==>
+         lookup_var x t = lookup_var x s /\ FLOOKUP G x = FLOOKUP G0 x /\
+         op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+    (?raw. exec_alloca (mk_inst sa.cs_next_id ALLOCA [Lit (n2w cap)] [root])
+                        s (n2w cap : bytes32) = OK raw /\
+           t = raw with vs_inst_idx := LENGTH sm.cs_current_insts) /\
     buf.buf_operand = Var root /\ buf.buf_size = cap /\ shbuf = buf /\
     gas_shadow_state sm shm /\ ci_mono sa sm /\ local_ptrs_reserved ce sm /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G0,tn0) [] (OK t,G,tn)) /\
@@ -129,7 +137,7 @@ Proof
   suspend "frame"
 QED
 
-Resume make_buffer_init_mods[frame]:
+Resume make_buffer_init_frame_mods[frame]:
   `t.vs_memory = s.vs_memory /\ t.vs_data_section = s.vs_data_section /\ ~t.vs_halted` by
     (qpat_assum `~s.vs_halted` mp_tac >>
      qpat_assum `t with <|vs_vars := _; vs_allocas := _;
@@ -164,13 +172,12 @@ Resume make_buffer_init_mods[frame]:
        `mk_inst sa.cs_next_id ALLOCA [Lit (n2w cap)] [root]`, `raw`, `s`, `sa`, `n2w cap`] >>
      rpt conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
      first_assum ACCEPT_TAC) >>
-  qpat_x_assum `t = raw with vs_inst_idx := _` kall_tac >>
   qpat_x_assum `G = step_prov _ _ _ raw` kall_tac >>
   qpat_x_assum `tn = step_taint _ _ raw _` kall_tac >>
   suspend "posts"
 QED
 
-Resume make_buffer_init_mods[posts]:
+Resume make_buffer_init_frame_mods[posts]:
   `!name p k. local_region ce es.scopes s name p k ==> p+k <= s.vs_alloca_next` by
     (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ s`
        (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac body_local_region_frontier) >>
@@ -186,6 +193,10 @@ Resume make_buffer_init_mods[posts]:
      simp[ghost_kept_at_def] >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
      first_x_assum drule >> simp[]) >>
   qexistsl [`root`, `w2n w`, `t`, `G`, `tn`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qexists `raw` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `t = raw with vs_inst_idx := _` kall_tac >>
   simp[expr_sim_full_endpoint_def, wordsTheory.n2w_w2n] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -200,4 +211,47 @@ Resume make_buffer_init_mods[posts]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Finalise make_buffer_init_mods
+Finalise make_buffer_init_frame_mods
+
+Theorem make_buffer_init_mods:
+  compile_alloc_buffer cap sa = (buf,sm) /\
+  compile_alloc_buffer cap sha = (shbuf,shm) /\ gas_shadow_state sa sha /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  cap < dimword (:256) /\ storage_trace_domain cx st0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s /\ immutable_frame_mods func ce cx es s /\
+     storage_well_formed_on cx es (FST H) /\ ghost_inv_at_mods (DF H) lo d ce cx es G0 tn0 s) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  return_buf_frame d ce sa s /\ alloca_history func s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?root addr t G tn.
+    buf.buf_operand = Var root /\ buf.buf_size = cap /\ shbuf = buf /\
+    gas_shadow_state sm shm /\ ci_mono sa sm /\ local_ptrs_reserved ce sm /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G0,tn0) [] (OK t,G,tn)) /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w cap)] [root]) (fn_insts func) /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (addr,cap) /\ sa.cs_next_id < sm.cs_next_id /\
+    lookup_var root t = SOME (n2w addr) /\ ptr_covers G tn root t cap /\
+    FLOOKUP G root = SOME (addr,cap) /\ not_fresh_at sm root /\ lo <= addr /\
+    addr + cap < dimword (:256) /\ addr + cap <= t.vs_alloca_next /\
+    allocas_from lo t /\ t.vs_memory = s.vs_memory /\
+    expr_sim_full_endpoint func sm s t /\ ~t.vs_halted /\
+    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+    (!aid b n. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,n) ==>
+               loweringStateRelDefs$regions_disjoint addr cap b n) /\
+    (!name b n. local_region ce es.scopes t name b n ==>
+                loweringStateRelDefs$regions_disjoint addr cap b n) /\
+    (!i. i IN tn.t_mem <=> i IN tn0.t_mem \/ (s.vs_alloca_next <= i /\ i < addr + cap)) /\
+    wb_frame ce es es sa s t /\ ghost_kept_at lo ce es sa G0 tn0 s G tn /\
+    return_buf_frame d ce sm t /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func ce cx es t /\ immutable_frame_mods func ce cx es t /\
+         storage_well_formed_on cx es (FST H) /\ ghost_inv_at_mods (DF H) lo d ce cx es G tn t)
+Proof
+  strip_tac >> drule_all make_buffer_init_frame_mods >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`root`,`addr`,`t`,`G`,`tn`] strip_assume_tac)) >>
+  qexistsl [`root`,`addr`,`t`,`G`,`tn`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
