@@ -319,12 +319,16 @@ Resume raw_log_dynamic_data_run_mods[path]:
 QED
 
 Resume raw_log_dynamic_data_run_mods[static]:
-  irule gas_outcome_full_mods_exit >> reverse conj_tac >- simp[] >>
-  qexistsl [`Gp`, `mid`, `Abort ExHalt_abort (halt_state (set_returndata [] q))`,
-    `INR (Error (RuntimeError "write in static context"))`, `tp`] >>
+  irule gas_outcome_full_mods_exit_static >> reverse conj_tac >- simp[] >>
+  qexistsl [`Gp`, `mid`, `INR (Error (RuntimeError "write in static context"))`,
+    `tp`, `halt_state (set_returndata [] q)`] >>
   simp[bind_def, lift_option_type_def, lift_option_def, dest_BytesV_def,
        ignore_bind_def, type_check_def, assert_def, return_def,
-       fragExecTheory.exit_result_def, expr_exit_def, halt_exit_def, Abbr `dataR`] >>
+       expr_exit_def, halt_exit_def, Abbr `dataR`] >>
+  reverse conj_tac
+  >- (qpat_assum `(p with vs_vars := _) = t` (mp_tac o AP_TERM ``\s:venom_state. s.vs_call_ctx``) >>
+      simp[Abbr `q`, halt_state_def, set_returndata_def] >>
+      disch_then SUBST1_TAC >> simp[]) >>
   qpat_x_assum `!H. valid_horizon _ _ _ _ ==> gas_origin_ptr_path _ _ _ _` mp_tac >>
   simp[]
 QED

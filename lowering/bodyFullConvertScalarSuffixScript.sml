@@ -66,7 +66,9 @@ Theorem scalar_convert_origin_path:
    (!exc. convert_result cx src dst v = INR exc ==>
     (?msg. exc = Error (RuntimeError msg)) /\
     ?err t Gf tnf.
-      !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (Abort err t,Gf,tnf)))
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (Abort err t,Gf,tnf)) /\
+      (MEM fn ctx.ctx_functions /\ ALL_DISTINCT (FLAT (MAP fn_labels ctx.ctx_functions)) ==>
+       ~oversized_create_abort ctx (Abort err t))))
 Proof
   strip_tac >>
   drule_all scalar_convert_typed_run >> strip_tac >>

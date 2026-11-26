@@ -117,7 +117,15 @@ Proof
   >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`case res of INL vs => INL (v::vs) | INR ex => INR ex`,`ee`,`r`,`G'`,`tn'`] >>
       conj_tac >- (gen_tac >> simp[bind_def, return_def] >> Cases_on `res` >> simp[]) >>
-      simp[] >> rpt strip_tac >> res_tac >> simp[] >> metis_tac[])
+      simp[] >> gen_tac >> disch_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+        (drule_then strip_assume_tac)
+      >- (simp[] >> disj1_tac >> qexists_tac `res` >> simp[])
+      >> simp[] >> disj2_tac >> conj_tac
+      >- (qspec_then `\raw. case raw of INL vs => INL (v::vs) | INR ex => INR ex`
+            mp_tac (Q.GEN `f` createSizeExitTheory.create_size_exit_ok_map) >>
+          simp[])
+      >> qexists_tac `res` >> simp[])
   >> disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
