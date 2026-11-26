@@ -100,6 +100,9 @@ Proof
   `?a t. step_inst_base (mk_inst sa.cs_next_id opc ops []) s0 = Abort a t /\
          expr_exit (INR (AssertException msg) : unit + exception) (Abort a t)` by
     (gvs[expr_exit_def] >> metis_tac[step_revert_zero, step_invalid]) >>
+  `create_size_exit_ok ctx (INR (AssertException msg) : unit + exception) (Abort a t)` by
+    (irule emit_abort_create_size_exit_ok >>
+     qexistsl_tac [`func`, `opc`, `ops`, `s0`, `sa`, `sb`] >> simp[]) >>
   irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es`, `Abort a t`, `INR (AssertException msg)`, `tn0`] >>
   simp[exit_result_def] >> qx_gen_tac `H` >> strip_tac >>

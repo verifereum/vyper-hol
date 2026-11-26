@@ -10,7 +10,8 @@ Theorem sha_implicit_endpoint_mods:
     gas_origin_ptr_path (DF H,lo,explicit,ctx,fnm,PG)
       (s,G,tn) [F] (r,Gf,tf) /\
     ((?t. r = OK t /\ Q H res (ef with gas_obs := []) Gf tf t) \/
-     (exit_result r /\ R H res (ef with gas_obs := []) (Gf,tf) r))) ==>
+     (exit_result r /\ create_size_exit_ok ctx res r /\
+      R H res (ef with gas_obs := []) (Gf,tf) r))) ==>
   gas_outcome_full_mods (DF,lo,explicit,ctx,fnm,PG) mods cx st0 source
     (mid,s,G,tn) Q R
 Proof
