@@ -229,7 +229,7 @@ QED
 (* The chosen run is independent of the storage horizon. Registering its
    actual copy allocation keeps the selector safe even on a reused site. *)
 
-Theorem abi_encode_saved_code_restore_core_mods:
+val code_restore_pre = ``
   saved = LocatedValue ty p /\ p.ptr_location = LocCode /\
   unwrap_value ce saved ready = (src,u) /\ fn_has_code ready u func /\
   fn_inst_ids_distinct func /\
@@ -242,8 +242,9 @@ Theorem abi_encode_saved_code_restore_core_mods:
     storage_well_formed_on cx ee (FST H) /\ ghost_inv_at_mods (DF H) lo d ce cx ee G tn s) /\
   return_buf_frame d ce ready s /\ alloca_history func s /\
   ~s.vs_halted /\ s.vs_current_bb = ready.cs_current_bb /\
-  s.vs_inst_idx = LENGTH ready.cs_current_insts ==>
-  ?z Gz tz root w.
+  s.vs_inst_idx = LENGTH ready.cs_current_insts``;
+
+val code_restore_core_result = ``
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,Gz,tz)) /\
     ~z.vs_halted /\ z.vs_current_bb = u.cs_current_bb /\
     z.vs_inst_idx = LENGTH u.cs_current_insts /\ alloca_history func z /\
@@ -282,7 +283,21 @@ Theorem abi_encode_saved_code_restore_core_mods:
     z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
     z.vs_call_ctx = s.vs_call_ctx /\ z.vs_immutables = s.vs_immutables /\
     z.vs_data_section = s.vs_data_section /\
-    tz.t_stor = tn.t_stor /\ tz.t_trans = tn.t_trans /\ tz.t_imm = tn.t_imm
+    tz.t_stor = tn.t_stor /\ tz.t_trans = tn.t_trans /\ tz.t_imm = tn.t_imm``;
+
+Theorem abi_encode_saved_code_restore_packet_mods:
+  ^code_restore_pre ==>
+  ?z Gz tz root w a.
+    ^code_restore_core_result /\
+    ready.cs_next_var < u.cs_next_var /\
+    root = STRING #"%" (toString ready.cs_next_var) /\
+    MEM (mk_inst ready.cs_next_id ALLOCA [Lit (n2w (type_memory_size rt))] [root]) (fn_insts func) /\
+    exec_alloca (mk_inst ready.cs_next_id ALLOCA [Lit (n2w (type_memory_size rt))] [root])
+      s (n2w (type_memory_size rt) : bytes32) = OK a /\
+    FLOOKUP a.vs_allocas ready.cs_next_id = SOME (w2n w,type_memory_size rt) /\
+    copy_static z = copy_static a /\ LENGTH s.vs_memory <= LENGTH z.vs_memory /\
+    (!name b len. local_region ce ee.scopes s name b len ==>
+       b+len <= w2n w \/ w2n w+type_memory_size rt <= b)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
@@ -337,7 +352,7 @@ Proof
   qhdtm_x_assum `expr_post_mods` (strip_assume_tac o REWRITE_RULE [expr_post_mods_def,expr_post_def]) >>
   `op_taint tz src = {}` by
     (qpat_assum `src = Var root` SUBST1_TAC >> fs[ptr_covers_def]) >>
-  qexistsl [`z`,`Gz`,`tz`,`root`,`w`] >> asm_rewrite_tac[LESS_IMP_LESS_OR_EQ] >>
+  qexistsl [`z`,`Gz`,`tz`,`root`,`w`,`a`] >> asm_rewrite_tac[LESS_IMP_LESS_OR_EQ] >>
   conj_tac >-
     (qpat_assum `ready.cs_next_var < u.cs_next_var` mp_tac >> simp[]) >>
   conj_tac >-
@@ -359,6 +374,16 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (qspec_then `H` (drule_then strip_assume_tac)) >>
   fs[expr_post_mods_def,expr_post_def]
+QED
+
+Theorem abi_encode_saved_code_restore_core_mods:
+  ^code_restore_pre ==>
+  ?z Gz tz root w. ^code_restore_core_result
+Proof
+  disch_then (qx_choosel_then [`z`,`Gz`,`tz`,`root`,`w`,`a`]
+    (CONJUNCTS_THEN2 assume_tac kall_tac) o
+    MATCH_MP abi_encode_saved_code_restore_packet_mods) >>
+  qexistsl [`z`,`Gz`,`tz`,`root`,`w`] >> first_assum ACCEPT_TAC
 QED
 
 Theorem abi_encode_saved_code_restore_mods:
