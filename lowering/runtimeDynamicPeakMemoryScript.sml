@@ -146,7 +146,7 @@ Proof
   `?charge. !a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
     ?fn ai pre op sz post.
       lower_alloc_record h a fn ai pre op sz post /\
-      charge a = contractABI$ceil32 (w2n sz)` by
+      charge a = venomLayout$ceil32 (w2n sz)` by
     (simp[GSYM SKOLEM_THM, RIGHT_EXISTS_IMP_THM] >> metis_tac[]) >>
   qabbrev_tac `allocs = FILTER (\a. lower_event_allocates (EL a h))
     (GENLIST I (LENGTH h))` >>
@@ -254,7 +254,7 @@ Proof
   `?charge. !a. a < LENGTH h /\ lower_event_allocates (EL a h) ==>
     ?fn ai pre op sz post.
       lower_alloc_record h a fn ai pre op sz post /\
-      charge a = contractABI$ceil32 (w2n sz)` by
+      charge a = venomLayout$ceil32 (w2n sz)` by
     (simp[GSYM SKOLEM_THM, RIGHT_EXISTS_IMP_THM] >> metis_tac[]) >>
   drule_all lower_budget_history_allocation_charge_bound >> strip_tac >>
   `w2n root.bp_state.vs_initial_fmp +
