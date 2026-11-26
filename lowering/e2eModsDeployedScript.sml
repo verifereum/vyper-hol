@@ -11,6 +11,7 @@ Ancestors
   vfmConstants frameOutcome frameGas frameRunRaises stackBoundDefs
   stackBoundSoundness callTrace guardSourceAlignment
   e2eTransactionWorld linkedCompilePhases codegenAsmProgOk asmOptNonemptyFinalizer
+  linkedCallPremises e2eLifecycle loweringStateRelDefs
 
 (* Readiness of the installed unit, independent of transaction bookkeeping. *)
 Definition deployed_mods_def:
@@ -130,6 +131,100 @@ Proof
   drule_all call_frame_preserves_call_ready_mods >> simp[call_ready_deployed_mods]
 QED
 
+Triviality call_next_storage_ok_mods:
+  call_within_mods H mods exps am tx es /\
+  calldata_dispatch_mods mods exps tx.calldata = SOME (f, vals) /\
+  txd = tx with <| function_name := f; args := vals |> /\
+  call_external (SOME (MAP SND (call_trace es))) gs am txd = (res, am', rqs) /\
+  ~source_exempt_mods mods (call_external (SOME (MAP SND (call_trace es))) gs am txd) /\
+  call_result_rel_at_mods gs mods exps am txd es (INR NONE) es' /\
+  storage_ok H am' txd /\ LENGTH es.contexts = 1 /\
+  ~MEM tx.target es'.rollback.toDelete /\
+  tx'.target = tx.target ==>
+  storage_ok H (next_source_machine am' es') tx'
+Proof
+  strip_tac >> qpat_x_assum `txd = _` SUBST_ALL_TAC >>
+  qabbrev_tac `obs = source_storage_trace am
+    (tx with <| function_name := f; args := vals |>) (MAP SND (call_trace es)) gs` >>
+  `storage_observations_ok (initial_evaluation_context am.sources am.layouts tx NONE)
+      H obs` by fs[call_within_mods_def, Abbr `obs`] >>
+  `accounts_agree (storage_trace_horizon obs) tx.target am'.accounts
+      (process_deletions es'.rollback.toDelete es'.rollback.accounts)` by
+    (namedCases_on `res` ["v", "source_exc"] >>
+     gvs[call_result_rel_at_mods_def, effects_agree_def, LET_THM, Abbr `obs`] >>
+     Cases_on `source_exc` >>
+     gvs[exception_outcome_rel_mods_def, source_exempt_mods_def,
+         frame_outcome_def, AllCaseEqs()]) >>
+  `(lookup_account tx.target es'.rollback.accounts).code =
+   (lookup_account tx.target am'.accounts).code` by
+    (qpat_x_assum `accounts_agree _ _ _ _`
+       (mp_tac o cj 2 o REWRITE_RULE [accounts_agree_def]) >>
+     disch_then (mp_tac o AP_TERM ``\a:account_state. a.code``) >>
+     simp[GSYM lookup_account_def, lookup_account_process_deletions]) >>
+  `(update_account tx.target
+      (lookup_account tx.target es'.rollback.accounts with
+       code := (lookup_account tx.target am'.accounts).code)
+      es'.rollback.accounts) = es'.rollback.accounts` by
+    (qpat_assum `(lookup_account _ es'.rollback.accounts).code = _`
+       (fn h => PURE_REWRITE_TAC [GSYM h]) >>
+     rw[FUN_EQ_THM, update_account_def, lookup_account_def,
+        combinTheory.APPLY_UPDATE_THM, account_state_component_equality]) >>
+  irule deploy_next_storage_ok_from_agreement >>
+  qexistsl_tac [`storage_trace_horizon obs`,
+    `tx with <| function_name := f; args := vals |>`] >>
+  simp[] >> fs[storage_observations_ok_def, storage_trace_horizon_def, listTheory.EVERY_MEM]
+QED
+
+Triviality call_success_storage_ok_mods:
+  source_typing_ok_mods mods exps am tx /\
+  call_state_rel_mods mods exps runtime_bc am tx es /\
+  call_within_mods H mods exps am tx es /\
+  calldata_result_rel_mods H mods exps am tx es (INR NONE) es' /\
+  LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete ==>
+  gas_readings_rel (gas_readings es)
+    (\gs. (!f vals.
+        calldata_dispatch_mods mods exps tx.calldata = SOME (f, vals) ==>
+        ~source_exempt_mods mods
+          (call_external (SOME (MAP SND (call_trace es))) gs am
+            (tx with <| function_name := f; args := vals |>))) ==>
+      !tx'. tx'.target = tx.target ==>
+        storage_ok H (next_source_machine am es') tx')
+Proof
+  strip_tac >> Cases_on `calldata_dispatch_mods mods exps tx.calldata`
+  >- (qpat_x_assum `calldata_result_rel_mods _ _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [calldata_result_rel_mods_def]) >>
+      gvs[frame_outcome_def]) >>
+  rename1 `calldata_dispatch_mods mods exps tx.calldata = SOME entry` >>
+  PairCases_on `entry` >>
+  rename1 `calldata_dispatch_mods mods exps tx.calldata = SOME (f, vals)` >>
+  qpat_x_assum `calldata_result_rel_mods _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [calldata_result_rel_mods_def]) >>
+  gvs[] >>
+  qpat_x_assum `call_result_rel_mods _ _ _ _ _ _ _ _`
+    (strip_assume_tac o BETA_RULE o REWRITE_RULE [call_result_rel_mods_def, LET_THM]) >>
+  qpat_x_assum `gas_readings_rel _ _`
+    (fn bridge => match_mp_tac (MATCH_MP
+      (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_mono) bridge)) >>
+  qx_gen_tac `gs` >> BETA_TAC >> strip_tac >>
+  qabbrev_tac `txd = tx with <| function_name := f; args := vals |>` >>
+  Cases_on `call_external (SOME (MAP SND (call_trace es))) gs am txd` >>
+  rename1 `call_external (SOME (MAP SND (call_trace es))) gs am txd = (res, output)` >>
+  PairCases_on `output` >>
+  rename1 `call_external (SOME (MAP SND (call_trace es))) gs am txd = (res, am', rqs)` >>
+  `source_typing_ok_mods mods exps am txd /\
+   call_state_rel_mods mods exps runtime_bc am txd es` by
+    simp[Abbr `txd`, call_premises_dispatch_invariant_mods] >>
+  `source_deployment_rel_mods mods exps am txd` by fs[call_state_rel_entry_mods] >>
+  `next_source_machine am' es' = next_source_machine am es'` by
+    (irule call_external_next_source_machine_mods >> metis_tac[]) >>
+  gvs[] >> strip_tac >> qx_gen_tac `tx'` >> strip_tac >>
+  qpat_x_assum `next_source_machine am' es' = next_source_machine am es'`
+    (fn h => PURE_REWRITE_TAC [GSYM h]) >>
+  irule call_next_storage_ok_mods >>
+  qexistsl_tac [`am`, `es`, `exps`, `f`, `gs`, `mods`, `res`, `rqs`, `tx`, `txd`, `vals`] >>
+  simp[Abbr `txd`]
+QED
+
 (* TOP-LEVEL: linked call correctness and preservation of a surviving deployment. *)
 Theorem vyper_call_correct_deployed_mods:
   !fin policy mods exps deploy_bc runtime_bc am tx es H.
@@ -146,7 +241,15 @@ Theorem vyper_call_correct_deployed_mods:
       (frame_starved es r es' \/
        calldata_result_rel_mods H mods exps am tx es r es') /\
       (LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete ==>
-       deployed_mods mods exps runtime_bc (transaction_world am r es') tx.target)
+       deployed_mods mods exps runtime_bc (transaction_world am r es') tx.target /\
+       gas_readings_rel (gas_readings es)
+         (\gs. (!f vals.
+             calldata_dispatch_mods mods exps tx.calldata = SOME (f, vals) ==>
+             ~source_exempt_mods mods
+               (call_external (SOME (MAP SND (call_trace es))) gs am
+                 (tx with <| function_name := f; args := vals |>))) ==>
+           !tx'. tx'.target = tx.target ==>
+             storage_ok H (transaction_world am r es') tx'))
 Proof
   rpt gen_tac >> strip_tac >>
   `source_typing_ok_mods mods exps am tx /\
@@ -157,16 +260,27 @@ Proof
     (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
   qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
   reverse conj_tac
-  >- (strip_tac >> Cases_on `r = INR NONE` >> simp[transaction_world_def] >>
-      `runtime_bc <> []` by (drule_all compile_vyper_mods_runtime_nonempty >> simp[]) >>
-      `source_deployment_rel_mods mods exps am tx` by fs[call_state_rel_entry_mods] >>
-      Cases_on `call_external NONE [] am tx` >>
-      rename1 `call_external NONE [] am tx = (res, output)` >>
-      PairCases_on `output` >>
-      rename1 `call_external NONE [] am tx = (res, am_out, rqs)` >>
-      `next_source_machine am_out es' = next_source_machine am es'` by
-        (irule call_external_next_source_machine_mods >> metis_tac[]) >>
-      drule_all call_preserves_deployed_mods >> simp[]) >>
+  >- (strip_tac >> Cases_on `r = INR NONE` >> simp[transaction_world_def]
+      >- (conj_tac
+          >- (`runtime_bc <> []` by (drule_all compile_vyper_mods_runtime_nonempty >> simp[]) >>
+              `source_deployment_rel_mods mods exps am tx` by fs[call_state_rel_entry_mods] >>
+              Cases_on `call_external NONE [] am tx` >>
+              rename1 `call_external NONE [] am tx = (res, output)` >>
+              PairCases_on `output` >>
+              rename1 `call_external NONE [] am tx = (res, am_out, rqs)` >>
+              `next_source_machine am_out es' = next_source_machine am es'` by
+                (irule call_external_next_source_machine_mods >> metis_tac[]) >>
+              drule_all call_preserves_deployed_mods >> simp[]) >>
+          qpat_x_assum `frame_resource_starved _ _ _ \/ _`
+            (strip_assume_tac o REWRITE_RULE [frame_resource_starved_def]) >>
+          gvs[frame_outcome_def] >>
+          drule_all call_success_storage_ok_mods >> simp[]) >>
+      rw[gas_readings_rel_def] >>
+      qexistsl_tac [`[]`, `gas_readings es`] >> simp[] >>
+      rpt strip_tac >> fs[storage_ok_def] >>
+      irule (iffRL storage_well_formed_on_target) >>
+      qexists_tac `initial_evaluation_context am.sources am.layouts tx NONE` >>
+      simp[initial_evaluation_context_def]) >>
   qpat_x_assum `frame_resource_starved _ _ _ \/ _` strip_assume_tac >>
   asm_rewrite_tac[] >>
   DISJ1_TAC >>
@@ -416,7 +530,8 @@ Theorem vyper_call_correct_deployed_mods_singleton:
       vyper_call_correct_deployed)
 Proof
   simp[compile_vyper_mods_singleton, deployed_mods_singleton,
-       call_within_mods_singleton, calldata_result_rel_mods_singleton]
+       call_within_mods_singleton, calldata_result_rel_mods_singleton,
+       calldata_dispatch_mods_singleton, source_exempt_mods_singleton]
 QED
 
 Theorem vyper_call_gas_sufficient_deployed_mods_singleton:
