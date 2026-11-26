@@ -105,7 +105,7 @@ Theorem extcall_return_default_mods:
           ptr_buf_ok cenv e p.ptr_operand G' z) /\
         vv_own cenv cx (post_value_type cenv e) sa sb (ee with gas_obs := []) tv vv z /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn') \/
-       (exit_result r /\ expr_exit res r)))
+       (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r)))
 Proof
   strip_tac >>
   qpat_x_assum `cap = abi_size_bound _ _` kall_tac >>
@@ -344,8 +344,10 @@ Resume extcall_return_default_mods[after_payload]:
      qpat_assum `!D. gas_origin_ptr_path _ (t,G,tn) [] (OK a,J,tm)`
        (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
      disch_then (qspecl_then [`a`,`J`,`tm`,`[]`,`OK u`,`Gu`,`tu`] mp_tac) >> simp[]) >>
-  drule_all extcall_default_exit_mods >>
-  Cases_on `skip \/ ext_call_has_code target ee.accounts` >> simp[]
+  drule_all (INST_TYPE [beta |-> ``:eval_result``, gamma |-> ``:eval_result``]
+    extcall_default_exit_create_size_mods) >>
+  Cases_on `skip \/ ext_call_has_code target ee.accounts` >>
+  simp[Excl "create_size_exit_ok_inr"]
   >- (disch_then (qx_choosel_then [`z`,`Gz`,`tz`] strip_assume_tac) >>
       qexistsl_tac [`OK z`,`Gz`,`tz`] >> qx_gen_tac `h` >> strip_tac >>
       conj_tac >- suspend "join_path" >>
@@ -354,9 +356,10 @@ Resume extcall_return_default_mods[after_payload]:
   disch_then (qx_choosel_then [`r`,`Gz`,`tz`] strip_assume_tac) >>
   qexistsl_tac [`r`,`Gz`,`tz`] >> qx_gen_tac `h` >> strip_tac >>
   reverse conj_tac >-
-    (qpat_assum `~(skip \/ ext_call_has_code target ee.accounts)` mp_tac >>
-     qpat_assum `expr_exit (INR _) r` mp_tac >>
-     Cases_on `r` >> simp[NoAsms,exprSimDefsTheory.expr_exit_def,exit_result_def,DE_MORGAN_THM]) >>
+    (conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >-
+       (qpat_assum `create_size_exit_ok ctx (INR _) r` mp_tac >> simp[NoAsms]) >>
+     first_assum ACCEPT_TAC) >>
   suspend "abort_path"
 QED
 
