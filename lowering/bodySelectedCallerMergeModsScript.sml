@@ -1829,6 +1829,46 @@ val caller_read_exit = ``\(H : (bool # 256 word # type_value) list # num list)
     expr_exit res r /\ halt_exit H cx ee res r /\
     (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)``;
 
+(* Normalize the completed-callee callback to the selected caller outcome. *)
+Theorem caller_completed_normal_callback_adapter[local]:
+  contract_inv mods exps ctx ce cx /\ (^caller_stage_frame) /\ (^reached_invoke) /\
+  gas_admissible (^return_rest) expr_vv_res_ok es1 /\ (^reached_return) /\
+  s0.vs_alloca_next <= t.vs_alloca_next /\
+  ALOOKUP mods src = SOME tops /\ ALOOKUP ce.ce_modules ce.ce_module = SOME caller_tops /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
+  evaluate_type (get_tenv cx) ret = SOME rtv /\
+  expr_body_pre_mods mods ce cx env (^selected_call_expr) es0 /\ (^caller_func_info) /\
+  (rc = 0 ==> (^zero_result_layout)) /\
+  (0 < rc ==> ALL_DISTINCT inst.inst_outputs /\ (^register_buffer)) /\
+  outs = inst.inst_outputs /\ ~t.vs_halted /\ allocas_from lo t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ fn_inst_ids_distinct func ==>
+  !marks v ee ir cs Gc tc.
+    (!tail. (^return_source)
+      (es1 with gas_obs := gas_explicit marks entered.vs_gas_readings ++ tail) =
+      (INL v,ee with gas_obs := tail)) /\
+    storage_trace_domain cx st0 ee.storage_trace /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,callee,MAP (op_prov G) ops)
+        (entered,FEMPTY,tn with t_var := FEMPTY) marks (IntRet ir cs,Gc,tc) /\
+      (^callee_return) H v (ee with gas_obs := []) (Gc,tc) ir cs) ==>
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+      (^return_rest) (es1,t,G,tn) (^selected_owned) (^caller_exit)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`Gc` |-> `Gc`, `args` |-> `args`, `argv` |-> `argv`,
+    `bb` |-> `bb`, `callee` |-> `callee`, `cs` |-> `cs`, `dflts` |-> `dflts`,
+    `ee` |-> `ee`, `entered` |-> `entered`, `inst` |-> `inst`, `ir` |-> `ir`,
+    `lbl` |-> `lbl`, `marks` |-> `marks`, `ops` |-> `ops`, `outs` |-> `outs`,
+    `pvs` |-> `pvs`, `rbs` |-> `rbs`, `rc` |-> `rc`, `ret` |-> `ret`,
+    `tc` |-> `tc`, `tops` |-> `tops`, `v` |-> `v`, `caller_tops` |-> `caller_tops`]
+    caller_completed_normal) >>
+  (impl_tac >- (rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     (rpt conj_tac >> first_assum ACCEPT_TAC)))) >>
+  disch_then ACCEPT_TAC
+QED
+
 (* Public linked caller restoration: the prepared packet fixes the reached
    INVOKE, while the supplied callee rule is consumed exactly once. *)
 Theorem selected_caller_exit_restore_mods:
@@ -1882,7 +1922,7 @@ Proof
      ((rpt strip_tac >>> NTH_GOAL (simp[SIMP_RULE bool_ss [LET_THM] caller_completed_normal]) 3 >>> NTH_GOAL (simp[SIMP_RULE bool_ss [LET_THM] caller_completed_normal]) 3 >>> NTH_GOAL (simp[SIMP_RULE bool_ss [LET_THM] caller_completed_normal]) 3 >>> NTH_GOAL (simp[SIMP_RULE bool_ss [LET_THM] caller_completed_normal]) 3 >>> NTH_GOAL (simp[SIMP_RULE bool_ss [LET_THM] caller_completed_normal]) 3 >>
        CONV_TAC (DEPTH_CONV BETA_CONV) >>
        mp_tac (SIMP_RULE bool_ss [LET_THM] caller_completed_normal) >>
-       (impl_tac >- (rpt conj_tac >> (TRY first_assum ACCEPT_TAC) >> all_tac)) >>
+       (impl_tac >- (rpt conj_tac >> (TRY (first_assum ACCEPT_TAC)) >> all_tac)) >>
        disch_then ACCEPT_TAC) >-
       (gen_tac >> strip_tac >>
        qpat_assum `!callee entered bb inst lbl ops argv. _` drule_all >>
@@ -1895,6 +1935,6 @@ Proof
       first_assum ACCEPT_TAC)) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule selected_return_unwrap_mods >>
-  rpt conj_tac >> (TRY first_assum ACCEPT_TAC) >> FAIL_TAC "unwrap_probe"
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
