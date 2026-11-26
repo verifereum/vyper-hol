@@ -1,7 +1,7 @@
 (* Exact raw runtime execution and its result boundary for a linked unit. *)
 Theory sourceUnitExecutionMods
 Ancestors
-  compileUnit e2eDefs e2eModsDefs finite_map sourceUnitExecution sourceExemptMods
+  createSizeExit compileUnit e2eDefs e2eModsDefs finite_map sourceUnitExecution sourceExemptMods
   vyperContext vyperLoweringCorrect
 
 Definition initial_venom_state_rel_mods_def:
@@ -91,6 +91,7 @@ Definition source_unit_execution_correct_with_mods_def:
                             vs_inst_idx := 0 |>), FEMPTY, entry_taint)
                marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
           (?r. exit_result r /\
+             create_size_exit_ok unit.cu_context res r /\
              storage_trace_domain
                (initial_evaluation_context am.sources am.layouts tx NONE)
                (initial_state am []) obs /\
