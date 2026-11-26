@@ -20,7 +20,7 @@ values the EVM's `GAS` instructions returned in this run.
 The run's result matches the source constructor's, run with those readings
 and with the call outcomes this run observed.
 
-## MEM
+## IN
 
 What follows applies when the new account is not scheduled for deletion.
 
@@ -33,7 +33,7 @@ The source constructor succeeds, giving the source machine `am'`.
 The contract is then deployed at its address in the next source machine,
 which is what the call theorems assume about it.
 
-## call_txn_target
+## target
 
 For every later transaction `tx'` to that address,
 

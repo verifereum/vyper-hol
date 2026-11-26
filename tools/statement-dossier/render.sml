@@ -155,7 +155,7 @@ fun conclusion_parts t =
   if boolSyntax.is_forall t then conclusion_parts (#2 (boolSyntax.dest_forall t))
   else if boolSyntax.is_exists t then conclusion_parts (#2 (boolSyntax.dest_exists t))
   else if boolSyntax.is_imp_only t orelse boolSyntax.is_conj t orelse boolSyntax.is_disj t then
-    let val (_, [a, b]) = boolSyntax.strip_comb t in conclusion_parts a @ conclusion_parts b end
+    conclusion_parts (Term.rand (Term.rator t)) @ conclusion_parts (Term.rand t)
   else
     let
       val (f, args) = boolSyntax.strip_comb t
@@ -180,8 +180,12 @@ val () =
         let
           val (name, anchor) =
             if Term.is_const k then
-              let val {Thy, Name, ...} = Term.dest_thy_const k in
-                (Name, String.extract (def_anchor {Thy = Thy, Name = Name}, 4, NONE))
+              let
+                val {Thy, Name, ...} = Term.dest_thy_const k
+                (* a record field selector keys as its field *)
+                val field = List.last (String.fields (fn c => c = #".") Name)
+              in
+                (field, String.extract (def_anchor {Thy = Thy, Name = Name}, 4, NONE))
               end
             else (#1 (Term.dest_var k), "")
         in
