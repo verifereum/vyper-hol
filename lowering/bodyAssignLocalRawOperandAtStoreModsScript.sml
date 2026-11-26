@@ -1,7 +1,7 @@
 (* Delayed unwrap at the actual local Assign store cut. *)
 Theory bodyAssignLocalRawOperandAtStoreMods
 Ancestors
-  bodyAssignLocalPreStoreMods bodyQualifiedPlaceTargetEntryMods
+  bodyAssignLocalPreStoreMods bodyQualifiedPlaceTargetEntryMods bodyAssignLocalSavedMods
   bodyAssignQualifiedStageJoinMods bodyAssignLocalPlaceRoutesMods
   stmtLoweringMono exprLoweringProps fragExec compileEnv
   bodyQualifiedPlaceRawUnwrapMods bodySavedTargetSourceMods
@@ -428,8 +428,12 @@ Resume assign_local_raw_operand_at_store_mods[source_direct_bytes]:
           (?str. v = StringV str /\ len = LENGTH str)) /\
          val_store_size rt v = 32 * word_size len + 32` by
     (drule_all_then strip_assume_tac bytestring_typed_value_view >>
-     drule_all_then strip_assume_tac valueCopyBytesTheory.bytestring_type_value >>
-     gvs[vyperTypingTheory.value_has_type_def,exprSimPropsTheory.val_store_size_def]) >>
+     qpat_assum `evaluate_type _ (lowered_value_type cenv e) = SOME rt` mp_tac >>
+     qpat_assum `lowered_value_type cenv e = BaseT _` (once_rewrite_tac o single) >>
+     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+     strip_tac >>
+     qpat_assum `BaseTV _ = rt` (once_rewrite_tac o single o SYM) >>
+     simp[exprSimPropsTheory.val_store_size_def]) >>
   `val_store_size rt v <= type_memory_size rt` by simp[exprSimPropsTheory.val_store_size_le,value_has_type_val_wf] >>
   qexists `val_store_size rt v` >>
   (conj_tac >- (qexists `len` >> simp[])) >>
@@ -497,7 +501,14 @@ Resume assign_local_raw_operand_at_store_mods[source_direct_other]:
        (mp_then (Pat `place_ptr_rel _ _ _ _ _ _ _`) irule
           targetPlaceSimCasesBaseTheory.place_ptr_rel_vars_frame) >>
      qexists `st` >> simp[]) >>
-  FAIL_TAC "direct separation"
+  `lowered_value_type cenv e <> dty` by (strip_tac >> gvs[]) >>
+  qpat_assum `place_ptr_rel cenv cx s _ dw _ _`
+    (mp_then (Pat `place_ptr_rel _ _ _ _ _ _ _`)
+       (fn th => qpat_assum `expr_val_at cenv cx (lowered_value_type cenv e) sa cur ee v op s`
+         (mp_then (Pat `expr_val_at _ _ _ _ _ _ _ _ _`) (drule_all_then mp_tac) th))
+       bodyAssignLocalSavedModsTheory.saved_local_typed_separation) >>
+  qpat_assum `w2n dw = _` (once_rewrite_tac o single) >>
+  simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
 
 Finalise assign_local_raw_operand_at_store_mods
