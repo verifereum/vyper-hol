@@ -1228,9 +1228,8 @@ val linked_deploy_ctor_accepted_inputs_tac =
      rpt strip_tac >> FIRST_ASSUM ACCEPT_TAC);
 
 val linked_deploy_ctor_source_trace_tac =
-  SUBGOAL_THEN ``mut = Payable \/ tx.value = 0`` ASSUME_TAC
-  >- (qpat_assum `~(mut <> Payable /\ tx.value <> 0)` mp_tac >>
-     simp[NoAsms, DE_MORGAN_THM]) >>
+  qpat_assum `~(mut <> Payable /\ _)`
+    (assume_tac o SIMP_RULE (srw_ss()) [DE_MORGAN_THM]) >>
   drule_all (Q.INST [`exps` |-> `exps`] linked_constructor_source_trace) >>
   disch_then (qx_choosel_then [`imms`,`am0`,`am_c`,`es0`]
     (map_every assume_tac o CONJUNCTS));
