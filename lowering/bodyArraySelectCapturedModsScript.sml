@@ -110,9 +110,9 @@ Resume array_select_captured_mods[counted]:
   simp[] >> strip_tac >>
   pure_rewrite_tac[array_select_outcome_mods_def,LET_THM] >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  irule gas_outcome_full_mods_exit >>
+  irule gas_outcome_full_mods_exit_revert >>
   conj_tac >-
-    (qexistsl [`Gq`,`fin`,`Abort Revert_abort q`,`INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tq`] >>
+    (qexistsl [`Gq`,`fin`,`INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tq`,`q`] >>
      simp[exit_result_def,expr_exit_def,halt_exit_def]) >>
   simp[]
 QED
