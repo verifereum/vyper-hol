@@ -28,7 +28,7 @@
  *)
 Theory e2eGasSufficient
 Ancestors
-  e2eDefs e2eProducers e2eEntry e2eOptEntry unitTransformDefs ctorDeployNoCreate
+  createSizeExit e2eModsDefs e2eDeployModsDefs e2eDefs e2eProducers e2eEntry e2eOptEntry unitTransformDefs ctorDeployNoCreate
   stackPlanGen[qualified,ignore_grammar] loweringCreateSource
   contextRawReachable venomLayout ctorCallFreeExpr
   ptrDiscipline lowerDloadDefs e2eComposition sourceUnitExitSafe
@@ -180,6 +180,21 @@ Definition deploy_gas_source_exempt_def:
     deploy_source_exempt tops src \/
     src = INR (Error (RuntimeError "create initcode too large"))
 End
+
+Theorem gas_source_exempt_mods_singleton:
+  gas_source_exempt_mods [(NONE, tops)] tx src <=> e2eGasSufficient$gas_source_exempt tops tx src
+Proof
+  simp[gas_source_exempt_mods_def, gas_source_exempt_def,
+       source_exempt_mods_singleton]
+QED
+
+Theorem deploy_gas_source_exempt_mods_singleton:
+  deploy_gas_source_exempt_mods [(NONE, tops)] src <=>
+  e2eGasSufficient$deploy_gas_source_exempt tops src
+Proof
+  simp[deploy_gas_source_exempt_mods_def, deploy_gas_source_exempt_def,
+       deploy_source_exempt_mods_singleton]
+QED
 
 Theorem opt_entry_state_identity_add_frame_gas:
   !tops am tx prog cp es g.
@@ -514,7 +529,80 @@ QED
 
 (* Combine the gas-selected optimizer variant with the CREATE exit fact
    from the matching source evaluation. *)
-Theorem call_entry_reachable_create_size_ok:
+Triviality entry_create_size_ok_from_raw:
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  dead_wf D /\ o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+  code_layout_valid vs /\ fmp_variant_room (SOME fmp) out.po_unit.cu_context vs /\
+  (!vi. raw_variant fmp vi vs ==>
+    o1_pre_walk_inv D unit.cu_context vi /\
+    mem_inv (\ctx fn i s. inst_dload_in_section i s /\
+      s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section)
+      unit.cu_context vi /\
+    !fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
+      inst_create_size_ok inst s) ==>
+  mem_inv (\ctx fn inst s. inst_create_size_ok inst s) out.po_unit.cu_context vs
+Proof
+  strip_tac >>
+  drule_all run_venom_pipeline_output_shape >> strip_tac >>
+  REWRITE_TAC[mem_inv_raw_reachable] >> BETA_TAC >> conj_tac
+  >- (gvs[unit_shape_ok_def, entry_fn_first_def, fn_shape_ok_def,
+           lookup_function_def, listTheory.FIND_thm]) >>
+  rpt gen_tac >> disch_tac >> REWRITE_TAC[inst_create_size_ok_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all o1_pipeline_reached_create_size >>
+  disch_then (qx_choosel_then [`vi`, `rf`, `ri`, `rs`, `a`, `p`, `z`, `sl`] strip_assume_tac) >>
+  `inst_create_size_ok ri rs` by metis_tac[] >>
+  fs[inst_create_size_ok_def] >> metis_tac[]
+QED
+
+Theorem call_entry_reachable_create_size_ok_mods:
+  !mods exps am tx rpolicy unit out vs D fmp.
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+    dead_wf D /\ o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ fmp_variant_room (SOME fmp) out.po_unit.cu_context vs /\
+    (!vi. raw_variant fmp vi vs ==>
+      o1_pre_walk_inv D unit.cu_context vi /\
+      mem_inv (\ctx fn i s. inst_dload_in_section i s /\
+        s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section)
+        unit.cu_context vi /\
+      ((!fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
+          inst_create_size_ok inst s) \/
+       ?f vals obs fuel.
+         calldata_dispatch_mods mods exps tx.calldata = SOME (f, vals) /\
+         ~gas_source_exempt_mods mods
+           (tx with <|function_name := f; args := vals|>)
+           (call_external (SOME vi.vs_outcomes) obs am
+             (tx with <|function_name := f; args := vals|>)) /\
+         exit_result (run_context fuel unit.cu_context vi) /\
+         create_size_exit_ok unit.cu_context
+           (FST (call_external (SOME vi.vs_outcomes) obs am
+              (tx with <|function_name := f; args := vals|>)))
+           (run_context fuel unit.cu_context vi) /\
+         (vi.vs_call_ctx.cc_static ==>
+          ~(!n. terminates (run_context n unit.cu_context vi) ==>
+               ?u. run_context n unit.cu_context vi = Abort ExHalt_abort u)))) ==>
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+      out.po_unit.cu_context vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.INST [`D` |-> `D`, `fmp` |-> `fmp`,
+    `rpolicy` |-> `rpolicy`, `unit` |-> `unit`] entry_create_size_ok_from_raw) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  gen_tac >> disch_tac >>
+  qpat_assum `!vi. raw_variant fmp vi vs ==> _`
+    (drule_then (CONJUNCTS_THEN2 assume_tac
+      (CONJUNCTS_THEN2 assume_tac STRIP_ASSUME_TAC))) >>
+  asm_rewrite_tac[] >>
+  drule create_size_raw_unit_wf >> strip_tac >>
+  fs[gas_source_exempt_mods_def] >>
+  metis_tac[selected_raw_create_size_ok]
+QED
+
+Theorem call_entry_create_size_inputs[local]:
   !own fin tops rpolicy unit out prog prog' cplan am tx es vs.
     fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
     (own <=> fin = asm_opt_finalizer) /\
@@ -535,8 +623,33 @@ Theorem call_entry_reachable_create_size_ok:
         (call_external (SOME (MAP SND (call_trace es))) obs am
           (tx with <|function_name := f; args := vals|>))) /\
       LENGTH (call_trace es) < 2 ** 64) ==>
-    mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
-      out.po_unit.cu_context vs
+    ?D fmp.
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+    dead_wf D /\ o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ fmp_variant_room (SOME fmp) out.po_unit.cu_context vs /\
+    (!vi. raw_variant fmp vi vs ==>
+      o1_pre_walk_inv D unit.cu_context vi /\
+      mem_inv (\ctx fn i s. inst_dload_in_section i s /\
+        s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section)
+        unit.cu_context vi /\
+      ((!fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
+          inst_create_size_ok inst s) \/
+       ?f vals obs fuel.
+         calldata_dispatch_mods [(NONE,tops)] [] tx.calldata = SOME (f, vals) /\
+         ~gas_source_exempt_mods [(NONE,tops)]
+           (tx with <|function_name := f; args := vals|>)
+           (call_external (SOME vi.vs_outcomes) obs am
+             (tx with <|function_name := f; args := vals|>)) /\
+         exit_result (run_context fuel unit.cu_context vi) /\
+         create_size_exit_ok unit.cu_context
+           (FST (call_external (SOME vi.vs_outcomes) obs am
+              (tx with <|function_name := f; args := vals|>)))
+           (run_context fuel unit.cu_context vi) /\
+         (vi.vs_call_ctx.cc_static ==>
+          ~(!n. terminates (run_context n unit.cu_context vi) ==>
+               ?u. run_context n unit.cu_context vi = Abort ExHalt_abort u))))
 Proof
   rpt gen_tac >> strip_tac >>
   `vs = opt_entry_state_own prog prog' cplan es` by
@@ -587,31 +700,28 @@ Proof
     o1_pre_walk_inv D unit.cu_context vi /\
     mem_inv (\ctx fn i s. inst_dload_in_section i s /\
       s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section) unit.cu_context vi /\
-    (!fn inst s. raw_reachable vi unit.cu_context fn inst s ==> inst_create_size_ok inst s)` by
+      ((!fn inst s. raw_reachable vi unit.cu_context fn inst s ==>
+          inst_create_size_ok inst s) \/
+       ?f vals obs fuel.
+         calldata_dispatch tops tx.calldata = SOME (f, vals) /\
+         ~gas_source_exempt tops
+           (tx with <|function_name := f; args := vals|>)
+           (call_external (SOME vi.vs_outcomes) obs am
+             (tx with <|function_name := f; args := vals|>)) /\
+         exit_result (run_context fuel unit.cu_context vi) /\
+         create_size_exit_ok unit.cu_context
+           (FST (call_external (SOME vi.vs_outcomes) obs am
+              (tx with <|function_name := f; args := vals|>)))
+           (run_context fuel unit.cu_context vi) /\
+         (vi.vs_call_ctx.cc_static ==>
+          ~(!n. terminates (run_context n unit.cu_context vi) ==>
+               ?u. run_context n unit.cu_context vi = Abort ExHalt_abort u)))` by
     suspend "variants" >>
-  pure_rewrite_tac[mem_inv_raw_reachable, inst_create_size_ok_def] >> conj_tac
-  >- (fs[unitShapeDefsTheory.unit_shape_ok_def, unitShapeDefsTheory.entry_fn_first_def,
-         EVERY_MEM, unitShapeDefsTheory.fn_shape_ok_def] >>
-      rename1 `out.po_unit.cu_context.ctx_functions = entry::rest` >>
-      qexistsl_tac [`entry`, `entry.fn_name`] >>
-      simp[venomInstTheory.lookup_function_def, FIND_thm] >>
-      first_x_assum (qspec_then `entry` mp_tac) >> simp[]) >>
-  `!vi. raw_variant fmp vi vs ==>
-    o1_pre_walk_inv D unit.cu_context vi /\
-    mem_inv (\ctx fn i s. inst_dload_in_section i s /\
-      s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section) unit.cu_context vi` by
-    (rpt gen_tac >> disch_tac >>
-     qpat_assum `!vi. raw_variant fmp vi vs ==> _` drule >> simp[]) >>
-  rpt gen_tac >> disch_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >> rpt gen_tac >>
-  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
-  drule_all o1_pipeline_reached_create_size >> strip_tac >>
-  qpat_assum `!vi. raw_variant fmp vi vs ==> _ /\ _ /\ _` drule >>
-  strip_tac >>
-  qpat_assum `!fn inst s. raw_reachable _ _ fn inst s ==> _` drule >>
-  simp[inst_create_size_ok_def] >> metis_tac[]
+  qexistsl_tac [`D`,`fmp`] >>
+  asm_rewrite_tac[calldata_dispatch_mods_singleton, gas_source_exempt_mods_singleton]
 QED
 
-Resume call_entry_reachable_create_size_ok[entry]:
+Resume call_entry_create_size_inputs[entry]:
   `initial_venom_state_rel tops am tx (opt_entry_state_own prog prog' cplan es0)` by
     metis_tac[opt_entry_initial_venom_state_rel_own, opt_entry_own_txp_identity] >>
   `code_layout_valid (opt_entry_state_own prog prog' cplan es0)` by
@@ -622,7 +732,7 @@ Resume call_entry_reachable_create_size_ok[entry]:
   fs[] >> metis_tac[LENGTH_APPEND]
 QED
 
-Resume call_entry_reachable_create_size_ok[streams]:
+Resume call_entry_create_size_inputs[streams]:
   conj_tac
   >- (`wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
        (qpat_x_assum `es = add_frame_gas _ _` SUBST_ALL_TAC >>
@@ -633,7 +743,7 @@ Resume call_entry_reachable_create_size_ok[streams]:
   metis_tac[]
 QED
 
-Resume call_entry_reachable_create_size_ok[variants]:
+Resume call_entry_create_size_inputs[variants]:
   gen_tac >> strip_tac >>
   `ctx_has_dalloca unit.cu_context ==>
    unit_alloca_budget unit.cu_context + 32 * ctx_dload_count unit.cu_context <= w2n fmp /\
@@ -662,11 +772,11 @@ Resume call_entry_reachable_create_size_ok[variants]:
       `ctx_has_dalloca unit.cu_context ==> w2n fmp < 2 ** 254 /\
        unit_alloca_budget unit.cu_context + 32 * ctx_dload_count unit.cu_context <= w2n fmp` by
         metis_tac[] >>
-      rpt strip_tac >> irule reject_raw_create_size >> metis_tac[]) >>
+      disj1_tac >> rpt strip_tac >> irule reject_raw_create_size >> metis_tac[]) >>
   suspend "selected"
 QED
 
-Resume call_entry_reachable_create_size_ok[selected]:
+Resume call_entry_create_size_inputs[selected]:
   rename1 `_ = SOME fv` >> PairCases_on `fv` >>
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all_then strip_assume_tac calldata_dispatch_has_source_entry >>
@@ -712,18 +822,44 @@ Resume call_entry_reachable_create_size_ok[selected]:
            lookup_block "__entry" fn.fn_blocks = SOME bb ==>
            phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[acceptedContextPhiTheory.lower_vyper_runtime_unit_block_phi] >>
-  qunabbrev_tac `obs` >> drule_all source_unit_create_size_run >> strip_tac >>
-  drule create_size_raw_unit_wf >> strip_tac >>
+  qunabbrev_tac `obs` >> drule_all source_unit_create_size_run >>
+  disch_then (qx_choose_then `selected_fuel` strip_assume_tac) >>
   `vi.vs_call_ctx.cc_static = tx.is_static` by
     fs[Abbr `td`, initial_venom_state_rel_def, venom_env_rel_def,
        loweringStateRelDefsTheory.call_ctx_rel_def] >>
-  `vi.vs_call_ctx.cc_static ==>
-   ~(!n. terminates (run_context n unit.cu_context vi) ==>
-         ?u. run_context n unit.cu_context vi = Abort ExHalt_abort u)` by metis_tac[] >>
-  metis_tac[selected_raw_create_size_ok]
+  disj2_tac >>
+  qexistsl_tac [`fv0`,`fv1`,`gas_explicit marks vi.vs_gas_readings`,`selected_fuel`] >>
+  simp[Abbr `td`] >> metis_tac[]
 QED
 
-Finalise call_entry_reachable_create_size_ok
+Finalise call_entry_create_size_inputs
+
+Theorem call_entry_reachable_create_size_ok:
+  !own fin tops rpolicy unit out prog prog' cplan am tx es vs.
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    (own <=> fin = asm_opt_finalizer) /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    EXISTS (top_body_has expr_create_root) tops /\
+    (?es0 g. call_state_rel tops (assemble prog') am tx es0 /\
+             es = add_frame_gas g es0) /\
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    codegen_assembly rpolicy out.po_unit = SOME prog /\
+    generate_context_plan out.po_unit.cu_context = SOME cplan /\
+    vs = (if own then opt_entry_state_own prog prog' cplan es
+          else opt_entry_state prog prog' cplan es) /\
+    (!f vals. calldata_dispatch tops tx.calldata = SOME (f,vals) ==>
+      (!obs. call_storage_ok am (tx with <|function_name := f; args := vals|>)
+        (MAP SND (call_trace es)) obs) /\
+      (!obs. ~gas_source_exempt tops (tx with <|function_name := f; args := vals|>)
+        (call_external (SOME (MAP SND (call_trace es))) obs am
+          (tx with <|function_name := f; args := vals|>))) /\
+      LENGTH (call_trace es) < 2 ** 64) ==>
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+      out.po_unit.cu_context vs
+Proof
+  metis_tac[call_entry_create_size_inputs, call_entry_reachable_create_size_ok_mods]
+QED
 
 Theorem call_state_rel_add_frame_gas_raises:
   call_state_rel tops runtime_bc am tx es ==>
@@ -1044,7 +1180,62 @@ QED
 
 (* Use the selected raw execution to rule out the oversized CREATE exit,
    then transport the evaluated size back from the optimized site. *)
-Theorem deploy_entry_reachable_create_size_ok:
+Theorem deploy_raw_reachable_create_size_exempt_mods:
+  !mods exps am tx rp unit out vi fn inst s.
+    o1PipelineCorrect$o1_pipeline rp unit = SOME out /\
+    ~vi.vs_call_ctx.cc_static /\
+    (?obs fuel.
+      exit_result (run_context fuel unit.cu_context vi) /\
+      create_size_exit_ok unit.cu_context
+        (load_contract (SOME vi.vs_outcomes) obs am tx mods exps)
+        (run_context fuel unit.cu_context vi)) /\
+    raw_reachable vi unit.cu_context fn inst s /\
+    ~inst_create_size_ok inst s ==>
+    ?obs. deploy_gas_source_exempt_mods mods
+      (load_contract (SOME vi.vs_outcomes) obs am tx mods exps)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule create_size_raw_unit_wf >> strip_tac >>
+  `oversized_create_abort unit.cu_context (run_context fuel unit.cu_context vi)` by
+    (irule raw_reachable_oversized_create_abort >> simp[] >> metis_tac[]) >>
+  qexists_tac `obs` >>
+  fs[create_size_exit_ok_def, deploy_gas_source_exempt_mods_def]
+QED
+
+Theorem deploy_entry_reachable_create_size_ok_mods:
+  !mods exps am tx rpolicy unit out vs D fmp.
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+    dead_wf D /\ o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ fmp_variant_room (SOME fmp) out.po_unit.cu_context vs /\
+    (!vi. raw_variant fmp vi vs ==>
+      o1_pre_walk_inv D unit.cu_context vi /\
+      mem_inv (\ctx fn i s. inst_dload_in_section i s /\
+        s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section)
+        unit.cu_context vi /\
+      ~vi.vs_call_ctx.cc_static /\
+      (?obs fuel.
+        exit_result (run_context fuel unit.cu_context vi) /\
+        create_size_exit_ok unit.cu_context
+          (load_contract (SOME vi.vs_outcomes) obs am tx mods exps)
+          (run_context fuel unit.cu_context vi)) /\
+      (!obs. ~deploy_gas_source_exempt_mods mods
+        (load_contract (SOME vi.vs_outcomes) obs am tx mods exps))) ==>
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+      out.po_unit.cu_context vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.INST [`D` |-> `D`, `fmp` |-> `fmp`,
+    `rpolicy` |-> `rpolicy`, `unit` |-> `unit`] entry_create_size_ok_from_raw) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  gen_tac >> disch_tac >>
+  qpat_assum `!vi. raw_variant fmp vi vs ==> _` (drule_then strip_assume_tac) >>
+  asm_rewrite_tac[] >> rpt strip_tac >>
+  metis_tac[deploy_raw_reachable_create_size_exempt_mods]
+QED
+
+Theorem deploy_entry_create_size_inputs[local]:
   !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs.
     fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
     deploy_phases policy tops (assemble prog, runtime_bc)
@@ -1057,8 +1248,25 @@ Theorem deploy_entry_reachable_create_size_ok:
     (!obs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) obs) /\
     (!obs. ~deploy_gas_source_exempt tops
       (load_contract (SOME (MAP SND (call_trace es))) obs am tx [(NONE,tops)] [])) ==>
-    mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
-      dout.po_unit.cu_context vs
+    ?D fmp.
+    o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
+    o1_source_unit_ok dunit /\ unit_entry_no_params dunit /\
+    unit_defs_reach_uses dunit /\ unit_fmp_unsealed dunit /\
+    dead_wf D /\ o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ fmp_variant_room (SOME fmp) dout.po_unit.cu_context vs /\
+    (!vi. raw_variant fmp vi vs ==>
+      o1_pre_walk_inv D dunit.cu_context vi /\
+      mem_inv (\ctx fn i s. inst_dload_in_section i s /\
+        s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section)
+        dunit.cu_context vi /\
+      ~vi.vs_call_ctx.cc_static /\
+      (?obs fuel.
+        exit_result (run_context fuel dunit.cu_context vi) /\
+        create_size_exit_ok dunit.cu_context
+          (load_contract (SOME vi.vs_outcomes) obs am tx [(NONE,tops)] [])
+          (run_context fuel dunit.cu_context vi)) /\
+      (!obs. ~deploy_gas_source_exempt_mods [(NONE,tops)]
+        (load_contract (SOME vi.vs_outcomes) obs am tx [(NONE,tops)] [])))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_unit_o1_shape_ok >> strip_tac >>
@@ -1120,8 +1328,14 @@ Proof
      simp[o1_src_inv_def, taint_within_def, Abbr `D`] >>
      metis_tac[source_fmp_free]) >>
   `!vi. raw_variant fmp vi vs ==>
-        !fn inst s. raw_reachable vi dunit.cu_context fn inst s ==>
-                    inst_create_size_ok inst s` by
+        ~vi.vs_call_ctx.cc_static /\
+        (?obs fuel.
+           exit_result (run_context fuel dunit.cu_context vi) /\
+           create_size_exit_ok dunit.cu_context
+             (load_contract (SOME vi.vs_outcomes) obs am tx [(NONE,tops)] [])
+             (run_context fuel dunit.cu_context vi)) /\
+        (!obs. ~deploy_gas_source_exempt tops
+          (load_contract (SOME vi.vs_outcomes) obs am tx [(NONE,tops)] []))` by
     (gen_tac >> disch_tac >>
      `vi.vs_outcomes = vs.vs_outcomes /\ ~vi.vs_call_ctx.cc_static` by
        metis_tac[raw_variant_outcomes, raw_variant_call_ctx] >>
@@ -1134,22 +1348,32 @@ Proof
      REWRITE_TAC [APPEND_NIL] >>
      impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])) >>
      disch_then (qx_choose_then `fuel` strip_assume_tac) >>
-     qabbrev_tac `src = load_contract (SOME vi.vs_outcomes)
-          (gas_explicit marks vi.vs_gas_readings) am tx [(NONE,tops)] []` >>
-     `src <> INR (Error (RuntimeError "create initcode too large"))` by
-       metis_tac[] >>
-     drule_at (Pos (el 5)) selected_raw_create_size_ok >>
-     disch_then (qspecl_then [`vi`, `fuel`] mp_tac) >>
-     simp[]) >>
-  REWRITE_TAC[mem_inv_raw_reachable] >> BETA_TAC >> conj_tac
-  >- (gvs[unit_shape_ok_def, entry_fn_first_def, fn_shape_ok_def,
-           lookup_function_def, listTheory.FIND_thm]) >>
-  rpt gen_tac >> disch_tac >> REWRITE_TAC[inst_create_size_ok_def] >>
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all o1_pipeline_reached_create_size >>
-  disch_then (qx_choosel_then [`vi`, `rf`, `ri`, `rs`, `a`, `p`, `z`, `sl`] strip_assume_tac) >>
-  `inst_create_size_ok ri rs` by metis_tac[] >>
-  fs[inst_create_size_ok_def] >> metis_tac[]
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (qexistsl_tac [`gas_explicit marks vi.vs_gas_readings`,`fuel`] >>
+         asm_rewrite_tac[]) >>
+     metis_tac[]) >>
+  qexistsl_tac [`D`,`fmp`] >>
+  asm_rewrite_tac[deploy_gas_source_exempt_mods_singleton] >> metis_tac[]
+QED
+
+Theorem deploy_entry_reachable_create_size_ok:
+  !fin policy tops runtime_bc rpolicy dunit dout prog prog' cplan am tx es vs.
+    fin IN accepted_finalizers /\ fin rpolicy prog = SOME prog' /\
+    deploy_phases policy tops (assemble prog, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_source_ok tops am tx /\
+    deploy_dalloca_form_occurs expr_create_root tops /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    vs = opt_deploy_entry_state_own prog prog' cplan tops es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    (!obs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) obs) /\
+    (!obs. ~deploy_gas_source_exempt tops
+      (load_contract (SOME (MAP SND (call_trace es))) obs am tx [(NONE,tops)] [])) ==>
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+      dout.po_unit.cu_context vs
+Proof
+  metis_tac[deploy_entry_create_size_inputs, deploy_entry_reachable_create_size_ok_mods]
 QED
 
 (* e2e_deploy_correctness's hypotheses.  The constructor run's finite

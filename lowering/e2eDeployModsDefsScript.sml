@@ -1,7 +1,7 @@
 (* Creation boundary and gas exemptions for linked units. *)
 Theory e2eDeployModsDefs
 Ancestors
-  e2eModsDefs e2eDefs e2eDeployDefs e2eGasSufficient[qualified]
+  e2eModsDefs e2eDefs e2eDeployDefs
   ctorDeployDefs[qualified] compileUnit sourceExemptMods
   vyperInterpreter vyperTypeContract vyperTypeInvariants vyperContext vyperABI
   vyperStorageFootprint callTrace frameOutcome vfmExecution vfmState
@@ -221,11 +221,3 @@ Definition deploy_gas_source_exempt_mods_def:
     deploy_source_exempt_mods mods src \/
     src = INR (Error (RuntimeError "create initcode too large"))
 End
-
-Theorem deploy_gas_source_exempt_mods_singleton:
-  deploy_gas_source_exempt_mods [(NONE, tops)] src <=>
-  e2eGasSufficient$deploy_gas_source_exempt tops src
-Proof
-  simp[deploy_gas_source_exempt_mods_def, e2eGasSufficientTheory.deploy_gas_source_exempt_def,
-       deploy_source_exempt_mods_singleton]
-QED

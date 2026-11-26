@@ -1,7 +1,7 @@
 (* Runtime boundary and gas exemptions for linked units. *)
 Theory e2eModsDefs
 Ancestors
-  e2eDefs e2eCorrectness[qualified] e2eGasSufficient[qualified]
+  e2eDefs e2eCorrectness[qualified]
   bodyInvSplit bodySimModsProps[qualified] bodySim[qualified]
   compileUnit compileVyper compileEnv immutableSectionRel immutableRelation
   immutableLocationProps immSectionDead
@@ -374,13 +374,6 @@ Definition gas_source_exempt_mods_def:
            FST src = INR (Error (RuntimeError m))) \/
       FST src = INR (AssertException "UNREACHABLE")))
 End
-
-Theorem gas_source_exempt_mods_singleton:
-  gas_source_exempt_mods [(NONE, tops)] tx src <=> e2eGasSufficient$gas_source_exempt tops tx src
-Proof
-  simp[gas_source_exempt_mods_def, e2eGasSufficientTheory.gas_source_exempt_def,
-       source_exempt_mods_singleton]
-QED
 
 Definition exception_outcome_rel_mods_def:
   exception_outcome_rel_mods mods exc es r es' <=>
