@@ -1236,6 +1236,11 @@ Resume append_storage_aggregate_cont_full[slots_static]:
      qpat_assum `placed.vs_call_ctx.cc_static <=> cx.txn.is_static` mp_tac >>
      simp[stmtSimAppendStorageComposeTheory.get_storage_gas_obs] >>
      fs[Abbr `len`]) >>
+  `(halt_state (set_returndata [] blocked)).vs_call_ctx.cc_static` by
+    (simp[venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def,
+          NoAsms] >>
+     qpat_assum `blocked.vs_call_ctx = placed.vs_call_ctx` SUBST1_TAC >>
+     first_assum ACCEPT_TAC) >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >>
   conj_tac >- (qexistsl_tac [`Gb`,`mid`,`Abort ExHalt_abort (halt_state (set_returndata [] blocked))`,
     `INR (Error (RuntimeError "write in static context"))`,`tb`] >>
@@ -2395,6 +2400,10 @@ Resume append_nested_storage_cont_framed[static]:
   `t.vs_call_ctx.cc_static` by simp[] >>
   drule_all appendStorageStaticPtrTheory.append_storage_word_static_origin_path >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
+  `((halt_state (set_returndata [] u)) with vs_inst_idx := j).vs_call_ctx.cc_static` by
+    (qpat_assum `state_frame u = state_frame t` mp_tac >>
+     simp[stateFrameTheory.state_frame_def, venomStateTheory.halt_state_def,
+          venomStateTheory.set_returndata_def]) >>
   `!tail. append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v
       (mid with gas_obs := tail) =
       (INR (Error (RuntimeError "write in static context")),mid with gas_obs := tail)` by
@@ -4492,7 +4501,7 @@ Proof
   strip_tac >> gvs[] >> drule emitHelperPropsTheory.emitted_insts_emit_op >> metis_tac[]
 QED
 
-Theorem append_resolved_rhs_code_full[local]:
+Theorem append_resolved_rhs_code_full:
   stmt_env cenv lctx ty (Append bt e) sa = (cenv,sf) /\
   compile_get_target_ptr compile_expr cenv bt sa =
     ((bop,SOME loc,SOME (ValPT (ArrayT elem (Dynamic cap)))),sp) /\

@@ -190,7 +190,8 @@ Proof
       disj2_tac >>
       qpat_x_assum `(\h rr e g r. _) H (INR y) _ _ _` mp_tac >> BETA_TAC >>
       ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:eval_result``] expr_exit_INR_type,
-                        INST_TYPE [beta |-> ``:eval_result``] halt_exit_INR_type] >> simp[]) >>
+                        INST_TYPE [beta |-> ``:eval_result``] halt_exit_INR_type] >>
+      fs[createSizeExitTheory.create_size_exit_ok_inr]) >>
   disj2_tac >> disj2_tac >> qexistsl [`err`,`ee`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >>
   simp[] >> qexists_tac `H` >> simp[]
 QED
