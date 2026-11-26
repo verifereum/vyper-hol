@@ -1231,13 +1231,7 @@ val linked_deploy_ctor_source_trace_tac =
   SUBGOAL_THEN ``mut = Payable \/ tx.value = 0`` ASSUME_TAC
   >- (qpat_assum `~(mut <> Payable /\ tx.value <> 0)` mp_tac >>
      simp[NoAsms, DE_MORGAN_THM]) >>
-  mp_tac (Q.INST [`am` |-> `am`, `tx` |-> `tx`, `mods` |-> `mods`,
-    `exps` |-> `exps`, `art` |-> `deploy_art`,
-    `mut` |-> `mut`, `args` |-> `src_args`, `src_body` |-> `raw_body`,
-    `scope` |-> `scope`] (Thm.INST
-      [Term.mk_var ("tops", ``:toplevel list``) |-> ``tops' : toplevel list``]
-      linked_constructor_source_trace)) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all (Q.INST [`exps` |-> `exps`] linked_constructor_source_trace) >>
   disch_then (qx_choosel_then [`imms`,`am0`,`am_c`,`es0`]
     (map_every assume_tac o CONJUNCTS));
 
