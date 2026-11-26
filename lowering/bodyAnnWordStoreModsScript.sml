@@ -260,8 +260,10 @@ Resume annassign_word_store_mods[finish_install]:
     (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
          (?v. _ /\ expr_post_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ exprSimMemDefs$expr_store_bound _ _ _ _ _ /\ _) /\ _`
        (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
-  drule_all (Q.INST [`inst` |-> `alloc_inst`, `t` |-> `t`, `old` |-> `cenv`,
-                     `D` |-> `DF H`] annassign_word_install_post_mods) >>
+  mp_tac (Q.INST [`inst` |-> `alloc_inst`, `t` |-> `t`, `old` |-> `cenv`,
+                  `D` |-> `DF H`, `gs` |-> `gas_explicit marks s0.vs_gas_readings`]
+    annassign_word_install_post_mods) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >>
   qunabbrev_tac `Provisional` >> qunabbrev_tac `Final` >> BETA_TAC >>
   disch_tac >> qexists_tac `ce` >>
