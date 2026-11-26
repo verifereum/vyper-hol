@@ -21,7 +21,7 @@ Proof
      vfmContextTheory.empty_transient_storage_def]
 QED
 
-Theorem call_result_rel_at_success_accounts[local]:
+Theorem call_result_rel_at_success_accounts:
   LENGTH es.contexts = 1 /\
   call_external (SOME (MAP SND (call_trace es))) gs am tx = (res, am', rqs) /\
   ~source_exempt tops (call_external (SOME (MAP SND (call_trace es))) gs am tx) /\
