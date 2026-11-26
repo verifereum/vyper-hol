@@ -118,6 +118,7 @@ Theorem selected_return_abort_mods:
        (INR ex,ee with gas_obs := tail)) /\
   storage_trace_domain cx st0 ee.storage_trace /\
   expr_exit (INR ex : value + exception) r /\
+  create_size_exit_ok ctx (INR ex : eval_result + exception) r /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
      ptr_inst_ok (DF H) lo 0 ctx func G tn inst t) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -175,7 +176,8 @@ Proof
     (drule_all gas_origin_ptr_invoke_exit >>
      disch_then (qspec_then `PG` ACCEPT_TAC)) >>
   conj_tac >- simp[gas_origin_ptr_path_rules] >>
-  disj2_tac >> simp[] >> conj_tac
+  disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >> simp[] >> conj_tac
   >- (Cases_on `ex = HaltException`
       >- (drule halt_exit_scopes_gas_obs >>
           disch_then (qspecl_then [`prev`,`[]`] mp_tac) >>

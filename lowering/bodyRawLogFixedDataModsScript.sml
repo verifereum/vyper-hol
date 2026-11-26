@@ -447,11 +447,17 @@ Resume raw_log_fixed_data_run_mods[static]:
   irule gas_outcome_full_mods_exit >> reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl [`G`,`ee`,`Abort ExHalt_abort (halt_state (set_returndata [] z))`,
     `INR (Error (RuntimeError "write in static context"))`,`tf`] >>
-  simp_tac (srw_ss()) [NoAsms,Abbr `ChildR`,exit_result_def,expr_exit_def,halt_exit_def] >>
+  simp_tac (srw_ss()) [NoAsms,Excl "create_size_exit_ok_inr",
+    Abbr `ChildR`,exit_result_def,expr_exit_def,halt_exit_def] >>
   conj_tac >- (gen_tac >> asm_simp_tac bool_ss [BETA_RULE fixed_log_next_replay]) >>
   gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ (s,G,tn) [] (OK z,G,tf) /\ _`
     (drule_then strip_assume_tac) >>
+  reverse conj_tac >-
+    (irule createSizeExitTheory.create_size_exit_ok_static >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx ee z`
+       (mp_tac o MATCH_MP state_rel_call_ctx_rel o MATCH_MP stmt_state_rel_state_rel) >>
+     simp[call_ctx_rel_def,halt_state_def,set_returndata_def]) >>
   irule gas_origin_ptr_path_trans >> qexistsl [`G`,`z`,`tf`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   mp_tac (Q.INST [`D` |-> `DF H`, `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
