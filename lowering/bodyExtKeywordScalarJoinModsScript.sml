@@ -105,7 +105,7 @@ Proof
   pairarg_tac >> simp[]
 QED
 
-Theorem keyword_read_admissible[local]:
+Theorem keyword_read_admissible:
   expr_body_pre_mods mods cenv cx env e es ==>
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
 Proof
