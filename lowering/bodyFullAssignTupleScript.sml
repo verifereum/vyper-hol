@@ -1405,7 +1405,7 @@ Theorem body_assign_tuple_static_head_full_exit[local]:
     s.vs_inst_idx = LENGTH st.cs_current_insts /\ cx.txn.is_static ==>
     ?r Gf tf.
       (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,Gf,tf)) /\
-      exit_result r /\
+      exit_result r /\ ~oversized_create_abort ctx r /\
       (!H tail. stmt_exit (RetQ H) (ee with gas_obs := tail)
         (INR (Error (RuntimeError "write in static context"))) r) /\
       (!H tail. stmt_exit_ptr (RetP H) (ee with gas_obs := tail)
@@ -1422,6 +1422,8 @@ Proof
         (Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>
       `eval_operand (Lit (n2w k)) s = SOME (n2w k) /\
        op_taint tn (Lit (n2w k)) = {}` by simp[eval_operand_def,op_taint_def] >>
+      `~oversized_create_abort ctx (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+        simp[venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def] >>
       qexistsl_tac [`Abort ExHalt_abort (halt_state (set_returndata [] s))`,`G`,`tn`] >>
       simp[exit_result_def,stmt_exit_def,stmt_exit_ptr_def,expr_exit_def] >>
       gen_tac >> irule storage_emit_static_origin_ptr >> metis_tac[]) >>
@@ -1454,6 +1456,8 @@ Proof
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (mid,Gm,tm) []
     (Abort ExHalt_abort (halt_state (set_returndata [] mid)),Gm,tm)` by
     (gen_tac >> irule storage_emit_static_origin_ptr >> metis_tac[]) >>
+  `~oversized_create_abort ctx (Abort ExHalt_abort (halt_state (set_returndata [] mid)))` by
+    simp[venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def] >>
   qexistsl_tac [`Abort ExHalt_abort (halt_state (set_returndata [] mid))`,`Gm`,`tm`] >>
   simp[exit_result_def,stmt_exit_def,stmt_exit_ptr_def,expr_exit_def] >>
   gen_tac >> metis_tac[gas_origin_ptr_path_append,APPEND]
@@ -1540,6 +1544,7 @@ Theorem body_assign_tuple_store_targets_full_path:
             ghost_inv_at D lo d cenv cx es G tn s ==>
             stmt_state_rel H ctx func cenv cx es' t /\ ghost_inv_at D lo d cenv cx es' Gf tf t)) \/
        (res = INR (Error (RuntimeError "write in static context")) /\ exit_result r /\
+        ~oversized_create_abort ctx r /\
         (!H tail. stmt_exit (RetQ H) (es' with gas_obs := tail) res r) /\
         (!H tail. stmt_exit_ptr (RetP H) (es' with gas_obs := tail) res (Gf,tf) r)))
 Proof
@@ -5246,10 +5251,20 @@ Resume tuple_runtime_loop_suffix[round]:
     (`lookup_var src r = lookup_var src s /\ FLOOKUP Gr src = FLOOKUP G src /\
       op_taint tr (Var src) = op_taint tn (Var src)` by
        (qpat_assum `!p. p <> tv ==> _` (qspec_then `src` mp_tac) >>
-        fs[Excl "isPREFIX"]) >>
+        qpat_assum `ALL_DISTINCT (src::tv::_)` mp_tac >>
+        simp[NoAsms]) >>
      qpat_assum `!op. _ ==> eval_operand op r = _ /\ _` (qspec_then `dst` mp_tac) >>
      qpat_assum `!op. _ ==> eval_operand op r = _ /\ _` (qspec_then `Var cv` mp_tac) >>
-     fs[ptr_covers_def, Excl "isPREFIX"] >> gvs[Excl "isPREFIX"]) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`ALL_DISTINCT (src::tv::cv::_)`, `~MEM dst (MAP Var (tv::_))`,
+        `eval_operand (Var cv) s = SOME (n2w i)`, `op_prov G (Var cv) = NONE`,
+        `op_taint tn (Var cv) = {}`, `eval_operand dst s = SOME bw`,
+        `op_prov G dst = NONE`, `op_taint tn dst = {}`,
+        `lookup_var src r = lookup_var src s`, `FLOOKUP Gr src = FLOOKUP G src`,
+        `op_taint tr (Var src) = op_taint tn (Var src)`,
+        `lookup_var src s = SOME a`, `ptr_covers G tn src s capacity`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_covers_def] >>
+     rpt strip_tac >> gvs[]) >>
   `case extra of
      NONE => arg = Var dv /\ bw = n2w dest /\ extra_code = [] /\ outs = []
    | SOME (region,rwrd,av) =>
@@ -5462,7 +5477,9 @@ Resume tuple_runtime_loop_from_entry[apply_suffix]:
 QED
 
 Resume tuple_runtime_loop_from_entry[header]:
-  `cnt <> Var cv /\ dst <> Var cv` by fs[Excl "isPREFIX"] >>
+  `cnt <> Var cv /\ dst <> Var cv` by
+    (qpat_assum `~MEM cnt (MAP Var (tv::cv::_))` mp_tac >>
+     qpat_assum `~MEM dst (MAP Var (tv::cv::_))` mp_tac >> simp[NoAsms]) >>
   qpat_assum `!op. op <> Var cv ==> _` (qspec_then `cnt` mp_tac) >>
   qpat_assum `!op. op <> Var cv ==> _` (qspec_then `dst` mp_tac) >>
   simp[Excl "isPREFIX"] >> rpt strip_tac >>
@@ -7158,7 +7175,8 @@ Proof
   simp[] >> strip_tac >>
   `op' = op /\ su' = shadow_su` by
     gvs[lower_value_def,comp_bind_def] >>
-  gvs[] >>
+  qpat_x_assum `op' = op` SUBST_ALL_TAC >>
+  qpat_x_assum `su' = shadow_su` SUBST_ALL_TAC >>
   Cases_on `compile_tuple_unpack (gas_shadow_env T cenv) (lowered_value_type cenv e)
     (is_memory_view e /\ vv_location shadow_vv = SOME LocMemory)
     (MAP gas_shadow_assignment gs) op shadow_su` >>
@@ -8878,11 +8896,12 @@ Proof
     simp[Abbr `written`]) >>>
   HEADGOAL conj_tac >>>
   HEADGOAL (
-    mp_tac (Q.INST [`etv` |-> `stv`,`dtv` |-> `stv`,`v` |-> `vi`,
-      `off` |-> `w2n (w':256 word)`,`dirty` |-> `tmid.t_mem`,`s` |-> `m`]
-      assignTuplePtrStoreWordTheory.store_lays_out_robust_ptr) >>
-    impl_tac >- first_assum ACCEPT_TAC >>
-    simp[Abbr `written`]) >>>
+    qpat_assum `store_lays_out stv stv vi` (fn layout =>
+      mp_tac (MATCH_MP (Q.INST [`etv` |-> `stv`,`dtv` |-> `stv`,`v` |-> `vi`,
+        `off` |-> `w2n (w':256 word)`,`dirty` |-> `tmid.t_mem`,`s` |-> `m`]
+        assignTuplePtrStoreWordTheory.store_lays_out_robust_ptr) layout)) >>
+    qpat_assum `word_store_ghost.t_mem = _` (fn dirty =>
+      simp[NoAsms, dirty, Abbr `written`])) >>>
   HEADGOAL (sg `word_store_ghost.t_imm = tmid.t_imm`) >>>
   HEADGOAL (
     qpat_assum `Abbrev (word_store_ghost = _)`
@@ -10283,9 +10302,10 @@ Proof
     qpat_assum `bodyFullTargetDefs$target_ptr_ok cenv (PlaceR place) target_r Gmid tmid m`
       (ACCEPT_TAC o cj 1 o REWRITE_RULE [bodyFullTargetDefsTheory.target_ptr_ok_def])) >>>
   HEADGOAL (Q.SUBGOAL_THEN `?abort_state Gabort tabort.
-    !D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (m,Gmid,tmid) [] (Abort ExHalt_abort (halt_state (set_returndata [] abort_state)), Gabort, tabort)`
-    (qx_choosel_then [`abort_state`,`Gabort`,`tabort`] assume_tac)) >>>
+    abort_state.vs_call_ctx.cc_static /\
+    (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (m,Gmid,tmid) [] (Abort ExHalt_abort (halt_state (set_returndata [] abort_state)), Gabort, tabort))`
+    (qx_choosel_then [`abort_state`,`Gabort`,`tabort`] (CONJUNCTS_THEN assume_tac))) >>>
   HEADGOAL (Cases_on `is_word_type sty`) >>>
   HEADGOAL (sg `compile_store_at_loc cenv.ce_imm_alloca (FST target_r) op0
     (SOME (slot_loc tr)) target_cs = ((),sm)`) >>>
@@ -10306,7 +10326,8 @@ Proof
       qpat_assum `is_word_type sty` (fn word =>
         simp[NoAsms,operand,word,eval_operand_def])) >> simp[]) >>>
   HEADGOAL (
-    qexistsl_tac [`m`,`Gmid`,`tmid`] >> gen_tac >>
+    qexistsl_tac [`m`,`Gmid`,`tmid`] >>
+    conj_tac >- first_assum ACCEPT_TAC >> gen_tac >>
     match_mp_tac (Q.INST [
       `dst` |-> `FST (target_r : operand # data_location option # place_ty option)`,
       `value` |-> `op0`, `addr` |-> `slot : 256 word`, `w` |-> `typed_val_to_w256 stv vi`,
@@ -10476,7 +10497,10 @@ Proof
   HEADGOAL (rpt conj_tac >> first_assum ACCEPT_TAC) >>>
   HEADGOAL (
     disch_then (qx_choosel_then [`q`,`Gq`,`tq`] (map_every assume_tac o CONJUNCTS)) >>
-    qexistsl_tac [`q`,`Gq`,`tq`] >> qx_gen_tac `D` >>
+    qexistsl_tac [`q`,`Gq`,`tq`] >>
+    conj_tac >- (qpat_assum `q.vs_call_ctx = m.vs_call_ctx` SUBST1_TAC >>
+                 first_assum ACCEPT_TAC) >>
+    qx_gen_tac `D` >>
     `type_slot_size stv <> 0` by
       (qpat_assum `0 < type_slot_size stv` mp_tac >> decide_tac) >>
     qpat_assum `type_slot_size stv <> 0` (fn size =>
@@ -10493,6 +10517,10 @@ Proof
   HEADGOAL (
     qpat_assum `!D. gas_origin_ptr_path _ (m,Gmid,tmid) [] (Abort _ _,Gabort,tabort)`
       (qspec_then `DF H` ACCEPT_TAC)) >>>
+  HEADGOAL (conj_tac
+    >- (qpat_assum `abort_state.vs_call_ctx.cc_static` (fn static =>
+        simp[NoAsms,static,venomStateTheory.halt_state_def,venomStateTheory.set_returndata_def,
+             createSizeExitTheory.oversized_create_abort_static]))) >>>
   HEADGOAL (
     simp[Abbr `suffixR`,stmt_exit_ptr_def,halt_exit_def,expr_exit_def]) >>>
   HEADGOAL (
@@ -11695,6 +11723,7 @@ Proof
   HEADGOAL (first_assum ACCEPT_TAC) >>>
   HEADGOAL (disj2_tac >> conj_tac) >>>
   HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (conj_tac >- simp[NoAsms,Abbr `r_exit`,createSizeExitTheory.create_size_exit_ok_non_exhalt]) >>>
   HEADGOAL (rpt conj_tac) >>>
   HEADGOAL (
     gen_tac >> simp[stmt_exit_ptr_def,
@@ -11718,7 +11747,7 @@ Proof
          gas_origin_ptr_path _ _ _ (r_exit,_,_) /\ _`
       (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
     (impl_tac >- first_assum ACCEPT_TAC) >>
-    disch_then (assume_tac o CONJUNCT1 o CONJUNCT2)) >>>
+    disch_then (CONJUNCTS_THEN2 (K ALL_TAC) (REPEAT_TCL CONJUNCTS_THEN assume_tac))) >>>
   HEADGOAL (sg `?exc. (res:value + exception) = INR exc`) >>>
   HEADGOAL (
     qpat_assum `expr_exit res r_exit` mp_tac >>
@@ -11744,6 +11773,10 @@ Proof
   HEADGOAL (first_assum ACCEPT_TAC) >>>
   HEADGOAL (disj2_tac >> conj_tac) >>>
   HEADGOAL (first_assum ACCEPT_TAC) >>>
+  HEADGOAL (conj_tac
+    >- (pure_rewrite_tac[createSizeExitTheory.create_size_exit_ok_inr] >>
+        qpat_assum `create_size_exit_ok ctx (INR exc : value + exception) r_exit`
+          (ACCEPT_TAC o PURE_REWRITE_RULE [createSizeExitTheory.create_size_exit_ok_inr]))) >>>
   HEADGOAL (rpt conj_tac) >>>
   HEADGOAL (
     gen_tac >> simp[stmt_exit_ptr_def,
@@ -11816,8 +11849,12 @@ Resume tuple_assign_exact_with_borrowed_frame[nested_immutable]:
     `well_typed_target env bt sty` by
       (qpat_assum `well_typed_atarget env (BaseTarget bt) sty` mp_tac >>
        simp[NoAsms,well_typed_atarget_def]) >>
-    `IS_SOME (type_place_target env bt)` by fs[well_typed_target_def] >>
-    drule_all bodyFullTargetRootsTheory.typed_immutable_target_root >>
+    `IS_SOME (type_place_target env bt)` by
+      (qpat_assum `well_typed_target env bt sty` mp_tac >>
+       simp[NoAsms,well_typed_target_def]) >>
+    mp_tac (Q.INST [`bt` |-> `bt`, `es` |-> `src`]
+      bodyFullTargetRootsTheory.typed_immutable_target_root) >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
     disch_then (qx_choosel_then [`id`,`root_ty`] (map_every assume_tac o CONJUNCTS))) >>>
   HEADGOAL (
     drule_all tuple_immutable_target_code >>
@@ -14144,6 +14181,9 @@ Proof
               rpt (conj_tac >- first_assum ACCEPT_TAC) >>
               qexistsl_tac [`slot`,`FST place_result`,`place_cs`,`write_cs`,`tr`,
                 `EL i elems`,`typed_val_to_w256 (EL i tvs) (EL i vs)`] >> simp[]) >>
+          conj_tac
+          >- (qpat_assum `sp.vs_call_ctx.cc_static` (fn static =>
+              simp[NoAsms,static,venomStateTheory.halt_state_def,venomStateTheory.set_returndata_def])) >>
           simp[Abbr `stmtR`,stmt_exit_ptr_def,expr_exit_def,halt_exit_def]) >>
       `~is_word_type (EL i dtys) /\ ~is_word_type (EL i ltys)` by
         metis_tac[compileEnvTheory.type_widens_to_word] >>
@@ -14317,6 +14357,11 @@ Proof
         qx_gen_tac `H` >> strip_tac >> conj_tac
         >- (qpat_assum `!D. gas_origin_ptr_path _ (sp,Gp,tp) [] (Abort _ _,Gq,tq)`
               (qspec_then `DF H` ACCEPT_TAC)) >>
+        conj_tac
+        >- (qpat_assum `q.vs_call_ctx = sp.vs_call_ctx` (fn call_ctx =>
+            qpat_assum `sp.vs_call_ctx.cc_static` (fn static =>
+              simp[NoAsms,call_ctx,static,venomStateTheory.halt_state_def,
+                   venomStateTheory.set_returndata_def]))) >>
         simp[Abbr `stmtR`,stmt_exit_ptr_def,expr_exit_def,halt_exit_def]) >>
         `EL i tys <> EL i dtys /\
           ~(is_bytestring_type (EL i dtys) /\ is_bytestring_type (EL i tys))` by
@@ -14482,23 +14527,22 @@ Proof
         `!H. valid_horizon cx st0 H mid.storage_trace ==>
           gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
             (sp,Gp,tp) [] (Abort ExHalt_abort (halt_state (set_returndata [] q)),Gq,tq) /\
+          create_size_exit_ok ctx (INR (Error (RuntimeError "write in static context")) : unit + exception)
+            (Abort ExHalt_abort (halt_state (set_returndata [] q))) /\
           stmtR H (INR (Error (RuntimeError "write in static context"))) (mid with gas_obs := [])
             (Gq,tq) (Abort ExHalt_abort (halt_state (set_returndata [] q)))` by
           (qx_gen_tac `H` >> disch_tac >> conj_tac
            >- (qpat_assum `!D. gas_origin_ptr_path _ (sp,Gp,tp) [] (Abort _ _,Gq,tq)`
                  (qspec_then `DF H` ACCEPT_TAC)) >>
+           conj_tac >- simp[venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def] >>
            simp[Abbr `stmtR`,stmt_exit_ptr_def,expr_exit_def,halt_exit_def]) >>
         qpat_assum `Abbrev (cfg = _)`
           (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-        qpat_assum `~sp.vs_halted` (fn live =>
-          qpat_assum `!tail. bind (write_place cx _ _) _ _ =
-                       (INR (Error (RuntimeError "write in static context")),mid with gas_obs := tail)`
-            (fn source =>
-              qpat_assum `exit_result (Abort ExHalt_abort _)` (fn exit =>
-                qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
-                             gas_origin_ptr_path _ (sp,Gp,tp) [] _ /\ stmtR H _ _ _ _`
-                  (fn post => MATCH_ACCEPT_TAC (MATCH_MP gasOutcomeFullComposeTheory.gas_outcome_full_exit
-                    (LIST_CONJ [live,source,exit,post]))))))) >>
+        irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >>
+        reverse conj_tac >- first_assum ACCEPT_TAC >>
+        qexistsl_tac [`Gq`,`mid`,`Abort ExHalt_abort (halt_state (set_returndata [] q))`,
+          `INR (Error (RuntimeError "write in static context"))`,`tq`] >>
+        rpt conj_tac >> first_assum ACCEPT_TAC) >>
       (rename1 `write_place cx p (EL i vs) mid = (INL u,ff)` >> Cases_on `u` >>
           `!tail. assign_tuple_targets cx (BaseTarget head) (EL i vs)
              (src with gas_obs := gas_explicit headmarks s.vs_gas_readings ++ tail) =
@@ -17270,15 +17314,17 @@ Resume tuple_assign_widened_with_immutable_paths[normalized]:
    (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
        simp[venomStateTheory.eval_operand_def])) >>
    disch_then (qx_choosel_then [`q`,`Gq`,`tq`] assume_tac) >>
-   drule_all (Q.INST [`H0` |-> `H0 : (bool # bytes32 # type_value) list # num list`,
+   mp_tac (Q.INST [`H0` |-> `H0 : (bool # bytes32 # type_value) list # num list`,
       `ce` |-> `cenv`,`mid` |-> `mid`,`fin` |-> `ff`,
       `s` |-> `norm_state`,`G` |-> `Gn`,`tn` |-> `tt`,
       `sa` |-> `norm_cs`,`sb` |-> `write_cs`,`v` |-> `EL i vs`,`id` |-> `id`,
       `ity` |-> `root_ty`,`ptv` |-> `ptv`,`itv` |-> `itv`,`off` |-> `off`,`k` |-> `leaf_off`,
       `path` |-> `path`,`tops` |-> `tops`,`env` |-> `env`,
+      `explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
       `p` |-> `w2n (w:bytes32)`,`n` |-> `type_memory_size_list tvs`]
      tuple_immutable_path_store_success) >>
-   disch_then (qspecl_then [`tvs`,`d`] (map_every assume_tac o CONJUNCTS)) >>
+   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+   disch_then (map_every assume_tac o CONJUNCTS) >>
    qexistsl [`q`,`Gq`,`tq`] >>
    (conj_tac >- (gen_tac >> irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
      qpat_assum `!D. gas_origin_ptr_path _ (sp,Gp,tp) [] (OK norm_state,Gn,tt)`
