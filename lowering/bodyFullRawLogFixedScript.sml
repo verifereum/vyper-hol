@@ -86,7 +86,7 @@ Proof
   (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC raw_log_fixed_alloc_full)) >>
   (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC raw_log_fixed_tail_full)) >>
   (impl_tac >- (rpt gen_tac >>
-    MATCH_ACCEPT_TAC bodyFullRawLogFixedTailPathTheory.raw_log_fixed_static_tail_path)) >>
+    MATCH_ACCEPT_TAC raw_log_fixed_static_tail_path_static)) >>
   disch_tac >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `!DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm.
       _` (qspecl_then [`DF`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`,
