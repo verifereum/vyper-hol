@@ -445,12 +445,30 @@ Proof
            qpat_assum `t7.vs_outcomes = [] \/ (cx.txn.is_static /\ amount <> 0)` mp_tac >>
            POP_ASSUM_LIST (K ALL_TAC) >>
            Cases_on `delegate` >> Cases_on `stat` >> simp[] >> tautLib.TAUT_TAC) >>
-      irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
+      `ALL_DISTINCT (FLAT (MAP fn_labels ctx.ctx_functions)) ==>
+       ~oversized_create_abort ctx
+         (Abort ExHalt_abort (halt_state (set_returndata [] t7)))` by
+        (`MEM func ctx.ctx_functions` by
+           (qpat_assum `stmt_state_rel _ ctx func cenv cx esK t7`
+              (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_alloca_room) >>
+            simp[NoAsms, alloca_room_def] >>
+            strip_tac >> drule venomInstTheory.lookup_function_MEM >> simp[NoAsms]) >>
+         rpt strip_tac >>
+         drule_all createSizeExitTheory.oversized_create_abort_at_cursor >>
+         Cases_on `call_ty` >> simp[NoAsms, Abbr `inst`, Abbr `opc`, mk_inst_def]) >>
+      irule gas_outcome_full_exit >> reverse conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`G7`,`esK`,`Abort ExHalt_abort (halt_state (set_returndata [] t7))`,
                     `INR (Error (RuntimeError err))`,`tn7`] >>
-      simp[exit_result_def,Abbr `RS`,exprSimDefsTheory.expr_exit_def,
-           exprSimDefsTheory.halt_exit_def] >>
-      rpt strip_tac >>
+      simp_tac bool_ss [exit_result_def] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      rpt gen_tac >> disch_tac >>
+      reverse conj_tac
+      >- (conj_tac
+          >- (qpat_assum `ALL_DISTINCT _ ==> ~oversized_create_abort _ _` mp_tac >>
+              simp[NoAsms, createSizeExitTheory.create_size_exit_ok_def] >>
+              tautLib.TAUT_TAC) >>
+          simp[NoAsms, Abbr `RS`, exprSimDefsTheory.expr_exit_def,
+               exprSimDefsTheory.halt_exit_def]) >>
       `inst = mk_inst s7.cs_next_id (case call_ty of
            RegularCall => CALL | StaticCall => STATICCALL | DelegateCall => DELEGATECALL)
          (if call_ty = RegularCall then [gas;addr;vop;dp;len;op;Lit (n2w cap)]

@@ -14,7 +14,8 @@ Ancestors
   contextCodegenRel exprSimPtrTopLevelStorageCopy exprSimPtrTopLevelCopy exprSimStorageCopy
   bodyStorageCopyMemory bodyMemAssignTopCopyPaths fragGasCopySeqLiftProps
   fragGasStorageCopyBodyProps fragGasStorageCopyHeaderProps
-  fragGasSeqPtrContext fragGasSeqPtr fragGasSeqAbort fragGasOriginPtr fragGasOriginPtrLoop fragGasOrigin
+  fragGasSeqPtrContext fragGasSeqPtr fragGasSeqAbort fragGasSeqAbortCursor
+  fragGasOriginPtr fragGasOriginPtrLoop fragGasOrigin
   ptrSafetyTransport instMemFrontier fragExecMem fragExec memSafeRun checkedPrefixCursor
   gasEvents gasCount ptrSafeRun ptrDiscipline bodyPtrDefs typedCopyPtr
   decoderGhostFramePtr exprLoweringProps venomMemProps
@@ -26,6 +27,7 @@ Ancestors
 
 (* The abort cursor is fixed from the executed instruction prefix before
    considering any dead set or pointer ghosts. *)
+
 Theorem run_inst_seq_abort_origin_ptr_uniform:
   !code s a t ctx func bb.
     ~s.vs_halted /\
@@ -44,60 +46,10 @@ Theorem run_inst_seq_abort_origin_ptr_uniform:
       gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
         (Abort a (t with vs_inst_idx := j),HG,th)
 Proof
-  Induct_on `code` >- simp[run_inst_seq_def] >>
   rpt gen_tac >> strip_tac >>
-  drule instruction_prefix_cursor >> strip_tac >>
-  `(ctx_has_dalloca ctx ==> dalloca_no_wrap h s)` by
-    (disch_tac >>
-     qpat_assum `ctx_has_dalloca ctx ==> _` (mp_tac o UNDISCH) >>
-     disch_then (qspecl_then [`[]`, `h`, `code`, `s`] mp_tac) >>
-     simp[run_inst_seq_def]) >>
-  Cases_on `step_inst_base h s` >>
-  gvs[run_inst_seq_def, run_inst_seq_mem_ok_def]
-  >- suspend "continue"
-  >> suspend "abort"
+  drule_all run_inst_seq_abort_origin_ptr_cursor >> strip_tac >>
+  qexists_tac `j` >> simp[]
 QED
-
-Resume run_inst_seq_abort_origin_ptr_uniform[continue]:
-  rename1 `step_inst_base h s = OK u` >>
-  `step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
-  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
-    metis_tac[step_preserves_halted, step_preserves_control_flow] >>
-  `EVERY (\i. ~is_terminator i.inst_opcode) code` by gvs[EVERY_MEM] >>
-  `(ctx_has_dalloca ctx ==>
-     !pre i post v. code = (pre ++ [i]) ++ post /\
-       run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) = OK v ==>
-       dalloca_no_wrap i v)` by
-    (pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, APPEND] >>
-     MATCH_MP_TAC checked_prefix_tail_cursor >> simp[] >>
-     qpat_assum `ctx_has_dalloca ctx ==> !pre i post v. _` mp_tac >>
-     simp[GSYM listTheory.APPEND_ASSOC]) >>
-  first_x_assum (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
-  disch_then (qspecl_then [`a`,`t with vs_inst_idx := SUC s.vs_inst_idx`,`ctx`,`func`,`bb`] mp_tac) >>
-  simp[run_inst_seq_inst_idx, exec_result_map_def, run_inst_seq_mem_ok_inst_idx] >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  disch_then (qx_choose_then `j` assume_tac) >>
-  qexists_tac `j` >> rpt strip_tac >>
-  gvs[inst_seq_ptr_def] >>
-  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
-     step_prov PG G h u, step_taint h s u tn)` by
-    (drule_all straight_line_origin_ptr_edge >> simp[]) >>
-  drule (cj 2 gas_origin_ptr_path_rules) >> simp[] >>
-  disch_then irule >> first_x_assum irule >> simp[]
-QED
-Resume run_inst_seq_abort_origin_ptr_uniform[abort]:
-  qexists_tac `t.vs_inst_idx` >> simp[] >> rpt strip_tac >>
-  gvs[inst_seq_ptr_def] >>
-  irule (cj 3 gas_origin_ptr_path_rules) >> simp[exit_result_def] >>
-  `step_inst 0 ctx h s = Abort a t` by simp[step_inst_non_invoke] >>
-  simp[gas_origin_ptr_edge_def] >> conj_tac
-  >- (simp[gas_origin_edge_def] >> qexists_tac `0` >>
-      simp[gas_events_step_def, memSafeRunTheory.mem_safe_step_non_invoke, exit_result_def]) >>
-  simp[gas_path_ptr_edge_def] >> qexists_tac `0` >>
-  simp[gas_count_step_def, ptr_safe_step_def, exit_result_def]
-QED
-Finalise run_inst_seq_abort_origin_ptr_uniform
 
 Theorem run_inst_seq_origin_ptr_abort_lift:
   ~s.vs_halted /\

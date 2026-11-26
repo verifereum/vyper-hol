@@ -124,7 +124,14 @@ Resume env_builtin_expr_prefix_ok[hash]:
   conj_asm1_tac
   >- (mp_tac hash_builtin_value_prefix_from_suffixes >>
       (impl_tac >- (conj_tac >- (rpt gen_tac >> strip_tac >>
-        irule blockhash_full_suffix >> simp[] >> qexists_tac `arg` >> simp[]) >>
+        mp_tac (Q.SPECL [`arg`,`sa`,`op`,`sb`,`func`,`st0`,`cenv'`,`cx'`,
+          `mid`,`s`,`ctx'`,`DF`,`lo`,`d`,`G`,`tn`,`explicit`,`PG`,`i`]
+          blockhash_full_suffix) >>
+        (impl_tac >- simp[]) >>
+        disch_then (qx_choosel_then [`r`,`G'`,`tn'`] assume_tac) >>
+        qexistsl [`r`,`G'`,`tn'`] >> rpt strip_tac >> first_x_assum drule >>
+        Cases_on `unop_result cx' (BaseT (BytesT (Fixed 32))) BlockHash
+          [BaseT (UintT 256)] (IntV i) mid` >> simp[]) >>
         rpt gen_tac >> strip_tac >> irule blobhash_full_suffix >>
         simp[] >> qexists_tac `arg` >> simp[])) >>
       disch_then irule >> fs[type_check_def, assert_def] >> metis_tac[]) >>

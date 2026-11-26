@@ -49,14 +49,12 @@ The call headline is documented in the
 
 Names below are actual exports. All seven rows are proved, with no admission in
 their closures. `vyper_call_correct`, `e2e_deploy_correctness` and S1 reach no
-admitted lemma. `vyper_call_gas_sufficient` reaches only
-`call_entry_reachable_create_size_ok` and `e2e_deploy_gas_sufficient` only
-`deploy_entry_reachable_create_size_ok`
-([e2eGasSufficient](../lowering/e2eGasSufficientScript.sml)): the two held
-claims, marked `GATE_ADMISSION`, that, from the call or deploy entry, every
-reachable creation instruction meets the init-code size check
-`inst_create_size_ok`, blueprint forms included. The one other admitted
-theorem, `function_inliner_correct`, lies under no top. The stage rows' exact
+admitted lemma. The gas companions use the proved
+`call_entry_reachable_create_size_ok` and `deploy_entry_reachable_create_size_ok`
+([e2eGasSufficient](../lowering/e2eGasSufficientScript.sml)). They establish
+`inst_create_size_ok`, including for blueprint creation, from the selected raw
+run and O1 transport. The admitted `function_inliner_correct` lies under no
+top. The stage rows' exact
 premises are in the linked owners and [dependency
 inventory](compiler-proof-dependencies.md#s1s7-stage-producers).
 
@@ -267,11 +265,8 @@ and `horizon_ok H` at entry. Under `deploy_within H`, no exempt source
 observation and fewer than 2⁶⁴ trace entries on the raised-gas run, `OutOfGas` implies that the code to deposit exceeds the
 runtime code-size limit. The call and deploy gas bounds cover
 `RETURNDATACOPY` and its revert-forwarding tail under both finalizers.
-Each companion rests on one admitted lemma, its entry's held create-size
-claim (`call_entry_reachable_create_size_ok`,
-`deploy_entry_reachable_create_size_ok`, marked `GATE_ADMISSION`); no other
-admitted theorem lies under either, assembly-optimizer cases included. The
-correctness tops reach neither.
+Each companion uses its entry's proved creation-size bound for both
+finalizers.
 
 On success the result relates `tx_return_bytes`, accounts after EVM pending
 deletions and transient storage modulo dead target storage, ordered concrete logs
@@ -292,9 +287,8 @@ corollaries remain Milestone 7.
 
 This table retains the 2026-10-01 plan's decision keys. Restrictions it
 attributes to the whitelist are the Milestone 1 gate's: the current gate
-accepts what `check_contract` accepts, and what remains is what the
-lowering refuses and the two held create-size claims under the gas
-companions. “Implemented” means
+accepts what `check_contract` accepts, subject to what the lowering
+refuses. “Implemented” means
 actual definitions/statements, **not stage proofs**. “Deviation/limit” is
 explicit; no intended producer is reported as proved merely because it was
 planned. Source owners below are durable; private PLAN line numbers are not.
@@ -311,7 +305,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects OK/IntRet and other Errors, relates a failed external call's `RevertData` to a Revert abort, and requires terminating run; `call_result_rel_at` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
 | D9 | Exact unspecified-behaviour exemptions, not weakened source checks | `unspecified_behaviour_exempt`, `occurs_abi_decode_target` inspect function bodies for dynamic decoding. Exact decode message also admits matching return rejection in such a program; not arbitrary ReturnReject. | 6 |
 | D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker acceptance, typed constant cells, machine and tx typing; `supported_program` depends on tops alone and is no longer a premise: the tops derive it from the checker acceptance and `layouts_agree` (`check_contract_supported_program`), which `source_deployment_rel` supplies for calls and `deploy_state_rel` for deployment; for the deploy pair `deploy_typing_ok` supplies `check_contract T` and `check_contract_deploy_implies_runtime` derives runtime acceptance (`deploy_typing_ok_supported_programs`). Partial readiness producers are not the whole premise. | 7 |
-| D11 | Whitelist, not open-ended exclusions | `supportedProgram` combines headers/names/body predicates; 101 named fixture membership proofs. The whitelist has since been widened to what `check_contract` accepts and is derived, not assumed, by the tops; forms it newly accepts are proved, bar the two held create-size claims under the gas companions. No universal compile-success witness. | 6 / 7 |
+| D11 | Whitelist, not open-ended exclusions | `supportedProgram` combines headers/names/body predicates; 101 named fixture membership proofs. The whitelist has since been widened to what `check_contract` accepts and is derived, not assumed, by the tops. The gas companions use the proved entry creation-size bounds. No universal compile-success witness. | 6 / 7 |
 | D12 | Ten source/type corrections, not remove fixtures | Invalid EC RuntimeError; Pop length-only storage update; empty codehash zero; decimal bound-before-truncate; bytes->address/decimal/narrow-zero-tail conversions; UnsafeDiv0 zero; minimum decimal Mul; abi_encode size rule. Actual owners `vyperContext`, `vyperState`, `vyperValueOperation`, `vyperTypeSystem`; historical source checkpoint retained. | 6 comparison proof |
 | D13 | Literal endpoint range checks + allocation-budget compiler check | `stmtLowering` tests both literal endpoints; five fixture bounds corrected historically. `vyperCompiler.lowering_context_ok` checks `unit_alloca_budget < dimword(:256)`. This is not a proof that every raw access is valid. | 5 / 6 |
 | D14 | STOP clears data, empty setup_callee accepted, CALL/STATICCALL outcomes | `venomExecSemantics` implemented; DELEGATECALL takes its outcome from the oracle too. DELEGATECALL/CREATE/CREATE2 are inside `unit_shape_ok` (`inst_shape_ok` excludes only `DJMP` and `OFFSET`); the delegated or created callee is not oracle-certified. | 2.1 / 4 |
@@ -769,8 +763,8 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    their data from pure results. The widened whitelist admits `raw_call` and
    the creation builtins (`raw_create`, `create_copy_of`,
    `create_from_blueprint`, `create_minimal_proxy_to`); their creation body
-   cases and `raw_call` on `msg.data` are proved; what stays held is only the
-   create-size claim at each entry, under the gas companions. Wire conversion
+   cases and `raw_call` on `msg.data` are proved. The gas companions use the
+   proved creation-size bound at each entry. Wire conversion
    proofs into the actual lowering rollup without inventing gas-number reads.
 7. **H6-deploy / owner Milestone 6 item7:**
    `e2eDeployCorrectness.e2e_deploy_correctness` is proved, reaching no

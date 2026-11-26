@@ -388,9 +388,9 @@ Resume convert_dynamic_vv_sim_full[unsigned]:
   qpat_x_assum `!exc. INR y = INR exc ==> _` (qspec_then `y` mp_tac) >>
   simp[] >> strip_tac >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >>
-  conj_tac >- (qexistsl_tac [`Gf`,`mid`,`Abort err t'`,`INR y`,`tnf`] >>
+  conj_tac >- (qexistsl_tac [`Gf`,`mid`,`Abort Revert_abort t'`,`INR y`,`tnf`] >>
   simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
-       halt_exit_not_halt]) >> simp[])
+       halt_exit_not_halt, createSizeExitTheory.create_size_exit_ok_non_exhalt]) >> simp[])
 QED
 
 Resume convert_dynamic_vv_sim_full[zero]:

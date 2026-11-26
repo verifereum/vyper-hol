@@ -127,14 +127,18 @@ Proof
      >- (disj1_tac >> simp[] >> metis_tac[])
      >- (disj2_tac >> disj1_tac >> qexistsl [`res`,`ee`,`r`,`G'`,`tn'`] >>
          simp[] >> Cases_on `r` >> gvs[exit_result_def, Abbr `continue`] >>
-         rpt strip_tac >> first_x_assum irule >> simp[] >>
-         reverse conj_tac
-         >- (qexists `marks` >> simp[] >> metis_tac[]) >>
-         qx_gen_tac `horizon` >> strip_tac >>
-         qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
-           (qspec_then `horizon` mp_tac) >>
-         (impl_tac >- first_assum ACCEPT_TAC) >>
-         disch_then (assume_tac o CONJUNCT2) >> fs[Abbr `rowQ`]) >>
+         rpt strip_tac >>
+         FIRST [first_assum ACCEPT_TAC,
+          (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+             (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC),
+          (qpat_assum `!marks' vs ee' G tn t. _ ==> gas_prefix_full _ _ _ _ _` irule >>
+           simp[] >> reverse conj_tac
+           >- (qexists `marks` >> simp[] >> metis_tac[]) >>
+           qx_gen_tac `horizon` >> strip_tac >>
+           qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+             (qspec_then `horizon` mp_tac) >>
+           (impl_tac >- first_assum ACCEPT_TAC) >>
+           disch_then (assume_tac o CONJUNCT2) >> fs[Abbr `rowQ`])]) >>
      disj2_tac >> disj2_tac >>
      rename1 `gas_origin_ptr_focus (DF horizon,_,_,_,_,_) _ _ (leaf,leaf_pg,leaf_g,leaf_tn,end_state)` >>
      qexistsl [`err`,`ee`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`end_state`] >>
