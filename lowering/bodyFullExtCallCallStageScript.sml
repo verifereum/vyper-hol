@@ -564,16 +564,40 @@ Proof
   drule_all (Q.INST [`explicit` |-> `explicit`, `PG` |-> `PG`, `DF` |-> `DF`]
                     extcall_precheck_to_call) >>
   reverse (Cases_on `ext_call_precheck_ok skip ret_type target ee.accounts`)
-  >- (disch_then (qspecl_then [`explicit`,`d`,`PG`] mp_tac) >>
-      ASM_SIMP_TAC bool_ss [] >> strip_tac >>
-      `create_size_exit_ok ctx (INR (Error (RuntimeError "ExtCall target has no code"))) r` by
-        (qpat_assum `r = Abort Revert_abort _` (SUBST1_TAC) >>
-         simp[create_size_exit_ok_non_exhalt]) >>
+  >- (disch_then kall_tac >>
+      `ret_type = NoneT /\ ~skip /\ NULL (lookup_account target ee.accounts).code` by
+        (qpat_assum `~ext_call_precheck_ok _ _ _ _` mp_tac >>
+         Cases_on `ret_type` >> simp[NoAsms,ext_call_precheck_ok_def,ext_call_has_code_def]) >>
+      `compile_extcodesize_check addr sp = ((),s1)` by
+        (qpat_x_assum `(if ret_type = NoneT /\ ~skip then _ else _) sp = _` mp_tac >> simp[]) >>
+      qhdtm_assum `extcall_request_ready`
+        (strip_assume_tac o REWRITE_RULE [extcall_request_ready_def]) >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+        (drule_then strip_assume_tac) >>
+      drule stmt_state_rel_state_rel >> strip_tac >>
+      drule accountsRelPropsTheory.state_rel_accounts >> strip_tac >>
+      drule accountsRelPropsTheory.accounts_agree_lookup >>
+      disch_then (qspec_then `target` strip_assume_tac) >>
+      drule_then assume_tac bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >>
+      drule_all extcall_codesize_checked_path >>
+      disch_then (qspecl_then [`explicit`,`PG`,`G`] assume_tac) >>
+      qabbrev_tac `chk = STRING #"%" (toString sp.cs_next_var)` >>
+      qabbrev_tac `f = revert_state (set_returndata []
+        (update_var chk 0w s with vs_inst_idx := SUC s.vs_inst_idx))` >>
       irule extcall_call_landing >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`G1`,`ee`,`r`,`INR (Error (RuntimeError "ExtCall target has no code"))`,`tn1`] >>
-      simp[get_accounts_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-           vyperStateTheory.check_def, vyperStateTheory.assert_def, vyperStateTheory.raise_def,
-           vyperStateTheory.return_def]) >>
+      qexistsl_tac [`G \\ chk`,`ee`,`Abort Revert_abort f`,
+                    `INR (Error (RuntimeError "ExtCall target has no code"))`,
+                    `tn with t_var := tn.t_var |+ (chk,{})`] >>
+      conj_tac
+      >- simp[get_accounts_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+              vyperStateTheory.check_def, vyperStateTheory.assert_def, vyperStateTheory.raise_def,
+              vyperStateTheory.return_def, ext_call_precheck_ok_def, ext_call_has_code_def] >>
+      simp[exit_result_def,expr_exit_def] >> qx_gen_tac `h` >> disch_tac >>
+      qpat_assum `NULL (lookup_account target ee.accounts).code`
+        (assume_tac o REWRITE_RULE [listTheory.NULL_EQ]) >>
+      qpat_x_assum `!D. gas_origin_ptr_path _ (s,G,tn) [] _`
+        (qspec_then `DF h` mp_tac) >>
+      simp[Abbr `chk`,Abbr `f`]) >>
   disch_then (qspecl_then [`explicit`,`d`,`PG`] mp_tac) >>
   ASM_SIMP_TAC bool_ss [] >> strip_tac >>
   qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
@@ -652,7 +676,11 @@ Proof
     (rpt strip_tac >> qpat_assum `!gw g. _ ==> _` drule_all >> simp[]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==> ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t`
     by (qpat_assum `_ ==> !H. _ ==> ghost_inv_at _ _ _ _ _ _ G1 tn1 t` mp_tac >> simp[]) >>
-  drule_all extcall_dispatch_selected >>
+  drule (Q.INST [`sp` |-> `p`, `s` |-> `t`, `G` |-> `G1`, `tn` |-> `tn1`]
+              extcall_dispatch_selected) >>
+  ntac 8 (disch_then drule) >>
+  ntac 8 (disch_then drule) >>
+  disch_then drule_all >>
   reverse (Cases_on `oc.co_success`)
   >- (disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
       ASM_SIMP_TAC bool_ss [] >> strip_tac >>
