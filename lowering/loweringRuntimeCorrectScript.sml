@@ -576,14 +576,13 @@ val runtime_reached_headroom_tac =
   disch_then ACCEPT_TAC);
 
 (* Compose at the body's marks, optionally retaining a call-result fact. *)
-fun runtime_body_compose_from_tac compose readings marks =
+fun runtime_body_compose_from_tac compose readings relation marks =
   drule_at_then (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)
     (Q.ISPECL_THEN
       [`vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                    vs_inst_idx := 0 |>`,
        readings,
-       `\(H : (bool # bytes32 # type_value) list # num list) c r.
-          external_call_result_rel H tops ret tx c r`,
+       relation,
        `source_exempt tops :
           ((value + exception) # abstract_machine # call_request list) -> bool`,
        marks]
@@ -591,7 +590,9 @@ fun runtime_body_compose_from_tac compose readings marks =
 
 fun runtime_body_compose_tac compose =
   runtime_body_compose_from_tac compose
-    `\g. call_external_trace (SOME vs.vs_outcomes) g am tx` `[]:bool list`;
+    `\g. call_external_trace (SOME vs.vs_outcomes) g am tx`
+    `\(H : (bool # bytes32 # type_value) list # num list) c r.
+       external_call_result_rel H tops ret tx c r` `[]:bool list`;
 
 val runtime_compose_exit_tac =
   rpt gen_tac >> BETA_TAC >> strip_tac >>
@@ -1469,8 +1470,16 @@ Proof
       simp[]) >>
   conj_tac
   >- (pure_rewrite_tac[source_unit_execution_correct_with_def] >>
-      qexistsl_tac [`func`,`shadow_func`] >> simp[] >>
-      disj2_tac >> qexistsl_tac [`cr`,`am'`,`rqs`,`obs`] >> simp[]) >>
+      qexistsl_tac [`func`,`shadow_func`] >> simp[] >> disj2_tac >>
+      qpat_x_assum `(source_exempt _ _ /\ _) \/ (?r. _)`
+        (DISJ_CASES_THEN2 strip_assume_tac (qx_choose_then `r` strip_assume_tac))
+      >- (disj1_tac >> simp[] >> metis_tac[]) >>
+      disj2_tac >> qexists_tac `r` >> simp[] >>
+      `valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+         (initial_state am []) (storage_trace_horizon obs) obs` by
+        fs[storage_trace_domain_def] >>
+      qpat_assum `!H. valid_horizon _ _ H obs ==> _`
+        (qspec_then `storage_trace_horizon obs` mp_tac) >> simp[]) >>
   disch_tac >> qx_gen_tac `unread` >>
   qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
     (qspec_then `unread` (strip_assume_tac o MATCH_MP call_external_trace_result)) >>
@@ -1694,7 +1703,7 @@ Proof
        (MAP_EVERY ASSUME_TAC o CONJUNCTS) o
      REWRITE_RULE [source_unit_execution_correct_with_def]) >>
   qexistsl_tac [`shadow_unit.cu_context`, `func`, `shadow_func`, `marks`] >>
-  simp[]
+  simp[] >> metis_tac[]
 QED
 
 (* S1 when the value moves and the body starts, for the canonical

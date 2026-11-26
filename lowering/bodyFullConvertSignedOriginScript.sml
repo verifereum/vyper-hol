@@ -170,8 +170,8 @@ Theorem signed_convert_origin_path:
       op_prov Gf out = NONE /\ op_taint tnf out = {}) /\
    (!exc. convert_result cx src dst v = INR exc ==>
     (?msg. exc = Error (RuntimeError msg)) /\
-    ?err t Gf tnf. !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
-      (s,G,tn) [] (Abort err t,Gf,tnf)))
+    ?t Gf tnf. !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (Abort Revert_abort t,Gf,tnf)))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all signed_compiler_normalize >>
@@ -336,7 +336,7 @@ Resume signed_convert_origin_path[abort]:
     (emitted_insts sa sb)` by (fs[EVERY_MEM] >> metis_tac[]) >>
   drule_all fragGasCopyLoopTheory.run_inst_seq_abort_origin_ptr_uniform >>
   strip_tac >>
-  qexistsl_tac [`Revert_abort`,`sf with vs_inst_idx := j`,`H`,`th'`] >>
+  qexistsl_tac [`sf with vs_inst_idx := j`,`H`,`th'`] >>
   gen_tac >> first_x_assum irule >>
   qpat_x_assum `!D q. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) _ H th'`
     (qspecl_then [`D`,`s.vs_inst_idx`] mp_tac) >> simp[]

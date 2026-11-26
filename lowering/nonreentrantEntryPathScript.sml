@@ -521,7 +521,8 @@ Theorem nonreentrant_entry_abort_joint_with_view:
     s_abort.vs_memory = s_reg.vs_memory /\
     s_abort.vs_allocas = s_reg.vs_allocas /\
     s_abort.vs_alloca_next = s_reg.vs_alloca_next /\
-    s_abort.vs_code = s_reg.vs_code /\ s_abort.vs_labels = s_reg.vs_labels
+    s_abort.vs_code = s_reg.vs_code /\ s_abort.vs_labels = s_reg.vs_labels /\
+    (a = Revert_abort \/ (a = ExHalt_abort /\ s_abort.vs_call_ctx.cc_static))
 Proof
   strip_tac >>
   qpat_assum `!H. _`
@@ -558,7 +559,8 @@ Proof
   `t.vs_gas_readings = s_reg.vs_gas_readings /\
    t.vs_memory = s_reg.vs_memory /\ t.vs_allocas = s_reg.vs_allocas /\
    t.vs_alloca_next = s_reg.vs_alloca_next /\
-   t.vs_code = s_reg.vs_code /\ t.vs_labels = s_reg.vs_labels` by
+   t.vs_code = s_reg.vs_code /\ t.vs_labels = s_reg.vs_labels /\
+   t.vs_call_ctx.cc_static = s_reg.vs_call_ctx.cc_static` by
     (Cases_on `tload (n2w nkey) s_reg = 1w` >>
      gvs[transient_lock_code_execution, transient_lock_checked_state_def,
          revert_state_def, halt_state_def, set_returndata_def, update_var_def]) >>
@@ -636,6 +638,8 @@ Proof
     (drule gas_path_ptr_erase >> simp[]) >>
   `gas_path_mem ctx func s_reg 0 (Abort a (t with vs_inst_idx := j))` by
     (drule gas_origin_path_erase >> simp[gas_marked_path_def]) >>
+  `a = Revert_abort \/ (a = ExHalt_abort /\ t.vs_call_ctx.cc_static)` by
+    metis_tac[] >>
   qexistsl_tac [`a`, `t with vs_inst_idx := j`, `G'`, `tn'`] >>
   simp[] >> fs[exprSimDefsTheory.expr_exit_def]
 QED
@@ -674,7 +678,9 @@ Proof
   `is_view_mut mut = (mut = View)` by
     (drule function_header_nonreentrant_view >> simp[is_view_mut_def]) >>
   drule_all nonreentrant_entry_abort_joint_with_view >>
-  disch_then ACCEPT_TAC
+  disch_then (qx_choosel_then [`a`,`s_abort`,`G_abort`,`tn_abort`]
+    (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
+  qexistsl_tac [`a`,`s_abort`,`G_abort`,`tn_abort`] >> simp[]
 QED
 
 (* Fragments of the compiled guarded body entered after registration. *)

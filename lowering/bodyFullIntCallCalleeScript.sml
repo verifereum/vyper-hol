@@ -2136,11 +2136,14 @@ Theorem intcall_callee_lock_run[local]:
   (?e u. lock_if_nr cx T view es = (INR (Error (RuntimeError "nonreentrant lock")),e) /\
           run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort u) \/
   (?e u. lock_if_nr cx T view es = (INR (Error (RuntimeError "write in static context")),e) /\
-          run_inst_seq (emitted_insts sa sb) s = Abort ExHalt_abort u)
+          run_inst_seq (emitted_insts sa sb) s = Abort ExHalt_abort u /\
+          u.vs_call_ctx.cc_static)
 Proof
   strip_tac >> drule_then assume_tac transientLockPropsTheory.compile_nonreentrant_lock_transient_code >>
   Cases_on `tload (n2w key) s = 1w` >> Cases_on `view` >> Cases_on `cx.txn.is_static` >>
-  simp[transientLockPropsTheory.transient_lock_code_execution, lock_if_nr_def,
+  simp[transientLockPropsTheory.transient_lock_code_execution,
+       transientLockPropsTheory.transient_lock_checked_state_def,
+       update_var_def, halt_state_def, set_returndata_def, lock_if_nr_def,
        acquire_nonreentrant_lock_execution, ignore_bind_def, bind_def,
        return_def, check_not_static_def, check_def, assert_def, raise_def]
 QED
@@ -5287,7 +5290,8 @@ Proof
            (?e u. lock_if_nr cx T view es1 = (INR (Error (RuntimeError "nonreentrant lock")),e) /\
                    run_inst_seq (emitted_insts prologue a) at_pro = Abort Revert_abort u) \/
            (?e u. lock_if_nr cx T view es1 = (INR (Error (RuntimeError "write in static context")),e) /\
-                   run_inst_seq (emitted_insts prologue a) at_pro = Abort ExHalt_abort u)` by
+                   run_inst_seq (emitted_insts prologue a) at_pro = Abort ExHalt_abort u /\
+                   u.vs_call_ctx.cc_static)` by
     (disch_tac >>
      `compile_nonreentrant_lock key T view prologue = ((),a)` by simp[] >>
      irule intcall_callee_lock_run >> conj_tac >- simp[] >>
@@ -5300,7 +5304,8 @@ Proof
       qpat_assum `nr ==> ?Gl tnl. _` drule >> strip_tac >>
       `?msg ee ab u. lock_if_nr cx nr (is_view_mut mut) es1 =
                        (INR (Error (RuntimeError msg)),ee) /\
-                     run_inst_seq (emitted_insts prologue a) at_pro = Abort ab u` by
+                     run_inst_seq (emitted_insts prologue a) at_pro = Abort ab u /\
+                     (ab = Revert_abort \/ u.vs_call_ctx.cc_static)` by
         (qpat_assum `nr ==> (?e u. _) \/ _` drule >>
          qpat_assum `nr` (pure_rewrite_tac o single) >>
          qpat_assum `view = is_view_mut mut` (pure_rewrite_tac o single) >>

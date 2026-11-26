@@ -1673,7 +1673,9 @@ Resume create_dispatch_outcome_full[preconsume]:
   gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _` (drule_then strip_assume_tac) >>
   `allocas_from lo s /\ stor_taint_ok_at (DF H) tn s` by fs[ghost_inv_at_def] >>
-  drule_all create_preconsume_abort_path >> simp[]
+  drule_all create_preconsume_abort_path >> simp[] >>
+  disch_then (qspec_then `explicit` (qspec_then `PG` assume_tac)) >>
+  simp[] >> metis_tac[]
 QED
 
 Resume create_dispatch_outcome_full[consume]:

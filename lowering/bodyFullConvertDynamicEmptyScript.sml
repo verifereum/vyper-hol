@@ -47,8 +47,8 @@ Theorem bytes_word_empty_convert_origin_path:
       op_prov Gf out = NONE /\ op_taint tnf out = {}) /\
    (!exc. convert_result cx src dst v = INR exc ==>
     (?msg. exc = Error (RuntimeError msg)) /\
-    ?err t Gf tnf. !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
-      (s,G,tn) [] (Abort err t,Gf,tnf)))
+    ?t Gf tnf. !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (Abort Revert_abort t,Gf,tnf)))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `~is_bytestring_type dst` by
