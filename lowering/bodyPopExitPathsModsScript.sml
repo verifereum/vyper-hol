@@ -144,7 +144,7 @@ Proof
   fs[IS_PREFIX_APPEND]
 QED
 
-Theorem pop_slot_static_exit_mods:
+Theorem pop_slot_static_exit_cc_static_mods:
   eval_operand hdr s = SOME slot /\ op_taint tn hdr = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
   (if tr then tload slot s else sload slot s) = n /\ n <> 0w /\
@@ -164,7 +164,8 @@ Theorem pop_slot_static_exit_mods:
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (Abort ExHalt_abort v,G',tn')) /\
     v.vs_halted /\ v.vs_returndata = [] /\ v.vs_inst_idx = s.vs_inst_idx+5 /\
-    allocas_from lo v /\ (ctx_has_dalloca ctx ==> allocas_below_fmp v)
+    allocas_from lo v /\ (ctx_has_dalloca ctx ==> allocas_below_fmp v) /\
+    v.vs_call_ctx.cc_static
 Proof
   strip_tac >> drule pop_header_test_cuts >> strip_tac >>
   drule_all pop_header_slot_load_mods >>
@@ -217,7 +218,7 @@ Proof
   suspend "store"
 QED
 
-Resume pop_slot_static_exit_mods[store]:
+Resume pop_slot_static_exit_cc_static_mods[store]:
   `s5.vs_inst_idx = s.vs_inst_idx+5 /\
    lookup_block s5.vs_current_bb func.fn_blocks = SOME bb` by
     (reverse conj_tac >- simp[] >> simp[Abbr `s5`]) >>
@@ -245,4 +246,30 @@ Resume pop_slot_static_exit_mods[store]:
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Finalise pop_slot_static_exit_mods
+Finalise pop_slot_static_exit_cc_static_mods
+
+Theorem pop_slot_static_exit_mods:
+  eval_operand hdr s = SOME slot /\ op_taint tn hdr = {} /\
+  key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
+  (if tr then tload slot s else sload slot s) = n /\ n <> 0w /\
+  ALL_DISTINCT [x0;x1;x2;x3] /\
+  EVERY (\x. hdr <> Var x) [x0;x1;x2;x3] /\
+  s.vs_call_ctx.cc_static /\ alloca_history func s /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX [mk_inst id (if tr then TLOAD else SLOAD) [hdr] [x0];
+    mk_inst (id+1) ISZERO [Var x0] [x1];
+    mk_inst (id+2) ISZERO [Var x1] [x2];
+    mk_inst (id+3) ASSERT [Var x2] [];
+    mk_inst (id+4) SUB [Var x0;Lit 1w] [x3];
+    mk_inst (id+5) (if tr then TSTORE else SSTORE) [hdr;Var x3] []]
+    (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?v G' tn'.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (Abort ExHalt_abort v,G',tn')) /\
+    v.vs_halted /\ v.vs_returndata = [] /\ v.vs_inst_idx = s.vs_inst_idx+5 /\
+    allocas_from lo v /\ (ctx_has_dalloca ctx ==> allocas_below_fmp v)
+Proof
+  disch_then (mp_tac o MATCH_MP pop_slot_static_exit_cc_static_mods) >>
+  strip_tac >> qexistsl_tac [`v`,`G'`,`tn'`] >> simp[]
+QED
