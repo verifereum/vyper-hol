@@ -4,6 +4,7 @@ Ancestors
   bodyFullConvertSignedOrigin bodyFullConvertDynamicEmpty
   bodyFullConvertBytesWordSuffix bodyPtrTypeBuiltinsBytesWordTypes
   exprSimConvertFromBytes exprSimConvert ptrDiscipline bodyPtrDefs fragGasOriginPtr
+  bodyConvertSelectedSuffixRevertMods
   compileEnv exprLowering exprLoweringProps fragExec venomState
   vyperTypeSystem vyperValue vyperState finite_map words arithmetic list
 
@@ -43,21 +44,10 @@ Theorem convert_selected_suffix_mods:
     ?err t Gf tnf. !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
       (s,G,tn) [] (Abort err t,Gf,tnf)))
 Proof
-  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  Cases_on `(?k. dst = BaseT (IntT k)) \/ dst = BaseT DecimalT`
-  >- (drule_all signed_convert_origin_path >>
-      disch_then (qspecl_then [`explicit`,`PG`] ACCEPT_TAC)) >>
-  Q.SUBGOAL_THEN
-    `dst = BaseT BoolT \/ (?k. dst = BaseT (UintT k)) \/
-     dst = BaseT AddressT \/ (?k. dst = BaseT (BytesT (Fixed k)))` assume_tac
-  >- (drule_all bytestring_scalar_type_partition_cases >>
-      qpat_x_assum `~((?k. dst = BaseT (IntT k)) \/ dst = BaseT DecimalT)` mp_tac >>
-      POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]) >>
-  Cases_on `v = BytesV [] \/ v = StringV []`
-  >- (drule_all bytes_word_empty_convert_origin_path >>
-      disch_then (qspecl_then [`explicit`,`PG`] ACCEPT_TAC)) >>
-  qpat_x_assum `~(v = BytesV [] \/ v = StringV [])`
-    (CONJUNCTS_THEN assume_tac o REWRITE_RULE [DE_MORGAN_THM]) >>
-  drule_all bytes_word_convert_origin_path >>
-  disch_then (qspecl_then [`explicit`,`PG`] ACCEPT_TAC)
+  disch_then (mp_tac o MATCH_MP convert_selected_suffix_revert_mods) >>
+  strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> disch_tac >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`Revert_abort`,`t`,`Gf`,`tnf`] >> first_assum ACCEPT_TAC
 QED
