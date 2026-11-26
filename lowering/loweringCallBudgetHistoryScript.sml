@@ -5,7 +5,7 @@
  *)
 Theory loweringCallBudgetHistory
 Ancestors
-  ptrDiscipline ptrSafeRun gasOutcomeFull gasEvents gasExplicitSites
+  createSizeExit ptrDiscipline ptrSafeRun gasOutcomeFull gasEvents gasExplicitSites
   loweringStateRelDefs compileVyper vyperCompiler
   o1PassContract fragGasOriginPtr contextRawReachable sourceUnitExecution
   vyperLoweringCorrect e2eDefs exprSimHypsDefs lowerDloadDefs
@@ -320,7 +320,8 @@ Definition gas_outcome_full_budget_def:
         !H. valid_horizon cx st0 H ee.storage_trace ==>
           (?h_cert. (H,h_cert,marks,INR (r,G',tn')) IN certificates) /\
           ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
-           (exit_result r /\ R H res (ee with gas_obs := []) (G',tn') r))) \/
+           (exit_result r /\ create_size_exit_ok ctx res r /\
+            R H res (ee with gas_obs := []) (G',tn') r))) \/
       (?err ee leaf leaf_pg leaf_g leaf_tn finish.
         gas_exempt_cert T tops (ctx,func)
           (ignore_bind source (return ()))

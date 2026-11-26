@@ -5,6 +5,8 @@ Ancestors
   vyperContext vyperValue vyperAST supportedExprTraverse whitelistCheckerConsts
   allocLimitsProps exprCallbackContracts moduleLowering exprLoweringEquations context
   gasShadow gasShadowShape list pair
+  boolChainOpsCong runtimeConstBoolChainOperands
+  ctorCallFreeBoolChain boolChainOperandsSupported
 
 val bad_builtin_arity = ``\e. case e of
     Builtin _ bt args => ~builtin_args_length_ok bt (LENGTH args)
@@ -461,7 +463,37 @@ Resume runtime_default_compile_vars[builtin]:
   >- (simp[compile_builtin_dispatch_body_def, LET_THM, runtime_default_value_size] >>
       BasicProvers.TOP_CASE_TAC >>
       simp[compile_make_array_def, comp_bind_def, comp_ignore_bind_def,
-        runtime_default_make_array_vars, runtime_default_make_tuple_vars]) >>
+        runtime_default_make_array_vars, runtime_default_make_tuple_vars])
+  >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst _ _`]
+  >- (gvs[builtin_args_length_ok_def, LENGTH_EQ_NUM_compute, Excl "expr_child_callback_def"] >>
+      simp[compile_builtin_dispatch_body_def, LET_THM, Excl "expr_child_callback_def"])
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (BoolChain _ _) _ _`]
+  >- (gvs[builtin_args_length_ok_def, LENGTH_EQ_NUM_compute, Excl "expr_child_callback_def"] >>
+      rename1 `compile_builtin_dispatch_body _ _ _ _ (BoolChain d n) [arg] _` >>
+      `~supported_expr_exists ^bad_builtin_arity arg` by
+        fs[supported_exprs_exists_every] >>
+      `EVERY (runtime_constant_expr mods) (bool_chain_operands d (n - 1) arg)` by
+        simp[runtime_constant_bool_chain_operands] >>
+      `EVERY (\e. ~supported_expr_exists ^bad_builtin_arity e)
+         (bool_chain_operands d (n - 1) arg)` by simp[bool_chain_operands_supported] >>
+      `expr_size arg < list_size expr_size [arg]` by simp[expr_list_member_bound] >>
+      `!r exit_lbl.
+        compile_bool_chain_ops (expr_child_callback lim compile_expr)
+          (ce with ce_vars := vars) d r exit_lbl (bool_chain_operands d (n - 1) arg) =
+        compile_bool_chain_ops (expr_child_callback lim compile_expr)
+          ce d r exit_lbl (bool_chain_operands d (n - 1) arg)` by
+        (rpt gen_tac >> irule compile_bool_chain_ops_lower_value_cong >>
+         qx_gen_tac `e` >> strip_tac >>
+         `expr_size e <= expr_size arg` by metis_tac[bool_chain_operand_size] >>
+         `expr_size e < list_size expr_size [arg]` by decide_tac >>
+         `runtime_constant_expr mods e /\ ~supported_expr_exists ^bad_builtin_arity e` by
+           fs[EVERY_MEM] >>
+         irule runtime_default_lower_value_vars >> gen_tac >>
+         simp[expr_child_callback_def, runtime_default_compile_defaults_size] >>
+         IF_CASES_TAC >> simp[] >>
+         qpat_assum `!child ce' ty st. _ ==> _ ==> compile_expr _ _ _ _ = _` irule >>
+         simp[]) >>
+      simp[compile_builtin_dispatch_body_def, LET_THM, Excl "expr_child_callback_def"]) >>
   gvs[builtin_args_length_ok_def, LENGTH_EQ_NUM_compute, Excl "expr_child_callback_def"] >>
   asm_simp_tac (srw_ss()) [compile_builtin_dispatch_body_def, LET_THM,
     runtime_default_value_size, runtime_default_unwrap_vars,

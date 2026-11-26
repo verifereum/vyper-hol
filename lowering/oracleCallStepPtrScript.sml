@@ -72,10 +72,7 @@ Proof
 QED
 
 Theorem call_adopted_stor_taint_ok:
-  inst.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-  s'.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s'.vs_requests) /\ s'.vs_outcomes <> s.vs_outcomes /\
-  (HD s.vs_outcomes).co_success /\ tn.t_imm = {} ==>
+  inst.inst_opcode = CALL /\ adopt_guard s.vs_call_ctx.cc_static s s' (HD s.vs_outcomes).co_success /\ tn.t_imm = {} ==>
   stor_taint_ok H cx (step_taint inst s s' tn) s'
 Proof
   simp[stor_taint_ok_def, step_taint_def, adopt_reset_def, imm_taint_def]
@@ -178,10 +175,7 @@ Theorem exec_ext_call_storage_cases:
   exec_ext_call inst s gas addr value ao az ro rz stat = OK u ==>
   u.vs_call_ctx = s.vs_call_ctx /\
   ((u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient) \/
-   (~stat /\ ~s.vs_call_ctx.cc_static /\
-    u.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST u.vs_requests) /\ u.vs_outcomes <> s.vs_outcomes /\
-    (HD s.vs_outcomes).co_success))
+   (~stat /\ adopt_guard s.vs_call_ctx.cc_static s u (HD s.vs_outcomes).co_success))
 Proof
   Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def] >>
   rename1 `h::outs` >> Cases_on `outs` >> simp[exec_ext_call_def] >>

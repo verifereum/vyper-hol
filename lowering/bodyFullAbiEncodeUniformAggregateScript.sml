@@ -226,13 +226,15 @@ Proof
     (rpt strip_tac >> gvs[array_elements_def] >>
      Cases_on `ALOOKUP l i` >> gvs[default_value_well_typed] >>
      drule_all sparse_has_type_lookup >> simp[]) >>
+  `LENGTH (array_elements (ArrayTV tv (Fixed (LENGTH infos))) (SArrayV l)) =
+    LENGTH infos` by simp[array_elements_def] >>
   `?rvs. LENGTH rvs = LENGTH (REPLICATE (LENGTH infos) t) /\
     !i ei abi_sz mem_sz dyn. i < LENGTH (REPLICATE (LENGTH infos) t) /\ EL i infos = (ei,abi_sz,mem_sz,dyn) ==>
       enc (EL i cts) (EL i rvs) = enc (vyper_to_abi_type E (EL i (REPLICATE (LENGTH infos) t))) (EL i avs) /\
       !mem a. val_in_memory (EL i (REPLICATE (LENGTH infos) tv))
         (EL i (array_elements (ArrayTV tv (Fixed (LENGTH infos))) (SArrayV l))) a mem ==>
         abi_encoder_open_input ei (EL i cts) (EL i rvs) a mem_sz mem` by
-    (irule abi_encode_uniform_members >> gvs[EL_REPLICATE, array_elements_def] >> metis_tac[]) >>
+    (irule abi_encode_uniform_members >> simp[EL_REPLICATE]) >>
   qexists `ListV rvs` >> conj_tac
   >- (`enc (Tuple cts) (ListV rvs) =
         enc (Tuple (vyper_to_abi_types E (REPLICATE (LENGTH infos) t))) (ListV avs)` by

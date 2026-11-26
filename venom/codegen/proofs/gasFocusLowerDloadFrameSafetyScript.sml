@@ -1921,7 +1921,16 @@ Proof
     fs[dload_table_stack_cons] >>
   Cases_on `FLOOKUP s.vs_allocas i.inst_id`
   >- ( `FLOOKUP t.vs_allocas i.inst_id = NONE` by
-         (fs[dload_frame_sites_def, FLOOKUP_DEF] >> ASM_SET_TAC[]) >>
+         (qpat_assum `dload_frame_sites r`
+            (strip_assume_tac o REWRITE_RULE [dload_frame_sites_def]) >>
+          qpat_x_assum `FDOM r.dr_target = _`
+            (mp_tac o Q.AP_TERM `\ids. i.inst_id IN ids`) >>
+          qpat_assum `r.dr_source = s.vs_allocas` mp_tac >>
+          qpat_assum `r.dr_target = t.vs_allocas` mp_tac >>
+          qpat_assum `FLOOKUP s.vs_allocas i.inst_id = NONE` mp_tac >>
+          qpat_assum `i.inst_id NOTIN r.dr_scratch` mp_tac >>
+          POP_ASSUM_LIST (K ALL_TAC) >>
+          simp[flookup_thm, IN_UNION]) >>
        `t1.vs_alloca_next <= dyn_floor C vs` by
          (drule_all ld_frame_alloca_fresh_post_bound >> simp[]) >>
        qexistsl [`s1`,`r with <|dr_source := r.dr_source |+

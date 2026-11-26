@@ -353,7 +353,13 @@ Proof
      Cases_on `res` >>
      gvs[as_ptr_val_def, vv_operand_def, mk_ptr_def, markerTheory.Abbrev_def] >>
      metis_tac[exprOperandVarTheory.compiler_make_array_result,
-               exprSafeOperandTheory.alloc_buffer_not_label]) >>
+               exprSafeOperandTheory.alloc_buffer_not_label])
+  >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst _ _`] >-
+    (rpt strip_tac >> gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     pairarg_tac >> gvs[] >>
+     rename1 `lower_value _ _ _ _ _ = (arg,_)` >>
+     Cases_on `is_word_type rt` >> Cases_on `arg` >>
+     gvs[as_stack_val_def, as_ptr_val_def, vv_operand_def, mk_ptr_def]) >>
   rpt strip_tac >>
   gvs[compile_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >>

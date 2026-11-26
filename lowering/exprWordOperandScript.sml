@@ -56,7 +56,7 @@ Theorem nonword_builtin_cases:
   (?n. bi = CalldataSlice n) \/ (?n. bi = Concat n) \/
   (?n. bi = Slice n) \/ (?n. bi = Uint2Str n) \/ bi = MethodId \/
   (?elem bd. bi = MakeArray elem bd) \/ bi = ECAdd \/ bi = ECMul \/
-  bi = Acc Code
+  bi = Acc Code \/ bi = NamedConst
 Proof
   Cases_on `bi` >>
   simp[well_typed_expr_def, well_typed_builtin_app_def, is_word_type_def] >>
@@ -370,6 +370,8 @@ Proof
 QED
 
 Theorem word_builtin_dispatch_body:
+  (!e t s op s'. lower_value f cenv t e s = (op,s') ==>
+     s.cs_next_var <= s'.cs_next_var) /\
   (!e t s op s'. MEM e args /\ well_typed_expr env e /\
        is_word_type (expr_type e) /\ lower_value f cenv t e s = (op,s') ==>
        safe_operand s' op) /\
@@ -384,6 +386,47 @@ Proof
     (irule word_builtin_as_wei_value >> goal_assum (drule_at Any) >> metis_tac[])
   >~ [`Len`] >- metis_tac[word_builtin_len]
   >~ [`MethodId`] >- metis_tac[word_builtin_method_id]
+  >~ [`NamedConst`] >-
+    (gvs[well_typed_expr_def, well_typed_builtin_app_def] >>
+     gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     pairarg_tac >> gvs[as_stack_val_def, word_result_ok_def] >>
+     rename1 `lower_value _ _ _ _ _ = (op0,_)` >>
+     `safe_operand sb op0` by metis_tac[] >>
+     Cases_on `op0` >> gvs[safe_operand_def])
+  >~ [`BoolChain _ _`] >-
+    (`!es d r exit_lbl s u s'.
+         (!e st op st'. MEM e es /\
+           lower_value f cenv (BaseT BoolT) e st = (op,st') ==>
+           st.cs_next_var <= st'.cs_next_var) /\
+         compile_bool_chain_ops f cenv d r exit_lbl es s = (u,s') ==>
+         s.cs_next_var <= s'.cs_next_var` by
+       (rpt (pop_assum kall_tac) >>
+        Induct_on `es` >- simp[compile_bool_chain_ops_def, comp_return_def] >>
+        qx_gen_tac `head` >> qx_gen_tac `d` >> Cases_on `d` >>
+        Cases_on `es` >> rpt gen_tac >> strip_tac >>
+        qpat_x_assum `compile_bool_chain_ops _ _ _ _ _ _ _ = _` mp_tac >>
+        simp[Once compile_bool_chain_ops_def, comp_bind_def, comp_ignore_bind_def] >>
+        pairarg_tac >> fs[] >>
+        rename1 `lower_value _ _ _ _ src = (_,mid)` >>
+        simp[comp_bind_def, comp_return_def, emit_inst_def, comp_ignore_bind_def,
+             fresh_id_def, emit_def, fresh_label_def, new_block_def] >>
+        rpt strip_tac >> gvs[] >>
+        irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `mid.cs_next_var` >>
+        conj_tac
+        >- metis_tac[] >>
+        qpat_assum `!d r l x y. _ /\ compile_bool_chain_ops _ _ _ _ _ _ _ = _ ==> _`
+          (drule_at (Pat `compile_bool_chain_ops _ _ _ _ _ _ _ = _`)) >>
+        simp[] >> metis_tac[]) >>
+     gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >> gvs[word_result_ok_def] >>
+     drule fresh_var_safe_operand >> strip_tac >>
+     qpat_assum `!es d r l s s'. _ /\ compile_bool_chain_ops _ _ _ _ _ _ _ = _ ==> _`
+       (drule_at (Pat `compile_bool_chain_ops _ _ _ _ _ _ _ = _`)) >>
+     (impl_tac >- (rpt strip_tac >>
+       qpat_assum `!e t s op s'. lower_value _ _ _ _ _ = _ ==> _`
+         (drule_then ACCEPT_TAC))) >>
+     strip_tac >> irule safe_operand_mono >>
+     goal_assum (drule_at Any) >> gvs[fresh_label_def, new_block_def])
   >> metis_tac[word_builtin_scalar, word_builtin_hash, word_builtin_located]
 QED
 
@@ -676,8 +719,9 @@ Resume compile_expr_word_result[builtin]:
   CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
   irule word_builtin_dispatch_body >>
   goal_assum (drule_at (Pat `compile_builtin_dispatch_body`)) >>
-  qexists_tac `env` >> simp[] >> rpt strip_tac >>
-  drule word_lower_value_child_safe >>
+  qexists_tac `env` >> simp[] >>
+  reverse conj_tac >- (rpt strip_tac >> drule word_lower_value_child_grows >> simp[]) >>
+  rpt strip_tac >> drule word_lower_value_child_safe >>
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >-
      (conj_tac >- (qx_gen_tac `arg` >> rpt gen_tac >> strip_tac >>

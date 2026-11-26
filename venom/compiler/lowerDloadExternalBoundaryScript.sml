@@ -90,9 +90,7 @@ Theorem ld_consume_adoption_cases[local]:
   consume_call_outcome rq ro rs s = (w,ss) /\
   consume_call_outcome rq' ro' rs' t = (w',ts) ==>
   if inst.inst_opcode = CALL /\
-     (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST ss.vs_requests) /\
-      ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success)
+     (adopt_guard s.vs_call_ctx.cc_static s ss (HD s.vs_outcomes).co_success)
   then ss.vs_accounts = ts.vs_accounts /\ ss.vs_transient = ts.vs_transient
   else ss.vs_accounts = s.vs_accounts /\ ts.vs_accounts = t.vs_accounts /\
        ss.vs_transient = s.vs_transient /\ ts.vs_transient = t.vs_transient
@@ -124,13 +122,9 @@ Theorem ld_consume_call_nonghost:
   (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
   tn'.t_imm = tn.t_imm /\
   tn'.t_stor = adopt_reset inst
-    (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST ss.vs_requests) /\
-     ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor /\
+    (adopt_guard s.vs_call_ctx.cc_static s ss (HD s.vs_outcomes).co_success) tn.t_stor /\
   tn'.t_trans = adopt_reset inst
-    (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST ss.vs_requests) /\
-     ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans ==>
+    (adopt_guard s.vs_call_ctx.cc_static s ss (HD s.vs_outcomes).co_success) tn.t_trans ==>
   ld_nonghost tn' ss ts
 Proof
   strip_tac >>
@@ -142,9 +136,7 @@ Proof
    (FST (take_outcome rq' t.vs_outcomes)).co_returnData` by
     (asm_rewrite_tac[] >> irule ld_take_outcome_returndata >> metis_tac[]) >>
   `if inst.inst_opcode = CALL /\
-      (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST ss.vs_requests) /\
-       ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success)
+      (adopt_guard s.vs_call_ctx.cc_static s ss (HD s.vs_outcomes).co_success)
    then ss.vs_accounts = ts.vs_accounts /\ ss.vs_transient = ts.vs_transient
    else ss.vs_accounts = s.vs_accounts /\ ts.vs_accounts = t.vs_accounts /\
         ss.vs_transient = s.vs_transient /\ ts.vs_transient = t.vs_transient` by
@@ -245,13 +237,9 @@ Theorem ld_consume_call_effect:
   tn'.t_mem = tn.t_mem DIFF {ro+j | j < LENGTH xs} /\
   tn'.t_imm = tn.t_imm /\
   tn'.t_stor = adopt_reset inst
-    (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST ss.vs_requests) /\
-     ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor /\
+    (adopt_guard s.vs_call_ctx.cc_static s ss (HD s.vs_outcomes).co_success) tn.t_stor /\
   tn'.t_trans = adopt_reset inst
-    (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST ss.vs_requests) /\
-     ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans /\
+    (adopt_guard s.vs_call_ctx.cc_static s ss (HD s.vs_outcomes).co_success) tn.t_trans /\
   (xs = [] \/ (ro = rt /\ ro + LENGTH xs <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
      ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz) \/

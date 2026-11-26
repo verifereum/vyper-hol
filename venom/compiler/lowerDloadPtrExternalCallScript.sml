@@ -31,16 +31,8 @@ Theorem dload_external_call_ghosts:
         {a | w2n ro <= a /\
              a < w2n ro + MIN (w2n rz) (LENGTH s1.vs_returndata)};
       t_var := set_var_taint tn.t_var i.inst_outputs {};
-      t_stor := if i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-                    s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\
-                    s1.vs_outcomes <> s.vs_outcomes /\
-                    (HD s.vs_outcomes).co_success then {} else tn.t_stor;
-      t_trans := if i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-                    s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\
-                    s1.vs_outcomes <> s.vs_outcomes /\
-                    (HD s.vs_outcomes).co_success then {} else tn.t_trans;
+      t_stor := if i.inst_opcode = CALL /\ adopt_guard s.vs_call_ctx.cc_static s s1 (HD s.vs_outcomes).co_success then {} else tn.t_stor;
+      t_trans := if i.inst_opcode = CALL /\ adopt_guard s.vs_call_ctx.cc_static s s1 (HD s.vs_outcomes).co_success then {} else tn.t_trans;
       t_imm := tn.t_imm|>
 Proof
   strip_tac >>
@@ -60,10 +52,7 @@ Theorem dload_external_call_adoption:
   (i.inst_opcode = CALL \/ i.inst_opcode = STATICCALL) /\
   (st <=> i.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
   exec_ext_call i s gas addr value ao az ro rz st = OK s1 ==>
-  ((i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-    s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\ s1.vs_outcomes <> s.vs_outcomes /\
-    (HD s.vs_outcomes).co_success) <=>
+  ((i.inst_opcode = CALL /\ adopt_guard s.vs_call_ctx.cc_static s s1 (HD s.vs_outcomes).co_success) <=>
    (~(st \/ s.vs_call_ctx.cc_static) /\
     ~computed_precompile (venom_call_request s addr value ao az st) /\
     s.vs_outcomes <> [] /\ (HD s.vs_outcomes).co_success))
@@ -136,15 +125,9 @@ QED
 Theorem dload_external_call_store_ghosts:
   (i.inst_opcode = CALL \/ i.inst_opcode = STATICCALL) ==>
   (step_taint i s s1 tn).t_stor =
-    (if i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-        s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\ s1.vs_outcomes <> s.vs_outcomes /\
-        (HD s.vs_outcomes).co_success then {} else tn.t_stor) /\
+    (if i.inst_opcode = CALL /\ adopt_guard s.vs_call_ctx.cc_static s s1 (HD s.vs_outcomes).co_success then {} else tn.t_stor) /\
   (step_taint i s s1 tn).t_trans =
-    (if i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-        s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\ s1.vs_outcomes <> s.vs_outcomes /\
-        (HD s.vs_outcomes).co_success then {} else tn.t_trans) /\
+    (if i.inst_opcode = CALL /\ adopt_guard s.vs_call_ctx.cc_static s s1 (HD s.vs_outcomes).co_success then {} else tn.t_trans) /\
   (step_taint i s s1 tn).t_imm = tn.t_imm
 Proof
   strip_tac >> simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def]
@@ -157,19 +140,12 @@ Theorem dload_external_call_shared_store:
   read_memory (w2n ao) (w2n az) s = read_memory (w2n bo) (w2n bz) t /\
   exec_ext_call i s gs addr value ao az ro rz st = OK s1 /\
   exec_ext_call i t gt addr value bo bz rt rz st = OK t1 /\
-  ((~s.vs_call_ctx.cc_static /\ s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\
-    s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
-   (~t.vs_call_ctx.cc_static /\ t1.vs_requests <> t.vs_requests /\
-        ~computed_precompile (LAST t1.vs_requests) /\
-    t1.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)) ==>
+  ((adopt_guard s.vs_call_ctx.cc_static s s1 (HD s.vs_outcomes).co_success) <=>
+   (adopt_guard t.vs_call_ctx.cc_static t t1 (HD t.vs_outcomes).co_success)) ==>
   dload_shared_store (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qabbrev_tac `a = (i.inst_opcode = CALL /\ ~s.vs_call_ctx.cc_static /\
-    s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\ s1.vs_outcomes <> s.vs_outcomes /\
-    (HD s.vs_outcomes).co_success)` >>
+  qabbrev_tac `a = (i.inst_opcode = CALL /\ adopt_guard s.vs_call_ctx.cc_static s s1 (HD s.vs_outcomes).co_success)` >>
   `a <=> ~(st \/ s.vs_call_ctx.cc_static) /\
      ~computed_precompile (venom_call_request s addr value ao az st) /\
      s.vs_outcomes <> [] /\ (HD s.vs_outcomes).co_success` by
@@ -207,12 +183,8 @@ Theorem dload_external_call_step:
     exec_ext_call i t gt addr value bo az rt rz st = OK t1 /\
     dload_equal_environment s1 t1 /\
     (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1) /\
-    ((~s.vs_call_ctx.cc_static /\ s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\
-      s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
-     (~t.vs_call_ctx.cc_static /\ t1.vs_requests <> t.vs_requests /\
-        ~computed_precompile (LAST t1.vs_requests) /\
-      t1.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success))
+    ((adopt_guard s.vs_call_ctx.cc_static s s1 (HD s.vs_outcomes).co_success) <=>
+     (adopt_guard t.vs_call_ctx.cc_static t t1 (HD t.vs_outcomes).co_success))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `s.vs_call_ctx = t.vs_call_ctx` by
@@ -325,12 +297,8 @@ Theorem dload_external_call_boundary:
   exec_ext_call i t gt addr value bo bz rt rz st = OK t1 /\
   dload_equal_environment s1 t1 /\
   (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1) /\
-  ((~s.vs_call_ctx.cc_static /\ s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\
-    s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
-   (~t.vs_call_ctx.cc_static /\ t1.vs_requests <> t.vs_requests /\
-        ~computed_precompile (LAST t1.vs_requests) /\
-    t1.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)) ==>
+  ((adopt_guard s.vs_call_ctx.cc_static s s1 (HD s.vs_outcomes).co_success) <=>
+   (adopt_guard t.vs_call_ctx.cc_static t t1 (HD t.vs_outcomes).co_success)) ==>
   dload_boundary_core fl lo fs V Ws PG PH
     (step_prov PG G i s1) (step_prov PH H i t1)
     (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds /\
@@ -438,12 +406,8 @@ Proof
     exec_ext_call i t gt addr vv bo az rt rz st = OK t1 /\
     dload_equal_environment s1 t1 /\
     (!out. MEM out i.inst_outputs ==> lookup_var out s1 = lookup_var out t1) /\
-    ((~s.vs_call_ctx.cc_static /\ s1.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST s1.vs_requests) /\
-      s1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
-     (~t.vs_call_ctx.cc_static /\ t1.vs_requests <> t.vs_requests /\
-        ~computed_precompile (LAST t1.vs_requests) /\
-      t1.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success))` by
+    ((adopt_guard s.vs_call_ctx.cc_static s s1 (HD s.vs_outcomes).co_success) <=>
+     (adopt_guard t.vs_call_ctx.cc_static t t1 (HD t.vs_outcomes).co_success))` by
     (irule (Q.INST [`value` |-> `vv`] dload_external_call_step) >>
      simp[] >> metis_tac[]) >>
   `source_memory_write_ranges i s = [(w2n ro,w2n rz)] /\

@@ -122,7 +122,7 @@ Proof
   `ALL_DISTINCT (MAP FST mods)` by
     (drule check_contract_namespaces_ok >> simp[contract_namespaces_ok_def]) >>
   irule checked_const_replacement_type >>
-  simp[consts_env_mods_def] >>
+  simp[consts_env_mods_def, consts_env_modules_order_eq] >>
   drule checked_const_replacements >>
   disch_then (qspecl_then [`constants_order mods`,`[]`] mp_tac) >>
   simp[MEM_constants_order, ALOOKUP_ALL_DISTINCT_MEM] >> metis_tac[]

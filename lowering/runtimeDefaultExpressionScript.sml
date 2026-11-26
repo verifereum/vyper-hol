@@ -1,7 +1,7 @@
 (* Runtime-constant syntax avoids the internal-call induction. *)
 Theory runtimeDefaultExpression
 Ancestors
-  bodyFullCases bodyFullPreds whitelistCheckerConsts vyperTypeContract
+  bodyFullCases bodyFullPreds bodyFullSimProjection whitelistCheckerConsts vyperTypeContract
   exprCallBounds exprLowering exprSimSource exprSimFullBundleProps
   gasOutcomeFullCompose abiEncodeArgsScopes vyperScopePreservation
   bodySimFull targetPureSourceFrame supportedExprTraverse
@@ -95,13 +95,9 @@ Theorem runtime_default_expr_full:
       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   strip_tac >>
+  `body_expr_full_ok cx e` by metis_tac[runtime_constant_expr_body_full_ok] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,fn,shadow_fn) ce cx ty e es` by
-    (drule_then (mp_tac o Q.SPEC `cx` o REWRITE_RULE [body_expr_full_ok_def])
-       runtime_constant_expr_body_full_ok >>
-     strip_tac >>
-     qpat_assum `!DF lo d PG tops ctx shadow_ctx fn shadow_fn ce env ty es. _`
-       (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`fn`,
-                     `shadow_fn`,`ce`,`env`,`ty`,`es`] mp_tac) >> simp[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   qpat_assum `expr_sim_full _ _ _ _ _ _`
     (mp_tac o ONCE_REWRITE_RULE[expr_sim_full_via_bundle]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,

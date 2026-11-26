@@ -2,6 +2,7 @@ Theory deploySymSrcFrameExpr
 Ancestors
   deploySymSrcBlockFrame deploySymSrcFrameExprHelpers exprLowering exprCallBounds
   emitHelper compileEnv builtinAbi builtinBytes context symbolicSourceCompilerFrame
+  symbolicSourceBoolChainFrame
 
 val _ = augment_srw_ss [rewrites [deploy_blocks_frame_bind,
                                 deploy_blocks_frame_ignore_bind]];
@@ -27,20 +28,18 @@ Theorem deploy_blocks_frame_type_builtin_dispatch_body:
   deploy_blocks_frame (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args)
 Proof
   strip_tac >> Cases_on `tb` >>
-  simp[deploy_blocks_frame_def, compile_type_builtin_dispatch_body_def] >>
-  rpt strip_tac >> rpt IF_CASES_TAC >>
-  simp[deploy_blocks_frame_equation,
+  simp[deploy_blocks_frame_def, compile_type_builtin_dispatch_body_def,
+       pairTheory.ELIM_UNCURRY, oneline as_stack_val_def,
+       oneline as_ptr_val_def] >>
+  rpt gen_tac >>
+  simp[deploy_blocks_frame_equation, pairTheory.ELIM_UNCURRY,
        oneline as_stack_val_def, oneline as_ptr_val_def] >>
-  TRY pairarg_tac >>
-  gvs[deploy_blocks_frame_equation,
-      oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>
-  TRY pairarg_tac >>
-  gvs[deploy_blocks_frame_equation,
-      oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[deploy_blocks_frame_equation,
-       oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()]) >>
-  Cases_on `ret_ty` >> gvs[deploy_blocks_frame_equation,
-    oneline as_stack_val_def, oneline as_ptr_val_def, AllCaseEqs()]
+  rpt IF_CASES_TAC >>
+  simp[pairTheory.pair_CASE_def, pairTheory.ELIM_UNCURRY] >>
+  Cases_on `ret_ty` >>
+  simp[deploy_blocks_frame_equation, pairTheory.pair_CASE_def,
+       pairTheory.ELIM_UNCURRY, oneline as_stack_val_def,
+       oneline as_ptr_val_def]
 QED
 
 Theorem deploy_blocks_frame_expr_body:
@@ -125,7 +124,21 @@ Theorem deploy_blocks_frame_builtin_dispatch_body:
   (!a b c d e. deploy_blocks_frame (compile_make_array cfn cenv a b c d e)) ==>
   deploy_blocks_frame (compile_builtin_dispatch_body cfn cenv ret_ty ty bi args)
 Proof
-  strip_tac >> Cases_on `bi` >>
+  strip_tac >> Cases_on `bi`
+  >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst _`]
+  >- (simp[deploy_blocks_frame_def, compile_builtin_dispatch_body_def] >>
+      rpt strip_tac >>
+      simp[deploy_blocks_frame_equation] >>
+      Cases_on `is_word_type ret_ty` >>
+      gvs[pairTheory.ELIM_UNCURRY, oneline as_stack_val_def,
+          oneline as_ptr_val_def])
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (BoolChain _ _) _`]
+  >- (`!d r l es. deploy_blocks_frame (compile_bool_chain_ops cfn cenv d r l es)` by
+        (rpt gen_tac >>
+         irule (specialize_frame symbolic_frame_compile_bool_chain_ops) >> simp[]) >>
+      simp[deploy_blocks_frame_def, compile_builtin_dispatch_body_def] >>
+      rpt strip_tac >> simp[deploy_blocks_frame_equation] >>
+      gvs[pairTheory.ELIM_UNCURRY, deploy_blocks_frame_equation]) >>
   simp[deploy_blocks_frame_def, compile_builtin_dispatch_body_def] >>
   rpt strip_tac >> rpt IF_CASES_TAC >>
   simp[deploy_blocks_frame_equation,

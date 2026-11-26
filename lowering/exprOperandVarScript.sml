@@ -1182,7 +1182,9 @@ Proof
   >~ [`compile_builtin_dispatch_body _ _ _ _ (Slice _) _ _`] >- suspend "slice"
   >~ [`compile_builtin_dispatch_body _ _ _ _ (MakeArray _ _) _ _`] >- suspend "array"
   >~ [`compile_builtin_dispatch_body _ _ _ _ MethodId _ _`] >- suspend "method"
-  >~ [`compile_builtin_dispatch_body _ _ _ _ (AsWeiValue _) _ _`] >- suspend "wei" >>
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (AsWeiValue _) _ _`] >- suspend "wei"
+  >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst _ _`] >- suspend "namedconst"
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (BoolChain _ _) _ _`] >- suspend "boolchain" >>
   simp[compile_builtin_dispatch_body_def, LET_THM]
   >~ [`compile_acc _ _ _ _ _`] >-
     (builtin_stack_var_tac >> metis_tac[compiler_acc_var])
@@ -1245,6 +1247,35 @@ Proof
   builtin_stack_var_tac >>
   metis_tac[exprSafeOperandBuiltinsTheory.compile_ecrecover_safe_operand,
             exprSafeOperandTheory.safe_operand_def]
+QED
+
+Resume compiler_builtin_var[namedconst]:
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  pairarg_tac >> gvs[] >>
+  rename1 `lower_value _ _ _ _ _ = (op,s1)` >>
+  Cases_on `is_word_type rt` >> Cases_on `op` >>
+  gvs[as_stack_val_def, as_ptr_val_def, contextTheory.vv_operand_def,
+      contextTheory.mk_ptr_def] >>
+  rpt strip_tac >> gvs[contextTheory.vv_operand_def] >> metis_tac[]
+QED
+
+Resume compiler_builtin_var[boolchain]:
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[contextTheory.vv_operand_def] >>
+  rename [`fresh_var sa = (res,s1)`, `fresh_label _ s1 = (ex,s2)`,
+          `compile_bool_chain_ops _ _ direction res ex
+             (bool_chain_operands direction (budget - 1) _) s2 = (_,s3)`] >>
+  `not_fresh_at s1 res` by
+    (drule fresh_var_safe_operand >> simp[safe_operand_def]) >>
+  `ci_mono s1 s2` by metis_tac[ci_mono_fresh_label, pairTheory.SND] >>
+  `ci_mono s2 s3` by
+    (`ci_mono s2 (SND (compile_bool_chain_ops cfn cenv direction res ex
+                          (bool_chain_operands direction (budget - 1) (HD args)) s2))` by
+       simp[ci_mono_compile_bool_chain_ops, ci_mono_lower_value_cfn] >>
+     gvs[]) >>
+  `ci_mono s3 sb` by metis_tac[ci_mono_new_block, pairTheory.SND] >>
+  metis_tac[compiler_ci_mono_not_fresh]
 QED
 
 Resume compiler_builtin_var[bop]:
@@ -2293,7 +2324,8 @@ Proof
   >~ [`Bop _`] >- suspend "bop"
   >~ [`Slice _`] >- suspend "slice"
   >~ [`MakeArray _ _`] >- suspend "array"
-  >~ [`Concat _`] >- suspend "concat" >>
+  >~ [`Concat _`] >- suspend "concat"
+  >~ [`BoolChain _ _`] >- suspend "boolchain" >>
   simp[compile_builtin_dispatch_body_def, LET_THM]
   >~ [`compile_acc _ _ _ _ _`] >-
     (AP_TERM_TAC >> irule compiler_acc_reserved_cong >> simp[])
@@ -2301,6 +2333,41 @@ Proof
   >~ [`compile_mulmod`] >- rpt compiler_reserved_pair_tac
   >~ [`compile_ecrecover`] >- rpt compiler_reserved_pair_tac >>
   rpt compiler_reserved_pair_tac
+QED
+
+Resume compiler_builtin_reserved_cong[boolchain]:
+  rename1 `BoolChain is_and n` >>
+  `!es res ex s. local_ptrs_reserved ce s ==>
+     compile_bool_chain_ops f ce is_and res ex es s =
+     compile_bool_chain_ops g ce is_and res ex es s` by
+    (Induct_on `es` >- simp[compile_bool_chain_ops_def] >>
+     rpt gen_tac >> strip_tac >> Cases_on `es`
+     >- (once_rewrite_tac[compile_bool_chain_ops_def] >>
+         irule compiler_reserved_bind_cong >> simp[ci_mono_lower_value_cfn] >>
+         qexists `ce` >> simp[]) >>
+     once_rewrite_tac[compile_bool_chain_ops_def] >>
+     irule compiler_reserved_bind_cong >> simp[ci_mono_lower_value_cfn] >>
+     qexists `ce` >> simp[] >>
+     rpt gen_tac >> strip_tac >> Cases_on `is_and` >>
+     simp[] >>
+     rpt (FIRST [irule compiler_reserved_bind_cong,
+                 irule compiler_reserved_ignore_bind_cong] >>
+          simp[ci_mono_bind, ci_mono_comp_return, ci_mono_fresh_label,
+               ci_mono_emit_inst, ci_mono_new_block] >>
+          qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac) >>
+     simp[]) >>
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  pairarg_tac >> simp[] >>
+  rename1 `fresh_var sa = (res,s1)` >>
+  `local_ptrs_reserved ce s1` by
+    (irule compiler_ci_mono_reserved >> qexists `sa` >>
+     metis_tac[ci_mono_fresh_var, pairTheory.SND]) >>
+  pairarg_tac >> simp[] >>
+  rename1 `fresh_label _ s1 = (ex,s2)` >>
+  `local_ptrs_reserved ce s2` by
+    (irule compiler_ci_mono_reserved >> qexists `s1` >>
+     metis_tac[ci_mono_fresh_label, pairTheory.SND]) >>
+  simp[]
 QED
 
 Resume compiler_builtin_reserved_cong[bop]:
@@ -2491,8 +2558,16 @@ Resume compiler_expr_body_reserved_cong[builtin]:
   >~ [`ECAdd`] >- suspend "builtin_ecadd"
   >~ [`ECMul`] >- suspend "builtin_ecmul"
   >~ [`PowMod256`] >- suspend "builtin_powmod"
+  >~ [`NamedConst`] >- suspend "builtin_namedconst"
+  >~ [`BoolChain _ _`] >- suspend "builtin_boolchain"
 QED
 
+Resume compiler_expr_body_reserved_cong[builtin_namedconst]:
+  simp[compile_expr_body_def, LET_THM]
+QED
+Resume compiler_expr_body_reserved_cong[builtin_boolchain]:
+  simp[compile_expr_body_def, LET_THM]
+QED
 Resume compiler_expr_body_reserved_cong[builtin_len]:
   simp[compile_expr_body_def, LET_THM]
 QED

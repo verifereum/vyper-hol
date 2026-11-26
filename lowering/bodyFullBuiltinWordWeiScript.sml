@@ -3,7 +3,7 @@ Theory bodyFullBuiltinWordWei
 Ancestors
   bodyFullShadowBodyInv
   bodyFullBuiltinWordWeiPrefix bodyFullBuiltinWordWeiContinuation
-  bodyFullPreds bodySimFull exprSimSource gasOutcomeFullCompose
+  bodyFullPreds bodyFullSimProjection bodySimFull exprSimSource gasOutcomeFullCompose
   exprSimWordBuiltins gasShadowCompileStmtHelpers bodyInvCodeProps exprBodyPreProps
   exprLoweringProps exprSimUnopProps fragExec exprSimDefs gasExemptCert
   vyperStorageTrace vyperStorageFootprint gasStorage compileEnv vyperTypeSystem vyperContext vyperAST list
@@ -44,7 +44,7 @@ Proof
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by
     (fs[builtin_args_length_ok_def, body_exprs_full_ok_def] >>
-     fs[body_expr_full_ok_def] >> metis_tac[]) >>
+     drule_all body_expr_full_ok_simulations >> simp[]) >>
   conj_asm1_tac
   >- (rw[expr_sim_full_def] >>
       qpat_assum `lower_value _ _ _ (Builtin _ _ _) sa = _`

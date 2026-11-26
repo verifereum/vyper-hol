@@ -435,7 +435,8 @@ Theorem storage_pop_step_load[local]:
   step_inst_base (mk_inst id (if tr then TLOAD else SLOAD) [Lit slot] [out]) s =
     OK (update_var out (if tr then tload slot s else sload slot s) s)
 Proof
-  Cases_on `tr` >> simp[step_inst_base_def, exec_read1_def, mk_inst_def, eval_operand_def]
+  Cases_on `tr` >>
+  simp[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def, eval_operand_def]
 QED
 
 Theorem storage_pop_step_store[local]:
@@ -445,7 +446,7 @@ Theorem storage_pop_step_store[local]:
         else sstore slot (THE (lookup_var x s)) s)
 Proof
   Cases_on `tr` >> Cases_on `lookup_var x s` >>
-  simp[step_inst_base_def, exec_write2_def, mk_inst_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def, eval_operand_def]
 QED
 
 Theorem storage_pop_step_store_static[local]:

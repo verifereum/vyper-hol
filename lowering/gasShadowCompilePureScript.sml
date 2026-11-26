@@ -69,7 +69,20 @@ Proof
   >- (rename1 `gas_shadow_builtin bi` >>
       Cases_on `bi` >>
       simp[gas_shadow_builtin_def, lowered_value_type_def, expr_type_def,
-           MAP_MAP_o, combinTheory.o_DEF] >>
+           MAP_MAP_o, combinTheory.o_DEF]
+      >~ [`lowered_value_type _ (Builtin _ NamedConst _) = _`]
+      >- (rename1 `MAP gas_shadow_expr args` >>
+          Cases_on `args` >> simp[lowered_value_type_def, expr_type_def] >>
+          rename1 `_ = lowered_value_type _ (Builtin _ NamedConst (head::tail))` >>
+          Cases_on `tail` >> simp[lowered_value_type_def, expr_type_def] >>
+          Cases_on `head` >>
+          simp[gas_shadow_expr_def, lowered_value_type_def, expr_type_def] >>
+          rename1 `_ = lowered_value_type _ (Builtin ann NamedConst _)` >>
+          Cases_on `ann` >> simp[lowered_value_type_def, expr_type_def] >>
+          rename1 `Builtin (BaseT base) NamedConst _` >>
+          Cases_on `base` >> simp[lowered_value_type_def, expr_type_def] >>
+          rename1 `Builtin (BaseT (BytesT bound)) NamedConst _` >>
+          Cases_on `bound` >> simp[lowered_value_type_def, expr_type_def]) >>
       IF_CASES_TAC >> simp[lowered_value_type_def, expr_type_def]) >>
   rename1 `MAP gas_shadow_expr args` >>
   rename1 `TypeBuiltin ann tb ret_ty _` >>

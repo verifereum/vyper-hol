@@ -59,14 +59,8 @@ Theorem ptr_dalloca_persistent_next:
      eval_operand a t = eval_operand a s /\
      op_taint un v SUBSET op_taint tn v) /\
   (MEM inst.inst_opcode [CALL;DELEGATECALL;CREATE;CREATE2] ==>
-    ((~t.vs_call_ctx.cc_static /\ postT.vs_requests <> t.vs_requests /\
-        ~computed_precompile (LAST postT.vs_requests) /\
-      postT.vs_outcomes <> t.vs_outcomes /\
-        ((HD t.vs_outcomes).co_success \/ MEM inst.inst_opcode [CREATE;CREATE2])) =
-     (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST post.vs_requests) /\
-      post.vs_outcomes <> s.vs_outcomes /\
-        ((HD s.vs_outcomes).co_success \/ MEM inst.inst_opcode [CREATE;CREATE2])))) ==>
+    ((adopt_guard t.vs_call_ctx.cc_static t postT ((HD t.vs_outcomes).co_success \/ MEM inst.inst_opcode [CREATE;CREATE2])) =
+     (adopt_guard s.vs_call_ctx.cc_static s post ((HD s.vs_outcomes).co_success \/ MEM inst.inst_opcode [CREATE;CREATE2])))) ==>
   (step_taint instT t postT un).t_stor SUBSET
     (step_taint inst s post tn).t_stor /\
   (step_taint instT t postT un).t_trans SUBSET
@@ -92,10 +86,7 @@ QED
 Theorem ptr_dalloca_noncall_reset_step:
   MEM inst.inst_opcode [DELEGATECALL;CREATE;CREATE2] /\
   step_inst fuel C inst s = OK post ==>
-  ((~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
-    ~computed_precompile (LAST post.vs_requests) /\
-    post.vs_outcomes <> s.vs_outcomes /\
-    ((HD s.vs_outcomes).co_success \/ MEM inst.inst_opcode [CREATE;CREATE2])) <=>
+  ((adopt_guard s.vs_call_ctx.cc_static s post ((HD s.vs_outcomes).co_success \/ MEM inst.inst_opcode [CREATE;CREATE2])) <=>
    (~s.vs_call_ctx.cc_static /\
     ((HD s.vs_outcomes).co_success \/ MEM inst.inst_opcode [CREATE;CREATE2])))
 Proof

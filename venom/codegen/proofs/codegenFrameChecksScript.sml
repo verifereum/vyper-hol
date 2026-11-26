@@ -190,8 +190,8 @@ Theorem initial_ctx_rel_fresh_nonvacuity:
 Proof
   simp[initial_ctx_rel_def, frame_probe_fn_def, mk_venom_context_def,
        frame_probe_vs_def, frame_probe_es_def, make_asm_call_state_def,
-       asm_oracle_initial_def, frame_probe_encoding, frame_probe_trace,
-       initial_state_rel_def, initial_codegen_state_rel_def,
+       frame_probe_encoding, frame_probe_trace] >>
+  simp[initial_state_rel_def, initial_codegen_state_rel_def, asm_oracle_initial_def,
        stack_params_rel_def, mk_raw_function_def, get_params_def,
        is_param_opcode_def, mk_inst_def, init_venom_state_def,
        context_memory_rel_def, context_spill_byte_def,
@@ -200,11 +200,14 @@ Proof
        asm_to_tx_params_def, make_sub_tx_def, make_rollback_def,
        initial_msg_params_def, vfmContextTheory.initial_context_def,
        empty_return_destination_def, transfer_value_def, asm_pc_to_offset_def,
-       wf_state_def, wf_context_def, all_accounts_def, wf_accounts_def,
+       FLOOKUP_UPDATE, lookup_account_def, account_empty_def,
+       empty_account_state_def] >>
+  simp[wf_state_def, wf_context_def, all_accounts_def, wf_accounts_def,
        stack_room_ok_def, gas_stack_ok_def, outputTo_consistent_stack_def,
        outputTo_consistent_ctx_def, empty_accounts_def, stack_limit_def,
-       context_limit_def, FLOOKUP_UPDATE, lookup_account_def,
-       account_empty_def, empty_account_state_def, wf_account_state_def] >>
+       context_limit_def, empty_return_destination_def, FLOOKUP_UPDATE,
+       lookup_account_def, empty_account_state_def, wf_account_state_def,
+       frame_probe_encoding] >>
   simp[dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
   gen_tac >> IF_CASES_TAC >> simp[]
 QED
@@ -333,8 +336,10 @@ Proof
      simp[Abbr `pre`, step_inner_def, get_current_context_def, bind_def, return_def] >>
      simp[Abbr `c`, vfmContextTheory.initial_context_def, initial_msg_params_def,
           frame_return_probe_encoding, frame_revert_probe_encoding, FLOOKUP_UPDATE] >>
-     simp[step_inst_def, step_return_def, pop_stack_def,
-          memory_expansion_info_def, memory_expansion_cost_def,
+     simp[step_inst_def] >>
+     simp[step_return_def, pop_stack_def, get_current_context_def,
+          set_current_context_def, bind_def, ignore_bind_def, return_def] >>
+     simp[memory_expansion_info_def, memory_expansion_cost_def,
           consume_gas_def, expand_memory_def, read_memory_def, set_return_data_def,
           revert_def, finish_def, get_current_context_def, set_current_context_def,
           bind_def, ignore_bind_def, return_def, assert_def, static_gas_def] >>

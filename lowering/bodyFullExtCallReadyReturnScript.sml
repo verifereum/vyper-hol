@@ -143,7 +143,7 @@ Theorem extcall_ready_return_outcome:
               (Call ann (ExtCall is_static skip (fname,arg_types,ret_type)
                  opts) args dflt)) sa sb (ee with gas_obs := []) tv vv t' /\
          ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn') \/
-         (exit_result r /\ expr_exit res r)))) ==>
+         (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r)))) ==>
   !DF lo d explicit ctx PG func cenv cx env es ann stat skip fname
    arg_types ret_type opts args dflt st0 sa sb s0 G0 tn0 sp sr u result_op vv
    addr value gas buf off len cap target target_v rest value_opt calldata
@@ -311,5 +311,5 @@ Proof
       qpat_assum `vv = _` SUBST1_TAC >> POP_ASSUM_LIST kall_tac >>
       Cases_on `ret_type = NoneT` >> simp[mk_ptr_def]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  disj2_tac >> conj_tac >> first_assum ACCEPT_TAC
+  disj2_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
