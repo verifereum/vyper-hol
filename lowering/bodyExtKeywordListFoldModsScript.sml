@@ -110,7 +110,15 @@ Proof
   >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`SUM_MAP (CONS v) I res`, `ee`, `r`, `G'`, `tn'`] >>
       simp[] >> conj_tac >- (rpt strip_tac >> irule keyword_cons_source >> simp[]) >>
-      rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[] >> metis_tac[]) >>
+      rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >>
+      disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac)
+      >- (disj1_tac >> qexists_tac `t` >> simp[] >> qexists_tac `res` >> simp[]) >>
+      disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac
+      >- (irule createSizeExitTheory.create_size_exit_ok_map >>
+          simp[sumTheory.SUM_MAP_def]) >>
+      qexists_tac `res` >> simp[]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
