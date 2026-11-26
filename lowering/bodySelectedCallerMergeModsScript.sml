@@ -8,6 +8,14 @@ Ancestors
   stateRelProj bodyInvSplit bodyInvCodeProps vyperImmutableMetadataFrame vyperState
   venomMemDefs venomExecSemantics ptrDiscipline bodyPtrDefs compileEnv finite_map
   exprSimProps loweringPosts fnRunFields execMemoryLength list
+  gasOutcomeFull gasOutcomeFullMods fragGasOriginPtr vyperStorageFootprint
+  bodySelectedReturnSourceSuccessMods bodySelectedReturnFocusMods
+  bodySelectedReturnAbortMods bodySelectedInvokeReturnEdgeMods
+  bodySelectedResultStoresMods bodySelectedStoredCallerFrameMods
+  bodySelectedStoredReturnValueMods bodySelectedCallerSretMods
+  bodySelectedNoBufferReturnMods bodySelectedReturnUnwrapMods
+  bodyFullIntCallReturnTyping
+Libs monadsyntax
 
 Theorem caller_local_registered_bound[local]:
   local_ptrs_rel func ce scopes t /\ local_region ce scopes t n b sz ==>
@@ -438,4 +446,35 @@ Proof
   drule_all caller_merge_ghost >> strip_tac >>
   drule_all caller_merge_kept >> strip_tac >>
   asm_rewrite_tac[storage_well_formed_on_scopes]
+QED
+
+(* The same marks and endpoint serve both the complete and bad-domain arms. *)
+Theorem caller_return_endpoint_outcome[local]:
+  (!tail. source (es with gas_obs := gas_explicit marks t.vs_gas_readings ++ tail) =
+     (res,ee with gas_obs := tail)) /\
+  storage_trace_domain cx st0 observations /\
+  (!H. valid_horizon cx st0 H observations ==>
+       valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       valid_horizon cx st0 H observations) /\
+  (!H. valid_horizon cx st0 H observations ==>
+       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G,tn) marks (OK z,J,N)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       Q H res (ee with gas_obs := []) J N z) ==>
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0 source (es,t,G,tn) Q R
+Proof
+  strip_tac >> pure_rewrite_tac[gas_outcome_full_mods_def] >> qexists_tac `marks` >>
+  Cases_on `storage_trace_domain cx st0 ee.storage_trace`
+  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`,`ee`,`OK z`,`J`,`N`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      gen_tac >> strip_tac >> simp[] >>
+      qpat_assum `!H. valid_horizon _ _ H observations ==> gas_origin_ptr_path _ _ _ _` irule >>
+      simp[]) >>
+  disj1_tac >> conj_tac
+  >- (irule gas_bad_storage_at_endpoint >> qexistsl_tac [`ee`,`res`] >> simp[]) >>
+  `valid_horizon cx st0 (storage_trace_horizon observations) observations` by
+    fs[storage_trace_domain_def] >>
+  qexistsl_tac [`storage_trace_horizon observations`,`func`,`PG`,`J`,`N`,`z`] >>
+  conj_tac >- simp[] >>
+  irule (cj 1 gas_origin_ptr_focus_rules) >> simp[]
 QED
