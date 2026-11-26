@@ -103,9 +103,7 @@ val snapshot_base = ``
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts``;
 
-Theorem qualified_snapshot_store_entry_mods:
-  ^snapshot_base ==>
-  ?p dw src sw su z Gz tz rt.
+val snapshot_store_ready = ``
     saved = LocatedValue (lowered_value_type ce e) (mk_ptr (Var p) LocMemory) /\
     compile_store_memory ce src (Var p) (lowered_value_type ce e)
       (lowered_value_type ce e) su = ((),sr) /\
@@ -145,7 +143,12 @@ Theorem qualified_snapshot_store_entry_mods:
     s0.vs_alloca_next <= z.vs_alloca_next /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       stmt_state_rel H ctx func ce cx ee z /\ immutable_frame_mods func ce cx ee z /\
-      storage_well_formed_on cx ee (FST H) /\ ghost_inv_at_mods (DF H) lo d ce cx ee Gz tz z)
+      storage_well_formed_on cx ee (FST H) /\ ghost_inv_at_mods (DF H) lo d ce cx ee Gz tz z)``;
+
+Theorem qualified_snapshot_store_entry_pure_mods:
+  ^snapshot_base ==>
+  ?p dw src sw su z Gz tz rt.
+    (~expr_has_effect e ==> pure_frame ce func es sa s0 z) /\ ^snapshot_store_ready
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee)` by
@@ -171,7 +174,7 @@ Proof
   suspend "unwrap"
 QED
 
-Resume qualified_snapshot_store_entry_mods[unwrap]:
+Resume qualified_snapshot_store_entry_pure_mods[unwrap]:
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
     (drule_then strip_assume_tac compile_expr_extends >> simp[]) >>
   `sm.cs_next_var <= k.cs_next_var /\ sm.cs_next_id <= k.cs_next_id` by fs[ci_mono_def] >>
@@ -201,7 +204,7 @@ Resume qualified_snapshot_store_entry_mods[unwrap]:
   suspend "transport"
 QED
 
-Resume qualified_snapshot_store_entry_mods[transport]:
+Resume qualified_snapshot_store_entry_pure_mods[transport]:
   qpat_x_assum `a = araw with vs_inst_idx := _` kall_tac >>
   `k.cs_next_var <= su.cs_next_var /\ k.cs_next_id <= su.cs_next_id /\
    su.cs_next_var <= sr.cs_next_var /\ su.cs_next_id <= sr.cs_next_id` by fs[ci_mono_def] >>
@@ -249,10 +252,16 @@ Resume qualified_snapshot_store_entry_mods[transport]:
      rpt strip_tac >> drule_all_then ACCEPT_TAC wb_frame_vars) >>
   `!x. not_fresh_at sa x ==> not_fresh_at su x` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists `sa` >> simp[]) >>
+  `~expr_has_effect e ==> pure_frame ce func es sa s0 z` by
+    (disch_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post_mods _ _ _ _ _ _ _ _ su _ _ _ _ z /\ _`
+       (qspec_then `storage_trace_horizon ee.storage_trace` (drule_then
+         (strip_assume_tac o REWRITE_RULE [expr_post_mods_def]))) >>
+     drule_all_then ACCEPT_TAC expr_post_pure_frame) >>
   suspend "package"
 QED
 
-Resume qualified_snapshot_store_entry_mods[source_name]:
+Resume qualified_snapshot_store_entry_pure_mods[source_name]:
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
     (gen_tac >> strip_tac >>
      drule_at (Pat `compile_expr _ _ _ _ = _`) (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
@@ -263,7 +272,7 @@ Resume qualified_snapshot_store_entry_mods[source_name]:
   rpt strip_tac >> drule_all_then ACCEPT_TAC exprOperandVarTheory.compiler_unwrap_value_var
 QED
 
-Resume qualified_snapshot_store_entry_mods[horizons]:
+Resume qualified_snapshot_store_entry_pure_mods[horizons]:
   conj_tac
   >- (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post_mods _ _ _ _ _ _ _ _ su _ _ _ _ z /\ _`
         (qspec_then `storage_trace_horizon ee.storage_trace` (mp_tac o REWRITE_RULE [expr_post_mods_def])) >>
@@ -276,7 +285,7 @@ Resume qualified_snapshot_store_entry_mods[horizons]:
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume qualified_snapshot_store_entry_mods[package]:
+Resume qualified_snapshot_store_entry_pure_mods[package]:
   `MEM (mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_size rt))] [p]) (fn_insts func)` by
     (drule_all_then mp_tac buffer_alloc_code >>
      drule_then strip_assume_tac compile_alloc_buffer_parts >> fs[]) >>
@@ -311,7 +320,7 @@ Resume qualified_snapshot_store_entry_mods[package]:
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume qualified_snapshot_store_entry_mods[alloc_ghost]:
+Resume qualified_snapshot_store_entry_pure_mods[alloc_ghost]:
   qpat_x_assum `Ga = step_prov _ _ _ _` kall_tac >>
   qpat_x_assum `ta = step_taint _ _ _ _` kall_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post_mods _ _ _ _ _ _ _ _ sm _ _ _ _ s /\ _`
@@ -334,4 +343,15 @@ Resume qualified_snapshot_store_entry_mods[alloc_ghost]:
   goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >> simp[]
 QED
 
-Finalise qualified_snapshot_store_entry_mods
+Finalise qualified_snapshot_store_entry_pure_mods
+
+Theorem qualified_snapshot_store_entry_mods:
+  ^snapshot_base ==>
+  ?p dw src sw su z Gz tz rt. ^snapshot_store_ready
+Proof
+  disch_then (mp_tac o MATCH_MP qualified_snapshot_store_entry_pure_mods) >>
+  disch_then (qx_choosel_then [`p`,`dw`,`src`,`sw`,`su`,`z`,`Gz`,`tz`,`rt`]
+    (assume_tac o CONJUNCT2)) >>
+  qexistsl_tac [`p`,`dw`,`src`,`sw`,`su`,`z`,`Gz`,`tz`,`rt`] >>
+  first_assum ACCEPT_TAC
+QED
