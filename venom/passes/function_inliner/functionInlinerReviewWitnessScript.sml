@@ -8,6 +8,7 @@
  *   inliner_phi_cover_witness       -- a PHI missing a predecessor
  *   inliner_retpc_arity_witness     -- the return-PC slot binds a PARAM
  *   inliner_rdc_split_witness       -- the call site splits an RDC pair
+ *   inliner_rfp_cut_witness         -- inlining creates an RDC pair
  *   inliner_param_dalloca_name_witness -- PARAM and DALLOCA share a name
  *   inliner_two_root_arg_witness    -- a readonly argument with two roots
  *)
@@ -118,10 +119,15 @@ val shape_tac =
   >- (irule every_defs_reach_uses_check >> EVAL_TAC)
   >> qexists_tac `witness_rank` >> EVAL_TAC;
 
+val guard_tac =
+  rewrite_tac[inliner_input_guard_def] >> conj_tac
+  >- (match_mp_tac rfp_self_contained_check_guard >> EVAL_TAC)
+  >> EVAL_TAC;
+
 val premises_tac =
   rpt conj_tac
   >- EVAL_TAC
-  >- EVAL_TAC
+  >- guard_tac
   >> irule stage_ptr_ok_from_eval >> EVAL_TAC;
 
 (* The clauses of inliner_shape_ok that reject the review's inputs. *)
@@ -154,13 +160,13 @@ Proof
   disch_then drule >> simp[EVERY_MEM]
 QED
 
-Theorem shape_ok_rfp[local]:
-  inliner_shape_ok C /\ MEM fn (reachable_ctx C).ctx_functions /\
+Theorem guard_rfp[local]:
+  inliner_input_guard C /\ MEM fn (reachable_ctx C).ctx_functions /\
   MEM bb fn.fn_blocks /\ revert_forward_pair bb i j ==>
   revert_forward_pair
     (bb with bb_instructions := DROP i bb.bb_instructions) 0 (j - i)
 Proof
-  simp[inliner_shape_ok_def] >> metis_tac[]
+  simp[inliner_input_guard_def] >> metis_tac[]
 QED
 
 (* A pointer variable defined by copying a non-pointer. *)
@@ -374,6 +380,11 @@ Proof
   pop_assum mp_tac >> EVAL_TAC
 QED
 
+(* The pruned output, evaluated once. *)
+val phi_cover_out_eval =
+  EVAL ``reachable_fn_eval
+           (HD (function_inliner_ctx 0 phi_cover_ctx).ctx_functions)``;
+
 Theorem phi_cover_out_not_ptr_ok:
   ~fn_ptr_ok P
      (reachable_fn (HD (function_inliner_ctx 0 phi_cover_ctx).ctx_functions))
@@ -381,7 +392,8 @@ Proof
   qabbrev_tac `out = HD (function_inliner_ctx 0 phi_cover_ctx).ctx_functions` >>
   `wf_function out` by (unabbrev_all_tac >> EVAL_TAC) >>
   drule reachable_fn_eval >> disch_then SUBST1_TAC >>
-  qabbrev_tac `fn = reachable_fn_eval out` >>
+  unabbrev_all_tac >> rewrite_tac[phi_cover_out_eval] >>
+  qmatch_goalsub_abbrev_tac `fn_ptr_ok P fn` >>
   `EVERY (\i. i.inst_opcode <> PARAM) (fn_insts fn)` by
     (unabbrev_all_tac >> EVAL_TAC) >>
   `ptr_roots P fn = set ["ptr"]` by
@@ -420,7 +432,7 @@ Proof
   rpt conj_tac
   >- EVAL_TAC
   >- ACCEPT_TAC phi_cover_not_shape_ok
-  >- EVAL_TAC
+  >- guard_tac
   >> irule stage_ptr_ok_from_eval >> EVAL_TAC
 QED
 
@@ -459,19 +471,19 @@ Proof
   simp[revert_forward_pair_def] >> EVAL_TAC >> simp[]
 QED
 
-Theorem rdc_not_shape_ok[local]:
-  ~inliner_shape_ok rdc_split_ctx
+Theorem rdc_not_guard[local]:
+  ~inliner_input_guard rdc_split_ctx
 Proof
   strip_tac >>
   drule (Q.INST [`fn` |-> `HD rdc_split_ctx.ctx_functions`,
                  `bb` |-> `HD (HD rdc_split_ctx.ctx_functions).fn_blocks`,
-                 `i` |-> `3`, `j` |-> `4`] shape_ok_rfp) >>
+                 `i` |-> `3`, `j` |-> `4`] guard_rfp) >>
   rewrite_tac[GSYM rfp_check_eq] >> EVAL_TAC
 QED
 
 Theorem inliner_rdc_split_witness:
   C = rdc_split_ctx /\ C' = function_inliner_ctx 0 C ==>
-  lowering_context_ok C /\ ~inliner_shape_ok C /\ inliner_input_guard C /\
+  lowering_context_ok C /\ inliner_shape_ok C /\ ~inliner_input_guard C /\
   (?P W. (!nm. W nm SUBSET P nm) /\
          EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
            C.ctx_functions /\ inline_ptr_ok P W (reachable_ctx C)) /\
@@ -479,8 +491,11 @@ Theorem inliner_rdc_split_witness:
   ~revert_forward_pair (EL 1 (HD C'.ctx_functions).fn_blocks) 0 1
 Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  simp[rdc_pair_in_input, rdc_pair_split_in_output, rdc_not_shape_ok] >>
-  premises_tac
+  simp[rdc_pair_in_input, rdc_pair_split_in_output, rdc_not_guard] >>
+  rpt conj_tac
+  >- EVAL_TAC
+  >- shape_tac
+  >> irule stage_ptr_ok_from_eval >> EVAL_TAC
 QED
 
 (* ===== Finding 5: a forwarded argument with two roots ===== *)
@@ -533,7 +548,57 @@ Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   rpt conj_tac
   >- shape_tac
-  >- EVAL_TAC
+  >- guard_tac
   >- (irule stage_ptr_ok_from_eval >> EVAL_TAC)
   >> irule stage_ptr_ok_from_eval >> EVAL_TAC
+QED
+
+(* ===== Revert-forward pairs the inliner creates ===== *)
+
+(* Inlining turns the callee's PARAM into an ASSIGN of the caller's literal,
+   which makes the copy and revert a revert-forward pair in the output
+   whose source resolves only through that ASSIGN. *)
+Definition rfp_cut_ctx_def:
+  rfp_cut_ctx =
+    mk_venom_context
+      [mk_raw_function "entry"
+         [witness_block "entry"
+            [mk_inst 0 INVOKE [Label "callee"; Lit 0w] [];
+             mk_inst 1 STOP [] []]];
+       mk_raw_function "callee"
+         [witness_block "callee"
+            [mk_inst 10 PARAM [Lit 0w] ["z"];
+             mk_inst 11 RETPC_PARAM [Lit 1w] ["pc"];
+             mk_inst 12 ALLOCA [Lit 32w] ["p"];
+             mk_inst 13 RETURNDATACOPY [Var "p"; Var "z"; Lit 0w] [];
+             mk_inst 14 REVERT [Var "p"; Lit 0w] []]]]
+      (SOME "entry")
+End
+
+Definition rfp_cut_out_block_def:
+  rfp_cut_out_block =
+    EL 2 (HD (function_inliner_ctx 0 rfp_cut_ctx).ctx_functions).fn_blocks
+End
+
+(* The input meets every syntactic premise; the inlined callee block holds a
+   pair at (3,4) whose source resolves only through the inlined PARAM, so
+   the pair is gone once the block is cut at 3. The cut clause is therefore
+   a guard on the input, not part of the shape the output keeps. *)
+Theorem inliner_rfp_cut_witness:
+  C = rfp_cut_ctx ==>
+  inliner_shape_ok C /\ inliner_input_guard C /\
+  (?P W. (!nm. W nm SUBSET P nm) /\
+         EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
+           C.ctx_functions /\ inline_ptr_ok P W (reachable_ctx C)) /\
+  revert_forward_pair rfp_cut_out_block 3 4 /\
+  ~revert_forward_pair
+     (rfp_cut_out_block with
+        bb_instructions := DROP 3 rfp_cut_out_block.bb_instructions) 0 1
+Proof
+  strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  rpt conj_tac
+  >- shape_tac
+  >- guard_tac
+  >- (irule stage_ptr_ok_from_eval >> EVAL_TAC)
+  >> rewrite_tac[GSYM rfp_check_eq] >> EVAL_TAC
 QED

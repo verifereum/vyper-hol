@@ -48,10 +48,6 @@ Definition inliner_shape_ok_def:
          LENGTH (get_params (fn_entry_insts callee)) /\
        EVERY (\r. raw_return_user_arity r = SOME (LENGTH inst.inst_outputs))
          (fn_return_insts callee)) /\
-    (!fn bb i j. MEM fn R.ctx_functions /\ MEM bb fn.fn_blocks /\
-       revert_forward_pair bb i j ==>
-       revert_forward_pair
-         (bb with bb_instructions := DROP i bb.bb_instructions) 0 (j - i)) /\
     (!fn other. MEM fn R.ctx_functions /\ MEM other R.ctx_functions /\
        fn.fn_name <> other.fn_name ==> ~MEM other.fn_name (fn_labels fn)) /\
     (!entry fn inst args.
@@ -64,9 +60,17 @@ Definition inliner_shape_ok_def:
 End
 
 (* Inlining introduces "inl" names and grows the caller's entry block.
-   The proof of the loop tracks the name counter and the original prologue. *)
+   The proof of the loop tracks the name counter and the original prologue.
+   Each revert-forward pair of the input stays one when its block is cut at
+   the pair's start, as inlining may cut it there. This is asked of the
+   input only: inlining a PARAM as an ASSIGN can create new pairs in the
+   output that fail it (inliner_rfp_cut_witness). *)
 Definition inliner_input_guard_def:
   inliner_input_guard C <=>
+    (!fn bb i j. MEM fn (reachable_ctx C).ctx_functions /\
+       MEM bb fn.fn_blocks /\ revert_forward_pair bb i j ==>
+       revert_forward_pair
+         (bb with bb_instructions := DROP i bb.bb_instructions) 0 (j - i)) /\
     EVERY (\fn.
       LENGTH (fn_entry_insts fn) < dimword (:256) /\
       ~isPREFIX "inl" fn.fn_name /\

@@ -5,8 +5,9 @@
  *   inliner_shape_check, inliner_shape_check_sound
  *
  * The call-rank existential is checked against a rank the caller supplies.
- * PHI coverage and self-contained revert-forwarding pairs have their own
- * checks (phis_cover_preds_check, rfp_check_eq).
+ * PHI coverage has its own check (phis_cover_preds_check). Self-contained
+ * revert-forwarding pairs, a conjunct of inliner_input_guard, are checked by
+ * rfp_self_contained_check (rfp_self_contained_check_guard).
  * Definite assignment stays a premise: its executable check rejects PHIs.
  *)
 Theory functionInlinerShapeCheck
@@ -198,13 +199,22 @@ Proof
   disch_then (qspec_then `j` mp_tac) >> simp[MEM_FILTER, MEM_COUNT_LIST]
 QED
 
+(* The revert-forward conjunct of inliner_input_guard. *)
+Theorem rfp_self_contained_check_guard:
+  EVERY rfp_self_contained_check fns ==>
+  !fn bb i j. MEM fn fns /\ MEM bb fn.fn_blocks /\ revert_forward_pair bb i j ==>
+    revert_forward_pair
+      (bb with bb_instructions := DROP i bb.bb_instructions) 0 (j - i)
+Proof
+  rw[EVERY_MEM] >> metis_tac[rfp_self_contained_check_sound]
+QED
+
 (* ===== Inliner shape ===== *)
 
 Definition inliner_fn_shape_check_def:
   inliner_fn_shape_check R rank fn <=>
     canonical_param_prefix fn /\ opaque_use_check fn /\
     retpc_shape_check fn /\ phis_cover_preds_check fn /\
-    rfp_self_contained_check fn /\
     EVERY (\x. LENGTH (FILTER (\i. MEM x i.inst_outputs) (fn_insts fn)) = 1)
       (FLAT (MAP (\i. i.inst_outputs)
          (FILTER (\i. i.inst_opcode = PARAM) (fn_insts fn)))) /\
@@ -319,10 +329,6 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       `inliner_fn_shape_check R rank caller` by res_tac >>
       drule_all inliner_arity_check_sound >> simp[])
-  >- (rpt gen_tac >> strip_tac >>
-      `inliner_fn_shape_check R rank fn` by res_tac >>
-      fs[inliner_fn_shape_check_def] >>
-      metis_tac[rfp_self_contained_check_sound])
   >- (rpt gen_tac >> strip_tac >> res_tac >>
       fs[inliner_fn_shape_check_def, EVERY_MEM])
   >- (rpt gen_tac >> strip_tac >> CCONTR_TAC >> fs[] >>

@@ -1,6 +1,7 @@
 Theory functionInlinerPtrWitness
 Ancestors
-  functionInlinerContract functionInlinerPtrCheck functionInlinerDefs
+  functionInlinerContract functionInlinerPtrCheck functionInlinerShapeCheck
+  functionInlinerDefs
   ptrOkCheck ptrDiscipline
   pointerConfinedDefs unitShapeDefs memLocDefs vyperCompiler venomExecSemantics
   venomInst venomWf venomState defsReachCheck list pred_set
@@ -241,6 +242,10 @@ Theorem inliner_dalloca_input_witness:
    | _ => F)
 Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac
+  >- (rewrite_tac[inliner_input_guard_def] >> conj_tac
+      >- (match_mp_tac rfp_self_contained_check_guard >> EVAL_TAC) >>
+      EVAL_TAC) >>
   EVAL_TAC
 QED
 
