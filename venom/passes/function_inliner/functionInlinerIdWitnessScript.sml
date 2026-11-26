@@ -1,6 +1,6 @@
 Theory functionInlinerIdWitness
 Ancestors
-  functionInlinerDefs venomInst venomWf
+  functionInlinerDefs fcgDefs vyperCompiler venomInst venomWf
 Libs
   finite_mapLib wordsLib
 
@@ -27,11 +27,47 @@ Definition id_witness_ctx_def:
     (SOME "entry")
 End
 
-(* The helper is removed, but the rewritten entry and the untouched other
-   function both have an instruction numbered zero. *)
-Theorem inliner_renumbering_duplicates_id:
+(* The entry is rewritten, while the untouched function keeps instruction
+   zero. This context collided when rewriting renumbered the caller from 0. *)
+Theorem inliner_preserves_witness_ids:
   ctx_inst_ids_distinct id_witness_ctx /\
-  ~ctx_inst_ids_distinct (function_inliner_ctx 0 id_witness_ctx)
+  ctx_inst_ids_distinct (function_inliner_ctx 0 id_witness_ctx) /\
+  MAP (\fn. fn.fn_name) (function_inliner_ctx 0 id_witness_ctx).ctx_functions =
+    ["entry"; "other"]
 Proof
   EVAL_TAC
+QED
+
+Definition dead_caller_witness_ctx_def:
+  dead_caller_witness_ctx =
+    let other = mk_raw_function "other"
+          [<| bb_label := "other"; bb_instructions :=
+                [mk_inst 0 RETPC_PARAM [Lit 0w] ["other_pc"];
+                 mk_inst 6 INVOKE [Label "helper"] [];
+                 mk_inst 5 RET [Var "other_pc"] []] |>] in
+    id_witness_ctx with ctx_functions :=
+      TAKE 2 id_witness_ctx.ctx_functions ++ [other]
+End
+
+(* The entry's call is rewritten, but the dead caller is left alone.
+   Its call targets the function removed in the same inlining round. *)
+Theorem inliner_retains_dead_caller_with_removed_target:
+  let C = dead_caller_witness_ctx in
+  let walk = build_call_walk (fcg_analyze C) "entry" in
+  let ist = <| is_inline_count := 0; is_label_counter := 0;
+                is_next_inst_id := 7 |> in
+    lowering_context_ok C /\
+    (case function_inliner_round C walk 0 ist of
+       NONE => F
+     | SOME (out, _, _) =>
+         lookup_function "helper" out.ctx_functions = NONE /\
+         (case lookup_function "other" out.ctx_functions of
+            NONE => F
+          | SOME caller => EXISTS (\inst. inst.inst_opcode = INVOKE /\
+                                     inst.inst_operands = [Label "helper"])
+                                  (fn_insts caller)) /\
+         ~wf_invoke_targets out) /\
+    ~wf_invoke_targets (function_inliner_ctx 0 C)
+Proof
+  simp_tac std_ss [GSYM wf_invoke_targets_check_eq, LET_THM] >> EVAL_TAC
 QED
