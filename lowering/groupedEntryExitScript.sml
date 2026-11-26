@@ -1,7 +1,7 @@
 (* Matched exits before the grouped entry binds its arguments. *)
 Theory groupedEntryExit
 Ancestors
-  sourceUnitExecution e2eDefs gasSummary gasExplicitSites fragGasOriginPtr
+  createSizeExit sourceUnitExecution e2eDefs gasSummary gasExplicitSites fragGasOriginPtr
   fragGasOriginPtrExec fragExec fragExecPtr entryDispatchPtr ptrSafeRun
   ptrDiscipline vyperStorageFootprint venomInst venomState venomExecSemantics
   vyperCall vyperState vyperEvalReadingErrors list
@@ -23,6 +23,7 @@ Theorem grouped_entry_matched_exit:
     (gas_explicit marks vs.vs_gas_readings ++ tail) am tx = (res,am',rqs,obs)) /\
   res <> INR (Error (RuntimeError "msg.gas: no gas reading")) /\
   storage_trace_domain cx (initial_state am []) obs /\ exit_result r /\
+  create_size_exit_ok unit.cu_context res r /\
   (!H. valid_horizon cx (initial_state am []) H obs ==>
     external_call_result_rel H tops ret tx (res,am',rqs) r /\
     ?G tn. gas_origin_ptr_path
@@ -97,7 +98,8 @@ Proof
     grouped_entry_matched_exit)) >>
   simp[] >>
   qexistsl_tac [`Abort Revert_abort u`, `shadow_fn`] >>
-  simp[exit_result_def, external_call_result_rel_def] >>
+  simp[exit_result_def, external_call_result_rel_def,
+       createSizeExitTheory.create_size_exit_ok_non_exhalt] >>
   reverse conj_tac
   >- simp[storage_trace_domain_def, valid_horizon_def, storage_trace_horizon_def,
        storage_trace_regions_def, storage_trace_locks_def, storage_observations_ok_def,
