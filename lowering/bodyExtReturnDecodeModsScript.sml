@@ -4,10 +4,12 @@ Ancestors
   bodyExtReturnAllocMods bodyExtReturnLayoutMods bodyExtReturnDecodeRouteMods
   bodyExtReturnSizeWindowMods bodyExtReturnSizedPhysicalMods bodyExtReturnDecodedPostMods
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
-  fragGasEmitCtrl fragExec loweringHalt exprSimAlloc decoderGhostFramePtr
+  fragGasOriginPtr fragGasEmitCtrl fragExec loweringHalt exprSimAlloc decoderGhostFramePtr
   abiReturnPrefixTransport abiMalformedRecursiveInterface abiDecoderReentry
-  bodyFullUnwrapRun freshWrites exprSimExtCallCase exprLoweringProps exprSafeOperand
-  bodyFullPostsMods bodyFullShadowBodyInv bodyPtrDefs ptrDiscipline
+  abiValidAllocatedContract emitHelperProps
+  bodyFullUnwrapRun freshWrites exprSimDefs exprSimExtCallCase exprLoweringProps exprSafeOperand
+  bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit bodyPtrDefs ptrDiscipline
+  exprSimMemDefs allocaHistory
   stateRelProj abiCallerAllocation abiCallerLocalScratch bodyFullAllocaFresh
   loweringStateRelDefs loweringPosts compileEnv exprLowering context
   vyperInterpreter vyperABI vyperAST vyperState venomState venomMemDefs
@@ -64,6 +66,45 @@ Proof
   conj_tac >- (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`,`sr`] >> simp[cs_extends_refl]) >>
   conj_tac >- (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`,`sr`] >> simp[cs_extends_refl]) >>
   simp[]
+QED
+
+(* The jump at the end of decoding changes control, not the retained value. *)
+Theorem return_decoded_jump_post[local]:
+  vv_post_mods H ctx func cenv cx e es sa sb s0 ee (Value v)
+    (LocatedValue ann (mk_ptr op LocMemory)) (jump_to lbl s) <=>
+  vv_post_mods H ctx func cenv cx e es sa sb s0 ee (Value v)
+    (LocatedValue ann (mk_ptr op LocMemory)) s
+Proof
+  simp[vv_post_mods_def, stmt_state_rel_jump_to,
+       immutable_frame_mods_def, immutables_rel_mods_def, immutable_alloca_sep_mods_def,
+       immutables_rel_def, immutable_alloca_sep_def, local_region_def,
+       vv_holds_mods_def, vv_holds_def, vv_place_ptr_mods_def, vv_place_ptr_def,
+       contextTheory.mk_ptr_def, vv_at_def, vv_own_def,
+       locals_kept_def, popped_kept_def, pure_frame_def,
+       eval_operand_def, lookup_var_def, jump_to_def]
+QED
+
+Theorem return_decoded_jump_ghost[local]:
+  ghost_inv_at_mods D lo d cenv cx ee G tn (jump_to lbl s) <=>
+  ghost_inv_at_mods D lo d cenv cx ee G tn s
+Proof
+  simp[ghost_inv_at_mods_def,jump_to_def,ptr_covers_def,stor_taint_ok_at_def,
+       lookup_var_def,allocas_from_def] >>
+  Cases_on `d` >- simp[return_buf_ptr_def] >>
+  PairCases_on `x` >> simp[return_buf_ptr_def,ptr_covers_def,lookup_var_def]
+QED
+
+Theorem return_decoded_jump_value[local]:
+  (vv_store_bound cx ty lt ee (Value v) (LocatedValue ann (mk_ptr op LocMemory)) (jump_to lbl s) <=>
+   vv_store_bound cx ty lt ee (Value v) (LocatedValue ann (mk_ptr op LocMemory)) s) /\
+  (ptr_vv_ok cx ty (Value v) (LocatedValue ann (mk_ptr op LocMemory)) ee G tn (jump_to lbl s) <=>
+   ptr_vv_ok cx ty (Value v) (LocatedValue ann (mk_ptr op LocMemory)) ee G tn s) /\
+  (ptr_buf_ok cenv e op G (jump_to lbl s) <=> ptr_buf_ok cenv e op G s) /\
+  (vv_own cenv cx ty sa sb ee (Value v) (LocatedValue ann (mk_ptr op LocMemory)) (jump_to lbl s) <=>
+   vv_own cenv cx ty sa sb ee (Value v) (LocatedValue ann (mk_ptr op LocMemory)) s)
+Proof
+  simp[vv_store_bound_def, ptr_vv_ok_def, ptr_buf_ok_def, ptr_mem_ok_def, vv_own_def,
+       contextTheory.mk_ptr_def, local_region_def, eval_operand_def, lookup_var_def, jump_to_def]
 QED
 
 Theorem extcall_return_decode_mods:
@@ -307,20 +348,31 @@ Resume extcall_return_decode_mods[window_entry]:
   `cap <> 0 /\ cap < dimword (:256)` by decide_tac >>
   qpat_assum `cap <> 0 ==> _` (drule_then
     (qx_choosel_then [`source`,`prov_base`,`span`,`rw`] (map_every assume_tac o CONJUNCTS))) >>
-  rename1 `eval_operand buf_op t = SOME ro` >>
-  `eval_operand (Var source) t = SOME ro /\ op_taint tn (Var source) = {} /\ not_fresh_at sr source` by
-    (qpat_assum `EVERY (\op. op_taint tn op = {}) _` mp_tac >>
-     qpat_assum `EVERY (safe_operand sr) _` mp_tac >>
-     simp[safe_operand_def]) >>
+  rename1 `mem_bytes_at (w2n ro) _ t.vs_memory = TAKE cap returnData` >>
   `rw = ro` by
-    (qpat_assum `eval_operand buf_op t = SOME rw` mp_tac >> simp[]) >>
+    (qpat_assum `eval_operand buf_op t = SOME rw` mp_tac >>
+     qpat_assum `eval_operand buf_op t = SOME ro`
+       (fn th => pure_rewrite_tac[th,optionTheory.SOME_11]) >>
+     disch_then (ACCEPT_TAC o SYM)) >>
   qpat_x_assum `rw = ro` SUBST_ALL_TAC >>
+  `eval_operand (Var source) t = SOME ro /\ op_taint tn (Var source) = {} /\ not_fresh_at sr source` by
+    (qpat_assum `buf_op = Var source` (SUBST1_TAC o SYM) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (qpat_assum `EVERY (\op. op_taint tn op = {}) _`
+           (strip_assume_tac o BETA_RULE o REWRITE_RULE[listTheory.EVERY_DEF]) >>
+         first_assum ACCEPT_TAC) >>
+     qpat_assum `EVERY (safe_operand sr) _`
+       (strip_assume_tac o REWRITE_RULE[listTheory.EVERY_DEF]) >>
+     qpat_assum `safe_operand sr buf_op` mp_tac >>
+     qpat_assum `buf_op = Var source` (fn th =>
+       simp_tac bool_ss [th,safe_operand_def,operand_11,operand_distinct])) >>
   qpat_assum `ci_mono ar k` (strip_assume_tac o REWRITE_RULE[ci_mono_def]) >>
   `sa.cs_next_id <= k.cs_next_id /\ sa.cs_next_var <= k.cs_next_var /\
-   sr.cs_next_id < k.cs_next_id` by decide_tac >>
-  `not_fresh_at ar source /\ not_fresh_at k source /\ not_fresh_at k q` by
-    (conj_tac >- (irule not_fresh_at_mono >> qexists `sr` >> simp[]) >>
-     conj_tac >> irule not_fresh_at_mono >> qexists `ar` >> simp[]) >>
+   sr.cs_next_id < k.cs_next_id /\ sr.cs_next_var <= ar.cs_next_var` by decide_tac >>
+  `not_fresh_at ar source` by (irule not_fresh_at_mono >> qexists `sr` >> simp[]) >>
+  `not_fresh_at k source /\ not_fresh_at k q` by
+    (conj_tac >> irule not_fresh_at_mono >> qexists `ar` >> simp[]) >>
   `local_ptrs_reserved cenv k` by
     (irule local_ptrs_reserved_next_var >> qexists `ar` >> simp[]) >>
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at k x) /\
@@ -340,10 +392,237 @@ Resume extcall_return_decode_mods[window_entry]:
       (qspec_then `source` (drule_then strip_assume_tac)) >> asm_rewrite_tac[]) >>
   `lookup_var q p = SOME w /\ ptr_covers Gp tp q p (type_memory_bytes cenv ret_type)` by
     (qpat_assum `!x. not_fresh_at ar x ==> lookup_var x p = lookup_var x a /\ _`
-      (qspec_then `q` (drule_then strip_assume_tac)) >>
-     conj_tac >- asm_rewrite_tac[] >>
-     irule ptr_covers_frame >> goal_assum (drule_at (Pat `ptr_covers _ _ _ _ _`)) >> asm_rewrite_tac[]) >>
-  FAIL_TAC "window entry"
+      (qspec_then `q` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     conj_tac
+     >- (qpat_assum `lookup_var q p = lookup_var q a` (SUBST1_TAC) >> first_assum ACCEPT_TAC) >>
+     irule ptr_covers_frame >>
+     goal_assum (drule_at (Pat `ptr_covers J tm q a _`)) >> asm_rewrite_tac[]) >>
+  `abi_malformed_destination func cenv ee.scopes sr.cs_next_id
+     (w2n w) (type_memory_bytes cenv ret_type) p` by
+    (drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+     simp[abi_malformed_destination_def] >>
+     qexistsl_tac [`mk_inst sr.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv ret_type))]
+          [STRING #"%" (toString sr.cs_next_var)]`, `STRING #"%" (toString sr.cs_next_var)`] >>
+     simp[venomInstTheory.mk_inst_def] >> irule local_ptrs_reserved_fresh >>
+     qexists `sr` >> simp[]) >>
+  `s0.vs_alloca_next <= p.vs_alloca_next` by decide_tac >>
+  `!i. i < t.vs_alloca_next ==> (i IN tp.t_mem <=> i IN tn.t_mem)` by
+    (qpat_assum `tp.t_mem = tm.t_mem` SUBST1_TAC >>
+     qpat_assum `!i. i IN tm.t_mem <=> _` (fn th => pure_rewrite_tac [th]) >>
+     gen_tac >> strip_tac >>
+     `~(t.vs_alloca_next <= i)` by decide_tac >> asm_rewrite_tac[]) >>
+  `compile_abi_decode_to_buf (Var q) (Lit 0w) MLOAD (Var source) hi
+     (type_to_abi_dec_info cenv.ce_struct_fields cenv rt) hs = ((),de)` by
+    (qpat_assum `compile_abi_decode_to_buf buf.buf_operand _ _ buf_op _ _ hs = _` mp_tac >>
+     qpat_assum `buf.buf_operand = Var q` (fn bo =>
+       qpat_assum `buf_op = Var source` (fn src => rewrite_tac [bo,src]))) >>
+  `k.cs_next_id <= hs.cs_next_id /\ k.cs_next_var <= hs.cs_next_var` by
+    (qpat_assum `compile_return_value_decode _ _ k = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[ci_mono_compile_return_value_decode,ci_mono_def,pairTheory.SND]) >>
+  `hs.cs_next_id <= de.cs_next_id` by
+    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ hs = ((),de)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[cj 1 ci_mono_compile_abi_decode,ci_mono_def,pairTheory.SND]) >>
+  `de.cs_next_id <= sb.cs_next_id` by
+    (qpat_assum `de = sb \/ _` strip_assume_tac >- simp[] >>
+     qpat_assum `emit_inst JMP _ _ de = _` mp_tac >>
+     qpat_assum `new_block _ _ = (_,sb)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[ci_mono_emit_inst,ci_mono_new_block,ci_mono_trans,ci_mono_def,pairTheory.SND]) >>
+  `sr.cs_next_id < sb.cs_next_id` by decide_tac >>
+  suspend "window_ready"
+QED
+
+Resume extcall_return_decode_mods[window_ready]:
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    abi_return_decode_ready H ctx func cenv cx ee k (abi_malformed_scratch_sites hs de func)
+      sr.cs_next_id live (Var source) (Var q) (w2n ro) cap returnData (w2n w)
+      (type_memory_bytes cenv rt) p /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at_mods (DF H) lo d cenv cx ee Gp tp p` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ p /\ _`
+       (drule_then strip_assume_tac) >>
+     reverse conj_tac >- asm_rewrite_tac[] >>
+     qpat_assum `type_memory_bytes cenv rt = type_memory_bytes cenv ret_type` SUBST1_TAC >>
+     simp_tac bool_ss [abi_return_decode_ready_def] >>
+     ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+     conj_tac >-
+       (simp_tac bool_ss [abi_malformed_allocated_window_def] >>
+        conj_tac >-
+          (qexists `buf_size` >> conj_tac >-
+             (qpat_assum `p.vs_allocas = a.vs_allocas` SUBST1_TAC >>
+              first_assum irule >> first_assum ACCEPT_TAC) >>
+           simp_tac (srw_ss()) [listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
+        conj_tac >- (simp_tac (srw_ss()) [listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
+        qpat_assum `p.vs_memory = a.vs_memory` SUBST1_TAC >>
+        qpat_assum `a.vs_memory = t.vs_memory` SUBST1_TAC >>
+        first_assum ACCEPT_TAC) >>
+     conj_tac >- (irule abi_malformed_scratch_sites_older >> decide_tac) >>
+     conj_tac >- decide_tac >>
+     conj_tac >- (irule abi_malformed_scratch_sites_older >> decide_tac) >>
+     ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+     conj_tac >-
+       (qpat_assum `eval_operand (Var source) t = SOME ro` mp_tac >>
+        qpat_assum `lookup_var source p = lookup_var source t` (fn th =>
+          simp_tac (srw_ss()) [eval_operand_def,th])) >>
+     conj_tac >- simp[eval_operand_def] >>
+     simp[abi_decoder_operand_live_def,abi_decoder_older_vars_def,GSYM not_fresh_at_def]) >>
+  `ptr_covers Gp tp q p (type_memory_bytes cenv rt)` by
+    (qpat_assum `type_memory_bytes cenv rt = type_memory_bytes cenv ret_type` SUBST1_TAC >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `compile_return_value_decode _ _ k = _`
+    (mp_then Any mp_tac extcall_size_window_kept_mods) >>
+  map_every (fn pat => disch_then (fn th => qpat_assum pat (mp_then Any mp_tac th)))
+    [`compile_abi_decode_to_buf (Var q) _ _ (Var source) _ _ hs = _`,
+     `!D. gas_origin_ptr_path _ (t,G,tn) [] (OK p,Gp,tp)`,
+     `ghost_kept_at lo cenv es sa G0 tn0 s0 Gp tp`, `wb_frame cenv es ee sa s0 p`,
+     `evaluate_type (get_tenv cx) ret_type = SOME actual_tv`,
+     `FLOOKUP G source = SOME (prov_base,span)`,
+     `FLOOKUP t.vs_allocas live = SOME (w2n ro,buf_size)`,
+     `!H. valid_horizon _ _ H _ ==>
+         abi_return_decode_ready H _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ p /\ _`] >>
+  disch_then (mp_tac o Q.INST [`sb` |-> `sb`] o SPEC_ALL) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  Cases_on `LENGTH returnData < abi_static_size cenv.ce_struct_fields rt`
+  >- (qpat_assum `LENGTH returnData < _` (fn th => pure_rewrite_tac[th,COND_CLAUSES]) >>
+      disch_then (qx_choosel_then [`err`,`z`,`Gf`,`tf`] strip_assume_tac) >>
+      qexistsl_tac [`INR (Error (RuntimeError err))`,`Abort Revert_abort z`,`Gf`,`tf`] >>
+      simp_tac (srw_ss()) [bind_def,lift_sum_runtime_def,raise_def,expr_exit_def,exit_result_def] >>
+      asm_rewrite_tac[sumTheory.sum_case_def,optionTheory.option_case_def,
+        bind_def,lift_sum_runtime_def,raise_def] >> simp_tac (srw_ss()) [raise_def]) >>
+  qpat_assum `~(LENGTH returnData < _)` (fn th => pure_rewrite_tac[th,COND_CLAUSES]) >>
+  disch_then (qx_choosel_then [`u`,`Gf`,`tf`] (map_every assume_tac o CONJUNCTS)) >>
+  suspend "physical"
+QED
+
+Resume extcall_return_decode_mods[physical]:
+  qpat_assum `!HH. valid_horizon _ _ HH _ ==> abi_malformed_entry HH _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `lo <= u.vs_alloca_next` by
+    (qhdtm_assum `ghost_inv_at_mods` (strip_assume_tac o REWRITE_RULE[ghost_inv_at_mods_def]) >>
+     first_assum ACCEPT_TAC) >>
+  asm "valid" (fn valid => asm "reject" (fn reject =>
+    qpat_assum `compile_abi_decode_to_buf (Var q) _ _ (Var source) _ _ hs = _`
+      (mp_then Any mp_tac (GEN_ALL (MATCH_MP (MATCH_MP extcall_sized_physical_mods valid) reject))))) >>
+  map_every (fn pat => disch_then (fn th => qpat_assum pat (mp_then Any mp_tac th)))
+    [`abi_malformed_entry H ctx func cenv cx ee hs _ _ _ _ _ _ _ _ _ _ _ _ _ u`,
+     `abi_decode_ptr_window Gf tf u source ro _`, `allocas_from lo u`,
+     `rtv = (if needs_external_call_wrap ret_type then _ else _)`] >>
+  disch_then (qspec_then `PG` mp_tac) >>
+  (impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qpat_assum `abi_size_bound cenv.ce_struct_fields rt = vyper_abi_size_bound _ _`
+       (fn th => pure_rewrite_tac[GSYM th]) >>
+     qpat_assum `cap = abi_size_bound cenv.ce_struct_fields rt`
+       (fn th => pure_rewrite_tac[th]) >>
+     (first_assum ACCEPT_TAC ORELSE REFL_TAC))) >>
+  Cases_on `evaluate_abi_decode_return (get_tenv cx) ret_type returnData`
+  >- (rename1 `evaluate_abi_decode_return _ _ _ = INL value` >>
+      qpat_assum `evaluate_abi_decode_return _ _ _ = INL value`
+        (fn th => pure_rewrite_tac[th,sumTheory.sum_case_def] >> CONV_TAC (DEPTH_CONV BETA_CONV)) >>
+      disch_then (qx_choosel_then [`z`,`Gd`,`td`,`ceiling`] (map_every assume_tac o CONJUNCTS)) >>
+      suspend "decoded") >>
+  rename1 `evaluate_abi_decode_return _ _ _ = INR err` >>
+  qpat_assum `evaluate_abi_decode_return _ _ _ = INR err`
+    (fn th => pure_rewrite_tac[th,sumTheory.sum_case_def] >> CONV_TAC (DEPTH_CONV BETA_CONV)) >>
+  disch_then (qx_choosel_then [`z`,`Gd`,`td`] (map_every assume_tac o CONJUNCTS)) >>
+  qexistsl_tac [`INR (Error (RuntimeError err))`,`Abort Revert_abort z`,`Gd`,`td`] >>
+  conj_tac >- simp[bind_def,lift_sum_runtime_def,raise_def] >>
+  qx_gen_tac `HH` >> disch_tac >> conj_tac
+  >- (qpat_assum `!D. gas_origin_ptr_path _ (t,G,tn) [] (OK u,Gf,tf)`
+        (qspec_then `DF HH` mp_tac) >>
+      qpat_assum `!D explicit. gas_origin_ptr_path _ (u,Gf,tf) [] (Abort Revert_abort z,Gd,td)`
+        (qspecl_then [`DF HH`,`explicit`] mp_tac) >>
+      rpt (pop_assum kall_tac) >> metis_tac[gas_origin_ptr_path_append,listTheory.APPEND]) >>
+  simp_tac (srw_ss()) [expr_exit_def,exit_result_def]
+QED
+
+Resume extcall_return_decode_mods[decoded]:
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) [] (OK z,Gd,td)` by
+    (qx_gen_tac `D` >>
+     qpat_assum `!D. gas_origin_ptr_path _ (t,G,tn) [] (OK u,Gf,tf)` (qspec_then `D` mp_tac) >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (u,Gf,tf) [] (OK z,Gd,td)`
+       (qspecl_then [`D`,`explicit`] mp_tac) >>
+     rpt (pop_assum kall_tac) >> metis_tac[gas_origin_ptr_path_append,listTheory.APPEND]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
+    (qhdtm_assum `abi_valid_allocated_post` (mp_tac o REWRITE_RULE[abi_valid_allocated_post_def,
+       abi_malformed_resource_post_def]) >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >>
+     simp[]) >>
+  Q_TAC (fn tm => SUBGOAL_THEN tm
+          (qx_choose_then `zf` (map_every assume_tac o CONJUNCTS)))
+    `?zf. (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) [] (OK zf,Gd,td)) /\
+      zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (zf = z \/ ?xl. zf = jump_to xl z)`
+  >- (qpat_assum `de = sb \/ _` strip_assume_tac
+     >- (qexists `z` >> asm_rewrite_tac[]) >>
+     rename1 `emit_inst JMP [Label xl] [] de = ((),cj)` >> qexists `jump_to xl z` >>
+     conj_tac >-
+       (qx_gen_tac `D` >>
+        `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (z,Gd,td) [] (OK (jump_to xl z),Gd,td)` by
+          (irule emit_jmp_origin_ptr >> asm_rewrite_tac[] >>
+           qexistsl_tac [`de`,`cj`] >> asm_rewrite_tac[]) >>
+        qpat_assum `!D. gas_origin_ptr_path _ (t,G,tn) [] (OK z,Gd,td)` (qspec_then `D` mp_tac) >>
+        qpat_assum `gas_origin_ptr_path _ (z,Gd,td) [] _` mp_tac >>
+        rpt (pop_assum kall_tac) >> metis_tac[gas_origin_ptr_path_append,listTheory.APPEND]) >>
+     drule_then strip_assume_tac new_block_props >>
+     rpt conj_tac >- simp[jump_to_def] >- simp[jump_to_def] >>
+     disj2_tac >> qexists `xl` >> REFL_TAC) >>
+  `ee with gas_obs := [] = ee` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `vv = LocatedValue ann (mk_ptr (Var q) LocMemory)` by simp[] >>
+  qexistsl_tac [`INL (Value value)`,`OK zf`,`Gd`,`td`] >>
+  conj_tac >- simp[bind_def,lift_sum_runtime_def,return_def] >>
+  qx_gen_tac `Hpost` >> disch_tac >> conj_tac >- asm_rewrite_tac[] >>
+  disj1_tac >> qexists `zf` >> conj_tac >- REFL_TAC >> qexists `Value value` >>
+  suspend "linked_post"
+QED
+
+Resume extcall_return_decode_mods[linked_post]:
+  qpat_assum `!HH. valid_horizon _ _ HH _ ==> abi_malformed_entry HH _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `Hpost` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `gas_origin_ptr_path (DF Hpost,lo,explicit,ctx,func,PG) (u,Gf,tf) [] (OK z,Gd,td)` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ (u,Gf,tf) [] (OK z,Gd,td)`
+      (qspecl_then [`DF Hpost`,`explicit`] ACCEPT_TAC)) >>
+  qpat_assum `abi_valid_allocated_post _ _ _ _ _ _ _ hs de _ _ _ _ u z`
+    (mp_then Any mp_tac extcall_decoded_post_mods) >>
+  map_every (fn pat => disch_then (fn th => qpat_assum pat (mp_then Any mp_tac th)))
+    [`compile_abi_decode_to_buf (Var q) _ _ (Var source) _ _ hs = _`,
+     `evaluate_abi_decode_return _ ret_type returnData = INL value`,
+     `abi_malformed_entry Hpost ctx func cenv cx ee hs _ _ _ _ _ _ _ _ _ _ _ _ _ u`,
+     `gas_origin_ptr_path (DF Hpost,lo,explicit,ctx,func,PG) (u,Gf,tf) [] (OK z,Gd,td)`,
+     `ghost_inv_at_mods (DF Hpost) lo d cenv cx ee Gf tf u`,
+     `ghost_kept_at lo cenv es sa G0 tn0 s0 Gf tf`, `sr.cs_next_id < sb.cs_next_id`,
+     `evaluate_type (get_tenv cx) ret_type = SOME actual_tv`, `ann = ret_type`] >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE asm_rewrite_tac[]))) >>
+  (* These binders occur only in the result: select the source call at this cut. *)
+  disch_then (qspecl_then [`is_static'`,`skip`,`opts`,`fname`,`dflt`,`args`,`arg_types`]
+    (map_every assume_tac o CONJUNCTS o SIMP_RULE (srw_ss()) [post_value_type_def])) >>
+  qpat_assum `ee with gas_obs := [] = ee` SUBST1_TAC >>
+  qpat_assum `vv = LocatedValue ann (mk_ptr (Var q) LocMemory)` SUBST1_TAC >>
+  `vv_location (LocatedValue ann (mk_ptr (Var q) LocMemory)) = SOME LocMemory` by
+    simp_tac (srw_ss()) [vv_location_def,contextTheory.mk_ptr_def] >>
+  `(mk_ptr (Var q) LocMemory).ptr_operand = Var q` by simp_tac (srw_ss()) [contextTheory.mk_ptr_def] >>
+  qpat_x_assum `ann = ret_type` SUBST_ALL_TAC >>
+  qpat_assum `vv_location (LocatedValue _ _) = SOME LocMemory`
+    (fn loc => qpat_assum `(mk_ptr (Var q) LocMemory).ptr_operand = Var q`
+      (fn op_eq => simp_tac (srw_ss()) [loc,op_eq,post_value_type_def])) >>
+  qpat_x_assum `zf = z \/ _` (DISJ_CASES_THEN2 SUBST_ALL_TAC strip_assume_tac)
+  >- asm_rewrite_tac[] >>
+  qpat_x_assum `zf = jump_to _ z` SUBST_ALL_TAC >>
+  rename1 `jump_to xl z` >>
+  `alloca_history func (jump_to xl z)` by
+    (irule alloca_history_jump >> simp_tac (srw_ss()) [jump_to_def] >>
+     qexists `z` >> asm_rewrite_tac[]) >>
+  asm_rewrite_tac[return_decoded_jump_post,return_decoded_jump_ghost,return_decoded_jump_value] >>
+  simp_tac (srw_ss()) [jump_to_def] >> first_assum ACCEPT_TAC
 QED
 
 Finalise extcall_return_decode_mods
