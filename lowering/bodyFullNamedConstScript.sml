@@ -22,7 +22,7 @@ Proof
             eval_expr_type_builtin_value]
 QED
 
-Theorem named_const_eval[local]:
+Theorem named_const_eval:
   named_const_operand e ==>
   eval_expr cx (Builtin ann NamedConst [e]) = eval_expr cx e
 Proof
@@ -61,7 +61,7 @@ Proof
   pairarg_tac >> gvs[reason_result_shape_def]
 QED
 
-Theorem named_const_operand_shape[local]:
+Theorem named_const_operand_shape:
   named_const_operand e /\ well_typed_expr env e /\
   compile_expr cenv ty e sa = (vv,sb) ==>
   if is_word_type (expr_type e) then
@@ -113,7 +113,7 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-Theorem named_const_parent_compile[local]:
+Theorem named_const_parent_compile:
   (!n. vv_operand vv <> Label n) /\
   (if is_word_type ann then ?op. vv = StackValue ann op
    else ?p. vv = LocatedValue ann p /\ p.ptr_location = LocMemory) /\

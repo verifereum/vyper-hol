@@ -664,7 +664,7 @@ val runtime_compose_abort_halt_cases_tac =
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `stmt_res_ok _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [stmt_res_ok_def]) >>
-  gvs[] >> Cases_on `r`;
+  qpat_x_assum `res = _` SUBST_ALL_TAC >> Cases_on `r`;
 
 val runtime_compose_halt_tac =
   fs[halt_exit_def] >>

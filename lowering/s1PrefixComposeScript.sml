@@ -8,7 +8,7 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState venomState
   list rich_list arithmetic sum pair
 
-Triviality request_site_prepend_path:
+Theorem request_site_prepend_path:
   gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn)
     marks (OK t,G1,tn1) /\
   request_site (D,lo,explicit,ctx,func,PG) cx H (t,G1,tn1)
@@ -23,7 +23,7 @@ QED
 
 (* The outcome at a split is either in the completed left trace or in
    the appended suffix of the right trace. *)
-Triviality bind_trace_outcome_split:
+Theorem bind_trace_outcome_split:
   left ++ suffix = obs_pre ++ StorageOutcome rq outcome :: rest ==>
   (?tail. left = obs_pre ++ StorageOutcome rq outcome :: tail) \/
   ?prefix. obs_pre = left ++ prefix /\
@@ -154,7 +154,7 @@ fun bind_bad_trace_site_tac bad_pattern =
           simp[NoAsms] >> MATCH_ACCEPT_TAC sites
         end)))
 
-Theorem gas_prefix_full_bind:
+Theorem gas_prefix_full_bind_replay:
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
     (es, s, G, tn) Q1 R1 /\
   (!H res ee gt r. R1 H res ee gt r ==> ISR res) /\
@@ -164,7 +164,10 @@ Theorem gas_prefix_full_bind:
                        gas_explicit marks s.vs_gas_readings ++ tail) =
              (INL v, mid with gas_obs := tail)) /\
      storage_trace_domain cx st0 mid.storage_trace /\
-     (!H. valid_horizon cx st0 H mid.storage_trace ==> Q1 H (INL v) mid G1 tn1 t) ==>
+     (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+         (s,G,tn) marks (OK t,G1,tn1) /\
+       Q1 H (INL v) mid G1 tn1 t) ==>
      gas_prefix_full (DF, lo, explicit, ctx, func, PG) cx st0 (next v) (mid, t, G1, tn1)) /\
   storage_trace_frame source /\ (!v. storage_trace_frame (next v)) /\
   requests_outcomes_frame source ==>
@@ -184,7 +187,7 @@ Proof
   >> suspend "normal"
 QED
 
-Resume gas_prefix_full_bind[bad]:
+Resume gas_prefix_full_bind_replay[bad]:
   `isPREFIX marks left_marks \/ isPREFIX left_marks marks` by
     metis_tac[gas_origin_ptr_focus_marks_comparable] >>
   gvs[IS_PREFIX_APPEND] >>
@@ -213,7 +216,7 @@ Resume gas_prefix_full_bind[bad]:
   bind_bad_trace_site_tac `gas_bad_storage_at _ _ source _ _ (left_marks ++ l)`
 QED
 
-Resume gas_prefix_full_bind[exempt]:
+Resume gas_prefix_full_bind_replay[exempt]:
   drule gas_exempt_cert_execution >> strip_tac >>
   `!tail. source (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
     (INR (Error err),ee with gas_obs := tail)` by
@@ -247,7 +250,7 @@ Resume gas_prefix_full_bind[exempt]:
   fs[]
 QED
 
-Resume gas_prefix_full_bind[normal]:
+Resume gas_prefix_full_bind_replay[normal]:
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[storage_trace_domain_def] >>
   `?appendix. ee.storage_trace = es.storage_trace ++ appendix` by
@@ -265,7 +268,7 @@ Resume gas_prefix_full_bind[normal]:
   >> suspend "error"
 QED
 
-Resume gas_prefix_full_bind[error]:
+Resume gas_prefix_full_bind_replay[error]:
   rewrite_tac[gas_prefix_full_def] >> qexists_tac `marks` >> conj_tac
   >- (qexistsl_tac [`storage_trace_horizon ee.storage_trace`, `exit_leaf`, `exit_pg`,
       `exit_g`, `exit_tn`, `exit_finish`] >> simp[] >>
@@ -278,7 +281,7 @@ Resume gas_prefix_full_bind[error]:
   fs[] >> metis_tac[gas_origin_ptr_focus_marks_comparable]
 QED
 
-Resume gas_prefix_full_bind[success]:
+Resume gas_prefix_full_bind_replay[success]:
   rename1 `source _ = (INL v,_)` >>
   `~exit_result r` by metis_tac[ISR, exit_result_def] >>
   qpat_x_assum `(?t. r = OK t /\ _) \/ _` strip_assume_tac >> gvs[] >>
@@ -342,7 +345,65 @@ Resume gas_prefix_full_bind[success]:
   simp[]
 QED
 
-Finalise gas_prefix_full_bind
+Finalise gas_prefix_full_bind_replay
+
+Theorem gas_prefix_full_bind_path:
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn) Q1 R1 /\
+  (!H res ee gt r. R1 H res ee gt r ==> ISR res) /\
+  gas_prefix_full (DF, lo, explicit, ctx, func, PG) cx st0 source (es, s, G, tn) /\
+  (!marks v mid G1 tn1 t.
+     (!tail. source (es with gas_obs :=
+                       gas_explicit marks s.vs_gas_readings ++ tail) =
+             (INL v, mid with gas_obs := tail)) /\
+     storage_trace_domain cx st0 mid.storage_trace /\
+     gas_path ctx func s (LENGTH marks) (OK t) /\
+     (!H. valid_horizon cx st0 H mid.storage_trace ==> Q1 H (INL v) mid G1 tn1 t) ==>
+     gas_prefix_full (DF, lo, explicit, ctx, func, PG) cx st0 (next v) (mid, t, G1, tn1)) /\
+  storage_trace_frame source /\ (!v. storage_trace_frame (next v)) /\
+  requests_outcomes_frame source ==>
+  gas_prefix_full (DF, lo, explicit, ctx, func, PG) cx st0 (bind source next) (es, s, G, tn)
+Proof
+  strip_tac >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ Q1 R1`
+    (mp_then Any irule gas_prefix_full_bind_replay) >>
+  simp[] >> rpt conj_tac >>
+  (first_assum ACCEPT_TAC ORELSE
+    (rpt gen_tac >> strip_tac >>
+     `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+       fs[storage_trace_domain_def] >>
+     `gas_path ctx func s (LENGTH marks) (OK t)` by
+       (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+          (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+        impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+        drule gas_origin_ptr_path_projections >> strip_tac >>
+        drule gas_origin_path_erase >> strip_tac >>
+        metis_tac[gas_marked_path_exec]) >>
+     qpat_assum `!marks v mid G1 tn1 t. _ ==> gas_prefix_full _ _ _ _ _`
+       irule >> metis_tac[]))
+QED
+
+Theorem gas_prefix_full_bind:
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn) Q1 R1 /\
+  (!H res ee gt r. R1 H res ee gt r ==> ISR res) /\
+  gas_prefix_full (DF, lo, explicit, ctx, func, PG) cx st0 source (es, s, G, tn) /\
+  (!marks v mid G1 tn1 t.
+     (!tail. source (es with gas_obs :=
+                       gas_explicit marks s.vs_gas_readings ++ tail) =
+             (INL v, mid with gas_obs := tail)) /\
+     storage_trace_domain cx st0 mid.storage_trace /\
+     (!H. valid_horizon cx st0 H mid.storage_trace ==> Q1 H (INL v) mid G1 tn1 t) ==>
+     gas_prefix_full (DF, lo, explicit, ctx, func, PG) cx st0 (next v) (mid, t, G1, tn1)) /\
+  storage_trace_frame source /\ (!v. storage_trace_frame (next v)) /\
+  requests_outcomes_frame source ==>
+  gas_prefix_full (DF, lo, explicit, ctx, func, PG) cx st0 (bind source next) (es, s, G, tn)
+Proof
+  strip_tac >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ Q1 R1`
+    (mp_then Any irule gas_prefix_full_bind_replay) >>
+  simp[] >> metis_tac[]
+QED
 
 Theorem gas_prefix_full_bind_no_outcome:
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
@@ -444,34 +505,37 @@ Proof
   simp[storage_trace_frame_cond] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem gas_prefix_full_zero_prefix_guarded:
+(* Generated instructions may consume machine gas readings, but do not
+   consume explicit source observations. *)
+Theorem gas_prefix_full_generated_prefix:
   storage_trace_frame source /\
   storage_trace_domain cx st0 es.storage_trace /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
-         (s0,G0,tn0) [] (OK s1,G1,tn1)) /\
+         (s0,G0,tn0) (REPLICATE n F) (OK s1,G1,tn1)) /\
   gas_prefix_full (DF,lo,explicit,ctx,func,PG) cx st0 source
     (es,s1,G1,tn1) ==>
   gas_prefix_full (DF,lo,explicit,ctx,func,PG) cx st0 source (es,s0,G0,tn0)
 Proof
   strip_tac >>
-  `s1.vs_gas_readings = s0.vs_gas_readings` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _`
+  `!marks. gas_explicit (REPLICATE n F ++ marks) s0.vs_gas_readings =
+     gas_explicit marks s1.vs_gas_readings` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _`
        (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
      impl_tac >- fs[storage_trace_domain_def] >> strip_tac >>
      drule gas_origin_ptr_path_projections >> strip_tac >>
      drule gas_origin_path_erase >> strip_tac >>
-     drule gas_marked_path_ok_suffix >> simp[]) >>
+     drule gas_marked_path_ok_suffix >> simp[gas_explicit_append]) >>
   qpat_x_assum `gas_prefix_full _ _ _ _ _`
     (qx_choose_then `marks` strip_assume_tac o
      ONCE_REWRITE_RULE[gas_prefix_full_def]) >>
-  rewrite_tac[gas_prefix_full_def] >> qexists_tac `marks` >> conj_tac
+  rewrite_tac[gas_prefix_full_def] >> qexists_tac `REPLICATE n F ++ marks` >> conj_tac
   >- (qexistsl_tac [`H`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >>
       conj_tac >- first_assum ACCEPT_TAC >>
       `valid_horizon cx st0 H es.storage_trace` by metis_tac[] >>
-      `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s0,G0,tn0) [] (OK s1,G1,tn1)` by
-        metis_tac[] >>
-      drule_then (irule o SIMP_RULE (srw_ss()) []) (cj 2 gas_origin_ptr_focus_rules) >>
+      `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+          (s0,G0,tn0) (REPLICATE n F) (OK s1,G1,tn1)` by metis_tac[] >>
+      drule_then irule (cj 2 gas_origin_ptr_focus_rules) >>
       first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >> rename1 `valid_horizon cx st0 site_horizon obs_pre` >>
   `valid_horizon cx st0 site_horizon es.storage_trace` by
@@ -483,11 +547,27 @@ Proof
            (fn trace => PURE_REWRITE_TAC[trace,LENGTH_APPEND,LENGTH]) >>
          decide_tac) >>
      metis_tac[valid_horizon_append]) >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _`
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _`
     (qspec_then `site_horizon` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule_then irule request_site_prepend_path >>
+  qpat_assum `!marks. gas_explicit (REPLICATE n F ++ marks) _ = _`
+    (qspec_then `marks` (fn eq =>
+      qpat_x_assum `source _ = (res,ee)` (assume_tac o REWRITE_RULE [eq]))) >>
   qpat_x_assum `!tail res ee obs_pre rq outcome sfx H. _`
     (qspecl_then [`tail`,`res`,`ee`,`obs_pre`,`rq`,`outcome`,`sfx`,`site_horizon`] mp_tac) >>
   simp[]
+QED
+
+Theorem gas_prefix_full_zero_prefix_guarded:
+  storage_trace_frame source /\
+  storage_trace_domain cx st0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+         (s0,G0,tn0) [] (OK s1,G1,tn1)) /\
+  gas_prefix_full (DF,lo,explicit,ctx,func,PG) cx st0 source
+    (es,s1,G1,tn1) ==>
+  gas_prefix_full (DF,lo,explicit,ctx,func,PG) cx st0 source (es,s0,G0,tn0)
+Proof
+  metis_tac[SIMP_RULE (srw_ss()) [] (Q.INST [`n` |-> `0`] gas_prefix_full_generated_prefix)]
 QED

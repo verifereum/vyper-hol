@@ -120,7 +120,7 @@ Proof
   simp[encode_source_event_def, encode_vyper_event_metadata_def] >> metis_tac[]
 QED
 
-Theorem log_full_snapshot_cuts[local]:
+Theorem log_full_snapshot_cuts:
   cenv.ce_event_info (nsid_to_string id) = SOME (hash,declared,flags) /\
   compile_stmt cenv lctx ret (Log id args) sa = ((),sb) /\
   compile_stmt (gas_shadow_env T cenv) lctx ret

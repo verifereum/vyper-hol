@@ -6,6 +6,12 @@ Ancestors
   ptrSafeRun memSafeRun bodyPtrDefs venomInst venomExecSemantics emitHelperProps
   vyperCallOutcomeProps vyperCallOutcome vyperState extCallOracle
   e2eRequestCutDefs vyperStorageFootprint gasSummary list rich_list arithmetic option
+  s1PrefixPreds bodyFullRawCall bodyFullRawCallPrefix
+  s1PrefixRawCallForcedArgs s1PrefixRawCallKeywordSuffix bodyFullRawCallKeywordSuffix
+  exprSimRawCall s1PrefixInvalidTraceDomain vyperStorageTrace
+  bodyFullRawCallPreparedEntry bodyFullRawCallGeneratedPrefix
+Libs
+  monadsyntax
 
 Theorem raw_call_actual_call_prefix:
   emit_op (case call_ty of
@@ -65,14 +71,17 @@ Proof
     `observed_outcome`, `sfx`, `H`] >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
   `ee.storage_trace = es1.storage_trace` by
-    (qpat_assum `(if _ then _ else _) _ _ _ _ (es with gas_obs := _) = _` mp_tac >>
+    (qpat_x_assum `ee.storage_trace = _` kall_tac >>
+     qpat_assum `(if _ then _ else _) _ _ _ _ (es with gas_obs := _) = _` mp_tac >>
      qpat_assum `(if _ then _ else _) _ _ _ _ es = _` mp_tac >>
      Cases_on `call_ty` >>
      simp[NoAsms] >> disch_tac >>
      simp[NoAsms, take_delegate_gas_obs, take_call_outcome_gas_obs] >>
      qpat_assum `_ es = (INL (rq,outcome),es1)`
        (fn th => PURE_REWRITE_TAC[th]) >>
-     simp[] >> strip_tac >> gvs[]) >>
+     simp[NoAsms] >> strip_tac >>
+     qpat_assum `es1 with gas_obs := tail = ee` (SUBST1_TAC o SYM) >>
+     simp[NoAsms]) >>
   `es1.storage_trace = obs_pre ++ StorageOutcome observed_rq observed_outcome :: sfx` by
     metis_tac[] >>
   `obs_pre = es.storage_trace /\ observed_rq = rq /\ observed_outcome = outcome` by
@@ -123,3 +132,119 @@ Proof
   qexistsl_tac [`[]`, `func`, `PG`, `G`, `tn`, `s`, `inst`, `0`, `u`] >>
   fs[gas_origin_ptr_focus_nil, step_inst_non_invoke]
 QED
+
+Theorem raw_call_expr_vv_prefix:
+  body_exprs_full_ok cx args /\
+  body_exprs_prefix_ok cx args /\
+  body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
+  expr_vv_sim_prefix (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Call ann (RawCallTarget flags) args dflt) es
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule raw_call_pre_operands >> strip_tac >>
+  drule raw_call_pre_flags >> strip_tac >> gvs[] >>
+  rewrite_tac[expr_vv_sim_prefix_def, expr_vv_sim_full_pre_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule compile_expr_raw_call >> strip_tac >>
+  drule raw_call_kwargs_types >> simp[] >> strip_tac >>
+  drule_all raw_call_kwargs_word_args >> strip_tac >>
+  drule_all raw_call_code_spans >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (irule gas_prefix_full_invalid_trace_domain >>
+      simp[evaluate_storage_trace_frame]) >>
+  CONV_TAC (SIMP_CONV bool_ss [raw_call_eval_action]) >>
+  ho_match_mp_tac (GEN_ALL raw_call_forced_args_prefix) >>
+  qexistsl_tac [`tops`,`shadow_sa`,`h2`,`h1`,`shadow_func`,`sa`,`s2`,`s1`,
+                `kws`,`flags`,`env`,`dframe`,`data`,`cenv`,`raw_call_return_type flags`,
+                `addr`,`\H res ee gt r. T`,`\H res ee G tn t. T`] >>
+  ASM_REWRITE_TAC [] >> BETA_TAC >> conj_tac
+  >- (rpt gen_tac >> irule storage_trace_frame_bind_all >>
+      simp[cj 6 evaluate_storage_trace_frame] >> gen_tac >>
+      irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+      irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac >>
+      irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac >>
+      irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts,storage_trace_frame_raw_call]) >>
+  qx_genl_tac [`gsA`,`av`,`esA`,`tA`,`GA`,`tnA`,`gsD`,`bs`,`esD`,`tD`,`GD`,`tnD`] >>
+  strip_tac >> conj_tac
+  >- (ho_match_mp_tac (GEN_ALL raw_call_forced_data_kwargs_full_from_action) >>
+      qexistsl_tac [`xs`,`tops`,`tA`,`shadow_func`,`sa`,`s5`,`s4`,`s3`,`s2`,
+        `s1`,`s0`,`len`,`h5`,`h4`,`flags`,`esA`,`es`,`env`,`dp`,`dframe`,
+        `data`,`d`,`cenv`,`n`,`bs`,`av`,`raw_call_return_type flags`,`addr`,`a`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+      >- (gen_tac >> strip_tac >>
+          qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _`
+            (drule_then (map_every assume_tac o CONJUNCTS)) >> simp[])
+      >- (gen_tac >> irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+          rpt (irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac) >>
+          irule storage_trace_frame_raw_call)
+      >- simp[] >>
+      qx_genl_tac [`b`,`x`,`l`,`p`,`base_addr`,`extent`,`t4`,`G4`,`tn4`,
+                   `marks`,`kvs`,`esK`,`tk`,`GK`,`tnK`] >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      `esK with gas_obs := [] = esK` by
+        simp[vyperStateTheory.evaluation_state_component_equality] >>
+      `eval_exprs cx kws (esD with gas_obs := gasSummary$gas_explicit marks t4.vs_gas_readings) =
+          (INL kvs,esK)` by
+        (qpat_assum `esK with gas_obs := [] = esK` (fn eq =>
+           qpat_assum `!tail. eval_exprs cx kws _ = _`
+             (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [APPEND_NIL,eq])))) >>
+      `valid_horizon cx st0 (storage_trace_horizon esD.storage_trace) esD.storage_trace` by
+        (qpat_assum `storage_trace_domain cx st0 esD.storage_trace`
+          (ACCEPT_TAC o REWRITE_RULE [storage_trace_domain_def])) >>
+      qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _`
+        (drule_then (map_every assume_tac o CONJUNCTS)) >>
+      mp_tac (Q.INST [`ann` |-> `raw_call_return_type flags`, `cap` |-> `n`,
+        `base'` |-> `base_addr`, `cap'` |-> `extent`,
+        `gsK` |-> `gasSummary$gas_explicit marks t4.vs_gas_readings`]
+        raw_call_kwargs_prepared_entry) >>
+      (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+        gen_tac >> strip_tac >>
+        first_assum (fn th =>
+          drule_then (map_every assume_tac o CONJUNCTS) th >>
+          rpt conj_tac >> first_assum ACCEPT_TAC))) >>
+      disch_then (qx_choose_then `t7` (qx_choose_then `G7` (qx_choose_then `tn7`
+        (qx_choose_then `ng` (qx_choose_then `ob` (qx_choose_then `gw`
+          (map_every assume_tac o CONJUNCTS))))))) >>
+      irule raw_call_generated_prefix_full >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+      >- (irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+          rpt (irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac) >>
+          irule storage_trace_frame_raw_call) >>
+      qexistsl_tac [`G7`,`ng`,`t7`,`tn7`] >>
+      (conj_tac >- (gen_tac >> strip_tac >>
+        qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+          (drule_then (ACCEPT_TAC o CONJUNCT1)))) >>
+      qabbrev_tac `gsK = gasSummary$gas_explicit marks t4.vs_gas_readings` >>
+      suspend "prepared_action") >>
+  mp_tac (BETA_RULE (Q.INST [`cap` |-> `n`, `Q` |-> `\H res ee G tn t. T`,
+    `R` |-> `\H res ee gt r. T`] raw_call_forced_data_kwargs_prefix_from_action)) >>
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+    >- (gen_tac >> strip_tac >>
+        qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+          (drule_then (map_every assume_tac o CONJUNCTS)) >> first_assum ACCEPT_TAC)
+    >- (gen_tac >> strip_tac >>
+        qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _`
+          (drule_then (map_every assume_tac o CONJUNCTS)) >>
+        rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    qx_genl_tac [`gsK`,`kvs`,`esK`,`t4`,`tk`,`t7`,`G7`,`tn7`,`b`,`ob`,`gw`] >>
+    disch_then (map_every assume_tac o CONJUNCTS) >>
+    suspend "prepared_action")) >>
+  disch_then ACCEPT_TAC
+QED
+
+Resume raw_call_expr_vv_prefix[prepared_action]:
+  markerLib.RESUME_TAC >>
+  mp_tac raw_call_prepared_action_full >>
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    gen_tac >> strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+      (drule_then (map_every assume_tac o CONJUNCTS)) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (mp_then Any irule gasOutcomeFullTheory.gas_outcome_full_post_mono) >>
+  simp[NoAsms]
+QED
+
+Finalise raw_call_expr_vv_prefix

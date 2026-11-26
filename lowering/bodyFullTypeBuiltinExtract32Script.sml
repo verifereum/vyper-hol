@@ -14,9 +14,9 @@ Ancestors
 Libs
   horizonTypeLib
 
-(* The current typing contract excludes fixed-byte sources and signed offsets.
-   Keep this boundary local rather than narrowing the frozen expression case. *)
-Theorem extract32_full_pre_shape[local]:
+(* The typing contract excludes fixed-byte sources and signed offsets.
+   Both simulation proofs use this boundary without narrowing the expression case. *)
+Theorem extract32_full_pre_shape:
   expr_body_pre cenv cx env (TypeBuiltin ann Extract32 t args) es ==>
   ?src off m k bt.
     args = [src;off] /\

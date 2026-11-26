@@ -31,7 +31,7 @@ in
   val decode_endpoint_producer = endpoint
 end
 
-Theorem abi_decode_singleton_compile[local]:
+Theorem abi_decode_singleton_compile:
   compile_expr ce ty0 (TypeBuiltin ty (AbiDecode unwrap) ty [e]) sa = (vv,final) /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\ fn_has_code sa final fn ==>
   ?data start out.

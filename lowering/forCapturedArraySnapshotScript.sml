@@ -18,7 +18,7 @@ Ancestors
   supportedExprTraverse[qualified,ignore_grammar]
 Libs monadsyntax
 
-Theorem snapshot_read[local]:
+Theorem snapshot_read:
   expr_body_pre c cx env e start /\ eval_expr cx e start = (INL rv,em) /\
   expr_type e = ArrayT typ bd /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
   vv_post H ctx func c cx e es sa se s0 em rv vv u /\
@@ -55,7 +55,7 @@ Proof
   Cases_on `bd` >> Cases_on `av` >> gvs[value_has_type_inv, array_elements_def, bound_length_def]
 QED
 
-Theorem snapshot_location[local]:
+Theorem snapshot_location:
   expr_body_pre c cx env e es /\ expr_type e = ArrayT typ bd /\
   vv_post H ctx func c cx e es sa se s0 em rv vv u /\
   (!v. rv = Value v /\ ~is_word_type (post_value_type c e) /\
@@ -80,7 +80,7 @@ Proof
                       vv_post_def,vv_place_ptr_def,vv_at_def]
 QED
 
-Theorem snapshot_length[local]:
+Theorem snapshot_length:
   expr_body_pre c cx env e start /\ eval_expr cx e start = (INL rv,em) /\
   expr_type e = ArrayT typ bd /\ evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV tyv bd) /\
   (!tr slot etv b. rv <> PlaceR (StoragePlace tr slot (ArrayTV etv b))) /\
@@ -186,6 +186,299 @@ QED
 
 Finalise snapshot_length
 
+Theorem for_array_snapshot_length_setup:
+  compile_stmt c lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
+  compile_stmt (gas_shadow_env T c) lctx ret_ty
+    (gas_shadow_stmt (For id typ (Array e) n loop_body)) sha = ((),shb) /\
+  compile_expr c (expr_type e) e sa = (vv,se) /\
+  compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e) sha = (vv,she) /\
+  gas_shadow_state sa sha /\ fn_has_code sa sb func /\ fn_has_code sha shb shadow_func /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
+  MEM shadow_func shadow_ctx.ctx_functions /\ fn_inst_ids_distinct func /\
+  body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  supported_stmt tops bindings (For id typ (Array e) n loop_body) /\
+  type_stmt env ret_ty (For id typ (Array e) n loop_body) = SOME env' /\
+  stmt_exprs_ok c (For id typ (Array e) n loop_body) /\
+  vyperTypeContract$stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n loop_body) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+      (For id typ (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
+  call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n loop_body)) /\
+  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ c ret_ty /\
+  c.ce_alloca_locals /\ local_ptrs_reserved c sa /\ ci_mono sa se /\
+  ret_pc_ok c sa s0 /\ return_buf_frame d c sa s0 /\ return_buf_sep d c em u /\
+  (!H. dead_lo_ok H (DF H) lo c cx) /\
+  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
+  ce_locals_declared c env /\ locals_alloc_ok c env /\ expr_body_pre c cx env e es /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_type e = ArrayT typ bd /\ bound_length bd <= n /\
+  evaluate_type (get_tenv cx) typ = SOME tyv /\
+  storage_trace_domain cx st0 em.storage_trace /\
+  (!tail. eval_expr cx e (es with gas_obs := obs ++ tail) =
+     (INL rv,em with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H em.storage_trace ==>
+     for_array_expr_endpoint (DF,lo,d,ctx,func) c cx e (es,sa,s0,G0,tn0)
+       (vv,se) H rv em Gu tu u) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func c cx es s0) /\
+  ((?av. rv = Value (ArrayV av)) \/ (?src name path. rv = PlaceR (ImmutablePlace src name path))) /\
+  (!av. read_result cx rv em = (INL (ArrayV av),em) ==>
+     for_nonslot_code_frame c cx env ctx func id e loop_body
+       (case vv_location vv of NONE => LocMemory | SOME l => l) rv vv av em u) ==>
+  ?she0 loc len_op sl bc saD saA xd capacity aidItem
+   entry cond bod incr exit idx invalid valid done_var next_var
+   sa' stride off_op sm sum_op sn addr saCopy sbCopy sbBody sj shadow_sbCopy shadow_sbBody
+   av xs vs tL GL tnL.
+    for_nonslot_layout (c,id,typ,e,typ,bd,ret_ty,loop_body) (func,shadow_func)
+      (sa,vv,se,sha,she0,loc,len_op,sl) (bc,saD,saA,xd,capacity,aidItem)
+      (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
+      (sa',stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
+      (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
+    body_const_cells_agree [(NONE,tops)] cx env em /\
+    (!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    ~u.vs_halted /\ em with gas_obs := [] = em /\
+    (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (u,Gu,tu) [] (OK tL,GL,tnL)) /\
+    vs = MAP Value xs /\
+    (!tail. array_iterator_results cx (expr_type e) rv (em with gas_obs := tail) =
+      (INL vs,em with gas_obs := tail)) /\
+    array_iterator_results cx (expr_type e) rv em = (INL vs,em) /\
+    check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" = return () /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV tyv bd) /\
+    read_result cx rv em = (INL (ArrayV av),em) /\
+    value_has_type (ArrayTV tyv bd) (ArrayV av) /\
+    extract_elements (ArrayTV tyv bd) (ArrayV av) = SOME xs /\
+    (loc = LocMemory \/ loc = LocCode) /\
+    (loc = LocMemory ==> rv = Value (ArrayV av) \/ ?name path. rv = PlaceR (MemoryPlace name path)) /\
+    (!name path. rv = PlaceR (MemoryPlace name path) ==>
+       runtime_place_typed cx em (MemoryPlace name path) (ArrayTV tyv bd)) /\
+    (!name path. rv = PlaceR (MemoryPlace name path) ==>
+       ?ent. lookup_scopes name em.scopes = SOME ent /\
+         evaluate_subscripts ent.type ent.value path = INL (ArrayV av)) /\
+    for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em tL /\
+    (!fn inst t. frag_reachable ctx func tL fn inst t ==> dalloca_fmp_headroom inst t) /\
+    return_buf_sep d c em tL /\
+    eval_operand len_op tL = SOME (n2w (LENGTH vs)) /\ op_taint tnL len_op = {} /\
+    op_prov GL len_op = NONE /\ ~tL.vs_halted /\ tL.vs_current_bb = sl.cs_current_bb /\
+    tL.vs_inst_idx = LENGTH sl.cs_current_insts /\
+    alloca_history func tL /\ (ctx_has_dalloca ctx ==> allocas_below_fmp tL) /\ allocas_from lo tL /\
+    s0.vs_alloca_next <= tL.vs_alloca_next /\ alloca_frame c es sa s0 c em tL /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP tL.vs_allocas aid = SOME b) /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x tL = SOME w) /\
+    ghost_kept_at lo c es sa G0 tn0 s0 GL tnL /\
+    (!H. valid_horizon cx st0 H em.storage_trace ==>
+       stmt_state_rel H ctx func c cx em tL /\ storage_well_formed_on cx em (FST H) /\
+       ghost_inv_at (DF H) lo d c cx em GL tnL tL) /\
+    vv_post (storage_trace_horizon em.storage_trace) ctx func c cx e es sa se s0 em rv vv tL /\
+    vv_store_bound cx (post_value_type c e) (lowered_value_type c e) em rv vv tL /\
+    ptr_vv_ok cx (post_value_type c e) rv vv em GL tnL tL /\
+    (!v. rv = Value v /\ ~is_word_type (post_value_type c e) /\
+      ~is_bytestring_type (post_value_type c e) ==>
+      vv_own c cx (post_value_type c e) sa se em rv vv tL /\
+      (!ty p. vv = LocatedValue ty p ==> p.ptr_location = LocMemory)) /\
+    (c.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+      !rt w. evaluate_type (get_tenv cx) (post_value_type c e) = SOME rt /\
+        eval_operand (vv_operand vv) tL = SOME w ==>
+        w2n w + type_memory_size rt <= lo /\
+        (!mem. mem_agree_outside tnL.t_mem tL.vs_memory mem ==>
+            val_in_memory rt (ArrayV av) (w2n w) mem)) /\
+    (!ty op. vv = StackValue ty op /\ ~is_word_type (post_value_type c e) ==>
+      ptr_buf_ok c e op GL tL) /\
+    (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
+      ptr_buf_ok c e p.ptr_operand GL tL)
+Proof
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  drule_all_then (qx_choosel_then [`vv0`,`se0`,`she0`,`loc`,`len_op`,`sl`] assume_tac)
+    (Q.INST [`sty` |-> `typ`] for_nonslot_array_layout_full) >>
+  qpat_x_assum `?bc. _` strip_assume_tac >>
+  `compile_expr c (expr_type e) e sa = (vv0,se0) /\
+   loc = (case vv_location vv0 of NONE => LocMemory | SOME l => l) /\
+   (case bd of Fixed cnt => comp_return (Lit (n2w cnt))
+       | Dynamic _ => compile_ptr_load c.ce_is_ctor c.ce_imm_alloca loc
+                        (vv_operand vv0)) se0 = (len_op,sl) /\ fn_has_code se0 sl func` by
+    (qpat_assum `for_nonslot_layout _ _ _ _ _ _ _`
+       (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_layout_def]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `vv0 = vv /\ se0 = se` by metis_tac[pairTheory.PAIR_EQ] >>
+  qpat_x_assum `vv0 = vv` SUBST_ALL_TAC >>
+  qpat_x_assum `se0 = se` SUBST_ALL_TAC >>
+  qabbrev_tac `H0 = storage_trace_horizon em.storage_trace` >>
+  `valid_horizon cx st0 H0 em.storage_trace` by fs[Abbr `H0`,storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> for_array_expr_endpoint _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H0` (drule_then (map_every assume_tac o CONJUNCTS o
+      REWRITE_RULE [for_array_expr_endpoint_def]))) >>
+  qabbrev_tac `start = es with gas_obs := obs` >>
+  `em with gas_obs := [] = em` by simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `eval_expr cx e start = (INL rv,em)` by
+    (qpat_assum `em with gas_obs := [] = em` (fn eq =>
+      qpat_assum `!tail. eval_expr cx e _ = _` (qspec_then `[]` mp_tac) >>
+      simp[NoAsms, Abbr `start`,eq])) >>
+  `expr_body_pre c cx env e start` by simp[Abbr `start`] >>
+  `body_const_cells_agree [(NONE,tops)] cx env em` by
+    (irule body_const_cells_agree_expr >>
+     qpat_assum `eval_expr cx e start = _`
+       (irule_at (Pat `eval_expr _ _ _ = _`)) >>
+     qpat_assum `expr_body_pre c cx env e start`
+       (assume_tac o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
+     simp[Abbr `start`]) >>
+  drule_all snapshot_read >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choosel_then [`av`,`xs`] (map_every assume_tac o CONJUNCTS))) >>
+  drule_all snapshot_location >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qmatch_asmsub_abbrev_tac `INL (vs : eval_result list)` >> suspend "length"
+QED
+
+Resume for_array_snapshot_length_setup[length]:
+  `!tail. array_iterator_results cx (expr_type e) rv (em with gas_obs := tail) =
+     (INL vs,em with gas_obs := tail)` by simp[Abbr `vs`] >>
+  `array_iterator_results cx (expr_type e) rv em = (INL vs,em)` by
+    (qpat_assum `em with gas_obs := [] = em` (fn eq =>
+      qpat_assum `!tail. array_iterator_results _ _ _ _ = (INL vs,_)`
+        (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [eq])))) >>
+  `check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" = return ()` by
+    (simp[FUN_EQ_THM,compatible_bound_def,check_def,assert_def,return_def,Abbr `vs`] >> decide_tac) >>
+  `vv_post H0 ctx func c cx e start sa se s0 em rv vv u` by
+    simp[Abbr `start`,vv_post_initial_gas] >>
+  drule_at_then (Pat `eval_expr _ _ _ = (INL _,_)`) drule_all snapshot_length >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
+    (qx_choosel_then [`tL`,`GL`,`tnL`] (map_every assume_tac o CONJUNCTS))) >>
+  `!H. valid_horizon cx st0 H em.storage_trace ==> valid_horizon cx st0 H es.storage_trace` by
+    (rpt strip_tac >>
+     `valid_horizon cx st0 H start.storage_trace` suffices_by simp[Abbr `start`] >>
+     irule (Q.ISPEC `eval_expr cx e` (Q.GEN `f` valid_horizon_frame)) >>
+     qexistsl [`e`,`INL rv`,`em`] >> simp[cj 5 evaluate_storage_trace_frame]) >>
+  `local_ptrs_reserved c se` by
+    (irule local_ptrs_reserved_next_var >> qexists `sa` >> fs[ci_mono_def]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at se x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> fs[ci_mono_def]) >>
+  `!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
+    (qpat_assum `return_buf_frame d c sa s0` (fn th => POP_ASSUM_LIST (K (mp_tac th))) >>
+     Cases_on `d` >> simp[return_buf_frame_def, pairTheory.FORALL_PROD, pairTheory.EXISTS_PROD] >>
+     PairCases_on `x` >> rw[return_buf_frame_def] >> gvs[]) >>
+  `!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x` by metis_tac[] >>
+  `!x sz. c.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x` by
+    metis_tac[ret_pc_ok_def] >>
+  drule_all_then (assume_tac o REWRITE_RULE [copy_old_operand_def])
+    reasonEndpointResourcesPtrTheory.compile_expr_old_operand >> suspend "transport"
+QED
+
+Resume for_array_snapshot_length_setup[transport]:
+  `!H. valid_horizon cx st0 H em.storage_trace ==>
+    stmt_state_rel H ctx func c cx em tL /\ storage_well_formed_on cx em (FST H) /\
+    ghost_inv_at (DF H) lo d c cx em GL tnL tL /\
+    alloca_history func tL /\ (ctx_has_dalloca ctx ==> allocas_below_fmp tL) /\
+    allocas_from lo tL /\ s0.vs_alloca_next <= tL.vs_alloca_next /\
+    alloca_frame c es sa s0 c em tL /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP tL.vs_allocas aid = SOME b) /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x tL = SOME w) /\
+    ghost_kept_at lo c es sa G0 tn0 s0 GL tnL /\
+    vv_post H ctx func c cx e es sa se s0 em rv vv tL /\
+    vv_store_bound cx (post_value_type c e) (lowered_value_type c e) em rv vv tL /\
+    ptr_vv_ok cx (post_value_type c e) rv vv em GL tnL tL /\
+    (!v. rv = Value v /\ ~is_word_type (post_value_type c e) /\
+      ~is_bytestring_type (post_value_type c e) ==>
+      vv_own c cx (post_value_type c e) sa se em rv vv tL /\
+      (!ty p. vv = LocatedValue ty p ==> p.ptr_location = LocMemory)) /\
+    (c.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+      !rt w. evaluate_type (get_tenv cx) (post_value_type c e) = SOME rt /\
+        eval_operand (vv_operand vv) tL = SOME w ==>
+        w2n w + type_memory_size rt <= lo /\
+        (!mem. mem_agree_outside tnL.t_mem tL.vs_memory mem ==>
+            val_in_memory rt (ArrayV av) (w2n w) mem)) /\
+    (!ty op. vv = StackValue ty op /\ ~is_word_type (post_value_type c e) ==>
+      ptr_buf_ok c e op GL tL) /\
+    (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
+      ptr_buf_ok c e p.ptr_operand GL tL) /\
+    eval_operand (vv_operand vv) tL = eval_operand (vv_operand vv) u` by
+    suspend "transport_at_horizon" >>
+  qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> stmt_state_rel H ctx func c cx em tL /\ _`
+    (qspec_then `H0` (drule_then (map_every assume_tac o CONJUNCTS))) >>
+  `!H. valid_horizon cx st0 H em.storage_trace ==> stmt_state_rel H ctx func c cx em tL /\
+       storage_well_formed_on cx em (FST H) /\ ghost_inv_at (DF H) lo d c cx em GL tnL tL` by
+    (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  suspend "round_frame"
+QED
+
+Resume for_array_snapshot_length_setup[transport_at_horizon]:
+  gen_tac >> disch_tac >>
+  `valid_horizon cx st0 H es.storage_trace` by simp[] >>
+  qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> for_array_expr_endpoint _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H` (drule_then (map_every assume_tac o CONJUNCTS o
+      REWRITE_RULE [for_array_expr_endpoint_def]))) >>
+  `stmt_state_rel H ctx func c cx es s0` by simp[] >>
+  drule_at_then (Pat `array_length_frame _ _ _ _ _ _ _`)
+    (drule_at_then (Pat `stmt_state_rel _ _ _ _ _ _ _`)
+      (drule_at_then (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) drule_all))
+    for_nonslot_array_length_frame_transport >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (disch_tac >>
+     qpat_assum `c.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+       ?v. read_result cx rv em = (INL v,em) /\
+           !rt w. (_ /\ eval_operand (vv_operand vv) tL = SOME w) ==> _` mp_tac >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (qx_choose_then `cv` (map_every assume_tac o CONJUNCTS)) >>
+     `cv = ArrayV av` by metis_tac[sumTheory.INL_11,pairTheory.PAIR_EQ] >>
+     pop_assum SUBST_ALL_TAC >> first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume for_array_snapshot_length_setup[round_frame]:
+  qpat_assum `array_length_frame _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [array_length_frame_def]) >>
+  `tL = u with <|vs_vars := tL.vs_vars; vs_inst_idx := tL.vs_inst_idx|>` by
+    (qpat_assum `_ with vs_vars := _ = u` (SUBST1_TAC o SYM) >>
+     simp[venom_state_component_equality]) >>
+  `tL.vs_allocas = u.vs_allocas /\ tL.vs_data_section = u.vs_data_section` by
+    (pop_assum (fn th => conj_tac >> simp[Once th])) >>
+  `return_buf_sep d c em tL` by
+    (irule return_buf_sep_transport >>
+     conj_tac >-
+       (map_every qx_gen_tac [`bw`,`cap`] >> disch_then SUBST_ALL_TAC >>
+        qpat_assum `return_buf_sep (SOME (bw,cap)) c em u`
+          (mp_tac o CONJUNCT1 o REWRITE_RULE [return_buf_sep_def]) >>
+        simp[allocas_from_def]) >>
+     qexistsl [`c`,`em`,`u`] >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     `!x. not_fresh_at se x ==> lookup_var x tL = lookup_var x u` by simp[] >>
+     drule_all_then (fn th => simp[th])
+       (Q.SPECL [`c`,`se`,`u`,`tL`] copy_buffer_local_region_frame)) >>
+  `!fn inst t. frag_reachable ctx func tL fn inst t ==> dalloca_fmp_headroom inst t` by
+    (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+       metis_tac[body_inv_no_phi] >>
+     qpat_assum `!D. gas_origin_ptr_path _ (u,Gu,tu) [] (OK tL,GL,tnL)`
+       (qspec_then `DF H0` assume_tac) >>
+     rpt strip_tac >> drule_all_then ACCEPT_TAC gas_origin_ptr_path_dalloca_fmp_headroom) >>
+  `for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em tL` by
+    (`for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em u` by
+       (qpat_assum `loc = case vv_location vv of NONE => LocMemory | SOME l => l` SUBST1_TAC >> simp[]) >>
+     qpat_x_assum `for_nonslot_code_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [for_nonslot_code_frame_def]) >>
+     `vv_place_ptr c cx em u rv vv /\ vv_place_ptr c cx em tL rv vv` by
+       (conj_tac >> fs[vv_post_def]) >>
+     simp[for_nonslot_code_frame_def]) >>
+  suspend "package"
+QED
+
+Resume for_array_snapshot_length_setup[package]:
+  `vs = MAP Value xs` by simp[Abbr `vs`] >>
+  `loc = LocMemory ==> rv = Value (ArrayV av) \/ ?name path. rv = PlaceR (MemoryPlace name path)` by simp[] >>
+  `!name path. rv = PlaceR (MemoryPlace name path) ==> runtime_place_typed cx em (MemoryPlace name path) (ArrayTV tyv bd)` by
+    (qpat_assum `rv = Value _ \/ _` strip_assume_tac >> simp[]) >>
+  `!name path. rv = PlaceR (MemoryPlace name path) ==>
+    ?ent. lookup_scopes name em.scopes = SOME ent /\ evaluate_subscripts ent.type ent.value path = INL (ArrayV av)` by
+    (qpat_assum `rv = Value _ \/ _` strip_assume_tac >> simp[]) >>
+  `vv_post (storage_trace_horizon em.storage_trace) ctx func c cx e es sa se s0 em rv vv tL` by
+    (qpat_assum `vv_post H0 _ _ _ _ _ es sa se s0 em rv vv tL` mp_tac >>
+     simp[Abbr `H0`]) >>
+  qpat_assum `for_nonslot_layout _ _ _ _ _ _ _` (irule_at Any) >>
+  qexistsl [`xs`,`vs`,`tnL`,`tL`,`av`,`GL`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise for_array_snapshot_length_setup
+
 Theorem for_array_snapshot_continue_full:
   compile_stmt c lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
   compile_stmt (gas_shadow_env T c) lctx ret_ty
@@ -239,198 +532,22 @@ Theorem for_array_snapshot_continue_full:
     (for_array_loop_exit ctx cx RetQ)
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then (qx_choosel_then [`vv0`,`se0`,`she0`,`loc`,`len_op`,`sl`] assume_tac)
-    (Q.INST [`sty` |-> `typ`] for_nonslot_array_layout_full) >>
-  qpat_x_assum `?bc. _` strip_assume_tac >>
-  `compile_expr c (expr_type e) e sa = (vv0,se0) /\
-   loc = (case vv_location vv0 of NONE => LocMemory | SOME l => l) /\
-   (case bd of Fixed cnt => comp_return (Lit (n2w cnt))
-       | Dynamic _ => compile_ptr_load c.ce_is_ctor c.ce_imm_alloca loc
-                        (vv_operand vv0)) se0 = (len_op,sl) /\ fn_has_code se0 sl func` by
-    (qpat_assum `for_nonslot_layout _ _ _ _ _ _ _`
-       (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_layout_def]) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `vv0 = vv /\ se0 = se` by metis_tac[pairTheory.PAIR_EQ] >>
-  qpat_x_assum `vv0 = vv` SUBST_ALL_TAC >>
-  qpat_x_assum `se0 = se` SUBST_ALL_TAC >>
-  qabbrev_tac `H0 = storage_trace_horizon em.storage_trace` >>
-  `valid_horizon cx st0 H0 em.storage_trace` by fs[Abbr `H0`,storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> for_array_expr_endpoint _ _ _ _ _ _ _ _ _ _ _ _`
-    (qspec_then `H0` (drule_then (map_every assume_tac o CONJUNCTS o
-      REWRITE_RULE [for_array_expr_endpoint_def]))) >>
-  qabbrev_tac `start = es with gas_obs := obs` >>
-  `em with gas_obs := [] = em` by simp[vyperStateTheory.evaluation_state_component_equality] >>
-  `eval_expr cx e start = (INL rv,em)` by
-    (qpat_assum `em with gas_obs := [] = em` (fn eq =>
-      qpat_assum `!tail. eval_expr cx e _ = _` (qspec_then `[]` mp_tac) >>
-      simp[NoAsms, Abbr `start`,eq])) >>
-  `expr_body_pre c cx env e start` by simp[Abbr `start`] >>
-  `body_const_cells_agree [(NONE,tops)] cx env em` by
-    (irule body_const_cells_agree_expr >>
-     qpat_assum `eval_expr cx e start = _`
-       (irule_at (Pat `eval_expr _ _ _ = _`)) >>
-     qpat_assum `expr_body_pre c cx env e start`
-       (assume_tac o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
-     simp[Abbr `start`]) >>
-  drule_all snapshot_read >>
-  disch_then (CONJUNCTS_THEN2 assume_tac
-    (qx_choosel_then [`av`,`xs`] (map_every assume_tac o CONJUNCTS))) >>
-  drule_all snapshot_location >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qmatch_asmsub_abbrev_tac `INL (vs : eval_result list)` >> suspend "source"
-QED
-
-Resume for_array_snapshot_continue_full[source]:
-  `!tail. array_iterator_results cx (expr_type e) rv (em with gas_obs := tail) =
-     (INL vs,em with gas_obs := tail)` by simp[Abbr `vs`] >>
-  `array_iterator_results cx (expr_type e) rv em = (INL vs,em)` by
-    (qpat_assum `em with gas_obs := [] = em` (fn eq =>
-      qpat_assum `!tail. array_iterator_results _ _ _ _ = (INL vs,_)`
-        (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [eq])))) >>
-  `check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" = return ()` by
-    (simp[FUN_EQ_THM,compatible_bound_def,check_def,assert_def,return_def,Abbr `vs`] >> decide_tac) >>
+  mp_tac (SPEC_ALL for_array_snapshot_length_setup) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choosel_then
+    [`she0`,`loc`,`len_op`,`sl`,`bc`,`saD`,`saA`,`xd`,`capacity`,`aidItem`,
+     `entry`,`cond`,`bod`,`incr`,`exit`,`idx`,`invalid`,`valid`,`done_var`,`next_var`,
+     `sa'`,`stride`,`off_op`,`sm`,`sum_op`,`sn`,`addr`,`saCopy`,`sbCopy`,
+     `sbBody`,`sj`,`shadow_sbCopy`,`shadow_sbBody`,`av`,`xs`,`vs`,`tL`,`GL`,`tnL`]
+    (map_every assume_tac o CONJUNCTS)) >>
   `body_for_full_ok cx tyv id loop_body vs /\
    gas_admissible (eval_for cx tyv id loop_body vs) (stmt_res_ok lctx) em` by
-    (first_x_assum irule >> simp[return_def]) >>
+    (qpat_assum `!vs. _ ==> body_for_full_ok _ _ _ _ _ /\ _` irule >> simp[return_def]) >>
   pop_assum strip_assume_tac >>
-  suspend "length"
-QED
-
-Resume for_array_snapshot_continue_full[length]:
-  `vv_post H0 ctx func c cx e start sa se s0 em rv vv u` by
-    simp[Abbr `start`,vv_post_initial_gas] >>
-  drule_at_then (Pat `eval_expr _ _ _ = (INL _,_)`) drule_all snapshot_length >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
-    (qx_choosel_then [`tL`,`GL`,`tnL`] (map_every assume_tac o CONJUNCTS))) >>
-  `!H. valid_horizon cx st0 H em.storage_trace ==> valid_horizon cx st0 H es.storage_trace` by
-    (rpt strip_tac >>
-     `valid_horizon cx st0 H start.storage_trace` suffices_by simp[Abbr `start`] >>
-     irule (Q.ISPEC `eval_expr cx e` (Q.GEN `f` valid_horizon_frame)) >>
-     qexistsl [`e`,`INL rv`,`em`] >> simp[cj 5 evaluate_storage_trace_frame]) >>
-  `local_ptrs_reserved c se` by
-    (irule local_ptrs_reserved_next_var >> qexists `sa` >> fs[ci_mono_def]) >>
-  `!x. not_fresh_at sa x ==> not_fresh_at se x` by
-    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> fs[ci_mono_def]) >>
-  `!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
-    (qpat_assum `return_buf_frame d c sa s0` (fn th => POP_ASSUM_LIST (K (mp_tac th))) >>
-     Cases_on `d` >> simp[return_buf_frame_def, pairTheory.FORALL_PROD, pairTheory.EXISTS_PROD] >>
-     PairCases_on `x` >> rw[return_buf_frame_def] >> gvs[]) >>
-  `!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x` by metis_tac[] >>
-  `!x sz. c.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x` by
-    metis_tac[ret_pc_ok_def] >>
-  drule_all_then (assume_tac o REWRITE_RULE [copy_old_operand_def])
-    reasonEndpointResourcesPtrTheory.compile_expr_old_operand >> suspend "transport"
-QED
-
-Resume for_array_snapshot_continue_full[transport]:
-  `!H. valid_horizon cx st0 H em.storage_trace ==>
-    stmt_state_rel H ctx func c cx em tL /\ storage_well_formed_on cx em (FST H) /\
-    ghost_inv_at (DF H) lo d c cx em GL tnL tL /\
-    alloca_history func tL /\ (ctx_has_dalloca ctx ==> allocas_below_fmp tL) /\
-    allocas_from lo tL /\ s0.vs_alloca_next <= tL.vs_alloca_next /\
-    alloca_frame c es sa s0 c em tL /\
-    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP tL.vs_allocas aid = SOME b) /\
-    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x tL = SOME w) /\
-    ghost_kept_at lo c es sa G0 tn0 s0 GL tnL /\
-    vv_post H ctx func c cx e es sa se s0 em rv vv tL /\
-    vv_store_bound cx (post_value_type c e) (lowered_value_type c e) em rv vv tL /\
-    ptr_vv_ok cx (post_value_type c e) rv vv em GL tnL tL /\
-    (!v. rv = Value v /\ ~is_word_type (post_value_type c e) /\
-      ~is_bytestring_type (post_value_type c e) ==>
-      vv_own c cx (post_value_type c e) sa se em rv vv tL /\
-      (!ty p. vv = LocatedValue ty p ==> p.ptr_location = LocMemory)) /\
-    (c.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-      !rt w. evaluate_type (get_tenv cx) (post_value_type c e) = SOME rt /\
-        eval_operand (vv_operand vv) tL = SOME w ==>
-        w2n w + type_memory_size rt <= lo /\
-        (!mem. mem_agree_outside tnL.t_mem tL.vs_memory mem ==>
-            val_in_memory rt (ArrayV av) (w2n w) mem)) /\
-    (!ty op. vv = StackValue ty op /\ ~is_word_type (post_value_type c e) ==>
-      ptr_buf_ok c e op GL tL) /\
-    (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
-      ptr_buf_ok c e p.ptr_operand GL tL) /\
-    eval_operand (vv_operand vv) tL = eval_operand (vv_operand vv) u` by
-    suspend "transport_at_horizon" >>
-  qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> stmt_state_rel H ctx func c cx em tL /\ _`
-    (qspec_then `H0` (drule_then (map_every assume_tac o CONJUNCTS))) >>
-  `!H. valid_horizon cx st0 H em.storage_trace ==> stmt_state_rel H ctx func c cx em tL /\
-       storage_well_formed_on cx em (FST H) /\ ghost_inv_at (DF H) lo d c cx em GL tnL tL` by
-    (rpt strip_tac >> first_x_assum drule >> simp[]) >>
-  suspend "round_frame"
-QED
-
-Resume for_array_snapshot_continue_full[transport_at_horizon]:
-  gen_tac >> disch_tac >>
-  `valid_horizon cx st0 H es.storage_trace` by simp[] >>
-  qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> for_array_expr_endpoint _ _ _ _ _ _ _ _ _ _ _ _`
-    (qspec_then `H` (drule_then (map_every assume_tac o CONJUNCTS o
-      REWRITE_RULE [for_array_expr_endpoint_def]))) >>
-  `stmt_state_rel H ctx func c cx es s0` by simp[] >>
-  drule_at_then (Pat `array_length_frame _ _ _ _ _ _ _`)
-    (drule_at_then (Pat `stmt_state_rel _ _ _ _ _ _ _`)
-      (drule_at_then (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) drule_all))
-    for_nonslot_array_length_frame_transport >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac >-
-    (disch_tac >>
-     qpat_assum `c.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-       ?v. read_result cx rv em = (INL v,em) /\
-           !rt w. (_ /\ eval_operand (vv_operand vv) tL = SOME w) ==> _` mp_tac >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     disch_then (qx_choose_then `cv` (map_every assume_tac o CONJUNCTS)) >>
-     `cv = ArrayV av` by metis_tac[sumTheory.INL_11,pairTheory.PAIR_EQ] >>
-     pop_assum SUBST_ALL_TAC >> first_assum ACCEPT_TAC) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Resume for_array_snapshot_continue_full[round_frame]:
-  qpat_assum `array_length_frame _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [array_length_frame_def]) >>
-  `tL = u with <|vs_vars := tL.vs_vars; vs_inst_idx := tL.vs_inst_idx|>` by
-    (qpat_assum `_ with vs_vars := _ = u` (SUBST1_TAC o SYM) >>
-     simp[venom_state_component_equality]) >>
-  `tL.vs_allocas = u.vs_allocas /\ tL.vs_data_section = u.vs_data_section` by
-    (pop_assum (fn th => conj_tac >> simp[Once th])) >>
-  `return_buf_sep d c em tL` by
-    (irule return_buf_sep_transport >>
-     conj_tac >-
-       (map_every qx_gen_tac [`bw`,`cap`] >> disch_then SUBST_ALL_TAC >>
-        qpat_assum `return_buf_sep (SOME (bw,cap)) c em u`
-          (mp_tac o CONJUNCT1 o REWRITE_RULE [return_buf_sep_def]) >>
-        simp[allocas_from_def]) >>
-     qexistsl [`c`,`em`,`u`] >>
-     reverse conj_tac >- first_assum ACCEPT_TAC >>
-     `!x. not_fresh_at se x ==> lookup_var x tL = lookup_var x u` by simp[] >>
-     drule_all_then (fn th => simp[th])
-       (Q.SPECL [`c`,`se`,`u`,`tL`] copy_buffer_local_region_frame)) >>
-  `!fn inst t. frag_reachable ctx func tL fn inst t ==> dalloca_fmp_headroom inst t` by
-    (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-       metis_tac[body_inv_no_phi] >>
-     qpat_assum `!D. gas_origin_ptr_path _ (u,Gu,tu) [] (OK tL,GL,tnL)`
-       (qspec_then `DF H0` assume_tac) >>
-     rpt strip_tac >> drule_all_then ACCEPT_TAC gas_origin_ptr_path_dalloca_fmp_headroom) >>
-  `for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em tL` by
-    (`for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em u` by
-       (qpat_assum `loc = case vv_location vv of NONE => LocMemory | SOME l => l` SUBST1_TAC >> simp[]) >>
-     qpat_x_assum `for_nonslot_code_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (mp_tac o REWRITE_RULE [for_nonslot_code_frame_def]) >>
-     `vv_place_ptr c cx em u rv vv /\ vv_place_ptr c cx em tL rv vv` by
-       (conj_tac >> fs[vv_post_def]) >>
-     simp[for_nonslot_code_frame_def]) >>
   suspend "rounds"
 QED
 
 Resume for_array_snapshot_continue_full[rounds]:
-  `vs = MAP Value xs` by simp[Abbr `vs`] >>
-  `loc = LocMemory ==> rv = Value (ArrayV av) \/ ?name path. rv = PlaceR (MemoryPlace name path)` by simp[] >>
-  `!name path. rv = PlaceR (MemoryPlace name path) ==> runtime_place_typed cx em (MemoryPlace name path) (ArrayTV tyv bd)` by
-    (qpat_assum `rv = Value _ \/ _` strip_assume_tac >> simp[]) >>
-  `!name path. rv = PlaceR (MemoryPlace name path) ==>
-    ?ent. lookup_scopes name em.scopes = SOME ent /\ evaluate_subscripts ent.type ent.value path = INL (ArrayV av)` by
-    (qpat_assum `rv = Value _ \/ _` strip_assume_tac >> simp[]) >>
-  `vv_post (storage_trace_horizon em.storage_trace) ctx func c cx e es sa se s0 em rv vv tL` by
-    (qpat_assum `vv_post H0 _ _ _ _ _ es sa se s0 em rv vv tL` mp_tac >>
-     simp[Abbr `H0`]) >>
   mp_tac (Q.INST [`u` |-> `tL`, `Gu` |-> `GL`, `tu` |-> `tnL`,
      `sty` |-> `typ`, `fty` |-> `typ`, `dtv` |-> `tyv`, `stv` |-> `tyv`, `es0` |-> `es`,
      `sa` |-> `sa'`, `sa0` |-> `sa`, `sbExpr` |-> `se`, `saL` |-> `sl`,

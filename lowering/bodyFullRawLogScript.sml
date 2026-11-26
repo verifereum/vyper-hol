@@ -10,13 +10,31 @@
  *)
 Theory bodyFullRawLog
 Ancestors
-  bodyFullRawLogCompose bodyFullExprGeneric bodyFullPreds bodySimFull
+  bodyFullRawLogCompose bodyFullExprGeneric bodyFullPreds bodySimFull exprSimCallRawLog
   gasShadowCompile gasShadowCompileHelpers gasShadowCompileStmtHelpers
   gasShadowState gasShadow exprLowering exprCallbackContracts exprSimHypsDefs vyperTypeSystem
   vyperAST list compileEnv vyperInterpreter vyperValue vyperState valueEncoding
 Libs pairLib
 
 val _ = Parse.hide "body";
+
+Theorem raw_log_compile_stack:
+  expr_body_pre cenv cx env (Call ann RawLog args dflt) es ==>
+  !sa. ?t op sb. compile_expr cenv ty (Call ann RawLog args dflt) sa =
+                (StackValue t op,sb)
+Proof
+  strip_tac >>
+  `LENGTH args = 2` by
+    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[expr_body_pre_def, Once well_typed_expr_def]) >>
+  gvs[LENGTH_EQ_NUM_compute] >> gen_tac >>
+  pure_once_rewrite_tac [CONJUNCT1 compile_expr_raw_def] >>
+  pure_rewrite_tac [compile_expr_body_def, expr_type_def, LET_THM] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[compile_call_child_calls, compile_call_def] >>
+  pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[] >>
+  rpt (pairarg_tac >> simp[])
+QED
 
 Theorem raw_log_expr_full_ok:
   !cx ann es dflt.
@@ -49,10 +67,10 @@ Resume raw_log_expr_full_ok[judgments]:
   irule expr_vv_sim_stack_full >> simp[] >> rpt conj_tac
   >~ [`!sa. ?t op sb. compile_expr cenv ty (Call ann RawLog es dflt) sa =
          (StackValue t op,sb)`]
-  >- suspend "stack"
+  >- metis_tac[raw_log_compile_stack]
   >~ [`!s tv s'. eval_expr cx (Call ann RawLog es dflt) s = (INL tv,s') ==>
          ?v. tv = Value v`]
-  >- suspend "value" >> suspend "size"
+  >- metis_tac[raw_log_eval_value] >> suspend "size"
 QED
 
 Resume raw_log_expr_full_ok[size]:
@@ -61,27 +79,6 @@ Resume raw_log_expr_full_ok[size]:
      simp[expr_body_pre_def, Once well_typed_expr_def]) >>
   simp[expr_type_def, lowered_value_type_def, evaluate_type_def,
        type_memory_size_def]
-QED
-
-Resume raw_log_expr_full_ok[stack]:
-  `LENGTH es = 2` by
-    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
-     simp[expr_body_pre_def, Once well_typed_expr_def]) >>
-  gvs[LENGTH_EQ_NUM_compute] >> gen_tac >>
-  pure_once_rewrite_tac [CONJUNCT1 compile_expr_raw_def] >>
-  pure_rewrite_tac [compile_expr_body_def, expr_type_def, LET_THM] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  simp[compile_call_child_calls, compile_call_def] >>
-  pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[] >>
-  rpt (pairarg_tac >> simp[])
-QED
-
-Resume raw_log_expr_full_ok[value]:
-  rpt gen_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-       type_check_def, assert_def, raise_def, lift_option_type_def,
-       lift_option_def, push_log_def,
-       AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
 Finalise raw_log_expr_full_ok
