@@ -13,6 +13,7 @@ Ancestors
   gasEvents gasContext emitHelper emitHelperProps fragExec memSafeRun
   ptrSafeRun ptrDiscipline instMemFrontier codegenRel contextCodegenRel
   unitTransformDefs venomExecProps venomExecSemantics venomInst venomState list
+  createSizeExit
 
 (* The gas, memory and pointer facts of one emitted control instruction at
    its block position, as a zero-mark joint edge. *)
@@ -54,6 +55,33 @@ Proof
   `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG)
      (s, G, tn) [] (OK (jump_to lbl s), G, tn)` by ctrl_edge_tac >>
   metis_tac[gas_origin_ptr_path_rules, APPEND]
+QED
+
+Theorem emit_abort_create_size_exit_ok:
+  emit_inst opc ops [] sa = ((), sb) /\ fn_has_code sa sb func /\
+  MEM func ctx.ctx_functions /\
+  ((opc = REVERT /\ ops = [Lit 0w; Lit 0w]) \/ (opc = INVALID /\ ops = [])) /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  step_inst_base (mk_inst sa.cs_next_id opc ops []) s = Abort a t ==>
+  create_size_exit_ok ctx res (Abort a t)
+Proof
+  strip_tac >> Cases_on `a` >> simp[create_size_exit_ok_def] >>
+  strip_tac >>
+  `opc = INVALID /\ ops = []` by
+    (simp[] >> qspecl_then [`sa.cs_next_id`, `s`] mp_tac step_revert_zero >> gvs[]) >>
+  `t = halt_state (set_returndata [] s)` by
+    (qpat_assum `step_inst_base _ s = Abort ExHalt_abort t` mp_tac >>
+     gvs[mk_inst_def, step_inst_base_opcode_eqs]) >>
+  drule emit_inst_extends >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH sa.cs_current_insts) =
+    SOME (mk_inst sa.cs_next_id INVALID [] [])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  mp_tac (Q.INST [`s` |-> `halt_state (set_returndata [] s)`,
+    `inst` |-> `mk_inst sa.cs_next_id INVALID [] []`, `a` |-> `ExHalt_abort`,
+    `fn` |-> `func`] (SPEC_ALL oversized_create_abort_non_create_cursor)) >>
+  (impl_tac >- simp[halt_state_def, set_returndata_def, mk_inst_opcode]) >>
+  disch_tac >> gvs[]
 QED
 
 Theorem emit_jnz_origin_ptr:

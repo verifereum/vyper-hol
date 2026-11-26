@@ -2,7 +2,7 @@
    before every finite storage horizon. *)
 Theory sourceUnitExecution
 Ancestors
-  e2eDefs gasSummary gasExplicitSites fragGasOrigin fragGasOriginPtr ptrSafeRun
+  createSizeExit e2eDefs gasSummary gasExplicitSites fragGasOrigin fragGasOriginPtr ptrSafeRun
   loweringStateRelDefs ptrDiscipline unitTransformDefs vyperStorageFootprint
 
 (* The dead bytes the body's run may leave taint in: those storage_dead
@@ -72,6 +72,7 @@ Definition source_unit_execution_correct_with_def:
                             vs_inst_idx := 0 |>), FEMPTY, entry_taint)
                marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
           (?r. exit_result r /\
+             create_size_exit_ok unit.cu_context res r /\
              storage_trace_domain
                (initial_evaluation_context am.sources am.layouts tx NONE)
                (initial_state am []) obs /\
