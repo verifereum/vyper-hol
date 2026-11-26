@@ -496,6 +496,20 @@ Proof
         metis_tac[IS_PREFIX_APPEND, APPEND] >>
       qabbrev_tac `tabort = halt_state (set_returndata [] u)
         with vs_inst_idx := SUC sbuf.vs_inst_idx` >>
+      `lookup_block tabort.vs_current_bb func.fn_blocks = SOME bb /\
+       get_instruction bb tabort.vs_inst_idx = SOME ci` by
+        (simp[NoAsms, Abbr `tabort`, Abbr `u`, halt_state_def, set_returndata_def,
+              update_var_def] >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qpat_assum `isPREFIX [gi;ci] _`
+           (strip_assume_tac o MATCH_MP fragGasSeqAbortTheory.instruction_prefix_cursor) >>
+         qpat_assum `isPREFIX [ci] _`
+           (ACCEPT_TAC o CONJUNCT1 o MATCH_MP fragGasSeqAbortTheory.instruction_prefix_cursor)) >>
+      `ALL_DISTINCT (FLAT (MAP fn_labels ctx.ctx_functions)) ==>
+       ~oversized_create_abort ctx (Abort ExHalt_abort tabort)` by
+        (strip_tac >> irule createSizeExitTheory.oversized_create_abort_non_create_cursor >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qexistsl_tac [`bb`, `func`, `ci`] >> simp[Abbr `ci`, mk_inst_def]) >>
       qabbrev_tac `Ga = step_prov PG Gbuf gi u` >>
       qabbrev_tac `tna = step_taint gi sbuf u tnbuf` >>
       `!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -579,7 +593,9 @@ Proof
             gas_origin_ptr_path _ (sarg,G1,tn1) [F] _`
             (fn th => qpat_assum `valid_horizon cx st0 H mid.storage_trace`
               (ACCEPT_TAC o MATCH_MP th))) >>
-      simp[NoAsms, exit_result_def, expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
+      simp[NoAsms, exit_result_def, expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
+      qpat_assum `ALL_DISTINCT _ ==> ~oversized_create_abort _ _` mp_tac >>
+      tautLib.TAUT_TAC) >>
   `?vcall. run_inst_seq [gi;ci] sbuf = OK vcall` by
     (qunabbrev_tac `gi` >> qunabbrev_tac `ci` >>
      MATCH_MP_TAC (Q.INST [`src` |-> `qi`,`dst` |-> `qo`,`gv` |-> `gv`,

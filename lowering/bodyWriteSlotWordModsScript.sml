@@ -182,6 +182,9 @@ Resume slot_word_writeback_mods[static]:
   conj_tac
   >- (irule storage_emit_static_origin_ptr >> simp[] >>
       goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >> simp[]) >>
+  conj_tac
+  >- (disj2_tac >> irule createSizeExitTheory.oversized_create_abort_static >>
+      simp[halt_state_def, set_returndata_def]) >>
   simp[stmt_exit_ptr_def, expr_exit_def, halt_exit_not_halt]
 QED
 

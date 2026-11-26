@@ -33,9 +33,19 @@ QED
 Theorem widen_immutable_frame[local]:
   immutable_frame_mods func ce cx mid t /\
   z.vs_memory = t.vs_memory /\ z.vs_data_section = t.vs_data_section /\
-  t.vs_alloca_next <= w2n (dw:256 word) /\ t.vs_alloca_next <= z.vs_alloca_next /\
+  t.vs_alloca_next <= z.vs_alloca_next /\
   (!aid b n. FLOOKUP z.vs_allocas aid = SOME (b,n) ==>
       FLOOKUP t.vs_allocas aid = SOME (b,n) \/ t.vs_alloca_next <= b) /\
+  (!aid b n. aid < sm.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (b,n) ==>
+      regions_disjoint (w2n dw) cap b n) /\
+  (!name b n. local_region ce mid.scopes z name b n ==>
+      regions_disjoint (w2n dw) cap b n) /\
+  FLOOKUP z.vs_allocas sm.cs_next_id = SOME (w2n (dw:256 word),cap) /\
+  k <= cap /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_id = sm.cs_next_id /\
+  z with <|vs_vars := t.vs_vars; vs_allocas := t.vs_allocas;
+           vs_alloca_next := t.vs_alloca_next; vs_inst_idx := t.vs_inst_idx|> = t /\
   local_ptrs_reserved ce sm /\
   (!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x t) /\
   q = (mcopy (w2n dw) a k z) with vs_inst_idx := idx ==>
@@ -53,11 +63,12 @@ Proof
   irule immutable_alloca_sep_frame >> qexistsl_tac [`t`,`mid`] >>
   `q.vs_alloca_next = z.vs_alloca_next /\ q.vs_allocas = z.vs_allocas` by
     simp[mcopy_def, write_memory_with_expansion_def] >>
-  fs[] >> rpt strip_tac >> disj1_tac >> qexists_tac `id` >>
-  qpat_assum `!ce' scopes id b n. _`
-    (qspecl_then [`ce with ce_module := src`,`mid.scopes`,`id`,`b`,`sz`] mp_tac) >>
-  fs[local_region_def,lookup_var_def,mcopy_def,write_memory_with_expansion_def] >>
-  metis_tac[]
+  fs[] >> rpt strip_tac >> disj1_tac >>
+  (qexists_tac `id` >>
+   qpat_assum `!ce' scopes id b n. _`
+     (qspecl_then [`ce with ce_module := src`,`mid.scopes`,`id`,`b`,`sz`] mp_tac) >>
+   fs[local_region_def,lookup_var_def,mcopy_def,write_memory_with_expansion_def] >>
+   metis_tac[])
 QED
 Resume widen_immutable_frame[bytes]:
   fs[immutables_rel_mods_def,immutable_alloca_sep_mods_def] >> rpt strip_tac >>
@@ -76,8 +87,24 @@ Resume widen_immutable_frame[bytes]:
      strip_tac >>
      qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >>
      simp[] >> disch_then (qspecl_then [`name`,`tv`,`v`,`off`] mp_tac) >> simp[]) >>
+  `regions_disjoint off (type_memory_size tv) (w2n dw) cap` by
+    (Cases_on `FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n dw,cap)`
+     >- (qpat_assum `immutable_alloca_sep func (ce with ce_module := src) cx mid t` mp_tac >>
+         pure_rewrite_tac[immutable_alloca_sep_def,compile_env_accfupds,combinTheory.K_THM] >>
+         strip_tac >> qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >> simp[] >>
+         disch_then (qspecl_then [`name`,`tv`,`v`,`off`] mp_tac) >> simp[] >>
+         disch_then assume_tac >> pop_assum (map_every assume_tac o CONJUNCTS) >>
+         qpat_assum `!inst b sz. _`
+           (qspecl_then [`inst`,`w2n dw`,`cap`] mp_tac) >> simp[] >>
+         disch_then assume_tac >> first_x_assum drule)
+     >- (`FLOOKUP z.vs_allocas inst.inst_id = SOME (w2n dw,cap)` by metis_tac[] >>
+         qpat_assum `!aid b n. FLOOKUP z.vs_allocas aid = SOME (b,n) ==> _`
+           (qspecl_then [`inst.inst_id`,`w2n dw`,`cap`] mp_tac) >>
+         disch_then drule >> simp[] >>
+         `t.vs_alloca_next <= w2n dw` by metis_tac[] >>
+         fs[regions_disjoint_def] >> decide_tac)) >>
   qpat_assum `z.vs_memory = t.vs_memory` (SUBST1_TAC o GSYM) >>
-  irule mcopy_mem_bytes_at_disjoint >> decide_tac
+  irule mcopy_mem_bytes_at_disjoint >> fs[regions_disjoint_def] >> metis_tac[]
 QED
 Finalise widen_immutable_frame
 
@@ -102,8 +129,7 @@ QED
 
 Theorem widen_mcopy_prefix[local]:
   lookup_var dst z = SOME dw /\ lookup_var src z = SOME a /\ k < dimword (:256) /\
-  z.vs_memory = t.vs_memory /\ lo <= t.vs_alloca_next /\
-  t.vs_alloca_next <= w2n dw /\
+  z.vs_memory = t.vs_memory /\ lo <= t.vs_alloca_next /\ lo <= w2n dw /\
   (!i. i IN tna.t_mem <=> i IN tn.t_mem \/
      (t.vs_alloca_next <= i /\ i < w2n dw+cap)) /\
   q = (mcopy (w2n dw) (w2n a) k z) with vs_inst_idx := idx /\
@@ -169,9 +195,15 @@ Theorem bytes_convert_widen_post_mods:
   stmt_state_rel H ctx func ce cx mid z /\
   z with <|vs_vars := t.vs_vars; vs_allocas := t.vs_allocas;
            vs_alloca_next := t.vs_alloca_next; vs_inst_idx := t.vs_inst_idx|> = t /\
-  t.vs_alloca_next <= w2n dw /\ allocas_from lo z /\
+  t.vs_alloca_next <= z.vs_alloca_next /\ allocas_from lo z /\
+  FLOOKUP z.vs_allocas sm.cs_next_id = SOME (w2n dw,cap) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = sm.cs_next_id /\
   (!aid b n. FLOOKUP z.vs_allocas aid = SOME (b,n) ==>
       FLOOKUP t.vs_allocas aid = SOME (b,n) \/ t.vs_alloca_next <= b) /\
+  (!aid b n. aid < sm.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (b,n) ==>
+      regions_disjoint (w2n dw) cap b n) /\
+  (!name b n. local_region ce mid.scopes z name b n ==>
+      regions_disjoint (w2n dw) cap b n) /\
   (!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x t /\
      FLOOKUP Ga x = FLOOKUP G x /\ op_taint tna (Var x) = op_taint tn (Var x)) /\
   tna.t_stor = tn.t_stor /\ tna.t_trans = tn.t_trans /\ tna.t_imm = tn.t_imm /\
@@ -238,8 +270,8 @@ QED
 Resume bytes_convert_widen_post_mods[immutable]:
   irule widen_immutable_frame >>
   goal_assum (drule_at (Pat `immutable_frame_mods _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `_ = (mcopy _ _ _ _) with vs_inst_idx := _`)) >>
-  qexists_tac `sm` >> rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])
+  qexistsl_tac [`w2n a`,`cap`,`dw`,`LENGTH sb.cs_current_insts`,`inst`,`k`,`sm`,`z`] >>
+  rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])
 QED
 
 Resume bytes_convert_widen_post_mods[plain_post]:
@@ -283,22 +315,45 @@ Resume bytes_convert_widen_post_mods[ghosts]:
   `!aid b n. FLOOKUP s0.vs_allocas aid = SOME (b,n) /\ aid < sa.cs_next_id ==>
      b+n <= t.vs_alloca_next /\ regions_disjoint (w2n dw) cap b n` by
     (rpt strip_tac >>
+     `FLOOKUP t.vs_allocas aid = SOME (b,n)` by metis_tac[wb_frame_def] >>
      `b+n <= s0.vs_alloca_next` by
        (qpat_assum `alloca_inv s0` mp_tac >>
         pure_rewrite_tac[alloca_inv_def,alloca_next_valid_def] >> strip_tac >>
         first_x_assum drule >> simp[]) >>
-     fs[regions_disjoint_def] >> decide_tac) >>
+     `b+n <= t.vs_alloca_next` by
+       (qpat_assum `b + n <= s0.vs_alloca_next` (fn th1 =>
+        qpat_assum `s0.vs_alloca_next <= t.vs_alloca_next` (fn th2 =>
+        ACCEPT_TAC (MATCH_MP arithmeticTheory.LESS_EQ_TRANS (CONJ th1 th2))))) >>
+     `regions_disjoint (w2n dw) cap b n` by
+       (qpat_assum `!aid b n. aid < sm.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (b,n) ==> _`
+          irule >> qexists_tac `aid` >> simp[] >> metis_tac[]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `!name b n. local_region ce es.scopes s0 name b n ==>
+     local_region ce mid.scopes z name b n` by
+    (rpt strip_tac >>
+     `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+       fs[wb_frame_def,locals_kept_def] >>
+     `local_region ce es.scopes z name b n` suffices_by
+       metis_tac[local_region_scopes_domain] >>
+     qpat_x_assum `local_region ce es.scopes s0 name b n` mp_tac >>
+     simp[local_region_def] >> rpt strip_tac >>
+     `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+     `lookup_var p t = SOME w` by metis_tac[wb_frame_def] >>
+     `lookup_var p z = SOME w` by metis_tac[] >>
+     qexistsl_tac [`entry`,`p`,`w`] >> simp[] >> metis_tac[]) >>
   `!name b n. local_region ce es.scopes s0 name b n ==>
      b+n <= t.vs_alloca_next /\ regions_disjoint (w2n dw) cap b n` by
-    (rpt strip_tac >> drule_all abi_caller_local_end >>
-     simp[regions_disjoint_def] >> decide_tac) >>
-  `!name b n. local_region ce mid.scopes z name b n ==>
-     regions_disjoint (w2n dw) cap b n` by
     (rpt strip_tac >>
-     `local_region ce mid.scopes t name b n` by
-       (drule_at (Pat `local_ptrs_reserved _ _`) widen_region_lookup >>
-        disch_then (qspecl_then [`z`,`t`,`ce`] mp_tac) >> metis_tac[]) >>
-     drule_all abi_caller_local_end >> simp[regions_disjoint_def] >> decide_tac) >>
+     `local_region ce mid.scopes z name b n` by metis_tac[] >>
+     `b+n <= s0.vs_alloca_next` by (drule_all abi_caller_local_end >> simp[]) >>
+     `b+n <= t.vs_alloca_next` by
+       (qpat_assum `b + n <= s0.vs_alloca_next` (fn th1 =>
+        qpat_assum `s0.vs_alloca_next <= t.vs_alloca_next` (fn th2 =>
+        ACCEPT_TAC (MATCH_MP arithmeticTheory.LESS_EQ_TRANS (CONJ th1 th2))))) >>
+     `regions_disjoint (w2n dw) cap b n` by
+       (qpat_assum `!name b n. local_region ce mid.scopes z name b n ==> _`
+          irule >> qexists_tac `name` >> simp[]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `val_store_size rt vout <= cap` by
     (drule val_store_size_le >> simp[]) >>
   suspend "apply_copy_ghosts"
@@ -338,6 +393,11 @@ Resume bytes_convert_widen_post_mods[ordinary_ghosts]:
 QED
 
 Resume bytes_convert_widen_post_mods[prefix]:
+  `lo <= w2n dw` by
+    (qpat_assum `allocas_from lo z` mp_tac >>
+     fs[allocas_from_def] >>
+     disch_then (qspecl_then [`sm.cs_next_id`,`w2n dw`,`cap`] mp_tac) >>
+     simp[]) >>
   irule widen_mcopy_prefix >> conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at (Pat `_ = step_prov _ _ _ _`)) >>
   goal_assum (drule_at (Pat `_ = (mcopy _ _ _ _) with vs_inst_idx := _`)) >>
