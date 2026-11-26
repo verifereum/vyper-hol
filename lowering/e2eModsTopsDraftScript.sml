@@ -44,7 +44,8 @@ Ancestors
   linkedRuntimeDallocaWindows runtimePeakMemoryProof runtimePeakMemoryCode
   loweringBudgetAccountCodes linkedConstructorSourceTrace linkedConstructorRegistrationMetadata
   ctorDeployLoweringEntryPrefix moduleLoweringProps callRawVariant
-  linkedUnitCreateSize[qualified] venomRunBounded
+  createSizeExit sourceUnitCreateSizeRun entryCreateExit[qualified]
+  entryCreateReject[qualified] acceptedContextPhi[qualified] venomRunBounded
   vyperTypeContractModes[qualified] e2eDeployEntry[qualified,ignore_grammar]
   vyperImportRefsProps vyperCallFiniteStorage vyperStorageBackend frameRunRaises
 
@@ -3865,6 +3866,10 @@ val linked_ctor_subst_idempotent_tac =
 
 (* Instantiate the body judgement without assuming any source-side obligations. *)
 val linked_ctor_conditional_body_tac =
+  `IS_SOME (check_contract F cx.layouts cx.txn.target mods)` by
+    (qpat_assum `check_contract F am.layouts tx.target mods = SOME _`
+       (fn checked => simp[NoAsms, Abbr `cx`, deploy_evaluation_context_mods_def,
+                           initial_evaluation_context_def, checked])) >>
   `!DF lo d PG RetQ env env' bindings src_es.
     EVERY (struct_args_unique o SND) mods /\
     supported_stmts tops' bindings cpkg6 /\
@@ -5841,7 +5846,8 @@ fun linked_ctor_replay_prefix_goal_tac retain_eval frame =
             gas_explicit_sites deploy_unit.cu_context shadow_unit.cu_context,
             deploy_unit.cu_context,fn,[]) (root,FEMPTY,entry_taint) marks (r,G',tn') /\
           ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
-           (exit_result r /\ R H res (ee with gas_obs := []) (G',tn') r)))`)
+           (exit_result r /\ create_size_exit_ok deploy_unit.cu_context res r /\
+            R H res (ee with gas_obs := []) (G',tn') r)))`)
     (mk_asm "linked_ctor_replay_prefix");
 
 val linked_ctor_replay_prefix_tac = linked_ctor_replay_prefix_goal_tac false;
@@ -6328,8 +6334,10 @@ val linked_ctor_terminal_replay_goal_tac =
          gas_explicit_sites deploy_unit.cu_context shadow_unit.cu_context,deploy_unit.cu_context,fn,[])
          (root,FEMPTY,entry_taint) marks (out,G,tn) /\
        ((?t. out = OK t /\ Q H res (ee with gas_obs := []) G tn t) \/
-        exit_result out /\ R H res (ee with gas_obs := []) (G,tn) out)) ==>
+        exit_result out /\ create_size_exit_ok deploy_unit.cu_context res out /\
+        R H res (ee with gas_obs := []) (G,tn) out)) ==>
     ?terminal end_g end_tn. exit_result terminal /\
+      create_size_exit_ok deploy_unit.cu_context res terminal /\
       !H. valid_horizon cx (initial_state am []) H ee.storage_trace ==>
         gas_origin_ptr_path (linked_ret_DF H,imm_len_mods mods,
           gas_explicit_sites deploy_unit.cu_context shadow_unit.cu_context,deploy_unit.cu_context,fn,[])
@@ -6358,14 +6366,14 @@ val linked_ctor_terminal_replay_open_tac =
 
 val linked_ctor_terminal_replay_exit_tac =
   qexistsl_tac [`replay_out`,`replay_G`,`replay_tn`] >>
-  (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >>
+  ntac 2 (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >>
   qx_gen_tac `replay_h` >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ (replay_out,replay_G,replay_tn) /\ _`
     (qspec_then `replay_h` (drule_then (CONJUNCTS_THEN2 assume_tac (mk_asm "replay_alts")))) >>
   (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >>
   asm_x "replay_alts" (DISJ_CASES_THEN2
     (qx_choose_then `impossible` (mp_tac o CONJUNCT1))
-    (assume_tac o CONJUNCT2))
+    (assume_tac o CONJUNCT2 o CONJUNCT2))
   >- (disch_then (fn eq =>
         qpat_assum `exit_result replay_out`
           (fn ex => mp_tac (REWRITE_RULE [eq,exit_result_def] ex))) >> simp[]) >>
@@ -6507,6 +6515,7 @@ fun linked_ctor_native_replay_projection_goal_tac retain_eval frame =
           (source_finish res (ee with gas_obs := tail),ee.storage_trace)) /\
         storage_trace_domain cx (initial_state am []) ee.storage_trace /\
         exit_result terminal /\
+        create_size_exit_ok deploy_unit.cu_context res terminal /\
         !H. valid_horizon cx (initial_state am []) H ee.storage_trace ==>
           gas_origin_ptr_path (linked_ret_DF H,imm_len_mods mods,
             gas_explicit_sites deploy_unit.cu_context shadow_unit.cu_context,
@@ -8175,6 +8184,7 @@ fun linked_registered_terminal_projection_goal_tac retain_eval frame =
           (source_finish res (ee with gas_obs := tail),ee.storage_trace)) /\
         storage_trace_domain cx (initial_state am []) ee.storage_trace /\
         exit_result terminal /\
+        create_size_exit_ok deploy_unit.cu_context res terminal /\
         !H. valid_horizon cx (initial_state am []) H ee.storage_trace ==>
           gas_origin_ptr_path (linked_ret_DF H,imm_len_mods mods,
             gas_explicit_sites deploy_unit.cu_context shadow_unit.cu_context,
@@ -11148,7 +11158,9 @@ val linked_accepted_gas_raw_exit_goal =
       exit_result terminal /\
       mem_safe_run body_fuel deploy_unit.cu_context fn root /\
       ptr_safe_run D (imm_len_mods mods) body_fuel deploy_unit.cu_context fn [] FEMPTY entry_taint root /\
-      (!p. terminal = Halt p ==> LENGTH p.vs_returndata <= LENGTH runtime_bc + imm_len_mods mods)`;
+      (!p. terminal = Halt p ==> LENGTH p.vs_returndata <= LENGTH runtime_bc + imm_len_mods mods) /\
+      (?obs. create_size_exit_ok deploy_unit.cu_context
+        (load_contract (SOME vi.vs_outcomes) obs am tx mods exps) terminal)`;
 
 val linked_accepted_gas_select_tac =
   qx_gen_tac `vi` >> disch_tac >>
@@ -11201,9 +11213,8 @@ val linked_accepted_gas_raw_length_tac =
   >- (pop_assum (qx_choose_then `final` (fn th => simp[NoAsms, th]) o CONJUNCT2)) >>
   pop_assum (qx_choosel_then [`err`,`final`,`abort`] (fn th => simp[NoAsms, th]));
 
-val linked_accepted_gas_raw_package : term quotation =
-  `!vi. raw_variant fmp vi vs ==>
-    raw_unit_memory_ok deploy_unit.cu_context vi /\
+val linked_accepted_gas_raw_fields : term quotation =
+  `raw_unit_memory_ok deploy_unit.cu_context vi /\
     ptr_discipline (imm_len_mods mods) deploy_unit.cu_context vi /\
     mem_inv dload_offset_ok deploy_unit.cu_context vi /\
     mem_inv dload_headroom_ok deploy_unit.cu_context vi /\
@@ -11213,6 +11224,35 @@ val linked_accepted_gas_raw_package : term quotation =
     terminates (run_context fuel deploy_unit.cu_context vi) /\
     (!p. run_context fuel deploy_unit.cu_context vi = Halt p ==>
          LENGTH p.vs_returndata <= LENGTH runtime_bc + imm_len_mods mods)`;
+
+(* The constructor finish step preserves the oversized CREATE error. *)
+val linked_accepted_gas_raw_size_tac =
+  qexists_tac `gas_explicit marks vi.vs_gas_readings` >>
+  qpat_assum `raw_variant fmp vi vs`
+    (fn variant =>
+      qpat_assum `vs.vs_outcomes = MAP SND (call_trace eg)`
+        (fn outcomes => PURE_REWRITE_TAC [MATCH_MP raw_variant_outcomes variant, outcomes])) >>
+  qpat_assum `!tail. load_contract_trace _ _ am tx mods exps = _`
+    (qspec_then `[]` (fn trace => PURE_REWRITE_TAC
+       [load_contract_def, PURE_REWRITE_RULE [APPEND_NIL] trace, pairTheory.FST])) >>
+  qpat_assum `create_size_exit_ok deploy_unit.cu_context res terminal` mp_tac >>
+  PURE_REWRITE_TAC [create_size_exit_ok_def] >>
+  disch_tac >> strip_tac >>
+  `res = INR (Error (RuntimeError "create initcode too large"))` by
+    (qpat_assum `_ ==> res = INR (Error (RuntimeError "create initcode too large"))`
+       (drule_all_then ACCEPT_TAC)) >>
+  qpat_assum `res = INR (Error (RuntimeError "create initcode too large"))`
+    (fn err => simp[NoAsms, err, Abbr `source_finish`]);
+
+val linked_accepted_gas_raw_package =
+  `!vi. raw_variant fmp vi vs ==> ` @ linked_accepted_gas_raw_fields;
+
+val linked_accepted_gas_raw_sized_package =
+  `!vi. raw_variant fmp vi vs ==> (` @ linked_accepted_gas_raw_fields @ `) /\
+    (?obs fr. exit_result (run_context fr deploy_unit.cu_context vi) /\
+       create_size_exit_ok deploy_unit.cu_context
+         (load_contract (SOME vi.vs_outcomes) obs am tx mods exps)
+         (run_context fr deploy_unit.cu_context vi))`;
 
 val linked_accepted_gas_raw_entry_tac =
   qx_gen_tac `vi` >> disch_tac >>
@@ -11361,9 +11401,15 @@ val linked_accepted_gas_selected_mem_tac =
         (FIRST_ASSUM ACCEPT_TAC ORELSE
          (qpat_assum `root = _` (SUBST1_TAC o SYM) >> FIRST_ASSUM ACCEPT_TAC)))) >>
       disch_then (map_every assume_tac o CONJUNCTS) >>
-      ntac 6 (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >>
-      qpat_assum `run_context fuel deploy_unit.cu_context vi = terminal` SUBST1_TAC >>
-      FIRST_ASSUM ACCEPT_TAC
+      conj_tac
+      >- (ntac 6 (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >>
+          qpat_assum `run_context fuel deploy_unit.cu_context vi = terminal` SUBST1_TAC >>
+          FIRST_ASSUM ACCEPT_TAC) >>
+      qpat_assum `?obs. create_size_exit_ok deploy_unit.cu_context _ terminal`
+        (qx_choose_then `obs` assume_tac) >>
+      qexistsl_tac [`obs`,`SUC body_fuel`] >>
+      qpat_assum `run_context (SUC body_fuel) deploy_unit.cu_context vi = terminal` SUBST1_TAC >>
+      conj_tac >> FIRST_ASSUM ACCEPT_TAC
   in
     Cases_on `ctx_has_dalloca deploy_unit.cu_context`
     >- selected deploy_selected_memory_from_checked_mods >>
@@ -11702,14 +11748,19 @@ Resume e2e_deploy_gas_sufficient_mods[linked_present_deploy_gas_accepted_value_b
     disch_then ACCEPT_TAC)) >>
   (linked_accepted_gas_raw_exit_goal >-
     (linked_accepted_gas_select_tac >> linked_accepted_gas_raw_exec_tac >>
-     linked_accepted_gas_raw_length_tac)) >>
+     conj_tac >- linked_accepted_gas_raw_length_tac >>
+     linked_accepted_gas_raw_size_tac)) >>
   linked_accepted_gas_layout_tac >>
-  (sg linked_accepted_gas_raw_package >-
+  (sg linked_accepted_gas_raw_sized_package >-
     (linked_accepted_gas_raw_entry_tac >> linked_accepted_gas_block_safety_tac >>
      linked_accepted_gas_ptr_run_tac >> linked_accepted_gas_ptr_blocks_tac >>
      linked_accepted_gas_context_run_tac >> linked_accepted_gas_variant_mem_tac >>
      linked_accepted_gas_dload_reachable_tac >> linked_accepted_gas_dload_mem_tac >>
      linked_accepted_gas_selected_mem_tac)) >>
+  pop_assum (mk_asm "linked_accepted_gas_raw_sized") >>
+  (sg linked_accepted_gas_raw_package >-
+    (gen_tac >> disch_tac >>
+     asm "linked_accepted_gas_raw_sized" (drule_then (ACCEPT_TAC o CONJUNCT1)))) >>
   pop_assum (mk_asm "linked_accepted_gas_raw") >>
   `mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
      deploy_out.po_unit.cu_context vs` suffices_by
@@ -11752,26 +11803,27 @@ Resume e2e_deploy_gas_sufficient_mods[linked_present_deploy_gas_accepted_value_b
          rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC) >>
          qexists_tac `imm_len_mods mods` >> conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
      FIRST_ASSUM ACCEPT_TAC) >>
-  `!vi fn i s. raw_variant fmp vi vs /\
-      raw_reachable vi deploy_unit.cu_context fn i s /\ ~inst_create_size_ok i s ==>
-      ?obs. deploy_gas_source_exempt_mods mods
-        (load_contract (SOME (MAP SND (call_trace eg))) obs am tx mods exps)`
-  suffices_by
-    (disch_tac >>
-     mp_tac
-       (linkedUnitCreateSizeTheory.o1_pipeline_create_size_from_raw_exemption
-        |> Q.INST_TYPE [`:'a` |-> `:bytes32 list`]
-        |> Q.INST [`unit` |-> `deploy_unit`, `out` |-> `deploy_out`,
-                   `P` |-> `\obs. deploy_gas_source_exempt_mods mods
-                     (load_contract (SOME (MAP SND (call_trace eg))) obs am tx mods exps)`]
-        |> BETA_RULE) >>
-     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     disch_then ACCEPT_TAC) >>
-  suspend "linked_deploy_raw_create_size_from_source"
-QED
-
-Resume e2e_deploy_gas_sufficient_mods[linked_deploy_raw_create_size_from_source]:
-  cheat
+  mp_tac (Q.INST [`mods` |-> `mods`, `exps` |-> `exps`, `am` |-> `am`,
+    `tx` |-> `tx`, `rpolicy` |-> `rpolicy`, `unit` |-> `deploy_unit`,
+    `out` |-> `deploy_out`, `vs` |-> `vs`, `D` |-> `D`, `fmp` |-> `fmp`]
+    (SPEC_ALL deploy_entry_reachable_create_size_ok_mods)) >>
+  impl_tac >-
+    (rpt (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >>
+     gen_tac >> disch_tac >>
+     qpat_assum `!vi. raw_variant fmp vi vs ==> o1_pre_walk_inv _ _ vi /\ _`
+       (drule_then (map_every assume_tac o CONJUNCTS)) >>
+     asm "linked_accepted_gas_raw_sized" (drule_then (assume_tac o CONJUNCT2)) >>
+     qpat_assum `raw_variant fmp vi vs` (fn variant =>
+       assume_tac (MATCH_MP raw_variant_call_ctx variant) >>
+       assume_tac (MATCH_MP raw_variant_outcomes variant)) >>
+     `~vi.vs_call_ctx.cc_static` by
+       (qpat_assum `vi.vs_call_ctx = vs.vs_call_ctx` SUBST1_TAC >>
+        FIRST_ASSUM ACCEPT_TAC) >>
+     rpt (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >>
+     qpat_assum `vi.vs_outcomes = vs.vs_outcomes` SUBST1_TAC >>
+     qpat_assum `vs.vs_outcomes = MAP SND (call_trace eg)` SUBST1_TAC >>
+     FIRST_ASSUM ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED
 
 Resume e2e_deploy_gas_sufficient_mods[linked_empty_deploy_gas]:
@@ -12421,9 +12473,8 @@ Proof
   suspend "linked_runtime_gas_bound"
 QED
 
-Resume vyper_call_gas_sufficient_mods[linked_runtime_gas_bound]:
-  `!vi. raw_variant fmp vi vs ==>
-      raw_unit_memory_ok runtime_unit.cu_context vi /\
+val linked_runtime_gas_raw_fields : term quotation =
+  `raw_unit_memory_ok runtime_unit.cu_context vi /\
       ptr_discipline 0 runtime_unit.cu_context vi /\
       mem_inv dload_offset_ok runtime_unit.cu_context vi /\
       mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
@@ -12433,21 +12484,69 @@ Resume vyper_call_gas_sufficient_mods[linked_runtime_gas_bound]:
       terminates (run_context fuel runtime_unit.cu_context vi) /\
       (tx.is_static ==>
        ~(!n. terminates (run_context n runtime_unit.cu_context vi) ==>
-             ?u. run_context n runtime_unit.cu_context vi = Abort ExHalt_abort u))` by
-    suspend "linked_runtime_gas_raw_variants" >>
+             ?u. run_context n runtime_unit.cu_context vi = Abort ExHalt_abort u))`;
+
+val linked_runtime_gas_raw_sized =
+  `!vi. raw_variant fmp vi vs ==> (` @ linked_runtime_gas_raw_fields @ `) /\
+    ((!fn inst s. raw_reachable vi runtime_unit.cu_context fn inst s ==>
+        inst_create_size_ok inst s) \/
+     ?f vals obs fr.
+       calldata_dispatch_mods mods exps tx.calldata = SOME (f,vals) /\
+       ~gas_source_exempt_mods mods
+         (tx with <|function_name := f; args := vals|>)
+         (call_external (SOME vi.vs_outcomes) obs am
+           (tx with <|function_name := f; args := vals|>)) /\
+       exit_result (run_context fr runtime_unit.cu_context vi) /\
+       create_size_exit_ok runtime_unit.cu_context
+         (FST (call_external (SOME vi.vs_outcomes) obs am
+            (tx with <|function_name := f; args := vals|>)))
+         (run_context fr runtime_unit.cu_context vi))`;
+
+Resume vyper_call_gas_sufficient_mods[linked_runtime_gas_bound]:
+  (sg linked_runtime_gas_raw_sized >- suspend "linked_runtime_gas_raw_variants") >>
+  pop_assum (mk_asm "linked_runtime_gas_sized") >>
   conj_tac
-  >- (Cases_on `!fn inst. MEM fn runtime_out.po_unit.cu_context.ctx_functions /\
-                    MEM inst (fn_insts fn) ==>
-                    inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2`
-      >- (match_mp_tac o1OpcodeAbsenceTheory.mem_inv_create_size_ok_no_create >>
-          conj_tac
-          >- (qpat_assum `o1PipelineCorrect$o1_pipeline rpolicy runtime_unit = SOME runtime_out`
-                (assume_tac o MATCH_MP run_venom_pipeline_success_unit_wf o
-                 BETA_RULE o REWRITE_RULE [o1PipelineCorrectTheory.o1_pipeline_def]) >>
-              fs[venomCompilerWfTheory.unit_wf_def]) >>
-          FIRST_ASSUM ACCEPT_TAC) >>
-      suspend "linked_runtime_reached_create_bound") >>
-  first_assum ACCEPT_TAC
+  >- (`fmp_free_ctx runtime_unit.cu_context` by
+        (irule source_fmp_free >> conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+      `fmp_variant_room (SOME fmp) runtime_out.po_unit.cu_context vs` by
+        (PURE_REWRITE_TAC [fmp_variant_room_def] >>
+         conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+      mp_tac (Q.INST [`mods` |-> `mods`, `exps` |-> `exps`, `am` |-> `am`,
+        `tx` |-> `tx`, `rpolicy` |-> `rpolicy`, `unit` |-> `runtime_unit`,
+        `out` |-> `runtime_out`, `vs` |-> `vs`, `D` |-> `D`, `fmp` |-> `fmp`]
+        (SPEC_ALL call_entry_reachable_create_size_ok_mods)) >>
+      impl_tac >-
+        (rpt (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >>
+         gen_tac >> disch_tac >>
+         asm "linked_runtime_gas_sized" (drule_then (CONJUNCTS_THEN2
+           (map_every assume_tac o CONJUNCTS) (mk_asm "linked_raw_size"))) >>
+         qpat_assum `!vi. raw_variant fmp vi vs ==> mem_inv dload_headroom_ok _ _ /\ _`
+           (drule_then (map_every assume_tac o CONJUNCTS)) >>
+         `mem_inv raw_mem_ok runtime_unit.cu_context vi` by
+           (qpat_assum `raw_unit_memory_ok runtime_unit.cu_context vi` mp_tac >>
+            simp[NoAsms, unitTransformDefsTheory.raw_unit_memory_ok_def,
+                 mem_inv_def, raw_mem_ok_def]) >>
+         conj_tac
+         >- (irule o1_source_pre_walk_inv >>
+             rpt (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >>
+             PURE_REWRITE_TAC [o1_src_inv_def] >>
+             rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC) >>
+             qexists_tac `0` >> conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+         conj_tac >- FIRST_ASSUM ACCEPT_TAC >>
+         asm "linked_raw_size" DISJ_CASES_TAC
+         >- (disj1_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+         disj2_tac >>
+         pop_assum (qx_choosel_then [`fname`,`vals`,`obs`,`fr`]
+           (map_every assume_tac o CONJUNCTS)) >>
+         qexistsl_tac [`fname`,`vals`,`obs`,`fr`] >>
+         rpt (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >>
+         qpat_assum `raw_variant fmp vi vs`
+           (SUBST1_TAC o MATCH_MP raw_variant_call_ctx) >>
+         qpat_assum `vs.vs_call_ctx.cc_static = tx.is_static` SUBST1_TAC >>
+         FIRST_ASSUM ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC) >>
+  gen_tac >> disch_tac >>
+  asm "linked_runtime_gas_sized" (drule_then (ACCEPT_TAC o CONJUNCT1))
 QED
 
 Resume vyper_call_gas_sufficient_mods[linked_runtime_gas_raw_variants]:
@@ -12591,10 +12690,23 @@ Resume vyper_call_gas_sufficient_mods[linked_runtime_gas_rejection]:
        (qspecl_then [`stop_fuel`,`vi`] (fn preserves =>
          qpat_assum `terminates (run_context stop_fuel runtime_unit.cu_context vi)`
            (ACCEPT_TAC o MATCH_MP preserves)))) >>
-  asm_rewrite_tac[] >> strip_tac >> strip_tac >>
-  qpat_assum `!n. terminates (run_context n runtime_unit.cu_context vi) ==>
-                  ?u. run_context n runtime_unit.cu_context vi = Abort ExHalt_abort u`
-    (qspec_then `stop_fuel` mp_tac) >> simp[]
+  conj_tac
+  >- (asm_rewrite_tac[] >> strip_tac >> strip_tac >>
+      qpat_assum `!n. terminates (run_context n runtime_unit.cu_context vi) ==>
+                      ?u. run_context n runtime_unit.cu_context vi = Abort ExHalt_abort u`
+        (qspec_then `stop_fuel` mp_tac) >> simp[]) >>
+  disj1_tac >> rpt gen_tac >> disch_tac >> CCONTR_TAC >>
+  `EVERY wf_function runtime_unit.cu_context.ctx_functions` by
+    (drule_then (ACCEPT_TAC o CONJUNCT1) entryCreateExitTheory.create_size_raw_unit_wf) >>
+  `!err. run_context stop_fuel runtime_unit.cu_context vi <> Error err` by
+    (qpat_assum `run_context stop_fuel _ _ = Abort Revert_abort _`
+       (fn stopped => simp[NoAsms, stopped])) >>
+  rename1 `raw_reachable vi runtime_unit.cu_context reached_fn reached_inst reached_state` >>
+  mp_tac (Q.INST [`ctx` |-> `runtime_unit.cu_context`, `vi` |-> `vi`,
+                  `fuel` |-> `stop_fuel`, `fn` |-> `reached_fn`,
+                  `i` |-> `reached_inst`, `s` |-> `reached_state`]
+    entryCreateRejectTheory.raw_reached_oversized_create_terminal) >>
+  asm_rewrite_tac[] >> simp[]
 QED
 
 val linked_runtime_gas_frame_tac =
@@ -12722,10 +12834,6 @@ val linked_runtime_gas_selected_state_tac =
        dalloca_fmp_headroom inst w` by
     linked_runtime_gas_dalloca_headroom_tac;
 
-Resume vyper_call_gas_sufficient_mods[linked_runtime_reached_create_bound]:
-  cheat
-QED
-
 Resume vyper_call_gas_sufficient_mods[linked_runtime_gas_selected]:
   qx_gen_tac `vi` >> strip_tac >>
   linked_runtime_gas_frame_tac >>
@@ -12765,6 +12873,22 @@ Resume vyper_call_gas_sufficient_mods[linked_runtime_gas_selected]:
        (qspec_then `gs` ACCEPT_TAC)) >>
   `~source_exempt_mods mods (call_external (SOME vi.vs_outcomes) gs am td)` by
     fs[gas_source_exempt_mods_def] >>
+  `?fr. exit_result (run_context fr runtime_unit.cu_context vi) /\
+     create_size_exit_ok runtime_unit.cu_context
+       (FST (call_external (SOME vi.vs_outcomes) gs am td))
+       (run_context fr runtime_unit.cu_context vi)` by
+    (mp_tac (Q.INST [`shadow_ctx` |-> `shadow_ctx`, `marks` |-> `marks`,
+       `mods` |-> `mods`, `exps` |-> `exps`, `am` |-> `am`, `tx` |-> `td`,
+       `unit` |-> `runtime_unit`, `vs` |-> `vi`,
+       `ret` |-> `external_return_type_mods mods exps td.function_name`]
+       (SPEC_ALL source_unit_create_size_run_mods)) >>
+     qpat_assum `Abbrev (gs = _)` (fn fill =>
+       PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] fill)]) >>
+     impl_tac >-
+       (rpt (conj_tac >- FIRST_ASSUM ACCEPT_TAC) >>
+        rpt gen_tac >> strip_tac >>
+        drule_all_then ACCEPT_TAC acceptedContextPhiTheory.lowering_context_ok_block_phi) >>
+     disch_then ACCEPT_TAC) >>
   mp_tac (Q.INST [`unit` |-> `runtime_unit`, `tx` |-> `td`,
       `vs` |-> `vi`, `tail` |-> `[]`, `marks` |-> `marks`,
       `ret` |-> `external_return_type_mods mods exps td.function_name`]
@@ -12814,6 +12938,14 @@ Resume vyper_call_gas_sufficient_mods[linked_runtime_gas_selected]:
        (qspecl_then [`stop_fuel`,`vi`] (fn preserves =>
          qpat_assum `terminates (run_context stop_fuel runtime_unit.cu_context vi)`
            (ACCEPT_TAC o MATCH_MP preserves)))) >>
+  reverse conj_tac
+  >- (disj2_tac >>
+      qpat_assum `?fr. exit_result (run_context fr runtime_unit.cu_context vi) /\ _`
+        (qx_choose_then `exit_fuel` (map_every assume_tac o CONJUNCTS)) >>
+      qexistsl_tac [`fname`,`vals`,`gs`,`exit_fuel`] >>
+      qpat_assum `Abbrev (td = _)` (fn td =>
+        PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] td)]) >>
+      rpt conj_tac >> (REFL_TAC ORELSE FIRST_ASSUM ACCEPT_TAC)) >>
   asm_rewrite_tac[] >> strip_tac >>
   qexists_tac `stop_fuel` >>
   conj_tac >- first_assum ACCEPT_TAC >>
