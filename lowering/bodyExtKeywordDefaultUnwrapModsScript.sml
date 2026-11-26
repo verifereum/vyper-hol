@@ -92,7 +92,7 @@ Proof
   Cases_on `p.ptr_location` >> fs[]
 QED
 
-Theorem default_unwrap_vv_cursor[local]:
+Theorem default_unwrap_vv_cursor:
   vv_post_mods H ctx func ce cx e es sa sm s0 ee tv vv u /\
   sm.cs_next_id <= sn.cs_next_id ==>
   vv_post_mods H ctx func ce cx e es sa sn s0 ee tv vv u
