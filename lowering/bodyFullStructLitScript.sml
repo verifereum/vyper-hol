@@ -84,7 +84,7 @@ Proof
   qexistsl_tac [`addr`, `capacity`] >> simp[] >> decide_tac
 QED
 
-Theorem structlit_list_admissible[local]:
+Theorem structlit_list_admissible:
   gas_admissible (eval_expr cx (StructLit ann nsid fs)) expr_vv_res_ok es ==>
   gas_admissible (eval_exprs cx (MAP SND fs))
     (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es
@@ -95,7 +95,7 @@ Proof
   first_x_assum drule >> simp[expr_vv_res_ok_def, expr_res_ok_def]
 QED
 
-Theorem structlit_eval_exprs_cons[local]:
+Theorem structlit_eval_exprs_cons:
   eval_exprs cx (e::args) =
   bind (bind (eval_expr cx e) (read_result cx))
     (\v. bind (eval_exprs cx args) (\vs. return (v::vs)))
@@ -103,7 +103,7 @@ Proof
   simp[Once evaluate_def, bind_assoc]
 QED
 
-Theorem structlit_tail_admissible[local]:
+Theorem structlit_tail_admissible:
   gas_admissible (eval_exprs cx (e::args))
     (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es /\
   (!tail. bind (eval_expr cx e) (read_result cx)
@@ -119,7 +119,7 @@ Proof
   simp[structlit_eval_exprs_cons, bind_def] >> metis_tac[]
 QED
 
-Theorem structlit_alloc_init_full[local]:
+Theorem structlit_alloc_init_full:
   compile_alloc_buffer n sa = (ba,sm) /\ fn_has_code sa sm func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   n < dimword(:256) /\
@@ -484,7 +484,7 @@ Proof
   simp[GSYM arithmeticTheory.ADD_ASSOC]
 QED
 
-Theorem structlit_fields_bundled_full[local]:
+Theorem structlit_fields_bundled_full:
   !inv'. inv' = (\H ee cs G tn s cells off.
     stmt_state_rel H ctx func ce cx ee s /\
     storage_well_formed_on cx ee (FST H) /\

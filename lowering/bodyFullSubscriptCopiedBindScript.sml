@@ -56,7 +56,7 @@ Proof
   simp[ci_mono_compile_array_subscript, ci_mono_compile_ptr_load]
 QED
 
-Theorem copied_array_cuts[local]:
+Theorem copied_array_cuts:
   compile_expr ce ty (Subscript ann obj idx) sa = (vv,sb) /\
   compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr (Subscript ann obj idx)) sha = (vv,shb) /\
   gas_shadow_state sa sha /\

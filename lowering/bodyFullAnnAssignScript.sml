@@ -22,7 +22,7 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem type_stmt_annassign[local]:
+Theorem type_stmt_annassign:
   type_stmt env ret_ty (AnnAssign id typ e) =
     (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
         type_widens_to env.type_defs (expr_type e) typ /\
@@ -32,14 +32,14 @@ Proof
   simp[Once type_stmt_def]
 QED
 
-Theorem supported_stmt_annassign[local]:
+Theorem supported_stmt_annassign:
   supported_stmt tops bindings (AnnAssign id typ e) =
     (supported_place_type tops typ /\ supported_expr tops e)
 Proof
   simp[Once supported_stmt_def]
 QED
 
-Theorem annassign_full_declared_rhs_pre[local]:
+Theorem annassign_full_declared_rhs_pre:
   body_stmt_safe tops (AnnAssign id typ e) /\
   body_inv tops ctx cenv cx /\ supported_expr tops e /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -63,7 +63,7 @@ Proof
   irule body_annassign_rhs_pre >> metis_tac[]
 QED
 
-Theorem annassign_word_full_source[local]:
+Theorem annassign_word_full_source:
   (!tenv s'' tyv t.
     tenv = get_tenv cx /\
     lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =

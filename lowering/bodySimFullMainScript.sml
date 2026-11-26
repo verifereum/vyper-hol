@@ -153,7 +153,7 @@ Proof
   rpt strip_tac >> irule body_raise_custom_case_full >> metis_tac[]
 QED
 
-Theorem callable_body_loop_calls_ok[local]:
+Theorem callable_body_loop_calls_ok:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy name ts = SOME (mut,nr,args,dflts,ret,ss) /\
@@ -179,7 +179,7 @@ fun full_loop_case th =
     asm_rewrite_tac[] >> metis_tac[]
   end;
 
-Theorem callable_remcode_decreases[local]:
+Theorem callable_remcode_decreases:
   ~MEM (src,fn) cx.stk /\
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) /\

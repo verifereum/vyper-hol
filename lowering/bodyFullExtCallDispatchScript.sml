@@ -661,7 +661,7 @@ QED
 
 (* Packing supplies the clean input window and its pointer coverage. The
    output frontier and floor, in contrast, follow from its live allocation. *)
-Theorem extcall_dispatch_counted_status[local]:
+Theorem extcall_dispatch_counted_status:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee s /\

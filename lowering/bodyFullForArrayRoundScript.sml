@@ -402,9 +402,45 @@ Proof
   simp[Abbr `t`, Abbr `tn'`, jump_to_def, update_var_def]
 QED
 
+(* Execution facts at the body entry, shared by outcomes and prefixes. *)
+Theorem for_nonslot_array_body_exec_pre:
+  !DF lo d ctx func cx c id env body original captured operands item
+   bc benv sbCopy dtv v k a rs es eb G tn s st0.
+  (!H. valid_horizon cx st0 H eb.storage_trace ==>
+    for_nonslot_body_entry (DF H,lo,d,ctx,func,cx,c,id,env,body)
+      original captured operands item (bc,benv,sbCopy,dtv,v)
+      (H,k,a::rs,es,eb,G,tn,s)) /\
+  storage_trace_domain cx st0 eb.storage_trace ==>
+  (!H. valid_horizon cx st0 H eb.storage_trace ==>
+    stmt_state_rel H ctx func bc cx eb s /\ storage_well_formed_on cx eb (FST H) /\
+    ghost_inv_at (DF H) lo d bc cx eb G tn s) /\
+  return_buf_frame d bc sbCopy s /\ ret_pc_ok bc sbCopy s /\
+  alloca_history func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u) /\
+  ~s.vs_halted /\ s.vs_current_bb = sbCopy.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sbCopy.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >>
+  PairCases_on `original` >> PairCases_on `captured` >>
+  PairCases_on `operands` >> PairCases_on `item` >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
+        (qspec_then `H` drule) >>
+      disch_then (map_every assume_tac o CONJUNCTS o
+        REWRITE_RULE [for_nonslot_body_entry_def, for_nonslot_live_def]) >>
+      asm_rewrite_tac[]) >>
+  qpat_x_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
+    (qspec_then `storage_trace_horizon eb.storage_trace`
+      (drule o REWRITE_RULE [GSYM storage_trace_domain_def])) >>
+  disch_then (map_every assume_tac o CONJUNCTS o
+    REWRITE_RULE [for_nonslot_body_entry_def, for_nonslot_live_def]) >>
+  asm_rewrite_tac[]
+QED
+
 (* Keep the raw source result until the actual fallthrough/continue/break
    suffix is chosen. The source execution is available at the same post. *)
-Theorem for_nonslot_array_body_invoke[local]:
+Theorem for_nonslot_array_body_invoke:
   !DF lo d ctx shadow_ctx func shadow_func PG cx RetQ c id env body
    original captured operands item bc benv sbCopy dtv v k a rs es eb G tn s
    tops bindings env' ret_ty st0 exit incr bc' sbBody shadow_sbCopy shadow_sbBody.
@@ -463,30 +499,9 @@ Theorem for_nonslot_array_body_invoke[local]:
                                       allocas_below_fmp u))
 Proof
   rpt gen_tac >> strip_tac >>
-  PairCases_on `original` >> PairCases_on `captured` >>
-  PairCases_on `operands` >> PairCases_on `item` >>
-  `!H. valid_horizon cx st0 H eb.storage_trace ==>
-    stmt_state_rel H ctx func bc cx eb s /\ storage_well_formed_on cx eb (FST H) /\
-    ghost_inv_at (DF H) lo d bc cx eb G tn s` by
-    (rpt gen_tac >> strip_tac >>
-     qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
-       (qspec_then `H` drule) >>
-     disch_then (map_every assume_tac o CONJUNCTS o
-       REWRITE_RULE [for_nonslot_body_entry_def, for_nonslot_live_def]) >>
-     asm_rewrite_tac[]) >>
-  `return_buf_frame d bc sbCopy s /\ ret_pc_ok bc sbCopy s /\
-   alloca_history func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-   (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u) /\
-   ~s.vs_halted /\ s.vs_current_bb = sbCopy.cs_current_bb /\
-   s.vs_inst_idx = LENGTH sbCopy.cs_current_insts` by
-    (qpat_x_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
-       (qspec_then `storage_trace_horizon eb.storage_trace`
-         (drule o REWRITE_RULE [GSYM storage_trace_domain_def])) >>
-     disch_then (map_every assume_tac o CONJUNCTS o
-       REWRITE_RULE [for_nonslot_body_entry_def, for_nonslot_live_def]) >>
-     asm_rewrite_tac[]) >>
+  drule_all_then (map_every assume_tac o CONJUNCTS) for_nonslot_array_body_exec_pre >>
   qpat_x_assum `body_stmts_full_ok _ _`
-    (mp_tac o REWRITE_RULE [body_stmts_full_ok_def]) >>
+    (mp_then Any mp_tac s1PrefixStmtFullApplyTheory.body_stmts_full_ok_apply) >>
   disch_then drule_all >> disch_then (qspec_then `InLoop exit incr` mp_tac) >>
   rewrite_tac[stmt_frag_full_def] >>
   disch_then (qspecl_then [`st0`,`sbCopy`,`sbBody`,`shadow_sbCopy`,
@@ -2813,7 +2828,10 @@ Theorem for_nonslot_array_scoped_body_at[local]:
       t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
       for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
         (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-        (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,tz,c,tz,Gf,tf,t)) ==>
+        (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,tz,c,tz,Gf,tf,t)) /\
+  ((?Q R. gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 (eval_stmts cx body) (eb,s,G,tn) Q R) ==> Extra eb s G tn) ==>
+  Extra eb s G tn /\
   gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (cx_tops cx) cx st0
     (finally (try (do eval_stmts cx body; return F od) handle_loop_exception) pop_scope)
@@ -2856,6 +2874,9 @@ Proof
   disch_then (drule_at (Pat `supported_stmts _ _ _`)) >>
   disch_then (drule_at (Pat `type_stmts _ _ _ = _`)) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
+  conj_tac >-
+    (qpat_assum `(?Q R. gas_outcome_full _ _ _ _ (eval_stmts _ _) _ Q R) ==> Extra eb s G tn` irule >>
+     qpat_assum `gas_outcome_full _ _ _ _ (eval_stmts _ _) _ _ _` (irule_at Any)) >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full fp _ _ _ (eval_stmts _ _) _ Qraw Rraw` >>
   suspend "scoped_suffix"
 QED
@@ -3803,6 +3824,659 @@ QED
 
 Finalise for_nonslot_actual_increment_live
 
+Theorem for_nonslot_array_round_contracts_at_with_prefix:
+  for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
+    (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
+    (bc,saD,saA,xd,capacity,aidItem)
+    (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
+    (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
+    (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
+  body_const_cells_agree [(NONE,tops)] cx env em /\
+  body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es0 /\
+  ce_locals_declared c env /\ locals_alloc_ok c env /\
+  supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
+  type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
+  stmt_exprs_ok c (For id fty (Array e) n loop_body) /\
+  for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em u /\
+  stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) n loop_body) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+      (For id fty (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
+  call_evaluation_safe cx (int_calls_stmt (For id fty (Array e) n loop_body)) /\
+  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ c ret_ty /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
+  MEM shadow_func shadow_ctx.ctx_functions /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved c sa0 /\ (!H. dead_lo_ok H (DF H) lo c cx) /\
+  (!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
+  return_buf_frame d c sa0 s0 /\ ret_pc_ok c sa0 s0 /\
+  (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
+  evaluate_type (get_tenv cx) fty = SOME dtv /\ body_for_full_ok cx dtv id loop_body vs /\
+  storage_trace_domain cx st0 em.storage_trace /\
+  return_buf_sep d c em u /\
+  vs = MAP Value xs /\
+  (?obs. !tail. eval_expr cx e (es0 with gas_obs := obs ++ tail) =
+                 (INL rv,em with gas_obs := tail)) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV stv bd) /\
+  value_has_type (ArrayTV stv bd) (ArrayV av) /\
+  (!name path. rv = PlaceR (MemoryPlace name path) ==>
+     runtime_place_typed cx em (MemoryPlace name path) (ArrayTV stv bd)) /\
+  (!name path. rv = PlaceR (MemoryPlace name path) ==>
+     ?ent. lookup_scopes name em.scopes = SOME ent /\
+       evaluate_subscripts ent.type ent.value path = INL (ArrayV av)) /\
+  read_result cx rv em = (INL (ArrayV av),em) /\
+  extract_elements (ArrayTV stv bd) (ArrayV av) = SOME xs /\
+  (loc = LocMemory \/ loc = LocCode) /\
+  (loc = LocMemory ==> rv = Value (ArrayV av) \/ ?name path. rv = PlaceR (MemoryPlace name path)) /\
+  eval_operand len_op u = SOME (n2w (LENGTH vs)) /\ op_taint tu len_op = {} /\
+  op_prov Gu len_op = NONE /\ ~u.vs_halted /\ u.vs_current_bb = saL.cs_current_bb /\
+  u.vs_inst_idx = LENGTH saL.cs_current_insts /\
+  alloca_history func u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\ allocas_from lo u /\
+  s0.vs_alloca_next <= u.vs_alloca_next /\ alloca_frame c es0 sa0 s0 c em u /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
+  (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
+  ghost_kept_at lo c es0 sa0 G0 tn0 s0 Gu tu /\
+  (!H. valid_horizon cx st0 H em.storage_trace ==>
+    stmt_state_rel H ctx func c cx em u /\ storage_well_formed_on cx em (FST H) /\
+    ghost_inv_at (DF H) lo d c cx em Gu tu u) /\
+  vv_post (storage_trace_horizon em.storage_trace) ctx func c cx e es0 sa0 sbExpr s0 em rv vv u /\
+  vv_store_bound cx (post_value_type c e) (lowered_value_type c e) em rv vv u /\
+  ptr_vv_ok cx (post_value_type c e) rv vv em Gu tu u /\
+  (!v. rv = Value v /\ ~is_word_type (post_value_type c e) /\
+    ~is_bytestring_type (post_value_type c e) ==>
+    vv_own c cx (post_value_type c e) sa0 sbExpr em rv vv u /\
+    (!ty p. vv = LocatedValue ty p ==> p.ptr_location = LocMemory)) /\
+  (c.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+    !rt w. evaluate_type (get_tenv cx) (post_value_type c e) = SOME rt /\
+      eval_operand (vv_operand vv) u = SOME w ==>
+      w2n w + type_memory_size rt <= lo /\
+      (!mem. mem_agree_outside tu.t_mem u.vs_memory mem ==>
+        val_in_memory rt (ArrayV av) (w2n w) mem)) /\
+  (!ty op. vv = StackValue ty op /\ ~is_word_type (post_value_type c e) ==>
+    ptr_buf_ok c e op Gu u) /\
+  (!ty p. vv = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
+    ptr_buf_ok c e p.ptr_operand Gu u) /\
+  (!k a rs es eb v t Gf tnf dw bw bc' benv env_b.
+    k < LENGTH vs /\ a = EL k vs /\ rs = DROP (SUC k) vs /\ a = Value v /\
+    read_result cx a es = (INL v,es) /\
+    push_scope_with_var id dtv v es = (INL (),eb) /\
+    (!H. valid_horizon cx st0 H eb.storage_trace ==>
+      for_nonslot_body_entry (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
+        (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
+        (len_op,idx,bw) (xd,dw,capacity,aidItem) (bc,benv,sbCopy,dtv,v)
+        (H,k,a::rs,es,eb,Gf,tnf,t)) /\
+    return_buf_sep d bc eb t /\ storage_trace_domain cx st0 eb.storage_trace /\
+    body_const_cells_agree [(NONE,tops)] cx benv eb /\
+    body_stmts_full_ok cx loop_body /\ expr_sim_inv bc cx benv eb /\
+    ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
+    body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    supported_stmts tops bindings loop_body /\
+    (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) loop_body ==>
+      occurs_abi_decode_target target tops) /\
+    type_stmts benv ret_ty loop_body = SOME env_b /\ stmts_exprs_ok bc loop_body /\
+    call_evaluation_safe cx (int_calls_stmts loop_body) /\
+    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
+    stmts_env bc (InLoop exit incr) ret_ty loop_body sbCopy = (bc',sbBody) /\
+    stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt loop_body)
+      shadow_sbCopy = (gas_shadow_env T bc',shadow_sbBody) /\
+    gas_shadow_state sbCopy shadow_sbCopy /\ gas_shadow_state sbBody shadow_sbBody /\
+    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+    gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
+    MEM shadow_func shadow_ctx.ctx_functions /\
+    fn_has_code sbCopy sbBody func /\ fn_has_code shadow_sbCopy shadow_sbBody shadow_func /\
+    (!H. dead_lo_ok H (DF H) lo bc cx) /\
+    fn_inst_ids_distinct func /\ local_ptrs_reserved bc sbCopy /\
+    (!x sz. bc.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sbCopy x) /\
+    ~block_is_terminated sbCopy /\
+    gas_admissible (eval_stmts cx loop_body) (stmt_res_ok (InLoop exit incr)) eb /\
+    (?Q R. gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 (eval_stmts cx loop_body) (eb,t,Gf,tnf) Q R) ==>
+    B eb t Gf tnf) /\
+  (!a rs es z J tz v eb t Gf tnf.
+    B eb t Gf tnf /\ a = Value v /\
+    read_result cx a es = (INL v,es) /\
+    push_scope_with_var id dtv v es = (INL (),eb) /\
+    eb = es with scopes :=
+      (FEMPTY |+ (id,<|assignable := F; type := dtv; value := v; popped := []|>)) :: es.scopes /\
+    storage_trace_domain cx st0 es.storage_trace /\ ~z.vs_halted /\
+    (!H. valid_horizon cx st0 H eb.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (z,J,tz) [] (OK t,Gf,tnf)) ==>
+    P a rs es z J tz) ==>
+  ?s G tn Inv Done.
+    ~s.vs_halted /\
+    (!H. valid_horizon cx st0 H em.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (u,Gu,tu) [] (OK s,G,tn) /\ Inv H vs em G tn s) /\
+    (!a rs es z J tz.
+      ~z.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z) /\
+      gas_admissible (eval_for cx dtv id loop_body (a::rs)) (stmt_res_ok lctx) es ==>
+      gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (cx_tops cx) cx st0
+        (do v <- read_result cx a;
+            push_scope_with_var id dtv v;
+            finally (try (do eval_stmts cx loop_body; return F od)
+              handle_loop_exception) pop_scope od)
+        (es,z,J,tz)
+        (\H res ee G1 tn1 t. ee.gas_obs = [] /\ ~t.vs_halted /\
+          ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\ (~b ==> Inv H rs ee G1 tn1 t))
+        (\H res ee gt r. ?ex. res = INR ex /\
+          (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r) /\
+          halt_exit H cx ee (INR ex) r /\
+          (ctx_has_dalloca ctx ==> !t. (r = Halt t \/ ?ir. r = IntRet ir t) ==>
+            allocas_below_fmp t)) /\
+      (storage_trace_domain cx st0 es.storage_trace ==> P a rs es z J tz)) /\
+    (!es z J tz.
+      ~z.vs_halted /\ storage_trace_domain cx st0 es.storage_trace /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==> Inv H [] es J tz z) /\
+      gas_admissible (eval_for cx dtv id loop_body []) (stmt_res_ok lctx) es ==>
+      ?t G1 tn1. !H. valid_horizon cx st0 H es.storage_trace ==>
+        gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+          (z,J,tz) [] (OK t,G1,tn1) /\ Done H (es with gas_obs := []) G1 tn1 t) /\
+    (!H ee G1 tn1 t. Done H ee G1 tn1 t ==>
+      stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sb /\
+      cenv_top_ext c c ee.scopes /\ stmt_state_rel H ctx func c cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\ return_buf_frame d c sb t /\
+      alloca_history func t /\ return_buf_sep d c ee t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d c cx ee G1 tn1 t /\
+      (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa0 x ==>
+        FLOOKUP G1 x = FLOOKUP G0 x /\ op_taint tn1 (Var x) = op_taint tn0 (Var x)) /\
+      alloca_frame c es0 sa0 s0 c ee t /\
+      (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
+        (!name base len. local_region c es0.scopes s0 name base len ==>
+          off + sz <= base \/ base + len <= off) /\
+        off <= i /\ i < off + sz /\ i IN tn1.t_mem ==> i IN tn0.t_mem))
+Proof
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  suspend "capture"
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[capture]:
+  drule_then (map_every assume_tac o CONJUNCTS) bodyFullForFactsTheory.type_stmt_for_projection >>
+  drule_then (map_every assume_tac o CONJUNCTS) bodyFullForFactsTheory.supported_stmt_for_projection >>
+  `expr_type e = ArrayT sty bd /\
+   loc = (case vv_location vv of NONE => LocMemory | SOME l => l) /\
+   local_ptrs_reserved c saL` by
+    (qpat_assum `for_nonslot_layout _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [for_nonslot_layout_def]) >> simp[]) >>
+  `sty = fty /\ well_typed_expr env e /\ expr_writes_ok (\_. F) e` by
+    fs[well_typed_iterator_def] >>
+  qpat_x_assum `?obs. !tail. eval_expr _ _ _ = _` (qx_choose_then `obs` assume_tac) >>
+  qabbrev_tac `start = es0 with gas_obs := obs ++ em.gas_obs` >>
+  `eval_expr cx e start = (INL rv,em)` by
+    (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `em.gas_obs` mp_tac) >>
+     simp[Abbr `start`]) >>
+  `expr_sim_inv c cx env em` by
+    (`expr_body_pre c cx env e start` by simp[Abbr `start`] >>
+     drule_all_then ACCEPT_TAC bodySimStmtFactsTheory.expr_body_pre_eval_result) >>
+  `lookup_scopes id em.scopes = NONE` by
+    (`env_scopes_consistent env cx em` by
+       (qpat_assum `expr_sim_inv c cx env em` mp_tac >>
+        simp[NoAsms, exprSimHypsDefsTheory.expr_sim_inv_def,
+             vyperTypeInvariantsTheory.env_consistent_def] >>
+        strip_tac >> first_assum ACCEPT_TAC) >>
+     Cases_on `lookup_scopes id em.scopes` >> simp[] >>
+     qpat_assum `env_scopes_consistent env cx em`
+       (strip_assume_tac o REWRITE_RULE [vyperTypeInvariantsTheory.env_scopes_consistent_def]) >>
+     qpat_assum `!nm ent. lookup_scopes nm em.scopes = SOME ent ==> _`
+       (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
+  `expr_type e = ArrayT fty bd` by metis_tac[] >>
+  `local_ptrs_rel func c em.scopes u` by
+    (qhdtm_assum `vv_post` (mp_tac o cj 1 o REWRITE_RULE [vv_post_def]) >>
+     disch_then (ACCEPT_TAC o MATCH_MP (cj 1 stateRelProjTheory.stmt_state_rel_local_ptrs_alloca))) >>
+  `c.ce_alloca_locals` by
+    (qpat_assum `body_inv tops ctx c cx`
+    (ACCEPT_TAC o MATCH_MP bodyInvExecutionPropsTheory.contract_inv_alloca_locals o MATCH_MP bodySimTheory.body_inv_contract)) >>
+  suspend "entry"
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[entry]:
+  `?dw bw s G tn.
+     s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
+     (!H. valid_horizon cx st0 H em.storage_trace ==>
+       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (u,Gu,tu) [] (OK s,G,tn) /\
+       for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
+         (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
+         (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,0,vs,em,c,em,G,tn,s))` by
+    (irule for_nonslot_array_entry_full >>
+     qpat_assum `for_nonslot_layout _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
+     qexists `n` >> simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `valid_horizon cx st0 (storage_trace_horizon em.storage_trace) em.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _ /\ for_nonslot_live _ _ _ _ _ _`
+    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  `~s.vs_halted /\
+   (!x w. not_fresh_at saL x /\ lookup_var x u = SOME w ==> lookup_var x s = SOME w)` by
+    (qhdtm_assum `for_nonslot_live` (mp_tac o REWRITE_RULE [for_nonslot_live_def]) >>
+     disch_then (map_every assume_tac o CONJUNCTS) >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `return_buf_sep d c em s` by
+    (`return_buf_frame d c sa0 u` by
+       (irule return_buf_frame_frame >> qexistsl [`c`,`s0`,`sa0`] >> simp[]) >>
+     `!rb sz. d = SOME (rb,sz) ==> allocas_from (w2n rb + sz) s` by
+       ((metis_tac[bodyFullSharedTheory.return_buf_allocas_path])) >>
+     `stmt_state_rel (storage_trace_horizon em.storage_trace) ctx func c cx em u` by
+       (qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+          (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ _ u`
+       (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule
+          bodyFullSharedTheory.return_buf_sep_locals_kept) >>
+     simp[] >> qexists `saL` >> simp[] >> first_assum ACCEPT_TAC) >>
+  suspend "round_packets"
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[round_packets]:
+  qabbrev_tac `Live = \H k rs es J tz z.
+    for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
+      (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
+      (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,rs,es,c,es,J,tz,z)` >>
+  qabbrev_tac `Inv = \H rs es J tz z.
+    z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\ return_buf_sep d c es z /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    Live H (LENGTH vs - LENGTH rs) rs es J tz z` >>
+  qabbrev_tac `Done = \H ee G1 tn1 t.
+    stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sb /\
+    cenv_top_ext c c ee.scopes /\ stmt_state_rel H ctx func c cx ee t /\
+    storage_well_formed_on cx ee (FST H) /\ return_buf_frame d c sb t /\
+    alloca_history func t /\ return_buf_sep d c ee t /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+    ghost_inv_at (DF H) lo d c cx ee G1 tn1 t /\
+    (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+    (!x. not_fresh_at sa0 x ==>
+      FLOOKUP G1 x = FLOOKUP G0 x /\ op_taint tn1 (Var x) = op_taint tn0 (Var x)) /\
+    alloca_frame c es0 sa0 s0 c ee t /\
+    (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
+      (!name base len. local_region c es0.scopes s0 name base len ==>
+        off + sz <= base \/ base + len <= off) /\
+      off <= i /\ i < off + sz /\ i IN tn1.t_mem ==> i IN tn0.t_mem)` >>
+  qexistsl [`s`,`G`,`tn`,`Inv`,`Done`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (qx_gen_tac `H` >> disch_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _ /\ for_nonslot_live _ _ _ _ _ _`
+       (drule_then (map_every assume_tac o CONJUNCTS)) >>
+     simp[Abbr `Inv`, Abbr `Live`, IgnAsm `loc = _`, IgnAsm `vs = _`]) >>
+  conj_tac >- suspend "cons" >>
+  conj_tac >- suspend "nil" >>
+  simp[Abbr `Done`, NoAsms] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> first_assum ACCEPT_TAC
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[nil]:
+  map_every qx_gen_tac [`es`,`z`,`J`,`tz`] >>
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  `return_buf_sep d c es z` by
+    (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H [] es J tz z`
+       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+     simp[Abbr `Inv`] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    ?k. z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\
+      for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
+        (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
+        (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,[],es,c,es,J,tz,z)` by
+    (gen_tac >> disch_tac >>
+     qexists `LENGTH vs` >>
+     qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H [] es J tz z`
+       (qspec_then `H` (drule_then assume_tac)) >>
+     fs[Abbr `Inv`, Abbr `Live`, IgnAsm `loc = _`, IgnAsm `vs = _`]) >>
+  qpat_assum `for_nonslot_layout _ _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_layout_def]) >>
+  `sa0.cs_next_var <= sb.cs_next_var /\ ~not_fresh_at sa0 done_var` by
+    (fs[ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  drule_all for_nonslot_array_nil_separated >>
+  disch_then (qspecl_then [`lctx`,`gas_explicit_sites ctx shadow_ctx`,`PG`] strip_assume_tac) >>
+  rename1 `gas_origin_ptr_path _ _ _ (OK t,G1,tn1) /\ _` >>
+  qexistsl [`t`,`G1`,`tn1`] >> gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ (z,J,tz) _ _ /\ _`
+    (qspec_then `H` (drule_then mp_tac)) >>
+  simp[Abbr `Done`, NoAsms] >> strip_tac >> asm_rewrite_tac[] >>
+  qpat_assum `return_buf_sep d c es z ==> _` irule >>
+  first_assum ACCEPT_TAC
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[cons]:
+  map_every qx_gen_tac [`a`,`rs`,`es`,`z`,`J`,`tz`] >>
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `storage_trace_domain cx st0 es.storage_trace` >>
+  ASM_REWRITE_TAC [] >>
+  TRY (irule gas_outcome_full_initial_domain >>
+    simp[] >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+    simp[vyperStorageTraceTheory.storage_trace_frame_ignore_bind,
+         vyperStorageTraceTheory.storage_trace_frame_state_updates,
+         vyperStorageTraceTheory.storage_trace_frame_finally,
+         vyperStorageTraceTheory.storage_trace_frame_pop_scope,
+         vyperStorageTraceTheory.storage_trace_frame_try,
+         vyperStorageTraceTheory.storage_trace_frame_return,
+         vyperStorageTraceTheory.storage_trace_frame_loop_handler,
+         vyperStorageTraceTheory.storage_trace_frame_read_result,
+         cj 2 vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qabbrev_tac `k = LENGTH vs - LENGTH (a::rs)` >>
+  `body_const_cells_agree [(NONE,tops)] cx env es` by
+    (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z`
+       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then mp_tac)) >>
+     simp[NoAsms, Abbr `Inv`] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\
+       return_buf_sep d c es z /\ Live H k (a::rs) es J tz z` by
+    (qx_gen_tac `H` >> disch_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z`
+       (qspec_then `H` (drule_then mp_tac)) >>
+     simp[NoAsms, Abbr `Inv`, Abbr `k`] >> strip_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> z.vs_current_bb = _ /\ _`
+    (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
+      (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
+      (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,a::rs,es,c,es,J,tz,z)` by
+    (qx_gen_tac `H` >> disch_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> z.vs_current_bb = _ /\ _`
+       (qspec_then `H` (drule_then mp_tac)) >> simp[NoAsms, Abbr `Live`] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  drule_all for_nonslot_array_head_full >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
+    (qx_choosel_then [`v`,`eb`,`t`,`Gf`,`tnf`] strip_assume_tac)) >>
+  suspend "cons_body"
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[cons_body]:
+  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> for_nonslot_live _ _ _ _ _ _`
+    (qspec_then `storage_trace_horizon es.storage_trace` (drule_then assume_tac)) >>
+  drule_then strip_assume_tac for_nonslot_live_head_index >>
+  `a = Value v` by
+    (`?w. a = Value w` by
+       (qpat_assum `a = EL k vs` SUBST1_TAC >>
+        qpat_assum `vs = MAP Value xs` (fn th =>
+          qpat_assum `k < LENGTH vs` mp_tac >> simp[NoAsms,th,listTheory.EL_MAP])) >>
+     qpat_assum `a = Value w` (fn th =>
+       qpat_assum `read_result cx a es = _` mp_tac >>
+       simp[NoAsms,th,read_result_def,return_def])) >>
+  qabbrev_tac `sc = FEMPTY |+ (id,<|assignable := F; type := dtv; value := v; popped := []|>)` >>
+  `eb = es with scopes := sc :: es.scopes` by
+    (qpat_assum `push_scope_with_var id dtv v es = (INL (),eb)` mp_tac >>
+     simp[NoAsms,push_scope_with_var_def,return_def] >>
+     disch_then (SUBST1_TAC o SYM) >>
+     simp[NoAsms,Abbr `sc`,evaluation_state_component_equality]) >>
+  `body_const_cells_agree [(NONE,tops)] cx (extend_local env id fty F) eb` by
+    (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
+  `eb.storage_trace = es.storage_trace` by
+    (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
+  `lookup_scopes id es.scopes = NONE` by
+    (qhdtm_assum `for_nonslot_live` (mp_tac o REWRITE_RULE [for_nonslot_live_def]) >>
+     simp[NoAsms] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     first_assum ACCEPT_TAC) >>
+  suspend "cons_admissible"
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[cons_admissible]:
+  `gas_admissible (eval_stmts cx loop_body) (stmt_res_ok (InLoop exit incr)) eb` by
+    (`!res. stmt_res_ok lctx res ==> stmt_res_ok lctx res` by simp[] >>
+     `es with <|scopes := sc :: es.scopes; gas_obs := []|> = eb with gas_obs := []` by
+       (qpat_assum `eb = _` SUBST1_TAC >> simp[evaluation_state_component_equality]) >>
+     qunabbrev_tac `sc` >>
+     drule_all forConsBodyGasTheory.captured_storage_body_admissible >>
+     disch_then (qspecl_then [`incr`,`exit`] mp_tac) >>
+     qpat_assum `_ = eb with gas_obs := []` (pure_rewrite_tac o single) >>
+     simp[NoAsms,gasContextTheory.gas_admissible_gas_obs]) >>
+  `storage_trace_domain cx st0 eb.storage_trace` by simp[] >>
+  `valid_horizon cx st0 (storage_trace_horizon eb.storage_trace) eb.storage_trace` by simp[] >>
+  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+    (fn th => qpat_assum `eb.storage_trace = es.storage_trace`
+      (assume_tac o (fn eq => REWRITE_RULE [GSYM eq] th))) >>
+  qpat_assum `!H. valid_horizon cx st0 H eb.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+    (qspec_then `storage_trace_horizon eb.storage_trace` (drule_then strip_assume_tac)) >>
+  qhdtm_assum `for_nonslot_body_entry`
+    (map_every assume_tac o CONJUNCTS o SIMP_RULE (srw_ss()) [for_nonslot_body_entry_def]) >>
+  qhdtm_assum `for_nonslot_layout`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_layout_def]) >>
+  suspend "cons_static_body"
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[cons_static_body]:
+  qpat_assum `compile_stmts bc _ _ loop_body sbCopy = _`
+    (mp_then Any mp_tac bodyFullForRangeTheory.range_body_compiler_pair) >>
+  disch_then (qspec_then `shadow_sbCopy` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`bc'`,`shBody`] strip_assume_tac) >>
+  `shBody = shadow_sbBody` by
+    (qpat_assum `compile_stmts _ _ _ (MAP gas_shadow_stmt _) shadow_sbCopy = ((),shBody)`
+       (fn th => qpat_assum `compile_stmts _ _ _ (MAP gas_shadow_stmt _) shadow_sbCopy = ((),shadow_sbBody)`
+          (mp_tac o REWRITE_RULE [th])) >> simp[]) >>
+  qpat_x_assum `shBody = shadow_sbBody` SUBST_ALL_TAC >>
+  drule_then strip_assume_tac bodyFullForFactsTheory.type_stmt_for_projection >>
+  drule_then strip_assume_tac supportedStmtsTheory.supported_loop_body_contract >>
+  drule_then assume_tac bodySimDeclCasesTheory.body_for_exprs_ok >>
+  `!l. FLOOKUP c.ce_vars id = SOME l ==> ?q z. l = PtrVar q z` by
+    (qpat_assum `ce_locals_declared c env` mp_tac >>
+     qpat_assum `id NOTIN FDOM env.var_types` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[bodySimTheory.ce_locals_declared_def] >> metis_tac[]) >>
+  drule_all_then strip_assume_tac bodyFullForRangeTheory.range_body_static_transport >>
+  drule_all_then (qspec_then `F` assume_tac) bodyExprPreFactsTheory.ce_locals_declared_declare_local >>
+  `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) loop_body ==>
+      occurs_abi_decode_target target tops` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!target. supported_stmt_expr_exists _ _ ==> _` irule >>
+     simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def]) >>
+  `call_evaluation_safe cx (int_calls_stmts loop_body)` by
+    (qpat_assum `call_evaluation_safe cx (int_calls_stmt _)`
+       (mp_tac o REWRITE_RULE [vyperTypeCallGraphTheory.int_calls_stmt_def]) >>
+     MATCH_ACCEPT_TAC vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right) >>
+  suspend "cons_body_geometry"
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[cons_body_geometry]:
+  qpat_assum `!H. valid_horizon cx st0 H eb.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+    (assume_tac o (fn th => SIMP_RULE (srw_ss()) [] (cj 3 th))) >>
+  `?bb inst. lookup_block incr func.fn_blocks = SOME bb /\
+      get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI` by
+    (qpat_assum `lookup_block incr func.fn_blocks = _`
+      (fn th => simp[NoAsms,th,get_instruction_def,mk_inst_def])) >>
+  `ci_mono sbExpr saL` by
+    nonslot_mono_cut `_ sbExpr = (len_op,saL)` [nonslot_length_mono] >>
+  `ci_mono saL sa` by (irule ci_mono_trans >> qexists `saA` >> simp[]) >>
+  `ci_mono saL saCopy` by (irule ci_mono_trans >> qexists `sa` >> simp[]) >>
+  `ci_mono saL sbCopy` by (irule ci_mono_trans >> qexists `saCopy` >> simp[]) >>
+  `ci_mono sa sbCopy` by (irule ci_mono_trans >> qexists `saCopy` >> simp[]) >>
+  `not_fresh_at sbCopy idx /\ not_fresh_at sbCopy xd` by
+    (conj_tac >> irule exprOperandVarTheory.compiler_ci_mono_not_fresh >>
+     qexists `sa` >> simp[]) >>
+  `ci_mono sa0 sbCopy` by (irule ci_mono_trans >> qexists `saL` >> simp[]) >>
+  `ci_mono sbExpr sbCopy` by (irule ci_mono_trans >> qexists `saL` >> simp[]) >>
+  `ci_mono sa0 sbBody` by (irule ci_mono_trans >> qexists `sbCopy` >> simp[]) >>
+  `ci_mono sa0 sj` by (irule ci_mono_trans >> qexists `sbBody` >> simp[]) >>
+  `ci_mono sa0 sb` by (irule ci_mono_trans >> qexists `sj` >> simp[]) >>
+  `~block_is_terminated saCopy` by
+    (qpat_assum `emit_op ADD [vv_operand vv;sum_op] sn = _`
+       (mp_then Any mp_tac exprOpenPrimitivesTheory.emit_op_nonterminator_open) >>
+     simp[NoAsms,is_terminator_def]) >>
+  `acyclic_struct_metadata c.ce_struct_fields` by
+    (qpat_assum `body_inv tops ctx c cx`
+    (ACCEPT_TAC o MATCH_MP bodyInvCodePropsTheory.contract_inv_acyclic_struct_metadata o MATCH_MP bodySimTheory.body_inv_contract)) >>
+  `~block_is_terminated sbCopy` by
+    (irule for_nonslot_copy_open >>
+     qexistsl [`addr`,`c`,`Var xd`,`fty`,`loc`,`saCopy`,`stride`,`sty`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "cons_scoped_body"
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[cons_scoped_body]:
+  `!H. dead_lo_ok H (DF H) lo bc cx` by
+    (qpat_assum `same_frame c bc` (mp_then Any assume_tac bodyPtrDefsTheory.same_frame_is_ctor) >>
+     qpat_assum `bc.ce_is_ctor = c.ce_is_ctor` (fn eq =>
+       qpat_assum `!H. dead_lo_ok H (DF H) lo c cx` mp_tac >>
+       simp[NoAsms,bodyPtrDefsTheory.dead_lo_ok_def,eq])) >>
+  `!x sz. bc.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sbCopy x` by
+    (`bc.ce_return_buf = c.ce_return_buf` by
+       (qpat_assum `same_frame c bc` (mp_tac o REWRITE_RULE [bodySimTheory.same_frame_def]) >>
+        strip_tac >>
+        first_x_assum (mp_tac o AP_TERM ``compile_env_ce_return_buf``) >> simp[NoAsms]) >>
+     rpt strip_tac >> irule exprOperandVarTheory.compiler_ci_mono_not_fresh >>
+     qexists `sa0` >> simp[] >> metis_tac[]) >>
+  qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
+    (mp_then Any mp_tac for_nonslot_array_scoped_body_at) >>
+  disch_then (drule_at (Pat `frame_ret_ok_full _ _ _ _ _`)) >>
+  disch_then (fn th => qpat_assum `stmts_env bc _ ret_ty loop_body sbCopy = _`
+    (mp_then (Pat `stmts_env _ _ _ loop_body _ = _`) mp_tac th)) >>
+  disch_then (drule_at (Pat `stmts_env _ _ _ (MAP gas_shadow_stmt _) _ = _`)) >>
+  disch_then (drule_at (Pat `gas_shadow_state sbCopy _`)) >>
+  disch_then (drule_at (Pat `supported_stmts _ _ _`)) >>
+  disch_then (drule_at (Pat `type_stmts _ _ _ = _`)) >>
+  disch_then (qspecl_then [`sj`,`sb`,`lctx`,`fty`,`fty`,`cond`,`B`] mp_tac) >>
+  impl_tac
+  >- ((rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC))
+      >- (qexists `start` >> first_assum ACCEPT_TAC) >>
+      (all_tac >>> SELECT_LT REFL_TAC)
+      >- (qexists_tac `n` >> first_assum ACCEPT_TAC)
+      >- (qexistsl [`bb`,`inst`] >> rpt conj_tac >> first_assum ACCEPT_TAC)
+      >- suspend "cons_increment" >>
+      disch_tac >>
+      qpat_assum `!k a rs es eb v t Gf tnf dw bw bc' benv env_b. _ ==> B eb t Gf tnf` irule >>
+      (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC))
+      >- (qexists `bc'` >> rpt conj_tac >> first_assum ACCEPT_TAC)
+      >> qexistsl [`a`,`extend_local env id fty F`,`bw`,`dw`,`body_env'`,`es`,`k`,`rs`,`v`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (mk_asm "scoped_outcome")) >>
+  reverse conj_tac >- suspend "cons_extra" >>
+  suspend "cons_compose"
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[cons_increment]:
+  map_every qx_gen_tac [`iz`,`JG`,`ef`] >> PairCases_on `JG` >>
+  simp[NoAsms,pairTheory.FST,pairTheory.SND] >> strip_tac >>
+  qabbrev_tac `q = jump_to cond (update_var idx (n2w (SUC k))
+                       (update_var next_var (n2w (SUC k)) iz))` >>
+  qabbrev_tac `Gq = DRESTRICT (DRESTRICT JG0 (COMPL {next_var})) (COMPL {idx})` >>
+  qabbrev_tac `tq = JG1 with t_var := (JG1.t_var |+ (next_var,{})) |+ (idx,{})` >>
+  qexistsl [`q`,`Gq`,`tq`] >> qx_gen_tac `H` >> disch_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H ef.storage_trace ==> for_nonslot_live _ _ _ _ _ _`
+    (qspec_then `H` (drule_then assume_tac)) >>
+  `~not_fresh_at saL idx /\ ~not_fresh_at saL next_var /\ xd <> idx /\ xd <> next_var` by
+    (qpat_assum `EVERY _ [idx;done_var;next_var]` mp_tac >>
+     qpat_assum `ALL_DISTINCT [xd;idx;done_var;next_var]` mp_tac >> simp[NoAsms]) >>
+  `sa0.cs_next_var <= saL.cs_next_var` by metis_tac[ci_mono_def] >>
+  `?bb inst. lookup_block cond func.fn_blocks = SOME bb /\
+      get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI` by
+    (qpat_assum `lookup_block cond func.fn_blocks = _`
+      (fn th => simp[NoAsms,th,get_instruction_def,mk_inst_def])) >>
+  conj_asm1_tac >-
+    (qpat_assum `for_nonslot_live _ _ _ _ _ (H,k,a::rs,ef,_,_,_,_,iz)`
+      (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_live_def]) >>
+     `n2w (SUC k) = (n2w k + 1w):256 word` by
+       simp[NoAsms,ADD1,wordsTheory.word_add_n2w] >>
+     map_every qunabbrev_tac [`q`,`Gq`,`tq`] >>
+     pop_assum (fn th => pure_rewrite_tac[th,pairTheory.PAIR]) >>
+     irule for_nonslot_actual_increment_path >>
+     (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC))
+     >- (qexists `saL` >> first_assum ACCEPT_TAC)
+     >- (qexistsl [`incr`,`sj`] >> conj_tac >> first_assum ACCEPT_TAC)
+     >> simp[op_prov_def]) >>
+  conj_tac >- simp[NoAsms,Abbr `q`,jump_to_def] >>
+  conj_tac >- simp[NoAsms,Abbr `q`,jump_to_def] >>
+  irule for_nonslot_actual_increment_live >>
+  (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC)) >>
+  qexistsl [`JG0`,`PG`,`a`,`cond`,`gas_explicit_sites ctx shadow_ctx`,`next_var`,`iz`,`JG1`] >>
+  conj_tac >- (qexistsl [`bb'`,`inst'`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC)) >>
+  simp[NoAsms,Abbr `q`,Abbr `Gq`,Abbr `tq`]
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[cons_extra]:
+  qpat_assum `!a rs es z J tz v eb t Gf tnf. _ ==> P a rs es z J tz` irule >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`Gf`,`eb`,`t`,`tnf`,`v`] >>
+  (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC))
+  >- (qpat_assum `!H. valid_horizon cx st0 H eb.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+        (ACCEPT_TAC o cj 1)) >>
+  qpat_assum `eb = _` (fn th => PURE_REWRITE_TAC [th]) >>
+  simp[NoAsms,Abbr `sc`]
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[cons_compose]:
+  qabbrev_tac `head = bind (read_result cx a) (push_scope_with_var id dtv)` >>
+  qabbrev_tac `clean = finally
+    (try (ignore_bind (eval_stmts cx loop_body) (return F)) handle_loop_exception)
+    pop_scope` >>
+  `bind head (\u:unit. clean) =
+    bind (read_result cx a) (\v. ignore_bind (push_scope_with_var id dtv v) clean)` by
+    simp[NoAsms, Abbr `head`, bind_assoc, ignore_bind_def] >>
+  pop_assum (SUBST1_TAC o SYM) >>
+  irule gas_outcome_full_bind >> BETA_TAC >>
+  conj_tac
+  >- (gen_tac >> simp[NoAsms, Abbr `clean`] >>
+      irule storage_trace_frame_finally >> simp[NoAsms, storage_trace_frame_pop_scope] >>
+      irule storage_trace_frame_try >> simp[NoAsms, storage_trace_frame_loop_handler] >>
+      irule storage_trace_frame_ignore_bind >>
+      simp[NoAsms, storage_trace_frame_return,
+           CONJUNCT1 (CONJUNCT2 evaluate_storage_trace_frame)]) >>
+  conj_tac
+  >- (qx_gen_tac `left` >> qx_gen_tac `value` >>
+      qx_gen_tac `mid` >> qx_gen_tac `t_mid` >> rpt strip_tac >>
+      irule gas_exempt_cert_bind_unit >>
+      qexistsl [`mid`,`t_mid`,`value`] >> BETA_TAC >>
+      conj_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt strip_tac >> irule gas_exempt_cert_error_unit >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (simp[NoAsms, Abbr `head`] >> irule storage_trace_frame_bind_all >>
+      simp[NoAsms, storage_trace_frame_read_result, storage_trace_frame_state_updates]) >>
+  suspend "cons_bind_continuation"
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[cons_bind_continuation]:
+  irule gas_outcome_full_pure >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`Gf`,`eb`,`INL ()`,`t`,`tnf`] >>
+  conj_tac
+  >- (qunabbrev_tac `head` >> qpat_assum `a = Value v` SUBST1_TAC >>
+      qpat_assum `eb = es with scopes := _` SUBST1_TAC >>
+      simp[NoAsms, Abbr `sc`, bind_def, read_result_def, return_def,
+           push_scope_with_var_def, evaluation_state_component_equality]) >>
+  qx_gen_tac `H` >> strip_tac >> BETA_TAC >> conj_tac
+  >- (qpat_assum `!H. valid_horizon cx st0 H eb.storage_trace ==>
+        gas_origin_ptr_path _ (z,J,tz) [] (OK t,Gf,tnf) /\ _`
+      (qspec_then `H` (drule_then (ACCEPT_TAC o CONJUNCT1)))) >>
+  qexists `()` >> simp[NoAsms] >>
+  `!P R. gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 clean (eb with gas_obs := [],t,Gf,tnf) P R =
+    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 clean (eb,t,Gf,tnf) P R` by
+    simp[NoAsms, gas_outcome_full_def, gasStorageTheory.gas_bad_storage_at_def,
+         gasOutcomeInitialObsPtrTheory.gas_exempt_cert_initial_obs] >>
+  pop_assum (fn th => pure_rewrite_tac [th]) >>
+  irule gas_outcome_full_post_mono >>
+  asm "scoped_outcome" (irule_at Any) >> BETA_TAC >>
+  reverse conj_tac >- (rpt gen_tac >> disch_tac >> first_assum ACCEPT_TAC) >>
+  suspend "cons_next_suffix"
+QED
+
+Resume for_nonslot_array_round_contracts_at_with_prefix[cons_next_suffix]:
+  `SUC k = LENGTH vs - LENGTH rs` by
+    (`LENGTH rs = LENGTH vs - SUC k` by
+       (qpat_assum `rs = DROP (SUC k) vs` (fn th => simp[NoAsms, th, LENGTH_DROP])) >>
+     qpat_assum `LENGTH rs = _` mp_tac >>
+     qpat_assum `k < LENGTH vs` mp_tac >> decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `SUC k = LENGTH vs - LENGTH rs` (fn th =>
+    simp[NoAsms, Abbr `Done`, Abbr `Inv`, Abbr `Live`, GSYM th]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists `b` >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >> disch_tac >>
+  first_x_assum (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise for_nonslot_array_round_contracts_at_with_prefix
+
 Theorem for_nonslot_array_round_contracts_at:
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
@@ -3921,470 +4595,97 @@ Theorem for_nonslot_array_round_contracts_at:
           off + sz <= base \/ base + len <= off) /\
         off <= i /\ i < off + sz /\ i IN tn1.t_mem ==> i IN tn0.t_mem))
 Proof
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  suspend "capture"
+  mp_tac (Q.INST [`B` |-> `\eb t G tn. T`, `P` |-> `\a rs es z J tz. T`]
+    for_nonslot_array_round_contracts_at_with_prefix) >>
+  simp_tac bool_ss []
 QED
 
-Resume for_nonslot_array_round_contracts_at[capture]:
+(* The captured iterator's source facts are common to the full and prefix rounds. *)
+Theorem for_nonslot_array_round_source_pre:
+  for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
+    (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
+    (bc,saD,saA,xd,capacity,aidItem)
+    (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
+    (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
+    (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
+  body_const_cells_agree [(NONE,tops)] cx env es0 /\
+  body_inv tops ctx c cx /\ expr_body_pre c cx env e es0 /\
+  type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
+  (!nid. e = TopLevelName (expr_type e) nid ==>
+     IS_SOME (supported_immutable_type tops nid)) /\
+  (~(?ty nid. e = TopLevelName ty nid) ==>
+   !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
+  stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) n loop_body) /\
+  (?obs. !tail. eval_expr cx e (es0 with gas_obs := obs ++ tail) =
+                 (INL rv,em with gas_obs := tail)) /\
+  vv_post (storage_trace_horizon em.storage_trace) ctx func c cx e es0 sa0 sbExpr s0 em rv vv u /\
+  (!v. rv = Value v /\ ~is_word_type (post_value_type c e) /\
+    ~is_bytestring_type (post_value_type c e) ==>
+    vv_own c cx (post_value_type c e) sa0 sbExpr em rv vv u /\
+    (!ty p. vv = LocatedValue ty p ==> p.ptr_location = LocMemory)) ==>
+  body_const_cells_agree [(NONE,tops)] cx env em /\
+  for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em u
+Proof
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
   drule_then (map_every assume_tac o CONJUNCTS) bodyFullForFactsTheory.type_stmt_for_projection >>
-  drule_then (map_every assume_tac o CONJUNCTS) bodyFullForFactsTheory.supported_stmt_for_projection >>
-  `expr_type e = ArrayT sty bd /\
-   loc = (case vv_location vv of NONE => LocMemory | SOME l => l) /\
-   local_ptrs_reserved c saL` by
-    (qpat_assum `for_nonslot_layout _ _ _ _ _ _ _`
-       (mp_tac o REWRITE_RULE [for_nonslot_layout_def]) >> simp[]) >>
-  `sty = fty /\ well_typed_expr env e /\ expr_writes_ok (\_. F) e` by
-    fs[well_typed_iterator_def] >>
-  qpat_x_assum `?obs. !tail. eval_expr _ _ _ = _` (qx_choose_then `obs` assume_tac) >>
+  `expr_type e = ArrayT sty bd /\ loc = (case vv_location vv of NONE => LocMemory | SOME l => l)` by
+    (qhdtm_assum `for_nonslot_layout` (mp_tac o REWRITE_RULE [for_nonslot_layout_def]) >> simp[]) >>
+  `expr_type e = ArrayT fty bd` by fs[well_typed_iterator_def] >>
+  qpat_assum `?obs. !tail. eval_expr _ _ _ = _` (qx_choose_then `obs` assume_tac) >>
   qabbrev_tac `start = es0 with gas_obs := obs ++ em.gas_obs` >>
   `eval_expr cx e start = (INL rv,em)` by
     (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `em.gas_obs` mp_tac) >>
      simp[Abbr `start`]) >>
+  `expr_body_pre c cx env e start` by simp[Abbr `start`] >>
+  `?start. eval_expr cx e start = (INL rv,em) /\ expr_body_pre c cx env e start` by
+    (qexists `start` >> simp[]) >>
+  conj_tac
+  >- (irule body_const_cells_agree_expr >>
+      qpat_assum `eval_expr cx e start = (INL rv,em)` (irule_at Any) >>
+      imp_res_tac exprBodyPrePropsTheory.expr_body_pre_static_facts >>
+      simp[Abbr `start`]) >>
   `expr_sim_inv c cx env em` by
-    (`expr_body_pre c cx env e start` by simp[Abbr `start`] >>
-     drule_all_then ACCEPT_TAC bodySimStmtFactsTheory.expr_body_pre_eval_result) >>
-  `lookup_scopes id em.scopes = NONE` by
-    (`env_scopes_consistent env cx em` by
-       (qpat_assum `expr_sim_inv c cx env em` mp_tac >>
-        simp[NoAsms, exprSimHypsDefsTheory.expr_sim_inv_def,
-             vyperTypeInvariantsTheory.env_consistent_def] >>
-        strip_tac >> first_assum ACCEPT_TAC) >>
-     Cases_on `lookup_scopes id em.scopes` >> simp[] >>
-     qpat_assum `env_scopes_consistent env cx em`
-       (strip_assume_tac o REWRITE_RULE [vyperTypeInvariantsTheory.env_scopes_consistent_def]) >>
-     qpat_assum `!nm ent. lookup_scopes nm em.scopes = SOME ent ==> _`
-       (drule_then mp_tac) >> simp[FLOOKUP_DEF]) >>
-  `expr_type e = ArrayT fty bd` by metis_tac[] >>
-  `local_ptrs_rel func c em.scopes u` by
-    (qhdtm_assum `vv_post` (mp_tac o cj 1 o REWRITE_RULE [vv_post_def]) >>
-     disch_then (ACCEPT_TAC o MATCH_MP (cj 1 stateRelProjTheory.stmt_state_rel_local_ptrs_alloca))) >>
-  `c.ce_alloca_locals` by
-    (qpat_assum `body_inv tops ctx c cx`
-    (ACCEPT_TAC o MATCH_MP bodyInvExecutionPropsTheory.contract_inv_alloca_locals o MATCH_MP bodySimTheory.body_inv_contract)) >>
-  suspend "entry"
+    (drule_all_then ACCEPT_TAC bodySimStmtFactsTheory.expr_body_pre_eval_result) >>
+  `vv_place_ptr c cx em u rv vv` by fs[vv_post_def] >>
+  `(!v ty p. rv = Value v /\ ~is_word_type (post_value_type c e) /\
+     ~is_bytestring_type (post_value_type c e) /\ vv = LocatedValue ty p ==>
+     p.ptr_location = LocMemory)` by
+    (rpt strip_tac >> first_x_assum (drule_all_then strip_assume_tac) >> simp[]) >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+    (qpat_assum `body_inv tops ctx _ cx`
+       (ACCEPT_TAC o MATCH_MP contractInvContextPropsTheory.contract_inv_singleton_source_modules
+         o MATCH_MP bodySimTheory.body_inv_contract)) >>
+  irule for_nonslot_code_frame_bare >>
+  conj_tac >- (qexistsl [`bd`,`fty`] >> disch_tac >>
+    `vv_location vv = SOME LocCode` by
+      (qpat_assum `loc = (case vv_location vv of NONE => LocMemory | SOME l => l)` mp_tac >>
+       Cases_on `vv_location vv` >> simp[]) >>
+    qpat_assum `body_inv tops ctx c cx` (fn inv =>
+      assume_tac (MATCH_MP bodySimTheory.body_inv_contract inv) >>
+      strip_assume_tac (MATCH_MP bodyInvCodePropsTheory.body_inv_main_code inv)) >>
+    `expr_sim_inv_mods [(NONE,tops)] c cx env em` by
+      (drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_module_locations >>
+       drule_then assume_tac bodyInvSplitTheory.contract_inv_immutable_section_layout >>
+       drule_all_then (fn th => simp[th])
+         bodyFullPostsModsTheory.expr_sim_inv_mods_singleton) >>
+    `type_widens_to env.type_defs (post_value_type c e) (expr_type e)` by
+      (irule post_value_type_widens >> conj_tac >- fs[well_typed_iterator_def] >>
+       qexistsl [`cx`,`em`] >> first_assum ACCEPT_TAC) >>
+    `!src name. e = TopLevelName (expr_type e) (src,name) ==>
+       ?ts. ALOOKUP [(NONE,tops)] src = SOME ts /\
+            IS_SOME (supported_immutable_type ts (NONE,name))` by
+      (rpt gen_tac >> strip_tac >>
+       qpat_assum `!nid. e = TopLevelName _ nid ==> _`
+         (qspec_then `(src,name)` (drule_then assume_tac)) >>
+       Cases_on `src` >>
+       gvs[alistTheory.ALOOKUP_def, supportedDeclsTheory.supported_immutable_type_def,
+            supportedDeclsTheory.supported_lookup_other_module]) >>
+    mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`, `et` |-> `fty`]
+              for_nonslot_array_capture_classify_mods) >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+    fs[exprSimHypsDefsTheory.cx_const_name_split_def]) >>
+  simp[] >> qexistsl [`fty`,`n`] >> simp[]
 QED
-
-Resume for_nonslot_array_round_contracts_at[entry]:
-  `?dw bw s G tn.
-     s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
-     (!H. valid_horizon cx st0 H em.storage_trace ==>
-       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-         (u,Gu,tu) [] (OK s,G,tn) /\
-       for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
-         (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-         (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,0,vs,em,c,em,G,tn,s))` by
-    (irule for_nonslot_array_entry_full >>
-     qpat_assum `for_nonslot_layout _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
-     qexists `n` >> simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `valid_horizon cx st0 (storage_trace_horizon em.storage_trace) em.storage_trace` by
-    fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _ /\ for_nonslot_live _ _ _ _ _ _`
-    (drule_then (map_every assume_tac o CONJUNCTS)) >>
-  `~s.vs_halted /\
-   (!x w. not_fresh_at saL x /\ lookup_var x u = SOME w ==> lookup_var x s = SOME w)` by
-    (qhdtm_assum `for_nonslot_live` (mp_tac o REWRITE_RULE [for_nonslot_live_def]) >>
-     disch_then (map_every assume_tac o CONJUNCTS) >> conj_tac >> first_assum ACCEPT_TAC) >>
-  `return_buf_sep d c em s` by
-    (`return_buf_frame d c sa0 u` by
-       (irule return_buf_frame_frame >> qexistsl [`c`,`s0`,`sa0`] >> simp[]) >>
-     `!rb sz. d = SOME (rb,sz) ==> allocas_from (w2n rb + sz) s` by
-       ((metis_tac[bodyFullSharedTheory.return_buf_allocas_path])) >>
-     `stmt_state_rel (storage_trace_horizon em.storage_trace) ctx func c cx em u` by
-       (qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
-          (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
-     qpat_assum `stmt_state_rel _ _ _ _ _ _ u`
-       (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule
-          bodyFullSharedTheory.return_buf_sep_locals_kept) >>
-     simp[] >> qexists `saL` >> simp[] >> first_assum ACCEPT_TAC) >>
-  suspend "round_packets"
-QED
-
-Resume for_nonslot_array_round_contracts_at[round_packets]:
-  qabbrev_tac `Live = \H k rs es J tz z.
-    for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
-      (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-      (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,rs,es,c,es,J,tz,z)` >>
-  qabbrev_tac `Inv = \H rs es J tz z.
-    z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\ return_buf_sep d c es z /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    Live H (LENGTH vs - LENGTH rs) rs es J tz z` >>
-  qabbrev_tac `Done = \H ee G1 tn1 t.
-    stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sb /\
-    cenv_top_ext c c ee.scopes /\ stmt_state_rel H ctx func c cx ee t /\
-    storage_well_formed_on cx ee (FST H) /\ return_buf_frame d c sb t /\
-    alloca_history func t /\ return_buf_sep d c ee t /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ s0.vs_alloca_next <= t.vs_alloca_next /\
-    ghost_inv_at (DF H) lo d c cx ee G1 tn1 t /\
-    (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
-    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
-    (!x. not_fresh_at sa0 x ==>
-      FLOOKUP G1 x = FLOOKUP G0 x /\ op_taint tn1 (Var x) = op_taint tn0 (Var x)) /\
-    alloca_frame c es0 sa0 s0 c ee t /\
-    (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
-      (!name base len. local_region c es0.scopes s0 name base len ==>
-        off + sz <= base \/ base + len <= off) /\
-      off <= i /\ i < off + sz /\ i IN tn1.t_mem ==> i IN tn0.t_mem)` >>
-  qexistsl [`s`,`G`,`tn`,`Inv`,`Done`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >-
-    (qx_gen_tac `H` >> disch_tac >>
-     qpat_assum `!H. valid_horizon cx st0 H em.storage_trace ==> _ /\ for_nonslot_live _ _ _ _ _ _`
-       (drule_then (map_every assume_tac o CONJUNCTS)) >>
-     simp[Abbr `Inv`, Abbr `Live`, IgnAsm `loc = _`, IgnAsm `vs = _`]) >>
-  conj_tac >- suspend "cons" >>
-  conj_tac >- suspend "nil" >>
-  simp[Abbr `Done`, NoAsms] >> rpt gen_tac >>
-  disch_then (map_every assume_tac o CONJUNCTS) >> first_assum ACCEPT_TAC
-QED
-
-Resume for_nonslot_array_round_contracts_at[nil]:
-  map_every qx_gen_tac [`es`,`z`,`J`,`tz`] >>
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
-    fs[storage_trace_domain_def] >>
-  `return_buf_sep d c es z` by
-    (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H [] es J tz z`
-       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
-     simp[Abbr `Inv`] >> metis_tac[]) >>
-  `!H. valid_horizon cx st0 H es.storage_trace ==>
-    ?k. z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\
-      for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
-        (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-        (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,[],es,c,es,J,tz,z)` by
-    (gen_tac >> disch_tac >>
-     qexists `LENGTH vs` >>
-     qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H [] es J tz z`
-       (qspec_then `H` (drule_then assume_tac)) >>
-     fs[Abbr `Inv`, Abbr `Live`, IgnAsm `loc = _`, IgnAsm `vs = _`]) >>
-  qpat_assum `for_nonslot_layout _ _ _ _ _ _ _`
-    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_layout_def]) >>
-  `sa0.cs_next_var <= sb.cs_next_var /\ ~not_fresh_at sa0 done_var` by
-    (fs[ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  drule_all for_nonslot_array_nil_separated >>
-  disch_then (qspecl_then [`lctx`,`gas_explicit_sites ctx shadow_ctx`,`PG`] strip_assume_tac) >>
-  rename1 `gas_origin_ptr_path _ _ _ (OK t,G1,tn1) /\ _` >>
-  qexistsl [`t`,`G1`,`tn1`] >> gen_tac >> disch_tac >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ (z,J,tz) _ _ /\ _`
-    (qspec_then `H` (drule_then mp_tac)) >>
-  simp[Abbr `Done`, NoAsms] >> strip_tac >> asm_rewrite_tac[] >>
-  qpat_assum `return_buf_sep d c es z ==> _` irule >>
-  first_assum ACCEPT_TAC
-QED
-
-Resume for_nonslot_array_round_contracts_at[cons]:
-  map_every qx_gen_tac [`a`,`rs`,`es`,`z`,`J`,`tz`] >>
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  irule gas_outcome_full_initial_domain >>
-  conj_tac >- (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-    simp[vyperStorageTraceTheory.storage_trace_frame_ignore_bind,
-         vyperStorageTraceTheory.storage_trace_frame_state_updates,
-         vyperStorageTraceTheory.storage_trace_frame_finally,
-         vyperStorageTraceTheory.storage_trace_frame_pop_scope,
-         vyperStorageTraceTheory.storage_trace_frame_try,
-         vyperStorageTraceTheory.storage_trace_frame_return,
-         vyperStorageTraceTheory.storage_trace_frame_loop_handler,
-         vyperStorageTraceTheory.storage_trace_frame_read_result,
-         cj 2 vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
-  conj_tac >- first_assum ACCEPT_TAC >> disch_tac >>
-  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
-    fs[storage_trace_domain_def] >>
-  qabbrev_tac `k = LENGTH vs - LENGTH (a::rs)` >>
-  `body_const_cells_agree [(NONE,tops)] cx env es` by
-    (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z`
-       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then mp_tac)) >>
-     simp[NoAsms, Abbr `Inv`] >> strip_tac >> first_assum ACCEPT_TAC) >>
-  `!H. valid_horizon cx st0 H es.storage_trace ==>
-       z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\
-       return_buf_sep d c es z /\ Live H k (a::rs) es J tz z` by
-    (qx_gen_tac `H` >> disch_tac >>
-     qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z`
-       (qspec_then `H` (drule_then mp_tac)) >>
-     simp[NoAsms, Abbr `Inv`, Abbr `k`] >> strip_tac >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> z.vs_current_bb = _ /\ _`
-    (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
-  `!H. valid_horizon cx st0 H es.storage_trace ==>
-    for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
-      (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-      (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,a::rs,es,c,es,J,tz,z)` by
-    (qx_gen_tac `H` >> disch_tac >>
-     qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> z.vs_current_bb = _ /\ _`
-       (qspec_then `H` (drule_then mp_tac)) >> simp[NoAsms, Abbr `Live`] >>
-     strip_tac >> first_assum ACCEPT_TAC) >>
-  drule_all for_nonslot_array_head_full >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
-    (qx_choosel_then [`v`,`eb`,`t`,`Gf`,`tnf`] strip_assume_tac)) >>
-  suspend "cons_body"
-QED
-
-Resume for_nonslot_array_round_contracts_at[cons_body]:
-  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> for_nonslot_live _ _ _ _ _ _`
-    (qspec_then `storage_trace_horizon es.storage_trace` (drule_then assume_tac)) >>
-  drule_then strip_assume_tac for_nonslot_live_head_index >>
-  `a = Value v` by
-    (`?w. a = Value w` by
-       (qpat_assum `a = EL k vs` SUBST1_TAC >>
-        qpat_assum `vs = MAP Value xs` (fn th =>
-          qpat_assum `k < LENGTH vs` mp_tac >> simp[NoAsms,th,listTheory.EL_MAP])) >>
-     qpat_assum `a = Value w` (fn th =>
-       qpat_assum `read_result cx a es = _` mp_tac >>
-       simp[NoAsms,th,read_result_def,return_def])) >>
-  qabbrev_tac `sc = FEMPTY |+ (id,<|assignable := F; type := dtv; value := v; popped := []|>)` >>
-  `eb = es with scopes := sc :: es.scopes` by
-    (qpat_assum `push_scope_with_var id dtv v es = (INL (),eb)` mp_tac >>
-     simp[NoAsms,push_scope_with_var_def,return_def] >>
-     disch_then (SUBST1_TAC o SYM) >>
-     simp[NoAsms,Abbr `sc`,evaluation_state_component_equality]) >>
-  `body_const_cells_agree [(NONE,tops)] cx (extend_local env id fty F) eb` by
-    (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
-  `eb.storage_trace = es.storage_trace` by
-    (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
-  `lookup_scopes id es.scopes = NONE` by
-    (qhdtm_assum `for_nonslot_live` (mp_tac o REWRITE_RULE [for_nonslot_live_def]) >>
-     simp[NoAsms] >> disch_then (map_every assume_tac o CONJUNCTS) >>
-     first_assum ACCEPT_TAC) >>
-  suspend "cons_admissible"
-QED
-
-Resume for_nonslot_array_round_contracts_at[cons_admissible]:
-  `gas_admissible (eval_stmts cx loop_body) (stmt_res_ok (InLoop exit incr)) eb` by
-    (`!res. stmt_res_ok lctx res ==> stmt_res_ok lctx res` by simp[] >>
-     `es with <|scopes := sc :: es.scopes; gas_obs := []|> = eb with gas_obs := []` by
-       (qpat_assum `eb = _` SUBST1_TAC >> simp[evaluation_state_component_equality]) >>
-     qunabbrev_tac `sc` >>
-     drule_all forConsBodyGasTheory.captured_storage_body_admissible >>
-     disch_then (qspecl_then [`incr`,`exit`] mp_tac) >>
-     qpat_assum `_ = eb with gas_obs := []` (pure_rewrite_tac o single) >>
-     simp[NoAsms,gasContextTheory.gas_admissible_gas_obs]) >>
-  `storage_trace_domain cx st0 eb.storage_trace` by simp[] >>
-  `valid_horizon cx st0 (storage_trace_horizon eb.storage_trace) eb.storage_trace` by simp[] >>
-  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-    (fn th => qpat_assum `eb.storage_trace = es.storage_trace`
-      (assume_tac o (fn eq => REWRITE_RULE [GSYM eq] th))) >>
-  qpat_assum `!H. valid_horizon cx st0 H eb.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-    (qspec_then `storage_trace_horizon eb.storage_trace` (drule_then strip_assume_tac)) >>
-  qhdtm_assum `for_nonslot_body_entry`
-    (map_every assume_tac o CONJUNCTS o SIMP_RULE (srw_ss()) [for_nonslot_body_entry_def]) >>
-  qhdtm_assum `for_nonslot_layout`
-    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_layout_def]) >>
-  suspend "cons_static_body"
-QED
-
-Resume for_nonslot_array_round_contracts_at[cons_static_body]:
-  qpat_assum `compile_stmts bc _ _ loop_body sbCopy = _`
-    (mp_then Any mp_tac bodyFullForRangeTheory.range_body_compiler_pair) >>
-  disch_then (qspec_then `shadow_sbCopy` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  disch_then (qx_choosel_then [`bc'`,`shBody`] strip_assume_tac) >>
-  `shBody = shadow_sbBody` by
-    (qpat_assum `compile_stmts _ _ _ (MAP gas_shadow_stmt _) shadow_sbCopy = ((),shBody)`
-       (fn th => qpat_assum `compile_stmts _ _ _ (MAP gas_shadow_stmt _) shadow_sbCopy = ((),shadow_sbBody)`
-          (mp_tac o REWRITE_RULE [th])) >> simp[]) >>
-  qpat_x_assum `shBody = shadow_sbBody` SUBST_ALL_TAC >>
-  drule_then strip_assume_tac bodyFullForFactsTheory.type_stmt_for_projection >>
-  drule_then strip_assume_tac supportedStmtsTheory.supported_loop_body_contract >>
-  drule_then assume_tac bodySimDeclCasesTheory.body_for_exprs_ok >>
-  `!l. FLOOKUP c.ce_vars id = SOME l ==> ?q z. l = PtrVar q z` by
-    (qpat_assum `ce_locals_declared c env` mp_tac >>
-     qpat_assum `id NOTIN FDOM env.var_types` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[bodySimTheory.ce_locals_declared_def] >> metis_tac[]) >>
-  drule_all_then strip_assume_tac bodyFullForRangeTheory.range_body_static_transport >>
-  drule_all_then (qspec_then `F` assume_tac) bodyExprPreFactsTheory.ce_locals_declared_declare_local >>
-  `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) loop_body ==>
-      occurs_abi_decode_target target tops` by
-    (gen_tac >> disch_tac >>
-     qpat_assum `!target. supported_stmt_expr_exists _ _ ==> _` irule >>
-     simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def]) >>
-  `call_evaluation_safe cx (int_calls_stmts loop_body)` by
-    (qpat_assum `call_evaluation_safe cx (int_calls_stmt _)`
-       (mp_tac o REWRITE_RULE [vyperTypeCallGraphTheory.int_calls_stmt_def]) >>
-     MATCH_ACCEPT_TAC vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right) >>
-  suspend "cons_body_geometry"
-QED
-
-Resume for_nonslot_array_round_contracts_at[cons_body_geometry]:
-  qpat_assum `!H. valid_horizon cx st0 H eb.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-    (assume_tac o (fn th => SIMP_RULE (srw_ss()) [] (cj 3 th))) >>
-  `?bb inst. lookup_block incr func.fn_blocks = SOME bb /\
-      get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI` by
-    (qpat_assum `lookup_block incr func.fn_blocks = _`
-      (fn th => simp[NoAsms,th,get_instruction_def,mk_inst_def])) >>
-  `ci_mono sbExpr saL` by
-    nonslot_mono_cut `_ sbExpr = (len_op,saL)` [nonslot_length_mono] >>
-  `ci_mono saL sa` by (irule ci_mono_trans >> qexists `saA` >> simp[]) >>
-  `ci_mono saL saCopy` by (irule ci_mono_trans >> qexists `sa` >> simp[]) >>
-  `ci_mono saL sbCopy` by (irule ci_mono_trans >> qexists `saCopy` >> simp[]) >>
-  `ci_mono sa sbCopy` by (irule ci_mono_trans >> qexists `saCopy` >> simp[]) >>
-  `not_fresh_at sbCopy idx /\ not_fresh_at sbCopy xd` by
-    (conj_tac >> irule exprOperandVarTheory.compiler_ci_mono_not_fresh >>
-     qexists `sa` >> simp[]) >>
-  `ci_mono sa0 sbCopy` by (irule ci_mono_trans >> qexists `saL` >> simp[]) >>
-  `ci_mono sbExpr sbCopy` by (irule ci_mono_trans >> qexists `saL` >> simp[]) >>
-  `ci_mono sa0 sbBody` by (irule ci_mono_trans >> qexists `sbCopy` >> simp[]) >>
-  `ci_mono sa0 sj` by (irule ci_mono_trans >> qexists `sbBody` >> simp[]) >>
-  `ci_mono sa0 sb` by (irule ci_mono_trans >> qexists `sj` >> simp[]) >>
-  `~block_is_terminated saCopy` by
-    (qpat_assum `emit_op ADD [vv_operand vv;sum_op] sn = _`
-       (mp_then Any mp_tac exprOpenPrimitivesTheory.emit_op_nonterminator_open) >>
-     simp[NoAsms,is_terminator_def]) >>
-  `acyclic_struct_metadata c.ce_struct_fields` by
-    (qpat_assum `body_inv tops ctx c cx`
-    (ACCEPT_TAC o MATCH_MP bodyInvCodePropsTheory.contract_inv_acyclic_struct_metadata o MATCH_MP bodySimTheory.body_inv_contract)) >>
-  `~block_is_terminated sbCopy` by
-    (irule for_nonslot_copy_open >>
-     qexistsl [`addr`,`c`,`Var xd`,`fty`,`loc`,`saCopy`,`stride`,`sty`] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  suspend "cons_scoped_body"
-QED
-
-Resume for_nonslot_array_round_contracts_at[cons_scoped_body]:
-  qpat_assum `!H. _ ==> for_nonslot_body_entry _ _ _ _ _ _ _`
-    (mp_then Any mp_tac for_nonslot_array_scoped_body_at) >>
-  disch_then (drule_at (Pat `frame_ret_ok_full _ _ _ _ _`)) >>
-  disch_then (fn th => qpat_assum `stmts_env bc _ ret_ty loop_body sbCopy = _`
-    (mp_then (Pat `stmts_env _ _ _ loop_body _ = _`) mp_tac th)) >>
-  disch_then (drule_at (Pat `stmts_env _ _ _ (MAP gas_shadow_stmt _) _ = _`)) >>
-  disch_then (drule_at (Pat `gas_shadow_state sbCopy _`)) >>
-  disch_then (drule_at (Pat `supported_stmts _ _ _`)) >>
-  disch_then (drule_at (Pat `type_stmts _ _ _ = _`)) >>
-  disch_then (qspecl_then [`sj`,`sb`,`lctx`,`fty`,`fty`,`cond`] mp_tac) >>
-  impl_tac
-  >- ((rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC))
-      >- (qexists `start` >> first_assum ACCEPT_TAC) >>
-      (all_tac >>> SELECT_LT REFL_TAC)
-      >- (qexists_tac `n` >> first_assum ACCEPT_TAC)
-      >- (qexistsl [`bb`,`inst`] >> rpt conj_tac >> first_assum ACCEPT_TAC)
-      >- (qpat_assum `same_frame c bc` (mp_then Any assume_tac bodyPtrDefsTheory.same_frame_is_ctor) >>
-          qpat_assum `bc.ce_is_ctor = c.ce_is_ctor` (fn eq =>
-            qpat_assum `!H. dead_lo_ok H (DF H) lo c cx` mp_tac >>
-            simp[NoAsms,bodyPtrDefsTheory.dead_lo_ok_def,eq]))
-      >- (`bc.ce_return_buf = c.ce_return_buf` by
-            (qpat_assum `same_frame c bc` (mp_tac o REWRITE_RULE [bodySimTheory.same_frame_def]) >>
-             strip_tac >>
-             first_x_assum (mp_tac o AP_TERM ``compile_env_ce_return_buf``) >> simp[NoAsms]) >>
-          rpt strip_tac >> irule exprOperandVarTheory.compiler_ci_mono_not_fresh >>
-          qexists `sa0` >> simp[] >> metis_tac[]) >>
-      suspend "cons_increment") >>
-  suspend "cons_compose"
-QED
-
-Resume for_nonslot_array_round_contracts_at[cons_increment]:
-  map_every qx_gen_tac [`iz`,`JG`,`ef`] >> PairCases_on `JG` >>
-  simp[NoAsms,pairTheory.FST,pairTheory.SND] >> strip_tac >>
-  qabbrev_tac `q = jump_to cond (update_var idx (n2w (SUC k))
-                       (update_var next_var (n2w (SUC k)) iz))` >>
-  qabbrev_tac `Gq = DRESTRICT (DRESTRICT JG0 (COMPL {next_var})) (COMPL {idx})` >>
-  qabbrev_tac `tq = JG1 with t_var := (JG1.t_var |+ (next_var,{})) |+ (idx,{})` >>
-  qexistsl [`q`,`Gq`,`tq`] >> qx_gen_tac `H` >> disch_tac >>
-  qpat_assum `!H. valid_horizon cx st0 H ef.storage_trace ==> for_nonslot_live _ _ _ _ _ _`
-    (qspec_then `H` (drule_then assume_tac)) >>
-  `~not_fresh_at saL idx /\ ~not_fresh_at saL next_var /\ xd <> idx /\ xd <> next_var` by
-    (qpat_assum `EVERY _ [idx;done_var;next_var]` mp_tac >>
-     qpat_assum `ALL_DISTINCT [xd;idx;done_var;next_var]` mp_tac >> simp[NoAsms]) >>
-  `sa0.cs_next_var <= saL.cs_next_var` by metis_tac[ci_mono_def] >>
-  `?bb inst. lookup_block cond func.fn_blocks = SOME bb /\
-      get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI` by
-    (qpat_assum `lookup_block cond func.fn_blocks = _`
-      (fn th => simp[NoAsms,th,get_instruction_def,mk_inst_def])) >>
-  conj_asm1_tac >-
-    (qpat_assum `for_nonslot_live _ _ _ _ _ (H,k,a::rs,ef,_,_,_,_,iz)`
-      (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_live_def]) >>
-     `n2w (SUC k) = (n2w k + 1w):256 word` by
-       simp[NoAsms,ADD1,wordsTheory.word_add_n2w] >>
-     map_every qunabbrev_tac [`q`,`Gq`,`tq`] >>
-     pop_assum (fn th => pure_rewrite_tac[th,pairTheory.PAIR]) >>
-     irule for_nonslot_actual_increment_path >>
-     (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC))
-     >- (qexists `saL` >> first_assum ACCEPT_TAC)
-     >- (qexistsl [`incr`,`sj`] >> conj_tac >> first_assum ACCEPT_TAC)
-     >> simp[op_prov_def]) >>
-  conj_tac >- simp[NoAsms,Abbr `q`,jump_to_def] >>
-  conj_tac >- simp[NoAsms,Abbr `q`,jump_to_def] >>
-  irule for_nonslot_actual_increment_live >>
-  (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC)) >>
-  qexistsl [`JG0`,`PG`,`a`,`cond`,`gas_explicit_sites ctx shadow_ctx`,`next_var`,`iz`,`JG1`] >>
-  conj_tac >- (qexistsl [`bb'`,`inst'`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC)) >>
-  simp[NoAsms,Abbr `q`,Abbr `Gq`,Abbr `tq`]
-QED
-
-Resume for_nonslot_array_round_contracts_at[cons_compose]:
-  disch_then (mk_asm "scoped_outcome") >>
-  qabbrev_tac `head = bind (read_result cx a) (push_scope_with_var id dtv)` >>
-  qabbrev_tac `clean = finally
-    (try (ignore_bind (eval_stmts cx loop_body) (return F)) handle_loop_exception)
-    pop_scope` >>
-  `bind head (\u:unit. clean) =
-    bind (read_result cx a) (\v. ignore_bind (push_scope_with_var id dtv v) clean)` by
-    simp[NoAsms, Abbr `head`, bind_assoc, ignore_bind_def] >>
-  pop_assum (SUBST1_TAC o SYM) >>
-  irule gas_outcome_full_bind >> BETA_TAC >>
-  conj_tac
-  >- (gen_tac >> simp[NoAsms, Abbr `clean`] >>
-      irule storage_trace_frame_finally >> simp[NoAsms, storage_trace_frame_pop_scope] >>
-      irule storage_trace_frame_try >> simp[NoAsms, storage_trace_frame_loop_handler] >>
-      irule storage_trace_frame_ignore_bind >>
-      simp[NoAsms, storage_trace_frame_return,
-           CONJUNCT1 (CONJUNCT2 evaluate_storage_trace_frame)]) >>
-  conj_tac
-  >- (qx_gen_tac `left` >> qx_gen_tac `value` >>
-      qx_gen_tac `mid` >> qx_gen_tac `t_mid` >> rpt strip_tac >>
-      irule gas_exempt_cert_bind_unit >>
-      qexistsl [`mid`,`t_mid`,`value`] >> BETA_TAC >>
-      conj_tac >> first_assum ACCEPT_TAC) >>
-  conj_tac
-  >- (rpt strip_tac >> irule gas_exempt_cert_error_unit >> first_assum ACCEPT_TAC) >>
-  conj_tac
-  >- (simp[NoAsms, Abbr `head`] >> irule storage_trace_frame_bind_all >>
-      simp[NoAsms, storage_trace_frame_read_result, storage_trace_frame_state_updates]) >>
-  suspend "cons_bind_continuation"
-QED
-
-Resume for_nonslot_array_round_contracts_at[cons_bind_continuation]:
-  irule gas_outcome_full_pure >>
-  reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`Gf`,`eb`,`INL ()`,`t`,`tnf`] >>
-  conj_tac
-  >- (qunabbrev_tac `head` >> qpat_assum `a = Value v` SUBST1_TAC >>
-      qpat_assum `eb = es with scopes := _` SUBST1_TAC >>
-      simp[NoAsms, Abbr `sc`, bind_def, read_result_def, return_def,
-           push_scope_with_var_def, evaluation_state_component_equality]) >>
-  qx_gen_tac `H` >> strip_tac >> BETA_TAC >> conj_tac
-  >- (qpat_assum `!H. valid_horizon cx st0 H eb.storage_trace ==>
-        gas_origin_ptr_path _ (z,J,tz) [] (OK t,Gf,tnf) /\ _`
-      (qspec_then `H` (drule_then (ACCEPT_TAC o CONJUNCT1)))) >>
-  qexists `()` >> simp[NoAsms] >>
-  `!P R. gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 clean (eb with gas_obs := [],t,Gf,tnf) P R =
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 clean (eb,t,Gf,tnf) P R` by
-    simp[NoAsms, gas_outcome_full_def, gasStorageTheory.gas_bad_storage_at_def,
-         gasOutcomeInitialObsPtrTheory.gas_exempt_cert_initial_obs] >>
-  pop_assum (fn th => pure_rewrite_tac [th]) >>
-  irule gas_outcome_full_post_mono >>
-  asm "scoped_outcome" (irule_at Any) >> BETA_TAC >>
-  reverse conj_tac >- (rpt gen_tac >> disch_tac >> first_assum ACCEPT_TAC) >>
-  suspend "cons_next_suffix"
-QED
-
-Resume for_nonslot_array_round_contracts_at[cons_next_suffix]:
-  `SUC k = LENGTH vs - LENGTH rs` by
-    (`LENGTH rs = LENGTH vs - SUC k` by
-       (qpat_assum `rs = DROP (SUC k) vs` (fn th => simp[NoAsms, th, LENGTH_DROP])) >>
-     qpat_assum `LENGTH rs = _` mp_tac >>
-     qpat_assum `k < LENGTH vs` mp_tac >> decide_tac) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_assum `SUC k = LENGTH vs - LENGTH rs` (fn th =>
-    simp[NoAsms, Abbr `Done`, Abbr `Inv`, Abbr `Live`, GSYM th]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexists `b` >> conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >> disch_tac >>
-  first_x_assum (drule_then (map_every assume_tac o CONJUNCTS)) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Finalise for_nonslot_array_round_contracts_at
 
 Theorem for_nonslot_array_round_contracts:
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
@@ -4508,63 +4809,8 @@ Theorem for_nonslot_array_round_contracts:
         off <= i /\ i < off + sz /\ i IN tn1.t_mem ==> i IN tn0.t_mem))
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  drule_then (map_every assume_tac o CONJUNCTS) bodyFullForFactsTheory.type_stmt_for_projection >>
-  drule_then (map_every assume_tac o CONJUNCTS) bodyFullForFactsTheory.supported_stmt_for_projection >>
-  `expr_type e = ArrayT sty bd /\ loc = (case vv_location vv of NONE => LocMemory | SOME l => l)` by
-    (qhdtm_assum `for_nonslot_layout` (mp_tac o REWRITE_RULE [for_nonslot_layout_def]) >> simp[]) >>
-  `expr_type e = ArrayT fty bd` by fs[well_typed_iterator_def] >>
-  qpat_assum `?obs. !tail. eval_expr _ _ _ = _` (qx_choose_then `obs` assume_tac) >>
-  qabbrev_tac `start = es0 with gas_obs := obs ++ em.gas_obs` >>
-  `eval_expr cx e start = (INL rv,em)` by
-    (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `em.gas_obs` mp_tac) >>
-     simp[Abbr `start`]) >>
-  `expr_body_pre c cx env e start` by simp[Abbr `start`] >>
-  `?start. eval_expr cx e start = (INL rv,em) /\ expr_body_pre c cx env e start` by
-    (qexists `start` >> simp[]) >>
-  `body_const_cells_agree [(NONE,tops)] cx env em` by
-    (irule body_const_cells_agree_expr >>
-     qpat_assum `eval_expr cx e start = (INL rv,em)` (irule_at Any) >>
-     imp_res_tac exprBodyPrePropsTheory.expr_body_pre_static_facts >>
-     simp[Abbr `start`]) >>
-  `expr_sim_inv c cx env em` by
-    (drule_all_then ACCEPT_TAC bodySimStmtFactsTheory.expr_body_pre_eval_result) >>
-  `vv_place_ptr c cx em u rv vv` by fs[vv_post_def] >>
-  `(!v ty p. rv = Value v /\ ~is_word_type (post_value_type c e) /\
-     ~is_bytestring_type (post_value_type c e) /\ vv = LocatedValue ty p ==>
-     p.ptr_location = LocMemory)` by
-    (rpt strip_tac >> first_x_assum (drule_all_then strip_assume_tac) >> simp[]) >>
-  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
-    (qpat_assum `body_inv tops ctx _ cx`
-       (ACCEPT_TAC o MATCH_MP contractInvContextPropsTheory.contract_inv_singleton_source_modules
-         o MATCH_MP bodySimTheory.body_inv_contract)) >>
-  `for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em u` by
-    (irule for_nonslot_code_frame_bare >>
-     conj_tac >- (qexistsl [`bd`,`fty`] >> disch_tac >>
-       `vv_location vv = SOME LocCode` by
-         (qpat_assum `loc = (case vv_location vv of NONE => LocMemory | SOME l => l)` mp_tac >>
-          Cases_on `vv_location vv` >> simp[]) >>
-       qpat_assum `body_inv tops ctx c cx` (fn inv =>
-         assume_tac (MATCH_MP bodySimTheory.body_inv_contract inv) >>
-         strip_assume_tac (MATCH_MP bodyInvCodePropsTheory.body_inv_main_code inv)) >>
-       `expr_sim_inv_mods [(NONE,tops)] c cx env em` by
-         fs[exprSimHypsDefsTheory.expr_sim_inv_split_def] >>
-       `type_widens_to env.type_defs (post_value_type c e) (expr_type e)` by
-         (irule post_value_type_widens >> conj_tac >- fs[well_typed_iterator_def] >>
-          qexistsl [`cx`,`em`] >> first_assum ACCEPT_TAC) >>
-       `!src name. e = TopLevelName (expr_type e) (src,name) ==>
-          ?ts. ALOOKUP [(NONE,tops)] src = SOME ts /\
-               IS_SOME (supported_immutable_type ts (NONE,name))` by
-         (rpt gen_tac >> strip_tac >>
-          qpat_assum `!nid. e = TopLevelName _ nid ==> _`
-            (qspec_then `(src,name)` (drule_then assume_tac)) >>
-          Cases_on `src` >>
-          gvs[alistTheory.ALOOKUP_def, supportedDeclsTheory.supported_immutable_type_def,
-               supportedDeclsTheory.supported_lookup_other_module]) >>
-       mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`, `et` |-> `fty`]
-                 for_nonslot_array_capture_classify_mods) >>
-       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-       fs[exprSimHypsDefsTheory.cx_const_name_split_def]) >>
-     simp[] >> qexistsl [`fty`,`n`] >> simp[]) >>
+  drule_all_then (map_every assume_tac o CONJUNCTS o Q.SPEC `av`)
+    for_nonslot_array_round_source_pre >>
   mp_tac (SPEC_ALL for_nonslot_array_round_contracts_at) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then ACCEPT_TAC

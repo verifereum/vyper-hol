@@ -9,7 +9,7 @@ Ancestors
   abiCallerAllocation exprLoweringProps emitHelperProps
   gasOutcomeFullCompose vyperStorageTrace vyperStorageFootprint exprSimDefs
 
-Theorem extcall_call_intervals[local]:
+Theorem extcall_call_intervals:
   (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr
    else comp_return ()) sp = ((),s1) /\
   emit_op opc ops s1 = (success,s2) /\
@@ -67,7 +67,7 @@ Proof
 QED
 
 (* Split the call suffix without unfolding the individual code emitters. *)
-Theorem extcall_call_layout[local]:
+Theorem extcall_call_layout:
   !ret_type skip addr_op is_static gas_op call_offset call_len buf_op ret_len
    value_op sp u sr.
   comp_ignore_bind
@@ -223,7 +223,7 @@ Proof
 QED
 
 (* All errors before a successful take halt at the fetched instruction. *)
-Theorem extcall_fetched_select[local]:
+Theorem extcall_fetched_select:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee t /\
@@ -323,7 +323,7 @@ QED
 
 (* The code check changes neither saved operand observations nor the
    allocation frontier. Reuse the precheck's pointwise guarantees. *)
-Theorem extcall_precheck_dispatch_operands[local]:
+Theorem extcall_precheck_dispatch_operands:
   EVERY (safe_operand sp) [addr;value;gas;buf;off;len;default_op] /\
   (!op. safe_operand sp op ==> eval_operand op t = eval_operand op s /\
     op_taint tn1 op = op_taint tn op /\
@@ -446,7 +446,7 @@ Proof
   rename1 `_ = (fr,es)` >> Cases_on `fr` >> simp[]
 QED
 
-Theorem extcall_frame_value_replay[local]:
+Theorem extcall_frame_value_replay:
   frame_call_value cx value_opt ee = (INL framed,ee) ==>
   !tail. frame_call_value cx value_opt (ee with gas_obs := tail) =
     (INL framed,ee with gas_obs := tail)
@@ -551,7 +551,13 @@ Proof
    ?gw. eval_operand gas s = SOME gw` by
     (qhdtm_assum `extcall_request_ready`
        (strip_assume_tac o REWRITE_RULE [extcall_request_ready_def]) >>
-     fs[EVERY_DEF] >> Cases_on `eval_operand gas s` >> gs[]) >>
+     rpt conj_tac
+     >- first_assum ACCEPT_TAC
+     >- (qpat_assum `EVERY (\p. op_taint tn p = {}) _`
+           (ACCEPT_TAC o CONJUNCT1 o SIMP_RULE bool_ss [EVERY_DEF]))
+     >- first_assum ACCEPT_TAC
+     >- (qpat_assum `IS_SOME (eval_operand gas s)`
+           (ACCEPT_TAC o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]))) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==> stor_taint_ok_at (DF H) tn s` by
     (rpt strip_tac >> qpat_assum `!H. _ ==> ghost_inv_at _ _ _ _ _ _ _ _ _`
        (drule_then (ACCEPT_TAC o cj 4 o REWRITE_RULE [ghost_inv_at_def]))) >>

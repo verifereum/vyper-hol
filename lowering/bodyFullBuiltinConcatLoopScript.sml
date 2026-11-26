@@ -2,7 +2,8 @@
 Theory bodyFullBuiltinConcatLoop
 Ancestors stmtSimProps[qualified,ignore_grammar]
   gasOutcomeFull[qualified,ignore_grammar] exprSimDefs[qualified,ignore_grammar]
-  bodyFullBuiltinConcatHead bodyFullPreds bodySimFull
+  bodyFullBuiltinConcatStep bodyFullBuiltinConcatReady exprSimFullBundleProps
+  bodyFullPreds bodySimFull
   bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
   gasOutcomeFullCompose gasOutcomeFullGuarded gasExemptCert
   exprSimConcatArgs exprSimConcatSource exprSimWordArgs
@@ -155,66 +156,16 @@ Proof
       asm_simp_tac arith_ss [fragGasOriginPtrTheory.gas_origin_ptr_path_rules,
         ghost_kept_at_refl]) >>
   rename1 `EVERY _ (e::args)` >>
-  qpat_assum `EVERY _ (e::args)`
-    (CONJUNCTS_THEN assume_tac o BETA_RULE o REWRITE_RULE [listTheory.EVERY_DEF]) >>
-  `expr_body_pre cenv cx env e es` by
-    (qpat_assum `!x st. MEM x (e::args) /\ _ ==> _`
-       (qspecl_then [`e`,`es`] mp_tac) >> simp[]) >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx (expr_type e) e es` by
-    (qpat_assum `body_exprs_full_ok cx (e::args)`
-       (mp_tac o REWRITE_RULE [body_exprs_full_ok_def]) >> strip_tac >>
-     qpat_x_assum `body_expr_full_ok cx e`
-       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
-       _ ==> expr_sim_full _ _ _ _ e _ /\ _` (qspecl_then
-       [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,
-        `cenv`,`env`,`expr_type e`,`es`] mp_tac) >> simp[]) >>
-  Cases_on `lower_value compile_expr cenv (expr_type e) e sa` >>
-  rename1 `lower_value _ _ _ _ sa = (op,sc)` >>
-  `ci_mono sa sc` by
-    (qpat_assum `lower_value _ _ _ e sa = _`
-       (mp_then Any mp_tac (cj 2 compile_expr_grows)) >> simp[ci_mono_def]) >>
-  `ci_mono sc sb` by
-    (irule (SRULE [LET_THM] concat_cons_mono) >>
-     goal_assum (drule_at Any) >> simp[] >>
-     qexistsl [`args`,`dv`,`ov`] >> gvs[]) >>
-  `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
-      (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
-    irule gas_shadow_stmt_lower_value_env >>
-  Cases_on `lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
-    (gas_shadow_expr e) shadow_sa` >>
-  rename1 `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = (shadow_op,shadow_sc)` >>
-  `shadow_op = op /\ gas_shadow_state sc shadow_sc` by
-    (qpat_x_assum `gas_shadow_compiles _ _`
-       (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >>
-  qpat_x_assum `shadow_op = op` SUBST_ALL_TAC >>
-  `ci_mono shadow_sa shadow_sc` by
-    (qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _`
-       (mp_then Any mp_tac (cj 2 compile_expr_grows)) >> simp[ci_mono_def]) >>
-  `ci_mono shadow_sc shadow_sb` by
-    (qspecl_then [`gas_shadow_env T cenv`,`gas_shadow_expr e`,`MAP gas_shadow_expr args`,
-       `dv`,`ov`,`shadow_sa`,`shadow_sb`,`op`,`shadow_sc`] mp_tac concat_cons_mono >>
-     (impl_tac >-
-       (RULE_ASSUM_TAC (SIMP_RULE bool_ss [LET_THM,listTheory.MAP,
-          listTheory.MAP_MAP_o,combinTheory.o_DEF,gasShadowTheory.gas_shadow_expr_type]) >>
-        simp_tac bool_ss [LET_THM,listTheory.MAP,listTheory.MAP_MAP_o,
-          combinTheory.o_DEF,gasShadowTheory.gas_shadow_expr_type] >>
-        rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]) >>
-  `fn_has_code sa sc func /\ fn_has_code shadow_sa shadow_sc shadow_func` by
-    (conj_tac
-     >- (qspecl_then [`sa`,`sa`,`sc`,`sb`,`func`] mp_tac fragExecTheory.fn_has_code_mid >>
-         (impl_tac >- fs[ci_mono_def,cs_extends_refl]) >> disch_then ACCEPT_TAC) >>
-     qspecl_then [`shadow_sa`,`shadow_sa`,`shadow_sc`,`shadow_sb`,`shadow_func`]
-       mp_tac fragExecTheory.fn_has_code_mid >>
-     (impl_tac >- fs[ci_mono_def,cs_extends_refl]) >> disch_then ACCEPT_TAC) >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
-    (drule exprSimSourceTheory.expr_body_pre_gas_admissible >> simp[]) >>
+  `concat_loop_ready (e::args) P k DF lo d ctx shadow_ctx PG
+      tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
+      s0 G0 tn0 dv ov ow binst B bsz oinst` by
+    (pure_rewrite_tac [concat_loop_ready_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule concat_loop_head_entry >>
+  disch_then (map_every strip_assume_tac o CONJUNCTS) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
+    (mp_tac o REWRITE_RULE [expr_sim_full_via_bundle]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sc`,`shadow_sa`,`shadow_sc`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >> strip_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ childR` >>
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
@@ -265,117 +216,15 @@ Resume concat_args_sim_full[continue]:
   qx_genl_tac [`marks`,`res`,`ee`,`G1`,`tn1`,`t`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
-    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
   qunabbrev_tac `childQ` >> qunabbrev_tac `headQ` >>
-  disch_then (strip_assume_tac o BETA_RULE) >>
+  `?v. res = INL v` by
+    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
+       (drule_then mp_tac) >> POP_ASSUM_LIST (K all_tac) >>
+     simp[expr_sim_full_post_def] >> metis_tac[]) >>
   qpat_x_assum `res = INL v` SUBST_ALL_TAC >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
-    (assume_tac o SIMP_RULE bool_ss [sumTheory.INL_11,UNWIND_THM1]) >>
-  qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
-    (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
-  `expr_body_pre cenv cx env e
-      (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
-    simp[exprSimSourceTheory.expr_body_pre_gas_obs] >>
-  `body_const_cells_agree [(NONE,tops)] cx env ee` by
-    (`well_typed_expr env e` by
-       qpat_assum `expr_body_pre _ cx env e _`
-         (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
-     `body_const_cells_agree [(NONE,tops)] cx env (ee with gas_obs := [])`
-       suffices_by simp[] >>
-     irule body_const_cells_agree_expr_read >>
-     qpat_assum `bind (eval_expr cx e) _ _ = (_, ee with gas_obs := [])`
-       (irule_at Any) >> simp[]) >>
-  drule_all concat_head_typed >>
-  disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-  rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME tv` >>
-  `post_value_type cenv e = expr_type e` by
-    (Cases_on `is_bytestring_type (expr_type e)`
-     >- (irule loweringPostsTheory.post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
-     `?m. expr_type e = BaseT (BytesT (Fixed m))` by fs[] >>
-     rename1 `expr_type e = BaseT (BytesT (Fixed m))` >>
-     `m <= 32` by
-       (qpat_assum `evaluate_type _ (expr_type e) = SOME tv` mp_tac >>
-        qpat_assum `expr_type e = BaseT (BytesT (Fixed m))` mp_tac >>
-        POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-        gvs[vyperValueTheory.evaluate_type_def,AllCaseEqs()]) >>
-     irule loweringPostsTheory.post_value_type_word >>
-     fs[compileEnvTheory.is_word_type_def]) >>
-  `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
-    (irule storage_trace_frame_bind_all >>
-     simp[evaluate_storage_trace_frame,storage_trace_frame_read_result]) >>
-  `?obs. ee.storage_trace = es.storage_trace ++ obs` by
-    (drule_all vyperStorageTraceTheory.storage_trace_frame_prefix >> simp[]) >>
-  `storage_trace_domain cx st0 es.storage_trace` by
-    (qpat_assum `storage_trace_domain cx st0 ee.storage_trace` mp_tac >>
-     qpat_assum `ee.storage_trace = es.storage_trace ++ obs` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-     metis_tac[vyperStorageFootprintTheory.storage_trace_domain_prefix]) >>
-  `body_exprs_full_ok cx args` by
-    (qpat_assum `body_exprs_full_ok cx (e::args)`
-       (mp_tac o REWRITE_RULE [body_exprs_full_ok_def]) >>
-     qpat_assum `eval_expr cx e _ = (INL _,_)` mp_tac >>
-     qpat_assum `read_result cx _ _ = (INL _,_)` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> metis_tac[]) >>
-  `expr_store_bound cx (expr_type e) v op t` by
-    (qpat_assum `post_value_type cenv e = expr_type e` (fn th =>
-       qpat_assum `expr_store_bound cx (post_value_type cenv e) v op t`
-         (ACCEPT_TAC o REWRITE_RULE [th]))) >>
-  `ptr_val_ok cx (expr_type e) v op G1 tn1 t` by
-    (qpat_assum `post_value_type cenv e = expr_type e` (fn th =>
-       qpat_assum `ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t`
-         (ACCEPT_TAC o REWRITE_RULE [th]))) >>
-  mp_tac (Q.INST [`s` |-> `s0`,`G` |-> `G0`,`tn` |-> `tn0`]
-    (SPEC_ALL concat_head_arm_full)) >>
-  (impl_tac >- (rpt conj_tac >> asm_rewrite_tac[LET_THM] >>
-     BETA_TAC >> asm_rewrite_tac[] >>
-     rpt strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
-       (qspec_then `H` mp_tac) >> simp[])) >>
-  disch_then (strip_assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
-  `!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z` by
-    (qpat_assum `gas_origin_ptr_path _ (s0,G0,tn0) _ (OK t,G1,tn1)` (fn path =>
-       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
-       qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
-           (LIST_CONJ [path,no_phi,safe])))))) >>
-  `!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z` by
-    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
-         gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,G2,tn2) /\ _`
-       (fn th => qpat_assum `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
-         (assume_tac o CONJUNCT1 o MATCH_MP th)) >>
-     qpat_assum `gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,G2,tn2)` (fn path =>
-       qpat_assum `!bb. MEM bb func.fn_blocks ==> _` (fn no_phi =>
-       qpat_assum `!fn inst z. frag_reachable ctx func t fn inst z ==> _` (fn safe =>
-         ACCEPT_TAC (MATCH_MP bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
-           (LIST_CONJ [path,no_phi,safe])))))) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
-    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ (t,G1,tn1) [] (OK u,G2,tn2) /\ _`
-       (fn th => qpat_assum `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
-         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
-          CONJUNCT1 o CONJUNCT2 o MATCH_MP th))) >>
-  suspend "tail"
-QED
-
-Resume concat_args_sim_full[tail]:
-  `local_ptrs_rel func cenv es.scopes s0` by
-    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
-       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
-     qpat_assum `storage_trace_domain cx st0 es.storage_trace` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[storage_trace_domain_def] >>
-     metis_tac[cj 1 stmt_state_rel_local_ptrs_alloca]) >>
-  `!name lb lsz. local_region cenv ee.scopes u name lb lsz <=>
-      local_region cenv es.scopes s0 name lb lsz` by
-    (rpt gen_tac >> eq_tac >> strip_tac
-     >- (irule exprSimPropsTheory.local_region_frame >>
-         (conj_tac >- (qexists `func` >> first_assum ACCEPT_TAC)) >>
-         qexistsl [`sa`,`ee.scopes`,`u`] >>
-         rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     irule exprSimPropsTheory.local_region_frame_fwd >>
-     qexistsl [`s0`,`sa`,`es.scopes`] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (assume_tac o REWRITE_RULE [GSYM CONJ_ASSOC] o BETA_RULE) >>
+  drule_all concat_loop_copy_entry >> strip_tac >>
   qpat_assum `!P k DF lo d ctx shadow_ctx PG tops func shadow_func cenv cx env st0
       es sa sb shadow_sa shadow_sb s0 G0 tn0 dv ov ow binst B bsz oinst. _`
     (mp_tac o Q.INST [
@@ -383,29 +232,12 @@ Resume concat_args_sim_full[tail]:
       `k` |-> `k+LENGTH (case v of BytesV bs => bs
           | StringV str => MAP (n2w o ORD) str | _ => [])`,
       `es` |-> `ee`, `sa` |-> `s2`, `shadow_sa` |-> `shadow_s2`,
-      `s0` |-> `u`, `G0` |-> `G2`, `tn0` |-> `tn2`] o SPEC_ALL) >>
-  (impl_tac >- (rpt conj_tac >> asm_simp_tac arith_ss [LET_THM] >>
-     rpt strip_tac >> asm_rewrite_tac[]
-     >~ [`dalloca_fmp_headroom inst z`]
-     >- (qpat_assum `!fn inst z. frag_reachable ctx func u fn inst z ==> _` irule >>
-         goal_assum (drule_at Any))
-     >~ [`expr_body_pre cenv cx env x st`]
-     >- (qpat_assum `!x st. MEM x (e::args) /\ _ ==> _`
-           (qspecl_then [`x`,`st`] mp_tac) >> simp[])
-     >~ [`not_fresh_at s2 z`, `cenv.ce_return_buf = SOME (PtrVar (Var z) sz)`]
-     >- (qpat_assum `!z sz. cenv.ce_return_buf = _ ==> not_fresh_at s2 z`
-           (qspecl_then [`z`,`sz`] mp_tac) >> simp[])
-     >~ [`not_fresh_at s2 z`, `cenv.ce_return_pc = SOME (PtrVar (Var z) sz)`]
-     >- (qpat_assum `!z sz. cenv.ce_return_pc = _ ==> not_fresh_at s2 z`
-           (qspecl_then [`z`,`sz`] mp_tac) >> simp[])
-     >~ [`B+bsz <= lb \/ lb+lsz <= B`]
-     >- (qpat_assum `!name lb lsz. local_region cenv es.scopes s0 name lb lsz ==> _`
-           (qspecl_then [`name`,`lb`,`lsz`] mp_tac) >> simp[])
-     >~ [`w2n ow+64 <= lb \/ lb+lsz <= w2n ow`]
-     >- (qpat_assum `!name lb lsz. local_region cenv es.scopes s0 name lb lsz ==> _`
-           (qspecl_then [`name`,`lb`,`lsz`] mp_tac) >> simp[]))) >> strip_tac >>
+      `s0` |-> `u`, `G0` |-> `G2`, `tn0` |-> `tn2`] o
+      REWRITE_RULE [GSYM concat_loop_ready_def] o SPEC_ALL) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   suspend "tail_outcome"
 QED
+
 
 Resume concat_args_sim_full[tail_outcome]:
   qmatch_assum_abbrev_tac
@@ -425,13 +257,6 @@ Resume concat_args_sim_full[tail_outcome]:
   `storage_trace_frame (bind (eval_exprs cx args) (\vs. return (v::vs)))` by
     (irule storage_trace_frame_bind_all >>
      simp[evaluate_storage_trace_frame,storage_trace_frame_return]) >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-     gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-       (t,G1,tn1) [] (OK u,G2,tn2)` by
-    (rpt strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
-         gas_origin_ptr_path _ _ [] _ /\ _`
-       (qspec_then `H` mp_tac) >> simp[]) >>
   mp_tac (Q.INST [
      `explicit` |-> `gas_explicit_sites ctx shadow_ctx`,`tops` |-> `cx_tops cx`,
      `es` |-> `ee`,`s0` |-> `t`,`G0` |-> `G1`,`tn0` |-> `tn1`,
@@ -471,16 +296,16 @@ Resume concat_args_sim_full[posts]:
     (qpat_assum `ci_mono sa sc` mp_tac >>
      qpat_assum `ci_mono sc s2` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[ci_mono_def] >> decide_tac) >>
-  `s0.vs_alloca_next <= t''.vs_alloca_next` by
+  `s0.vs_alloca_next <= t'.vs_alloca_next` by
     (qpat_assum `s0.vs_alloca_next <= t.vs_alloca_next` mp_tac >>
      qpat_assum `u.vs_alloca_next = t.vs_alloca_next` mp_tac >>
-     qpat_assum `u.vs_alloca_next <= t''.vs_alloca_next` mp_tac >>
+     qpat_assum `u.vs_alloca_next <= t'.vs_alloca_next` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> decide_tac) >>
   `ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn'` by
     (irule wordArgsPtrTheory.ghost_kept_at_trans >>
      qexistsl [`G2`,`ee`,`u`,`s2`,`tn2`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z t'' = SOME w` by
+  `!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z t' = SOME w` by
     (qx_genl_tac [`z`,`w`] >> strip_tac >>
      `lookup_var z u = SOME w` by
        (qpat_assum `!z w. not_fresh_at sa z /\ _ ==> lookup_var z u = SOME w`
@@ -488,14 +313,14 @@ Resume concat_args_sim_full[posts]:
      `not_fresh_at s2 z` by
        (irule freshWritesTheory.not_fresh_at_mono >>
         qexists `sa` >> simp[]) >>
-     qpat_assum `!z w. not_fresh_at s2 z /\ _ ==> lookup_var z t'' = SOME w`
+     qpat_assum `!z w. not_fresh_at s2 z /\ _ ==> lookup_var z t' = SOME w`
        (qspecl_then [`z`,`w`] mp_tac) >> simp[]) >>
-  `!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==> FLOOKUP t''.vs_allocas aid = SOME a` by
+  `!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==> FLOOKUP t'.vs_allocas aid = SOME a` by
     (qpat_assum `!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==> FLOOKUP u.vs_allocas aid = SOME a`
        mp_tac >>
-     qpat_assum `!aid a. FLOOKUP u.vs_allocas aid = SOME a ==> FLOOKUP t''.vs_allocas aid = SOME a`
+     qpat_assum `!aid a. FLOOKUP u.vs_allocas aid = SOME a ==> FLOOKUP t'.vs_allocas aid = SOME a`
        mp_tac >> POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
-  `locals_kept cenv es ee' s0 t''` by
+  `locals_kept cenv es ee' s0 t'` by
     (irule exprBopSimPropsTheory.locals_kept_trans >>
      qexistsl [`ee`,`sa`,`u`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -536,7 +361,7 @@ Resume concat_args_sim_full[oldframe]:
      (impl_tac >- (asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM] >>
        rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then ACCEPT_TAC) >>
-  qpat_assum `!aid p n. _ ==> mem_bytes_at p n t''.vs_memory = _`
+  qpat_assum `!aid p n. _ ==> mem_bytes_at p n t'.vs_memory = _`
     (qspecl_then [`aid`,`p`,`n`] mp_tac) >>
   (impl_tac >- (asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM] >>
        rpt conj_tac >> first_assum ACCEPT_TAC)) >>
@@ -553,7 +378,7 @@ Resume concat_args_sim_full[pureframe]:
   qpat_assum `EVERY ($~ o expr_has_effect) args` mp_tac >>
   qpat_assum `~expr_has_effect e` mp_tac >>
   qpat_assum `!name lb lsz. local_region cenv ee.scopes u name lb lsz <=> _` mp_tac >>
-  qpat_assum `!aid a. FLOOKUP u.vs_allocas aid = SOME a ==> FLOOKUP t''.vs_allocas aid = SOME a` mp_tac >>
+  qpat_assum `!aid a. FLOOKUP u.vs_allocas aid = SOME a ==> FLOOKUP t'.vs_allocas aid = SOME a` mp_tac >>
   qpat_assum `!id. s2.cs_next_id <= id ==> sa.cs_next_id <= id` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
   qpat_x_assum `~expr_has_effect e ==> _` mp_tac >>
@@ -562,7 +387,7 @@ Resume concat_args_sim_full[pureframe]:
   asm_simp_tac bool_ss [listTheory.NOT_EXISTS] >> strip_tac >>
   conj_tac
   >- (qpat_assum `!name lb lsz. _ ==> mem_bytes_at lb lsz u.vs_memory = _` mp_tac >>
-      qpat_assum `!name lb lsz. _ ==> mem_bytes_at lb lsz t''.vs_memory = _` mp_tac >>
+      qpat_assum `!name lb lsz. _ ==> mem_bytes_at lb lsz t'.vs_memory = _` mp_tac >>
       qpat_assum `!name lb lsz. local_region cenv ee.scopes u name lb lsz <=> _` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   qx_genl_tac [`p`,`n`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -570,19 +395,19 @@ Resume concat_args_sim_full[pureframe]:
       sa.cs_next_id <= inst.inst_id /\ FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==>
       regions_disjoint p n b sz` by
     (qpat_assum `!inst b sz. _ ==> regions_disjoint p n b sz` mp_tac >>
-     qpat_assum `!aid a. FLOOKUP u.vs_allocas aid = SOME a ==> FLOOKUP t''.vs_allocas aid = SOME a` mp_tac >>
+     qpat_assum `!aid a. FLOOKUP u.vs_allocas aid = SOME a ==> FLOOKUP t'.vs_allocas aid = SOME a` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   `!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-      s2.cs_next_id <= inst.inst_id /\ FLOOKUP t''.vs_allocas inst.inst_id = SOME (b,sz) ==>
+      s2.cs_next_id <= inst.inst_id /\ FLOOKUP t'.vs_allocas inst.inst_id = SOME (b,sz) ==>
       regions_disjoint p n b sz` by
     (qpat_assum `!inst b sz. MEM inst (fn_insts func) /\
        inst.inst_opcode = ALLOCA /\ sa.cs_next_id <= inst.inst_id /\
-       FLOOKUP t''.vs_allocas inst.inst_id = SOME (b,sz) ==> regions_disjoint p n b sz` mp_tac >>
+       FLOOKUP t'.vs_allocas inst.inst_id = SOME (b,sz) ==> regions_disjoint p n b sz` mp_tac >>
      qpat_assum `!id. s2.cs_next_id <= id ==> sa.cs_next_id <= id` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   qpat_assum `!p n. _ ==> mem_bytes_at p n u.vs_memory = _`
     (qspecl_then [`p`,`n`] mp_tac) >>
-  qpat_assum `!p n. _ ==> mem_bytes_at p n t''.vs_memory = _`
+  qpat_assum `!p n. _ ==> mem_bytes_at p n t'.vs_memory = _`
     (qspecl_then [`p`,`n`] mp_tac) >>
   asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM] >> metis_tac[]
 QED

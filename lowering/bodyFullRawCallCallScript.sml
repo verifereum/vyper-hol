@@ -6,7 +6,39 @@ Ancestors
   words finite_map pred_set list arithmetic emitHelper compileEnv venomState
   venomInst memLocDefs codegenRel contextCodegenRel venomExecSemantics bodyPtrDefs
   loweringStateRelDefs ptrDiscipline exprSafeOperand unitTransformDefs decoderGhostFramePtr
-  memSafeRun
+  memSafeRun instMemFrontier
+
+Theorem raw_call_inst_mem_safe_at:
+  eval_operand dp s = SOME (n2w ib) /\ eval_operand dl s = SOME (n2w len) /\
+  eval_operand out s = SOME (n2w ro) /\
+  IS_SOME (eval_operand gas s) /\ IS_SOME (eval_operand addr s) /\
+  IS_SOME (eval_operand value s) /\
+  ib < dimword (:256) /\ len < dimword (:256) /\
+  ro < dimword (:256) /\ cap < dimword (:256) /\
+  (len = 0 \/ ib + len <= s.vs_alloca_next \/
+   ctx_has_dalloca ctx /\ w2n s.vs_initial_fmp <= ib /\ ib + len <= w2n s.vs_fmp) /\
+  (cap <> 0 ==> ro + cap <= s.vs_alloca_next) ==>
+  mem_safe_step 0 ctx
+    (mk_inst id (case kind of
+      RegularCall => CALL | StaticCall => STATICCALL | DelegateCall => DELEGATECALL)
+      (if kind = RegularCall then [gas;addr;value;dp;dl;out;Lit (n2w cap)]
+       else [gas;addr;dp;dl;out;Lit (n2w cap)]) [dst]) s
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qmatch_goalsub_abbrev_tac `mem_safe_step 0 ctx inst s` >>
+  `source_memory_read_ranges inst s = [(ib,len)] /\
+   source_memory_write_ranges inst s = [(ro,cap)] /\
+   inst_dload_in_section inst s /\ inst.inst_opcode <> INVOKE /\
+   inst.inst_opcode <> DALLOCA` by
+    (qunabbrev_tac `inst` >> Cases_on `kind` >>
+     fs[optionTheory.IS_SOME_EXISTS] >>
+     simp[mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
+          mem_read_ops_def, mem_write_ops_def, memory_range_of_operands_def,
+          eval_operand_def, inst_dload_in_section_def, w2n_n2w]) >>
+  simp[mem_safe_step_non_invoke, inst_mem_below_frontiers_def,
+       inst_mem_below_frontier_def] >>
+  metis_tac[]
+QED
 
 Triviality raw_call_written_taint:
   ((inst.inst_opcode = CALL /\ LENGTH inst.inst_operands = 7) \/

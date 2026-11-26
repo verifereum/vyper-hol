@@ -1462,9 +1462,17 @@ Proof
        (qspec_then `H` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >>
      disch_then (ACCEPT_TAC o cj 2 o REWRITE_RULE [target_post_def] o CONJUNCT1)) >>
-  drule_all (Q.INST [`target` |-> `t`, `es` |-> `st`, `sa` |-> `cb`, `sb` |-> `cc`,
-                    `old` |-> `old`, `place` |-> `r`] augassign_rhs_saved_outcome) >>
-  disch_then (qspecl_then [`RetQ`,`PG`] assume_tac) >>
+  mp_tac (Q.INST
+    [`target` |-> `t`, `es0` |-> `es with gas_obs := reads`,
+     `sr` |-> `st`, `tr` |-> `st`, `sty` |-> `st`, `tty` |-> `st`,
+     `es` |-> `st`, `ty` |-> `aty`, `op` |-> `rhsop`,
+     `sa` |-> `cb`, `sb` |-> `cc`,
+     `shadow_sa` |-> `shadow_cb`, `shadow_sb` |-> `shadow_cc`,
+     `s0` |-> `u`, `G0` |-> `Gload`, `tn0` |-> `tnload`,
+     `old` |-> `old`, `place` |-> `r`, `word` |-> `typed_val_to_w256 ptv cur`,
+     `RetQ` |-> `RetQ`, `PG` |-> `PG`] augassign_rhs_saved_outcome) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_tac >>
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ (bind (eval_expr cx e) (read_result cx)) _ rhsQ rhsR` >>
   `!gs. read_place cx p (st with gas_obs := gs) = (INL cur,st with gas_obs := gs)` by
