@@ -1,37 +1,15 @@
 (* Linked sequential simulation for the ExtCall keyword suffix. *)
 Theory bodyExtKeywordListRunMods
 Ancestors
-  bodyFullPredsMods bodyFullPostsMods bodyFullExtCallKeywordList
-  exprLowering compileEnv fragGasOriginPtr wordArgsPtr
-  bodyBranchCellFrameMods vyperStorageFootprint exprSimWordArgs
-  gasOutcomeFullMods gasOutcomeFullPostMods gasOutcomeFullPostPathMods
-  gasOutcomeFullBindMods gasExemptCertMods gasShadow gasContext
-  exprSimHypsDefs exprSimSource exprLoweringProps bodyInvSplit
-  vyperInterpreter vyperState vyperTypeSystem vyperAST vyperContext
+  bodyFullPredsMods bodyFullPostsMods exprLowering compileEnv
+  gasOutcomeFullMods gasOutcomeFullPostMods gasShadow gasContext exprSimHypsDefs
+  bodyInvSplit vyperInterpreter vyperState vyperTypeSystem vyperAST vyperContext
   loweringPosts loweringStateRelDefs bodyPtrDefs bodyFullShadowBodyInv
-  bodyCallSupport list pair option finite_map arithmetic
-Theorem ext_kw_inv_gas_obs[local]:
-  expr_sim_inv_mods mods cenv cx env (es with gas_obs := gs) <=>
-  expr_sim_inv_mods mods cenv cx env es
-Proof
-  simp[expr_sim_inv_mods_def]
-QED
-
-Theorem ext_kw_frame_obs[local]:
-  (immutable_frame_mods func cenv cx (es with gas_obs := gs) s <=>
-   immutable_frame_mods func cenv cx es s) /\
-  (ghost_inv_at_mods D lo d cenv cx (es with gas_obs := gs) G tn s <=>
-   ghost_inv_at_mods D lo d cenv cx es G tn s) /\
-  (storage_well_formed_on cx (es with gas_obs := gs) A <=>
-   storage_well_formed_on cx es A)
-Proof
-  rpt conj_tac
-  >- simp[immutable_frame_mods_def, immutables_rel_mods_def,
-          immutables_rel_def, immutable_alloca_sep_mods_def,
-          immutable_alloca_sep_def]
-  >- simp[ghost_inv_at_mods_def]
-  >> irule storage_well_formed_on_backends >> simp[]
-QED
+  bodyCallSupport bodyInvCodeProps list pair option finite_map arithmetic
+  bodyExtKeywordListFoldMods bodyExtKeywordHeadRunMods bodyExtKeywordScalarJoinMods
+  bodyExtKeywordScalarMods bodyExtKeywordDefaultMods
+Libs
+  monadsyntax
 
 (* The linked counterpart of extcall_request_keywords_owned_outcome. *)
 Theorem ext_kw_list_run_mods:
@@ -133,35 +111,51 @@ Theorem ext_kw_list_run_mods:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  map_every qid_spec_tac
-    [`tn0`,`G0`,`s0`,`es`,`shadow_sb`,`shadow_sa`,`sb`,`sa`,`dopt`,`go`,`vo`,`ks`] >>
-  Induct_on `xs` >> rpt gen_tac >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS)
-  >- (gvs[compile_ext_call_kwargs_def, comp_return_def] >>
-      irule (Q.INST [`res` |-> `INL ([] : value list)`, `ee` |-> `es`,
-                    `t` |-> `s0`, `G'` |-> `G0`, `tn'` |-> `tn0`]
-        (INST_TYPE [alpha |-> ``:value list``] gas_outcome_full_mods_pure)) >>
-      simp[evaluate_def, return_def] >>
-      qexistsl [`G0`, `s0`, `tn0`] >>
-      simp[gas_origin_ptr_path_rules, ghost_kept_at_refl,
-           ext_call_kwarg_def, immutable_frame_mods_def,
-           body_exprs_full_ok_mods_def] >>
-      qx_gen_tac `H` >> strip_tac >>
-      qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
-        (qspec_then `H` mp_tac) >>
-      simp[] >> strip_tac >> gvs[] >>
-      `expr_sim_inv_mods mods cenv cx env (es with gas_obs := [])` by
-        simp[ext_kw_inv_gas_obs] >>
-      `immutable_frame_mods func cenv cx (es with gas_obs := []) s0` by
-        simp[ext_kw_frame_obs] >>
-      `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-        simp[ext_kw_frame_obs] >>
-      `ghost_inv_at_mods (DF H) lo d cenv cx (es with gas_obs := []) G0 tn0 s0` by
-        simp[ext_kw_frame_obs] >>
-      `wb_frame cenv es (es with gas_obs := []) sa s0 s0` by
-        (irule wb_frame_refl >> simp[]) >>
-      qpat_assum `immutable_frame_mods _ _ _ (es with gas_obs := []) _`
-        (strip_assume_tac o REWRITE_RULE [immutable_frame_mods_def]) >>
-      simp[] >> metis_tac[])
-  >- (rpt strip_tac >> FAIL_TAC "cons")
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule ext_kw_list_run_with_head_mods >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  qexistsl [`exps`, `shadow_func`, `shadow_sa`, `shadow_sb`, `src`, `tops`] >>
+  simp[] >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es'` by
+    (drule_then ACCEPT_TAC bodyExtKeywordScalarJoinModsTheory.keyword_read_admissible) >>
+  irule (CONV_RULE (DEPTH_CONV BETA_CONV) extcall_keyword_head_outcome_mods) >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (disch_tac >>
+    irule (CONV_RULE (DEPTH_CONV BETA_CONV) ext_kw_scalar_join_mods) >> simp[] >>
+    ntac 2 (conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[])) >>
+    conj_tac >- (disch_tac >>
+      pure_rewrite_tac [GSYM CONJ_ASSOC] >>
+      irule (PURE_REWRITE_RULE [GSYM CONJ_ASSOC] ext_kw_scalar_head_mods) >>
+      simp[] >> ntac 2 (conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[])) >>
+      conj_tac >- (qexistsl [`env`, `mods`] >> simp[]) >>
+      qexistsl [`k`, `rt`, `shadow_func`, `shadow_sa'`, `shadow_sb'`] >> simp[] >>
+      conj_tac >- (Cases_on `k` >> gvs[] >>
+        qpat_x_assum `compile_ext_call_kwarg compile_expr cenv _ _ _ _ = _` mp_tac >>
+        simp[NoAsms, compile_ext_call_kwarg_def, comp_bind_def, comp_return_def,
+                     ext_call_kw_type_def] >> pairarg_tac >> simp[]) >>
+      conj_tac >- (Cases_on `k` >> gvs[] >>
+        qpat_x_assum `compile_ext_call_kwarg compile_expr (gas_shadow_env T _) _ _ _ _ = _` mp_tac >>
+        simp[NoAsms, compile_ext_call_kwarg_def, comp_bind_def, comp_return_def,
+                     ext_call_kw_type_def] >> pairarg_tac >> simp[]) >>
+      qpat_assum `body_expr_full_ok_mods _ _ _ _`
+        (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_mods_def]) >>
+      qpat_assum `!DF lo d PG src tops ctx shadow_ctx func shadow_func cenv env ty es.
+                    _ ==> expr_sim_full_mods _ _ _ _ _ _ /\ _`
+        (FIRST o map irule o CONJUNCTS o REWRITE_RULE [IMP_CONJ_THM] o SPEC_ALL) >>
+      simp[] >> conj_tac >- (qexistsl [`src`, `tops`] >> simp[]) >>
+      qexists `env` >> simp[]) >>
+    conj_tac >- (qexistsl [`shadow_func`, `shadow_sa'`, `shadow_sb'`] >> simp[]) >>
+    conj_tac >- (qexists `exps` >> simp[]) >>
+    conj_tac >- (qexistsl [`src`, `tops`] >> simp[]) >>
+    qexists `env` >> simp[]) >>
+  reverse conj_tac >- (qexists `exps` >> first_assum ACCEPT_TAC) >>
+  strip_tac >> qpat_x_assum `k = EKDefault` SUBST_ALL_TAC >>
+  drule_then (SUBST1_TAC o SYM) contract_inv_cenv_modules >>
+  pure_rewrite_tac [GSYM CONJ_ASSOC] >>
+  irule (PURE_REWRITE_RULE [GSYM CONJ_ASSOC] ext_kw_default_head_mods) >>
+  fs[ext_call_kw_type_def] >>
+  ntac 2 (conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[])) >>
+  conj_tac >- (qexistsl [`shadow_func`, `shadow_sa'`, `shadow_sb'`] >> simp[]) >>
+  qexistsl [`env`, `exps`, `mods`, `src`, `tops`] >> simp[]
 QED
