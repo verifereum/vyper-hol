@@ -31,8 +31,8 @@ val stops = [{Thy = "compileUnit", Name = "compile_vyper_mods"},
 
 val intro = if target then
   "`vyper_call_correct_mods` is the module-list target. Its proof is open.\n\n" ^ draftSource
-  else (if public then "[What these theorems mean](index.html), for readers new to HOL.\n\n" else "") ^
-       "The deployment theorem shows how the constructor establishes `deployed`, \
+  else if public then ""
+  else "The deployment theorem shows how the constructor establishes `deployed`, \
        \which combines installed code, source typing, source deployment and \
        \storage validity on the fixed horizon `H`. \
        \The call theorem also needs a well-typed transaction, its fresh EVM \

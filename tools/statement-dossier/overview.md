@@ -1,7 +1,3 @@
----
-title: "Vyper compiler correctness: the theorems"
----
-
 ## Summary
 
 vyper-hol proves, in the HOL4 theorem prover, that Vyper contracts compiled
@@ -9,20 +5,20 @@ by its compiler definition behave on the EVM the way the Vyper source says
 they should. Four theorems state this for a single-module contract:
 
 - **Deployment correctness**
-  ([`e2e_deploy_correctness_deployed`](dossier.html#thm-e2eDeployed-e2e_deploy_correctness_deployed)):
+  ([`e2e_deploy_correctness_deployed`](#thm-e2eDeployed-e2e_deploy_correctness_deployed)):
   when its hypotheses hold, running the compiled deployment bytecode
   either stops by starvation (below) or gives the constructor's result,
   and then, if the constructor succeeded and the new account isn't
   scheduled for deletion, it has installed a contract that the call
   theorems apply to.
 - **Call correctness**
-  ([`vyper_call_correct_deployed`](dossier.html#thm-e2eDeployed-vyper_call_correct_deployed)):
+  ([`vyper_call_correct_deployed`](#thm-e2eDeployed-vyper_call_correct_deployed)):
   a later call to that contract, with any calldata, either gives the
   result the source semantics gives or stops by starvation (below), when
   the call's own hypotheses hold.
 - **Gas sufficiency for deployment and for calls**
-  ([`e2e_deploy_gas_sufficient`](dossier.html#thm-e2eGasSufficientTop-e2e_deploy_gas_sufficient),
-  [`vyper_call_gas_sufficient_deployed`](dossier.html#thm-e2eDeployed-vyper_call_gas_sufficient_deployed)):
+  ([`e2e_deploy_gas_sufficient`](#thm-e2eGasSufficientTop-e2e_deploy_gas_sufficient),
+  [`vyper_call_gas_sufficient_deployed`](#thm-e2eDeployed-vyper_call_gas_sufficient_deployed)):
   starvation (below) by running out of gas is avoidable: with enough gas,
   the compiled code doesn't run out of gas, provided the larger-gas run
   meets the storage and call-trace conditions and the source doesn't stop
@@ -31,11 +27,11 @@ they should. Four theorems state this for a single-module contract:
   overflow is ruled out when the code passes the static stack check.
 
 All four are proved with no admitted steps at the commit this page was
-built from: `holbuild check` reports each one clean. The theorems, every
-hypothesis and the definitions they rest on are in the
-[statement dossier](dossier.html); this page says what they mean in
-words. It simplifies: where it and the dossier differ, the dossier's
-statements are what is proved.
+built from: `holbuild check` reports each one clean. Each theorem is
+stated in full below the words that explain it, with every hypothesis and,
+at the end of the page, the definitions they rest on. The explanations
+simplify: where they and the statements differ, the statements are what
+is proved.
 
 ## What is being related
 
@@ -55,13 +51,13 @@ executable functions:
   tested against the Ethereum execution spec tests.
 
 The compiler is the HOL function
-[`compile_vyper fin policy tops`](dossier.html#nx-compileVyper-compile_vyper),
+[`compile_vyper fin policy tops`](#nx-compileVyper-compile_vyper),
 which returns the deployment bytecode and the runtime bytecode, or nothing
 if it refuses the contract. It lowers Vyper to Venom, Vyper's intermediate
 representation, runs the Venom passes of Vyper's `-O1` pipeline, and
 generates EVM assembly and bytecode. `fin` is the last step on the assembly:
 either nothing, or the assembly optimizer
-([`accepted_finalizers`](dossier.html#def-asmOptimizer-accepted_finalizers)).
+([`accepted_finalizers`](#def-asmOptimizer-accepted_finalizers)).
 `policy` is any compiler setting. The definition follows the Vyper compiler
 at the commit in the repository's `VYPER_PIN`, and the two are compared
 byte for byte on test contracts; the theorems are about this definition,
@@ -78,7 +74,7 @@ only how the frame fails.
 Gas is the other value the source can't compute: `msg.gas` depends on the
 compiled code. The source takes each `msg.gas` from a list of **gas
 readings**
-([`gas_readings_rel`](dossier.html#def-e2eDefs-gas_readings_rel)): the
+([`gas_readings_rel`](#def-e2eDefs-gas_readings_rel)): the
 theorems match some of the source's readings to values the EVM's `GAS`
 instructions returned, not necessarily in the same order, and the result
 holds for every list of readings consistent with that matching, the
@@ -88,96 +84,10 @@ passes that amount as the call instruction's gas operand (the EVM may
 give the callee less, under its own cap on forwarded gas); otherwise the
 operand is not constrained.
 
-## The theorems
-
-### Deployment correctness
-
-When the hypotheses below hold, the EVM runs the deployment bytecode
-followed by the ABI-encoded constructor arguments, in a fresh creation
-frame. Then the run finishes, and either the frame is **starved** (below),
-or:
-
-- the result matches the source constructor's
-  ([`deploy_result_rel_at`](dossier.html#def-e2eDeployed-deploy_result_rel_at)):
-  on success the account holds the runtime bytecode followed by the
-  encoded immutables (or, if the constructor self-destructs, no code and
-  the account is scheduled for deletion), and balances, storage,
-  transient storage, logs and the calls the constructor made all agree
-  with the source's; when the
-  source constructor fails, the frame fails as described for calls below; and
-- on success, unless the new account is scheduled for deletion, the
-  contract is [`deployed`](dossier.html#def-e2eDeployed-deployed) at its address,
-  and its storage satisfies the call theorems' storage hypothesis.
-
-`deployed` is exactly what the call theorems assume about the installed
-contract, so the two compose: the call theorems apply to each later call
-whose own hypotheses (below) hold. The repository's
-`call_preserves_deployed` shows that a call satisfying the call
-theorem's typing and entry hypotheses keeps `deployed` for the source
-state after the call when the runtime code is nonempty, the call is the
-only frame running, and the contract is not scheduled for deletion. That
-state
-([`next_source_machine`](dossier.html#def-e2eDefs-next_source_machine))
-is the source's result with the EVM run's accounts after deletions, and
-with transient storage, logs and pending deletions cleared.
-
-### Call correctness
-
-For a deployed contract and any transaction to it, with any calldata,
-when the hypotheses below hold, the EVM run of the call frame finishes,
-and either the frame is starved, or
-([`calldata_result_rel`](dossier.html#def-e2eCorrectness-calldata_result_rel)):
-
-- if the calldata selects no function, the frame reverts with empty
-  return data. That is the case when a selector matching no function, or
-  calldata shorter than four bytes, meets a contract without
-  `__default__`, and when the calldata is too short for the selected
-  function's arguments or they don't decode
-  ([`calldata_dispatch`](dossier.html#def-vyperCalldata-calldata_dispatch));
-- otherwise the result matches the source semantics' run of the selected
-  function ([`call_result_rel_at`](dossier.html#def-e2eDefs-call_result_rel_at)):
-  - a normal return gives the ABI encoding of the returned value as return
-    data (for a `@raw_return` function, the returned bytes themselves),
-    with the same balances, storage, transient storage, logs and
-    outgoing calls;
-  - `selfdestruct` halts with the same effects;
-  - a failed `assert` or a `raise` reverts (with `UNREACHABLE` the frame may
-    fail in any way), and so does a revert passed on from a called contract; any
-    other runtime error of the source (an overflow, an index out of bounds)
-    makes the frame fail. The revert data itself is not compared.
-
-### Gas sufficiency
-
-Each correctness theorem allows the run to stop by **starvation**
-([`frame_starved`](dossier.html#def-e2eDeployed-frame_starved)): the frame
-ran out of gas, or overflowed the EVM stack in code that fails a static
-stack-height check (`bytecode_stack_check`); so when the code passes that
-check, starvation can only be running out of gas. The gas theorems say
-that, under conditions, starvation by running out of gas is avoidable:
-there is an amount of gas `g` such that, with `g` or more added to the
-frame, it does not run out of gas.
-
-- For a call whose calldata selects no function, this needs no condition
-  on the larger-gas run.
-  Otherwise it holds when, given the calls' outcomes in the larger-gas
-  run, the source run of the selected function stays inside the storage
-  regions `H` (below) for every gas filling, the larger-gas run's call
-  trace is bounded, and, for every gas filling, that source run does not
-  stop with one of the errors listed in
-  [`gas_source_exempt`](dossier.html#def-e2eGasSufficient-gas_source_exempt):
-  an error the correctness theorems already exempt (below), a contract
-  creation whose init code exceeds the EVM's size limit (no amount of gas
-  helps there), or, in a static call, `UNREACHABLE` or a runtime error
-  other than a missing gas reading.
-- For deployment, under the same three conditions on the larger-gas
-  constructor run (with `deploy_gas_source_exempt` in place of
-  `gas_source_exempt`), running out of gas with that much gas implies
-  the runtime bytecode plus immutables exceeds the EVM's code-size limit.
-
 ## What the hypotheses ask of the caller
 
-Each theorem's hypotheses are listed, with a plain-language note on each,
-in the [dossier](dossier.html). In groups:
+Each theorem's hypotheses are listed below its statement, with a
+plain-language note on each. In groups:
 
 - **The compiler accepted the contract.** `compile_vyper` returned bytecode,
   with one of the accepted finalizers.
@@ -197,16 +107,108 @@ in the [dossier](dossier.html). In groups:
   slots. They require each region to fit in the slot space, distinct
   regions of the same kind not to overlap, transient regions to avoid the
   lock slots, for a call, the source's initial storage to decode on the
-  regions ([`storage_ok`](dossier.html#def-e2eCorrectness-storage_ok);
+  regions ([`storage_ok`](#def-e2eCorrectness-storage_ok);
   deployment doesn't assume it, and establishes it for later calls), and the
   source run, for every gas filling, to keep within them: every storage
   region it uses is in `H`, every lock it takes is in the lock list, and
   every storage it takes back from a called contract decodes on the
-  regions ([`call_within`](dossier.html#def-e2eCorrectness-call_within),
-  [`deploy_within`](dossier.html#def-e2eDeployEntry-deploy_within)).
+  regions ([`call_within`](#def-e2eCorrectness-call_within),
+  [`deploy_within`](#def-e2eDeployEntry-deploy_within)).
   The contract's storage and transient storage then agree with the
   source's at every byte except the unused bytes of a value's layout in a
   region the run touched; other accounts agree exactly.
+
+## Deployment correctness
+
+When the hypotheses below hold, the EVM runs the deployment bytecode
+followed by the ABI-encoded constructor arguments, in a fresh creation
+frame. Then the run finishes, and either the frame is **starved** (below),
+or:
+
+- the result matches the source constructor's
+  ([`deploy_result_rel_at`](#def-e2eDeployed-deploy_result_rel_at)):
+  on success the account holds the runtime bytecode followed by the
+  encoded immutables (or, if the constructor self-destructs, no code and
+  the account is scheduled for deletion), and balances, storage,
+  transient storage, logs and the calls the constructor made all agree
+  with the source's; when the
+  source constructor fails, the frame fails as described for calls below; and
+- on success, unless the new account is scheduled for deletion, the
+  contract is [`deployed`](#def-e2eDeployed-deployed) at its address,
+  and its storage satisfies the call theorems' storage hypothesis.
+
+`deployed` is exactly what the call theorems assume about the installed
+contract, so the two compose: the call theorems apply to each later call
+whose own hypotheses (below) hold. The repository's
+`call_preserves_deployed` shows that a call satisfying the call
+theorem's typing and entry hypotheses keeps `deployed` for the source
+state after the call when the runtime code is nonempty, the call is the
+only frame running, and the contract is not scheduled for deletion. That
+state
+([`next_source_machine`](#def-e2eDefs-next_source_machine))
+is the source's result with the EVM run's accounts after deletions, and
+with transient storage, logs and pending deletions cleared.
+
+<!-- dossier: thm-e2eDeployed-e2e_deploy_correctness_deployed -->
+
+## Call correctness
+
+For a deployed contract and any transaction to it, with any calldata,
+when the hypotheses below hold, the EVM run of the call frame finishes,
+and either the frame is starved, or
+([`calldata_result_rel`](#def-e2eCorrectness-calldata_result_rel)):
+
+- if the calldata selects no function, the frame reverts with empty
+  return data. That is the case when a selector matching no function, or
+  calldata shorter than four bytes, meets a contract without
+  `__default__`, and when the calldata is too short for the selected
+  function's arguments or they don't decode
+  ([`calldata_dispatch`](#def-vyperCalldata-calldata_dispatch));
+- otherwise the result matches the source semantics' run of the selected
+  function ([`call_result_rel_at`](#def-e2eDefs-call_result_rel_at)):
+  - a normal return gives the ABI encoding of the returned value as return
+    data (for a `@raw_return` function, the returned bytes themselves),
+    with the same balances, storage, transient storage, logs and
+    outgoing calls;
+  - `selfdestruct` halts with the same effects;
+  - a failed `assert` or a `raise` reverts (with `UNREACHABLE` the frame may
+    fail in any way), and so does a revert passed on from a called contract; any
+    other runtime error of the source (an overflow, an index out of bounds)
+    makes the frame fail. The revert data itself is not compared.
+
+<!-- dossier: thm-e2eDeployed-vyper_call_correct_deployed -->
+
+## Gas sufficiency
+
+Each correctness theorem allows the run to stop by **starvation**
+([`frame_starved`](#def-e2eDeployed-frame_starved)): the frame
+ran out of gas, or overflowed the EVM stack in code that fails a static
+stack-height check (`bytecode_stack_check`); so when the code passes that
+check, starvation can only be running out of gas. The gas theorems say
+that, under conditions, starvation by running out of gas is avoidable:
+there is an amount of gas `g` such that, with `g` or more added to the
+frame, it does not run out of gas.
+
+- For a call whose calldata selects no function, this needs no condition
+  on the larger-gas run.
+  Otherwise it holds when, given the calls' outcomes in the larger-gas
+  run, the source run of the selected function stays inside the storage
+  regions `H` (below) for every gas filling, the larger-gas run's call
+  trace is bounded, and, for every gas filling, that source run does not
+  stop with one of the errors listed in
+  [`gas_source_exempt`](#def-e2eGasSufficient-gas_source_exempt):
+  an error the correctness theorems already exempt (below), a contract
+  creation whose init code exceeds the EVM's size limit (no amount of gas
+  helps there), or, in a static call, `UNREACHABLE` or a runtime error
+  other than a missing gas reading.
+- For deployment, under the same three conditions on the larger-gas
+  constructor run (with `deploy_gas_source_exempt` in place of
+  `gas_source_exempt`), running out of gas with that much gas implies
+  the runtime bytecode plus immutables exceeds the EVM's code-size limit.
+
+<!-- dossier: thm-e2eGasSufficientTop-e2e_deploy_gas_sufficient -->
+
+<!-- dossier: thm-e2eDeployed-vyper_call_gas_sufficient_deployed -->
 
 ## What the theorems do not cover
 
@@ -228,7 +230,7 @@ in the [dossier](dossier.html). In groups:
   `abi_decode`, in a contract that applies `abi_decode` to some
   dynamically sized type, or with a value transfer that would overflow
   the recipient's balance
-  ([`unspecified_behaviour_exempt`](dossier.html#def-e2eDefs-unspecified_behaviour_exempt)),
+  ([`unspecified_behaviour_exempt`](#def-e2eDefs-unspecified_behaviour_exempt)),
   the compiled code's outcome is not constrained.
 - **Calls into the contract's code from elsewhere.** Frames running the
   contract's code under another address (`DELEGATECALL` from a proxy, an
@@ -239,7 +241,7 @@ in the [dossier](dossier.html). In groups:
 
 All the proof scripts are public. From a checkout of
 [vyper-hol](https://github.com/verifereum/vyper-hol) at the commit in the
-dossier's header, with [holbuild](https://github.com/HOL-Theorem-Prover/holbuild):
+page's header, with [holbuild](https://github.com/HOL-Theorem-Prover/holbuild):
 
 ```sh
 holbuild check e2eDeployedTheory:e2e_deploy_correctness_deployed \
@@ -250,3 +252,5 @@ holbuild check e2eDeployedTheory:e2e_deploy_correctness_deployed \
 
 This builds every theory the theorems depend on and reports each theorem
 clean when it rests on no admitted step, oracle or extra axiom.
+
+<!-- dossier: index -->

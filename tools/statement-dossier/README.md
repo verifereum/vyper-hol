@@ -36,16 +36,19 @@ are listed as not expanded and link to their source files at the
 checked-out commit. A depth past the deepest definition, such as
 `--depth 1000`, renders the full index.
 
-For readers outside the project, `--public DIR` writes two pages into
-an existing directory: `index.html`, an overview of what the theorems
-say rendered from `overview.md`, and `dossier.html`, the main dossier.
-Instead of a depth, the public dossier expands only the definitions of
-the theories and single `Thy$name` constants listed in
-`public-expand.txt`; every other constant is listed as not expanded.
-The overview says the four theorems are proved, so the renderer first
-runs `holbuild check` on them and fails if one is not clean. It also
-fails if an overview link names a dossier anchor that does not exist,
-or if the list names a theory the theorems do not depend on.
+For readers outside the project, `--public DIR` writes one page,
+`index.html`, into an existing directory. It puts the explanations in
+`overview.md` around the dossier's parts: each
+`<!-- dossier: thm-Thy-name -->` line in `overview.md` is replaced by
+that theorem's statement and hypotheses, and `<!-- dossier: index -->`
+by the types, definitions and boundary index. Instead of a depth, the
+public page expands only the definitions of the theories and single
+`Thy$name` constants listed in `public-expand.txt`; every other constant
+is listed as not expanded. The page says the four theorems are proved,
+so the renderer first runs `holbuild check` on them and fails if one is
+not clean. It also fails if `overview.md` doesn't place each theorem and
+the index exactly once, if a link on the page names an anchor that does
+not exist, or if the list names a theory the theorems do not depend on.
 
 ```sh
 python3 tools/statement-dossier/render.py --public /path/to/site

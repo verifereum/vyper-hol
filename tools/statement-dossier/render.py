@@ -113,17 +113,31 @@ def public_expansion() -> tuple[list[str], list[tuple[str, str]]]:
     return theories, constants
 
 
-def write_overview(destination: Path, revision: str, dossier: str) -> None:
-    """Render the overview to HTML, checking its links into the dossier."""
-    source = (CONFIG / "overview.md").read_text()
-    stamp = f"\n\nBuilt from [vyper-hol {revision}]({VYPER_URL}/tree/{revision}).\n"
-    subprocess.run(["pandoc", "--standalone", "--from", "markdown", "--to", "html5",
-                    "--output", str(destination)], input=source + stamp, text=True, check=True)
-    ids = set(re.findall(r'\bid="([^"]+)"', dossier))
-    links = set(re.findall(r'\bhref="(?:\./)?dossier\.html#([^"]+)"', destination.read_text()))
-    missing = sorted(links - ids)
+def compose_public(dossier: str) -> str:
+    """Place overview.md's sections around the dossier's theorem sections.
+
+    overview.md marks where each dossier part goes with a
+    `<!-- dossier: thm-Thy-name -->` line, or `<!-- dossier: index -->` for
+    the types, definitions and boundary index that follow the theorems.
+    """
+    prose = subprocess.run(["pandoc", "--from", "markdown", "--to", "html5"],
+                           input=(CONFIG / "overview.md").read_text(), capture_output=True,
+                           text=True, check=True).stdout
+    starts = [match.start() for match in re.finditer(r'<h2 id="thm-', dossier)]
+    index = dossier.index("<h2>", starts[-1])
+    end = dossier.rindex("</body>")
+    parts = {re.match(r'<h2 id="([^"]+)"', dossier[start:])[1]: dossier[start:stop]
+             for start, stop in zip(starts, starts[1:] + [index])}
+    parts["index"] = dossier[index:end]
+    markers = re.findall(r"<!-- dossier: (\S+) -->", prose)
+    if sorted(markers) != sorted(parts):
+        raise SystemExit("overview.md must place each of these exactly once: " + ", ".join(sorted(parts)))
+    page = dossier[:starts[0]] + re.sub(r"<!-- dossier: (\S+) -->", lambda m: parts[m[1]], prose) + dossier[end:]
+    ids = set(re.findall(r'\bid="([^"]+)"', page))
+    missing = sorted(set(re.findall(r'\bhref="#([^"]+)"', page)) - ids)
     if missing:
-        raise SystemExit("overview.md links to dossier anchors that do not exist: " + ", ".join(missing))
+        raise SystemExit("the page links to anchors that do not exist: " + ", ".join(missing))
+    return page
 
 
 def main() -> None:
@@ -133,8 +147,8 @@ def main() -> None:
     output_arg = parser.add_mutually_exclusive_group(required=True)
     output_arg.add_argument("--output", type=Path, help="HTML file to write")
     output_arg.add_argument("--public", metavar="DIR", type=Path,
-                            help="write the public overview and dossier, index.html and dossier.html, "
-                                 "expanding only the definitions public-expand.txt lists")
+                            help="write the public page, index.html: overview.md's explanations around the "
+                                 "theorems, expanding only the definitions public-expand.txt lists")
     parser.add_argument("--depth", type=int,
                         help="expand only definitions this many steps below the theorems (default 4)")
     args = parser.parse_args()
@@ -163,7 +177,7 @@ def main() -> None:
     sources = ",\n  ".join(f"({sml_string(theory)}, {sml_string(url)})" for theory, url in links)
     public_theories, public_consts = public_expansion() if args.public else ([], [])
     public_dir = args.public.resolve() if args.public else None
-    destination = public_dir / "dossier.html" if public_dir else args.output.resolve()
+    destination = public_dir / "index.html" if public_dir else args.output.resolve()
     scratch = target_script(target) if target else nullcontext()
     with tempfile.TemporaryDirectory(prefix=".compiler-dossier-", dir=destination.parent) as temp, scratch:
         html = Path(temp) / "dossier.html"
@@ -202,11 +216,8 @@ val theorySources = [
         subprocess.run([hol / "bin" / "hol", "--maxheap", "4096", "--gcthreads", "1",
                         "run", driver], cwd=ROOT, check=True)
         if args.public:
-            overview = Path(temp) / "index.html"
-            write_overview(overview, revision, html.read_text())
+            html.write_text(compose_public(html.read_text()), encoding="utf-8")
         html.replace(destination)
-        if args.public:
-            overview.replace(public_dir / "index.html")
 
 
 @contextmanager
