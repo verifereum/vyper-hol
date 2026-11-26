@@ -21,7 +21,6 @@ Theorem blueprint_raw_copy_entry_mods:
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   type_memory_bytes ce (vv_type vv) < dimword (:256) /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-  (!H. dead_lo_ok H (DF H) lo ce cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   ~is_word_type (post_value_type ce e) /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv /\
