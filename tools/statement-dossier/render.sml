@@ -13,8 +13,13 @@ val sections =
 
 val projectTheories = statementDossierLib.script_theories [projectRoot]
 val ancestors = Theory.ancestry "-"
-val expandTheories = List.filter (fn thy => List.exists (fn a => a = thy) ancestors)
-                                projectTheories
+val expandTheories =
+  if public then
+    case List.filter (fn thy => not (Lib.mem thy ancestors)) publicTheories of
+      [] => publicTheories
+    | missing => raise Fail ("public-expand.txt names theories the theorems don't depend on: " ^
+                             String.concatWith ", " missing)
+  else List.filter (fn thy => List.exists (fn a => a = thy) ancestors) projectTheories
 
 val stops = [{Thy = "compileUnit", Name = "compile_vyper_mods"},
              {Thy = "compileVyper", Name = "compile_vyper"},
@@ -26,7 +31,8 @@ val stops = [{Thy = "compileUnit", Name = "compile_vyper_mods"},
 
 val intro = if target then
   "`vyper_call_correct_mods` is the module-list target. Its proof is open.\n\n" ^ draftSource
-  else "The deployment theorem shows how the constructor establishes `deployed`, \
+  else (if public then "[What these theorems mean](index.html), for readers new to HOL.\n\n" else "") ^
+       "The deployment theorem shows how the constructor establishes `deployed`, \
        \which combines installed code, source typing, source deployment and \
        \storage validity on the fixed horizon `H`. \
        \The call theorem also needs a well-typed transaction, its fresh EVM \
@@ -104,7 +110,7 @@ fun below_cut k within =
       end
   end
 
-val cut = below_cut 0 []
+val cut = if public then [] else below_cut 0 []
 
 val cutAbout = if null cut then "" else
   " This page also stops " ^ Int.toString depth ^ " definition steps below \
@@ -113,11 +119,16 @@ val cutAbout = if null cut then "" else
   " constants at the next step are listed as not expanded and link to their \
   \sources. Render with a larger `--depth` for the full index."
 
+val publicAbout =
+  " This page expands only the definitions in the theories that state the theorems' \
+  \hypotheses and result relations, and a few single constants; every other constant \
+  \is listed as not expanded and links to its source."
+
 val () = statementDossierLib.run_with_presentation {
   about = "Definitions stop at the compiler, contract checker, source interpreter entry \
           \points, verifereum, and the HOL libraries. The boundary index links to their sources." ^
-          cutAbout,
+          (if public then publicAbout else cutAbout),
   omit_types = [],
   reader_view = true,
   theory_sources = theorySources
-} (config expandTheories [] (boundaryStops @ cut))
+} (config expandTheories publicConsts (boundaryStops @ cut))
