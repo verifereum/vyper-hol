@@ -56,6 +56,7 @@ Proof
   rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[is_word_type_def])
 QED
 
+(* The prefix supplies the value and VV simulations without a conversion premise. *)
 Theorem word_rounding_sim_mods:
   ^(snd (dest_imp (concl word_rounding_prefix_mods)))
 Proof
