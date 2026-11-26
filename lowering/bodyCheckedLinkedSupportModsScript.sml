@@ -167,28 +167,25 @@ Proof
   `?out. type_stmts env ret b = SOME out` by fs[optionTheory.IS_SOME_EXISTS] >>
   `supported_function_body tops vis args b` suffices_by
     simp[supported_function_body_def] >>
-  drule_at (Pat `linked_body_env _ _ _ _`) linked_typed_body_supported >>
-  disch_then (drule_at (Pat `type_stmts _ _ _ = SOME _`)) >>
-  disch_then (drule_at (Pat `custom_errors_stmts_ok _ _`)) >>
-  disch_then (Q.ISPECL_THEN [`vis`, `args`] mp_tac) >>
-  impl_tac >- (
-    conj_tac
-    >- (rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-        drule linked_well_typed_expr_supported >>
-        disch_then (qspec_then `tenv` (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
-        qpat_assum `!env e. well_typed_expr env e ==> _`
-          (qspecl_then [`env'`, `e`] mp_tac) >> simp[]) >>
-    conj_tac
-    >- (rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-        drule_at (Pat `FDOM _ SUBSET _`) linked_checked_leaf >>
-        disch_then (drule_at (Pat `type_stmt _ _ _ = SOME _`)) >>
-        disch_then (drule_at (Pat `linked_body_env _ _ _ _`)) >>
-        disch_then (drule_at (Pat `custom_errors_stmt_ok _ _`)) >> simp[]) >>
-    conj_tac
-    >- (rpt gen_tac >>
-        rewrite_tac[subst_consts_stmt_mods_def, subst_consts_iter_mods_def] >>
-        disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-        drule_all linked_checked_range_literals >> simp[]) >>
-    simp[]) >>
+  irule (INST_TYPE [alpha |-> numSyntax.num] linked_typed_body_supported) >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`env`, `mods`, `out`, `ret`, `src`, `tenv`] >>
+  conj_tac
+  >- (rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+      drule linked_well_typed_expr_supported >>
+      disch_then (qspec_then `tenv` (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+      qpat_assum `!env e. well_typed_expr env e ==> _`
+        (qspecl_then [`env'`, `e`] mp_tac) >> simp[]) >>
+  conj_tac
+  >- (rpt gen_tac >>
+      rewrite_tac[subst_consts_stmt_mods_def, subst_consts_iter_mods_def] >>
+      disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+      drule_all linked_checked_range_literals >> simp[]) >>
+  conj_tac
+  >- (rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+      drule_at (Pat `FDOM _ SUBSET _`) linked_checked_leaf >>
+      disch_then (drule_at (Pat `type_stmt _ _ _ = SOME _`)) >>
+      disch_then (drule_at (Pat `linked_body_env _ _ _ _`)) >>
+      disch_then (drule_at (Pat `custom_errors_stmt_ok _ _`)) >> simp[]) >>
   simp[]
 QED
