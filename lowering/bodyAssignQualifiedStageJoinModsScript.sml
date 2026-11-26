@@ -3,7 +3,7 @@
 Theory bodyAssignQualifiedStageJoinMods
 Ancestors
   bodyAssignLocalPlaceRoutesMods bodyInvModuleProps bodyWriteTargetStageMods
-  gasOutcomeFullBindMods gasOutcomeFullPostMods gasExemptCertMods
+  gasOutcomeFullBindMods gasOutcomeFullPostMods gasOutcomeFullPostPathMods gasExemptCertMods
   stmtSimForArrayFrame stmtSimProps bodyPtrDefs haltExitProj
   targetPlaceSim targetPlaceSimCases vyperInterpreter vyperExprNoControl
   vyperStorageTrace vyperStorageFootprint vyperState vyperAST bodyFullPredsMods bodyFullPostsMods
@@ -497,3 +497,203 @@ Proof
   qexistsl [`RhsQ`,`d`,`dst`,`dty`,`e`,`env`,`es`,`key`,`ms`,`s0`,`saved`,
             `shadow_func`,`shadow_sr`,`shadow_st`,`sr`,`st`] >> simp[]
 QED
+
+(* Refine the target post while its normal execution path is still available. *)
+Theorem qualified_assign_place_store_floor_mods[local]:
+  write_place_sim_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx env bt mid /\
+  type_place_target env bt = SOME (Type dty) /\
+  write_target_entry_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx bt mid st0 sr st shadow_sr shadow_st dst u Gu tu /\
+  gas_admissible (eval_target_place cx bt) target_place_res_ok mid /\
+  (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) u) /\
+  (!marks p ee Gz tz z.
+    qualified_assign_target_reached_mods (DF,lo,d,ctx,func) cenv cx st0 bt dty
+      mid sr st dst u Gu tu marks p ee Gz tz z /\
+    (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) z) ==>
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (write_place cx p v) (ee,z,Gz,tz) Q
+      (assign_qualified_exit_mods ctx cx RetQ)) ==>
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_target_place cx bt) (\p. write_place cx p v))
+    (mid,u,Gu,tu) Q (assign_qualified_exit_mods ctx cx RetQ)
+Proof
+  strip_tac >>
+  `return_buf_frame d cenv sr u` by
+    (qhdtm_assum `write_target_entry_mods`
+       (strip_assume_tac o REWRITE_RULE [write_target_entry_mods_def]) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_x_assum `write_place_sim_mods _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [write_place_sim_mods_def]) >>
+  disch_then (qspecl_then [`st0`,`dty`,`sr`,`st`,`shadow_sr`,`shadow_st`,`dst`,`u`,`Gu`,`tu`] mp_tac) >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full_mods _ _ _ _ _ _ ChildQ ChildR` >>
+  `gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     cenv.ce_modules cx st0 (eval_target_place cx bt) (mid,u,Gu,tu)
+     (\H res ee G tn t. ChildQ H res ee G tn t /\
+       (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) t)) ChildR` by
+    (irule gas_outcome_full_mods_post_path >> first_assum (irule_at Any) >>
+     rpt gen_tac >> strip_tac >> simp[] >>
+     drule bodyFullSharedTheory.return_buf_allocas_suffix >>
+     disch_then (qspecl_then [`sr`,`d`,`cenv`] mp_tac) >> simp[]) >>
+  irule gas_outcome_full_mods_bind_all >> BETA_TAC >> rpt conj_tac
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_bind_place >>
+      goal_assum (drule_at Any) >> simp[])
+  >~ [`gas_exempt_cert_mods _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_error_place >> simp[])
+  >~ [`storage_trace_frame (eval_target_place _ _)`]
+  >- simp[evaluate_storage_trace_frame]
+  >~ [`!p. storage_trace_frame (write_place _ p _)`]
+  >- simp[storage_trace_frame_write_place] >>
+  qexists `\H res ee G tn t. ChildQ H res ee G tn t /\
+     (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) t) /\
+     ee.gas_obs = []` >>
+  conj_tac >- suspend "target_reached" >>
+  irule gas_outcome_full_mods_post_source >>
+  qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ (\H res ee G tn t. _ /\ _) ChildR`
+    (irule_at Any) >>
+  conj_tac >- simp[] >>
+  simp[Abbr `ChildR`,Excl "AND_IMP_INTRO"] >> rpt gen_tac >> disch_tac >>
+  irule qualified_assign_expr_exit >> simp[]
+QED
+
+Resume qualified_assign_place_store_floor_mods[target_reached]:
+  qx_genl_tac [`marks`,`res`,`ee`,`Gz`,`tz`,`z`] >> BETA_TAC >> strip_tac >>
+  qpat_assum `storage_trace_domain _ _ _`
+    (assume_tac o REWRITE_RULE [storage_trace_domain_def]) >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  qpat_x_assum `ChildQ (storage_trace_horizon _) _ _ _ _ _` mp_tac >>
+  simp[Abbr `ChildQ`,NoAsms] >>
+  disch_then (qx_choose_then `p` (CONJUNCTS_THEN2 SUBST_ALL_TAC strip_assume_tac)) >>
+  disj1_tac >> qexists `p` >> simp[] >>
+  first_x_assum irule >> simp[qualified_assign_target_reached_mods_def] >>
+  qexists `marks` >> simp[] >> rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (drule_then (strip_assume_tac o BETA_RULE)) >> gvs[]
+QED
+
+Finalise qualified_assign_place_store_floor_mods[local]
+
+(* Retain the allocation floor at both reached endpoints for every landing. *)
+Theorem assign_qualified_staged_routes_floor_mods:
+  target_root bt = TopLevelNameTarget key /\
+  module_body_inv mods src tops cenv cx /\ EVERY (struct_args_unique o SND) mods /\
+  type_stmt env ret_ty (Assign (BaseTarget bt) e) = SOME env' /\
+  (!k. MEM (WriteAcc (StateRef k)) (accesses_stmt (Assign (BaseTarget bt) e)) /\
+       IS_SOME (FLOOKUP env.bare_global_assignable k) ==>
+       IS_SOME (FLOOKUP cenv.ce_module_vars k)) /\
+  expr_body_pre_mods mods cenv cx env e es /\
+  body_expr_full_ok_mods mods exps cx e /\
+  (!s pv se sr v sf. eval_expr cx e s = (INL pv,se) /\
+     read_result cx pv sr = (INL v,sf) ==> body_base_target_full_ok_mods mods exps cx bt) /\
+  gas_admissible (eval_stmt cx (Assign (BaseTarget bt) e)) (stmt_res_ok lctx) es /\
+  return_buf_frame d cenv sa s0 /\ return_buf_sep d cenv es s0 /\
+  stmt_env cenv lctx ret_ty (Assign (BaseTarget bt) e) sa = (ce,sb) /\
+  stmt_env (gas_shadow_env T cenv) lctx ret_ty
+    (gas_shadow_stmt (Assign (BaseTarget bt) e)) shadow_sa =
+      (gas_shadow_env T ce,shadow_sb) /\
+  gas_shadow_state sa shadow_sa /\
+  (!dty saved sr st shadow_sr shadow_st dst.
+    type_place_target env bt = SOME (Type dty) /\
+    type_widens_to env.type_defs (expr_type e) dty /\
+    struct_args_unique tops /\
+    expr_body_pre_mods mods cenv cx env e es /\
+    body_expr_full_ok_mods mods exps cx e /\
+    qualified_assign_code_mods cenv bt e sa sb shadow_sa shadow_sb saved sr st
+      shadow_sr shadow_st dst ==>
+    ?RhsQ.
+      (gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es ==>
+       gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+         (\H res mid Gu tu u. ?v. res = INL v /\ RhsQ H v mid Gu tu u)
+         (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+           (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))) /\
+      (!ms v mid Gu tu u.
+        qualified_assign_rhs_reached_mods cx st0 e es s0 RhsQ ms v mid Gu tu u /\
+        body_base_target_full_ok_mods mods exps cx bt /\
+        (IS_SOME (FLOOKUP env.bare_global_assignable key) ==>
+         IS_SOME (FLOOKUP cenv.ce_module_vars key)) /\
+        gas_admissible (eval_target_place cx bt) target_place_res_ok mid ==>
+        write_place_sim_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx env bt mid /\
+        write_target_entry_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+          cenv cx bt mid st0 sr st shadow_sr shadow_st dst u Gu tu) /\
+      (!route ms v mid Gu tu u marks p ee Gz tz z.
+        qualified_assign_rhs_reached_mods cx st0 e es s0 RhsQ ms v mid Gu tu u /\
+        qualified_assign_target_reached_mods (DF,lo,d,ctx,func) cenv cx st0 bt dty
+          mid sr st dst u Gu tu marks p ee Gz tz z /\
+        qualified_assign_route_mods route key p saved dty dst /\
+        (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) u) /\
+        (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) z) ==>
+        gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+          cenv.ce_modules cx st0 (write_place cx p v) (ee,z,Gz,tz) Q
+          (assign_qualified_exit_mods ctx cx RetQ))) ==>
+  ce = cenv /\
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (eval_stmt cx (Assign (BaseTarget bt) e)) (es,s0,G0,tn0) Q
+    (assign_qualified_exit_mods ctx cx RetQ)
+Proof
+  strip_tac >> drule_then assume_tac module_body_inv_lookup >>
+  `struct_args_unique tops` by
+    (qpat_x_assum `EVERY _ mods` mp_tac >> simp[listTheory.EVERY_MEM] >>
+     disch_then (qspec_then `(src,tops)` mp_tac) >> simp[ALOOKUP_MEM]) >>
+  drule_then strip_assume_tac qualified_assign_destination_type_mods >>
+  drule_then assume_tac qualified_assign_write_access_mods >>
+  drule_all assign_place_paired_code_mods >>
+  disch_then (CONJUNCTS_THEN2 SUBST_ALL_TAC
+    (qx_choosel_then [`saved`,`sr`,`shadow_sr`,`dst`,`st`,`shadow_st`] strip_assume_tac)) >>
+  simp[] >>
+  `qualified_assign_code_mods cenv bt e sa sb shadow_sa shadow_sb saved sr st
+    shadow_sr shadow_st dst` by simp[qualified_assign_code_mods_def] >>
+  `IS_SOME (FLOOKUP env.bare_global_assignable key) ==>
+   IS_SOME (FLOOKUP cenv.ce_module_vars key)` by
+    (disch_tac >> first_x_assum irule >> simp[]) >>
+  qpat_x_assum `!dty saved sr st shadow_sr shadow_st dst. _ ==> ?RhsQ. _`
+    (drule_all_then (qx_choose_then `RhsQ` strip_assume_tac)) >>
+  irule qualified_assign_bind_rhs_mods >>
+  reverse conj_tac >- (qexists `lctx` >> simp[]) >>
+  qexistsl [`\H v mid Gu tu u. RhsQ H v mid Gu tu u /\
+              (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) u)`,
+            `exps`,`mods`] >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "write_floor" >>
+  suspend "rhs_floor"
+QED
+
+Resume assign_qualified_staged_routes_floor_mods[rhs_floor]:
+  strip_tac >>
+  qpat_assum `gas_admissible _ _ _ ==> gas_outcome_full_mods _ _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
+  drule_all gas_outcome_full_mods_return_buf_allocas >>
+  simp[LEFT_EXISTS_AND_THM,CONJ_ASSOC]
+QED
+
+Resume assign_qualified_staged_routes_floor_mods[write_floor]:
+  qx_genl_tac [`ms`,`v`,`mid`,`Gu`,`tu`,`u`] >> strip_tac >>
+  qpat_x_assum `qualified_assign_rhs_reached_mods _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o BETA_RULE o REWRITE_RULE [qualified_assign_rhs_reached_mods_def]) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  `qualified_assign_rhs_reached_mods cx st0 e es s0 RhsQ ms v mid Gu tu u` by
+    (simp[qualified_assign_rhs_reached_mods_def] >> rpt strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  qpat_x_assum `!ms v mid Gu tu u. _ ==> write_place_sim_mods _ _ _ _ _ _ /\ _`
+    (drule_all_then strip_assume_tac) >>
+  irule qualified_assign_place_store_floor_mods >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`d`,`dst`,`dty`,`env`,`shadow_func`,`shadow_sr`,`shadow_st`,`sr`,`st`] >>
+  simp[] >>
+  qx_genl_tac [`marks`,`p`,`ee`,`Gz`,`tz`,`z`] >> strip_tac >>
+  drule_all qualified_assign_select_route_mods >>
+  disch_then (qspec_then `saved` (qx_choose_then `route` assume_tac)) >>
+  qpat_assum `!route ms v mid Gu tu u marks p ee Gz tz z. _ ==> _`
+    (irule o Q.SPEC `route`) >>
+  conj_tac >- simp[] >>
+  conj_tac >- (qexists `route` >> first_assum ACCEPT_TAC) >>
+  qexistsl [`Gu`,`marks`,`mid`,`ms`,`tu`,`u`] >> simp[]
+QED
+
+Finalise assign_qualified_staged_routes_floor_mods
