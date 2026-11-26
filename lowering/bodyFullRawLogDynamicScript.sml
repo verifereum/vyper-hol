@@ -192,20 +192,23 @@ Resume raw_log_dynamic_data_full[selected]:
         CONJUNCT1 o MATCH_MP (iffLR expr_post_def) o CONJUNCT1)) >>
   Cases_on `cx.txn.is_static`
   >- (`?u G2 tn2. !H. valid_horizon cx st0 H mid.storage_trace ==>
+      u.vs_call_ctx.cc_static /\
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (t,G1,tn1) [] (Abort ExHalt_abort u,G2,tn2)` by
-      (match_mp_tac bodyFullRawLogDynamicTailPathTheory.raw_log_dynamic_static_tail_path >>
+      (match_mp_tac raw_log_dynamic_static_tail_endpoint >>
        simp[] >>
        fs[EVERY_DEF, compileEnvTheory.is_word_type_def] >>
        rpt strip_tac >>
        qpat_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
          (qspec_then `H` mp_tac) >> simp[]) >>
-      irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
-      qexistsl [`G2`, `mid`, `Abort ExHalt_abort u`,
-        `INR (Error (RuntimeError "write in static context"))`, `tn2`] >>
+      `u.vs_call_ctx.cc_static` by
+        (qpat_assum `!H. valid_horizon _ _ _ mid.storage_trace ==> u.vs_call_ctx.cc_static /\ _`
+           (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >> simp[]) >>
+      irule gas_outcome_full_exit_static >> simp[] >>
+      qexistsl [`G2`, `mid`, `INR (Error (RuntimeError "write in static context"))`, `tn2`, `u`] >>
       simp[bind_def, lift_option_type_def, lift_option_def, dest_BytesV_def,
-           ignore_bind_def, type_check_def, assert_def, return_def,
-           fragExecTheory.exit_result_def, expr_exit_def, halt_exit_def, Abbr `dataR`]) >>
+           ignore_bind_def, type_check_def, assert_def, return_def, check_not_static_def,
+           check_def, expr_exit_def, halt_exit_def, Abbr `dataR`]) >>
   `?u G2 tn2. !H. valid_horizon cx st0 H mid.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (t,G1,tn1) [] (OK u,G2,tn2) /\

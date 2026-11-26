@@ -310,6 +310,7 @@ Resume grouped_default_passing_execution[exception]:
        gas_origin_ptr_path (cx_dead H ^pcx,0,^pexp,^pctx,fn,[])
          (^pentry,FEMPTY,entry_taint) [] (OK t,J,tz)` by simp[] >>
   `(?r Gu tu. exit_result r /\
+       create_size_exit_ok ^pctx (INR ex : value list + exception) r /\
        !H. valid_horizon ^pcx ^pst H ee.storage_trace ==>
          gas_origin_ptr_path (cx_dead H ^pcx,0,^pexp,^pctx,fn,[])
            (t,J,tz) marks (r,Gu,tu) /\
@@ -332,11 +333,12 @@ Resume grouped_default_passing_execution[exception]:
   qpat_x_assum `(?r U V. !H. _) \/ _` (DISJ_CASES_THEN2
     (qx_choosel_then [`r`,`Gu`,`tu`] assume_tac)
     (strip_assume_tac o SIMP_RULE bool_ss [sumTheory.INR_11]))
-  >- (disj1_tac >> qexistsl_tac [`r`,`Gu`,`tu`] >> conj_tac
-      >- (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-            (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac o
-               SIMP_RULE bool_ss [sumTheory.sum_distinct1, sumTheory.INR_11])) >>
-          first_assum ACCEPT_TAC) >>
+  >- (disj1_tac >> qexistsl_tac [`r`,`Gu`,`tu`] >>
+      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+        (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac o
+           SIMP_RULE bool_ss [sumTheory.sum_distinct1, sumTheory.INR_11])) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
       qx_gen_tac `h` >> disch_tac >>
       qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
         (qspec_then `h` (drule_then strip_assume_tac o
