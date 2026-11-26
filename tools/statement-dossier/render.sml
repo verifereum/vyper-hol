@@ -164,7 +164,7 @@ fun conclusion_parts t =
       if not (null args) andalso Term.is_abs p andalso
          Term.type_of (Term.body p) = Type.bool then
         let val (v, b) = Term.dest_abs p in
-          (part_key t, Parse.term_to_string (boolSyntax.list_mk_comb (f, Lib.butlast args)) ^
+          (part_key t, Parse.term_to_string (Term.list_mk_comb (f, Lib.butlast args)) ^
                        " (λ" ^ #1 (Term.dest_var v) ^ ". …)") :: conclusion_parts b
         end
       else [(part_key t, Parse.term_to_string t)]
