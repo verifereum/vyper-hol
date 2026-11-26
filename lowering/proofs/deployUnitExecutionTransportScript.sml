@@ -4,6 +4,7 @@ Ancestors
   deployUnitExecution rawFmpTransport ptrSafeFmpTransport fragGasOriginFmpTransport
   rawFmpRecursiveTransport unitShapeDefs ctorDeployDefs venomExecSemantics
   venomState venomInst ptrDiscipline fragGasOrigin fragGasOriginPtr list ptrSafeRun
+  createSizeExit
 
 Theorem deploy_venom_result_rel_raw_fmp_transport:
   raw_fmp_result_rel p i e r r' /\
@@ -128,6 +129,14 @@ Proof
        SRULE [] step_inst_base_fmp_update]
 QED
 
+Theorem create_size_exit_ok_raw_fmp[local]:
+  raw_fmp_result_rel p i e r r' /\ create_size_exit_ok ctx src r ==>
+  create_size_exit_ok ctx src r'
+Proof
+  Cases_on `r` >> simp[] >> rpt strip_tac >>
+  gvs[create_size_exit_ok_def, oversized_create_abort_def] >> metis_tac[]
+QED
+
 Theorem deploy_certificate_raw_fmp_transport:
   o1_source_unit_ok unit /\ ~ctx_has_dalloca unit.cu_context /\
   deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx unit s ==>
@@ -156,6 +165,7 @@ Proof
     (qx_choose_then `r2` strip_assume_tac)) >> gvs[] >>
   qexists_tac `r2` >> simp[] >>
   (conj_tac >- metis_tac[raw_fmp_result_rel_exit]) >>
+  (conj_tac >- metis_tac[create_size_exit_ok_raw_fmp]) >>
   gen_tac >> strip_tac >>
   (conj_tac >- metis_tac[deploy_venom_result_rel_raw_fmp_transport]) >>
   gen_tac >>
