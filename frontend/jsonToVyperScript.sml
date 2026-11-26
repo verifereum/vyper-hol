@@ -659,6 +659,12 @@ Definition module_origin_constants_def:
        let value = origin_retype declared_ty (origin_fold_value
          (translate_expr_with_policy T ctx init)) in
        let origins =
+         case value of
+         | TypeBuiltin ty Empty _ [] =>
+             if ty = declared_ty then
+               ((expr_current_nsid ctx,name),(value,init)) :: expr_origins ctx
+             else expr_origins ctx
+         | _ =>
          case resolved_origin_expr T ctx init value of
          | SOME origin =>
              if pin_literal_tree value /\ expr_type value = declared_ty then

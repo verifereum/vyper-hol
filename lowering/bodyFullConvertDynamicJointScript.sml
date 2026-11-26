@@ -2,7 +2,7 @@ Theory bodyFullConvertDynamicJoint
 Ancestors
   bodyFullShadowBodyInv
   haltExitProj typeBuiltinPrereqs
-  bodyFullPreds bodySimFull exprLowering bodyFullOfVV bodyFullExprGeneric
+  bodyFullPreds bodyFullSimProjection bodySimFull exprLowering bodyFullOfVV bodyFullExprGeneric
   bodyFullConvertChildRead bodyFullPathHistory exprSafeOperand bodyPtrSignedConvertSourceTyping
   valueCopyBytes bodyPtrMakeArrayBytesTransport bodyPtrTypeBuiltinsBytesWordInputs
   bodyFullConvertBytesWordSuffix bodyFullConvertDynamicEmpty
@@ -72,6 +72,23 @@ Proof
   Cases_on `i < w2n a + 32` >> metis_tac[arithmeticTheory.NOT_LESS]
 QED
 
+Theorem dynamic_empty_scalar_no_inr[local]:
+  is_bytestring_type src /\ ~is_bytestring_type dst /\
+  valid_conversion src dst /\ well_formed_type (get_tenv cx) dst /\
+  evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
+  (v = BytesV [] \/ v = StringV "") /\
+  convert_result cx src dst v = INR exc ==> F
+Proof
+  strip_tac >>
+  `?vout dtv. INR exc = INL vout /\
+     evaluate_type (get_tenv cx) dst = SOME dtv /\
+     typed_val_to_w256 dtv vout = 0w` by
+    (irule exprSimConvertFromBytesTheory.dynamic_empty_scalar_convert >>
+     conj_tac >- simp[] >> conj_tac
+     >- (qexistsl_tac [`src`,`stv`,`v`] >> simp[]) >>
+     qexists_tac `get_tenv cx` >> simp[]) >>
+  gvs[]
+QED
 
 Theorem convert_dynamic_vv_sim_full:
   body_inv tops ctx cenv cx /\
@@ -131,7 +148,7 @@ Proof
   `post_value_type cenv e = expr_type e` by simp[] >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by
-    (gvs[body_expr_full_ok_def] >> metis_tac[]) >>
+    metis_tac[body_expr_full_ok_simulations] >>
   `!rt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
         ~is_word_type (post_value_type cenv e) ==>
         type_memory_bytes cenv (post_value_type cenv e) = type_memory_size rt /\
@@ -318,7 +335,7 @@ Resume convert_dynamic_vv_sim_full[continuation]:
   Cases_on `(?k. bt = IntT k) \/ bt = DecimalT`
   >- (Q.SUBGOAL_THEN `(?k. BaseT bt = BaseT (IntT k)) \/ BaseT bt = BaseT DecimalT` assume_tac
       >- metis_tac[] >>
-      drule_all signed_convert_origin_path >>
+      drule_all signed_convert_origin_path_revert >>
       disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] mp_tac) >>
       strip_tac >> suspend "unsigned") >>
   Q.SUBGOAL_THEN
@@ -335,7 +352,7 @@ Resume convert_dynamic_vv_sim_full[continuation]:
   `v <> BytesV [] /\ v <> StringV []` by
     (qpat_x_assum `~(v = BytesV [] \/ v = StringV [])` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
-  drule_all bytes_word_convert_origin_path >>
+  drule_all bytes_word_convert_origin_path_revert >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] mp_tac) >>
   strip_tac >> suspend "unsigned"
 QED
@@ -387,10 +404,15 @@ Resume convert_dynamic_vv_sim_full[unsigned]:
         simp[contextTheory.vv_location_def]) >> simp[]) >>
   qpat_x_assum `!exc. INR y = INR exc ==> _` (qspec_then `y` mp_tac) >>
   simp[] >> strip_tac >>
-  irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >>
-  conj_tac >- (qexistsl_tac [`Gf`,`mid`,`Abort err t'`,`INR y`,`tnf`] >>
-  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
-       halt_exit_not_halt]) >> simp[])
+  `~((v = BytesV [] \/ v = StringV "") /\
+      convert_result cx (expr_type e) (BaseT bt) v = INR y)` by
+    (strip_tac >> (gvs[dynamic_empty_scalar_no_inr])) >>
+  all_tac >>> ALLGOALS
+    (metis_tac[] ORELSE
+     (irule gasOutcomeFullComposeTheory.gas_outcome_full_exit_revert >>
+      conj_tac >- (qexistsl_tac [`Gf`,`mid`,`INR y`,`tnf`,`t'`] >>
+      simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
+           halt_exit_not_halt]) >> simp[])))
 QED
 
 Resume convert_dynamic_vv_sim_full[zero]:

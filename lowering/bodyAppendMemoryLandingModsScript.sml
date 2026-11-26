@@ -153,9 +153,8 @@ Resume memory_append_suffix_landing[counted]:
 QED
 
 Resume memory_append_suffix_landing[overflow]:
-  irule gas_outcome_full_mods_exit >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`Gf`,`fin`,`Abort Revert_abort r`,
-    `INR (Error (RuntimeError "append overflow"))`,`tf`] >>
+  irule gas_outcome_full_mods_exit_revert >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`Gf`,`fin`,`INR (Error (RuntimeError "append overflow"))`,`tf`,`r`] >>
   simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def] >>
   metis_tac[gas_origin_ptr_path_trans]
 QED

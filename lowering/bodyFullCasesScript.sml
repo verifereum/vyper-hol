@@ -11,7 +11,8 @@ Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallS
   bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
   bodyFullAppend bodyFullIfExp bodyFullAttribute
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
-  bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
+  bodyFullAssertReason bodyFullPreds bodyFullSimProjection
+  bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
   bodyFullStructLit bodyFullPop
   bodyFullSubscript[qualified,ignore_grammar]
   bodyFullSubscriptUnframedArray[qualified,ignore_grammar]
@@ -22,7 +23,8 @@ Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallS
   bodyFullExtCallReturn abiDecodeValidJoint abiDecodeRejectJoint gasOutcomeFull
   bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   bodyFullBuiltinEnv
-  bodyFullMakeArray
+  bodyFullMakeArray bodyFullNamedConst bodyFullUnaryBuiltin
+  bodyFullBoolChainOperands bodyFullBoolChain
   bodyFullBuiltinConcat bodyFullBuiltinSlice bodyFullBuiltinCalldataSlice
   bodyFullBuiltinUint2Str
   bodyFullBuiltinECRecover bodyFullBuiltinECArithCompose
@@ -514,6 +516,14 @@ Proof
   `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len ==>
    body_exprs_full_ok cx es` by
     metis_tac[type_check_def, assert_def] >>
+  Cases_on `bt = NamedConst`
+  >- (gvs[] >> irule unary_builtin_expr_full_ok >>
+      gvs[builtin_args_length_ok_def, named_const_expr_full_ok]) >>
+  Cases_on `?is_and n. bt = BoolChain is_and n`
+  >- (gvs[] >> irule unary_builtin_expr_full_ok >>
+      gvs[builtin_args_length_ok_def] >> rpt strip_tac >>
+      irule bool_chain_expr_full_ok >>
+      irule body_expr_full_ok_bool_chain_operands >> simp[]) >>
   Cases_on `bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i) \/ (?i. bt = Acc i) \/
              bt = BlockHash \/ bt = BlobHash \/ bt = MethodId`
   >- (irule env_builtin_expr_full_ok >> rpt conj_tac >> gvs[] >>
@@ -892,7 +902,7 @@ Proof
      fs[alloc_limits_stmt_def,alloc_limits_expr_def]) >>
   first_x_assum (qspecl_then [`cenv`, `env`, `lctx`, `SOME e`, `es`] mp_tac) >>
   simp[same_frame_refl] >> disch_then irule >>
-  fs[body_expr_full_ok_def] >> metis_tac[]
+  gen_tac >> drule_all body_expr_full_ok_simulations >> simp[]
 QED
 
 (* Return, by the frame's own joint Return fragment. *)
@@ -1155,8 +1165,12 @@ Resume selfdestruct_expr_full_from_interfaces[static]:
   conj_tac >- first_assum ACCEPT_TAC >>
   gen_tac >> disch_tac >> reverse conj_tac
   >- (disj2_tac >>
-      simp[fragExecTheory.exit_result_def, Abbr `childR`,
-        exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
+      conj_tac >- simp[fragExecTheory.exit_result_def] >>
+      conj_tac
+      >- (irule createSizeExitTheory.create_size_exit_ok_static >>
+          simp[halt_state_def, set_returndata_def]) >>
+      simp[Abbr `childR`, exprSimDefsTheory.expr_exit_def,
+           exprSimDefsTheory.halt_exit_def]) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _ /\ _` drule >> strip_tac >>
   `gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (t,G',tn') [] (Abort ExHalt_abort (halt_state (set_returndata [] t)),G',tn')` by
