@@ -8,6 +8,7 @@ Ancestors
   immutableSectionRel vfmState vfmRunCall callTrace frameOutcome frameGas
   vyperInterpreter vyperStorageFootprint stackBoundSoundness stackBoundDefs
   vfmConstants vfmExecutionProp frameRunRaises guardSourceAlignment
+  e2eTransactionWorld e2eProducers asmOptNonemptyFinalizer
 
 (* Deployment installs the code and establishes the source facts at a.
    The transaction quantifier lets us reuse the existing source relations. *)
@@ -456,36 +457,6 @@ Proof
   simp[]
 QED
 
-(* TOP-LEVEL: call correctness in the world supplied by deployment. *)
-Theorem vyper_call_correct_deployed:
-  !fin policy tops deploy_bc runtime_bc am tx es H.
-    fin IN accepted_finalizers /\
-    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    deployed tops runtime_bc am tx.target /\
-    call_tx_well_typed tx /\ call_entry_rel am tx es /\
-    LENGTH (call_trace es) < 2 ** 64 /\
-    storage_ok H am tx /\
-    call_within H tops am tx es
-    ==>
-    ?r es'.
-      run_call es = SOME (r, es') /\
-      (frame_starved es r es' \/
-       calldata_result_rel H tops am tx es r es')
-Proof
-  rpt gen_tac >> strip_tac >>
-  `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es` by
-    simp[call_premises_deployed] >>
-  drule_all e2eCorrectnessTheory.vyper_call_correct >>
-  disch_then (qx_choosel_then [`r`, `es'`] strip_assume_tac) >>
-  qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
-  DISJ1_TAC >>
-  qpat_x_assum `frame_resource_starved _ _ _`
-    (strip_assume_tac o REWRITE_RULE [frame_resource_starved_def]) >>
-  PURE_REWRITE_TAC [frame_starved_def] >>
-  qexistsl_tac [`exc`, `out`, `lgs`] >>
-  (conj_tac >- metis_tac[call_entry_stack_check] >> asm_rewrite_tac[])
-QED
-
 Theorem call_preserves_deployed:
   deployed tops runtime_bc am tx.target /\ call_tx_well_typed tx /\
   runtime_bc <> [] /\ call_entry_rel am tx es /\ LENGTH es.contexts = 1 /\
@@ -500,6 +471,56 @@ Proof
   qpat_x_assum `deployed _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [deployed_def]) >>
   drule_all call_frame_preserves_call_ready >> simp[call_ready_deployed]
+QED
+
+(* TOP-LEVEL: call correctness and preservation of a surviving deployment. *)
+Theorem vyper_call_correct_deployed:
+  !fin policy tops deploy_bc runtime_bc am tx es H.
+    fin IN accepted_finalizers /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    deployed tops runtime_bc am tx.target /\
+    call_tx_well_typed tx /\ call_entry_rel am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    storage_ok H am tx /\
+    call_within H tops am tx es
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_starved es r es' \/
+       calldata_result_rel H tops am tx es r es') /\
+      (LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete ==>
+       deployed tops runtime_bc (transaction_world am r es') tx.target)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `runtime_bc <> []` by
+    (fs[accepted_finalizers_def]
+     >- (gvs[] >> metis_tac[compile_vyper_runtime_nonempty]) >>
+     gvs[] >> drule compile_vyper_runtime_phases_asm_opt >>
+     metis_tac[codegen_assembly_finalizer_nonempty]) >>
+  `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es` by
+    simp[call_premises_deployed] >>
+  drule_all e2eCorrectnessTheory.vyper_call_correct >>
+  disch_then (qx_choosel_then [`r`, `es'`]
+    (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
+  reverse conj_tac
+  >- (strip_tac >> Cases_on `r = INR NONE` >> simp[transaction_world_def] >>
+      Cases_on `call_external NONE [] am tx` >>
+      rename1 `call_external NONE [] am tx = (res, output)` >>
+      PairCases_on `output` >>
+      rename1 `call_external NONE [] am tx = (res, am_out, rqs)` >>
+      `next_source_machine am_out es' = next_source_machine am es'` by
+        (irule call_external_next_source_machine >>
+         fs[call_state_rel_def] >> metis_tac[]) >>
+      drule_all call_preserves_deployed >> simp[]) >>
+  qpat_x_assum `frame_resource_starved _ _ _ \/ _` strip_assume_tac >>
+  asm_rewrite_tac[] >>
+  DISJ1_TAC >>
+  qpat_x_assum `frame_resource_starved _ _ _`
+    (strip_assume_tac o REWRITE_RULE [frame_resource_starved_def]) >>
+  PURE_REWRITE_TAC [frame_starved_def] >>
+  qexistsl_tac [`exc`, `out`, `lgs`] >>
+  (conj_tac >- metis_tac[call_entry_stack_check] >> asm_rewrite_tac[])
 QED
 
 (* The per-filling form of the deployed call gas companion. *)
