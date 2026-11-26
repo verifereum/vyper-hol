@@ -7,7 +7,7 @@ Ancestors fragGasOriginPtrLoop[qualified,ignore_grammar]
   typedMemoryCopy exprSafeOperand exprLoweringProps emitHelperProps
   fragGasOriginPtr bodyFullPostsMods loweringPosts bodyPtrDefs
   codegenRel compileEnv context venomState finite_map words ptrDiscipline
-  fragExec emitHelper exprLowering
+  fragExec emitHelper exprLowering createSizeExit
 
 Theorem default_shell_linked[local]:
   emit_op RETURNDATASIZE [] ar = (rds,a1) /\
@@ -204,37 +204,11 @@ Theorem extcall_default_entry_mods:
        (wb_frame cenv es ee sa s0 a ==> wb_frame cenv es ee sa s0 u))
 Proof
   strip_tac >>
-  drule_then strip_assume_tac return_default_path_intervals >>
-  drule_all_then strip_assume_tac return_default_intervals_code >>
-  drule_all_then assume_tac default_shell_next_var >>
-  `a.vs_returndata = []` by simp[] >>
-  drule_all default_shell_linked >>
-  disch_then (qspecl_then [`tm`,`explicit`,`PG`,`J`]
-    (qx_choosel_then [`u`,`Gu`,`tu`] strip_assume_tac)) >>
-  `ds.cs_current_bb = dl /\ ds.cs_current_insts = []` by
-    (qpat_assum `new_block dl a6 = (_,ds)` (mp_tac o MATCH_MP new_block_props) >> simp[]) >>
-  `!x. not_fresh_at ar x ==> not_fresh_at ds x` by
-    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `ar` >> simp[]) >>
-  `local_ptrs_reserved cenv ds` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `ar` >> simp[]) >>
-  `!op. safe_operand ar op ==> eval_operand op u = eval_operand op a /\
-      op_taint tu op = op_taint tm op /\ (!x. op = Var x ==> not_fresh_at ds x)` by
-    (Cases_on `op` >> simp[safe_operand_def,eval_operand_def,op_taint_def] >>
-     rpt strip_tac >> first_x_assum drule >> simp[op_taint_def]) >>
-  `lookup_var q u = SOME dw /\ FLOOKUP Gu q = SOME (w2n dw,n) /\ ptr_covers Gu tu q u n` by
-    (qpat_assum `!x. not_fresh_at ar x ==> lookup_var x u = _ /\ _`
-       (qspec_then `q` assume_tac) >>
-     qpat_assum `not_fresh_at ar q ==> _` (drule_then strip_assume_tac) >>
-     qpat_x_assum `ptr_covers J tm q a n` mp_tac >>
-     pure_rewrite_tac[ptr_covers_def] >> simp[]) >>
-  `!x. dop = Var x ==> not_fresh_at ds x` by
-    (qpat_assum `!op. safe_operand ar op ==> _`
-       (qspec_then `dop` mp_tac) >> simp[]) >>
-  `!x. addr = Var x ==> not_fresh_at ds x` by
-    (qpat_assum `!op. safe_operand ar op ==> _`
-       (qspec_then `addr` mp_tac) >> simp[]) >>
+  drule_all extcall_default_entry_tmem_mods >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`ds`,`de`,`ck`,`dj`,`xl`,`cj`,`old3`,`u`,`Gu`,`tu`] strip_assume_tac)) >>
   qexistsl_tac [`ds`,`de`,`ck`,`dj`,`xl`,`cj`,`old3`,`u`,`Gu`,`tu`] >>
-  simp[] >> rpt conj_tac >> first_assum (irule_at Any) >> first_assum ACCEPT_TAC
+  simp[]
 QED
 
 Theorem default_shell_code_agrees[local]:
@@ -320,7 +294,7 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >- metis_tac[]
 QED
 
-Theorem extcall_default_exit_mods:
+Theorem extcall_default_exit_create_size_mods:
   compile_store_memory cenv dop (Var q) rt dt ds = ((),de) /\
   (if skip then comp_return () else compile_extcodesize_check addr) de = ((),ck) /\
   fn_has_code de ck func /\ emit_inst JMP [Label xl] [] ck = ((),dj) /\
@@ -354,7 +328,9 @@ Theorem extcall_default_exit_mods:
   else
     ?r Gz tz.
       (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (r,Gz,tz)) /\
-      exit_result r /\ expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
+      exit_result r /\
+      create_size_exit_ok ctx (INR (Error (RuntimeError "ExtCall target has no code"))) r /\
+      expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
 Proof
   strip_tac >>
   `eval_operand addr p = SOME aw` by
@@ -375,7 +351,7 @@ Proof
   suspend "abort"
 QED
 
-Resume extcall_default_exit_mods[abort]:
+Resume extcall_default_exit_create_size_mods[abort]:
   `~skip /\ ~ext_call_has_code target ee.accounts` by fs[] >>
   `compile_extcodesize_check addr de = ((),ck)` by fs[] >>
   `(n2w (LENGTH (lookup_account (w2w aw) p.vs_accounts).code) : bytes32) = 0w` by fs[] >>
@@ -404,7 +380,8 @@ Resume extcall_default_exit_mods[abort]:
              vs_inst_idx := SUC (LENGTH de.cs_current_insts))))`,
        `Gp \\ STRING #"%" (toString de.cs_next_var)`,
        `tp with t_var := tp.t_var |+ (STRING #"%" (toString de.cs_next_var),{})`] >>
-  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def] >>
+  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
+       createSizeExitTheory.create_size_exit_ok_non_exhalt] >>
   gen_tac >>
   qpat_assum `!D. gas_origin_ptr_path _ (u,Gu,tu) [] (OK p,Gp,tp)`
     (qspec_then `D` mp_tac) >>
@@ -414,7 +391,7 @@ Resume extcall_default_exit_mods[abort]:
   metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append,listTheory.APPEND]
 QED
 
-Resume extcall_default_exit_mods[success]:
+Resume extcall_default_exit_create_size_mods[success]:
   qabbrev_tac `out = STRING #"%" (toString de.cs_next_var)` >>
   qabbrev_tac `w:bytes32 = n2w (LENGTH (lookup_account (w2w aw) p.vs_accounts).code)` >>
   qabbrev_tac `v = if skip then p else update_var out w p with
@@ -441,7 +418,7 @@ Resume extcall_default_exit_mods[success]:
   suspend "join_post"
 QED
 
-Resume extcall_default_exit_mods[join_post]:
+Resume extcall_default_exit_create_size_mods[join_post]:
   qabbrev_tac `z = jump_to xl v` >>
   `ds.cs_next_var <= de.cs_next_var` by
     (qpat_assum `compile_store_memory _ _ _ _ _ ds = _` mp_tac >>
@@ -486,7 +463,7 @@ Resume extcall_default_exit_mods[join_post]:
   suspend "join_fields"
 QED
 
-Resume extcall_default_exit_mods[join_fields]:
+Resume extcall_default_exit_create_size_mods[join_fields]:
   `z.vs_memory = p.vs_memory /\ z.vs_allocas = u.vs_allocas /\
    z.vs_alloca_next = u.vs_alloca_next /\ ~z.vs_halted /\
    (allocas_below_fmp z <=> allocas_below_fmp p)` by
@@ -505,4 +482,47 @@ Resume extcall_default_exit_mods[join_fields]:
   qexistsl_tac [`z`,`Gc`,`tc`] >> simp[]
 QED
 
-Finalise extcall_default_exit_mods
+Finalise extcall_default_exit_create_size_mods
+
+Theorem extcall_default_exit_mods:
+  compile_store_memory cenv dop (Var q) rt dt ds = ((),de) /\
+  (if skip then comp_return () else compile_extcodesize_check addr) de = ((),ck) /\
+  fn_has_code de ck func /\ emit_inst JMP [Label xl] [] ck = ((),dj) /\
+  fn_has_code ck dj func /\ new_block xl cj = (old3,sb) /\
+  stmt_state_rel H ctx func cenv cx ee u /\ accounts_runtime_well_typed ee.accounts /\
+  w2w (aw:bytes32) = target /\ eval_operand addr u = SOME aw /\ op_taint tu addr = {} /\
+  (!x. addr = Var x ==> not_fresh_at ds x) /\
+  alloca_history func u /\ allocas_from lo u /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK p,Gp,tp)) /\
+  typed_copy_state_frame ds off (type_memory_size rtv) u p /\
+  (!mem. mem_agree_outside tp.t_mem p.vs_memory mem ==> val_in_memory rtv dv off mem) /\
+  (!x. not_fresh_at ds x ==> FLOOKUP Gp x = FLOOKUP Gu x /\
+       op_taint tp (Var x) = op_taint tu (Var x)) /\
+  (!i. ~(off <= i /\ i < off + type_memory_size rtv) ==> (i IN tp.t_mem <=> i IN tu.t_mem)) /\
+  tp.t_stor = tu.t_stor /\ tp.t_trans = tu.t_trans /\ tp.t_imm = tu.t_imm /\
+  ~p.vs_halted /\ p.vs_current_bb = de.cs_current_bb /\ p.vs_inst_idx = LENGTH de.cs_current_insts ==>
+  if skip \/ ext_call_has_code target ee.accounts then
+    ?z Gz tz.
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)) /\
+      typed_copy_state_frame ds off (type_memory_size rtv) u z /\
+      (!mem. mem_agree_outside tz.t_mem z.vs_memory mem ==> val_in_memory rtv dv off mem) /\
+      (!x. not_fresh_at ds x ==> FLOOKUP Gz x = FLOOKUP Gu x /\
+           op_taint tz (Var x) = op_taint tu (Var x)) /\
+      (!i. ~(off <= i /\ i < off + type_memory_size rtv) ==> (i IN tz.t_mem <=> i IN tu.t_mem)) /\
+      tz.t_stor = tu.t_stor /\ tz.t_trans = tu.t_trans /\ tz.t_imm = tu.t_imm /\
+      z.vs_memory = p.vs_memory /\ z.vs_allocas = u.vs_allocas /\
+      z.vs_alloca_next = u.vs_alloca_next /\ alloca_history func z /\
+      allocas_from lo z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+      ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts
+  else
+    ?r Gz tz.
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (r,Gz,tz)) /\
+      exit_result r /\ expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
+Proof
+  strip_tac >>
+  drule_all extcall_default_exit_create_size_mods >>
+  Cases_on `skip \/ ext_call_has_code target ee.accounts` >> simp[] >>
+  strip_tac >> qexistsl_tac [`r`,`Gz`,`tz`] >> simp[] >>
+  Cases_on `r` >> gvs[exprSimDefsTheory.expr_exit_def]
+QED
