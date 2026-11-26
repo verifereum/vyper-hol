@@ -50,6 +50,47 @@ Proof
       simp[GSYM loweringStateRelDefsTheory.regions_disjoint_def] >> first_assum ACCEPT_TAC)
 QED
 
+Theorem abi_encode_copied_row_L1428:
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  compile_snapshot_vv ce T (ext_call_arg_value (lowered_value_type ce e) vv) sm = (sv,ss) /\
+  ~is_word_type (lowered_value_type ce e) /\
+  sv = LocatedValue (lowered_value_type ce e) (mk_ptr (Var p) LocMemory) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME rt /\
+  type_memory_bytes ce (lowered_value_type ce e) = type_memory_size rt /\
+  val_wf rt v /\
+  FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,type_memory_size rt) /\
+  lookup_var p u = SOME w /\
+  ptr_covers Gu tu p u (type_memory_size rt) /\
+  w2n w + type_memory_size rt <= u.vs_alloca_next /\
+  (!m. mem_agree_outside tu.t_mem u.vs_memory m ==> val_in_memory rt v (w2n w) m) /\
+  (!n b sz. local_region ce ee.scopes u n b sz ==>
+     loweringStateRelDefs$regions_disjoint (w2n w) (type_memory_size rt) b sz) /\
+  sm.cs_next_id < ss.cs_next_id /\
+  sm.cs_next_var <= ss.cs_next_var /\
+  local_ptrs_reserved ce si /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) ==>
+  abi_encode_saved_row_mods lo ce cx si ss e sv v si sm ss vv T H ee Gu tu u
+Proof
+  strip_tac >>
+  drule_then strip_assume_tac compile_expr_extends >>
+  `val_in_memory rt v (w2n w) u.vs_memory` by fs[mem_agree_outside_def] >>
+  `val_footprint rt v <= type_memory_size rt /\ val_store_size rt v <= type_memory_size rt`
+    by simp[val_footprint_le,val_store_size_le] >>
+  qpat_assum `ptr_covers _ _ _ _ _` (strip_assume_tac o REWRITE_RULE [ptr_covers_def]) >>
+  gvs[abi_encode_saved_row_mods_def,vv_location_def,vv_operand_def,mk_ptr_def,eval_operand_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac
+  >- (simp[ptr_buf_ok_def,eval_operand_def] >> strip_tac >>
+      qexistsl_tac [`b`,`sz'`] >> simp[]) >>
+  qexists_tac `Value v` >>
+  simp[vv_holds_mods_def,vv_holds_def,vv_at_def,ptr_vv_ok_def,ptr_mem_ok_def,
+       vv_store_bound_def,eval_operand_def,read_result_def,return_def] >>
+  rpt conj_tac
+  >- (disj1_tac >> qexists_tac `sm.cs_next_id` >>
+      simp[GSYM loweringStateRelDefsTheory.regions_disjoint_def] >> first_assum ACCEPT_TAC)
+QED
+
 Theorem abi_encode_head_copy_mods:
   expr_body_pre_mods mods ce cx env e es /\
   body_const_cells_agree_mods mods cx env es /\
@@ -92,7 +133,8 @@ Theorem abi_encode_head_copy_mods:
     ~u.vs_halted /\ u.vs_current_bb = ss.cs_current_bb /\ u.vs_inst_idx = LENGTH ss.cs_current_insts /\
     alloca_history func u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     s0.vs_alloca_next <= u.vs_alloca_next /\ return_buf_frame d ce ss u /\
-    wb_frame ce es ee si s0 u /\ ghost_kept_at lo ce es si G0 tn0 s0 Gu tu /\
+    wb_frame ce es ee si s0 u /\
+    (~expr_has_effect e ==> pure_frame ce func es si s0 u) /\ ghost_kept_at lo ce es si G0 tn0 s0 Gu tu /\
     MAP FDOM ee.scopes = MAP FDOM es.scopes /\
     expr_sim_inv_mods mods ce cx env ee /\ body_const_cells_agree_mods mods cx env ee /\
     (!x w. not_fresh_at si x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
@@ -123,10 +165,10 @@ Proof
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[storage_trace_domain_def] >>
-  drule_all qualified_snapshot_store_entry_mods >>
+  drule_all qualified_snapshot_store_entry_pure_mods >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choosel_then [`p`,`dw`,`src`,`sw`,`su`,`z`,`Gz`,`tz`,`rt`]
-      (map_every assume_tac o CONJUNCTS))) >>
+      (CONJUNCTS_THEN2 assume_tac (map_every assume_tac o CONJUNCTS)))) >>
   suspend "store"
 QED
 
@@ -184,6 +226,35 @@ Resume abi_encode_head_copy_mods[frame]:
   `(ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
     (drule_then (fn th => simp[th]) typed_copy_state_frame_allocas_below_fmp) >>
   `lookup_var p u = SOME dw` by fs[] >>
+  `u.vs_allocas = z.vs_allocas` by
+    (qpat_assum `typed_copy_state_frame _ _ _ z u`
+      (mp_tac o REWRITE_RULE [typed_copy_state_frame_def]) >>
+     simp[venom_state_component_equality]) >>
+  `~expr_has_effect e ==> pure_frame ce func es si s0 u` by
+    (disch_tac >>
+     qpat_assum `~expr_has_effect e ==> pure_frame ce func es si s0 z`
+       (drule_then assume_tac) >>
+     irule pure_frame_buffer_tail >>
+     qpat_assum `pure_frame ce func es si s0 z` (irule_at Any) >>
+     qpat_assum `MEM (mk_inst sm.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+     qpat_assum `typed_copy_state_frame _ _ _ z u`
+       (strip_assume_tac o REWRITE_RULE [typed_copy_state_frame_def]) >>
+     qpat_assum `typed_copy_frame _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [typed_copy_frame_def]) >>
+     qexistsl [`type_memory_size rt`,`w2n dw`] >>
+     simp[venomInstTheory.mk_inst_def,loweringStateRelDefsTheory.regions_disjoint_def] >>
+     conj_tac
+     >- (rpt strip_tac >>
+         qpat_assum `!name b len. local_region ce es.scopes s0 name b len ==> _`
+           drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
+     >- (rpt gen_tac >> disch_tac >>
+         qpat_assum `!a n. _ ==> mem_bytes_at a n u.vs_memory = _`
+           (qspecl_then [`off`,`len`] mp_tac) >>
+         (impl_tac >-
+          (qpat_x_assum `len + off ≤ w2n dw \/ type_memory_size rt + w2n dw ≤ off`
+             mp_tac >>
+           qpat_x_assum `val_store_size rt v ≤ type_memory_size rt` mp_tac >>
+           simp[] >> decide_tac)) >> simp[])) >>
   `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,Gu,tu)` by
     (gen_tac >> irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gz`,`z`,`tz`] >> simp[]) >>
   suspend "post"
@@ -203,13 +274,14 @@ Resume abi_encode_head_copy_mods[post]:
   >- (qx_gen_tac `h` >> strip_tac >> conj_tac
       >- (qpat_assum `sv = LocatedValue _ _`
             (fn th => once_rewrite_tac [GSYM (REWRITE_RULE [mk_ptr_def] th)]) >>
-          irule abi_encode_copied_row >>
+          irule abi_encode_copied_row_L1428 >>
           qpat_assum `lookup_var p u = SOME dw` (irule_at Any) >>
-          simp[] >> first_assum ACCEPT_TAC) >>
-      qpat_assum `!H. valid_horizon _ _ _ _ ==> stmt_state_rel _ _ _ _ _ _ u /\ _`
-        (qspec_then `h` (drule_then (ACCEPT_TAC o cj 2))))
+          simp[] >> first_assum ACCEPT_TAC)
+      >- (qpat_assum `!H. valid_horizon _ _ _ _ ==> stmt_state_rel _ _ _ _ _ _ u /\ _`
+            (qspec_then `h` (drule_then (ACCEPT_TAC o cj 2)))) )
   >- (rpt strip_tac >> drule_all_then ACCEPT_TAC exprSimWordArgsTheory.wb_frame_vars) >>
   qexistsl_tac [`z`,`Gz`,`tz`,`su`,`dw`] >> simp[eval_operand_def]
 QED
 
 Finalise abi_encode_head_copy_mods
+
