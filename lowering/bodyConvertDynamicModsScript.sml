@@ -2,7 +2,8 @@
 Theory bodyConvertDynamicMods
 Ancestors
   bodyConvertDynamicEntryMods bodyConvertOperandBufferMods bodyConvertSourceWindowMods
-  bodyConvertSelectedSuffixMods bodyConvertZeroCapacityMods bodyConvertWordEndpointMods
+  bodyConvertSelectedSuffixMods bodyConvertSelectedSuffixRevertMods
+  bodyConvertZeroCapacityMods bodyConvertWordEndpointMods
   bodyConvertReachedBindMods bodyForcedStorageFrameMods bodyAggregateReadMods
   bodyAggregateReadPostMods bodyCopyReadPhysicalTypeMods bodyPtrSignedConvertLayout
   bodyPtrTypeBuiltinsBytesWordInputs bodyFullPathHistory bodyWriteSubscriptSourceMods
@@ -162,12 +163,12 @@ QED
 Theorem dynamic_convert_failure[local]:
   convert_result cx (expr_type e) dst v = INR (Error (RuntimeError msg)) /\
   (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-    (t,G,tn) [] (Abort err u,Gf,tnf)) /\ ~t.vs_halted ==>
+    (t,G,tn) [] (Abort Revert_abort u,Gf,tnf)) /\ ~t.vs_halted ==>
   gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) ce.ce_modules cx st0
     ^convert_action (ee,t,G,tn) ^word_post ^convert_exit
 Proof
   strip_tac >> irule gas_outcome_full_mods_exit >> simp[] >>
-  qexistsl_tac [`Gf`,`ee`,`Abort err u`,`INR (Error (RuntimeError msg))`,`tnf`] >>
+  qexistsl_tac [`Gf`,`ee`,`Abort Revert_abort u`,`INR (Error (RuntimeError msg))`,`tnf`] >>
   simp[exit_result_def,expr_exit_def,haltExitProjTheory.halt_exit_not_halt]
 QED
 
@@ -281,7 +282,7 @@ Proof
   drule_all (BETA_RULE dynamic_convert_window) >>
   disch_then (qx_choosel_then [`rt`,`rty`,`z`,`a`,`n`] (map_every assume_tac o CONJUNCTS)) >>
   qpat_x_assum `op = Var z` SUBST_ALL_TAC >>
-  drule_all convert_selected_suffix_mods >>
+  drule_all convert_selected_suffix_revert_mods >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   Cases_on `convert_result cx (expr_type e) dst v`
   >- (qpat_x_assum `!w. INL _ = INL w ==> _`
@@ -303,8 +304,8 @@ Proof
   qpat_assum `convert_result _ _ _ _ = INR _` (SUBST1_TAC o SYM) >>
   irule dynamic_convert_failure >>
   goal_assum (drule_at Any) >> simp[] >>
-  rename1 `gas_origin_ptr_path _ _ _ (Abort err u,Gf,tnf)` >>
-  qexistsl_tac [`Gf`,`err`,`tnf`,`u`] >> first_assum ACCEPT_TAC
+  rename1 `gas_origin_ptr_path _ _ _ (Abort Revert_abort u,Gf,tnf)` >>
+  qexistsl_tac [`Gf`,`tnf`,`u`] >> first_assum ACCEPT_TAC
 QED
 
 Theorem dynamic_convert_pair_run[local]:
