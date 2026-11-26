@@ -328,10 +328,10 @@ Resume extract32_suffix_mods[abort]:
   markerLib.RESUME_TAC >>
   qpat_x_assum `_ = RuntimeError _` SUBST_ALL_TAC >>
   drule_all_then strip_assume_tac extract32_suffix_abort_path >>
-  irule gas_outcome_full_mods_exit >> simp[] >>
+  irule gas_outcome_full_mods_exit_revert >> simp[] >>
   rename1 `evaluate_extract32 bs (Num i) bt = INR (RuntimeError msg)` >>
-  qexistsl_tac [`HG`,`ee`,`Abort Revert_abort (t with vs_inst_idx := j)`,
-    `INR (vyperState$Error (RuntimeError msg))`,`th`] >>
+  qexistsl_tac [`HG`,`ee`,`INR (vyperState$Error (RuntimeError msg))`,`th`,
+    `t with vs_inst_idx := j`] >>
   simp[exit_result_def] >> conj_tac
   >- simp[evaluate_type_builtin_def, lift_sum_def, bind_def, raise_def] >>
   rpt strip_tac >> simp[expr_exit_def, halt_exit_not_halt] >>

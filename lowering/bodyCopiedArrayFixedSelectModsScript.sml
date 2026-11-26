@@ -93,9 +93,9 @@ Proof
     simp[eval_operand_def,op_taint_def,op_prov_def] >>
   drule_all array_bounds_check_joint_oob_frame >>
   disch_then (qspec_then `PG` (qx_choosel_then [`Gf`,`tf`,`t`] strip_assume_tac)) >>
-  irule gas_outcome_full_mods_exit >> simp[] >>
-  qexistsl_tac [`Gf`,`fin`,`Abort Revert_abort t`,
-    `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tf`] >>
+  irule gas_outcome_full_mods_exit_revert >> simp[] >>
+  qexistsl_tac [`Gf`,`fin`,
+    `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tf`,`t`] >>
   simp[exit_result_def,copied_vv_exit_mods_def,expr_exit_def,halt_exit_def]
 QED
 
