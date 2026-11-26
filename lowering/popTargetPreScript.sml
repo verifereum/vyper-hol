@@ -45,6 +45,25 @@ Proof
   metis_tac[]
 QED
 
+Theorem pop_target_root_allocated_mods:
+  expr_body_pre_mods mods cenv cx env (Pop ann bt) es /\
+  target_root bt = TopLevelNameTarget nsid /\
+  IS_SOME (FLOOKUP env.bare_global_assignable nsid) ==>
+  IS_SOME (FLOOKUP cenv.ce_module_vars nsid)
+Proof
+  strip_tac >>
+  `MEM (WriteAcc (StateRef nsid)) (accesses_target bt)` by
+    (qpat_x_assum `target_root bt = TopLevelNameTarget nsid` mp_tac >>
+     qid_spec_tac `bt` >>
+     ho_match_mp_tac base_assignment_target_induct >>
+     rw[target_root_def, vyperSubscriptOverlapTheory.accesses_expr_def, MEM_APPEND]) >>
+  qpat_x_assum `expr_body_pre_mods _ _ _ _ _ _` mp_tac >>
+  simp[expr_body_pre_mods_def, supported_expr_exists_def,
+       unallocated_bare_global_root_def, optionTheory.IS_SOME_EXISTS] >>
+  Cases_on `FLOOKUP cenv.ce_module_vars nsid` >> simp[] >>
+  metis_tac[optionTheory.IS_SOME_EXISTS]
+QED
+
 Theorem target_pre_of_pop_mods:
   !mods cenv cx env ann bt es.
     expr_body_pre_mods mods cenv cx env (Pop ann bt) es /\ ~immutable_root cx bt ==>
