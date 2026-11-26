@@ -2,7 +2,7 @@
    initializer's normal or exceptional endpoint therefore has a horizon. *)
 Theory groupedDefaultOutcome
 Ancestors
-  gasOutcomeFull gasStorage gasExemptCert gasSummary groupedDefaultHorizon
+  createSizeExit gasOutcomeFull gasStorage gasExemptCert gasSummary groupedDefaultHorizon
   vyperStorageFootprint vyperInterpreter vyperState vyperEvalReadingErrors fragExec list
 
 Theorem grouped_default_initializer_outcome:
@@ -20,7 +20,8 @@ Theorem grouped_default_initializer_outcome:
       !H. valid_horizon cx st0 H ee.storage_trace ==>
         gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,tn) marks (r,J,u) /\
         ((?t. r = OK t /\ Q H res (ee with gas_obs := []) J u t) \/
-         (exit_result r /\ R H res (ee with gas_obs := []) (J,u) r))) \/
+         (exit_result r /\ create_size_exit_ok ctx res r /\
+          R H res (ee with gas_obs := []) (J,u) r))) \/
      (?err H leaf leaf_pg leaf_g leaf_tn finish.
        res = INR (Error err) /\ unspecified_behaviour_exempt tops err /\
        valid_horizon cx st0 H es.storage_trace /\
