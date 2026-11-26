@@ -1,7 +1,18 @@
 Theory runtimeSymSrcDataExprBodies
 Ancestors
   runtimeSymSrcDataFrame exprLowering emitHelper compileEnv builtinAbi builtinBytes context exprCallBounds
-  exprLoweringEquations
+  exprLoweringEquations symbolicSourceBoolChainFrame
+
+Theorem runtime_data_frame_compile_bool_chain_ops[local]:
+  (!e. MEM e es ==> runtime_data_frame (lower_value f ce (BaseT BoolT) e)) ==>
+  runtime_data_frame (compile_bool_chain_ops f ce d r exit_lbl es)
+Proof
+  strip_tac >>
+  irule (REWRITE_RULE [symbolic_frame_runtime]
+    (Q.ISPEC `\data (s:compile_state) t. s = t /\ s.cs_data_sections = data`
+      (Q.GEN `R` symbolic_frame_compile_bool_chain_ops))) >>
+  simp[]
+QED
 
 Theorem runtime_data_frame_type_builtin_dispatch_body:
   (!ty e. runtime_data_frame (lower_value cfn cenv ty e)) /\
@@ -164,7 +175,8 @@ Proof
        oneline as_stack_val_def, oneline as_ptr_val_def,
        REWRITE_RULE [runtime_data_frame_def] runtime_data_frame_emit_inst,
        REWRITE_RULE [runtime_data_frame_def] runtime_data_frame_emit_op,
-       REWRITE_RULE [runtime_data_frame_def] runtime_data_frame_emit_void] >>
+       REWRITE_RULE [runtime_data_frame_def] runtime_data_frame_emit_void,
+       REWRITE_RULE [runtime_data_frame_def] runtime_data_frame_new_block] >>
   all_tac
   >~ [`compile_keccak256_word`]
   >- (Cases_on `expr_type (HD args)` >> simp[] >>
@@ -183,5 +195,13 @@ Proof
   >>~- ([`bytestring_literal_hash`],
         Cases_on `bytestring_literal_hash (HD args)` >>
         Cases_on `bytestring_literal_hash (HD (TL args))` >> simp[]) >>
-  Cases_on `method_id_literal (HD args)` >> simp[]
+  Cases_on `method_id_literal (HD args)` >> simp[] >>
+  simp[runtimeSymSrcDataFrameTheory.runtime_data_frame_def,
+       CONV_RULE (RAND_CONV (REWR_CONV runtime_data_frame_def))
+         (valOf (DB.local_thm "runtime_data_frame_compile_bool_chain_ops")),
+       (valOf (DB.local_thm "runtime_data_frame_compile_bool_chain_ops")),
+       exprLoweringTheory.compile_bool_chain_ops_def,
+       exprLoweringTheory.bool_chain_operands_def,
+       compileEnvTheory.fresh_var_def, compileEnvTheory.fresh_label_def,
+       exprLoweringTheory.lower_value_def]
 QED
