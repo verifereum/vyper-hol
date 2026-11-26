@@ -118,7 +118,7 @@ Proof
   qexistsl [`exps`, `shadow_func`, `shadow_sa`, `shadow_sb`, `src`, `tops`] >>
   simp[] >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es'` by
-    FAIL_TAC "reuse keyword_read_admissible" >>
+    (drule_then ACCEPT_TAC bodyExtKeywordScalarJoinModsTheory.keyword_read_admissible) >>
   irule (CONV_RULE (DEPTH_CONV BETA_CONV) extcall_keyword_head_outcome_mods) >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (disch_tac >>
