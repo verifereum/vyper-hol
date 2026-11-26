@@ -63,7 +63,7 @@ Proof
   strip_tac >> irule not_fresh_at_mono >> qexists `a` >> fs[ci_mono_def]
 QED
 
-Theorem ecadd_stage_mods:
+Theorem ecadd_stage_with_suffix_mods:
   compile_ecadd_points (Var p) (Var q) sf = (res,sb) /\
   compile_ecadd_points (Var p) (Var q) shf = (shres,shb) /\
   gas_shadow_state sf shf /\ gas_shadow_context ctx shctx /\
@@ -91,6 +91,10 @@ Theorem ecadd_stage_mods:
   (!i. w2n wp <= i /\ i < w2n wp+64 ==> i NOTIN tn.t_mem) /\
   (!i. w2n wq <= i /\ i < w2n wq+64 ==> i NOTIN tn.t_mem) ==>
   ?ib ca cp ob sm shm src dst gv cv bb wi wo u Gu tnu.
+    (do gas <- emit_op GAS [];
+        success <- emit_op STATICCALL
+          [gas; Lit 6w; Var src; Lit 128w; Var dst; Lit 64w];
+        emit_void ASSERT [success]; return (Var dst) od) sm = (res,sb) /\
     compile_alloc_buffer 128 sf = (ib,ca) /\ compile_alloc_buffer 64 cp = (ob,sm) /\
     ib.buf_operand = Var src /\ ob.buf_operand = Var dst /\ res = Var dst /\ shres = res /\
     gas_shadow_state sm shm /\ fn_has_code sm sb func /\ fn_has_code shm shb shfunc /\
@@ -157,7 +161,7 @@ Proof
   qabbrev_tac `explicit = gas_explicit_sites ctx shctx` >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
     (qspec_then `H0` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  drule_all ecadd_launch_code_mods >>
+  drule_all ecadd_launch_code_with_suffix_mods >>
   disch_then (qx_choosel_then [`ib`,`ca`,`c1`,`c2`,`c3`,`cpost`,`ob`,`sm`,`shm`,
                               `src`,`dst`,`gv`,`cv`] strip_assume_tac) >>
   `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_mods_def] >>
@@ -406,6 +410,7 @@ Proof
   asm "input_operand" assume_tac >>
   qexistsl_tac [`ib`,`ca`,`cpost`,`ob`,`sm`,`shm`,`src`,`dst`,`gv`,`cv`,`bb`,
                 `wi`,`wo`,`u`,`Gu`,`tnu`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   rpt (first_assum ACCEPT_TAC ORELSE conj_tac)
   >- (rpt strip_tac >> simp[])
   >- (rpt strip_tac >> simp[])
@@ -431,4 +436,100 @@ Proof
   qpat_assum `ghost_inv_at_mods (DF H) _ _ _ _ _ Gu tnu u`
     (strip_assume_tac o REWRITE_RULE[ghost_inv_at_mods_def]) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem ecadd_stage_mods:
+  compile_ecadd_points (Var p) (Var q) sf = (res,sb) /\
+  compile_ecadd_points (Var p) (Var q) shf = (shres,shb) /\
+  gas_shadow_state sf shf /\ gas_shadow_context ctx shctx /\
+  ctx_inst_ids_distinct ctx /\ gas_shadow_function func shfunc /\
+  MEM func ctx.ctx_functions /\ MEM shfunc shctx.ctx_functions /\
+  fn_has_code sf sb func /\ fn_has_code shf shb shfunc /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sf /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sf x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sf x) /\
+  (lo <> 0 ==> !x. ce.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sf x) /\
+  ~s.vs_halted /\ s.vs_current_bb = sf.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sf.cs_current_insts /\ alloca_history func s /\
+  valid_horizon cx st0 H0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s /\ immutable_frame_mods func ce cx es s /\
+     storage_well_formed_on cx es (FST H) /\
+     ghost_inv_at_mods (DF H) lo d ce cx es G tn s) /\
+  expr_val_at ce cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lp sf es vp (Var p) s /\
+  expr_val_at ce cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lq sf es vq (Var q) s /\
+  lookup_var p s = SOME wp /\ lookup_var q s = SOME wq /\
+  ptr_covers G tn p s 64 /\ ptr_covers G tn q s 64 /\
+  not_fresh_at sf p /\ not_fresh_at sf q /\
+  w2n wp + 64 < dimword (:256) /\ w2n wq + 64 < dimword (:256) /\
+  w2n wp + 64 <= s.vs_alloca_next /\ w2n wq + 64 <= s.vs_alloca_next /\
+  (!i. w2n wp <= i /\ i < w2n wp+64 ==> i NOTIN tn.t_mem) /\
+  (!i. w2n wq <= i /\ i < w2n wq+64 ==> i NOTIN tn.t_mem) ==>
+  ?ib ca cp ob sm shm src dst gv cv bb wi wo u Gu tnu.
+    compile_alloc_buffer 128 sf = (ib,ca) /\ compile_alloc_buffer 64 cp = (ob,sm) /\
+    ib.buf_operand = Var src /\ ob.buf_operand = Var dst /\ res = Var dst /\ shres = res /\
+    gas_shadow_state sm shm /\ fn_has_code sm sb func /\ fn_has_code shm shb shfunc /\
+    ci_mono sf sm /\ ci_mono sm sb /\
+    emitted_insts sm sb =
+      [mk_inst sm.cs_next_id GAS [] [gv];
+       mk_inst (sm.cs_next_id+1) STATICCALL
+         [Var gv; Lit 6w; Var src; Lit 128w; Var dst; Lit 64w] [cv];
+       mk_inst (sm.cs_next_id+2) ASSERT [Var cv] []] /\
+    emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb /\
+    src <> gv /\ dst <> gv /\ src <> cv /\ dst <> cv /\
+    not_fresh_at sm src /\ not_fresh_at sm dst /\
+    ~not_fresh_at sm gv /\ ~not_fresh_at sm cv /\ local_ptrs_reserved ce sm /\
+    (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+    (lo <> 0 ==> !x. ce.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sm x) /\
+    ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts sm sb) (DROP u.vs_inst_idx bb.bb_instructions) /\
+    (func.fn_name,sm.cs_next_id) NOTIN gas_explicit_sites ctx shctx /\
+    lookup_var src u = SOME wi /\ lookup_var dst u = SOME wo /\
+    w2n wi+128 < dimword (:256) /\ w2n wo+64 < dimword (:256) /\
+    w2n wi+128 <= u.vs_alloca_next /\ w2n wo+64 <= u.vs_alloca_next /\
+    lo <= w2n wo /\ s.vs_alloca_next <= u.vs_alloca_next /\ alloca_history func u /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    MEM (mk_inst sf.cs_next_id ALLOCA [Lit 128w] [src]) (fn_insts func) /\
+    MEM (mk_inst cp.cs_next_id ALLOCA [Lit 64w] [dst]) (fn_insts func) /\
+    sf.cs_next_id <= cp.cs_next_id /\
+    FLOOKUP u.vs_allocas sf.cs_next_id = SOME (w2n wi,128) /\
+    FLOOKUP u.vs_allocas cp.cs_next_id = SOME (w2n wo,64) /\
+    regions_disjoint (w2n wo) 64 (w2n wi) 128 /\
+    mem_word_at (w2n wi) u.vs_memory = mem_word_at (w2n wp) s.vs_memory /\
+    mem_word_at (w2n wi+32) u.vs_memory = mem_word_at (w2n wp+32) s.vs_memory /\
+    mem_word_at (w2n wi+64) u.vs_memory = mem_word_at (w2n wq) s.vs_memory /\
+    mem_word_at (w2n wi+96) u.vs_memory = mem_word_at (w2n wq+32) s.vs_memory /\
+    pure_frame ce func es sf s u /\ wb_frame ce es es sf s u /\
+    (!z. not_fresh_at sf z ==> lookup_var z u = lookup_var z s) /\
+    (!i. w2n wi <= i /\ i < w2n wi+128 ==> i NOTIN tnu.t_mem) /\
+    ptr_covers Gu tnu src u 128 /\ ptr_covers Gu tnu dst u 64 /\
+    (!name b n. local_region ce es.scopes u name b n ==>
+       regions_disjoint (w2n wo) 64 b n) /\
+    (!aid b n. aid < sf.cs_next_id /\ FLOOKUP u.vs_allocas aid = SOME (b,n) ==>
+       regions_disjoint (w2n wo) 64 b n) /\
+    immutable_frame_mods func ce cx es u /\
+    (!src tops. ALOOKUP ce.ce_modules src = SOME tops /\ ce.ce_is_ctor ==>
+      (!name ty tv off. FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+        ce.ce_module_var_type (src,name) = SOME ty /\ evaluate_type (get_tenv cx) ty = SOME tv ==>
+        regions_disjoint (w2n wo) 64 off (type_memory_size tv)) /\
+      (!name tv iv off. FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+                  | SOME imms => get_source_immutables src imms) name = SOME (tv,iv) ==>
+        regions_disjoint (w2n wo) 64 off (type_memory_size tv))) /\
+    !H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shctx,ctx,func,PG)
+        (s,G,tn) [] (OK u,Gu,tnu) /\
+      ghost_kept_at lo ce es sf G tn s Gu tnu /\
+      stmt_state_rel H ctx func ce cx es u /\ storage_well_formed_on cx es (FST H) /\
+      ghost_inv_at_mods (DF H) lo d ce cx es Gu tnu u /\
+      local_ptrs_rel func ce es.scopes u /\ allocas_from lo u /\
+      stor_taint_ok_at (DF H) tnu u
+Proof
+  strip_tac >> mp_tac ecadd_stage_with_suffix_mods >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  rpt (ho_match_mp_tac MONO_EXISTS >> gen_tac) >>
+  disch_then (ACCEPT_TAC o CONJUNCT2)
 QED
