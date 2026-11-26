@@ -727,6 +727,9 @@ Proof
       qx_gen_tac `H` >> strip_tac >> BETA_TAC >>
       conj_tac
       >- (irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gu`,`u`,`tu`] >> simp[]) >>
+      conj_tac
+      >- (irule createSizeExitTheory.create_size_exit_ok_static >>
+          simp[halt_state_def, set_returndata_def]) >>
       simp[stmt_exit_ptr_def, expr_exit_def, halt_exit_def]) >>
   qabbrev_tac `done_es = mid with logs := mid.logs ++ [ev]` >>
   qabbrev_tac `fin = u with <|vs_logs := u.vs_logs ++ [ev];

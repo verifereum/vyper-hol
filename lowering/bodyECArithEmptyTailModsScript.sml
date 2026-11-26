@@ -26,6 +26,7 @@ Theorem ec_arith_empty_tail_mods:
   w2n wi + w2n an <= u.vs_alloca_next /\
   w2n wo + 64 <= u.vs_alloca_next /\
   ~u.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+  MEM func ctx.ctx_functions /\
   lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [gi;ci] (DROP u.vs_inst_idx bb.bb_instructions) /\
   (func.fn_name,id) NOTIN explicit /\
@@ -59,6 +60,17 @@ Proof
      gvs[eval_operand_def, lookup_var_def]) >>
   qabbrev_tac `bad = halt_state (set_returndata [] sg)
     with vs_inst_idx := SUC u.vs_inst_idx` >>
+  `lookup_block bad.vs_current_bb func.fn_blocks = SOME bb /\
+   get_instruction bb bad.vs_inst_idx = SOME ci` by
+    (simp[Abbr `bad`, Abbr `sg`, halt_state_def, set_returndata_def, update_var_def] >>
+     qpat_assum `isPREFIX [gi;ci] _`
+       (strip_assume_tac o MATCH_MP fragGasSeqAbortTheory.instruction_prefix_cursor) >>
+     drule fragGasSeqAbortTheory.instruction_prefix_cursor >> simp[]) >>
+  `ALL_DISTINCT (FLAT (MAP fn_labels ctx.ctx_functions)) ==>
+   ~oversized_create_abort ctx (Abort ExHalt_abort bad)` by
+    (strip_tac >> irule createSizeExitTheory.oversized_create_abort_non_create_cursor >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`bb`, `func`, `ci`] >> simp[mk_inst_def]) >>
   qabbrev_tac `Ga = step_prov PG Gu gi sg` >>
   qabbrev_tac `tna = step_taint gi u sg tnu` >>
   `!H. valid_horizon cx st0 H es2.storage_trace ==>
@@ -77,14 +89,18 @@ Proof
   qexists_tac `[F]` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`INR (Error (RuntimeError msg))`, `es2`,
     `Abort ExHalt_abort bad`, `Ga`, `tna`] >>
-  simp[exit_result_def, expr_exit_def, halt_exit_def] >>
+  simp[Excl "create_size_exit_ok_inr", exit_result_def, expr_exit_def, halt_exit_def] >>
   conj_tac >- metis_tac[ec_source_tail_gas_obs] >>
   gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _ /\ _`
     (drule_then strip_assume_tac) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [F] _`
     (drule_then assume_tac) >>
-  qpat_assum `gas_origin_ptr_path _ (t2,G2,tn2) [] _`
-    (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
-  simp[NoAsms] >> disch_then drule >> simp[NoAsms]
+  conj_tac
+  >- (qpat_assum `gas_origin_ptr_path _ (t2,G2,tn2) [] _`
+        (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
+      simp[NoAsms] >> disch_then drule >> simp[NoAsms]) >>
+  pure_rewrite_tac[createSizeExitTheory.create_size_exit_ok_def] >>
+  strip_tac >> qpat_assum `ALL_DISTINCT _ ==> ~oversized_create_abort _ _` drule >>
+  simp[]
 QED

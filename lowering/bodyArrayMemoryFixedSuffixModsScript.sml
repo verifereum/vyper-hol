@@ -207,9 +207,9 @@ Resume array_memory_fixed_suffix_mods[reject]:
     simp[eval_operand_def,op_taint_def,op_prov_def] >>
   drule_all array_bounds_check_joint_oob_frame >>
   disch_then (qspec_then `PG` (qx_choosel_then [`Gq`,`tq`,`q`] strip_assume_tac)) >>
-  simp[array_select_outcome_mods_def] >> irule gas_outcome_full_mods_exit >> simp[] >>
-  qexistsl [`Gq`,`fin`,`Abort Revert_abort q`,
-            `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tq`] >>
+  simp[array_select_outcome_mods_def] >> irule gas_outcome_full_mods_exit_revert >> simp[] >>
+  qexistsl [`Gq`,`fin`,
+            `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tq`,`q`] >>
   simp[exit_result_def,expr_exit_def,halt_exit_def]
 QED
 
