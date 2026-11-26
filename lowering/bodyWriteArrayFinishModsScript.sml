@@ -164,7 +164,7 @@ Proof
   Cases_on `idx_in_range (is_signed_type (expr_type e)) iw nw`
   >- suspend "normal" >>
   gs[] >> irule gas_outcome_full_mods_exit_revert >> simp[] >>
-  qexistsl [`G3`,`mid2`,`Abort Revert_abort t3`,`INR (Error (RuntimeError msg))`,`tn3`] >>
+  qexistsl [`G3`,`mid2`,`INR (Error (RuntimeError msg))`,`tn3`,`t3`] >>
   simp[exit_result_def,expr_exit_def,halt_exit_def]
 QED
 

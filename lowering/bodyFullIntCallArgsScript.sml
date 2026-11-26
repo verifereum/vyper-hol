@@ -29,6 +29,7 @@ Ancestors bodyCallSupport bodyFullShadowBodyInv vyperCallOutcome[qualified,ignor
   vyperTypeInvariants[qualified,ignore_grammar]
   nonreentrantEquiv[qualified,ignore_grammar] nonreentrantEntryPath[qualified,ignore_grammar]
   transientLockProps transientLockPtr[qualified,ignore_grammar] fragGasCopyLoop[qualified,ignore_grammar]
+  bodyIntCallLockAbortExit[qualified]
   instSeqPtrLo[qualified,ignore_grammar] fragExecMem fragGasSeqPtr
   unitTransformDefs[qualified,ignore_grammar] memSafeRun[qualified,ignore_grammar]
   fragGasOriginPtrInvoke bodyFullShadowInternalRun[qualified,ignore_grammar]
@@ -6624,46 +6625,10 @@ Theorem args_transient_lock_abort_origin_ptr[local]:
       (Abort (if tload (n2w key) s = 1w then Revert_abort else ExHalt_abort) t,G',tn')
 Proof
   DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
-  qabbrev_tac `code = transient_lock_code key view st` >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-      i.inst_opcode <> GAS) code` by
-    (Cases_on `view` >> simp[Abbr `code`, transientLockPropsTheory.transient_lock_code_def,
-                            emitHelperPropsTheory.mk_inst_opcode, venomInstTheory.is_terminator_def]) >>
-  `run_inst_seq_mem_ok code s` by
-    (irule fragExecMemTheory.run_inst_seq_mem_ok_every >> Cases_on `view` >>
-     simp[Abbr `code`, transientLockPropsTheory.transient_lock_code_def, venomInstTheory.mk_inst_def,
-          unitTransformDefsTheory.inst_mem_below_frontier_def, memSafeRunTheory.inst_dload_in_section_def,
-          contextCodegenRelTheory.source_memory_read_ranges_def,
-          codegenRelTheory.source_memory_write_ranges_def]) >>
-  qabbrev_tac `a = if tload (n2w key) s = 1w then Revert_abort else ExHalt_abort` >>
-  `?t. run_inst_seq code s = Abort a t` by
-    (Cases_on `tload (n2w key) s = 1w` >> fs[Abbr `a`, Abbr `code`,
-                            transientLockPropsTheory.transient_lock_code_execution]) >>
-  `(ctx_has_dalloca ctx ==>
-    !pre i post u. code = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
-      unitTransformDefs$dalloca_no_wrap i u)` by
-    (rpt strip_tac >> irule memSafeRunTheory.dalloca_no_wrap_non_dalloca >>
-     `MEM i code` by
-       (qpat_assum `code = _ ++ _` (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
-     Cases_on `view` >>
-     fs[Abbr `code`, transientLockPropsTheory.transient_lock_code_def] >>
-     gvs[emitHelperPropsTheory.mk_inst_opcode]) >>
-  drule_all fragGasCopyLoopTheory.run_inst_seq_abort_origin_ptr_uniform >>
-  strip_tac >>
-  `!D. ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn'` by
-    (gen_tac >> simp[Abbr `code`] >>
-     irule transientLockPtrTheory.transient_lock_abort_ptr_ghost >> simp[]) >>
-  qpat_assum `!D. ?G' tn'. inst_seq_ptr D 0 _ _ _ _ _ _ _ G' tn'`
-    (qspec_then `ARB` (qx_choose_then `J` (qx_choose_then `tj` assume_tac))) >>
-  `!D. inst_seq_ptr D lo ctx fn PG G tn code s J tj` by
-    (gen_tac >>
-     qpat_assum `!D. ?G' tn'. inst_seq_ptr D 0 _ _ _ _ _ _ _ G' tn'`
-       (qspec_then `D` (qx_choose_then `J1` (qx_choose_then `tk` assume_tac))) >>
-     `J1 = J /\ tk = tj` by
-       (irule fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique >> metis_tac[]) >>
-     irule instSeqPtrLoTheory.inst_seq_ptr_zero_to_lo >> simp[] >> qexists_tac `D` >> gvs[]) >>
-  qexistsl_tac [`t with vs_inst_idx := j`, `J`, `tj`] >>
-  fs[Abbr `code`, Abbr `a`] >> metis_tac[]
+  drule_all bodyIntCallLockAbortExitTheory.transient_lock_abort_origin_ptr_safe >>
+  disch_then (qspecl_then [`PG`, `G`] (qx_choose_then `t` (qx_choose_then `G'`
+    (qx_choose_then `tn'` strip_assume_tac)))) >>
+  qexistsl_tac [`t`, `G'`, `tn'`] >> first_assum ACCEPT_TAC
 QED
 
 Theorem args_lock_abort_callee[local]:
@@ -6689,11 +6654,13 @@ Proof
   >- (qpat_x_assum `?H. valid_horizon _ _ H _` strip_assume_tac >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >>
       DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
-      drule_all args_transient_lock_abort_origin_ptr >>
-      disch_then (qspecl_then [`MAP (op_prov G) ops`, `Gs`] strip_assume_tac) >>
+      drule_all bodyIntCallLockAbortExitTheory.transient_lock_abort_origin_ptr_safe >>
+      disch_then (qspecl_then [`MAP (op_prov G) ops`, `Gs`]
+        (qx_choose_then `t` (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac)))) >>
       qexistsl_tac [`Abort (if tload (n2w key) s = 1w
                            then Revert_abort else ExHalt_abort) t`, `G'`, `tn'`] >>
-      conj_tac >- metis_tac[] >>
+      conj_tac >- (qexistsl_tac [`if tload (n2w key) s = 1w then Revert_abort else ExHalt_abort`, `t`] >> simp[]) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
       qx_gen_tac `H'` >> strip_tac >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >>
       DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
@@ -6729,7 +6696,7 @@ Proof
   strip_tac >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_exit >> simp[] >>
   qexistsl_tac [`G`, `failed`, `Abort a t`, `INR (Error (RuntimeError msg))`, `tn`] >>
-  simp[exit_result_def] >>
+  simp[exit_result_def, createSizeExitTheory.create_size_exit_ok_def] >>
   qx_gen_tac `H` >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
   conj_tac
