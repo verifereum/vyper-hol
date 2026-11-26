@@ -311,5 +311,5 @@ Proof
       qpat_assum `vv = _` SUBST1_TAC >> POP_ASSUM_LIST kall_tac >>
       Cases_on `ret_type = NoneT` >> simp[mk_ptr_def]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  disj2_tac >> conj_tac >> first_assum ACCEPT_TAC
+  disj2_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
