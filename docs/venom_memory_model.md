@@ -262,7 +262,10 @@ alloca_meta_equiv live_ids s1 s2 <=
 
 or a pass-specific variant that allows extra dead cloned alloca entries while preserving raw memory, return values, and logs/accounts/storage. Later ALLOCAs then hand out different addresses in the two runs, so the relation must also hold up to that renaming of alloca regions (pointer confinement).
 
-`function_inliner_correct` therefore concludes `observable_result_equiv`, not `result_equiv {}`: the runs' variables, memory and allocation metadata differ, and only their observable effects agree.
+Semantic correctness of the function inliner remains unproved, and the pass
+is outside O1. Its correctness statement needs a relation that allows the
+runs to differ in variables, memory layout and allocation metadata while
+preserving observable effects.
 
 ## IRCF/RICF implications
 
