@@ -341,6 +341,12 @@ Resume compile_assert_frag_full[false]:
     (qpat_x_assum `ak = _ \/ _` strip_assume_tac >>
      simp[Abbr `opc`, Abbr `ops`, Abbr `msg`, expr_exit_def] >>
      metis_tac[step_revert_zero, step_invalid]) >>
+  `create_size_exit_ok ctx (INR (AssertException msg) : unit + exception) (Abort a u)` by
+    (irule emit_abort_create_size_exit_ok >>
+     qexistsl_tac [`func`, `opc`, `ops`, `jump_to fl t`, `s5`, `s6`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     qpat_assum `ak = _ \/ _` strip_assume_tac >>
+     simp[Abbr `opc`, Abbr `ops`, jump_to_def]) >>
   `!D. gas_origin_ptr_path
          (D, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
          (t, G1, tn1) [] (Abort a u, G1, tn1)` by
