@@ -17,7 +17,8 @@ they should. Four theorems state this for a single-module contract:
   result the source semantics gives or stops by starvation (below), when
   the call's own hypotheses hold; and, when it is the only frame running
   and the contract isn't scheduled for deletion, the contract is still
-  deployed for the next call.
+  deployed for the next call, and its storage still meets the storage
+  hypothesis unless the source stopped with one of a few listed errors.
 - **Gas sufficiency for deployment and for calls**
   ([`e2e_deploy_gas_sufficient`](#thm-e2eGasSufficientTop-e2e_deploy_gas_sufficient),
   [`vyper_call_gas_sufficient_deployed`](#thm-e2eDeployed-vyper_call_gas_sufficient_deployed)):
@@ -181,9 +182,12 @@ still `deployed` in the world the call leaves
 ([`transaction_world`](#def-e2eTransactionWorld-transaction_world)):
 after a successful call, the state before it with the EVM run's accounts
 after deletions and with transient storage, logs and pending deletions
-cleared; after a failed one, the state before the call. So the call
-theorems apply again to the next call, whose own hypotheses, the storage
-hypothesis included, still have to hold.
+cleared; after a failed one, the state before the call. The storage
+hypothesis carries over to every later call to the contract in that
+world, unless the selected function's source run stops with one of the
+listed errors ([`source_exempt`](#def-e2eDefs-source_exempt)) for every
+filling of the gas readings consistent with this run. So the call theorems
+apply again to the next call, whose other hypotheses still have to hold.
 
 <!-- dossier: thm-e2eDeployed-vyper_call_correct_deployed -->
 

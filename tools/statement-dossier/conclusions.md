@@ -73,6 +73,29 @@ and the contract is not scheduled for deletion after the run,
 the contract is still deployed in the world the call leaves: the EVM's
 accounts after a successful call, the world before it after a failed one.
 
+## gas_readings_rel
+
+Also, for every list of gas readings `gs` consistent with the values the
+EVM's `GAS` instructions returned in this run,
+
+## calldata_dispatch
+
+if, whenever the calldata selects function `f` with arguments `vals`,
+
+## source_exempt
+
+that function's source run with those readings does not stop with one of
+the listed errors,
+
+## target
+
+then for every later transaction `tx'` to the contract,
+
+## storage_ok
+
+the call theorems' storage hypothesis holds for `H` in the world the call
+leaves.
+
 # e2e_deploy_gas_sufficient
 
 ## g
