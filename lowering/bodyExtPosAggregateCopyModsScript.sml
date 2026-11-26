@@ -15,7 +15,7 @@ Ancestors
   loweringStateRelDefs stateRelProj exprSimProps typedCopyOriginPtrBase
 Libs monadsyntax
 
-Theorem ext_pos_copy_snapshot_retag[local]:
+Theorem ext_pos_copy_snapshot_retag:
   expr_body_pre_mods mods ce cx env e es /\ ~is_word_type (expr_type e) /\
   compile_expr ce (expr_type e) e sa = (vv,sm) ==>
   ext_call_arg_value (lowered_value_type ce e) vv = vv_with_type (lowered_value_type ce e) vv
@@ -139,7 +139,7 @@ Proof
     (gen_tac >> disch_tac >>
      qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
        (qspec_then `H` (drule_then strip_assume_tac)) >> simp[]) >>
-  drule_all qualified_snapshot_store_entry_mods >>
+  drule_all qualified_snapshot_store_entry_pure_mods >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choosel_then [`p`,`dw`,`src`,`sw`,`su`,`z`,`Gz`,`tz`,`rt`]
       (map_every assume_tac o CONJUNCTS))) >>
@@ -253,9 +253,9 @@ Resume ext_pos_aggregate_copy_landing_mods[owned]:
           qpat_assum `!n b l. loweringStateRelDefs$local_region ce _ u n b l ==>
             loweringStateRelDefs$regions_disjoint _ _ b l` (drule_then mp_tac) >>
           rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
-          simp[Once (Q.SPECL [`w2n dw`,`type_memory_size rt`] ADD_COMM)]) >>
+          simp[AC ADD_ASSOC ADD_COMM]) >>
       `val_footprint rt v <= type_memory_size rt` by simp[val_footprint_le] >>
-      simp[Once (Q.SPECL [`type_memory_size rt`,`w2n dw`] ADD_COMM)])
+      simp[AC ADD_ASSOC ADD_COMM])
   >~ [`ptr_vv_ok _ _ _ _ _ _ _ _`] >- suspend "ptr" >>
   simp[vv_store_bound_def,mk_ptr_def,eval_operand_def,read_result_def,return_def] >>
   decide_tac
@@ -277,7 +277,34 @@ Resume ext_pos_aggregate_copy_landing_mods[live]:
 QED
 
 Resume ext_pos_aggregate_copy_landing_mods[pure]:
-  FAIL_TAC "conditional pure prefix"
+  strip_tac >>
+  qpat_assum `~expr_has_effect e ==> pure_frame ce func es sa s0 z`
+    (drule_then assume_tac) >>
+  irule pure_frame_buffer_tail >>
+  qpat_assum `pure_frame ce func es sa s0 z` (irule_at Any) >>
+  qpat_assum `MEM (mk_inst sm.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+  `u.vs_allocas = z.vs_allocas` by
+    (qpat_assum `typed_copy_state_frame _ _ _ z u`
+       (mp_tac o REWRITE_RULE [typed_copy_state_frame_def]) >>
+     simp[venom_state_component_equality]) >>
+  qpat_assum `typed_copy_state_frame _ _ _ z u`
+    (strip_assume_tac o REWRITE_RULE [typed_copy_state_frame_def]) >>
+  qpat_assum `typed_copy_frame _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [typed_copy_frame_def]) >>
+  qexistsl [`type_memory_size rt`,`w2n dw`] >>
+  simp[venomInstTheory.mk_inst_def,loweringStateRelDefsTheory.regions_disjoint_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!name b len. local_region ce es.scopes s0 name b len ==> _`
+        drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  rpt gen_tac >> disch_tac >>
+  qpat_assum `!a n. _ ==> mem_bytes_at a n u.vs_memory = _`
+    (qspecl_then [`off`,`len`] mp_tac) >>
+  (impl_tac >-
+   (qpat_x_assum `len + off ≤ w2n dw \/ type_memory_size rt + w2n dw ≤ off`
+      mp_tac >>
+    qpat_x_assum `val_store_size rt v ≤ type_memory_size rt` mp_tac >>
+    simp[] >> decide_tac)) >> simp[]
 QED
 
 Finalise ext_pos_aggregate_copy_landing_mods

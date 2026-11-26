@@ -374,9 +374,9 @@ Resume immutable_select_endpoint_mods[bounds_exit]:
   drule_all_then assume_tac immutable_selected_error >>
   pure_rewrite_tac[array_select_outcome_mods_def,LET_THM] >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  irule gas_outcome_full_mods_exit >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`Gf`,`fin`,`Abort Revert_abort q`,
-    `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tnf`] >>
+  irule gas_outcome_full_mods_exit_revert >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`Gf`,`fin`,
+    `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tnf`,`q`] >>
   simp[exit_result_def,expr_exit_def,halt_exit_def] >>
   rpt gen_tac >> strip_tac >>
   qpat_assum `~idx_in_range _ _ _` (fn bad =>
