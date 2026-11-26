@@ -9,7 +9,7 @@ Ancestors
   abiValidAllocatedContract emitHelperProps
   bodyFullUnwrapRun freshWrites exprSimDefs exprSimExtCallCase exprLoweringProps exprSafeOperand
   bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit bodyPtrDefs ptrDiscipline
-  exprSimMemDefs allocaHistory
+  exprSimMemDefs allocaHistory createSizeExit
   stateRelProj abiCallerAllocation abiCallerLocalScratch bodyFullAllocaFresh
   loweringStateRelDefs loweringPosts compileEnv exprLowering context
   vyperInterpreter vyperABI vyperAST vyperState venomState venomMemDefs
@@ -283,7 +283,7 @@ Theorem extcall_return_decode_mods:
            (post_value_type cenv (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts) args dflt))
            sa sb (ee with gas_obs := []) tv vv t' /\
          ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn') \/
-         (exit_result r /\ expr_exit res r)))
+         (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r)))
 Proof
   disch_then (mk_asm "valid") >> disch_then (mk_asm "reject") >>
   rpt gen_tac >> strip_tac >>
@@ -489,7 +489,8 @@ Resume extcall_return_decode_mods[window_ready]:
   >- (qpat_assum `LENGTH returnData < _` (fn th => pure_rewrite_tac[th,COND_CLAUSES]) >>
       disch_then (qx_choosel_then [`err`,`z`,`Gf`,`tf`] strip_assume_tac) >>
       qexistsl_tac [`INR (Error (RuntimeError err))`,`Abort Revert_abort z`,`Gf`,`tf`] >>
-      simp_tac (srw_ss()) [bind_def,lift_sum_runtime_def,raise_def,expr_exit_def,exit_result_def] >>
+      simp_tac (srw_ss()) [bind_def,lift_sum_runtime_def,raise_def,expr_exit_def,exit_result_def,
+        createSizeExitTheory.create_size_exit_ok_non_exhalt] >>
       asm_rewrite_tac[sumTheory.sum_case_def,optionTheory.option_case_def,
         bind_def,lift_sum_runtime_def,raise_def] >> simp_tac (srw_ss()) [raise_def]) >>
   qpat_assum `~(LENGTH returnData < _)` (fn th => pure_rewrite_tac[th,COND_CLAUSES]) >>
@@ -538,7 +539,8 @@ Resume extcall_return_decode_mods[physical]:
       qpat_assum `!D explicit. gas_origin_ptr_path _ (u,Gf,tf) [] (Abort Revert_abort z,Gd,td)`
         (qspecl_then [`DF HH`,`explicit`] mp_tac) >>
       rpt (pop_assum kall_tac) >> metis_tac[gas_origin_ptr_path_append,listTheory.APPEND]) >>
-  simp_tac (srw_ss()) [expr_exit_def,exit_result_def]
+  simp_tac (srw_ss()) [expr_exit_def,exit_result_def,
+    createSizeExitTheory.create_size_exit_ok_non_exhalt]
 QED
 
 Resume extcall_return_decode_mods[decoded]:
