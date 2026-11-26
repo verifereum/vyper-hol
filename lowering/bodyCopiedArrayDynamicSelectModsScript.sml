@@ -124,8 +124,8 @@ Proof
         (qpat_assum `evaluate_type _ (ArrayT _ _) = SOME _`
            (mp_then Any (fn th => simp[th,bind_def,lift_sum_def,raise_def]) select_value_result)) >>
       irule gas_outcome_full_mods_exit_revert >> simp[] >>
-      qexistsl_tac [`Gu`,`fin`,`Abort Revert_abort u`,
-        `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tu`] >>
+      qexistsl_tac [`Gu`,`fin`,
+        `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tu`,`u`] >>
       simp[exit_result_def,copied_vv_exit_mods_def,expr_exit_def,halt_exit_def]) >>
   fs[] >> suspend "selected"
 QED
