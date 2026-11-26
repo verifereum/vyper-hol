@@ -31,7 +31,7 @@ End
 
 (* The legacy dispatcher exposes only empty default lists. The checker
    rules out parameters and therefore defaults on the fallback. *)
-Triviality selected_legacy_defaults_nil[local]:
+Theorem selected_legacy_defaults_nil:
   ~EXISTS external_has_defaults (FST (classify_functions tops)) /\
   source_typing_ok tops am tx /\
   vyperInterpreter$lookup_function NONE name External tops =
@@ -66,7 +66,9 @@ Triviality runtime_dispatched_readings_certificate[local]:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops ==>
-    ?shadow_unit. !am tx ret vs.
+    ?shadow_unit.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      !am tx ret vs.
       source_typing_ok tops am tx /\
       source_deployment_rel tops am tx /\
       dispatched_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
@@ -91,16 +93,16 @@ Proof
   Cases_on `EXISTS external_has_defaults (FST (classify_functions tops))`
   >- (drule_all runtime_body_grouped_default_readings >>
       disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
-      qexists_tac `shadow_unit` >> rpt gen_tac >> strip_tac >>
-      first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+      qexists_tac `shadow_unit` >> conj_tac >- first_assum ACCEPT_TAC >>
+      rpt gen_tac >> strip_tac >> first_x_assum (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
       fs[dispatched_vyper_call_def] >> metis_tac[]) >>
   `?shadow_unit. runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
                 gas_shadow_unit unit shadow_unit` by
     (Cases_on `classify_functions tops` >> PairCases_on `r` >>
      irule runtime_gas_shadow_unit_exists >> fs[]) >>
   pop_assum strip_assume_tac >>
-  qexists_tac `shadow_unit` >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `dispatched_vyper_call _ _ _ _`
+  qexists_tac `shadow_unit` >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >> qpat_x_assum `dispatched_vyper_call _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [dispatched_vyper_call_def]) >>
   drule_all_then SUBST_ALL_TAC selected_legacy_defaults_nil >>
   drule_all dispatched_call_correct_with_readings >> simp[]
@@ -144,6 +146,54 @@ Proof
   metis_tac[source_unit_execution_correct_at_def]
 QED
 
+(* Retain the compiler-selected shadow before choosing a call. *)
+Theorem lower_vyper_runtime_unit_correct_dispatched_with_shadow:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops ==>
+    ?shadow_unit.
+      runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+      !am tx ret vs.
+      source_typing_ok tops am tx /\
+      source_deployment_rel tops am tx /\
+      dispatched_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+      LENGTH vs.vs_call_ctx.cc_calldata < 2 ** 64 /\
+      initial_venom_state_rel tops am tx vs /\
+      outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+      LENGTH vs.vs_outcomes < 2 ** 64 /\
+      vs.vs_fmp = vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254 /\
+      unit_alloca_budget unit.cu_context +
+        32 * ctx_dload_count unit.cu_context <= w2n vs.vs_initial_fmp ==>
+      ?marks.
+        source_unit_execution_correct_with shadow_unit.cu_context marks
+          tops ret am tx unit vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all runtime_dispatched_readings_certificate >>
+  disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
+  qexists_tac `shadow_unit` >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  `raw_variant vs.vs_initial_fmp vs vs` by
+    simp[raw_variant_def, gas_variant_def, venomStateTheory.venom_state_component_equality] >>
+  `!fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+      dalloca_fmp_headroom inst s` by
+    (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `vs.vs_initial_fmp`, `vs`]
+       mp_tac callDynamicMemoryTheory.call_raw_variant_headroom >>
+     impl_tac >- simp[] >> metis_tac[]) >>
+  `(ctx_has_dalloca unit.cu_context ==>
+      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
+        dalloca_fmp_headroom inst s)` by (strip_tac >> first_assum ACCEPT_TAC) >>
+  `(ctx_has_dalloca unit.cu_context ==>
+      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254)` by (strip_tac >> conj_tac >> decide_tac) >>
+  qpat_assum `!am tx ret vs. _ ==> ?marks. _`
+    (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `marks` strip_assume_tac) >>
+  qexists_tac `marks` >> first_assum ACCEPT_TAC
+QED
+
 (* The shadow context is fixed by the program before choosing a call. *)
 Theorem lower_vyper_runtime_unit_correct_dispatched_with:
   !tops rpolicy unit.
@@ -166,27 +216,9 @@ Theorem lower_vyper_runtime_unit_correct_dispatched_with:
           tops ret am tx unit vs
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all runtime_dispatched_readings_certificate >>
+  drule_all lower_vyper_runtime_unit_correct_dispatched_with_shadow >>
   disch_then (qx_choose_then `shadow_unit` strip_assume_tac) >>
-  qexists_tac `shadow_unit.cu_context` >> rpt gen_tac >> strip_tac >>
-  `raw_variant vs.vs_initial_fmp vs vs` by
-    simp[raw_variant_def, gas_variant_def, venomStateTheory.venom_state_component_equality] >>
-  `!fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-      dalloca_fmp_headroom inst s` by
-    (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `vs`, `vs.vs_initial_fmp`, `vs`]
-       mp_tac callDynamicMemoryTheory.call_raw_variant_headroom >>
-     impl_tac >- simp[] >> metis_tac[]) >>
-  `(ctx_has_dalloca unit.cu_context ==>
-      !fn inst s. raw_reachable vs unit.cu_context fn inst s ==>
-        dalloca_fmp_headroom inst s)` by (strip_tac >> first_assum ACCEPT_TAC) >>
-  `(ctx_has_dalloca unit.cu_context ==>
-      unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
-      w2n vs.vs_initial_fmp < 2 ** 254)` by (strip_tac >> conj_tac >> decide_tac) >>
-  qpat_assum `!am tx ret vs. _ ==> ?marks. _`
-    (qspecl_then [`am`, `tx`, `ret`, `vs`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then (qx_choose_then `marks` strip_assume_tac) >>
-  qexists_tac `marks` >> first_assum ACCEPT_TAC
+  qexists_tac `shadow_unit.cu_context` >> first_assum ACCEPT_TAC
 QED
 
 (* S1, calldata that dispatches to nothing: no fallback, a short head, or a
