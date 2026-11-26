@@ -297,8 +297,6 @@ QED
 
 Theorem body_intcall_case_prefix:
   !cx v16 src_id_opt fn es v17.
-    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-       ~internal_defaults_msg_gas tops) /\
     (!ts mut nr args dflts ret ss.
        ~MEM (src_id_opt,fn) cx.stk /\
        get_module_code cx src_id_opt = SOME ts /\
@@ -394,23 +392,6 @@ Proof
       >- first_assum ACCEPT_TAC
       >- first_assum ACCEPT_TAC
       >- (qexistsl_tac [`args`,`dflts`,`mut`,`nr`,`ret`,`rr`,`ss`,`env`,`tops`] >>
-          `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
-            (qpat_assum `body_inv _ _ _ _`
-               (mp_then Any mp_tac body_inv_contract) >>
-             MATCH_ACCEPT_TAC contractInvContextPropsTheory.contract_inv_singleton_source_modules) >>
-          `~supported_exprs_exists expr_msg_gas_root
-              (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
-            (gvs[supportedProgramTheory.internal_defaults_msg_gas_def, listTheory.EVERY_MEM] >>
-             qpat_assum `!e. MEM e (cx_tops cx) ==> _`
-               (qspecl_then [`FunctionDecl Internal mut nr rr fn args dflts ret ss`] mp_tac) >>
-             gvs[] >> strip_tac >>
-             `~supported_exprs_exists expr_msg_gas_root dflts` by
-               (rw[exprOracleStorageInterfacesTheory.supported_exprs_exists_not_every] >>
-                qpat_assum `EVERY ($¬ ∘ supported_expr_exists expr_msg_gas_root) dflts`
-                  (assume_tac o REWRITE_RULE [combinTheory.o_DEF]) >>
-                first_assum ACCEPT_TAC) >>
-             irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
-             first_assum ACCEPT_TAC) >>
           rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
           >- (rpt gen_tac >> strip_tac >> metis_tac[])
           >- (rpt gen_tac >> strip_tac >> metis_tac[])))
@@ -419,23 +400,6 @@ Proof
       >- first_assum ACCEPT_TAC
       >- first_assum ACCEPT_TAC
       >- (qexistsl_tac [`args`,`dflts`,`mut`,`nr`,`ret`,`rr`,`ss`,`env`,`tops`] >>
-          `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
-            (qpat_assum `body_inv _ _ _ _`
-               (mp_then Any mp_tac body_inv_contract) >>
-             MATCH_ACCEPT_TAC contractInvContextPropsTheory.contract_inv_singleton_source_modules) >>
-          `~supported_exprs_exists expr_msg_gas_root
-              (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
-            (gvs[supportedProgramTheory.internal_defaults_msg_gas_def, listTheory.EVERY_MEM] >>
-             qpat_assum `!e. MEM e (cx_tops cx) ==> _`
-               (qspecl_then [`FunctionDecl Internal mut nr rr fn args dflts ret ss`] mp_tac) >>
-             gvs[] >> strip_tac >>
-             `~supported_exprs_exists expr_msg_gas_root dflts` by
-               (rw[exprOracleStorageInterfacesTheory.supported_exprs_exists_not_every] >>
-                qpat_assum `EVERY ($¬ ∘ supported_expr_exists expr_msg_gas_root) dflts`
-                  (assume_tac o REWRITE_RULE [combinTheory.o_DEF]) >>
-                first_assum ACCEPT_TAC) >>
-             irule bodyStorageCasesTheory.supported_exprs_exists_DROP >>
-             first_assum ACCEPT_TAC) >>
           rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
           >- (rpt gen_tac >> strip_tac >> metis_tac[])
           >- (rpt gen_tac >> strip_tac >> metis_tac[])))

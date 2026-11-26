@@ -1671,7 +1671,7 @@ Proof
        vyperStateTheory.assert_def, vyperStateTheory.raise_def]
 QED
 
-Theorem intcall_callee_lock_no_outcome[local]:
+Theorem intcall_callee_lock_no_outcome:
   lock_if_nr cx nr view es = (ans,locked) ==>
   ~MEM (StorageOutcome rq outcome)
     (DROP (LENGTH es.storage_trace) locked.storage_trace)

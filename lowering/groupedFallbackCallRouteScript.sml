@@ -213,7 +213,11 @@ Theorem grouped_fallback_call_route:
                (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
      !tail. FST (call_external (SOME vs.vs_outcomes)
                     (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
-            INR (Error (RuntimeError "msg.gas: no gas reading"))))
+            INR (Error (RuntimeError "msg.gas: no gas reading"))) /\
+    (!tail res am' rqs obs.
+      call_external_trace (SOME vs.vs_outcomes)
+        (gas_explicit marks vs.vs_gas_readings ++ tail) am tx = (res,am',rqs,obs) ==>
+      obs = []) /\ marks = [])
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all grouped_fallback_source_parameters >> strip_tac >>
@@ -407,7 +411,7 @@ Resume grouped_fallback_call_route[rejected]:
   `MEM shadow_fn shadow_unit.cu_context.ctx_functions` by simp[] >>
   qpat_x_assum `compile_entry_checks _ _ shn = _` kall_tac >>
   drule_all grouped_entry_value_rejected >> strip_tac >>
-  disj2_tac >> qexists_tac `[]` >> simp[gas_explicit_def]
+  disj2_tac >> simp[gas_explicit_def] >> first_assum ACCEPT_TAC
 QED
 
 Finalise grouped_fallback_call_route

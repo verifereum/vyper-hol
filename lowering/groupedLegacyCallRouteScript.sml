@@ -44,7 +44,11 @@ Theorem grouped_legacy_call_route:
       (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
      !tail. FST (call_external (SOME vs.vs_outcomes)
       (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
-        INR (Error (RuntimeError "msg.gas: no gas reading"))))
+        INR (Error (RuntimeError "msg.gas: no gas reading"))) /\
+    (!tail res am' rqs obs.
+      call_external_trace (SOME vs.vs_outcomes)
+        (gas_explicit marks vs.vs_gas_readings ++ tail) am tx = (res,am',rqs,obs) ==>
+      obs = []) /\ marks = [])
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all source_typing_ok_runtime_ready >> strip_tac >>

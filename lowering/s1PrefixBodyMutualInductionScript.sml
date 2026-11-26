@@ -119,8 +119,6 @@ val outstanding_cases = ``
          body_expr_prefix_ok cx (HD es)) ==>
     body_expr_prefix_ok cx (Builtin ty bt es)) /\
   (!cx v16 src_id_opt fn es v17.
-    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-       ~internal_defaults_msg_gas tops) /\
     (!ts mut nr args dflts ret ss.
        ~MEM (src_id_opt,fn) cx.stk /\
        get_module_code cx src_id_opt = SOME ts /\
@@ -175,7 +173,6 @@ val outstanding_cases = ``
 
 val source_conditions = ``\tops.
   struct_args_unique tops /\
-  ~supportedProgram$internal_defaults_msg_gas tops /\
   (!vis mut nr raw fn args dflts ret ss.
      MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
      stmts_loop_calls_ok [(NONE,tops)]
@@ -342,7 +339,6 @@ QED
 Resume body_sim_prefix_mutual_ranked[intcall]:
   rpt strip_tac >> full_simp_tac bool_ss case_simps >>
   asm_x "case_rules" (match_mp_tac o SIMP_RULE bool_ss case_simps o el 5 o CONJUNCTS) >>
-  conj_tac >- from_source >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >> conj_tac
       >- (FIRST (map irule full_children) >> simp[evaluation_context_accfupds] >>
@@ -382,7 +378,6 @@ Theorem body_sim_prefix_mutual_from_cases:
   ^outstanding_cases ==>
   ((!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -391,7 +386,6 @@ Theorem body_sim_prefix_mutual_from_cases:
     body_stmt_prefix_ok cx s) /\
   (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -400,7 +394,6 @@ Theorem body_sim_prefix_mutual_from_cases:
     body_stmts_prefix_ok cx ss) /\
   (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -408,7 +401,6 @@ Theorem body_sim_prefix_mutual_from_cases:
     body_iterator_prefix_ok cx it) /\
   (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -417,7 +409,6 @@ Theorem body_sim_prefix_mutual_from_cases:
     body_for_prefix_ok cx tyv nm body vs) /\
   (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -425,7 +416,6 @@ Theorem body_sim_prefix_mutual_from_cases:
     body_expr_prefix_ok cx e) /\
   (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -433,7 +423,6 @@ Theorem body_sim_prefix_mutual_from_cases:
     body_exprs_prefix_ok cx es) /\
   (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -441,7 +430,6 @@ Theorem body_sim_prefix_mutual_from_cases:
     body_base_target_prefix_ok cx t) /\
   (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -449,7 +437,6 @@ Theorem body_sim_prefix_mutual_from_cases:
     body_tuple_target_prefix_ok cx g v) /\
   (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]

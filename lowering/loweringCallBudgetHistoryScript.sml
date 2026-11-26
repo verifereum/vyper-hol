@@ -666,7 +666,7 @@ Proof
   `n = LENGTH h` by decide_tac >> gvs[lower_event_ordinal_def]
 QED
 
-Theorem lower_budget_frame_history[local]:
+Theorem lower_budget_frame_history:
   !vs ctx stk PG G tn fn inst s.
     frame_reachable vs ctx stk PG G tn fn inst s ==>
     !D lo explicit. ~vs.vs_halted ==>
@@ -788,7 +788,7 @@ Resume lower_budget_frame_history[ret]:
                         SUC frame0.cf_state.vs_inst_idx |>`]
           (SPEC_ALL lower_budget_path_ret))])
 QED
-Finalise lower_budget_frame_history[local]
+Finalise lower_budget_frame_history
 
 Theorem lower_budget_raw_history:
   !vs ctx fn inst s D lo explicit.

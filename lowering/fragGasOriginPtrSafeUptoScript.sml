@@ -680,7 +680,7 @@ QED
 
 (* ===== The per-state facts ===== *)
 
-Theorem mem_step_facts[local]:
+Theorem mem_step_facts:
   MEM fn ctx.ctx_functions /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
@@ -702,7 +702,7 @@ Proof
   metis_tac[inst_mem_below_frontier_frontiers, dalloca_no_wrap_non_dalloca]
 QED
 
-Theorem invoke_mem_facts[local]:
+Theorem invoke_mem_facts:
   inst.inst_opcode = INVOKE ==>
   inst_mem_ok_in_fn fn inst s /\ inst_dload_in_section inst s /\
   dalloca_no_wrap inst s

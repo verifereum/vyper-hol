@@ -24,6 +24,8 @@ Ancestors
   selectedAcceptedFold fragGasOriginPtr fragGasOriginPtrLoop fragExec
   dispatchedDecodeDomain dispatchedDecodeCast vyperTyping constSubst
   venomInst venomState words arithmetic list rich_list pair finite_map
+Libs
+  groupedDefaultLoweringGuardLib
 
 val shadow_group = ``\group. case group of
   ExternalSingle selector package =>
@@ -90,7 +92,19 @@ Theorem grouped_default_call_route:
       (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
      !tail. FST (call_external (SOME vs.vs_outcomes)
       (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
-        INR (Error (RuntimeError "msg.gas: no gas reading"))))
+        INR (Error (RuntimeError "msg.gas: no gas reading"))) /\
+    (!tail res am' rqs obs.
+      call_external_trace (SOME vs.vs_outcomes)
+        (gas_explicit marks vs.vs_gas_readings ++ tail) am tx = (res,am',rqs,obs) ==>
+      obs = []) /\
+    (marks = [] \/ ?f (H : (bool # bytes32 # type_value) list # num list).
+      venomInst$lookup_function "__entry" (^ctx).ctx_functions = SOME f /\
+      ((?r J tz.
+        gas_origin_ptr_path (cx_dead H ^cx,0,^explicit,^ctx,f,[])
+          (^start,FEMPTY,entry_taint) marks (r,J,tz)) \/
+       (?leaf leaf_pg leaf_g leaf_tn finish.
+        gas_origin_ptr_focus (cx_dead H ^cx,0,^explicit,^ctx,f,[])
+          (^start,FEMPTY,entry_taint) marks (leaf,leaf_pg,leaf_g,leaf_tn,finish)))))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all source_typing_ok_runtime_ready >> strip_tac >>
@@ -169,7 +183,8 @@ QED
 
 Resume grouped_default_call_route[reject]:
   drule_all grouped_selected_default_value_rejection >> strip_tac >>
-  disj2_tac >> qexists_tac `[]` >> simp[gas_explicit_def]
+  disj2_tac >> qexists_tac `[]` >> simp[gas_explicit_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume grouped_default_call_route[accept]:
@@ -401,7 +416,11 @@ Resume grouped_default_call_route[run_init]:
     (SPEC_ALL grouped_default_passing_execution)) >>
   impl_tac >- suspend "init_pre" >>
   disch_then (DISJ_CASES_THEN2
-    (fn th => disj2_tac >> ACCEPT_TAC th)
+    (fn th => disj2_tac >>
+      qpat_assum `s = ^start` SUBST1_TAC >>
+      qpat_assum `venomInst$lookup_function "__entry" (^ctx).ctx_functions = SOME fn`
+        (fn entry => simp_tac (srw_ss()) [entry] >>
+                     ACCEPT_TAC (SIMP_RULE (srw_ss()) [entry] th)))
     (qx_choosel_then [`slots`,`last`,`t`,`J`,`tz`,`marks`,`values`,`ee`,`u`,`Gu`,`tu`]
       (map_every assume_tac o CONJUNCTS))) >>
   suspend "normal"
@@ -703,20 +722,9 @@ Resume grouped_default_call_route[slot_finish]:
 QED
 
 Resume grouped_default_call_route[source_finish]:
-  `EVERY external_defaults_no_sha256 externals` by
-    (map_every (fn pat => qpat_assum pat mp_tac)
-       [`lower_vyper_runtime_unit tops rpolicy = SOME unit`,
-        `classify_functions tops = (externals,_,_,_)`,
-        `EXISTS external_has_defaults externals`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >> rw[] >>
-     gvs[lower_vyper_runtime_unit_def,AllCaseEqs()]) >>
   `no_sha256_exprs dflts` by
-    (qpat_assum `MEM (mut,nr,^rr,tx.function_name,args,^ds,ret,^ss) (FST (classify_functions tops))` mp_tac >>
-     qpat_assum `classify_functions tops = _` (fn th => simp_tac bool_ss [th,FST]) >>
-     qpat_assum `EVERY external_defaults_no_sha256 externals`
-       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     metis_tac[external_defaults_no_sha256_def,cj 3 source_no_sha256_after_const_substitution]) >>
+    (groupedDefaultLoweringGuardLib.raw_defaults_no_sha_tac
+       `MEM (mut,nr,^rr,tx.function_name,args,^ds,ret,^ss) (FST (classify_functions tops))`) >>
   `no_sha256_exprs (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts)` by
     (pure_rewrite_tac[no_sha256_collections] >> irule EVERY_DROP >>
      qpat_assum `no_sha256_exprs dflts` (ACCEPT_TAC o REWRITE_RULE [no_sha256_collections])) >>

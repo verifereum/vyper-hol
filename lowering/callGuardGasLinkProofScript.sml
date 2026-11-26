@@ -1,5 +1,6 @@
 Theory callGuardGasLinkProof
 Ancestors
+  s1RequestPrefix
   e2eRequestCutDefs e2eDefs e2eEntry e2eProducers e2eCorrectness
   callRawVariant lowerDloadDefs loweringShapeSource vyperLoweringCorrect
   asmOptimizer o1PassContract o1PipelineCorrect venomState venomLayout
@@ -8,6 +9,8 @@ Ancestors
   gasMaskProjection gasSummary gasEvents gasExplicitSites o1SafeUpto
   codegenSymRel asmFrameRel oracleExecProps venomExecSemantics venomInst
   words arithmetic list sorting
+
+val _ = Parse.hide "tops";
 
 Theorem guard_runtime_phases:
   fin IN accepted_finalizers /\
@@ -72,7 +75,7 @@ Proof
 QED
 
 Theorem guard_source_marks:
-  s1_request_prefix tops /\ supported_program tops /\
+  supported_program tops /\
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   vyper_call_staging fin policy tops (assemble prog') am tx ret es /\
   vs0 = opt_entry_state_own prog prog' cplan es /\ txp = tx with code := vs0.vs_code /\
@@ -110,8 +113,8 @@ Theorem guard_source_marks:
              outcome = (if s.vs_outcomes = [] then failed_outcome rq else HD s.vs_outcomes))
 Proof
   strip_tac >>
-  qpat_x_assum `s1_request_prefix tops`
-    (mp_tac o Q.SPECL [`rpolicy`, `unit`] o REWRITE_RULE [s1_request_prefix_def]) >>
+  `s1_request_prefix tops` by MATCH_ACCEPT_TAC s1_request_prefix_all >>
+  pop_assum (mp_tac o Q.SPECL [`rpolicy`, `unit`] o REWRITE_RULE [s1_request_prefix_def]) >>
   impl_tac >- simp[] >>
   disch_then (qx_choose_then `shadow_ctx` assume_tac) >>
   qexists_tac `shadow_ctx` >> rpt strip_tac >>

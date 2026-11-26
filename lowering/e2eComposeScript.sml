@@ -3,11 +3,12 @@ Theory e2eCompose
 Ancestors
   e2eTransactionWorld e2eOutcomesProducer e2eRequestCutDefs e2eDefs e2eLifecycle
 
+val _ = Parse.hide "tops";
+
 (* The call outcomes producer proposition is an explicit hypothesis here. *)
 val step4_producer_tm =
   ``!fin policy tops runtime_bc am tx ret es H.
     vyper_call_staging fin policy tops runtime_bc am tx ret es /\
-    s1_request_prefix tops /\
     vyper_closed_world fin policy tops runtime_bc am tx H es ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -33,7 +34,6 @@ Theorem closed_world_transaction_correct_assuming_producer:
   ^step4_producer_tm /\
   call_ready tops runtime_bc am tx.target /\
   vyper_call_staging fin policy tops runtime_bc am tx ret es /\
-  s1_request_prefix tops /\
   vyper_closed_world fin policy tops runtime_bc am tx H es /\
   call_tx_well_typed tx /\ runtime_bc <> [] /\
   LENGTH es.contexts = 1 /\ run_call es = SOME (r, es') /\
@@ -61,7 +61,7 @@ Theorem transaction_sequence_correct_assuming_producer:
   ^step4_producer_tm /\
   LENGTH worlds = SUC (LENGTH calls) /\
   call_ready tops runtime_bc (HD worlds) a /\
-  s1_request_prefix tops /\ runtime_bc <> [] /\
+  runtime_bc <> [] /\
   (!i tx ret H es r es'.
     i < LENGTH calls /\ EL i calls = (tx, ret, H, es, r, es') /\
     call_ready tops runtime_bc (EL i worlds) a ==>
@@ -115,7 +115,6 @@ QED
 Theorem closed_world_transaction_correct:
   call_ready tops runtime_bc am tx.target /\
   vyper_call_staging fin policy tops runtime_bc am tx ret es /\
-  s1_request_prefix tops /\
   vyper_closed_world fin policy tops runtime_bc am tx H es /\
   call_tx_well_typed tx /\ runtime_bc <> [] /\
   LENGTH es.contexts = 1 /\ run_call es = SOME (r, es') /\
@@ -136,7 +135,7 @@ QED
 Theorem transaction_sequence_correct:
   LENGTH worlds = SUC (LENGTH calls) /\
   call_ready tops runtime_bc (HD worlds) a /\
-  s1_request_prefix tops /\ runtime_bc <> [] /\
+  runtime_bc <> [] /\
   (!i tx ret H es r es'.
     i < LENGTH calls /\ EL i calls = (tx, ret, H, es, r, es') /\
     call_ready tops runtime_bc (EL i worlds) a ==>

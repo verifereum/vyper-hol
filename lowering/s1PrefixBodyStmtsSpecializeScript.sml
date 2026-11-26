@@ -8,7 +8,6 @@ val _ = Parse.hide "body";
 Theorem body_stmts_sim_prefix_from_list_clause:
   (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret body.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret body) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -17,7 +16,6 @@ Theorem body_stmts_sim_prefix_from_list_clause:
     body_stmts_prefix_ok cx ss) ==>
   !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
    ret_ty lctx RetQ ss es.
-    ~supportedProgram$internal_defaults_msg_gas tops /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
     supported_stmts tops bindings ss /\

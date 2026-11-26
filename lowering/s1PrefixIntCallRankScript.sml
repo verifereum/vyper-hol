@@ -9,7 +9,6 @@ Theorem intcall_callee_prefix_ih:
   LENGTH (remcode cx) <= rank /\
   (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
           struct_args_unique tops /\
-          ~supportedProgram$internal_defaults_msg_gas tops /\
           (!vis mut nr raw f a ds rt ss.
              MEM (FunctionDecl vis mut nr raw f a ds rt ss) tops ==>
              stmts_loop_calls_ok [(NONE,tops)]
@@ -17,7 +16,6 @@ Theorem intcall_callee_prefix_ih:
   (!m. m < rank ==> !c ys. LENGTH (remcode c) <= m /\
        (!tops. ALOOKUP c.sources c.txn.target = SOME [(NONE,tops)] ==>
                struct_args_unique tops /\
-               ~supportedProgram$internal_defaults_msg_gas tops /\
                (!vis mut nr raw f a ds rt ss.
                   MEM (FunctionDecl vis mut nr raw f a ds rt ss) tops ==>
                   stmts_loop_calls_ok [(NONE,tops)]
@@ -27,7 +25,6 @@ Theorem intcall_callee_prefix_ih:
   (!m. m < rank ==> !c xs. LENGTH (remcode c) <= m /\
        (!tops. ALOOKUP c.sources c.txn.target = SOME [(NONE,tops)] ==>
                struct_args_unique tops /\
-               ~supportedProgram$internal_defaults_msg_gas tops /\
                (!vis mut nr raw f a ds rt ss.
                   MEM (FunctionDecl vis mut nr raw f a ds rt ss) tops ==>
                   stmts_loop_calls_ok [(NONE,tops)]

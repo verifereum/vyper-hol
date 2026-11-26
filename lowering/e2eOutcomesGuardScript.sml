@@ -15,10 +15,12 @@ Ancestors
   stackPlanGen
   vfmDecreasesGas relation pair arithmetic list
   gasFocusPacketPipelineStages requestCutSelectedReplay
-  gasMaskProjection gasEvents gasExplicitSites
+  gasMaskProjection gasEvents gasExplicitSites s1RequestPrefix
   venomState sorting
 Libs
   stepInstBaseLib
+
+val _ = Parse.hide "tops";
 
 Triviality guard_closed_world_inherit:
   vyper_closed_world fin policy tops runtime_bc am tx H es /\
@@ -568,7 +570,6 @@ Triviality guard_compiler_readings:
   call_guard_gas_link_stmt /\
   vyper_call_staging fin policy tops runtime_bc am tx ret es /\
   vyper_closed_world fin policy tops runtime_bc am tx H es /\
-  s1_request_prefix tops /\
   run_call es = SOME (r,es') /\ ~frame_resource_starved es r es' ==>
   gas_readings_rel (gas_readings es)
     (\gs.
@@ -584,6 +585,7 @@ Triviality guard_compiler_readings:
          ?rq'. MEM (rq',co) (call_trace es) /\ request_agree H tx.target rq rq')
 Proof
   strip_tac >>
+  `s1_request_prefix tops` by MATCH_ACCEPT_TAC s1_request_prefix_all >>
   qpat_assum `call_guard_gas_link_stmt`
     (qspecl_then [`fin`, `policy`, `tops`, `runtime_bc`, `am`,
       `tx`, `ret`, `es`, `r`, `es'`] mp_tac o
@@ -665,7 +667,6 @@ QED
    induction supplies storage preservation for that child's own calls. *)
 Theorem guard_closed_world_readings:
   call_guard_gas_link_stmt /\
-  s1_request_prefix tops /\
   vyper_call_staging fin policy tops runtime_bc am tx ret es /\
   vyper_closed_world fin policy tops runtime_bc am tx H es /\
   run_call es = SOME (r,es') /\ ~frame_resource_starved es r es' ==>
