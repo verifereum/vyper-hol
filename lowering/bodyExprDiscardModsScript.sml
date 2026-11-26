@@ -88,8 +88,13 @@ Proof
                     `ee`, `r`, `G'`, `tn'`] >>
       conj_tac >- (gen_tac >> irule expr_discard_eval >> simp[] >> metis_tac[]) >>
       conj_tac >- first_assum ACCEPT_TAC >>
-      gen_tac >> disch_tac >> first_x_assum drule >> strip_tac >> simp[] >>
-      first_x_assum strip_assume_tac >> gvs[] >> metis_tac[]) >>
+      gen_tac >> disch_tac >> first_x_assum drule >>
+      disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+      disch_then (DISJ_CASES_THEN2
+        (fn th => strip_assume_tac th >> gvs[] >> disj1_tac >> metis_tac[])
+        (fn th => strip_assume_tac th >> simp[] >> disj2_tac >>
+          qpat_x_assum `create_size_exit_ok _ _ _` mp_tac >>
+          Cases_on `res` >> simp[createSizeExitTheory.create_size_exit_ok_def]))) >>
   disj2_tac >> disj2_tac >>
   drule_then assume_tac expr_discard_exempt >> metis_tac[]
 QED
