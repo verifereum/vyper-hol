@@ -97,7 +97,7 @@ Resume array_select_slot_mods[replay]:
   qpat_assum `~idx_in_range _ _ _ ==> _` (drule_then strip_assume_tac) >>
   pure_rewrite_tac[array_select_outcome_mods_def,LET_THM] >> BETA_TAC >>
   irule gas_outcome_full_mods_exit_revert >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`Gq`,`fin`,`Abort Revert_abort q`,`res`,`tq`] >>
+  qexistsl [`Gq`,`fin`,`res`,`tq`,`q`] >>
   simp[exit_result_def,expr_exit_def,halt_exit_def] >>
   qx_gen_tac `H` >> strip_tac >>
   qpat_assum `~idx_in_range _ _ _` (fn test =>
