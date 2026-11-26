@@ -174,46 +174,39 @@ Definition inline_ptr_ok_check_def:
   inline_ptr_ok_check C <=> inline_ptr_ok_check_with (ctx_write_params C) C
 End
 
-Theorem inline_opcode_roots:
-  MEM v (opcode_root_list op func) <=>
-  ?i. MEM i (fn_insts func) /\ i.inst_opcode = op /\ inst_output i = SOME v
-Proof
-  simp[opcode_root_list_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-  eq_tac >> rpt strip_tac >> rename1 `MEM inst (fn_insts func)`
-  >- (Cases_on `inst.inst_opcode = op` >>
-      Cases_on `inst_output inst` >> gvs[] >>
-      qexists_tac `inst` >> simp[]) >>
-  qexists_tac `inst` >> simp[]
-QED
-
-Theorem inline_param_roots[local]:
-  !params func v.
-    MEM v (param_root_list params func) <=>
-    ?i k. MEM i (fn_insts func) /\ i.inst_opcode = PARAM /\
-          i.inst_operands = [Lit k] /\ MEM (w2n k) params /\
-          inst_output i = SOME v
-Proof
-  simp[param_root_list_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-  rpt gen_tac >> eq_tac >> rpt strip_tac >>
-  rename1 `MEM inst (fn_insts func)`
-  >- (Cases_on `inst.inst_opcode = PARAM` >> gvs[] >>
-      Cases_on `inst.inst_operands` >> gvs[] >>
-      rename1 `inst.inst_operands = op1::rest` >>
-      Cases_on `op1` >> Cases_on `rest` >> gvs[] >>
-      Cases_on `inst_output inst` >> gvs[] >>
-      rename1 `inst.inst_operands = [Lit idx]` >>
-      qexistsl_tac [`inst`, `idx`] >> gvs[] >>
-      Cases_on `MEM (w2n idx) params` >> gvs[]) >>
-  qexists_tac `inst` >> simp[]
-QED
-
 Theorem inline_root_list_set:
   set (opcode_root_list ALLOCA func ++ opcode_root_list DALLOCA func ++
        param_root_list (PL func.fn_name) func) =
     ptr_roots (\nm. set (PL nm)) func
 Proof
-  rw[EXTENSION, ptr_roots_def, alloca_roots_def,
-     inline_opcode_roots, inline_param_roots] >>
+  `!op v. MEM v (opcode_root_list op func) <=>
+          ?i. MEM i (fn_insts func) /\ i.inst_opcode = op /\
+              inst_output i = SOME v` by
+    (simp[opcode_root_list_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+     rpt gen_tac >> eq_tac >> rpt strip_tac >>
+     rename1 `MEM inst (fn_insts func)`
+     >- (Cases_on `inst.inst_opcode = op` >>
+         Cases_on `inst_output inst` >> gvs[] >>
+         qexists_tac `inst` >> simp[]) >>
+     qexists_tac `inst` >> simp[]) >>
+  `!params v. MEM v (param_root_list params func) <=>
+              ?i k. MEM i (fn_insts func) /\ i.inst_opcode = PARAM /\
+                    i.inst_operands = [Lit k] /\ MEM (w2n k) params /\
+                    inst_output i = SOME v` by
+    (simp[param_root_list_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+     rpt gen_tac >> eq_tac >> rpt strip_tac >>
+     rename1 `MEM inst (fn_insts func)`
+     >- (Cases_on `inst.inst_opcode = PARAM` >> gvs[] >>
+         Cases_on `inst.inst_operands` >> gvs[] >>
+         rename1 `inst.inst_operands = op1::rest` >>
+         Cases_on `op1` >> Cases_on `rest` >> gvs[] >>
+         Cases_on `inst_output inst` >> gvs[] >>
+         rename1 `inst.inst_operands = [Lit idx]` >>
+         qexistsl_tac [`inst`, `idx`] >> gvs[] >>
+         Cases_on `MEM (w2n idx) params` >> gvs[]) >>
+     qexists_tac `inst` >> simp[]) >>
+  asm_simp_tac std_ss [EXTENSION, ptr_roots_def, alloca_roots_def,
+                       MEM_APPEND, IN_UNION, IN_DIFF, GSPECIFICATION] >>
   metis_tac[]
 QED
 

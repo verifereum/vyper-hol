@@ -103,7 +103,12 @@ End
 Theorem witness_alloca_roots_list:
   alloca_roots fn = set (opcode_root_list ALLOCA fn)
 Proof
-  simp[EXTENSION, alloca_roots_def, inline_opcode_roots]
+  simp[EXTENSION, alloca_roots_def, opcode_root_list_def, MEM_FLAT, MEM_MAP,
+       PULL_EXISTS] >>
+  gen_tac >> eq_tac >> rpt strip_tac >> rename1 `MEM inst (fn_insts fn)`
+  >- (qexists_tac `inst` >> simp[]) >>
+  Cases_on `inst.inst_opcode = ALLOCA` >> Cases_on `inst_output inst` >>
+  gvs[] >> qexists_tac `inst` >> simp[]
 QED
 
 Theorem witness_closure_member:
