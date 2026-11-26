@@ -204,37 +204,11 @@ Theorem extcall_default_entry_mods:
        (wb_frame cenv es ee sa s0 a ==> wb_frame cenv es ee sa s0 u))
 Proof
   strip_tac >>
-  drule_then strip_assume_tac return_default_path_intervals >>
-  drule_all_then strip_assume_tac return_default_intervals_code >>
-  drule_all_then assume_tac default_shell_next_var >>
-  `a.vs_returndata = []` by simp[] >>
-  drule_all default_shell_linked >>
-  disch_then (qspecl_then [`tm`,`explicit`,`PG`,`J`]
-    (qx_choosel_then [`u`,`Gu`,`tu`] strip_assume_tac)) >>
-  `ds.cs_current_bb = dl /\ ds.cs_current_insts = []` by
-    (qpat_assum `new_block dl a6 = (_,ds)` (mp_tac o MATCH_MP new_block_props) >> simp[]) >>
-  `!x. not_fresh_at ar x ==> not_fresh_at ds x` by
-    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `ar` >> simp[]) >>
-  `local_ptrs_reserved cenv ds` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `ar` >> simp[]) >>
-  `!op. safe_operand ar op ==> eval_operand op u = eval_operand op a /\
-      op_taint tu op = op_taint tm op /\ (!x. op = Var x ==> not_fresh_at ds x)` by
-    (Cases_on `op` >> simp[safe_operand_def,eval_operand_def,op_taint_def] >>
-     rpt strip_tac >> first_x_assum drule >> simp[op_taint_def]) >>
-  `lookup_var q u = SOME dw /\ FLOOKUP Gu q = SOME (w2n dw,n) /\ ptr_covers Gu tu q u n` by
-    (qpat_assum `!x. not_fresh_at ar x ==> lookup_var x u = _ /\ _`
-       (qspec_then `q` assume_tac) >>
-     qpat_assum `not_fresh_at ar q ==> _` (drule_then strip_assume_tac) >>
-     qpat_x_assum `ptr_covers J tm q a n` mp_tac >>
-     pure_rewrite_tac[ptr_covers_def] >> simp[]) >>
-  `!x. dop = Var x ==> not_fresh_at ds x` by
-    (qpat_assum `!op. safe_operand ar op ==> _`
-       (qspec_then `dop` mp_tac) >> simp[]) >>
-  `!x. addr = Var x ==> not_fresh_at ds x` by
-    (qpat_assum `!op. safe_operand ar op ==> _`
-       (qspec_then `addr` mp_tac) >> simp[]) >>
+  drule_all extcall_default_entry_tmem_mods >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`ds`,`de`,`ck`,`dj`,`xl`,`cj`,`old3`,`u`,`Gu`,`tu`] strip_assume_tac)) >>
   qexistsl_tac [`ds`,`de`,`ck`,`dj`,`xl`,`cj`,`old3`,`u`,`Gu`,`tu`] >>
-  simp[] >> rpt conj_tac >> first_assum (irule_at Any) >> first_assum ACCEPT_TAC
+  simp[]
 QED
 
 Theorem default_shell_code_agrees[local]:
