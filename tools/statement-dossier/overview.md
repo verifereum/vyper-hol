@@ -23,10 +23,12 @@ they should. Four theorems state this for a single-module contract:
 - **Gas sufficiency for deployment and for calls**
   ([`e2e_deploy_gas_sufficient`](dossier.html#thm-e2eGasSufficientTop-e2e_deploy_gas_sufficient),
   [`vyper_call_gas_sufficient_deployed`](dossier.html#thm-e2eDeployed-vyper_call_gas_sufficient_deployed)):
-  with enough gas, the compiled code doesn't run out of gas, provided the
-  larger-gas run meets the storage and call-trace conditions and the
-  source doesn't stop with one of a few listed errors; a deployment may
-  still run out when its runtime code exceeds the EVM's code-size limit.
+  starvation (below) by running out of gas is avoidable: with enough gas,
+  the compiled code doesn't run out of gas, provided the larger-gas run
+  meets the storage and call-trace conditions and the source doesn't stop
+  with one of a few listed errors; a deployment may still run out when its
+  runtime code exceeds the EVM's code-size limit. Starvation by stack
+  overflow is ruled out when the code passes the static stack check.
 
 All four are proved with no admitted steps at the commit this page was
 built from: `holbuild check` reports each one clean. The theorems, every
@@ -41,8 +43,11 @@ A **source semantics** and an **EVM semantics**, both written in HOL4 as
 executable functions:
 
 - The Vyper semantics is vyper-hol's definitional interpreter. A contract is
-  its list of top-level declarations (`tops`), as Vyper's frontend outputs
-  them after parsing, type checking and constant folding. `load_contract`
+  its list of top-level declarations (`tops`), which vyper-hol's own
+  frontend translates from the annotated AST that Vyper's parser and type
+  checker produce. The frontend evaluates compile-time constants itself,
+  from their source expressions, rather than taking Vyper's folded values.
+  `load_contract`
   runs the constructor and `call_external` runs one external call. The
   interpreter is tested against Vyper's own test suite.
 - The EVM semantics is [Verifereum](https://github.com/verifereum/verifereum)'s
@@ -79,7 +84,9 @@ instructions returned, not necessarily in the same order, and the result
 holds for every list of readings consistent with that matching, the
 unmatched ones taking any value. Gas forwarded to a call is not a
 reading: when the source call gives a `gas=` amount, the compiled call
-forwards that amount; otherwise the forwarded gas is not constrained.
+passes that amount as the call instruction's gas operand (the EVM may
+give the callee less, under its own cap on forwarded gas); otherwise the
+operand is not constrained.
 
 ## The theorems
 
@@ -108,7 +115,11 @@ whose own hypotheses (below) hold. The repository's
 `call_preserves_deployed` shows that a call satisfying the call
 theorem's typing and entry hypotheses keeps `deployed` for the source
 state after the call when the runtime code is nonempty, the call is the
-only frame running, and the contract is not scheduled for deletion.
+only frame running, and the contract is not scheduled for deletion. That
+state
+([`next_source_machine`](dossier.html#def-e2eDefs-next_source_machine))
+is the source's result with the EVM run's accounts after deletions, and
+with transient storage, logs and pending deletions cleared.
 
 ### Call correctness
 
@@ -140,10 +151,11 @@ and either the frame is starved, or
 Each correctness theorem allows the run to stop by **starvation**
 ([`frame_starved`](dossier.html#def-e2eDeployed-frame_starved)): the frame
 ran out of gas, or overflowed the EVM stack in code that fails a static
-stack-height check (`bytecode_stack_check`). The gas theorems say that,
-under conditions, starvation by gas is avoidable: there is an amount of
-gas `g` such that, with `g` or more added to the frame, it does not run
-out of gas.
+stack-height check (`bytecode_stack_check`); so when the code passes that
+check, starvation can only be running out of gas. The gas theorems say
+that, under conditions, starvation by running out of gas is avoidable:
+there is an amount of gas `g` such that, with `g` or more added to the
+frame, it does not run out of gas.
 
 - For a call whose calldata selects no function, this needs no condition
   on the larger-gas run.
@@ -184,8 +196,9 @@ in the [dossier](dossier.html). In groups:
   theorems take a finite list of storage regions and nonreentrancy lock
   slots. They require each region to fit in the slot space, distinct
   regions of the same kind not to overlap, transient regions to avoid the
-  lock slots, the source's initial storage to decode on the regions
-  ([`storage_ok`](dossier.html#def-e2eCorrectness-storage_ok)), and the
+  lock slots, for a call, the source's initial storage to decode on the
+  regions ([`storage_ok`](dossier.html#def-e2eCorrectness-storage_ok);
+  deployment doesn't assume it, and establishes it for later calls), and the
   source run, for every gas filling, to keep within them: every storage
   region it uses is in `H`, every lock it takes is in the lock list, and
   every storage it takes back from a called contract decodes on the
@@ -202,9 +215,12 @@ in the [dossier](dossier.html). In groups:
   a target; its proof is open, and it is not shown here.
 - **Contracts the compiler definition refuses.** If `compile_vyper` returns
   nothing, the theorems say nothing.
-- **The frontend and the Python compiler.** Parsing and Vyper's own semantic
-  analysis are not verified: the theorems start from the frontend's output.
-  They are about the HOL compiler definition, not the `vyper` executable.
+- **The frontend and the Python compiler.** Vyper's parsing and semantic
+  analysis are not verified, and neither is vyper-hol's translation of
+  their annotated AST into `tops`: the theorems take `tops` as given,
+  whatever produced it, and ask only that `check_contract` accept it and
+  `compile_vyper` compile it (with the other hypotheses). They are about
+  the HOL compiler definition, not the `vyper` executable.
 - **Revert data and exact gas.** A revert is matched by a revert, but its
   data isn't compared (beyond the empty revert on unmatched calldata). Gas
   sufficiency says some amount of gas is enough; it gives no bound.
