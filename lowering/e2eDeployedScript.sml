@@ -8,6 +8,7 @@ Ancestors
   immutableSectionRel vfmState vfmRunCall callTrace frameOutcome frameGas
   vyperInterpreter vyperStorageFootprint stackBoundSoundness stackBoundDefs
   vfmConstants vfmExecutionProp frameRunRaises guardSourceAlignment
+  e2eTransactionWorld e2eProducers asmOptNonemptyFinalizer
 
 (* Deployment installs the code and establishes the source facts at a.
    The transaction quantifier lets us reuse the existing source relations. *)
@@ -456,36 +457,6 @@ Proof
   simp[]
 QED
 
-(* TOP-LEVEL: call correctness in the world supplied by deployment. *)
-Theorem vyper_call_correct_deployed:
-  !fin policy tops deploy_bc runtime_bc am tx es H.
-    fin IN accepted_finalizers /\
-    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    deployed tops runtime_bc am tx.target /\
-    call_tx_well_typed tx /\ call_entry_rel am tx es /\
-    LENGTH (call_trace es) < 2 ** 64 /\
-    storage_ok H am tx /\
-    call_within H tops am tx es
-    ==>
-    ?r es'.
-      run_call es = SOME (r, es') /\
-      (frame_starved es r es' \/
-       calldata_result_rel H tops am tx es r es')
-Proof
-  rpt gen_tac >> strip_tac >>
-  `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es` by
-    simp[call_premises_deployed] >>
-  drule_all e2eCorrectnessTheory.vyper_call_correct >>
-  disch_then (qx_choosel_then [`r`, `es'`] strip_assume_tac) >>
-  qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
-  DISJ1_TAC >>
-  qpat_x_assum `frame_resource_starved _ _ _`
-    (strip_assume_tac o REWRITE_RULE [frame_resource_starved_def]) >>
-  PURE_REWRITE_TAC [frame_starved_def] >>
-  qexistsl_tac [`exc`, `out`, `lgs`] >>
-  (conj_tac >- metis_tac[call_entry_stack_check] >> asm_rewrite_tac[])
-QED
-
 Theorem call_preserves_deployed:
   deployed tops runtime_bc am tx.target /\ call_tx_well_typed tx /\
   runtime_bc <> [] /\ call_entry_rel am tx es /\ LENGTH es.contexts = 1 /\
@@ -500,6 +471,297 @@ Proof
   qpat_x_assum `deployed _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [deployed_def]) >>
   drule_all call_frame_preserves_call_ready >> simp[call_ready_deployed]
+QED
+
+Triviality storage_ok_target:
+  storage_ok H am tx /\ tx'.target = tx.target ==>
+  storage_ok H am tx'
+Proof
+  simp[storage_ok_def, horizon_ok_def] >>
+  strip_tac >>
+  `storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx' NONE)
+      (initial_state am []) (FST H) <=>
+   storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am []) (FST H)` by
+    (irule vyperCallFiniteStorageSupportTheory.storage_well_formed_on_target >>
+     simp[initial_evaluation_context_def]) >>
+  fs[]
+QED
+
+Triviality call_next_storage_ok:
+  storage_ok H am tx /\
+  storage_ok H am' txd /\
+  call_within H tops am tx es /\
+  calldata_dispatch tops tx.calldata = SOME (f, vals) /\
+  txd = tx with <| function_name := f; args := vals |> /\
+  call_result_rel_at gs tops am txd es (INR NONE) es' /\
+  ~source_exempt tops
+    (call_external (SOME (MAP SND (call_trace es))) gs am txd) /\
+  call_external (SOME (MAP SND (call_trace es))) gs am txd =
+    (res, am', rqs) /\
+  LENGTH es.contexts = 1 /\ ~MEM txd.target es'.rollback.toDelete ==>
+  !tx'. tx'.target = txd.target ==>
+    storage_ok H (next_source_machine am' es') tx'
+Proof
+  strip_tac >> qx_gen_tac `tx'` >> strip_tac >>
+  qpat_x_assum `txd = _` SUBST_ALL_TAC >>
+  qpat_x_assum `storage_ok H am' _`
+    (strip_assume_tac o BETA_RULE o
+     REWRITE_RULE [storage_ok_def, horizon_ok_def, LET_THM]) >>
+  qabbrev_tac `H0 = storage_trace_horizon
+    (source_storage_trace am
+      (tx with <| function_name := f; args := vals |>)
+      (MAP SND (call_trace es)) gs)` >>
+  `valid_horizon
+      (initial_evaluation_context am.sources am.layouts
+        (tx with <| function_name := f; args := vals |>) NONE)
+      (initial_state am []) H
+      (source_storage_trace am
+        (tx with <| function_name := f; args := vals |>)
+        (MAP SND (call_trace es)) gs)` by
+    (irule valid_horizon_for_dispatch >> simp[] >>
+     qexists_tac `tops` >> simp[]) >>
+  `accounts_agree H0 tx.target am'.accounts
+      (process_deletions es'.rollback.toDelete es'.rollback.accounts)` by
+    (drule_all call_result_rel_at_success_accounts >>
+     simp[Abbr `H0`]) >>
+  qpat_x_assum `storage_ok H am tx`
+    (strip_assume_tac o BETA_RULE o
+     REWRITE_RULE [storage_ok_def, horizon_ok_def, LET_THM]) >>
+  `!region. MEM region (FST H0) ==> MEM region (FST H)` by
+    (rpt strip_tac >>
+     qpat_x_assum `valid_horizon _ _ H _`
+       (strip_assume_tac o REWRITE_RULE [valid_horizon_def]) >>
+     qpat_x_assum `storage_observations_ok _ _ _`
+       (strip_assume_tac o BETA_RULE o
+        REWRITE_RULE [storage_observations_ok_def, LET_THM]) >>
+     qpat_x_assum `EVERY (\region. MEM region (FST H)) _`
+       (strip_assume_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
+     qpat_x_assum `!region. _` (qspecl_then [`region`] mp_tac) >>
+     simp[storage_trace_horizon_def, storage_trace_regions_def, Abbr `H0`] >>
+     simp[] >> strip_tac >>
+     qpat_x_assum `MEM region _ ==> MEM region (FST H)` irule >>
+     gvs[storage_trace_horizon_def, storage_trace_regions_def]) >>
+  `!j b. storage_dead H0 F
+       (lookup_account tx.target am'.accounts).storage j b ==>
+       storage_dead H F (lookup_account tx.target am'.accounts).storage j b` by
+    (rpt strip_tac >>
+     qpat_x_assum `storage_dead H0 F _ _ _` mp_tac >>
+     simp[loweringStateRelDefsTheory.storage_dead_def] >>
+     strip_tac >> qexistsl_tac [`slot`, `tv`] >>
+     qpat_x_assum `regions_consistent (FST H)`
+       (strip_assume_tac o REWRITE_RULE [regions_consistent_def]) >>
+     conj_tac >-
+       (qpat_x_assum `!region. MEM region (FST H0) ==> MEM region (FST H)`
+          (qspecl_then [`(F,slot,tv)`] mp_tac) >> simp[] >> metis_tac[]) >>
+     conj_tac >- metis_tac[] >>
+     rpt gen_tac >> strip_tac >> metis_tac[]) >>
+  qabbrev_tac `D = storage_dead H0 F
+    (lookup_account tx.target am'.accounts).storage` >>
+  `storage_agree D (lookup_account tx.target am'.accounts).storage
+      (lookup_account tx.target es'.rollback.accounts).storage` by
+    (qpat_x_assum `accounts_agree H0 _ _ _`
+       (strip_assume_tac o REWRITE_RULE
+        [loweringStateRelDefsTheory.accounts_agree_def]) >>
+     rw[GSYM lookup_account_process_deletions] >>
+     rw[lookup_account_process_deletions] >> simp[] >>
+     `process_deletions es'.rollback.toDelete es'.rollback.accounts tx.target =
+        es'.rollback.accounts tx.target` by
+       (mp_tac (vfmProgTheory.lookup_account_process_deletions_other |> Q.INST
+          [`addr` |-> `tx.target`, `toDelete` |-> `es'.rollback.toDelete`,
+           `acc` |-> `es'.rollback.accounts`]) >>
+        impl_tac >-
+          (qpat_x_assum
+             `~MEM (tx with <| function_name := f; args := vals |>).target _`
+             (strip_assume_tac o SIMP_RULE (srw_ss())
+              [vyperContextTheory.call_txn_component_equality])) >>
+        simp[lookup_account_def]) >>
+     rw[] >>
+     rw[lookup_account_def, Abbr `D`] >> metis_tac[]) >>
+  `!j b slot tv. D j b /\ MEM (F,slot,tv) (FST H) /\
+      w2n slot <= j /\ j < w2n slot + type_slot_size tv ==>
+      dead_bytes (lookup_account tx.target am'.accounts).storage
+        (w2n slot) tv j b` by
+    (rw[Abbr `D`] >> rpt gen_tac >>
+     qpat_x_assum `!j b. _` (qspecl_then [`j`, `b`] mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     drule accountsRelPropsTheory.observed_storage_region_read_live >>
+     simp[loweringStateRelDefsTheory.storage_read_live_def] >> metis_tac[]) >>
+  rw[storage_ok_def, horizon_ok_def] >> simp[] >>
+  mp_tac (Q.INST
+    [`cx` |-> `initial_evaluation_context am'.sources am'.layouts
+       (tx with <| function_name := f; args := vals |>) NONE`,
+     `R1` |-> `FST (H : (bool # bytes32 # type_value) list # num list)`,
+     `R2` |-> `FST (H : (bool # bytes32 # type_value) list # num list)`,
+     `cx2` |-> `initial_evaluation_context am'.sources am'.layouts tx' NONE`,
+     `D` |-> `D`] storage_well_formed_on_horizon_extension) >>
+  impl_tac >- gvs[initial_evaluation_context_def] >>
+  metis_tac[]
+QED
+
+Triviality call_success_storage_ok:
+  storage_ok H am tx /\
+  source_typing_ok tops am tx /\
+  call_state_rel tops runtime_bc am tx es /\
+  call_within H tops am tx es /\
+  calldata_result_rel H tops am tx es (INR NONE) es' /\
+  LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete ==>
+  gas_readings_rel (gas_readings es)
+    (\gs. (!f vals.
+        calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+        ~source_exempt tops
+          (call_external (SOME (MAP SND (call_trace es))) gs am
+            (tx with <| function_name := f; args := vals |>))) ==>
+      !tx'. tx'.target = tx.target ==>
+        storage_ok H (next_source_machine am es') tx')
+Proof
+  strip_tac >> Cases_on `calldata_dispatch tops tx.calldata`
+  >- (qpat_x_assum `calldata_result_rel H tops am tx es (INR NONE) es'`
+        (strip_assume_tac o REWRITE_RULE [calldata_result_rel_def]) >>
+    gvs[frame_outcome_def]) >>
+  rename1 `calldata_dispatch tops tx.calldata = SOME entry` >>
+  PairCases_on `entry` >>
+  rename1 `calldata_dispatch tops tx.calldata = SOME (f, vals)` >>
+  qpat_x_assum `calldata_result_rel H tops am tx es (INR NONE) es'`
+    (strip_assume_tac o REWRITE_RULE [calldata_result_rel_def]) >>
+  gvs[] >>
+  qpat_x_assum `call_result_rel H tops am (tx with <| function_name := f; args := vals |>) es (INR NONE) es'`
+    (strip_assume_tac o BETA_RULE o
+     REWRITE_RULE [call_result_rel_def, LET_THM]) >>
+  qpat_x_assum `gas_readings_rel _ _`
+    (fn bridge =>
+      match_mp_tac (MATCH_MP
+        (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_mono) bridge)) >>
+  qx_gen_tac `gs` >> BETA_TAC >> strip_tac >>
+  Cases_on `call_external (SOME (MAP SND (call_trace es))) gs am
+      (tx with <| function_name := f; args := vals |>)` >>
+  rename1 `call_external (SOME (MAP SND (call_trace es))) gs am
+      (tx with <| function_name := f; args := vals |>) = (res, output)` >>
+  PairCases_on `output` >>
+  rename1 `call_external (SOME (MAP SND (call_trace es))) gs am
+      (tx with <| function_name := f; args := vals |>) = (res, am', rqs)` >>
+  gvs[] >>
+  `source_typing_ok tops am (tx with <| function_name := f; args := vals |>) /\
+   call_state_rel tops runtime_bc am
+     (tx with <| function_name := f; args := vals |>) es` by
+    simp[callPremiseDispatchTheory.call_premises_dispatch_invariant] >>
+  `source_deployment_rel tops am
+      (tx with <| function_name := f; args := vals |>)` by
+    (qpat_x_assum `call_state_rel tops runtime_bc am
+         (tx with <| function_name := f; args := vals |>) es`
+       (strip_assume_tac o REWRITE_RULE [call_state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `next_source_machine am' es' = next_source_machine am es'` by
+    (irule call_external_next_source_machine >> metis_tac[]) >>
+  gvs[] >>
+  qpat_x_assum `call_result_rel_at _ _ _ _ _ _ _` assume_tac >>
+  qpat_x_assum `storage_ok H _ _` assume_tac >>
+  strip_tac >> qx_gen_tac `tx'` >> strip_tac >>
+  qpat_x_assum `next_source_machine am' es' = next_source_machine am es'`
+    (fn h => PURE_REWRITE_TAC [GSYM h]) >>
+  irule call_next_storage_ok >>
+  qexistsl_tac [`am`, `es`, `f`, `gs`, `res`, `rqs`, `tops`, `tx`,
+               `(tx with <| function_name := f; args := vals |>)`, `vals`] >>
+  rpt conj_tac
+  >- gvs[vyperContextTheory.call_txn_component_equality]
+  >- (qpat_x_assum
+        `call_external (SOME (MAP SND (call_trace es))) gs am
+           (tx with <| function_name := f; args := vals |>) = (res,am',rqs)`
+        (fn h => PURE_REWRITE_TAC [h]) >>
+      first_assum ACCEPT_TAC)
+  >- simp[]
+  >- gvs[vyperContextTheory.call_txn_component_equality]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- simp[]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+QED
+
+(* TOP-LEVEL: call correctness and preservation of a surviving deployment. *)
+Theorem vyper_call_correct_deployed:
+  !fin policy tops deploy_bc runtime_bc am tx es H.
+    fin IN accepted_finalizers /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    deployed tops runtime_bc am tx.target /\
+    call_tx_well_typed tx /\ call_entry_rel am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    storage_ok H am tx /\
+    call_within H tops am tx es
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_starved es r es' \/
+       calldata_result_rel H tops am tx es r es') /\
+      (LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete ==>
+       deployed tops runtime_bc (transaction_world am r es') tx.target /\
+       gas_readings_rel (gas_readings es)
+         (\gs. (!f vals.
+             calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
+             ~source_exempt tops
+               (call_external (SOME (MAP SND (call_trace es))) gs am
+                 (tx with <| function_name := f; args := vals |>))) ==>
+           !tx'. tx'.target = tx.target ==>
+             storage_ok H (transaction_world am r es') tx'))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `runtime_bc <> []` by
+    (fs[accepted_finalizers_def]
+     >- (gvs[] >> metis_tac[compile_vyper_runtime_nonempty]) >>
+     gvs[] >> drule compile_vyper_runtime_phases_asm_opt >>
+     metis_tac[codegen_assembly_finalizer_nonempty]) >>
+  `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es` by
+    simp[call_premises_deployed] >>
+  drule_all e2eCorrectnessTheory.vyper_call_correct >>
+  disch_then (qx_choosel_then [`r`, `es'`]
+    (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
+  reverse conj_tac
+  >- (strip_tac >> Cases_on `r = INR NONE`
+      >- (simp[transaction_world_def] >>
+          qpat_x_assum `frame_resource_starved es r es' \/
+             calldata_result_rel H tops am tx es r es'`
+            (strip_assume_tac o REWRITE_RULE [frame_resource_starved_def]) >>
+          gvs[frame_outcome_def] >>
+          Cases_on `call_external NONE [] am tx` >>
+          rename1 `call_external NONE [] am tx = (res, output)` >>
+          PairCases_on `output` >>
+          rename1 `call_external NONE [] am tx = (res, am_out, rqs)` >>
+          `next_source_machine am_out es' = next_source_machine am es'` by
+            (irule call_external_next_source_machine >>
+             fs[call_state_rel_def] >> metis_tac[]) >>
+          `deployed tops runtime_bc (next_source_machine am es') tx.target` by
+            (drule_all call_preserves_deployed >> simp[]) >>
+          conj_tac
+          >- first_assum ACCEPT_TAC
+          >- (irule call_success_storage_ok >> rpt conj_tac
+              >- first_assum ACCEPT_TAC
+              >- first_assum ACCEPT_TAC
+              >- first_assum ACCEPT_TAC
+              >- first_assum ACCEPT_TAC
+              >- (qexists_tac `runtime_bc` >> first_assum ACCEPT_TAC)
+              >- first_assum ACCEPT_TAC
+              >- first_assum ACCEPT_TAC))
+      >- (simp[transaction_world_def] >>
+          qpat_x_assum `storage_ok H am tx` assume_tac >>
+          rw[gas_readings_rel_def] >>
+          qexistsl_tac [`[]`, `gas_readings es`] >> simp[] >>
+          rpt gen_tac >> strip_tac >>
+          rpt gen_tac >> strip_tac >>
+          irule storage_ok_target >>
+          qexists_tac `tx` >> simp[])) >>
+  qpat_x_assum `frame_resource_starved _ _ _ \/ _` strip_assume_tac >>
+  asm_rewrite_tac[] >>
+  DISJ1_TAC >>
+  qpat_x_assum `frame_resource_starved _ _ _`
+    (strip_assume_tac o REWRITE_RULE [frame_resource_starved_def]) >>
+  PURE_REWRITE_TAC [frame_starved_def] >>
+  qexistsl_tac [`exc`, `out`, `lgs`] >>
+  (conj_tac >- metis_tac[call_entry_stack_check] >> asm_rewrite_tac[])
 QED
 
 (* The per-filling form of the deployed call gas companion. *)
