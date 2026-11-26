@@ -1,6 +1,6 @@
 Theory abiArgsCompilerImage
 Ancestors
-  exprLowering context compileEnv emitHelper vyperAST exprWordOperand exprSafeOperand exprOperandVar exprSafeOperandBuiltins exprCallBounds fragExec
+  exprLowering context compileEnv emitHelper vyperAST exprWordOperand exprSafeOperand exprOperandVar exprSafeOperandBuiltins exprCallBounds fragExec namedConstDispatchResult
 
 Theorem abi_image_convert_label:
   compile_type_convert op conv sa = (Label l,sb) ==>
@@ -635,7 +635,13 @@ Proof
   >~ [`compile_builtin_dispatch_body _ _ _ _ (Acc item) _ _ = _`] >-
     (drule_all abi_image_builtin_acc_label >> strip_tac >> gvs[])
   >~ [`compile_builtin_dispatch_body _ _ _ _ (AsWeiValue denom) _ _ = _`] >-
-    (drule_all abi_image_builtin_wei_label >> strip_tac >> gvs[]) >>
+    (drule_all abi_image_builtin_wei_label >> strip_tac >> gvs[])
+  >~ [`compile_builtin_dispatch_body _ _ _ _ NamedConst _ _ = _`] >-
+    (drule named_const_dispatch_not_label >>
+     disch_then (qspec_then `l` mp_tac) >> simp[])
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (BoolChain _ _) _ _ = _`] >-
+    (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[vv_operand_def])) >>
   metis_tac[abi_image_builtin_scalar_not_label, abi_image_builtin_hash_not_label,
             abi_image_builtin_len_not_label, abi_image_builtin_bop_not_label,
             abi_image_builtin_fresh_not_label, abi_image_builtin_makearray_not_label,

@@ -32,6 +32,8 @@ Ancestors
   whitelistCheckerDecls whitelistCheckerDeploy whitelistCheckerTypes
   whitelistCheckerProgram whitelistCheckerExprs whitelistCheckerStmts
   whitelistCheckerFnSigs
+  whitelistCheckerCallGraphProps whitelistAllocatedHeaderProps
+  whitelistCheckedBareGlobalProps whitelistLinkedConstProps whitelistEventTypeProps
   relation vyperTypeContractStaticMaps vyperTypeCallGraph
   vyperTypeCallGraphSoundness vyperTypeEventLookup placeTypingBuildProps
   supportedNameRoot supportedGetterProps compileVyper constSubst constSubstMods
@@ -40,35 +42,6 @@ Ancestors
   vyperTypeExternalDefaults
 
 (* ===== Runtime gate ===== *)
-
-Triviality checker_indexed_event_type_supported:
-  assignable_type tenv ty /\ event_indexable_type ty ==>
-  supported_event_leaf_type ty
-Proof
-  Cases_on `ty` >> simp[event_indexable_type_def, supported_event_leaf_type_def]
-  >- (strip_tac >> fs[assignable_type_def] >>
-      drule well_formed_base_scalar >> strip_tac >>
-      rename1 `BaseT bt` >> Cases_on `bt` >>
-      gvs[supported_scalar_type_def, supported_word_type_def]) >>
-  simp[supported_scalar_type_def]
-QED
-
-Triviality layouts_agree_allocated_header:
-  layouts_agree tops am tx /\ MEM tl tops /\
-  toplevel_allocated am.layouts tx.target NONE tl ==>
-  case tl of
-    VariableDecl _ Storage _ _ slot => IS_SOME slot
-  | VariableDecl _ Transient _ _ slot => IS_SOME slot
-  | HashMapDecl _ _ _ _ _ slot => IS_SOME slot
-  | _ => T
-Proof
-  Cases_on `tl` >> simp[] >>
-  TRY (rename1 `VariableDecl _ mut` >> Cases_on `mut`) >>
-  simp[toplevel_allocated_def, layouts_agree_def, lookup_var_slot_in_layouts_def] >>
-  Cases_on `ALOOKUP am.layouts tx.target` >> simp[] >>
-  PairCases_on `x` >> simp[] >>
-  metis_tac[]
-QED
 
 Triviality checker_supported_declaration_header:
   check_toplevel_decl [(NONE, tops)] art NONE tl /\
@@ -211,17 +184,6 @@ Proof
   drule_all checker_hashmap_decl_facts >>
   gvs[checker_vtype_ok_def, check_toplevel_decl_def, check_value_type_def,
       type_env_all_modules_def, FUNION_FEMPTY_2, GSYM type_env_def]
-QED
-
-Triviality checked_bare_global_vtype:
-  check_contract mode layouts addr mods = SOME art /\
-  FLOOKUP art.cta_bare_globals k = SOME ty ==>
-  FLOOKUP art.cta_toplevel_vtypes k = SOME (Type ty)
-Proof
-  strip_tac >> PairCases_on `k` >>
-  `ALOOKUP [((tx:call_txn).target, mods)] tx.target = SOME mods` by simp[] >>
-  drule_all check_contract_bare_globals_consistent_checked >>
-  disch_then (qspec_then `ARB` strip_assume_tac)
 QED
 
 Triviality checked_single_fn_sig_ret:
@@ -565,59 +527,14 @@ Proof
        supported_expr_def]
 QED
 
-Triviality module_consts_env_keys:
-  !ts acc. MAP FST (module_consts_env ts acc) = MAP FST acc ++ const_decl_names ts
-Proof
-  Induct >> simp[module_consts_env_def, const_decl_names_def] >> Cases >>
-  simp[module_consts_env_def, const_decl_names_def] >>
-  rename1 `VariableDecl _ mut` >> Cases_on `mut` >>
-  simp[module_consts_env_def, const_decl_names_def]
-QED
-
-Triviality checked_consts_fold:
-  check_contract F layouts addr [(NONE, tops)] = SOME art ==>
-  ?imms A. constants_fold_module [(NONE, tops)] imms NONE tops FEMPTY = SOME A
-Proof
-  strip_tac >>
-  `contract_constants_ok [(NONE, tops)]` by
-    (qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
-     simp[check_contract_def] >> rw[]) >>
-  gvs[contract_constants_ok_def, vyperInterpreterTheory.constants_order_def,
-      constants_fold_def,
-      optionTheory.IS_SOME_EXISTS] >>
-  Cases_on `initial_immutables (type_env_all_modules [(NONE, tops)]) [(NONE, tops)]` >>
-  gvs[AllCaseEqs()] >> metis_tac[]
-QED
-
-Triviality checked_const_replacement:
-  check_contract F layouts addr [(NONE, tops)] = SOME art /\
-  MEM (id, r) (module_consts_env tops []) ==>
-  ALOOKUP (module_consts_env tops []) id = SOME r /\
-  constant_expr [(NONE, tops)] r /\ no_neg_exp_expr r
-Proof
-  strip_tac >>
-  `ALOOKUP (module_consts_env tops []) id = SOME r` by
-    (irule ALOOKUP_ALL_DISTINCT_MEM >> simp[module_consts_env_keys] >>
-     drule checked_const_decl_names_distinct >> simp[]) >>
-  `ALOOKUP [(NONE, tops)] (NONE:num option) = SOME tops` by simp[] >>
-  drule checked_consts_fold >> strip_tac >>
-  drule_all checked_module_consts_env_replacement >> strip_tac >>
-  metis_tac[constant_value_no_neg_exp]
-QED
-
 Theorem check_contract_supported_consts:
   check_contract F layouts addr [(NONE, tops)] = SOME art ==>
   EVERY (supported_pure_expr tops o SND) (module_consts_env tops [])
 Proof
   strip_tac >>
-  `EVERY (no_neg_exp_expr o SND) (module_consts_env tops [])` by
-    (rw[EVERY_MEM, FORALL_PROD] >> metis_tac[checked_const_replacement]) >>
-  rw[EVERY_MEM, FORALL_PROD] >> drule_all checked_const_replacement >>
-  strip_tac >>
-  `ALOOKUP [(NONE, tops)] (NONE:num option) = SOME tops` by simp[] >>
-  drule_all checked_module_consts_env_replacement_typed >> strip_tac >>
-  drule_all constant_expr_runtime_constant >> strip_tac >>
-  drule_all checked_const_typed_supported >> simp[]
+  irule (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`]
+    check_contract_linked_supported_consts) >>
+  metis_tac[ALOOKUP_def]
 QED
 
 Theorem check_contract_supported_declaration_bodies:
@@ -645,16 +562,6 @@ Proof
 QED
 
 (* ===== Deployment gate ===== *)
-
-Triviality checked_no_self_call:
-  check_contract mode layouts addr mods = SOME art ==>
-  ~MEM (k,k) (contract_call_edges mods)
-Proof
-  strip_tac >> drule checked_contract_call_graph_irreflexive >>
-  rw[relationTheory.irreflexive_def] >> strip_tac >>
-  first_x_assum (qspec_then `k` mp_tac) >> simp[] >>
-  irule relationTheory.TC_SUBSET >> fs[call_edge_rel_def]
-QED
 
 (* A constructor calls only internal functions: its own signature is the
    only other one in the deploy artifact, and calling it is a self-edge. *)
