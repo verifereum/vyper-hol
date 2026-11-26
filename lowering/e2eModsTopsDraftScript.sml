@@ -12933,12 +12933,10 @@ Resume vyper_call_gas_sufficient_mods[linked_runtime_gas_selected]:
            (ACCEPT_TAC o MATCH_MP preserves)))) >>
   reverse conj_tac
   >- (disj2_tac >>
-      qpat_assum `?fr. exit_result (run_context fr runtime_unit.cu_context vi) /\ _`
-        (qx_choose_then `exit_fuel` (map_every assume_tac o CONJUNCTS)) >>
-      qexistsl_tac [`fname`,`vals`,`gs`,`exit_fuel`] >>
-      qpat_assum `Abbrev (td = _)` (fn td =>
-        PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] td)]) >>
-      rpt conj_tac >> (REFL_TAC ORELSE FIRST_ASSUM ACCEPT_TAC)) >>
+      qexistsl_tac [`gs`,`fr`] >>
+      qpat_assum `vi.vs_outcomes = MAP SND (call_trace eg)` (fn outcomes =>
+        PURE_REWRITE_TAC [GSYM outcomes]) >>
+      conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
   asm_rewrite_tac[] >> strip_tac >>
   qexists_tac `stop_fuel` >>
   conj_tac >- first_assum ACCEPT_TAC >>
