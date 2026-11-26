@@ -3,11 +3,11 @@ Theory bodyForArrayFragMods
 Ancestors
   bodyForArrayCodeCutsMods bodyForArrayExprRunMods bodyForArrayCaptureInstallMods
   bodyForArrayOriginRoundsMods bodyForArrayRouteMods bodyForArraySelectedPacketMods
-  bodyForArrayHeaderMods
+  bodyForArrayHeaderMods bodyForArrayLayoutCopyOpenMods bodyForArrayRawSlotSelectorMods
   bodyForRangeHeaderMods bodyFullForFacts bodyFullForArrayRound bodyFullPostsMods
   gasOutcomeFullPostMods bodyInvCodeProps bodyInvExecutionProps exprBodyPreProps option
   loweringPosts stmtLowering compileEnv gasShadow vyperTypeSystem vyperTypeEvalCaseProofs
-  vyperTypeInvariants vyperInterpreter vyperValue finite_map
+  vyperTypeInvariants vyperInterpreter vyperValue vyperStorageFootprint finite_map
 Libs monadsyntax
 
 val _ = Parse.hide "body";
@@ -82,6 +82,8 @@ Proof
   `?bd. expr_type e = ArrayT typ bd` by
     (drule type_stmt_for_array_bound >> metis_tac[]) >>
   drule_all_then strip_assume_tac for_array_paired_cuts_mods >>
+  drule_then assume_tac contract_inv_acyclic_struct_metadata >>
+  drule_all_then assume_tac for_array_layout_copy_open_mods >>
   drule_all_then assume_tac for_array_source_pre_mods >>
   qabbrev_tac `Done = for_array_done_mods DF lo d ctx func cenv cx lctx sa sb es s0 G0 tn0` >>
   qabbrev_tac `Term = \H ex ee gt r.
@@ -102,14 +104,17 @@ Resume compile_for_array_frag_full_mods[route]:
   qabbrev_tac `P = \H (res:eval_result + exception) ee G tn t.
     for_array_expr_landed_mods (DF,lo,d,ctx,func) mods cx cenv env e vv sbExpr
       (es,sa,s0,G0,tn0) H (OUTL res) ee G tn t` >>
-  qabbrev_tac `Entry = for_array_selected_entry_mods mods exps cx env st0 tyv id body
-    (DF,lo,d,ctx,func,shadow_func) (es,sa,s0,G0,tn0)
-    ((cenv,id,typ,e,typ,bd,ret_ty,body),
-     (vv,sbExpr,shadow_sa,shadow_sbExpr,loc,len_op,saL),
-     (bc,saD,saA,xd,capacity,aidItem),
-     (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var),
-     (sa',stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy),
-     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody))` >>
+  qabbrev_tac `Entry = \H vs ee G tn t.
+    for_array_selected_entry_mods mods exps cx env st0 tyv id body
+      (DF,lo,d,ctx,func,shadow_func) (es,sa,s0,G0,tn0)
+      ((cenv,id,typ,e,typ,bd,ret_ty,body),
+       (vv,sbExpr,shadow_sa,shadow_sbExpr,loc,len_op,saL),
+       (bc,saD,saA,xd,capacity,aidItem),
+       (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var),
+       (sa',stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy),
+       (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody)) H vs ee G tn t /\
+    (is_slot_addressed loc ==>
+     ?tgt nid. loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid)` >>
   irule (Q.INST [`ok` |-> `stmt_res_ok lctx`] for_array_outcome_from_capture_mods) >>
   qexistsl_tac [`Entry`,`P`,`lctx`,`tyv`] >>
   conj_tac >- suspend "install" >>
@@ -133,6 +138,14 @@ QED
 
 Resume compile_for_array_frag_full_mods[install]:
   simp[NoAsms,Abbr `P`,Abbr `Entry`] >> rpt gen_tac >> strip_tac >>
+  `loc = (case vv_location vv of NONE => LocMemory | SOME l => l)` by
+    (qhdtm_assum `for_nonslot_layout`
+      (strip_assume_tac o REWRITE_RULE [for_nonslot_layout_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `(is_slot_addressed loc ==>
+    ?tgt nid. loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid)` by
+    (disch_tac >> drule_all_then ACCEPT_TAC for_array_raw_slot_selector_mods) >>
+  qpat_assum `is_slot_addressed _ ==> _` (fn th => rewrite_tac[th]) >>
   irule for_array_origin_capture_install_mods >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (qexists_tac `gas_explicit marks s0.vs_gas_readings` >> first_assum ACCEPT_TAC) >>
@@ -145,6 +158,15 @@ Resume compile_for_array_frag_full_mods[rounds]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `Abbrev (Entry = _)`
     (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> (\h vs ee G tn t. _) H _ _ _ _ _`
+    (strip_assume_tac o CONV_RULE FORALL_AND_CONV o
+     REWRITE_RULE [IMP_CONJ_THM] o BETA_RULE) >>
+  `(is_slot_addressed loc ==>
+    ?tgt nid. loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid)` by
+    (qhdtm_assum `storage_trace_domain`
+       (assume_tac o REWRITE_RULE [storage_trace_domain_def]) >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> (is_slot_addressed _ ==> _)`
+       (drule_then ACCEPT_TAC)) >>
   simp[NoAsms,Abbr `Done`,Abbr `Term`] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
     (qhdtm_assum `ret_pc_ok` (mp_tac o REWRITE_RULE [ret_pc_ok_def]) >> simp[]) >>
@@ -152,7 +174,7 @@ Resume compile_for_array_frag_full_mods[rounds]:
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   first_assum (part_match_exists_tac (fst o dest_conj) o concl) >>
   qexistsl_tac [`bindings`,`env'`,`n`,`src`,`tops`] >>
-  pure_asm_rewrite_tac [AND_CLAUSES] >> FAIL_TAC "rounds cuts"
+  pure_asm_rewrite_tac [AND_CLAUSES] >> simp[]
 QED
 
 Finalise compile_for_array_frag_full_mods
