@@ -551,6 +551,13 @@ Proof
            lookup_function_def, listTheory.FIND_thm]) >>
   rpt gen_tac >> disch_tac >> REWRITE_TAC[inst_create_size_ok_def] >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!vi. raw_variant fmp vi vs ==>
+    o1_pre_walk_inv D unit.cu_context vi /\
+    mem_inv (\ctx fn i s. inst_dload_in_section i s /\
+      s.vs_code = vi.vs_code /\ s.vs_data_section = vi.vs_data_section)
+      unit.cu_context vi` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!vi. raw_variant fmp vi vs ==> _ /\ _ /\ _` drule >> simp[]) >>
   drule_all o1_pipeline_reached_create_size >>
   disch_then (qx_choosel_then [`vi`, `rf`, `ri`, `rs`, `a`, `p`, `z`, `sl`] strip_assume_tac) >>
   `inst_create_size_ok ri rs` by metis_tac[] >>
