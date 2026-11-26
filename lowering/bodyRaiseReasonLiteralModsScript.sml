@@ -70,8 +70,8 @@ Resume compile_raise_reason_literal_frag_full_mods[revert]:
      simp[] >>
      qexistsl_tac [`sa`,`s0`,`d`] >> simp[] >>
      rpt strip_tac >> first_x_assum drule >> simp[]) >>
-  irule gas_outcome_full_mods_exit >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`Gf`,`es`,`Abort Revert_abort z`,`INR (AssertException str)`,`tnf`] >>
+  irule gas_outcome_full_mods_exit_revert >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`Gf`,`es`,`INR (AssertException str)`,`tnf`,`z`] >>
   simp[eval_raise_string_literal_reason, fragExecTheory.exit_result_def,
        stmt_exit_ptr_def, expr_exit_def, halt_exit_def] >>
   rpt strip_tac >>
