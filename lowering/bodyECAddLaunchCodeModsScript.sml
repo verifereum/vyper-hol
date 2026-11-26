@@ -147,7 +147,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ecadd_launch_code_mods:
+Theorem ecadd_launch_code_with_suffix_mods:
   compile_ecadd_points (Var p) (Var q) sf = (res,sb) /\
   compile_ecadd_points (Var p) (Var q) shf = (shres,shb) /\
   gas_shadow_state sf shf /\ gas_shadow_context ctx shctx /\
@@ -156,6 +156,10 @@ Theorem ecadd_launch_code_mods:
   fn_has_code sf sb func /\ fn_has_code shf shb shfunc /\
   local_ptrs_reserved cenv sf ==>
   ?ib ca c1 c2 c3 cp ob sm shm src dst gv cv.
+    (do gas <- emit_op GAS [];
+        success <- emit_op STATICCALL
+          [gas; Lit 6w; Var src; Lit 128w; Var dst; Lit 64w];
+        emit_void ASSERT [success]; return (Var dst) od) sm = (res,sb) /\
     compile_alloc_buffer 128 sf = (ib,ca) /\
     (do x <- emit_op ADD [Var p; Lit 0w]; v <- emit_op MLOAD [x];
         y <- emit_op ADD [ib.buf_operand; Lit 0w]; emit_void MSTORE [y; v] od)
@@ -257,4 +261,63 @@ Proof
     (irule ecadd_launch_fresh >> simp[Abbr `gv`,Abbr `cv`]) >>
   qexistsl_tac [`sm'`,`src`,`dst`] >> gvs[Abbr `gv`,Abbr `cv`] >>
   first_assum ACCEPT_TAC
+QED
+
+Theorem ecadd_launch_code_mods:
+  compile_ecadd_points (Var p) (Var q) sf = (res,sb) /\
+  compile_ecadd_points (Var p) (Var q) shf = (shres,shb) /\
+  gas_shadow_state sf shf /\ gas_shadow_context ctx shctx /\
+  ctx_inst_ids_distinct ctx /\ gas_shadow_function func shfunc /\
+  MEM func ctx.ctx_functions /\ MEM shfunc shctx.ctx_functions /\
+  fn_has_code sf sb func /\ fn_has_code shf shb shfunc /\
+  local_ptrs_reserved cenv sf ==>
+  ?ib ca c1 c2 c3 cp ob sm shm src dst gv cv.
+    compile_alloc_buffer 128 sf = (ib,ca) /\
+    (do x <- emit_op ADD [Var p; Lit 0w]; v <- emit_op MLOAD [x];
+        y <- emit_op ADD [ib.buf_operand; Lit 0w]; emit_void MSTORE [y; v] od)
+      ca = ((),c1) /\
+    (do x <- emit_op ADD [Var p; Lit 32w]; v <- emit_op MLOAD [x];
+        y <- emit_op ADD [ib.buf_operand; Lit 32w]; emit_void MSTORE [y; v] od)
+      c1 = ((),c2) /\
+    (do x <- emit_op ADD [Var q; Lit 0w]; v <- emit_op MLOAD [x];
+        y <- emit_op ADD [ib.buf_operand; Lit 64w]; emit_void MSTORE [y; v] od)
+      c2 = ((),c3) /\
+    (do x <- emit_op ADD [Var q; Lit 32w]; v <- emit_op MLOAD [x];
+        y <- emit_op ADD [ib.buf_operand; Lit 96w]; emit_void MSTORE [y; v] od)
+      c3 = ((),cp) /\
+    compile_alloc_buffer 64 cp = (ob,sm) /\
+    gas_shadow_state sm shm /\ ib.buf_operand = Var src /\ ob.buf_operand = Var dst /\
+    res = Var dst /\ shres = res /\
+    fn_has_code sf ca func /\ fn_has_code ca cp func /\
+    fn_has_code cp sm func /\ fn_has_code sm sb func /\ fn_has_code shm shb shfunc /\
+    ci_mono sf ca /\ ci_mono ca cp /\ ci_mono cp sm /\ ci_mono sm sb /\
+    local_ptrs_reserved cenv ca /\ local_ptrs_reserved cenv cp /\
+    local_ptrs_reserved cenv sm /\
+    MEM (mk_inst sf.cs_next_id ALLOCA [Lit 128w] [src]) (fn_insts func) /\
+    MEM (mk_inst cp.cs_next_id ALLOCA [Lit 64w] [dst]) (fn_insts func) /\
+    emitted_insts sf sm = emitted_insts sf ca ++ emitted_insts ca cp ++
+                         emitted_insts cp sm /\
+    emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb /\
+    gv = STRING #"%" (toString sm.cs_next_var) /\
+    cv = STRING #"%" (toString (sm.cs_next_var + 1)) /\
+    not_fresh_at ca src /\ not_fresh_at cp src /\
+    not_fresh_at sm src /\ not_fresh_at sm dst /\
+    ~not_fresh_at sm gv /\ ~not_fresh_at sm cv /\
+    src <> gv /\ dst <> gv /\ src <> cv /\ dst <> cv /\
+    emitted_insts sm sb =
+      [mk_inst sm.cs_next_id GAS [] [gv];
+       mk_inst (sm.cs_next_id+1) STATICCALL
+         [Var gv; Lit 6w; Var src; Lit 128w; Var dst; Lit 64w] [cv];
+       mk_inst (sm.cs_next_id+2) ASSERT [Var cv] []] /\
+    (!u. ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
+         u.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+         (func.fn_name,sm.cs_next_id) NOTIN gas_explicit_sites ctx shctx /\
+         ?bb. lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+              isPREFIX (emitted_insts sm sb) (DROP u.vs_inst_idx bb.bb_instructions))
+Proof
+  strip_tac >> drule_all ecadd_launch_code_with_suffix_mods >>
+  disch_then strip_assume_tac >>
+  rename1 `compile_alloc_buffer 64 sp = (ob,sm)` >>
+  qexistsl_tac [`ib`,`ca`,`c1`,`c2`,`c3`,`sp`,`ob`,`sm`,`shm`,`src`,`dst`,`gv`,`cv`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
