@@ -123,7 +123,7 @@ Proof
   qpat_assum `eval_exprs _ _ _ = _` (fn th => simp_tac (srw_ss()) [Once bind_def,th,return_def])
 QED
 
-Theorem slice_ordinary_captured_words_mods:
+Theorem slice_ordinary_captured_words_reached_mods:
   ^window_supplier /\
   ((ann = BaseT (BytesT (Dynamic n)) /\ expr_type src = BaseT (BytesT bd) /\ v = BytesV bs) \/
    (?m str. ann = BaseT (StringT n) /\ expr_type src = BaseT (StringT m) /\
@@ -145,6 +145,7 @@ Theorem slice_ordinary_captured_words_mods:
   lookup_var root scs = SOME p /\ ptr_covers Gc tc root scs (LENGTH bs) /\
   w2n p + LENGTH bs < dimword (:256) /\ w2n p + LENGTH bs <= scs.vs_alloca_next /\
   (!H e1 e2 v1 v2 sds ses Gd Ge td te.
+    expr_sim_inv_mods mods cenv cx env e1 /\
     valid_horizon cx st0 H ec.storage_trace /\ sc.cs_next_id <= sd.cs_next_id /\
     MAP FDOM ec.scopes = MAP FDOM e1.scopes /\ MAP FDOM e1.scopes = MAP FDOM e2.scopes /\
     expr_post_mods H ctx func cenv cx start ec sc sd scs e1 v1 x sds /\
@@ -185,7 +186,7 @@ Proof
   suspend "reached"
 QED
 
-Resume slice_ordinary_captured_words_mods[reached]:
+Resume slice_ordinary_captured_words_reached_mods[reached]:
   qabbrev_tac `i = w2n (val_to_w256 v1)` >>
   qabbrev_tac `k = w2n (val_to_w256 v2)` >>
   `v1 = IntV (&i)` by (simp_tac bool_ss [Abbr `i`] >> first_assum ACCEPT_TAC) >>
@@ -225,7 +226,7 @@ Resume slice_ordinary_captured_words_mods[reached]:
   suspend "terminal"
 QED
 
-Resume slice_ordinary_captured_words_mods[terminal]:
+Resume slice_ordinary_captured_words_reached_mods[terminal]:
   `!tail. eval_exprs cx [src;start;len]
       (es with gas_obs := (obs0 ++ (gas_explicit marks1 scs.vs_gas_readings ++
                                     gas_explicit marks2 sds.vs_gas_readings)) ++ tail) =
@@ -278,4 +279,60 @@ Resume slice_ordinary_captured_words_mods[terminal]:
   disch_then ACCEPT_TAC
 QED
 
-Finalise slice_ordinary_captured_words_mods
+Finalise slice_ordinary_captured_words_reached_mods
+
+(* The lean callback remains available when the payload uses only the frames. *)
+Theorem slice_ordinary_captured_words_mods:
+  ^window_supplier /\
+  ((ann = BaseT (BytesT (Dynamic n)) /\ expr_type src = BaseT (BytesT bd) /\ v = BytesV bs) \/
+   (?m str. ann = BaseT (StringT n) /\ expr_type src = BaseT (StringT m) /\
+             v = StringV str /\ bs = MAP (n2w o ORD) str)) /\
+  code_slice_source (Slice n) [src;start;len] = NONE /\
+  slice_operands_ok (Slice n) [src;start;len] /\ value_runtime_typed env (expr_type src) v /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Slice n) [src;start;len]) es /\
+  ^reached src es ec v obs0 /\ ^read_post src es sa s0 G0 tn0 ec sm sms Gm tm v op0 /\
+  MAP FDOM es.scopes = MAP FDOM ec.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==> stmt_state_rel H ctx func cenv cx es s0) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  sm.cs_next_var <= sc.cs_next_var /\ sm.cs_next_id <= sc.cs_next_id /\
+  (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+           (sms,Gm,tm) [] (OK scs,Gc,tc)) /\ ^capture_frame /\
+  not_fresh_at sc root /\ (!z. limit = Var z ==> not_fresh_at sc z) /\
+  (!l. limit <> Label l) /\ eval_operand limit scs = SOME (n2w (LENGTH bs)) /\
+  op_prov Gc limit = NONE /\ op_taint tc limit = {} /\
+  lookup_var root scs = SOME p /\ ptr_covers Gc tc root scs (LENGTH bs) /\
+  w2n p + LENGTH bs < dimword (:256) /\ w2n p + LENGTH bs <= scs.vs_alloca_next /\
+  (!H e1 e2 v1 v2 sds ses Gd Ge td te.
+    valid_horizon cx st0 H ec.storage_trace /\ sc.cs_next_id <= sd.cs_next_id /\
+    MAP FDOM ec.scopes = MAP FDOM e1.scopes /\ MAP FDOM e1.scopes = MAP FDOM e2.scopes /\
+    expr_post_mods H ctx func cenv cx start ec sc sd scs e1 v1 x sds /\
+    expr_post_mods H ctx func cenv cx len e1 sd se sds e2 v2 y ses /\
+    ghost_kept_at lo cenv ec sc Gc tc scs Gd td /\ ghost_kept_at lo cenv e1 sd Gd td sds Ge te ==>
+    mem_bytes_at (w2n p) (LENGTH bs) ses.vs_memory = bs /\
+    (!j. w2n p <= j /\ j < w2n p + LENGTH bs ==> j NOTIN te.t_mem)) /\
+  expr_sim_inv_mods mods cenv cx env ec /\
+  (!e mid. MEM e [start;len] /\ expr_sim_inv_mods mods cenv cx env mid ==>
+    expr_body_pre_mods mods cenv cx env e mid) /\
+  expr_type start = BaseT (UintT 256) /\ expr_type len = BaseT (UintT 256) /\
+  body_const_cells_agree_mods mods cx env ec /\ body_exprs_full_ok_mods mods exps cx [start;len] /\
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods msrc tops cenv cx /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  ^child ty1 start sc sd shc shd x /\ ^child ty2 len sd se shd she y /\
+  sc.cs_next_id <= sd.cs_next_id /\ sd.cs_next_id <= se.cs_next_id /\
+  ^entry ec sc scs Gc tc /\ local_ptrs_reserved cenv sd /\ local_ptrs_reserved cenv se /\
+  (!H. dead_lo_ok_mods H (DF H) lo cenv cx) /\
+  compile_slice_data limit (Var root) x y (type_memory_bytes cenv ann) se = (out,sb) /\
+  fn_has_code se sb func /\ fn_inst_ids_distinct func /\
+  gas_admissible (^next v) expr_vv_res_ok ec ==>
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     cenv.ce_modules cx st0 (^next v) (ec,sms,Gm,tm) ^parent_post ^exit_post
+Proof
+  mp_tac slice_ordinary_captured_words_reached_mods >>
+  BETA_TAC >> disch_then (fn th => disch_then (fn h =>
+    MATCH_MP_TAC th >> map_every assume_tac (CONJUNCTS h))) >>
+  rpt (conj_tac ORELSE first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!H e1 e2 v1 v2 sds ses Gd Ge td te. _ ==> mem_bytes_at _ _ _ = _ /\ _`
+    (drule_all_then ACCEPT_TAC)
+QED
