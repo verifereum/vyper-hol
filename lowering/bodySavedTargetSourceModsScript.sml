@@ -107,7 +107,7 @@ Proof
   drule_all_then MATCH_ACCEPT_TAC saved_call_frame_from_lookup
 QED
 
-Triviality saved_checked_call_frame:
+Theorem saved_checked_call_frame:
   contract_inv mods exps ctx cenv cx /\
   exports_ok cx.layouts cx.txn.target mods exps /\
   check_contract F cx.layouts cx.txn.target mods = SOME runtime_art /\
