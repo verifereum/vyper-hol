@@ -227,6 +227,8 @@ Resume convert_scalar_vv_sim_full[continuation]:
   reverse conj_tac >- simp[] >>
   qexistsl_tac [`Gf`,`mid`,`Abort err t'`,`INR (Error (RuntimeError msg))`,`tnf`] >>
   simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
-       halt_exit_not_halt]
+       halt_exit_not_halt, createSizeExitTheory.create_size_exit_ok_def] >>
+  rpt strip_tac >>
+  qpat_assum `_ ==> ~oversized_create_abort ctx (Abort err t')` mp_tac >> simp[]
 QED
 Finalise convert_scalar_vv_sim_full

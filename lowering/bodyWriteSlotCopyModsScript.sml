@@ -152,10 +152,12 @@ Resume slot_copy_ready_writeback[static]:
   mp_tac (Q.INST [`tenv` |-> `get_tenv cx`] (SPEC_ALL slot_copy_static_or_zero_mods)) >>
   (impl_tac >- (pure_asm_rewrite_tac[] >> simp[])) >> simp[] >>
   disch_then (qx_choosel_then [`t`,`Gf`,`tf`] (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
-  irule gas_outcome_full_mods_exit >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`Gf`,`es`,`Abort ExHalt_abort (halt_state (set_returndata [] t))`,
-    `INR (Error (RuntimeError "write in static context"))`,`tf`] >>
-  simp[exit_result_def,write_storage_place_eq,stmt_exit_ptr_def,expr_exit_def,halt_exit_not_halt]
+  irule gas_outcome_full_mods_exit_static >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`Gf`,`es`,
+    `INR (Error (RuntimeError "write in static context"))`,`tf`,
+    `halt_state (set_returndata [] t)`] >>
+  simp[write_storage_place_eq,stmt_exit_ptr_def,expr_exit_def,halt_exit_not_halt,
+       halt_state_def,set_returndata_def]
 QED
 
 Resume slot_copy_ready_writeback[normal]:
