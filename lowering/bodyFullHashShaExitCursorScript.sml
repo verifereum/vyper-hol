@@ -70,8 +70,9 @@ Proof
       simp[run_inst_seq_inst_idx, exec_result_map_def] >>
       strip_tac >> qexistsl_tac [`j`,`i`] >> simp[] >>
       drule_all run_from_step >> simp[]) >>
-  qpat_x_assum `_ = ExHalt_abort` SUBST_ALL_TAC >>
-  qpat_x_assum `v = t` SUBST_ALL_TAC >>
+  rename1 `step_inst_base h s = Abort reason u` >>
+  qpat_x_assum `reason = ExHalt_abort` SUBST_ALL_TAC >>
+  qpat_x_assum `u = t` SUBST_ALL_TAC >>
   drule_all sha_exhalt_step_cursor >> strip_tac >>
   qexistsl_tac [`t.vs_inst_idx`,`h`] >> simp[run_from_def] >>
   `step_inst 0 ctx h s = Abort ExHalt_abort t` by simp[step_inst_non_invoke] >>

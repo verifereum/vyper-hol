@@ -2,20 +2,10 @@
 Theory entryCreateExit
 Ancestors
   createSizeExit entryCreateReject requestCutEntryFacts stepWriteFootprintBase
-  o1LowerDloadRunnerBoundary lowerDloadPtrRawReachable fragExec
+  lowerDloadPtrRawReachable fragExec gasFocusReplayExit[qualified,ignore_grammar]
   contextRawReachable contextCodegenRel venomRunBounded venomWf venomState
   venomInst arithmetic words list ctorDeployRunBounded actualDecoderPackaging
   venomCompilerWf o1PipelineCorrect passSimulationDefs
-
-Theorem raw_reachable_call_context[local]:
-  !vs ctx fn inst s. raw_reachable vs ctx fn inst s ==>
-    s.vs_call_ctx = vs.vs_call_ctx
-Proof
-  ho_match_mp_tac raw_reachable_ind >> rpt strip_tac >>
-  imp_res_tac ld_enters_block_call_ctx >>
-  imp_res_tac ld_step_ok_call_ctx >>
-  imp_res_tac ld_setup_callee_call_ctx >> fs[]
-QED
 
 Theorem raw_reachable_oversized_create_abort:
   EVERY wf_function ctx.ctx_functions /\ ~vs.vs_call_ctx.cc_static /\
@@ -33,7 +23,8 @@ Proof
   `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
         get_instruction bb s.vs_inst_idx = SOME inst` by
     metis_tac[raw_reachable_active, active_inst_block_lookup] >>
-  `~s.vs_call_ctx.cc_static` by metis_tac[raw_reachable_call_context] >>
+  `~s.vs_call_ctx.cc_static` by
+    metis_tac[gasFocusReplayExitTheory.replay_exit_raw_call_ctx] >>
   `r = Abort ExHalt_abort (halt_state (set_returndata [] s))` by metis_tac[] >>
   qpat_x_assum `~inst_create_size_ok inst s` mp_tac >>
   simp[inst_create_size_ok_def] >> rpt strip_tac >>

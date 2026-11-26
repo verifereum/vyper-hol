@@ -47,6 +47,7 @@ Ancestors
   vfmExecution vfmExecutionProp vfmContext list rich_list pair
   ctorDeployRawEntryFacts deployUnitCreateSizeRun entryCreateExit
   o1CreateSizeTransport unitShapeDefs venomState venomInst
+  acceptedContextPhi[qualified,ignore_grammar]
 
 val _ = Parse.hide "tops";
 val _ = Parse.hide "body";
@@ -705,7 +706,7 @@ Resume call_entry_reachable_create_size_ok[selected]:
   `!fn bb. lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
            lookup_block "__entry" fn.fn_blocks = SOME bb ==>
            phi_prefix_length bb.bb_instructions = 0` by
-    suspend "no_phi" >>
+    metis_tac[acceptedContextPhiTheory.lower_vyper_runtime_unit_block_phi] >>
   qunabbrev_tac `obs` >> drule_all source_unit_create_size_run >> strip_tac >>
   drule create_size_raw_unit_wf >> strip_tac >>
   `vi.vs_call_ctx.cc_static = tx.is_static` by
@@ -715,13 +716,6 @@ Resume call_entry_reachable_create_size_ok[selected]:
    ~(!n. terminates (run_context n unit.cu_context vi) ==>
          ?u. run_context n unit.cu_context vi = Abort ExHalt_abort u)` by metis_tac[] >>
   metis_tac[selected_raw_create_size_ok]
-QED
-
-Resume call_entry_reachable_create_size_ok[no_phi]:
-  rpt gen_tac >> strip_tac >>
-  Cases_on `bb.bb_instructions` >> simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
-  fs[unitShapeDefsTheory.o1_source_unit_ok_def, EVERY_MEM, unitShapeDefsTheory.raw_opcode_ok_def] >>
-  metis_tac[venomInstTheory.lookup_function_MEM, fragExecTheory.lookup_block_fn_insts, MEM]
 QED
 
 Finalise call_entry_reachable_create_size_ok
