@@ -7,7 +7,8 @@ Ancestors
   bodyPtrTypeBuiltinsScalarRawOutcome exprSimBopRestWordLayout[qualified,ignore_grammar] loweringShapeDefs[qualified,ignore_grammar] marker[qualified,ignore_grammar] vyperTypeSystem[qualified,ignore_grammar]
   bodyPtrTypeBuiltinsCheckedArithmetic bodyPtrSignedConvertBool
   bodyPtrTypeBuiltinsScalarChecks bodyPtrTypeBuiltinsScalarArithmetic
-  fragGasCopyLoop fragGasSeqPtr ptrSafetyTransport ptrSafeRun exprLowering exprLoweringProps
+  fragGasSeqAbortCursor freshWriteAbortCursor
+  fragGasSeqPtr ptrSafetyTransport ptrSafeRun exprLowering exprLoweringProps
   compileEnv ptrDiscipline venomExecSemantics venomState venomInst finite_map list
   freshWrites exprSimConvert convertScalarProps
   fragGasOriginPtr fragGasOrigin memSafeRun gasEvents gasCount fragGasPathPtr fragExec
@@ -187,6 +188,9 @@ Theorem scalar_convert_run_origin:
   ?H th j.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
       (exec_result_map (\t. t with vs_inst_idx := j) r,H,th)) /\
+    (!a t. r = Abort a t /\ MEM fn ctx.ctx_functions /\
+      ALL_DISTINCT (FLAT (MAP fn_labels ctx.ctx_functions)) ==>
+      ~oversized_create_abort ctx (Abort a (t with vs_inst_idx := j))) /\
     (!t. r = OK t ==> op_prov H out = NONE /\ op_taint th out = {} /\
       j = s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
     (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
@@ -227,7 +231,8 @@ Proof
     (gen_tac >> irule bodyFullAllocGenericTheory.inst_seq_ptr_lower_bound_from_alloca_next >> simp[] >> qexists `0` >> simp[]) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
-  drule_all run_inst_seq_abort_origin_ptr_uniform >> strip_tac >>
+  drule_all run_inst_seq_abort_origin_ptr_cursor >> strip_tac >>
+  `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
   qexistsl [`H`,`th`,`j`] >> simp[exec_result_map_def] >>
-  metis_tac[]
+  rpt strip_tac >> drule_all fetched_fresh_write_abort_not_oversized >> simp[]
 QED

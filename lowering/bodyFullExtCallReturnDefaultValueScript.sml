@@ -10,7 +10,7 @@ Ancestors
   bodyFullExtCallDefaultCopy bodyFullExtCallDefaultBytesStore
   bodyPtrBopRepresentationFrame bodyPtrBopHashFootprint
   actualAllocExec exprSimIfExpWidenedCounted bodyFullExtCallPrecheck
-  bodyFullUnwrapSlotPost exprSimHash extcallReturnInterface
+  bodyFullUnwrapSlotPost exprSimHash extcallReturnInterface createSizeExit
   annassignRelayoutPost[qualified,ignore_grammar]
   aggregateEvaluatedLayout[qualified,ignore_grammar]
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
@@ -316,7 +316,7 @@ Theorem extcall_return_full_default_value:
               (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
                  args dflt)) sa sb (ee with gas_obs := []) tv vv t' /\
          ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn') \/
-         (exit_result r /\ expr_exit res r)))
+         (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r)))
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[comp_bind_def] >> pairarg_tac >> gvs[] >>
@@ -744,7 +744,8 @@ Resume extcall_return_full_default_value[after_payload]:
   qabbrev_tac `Gcheck = Gp \\ out` >>
   qabbrev_tac `tcheck = tp with t_var := tp.t_var |+ (out,{})` >>
   qexistsl_tac [`Abort Revert_abort z`,`Gcheck`,`tcheck`] >>
-  simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def] >>
+  simp[create_size_exit_ok_non_exhalt, fragExecTheory.exit_result_def,
+       exprSimDefsTheory.expr_exit_def] >>
   qx_gen_tac `H'` >> strip_tac >>
   qpat_assum `!D. gas_origin_ptr_path _ (t,G,tn) [] (OK p,Gp,tp)`
     (qspec_then `DF H'` mp_tac) >>
@@ -995,6 +996,8 @@ Resume extcall_return_full_default_value[default_owned_post]:
          supportedExprTraverseTheory.expr_effect_root_def] >>
   `ee with gas_obs := [] = ee` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
+  qpat_assum `skip \/ ext_call_has_code target ee.accounts`
+    (fn th => pure_rewrite_tac [th, COND_CLAUSES]) >>
   qexistsl_tac [`OK z`,`Gc`,`tc`] >> qx_gen_tac `h` >> strip_tac >>
   conj_tac >- simp[] >> disj1_tac >>
   simp[mk_ptr_def, vv_location_def] >>

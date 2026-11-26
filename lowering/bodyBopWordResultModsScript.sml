@@ -227,9 +227,9 @@ QED
 Resume bop_word_value_sim_mods[abort]:
   drule_all bop_word_scalar_abort_joint >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] strip_assume_tac) >>
-  irule gas_outcome_full_mods_exit >> simp[] >>
-  qexistsl_tac [`G'`,`fin`,`Abort Revert_abort (r with vs_inst_idx := j)`,
-    `INR (Error (RuntimeError m))`,`tn'`] >>
+  irule gas_outcome_full_mods_exit_revert >> simp[] >>
+  qexistsl_tac [`G'`,`fin`,`INR (Error (RuntimeError m))`,`tn'`,
+    `r with vs_inst_idx := j`] >>
   simp[expr_exit_def, halt_exit_def, exit_result_def]
 QED
 
