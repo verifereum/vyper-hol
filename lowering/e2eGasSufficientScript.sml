@@ -1126,7 +1126,10 @@ Proof
      qspecl_then [`marks`, `tops`, `runtime_bc`, `am`, `tx`, `dunit`, `vi`, `[]`]
        mp_tac deploy_unit_create_size_run >>
      REWRITE_TAC [APPEND_NIL] >>
-     impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])) >>
+     impl_tac
+     >- (qpat_assum `vi.vs_outcomes = vs.vs_outcomes`
+           (fn outcomes => PURE_REWRITE_TAC [outcomes]) >>
+         rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
      disch_then (qx_choose_then `fuel` strip_assume_tac) >>
      qabbrev_tac `src = load_contract (SOME vi.vs_outcomes)
           (gas_explicit marks vi.vs_gas_readings) am tx [(NONE,tops)] []` >>

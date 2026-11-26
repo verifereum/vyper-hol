@@ -63,6 +63,58 @@ Proof
   qexists_tac `bb` >> simp[eval_phis_no_phi]
 QED
 
+(* At the selected readings, the storage and exemption guards select the
+   terminating path and its source trace. *)
+Theorem source_unit_execution_exit:
+  !marks tops ret am tx unit vs.
+    source_unit_execution_correct_at marks tops ret am tx unit vs /\
+    call_storage_ok am tx vs.vs_outcomes
+      (gas_explicit marks vs.vs_gas_readings) /\
+    ~source_exempt tops
+      (call_external (SOME vs.vs_outcomes)
+         (gas_explicit marks vs.vs_gas_readings) am tx) ==>
+    ?func shadow_ctx r.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      fn_entry_label func = SOME "__entry" /\
+      exit_result r /\
+      create_size_exit_ok unit.cu_context
+        (FST (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings) am tx)) r /\
+      storage_trace_domain
+        (initial_evaluation_context am.sources am.layouts tx NONE)
+        (initial_state am [])
+        (source_storage_trace am tx vs.vs_outcomes
+           (gas_explicit marks vs.vs_gas_readings)) /\
+      gas_origin_path T (gas_explicit_sites unit.cu_context shadow_ctx)
+        unit.cu_context func
+        (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                    vs_inst_idx := 0 |>) marks r /\
+      !H. valid_horizon
+            (initial_evaluation_context am.sources am.layouts tx NONE)
+            (initial_state am []) H
+            (source_storage_trace am tx vs.vs_outcomes
+               (gas_explicit marks vs.vs_gas_readings)) ==>
+          !fuel. ptr_safe_blocks
+            (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
+            0 fuel unit.cu_context func [] FEMPTY entry_taint
+            (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                        vs_inst_idx := 0 |>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `source_unit_execution_correct_at _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def,
+                                      source_unit_execution_correct_with_def])
+  >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> gvs[])
+  >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
+        (qspec_then `[]` assume_tac) >> fs[] >>
+      drule vyperInterpreterTheory.call_external_trace_result >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
+    (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
+  drule vyperInterpreterTheory.call_external_trace_result >> strip_tac >>
+  qexistsl_tac [`func`, `shadow_ctx`, `r`] >> simp[]
+QED
+
 Theorem source_unit_exit_safe_runs:
   !marks tops ret am tx unit vs rpolicy.
     source_unit_execution_correct_at marks tops ret am tx unit vs /\
@@ -86,17 +138,13 @@ Theorem source_unit_exit_safe_runs:
                      vs_inst_idx := 0 |>))
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `source_unit_execution_correct_at _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def,
-                                      source_unit_execution_correct_with_def])
-  >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> gvs[])
-  >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
-        (qspec_then `[]` assume_tac) >> fs[] >>
-      drule call_external_trace_result >> strip_tac >> gvs[]) >>
-  qexistsl_tac [`func`, `storage_trace_horizon obs`] >> simp[] >>
+  drule_all source_unit_execution_exit >>
+  disch_then (qx_choosel_then [`func`, `shadow_ctx`, `r`] strip_assume_tac) >>
+  qexistsl_tac [`func`, `storage_trace_horizon
+    (source_storage_trace am tx vs.vs_outcomes
+       (gas_explicit marks vs.vs_gas_readings))`] >> simp[] >>
   reverse conj_tac
-  >- (first_x_assum (qspec_then `storage_trace_horizon obs` mp_tac) >>
-      fs[storage_trace_domain_def]) >>
+  >- (first_x_assum irule >> fs[storage_trace_domain_def]) >>
   drule gas_origin_path_erase >> simp[gas_marked_path_def] >> strip_tac >>
   irule lower_vyper_runtime_unit_exit_mem_safe_blocks >> simp[] >>
   metis_tac[]
@@ -126,14 +174,6 @@ Theorem source_unit_exit_ptr_safe_horizons:
                       vs_inst_idx := 0 |>)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `source_unit_execution_correct_at _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def,
-                                      source_unit_execution_correct_with_def])
-  >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> gvs[])
-  >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
-        (qspec_then `[]` assume_tac) >> fs[] >>
-      drule call_external_trace_result >> strip_tac >> gvs[]) >>
-  qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
-    (qspec_then `[]` assume_tac) >>
-  gvs[source_storage_trace_def]
+  drule_all source_unit_execution_exit >> strip_tac >>
+  gvs[]
 QED

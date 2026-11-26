@@ -23,30 +23,21 @@ Theorem source_unit_create_size_run:
         (run_context fuel unit.cu_context vs)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `source_unit_execution_correct_at _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [source_unit_execution_correct_at_def,
-                                      source_unit_execution_correct_with_def])
-  >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> simp[])
-  >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
-        (qspec_then `[]` assume_tac) >> fs[] >>
-      drule call_external_trace_result >> strip_tac >> gvs[]) >>
-  qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
-    (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
-  drule call_external_trace_result >> strip_tac >>
-  drule gas_origin_path_erase >> simp[gas_marked_path_def] >> strip_tac >>
-  drule gas_path_mem_exec >> strip_tac
-  >- metis_tac[exit_result_def] >>
-  qmatch_asmsub_abbrev_tac `run_from fuel unit.cu_context func s` >>
-  `?bb. lookup_block "__entry" func.fn_blocks = SOME bb` by
-    (Cases_on `lookup_block "__entry" func.fn_blocks` >> simp[] >>
-     qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
-     simp[Abbr `s`, run_from_def] >> metis_tac[exit_result_not_error]) >>
-  `phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
-  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[Abbr `s`] >>
+  drule_all sourceUnitExitSafeTheory.source_unit_execution_exit >>
+  disch_then (qx_choosel_then [`func`, `shadow_ctx`, `r`] strip_assume_tac) >>
+  qabbrev_tac `s = vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                                 vs_inst_idx := 0 |>` >>
+  drule_all gas_origin_path_events >>
+  disch_then (qx_choosel_then [`fuel`, `bb`]
+    (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac kall_tac))) >>
+  `phi_prefix_length bb.bb_instructions = 0` by
+    (qpat_assum `!fn bb. _ ==> phi_prefix_length _ = 0`
+       (qspecl_then [`func`, `bb`] mp_tac) >> fs[Abbr `s`]) >>
   `s with vs_inst_idx := 0 = s` by simp[Abbr `s`] >>
   qexists_tac `SUC fuel` >>
   `run_context (SUC fuel) unit.cu_context vs =
       run_blocks (SUC fuel) unit.cu_context func s` by
     (qunabbrev_tac `s` >> irule run_context_run_blocks >> simp[]) >>
-  drule_all run_blocks_run_from_no_phi >> simp[]
+  qspecl_then [`fuel`, `unit.cu_context`, `func`, `s`, `bb`] mp_tac
+    run_blocks_run_from_no_phi >> simp[]
 QED
