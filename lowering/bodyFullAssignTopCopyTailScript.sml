@@ -54,6 +54,7 @@ Theorem body_assign_slots_full_static_exit:
       op_taint tnf (Var x) = op_taint tn (Var x)) /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next /\ tnf.t_mem = tn.t_mem /\
+    t.vs_call_ctx.cc_static /\
     (type_slot_size tv = 0 ==>
      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
      t.vs_inst_idx = LENGTH sb.cs_current_insts /\

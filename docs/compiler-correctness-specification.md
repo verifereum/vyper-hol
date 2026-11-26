@@ -367,14 +367,13 @@ The result relation ties source gas observations to the frame's EVM gas readings
   on the raised-gas run, with no exempt source observation
   (`~gas_source_exempt`) and fewer than 2⁶⁴ entries. The identity
   case composes proved lowering, O1 fuel/memory and codegen gas bounds. The
-  assembly-optimizer case is proved from the same stages. The general
-  companion reaches exactly one admitted lemma,
-  `call_entry_reachable_create_size_ok`, marked `GATE_ADMISSION`: from the
-  call entry, every reachable creation instruction meets the init-code size
-  check. The correctness tops reach no admitted lemma. The deploy companion
-  `e2e_deploy_gas_sufficient` similarly composes proved stage bounds and
-  reaches exactly one admitted lemma, `deploy_entry_reachable_create_size_ok`,
-  the same claim at the deploy entry; with enough added gas, and under
+  assembly-optimizer case is proved from the same stages.
+  `call_entry_reachable_create_size_ok` proves the initcode size bound for
+  reachable creation instructions by using the selected raw run and
+  transporting the bound through O1. `deploy_entry_reachable_create_size_ok`
+  proves the corresponding bound for deployment. The deploy companion
+  `e2e_deploy_gas_sufficient` composes the deployment stage bounds. With
+  enough added gas, and under
   `deploy_entry_rel` and `horizon_ok H` at entry, plus `deploy_within H`, no
   exempt source observation and fewer than 2⁶⁴ trace entries on the raised-gas
   run, OutOfGas implies that the code to deposit exceeds the runtime code-size

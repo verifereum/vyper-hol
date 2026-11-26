@@ -6849,6 +6849,19 @@ Proof
   drule_all nonreentrantEntryPathTheory.compile_nonreentrant_lock_transient_prefix >> simp[]
 QED
 
+Theorem args_static_lock_abort[local]:
+  tload (n2w key) s <> 1w /\ ~view /\ s.vs_call_ctx.cc_static /\
+  run_inst_seq (transient_lock_code key view st) s = Abort ExHalt_abort t ==>
+  t.vs_call_ctx.cc_static
+Proof
+  simp[transientLockPropsTheory.transient_lock_code_execution,
+       transientLockPropsTheory.transient_lock_checked_state_def,
+       venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def,
+       venomStateTheory.update_var_def] >> rw[] >>
+  pure_rewrite_tac[venomStateTheory.venom_state_fupdcanon,
+                   venomStateTheory.venom_state_accfupds] >> first_assum ACCEPT_TAC
+QED
+
 Theorem args_transient_lock_abort_origin_ptr[local]:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -6857,8 +6870,8 @@ Theorem args_transient_lock_abort_origin_ptr[local]:
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   key_taint tn.t_trans (n2w key) = {} /\
   (tload (n2w key) s = 1w \/ (~view /\ s.vs_call_ctx.cc_static)) ==>
-  ?t G' tn'. !D explicit.
-    gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+  ?t G' tn'. (tload (n2w key) s = 1w \/ t.vs_call_ctx.cc_static) /\
+    !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
       (Abort (if tload (n2w key) s = 1w then Revert_abort else ExHalt_abort) t,G',tn')
 Proof
   DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
@@ -6901,6 +6914,12 @@ Proof
        (irule fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique >> metis_tac[]) >>
      irule instSeqPtrLoTheory.inst_seq_ptr_zero_to_lo >> simp[] >> qexists_tac `D` >> gvs[]) >>
   qexistsl_tac [`t with vs_inst_idx := j`, `J`, `tj`] >>
+  conj_tac
+  >- (Cases_on `tload (n2w key) s = 1w` >> simp[] >>
+      `~view /\ s.vs_call_ctx.cc_static` by fs[] >>
+      irule args_static_lock_abort >>
+      qexistsl_tac [`key`, `s`, `st`, `view`] >>
+      fs[Abbr `code`, Abbr `a`]) >>
   fs[Abbr `code`, Abbr `a`] >> metis_tac[]
 QED
 
@@ -6917,6 +6936,7 @@ Theorem args_lock_abort_callee[local]:
     (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?r Gc tc.
     (?a t. r = Abort a t) /\
+    ~oversized_create_abort ctx r /\
     !H. valid_horizon cx st0 H failed.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,callee,MAP (op_prov G) ops)
         (entered,FEMPTY,tn with t_var := FEMPTY) [] (r,Gc,tc)
@@ -6927,10 +6947,13 @@ Proof
       qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >>
       DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
       drule_all args_transient_lock_abort_origin_ptr >>
-      disch_then (qspecl_then [`MAP (op_prov G) ops`, `Gs`] strip_assume_tac) >>
+      disch_then (qspecl_then [`MAP (op_prov G) ops`, `Gs`]
+        (qx_choose_then `t` (qx_choose_then `G'` (qx_choose_then `tn'`
+          (MAP_EVERY ASSUME_TAC o CONJUNCTS))))) >>
       qexistsl_tac [`Abort (if tload (n2w key) s = 1w
                            then Revert_abort else ExHalt_abort) t`, `G'`, `tn'`] >>
       conj_tac >- metis_tac[] >>
+      conj_tac >- (Cases_on `tload (n2w key) s = 1w` >> fs[]) >>
       qx_gen_tac `H'` >> strip_tac >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >>
       DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
@@ -6951,6 +6974,7 @@ Theorem args_failed_lock_caller_outcome[local]:
   get_instruction bb u.vs_inst_idx = SOME inst /\
   inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (label,ops) /\
   gas_invoke_entry (ctx,caller) u callee entered /\
+  ~oversized_create_abort ctx (Abort a t) /\
   (!H. valid_horizon cx st0 H failed.storage_trace ==>
     ptr_inst_ok (DF H) lo 0 ctx caller G tn inst u /\
     gas_origin_ptr_path (DF H,lo,explicit,ctx,callee,MAP (op_prov G) ops)

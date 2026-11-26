@@ -714,6 +714,8 @@ Proof
         (mp_tac (Q.INST [`topic_ops` |-> `ops`, `sa` |-> `send`, `s` |-> `u`,
            `G` |-> `Gu`, `tn` |-> `tu`] (SPEC_ALL compile_log_emit_static_origin_ptr_path)) >>
          simp[]) >>
+      `(halt_state (set_returndata [] u)).vs_call_ctx.cc_static` by
+        simp[halt_state_def, set_returndata_def] >>
       irule gas_outcome_full_exit >>
       reverse conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`Gu`,`mid`,
@@ -723,7 +725,7 @@ Proof
       >- (qx_gen_tac `tail` >>
           mp_tac (Q.INST [`mid` |-> `mid with gas_obs := tail`]
             (SPEC_ALL log_full_source_suffix_result)) >> simp[]) >>
-      reverse conj_tac >- simp[exit_result_def] >>
+      simp[exit_result_def] >>
       qx_gen_tac `H` >> strip_tac >> BETA_TAC >>
       conj_tac
       >- (irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gu`,`u`,`tu`] >> simp[]) >>
