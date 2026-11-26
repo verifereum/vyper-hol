@@ -29,7 +29,7 @@ Theorem default_shell_linked[local]:
     (!x. not_fresh_at ar x ==> lookup_var x u = lookup_var x a /\
           FLOOKUP Gu x = FLOOKUP J x /\ op_taint tu (Var x) = op_taint tm (Var x)) /\
     u.vs_allocas = a.vs_allocas /\ u.vs_alloca_next = a.vs_alloca_next /\
-    u.vs_memory = a.vs_memory /\ u.vs_accounts = a.vs_accounts /\
+    u.vs_memory = a.vs_memory /\ tu.t_mem = tm.t_mem /\ u.vs_accounts = a.vs_accounts /\
     ~u.vs_halted /\ u.vs_inst_idx = 0 /\ u.vs_current_bb = dl /\ allocas_from lo u /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     (alloca_history func a ==> alloca_history func u) /\
@@ -60,6 +60,7 @@ Proof
      qpat_assum `allocas_from lo a` (ACCEPT_TAC o REWRITE_RULE[allocas_from_def])) >>
   qpat_x_assum `u = jump_to _ _` kall_tac >>
   qpat_x_assum `Gu = DRESTRICT _ _` kall_tac >>
+  `tu.t_mem = tm.t_mem` by simp[] >>
   qpat_x_assum `tu = _ with t_var := _` kall_tac >>
   qexistsl_tac [`u`,`Gu`,`tu`] >> simp[] >>
   conj_tac
@@ -86,6 +87,80 @@ Proof
     metis_tac[ci_mono_emit_inst,ci_mono_def,pairTheory.SND] >>
   `ds.cs_next_var = a6.cs_next_var` by metis_tac[new_block_props] >>
   decide_tac
+QED
+
+Theorem extcall_default_entry_tmem_mods:
+  compile_default_return_path cenv rt dt base_op (Var q) dop addr skip low cap info ar = (out,sb) /\
+  fn_has_code ar sb func /\ rt <> NoneT /\ has_default /\ bs = [] /\ a.vs_returndata = bs /\
+  ~a.vs_halted /\ a.vs_current_bb = ar.cs_current_bb /\ a.vs_inst_idx = LENGTH ar.cs_current_insts /\
+  alloca_history func a /\ allocas_from lo a /\ lo <= a.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp a) /\
+  local_ptrs_reserved cenv ar /\
+  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at ar x) /\
+  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at ar x) /\
+  not_fresh_at ar q /\ lookup_var q a = SOME dw /\ FLOOKUP J q = SOME (w2n dw,n) /\
+  ptr_covers J tm q a n /\ w2n dw + n <= a.vs_alloca_next /\
+  safe_operand ar dop /\ eval_operand dop a = SOME w /\ op_taint tm dop = {} /\
+  safe_operand ar addr /\ eval_operand addr a = SOME aw /\ op_taint tm addr = {} /\
+  immutable_frame_mods func cenv cx ee a ==>
+  ?ds de ck dj xl cj old3 u Gu tu.
+    out = Var q /\ ar.cs_next_var <= ds.cs_next_var /\
+    compile_store_memory cenv dop (Var q) rt dt ds = ((),de) /\
+    (if skip then comp_return () else compile_extcodesize_check addr) de = ((),ck) /\
+    emit_inst JMP [Label xl] [] ck = ((),dj) /\ new_block xl cj = (old3,sb) /\
+    fn_has_code ds de func /\ fn_has_code de ck func /\ fn_has_code ck dj func /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (a,J,tm) [] (OK u,Gu,tu)) /\
+    ~u.vs_halted /\ u.vs_current_bb = ds.cs_current_bb /\ u.vs_inst_idx = LENGTH ds.cs_current_insts /\
+    alloca_history func u /\ allocas_from lo u /\ lo <= u.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    u.vs_allocas = a.vs_allocas /\ u.vs_alloca_next = a.vs_alloca_next /\
+    u.vs_memory = a.vs_memory /\ tu.t_mem = tm.t_mem /\ u.vs_accounts = a.vs_accounts /\
+    (!x. not_fresh_at ar x ==> lookup_var x u = lookup_var x a /\
+          FLOOKUP Gu x = FLOOKUP J x /\ op_taint tu (Var x) = op_taint tm (Var x)) /\
+    lookup_var q u = SOME dw /\ FLOOKUP Gu q = SOME (w2n dw,n) /\
+    ptr_covers Gu tu q u n /\ w2n dw + n <= u.vs_alloca_next /\ not_fresh_at ds q /\
+    eval_operand dop u = SOME w /\ op_taint tu dop = {} /\ (!x. dop = Var x ==> not_fresh_at ds x) /\
+    eval_operand addr u = SOME aw /\ op_taint tu addr = {} /\ (!x. addr = Var x ==> not_fresh_at ds x) /\
+    local_ptrs_reserved cenv ds /\ immutable_frame_mods func cenv cx ee u /\
+    (!H. stmt_state_rel H ctx func cenv cx ee a ==> stmt_state_rel H ctx func cenv cx ee u) /\
+    (!D d. ghost_inv_at_mods D lo d cenv cx ee J tm a ==>
+           ghost_inv_at_mods D lo d cenv cx ee Gu tu u) /\
+    (!es s0 sa G0 tn0. sa.cs_next_var <= ar.cs_next_var ==>
+       (ghost_kept_at lo cenv es sa G0 tn0 s0 J tm ==> ghost_kept_at lo cenv es sa G0 tn0 s0 Gu tu) /\
+       (wb_frame cenv es ee sa s0 a ==> wb_frame cenv es ee sa s0 u))
+Proof
+  strip_tac >>
+  drule_then strip_assume_tac return_default_path_intervals >>
+  drule_all_then strip_assume_tac return_default_intervals_code >>
+  drule_all_then assume_tac default_shell_next_var >>
+  `a.vs_returndata = []` by simp[] >>
+  drule_all default_shell_linked >>
+  disch_then (qspecl_then [`tm`,`explicit`,`PG`,`J`]
+    (qx_choosel_then [`u`,`Gu`,`tu`] strip_assume_tac)) >>
+  `ds.cs_current_bb = dl /\ ds.cs_current_insts = []` by
+    (qpat_assum `new_block dl a6 = (_,ds)` (mp_tac o MATCH_MP new_block_props) >> simp[]) >>
+  `!x. not_fresh_at ar x ==> not_fresh_at ds x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `ar` >> simp[]) >>
+  `local_ptrs_reserved cenv ds` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `ar` >> simp[]) >>
+  `!op. safe_operand ar op ==> eval_operand op u = eval_operand op a /\
+      op_taint tu op = op_taint tm op /\ (!x. op = Var x ==> not_fresh_at ds x)` by
+    (Cases_on `op` >> simp[safe_operand_def,eval_operand_def,op_taint_def] >>
+     rpt strip_tac >> first_x_assum drule >> simp[op_taint_def]) >>
+  `lookup_var q u = SOME dw /\ FLOOKUP Gu q = SOME (w2n dw,n) /\ ptr_covers Gu tu q u n` by
+    (qpat_assum `!x. not_fresh_at ar x ==> lookup_var x u = _ /\ _`
+       (qspec_then `q` assume_tac) >>
+     qpat_assum `not_fresh_at ar q ==> _` (drule_then strip_assume_tac) >>
+     qpat_x_assum `ptr_covers J tm q a n` mp_tac >>
+     pure_rewrite_tac[ptr_covers_def] >> simp[]) >>
+  `!x. dop = Var x ==> not_fresh_at ds x` by
+    (qpat_assum `!op. safe_operand ar op ==> _`
+       (qspec_then `dop` mp_tac) >> simp[]) >>
+  `!x. addr = Var x ==> not_fresh_at ds x` by
+    (qpat_assum `!op. safe_operand ar op ==> _`
+       (qspec_then `addr` mp_tac) >> simp[]) >>
+  qexistsl_tac [`ds`,`de`,`ck`,`dj`,`xl`,`cj`,`old3`,`u`,`Gu`,`tu`] >>
+  simp[] >> rpt conj_tac >> first_assum (irule_at Any) >> first_assum ACCEPT_TAC
 QED
 
 Theorem extcall_default_entry_mods:
