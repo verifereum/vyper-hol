@@ -1,6 +1,6 @@
 (* The reached address operand determines the linked SELFDESTRUCT outcome. *)
 Theory bodySelfDestructCaseMods
-Ancestors
+Ancestors createSizeExit[qualified,ignore_grammar]
   bodyFullCases[qualified] bodyFullPredsMods bodyFullPostsMods
   bodyActionStackVVMods bodySelfDestructStaticMods bodySelfDestructOverflowMods
   bodySelfDestructHaltMods bodyForcedStorageFrameMods
@@ -108,6 +108,9 @@ Theorem selfdestruct_static_prefix[local]:
       (INL v, ee with gas_obs := tail)) /\
     storage_trace_domain cx st0 ee.storage_trace /\
     (?a. dest_AddressV v = SOME a) /\ cx.txn.is_static /\
+    create_size_exit_ok ctx
+      (INR (Error (RuntimeError "write in static context")) : value + exception)
+      (Abort ExHalt_abort (halt_state (set_returndata [] t))) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
         (s0,G0,tn0) marks (OK t,G,tn) /\
@@ -334,7 +337,11 @@ Resume selfdestruct_run_mods[static]:
   irule selfdestruct_static_prefix >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl [`G'`,`ee`,`marks`,`t`,`tn'`,`v`] >>
-  simp[] >> gen_tac >> disch_tac >>
+  `(halt_state (set_returndata [] t)).vs_call_ctx.cc_static` by
+    simp[halt_state_def, set_returndata_def] >>
+  simp[createSizeExitTheory.create_size_exit_ok_static,
+       createSizeExitTheory.oversized_create_abort_static] >>
+  gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> state_rel _ _ _ _ _ _ /\ _`
     (drule_then strip_assume_tac) >>
   qpat_x_assum `r' = Abort _ _` (SUBST_ALL_TAC o SYM) >>
