@@ -746,8 +746,7 @@ End
 Definition order_internals_unit_def:
   order_internals_unit names ints =
     FLAT (MAP (λn. FILTER (λ(src, f). nsid_to_string (src, fn_decl_name f) = n)
-                     ints) names) ++
-    FILTER (λ(src, f). ¬MEM (nsid_to_string (src, fn_decl_name f)) names) ints
+                     ints) names)
 End
 
 (* ===== Complete-unit lowering ===== *)
@@ -1044,6 +1043,149 @@ Proof
   simp[build_func_ids_mods_def]
 QED
 
+(* ===== Internal function ids over the unit are injective ===== *)
+
+(* A key no non-external function of the module has keeps the later
+   modules' id. *)
+Theorem build_func_ids_src_absent[local]:
+  !tops n src R k.
+    (!v fm nr rr s args dflts ret body.
+       v <> External /\ MEM (FunctionDecl v fm nr rr s args dflts ret body) tops ==>
+       nsid_to_string (src,s) <> k) ==>
+    build_func_ids_src n src tops R k = R k
+Proof
+  Induct >- simp[build_func_ids_src_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[build_func_ids_src_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+  rw[] >> metis_tac[]
+QED
+
+(* A key of a non-external function of the module gets an id in the
+   module's block. *)
+Theorem build_func_ids_src_range[local]:
+  !tops n src R v fm nr rr s args dflts ret body.
+    v <> External /\ MEM (FunctionDecl v fm nr rr s args dflts ret body) tops ==>
+    n <= build_func_ids_src n src tops R (nsid_to_string (src,s)) /\
+    build_func_ids_src n src tops R (nsid_to_string (src,s)) <
+      n + count_function_decls tops
+Proof
+  Induct >- simp[] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[build_func_ids_src_def, count_function_decls_def] >>
+  strip_tac >> gvs[] >> rw[] >>
+  first_x_assum (drule_all_then assume_tac) >>
+  FIRST [first_x_assum (qspecl_then [`n + 1`, `src`, `R`] mp_tac) >>
+         rw[] >> NO_TAC,
+         first_x_assum (qspecl_then [`n`, `src`, `R`] mp_tac) >> rw[]]
+QED
+
+Theorem build_func_ids_src_11[local]:
+  !tops n src R v1 fm1 nr1 rr1 s1 args1 dflts1 ret1 body1
+               v2 fm2 nr2 rr2 s2 args2 dflts2 ret2 body2.
+    v1 <> External /\ v2 <> External /\
+    MEM (FunctionDecl v1 fm1 nr1 rr1 s1 args1 dflts1 ret1 body1) tops /\
+    MEM (FunctionDecl v2 fm2 nr2 rr2 s2 args2 dflts2 ret2 body2) tops /\
+    build_func_ids_src n src tops R (nsid_to_string (src,s1)) =
+    build_func_ids_src n src tops R (nsid_to_string (src,s2)) ==>
+    nsid_to_string (src,s1) = nsid_to_string (src,s2)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `h` >>
+  simp[build_func_ids_src_def] >> rw[] >> gvs[] >>
+  metis_tac[build_func_ids_src_range, DECIDE ``!n:num. ~(n + 1 <= n)``]
+QED
+
+Theorem build_func_ids_mods_range[local]:
+  !mods n src tops v fm nr rr s args dflts ret body.
+    MEM (src,tops) mods /\ v <> External /\
+    MEM (FunctionDecl v fm nr rr s args dflts ret body) tops ==>
+    n <= build_func_ids_mods n mods (nsid_to_string (src,s))
+Proof
+  Induct >- simp[] >>
+  rpt gen_tac >> PairCases_on `h` >> simp[build_func_ids_mods_def] >>
+  strip_tac >> gvs[] >- metis_tac[build_func_ids_src_range] >>
+  Cases_on `?v' fm' nr' rr' s' args' dflts' ret' body'.
+    v' <> External /\
+    MEM (FunctionDecl v' fm' nr' rr' s' args' dflts' ret' body') h1 /\
+    nsid_to_string (h0,s') = nsid_to_string (src,s)`
+  >- metis_tac[build_func_ids_src_range] >>
+  `build_func_ids_src n h0 h1
+     (build_func_ids_mods (n + count_function_decls h1) mods)
+     (nsid_to_string (src,s)) =
+   build_func_ids_mods (n + count_function_decls h1) mods
+     (nsid_to_string (src,s))` by
+    (irule build_func_ids_src_absent >> metis_tac[]) >>
+  first_x_assum (drule_all_then (qspec_then `n + count_function_decls h1`
+    mp_tac)) >>
+  simp[]
+QED
+
+(* Distinct keys of non-external functions anywhere in the unit get
+   distinct ids, so equal internal labels mean equal keys. *)
+Theorem build_func_ids_mods_11:
+  !mods n src1 tops1 v1 fm1 nr1 rr1 s1 args1 dflts1 ret1 body1
+          src2 tops2 v2 fm2 nr2 rr2 s2 args2 dflts2 ret2 body2.
+    MEM (src1,tops1) mods /\ MEM (src2,tops2) mods /\
+    v1 <> External /\ v2 <> External /\
+    MEM (FunctionDecl v1 fm1 nr1 rr1 s1 args1 dflts1 ret1 body1) tops1 /\
+    MEM (FunctionDecl v2 fm2 nr2 rr2 s2 args2 dflts2 ret2 body2) tops2 /\
+    build_func_ids_mods n mods (nsid_to_string (src1,s1)) =
+    build_func_ids_mods n mods (nsid_to_string (src2,s2)) ==>
+    nsid_to_string (src1,s1) = nsid_to_string (src2,s2)
+Proof
+  Induct >- simp[] >>
+  rpt gen_tac >> PairCases_on `h` >> strip_tac >>
+  qpat_x_assum `build_func_ids_mods _ _ _ = _` mp_tac >>
+  simp[build_func_ids_mods_def] >> strip_tac >>
+  qabbrev_tac `occ = \k. ?v fm nr rr s args dflts ret body.
+    v <> External /\
+    MEM (FunctionDecl v fm nr rr s args dflts ret body) h1 /\
+    nsid_to_string (h0,s) = k` >>
+  `!src tops v fm nr rr s args dflts ret body.
+     MEM (src,tops) ((h0,h1)::mods) /\ v <> External /\
+     MEM (FunctionDecl v fm nr rr s args dflts ret body) tops /\
+     ~occ (nsid_to_string (src,s)) ==>
+     MEM (src,tops) mods /\
+     build_func_ids_src n h0 h1
+       (build_func_ids_mods (n + count_function_decls h1) mods)
+       (nsid_to_string (src,s)) =
+     build_func_ids_mods (n + count_function_decls h1) mods
+       (nsid_to_string (src,s)) /\
+     n + count_function_decls h1 <=
+       build_func_ids_mods (n + count_function_decls h1) mods
+         (nsid_to_string (src,s))` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `~occ _` mp_tac >> simp[Abbr `occ`] >> strip_tac >>
+     `MEM (src,tops) mods` by
+       (qpat_x_assum `MEM (src,tops) (_::_)` mp_tac >> rw[] >> metis_tac[]) >>
+     simp[] >>
+     conj_tac >- (irule build_func_ids_src_absent >> metis_tac[]) >>
+     metis_tac[build_func_ids_mods_range]) >>
+  `!k. occ k ==> ?s. k = nsid_to_string (h0,s) /\
+     ?v fm nr rr args dflts ret body. v <> External /\
+       MEM (FunctionDecl v fm nr rr s args dflts ret body) h1` by
+    (simp[Abbr `occ`] >> metis_tac[]) >>
+  Cases_on `occ (nsid_to_string (src1,s1))` >>
+  Cases_on `occ (nsid_to_string (src2,s2))`
+  >- metis_tac[build_func_ids_src_11]
+  >- metis_tac[build_func_ids_src_range,
+       DECIDE ``!x a y:num. x < a /\ a <= y ==> x <> y``]
+  >- metis_tac[build_func_ids_src_range,
+       DECIDE ``!x a y:num. x < a /\ a <= y ==> x <> y``] >>
+  first_assum (qspecl_then [`src1`, `tops1`, `v1`, `fm1`, `nr1`, `rr1`, `s1`,
+    `args1`, `dflts1`, `ret1`, `body1`] mp_tac) >>
+  impl_tac >- gs[] >> strip_tac >>
+  first_assum (qspecl_then [`src2`, `tops2`, `v2`, `fm2`, `nr2`, `rr2`, `s2`,
+    `args2`, `dflts2`, `ret2`, `body2`] mp_tac) >>
+  impl_tac >- gs[] >> strip_tac >>
+  qpat_x_assum `!n src1 tops1 v1 fm1 nr1 rr1 s1 args1 dflts1 ret1 body1
+                  src2 tops2 v2 fm2 nr2 rr2 s2 args2 dflts2 ret2 body2. _`
+    (qspecl_then [`n + count_function_decls h1`, `src1`, `tops1`, `v1`, `fm1`,
+      `nr1`, `rr1`, `s1`, `args1`, `dflts1`, `ret1`, `body1`, `src2`, `tops2`,
+      `v2`, `fm2`, `nr2`, `rr2`, `s2`, `args2`, `dflts2`, `ret2`, `body2`]
+      mp_tac) >>
+  impl_tac >- gs[] >> simp[]
+QED
+
 Theorem classify_functions_unit_singleton:
   classify_functions_unit [(NONE, tops)] [] =
   case classify_functions tops of
@@ -1171,9 +1313,7 @@ Theorem order_internals_unit_singleton:
 Proof
   simp[order_internals_unit_def, order_internals_def,
        MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF,
-       BETA_RULE (Q.SPEC `λfname. fname = n` filter_unit_internal_names_singleton),
-       BETA_RULE (Q.SPEC `λfname. ¬MEM fname names`
-                    filter_unit_internal_names_singleton)]
+       BETA_RULE (Q.SPEC `λfname. fname = n` filter_unit_internal_names_singleton)]
 QED
 
 Theorem internal_callees_unit_singleton[local]:

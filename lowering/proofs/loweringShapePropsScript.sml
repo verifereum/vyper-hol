@@ -16766,6 +16766,34 @@ Proof
   simp[]
 QED
 
+(* The same for any distinct selection of the classified internal functions,
+   such as the reachable ones the lowering emits. *)
+Theorem internal_descriptors_sublist_ok:
+  !tops is_ctor srcs.
+    ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+                    (FST (SND (classify_functions tops)))) /\
+    ALL_DISTINCT srcs /\
+    (!x. MEM x srcs ==> MEM x (FST (SND (classify_functions tops)))) ==>
+    EVERY (\d. internal_label_ok (FST d))
+      (MAP (source_internal_fn_descriptor tops is_ctor) srcs) /\
+    ALL_DISTINCT
+      (MAP FST (MAP (source_internal_fn_descriptor tops is_ctor) srcs))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule internal_descriptors_ok >>
+  disch_then (qspec_then `is_ctor` strip_assume_tac) >>
+  conj_tac >- fs[listTheory.EVERY_MAP, listTheory.EVERY_MEM] >>
+  simp[listTheory.MAP_MAP_o] >> irule listTheory.ALL_DISTINCT_MAP_INJ >> simp[] >>
+  rpt strip_tac >>
+  `MEM x (FST (SND (classify_functions tops))) /\
+   MEM y (FST (SND (classify_functions tops)))` by fs[] >>
+  qpat_x_assum `ALL_DISTINCT (MAP FST (MAP _ (FST _)))` mp_tac >>
+  qpat_x_assum `MEM x (FST _)` mp_tac >>
+  qpat_x_assum `MEM y (FST _)` mp_tac >>
+  qspec_tac (`FST (SND (classify_functions tops))`, `l`) >>
+  Induct >> rw[listTheory.MEM_MAP] >> metis_tac[]
+QED
+
 (* S2's statement, proved from the generator and source lemmas above.
    package_internal_blocks splits the block stream at each internal entry
    label; internal_descriptors_ok keeps those labels apart from
@@ -16815,8 +16843,8 @@ Proof
                      `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok_mode >> gs[]) >>
   `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
      (order_internals (runtime_internal_order tops ints) ints)))`
-    by metis_tac[sortingTheory.ALL_DISTINCT_PERM, sortingTheory.PERM_MAP,
-                 PERM_order_runtime_internals] >>
+    by (REWRITE_TAC [listTheory.MAP_MAP_o] >>
+        irule ALL_DISTINCT_order_runtime_internals >> fs[listTheory.MAP_MAP_o]) >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   qpat_x_assum `classify_functions tops = _` (fn th => REWRITE_TAC [th]) >>

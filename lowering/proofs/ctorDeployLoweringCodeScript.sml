@@ -63,10 +63,29 @@ Proof
     update_cenv_nonreentrant_def]
 QED
 
+(* The reachable internal functions the deploy lowering selects are distinct
+   classified internal functions. *)
+Theorem deploy_order_internals_ok:
+  !tops exts ints fb ctor.
+    supported_program tops /\
+    classify_functions tops = (exts,ints,fb,ctor) ==>
+    ALL_DISTINCT (order_internals (deploy_internal_order ctor ints) ints) /\
+    !x. MEM x (order_internals (deploy_internal_order ctor ints) ints) ==>
+        MEM x (FST (SND (classify_functions tops)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule supported_program_internal_names >> strip_tac >>
+  drule classified_internal_names_distinct >> gvs[] >> strip_tac >>
+  simp[] >>
+  drule_then (qspec_then `ctor` assume_tac) ALL_DISTINCT_order_deploy_internals >>
+  imp_res_tac ALL_DISTINCT_MAP >> first_assum ACCEPT_TAC
+QED
+
 Theorem deploy_internal_package_labels:
   !tops target ut key is_ctor cap srcs ifns.
     supported_program tops /\
-    PERM srcs (FST (SND (classify_functions tops))) /\
+    ALL_DISTINCT srcs /\
+    (!x. MEM x srcs ==> MEM x (FST (SND (classify_functions tops)))) /\
     ifns = MAP (set_internal_package_target target o
       package_internal_fn tops ut key is_ctor cap) srcs ==>
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
@@ -75,18 +94,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule supported_program_internal_names >> strip_tac >>
   drule classified_internal_names_distinct >> strip_tac >>
-  drule internal_descriptors_ok >>
+  drule_all internal_descriptors_sublist_ok >>
   disch_then (qspec_then `is_ctor` strip_assume_tac) >>
-  drule sortingTheory.PERM_MEM_EQ >> strip_tac >>
-  `PERM
-    (MAP FST (MAP (source_internal_fn_descriptor tops is_ctor) srcs))
-    (MAP FST (MAP (source_internal_fn_descriptor tops is_ctor)
-      (FST (SND (classify_functions tops)))))` by
-    (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >> simp[]) >>
-  drule sortingTheory.ALL_DISTINCT_PERM >> strip_tac >>
   gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
-    internal_fn_descriptors_MAP_package_internal_fn] >>
-  fs[EVERY_MAP, EVERY_MEM] >> metis_tac[]
+    internal_fn_descriptors_MAP_package_internal_fn]
 QED
 
 Theorem deploy_ctor_packaged_entry_by_labels:
@@ -299,9 +310,7 @@ Proof
       package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
       (order_internals (deploy_internal_order (SOME cf) ints) ints)` by
     simp[Abbr `ifns`] >>
-  `PERM (order_internals (deploy_internal_order (SOME cf) ints) ints)
-      (FST (SND (classify_functions tops)))` by
-    simp[PERM_order_deploy_internals] >>
+  drule_all deploy_order_internals_ok >> strip_tac >>
   drule_all deploy_internal_package_labels >> strip_tac >>
   drule_all deploy_ctor_packaged_entry_by_labels >> strip_tac >>
   drule_all deploy_ctor_member_certificates >> strip_tac >>

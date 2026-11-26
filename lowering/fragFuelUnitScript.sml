@@ -262,8 +262,8 @@ Proof
     assume_tac package_internal_fns_fuel >>
   `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
      (order_internals (runtime_internal_order tops ints) ints)))`
-    by metis_tac[sortingTheory.ALL_DISTINCT_PERM, sortingTheory.PERM_MAP,
-                 PERM_order_runtime_internals] >>
+    by (REWRITE_TAC [listTheory.MAP_MAP_o] >>
+        irule ALL_DISTINCT_order_runtime_internals >> fs[listTheory.MAP_MAP_o]) >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   qpat_x_assum `classify_functions tops = _` (fn th => REWRITE_TAC [th]) >>

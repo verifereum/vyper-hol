@@ -137,11 +137,12 @@ Proof
       (order_internals (deploy_internal_order (SOME cf) ints) ints)` >>
   `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
    ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns))` by
-    (qspecl_then [`tops`, `rpolicy.rpol_target`, `T`,
+    (drule_all deploy_order_internals_ok >> strip_tac >>
+     qspecl_then [`tops`, `rpolicy.rpol_target`, `T`,
        `K global_nonreentrant_slot`, `T`, `imm_len tops`,
        `order_internals (deploy_internal_order (SOME cf) ints) ints`, `ifns`]
        mp_tac deploy_internal_package_labels >>
-     simp[Abbr `ifns`, PERM_order_deploy_internals]) >>
+     simp[Abbr `ifns`]) >>
   `run_deploy_lowering T rpolicy runtime_bc (imm_len tops) pos_args 0 ifns
      cenv0 body pay nr nkey ut "__deploy" = SOME dunit` by
     (simp[Abbr `ifns`] >> irule lower_vyper_deploy_unit_ctor_run >>

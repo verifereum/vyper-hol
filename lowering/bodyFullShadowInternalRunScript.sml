@@ -55,6 +55,36 @@ Proof
   simp[] >> metis_tac[internal_fn_label_mode]
 QED
 
+(* A label the extracted context resolves belongs to a packaged source
+   function, whose id is the label's. *)
+Theorem packaged_internal_source_id:
+  ips = MAP (set_internal_package_target target o
+    package_internal_fn tops T (K global_nonreentrant_slot) is_ctor cap)
+      (srcs : (function_mutability # bool # bool # string #
+        (string # type) list # expr list # type # stmt list) list) /\
+  name = (if is_ctor then "__deploy" else "__entry") /\
+  extract_context_with_internals name ips run_end = SOME (raw,data) /\
+  lookup_function (internal_fn_label id fname tys mode) raw.ctx_functions =
+    SOME callee ==>
+  ?src. MEM src srcs /\ id = build_func_ids 0 tops (FST (SND (SND (SND src))))
+Proof
+  strip_tac >>
+  `MEM (internal_fn_label id fname tys mode)
+    (name :: MAP FST (internal_fn_descriptors ips))` by
+    metis_tac[venomInstTheory.lookup_function_mem, extract_context_internal_names] >>
+  qpat_x_assum `MEM _ (_::_)` mp_tac >>
+  simp[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
+       internal_fn_descriptors_MAP_package_internal_fn, MEM_MAP,
+       pairTheory.EXISTS_PROD] >>
+  strip_tac
+  >- (Cases_on `is_ctor` >> fs[internal_fn_label_def]) >>
+  qpat_x_assum `_ = source_internal_fn_descriptor _ _ _`
+    (mp_tac o Q.AP_TERM `FST`) >>
+  simp[] >> strip_tac >>
+  drule internal_fn_label_id_11 >> strip_tac >>
+  simp[pairTheory.EXISTS_PROD] >> metis_tac[]
+QED
+
 Theorem extract_context_internal_code_by_labels:
   extract_context_with_internals name packages final = SOME (ctx,data) /\
   ALL_DISTINCT (MAP (\f. f.fn_name) ctx.ctx_functions) /\

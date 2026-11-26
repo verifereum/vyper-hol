@@ -142,8 +142,8 @@ Proof
     internal_package_avoids create_or_short_builtin_root
       (set_internal_package_target rp.rpol_target
         (package_internal_fn tops T (K global_nonreentrant_slot) F 0 x))` by
-    (rpt strip_tac >> irule package_internal_avoids_create >> simp[] >>
-     metis_tac[PERM_order_runtime_internals, sortingTheory.PERM_MEM_EQ]) >>
+    (rpt strip_tac >> irule package_internal_avoids_create >> fs[] >>
+     metis_tac[]) >>
   `fallback_package_avoids create_or_short_builtin_root
      (set_fallback_package_target rp.rpol_target
        (package_fallback_fn tops T (K global_nonreentrant_slot) fb))` by
