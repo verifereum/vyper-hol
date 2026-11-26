@@ -23,7 +23,7 @@ Ancestors
   bodyForArrayMemoryPacketOriginMods bodyForArrayHeaderInstallMods
   vyperInterpreter bodyForArrayOriginMods bodyForArrayEntryMods fragGasOriginPtrLoop
   bodyInvSplit moduleVariableKeyProps exprSimHypsDefs supportedNameRoot
-  immutableRegionTypingProps vyperBareGlobalName
+  immutableRegionTypingProps vyperBareGlobalName bodyForArrayHeldDirectSelectionMods
 Libs monadsyntax
 
 Theorem capture_install_name_fresh[local]:
@@ -893,3 +893,62 @@ Resume for_array_capture_install_from_direct_mods[held_selected]:
 QED
 
 Finalise for_array_capture_install_from_direct_mods[local]
+
+Theorem for_array_origin_capture_install_mods:
+  contract_inv mods exps ctx c cx /\ MEM func ctx.ctx_functions /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved c sa0 /\
+  (!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
+  (!h. dead_lo_ok_mods h (DF h) lo c cx) /\
+  type_stmt env ret_ty (For id typ (Array e) n loop_body) = SOME env' /\
+  stmt_exprs_ok c (For id typ (Array e) n loop_body) /\
+  expr_body_pre_mods mods c cx env e es /\
+  for_nonslot_layout (c,id,typ,e,typ,bd,ret_ty,loop_body) (func,shadow_func)
+    (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
+    (bc,saD,saA,xd,capacity,aidItem)
+    (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
+    addr_cut body_cut /\
+  (!tail. eval_expr cx e (es with gas_obs := prefix ++ tail) =
+         (INL raw,em with gas_obs := tail)) /\
+  storage_trace_domain cx st0 em.storage_trace /\
+  (!H. valid_horizon cx st0 H em.storage_trace ==>
+       for_array_expr_landed_mods (DF,lo,d,ctx,func) mods cx c env e vv sbExpr
+          (es,sa0,s0,G0,tn0) H raw em Gr traw r) /\
+  evaluate_type (get_tenv cx) typ = SOME tyv /\
+  (!tenv s tyv' t s1 vs1 t1 s2 u t2.
+     tenv = get_tenv cx /\
+     lift_option_type (evaluate_type tenv typ) "For evaluate_type" s = (INL tyv',t) /\
+     eval_iterator cx (Array e) s1 = (INL vs1,t1) /\
+     check (compatible_bound (Dynamic n) (LENGTH vs1)) "For too long" s2 = (INL u,t2) ==>
+     body_for_full_ok_mods mods exps cx tyv' id loop_body vs1) ==>
+  ~r.vs_halted /\ ?vs t G tn.
+    compatible_bound (Dynamic n) (LENGTH vs) /\
+    (!tail. array_iterator_results cx (expr_type e) raw (em with gas_obs := tail) =
+         (INL vs,em with gas_obs := tail)) /\
+    (!H. valid_horizon cx st0 H em.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (r,Gr,traw) [] (OK t,G,tn) /\
+      for_array_selected_entry_mods mods exps cx env st0 tyv id loop_body
+        (DF,lo,d,ctx,func,shadow_func) (es,sa0,s0,G0,tn0)
+        ((c,id,typ,e,typ,bd,ret_ty,loop_body),
+         (vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL),
+         (bc,saD,saA,xd,capacity,aidItem),
+         (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var),
+         addr_cut,body_cut) H vs (em with gas_obs := []) G tn t)
+Proof
+  strip_tac >>
+  drule_then strip_assume_tac type_stmt_for_projection >>
+  `well_typed_expr env e /\ expr_writes_ok (\_. F) e` by
+    fs[well_typed_iterator_def] >>
+  `!name path. raw = PlaceR (MemoryPlace name path) ==>
+     ?ent v. lookup_scopes name em.scopes = SOME ent /\
+             evaluate_subscripts ent.type ent.value path = INL v` by
+    (rpt gen_tac >> disch_then SUBST_ALL_TAC >>
+     qspecl_then [`e`,`cx`,`env`,`es with gas_obs := prefix`,
+                  `name`,`path`,`em with gas_obs := []`] mp_tac
+       held_eval_direct_selection_mods >>
+     qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     fs[]) >>
+  irule for_array_capture_install_from_direct_mods >>
+  PURE_ASM_REWRITE_TAC [FORALL_SIMP,AND_CLAUSES] >>
+  conj_tac >- (qexists_tac `prefix` >> first_assum ACCEPT_TAC) >>
+  simp[]
+QED
