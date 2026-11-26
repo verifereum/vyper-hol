@@ -62,7 +62,10 @@ Proof
        (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp) >> simp[]) >>
   `t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  conj_tac
+  `create_size_exit_ok ctx (INR (Error (RuntimeError "write in static context")))
+     (Abort ExHalt_abort (halt_state (set_returndata [] t)))` by
+    simp[halt_state_def, set_returndata_def] >>
+  simp[] >> conj_tac
   >- (irule storage_emit_static_origin_ptr >> simp[] >>
       qexistsl_tac [`n2w slot`, `Lit (n2w slot)`, `sb`, `sf`, `tr`, `op`, `w`] >>
       simp[eval_operand_def, op_taint_def]) >>

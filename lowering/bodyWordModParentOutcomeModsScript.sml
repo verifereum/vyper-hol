@@ -134,8 +134,8 @@ QED
 
 Resume modular_suffix_parent_outcome_mods[zero]:
   qpat_x_assum `^wc = 0w ==> _` (drule_then strip_assume_tac) >>
-  irule gas_outcome_full_mods_exit >> simp[] >>
-  qexistsl_tac [`G3`,`fin`,`Abort Revert_abort u`,`INR ^div_error`,`tn3`] >>
+  irule gas_outcome_full_mods_exit_revert >> simp[] >>
+  qexistsl_tac [`G3`,`fin`,`INR ^div_error`,`tn3`,`u`] >>
   simp[halt_exit_def, fragExecTheory.exit_result_def, expr_exit_def] >> gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
     (drule_then strip_assume_tac) >> fs[]

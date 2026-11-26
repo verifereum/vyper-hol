@@ -4,7 +4,7 @@ Ancestors
   bodyAppendSlotGuardMods bodyAppendSlotAddressMods bodyAppendSlotStaticMods
   bodyAppendSlotStoreTailMods bodyAppendSlotStateMods bodyAppendSlotTaintMods
   bodyAppendSlotEndpointFramesMods stmtSimAppendStorageCompose
-  gasOutcomeFullPostMods bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit
+  gasOutcomeFullPostMods createSizeExit bodyFullPostsMods bodyFullShadowBodyInv bodyInvSplit
   assignTuplePtrCopyLen typedMemoryCopy valueEncodingProps bodyPtrDefs
   exprSimWordArgs stateFrame stateRelProj bodyFullShared haltExitProj
   exprOpenPrimitives exprLoweringProps loweringStateRelDefs stmtLoweringMono exprOperandVar
@@ -97,7 +97,8 @@ Theorem append_slot_staged_error[local]:
   (!tail. source (mid with gas_obs := tail) =
           (INR (Error (RuntimeError msg)),mid with gas_obs := tail)) /\
   (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-          (Abort reason u,Gf,tf)) ==>
+          (Abort reason u,Gf,tf)) /\
+  create_size_exit_ok ctx (INR (Error (RuntimeError msg))) (Abort reason u) ==>
   gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0 source (mid,s,G,tn) Q
     (\H res ee gt r.
       (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
@@ -107,7 +108,7 @@ Theorem append_slot_staged_error[local]:
 Proof
   strip_tac >> irule gas_outcome_full_mods_exit >> simp[] >>
   qexistsl_tac [`Gf`,`mid`,`Abort reason u`,`INR (Error (RuntimeError msg))`,`tf`] >>
-  simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def]
+  fs[exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def]
 QED
 
 Theorem append_slot_gas_obs_frames[local]:
@@ -301,11 +302,12 @@ Resume append_slot_staged_suffix_mods[static]:
      eval_operand bop placed = SOME slot /\ op_taint ptn bop = {}` by
     (simp[] >> strip_tac >> qx_gen_tac `x` >> strip_tac >>
      qpat_assum `!x. src = Var x \/ pop = Var x \/ _ ==> _` (qspec_then `x` mp_tac) >> simp[]) >>
-  drule_all (Q.INST [`s` |-> `placed`, `sa` |-> `s6`] append_slot_static_tail_mods) >>
+  drule_all (Q.INST [`s` |-> `placed`, `sa` |-> `s6`] append_slot_static_tail_mods_with_static) >>
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choosel_then [`blocked`,`Gb`,`tbn`] strip_assume_tac)) >>
   irule append_slot_staged_error >> simp[] >>
   qexistsl_tac [`Gb`,`ExHalt_abort`,`tbn`,`halt_state (set_returndata [] blocked)`] >>
+  simp[create_size_exit_ok_static] >>
   gen_tac >> irule gas_origin_ptr_path_trans >> qexistsl_tac [`Gp`,`placed`,`ptn`] >> simp[]
 QED
 

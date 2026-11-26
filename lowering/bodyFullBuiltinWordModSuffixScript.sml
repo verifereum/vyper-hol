@@ -240,9 +240,9 @@ Proof
      simp[Abbr `t2`, Abbr `u`, Abbr `t1`, update_var_def] >> metis_tac[]) >>
   `builtin_result cx ee.accounts ann bt ts
       [IntV (&w2n va); IntV (&w2n vb); IntV (&w2n vc)] = INL (IntV (&w2n w))` by
-    (mp_tac (Q.INST [`is_mul` |-> `bt = MulMod`, `a` |-> `va`, `b` |-> `vb`,
-       `c` |-> `vc`, `ac` |-> `(ee : evaluation_state).accounts`] word_modular_source_words) >>
-     Cases_on `bt = AddMod` >> gvs[Abbr `w`]) >>
+    simp[Abbr `w`,
+      SIMP_RULE std_ss [] (Q.INST [`is_mul` |-> `F`] word_modular_source_words),
+      SIMP_RULE std_ss [] (Q.INST [`is_mul` |-> `T`] word_modular_source_words)] >>
   qexistsl_tac [`OK t2`, `t2`, `step_prov PG G1 j u`, `step_taint j t1 u tn1`] >>
   simp[Abbr `t2`, Abbr `u`, Abbr `t1`, eval_operand_def, lookup_var_def,
        update_var_def, FLOOKUP_UPDATE, op_taint_def])

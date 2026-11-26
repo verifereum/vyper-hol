@@ -225,9 +225,9 @@ Theorem wei_abort_landing[local]:
 Proof
   strip_tac >> drule_all as_wei_value_abort_origin >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
-  irule gas_outcome_full_mods_exit >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`G'`,`mid`,`Abort Revert_abort (ss with vs_inst_idx := t.vs_inst_idx + 5)`,
-               `INR (Error (RuntimeError "ewv bound"))`,`tn'`] >>
+  irule gas_outcome_full_mods_exit_revert >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`G'`, `mid`, `INR (Error (RuntimeError "ewv bound"))`, `tn'`,
+                `ss with vs_inst_idx := t.vs_inst_idx + 5`] >>
   simp[expr_exit_def, halt_exit_def, exit_result_def]
 QED
 
