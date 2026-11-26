@@ -708,7 +708,7 @@ Finalise qualified_raw_saved_at_cut
 
 val value_landing = ``if is_word_type (expr_type e) then ^word_value else ^copy_value``;
 
-Theorem qualified_raw_run_suffix[local]:
+Theorem qualified_raw_run_suffix:
   ^suffix_entry /\ expr_body_pre_mods mods ce cx env e es /\
   eval_expr cx e (es with gas_obs := gs) = (INL raw,mid) /\
   read_result cx raw mid = (INL v,mid) /\ value_runtime_typed env (expr_type e) v /\

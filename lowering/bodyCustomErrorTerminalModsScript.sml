@@ -38,8 +38,8 @@ Proof
   disch_then (qspecl_then [`explicit`,`PG`]
     (qx_choosel_then [`t`,`Gf`,`tf`] strip_assume_tac)) >>
   `t.vs_returndata = data` by fs[] >>
-  irule gas_outcome_full_mods_exit >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`Gf`,`mid`,`Abort Revert_abort t`,`INR (Error (RevertData data))`,`tf`] >>
+  irule gas_outcome_full_mods_exit_revert >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`Gf`,`mid`,`INR (Error (RevertData data))`,`tf`,`t`] >>
   simp[bind_def, lift_option_def, raise_def, return_def, exit_result_def,
        stmt_exit_ptr_def, expr_exit_def, halt_exit_def] >>
   rpt strip_tac >> irule gas_origin_ptr_path_trans >>

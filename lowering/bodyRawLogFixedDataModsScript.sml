@@ -13,6 +13,9 @@ Ancestors
   venomExecSemantics unitTransformDefs loweringShapeDefs
   vyperEvent vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState
   vyperValue vyperTyping vyperTypeExprSoundness
+  bodyRawLogFixedScratchStoreMods bodyRawLogFixedEmitMods bodyRawLogFixedStaticEmitMods
+  bodyFullRawLogFixedTailFrame gasExemptCertMods fragGasOriginPtr
+  exprSimExtract32Post fragExec fragGasOriginPtrLoop ptrDiscipline bodyFullShadowBodyInv
 Libs monadsyntax
 
 val raw_log_next = ``\v. do
@@ -283,3 +286,268 @@ Resume raw_log_fixed_forced_cut_mods[payload]:
 QED
 
 Finalise raw_log_fixed_forced_cut_mods
+
+val fixed_log_post = ``\H (res:value + exception) ee G tn t. ?v. res = INL v /\
+  expr_post_mods H ctx func cenv cx (Call ann RawLog es_call dflt)
+    es sa sb s0 ee v (Lit 0w) t /\
+  expr_store_bound cx (post_value_type cenv (Call ann RawLog es_call dflt)) v (Lit 0w) t /\
+  t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+  s0.vs_alloca_next <= t.vs_alloca_next /\
+  ghost_inv_at_mods (DF (H:(bool # bytes32 # type_value) list # num list)) lo d cenv cx ee G tn t /\
+  ptr_val_ok cx (post_value_type cenv (Call ann RawLog es_call dflt)) v (Lit 0w) G tn t /\
+  (~is_word_type (post_value_type cenv (Call ann RawLog es_call dflt)) ==>
+    ptr_buf_ok cenv (Call ann RawLog es_call dflt) (Lit 0w) G t) /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn``;
+
+Theorem raw_log_fixed_data_run_mods:
+  expr_body_pre_mods mods cenv cx env data es /\
+  body_const_cells_agree_mods mods cx env es /\
+  expr_type data = BaseT (BytesT (Fixed 32)) /\ post_value_type cenv data = expr_type data /\
+  expr_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx (expr_type data) data es /\
+  compile_alloc_buffer 32 sa = (buf,sd) /\
+  compile_alloc_buffer 32 shadow_sa = (buf,shadow_sd) /\
+  fn_has_code sa sd func /\ fn_has_code shadow_sa shadow_sd shadow_func /\
+  lower_value compile_expr cenv (expr_type data) data sd = (data_op,sm) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type data)
+    (gas_shadow_expr data) shadow_sd = (data_op,shadow_sm) /\
+  expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (sd,sm,shadow_sd,shadow_sm) /\
+  local_ptrs_reserved cenv sa /\
+  (!H. dead_lo_ok_mods H (DF H) lo cenv cx) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
+  (!bb. MEM bb func.fn_blocks ==> venomExecSemantics$phi_prefix_length bb.bb_instructions = 0) /\
+  (!fn inst t. frag_reachable ctx func s0 fn inst t ==> unitTransformDefs$dalloca_fmp_headroom inst t) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\ immutable_frame_mods func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv_at_mods (DF H) lo d cenv cx es G0 tn0 s0) /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  gas_admissible (bind (eval_expr cx data) (read_result cx)) expr_res_ok es /\
+  EVERY (\op. (!x. op = Var x ==> not_fresh_at sa x) /\ (!l. op <> Label l)) ops /\
+  eval_operands ops s0 = SOME (MAP event_value_to_word vals) /\
+  EVERY (\op. op_taint tn0 op = {}) ops /\
+  emit_void MSTORE [buf.buf_operand;data_op] sm = ((),s1) /\
+  emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [] s1 = ((),sb) /\
+  fn_has_code sm sb func /\
+  LENGTH vals <= 4 /\ LENGTH ops < dimword (:256) /\
+  expr_type (Call ann RawLog es_call dflt) = NoneT /\
+  post_value_type cenv (Call ann RawLog es_call dflt) = NoneT /\
+  expr_has_effect (Call ann RawLog es_call dflt) ==>
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (bind (eval_expr cx data) (read_result cx)) ^raw_log_next)
+    (es,s0,G0,tn0) ^fixed_log_post
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
+Proof
+  strip_tac >>
+  mp_tac raw_log_fixed_forced_cut_mods >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full_mods _ _ _ _ _ _ ChildQ ChildR` >>
+  irule gas_outcome_full_mods_bind_all >> rpt conj_tac
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_bind_value >>
+      goal_assum (drule_at Any) >> BETA_TAC >> RULE_ASSUM_TAC BETA_RULE >> first_assum ACCEPT_TAC)
+  >~ [`gas_exempt_cert_mods _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_error_value >> simp[])
+  >~ [`storage_trace_frame (bind (eval_expr _ _) _)`]
+  >- MATCH_ACCEPT_TAC (GEN_ALL bodyForcedStorageFrameModsTheory.bop_forced_storage_frame)
+  >- MATCH_ACCEPT_TAC (GEN_ALL fixed_log_next_frame) >>
+  qexists `ChildQ` >> conj_tac >- suspend "reached" >>
+  irule gas_outcome_full_mods_post_source >>
+  qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ ChildQ ChildR` (irule_at Any) >>
+  simp[Abbr `ChildR`] >> rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]
+QED
+
+Resume raw_log_fixed_data_run_mods[reached]:
+  map_every qx_gen_tac [`marks`,`res`,`ee`,`G`,`tn`,`s`] >> strip_tac >>
+  qunabbrev_tac `ChildQ` >> RULE_ASSUM_TAC BETA_RULE >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (drule_then (qx_choosel_then [`bs`,`word`,`p`,`w`] strip_assume_tac)) >>
+  qpat_x_assum `res = INL (BytesV bs)` SUBST_ALL_TAC >>
+  disj1_tac >> qexists `BytesV bs` >> simp_tac bool_ss [sumTheory.INL_11, AND_CLAUSES] >>
+  suspend "store"
+QED
+
+Resume raw_log_fixed_data_run_mods[store]:
+  `sa.cs_next_var <= sd.cs_next_var` by
+    (qspecl_then [`32`,`sa`] mp_tac ci_mono_compile_alloc_buffer >> simp[ci_mono_def]) >>
+  `sd.cs_next_var <= sm.cs_next_var` by
+    (qspecl_then [`cenv`,`expr_type data`,`data`,`sd`] mp_tac
+       ci_mono_lower_value_compile_expr >> simp[ci_mono_def]) >>
+  `sa.cs_next_var <= sm.cs_next_var` by decide_tac >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists `sa` >> simp[]) >>
+  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
+    (rpt strip_tac >> qpat_assum `!x. not_fresh_at sa x ==> _` irule >>
+     first_assum (drule_then ACCEPT_TAC)) >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
+    (rpt strip_tac >> qpat_assum `!x. not_fresh_at sa x ==> _` irule >>
+     first_assum (drule_then ACCEPT_TAC)) >>
+  `fn_has_code s1 sb func` by
+    (`cs_extends sm s1` by
+       (irule cs_extends_emit_inst >> qexistsl [`MSTORE`,`[buf.buf_operand;data_op]`,`[]`] >>
+        fs[emitHelperTheory.emit_void_def,emitHelperTheory.emit_inst_def]) >>
+     `cs_extends s1 sb` by (irule cs_extends_emit_inst >> goal_assum (drule_at Any)) >>
+     qspecl_then [`sm`,`s1`,`sb`,`func`] mp_tac fn_has_code_split >> simp[]) >>
+  qabbrev_tac `t = mstore (w2n w) word s` >>
+  qabbrev_tac `z = t with vs_inst_idx := LENGTH s1.cs_current_insts` >>
+  qabbrev_tac `tf = step_taint (mk_inst sm.cs_next_id MSTORE [buf.buf_operand;data_op] []) s t tn` >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (s,G,tn) [] (OK z,G,tf) /\
+    ~z.vs_halted /\ z.vs_current_bb = s1.cs_current_bb /\ z.vs_inst_idx = LENGTH s1.cs_current_insts /\
+    eval_operand buf.buf_operand z = SOME w /\ ptr_covers G tf p z 32 /\
+    op_taint tf buf.buf_operand = {} /\ w2n w + 32 <= z.vs_alloca_next /\
+    mem_bytes_at (w2n w) 32 z.vs_memory = bs /\
+    (!j. w2n w <= j /\ j < w2n w+32 ==> j NOTIN tf.t_mem) /\
+    eval_operands ops z = SOME (MAP event_value_to_word vals) /\ EVERY (\op. op_taint tf op = {}) ops /\
+    allocas_from lo z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+    stor_taint_ok_at (DF H) tf z /\ stmt_state_rel H ctx func cenv cx ee z /\
+    immutable_frame_mods func cenv cx ee z /\ ghost_inv_at_mods (DF H) lo d cenv cx ee G tf z /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G tf` by suspend "store_fields" >>
+  Cases_on `cx.txn.is_static`
+  >- suspend "static"
+  >> suspend "normal"
+QED
+
+Resume raw_log_fixed_data_run_mods[store_fields]:
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >> simp_tac bool_ss [sumTheory.INL_11, AND_CLAUSES] >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`word'`,`p'`,`w'`] strip_assume_tac) >>
+  qpat_assum `eval_operand data_op s = SOME word` (fn th =>
+    qpat_x_assum `eval_operand data_op s = SOME word'`
+      (SUBST_ALL_TAC o REWRITE_RULE [th,optionTheory.SOME_11] o SYM)) >>
+  qpat_assum `buf.buf_operand = Var p` (fn th =>
+    qpat_x_assum `buf.buf_operand = Var p'`
+      (SUBST_ALL_TAC o SIMP_RULE (srw_ss()) [th] o SYM)) >>
+  qpat_assum `eval_operand buf.buf_operand s = SOME w` (fn th =>
+    qpat_x_assum `eval_operand buf.buf_operand s = SOME w'`
+      (SUBST_ALL_TAC o REWRITE_RULE [th,optionTheory.SOME_11] o SYM)) >>
+  `stmt_state_rel H ctx func cenv cx ee s` by
+    (qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ ee _ _ s`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >> first_assum ACCEPT_TAC) >>
+  mp_tac (Q.INST [`alloc_sa` |-> `sa`, `data_sa` |-> `sd`,
+    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `ty` |-> `post_value_type cenv data`,
+    `words` |-> `MAP event_value_to_word vals`]
+    (Q.INST [`vals` |-> `words`] (INST_TYPE [alpha |-> ``:256``] raw_log_fixed_scratch_store_mods))) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp_tac bool_ss [LET_THM,Abbr `tf`,Abbr `z`,Abbr `t`] >>
+  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume raw_log_fixed_data_run_mods[static]:
+  irule gas_outcome_full_mods_exit >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`G`,`ee`,`Abort ExHalt_abort (halt_state (set_returndata [] z))`,
+    `INR (Error (RuntimeError "write in static context"))`,`tf`] >>
+  simp_tac (srw_ss()) [NoAsms,Excl "create_size_exit_ok_inr",
+    Abbr `ChildR`,exit_result_def,expr_exit_def,halt_exit_def] >>
+  conj_tac >- (gen_tac >> asm_simp_tac bool_ss [BETA_RULE fixed_log_next_replay]) >>
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ (s,G,tn) [] (OK z,G,tf) /\ _`
+    (drule_then strip_assume_tac) >>
+  reverse conj_tac >-
+    (irule createSizeExitTheory.create_size_exit_ok_static >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx ee z`
+       (mp_tac o MATCH_MP state_rel_call_ctx_rel o MATCH_MP stmt_state_rel_state_rel) >>
+     simp[call_ctx_rel_def,halt_state_def,set_returndata_def]) >>
+  irule gas_origin_ptr_path_trans >> qexistsl [`G`,`z`,`tf`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  mp_tac (Q.INST [`D` |-> `DF H`, `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+    (INST_TYPE [alpha |-> ``:256``] raw_log_fixed_static_emit_mods)) >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
+    qpat_assum `buf.buf_operand = Var p` (fn th =>
+      first_assum (ACCEPT_TAC o REWRITE_RULE [th]))))) >> disch_then ACCEPT_TAC
+QED
+
+Resume raw_log_fixed_data_run_mods[normal]:
+  qabbrev_tac `ev = encode_raw_event_values cx.txn.target vals bs` >>
+  qabbrev_tac `ef = ee with logs := ee.logs ++ [ev]` >>
+  qabbrev_tac `u = z with <|vs_logs := z.vs_logs ++ [ev]; vs_inst_idx := LENGTH sb.cs_current_insts|>` >>
+  irule gas_outcome_full_mods_pure >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`G`,`ef`,`INL NoneV`,`u`,`tf`] >> BETA_TAC >>
+  conj_tac >-
+    (qx_gen_tac `tail` >> mp_tac (Q.INST [`bs` |-> `bs`, `ee` |-> `ee`]
+      (BETA_RULE fixed_log_next_replay)) >> simp[Abbr `ef`,Abbr `ev`]) >>
+  `ef.storage_trace = ee.storage_trace` by simp[Abbr `ef`] >>
+  pop_assum (fn th => PURE_REWRITE_TAC [th]) >>
+  gen_tac >> disch_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ (s,G,tn) [] (OK z,G,tf) /\ _`
+    (drule_then strip_assume_tac) >>
+  `~z.vs_call_ctx.cc_static /\ z.vs_call_ctx.cc_address = cx.txn.target` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx ee z`
+       (mp_tac o MATCH_MP state_rel_call_ctx_rel o MATCH_MP stmt_state_rel_state_rel) >>
+     simp[call_ctx_rel_def]) >>
+  `lo <= z.vs_alloca_next` by
+    (qpat_assum `ghost_inv_at_mods (DF H) lo d cenv cx ee G tf z`
+       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_mods_def]) >> first_assum ACCEPT_TAC) >>
+  `gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (z,G,tf) [] (OK u,G,tf) /\
+   u.vs_current_bb = sb.cs_current_bb /\ immutable_frame_mods func cenv cx ef u /\
+   ghost_inv_at_mods (DF H) lo d cenv cx ef G tf u` by suspend "emit" >>
+  conj_tac >-
+    (irule gas_origin_ptr_path_trans >> qexistsl [`G`,`z`,`tf`] >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "normal_post"
+QED
+
+Resume raw_log_fixed_data_run_mods[emit]:
+  mp_tac (Q.INST [`D` |-> `DF (H:(bool # bytes32 # type_value) list # num list)`,
+    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `off` |-> `w`, `pop` |-> `buf.buf_operand`]
+    (Q.INST [`buf` |-> `pop`] (SPEC_ALL raw_log_fixed_emit_mods))) >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[Abbr `ev`]))) >>
+  simp_tac bool_ss [Abbr `u`, Abbr `ef`]
+QED
+
+Resume raw_log_fixed_data_run_mods[normal_post]:
+  `u = (mstore (w2n w) word s) with
+    <|vs_logs := s.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs];
+      vs_inst_idx := LENGTH sb.cs_current_insts|>` by
+    simp[Abbr `u`, Abbr `z`, Abbr `t`, Abbr `ev`, mstore_def] >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> ?bs' word p w. _`
+    (qspec_then `H` mp_tac) >>
+  simp_tac (srw_ss()) [sumTheory.INL_11] >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`word'`,`p'`,`w'`] strip_assume_tac) >>
+  `expr_post H ctx func cenv cx data es sa sm s0 ee (BytesV bs) data_op s` by
+    (qpat_assum `bs = TAKE 32 (word_to_bytes_be word')` (fn th =>
+      first_assum (ACCEPT_TAC o REWRITE_RULE [SYM th]))) >>
+  mp_tac (Q.INST [`alloc_sa` |-> `sa`, `data_sa` |-> `sd`,
+    `G2` |-> `G`, `tn2` |-> `tf`]
+    (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``] raw_log_fixed_tail_post_frame)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  suspend "finish_post"
+QED
+
+Resume raw_log_fixed_data_run_mods[finish_post]:
+  `ef = ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]` by
+    simp[Abbr `ef`,Abbr `ev`] >>
+  pop_assum (fn th => PURE_REWRITE_TAC [SYM th]) >>
+  strip_tac >> rename1 `ghost_inv_at_mods (DF H) lo d cenv cx ef G tf u` >>
+  pure_rewrite_tac[expr_post_mods_def,extract32_expr_post_end_gas_obs] >>
+  rpt (FIRST [first_assum ACCEPT_TAC,conj_tac])
+  >~ [`immutable_frame_mods _ _ _ (ef with gas_obs := []) _`]
+  >- (qpat_assum `immutable_frame_mods _ _ _ ef u` mp_tac >>
+      pure_rewrite_tac[immutable_frame_mods_def,bodyInvSplitTheory.immutables_rel_mods_def,
+        bodyInvSplitTheory.immutable_alloca_sep_mods_def,immutable_alloca_sep_def,
+        immutables_rel_def,evaluation_state_accfupds] >> disch_then ACCEPT_TAC)
+  >~ [`u.vs_inst_idx = LENGTH sb.cs_current_insts`]
+  >- simp_tac (srw_ss()) [Abbr `u`]
+  >~ [`ctx_has_dalloca ctx ==> allocas_below_fmp u`]
+  >- (qpat_assum `stmt_state_rel H ctx func cenv cx ef u`
+      (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp))
+  >~ [`ghost_inv_at_mods _ _ _ _ _ (ef with gas_obs := []) _ _ _`]
+  >- (qpat_assum `ghost_inv_at_mods (DF H) lo d cenv cx ef G tf u` mp_tac >>
+      pure_rewrite_tac[ghost_inv_at_mods_def,evaluation_state_accfupds] >> disch_then ACCEPT_TAC) >>
+  qpat_assum `post_value_type cenv (Call ann RawLog es_call dflt) = NoneT` (fn ty =>
+    qpat_assum `expr_type (Call ann RawLog es_call dflt) = NoneT` (fn ty' =>
+      first_assum (ACCEPT_TAC o REWRITE_RULE [ty,GSYM ty'])))
+QED
+
+Finalise raw_log_fixed_data_run_mods

@@ -140,7 +140,8 @@ Proof
   >- (irule gas_outcome_full_mods_exit >> reverse conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl [`Gu`,`mid`,`Abort ExHalt_abort (halt_state (set_returndata [] u))`,
                 `INR (Error (RuntimeError "write in static context"))`,`tu`] >>
-      simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def] >>
+      simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def,
+           Excl "create_size_exit_ok_inr"] >>
       conj_tac >- (qx_gen_tac `tail` >> drule log_full_source_suffix_result >> simp[]) >>
       qx_gen_tac `H` >> strip_tac >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
@@ -148,6 +149,9 @@ Proof
       `u.vs_call_ctx.cc_static` by
         (drule stmt_state_rel_state_rel >> disch_then (mp_tac o MATCH_MP state_rel_call_ctx_rel) >>
          fs[call_ctx_rel_def]) >>
+      reverse conj_tac
+      >- (irule createSizeExitTheory.create_size_exit_ok_static >>
+          simp[halt_state_def, set_returndata_def]) >>
       `allocas_from lo u /\ lo <= u.vs_alloca_next` by fs[ghost_inv_at_mods_def] >>
       `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
         (qpat_assum `stmt_state_rel H ctx func ce cx mid u`
