@@ -9,6 +9,7 @@
  *   inliner_retpc_arity_witness     -- the return-PC slot binds a PARAM
  *   inliner_rdc_split_witness       -- the call site splits an RDC pair
  *   inliner_param_dalloca_name_witness -- PARAM and DALLOCA share a name
+ *   inliner_two_root_arg_witness    -- a forwarded argument with two roots
  *)
 Theory functionInlinerReviewWitness
 Ancestors
@@ -440,4 +441,79 @@ Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   simp[rdc_pair_in_input, rdc_pair_split_in_output] >>
   premises_tac
+QED
+
+(* ===== Finding 5: a forwarded argument with two roots ===== *)
+
+(* The inliner's input when the pinned compiler, with vyperlang/vyper#5237,
+   compiles a readonly internal call on `(a if c else b)[1]`: "s" is
+   assigned on both paths, and the forwarding replaced the argument's copy
+   with "p", which an ADD derives from "s". *)
+Definition two_root_arg_ctx_def:
+  two_root_arg_ctx =
+    mk_venom_context
+      [mk_raw_function "entry"
+         [witness_block "entry"
+            [mk_inst 0 CALLDATASIZE [] ["c"];
+             mk_inst 1 ALLOCA [Lit 64w] ["a"];
+             mk_inst 2 ALLOCA [Lit 64w] ["b"];
+             mk_inst 3 JNZ [Var "c"; Label "then"; Label "else"] []];
+          witness_block "then"
+            [mk_inst 4 ASSIGN [Var "a"] ["s"];
+             mk_inst 5 JMP [Label "join"] []];
+          witness_block "else"
+            [mk_inst 6 ASSIGN [Var "b"] ["s"];
+             mk_inst 7 JMP [Label "join"] []];
+          witness_block "join"
+            [mk_inst 8 ADD [Var "s"; Lit 32w] ["p"];
+             mk_inst 9 INVOKE [Label "callee"; Var "p"] ["r"];
+             mk_inst 10 STOP [] []]];
+       mk_raw_function "callee"
+         [witness_block "callee"
+            [mk_inst 20 PARAM [Lit 0w] ["x"];
+             mk_inst 21 RETPC_PARAM [Lit 1w] ["pc"];
+             mk_inst 22 MLOAD [Var "x"] ["v"];
+             mk_inst 23 RET [Var "v"; Var "pc"] []]]]
+      (SOME "entry")
+End
+
+(* A pointer argument derived from two distinct roots. *)
+Theorem two_root_arg_refutes_inline_ptr_ok:
+  MEM fn C.ctx_functions /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm, args) /\
+  k < LENGTH args /\ EL k args = Var v /\ v IN fn_pv P fn /\
+  r1 IN ptr_roots P fn /\ r2 IN ptr_roots P fn /\ r1 <> r2 /\
+  v IN pointer_derived_vars fn {r1} /\ v IN pointer_derived_vars fn {r2} ==>
+  ~inline_ptr_ok P C
+Proof
+  rpt strip_tac >> fs[inline_ptr_ok_def, EVERY_MEM] >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> simp[] >>
+  DISJ2_TAC >> qexists_tac `k` >>
+  simp[inline_ptr_single_root_def] >> metis_tac[]
+QED
+
+Theorem inliner_two_root_arg_witness:
+  !P. ~inline_ptr_ok P (reachable_ctx two_root_arg_ctx)
+Proof
+  gen_tac >>
+  qabbrev_tac `fn = HD (reachable_ctx two_root_arg_ctx).ctx_functions` >>
+  `EVERY (\i. i.inst_opcode <> PARAM) (fn_insts fn)` by
+    (unabbrev_all_tac >> EVAL_TAC) >>
+  `ptr_roots P fn = set ["a"; "b"]` by
+    (asm_simp_tac std_ss [no_param_ptr_roots_list] >> AP_TERM_TAC >>
+     unabbrev_all_tac >> EVAL_TAC) >>
+  `OPTION_MAP (MEM "p") (pv_closure fn ["a"; "b"]) = SOME T /\
+   OPTION_MAP (MEM "p") (pv_closure fn ["a"]) = SOME T /\
+   OPTION_MAP (MEM "p") (pv_closure fn ["b"]) = SOME T` by
+    (unabbrev_all_tac >> EVAL_TAC) >>
+  `"p" IN pointer_derived_vars fn (set ["a"; "b"]) /\
+   "p" IN pointer_derived_vars fn (set ["a"]) /\
+   "p" IN pointer_derived_vars fn (set ["b"])` by
+    metis_tac[witness_closure_member] >>
+  `"p" IN fn_pv P fn` by asm_rewrite_tac[fn_pv_def] >>
+  irule two_root_arg_refutes_inline_ptr_ok >>
+  qexistsl_tac [`[Var "p"]`, `fn`, `EL 9 (fn_insts fn)`, `0`, `"callee"`,
+                `"a"`, `"b"`, `"p"`] >>
+  fs[] >> unabbrev_all_tac >> EVAL_TAC
 QED
