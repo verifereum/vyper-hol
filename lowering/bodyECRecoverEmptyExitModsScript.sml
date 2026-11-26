@@ -3,7 +3,8 @@
 Theory bodyECRecoverEmptyExitMods
 Ancestors
   bodyFullBuiltinPrecompileSuffixAbort exprSimPrecompiles exprSimDefs exprSimHash
-  gasOutcomeFullMods gasSummary fragGasOriginPtr fragExec
+  gasOutcomeFullMods gasSummary fragGasOriginPtr fragGasSeqAbort fragExec
+  createSizeExit
   venomInstProofs venomExecSemantics venomInst venomState finite_map
   rich_list words vyperStorageFootprint vyperInterpreter vyperState
 Libs
@@ -38,7 +39,8 @@ Theorem ecrecover_empty_exit_mods:
     tn.t_stor SUBSET (DF H).d_stor sbuf.vs_call_ctx.cc_address
       (sbuf.vs_accounts sbuf.vs_call_ctx.cc_address).storage /\
     tn.t_trans SUBSET (DF H).d_trans sbuf.vs_call_ctx.cc_address
-      (sbuf.vs_transient sbuf.vs_call_ctx.cc_address)) ==>
+      (sbuf.vs_transient sbuf.vs_call_ctx.cc_address)) /\
+  MEM func ctx.ctx_functions ==>
   ?u bad Ga tna.
     step_inst_base gi sbuf = OK u /\
     step_inst_base ci u = Abort ExHalt_abort (halt_state (set_returndata [] u)) /\
@@ -65,6 +67,18 @@ Proof
      gvs[eval_operand_def, lookup_var_def]) >>
   qabbrev_tac `bad = halt_state (set_returndata [] u)
     with vs_inst_idx := SUC sbuf.vs_inst_idx` >>
+  `lookup_block bad.vs_current_bb func.fn_blocks = SOME bb /\
+   get_instruction bb bad.vs_inst_idx = SOME ci` by
+    (simp[NoAsms, Abbr `bad`, Abbr `u`, halt_state_def, set_returndata_def,
+          update_var_def] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     drule instruction_prefix_cursor >> strip_tac >>
+     drule instruction_prefix_cursor >> simp[]) >>
+  `ALL_DISTINCT (FLAT (MAP fn_labels ctx.ctx_functions)) ==>
+   ~oversized_create_abort ctx (Abort ExHalt_abort bad)` by
+    (strip_tac >> irule oversized_create_abort_non_create_cursor >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`bb`,`func`,`ci`] >> simp[mk_inst_def]) >>
   qabbrev_tac `Ga = step_prov PG G gi u` >>
   qabbrev_tac `tna = step_taint gi sbuf u tn` >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
@@ -88,5 +102,6 @@ Proof
   qexistsl_tac [`INR (Error (RuntimeError "precompile failed"))`, `mid`,
     `Abort ExHalt_abort bad`, `Ga`, `tna`] >>
   simp[ignore_bind_def, bind_def, ecrecover_source_outcome_step,
-    exit_result_def, expr_exit_def, halt_exit_def]
+    exit_result_def, expr_exit_def, halt_exit_def] >>
+  Cases_on `ALL_DISTINCT (FLAT (MAP fn_labels ctx.ctx_functions))` >> simp[]
 QED
