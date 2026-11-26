@@ -183,7 +183,8 @@ Resume slot_copy_empty_header_mods[static]:
   >- (irule storage_emit_static_origin_ptr >> simp[] >>
       goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >> simp[] >>
       qexists_tac `0w` >> simp[eval_operand_def,op_taint_def]) >>
-  simp[stmt_exit_ptr_def, expr_exit_def, halt_exit_not_halt]
+  simp[createSizeExitTheory.create_size_exit_ok_static, halt_state_def, set_returndata_def,
+       stmt_exit_ptr_def, expr_exit_def, halt_exit_not_halt]
 QED
 
 Resume slot_copy_empty_header_mods[normal]:

@@ -2,7 +2,7 @@
 Theory bodyFullForHandlers
 Ancestors
   bodyFullForControl bodyPtrDefs exprSimDefs stmtSimForArrayLoop
-  gasOutcomeFullStmts gasOutcomeFull gasExemptCert gasSummary gasStorage
+  createSizeExit gasOutcomeFullStmts gasOutcomeFull gasExemptCert gasSummary gasStorage
   fragGasOriginPtr fragGasOrigin vyperEvalPreservesScopes vyperInterpreter
   vyperState vyperStorageFootprint list
 
@@ -86,7 +86,14 @@ Resume for_body_cleanup_full[ordinary]:
   simp[] >> rpt strip_tac >>
   `ee with <|scopes := sc :: rest; gas_obs := []|> =
    ee with gas_obs := []` by simp[evaluation_state_component_equality] >>
-  simp[Abbr `mapped`] >> metis_tac[]
+  simp[Abbr `mapped`]
+  >- (disj1_tac >> qexistsl_tac [`res`, `sc`] >> fs[]) >>
+  disj2_tac >> simp[] >> conj_tac
+  >- (simp[create_size_exit_ok_def] >> strip_tac >>
+      qpat_assum `create_size_exit_ok _ _ _`
+        (mp_tac o REWRITE_RULE [create_size_exit_ok_def]) >>
+      simp[] >> disch_then SUBST1_TAC >> simp[]) >>
+  qexistsl_tac [`res`, `sc`] >> fs[]
 QED
 
 Finalise for_body_cleanup_full

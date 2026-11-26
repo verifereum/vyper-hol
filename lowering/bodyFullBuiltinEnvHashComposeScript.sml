@@ -48,7 +48,8 @@ Theorem hash_builtin_value_from_suffixes:
        (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
           FLOOKUP G' p = FLOOKUP G p /\
           op_taint tn' (Var p) = op_taint tn (Var p))
-   | INR ex => expr_exit (INR ex) r /\ halt_exit H cx mid (INR ex) r)) /\
+   | INR ex => expr_exit (INR ex) r /\ halt_exit H cx mid (INR ex) r /\
+               create_size_exit_ok ctx (INR ex) r)) /\
  (!arg sa op sb func st0 cenv cx mid s ctx DF lo d G tn explicit PG i.
  emit_op BLOBHASH [arg] sa = (op,sb) /\
  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
