@@ -4,14 +4,13 @@
  * Inlines small internal functions at their call sites. Copies callee's
  * basic blocks into the caller, binds parameters, and rewires control flow.
  *
- * Source: vyper/venom/passes/function_inliner.py (~241 LOC)
- * Upstream: vyperlang/vyper@cff4f6822
+ * Source: vyper/venom/passes/function_inliner.py at VYPER_PIN (577d2534).
  *
  * TOP-LEVEL:
  *   clone_function              — clone function with prefixed labels/vars
  *   inline_call_site            — inline callee at a single INVOKE site
  *   fix_inline_phis             — fix PHIs after inlining
- *   inline_at_sites             — inline callee at all sites in a function
+ *   inline_candidate            — inline at the candidate's FCG call sites
  *   remove_function             — remove a function from context
  *   build_call_walk             — postorder DFS walk over call graph
  *   select_inline_candidate     — select next function to inline
@@ -24,12 +23,12 @@
  *   rewrite_inline_inst / rewrite_inline_insts
  *   rewrite_inline_block / rewrite_inline_blocks
  *   find_invoke_idx / find_invoke_site
- *   fn_code_size / fn_code_size_from_ctx
+ *   fn_code_size
  *)
 
 Theory functionInlinerDefs
 Ancestors
-  cfgTransform venomWf venomExecSemantics fcgDefs
+  cfgTransform venomWf venomExecSemantics fcgDefs irSupply
 
 (* ===== Operand Helpers ===== *)
 
@@ -45,8 +44,9 @@ Definition inline_prefix_def:
   inline_prefix (n:num) = STRCAT "inl" (STRCAT (num_to_dec_string n) "_")
 End
 
-(* Return block label. Python: ctx.get_next_label(f"{prefix}inline_return")
-   produces f"{prefix}inline_return{label_counter}". *)
+(* HOL uses a pass-local counter in the inline namespace. At the pin,
+   get_next_label emits "<last_label>_<prefix>inline_return" and shares
+   its counter with other passes. *)
 Definition return_block_label_def:
   return_block_label prefix (label_counter:num) =
     STRCAT prefix (STRCAT "inline_return" (num_to_dec_string label_counter))
@@ -176,6 +176,16 @@ End
 
 (* ===== Call Site Inlining ===== *)
 
+(* Assign new ids only to cloned and synthesized instructions. Callers'
+   existing instructions keep their ids across block splits and PHI repair. *)
+Definition renumber_inline_blocks_def:
+  renumber_inline_blocks n [] = (n, []) ∧
+  renumber_inline_blocks n (bb::rest) =
+    let (n', bb') = renumber_block_inst_ids n bb in
+    let (n'', rest') = renumber_inline_blocks n' rest in
+    (n'', bb'::rest')
+End
+
 (* Inline callee at a single INVOKE call site.
    Steps (matching Python _inline_call_site):
    1. Split call block at INVOKE index
@@ -183,13 +193,13 @@ End
    3. Rewrite cloned blocks: PARAM → ASSIGN, RET → assigns + JMP
    4. Append return block and cloned blocks to caller
    5. Truncated call block gets JMP to cloned entry *)
-(* The result is always the caller itself or a caller record update changing
-   only fn_blocks; callee metadata is never transferred to the caller. *)
+(* Returns the next fresh instruction id and the caller, with only its blocks
+   updated. *)
 Definition inline_call_site_def:
-  inline_call_site prefix return_label caller_fn callee_fn
-      call_bb_lbl call_idx =
-    case lookup_block call_bb_lbl caller_fn.fn_blocks of
-      NONE => caller_fn
+  inline_call_site prefix return_label fresh caller_fn callee_fn
+      block_idx call_idx =
+    case oEL block_idx caller_fn.fn_blocks of
+      NONE => (fresh, caller_fn)
     | SOME call_bb =>
         let call_inst = EL call_idx call_bb.bb_instructions in
         let invoke_ops = rotate_invoke_ops call_inst.inst_operands in
@@ -205,6 +215,8 @@ Definition inline_call_site_def:
         let (rewritten_blocks, _) =
           rewrite_inline_blocks invoke_ops invoke_outs return_label
             callee_clone.fn_blocks 0 in
+        let numbered_blocks =
+          renumber_inline_blocks (SUC fresh) rewritten_blocks in
         (* Entry label of cloned callee *)
         let cloned_entry_label =
           case callee_clone.fn_blocks of
@@ -212,16 +224,16 @@ Definition inline_call_site_def:
           | (eb::_) => eb.bb_label in
         (* Truncated call block: before_invoke ++ JMP to cloned entry *)
         let jmp_inst =
-          <| inst_id := 0; inst_opcode := JMP;
+          <| inst_id := fresh; inst_opcode := JMP;
              inst_operands := [Label cloned_entry_label];
              inst_outputs := [] |> in
         let truncated_bb = call_bb with
           bb_instructions := before_invoke ++ [jmp_inst] in
         (* Assemble: replace call block, append return + cloned blocks *)
-        caller_fn with fn_blocks :=
-          replace_block call_bb_lbl truncated_bb caller_fn.fn_blocks
+        (FST numbered_blocks, caller_fn with fn_blocks :=
+          LUPDATE truncated_bb block_idx caller_fn.fn_blocks
           ++ [return_bb]
-          ++ rewritten_blocks
+          ++ SND numbered_blocks)
 End
 
 (* ===== PHI Fixup ===== *)
@@ -251,64 +263,71 @@ End
 Datatype:
   inline_state = <|
     is_inline_count : num;
-    is_label_counter : num
+    is_label_counter : num;
+    is_next_inst_id : num
   |>
 End
 
 (* ===== Find INVOKE Sites ===== *)
 
-(* Find index of first INVOKE targeting callee_name in a block. *)
+(* Locate a snapshotted INVOKE by its stable instruction id. *)
 Definition find_invoke_idx_def:
-  find_invoke_idx callee_name [] (n:num) = NONE ∧
-  find_invoke_idx callee_name (inst::rest) n =
-    if inst.inst_opcode = INVOKE ∧
+  find_invoke_idx callee_name site_id [] (n:num) = NONE ∧
+  find_invoke_idx callee_name site_id (inst::rest) n =
+    if inst.inst_id = site_id ∧ inst.inst_opcode = INVOKE ∧
        (case inst.inst_operands of
           Label l :: _ => l = callee_name
         | _ => F)
     then SOME n
-    else find_invoke_idx callee_name rest (n + 1)
+    else find_invoke_idx callee_name site_id rest (n + 1)
 End
 
-(* Find a call site (block label, instruction index) in a function. *)
+(* Find the block and instruction indices of a call site in a function. *)
 Definition find_invoke_site_def:
-  find_invoke_site callee_name [] = NONE ∧
-  find_invoke_site callee_name (bb::rest) =
-    case find_invoke_idx callee_name bb.bb_instructions 0 of
-      SOME idx => SOME (bb.bb_label, idx)
-    | NONE => find_invoke_site callee_name rest
+  find_invoke_site callee_name site_id [] (n:num) = NONE ∧
+  find_invoke_site callee_name site_id (bb::rest) n =
+    case find_invoke_idx callee_name site_id bb.bb_instructions 0 of
+      SOME idx => SOME (n, idx)
+    | NONE => find_invoke_site callee_name site_id rest (SUC n)
 End
 
 (* ===== Inline at All Sites ===== *)
 
 (* Inline callee at one call site. Returns NONE if no site found. *)
 Definition inline_one_site_def:
-  inline_one_site caller_fn callee_fn ist =
-    case find_invoke_site callee_fn.fn_name caller_fn.fn_blocks of
+  inline_one_site caller_fn callee_fn site_id ist =
+    case find_invoke_site callee_fn.fn_name site_id caller_fn.fn_blocks 0 of
       NONE => NONE
-    | SOME (bb_lbl, idx) =>
+    | SOME (block_idx, idx) =>
+        let bb_lbl = (EL block_idx caller_fn.fn_blocks).bb_label in
         let prefix = inline_prefix ist.is_inline_count in
         let ret_lbl = return_block_label prefix ist.is_label_counter in
-        let caller' =
-          inline_call_site prefix ret_lbl caller_fn callee_fn bb_lbl idx in
+        let (next_id, caller') =
+          inline_call_site prefix ret_lbl ist.is_next_inst_id
+            caller_fn callee_fn block_idx idx in
         let caller'' =
           case lookup_block ret_lbl caller'.fn_blocks of
             SOME ret_bb =>
               fix_inline_phis bb_lbl ret_lbl ret_bb caller'
           | NONE => caller' in
-        SOME (renumber_fn_inst_ids caller'',
+        SOME (caller'',
               ist with <| is_inline_count := ist.is_inline_count + 1;
-                          is_label_counter := ist.is_label_counter + 1 |>)
+                          is_label_counter := ist.is_label_counter + 1;
+                          is_next_inst_id := next_id |>)
 End
 
-(* Inline callee at ALL sites in caller, iterating until no more found.
-   Fuel bounds iterations (at most one INVOKE per instruction). *)
-Definition inline_at_sites_def:
-  inline_at_sites 0 caller_fn callee_fn ist = (caller_fn, ist) ∧
-  inline_at_sites (SUC n) caller_fn callee_fn ist =
-    case inline_one_site caller_fn callee_fn ist of
-      NONE => (caller_fn, ist)
-    | SOME (caller', ist') =>
-        inline_at_sites n caller' callee_fn ist'
+(* A call-graph site belongs to one reachable caller. Replace that caller
+   in place, keeping the context's function order. *)
+Definition inline_at_site_def:
+  inline_at_site reachable callee site_id [] ist = ([], ist) ∧
+  inline_at_site reachable callee site_id (caller::rest) ist =
+    case (if MEM caller.fn_name reachable then
+            inline_one_site caller callee site_id ist
+          else NONE) of
+      SOME (caller', ist') => (caller'::rest, ist')
+    | NONE =>
+        let (rest', ist') = inline_at_site reachable callee site_id rest ist in
+        (caller::rest', ist')
 End
 
 (* ===== Function Removal ===== *)
@@ -334,50 +353,43 @@ QED
 
 (* ===== Candidate Selection ===== *)
 
-(* Non-pseudo instruction count as code size estimate. *)
+(* Vyper's instruction weights (venom/basicblock.py:457 at the pin). *)
 Definition fn_code_size_def:
   fn_code_size func =
-    LENGTH (FILTER (λinst. ¬is_pseudo inst.inst_opcode) (fn_insts func))
-End
-
-(* Look up function code size from context. *)
-Definition fn_code_size_from_ctx_def:
-  fn_code_size_from_ctx ctx fn_name =
-    case lookup_function fn_name ctx.ctx_functions of
-      NONE => 0
-    | SOME func => fn_code_size func
+    SUM (MAP (λinst.
+      let op = inst.inst_opcode in
+      if is_param_opcode op ∨ op = RET ∨ op = DRET ∨ op = RETFMP then 0
+      else if op = ASSIGN ∨ op = ALLOCA ∨ op = GETFMP ∨ op = SETFMP then 1
+      else if op = DALLOCA then 10
+      else 2) (fn_insts func))
 End
 
 (* Select first inlinable function from the walk.
-   Inlinable if: has call sites AND (single call site OR cost ≤ threshold).
+   Inlinable if allowed and called, with a single call site or cost ≤ threshold.
    Matches Python _select_inline_candidate. *)
 Definition select_inline_candidate_def:
   select_inline_candidate ctx fcg threshold [] = NONE ∧
   select_inline_candidate ctx fcg threshold (fn_name::rest) =
     let call_count = LENGTH (fcg_get_call_sites fcg fn_name) in
-    if call_count = 0 then
-      select_inline_candidate ctx fcg threshold rest
-    else if call_count = 1 then
-      SOME fn_name
-    else if fn_code_size_from_ctx ctx fn_name ≤ threshold then
-      SOME fn_name
-    else
-      select_inline_candidate ctx fcg threshold rest
+    case lookup_function fn_name ctx.ctx_functions of
+      NONE => select_inline_candidate ctx fcg threshold rest
+    | SOME func =>
+        if 0 < call_count ∧ ¬func.fn_noinline ∧
+           (call_count = 1 ∨ fn_code_size func ≤ threshold)
+        then SOME fn_name
+        else select_inline_candidate ctx fcg threshold rest
 End
 
 (* ===== Inline a Candidate Across All Callers ===== *)
 
-(* Inline callee into all functions in the context. *)
+(* Snapshot the candidate's ordered sites before modifying any blocks. *)
 Definition inline_candidate_def:
-  inline_candidate ctx callee ist =
+  inline_candidate ctx fcg callee ist =
     let (fns', ist') =
-      FOLDL (λ(fns, st) caller_fn.
-        let max_sites = LENGTH (fn_insts caller_fn) in
-        let (caller', st') =
-          inline_at_sites max_sites caller_fn callee st in
-        (SNOC caller' fns, st'))
-      ([], ist)
-      ctx.ctx_functions in
+      FOLDL (λ(fns, st) site.
+        inline_at_site fcg.fcg_reachable callee site.inst_id fns st)
+      (ctx.ctx_functions, ist)
+      (fcg_get_call_sites fcg callee.fn_name) in
     (ctx with ctx_functions := fns', ist')
 End
 
@@ -394,7 +406,7 @@ Definition function_inliner_round_def:
         case lookup_function candidate_name ctx.ctx_functions of
           NONE => NONE
         | SOME callee =>
-            let (ctx', ist') = inline_candidate ctx callee ist in
+            let (ctx', ist') = inline_candidate ctx fcg callee ist in
             let ctx'' = remove_function candidate_name ctx' in
             let walk' = FILTER (λn. n ≠ candidate_name) walk in
             SOME (ctx'', walk', ist')
@@ -419,6 +431,10 @@ Definition function_inliner_ctx_def:
       case ctx.ctx_entry of
         NONE => []
       | SOME entry => build_call_walk fcg entry in
-    let ist = <| is_inline_count := 0; is_label_counter := 0 |> in
+    let next_id =
+      FOLDL (λn id. MAX n (SUC id)) 0
+        (FLAT (MAP fn_ir_inst_ids ctx.ctx_functions)) in
+    let ist = <| is_inline_count := 0; is_label_counter := 0;
+                 is_next_inst_id := next_id |> in
     function_inliner_loop (LENGTH ctx.ctx_functions) ctx walk threshold ist
 End
