@@ -166,7 +166,7 @@ Resume slot_word_writeback_mods[static]:
     (qpat_x_assum `write_place _ _ _ _ = _` mp_tac >>
      simp[write_place_def, write_storage_slot_def, check_not_static_def,
           check_def, assert_def, ignore_bind_def, bind_def, raise_def]) >>
-  irule gas_outcome_full_mods_exit_static >>
+  irule gas_outcome_full_mods_exit >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`G`, `es`, `Abort ExHalt_abort (halt_state (set_returndata [] s))`, `res`, `tn`] >>
   simp[IgnAsm `u = _`, IgnAsm `un = _`, exit_result_def] >>
@@ -182,6 +182,9 @@ Resume slot_word_writeback_mods[static]:
   conj_tac
   >- (irule storage_emit_static_origin_ptr >> simp[] >>
       goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >> simp[]) >>
+  conj_tac
+  >- (disj2_tac >> irule createSizeExitTheory.oversized_create_abort_static >>
+      simp[halt_state_def, set_returndata_def]) >>
   simp[stmt_exit_ptr_def, expr_exit_def, halt_exit_not_halt]
 QED
 
