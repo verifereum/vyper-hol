@@ -1230,9 +1230,9 @@ val linked_deploy_ctor_accepted_inputs_tac =
 val linked_deploy_ctor_source_trace_tac =
   qpat_assum `~(mut <> Payable /\ _)`
     (assume_tac o SIMP_RULE (srw_ss()) [DE_MORGAN_THM]) >>
-  drule_all (Q.INST [`exps` |-> `exps`] linked_constructor_source_trace) >>
-  disch_then (qx_choosel_then [`imms`,`am0`,`am_c`,`es0`]
-    (map_every assume_tac o CONJUNCTS));
+  drule_all linked_constructor_source_trace >>
+  disch_then (qspec_then `exps` (qx_choosel_then [`imms`,`am0`,`am_c`,`es0`]
+    (map_every assume_tac o CONJUNCTS)));
 
 val linked_deploy_ctor_registration_metadata_tac =
   qabbrev_tac `ce_before_registration = cpkg0 with ce_imm_alloca :=
