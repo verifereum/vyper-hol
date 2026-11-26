@@ -310,6 +310,7 @@ Resume grouped_default_passing_execution[exception]:
        gas_origin_ptr_path (cx_dead H ^pcx,0,^pexp,^pctx,fn,[])
          (^pentry,FEMPTY,entry_taint) [] (OK t,J,tz)` by simp[] >>
   `(?r Gu tu. exit_result r /\
+       create_size_exit_ok ^pctx (INR ex : value list + exception) r /\
        !H. valid_horizon ^pcx ^pst H ee.storage_trace ==>
          gas_origin_ptr_path (cx_dead H ^pcx,0,^pexp,^pctx,fn,[])
            (t,J,tz) marks (r,Gu,tu) /\

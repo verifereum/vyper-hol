@@ -44,6 +44,7 @@ Theorem send_tail_path_full[local]:
       alloca_history fn z /\ z.vs_alloca_next = s.vs_alloca_next /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp z)) \/
      (exit_result r /\ expr_exit res r /\ halt_exit H cx es' res r /\
+      create_size_exit_ok ctx res r /\
       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))
 Proof
   strip_tac >>
@@ -90,7 +91,24 @@ Resume send_tail_path_full[halt]:
   qpat_x_assum `res = _ \/ res = _` strip_assume_tac >>
   rpt strip_tac >> res_tac >>
   gvs[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
-       exprSimDefsTheory.halt_exit_def]
+       exprSimDefsTheory.halt_exit_def] >>
+  simp[createSizeExitTheory.create_size_exit_ok_def] >>
+  Cases_on `ALL_DISTINCT (FLAT (MAP fn_labels ctx.ctx_functions))` >> simp[] >>
+  `MEM fn ctx.ctx_functions` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     drule stateRelProjTheory.stmt_state_rel_alloca_room >>
+     fs[alloca_room_def] >> metis_tac[venomInstTheory.lookup_function_MEM]) >>
+  `inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2` by
+    simp[Abbr `inst`,mk_inst_def] >>
+  `lookup_block (halt_state (set_returndata [] s)).vs_current_bb fn.fn_blocks = SOME bb` by
+    (simp[halt_state_def,set_returndata_def] >>
+     qpat_assum `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` ACCEPT_TAC) >>
+  `get_instruction bb (halt_state (set_returndata [] s)).vs_inst_idx = SOME inst` by
+    (simp[halt_state_def,set_returndata_def] >>
+     qpat_assum `get_instruction bb s.vs_inst_idx = SOME inst` ACCEPT_TAC) >>
+  metis_tac[createSizeExitTheory.oversized_create_abort_non_create_cursor]
 QED
 
 Resume send_tail_path_full[failed]:
@@ -100,7 +118,8 @@ Resume send_tail_path_full[failed]:
       (set_returndata [] (u with vs_inst_idx := SUC s.vs_inst_idx)))`] >>
   rpt strip_tac >> res_tac >>
   gvs[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
-       exprSimDefsTheory.halt_exit_def]
+       exprSimDefsTheory.halt_exit_def] >>
+  simp[createSizeExitTheory.create_size_exit_ok_def]
 QED
 
 Resume send_tail_path_full[normal]:
