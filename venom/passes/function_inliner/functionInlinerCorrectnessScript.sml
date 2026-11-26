@@ -1,23 +1,8 @@
-(* Function Inliner — Correctness Statement (re-exported) *)
+(* Function inliner well-formedness *)
 
 Theory functionInlinerCorrectness
 Ancestors
-  functionInlinerProof functionInlinerWf
-
-Theorem function_inliner_pass_correct:
-  ∀ctx s fuel threshold.
-    EVERY wf_function ctx.ctx_functions ∧
-    EVERY alloca_pointer_confined ctx.ctx_functions ⇒
-    let ctx' = function_inliner_ctx threshold ctx in
-    ∃fuel'.
-      observable_result_equiv
-        (run_context fuel ctx s)
-        (run_context fuel' ctx' s)
-Proof
-  ACCEPT_TAC function_inliner_correct
-QED
-
-(* ===== Obligations ===== *)
+  functionInlinerWf
 
 (* Inliner preserves wf_function for all functions in context.
    Cloned blocks are named inl<n>_<label> and return blocks

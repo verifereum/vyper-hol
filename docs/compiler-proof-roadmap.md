@@ -53,8 +53,8 @@ admitted lemma. The gas companions use the proved
 `call_entry_reachable_create_size_ok` and `deploy_entry_reachable_create_size_ok`
 ([e2eGasSufficient](../lowering/e2eGasSufficientScript.sml)). They establish
 `inst_create_size_ok`, including for blueprint creation, from the selected raw
-run and O1 transport. The admitted `function_inliner_correct` lies under no
-top. The stage rows' exact
+run and O1 transport. Semantic correctness of the function inliner remains
+unproved. The pass is outside O1. The stage rows' exact
 premises are in the linked owners and [dependency
 inventory](compiler-proof-dependencies.md#s1s7-stage-producers).
 
