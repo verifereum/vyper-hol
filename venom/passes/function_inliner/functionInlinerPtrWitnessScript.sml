@@ -1,6 +1,7 @@
 Theory functionInlinerPtrWitness
 Ancestors
-  functionInlinerPtrCheck functionInlinerDefs ptrOkCheck ptrDiscipline
+  functionInlinerContract functionInlinerPtrCheck functionInlinerDefs
+  ptrOkCheck ptrDiscipline
   pointerConfinedDefs unitShapeDefs memLocDefs vyperCompiler venomExecSemantics
   venomInst venomWf venomState defsReachCheck list pred_set
 Libs
@@ -219,7 +220,7 @@ Theorem inliner_dalloca_input_witness:
   let C = witness_alloc_ctx T in
   let s = (init_venom_state "entry") with
     <| vs_fmp := 256w; vs_initial_fmp := 256w; vs_call_entry_fmp := 256w |> in
-    lowering_context_ok C /\ inline_ptr_ok_check C /\
+    lowering_context_ok C /\ inliner_input_guard C /\ inline_ptr_ok_check C /\
     ctx_has_dalloca C /\
     LENGTH (FILTER (\i. i.inst_opcode = DALLOCA)
       (FLAT (MAP fn_insts (function_inliner_ctx 0 C).ctx_functions))) = 1 /\

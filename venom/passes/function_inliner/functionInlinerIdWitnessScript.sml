@@ -1,6 +1,7 @@
 Theory functionInlinerIdWitness
 Ancestors
-  functionInlinerDefs fcgDefs vyperCompiler venomInst venomWf
+  functionInlinerContract functionInlinerDefs fcgDefs vyperCompiler
+  venomInst venomWf
 Libs
   finite_mapLib wordsLib
 
@@ -68,6 +69,14 @@ Theorem inliner_retains_dead_caller_with_removed_target:
                                   (fn_insts caller)) /\
          ~wf_invoke_targets out) /\
     ~wf_invoke_targets (function_inliner_ctx 0 C)
+Proof
+  simp_tac std_ss [GSYM wf_invoke_targets_check_eq, LET_THM] >> EVAL_TAC
+QED
+
+Theorem inliner_dead_caller_projection:
+  let out = function_inliner_ctx 0 dead_caller_witness_ctx in
+    MAP (\fn. fn.fn_name) (reachable_ctx out).ctx_functions = ["entry"] /\
+    wf_invoke_targets (reachable_ctx out)
 Proof
   simp_tac std_ss [GSYM wf_invoke_targets_check_eq, LET_THM] >> EVAL_TAC
 QED
