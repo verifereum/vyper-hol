@@ -98,13 +98,13 @@ Definition witness_join_out_def:
     HD (function_inliner_ctx 0 (witness_join_ctx arg access)).ctx_functions
 End
 
-Theorem witness_alloca_roots_list[local]:
+Theorem witness_alloca_roots_list:
   alloca_roots fn = set (opcode_root_list ALLOCA fn)
 Proof
   simp[EXTENSION, alloca_roots_def, inline_opcode_roots]
 QED
 
-Theorem witness_closure_member[local]:
+Theorem witness_closure_member:
   OPTION_MAP (MEM v) (pv_closure fn roots) = SOME ok ==>
   (v IN pointer_derived_vars fn (set roots) <=> ok)
 Proof
@@ -112,7 +112,7 @@ Proof
   imp_res_tac pv_closure_set >> simp[]
 QED
 
-Theorem witness_mixed_write_refutes_fn_ptr_ok[local]:
+Theorem witness_mixed_write_refutes_fn_ptr_ok:
   MEM inst (fn_insts fn) /\ mem_write_ops inst = SOME ops /\
   ops.iao_ofst = Var v /\
   v IN pointer_derived_vars fn (alloca_roots fn) /\
@@ -317,7 +317,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem witness_mixed_eq_refutes_fn_ptr_ok[local]:
+Theorem witness_mixed_eq_refutes_fn_ptr_ok:
   MEM inst (fn_insts fn) /\ inst.inst_opcode = EQ /\
   inst.inst_operands = [Var x; Var y] /\
   x IN fn_pv P fn /\ y NOTIN fn_pv P fn ==>
