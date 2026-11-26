@@ -208,12 +208,21 @@ Theorem modular_suffix_mods:
           ghost_inv_at_mods (DF H) lo d cenv cx ee G2 tn2 t'))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then (strip_assume_tac o SIMP_RULE bool_ss [LET_THM]) modular_layout >>
   qabbrev_tac `out = STRING #"%" (toString sm.cs_next_var)` >>
   qabbrev_tac `i = mk_inst sm.cs_next_id ASSERT [z] []` >>
   qabbrev_tac `j = mk_inst (sm.cs_next_id + 1) (if bt = AddMod then ADDMOD else MULMOD)
     [x;y;z] [out]` >>
-  drule_all_then strip_assume_tac fn_has_code_same_block >>
+  `emitted_insts sm sb = [i;j] /\ op = Var out /\
+   sb.cs_current_bb = sm.cs_current_bb /\
+   sb.cs_current_insts = sm.cs_current_insts ++ [i;j]` by
+    (qpat_x_assum `_ x y z sm = (op,sb)` mp_tac >>
+     Cases_on `bt = AddMod` >> simp[] >> strip_tac >> gvs[] >>
+     pop_assum mp_tac >>
+     simp[compile_addmod_def, compile_mulmod_def, emit_op_def, emit_void_def,
+          comp_bind_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+          emit_def, comp_return_def] >>
+     strip_tac >> gvs[emitted_insts_def, DROP_LENGTH_APPEND]) >>
+  drule_all fn_has_code_same_block >> strip_tac >>
   `get_instruction bb t.vs_inst_idx = SOME i /\
    get_instruction bb (SUC t.vs_inst_idx) = SOME j` by
     (conj_tac
@@ -268,15 +277,99 @@ Resume modular_suffix_mods[normal]:
      first_assum ACCEPT_TAC) >>
   `j = mk_inst (sm.cs_next_id + 1) (if bt = AddMod then ADDMOD else MULMOD)
         [x;y;z] [out]` by simp[Abbr `j`] >>
-  drule_all_then (qspecl_then [`explicit`,`PG`,`G1`] strip_assume_tac o
-                  SIMP_RULE bool_ss [LET_THM])
-    (Q.INST [`G` |-> `G1`, `tn` |-> `tn1`, `PG` |-> `PG`, `explicit` |-> `explicit`]
-      modular_apply) >>
   qabbrev_tac `w = (if bt = AddMod then addmod else mulmod) va vb vc` >>
   qabbrev_tac `u = update_var out w t1` >>
   qabbrev_tac `t2 = u with vs_inst_idx := SUC t1.vs_inst_idx` >>
   qabbrev_tac `G2 = step_prov PG G1 j u` >>
   qabbrev_tac `tn2 = tn1 with t_var := tn1.t_var |+ (out,{})` >>
+  `step_inst_base j t1 = OK u` by
+    (Cases_on `bt = AddMod`
+     >- (qpat_assum `bt = AddMod` (fn th =>
+       qpat_assum `eval_operand x t = SOME va` (fn hx =>
+       qpat_assum `eval_operand y t = SOME vb` (fn hy =>
+       qpat_assum `eval_operand z t = SOME vc` (fn hz =>
+         simp[NoAsms, th, hx, hy, hz, Abbr `j`, Abbr `u`, Abbr `w`, Abbr `t1`,
+              mk_inst_def, step_inst_base_opcode_eqs, exec_pure3_def])))))
+     >- (qpat_assum `bt <> AddMod` (fn th =>
+       qpat_assum `eval_operand x t = SOME va` (fn hx =>
+       qpat_assum `eval_operand y t = SOME vb` (fn hy =>
+       qpat_assum `eval_operand z t = SOME vc` (fn hz =>
+         simp[NoAsms, th, hx, hy, hz, Abbr `j`, Abbr `u`, Abbr `w`, Abbr `t1`,
+              mk_inst_def, step_inst_base_opcode_eqs, exec_pure3_def])))))) >>
+  `alloca_history func t2` by
+    (drule_all_then mp_tac alloca_history_base_step >>
+     Cases_on `bt = AddMod`
+     >- (qpat_assum `bt = AddMod` (fn th =>
+           simp[NoAsms, th, Abbr `t2`, Abbr `u`, Abbr `t1`, Abbr `j`,
+                mk_inst_def, is_terminator_def]))
+     >- (qpat_assum `bt <> AddMod` (fn th =>
+           simp[NoAsms, th, Abbr `t2`, Abbr `u`, Abbr `t1`, Abbr `j`,
+                mk_inst_def, is_terminator_def]))) >>
+  `op_prov G2 (Var out) = NONE` by
+    (qunabbrev_tac `G2` >> irule step_prov_out_none >> simp[Abbr `u`, Abbr `j`, mk_inst_def] >>
+     irule out_prov_other_none >> Cases_on `bt = AddMod` >> simp[]) >>
+  `!old. old <> out ==> FLOOKUP G2 old = FLOOKUP G1 old` by
+    (rpt strip_tac >> qunabbrev_tac `G2` >> irule step_prov_other_output >>
+     simp[Abbr `j`, mk_inst_def]) >>
+  `out_taint tn1 j t1 = {} /\ written_taint tn1 j t1 = {}` by
+    (Cases_on `bt = AddMod`
+     >- (qpat_assum `bt = AddMod` (fn th =>
+           conj_tac
+           >- (irule out_taint_opcode_exclusion >>
+               simp[NoAsms, th, Abbr `j`, mk_inst_def])
+           >- (irule written_taint_opcode_exclusion >>
+               simp[NoAsms, th, Abbr `j`, mk_inst_def])))
+     >- (qpat_assum `bt <> AddMod` (fn th =>
+           conj_tac
+           >- (irule out_taint_opcode_exclusion >>
+               simp[NoAsms, th, Abbr `j`, mk_inst_def])
+           >- (irule written_taint_opcode_exclusion >>
+               simp[NoAsms, th, Abbr `j`, mk_inst_def]))) ) >>
+  `step_taint j t1 u tn1 = tn2` by
+    (`new_site_bytes t1 u = {}` by
+       (irule new_site_bytes_unchanged >> simp[Abbr `u`, update_var_def]) >>
+     Cases_on `bt = AddMod`
+     >- ((qpat_assum `bt = AddMod` (fn th =>
+           qpat_assum `new_site_bytes t1 u = {}` (fn hn =>
+             qpat_assum `out_taint tn1 j t1 = {}` (fn ho =>
+               qpat_assum `written_taint tn1 j t1 = {}` (fn hw =>
+                 simp[NoAsms, th, hn, ho, hw, Abbr `tn2`, step_taint_def,
+                      mem_taint_def, set_var_taint_def, mk_inst_def,
+                      step_writes_def, source_memory_write_ranges_def,
+                      range_bytes_def, store_taint_def, imm_taint_def,
+                      adopt_reset_def, taint_component_equality] >>
+                 simp[NoAsms, hw, ho, Abbr `j`, mk_inst_def]))))) >> (simp[]))
+     >- (qpat_assum `bt <> AddMod` (fn th =>
+           qpat_assum `new_site_bytes t1 u = {}` (fn hn =>
+             qpat_assum `out_taint tn1 j t1 = {}` (fn ho =>
+               qpat_assum `written_taint tn1 j t1 = {}` (fn hw =>
+                 simp[NoAsms, th, hn, ho, hw, Abbr `tn2`, step_taint_def,
+                      mem_taint_def, set_var_taint_def, mk_inst_def,
+                      step_writes_def, source_memory_write_ranges_def,
+                      range_bytes_def, store_taint_def, imm_taint_def,
+                      adopt_reset_def, taint_component_equality] >>
+                 simp[NoAsms, hw, ho, Abbr `j`, mk_inst_def])))))) >>
+  `!D. ptr_inst_ok D lo 0 ctx func G1 tn1 j t1` by
+    (gen_tac >>
+     `step_inst 0 ctx j t1 = OK u` by
+       (Cases_on `bt = AddMod` >> simp[step_inst_non_invoke, mk_inst_def]) >>
+     Cases_on `bt = AddMod` >>
+     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          source_memory_read_ranges_def, source_memory_write_ranges_def,
+          mk_inst_def] >>
+     gvs[Abbr `u`, update_var_def, allocas_from_def, allocas_below_fmp_def] >>
+     metis_tac[]) >>
+  `!D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG)
+      (t1,G1,tn1) [] (OK t2,G2,tn2)` by
+    (gen_tac >>
+     mp_tac (Q.INST [`i` |-> `j`, `s` |-> `t1`, `u` |-> `u`,
+       `G` |-> `G1`, `tn` |-> `tn1`, `lo` |-> `lo`, `D` |-> `D`]
+       straight_line_origin_ptr_edge) >>
+     Cases_on `bt = AddMod` >>
+     simp[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
+          inst_dload_in_section_def, source_memory_read_ranges_def,
+          source_memory_write_ranges_def] >>
+     disch_then irule >> simp[mk_inst_def]) >>
   `!q. not_fresh_at sm q ==>
      lookup_var q t2 = lookup_var q t /\ FLOOKUP G2 q = FLOOKUP G1 q /\
      op_taint tn2 (Var q) = op_taint tn1 (Var q)` by
