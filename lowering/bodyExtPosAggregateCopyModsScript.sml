@@ -15,7 +15,7 @@ Ancestors
   loweringStateRelDefs stateRelProj exprSimProps typedCopyOriginPtrBase
 Libs monadsyntax
 
-Theorem ext_pos_copy_snapshot_retag[local]:
+Theorem ext_pos_copy_snapshot_retag:
   expr_body_pre_mods mods ce cx env e es /\ ~is_word_type (expr_type e) /\
   compile_expr ce (expr_type e) e sa = (vv,sm) ==>
   ext_call_arg_value (lowered_value_type ce e) vv = vv_with_type (lowered_value_type ce e) vv
