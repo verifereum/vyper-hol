@@ -35,7 +35,8 @@ Proof
       conj_tac >- (gen_tac >> first_x_assum irule >> simp[]) >>
       conj_tac >- first_assum ACCEPT_TAC >>
       gen_tac >> strip_tac >> first_x_assum drule >>
-      Cases_on `res` >> simp[] >> strip_tac >> simp[]) >>
+      Cases_on `res` >> simp[createSizeExitTheory.create_size_exit_ok_def, fragExecTheory.exit_result_def] >>
+      strip_tac >> metis_tac[createSizeExitTheory.create_size_exit_ok_map]) >>
   disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`finish'`] >>
   conj_tac >- (irule gas_exempt_cert_mods_unforce_result >> simp[]) >>
