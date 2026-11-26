@@ -52,6 +52,7 @@ Theorem grouped_default_exception_result:
       (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
        FEMPTY,entry_taint) [] (OK s,G,tn)) /\
   ((?r J tz. exit_result r /\
+      create_size_exit_ok unit.cu_context (INR ex : value list + exception) r /\
       !H. valid_horizon cx (initial_state am []) H ee.storage_trace ==>
         gas_origin_ptr_path
           (cx_dead H cx,0,gas_explicit_sites unit.cu_context shadow_ctx,unit.cu_context,fn,[])
@@ -95,6 +96,8 @@ Proof
 QED
 
 Resume grouped_default_exception_result[matched]:
+  `create_size_exit_ok unit.cu_context (INR ex : value + exception) r` by
+    fs[createSizeExitTheory.create_size_exit_ok_inr] >>
   qsuff_tac `source_unit_execution_correct_with shadow_ctx marks tops ret am tx unit vs /\
     !tail. FST (call_external (SOME vs.vs_outcomes)
       (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>

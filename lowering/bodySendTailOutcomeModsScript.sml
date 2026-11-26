@@ -8,7 +8,7 @@ Ancestors
   loweringStateRelDefs localPtrsProps compileEnv venomMemProofs ghostPcTransportPtr
   venomExecProofs venomExecSemantics venomState venomInst list
 
-Theorem send_tail_path_full_mods[local]:
+Theorem send_tail_path_certified_mods[local]:
   expr_has_effect e /\
   emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success,s3) /\
   emit_void ASSERT [success] s3 = (void,sb) /\ fn_has_code sm sb fn /\
@@ -45,6 +45,7 @@ Theorem send_tail_path_full_mods[local]:
       alloca_history fn z /\ z.vs_alloca_next = s.vs_alloca_next /\
       (ctx_has_dalloca ctx ==> allocas_below_fmp z)) \/
      (exit_result r /\ expr_exit res r /\ halt_exit H cx es' res r /\
+      create_size_exit_ok ctx res r /\
       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))
 Proof
   strip_tac >> (* linked path split *)
@@ -86,7 +87,16 @@ Proof
   gvs[] >- suspend "normal" >> suspend "failed"
 QED
 
-Resume send_tail_path_full_mods[halt]:
+Resume send_tail_path_certified_mods[halt]:
+  `create_size_exit_ok ctx res (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
+    (pure_rewrite_tac[createSizeExitTheory.create_size_exit_ok_def] >> strip_tac >>
+     `MEM fn ctx.ctx_functions` by
+       (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+          (qspec_then `H0` mp_tac) >>
+        impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+        drule stateRelProjTheory.stmt_state_rel_alloca_room >>
+        simp[alloca_room_def] >> metis_tac[venomInstTheory.lookup_function_MEM]) >>
+     drule_all createSizeExitTheory.oversized_create_abort_at_cursor >> simp[]) >>
   qexistsl_tac [`G`,`tn`,
     `Abort ExHalt_abort (halt_state (set_returndata [] s))`] >>
   qpat_x_assum `res = _ \/ res = _` strip_assume_tac >>
@@ -95,7 +105,7 @@ Resume send_tail_path_full_mods[halt]:
        exprSimDefsTheory.halt_exit_def]
 QED
 
-Resume send_tail_path_full_mods[failed]:
+Resume send_tail_path_certified_mods[failed]:
   qmatch_asmsub_abbrev_tac `step_inst_base inst s = OK u` >>
   qexistsl_tac [`step_prov PG G inst u`,`step_taint inst s u tn`,
     `Abort Revert_abort (revert_state
@@ -105,7 +115,7 @@ Resume send_tail_path_full_mods[failed]:
        exprSimDefsTheory.halt_exit_def]
 QED
 
-Resume send_tail_path_full_mods[normal]:
+Resume send_tail_path_certified_mods[normal]:
   qmatch_asmsub_abbrev_tac `step_inst_base inst s = OK u` >>
   `stmt_state_rel H0 ctx fn cenv cx es1 s` by metis_tac[] >>
   `ghost_kept_at lo cenv es1 sm G tn s (step_prov PG G inst u)
@@ -238,7 +248,55 @@ Resume send_tail_path_full_mods[normal]:
   qexists_tac `z` >> simp[] >> fs[Abbr `z`]
 QED
 
-Finalise send_tail_path_full_mods[local]
+Finalise send_tail_path_certified_mods[local]
+
+Theorem send_tail_path_full_mods[local]:
+  expr_has_effect e /\
+  emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success,s3) /\
+  emit_void ASSERT [success] s3 = (void,sb) /\ fn_has_code sm sb fn /\
+  fn_inst_ids_distinct fn /\ alloca_history fn s /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+     stmt_state_rel H ctx fn cenv cx es1 s /\
+     storage_well_formed_on cx es' (FST H) /\
+     immutable_frame_mods fn cenv cx es1 s /\
+     ghost_inv_at_mods (DF H) lo d cenv cx es1 G tn s) /\
+  wb_frame cenv es es1 sa s0 s /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
+  op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
+  eval_operand gas s = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
+  eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  (do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);
+      read_result cx tv od) es1 = (res,es') /\
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
+  ?G' tn' r. !H. valid_horizon cx st0 H es'.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,tn) [] (r,G',tn') /\
+    ((?z. r = OK z /\ res = INL NoneV /\
+      expr_post_mods H ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w) z /\
+      ghost_inv_at_mods (DF H) lo d cenv cx es' G' tn' z /\
+      ghost_kept_at lo cenv es1 sm G tn s G' tn' /\
+      z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history fn z /\ z.vs_alloca_next = s.vs_alloca_next /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp z)) \/
+     (exit_result r /\ expr_exit res r /\ halt_exit H cx es' res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))
+Proof
+  strip_tac >> drule_all send_tail_path_certified_mods >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`G'`,`tn'`,`r`] >>
+  qx_gen_tac `H` >> strip_tac >>
+  first_x_assum (qspec_then `H` mp_tac) >>
+  simp[] >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  simp[]
+QED
 
 Theorem send_tail_outcome_full_mods:
   expr_has_effect e /\
@@ -317,11 +375,14 @@ Proof
        qexistsl_tac [`has_gas`,`r`,`es1`,`to_v::amount_v::gas_vs`] >> simp[]) >>
      conj_tac >- first_assum ACCEPT_TAC >>
      first_assum ACCEPT_TAC) >>
-  drule_all send_tail_path_full_mods >>
+  drule_all send_tail_path_certified_mods >>
   disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   rewrite_tac[gas_outcome_full_mods_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`res`,`ee`,`r`,`G'`,`tn'`] >>
   simp[gas_explicit_def] >>
-  rpt strip_tac >> res_tac >> gvs[] >> metis_tac[]
+  qx_gen_tac `H` >> strip_tac >>
+  first_x_assum (qspec_then `H` mp_tac) >>
+  simp[] >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  simp[]
 QED
