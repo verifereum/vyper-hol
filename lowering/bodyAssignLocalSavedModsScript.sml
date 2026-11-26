@@ -61,7 +61,7 @@ Proof
   metis_tac[SOME_11]
 QED
 
-Theorem saved_local_typed_separation[local]:
+Theorem saved_local_typed_separation:
   ~is_word_type sty /\ ~is_bytestring_type sty /\ sty <> dty /\
   type_widens_to (get_tenv cx) sty dty /\
   evaluate_type (get_tenv cx) sty = SOME stv /\
