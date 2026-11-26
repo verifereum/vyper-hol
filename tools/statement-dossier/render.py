@@ -153,7 +153,11 @@ def conclusion_lists(parts: str) -> dict[str, str]:
                              + ", ".join(parts_of))
         items = [f'<h2 id="conclusion-{theorem}">Conclusion of <code>{theorem}</code></h2>']
         for key, shown in parts_of.items():
-            terms = "<br>".join(f'<code data-anchor="{anchor}">{html.escape(part)}</code>' for anchor, part in shown)
+            # Link a part to its key's entry only where the key is printed: `MEM`
+            # prints an overload of `IN`, whose entry would mislead.
+            terms = "<br>".join(
+                f'<code data-anchor="{anchor if re.search(rf"(?<![\w$]){re.escape(key)}(?![\w$])", part) else ""}">'
+                f'{html.escape(part)}</code>' for anchor, part in shown)
             items.append(f'<h3 id="concl-{theorem}-{re.sub(r"[^A-Za-z0-9_]", "-", key)}">{terms}</h3>')
             items.append(markdown_html("\n".join(notes[theorem][key])))
         lists[theorem] = "\n".join(items) + "\n"
