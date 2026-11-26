@@ -20,6 +20,7 @@ Ancestors
   bodyFullDynamicBuffer[qualified,ignore_grammar]
   ptrDisciplineTaintProps[qualified,ignore_grammar]
   bodyFullPreds bodyFullExprsListFacts bodyFullExprsSingleton
+  exprListSplitProps[qualified,ignore_grammar]
   exprBodyPreProps bodyInvCodeProps[qualified,ignore_grammar]
   exprSimSend vyperLocalAccessFrame stateRelProj[qualified]
   exprLowering builtinCreate vyperInterpreter vyperCreate vyperTypeSystem
@@ -11221,12 +11222,9 @@ Theorem create_body_exprs_split:
     body_exprs_full_ok cx xs /\
     (!st vs en. eval_exprs cx xs st = (INL vs,en) ==> body_exprs_full_ok cx ys)
 Proof
-  Induct >- simp[body_exprs_full_ok_def,exprSimWordArgsTheory.eval_exprs_nil] >>
-  rpt gen_tac >> rewrite_tac[APPEND] >>
-  once_rewrite_tac[body_exprs_full_ok_def] >> strip_tac >> conj_tac
-  >- (simp[] >> metis_tac[]) >>
-  rpt gen_tac >> simp[Once exprSimWordArgsTheory.eval_exprs_cons_action,bind_def,return_def,AllCaseEqs()] >>
-  strip_tac >> gvs[] >> metis_tac[]
+  mp_tac (Q.SPECL [`body_exprs_full_ok`, `body_expr_full_ok`]
+    exprListSplitPropsTheory.expr_list_ok_append_split) >>
+  simp[body_exprs_full_ok_nil, body_exprs_full_ok_cons]
 QED
 
 Theorem blueprint_scalar_source_split:

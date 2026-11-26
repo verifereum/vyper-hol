@@ -8,6 +8,7 @@
  *)
 Theory bodyFullCases
 Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallSource
+  intCallResultsProps[qualified,ignore_grammar]
   bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
   bodyFullAppend bodyFullIfExp bodyFullAttribute
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
@@ -724,7 +725,9 @@ Proof
   drule_all body_intcall_source_selection >> strip_tac >>
   drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
   `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_full_ok cx es` by
-    (strip_tac >> drule intcall_results_full_ih >> disch_then drule_all >>
+    (strip_tac >>
+     drule (Q.ISPEC `body_exprs_full_ok` intCallResultsPropsTheory.intcall_results_ih) >>
+     disch_then drule_all >>
      simp[]) >>
   `~MEM (src_id_opt,fn) cx.stk ==>
      body_stmts_full_ok (cx with stk updated_by CONS (src_id_opt,fn))

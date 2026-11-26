@@ -19,9 +19,10 @@ Ancestors
   bodyFullCases exprSimBuiltins bodyFullBuiltinEnvAccountRun bodyFullBuiltinEnvBlockHashSuffix bodyFullBuiltinEnvBlobHashSuffix exprSimSource exprBopLowering bodySimFullMain[qualified] s1PrefixRaiseCustomError[qualified] s1PrefixAssertCustomError[qualified] s1PrefixBuiltinECArithCompose s1PrefixIfExpPrepare s1PrefixWordArgs
   s1PrefixPrecompile gasShadowStmtEnv gasShadowCompileStmtHelpers s1PrefixBuiltinEnvAccountCompose s1PrefixBuiltinEnvHashCompose vyperTypeCallStackSoundness s1PrefixRawRevertValue s1PrefixAssertBare s1PrefixOfVV immutableDeployAssignRanges s1PrefixBopRestWordCompose exprSimOperators exprSimHyps exprLowering exprSimAccounts builtinSystem compileEnv s1PrefixIf bodyFullPreds s1PrefixStmtsCons s1PrefixStmtFullApply bodyFullIfExpReach stmtLoweringMono exprLoweringProps bodyFullShared bodyFullBopWordLayout exprSimBopInLiteralWord bodyFullWordArgs exprSimWordArgs exprSimUnopProps gasShadowState exprBopSimProps fragExec exprSimLen vyperStatePreservation gasShadowCompilePure bodyFullRawRevertCompiledTail bodyFullRawRevertInterfaces vyperSystemControl selfdestructHalt exprBodyPreProps bodyInvExecutionProps bodySingletonCallSupport
   s1PrefixRawLogCompose bodyFullRawLog exprSimCallRawLog
+  intCallResultsProps[qualified,ignore_grammar]
   s1PrefixAugAssign s1PrefixIfExpChildren
   s1PrefixRawCallCalldata s1PrefixSubscriptCase[qualified]
-  s1PrefixFor s1PrefixRawCall s1PrefixAnnAssign s1PrefixMakeArray gasShadowCompile gasShadowCompileHelpers bodySimFull s1PrefixLog s1PrefixBuiltinLeaves s1PrefixAnnAssignEmptyRhs s1PrefixTypeBuiltinExtract32 s1PrefixAbiDecodeExprConditional s1PrefixAbiEncodeTupleFull s1PrefixAbiEncodeNonwordFull s1PrefixAbiEncodeWordFull s1PrefixConvertBytesJoint s1PrefixConvertDynamicJoint s1PrefixConvertScalarJoint exprSimAbiEncodeRuntimeInputs exprSimConvert stmtLowering list s1PrefixPop s1PrefixBopBytestringEq s1PrefixBopWordPair exprSimBopRestWordFacts exprSimHash exprSimUnwrap s1PrefixRaiseReason
+  s1PrefixFor s1PrefixRawCall s1PrefixAnnAssign s1PrefixMakeArray gasShadowCompile gasShadowCompileHelpers bodySimFull s1PrefixLog s1PrefixBuiltinLeaves s1PrefixAnnAssignEmptyRhs s1PrefixTypeBuiltinExtract32 s1PrefixAbiDecodeExprConditional s1PrefixAbiEncodeTupleFull s1PrefixAbiEncodeNonwordFull s1PrefixAbiEncodeWordFull s1PrefixConvertBytesJoint s1PrefixConvertDynamicJoint s1PrefixConvertScalarJoint exprSimAbiEncodeRuntimeInputs exprSimConvert stmtLowering list s1PrefixBopBytestringEq s1PrefixBopWordPair exprSimBopRestWordFacts exprSimHash exprSimUnwrap s1PrefixRaiseReason
   s1PrefixBuiltinWord s1PrefixAppendSourceChildren s1PrefixAppendCodeCuts s1PrefixAppendToplevelEntry s1PrefixAppendReplayRhs s1PrefixTarget bodyPtrPopTargetFragTransport bodyAppendResolvedPre bodyFullTarget bodyFullTargetDefs loweringPosts gasOutcomeFullCompose stmtSimDefs targetPlaceSimCases vyperExprNoControl exprSimDefs emitHelper quantHeuristics bodyFullSubscript[qualified,ignore_grammar] bodyFullSubscriptMapBase bodyFullSimProjection bodySimExprCases exprSimPlaces exprSimTuple exprSimSubscriptMap exprSimMapDefs s1PrefixSubscriptMapBase s1PrefixSubscriptMap s1PrefixSubscriptTuple s1PrefixSubscriptArrayCode s1PrefixSubscriptArrayMemory s1PrefixSubscriptUnframedArray s1PrefixExtCallRequestStage s1PrefixExtCallCallStage s1PrefixExtCallReturnTrace bodyFullExtCallReadyReturn bodyFullExtCallReturn abiDecodeValidJoint abiDecodeRejectJoint exprSimExtCallCase s1PrefixAssignTuple s1PrefixAssign s1PrefixBoolChainSelectedLocalAssign finite_map exprSimAggregateLayout contractInvContextProps s1PrefixHash s1PrefixSelfdestruct s1PrefixBoolChainSelectedStmtCasePorts[qualified]
 Libs
   pairLib
@@ -294,36 +295,6 @@ Proof
   simp[]
 QED
 
-Theorem intcall_results_prefix_ih:
-  !cx src_id_opt fn es ts mut nr args dflts ret ss.
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
-         ret body' s'5' x' t'3'.
-       type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
-       lift_option_type (get_module_code cx src_id_opt)
-         "IntCall get_module_code" s'3' = (INL ts,t') /\
-       lift_option_type (lookup_callable_function cx.in_deploy fn ts)
-         "IntCall lookup_function" s'4' = (INL tup,t'') /\ mut = FST tup /\
-       stup = SND tup /\ (nr <=> FST stup) /\ stup2 = SND stup /\
-       args = FST stup2 /\ sstup = SND stup2 /\ dflts = FST sstup /\
-       sstup2 = SND sstup /\ ret = FST sstup2 /\ body' = SND sstup2 /\
-       type_check
-         (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
-         "IntCall args length" s'5' = (INL x',t'3') ==>
-       body_exprs_prefix_ok cx es) /\
-    get_module_code cx src_id_opt = SOME ts /\
-    lookup_callable_function cx.in_deploy fn ts =
-      SOME (mut,nr,args,dflts,ret,ss) /\
-    LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
-    ~MEM (src_id_opt,fn) cx.stk ==>
-    body_exprs_prefix_ok cx es
-Proof
-  rpt strip_tac >>
-  `LENGTH args - LENGTH es <= LENGTH dflts` by decide_tac >>
-  first_x_assum irule >>
-  simp[type_check_def, assert_def, lift_option_type_def, return_def]
-QED
-
-
 Theorem body_intcall_case_prefix:
   !cx v16 src_id_opt fn es v17.
     (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
@@ -382,10 +353,14 @@ Proof
   drule_all bodyIntCallSourceTheory.body_intcall_source_selection >> strip_tac >>
   drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
   `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_full_ok cx es` by
-    (strip_tac >> drule bodyFullIntCallTheory.intcall_results_full_ih >> disch_then drule_all >> simp[]) >>
+    (strip_tac >>
+     drule (Q.ISPEC `body_exprs_full_ok` intCallResultsPropsTheory.intcall_results_ih) >>
+     disch_then drule_all >> simp[]) >>
   `~MEM (src_id_opt,fn) cx.stk ==>
      body_exprs_prefix_ok cx es` by
-    (strip_tac >> drule intcall_results_prefix_ih >> disch_then drule_all >> simp[]) >>
+    (strip_tac >>
+     drule (Q.ISPEC `body_exprs_prefix_ok` intCallResultsPropsTheory.intcall_results_ih) >>
+     disch_then drule_all >> simp[]) >>
   `~MEM (src_id_opt,fn) cx.stk ==>
      body_stmts_full_ok (cx with stk updated_by CONS (src_id_opt,fn))
        (subst_consts_stmts (module_consts_env tops []) ss) /\

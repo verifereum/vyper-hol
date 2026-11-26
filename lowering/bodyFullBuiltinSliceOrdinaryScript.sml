@@ -53,9 +53,6 @@ fun slice_stmt_state_room related =
   POP_ASSUM_LIST (K ALL_TAC) >>
   simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac
 
-Theorem slice_dynamic_capture_source_post_from_run =
-  exprSimSliceDynamicStartEntryTheory.slice_dynamic_capture_source_post_from_run
-
 Theorem slice_builtin_none_vv_full_from_runs:
   (!sa src len data sb func s p G tn capacity bs lo ctx explicit PG.
     compile_bytestring_src (Var src) sa = ((len,data),sb) /\

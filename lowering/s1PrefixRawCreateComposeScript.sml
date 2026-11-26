@@ -5,6 +5,7 @@ Ancestors
   s1PrefixCreateCtorRows s1PrefixPreds s1PrefixOfVV s1PrefixProps s1PrefixDefs
   bodyFullCreateHeld bodyFullPreds bodySimFull exprSimDefs exprSimSource
   bodyFullExprsListFacts
+  exprListSplitProps[qualified,ignore_grammar]
   s1PrefixCreateOutcomeTyping exprSimHypsDefs exprBodyPreProps exprLoweringProps builtinCreate
   loweringPosts loweringStateRelDefs bodyPtrDefs fragExec codegenRel compileEnv
   vyperInterpreter vyperCreate vyperValue vyperState vyperAST vyperTypeSystem
@@ -20,12 +21,9 @@ Theorem create_prefix_exprs_split:
     body_exprs_prefix_ok cx xs /\
     (!st vs en. eval_exprs cx xs st = (INL vs,en) ==> body_exprs_prefix_ok cx ys)
 Proof
-  Induct >- simp[body_exprs_prefix_ok_def,exprSimWordArgsTheory.eval_exprs_nil] >>
-  rpt gen_tac >> rewrite_tac[APPEND] >>
-  once_rewrite_tac[body_exprs_prefix_ok_def] >> strip_tac >> conj_tac
-  >- (simp[] >> metis_tac[]) >>
-  rpt gen_tac >> simp[Once exprSimWordArgsTheory.eval_exprs_cons_action,bind_def,return_def,AllCaseEqs()] >>
-  strip_tac >> gvs[] >> metis_tac[]
+  mp_tac (Q.SPECL [`body_exprs_prefix_ok`, `body_expr_prefix_ok`]
+    exprListSplitPropsTheory.expr_list_ok_append_split) >>
+  simp[body_exprs_prefix_ok_def]
 QED
 
 Theorem raw_create_expr_prefix_from_dispatch:
