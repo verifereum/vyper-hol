@@ -1,16 +1,8 @@
 Theory s1PrefixAugAssignStorageFieldTarget
 Ancestors
   bodyAugPlaceTarget s1PrefixFrame s1PrefixNames vyperStorageTrace
+  targetPlaceSimCasesBase[qualified,ignore_grammar]
   vyperPlaceFrames vyperInterpreter vyperState
-
-Theorem extend_attr_state[local]:
-  extend_place cx v (AttrSubscript fld) st = (res,st') ==> st' = st
-Proof
-  Cases_on `v`
-  >- simp[extend_place_def, raise_def]
-  >- metis_tac[extend_place_PlaceR_state] >>
-  simp[extend_place_def, raise_def]
-QED
 
 Theorem storage_field_target_no_outcome[local]:
   eval_target_place cx (AttributeTarget (TopLevelNameTarget (src,id)) fld) st =
@@ -23,7 +15,9 @@ Proof
   drule lookup_global_no_outcome >>
   Cases_on `result` >> simp[]
   >- (namedCases_on `extend_place cx x (AttrSubscript fld) mid` ["extended after"] >>
-      drule_then SUBST_ALL_TAC extend_attr_state >>
+      mp_tac (CONJUNCT2 (Q.SPECL [`cx`, `x`, `fld`, `mid`, `mid.gas_obs`]
+        targetPlaceSimCasesBaseTheory.extend_place_attr_gas_obs)) >>
+      simp[] >> disch_then SUBST_ALL_TAC >>
       Cases_on `extended` >> simp[] >>
       rpt strip_tac >> imp_res_tac get_place_state >> gvs[]) >>
   rw[] >> first_assum ACCEPT_TAC
