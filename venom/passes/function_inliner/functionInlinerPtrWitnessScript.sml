@@ -64,29 +64,31 @@ Proof
 QED
 
 Theorem inliner_single_root_store_witness:
-  let access = mk_inst 18 MSTORE [Var "x"; Lit 7w] [] in
-  let C = witness_join_ctx (Var "local") access in
-  let out = function_inliner_ctx 0 C in
-    inline_ptr_ok (\nm. set (ctx_ptr_param_list C nm)) C /\
-    EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list C nm))) C.ctx_functions /\
-    inline_ptr_ok (\nm. set (ctx_ptr_param_list out nm)) out /\
-    EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list out nm))) out.ctx_functions
+  access = mk_inst 18 MSTORE [Var "x"; Lit 7w] [] /\
+  C = witness_join_ctx (Var "local") access /\
+  out = function_inliner_ctx 0 C ==>
+  inline_ptr_ok (\nm. set (ctx_ptr_param_list C nm)) C /\
+  EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list C nm))) C.ctx_functions /\
+  inline_ptr_ok (\nm. set (ctx_ptr_param_list out nm)) out /\
+  EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list out nm))) out.ctx_functions
 Proof
-  simp_tac std_ss [LET_THM] >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  rpt conj_tac >>
   TRY (irule inline_ptr_ok_check_sound >> EVAL_TAC) >>
   irule witness_static_ptr_check_sound >> EVAL_TAC
 QED
 
 Theorem inliner_pointer_argument_witness:
-  let access = mk_inst 18 MLOAD [Var "joined"] ["value"] in
-  let C = witness_join_ctx (Var "local") access in
-  let out = function_inliner_ctx 0 C in
-    inline_ptr_ok (\nm. set (ctx_ptr_param_list C nm)) C /\
-    EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list C nm))) C.ctx_functions /\
-    inline_ptr_ok (\nm. set (ctx_ptr_param_list out nm)) out /\
-    EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list out nm))) out.ctx_functions
+  access = mk_inst 18 MLOAD [Var "joined"] ["value"] /\
+  C = witness_join_ctx (Var "local") access /\
+  out = function_inliner_ctx 0 C ==>
+  inline_ptr_ok (\nm. set (ctx_ptr_param_list C nm)) C /\
+  EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list C nm))) C.ctx_functions /\
+  inline_ptr_ok (\nm. set (ctx_ptr_param_list out nm)) out /\
+  EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list out nm))) out.ctx_functions
 Proof
-  simp_tac std_ss [LET_THM] >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  rpt conj_tac >>
   TRY (irule inline_ptr_ok_check_sound >> EVAL_TAC) >>
   irule witness_static_ptr_check_sound >> EVAL_TAC
 QED
@@ -121,14 +123,14 @@ Proof
 QED
 
 Theorem inliner_mixed_root_store_rejected:
-  let access = mk_inst 18 MSTORE [Var "joined"; Lit 7w] [] in
-  let C = witness_join_ctx (Var "local") access in
-  let fn = witness_join_out (Var "local") access in
-    EVERY (fn_ptr_ok (\nm. set (witness_param_list nm))) C.ctx_functions /\
-    ~inline_ptr_ok_check C /\
-    ~fn_ptr_ok (\nm. set (witness_param_list nm)) fn
+  access = mk_inst 18 MSTORE [Var "joined"; Lit 7w] [] /\
+  C = witness_join_ctx (Var "local") access /\
+  fn = witness_join_out (Var "local") access ==>
+  EVERY (fn_ptr_ok (\nm. set (witness_param_list nm))) C.ctx_functions /\
+  ~inline_ptr_ok_check C /\
+  ~fn_ptr_ok (\nm. set (witness_param_list nm)) fn
 Proof
-  simp_tac std_ss [LET_THM] >>
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   conj_tac >- (irule witness_static_ptr_check_sound >> EVAL_TAC) >>
   conj_tac >- EVAL_TAC >>
   qabbrev_tac `fn = witness_join_out (Var "local")
@@ -163,14 +165,14 @@ Proof
 QED
 
 Theorem inliner_literal_pointer_argument_rejected:
-  let access = mk_inst 18 MLOAD [Var "joined"] ["value"] in
-  let C = witness_join_ctx (Lit 0w) access in
-  let fn = witness_join_out (Lit 0w) access in
-    EVERY (fn_ptr_ok (\nm. set (witness_param_list nm))) C.ctx_functions /\
-    ~inline_ptr_ok_check C /\
-    ~fn_ptr_ok (\nm. set (witness_param_list nm)) fn
+  access = mk_inst 18 MLOAD [Var "joined"] ["value"] /\
+  C = witness_join_ctx (Lit 0w) access /\
+  fn = witness_join_out (Lit 0w) access ==>
+  EVERY (fn_ptr_ok (\nm. set (witness_param_list nm))) C.ctx_functions /\
+  ~inline_ptr_ok_check C /\
+  ~fn_ptr_ok (\nm. set (witness_param_list nm)) fn
 Proof
-  simp_tac std_ss [LET_THM] >>
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   conj_tac >- (irule witness_static_ptr_check_sound >> EVAL_TAC) >>
   conj_tac >- EVAL_TAC >>
   qabbrev_tac `fn = witness_join_out (Lit 0w)
@@ -217,20 +219,21 @@ Definition witness_alloc_ctx_def:
 End
 
 Theorem inliner_dalloca_input_witness:
-  let C = witness_alloc_ctx T in
-  let s = (init_venom_state "entry") with
-    <| vs_fmp := 256w; vs_initial_fmp := 256w; vs_call_entry_fmp := 256w |> in
-    lowering_context_ok C /\ inliner_input_guard C /\ inline_ptr_ok_check C /\
-    ctx_has_dalloca C /\
-    LENGTH (FILTER (\i. i.inst_opcode = DALLOCA)
-      (FLAT (MAP fn_insts (function_inliner_ctx 0 C).ctx_functions))) = 1 /\
-    (case run_context 16 C s of
-       Halt s' => s'.vs_fmp = 256w /\ s'.vs_alloca_next = 32
-     | _ => F) /\
-    (case run_context 16 (function_inliner_ctx 0 C) s of
-       Halt s' => s'.vs_fmp = 320w /\ s'.vs_alloca_next = 64
-     | _ => F)
+  C = witness_alloc_ctx T /\
+  s = (init_venom_state "entry") with
+    <| vs_fmp := 256w; vs_initial_fmp := 256w; vs_call_entry_fmp := 256w |> ==>
+  lowering_context_ok C /\ inliner_input_guard C /\ inline_ptr_ok_check C /\
+  ctx_has_dalloca C /\
+  LENGTH (FILTER (\i. i.inst_opcode = DALLOCA)
+    (FLAT (MAP fn_insts (function_inliner_ctx 0 C).ctx_functions))) = 1 /\
+  (case run_context 16 C s of
+     Halt s' => s'.vs_fmp = 256w /\ s'.vs_alloca_next = 32
+   | _ => F) /\
+  (case run_context 16 (function_inliner_ctx 0 C) s of
+     Halt s' => s'.vs_fmp = 320w /\ s'.vs_alloca_next = 64
+   | _ => F)
 Proof
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   EVAL_TAC
 QED
 
@@ -251,17 +254,17 @@ Proof
 QED
 
 Theorem inliner_reverting_callee_witness:
-  let C = witness_alloc_ctx F in
-  let C' = function_inliner_ctx 0 C in
-    lowering_context_ok C /\ inline_ptr_ok_check C /\
-    EVERY (\fn. EVERY (\i. i.inst_opcode <> RET) (fn_insts fn))
-      C.ctx_functions /\
-    EVERY (\fn. fn_ptr_ok (\nm. {}) fn /\ fn_ptr_ok (\nm. {}) (reachable_fn fn) /\
-                  fn_defs_reach_uses fn /\
-                  LENGTH (fn_reachable_blocks fn).fn_blocks < LENGTH fn.fn_blocks)
-      C'.ctx_functions
+  C = witness_alloc_ctx F /\
+  C' = function_inliner_ctx 0 C ==>
+  lowering_context_ok C /\ inline_ptr_ok_check C /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> RET) (fn_insts fn))
+    C.ctx_functions /\
+  EVERY (\fn. fn_ptr_ok (\nm. {}) fn /\ fn_ptr_ok (\nm. {}) (reachable_fn fn) /\
+                fn_defs_reach_uses fn /\
+                LENGTH (fn_reachable_blocks fn).fn_blocks < LENGTH fn.fn_blocks)
+    C'.ctx_functions
 Proof
-  simp_tac std_ss [LET_THM] >>
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   conj_tac >- EVAL_TAC >>
   conj_tac >- EVAL_TAC >>
   conj_tac >- EVAL_TAC >>
@@ -303,13 +306,14 @@ Definition witness_reverting_comparison_ctx_def:
 End
 
 Theorem inliner_revert_pruning_comparison_witness:
-  let C = witness_reverting_comparison_ctx in
-  let fn = HD (function_inliner_ctx 0 C).ctx_functions in
-    ptr_ok_check C /\ inline_ptr_ok_check C /\
-    ~fn_defs_reach_uses_check (HD C.ctx_functions) /\
-    fn_ptr_ok_check (K []) fn /\
-    ~fn_ptr_ok_check (K []) (fn_reachable_blocks fn)
+  C = witness_reverting_comparison_ctx /\
+  fn = HD (function_inliner_ctx 0 C).ctx_functions ==>
+  ptr_ok_check C /\ inline_ptr_ok_check C /\
+  ~fn_defs_reach_uses_check (HD C.ctx_functions) /\
+  fn_ptr_ok_check (K []) fn /\
+  ~fn_ptr_ok_check (K []) (fn_reachable_blocks fn)
 Proof
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   EVAL_TAC
 QED
 
@@ -328,10 +332,10 @@ Proof
 QED
 
 Theorem inliner_revert_pruning_breaks_ptr_ok:
-  let C = function_inliner_ctx 0 witness_reverting_comparison_ctx in
-    ~fn_ptr_ok (\nm. set ((K []) nm)) (reachable_fn (HD C.ctx_functions))
+  C = function_inliner_ctx 0 witness_reverting_comparison_ctx ==>
+  ~fn_ptr_ok (\nm. set ((K []) nm)) (reachable_fn (HD C.ctx_functions))
 Proof
-  simp_tac std_ss [LET_THM] >>
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qabbrev_tac `out = HD (function_inliner_ctx 0
                              witness_reverting_comparison_ctx).ctx_functions` >>
   `wf_function out /\ EVERY (\i. i.inst_opcode <> PHI) (fn_insts out)` by

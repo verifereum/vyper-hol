@@ -53,30 +53,32 @@ End
 (* The entry's call is rewritten, but the dead caller is left alone.
    Its call targets the function removed in the same inlining round. *)
 Theorem inliner_retains_dead_caller_with_removed_target:
-  let C = dead_caller_witness_ctx in
-  let walk = build_call_walk (fcg_analyze C) "entry" in
-  let ist = <| is_inline_count := 0; is_label_counter := 0;
-                is_next_inst_id := 7 |> in
-    lowering_context_ok C /\
-    (case function_inliner_round C walk 0 ist of
-       NONE => F
-     | SOME (out, _, _) =>
-         lookup_function "helper" out.ctx_functions = NONE /\
-         (case lookup_function "other" out.ctx_functions of
-            NONE => F
-          | SOME caller => EXISTS (\inst. inst.inst_opcode = INVOKE /\
-                                     inst.inst_operands = [Label "helper"])
-                                  (fn_insts caller)) /\
-         ~wf_invoke_targets out) /\
-    ~wf_invoke_targets (function_inliner_ctx 0 C)
+  C = dead_caller_witness_ctx /\
+  walk = build_call_walk (fcg_analyze C) "entry" /\
+  ist = <| is_inline_count := 0; is_label_counter := 0;
+                is_next_inst_id := 7 |> ==>
+  lowering_context_ok C /\
+  (case function_inliner_round C walk 0 ist of
+     NONE => F
+   | SOME (out, _, _) =>
+       lookup_function "helper" out.ctx_functions = NONE /\
+       (case lookup_function "other" out.ctx_functions of
+          NONE => F
+        | SOME caller => EXISTS (\inst. inst.inst_opcode = INVOKE /\
+                                   inst.inst_operands = [Label "helper"])
+                                (fn_insts caller)) /\
+       ~wf_invoke_targets out) /\
+  ~wf_invoke_targets (function_inliner_ctx 0 C)
 Proof
-  simp_tac std_ss [GSYM wf_invoke_targets_check_eq, LET_THM] >> EVAL_TAC
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  simp_tac std_ss [GSYM wf_invoke_targets_check_eq] >> EVAL_TAC
 QED
 
 Theorem inliner_dead_caller_projection:
-  let out = function_inliner_ctx 0 dead_caller_witness_ctx in
-    MAP (\fn. fn.fn_name) (reachable_ctx out).ctx_functions = ["entry"] /\
-    wf_invoke_targets (reachable_ctx out)
+  out = function_inliner_ctx 0 dead_caller_witness_ctx ==>
+  MAP (\fn. fn.fn_name) (reachable_ctx out).ctx_functions = ["entry"] /\
+  wf_invoke_targets (reachable_ctx out)
 Proof
-  simp_tac std_ss [GSYM wf_invoke_targets_check_eq, LET_THM] >> EVAL_TAC
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  simp_tac std_ss [GSYM wf_invoke_targets_check_eq] >> EVAL_TAC
 QED
