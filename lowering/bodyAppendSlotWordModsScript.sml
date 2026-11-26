@@ -362,26 +362,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem append_slot_error_outcome[local]:
-  ~t.vs_halted /\
-  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v mid =
-    (INR (Error (RuntimeError msg)),mid) /\
-  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (t,G,tn) []
-          (Abort reason u,Gf,tf)) ==>
-  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
-    (append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v) (mid,t,G,tn) Q
-    (\H res ee gt r.
-      (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
-      halt_exit H cx ee res r /\
-      (ctx_has_dalloca ctx ==>
-       !z. (r = Halt z \/ ?ir. r = IntRet ir z) ==> allocas_below_fmp z))
-Proof
-  strip_tac >> irule gas_outcome_full_mods_exit >> simp[] >>
-  qexistsl_tac [`Gf`,`mid`,`Abort reason u`,`INR (Error (RuntimeError msg))`,`tf`] >>
-  simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def] >>
-  rpt gen_tac >> drule append_storage_place_gas_obs >> simp[]
-QED
-
 Theorem append_slot_written_frame[local]:
   ee.scopes = mid.scopes /\
   (!n b sz. local_region cenv ee.scopes u n b sz =
@@ -470,7 +450,13 @@ Resume append_slot_word_landing_mods[capacity]:
     (irule vyperStorageBackendTheory.append_storage_full >> fs[Abbr `len`]) >>
   drule_all append_slot_capacity_path >>
   strip_tac >>
-  irule append_slot_error_outcome >> simp[] >> metis_tac[]
+  qpat_assum `!explicit PG G. ?u Gf tf. !D. _`
+    (qspecl_then [`explicit`,`PG`,`G`] strip_assume_tac) >>
+  irule gas_outcome_full_mods_exit_revert >> simp[] >>
+  qexistsl_tac [`Gf`,`mid`,
+    `INR (Error (RuntimeError "append full storage array"))`,`tf`,`u`] >>
+  simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def] >>
+  gen_tac >> drule append_storage_place_gas_obs >> simp[]
 QED
 
 Resume append_slot_word_landing_mods[static]:
@@ -480,7 +466,18 @@ Resume append_slot_word_landing_mods[static]:
      (INR (Error (RuntimeError "write in static context")),mid)` by
     (irule stmtSimAppendStorageTheory.append_storage_static >> fs[Abbr `len`]) >>
   drule_all append_storage_word_static_origin_path >> strip_tac >>
-  irule append_slot_error_outcome >> simp[] >> metis_tac[]
+  qpat_assum `!PG G. ?u j Gf tf. _`
+    (qspecl_then [`PG`,`G`] strip_assume_tac) >>
+  irule gas_outcome_full_mods_exit_static >> simp[] >>
+  qexistsl_tac [`Gf`,`mid`,
+    `INR (Error (RuntimeError "write in static context"))`,`tf`,
+    `(halt_state (set_returndata [] u)) with vs_inst_idx := j`] >>
+  simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def] >>
+  conj_tac
+  >- (gen_tac >> drule append_storage_place_gas_obs >> simp[])
+  >- (qpat_assum `state_frame u = state_frame t` mp_tac >>
+      simp[NoAsms, state_frame_def, venom_state_component_equality] >>
+      simp[halt_state_def, set_returndata_def])
 QED
 
 Resume append_slot_word_landing_mods[success]:

@@ -3,7 +3,7 @@
    since the right computation only appends storage observations. *)
 Theory gasOutcomeFullCompose
 Ancestors
-  gasOutcomeFull fragGasOriginPtr fragGasOrigin gasOutcome gasExemptCert
+  createSizeExit gasOutcomeFull fragGasOriginPtr fragGasOrigin gasOutcome gasExemptCert
   gasStorage gasSummaryCompose gasSummary fragGasPathPtr fragGasPathMem
   fragGasPath fragGasMode fragExec
   vyperStorageTrace vyperStorageFootprint
@@ -89,7 +89,7 @@ Proof
        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
          (s, G, tn) marks (r, G', tn') /\
        ((?t. r = OK t /\ Q1 H res (ee with gas_obs := []) G' tn' t) \/
-        (exit_result r /\ ?exc. res = INR exc /\
+        (exit_result r /\ create_size_exit_ok ctx res r /\ ?exc. res = INR exc /\
            R H (INR exc) (ee with gas_obs := []) (G', tn') r))` by
     (rpt strip_tac >> res_tac >> fs[]) >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _ /\ ((?t. _) \/ _)`
@@ -330,6 +330,7 @@ Theorem gas_outcome_full_exit:
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
        (s, G, tn) [] (r, G', tn') /\
+     create_size_exit_ok ctx res r /\
      R H res (ee with gas_obs := []) (G', tn') r) ==>
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
     (es, s, G, tn) Q R
@@ -341,6 +342,37 @@ Proof
       qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >> simp[] >>
       rpt strip_tac >> res_tac >> fs[]) >>
   irule gas_outcome_full_bad_nil >> simp[]
+QED
+
+val gas_outcome_full_exit_revert =
+  save_thm ("gas_outcome_full_exit_revert",
+    SIMP_RULE bool_ss [create_size_exit_ok_non_exhalt]
+      (Q.INST [`r` |-> `Abort Revert_abort u`] gas_outcome_full_exit))
+
+val gas_outcome_full_exit_halt =
+  save_thm ("gas_outcome_full_exit_halt",
+    SIMP_RULE bool_ss [create_size_exit_ok_non_exhalt]
+      (Q.INST [`r` |-> `Halt u`] gas_outcome_full_exit))
+
+val gas_outcome_full_exit_intret =
+  save_thm ("gas_outcome_full_exit_intret",
+    SIMP_RULE bool_ss [create_size_exit_ok_non_exhalt]
+      (Q.INST [`r` |-> `IntRet vs u`] gas_outcome_full_exit))
+
+Theorem gas_outcome_full_exit_static:
+  ~s.vs_halted /\
+  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
+  u.vs_call_ctx.cc_static /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+       (s, G, tn) [] (Abort ExHalt_abort u, G', tn') /\
+     R H res (ee with gas_obs := []) (G', tn') (Abort ExHalt_abort u)) ==>
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn) Q R
+Proof
+  strip_tac >> irule gas_outcome_full_exit >> simp[] >>
+  qexistsl_tac [`G'`, `ee`, `Abort ExHalt_abort u`, `res`, `tn'`] >>
+  simp[fragExecTheory.exit_result_def]
 QED
 
 Theorem gas_outcome_full_post_source:
@@ -445,7 +477,8 @@ Theorem gas_outcome_full_intro:
      gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
        (s, G, tn) marks (r, G', tn') /\
      ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
-      (exit_result r /\ R H res (ee with gas_obs := []) (G', tn') r))) ==>
+      (exit_result r /\ create_size_exit_ok ctx res r /\
+       R H res (ee with gas_obs := []) (G', tn') r))) ==>
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
     (es, s, G, tn) Q R
 Proof
@@ -482,7 +515,7 @@ Proof
   >- (disj1_tac >> fs[gas_bad_storage_at_def] >> metis_tac[])
   >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`f res`, `ee`, `r`, `G'`, `tn'`] >> simp[] >>
-      rpt strip_tac >> res_tac >> simp[] >> metis_tac[])
+      rpt strip_tac >> res_tac >> simp[] >> metis_tac[create_size_exit_ok_map])
   >> disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
@@ -571,7 +604,7 @@ Proof
        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
          (s, G, tn) marks (r, G', tn') /\
        ((?t. r = OK t /\ Q1 H res (ee with gas_obs := []) G' tn' t) \/
-        (exit_result r /\ ?exc. res = INR exc /\
+        (exit_result r /\ create_size_exit_ok ctx res r /\ ?exc. res = INR exc /\
            R H (INR exc) (ee with gas_obs := []) (G', tn') r))` by
     (rpt strip_tac >> res_tac >> fs[]) >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _ /\ ((?t. _) \/ _)`

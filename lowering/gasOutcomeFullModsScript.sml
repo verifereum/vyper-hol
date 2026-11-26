@@ -1,7 +1,7 @@
 (* A full counted run may stop at an exempt error in any linked module. *)
 Theory gasOutcomeFullMods
 Ancestors
-  fragGasOriginPtr gasExemptCertMods gasStorage gasSummary
+  createSizeExit fragGasOriginPtr gasExemptCertMods gasStorage gasSummary
   fragGasPathPtr vyperStorageFootprint vyperInterpreter vyperState venomState
 
 Definition gas_outcome_full_mods_def:
@@ -24,7 +24,8 @@ Definition gas_outcome_full_mods_def:
           gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
             (s, G, tn) marks (r, G', tn') /\
           ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
-           (exit_result r /\ R H res (ee with gas_obs := []) (G', tn') r))) \/
+           (exit_result r /\ create_size_exit_ok ctx res r /\
+            R H res (ee with gas_obs := []) (G', tn') r))) \/
       (?err ee leaf leaf_pg leaf_g leaf_tn finish.
         gas_exempt_cert_mods T mods (ctx, func)
           (ignore_bind source (return ()))
