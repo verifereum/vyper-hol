@@ -47,7 +47,7 @@ Proof
      qexists_tac `"evaluate_slice range"` >>
      simp[builtin_result_def,vyperContextTheory.evaluate_builtin_def,
           evaluate_calldata_slice_uint]) >>
-  irule gas_outcome_full_mods_exit >> simp[] >>
-  qexistsl_tac [`HG`,`mid`,`Abort Revert_abort u`,`INR (Error (RuntimeError msg))`,`tm`] >>
+  irule gas_outcome_full_mods_exit_revert >> simp[] >>
+  qexistsl_tac [`HG`,`mid`,`INR (Error (RuntimeError msg))`,`tm`,`u`] >>
   simp[exit_result_def,expr_exit_def,halt_exit_not_halt]
 QED

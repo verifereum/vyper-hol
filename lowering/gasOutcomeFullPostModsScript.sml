@@ -1,7 +1,7 @@
 (* Introductions and same-run post transformations for linked outcomes. *)
 Theory gasOutcomeFullPostMods
 Ancestors
-  gasOutcomeFullMods gasOutcomeFull bodyFullShared gasStorage gasSummary
+  createSizeExit gasOutcomeFullMods gasOutcomeFull bodyFullShared gasStorage gasSummary
   fragGasOriginPtr fragGasOrigin fragGasMode fragGasPath fragExec
   bodyPtrDefs loweringPosts vyperStorageFootprint vyperState venomState
 
@@ -27,7 +27,8 @@ Theorem linked_outcome_nil_endpoint[local]:
      gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
        (s, G, tn) [] (r, G', tn') /\
      ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
-      (exit_result r /\ R H res (ee with gas_obs := []) (G', tn') r))) ==>
+      (exit_result r /\ create_size_exit_ok ctx res r /\
+       R H res (ee with gas_obs := []) (G', tn') r))) ==>
   gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
     (es, s, G, tn) Q R
 Proof
@@ -61,13 +62,45 @@ Theorem gas_outcome_full_mods_exit:
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
        (s, G, tn) [] (r, G', tn') /\
+     create_size_exit_ok ctx res r /\
      R H res (ee with gas_obs := []) (G', tn') r) ==>
   gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
     (es, s, G, tn) Q R
 Proof
   strip_tac >> irule linked_outcome_nil_endpoint >>
   (reverse conj_tac >- first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`G'`, `ee`, `r`, `res`, `tn'`] >> simp[]
+  qexistsl_tac [`G'`, `ee`, `r`, `res`, `tn'`] >> simp[] >> metis_tac[]
+QED
+
+val gas_outcome_full_mods_exit_revert =
+  save_thm ("gas_outcome_full_mods_exit_revert",
+    SIMP_RULE bool_ss [create_size_exit_ok_non_exhalt]
+      (Q.INST [`r` |-> `Abort Revert_abort u`] gas_outcome_full_mods_exit))
+
+val gas_outcome_full_mods_exit_halt =
+  save_thm ("gas_outcome_full_mods_exit_halt",
+    SIMP_RULE bool_ss [create_size_exit_ok_non_exhalt]
+      (Q.INST [`r` |-> `Halt u`] gas_outcome_full_mods_exit))
+
+val gas_outcome_full_mods_exit_intret =
+  save_thm ("gas_outcome_full_mods_exit_intret",
+    SIMP_RULE bool_ss [create_size_exit_ok_non_exhalt]
+      (Q.INST [`r` |-> `IntRet vs u`] gas_outcome_full_mods_exit))
+
+Theorem gas_outcome_full_mods_exit_static:
+  ~s.vs_halted /\
+  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
+  u.vs_call_ctx.cc_static /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+       (s, G, tn) [] (Abort ExHalt_abort u, G', tn') /\
+     R H res (ee with gas_obs := []) (G', tn') (Abort ExHalt_abort u)) ==>
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
+    (es, s, G, tn) Q R
+Proof
+  strip_tac >> irule gas_outcome_full_mods_exit >> simp[] >>
+  qexistsl_tac [`G'`, `ee`, `Abort ExHalt_abort u`, `res`, `tn'`] >>
+  simp[fragExecTheory.exit_result_def]
 QED
 
 Theorem gas_outcome_full_mods_post_source:
