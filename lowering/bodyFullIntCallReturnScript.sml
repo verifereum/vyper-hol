@@ -216,7 +216,7 @@ Proof
                            MAP (op_prov G) arg_ops)
                           (entered,FEMPTY,tn with t_var := FEMPTY)
                           return_marks (return_r,return_g,return_tn) /\
-                        exit_result return_r /\
+                        exit_result return_r /\ create_size_exit_ok ctx return_res return_r /\
                         intcall_callee_exit_full (DF,lo) h func cenv cx mut nr rtv
                           result_count
                           (if result_count = 0 /\ 0 < buf_size then SOME (HD argv) else NONE)
@@ -229,7 +229,7 @@ Proof
          simp[] >> rpt strip_tac >>
          qpat_assum `!h. valid_horizon cx st0 h return_source.storage_trace ==>
                            gas_origin_ptr_path _ _ _ _ /\ _`
-           (drule_then (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2))) >>
+           (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
      rename1 `gas_exempt_cert _ _ _ _ _ _ (exempt_error,exempt_source) _` >>
      rename1 `gas_origin_ptr_focus (DF focus_horizon,_,_,_,_,_) _
                 focus_marks (focus_leaf,focus_pg,focus_g,focus_tn,focus_finish)` >>
