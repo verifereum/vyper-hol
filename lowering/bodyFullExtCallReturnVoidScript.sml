@@ -1,7 +1,7 @@
 Theory bodyFullExtCallReturnVoid
 Ancestors
   exprSimExtCallCase extcallReturnInterface fragGasOriginPtr bodyPtrDefs
-  exprSimMemDefs exprLowering vyperInterpreter vyperAST list
+  exprSimMemDefs exprLowering vyperInterpreter vyperAST list createSizeExit
 
 val _ = Parse.hide "body";
 
@@ -131,7 +131,7 @@ Theorem extcall_return_step_void:
               (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
                  args dflt) p.ptr_operand G' t') /\
          ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn') \/
-         (exit_result r /\ expr_exit res r)))
+         (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r)))
 Proof
   rpt gen_tac >> strip_tac >>
   drule extcallReturnInterfaceTheory.extcall_return_type_bounds >> strip_tac >>
