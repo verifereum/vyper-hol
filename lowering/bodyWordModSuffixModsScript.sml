@@ -6,7 +6,7 @@ Ancestors
   allocasBelowFmpUpdatesProps
   fragGasSeqPtr fragGasOriginPtr fragGasEmitCtrl exprSimWordBuiltins exprSimWordArgs exprSimDefs exprLoweringProps
   emitHelperProps emitHelper builtinMath fragExec allocaHistory instMemFrontier
-  ptrDisciplineEmptyTaint lowerDloadPtrScalar decoderGhostFramePtr ptrDiscipline ptrSafeRun
+  ptrDisciplineEmptyTaint bodyPureModTaintMods lowerDloadPtrScalar decoderGhostFramePtr ptrDiscipline ptrSafeRun
   venomExecSemantics venomState venomInst venomMemDefs venomMemProofs memSafeRun compileEnv
   unitTransformDefs contextCodegenRel codegenRel
   vyperInterpreter vyperContext vyperStorageFootprint loweringStateRelDefs
@@ -328,48 +328,55 @@ Resume modular_suffix_mods[normal]:
   `step_taint j t1 u tn1 = tn2` by
     (`new_site_bytes t1 u = {}` by
        (irule new_site_bytes_unchanged >> simp[Abbr `u`, update_var_def]) >>
-     Cases_on `bt = AddMod`
-     >- ((qpat_assum `bt = AddMod` (fn th =>
-           qpat_assum `new_site_bytes t1 u = {}` (fn hn =>
-             qpat_assum `out_taint tn1 j t1 = {}` (fn ho =>
-               qpat_assum `written_taint tn1 j t1 = {}` (fn hw =>
-                 simp[NoAsms, th, hn, ho, hw, Abbr `tn2`, step_taint_def,
-                      mem_taint_def, set_var_taint_def, mk_inst_def,
-                      step_writes_def, source_memory_write_ranges_def,
-                      range_bytes_def, store_taint_def, imm_taint_def,
-                      adopt_reset_def, taint_component_equality] >>
-                 simp[NoAsms, hw, ho, Abbr `j`, mk_inst_def]))))) >> (simp[]))
-     >- (qpat_assum `bt <> AddMod` (fn th =>
-           qpat_assum `new_site_bytes t1 u = {}` (fn hn =>
-             qpat_assum `out_taint tn1 j t1 = {}` (fn ho =>
-               qpat_assum `written_taint tn1 j t1 = {}` (fn hw =>
-                 simp[NoAsms, th, hn, ho, hw, Abbr `tn2`, step_taint_def,
-                      mem_taint_def, set_var_taint_def, mk_inst_def,
-                      step_writes_def, source_memory_write_ranges_def,
-                      range_bytes_def, store_taint_def, imm_taint_def,
-                      adopt_reset_def, taint_component_equality] >>
-                 simp[NoAsms, hw, ho, Abbr `j`, mk_inst_def])))))) >>
+     qpat_assum `j = mk_inst _ _ _ _` (pure_once_rewrite_tac o single) >>
+     simp[NoAsms, Abbr `tn2`] >>
+     irule bodyPureModTaintModsTheory.pure_mod_step_taint >>
+     qpat_assum `j = mk_inst _ _ _ _` (pure_once_rewrite_tac o single o GSYM) >>
+     Cases_on `bt = AddMod` >> simp[] >>
+     qexists_tac `w` >> simp[Abbr `u`]) >>
   `!D. ptr_inst_ok D lo 0 ctx func G1 tn1 j t1` by
     (gen_tac >>
      `step_inst 0 ctx j t1 = OK u` by
-       (Cases_on `bt = AddMod` >> simp[step_inst_non_invoke, mk_inst_def]) >>
-     Cases_on `bt = AddMod` >>
-     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
-          source_memory_read_ranges_def, source_memory_write_ranges_def,
-          mk_inst_def] >>
-     gvs[Abbr `u`, update_var_def, allocas_from_def, allocas_below_fmp_def] >>
-     metis_tac[]) >>
+       (`j.inst_opcode <> INVOKE` by
+          (Cases_on `bt = AddMod` >>
+           qpat_assum `j = mk_inst _ _ _ _` (pure_once_rewrite_tac o single) >>
+           simp[mk_inst_def]) >>
+        qpat_assum `j.inst_opcode <> INVOKE` (fn h =>
+          simp[NoAsms, h, step_inst_non_invoke]) >>
+        first_assum ACCEPT_TAC) >>
+     `u.vs_requests = t1.vs_requests` by simp[Abbr `u`, update_var_def] >>
+     `access_ok lo G1 func j t1 /\ taint_ok func tn1 j t1` by
+       (Cases_on `bt = AddMod` >>
+        qpat_assum `j = mk_inst _ _ _ _` (pure_once_rewrite_tac o single) >>
+        pop_assum (fn h => simp[NoAsms, h]) >>
+        simp[NoAsms, access_ok_def, taint_ok_def, source_memory_read_ranges_def,
+             source_memory_write_ranges_def, mk_inst_def] >>
+        qx_gen_tac `a` >> Cases_on `a = x` >> Cases_on `a = y` >>
+        Cases_on `a = z` >> asm_rewrite_tac[]) >>
+     qpat_assum `step_inst 0 ctx j t1 = OK u` (fn hs =>
+       qpat_assum `u.vs_requests = t1.vs_requests` (fn hr =>
+         simp[NoAsms, ptr_inst_ok_def, hs, hr])) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `!D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG)
       (t1,G1,tn1) [] (OK t2,G2,tn2)` by
     (gen_tac >>
-     mp_tac (Q.INST [`i` |-> `j`, `s` |-> `t1`, `u` |-> `u`,
-       `G` |-> `G1`, `tn` |-> `tn1`, `lo` |-> `lo`, `D` |-> `D`]
-       straight_line_origin_ptr_edge) >>
-     Cases_on `bt = AddMod` >>
-     simp[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
-          inst_dload_in_section_def, source_memory_read_ranges_def,
-          source_memory_write_ranges_def] >>
-     disch_then irule >> simp[mk_inst_def]) >>
+     `j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode /\
+      inst_mem_below_frontier j t1 /\ inst_dload_in_section j t1 /\
+      dalloca_no_wrap j t1 /\ j.inst_opcode <> GAS` by
+       (Cases_on `bt = AddMod` >>
+        qpat_assum `j = mk_inst _ _ _ _` (pure_once_rewrite_tac o single) >>
+        pop_assum (fn h => simp[NoAsms, h]) >>
+        simp[NoAsms, mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
+             inst_dload_in_section_def, source_memory_read_ranges_def,
+             source_memory_write_ranges_def]) >>
+     `(if j.inst_opcode = GAS then [(func.fn_name,j.inst_id) IN explicit] else []) = []` by
+       (qpat_assum `j.inst_opcode <> GAS` (fn h => simp[NoAsms, h])) >>
+     pop_assum (pure_once_rewrite_tac o single o GSYM) >>
+     qpat_assum `step_taint j t1 u tn1 = tn2` (pure_once_rewrite_tac o single o GSYM) >>
+     simp[NoAsms, Abbr `t2`, Abbr `G2`] >>
+     irule straight_line_origin_ptr_edge >>
+     asm_rewrite_tac[] >>
+     qexists_tac `bb` >> asm_rewrite_tac[]) >>
   `!q. not_fresh_at sm q ==>
      lookup_var q t2 = lookup_var q t /\ FLOOKUP G2 q = FLOOKUP G1 q /\
      op_taint tn2 (Var q) = op_taint tn1 (Var q)` by
