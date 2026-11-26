@@ -7,7 +7,7 @@ Ancestors fragGasOriginPtrLoop[qualified,ignore_grammar]
   typedMemoryCopy exprSafeOperand exprLoweringProps emitHelperProps
   fragGasOriginPtr bodyFullPostsMods loweringPosts bodyPtrDefs
   codegenRel compileEnv context venomState finite_map words ptrDiscipline
-  fragExec emitHelper exprLowering
+  fragExec emitHelper exprLowering createSizeExit
 
 Theorem default_shell_linked[local]:
   emit_op RETURNDATASIZE [] ar = (rds,a1) /\
@@ -294,7 +294,7 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >- metis_tac[]
 QED
 
-Theorem extcall_default_exit_mods:
+Theorem extcall_default_exit_create_size_mods:
   compile_store_memory cenv dop (Var q) rt dt ds = ((),de) /\
   (if skip then comp_return () else compile_extcodesize_check addr) de = ((),ck) /\
   fn_has_code de ck func /\ emit_inst JMP [Label xl] [] ck = ((),dj) /\
@@ -328,7 +328,9 @@ Theorem extcall_default_exit_mods:
   else
     ?r Gz tz.
       (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (r,Gz,tz)) /\
-      exit_result r /\ expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
+      exit_result r /\
+      create_size_exit_ok ctx (INR (Error (RuntimeError "ExtCall target has no code"))) r /\
+      expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
 Proof
   strip_tac >>
   `eval_operand addr p = SOME aw` by
@@ -349,7 +351,7 @@ Proof
   suspend "abort"
 QED
 
-Resume extcall_default_exit_mods[abort]:
+Resume extcall_default_exit_create_size_mods[abort]:
   `~skip /\ ~ext_call_has_code target ee.accounts` by fs[] >>
   `compile_extcodesize_check addr de = ((),ck)` by fs[] >>
   `(n2w (LENGTH (lookup_account (w2w aw) p.vs_accounts).code) : bytes32) = 0w` by fs[] >>
@@ -378,7 +380,8 @@ Resume extcall_default_exit_mods[abort]:
              vs_inst_idx := SUC (LENGTH de.cs_current_insts))))`,
        `Gp \\ STRING #"%" (toString de.cs_next_var)`,
        `tp with t_var := tp.t_var |+ (STRING #"%" (toString de.cs_next_var),{})`] >>
-  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def] >>
+  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
+       createSizeExitTheory.create_size_exit_ok_non_exhalt] >>
   gen_tac >>
   qpat_assum `!D. gas_origin_ptr_path _ (u,Gu,tu) [] (OK p,Gp,tp)`
     (qspec_then `D` mp_tac) >>
@@ -388,7 +391,7 @@ Resume extcall_default_exit_mods[abort]:
   metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append,listTheory.APPEND]
 QED
 
-Resume extcall_default_exit_mods[success]:
+Resume extcall_default_exit_create_size_mods[success]:
   qabbrev_tac `out = STRING #"%" (toString de.cs_next_var)` >>
   qabbrev_tac `w:bytes32 = n2w (LENGTH (lookup_account (w2w aw) p.vs_accounts).code)` >>
   qabbrev_tac `v = if skip then p else update_var out w p with
@@ -415,7 +418,7 @@ Resume extcall_default_exit_mods[success]:
   suspend "join_post"
 QED
 
-Resume extcall_default_exit_mods[join_post]:
+Resume extcall_default_exit_create_size_mods[join_post]:
   qabbrev_tac `z = jump_to xl v` >>
   `ds.cs_next_var <= de.cs_next_var` by
     (qpat_assum `compile_store_memory _ _ _ _ _ ds = _` mp_tac >>
@@ -460,7 +463,7 @@ Resume extcall_default_exit_mods[join_post]:
   suspend "join_fields"
 QED
 
-Resume extcall_default_exit_mods[join_fields]:
+Resume extcall_default_exit_create_size_mods[join_fields]:
   `z.vs_memory = p.vs_memory /\ z.vs_allocas = u.vs_allocas /\
    z.vs_alloca_next = u.vs_alloca_next /\ ~z.vs_halted /\
    (allocas_below_fmp z <=> allocas_below_fmp p)` by
@@ -479,4 +482,47 @@ Resume extcall_default_exit_mods[join_fields]:
   qexistsl_tac [`z`,`Gc`,`tc`] >> simp[]
 QED
 
-Finalise extcall_default_exit_mods
+Finalise extcall_default_exit_create_size_mods
+
+Theorem extcall_default_exit_mods:
+  compile_store_memory cenv dop (Var q) rt dt ds = ((),de) /\
+  (if skip then comp_return () else compile_extcodesize_check addr) de = ((),ck) /\
+  fn_has_code de ck func /\ emit_inst JMP [Label xl] [] ck = ((),dj) /\
+  fn_has_code ck dj func /\ new_block xl cj = (old3,sb) /\
+  stmt_state_rel H ctx func cenv cx ee u /\ accounts_runtime_well_typed ee.accounts /\
+  w2w (aw:bytes32) = target /\ eval_operand addr u = SOME aw /\ op_taint tu addr = {} /\
+  (!x. addr = Var x ==> not_fresh_at ds x) /\
+  alloca_history func u /\ allocas_from lo u /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK p,Gp,tp)) /\
+  typed_copy_state_frame ds off (type_memory_size rtv) u p /\
+  (!mem. mem_agree_outside tp.t_mem p.vs_memory mem ==> val_in_memory rtv dv off mem) /\
+  (!x. not_fresh_at ds x ==> FLOOKUP Gp x = FLOOKUP Gu x /\
+       op_taint tp (Var x) = op_taint tu (Var x)) /\
+  (!i. ~(off <= i /\ i < off + type_memory_size rtv) ==> (i IN tp.t_mem <=> i IN tu.t_mem)) /\
+  tp.t_stor = tu.t_stor /\ tp.t_trans = tu.t_trans /\ tp.t_imm = tu.t_imm /\
+  ~p.vs_halted /\ p.vs_current_bb = de.cs_current_bb /\ p.vs_inst_idx = LENGTH de.cs_current_insts ==>
+  if skip \/ ext_call_has_code target ee.accounts then
+    ?z Gz tz.
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)) /\
+      typed_copy_state_frame ds off (type_memory_size rtv) u z /\
+      (!mem. mem_agree_outside tz.t_mem z.vs_memory mem ==> val_in_memory rtv dv off mem) /\
+      (!x. not_fresh_at ds x ==> FLOOKUP Gz x = FLOOKUP Gu x /\
+           op_taint tz (Var x) = op_taint tu (Var x)) /\
+      (!i. ~(off <= i /\ i < off + type_memory_size rtv) ==> (i IN tz.t_mem <=> i IN tu.t_mem)) /\
+      tz.t_stor = tu.t_stor /\ tz.t_trans = tu.t_trans /\ tz.t_imm = tu.t_imm /\
+      z.vs_memory = p.vs_memory /\ z.vs_allocas = u.vs_allocas /\
+      z.vs_alloca_next = u.vs_alloca_next /\ alloca_history func z /\
+      allocas_from lo z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+      ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts
+  else
+    ?r Gz tz.
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (r,Gz,tz)) /\
+      exit_result r /\ expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
+Proof
+  strip_tac >>
+  drule_all extcall_default_exit_create_size_mods >>
+  Cases_on `skip \/ ext_call_has_code target ee.accounts` >> simp[] >>
+  strip_tac >> qexistsl_tac [`r`,`Gz`,`tz`] >> simp[] >>
+  Cases_on `r` >> gvs[exprSimDefsTheory.expr_exit_def]
+QED
