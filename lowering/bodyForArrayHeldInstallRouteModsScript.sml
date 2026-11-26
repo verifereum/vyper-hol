@@ -20,16 +20,17 @@ Proof
   Cases_on `FLOOKUP env.var_types name` >> gvs[] >> metis_tac[]
 QED
 
-Theorem held_named_extent[local]:
+Theorem held_named_root[local]:
   expr_sim_inv_mods mods c cx env em /\
   runtime_place_typed cx em (MemoryPlace name path) tv /\
   stmt_state_rel H ctx func c cx em r /\
   vv_place_ptr c cx em r (PlaceR (MemoryPlace name path)) (LocatedValue ann p) /\
   eval_operand p.ptr_operand r = SOME bw ==>
-  ?q b sz ent. lookup_scopes name em.scopes = SOME ent /\
+  ?q b sz ent k. lookup_scopes name em.scopes = SOME ent /\
     FLOOKUP c.ce_vars name = SOME (PtrVar (Var q) sz) /\
-    lookup_var q r = SOME b /\ w2n b <= w2n bw /\
-    w2n bw + type_memory_size tv <= w2n b + sz
+    lookup_var q r = SOME b /\ mem_path_offset ent.type path = SOME (k,tv) /\
+    bw = b + n2w k /\ w2n b + k < dimword (:256) /\
+    w2n b <= w2n bw /\ w2n bw + type_memory_size tv <= w2n b + sz
 Proof
   simp[runtime_place_typed_memory,vv_place_ptr_def] >> strip_tac >>
   drule_all_then strip_assume_tac held_local_type >> gvs[] >>
@@ -44,7 +45,23 @@ Proof
     (drule_then strip_assume_tac stmt_state_rel_region_lt >> first_assum drule >> simp[]) >>
   `w2n (b + n2w k) = w2n b + k` by
     (irule buffer_offset_no_wrap >> qexists_tac `sz` >> simp[] >> decide_tac) >>
-  simp[] >> goal_assum (drule_at Any) >> qexists_tac `q` >> simp[] >> decide_tac
+  simp[] >> goal_assum (drule_at Any) >> qexistsl_tac [`q`,`k`] >> simp[] >> decide_tac
+QED
+
+Theorem held_named_extent[local]:
+  expr_sim_inv_mods mods c cx env em /\
+  runtime_place_typed cx em (MemoryPlace name path) tv /\
+  stmt_state_rel H ctx func c cx em r /\
+  vv_place_ptr c cx em r (PlaceR (MemoryPlace name path)) (LocatedValue ann p) /\
+  eval_operand p.ptr_operand r = SOME bw ==>
+  ?q b sz ent. lookup_scopes name em.scopes = SOME ent /\
+    FLOOKUP c.ce_vars name = SOME (PtrVar (Var q) sz) /\
+    lookup_var q r = SOME b /\ w2n b <= w2n bw /\
+    w2n bw + type_memory_size tv <= w2n b + sz
+Proof
+  strip_tac >>
+  drule_all_then strip_assume_tac held_named_root >>
+  qexistsl_tac [`q`,`b`,`sz`,`ent`] >> gvs[]
 QED
 
 Theorem held_length_operand[local]:
@@ -98,4 +115,34 @@ Proof
   `lookup_var q t = SOME b` by fs[for_array_install_frame_mods_def] >>
   qexistsl_tac [`w2n b`,`sz`] >> simp[local_region_def] >>
   qexistsl_tac [`ent`,`q`,`b`] >> simp[]
+QED
+
+Theorem for_array_held_length_root_mods:
+  vv_post_mods H ctx func c cx e es sa0 sbExpr s0 em
+    (PlaceR (MemoryPlace name path)) (LocatedValue ann p) r /\
+  expr_sim_inv_mods mods c cx env em /\
+  runtime_place_typed cx em (MemoryPlace name path) (ArrayTV tv bd) /\
+  eval_operand p.ptr_operand u = SOME bw /\
+  copy_old_operand sbExpr p.ptr_operand /\
+  local_ptrs_reserved c sbExpr /\ local_ptrs_reserved c saL /\
+  array_length_frame sbExpr r Gr traw u Gu tu ==>
+  ?ent q sz rw delta. lookup_scopes name em.scopes = SOME ent /\
+    FLOOKUP c.ce_vars name = SOME (PtrVar (Var q) sz) /\
+    lookup_var q u = SOME rw /\ not_fresh_at saL q /\
+    mem_path_offset ent.type path = SOME (delta,ArrayTV tv bd) /\
+    bw = rw + n2w delta /\ w2n rw + delta < dimword (:256) /\
+    w2n rw <= w2n bw /\ w2n bw + type_memory_size (ArrayTV tv bd) <= w2n rw + sz
+Proof
+  strip_tac >>
+  qhdtm_x_assum `vv_post_mods`
+    (strip_assume_tac o REWRITE_RULE [vv_post_mods_def]) >>
+  qhdtm_x_assum `vv_place_ptr_mods`
+    (assume_tac o SIMP_RULE (srw_ss()) [vv_place_ptr_mods_def]) >>
+  `eval_operand p.ptr_operand r = SOME bw` by
+    (drule_all held_length_operand >> simp[]) >>
+  drule_all_then strip_assume_tac held_named_root >>
+  `not_fresh_at sbExpr q /\ not_fresh_at saL q` by
+    (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `lookup_var q u = SOME b` by fs[array_length_frame_def] >>
+  qexistsl_tac [`ent`,`q`,`sz`,`b`,`k`] >> gvs[]
 QED

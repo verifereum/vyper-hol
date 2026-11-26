@@ -9,17 +9,17 @@ Ancestors
 val _ = Parse.hide "body";
 
 Triviality expression_root_access_cover:
-  (!e. p e ==> ?key. P key /\ MEM (ReadAcc (StateRef key)) (accesses_expr e)) ==>
+  (!e. p e ==> ?a. P a /\ MEM a (accesses_expr e)) ==>
   (!e. supported_expr_exists p e ==>
-       ?key. P key /\ MEM (ReadAcc (StateRef key)) (accesses_expr e)) /\
+       ?a. P a /\ MEM a (accesses_expr e)) /\
   (!t. supported_target_exists p t ==>
-       ?key. P key /\ MEM (ReadAcc (StateRef key)) (accesses_target t)) /\
+       ?a. P a /\ MEM a (accesses_target t)) /\
   (!es. supported_exprs_exists p es ==>
-        ?key. P key /\ MEM (ReadAcc (StateRef key)) (accesses_exprs es)) /\
+        ?a. P a /\ MEM a (accesses_exprs es)) /\
   (!opt. supported_opt_exists p opt ==>
-         ?key. P key /\ MEM (ReadAcc (StateRef key)) (accesses_opt opt)) /\
+         ?a. P a /\ MEM a (accesses_opt opt)) /\
   (!fields. supported_fields_exists p fields ==>
-            ?key. P key /\ MEM (ReadAcc (StateRef key)) (accesses_named_exprs fields))
+            ?a. P a /\ MEM a (accesses_named_exprs fields))
 Proof
   strip_tac >> ho_match_mp_tac accesses_expr_ind >>
   simp[supported_expr_exists_def, accesses_expr_def, MEM_APPEND] >>
@@ -28,30 +28,27 @@ Proof
 QED
 
 Triviality substituted_roots_keep_access:
-  (!e. p e ==> ?ty key. e = TopLevelName ty key /\ P key) /\
+  (!e. p e ==> (?ty key. e = TopLevelName ty key /\ R key) \/
+                (?a. P a /\ MEM a (accesses_expr e))) /\
+  (!key. R key /\ ALOOKUP E key = NONE ==> P (ReadAcc (StateRef key))) /\
   (!key r. ALOOKUP E key = SOME r ==> accesses_expr r = []) ==>
   (!e. supported_expr_exists p (subst_consts_expr_mods E e) ==>
-       ?key. P key /\ ALOOKUP E key = NONE /\
-         MEM (ReadAcc (StateRef key)) (accesses_expr (subst_consts_expr_mods E e))) /\
+       ?a. P a /\ MEM a (accesses_expr (subst_consts_expr_mods E e))) /\
   (!t. supported_target_exists p (subst_consts_btarget_mods E t) ==>
-       ?key. P key /\ ALOOKUP E key = NONE /\
-         MEM (ReadAcc (StateRef key)) (accesses_target (subst_consts_btarget_mods E t))) /\
+       ?a. P a /\ MEM a (accesses_target (subst_consts_btarget_mods E t))) /\
   (!es. supported_exprs_exists p (subst_consts_exprs_mods E es) ==>
-        ?key. P key /\ ALOOKUP E key = NONE /\
-          MEM (ReadAcc (StateRef key)) (accesses_exprs (subst_consts_exprs_mods E es))) /\
+        ?a. P a /\ MEM a (accesses_exprs (subst_consts_exprs_mods E es))) /\
   (!opt. supported_opt_exists p (subst_consts_opt_mods E opt) ==>
-         ?key. P key /\ ALOOKUP E key = NONE /\
-           MEM (ReadAcc (StateRef key)) (accesses_opt (subst_consts_opt_mods E opt))) /\
+         ?a. P a /\ MEM a (accesses_opt (subst_consts_opt_mods E opt))) /\
   (!fields. supported_fields_exists p (subst_consts_fields_mods E fields) ==>
-            ?key. P key /\ ALOOKUP E key = NONE /\
-              MEM (ReadAcc (StateRef key)) (accesses_named_exprs (subst_consts_fields_mods E fields)))
+            ?a. P a /\ MEM a (accesses_named_exprs (subst_consts_fields_mods E fields)))
 Proof
   strip_tac >>
   `!e. accesses_expr e = [] ==> ~supported_expr_exists p e` by
-    (`!e. p e ==> ?key. P key /\ MEM (ReadAcc (StateRef key)) (accesses_expr e)` by
-       (rpt strip_tac >> res_tac >> gvs[accesses_expr_def]) >>
-     drule_then (assume_tac o cj 1) expression_root_access_cover >>
-     metis_tac[MEM]) >>
+    (mp_tac (Q.INST [`P` |-> `\a:var_access. T`] expression_root_access_cover) >>
+     simp[] >> impl_tac
+     >- (rpt strip_tac >> res_tac >> gvs[accesses_expr_def] >> metis_tac[]) >>
+     simp[] >> metis_tac[MEM]) >>
   ho_match_mp_tac accesses_expr_ind >>
   simp[subst_consts_expr_mods_def, supported_expr_exists_def, accesses_expr_def, MEM_APPEND] >>
   rpt strip_tac >>
@@ -60,25 +57,24 @@ Proof
   >- (rename1 `subst_consts_expr_mods E (TopLevelName ty nsid)` >>
       PairCases_on `nsid` >> Cases_on `ALOOKUP E (nsid0,nsid1)` >>
       gvs[subst_consts_expr_mods_def, accesses_expr_def, supported_expr_exists_def] >>
-      res_tac >> gvs[]) >>
-  metis_tac[]
+      res_tac >> gvs[accesses_expr_def]) >>
+  gvs[accesses_expr_def, MEM_APPEND] >> metis_tac[]
 QED
 
 Triviality substituted_stmt_roots_keep_access:
-  (!e. p e ==> ?ty key. e = TopLevelName ty key /\ P key) /\
+  (!e. p e ==> (?ty key. e = TopLevelName ty key /\ R key) \/
+                (?a. P a /\ MEM a (accesses_expr e))) /\
+  (!key. R key /\ ALOOKUP E key = NONE ==> P (ReadAcc (StateRef key))) /\
   (!key r. ALOOKUP E key = SOME r ==> accesses_expr r = []) ==>
   !ss. supported_stmts_expr_exists p (subst_consts_stmts_mods E ss) ==>
-       ?key. P key /\ ALOOKUP E key = NONE /\
-         MEM (ReadAcc (StateRef key)) (accesses_stmts (subst_consts_stmts_mods E ss))
+       ?a. P a /\ MEM a (accesses_stmts (subst_consts_stmts_mods E ss))
 Proof
   strip_tac >>
   drule_all_then (map_every assume_tac o CONJUNCTS) substituted_roots_keep_access >>
   `(!t. supported_assignment_exists p (subst_consts_target_mods E t) ==>
-        ?key. P key /\ ALOOKUP E key = NONE /\
-          MEM (ReadAcc (StateRef key)) (accesses_atarget (subst_consts_target_mods E t))) /\
+        ?a. P a /\ MEM a (accesses_atarget (subst_consts_target_mods E t))) /\
     (!ts. supported_assignments_exists p (subst_consts_targets_mods E ts) ==>
-          ?key. P key /\ ALOOKUP E key = NONE /\
-            MEM (ReadAcc (StateRef key)) (accesses_atargets (subst_consts_targets_mods E ts)))` by
+          ?a. P a /\ MEM a (accesses_atargets (subst_consts_targets_mods E ts)))` by
     (ho_match_mp_tac accesses_atarget_ind >>
      simp[subst_consts_target_mods_def, supported_assignment_exists_def, accesses_atarget_def, MEM_APPEND] >>
      metis_tac[]) >>
@@ -90,17 +86,14 @@ Proof
             EXISTS (supported_expr_exists p) (MAP SND fields) = supported_fields_exists p fields` by
     (Induct >> simp[accesses_expr_def, supported_expr_exists_def, FORALL_PROD]) >>
   `!err. EXISTS (supported_expr_exists p) (custom_error_exprs (subst_consts_error_mods E err)) ==>
-    ?key. P key /\ ALOOKUP E key = NONE /\
-      MEM (ReadAcc (StateRef key))
+    ?a. P a /\ MEM a
           (accesses_exprs (custom_error_exprs (subst_consts_error_mods E err)))` by
     (Cases >> simp[custom_error_exprs_def, subst_consts_error_mods_def, MEM_APPEND, EXISTS_APPEND] >>
      metis_tac[]) >>
   `(!s. supported_stmt_expr_exists p (subst_consts_stmt_mods E s) ==>
-        ?key. P key /\ ALOOKUP E key = NONE /\
-          MEM (ReadAcc (StateRef key)) (accesses_stmt (subst_consts_stmt_mods E s))) /\
+        ?a. P a /\ MEM a (accesses_stmt (subst_consts_stmt_mods E s))) /\
     (!ss. supported_stmts_expr_exists p (subst_consts_stmts_mods E ss) ==>
-          ?key. P key /\ ALOOKUP E key = NONE /\
-            MEM (ReadAcc (StateRef key)) (accesses_stmts (subst_consts_stmts_mods E ss)))`
+          ?a. P a /\ MEM a (accesses_stmts (subst_consts_stmts_mods E ss)))`
     suffices_by (strip_tac >> first_assum ACCEPT_TAC) >>
   ho_match_mp_tac accesses_stmt_ind >>
   simp[subst_consts_stmt_mods_def, supported_stmt_expr_exists_def, accesses_stmt_def, MEM_APPEND] >>
@@ -208,16 +201,55 @@ Proof
        assume_tac
      >- (qpat_x_assum `mods = [(NONE,tops)] \/ _` (DISJ_CASES_THEN assume_tac) >> fs[]) >>
      drule_all_then strip_assume_tac linked_owned_immutable_location >> simp[]) >>
-  conj_tac
-  >- (strip_tac >>
-      mp_tac (Q.INST [`p` |-> `unallocated_bare_global_root ce env`,
-                      `P` |-> `\key. IS_SOME (FLOOKUP env.bare_globals key) /\
-                                      FLOOKUP ce.ce_module_vars key = NONE`,
-                      `E` |-> `consts_env_mods mods`] substituted_stmt_roots_keep_access) >>
-      BETA_TAC >>
-      impl_tac >- (asm_rewrite_tac[] >> Cases >> simp[unallocated_bare_global_root_def] >> metis_tac[]) >>
-      disch_then (qspec_then `body : stmt list` mp_tac) >>
-      asm_rewrite_tac[] >> disch_then (qx_choose_then `key` strip_assume_tac) >>
+  `!key. MEM (WriteAcc (StateRef key))
+          (accesses_stmts (subst_consts_stmts_mods (consts_env_mods mods) body)) /\
+         IS_SOME (FLOOKUP env.bare_global_assignable key) ==>
+         IS_SOME (FLOOKUP ce.ce_module_vars key)` by
+    (Cases_on `mode`
+     >~ [`check_contract F layouts addr mods = SOME art`]
+     >- (drule_then strip_assume_tac check_contract_runtime_assignable >> simp[]) >>
+     rpt strip_tac >> PairCases_on `key` >>
+     qpat_x_assum `IS_SOME (FLOOKUP env.bare_global_assignable _)`
+       (qx_choose_then `ity` mp_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
+     qpat_assum `env.bare_global_assignable = art.cta_bare_global_assignable`
+       (PURE_REWRITE_TAC o single) >>
+     qpat_assum `art.cta_bare_global_assignable = _` (PURE_REWRITE_TAC o single) >>
+     strip_tac >>
+     drule_then assume_tac (cj 1 check_contract_artifact_fields) >>
+     drule_all_then
+       (qx_choosel_then [`itops`,`ivis`,`id_str`,`init`] (map_every assume_tac o CONJUNCTS))
+       build_contract_type_artifact_bare_global_assignable_sound >>
+     qpat_x_assum `key1 = id_str` SUBST_ALL_TAC >>
+     qpat_assum `!isrc itops ivis id ty slot. _ ==> IS_SOME _`
+       (qspecl_then [`key0`,`itops`,`ivis`,`id_str`,`ity`,`init`] mp_tac) >>
+     qpat_assum `!key. _ ==> mods = [(NONE,tops)] \/ _`
+       (qspec_then `(key0,id_str)` mp_tac) >> simp[]) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
+  qabbrev_tac `read_root =
+    \key. IS_SOME (FLOOKUP env.bare_globals key) /\
+          FLOOKUP ce.ce_module_vars key = NONE` >>
+  qabbrev_tac `bad_access = \a.
+    (?key. a = ReadAcc (StateRef key) /\ read_root key /\
+           ALOOKUP (consts_env_mods mods) key = NONE) \/
+    (?key. a = WriteAcc (StateRef key) /\
+           IS_SOME (FLOOKUP env.bare_global_assignable key) /\
+           FLOOKUP ce.ce_module_vars key = NONE)` >>
+  mp_tac (Q.INST [`p` |-> `unallocated_bare_global_root ce env`,
+                  `P` |-> `bad_access`, `R` |-> `read_root`,
+                  `E` |-> `consts_env_mods mods`] substituted_stmt_roots_keep_access) >>
+  impl_tac
+  >- (asm_rewrite_tac[] >> conj_tac
+      >- (Cases >> simp[unallocated_bare_global_root_def, Abbr `read_root`,
+                        Abbr `bad_access`, accesses_expr_def] >> metis_tac[]) >>
+      simp[Abbr `bad_access`]) >>
+  disch_then (qspec_then `body : stmt list` mp_tac) >>
+  asm_rewrite_tac[] >>
+  disch_then (qx_choose_then `access` strip_assume_tac) >>
+  qunabbrev_tac `bad_access` >>
+  qpat_x_assum `(\a. _) access`
+    (DISJ_CASES_THEN (qx_choose_then `key` strip_assume_tac) o BETA_RULE) >> gvs[]
+  >- (fs[Abbr `read_root`] >>
       PairCases_on `key` >>
       `?ty. FLOOKUP (build_contract_type_artifact F mods).cta_bare_globals (key0,key1) = SOME ty` by
         fs[optionTheory.IS_SOME_EXISTS] >>
@@ -231,23 +263,6 @@ Proof
         (simp[consts_env_mods_def, consts_env_modules_order_eq] >> irule ordered_const_key_mem >>
          simp[MEM_constants_order] >> metis_tac[ALOOKUP_MEM]) >>
       gvs[ALOOKUP_NONE]) >>
-  Cases_on `mode`
-  >~ [`check_contract F layouts addr mods = SOME art`]
-  >- (drule_then strip_assume_tac check_contract_runtime_assignable >> simp[]) >>
-  rpt strip_tac >> PairCases_on `key` >>
-  qpat_x_assum `IS_SOME (FLOOKUP env.bare_global_assignable _)`
-    (qx_choose_then `ity` mp_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
-  qpat_assum `env.bare_global_assignable = art.cta_bare_global_assignable`
-    (PURE_REWRITE_TAC o single) >>
-  qpat_assum `art.cta_bare_global_assignable = _` (PURE_REWRITE_TAC o single) >>
-  strip_tac >>
-  drule_then assume_tac (cj 1 check_contract_artifact_fields) >>
-  drule_all_then
-    (qx_choosel_then [`itops`,`ivis`,`id_str`,`init`] (map_every assume_tac o CONJUNCTS))
-    build_contract_type_artifact_bare_global_assignable_sound >>
-  qpat_x_assum `key1 = id_str` SUBST_ALL_TAC >>
-  qpat_assum `!isrc itops ivis id ty slot. _ ==> IS_SOME _`
-    (qspecl_then [`key0`,`itops`,`ivis`,`id_str`,`ity`,`init`] mp_tac) >>
-  qpat_assum `!key. _ ==> mods = [(NONE,tops)] \/ _`
-    (qspec_then `(key0,id_str)` mp_tac) >> simp[]
+  qpat_x_assum `!key. MEM (WriteAcc (StateRef key)) _ /\ IS_SOME _ ==> IS_SOME _`
+    (qspec_then `key` mp_tac) >> asm_rewrite_tac[] >> simp[]
 QED

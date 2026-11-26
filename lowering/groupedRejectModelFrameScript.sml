@@ -132,7 +132,8 @@ Resume row22_model_source[source_frame]:
      (initial_evaluation_context am.sources am.layouts tx' NONE)
      (artifact_env art [(NONE,tops)] NONE) es` by
     (irule external_source_body_const_cells_checked >>
-     asm_rewrite_tac[] >> qexistsl_tac [`rp`,`unit`] >> first_assum ACCEPT_TAC) >>
+     simp[vyperTypeContractTheory.artifact_env_def] >>
+     qexistsl_tac [`rp`,`unit`] >> first_assum ACCEPT_TAC) >>
   fs[]
 QED
 
