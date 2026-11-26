@@ -15,7 +15,9 @@ they should. Four theorems state this for a single-module contract:
   ([`vyper_call_correct_deployed`](#thm-e2eDeployed-vyper_call_correct_deployed)):
   a later call to that contract, with any calldata, either gives the
   result the source semantics gives or stops by starvation (below), when
-  the call's own hypotheses hold.
+  the call's own hypotheses hold; and, when it is the only frame running
+  and the contract isn't scheduled for deletion, the contract is still
+  deployed for the next call.
 - **Gas sufficiency for deployment and for calls**
   ([`e2e_deploy_gas_sufficient`](#thm-e2eGasSufficientTop-e2e_deploy_gas_sufficient),
   [`vyper_call_gas_sufficient_deployed`](#thm-e2eDeployed-vyper_call_gas_sufficient_deployed)):
@@ -139,12 +141,9 @@ or:
 
 `deployed` is exactly what the call theorems assume about the installed
 contract, so the two compose: the call theorems apply to each later call
-whose own hypotheses (below) hold. The repository's
-`call_preserves_deployed` shows that a call satisfying the call
-theorem's typing and entry hypotheses keeps `deployed` for the source
-state after the call when the runtime code is nonempty, the call is the
-only frame running, and the contract is not scheduled for deletion. That
-state
+whose own hypotheses (below) hold, and the call correctness theorem
+concludes that the contract stays deployed for the call after it. The
+deployment's next source state
 ([`next_source_machine`](#def-e2eDefs-next_source_machine))
 is the source's result with the EVM run's accounts after deletions, and
 with transient storage, logs and pending deletions cleared.
@@ -175,6 +174,16 @@ and either the frame is starved, or
     fail in any way), and so does a revert passed on from a called contract; any
     other runtime error of the source (an overflow, an index out of bounds)
     makes the frame fail. The revert data itself is not compared.
+
+Whether or not the frame starved, when the call is the only frame running
+and the contract is not scheduled for deletion afterwards, the contract is
+still `deployed` in the world the call leaves
+([`transaction_world`](#def-e2eTransactionWorld-transaction_world)):
+after a successful call, the state before it with the EVM run's accounts
+after deletions and with transient storage, logs and pending deletions
+cleared; after a failed one, the state before the call. So the call
+theorems apply again to the next call, whose own hypotheses, the storage
+hypothesis included, still have to hold.
 
 <!-- dossier: thm-e2eDeployed-vyper_call_correct_deployed -->
 

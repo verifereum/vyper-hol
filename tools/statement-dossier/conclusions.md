@@ -60,6 +60,19 @@ Or the run gives the source's result: if the calldata selects no function,
 the frame reverts with empty return data; otherwise the result matches the
 source run of the selected function on the decoded arguments.
 
+## LENGTH
+
+Whatever the result, when the call is the only frame running,
+
+## IN
+
+and the contract is not scheduled for deletion after the run,
+
+## deployed
+
+the contract is still deployed in the world the call leaves: the EVM's
+accounts after a successful call, the world before it after a failed one.
+
 # e2e_deploy_gas_sufficient
 
 ## g

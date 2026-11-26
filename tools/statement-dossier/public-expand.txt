@@ -18,3 +18,4 @@ vyperTypeContractSoundness$call_tx_well_typed
 vyperTypeInitialState$machine_well_typed
 ctorDeployDefs$deploy_source_exempt
 vyperCalldata$calldata_dispatch
+e2eTransactionWorld$transaction_world
