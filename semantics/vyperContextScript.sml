@@ -27,6 +27,8 @@ val () = List.app cv_rep_delete
    "vfmRoot.cv_get_byte'_thm",
    "vfmRoot.cv_byte_index'_thm"];
 
+val () = cv_from_to_delete "vfmCompute.from_bool_to_bool_itself_thm";
+
 (* Environment and context for a contract call *)
 
 (* external environment (tx, msg, block) *)
