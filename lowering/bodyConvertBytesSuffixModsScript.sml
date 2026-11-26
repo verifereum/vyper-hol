@@ -29,7 +29,7 @@ Proof
       >- (irule gas_outcome_full_mods_pure >> simp[] >>
           qexistsl_tac [`Gf`,`mid`,`INL (Value vout)`,`q`,`tnf`] >> simp[]) >>
       irule gas_outcome_full_mods_exit_revert >> simp[] >>
-      qexistsl_tac [`Gf`,`mid`,`Abort Revert_abort q`,`INR (Error (RuntimeError msg))`,`tnf`] >>
+      qexistsl_tac [`Gf`,`mid`,`INR (Error (RuntimeError msg))`,`tnf`,`q`] >>
       simp[exit_result_def,expr_exit_def,halt_exit_not_halt]) >>
   irule gas_outcome_full_mods_bad_nil >> simp[]
 QED
