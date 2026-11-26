@@ -12,6 +12,7 @@ Theorem selfdestruct_static_outcome_mods:
     ~s.vs_halted /\
     (!tail. source (es with gas_obs := tail) = (res,ee with gas_obs := tail)) /\
     exit_result r /\
+    create_size_exit_ok ctx res r /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
          (s,G,tn) [] (r,G',tn') /\
@@ -21,7 +22,10 @@ Theorem selfdestruct_static_outcome_mods:
 Proof
   rpt gen_tac >> strip_tac >>
   irule gas_outcome_full_mods_exit >>
-  conj_tac
-  >- (qexistsl_tac [`G'`,`ee`,`r`,`res`,`tn'`] >> metis_tac[])
-  >- first_assum ACCEPT_TAC
+  (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`G'`,`ee`,`r`,`res`,`tn'`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+  qx_gen_tac `H` >> strip_tac >>
+  first_x_assum (qspec_then `H` mp_tac) >> simp[]
 QED
