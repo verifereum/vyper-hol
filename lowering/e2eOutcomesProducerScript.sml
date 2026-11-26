@@ -2,10 +2,11 @@ Theory e2eOutcomesProducer
 Ancestors
   e2eRequestCutDefs e2eDefs e2eComposition e2eOutcomesGuard
 
+val _ = Parse.hide "tops";
+
 Theorem closed_world_call_outcomes_ok:
   !fin policy tops runtime_bc am tx ret es H.
     vyper_call_staging fin policy tops runtime_bc am tx ret es /\
-    s1_request_prefix tops /\
     vyper_closed_world fin policy tops runtime_bc am tx H es ==>
     ?r es'.
       run_call es = SOME (r, es') /\

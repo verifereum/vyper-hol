@@ -71,7 +71,7 @@ Proof
   simp[LIST_REL_MAP1, LIST_REL_MAP2, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
 QED
 
-Theorem grouped_default_passing_execution:
+val passing_input = ``
   lower_vyper_runtime_unit tops rp = SOME unit /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
@@ -131,13 +131,10 @@ Theorem grouped_default_passing_execution:
   (!D e. gas_origin_ptr_path (D,0,e,^pctx,fn,[]) (^pentry,FEMPTY,entry_taint) [] (OK s,G,tn)) /\
   s.vs_gas_readings = vs.vs_gas_readings /\ s.vs_call_ctx.cc_calldata = vs.vs_call_ctx.cc_calldata /\
   (ctx_has_dalloca ^pctx ==>
-    !f inst u. raw_reachable vs ^pctx f inst u ==> dalloca_fmp_headroom inst u) ==>
-  (?marks. source_unit_execution_correct_with ^psh marks tops ret am tx unit vs /\
-    ((?tail. call_storage_ok am tx vs.vs_outcomes (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
-     !tail. FST (call_external (SOME vs.vs_outcomes)
-       (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
-       INR (Error (RuntimeError "msg.gas: no gas reading")))) \/
-  (?slots last t J tz marks values ee u Gu tu.
+    !f inst u. raw_reachable vs ^pctx f inst u ==> dalloca_fmp_headroom inst u)``;
+
+val passing_normal = ``
+  ?slots last t J tz marks values ee u Gu tu.
     ALL_DISTINCT (MAP FST slots) /\ MAP (\(_,_,_,tv). tv) slots = DROP ^ppos tvs /\
     LIST_REL (\(name,op,ty,e) (id,q,base,tv).
       op = Var q /\ type_memory_bytes ^pce ty = type_memory_size tv /\
@@ -173,7 +170,31 @@ Theorem grouped_default_passing_execution:
       ghost_inv_at (cx_dead H ^pcx) 0 NONE ^pce0 ^pcx (ee with gas_obs := []) Gu tu u /\
       (ee with gas_obs := []).scopes = es.scopes /\ alloca_history fn u /\
       (ctx_has_dalloca ^pctx ==> allocas_below_fmp u) /\
-      ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts))
+      ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts)``;
+
+val passing_readings = ``
+  (?tail. call_storage_ok am tx vs.vs_outcomes (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+  !tail. FST (call_external (SOME vs.vs_outcomes)
+    (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+    INR (Error (RuntimeError "msg.gas: no gas reading"))``;
+
+Theorem grouped_default_passing_execution_trace:
+  ^passing_input ==>
+  (?marks. source_unit_execution_correct_with ^psh marks tops ret am tx unit vs /\
+    ^passing_readings /\
+    (!tail res am' rqs obs.
+      call_external_trace (SOME vs.vs_outcomes)
+        (gas_explicit marks vs.vs_gas_readings ++ tail) am tx = (res,am',rqs,obs) ==>
+      obs = []) /\
+    (marks = [] \/ ?f (H : (bool # bytes32 # type_value) list # num list).
+      venomInst$lookup_function "__entry" (^pctx).ctx_functions = SOME f /\
+      ((?r J tz.
+        gas_origin_ptr_path (cx_dead H ^pcx,0,^pexp,^pctx,f,[])
+          (^pentry,FEMPTY,entry_taint) marks (r,J,tz)) \/
+       (?leaf leaf_pg leaf_g leaf_tn finish.
+        gas_origin_ptr_focus (cx_dead H ^pcx,0,^pexp,^pctx,f,[])
+          (^pentry,FEMPTY,entry_taint) marks (leaf,leaf_pg,leaf_g,leaf_tn,finish))))) \/
+  ^passing_normal
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all grouped_default_supplied_cut >>
@@ -232,7 +253,7 @@ Proof
   suspend "omitted_suffix"
 QED
 
-Resume grouped_default_passing_execution[omitted_suffix]:
+Resume grouped_default_passing_execution_trace[omitted_suffix]:
   `body_const_cells_agree [(NONE,tops)] ^pcx ^penv es` by
     (`env_context_consistent ^penv ^pcx` by
        fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def] >>
@@ -281,7 +302,7 @@ Resume grouped_default_passing_execution[omitted_suffix]:
   suspend "exception"
 QED
 
-Resume grouped_default_passing_execution[normal]:
+Resume grouped_default_passing_execution_trace[normal]:
   qmatch_asmsub_rename_tac `INL values : value list + exception` >>
   qpat_x_assum `(?r U V. !H. _) \/ _`
     (qx_choosel_then [`r`,`Gu`,`tu`] assume_tac o
@@ -300,7 +321,7 @@ Resume grouped_default_passing_execution[normal]:
   gvs[sumTheory.sum_distinct]
 QED
 
-Resume grouped_default_passing_execution[exception]:
+Resume grouped_default_passing_execution_trace[exception]:
   qmatch_asmsub_rename_tac `INR ex : value list + exception` >>
   disj1_tac >> qexists_tac `marks` >>
   `!H. valid_horizon ^pcx ^pst H es.storage_trace ==>
@@ -318,14 +339,34 @@ Resume grouped_default_passing_execution[exception]:
        valid_horizon ^pcx ^pst H es.storage_trace /\
        gas_origin_ptr_focus (cx_dead H ^pcx,0,^pexp,^pctx,fn,[])
          (t,J,tz) marks (leaf,leaf_pg,leaf_g,leaf_tn,finish))` suffices_by
-    (disch_tac >> irule (SIMP_RULE bool_ss [] (Q.INST [`cx` |-> `^pcx`]
+    (disch_tac >>
+     qsuff_tac `(!tail res am' rqs obs.
+         call_external_trace (SOME vs.vs_outcomes)
+           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx = (res,am',rqs,obs) ==>
+         obs = es.storage_trace) /\
+       (?(H : (bool # bytes32 # type_value) list # num list).
+         (?r J tz. gas_origin_ptr_path (cx_dead H ^pcx,0,^pexp,^pctx,fn,[])
+           (^pentry,FEMPTY,entry_taint) marks (r,J,tz)) \/
+         (?leaf pg lg ltn finish. gas_origin_ptr_focus
+           (cx_dead H ^pcx,0,^pexp,^pctx,fn,[])
+           (^pentry,FEMPTY,entry_taint) marks (leaf,pg,lg,ltn,finish))) /\
+       source_unit_execution_correct_with ^psh marks tops ret am tx unit vs /\
+       ^passing_readings`
+     >- (disch_then (map_every assume_tac o CONJUNCTS) >>
+         asm_rewrite_tac[] >> conj_tac
+         >- (rpt gen_tac >> strip_tac >>
+             qpat_assum `!tail res am' rqs obs. _ ==> obs = es.storage_trace`
+               (drule_then SUBST1_TAC) >> fs[initial_state_def]) >>
+         disj2_tac >>
+         qpat_assum `?H. _ \/ _` (qx_choose_then `H` assume_tac) >>
+         qexistsl_tac [`fn`,`H`] >> asm_rewrite_tac[]) >>
+     irule (SIMP_RULE bool_ss [] (Q.INST [`cx` |-> `^pcx`]
        (SPEC_ALL grouped_default_exception_result))) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
      qpat_assum `vyperInterpreter$lookup_function NONE tx.function_name External tops = _`
        (irule_at Any) >>
      qpat_assum `lookup_block "__entry" fn.fn_blocks = SOME bb` (irule_at Any) >>
      qpat_assum `gas_shadow_function fn shfn` (irule_at Any) >>
-     qexistsl_tac [`tz`,`t`,`ex`,`es`,`ee`,`J`] >>
+     qexistsl_tac [`tz`,`t`,`ex`,`ee`,`J`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `(?r U V. !H. _) \/ _` (DISJ_CASES_THEN2
     (qx_choosel_then [`r`,`Gu`,`tu`] assume_tac)
@@ -344,4 +385,6 @@ Resume grouped_default_passing_execution[exception]:
   disj2_tac >> metis_tac[]
 QED
 
-Finalise grouped_default_passing_execution
+Finalise grouped_default_passing_execution_trace[local]
+
+Theorem grouped_default_passing_execution = grouped_default_passing_execution_trace

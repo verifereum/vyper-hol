@@ -10,7 +10,6 @@ val _ = Parse.hide "body";
 Theorem body_sim_prefix_mutual:
   (!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -19,7 +18,6 @@ Theorem body_sim_prefix_mutual:
     body_stmt_prefix_ok cx s) /\
   (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -28,7 +26,6 @@ Theorem body_sim_prefix_mutual:
     body_stmts_prefix_ok cx ss) /\
   (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -36,7 +33,6 @@ Theorem body_sim_prefix_mutual:
     body_iterator_prefix_ok cx it) /\
   (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -45,7 +41,6 @@ Theorem body_sim_prefix_mutual:
     body_for_prefix_ok cx tyv nm body vs) /\
   (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -53,7 +48,6 @@ Theorem body_sim_prefix_mutual:
     body_expr_prefix_ok cx e) /\
   (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -61,7 +55,6 @@ Theorem body_sim_prefix_mutual:
     body_exprs_prefix_ok cx es) /\
   (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -69,7 +62,6 @@ Theorem body_sim_prefix_mutual:
     body_base_target_prefix_ok cx t) /\
   (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -77,7 +69,6 @@ Theorem body_sim_prefix_mutual:
     body_tuple_target_prefix_ok cx g v) /\
   (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
-                 ~supportedProgram$internal_defaults_msg_gas tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
                     stmts_loop_calls_ok [(NONE,tops)]
@@ -96,7 +87,6 @@ QED
 Theorem body_stmts_sim_prefix:
   !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
    ret_ty lctx RetQ ss es.
-    ~supportedProgram$internal_defaults_msg_gas tops /\
     body_inv tops ctx cenv cx /\
     shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
     supported_stmts tops bindings ss /\

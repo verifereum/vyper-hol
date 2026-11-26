@@ -6,7 +6,7 @@ Ancestors
   nonreentrantEquiv list
 
 (* The successful lock adds no request and at most one lock observation. *)
-Theorem intcall_callee_lock_request_frame[local]:
+Theorem intcall_callee_lock_request_frame:
   lock_if_nr cx nr view es = (INL (),locked) ==>
   locked.requests = es.requests /\
   (?key. locked.storage_trace =

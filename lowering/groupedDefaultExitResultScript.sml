@@ -25,7 +25,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem grouped_default_exception_result:
+val exception_input = ``
   source_deployment_rel tops am tx /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,dflts,ret,fbody) /\
@@ -64,7 +64,25 @@ Theorem grouped_default_exception_result:
       valid_horizon cx (initial_state am []) H es.storage_trace /\
       gas_origin_ptr_focus
         (cx_dead H cx,0,gas_explicit_sites unit.cu_context shadow_ctx,unit.cu_context,fn,[])
-        (s,G,tn) marks (leaf,leaf_pg,leaf_g,leaf_tn,finish))) ==>
+        (s,G,tn) marks (leaf,leaf_pg,leaf_g,leaf_tn,finish)))``;
+
+Theorem grouped_default_exception_result_trace:
+  ^exception_input ==>
+  (!tail res am' rqs obs.
+     call_external_trace (SOME vs.vs_outcomes)
+       (gas_explicit marks vs.vs_gas_readings ++ tail) am tx = (res,am',rqs,obs) ==>
+     obs = ee.storage_trace) /\
+  (?(H : (bool # bytes32 # type_value) list # num list).
+     (?r J tz.
+       gas_origin_ptr_path
+         (cx_dead H cx,0,gas_explicit_sites unit.cu_context shadow_ctx,unit.cu_context,fn,[])
+         (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+          FEMPTY,entry_taint) marks (r,J,tz)) \/
+     (?leaf leaf_pg leaf_g leaf_tn finish.
+       gas_origin_ptr_focus
+         (cx_dead H cx,0,gas_explicit_sites unit.cu_context shadow_ctx,unit.cu_context,fn,[])
+         (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+          FEMPTY,entry_taint) marks (leaf,leaf_pg,leaf_g,leaf_tn,finish))) /\
   source_unit_execution_correct_with shadow_ctx marks tops ret am tx unit vs /\
   ((?tail. call_storage_ok am tx vs.vs_outcomes
      (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
@@ -83,19 +101,41 @@ Proof
          rpt strip_tac >> Cases_on `r` >> gvs[expr_exit_def]) >>
      simp[]) >>
   drule_all grouped_default_initializer_exception_trace >> strip_tac >>
+  conj_tac >- simp[] >>
   drule grouped_default_readings_not_missing >>
   disch_then (assume_tac o REWRITE_RULE [sumTheory.INR_11]) >>
-  reverse conj_tac
-  >- (strip_tac >> qx_gen_tac `unread` >>
-      qpat_assum `!tail. call_external_trace _ _ _ _ = _`
-        (qspec_then `unread` (strip_assume_tac o MATCH_MP call_external_trace_result)) >>
-      asm_rewrite_tac[pairTheory.FST, sumTheory.INR_11]) >>
+  `(?tail. call_storage_ok am tx vs.vs_outcomes
+      (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+    !tail. FST (call_external (SOME vs.vs_outcomes)
+      (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+        INR (Error (RuntimeError "msg.gas: no gas reading"))` by
+    (strip_tac >> qx_gen_tac `unread` >>
+     qpat_assum `!tail. call_external_trace _ _ _ _ = _`
+       (qspec_then `unread` (strip_assume_tac o MATCH_MP call_external_trace_result)) >>
+     asm_rewrite_tac[pairTheory.FST, sumTheory.INR_11]) >>
+  asm_rewrite_tac[] >>
   qpat_x_assum `(?r J tz. _) \/ _` strip_assume_tac
   >- suspend "matched" >>
   suspend "exempt"
 QED
 
-Resume grouped_default_exception_result[matched]:
+Resume grouped_default_exception_result_trace[matched]:
+  `!H. valid_horizon cx (initial_state am []) H ee.storage_trace ==>
+       gas_origin_ptr_path
+         (cx_dead H cx,0,gas_explicit_sites unit.cu_context shadow_ctx,unit.cu_context,fn,[])
+         (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+          FEMPTY,entry_taint) marks (r,J,tz)` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx (initial_state am []) H es.storage_trace` by metis_tac[] >>
+     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _ /\ _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> gas_origin_ptr_path _ _ [] _`
+       (drule_then assume_tac) >>
+     metis_tac[gas_origin_ptr_path_append, listTheory.APPEND]) >>
+  conj_tac
+  >- (qexists_tac `storage_trace_horizon es.storage_trace` >>
+      disj1_tac >> qexistsl_tac [`r`,`J`,`tz`] >>
+      metis_tac[storage_trace_domain_def]) >>
   `create_size_exit_ok unit.cu_context (INR ex : value + exception) r` by
     fs[createSizeExitTheory.create_size_exit_ok_inr] >>
   qsuff_tac `source_unit_execution_correct_with shadow_ctx marks tops ret am tx unit vs /\
@@ -119,24 +159,34 @@ Resume grouped_default_exception_result[matched]:
   conj_tac >- (irule grouped_default_exit_rel >> metis_tac[]) >>
   qexistsl_tac [`J`,`tz`] >>
   qpat_assum `cx = _` (fn th => pure_rewrite_tac [SYM th]) >>
-  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> gas_origin_ptr_path _ _ [] _`
-    (drule_then assume_tac) >>
-  metis_tac[gas_origin_ptr_path_append, listTheory.APPEND]
+  simp[]
 QED
 
-Resume grouped_default_exception_result[exempt]:
+Resume grouped_default_exception_result_trace[exempt]:
   qpat_x_assum `cx = _` SUBST_ALL_TAC >>
+  qmatch_asmsub_rename_tac `gas_origin_ptr_focus _ _ _ (_,_,_,_,u_end)` >>
+  `gas_origin_ptr_focus
+     (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
+      0,gas_explicit_sites unit.cu_context shadow_ctx,unit.cu_context,fn,[])
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
+      FEMPTY,entry_taint) marks (leaf,leaf_pg,leaf_g,leaf_tn,u_end)` by
+    (irule (SIMP_RULE (srw_ss()) [listTheory.APPEND]
+       (Q.INST [`left` |-> `[]`] (SPEC_ALL (cj 2 gas_origin_ptr_focus_rules)))) >>
+     metis_tac[]) >>
+  conj_tac
+  >- (qexists_tac `H` >> disj2_tac >>
+      qexistsl_tac [`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`u_end`] >>
+      first_assum ACCEPT_TAC) >>
   PURE_REWRITE_TAC [source_unit_execution_correct_with_def] >>
   qexistsl_tac [`fn`,`shadow_fn`] >> asm_rewrite_tac[] >>
   conj_tac >- metis_tac[lookup_function_MEM] >>
   disj2_tac >>
   qexistsl_tac [`INR (Error err)`,`am`,`ee.requests`,`ee.storage_trace`] >>
   fs[] >> disj1_tac >> simp[source_exempt_def] >>
-  qmatch_asmsub_rename_tac `gas_origin_ptr_focus _ _ _ (_,_,_,_,u_end)` >>
   qexistsl_tac [`H`,`leaf`,`leaf_pg`,`leaf_g`,`leaf_tn`,`u_end`] >>
-  irule (SIMP_RULE (srw_ss()) [listTheory.APPEND]
-    (Q.INST [`left` |-> `[]`] (SPEC_ALL (cj 2 gas_origin_ptr_focus_rules)))) >>
-  metis_tac[]
+  first_assum ACCEPT_TAC
 QED
 
-Finalise grouped_default_exception_result
+Finalise grouped_default_exception_result_trace[local]
+
+Theorem grouped_default_exception_result = grouped_default_exception_result_trace

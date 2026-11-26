@@ -50,6 +50,22 @@ Proof
      disch_then (qx_choosel_then [`envb`,`tvs`] (map_every assume_tac o CONJUNCTS)) >>
      qexistsl_tac [`envb`,`tvs`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      qpat_assum `_ = 4 + SUM _` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
+  `(?es. runtime_body_endpoint tops rpolicy unit am tx vs es mut F args [] ret
+       (subst_consts_stmts (module_consts_env tops []) fbody)) \/
+   (?marks. source_unit_execution_correct_with shadow_unit.cu_context marks
+       tops ret am tx unit vs /\
+     ((?tail. call_storage_ok am tx vs.vs_outcomes
+       (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+      !tail. FST (call_external (SOME vs.vs_outcomes)
+       (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+         INR (Error (RuntimeError "msg.gas: no gas reading"))) /\
+     (!tail res am' rqs obs.
+       call_external_trace (SOME vs.vs_outcomes)
+         (gas_explicit marks vs.vs_gas_readings ++ tail) am tx = (res,am',rqs,obs) ==>
+       obs = []) /\ marks = [])` suffices_by
+    (strip_tac
+     >- (disj1_tac >> qexists_tac `es` >> first_assum ACCEPT_TAC) >>
+     disj2_tac >> qexists_tac `marks` >> asm_rewrite_tac[]) >>
   irule grouped_legacy_checked_route >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- (qexists_tac `envb` >> first_assum ACCEPT_TAC)

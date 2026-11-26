@@ -40,9 +40,12 @@ Theorem grouped_selected_default_value_rejection:
   send_call_value mut (initial_evaluation_context am.sources am.layouts tx NONE)
     (initial_state am [FEMPTY] with <|outcomes := SOME vs.vs_outcomes; requests := []|>) =
     (INR e,ev) ==>
-  source_unit_execution_correct_with shadow_ctx [] tops ret am tx unit vs /\
-  !tail. FST (call_external (SOME vs.vs_outcomes) tail am tx) <>
-    INR (Error (RuntimeError "msg.gas: no gas reading"))
+  (source_unit_execution_correct_with shadow_ctx [] tops ret am tx unit vs /\
+   !tail. FST (call_external (SOME vs.vs_outcomes) tail am tx) <>
+     INR (Error (RuntimeError "msg.gas: no gas reading"))) /\
+  !tail res am' rqs obs.
+    call_external_trace (SOME vs.vs_outcomes) tail am tx = (res,am',rqs,obs) ==>
+    obs = []
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `s = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
