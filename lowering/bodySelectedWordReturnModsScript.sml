@@ -9,6 +9,7 @@ Ancestors
   venomExecSemantics vyperState list rich_list pair fragExec bodyFullShadowBodyInv
   vyperInterpreter vyperStorageFootprint bodyPtrDefs gasOutcome gasContext gasExplicitSites
   gasOutcomeFullMods gasOutcomeFull exprSimDefs gasShadow gasShadowCompileBase
+  bodySelectedForcedReturnMods
 Libs
   monadsyntax
 
@@ -126,13 +127,22 @@ Theorem word_return_immutable_frame[local]:
   immutable_frame_mods func cenv cx (ee with <|scopes := []; gas_obs := tail|>)
     (return_unlock_state cenv s)
 Proof
+  `(return_unlock_state cenv s).vs_memory = s.vs_memory /\
+   (return_unlock_state cenv s).vs_data_section = s.vs_data_section /\
+   (return_unlock_state cenv s).vs_allocas = s.vs_allocas /\
+   (return_unlock_state cenv s).vs_alloca_next = s.vs_alloca_next` by
+    (qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
+     Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
+     gvs[return_unlock_state_def, tstore_def, sstore_def]) >>
   simp[immutable_frame_mods_def, immutables_rel_mods_def,
        immutable_alloca_sep_mods_def, immutables_rel_def,
-       immutable_alloca_sep_def, immutable_decl_sep_def, local_region_def] >>
-  qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
-  Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
-  gvs[return_unlock_state_def, tstore_def, sstore_def, lookup_scopes_def] >>
-  metis_tac[]
+       immutable_alloca_sep_def, immutable_decl_sep_def, local_region_def,
+       lookup_scopes_def] >>
+  strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!src tops. ALOOKUP _ src = SOME tops ==> _ /\ _`
+    (drule_then strip_assume_tac) >>
+  Cases_on `cenv.ce_is_ctor` >> fs[] >> metis_tac[]
 QED
 
 val selected_unlock_taint =
@@ -269,4 +279,46 @@ Proof
      disch_then (qspecl_then [`sa`,`sha`] mp_tac) >> simp[]) >>
   qpat_x_assum `op = shadow_op` SUBST_ALL_TAC >>
   qexistsl_tac [`shadow_op`,`sm`,`shm`] >> simp[]
+QED
+
+Theorem selected_word_return_frag_mods:
+  ^selected_unlock_taint /\
+  cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+  cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
+  ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+    ~cx.txn.is_static /\ FST (SND (SND cenv.ce_nonreentrant))) /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  IS_SOME (type_stmt env ty (Return (SOME e))) /\
+  expr_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es ==>
+  stmt_frag_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx lctx
+    (\H v ee gt r. intret_q H func cenv cx tv v ee r /\
+      !ir u. r = IntRet ir u ==>
+        immutable_frame_mods func cenv cx (ee with scopes := []) u /\
+        stor_taint_ok_at (DF H) (SND gt) u /\
+        (!i. i < lo /\ i IN (SND gt).t_mem ==>
+          imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i))
+    cenv (stmt_env cenv lctx ty (Return (SOME e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
+    (eval_stmt cx (Return (SOME e))) es
+Proof
+  strip_tac >>
+  irule (SIMP_RULE bool_ss [LET_THM] selected_forced_return_frag_mods) >>
+  reverse conj_tac >- simp[] >>
+  qexists `\sa sb sha shb op sm shm.
+    ?su. compile_return_unlock cenv sm = ((),su) /\
+         emit_inst RET [op; Var rpc] [] su = ((),sb) /\
+         fn_has_code sm su func /\ fn_has_code su sb func` >>
+  simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> drule_all word_return_paired_cut >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  irule word_return_reached_suffix >>
+  qpat_assum `emit_inst RET _ [] _ = _` (irule_at Any) >>
+  qpat_assum `ret_pc_ok cenv sa s0` (irule_at Any) >>
+  qpat_assum `IS_SOME (type_stmt env ty (Return (SOME e)))` (irule_at Any) >>
+  qpat_assum `compile_return_unlock cenv sm = _` (irule_at Any) >>
+  qpat_assum `cenv.ce_return_pc = SOME (PtrVar (Var rpc) _)` (irule_at Any) >>
+  qexistsl_tac [`es`,`d`] >> asm_rewrite_tac[] >>
+  rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (drule_then strip_assume_tac) >> simp[]
 QED
