@@ -319,8 +319,6 @@ Theorem word_not_value_sim_mods:
   expr_body_pre_mods mods cenv cx env (Builtin (expr_type e) Not [e]) es /\
   expr_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx (expr_type e) e es /\
-  (!sa. ?a x s1. compile_expr cenv (expr_type e) e sa = (StackValue a x,s1)) /\
-  (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) /\
   is_word_type (expr_type e) /\ body_expr_full_ok_mods mods exps cx e ==>
   expr_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Builtin (expr_type e) Not [e]) es
