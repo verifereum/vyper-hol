@@ -2,8 +2,8 @@
 Theory bodyForArrayFragMods
 Ancestors
   bodyForArrayCodeCutsMods bodyForArrayExprRunMods bodyForArrayCaptureInstallMods
-  bodyForArrayRoundDriverMods bodyForArrayRouteMods bodyForArrayHeaderMods
-  bodyForArrayEntryMods vyperStorageFootprint
+  bodyForArrayOriginRoundsMods bodyForArrayRouteMods bodyForArraySelectedPacketMods
+  bodyForArrayHeaderMods
   bodyForRangeHeaderMods bodyFullForFacts bodyFullForArrayRound bodyFullPostsMods
   gasOutcomeFullPostMods bodyInvCodeProps bodyInvExecutionProps exprBodyPreProps option
   loweringPosts stmtLowering compileEnv gasShadow vyperTypeSystem vyperTypeEvalCaseProofs
@@ -102,8 +102,8 @@ Resume compile_for_array_frag_full_mods[route]:
   qabbrev_tac `P = \H (res:eval_result + exception) ee G tn t.
     for_array_expr_landed_mods (DF,lo,d,ctx,func) mods cx cenv env e vv sbExpr
       (es,sa,s0,G0,tn0) H (OUTL res) ee G tn t` >>
-  qabbrev_tac `Entry = for_array_entry_mods mods (DF,lo,d,ctx,func,shadow_func) cx env st0
-    (es,sa,s0,G0,tn0)
+  qabbrev_tac `Entry = for_array_selected_entry_mods mods exps cx env st0 tyv id body
+    (DF,lo,d,ctx,func,shadow_func) (es,sa,s0,G0,tn0)
     ((cenv,id,typ,e,typ,bd,ret_ty,body),
      (vv,sbExpr,shadow_sa,shadow_sbExpr,loc,len_op,saL),
      (bc,saD,saA,xd,capacity,aidItem),
@@ -133,12 +133,11 @@ QED
 
 Resume compile_for_array_frag_full_mods[install]:
   simp[NoAsms,Abbr `P`,Abbr `Entry`] >> rpt gen_tac >> strip_tac >>
-  irule for_array_capture_install_mods >>
+  irule for_array_origin_capture_install_mods >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (qexists_tac `gas_explicit marks s0.vs_gas_readings` >> first_assum ACCEPT_TAC) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >- (qexists_tac `env'` >> first_assum ACCEPT_TAC) >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac >- (qexists_tac `exps` >> first_assum ACCEPT_TAC) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -146,15 +145,14 @@ Resume compile_for_array_frag_full_mods[rounds]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `Abbrev (Entry = _)`
     (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  `~u.vs_halted` by
-    (drule_all_then strip_assume_tac for_array_entry_extract_mods >>
-     `valid_horizon cx st0 (storage_trace_horizon em.storage_trace) em.storage_trace` by
-       fs[storage_trace_domain_def] >>
-     PairCases_on `saved` >>
-     qpat_assum `!K. valid_horizon _ _ K _ ==> for_array_entry_header_mods _ _ _ _ _ _ _ _ K _ _ _ _ _ _`
-       (drule_then strip_assume_tac) >>
-     fs[for_array_entry_header_mods_def,for_array_header_mods_def]) >>
-  irule for_array_round_continuation_mods >> FAIL_TAC "rounds"
+  simp[NoAsms,Abbr `Done`,Abbr `Term`] >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
+    (qhdtm_assum `ret_pc_ok` (mp_tac o REWRITE_RULE [ret_pc_ok_def]) >> simp[]) >>
+  irule for_array_origin_rounds_mods >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  first_assum (part_match_exists_tac (fst o dest_conj) o concl) >>
+  qexistsl_tac [`bindings`,`env'`,`n`,`src`,`tops`] >>
+  pure_asm_rewrite_tac [AND_CLAUSES] >> FAIL_TAC "rounds cuts"
 QED
 
 Finalise compile_for_array_frag_full_mods
