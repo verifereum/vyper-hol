@@ -1,15 +1,15 @@
-(* Inputs that meet the syntactic premises of
- * function_inliner_pass_correct_stmt (inliner_shape_ok, inliner_input_guard
- * and the pointer conjunct of inliner_stage_inv) and whose inlined output
- * breaks the pointer conjunct of its conclusion, or splits a
- * revert-forwarding pair.
+(* Inputs whose inlined output breaks the pointer conjunct of
+ * function_inliner_pass_correct_stmt's conclusion, or splits a
+ * revert-forwarding pair. Each meets inliner_input_guard and the pointer
+ * conjunct of inliner_stage_inv, and fails inliner_shape_ok by the clause
+ * added for it. The last input meets all the syntactic premises.
  *
  * TOP-LEVEL:
  *   inliner_phi_cover_witness       -- a PHI missing a predecessor
  *   inliner_retpc_arity_witness     -- the return-PC slot binds a PARAM
  *   inliner_rdc_split_witness       -- the call site splits an RDC pair
  *   inliner_param_dalloca_name_witness -- PARAM and DALLOCA share a name
- *   inliner_two_root_arg_witness    -- a forwarded argument with two roots
+ *   inliner_two_root_arg_witness    -- a readonly argument with two roots
  *)
 Theory functionInlinerReviewWitness
 Ancestors
@@ -87,11 +87,14 @@ Theorem stage_ptr_ok_from_eval:
   EVERY (\fn. wf_function fn /\ fn_ptr_ok_check (ctx_ptr_param_list C) fn /\
               fn_ptr_ok_check (ctx_ptr_param_list C) (reachable_fn_eval fn))
     C.ctx_functions ==>
-  ?P. EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
-        C.ctx_functions /\ inline_ptr_ok P (reachable_ctx C)
+  ?P W. (!nm. W nm SUBSET P nm) /\
+        EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
+          C.ctx_functions /\ inline_ptr_ok P W (reachable_ctx C)
 Proof
-  strip_tac >> qexists_tac `\nm. set (ctx_ptr_param_list C nm)` >>
-  simp[inline_ptr_ok_check_sound] >>
+  strip_tac >>
+  qexistsl_tac [`\nm. set (ctx_ptr_param_list C nm)`,
+                `ctx_write_param_set C`] >>
+  simp[inline_ptr_ok_check_sound, ctx_write_param_set_subset] >>
   fs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
   drule reachable_fn_eval >> disch_then SUBST1_TAC >>
   qspecl_then [`ctx_ptr_param_list C`, `fn`] mp_tac fn_ptr_ok_check_sound >>
@@ -118,9 +121,47 @@ val shape_tac =
 val premises_tac =
   rpt conj_tac
   >- EVAL_TAC
-  >- shape_tac
   >- EVAL_TAC
   >> irule stage_ptr_ok_from_eval >> EVAL_TAC;
+
+(* The clauses of inliner_shape_ok that reject the review's inputs. *)
+Theorem shape_ok_phis_cover[local]:
+  inliner_shape_ok C ==>
+  EVERY fn_phis_cover_preds (reachable_ctx C).ctx_functions
+Proof
+  simp[inliner_shape_ok_def]
+QED
+
+Theorem shape_ok_retpc[local]:
+  inliner_shape_ok C /\ MEM caller (reachable_ctx C).ctx_functions /\
+  MEM inst (fn_insts caller) /\ MEM callee (reachable_ctx C).ctx_functions /\
+  inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label callee.fn_name :: args ==>
+  IS_SOME (fn_retpc_param callee)
+Proof
+  simp[inliner_shape_ok_def] >> metis_tac[]
+QED
+
+Theorem shape_ok_param_once[local]:
+  inliner_shape_ok C /\ MEM fn (reachable_ctx C).ctx_functions ==>
+  EVERY (\x. LENGTH (FILTER (\i. MEM x i.inst_outputs) (fn_insts fn)) = 1)
+    (FLAT (MAP (\i. i.inst_outputs)
+       (FILTER (\i. i.inst_opcode = PARAM) (fn_insts fn))))
+Proof
+  simp[inliner_shape_ok_def] >> strip_tac >>
+  qpat_x_assum `EVERY (\fn. canonical_param_prefix fn /\ _) _`
+    (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+  disch_then drule >> simp[EVERY_MEM]
+QED
+
+Theorem shape_ok_rfp[local]:
+  inliner_shape_ok C /\ MEM fn (reachable_ctx C).ctx_functions /\
+  MEM bb fn.fn_blocks /\ revert_forward_pair bb i j ==>
+  revert_forward_pair
+    (bb with bb_instructions := DROP i bb.bb_instructions) 0 (j - i)
+Proof
+  simp[inliner_shape_ok_def] >> metis_tac[]
+QED
 
 (* A pointer variable defined by copying a non-pointer. *)
 Theorem nonptr_copy_refutes_fn_ptr_ok:
@@ -181,19 +222,29 @@ Proof
   asm_simp_tac std_ss [] >> unabbrev_all_tac >> EVAL_TAC
 QED
 
+Theorem name_share_not_shape_ok[local]:
+  ~inliner_shape_ok name_share_ctx
+Proof
+  strip_tac >>
+  drule (Q.INST [`fn` |-> `EL 1 name_share_ctx.ctx_functions`]
+           shape_ok_param_once) >>
+  EVAL_TAC
+QED
+
 Theorem inliner_param_dalloca_name_witness:
   C = name_share_ctx /\ C' = function_inliner_ctx 0 C ==>
-  lowering_context_ok C /\ inliner_shape_ok C /\ inliner_input_guard C /\
-  (?P. EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
-         C.ctx_functions /\ inline_ptr_ok P (reachable_ctx C)) /\
+  lowering_context_ok C /\ ~inliner_shape_ok C /\ inliner_input_guard C /\
+  (?P W. (!nm. W nm SUBSET P nm) /\
+         EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
+           C.ctx_functions /\ inline_ptr_ok P W (reachable_ctx C)) /\
   !P. ~EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
          C'.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   `(function_inliner_ctx 0 name_share_ctx).ctx_functions =
      [HD (function_inliner_ctx 0 name_share_ctx).ctx_functions]` by EVAL_TAC >>
-  pop_assum SUBST1_TAC >> simp[name_share_out_not_ptr_ok] >>
-  premises_tac
+  pop_assum SUBST1_TAC >>
+  simp[name_share_out_not_ptr_ok, name_share_not_shape_ok] >> premises_tac
 QED
 
 (* ===== Finding 2: the return-PC slot binds a user PARAM ===== *)
@@ -250,18 +301,30 @@ Proof
   asm_simp_tac std_ss [] >> unabbrev_all_tac >> EVAL_TAC
 QED
 
+Theorem arity_not_shape_ok[local]:
+  ~inliner_shape_ok arity_ctx
+Proof
+  strip_tac >>
+  drule (Q.INST [`caller` |-> `HD arity_ctx.ctx_functions`,
+                 `inst` |-> `EL 1 (fn_insts (HD arity_ctx.ctx_functions))`,
+                 `callee` |-> `EL 1 arity_ctx.ctx_functions`,
+                 `args` |-> `[]`] shape_ok_retpc) >>
+  EVAL_TAC
+QED
+
 Theorem inliner_retpc_arity_witness:
   C = arity_ctx /\ C' = function_inliner_ctx 0 C ==>
-  lowering_context_ok C /\ inliner_shape_ok C /\ inliner_input_guard C /\
-  (?P. EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
-         C.ctx_functions /\ inline_ptr_ok P (reachable_ctx C)) /\
+  lowering_context_ok C /\ ~inliner_shape_ok C /\ inliner_input_guard C /\
+  (?P W. (!nm. W nm SUBSET P nm) /\
+         EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
+           C.ctx_functions /\ inline_ptr_ok P W (reachable_ctx C)) /\
   !P. ~EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
          C'.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   `(function_inliner_ctx 0 arity_ctx).ctx_functions =
      [HD (function_inliner_ctx 0 arity_ctx).ctx_functions]` by EVAL_TAC >>
-  pop_assum SUBST1_TAC >> simp[arity_out_not_ptr_ok] >>
+  pop_assum SUBST1_TAC >> simp[arity_out_not_ptr_ok, arity_not_shape_ok] >>
   premises_tac
 QED
 
@@ -302,45 +365,13 @@ Definition phi_cover_ctx_def:
       (SOME "entry")
 End
 
-Theorem entry_write_def_on_all_paths:
-  fn.fn_blocks = entry_bb :: rest /\ bb.bb_label <> entry_bb.bb_label /\
-  EXISTS (\i. MEM v i.inst_outputs) entry_bb.bb_instructions ==>
-  def_on_all_paths fn bb opt v
+Theorem phi_cover_not_shape_ok[local]:
+  ~inliner_shape_ok phi_cover_ctx
 Proof
-  rw[def_on_all_paths_def, EXISTS_MEM] >> disj1_tac >>
-  gvs[fn_entry_label_def, entry_block_def] >>
-  qexistsl_tac [`0`, `entry_bb`, `i`] >> simp[] >>
-  Cases_on `path` >> gvs[] >> Cases_on `t` >> gvs[]
-QED
-
-Theorem block_write_def_on_all_paths:
-  i < j /\ j < LENGTH bb.bb_instructions /\ EL j bb.bb_instructions = use /\
-  MEM v (EL i bb.bb_instructions).inst_outputs ==>
-  def_on_all_paths fn bb (SOME use) v
-Proof
-  rw[def_on_all_paths_def] >> disj2_tac >> qexists_tac `i` >> simp[] >>
-  qexists_tac `j` >> simp[]
-QED
-
-Theorem phi_cover_main_defs_reach[local]:
-  fn_defs_reach_uses (mk_raw_function "entry" phi_cover_blocks)
-Proof
-  qabbrev_tac `fn = mk_raw_function "entry" phi_cover_blocks` >>
-  `fn.fn_blocks = phi_cover_blocks` by simp[Abbr `fn`, mk_raw_function_def] >>
-  simp[fn_defs_reach_uses_def] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `MEM bb _` mp_tac >>
-  asm_simp_tac std_ss [phi_cover_blocks_def, witness_block_def, MEM] >>
-  strip_tac >> pop_assum SUBST_ALL_TAC >>
-  qpat_x_assum `MEM inst _` mp_tac >>
-  simp_tac (srw_ss()) [mk_inst_def] >>
-  strip_tac >> pop_assum SUBST_ALL_TAC >>
-  simp_tac (srw_ss()) [phi_pairs_def] >> rpt strip_tac >> gvs[]
-  >~ [`def_on_all_paths _ _ _ "w"`]
-  >- (irule block_write_def_on_all_paths >> qexistsl_tac [`0`, `1`] >>
-      simp[])
-  >> irule entry_write_def_on_all_paths >>
-  qexistsl_tac [`HD phi_cover_blocks`, `TL phi_cover_blocks`] >>
-  asm_simp_tac std_ss [] >> EVAL_TAC
+  strip_tac >> drule shape_ok_phis_cover >> strip_tac >>
+  `EVERY phis_cover_preds_check (reachable_ctx phi_cover_ctx).ctx_functions`
+    by fs[EVERY_MEM, phis_cover_preds_check_complete] >>
+  pop_assum mp_tac >> EVAL_TAC
 QED
 
 Theorem phi_cover_out_not_ptr_ok:
@@ -371,9 +402,10 @@ QED
 
 Theorem inliner_phi_cover_witness:
   C = phi_cover_ctx /\ C' = function_inliner_ctx 0 C ==>
-  ~lowering_context_ok C /\ inliner_shape_ok C /\ inliner_input_guard C /\
-  (?P. EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
-         C.ctx_functions /\ inline_ptr_ok P (reachable_ctx C)) /\
+  ~lowering_context_ok C /\ ~inliner_shape_ok C /\ inliner_input_guard C /\
+  (?P W. (!nm. W nm SUBSET P nm) /\
+         EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
+           C.ctx_functions /\ inline_ptr_ok P W (reachable_ctx C)) /\
   !P. ~EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
          C'.ctx_functions
 Proof
@@ -387,10 +419,7 @@ Proof
     EVAL_TAC >>
   rpt conj_tac
   >- EVAL_TAC
-  >- (irule inliner_shape_check_sound >> conj_tac
-      >- (asm_simp_tac std_ss [EVERY_DEF, phi_cover_main_defs_reach] >>
-          irule fn_defs_reach_uses_check_sound >> EVAL_TAC) >>
-      qexists_tac `witness_rank` >> EVAL_TAC)
+  >- ACCEPT_TAC phi_cover_not_shape_ok
   >- EVAL_TAC
   >> irule stage_ptr_ok_from_eval >> EVAL_TAC
 QED
@@ -430,16 +459,27 @@ Proof
   simp[revert_forward_pair_def] >> EVAL_TAC >> simp[]
 QED
 
+Theorem rdc_not_shape_ok[local]:
+  ~inliner_shape_ok rdc_split_ctx
+Proof
+  strip_tac >>
+  drule (Q.INST [`fn` |-> `HD rdc_split_ctx.ctx_functions`,
+                 `bb` |-> `HD (HD rdc_split_ctx.ctx_functions).fn_blocks`,
+                 `i` |-> `3`, `j` |-> `4`] shape_ok_rfp) >>
+  rewrite_tac[GSYM rfp_check_eq] >> EVAL_TAC
+QED
+
 Theorem inliner_rdc_split_witness:
   C = rdc_split_ctx /\ C' = function_inliner_ctx 0 C ==>
-  lowering_context_ok C /\ inliner_shape_ok C /\ inliner_input_guard C /\
-  (?P. EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
-         C.ctx_functions /\ inline_ptr_ok P (reachable_ctx C)) /\
+  lowering_context_ok C /\ ~inliner_shape_ok C /\ inliner_input_guard C /\
+  (?P W. (!nm. W nm SUBSET P nm) /\
+         EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
+           C.ctx_functions /\ inline_ptr_ok P W (reachable_ctx C)) /\
   revert_forward_pair (HD (HD C.ctx_functions).fn_blocks) 3 4 /\
   ~revert_forward_pair (EL 1 (HD C'.ctx_functions).fn_blocks) 0 1
 Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  simp[rdc_pair_in_input, rdc_pair_split_in_output] >>
+  simp[rdc_pair_in_input, rdc_pair_split_in_output, rdc_not_shape_ok] >>
   premises_tac
 QED
 
@@ -477,43 +517,23 @@ Definition two_root_arg_ctx_def:
       (SOME "entry")
 End
 
-(* A pointer argument derived from two distinct roots. *)
-Theorem two_root_arg_refutes_inline_ptr_ok:
-  MEM fn C.ctx_functions /\ MEM inst (fn_insts fn) /\
-  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm, args) /\
-  k < LENGTH args /\ EL k args = Var v /\ v IN fn_pv P fn /\
-  r1 IN ptr_roots P fn /\ r2 IN ptr_roots P fn /\ r1 <> r2 /\
-  v IN pointer_derived_vars fn {r1} /\ v IN pointer_derived_vars fn {r2} ==>
-  ~inline_ptr_ok P C
-Proof
-  rpt strip_tac >> fs[inline_ptr_ok_def, EVERY_MEM] >>
-  first_x_assum drule >> strip_tac >>
-  first_x_assum drule >> simp[] >>
-  DISJ2_TAC >> qexists_tac `k` >>
-  simp[inline_ptr_single_root_def] >> metis_tac[]
-QED
-
+(* The argument "p" has two roots, but no write reaches the callee's
+   parameter, so the input meets every syntactic premise, and the inlined
+   output keeps the pointer conjunct. *)
 Theorem inliner_two_root_arg_witness:
-  !P. ~inline_ptr_ok P (reachable_ctx two_root_arg_ctx)
+  C = two_root_arg_ctx /\ C' = function_inliner_ctx 0 C ==>
+  inliner_shape_ok C /\ inliner_input_guard C /\
+  (?P W. (!nm. W nm SUBSET P nm) /\
+         EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
+           C.ctx_functions /\ inline_ptr_ok P W (reachable_ctx C)) /\
+  ?P W. (!nm. W nm SUBSET P nm) /\
+        EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
+          C'.ctx_functions /\ inline_ptr_ok P W (reachable_ctx C')
 Proof
-  gen_tac >>
-  qabbrev_tac `fn = HD (reachable_ctx two_root_arg_ctx).ctx_functions` >>
-  `EVERY (\i. i.inst_opcode <> PARAM) (fn_insts fn)` by
-    (unabbrev_all_tac >> EVAL_TAC) >>
-  `ptr_roots P fn = set ["a"; "b"]` by
-    (asm_simp_tac std_ss [no_param_ptr_roots_list] >> AP_TERM_TAC >>
-     unabbrev_all_tac >> EVAL_TAC) >>
-  `OPTION_MAP (MEM "p") (pv_closure fn ["a"; "b"]) = SOME T /\
-   OPTION_MAP (MEM "p") (pv_closure fn ["a"]) = SOME T /\
-   OPTION_MAP (MEM "p") (pv_closure fn ["b"]) = SOME T` by
-    (unabbrev_all_tac >> EVAL_TAC) >>
-  `"p" IN pointer_derived_vars fn (set ["a"; "b"]) /\
-   "p" IN pointer_derived_vars fn (set ["a"]) /\
-   "p" IN pointer_derived_vars fn (set ["b"])` by
-    metis_tac[witness_closure_member] >>
-  `"p" IN fn_pv P fn` by asm_rewrite_tac[fn_pv_def] >>
-  irule two_root_arg_refutes_inline_ptr_ok >>
-  qexistsl_tac [`[Var "p"]`, `fn`, `EL 9 (fn_insts fn)`, `0`, `"callee"`,
-                `"a"`, `"b"`, `"p"`] >>
-  fs[] >> unabbrev_all_tac >> EVAL_TAC
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  rpt conj_tac
+  >- shape_tac
+  >- EVAL_TAC
+  >- (irule stage_ptr_ok_from_eval >> EVAL_TAC)
+  >> irule stage_ptr_ok_from_eval >> EVAL_TAC
 QED

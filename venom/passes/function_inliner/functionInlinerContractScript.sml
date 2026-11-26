@@ -2,8 +2,8 @@ Theory functionInlinerContract
 Ancestors
   functionInlinerDefs functionInlinerPtrCheck o1PassContract ptrDiscipline
   contextRawReachable unitTransformDefs lowerDloadDefs vyperCompiler
-  callLayoutDefs stackPlanGen unitShapeDefs fcgDefs venomExecSemantics
-  venomWf venomInst venomState list string words
+  callLayoutDefs stackPlanGen unitShapeDefs fcgDefs contextCodegenRel
+  venomExecSemantics venomWf venomInst venomState list string words
 
 Definition reachable_ctx_def:
   reachable_ctx C =
@@ -22,8 +22,12 @@ Definition inliner_shape_ok_def:
     ALL_DISTINCT (MAP (\fn. fn.fn_name) C.ctx_functions) /\
     o1_ctx_shape R /\
     EVERY fn_defs_reach_uses R.ctx_functions /\
+    EVERY fn_phis_cover_preds R.ctx_functions /\
     EVERY (\fn.
       canonical_param_prefix fn /\ opaque_use_ok fn /\ retpc_shape_ok fn /\
+      EVERY (\x. LENGTH (FILTER (\i. MEM x i.inst_outputs) (fn_insts fn)) = 1)
+        (FLAT (MAP (\i. i.inst_outputs)
+           (FILTER (\i. i.inst_opcode = PARAM) (fn_insts fn)))) /\
       EVERY (\inst.
         label_positions_ok inst /\
         (inst.inst_opcode = PHI ==>
@@ -39,10 +43,15 @@ Definition inliner_shape_ok_def:
        MEM caller R.ctx_functions /\ MEM inst (fn_insts caller) /\
        MEM callee R.ctx_functions /\ inst.inst_opcode = INVOKE /\
        inst.inst_operands = Label callee.fn_name :: args ==>
+       IS_SOME (fn_retpc_param callee) /\
        LENGTH (rotate_invoke_ops inst.inst_operands) =
          LENGTH (get_params (fn_entry_insts callee)) /\
        EVERY (\r. raw_return_user_arity r = SOME (LENGTH inst.inst_outputs))
          (fn_return_insts callee)) /\
+    (!fn bb i j. MEM fn R.ctx_functions /\ MEM bb fn.fn_blocks /\
+       revert_forward_pair bb i j ==>
+       revert_forward_pair
+         (bb with bb_instructions := DROP i bb.bb_instructions) 0 (j - i)) /\
     (!fn other. MEM fn R.ctx_functions /\ MEM other R.ctx_functions /\
        fn.fn_name <> other.fn_name ==> ~MEM other.fn_name (fn_labels fn)) /\
     (!entry fn inst args.
@@ -71,12 +80,15 @@ End
 
 (* The map P is used by the syntactic conjunct of ptr_discipline. Its
    reachable-state clauses are independent of P, so this conjunct supplies
-   a single map that also meets the inliner's pointer requirements. *)
+   a single map that also meets the inliner's pointer requirements. W holds
+   the pointer positions a write can reach; only those need a single root,
+   since the relation relocates pointers by their run's ghost provenance. *)
 Definition inliner_stage_inv_def:
   inliner_stage_inv D C vs <=>
     inliner_shape_ok C /\ o1_src_inv D C vs /\
-    (?P. EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
-           C.ctx_functions /\ inline_ptr_ok P (reachable_ctx C))
+    (?P W. (!nm. W nm SUBSET P nm) /\
+           EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
+             C.ctx_functions /\ inline_ptr_ok P W (reachable_ctx C))
 End
 
 (* Each activation inherits its parent's current static frontier. Its

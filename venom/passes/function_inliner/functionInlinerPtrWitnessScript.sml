@@ -67,9 +67,10 @@ Theorem inliner_single_root_store_witness:
   access = mk_inst 18 MSTORE [Var "x"; Lit 7w] [] /\
   C = witness_join_ctx (Var "local") access /\
   out = function_inliner_ctx 0 C ==>
-  inline_ptr_ok (\nm. set (ctx_ptr_param_list C nm)) C /\
+  inline_ptr_ok (\nm. set (ctx_ptr_param_list C nm)) (ctx_write_param_set C) C /\
   EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list C nm))) C.ctx_functions /\
-  inline_ptr_ok (\nm. set (ctx_ptr_param_list out nm)) out /\
+  inline_ptr_ok (\nm. set (ctx_ptr_param_list out nm)) (ctx_write_param_set out)
+    out /\
   EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list out nm))) out.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
@@ -82,9 +83,10 @@ Theorem inliner_pointer_argument_witness:
   access = mk_inst 18 MLOAD [Var "joined"] ["value"] /\
   C = witness_join_ctx (Var "local") access /\
   out = function_inliner_ctx 0 C ==>
-  inline_ptr_ok (\nm. set (ctx_ptr_param_list C nm)) C /\
+  inline_ptr_ok (\nm. set (ctx_ptr_param_list C nm)) (ctx_write_param_set C) C /\
   EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list C nm))) C.ctx_functions /\
-  inline_ptr_ok (\nm. set (ctx_ptr_param_list out nm)) out /\
+  inline_ptr_ok (\nm. set (ctx_ptr_param_list out nm)) (ctx_write_param_set out)
+    out /\
   EVERY (fn_ptr_ok (\nm. set (ctx_ptr_param_list out nm))) out.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
