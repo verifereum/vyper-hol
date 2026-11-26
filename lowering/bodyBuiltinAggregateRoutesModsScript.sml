@@ -15,7 +15,6 @@ Ancestors
   exprBodyPreProps exprLoweringProps exprSimOperators
   vyperTypeSystem vyperContext vyperAST compileEnv vyperInterpreter
 
-val _ = HolbuildProofRuntime.trace_all_ref := true (* trace 1 *)
 
 Theorem empty_expr_full_ok_mods:
   !mods exps cx ann typ args.
