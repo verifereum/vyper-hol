@@ -15,7 +15,7 @@ Ancestors
   loweringPosts loweringStateRelDefs[qualified,ignore_grammar] bodyPtrDefs
   exprSimMemDefs exprSimDefs compileEnv context exprLowering
   ptrDiscipline venomState venomMemDefs vyperInterpreter vyperState vyperABI
-  vyperABIValid vyperAST words finite_map pred_set list
+  vyperABIValid vyperAST words finite_map pred_set list createSizeExit
 
 Theorem extcall_return_full:
   (!H0 ce env sf ty tv v ctx func cenv cx es st en source hi pos output
@@ -214,7 +214,7 @@ Theorem extcall_return_full:
               (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
                  args dflt)) sa sb (ee with gas_obs := []) tv vv t' /\
          ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn') \/
-         (exit_result r /\ expr_exit res r)))
+         (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r)))
 Proof
   disch_then (mk_asm "valid") >> disch_then (mk_asm "reject") >>
   rpt gen_tac >> strip_tac >>
@@ -507,7 +507,7 @@ Resume extcall_return_full[has_horizon]:
           qpat_x_assum `!tail. bind _ _ (ee with gas_obs := tail) = _`
             (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss())
               [bind_def,lift_sum_runtime_def,raise_def])) >>
-          gvs[expr_exit_def,exit_result_def]) >>
+          gvs[create_size_exit_ok_non_exhalt,expr_exit_def,exit_result_def]) >>
       qpat_assum `~(LENGTH returnData < abi_static_size _ rt)`
         (fn th => simp_tac bool_ss [th]) >>
       `abi_static_size cenv.ce_struct_fields rt <= LENGTH returnData` by decide_tac >>
@@ -720,7 +720,7 @@ Resume extcall_return_full[decode_reject]:
             (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss())
               [bind_def,lift_sum_runtime_def,raise_def])) >>
           qpat_x_assum `INR _ = res` (SUBST1_TAC o SYM) >>
-          simp[expr_exit_def,exit_result_def]
+          simp[create_size_exit_ok_non_exhalt,expr_exit_def,exit_result_def]
 QED
 
 Resume extcall_return_full[decode_success]:
