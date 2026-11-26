@@ -120,8 +120,8 @@ The gas companions use the proved `call_entry_reachable_create_size_ok` and
 raw run, the simulation relates an oversized non-static CREATE or CREATE2
 abort to the source initcode-size error. The entry proofs use that fact and
 the O1 transport theorem to establish `inst_create_size_ok`, including for
-blueprint creation. The admitted `function_inliner_correct` lies under no
-top. See the [Milestone 1
+blueprint creation. Semantic correctness of the function inliner remains
+unproved. The pass is outside O1. See the [Milestone 1
 source owners and
 receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
 
