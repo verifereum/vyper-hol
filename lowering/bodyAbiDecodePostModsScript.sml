@@ -56,9 +56,8 @@ Theorem abi_decode_selected_revert_mods[local]:
 Proof
   strip_tac >> drule (cj 1 abi_decode_builtin_reject) >>
   disch_then (qspecl_then [`tys`] assume_tac) >>
-  irule gas_outcome_full_mods_exit >> simp[] >>
-  qexistsl_tac [`Gf`, `ee`, `Abort Revert_abort z`,
-                `INR (Error (RuntimeError err))`, `tf`] >>
+  irule gas_outcome_full_mods_exit_revert >> simp[] >>
+  qexistsl_tac [`Gf`, `ee`, `INR (Error (RuntimeError err))`, `tf`, `z`] >>
   simp[lift_sum_def, bind_def, raise_def, fragExecTheory.exit_result_def,
        expr_exit_def, halt_exit_def]
 QED

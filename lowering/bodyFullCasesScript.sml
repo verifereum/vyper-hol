@@ -1165,8 +1165,12 @@ Resume selfdestruct_expr_full_from_interfaces[static]:
   conj_tac >- first_assum ACCEPT_TAC >>
   gen_tac >> disch_tac >> reverse conj_tac
   >- (disj2_tac >>
-      simp[fragExecTheory.exit_result_def, Abbr `childR`,
-        exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
+      conj_tac >- simp[fragExecTheory.exit_result_def] >>
+      conj_tac
+      >- (irule createSizeExitTheory.create_size_exit_ok_static >>
+          simp[halt_state_def, set_returndata_def]) >>
+      simp[Abbr `childR`, exprSimDefsTheory.expr_exit_def,
+           exprSimDefsTheory.halt_exit_def]) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _ /\ _` drule >> strip_tac >>
   `gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (t,G',tn') [] (Abort ExHalt_abort (halt_state (set_returndata [] t)),G',tn')` by
