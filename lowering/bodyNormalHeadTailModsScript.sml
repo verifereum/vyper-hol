@@ -181,7 +181,8 @@ Proof
 QED
 
 Theorem unallocated_bare_global_root_tables[local]:
-  c.ce_module_vars = cenv.ce_module_vars /\ env1.bare_globals = env.bare_globals ==>
+  c.ce_module_vars = cenv.ce_module_vars /\ env1.bare_globals = env.bare_globals /\
+  env1.bare_global_assignable = env.bare_global_assignable ==>
   unallocated_bare_global_root c env1 = unallocated_bare_global_root cenv env
 Proof
   strip_tac >> simp[FUN_EQ_THM] >> Cases >> simp[unallocated_bare_global_root_def]

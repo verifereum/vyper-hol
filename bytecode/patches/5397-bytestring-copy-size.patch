@@ -1,0 +1,69 @@
+Upstream PR: https://github.com/vyperlang/vyper/pull/5397
+Status: merged 2026-11-23 (b8ceaf5bf2a073ef1bb7b15987bbc4654af015dd)
+
+Size the copy of a bytestring into memory by the lowered value's own type.
+The expression annotation can be wider for map keys and comparison operands.
+
+diff --git a/vyper/codegen_venom/builtins/hashing.py b/vyper/codegen_venom/builtins/hashing.py
+index b2619ac4..f507c3d7 100644
+--- a/vyper/codegen_venom/builtins/hashing.py
++++ b/vyper/codegen_venom/builtins/hashing.py
+@@ -27,7 +27,7 @@ def _prepare_hash_input(node: vy_ast.Call, ctx: VenomCodegenContext) -> tuple[IR
+
+     if isinstance(arg_t, _BytestringT):
+         arg_vv = Expr(arg_node, ctx).lower()
+-        arg_mem = ctx.ensure_bytestring_in_memory(arg_vv, arg_t)
++        arg_mem = ctx.ensure_bytestring_in_memory(arg_vv)
+         return ctx.bytes_data_ptr(arg_mem), ctx.bytestring_length(arg_mem)
+
+     # Fixed-size word values are hashed from a temporary 32-byte buffer.
+diff --git a/vyper/codegen_venom/context.py b/vyper/codegen_venom/context.py
+index 3d1364f1..2132260d 100644
+--- a/vyper/codegen_venom/context.py
++++ b/vyper/codegen_venom/context.py
+@@ -732,12 +732,16 @@ class VenomCodegenContext:
+         # code path needs ctor-aware CODE loads, add an explicit branch here.
+         return self.builder.load(addr, location)
+
+-    def ensure_bytestring_in_memory(self, vv: VyperValue, typ: _BytestringT) -> VyperValue:
++    def ensure_bytestring_in_memory(self, vv: VyperValue) -> VyperValue:
+         """Return a bytestring value guaranteed to be in memory.
+
+         Hashing and certain builtins require memory-backed bytestring data.
+-        STORAGE/TRANSIENT/CODE values are copied into a temporary memory buffer.
++        STORAGE/TRANSIENT/IMMUTABLES values are copied into a temporary memory buffer
++        sized by the value's own type (the annotated type of the expression
++        it came from can be wider, e.g. a map key or comparison operand).
+         """
++        typ = vv.typ
++        assert isinstance(typ, _BytestringT)
+         if vv.location is DataLocation.STORAGE or vv.location is DataLocation.TRANSIENT:
+             buf_val = self.new_temporary_value(typ)
+             self.slot_to_memory(vv.operand, buf_val.operand, typ.storage_size_in_words, vv.location)
+diff --git a/vyper/codegen_venom/expr.py b/vyper/codegen_venom/expr.py
+index b2c30124..7c53b148 100644
+--- a/vyper/codegen_venom/expr.py
++++ b/vyper/codegen_venom/expr.py
+@@ -1149,9 +1149,7 @@ class Expr:
+         # bytes/string: get pointer, hash the data portion
+         # sha3 only works on memory - copy non-memory data first
+         key_vv = Expr(key_node, self.ctx).lower()
+-        key_typ = key_node._metadata["type"]
+-        assert isinstance(key_typ, _BytestringT)
+-        key_mem = self.ctx.ensure_bytestring_in_memory(key_vv, key_typ)
++        key_mem = self.ctx.ensure_bytestring_in_memory(key_vv)
+         data_ptr_op = self.ctx.bytes_data_ptr(key_mem)
+         length = self.ctx.bytestring_length(key_mem)
+         return self.builder.sha3(data_ptr_op, length)
+@@ -1182,10 +1180,7 @@ class Expr:
+
+         # Not a constant - compute at runtime
+         vv = Expr(node, self.ctx).lower()
+-        assert isinstance(node, vy_ast.ExprNode)
+-        typ = node._expr_info.typ
+-        assert isinstance(typ, _BytestringT)
+-        vv_mem = self.ctx.ensure_bytestring_in_memory(vv, typ)
++        vv_mem = self.ctx.ensure_bytestring_in_memory(vv)
+         data_ptr_op = self.ctx.bytes_data_ptr(vv_mem)
+         length = self.ctx.bytestring_length(vv_mem)
+         return self.builder.sha3(data_ptr_op, length)

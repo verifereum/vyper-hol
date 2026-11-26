@@ -49,13 +49,9 @@ Theorem cut_call_shared[local]:
   consume_call_outcome rq2 ro2 rs t = (w2,r2) ==>
   w1 = w2 /\ r1.vs_returndata = r2.vs_returndata /\
   ld_shared_agree D s.vs_call_ctx.cc_address
-    (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-                        ~computed_precompile (LAST r1.vs_requests) /\
-                        r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+    (tn with <|t_stor := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
                        then {} else tn.t_stor;
-               t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
-                         ~computed_precompile (LAST r1.vs_requests) /\
-                         r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+               t_trans := if adopt_guard rq1.cr_static s r1 (HD s.vs_outcomes).co_success
                         then {} else tn.t_trans|>) r1 r2
 Proof
   strip_tac >>
@@ -118,13 +114,9 @@ Theorem cut_call_shared_after_update[local]:
   (MEM inst.inst_opcode [CALL;DELEGATECALL] ==>
     rq.cr_static = s.vs_call_ctx.cc_static) /\
   ld_shared_agree D s.vs_call_ctx.cc_address
-    (tn with <|t_stor := if ~rq.cr_static /\ r1.vs_requests <> s.vs_requests /\
-                        ~computed_precompile (LAST r1.vs_requests) /\
-                        r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+    (tn with <|t_stor := if adopt_guard rq.cr_static s r1 (HD s.vs_outcomes).co_success
                        then {} else tn.t_stor;
-               t_trans := if ~rq.cr_static /\ r1.vs_requests <> s.vs_requests /\
-                         ~computed_precompile (LAST r1.vs_requests) /\
-                         r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+               t_trans := if adopt_guard rq.cr_static s r1 (HD s.vs_outcomes).co_success
                         then {} else tn.t_trans|>) r1 r2 ==>
   ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s (update_var out w1 r1) tn)
     (update_var out w1 r1) (update_var out w2 r2)
@@ -138,9 +130,7 @@ Proof
   Cases_on `MEM inst.inst_opcode [CALL;DELEGATECALL]`
   >- gvs[MEM, ld_shared_agree_def, adopt_reset_def, update_var_def] >>
   `inst.inst_opcode = STATICCALL` by fs[MEM] >>
-  Cases_on `~rq.cr_static /\ r1.vs_requests <> s.vs_requests /\
-    ~computed_precompile (LAST r1.vs_requests) /\
-    r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
+  Cases_on `adopt_guard rq.cr_static s r1 (HD s.vs_outcomes).co_success` >>
   gvs[ld_shared_agree_def, adopt_reset_def, update_var_def, word_agree_except_def]
 QED
 

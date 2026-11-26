@@ -74,7 +74,10 @@ Ancestors
   assignPlacePureCode assignPlaceEmpty
   assignPlaceEmptyCompose
   assignPlaceGasCompose assignPlaceBytesStore
-  (* whitelist: retained raw-call and CREATE compiler shape proofs *)
+  (* Linked checker support for the compiler invariant. *)
+  whitelistLinkedHeaderProps[qualified,ignore_grammar]
+  whitelistLinkedConstProps[qualified,ignore_grammar]
+  whitelistLinkedBodyProps[qualified,ignore_grammar]
   (* pointer safety of the lowering *)
   normalizationAllocPtr
   ptrSafetyTransport staticTypeFitsPtr

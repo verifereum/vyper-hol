@@ -464,6 +464,71 @@ Resume immutable_fixed_spine[attribute]:
 QED
 Finalise immutable_fixed_spine
 
+(* The final index has run, but has not yet selected an element. *)
+Theorem immutable_expr_current_parent_mods:
+  contract_inv mods exps ctx cenv cx /\
+  expr_body_pre_mods mods cenv cx env obj es /\
+  expr_type obj = ArrayT et bd /\
+  eval_expr cx obj es = (INL (PlaceR (ImmutablePlace owner id path)),mid) /\
+  ~subscript_reads_base cx obj idx /\
+  expr_body_pre_mods mods cenv cx env idx (mid with gas_obs := gs2) /\
+  bind (eval_expr cx idx) (read_result cx) (mid with gas_obs := gs2) = (INL key,fin) /\
+  expr_sim_inv_mods mods cenv cx env fin /\
+  ~cx_const_name_mods mods (owner,id) /\
+  FLOOKUP env.bare_globals (owner,id) = SOME root_ty /\
+  evaluate_type (get_tenv cx) root_ty = SOME itv /\
+  ALOOKUP mid.immutables cx.txn.target = SOME old_imms /\
+  FLOOKUP (get_source_immutables owner old_imms) id = SOME (itv,old) /\
+  evaluate_subscripts itv old path = INL saved /\
+  mem_path_offset itv path = SOME (k,ArrayTV etv bd) ==>
+  ?imms iv av. ALOOKUP fin.immutables cx.txn.target = SOME imms /\
+    FLOOKUP (get_source_immutables owner imms) id = SOME (itv,iv) /\
+    evaluate_subscripts itv iv path = INL (ArrayV av) /\
+    value_has_type itv iv /\ well_formed_type_value itv /\
+    value_has_type (ArrayTV etv bd) (ArrayV av)
+Proof
+  strip_tac >> drule_then assume_tac expr_sim_inv_mods_env >>
+  drule_all vyperTypeEnvTheory.env_consistent_bare_global_ready_src >> strip_tac >>
+  Cases_on `ALOOKUP fin.immutables cx.txn.target` >> gvs[]
+  >- fs[get_source_immutables_def] >>
+  rename1 `ALOOKUP fin.immutables _ = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables owner imms) id` >> gvs[] >>
+  rename1 `FLOOKUP (get_source_immutables owner imms) id = SOME cell` >>
+  PairCases_on `cell` >>
+  `cell0 = itv` by
+    (`env_immutables_consistent env cx fin` by fs[env_consistent_def] >>
+     qpat_x_assum `env_immutables_consistent _ _ _` mp_tac >>
+     simp[env_immutables_consistent_def] >> strip_tac >>
+     first_x_assum (drule_all_then mp_tac) >> simp[]) >>
+  gvs[] >> rename1 `FLOOKUP (get_source_immutables owner imms) id = SOME (itv,iv)` >>
+  `state_well_typed fin` by fs[expr_sim_inv_mods_def] >>
+  drule_all_then assume_tac vyperTypeEnvTheory.state_well_typed_immutables_ALOOKUP >>
+  drule_all_then strip_assume_tac vyperTypeEnvTheory.imms_well_typed_get_source_immutables >>
+  `?v. evaluate_subscripts itv iv path = INL v` by
+    (Cases_on `base_through_dynarray obj`
+     >- (drule_then strip_assume_tac vyperStatePreservationTheory.bind_split
+         >- (drule_then SUBST_ALL_TAC read_result_state >>
+             `is_ArrayT (expr_type obj)` by simp[is_ArrayT_def] >>
+             `(mid with gas_obs := gs2).immutables = mid.immutables` by simp[] >>
+             drule_all immutable_no_copy_dynamic_frame_mods >> simp[] >>
+             disch_then SUBST_ALL_TAC >> qexists `saved` >> simp[])
+         >> gvs[]) >>
+     `fixed_shape_path itv path` by
+       (`runtime_consistent env cx es /\ well_typed_expr env obj /\
+         functions_well_typed cx` by (irule expr_body_pre_mods_runtime_typing >>
+                                      qexistsl [`cenv`,`mods`] >> simp[]) >>
+        `call_evaluation_safe cx (int_calls_expr obj)` by
+          (irule expr_body_pre_mods_call_evaluation_safe >> goal_assum (drule_at Any)) >>
+        irule immutable_fixed_spine >>
+        goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+        qexistsl [`env`,`root_ty`] >> simp[]) >>
+     irule fixed_shape_path_live >> simp[]) >>
+  drule_then strip_assume_tac exprSimPropsTheory.mem_path_offset_sound >>
+  drule_all_then assume_tac vyperPlaceStatePreservationTheory.evaluate_subscripts_type >>
+  Cases_on `bd` >> Cases_on `v` >>
+  gvs[vyperTypingTheory.value_has_type_def] >> metis_tac[]
+QED
+
 Theorem live_immutable_path_after_index[local]:
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env obj es /\

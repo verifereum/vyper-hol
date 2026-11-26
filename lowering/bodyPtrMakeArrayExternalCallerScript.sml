@@ -2,38 +2,14 @@ Theory bodyPtrMakeArrayExternalCaller
 Ancestors
   bodyPtrMakeArrayExternalSize exprReasonOperand exprLoweringProps exprLowering
   context compileEnv loweringStateRelDefs vyperAST list bodyPtrMakeArrayConsumerPost exprCallBounds
-  vyperTypeStatePreservation valueEncodingTyping exprSimProps
+  vyperTypeStatePreservation valueEncodingTyping exprSimProps exprPtrUnwrapStorageShape
 
 Theorem external_located_lowered_type:
   compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
   p.ptr_location <> LocMemory ==>
   lowered_value_type cenv e = expr_type e
 Proof
-  Cases_on `e` >> simp[lowered_value_type_def, expr_type_def]
-  >~ [`Literal ann lit`]
-  >- (simp[Once compile_expr_def] >> strip_tac >>
-      drule reason_compile_literal >> simp[reason_result_shape_def])
-  >~ [`Call ann target args default_ret`]
-  >- (simp[Once compile_expr_def] >> strip_tac >>
-      drule reason_compile_call >> simp[reason_result_shape_def])
-  >~ [`Builtin ann bi args`]
-  >- (Cases_on `bi` >> simp[lowered_value_type_def, expr_type_def] >>
-      pure_rewrite_tac[Once compile_expr_raw_def] >> strip_tac >>
-      drule reason_compile_expr_builtin_shape_classify >>
-      strip_tac >> gvs[reason_result_shape_def] >>
-      gvs[builtin_child_callback_def, invalid_expr_call_def, expr_type_def,
-        AllCaseEqs()] >>
-      qpat_x_assum `compile_builtin_dispatch _ _ _ _ _ _ = _` mp_tac >>
-      pure_rewrite_tac[Once compile_expr_raw_def] >> strip_tac >>
-      drule_at (Pos last) reason_builtin_fresh >>
-      simp[reason_result_shape_def]) >>
-  rename1 `TypeBuiltin ann tb rt args` >>
-  Cases_on `tb` >> simp[lowered_value_type_def, expr_type_def] >>
-  simp[Once compile_expr_def] >>
-  simp[Once compile_type_builtin_dispatch_component_eq] >>
-  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
-  gvs[base_ptr_def, mk_ptr_def, AllCaseEqs()] >>
-  gvs[oneline as_ptr_val_def, AllCaseEqs(), mk_ptr_def]
+  MATCH_ACCEPT_TAC exprPtrUnwrapStorageShapeTheory.compile_nonmemory_lowered_value_type
 QED
 
 Theorem external_located_post_type:

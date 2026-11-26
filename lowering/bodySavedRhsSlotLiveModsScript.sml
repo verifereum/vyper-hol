@@ -277,6 +277,16 @@ Resume saved_slot_expr_cases[builtin]:
   >~ [`ECMul`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
   >~ [`Concat n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
   >~ [`Slice n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def])
+  >~ [`NamedConst`] >-
+    (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     pairarg_tac >> gvs[] >>
+     rename1 `lower_value _ _ _ _ _ = (opnd,_)` >>
+     rename1 `is_word_type vt` >>
+     Cases_on `is_word_type vt` >> Cases_on `opnd` >>
+     gvs[as_stack_val_def, as_ptr_val_def, mk_ptr_def])
+  >~ [`BoolChain _ _`] >-
+    (gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]))
   >~ [`Uint2Str n`] >- (drule_at Any reason_builtin_fresh >> simp[reason_result_shape_def]) >>
   drule_at Any reason_builtin_scalar >> simp[reason_result_shape_def])
 QED

@@ -1,7 +1,7 @@
 Theory constSubstCV
 Ancestors
   vyperAST alist list pair vyperContext
-  constSubst
+  constSubst constSubstMods
 Libs
   cv_transLib
 
@@ -36,3 +36,13 @@ val () = cv_auto_trans subst_consts_stmt_def;
 val () = cv_auto_trans module_consts_env_def;
 
 val () = cv_auto_trans subst_consts_fn_def;
+
+val () = cv_auto_trans subst_consts_expr_mods_def;
+
+val () = cv_auto_trans module_consts_env_mods_def;
+
+val () = cv_auto_trans consts_env_mods_acc_def;
+
+val () = cv_auto_trans consts_env_modules_order_def;
+
+val () = cv_auto_trans consts_env_mods_def;

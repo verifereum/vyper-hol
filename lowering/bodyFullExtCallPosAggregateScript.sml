@@ -11,7 +11,7 @@ Ancestors
   vyperStorageFootprint vyperState stmtSimProps exprSimDefs context exprSimMemDefs
   exprSimHypsDefs abiEncodeArgsCase abiEncodeArgsSim abiEncodeMaterialize aggregateEvaluatedLayout
   valueCopyBytes exprReasonOperand bodyFullAssign vyperEvalExprPreservesScopesDom
-  vyperTypeExprSoundness vyperTypeInvariants exprSimConcatResult
+  vyperTypeExprSoundness vyperTypeInvariants exprSimConcatResult exprNamedConstResult
   exprSimSend[qualified,ignore_grammar] abiBuiltinDispatchCorrect
   list[qualified,ignore_grammar]
 
@@ -53,7 +53,14 @@ Proof
          rename1 `BytesT bound` >> Cases_on `bound` >>
          simp[lowered_value_type_def])
      >~ [`Builtin ann bt args`]
-     >- (Cases_on `bt` >> simp[lowered_value_type_def])
+     >- (Cases_on `bt` >> simp[lowered_value_type_def] >>
+         Cases_on `is_word_type ann`
+         >- (`is_word_type (expr_type (Builtin ann NamedConst args))` by
+               simp[vyperASTTheory.expr_type_def] >>
+             irule vyperTypeArgFitsTheory.arg_type_fits_prim_word >>
+             simp[membership_element_word_boundary] >>
+             irule expr_body_pre_lowered_fits >> metis_tac[]) >>
+         drule_all named_const_nonword_compile_shape >> simp[])
      >~ [`TypeBuiltin ann tb tys args`]
      >- (Cases_on `tb` >> simp[lowered_value_type_def]) >>
      rename1 `Call ann tgt args dr` >> Cases_on `tgt` >>

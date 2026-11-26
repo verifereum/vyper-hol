@@ -113,6 +113,10 @@
       "sha256": "4aa42d5d6b739f80fe17a7637a26de4610d86bd69578f14688276cc4ce697dcc"
     },
     {
+      "path": "bytecode/patches/5397-bytestring-copy-size.patch",
+      "sha256": "6cf6f52005bf89176e156c8b6647d7cf20c77e43c30ab49ba1549eb8f3db4be6"
+    },
+    {
       "path": "bytecode/patches/local-dft-create-abort.patch",
       "sha256": "0c4a28b798de3df8978a7ca2a1965c107a71f6322fa97c22e6aa7356642a5290"
     }

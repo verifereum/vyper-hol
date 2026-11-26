@@ -537,21 +537,50 @@ Proof
   CASE_TAC >> simp[gas_shadow_expr_def]
 QED
 
+Theorem pin_fold_builtin_non_len[local]:
+  bi <> Len ==>
+  pin_fold_builtin (BaseT bt) bi es =
+    if ~pin_foldable_builtin bi \/
+       ~builtin_args_length_ok bi (LENGTH es) \/
+       ~EVERY (\e. ?t. expr_type e = BaseT t) es
+    then Builtin (BaseT bt) bi es
+    else case pin_literal_values es of
+         | NONE => Builtin (BaseT bt) bi es
+         | SOME vs => pin_fold_result (BaseT bt) (Builtin (BaseT bt) bi es)
+             (evaluate_builtin empty_evaluation_context empty_accounts
+               (BaseT bt) bi (MAP expr_type es) vs)
+Proof
+  Cases_on `bi` >> simp[pin_fold_builtin_def] >>
+  Cases_on `es` >> simp[]
+QED
+
 Theorem gas_shadow_pin_fold_builtin[local]:
   gas_shadow_expr (pin_fold_builtin ty bi es) =
     pin_fold_builtin ty (gas_shadow_builtin bi) (MAP gas_shadow_expr es)
 Proof
-  Cases_on `ty` >> Cases_on `bi` >>
-  simp[pin_fold_builtin_def, gas_shadow_builtin_def,
-       pin_foldable_builtin_def, gas_shadow_expr_def,
-       gas_shadow_pin_literal_values, MAP_MAP_o, EVERY_MAP, EXISTS_MAP,
-       combinTheory.o_DEF, ETA_THM,
-       gas_shadow_expr_type, gas_shadow_pin_fold_result] >>
-  BasicProvers.every_case_tac >>
-  gvs[gas_shadow_expr_def, gas_shadow_builtin_def, pin_foldable_builtin_def,
-      gas_shadow_pin_literal_values, gas_shadow_pin_fold_result,
-      EVERY_MAP, EXISTS_MAP, MAP_MAP_o, combinTheory.o_DEF, ETA_THM] >>
-  fs[GSYM EVERY_NOT_EXISTS, combinTheory.o_DEF]
+  reverse (Cases_on `?bt. ty = BaseT bt`)
+  >- (Cases_on `ty` >> gvs[pin_fold_builtin_def, gas_shadow_expr_def]) >>
+  gvs[] >>
+  Cases_on `bi = Len`
+  >- (gvs[gas_shadow_builtin_def] >> Cases_on `es`
+      >- simp[pin_fold_builtin_def, pin_foldable_builtin_def,
+              gas_shadow_expr_def, gas_shadow_builtin_def] >>
+      rename1 `h::rest` >> Cases_on `rest`
+      >- (Cases_on `h` >> simp[pin_fold_builtin_def, pin_foldable_builtin_def,
+                              gas_shadow_expr_def, gas_shadow_builtin_def] >>
+          rename1 `Literal _ l` >> Cases_on `l` >>
+          simp[pin_fold_builtin_def, pin_foldable_builtin_def,
+               gas_shadow_expr_def, gas_shadow_builtin_def]) >>
+      simp[pin_fold_builtin_def, pin_foldable_builtin_def,
+           gas_shadow_expr_def, gas_shadow_builtin_def]) >>
+  Cases_on `bi = Env MsgGas`
+  >- simp[pin_fold_builtin_non_len, pin_foldable_builtin_def,
+          gas_shadow_expr_def, gas_shadow_builtin_def] >>
+  simp[gas_shadow_builtin_def, pin_fold_builtin_non_len,
+       gas_shadow_pin_literal_values, EXISTS_MAP, MAP_MAP_o,
+       combinTheory.o_DEF, ETA_THM] >>
+  IF_CASES_TAC >> Cases_on `pin_literal_values es` >>
+  simp[gas_shadow_pin_fold_result, gas_shadow_expr_def, gas_shadow_builtin_def]
 QED
 
 Theorem gas_shadow_origin_fold_not[local]:

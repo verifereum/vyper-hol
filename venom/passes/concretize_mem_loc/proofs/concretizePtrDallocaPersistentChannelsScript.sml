@@ -200,17 +200,9 @@ Theorem ptr_dalloca_oracle_adoption:
   MEM a.po_inst.inst_opcode [CALL;DELEGATECALL;CREATE;CREATE2] /\
   step_inst fuel C a.po_inst a.po_state = OK post /\
   step_inst fuelT C' a.po_inst at.po_state = OK postT ==>
-  ((~a.po_state.vs_call_ctx.cc_static /\
-    post.vs_requests <> a.po_state.vs_requests /\
-    ~computed_precompile (LAST post.vs_requests) /\
-    post.vs_outcomes <> a.po_state.vs_outcomes /\
-    ((HD a.po_state.vs_outcomes).co_success \/
+  ((adopt_guard a.po_state.vs_call_ctx.cc_static a.po_state post ((HD a.po_state.vs_outcomes).co_success \/
       MEM a.po_inst.inst_opcode [CREATE;CREATE2])) <=>
-   (~at.po_state.vs_call_ctx.cc_static /\
-    postT.vs_requests <> at.po_state.vs_requests /\
-    ~computed_precompile (LAST postT.vs_requests) /\
-    postT.vs_outcomes <> at.po_state.vs_outcomes /\
-    ((HD at.po_state.vs_outcomes).co_success \/
+   (adopt_guard at.po_state.vs_call_ctx.cc_static at.po_state postT ((HD at.po_state.vs_outcomes).co_success \/
       MEM a.po_inst.inst_opcode [CREATE;CREATE2])))
 Proof
   strip_tac >> Cases_on `a.po_inst.inst_opcode = CALL`

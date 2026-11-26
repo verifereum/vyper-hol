@@ -1,7 +1,7 @@
 (* The calldata slice consumes its unary child's joint judgment. *)
 Theory bodyFullBuiltinBytestringCalldataCase
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyFullSimProjection
   bodyFullPreds bodySimFull exprSimCalldataSlice exprSimHypsDefs
   exprLoweringProps exprSimSource builtinProps vyperContext vyperTyping vyperAST list
 
@@ -32,5 +32,5 @@ Proof
     (first_x_assum irule >> simp[builtin_args_length_ok_def]) >>
   `body_expr_full_ok cx e` by fs[body_exprs_full_ok_def] >>
   simp[] >>
-  fs[body_expr_full_ok_def] >> metis_tac[]
+  irule body_expr_full_ok_simulations >> metis_tac[]
 QED

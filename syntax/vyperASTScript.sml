@@ -156,6 +156,17 @@ Datatype:
   | ECAdd        (* ecadd((x1,y1), (x2,y2)) -> (x3,y3) on BN254 *)
   | ECMul        (* ecmul((x,y), scalar) -> (x',y') on BN254 *)
   | PowMod256   (* pow_mod256(base, exp) -> (base ** exp) % 2^256 *)
+  | NamedConst  (* the identity on its one argument, a value the source wrote
+                   as a constant's name rather than as a literal.  Only the
+                   frontend emits it, where the pinned compiler's code depends
+                   on that spelling: at a membership's right operand, which it
+                   unrolls only over a list literal *)
+  | BoolChain bool num
+                (* an and (T) / or (F) chain of n operands; the identity on
+                   its one argument, the nested IfExp the frontend builds for
+                   the chain.  Only the frontend emits it, for n >= 3, so the
+                   lowering can emit the pinned compiler's single-exit
+                   lower_BoolOp instead of n - 1 ternaries *)
 End
 
 (* Resolved external call signature: (func_name, arg_types, return_type) *)

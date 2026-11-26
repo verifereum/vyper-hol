@@ -1,7 +1,7 @@
 (* Joint Neg simulation: its checked arithmetic suffix. *)
 Theory bodyFullBuiltinWordNeg
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyFullSimProjection
   bodyFullGhostFrame bodyFullShared bodyFullPreds bodySimFull
   gasOutcomeFullCompose gasOutcomeFullStmts fragGasSeqPtr fragGasEmitCtrl
   exprSimWordBuiltins exprSimUnopProps exprSimSource
@@ -735,10 +735,11 @@ Proof
     (strip_tac >> gvs[] >> first_x_assum irule >>
      simp[vyperASTTheory.expr_type_def, compile_neg_stack] >>
      metis_tac[eval_expr_builtin_value]) >>
+  `body_expr_full_ok cx e` by
+    fs[builtin_args_length_ok_def, body_exprs_full_ok_def] >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx (expr_type e) e es` by
-    (gvs[builtin_args_length_ok_def, body_exprs_full_ok_def,
-         body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule lower_value_neg >> strip_tac >>
   rename1 `compile_neg x (expr_type e) s1 = (op,sb)` >>

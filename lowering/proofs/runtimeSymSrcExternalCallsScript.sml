@@ -225,8 +225,10 @@ Proof
   drule_all runtime_sym_raw_outbuf >> strip_tac >>
   qpat_assum `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_raw_finish) >> simp[] >> strip_tac >>
-  Cases_on `rcf.rcf_max_outsize = 0` >>
-  gvs[runtime_sym_value_def, mk_ptr_def]
+  qpat_x_assum `(if rcf.rcf_max_outsize = 0 then _ else _) = (v,s')` mp_tac >>
+  Cases_on `rcf.rcf_max_outsize = 0` >> simp[] >>
+  disch_then (fn th => pure_rewrite_tac [GSYM (CONJUNCT1 th), GSYM (CONJUNCT2 th)]) >>
+  simp[runtime_sym_value_def, mk_ptr_def]
 QED
 
 Theorem runtime_sym_call_raw_calldata:

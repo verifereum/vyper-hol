@@ -8,7 +8,8 @@ Ancestors
   logArgumentTypes logArgumentTypeEval vyperEventArgCompat typedCopyCompatibility
   exprSimAbiEncodeRuntimeInputs exprBodyPreProps exprBodyPreTypingProps
   typedMemoryCopy loweringPosts allocLimits exprSafeOperand vyperValueOperation
-  vyperAST exprSimHypsDefs exprSimHyps vyperTypeCallGraph vyperValue vyperTyping
+  vyperAST exprSimHypsDefs exprSimHyps exprSimProps vyperTypeCallGraph vyperValue
+  vyperTyping vyperContext
 
 (* Static compatibility uses the linked struct table: unlike the event
    metadata relation, it does not restrict all struct keys to the root module. *)
@@ -60,7 +61,15 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem copy_lowered_fits_mods[local]:
+fun named_literal_fits_tac ty =
+  strip_tac >>
+  gvs[Once well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
+  fs[well_typed_expr_def] >> drule literal_event_arg_compatible >>
+  disch_then (qspecl_then [`ce`, ty] mp_tac) >>
+  simp[lowered_value_type_def, expr_type_def, GSYM event_arg_compatible_alias_def,
+       event_arg_compatible_reflexive];
+
+Theorem copy_lowered_fits_mods:
   !ce e. expr_sim_inv_mods mods ce cx env es /\ well_typed_expr env e ==>
     arg_type_fits (lowered_value_type ce e) (expr_type e)
 Proof
@@ -87,7 +96,16 @@ Proof
   >~ [`Concat`]
   >- (strip_tac >> simp[GSYM event_arg_compatible_alias_def] >>
       irule concat_event_arg_compatible >>
-      fs[Once well_typed_expr_def, expr_type_def, event_arg_compatible_reflexive]) >>
+      fs[Once well_typed_expr_def, expr_type_def, event_arg_compatible_reflexive])
+  >~ [`Builtin (BaseT (StringT _)) NamedConst [Literal _ (StringL _)]`]
+  >- (rename1 `Builtin (BaseT (StringT n)) NamedConst _` >>
+      named_literal_fits_tac `BaseT (StringT n)`)
+  >~ [`Builtin (BaseT (BytesT (Dynamic _))) NamedConst [Literal _ (BytesL _)]`]
+  >- (rename1 `Builtin (BaseT (BytesT (Dynamic n))) NamedConst _` >>
+      named_literal_fits_tac `BaseT (BytesT (Dynamic n))`)
+  >~ [`Builtin (BaseT (BytesT (Dynamic _))) NamedConst [Literal _ (HexBytesL _)]`]
+  >- (rename1 `Builtin (BaseT (BytesT (Dynamic n))) NamedConst _` >>
+      named_literal_fits_tac `BaseT (BytesT (Dynamic n))`) >>
   strip_tac >>
   ((simp[lowered_value_type_def] >> NO_TAC) ORELSE
    (simp[GSYM event_arg_compatible_alias_def] >> irule literal_event_arg_compatible >>
@@ -162,7 +180,19 @@ Proof
       vfmConstantsTheory.word_size_def, wordsTheory.dimword_def]
 QED
 
-Theorem copy_read_lowered_type_mods[local]:
+val copy_named_literal_read_tac =
+  rpt gen_tac >> simp[lowered_value_type_def] >> strip_tac >>
+  gvs[evaluate_def, bind_def, ignore_bind_def, return_def, read_result_def,
+      type_check_def, assert_def, builtin_args_length_ok_def, get_accounts_def,
+      is_self_codesize_def, lift_sum_def, evaluate_builtin_def,
+      precompile_builtin_def, evaluate_literal_def] >>
+  gvs[well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
+  gvs[well_typed_literal_def, well_formed_type_def, evaluate_type_def,
+      value_runtime_typed_def, value_has_type_def, type_slot_size_def,
+      compatible_bound_def] >>
+  imp_res_tac word_size_monotone >> decide_tac;
+
+Theorem copy_read_lowered_type_mods:
   !ce e es v ee.
     expr_sim_inv_mods mods ce cx env es /\ well_typed_expr env e /\
     alloc_limits_expr ce e /\ call_evaluation_safe cx (int_calls_expr e) /\
@@ -176,6 +206,12 @@ Proof
       qexistsl_tac [`cx`,`es`,`ee`] >> simp[SF ETA_ss])
   >- (rpt gen_tac >> strip_tac >> irule (cj 3 copy_literal_read_lowered_mods) >> simp[] >>
       qexistsl_tac [`cx`,`es`,`ee`] >> simp[SF ETA_ss])
+  >~ [`Builtin _ NamedConst [Literal _ (StringL _)]`]
+  >- copy_named_literal_read_tac
+  >~ [`Builtin _ NamedConst [Literal _ (BytesL _)]`]
+  >- copy_named_literal_read_tac
+  >~ [`Builtin _ NamedConst [Literal _ (HexBytesL _)]`]
+  >- copy_named_literal_read_tac
   >~ [`Builtin _ (Concat _) _`]
   >- (rpt gen_tac >> strip_tac >> irule copy_concat_read_lowered_mods >> simp[] >>
       qexistsl_tac [`cx`,`ee`,`es`,`mods`] >> simp[])

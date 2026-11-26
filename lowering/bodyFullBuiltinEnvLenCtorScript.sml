@@ -327,12 +327,24 @@ Resume len_full_suffix_ctor[base]:
   conj_tac
   >- (irule ghost_inv_at_exterior_frame >> qexistsl [`G`, `ee`, `t`, `sm`, `tn`] >>
       simp[Abbr `G1`, Abbr `tn1`, Abbr `i2`, Abbr `i1`, venomInstTheory.mk_inst_def] >>
-      simp[step_prov_def, step_taint_def, set_var_taint_def, op_taint_def,
-           mem_taint_def, step_writes_def, written_taint_def, range_bytes_def,
-           store_taint_def, imm_taint_def, adopt_reset_def,
-           contextCodegenRelTheory.source_memory_read_ranges_def, codegenRelTheory.source_memory_write_ranges_def,
-           lookup_var_def, FLOOKUP_UPDATE, set_prov_def, out_prov_def, finite_mapTheory.FLOOKUP_DRESTRICT] >>
-      gvs[update_var_def, first_prov_def, op_prov_def] >> simp[FLOOKUP_DRESTRICT]) >>
+      rpt conj_tac
+      >- (gen_tac >> disch_tac >>
+          qpat_assum `!x. not_fresh_at sm x ==> _` (qspec_then `x` mp_tac) >>
+          impl_tac >- first_assum ACCEPT_TAC >>
+          disch_then (fn distinct =>
+            simp[NoAsms, distinct, lookup_var_def, FLOOKUP_UPDATE,
+                 step_taint_def, set_var_taint_def, op_taint_def,
+                 step_prov_def, out_prov_def] >>
+            Cases_on `first_prov G [vv_operand vv; ib]` >>
+            qpat_assum `out1 <> out2` (fn outputs =>
+              simp[NoAsms, distinct, outputs, set_prov_def,
+                   FLOOKUP_DRESTRICT, FLOOKUP_UPDATE])))
+      >- (qpat_assum `new_site_bytes t (update_var out1 w t) = {}` mp_tac >>
+          qpat_assum `new_site_bytes (update_var out1 w t with vs_inst_idx := _) _ = {}` mp_tac >>
+          qpat_assum `t.vs_inst_idx = _` mp_tac >>
+          simp[NoAsms, step_taint_def, mem_taint_def, step_writes_def, written_taint_def,
+               range_bytes_def, source_memory_write_ranges_def, update_var_def]) >>
+      simp[NoAsms, step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def]) >>
   conj_tac
   >- (simp[ptr_val_ok_def, op_prov_def, op_taint_def,
            Abbr `i2`, Abbr `i1`, Abbr `G1`, Abbr `tn1`, venomInstTheory.mk_inst_def,

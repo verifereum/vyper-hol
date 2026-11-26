@@ -1,6 +1,6 @@
 Theory bodyFullBopRestWordCompose
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyFullSimProjection
   bodyFullBopRestWordLayout bodyFullBopRestWordEntry bodyFullBopRestWordPost
   bodyFullBopRestWordTail bodyFullPreds bodySimFull bodySim
   exprBopSimProps exprSimSource exprSimHypsDefs
@@ -26,9 +26,13 @@ Proof
     (irule expr_body_pre_builtin_arg >>
      conj_tac >- fs[expr_body_pre_def] >>
      qexistsl [`ann`, `[e1;e2]`, `Bop bop`, `es`] >> simp[]) >>
+  `body_expr_full_ok cx e1` by
+    (qpat_assum `body_exprs_full_ok cx [e1;e2]` mp_tac >>
+     pure_once_rewrite_tac[body_exprs_full_ok_def] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e1) e1 es` by
-    (fs[body_exprs_full_ok_def, body_expr_full_ok_def] >> metis_tac[]) >>
+    metis_tac[body_expr_full_ok_simulations] >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     (mp_tac (Q.INST [`fn` |-> `func`, `ctx` |-> `ctx`, `tops` |-> `tops`,
@@ -77,7 +81,9 @@ Resume compile_rest_word_membership_full[after_needle]:
        ~t.vs_halted /\ mid.gas_obs = []` by metis_tac[] >>
       `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
         cenv cx (expr_type e2) e2 mid` by
-        (fs[body_expr_full_ok_def] >> metis_tac[]) >>
+        (`mid with gas_obs := [] = mid` by
+           simp[evaluation_state_component_equality] >>
+         metis_tac[body_expr_full_ok_simulations]) >>
       `gas_admissible (eval_expr cx e2) expr_vv_res_ok mid` by
         (qpat_assum `expr_body_pre _ _ _ e2 _`
            (mp_tac o MATCH_MP exprSimHypsTheory.expr_body_pre_vv_gas_admissible) >>
