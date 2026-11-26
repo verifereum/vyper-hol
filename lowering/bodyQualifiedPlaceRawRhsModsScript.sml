@@ -75,7 +75,9 @@ Resume raw_rhs_counted_read[counted]:
   first_x_assum drule >> strip_tac >> simp[]
   >- (qpat_assum `!H res mid G tn u. Q H res mid G tn u ==> _`
         (drule_then strip_assume_tac) >> gvs[]) >>
-  disj2_tac >> metis_tac[expr_exit_INR_type,halt_exit_INR_type]
+  disj2_tac >>
+  gvs[createSizeExitTheory.create_size_exit_ok_inr] >>
+  metis_tac[expr_exit_INR_type,halt_exit_INR_type]
 QED
 
 Resume raw_rhs_counted_read[normal]:
