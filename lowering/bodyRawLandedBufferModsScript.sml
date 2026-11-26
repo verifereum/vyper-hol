@@ -29,7 +29,7 @@ Theorem raw_call_landed_buffer_packet_mods:
   op_prov G7 ov = SOME (ob,32 * ((cap + 31) DIV 32) + 32) /\
   op_prov G7 op = SOME (ob,32 * ((cap + 31) DIV 32) + 32) /\
   op_taint tn7 ov = {} /\ op_taint tn7 op = {} /\
-  q.vs_allocas = t7.vs_allocas /\ q.vs_vars = t7.vs_vars /\
+  q.vs_allocas = t7.vs_allocas /\
   lookup_var x q = SOME (n2w ob) /\
   FLOOKUP q.vs_allocas s6.cs_next_id =
     SOME (w2n (n2w ob : bytes32),32 * ((cap + 31) DIV 32) + 32) /\
