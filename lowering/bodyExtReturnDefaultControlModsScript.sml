@@ -7,7 +7,7 @@ Ancestors fragGasOriginPtrLoop[qualified,ignore_grammar]
   typedMemoryCopy exprSafeOperand exprLoweringProps emitHelperProps
   fragGasOriginPtr bodyFullPostsMods loweringPosts bodyPtrDefs
   codegenRel compileEnv context venomState finite_map words ptrDiscipline
-  fragExec emitHelper exprLowering
+  fragExec emitHelper exprLowering createSizeExit
 
 Theorem default_shell_linked[local]:
   emit_op RETURNDATASIZE [] ar = (rds,a1) /\
@@ -29,7 +29,7 @@ Theorem default_shell_linked[local]:
     (!x. not_fresh_at ar x ==> lookup_var x u = lookup_var x a /\
           FLOOKUP Gu x = FLOOKUP J x /\ op_taint tu (Var x) = op_taint tm (Var x)) /\
     u.vs_allocas = a.vs_allocas /\ u.vs_alloca_next = a.vs_alloca_next /\
-    u.vs_memory = a.vs_memory /\ u.vs_accounts = a.vs_accounts /\
+    u.vs_memory = a.vs_memory /\ tu.t_mem = tm.t_mem /\ u.vs_accounts = a.vs_accounts /\
     ~u.vs_halted /\ u.vs_inst_idx = 0 /\ u.vs_current_bb = dl /\ allocas_from lo u /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     (alloca_history func a ==> alloca_history func u) /\
@@ -60,6 +60,7 @@ Proof
      qpat_assum `allocas_from lo a` (ACCEPT_TAC o REWRITE_RULE[allocas_from_def])) >>
   qpat_x_assum `u = jump_to _ _` kall_tac >>
   qpat_x_assum `Gu = DRESTRICT _ _` kall_tac >>
+  `tu.t_mem = tm.t_mem` by simp[] >>
   qpat_x_assum `tu = _ with t_var := _` kall_tac >>
   qexistsl_tac [`u`,`Gu`,`tu`] >> simp[] >>
   conj_tac
@@ -88,7 +89,7 @@ Proof
   decide_tac
 QED
 
-Theorem extcall_default_entry_mods:
+Theorem extcall_default_entry_tmem_mods:
   compile_default_return_path cenv rt dt base_op (Var q) dop addr skip low cap info ar = (out,sb) /\
   fn_has_code ar sb func /\ rt <> NoneT /\ has_default /\ bs = [] /\ a.vs_returndata = bs /\
   ~a.vs_halted /\ a.vs_current_bb = ar.cs_current_bb /\ a.vs_inst_idx = LENGTH ar.cs_current_insts /\
@@ -113,7 +114,7 @@ Theorem extcall_default_entry_mods:
     alloca_history func u /\ allocas_from lo u /\ lo <= u.vs_alloca_next /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
     u.vs_allocas = a.vs_allocas /\ u.vs_alloca_next = a.vs_alloca_next /\
-    u.vs_memory = a.vs_memory /\ u.vs_accounts = a.vs_accounts /\
+    u.vs_memory = a.vs_memory /\ tu.t_mem = tm.t_mem /\ u.vs_accounts = a.vs_accounts /\
     (!x. not_fresh_at ar x ==> lookup_var x u = lookup_var x a /\
           FLOOKUP Gu x = FLOOKUP J x /\ op_taint tu (Var x) = op_taint tm (Var x)) /\
     lookup_var q u = SOME dw /\ FLOOKUP Gu q = SOME (w2n dw,n) /\
@@ -160,6 +161,54 @@ Proof
        (qspec_then `addr` mp_tac) >> simp[]) >>
   qexistsl_tac [`ds`,`de`,`ck`,`dj`,`xl`,`cj`,`old3`,`u`,`Gu`,`tu`] >>
   simp[] >> rpt conj_tac >> first_assum (irule_at Any) >> first_assum ACCEPT_TAC
+QED
+
+Theorem extcall_default_entry_mods:
+  compile_default_return_path cenv rt dt base_op (Var q) dop addr skip low cap info ar = (out,sb) /\
+  fn_has_code ar sb func /\ rt <> NoneT /\ has_default /\ bs = [] /\ a.vs_returndata = bs /\
+  ~a.vs_halted /\ a.vs_current_bb = ar.cs_current_bb /\ a.vs_inst_idx = LENGTH ar.cs_current_insts /\
+  alloca_history func a /\ allocas_from lo a /\ lo <= a.vs_alloca_next /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp a) /\
+  local_ptrs_reserved cenv ar /\
+  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at ar x) /\
+  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at ar x) /\
+  not_fresh_at ar q /\ lookup_var q a = SOME dw /\ FLOOKUP J q = SOME (w2n dw,n) /\
+  ptr_covers J tm q a n /\ w2n dw + n <= a.vs_alloca_next /\
+  safe_operand ar dop /\ eval_operand dop a = SOME w /\ op_taint tm dop = {} /\
+  safe_operand ar addr /\ eval_operand addr a = SOME aw /\ op_taint tm addr = {} /\
+  immutable_frame_mods func cenv cx ee a ==>
+  ?ds de ck dj xl cj old3 u Gu tu.
+    out = Var q /\ ar.cs_next_var <= ds.cs_next_var /\
+    compile_store_memory cenv dop (Var q) rt dt ds = ((),de) /\
+    (if skip then comp_return () else compile_extcodesize_check addr) de = ((),ck) /\
+    emit_inst JMP [Label xl] [] ck = ((),dj) /\ new_block xl cj = (old3,sb) /\
+    fn_has_code ds de func /\ fn_has_code de ck func /\ fn_has_code ck dj func /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (a,J,tm) [] (OK u,Gu,tu)) /\
+    ~u.vs_halted /\ u.vs_current_bb = ds.cs_current_bb /\ u.vs_inst_idx = LENGTH ds.cs_current_insts /\
+    alloca_history func u /\ allocas_from lo u /\ lo <= u.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    u.vs_allocas = a.vs_allocas /\ u.vs_alloca_next = a.vs_alloca_next /\
+    u.vs_memory = a.vs_memory /\ u.vs_accounts = a.vs_accounts /\
+    (!x. not_fresh_at ar x ==> lookup_var x u = lookup_var x a /\
+          FLOOKUP Gu x = FLOOKUP J x /\ op_taint tu (Var x) = op_taint tm (Var x)) /\
+    lookup_var q u = SOME dw /\ FLOOKUP Gu q = SOME (w2n dw,n) /\
+    ptr_covers Gu tu q u n /\ w2n dw + n <= u.vs_alloca_next /\ not_fresh_at ds q /\
+    eval_operand dop u = SOME w /\ op_taint tu dop = {} /\ (!x. dop = Var x ==> not_fresh_at ds x) /\
+    eval_operand addr u = SOME aw /\ op_taint tu addr = {} /\ (!x. addr = Var x ==> not_fresh_at ds x) /\
+    local_ptrs_reserved cenv ds /\ immutable_frame_mods func cenv cx ee u /\
+    (!H. stmt_state_rel H ctx func cenv cx ee a ==> stmt_state_rel H ctx func cenv cx ee u) /\
+    (!D d. ghost_inv_at_mods D lo d cenv cx ee J tm a ==>
+           ghost_inv_at_mods D lo d cenv cx ee Gu tu u) /\
+    (!es s0 sa G0 tn0. sa.cs_next_var <= ar.cs_next_var ==>
+       (ghost_kept_at lo cenv es sa G0 tn0 s0 J tm ==> ghost_kept_at lo cenv es sa G0 tn0 s0 Gu tu) /\
+       (wb_frame cenv es ee sa s0 a ==> wb_frame cenv es ee sa s0 u))
+Proof
+  strip_tac >>
+  drule_all extcall_default_entry_tmem_mods >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choosel_then [`ds`,`de`,`ck`,`dj`,`xl`,`cj`,`old3`,`u`,`Gu`,`tu`] strip_assume_tac)) >>
+  qexistsl_tac [`ds`,`de`,`ck`,`dj`,`xl`,`cj`,`old3`,`u`,`Gu`,`tu`] >>
+  simp[]
 QED
 
 Theorem default_shell_code_agrees[local]:
@@ -245,7 +294,7 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >- metis_tac[]
 QED
 
-Theorem extcall_default_exit_mods:
+Theorem extcall_default_exit_create_size_mods:
   compile_store_memory cenv dop (Var q) rt dt ds = ((),de) /\
   (if skip then comp_return () else compile_extcodesize_check addr) de = ((),ck) /\
   fn_has_code de ck func /\ emit_inst JMP [Label xl] [] ck = ((),dj) /\
@@ -279,7 +328,9 @@ Theorem extcall_default_exit_mods:
   else
     ?r Gz tz.
       (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (r,Gz,tz)) /\
-      exit_result r /\ expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
+      exit_result r /\
+      create_size_exit_ok ctx (INR (Error (RuntimeError "ExtCall target has no code"))) r /\
+      expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
 Proof
   strip_tac >>
   `eval_operand addr p = SOME aw` by
@@ -300,7 +351,7 @@ Proof
   suspend "abort"
 QED
 
-Resume extcall_default_exit_mods[abort]:
+Resume extcall_default_exit_create_size_mods[abort]:
   `~skip /\ ~ext_call_has_code target ee.accounts` by fs[] >>
   `compile_extcodesize_check addr de = ((),ck)` by fs[] >>
   `(n2w (LENGTH (lookup_account (w2w aw) p.vs_accounts).code) : bytes32) = 0w` by fs[] >>
@@ -329,7 +380,8 @@ Resume extcall_default_exit_mods[abort]:
              vs_inst_idx := SUC (LENGTH de.cs_current_insts))))`,
        `Gp \\ STRING #"%" (toString de.cs_next_var)`,
        `tp with t_var := tp.t_var |+ (STRING #"%" (toString de.cs_next_var),{})`] >>
-  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def] >>
+  simp[fragExecTheory.exit_result_def,exprSimDefsTheory.expr_exit_def,
+       createSizeExitTheory.create_size_exit_ok_non_exhalt] >>
   gen_tac >>
   qpat_assum `!D. gas_origin_ptr_path _ (u,Gu,tu) [] (OK p,Gp,tp)`
     (qspec_then `D` mp_tac) >>
@@ -339,7 +391,7 @@ Resume extcall_default_exit_mods[abort]:
   metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append,listTheory.APPEND]
 QED
 
-Resume extcall_default_exit_mods[success]:
+Resume extcall_default_exit_create_size_mods[success]:
   qabbrev_tac `out = STRING #"%" (toString de.cs_next_var)` >>
   qabbrev_tac `w:bytes32 = n2w (LENGTH (lookup_account (w2w aw) p.vs_accounts).code)` >>
   qabbrev_tac `v = if skip then p else update_var out w p with
@@ -366,7 +418,7 @@ Resume extcall_default_exit_mods[success]:
   suspend "join_post"
 QED
 
-Resume extcall_default_exit_mods[join_post]:
+Resume extcall_default_exit_create_size_mods[join_post]:
   qabbrev_tac `z = jump_to xl v` >>
   `ds.cs_next_var <= de.cs_next_var` by
     (qpat_assum `compile_store_memory _ _ _ _ _ ds = _` mp_tac >>
@@ -411,7 +463,7 @@ Resume extcall_default_exit_mods[join_post]:
   suspend "join_fields"
 QED
 
-Resume extcall_default_exit_mods[join_fields]:
+Resume extcall_default_exit_create_size_mods[join_fields]:
   `z.vs_memory = p.vs_memory /\ z.vs_allocas = u.vs_allocas /\
    z.vs_alloca_next = u.vs_alloca_next /\ ~z.vs_halted /\
    (allocas_below_fmp z <=> allocas_below_fmp p)` by
@@ -430,4 +482,47 @@ Resume extcall_default_exit_mods[join_fields]:
   qexistsl_tac [`z`,`Gc`,`tc`] >> simp[]
 QED
 
-Finalise extcall_default_exit_mods
+Finalise extcall_default_exit_create_size_mods
+
+Theorem extcall_default_exit_mods:
+  compile_store_memory cenv dop (Var q) rt dt ds = ((),de) /\
+  (if skip then comp_return () else compile_extcodesize_check addr) de = ((),ck) /\
+  fn_has_code de ck func /\ emit_inst JMP [Label xl] [] ck = ((),dj) /\
+  fn_has_code ck dj func /\ new_block xl cj = (old3,sb) /\
+  stmt_state_rel H ctx func cenv cx ee u /\ accounts_runtime_well_typed ee.accounts /\
+  w2w (aw:bytes32) = target /\ eval_operand addr u = SOME aw /\ op_taint tu addr = {} /\
+  (!x. addr = Var x ==> not_fresh_at ds x) /\
+  alloca_history func u /\ allocas_from lo u /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK p,Gp,tp)) /\
+  typed_copy_state_frame ds off (type_memory_size rtv) u p /\
+  (!mem. mem_agree_outside tp.t_mem p.vs_memory mem ==> val_in_memory rtv dv off mem) /\
+  (!x. not_fresh_at ds x ==> FLOOKUP Gp x = FLOOKUP Gu x /\
+       op_taint tp (Var x) = op_taint tu (Var x)) /\
+  (!i. ~(off <= i /\ i < off + type_memory_size rtv) ==> (i IN tp.t_mem <=> i IN tu.t_mem)) /\
+  tp.t_stor = tu.t_stor /\ tp.t_trans = tu.t_trans /\ tp.t_imm = tu.t_imm /\
+  ~p.vs_halted /\ p.vs_current_bb = de.cs_current_bb /\ p.vs_inst_idx = LENGTH de.cs_current_insts ==>
+  if skip \/ ext_call_has_code target ee.accounts then
+    ?z Gz tz.
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)) /\
+      typed_copy_state_frame ds off (type_memory_size rtv) u z /\
+      (!mem. mem_agree_outside tz.t_mem z.vs_memory mem ==> val_in_memory rtv dv off mem) /\
+      (!x. not_fresh_at ds x ==> FLOOKUP Gz x = FLOOKUP Gu x /\
+           op_taint tz (Var x) = op_taint tu (Var x)) /\
+      (!i. ~(off <= i /\ i < off + type_memory_size rtv) ==> (i IN tz.t_mem <=> i IN tu.t_mem)) /\
+      tz.t_stor = tu.t_stor /\ tz.t_trans = tu.t_trans /\ tz.t_imm = tu.t_imm /\
+      z.vs_memory = p.vs_memory /\ z.vs_allocas = u.vs_allocas /\
+      z.vs_alloca_next = u.vs_alloca_next /\ alloca_history func z /\
+      allocas_from lo z /\ (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
+      ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts
+  else
+    ?r Gz tz.
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (r,Gz,tz)) /\
+      exit_result r /\ expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
+Proof
+  strip_tac >>
+  drule_all extcall_default_exit_create_size_mods >>
+  Cases_on `skip \/ ext_call_has_code target ee.accounts` >> simp[] >>
+  strip_tac >> qexistsl_tac [`r`,`Gz`,`tz`] >> simp[] >>
+  Cases_on `r` >> gvs[exprSimDefsTheory.expr_exit_def]
+QED

@@ -260,8 +260,8 @@ Theorem checked_error_outcome[local]:
       (ctx_has_dalloca ctx ==>
        !u. r = Halt u \/ (?ir. r = IntRet ir u) ==> allocas_below_fmp u))
 Proof
-  strip_tac >> irule gas_outcome_full_mods_exit >> simp[] >>
-  qexistsl [`G1`, `ea`, `Abort Revert_abort t`, `INR (Error (RuntimeError msg))`, `tn1`] >>
+  strip_tac >> irule gas_outcome_full_mods_exit_revert >> simp[] >>
+  qexistsl [`G1`, `ea`, `INR (Error (RuntimeError msg))`, `tn1`, `t`] >>
   simp[exit_result_def, stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def,
        halt_exit_not_halt]
 QED
