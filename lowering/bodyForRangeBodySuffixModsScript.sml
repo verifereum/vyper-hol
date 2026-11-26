@@ -135,8 +135,12 @@ Proof
       `ee with <|scopes := sc::rest; gas_obs := []|> = ee with gas_obs := []` by
         simp[evaluation_state_component_equality] >> simp[]) >>
   disj2_tac >> conj_tac >- (
-    irule createSizeExitTheory.create_size_exit_ok_map >> simp[range_loop_result_mods_def] >>
-    first_assum ACCEPT_TAC) >>
+    rewrite_tac[createSizeExitTheory.create_size_exit_ok_def] >>
+    qpat_x_assum `create_size_exit_ok _ res _`
+      (strip_assume_tac o REWRITE_RULE [createSizeExitTheory.create_size_exit_ok_def]) >>
+    Cases_on `res` >>
+    simp[range_loop_result_mods_def] >>
+    gvs[sumTheory.INR_neq_INL]) >>
   simp[] >> qexistsl_tac [`res`,`sc`] >>
   `ee with <|scopes := sc::rest; gas_obs := []|> = ee with gas_obs := []` by
     simp[evaluation_state_component_equality] >> simp[]
