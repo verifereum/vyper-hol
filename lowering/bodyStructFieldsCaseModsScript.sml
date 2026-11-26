@@ -33,7 +33,8 @@ Proof
   asm_rewrite_tac[gas_outcome_full_mods_def] >> qexists_tac `marks`
   >- (disj1_tac >> fs[gas_bad_storage_at_def] >> metis_tac[])
   >- (disj2_tac >> disj1_tac >> qexistsl [`f res`,`ee`,`r`,`G'`,`tn'`] >> simp[] >>
-      gen_tac >> disch_tac >> first_x_assum drule >> strip_tac >> metis_tac[]) >>
+      gen_tac >> disch_tac >> first_x_assum drule >> strip_tac >>
+      metis_tac[createSizeExitTheory.create_size_exit_ok_map]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
