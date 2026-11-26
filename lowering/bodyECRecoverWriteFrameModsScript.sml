@@ -28,7 +28,7 @@ Theorem ecrecover_write_frame_mods:
   (!p n. regions_disjoint b cap p n ==>
        mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory) /\
   (!i. i < lo /\ i IN tn'.t_mem ==> i IN tn.t_mem) /\
-  (!src tops name tv v off.
+  (ce.ce_is_ctor ==> !src tops name tv v off.
      ALOOKUP ce.ce_modules src = SOME tops /\
      FLOOKUP (ce with ce_module := src).ce_module_vars (src,name) =
        SOME (ImmutableLoc off) /\
@@ -57,12 +57,10 @@ Proof
        (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
      simp[] >> conj_tac
      >- (strip_tac >> rpt gen_tac >> strip_tac >>
-         qpat_assum `!src tops name tv v off. _`
-           (qspecl_then [`src`,`tops`,`name`,`tv`,`v`,`off`] mp_tac) >>
-         simp[] >>
-         qpat_assum `!p n. regions_disjoint b cap p n ==> _`
-           (qspecl_then [`off`,`type_memory_size tv`] mp_tac) >>
-         strip_tac >> metis_tac[])
+         qpat_assum `ce.ce_is_ctor ==> !src tops name tv v off. _`
+           (drule_then assume_tac) >>
+         qpat_assum `!p n. regions_disjoint b cap p n ==> _` irule >>
+         qpat_assum `!src tops name tv v off. _` (drule_all_then ACCEPT_TAC))
      >- (qpat_assum `immutables_rel_mods _ _ _ _ _`
            (mp_tac o REWRITE_RULE [immutables_rel_mods_def]) >>
          disch_then (qspecl_then [`src`,`tops`] mp_tac) >> simp[] >>

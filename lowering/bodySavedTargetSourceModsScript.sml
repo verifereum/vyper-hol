@@ -77,7 +77,7 @@ Resume saved_call_frame_from_lookup[after_lookup]:
 QED
 Finalise saved_call_frame_from_lookup[local]
 
-Triviality saved_runtime_call_frame:
+Theorem saved_runtime_call_frame:
   contract_inv mods exps ctx cenv cx /\ ~cx.in_deploy /\
   check_contract cx.in_deploy cx.layouts cx.txn.target mods = SOME art /\
   source_body_call_supported cx (src,name) /\
@@ -107,7 +107,7 @@ Proof
   drule_all_then MATCH_ACCEPT_TAC saved_call_frame_from_lookup
 QED
 
-Triviality saved_checked_call_frame:
+Theorem saved_checked_call_frame:
   contract_inv mods exps ctx cenv cx /\
   exports_ok cx.layouts cx.txn.target mods exps /\
   check_contract F cx.layouts cx.txn.target mods = SOME runtime_art /\
