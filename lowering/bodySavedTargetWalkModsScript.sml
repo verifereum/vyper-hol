@@ -342,6 +342,20 @@ QED
 
 Finalise saved_walk_mutual[local]
 
+Theorem saved_exprs_walk_from_calls_mods:
+  !cx es cenv P.
+    (!ty key actuals fallback.
+      P key /\ ~call_can_mutate cenv (IntCall key) /\
+      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
+        (eval_exprs cx actuals) ==>
+      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
+        (eval_expr cx (Call ty (IntCall key) actuals fallback))) /\
+    ~exprs_can_mutate cenv es /\ EVERY P (int_calls_exprs es) ==>
+    state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_exprs cx es)
+Proof
+  ACCEPT_TAC (cj 6 saved_walk_mutual)
+QED
+
 Theorem saved_target_walk_from_calls_mods:
   (!ty key actuals fallback.
     P key /\ ~call_can_mutate cenv (IntCall key) /\
