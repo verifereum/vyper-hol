@@ -7,7 +7,7 @@ Ancestors
   bodyFullShadowBodyInv bodyPtrDefs ptrDiscipline ptrDisciplineTaintProps
   memSafeRun unitTransformDefs contextCodegenRel codegenRel memLocDefs ptrSafeRun
   venomExecSemantics venomState venomInst venomMemDefs
-  exprSimDefs exprLoweringProps loweringStateRelDefs
+  exprSimDefs exprLoweringProps loweringStateRelDefs stateRelProj createSizeExit
   vyperCreate vyperInterpreter vyperCallOutcome vyperState vyperStorageFootprint
   words list
 Libs
@@ -148,23 +148,6 @@ Proof
      Cases_on `w2n sz > 2 * max_code_size` >> simp[Abbr `msg`] >>
      Cases_on `cx.txn.is_static` >> fs[bind_def,ignore_bind_def,
        create_oracle_result_def,take_create_outcome_exhausted]) >>
-  `MEM func ctx.ctx_functions` by
-    (`valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
-       by fs[storage_trace_domain_def] >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> _`
-       (drule_then strip_assume_tac) >>
-     drule stateRelProjTheory.stmt_state_rel_alloca_room >>
-     simp[alloca_room_def] >> metis_tac[venomInstTheory.lookup_function_MEM]) >>
-  `ALL_DISTINCT (FLAT (MAP fn_labels ctx.ctx_functions)) /\
-   oversized_create_abort ctx (Abort ExHalt_abort (halt_state (set_returndata [] s))) ==>
-   msg = "create initcode too large"` by
-    (strip_tac >>
-     mp_tac (Q.INST [`fn` |-> `func`, `inst` |-> `inst`, `bb` |-> `bb`]
-       (SPEC_ALL createSizeExitTheory.oversized_create_abort_at_cursor)) >>
-     impl_tac >- fs[Abbr `inst`] >>
-     disch_then (qx_choosel_then [`a`,`p`,`n`,`sl`,`w`] strip_assume_tac) >>
-     `w = sz` by (Cases_on `sop` >> fs[Abbr `inst`, mk_inst_def]) >>
-     fs[Abbr `msg`, arithmeticTheory.GREATER_DEF]) >>
   irule gas_outcome_full_mods_exit >> simp[] >>
   qexistsl_tac [`G`,`ee`,`Abort ExHalt_abort (halt_state (set_returndata [] s))`,
                 `INR (Error (RuntimeError msg))`,`tn`] >>
@@ -172,5 +155,15 @@ Proof
   gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _` (drule_then strip_assume_tac) >>
   `allocas_from lo s /\ stor_taint_ok_at (DF H) tn s` by fs[ghost_inv_at_mods_def] >>
-  drule_all create_dispatch_abort_path >> simp[]
+  drule_all create_dispatch_abort_path >> simp[] >> disch_tac >>
+  Cases_on `w2n sz > 2 * max_code_size` >- simp[Abbr `msg`] >>
+  Cases_on `s.vs_call_ctx.cc_static`
+  >- simp[halt_state_def,set_returndata_def] >>
+  strip_tac >>
+  `MEM func ctx.ctx_functions` by
+    (drule stmt_state_rel_alloca_room >> simp[alloca_room_def] >>
+     strip_tac >> drule lookup_function_MEM >> simp[]) >>
+  drule_all oversized_create_abort_at_cursor >> strip_tac >>
+  qpat_assum `inst.inst_opcode = CREATE /\ _ \/ _` strip_assume_tac >>
+  gvs[]
 QED
