@@ -5,7 +5,7 @@ Ancestors
   gasOutcomeFullMods gasExemptCertMods gasStorage loweringPosts stmtSimProps
   bodyPtrDefs context exprLowering compileEnv vyperInterpreter vyperState
 
-Theorem stack_unforce_outcome_mods[local]:
+Theorem stack_unforce_outcome_mods:
   (!s tv t. eval_expr cx e s = (INL tv,t) ==> ?v. tv = Value v) /\
   gas_outcome_full_mods (DF,lo,explicit,ctx,f,PG) mods cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn) Q R /\
