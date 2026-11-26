@@ -5,7 +5,7 @@ Ancestors
   fragGasCopyLoop fragGasSeqPtr fragGasOriginPtr instSeqPtrLo
   fragExecMem fragExec memSafeRun ptrDiscipline
   emitHelperProps venomInst venomState list rich_list
-  contextCodegenRel[qualified] codegenRel[qualified] unitTransformDefs[qualified]
+  contextCodegenRel[qualified] codegenRel[qualified] unitTransformDefs[qualified] gasPathPtrExec[qualified,ignore_grammar] fragGasOriginPtrLoop[qualified,ignore_grammar] bool[qualified,ignore_grammar]
 
 Theorem transient_lock_abort_origin_ptr_safe:
   ~s.vs_halted /\
@@ -67,4 +67,27 @@ Proof
       simp[transient_lock_checked_state_def, halt_state_def, set_returndata_def,
            update_var_def]) >>
   fs[Abbr `code`, Abbr `a`] >> metis_tac[]
+QED
+
+Theorem lock_abort_suffix_no_oversize_transfer:
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (Abort a t,G1,tn1) /\
+  (?u G2 tn2. ~oversized_create_abort ctx (Abort a u) /\
+     !D' E. gas_origin_ptr_path (D',lo,E,ctx,func,PG)
+       (s,G,tn) [] (Abort a u,G2,tn2)) ==>
+  ~oversized_create_abort ctx (Abort a t)
+Proof
+  strip_tac >>
+  qpat_assum `!D' E. gas_origin_ptr_path (D',lo,E,ctx,func,PG)
+      (s,G,tn) [] (Abort a u,G2,tn2)`
+    (qspecl_then [`D`,`explicit`] assume_tac) >>
+  qpat_assum `gas_origin_ptr_path _ _ [] (Abort a t,G1,tn1)`
+    (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
+  qpat_assum `gas_origin_ptr_path _ _ [] (Abort a u,G2,tn2)`
+    (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections) >>
+  `exit_result (Abort a t)` by simp[exit_result_def] >>
+  `exit_result (Abort a u)` by simp[exit_result_def] >>
+  drule_all gasPathPtrExecTheory.gas_path_ptr_exit_unique >>
+  simp[exit_result_def] >> strip_tac >>
+  (metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_projections, gasPathPtrExecTheory.gas_path_ptr_exit_unique, fragGasOriginPtrLoopTheory.gas_origin_ptr_path_loop, fragGasOriginPtrTheory.gas_origin_ptr_path_rules, transient_lock_abort_origin_ptr_safe, fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted, fragGasCopyLoopTheory.run_inst_seq_abort_origin_ptr_uniform, fragGasSeqPtrTheory.sha_zero_origin_abort, createSizeExitTheory.oversized_create_abort_def, fragExecTheory.exit_result_def, boolTheory.F_DEF, boolTheory.T_DEF])
 QED
