@@ -322,6 +322,7 @@ Definition constant_builtin_def:
   constant_builtin (Bop op) = constant_binop op /\
   constant_builtin MethodId = T /\
   constant_builtin PowMod256 = T /\
+  constant_builtin NamedConst = T /\
   constant_builtin _ = F
 End
 
@@ -533,6 +534,8 @@ Definition runtime_constant_builtin_def:
     (constant_binop op /\ op <> Min /\ op <> Max) /\
   runtime_constant_builtin (Env item) = (item <> SelfAddr) /\
   runtime_constant_builtin (Acc item) = (item <> Code) /\
+  runtime_constant_builtin NamedConst = T /\
+  runtime_constant_builtin (BoolChain _ _) = T /\
   runtime_constant_builtin _ = F
 End
 

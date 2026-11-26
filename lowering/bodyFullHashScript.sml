@@ -3,7 +3,7 @@
 Theory bodyFullHash
 Ancestors
   bodyFullHashKeccak bodyFullHashSha
-  bodyFullOfVV bodyFullPreds bodySimFull
+  bodyFullOfVV bodyFullPreds bodyFullSimProjection bodySimFull
   exprSimHyps exprSimHypsDefs exprSimSource
   bodyPtrHashBuiltinsCases gasShadowCompile gasShadowState
   loweringPosts exprLowering exprLoweringProps compileEnv valueEncoding
@@ -33,8 +33,9 @@ Theorem hash_expr_full_ok:
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
   rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
-  rewrite_tac[body_expr_full_ok_def] >>
-  reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
+  ONCE_REWRITE_TAC [body_expr_full_ok_def] >>
+  reverse conj_tac
+  >- (qpat_x_assum `bt = Keccak256 \/ bt = Sha256` strip_assume_tac >> simp[]) >>
   rpt gen_tac >> strip_tac >>
   `LENGTH es = 1` by metis_tac[hash_body_pre_arity] >>
   `?e. es = [e]` by (Cases_on `es` >> gvs[listTheory.LENGTH_EQ_NUM]) >>
@@ -50,7 +51,7 @@ Proof
      gvs[expr_body_pre_def]) >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx (expr_type e) e es'` by
-    (gvs[body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty' (Builtin ty bt [e]) es'` by
     (irule hash_vv_sim_full >> metis_tac[]) >>

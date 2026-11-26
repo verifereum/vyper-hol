@@ -492,13 +492,9 @@ Theorem ext_call_taint[local]:
     tn with <|t_mem := tn.t_mem DIFF range_bytes (step_writes inst s post);
       t_var := tn.t_var |+ (v,{});
       t_stor := adopt_reset inst
-        (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST post.vs_requests) /\
-         post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
+        (adopt_guard s.vs_call_ctx.cc_static s post (HD s.vs_outcomes).co_success) tn.t_stor;
       t_trans := adopt_reset inst
-        (~s.vs_call_ctx.cc_static /\ post.vs_requests <> s.vs_requests /\
-        ~computed_precompile (LAST post.vs_requests) /\
-         post.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans|>
+        (adopt_guard s.vs_call_ctx.cc_static s post (HD s.vs_outcomes).co_success) tn.t_trans|>
 Proof
   strip_tac >>
   `new_site_bytes s post = {}` by

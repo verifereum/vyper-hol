@@ -458,14 +458,22 @@ Definition adopt_reset_def:
     then {} else X
 End
 
+(* The guard an adopting call or create passes before its outcome counts:
+   not static (`stat`), the step recorded a request other than a computed
+   precompile and took an outcome, and `ok` holds of that outcome (a call
+   must succeed, a create adopts either way).  It unfolds by simp. *)
+Definition adopt_guard_def[simp]:
+  adopt_guard stat s s' ok <=>
+    ~stat /\ s'.vs_requests <> s.vs_requests /\
+    ~computed_precompile (LAST s'.vs_requests) /\
+    s'.vs_outcomes <> s.vs_outcomes /\ ok
+End
+
 Definition step_taint_def:
   step_taint inst s s' tn =
-    let adopted = (~s.vs_call_ctx.cc_static /\
-                   s'.vs_requests <> s.vs_requests /\
-                   ~computed_precompile (LAST s'.vs_requests) /\
-                   s'.vs_outcomes <> s.vs_outcomes /\
-                   ((HD s.vs_outcomes).co_success \/
-                    MEM inst.inst_opcode [CREATE; CREATE2])) in
+    let adopted = adopt_guard s.vs_call_ctx.cc_static s s'
+                    ((HD s.vs_outcomes).co_success \/
+                     MEM inst.inst_opcode [CREATE; CREATE2]) in
     <| t_mem := mem_taint tn inst s s';
        t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst s);
        t_stor := adopt_reset inst adopted

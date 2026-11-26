@@ -1,7 +1,7 @@
 (* Abs in the joint expression induction. *)
 Theory bodyFullBuiltinWordAbsCase
 Ancestors
-  bodyFullShadowBodyInv
+  bodyFullShadowBodyInv bodyFullSimProjection
   exprSimAbsSource
   bodyFullBuiltinWordAbs bodyFullShared bodyFullPreds bodySimFull
   gasOutcomeFullCompose gasOutcomeFullStmts exprSimWordBuiltins
@@ -236,10 +236,11 @@ Proof
     (strip_tac >> gvs[] >> first_x_assum irule >>
      simp[vyperASTTheory.expr_type_def, compile_not_abs_stack] >>
      metis_tac[eval_expr_builtin_value]) >>
+  `body_expr_full_ok cx e` by
+    fs[builtin_args_length_ok_def, body_exprs_full_ok_def] >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty e es` by
-    (gvs[builtin_args_length_ok_def, body_exprs_full_ok_def,
-         body_expr_full_ok_def] >> metis_tac[]) >>
+    (drule_all body_expr_full_ok_simulations >> simp[]) >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
   drule lower_value_abs >> strip_tac >>
   rename1 `compile_builtin_abs x s1 = (op,sb)` >>

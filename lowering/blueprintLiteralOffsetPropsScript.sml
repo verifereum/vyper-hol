@@ -1,7 +1,7 @@
 (* The source's blueprint-offset test and the compiler use the same folded literal. *)
 Theory blueprintLiteralOffsetProps
 Ancestors
-  abiValueEncoding alist compileEnv constSubst constSubstStmtsPreserve exprBodyPreProps
+  abiValueEncoding alist bodySim compileEnv constSubst constSubstStmtsPreserve exprBodyPreProps
   exprLowering exprSimHypsDefs exprSimSend exprSimSource gasContext integer_word
   list option supportedExprTraverse valueEncoding vyperAST vyperCreate
   vyperInterpreter vyperOriginFold vyperPinFold vyperPinFoldProps
@@ -18,11 +18,13 @@ Proof
 QED
 
 Theorem blueprint_offset_literal_bit:
-  expr_body_pre cenv cx env offset es /\ LENGTH salts = (if salted then 1 else 0) ==>
+  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env offset es /\
+  LENGTH salts = (if salted then 1 else 0) ==>
   blueprint_literal_offset cx salted (target::amount::(salts ++ offset::ctor)) =
     IS_SOME (expr_int_literal (origin_fold_value offset))
 Proof
   strip_tac >>
+  qpat_assum `body_inv _ _ _ _` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
   `subst_consts_expr (case get_module_code cx NONE of
       SOME tops => module_consts_env tops [] | NONE => []) offset = offset` by
     (Cases_on `get_module_code cx NONE`
@@ -38,7 +40,9 @@ Proof
            optionTheory.IS_SOME_EQ_NOT_NONE] >>
          metis_tac[alistTheory.ALOOKUP_NONE]) >>
      simp[]) >>
-  Cases_on `salted` >> gvs[LENGTH_EQ_NUM_compute,blueprint_literal_offset_def,blueprint_offset_form]
+  qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+    (fn code => rewrite_tac [MATCH_MP blueprint_literal_offset_singleton code]) >>
+  Cases_on `salted` >> gvs[LENGTH_EQ_NUM_compute, blueprint_offset_form]
 QED
 
 Theorem blueprint_literal_offset_read:

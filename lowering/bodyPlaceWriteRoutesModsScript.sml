@@ -1,0 +1,11 @@
+(* Closed linked place-write routes for the typed write-case join. *)
+Theory bodyPlaceWriteRoutesMods
+Ancestors
+  bodyQualifiedPlaceAssignFullMods bodyPlaceAppendFullMods bodyPlaceAugAssignFullMods
+
+Theorem qualified_place_assign_full_mods =
+  bodyQualifiedPlaceAssignFullModsTheory.qualified_place_assign_full_mods
+
+Theorem place_append_full_mods = bodyPlaceAppendFullModsTheory.place_append_full_mods
+
+Theorem place_augassign_full_mods = bodyPlaceAugAssignFullModsTheory.place_augassign_full_mods

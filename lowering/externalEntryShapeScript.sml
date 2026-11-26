@@ -1449,6 +1449,18 @@ Proof
   (impl_tac >- (Cases_on `a` >> gvs[])) >> simp[]
 QED
 
+Theorem fresh_label_pair_labels:
+  (!lbl s. isPREFIX "@" lbl ==>
+    cs_extends s (SND (k lbl s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (k lbl s)))) ==>
+  cs_extends st (SND ((\(lbl,s). k lbl s) (fresh_label suffix st))) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND ((\(lbl,s). k lbl s) (fresh_label suffix st))))
+Proof
+  disch_tac >> rewrite_tac[GSYM (SRULE [LET_THM] comp_bind_def)] >>
+  irule fresh_label_bind_labels >> simp[]
+QED
+
 Theorem new_block_action_labels:
   !lbl s P. P lbl ==>
     cs_extends s (SND (new_block lbl s)) /\
@@ -3667,6 +3679,29 @@ Proof
    irule as_ptr_val_labels >> simp[compile_slice_extcode_labels, compile_slice_data_labels])
 QED
 
+Theorem compile_bool_chain_ops_labels:
+  !es. (!e s. MEM e es ==>
+      cs_extends s (SND (lower_value f cenv (BaseT BoolT) e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (lower_value f cenv (BaseT BoolT) e s)))) ==>
+    !s. cs_extends s (SND (compile_bool_chain_ops f cenv is_and result exit_lbl es s)) /\
+      EVERY (isPREFIX "@")
+        (added_labels s (SND (compile_bool_chain_ops f cenv is_and result exit_lbl es s)))
+Proof
+  Induct_on `es` >- simp[compile_bool_chain_ops_def, comp_return_labels] >>
+  qx_gen_tac `e` >> strip_tac >> gen_tac >> Cases_on `es` >>
+  simp[compile_bool_chain_ops_def] >>
+  irule comp_bind_labels >> (reverse conj_tac >- (gvs[DISJ_IMP_THM])) >>
+  rpt gen_tac >> BETA_TAC
+  >- (irule comp_ignore_bind_labels >> simp[emit_inst_labels]) >>
+  Cases_on `is_and` >> simp[comp_bind_assoc] >>
+  ntac 2 (irule fresh_label_bind_labels >> rpt gen_tac >> disch_tac >> BETA_TAC) >>
+  simp[fragFuelTheory.comp_bind_return] >>
+  ntac 5 (rpt gen_tac >> irule comp_ignore_bind_labels >>
+    (conj_tac >- (gen_tac >> FIRST
+      [irule new_block_action_labels >> simp[], simp[emit_inst_labels]]))) >>
+  gen_tac >> first_x_assum irule >> gvs[DISJ_IMP_THM]
+QED
+
 Theorem compile_builtin_dispatch_body_labels:
   (!ce t e s. cs_extends s (SND (f ce t e s)) /\
     EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
@@ -3678,6 +3713,19 @@ Proof
   simp[builtin_scalar_labels, builtin_method_id_labels, builtin_branching_scalar_labels,
        builtin_environment_labels, builtin_hash_labels, builtin_bop_labels,
        builtin_ec_labels, builtin_concat_labels, builtin_makearray_labels, builtin_slice_labels]
+  >- (once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
+      ho_match_mp_tac pair_case_labels >> conj_tac >- simp[lower_value_labels] >>
+      Cases_on `is_word_type ret_ty` >>
+      simp[as_stack_val_def, as_ptr_val_def, cs_extends_refl, added_labels_def,
+           DROP_LENGTH_TOO_LONG]) >>
+  once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
+  ho_match_mp_tac pair_case_labels >> conj_tac >- simp[fresh_var_action_labels] >>
+  rpt gen_tac >> ho_match_mp_tac fresh_label_pair_labels >> rpt gen_tac >> disch_tac >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- simp[compile_bool_chain_ops_labels, lower_value_labels] >>
+  rpt gen_tac >> ho_match_mp_tac pair_case_labels >> conj_tac
+  >- (irule new_block_action_labels >> simp[]) >>
+  simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
 QED
 
 Theorem compile_expr_structlit_labels:
@@ -3758,18 +3806,6 @@ Proof
   rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
        simp[compile_name_vv_labels, unwrap_value_labels]) >>
   irule as_stack_val_labels >> simp[compile_pow_mod256_labels]
-QED
-
-Theorem fresh_label_pair_labels:
-  (!lbl s. isPREFIX "@" lbl ==>
-    cs_extends s (SND (k lbl s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (k lbl s)))) ==>
-  cs_extends st (SND ((\(lbl,s). k lbl s) (fresh_label suffix st))) /\
-  EVERY (isPREFIX "@") (added_labels st
-    (SND ((\(lbl,s). k lbl s) (fresh_label suffix st))))
-Proof
-  disch_tac >> rewrite_tac[GSYM (SRULE [LET_THM] comp_bind_def)] >>
-  irule fresh_label_bind_labels >> simp[]
 QED
 
 Theorem compile_ifexp_arm_labels:

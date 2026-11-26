@@ -2,6 +2,7 @@
 Theory bodyFlagLeafMods
 Ancestors
   bodyFullPredsMods bodyFullPostsMods bodyFullShadowBodyInv bodyFullShared bodyInvSplit
+  bodyWordLiteralMods[qualified]
   exprBodyPreProps exprSimHypsDefs exprSimProps exprSimStack exprSimMemDefs
   exprLoweringProps loweringPosts loweringStateRelDefs bodyPtrDefs
   gasOutcomeFullMods gasOutcomeFull gasContext gasStorage gasSummary
@@ -24,26 +25,6 @@ Theorem flag_member_annotation[local]:
   ann = FlagT nsid
 Proof
   strip_tac >> drule expr_body_pre_mods_well_typed >> simp[well_typed_expr_def]
-QED
-
-Theorem flag_outcome_nil[local]:
-  ~s.vs_halted /\
-  (!tail. source (es with gas_obs := tail) = (res,es with gas_obs := tail)) /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-       Q H res (es with gas_obs := []) G tn s) ==>
-  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
-    (es,s,G,tn) Q R
-Proof
-  strip_tac >> PURE_REWRITE_TAC[gas_outcome_full_mods_def] >>
-  qexists_tac `[]` >>
-  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
-  >- (disj1_tac >>
-      conj_tac >- simp[gas_bad_storage_at_def, gas_explicit_def] >>
-      qexistsl_tac [`ARB`, `func`, `PG`, `G`, `tn`, `s`] >>
-      simp[gas_origin_ptr_focus_nil]) >>
-  disj2_tac >> disj1_tac >>
-  qexistsl_tac [`res`, `es`, `OK s`, `G`, `tn`] >>
-  simp[gas_origin_ptr_path_rules]
 QED
 
 Theorem flag_nil_frame[local]:
@@ -88,7 +69,8 @@ Proof
   qpat_x_assum `lower_value compile_expr cenv _ _ _ = _` mp_tac >>
   simp[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
        unwrap_value_def] >> strip_tac >> gvs[] >>
-  irule flag_outcome_nil >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule bodyWordLiteralModsTheory.word_literal_pure_outcome >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `INL (FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (src,fid)) mid))` >>
   simp[] >>
   gen_tac >> strip_tac >> first_x_assum drule >>
@@ -117,7 +99,8 @@ Proof
   drule flag_member_annotation >> strip_tac >>
   qpat_x_assum `compile_expr cenv _ _ _ = _` mp_tac >>
   simp[compile_expr_def, comp_return_def] >> strip_tac >> gvs[] >>
-  irule flag_outcome_nil >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule bodyWordLiteralModsTheory.word_literal_pure_outcome >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `INL (Value (FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (src,fid)) mid)))` >>
   conj_tac >- simp[Once evaluate_def, lookup_flag_mem_def, return_def] >>
   simp[] >> gen_tac >> strip_tac >> first_x_assum drule >>

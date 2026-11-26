@@ -84,15 +84,6 @@ Proof
   metis_tac[supportedExprFormsTheory.supported_place_root_def]
 QED
 
-Theorem aug_place_supported_root_namespace:
-  body_inv tops ctx cenv cx /\ supported_place_root tops (src,id) /\
-  IS_SOME (get_module_code cx src) ==> src = NONE
-Proof
-  strip_tac >> Cases_on `src` >> fs[] >>
-  drule_then (qspec_then `x` assume_tac) body_inv_qualified_module_absent >>
-  fs[]
-QED
-
 Theorem aug_place_supported_root_decl:
   !tops id.
     ((?vis mut ty slot.

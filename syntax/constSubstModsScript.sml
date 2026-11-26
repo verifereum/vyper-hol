@@ -6,7 +6,7 @@
    subst_consts_* (the singleton theorems in compileUnit). *)
 Theory constSubstMods
 Ancestors
-  vyperAST alist list pair vyperContext constSubst vyperInterpreter
+  vyperAST alist list option pair vyperContext constSubst
 
 Definition subst_consts_expr_mods_def:
   subst_consts_expr_mods env (Name ty id) = Name ty id /\
@@ -147,9 +147,17 @@ Definition consts_env_mods_acc_def:
     consts_env_mods_acc rest (module_consts_env_mods src tops acc)
 End
 
+(* Match the interpreter's constant installation order. *)
+Definition consts_env_modules_order_def:
+  consts_env_modules_order [] = [] /\
+  consts_env_modules_order ((src,tops)::rest) =
+    if IS_SOME src then (src,tops)::consts_env_modules_order rest
+    else consts_env_modules_order rest ++ [(src,tops)]
+End
+
 Definition consts_env_mods_def:
   consts_env_mods (mods : (num option # toplevel list) list) =
-    consts_env_mods_acc (constants_order mods) []
+    consts_env_mods_acc (consts_env_modules_order mods) []
 End
 
 Definition subst_consts_fn_mods_def:
@@ -270,7 +278,8 @@ Theorem consts_env_mods_singleton:
   consts_env_mods [(NONE, tops)] =
   MAP (λ(id,v). ((NONE,id),v)) (module_consts_env tops [])
 Proof
-  simp[consts_env_mods_def, constants_order_def, consts_env_mods_acc_def] >>
+  simp[consts_env_mods_def, consts_env_modules_order_def,
+       consts_env_mods_acc_def] >>
   qspecl_then [`tops`, `[]`] mp_tac module_consts_env_mods_singleton >>
   simp[]
 QED

@@ -5226,25 +5226,9 @@ Theorem ctor_guarded_builtin_body_first_emission:
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  strip_tac >> ntac 5 gen_tac >> Cases_on `bi`
-  >~ [`Bop _`] >- (rpt gen_tac >> strip_tac >>
-      drule_at (Pos last) ctor_guarded_bop_dispatch_first_emission >> disch_then irule >> metis_tac[])
-  >~ [`Concat`] >- (rpt gen_tac >> strip_tac >>
-      drule_at (Pos last) ctor_guarded_concat_dispatch_first_emission >> disch_then irule >> metis_tac[])
-  >~ [`MakeArray _ _`] >- (rpt gen_tac >> strip_tac >>
-      drule_at (Pos last) ctor_guarded_make_array_dispatch_first_emission >> disch_then irule >> metis_tac[])
-  >~ [`Uint2Str`] >- (rpt gen_tac >> strip_tac >>
-      drule_at (Pos last) ctor_guarded_uint2str_dispatch_first_emission >> disch_then irule >> metis_tac[])
-  >~ [`AsWeiValue _`] >- (rpt gen_tac >> strip_tac >>
-      drule_at (Pos last) ctor_guarded_as_wei_value_dispatch_first_emission >> disch_then irule >> metis_tac[])
-  >~ [`ECRecover`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM])
-  >~ [`ECAdd`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM])
-  >~ [`ECMul`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM])
-  >~ [`MethodId`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM])
-  >~ [`Slice _`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_bytes_precompile_dispatch_first_emission >> disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM])
-  >> rpt gen_tac >> strip_tac >>
-  drule_at (Pos last) ctor_guarded_scalar_dispatch_first_emission >>
-  disch_then irule >> metis_tac[arithmeticTheory.ADD_COMM]
+  strip_tac >> dxrule ctor_expr_callback_first_emission >> disch_tac >>
+  drule entryReachBodyFirstEmissionExprSupportTheory.first_emission_builtin_dispatch >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem ctor_target_callback_first_emission:

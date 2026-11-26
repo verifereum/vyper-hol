@@ -2,7 +2,7 @@
 Theory bodyFullAppendResolved
 Ancestors
   stateRelProj stmtSimDefs vyperScopePreservation
-  bodyFullPreds bodySimFull gasOutcomeFullCompose
+  bodyFullPreds bodyFullSimProjection bodySimFull gasOutcomeFullCompose
   bodyFullShared bodyFullMemoryFrames bodyAppendResolvedPre appendMemoryRel appendMemoryPtr
   bodyNameMemoryFacts representationCleanPtr appendMemoryPath
   normalizationPrefixPtr robustCopyTransportPtr exprSimAggregateEncoding allocaHistoryFragment
@@ -267,8 +267,11 @@ Resume body_append_local_primitive_full[rhs_full]:
     fs[ret_pc_ok_def] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e (es with gas_obs := [])` by
-    (fs[body_expr_full_ok_def] >> first_x_assum (irule o cj 1) >>
-     simp[] >> metis_tac[]) >>
+    (`body_const_cells_agree [(NONE,tops)] cx env (es with gas_obs := [])` by
+       simp[body_const_cells_agree_state_updates] >>
+     `expr_body_pre cenv cx env e (es with gas_obs := [])` by
+       simp[expr_body_pre_gas_obs] >>
+     drule_all body_expr_full_ok_simulations >> simp[]) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
   simp[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,

@@ -21,7 +21,8 @@ Proof
   `expr_body_pre cenv cx env off es` by
     metis_tac[create_call_operand_body_pre] >>
   conj_tac
-  >- (mp_tac (Q.INST [`salted` |-> `hs`, `offset` |-> `off`,
+  >- (mp_tac (Q.INST [`tops` |-> `tops`, `ctx` |-> `ctx`,
+          `salted` |-> `hs`, `offset` |-> `off`,
           `salts` |-> `if hs then [salt] else []`,
           `target` |-> `target`, `amount` |-> `value`, `ctor` |-> `ctors`]
           blueprint_offset_literal_bit) >>

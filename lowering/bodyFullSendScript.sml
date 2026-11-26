@@ -852,7 +852,7 @@ Theorem body_send_case_full:
        body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Call v12 (Send has_gas) es v13)
 Proof
-  rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_full_ok_def] >>
+  rpt gen_tac >> disch_tac >> ONCE_REWRITE_TAC[body_expr_full_ok_def] >>
   reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
   drule send_pre_types >> strip_tac >>
   `body_exprs_full_ok cx es` by
