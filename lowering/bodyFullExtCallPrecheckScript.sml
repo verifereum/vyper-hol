@@ -362,7 +362,12 @@ Theorem extcall_precheck_to_call:
           (!x. op = Var x ==> FLOOKUP G1 x = FLOOKUP G x)) /\
         (!ty v op. safe_operand sp op /\ ptr_mem_ok cx ty v op G tn s ==>
           ptr_mem_ok cx ty v op G1 tn1 t)
-    else exit_result r /\ expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
+    else ?aw. eval_operand addr s = SOME aw /\
+      r = Abort Revert_abort (revert_state (set_returndata []
+        (update_var (STRING #"%" (toString sp.cs_next_var))
+           (n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code)) s
+           with vs_inst_idx := SUC s.vs_inst_idx))) /\
+      exit_result r /\ expr_exit (INR (Error (RuntimeError "ExtCall target has no code"))) r
 Proof
   strip_tac >>
   qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -381,7 +386,8 @@ Proof
   reverse (Cases_on `ext_call_precheck_ok skip ret_type target ee.accounts`)
   >- (qexistsl_tac [`Abort Revert_abort (revert_state (set_returndata []
                     (update_var chk_out w s with vs_inst_idx := SUC s.vs_inst_idx)))`,`Gc`,`tc`] >>
-      fs[exit_result_def,exprSimDefsTheory.expr_exit_def]) >>
+      fs[exit_result_def,exprSimDefsTheory.expr_exit_def] >>
+      qexists_tac `aw` >> simp[Abbr `chk_out`, Abbr `w`]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t0,Gc,tc)` by fs[] >>
   `alloca_history func t0` by

@@ -199,6 +199,7 @@ Theorem raw_log_dynamic_static_tail_path:
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts) ==>
   ?u G1 tn1. !H. valid_horizon cx st0 H ee.storage_trace ==>
+    u.vs_call_ctx.cc_static /\
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
       (Abort ExHalt_abort u,G1,tn1)
 Proof
@@ -247,6 +248,7 @@ Proof
         (simp[Abbr `q`] >>
          qpat_assum `t = s with vs_vars := _` SUBST1_TAC >>
          fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
+      conj_tac >- fs[Abbr `q`, halt_state_def, set_returndata_def] >>
       `step_inst_base i q = Abort ExHalt_abort (halt_state (set_returndata [] q))` by
         (irule log_emit_static_step >> simp[Abbr `i`, venomInstTheory.mk_inst_def, Abbr `q`,
            eval_operand_def, lookup_var_def, eval_operands_def] >>

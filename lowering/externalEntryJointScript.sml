@@ -516,6 +516,7 @@ Theorem external_entry_abort_from_registration:
     (exc = Error (RuntimeError "nonreentrant lock") \/
      exc = Error (RuntimeError "write in static context")) /\
     s.vs_gas_readings = DROP (LENGTH marks0) ss.vs_gas_readings /\
+    (a = Revert_abort \/ (a = ExHalt_abort /\ s.vs_call_ctx.cc_static)) /\
     !D. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
       (ss,FEMPTY,entry_taint) marks0 (Abort a s,G,tn)
 Proof

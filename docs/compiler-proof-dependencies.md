@@ -114,13 +114,14 @@ S1 is proved from the entry bridge, the joint body simulation
 (`bodySimFullMain.body_stmts_sim_full`) and the halt bridge. Generic
 composition and each L1–L13 have none either. `vyper_call_correct`,
 `e2e_deploy_correctness` and S1 reach no admitted lemma.
-`vyper_call_gas_sufficient` reaches only `call_entry_reachable_create_size_ok`
-and `e2e_deploy_gas_sufficient` only `deploy_entry_reachable_create_size_ok`
-([e2eGasSufficient](../lowering/e2eGasSufficientScript.sml)): the two held
-claims, marked `GATE_ADMISSION`, that, from the call or deploy entry, every
-reachable creation instruction meets the init-code size check
-`inst_create_size_ok`, blueprint forms included. The one other admitted
-theorem, `function_inliner_correct`, lies under no top. See the [Milestone 1
+The gas companions use the proved `call_entry_reachable_create_size_ok` and
+`deploy_entry_reachable_create_size_ok`
+([e2eGasSufficient](../lowering/e2eGasSufficientScript.sml)). For the selected
+raw run, the simulation relates an oversized non-static CREATE or CREATE2
+abort to the source initcode-size error. The entry proofs use that fact and
+the O1 transport theorem to establish `inst_create_size_ok`, including for
+blueprint creation. The admitted `function_inliner_correct` lies under no
+top. See the [Milestone 1
 source owners and
 receipt](compiler-proof-status-2026-10-09.md#built-logical-admission-path).
 

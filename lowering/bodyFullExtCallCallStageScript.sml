@@ -7,7 +7,7 @@ Ancestors
   fragGasEmitCtrl fragGasOriginPtr fragExec memSafeRun instMemFrontier gasEvents gasCount
   pred_set list exprSimRawCallCalldata exprSimExtCallCase extCallOracleStep
   abiCallerAllocation exprLoweringProps emitHelperProps
-  gasOutcomeFullCompose vyperStorageTrace vyperStorageFootprint exprSimDefs
+  gasOutcomeFullCompose createSizeExit vyperStorageTrace vyperStorageFootprint exprSimDefs
 
 Theorem extcall_call_intervals:
   (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr
@@ -414,7 +414,7 @@ Theorem extcall_call_landing[local]:
   (!H. valid_horizon cx st0 H ef.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,Gf,tf) /\
     ((?z. r = OK z /\ Q H res (ef with gas_obs := []) Gf tf z) \/
-     (exit_result r /\ expr_exit res r))) ==>
+     (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r))) ==>
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0 source
     (ee,s,G,tn) Q (\H res es gt r. expr_exit res r)
 Proof
@@ -474,7 +474,7 @@ Theorem extcall_call_stage_full:
          (emit_void RETURNDATACOPY [fail_buf.buf_operand;Lit 0w;rds])
        (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand;rds] [])
          (new_block cont_lbl)))))))))) sp = (u,sr) /\
-  fn_has_code sp sr func /\ fn_inst_ids_distinct func /\
+  fn_has_code sp sr func /\ fn_inst_ids_distinct func /\ MEM func ctx.ctx_functions /\
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee s /\
@@ -533,7 +533,7 @@ Theorem extcall_call_stage_full:
       (!H. valid_horizon cx st0 H ee'.storage_trace ==>
         gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (z,Gu,tu) [] (r,Gf,tf) /\
         ((?t. r = OK t /\ Q H res (ee' with gas_obs := []) Gf tf t) \/
-         (exit_result r /\ expr_exit res r)))) ==>
+         (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r)))) ==>
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (do accounts <- get_accounts;
         check (ext_call_precheck_ok skip ret_type target accounts)
@@ -566,6 +566,9 @@ Proof
   reverse (Cases_on `ext_call_precheck_ok skip ret_type target ee.accounts`)
   >- (disch_then (qspecl_then [`explicit`,`d`,`PG`] mp_tac) >>
       ASM_SIMP_TAC bool_ss [] >> strip_tac >>
+      `create_size_exit_ok ctx (INR (Error (RuntimeError "ExtCall target has no code"))) r` by
+        (qpat_assum `r = Abort Revert_abort _` (SUBST1_TAC) >>
+         simp[create_size_exit_ok_non_exhalt]) >>
       irule extcall_call_landing >> reverse conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`G1`,`ee`,`r`,`INR (Error (RuntimeError "ExtCall target has no code"))`,`tn1`] >>
       simp[get_accounts_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
@@ -609,12 +612,18 @@ Proof
   drule_all (Q.INST [`source_gas` |-> `source_gas`, `explicit` |-> `explicit`,
                     `PG` |-> `PG`] extcall_fetched_select) >>
   disch_then (qspecl_then [`source_gas`,`explicit`,`PG`] strip_assume_tac)
-  >- (irule extcall_call_landing >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  >- (`!res. create_size_exit_ok ctx res (Abort ExHalt_abort (halt_state (set_returndata [] t)))` by
+        (simp[create_size_exit_ok_def] >> rpt strip_tac >>
+         drule_all oversized_create_abort_at_cursor >>
+         qpat_assum `inst = mk_inst _ _ _ _` (fn th =>
+           simp[NoAsms, th, mk_inst_def, COND_RATOR, COND_RAND] >>
+           Cases_on `stat` >> simp[NoAsms])) >>
+      irule extcall_call_landing >> reverse conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`G1`,`ee`,`Abort ExHalt_abort (halt_state (set_returndata [] t))`,
         `INR (Error (RuntimeError err))`,`tn1`] >>
       conj_tac
       >- (simp[extcall_call_source_replay] >> simp[Once vyperStateTheory.bind_def]) >>
-      simp[exit_result_def,expr_exit_def] >> rpt strip_tac >>
+      simp[exit_result_def,expr_exit_def,create_size_exit_ok_non_exhalt] >> rpt strip_tac >>
       qpat_assum `!H. _ ==> gas_origin_ptr_path _ (s,G,tn) _ _` (drule_then assume_tac) >>
       irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
       goal_assum (drule_at Any) >> simp[]) >>
@@ -653,7 +662,7 @@ Proof
       >- (drule extcall_frame_value_replay >> strip_tac >>
           gen_tac >> simp[extcall_call_source_replay] >>
           simp[vyperStateTheory.bind_def]) >>
-      simp[exit_result_def,expr_exit_def] >> rpt strip_tac >>
+      simp[exit_result_def,expr_exit_def,create_size_exit_ok_non_exhalt] >> rpt strip_tac >>
       qpat_assum `!H. _ ==> _ /\ gas_origin_ptr_path _ (t,G1,tn1) _ _`
         (drule_then strip_assume_tac) >>
       qpat_assum `!H. _ ==> gas_origin_ptr_path _ (s,G,tn) _ _`

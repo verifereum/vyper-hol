@@ -332,7 +332,8 @@ Resume tuple_widened_prefix_from_nested_heads[regular_outcome]:
        (SUC j) write_cs shadow_write_cs ff q Gq tq (obs0 ++ gas_explicit headmarks s1.vs_gas_readings)) \/
    ((!tail. write_place cx p (EL j vs) (mid with gas_obs := tail) =
       (INR (Error (RuntimeError "write in static context")),mid with gas_obs := tail)) /\
-    ?q Gq tq. !H. valid_horizon cx st0 H mid.storage_trace ==>
+    ?q Gq tq. q.vs_call_ctx.cc_static /\
+    !H. valid_horizon cx st0 H mid.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (sp,Gp,tp) [] (Abort ExHalt_abort (halt_state (set_returndata [] q)),Gq,tq))` by
    (irule tuple_widened_place_write_advance >>
@@ -374,7 +375,8 @@ Resume tuple_widened_prefix_from_nested_heads[write_static]:
   irule gas_outcome_full_exit >> simp[] >>
   qexistsl_tac [`Gq`,`mid`,`Abort ExHalt_abort (halt_state (set_returndata [] q))`,
     `INR (Error (RuntimeError "write in static context"))`,`tq`] >>
-  simp[Abbr `storeR`,exit_result_def]
+  simp[Abbr `storeR`,exit_result_def, venomStateTheory.halt_state_def,
+       venomStateTheory.set_returndata_def]
 QED
 
 Finalise tuple_widened_prefix_from_nested_heads
