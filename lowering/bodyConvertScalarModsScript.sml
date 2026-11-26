@@ -2,6 +2,7 @@
 Theory bodyConvertScalarMods
 Ancestors
   bodyTypeBuiltinAbiMods bodyFullConvertScalarSuffix bodyScalarStackVVMods
+  bodyConvertScalarOpcode bodyConvertScalarAbortKind bodyConvertScalarRevertOrigin
   bodyForRangeScalarFrameMods bodyFullUnwrapRun bodyFullPathHistory
   bodyPtrTypeBuiltinsScalarSemantic bodySimStmtFacts exprBodyPreTypingProps
   exprSimFullBundleProps exprOperandVar gasShadowCompileStmtHelpers
@@ -311,10 +312,20 @@ Resume convert_scalar_suffix[success]:
 QED
 
 Resume convert_scalar_suffix[failure]:
-  qpat_x_assum `!exc. INR _ = INR exc ==> _` (strip_assume_tac o SRULE []) >>
+  `writes_fresh sm (emitted_insts sm sb)` by
+    (drule_all bodyPtrTypeBuiltinsScalarRawOutcomeTheory.scalar_dispatch_straight_fresh >>
+     disch_then (qspecl_then [`x`,`cenv`] (mp_tac o REWRITE_RULE [straight_fresh_def])) >>
+     disch_then (drule_then strip_assume_tac) >> simp[]) >>
+  `EVERY (\i. fresh_write_op i.inst_opcode) (emitted_insts sm sb)` by
+    fs[writes_fresh_def, listTheory.EVERY_MEM] >>
+  drule_then assume_tac scalar_convert_emitted_no_unreachable >>
+  `!a u. run_inst_seq (emitted_insts sm sb) t = Abort a u ==> a = Revert_abort` by
+    (rpt strip_tac >> drule_all fresh_run_abort_revert >> simp[]) >>
+  drule_all scalar_convert_revert_origin >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
   irule gas_outcome_full_mods_exit >> simp[] >>
-  rename1 `gas_origin_ptr_path _ _ _ (Abort err u,Gu,tnu)` >>
-  qexistsl_tac [`Gu`,`mid`,`Abort err u`,`INR (Error (RuntimeError msg))`,`tnu`] >>
+  rename1 `gas_origin_ptr_path _ _ _ (Abort Revert_abort u,Gu,tnu)` >>
+  qexistsl_tac [`Gu`,`mid`,`Abort Revert_abort u`,`INR (Error (RuntimeError msg))`,`tnu`] >>
   simp[exit_result_def,expr_exit_def,halt_exit_not_halt]
 QED
 Finalise convert_scalar_suffix
