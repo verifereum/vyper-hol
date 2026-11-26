@@ -41,7 +41,12 @@ For readers outside the project, `--public DIR` writes one page,
 `overview.md` around the dossier's parts: each
 `<!-- dossier: thm-Thy-name -->` line in `overview.md` is replaced by
 that theorem's statement and hypotheses, and `<!-- dossier: index -->`
-by the types, definitions and boundary index. Instead of a depth, the
+by the types, definitions and boundary index. After each theorem's
+hypotheses comes a "Conclusion of" list: the renderer splits the
+conclusion through its quantifiers, implications, conjunctions and
+disjunctions, keys each part as hypotheses are keyed, and takes each key's
+note from that theorem's `## key` section in `conclusions.md`; a missing,
+extra or duplicate section fails the run. Instead of a depth, the
 public page expands only the definitions of the theories and single
 `Thy$name` constants listed in `public-expand.txt`; every other constant
 is listed as not expanded. The page says the four theorems are proved,
