@@ -21,6 +21,9 @@ Ancestors
   o1CreateSizeTransport
   mem2varWitness functionInlinerReturnPcWitness phiElimNonVacuity
   assertCombinerNonVacuity
+  (* the function inliner's target statement, its checkers and witnesses *)
+  functionInlinerShapeCheck functionInlinerReviewWitness
+  functionInlinerPtrWitness functionInlinerIdWitness
   (* branch_opt's output checker accepts and runs a rewritten function *)
   branchOptCheckWitness
   mmMergeWitness
