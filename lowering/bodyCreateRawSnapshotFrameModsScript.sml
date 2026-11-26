@@ -20,7 +20,13 @@ Theorem raw_create_snapshot_frame_mods:
   MEM site (fn_insts func) /\ site.inst_opcode = ALLOCA /\
   site.inst_id = a.cs_next_id /\ site.inst_outputs = [owner] /\
   not_local_ptr cenv ee.scopes owner /\ not_fresh_at m owner /\
-  t.vs_alloca_next <= pbase /\ pbase+cap < dimword (:256) /\
+  lo <= pbase /\ t.vs_alloca_next <= j.vs_alloca_next /\
+  (!name off len. local_region cenv ee.scopes j name off len ==>
+     loweringStateRelDefs$regions_disjoint pbase cap off len) /\
+  (!aid off len. aid < a.cs_next_id /\
+     FLOOKUP t.vs_allocas aid = SOME (off,len) ==>
+     loweringStateRelDefs$regions_disjoint pbase cap off len) /\
+  pbase+cap < dimword (:256) /\
   pbase+cap <= j.vs_alloca_next /\ allocas_from lo j /\
   FLOOKUP j.vs_allocas site.inst_id = SOME (pbase,cap) /\
   (!aid e. FLOOKUP t.vs_allocas aid = SOME e ==> FLOOKUP j.vs_allocas aid = SOME e) /\
@@ -96,12 +102,9 @@ Resume raw_create_snapshot_frame_mods[separation]:
     (rpt strip_tac >> drule_all body_local_region_frontier >> simp[]) >>
   `!aid off len. FLOOKUP t.vs_allocas aid = SOME (off,len) ==> off+len <= t.vs_alloca_next` by
     (fs[alloca_inv_def,alloca_next_valid_def] >> metis_tac[]) >>
-  `!name off len. local_region cenv ee.scopes j name off len ==>
+  `!name off len. local_region cenv ee.scopes t name off len ==>
       loweringStateRelDefs$regions_disjoint pbase cap off len` by
-    (rpt gen_tac >> strip_tac >>
-     `local_region cenv ee.scopes t name off len` by metis_tac[] >>
-     qpat_assum `!name off len. local_region cenv ee.scopes t name off len ==> _`
-       (drule_then mp_tac) >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+    metis_tac[] >>
   `!aid off len. aid < a.cs_next_id /\ FLOOKUP j.vs_allocas aid = SOME (off,len) ==>
       loweringStateRelDefs$regions_disjoint pbase cap off len` by
     (rpt gen_tac >> strip_tac >>
@@ -146,34 +149,47 @@ Resume raw_create_snapshot_frame_mods[wb]:
   conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl [`t`,`ee.scopes`,`a`] >>
   simp[wb_frame_refl] >>
-  `!off len. off+len <= t.vs_alloca_next ==>
+  `!off len. loweringStateRelDefs$regions_disjoint pbase cap off len ==>
       mem_bytes_at off len u.vs_memory = mem_bytes_at off len t.vs_memory` by
     (rpt gen_tac >> disch_tac >> qpat_assum `j.vs_memory = _` (SUBST1_TAC o SYM) >>
      qpat_assum `typed_copy_frame _ _ _ _`
-       (irule o cj 1 o REWRITE_RULE [typed_copy_frame_def]) >> decide_tac) >>
-  rpt conj_tac
+       (irule o cj 1 o REWRITE_RULE [typed_copy_frame_def]) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
+  conj_tac
   >- (rpt strip_tac >> first_x_assum irule >>
       qpat_assum `!name off len. local_region cenv ee.scopes t name off len ==> _`
         (drule_then ACCEPT_TAC)) >>
   rpt strip_tac >> first_x_assum irule >>
-  qpat_assum `!aid off len. FLOOKUP t.vs_allocas aid = SOME (off,len) ==> _`
-    (drule_then ACCEPT_TAC)
+  qpat_assum `!aid off len. aid < a.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (off,len) ==> _`
+    (drule_all_then ACCEPT_TAC)
 QED
 
 Resume raw_create_snapshot_frame_mods[kept]:
-  `!i. i < t.vs_alloca_next ==> (i IN tu.t_mem <=> i IN tn1.t_mem)` by
-    (gen_tac >> disch_tac >>
-     `~(pbase <= i /\ i < pbase+cap)` by decide_tac >>
+  `!i. i < t.vs_alloca_next /\ ~(pbase <= i /\ i < pbase+cap) ==>
+       (i IN tu.t_mem <=> i IN tn1.t_mem)` by
+    (gen_tac >> strip_tac >>
      qpat_assum `!i. _ ==> (i IN tu.t_mem <=> _)` (drule_then SUBST1_TAC) >>
      qpat_assum `!i. i IN tj.t_mem <=> _` (qspec_then `i` SUBST1_TAC) >>
      simp[arithmeticTheory.NOT_LESS_EQUAL]) >>
-  simp[ghost_kept_at_def] >> rpt conj_tac >> rpt strip_tac
-  >- (qpat_assum `!aid off len. FLOOKUP t.vs_allocas aid = SOME (off,len) ==> _`
+  simp[ghost_kept_at_def] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!aid off len. FLOOKUP t.vs_allocas aid = SOME (off,len) ==> _`
         (drule_then assume_tac) >>
-      `i < t.vs_alloca_next` by decide_tac >> metis_tac[]) >>
-  qpat_assum `!name off len. local_region cenv ee.scopes t name off len ==> _`
+      qpat_assum `!aid off len. aid < a.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (off,len) ==> _`
+        (drule_all_then assume_tac) >>
+      `i < t.vs_alloca_next /\ ~(pbase <= i /\ i < pbase+cap)` by
+        (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+      qpat_assum `!i. _ ==> (i IN tu.t_mem <=> i IN tn1.t_mem)` (drule_all_then (SUBST1_TAC o SYM)) >>
+      first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  qpat_assum `!name off len. local_region cenv ee.scopes t name off len ==> off+len <= _`
     (drule_then assume_tac) >>
-  `i < t.vs_alloca_next` by decide_tac >> metis_tac[]
+  qpat_assum `!name off len. local_region cenv ee.scopes t name off len ==> loweringStateRelDefs$regions_disjoint _ _ _ _`
+    (drule_then assume_tac) >>
+  `i < t.vs_alloca_next /\ ~(pbase <= i /\ i < pbase+cap)` by
+    (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  qpat_assum `!i. _ ==> (i IN tu.t_mem <=> i IN tn1.t_mem)` (drule_all_then (SUBST1_TAC o SYM)) >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume raw_create_snapshot_frame_mods[resources]:
