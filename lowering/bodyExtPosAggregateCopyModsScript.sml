@@ -253,9 +253,9 @@ Resume ext_pos_aggregate_copy_landing_mods[owned]:
           qpat_assum `!n b l. loweringStateRelDefs$local_region ce _ u n b l ==>
             loweringStateRelDefs$regions_disjoint _ _ b l` (drule_then mp_tac) >>
           rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
-          simp[Once (Q.SPECL [`w2n dw`,`type_memory_size rt`] ADD_COMM)]) >>
+          simp[AC ADD_ASSOC ADD_COMM]) >>
       `val_footprint rt v <= type_memory_size rt` by simp[val_footprint_le] >>
-      simp[Once (Q.SPECL [`type_memory_size rt`,`w2n dw`] ADD_COMM)])
+      simp[AC ADD_ASSOC ADD_COMM])
   >~ [`ptr_vv_ok _ _ _ _ _ _ _ _`] >- suspend "ptr" >>
   simp[vv_store_bound_def,mk_ptr_def,eval_operand_def,read_result_def,return_def] >>
   decide_tac
