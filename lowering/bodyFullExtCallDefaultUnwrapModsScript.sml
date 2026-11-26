@@ -52,7 +52,6 @@ Theorem extcall_default_unwrap_store_entry_mods:
   fn_has_code sn sc func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   ~is_word_type (post_value_type cenv e) /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv /\
