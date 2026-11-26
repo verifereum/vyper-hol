@@ -156,6 +156,7 @@ Theorem raw_log_fixed_data_full_from_endpoints:
       EVERY (\op. op_taint tn op = {}) ops /\ ~s.vs_halted /\
       s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts) ==>
     ?u G2 tn2. !H. valid_horizon cx st0 H ee.storage_trace ==>
+      u.vs_call_ctx.cc_static /\
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
         (Abort ExHalt_abort u,G2,tn2)) ==>
   (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm
@@ -481,6 +482,7 @@ Resume raw_log_fixed_data_full_from_endpoints[data_next]:
   Cases_on `cx.txn.is_static`
   >- (asm_x "tail_endpoint" kall_tac >>
     `?uf Gf tnf. !H. valid_horizon cx st0 H mid.storage_trace ==>
+       uf.vs_call_ctx.cc_static /\
        gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
          (t,G1,tn1) [] (Abort ExHalt_abort uf,Gf,tnf)` by
     (asm "static_tail_endpoint" (fn th => match_mp_tac
@@ -514,7 +516,8 @@ Resume raw_log_fixed_data_full_from_endpoints[data_next]:
       `INR (Error (RuntimeError "write in static context"))`, `tnf`] >>
     simp[bind_def, lift_option_type_def, lift_option_def, dest_BytesV_def,
          ignore_bind_def, type_check_def, assert_def, return_def,
-         fragExecTheory.exit_result_def, expr_exit_def, halt_exit_def]) >>
+         fragExecTheory.exit_result_def, expr_exit_def, halt_exit_def] >>
+    rpt strip_tac >> res_tac >> simp[]) >>
   asm_x "static_tail_endpoint" kall_tac >>
   `?uf Gf tnf. !H. valid_horizon cx st0 H mid.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)

@@ -400,8 +400,8 @@ Resume indexed_hash_value[exit]:
   qpat_assum `unop_result _ _ _ _ _ mid = _` (fn eq =>
     disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) [eq])) >>
   qpat_x_assum `r = Abort Revert_abort u` SUBST_ALL_TAC >>
-  irule gas_outcome_full_mods_exit >> simp[] >>
-  qexistsl_tac [`G'`,`mid`,`Abort Revert_abort u`,`INR y`,`tn'`] >>
+  irule gas_outcome_full_mods_exit_revert >> simp[] >>
+  qexistsl_tac [`G'`,`mid`,`INR y`,`tn'`,`u`] >>
   simp[exit_result_def] >>
   conj_tac >- (gen_tac >> qpat_assum `unop_result _ _ _ _ _ mid = _`
       (mp_tac o REWRITE_RULE [exprSimUnopPropsTheory.unop_result_def]) >>
