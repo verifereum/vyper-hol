@@ -10,6 +10,7 @@ Ancestors
   vyperCallFiniteStorageSupport vyperStorageBackend vfmState vfmRunCall vfmExecutionProp
   vfmConstants frameOutcome frameGas frameRunRaises stackBoundDefs
   stackBoundSoundness callTrace guardSourceAlignment
+  e2eTransactionWorld linkedCompilePhases codegenAsmProgOk asmOptNonemptyFinalizer
 
 (* Readiness of the installed unit, independent of transaction bookkeeping. *)
 Definition deployed_mods_def:
@@ -92,35 +93,24 @@ Proof
   metis_tac[call_source_premises_mods]
 QED
 
-(* TOP-LEVEL: linked call correctness in the world supplied by deployment. *)
-Theorem vyper_call_correct_deployed_mods:
-  !fin policy mods exps deploy_bc runtime_bc am tx es H.
-    fin IN accepted_finalizers /\
-    compile_vyper_mods fin policy mods exps = SOME (deploy_bc, runtime_bc) /\
-    deployed_mods mods exps runtime_bc am tx.target /\
-    call_tx_well_typed tx /\ call_entry_rel am tx es /\
-    LENGTH (call_trace es) < 2 ** 64 /\
-    storage_ok H am tx /\
-    call_within_mods H mods exps am tx es
-    ==>
-    ?r es'.
-      run_call es = SOME (r, es') /\
-      (frame_starved es r es' \/
-       calldata_result_rel_mods H mods exps am tx es r es')
+Triviality compile_vyper_mods_runtime_nonempty:
+  fin IN accepted_finalizers /\
+  compile_vyper_mods fin policy mods exps = SOME (deploy_bc, runtime_bc) ==>
+  runtime_bc <> []
 Proof
-  rpt gen_tac >> strip_tac >>
-  `source_typing_ok_mods mods exps am tx /\
-   call_state_rel_mods mods exps runtime_bc am tx es` by
-    simp[call_premises_deployed_mods] >>
-  drule_all e2eModsTopsDraftTheory.vyper_call_correct_mods >>
-  disch_then (qx_choosel_then [`r`, `es'`] strip_assume_tac) >>
-  qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
-  DISJ1_TAC >>
-  qpat_x_assum `frame_resource_starved _ _ _`
-    (strip_assume_tac o REWRITE_RULE [frame_resource_starved_def]) >>
-  PURE_REWRITE_TAC [frame_starved_def] >>
-  qexistsl_tac [`exc`, `out`, `lgs`] >>
-  (conj_tac >- metis_tac[call_entry_stack_check] >> asm_rewrite_tac[])
+  strip_tac >>
+  qpat_assum `compile_vyper_mods _ _ _ _ = _`
+    (strip_assume_tac o MATCH_MP compile_vyper_with_mods_success_phases o
+     REWRITE_RULE [compile_vyper_mods_def]) >>
+  qpat_assum `finalize_codegen fin rpolicy runtime_out.po_unit = SOME runtime_bc`
+    (strip_assume_tac o MATCH_MP finalize_codegen_success_plan) >>
+  Cases_on `fin = K SOME`
+  >- (drule codegen_assembly_nonempty >> gvs[]) >>
+  `fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  qpat_assum `fin = asm_opt_finalizer` SUBST_ALL_TAC >>
+  qpat_x_assum `runtime_bc = assemble prog'` SUBST1_TAC >>
+  irule codegen_assembly_finalizer_nonempty >>
+  qexistsl [`prog`, `rpolicy`, `runtime_out.po_unit`] >> simp[]
 QED
 
 Theorem call_preserves_deployed_mods:
@@ -138,6 +128,53 @@ Proof
   qpat_x_assum `deployed_mods _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [deployed_mods_facts]) >>
   drule_all call_frame_preserves_call_ready_mods >> simp[call_ready_deployed_mods]
+QED
+
+(* TOP-LEVEL: linked call correctness and preservation of a surviving deployment. *)
+Theorem vyper_call_correct_deployed_mods:
+  !fin policy mods exps deploy_bc runtime_bc am tx es H.
+    fin IN accepted_finalizers /\
+    compile_vyper_mods fin policy mods exps = SOME (deploy_bc, runtime_bc) /\
+    deployed_mods mods exps runtime_bc am tx.target /\
+    call_tx_well_typed tx /\ call_entry_rel am tx es /\
+    LENGTH (call_trace es) < 2 ** 64 /\
+    storage_ok H am tx /\
+    call_within_mods H mods exps am tx es
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_starved es r es' \/
+       calldata_result_rel_mods H mods exps am tx es r es') /\
+      (LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete ==>
+       deployed_mods mods exps runtime_bc (transaction_world am r es') tx.target)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `source_typing_ok_mods mods exps am tx /\
+   call_state_rel_mods mods exps runtime_bc am tx es` by
+    simp[call_premises_deployed_mods] >>
+  drule_all e2eModsTopsDraftTheory.vyper_call_correct_mods >>
+  disch_then (qx_choosel_then [`r`, `es'`]
+    (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
+  reverse conj_tac
+  >- (strip_tac >> Cases_on `r = INR NONE` >> simp[transaction_world_def] >>
+      `runtime_bc <> []` by (drule_all compile_vyper_mods_runtime_nonempty >> simp[]) >>
+      `source_deployment_rel_mods mods exps am tx` by fs[call_state_rel_entry_mods] >>
+      Cases_on `call_external NONE [] am tx` >>
+      rename1 `call_external NONE [] am tx = (res, output)` >>
+      PairCases_on `output` >>
+      rename1 `call_external NONE [] am tx = (res, am_out, rqs)` >>
+      `next_source_machine am_out es' = next_source_machine am es'` by
+        (irule call_external_next_source_machine_mods >> metis_tac[]) >>
+      drule_all call_preserves_deployed_mods >> simp[]) >>
+  qpat_x_assum `frame_resource_starved _ _ _ \/ _` strip_assume_tac >>
+  asm_rewrite_tac[] >>
+  DISJ1_TAC >>
+  qpat_x_assum `frame_resource_starved _ _ _`
+    (strip_assume_tac o REWRITE_RULE [frame_resource_starved_def]) >>
+  PURE_REWRITE_TAC [frame_starved_def] >>
+  qexistsl_tac [`exc`, `out`, `lgs`] >>
+  (conj_tac >- metis_tac[call_entry_stack_check] >> asm_rewrite_tac[])
 QED
 
 (* TOP-LEVEL: sufficient gas for a deployed linked call. *)
