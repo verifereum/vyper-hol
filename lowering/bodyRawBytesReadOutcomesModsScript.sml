@@ -58,9 +58,10 @@ Proof
   BETA_TAC >> strip_tac >> drule_then strip_assume_tac expr_sim_full_code_fields >>
   `expr_sim_full_mods (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e) e es` by
-    (qpat_x_assum `body_expr_full_ok_mods _ _ _ e`
-       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_mods_def]) >>
-     first_x_assum (irule o cj 1 o UNDISCH_ALL o SPEC_ALL) >> simp[]) >>
+    (irule bop_bytestring_child_sim_mods >>
+     qpat_assum `expr_body_pre_mods _ _ _ _ e es` (irule_at Any) >>
+     qpat_assum `module_body_inv _ _ _ _ _` (irule_at Any) >> simp[] >>
+     qexists_tac `exps` >> simp[]) >>
   qhdtm_x_assum `expr_sim_full_mods`
     (qspecl_then [`st0`,`sa`,`sb`,`hsa`,`hsb`,`op`,`s0`,`G0`,`tn0`] mp_tac o
      REWRITE_RULE[expr_sim_full_mods_def]) >>
@@ -109,6 +110,7 @@ Proof
     (pure_rewrite_tac o single o EQT_INTRO) >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _`
     (strip_assume_tac o REWRITE_RULE [IMP_CONJ_THM]) >> simp[] >>
+  qexistsl_tac [`tops`,`src`,`exps`] >> simp[] >>
   qx_gen_tac `H` >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _`
     (qspec_then `H` mp_tac) >> simp[]
