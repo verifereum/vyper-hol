@@ -152,7 +152,7 @@ Theorem row22_model_frame:
     (vs with <|vs_outcomes := os0; vs_prev_bb := NONE;
       vs_current_bb := "__entry"; vs_inst_idx := 0|>,FEMPTY,entry_taint)
     [] (OK (u with vs_outcomes := os1),J,tz) /\
-  ce.ce_vars = FEMPTY /\ ce.ce_module = NONE /\ ~ce.ce_is_ctor /\
+  ce.ce_modules = [(NONE,tops)] /\ ce.ce_vars = FEMPTY /\ ce.ce_module = NONE /\ ~ce.ce_is_ctor /\
   ce.ce_imm_alloca = NONE /\ ce.ce_return_pc = NONE /\ ce.ce_return_buf = NONE /\
   storage_vars_rel ce cx /\ transient_vars_rel ce cx /\
   immutable_section_layout ce tops ==>
