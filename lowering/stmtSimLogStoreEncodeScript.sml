@@ -23,13 +23,16 @@ Theorem log_buffer_immutable_footprint[local]:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
   stmt_state_rel H ctx func ce cx es s /\
   FLOOKUP s.vs_allocas sa.cs_next_id = SOME (p,cap) ==>
-  ce.ce_is_ctor ==> !name tv v off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  ce.ce_is_ctor ==> !src_id name tv v off.
+    (src_id = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src_id)) /\
+    FLOOKUP ce.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src_id imms) name = SOME (tv,v) ==>
     abi_footprint_disjoint off (type_memory_size tv) [(p,cap)]
 Proof
-  rpt strip_tac >> simp[abi_footprint_disjoint_def] >>
+  strip_tac >> disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  simp[abi_footprint_disjoint_def] >>
   drule_all log_buffer_clear_of_immutable >> simp[]
 QED
 
@@ -48,10 +51,11 @@ Theorem log_tuple_cursor_footprints[local]:
     (db+outcap <= p \/ p+32 <= db) /\
     (!name lo sz. local_region ce es.scopes s name lo sz ==>
       abi_footprint_disjoint lo sz [(p,32)]) /\
-    (ce.ce_is_ctor ==> !name tv v off.
-      FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    (ce.ce_is_ctor ==> !src_id name tv v off.
+      (src_id = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src_id)) /\
+      FLOOKUP ce.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+        | SOME imms => get_source_immutables src_id imms) name = SOME (tv,v) ==>
       abi_footprint_disjoint off (type_memory_size tv) [(p,32)])
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -62,7 +66,7 @@ Proof
   `p+32 <= db \/ db+outcap <= p` by
     (qpat_assum `!id b sz. _` (qspec_then `dstid` mp_tac) >> simp[]) >>
   qexists_tac `p` >> simp[abi_footprint_disjoint_def] >>
-  rpt conj_tac >> rpt strip_tac >> first_x_assum drule_all >> simp[]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem log_output_buffer_shape:
@@ -96,8 +100,35 @@ Proof
   simp[abi_footprint_disjoint_def] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem log_tuple_encoder_owned[local]:
+  compile_alloc_buffer outcap st = (dst,prepared) /\ fn_has_code st prepared func /\
+  compile_abi_encode_to_buf dst.buf_operand src ei prepared = (out,end_st) /\
+  fn_has_code prepared end_st func /\
+  FLOOKUP initial.vs_allocas srcid = SOME (sb,srccap) /\
+  FLOOKUP initial.vs_allocas st.cs_next_id = SOME (db,outcap) /\
+  srcid < st.cs_next_id /\ cap <= srccap /\ sb+srccap < dimword (:256) /\
+  db+outcap < dimword (:256) /\ (sb+cap <= db \/ db+outcap <= sb) /\
+  abi_encoder_input ei (Tuple ats) (ListV avs) sb cap initial.vs_memory /\
+  eval_operand src initial = SOME (n2w sb) /\
+  eval_operand dst.buf_operand initial = SOME (n2w db) /\
+  abi_decoder_operand_live prepared.cs_next_var src /\
+  stmt_state_rel H ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce st /\ fresh_vars_wrt limit_st initial /\
+  end_st.cs_next_var <= limit_st.cs_next_var /\
+  LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
+  ((?n. ei = AbiCopy n /\ n < dimword (:256)) \/
+   (?infos. ei = AbiComplex infos /\ EXISTS (\(_,_,_,dyn). dyn) infos /\
+      EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos)) ==>
+  ?actual. run_inst_seq (emitted_insts prepared end_st) initial = OK actual /\
+    inst_extends prepared end_st /\ fresh_vars_wrt limit_st actual /\
+    mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
+      enc (Tuple ats) (ListV avs) /\
+    eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
+    stmt_state_rel H ctx func ce cx es actual /\
+    (!op w. abi_decoder_operand_live prepared.cs_next_var op /\
+      eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
+    (!aid a k. aid < st.cs_next_id /\ FLOOKUP initial.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k actual.vs_memory = mem_bytes_at a k initial.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule log_output_buffer_shape >> strip_tac >>
@@ -115,12 +146,15 @@ Proof
   `!name lo sz. local_region ce es.scopes initial name lo sz ==>
     abi_footprint_disjoint lo sz [(db,outcap)]` by
     (rpt strip_tac >> drule_all log_buffer_local_footprint >> simp[]) >>
-  `ce.ce_is_ctor ==> !name tv v off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  `ce.ce_is_ctor ==> !src_id name tv v off.
+    (src_id = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src_id)) /\
+    FLOOKUP ce.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src_id imms) name = SOME (tv,v) ==>
     abi_footprint_disjoint off (type_memory_size tv) [(db,outcap)]` by
-    (rpt strip_tac >> drule_all log_buffer_immutable_footprint >> simp[]) >>
+    (disch_tac >> rpt gen_tac >>
+     disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+     drule_all log_buffer_immutable_footprint >> simp[]) >>
   `sb+cap < dimword (:256)` by decide_tac >>
   qpat_x_assum `(?n. _) \/ (?infos. _)` strip_assume_tac
   >- (Q.SUBGOAL_THEN `?actual.
@@ -166,10 +200,11 @@ Resume log_tuple_encoder_owned[dynamic]:
     (db+outcap <= p \/ p+32 <= db) /\
     (!name lo sz. local_region ce es.scopes initial name lo sz ==>
       abi_footprint_disjoint lo sz [(p,32)]) /\
-    (ce.ce_is_ctor ==> !name tv v off.
-      FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    (ce.ce_is_ctor ==> !src_id name tv v off.
+      (src_id = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src_id)) /\
+      FLOOKUP ce.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+        | SOME imms => get_source_immutables src_id imms) name = SOME (tv,v) ==>
       abi_footprint_disjoint off (type_memory_size tv) [(p,32)])`
     (qx_choose_then `p` (MAP_EVERY assume_tac o CONJUNCTS))
     >- (irule log_tuple_cursor_footprints >>
@@ -198,9 +233,11 @@ Resume log_tuple_encoder_owned[dynamic]:
   conj_tac >- (qpat_x_assum `!name entry v sz. _` mp_tac >> simp[]) >>
   conj_tac >- (qexists_tac `inst` >> simp[]) >>
   conj_tac
-  >- (rpt strip_tac >> irule log_two_footprints >>
+  >- (disch_tac >> qx_gen_tac `src_id` >> rpt gen_tac >>
+      disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+      irule log_two_footprints >>
       conj_tac >> first_assum irule >> simp[] >>
-      qexistsl_tac [`name`,`v`] >> simp[]) >>
+      qexistsl_tac [`name`,`src_id`,`v`] >> simp[]) >>
   conj_tac
   >- (qpat_x_assum `(FLOOKUP _ inst.inst_id = NONE /\ _) \/ _` mp_tac >> simp[]) >>
   qexistsl_tac [`cap`,`sb`] >> simp[]) >>
@@ -216,39 +253,6 @@ Resume log_tuple_encoder_owned[dynamic]:
 QED
 
 Finalise log_tuple_encoder_owned
-*)
-Theorem log_tuple_encoder_owned[local]:
-  compile_alloc_buffer outcap st = (dst,prepared) /\ fn_has_code st prepared func /\
-  compile_abi_encode_to_buf dst.buf_operand src ei prepared = (out,end_st) /\
-  fn_has_code prepared end_st func /\
-  FLOOKUP initial.vs_allocas srcid = SOME (sb,srccap) /\
-  FLOOKUP initial.vs_allocas st.cs_next_id = SOME (db,outcap) /\
-  srcid < st.cs_next_id /\ cap <= srccap /\ sb+srccap < dimword (:256) /\
-  db+outcap < dimword (:256) /\ (sb+cap <= db \/ db+outcap <= sb) /\
-  abi_encoder_input ei (Tuple ats) (ListV avs) sb cap initial.vs_memory /\
-  eval_operand src initial = SOME (n2w sb) /\
-  eval_operand dst.buf_operand initial = SOME (n2w db) /\
-  abi_decoder_operand_live prepared.cs_next_var src /\
-  stmt_state_rel H ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce st /\ fresh_vars_wrt limit_st initial /\
-  end_st.cs_next_var <= limit_st.cs_next_var /\
-  LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
-  ((?n. ei = AbiCopy n /\ n < dimword (:256)) \/
-   (?infos. ei = AbiComplex infos /\ EXISTS (\(_,_,_,dyn). dyn) infos /\
-      EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos)) ==>
-  ?actual. run_inst_seq (emitted_insts prepared end_st) initial = OK actual /\
-    inst_extends prepared end_st /\ fresh_vars_wrt limit_st actual /\
-    mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
-      enc (Tuple ats) (ListV avs) /\
-    eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
-    stmt_state_rel H ctx func ce cx es actual /\
-    (!op w. abi_decoder_operand_live prepared.cs_next_var op /\
-      eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
-    (!aid a k. aid < st.cs_next_id /\ FLOOKUP initial.vs_allocas aid = SOME (a,k) ==>
-      mem_bytes_at a k actual.vs_memory = mem_bytes_at a k initial.vs_memory)
-Proof
-  cheat
-QED
 
 Theorem log_allocated_tuple_encode_continue_bounded:
   compile_alloc_buffer outcap st = (dst,prepared) /\ fn_has_code st prepared func /\
