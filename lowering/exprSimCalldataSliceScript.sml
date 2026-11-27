@@ -258,8 +258,18 @@ Proof
   irule mem_bytes_at_write_disjoint >> decide_tac
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem bytes_buffer_write_state_rel:
+  !func cenv cx es s p data sz ctx.
+  stmt_state_rel H ctx func cenv cx es s /\ 32 + LENGTH data <= sz /\
+  (!name b len. local_region cenv es.scopes s name b len ==>
+     b + len <= p \/ p + sz <= b) /\
+  (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+    immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es
+      (mstore p (n2w (LENGTH data))
+        (write_memory_with_expansion (p + 32) data s))) ==>
+  stmt_state_rel H ctx func cenv cx es
+    (mstore p (n2w (LENGTH data))
+      (write_memory_with_expansion (p + 32) data s))
 Proof
   rpt strip_tac >>
   `local_ptrs_rel func cenv es.scopes
@@ -284,6 +294,7 @@ Proof
   rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
   rewrite_tac[stmt_state_rel_def] >> conj_tac
   >- (irule state_rel_frame >> simp[] >> qexistsl_tac [`es`, `s`] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
       asm_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, LET_THM]) >>
   conj_tac
   >- (irule localPtrsPropsTheory.alloca_inv_fields >> qexists_tac `s` >>
@@ -294,29 +305,16 @@ Proof
   conj_tac
   >- (irule fmp_room_mstore >> irule fmp_room_write_memory >>
       fs[stmt_state_rel_def]) >>
-  simp[] >>
-  qpat_x_assum `immutable_base_zero cenv (mstore _ _ _)` kall_tac >>
-  qpat_x_assum `immutables_rel _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `local_ptrs_rel _ _ _ _` kall_tac >>
-  qpat_x_assum `state_rel H _ _ _ _ _` kall_tac >>
-  full_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def,
-      LET_THM, immutable_alloca_sep_def, local_region_def, lookup_var_def] >>
-  metis_tac[]
-QED
-*)
-Theorem bytes_buffer_write_state_rel:
-  !func cenv cx es s p data sz ctx.
-  stmt_state_rel H ctx func cenv cx es s /\ 32 + LENGTH data <= sz /\
-  (!name b len. local_region cenv es.scopes s name b len ==>
-     b + len <= p \/ p + sz <= b) /\
-  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-    (mstore p (n2w (LENGTH data))
-      (write_memory_with_expansion (p + 32) data s)) ==>
-  stmt_state_rel H ctx func cenv cx es
-    (mstore p (n2w (LENGTH data))
-      (write_memory_with_expansion (p + 32) data s))
-Proof
-  cheat
+  (rpt conj_tac >> TRY (first_assum ACCEPT_TAC))
+  >- (qpat_x_assum `immutable_alloca_sep func cenv cx es s` mp_tac >>
+      simp_tac (srw_ss()) [immutable_alloca_sep_def, immutable_decl_sep_alt,
+        local_region_def, lookup_var_def, mstore_def, write_memory_with_expansion_def])
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!src tops. _ ==> immutable_alloca_sep _ _ _ _ _` drule >>
+      simp_tac (srw_ss()) [immutable_alloca_sep_def, immutable_decl_sep_alt,
+        local_region_def, lookup_var_def, mstore_def, write_memory_with_expansion_def]) >>
+  simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, LET_THM] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem calldata_copy_step:
