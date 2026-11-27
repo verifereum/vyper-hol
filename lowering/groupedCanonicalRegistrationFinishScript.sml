@@ -18,7 +18,7 @@ Theorem grouped_canonical_registration_finish:
   LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) (MAP SND args) tvs /\
   (!k. ~MEM k (MAP FST args) ==> FLOOKUP cf.ce_vars k = NONE) /\
   local_ptrs_reserved cf sa /\
-  cf.ce_module = NONE /\ ~cf.ce_is_ctor /\ cf.ce_imm_alloca = NONE /\
+  cf.ce_modules = [(NONE,tops)] /\ cf.ce_module = NONE /\ ~cf.ce_is_ctor /\ cf.ce_imm_alloca = NONE /\
   cf.ce_return_pc = NONE /\ cf.ce_return_buf = NONE /\
   storage_vars_rel (cf with ce_vars := FEMPTY) cx /\
   transient_vars_rel (cf with ce_vars := FEMPTY) cx /\
