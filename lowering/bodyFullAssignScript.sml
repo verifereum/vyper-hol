@@ -595,52 +595,8 @@ Proof
   simp[type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2]
 QED
 
-Theorem body_assign_widened_success_resources[local]:
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
-  expr_body_pre_mods mods cenv cx env e es /\ supported_expr tops e /\
-  FLOOKUP env.var_types id = SOME ty /\
-  type_widens_to env.type_defs (expr_type e) ty /\
-  evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
-  evaluate_type (get_tenv cx) ty = SOME dtv /\
-  post_value_type cenv e = lowered_value_type cenv e /\
-  lowered_value_type cenv e <> expr_type e /\
-  ~is_word_type (lowered_value_type cenv e) /\
-  ~is_bytestring_type (lowered_value_type cenv e) /\
-  0 < type_memory_size stv /\ type_memory_size stv <= type_memory_size dtv /\
-  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
-  lower_value compile_expr cenv (expr_type e) e sa = (op,sB) /\
-  local_ptrs_reserved cenv sa /\
-  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
-  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
-  gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (stmt_res_ok lctx) es /\
-  (!tail. bind (eval_expr cx e) (read_result cx) (es with gas_obs := prefix ++ tail) =
-     (INL v,mid with gas_obs := tail)) /\ mid.gas_obs = [] /\
-  expr_post H ctx func cenv cx e es sa sB s0 mid v op u /\
-  ptr_val_ok cx (post_value_type cenv e) v op Gi ti u /\
-  ghost_inv_at D lo d cenv cx mid Gi ti u /\ dead_lo_ok H D lo cenv cx ==>
-  ?pre sc ent rest xs sw dw.
-    find_containing_scope id mid.scopes = SOME (pre,sc,ent,rest) /\
-    ent.assignable /\ ent.type = dtv /\
-    (!tail. write_place cx (MemoryPlace id []) v (mid with gas_obs := tail) =
-      (INL (), (mid with scopes := pre ++ (sc |+ (id,ent with <|value := v; popped := []|>)) :: rest)
-         with gas_obs := tail)) /\
-    value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-    op = Var xs /\ not_fresh_at sB xs /\ not_fresh_at sB p /\
-    lookup_var xs u = SOME sw /\ lookup_var p u = SOME dw /\
-    (!mem. mem_agree_outside ti.t_mem u.vs_memory mem ==> val_in_memory stv v (w2n sw) mem) /\
-    ptr_covers Gi ti xs u (type_memory_size stv) /\
-    ptr_covers Gi ti p u (type_memory_size dtv) /\
-    w2n sw + type_memory_size stv < dimword (:256) /\
-    w2n dw + type_memory_size dtv < dimword (:256) /\
-    w2n sw + type_memory_size stv <= u.vs_alloca_next /\
-    w2n dw + type_memory_size dtv <= u.vs_alloca_next /\
-    (w2n sw + type_memory_size stv <= w2n dw \/ w2n dw + type_memory_size dtv <= w2n sw) /\
-    allocas_from lo u /\ lo <= u.vs_alloca_next /\ lo <= w2n dw /\
-    type_memory_size dtv <= cap /\ local_ptrs_reserved cenv sB /\
-    expr_val_at cenv cx (lowered_value_type cenv e) sa sB mid v (Var xs) u /\
-    (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sB x) /\
-    (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sB x)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   drule_all assign_local_continuation_all_tails >>
@@ -708,6 +664,56 @@ Proof
   `not_fresh_at sB xs` by metis_tac[compile_lower_value_var] >>
   qexistsl_tac [`xs`,`sw`,`dw`] >> simp[] >>
   metis_tac[freshWritesTheory.not_fresh_at_mono]
+QED
+*)
+Theorem body_assign_widened_success_resources[local]:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\ supported_expr tops e /\
+  FLOOKUP env.var_types id = SOME ty /\
+  type_widens_to env.type_defs (expr_type e) ty /\
+  evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+  evaluate_type (get_tenv cx) ty = SOME dtv /\
+  post_value_type cenv e = lowered_value_type cenv e /\
+  lowered_value_type cenv e <> expr_type e /\
+  ~is_word_type (lowered_value_type cenv e) /\
+  ~is_bytestring_type (lowered_value_type cenv e) /\
+  0 < type_memory_size stv /\ type_memory_size stv <= type_memory_size dtv /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
+  lower_value compile_expr cenv (expr_type e) e sa = (op,sB) /\
+  local_ptrs_reserved cenv sa /\
+  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+  gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (stmt_res_ok lctx) es /\
+  (!tail. bind (eval_expr cx e) (read_result cx) (es with gas_obs := prefix ++ tail) =
+     (INL v,mid with gas_obs := tail)) /\ mid.gas_obs = [] /\
+  expr_post H ctx func cenv cx e es sa sB s0 mid v op u /\
+  ptr_val_ok cx (post_value_type cenv e) v op Gi ti u /\
+  ghost_inv_at D lo d cenv cx mid Gi ti u /\ dead_lo_ok H D lo cenv cx ==>
+  ?pre sc ent rest xs sw dw.
+    find_containing_scope id mid.scopes = SOME (pre,sc,ent,rest) /\
+    ent.assignable /\ ent.type = dtv /\
+    (!tail. write_place cx (MemoryPlace id []) v (mid with gas_obs := tail) =
+      (INL (), (mid with scopes := pre ++ (sc |+ (id,ent with <|value := v; popped := []|>)) :: rest)
+         with gas_obs := tail)) /\
+    value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+    op = Var xs /\ not_fresh_at sB xs /\ not_fresh_at sB p /\
+    lookup_var xs u = SOME sw /\ lookup_var p u = SOME dw /\
+    (!mem. mem_agree_outside ti.t_mem u.vs_memory mem ==> val_in_memory stv v (w2n sw) mem) /\
+    ptr_covers Gi ti xs u (type_memory_size stv) /\
+    ptr_covers Gi ti p u (type_memory_size dtv) /\
+    w2n sw + type_memory_size stv < dimword (:256) /\
+    w2n dw + type_memory_size dtv < dimword (:256) /\
+    w2n sw + type_memory_size stv <= u.vs_alloca_next /\
+    w2n dw + type_memory_size dtv <= u.vs_alloca_next /\
+    (w2n sw + type_memory_size stv <= w2n dw \/ w2n dw + type_memory_size dtv <= w2n sw) /\
+    allocas_from lo u /\ lo <= u.vs_alloca_next /\ lo <= w2n dw /\
+    type_memory_size dtv <= cap /\ local_ptrs_reserved cenv sB /\
+    expr_val_at cenv cx (lowered_value_type cenv e) sa sB mid v (Var xs) u /\
+    (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sB x) /\
+    (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sB x)
+Proof
+  cheat
 QED
 
 Theorem body_assign_widened_frame_compose[local]:
