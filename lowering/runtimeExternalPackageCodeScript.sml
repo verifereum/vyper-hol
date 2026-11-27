@@ -81,12 +81,8 @@ Proof
        `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >> gs[]) >>
   `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
      (order_internals (runtime_internal_order tops ints) ints)))` by
-    (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops F)
-              (order_internals (runtime_internal_order tops ints) ints)))
-           (MAP FST (MAP (source_internal_fn_descriptor tops F) ints))` by
-       (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
-        simp[PERM_order_runtime_internals]) >>
-     drule sortingTheory.ALL_DISTINCT_PERM >> fs[]) >>
+    (REWRITE_TAC [listTheory.MAP_MAP_o] >>
+     irule ALL_DISTINCT_order_runtime_internals >> fs[listTheory.MAP_MAP_o]) >>
   gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
     internal_fn_descriptors_MAP_package_internal_fn] >>
   qmatch_asmsub_abbrev_tac `run_lowering sels extpkgs intpkgs fbpkg` >>

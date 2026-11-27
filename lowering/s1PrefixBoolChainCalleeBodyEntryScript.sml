@@ -9,6 +9,7 @@ Ancestors
   alist finite_map list pair
 
 Theorem selected_callee_in_order[local]:
+  MEM name names /\
   MEM (FunctionDecl Internal mut nr rr name args ds ret ss) tops ==>
   MEM (NONE,subst_consts_fn (module_consts_env tops [])
     (mut,nr,rr,name,args,ds,ret,ss))
@@ -23,13 +24,8 @@ Proof
       (FST (SND (classify_functions_unit [(NONE,tops)] [])))` by
     (Cases_on `classify_functions tops` >> PairCases_on `r` >>
      fs[classify_functions_unit_singleton, MEM_MAP] >> metis_tac[]) >>
-  qabbrev_tac `f = subst_consts_fn (module_consts_env tops []) (mut,nr,rr,name,args,ds,ret,ss)` >>
-  qabbrev_tac `ints = FST (SND (classify_functions_unit [(NONE,tops)] []))` >>
-  Cases_on `MEM (nsid_to_string (NONE,fn_decl_name f)) names` >>
-  simp[order_internals_unit_def, MEM_FLAT, MEM_MAP, MEM_FILTER] >>
-  qexists_tac `FILTER (\(src,g). nsid_to_string (src,fn_decl_name g) =
-    nsid_to_string (NONE,fn_decl_name f)) ints` >>
-  simp[MEM_FILTER] >> metis_tac[]
+  simp[order_internals_unit_def, MEM_FLAT, MEM_MAP, MEM_FILTER, PULL_EXISTS] >>
+  simp[subst_consts_fn_def, fn_decl_name_def, compileEnvTheory.nsid_to_string_def]
 QED
 
 Theorem bool_chain_callee_body_entry_prefix:
@@ -62,7 +58,7 @@ Theorem bool_chain_callee_body_entry_prefix:
      arg_ops) ==>
   LENGTH (remcode pushed) < LENGTH (remcode cx) /\
   body_stmts_full_ok pushed callee_stmts /\ body_stmts_prefix_ok pushed callee_stmts /\
-  (!names. MEM (NONE,subst_consts_fn (module_consts_env tops [])
+  (!names. MEM name names ==> MEM (NONE,subst_consts_fn (module_consts_env tops [])
     (mut,nr,rr,name,args,ds,ret,ss))
     (order_internals_unit names (FST (SND (classify_functions_unit [(NONE,tops)] []))))) /\
   MEM callee ctx.ctx_functions /\
@@ -110,7 +106,7 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
   >- (irule (cj 2 body_sim_full_mutual) >> first_assum ACCEPT_TAC)
   >- (first_x_assum irule >> asm_rewrite_tac[])
-  >- (gen_tac >> irule selected_callee_in_order >> simp[])
+  >- (rpt strip_tac >> irule selected_callee_in_order >> asm_rewrite_tac[])
   >- (drule venomInstTheory.lookup_function_MEM >> simp[])
   >- fs[gas_invoke_entry_def]
   >- (drule gas_invoke_entry_readings >> simp[])
