@@ -181,23 +181,32 @@ Theorem raw_call_outbuf_write_frame:
     b <= dst /\ dst + LENGTH data <= b + sz ==>
     stmt_state_rel H ctx func cenv cx es (write_memory_with_expansion dst data s)
 Proof
-  rpt gen_tac >> strip_tac >> irule write_memory_stmt_state_rel >> simp[] >>
-  conj_tac
-  >- (rpt strip_tac >> drule_all alloca_clear_of_locals >> decide_tac) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s` by
-    gvs[stmt_state_rel_def, state_rel_def] >>
-  `(write_memory_with_expansion dst data s).vs_data_section = s.vs_data_section /\
-   LENGTH s.vs_memory <= LENGTH (write_memory_with_expansion dst data s).vs_memory` by
-    (simp[write_memory_with_expansion_def] >>
-     Cases_on `dst + LENGTH data > LENGTH s.vs_memory` >>
-     simp[LENGTH_TAKE, LENGTH_DROP, arithmeticTheory.MIN_DEF] >> decide_tac) >>
-  irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
-  rpt strip_tac >>
-  `regions_disjoint off (type_memory_size tv) b sz` by
-    (qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` mp_tac >>
-     simp[stmt_state_rel_def, immutable_alloca_sep_def] >> metis_tac[]) >>
-  irule hash_write_memory_disjoint >>
-  gvs[regions_disjoint_def] >> decide_tac
+  rpt gen_tac >> strip_tac >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+    immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es
+      (write_memory_with_expansion dst data s)` by
+    (gen_tac >> disch_tac >>
+     irule immutables_rel_mem_agree >> qexists_tac `s` >>
+     conj_tac >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity] >>
+     conj_tac >- simp[write_memory_with_expansion_def] >>
+     reverse conj_tac
+     >- (fs[stmt_state_rel_def, state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+         metis_tac[]) >>
+     rpt strip_tac >>
+     `immutable_alloca_sep func (cenv with ce_module := src) cx es s` by
+       (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+        Cases_on `src = cenv.ce_module` >>
+        gvs[compileEnvTheory.compile_env_component_equality] >> metis_tac[]) >>
+     qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
+     simp[immutable_alloca_sep_def] >>
+     disch_then (drule_all o CONJUNCT2) >> strip_tac >>
+     `regions_disjoint off (type_memory_size tv) b sz` by
+       (qpat_x_assum `!inst b sz. _` drule_all >> simp[]) >>
+     irule hash_write_memory_disjoint >>
+     fs[regions_disjoint_def] >> decide_tac) >>
+  irule write_memory_stmt_state_rel >> simp[] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >> drule_all alloca_clear_of_locals >> decide_tac
 QED
 
 Theorem raw_call_outbuf_write_contents:
@@ -243,8 +252,9 @@ Theorem raw_call_oracle_step:
       (if stat \/ cx.txn.is_static then NONE else SOME (w2n vw)) es = (INL (rq,outcome),es1) /\
     local_ptrs_rel func cenv es.scopes
       (write_memory_with_expansion (w2n rp) (TAKE (w2n cap) outcome.co_returnData) s) /\
-    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-      (write_memory_with_expansion (w2n rp) (TAKE (w2n cap) outcome.co_returnData) s) ==>
+    (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+      immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es
+        (write_memory_with_expansion (w2n rp) (TAKE (w2n cap) outcome.co_returnData) s)) ==>
     ?t. step_inst_base inst s =
           OK (update_var out (if outcome.co_success then 1w else 0w) t) /\
         state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
@@ -269,7 +279,8 @@ Proof
       (TAKE (w2n cap) outcome.co_returnData) s).vs_memory /\
     t.vs_returndata = outcome.co_returnData /\
     (local_ptrs_rel func cenv es.scopes t /\
-     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t ==>
+     (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+       immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t) ==>
      state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) t)` by
     (irule exec_ext_call_oracle_step >> simp[] >>
      qexistsl_tac [`gas_cap`,
@@ -280,9 +291,10 @@ Proof
     (qpat_x_assum `t.vs_memory = _` (fn th => REWRITE_TAC [th]) >>
      simp[write_memory_with_expansion_def]) >>
   `local_ptrs_rel func cenv es.scopes t /\
-   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
+   (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t)` by
     (qpat_x_assum `local_ptrs_rel _ _ _ (write_memory_with_expansion _ _ _)` mp_tac >>
-     qpat_x_assum `immutables_rel _ _ _ _ _ (write_memory_with_expansion _ _ _)` mp_tac >>
+     qpat_x_assum `!src. _ ==> immutables_rel _ _ _ _ _ (write_memory_with_expansion _ _ _)` mp_tac >>
      qpat_x_assum `write_memory_with_expansion _ _ _ = _`
        (fn th => ONCE_REWRITE_TAC [th]) >>
      qpat_x_assum `t = _` mp_tac >> rpt (pop_assum kall_tac) >>

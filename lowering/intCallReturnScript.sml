@@ -213,8 +213,45 @@ Proof
   first_x_assum irule >> qexists_tac `name` >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem invoke_intret_state_rel:
+  !fuel ctx inst s name arg_ops callee args cs ret cs'
+   func cenv cenv' cx cx' es es2 tv v excl.
+    inst.inst_opcode = INVOKE /\
+    decode_invoke inst = SOME (name, arg_ops) /\
+    lookup_function name ctx.ctx_functions = SOME callee /\
+    eval_operands arg_ops s = SOME args /\
+    setup_callee callee args s = SOME cs /\
+    run_blocks fuel ctx callee cs = IntRet ret cs' /\
+    LENGTH inst.inst_outputs = LENGTH ret.iret_values /\
+    ALL_DISTINCT inst.inst_outputs /\
+    EVERY (not_local_ptr cenv es.scopes) inst.inst_outputs /\
+    stmt_state_rel H ctx func cenv cx es s /\
+    immutable_alloca_sep func cenv cx (es2 with scopes := es.scopes) s /\
+    (!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+       immutable_alloca_sep func (cenv with ce_module := src) cx
+         (es2 with scopes := es.scopes) s) /\
+    result_rel H callee tv cenv' cx'
+      (INR (ReturnException v), es2 with scopes := []) (IntRet ret cs') /\
+    cx'.txn = cx.txn /\ cx'.sources = cx.sources /\ cx'.layouts = cx.layouts /\
+    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
+    (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+       (src = cenv'.ce_module \/ IS_SOME (ALOOKUP cenv'.ce_modules src)) /\
+       (!n off. FLOOKUP cenv.ce_module_vars (src,n) = SOME (ImmutableLoc off) ==>
+          FLOOKUP cenv'.ce_module_vars (src,n) = SOME (ImmutableLoc off))) /\
+    callee_writes_above s.vs_alloca_next excl s.vs_memory cs'.vs_memory /\
+    (!n lo sz. local_region cenv es.scopes s n lo sz ==>
+       EVERY (\(eb,esz). regions_disjoint lo sz eb esz) excl) ==>
+    ?s'. step_inst fuel ctx inst s = OK s' /\
+         stmt_state_rel H ctx func cenv cx (es2 with scopes := es.scopes) s' /\
+         intret_vals_match tv v ret.iret_values /\
+         (!i. i < LENGTH inst.inst_outputs ==>
+              lookup_var (EL i inst.inst_outputs) s' =
+                SOME (EL i ret.iret_values)) /\
+         (!x. ~MEM x inst.inst_outputs ==> lookup_var x s' = lookup_var x s) /\
+         s'.vs_memory = cs'.vs_memory /\
+         s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+         s'.vs_current_bb = s.vs_current_bb /\ s'.vs_inst_idx = s.vs_inst_idx /\
+         s'.vs_halted = s.vs_halted
 Proof
   rpt strip_tac >>
   `accounts_agree H cx'.txn.target = accounts_agree H cx.txn.target /\
@@ -242,75 +279,46 @@ Proof
   gvs[result_rel_def, adopt_return_fmp_def] >>
   `cs.vs_data_section = s.vs_data_section` by gvs[setup_callee_def] >>
   drule run_blocks_intret_data_section >> strip_tac >>
-  `immutables_rel cenv' cx.txn.target cenv.ce_module cenv.ce_is_ctor es2 cs'` by
-    (fs[state_rel_def] >>
-     qpat_x_assum `immutables_rel _ _ _ _ _ _` mp_tac >>
-     simp[immutables_rel_def]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es2 cs'` by
-    (irule immutables_rel_env_transport >> qexists_tac `cenv'` >> simp[]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es2 cs'` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!src. src = cenv.ce_module \/ _ ==> _` (drule_then strip_assume_tac) >>
+     irule immutables_rel_env_transport >> qexists_tac `cenv'` >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     fs[state_rel_def, optionTheory.IS_SOME_EXISTS, immutables_rel_def] >>
+     metis_tac[]) >>
   gvs[merge_callee_state_def, lookup_var_def] >>
-  irule stmt_state_rel_allocas_frame >>
-  simp[] >>
-  conj_tac
-  >- (irule immutable_alloca_sep_fields >>
-      qexistsl_tac [`s`, `es2 with scopes := es.scopes`] >> simp[] >>
-      rpt strip_tac >> qexists_tac `id` >>
-      gvs[local_region_def] >>
-      rename1 `FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` >>
-      `~MEM p inst.inst_outputs` by
-        (gvs[EVERY_MEM, not_local_ptr_def] >> metis_tac[]) >>
-      qpat_x_assum `!x. ~MEM x inst.inst_outputs ==> _` drule >>
-      gvs[lookup_var_def]) >>
-  reverse conj_tac >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
-  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
-  qpat_x_assum `state_rel H _ _ _ _ cs'` mp_tac >>
-  simp[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
-       accounts_rel_def, logs_rel_def, call_ctx_rel_def,
-       contract_storage_def, contract_transient_def, log_entry_equiv_def] >>
-  rpt strip_tac >> gvs[]
-  >- (qpat_x_assum `immutables_rel cenv _ _ _ es2 cs'` mp_tac >>
-      simp[immutables_rel_def]) >>
-  irule LIST_REL_mono >>
-  qexists_tac `log_entry_equiv cenv' cx.txn.target` >>
-  simp[log_entry_equiv_def]
-QED
-*)
-Theorem invoke_intret_state_rel:
-  !fuel ctx inst s name arg_ops callee args cs ret cs'
-   func cenv cenv' cx cx' es es2 tv v excl.
-    inst.inst_opcode = INVOKE /\
-    decode_invoke inst = SOME (name, arg_ops) /\
-    lookup_function name ctx.ctx_functions = SOME callee /\
-    eval_operands arg_ops s = SOME args /\
-    setup_callee callee args s = SOME cs /\
-    run_blocks fuel ctx callee cs = IntRet ret cs' /\
-    LENGTH inst.inst_outputs = LENGTH ret.iret_values /\
-    ALL_DISTINCT inst.inst_outputs /\
-    EVERY (not_local_ptr cenv es.scopes) inst.inst_outputs /\
-    stmt_state_rel H ctx func cenv cx es s /\
-    immutable_alloca_sep func cenv cx (es2 with scopes := es.scopes) s /\
-    result_rel H callee tv cenv' cx'
-      (INR (ReturnException v), es2 with scopes := []) (IntRet ret cs') /\
-    cx'.txn = cx.txn /\ cx'.sources = cx.sources /\ cx'.layouts = cx.layouts /\
-    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
-    (!n off. FLOOKUP cenv.ce_module_vars (cenv.ce_module, n) =
-               SOME (ImmutableLoc off) ==>
-             FLOOKUP cenv'.ce_module_vars (cenv.ce_module, n) =
-               SOME (ImmutableLoc off)) /\
-    callee_writes_above s.vs_alloca_next excl s.vs_memory cs'.vs_memory /\
-    (!n lo sz. local_region cenv es.scopes s n lo sz ==>
-       EVERY (\(eb,esz). regions_disjoint lo sz eb esz) excl) ==>
-    ?s'. step_inst fuel ctx inst s = OK s' /\
-         stmt_state_rel H ctx func cenv cx (es2 with scopes := es.scopes) s' /\
-         intret_vals_match tv v ret.iret_values /\
-         (!i. i < LENGTH inst.inst_outputs ==>
-              lookup_var (EL i inst.inst_outputs) s' =
-                SOME (EL i ret.iret_values)) /\
-         (!x. ~MEM x inst.inst_outputs ==> lookup_var x s' = lookup_var x s) /\
-         s'.vs_memory = cs'.vs_memory /\
-         s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
-         s'.vs_current_bb = s.vs_current_bb /\ s'.vs_inst_idx = s.vs_inst_idx /\
-         s'.vs_halted = s.vs_halted
-Proof
-  cheat
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx _ resumed` >>
+  `!ce. ce.ce_vars = cenv.ce_vars /\
+        immutable_alloca_sep func ce cx (es2 with scopes := es.scopes) s ==>
+        immutable_alloca_sep func ce cx (es2 with scopes := es.scopes) resumed` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `es2 with scopes := es.scopes`] >>
+     simp[Abbr `resumed`] >>
+     rpt strip_tac >> qexists_tac `id` >>
+     gvs[local_region_def] >>
+     rename1 `FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` >>
+     `~MEM p inst.inst_outputs` by
+       (gvs[EVERY_MEM, not_local_ptr_def] >> metis_tac[]) >>
+     qpat_x_assum `!x. ~MEM x inst.inst_outputs ==> _` drule >>
+     gvs[lookup_var_def]) >>
+  `state_rel H func cenv cx (es2 with scopes := es.scopes) resumed` by
+    (simp[Abbr `resumed`] >>
+     qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
+     qpat_x_assum `state_rel H _ _ _ _ cs'` mp_tac >>
+     simp[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
+          accounts_rel_def, logs_rel_def, call_ctx_rel_def,
+          contract_storage_def, contract_transient_def, log_entry_equiv_def] >>
+     rpt strip_tac >> gvs[]
+     >- (qpat_assum `!src. src = cenv.ce_module \/ _ ==> immutables_rel cenv _ _ _ es2 cs'`
+           (qspec_then `cenv.ce_module` mp_tac) >>
+         Cases_on `cenv.ce_is_ctor` >> fs[immutables_rel_def])
+     >- (qpat_assum `!src. src = cenv.ce_module \/ _ ==> immutables_rel cenv _ _ _ es2 cs'`
+           (qspec_then `src` mp_tac) >>
+         Cases_on `cenv.ce_is_ctor` >> fs[immutables_rel_def]) >>
+     irule LIST_REL_mono >>
+     qexists_tac `log_entry_equiv cenv' cx.txn.target` >>
+     simp[log_entry_equiv_def]) >>
+  irule stmt_state_rel_allocas_frame >> simp[] >>
+  qexistsl_tac [`es`, `s`] >> simp[Abbr `resumed`]
 QED

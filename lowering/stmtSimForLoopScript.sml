@@ -427,8 +427,55 @@ QED
    counter into the loop variable.  The relation then holds at the body's
    environment bc, for the source state with the loop variable's scope
    pushed. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem for_body_entry_alloca[local]:
+  !ctx func cenv bc cx esk cc id tyv p sz w ainst cv ev dv n1 n2 k
+   cond_lbl exit_lbl body_lbl j1 j2 j3 bbb
+   (H :(bool # 'a word # type_value) list # num list).
+    lookup_block cond_lbl func.fn_blocks =
+      SOME <| bb_label := cond_lbl;
+              bb_instructions :=
+                [mk_inst j1 EQ [Var cv; Var ev] [dv];
+                 mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl] []] |> /\
+    lookup_block body_lbl func.fn_blocks = SOME bbb /\
+    get_instruction bbb 0 = SOME (mk_inst j3 MSTORE [Var p; Var cv] []) /\
+    cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
+    stmt_state_rel H ctx func cenv cx esk cc /\
+    lookup_var cv cc = SOME (i2w (n1 + &k)) /\
+    lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
+    FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
+    n1 <= n2 /\ k < Num (n2 - n1) /\ Num (n2 - n1) < dimword (:256) /\
+    lookup_scopes id esk.scopes = NONE /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
+    bc.ce_module_vars = cenv.ce_module_vars /\
+    bc.ce_modules = cenv.ce_modules /\
+    bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
+    bc.ce_imm_alloca = cenv.ce_imm_alloca /\
+    bc.ce_module_var_type = cenv.ce_module_var_type /\
+    not_local_ptr cenv esk.scopes dv /\
+    not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
+    MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
+    ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv ==>
+    ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
+         ~s2.vs_halted /\
+         (!(H' :(bool # 'a word # type_value) list # num list). stmt_state_rel H' ctx func cenv cx esk cc ==>
+           stmt_state_rel H' ctx func bc cx
+             (esk with scopes :=
+                (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                                   value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
+             s2) /\
+         (!x. x <> dv ==> lookup_var x s2 = lookup_var x cc) /\
+         s2.vs_allocas = cc.vs_allocas /\
+         gas_marked_path F ctx func cc 0 (OK s2) /\
+         (!frame_start. frame_start.cs_next_id <= ainst.inst_id ==>
+           alloca_frame cenv esk frame_start cc bc
+             (esk with scopes :=
+               (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                  value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes) s2) /\
+         !fuel rr. run_from fuel ctx func s2 = rr /\ (!e. rr <> Error e) ==>
+                   ?fuel'. run_from fuel' ctx func cc = rr
 Proof
   rpt gen_tac >> strip_tac >>
   `(i2w (n1 + &k) : bytes32) <> i2w n2` by metis_tac[i2w_counter_ne] >>
@@ -489,58 +536,6 @@ Proof
       metis_tac[]) >>
   metis_tac[]
 QED
-*)
-Theorem for_body_entry_alloca[local]:
-  !ctx func cenv bc cx esk cc id tyv p sz w ainst cv ev dv n1 n2 k
-   cond_lbl exit_lbl body_lbl j1 j2 j3 bbb
-   (H :(bool # 'a word # type_value) list # num list).
-    lookup_block cond_lbl func.fn_blocks =
-      SOME <| bb_label := cond_lbl;
-              bb_instructions :=
-                [mk_inst j1 EQ [Var cv; Var ev] [dv];
-                 mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl] []] |> /\
-    lookup_block body_lbl func.fn_blocks = SOME bbb /\
-    get_instruction bbb 0 = SOME (mk_inst j3 MSTORE [Var p; Var cv] []) /\
-    cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-    stmt_state_rel H ctx func cenv cx esk cc /\
-    lookup_var cv cc = SOME (i2w (n1 + &k)) /\
-    lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
-    FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
-    n1 <= n2 /\ k < Num (n2 - n1) /\ Num (n2 - n1) < dimword (:256) /\
-    lookup_scopes id esk.scopes = NONE /\
-    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
-    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
-    bc.ce_module_vars = cenv.ce_module_vars /\
-    bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
-    bc.ce_imm_alloca = cenv.ce_imm_alloca /\
-    bc.ce_module_var_type = cenv.ce_module_var_type /\
-    not_local_ptr cenv esk.scopes dv /\
-    not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
-    MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
-    ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv ==>
-    ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
-         ~s2.vs_halted /\
-         (!(H' :(bool # 'a word # type_value) list # num list). stmt_state_rel H' ctx func cenv cx esk cc ==>
-           stmt_state_rel H' ctx func bc cx
-             (esk with scopes :=
-                (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                                   value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
-             s2) /\
-         (!x. x <> dv ==> lookup_var x s2 = lookup_var x cc) /\
-         s2.vs_allocas = cc.vs_allocas /\
-         gas_marked_path F ctx func cc 0 (OK s2) /\
-         (!frame_start. frame_start.cs_next_id <= ainst.inst_id ==>
-           alloca_frame cenv esk frame_start cc bc
-             (esk with scopes :=
-               (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                  value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes) s2) /\
-         !fuel rr. run_from fuel ctx func s2 = rr /\ (!e. rr <> Error e) ==>
-                   ?fuel'. run_from fuel' ctx func cc = rr
-Proof
-  cheat
-QED
 
 
 Theorem for_body_entry:
@@ -564,6 +559,7 @@ Theorem for_body_entry:
     FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
     (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
     bc.ce_module_vars = cenv.ce_module_vars /\
+    bc.ce_modules = cenv.ce_modules /\
     bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
     bc.ce_imm_alloca = cenv.ce_imm_alloca /\
     bc.ce_module_var_type = cenv.ce_module_var_type /\
@@ -874,6 +870,7 @@ Proof
   strip_tac >> fs[for_code_def] >>
   `stmt_state_rel H0 ctx func cenv cx esk cc` by metis_tac[] >>
   `bc.ce_module_vars = cenv.ce_module_vars /\
+   bc.ce_modules = cenv.ce_modules /\
    bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
    bc.ce_imm_alloca = cenv.ce_imm_alloca /\
    bc.ce_module_var_type = cenv.ce_module_var_type` by

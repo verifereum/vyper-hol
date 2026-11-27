@@ -19,7 +19,7 @@
 
 Theory placeStore
 Ancestors
-  placeStoreMemory placeStoreSlots
+  placeStoreMemory placeStoreSlots stmtSimAssignStore
   stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance
   loweringPosts fragGasMode exprSimProps localPtrsProps stmtSimDeclPath
   emitHelper venomExecSemantics venomInst exprLoweringProps accountsRelProps vyperLookup vyperPlaceStatePreservation
@@ -1167,8 +1167,20 @@ Proof
   simp[] >> goal_assum (drule_at Any)
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem place_store_memory_state:
+  !ctx func cenv cx ee ff s id path v entry p sz bw k tv mem'.
+    stmt_state_rel H ctx func cenv cx ee s /\
+    write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
+    lookup_scopes id ee.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME bw /\
+    mem_path_offset entry.type path = SOME (k,tv) /\
+    value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+    value_has_type tv v /\ val_in_memory tv v (w2n bw+k) mem' /\
+    LENGTH s.vs_memory <= LENGTH mem' /\
+    (!q. q < w2n bw+k \/ w2n bw+k+type_memory_size tv <= q ==>
+         mem_bytes_at q 1 s.vs_memory = mem_bytes_at q 1 mem') ==>
+    stmt_state_rel H ctx func cenv cx ff (s with vs_memory := mem')
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `find_containing_scope id ee.scopes` >>
@@ -1201,23 +1213,52 @@ Proof
     (simp[local_region_def] >> metis_tac[]) >>
   `type_memory_size entry.type <= sz` by
     (fs[local_ptrs_rel_def] >> metis_tac[]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
-     ee (s with vs_memory := mem')` by
-    (irule place_store_local_immutables_frame >>
-     goal_assum (drule_at Any) >> simp[] >>
-     qexistsl_tac [`H`, `ctx`, `func`] >> simp[] >>
-     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor
+       ee (s with vs_memory := mem')` by
+    (gen_tac >> disch_tac >>
+     MATCH_MP_TAC (Q.INST
+       [`H` |-> `H`, `b` |-> `w2n (bw:bytes32)`, `ctx` |-> `ctx`, `func` |-> `func`,
+        `id` |-> `id`, `s` |-> `s`, `sz` |-> `sz`]
+       (SPEC_ALL local_write_preserves_immutables)) >>
+     simp[] >> rpt strip_tac >> sym_tac >>
+     irule place_store_bytes_agree >> rpt strip_tac >>
+     qpat_x_assum `!q. _ ==> mem_bytes_at q 1 _ = _` irule >>
+     decide_tac) >>
   `entry'.type = entry.type` by metis_tac[replace_memory_entry_type] >>
   `!n b z. local_region cenv sc' (s with vs_memory := mem') n b z ==>
             local_region cenv ee.scopes s n b z` by
     (rpt gen_tac >> Cases_on `n = id` >>
      gvs[local_region_def, lookup_var_def] >> metis_tac[]) >>
   qpat_x_assum `ee.scopes = _` kall_tac >>
+  `!ce. ce.ce_vars = cenv.ce_vars ==>
+     !n b z. local_region ce sc' (s with vs_memory := mem') n b z ==>
+       ?n0. local_region ce ee.scopes s n0 b z` by
+    (rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >>
+     qpat_assum `ce.ce_vars = cenv.ce_vars` (fn vars =>
+       qpat_assum `local_region ce _ _ _ _ _`
+         (assume_tac o REWRITE_RULE [local_region_def, vars])) >>
+     `local_region cenv sc' (s with vs_memory := mem') n b z` by
+       (rewrite_tac[local_region_def] >> first_assum ACCEPT_TAC) >>
+     qpat_assum `!n b z. local_region cenv sc' _ n b z ==> _`
+       (drule_then assume_tac) >>
+     qexists_tac `n` >>
+     qpat_assum `ce.ce_vars = cenv.ce_vars` (fn vars =>
+       rewrite_tac[local_region_def, vars] >>
+       qpat_assum `local_region cenv ee.scopes s n b z`
+         (ACCEPT_TAC o REWRITE_RULE [local_region_def]))) >>
   `immutable_alloca_sep func cenv cx (ee with scopes := sc')
      (s with vs_memory := mem')` by
     (irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `ee`] >> fs[stmt_state_rel_def] >> metis_tac[]) >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx
+       (ee with scopes := sc') (s with vs_memory := mem')` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
      qexistsl_tac [`s`, `ee`] >> simp[] >>
-     fs[stmt_state_rel_def] >> metis_tac[]) >>
+     fs[stmt_state_rel_def] >>
+     qpat_assum `!ce. ce.ce_vars = _ ==> _`
+       (qspec_then `cenv with ce_module := src` mp_tac) >> simp[]) >>
   irule stmt_state_rel_allocas_frame >>
   simp[] >>
   conj_tac
@@ -1230,25 +1271,7 @@ Proof
   fs[stmt_state_rel_def, state_rel_def] >>
   fs[storage_rel_def, transient_rel_def, accounts_rel_def,
      immutables_rel_def, logs_rel_def, contract_storage_def,
-     contract_transient_def] >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem place_store_memory_state:
-  !ctx func cenv cx ee ff s id path v entry p sz bw k tv mem'.
-    stmt_state_rel H ctx func cenv cx ee s /\
-    write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
-    lookup_scopes id ee.scopes = SOME entry /\
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    lookup_var p s = SOME bw /\
-    mem_path_offset entry.type path = SOME (k,tv) /\
-    value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
-    value_has_type tv v /\ val_in_memory tv v (w2n bw+k) mem' /\
-    LENGTH s.vs_memory <= LENGTH mem' /\
-    (!q. q < w2n bw+k \/ w2n bw+k+type_memory_size tv <= q ==>
-         mem_bytes_at q 1 s.vs_memory = mem_bytes_at q 1 mem') ==>
-    stmt_state_rel H ctx func cenv cx ff (s with vs_memory := mem')
-Proof
-  cheat
+     contract_transient_def] >> metis_tac[optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem place_store_pointer_memory_state:
