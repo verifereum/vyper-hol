@@ -3,7 +3,7 @@ Theory exprSimAlloc
 Ancestors
   list rich_list finite_map context compileEnv loweringStateRelDefs loweringSlice exprLoweringProps
   emitHelperProps fragExec localPtrsProps venomInst venomState
-  venomExecSemantics fragGasSeq fragGasMode
+  venomExecSemantics fragGasSeq fragGasMode stateRelProj
 
 Theorem literal_alloca_run[local]:
   !H.
@@ -154,47 +154,6 @@ Proof
 QED
 
 (* A bounded store into an allocation separated from local regions. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
-  rewrite_tac[Once exprLoweringPropsTheory.stmt_state_rel_def] >> strip_tac >>
-  `local_ptrs_rel func cenv es.scopes (mstore a w s)` by
-    (irule localPtrsPropsTheory.local_ptrs_rel_mstore >>
-     reverse conj_tac >- gvs[state_rel_def] >>
-     rpt strip_tac >>
-     qpat_x_assum `!name lb lsz. local_region _ _ _ _ _ _ ==> _` drule >>
-     decide_tac) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-     (mstore a w s)` by
-    (irule immutables_rel_mstore_alloca >> conj_tac
-     >- (qexistsl_tac [`b`, `func`, `inst`, `sz`] >> simp[]) >>
-     gvs[state_rel_def]) >>
-  rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
-  conj_tac
-  >- (irule exprLoweringPropsTheory.state_rel_frame >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`es`, `s`] >> simp[] >> simp[mstore_def]) >>
-  conj_tac
-  >- (irule localPtrsPropsTheory.alloca_inv_fields >>
-      qexists_tac `s` >> simp[mstore_def]) >>
-  conj_tac
-  >- (irule exprLoweringPropsTheory.alloca_room_fields >>
-      qexists_tac `s` >> simp[mstore_def]) >>
-  conj_tac
-  >- (irule fmp_room_mstore >> fs[stmt_state_rel_def]) >>
-  conj_tac
-  >- (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
-      qexistsl_tac [`s`, `es`] >> simp[mstore_def] >>
-      rpt strip_tac >> qexists_tac `id` >>
-      fs[local_region_def, lookup_var_def]) >>
-  conj_tac
-  >- (irule exprLoweringPropsTheory.immutable_base_zero_frame >>
-      qexists_tac `s` >> simp[mstore_def, lookup_var_def]) >>
-  simp[mstore_def] >> first_assum MATCH_ACCEPT_TAC
-QED
-*)
 Theorem literal_mstore_state_rel:
   !H.
   !func cenv cx es s a (w:bytes32) inst b sz ctx.
@@ -205,7 +164,49 @@ Theorem literal_mstore_state_rel:
        b + sz <= lb \/ lb + lsz <= b) ==>
     stmt_state_rel H ctx func cenv cx es (mstore a w s)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule stmt_state_rel_state_rel >> strip_tac >>
+  drule state_rel_local_ptrs_rel >> strip_tac >>
+  `local_ptrs_rel func cenv es.scopes (mstore a w s)` by
+    (irule local_ptrs_rel_mstore >> simp[] >> rpt strip_tac >>
+     qpat_x_assum `!name lb lsz. local_region _ _ _ _ _ _ ==> _` drule >>
+     decide_tac) >>
+  `immutable_alloca_sep func cenv cx es s /\
+   (!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx es s)` by
+    fs[stmt_state_rel_def] >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es (mstore a w s)` by
+    (gen_tac >> disch_tac >> irule immutables_rel_mem_agree >>
+     qexists_tac `s` >> simp[venomMemPropsTheory.mstore_memory_nondecreasing] >>
+     conj_tac >- simp[mstore_def] >>
+     reverse conj_tac
+     >- metis_tac[state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+     `immutable_alloca_sep func (cenv with ce_module := src) cx es s` by
+       (Cases_on `src = cenv.ce_module` >>
+        gvs[compileEnvTheory.compile_env_component_equality,
+            optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+     rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+     qpat_x_assum `immutable_alloca_sep _ (_ with ce_module := _) _ _ _` mp_tac >>
+     simp[immutable_alloca_sep_def] >> strip_tac >>
+     qpat_x_assum `!name tv v off. _ ==> _ /\ _ /\ _` drule_all >> strip_tac >>
+     qpat_x_assum `!i b sz. MEM i _ /\ _ ==> regions_disjoint _ _ b sz` drule_all >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  `state_rel H func cenv cx es (mstore a w s)` by
+    (irule state_rel_frame >> conj_tac >- simp[] >>
+     qexistsl_tac [`es`, `s`] >> conj_tac >- first_assum ACCEPT_TAC >>
+     simp[mstore_def]) >>
+  `!ce. immutable_alloca_sep func ce cx es s ==>
+     immutable_alloca_sep func ce cx es (mstore a w s)` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `es`] >> simp[mstore_def, local_region_def, lookup_var_def] >>
+     metis_tac[]) >>
+  `immutable_base_zero cenv (mstore a w s)` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     simp[mstore_def, lookup_var_def] >> metis_tac[stmt_state_rel_immutable_base_zero]) >>
+  irule stmt_state_rel_allocas_frame >> simp[] >>
+  qexistsl_tac [`es`, `s`] >>
+  simp[venomMemPropsTheory.mstore_memory_nondecreasing] >> simp[mstore_def]
 QED
 
 (* Allocation preserves label operands as well as older registers. *)

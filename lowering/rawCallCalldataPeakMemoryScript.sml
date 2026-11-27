@@ -4,7 +4,7 @@ Ancestors
   vfmConstants vfmBuffer
   dallocaBounds exprLoweringProps fmpAlignment fmpLowerSequenceExec
   dallocaCalldata rawCallCalldataDalloca
-  compileEnv exprSimProps localPtrsProps loweringSlice loweringStateRelDefs
+  compileEnv exprSimProps localPtrsProps loweringSlice loweringStateRelDefs stateRelProj
   valueEncodingProps
   venomExecSemantics venomLayout venomMemProps venomState
   arithmetic list words
@@ -108,20 +108,22 @@ QED
 (* The copy starts at or above every live local and constructor immutable.
    This frame keeps the register file, so the reserved-name check can be
    applied separately to the gadget's two result registers. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem calldata_copy_stmt_frame[local]:
+  stmt_state_rel H ctx func cenv cx vy s /\
+  s.vs_alloca_next <= w2n s.vs_fmp /\
+  fmp_room ctx func
+    ((write_memory_with_expansion (w2n s.vs_fmp) bytes s) with vs_fmp := fmp) ==>
+  stmt_state_rel H ctx func cenv cx vy
+    ((write_memory_with_expansion (w2n s.vs_fmp) bytes s) with vs_fmp := fmp)
 Proof
-  disch_then (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
+  strip_tac >>
   qabbrev_tac `t =
     (write_memory_with_expansion (w2n s.vs_fmp) bytes s) with vs_fmp := fmp` >>
-  qpat_x_assum `stmt_state_rel H ctx func cenv cx vy s`
-    (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+  drule stmt_state_rel_state_rel >> strip_tac >>
+  drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
    (!x. lookup_var x t = lookup_var x s)` by
     simp[Abbr `t`, write_memory_with_expansion_def, lookup_var_def] >>
-  `local_ptrs_rel func cenv vy.scopes s /\
-   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vy s` by
-    fs[state_rel_def] >>
   `local_ptrs_rel func cenv vy.scopes t` by
     (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >> simp[] >>
      rpt conj_tac >~ [`mem_bytes_at _ _ _ = mem_bytes_at _ _ _`]
@@ -132,42 +134,44 @@ Proof
          simp[Abbr `t`] >> sym_tac >>
          irule write_memory_mem_bytes_at_disjoint >> fs[regions_disjoint_def]) >>
      rpt strip_tac >> gvs[]) >>
-  `t.vs_data_section = s.vs_data_section` by
-    simp[Abbr `t`, write_memory_with_expansion_def] >>
-  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
-    simp[Abbr `t`, write_memory_with_expansion_nondecreasing] >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vy t` by
-    (irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
-     strip_tac >> rpt gen_tac >> strip_tac >>
-     simp[Abbr `t`] >> irule write_memory_mem_bytes_at_disjoint >>
-     fs[immutable_alloca_sep_def] >>
-     qpat_x_assum `!name tv v off. _ ==> _ <= s.vs_alloca_next /\ _`
-       drule_all >> strip_tac >> decide_tac) >>
-  rewrite_tac[stmt_state_rel_def] >> conj_tac
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+         immutables_rel cenv cx.txn.target src cenv.ce_is_ctor vy t` by
+    (gen_tac >> disch_tac >>
+     `immutable_alloca_sep func (cenv with ce_module := src) cx vy s` by
+       (Cases_on `src = cenv.ce_module` >>
+        fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS,
+           compile_env_component_equality] >> metis_tac[]) >>
+     irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+     `immutables_rel cenv cx.txn.target src cenv.ce_is_ctor vy s` by
+       (fs[state_rel_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+     simp[Abbr `t`, write_memory_with_expansion_nondecreasing] >>
+     conj_tac >- simp[write_memory_with_expansion_def] >>
+     rpt strip_tac >> irule write_memory_mem_bytes_at_disjoint >> disj1_tac >>
+     qpat_x_assum `immutable_alloca_sep _ _ _ _ _`
+       (strip_assume_tac o SIMP_RULE (srw_ss()) [immutable_alloca_sep_def]) >>
+     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >> strip_tac >>
+     qpat_x_assum `!name tv v off. _ ==> _` drule_all >> strip_tac >> decide_tac) >>
+  `!ce. immutable_alloca_sep func ce cx vy s ==>
+        immutable_alloca_sep func ce cx vy t` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `vy`] >> simp[] >> rpt strip_tac >>
+     qexists_tac `id` >> fs[local_region_def] >> metis_tac[]) >>
+  match_mp_tac stmt_state_rel_intro >> conj_tac
   >- (irule state_rel_frame >> simp[] >> qexistsl_tac [`vy`, `s`] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
       simp[Abbr `t`, write_memory_with_expansion_def]) >>
   conj_tac >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
-  conj_tac >- (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
+  conj_tac >- (irule alloca_room_fields >> qexists_tac `s` >>
+               simp[] >> metis_tac[stmt_state_rel_alloca_room]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (first_x_assum irule >> fs[stmt_state_rel_def]) >>
   conj_tac
-  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `vy`] >>
-      simp[] >> rpt strip_tac >> qexists_tac `id` >>
-      fs[local_region_def] >> metis_tac[]) >>
+  >- (irule immutable_base_zero_frame >> qexists_tac `s` >>
+      simp[Abbr `t`, write_memory_with_expansion_def] >>
+      metis_tac[stmt_state_rel_immutable_base_zero]) >>
   conj_tac
-  >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
-      simp[Abbr `t`, write_memory_with_expansion_def]) >>
-  simp[] >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem calldata_copy_stmt_frame[local]:
-  stmt_state_rel H ctx func cenv cx vy s /\
-  s.vs_alloca_next <= w2n s.vs_fmp /\
-  fmp_room ctx func
-    ((write_memory_with_expansion (w2n s.vs_fmp) bytes s) with vs_fmp := fmp) ==>
-  stmt_state_rel H ctx func cenv cx vy
-    ((write_memory_with_expansion (w2n s.vs_fmp) bytes s) with vs_fmp := fmp)
-Proof
-  cheat
+  >- (rpt strip_tac >> first_x_assum irule >> fs[stmt_state_rel_def] >> metis_tac[]) >>
+  drule stmt_state_rel_alloca_size >> simp[]
 QED
 
 val raw_bridge = SIMP_RULE bool_ss []
