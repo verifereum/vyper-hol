@@ -637,24 +637,25 @@ Proof
   gvs[] >> metis_tac[value_has_type_val_wf, arithmeticTheory.ADD_ASSOC]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def, read_result_def, return_def] >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-  `off + k < dimword (:256)` by decide_tac >>
-  gvs[arithmeticTheory.ADD_COMM]
-QED
-*)
 Theorem immutable_holds_memory:
   stmt_state_rel H ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
   immutable_holds cenv cx t (Value v) a es uu /\
   evaluate_type (get_tenv cx) t = SOME tv ==>
   val_in_memory tv v (w2n a) uu.vs_memory
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `immutable_holds _ _ _ _ _ _ _` mp_tac >>
+  simp[immutable_holds_def, read_result_def, return_def] >> strip_tac >>
+  `immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es uu` by
+    (drule stateRelProjTheory.stmt_state_rel_state_rel >>
+     simp[state_rel_def] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+  `val_in_memory itv iv off uu.vs_memory` by
+    (qpat_x_assum `immutables_rel _ _ _ _ _ _` mp_tac >>
+     simp[immutables_rel_def] >> metis_tac[]) >>
+  fs[sub_layout_def] >>
+  `k + off < dimword (:256)` by decide_tac >>
+  simp[] >>
+  `k + off = off + k` by decide_tac >> metis_tac[]
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
