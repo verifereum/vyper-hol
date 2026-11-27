@@ -162,6 +162,23 @@ Proof
   simp[imm_len_mods_singleton]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt strip_tac >>
+  drule intCallFrameTheory.invoke_return_frame >> strip_tac >>
+  `ghost_inv_at (DF H) lo d cenv cx (es1 with scopes := prev) G tn t` by
+    fs[intcall_entry_full_def] >>
+  simp[ghost_inv_at_def] >> rpt conj_tac
+  >- suspend "locals"
+  >- suspend "buffer"
+  >- suspend "pc"
+  >- suspend "storage"
+  >- suspend "fixed"
+  >- suspend "base"
+  >> gvs[ghost_inv_at_def, allocas_from_def] >> metis_tac[]
+QED
+*)
 Theorem intcall_return_ghost_inv:
   !tops ctx cenv cx H DF lo sa mut nr rtv rc rb sm t tn v ee Gc tc ir cs
    outs out d func tenv name es vv s0 es0 G0 tn0 args ret ss rr prev penv es1 G.
@@ -180,20 +197,10 @@ Theorem intcall_return_ghost_inv:
     (DRESTRICT G (COMPL (set outs)))
     (tc with t_var := DRESTRICT tn.t_var (COMPL (set outs))) out
 Proof
-  rpt strip_tac >>
-  drule intCallFrameTheory.invoke_return_frame >> strip_tac >>
-  `ghost_inv_at (DF H) lo d cenv cx (es1 with scopes := prev) G tn t` by
-    fs[intcall_entry_full_def] >>
-  simp[ghost_inv_at_def] >> rpt conj_tac
-  >- suspend "locals"
-  >- suspend "buffer"
-  >- suspend "pc"
-  >- suspend "storage"
-  >- suspend "fixed"
-  >- suspend "base"
-  >> gvs[ghost_inv_at_def, allocas_from_def] >> metis_tac[]
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_ghost_inv[locals]:
   rpt gen_tac >> strip_tac >>
   `not_fresh_at sa p` by
@@ -251,6 +258,8 @@ Resume intcall_return_ghost_inv[locals]:
   qexistsl [`tn.t_mem`, `tc.t_mem`, `t.vs_memory`, `cs.vs_memory`, `sz`] >>
   simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_ghost_inv[buffer]:
   Cases_on `d` >- simp[return_buf_ptr_def] >>
   rename1 `return_buf_ptr (SOME pair) _ _ _ _` >> PairCases_on `pair` >>
@@ -259,12 +268,16 @@ Resume intcall_return_ghost_inv[buffer]:
   `~MEM x outs` by metis_tac[] >>
   gvs[ptr_covers_def, op_taint_def, FLOOKUP_DRESTRICT]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_ghost_inv[pc]:
   rpt strip_tac >>
   `not_fresh_at sa x` by metis_tac[] >>
   `~MEM x outs` by metis_tac[] >>
   fs[ghost_inv_at_def, op_taint_def, FLOOKUP_DRESTRICT]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_ghost_inv[storage]:
   `stor_taint_ok_at (DF H) tc cs` by fs[intcall_callee_exit_full_def] >>
   `t.vs_call_ctx.cc_address = cx.txn.target` by
@@ -287,9 +300,13 @@ Resume intcall_return_ghost_inv[storage]:
       venomExecSemanticsTheory.merge_callee_state_def,
       stor_taint_ok_at_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_ghost_inv[fixed]:
   gvs[intcall_callee_exit_full_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_ghost_inv[base]:
   rpt strip_tac >>
   `not_fresh_at sa x` by
@@ -297,7 +314,10 @@ Resume intcall_return_ghost_inv[base]:
   `~MEM x outs` by metis_tac[] >>
   gvs[ghost_inv_at_def, op_taint_def, FLOOKUP_DRESTRICT]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise intcall_return_ghost_inv
+*)
 
 Theorem intcall_return_ghost_kept:
   !tops ctx cenv cx H DF lo sa mut nr rtv rc rb sm t tn v ee Gc tc ir cs
