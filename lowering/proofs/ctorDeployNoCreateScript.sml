@@ -160,7 +160,7 @@ Proof
        (qspecl_then [`am.layouts`, `tx.target`, `tops`, `art`,
                      `f0`, `f1`, `f2`, `f3`, `f4`, `f5`, `f6`, `f7`]
           mp_tac deploy_classified_function_avoids_create >>
-        fs[] >> metis_tac[PERM_order_deploy_internals, sortingTheory.PERM_MEM_EQ]) >>
+        fs[] >> metis_tac[]) >>
      simp[package_internal_fn_def, set_internal_package_target_def,
           internal_package_avoids_def, package_body_avoids_def,
           update_cenv_nonreentrant_def, build_compile_env_defaults]) >>

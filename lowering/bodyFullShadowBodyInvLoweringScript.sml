@@ -23,7 +23,9 @@ Theorem shadow_body_inv_from_internal_runs[local]:
   (if is_ctor then lower_vyper_deploy_unit tops rp bc = SOME unit
    else lower_vyper_runtime_unit tops rp = SOME unit) /\
   name = (if is_ctor then "__deploy" else "__entry") /\
-  PERM srcs (FST (SND (classify_functions tops))) /\
+  (!x. MEM x srcs ==> MEM x (FST (SND (classify_functions tops)))) /\
+  (!x y. MEM x (FST (SND (classify_functions tops))) /\ MEM y srcs /\
+         FST (SND (SND (SND x))) = FST (SND (SND (SND y))) ==> MEM x srcs) /\
   ips = MAP (set_internal_package_target rp.rpol_target o
     package_internal_fn tops T (K global_nonreentrant_slot) is_ctor
       (if is_ctor then imm_len tops else 0)) srcs /\
@@ -52,11 +54,31 @@ Proof
   qpat_x_assum `mode = is_ctor` SUBST_ALL_TAC >>
   qabbrev_tac `src = subst_consts_fn (module_consts_env tops [])
     (mut,nr,rr,fname,args,dflts,ret,ss)` >>
-  `MEM src srcs` by
-    (qpat_assum `PERM srcs _` (mp_tac o MATCH_MP PERM_MEM_EQ) >>
-     disch_then (qspec_then `src` SUBST1_TAC) >>
-     simp[Abbr `src`, subst_consts_fn_def, MEM_classify_internal] >>
+  `MEM src (FST (SND (classify_functions tops)))` by
+    (simp[Abbr `src`, subst_consts_fn_def, MEM_classify_internal] >>
      qexistsl [`dflts`, `ss`] >> simp[]) >>
+  `MEM src srcs` by
+    (mp_tac (Q.INST [`target` |-> `rp.rpol_target`,
+       `cap` |-> `if is_ctor then imm_len tops else 0`,
+       `id` |-> `build_func_ids 0 tops fname`,
+       `tys` |-> `MAP SND (args : (string # type) list)`, `mode` |-> `is_ctor`]
+       packaged_internal_source_id) >>
+     impl_tac >- fs[] >> strip_tac >>
+     rename1 `build_func_ids 0 tops fname =
+                build_func_ids 0 tops (FST (SND (SND (SND other))))` >>
+     PairCases_on `other` >>
+     `MEM (other0,other1,other2,other3,other4,other5,other6,other7)
+        (FST (SND (classify_functions tops)))` by metis_tac[] >>
+     qpat_x_assum `MEM _ (FST (SND (classify_functions tops)))`
+       (strip_assume_tac o REWRITE_RULE [MEM_classify_internal]) >>
+     `fname = other3` by
+       (qspecl_then [`tops`, `0`, `Internal`, `mut`, `nr`, `rr`, `fname`, `args`,
+          `dflts`, `ret`, `ss`, `Internal`, `other0`, `other1`, `other2`,
+          `other3`, `other4`, `rawdflts`, `other6`, `rawbody`]
+          mp_tac build_func_ids_11 >>
+        simp[] >> disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     first_x_assum irule >> simp[Abbr `src`, subst_consts_fn_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
   `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ips)` by
     simp[package_internal_labels] >>
   `ALL_DISTINCT (MAP FST (internal_fn_descriptors ips))` by
@@ -170,7 +192,7 @@ Proof
     `rawS` |-> `shadow_unit.cu_context`, `dataS` |-> `shadow_data`,
     `srcs` |-> `order_internals (runtime_internal_order tops ints) ints`]
     shadow_body_inv_from_internal_runs) >>
-  fs[Abbr `ips`, PERM_order_runtime_internals, gas_shadow_unit_def]
+  fs[Abbr `ips`, gas_shadow_unit_def] >> metis_tac[]
 QED
 
 Theorem runtime_shadow_body_inv:
@@ -241,7 +263,7 @@ Proof
     `rawS` |-> `shadow_unit.cu_context`, `dataS` |-> `shadow_data`,
     `srcs` |-> `order_internals (runtime_internal_order tops ints) ints`]
     shadow_body_inv_from_internal_runs) >>
-  simp[Abbr `ips`, PERM_order_runtime_internals]
+  fs[Abbr `ips`] >> metis_tac[]
 QED
 
 Theorem runtime_grouped_shadow_body_inv:
@@ -312,13 +334,18 @@ Proof
      simp[optionTheory.OPTREL_def, gas_shadow_unit_def]) >>
   mp_tac (Q.INST [`is_ctor` |-> `T`, `name` |-> `"__deploy"`]
     shadow_body_inv_from_internal_runs) >>
-  fs[deploy_source_ok_def, install_immutable_reservation_def, Abbr `srcs`,
-     PERM_order_deploy_internals]
+  fs[deploy_source_ok_def, install_immutable_reservation_def, Abbr `srcs`] >>
+  metis_tac[]
 QED
 
-(* Two modules can declare the same internal name and lower to distinct labels. *)
+(* A linked unit whose main module calls its own foo and the imported
+   module's foo from an external function. Both modules declare foo, and
+   the two lower to distinct labels. *)
 Theorem two_module_unit_lowers[local]:
-  mods = [(NONE,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]]);
+  mods = [(NONE,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass];
+          FunctionDecl External Nonpayable F F "bar" [] [] NoneT
+            [Expr (Call NoneT (IntCall (NONE,"foo")) [] NONE);
+             Expr (Call NoneT (IntCall (SOME 1,"foo")) [] NONE)]]);
           (SOME 1,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]])] ==>
   ?unit main lib.
     lower_vyper_runtime_unit_mods mods []
@@ -327,10 +354,21 @@ Theorem two_module_unit_lowers[local]:
          rpol_final_assembly := FAP_Optimize |> = SOME unit /\
     lookup_function (internal_fn_label 0 "foo" [] F)
       unit.cu_context.ctx_functions = SOME main /\
-    lookup_function (internal_fn_label 1 "1.foo" [] F)
+    lookup_function (internal_fn_label 2 "1.foo" [] F)
       unit.cu_context.ctx_functions = SOME lib
 Proof
-  strip_tac >> gvs[] >> EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
+  strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `lower_vyper_runtime_unit_mods M [] P` >>
+  (* Evaluating only the looked-up names avoids normalising the whole unit. *)
+  `case lower_vyper_runtime_unit_mods M [] P of
+     NONE => F
+   | SOME u => IS_SOME (lookup_function (internal_fn_label 0 "foo" [] F)
+                          u.cu_context.ctx_functions) /\
+               IS_SOME (lookup_function (internal_fn_label 2 "1.foo" [] F)
+                          u.cu_context.ctx_functions)` by
+    (simp[Abbr `M`, Abbr `P`] >> EVAL_TAC) >>
+  Cases_on `lower_vyper_runtime_unit_mods M [] P` >>
+  fs[optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem foo_supported[local]:
@@ -349,75 +387,99 @@ Proof
        supported_pure_expr_def]
 QED
 
+Theorem foo_bar_supported[local]:
+  supported_program [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass];
+    FunctionDecl External Nonpayable F F "bar" [] [] NoneT
+      [Expr (Call NoneT (IntCall (NONE,"foo")) [] NONE);
+       Expr (Call NoneT (IntCall (SOME 1,"foo")) [] NONE)]]
+Proof
+  EVAL_TAC
+QED
+
 Theorem two_module_unit_invariants[local]:
-  tops = [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]] /\
-  mods = [(NONE,tops); (SOME 1,tops)] ==>
+  tops = [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass];
+          FunctionDecl External Nonpayable F F "bar" [] [] NoneT
+            [Expr (Call NoneT (IntCall (NONE,"foo")) [] NONE);
+             Expr (Call NoneT (IntCall (SOME 1,"foo")) [] NONE)]] /\
+  lib_tops = [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]] /\
+  mods = [(NONE,tops); (SOME 1,lib_tops)] ==>
   ?ctx cenv cx main lib.
     contract_inv mods [] ctx cenv cx /\
-    module_body_inv mods (SOME 1) tops cenv cx /\
+    module_body_inv mods (SOME 1) lib_tops cenv cx /\
     ~cx.in_deploy /\
     lookup_function (internal_fn_label 0 "foo" [] F)
       ctx.ctx_functions = SOME main /\
-    lookup_function (internal_fn_label 1 "1.foo" [] F)
+    lookup_function (internal_fn_label 2 "1.foo" [] F)
       ctx.ctx_functions = SOME lib
 Proof
-  strip_tac >>
-  `supported_module_headers [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]]` by
-    metis_tac[foo_supported, supported_program_module_headers] >>
-  `mods = [(NONE,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]]);
-           (SOME 1,[FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]])]`
-    by fs[] >>
+  strip_tac >> qpat_x_assum `tops = _` SUBST_ALL_TAC >>
+  qpat_x_assum `lib_tops = _` SUBST_ALL_TAC >>
   drule two_module_unit_lowers >> strip_tac >>
   qabbrev_tac `ce = build_compile_env_unit mods (SOME 1) Internal Pure "foo"
     [] NoneT [Pass] T` >>
   `cenv_module_pins_mods mods ce` by
     simp[NoAsms, Abbr `ce`, build_compile_env_unit_def, cenv_module_pins_mods_def,
          pairTheory.ELIM_UNCURRY] >>
-  qexists_tac `unit.cu_context` >>
-  qexists_tac `ce` >>
-  qexists_tac `(ARB:evaluation_context) with
-    <| in_deploy := F; sources := [((ARB:evaluation_context).txn.target,mods)] |>` >>
-  qexistsl_tac [`main`, `lib`] >>
+  `!src ts vis n ty slot. ALOOKUP mods src = SOME ts ==>
+      ~MEM (VariableDecl vis Immutable n ty slot) ts` by
+    (rpt gen_tac >> disch_then (mp_tac o MATCH_MP ALOOKUP_MEM) >> simp[] >>
+     strip_tac >> gvs[]) >>
+  `!src name off size. ~immutable_region_mods mods src name off size` by
+    (rewrite_tac[immutable_region_mods_def, NOT_EXISTS_THM] >> rpt strip_tac >>
+     first_x_assum drule >> simp[EXISTS_OR_THM]) >>
+  `supported_module_headers [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]]` by
+    metis_tac[foo_supported, supported_program_module_headers] >>
+  `supported_module_headers [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass];
+      FunctionDecl External Nonpayable F F "bar" [] [] NoneT
+        [Expr (Call NoneT (IntCall (NONE,"foo")) [] NONE);
+         Expr (Call NoneT (IntCall (SOME 1,"foo")) [] NONE)]]` by
+    metis_tac[foo_bar_supported, supported_program_module_headers] >>
+  qexistsl_tac [`unit.cu_context`, `ce`,
+    `(ARB:evaluation_context) with
+      <| in_deploy := F; sources := [((ARB:evaluation_context).txn.target,mods)] |>`,
+    `main`, `lib`] >>
   simp[contract_inv_def, module_body_inv_def, get_tenv_def] >>
   rpt conj_tac >>
   simp[NoAsms, Abbr `ce`, build_compile_env_unit_def, pairTheory.ELIM_UNCURRY] >>
   gvs[] >>
-  simp[foo_supported, toplevel_vtype_keys_toplevel_def, make_struct_fields_map_mods_def,
+  simp[foo_supported, foo_bar_supported, toplevel_vtype_keys_toplevel_def,
+       make_struct_fields_map_mods_def,
        build_struct_fields_map_mods_def, build_struct_fields_map_src_def] >>
-  simp[immutable_section_layout_mods_def, immutable_region_mods_def,
-       imm_len_mods_def, ALOOKUP_def, AllCaseEqs(),
+  simp[immutable_section_layout_mods_def, imm_len_mods_def, ALOOKUP_def, AllCaseEqs(),
        add_module_var_locations_mods_def, add_module_var_locations_src_def,
        add_immutable_locations_unit_def, add_annotated_immutables_mods_def,
        add_annotated_immutables_src_def, compute_immutables_len_unit_def,
-       annotated_immutables_len_def] >>
-  rpt strip_tac >> gvs[foo_supported, toplevel_vtype_keys_toplevel_def,
-    function_mutability_ok_def, stmt_mutability_ok_def, listTheory.APPEND_EQ_SING,
-    linked_body_calls_resolved_def, function_int_calls_def,
-    supported_declaration_body_def, supported_function_body_def,
-    supported_stmt_bindings_def, supported_stmt_def, body_stmts_safe_iff, body_stmt_safe_def,
-    supported_stmt_expr_exists_def, int_calls_stmt_def]
-  >- (qexistsl_tac [`<| rpol_target := all_capabilities;
-                     rpol_frontend_dispatch := Linear;
-                     rpol_final_assembly := FAP_Optimize |>`, `unit`] >>
-     simp[EQ_SYM_EQ]) >>
-  rpt strip_tac >> gvs[AllCaseEqs(), function_mutability_ok_def,
-    stmt_mutability_ok_def, function_int_calls_def, supported_declaration_body_def,
-    supported_function_body_def, supported_stmt_def, body_stmts_safe_iff,
-    body_stmt_safe_def, supported_stmt_bindings_def, supported_stmt_expr_exists_def,
-    int_calls_stmt_def, int_calls_expr_def, supported_pure_expr_def, LET_THM]
+       annotated_immutables_len_def, linked_body_calls_resolved_def] >>
+  rpt strip_tac >> gvs[foo_supported, foo_bar_supported, AllCaseEqs(),
+    toplevel_vtype_keys_toplevel_def,
+    function_mutability_ok_def, stmt_mutability_ok_def, expr_mutability_ok_def,
+    call_target_mutability_ok_def, call_mutability_ok_def, lookup_callable_function_F,
+    vyperInterpreterTheory.lookup_function_def,
+    function_int_calls_def, int_calls_stmt_def, int_calls_expr_def,
+    supported_linked_callee_def, supported_function_decl_def]
+  >- (qmatch_goalsub_rename_tac `lower_vyper_runtime_unit_mods _ [] _` >>
+      qexistsl_tac [`<| rpol_target := all_capabilities;
+                        rpol_frontend_dispatch := Linear;
+                        rpol_final_assembly := FAP_Optimize |>`, `unit`] >>
+      simp[EQ_SYM_EQ]) >>
+  metis_tac[supported_program_declaration, foo_supported, foo_bar_supported, MEM]
 QED
 
 Theorem linked_two_module_internal_code:
-  tops = [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]] /\
-  mods = [(NONE,tops); (SOME 1,tops)] ==>
+  tops = [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass];
+          FunctionDecl External Nonpayable F F "bar" [] [] NoneT
+            [Expr (Call NoneT (IntCall (NONE,"foo")) [] NONE);
+             Expr (Call NoneT (IntCall (SOME 1,"foo")) [] NONE)]] /\
+  lib_tops = [FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]] /\
+  mods = [(NONE,tops); (SOME 1,lib_tops)] ==>
   ?ctx cenv cx main lib entry final.
     contract_inv mods [] ctx cenv cx /\
-    module_body_inv mods (SOME 1) tops cenv cx /\
+    module_body_inv mods (SOME 1) lib_tops cenv cx /\
     immutable_section_layout_mods mods cenv /\
     ~cx.in_deploy /\
     lookup_function (internal_fn_label 0 "foo" [] F)
       ctx.ctx_functions = SOME main /\
-    lookup_function (internal_fn_label 1 "1.foo" [] F)
+    lookup_function (internal_fn_label 2 "1.foo" [] F)
       ctx.ctx_functions = SOME lib /\
     fn_has_code entry final lib /\
     ALL_DISTINCT (MAP (\bb. bb.bb_label) lib.fn_blocks)
@@ -426,12 +488,14 @@ Proof
   `immutable_section_layout_mods mods cenv` by
     metis_tac[body_inv_immutable_section_layout_mods] >>
   `nsid_to_string (SOME 1,"foo") = "1.foo" /\
-    build_func_ids_mods 0 mods "1.foo" = 1` by
+    build_func_ids_mods 0 mods "1.foo" = 2` by
     (qpat_x_assum `mods = _` SUBST1_TAC >>
-     qpat_x_assum `tops = _` SUBST1_TAC >> EVAL_TAC >> simp[]) >>
-  `MEM (FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]) tops` by simp[] >>
+     qpat_x_assum `tops = _` SUBST1_TAC >>
+     qpat_x_assum `lib_tops = _` SUBST1_TAC >> EVAL_TAC >> simp[]) >>
+  `MEM (FunctionDecl Internal Pure F F "foo" [] [] NoneT [Pass]) lib_tops` by simp[] >>
   qpat_x_assum `mods = _` kall_tac >>
   qpat_x_assum `tops = _` kall_tac >>
+  qpat_x_assum `lib_tops = _` kall_tac >>
   `lookup_function
       (internal_fn_label
         (build_func_ids_mods 0 mods (nsid_to_string (SOME 1,"foo")))
