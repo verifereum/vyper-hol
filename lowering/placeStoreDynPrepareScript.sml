@@ -1,5 +1,6 @@
 Theory placeStoreDynPrepare
 Ancestors
+  placeMemoryProtectedFrame
   placeStoreAllocPath placeTypedCopyRecursivePath exprSimBufferStore
   exprLoweringProps compileEnv loweringStateRelDefs typedMemoryCopy venomState stmtLowering
   exprLowering finite_map loweringHalt freshWrites fragGasMode fragExec venomInst exprSimAlloc
@@ -22,21 +23,26 @@ Proof
     venomMemDefsTheory.alloca_next_valid_def, pending_alloca_size_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem place_typed_copy_alloca_state_frame:
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  typed_copy_state_frame sa dst len s t /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (dst,alloc_sz) /\ len <= alloc_sz /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+     regions_disjoint dst len b sz) ==>
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >>
-  `!name tv v off. cenv.ce_is_ctor /\
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  `cenv.ce_is_ctor ==> !src name tv v off.
+      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+      FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+        | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
       regions_disjoint off (type_memory_size tv) dst len` by
-    (rpt strip_tac >>
-     qpat_assum `stmt_state_rel _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE[stmt_state_rel_def]) >>
-     fs[immutable_alloca_sep_def] >>
-     `regions_disjoint off (type_memory_size tv) dst alloc_sz` by metis_tac[] >>
-     gvs[regions_disjoint_def] >> decide_tac) >>
+    (disch_tac >> rpt gen_tac >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     drule_all_then assume_tac stmt_state_rel_immutable_alloca_disjoint >>
+     fs[regions_disjoint_def] >> decide_tac) >>
   qpat_x_assum `typed_copy_state_frame _ _ _ _ _` mp_tac >>
   simp[typed_copy_state_frame_def, typed_copy_frame_def] >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx es
@@ -51,18 +57,6 @@ Proof
   >- (rpt strip_tac >> first_x_assum drule >> simp[lookup_var_def])
   >- gvs[venom_state_component_equality] >>
   rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]
-QED
-*)
-Theorem place_typed_copy_alloca_state_frame:
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
-  typed_copy_state_frame sa dst len s t /\
-  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-  FLOOKUP s.vs_allocas inst.inst_id = SOME (dst,alloc_sz) /\ len <= alloc_sz /\
-  (!name b sz. local_region cenv es.scopes s name b sz ==>
-     regions_disjoint dst len b sz) ==>
-  stmt_state_rel H ctx func cenv cx es t
-Proof
-  cheat
 QED
 
 Theorem place_alloca_source_disjoint:
