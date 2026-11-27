@@ -88,73 +88,6 @@ Proof
                        APPLY_UPDATE_THM, EQ_SYM_EQ]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel H cx es s` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx _ _ _ es1 s1` >>
-  `accounts_rel H cx es1 s1` by
-    (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`]
-     >- (irule accounts_rel_set_transient >>
-         qexistsl_tac [`es`, `s`,
-           `update_storage slot (n2w (len+1))
-             (update_storage (slot+n2w (1+len)) w (get_storage cx es T))`,
-           `update_storage slot (n2w (len+1))
-             (update_storage (slot+n2w (1+len)) w (contract_transient s))`] >>
-         simp[set_storage_backend_eq, tstore_def, contract_transient_def,
-              APPLY_UPDATE_THM] >>
-         `storage_agree (storage_dead H T (get_storage cx es T))
-           (get_storage cx es T) (s.vs_transient cx.txn.target)` by
-           gvs[get_storage_def, accounts_rel_def, transient_agree_def] >>
-         `w2n slot = w2n rootk + delta /\
-          w2n rootk + type_slot_size root <= dimword (:256)` by decide_tac >>
-         drule_all append_resolved_storage_agree >>
-         disch_then (qspec_then `w` mp_tac) >>
-         asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM]) >>
-     irule accounts_rel_set_storage >>
-     qexistsl_tac [`es`, `s`,
-       `update_storage slot (n2w (len+1))
-         (update_storage (slot+n2w (1+len)) w (get_storage cx es F))`,
-       `update_storage slot (n2w (len+1))
-         (update_storage (slot+n2w (1+len)) w (contract_storage s))`] >>
-     simp[set_storage_backend_eq, sstore_def, contract_storage_def,
-          lookup_account_def, APPLY_UPDATE_THM] >>
-     `storage_agree (storage_dead H F (get_storage cx es F))
-       (get_storage cx es F) (s.vs_accounts cx.txn.target).storage` by
-       gvs[get_storage_def, accounts_rel_def, accounts_agree_def,
-           lookup_account_def] >>
-     `w2n slot = w2n rootk + delta /\
-          w2n rootk + type_slot_size root <= dimword (:256)` by decide_tac >>
-     drule_all append_resolved_storage_agree >>
-     disch_then (qspec_then `w` mp_tac) >>
-     asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM]) >>
-  `s1.vs_call_ctx = s.vs_call_ctx` by
-    (Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]) >>
-  drule accounts_rel_storage_transient >> strip_tac >>
-  `state_rel H func cenv cx es1 s1` by
-    (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`] >>
-     fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def, sstore_def, tstore_def, LET_THM,
-        set_storage_def, local_ptrs_rel_def, local_backed_def,
-        local_region_def, lookup_var_def, immutables_rel_def,
-        logs_rel_def] >> gvs[] >> metis_tac[]) >>
-  `immutable_alloca_sep func cenv cx es1 s1` by
-    (`immutable_alloca_sep func cenv cx es s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
-     irule exprLoweringPropsTheory.immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
-     simp[] >> Cases_on `tr` >>
-     simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
-          set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
-  `immutable_base_zero cenv s1` by
-    (`immutable_base_zero cenv s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
-     irule exprLoweringPropsTheory.immutable_base_zero_frame >> qexists_tac `s` >>
-     Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM, lookup_var_def]) >>
-  irule exprLoweringPropsTheory.stmt_state_rel_allocas_frame >>
-  qpat_assum `immutable_base_zero cenv _` (irule_at Any) >> simp[] >>
-  qexistsl_tac [`s`, `es`] >> simp[] >> Cases_on `tr` >>
-  simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
-QED
-*)
 Theorem stmt_state_rel_append_resolved_storage_updates:
   stmt_state_rel H ctx func cenv cx es s /\
   MEM (tr,(rootk:bytes32),root) (FST H) /\
@@ -170,5 +103,71 @@ Theorem stmt_state_rel_append_resolved_storage_updates:
      else sstore slot (n2w (len+1))
       (sstore (slot+n2w (1+len)) w s))
 Proof
-  cheat
+  strip_tac >>
+  drule stateRelProjTheory.stmt_state_rel_state_rel >> strip_tac >>
+  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel H cx es s` by
+    fs[state_rel_def, call_ctx_rel_def] >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx _ _ _ es1 s1` >>
+  `accounts_rel H cx es1 s1` by
+    (Cases_on `tr` >> simp[Abbr `s1`, Abbr `es1`]
+     >- (irule accounts_rel_set_transient >>
+         qexistsl_tac [`es`, `s`,
+           `update_storage slot (n2w (len+1))
+             (update_storage (slot+n2w (1+len)) w (get_storage cx es T))`,
+           `update_storage slot (n2w (len+1))
+             (update_storage (slot+n2w (1+len)) w (contract_transient s))`] >>
+         simp[set_storage_backend_eq, tstore_def, contract_transient_def,
+              APPLY_UPDATE_THM] >>
+         `storage_agree (storage_dead H T (get_storage cx es T))
+           (get_storage cx es T) (s.vs_transient cx.txn.target)` by
+           fs[get_storage_def, accounts_rel_def, transient_agree_def] >>
+         drule_all append_resolved_storage_agree >>
+         disch_then (qspec_then `w` mp_tac) >>
+         asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM]) >>
+     irule accounts_rel_set_storage >>
+     qexistsl_tac [`es`, `s`,
+       `update_storage slot (n2w (len+1))
+         (update_storage (slot+n2w (1+len)) w (get_storage cx es F))`,
+       `update_storage slot (n2w (len+1))
+         (update_storage (slot+n2w (1+len)) w (contract_storage s))`] >>
+     simp[set_storage_backend_eq, sstore_def, contract_storage_def,
+          lookup_account_def, APPLY_UPDATE_THM] >>
+     `storage_agree (storage_dead H F (get_storage cx es F))
+       (get_storage cx es F) (s.vs_accounts cx.txn.target).storage` by
+       fs[get_storage_def, accounts_rel_def, accounts_agree_def,
+          lookup_account_def] >>
+     drule_all append_resolved_storage_agree >>
+     disch_then (qspec_then `w` mp_tac) >>
+     asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM]) >>
+  `s1.vs_call_ctx = s.vs_call_ctx` by
+    (Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def]) >>
+  `storage_rel H cx.txn.target es1 s1 /\ transient_rel H cx.txn.target es1 s1` by
+    metis_tac[accounts_rel_storage_transient] >>
+  `state_rel H func cenv cx es1 s1` by
+    (pure_rewrite_tac[state_rel_def] >> simp[] >>
+     qpat_x_assum `state_rel H func cenv cx es s`
+       (strip_assume_tac o REWRITE_RULE [state_rel_def]) >>
+     Cases_on `tr` >>
+     fs[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def,
+          set_storage_def, local_ptrs_rel_def, local_backed_def,
+          local_region_def, lookup_var_def, immutables_rel_def, logs_rel_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!c. immutable_alloca_sep func c cx es s ==>
+       immutable_alloca_sep func c cx es1 s1` by
+    (rpt strip_tac >> irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
+     goal_assum (drule_at (Pat `immutable_alloca_sep _ _ _ _ _`)) >>
+     Cases_on `tr` >>
+     simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def,
+          set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
+  `immutable_base_zero cenv s1` by
+    (irule exprLoweringPropsTheory.immutable_base_zero_frame >> qexists_tac `s` >>
+     imp_res_tac stateRelProjTheory.stmt_state_rel_immutable_base_zero >>
+     Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, lookup_var_def]) >>
+  irule exprLoweringPropsTheory.stmt_state_rel_allocas_frame >>
+  simp[] >> conj_tac
+  >- (fs[exprLoweringPropsTheory.stmt_state_rel_def] >> metis_tac[]) >>
+  conj_tac
+  >- (fs[exprLoweringPropsTheory.stmt_state_rel_def] >> metis_tac[]) >>
+  qexistsl_tac [`es`, `s`] >> Cases_on `tr` >>
+  simp[Abbr `s1`, sstore_def, tstore_def]
 QED

@@ -1,7 +1,7 @@
 Theory placeMemoryProtectedFrame
 Ancestors
   valueEncodingDefs placeMemoryCopyEffect exprSimAlloc exprLoweringProps compileEnv loweringStateRelDefs
-  venomInst finite_map
+  venomInst finite_map option alist
 
 (* A protected slice survives both writes, relative to the allocation-only
    reference state rather than to the scratch-copy state. *)
@@ -40,4 +40,35 @@ Proof
   simp[] >> strip_tac >>
   gvs[regions_disjoint_def] >>
   first_x_assum drule >> simp[mk_inst_def]
+QED
+
+Theorem stmt_state_rel_immutable_alloca_sep_source:
+  stmt_state_rel H ctx func cenv cx ee s /\
+  (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) ==>
+  immutable_alloca_sep func (cenv with ce_module := src) cx ee s
+Proof
+  rw[stmt_state_rel_def, IS_SOME_EXISTS] >-
+    gvs[compile_env_component_equality] >>
+  metis_tac[]
+QED
+
+Theorem immutable_local_slice_disjoint:
+  stmt_state_rel H ctx func cenv cx ee s /\ cenv.ce_is_ctor /\
+  (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+  FLOOKUP cenv.ce_module_vars (src,nm) = SOME (ImmutableLoc off) /\
+  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+    | SOME imms => get_source_immutables src imms) nm = SOME (tv,iv) /\
+  local_region cenv ee.scopes s name b len /\ b <= d /\ d+n <= b+len ==>
+  off + type_memory_size tv <= d \/ d+n <= off
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `immutable_alloca_sep func (cenv with ce_module := src) cx ee s` by
+    metis_tac[stmt_state_rel_immutable_alloca_sep_source] >>
+  pop_assum mp_tac >>
+  simp[immutable_alloca_sep_def] >>
+  disch_then (qspecl_then [`nm`, `tv`, `iv`, `off`] mp_tac o CONJUNCT2) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!id b sz. local_region _ _ _ _ _ _ ==> _`
+    (qspecl_then [`name`, `b`, `len`] mp_tac) >>
+  fs[local_region_def, regions_disjoint_def] >> decide_tac
 QED
