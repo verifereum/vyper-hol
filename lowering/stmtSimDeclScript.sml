@@ -48,7 +48,8 @@ Theorem stmt_state_rel_declare_local_entry:
 Proof
   rpt strip_tac >> drule_all declare_local_ptr >> strip_tac >>
   irule stmt_state_rel_cenv_cong >> qexists `cenv` >> simp[] >>
-  `c.ce_module_vars = cenv.ce_module_vars` by
+  `c.ce_module_vars = cenv.ce_module_vars /\
+   c.ce_modules = cenv.ce_modules` by
     (qpat_x_assum `c with <| ce_vars := _; ce_var_type := _;
                             ce_dynarray_capacity := _ |> = cenv`
        (SUBST1_TAC o SYM) >> simp[]) >>
