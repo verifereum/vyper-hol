@@ -10,23 +10,6 @@ Ancestors
   placeMemoryStoreEffect placeMemoryStagingFrame freshWrites exprSimProps
   placeMemoryProtectedFrame
 
-Theorem immutable_local_slice_disjoint:
-  immutable_alloca_sep func cenv cx ee s /\ cenv.ce_is_ctor /\
-  FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) /\
-  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-    | SOME imms => get_source_immutables cenv.ce_module imms) nm = SOME (tv,iv) /\
-  local_region cenv ee.scopes s name b len /\ b <= d /\ d+n <= b+len ==>
-  off + type_memory_size tv <= d \/ d+n <= off
-Proof
-  strip_tac >>
-  qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
-  simp[immutable_alloca_sep_def] >>
-  disch_then (qspecl_then [`nm`, `tv`, `iv`, `off`] mp_tac o CONJUNCT2) >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `!id b sz. local_region _ _ _ _ _ _ ==> _` drule >>
-  simp[regions_disjoint_def] >> decide_tac
-QED
-
 Theorem compile_assign_memory_forward_local_frame:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     loc = LocMemory /\
@@ -92,10 +75,11 @@ Theorem compile_assign_memory_forward_local_frame:
       LENGTH r.vs_memory <= LENGTH t.vs_memory /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      (cenv.ce_is_ctor ==> !nm tv iv off.
-        FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) /\
+      (cenv.ce_is_ctor ==> !src nm tv iv off.
+        (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+        FLOOKUP cenv.ce_module_vars (src,nm) = SOME (ImmutableLoc off) /\
         FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-          | SOME imms => get_source_immutables cenv.ce_module imms) nm = SOME (tv,iv) ==>
+          | SOME imms => get_source_immutables src imms) nm = SOME (tv,iv) ==>
         mem_bytes_at off (type_memory_size tv) t.vs_memory =
         mem_bytes_at off (type_memory_size tv) r.vs_memory)
 Proof
@@ -112,15 +96,15 @@ Proof
       else val_in_memory stv v (w2n sw) s.vs_memory)` by
     gvs[expr_val_rel_def] >>
   drule_all memory_place_live_region >> strip_tac >>
-  `immutable_alloca_sep func cenv cx ee s` by
-    metis_tac[stmt_state_rel_def] >>
-  `cenv.ce_is_ctor ==> !nm tv iv off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) /\
+  `cenv.ce_is_ctor ==> !src nm tv iv off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,nm) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) nm = SOME (tv,iv) ==>
+      | SOME imms => get_source_immutables src imms) nm = SOME (tv,iv) ==>
     off + type_memory_size tv <= w2n w \/ w2n w + type_memory_size dtv <= off` by
     (rpt strip_tac >> irule immutable_local_slice_disjoint >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      simp[] >> metis_tac[]) >>
   Cases_on `is_word_type dty`
   >- suspend "word" >>
@@ -270,10 +254,11 @@ Resume compile_assign_memory_forward_local_frame[staged]:
     (irule compile_store_memory_nonword_effect >> simp[] >>
      goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
      simp[] >> qexistsl_tac [`stv`, `get_tenv cx`] >> simp[]) >>
-  `cenv.ce_is_ctor ==> !nm tv iv off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) /\
+  `cenv.ce_is_ctor ==> !src nm tv iv off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,nm) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) nm = SOME (tv,iv) ==>
+      | SOME imms => get_source_immutables src imms) nm = SOME (tv,iv) ==>
     mem_bytes_at off (type_memory_size tv) t.vs_memory =
     mem_bytes_at off (type_memory_size tv) r.vs_memory` by
     suspend "staged_immutables" >>
@@ -287,7 +272,7 @@ Resume compile_assign_memory_forward_local_frame[staged]:
   simp[] >> (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qexistsl_tac [`r`, `t`] >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `cenv.ce_is_ctor ==> !nm tv iv off. _ ==> mem_bytes_at _ _ _ = _`
+  qpat_x_assum `cenv.ce_is_ctor ==> !src nm tv iv off. _ ==> mem_bytes_at _ _ _ = _`
     mp_tac >> simp[] >> strip_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -300,16 +285,19 @@ Resume compile_assign_memory_forward_local_frame[staged_immutables]:
      rpt (pop_assum kall_tac) >> metis_tac[fn_has_code_split]) >>
   `off + type_memory_size tv <= w2n tw \/
    w2n tw + type_memory_size stv <= off` by
-    (irule compile_alloc_buffer_immutable_disjoint >>
-     goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
-     goal_assum (drule_at (Pat `immutable_alloca_sep _ _ _ _ _`)) >>
-     simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+    (`immutable_alloca_sep func (cenv with ce_module := src) cx ee s` by
+         metis_tac[stmt_state_rel_immutable_alloca_sep_source] >>
+       mp_tac (Q.INST [`cenv` |-> `cenv with ce_module := src`,
+         `n` |-> `type_memory_size stv`, `tmp` |-> `w2n (tw:bytes32)`,
+         `name` |-> `nm`, `tv` |-> `tv`, `v` |-> `iv`]
+         compile_alloc_buffer_immutable_disjoint) >>
+       gvs[]) >>
   `mem_bytes_at off (type_memory_size tv) t.vs_memory =
    mem_bytes_at off (type_memory_size tv) u.vs_memory` by
     (irule typed_copy_effect_bytes >>
      goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
-     qpat_x_assum `cenv.ce_is_ctor ==> !nm tv iv off. _ ==> _ \/ _` mp_tac >>
-     simp[] >> disch_then (qspecl_then [`nm`, `tv`, `iv`, `off`] mp_tac) >>
+     qpat_x_assum `cenv.ce_is_ctor ==> !src nm tv iv off. _ ==> _ \/ _` mp_tac >>
+     simp[] >> disch_then (qspecl_then [`src`, `nm`, `tv`, `iv`, `off`] mp_tac) >>
      simp[]) >>
   qpat_x_assum `!a len. _ ==> mem_bytes_at a len u.vs_memory = _`
     (qspecl_then [`off`, `type_memory_size tv`] mp_tac) >> simp[]
