@@ -343,15 +343,16 @@ Proof
        goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
        qexists_tac `s1` >> simp[] >> rpt strip_tac >>
        first_assum drule_all >> simp[]) >>
-    `cenv.ce_is_ctor ==> !name tv iv off.
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    `cenv.ce_is_ctor ==> !src_id name tv iv off.
+      (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+      FLOOKUP cenv.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
+        | SOME imms => get_source_immutables src_id imms) name = SOME (tv,iv) ==>
       regions_disjoint (w2n wi) 96 off (type_memory_size tv)` by
       (match_mp_tac (Q.INST [`s` |-> `s1`,
          `inst` |-> `mk_inst sf.cs_next_id ALLOCA [Lit 96w]
            [STRING #"%" (toString sf.cs_next_var)]`]
-         precompile_alloca_immutable_disjoint) >> simp[mk_inst_def]) >>
+         precompile_alloca_immutable_disjoint_source) >> simp[mk_inst_def]) >>
     `sf.cs_next_id <= sa.cs_next_id` by decide_tac >>
     gvs[] >>
     qpat_assum `w2n point + 64 < dimword (:256)`
@@ -430,15 +431,16 @@ Proof
       (qpat_assum `expr_val_at _ _ _ lo2 _ _ _ q _`
          (mp_then Any mp_tac ec_point_fresh_scratch_disjoint) >>
        disch_then drule_all >> simp[]) >>
-    `cenv.ce_is_ctor ==> !name tv iv off.
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    `cenv.ce_is_ctor ==> !src_id name tv iv off.
+      (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+      FLOOKUP cenv.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
+        | SOME imms => get_source_immutables src_id imms) name = SOME (tv,iv) ==>
       regions_disjoint (w2n wi) 128 off (type_memory_size tv)` by
       (match_mp_tac (Q.INST [`s` |-> `s1`,
          `inst` |-> `mk_inst sf.cs_next_id ALLOCA [Lit 128w]
            [STRING #"%" (toString sf.cs_next_var)]`]
-         precompile_alloca_immutable_disjoint) >> simp[mk_inst_def]) >>
+         precompile_alloca_immutable_disjoint_source) >> simp[mk_inst_def]) >>
     gvs[] >>
     qpat_assum `w2n point + 64 < dimword (:256)`
       (assume_tac o SRULE [wordsTheory.dimword_def]) >>

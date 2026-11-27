@@ -213,8 +213,17 @@ QED
    add_module_var_locations gives (build_compile_env's ce_module_vars).
    For a deployment of tops alone, with its slots as the layout's, both
    directions of the storage and transient relations hold. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem entry_storage_vars_rel:
+  !tops am tx cenv cx.
+    supported_declaration_headers tops /\
+    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+    source_deployment_rel tops am tx /\
+    cx.sources = am.sources /\ cx.layouts = am.layouts /\
+    cx.txn.target = tx.target /\
+    cenv.ce_module = NONE /\
+    (!key. FLOOKUP cenv.ce_module_vars key =
+            FLOOKUP (add_module_var_locations tops FEMPTY) key) ==>
+    storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
 Proof
   rpt gen_tac >> strip_tac >>
   `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
@@ -226,11 +235,15 @@ Proof
   simp[storage_vars_rel_def, transient_vars_rel_def] >> rpt conj_tac >>
   rpt gen_tac >> strip_tac
   >~ [`FLOOKUP _ _ = SOME (StorageLoc slot)`]
-  >- (drule add_module_var_locations_cases >> rw[] >>
+  >- (qpat_x_assum `!key. FLOOKUP cenv.ce_module_vars key = _`
+        (qspec_then `(src,name)` mp_tac) >> simp[] >>
+      drule add_module_var_locations_cases >> rw[] >>
       gvs[] >> res_tac >> simp[] >>
       Cases_on `tr` >> gvs[] >> res_tac >> simp[])
   >~ [`FLOOKUP _ _ = SOME (TransientLoc slot)`]
-  >- (drule add_module_var_locations_cases >> rw[] >>
+  >- (qpat_x_assum `!key. FLOOKUP cenv.ce_module_vars key = _`
+        (qspec_then `(src,name)` mp_tac) >> simp[] >>
+      drule add_module_var_locations_cases >> rw[] >>
       gvs[] >> res_tac >> simp[] >>
       Cases_on `tr` >> gvs[] >> res_tac >> simp[]) >>
   first_x_assum drule >> strip_tac >> gvs[] >>
@@ -265,22 +278,6 @@ Proof
     [toplevel_vtype_keys_toplevel_def, add_module_var_locations_def,
      LET_THM, FLOOKUP_UPDATE]
 QED
-*)
-Theorem entry_storage_vars_rel:
-  !tops am tx cenv cx.
-    supported_declaration_headers tops /\
-    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
-    source_deployment_rel tops am tx /\
-    cx.sources = am.sources /\ cx.layouts = am.layouts /\
-    cx.txn.target = tx.target /\
-    cenv.ce_module = NONE /\
-    (!name. FLOOKUP cenv.ce_module_vars (NONE, name) =
-            FLOOKUP (add_module_var_locations tops FEMPTY)
-              ((NONE, name))) ==>
-    storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
-Proof
-  cheat
-QED
 
 (* Immutable declarations cannot overwrite a populated storage/transient key. *)
 Theorem entry_module_lookup_immutable_frame:
@@ -303,8 +300,18 @@ Proof
   drule add_immutable_locations_lookup_unchanged >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem entry_storage_vars_rel_immutable:
+  !tops am tx cenv cx.
+    supported_declaration_headers tops /\
+    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+    source_deployment_rel tops am tx /\
+    cx.sources = am.sources /\ cx.layouts = am.layouts /\
+    cx.txn.target = tx.target /\ cenv.ce_module = NONE /\
+    (!key. FLOOKUP cenv.ce_module_vars key =
+      FLOOKUP (add_immutable_locations
+        (get_struct_fields (make_struct_fields_map tops)) tops 0
+        (add_module_var_locations tops FEMPTY)) key) ==>
+    storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
 Proof
   rpt gen_tac >> strip_tac >>
   `storage_vars_rel (cenv with ce_module_vars := add_module_var_locations tops FEMPTY) cx /\
@@ -331,22 +338,6 @@ Proof
   conj_tac >> rpt gen_tac >> strip_tac >>
   first_x_assum drule >> strip_tac >> gvs[] >>
   first_assum drule_all >> simp[]
-QED
-*)
-Theorem entry_storage_vars_rel_immutable:
-  !tops am tx cenv cx.
-    supported_declaration_headers tops /\
-    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
-    source_deployment_rel tops am tx /\
-    cx.sources = am.sources /\ cx.layouts = am.layouts /\
-    cx.txn.target = tx.target /\ cenv.ce_module = NONE /\
-    (!name. FLOOKUP cenv.ce_module_vars (NONE, name) =
-      FLOOKUP (add_immutable_locations
-        (get_struct_fields (make_struct_fields_map tops)) tops 0
-        (add_module_var_locations tops FEMPTY)) ((NONE, name))) ==>
-    storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
-Proof
-  cheat
 QED
 
 (* ===== The source's body-start state ===== *)
