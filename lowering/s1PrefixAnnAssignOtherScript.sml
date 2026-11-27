@@ -8,25 +8,6 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint vyperState
   venomState compileEnv list
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
-  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
-  PURE_REWRITE_TAC[stmt_frag_prefix_def, stmt_frag_full_pre_def] >>
-  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
-  `type_memory_bytes cenv typ < dimword (:256)` by
-    (qpat_assum `stmt_exprs_ok cenv (AnnAssign id typ e)`
-       (strip_assume_tac o PURE_REWRITE_RULE [stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
-     irule arithmeticTheory.LESS_TRANS >> qexists_tac `2 ** 64` >>
-     simp[wordsTheory.dimword_def]) >>
-  `storage_trace_frame (eval_stmt cx (AnnAssign id typ e))` by
-    simp[evaluate_storage_trace_frame] >>
-  Cases_on `storage_trace_domain cx st0 es.storage_trace`
-  >- suspend "allocation" >>
-  suspend "invalid_domain"
-QED
-*)
 Theorem annassign_other_typed_prefix_execution:
   body_inv tops ctx cenv cx /\
   expr_sim_inv cenv cx env es /\
@@ -55,10 +36,22 @@ Theorem annassign_other_typed_prefix_execution:
     (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
     (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  cheat
+  disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  PURE_REWRITE_TAC[stmt_frag_prefix_def, stmt_frag_full_pre_def] >>
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
+  `type_memory_bytes cenv typ < dimword (:256)` by
+    (qpat_assum `stmt_exprs_ok cenv (AnnAssign id typ e)`
+       (strip_assume_tac o PURE_REWRITE_RULE [stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
+     irule arithmeticTheory.LESS_TRANS >> qexists_tac `2 ** 64` >>
+     simp[wordsTheory.dimword_def]) >>
+  `storage_trace_frame (eval_stmt cx (AnnAssign id typ e))` by
+    simp[evaluate_storage_trace_frame] >>
+  Cases_on `storage_trace_domain cx st0 es.storage_trace`
+  >- suspend "allocation" >>
+  suspend "invalid_domain"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_other_typed_prefix_execution[allocation]:
     drule_all annassign_full_prefix_parts >>
     disch_then (qx_choosel_then
@@ -76,7 +69,7 @@ Resume annassign_other_typed_prefix_execution[allocation]:
       (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac)) >>
     qpat_x_assum `if _ then _ else _` mp_tac >> asm_rewrite_tac[] >>
     disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
-    qpat_x_assum `!sa ce r ty. declare_local _ _ _ _ = _ ==> _ /\ _ /\ expr_sim_prefix _ _ _ _ _ _ /\ _`
+    qpat_x_assum `!sa ce r ty. declare_local _ _ _ _ = _ ==> _ /\ _ /\ expr_sim_prefix _ _ _ _ _ _`
       (drule_then (qspec_then `expr_type e` strip_assume_tac)) >>
     `!bb. MEM bb func.fn_blocks ==> venomExecSemantics$phi_prefix_length bb.bb_instructions = 0` by
       (drule_at (Pat `body_inv tops ctx cenv cx`) body_inv_no_phi >>
@@ -103,9 +96,7 @@ Resume annassign_other_typed_prefix_execution[allocation]:
        asm_rewrite_tac[]) >>
     suspend "rhs_request"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_other_typed_prefix_execution[rhs_request]:
     `!ss. (SND (eval_stmt cx (AnnAssign id typ e) ss)).storage_trace =
           (SND (bind (eval_expr cx e) (read_result cx) ss)).storage_trace` by
@@ -130,13 +121,11 @@ Resume annassign_other_typed_prefix_execution[rhs_request]:
       (qspec_then `src_st` mp_tac) >>
     asm_rewrite_tac[pairTheory.SND] >> strip_tac >>
     unabbrev_all_tac >>
-    qpat_x_assum `!tail res ee obs_pre rq outcome sfx H. _ ==> request_site _ _ _ _ _ _ _`
+    qpat_x_assum `!tail res ee obs_pre rq outcome sfx H. _ ==> request_site _ _ _ _ _ _`
       (qspecl_then [`tail`,`rhs_res`,`rhs_state`,`obs_pre`,`rq`,`outcome`,`sfx`,`H`] mp_tac) >>
     asm_rewrite_tac[] >> metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_other_typed_prefix_execution[invalid_domain]:
   simp[gas_prefix_full_def] >> qexists_tac `[]` >> conj_tac
   >- (qexistsl_tac [`storage_trace_horizon es.storage_trace`, `func`, `PG`, `G0`, `tn0`, `s0`] >>
@@ -151,8 +140,5 @@ Resume annassign_other_typed_prefix_execution[invalid_domain]:
   `obs_pre = es.storage_trace ++ DROP (LENGTH es.storage_trace) obs_pre` by metis_tac[TAKE_DROP] >>
   metis_tac[extcall_packing_observed_domain, storage_trace_domain_prefix]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise annassign_other_typed_prefix_execution
-*)
