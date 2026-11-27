@@ -69,7 +69,7 @@ Theorem default_registration_endpoint_state:
   alloca_inv s /\ fn_inst_ids_distinct fn /\ local_ptrs_reserved ce st /\
   alloca_room ctx fn s /\ fmp_room ctx fn s /\
   abi_alloca_history (fn_insts fn) s /\ alloca_history fn s /\
-  ce.ce_module = NONE /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
+  ce.ce_modules = [(NONE,tops)] /\ ce.ce_module = NONE /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
   ce.ce_return_pc = NONE /\ ce.ce_return_buf = NONE /\
   storage_vars_rel ce cx /\ transient_vars_rel ce cx /\
   immutable_section_layout ce tops /\
