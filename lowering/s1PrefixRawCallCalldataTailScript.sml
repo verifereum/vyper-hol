@@ -52,10 +52,11 @@ Theorem raw_call_calldata_prepared_tail_prefix:
   op_prov G7 op = SOME (ob,payload) /\ op_taint tn7 op = {} /\
   (!name lb sz. local_region cenv esK.scopes t7 name lb sz ==>
     regions_disjoint ob payload lb sz) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src name tv v off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
-         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+         | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     regions_disjoint off (type_memory_size tv) ob payload) ==>
   gas_prefix_full (DF,lo,explicit,ctx,func,PG) cx st0
     (eval_raw_call cx flags target cx.txn.calldata amount (ext_call_kwarg EKGas flags.rcf_kws kvs))
@@ -129,10 +130,11 @@ Resume raw_call_calldata_prepared_tail_prefix[memory_ranges]:
    (cap <> 0 ==> ?p. op = Var p /\ ptr_covers G7 tn7 p t7 cap) /\
    (!name lb sz. local_region cenv esK.scopes t7 name lb sz ==>
      regions_disjoint ro cap lb sz) /\
-   (cenv.ce_is_ctor ==> !name tv v off.
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+   (cenv.ce_is_ctor ==> !src name tv v off.
+      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+      FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
-               | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+               | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
       off + type_memory_size tv <= ro \/ ro + cap <= off)` by
     (irule raw_call_output_range >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)

@@ -440,34 +440,17 @@ Proof
   >> metis_tac[arithmeticTheory.NOT_LESS_EQUAL]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `!tail. intret_mem_q H func ce cx tv bw v
-     ((ee with gas_obs := tail) with scopes := [])
-     (IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
-       (copied with vs_inst_idx := n0))` by
-    (mp_tac (Q.INST [`n` |-> `n0`, `r` |-> `IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
-          (copied with vs_inst_idx := n0)`] internal_return_memory_copy_exit_base) >>
-     disch_then (mp_tac o SIMP_RULE bool_ss []) >>
-     disch_then (fn th => drule_all th) >> simp[]) >>
-  qpat_x_assum `r = IntRet _ _` SUBST_ALL_TAC >> gen_tac >>
-  qpat_assum `!tail. intret_mem_q _ _ _ _ _ _ _ _ _`
-    (qspec_then `tail` (MATCH_ACCEPT_TAC o SRULE [] o
-      MATCH_MP intret_mem_q_set_control))
-QED
-*)
 Theorem return_memory_copy_exit_control[local]:
   same_frame ce cenv /\ cenv.ce_returns_count = 0 /\
   (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
        lookup_var x copied = lookup_var x t) /\
   stmt_state_rel H ctx func cenv cx ee t /\
-  (cenv.ce_is_ctor ==> !name itv iv off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src name itv iv off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
                NONE => FEMPTY
-             | SOME imms => get_source_immutables cenv.ce_module imms) name =
+             | SOME imms => get_source_immutables src imms) name =
       SOME (itv,iv) ==>
     regions_disjoint off (type_memory_size itv) (w2n bw) (type_memory_size tv)) /\
   (copied with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>) =
@@ -482,7 +465,19 @@ Theorem return_memory_copy_exit_control[local]:
   !tail. intret_mem_q H func ce cx tv bw v
     ((ee with gas_obs := tail) with scopes := []) r
 Proof
-  cheat
+  strip_tac >>
+  `!tail. intret_mem_q H func ce cx tv bw v
+     ((ee with gas_obs := tail) with scopes := [])
+     (IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+       (copied with vs_inst_idx := n0))` by
+    (mp_tac (Q.INST [`n` |-> `n0`, `r` |-> `IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+          (copied with vs_inst_idx := n0)`] internal_return_memory_copy_exit_base) >>
+     disch_then (mp_tac o SIMP_RULE bool_ss []) >>
+     disch_then (fn th => drule_all th) >> simp[]) >>
+  qpat_x_assum `r = IntRet _ _` SUBST_ALL_TAC >> gen_tac >>
+  qpat_assum `!tail. intret_mem_q _ _ _ _ _ _ _ _ _`
+    (qspec_then `tail` (MATCH_ACCEPT_TAC o SRULE [] o
+      MATCH_MP intret_mem_q_set_control))
 QED
 
 (* The release writes storage, but the following copy sees the same
@@ -654,11 +649,57 @@ Proof
   simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem internal_return_memory_full_robust_taint:
+  !DF lo ctx shadow_ctx PG func shadow_func tops cx ce cenv env es
+   ty tv e lctx bw rpc rsz.
+  body_inv tops ctx cenv cx /\ cenv.ce_module = NONE /\
+  cenv.ce_module_vars =
+    add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
+      tops 0 (add_module_var_locations tops FEMPTY) /\
+  same_frame ce cenv /\ expr_sim_inv cenv cx env es /\
+  ((FST ce.ce_nonreentrant /\ ~SND (SND (SND ce.ce_nonreentrant))) ==>
+    ~cx.txn.is_static) /\
+  cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
+  cenv.ce_returns_count = 0 /\
+  lowered_value_type cenv e = expr_type e /\ expr_type e = ty /\
+  ~is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ 0 < type_memory_size tv /\
+  stmt_exprs_ok cenv (Return (SOME e)) /\
+  IS_SOME (type_stmt env ty (Return (SOME e))) /\
+  call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
+  type_memory_size tv + 64 < dimword (:256) /\
+  (cenv.ce_is_ctor ==> !nm io ity itv.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc io) /\
+    cenv.ce_module_var_type (cenv.ce_module,nm) = SOME ity /\
+    evaluate_type (get_tenv cx) ity = SOME itv ==>
+    regions_disjoint io (type_memory_size itv) (w2n bw) (type_memory_size tv)) /\
+  (!ety. expr_sim_full
+     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx ety e es /\
+   expr_vv_sim_full
+     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx ety e es) ==>
+  stmt_frag_full
+    (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx (\H v ee gt r.
+      intret_mem_q H func ce cx tv bw v ee r /\
+      (!ir u mem. r = IntRet ir u /\
+        mem_agree_outside (SND gt).t_mem u.vs_memory mem ==>
+        val_in_memory tv v (w2n bw) mem) /\
+      (!ir u. r = IntRet ir u /\ lo <= w2n bw /\
+        ((FST ce.ce_nonreentrant /\ ~SND (SND (SND ce.ce_nonreentrant))) ==>
+          FST (SND (SND ce.ce_nonreentrant))) ==>
+        stor_taint_ok_at (DF H) (SND gt) u /\
+        (!i. i < lo /\ i IN (SND gt).t_mem ==>
+             imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i))) cenv
+    (stmt_env cenv lctx ty (Return (SOME e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
+    (eval_stmt cx (Return (SOME e))) es
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  `cenv.ce_modules = [(NONE,cx_tops cx)]` by
+    fs[body_inv_def, cenv_module_pins_def, gasContextTheory.cx_tops_module] >>
   `ce.ce_nonreentrant = cenv.ce_nonreentrant` by
     fs[same_frame_def, compile_env_component_equality] >>
   `?bp cap. cenv.ce_return_buf = SOME (PtrVar (Var bp) cap) /\
@@ -823,7 +864,8 @@ Proof
              cenv cx mid G1 tn1 t`
            (mp_tac o MATCH_MP (GEN_ALL return_unlock_exit_taint))
          >- (rpt conj_tac >> fs[]) >>
-         simp[]) >>
+         qpat_assum `cenv.ce_modules = [(NONE,cx_tops cx)]`
+           (fn eq => simp[MATCH_MP immSectionDeadTheory.imm_section_dead_mods_singleton eq])) >>
       `mem_bytes_at 0 lo copied.vs_memory = mem_bytes_at 0 lo t.vs_memory`
         by simp[] >>
       rpt strip_tac >> fs[stor_taint_ok_at_def]
@@ -842,14 +884,15 @@ Proof
   `env_consistent env cx (mid with gas_obs := [])` by
     (irule internal_return_source_env >> fs[expr_sim_inv_def] >>
      metis_tac[]) >>
-  `cenv.ce_is_ctor ==> !name itv iv off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  `cenv.ce_is_ctor ==> !src name itv iv off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP (mid with gas_obs := []).immutables cx.txn.target of
                 NONE => FEMPTY
-              | SOME imms => get_source_immutables cenv.ce_module imms) name =
+              | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint off (type_memory_size itv) (w2n bw) (type_memory_size tv)` by
-    (strip_tac >>
+    (simp[] >> strip_tac >>
      drule_at (Pos (el 5)) internal_return_immutable_separation >>
      simp[] >> metis_tac[]) >>
   `!x. cenv.ce_imm_alloca = SOME (Var x) ==>
@@ -875,8 +918,8 @@ Proof
   fs[allocas_below_fmp_def, return_unlock_state_def, tstore_def, sstore_def] >>
   metis_tac[]
 QED
-*)
-Theorem internal_return_memory_full_robust_taint:
+
+Theorem internal_return_memory_relayout_robust_taint:
   !DF lo ctx shadow_ctx PG func shadow_func tops cx ce cenv env es
    ty tv e lctx bw rpc rsz.
   body_inv tops ctx cenv cx /\ cenv.ce_module = NONE /\
@@ -888,7 +931,6 @@ Theorem internal_return_memory_full_robust_taint:
     ~cx.txn.is_static) /\
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
   cenv.ce_returns_count = 0 /\
-  lowered_value_type cenv e = expr_type e /\ expr_type e = ty /\
   ~is_word_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ 0 < type_memory_size tv /\
   stmt_exprs_ok cenv (Return (SOME e)) /\
@@ -923,14 +965,10 @@ Theorem internal_return_memory_full_robust_taint:
     (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
-  cheat
-QED
-
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  `cenv.ce_modules = [(NONE,cx_tops cx)]` by
+    fs[body_inv_def, cenv_module_pins_def, gasContextTheory.cx_tops_module] >>
   `ce.ce_nonreentrant = cenv.ce_nonreentrant` by
     fs[same_frame_def, compile_env_component_equality] >>
   `?bp cap. cenv.ce_return_buf = SOME (PtrVar (Var bp) cap) /\
@@ -1207,7 +1245,8 @@ Proof
              cenv cx mid G1 tn1 t`
            (mp_tac o MATCH_MP (GEN_ALL return_unlock_exit_taint))
          >- (rpt conj_tac >> fs[]) >>
-         simp[]) >>
+         qpat_assum `cenv.ce_modules = [(NONE,cx_tops cx)]`
+           (fn eq => simp[MATCH_MP immSectionDeadTheory.imm_section_dead_mods_singleton eq])) >>
       `mem_bytes_at 0 lo copied.vs_memory = mem_bytes_at 0 lo t.vs_memory`
         by simp[] >>
       conj_tac
@@ -1231,14 +1270,15 @@ Proof
   `env_consistent env cx (mid with gas_obs := [])` by
     (irule internal_return_source_env >> fs[expr_sim_inv_def] >>
      metis_tac[]) >>
-  `cenv.ce_is_ctor ==> !name itv iv off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  `cenv.ce_is_ctor ==> !src name itv iv off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP (mid with gas_obs := []).immutables cx.txn.target of
                 NONE => FEMPTY
-              | SOME imms => get_source_immutables cenv.ce_module imms) name =
+              | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint off (type_memory_size itv) (w2n bw) (type_memory_size tv)` by
-    (strip_tac >>
+    (simp[] >> strip_tac >>
      drule_at (Pos (el 5)) internal_return_immutable_separation >>
      simp[] >> metis_tac[]) >>
   `!x. cenv.ce_imm_alloca = SOME (Var x) ==>
@@ -1258,55 +1298,6 @@ Proof
   >- (simp[allocas_below_fmp_def] >>
       qpat_assum `ctx_has_dalloca ctx ==> allocas_below_fmp copied`
         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [allocas_below_fmp_def]))
-QED
-*)
-Theorem internal_return_memory_relayout_robust_taint:
-  !DF lo ctx shadow_ctx PG func shadow_func tops cx ce cenv env es
-   ty tv e lctx bw rpc rsz.
-  body_inv tops ctx cenv cx /\ cenv.ce_module = NONE /\
-  cenv.ce_module_vars =
-    add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
-      tops 0 (add_module_var_locations tops FEMPTY) /\
-  same_frame ce cenv /\ expr_sim_inv cenv cx env es /\
-  ((FST ce.ce_nonreentrant /\ ~SND (SND (SND ce.ce_nonreentrant))) ==>
-    ~cx.txn.is_static) /\
-  cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
-  cenv.ce_returns_count = 0 /\
-  ~is_word_type ty /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\ 0 < type_memory_size tv /\
-  stmt_exprs_ok cenv (Return (SOME e)) /\
-  IS_SOME (type_stmt env ty (Return (SOME e))) /\
-  call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
-  type_memory_size tv + 64 < dimword (:256) /\
-  (cenv.ce_is_ctor ==> !nm io ity itv.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc io) /\
-    cenv.ce_module_var_type (cenv.ce_module,nm) = SOME ity /\
-    evaluate_type (get_tenv cx) ity = SOME itv ==>
-    regions_disjoint io (type_memory_size itv) (w2n bw) (type_memory_size tv)) /\
-  (!ety. expr_sim_full
-     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx ety e es /\
-   expr_vv_sim_full
-     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx ety e es) ==>
-  stmt_frag_full
-    (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
-    cx lctx (\H v ee gt r.
-      intret_mem_q H func ce cx tv bw v ee r /\
-      (!ir u mem. r = IntRet ir u /\
-        mem_agree_outside (SND gt).t_mem u.vs_memory mem ==>
-        val_in_memory tv v (w2n bw) mem) /\
-      (!ir u. r = IntRet ir u /\ lo <= w2n bw /\
-        ((FST ce.ce_nonreentrant /\ ~SND (SND (SND ce.ce_nonreentrant))) ==>
-          FST (SND (SND ce.ce_nonreentrant))) ==>
-        stor_taint_ok_at (DF H) (SND gt) u /\
-        (!i. i < lo /\ i IN (SND gt).t_mem ==>
-             imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i))) cenv
-    (stmt_env cenv lctx ty (Return (SOME e)))
-    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
-    (eval_stmt cx (Return (SOME e))) es
-Proof
-  cheat
 QED
 
 Theorem internal_return_memory_full_robust:

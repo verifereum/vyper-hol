@@ -102,10 +102,11 @@ Theorem raw_call_actual_call_mem_safe_full:
   (cap = 0 \/ lo <= w2n ro) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
     regions_disjoint (w2n ro) cap b sz) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src name tv v off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     off + type_memory_size tv <= w2n ro \/ w2n ro + cap <= off) /\
   ghost_inv_at D lo d cenv cx es G tn s ==>
   ?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
@@ -352,10 +353,11 @@ Theorem raw_call_actual_call_full:
   (cap = 0 \/ lo <= w2n ro) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
     regions_disjoint (w2n ro) cap b sz) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src name tv v off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     off + type_memory_size tv <= w2n ro \/ w2n ro + cap <= off) /\
   ghost_inv_at D lo d cenv cx es G tn s ==>
   ?u. run_inst_seq (emitted_insts sa sb) s = OK u /\

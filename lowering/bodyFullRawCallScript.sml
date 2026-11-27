@@ -7,11 +7,11 @@ Ancestors
   venomExecSemantics venomInst venomState words bodyPtrDefs ptrDiscipline
   memLocDefs fragGasOriginPtr fragExec memSafeRun gasEvents gasCount
   contextCodegenRel codegenRel unitTransformDefs ptrSafeRun bodyFullRawCallCall
-  exprSimRawCall exprSimHyps exprSimSource
+  exprSimRawCall exprSimHyps exprSimSource exprSimAggregates
   gasOutcomeFullCompose vyperStorageTrace bodyFullIntCallReturnHalt exprLoweringProps
   bodyFullHashKeccakFixed bodyFullWordArgs
 Libs
-  monadsyntax
+  monadsyntax horizonTypeLib
 
 Theorem raw_call_empty_write_memory[local]:
   mem_bytes_at src len (write_memory_with_expansion dst [] s).vs_memory =
@@ -187,6 +187,25 @@ end
 
 (* After evaluating its input, either lowering uses the same call and result
    continuation. The input range can come from ALLOCA or DALLOCA. *)
+Theorem raw_call_outbuf_immutable_separation:
+  compile_raw_call_outbuf cap sa = ((ov,op),sb) /\ fn_has_code sa sb func /\
+  stmt_state_rel H ctx func cenv cx es t /\
+  FLOOKUP t.vs_allocas sa.cs_next_id = SOME (ob,sz) ==>
+  cenv.ce_is_ctor ==>
+  !src name tv v off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
+    regions_disjoint off (type_memory_size tv) ob sz
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all raw_call_outbuf_alloca_inst >>
+  disch_then (qx_choose_then `alloc` strip_assume_tac) >>
+  `FLOOKUP t.vs_allocas alloc.inst_id = SOME (ob,sz)` by simp[] >>
+  metis_tac[aggregate_alloca_immutable_sep_source]
+QED
+
 Theorem raw_call_continuation_full:
   expr_has_effect e /\ post_value_type cenv e = expr_type e /\
   lowered_value_type cenv e = expr_type e /\
@@ -560,16 +579,6 @@ Proof
        drule >>
      Cases_on `cap = 0` >> simp[Abbr `ro`, loweringStateRelDefsTheory.regions_disjoint_def] >>
      decide_tac) >>
-  `cenv.ce_is_ctor ==> !name tv v off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
-     FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
-     off + type_memory_size tv <= ro \/ ro + cap <= off` by
-    (strip_tac >>
-     qpat_assum `_ ==> !name tv v off. _ ==> regions_disjoint off _ ob _` drule >>
-     disch_then (fn th => rpt gen_tac >> strip_tac >> drule_all th) >>
-     Cases_on `cap = 0` >> simp[Abbr `ro`, loweringStateRelDefsTheory.regions_disjoint_def] >>
-     decide_tac) >>
   `w2w (w2w target : bytes32) = target` by wordsLib.WORD_DECIDE_TAC >>
   `!g. gas_cap = SOME g ==> g = w2n gw` by simp[Abbr `gas_cap`] >>
   `((n2w (LENGTH bs) : bytes32) <> 0w ==>
@@ -601,6 +610,25 @@ Proof
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon cx st0 H esK.storage_trace ==> _` drule >>
      strip_tac >>
+     `cenv.ce_is_ctor ==> !src name tv v off.
+        (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+        FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+        FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
+          | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
+        off + type_memory_size tv <= ro \/ ro + cap <= off` by
+       (disch_tac >> rpt gen_tac >> strip_tac >>
+        `loweringStateRelDefs$regions_disjoint off (type_memory_size tv) ob
+           (if cap = 0 then 0 else round + 32)` by
+          (mp_tac (Q.INST [`sa` |-> `s6`, `sb` |-> `sout`, `es` |-> `esK`,
+              `t` |-> `t7`, `sz` |-> `if cap = 0 then 0 else round + 32`]
+             (horizonTypeLib.at_horizon_named "H" raw_call_outbuf_immutable_separation)) >>
+           impl_tac >- simp[] >>
+           disch_then (drule_then (qspecl_then [`src`,`name`,`tv`,`v`,`off`] mp_tac)) >>
+           simp[]) >>
+        qpat_x_assum `loweringStateRelDefs$regions_disjoint off _ ob _` mp_tac >>
+        Cases_on `cap = 0` >>
+        simp[Abbr `ro`, loweringStateRelDefsTheory.regions_disjoint_def] >>
+        decide_tac) >>
      raw_call_at
        `stmt_state_rel H ctx func cenv cx esK t7`
        `ghost_inv_at (DF H) lo dframe cenv cx esK G7 tn7 t7`

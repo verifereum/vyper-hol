@@ -451,8 +451,19 @@ QED
 Finalise literal_bytelike_ptr_run
 
 (* Ordinary transport across the fully written buffer. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem literal_ptr_state_memory_frame:
+  stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
+  (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
+  LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+  (!x. not_fresh_at sh x ==> lookup_var x t = lookup_var x u) /\
+  (!name a len. local_region cenv es.scopes u name a len ==>
+    regions_disjoint b n a len) /\
+  (!a len. a+len <= b \/ b+n <= a ==>
+    mem_bytes_at a len t.vs_memory = mem_bytes_at a len u.vs_memory) /\
+  MEM (mk_inst aid ALLOCA [Lit (n2w n)] [p]) (fn_insts func) /\
+  FLOOKUP u.vs_allocas aid = SOME (b,n) ==>
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >> irule literal_state_memory_frame >>
   qexists_tac `u` >> simp[] >>
@@ -469,32 +480,20 @@ Proof
   conj_tac
   >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
       qpat_x_assum `!x. not_fresh_at sh x ==> _` irule >> metis_tac[]) >>
-  rpt strip_tac >>
+  disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   `regions_disjoint off (type_memory_size tv) b n` by
-    (qpat_x_assum `stmt_state_rel H ctx _ _ _ _ u` mp_tac >>
-     simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
-     first_x_assum drule_all >> strip_tac >>
+    (`immutable_alloca_sep func (cenv with ce_module := src) cx es u` by
+       (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+        Cases_on `src = cenv.ce_module` >>
+        gvs[compileEnvTheory.compile_env_component_equality] >> metis_tac[]) >>
+     qpat_x_assum `immutable_alloca_sep _ _ _ _ _`
+       (mp_tac o CONJUNCT2 o REWRITE_RULE [immutable_alloca_sep_def]) >>
+     simp[] >> disch_then (drule_all_then strip_assume_tac) >>
      qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
      goal_assum (drule_at Any) >> simp[mk_inst_def]) >>
   qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _` irule >>
   gvs[regions_disjoint_def] >> decide_tac
-QED
-*)
-Theorem literal_ptr_state_memory_frame:
-  stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
-  (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
-  (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
-  LENGTH u.vs_memory <= LENGTH t.vs_memory /\
-  (!x. not_fresh_at sh x ==> lookup_var x t = lookup_var x u) /\
-  (!name a len. local_region cenv es.scopes u name a len ==>
-    regions_disjoint b n a len) /\
-  (!a len. a+len <= b \/ b+n <= a ==>
-    mem_bytes_at a len t.vs_memory = mem_bytes_at a len u.vs_memory) /\
-  MEM (mk_inst aid ALLOCA [Lit (n2w n)] [p]) (fn_insts func) /\
-  FLOOKUP u.vs_allocas aid = SOME (b,n) ==>
-  stmt_state_rel H ctx func cenv cx es t
-Proof
-  cheat
 QED
 
 (* Public counterpart of S1's local post constructor. *)

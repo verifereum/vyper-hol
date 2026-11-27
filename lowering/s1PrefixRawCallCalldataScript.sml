@@ -5,6 +5,7 @@ Ancestors
   bodyFullRawCallCalldata s1PrefixCompose s1PrefixDefs s1PrefixProps
   vyperStorageTrace vyperStorageFootprint vyperState gasShadow
   bodyFullWordArgs exprSimPrecompiles fragGasOriginPtr finite_map
+  bodyFullRawCall loweringStateRelDefs exprLoweringProps
 Libs
   monadsyntax
 
@@ -73,6 +74,22 @@ Proof
         (drule_then (qspecl_then [`tg`,`GG`,`tnG`,`[]`,`OK t7`,`G7`,`tn7`] mp_tac o
                      MATCH_MP gas_origin_ptr_path_append)) >>
       simp[]) >>
+  `cenv.ce_is_ctor ==> !src name tv v off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
+     regions_disjoint off (type_memory_size tv) ob
+       (if flags.rcf_max_outsize = 0 then 0
+        else ((flags.rcf_max_outsize+31) DIV 32)*32+32)` by
+    (mp_tac (Q.INST [`sa` |-> `s3`, `sb` |-> `s4`, `cap` |-> `flags.rcf_max_outsize`,
+        `es` |-> `esK`, `t` |-> `t7`, `sz` |-> `if flags.rcf_max_outsize = 0 then 0 else ((flags.rcf_max_outsize+31) DIV 32)*32+32`,
+        `H` |-> `storage_trace_horizon esK.storage_trace`]
+       (INST_TYPE [alpha |-> ``:256``] raw_call_outbuf_immutable_separation)) >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ esK t7 /\ _`
+       (drule_then (map_every assume_tac o CONJUNCTS)) >>
+     impl_tac >- simp[] >>
+     disch_then ACCEPT_TAC) >>
   irule raw_call_calldata_prepared_tail_prefix >>
   qpat_assum `compile_raw_call_finish addr dp len gas _ _ _ _ ov op s5 = _`
     (irule_at Any) >>
@@ -84,6 +101,7 @@ Proof
   qexists `d` >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC
   >- (simp_tac bool_ss [DISJ_IMP_THM] >> conj_tac >> first_assum ACCEPT_TAC) >>
+  TRY (first_assum (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.MULT_COMM])) >>
   gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ esK t7 /\ _`
     (drule_then (map_every assume_tac o CONJUNCTS)) >>

@@ -136,12 +136,13 @@ Definition extcall_request_ready_def:
           (!aid b sz. aid < sa.cs_next_id /\
              FLOOKUP t.vs_allocas aid = SOME (b,sz) ==>
              loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) /\
-          (cenv.ce_is_ctor ==> !name tv v off.
-             FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+          (cenv.ce_is_ctor ==> !src name tv v off.
+             (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+             FLOOKUP cenv.ce_module_vars (src,name) =
                SOME (ImmutableLoc off) /\
              FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
                         NONE => FEMPTY
-                      | SOME imms => get_source_immutables cenv.ce_module imms)
+                      | SOME imms => get_source_immutables src imms)
                name = SOME (tv,v) ==>
              loweringStateRelDefs$regions_disjoint (w2n ro) cap off
                (type_memory_size tv)) /\
