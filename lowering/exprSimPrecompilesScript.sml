@@ -1020,8 +1020,29 @@ Proof
   gvs[not_fresh_at_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem scratch_memory_frame:
+  stmt_state_rel H ctx func cenv cx es s /\
+  (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+  local_ptrs_reserved cenv sa /\
+  sc.cs_next_var <= sa.cs_next_var /\ sc.cs_next_id <= sa.cs_next_id /\
+  (!b sz. loweringStateRelDefs$regions_disjoint scratch_base scratch_len b sz ==>
+    mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+    loweringStateRelDefs$regions_disjoint scratch_base scratch_len b sz) /\
+  (!aid b sz. aid < sc.cs_next_id /\
+    FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+    loweringStateRelDefs$regions_disjoint scratch_base scratch_len b sz) /\
+  LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+  (cenv.ce_is_ctor ==> !src_id name tv iv off.
+    (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+    FLOOKUP cenv.ce_module_vars (src_id,name) =
+      SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables src_id imms) name =
+      SOME (tv,iv) ==>
+    regions_disjoint scratch_base scratch_len off (type_memory_size tv)) ==>
+  stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sc s t
 Proof
   strip_tac >>
   `t.vs_allocas = s.vs_allocas` by
@@ -1050,32 +1071,6 @@ Proof
          metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >> metis_tac[]) >>
   rpt strip_tac >> first_x_assum irule >> metis_tac[]
 QED
-*)
-Theorem scratch_memory_frame:
-  stmt_state_rel H ctx func cenv cx es s /\
-  (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-  local_ptrs_reserved cenv sa /\
-  sc.cs_next_var <= sa.cs_next_var /\ sc.cs_next_id <= sa.cs_next_id /\
-  (!b sz. loweringStateRelDefs$regions_disjoint scratch_base scratch_len b sz ==>
-    mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
-  (!name b sz. local_region cenv es.scopes s name b sz ==>
-    loweringStateRelDefs$regions_disjoint scratch_base scratch_len b sz) /\
-  (!aid b sz. aid < sc.cs_next_id /\
-    FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-    loweringStateRelDefs$regions_disjoint scratch_base scratch_len b sz) /\
-  LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-  (cenv.ce_is_ctor ==> !name tv iv off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
-      SOME (ImmutableLoc off) /\
-    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name =
-      SOME (tv,iv) ==>
-    regions_disjoint scratch_base scratch_len off (type_memory_size tv)) ==>
-  stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sc s t
-Proof
-  cheat
-QED
 
 Theorem ecrecover_input_stores_sim:
   (do emit_void MSTORE [base_op; h];
@@ -1098,11 +1093,12 @@ Theorem ecrecover_input_stores_sim:
   (!aid b sz. aid < sc.cs_next_id /\
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 128 b sz) /\
-  (cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+  (cenv.ce_is_ctor ==> !src_id name tv iv off.
+     (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+     FLOOKUP cenv.ce_module_vars (src_id,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src_id imms) name =
        SOME (tv,iv) ==>
      regions_disjoint (w2n p) 128 off (type_memory_size tv)) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -1603,6 +1599,32 @@ Proof
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
+Theorem precompile_alloca_immutable_disjoint_source:
+  stmt_state_rel H ctx func cenv cx es s /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+  (cenv.ce_is_ctor ==> !src_id name tv iv off.
+     (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+     FLOOKUP cenv.ce_module_vars (src_id,name) =
+       SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables src_id imms) name =
+       SOME (tv,iv) ==>
+     regions_disjoint b sz off (type_memory_size tv))
+Proof
+  strip_tac >> disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `immutable_alloca_sep func (cenv with ce_module := src_id) cx es s` by
+    (Cases_on `src_id = cenv.ce_module` >>
+     gvs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+  qpat_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
+  simp[NoAsms, immutable_alloca_sep_def] >> strip_tac >>
+  qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+  disch_then drule_all >> strip_tac >>
+  qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
 Theorem precompile_alloca_immutable_disjoint:
   stmt_state_rel H ctx func cenv cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -1615,14 +1637,7 @@ Theorem precompile_alloca_immutable_disjoint:
        SOME (tv,iv) ==>
      regions_disjoint b sz off (type_memory_size tv))
 Proof
-  strip_tac >>
-  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
-  pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
-  strip_tac >> rpt strip_tac >>
-  qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-  disch_then drule_all >> strip_tac >>
-  qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
-  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+  strip_tac >> metis_tac[precompile_alloca_immutable_disjoint_source]
 QED
 
 Theorem ecrecover_buffers_run:
@@ -1695,17 +1710,18 @@ Proof
          (mp_tac o MATCH_MP compile_alloc_buffer_parts) >>
        POP_ASSUM_LIST (K all_tac) >> simp[listTheory.MEM] >> metis_tac[]) >>
     `sf.cs_next_id <= sa.cs_next_id` by decide_tac >>
-    `cenv.ce_is_ctor ==> !name tv iv off.
-       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+    `cenv.ce_is_ctor ==> !src_id name tv iv off.
+       (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+       FLOOKUP cenv.ce_module_vars (src_id,name) =
          SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-         | SOME imms => get_source_immutables cenv.ce_module imms) name =
+         | SOME imms => get_source_immutables src_id imms) name =
          SOME (tv,iv) ==>
        regions_disjoint (w2n wi) 128 off (type_memory_size tv)` by
       (match_mp_tac (Q.INST
          [`s` |-> `s1`, `inst` |-> `mk_inst sf.cs_next_id ALLOCA [Lit 128w]
            [STRING #"%" (toString sf.cs_next_var)]`]
-         precompile_alloca_immutable_disjoint) >>
+         precompile_alloca_immutable_disjoint_source) >>
        simp[mk_inst_def]) >>
     drule_all ecrecover_input_stores_sim >> strip_tac >>
     `t.vs_allocas = s1.vs_allocas` by
