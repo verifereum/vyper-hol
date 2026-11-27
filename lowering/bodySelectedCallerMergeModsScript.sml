@@ -1829,7 +1829,23 @@ val caller_read_exit = ``\(H : (bool # 256 word # type_value) list # num list)
     expr_exit res r /\ halt_exit H cx ee res r /\
     (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)``;
 
-(* Normalize the completed-callee callback to the selected caller outcome. *)
+(* Use the callback of the very same case rule that restores the caller. *)
+val selected_caller_outcome_cases =
+  Q.INST [`P` |-> `^callee_return`, `Q` |-> `^selected_owned`]
+    caller_callee_outcome_cases;
+
+val selected_normal_callback =
+  let
+    val premises = strip_conj (fst (dest_imp (concl selected_caller_outcome_cases)))
+    fun is_callback tm =
+      let val (args,body) = strip_forall tm
+      in length args = 7 andalso can dest_imp body end
+  in
+    case List.filter is_callback premises of
+      [callback] => callback
+    | _ => raise Fail "expected exactly one completed-callee callback"
+  end;
+
 Theorem caller_completed_normal_callback_adapter[local]:
   contract_inv mods exps ctx ce cx /\ (^caller_stage_frame) /\ (^reached_invoke) /\
   gas_admissible (^return_rest) expr_vv_res_ok es1 /\ (^reached_return) /\
@@ -1842,20 +1858,10 @@ Theorem caller_completed_normal_callback_adapter[local]:
   (0 < rc ==> ALL_DISTINCT inst.inst_outputs /\ (^register_buffer)) /\
   outs = inst.inst_outputs /\ ~t.vs_halted /\ allocas_from lo t /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ fn_inst_ids_distinct func ==>
-  !marks v ee ir cs Gc tc.
-    (!tail. (^return_source)
-      (es1 with gas_obs := gas_explicit marks entered.vs_gas_readings ++ tail) =
-      (INL v,ee with gas_obs := tail)) /\
-    storage_trace_domain cx st0 ee.storage_trace /\
-    (!H. valid_horizon cx st0 H ee.storage_trace ==>
-      gas_origin_ptr_path (DF H,lo,explicit,ctx,callee,MAP (op_prov G) ops)
-        (entered,FEMPTY,tn with t_var := FEMPTY) marks (IntRet ir cs,Gc,tc) /\
-      (^callee_return) H v (ee with gas_obs := []) (Gc,tc) ir cs) ==>
-    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
-      (^return_rest) (es1,t,G,tn) (^selected_owned) (^caller_exit)
+  ^selected_normal_callback
 Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  rpt gen_tac >> strip_tac >>
   mp_tac (Q.INST [`Gc` |-> `Gc`, `args` |-> `args`, `argv` |-> `argv`,
     `bb` |-> `bb`, `callee` |-> `callee`, `cs` |-> `cs`, `dflts` |-> `dflts`,
     `ee` |-> `ee`, `entered` |-> `entered`, `inst` |-> `inst`, `ir` |-> `ir`,
