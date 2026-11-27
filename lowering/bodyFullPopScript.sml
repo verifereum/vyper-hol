@@ -25,7 +25,7 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem pop_full_target_pre[local]:
+Theorem pop_full_target_pre:
   !cenv cx env ann bt es.
     expr_body_pre cenv cx env (Pop ann bt) es ==>
     target_pre cenv cx env bt es
@@ -2084,8 +2084,8 @@ Theorem pop_full_storage_static_path[local]:
     (DROP s.vs_inst_idx bb.bb_instructions) /\
   get_instruction bb (s.vs_inst_idx+5) =
     SOME (mk_inst (id+5) (if tr then TSTORE else SSTORE) [hdr;Var x3] []) ==>
-  ?v G' tn'. !D.
-    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+  ?v G' tn'. v.vs_call_ctx.cc_static /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
       (Abort ExHalt_abort v,G',tn')
 Proof
   strip_tac >>
@@ -2166,15 +2166,21 @@ Resume pop_full_storage_static_path[prefix]:
      drule_all run_inst_seq_gas_origin_ptr_path >>
      Cases_on `tr` >> simp[Abbr `prefix`,Abbr `load`,Abbr `chunk`,mk_inst_def,
        nested_pop_suffix_def]) >>
+  `s2.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `s2 with vs_vars := s1.vs_vars = s1` mp_tac >>
+     simp[venom_state_component_equality, update_var_def] >>
+     metis_tac[]) >>
   qexistsl_tac [`halt_state (set_returndata [] (s2 with vs_inst_idx := s.vs_inst_idx+5))`,
-    `G2`,`tn2`] >> gen_tac >>
+    `G2`,`tn2`] >>
+  conj_tac >- simp[halt_state_def, set_returndata_def] >>
+  gen_tac >>
   qpat_assum `!D. gas_origin_ptr_path _ _ [] _` (qspec_then `D` assume_tac) >>
   irule gas_origin_ptr_path_trans >> goal_assum (drule_at Any) >>
   suspend "exit"
 QED
 
 Resume pop_full_storage_static_path[exit]:
-  `s2.vs_call_ctx = s.vs_call_ctx /\ s2.vs_halted = s.vs_halted /\
+  `s2.vs_halted = s.vs_halted /\
    s2.vs_current_bb = s.vs_current_bb /\ s2.vs_labels = s.vs_labels /\
    allocas_from lo s2` by
     (qpat_assum `s2 with vs_vars := s1.vs_vars = s1` mp_tac >>
