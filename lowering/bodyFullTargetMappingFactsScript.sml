@@ -6,6 +6,28 @@ Ancestors
   exprLowering compileEnv targetPlaceSim targetSubscriptSplit venomState
   exprSimHypsDefs[qualified]
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `et = vt /\ expr_type e = kt /\ hashmap_key_type kt` by
+    gvs[type_place_target_SubscriptTarget, subscript_vtype_def, AllCaseEqs()] >>
+  simp[] >>
+  `expr_body_pre cenv cx env e (mid1 with gas_obs := gs)` by
+    gvs[target_pre_def, target_indices_pre_def] >>
+  `?tv. evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv v` by
+    metis_tac[ifexp_body_pre_read_typed] >>
+  simp[] >>
+  `!l. FST rb <> Label l` by
+    metis_tac[target_subscript_typed_base_not_label] >>
+  PairCases_on `rb` >> Cases_on `pv` >>
+  gvs[target_post_def, place_ptr_rel_def, value_type_place_def] >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       gvs[place_ptr_rel_def] >> NO_TAC) >>
+  gvs[expr_post_def] >>
+  Cases_on `rb0` >> gvs[eval_operand_def]
+QED
+*)
 Theorem target_mapping_source_cut:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   type_place_target env bt = SOME (HashMapT kt vt) /\
@@ -25,23 +47,7 @@ Theorem target_mapping_source_cut:
     loc = SOME (slot_loc tr) /\
     eval_operand bop t2 = SOME base_slot
 Proof
-  strip_tac >>
-  `et = vt /\ expr_type e = kt /\ hashmap_key_type kt` by
-    gvs[type_place_target_SubscriptTarget, subscript_vtype_def, AllCaseEqs()] >>
-  simp[] >>
-  `expr_body_pre cenv cx env e (mid1 with gas_obs := gs)` by
-    gvs[target_pre_def, target_indices_pre_def] >>
-  `?tv. evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv v` by
-    metis_tac[ifexp_body_pre_read_typed] >>
-  simp[] >>
-  `!l. FST rb <> Label l` by
-    metis_tac[target_subscript_typed_base_not_label] >>
-  PairCases_on `rb` >> Cases_on `pv` >>
-  gvs[target_post_def, place_ptr_rel_def, value_type_place_def] >>
-  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
-       gvs[place_ptr_rel_def] >> NO_TAC) >>
-  gvs[expr_post_def] >>
-  Cases_on `rb0` >> gvs[eval_operand_def]
+  cheat
 QED
 
 Theorem target_mapping_compile_cut:

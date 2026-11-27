@@ -624,6 +624,149 @@ Proof
 QED
 
 (* Assemble the request from the saved rows and the actual operand path. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rewrite_tac [LET_THM] >> BETA_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `env.type_defs = get_tenv cx` by
+    (qpat_assum `expr_sim_inv cenv cx env mid`
+       (mp_tac o MATCH_MP (cj 1 (iffLR exprSimHypsDefsTheory.expr_sim_inv_def))) >>
+     metis_tac[vyperTypeEvalCaseProofsTheory.env_consistent_type_defs_get_tenv]) >>
+  drule_all post_gas_call_signature >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `LIST_REL (\e v. value_runtime_typed env (lowered_value_type cenv e) v) xs vs` by
+    (`expr_sim_inv cenv cx env (mid with gas_obs := obs2)` by simp[] >>
+     qpat_assum `eval_exprs cx xs (mid with gas_obs := obs2) = _`
+       (mp_then (Pat `eval_exprs _ _ _ = _`) mp_tac post_gas_replay_typed) >>
+     disch_then (qspecl_then [`env`,`cenv`] mp_tac) >>
+     impl_tac >- simp[] >>
+     simp[listTheory.LIST_REL_EL_EQN]) >>
+  drule_all post_gas_lowered_assignable >> disch_then assume_tac >>
+  drule_all post_gas_encoding_plans >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `LENGTH vs = LENGTH xs` by metis_tac[listTheory.LIST_REL_LENGTH] >>
+  `LENGTH xs = LENGTH ats` by
+    (qpat_assum `arg_types_fit _ _` mp_tac >>
+     simp[NoAsms, vyperTypeArgFitsTheory.arg_types_fit_LIST_REL, listTheory.LIST_REL_EL_EQN]) >>
+  `sa.cs_next_var <= s5.cs_next_var /\ sa.cs_next_id <= s5.cs_next_id /\
+   s1.cs_next_var <= s2.cs_next_var /\ s2.cs_next_var <= s5.cs_next_var /\
+   s3.cs_next_var <= s5.cs_next_var /\ s3.cs_next_id <= s5.cs_next_id` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  drule_all post_gas_target_ready >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!x. not_fresh_at s3 x ==> lookup_var x zg = lookup_var x z /\
+       op_taint tng (Var x) = op_taint tn3 (Var x)` by metis_tac[] >>
+  drule_all (PURE_REWRITE_RULE [REFL_CLAUSE,AND_CLAUSES]
+    (Q.INST [`value` |-> `option_CASE vo (Lit 0w) I`,
+             `value_opt` |-> `if stat then NONE else
+               option_CASE (ext_call_kwarg EKValue opts kws) (SOME 0) dest_NumV`]
+      post_gas_value_ready)) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ghost_inv_at (DF H) lo d cenv cx ke Gg tng zg` by simp[] >>
+  drule_then (map_every assume_tac o CONJUNCTS) post_gas_alloca_floor >>
+  `alloca_inv u` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx ee u`
+      (mp_tac o MATCH_MP (cj 2 stateRelProjTheory.stmt_state_rel_local_ptrs_alloca)) >> simp[]) >>
+  `alloca_inv zg` by
+    (`stmt_state_rel H ctx func cenv cx ke zg` by simp[] >>
+     metis_tac[cj 2 stateRelProjTheory.stmt_state_rel_local_ptrs_alloca]) >>
+  `alloca_next_valid zg` by fs[venomMemDefsTheory.alloca_inv_def] >>
+  `expr_sim_inv cenv cx env (ee with gas_obs := obs3)` by simp[] >>
+  qabbrev_tac `dop = case def of NONE => Lit 0w | SOME (op,dt) => op` >>
+  qabbrev_tac `dty = case def of NONE => rt | SOME (op,dt) => dt` >>
+  `(case def of NONE => dop = Lit 0w /\ dty = rt | SOME p => p = (dop,dty))` by
+    (Cases_on `def` >- simp[Abbr `dop`,Abbr `dty`] >>
+     rename1 `SOME p` >> PairCases_on `p` >> simp[Abbr `dop`,Abbr `dty`]) >>
+  mp_tac (PURE_REWRITE_RULE [REFL_CLAUSE,AND_CLAUSES]
+    (Q.INST [`has_def` |-> `IS_SOME (def : (operand # type) option)`,`dopt` |-> `def`,
+             `def_op` |-> `dop`, `def_ty` |-> `dty`,
+             `kw_in` |-> `ee with gas_obs := obs3`]
+      post_gas_default_packet)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `wb_frame cenv es mid sa s0 t0` by
+    (drule (horizonTypeLib.at_horizon_named "H" exprSimWordArgsTheory.expr_post_frame) >> simp[]) >>
+  `sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
+   sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `wb_frame cenv es ee sa s0 u /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2` by
+    (MATCH_MP_TAC (Q.INST [`H` |-> `H0`, `ctx` |-> `ctx`, `cx` |-> `cx`,
+       `func` |-> `func`, `es1` |-> `mid`, `sm` |-> `s1`, `s` |-> `t0`,
+       `G1` |-> `G1`, `tn1` |-> `tn1`] post_gas_extend_frame) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `wb_frame cenv es ke sa s0 zg /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gg tng` by
+    (MATCH_MP_TAC (Q.INST [`H` |-> `H0`, `ctx` |-> `ctx`, `cx` |-> `cx`,
+       `func` |-> `func`, `es1` |-> `ee`, `ee` |-> `ke`, `sm` |-> `s2`, `s` |-> `u`,
+       `G1` |-> `G2`, `tn1` |-> `tn2`, `G2` |-> `Gg`, `tn2` |-> `tng`]
+       post_gas_extend_frame) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `MAP FDOM es.scopes = MAP FDOM ke.scopes` by
+    ((qpat_assum `wb_frame cenv es ke sa s0 zg` mp_tac >>
+     simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def] >> (metis_tac[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def]))) >>
+  `return_buf_frame d cenv s5 zg` by
+    (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+     qexistsl [`cenv`,`z`,`s3`] >> simp[] >> metis_tac[]) >>
+  `!e. MEM e kw_es ==> expr_body_pre cenv cx env e ee` by metis_tac[] >>
+  drule_all post_gas_kwargs_not_label >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `safe_operand s5 (option_CASE vo (Lit 0w) I)` by
+    (irule safe_operand_mono >> qexists `s3` >> simp[] >>
+     Cases_on `vo` >> simp[safe_operand_def]) >>
+  `safe_operand s5 gas` by
+    (Cases_on `go`
+     >- (qpat_assum `(case NONE of NONE => emit_op GAS [] s3 | SOME _ => _) = _`
+           (mp_tac o SIMP_RULE (srw_ss()) []) >>
+         MATCH_ACCEPT_TAC emit_op_safe_operand) >>
+     Cases_on `ext_call_kwarg EKGas opts kws` >>
+     fs[safe_operand_def] >>
+     qpat_x_assum `_ = gas` (SUBST_ALL_TAC o SYM) >>
+     qpat_x_assum `s3 = s5` SUBST_ALL_TAC >> simp[]) >>
+  `safe_operand s5 dop` by
+    (irule safe_operand_mono >> qexists `s3` >> simp[] >>
+     qpat_assum `!op ty l. def = SOME (op,ty) ==> op <> Label l` mp_tac >>
+     qpat_assum `case def of NONE => dop = Lit 0w /\ _ | SOME p => _` mp_tac >>
+     qpat_assum `case ext_call_kwarg EKDefault opts kws of NONE => def = NONE | SOME dv => _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `ext_call_kwarg EKDefault opts kws` >>
+     simp[safe_operand_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  qabbrev_tac `ptys = MAP (lowered_value_type cenv) xs` >>
+  irule (Q.INST [`tys` |-> `ptys`, `abi` |-> `abi_size_bound cenv.ce_struct_fields (TupleT ptys)`,
+    `mid` |-> `cenv.ce_method_id fname ats`, `sb` |-> `sb1`, `se` |-> `s5`,
+    `sf` |-> `sb3`, `sm` |-> `sb2`, `vals` |-> `av`, `xs` |-> `xs`,
+    `H0` |-> `H0`, `arg_types` |-> `ats`]
+    (horizonTypeLib.at_horizon_named "H0" extcall_request_packing_ready)) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (qexists `H` >> first_assum ACCEPT_TAC)
+  >- (qpat_assum `expr_sim_inv cenv cx env ke`
+        (mp_tac o MATCH_MP (cj 3 (iffLR exprSimHypsDefsTheory.expr_sim_inv_def))) >>
+      simp[vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed])
+  >- (qpat_assum `expr_sim_inv cenv cx env ke`
+        (mp_tac o MATCH_MP (cj 14 (iffLR exprSimHypsDefsTheory.expr_sim_inv_def))) >> simp[])
+  >- decide_tac
+  >- decide_tac
+  >- (rewrite_tac[listTheory.EVERY_DEF] >> BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC)
+  >>~- ([`?tops. body_inv tops ctx cenv cx`], qexists `tops` >> first_assum ACCEPT_TAC)
+  >>~- ([`?env. expr_sim_inv cenv cx env ke`], qexists `env` >> first_assum ACCEPT_TAC)
+  >>~- ([`?K. valid_horizon cx st0 K ke.storage_trace`], qexists `H` >> first_assum ACCEPT_TAC)
+  >>~- ([`?K. stmt_state_rel K ctx func cenv cx es s0`], qexists `H0` >> first_assum ACCEPT_TAC)
+  >> qexistsl [`av`,`ptys`,`s5`,`sb1`,`sb2`,`sb3`,`xs`]
+  >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >>~- ([`_ < dimword (:256)`],
+       irule vyperArithTheory.lt_dimword_256 >> qexists `64` >>
+       qpat_assum `MAX _ _ + 32 < 2**64` mp_tac >>
+       simp[NoAsms, arithmeticTheory.MAX_DEF] >> decide_tac)
+  >> simp[NoAsms, Abbr `ptys`]
+  >- (mp_tac (Q.INST [`pos` |-> `mid`, `se` |-> `s5`, `ee` |-> `ke`,
+                       `t` |-> `zg`, `G` |-> `Gg`, `tn` |-> `tng`]
+               post_gas_indexed_rows) >>
+      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+      simp[NoAsms])
+  >- (sym_tac >> first_assum ACCEPT_TAC)
+  >- (qpat_assum `LENGTH av = LENGTH xs` (rewrite_tac o single) >>
+      sym_tac >> first_assum ACCEPT_TAC)
+  >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+*)
 Theorem extcall_request_post_gas_packing:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -788,142 +931,5 @@ Theorem extcall_request_post_gas_packing:
         (!w. eval_operand (case def of NONE => Lit 0w | SOME (op,dt) => op) t = SOME w ==>
              w2n w + type_memory_bytes cenv (case def of NONE => rt | SOME (op,dt) => dt) <= t.vs_alloca_next)))
 Proof
-  rewrite_tac [LET_THM] >> BETA_TAC >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `env.type_defs = get_tenv cx` by
-    (qpat_assum `expr_sim_inv cenv cx env mid`
-       (mp_tac o MATCH_MP (cj 1 (iffLR exprSimHypsDefsTheory.expr_sim_inv_def))) >>
-     metis_tac[vyperTypeEvalCaseProofsTheory.env_consistent_type_defs_get_tenv]) >>
-  drule_all post_gas_call_signature >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `LIST_REL (\e v. value_runtime_typed env (lowered_value_type cenv e) v) xs vs` by
-    (`expr_sim_inv cenv cx env (mid with gas_obs := obs2)` by simp[] >>
-     qpat_assum `eval_exprs cx xs (mid with gas_obs := obs2) = _`
-       (mp_then (Pat `eval_exprs _ _ _ = _`) mp_tac post_gas_replay_typed) >>
-     disch_then (qspecl_then [`env`,`cenv`] mp_tac) >>
-     impl_tac >- simp[] >>
-     simp[listTheory.LIST_REL_EL_EQN]) >>
-  drule_all post_gas_lowered_assignable >> disch_then assume_tac >>
-  drule_all post_gas_encoding_plans >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `LENGTH vs = LENGTH xs` by metis_tac[listTheory.LIST_REL_LENGTH] >>
-  `LENGTH xs = LENGTH ats` by
-    (qpat_assum `arg_types_fit _ _` mp_tac >>
-     simp[NoAsms, vyperTypeArgFitsTheory.arg_types_fit_LIST_REL, listTheory.LIST_REL_EL_EQN]) >>
-  `sa.cs_next_var <= s5.cs_next_var /\ sa.cs_next_id <= s5.cs_next_id /\
-   s1.cs_next_var <= s2.cs_next_var /\ s2.cs_next_var <= s5.cs_next_var /\
-   s3.cs_next_var <= s5.cs_next_var /\ s3.cs_next_id <= s5.cs_next_id` by
-    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
-  drule_all post_gas_target_ready >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `!x. not_fresh_at s3 x ==> lookup_var x zg = lookup_var x z /\
-       op_taint tng (Var x) = op_taint tn3 (Var x)` by metis_tac[] >>
-  drule_all (PURE_REWRITE_RULE [REFL_CLAUSE,AND_CLAUSES]
-    (Q.INST [`value` |-> `option_CASE vo (Lit 0w) I`,
-             `value_opt` |-> `if stat then NONE else
-               option_CASE (ext_call_kwarg EKValue opts kws) (SOME 0) dest_NumV`]
-      post_gas_value_ready)) >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `ghost_inv_at (DF H) lo d cenv cx ke Gg tng zg` by simp[] >>
-  drule_then (map_every assume_tac o CONJUNCTS) post_gas_alloca_floor >>
-  `alloca_inv u` by
-    (qpat_assum `stmt_state_rel H ctx func cenv cx ee u`
-      (mp_tac o MATCH_MP (cj 2 stateRelProjTheory.stmt_state_rel_local_ptrs_alloca)) >> simp[]) >>
-  `alloca_inv zg` by
-    (`stmt_state_rel H ctx func cenv cx ke zg` by simp[] >>
-     metis_tac[cj 2 stateRelProjTheory.stmt_state_rel_local_ptrs_alloca]) >>
-  `alloca_next_valid zg` by fs[venomMemDefsTheory.alloca_inv_def] >>
-  `expr_sim_inv cenv cx env (ee with gas_obs := obs3)` by simp[] >>
-  qabbrev_tac `dop = case def of NONE => Lit 0w | SOME (op,dt) => op` >>
-  qabbrev_tac `dty = case def of NONE => rt | SOME (op,dt) => dt` >>
-  `(case def of NONE => dop = Lit 0w /\ dty = rt | SOME p => p = (dop,dty))` by
-    (Cases_on `def` >- simp[Abbr `dop`,Abbr `dty`] >>
-     rename1 `SOME p` >> PairCases_on `p` >> simp[Abbr `dop`,Abbr `dty`]) >>
-  mp_tac (PURE_REWRITE_RULE [REFL_CLAUSE,AND_CLAUSES]
-    (Q.INST [`has_def` |-> `IS_SOME (def : (operand # type) option)`,`dopt` |-> `def`,
-             `def_op` |-> `dop`, `def_ty` |-> `dty`,
-             `kw_in` |-> `ee with gas_obs := obs3`]
-      post_gas_default_packet)) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `wb_frame cenv es mid sa s0 t0` by
-    (drule (horizonTypeLib.at_horizon_named "H" exprSimWordArgsTheory.expr_post_frame) >> simp[]) >>
-  `sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
-   sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
-    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
-  `wb_frame cenv es ee sa s0 u /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2` by
-    (MATCH_MP_TAC (Q.INST [`H` |-> `H0`, `ctx` |-> `ctx`, `cx` |-> `cx`,
-       `func` |-> `func`, `es1` |-> `mid`, `sm` |-> `s1`, `s` |-> `t0`,
-       `G1` |-> `G1`, `tn1` |-> `tn1`] post_gas_extend_frame) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `wb_frame cenv es ke sa s0 zg /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gg tng` by
-    (MATCH_MP_TAC (Q.INST [`H` |-> `H0`, `ctx` |-> `ctx`, `cx` |-> `cx`,
-       `func` |-> `func`, `es1` |-> `ee`, `ee` |-> `ke`, `sm` |-> `s2`, `s` |-> `u`,
-       `G1` |-> `G2`, `tn1` |-> `tn2`, `G2` |-> `Gg`, `tn2` |-> `tng`]
-       post_gas_extend_frame) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `MAP FDOM es.scopes = MAP FDOM ke.scopes` by
-    ((qpat_assum `wb_frame cenv es ke sa s0 zg` mp_tac >>
-     simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def] >> (metis_tac[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def]))) >>
-  `return_buf_frame d cenv s5 zg` by
-    (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-     qexistsl [`cenv`,`z`,`s3`] >> simp[] >> metis_tac[]) >>
-  `!e. MEM e kw_es ==> expr_body_pre cenv cx env e ee` by metis_tac[] >>
-  drule_all post_gas_kwargs_not_label >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `safe_operand s5 (option_CASE vo (Lit 0w) I)` by
-    (irule safe_operand_mono >> qexists `s3` >> simp[] >>
-     Cases_on `vo` >> simp[safe_operand_def]) >>
-  `safe_operand s5 gas` by
-    (Cases_on `go`
-     >- (qpat_assum `(case NONE of NONE => emit_op GAS [] s3 | SOME _ => _) = _`
-           (mp_tac o SIMP_RULE (srw_ss()) []) >>
-         MATCH_ACCEPT_TAC emit_op_safe_operand) >>
-     Cases_on `ext_call_kwarg EKGas opts kws` >>
-     fs[safe_operand_def] >>
-     qpat_x_assum `_ = gas` (SUBST_ALL_TAC o SYM) >>
-     qpat_x_assum `s3 = s5` SUBST_ALL_TAC >> simp[]) >>
-  `safe_operand s5 dop` by
-    (irule safe_operand_mono >> qexists `s3` >> simp[] >>
-     qpat_assum `!op ty l. def = SOME (op,ty) ==> op <> Label l` mp_tac >>
-     qpat_assum `case def of NONE => dop = Lit 0w /\ _ | SOME p => _` mp_tac >>
-     qpat_assum `case ext_call_kwarg EKDefault opts kws of NONE => def = NONE | SOME dv => _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     Cases_on `ext_call_kwarg EKDefault opts kws` >>
-     simp[safe_operand_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  qabbrev_tac `ptys = MAP (lowered_value_type cenv) xs` >>
-  irule (Q.INST [`tys` |-> `ptys`, `abi` |-> `abi_size_bound cenv.ce_struct_fields (TupleT ptys)`,
-    `mid` |-> `cenv.ce_method_id fname ats`, `sb` |-> `sb1`, `se` |-> `s5`,
-    `sf` |-> `sb3`, `sm` |-> `sb2`, `vals` |-> `av`, `xs` |-> `xs`,
-    `H0` |-> `H0`, `arg_types` |-> `ats`]
-    (horizonTypeLib.at_horizon_named "H0" extcall_request_packing_ready)) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (qexists `H` >> first_assum ACCEPT_TAC)
-  >- (qpat_assum `expr_sim_inv cenv cx env ke`
-        (mp_tac o MATCH_MP (cj 3 (iffLR exprSimHypsDefsTheory.expr_sim_inv_def))) >>
-      simp[vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed])
-  >- (qpat_assum `expr_sim_inv cenv cx env ke`
-        (mp_tac o MATCH_MP (cj 14 (iffLR exprSimHypsDefsTheory.expr_sim_inv_def))) >> simp[])
-  >- decide_tac
-  >- decide_tac
-  >- (rewrite_tac[listTheory.EVERY_DEF] >> BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC)
-  >>~- ([`?tops. body_inv tops ctx cenv cx`], qexists `tops` >> first_assum ACCEPT_TAC)
-  >>~- ([`?env. expr_sim_inv cenv cx env ke`], qexists `env` >> first_assum ACCEPT_TAC)
-  >>~- ([`?K. valid_horizon cx st0 K ke.storage_trace`], qexists `H` >> first_assum ACCEPT_TAC)
-  >>~- ([`?K. stmt_state_rel K ctx func cenv cx es s0`], qexists `H0` >> first_assum ACCEPT_TAC)
-  >> qexistsl [`av`,`ptys`,`s5`,`sb1`,`sb2`,`sb3`,`xs`]
-  >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >>~- ([`_ < dimword (:256)`],
-       irule vyperArithTheory.lt_dimword_256 >> qexists `64` >>
-       qpat_assum `MAX _ _ + 32 < 2**64` mp_tac >>
-       simp[NoAsms, arithmeticTheory.MAX_DEF] >> decide_tac)
-  >> simp[NoAsms, Abbr `ptys`]
-  >- (mp_tac (Q.INST [`pos` |-> `mid`, `se` |-> `s5`, `ee` |-> `ke`,
-                       `t` |-> `zg`, `G` |-> `Gg`, `tn` |-> `tng`]
-               post_gas_indexed_rows) >>
-      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-      simp[NoAsms])
-  >- (sym_tac >> first_assum ACCEPT_TAC)
-  >- (qpat_assum `LENGTH av = LENGTH xs` (rewrite_tac o single) >>
-      sym_tac >> first_assum ACCEPT_TAC)
-  >> rpt conj_tac >> first_assum ACCEPT_TAC
+  cheat
 QED

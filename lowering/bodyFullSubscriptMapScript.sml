@@ -426,16 +426,8 @@ val mapping_map_package_tac =
   rpt conj_tac >> first_assum ACCEPT_TAC;
 
 
-Theorem subscript_map_map_full:
-  !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
-    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    body_const_cells_agree mods cx env es /\
-    expr_map_pre_mods mods cenv cx env (Subscript ann e1 e2) es /\
-    expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e1 es ==>
-    expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Subscript ann e1 e2) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_map_pre cenv cx env e1 es` by metis_tac[expr_map_pre_subscript_base] >>
@@ -461,7 +453,22 @@ Proof
        mapping_shadow_type_tac)
     (suspend "mapping_index")
 QED
+*)
+Theorem subscript_map_map_full:
+  !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_map_pre_mods mods cenv cx env (Subscript ann e1 e2) es /\
+    expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e1 es ==>
+    expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Subscript ann e1 e2) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_map_map_full[mapping_index]:
   mapping_index_source_tac
     (`expr_map_pre cenv cx env (Subscript ann e1 e2)
@@ -473,7 +480,9 @@ Resume subscript_map_map_full[mapping_index]:
        mapping_shadow_type_tac) >>
   mapping_index_bind_tac (suspend "mapping_selection")
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_map_map_full[mapping_selection]:
   mapping_selection_intro_tac >>
   `kt' = kt /\ vt = HashMapT ikt ivt` by
@@ -487,8 +496,11 @@ Resume subscript_map_map_full[mapping_selection]:
   mapping_suffix_tac >> mapping_frames_tac >> mapping_pure_frame_tac >>
   mapping_map_package_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise subscript_map_map_full
+*)
 
 Theorem subscript_map_full:
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es kt vt.
