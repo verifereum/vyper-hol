@@ -60,8 +60,17 @@ Proof
   simp[vyperValueTheory.type_slot_size_def, tload_def, contract_transient_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem state_rel_transient_update:
+  state_rel H func cenv cx vs ss /\
+  (!j b. storage_dead H T (vs.tStorage cx.txn.target) j b /\
+         j <> w2n key ==>
+         storage_dead H T
+           (update_storage key value (vs.tStorage cx.txn.target)) j b) ==>
+  state_rel H func cenv cx
+    (vs with tStorage :=
+      (cx.txn.target =+ update_storage key value (vs.tStorage cx.txn.target))
+        vs.tStorage)
+    (tstore key value ss)
 Proof
   strip_tac >>
   `transient_agree H cx.txn.target vs.tStorage ss.vs_transient` by
@@ -79,22 +88,7 @@ Proof
       transient_rel_def, accounts_rel_def, immutables_rel_def, logs_rel_def,
       call_ctx_rel_def, contract_storage_def, contract_transient_def,
       tstore_def, combinTheory.APPLY_UPDATE_THM] >>
-  first_assum ACCEPT_TAC
-QED
-*)
-Theorem state_rel_transient_update:
-  state_rel H func cenv cx vs ss /\
-  (!j b. storage_dead H T (vs.tStorage cx.txn.target) j b /\
-         j <> w2n key ==>
-         storage_dead H T
-           (update_storage key value (vs.tStorage cx.txn.target)) j b) ==>
-  state_rel H func cenv cx
-    (vs with tStorage :=
-      (cx.txn.target =+ update_storage key value (vs.tStorage cx.txn.target))
-        vs.tStorage)
-    (tstore key value ss)
-Proof
-  cheat
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Unlike the transient write, the scratch writes need freshness: state_rel
