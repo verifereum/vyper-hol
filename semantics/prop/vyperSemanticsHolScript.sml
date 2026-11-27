@@ -1,5 +1,6 @@
 Theory vyperSemanticsHol
 Ancestors
+  vyperBalanceOverflow
   vyperCallFiniteStorage
   vyperFiniteStoragePreservation
   vyperImmutableAccessFrame

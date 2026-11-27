@@ -4707,6 +4707,13 @@ Proof
            metis_tac[vyperCompilerTheory.lookup_function_result_name] >>
          metis_tac[deploy_prefix_member_entry_label]) >>
      `lower_vyper_runtime_unit tops rpolicy = SOME unit` by fs[] >>
+     `lookup_function
+        (internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) F)
+        unit.cu_context.ctx_functions = SOME callee` by
+       (qpat_assum `ctx = unit.cu_context` (fn th => REWRITE_TAC [GSYM th]) >>
+        qpat_assum `~cx.in_deploy`
+          (fn th => REWRITE_TAC [GSYM (EQF_INTRO th)]) >>
+        first_assum ACCEPT_TAC) >>
      drule_all lower_vyper_runtime_unit_internal_lookup >>
      strip_tac >>
      gvs[vyperCompilerTheory.mk_internal_function_metadata,
