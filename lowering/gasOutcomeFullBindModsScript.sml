@@ -20,7 +20,7 @@ QED
 
 (* The two certificate premises select the bind and error rules for
    the source's result type; neither premise chooses a particular module. *)
-Theorem gas_outcome_full_mods_bind_all:
+Theorem gas_outcome_full_mods_bind_all_path:
   gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
     (es, s, G, tn)
     Q1 (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
@@ -30,7 +30,10 @@ Theorem gas_outcome_full_mods_bind_all:
              (res, mid with gas_obs := tail)) /\
      storage_trace_domain cx st0 mid.storage_trace /\
      (!H. valid_horizon cx st0 H mid.storage_trace ==>
-          Q1 H res mid G1 tn1 t) ==>
+          Q1 H res mid G1 tn1 t) /\
+     (!H. valid_horizon cx st0 H mid.storage_trace ==>
+          gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+            (s, G, tn) marks (OK t, G1, tn1)) ==>
      (?v. res = INL v /\
           gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0
             (next v) (mid, t, G1, tn1) Q R) \/
@@ -94,7 +97,8 @@ Proof
   qpat_x_assum `!marks res mid G1 tn1 t. _ /\ _ /\ _ ==> _`
     (qspecl_then [`marks`, `res`, `ee with gas_obs := []`, `G'`, `tn'`, `t`]
        mp_tac) >>
-  impl_tac >- fs[] >> reverse strip_tac >> gvs[]
+  impl_tac >- (fs[] >> rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  reverse strip_tac >> gvs[]
   >- (rewrite_tac[gas_outcome_full_mods_def] >> qexists_tac `marks` >>
       disj2_tac >> disj1_tac >>
       qexistsl_tac [`INR exc`, `ee`, `OK t`, `G'`, `tn'`] >>
@@ -104,7 +108,7 @@ Proof
   suspend "right"
 QED
 
-Resume gas_outcome_full_mods_bind_all[right]:
+Resume gas_outcome_full_mods_bind_all_path[right]:
   `gas_marked_exec T (ctx, func) source (es, s) marks (INL v) ee (OK t)` by
     (rewrite_tac[gas_marked_exec_def] >>
      metis_tac[gas_origin_ptr_path_projections, gas_origin_path_erase]) >>
@@ -151,6 +155,54 @@ Resume gas_outcome_full_mods_bind_all[right]:
   conj_tac >- first_assum ACCEPT_TAC >>
   rpt strip_tac >> res_tac >> simp[] >>
   irule gas_origin_ptr_path_append >> metis_tac[]
+QED
+
+Finalise gas_outcome_full_mods_bind_all_path
+
+Theorem gas_outcome_full_mods_bind_all:
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
+    (es, s, G, tn)
+    Q1 (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
+  (!marks res mid G1 tn1 t.
+     (!tail. source (es with gas_obs :=
+                       gas_explicit marks s.vs_gas_readings ++ tail) =
+             (res, mid with gas_obs := tail)) /\
+     storage_trace_domain cx st0 mid.storage_trace /\
+     (!H. valid_horizon cx st0 H mid.storage_trace ==>
+          Q1 H res mid G1 tn1 t) ==>
+     (?v. res = INL v /\
+          gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0
+            (next v) (mid, t, G1, tn1) Q R) \/
+     (?exc. res = INR exc /\
+            !H. valid_horizon cx st0 H mid.storage_trace ==>
+                Q H (INR exc) mid G1 tn1 t)) /\
+  storage_trace_frame source /\
+  (!v. storage_trace_frame (next v)) /\
+  (!marks err ee leaf stop_state.
+     gas_exempt_cert_mods T mods (ctx, func) (ignore_bind source (return ()))
+       (es, s) marks (err, ee) (leaf, stop_state) ==>
+     gas_exempt_cert_mods T mods (ctx, func)
+       (bind source (\v. ignore_bind (next v) (return ())))
+       (es, s) marks (err, ee) (leaf, stop_state)) /\
+  (!left v mid t right err ee leaf stop_state.
+     gas_marked_exec T (ctx, func) source (es, s) left (INL v) mid (OK t) /\
+     gas_exempt_cert_mods T mods (ctx, func) (ignore_bind (next v) (return ()))
+       (mid with gas_obs := [], t) right (err, ee) (leaf, stop_state) ==>
+     gas_exempt_cert_mods T mods (ctx, func)
+       (bind source (\v. ignore_bind (next v) (return ())))
+       (es, s) (left ++ right) (err, ee) (leaf, stop_state)) ==>
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0
+    (bind source next) (es, s, G, tn) Q R
+Proof
+  strip_tac >>
+  irule gas_outcome_full_mods_bind_all_path >>
+  rpt conj_tac >>
+  TRY (qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ _ _` (irule_at Any)) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  FIRST [
+    (qmatch_goalsub_abbrev_tac `EXISTS _ _` >> qexists_tac `Q1`),
+    (rpt gen_tac >> strip_tac >> metis_tac[])
+  ]
 QED
 
 Finalise gas_outcome_full_mods_bind_all

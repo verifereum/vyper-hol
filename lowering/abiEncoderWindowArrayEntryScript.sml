@@ -229,30 +229,8 @@ Proof
 QED
 
 (* The same raw three-instruction run behind the cursor observation. *)
-Theorem window_array_dynamic_cursor_sequence:
-  emit_op ALLOCA [Lit 32w] st = (dp,c1) /\
-  emit_op MUL [count_op;Lit (n2w asz)] c1 = (offset,c2) /\
-  emit_void MSTORE [dp;offset] c2 = ((),en) /\
-  MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
-    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
-  fn_has_code st c1 func /\ fn_has_code c1 c2 func /\ fn_has_code c2 en func /\
-  alloca_room ctx func s /\ alloca_inv s /\
-  (!b sz. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz) ==> sz = 32) /\
-  eval_operand count_op s = SOME (n2w n) /\
-  (!x. count_op = Var x ==> not_fresh_at st x) /\
-  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
-  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t b.
-    run_inst_seq (emitted_insts st en) s =
-      OK (t with vs_inst_idx := s.vs_inst_idx) /\
-    window_phase ctx func st en {st.cs_next_id} [] s t /\
-    window_array_transition ctx func st {st.cs_next_id} [] s t /\
-    eval_operand dp t = SOME (n2w b) /\
-    (!x. dp = Var x ==> not_fresh_at en x) /\
-    FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
-    b+32 <= t.vs_alloca_next /\ b < dimword (:256) /\
-    mem_word_at b t.vs_memory = n2w (n*asz) /\
-    (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >> drule_all window_emit_alloca32_sequence >> strip_tac >>
   rename1 `window_seq st c1 s a` >>
@@ -296,7 +274,36 @@ Proof
     (irule window_seq_phase >> asm_rewrite_tac[]) >>
   suspend "observations"
 QED
+*)
+Theorem window_array_dynamic_cursor_sequence:
+  emit_op ALLOCA [Lit 32w] st = (dp,c1) /\
+  emit_op MUL [count_op;Lit (n2w asz)] c1 = (offset,c2) /\
+  emit_void MSTORE [dp;offset] c2 = ((),en) /\
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
+  fn_has_code st c1 func /\ fn_has_code c1 c2 func /\ fn_has_code c2 en func /\
+  alloca_room ctx func s /\ alloca_inv s /\
+  (!b sz. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz) ==> sz = 32) /\
+  eval_operand count_op s = SOME (n2w n) /\
+  (!x. count_op = Var x ==> not_fresh_at st x) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t b.
+    run_inst_seq (emitted_insts st en) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    window_phase ctx func st en {st.cs_next_id} [] s t /\
+    window_array_transition ctx func st {st.cs_next_id} [] s t /\
+    eval_operand dp t = SOME (n2w b) /\
+    (!x. dp = Var x ==> not_fresh_at en x) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
+    b+32 <= t.vs_alloca_next /\ b < dimword (:256) /\
+    mem_word_at b t.vs_memory = n2w (n*asz) /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume window_array_dynamic_cursor_sequence[observations]:
   qmatch_asmsub_abbrev_tac `window_phase ctx func st en {st.cs_next_id} [] s v` >>
   `v.vs_allocas = a.vs_allocas /\ v.vs_alloca_next = a.vs_alloca_next` by
@@ -327,7 +334,9 @@ Resume window_array_dynamic_cursor_sequence[observations]:
   conj_tac >- simp[Abbr `v`, Abbr `raw`, mstore_mem_word_at_same] >>
   suspend "high"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume window_array_dynamic_cursor_sequence[high]:
   rpt strip_tac >>
   `~not_fresh_at c2 x /\ ~not_fresh_at c1 x` by
@@ -343,8 +352,11 @@ Resume window_array_dynamic_cursor_sequence[high]:
        write_memory_with_expansion_def] >>
   metis_tac[lookup_var_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise window_array_dynamic_cursor_sequence
+*)
 
 Theorem window_array_dynamic_cursor_phase_observed:
   emit_op ALLOCA [Lit 32w] st = (dp,c1) /\

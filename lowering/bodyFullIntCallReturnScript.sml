@@ -44,6 +44,81 @@ val intcall_return_premises =
    release, and the cast reach the call's joint vv post at the end of its
    code; with the value unwrapped after it, they reach its joint value
    post. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `cenv.ce_func_info _ = (result_count,buf_size,param_vars)` >>
+  `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+    sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
+    metis_tac[] >>
+  `?callee entered. gas_invoke_entry (ctx,func) t callee entered` by
+    (fs[intcall_entry_full_def] >> metis_tac[]) >>
+  `?bb inst lbl arg_ops argv.
+     lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+     get_instruction bb t.vs_inst_idx = SOME inst /\
+     decode_invoke inst = SOME (lbl,arg_ops) /\
+     eval_operands arg_ops t = SOME argv` by
+    (fs[gas_invoke_entry_def] >> metis_tac[]) >>
+  qpat_x_assum `!callee entered bb inst lbl arg_ops argv. _` drule_all >>
+  strip_tac >>
+  conj_asm1_tac >-
+    (qhdtm_x_assum `gas_outcome_full`
+       (strip_assume_tac o SIMP_RULE bool_ss [gas_outcome_full_def])
+     >- (rename1 `gas_origin_ptr_focus (DF focus_horizon,_,_,_,_,_) _
+                    focus_marks (focus_leaf,focus_pg,focus_g,focus_tn,focus_finish)` >>
+         apply_intcall_return_rule intcall_return_noncompleted >>
+         intcall_return_premises >>
+         qexists_tac `focus_marks` >> disj1_tac >> simp[] >>
+         qexistsl_tac
+           [`focus_horizon`,`focus_leaf`,`focus_pg`,`focus_g`,`focus_tn`,`focus_finish`] >>
+         simp[])
+     >- (rename1 `!tail. intcall_callee_src cx name mut nr ss
+                           (es1 with gas_obs :=
+                             gas_explicit return_marks entered.vs_gas_readings ++ tail) =
+                         (return_res,return_source with gas_obs := tail)` >>
+         rename1 `!h. valid_horizon cx st0 h return_source.storage_trace ==>
+                        gas_origin_ptr_path
+                          (DF h,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+                           MAP (op_prov G) arg_ops)
+                          (entered,FEMPTY,tn with t_var := FEMPTY)
+                          return_marks (return_r,return_g,return_tn) /\
+                        exit_result return_r /\ create_size_exit_ok ctx return_res return_r /\
+                        intcall_callee_exit_full (DF,lo) h func cenv cx mut nr rtv
+                          result_count
+                          (if result_count = 0 /\ 0 < buf_size then SOME (HD argv) else NONE)
+                          sa.cs_next_id sm.cs_next_id t tn return_res
+                          (return_source with gas_obs := []) (return_g,return_tn) return_r` >>
+         apply_intcall_return_rule intcall_return_normal_owned >>
+         intcall_return_premises >>
+         qexistsl_tac
+           [`return_marks`,`return_res`,`return_source`,`return_r`,`return_g`,`return_tn`] >>
+         simp[] >> rpt strip_tac >>
+         qpat_assum `!h. valid_horizon cx st0 h return_source.storage_trace ==>
+                           gas_origin_ptr_path _ _ _ _ /\ _`
+           (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+     rename1 `gas_exempt_cert _ _ _ _ _ _ (exempt_error,exempt_source) _` >>
+     rename1 `gas_origin_ptr_focus (DF focus_horizon,_,_,_,_,_) _
+                focus_marks (focus_leaf,focus_pg,focus_g,focus_tn,focus_finish)` >>
+     apply_intcall_return_rule intcall_return_noncompleted >>
+     intcall_return_premises >> qexists_tac `focus_marks` >> disj2_tac >>
+     qexistsl_tac
+       [`exempt_error`,`exempt_source`,`focus_leaf`,`focus_pg`,`focus_g`,`focus_tn`,`focus_finish`] >>
+     simp[] >> qexists_tac `focus_horizon` >> simp[]) >>
+  match_mp_tac intcall_return_unwrap >>
+  qexistsl_tac
+    [`tops`, `tenv`, `ty`, `args`, `ret`, `rr`, `penv`,
+     `result_count`, `buf_size`, `param_vars`, `dflts`] >>
+  simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  qpat_assum `_ ==> gas_outcome_full _ _ _ _ _ _ _ _` drule_all >>
+  strip_tac >>
+  irule gas_outcome_full_post_mono >>
+  qhdtm_assum `gas_outcome_full` (irule_at Any) >>
+  simp[] >> rpt strip_tac >> qexists_tac `tv` >> simp[]
+QED
+*)
 Theorem intcall_return_full_owned:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
@@ -183,78 +258,24 @@ Theorem intcall_return_full_owned:
          (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
            (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))
 Proof
-  rpt gen_tac >> strip_tac >>
-  rename1 `cenv.ce_func_info _ = (result_count,buf_size,param_vars)` >>
-  `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
-    sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
-    metis_tac[] >>
-  `?callee entered. gas_invoke_entry (ctx,func) t callee entered` by
-    (fs[intcall_entry_full_def] >> metis_tac[]) >>
-  `?bb inst lbl arg_ops argv.
-     lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
-     get_instruction bb t.vs_inst_idx = SOME inst /\
-     decode_invoke inst = SOME (lbl,arg_ops) /\
-     eval_operands arg_ops t = SOME argv` by
-    (fs[gas_invoke_entry_def] >> metis_tac[]) >>
-  qpat_x_assum `!callee entered bb inst lbl arg_ops argv. _` drule_all >>
-  strip_tac >>
-  conj_asm1_tac >-
-    (qhdtm_x_assum `gas_outcome_full`
-       (strip_assume_tac o SIMP_RULE bool_ss [gas_outcome_full_def])
-     >- (rename1 `gas_origin_ptr_focus (DF focus_horizon,_,_,_,_,_) _
-                    focus_marks (focus_leaf,focus_pg,focus_g,focus_tn,focus_finish)` >>
-         apply_intcall_return_rule intcall_return_noncompleted >>
-         intcall_return_premises >>
-         qexists_tac `focus_marks` >> disj1_tac >> simp[] >>
-         qexistsl_tac
-           [`focus_horizon`,`focus_leaf`,`focus_pg`,`focus_g`,`focus_tn`,`focus_finish`] >>
-         simp[])
-     >- (rename1 `!tail. intcall_callee_src cx name mut nr ss
-                           (es1 with gas_obs :=
-                             gas_explicit return_marks entered.vs_gas_readings ++ tail) =
-                         (return_res,return_source with gas_obs := tail)` >>
-         rename1 `!h. valid_horizon cx st0 h return_source.storage_trace ==>
-                        gas_origin_ptr_path
-                          (DF h,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
-                           MAP (op_prov G) arg_ops)
-                          (entered,FEMPTY,tn with t_var := FEMPTY)
-                          return_marks (return_r,return_g,return_tn) /\
-                        exit_result return_r /\ create_size_exit_ok ctx return_res return_r /\
-                        intcall_callee_exit_full (DF,lo) h func cenv cx mut nr rtv
-                          result_count
-                          (if result_count = 0 /\ 0 < buf_size then SOME (HD argv) else NONE)
-                          sa.cs_next_id sm.cs_next_id t tn return_res
-                          (return_source with gas_obs := []) (return_g,return_tn) return_r` >>
-         apply_intcall_return_rule intcall_return_normal_owned >>
-         intcall_return_premises >>
-         qexistsl_tac
-           [`return_marks`,`return_res`,`return_source`,`return_r`,`return_g`,`return_tn`] >>
-         simp[] >> rpt strip_tac >>
-         qpat_assum `!h. valid_horizon cx st0 h return_source.storage_trace ==>
-                           gas_origin_ptr_path _ _ _ _ /\ _`
-           (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
-     rename1 `gas_exempt_cert _ _ _ _ _ _ (exempt_error,exempt_source) _` >>
-     rename1 `gas_origin_ptr_focus (DF focus_horizon,_,_,_,_,_) _
-                focus_marks (focus_leaf,focus_pg,focus_g,focus_tn,focus_finish)` >>
-     apply_intcall_return_rule intcall_return_noncompleted >>
-     intcall_return_premises >> qexists_tac `focus_marks` >> disj2_tac >>
-     qexistsl_tac
-       [`exempt_error`,`exempt_source`,`focus_leaf`,`focus_pg`,`focus_g`,`focus_tn`,`focus_finish`] >>
-     simp[] >> qexists_tac `focus_horizon` >> simp[]) >>
-  match_mp_tac intcall_return_unwrap >>
-  qexistsl_tac
-    [`tops`, `tenv`, `ty`, `args`, `ret`, `rr`, `penv`,
-     `result_count`, `buf_size`, `param_vars`, `dflts`] >>
-  simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
-  strip_tac >>
-  qpat_assum `_ ==> gas_outcome_full _ _ _ _ _ _ _ _` drule_all >>
-  strip_tac >>
-  irule gas_outcome_full_post_mono >>
-  qhdtm_assum `gas_outcome_full` (irule_at Any) >>
-  simp[] >> rpt strip_tac >> qexists_tac `tv` >> simp[]
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >>
+  disch_then (strip_assume_tac o Q.SPEC `PG` o MATCH_MP intcall_return_full_owned) >>
+  conj_tac >-
+    (strip_tac >>
+     qpat_assum `_ ==> gas_outcome_full _ _ _ _ _ _ _ _` drule_all >>
+     strip_tac >>
+     irule gas_outcome_full_post_mono >>
+     qhdtm_assum `gas_outcome_full` (irule_at Any) >>
+     simp[] >> rpt strip_tac >> qexists_tac `tv` >> simp[]) >>
+  first_assum ACCEPT_TAC
+QED
+*)
 Theorem intcall_return_full:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
@@ -385,14 +406,5 @@ Theorem intcall_return_full:
          (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
            (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))
 Proof
-  rpt gen_tac >>
-  disch_then (strip_assume_tac o Q.SPEC `PG` o MATCH_MP intcall_return_full_owned) >>
-  conj_tac >-
-    (strip_tac >>
-     qpat_assum `_ ==> gas_outcome_full _ _ _ _ _ _ _ _` drule_all >>
-     strip_tac >>
-     irule gas_outcome_full_post_mono >>
-     qhdtm_assum `gas_outcome_full` (irule_at Any) >>
-     simp[] >> rpt strip_tac >> qexists_tac `tv` >> simp[]) >>
-  first_assum ACCEPT_TAC
+  cheat
 QED

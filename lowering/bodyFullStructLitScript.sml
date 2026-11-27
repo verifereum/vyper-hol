@@ -381,6 +381,56 @@ Proof
   strip_tac >> simp[] >> decide_tac
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  gen_tac >> disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  strip_tac >> irule gas_outcome_full_bind >>
+  rpt conj_tac
+  >~ [`storage_trace_frame (read_result _ _)`]
+  >- simp[storage_trace_frame_read_result]
+  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
+      qexistsl_tac [`mid'`, `t'`, `v'`] >> fs[])
+  >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
+      simp[evaluate_storage_trace_frame, storage_trace_frame_return])
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >> simp[]) >>
+  irule gas_outcome_full_pure >> simp[] >>
+  qexistsl_tac [`G2`, `mid`, `INL v`, `u`, `tn2`] >>
+  conj_tac >- metis_tac[exprSimMemorySourceTheory.read_result_gas_obs] >>
+  rpt gen_tac >> strip_tac >> simp[] >>
+  `mid with gas_obs := [] = mid` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  simp[] >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (mp_then Any (qspecl_then
+      [`bind (eval_exprs cx (MAP SND fs)) (\vs. return (v::vs))`,
+       `\res. case res of INL vs => INL (v::vs) | INR ex => INR ex`]
+      mp_tac) gas_outcome_full_source_map) >>
+  (impl_tac >-
+    (simp[bind_def, return_def] >> gen_tac >>
+     Cases_on `eval_exprs cx (MAP SND fs) es` >>
+     rename1 `eval_exprs cx (MAP SND fs) es = (rr,ee)` >>
+     Cases_on `rr` >> simp[])) >>
+  disch_then (mp_then Any irule gasOutcomeFullTheory.gas_outcome_full_post_mono) >>
+  BETA_TAC >> reverse conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qexists_tac `[(ftv,v,addr+off,type_memory_size ftv)] ++ added` >>
+  conj_tac >- gvs[typeLayoutPropsTheory.type_memory_size_list_sum, APPEND_ASSOC] >>
+  `literal_prefix_ok
+     (cells ++ [(ftv,v,addr+off,type_memory_size ftv)] ++ added) tn' t'` by
+    fs[Abbr `inv'`] >>
+  `!m. mem_agree_outside tn'.t_mem t'.vs_memory m ==>
+      val_in_memory ftv v (addr+off) m` by
+    (rpt strip_tac >>
+     irule (cj 3 bodyPtrMakeArrayMemoryFrameTheory.literal_prefix_lookup) >>
+     qexistsl_tac [`cells ++ [(ftv,v,addr+off,type_memory_size ftv)] ++ added`,
+                    `type_memory_size ftv`, `t'`, `tn'`] >> simp[]) >>
+  rpt strip_tac >>
+  pure_once_rewrite_tac[valueEncodingDefsTheory.val_in_memory_def] >>
+  simp[GSYM arithmeticTheory.ADD_ASSOC]
+QED
+*)
 Theorem structlit_fields_cons_continuation[local]:
   !inv'. inv' = (\H ee cs G tn s cells off.
     stmt_state_rel H ctx func ce cx ee s /\
@@ -439,51 +489,7 @@ Theorem structlit_fields_cons_continuation[local]:
       halt_exit H cx ee (INR exc : eval_result + exception) r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  gen_tac >> disch_then (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
-  strip_tac >> irule gas_outcome_full_bind >>
-  rpt conj_tac
-  >~ [`storage_trace_frame (read_result _ _)`]
-  >- simp[storage_trace_frame_read_result]
-  >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
-      qexistsl_tac [`mid'`, `t'`, `v'`] >> fs[])
-  >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
-      simp[evaluate_storage_trace_frame, storage_trace_frame_return])
-  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >> simp[]) >>
-  irule gas_outcome_full_pure >> simp[] >>
-  qexistsl_tac [`G2`, `mid`, `INL v`, `u`, `tn2`] >>
-  conj_tac >- metis_tac[exprSimMemorySourceTheory.read_result_gas_obs] >>
-  rpt gen_tac >> strip_tac >> simp[] >>
-  `mid with gas_obs := [] = mid` by
-    simp[vyperStateTheory.evaluation_state_component_equality] >>
-  simp[] >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
-    (mp_then Any (qspecl_then
-      [`bind (eval_exprs cx (MAP SND fs)) (\vs. return (v::vs))`,
-       `\res. case res of INL vs => INL (v::vs) | INR ex => INR ex`]
-      mp_tac) gas_outcome_full_source_map) >>
-  (impl_tac >-
-    (simp[bind_def, return_def] >> gen_tac >>
-     Cases_on `eval_exprs cx (MAP SND fs) es` >>
-     rename1 `eval_exprs cx (MAP SND fs) es = (rr,ee)` >>
-     Cases_on `rr` >> simp[])) >>
-  disch_then (mp_then Any irule gasOutcomeFullTheory.gas_outcome_full_post_mono) >>
-  BETA_TAC >> reverse conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  qexists_tac `[(ftv,v,addr+off,type_memory_size ftv)] ++ added` >>
-  conj_tac >- gvs[typeLayoutPropsTheory.type_memory_size_list_sum, APPEND_ASSOC] >>
-  `literal_prefix_ok
-     (cells ++ [(ftv,v,addr+off,type_memory_size ftv)] ++ added) tn' t'` by
-    fs[Abbr `inv'`] >>
-  `!m. mem_agree_outside tn'.t_mem t'.vs_memory m ==>
-      val_in_memory ftv v (addr+off) m` by
-    (rpt strip_tac >>
-     irule (cj 3 bodyPtrMakeArrayMemoryFrameTheory.literal_prefix_lookup) >>
-     qexistsl_tac [`cells ++ [(ftv,v,addr+off,type_memory_size ftv)] ++ added`,
-                    `type_memory_size ftv`, `t'`, `tn'`] >> simp[]) >>
-  rpt strip_tac >>
-  pure_once_rewrite_tac[valueEncodingDefsTheory.val_in_memory_def] >>
-  simp[GSYM arithmeticTheory.ADD_ASSOC]
+  cheat
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body

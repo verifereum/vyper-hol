@@ -19,6 +19,7 @@ Ancestors
   (* definitions *)
   moduleLowering compileUnit
   (* property statements and proofs *)
+  totalBalanceOverflow
   dallocaBlueprintArgs
   dallocaCreateCopy dallocaCreateGeometry
   createExprSizeExit

@@ -510,9 +510,7 @@ Proof
       package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
       (order_internals (deploy_internal_order (SOME cf) ints) ints)` by
     simp[Abbr `ifns`] >>
-  `PERM (order_internals (deploy_internal_order (SOME cf) ints) ints)
-      (FST (SND (classify_functions tops)))` by
-    simp[PERM_order_deploy_internals] >>
+  drule_all deploy_order_internals_ok >> strip_tac >>
   drule_all deploy_internal_package_labels >> strip_tac >>
   qpat_x_assum `ifns = _` kall_tac >>
   `EVERY (\d. internal_label_ok (FST d) /\
