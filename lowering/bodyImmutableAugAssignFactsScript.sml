@@ -132,18 +132,6 @@ Proof
   simp[get_source_immutables_def] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `immutable_holds cenv cx ty (Value v) (n2w off) es ss` by
-    (simp[immutable_holds_def, read_result_def, return_def] >>
-     qexistsl_tac [`id`, `off`, `tv`, `v`, `0`] >> simp[sub_layout_def]) >>
-  drule_all immutable_holds_iload >> strip_tac >> gvs[] >>
-  `off < dimword (:256)` by decide_tac >>
-  gvs[wordsTheory.w2n_n2w]
-QED
-*)
 Theorem immutable_augassign_load:
   stmt_state_rel H ctx func cenv cx es ss /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
@@ -153,5 +141,11 @@ Theorem immutable_augassign_load:
   value_has_type tv v /\ off + type_memory_size tv < dimword (:256) ==>
   mload off ss = typed_val_to_w256 tv v
 Proof
-  cheat
+  strip_tac >>
+  drule_then assume_tac stateRelProjTheory.stmt_state_rel_state_rel >>
+  `val_in_memory tv v off ss.vs_memory` by
+    (drule stateRelProjTheory.state_rel_immutables_rel >>
+     simp[immutables_rel_def] >> disch_then drule_all >> simp[]) >>
+  drule_all exprSimPropsTheory.val_in_memory_word_type >>
+  simp[valueEncodingDefsTheory.mem_word_at_def, venomStateTheory.mload_def]
 QED
