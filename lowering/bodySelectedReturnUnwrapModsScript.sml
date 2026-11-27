@@ -358,7 +358,7 @@ val read_exit = Term.inst [alpha |-> ``:value``] exit_post;
 
 (* The raw result is already on the counted execution.  Bind its source
    answer to the forcing continuation at the same machine endpoint. *)
-Theorem selected_return_unwrap_mods:
+Theorem selected_return_unwrap_explicit_mods:
   contract_inv mods exps ctx ce cx /\ ALOOKUP mods src = SOME tops /\
   expr_body_pre_mods mods ce cx env (^call_expr) es0 /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
@@ -370,14 +370,14 @@ Theorem selected_return_unwrap_mods:
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func ==>
-   gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) mods cx st0
+   gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
      (^selected_rest) (es1,t,G,tn) (^call_owned) (^owned_exit)) ==>
   !op sb shadow_sb.
     unwrap_value ce vv sm = (op,sb) /\ unwrap_value ce vv shadow_sm = (op,shadow_sb) /\
     gas_shadow_state sb shadow_sb /\ fn_has_code sa sb func /\
     fn_has_code shadow_sa shadow_sb shadow_func /\
     gas_admissible (bind (^selected_rest) (read_result cx)) expr_res_ok es1 ==>
-    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) mods cx st0
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
       (bind (^selected_rest) (read_result cx)) (es1,t,G,tn) (^call_read) (^read_exit)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -414,7 +414,7 @@ Proof
   suspend "read"
 QED
 
-Resume selected_return_unwrap_mods[prefix]:
+Resume selected_return_unwrap_explicit_mods[prefix]:
   irule gas_outcome_full_mods_post_source >> first_assum (irule_at Any) >>
   simp[Abbr `childR`] >> rpt strip_tac >> Cases_on `res`
   >- (Cases_on `r` >> fs[exprSimDefsTheory.expr_exit_def]) >>
@@ -424,7 +424,7 @@ Resume selected_return_unwrap_mods[prefix]:
   Cases_on `err` >> fs[exprSimDefsTheory.expr_exit_def]
 QED
 
-Resume selected_return_unwrap_mods[read]:
+Resume selected_return_unwrap_explicit_mods[read]:
   qx_genl_tac [`marks`,`res`,`ee`,`G1`,`tn1`,`s`] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -452,4 +452,30 @@ Resume selected_return_unwrap_mods[read]:
   >> irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]
 QED
 
-Finalise selected_return_unwrap_mods
+Finalise selected_return_unwrap_explicit_mods
+
+Theorem selected_return_unwrap_mods:
+  contract_inv mods exps ctx ce cx /\ ALOOKUP mods src = SOME tops /\
+  expr_body_pre_mods mods ce cx env (^call_expr) es0 /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
+  evaluate_type (get_tenv cx) ret = SOME rtv /\
+  compile_expr ce ty (^call_expr) sa = (vv,sm) /\
+  compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr (^call_expr)) shadow_sa = (vv,shadow_sm) /\
+  gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func ==>
+   gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) mods cx st0
+     (^selected_rest) (es1,t,G,tn) (^call_owned) (^owned_exit)) ==>
+  !op sb shadow_sb.
+    unwrap_value ce vv sm = (op,sb) /\ unwrap_value ce vv shadow_sm = (op,shadow_sb) /\
+    gas_shadow_state sb shadow_sb /\ fn_has_code sa sb func /\
+    fn_has_code shadow_sa shadow_sb shadow_func /\
+    gas_admissible (bind (^selected_rest) (read_result cx)) expr_res_ok es1 ==>
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) mods cx st0
+      (bind (^selected_rest) (read_result cx)) (es1,t,G,tn) (^call_read) (^read_exit)
+Proof
+  ACCEPT_TAC (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+    selected_return_unwrap_explicit_mods)
+QED
