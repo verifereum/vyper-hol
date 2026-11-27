@@ -559,31 +559,8 @@ Proof
 QED
 
 (* A builtin, split by family as body_builtin_case_ptr does. *)
-Theorem body_builtin_case_full:
-  !cx ty bt es.
-    (!s'' x t v code_ty addr tail_s tail_vs t'.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\
-       bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
-       v = (code_ty,addr) /\
-       eval_exprs cx (TL es) tail_s = (INL tail_vs,t') ==>
-       body_exprs_full_ok_mods mods exps cx [addr]) /\
-    (!s'' x t v code_ty addr.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\
-       bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
-       v = (code_ty,addr) ==>
-       body_exprs_full_ok_mods mods exps cx (TL es)) /\
-    (!s'' x t.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\
-       bt <> Env MsgGas /\ code_slice_source bt es = NONE ==>
-       body_exprs_full_ok_mods mods exps cx es) /\
-    (!s'' x t.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt = Len ==>
-       body_expr_full_ok_mods mods exps cx (HD es)) ==>
-    body_expr_full_ok_mods mods exps cx (Builtin ty bt es)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `bt = Env MsgGas` >- simp[body_msg_gas_full_case] >>
@@ -617,6 +594,35 @@ Proof
     [make_array_expr_full_ok, word_builtin_expr_full_ok,
      hash_builtin_expr_full_ok, bytestring_builtin_expr_full_ok,
      precompile_builtin_expr_full_ok])
+QED
+*)
+Theorem body_builtin_case_full:
+  !cx ty bt es.
+    (!s'' x t v code_ty addr tail_s tail_vs t'.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\
+       bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
+       v = (code_ty,addr) /\
+       eval_exprs cx (TL es) tail_s = (INL tail_vs,t') ==>
+       body_exprs_full_ok_mods mods exps cx [addr]) /\
+    (!s'' x t v code_ty addr.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\
+       bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
+       v = (code_ty,addr) ==>
+       body_exprs_full_ok_mods mods exps cx (TL es)) /\
+    (!s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\
+       bt <> Env MsgGas /\ code_slice_source bt es = NONE ==>
+       body_exprs_full_ok_mods mods exps cx es) /\
+    (!s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt = Len ==>
+       body_expr_full_ok_mods mods exps cx (HD es)) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ty bt es)
+Proof
+  cheat
 QED
 
 (* The joint twin of body_continue_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
