@@ -1088,18 +1088,6 @@ Proof
   simp[lookup_scopes_def] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  gen_tac >>
-  rw[stmt_state_rel_def]
-  >- (irule state_rel_pop_scope >> metis_tac[])
-  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
-      simp[] >> rpt strip_tac >> qexists_tac `id` >>
-      gvs[] >> irule local_region_pop_scope >> metis_tac[]) >>
-  metis_tac[]
-QED
-*)
 Theorem stmt_state_rel_pop_scope:
   !H.
   !func cenv cx es s sc rest ctx.
@@ -1107,7 +1095,14 @@ Theorem stmt_state_rel_pop_scope:
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
     stmt_state_rel H ctx func cenv cx (es with scopes := rest) s
 Proof
-  cheat
+  rpt gen_tac >> rewrite_tac[stmt_state_rel_def] >> strip_tac >>
+  conj_tac >- (irule state_rel_pop_scope >> metis_tac[]) >>
+  `!ce. immutable_alloca_sep func ce cx es s ==>
+        immutable_alloca_sep func ce cx (es with scopes := rest) s` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `es`] >> simp[] >> rpt strip_tac >>
+     qexists_tac `id` >> simp[] >> irule local_region_pop_scope >> simp[]) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem local_ptrs_rel_cenv_cong:
