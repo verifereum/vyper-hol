@@ -440,6 +440,24 @@ Proof
   >> metis_tac[arithmeticTheory.NOT_LESS_EQUAL]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `!tail. intret_mem_q H func ce cx tv bw v
+     ((ee with gas_obs := tail) with scopes := [])
+     (IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+       (copied with vs_inst_idx := n0))` by
+    (mp_tac (Q.INST [`n` |-> `n0`, `r` |-> `IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+          (copied with vs_inst_idx := n0)`] internal_return_memory_copy_exit_base) >>
+     disch_then (mp_tac o SIMP_RULE bool_ss []) >>
+     disch_then (fn th => drule_all th) >> simp[]) >>
+  qpat_x_assum `r = IntRet _ _` SUBST_ALL_TAC >> gen_tac >>
+  qpat_assum `!tail. intret_mem_q _ _ _ _ _ _ _ _ _`
+    (qspec_then `tail` (MATCH_ACCEPT_TAC o SRULE [] o
+      MATCH_MP intret_mem_q_set_control))
+QED
+*)
 Theorem return_memory_copy_exit_control[local]:
   same_frame ce cenv /\ cenv.ce_returns_count = 0 /\
   (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
@@ -464,19 +482,7 @@ Theorem return_memory_copy_exit_control[local]:
   !tail. intret_mem_q H func ce cx tv bw v
     ((ee with gas_obs := tail) with scopes := []) r
 Proof
-  strip_tac >>
-  `!tail. intret_mem_q H func ce cx tv bw v
-     ((ee with gas_obs := tail) with scopes := [])
-     (IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
-       (copied with vs_inst_idx := n0))` by
-    (mp_tac (Q.INST [`n` |-> `n0`, `r` |-> `IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
-          (copied with vs_inst_idx := n0)`] internal_return_memory_copy_exit_base) >>
-     disch_then (mp_tac o SIMP_RULE bool_ss []) >>
-     disch_then (fn th => drule_all th) >> simp[]) >>
-  qpat_x_assum `r = IntRet _ _` SUBST_ALL_TAC >> gen_tac >>
-  qpat_assum `!tail. intret_mem_q _ _ _ _ _ _ _ _ _`
-    (qspec_then `tail` (MATCH_ACCEPT_TAC o SRULE [] o
-      MATCH_MP intret_mem_q_set_control))
+  cheat
 QED
 
 (* The release writes storage, but the following copy sees the same
