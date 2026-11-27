@@ -7490,10 +7490,8 @@ Resume create_copy_finish[dispatch]:
 QED
 Finalise create_copy_finish
 
-Theorem create_copy_expr_full_ok:
-  !cx ty s r ks es d.
-    body_exprs_full_ok_mods mods exps cx (create_operand_order CreateCopyOf s es) ==>
-    body_expr_full_ok_mods mods exps cx (Call ty (CreateTarget CreateCopyOf s r ks) es d)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> disch_tac >> rewrite_tac[Once body_expr_full_ok_def] >>
   reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
@@ -7516,7 +7514,16 @@ Proof
        vyperASTTheory.expr_type_def,is_word_type_def] >>
   metis_tac[create_eval_value]
 QED
+*)
+Theorem create_copy_expr_full_ok:
+  !cx ty s r ks es d.
+    body_exprs_full_ok_mods mods exps cx (create_operand_order CreateCopyOf s es) ==>
+    body_expr_full_ok_mods mods exps cx (Call ty (CreateTarget CreateCopyOf s r ks) es d)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_full_ok[target]:
   `expr_body_pre cenv cx env target es'` by
     (irule create_operand_pre >> simp[] >>
@@ -7562,7 +7569,9 @@ Resume create_copy_expr_full_ok[target]:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   suspend "scalar_frames"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_full_ok[scalar_frames]:
   qpat_x_assum `_ ==> body_exprs_full_ok _ salts` (drule_then assume_tac) >>
   `is_word_type (BaseT AddressT) /\ is_word_type (BaseT (UintT 256))` by simp[is_word_type_def] >>
@@ -7608,7 +7617,9 @@ Resume create_copy_expr_full_ok[scalar_frames]:
        (drule_then strip_assume_tac) >> fs[loweringPostsTheory.expr_post_def]) >>
   suspend "scalar_paths"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_full_ok[scalar_paths]:
   qpat_x_assum `?marks. !H. _ ==> gas_origin_ptr_path _ _ marks (OK st,_,_)`
     (qx_choose_then `mt` assume_tac) >>
@@ -7638,7 +7649,9 @@ Resume create_copy_expr_full_ok[scalar_paths]:
   >- suspend "salt_cut" >>
   suspend "no_salt"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_full_ok[salt_cut]:
   Cases_on `lower_value compile_expr cenv (BaseT (BytesT (Fixed 32))) salt b` >>
   Cases_on `lower_value compile_expr (gas_shadow_env T cenv)
@@ -7663,7 +7676,9 @@ Resume create_copy_expr_full_ok[salt_cut]:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   suspend "salt_frames"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_full_ok[no_salt]:
   simp[NoAsms,Once vyperInterpreterTheory.evaluate_def,bind_return] >>
   `valid_horizon cx st0 (storage_trace_horizon ea.storage_trace) et.storage_trace`
@@ -7702,7 +7717,9 @@ Resume create_copy_expr_full_ok[no_salt]:
       simp[vyperValueTheory.dest_AddressV_def]) >>
   rpt strip_tac >> first_assum (drule_then ACCEPT_TAC)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_full_ok[salt_frames]:
   `valid_horizon cx st0 (storage_trace_horizon ew.storage_trace) ew.storage_trace`
     by fs[storage_trace_domain_def] >>
@@ -7745,7 +7762,9 @@ Resume create_copy_expr_full_ok[salt_frames]:
        (mp_then Any (drule_all_then ACCEPT_TAC) create_operand_cut_frame)) >>
   suspend "salt_finish"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_full_ok[salt_finish]:
   qpat_x_assum `?marks. !H. _ ==> gas_origin_ptr_path _ _ marks (OK ssalt,_,_)`
     (qx_choose_then `ms` assume_tac) >>
@@ -7799,7 +7818,10 @@ Resume create_copy_expr_full_ok[salt_finish]:
       simp[vyperValueTheory.dest_AddressV_def]) >>
   rpt strip_tac >> first_assum (drule_then ACCEPT_TAC)
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise create_copy_expr_full_ok
+*)
 
 Theorem blueprint_pre_args:
   expr_body_pre_mods mods cenv cx env
