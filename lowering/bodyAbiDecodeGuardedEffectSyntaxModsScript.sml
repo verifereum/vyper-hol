@@ -1,7 +1,10 @@
-(* The compositional effect retained by the linked guarded decoder. *)
+(* Public compatibility laws for the guarded decoder effect. *)
 Theory bodyAbiDecodeGuardedEffectSyntaxMods
 Ancestors
   venomState ptrDiscipline pred_set arithmetic
+  bodyAbiDecodeGuardedEffectBaseMods
+Libs
+  bodyAbiDecodeGuardedEffectSyntaxLib
 
 Definition abi_decode_guarded_effect_def:
   abi_decode_guarded_effect (s:venom_state) tn t tf <=>
