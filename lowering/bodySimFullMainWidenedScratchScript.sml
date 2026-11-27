@@ -1,7 +1,7 @@
 (* Scratch statement-level check for the widened body-simulation header. *)
 Theory bodySimFullMainWidenedScratch
 Ancestors
-  loweringPosts bodyFullPostsMods bodyFullPredsMods bodyInvSplit bodySimFull bodySim
+  loweringPosts bodyFullPostsMods bodyFullPreds bodyFullPredsMods bodyInvSplit bodySimFull bodySim
   bodyFullShadowBodyInv bodyLoopCalls contractInvContextProps constSubst constSubstMods
   vyperTypeContract[qualified,ignore_grammar] vyperAST vyperInterpreter
   vyperState vyperTypeCallGraph supportedStmts alist list option pair finite_map
@@ -299,6 +299,575 @@ Proof
     (mp_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
   strip_tac >>
   metis_tac[vyperTypeContractTheory.check_contract_single_module_exports_ok]
+QED
+
+Theorem no_singleton_body_inv_false:
+  (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) /\
+  body_inv tops ctx cenv cx ==> F
+Proof
+  strip_tac >>
+  qpat_assum `body_inv _ _ _ _`
+    (assume_tac o MATCH_MP body_inv_contract) >>
+  qpat_assum `contract_inv _ _ _ _ _`
+    (assume_tac o MATCH_MP contract_inv_singleton_source_modules) >>
+  metis_tac[]
+QED
+
+Theorem body_expr_no_singleton_source_wide:
+  (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+  body_expr_full_ok cx e
+Proof
+  `(!cx e. (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+       body_expr_full_ok cx e) /\
+   (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+       body_exprs_full_ok cx es)` by
+    (ho_match_mp_tac bodyFullPredsTheory.body_expr_full_ok_ind >>
+     rpt conj_tac >> rpt strip_tac >>
+     once_rewrite_tac[bodyFullPredsTheory.body_expr_full_ok_def] >>
+     simp[] >>
+     metis_tac[no_singleton_body_inv_false]) >>
+  metis_tac[]
+QED
+
+Theorem body_stmt_no_singleton_source_wide:
+  (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+  body_stmt_full_ok cx s
+Proof
+  strip_tac >>
+  once_rewrite_tac[bodyFullPredsTheory.body_stmt_full_ok_def] >>
+  rpt gen_tac >> rpt strip_tac >>
+  metis_tac[no_singleton_body_inv_false]
+QED
+
+Theorem body_stmts_no_singleton_source_wide:
+  (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+  body_stmts_full_ok cx ss
+Proof
+  strip_tac >>
+  once_rewrite_tac[bodyFullPredsTheory.body_stmts_full_ok_def] >>
+  rpt gen_tac >> rpt strip_tac >>
+  metis_tac[no_singleton_body_inv_false]
+QED
+
+Theorem body_results_no_singleton_source_wide:
+  (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+  body_results_full_ok cx es
+Proof
+  strip_tac >>
+  Induct_on `es` >>
+  simp[bodyFullPredsTheory.body_results_full_ok_def] >>
+  metis_tac[body_expr_no_singleton_source_wide]
+QED
+
+Theorem body_exprs_no_singleton_source_wide:
+  (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+  body_exprs_full_ok cx es
+Proof
+  strip_tac >>
+  Induct_on `es` >>
+  simp[bodyFullPredsTheory.body_exprs_full_ok_def] >>
+  metis_tac[body_expr_no_singleton_source_wide]
+QED
+
+Theorem body_iterator_no_singleton_source_wide:
+  (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+  body_iterator_full_ok cx it
+Proof
+  strip_tac >>
+  Cases_on `it` >>
+  simp[bodyFullPredsTheory.body_iterator_full_ok_def] >>
+  metis_tac[body_expr_no_singleton_source_wide]
+QED
+
+Theorem body_for_no_singleton_source_wide:
+  (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+  body_for_full_ok cx tyv nm body vs
+Proof
+  strip_tac >>
+  simp[bodyFullPredsTheory.body_for_full_ok_def] >>
+  metis_tac[body_stmts_no_singleton_source_wide]
+QED
+
+Theorem body_base_target_no_singleton_source_wide:
+  (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+  body_base_target_full_ok cx bt
+Proof
+  strip_tac >>
+  completeInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >>
+  gvs[bodyFullPredsTheory.body_base_target_full_ok_def, expr_size_def] >>
+  metis_tac[body_expr_no_singleton_source_wide]
+QED
+
+Theorem body_tuple_target_no_singleton_source_wide:
+  ((!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+     body_tuple_target_full_ok cx g v) /\
+  ((!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+     body_tuple_targets_full_ok cx gs vs)
+Proof
+  `(!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+       body_tuple_target_full_ok cx g v) /\
+   (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target <> SOME [(NONE,tops)]) ==>
+       body_tuple_targets_full_ok cx gs vs)` by
+    (ho_match_mp_tac bodyFullPredsTheory.body_tuple_target_full_ok_ind >>
+     rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+     once_rewrite_tac[bodyFullPredsTheory.body_tuple_target_full_ok_def] >>
+     gvs[] >>
+     metis_tac[body_base_target_no_singleton_source_wide,
+               no_singleton_body_inv_false]) >>
+  metis_tac[]
+QED
+
+Theorem body_sim_full_mutual_guarded_wide:
+  (!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_stmt s) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
+                 stmt_loop_calls_ok [(NONE,tops)] s) ==>
+    body_stmt_full_ok cx s) /\
+  (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_stmts ss) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
+                 stmts_loop_calls_ok [(NONE,tops)] ss) ==>
+    body_stmts_full_ok cx ss) /\
+  (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_iterator it) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_iterator_full_ok cx it) /\
+  (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_stmts body) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
+                 stmts_loop_calls_ok [(NONE,tops)] body) ==>
+    body_for_full_ok cx tyv nm body vs) /\
+  (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_expr e) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_expr_full_ok cx e) /\
+  (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_exprs es) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_exprs_full_ok cx es) /\
+  (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_target t) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_base_target_full_ok cx t) /\
+  (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_target t) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_base_target_full_ok cx t) /\
+  (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_atarget g) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_tuple_target_full_ok cx g v) /\
+  (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_atargets gs) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_tuple_targets_full_ok cx gs vs)
+Proof
+  rpt conj_tac
+  >- (rpt gen_tac >> rpt strip_tac >>
+      Cases_on `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
+      rpt strip_tac
+      >- (TRY (qpat_assum `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (strip_assume_tac)) >>
+          TRY (qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (qspec_then `tops` (assume_tac o SIMP_RULE bool_ss []))) >>
+          `body_stmt_full_ok_mods [(NONE,tops)] [] cx s` by
+            (irule (cj 1 (Q.SPECL [`[(NONE,tops)]`,`[]`]
+              body_sim_full_mutual_mods_widened)) >>
+             simp[alistTheory.ALOOKUP_def,
+                  constSubstModsTheory.consts_env_mods_singleton,
+                  constSubstModsTheory.subst_consts_mods_singleton] >>
+             metis_tac[check_single_exports_from_is_some_wide]) >>
+          metis_tac[body_stmt_full_ok_mods_singleton])
+      >- metis_tac[body_stmt_no_singleton_source_wide])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      Cases_on `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
+      rpt strip_tac
+      >- (TRY (qpat_assum `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (strip_assume_tac)) >>
+          TRY (qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (qspec_then `tops` (assume_tac o SIMP_RULE bool_ss []))) >>
+          `body_stmts_full_ok_mods [(NONE,tops)] [] cx ss` by
+            (irule (cj 2 (Q.SPECL [`[(NONE,tops)]`,`[]`]
+              body_sim_full_mutual_mods_widened)) >>
+             simp[alistTheory.ALOOKUP_def,
+                  constSubstModsTheory.consts_env_mods_singleton,
+                  constSubstModsTheory.subst_consts_mods_singleton] >>
+             metis_tac[check_single_exports_from_is_some_wide]) >>
+          metis_tac[body_stmts_full_ok_mods_singleton])
+      >- metis_tac[body_stmts_no_singleton_source_wide])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      Cases_on `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
+      rpt strip_tac
+      >- (TRY (qpat_assum `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (strip_assume_tac)) >>
+          TRY (qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (qspec_then `tops` (assume_tac o SIMP_RULE bool_ss []))) >>
+          `body_iterator_full_ok_mods [(NONE,tops)] [] cx it` by
+            (irule (cj 3 (Q.SPECL [`[(NONE,tops)]`,`[]`]
+              body_sim_full_mutual_mods_widened)) >>
+             simp[alistTheory.ALOOKUP_def,
+                  constSubstModsTheory.consts_env_mods_singleton,
+                  constSubstModsTheory.subst_consts_mods_singleton] >>
+             metis_tac[check_single_exports_from_is_some_wide]) >>
+          metis_tac[body_iterator_full_ok_mods_singleton])
+      >- metis_tac[body_iterator_no_singleton_source_wide])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      Cases_on `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
+      rpt strip_tac
+      >- (TRY (qpat_assum `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (strip_assume_tac)) >>
+          TRY (qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (qspec_then `tops` (assume_tac o SIMP_RULE bool_ss []))) >>
+          `body_for_full_ok_mods [(NONE,tops)] [] cx tyv nm body vs` by
+            (irule (cj 4 (Q.SPECL [`[(NONE,tops)]`,`[]`]
+              body_sim_full_mutual_mods_widened)) >>
+             simp[alistTheory.ALOOKUP_def,
+                  constSubstModsTheory.consts_env_mods_singleton,
+                  constSubstModsTheory.subst_consts_mods_singleton] >>
+             metis_tac[check_single_exports_from_is_some_wide]) >>
+          metis_tac[body_for_full_ok_mods_singleton])
+      >- metis_tac[body_for_no_singleton_source_wide])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      Cases_on `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
+      rpt strip_tac
+      >- (TRY (qpat_assum `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (strip_assume_tac)) >>
+          TRY (qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (qspec_then `tops` (assume_tac o SIMP_RULE bool_ss []))) >>
+          `body_expr_full_ok_mods [(NONE,tops)] [] cx e` by
+            (irule (cj 5 (Q.SPECL [`[(NONE,tops)]`,`[]`]
+              body_sim_full_mutual_mods_widened)) >>
+             simp[alistTheory.ALOOKUP_def,
+                  constSubstModsTheory.consts_env_mods_singleton,
+                  constSubstModsTheory.subst_consts_mods_singleton] >>
+             metis_tac[check_single_exports_from_is_some_wide]) >>
+          metis_tac[body_expr_full_ok_mods_singleton])
+      >- metis_tac[body_expr_no_singleton_source_wide])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      Cases_on `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
+      rpt strip_tac
+      >- (TRY (qpat_assum `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (strip_assume_tac)) >>
+          TRY (qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (qspec_then `tops` (assume_tac o SIMP_RULE bool_ss []))) >>
+          `body_exprs_full_ok_mods [(NONE,tops)] [] cx es` by
+            (irule (cj 6 (Q.SPECL [`[(NONE,tops)]`,`[]`]
+              body_sim_full_mutual_mods_widened)) >>
+             simp[alistTheory.ALOOKUP_def,
+                  constSubstModsTheory.consts_env_mods_singleton,
+                  constSubstModsTheory.subst_consts_mods_singleton] >>
+             metis_tac[check_single_exports_from_is_some_wide]) >>
+          metis_tac[body_expr_full_ok_mods_singleton])
+      >- metis_tac[body_exprs_no_singleton_source_wide])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      Cases_on `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
+      rpt strip_tac
+      >- (TRY (qpat_assum `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (strip_assume_tac)) >>
+          TRY (qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (qspec_then `tops` (assume_tac o SIMP_RULE bool_ss []))) >>
+          `body_base_target_full_ok_mods [(NONE,tops)] [] cx t` by
+            (irule (cj 7 (Q.SPECL [`[(NONE,tops)]`,`[]`]
+              body_sim_full_mutual_mods_widened)) >>
+             simp[alistTheory.ALOOKUP_def,
+                  constSubstModsTheory.consts_env_mods_singleton,
+                  constSubstModsTheory.subst_consts_mods_singleton] >>
+             metis_tac[check_single_exports_from_is_some_wide]) >>
+          metis_tac[body_base_target_full_ok_mods_singleton])
+      >- metis_tac[body_base_target_no_singleton_source_wide])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      Cases_on `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
+      rpt strip_tac
+      >- (TRY (qpat_assum `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (strip_assume_tac)) >>
+          TRY (qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (qspec_then `tops` (assume_tac o SIMP_RULE bool_ss []))) >>
+          `body_base_target_full_ok_mods [(NONE,tops)] [] cx t` by
+            (irule (cj 8 (Q.SPECL [`[(NONE,tops)]`,`[]`]
+              body_sim_full_mutual_mods_widened)) >>
+             simp[alistTheory.ALOOKUP_def,
+                  constSubstModsTheory.consts_env_mods_singleton,
+                  constSubstModsTheory.subst_consts_mods_singleton] >>
+             metis_tac[check_single_exports_from_is_some_wide]) >>
+          metis_tac[body_base_target_full_ok_mods_singleton])
+      >- metis_tac[body_base_target_no_singleton_source_wide])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      Cases_on `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
+      rpt strip_tac
+      >- (TRY (qpat_assum `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (strip_assume_tac)) >>
+          TRY (qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (qspec_then `tops` (assume_tac o SIMP_RULE bool_ss []))) >>
+          `body_tuple_target_full_ok_mods [(NONE,tops)] [] cx g v` by
+            (irule (cj 9 (Q.SPECL [`[(NONE,tops)]`,`[]`]
+              body_sim_full_mutual_mods_widened)) >>
+             simp[alistTheory.ALOOKUP_def,
+                  constSubstModsTheory.consts_env_mods_singleton,
+                  constSubstModsTheory.subst_consts_mods_singleton] >>
+             metis_tac[check_single_exports_from_is_some_wide]) >>
+          metis_tac[body_tuple_target_full_ok_mods_singleton])
+      >- metis_tac[body_tuple_target_no_singleton_source_wide])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      Cases_on `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
+      rpt strip_tac
+      >- (TRY (qpat_assum `?tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (strip_assume_tac)) >>
+          TRY (qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]`
+            (qspec_then `tops` (assume_tac o SIMP_RULE bool_ss []))) >>
+          `body_tuple_targets_full_ok_mods [(NONE,tops)] [] cx gs vs` by
+            (irule (cj 10 (Q.SPECL [`[(NONE,tops)]`,`[]`]
+              body_sim_full_mutual_mods_widened)) >>
+             simp[alistTheory.ALOOKUP_def,
+                  constSubstModsTheory.consts_env_mods_singleton,
+                  constSubstModsTheory.subst_consts_mods_singleton] >>
+             metis_tac[check_single_exports_from_is_some_wide]) >>
+          metis_tac[body_tuple_target_full_ok_mods_singleton])
+      >- metis_tac[body_tuple_target_no_singleton_source_wide])
+QED
+
+
+Theorem body_sim_full_mutual:
+  (!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_stmt s) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
+                 stmt_loop_calls_ok [(NONE,tops)] s) ==>
+    body_stmt_full_ok cx s) /\
+  (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_stmts ss) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
+                 stmts_loop_calls_ok [(NONE,tops)] ss) ==>
+    body_stmts_full_ok cx ss) /\
+  (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_iterator it) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_iterator_full_ok cx it) /\
+  (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_stmts body) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss)) /\
+                 stmts_loop_calls_ok [(NONE,tops)] body) ==>
+    body_for_full_ok cx tyv nm body vs) /\
+  (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_expr e) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_expr_full_ok cx e) /\
+  (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_exprs es) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_exprs_full_ok cx es) /\
+  (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_target t) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_base_target_full_ok cx t) /\
+  (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_atarget g) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_tuple_target_full_ok cx g v) /\
+  (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_atargets gs) /\
+                 struct_args_unique tops /\
+                 (!vis mut nr raw fn args dflts ret ss.
+                    MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+                    stmts_loop_calls_ok [(NONE,tops)]
+                      (subst_consts_stmts (module_consts_env tops []) ss))) ==>
+    body_tuple_targets_full_ok cx gs vs)
+Proof
+  rpt conj_tac
+  >- (rpt gen_tac >> rpt strip_tac >>
+      irule (cj 1 body_sim_full_mutual_guarded_wide) >>
+      metis_tac[])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      irule (cj 2 body_sim_full_mutual_guarded_wide) >>
+      metis_tac[])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      irule (cj 3 body_sim_full_mutual_guarded_wide) >>
+      metis_tac[])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      irule (cj 4 body_sim_full_mutual_guarded_wide) >>
+      metis_tac[])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      irule (cj 5 body_sim_full_mutual_guarded_wide) >>
+      metis_tac[])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      irule (cj 6 body_sim_full_mutual_guarded_wide) >>
+      metis_tac[])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      irule (cj 7 body_sim_full_mutual_guarded_wide) >>
+      metis_tac[])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      irule (cj 9 body_sim_full_mutual_guarded_wide) >>
+      metis_tac[])
+  >- (rpt gen_tac >> rpt strip_tac >>
+      irule (cj 10 body_sim_full_mutual_guarded_wide) >>
+      metis_tac[])
+QED
+
+
+Theorem body_stmts_sim_full:
+  !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
+   ret_ty lctx RetQ ss es.
+    body_inv tops ctx cenv cx /\
+    (!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
+       IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,ts)]) /\
+       EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+         (int_calls_stmts ss)) /\
+    shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
+    supported_stmts tops bindings ss /\
+    (!vis mut nr raw fn args dflts ret body.
+       MEM (FunctionDecl vis mut nr raw fn args dflts ret body) tops ==>
+       stmts_loop_calls_ok [(NONE,tops)] body) /\
+    stmts_loop_calls_ok [(NONE,tops)] ss /\
+    (!target. supported_stmts_expr_exists
+       (expr_abi_decode_target_root target) ss ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmts env ret_ty ss = SOME env' /\
+    stmts_exprs_ok cenv ss /\
+    call_evaluation_safe cx (int_calls_stmts ss) /\
+    EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (int_calls_stmts ss) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmts_env cenv lctx ret_ty ss)
+      (stmts_env (gas_shadow_env T cenv) lctx ret_ty (MAP gas_shadow_stmt ss))
+      (eval_stmts cx ss) es
+Proof
+  rpt strip_tac >>
+  `!vis mut nr raw fn args dflts ret body.
+      MEM (FunctionDecl vis mut nr raw fn args dflts ret body) tops ==>
+      stmts_loop_calls_ok [(NONE,tops)] (subst_consts_stmts (module_consts_env tops []) body)` by
+    (qpat_assum `body_const_cells_agree _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
+     `cx_tops cx = tops` by
+       fs[gasContextTheory.cx_tops_def, vyperContextTheory.get_module_code_def,
+          alistTheory.ALOOKUP_def] >>
+     rpt strip_tac >>
+     drule checked_subst_consts_loop_calls_ok >>
+     simp[] >> disch_then irule >> gvs[] >> metis_tac[]) >>
+  `!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
+        struct_args_unique ts /\
+        (!vis mut nr raw fn args dflts ret body.
+           MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
+           stmts_loop_calls_ok [(NONE,ts)]
+             (subst_consts_stmts (module_consts_env ts []) body)) /\
+        stmts_loop_calls_ok [(NONE,ts)] ss` by (drule_then assume_tac body_inv_contract >>
+          drule_then assume_tac contract_inv_singleton_source_modules >>
+          simp[] >> first_assum ACCEPT_TAC) >>
+  metis_tac[body_sim_full_mutual, body_stmts_full_ok_def]
 QED
 
 Theorem body_sim_header_post_equiv:
