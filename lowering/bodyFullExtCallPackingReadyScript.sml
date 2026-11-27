@@ -6,8 +6,9 @@ Ancestors
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
   localPtrsProps abiEncodeValuesMetadata abiDecodeRanges abiDecoderMembers
   bodyFullIntCallReturnFrame bodyPtrBytestringBuiltinsWindowGhost
-  exprLoweringProps exprSimWordArgs wordArgsPtr exprSimProps exprSimExtCallCase
+  exprLoweringProps exprSimAggregates exprSimWordArgs wordArgsPtr exprSimProps exprSimExtCallCase
   emitHelperProps compileEnv fragGasOriginPtrLoop fragGasOriginPtr list pair words
+Libs horizonTypeLib
 
 Theorem extcall_packing_observed_domain:
   valid_horizon cx st H obs ==> storage_trace_domain cx st obs
@@ -642,21 +643,20 @@ Resume extcall_request_packing_ready[nonempty]:
      simp[NoAsms,venomMemDefsTheory.allocas_non_overlapping_def] >>
      disch_then (qspecl_then [`se.cs_next_id`,`aid`,`w2n rw`,`n`,`b`,`k`] mp_tac) >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  `cenv.ce_is_ctor ==> !name tv v imm_off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc imm_off) /\
+  `cenv.ce_is_ctor ==> !src name tv v imm_off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc imm_off) /\
      FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+       | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
      regions_disjoint (w2n rw) cap imm_off (type_memory_size tv)` by
-    (disch_tac >> rpt gen_tac >> strip_tac >>
+    (disch_tac >> rpt gen_tac >>
+     disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
      `stmt_state_rel HH ctx func cenv cx ee t` by first_assum (drule_then ACCEPT_TAC) >>
-     qpat_assum `stmt_state_rel HH ctx func cenv cx ee t`
-       (mp_tac o MATCH_MP bodyFullIntCallReturnFrameTheory.return_stmt_immutable_sep) >>
-     simp[NoAsms,exprLoweringPropsTheory.immutable_alloca_sep_def] >>
-     disch_then (mp_tac o CONJUNCT2) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >>
-     disch_then (drule_all_then strip_assume_tac) >>
-     qpat_assum `!inst b sz. _ ==> regions_disjoint _ _ b sz`
-       (qspecl_then [`inst`,`w2n rw`,`n`] mp_tac) >>
+     mp_tac (Q.INST [`inst` |-> `inst`, `b` |-> `w2n (rw:bytes32)`, `sz` |-> `n`,
+         `es` |-> `ee`, `H` |-> `HH`]
+        (horizonTypeLib.at_horizon_named "H" aggregate_alloca_immutable_sep_source)) >>
+     impl_tac >- simp[] >>
+     disch_then (drule_then (qspecl_then [`src`,`name`,`tv`,`v`,`imm_off`] mp_tac)) >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `!dv w tv. dopt = SOME dv /\ ~is_word_type dt /\
        eval_operand def t = SOME w /\ evaluate_type (get_tenv cx) dt = SOME tv ==>

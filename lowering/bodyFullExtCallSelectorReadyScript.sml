@@ -1,5 +1,6 @@
 Theory bodyFullExtCallSelectorReady
 Ancestors
+  exprSimAggregates
   bodyFullExtCallBufferSetup bodyFullExtCallPacking calldataOverwritePtr
   typedCopyOriginPtrFields typedMemoryCopy exprSimAlloc emitHelperProps
   exprLoweringProps fragGasOriginPtrLoop fragGasOriginPtrDead bodyPtrDefs
@@ -9,6 +10,7 @@ Ancestors
   loweringShapeRules venomMemDefs finite_map exprSimExtCallCase exprSafeOperand
   bodyPtrBytestringBuiltinsWindowGhost exprSimProps loweringPosts
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
+Libs horizonTypeLib
 
 (* Retain the write's exact memory and ghost frame at the PC after MSTORE.
    The short selector-tail post forgets these once it has read the four bytes. *)
@@ -657,22 +659,20 @@ Proof
   conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac
-  >- (strip_tac >> rpt gen_tac >> strip_tac >>
+  >- (disch_tac >> rpt gen_tac >>
+      disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
       `stmt_state_rel H ctx func cenv cx ee t` by simp[] >>
-      qpat_assum `stmt_state_rel H _ _ _ _ ee t`
-        (assume_tac o MATCH_MP (cj 5 (iffLR stmt_state_rel_def))) >>
-      `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-              inst.inst_id = se.cs_next_id` by
-        (drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
-         goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def]) >>
-      qpat_assum `immutable_alloca_sep func cenv cx ee t`
-        (mp_tac o CONJUNCT2 o REWRITE_RULE [immutable_alloca_sep_def]) >>
-      simp[] >> disch_then (qspecl_then [`name`,`tv`,`v`,`off'`] mp_tac) >>
-      simp[] >> strip_tac >>
-      `regions_disjoint off' (type_memory_size tv) (w2n w) n` by
-        (qpat_assum `!i b sz. MEM i (fn_insts func) /\ _ ==> regions_disjoint _ _ _ _`
-           (qspecl_then [`inst`,`w2n w`,`n`] mp_tac) >> simp[]) >>
-      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+      Q.SUBGOAL_THEN
+        `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+                inst.inst_id = se.cs_next_id` (qx_choose_then `inst` strip_assume_tac)
+      >- (drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+          goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def]) >>
+      mp_tac (Q.INST [`inst` |-> `inst`, `b` |-> `w2n (w:bytes32)`, `sz` |-> `n`,
+          `es` |-> `ee`]
+         (horizonTypeLib.at_horizon_named "H" aggregate_alloca_immutable_sep_source)) >>
+      impl_tac >- simp[] >>
+      disch_then (drule_then (qspecl_then [`src`,`name`,`tv`,`v`,`off'`] mp_tac)) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   rpt gen_tac >> strip_tac >>
   qpat_assum `!dv. _ ==> ?dw aid tv. _` (drule_all_then strip_assume_tac) >>
   `tv' = tv /\ dw = w'` by

@@ -843,8 +843,40 @@ Proof
 QED
 
 (* Oracle tail, independent of the expression producing calldata. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem raw_call_kind_memory_oracle_exec[local]:
+  stmt_state_rel H ctx func cenv cx es s /\ inst.inst_outputs = [out] /\
+  w2w aw = target /\
+  w2n (if call_ty = RegularCall then vw else 0w) =
+    (case value_opt of NONE => 0 | SOME n => n) /\
+  (call_ty = StaticCall \/ cx.txn.is_static) = IS_NONE value_opt /\
+  (!g. gas_cap = SOME g ==> g = w2n gas) /\
+  (if call_ty = DelegateCall then take_delegate_outcome else take_call_outcome)
+    gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es =
+    (INL (rq,outcome),es1) /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+     b + sz <= w2n ro \/ w2n ro + w2n rz <= b) /\
+  (cenv.ce_is_ctor ==> !src name tv v off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
+    off + type_memory_size tv <= w2n ro \/ w2n ro + w2n rz <= off) ==>
+  ?t. (if call_ty = DelegateCall then
+         exec_delegatecall inst s gas aw ao az ro rz
+       else exec_ext_call inst s gas aw
+         (if call_ty = RegularCall then vw else 0w) ao az ro rz
+         (call_ty = StaticCall \/ s.vs_call_ctx.cc_static)) =
+        OK (update_var out (if outcome.co_success then 1w else 0w) t) /\
+    t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
+      vs_accounts := t.vs_accounts; vs_transient := t.vs_transient;
+      vs_logs := t.vs_logs; vs_pending_deletions := t.vs_pending_deletions;
+      vs_returndata := t.vs_returndata; vs_memory := t.vs_memory |> /\
+    t.vs_memory = (write_memory_with_expansion (w2n ro)
+      (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
+    t.vs_returndata = outcome.co_returnData /\
+    mem_bytes_at (w2n ro) (LENGTH (TAKE (w2n rz) outcome.co_returnData)) t.vs_memory =
+      TAKE (w2n rz) outcome.co_returnData /\
+    state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) t
 Proof
   strip_tac >>
   `state_rel H func cenv cx es s` by fs[stmt_state_rel_def] >>
@@ -867,7 +899,8 @@ Proof
       (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
     t.vs_returndata = outcome.co_returnData /\
     (local_ptrs_rel func cenv es.scopes t /\
-     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t ==>
+     (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+        immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t) ==>
      state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) t)` by
     (Cases_on `call_ty` >> fs[] >>
      FIRST [irule (SIMP_RULE (srw_ss()) [] exec_delegate_call_oracle_step),
@@ -877,17 +910,23 @@ Proof
   qabbrev_tac `payload = TAKE (w2n rz) outcome.co_returnData` >>
   qabbrev_tac `dst = w2n ro` >>
   `LENGTH payload <= w2n rz` by simp[Abbr `payload`, LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF] >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-     (write_memory_with_expansion dst payload s)` by
-    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+    immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es
+      (write_memory_with_expansion dst payload s)` by
+    (gen_tac >> disch_tac >>
+     irule immutables_rel_mem_agree >> qexists_tac `s` >>
      conj_tac >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity] >>
      conj_tac >- simp[write_memory_with_expansion_def, LET_THM] >>
-     reverse conj_tac >- fs[state_rel_def] >>
+     reverse conj_tac
+     >- (fs[state_rel_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
      rpt strip_tac >> irule hash_write_memory_disjoint >>
-     first_x_assum drule_all >> decide_tac) >>
+     qpat_x_assum `cenv.ce_is_ctor ==> !src name tv v off. _` drule >>
+     disch_then (qspecl_then [`src`, `name`, `tv`, `v`, `off`] mp_tac) >>
+     simp[Abbr `dst`] >> decide_tac) >>
   `stmt_state_rel H ctx func cenv cx es (write_memory_with_expansion dst payload s)` by
     (irule write_memory_stmt_state_rel >> simp[] >>
-     rpt strip_tac >> first_x_assum drule >> simp[Abbr `dst`] >> decide_tac) >>
+     conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[Abbr `dst`] >> decide_tac) >>
+     first_assum ACCEPT_TAC) >>
   `s' = (write_memory_with_expansion dst payload s) with
     <| vs_outcomes := s'.vs_outcomes; vs_requests := s'.vs_requests;
        vs_accounts := s'.vs_accounts; vs_transient := s'.vs_transient;
@@ -900,53 +939,18 @@ Proof
      rpt (pop_assum kall_tac) >>
      simp[venom_state_component_equality, write_memory_with_expansion_def, LET_THM]) >>
   `local_ptrs_rel func cenv es.scopes s' /\
-   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s'` by
+   (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s')` by
     (qpat_x_assum `stmt_state_rel H _ _ _ _ _ (write_memory_with_expansion _ _ _)` mp_tac >>
      qpat_x_assum `_ = _ with <| vs_outcomes := _; vs_requests := _;
        vs_accounts := _; vs_transient := _; vs_logs := _;
        vs_pending_deletions := _; vs_returndata := _ |>` mp_tac >>
      rpt (pop_assum kall_tac) >> strip_tac >> once_asm_rewrite_tac[] >>
      simp[local_ptrs_rel_oracle_fields, stmt_state_rel_def, state_rel_def,
-          immutables_rel_def] >> strip_tac >> simp[]) >>
+          immutables_rel_def] >> strip_tac >> simp[] >>
+     metis_tac[optionTheory.IS_SOME_EXISTS]) >>
   qexists_tac `s'` >> simp[hash_write_memory_read_self] >>
   metis_tac[]
-QED
-*)
-Theorem raw_call_kind_memory_oracle_exec[local]:
-  stmt_state_rel H ctx func cenv cx es s /\ inst.inst_outputs = [out] /\
-  w2w aw = target /\
-  w2n (if call_ty = RegularCall then vw else 0w) =
-    (case value_opt of NONE => 0 | SOME n => n) /\
-  (call_ty = StaticCall \/ cx.txn.is_static) = IS_NONE value_opt /\
-  (!g. gas_cap = SOME g ==> g = w2n gas) /\
-  (if call_ty = DelegateCall then take_delegate_outcome else take_call_outcome)
-    gas_cap target (read_memory (w2n ao) (w2n az) s) value_opt es =
-    (INL (rq,outcome),es1) /\
-  (!name b sz. local_region cenv es.scopes s name b sz ==>
-     b + sz <= w2n ro \/ w2n ro + w2n rz <= b) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
-    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
-    off + type_memory_size tv <= w2n ro \/ w2n ro + w2n rz <= off) ==>
-  ?t. (if call_ty = DelegateCall then
-         exec_delegatecall inst s gas aw ao az ro rz
-       else exec_ext_call inst s gas aw
-         (if call_ty = RegularCall then vw else 0w) ao az ro rz
-         (call_ty = StaticCall \/ s.vs_call_ctx.cc_static)) =
-        OK (update_var out (if outcome.co_success then 1w else 0w) t) /\
-    t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
-      vs_accounts := t.vs_accounts; vs_transient := t.vs_transient;
-      vs_logs := t.vs_logs; vs_pending_deletions := t.vs_pending_deletions;
-      vs_returndata := t.vs_returndata; vs_memory := t.vs_memory |> /\
-    t.vs_memory = (write_memory_with_expansion (w2n ro)
-      (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
-    t.vs_returndata = outcome.co_returnData /\
-    mem_bytes_at (w2n ro) (LENGTH (TAKE (w2n rz) outcome.co_returnData)) t.vs_memory =
-      TAKE (w2n rz) outcome.co_returnData /\
-    state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) t
-Proof
-  cheat
 QED
 
 (* A fresh result variable is disjoint from source locals even after adoption. *)
@@ -979,24 +983,6 @@ Proof
   drule raw_call_take_adopt_fields >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `es'.scopes = es.scopes /\ es'.immutables = es.immutables` by
-    (drule raw_call_kind_take_adopt_fields >> simp[]) >>
-  `immutable_base_zero cenv t` by
-    (irule immutable_base_zero_frame >> qexists_tac `s` >>
-     fs[stmt_state_rel_def, lookup_var_def]) >>
-  irule stmt_state_rel_allocas_frame >> simp[] >>
-  conj_tac
-  >- (irule immutable_alloca_sep_fields >>
-      qexistsl_tac [`s`,`es`] >> gvs[] >>
-      reverse conj_tac >- fs[stmt_state_rel_def] >>
-      simp[local_region_def, lookup_var_def] >> metis_tac[]) >>
-  qexistsl_tac [`es`,`s`] >> simp[] >> first_assum ACCEPT_TAC
-QED
-*)
 Theorem raw_call_oracle_stmt_frame[local]:
   (if delegate then take_delegate_outcome else take_call_outcome)
     gas_cap target calldata value_opt es = (INL (rq,outcome),es1) /\
@@ -1011,7 +997,23 @@ Theorem raw_call_oracle_stmt_frame[local]:
     LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   stmt_state_rel H ctx func cenv cx es' t
 Proof
-  cheat
+  strip_tac >>
+  `es'.scopes = es.scopes /\ es'.immutables = es.immutables` by
+    (drule raw_call_kind_take_adopt_fields >> simp[]) >>
+  `immutable_base_zero cenv t` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     fs[stmt_state_rel_def, lookup_var_def]) >>
+  qpat_x_assum `es' = SND _` (SUBST_ALL_TAC o SYM) >>
+  irule stmt_state_rel_allocas_frame >>
+  qpat_assum `stmt_state_rel H ctx func cenv cx es s` (irule_at Any) >>
+  qpat_assum `state_rel H func cenv cx es' t` (irule_at Any) >>
+  simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> TRY disch_tac >>
+  irule immutable_alloca_sep_fields >> qexistsl_tac [`s`,`es`] >>
+  simp[local_region_def, lookup_var_def] >>
+  qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+    (mp_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+  metis_tac[]
 QED
 
 
@@ -1213,10 +1215,11 @@ Theorem raw_call_kind_oracle_emit_run_aged:
     (INL (rq,outcome),es1) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
     b + sz <= w2n ro \/ w2n ro + w2n (n2w cap : bytes32) <= b) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src name tv v off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     off + type_memory_size tv <= w2n ro \/
       w2n ro + w2n (n2w cap : bytes32) <= off) ==>
   ?t u. run_inst_seq (emitted_insts sa sb) s = OK u /\
@@ -1327,10 +1330,11 @@ Theorem raw_call_oracle_emit_run_aged:
     (INL (rq,outcome),es1) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
     b + sz <= w2n ro \/ w2n ro + w2n (n2w cap : bytes32) <= b) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src name tv v off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     off + type_memory_size tv <= w2n ro \/
       w2n ro + w2n (n2w cap : bytes32) <= off) ==>
   ?t u. run_inst_seq (emitted_insts sa sb) s = OK u /\
@@ -1453,6 +1457,28 @@ Proof
   simp[vfmConstantsTheory.word_size_def] >> decide_tac
 QED
 
+
+Theorem raw_call_outbuf_alloca_inst:
+  compile_raw_call_outbuf cap sa = ((ov,op),sm) /\ fn_has_code sa sm func ==>
+  ?alloc. MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
+    alloc.inst_id = sa.cs_next_id
+Proof
+  strip_tac >>
+  `?alloc. MEM alloc (emitted_insts sa sm) /\ alloc.inst_opcode = ALLOCA /\
+    alloc.inst_id = sa.cs_next_id` by
+    (Cases_on `cap = 0`
+     >- (gvs[compile_raw_call_outbuf_def, contextTheory.compile_alloc_buffer_def,
+              emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+              fresh_id_def, fresh_var_def, emit_def, emitted_insts_def,
+              rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]) >>
+     `0 < cap` by decide_tac >>
+     drule_all raw_call_outbuf_positive_code >> strip_tac >>
+     qexists_tac `mk_inst sa.cs_next_id ALLOCA
+       [Lit (n2w (((cap+31) DIV 32)*32+32))]
+       [STRING #"%" (toString sa.cs_next_var)]` >>
+     asm_rewrite_tac[] >> simp[mk_inst_def]) >>
+  metis_tac[exprSimHashTheory.hash_emitted_inst_mem]
+QED
 
 Theorem raw_call_outbuf_allocation_site:
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\

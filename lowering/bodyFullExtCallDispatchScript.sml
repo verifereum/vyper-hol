@@ -442,13 +442,17 @@ Proof
     b + sz <= w2n ro \/ w2n ro + cap <= b` by
     (rpt strip_tac >> qpat_x_assum `!name b sz. _ ==> regions_disjoint _ _ _ _` drule >>
      simp[regions_disjoint_def, DISJ_COMM]) >>
-  `(cenv.ce_is_ctor ==> !name tv v immoff.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc immoff) /\
+  `(cenv.ce_is_ctor ==> !src name tv v immoff.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc immoff) /\
      FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+       | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
      immoff + type_memory_size tv <= w2n ro \/ w2n ro + cap <= immoff)` by
-    (rpt strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >> simp[regions_disjoint_def, DISJ_COMM]) >>
+    (disch_tac >> rpt gen_tac >>
+     disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+     disch_then (qspecl_then [`src`,`name`,`tv`,`v`,`immoff`] mp_tac) >>
+     simp[regions_disjoint_def, DISJ_COMM]) >>
   `!hz. valid_horizon cx st0 hz ee.storage_trace ==>
      ?t u. run_inst_seq (emitted_insts sp sj) s = OK u /\
        u = update_var (STRING #"%" (toString sp.cs_next_var)) (bool_to_word oc.co_success) t /\

@@ -23,20 +23,22 @@ Theorem raw_call_output_range:
   op_prov G out = SOME (ob,bytes_alloc) /\ op_taint tn out = {} /\
   (!name lb sz. local_region cenv ee.scopes t name lb sz ==>
     regions_disjoint ob bytes_alloc lb sz) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src name tv v off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     regions_disjoint off (type_memory_size tv) ob bytes_alloc) ==>
   ro < dimword (:256) /\ (cap <> 0 ==> lo <= ro) /\
   (cap <> 0 ==> ro + cap <= t.vs_alloca_next) /\
   (cap <> 0 ==> ?p. out = Var p /\ ptr_covers G tn p t cap) /\
   (!name lb sz. local_region cenv ee.scopes t name lb sz ==>
     regions_disjoint ro cap lb sz) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src name tv v off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     off + type_memory_size tv <= ro \/ ro + cap <= off)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -62,9 +64,11 @@ Proof
       simp[op_prov_def,eval_operand_def,ptr_covers_def,w2n_n2w])
   >- (rpt strip_tac >> first_x_assum drule >>
       simp[regions_disjoint_def] >> decide_tac) >>
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  qpat_assum `_ ==> !name tv v off. _ ==> regions_disjoint _ _ _ _` drule >>
-  disch_then drule_all >> simp[regions_disjoint_def] >> decide_tac
+  disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  qpat_assum `_ ==> !src name tv v off. _ ==> regions_disjoint _ _ _ _` drule >>
+  disch_then (qspecl_then [`src`,`name`,`tv`,`v`,`off`] mp_tac) >>
+  impl_tac >- metis_tac[] >> simp[regions_disjoint_def] >> decide_tac
 QED
 
 Theorem raw_call_prepared_tail_prefix:
@@ -118,13 +122,6 @@ Theorem raw_call_prepared_tail_prefix:
     (!name lb sz. local_region cenv esK.scopes t7 name lb sz ==>
       regions_disjoint ob (if flags.rcf_max_outsize = 0 then 0
                            else ((flags.rcf_max_outsize+31) DIV 32)*32+32) lb sz) /\
-    (cenv.ce_is_ctor ==> !name tv v off.
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
-      FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
-      regions_disjoint off (type_memory_size tv) ob
-        (if flags.rcf_max_outsize = 0 then 0
-         else ((flags.rcf_max_outsize+31) DIV 32)*32+32)) /\
     ~t7.vs_halted /\ t7.vs_current_bb = s7.cs_current_bb /\
     t7.vs_inst_idx = LENGTH s7.cs_current_insts /\ allocas_from lo t7 /\
     ghost_inv_at (DF H) lo dframe cenv cx esK G7 tn7 t7) ==>
@@ -181,7 +178,7 @@ Proof
 QED
 
 Resume raw_call_prepared_tail_prefix[successful_take]:
-  `ci_mono sa s7` by
+  `ci_mono sa s6 /\ ci_mono s6 s7 /\ ci_mono sa s7` by
     (`ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\
       ci_mono s3 s4 /\ ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7` by
        (rpt conj_tac
@@ -281,15 +278,35 @@ Resume raw_call_prepared_tail_prefix[prepared_operands]:
      first_x_assum irule >> simp[mem_agree_outside_def]) >>
   qabbrev_tac `ro = if cap = 0 then ob else ob + 32` >>
   qabbrev_tac `bytes_alloc = if cap = 0 then 0 else ((cap+31) DIV 32)*32+32` >>
+  `fn_has_code s6 s7 func` by
+    (qpat_assum `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ s7 = (result,sb)` mp_tac >>
+     qpat_assum `ci_mono sa s6` mp_tac >>
+     qpat_assum `ci_mono s6 s7` mp_tac >>
+     qpat_assum `fn_has_code sa sb func` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[fn_has_code_mid,ci_mono_def,ci_mono_compile_raw_call_finish,pairTheory.SND]) >>
+  `cenv.ce_is_ctor ==> !src name tv v off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
+     regions_disjoint off (type_memory_size tv) ob bytes_alloc` by
+    (mp_tac (Q.INST [`sa` |-> `s6`, `sb` |-> `s7`, `cap` |-> `cap`,
+        `es` |-> `esK`, `t` |-> `t7`, `sz` |-> `bytes_alloc`,
+        `H` |-> `storage_trace_horizon esK.storage_trace`]
+       (INST_TYPE [alpha |-> ``:256``] raw_call_outbuf_immutable_separation)) >>
+     impl_tac >- simp[] >>
+     disch_then ACCEPT_TAC) >>
   `ro < dimword (:256) /\ (cap <> 0 ==> lo <= ro) /\
    (cap <> 0 ==> ro + cap <= t7.vs_alloca_next) /\
    (cap <> 0 ==> ?p. op = Var p /\ ptr_covers G7 tn7 p t7 cap) /\
    (!name lb sz. local_region cenv esK.scopes t7 name lb sz ==>
      regions_disjoint ro cap lb sz) /\
-   (cenv.ce_is_ctor ==> !name tv v off.
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+   (cenv.ce_is_ctor ==> !src name tv v off.
+      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+      FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+        | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
       off + type_memory_size tv <= ro \/ ro + cap <= off)` by
     (irule raw_call_output_range >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
