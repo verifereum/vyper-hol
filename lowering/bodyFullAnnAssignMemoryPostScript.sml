@@ -856,10 +856,52 @@ Theorem annassign_full_rhs_from_entry:
       (\H res mid gt rr. expr_exit res rr /\ halt_exit H cx mid res rr /\
         (ctx_has_dalloca ctx ==> !s. rr = Halt s ==> allocas_below_fmp s))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `ci_mono sa a /\ ci_mono a b` by
+    metis_tac[ci_mono_compile_alloc_buffer,ci_mono_lower_value_compile_expr,
+              pairTheory.SND] >>
+  `sa.cs_next_var <= a.cs_next_var /\ a.cs_next_var <= b.cs_next_var /\
+   sa.cs_next_id <= a.cs_next_id` by fs[ci_mono_def] >>
+  `!x. not_fresh_at sa x ==> not_fresh_at a x /\ not_fresh_at b x` by
+    (rpt strip_tac >> metis_tac[not_fresh_at_mono,arithmeticTheory.LESS_EQ_TRANS]) >>
+  `not_fresh_at b p /\ local_ptrs_reserved ce b` by
+    (conj_tac >- metis_tac[not_fresh_at_mono] >>
+     irule local_ptrs_reserved_next_var >> qexists_tac `a` >> simp[]) >>
+  `ce.ce_is_ctor = old.ce_is_ctor /\ ce.ce_modules = old.ce_modules /\
+   ce.ce_return_buf = old.ce_return_buf /\ ce.ce_return_pc = old.ce_return_pc` by
+    (qpat_assum `ce with <|ce_vars := _; ce_var_type := _;
+                         ce_dynarray_capacity := _|> = old` mp_tac >>
+     simp[compile_env_component_equality]) >>
+  `(!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x) /\
+   (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x)` by
+    (fs[ret_pc_ok_def] >> metis_tac[]) >>
+  simp[] >>
+  `return_buf_frame d ce a entry` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`old`,`s0`,`sa`] >>
+     simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp entry` by
+    (`stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func ce cx es entry` by
+       metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `stmt_state_rel _ ctx func ce cx es entry`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`,`a`,`b`,`shadow_a`,`shadow_b`,
+    `op`,`entry`,`Ga`,`tna`] mp_tac) >>
+  (impl_tac >-
+    (asm_rewrite_tac[] >> rpt conj_tac
+     >- (qpat_assum `!H. dead_lo_ok H (DF H) lo old cx` mp_tac >>
+         simp[bodyPtrDefsTheory.dead_lo_ok_def])
+     >~ [`gas_admissible _ expr_res_ok es`]
+     >- metis_tac[annassign_admissible_rhs] >>
+     fs[ret_pc_ok_def] >> metis_tac[])) >>
+  disch_tac >> irule gas_outcome_full_post_source >>
+  goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >>
+  simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  suspend "success"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_full_rhs_from_entry[success]:
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
@@ -897,9 +939,7 @@ Resume annassign_full_rhs_from_entry[success]:
   fs[expr_post_def,bodyPtrDefsTheory.ghost_kept_at_def] >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, metis_tac[]]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_full_rhs_from_entry[horizon]:
   qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >> strip_tac >>
   drule_at (Pat `f st = _`) vyperStorageFootprintTheory.valid_horizon_frame >>
@@ -908,9 +948,7 @@ Resume annassign_full_rhs_from_entry[horizon]:
        vyperStorageTraceTheory.storage_trace_frame_read_result] >>
   disch_then drule >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_full_rhs_from_entry[taint]:
   fs[bodyPtrDefsTheory.ghost_kept_at_def] >>
   qpat_assum `alloca_frame old es sa s0 ce es entry`
@@ -921,11 +959,8 @@ Resume annassign_full_rhs_from_entry[taint]:
   simp[arithmeticTheory.ADD_COMM] >>
   (impl_tac >- (rpt strip_tac >> first_x_assum drule >> decide_tac)) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise annassign_full_rhs_from_entry
-*)
 
 (* Capacity-generic allocation, before the RHS or empty-value execution. *)
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
