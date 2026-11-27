@@ -10,7 +10,7 @@ Ancestors
 
 (* The legacy expression invariant can expose an inactive bare global
    only as a constant. An immutable layout cannot allocate such a cell. *)
-Theorem immutable_store_layout_active[local]:
+Theorem immutable_store_layout_active:
   expr_sim_inv ce cx env es /\
   immutable_section_layout_mods ce.ce_modules ce /\
   FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) ==>
