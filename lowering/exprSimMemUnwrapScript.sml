@@ -1243,21 +1243,28 @@ Proof
 QED
 
 (* A constructor's immutable lies below the allocation frontier. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rw[immutable_holds_def, stmt_state_rel_def, immutable_alloca_sep_def] >>
-  first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def, wordsTheory.w2n_n2w]
-QED
-*)
 Theorem ctor_immutable_frontier:
   stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   immutable_holds cenv cx t tv w es s' /\
   evaluate_type (get_tenv cx) t = SOME tvt ==>
   w2n w + type_memory_size tvt <= s.vs_alloca_next
 Proof
-  cheat
+  strip_tac >>
+  qpat_x_assum `immutable_holds _ _ _ _ _ _ _` mp_tac >>
+  simp[immutable_holds_def] >>
+  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+  rename1 `src = cenv.ce_module \/ IS_SOME _` >>
+  `immutable_alloca_sep func (cenv with ce_module := src) cx es s` by
+    (Cases_on `src = cenv.ce_module` >- gvs[stmt_state_rel_def] >>
+     gvs[optionTheory.IS_SOME_EXISTS, stmt_state_rel_def] >>
+     first_x_assum drule >> simp[]) >>
+  `off + type_memory_size itv <= s.vs_alloca_next` by
+    (qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
+     simp[immutable_alloca_sep_def] >> metis_tac[]) >>
+  fs[sub_layout_def] >>
+  `off + k < dimword (:256)` by decide_tac >>
+  simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
+  decide_tac
 QED
 
 (* Runtime transfers leave memory outside the buffer alone. *)
