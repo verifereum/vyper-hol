@@ -157,8 +157,19 @@ Proof
   Cases_on `name = id` >> gvs[] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+(* A successful module lookup in this single-module body can only name
+   the active module, so the widened clauses use the same store facts. *)
+Theorem immutable_augassign_store:
+  body_inv tops ctx cenv cx /\ cx.in_deploy /\
+  expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es ss /\
+  FLOOKUP env.bare_globals (cenv.ce_module,id) = SOME ty /\
+  FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
+  cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ is_word_type ty /\
+  value_has_type tv v /\
+  write_place cx (ImmutablePlace cenv.ce_module id []) v es = (INL (),es') ==>
+  stmt_state_rel H ctx func cenv cx es'
+    (mstore off (typed_val_to_w256 tv v) ss)
 Proof
   strip_tac >>
   `cenv.ce_is_ctor` by fs[body_inv_def] >>
@@ -186,6 +197,12 @@ Proof
      metis_tac[stmt_state_rel_def]) >>
   `fmp_room ctx func (mstore off (typed_val_to_w256 tv v) ss)` by
     (irule fmp_room_mstore >> fs[stmt_state_rel_def]) >>
+  `!src ts. ALOOKUP cenv.ce_modules src = SOME ts ==>
+      src = cenv.ce_module` by
+    (imp_res_tac body_inv_modules_aligned >>
+     `!src ts. get_module_code cx src = SOME ts ==> src = NONE` by
+       fs[body_inv_def] >>
+     metis_tac[]) >>
   fs[stmt_state_rel_def, state_rel_def] >>
   gvs[stmt_state_rel_def, state_rel_def, venomStateTheory.mstore_def,
        storage_rel_def, transient_rel_def, accounts_rel_def, logs_rel_def,
@@ -196,21 +213,6 @@ Proof
        alloca_room_def, fmp_room_def,
        pending_alloca_size_def, immutable_base_zero_def] >>
   rpt conj_tac >> fs[]
-QED
-*)
-Theorem immutable_augassign_store:
-  body_inv tops ctx cenv cx /\ cx.in_deploy /\
-  expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es ss /\
-  FLOOKUP env.bare_globals (cenv.ce_module,id) = SOME ty /\
-  FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
-  cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\ is_word_type ty /\
-  value_has_type tv v /\
-  write_place cx (ImmutablePlace cenv.ce_module id []) v es = (INL (),es') ==>
-  stmt_state_rel H ctx func cenv cx es'
-    (mstore off (typed_val_to_w256 tv v) ss)
-Proof
-  cheat
 QED
 
 

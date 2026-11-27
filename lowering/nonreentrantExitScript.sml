@@ -327,8 +327,15 @@ Proof
   irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+
+Theorem optional_transient_unlock_stmt_state_rel:
+  unlock_if_nr cx nr iv es = (INL (),us) /\
+  (nr /\ ~iv ==> cx.nonreentrant_slot = SOME nkey /\
+                  nkey < dimword (:256)) /\
+  u = ((if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+         vs_inst_idx := n) /\
+  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx us u
 Proof
   strip_tac >> Cases_on `nr /\ ~iv`
   >- (`cx.nonreentrant_slot = SOME nkey` by fs[] >>
@@ -356,6 +363,17 @@ Proof
          simp[tstore_def] >>
          rpt strip_tac >> qexists_tac `id` >>
          fs[local_region_def, lookup_var_def]) >>
+      `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+          immutable_alloca_sep func (cenv with ce_module := src) cx us
+            (tstore (n2w nkey) 0w s)` by
+        (rpt strip_tac >>
+         irule immutable_alloca_sep_fields >>
+         qexistsl_tac [`s`,`es`] >>
+         qpat_assum `stmt_state_rel H ctx func cenv cx es s`
+           (strip_assume_tac o REWRITE_RULE[stmt_state_rel_def]) >>
+         simp[tstore_def] >>
+         rpt strip_tac >> qexists_tac `id` >>
+         fs[local_region_def, lookup_var_def]) >>
       `stmt_state_rel H ctx func cenv cx us (tstore (n2w nkey) 0w s)` by
         (match_mp_tac (Q.SPECL [`H`, `func`, `cenv`, `cx`, `es`, `s`,
            `us`, `tstore (n2w nkey) 0w s`, `ctx`]
@@ -365,18 +383,6 @@ Proof
       gvs[stmt_state_rel_inst_idx]) >>
   `us = es` by gvs[unlock_if_nr_def, vyperStateTheory.return_def] >>
   gvs[stmt_state_rel_inst_idx]
-QED
-*)
-Theorem optional_transient_unlock_stmt_state_rel:
-  unlock_if_nr cx nr iv es = (INL (),us) /\
-  (nr /\ ~iv ==> cx.nonreentrant_slot = SOME nkey /\
-                  nkey < dimword (:256)) /\
-  u = ((if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
-         vs_inst_idx := n) /\
-  stmt_state_rel H ctx func cenv cx es s ==>
-  stmt_state_rel H ctx func cenv cx us u
-Proof
-  cheat
 QED
 
 (* Zeroing transient storage preserves each horizon relation. *)
