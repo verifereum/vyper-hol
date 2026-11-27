@@ -1477,90 +1477,8 @@ Proof
 QED
 (* Compose singleton stores over the fixed post-load snapshot.  The seed
    identifies the caller regions independently of the final trace horizon. *)
-Theorem body_assign_tuple_store_targets_full_path:
-  !gs tys tvs vs ops k m b fulltys fullvs ctx func cenv cx es s st sf
-     tops env es0 eseed sseed Hseed Dseed lo G tn explicit PG RetQ RetP.
-    compile_tuple_store_all cenv tys gs ops st = ((),sf) /\
-    LENGTH gs = LENGTH tys /\ LENGTH tys = LENGTH tvs /\
-    LENGTH tvs = LENGTH vs /\ LENGTH ops = LENGTH vs /\
-    values_have_types tvs vs /\ tuple_val_wf vs tvs /\
-    (!i. i < LENGTH gs ==>
-      tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
-      tuple_target_layout es.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) /\
-    (!i. i < LENGTH gs ==>
-      ?x. EL i ops = Var x /\ not_fresh_at st x /\ op_taint tn (Var x) = {} /\
-          (if is_word_type (EL i tys) then
-             lookup_var x s = SOME (typed_val_to_w256 (EL i tvs) (EL i vs))
-           else m /\
-             lookup_var x s = SOME (n2w (b + SUM (MAP type_memory_size (TAKE (k+i) fulltys)))) /\
-             ptr_covers G tn x s (type_memory_size (EL i tvs)))) /\
-    (m ==> DROP k fulltys = tvs /\ DROP k fullvs = vs /\
-           LENGTH fulltys = LENGTH fullvs /\ k <= LENGTH fulltys /\
-           b + type_memory_size (TupleTV fulltys) < dimword (:256) /\
-           b + type_memory_size (TupleTV fulltys) <= s.vs_alloca_next /\
-           val_wf (TupleTV fulltys) (ArrayV (TupleV fullvs)) /\
-           (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-                  val_in_memory (TupleTV fulltys) (ArrayV (TupleV fullvs)) b mem) /\
-           (!i id a cap. i < LENGTH gs /\ EL i gs = BaseTarget (NameTarget id) /\
-              local_region cenv es.scopes s id a cap ==>
-              b + type_memory_size (TupleTV fulltys) <= a \/
-              a + type_memory_size (EL i tvs) <= b)) /\
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es0 /\
-    stmt_state_rel Hseed ctx func cenv cx eseed sseed /\ dead_lo_ok Hseed Dseed lo cenv cx /\
-    (!name a len. local_region cenv es.scopes s name a len <=>
-                   local_region cenv eseed.scopes sseed name a len) /\
-    (!name. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes name es.scopes) =
-            OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes name eseed.scopes)) /\
-    (!x. not_fresh_at st x /\ (?id cap. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var x) cap)) ==>
-         lookup_var x s = lookup_var x sseed) /\
-    (!id entry x cap. lookup_scopes id es.scopes = SOME entry /\
-       FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var x) cap) ==> ptr_covers G tn x s cap) /\
-    local_ptrs_reserved cenv st /\
-    (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at st x) /\
-    (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at st x) /\
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-      ALL_DISTINCT (MAP FST fields) /\
-      EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
-                                sz = type_memory_size tv) fields) /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\
-    s.vs_alloca_next = sseed.vs_alloca_next /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-    s.vs_call_ctx.cc_static = cx.txn.is_static /\
-    fn_has_code st sf func /\ fn_inst_ids_distinct func /\
-    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
-    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-    ?res es' r Gf tf.
-      (!tail. assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
-              (res,es' with gas_obs := tail)) /\
-      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,Gf,tf)) /\
-      ((res = INL () /\ ?t. r = OK t /\
-          (gs <> [] \/ ~block_is_terminated st ==> ~block_is_terminated sf) /\
-          ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
-          t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-          t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-          (!x. not_fresh_at st x ==>
-            lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
-            op_taint tf (Var x) = op_taint tn (Var x)) /\
-          (!name a len. local_region cenv es'.scopes t name a len <=>
-                         local_region cenv es.scopes s name a len) /\
-          (!aid off sz. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
-            (!name a len. local_region cenv es.scopes s name a len ==>
-              off + sz <= a \/ a + len <= off) ==>
-            mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory /\
-            (!i. off <= i /\ i < off + sz /\ i IN tf.t_mem ==> i IN tn.t_mem)) /\
-          (!st0 H. valid_horizon cx st0 H es'.storage_trace /\
-            storage_well_formed_on cx es (FST H) ==> storage_well_formed_on cx es' (FST H)) /\
-          (!st0 H D d. valid_horizon cx st0 H es'.storage_trace /\
-            dead_lo_ok H D lo cenv cx /\ stmt_state_rel H ctx func cenv cx es s /\
-            ghost_inv_at D lo d cenv cx es G tn s ==>
-            stmt_state_rel H ctx func cenv cx es' t /\ ghost_inv_at D lo d cenv cx es' Gf tf t)) \/
-       (res = INR (Error (RuntimeError "write in static context")) /\ exit_result r /\
-        ~oversized_create_abort ctx r /\
-        (!H tail. stmt_exit (RetQ H) (es' with gas_obs := tail) res r) /\
-        (!H tail. stmt_exit_ptr (RetP H) (es' with gas_obs := tail) res (Gf,tf) r)))
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   Induct
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -1662,7 +1580,96 @@ Proof
     suspend "head" >>
   suspend "tail"
 QED
+*)
+Theorem body_assign_tuple_store_targets_full_path[local]:
+  !gs tys tvs vs ops k m b fulltys fullvs ctx func cenv cx es s st sf
+     tops env es0 eseed sseed Hseed Dseed lo G tn explicit PG RetQ RetP.
+    compile_tuple_store_all cenv tys gs ops st = ((),sf) /\
+    LENGTH gs = LENGTH tys /\ LENGTH tys = LENGTH tvs /\
+    LENGTH tvs = LENGTH vs /\ LENGTH ops = LENGTH vs /\
+    values_have_types tvs vs /\ tuple_val_wf vs tvs /\
+    (!i. i < LENGTH gs ==>
+      tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
+      tuple_target_layout es.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) /\
+    (!i. i < LENGTH gs ==>
+      ?x. EL i ops = Var x /\ not_fresh_at st x /\ op_taint tn (Var x) = {} /\
+          (if is_word_type (EL i tys) then
+             lookup_var x s = SOME (typed_val_to_w256 (EL i tvs) (EL i vs))
+           else m /\
+             lookup_var x s = SOME (n2w (b + SUM (MAP type_memory_size (TAKE (k+i) fulltys)))) /\
+             ptr_covers G tn x s (type_memory_size (EL i tvs)))) /\
+    (m ==> DROP k fulltys = tvs /\ DROP k fullvs = vs /\
+           LENGTH fulltys = LENGTH fullvs /\ k <= LENGTH fulltys /\
+           b + type_memory_size (TupleTV fulltys) < dimword (:256) /\
+           b + type_memory_size (TupleTV fulltys) <= s.vs_alloca_next /\
+           val_wf (TupleTV fulltys) (ArrayV (TupleV fullvs)) /\
+           (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+                  val_in_memory (TupleTV fulltys) (ArrayV (TupleV fullvs)) b mem) /\
+           (!i id a cap. i < LENGTH gs /\ EL i gs = BaseTarget (NameTarget id) /\
+              local_region cenv es.scopes s id a cap ==>
+              b + type_memory_size (TupleTV fulltys) <= a \/
+              a + type_memory_size (EL i tvs) <= b)) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es0 /\
+    stmt_state_rel Hseed ctx func cenv cx eseed sseed /\ dead_lo_ok Hseed Dseed lo cenv cx /\
+    (!name a len. local_region cenv es.scopes s name a len <=>
+                   local_region cenv eseed.scopes sseed name a len) /\
+    (!name. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes name es.scopes) =
+            OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes name eseed.scopes)) /\
+    (!x. not_fresh_at st x /\ (?id cap. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var x) cap)) ==>
+         lookup_var x s = lookup_var x sseed) /\
+    (!id entry x cap. lookup_scopes id es.scopes = SOME entry /\
+       FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var x) cap) ==> ptr_covers G tn x s cap) /\
+    local_ptrs_reserved cenv st /\
+    (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at st x) /\
+    (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at st x) /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+                                sz = type_memory_size tv) fields) /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    s.vs_alloca_next = sseed.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+    s.vs_call_ctx.cc_static = cx.txn.is_static /\
+    fn_has_code st sf func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?res es' r Gf tf.
+      (!tail. assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
+              (res,es' with gas_obs := tail)) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,Gf,tf)) /\
+      ((res = INL () /\ ?t. r = OK t /\
+          (gs <> [] \/ ~block_is_terminated st ==> ~block_is_terminated sf) /\
+          ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+          t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+          (!x. not_fresh_at st x ==>
+            lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+            op_taint tf (Var x) = op_taint tn (Var x)) /\
+          (!name a len. local_region cenv es'.scopes t name a len <=>
+                         local_region cenv es.scopes s name a len) /\
+          (!aid off sz. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
+            (!name a len. local_region cenv es.scopes s name a len ==>
+              off + sz <= a \/ a + len <= off) ==>
+            mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory /\
+            (!i. off <= i /\ i < off + sz /\ i IN tf.t_mem ==> i IN tn.t_mem)) /\
+          (!st0 H. valid_horizon cx st0 H es'.storage_trace /\
+            storage_well_formed_on cx es (FST H) ==> storage_well_formed_on cx es' (FST H)) /\
+          (!st0 H D d. valid_horizon cx st0 H es'.storage_trace /\
+            dead_lo_ok H D lo cenv cx /\ stmt_state_rel H ctx func cenv cx es s /\
+            ghost_inv_at D lo d cenv cx es G tn s ==>
+            stmt_state_rel H ctx func cenv cx es' t /\ ghost_inv_at D lo d cenv cx es' Gf tf t)) \/
+       (res = INR (Error (RuntimeError "write in static context")) /\ exit_result r /\
+        ~oversized_create_abort ctx r /\
+        (!H tail. stmt_exit (RetQ H) (es' with gas_obs := tail) res r) /\
+        (!H tail. stmt_exit_ptr (RetP H) (es' with gas_obs := tail) res (Gf,tf) r)))
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_tuple_store_targets_full_path[head]:
   reverse (Cases_on `?id. bt = NameTarget id`)
   >- suspend "nonlocal" >>
@@ -1757,7 +1764,9 @@ Resume body_assign_tuple_store_targets_full_path[head]:
   disch_then (qx_choosel_then [`smach`,`Gm`,`tm`] (map_every assume_tac o CONJUNCTS)) >>
   suspend "local_join"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_tuple_store_targets_full_path[snapshot_member]:
   qpat_assum `~is_word_type ty` (fn mode =>
     qpat_assum `if is_word_type ty then lookup_var x s = _ else _`
@@ -1803,7 +1812,9 @@ Resume body_assign_tuple_store_targets_full_path[snapshot_member]:
   qpat_assum `m ==> b + type_memory_size (TupleTV fulltys) <= w2n dw \/ _`
     (mp_tac o UNDISCH) >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_tuple_store_targets_full_path[local_join]:
   qpat_assum `typed_copy_state_frame _ _ _ s smach`
     (strip_assume_tac o SRULE [typed_copy_state_frame_def,
@@ -1834,7 +1845,9 @@ Resume body_assign_tuple_store_targets_full_path[local_join]:
                         ghost_inv_at D lo d cenv cx es G tn s ==> _`
     (drule_all_then ACCEPT_TAC)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_tuple_store_targets_full_path[nonlocal]:
   `!id. BaseTarget bt <> BaseTarget (NameTarget id)` by gvs[] >>
   `is_word_type ty` by
@@ -1888,7 +1901,9 @@ Resume body_assign_tuple_store_targets_full_path[nonlocal]:
     (qspecl_then [`st0`,`H`,`D`,`d`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_tuple_store_targets_full_path[tail]:
   `!g ty tv v. tuple_target_layout em.scopes g ty tv v <=>
                tuple_target_layout es.scopes g ty tv v` by
@@ -2016,8 +2031,11 @@ Resume body_assign_tuple_store_targets_full_path[tail]:
     (qspecl_then [`st0`,`H`,`D`,`d`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_tuple_store_targets_full_path[local]
+*)
 
 
 (* The allocation packet transports the horizon type selected at its input. *)

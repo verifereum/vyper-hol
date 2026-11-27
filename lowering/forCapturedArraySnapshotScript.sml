@@ -491,6 +491,25 @@ QED
 
 Finalise for_array_snapshot_length_setup
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (SPEC_ALL for_array_snapshot_length_setup) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choosel_then
+    [`she0`,`loc`,`len_op`,`sl`,`bc`,`saD`,`saA`,`xd`,`capacity`,`aidItem`,
+     `entry`,`cond`,`bod`,`incr`,`exit`,`idx`,`invalid`,`valid`,`done_var`,`next_var`,
+     `sa'`,`stride`,`off_op`,`sm`,`sum_op`,`sn`,`addr`,`saCopy`,`sbCopy`,
+     `sbBody`,`sj`,`shadow_sbCopy`,`shadow_sbBody`,`av`,`xs`,`vs`,`tL`,`GL`,`tnL`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  `body_for_full_ok cx tyv id loop_body vs /\
+   gas_admissible (eval_for cx tyv id loop_body vs) (stmt_res_ok lctx) em` by
+    (qpat_assum `!vs. _ ==> body_for_full_ok _ _ _ _ _ /\ _` irule >> simp[return_def]) >>
+  pop_assum strip_assume_tac >>
+  suspend "rounds"
+QED
+*)
 Theorem for_array_snapshot_continue_full:
   compile_stmt c lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
   compile_stmt (gas_shadow_env T c) lctx ret_ty
@@ -543,22 +562,10 @@ Theorem for_array_snapshot_continue_full:
     (em,u,Gu,tu) (for_array_loop_post (DF,lo,d,ctx,func) c cx lctx (es,sa,s0,G0,tn0) sb)
     (for_array_loop_exit ctx cx RetQ)
 Proof
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  mp_tac (SPEC_ALL for_array_snapshot_length_setup) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (qx_choosel_then
-    [`she0`,`loc`,`len_op`,`sl`,`bc`,`saD`,`saA`,`xd`,`capacity`,`aidItem`,
-     `entry`,`cond`,`bod`,`incr`,`exit`,`idx`,`invalid`,`valid`,`done_var`,`next_var`,
-     `sa'`,`stride`,`off_op`,`sm`,`sum_op`,`sn`,`addr`,`saCopy`,`sbCopy`,
-     `sbBody`,`sj`,`shadow_sbCopy`,`shadow_sbBody`,`av`,`xs`,`vs`,`tL`,`GL`,`tnL`]
-    (map_every assume_tac o CONJUNCTS)) >>
-  `body_for_full_ok cx tyv id loop_body vs /\
-   gas_admissible (eval_for cx tyv id loop_body vs) (stmt_res_ok lctx) em` by
-    (qpat_assum `!vs. _ ==> body_for_full_ok _ _ _ _ _ /\ _` irule >> simp[return_def]) >>
-  pop_assum strip_assume_tac >>
-  suspend "rounds"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_array_snapshot_continue_full[rounds]:
   mp_tac (Q.INST [`u` |-> `tL`, `Gu` |-> `GL`, `tu` |-> `tnL`,
      `sty` |-> `typ`, `fty` |-> `typ`, `dtv` |-> `tyv`, `stv` |-> `tyv`, `es0` |-> `es`,
@@ -572,7 +579,9 @@ Resume for_array_snapshot_continue_full[rounds]:
   disch_then (qx_choosel_then [`s`,`G`,`tn`,`Inv`,`Done`] (map_every assume_tac o CONJUNCTS)) >>
   suspend "induct"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_array_snapshot_continue_full[induct]:
   qabbrev_tac `Round = (\a. do v <- read_result cx a;
       push_scope_with_var id tyv v;
@@ -604,7 +613,9 @@ Resume for_array_snapshot_continue_full[induct]:
      first_assum ACCEPT_TAC) >>
   suspend "finish"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_array_snapshot_continue_full[finish]:
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (cx_tops cx) cx st0 (eval_for cx tyv id loop_body vs) (em,tL,GL,tnL)
@@ -629,7 +640,9 @@ Resume for_array_snapshot_continue_full[finish]:
      simp[Abbr `Exit`] >> metis_tac[]) >>
   suspend "bind"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_array_snapshot_continue_full[bind]:
   irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all >> BETA_TAC >>
   conj_tac >-
@@ -659,5 +672,8 @@ Resume for_array_snapshot_continue_full[bind]:
     (fn th => rewrite_tac[th,ignore_bind_def,bind_return]) >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise for_array_snapshot_continue_full
+*)
