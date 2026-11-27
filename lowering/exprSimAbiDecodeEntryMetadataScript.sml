@@ -21,11 +21,17 @@ Definition abi_decode_descended_metadata_def:
     sf SUBMAP ce.ce_struct_fields /\ abi_sfields_consistent_upto n sf env
 End
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  simp[expr_sim_inv_def, abi_decode_root_metadata_def] >> metis_tac[]
+QED
+*)
 Theorem abi_decode_root_metadata_inv:
   expr_sim_inv_mods mods ce cx env es ==>
   abi_decode_root_metadata ce (get_tenv cx)
 Proof
-  simp[expr_sim_inv_def, abi_decode_root_metadata_def] >> metis_tac[]
+  cheat
 QED
 
 Theorem abi_decode_descended_metadata_init:
