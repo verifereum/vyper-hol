@@ -6,27 +6,22 @@ Ancestors
   extCallOracleStep loweringPosts exprLoweringProps loweringStateRelDefs
   vyperEvent venomExecSemantics venomMemDefs venomState list
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  gvs[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt, logs_rel_eq,
-      local_ptrs_rel_def, local_region_def, local_backed_def,
-      storage_rel_def, transient_rel_def, accounts_rel_def,
-      immutables_rel_def, immutable_alloca_sep_def,
-      alloca_room_def, fmp_room_def, pending_alloca_size_def, alloca_inv_def,
-      lookup_var_def, contract_storage_def, contract_transient_def,
-      allocas_non_overlapping_def, alloca_next_valid_def] >>
-  rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
-QED
-*)
 Theorem raw_log_state_rel:
   stmt_state_rel H ctx func cenv cx es s ==>
   stmt_state_rel H ctx func cenv cx
     (es with logs := es.logs ++ [ev])
     (s with vs_logs := s.vs_logs ++ [ev])
 Proof
-  cheat
+  pure_rewrite_tac[
+    stmt_state_rel_def, state_rel_def, immutable_base_zero_alt, logs_rel_eq,
+    local_ptrs_rel_def, local_region_def, local_backed_def, lookup_var_def,
+    storage_rel_def, transient_rel_def, accounts_rel_def,
+    contract_storage_def, contract_transient_def, immutables_rel_def,
+    immutable_alloca_sep_def, alloca_room_def, fmp_room_def,
+    pending_alloca_size_def, alloca_inv_def, allocas_non_overlapping_def,
+    alloca_next_valid_def, vyperStateTheory.evaluation_state_accfupds,
+    venom_state_accfupds] >>
+  strip_tac >> asm_rewrite_tac[]
 QED
 
 Theorem raw_log_core_step:
