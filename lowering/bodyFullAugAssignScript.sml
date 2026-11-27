@@ -1049,6 +1049,8 @@ Resume body_augassign_nested_immutable_full[nested_store_rel]:
      qpat_assum `regions_disjoint a n (off+k) (type_memory_size ptv)` mp_tac >>
      simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def,
        ASSUME ``type_memory_size ptv = 32``] >> decide_tac) >>
+  `immutable_section_layout_mods cenv.ce_modules cenv` by
+    drule_then ACCEPT_TAC bodyInvCodePropsTheory.body_inv_unit_immutable_layout >>
   MATCH_MP_TAC (Q.INST [`env` |-> `env`,`es` |-> `ee`,`id` |-> `id`,
     `itv` |-> `itv`,`k` |-> `k`,`off` |-> `off`,`path` |-> `path`,
     `ptv` |-> `ptv`,`s` |-> `w`,`sa` |-> `cd`,`src` |-> `NONE`,
