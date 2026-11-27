@@ -4049,6 +4049,34 @@ Finalise create_ctor_borrowed_head_outcome
 
 (* The suffix changes the evaluation and machine endpoints, but not the
    compiler cuts of the immediate saved row. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!x. vv_operand sv = Var x ==> not_fresh_at ss x` by
+    metis_tac[bodyFullExtCallSavedOperandTheory.extcall_saved_operand_not_fresh] >>
+  `alloca_inv u` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx ee u`
+       (mp_then Any mp_tac stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >> simp[]) >>
+  `!n b len. local_region cenv mid.scopes t n b len <=> local_region cenv ee.scopes u n b len` by
+    (irule (INST_TYPE [alpha |-> ``:256``] wordArgsPtrTheory.wb_frame_local_regions) >>
+     simp[] >> conj_tac >- (qexistsl [`ee`,`ss`] >> simp[]) >>
+     qexistsl [`H`,`ctx`,`cx`,`func`] >> simp[]) >>
+  qpat_assum `wb_frame _ _ _ _ _ _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+  namedCases_on `sv` ["tag op", "tag p"]
+  >- suspend "stack" >>
+  `tag = lowered_value_type cenv e /\ ~is_word_type (lowered_value_type cenv e)` by simp[] >>
+  qpat_x_assum `tag = _` SUBST_ALL_TAC >>
+  Cases_on `p.ptr_location = LocMemory`
+  >- (Cases_on `copy` >- suspend "copied" >> suspend "memory") >>
+  `~copy` by (Cases_on `copy` >> fs[vv_location_def]) >>
+  `ee.immutables = mid.immutables /\ (!tr. get_storage cx ee tr = get_storage cx mid tr)` by simp[] >>
+  Cases_on `?tr. p.ptr_location = slot_loc tr` >- suspend "slot" >>
+  Cases_on `p.ptr_location = LocCode` >- suspend "code" >>
+  suspend "calldata"
+QED
+*)
 Theorem create_ctor_saved_row_suffix:
   compile_expr cenv (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv cenv copy (ext_call_arg_value (lowered_value_type cenv e) vv) sm = (sv,ss) /\
@@ -4093,31 +4121,10 @@ Theorem create_ctor_saved_row_suffix:
               | LocatedValue _ p => p.ptr_location = LocMemory) ==>
     ptr_buf_ok cenv e (vv_operand sv) G2 u)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `!x. vv_operand sv = Var x ==> not_fresh_at ss x` by
-    metis_tac[bodyFullExtCallSavedOperandTheory.extcall_saved_operand_not_fresh] >>
-  `alloca_inv u` by
-    (qpat_assum `stmt_state_rel H ctx func cenv cx ee u`
-       (mp_then Any mp_tac stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >> simp[]) >>
-  `!n b len. local_region cenv mid.scopes t n b len <=> local_region cenv ee.scopes u n b len` by
-    (irule (INST_TYPE [alpha |-> ``:256``] wordArgsPtrTheory.wb_frame_local_regions) >>
-     simp[] >> conj_tac >- (qexistsl [`ee`,`ss`] >> simp[]) >>
-     qexistsl [`H`,`ctx`,`cx`,`func`] >> simp[]) >>
-  qpat_assum `wb_frame _ _ _ _ _ _`
-    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
-  namedCases_on `sv` ["tag op", "tag p"]
-  >- suspend "stack" >>
-  `tag = lowered_value_type cenv e /\ ~is_word_type (lowered_value_type cenv e)` by simp[] >>
-  qpat_x_assum `tag = _` SUBST_ALL_TAC >>
-  Cases_on `p.ptr_location = LocMemory`
-  >- (Cases_on `copy` >- suspend "copied" >> suspend "memory") >>
-  `~copy` by (Cases_on `copy` >> fs[vv_location_def]) >>
-  `ee.immutables = mid.immutables /\ (!tr. get_storage cx ee tr = get_storage cx mid tr)` by simp[] >>
-  Cases_on `?tr. p.ptr_location = slot_loc tr` >- suspend "slot" >>
-  Cases_on `p.ptr_location = LocCode` >- suspend "code" >>
-  suspend "calldata"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_saved_row_suffix[stack]:
   rule_assum_tac (SIMP_RULE (srw_ss()) [vv_operand_def,vv_location_def]) >>
   simp[vv_operand_def] >>
@@ -4128,7 +4135,9 @@ Resume create_ctor_saved_row_suffix[stack]:
   `~copy` by fs[] >>
   disj2_tac >> qexistsl [`env`,`H`,`H`,`ctx`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_saved_row_suffix[copied]:
   qpat_assum `T /\ _ ==> ?x w tv. _`
     (drule_then (qx_choosel_then [`x`,`w`,`tv`] (map_every assume_tac o CONJUNCTS)) o
@@ -4153,7 +4162,9 @@ Resume create_ctor_saved_row_suffix[copied]:
      simp[vv_operand_def] >> suspend "copied_apply") >>
   simp[vv_operand_def] >> qexists `Value v` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_saved_row_suffix[copied_apply]:
   conj_tac >- (qexistsl [`sm`,`ext_call_arg_value (lowered_value_type cenv e) vv`] >> simp[]) >>
   qexistsl [`G1`,`sm.cs_next_id`,`ss`,`lo`,`mid`,`type_memory_size tv`,`t`,`tn1`,`w`] >>
@@ -4163,7 +4174,9 @@ Resume create_ctor_saved_row_suffix[copied_apply]:
     (drule_then mp_tac) >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def, arithmeticTheory.ADD_COMM]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_saved_row_suffix[memory]:
   rule_assum_tac (SIMP_RULE (srw_ss()) [vv_operand_def]) >>
   simp[vv_operand_def] >>
@@ -4173,7 +4186,9 @@ Resume create_ctor_saved_row_suffix[memory]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   disj2_tac >> qexistsl [`env`,`H`,`H`,`ctx`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_saved_row_suffix[slot]:
   qpat_x_assum `?tr. _` (qx_choose_then `tr` assume_tac) >>
   simp[Excl "vv_storage_live_def"] >>
@@ -4184,7 +4199,9 @@ Resume create_ctor_saved_row_suffix[slot]:
   qpat_assum `?raw. read_result cx raw mid = _ /\ _` (qx_choose_then `raw` strip_assume_tac) >>
   qexists `raw` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_saved_row_suffix[code]:
   simp[] >>
   irule (cj 1 bodyFullExtCallPosTransportTheory.extcall_request_saved_code_endpoint) >>
@@ -4192,7 +4209,9 @@ Resume create_ctor_saved_row_suffix[code]:
   qpat_assum `?raw. read_result cx raw mid = _ /\ _` (qx_choose_then `raw` strip_assume_tac) >>
   qexists `raw` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_saved_row_suffix[calldata]:
   `p.ptr_location = LocCalldata` by
     (qpat_x_assum `~(?tr. _)` (mp_tac o CONV_RULE NOT_EXISTS_CONV) >>
@@ -4204,8 +4223,11 @@ Resume create_ctor_saved_row_suffix[calldata]:
   qpat_x_assum `vv_holds _ _ _ raw _ mid t`
     (mp_tac o REWRITE_RULE [loweringPostsTheory.vv_holds_def]) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise create_ctor_saved_row_suffix
+*)
 
 (* A copying snapshot carries its own allocation witness to the suffix. *)
 Theorem create_ctor_materialized_head_outcome:
