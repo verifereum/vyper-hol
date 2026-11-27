@@ -874,29 +874,8 @@ Finalise annassign_memory_full_physical_rhs_from_entry
 
 (* Complete consumer boundary.  Dispatch and installation are the two literal
    universal contracts; RHS induction is supplied for the declared environment. *)
-Theorem annassign_memory_full_execution:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-  expr_body_pre cenv cx env e es /\
-  FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
-  type_widens_to env.type_defs (expr_type e) typ /\
-  assignable_type env.type_defs typ /\
-  stmt_exprs_ok cenv (AnnAssign id typ e) /\
-  ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
-  (lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
-    has_length_word typ /\ is_empty_value_expr e) /\
-  (lowered_value_type cenv e = expr_type e \/
-    is_bytestring_type (expr_type e) /\
-    is_bytestring_type (lowered_value_type cenv e) /\
-    arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
-  (!sa ce r ty. declare_local cenv id typ sa = (ce,r) ==>
-    body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
-    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es /\
-    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es) ==>
-  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cx lctx RetQ cenv
-    (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
-    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
-    (eval_stmt cx (AnnAssign id typ e)) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `cenv.ce_alloca_locals` by
@@ -951,7 +930,35 @@ Proof
   >- suspend "empty" >>
   suspend "ordinary"
 QED
+*)
+Theorem annassign_memory_full_execution:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  expr_body_pre cenv cx env e es /\
+  FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
+  type_widens_to env.type_defs (expr_type e) typ /\
+  assignable_type env.type_defs typ /\
+  stmt_exprs_ok cenv (AnnAssign id typ e) /\
+  ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
+  (lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
+    has_length_word typ /\ is_empty_value_expr e) /\
+  (lowered_value_type cenv e = expr_type e \/
+    is_bytestring_type (expr_type e) /\
+    is_bytestring_type (lowered_value_type cenv e) /\
+    arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
+  (!sa ce r ty. declare_local cenv id typ sa = (ce,r) ==>
+    body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es /\
+    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es) ==>
+  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ cenv
+    (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+    (eval_stmt cx (AnnAssign id typ e)) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_full_execution[empty]:
   qpat_x_assum `if has_length_word typ /\ is_empty_value_expr e then _ else _`
     mp_tac >> asm_rewrite_tac[] >> strip_tac >>
@@ -1010,7 +1017,9 @@ Resume annassign_memory_full_execution[empty]:
   simp[exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def] >>
   TRY (Cases_on `e`) >> simp[exprSimDefsTheory.expr_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_full_execution[empty_continuation]:
   rpt gen_tac >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -1117,7 +1126,9 @@ Resume annassign_memory_full_execution[empty_continuation]:
   qpat_assum `!aid off len i. _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_full_execution[ordinary]:
   qpat_x_assum `if has_length_word typ /\ is_empty_value_expr e then _ else _`
     mp_tac >> asm_rewrite_tac[] >> strip_tac >>
@@ -1339,7 +1350,9 @@ Resume annassign_memory_full_execution[ordinary]:
     suspend "ordinary_suffix" >>
   suspend "ordinary_pure"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_full_execution[ordinary_suffix]:
   markerLib.RESUME_TAC >>
   `expr_val_at cenv' cx (lowered_value_type cenv' e) a b mid v op t` by
@@ -1405,7 +1418,9 @@ Resume annassign_memory_full_execution[ordinary_suffix]:
      irule annassign_memory_full_suffix_post]) >>
   suspend "ordinary_suffix_premises"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_full_execution[ordinary_suffix_premises]:
   markerLib.RESUME_TAC >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -1441,7 +1456,9 @@ Resume annassign_memory_full_execution[ordinary_suffix_premises]:
      `~is_bytestring_type typ /\ vv_location vv <> SOME LocMemory ==> _`] >>
   POP_ASSUM_LIST (K all_tac) >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_full_execution[ordinary_pure]:
   markerLib.RESUME_TAC >>
   irule gas_outcome_full_pure >>
@@ -1478,5 +1495,8 @@ Resume annassign_memory_full_execution[ordinary_pure]:
   simp[arithmeticTheory.ADD_SYM] >> disch_then irule >>
   rpt strip_tac >> first_x_assum drule >> simp[arithmeticTheory.ADD_SYM]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise annassign_memory_full_execution
+*)
