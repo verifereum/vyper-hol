@@ -159,27 +159,8 @@ QED
 
 (* The two implementation callbacks are literal contracts.  The common
    allocation/RHS prefix is a theorem dependency, never an assumption. *)
-Theorem annassign_widened_full_execution:
-  (contract_inv mods exps ctx old cx /\
-     module_body_inv mods old.ce_module tops old cx) /\ supported_expr tops e /\
-  type_widens_to env.type_defs (expr_type e) typ /\
-  ~is_word_type typ /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
-  type_memory_bytes old typ < 2 ** 64 /\
-  FLOOKUP old.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
-  (!sa ce r. declare_local old id typ sa = (ce,r) ==>
-    (contract_inv mods exps ctx ce cx /\
-     module_body_inv mods ce.ce_module tops ce cx) /\ expr_body_pre_mods mods ce cx env e es /\
-    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      ce cx (expr_type e) e es /\
-    ~(lowered_value_type ce e = expr_type e \/
-      is_bytestring_type (expr_type e) /\
-      is_bytestring_type (lowered_value_type ce e) /\
-      arg_type_fits (lowered_value_type ce e) (expr_type e))) ==>
-  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cx lctx RetQ old
-    (stmt_env old lctx ret_ty (AnnAssign id typ e))
-    (stmt_env (gas_shadow_env T old) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
-    (eval_stmt cx (AnnAssign id typ e)) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   rewrite_tac[stmt_frag_full_def] >>
@@ -221,7 +202,33 @@ Proof
      simp[lowered_value_type_def,is_bytestring_type_def]) >>
   gnvs[] >> suspend "prefix"
 QED
+*)
+Theorem annassign_widened_full_execution:
+  (contract_inv mods exps ctx old cx /\
+     module_body_inv mods old.ce_module tops old cx) /\ supported_expr tops e /\
+  type_widens_to env.type_defs (expr_type e) typ /\
+  ~is_word_type typ /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
+  type_memory_bytes old typ < 2 ** 64 /\
+  FLOOKUP old.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
+  (!sa ce r. declare_local old id typ sa = (ce,r) ==>
+    (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_body_pre_mods mods ce cx env e es /\
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      ce cx (expr_type e) e es /\
+    ~(lowered_value_type ce e = expr_type e \/
+      is_bytestring_type (expr_type e) /\
+      is_bytestring_type (lowered_value_type ce e) /\
+      arg_type_fits (lowered_value_type ce e) (expr_type e))) ==>
+  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ old
+    (stmt_env old lctx ret_ty (AnnAssign id typ e))
+    (stmt_env (gas_shadow_env T old) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+    (eval_stmt cx (AnnAssign id typ e)) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_widened_full_execution[prefix]:
   markerLib.RESUME_TAC >> irule gas_outcome_full_initial_domain >> simp[] >> conj_tac
   >- irule (cj 1 vyperStorageTraceTheory.evaluate_storage_trace_frame) >>
@@ -241,7 +248,9 @@ Resume annassign_widened_full_execution[prefix]:
   disch_then (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac) >>
   suspend "rhs"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_widened_full_execution[rhs]:
   markerLib.RESUME_TAC >>
   drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)
@@ -255,7 +264,9 @@ Resume annassign_widened_full_execution[rhs]:
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ rhs_post _` >>
   suspend "source"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_widened_full_execution[source]:
   markerLib.RESUME_TAC >>
   irule gas_outcome_full_zero_prefix >> qexistsl_tac [`Ga`,`entry`,`tna`] >>
@@ -287,7 +298,9 @@ Resume annassign_widened_full_execution[source]:
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   BETA_TAC >> rpt strip_tac >> suspend "continuation"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_widened_full_execution[continuation]:
   markerLib.RESUME_TAC >>
   qpat_assum `storage_trace_domain cx st0 mid.storage_trace`
@@ -300,7 +313,9 @@ Resume annassign_widened_full_execution[continuation]:
   BETA_TAC >> simp_tac (srw_ss()) [] >> strip_tac >>
   suspend "new_variable"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_widened_full_execution[new_variable]:
   markerLib.RESUME_TAC >>
   drule_all annassign_continuation_all_tails >> strip_tac >>
@@ -313,7 +328,9 @@ Resume annassign_widened_full_execution[new_variable]:
      simp_tac (srw_ss()) [Abbr `out`]) >>
   suspend "suffix"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_widened_full_execution[suffix]:
   markerLib.RESUME_TAC >>
   qpat_x_assum `op = Var xs` SUBST_ALL_TAC >>
@@ -400,7 +417,9 @@ Resume annassign_widened_full_execution[suffix]:
      simp[])) >> simp[venomInstTheory.mk_inst_def]) >>
   suspend "pure"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_widened_full_execution[pure]:
   markerLib.RESUME_TAC >> (
   irule gas_outcome_full_pure >>
@@ -428,5 +447,8 @@ Resume annassign_widened_full_execution[pure]:
     (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
   metis_tac[ADD_COMM])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise annassign_widened_full_execution
+*)

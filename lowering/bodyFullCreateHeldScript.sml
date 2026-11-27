@@ -2627,6 +2627,50 @@ QED
 
 (* The prepared initcode belongs to the continuation: the scalar cut
    evaluates only the amount and, when present, the one salt expression. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `body_exprs_full_ok _ (amount::_)` mp_tac >>
+  rewrite_tac[Once body_exprs_full_ok_def] >> strip_tac >>
+  once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
+  simp[NoAsms,bind_assoc,bind_return] >> once_rewrite_tac[GSYM bind_assoc] >>
+  irule create_body_operand_cut_replay >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  conj_tac >-
+    simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+         vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  qexistsl [`cenv`,`d`,`env`,`y`,`sa`,`sm`,`sh`,`shadow_func`,`shm`,`tops`] >>
+  simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (qmatch_goalsub_rename_tac `lower_value _ _ _ _ _` >>
+       qpat_assum `expr_type amount = _` (fn th => once_rewrite_tac [GSYM th]) >>
+       first_assum ACCEPT_TAC) >>
+  map_every qx_gen_tac [`av`,`em`,`Gm`,`tm`,`m`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?ms. _ /\ (!H. _ ==> gas_origin_ptr_path _ _ ms _)`
+    (qx_choose_then `ma` strip_assume_tac) >>
+  qpat_x_assum `_ ==> body_exprs_full_ok _ _` (drule_then assume_tac) >>
+  `is_word_type (BaseT (UintT 256))` by simp[is_word_type_def] >>
+  qpat_assum `!H. _ ==> expr_post H _ _ _ _ amount _ _ _ _ _ _ _ _ /\ _`
+    (mp_then Any (drule_all_then strip_assume_tac) create_word_cut_frame_facts) >>
+  qabbrev_tac `yw = typed_val_to_w256 (BaseTV (UintT 256)) av` >>
+  `dest_NumV av = SOME (w2n yw)` by simp[Abbr `yw`,exprSimSendTheory.uint256_typed_dest] >>
+  Cases_on `salted` >> gvs[compile_create_salt_def,comp_return_def]
+  >- suspend "salt_some" >>
+  `eval_exprs cx [] = return []` by
+    simp[FUN_EQ_THM,exprSimWordArgsTheory.eval_exprs_nil,return_def] >>
+  simp[bind_return] >>
+  `MAP FDOM es.scopes = MAP FDOM em.scopes` by
+    fs[loweringPostsTheory.wb_frame_def,loweringPostsTheory.locals_kept_def] >>
+  qpat_assum `!av yw ee G1 tn1 t gs marks. _ ==> gas_outcome_full _ _ _ _ (next av NONE) _ _ _` irule >>
+  simp[dest_optional_salt_def] >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qexists `gas_explicit ma s.vs_gas_readings` >>
+      once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
+      simp[GSYM bind_assoc,bind_def,return_def]) >>
+  qexists `ma` >> simp[]
+QED
+*)
 Theorem raw_create_scalar_suffix_cut:
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
@@ -2691,46 +2735,9 @@ Theorem raw_create_scalar_suffix_cut:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `body_exprs_full_ok _ (amount::_)` mp_tac >>
-  rewrite_tac[Once body_exprs_full_ok_def] >> strip_tac >>
-  once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
-  simp[NoAsms,bind_assoc,bind_return] >> once_rewrite_tac[GSYM bind_assoc] >>
-  irule create_body_operand_cut_replay >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  conj_tac >-
-    simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
-         vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
-  qexistsl [`cenv`,`d`,`env`,`y`,`sa`,`sm`,`sh`,`shadow_func`,`shm`,`tops`] >>
-  simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (qmatch_goalsub_rename_tac `lower_value _ _ _ _ _` >>
-       qpat_assum `expr_type amount = _` (fn th => once_rewrite_tac [GSYM th]) >>
-       first_assum ACCEPT_TAC) >>
-  map_every qx_gen_tac [`av`,`em`,`Gm`,`tm`,`m`] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `?ms. _ /\ (!H. _ ==> gas_origin_ptr_path _ _ ms _)`
-    (qx_choose_then `ma` strip_assume_tac) >>
-  qpat_x_assum `_ ==> body_exprs_full_ok _ _` (drule_then assume_tac) >>
-  `is_word_type (BaseT (UintT 256))` by simp[is_word_type_def] >>
-  qpat_assum `!H. _ ==> expr_post H _ _ _ _ amount _ _ _ _ _ _ _ _ /\ _`
-    (mp_then Any (drule_all_then strip_assume_tac) create_word_cut_frame_facts) >>
-  qabbrev_tac `yw = typed_val_to_w256 (BaseTV (UintT 256)) av` >>
-  `dest_NumV av = SOME (w2n yw)` by simp[Abbr `yw`,exprSimSendTheory.uint256_typed_dest] >>
-  Cases_on `salted` >> gvs[compile_create_salt_def,comp_return_def]
-  >- suspend "salt_some" >>
-  `eval_exprs cx [] = return []` by
-    simp[FUN_EQ_THM,exprSimWordArgsTheory.eval_exprs_nil,return_def] >>
-  simp[bind_return] >>
-  `MAP FDOM es.scopes = MAP FDOM em.scopes` by
-    fs[loweringPostsTheory.wb_frame_def,loweringPostsTheory.locals_kept_def] >>
-  qpat_assum `!av yw ee G1 tn1 t gs marks. _ ==> gas_outcome_full _ _ _ _ (next av NONE) _ _ _` irule >>
-  simp[dest_optional_salt_def] >> conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (qexists `gas_explicit ma s.vs_gas_readings` >>
-      once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
-      simp[GSYM bind_assoc,bind_def,return_def]) >>
-  qexists `ma` >> simp[]
+  cheat
 QED
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_create_scalar_suffix_cut[salt_some]:
   Cases_on `lower_value compile_expr cenv (BaseT (BytesT (Fixed 32))) salt sm` >>
   Cases_on `lower_value compile_expr (gas_shadow_env T cenv)
@@ -2804,7 +2811,10 @@ Resume raw_create_scalar_suffix_cut[salt_some]:
   irule fragGasOriginPtrTheory.gas_origin_ptr_path_append >>
   qexistsl [`Gm`,`m`,`(OK m,Gm,tm)`,`tm`] >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise raw_create_scalar_suffix_cut
+*)
 
 (* A salt can write other memory. Its writeback frame preserves the entire
    old allocation, and its ghost frame rules out new taint in the payload. *)

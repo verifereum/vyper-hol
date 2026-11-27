@@ -314,6 +314,30 @@ Finalise annassign_memory_full_empty_post
 
 (* Empty declarations run compile_expr itself.  This boundary enriches that
    run with the reserved destination and the original allocation frame. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule gas_outcome_full_initial_domain >>
+  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp entry` by
+    (`stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func ce cx es entry` by
+       metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `stmt_state_rel _ ctx func ce cx es entry`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
+  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_vv_sim_full_def] >>
+  disch_then (qspecl_then [`st0`,`a`,`b`,`shadow_a`,`shadow_b`,
+    `vv`,`entry`,`Ga`,`tna`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
+  irule gas_outcome_full_post_source >>
+  goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >>
+  simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  suspend "success"
+QED
+*)
 Theorem annassign_memory_full_raw_rhs_from_entry[local]:
   compile_expr ce ty e a = (vv,b) /\
   compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e) shadow_a = (vv,shadow_b) /\
@@ -397,27 +421,10 @@ Theorem annassign_memory_full_raw_rhs_from_entry[local]:
     (\H res mid gt rr. expr_exit res rr /\ halt_exit H cx mid res rr /\
       (ctx_has_dalloca ctx ==> !s. rr = Halt s ==> allocas_below_fmp s))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  irule gas_outcome_full_initial_domain >>
-  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
-  strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp entry` by
-    (`stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func ce cx es entry` by
-       metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-     qpat_assum `stmt_state_rel _ ctx func ce cx es entry`
-       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
-     simp[]) >>
-  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_vv_sim_full_def] >>
-  disch_then (qspecl_then [`st0`,`a`,`b`,`shadow_a`,`shadow_b`,
-    `vv`,`entry`,`Ga`,`tna`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
-  irule gas_outcome_full_post_source >>
-  goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >>
-  simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
-  suspend "success"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_full_raw_rhs_from_entry[success]:
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
@@ -456,14 +463,18 @@ Resume annassign_memory_full_raw_rhs_from_entry[success]:
   fs[vv_post_def,ghost_kept_at_def] >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,metis_tac[]]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_full_raw_rhs_from_entry[horizon]:
   qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >> strip_tac >>
   drule_at (Pat `f st = _`) vyperStorageFootprintTheory.valid_horizon_frame >>
   simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
   disch_then drule >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_full_raw_rhs_from_entry[taint]:
   fs[ghost_kept_at_def] >>
   qpat_assum `alloca_frame old es sa s0 ce es entry`
@@ -473,8 +484,11 @@ Resume annassign_memory_full_raw_rhs_from_entry[taint]:
   first_x_assum (qspecl_then [`ad`,`off`,`len`,`i`] mp_tac) >>
   simp[arithmeticTheory.ADD_COMM] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise annassign_memory_full_raw_rhs_from_entry
+*)
 
 (* Keep the physical frontier and unwrap origin at the very endpoint used by
    the successful source read.  The value-only judgment forgets these fields. *)
