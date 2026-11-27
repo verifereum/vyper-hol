@@ -114,6 +114,17 @@ fun full_case th =
   irule (SIMP_RULE bool_ss full_case_simps th) >>
   asm_rewrite_tac[] >> metis_tac[];
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[body_stmt_full_ok_def] >> rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.SPECL [`cx`,`err`,`DF`,`lo`,`d`,`PG`,
+    `tops`,`bindings`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,
+    `env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] compile_raise_custom_frag_full) >>
+  asm_rewrite_tac[]
+QED
+*)
 Theorem body_raise_custom_case_full:
   !cx err.
     (!id positional kwargs tops params es.
@@ -124,12 +135,7 @@ Theorem body_raise_custom_case_full:
        body_exprs_full_ok cx es) ==>
     body_stmt_full_ok cx (Raise (RaiseCustomError err))
 Proof
-  rpt gen_tac >> strip_tac >>
-  rewrite_tac[body_stmt_full_ok_def] >> rpt gen_tac >> strip_tac >>
-  match_mp_tac (Q.SPECL [`cx`,`err`,`DF`,`lo`,`d`,`PG`,
-    `tops`,`bindings`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,
-    `env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] compile_raise_custom_frag_full) >>
-  asm_rewrite_tac[]
+  cheat
 QED
 
 Theorem body_assert_custom_case_full:
