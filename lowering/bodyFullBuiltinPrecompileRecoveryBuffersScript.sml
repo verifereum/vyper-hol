@@ -5,7 +5,7 @@ Ancestors
   bodyFullHashKeccakFixed
   bodyMemBiECRecoverMemory bodyPtrPrecompileBuiltinsRecoveryInput
   bodyPtrPrecompileBuiltinsCompilerStages bodyPtrPrecompileBuiltinsSeq
-  exprSimPrecompiles exprSimAlloc exprSimLiteralBuffer exprSimWordArgs
+  exprSimAggregates exprSimPrecompiles exprSimAlloc exprSimLiteralBuffer exprSimWordArgs
   exprSimPtrLiteralBuffer bodyMemoryDefs bodyPtrDefs loweringPosts
   fragGasCopyLoop fragGasCopySeqLiftProps fragGasSeqPtr fragGasOriginPtr fragExecMem fragExec
   logTopicScalarPtr wordLoadStorePtr allocaFootprint stmtSimProps
@@ -85,10 +85,11 @@ s.vs_inst_idx = LENGTH sf.cs_current_insts ==>
   (!aid b len. aid < sf.cs_next_id /\
     FLOOKUP t.vs_allocas aid = SOME (b,len) ==>
     regions_disjoint (w2n wo) 32 b len) /\
-  (cenv.ce_is_ctor ==> !name tv iv off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src_id name tv iv off.
+    (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+    FLOOKUP cenv.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
+      | SOME imms => get_source_immutables src_id imms) name = SOME (tv,iv) ==>
     regions_disjoint (w2n wo) 32 off (type_memory_size tv)) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es t /\
@@ -851,7 +852,7 @@ Proof
           (fn instruction => qpat_assum `FLOOKUP t.vs_allocas sp.cs_next_id = SOME (w2n wo,32)`
             (fn site => qpat_assum `sf.cs_next_id <= sp.cs_next_id`
               (fn growth => POP_ASSUM_LIST (K all_tac) >>
-                MAP_EVERY assume_tac [instruction,site,growth]))) >>
+                 MAP_EVERY assume_tac [instruction,site,growth]))) >>
         gvs[mk_inst_def]) >>
      qpat_assum `!b len. regions_disjoint (w2n wi) 128 b len /\ _ ==> _`
        (fn exterior => MATCH_MP_TAC (Q.SPECL [`off`,`len`] exterior)) >>
@@ -921,29 +922,31 @@ Proof
          (fn separated => POP_ASSUM_LIST (K all_tac) >>
            MAP_EVERY assume_tac [frame,separated])) >>
      fs[local_region_def] >> metis_tac[]) >>
-  `(cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  `(cenv.ce_is_ctor ==> !src_id name tv iv off.
+     (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+     FLOOKUP cenv.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
-       SOME (tv,iv) ==>
+       | SOME imms => get_source_immutables src_id imms) name = SOME (tv,iv) ==>
      regions_disjoint (w2n wo) 32 off (type_memory_size tv))` by
-    (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ t`
-       (fn ssr => let
-          val horizon = hd (snd (strip_comb (concl ssr)));
-          val th = precompile_alloca_immutable_disjoint;
-          val hv = valOf (List.find (fn v => fst (dest_var v) = "H")
-            (free_vars (concl th)));
-          val typed = INST_TYPE (match_type (type_of hv) (type_of horizon)) th;
-        in mp_tac (Q.INST [`s` |-> `t`,`b` |-> `w2n (wo:256 word)`,
-          `sz` |-> `32`,`H` |-> `storage_trace_horizon es.storage_trace`,
-          `inst` |-> `mk_inst sp.cs_next_id ALLOCA [Lit (n2w 32)]
-            [STRING #"%" (toString sp.cs_next_var)]`] typed) end) >>
-     qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ t`
-       (fn state => qpat_assum `MEM (mk_inst sp.cs_next_id ALLOCA _ _) (fn_insts func)`
-         (fn instruction => qpat_assum `FLOOKUP t.vs_allocas sp.cs_next_id = SOME (w2n wo,32)`
-           (fn site => POP_ASSUM_LIST (K all_tac) >>
-             MAP_EVERY assume_tac [state,instruction,site]))) >>
-     gvs[mk_inst_def]) >>
+    (disch_tac >> rpt gen_tac >>
+     disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+     `regions_disjoint off (type_memory_size tv) (w2n wo) 32` by
+       (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ t`
+          (fn rel => let
+             val horizon = hd (snd (strip_comb (concl rel)))
+             val frame = aggregate_alloca_immutable_sep_source
+             val premises = fst (dest_imp (concl frame))
+             val frame_horizon = hd (snd (strip_comb (fst (dest_conj premises))))
+           in irule (INST_TYPE (match_type (type_of frame_horizon) (type_of horizon)) frame) end) >>
+        qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ t` (irule_at Any) >>
+        qexistsl [`src_id`, `name`, `iv`,
+          `mk_inst sp.cs_next_id ALLOCA [Lit (n2w 32)]
+            [STRING #"%" (toString sp.cs_next_var)]`] >>
+        qpat_assum `MEM (mk_inst sp.cs_next_id ALLOCA _ _) (fn_insts func)` mp_tac >>
+        qpat_assum `FLOOKUP t.vs_allocas sp.cs_next_id = SOME (w2n wo,32)` mp_tac >>
+        simp[NoAsms, mk_inst_def] >> rpt strip_tac >> first_assum ACCEPT_TAC) >>
+     pop_assum mp_tac >>
+     pure_rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `w2n wi+128 <= t.vs_alloca_next /\
    w2n wo+32 <= t.vs_alloca_next` by metis_tac[LESS_EQ_TRANS] >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
