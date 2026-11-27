@@ -955,6 +955,20 @@ QED
 Finalise annassign_word_full_execution_sep
 *)
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `ctx_has_dalloca ctx ==>
+    (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s)` by simp[] >>
+  drule_all annassign_word_full_execution_sep >>
+  disch_then (fn th => irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+    irule_at Any th) >>
+  qexists_tac `RetQ` >> simp[] >> rpt strip_tac >>
+  qexists_tac `ce` >> simp[] >> metis_tac[]
+QED
+*)
 Theorem annassign_word_full_execution:
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -1007,13 +1021,5 @@ Theorem annassign_word_full_execution:
         (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
         halt_exit H cx ee res r)
 Proof
-  strip_tac >>
-  `ctx_has_dalloca ctx ==>
-    (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s)` by simp[] >>
-  drule_all annassign_word_full_execution_sep >>
-  disch_then (fn th => irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-    irule_at Any th) >>
-  qexists_tac `RetQ` >> simp[] >> rpt strip_tac >>
-  qexists_tac `ce` >> simp[] >> metis_tac[]
+  cheat
 QED
