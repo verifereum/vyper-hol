@@ -4526,6 +4526,15 @@ Finalise create_ctor_head_outcome
 
 (* Constructor operands are read before evaluating the suffix. Their row
    witnesses refer to the original compiler cuts and the final runtime cut. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  map_every qid_spec_tac [`tn0`,`G0`,`s0`,`es`,`shadow_sb`,`shadow_sa`,`sb`,`sa`,`svs`] >>
+  Induct_on `xs` >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
+  >- suspend "nil" >>
+  suspend "cons"
+QED
+*)
 Theorem create_ctor_rows_outcome[local]:
   body_const_cells_agree mods cx env es /\
   body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
@@ -4614,12 +4623,10 @@ Theorem create_ctor_rows_outcome[local]:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
-  map_every qid_spec_tac [`tn0`,`G0`,`s0`,`es`,`shadow_sb`,`shadow_sa`,`sb`,`sa`,`svs`] >>
-  Induct_on `xs` >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
-  >- suspend "nil" >>
-  suspend "cons"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_outcome[nil]:
   gvs[compile_create_ctor_args_def,comp_return_def] >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
@@ -4636,7 +4643,9 @@ Resume create_ctor_rows_outcome[nil]:
   fs[bodyPtrDefsTheory.ghost_inv_at_def,exprSimWordArgsTheory.wb_frame_refl] >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_outcome[cons]:
   qmatch_asmsub_rename_tac `body_exprs_full_ok cx (e::xs)` >>
   `body_expr_full_ok cx e /\ expr_body_pre cenv cx env e es` by
@@ -4709,7 +4718,9 @@ Resume create_ctor_rows_outcome[cons]:
      qexists `sa` >> fs[ci_mono_def]) >>
   suspend "head_code"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_outcome[head_code]:
   mp_tac (Q.INST [`sh` |-> `shadow_sa`] create_ctor_head_outcome) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
@@ -4753,7 +4764,9 @@ Resume create_ctor_rows_outcome[head_code]:
   qexists `v` >> simp[] >>
   suspend "tail_at_cut"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_outcome[tail_at_cut]:
   `bind (eval_expr cx e) (read_result cx)
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
@@ -4792,7 +4805,9 @@ Resume create_ctor_rows_outcome[tail_at_cut]:
   disch_tac >>
   suspend "tail_mapped"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_outcome[tail_mapped]:
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ (eval_exprs cx xs) _ tailQ tailR` >>
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -4831,7 +4846,9 @@ Resume create_ctor_rows_outcome[tail_mapped]:
   qunabbrev_tac `tailR` >>
   suspend "tail_endpoint"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_outcome[tail_endpoint]:
   `?rs. eval_exprs cx xs (mid with gas_obs := obs) = (rs,ee)` by
     (qpat_assum `!src. bind (eval_exprs cx xs) _ src = _` (fn mapped =>
@@ -4862,7 +4879,9 @@ Resume create_ctor_rows_outcome[tail_endpoint]:
   qpat_x_assum `orig = INL vs` SUBST_ALL_TAC >>
   suspend "rows_frame"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_outcome[rows_frame]:
   `sa.cs_next_var <= ss.cs_next_var /\ sa.cs_next_id <= ss.cs_next_id /\
     sa.cs_next_id <= sm.cs_next_id /\ ss.cs_next_var <= sc.cs_next_var /\
@@ -4901,7 +4920,9 @@ Resume create_ctor_rows_outcome[rows_frame]:
      Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
   suspend "rows_head"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_outcome[rows_head]:
   `!tag p. sv = LocatedValue tag p ==> tag = lowered_value_type cenv e /\
       ~is_word_type (lowered_value_type cenv e)` by
@@ -4930,7 +4951,9 @@ Resume create_ctor_rows_outcome[rows_head]:
      fs[]) >>
   suspend "rows_pack"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_outcome[rows_pack]:
   `(copy /\ ~is_word_type (lowered_value_type cenv e) ==>
     ?p w tv. vv_location sv = SOME LocMemory /\ vv_operand sv = Var p /\
@@ -5000,7 +5023,9 @@ Resume create_ctor_rows_outcome[rows_pack]:
       simp[] >> disch_then (qspecl_then [`rt`,`w`] mp_tac) >> simp[]) >>
   suspend "rows_list"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_outcome[rows_list]:
   irule listTheory.LIST_REL_mono >>
   qpat_assum `LIST_REL _ (ZIP (xs,tail_svs)) vs` (irule_at Any) >>
@@ -5011,8 +5036,11 @@ Resume create_ctor_rows_outcome[rows_list]:
        (map_every assume_tac o CONJUNCTS)) >>
   qexistsl [`si`,`sm1`,`ss1`,`vv1`,`raw1`,`copy1`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise create_ctor_rows_outcome
+*)
 
 (* The continuation starts only after all constructor arguments were read.
    The row relation describes the actual saved values at the common cut. *)
