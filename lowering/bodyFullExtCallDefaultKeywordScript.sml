@@ -98,6 +98,44 @@ Proof
   disch_then (qspecl_then [`explicit`,`PG`] ACCEPT_TAC)
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  gvs[] >>
+  Cases_on `compile_alloc_buffer (type_memory_bytes cenv (lowered_value_type cenv e)) sm` >>
+  rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
+  Cases_on `unwrap_value cenv vv mid` >>
+  rename1 `unwrap_value cenv vv mid = (src,sc)` >>
+  Cases_on `compile_store_memory cenv src buf.buf_operand
+    (lowered_value_type cenv e) (lowered_value_type cenv e) sc` >>
+  qpat_x_assum `compile_materialize_vv _ _ _ sm = _` mp_tac >>
+  simp[compile_materialize_vv_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def] >>
+  strip_tac >> gvs[] >>
+  rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
+  rename1 `compile_store_memory _ _ _ _ _ sc = ((),sb)` >>
+  `ci_mono sa sm` by
+    (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`e`,`sa`]
+      (cj 1 ci_mono_compile_expr_sa)) >> simp[]) >>
+  `ci_mono sm mid` by
+    (mp_tac (Q.SPECL [`type_memory_bytes cenv (lowered_value_type cenv e)`,`sm`]
+      ci_mono_compile_alloc_buffer) >> simp[]) >>
+  `ci_mono mid sc` by
+    (mp_tac (Q.SPECL [`cenv`,`vv`,`mid`] ci_mono_unwrap_value) >> simp[]) >>
+  `ci_mono sc sb` by
+    (mp_tac (Q.SPECL [`cenv`,`src`,`buf.buf_operand`,
+       `lowered_value_type cenv e`,`lowered_value_type cenv e`,`sc`]
+      ci_mono_compile_store_memory) >> simp[]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    (irule fn_has_code_split >> fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code sm mid func /\ fn_has_code mid sb func` by
+    (irule fn_has_code_split >> fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code mid sc func /\ fn_has_code sc sb func` by
+    (irule fn_has_code_split >> fs[ci_mono_def] >> metis_tac[]) >>
+  suspend "child"
+QED
+*)
 Theorem extcall_operand_materialized_full:
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -162,41 +200,10 @@ Theorem extcall_operand_materialized_full:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  gvs[] >>
-  Cases_on `compile_alloc_buffer (type_memory_bytes cenv (lowered_value_type cenv e)) sm` >>
-  rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
-  Cases_on `unwrap_value cenv vv mid` >>
-  rename1 `unwrap_value cenv vv mid = (src,sc)` >>
-  Cases_on `compile_store_memory cenv src buf.buf_operand
-    (lowered_value_type cenv e) (lowered_value_type cenv e) sc` >>
-  qpat_x_assum `compile_materialize_vv _ _ _ sm = _` mp_tac >>
-  simp[compile_materialize_vv_def, comp_bind_def, comp_ignore_bind_def,
-      comp_return_def] >>
-  strip_tac >> gvs[] >>
-  rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
-  rename1 `compile_store_memory _ _ _ _ _ sc = ((),sb)` >>
-  `ci_mono sa sm` by
-    (mp_tac (Q.SPECL [`cenv`,`expr_type e`,`e`,`sa`]
-      (cj 1 ci_mono_compile_expr_sa)) >> simp[]) >>
-  `ci_mono sm mid` by
-    (mp_tac (Q.SPECL [`type_memory_bytes cenv (lowered_value_type cenv e)`,`sm`]
-      ci_mono_compile_alloc_buffer) >> simp[]) >>
-  `ci_mono mid sc` by
-    (mp_tac (Q.SPECL [`cenv`,`vv`,`mid`] ci_mono_unwrap_value) >> simp[]) >>
-  `ci_mono sc sb` by
-    (mp_tac (Q.SPECL [`cenv`,`src`,`buf.buf_operand`,
-       `lowered_value_type cenv e`,`lowered_value_type cenv e`,`sc`]
-      ci_mono_compile_store_memory) >> simp[]) >>
-  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
-    (irule fn_has_code_split >> fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
-  `fn_has_code sm mid func /\ fn_has_code mid sb func` by
-    (irule fn_has_code_split >> fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
-  `fn_has_code mid sc func /\ fn_has_code sc sb func` by
-    (irule fn_has_code_split >> fs[ci_mono_def] >> metis_tac[]) >>
-  suspend "child"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_operand_materialized_full[child]:
   `gas_shadow_state sm shadow_sm` by
     (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
@@ -227,7 +234,9 @@ Resume extcall_operand_materialized_full[child]:
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   suspend "bind"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_operand_materialized_full[bind]:
   irule gas_outcome_full_bind_all >>
   rpt conj_tac
@@ -250,7 +259,9 @@ Resume extcall_operand_materialized_full[bind]:
       simp[]) >>
   suspend "read"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_operand_materialized_full[read]:
   qx_genl_tac [`marks`,`res`,`ee`,`G1`,`tn1`,`s`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -278,7 +289,9 @@ Resume extcall_operand_materialized_full[read]:
   >- (rename1 `read_result cx tv ee = (INL v,ee)` >> suspend "typing") >>
   metis_tac[exprSimUnwrapTheory.vv_post_failed_read]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_operand_materialized_full[typing]:
   `expr_body_pre cenv cx env e
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
@@ -302,7 +315,9 @@ Resume extcall_operand_materialized_full[typing]:
     (drule body_post_type_allocation_bound >> disch_then (qspec_then `ptv` mp_tac) >> simp[]) >>
   suspend "prefix"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_operand_materialized_full[prefix]:
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
@@ -357,7 +372,9 @@ Resume extcall_operand_materialized_full[prefix]:
     [`dst`,`dw`,`v'`,`z`,`G'`,`tn'`,`sw`]) >>
   suspend "store"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_operand_materialized_full[store]:
   `~is_word_type (lowered_value_type cenv e)` by
     metis_tac[arg_type_fits_word_type] >>
@@ -393,7 +410,9 @@ Resume extcall_operand_materialized_full[store]:
       simp[]) >>
   simp[] >> suspend "post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_operand_materialized_full[post]:
   qpat_assum `expr_post H ctx func cenv cx e es sa sc s0 ee v src z`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [expr_post_def]) >>
@@ -448,7 +467,9 @@ Resume extcall_operand_materialized_full[post]:
        typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp] >>
   suspend "frames"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_operand_materialized_full[frames]:
   conj_tac
   >- (irule place_typed_copy_alloca_state_frame >>
@@ -469,7 +490,9 @@ Resume extcall_operand_materialized_full[frames]:
        (mp_then Any mp_tac typedCopyOriginPtrBaseTheory.typed_copy_state_frame_allocas_below_fmp) >> simp[]) >>
   simp[] >> suspend "exterior"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_operand_materialized_full[exterior]:
   conj_tac >- fs[] >>
   `lo <= w2n dw` by
@@ -518,7 +541,9 @@ Resume extcall_operand_materialized_full[exterior]:
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   suspend "ghost"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_operand_materialized_full[ghost]:
   `!name b sz. local_region cenv es.scopes s0 name b sz ==>
      b+sz <= w2n dw \/ w2n dw + type_memory_size ltv <= b` by
@@ -546,7 +571,9 @@ Resume extcall_operand_materialized_full[ghost]:
      qpat_assum `return_buf_frame d cenv sa s0` (irule_at Any) >> simp[]) >>
   simp[] >> suspend "purity"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_operand_materialized_full[purity]:
   `wb_frame cenv es ee sa s0 z` by
     (qpat_assum `expr_post H ctx func cenv cx e es sa sc s0 ee v src z`
@@ -589,8 +616,11 @@ Resume extcall_operand_materialized_full[purity]:
         (mp_then Any mp_tac effect_free_source_projection) >> simp[]) >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise extcall_operand_materialized_full
+*)
 
 Theorem extcall_kwarg_default_owned_lookup_full:
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\

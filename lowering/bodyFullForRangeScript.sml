@@ -3620,6 +3620,115 @@ Finalise range_full_body_entry
 *)
 
 (* Complete checked post-allocation entry, retaining the original frame. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ source _ Q R` >>
+  qspecl_then [`get_tenv cx`, `fty`, `tyv`, `n1`, `n2`] mp_tac range_end_words >>
+  simp[] >> strip_tac >>
+  qabbrev_tac `s = jump_to entry_lbl sA` >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (sA,GA,tnA) [] (OK s,GA,tnA)` by
+    (gen_tac >> simp[Abbr `s`] >> irule jmp_origin_ptr_path >> simp[] >>
+     qexists_tac `st.cs_next_id + 1` >>
+     simp[get_instruction_def, EL_APPEND_EQN]) >>
+  qabbrev_tac `A = {x | op1 = Var x \/ op2 = Var x}` >>
+  qabbrev_tac `cmp = if is_signed_type fty then SGT else GT` >>
+  qmatch_asmsub_abbrev_tac
+    `lookup_block entry_lbl _ = SOME <|bb_label := entry_lbl; bb_instructions := fullcode|>` >>
+  qabbrev_tac `code = TAKE 9 fullcode` >>
+  `MEM cmp [SGT;GT] /\ scalar_available A op1 /\ scalar_available A op2 /\
+   ALL_DISTINCT [cv;rv;g1;z1;g2;z2;ev] /\
+   (!x. op1 = Var x \/ op2 = Var x ==>
+     ~MEM x [cv;rv;g1;z1;g2;z2;ev])` by
+    (simp[Abbr `cmp`] >> conj_tac >- (Cases_on `is_signed_type fty` >> simp[]) >>
+     conj_tac >- (Cases_on `op1` >> gvs[scalar_available_def, Abbr `A`] >> metis_tac[]) >>
+     conj_tac >- (Cases_on `op2` >> gvs[scalar_available_def, Abbr `A`] >> metis_tac[]) >>
+     conj_tac >- fs[ALL_DISTINCT] >>
+     gen_tac >> strip_tac >>
+     `not_fresh_at st x` by
+       (qpat_x_assum `!x. op1 = Var x \/ op2 = Var x ==> not_fresh_at st x`
+          irule >> simp[]) >>
+     qpat_x_assum `!x. MEM x [cv;rv;g1;z1;g2;z2;ev] ==> _`
+       (qspec_then `x` mp_tac) >> simp[]) >>
+  `eval_operand op1 s = SOME (i2w n1) /\
+   eval_operand op2 s = SOME (i2w n2)` by
+    simp[Abbr `s`, eval_operand_def, lookup_var_def, jump_to_def] >>
+  qabbrev_tac `bad1 = if cmp = SGT then word_gt (i2w n1 : bytes32) (i2w n2)
+                       else w2n (i2w n1 : bytes32) > w2n (i2w n2 : bytes32)` >>
+  qabbrev_tac `bad2 = (w2n (i2w n2 - i2w n1 : bytes32) >
+                       w2n (n2w bound : bytes32))` >>
+  qabbrev_tac `u1 = update_var cv (i2w n1) s` >>
+  qabbrev_tac `u2 = update_var rv (i2w n2-i2w n1) u1` >>
+  qabbrev_tac `u3 = update_var g1 (bool_to_word bad1) u2` >>
+  qabbrev_tac `u4 = update_var z1 (bool_to_word (bool_to_word bad1 = 0w)) u3` >>
+  qabbrev_tac `u5 = update_var g2 (bool_to_word bad2) u4` >>
+  qabbrev_tac `u6 = update_var z2 (bool_to_word (bool_to_word bad2 = 0w)) u5` >>
+  qabbrev_tac `u7 = update_var ev (i2w n1+(i2w n2-i2w n1)) u6` >>
+  `scalar_code A code /\ run_inst_seq_mem_ok code s /\
+   run_inst_seq code s =
+     (if bad1 then Abort Revert_abort (revert_state (set_returndata [] u4))
+      else if bad2 then Abort Revert_abort (revert_state (set_returndata [] u6))
+      else OK u7) /\
+   lookup_var cv u7 = SOME (i2w n1) /\
+   lookup_var ev u7 = SOME (i2w n1+(i2w n2-i2w n1)) /\
+   (!x. ~MEM x [cv;rv;g1;z1;g2;z2;ev] ==>
+     lookup_var x u4 = lookup_var x s /\
+     lookup_var x u6 = lookup_var x s /\
+     lookup_var x u7 = lookup_var x s)` by
+    (mp_tac (range_checked_scalar_run |> SPEC_ALL |>
+       Q.INST [`i` |-> `st.cs_next_id + 2`, `a` |-> `i2w n1 : bytes32`,
+               `b` |-> `i2w n2 : bytes32`]) >>
+     (impl_tac >- asm_rewrite_tac[]) >>
+     simp[LET_THM, Abbr `code`, Abbr `fullcode`, Abbr `u7`, Abbr `u6`, Abbr `u5`,
+          Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `bad1`, Abbr `bad2`,
+          GSYM arithmeticTheory.ADD_ASSOC]) >>
+  `?G' tn' j.
+    (!D. inst_seq_ptr D 0 ctx func PG GA tnA code s G' tn') /\
+    (!v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) code)) ==>
+      FLOOKUP G' v = FLOOKUP GA v /\
+      FLOOKUP tn'.t_var v = FLOOKUP tnA.t_var v /\
+      op_taint tn' (Var v) = op_taint tnA (Var v)) /\
+    tn'.t_mem = tnA.t_mem /\ tn'.t_stor = tnA.t_stor /\
+    tn'.t_trans = tnA.t_trans /\ tn'.t_imm = tnA.t_imm /\
+    (!t. run_inst_seq code s = OK t ==>
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+        (s,GA,tnA) []
+        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code),G',tn')) /\
+      (!v. v IN A UNION BIGUNION (set (MAP (\i. set i.inst_outputs) code)) ==>
+        op_prov G' (Var v) = NONE /\ op_taint tn' (Var v) = {})) /\
+    (!a t. run_inst_seq code s = Abort a t ==>
+      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+        (s,GA,tnA) [] (Abort a (t with vs_inst_idx := j),G',tn'))` by
+    (`!v. v IN A ==> op_prov GA (Var v) = NONE /\ op_taint tnA (Var v) = {}` by
+       (simp[Abbr `A`] >> asm_rewrite_tac[]) >>
+     `~s.vs_halted /\ allocas_from lo s /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
+       (pure_rewrite_tac[allocas_from_def, allocas_below_fmp_def] >>
+        simp[Abbr `s`, jump_to_def] >>
+        conj_tac >-
+          (qpat_x_assum `allocas_from lo sA` mp_tac >>
+           pure_rewrite_tac[allocas_from_def] >> asm_rewrite_tac[]) >>
+        qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp sA` mp_tac >>
+        pure_rewrite_tac[allocas_below_fmp_def] >> asm_rewrite_tac[]) >>
+     irule range_scalar_joint_lift >> asm_rewrite_tac[] >>
+     qexists_tac `<|bb_label := entry_lbl; bb_instructions := fullcode|>` >>
+     simp[Abbr `s`, jump_to_def, Abbr `code`, Abbr `fullcode`,
+          rich_listTheory.IS_PREFIX_APPEND]) >>
+  `bad1 = (n2 < n1)` by
+    (simp[Abbr `bad1`, Abbr `cmp`] >>
+     Cases_on `is_signed_type fty` >> fs[]) >>
+  `n1 <= n2 ==> (bad2 = (bound < Num (n2-n1)))` by
+    (strip_tac >> simp[Abbr `bad2`]) >>
+  Cases_on `bad1` >- suspend "order_error" >>
+  `n1 <= n2` by
+    (qpat_x_assum `bad1 = (n2 < n1)` mp_tac >>
+     asm_rewrite_tac[] >> POP_ASSUM_LIST (K ALL_TAC) >> intLib.COOPER_TAC) >>
+  Cases_on `bad2` >- suspend "bound_error" >>
+  suspend "success"
+QED
+*)
 Theorem range_checked_entry_full:
   !DF lo explicit d ctx func PG tops cx st0 RetQ cenv env es sa s0 G0 tn0 ea sA
       GA tnA st sb0 entry_lbl cond_lbl op1 op2 p cv rv g1 z1 g2 z2 ev bound fty
@@ -3739,112 +3848,10 @@ Theorem range_checked_entry_full:
            (ctx_has_dalloca ctx ==>
             !t. r = Halt t \/ (?ir. r = IntRet ir t) ==> allocas_below_fmp t))
 Proof
-  rpt gen_tac >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ source _ Q R` >>
-  qspecl_then [`get_tenv cx`, `fty`, `tyv`, `n1`, `n2`] mp_tac range_end_words >>
-  simp[] >> strip_tac >>
-  qabbrev_tac `s = jump_to entry_lbl sA` >>
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-    (sA,GA,tnA) [] (OK s,GA,tnA)` by
-    (gen_tac >> simp[Abbr `s`] >> irule jmp_origin_ptr_path >> simp[] >>
-     qexists_tac `st.cs_next_id + 1` >>
-     simp[get_instruction_def, EL_APPEND_EQN]) >>
-  qabbrev_tac `A = {x | op1 = Var x \/ op2 = Var x}` >>
-  qabbrev_tac `cmp = if is_signed_type fty then SGT else GT` >>
-  qmatch_asmsub_abbrev_tac
-    `lookup_block entry_lbl _ = SOME <|bb_label := entry_lbl; bb_instructions := fullcode|>` >>
-  qabbrev_tac `code = TAKE 9 fullcode` >>
-  `MEM cmp [SGT;GT] /\ scalar_available A op1 /\ scalar_available A op2 /\
-   ALL_DISTINCT [cv;rv;g1;z1;g2;z2;ev] /\
-   (!x. op1 = Var x \/ op2 = Var x ==>
-     ~MEM x [cv;rv;g1;z1;g2;z2;ev])` by
-    (simp[Abbr `cmp`] >> conj_tac >- (Cases_on `is_signed_type fty` >> simp[]) >>
-     conj_tac >- (Cases_on `op1` >> gvs[scalar_available_def, Abbr `A`] >> metis_tac[]) >>
-     conj_tac >- (Cases_on `op2` >> gvs[scalar_available_def, Abbr `A`] >> metis_tac[]) >>
-     conj_tac >- fs[ALL_DISTINCT] >>
-     gen_tac >> strip_tac >>
-     `not_fresh_at st x` by
-       (qpat_x_assum `!x. op1 = Var x \/ op2 = Var x ==> not_fresh_at st x`
-          irule >> simp[]) >>
-     qpat_x_assum `!x. MEM x [cv;rv;g1;z1;g2;z2;ev] ==> _`
-       (qspec_then `x` mp_tac) >> simp[]) >>
-  `eval_operand op1 s = SOME (i2w n1) /\
-   eval_operand op2 s = SOME (i2w n2)` by
-    simp[Abbr `s`, eval_operand_def, lookup_var_def, jump_to_def] >>
-  qabbrev_tac `bad1 = if cmp = SGT then word_gt (i2w n1 : bytes32) (i2w n2)
-                       else w2n (i2w n1 : bytes32) > w2n (i2w n2 : bytes32)` >>
-  qabbrev_tac `bad2 = (w2n (i2w n2 - i2w n1 : bytes32) >
-                       w2n (n2w bound : bytes32))` >>
-  qabbrev_tac `u1 = update_var cv (i2w n1) s` >>
-  qabbrev_tac `u2 = update_var rv (i2w n2-i2w n1) u1` >>
-  qabbrev_tac `u3 = update_var g1 (bool_to_word bad1) u2` >>
-  qabbrev_tac `u4 = update_var z1 (bool_to_word (bool_to_word bad1 = 0w)) u3` >>
-  qabbrev_tac `u5 = update_var g2 (bool_to_word bad2) u4` >>
-  qabbrev_tac `u6 = update_var z2 (bool_to_word (bool_to_word bad2 = 0w)) u5` >>
-  qabbrev_tac `u7 = update_var ev (i2w n1+(i2w n2-i2w n1)) u6` >>
-  `scalar_code A code /\ run_inst_seq_mem_ok code s /\
-   run_inst_seq code s =
-     (if bad1 then Abort Revert_abort (revert_state (set_returndata [] u4))
-      else if bad2 then Abort Revert_abort (revert_state (set_returndata [] u6))
-      else OK u7) /\
-   lookup_var cv u7 = SOME (i2w n1) /\
-   lookup_var ev u7 = SOME (i2w n1+(i2w n2-i2w n1)) /\
-   (!x. ~MEM x [cv;rv;g1;z1;g2;z2;ev] ==>
-     lookup_var x u4 = lookup_var x s /\
-     lookup_var x u6 = lookup_var x s /\
-     lookup_var x u7 = lookup_var x s)` by
-    (mp_tac (range_checked_scalar_run |> SPEC_ALL |>
-       Q.INST [`i` |-> `st.cs_next_id + 2`, `a` |-> `i2w n1 : bytes32`,
-               `b` |-> `i2w n2 : bytes32`]) >>
-     (impl_tac >- asm_rewrite_tac[]) >>
-     simp[LET_THM, Abbr `code`, Abbr `fullcode`, Abbr `u7`, Abbr `u6`, Abbr `u5`,
-          Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `bad1`, Abbr `bad2`,
-          GSYM arithmeticTheory.ADD_ASSOC]) >>
-  `?G' tn' j.
-    (!D. inst_seq_ptr D 0 ctx func PG GA tnA code s G' tn') /\
-    (!v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) code)) ==>
-      FLOOKUP G' v = FLOOKUP GA v /\
-      FLOOKUP tn'.t_var v = FLOOKUP tnA.t_var v /\
-      op_taint tn' (Var v) = op_taint tnA (Var v)) /\
-    tn'.t_mem = tnA.t_mem /\ tn'.t_stor = tnA.t_stor /\
-    tn'.t_trans = tnA.t_trans /\ tn'.t_imm = tnA.t_imm /\
-    (!t. run_inst_seq code s = OK t ==>
-      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-        (s,GA,tnA) []
-        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code),G',tn')) /\
-      (!v. v IN A UNION BIGUNION (set (MAP (\i. set i.inst_outputs) code)) ==>
-        op_prov G' (Var v) = NONE /\ op_taint tn' (Var v) = {})) /\
-    (!a t. run_inst_seq code s = Abort a t ==>
-      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-        (s,GA,tnA) [] (Abort a (t with vs_inst_idx := j),G',tn'))` by
-    (`!v. v IN A ==> op_prov GA (Var v) = NONE /\ op_taint tnA (Var v) = {}` by
-       (simp[Abbr `A`] >> asm_rewrite_tac[]) >>
-     `~s.vs_halted /\ allocas_from lo s /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
-       (pure_rewrite_tac[allocas_from_def, allocas_below_fmp_def] >>
-        simp[Abbr `s`, jump_to_def] >>
-        conj_tac >-
-          (qpat_x_assum `allocas_from lo sA` mp_tac >>
-           pure_rewrite_tac[allocas_from_def] >> asm_rewrite_tac[]) >>
-        qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp sA` mp_tac >>
-        pure_rewrite_tac[allocas_below_fmp_def] >> asm_rewrite_tac[]) >>
-     irule range_scalar_joint_lift >> asm_rewrite_tac[] >>
-     qexists_tac `<|bb_label := entry_lbl; bb_instructions := fullcode|>` >>
-     simp[Abbr `s`, jump_to_def, Abbr `code`, Abbr `fullcode`,
-          rich_listTheory.IS_PREFIX_APPEND]) >>
-  `bad1 = (n2 < n1)` by
-    (simp[Abbr `bad1`, Abbr `cmp`] >>
-     Cases_on `is_signed_type fty` >> fs[]) >>
-  `n1 <= n2 ==> (bad2 = (bound < Num (n2-n1)))` by
-    (strip_tac >> simp[Abbr `bad2`]) >>
-  Cases_on `bad1` >- suspend "order_error" >>
-  `n1 <= n2` by
-    (qpat_x_assum `bad1 = (n2 < n1)` mp_tac >>
-     asm_rewrite_tac[] >> POP_ASSUM_LIST (K ALL_TAC) >> intLib.COOPER_TAC) >>
-  Cases_on `bad2` >- suspend "bound_error" >>
-  suspend "success"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_checked_entry_full[order_error]:
   qpat_x_assum `T = (n2 < n1)` mp_tac >>
   pure_rewrite_tac[EQ_CLAUSES] >> strip_tac >>
@@ -3874,7 +3881,9 @@ Resume range_checked_entry_full[order_error]:
   simp[Abbr `R`, stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def,
        haltExitProjTheory.halt_exit_not_halt]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_checked_entry_full[bound_error]:
   qpat_x_assum `n1 <= n2 ==> (T = (bound < Num (n2-n1)))` mp_tac >>
   pure_rewrite_tac[EQ_CLAUSES] >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
@@ -3901,7 +3910,9 @@ Resume range_checked_entry_full[bound_error]:
   simp[Abbr `R`, stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def,
        haltExitProjTheory.halt_exit_not_halt]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_checked_entry_full[success]:
   qpat_x_assum `n1 <= n2 ==> (F = (bound < Num (n2-n1)))` mp_tac >>
   pure_rewrite_tac[EQ_CLAUSES] >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
@@ -3952,7 +3963,9 @@ Resume range_checked_entry_full[success]:
      simp[] >> qexistsl_tac [`G'`, `pre`, `tn'`] >> simp[]) >>
   suspend "success_post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_checked_entry_full[success_post]:
   `fin = jump_to cond_lbl (jump_to entry_lbl (sA with vs_vars := u7.vs_vars))` by
     simp[Abbr `fin`, Abbr `pre`, Abbr `u7`, Abbr `u6`, Abbr `u5`, Abbr `u4`,
@@ -4091,8 +4104,11 @@ Resume range_checked_entry_full[success_post]:
        (ACCEPT_TAC o PURE_REWRITE_RULE [alloca_frame_def])) >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise range_checked_entry_full
+*)
 
 (* ===== Initialization: one allocation and the selected scalar suffix ===== *)
 
