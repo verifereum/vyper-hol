@@ -32,12 +32,21 @@ Proof
   simp[ghost_inv_at_def, lookup_scopes_def] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem ghost_inv_at_pop:
+  !D lo d cenv cenv' cx ee G tn s sc rest.
+  ghost_inv_at D lo d cenv' cx ee G tn s /\
+  cenv_top_ext cenv cenv' ee.scopes /\
+  ee.scopes = sc :: rest /\
+  (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
+  ghost_inv_at D lo d cenv cx (ee with scopes := rest) G tn s
 Proof
   rpt gen_tac >>
   simp[ghost_inv_at_def, cenv_top_ext_def, compile_env_component_equality] >>
-  strip_tac >> gvs[] >> conj_tac
+  strip_tac >>
+  `!i. imm_section_dead_mods cenv (mem_bytes_at 0 lo s.vs_memory) i <=>
+       imm_section_dead_mods cenv' (mem_bytes_at 0 lo s.vs_memory) i` by
+    simp[immSectionDeadTheory.imm_section_dead_mods_def] >>
+  gvs[] >> conj_tac
   >- (rpt strip_tac >>
       `name NOTIN FDOM sc` by metis_tac[optionTheory.NOT_NONE_SOME] >>
       `FLOOKUP sc name = NONE` by simp[FLOOKUP_DEF] >>
@@ -48,17 +57,6 @@ Proof
   gvs[] >> Cases_on `d` >> simp[return_buf_ptr_def] >>
   rename1 `SOME ds` >> PairCases_on `ds` >>
   gvs[return_buf_ptr_def]
-QED
-*)
-Theorem ghost_inv_at_pop:
-  !D lo d cenv cenv' cx ee G tn s sc rest.
-  ghost_inv_at D lo d cenv' cx ee G tn s /\
-  cenv_top_ext cenv cenv' ee.scopes /\
-  ee.scopes = sc :: rest /\
-  (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-  ghost_inv_at D lo d cenv cx (ee with scopes := rest) G tn s
-Proof
-  cheat
 QED
 
 (* local_ptrs_reserved reads only ce_vars, which the shadow env keeps, and
