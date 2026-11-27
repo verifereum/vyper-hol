@@ -546,13 +546,14 @@ End
 Definition immutable_holds_def:
   immutable_holds cenv cx t tv (w:bytes32) (es:evaluation_state)
                   (s:venom_state) <=>
-    ?name off itv iv k tvt v.
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
+    ?src name off itv iv k tvt v.
+      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+      FLOOKUP cenv.ce_module_vars (src, name) =
         SOME (ImmutableLoc off) /\ w = n2w (off + k) /\
       off + type_memory_size itv < dimword (:256) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
                  NONE => FEMPTY
-               | SOME imms => get_source_immutables cenv.ce_module imms)
+               | SOME imms => get_source_immutables src imms)
               name = SOME (itv, iv) /\
       evaluate_type (get_tenv cx) t = SOME tvt /\
       sub_layout itv iv k tvt v /\
@@ -696,13 +697,14 @@ Definition vv_place_ptr_def:
          p.ptr_location = slot_loc tr /\
          eval_operand p.ptr_operand s = SOME slot
      | PlaceR (ImmutablePlace src id path) =>
-         p.ptr_location = LocCode /\ src = cenv.ce_module /\
+         p.ptr_location = LocCode /\
+         (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
          ?off itv iv k tvk.
-           FLOOKUP cenv.ce_module_vars (cenv.ce_module, id) =
+           FLOOKUP cenv.ce_module_vars (src, id) =
              SOME (ImmutableLoc off) /\
            FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
                       NONE => FEMPTY
-                    | SOME imms => get_source_immutables cenv.ce_module imms)
+                    | SOME imms => get_source_immutables src imms)
                    id = SOME (itv, iv) /\
            mem_path_offset itv path = SOME (k, tvk) /\
            eval_operand p.ptr_operand s = SOME (n2w (off + k))
