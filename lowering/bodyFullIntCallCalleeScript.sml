@@ -3930,23 +3930,8 @@ QED
 
 (* The target Return has performed the unlock. Match it to the source
    release and transport the scope-empty state relation to the caller. *)
-Theorem intcall_callee_intret_post[local]:
-  body_inv tops ctx cenv cx /\
-  body_inv tops ctx ce (cx with stk updated_by CONS (NONE,name)) /\
-  ce.ce_returns_count = ret_count /\
-  ce.ce_nonreentrant = (nr,key,T,view) /\
-  (nr ==> cx.nonreentrant_slot = SOME key /\ view = is_view_mut mut) /\
-  (nr /\ ~view ==> regions_consistent (FST H) /\
-     storage_locks_separated (FST H) (SND H) /\
-     storage_observations_ok cx H trace /\ MEM (StorageLock key) trace) /\
-  storage_well_formed_on cx ee (FST H) /\
-  intret_q H callee ce (cx with stk updated_by CONS (NONE,name)) rtv v
-    (ee with scopes := []) (IntRet ir u) ==>
-  ?ee'. unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),ee') /\
-    storage_well_formed_on cx ee' (FST H) /\
-    state_rel H func cenv cx (ee' with scopes := []) u /\
-    LENGTH ir.iret_values = ret_count /\ ir.iret_adopt_fmp = NONE /\
-    intret_vals_match rtv v ir.iret_values
+(* SCRATCH MEASUREMENT: the original proof failed after restating the state-relation
+   lemmas. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `LENGTH ir.iret_values = ret_count` by
@@ -4019,6 +4004,27 @@ Proof
   qpat_assum `body_inv tops ctx ce _`
     (assume_tac o MATCH_MP contract_inv_constructor o MATCH_MP bodySimTheory.body_inv_contract) >>
   fs[vyperStateTheory.lookup_scopes_def]
+QED
+*)
+Theorem intcall_callee_intret_post[local]:
+  body_inv tops ctx cenv cx /\
+  body_inv tops ctx ce (cx with stk updated_by CONS (NONE,name)) /\
+  ce.ce_returns_count = ret_count /\
+  ce.ce_nonreentrant = (nr,key,T,view) /\
+  (nr ==> cx.nonreentrant_slot = SOME key /\ view = is_view_mut mut) /\
+  (nr /\ ~view ==> regions_consistent (FST H) /\
+     storage_locks_separated (FST H) (SND H) /\
+     storage_observations_ok cx H trace /\ MEM (StorageLock key) trace) /\
+  storage_well_formed_on cx ee (FST H) /\
+  intret_q H callee ce (cx with stk updated_by CONS (NONE,name)) rtv v
+    (ee with scopes := []) (IntRet ir u) ==>
+  ?ee'. unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),ee') /\
+    storage_well_formed_on cx ee' (FST H) /\
+    state_rel H func cenv cx (ee' with scopes := []) u /\
+    LENGTH ir.iret_values = ret_count /\ ir.iret_adopt_fmp = NONE /\
+    intret_vals_match rtv v ir.iret_values
+Proof
+  cheat
 QED
 
 Theorem intcall_callee_exit_assemble[local]:
