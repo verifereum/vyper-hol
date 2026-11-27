@@ -182,14 +182,19 @@ Proof
   metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_state_rel_pop_top_ext:
+  !H func cenv cenv' cx es ss sc rest ctx.
+    stmt_state_rel H ctx func cenv' cx es ss /\ cenv_top_ext cenv cenv' es.scopes /\
+    es.scopes = sc :: rest /\
+    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
+    stmt_state_rel H ctx func cenv cx (es with scopes := rest) ss
 Proof
   rpt strip_tac >>
   drule_all stmt_state_rel_pop_scope >> strip_tac >>
   irule stmt_state_rel_cenv_cong >>
   qexists_tac `cenv'` >> fs[cenv_top_ext_def] >>
-  `cenv'.ce_module_vars = cenv.ce_module_vars` by
+  `cenv'.ce_module_vars = cenv.ce_module_vars /\
+   cenv'.ce_modules = cenv.ce_modules` by
     (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   rpt conj_tac
   >- (rpt strip_tac >> CCONTR_TAC >>
@@ -199,16 +204,6 @@ Proof
   >- simp[]
   >- simp[] >>
   fs[compileEnvTheory.compile_env_component_equality]
-QED
-*)
-Theorem stmt_state_rel_pop_top_ext:
-  !H func cenv cenv' cx es ss sc rest ctx.
-    stmt_state_rel H ctx func cenv' cx es ss /\ cenv_top_ext cenv cenv' es.scopes /\
-    es.scopes = sc :: rest /\
-    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    stmt_state_rel H ctx func cenv cx (es with scopes := rest) ss
-Proof
-  cheat
 QED
 
 Theorem declare_stmt_local_reserved:

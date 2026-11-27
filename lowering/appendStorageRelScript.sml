@@ -164,8 +164,16 @@ Proof
   asm_simp_tac bool_ss [arithmeticTheory.ADD_COMM]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_state_rel_append_storage_updates:
+  stmt_state_rel H ctx func cenv cx es s /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
+  type_slot_size tv = 1 /\
+  len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap ==>
+  stmt_state_rel H ctx func cenv cx
+    (set_storage cx es tr (update_storage slot (n2w (len+1))
+      (update_storage (slot+n2w (1+len)) w (get_storage cx es tr))))
+    (if tr then tstore slot (n2w (len+1)) (tstore (slot+n2w (1+len)) w s)
+     else sstore slot (n2w (len+1)) (sstore (slot+n2w (1+len)) w s))
 Proof
   strip_tac >>
   `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel H cx es s` by
@@ -194,24 +202,19 @@ Proof
     (`immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>
      irule immutable_base_zero_frame >> qexists_tac `s` >>
      Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM, lookup_var_def]) >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx es1 s1` by
+    (rpt strip_tac >>
+     irule immutable_alloca_sep_fields >> qexistsl [`s`, `es`] >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+     Cases_on `tr` >>
+     simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
+          set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
   irule stmt_state_rel_allocas_frame >>
   qpat_assum `immutable_base_zero cenv _` (irule_at Any) >> simp[] >>
   qexistsl [`s`, `es`] >> simp[] >> Cases_on `tr` >>
   simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
-QED
-*)
-Theorem stmt_state_rel_append_storage_updates:
-  stmt_state_rel H ctx func cenv cx es s /\
-  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
-  type_slot_size tv = 1 /\
-  len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap ==>
-  stmt_state_rel H ctx func cenv cx
-    (set_storage cx es tr (update_storage slot (n2w (len+1))
-      (update_storage (slot+n2w (1+len)) w (get_storage cx es tr))))
-    (if tr then tstore slot (n2w (len+1)) (tstore (slot+n2w (1+len)) w s)
-     else sstore slot (n2w (len+1)) (sstore (slot+n2w (1+len)) w s))
-Proof
-  cheat
 QED
 
 Theorem stmt_state_rel_append_storage_word:
