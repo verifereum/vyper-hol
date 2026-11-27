@@ -36,7 +36,7 @@ Proof
   metis_tac[qualified_module_const_keep, qualified_module_const_key, MAP, MEM]
 QED
 
-Triviality checked_const_key:
+Theorem checked_const_key:
   cx_const_name_mods mods key ==> IS_SOME (ALOOKUP (consts_env_mods mods) key)
 Proof
   PairCases_on `key` >>
@@ -46,7 +46,7 @@ Proof
   metis_tac[ALOOKUP_MEM]
 QED
 
-Triviality fixed_const_root_free:
+Theorem fixed_const_root_free:
   (!e. (!eenv. subst_consts_expr_mods eenv e = e) ==>
        ~supported_expr_exists (const_name_root_mods mods) e) /\
   (!t. (!eenv. subst_consts_btarget_mods eenv t = t) ==>
@@ -67,7 +67,7 @@ Proof
       PairCases_on `ns` >> simp[subst_consts_expr_mods_def, ALOOKUP_def])
 QED
 
-Triviality subst_const_roots_eliminated:
+Theorem subst_const_roots_eliminated:
   (!key. cx_const_name_mods mods key ==> IS_SOME (ALOOKUP env key)) /\
   (!key rhs. ALOOKUP env key = SOME rhs ==>
      ~supported_expr_exists (const_name_root_mods mods) rhs) ==>
