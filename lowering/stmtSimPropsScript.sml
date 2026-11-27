@@ -193,7 +193,8 @@ Proof
   drule_all stmt_state_rel_pop_scope >> strip_tac >>
   irule stmt_state_rel_cenv_cong >>
   qexists_tac `cenv'` >> fs[cenv_top_ext_def] >>
-  `cenv'.ce_module_vars = cenv.ce_module_vars` by
+  `cenv'.ce_module_vars = cenv.ce_module_vars /\
+   cenv'.ce_modules = cenv.ce_modules` by
     (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   rpt conj_tac
   >- (rpt strip_tac >> CCONTR_TAC >>

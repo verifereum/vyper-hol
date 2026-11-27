@@ -4018,6 +4018,8 @@ Proof
     (assume_tac o MATCH_MP contract_inv_constructor o MATCH_MP bodySimTheory.body_inv_contract) >>
   qpat_assum `body_inv tops ctx ce _`
     (assume_tac o MATCH_MP contract_inv_constructor o MATCH_MP bodySimTheory.body_inv_contract) >>
+  `cenv.ce_modules = [(NONE,tops)] /\ ce.ce_modules = [(NONE,tops)]` by
+    metis_tac[bodySimTheory.body_inv_contract, contract_inv_cenv_modules] >>
   fs[vyperStateTheory.lookup_scopes_def]
 QED
 

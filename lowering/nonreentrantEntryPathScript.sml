@@ -273,6 +273,16 @@ Proof
      gvs[transient_lock_code_execution, tstore_def] >>
      rpt strip_tac >> qexists_tac `id` >>
      fs[local_region_def, lookup_var_def]) >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx locked u` by
+    (rpt strip_tac >>
+     irule immutable_alloca_sep_fields >>
+     qexistsl [`transient_lock_checked_state sa nkey s`, `es`] >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ es (transient_lock_checked_state _ _ _)`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+     Cases_on `iv` >> gvs[transient_lock_code_execution, tstore_def] >>
+     rpt strip_tac >- metis_tac[] >>
+     qexists_tac `id` >> fs[local_region_def, lookup_var_def]) >>
   `immutable_base_zero cenv u` by
     (Cases_on `iv` >> gvs[transient_lock_code_execution] >>
      fs[stmt_state_rel_def, immutable_base_zero_alt, tstore_def]) >>
