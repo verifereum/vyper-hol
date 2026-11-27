@@ -3,7 +3,7 @@ Theory bodyFullImmutablePathStore
 Ancestors
   immutableDeployAssignPathGhost immutableAssignCompose
   bodyImmutableAugAssignExec bodyFullPathHistory bodyFullHashKeccakFixed
-  stmtSimDefs exprLoweringProps loweringPosts gasOutcomeFullCompose gasSummary fragExec
+  stmtSimDefs exprLoweringProps loweringPosts gasOutcomeFullCompose gasSummary fragExec bodyInvCodeProps
   freshWrites bodyPtrDefs bodySim vyperPlaceFrames
   vyperStorageFootprint gasContext venomState
   immutableWordStorePath stmtSimDeclStore stmtLowering context
@@ -243,6 +243,8 @@ Proof
   gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
     (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  `immutable_section_layout_mods ce.ce_modules ce` by
+    metis_tac[body_inv_unit_immutable_layout] >>
   `stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q` by
     (`q with vs_inst_idx := LENGTH sb.cs_current_insts = q` by
        simp[venom_state_component_equality] >>
