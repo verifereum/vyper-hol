@@ -655,7 +655,7 @@ Theorem intcall_callee_final_horizon_bytes[local]:
   gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
     MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
     marks (IntRet ir s',G',tn') ==>
-  !b sz. (cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b) /\
+  !b sz. (cenv.ce_is_ctor ==> imm_len_mods cenv.ce_modules <= b) /\
     b + sz <= t.vs_alloca_next /\
     (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
       sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
@@ -2551,18 +2551,12 @@ Proof
   fs[module_body_inv_def, contract_inv_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  simp[bodyPtrDefsTheory.dead_lo_ok_def, sourceUnitExecutionTheory.cx_dead_def,
-       cx_tops_def, get_module_code_stk_irrelevant]
-QED
-*)
 Theorem intcall_callee_dead_lo[local]:
-  body_ce.ce_is_ctor = caller.ce_is_ctor /\ dead_lo_ok H D lo caller cx ==>
+  body_ce.ce_is_ctor = caller.ce_is_ctor /\
+  body_ce.ce_modules = caller.ce_modules /\ dead_lo_ok H D lo caller cx ==>
   dead_lo_ok H D lo body_ce (cx with stk updated_by CONS k)
 Proof
-  cheat
+  simp[bodyPtrDefsTheory.dead_lo_ok_def, sourceUnitExecutionTheory.cx_dead_def]
 QED
 
 Theorem module_body_inv_active_module[local]:
@@ -2908,13 +2902,16 @@ Theorem intcall_callee_locked_body_frag[local]:
         (case rt of NONE => BaseT BoolT | SOME ty => ty) (MAP gas_shadow_stmt ss_comp))
       (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) locked /\
     gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (stmt_res_ok NoLoop) locked /\
-    body_ce.ce_is_ctor = caller.ce_is_ctor
+    body_ce.ce_is_ctor = caller.ce_is_ctor /\
+    body_ce.ce_modules = caller.ce_modules
 Proof
   strip_tac >> drule_all intcall_callee_locked_body_ready >> strip_tac >>
   `body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss_comp` by
     (qpat_assum `(_ ==> _) ==> body_stmts_full_ok _ ss_comp` match_mp_tac >>
      first_assum ACCEPT_TAC) >>
-  (reverse conj_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+  `body_ce.ce_modules = caller.ce_modules` by
+    fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def] >>
+  reverse conj_tac >- simp[] >>
   qpat_assum `stmts_env body_ce NoLoop ret ss_comp = _`
     (pure_once_rewrite_tac o single o SYM) >>
   qpat_assum `stmts_env _ NoLoop ret (MAP gas_shadow_stmt ss_comp) = _`
@@ -3019,7 +3016,8 @@ Proof
       (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) locked /\
     gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss)
       (stmt_res_ok NoLoop) locked /\
-    body_ce.ce_is_ctor = caller.ce_is_ctor` by
+    body_ce.ce_is_ctor = caller.ce_is_ctor /\
+    body_ce.ce_modules = caller.ce_modules` by
     (drule_all intcall_callee_locked_body_frag >> simp[NoAsms]) >>
   `!K. dead_lo_ok K (DF K) lo body_ce (cx with stk updated_by CONS (NONE,name))` by
     (gen_tac >> irule intcall_callee_dead_lo >> metis_tac[]) >>
@@ -3179,6 +3177,8 @@ Proof
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   `B (cx with stk updated_by CONS (NONE,name)) ss_comp` by
     (qpat_assum `(_ ==> _) ==> B _ ss_comp` match_mp_tac >> first_assum ACCEPT_TAC) >>
+  `body_ce.ce_modules = caller.ce_modules` by
+    fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def] >>
   `!K. dead_lo_ok K (DF K) lo body_ce (cx with stk updated_by CONS (NONE,name))` by
     (gen_tac >> irule intcall_callee_dead_lo >> metis_tac[]) >>
   qpat_assum `!dret RetQ body_ce bindings env env_after rt locked sf body_start
@@ -3649,31 +3649,6 @@ Proof
       listTheory.LAST_CONS_cond, listTheory.LAST_APPEND_CONS]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> rpt conj_tac
-  >- (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
-      qexists_tac `materialized` >> simp[])
-  >- simp[]
-  >- (irule stmtSimPropsTheory.ret_pc_ok_frame >>
-      qexistsl_tac [`ce1`,`at_reserve`,`reserved`] >> simp[])
-  >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-      qexistsl_tac [`ce1`,`at_reserve`,`reserved`] >> simp[])
-  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
-      qexists_tac `materialized` >> simp[])
-  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
-      qexists_tac `materialized` >> simp[])
-  >- (simp[exprLoweringPropsTheory.stmt_state_rel_def] >> rpt strip_tac >>
-      qpat_assum `!i w b sz. MEM i (fn_insts callee) /\ _ /\ _ /\ FLOOKUP at_pro.vs_allocas _ = _ ==> _`
-        (irule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
-  gen_tac >> disch_tac >>
-  irule bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at_vars >>
-  conj_tac >- (first_assum irule >> first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`Gmat`,`at_pro.vs_alloca_next`,`callee`,`at_mat`,`materialized`,`tnmat`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> simp[]
-QED
-*)
 Theorem intcall_callee_prologue_body_resources:
   local_ptrs_reserved body_ce materialized /\
   materialized.cs_next_var <= prologue.cs_next_var /\
@@ -3688,6 +3663,8 @@ Theorem intcall_callee_prologue_body_resources:
   at_reserve.vs_alloca_next <= at_pro.vs_alloca_next /\
   alloca_inv at_pro /\ alloca_room ctx callee at_pro /\ fmp_room ctx callee at_pro /\
   immutable_alloca_sep callee body_ce cx es1 at_pro /\ immutable_base_zero body_ce at_pro /\
+  (!src tops. ALOOKUP body_ce.ce_modules src = SOME tops ==>
+     immutable_alloca_sep callee (body_ce with ce_module := src) cx es1 at_pro) /\
   (!i w b sz. MEM i (fn_insts callee) /\ i.inst_opcode = ALLOCA /\
      i.inst_operands = [Lit w] /\ FLOOKUP at_pro.vs_allocas i.inst_id = SOME (b,sz) ==>
      sz = w2n w) /\
@@ -3717,7 +3694,26 @@ Theorem intcall_callee_prologue_body_resources:
   (!H. valid_horizon cx st0 H es1.storage_trace ==>
      ghost_inv_at (DF H) lo ret_dest body_ce cx es1 Gpro tnpro at_pro)
 Proof
-  cheat
+  strip_tac >> rpt conj_tac
+  >- (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+      qexists_tac `materialized` >> simp[])
+  >- simp[]
+  >- (irule stmtSimPropsTheory.ret_pc_ok_frame >>
+      qexistsl_tac [`ce1`,`at_reserve`,`reserved`] >> simp[])
+  >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+      qexistsl_tac [`ce1`,`at_reserve`,`reserved`] >> simp[])
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `materialized` >> simp[])
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `materialized` >> simp[])
+  >- (simp[exprLoweringPropsTheory.stmt_state_rel_def] >> rpt strip_tac >>
+      qpat_assum `!i w b sz. MEM i (fn_insts callee) /\ _ /\ _ /\ FLOOKUP at_pro.vs_allocas _ = _ ==> _`
+        (irule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  gen_tac >> disch_tac >>
+  irule bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at_vars >>
+  conj_tac >- (first_assum irule >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`Gmat`,`at_pro.vs_alloca_next`,`callee`,`at_mat`,`materialized`,`tnmat`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> simp[]
 QED
 
 Theorem intcall_callee_buffered_frame_ret[local]:
@@ -3793,6 +3789,9 @@ Proof
      simp[returns_stack_count_def,is_word_type_def]) >>
   `?pc slot. ce.ce_return_pc = SOME (PtrVar (Var pc) slot)` by
     (qexistsl [`rpc`,`rsz`] >> first_assum ACCEPT_TAC) >>
+  `ce.ce_modules = [(NONE,cx_tops cx)]` by
+    fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def,
+       gasContextTheory.cx_tops_module] >>
   Cases_on `has_rb`
   >- (simp[NoAsms] >> irule intcall_callee_buffered_frame_ret >>
       `~is_word_type ty` by
@@ -3812,10 +3811,16 @@ Proof
     ce ty` by
     (Cases_on `ty = NoneT`
      >- (qpat_assum `ty = NoneT` SUBST_ALL_TAC >>
+         qpat_assum `ce.ce_modules = [(NONE,cx_tops cx)]`
+           (pure_rewrite_tac o single o GSYM o
+            MATCH_MP immSectionDeadTheory.imm_section_dead_mods_singleton) >>
          irule stmtSimReturnTheory.internal_frame_ret_none_full_taint >>
          fs[returns_stack_count_def]) >>
      Cases_on `is_word_type ty`
-     >- (irule stmtSimReturnTheory.internal_frame_ret_word_full_taint >>
+     >- (qpat_assum `ce.ce_modules = [(NONE,cx_tops cx)]`
+        (pure_rewrite_tac o single o GSYM o
+         MATCH_MP immSectionDeadTheory.imm_section_dead_mods_singleton) >>
+      irule stmtSimReturnTheory.internal_frame_ret_word_full_taint >>
          fs[]) >>
      qpat_assum `ce.ce_modules = [(NONE,cx_tops cx)]`
        (pure_rewrite_tac o single o MATCH_MP imm_section_dead_mods_singleton) >>
@@ -4408,6 +4413,9 @@ Theorem intcall_callee_return_from_path[local]:
     sa.cs_next_id sb.cs_next_id t tn (INL v) (ee with gas_obs := []) (G',tn') (IntRet ir u)
 Proof
   strip_tac >>
+  `cenv.ce_modules = [(NONE,cx_tops cx)]` by
+    fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def,
+       gasContextTheory.cx_tops_module] >>
   `!b sz. (cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b) /\
     b + sz <= t.vs_alloca_next /\
     (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
@@ -4416,7 +4424,9 @@ Proof
     mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz t.vs_memory` by
     (mp_tac (Q.INST [`ys` |-> `[]`, `res` |-> `INL v`, `s'` |-> `u`]
        intcall_callee_final_horizon_bytes) >>
-     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[NoAsms]) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `cenv.ce_modules = [(NONE,cx_tops cx)]`
+       (simp o cons NoAsms o cons immSectionDeadTheory.imm_len_mods_singleton o single)) >>
   `!i. lo <= i /\ i < t.vs_alloca_next /\ i IN tn'.t_mem /\
     (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
       sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
