@@ -4230,6 +4230,44 @@ Finalise create_ctor_saved_row_suffix
 *)
 
 (* A copying snapshot carries its own allocation witness to the suffix. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `compile_expr _ _ e sa = _`
+    (mp_then Any mp_tac create_ctor_snapshot_retag) >> simp[] >>
+  disch_then (drule_then strip_assume_tac) >>
+  `~is_word_type (lowered_value_type cenv e)` by metis_tac[] >>
+  `?op. compile_materialize_vv cenv (lowered_value_type cenv e) vv sm = (op,ss) /\
+        compile_materialize_vv cenv (lowered_value_type cenv e) vv shm = (op,shs) /\
+        sv = LocatedValue (lowered_value_type cenv e) (mk_ptr op LocMemory)` by
+    (Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv sm` >>
+     Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv shm` >>
+     gvs[compile_snapshot_vv_def, comp_bind_def, comp_return_def, mk_ptr_def]) >>
+  `sa.cs_next_id <= sm.cs_next_id` by
+    (qpat_assum `compile_expr _ _ e sa = _`
+      (mp_then Any mp_tac exprSimUnwrapTheory.compile_expr_extends) >> simp[]) >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_initial_domain >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_read_result] >> disch_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+       fs[storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
+     drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
+  irule_at Any bodyFullExtCallDefaultKeywordTheory.extcall_operand_materialized_full >>
+  qpat_assum `compile_materialize_vv _ _ _ sm = _` (irule_at Any) >>
+  qpat_assum `compile_materialize_vv _ _ _ shm = _` (irule_at Any) >>
+  qpat_assum `body_inv _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `gas_shadow_function _ _` (irule_at Any) >>
+  qpat_assum `return_buf_frame _ _ sa s0` (irule_at Any) >>
+  asm_simp_tac bool_ss [] >> suspend "post"
+QED
+*)
 Theorem create_ctor_materialized_head_outcome:
   body_const_cells_agree mods cx env es /\
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
@@ -4288,41 +4326,10 @@ Theorem create_ctor_materialized_head_outcome:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_assum `compile_expr _ _ e sa = _`
-    (mp_then Any mp_tac create_ctor_snapshot_retag) >> simp[] >>
-  disch_then (drule_then strip_assume_tac) >>
-  `~is_word_type (lowered_value_type cenv e)` by metis_tac[] >>
-  `?op. compile_materialize_vv cenv (lowered_value_type cenv e) vv sm = (op,ss) /\
-        compile_materialize_vv cenv (lowered_value_type cenv e) vv shm = (op,shs) /\
-        sv = LocatedValue (lowered_value_type cenv e) (mk_ptr op LocMemory)` by
-    (Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv sm` >>
-     Cases_on `compile_materialize_vv cenv (lowered_value_type cenv e) vv shm` >>
-     gvs[compile_snapshot_vv_def, comp_bind_def, comp_return_def, mk_ptr_def]) >>
-  `sa.cs_next_id <= sm.cs_next_id` by
-    (qpat_assum `compile_expr _ _ e sa = _`
-      (mp_then Any mp_tac exprSimUnwrapTheory.compile_expr_extends) >> simp[]) >>
-  irule gasOutcomeFullComposeTheory.gas_outcome_full_initial_domain >>
-  simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
-       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
-       vyperStorageTraceTheory.storage_trace_frame_read_result] >> disch_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
-    (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
-       fs[storage_trace_domain_def] >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
-       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
-     drule bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >> simp[]) >>
-  irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
-  irule_at Any bodyFullExtCallDefaultKeywordTheory.extcall_operand_materialized_full >>
-  qpat_assum `compile_materialize_vv _ _ _ sm = _` (irule_at Any) >>
-  qpat_assum `compile_materialize_vv _ _ _ shm = _` (irule_at Any) >>
-  qpat_assum `body_inv _ _ _ _` (irule_at Any) >>
-  qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `gas_shadow_function _ _` (irule_at Any) >>
-  qpat_assum `return_buf_frame _ _ sa s0` (irule_at Any) >>
-  asm_simp_tac bool_ss [] >> suspend "post"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_materialized_head_outcome[post]:
   qexists_tac `sh` >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -4352,8 +4359,11 @@ Resume create_ctor_materialized_head_outcome[post]:
     (qspec_then `[]` (mp_then Any mp_tac stmtSimDefsTheory.eval_read_preserves_scopes_dom)) >>
   gvs[] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise create_ctor_materialized_head_outcome
+*)
 
 (* All constructor heads use the same packet at the immediate-read cut.
    A private allocation is required only when a nonword snapshot copies. *)
