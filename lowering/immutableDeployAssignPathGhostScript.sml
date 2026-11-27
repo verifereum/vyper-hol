@@ -418,19 +418,42 @@ Proof
   cheat
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem immutable_path_store_ghost_inv:
+  body_inv tops ctx ce cx /\
+  stmt_state_rel H ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
+  ghost_inv_at D lo d ce cx ee G tn s /\ dead_lo_ok H D lo ce cx /\
+  ce.ce_is_ctor /\ local_ptrs_reserved ce sa /\
+  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ty /\
+  evaluate_type (get_tenv cx) ty = SOME itv /\
+  mem_path_offset itv path = SOME (k,ptv) /\
+  write_place cx (ImmutablePlace ce.ce_module id path) v ee = (INL (),fin) /\
+  value_has_type ptv v /\
+  (!m. mem_agree_outside tf.t_mem q.vs_memory m ==> val_in_memory ptv v (off+k) m) /\
+  (!b n. regions_disjoint b n (off+k) (type_memory_size ptv) ==>
+      mem_bytes_at b n q.vs_memory = mem_bytes_at b n s.vs_memory) /\
+  (!i. ~(off+k <= i /\ i < off+k+type_memory_size ptv) /\ i IN tf.t_mem ==>
+       i IN tn.t_mem) /\
+  (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s /\
+       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+  q.vs_call_ctx = s.vs_call_ctx /\ q.vs_accounts = s.vs_accounts /\
+  q.vs_transient = s.vs_transient /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+  allocas_from lo q /\ s.vs_alloca_next <= q.vs_alloca_next ==>
+  ghost_inv_at D lo d ce cx fin Gf tf q
 Proof
   strip_tac >>
+  drule_then (assume_tac o MATCH_MP bodyInvCodePropsTheory.contract_inv_cenv_modules)
+    body_inv_contract >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
   `!i. i < lo /\ i IN tf.t_mem ==>
-      imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo q.vs_memory) i` by
-    (MATCH_MP_TAC (Q.INST [`tops` |-> `tops`,`ctx` |-> `ctx`,`func` |-> `func`,
-       `ce` |-> `ce`,`ee` |-> `ee`,`env` |-> `env`,`H` |-> `H`,
-       `d` |-> `d`,`D` |-> `D`,`s` |-> `s`,`G` |-> `G`,`tn` |-> `tn`,
-       `id` |-> `id`,`ty` |-> `ty`,`off` |-> `off`,`k` |-> `k`,
-       `itv` |-> `itv`,`path` |-> `path`,`ptv` |-> `ptv`,`fin` |-> `fin`,`v` |-> `v`]
-       immutable_path_section_dead) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      imm_section_dead_mods ce (mem_bytes_at 0 lo q.vs_memory) i` by
+    (drule_then (fn th => PURE_REWRITE_TAC [th])
+       immSectionDeadTheory.imm_section_dead_mods_singleton >>
+     qpat_assum `cx_tops cx = tops` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+     rpt strip_tac >> irule immutable_path_section_dead >> metis_tac[]) >>
   drule_all_then strip_assume_tac immutable_assign_declared_region >>
   drule_then strip_assume_tac mem_path_offset_sound >>
   `fin.scopes = ee.scopes` by metis_tac[write_immutable_place_scopes] >>
@@ -459,11 +482,10 @@ Proof
   `mem_bytes_at 0 0 q.vs_memory = mem_bytes_at 0 0 s.vs_memory` by
     simp[mem_bytes_at_def] >>
   `ghost_inv_at D 0 d ce cx fin Gf tf q` by
-    (MATCH_MP_TAC (Q.INST [`es` |-> `ee`,`s` |-> `s`,`G` |-> `G`,`tn` |-> `tn`,
-       `fn` |-> `func`,`sa` |-> `sa`] ghost_inv_at_local_window_transport) >>
-     rpt (conj_tac ORELSE first_assum ACCEPT_TAC) >>
+    (irule ghost_inv_at_local_window_transport >>
      simp[ptrDisciplineTheory.allocas_from_def] >>
-     rpt strip_tac >> simp[]) >>
+     qexistsl_tac [`G`,`ee`,`func`,`s`,`sa`,`tn`] >>
+     simp[] >> first_assum ACCEPT_TAC) >>
   qpat_assum `fin.scopes = ee.scopes` (fn eq =>
     qpat_x_assum `ghost_inv_at D 0 d ce cx fin Gf tf q`
       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def,eq])) >>
@@ -474,33 +496,4 @@ Proof
      simp[]) >>
   `lo <= q.vs_alloca_next` by decide_tac >>
   simp[ghost_inv_at_def] >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem immutable_path_store_ghost_inv:
-  body_inv tops ctx ce cx /\
-  stmt_state_rel H ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
-  ghost_inv_at D lo d ce cx ee G tn s /\ dead_lo_ok H D lo ce cx /\
-  ce.ce_is_ctor /\ local_ptrs_reserved ce sa /\
-  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty /\
-  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
-  ce.ce_module_var_type (ce.ce_module,id) = SOME ty /\
-  evaluate_type (get_tenv cx) ty = SOME itv /\
-  mem_path_offset itv path = SOME (k,ptv) /\
-  write_place cx (ImmutablePlace ce.ce_module id path) v ee = (INL (),fin) /\
-  value_has_type ptv v /\
-  (!m. mem_agree_outside tf.t_mem q.vs_memory m ==> val_in_memory ptv v (off+k) m) /\
-  (!b n. regions_disjoint b n (off+k) (type_memory_size ptv) ==>
-      mem_bytes_at b n q.vs_memory = mem_bytes_at b n s.vs_memory) /\
-  (!i. ~(off+k <= i /\ i < off+k+type_memory_size ptv) /\ i IN tf.t_mem ==>
-       i IN tn.t_mem) /\
-  (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
-  (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
-  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s /\
-       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
-  q.vs_call_ctx = s.vs_call_ctx /\ q.vs_accounts = s.vs_accounts /\
-  q.vs_transient = s.vs_transient /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
-  allocas_from lo q /\ s.vs_alloca_next <= q.vs_alloca_next ==>
-  ghost_inv_at D lo d ce cx fin Gf tf q
-Proof
-  cheat
 QED
