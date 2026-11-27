@@ -97,19 +97,16 @@ Proof
   gen_tac >> irule gas_origin_ptr_path_from_no_dead >> simp[]
 QED
 
-(* Rebase the open value, not its read, at the reached target endpoint. *)
+(* Recover the physical resources of the open value at the reached target. *)
 Theorem qualified_raw_at_target[local]:
-  contract_inv mods exps ctx ce cx /\ module_body_inv mods src tops ce cx /\
-  expr_body_pre_mods mods ce cx env e es /\ expr_sim_inv_mods mods ce cx env ee /\
-  compile_expr ce (expr_type e) e sa = (vv,sr) /\
-  eval_expr cx e (es with gas_obs := gs) = (INL raw,mid) /\
+  contract_inv mods exps ctx ce cx /\ expr_sim_inv_mods mods ce cx env ee /\
   read_result cx raw mid = (INL v,mid) /\ read_result cx raw ee = (INL v,ee) /\
-  ee = mid with <|gas_obs := ee.gas_obs; outcomes := ee.outcomes;
-    requests := ee.requests; logs := ee.logs; storage_trace := ee.storage_trace|> /\
-  local_ptrs_reserved ce sa /\ (!l. vv_operand vv <> Label l) /\
-  stmt_state_rel H ctx func ce cx es s0 /\ storage_well_formed_on cx es (FST H) /\
-  valid_horizon cx st0 H mid.storage_trace /\
+  ee.scopes = mid.scopes /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sr x) /\
+  (!l. vv_operand vv <> Label l) /\
   vv_post_mods H ctx func ce cx e es sa sr s0 mid raw vv u /\
+  vv_post_mods H ctx func ce cx e ee sa sr s ee raw vv s /\
+  vv_storage_live H cx vv ee s /\
   write_target_post_mods H D lo d ctx func ce cx bt mid sr k u ee
     (PlaceR place) (Type dty) dst Gu tu G tn s /\
   dead_lo_ok_mods H D lo ce cx /\
@@ -117,27 +114,19 @@ Theorem qualified_raw_at_target[local]:
   ptr_vv_ok cx (post_value_type ce e) raw vv mid Gu tu u /\
   ((vv_location vv = NONE /\ ~is_word_type (post_value_type ce e) \/
     vv_location vv = SOME LocMemory) ==> ptr_buf_ok ce e (vv_operand vv) Gu u) ==>
-  vv_post_mods H ctx func ce cx e ee sa sr s ee raw vv s /\
-  wb_frame ce es ee sa s0 s /\ ^saved_ptr /\
+  ^saved_ptr /\
   ((vv_location vv = NONE /\ ~is_word_type (post_value_type ce e) \/
     vv_location vv = SOME LocMemory) ==> ptr_buf_ok ce e (vv_operand vv) G s)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then assume_tac saved_rhs_slot_live_mods >>
   drule_then strip_assume_tac write_target_post_view_mods >>
-  drule_then strip_assume_tac (cj 1 compile_expr_grows) >>
-  `!x. vv_operand vv = Var x ==> not_fresh_at sr x` by
-    (drule (cj 1 compiler_compile_var) >> simp[]) >>
-  drule_all_then strip_assume_tac saved_target_vv_post_mods >>
   `wb_frame ce mid mid sr u s` by
-    (`ee.scopes = mid.scopes` by (qpat_assum `ee = _` (fn th => simp[Once th])) >>
-     pop_assum (fn th => qpat_assum `wb_frame ce mid ee sr u s`
-       (strip_assume_tac o PURE_REWRITE_RULE [wb_frame_def,locals_kept_def,popped_kept_def,th])) >>
+    (qpat_assum `ee.scopes = mid.scopes` (fn th =>
+       qpat_assum `wb_frame ce mid ee sr u s`
+         (strip_assume_tac o PURE_REWRITE_RULE [wb_frame_def,locals_kept_def,popped_kept_def,th])) >>
      pure_rewrite_tac[wb_frame_def,locals_kept_def,popped_kept_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all_then strip_assume_tac saved_target_ptr_resources_mods >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
   asm_rewrite_tac[] >>
   `vv_holds_mods ce cx (post_value_type ce e) raw vv ee s` by
     (qpat_assum `vv_post_mods _ _ _ _ _ _ ee _ _ _ ee _ _ s`
@@ -147,6 +136,10 @@ Proof
     dead_lo_ok_mods H D lo ce cx /\ ghost_inv_at_mods D lo d ce cx ee G tn s /\
     immutable_frame_mods func ce cx ee s /\
     vv_holds_mods ce cx (post_value_type ce e) raw vv ee s)` by simp[] >>
+  (* The constructor certificate uses only the selected read at ee. *)
+  `ee = ee with <|gas_obs := ee.gas_obs; outcomes := ee.outcomes;
+     requests := ee.requests; logs := ee.logs; storage_trace := ee.storage_trace|>` by
+    simp[evaluation_state_component_equality] >>
   drule_all_then strip_assume_tac assign_local_saved_ctor_source_mods >>
   first_assum ACCEPT_TAC
 QED
@@ -293,16 +286,27 @@ val copy_value = ``
     (~is_bytestring_type (lowered_value_type ce e) ==>
       expr_val_at ce cx (lowered_value_type ce e) sa kf ee v op z)``;
 
+(* Retain the post-type placement even if the lowered bytestring has a
+   different capacity. *)
+val bytestring_placement = ``
+  ~is_word_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) ==>
+    is_bytestring_type (post_value_type ce e) /\
+    (?pt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME pt) /\
+    expr_val_at ce cx (post_value_type ce e) sa kf ee v op z``;
+
 Theorem qualified_raw_copy_value[local]:
   ^copy_types /\ expr_post_mods H ctx func ce cx e ee sa kf s ee v op z /\
   ptr_val_ok cx (post_value_type ce e) v op Gf tf z /\ ptr_buf_ok ce e op Gf z /\
   (!w. eval_operand op z = SOME w ==>
     type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) ==>
-  ^copy_value
+  ^copy_value /\ ^bytestring_placement
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qhdtm_x_assum `expr_post_mods`
     (strip_assume_tac o REWRITE_RULE [expr_post_mods_def,expr_post_def,expr_val_rel_def]) >>
+  reverse conj_tac
+  >- (strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      metis_tac[]) >>
   rename1 `eval_operand op z = SOME w` >>
   qexistsl [`rt`,`w`] >> asm_rewrite_tac[] >>
   `op_taint tf op = {} /\
@@ -328,7 +332,7 @@ val identity_shape = ``
 
 Theorem qualified_raw_identity_suffix[local]:
   ^suffix_entry /\ ^copy_types /\ ^identity_shape /\ ptr_buf_ok ce e op G s ==>
-  ?z Gf tf. ^suffix_frame /\ ^copy_value
+  ?z Gf tf. ^suffix_frame /\ ^copy_value /\ ^bytestring_placement
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -339,7 +343,7 @@ Proof
      type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= s.vs_alloca_next` by
     (qpat_x_assum `!rt w. evaluate_type _ _ = SOME rt /\ _ ==> _`
        (qspec_then `rt` mp_tac) >> simp[]) >>
-  drule_all_then assume_tac qualified_raw_copy_value >>
+  drule_all_then (CONJUNCTS_THEN2 assume_tac assume_tac) qualified_raw_copy_value >>
   qpat_x_assum `kf = k` SUBST_ALL_TAC >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
       stmt_state_rel H ctx func ce cx ee s /\ immutable_frame_mods func ce cx ee s /\
@@ -364,7 +368,7 @@ Theorem qualified_raw_code_suffix[local]:
   local_ptrs_reserved ce sa /\
   (!x n. ce.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. ce.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) ==>
-  ?z Gf tf. ^suffix_frame /\ ^copy_value
+  ?z Gf tf. ^suffix_frame /\ ^copy_value /\ ^bytestring_placement
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `pt = rt` by metis_tac[optionTheory.SOME_11] >>
@@ -386,7 +390,7 @@ Proof
     (drule_then strip_assume_tac) >>
   `!u. eval_operand op z = SOME u ==> type_memory_size rt = 0 \/
     w2n u + type_memory_size rt <= z.vs_alloca_next` by simp[] >>
-  drule_all_then assume_tac qualified_raw_copy_value >>
+  drule_all_then (CONJUNCTS_THEN2 assume_tac assume_tac) qualified_raw_copy_value >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
       stmt_state_rel H ctx func ce cx ee z /\ immutable_frame_mods func ce cx ee z /\
       ghost_inv_at_mods (DF H) lo d ce cx ee Gf tf z` by
@@ -407,7 +411,7 @@ Theorem qualified_raw_slot_suffix[local]:
   local_ptrs_reserved ce sa /\
   (!x n. ce.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. ce.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) ==>
-  ?z Gf tf. ^suffix_frame /\ ^copy_value
+  ?z Gf tf. ^suffix_frame /\ ^copy_value /\ ^bytestring_placement
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `pt = rt` by metis_tac[optionTheory.SOME_11] >>
@@ -441,7 +445,7 @@ Proof
     (drule_then strip_assume_tac) >>
   `!w. eval_operand (Var root) z = SOME w ==> type_memory_size rt = 0 \/
     w2n w + type_memory_size rt <= z.vs_alloca_next` by simp[] >>
-  drule_all_then assume_tac qualified_raw_copy_value >>
+  drule_all_then (CONJUNCTS_THEN2 assume_tac assume_tac) qualified_raw_copy_value >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
       stmt_state_rel H ctx func ce cx ee z /\ immutable_frame_mods func ce cx ee z /\
       ghost_inv_at_mods (DF H) lo d ce cx ee Gf tnf z` by
@@ -486,7 +490,7 @@ Theorem qualified_raw_nonword_suffix[local]:
   local_ptrs_reserved ce sa /\
   (!x n. ce.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. ce.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) ==>
-  ?z Gf tf. ^suffix_frame /\ ^copy_value
+  ?z Gf tf. ^suffix_frame /\ ^copy_value /\ ^bytestring_placement
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> Cases_on `vv`
   >- suspend "stack" >>
@@ -595,19 +599,31 @@ val entry_live = ``
   !H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func ce cx es s0 /\ storage_well_formed_on cx es (FST H)``;
 
-val raw_source = ``
-  expr_sim_inv_mods mods ce cx env ee /\
+val raw_update = ``
   ee = mid with <|gas_obs := ee.gas_obs; outcomes := ee.outcomes;
     requests := ee.requests; logs := ee.logs; storage_trace := ee.storage_trace|> /\
   (!r. read_result cx r mid = (INL v,mid) ==> read_result cx r ee = (INL v,ee))``;
 
-Theorem qualified_raw_saved_at_cut[local]:
-  contract_inv mods exps ctx ce cx /\ module_body_inv mods src tops ce cx /\
-  expr_body_pre_mods mods ce cx env e es /\ ^raw_source /\ ^entry_live /\
-  ^rhs_stage /\ ^target_stage /\ ~expr_can_mutate ce (target_to_expr bt) /\
-  sr.cs_next_id <= k.cs_next_id /\
+val reached_saved_packet = ``
+  ee.scopes = mid.scopes /\
+  !gs raw H.
+    eval_expr cx e (es with gas_obs := gs) = (INL raw,mid) /\
+    read_result cx raw mid = (INL v,mid) /\
+    valid_horizon cx st0 H ee.storage_trace /\
+    valid_horizon cx st0 H mid.storage_trace /\
+    vv_post_mods H ctx func ce cx e es sa sr s0 mid raw vv u /\
+    vv_storage_live H cx vv mid u ==>
+    read_result cx raw ee = (INL v,ee) /\
+    vv_post_mods H ctx func ce cx e ee sa sr s ee raw vv s /\
+    vv_storage_live H cx vv ee s``;
+
+val raw_cut_entry = ``
+  ^entry_live /\ ^rhs_stage /\ ^target_stage /\
+  ~expr_can_mutate ce (target_to_expr bt) /\ sr.cs_next_id <= k.cs_next_id /\
   local_ptrs_reserved ce sa /\ (!l. vv_operand vv <> Label l) /\
-  (!H. valid_horizon cx st0 H ee.storage_trace ==> dead_lo_ok_mods H (DF H) lo ce cx) ==>
+  (!H. valid_horizon cx st0 H ee.storage_trace ==> dead_lo_ok_mods H (DF H) lo ce cx)``;
+
+val raw_cut_post = ``
   compile_expr ce (expr_type e) e sa = (vv,sr) /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sr x) /\
   value_runtime_typed env (expr_type e) v /\
@@ -615,7 +631,13 @@ Theorem qualified_raw_saved_at_cut[local]:
     read_result cx raw mid = (INL v,mid) /\ read_result cx raw ee = (INL v,ee) /\
     ^all_posts /\ ^saved_ptr /\
     ((vv_location vv = NONE /\ ~is_word_type (post_value_type ce e) \/
-      vv_location vv = SOME LocMemory) ==> ptr_buf_ok ce e (vv_operand vv) G s)
+      vv_location vv = SOME LocMemory) ==> ptr_buf_ok ce e (vv_operand vv) G s)``;
+
+(* Both source certificates feed the same selected raw witness and suffix. *)
+Theorem qualified_raw_saved_at_cut_modes_mods:
+  contract_inv mods exps ctx ce cx /\ module_body_inv mods src tops ce cx /\
+  expr_body_pre_mods mods ce cx env e es /\ expr_sim_inv_mods mods ce cx env ee /\
+  (^raw_update \/ ^reached_saved_packet) /\ ^raw_cut_entry ==> ^raw_cut_post
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_then (strip_assume_tac o BETA_RULE) qualified_place_rhs_entry_view_mods >>
@@ -646,14 +668,14 @@ Proof
     (drule_then strip_assume_tac) >>
   drule_all_then strip_assume_tac qualified_raw_rhs_components >>
   qmatch_asmsub_rename_tac `eval_expr cx e (es with gas_obs := gs) = (INL raw,mid)` >>
-  `read_result cx raw ee = (INL v,ee)` by simp[] >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     read_result cx raw ee = (INL v,ee) /\
      vv_post_mods H ctx func ce cx e ee sa k s ee raw vv s /\
      ghost_inv_at_mods (DF H) lo d ce cx ee G tn s /\ ^saved_ptr /\
      ((vv_location vv = NONE /\ ~is_word_type (post_value_type ce e) \/
        vv_location vv = SOME LocMemory) ==> ptr_buf_ok ce e (vv_operand vv) G s)` by
     (gen_tac >> disch_tac >> suspend "at_horizon") >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> vv_post_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> read_result _ _ _ = _ /\ _`
     (drule_then strip_assume_tac) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -661,11 +683,11 @@ Proof
   qexistsl [`gs`,`raw`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   gen_tac >> disch_tac >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> vv_post_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> read_result _ _ _ = _ /\ _`
     (drule_then strip_assume_tac) >> simp[]
 QED
 
-Resume qualified_raw_saved_at_cut[at_horizon]:
+Resume qualified_raw_saved_at_cut_modes_mods[at_horizon]:
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> valid_horizon _ _ _ _ /\ _`
     (drule_then strip_assume_tac) >>
   qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _` (drule_then strip_assume_tac) >>
@@ -688,16 +710,59 @@ Resume qualified_raw_saved_at_cut[at_horizon]:
   drule_then strip_assume_tac write_target_post_view_mods >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> dead_lo_ok_mods _ _ _ _ _`
     (qspec_then `H` (drule_then assume_tac)) >>
+  `ee.scopes = mid.scopes /\ read_result cx raw ee = (INL v,ee) /\
+   vv_post_mods H ctx func ce cx e ee sa sr s ee raw vv s /\
+   vv_storage_live H cx vv ee s` by
+    (qpat_x_assum `^raw_update \/ ^reached_saved_packet` DISJ_CASES_TAC
+     >- (qpat_x_assum `^raw_update` strip_assume_tac >>
+         `ee.scopes = mid.scopes` by
+           (qpat_assum `ee = _` (fn th => simp[Once th])) >>
+         `read_result cx raw ee = (INL v,ee)` by simp[] >>
+         drule_then strip_assume_tac (cj 1 compile_expr_grows) >>
+         drule_all_then strip_assume_tac saved_target_vv_post_mods >> simp[]) >>
+     qpat_x_assum `^reached_saved_packet` strip_assume_tac >>
+     qpat_assum `!gs raw H. _ ==> read_result _ _ _ = _ /\ _`
+       (qspecl_then [`gs`,`raw`,`H`] mp_tac) >> simp[]) >>
   drule_all_then strip_assume_tac qualified_raw_at_target >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   reverse conj_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   irule qualified_raw_vv_end_mono >> qexists `sr` >> simp[]
 QED
 
-Finalise qualified_raw_saved_at_cut
+Finalise qualified_raw_saved_at_cut_modes_mods
+
+val raw_source = ``expr_sim_inv_mods mods ce cx env ee /\ ^raw_update``;
+
+Theorem qualified_raw_saved_at_cut:
+  contract_inv mods exps ctx ce cx /\ module_body_inv mods src tops ce cx /\
+  expr_body_pre_mods mods ce cx env e es /\ ^raw_source /\ ^raw_cut_entry ==>
+  ^raw_cut_post
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule qualified_raw_saved_at_cut_modes_mods >>
+  qhdtm_assum `qualified_assign_rhs_reached_mods` (irule_at Any) >>
+  qhdtm_assum `qualified_assign_target_reached_mods` (irule_at Any) >>
+  qhdtm_assum `module_body_inv` (irule_at Any) >>
+  qhdtm_assum `contract_inv` (irule_at Any) >> simp[]
+QED
+
+Theorem qualified_raw_saved_at_cut_with_reached_mods:
+  contract_inv mods exps ctx ce cx /\ module_body_inv mods src tops ce cx /\
+  expr_body_pre_mods mods ce cx env e es /\ expr_sim_inv_mods mods ce cx env ee /\
+  ^reached_saved_packet /\ ^raw_cut_entry ==> ^raw_cut_post
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule qualified_raw_saved_at_cut_modes_mods >>
+  qhdtm_assum `qualified_assign_rhs_reached_mods` (irule_at Any) >>
+  qhdtm_assum `qualified_assign_target_reached_mods` (irule_at Any) >>
+  qhdtm_assum `module_body_inv` (irule_at Any) >>
+  qhdtm_assum `contract_inv` (irule_at Any) >> simp[] >>
+  disj2_tac >> first_assum ACCEPT_TAC
+QED
 
 val value_landing = ``if is_word_type (expr_type e) then ^word_value else ^copy_value``;
 
-Theorem qualified_raw_run_suffix[local]:
+Theorem qualified_raw_run_suffix:
   ^suffix_entry /\ expr_body_pre_mods mods ce cx env e es /\
   eval_expr cx e (es with gas_obs := gs) = (INL raw,mid) /\
   read_result cx raw mid = (INL v,mid) /\ value_runtime_typed env (expr_type e) v /\
@@ -708,7 +773,7 @@ Theorem qualified_raw_run_suffix[local]:
   local_ptrs_reserved ce sa /\
   (!x n. ce.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. ce.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) ==>
-  ?z Gf tf. ^suffix_frame /\ ^value_landing
+  ?z Gf tf. ^suffix_frame /\ ^value_landing /\ ^bytestring_placement
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> Cases_on `is_word_type (expr_type e)`
   >- (drule_then strip_assume_tac expr_body_pre_mods_runtime_typing >>
@@ -718,7 +783,8 @@ Proof
       rename1 `evaluate_type env.type_defs (expr_type e) = SOME rt` >>
       `evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rt` by simp[] >>
       qpat_assum `is_word_type (expr_type e)`
-        (fn th => pure_rewrite_tac [EQT_INTRO th,COND_CLAUSES]) >>
+        (fn th => pure_rewrite_tac
+          [EQT_INTRO th,COND_CLAUSES,NOT_CLAUSES,AND_CLAUSES,IMP_CLAUSES]) >>
       match_mp_tac (Q.INST [`raw` |-> `raw`,`rt` |-> `rt`,`vv` |-> `vv`]
         qualified_raw_word_suffix) >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,mid)` by
@@ -729,10 +795,11 @@ Proof
   `vv_location vv = NONE \/ vv_location vv = SOME LocMemory ==>
     ptr_buf_ok ce e (vv_operand vv) G s` by
     (qpat_x_assum `_ \/ _ ==> ptr_buf_ok ce e _ G s` mp_tac >> simp[]) >>
-  qpat_assum `~is_word_type (expr_type e)`
-    (fn th => pure_rewrite_tac [EQF_INTRO th,COND_CLAUSES]) >>
-  match_mp_tac (Q.INST [`raw` |-> `raw`,`pt` |-> `pt`,`rt` |-> `rt`,
-    `vv` |-> `vv`,`sr` |-> `sr`] qualified_raw_nonword_suffix) >>
+  qpat_assum `~is_word_type (expr_type e)` (fn th =>
+    pure_rewrite_tac [EQF_INTRO th,COND_CLAUSES] >>
+    match_mp_tac (PURE_REWRITE_RULE [EQF_INTRO th]
+      (Q.INST [`raw` |-> `raw`,`pt` |-> `pt`,`rt` |-> `rt`,
+               `vv` |-> `vv`,`sr` |-> `sr`] qualified_raw_nonword_suffix))) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -809,7 +876,7 @@ QED
 
 (* The endpoint and unwrap instruction interval are those of the caller's
    reached qualified Assign. Read agreement is a source-side input. *)
-Theorem qualified_place_raw_unwrap_mods:
+Theorem qualified_place_raw_unwrap_owned_mods:
   target_root bt = TopLevelNameTarget (owner,id) /\
   type_place_target env bt = SOME (Type dty) /\
   (!i se. MEM i (target_indices bt) /\ expr_sim_inv_mods mods ce cx env se ==>
@@ -832,7 +899,8 @@ Theorem qualified_place_raw_unwrap_mods:
     (!x. FST dst = Var x ==> not_fresh_at kf x) /\
     target_ptr_ok ce (PlaceR place) dst Gf tf z /\
     write_target_location_mods ce cx bt ee (PlaceR place) (Type dty) dst Gf z /\
-    (!H. valid_horizon cx st0 H ee.storage_trace ==> storage_well_formed_on cx ee (FST H))
+    (!H. valid_horizon cx st0 H ee.storage_trace ==> storage_well_formed_on cx ee (FST H)) /\
+    ^bytestring_placement
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==> stmt_state_rel H ctx func ce cx es s0` by simp[] >>
@@ -861,7 +929,7 @@ Proof
   suspend "landing"
 QED
 
-Resume qualified_place_raw_unwrap_mods[landing]:
+Resume qualified_place_raw_unwrap_owned_mods[landing]:
   drule_all_then strip_assume_tac qualified_raw_dest_fields >>
   `target_ptr_ok ce (PlaceR place) dst Gf tf z /\
    write_target_location_mods ce cx bt ee (PlaceR place) (Type dty) dst Gf z` by
@@ -881,4 +949,33 @@ Resume qualified_place_raw_unwrap_mods[landing]:
   qexistsl [`z`,`Gf`,`tf`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Finalise qualified_place_raw_unwrap_mods
+Finalise qualified_place_raw_unwrap_owned_mods
+
+Theorem qualified_place_raw_unwrap_mods:
+  target_root bt = TopLevelNameTarget (owner,id) /\
+  type_place_target env bt = SOME (Type dty) /\
+  (!i se. MEM i (target_indices bt) /\ expr_sim_inv_mods mods ce cx env se ==>
+    expr_body_pre_mods mods ce cx env i se) /\
+  contract_inv mods exps ctx ce cx /\ module_body_inv mods src tops ce cx /\
+  expr_body_pre_mods mods ce cx env e es /\ ^entry_live /\
+  qualified_assign_code_mods ce bt e sa sb shadow_sa shadow_sb (SOME vv) sr k
+    shadow_sr shadow_k dst /\ ^rhs_stage /\ ^target_stage /\
+  ~expr_can_mutate ce (target_to_expr bt) /\
+  ee = mid with <|gas_obs := ee.gas_obs; outcomes := ee.outcomes;
+    requests := ee.requests; logs := ee.logs; storage_trace := ee.storage_trace|> /\
+  (!r. read_result cx r mid = (INL v,mid) ==> read_result cx r ee = (INL v,ee)) /\
+  (!l. vv_operand vv <> Label l) /\ (!l. FST dst <> Label l) /\
+  unwrap_value ce vv k = (op,kf) /\ fn_has_code k kf func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\
+  (!x n. ce.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+  (!x n. ce.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==> dead_lo_ok_mods H (DF H) lo ce cx) ==>
+  ?z Gf tf. ^suffix_frame /\ ^value_landing /\ ^dst_equations /\ ^from_entry /\
+    (!x. FST dst = Var x ==> not_fresh_at kf x) /\
+    target_ptr_ok ce (PlaceR place) dst Gf tf z /\
+    write_target_location_mods ce cx bt ee (PlaceR place) (Type dty) dst Gf z /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==> storage_well_formed_on cx ee (FST H))
+Proof
+  disch_then (strip_assume_tac o MATCH_MP qualified_place_raw_unwrap_owned_mods) >>
+  qexistsl [`z`,`Gf`,`tf`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED

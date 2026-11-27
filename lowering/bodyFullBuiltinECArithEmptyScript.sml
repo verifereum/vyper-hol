@@ -23,6 +23,7 @@ Theorem ec_arith_empty_tail_full:
   w2n wi + w2n an <= u.vs_alloca_next /\
   w2n wo + 64 <= u.vs_alloca_next /\
   ~u.vs_halted /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+  MEM func ctx.ctx_functions /\
   lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (gi::ci::rest) (DROP u.vs_inst_idx bb.bb_instructions) /\
   (func.fn_name,id) NOTIN explicit /\
@@ -57,6 +58,17 @@ Proof
     metis_tac[IS_PREFIX_APPEND, APPEND] >>
   qabbrev_tac `bad = halt_state (set_returndata [] sg)
     with vs_inst_idx := SUC u.vs_inst_idx` >>
+  `lookup_block bad.vs_current_bb func.fn_blocks = SOME bb /\
+   get_instruction bb bad.vs_inst_idx = SOME ci` by
+    (simp[Abbr `bad`, Abbr `sg`, halt_state_def, set_returndata_def, update_var_def] >>
+     qpat_assum `isPREFIX (gi::ci::rest) _`
+       (strip_assume_tac o MATCH_MP fragGasSeqAbortTheory.instruction_prefix_cursor) >>
+     drule fragGasSeqAbortTheory.instruction_prefix_cursor >> simp[]) >>
+  `ALL_DISTINCT (FLAT (MAP fn_labels ctx.ctx_functions)) ==>
+   ~oversized_create_abort ctx (Abort ExHalt_abort bad)` by
+    (strip_tac >> irule createSizeExitTheory.oversized_create_abort_non_create_cursor >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`bb`, `func`, `ci`] >> simp[mk_inst_def]) >>
   qabbrev_tac `Ga = step_prov PG Gu gi sg` >>
   qabbrev_tac `tna = step_taint gi u sg tnu` >>
   `!H. valid_horizon cx st0 H es2.storage_trace ==>
@@ -89,6 +101,8 @@ Proof
       (drule_then assume_tac) >>
     qpat_assum `gas_origin_ptr_path _ (t2,G2,tn2) [] _`
       (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
-    simp[NoAsms] >> disch_then drule >> simp[NoAsms])) >>
+    simp[NoAsms] >> disch_then drule >> simp[NoAsms] >>
+    qpat_assum `ALL_DISTINCT _ ==> ~oversized_create_abort _ _` mp_tac >>
+    tautLib.TAUT_TAC)) >>
   disch_then ACCEPT_TAC
 QED
