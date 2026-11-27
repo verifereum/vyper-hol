@@ -8,7 +8,7 @@ Ancestors
   emitHelperProps exprLoweringProps venomState emitHelper rich_list
   immutableMemoryFrame stmtSimDeclStore loweringSlice localPtrsProps
   stmtSimForArrayFrame valueEncodingTyping memoryValueEncoding list alist pair
-  exprSimHypsDefs exprSimProps
+  exprSimHypsDefs exprSimProps stateRelProj finite_map
 
 Theorem array_for_hypotheses:
   !tops bindings id ty e n body env ret_ty env' m arr.
@@ -282,26 +282,103 @@ QED
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
-  `memory_value_rel tv v (w2n w) t.vs_memory` by
-    metis_tac[val_in_memory_memory_value_rel] >>
+  qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+  simp[venom_state_component_equality] >> strip_tac >>
+  qabbrev_tac `entry = <|assignable := a; type := tv; value := v; popped := []|>` >>
+  qabbrev_tac `scs = (sc |+ (id,entry)) :: rest` >>
+  `lookup_scopes id scs = SOME entry /\
+   !n. n <> id ==> lookup_scopes n scs = lookup_scopes n es.scopes` by
+    simp[Abbr `scs`, lookup_scopes_def, FLOOKUP_UPDATE] >>
+  `!q. q = p \/ ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s` by
+    (rpt strip_tac >> simp[]) >>
+  drule stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >> strip_tac >>
+  `w2n w + sz <= s.vs_alloca_next` by
+    (fs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     first_x_assum drule >> simp[]) >>
   `!n b len. n <> id /\ local_region cenv es.scopes s n b len ==>
-      mem_bytes_at b len s.vs_memory = mem_bytes_at b len t.vs_memory` by
-    (rpt strip_tac >>
-     `regions_disjoint (w2n w) sz b len` by
-       (irule local_ptrs_rel_alloca_disjoint >>
-        qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >>
-        fs[stmt_state_rel_def, state_rel_def]) >>
-     irule EQ_SYM >> first_x_assum irule >>
+     regions_disjoint (w2n w) sz b len` by
+    (rpt strip_tac >> irule local_ptrs_rel_alloca_disjoint >>
+     qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >> simp[]) >>
+  `!n b len. n <> id /\ local_region cenv es.scopes s n b len ==>
+     mem_bytes_at b len s.vs_memory = mem_bytes_at b len t.vs_memory` by
+    (rpt strip_tac >> qpat_assum `!n b len. _ ==> regions_disjoint _ _ _ _` drule_all >>
+     simp[regions_disjoint_def] >> strip_tac >> sym_tac >>
+     qpat_assum `!b len. _ ==> mem_bytes_at b len t.vs_memory = _` irule >> decide_tac) >>
+  `!n e q cap. lookup_scopes n scs = SOME e /\
+     FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) cap) ==>
+     lookup_var q t = lookup_var q s` by
+    (rpt strip_tac >> Cases_on `n = id` >- gvs[] >>
+     `lookup_scopes n es.scopes = SOME e` by metis_tac[] >>
+     `~not_local_ptr cenv es.scopes q` by (simp[not_local_ptr_def] >> metis_tac[]) >>
+     simp[]) >>
+  `local_backed func p s (w2n w) sz` by
+    (simp[local_backed_def] >> disj1_tac >> qexists_tac `inst` >> simp[]) >>
+  `local_ptrs_rel func cenv scs t` by
+    (irule local_ptrs_rel_write_local >>
+     qexistsl_tac [`entry`, `id`, `p`, `es.scopes`, `s`, `sz`, `w`] >>
+     gs[Abbr `entry`, memoryValueEncodingTheory.val_in_memory_memory_value_rel] >>
+     rpt strip_tac >> gvs[]
+     >- (qpat_assum `!n b len. _ ==> mem_bytes_at _ _ s.vs_memory = _` (drule_all_then ACCEPT_TAC))
+     >- (qpat_assum `!n b len. _ ==> regions_disjoint _ _ _ _` (drule_all_then ACCEPT_TAC)) >>
+     qpat_assum `!n e q cap. _ ==> lookup_var q t = _` (drule_all_then ACCEPT_TAC)) >>
+  `!n b len. local_region cenv scs t n b len ==>
+     (n = id /\ b = w2n w /\ len = sz) \/ local_region cenv es.scopes s n b len` by
+    (simp[local_region_def] >> rpt strip_tac >> Cases_on `n = id` >- gvs[] >>
+     disj2_tac >> qexistsl_tac [`entry'`, `p'`, `w'`] >> simp[] >> metis_tac[]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s /\
+     immutable_alloca_sep func (cenv with ce_module := src) cx es s` by
+    (rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >>
+     fs[stmt_state_rel_def, state_rel_def]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!src. _ ==> immutables_rel _ _ _ _ _ _ /\ _` drule >> strip_tac >>
+     irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+     rpt strip_tac >>
+     qpat_x_assum `immutable_alloca_sep _ (cenv with ce_module := src) _ _ _` mp_tac >>
+     simp[immutable_alloca_sep_def] >> strip_tac >> first_x_assum drule_all >>
+     strip_tac >>
+     `regions_disjoint off (type_memory_size tv') (w2n w) sz` by metis_tac[] >>
+     qpat_assum `!b len. _ ==> mem_bytes_at b len t.vs_memory = _` irule >>
      fs[regions_disjoint_def] >> decide_tac) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
-    (`t.vs_data_section = s.vs_data_section` by
-       (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = _` mp_tac >>
-        simp[venom_state_component_equality]) >>
-     drule_all array_iter_copy_immutables >> simp[]) >>
-  irule stmt_state_rel_declare_memory >> simp[] >>
-  qexistsl_tac [`inst`, `s`, `w`] >> simp[] >>
-  qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = _` mp_tac >>
-  simp[venom_state_component_equality] >> metis_tac[]
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx (es with scopes := scs) t` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!src. _ ==> immutables_rel _ _ _ _ _ _ /\ _` drule >> strip_tac >>
+     drule immutable_alloca_sep_frame >> disch_then irule >>
+     simp[] >> rpt strip_tac >>
+     fs[local_region_def] >> metis_tac[]) >>
+  `state_rel H func cenv cx (es with scopes := scs) t` by
+    (irule exprLoweringPropsTheory.state_rel_frame >> simp[] >>
+     qexistsl_tac [`es`, `s`] >> simp[] >> conj_tac
+     >- first_assum ACCEPT_TAC >>
+     drule_then ACCEPT_TAC stmt_state_rel_state_rel) >>
+  irule stmt_state_rel_intro >>
+  simp[] >> rpt conj_tac
+  >- (drule stmt_state_rel_alloca_size >> simp[])
+  >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[])
+  >~ [`alloca_room ctx func t`] >-
+    (drule stmt_state_rel_alloca_room >> strip_tac >>
+     irule alloca_room_fields >> qexists_tac `s` >> simp[])
+  >~ [`fmp_room ctx func t`] >-
+    (drule stmt_state_rel_fmp_room >> strip_tac >>
+     irule fmp_room_fields >> qexists_tac `s` >> simp[])
+  >~ [`immutable_alloca_sep func cenv cx _ t`] >-
+    (`cenv with ce_module := cenv.ce_module = cenv` by
+       simp[compile_env_component_equality] >>
+     qpat_assum `!src. _ ==> immutable_alloca_sep _ (cenv with ce_module := src) _ _ t`
+        (qspec_then `cenv.ce_module` mp_tac) >>
+     simp[NoAsms] >>
+     qpat_x_assum `cenv with ce_module := cenv.ce_module = cenv` mp_tac >>
+     metis_tac[])
+  >~ [`immutable_base_zero cenv t`] >-
+    (drule stmt_state_rel_immutable_base_zero >> strip_tac >>
+     irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
+     rpt strip_tac >> qpat_assum `!q. _ ==> lookup_var q t = _` irule >>
+     simp[not_local_ptr_def]) >>
+  rpt strip_tac >> qpat_assum `!src. _ ==> immutable_alloca_sep _ _ _ _ t`
+    (qspec_then `src` mp_tac) >> simp[]
 QED
 *)
 Theorem array_iter_copy_declare_rel:
@@ -325,7 +402,104 @@ Theorem array_iter_copy_declare_rel:
       (es with scopes :=
         (sc |+ (id, <|assignable := a; type := tv; value := v; popped := []|>)) :: rest) t
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+  simp[venom_state_component_equality] >> strip_tac >>
+  qabbrev_tac `entry = <|assignable := a; type := tv; value := v; popped := []|>` >>
+  qabbrev_tac `scs = (sc |+ (id,entry)) :: rest` >>
+  `lookup_scopes id scs = SOME entry /\
+   !n. n <> id ==> lookup_scopes n scs = lookup_scopes n es.scopes` by
+    simp[Abbr `scs`, lookup_scopes_def, FLOOKUP_UPDATE] >>
+  `!q. q = p \/ ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s` by
+    (rpt strip_tac >> simp[]) >>
+  drule stateRelProjTheory.stmt_state_rel_local_ptrs_alloca >> strip_tac >>
+  `w2n w + sz <= s.vs_alloca_next` by
+    (fs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     first_x_assum drule >> simp[]) >>
+  `!n b len. n <> id /\ local_region cenv es.scopes s n b len ==>
+     regions_disjoint (w2n w) sz b len` by
+    (rpt strip_tac >> irule local_ptrs_rel_alloca_disjoint >>
+     qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >> simp[]) >>
+  `!n b len. n <> id /\ local_region cenv es.scopes s n b len ==>
+     mem_bytes_at b len s.vs_memory = mem_bytes_at b len t.vs_memory` by
+    (rpt strip_tac >> qpat_assum `!n b len. _ ==> regions_disjoint _ _ _ _` drule_all >>
+     simp[regions_disjoint_def] >> strip_tac >> sym_tac >>
+     qpat_assum `!b len. _ ==> mem_bytes_at b len t.vs_memory = _` irule >> decide_tac) >>
+  `!n e q cap. lookup_scopes n scs = SOME e /\
+     FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) cap) ==>
+     lookup_var q t = lookup_var q s` by
+    (rpt strip_tac >> Cases_on `n = id` >- gvs[] >>
+     `lookup_scopes n es.scopes = SOME e` by metis_tac[] >>
+     `~not_local_ptr cenv es.scopes q` by (simp[not_local_ptr_def] >> metis_tac[]) >>
+     simp[]) >>
+  `local_backed func p s (w2n w) sz` by
+    (simp[local_backed_def] >> disj1_tac >> qexists_tac `inst` >> simp[]) >>
+  `local_ptrs_rel func cenv scs t` by
+    (irule local_ptrs_rel_write_local >>
+     qexistsl_tac [`entry`, `id`, `p`, `es.scopes`, `s`, `sz`, `w`] >>
+     gs[Abbr `entry`, memoryValueEncodingTheory.val_in_memory_memory_value_rel] >>
+     rpt strip_tac >> gvs[]
+     >- (qpat_assum `!n b len. _ ==> mem_bytes_at _ _ s.vs_memory = _` (drule_all_then ACCEPT_TAC))
+     >- (qpat_assum `!n b len. _ ==> regions_disjoint _ _ _ _` (drule_all_then ACCEPT_TAC)) >>
+     qpat_assum `!n e q cap. _ ==> lookup_var q t = _` (drule_all_then ACCEPT_TAC)) >>
+  `!n b len. local_region cenv scs t n b len ==>
+     (n = id /\ b = w2n w /\ len = sz) \/ local_region cenv es.scopes s n b len` by
+    (simp[local_region_def] >> rpt strip_tac >> Cases_on `n = id` >- gvs[] >>
+     disj2_tac >> qexistsl_tac [`entry'`, `p'`, `w'`] >> simp[] >> metis_tac[]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s /\
+     immutable_alloca_sep func (cenv with ce_module := src) cx es s` by
+    (rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >>
+     fs[stmt_state_rel_def, state_rel_def]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!src. _ ==> immutables_rel _ _ _ _ _ _ /\ _` drule >> strip_tac >>
+     irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+     rpt strip_tac >>
+     qpat_x_assum `immutable_alloca_sep _ (cenv with ce_module := src) _ _ _` mp_tac >>
+     simp[immutable_alloca_sep_def] >> strip_tac >> first_x_assum drule_all >>
+     strip_tac >>
+     `regions_disjoint off (type_memory_size tv') (w2n w) sz` by metis_tac[] >>
+     qpat_assum `!b len. _ ==> mem_bytes_at b len t.vs_memory = _` irule >>
+     fs[regions_disjoint_def] >> decide_tac) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx (es with scopes := scs) t` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!src. _ ==> immutables_rel _ _ _ _ _ _ /\ _` drule >> strip_tac >>
+     drule immutable_alloca_sep_frame >> disch_then irule >>
+     simp[] >> rpt strip_tac >>
+     fs[local_region_def] >> metis_tac[]) >>
+  `state_rel H func cenv cx (es with scopes := scs) t` by
+    (irule exprLoweringPropsTheory.state_rel_frame >> simp[] >>
+     qexistsl_tac [`es`, `s`] >> simp[] >> conj_tac
+     >- first_assum ACCEPT_TAC >>
+     drule_then ACCEPT_TAC stmt_state_rel_state_rel) >>
+  irule stmt_state_rel_intro >>
+  simp[] >> rpt conj_tac
+  >- (drule stmt_state_rel_alloca_size >> simp[])
+  >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[])
+  >~ [`alloca_room ctx func t`] >-
+    (drule stmt_state_rel_alloca_room >> strip_tac >>
+     irule alloca_room_fields >> qexists_tac `s` >> simp[])
+  >~ [`fmp_room ctx func t`] >-
+    (drule stmt_state_rel_fmp_room >> strip_tac >>
+     irule fmp_room_fields >> qexists_tac `s` >> simp[])
+  >~ [`immutable_alloca_sep func cenv cx _ t`] >-
+    (`cenv with ce_module := cenv.ce_module = cenv` by
+       simp[compile_env_component_equality] >>
+     qpat_assum `!src. _ ==> immutable_alloca_sep _ (cenv with ce_module := src) _ _ t`
+        (qspec_then `cenv.ce_module` mp_tac) >>
+     simp[NoAsms] >>
+     qpat_x_assum `cenv with ce_module := cenv.ce_module = cenv` mp_tac >>
+     metis_tac[])
+  >~ [`immutable_base_zero cenv t`] >-
+    (drule stmt_state_rel_immutable_base_zero >> strip_tac >>
+     irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
+     rpt strip_tac >> qpat_assum `!q. _ ==> lookup_var q t = _` irule >>
+     simp[not_local_ptr_def]) >>
+  rpt strip_tac >> qpat_assum `!src. _ ==> immutable_alloca_sep _ _ _ _ t`
+    (qspec_then `src` mp_tac) >> simp[]
 QED
 
 Theorem fixed_array_elements_typed:
