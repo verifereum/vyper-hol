@@ -379,17 +379,6 @@ QED
 
 (* In the constructor the value at an immutable's code pointer is in the
    staged memory. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def] >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-  `off + k < dimword (:256)` by DECIDE_TAC >>
-  gvs[arithmeticTheory.ADD_COMM]
-QED
-*)
 Theorem immutable_holds_memory[local]:
   !func cenv cx es s t tv w ctx.
     stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
@@ -398,7 +387,39 @@ Theorem immutable_holds_memory[local]:
             read_result cx tv es = (INL v, es) /\
             val_in_memory tvt v (w2n w) s.vs_memory
 Proof
-  cheat
+  rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
+     immutables_rel_def] >>
+  gvs[] >-
+    (qpat_assum `!name tv v byte_offset. _`
+       (drule_all_then strip_assume_tac) >>
+     gvs[sub_layout_def] >>
+     qpat_assum `!b mem. _`
+       (qspecl_then [`off`,`s.vs_memory`] mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     strip_tac >>
+     `off + k < dimword (:256)` by DECIDE_TAC >>
+     gvs[arithmeticTheory.ADD_COMM] >>
+     metis_tac[sub_layout_def, arithmeticTheory.ADD_COMM]) >-
+    (qpat_x_assum `IS_SOME (ALOOKUP cenv.ce_modules src)`
+       (mp_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
+     strip_tac >>
+     qpat_assum
+       `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+          !name tv v byte_offset. _`
+       (qspecl_then [`src`,`x`]
+          (drule_then strip_assume_tac)) >>
+     qpat_assum
+       `!name tv v byte_offset.
+          FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc byte_offset) /\ _ ==> _`
+       (drule_all_then strip_assume_tac) >>
+     gvs[sub_layout_def] >>
+     qpat_assum `!b mem. _`
+       (qspecl_then [`off`,`s.vs_memory`] mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     strip_tac >>
+     `off + k < dimword (:256)` by DECIDE_TAC >>
+     gvs[arithmeticTheory.ADD_COMM] >>
+     metis_tac[sub_layout_def, arithmeticTheory.ADD_COMM])
 QED
 
 Theorem vv_holds_len_header:

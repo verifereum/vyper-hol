@@ -684,33 +684,29 @@ Proof
   irule (SRULE [mk_inst_def] sha256_exec_ext_call_fail) >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  `fmp_room ctx func (s with vs_outcomes := DROP 1 s.vs_outcomes) <=>
-   fmp_room ctx func s` by
-    (irule fmp_room_fields_cong >> simp[]) >>
-  strip_tac >>
-  gvs[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
-       immutable_alloca_sep_def,
-       local_ptrs_rel_def, local_region_def, local_backed_def,
-       lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
-       logs_rel_def, call_ctx_rel_def, accounts_rel_def,
-       contract_storage_def, contract_transient_def,
-       venomMemDefsTheory.alloca_inv_def,
-       venomMemDefsTheory.allocas_non_overlapping_def,
-       venomMemDefsTheory.alloca_next_valid_def,
-       alloca_room_def, pending_alloca_size_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-*)
 Theorem hash_outcomes_state_rel:
   stmt_state_rel H ctx func cenv cx es s ==>
   stmt_state_rel H ctx func cenv cx
     (es with outcomes := SOME (DROP 1 s.vs_outcomes))
     (s with vs_outcomes := DROP 1 s.vs_outcomes)
 Proof
-  cheat
+  `fmp_room ctx func (s with vs_outcomes := DROP 1 s.vs_outcomes) <=>
+   fmp_room ctx func s` by
+    (irule fmp_room_fields_cong >> simp[]) >>
+  `!ce. immutable_alloca_sep func ce cx
+          (es with outcomes := SOME (DROP 1 s.vs_outcomes))
+          (s with vs_outcomes := DROP 1 s.vs_outcomes) <=>
+        immutable_alloca_sep func ce cx es s` by
+    simp[immutable_alloca_sep_def, local_region_def, lookup_var_def] >>
+  simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
+       local_ptrs_rel_def, local_region_def, local_backed_def,
+       lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
+       logs_rel_def, accounts_rel_def, contract_storage_def,
+       contract_transient_def, venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def, alloca_room_def,
+       pending_alloca_size_def] >>
+  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem hash_sha256_take_state_rel:

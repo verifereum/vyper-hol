@@ -3828,24 +3828,6 @@ Proof
   simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `ALL_DISTINCT (MAP FST args)` by
-    (drule_all registration_source_parameter_inputs_nr >> simp[]) >>
-  drule send_call_value_accounts >> strip_tac >>
-  `es0.scopes = [env]` by simp[initial_state_def] >>
-  `unit_alloca_budget unit.cu_context < dimword (:256)` by
-    (drule_all registration_initial_ptr_resources >>
-     disch_then (qspec_then `site` strip_assume_tac) >> simp[]) >>
-  conj_tac >- suspend "actual_stmt" >>
-  irule registration_indexed_locals_ghost >>
-  conj_tac >- suspend "actual_return_pc" >> simp[] >>
-  qexistsl_tac [`args`, `type_env tops`, `tvs`, `tx.args`] >> simp[] >>
-  suspend "actual_ghost_locals"
-QED
-*)
 Theorem registration_actual_endpoint_relations_from_prefix:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
@@ -3890,11 +3872,16 @@ Theorem registration_actual_endpoint_relations_from_prefix:
   ghost_inv H NONE cenv (initial_evaluation_context am.sources am.layouts tx NONE)
     es0 G0 tn0 s0
 Proof
-  cheat
-QED
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume registration_actual_endpoint_relations_from_prefix[actual_ghost_locals]:
+  strip_tac >>
+  conj_tac >- suspend "actual_stmt" >>
+  `ALL_DISTINCT (MAP FST args)` by
+    (drule_all registration_source_parameter_inputs_nr >> simp[]) >>
+  `es0.scopes = [env]` by
+    (drule send_call_value_accounts >> simp[initial_state_def]) >>
+  irule registration_indexed_locals_ghost >>
+  conj_tac >- (drule_all_then assume_tac registration_external_return_pc >> simp[]) >>
+  simp[] >>
+  qexistsl_tac [`args`, `type_env tops`, `tvs`, `tx.args`] >> simp[] >>
   rpt strip_tac >>
   qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n. _`
     (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
@@ -3902,21 +3889,16 @@ Resume registration_actual_endpoint_relations_from_prefix[actual_ghost_locals]:
   `p + n <= s0.vs_alloca_next` by
     metis_tac[venomMemDefsTheory.alloca_inv_def,
       venomMemDefsTheory.alloca_next_valid_def] >>
+  `unit_alloca_budget unit.cu_context < dimword (:256)` by
+    (drule_all registration_initial_ptr_resources >>
+     disch_then (qspec_then `site` strip_assume_tac) >> simp[]) >>
   qpat_x_assum `alloca_frontier_inv _ _ _ s0` mp_tac >>
   simp[allocaFrontierBoundTheory.alloca_frontier_inv_def] >> decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
-Resume registration_actual_endpoint_relations_from_prefix[actual_return_pc]:
-  drule_all_then assume_tac registration_external_return_pc >> simp[]
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
 Resume registration_actual_endpoint_relations_from_prefix[actual_stmt]:
-  `cenv0.ce_module = NONE /\ ~cenv0.ce_is_ctor /\
-   cenv0.ce_imm_alloca = NONE /\
+  `cenv0.ce_modules = [(NONE,tops)] /\ cenv0.ce_module = NONE /\
+   ~cenv0.ce_is_ctor /\ cenv0.ce_imm_alloca = NONE /\
    cenv0.ce_module_vars = add_immutable_locations
      (get_struct_fields (make_struct_fields_map tops)) tops 0
      (add_module_var_locations tops FEMPTY)` by
@@ -3926,23 +3908,29 @@ Resume registration_actual_endpoint_relations_from_prefix[actual_stmt]:
      gvs[update_cenv_nonreentrant_def] >>
      rw[update_cenv_ret_abi_def, build_compile_env_def] >>
      rpt (pairarg_tac >> gvs[])) >>
-  `cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
-   cenv.ce_imm_alloca = NONE /\ cenv.ce_module_vars = cenv0.ce_module_vars` by
+  `cenv.ce_modules = [(NONE,tops)] /\ cenv.ce_module = NONE /\
+   ~cenv.ce_is_ctor /\ cenv.ce_imm_alloca = NONE /\
+   cenv.ce_module_vars = cenv0.ce_module_vars` by
     (qpat_assum `cenv = cenv0 with ce_vars := cenv.ce_vars`
       (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+  `unit_alloca_budget unit.cu_context < dimword (:256)` by
+    (drule_all registration_initial_ptr_resources >>
+     disch_then (qspec_then `site` strip_assume_tac) >> simp[]) >>
   `alloca_room unit.cu_context efn s0` by
     (drule_all registration_frontier_alloca_room >> simp[]) >>
-  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_def,
-       immutable_base_zero_def] >>
-  conj_tac >- suspend "actual_state" >> first_assum ACCEPT_TAC
+  irule stateRelProjTheory.stmt_state_rel_intro >>
+  simp[immutable_alloca_sep_def, immutable_decl_sep_def, immutable_base_zero_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  suspend "actual_state"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume registration_actual_endpoint_relations_from_prefix[actual_state]:
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
+  drule source_typing_ok_vtype_keys_distinct >> strip_tac >>
   `storage_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE) /\
    transient_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE)` by
-    suspend "actual_module_locations" >>
+    (irule entry_storage_vars_rel_immutable >> simp[initial_evaluation_context_def] >>
+     qexistsl_tac [`am`, `tops`, `tx`] >> simp[]) >>
   `immutable_section_layout cenv tops` by
     (qspecl_then [`tops`, `External`, `mut`, `tx.function_name`, `args`, `ret`,
        `fbody`, `F`] mp_tac
@@ -3952,11 +3940,14 @@ Resume registration_actual_endpoint_relations_from_prefix[actual_state]:
      POP_ASSUM_LIST (K all_tac) >>
      simp[immutableRelationTheory.immutable_section_layout_def,
        build_compile_env_def] >> rpt (pairarg_tac >> gvs[])) >>
-  `immutables_rel cenv
-    (initial_evaluation_context am.sources am.layouts tx NONE).txn.target
-    cenv.ce_module cenv.ce_is_ctor es0 s0` by suspend "actual_immutables" >>
   qpat_x_assum `vars_pc_only _ s1` mp_tac >>
   simp[vars_pc_only_def, venom_state_component_equality] >> strip_tac >>
+  drule send_call_value_accounts >> strip_tac >>
+  `immutables_rel cenv tx.target NONE F es0 s0` by
+    (irule immutableSectionRelTheory.immutables_section_rel_runtime_fallback >>
+     qexistsl_tac [`vs.vs_data_section`, `tops`] >>
+     gvs[initial_venom_state_rel_def, initial_state_def,
+         e2eDefsTheory.account_immutables_def, initial_evaluation_context_def]) >>
   gvs[initial_venom_state_rel_def, venom_env_rel_def, state_rel_def,
       initial_state_def, initial_evaluation_context_def] >>
   `s0.vs_call_ctx.cc_address = tx.target` by fs[call_ctx_rel_def] >>
@@ -3964,72 +3955,8 @@ Resume registration_actual_endpoint_relations_from_prefix[actual_state]:
        contract_transient_def, logs_rel_def, accounts_rel_def,
        accounts_agree_def, transient_agree_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
-Resume registration_actual_endpoint_relations_from_prefix[actual_immutables]:
-  simp[] >> irule immutableSectionRelTheory.immutables_section_rel_runtime_fallback >>
-  qexistsl_tac [`vs.vs_data_section`, `tops`] >> simp[] >>
-  qpat_x_assum `vars_pc_only _ s1` mp_tac >>
-  simp[vars_pc_only_def, venom_state_component_equality] >> strip_tac >>
-  gvs[initial_venom_state_rel_def, initial_state_def, e2eDefsTheory.account_immutables_def,
-      initial_evaluation_context_def]
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume registration_actual_endpoint_relations_from_prefix[actual_module_locations]:
-  `supported_declaration_headers tops` by fs[supported_program_def] >>
-  drule source_typing_ok_vtype_keys_distinct >> strip_tac >>
-  `storage_vars_rel
-     (cenv with ce_module_vars := add_module_var_locations tops FEMPTY)
-     (initial_evaluation_context am.sources am.layouts tx NONE) /\
-   transient_vars_rel
-     (cenv with ce_module_vars := add_module_var_locations tops FEMPTY)
-     (initial_evaluation_context am.sources am.layouts tx NONE)` by
-    (irule entry_storage_vars_rel >> simp[initial_evaluation_context_def] >>
-     qexistsl_tac [`am`, `tops`, `tx`] >> simp[]) >>
-  `(!key slot.
-     (FLOOKUP (add_immutable_locations
-       (get_struct_fields (make_struct_fields_map tops)) tops 0
-       (add_module_var_locations tops FEMPTY)) key = SOME (StorageLoc slot) <=>
-      FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (StorageLoc slot))) /\
-   (!key slot.
-     (FLOOKUP (add_immutable_locations
-       (get_struct_fields (make_struct_fields_map tops)) tops 0
-       (add_module_var_locations tops FEMPTY)) key = SOME (TransientLoc slot) <=>
-      FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (TransientLoc slot)))` by
-    (conj_tac >> rpt gen_tac >> eq_tac
-     >- (strip_tac >> drule add_immutable_locations_FLOOKUP >> simp[])
-     >- (strip_tac >> suspend "actual_insert")
-     >- (strip_tac >> drule add_immutable_locations_FLOOKUP >> simp[]) >>
-     strip_tac >> suspend "actual_insert") >>
-  mp_tac (module_location_relations_cong |> Q.SPECL
-    [`cenv`, `cenv with ce_module_vars := add_module_var_locations tops FEMPTY`,
-     `initial_evaluation_context am.sources am.layouts tx NONE`]) >>
-  simp[]
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume registration_actual_endpoint_relations_from_prefix[actual_insert]:
-  markerLib.RESUME_TAC >> rpt strip_tac >>
-  rename1 `FLOOKUP (add_module_var_locations tops FEMPTY) ky = SOME _` >>
-  `!vis name ty sl.
-    MEM (VariableDecl vis Immutable name ty sl) tops ==> (NONE,name) <> ky` by
-    (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-     drule_then (qspecl_then
-       [`FEMPTY`, `VariableDecl vis Immutable name ty sl`, `name`] mp_tac)
-       add_module_var_locations_mem >>
-     simp[vyperTypeContractTheory.toplevel_vtype_keys_toplevel_def] >>
-     Cases_on `sl` >> simp[add_module_var_locations_def]) >>
-  drule add_immutable_locations_lookup_unchanged >> simp[]
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise registration_actual_endpoint_relations_from_prefix
-*)
 
 Theorem registration_actual_endpoint_relations_nr:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
