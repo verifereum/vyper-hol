@@ -18,6 +18,7 @@
  *)
 Theory exprSimAggregateLoops
 Ancestors
+  exprSimAggregateBodyHeader
   exprSimHashBoundary fragGasPathMem
   exprBopSimProps
   exprSimSource
@@ -1851,53 +1852,19 @@ Proof
 QED
 
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `local_ptrs_rel func ce es.scopes (mstore b w s)` by
-    (irule localPtrsPropsTheory.local_ptrs_rel_mstore >>
-     gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
-  `immutables_rel ce cx.txn.target ce.ce_module ce.ce_is_ctor es (mstore b w s)` by
-    (irule loweringSliceTheory.immutables_rel_mem_agree >>
-     qexists_tac `s` >> conj_tac
-     >- (simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
-               arithmeticTheory.MAX_DEF] >> IF_CASES_TAC >> decide_tac) >>
-     conj_tac >- simp[mstore_def] >>
-     reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
-     rpt strip_tac >> first_x_assum drule_all >>
-     simp[regions_disjoint_def] >> strip_tac >>
-     irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> simp[]) >>
-  irule stmt_state_rel_allocas_frame >> conj_tac
-  >- (irule immutable_base_zero_frame >> qexists_tac `s` >>
-      gvs[stmt_state_rel_def, mstore_def, lookup_var_def]) >>
-  conj_tac
-  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
-      gvs[stmt_state_rel_def, mstore_def, local_region_def, lookup_var_def] >>
-      metis_tac[]) >>
-  conj_tac
-  >- (irule state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`es`, `s`] >>
-      gvs[stmt_state_rel_def, mstore_def]) >>
-  qexistsl_tac [`es`, `s`] >> simp[] >> reverse conj_tac
-  >- (disch_tac >> conj_tac
-      >- simp[mstore_def, write_memory_with_expansion_def] >>
-      simp[venomMemPropsTheory.mstore_memory_nondecreasing]) >>
-  simp[mstore_def]
-QED
-*)
 Theorem array_header_store_state_rel:
   stmt_state_rel H ctx func ce cx es s /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
      lo + sz <= b \/ b + 32 <= lo) /\
-  (ce.ce_is_ctor ==> !name tv v io.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+  (ce.ce_is_ctor ==> !src name tv v io.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc io) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     regions_disjoint io (type_memory_size tv) b 32) ==>
   stmt_state_rel H ctx func ce cx es (mstore b w s)
 Proof
-  cheat
+  ACCEPT_TAC aggregate_body_header_state_rel
 QED
 
 Theorem array_header_store_boundary:
@@ -1905,10 +1872,11 @@ Theorem array_header_store_boundary:
   MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
   not_local_ptr ce es.scopes x /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,asz) /\ 32 <= asz /\
-  (ce.ce_is_ctor ==> !name tv v io.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+  (ce.ce_is_ctor ==> !src name tv v io.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc io) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     regions_disjoint io (type_memory_size tv) b 32) ==>
   stmt_state_rel H ctx func ce cx es (mstore b w s) /\
   locals_kept ce es es s (mstore b w s) /\
@@ -2168,11 +2136,12 @@ Theorem aggregate_make_array_full_exit_sim:
   (if header then 32 else 0) + LENGTH args * type_memory_size tv <= asz /\
   b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) b
        ((if header then 32 else 0) + LENGTH args * type_memory_size tv)) /\
@@ -2254,7 +2223,10 @@ Proof
      mem_bytes_at p n s0.vs_memory)` by
     (gen_tac >> strip_tac >> irule array_header_store_boundary >>
      simp[] >> conj_tac
-     >- (rpt strip_tac >> first_x_assum drule_all >>
+     >- (disch_tac >> rpt gen_tac >>
+         disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+         qpat_x_assum `ce.ce_is_ctor ==> _` drule >>
+         disch_then drule_all >>
          simp[regions_disjoint_def] >> decide_tac) >>
      qexistsl_tac [`asz`, `inst`, `x`] >> simp[]) >>
   `sm.cs_current_bb = sa.cs_current_bb /\
@@ -2296,8 +2268,10 @@ Proof
        (simp[Abbr `sh`, mstore_def, lookup_var_def] >>
         gvs[lookup_var_def]) >>
      simp[] >> reverse conj_tac
-     >- (rpt strip_tac >> first_x_assum drule_all >>
-         simp[regions_disjoint_def] >> decide_tac) >>
+     >- (rpt strip_tac >>
+         qpat_x_assum `ce.ce_is_ctor ==> !src name itv iv io. _` drule >>
+         disch_then (qspecl_then [`ce.ce_module`, `name`, `itv`, `iv`, `io`]
+           mp_tac) >> simp[regions_disjoint_def] >> decide_tac) >>
      metis_tac[])) >>
   strip_tac >> conj_tac >- simp[] >>
   irule gas_outcome_zero_prefix >> qexists_tac `sh` >> simp[] >>
@@ -3091,11 +3065,12 @@ Theorem aggregate_make_array_sim:
   (if header then 32 else 0) + LENGTH args * type_memory_size tv <= asz /\
   b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) b
        ((if header then 32 else 0) + LENGTH args * type_memory_size tv)) /\
