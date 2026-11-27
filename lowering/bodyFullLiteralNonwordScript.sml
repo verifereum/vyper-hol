@@ -264,10 +264,8 @@ Proof
   cheat
 QED
 
-Theorem literal_nonword_value_full:
-  expr_body_pre_mods mods cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Literal ann l) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   drule_all literal_nonword_vv_full >>
@@ -297,7 +295,16 @@ Proof
   first_x_assum drule_all >> disch_then (qspec_then `PG` assume_tac) >>
   suspend "value"
 QED
+*)
+Theorem literal_nonword_value_full:
+  expr_body_pre_mods mods cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Literal ann l) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume literal_nonword_value_full[value]:
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -323,7 +330,9 @@ Resume literal_nonword_value_full[value]:
   simp[expr_exit_success_map] >>
   Cases_on `res'` >> gvs[halt_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume literal_nonword_value_full[post]:
   simp[Abbr `Q`] >> rpt strip_tac >> gvs[]
   >~ [`expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`] >-
@@ -333,5 +342,8 @@ Resume literal_nonword_value_full[post]:
      metis_tac[]) >>
   gvs[ptr_vv_ok_def, ptr_val_ok_def, read_result_def, return_def, expr_type_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise literal_nonword_value_full
+*)

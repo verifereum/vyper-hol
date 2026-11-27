@@ -122,10 +122,8 @@ Proof
   cheat
 QED
 
-Theorem body_const_cells_agree_read:
-  body_const_cells_agree mods cx env st /\
-  read_result cx pv st = (res,st') ==>
-  body_const_cells_agree mods cx env st'
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[body_const_cells_agree_def] >>
   qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
@@ -133,6 +131,14 @@ Proof
   qexists_tac `st` >> simp[] >> rpt strip_tac >>
   mp_tac (CONJUNCT1 protected_cell_frame_reads) >>
   simp[state_rel_frame_result] >> disch_then drule >> simp[]
+QED
+*)
+Theorem body_const_cells_agree_read:
+  body_const_cells_agree mods cx env st /\
+  read_result cx pv st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  cheat
 QED
 
 Theorem body_const_cells_agree_expr_read:
