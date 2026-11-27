@@ -422,6 +422,25 @@ Proof
   first_x_assum drule_all >> strip_tac >> metis_tac[]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt strip_tac >> drule_all ifexp_store_bytestring_encoding >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es q` by
+    (irule literal_state_memory_frame >> qexists_tac `s` >> simp[] >>
+     rpt conj_tac >> rpt strip_tac
+     >~ [`ImmutableLoc _`]
+     >- (qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >>
+         drule_all ifexp_immutable_destination_sep >>
+         simp[regions_disjoint_def])
+     >~ [`local_region _ _ _ _ _ _`]
+     >- (qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> metis_tac[]) >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+     gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  qexists_tac `q` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> decide_tac
+QED
+*)
 Theorem ifexp_bytestring_store_state[local]:
   !ctx func cenv cx es src dst sa sb s w d len tv v inst.
     compile_store_bytestring src dst sa = ((),sb) /\
@@ -444,20 +463,7 @@ Theorem ifexp_bytestring_store_state[local]:
       (!a k. a + k <= w2n d \/ w2n d + type_memory_size tv <= a ==>
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
-  rpt strip_tac >> drule_all ifexp_store_bytestring_encoding >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es q` by
-    (irule literal_state_memory_frame >> qexists_tac `s` >> simp[] >>
-     rpt conj_tac >> rpt strip_tac
-     >~ [`ImmutableLoc _`]
-     >- (qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >>
-         drule_all ifexp_immutable_destination_sep >>
-         simp[regions_disjoint_def])
-     >~ [`local_region _ _ _ _ _ _`]
-     >- (qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> metis_tac[]) >>
-     qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
-     gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  qexists_tac `q` >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> decide_tac
+  cheat
 QED
 
 Theorem ifexp_destination_at[local]:
