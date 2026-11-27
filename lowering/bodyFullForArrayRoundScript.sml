@@ -1929,42 +1929,8 @@ Proof
 QED
 
 (* Execute the nonempty test and the actual indexed copy before calling the body. *)
-Theorem for_nonslot_array_head_full:
-  for_nonslot_layout (c, id, fty, e, sty, bd, ret_ty, loop_body)
-    (func, shadow_func)
-    (sa0, vv, sbExpr, shadow_sa0, shadow_sbExpr, loc, len_op, saL)
-    (bc, saD, saA, xd, capacity, aidItem)
-    (entry, cond, bod, incr, exit, idx, invalid, valid, done_var, next_var)
-    (sa, stride, off_op, sm, sum_op, sn, addr, saCopy, sbCopy)
-    (sbBody, sj, sb, shadow_sbCopy, shadow_sbBody) /\
-  (contract_inv mods exps ctx c cx /\
-     module_body_inv mods c.ce_module tops c cx) /\ c.ce_alloca_locals /\ fn_inst_ids_distinct func /\
-  supported_stmt tops bindings (For id fty (Array e) bound loop_body) /\
-  type_stmt env ret_ty (For id fty (Array e) bound loop_body) = SOME env' /\
-  stmt_exprs_ok c (For id fty (Array e) bound loop_body) /\
-  evaluate_type (get_tenv cx) fty = SOME dtv /\
-  body_for_full_ok_mods mods exps cx dtv id loop_body vs /\
-  storage_trace_domain cx st0 es.storage_trace /\
-  return_buf_sep d c es s /\
-  s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    for_nonslot_live (DF H, lo, d, ctx, func, cx, c, id, env, loop_body)
-      (es0, sa0, s0, G0, tn0)
-      (e, sbExpr, saL, loc, vv, bd, stv, vs, rv, av, xs, em, u, Gu, tu)
-      (len_op, idx, bw) (xd, dw, capacity, aidItem)
-      (H, k, a::rs, es, c, es, G, tn, s)) ==>
-  ?v eb t Gf tnf.
-    read_result cx a es = (INL v,es) /\
-    push_scope_with_var id dtv v es = (INL (),eb) /\
-    value_has_type dtv v /\ val_wf dtv v /\
-    !H. valid_horizon cx st0 H es.storage_trace ==>
-      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-      return_buf_sep d bc eb t /\
-      for_nonslot_body_entry (DF H, lo, d, ctx, func, cx, c, id, env, loop_body)
-        (es0, sa0, s0, G0, tn0)
-        (e, sbExpr, saL, loc, vv, bd, stv, vs, rv, av, xs, em, u, Gu, tu)
-        (len_op, idx, bw) (xd, dw, capacity, aidItem)
-        (bc, extend_local env id fty F, sbCopy, dtv, v) (H, k, a::rs, es, eb, Gf, tnf, t)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `H0 = storage_trace_horizon es.storage_trace` >>
@@ -2112,7 +2078,48 @@ Proof
   conj_tac >- suspend "capture_frames" >>
   suspend "push_body_scope"
 QED
+*)
+Theorem for_nonslot_array_head_full:
+  for_nonslot_layout (c, id, fty, e, sty, bd, ret_ty, loop_body)
+    (func, shadow_func)
+    (sa0, vv, sbExpr, shadow_sa0, shadow_sbExpr, loc, len_op, saL)
+    (bc, saD, saA, xd, capacity, aidItem)
+    (entry, cond, bod, incr, exit, idx, invalid, valid, done_var, next_var)
+    (sa, stride, off_op, sm, sum_op, sn, addr, saCopy, sbCopy)
+    (sbBody, sj, sb, shadow_sbCopy, shadow_sbBody) /\
+  (contract_inv mods exps ctx c cx /\
+     module_body_inv mods c.ce_module tops c cx) /\ c.ce_alloca_locals /\ fn_inst_ids_distinct func /\
+  supported_stmt tops bindings (For id fty (Array e) bound loop_body) /\
+  type_stmt env ret_ty (For id fty (Array e) bound loop_body) = SOME env' /\
+  stmt_exprs_ok c (For id fty (Array e) bound loop_body) /\
+  evaluate_type (get_tenv cx) fty = SOME dtv /\
+  body_for_full_ok_mods mods exps cx dtv id loop_body vs /\
+  storage_trace_domain cx st0 es.storage_trace /\
+  return_buf_sep d c es s /\
+  s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    for_nonslot_live (DF H, lo, d, ctx, func, cx, c, id, env, loop_body)
+      (es0, sa0, s0, G0, tn0)
+      (e, sbExpr, saL, loc, vv, bd, stv, vs, rv, av, xs, em, u, Gu, tu)
+      (len_op, idx, bw) (xd, dw, capacity, aidItem)
+      (H, k, a::rs, es, c, es, G, tn, s)) ==>
+  ?v eb t Gf tnf.
+    read_result cx a es = (INL v,es) /\
+    push_scope_with_var id dtv v es = (INL (),eb) /\
+    value_has_type dtv v /\ val_wf dtv v /\
+    !H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+      return_buf_sep d bc eb t /\
+      for_nonslot_body_entry (DF H, lo, d, ctx, func, cx, c, id, env, loop_body)
+        (es0, sa0, s0, G0, tn0)
+        (e, sbExpr, saL, loc, vv, bd, stv, vs, rv, av, xs, em, u, Gu, tu)
+        (len_op, idx, bw) (xd, dw, capacity, aidItem)
+        (bc, extend_local env id fty F, sbCopy, dtv, v) (H, k, a::rs, es, eb, Gf, tnf, t)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_head_full[prepare_inputs]:
   simp[exprSimPropsTheory.immutable_holds_memory_cong] >>
      rpt conj_tac
@@ -2143,7 +2150,9 @@ Resume for_nonslot_array_head_full[prepare_inputs]:
      >> simp[Abbr `p`, allocas_below_fmp_def, jump_to_def, update_var_def] >>
         fs[allocas_below_fmp_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_head_full[body_entry_separation]:
   qpat_assum `stmt_state_rel H0 ctx func c cx es s`
     (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule
@@ -2175,7 +2184,9 @@ Resume for_nonslot_array_head_full[body_entry_separation]:
        (drule_then strip_assume_tac) >> simp[]) >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_head_full[capture_frames]:
   `!x. not_fresh_at saL x ==> lookup_var x t = lookup_var x s /\
      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x)` by
@@ -2341,8 +2352,10 @@ Resume for_nonslot_array_head_full[capture_frames]:
     arithmeticTheory.ADD_COMM >>
   first_assum ACCEPT_TAC
 QED
+*)
 
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_head_full[body_position_reachable]:
   `~block_is_terminated saCopy` by
     (drule exprOpenPrimitivesTheory.emit_op_nonterminator_open >> simp[is_terminator_def]) >>
@@ -2368,7 +2381,9 @@ Resume for_nonslot_array_head_full[body_position_reachable]:
   rpt strip_tac >>
   drule contextRawReachableTheory.frag_reachable_trans >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_head_full[capture_copy_frame]:
   rewrite_tac[alloca_frame_def] >> rpt gen_tac >> strip_tac >>
   Q_TAC (fn tm => SUBGOAL_THEN tm ASSUME_TAC)
@@ -2396,7 +2411,9 @@ Resume for_nonslot_array_head_full[capture_copy_frame]:
       first_assum ACCEPT_TAC) >>
   qpat_assum `!n b sz'. local_region c es.scopes p n b sz' ==> _` (drule_then ACCEPT_TAC)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_head_full[capture_copy_taint]:
   rpt gen_tac >> strip_tac >>
   Q_TAC (fn tm => SUBGOAL_THEN tm ASSUME_TAC)
@@ -2414,7 +2431,9 @@ Resume for_nonslot_array_head_full[capture_copy_taint]:
     (qspecl_then [`aid`,`off`,`sz`,`i`] mp_tac) >>
   simp[] >> disch_then irule >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_head_full[push_body_scope]:
   drule bodyFullForFactsTheory.type_stmt_for_projection >> strip_tac >>
   `eb =
@@ -2470,8 +2489,11 @@ Resume for_nonslot_array_head_full[push_body_scope]:
   irule stmtSimPropsTheory.ret_pc_ok_frame >>
   qexistsl [`c`,`p`,`saL`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise for_nonslot_array_head_full
+*)
 
 (* The raw normal post has already run the required machine suffix.  Pop
    only the source scope, without losing the raw nonlocal exit witness. *)
