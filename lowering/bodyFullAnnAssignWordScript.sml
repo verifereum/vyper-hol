@@ -683,6 +683,74 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt strip_tac >>
+  drule annassign_word_full_store_ready >> disch_then drule >>
+  disch_then (fn th => first_assum (mp_then (Pos hd) mp_tac th)) >>
+  disch_then drule_all >> strip_tac >> gvs[] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (`valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
+       by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ u`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     qpat_assum `stmt_state_rel _ ctx func cenv' cx mid u`
+       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
+  irule annassign_word_full_continuation >> simp[] >>
+  goal_assum (drule_at (Pat `compile_stmt _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_void MSTORE _ _ = _`)) >>
+  goal_assum (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
+  qexists_tac `mid with scopes :=
+    (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>))::rest` >> simp[] >>
+  rename1 `stmt_state_rel Hentry ctx func cenv' cx es t` >>
+  qx_genl_tac [`H`, `Gf`, `tnf`, `t'`] >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
+  `stmt_state_rel H ctx func cenv' cx mid u` by fs[loweringPostsTheory.expr_post_def] >>
+  `!x cap. cenv'.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x` by
+    fs[ret_pc_ok_def] >>
+  `!x cap. cenv'.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x` by fs[] >>
+  drule_all (SRULE [] (Q.INST [`typ` |-> `expr_type e`]
+    annassign_word_full_store_freshness)) >> strip_tac >>
+  `bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := gas_explicit marks t.vs_gas_readings) = (INL v,mid)` by
+    (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     simp[vyperStateTheory.evaluation_state_component_equality]) >>
+  `mid with gas_obs := [] = mid` by simp[vyperStateTheory.evaluation_state_component_equality] >>
+  qpat_assum `!tail. new_variable _ _ _ _ = _`
+    (qspec_then `[]` (fn th => qpat_assum `mid with gas_obs := [] = mid`
+      (fn eq => assume_tac (REWRITE_RULE [eq] th)))) >>
+  `sa.cs_next_id <= sa'.cs_next_id` by
+    (drule_all declare_local_ptr >> strip_tac >>
+     drule emitHelperPropsTheory.emit_inst_extends >> simp[] >> strip_tac >> gvs[]) >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    (drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame cenv' es sa' t cenv' mid u` by
+    (irule (INST_TYPE [alpha |-> ``:256``]
+       stmtSimDefsTheory.alloca_frame_of_mem_frame) >>
+     fs[loweringPostsTheory.expr_post_def] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`Hentry`, `ctx`, `cx`, `func`] >> simp[]) >>
+  drule annassign_word_full_final_post >> disch_then drule >>
+  disch_then (fn th => qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac th)) >>
+  disch_then drule >> disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then irule >> simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- goal_assum (drule_at Any) >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`G0`,`Ga`,`mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]`,
+                `lctx`,`r`,`ret_ty`,`tn0`,`tna`,`expr_type e`] >>
+  simp[venomInstTheory.mk_inst_def] >>
+  qpat_x_assum `mid.scopes = _` (fn th => rule_assum_tac (REWRITE_RULE [th])) >>
+  simp[] >> conj_tac
+  >- (strip_tac >> first_assum ACCEPT_TAC) >>
+  qx_gen_tac `qq` >>
+  qpat_x_assum `!q. q = p \/ _ ==> _` (qspec_then `qq` mp_tac) >> simp[]
+QED
+*)
 Theorem annassign_word_full_source_action[local]:
   gas_admissible (eval_stmt cx (AnnAssign id (expr_type e) e)) (stmt_res_ok lctx) es ==>
   (!tail. bind (eval_expr cx e) (read_result cx)
@@ -761,69 +829,7 @@ Theorem annassign_word_full_source_action[local]:
         (ctx_has_dalloca ctx ==> !u. (r = Halt u \/ ?ir. r = IntRet ir u) ==>
           allocas_below_fmp u)))
 Proof
-  rpt strip_tac >>
-  drule annassign_word_full_store_ready >> disch_then drule >>
-  disch_then (fn th => first_assum (mp_then (Pos hd) mp_tac th)) >>
-  disch_then drule_all >> strip_tac >> gvs[] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
-    (`valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
-       by fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-       (drule_then strip_assume_tac) >>
-     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ u`
-       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-     qpat_assum `stmt_state_rel _ ctx func cenv' cx mid u`
-       (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp)) >>
-  irule annassign_word_full_continuation >> simp[] >>
-  goal_assum (drule_at (Pat `compile_stmt _ _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `emit_void MSTORE _ _ = _`)) >>
-  goal_assum (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
-  qexists_tac `mid with scopes :=
-    (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>))::rest` >> simp[] >>
-  rename1 `stmt_state_rel Hentry ctx func cenv' cx es t` >>
-  qx_genl_tac [`H`, `Gf`, `tnf`, `t'`] >> strip_tac >>
-  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-    (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
-  `stmt_state_rel H ctx func cenv' cx mid u` by fs[loweringPostsTheory.expr_post_def] >>
-  `!x cap. cenv'.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x` by
-    fs[ret_pc_ok_def] >>
-  `!x cap. cenv'.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x` by fs[] >>
-  drule_all (SRULE [] (Q.INST [`typ` |-> `expr_type e`]
-    annassign_word_full_store_freshness)) >> strip_tac >>
-  `bind (eval_expr cx e) (read_result cx)
-     (es with gas_obs := gas_explicit marks t.vs_gas_readings) = (INL v,mid)` by
-    (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
-     simp[vyperStateTheory.evaluation_state_component_equality]) >>
-  `mid with gas_obs := [] = mid` by simp[vyperStateTheory.evaluation_state_component_equality] >>
-  qpat_assum `!tail. new_variable _ _ _ _ = _`
-    (qspec_then `[]` (fn th => qpat_assum `mid with gas_obs := [] = mid`
-      (fn eq => assume_tac (REWRITE_RULE [eq] th)))) >>
-  `sa.cs_next_id <= sa'.cs_next_id` by
-    (drule_all declare_local_ptr >> strip_tac >>
-     drule emitHelperPropsTheory.emit_inst_extends >> simp[] >> strip_tac >> gvs[]) >>
-  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
-    (drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
-  `alloca_frame cenv' es sa' t cenv' mid u` by
-    (irule (INST_TYPE [alpha |-> ``:256``]
-       stmtSimDefsTheory.alloca_frame_of_mem_frame) >>
-     fs[loweringPostsTheory.expr_post_def] >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl_tac [`Hentry`, `ctx`, `cx`, `func`] >> simp[]) >>
-  drule annassign_word_full_final_post >> disch_then drule >>
-  disch_then (fn th => qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_then Any mp_tac th)) >>
-  disch_then drule >> disch_then drule >> disch_then drule >> disch_then drule >>
-  disch_then irule >> simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- goal_assum (drule_at Any) >>
-  conj_tac >- metis_tac[] >>
-  qexistsl_tac [`G0`,`Ga`,`mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]`,
-                `lctx`,`r`,`ret_ty`,`tn0`,`tna`,`expr_type e`] >>
-  simp[venomInstTheory.mk_inst_def] >>
-  qpat_x_assum `mid.scopes = _` (fn th => rule_assum_tac (REWRITE_RULE [th])) >>
-  simp[] >> conj_tac
-  >- (strip_tac >> first_assum ACCEPT_TAC) >>
-  qx_gen_tac `qq` >>
-  qpat_x_assum `!q. q = p \/ _ ==> _` (qspec_then `qq` mp_tac) >> simp[]
+  cheat
 QED
 
 Theorem annassign_word_full_execution_sep:

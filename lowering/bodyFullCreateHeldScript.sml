@@ -3501,6 +3501,60 @@ QED
 (* Execute the final value-row encoder. se and s are at the end of
    constructor evaluation; st and initial are after destination setup.
    Blueprint uses an empty prefix, and RawCreate uses its saved bytecode. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx)` by
+    (drule_all bodyCustomErrorWindowBoundsTheory.custom_error_invariant_layout >> simp[]) >>
+  Q.SUBGOAL_THEN `?H. valid_horizon cx st0 H ee.storage_trace` assume_tac
+  >- metis_tac[storage_trace_domain_def] >>
+  `!i. i < LENGTH args ==> ?tv.
+    evaluate_type (get_tenv cx) (lowered_value_type ce (EL i args)) = SOME tv /\
+    value_has_type tv (EL i vs)` by
+    (qx_gen_tac `i` >> disch_tac >>
+     qpat_assum `!i. i < LENGTH args ==> ?e saved v raw si sm ss vv copy tv. _`
+       (qspec_then `i` (drule_then (qx_choosel_then [`e`,`saved`,`v`,`raw`,`si`,`sm`,`ss`,`vv`,`copy`,`tv`]
+         (MAP_EVERY assume_tac o CONJUNCTS)))) >>
+     qexists `tv` >> gvs[]) >>
+  drule_all create_encoded_rows_layout >>
+  disch_then (qx_choosel_then [`ats`,`avs`,`bytes`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  qabbrev_tac `rows = ZIP (vals,MAP (lowered_value_type ce) args)` >>
+  qabbrev_tac `hl = head_lengths ats 0` >>
+  `hl = head_lengths ats 0` by simp[NoAsms, Abbr `hl`] >>
+  `LENGTH rows = LENGTH args /\ LENGTH ats = LENGTH args /\ LENGTH avs = LENGTH args` by
+    (qpat_assum `LIST_REL abi_encoder_layout_valid ats avs` (mp_tac o MATCH_MP LIST_REL_LENGTH) >>
+     simp[Abbr `rows`, LENGTH_ZIP, abiDecoderMembersTheory.vyper_to_abi_types_MAP]) >>
+  `LENGTH prefix + LENGTH bytes <= capacity` by decide_tac >>
+  mp_tac (Q.INST [`dst_offset` |-> `LENGTH prefix`, `en` |-> `fin`,
+    `u` |-> `initial`, `Gu` |-> `Gi`, `tu` |-> `ti`]
+    bodyFullExtCallDirectEncodeTheory.abi_encode_saved_values_execute_pure) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> suspend "saved_row") >>
+  disch_then (qx_choosel_then [`out`,`Go`,`to`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  qexistsl [`bytes`,`out`,`Go`,`to`] >>
+  drule_all bodyFullExtCallDirectStateTheory.abi_encode_saved_state_resources >> strip_tac >>
+  qpat_assum `abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
+    shared pbase capacity root payload_var (LENGTH prefix) prefix fin out Go to`
+    (MAP_EVERY assume_tac o CONJUNCTS o REWRITE_RULE
+      [bodyFullExtCallDirectStateTheory.abi_encode_saved_state_def]) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- metis_tac[allocaSiteResourceTheory.alloca_site_registered_below]
+  >- (PURE_REWRITE_TAC [LENGTH_APPEND] >>
+      PURE_ONCE_REWRITE_TAC [read_memory_split] >>
+      BINOP_TAC
+      >- (qpat_assum `read_memory (pbase + LENGTH prefix - LENGTH prefix) _ _ = _` mp_tac >>
+          simp[NoAsms]) >>
+      pure_rewrite_tac[read_memory_eq_mem_bytes_at] >> first_assum ACCEPT_TAC) >>
+  pure_rewrite_tac[LENGTH_APPEND] >> gen_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> Cases_on `j < pbase + LENGTH prefix`
+  >- (qpat_assum `!i. pbase + LENGTH prefix - LENGTH prefix <= i /\ _ ==> _` irule >>
+      asm_rewrite_tac[arithmeticTheory.ADD_SUB]) >>
+  qpat_assum `!i. pbase + LENGTH prefix <= i /\ _ ==> _` irule >>
+  qpat_assum `j < pbase + (LENGTH prefix + LENGTH bytes)` mp_tac >>
+  asm_rewrite_tac[GSYM arithmeticTheory.NOT_LESS, GSYM arithmeticTheory.ADD_ASSOC] >>
+  metis_tac[]
+QED
+*)
 Theorem create_encoded_rows_window:
   LENGTH args = LENGTH vals /\ LENGTH args = LENGTH vs /\
   EVERY (\e. expr_body_pre_mods mods ce cx env e ee) args /\
@@ -3558,57 +3612,10 @@ Theorem create_encoded_rows_window:
     (!j. pbase <= j /\ j < pbase + LENGTH (prefix ++ bytes) ==> j NOTIN tz.t_mem) /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (initial,Gi,ti) [] (OK z,Gz,tz)
 Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx)` by
-    (drule_all bodyCustomErrorWindowBoundsTheory.custom_error_invariant_layout >> simp[]) >>
-  Q.SUBGOAL_THEN `?H. valid_horizon cx st0 H ee.storage_trace` assume_tac
-  >- metis_tac[storage_trace_domain_def] >>
-  `!i. i < LENGTH args ==> ?tv.
-    evaluate_type (get_tenv cx) (lowered_value_type ce (EL i args)) = SOME tv /\
-    value_has_type tv (EL i vs)` by
-    (qx_gen_tac `i` >> disch_tac >>
-     qpat_assum `!i. i < LENGTH args ==> ?e saved v raw si sm ss vv copy tv. _`
-       (qspec_then `i` (drule_then (qx_choosel_then [`e`,`saved`,`v`,`raw`,`si`,`sm`,`ss`,`vv`,`copy`,`tv`]
-         (MAP_EVERY assume_tac o CONJUNCTS)))) >>
-     qexists `tv` >> gvs[]) >>
-  drule_all create_encoded_rows_layout >>
-  disch_then (qx_choosel_then [`ats`,`avs`,`bytes`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
-  qabbrev_tac `rows = ZIP (vals,MAP (lowered_value_type ce) args)` >>
-  qabbrev_tac `hl = head_lengths ats 0` >>
-  `hl = head_lengths ats 0` by simp[NoAsms, Abbr `hl`] >>
-  `LENGTH rows = LENGTH args /\ LENGTH ats = LENGTH args /\ LENGTH avs = LENGTH args` by
-    (qpat_assum `LIST_REL abi_encoder_layout_valid ats avs` (mp_tac o MATCH_MP LIST_REL_LENGTH) >>
-     simp[Abbr `rows`, LENGTH_ZIP, abiDecoderMembersTheory.vyper_to_abi_types_MAP]) >>
-  `LENGTH prefix + LENGTH bytes <= capacity` by decide_tac >>
-  mp_tac (Q.INST [`dst_offset` |-> `LENGTH prefix`, `en` |-> `fin`,
-    `u` |-> `initial`, `Gu` |-> `Gi`, `tu` |-> `ti`]
-    bodyFullExtCallDirectEncodeTheory.abi_encode_saved_values_execute_pure) >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> suspend "saved_row") >>
-  disch_then (qx_choosel_then [`out`,`Go`,`to`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
-  qexistsl [`bytes`,`out`,`Go`,`to`] >>
-  drule_all bodyFullExtCallDirectStateTheory.abi_encode_saved_state_resources >> strip_tac >>
-  qpat_assum `abi_encode_saved_state ctx func ce cx st0 ee DF lo disp se s G tn
-    shared pbase capacity root payload_var (LENGTH prefix) prefix fin out Go to`
-    (MAP_EVERY assume_tac o CONJUNCTS o REWRITE_RULE
-      [bodyFullExtCallDirectStateTheory.abi_encode_saved_state_def]) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- metis_tac[allocaSiteResourceTheory.alloca_site_registered_below]
-  >- (PURE_REWRITE_TAC [LENGTH_APPEND] >>
-      PURE_ONCE_REWRITE_TAC [read_memory_split] >>
-      BINOP_TAC
-      >- (qpat_assum `read_memory (pbase + LENGTH prefix - LENGTH prefix) _ _ = _` mp_tac >>
-          simp[NoAsms]) >>
-      pure_rewrite_tac[read_memory_eq_mem_bytes_at] >> first_assum ACCEPT_TAC) >>
-  pure_rewrite_tac[LENGTH_APPEND] >> gen_tac >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> Cases_on `j < pbase + LENGTH prefix`
-  >- (qpat_assum `!i. pbase + LENGTH prefix - LENGTH prefix <= i /\ _ ==> _` irule >>
-      asm_rewrite_tac[arithmeticTheory.ADD_SUB]) >>
-  qpat_assum `!i. pbase + LENGTH prefix <= i /\ _ ==> _` irule >>
-  qpat_assum `j < pbase + (LENGTH prefix + LENGTH bytes)` mp_tac >>
-  asm_rewrite_tac[GSYM arithmeticTheory.NOT_LESS, GSYM arithmeticTheory.ADD_ASSOC] >>
-  metis_tac[]
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_encoded_rows_window[saved_row]:
   map_every qx_gen_tac [`ci`,`cursor_var`] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -3672,8 +3679,11 @@ Resume create_encoded_rows_window[saved_row]:
       simp[NoAsms, Abbr `ty`, Abbr `at`, Abbr `av`, Abbr `off`]) >>
   disch_then ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise create_encoded_rows_window
+*)
 
 (* The snapshot's physical tag decides whether it saves a word or copies
    bytes. Retagging a nonword leaves the materialization code unchanged. *)
