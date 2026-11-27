@@ -47,7 +47,7 @@ Theorem intcall_callee_prefix:
 Proof
   rpt strip_tac >>
   qspecl_then [`body_stmts_prefix_ok`, `gas_prefix_full`, `gas_prefix_full`]
-    drule_all intcall_callee_full_with_prefix >>
+    drule_all intcall_callee_full_with_prefix_singleton >>
   disch_then (irule o cj 2) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
   >- (rpt strip_tac >> drule_all intcall_callee_locked_request_prefix >> simp[NoAsms])

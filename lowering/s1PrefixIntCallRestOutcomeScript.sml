@@ -67,7 +67,7 @@ Proof
           intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv result_count
             (if result_count = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
             sa.cs_next_id sb.cs_next_id t tn res ee gt r)` by
-    (rpt gen_tac >> strip_tac >> drule_all intcall_callee_full >> simp[]) >>
+    (rpt gen_tac >> strip_tac >> drule_all intcall_callee_full_singleton >> simp[]) >>
   qpat_assum `!callee entered bb inst lbl arg_ops argv. _ ==> gas_outcome_full _ _ _ _ _ _ _ _`
     (mp_then Any (drule_all_then (qspec_then `PG` assume_tac))
       (DISCH_ALL (CONJUNCT1 (UNDISCH (SPEC_ALL intcall_return_full_owned))))) >>
