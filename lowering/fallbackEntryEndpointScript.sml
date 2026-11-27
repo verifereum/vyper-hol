@@ -235,7 +235,7 @@ Theorem fallback_empty_registration_state[local]:
     (initial_state am [env] with
       <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es) /\
   fn_inst_ids_distinct fn /\ ce.ce_vars = FEMPTY /\
-  ce.ce_module = NONE /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
+  ce.ce_modules = [(NONE,tops)] /\ ce.ce_module = NONE /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
   ce.ce_return_pc = NONE /\ ce.ce_return_buf = NONE /\
   immutable_section_layout ce tops /\
   storage_vars_rel ce (initial_evaluation_context am.sources am.layouts tx NONE) /\
@@ -254,7 +254,7 @@ Proof
   `!H : (bool # bytes32 # type_value) list # num list.
     state_rel H fn ce (initial_evaluation_context am.sources am.layouts tx NONE) es s` by
     (gen_tac >> irule body_entry_state_rel_runtime >> simp[] >>
-     qexistsl [`am`,`env`,`mut`,`tops`,`vs`] >>
+     qexistsl [`am`,`env`,`mut`,`vs`] >>
      fs[default_registration_entry_frame_def,
         vyperInterpreterTheory.initial_evaluation_context_def]) >>
   fs[default_registration_resources_def] >>
