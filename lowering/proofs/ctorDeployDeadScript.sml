@@ -7,7 +7,7 @@
  *)
 Theory ctorDeployDead
 Ancestors
-  ctorDeployDefs bodyPtrDefs gasContext ctorDeployDeadSectionFrame ctorDeployDeadSectionRel
+  ctorDeployDefs bodyPtrDefs immSectionDead gasContext ctorDeployDeadSectionFrame ctorDeployDeadSectionRel
   ctorDeployDeadLoad ctorDeployDeadImmTypes e2eComposition ptrDiscipline accountsRelProps compileEnv loweringStateRelDefs
   vyperInterpreter e2eDeployDefs e2eDefs vyperContext sourceUnitExecution list rich_list
 
@@ -36,7 +36,7 @@ QED
    immutables fixed region's bound: dead_lo_ok at the constructor's context. *)
 Theorem deploy_dead_lo_ok:
   !H tops runtime_bc am tx cenv.
-    cenv.ce_is_ctor ==>
+    cenv.ce_is_ctor /\ cenv.ce_modules = [(NONE,tops)] ==>
     dead_lo_ok H (deploy_dead H tops runtime_bc am tx) (imm_len tops) cenv
       (deploy_evaluation_context tops am tx)
 Proof
@@ -47,7 +47,8 @@ Proof
           get_module_code_def]) >>
   `(deploy_evaluation_context tops am tx).txn.target = tx.target` by
     simp[deploy_evaluation_context_def, initial_evaluation_context_def] >>
-  simp[dead_lo_ok_def, cx_dead_def, deploy_dead_def, dead_sub_def]
+  simp[dead_lo_ok_def, cx_dead_def, deploy_dead_def, dead_sub_def,
+       imm_len_mods_singleton]
 QED
 
 (* A list that agrees with pre ++ sec1 outside the dead bytes of sec1 is
