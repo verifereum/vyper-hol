@@ -3,74 +3,11 @@ Theory exprSimConcatStore
 Ancestors
   valueEncodingDefs arithmetic list compileEnv loweringStateRelDefs exprLoweringProps localPtrsProps loweringSlice
   immutableMemoryFrame valueEncodingProps valueEncodingProofs venomState
-  venomExecSemantics byte
+  venomExecSemantics byte exprSimLiteralBuffer
 
 (* An MCOPY whose destination lies inside one tracked ALLOCA, disjoint from
    every live local, keeps stmt_state_rel; the MSTORE counterpart is
    literal_mstore_state_rel. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt strip_tac >>
-  `(mcopy d src n s with vs_memory := s.vs_memory) = s` by
-    simp[mcopy_def, write_memory_with_expansion_def, LET_THM] >>
-  `!q. lookup_var q (mcopy d src n s) = lookup_var q s` by
-    simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def] >>
-  `!nm lo len. local_region cenv es.scopes (mcopy d src n s) nm lo len <=>
-               local_region cenv es.scopes s nm lo len` by
-    simp[local_region_def] >>
-  `LENGTH s.vs_memory <= LENGTH (mcopy d src n s).vs_memory` by
-    simp[mcopy_def, immutable_write_memory_capacity, MAX_DEF] >>
-  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
-  rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
-  `local_ptrs_rel func cenv es.scopes (mcopy d src n s)` by
-    (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >>
-     rpt conj_tac
-     >~ [`mem_bytes_at _ _ (mcopy _ _ _ _).vs_memory`]
-     >- (rpt strip_tac >> rename1 `local_region _ _ _ nm lo len` >>
-         `lo + len <= d \/ d + n <= lo` by
-           (qpat_x_assum `!name lb lsz. local_region _ _ s _ _ _ ==> _` drule >>
-            decide_tac) >>
-         simp[mcopy_mem_bytes_at_disjoint]) >>
-     rpt strip_tac >> gvs[state_rel_def, mcopy_def, write_memory_with_expansion_def, LET_THM]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-     (mcopy d src n s)` by
-    (irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
-     conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
-     reverse conj_tac >- gvs[state_rel_def] >>
-     rpt strip_tac >>
-     qpat_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
-     rewrite_tac[immutable_alloca_sep_def] >>
-     disch_then (drule_all o CONJUNCT2) >> strip_tac >>
-     `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
-     irule mcopy_mem_bytes_at_disjoint >> gvs[regions_disjoint_def]) >>
-  rewrite_tac[stmt_state_rel_def] >>
-  conj_tac
-  >- (irule state_rel_frame >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`es`, `s`] >> simp[] >>
-      simp[mcopy_def, write_memory_with_expansion_def, LET_THM]) >>
-  conj_tac
-  >- (irule alloca_inv_fields >> qexists_tac `s` >>
-      simp[mcopy_def, write_memory_with_expansion_def, LET_THM]) >>
-  conj_tac
-  >- (irule alloca_room_fields >> qexists_tac `s` >>
-      simp[mcopy_def, write_memory_with_expansion_def, LET_THM]) >>
-  conj_tac
-  >- (simp_tac bool_ss [mcopy_def, LET_THM] >>
-      irule fmp_room_write_memory >> fs[stmt_state_rel_def]) >>
-  conj_tac
-  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
-      simp[mcopy_def, write_memory_with_expansion_def, LET_THM] >>
-      rpt strip_tac >> qexists_tac `id` >>
-      gvs[local_region_def, lookup_var_def]) >>
-  conj_tac
-  >- (irule immutable_base_zero_frame >> qexists_tac `s` >>
-      simp[mcopy_def, write_memory_with_expansion_def, LET_THM]) >>
-  simp[mcopy_def, write_memory_with_expansion_def, LET_THM] >>
-  first_assum MATCH_ACCEPT_TAC
-QED
-*)
 Theorem alloca_mcopy_state_rel:
   !ctx func cenv cx es s inst b sz d src n.
     stmt_state_rel H ctx func cenv cx es s /\ b <= d /\ d + n <= b + sz /\
@@ -80,7 +17,29 @@ Theorem alloca_mcopy_state_rel:
        b + sz <= lb \/ lb + lsz <= b) ==>
     stmt_state_rel H ctx func cenv cx es (mcopy d src n s)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `!q. lookup_var q (mcopy d src n s) = lookup_var q s` by
+    simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def] >>
+  `LENGTH s.vs_memory <= LENGTH (mcopy d src n s).vs_memory` by
+    simp[mcopy_def, immutable_write_memory_capacity, MAX_DEF] >>
+  `(mcopy d src n s with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s` by
+    simp[mcopy_def, write_memory_with_expansion_def, LET_THM] >>
+  irule literal_state_memory_frame >> qexists_tac `s` >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> irule mcopy_mem_bytes_at_disjoint >>
+      qpat_x_assum `!name lb lsz. local_region _ _ s _ _ _ ==> _` drule >>
+      decide_tac) >>
+  disch_tac >> qx_gen_tac `owner` >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `immutable_alloca_sep func (cenv with ce_module := owner) cx es s` by
+    (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+     Cases_on `owner = cenv.ce_module` >>
+     gvs[compile_env_component_equality] >> metis_tac[]) >>
+  `regions_disjoint off (type_memory_size tv) b sz` by
+    (qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
+     simp[immutable_alloca_sep_def] >> strip_tac >>
+     first_x_assum (drule_all_then strip_assume_tac) >> metis_tac[]) >>
+  irule mcopy_mem_bytes_at_disjoint >> fs[regions_disjoint_def] >> decide_tac
 QED
 
 (* After a bytesM operand's full-word store at D + k and the offset store at
