@@ -101,20 +101,16 @@ Proof
   simp[stmt_state_rel_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  simp[stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC
-QED
-*)
 Theorem stmt_state_rel_intro:
   state_rel H func cenv cx vs ss /\ alloca_inv ss /\ alloca_room ctx func ss /\
   fmp_room ctx func ss /\ immutable_alloca_sep func cenv cx vs ss /\
   immutable_base_zero cenv ss /\
+  (!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx vs ss) /\
   (!inst n base sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit n] /\
     FLOOKUP ss.vs_allocas inst.inst_id = SOME (base,sz) ==> sz = w2n n) ==>
   stmt_state_rel H ctx func cenv cx vs ss
 Proof
-  cheat
+  simp[stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC
 QED
