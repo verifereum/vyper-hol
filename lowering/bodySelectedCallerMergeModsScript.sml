@@ -1829,7 +1829,23 @@ val caller_read_exit = ``\(H : (bool # 256 word # type_value) list # num list)
     expr_exit res r /\ halt_exit H cx ee res r /\
     (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)``;
 
-(* Normalize the completed-callee callback to the selected caller outcome. *)
+(* Use the callback of the very same case rule that restores the caller. *)
+val selected_caller_outcome_cases =
+  Q.INST [`P` |-> `^callee_return`, `Q` |-> `^selected_owned`]
+    caller_callee_outcome_cases;
+
+val selected_normal_callback =
+  let
+    val premises = strip_conj (fst (dest_imp (concl selected_caller_outcome_cases)))
+    fun is_callback tm =
+      let val (args,body) = strip_forall tm
+      in length args = 7 andalso can dest_imp body end
+  in
+    case List.filter is_callback premises of
+      [callback] => callback
+    | _ => raise Fail "expected exactly one completed-callee callback"
+  end;
+
 Theorem caller_completed_normal_callback_adapter[local]:
   contract_inv mods exps ctx ce cx /\ (^caller_stage_frame) /\ (^reached_invoke) /\
   gas_admissible (^return_rest) expr_vv_res_ok es1 /\ (^reached_return) /\
@@ -1842,20 +1858,10 @@ Theorem caller_completed_normal_callback_adapter[local]:
   (0 < rc ==> ALL_DISTINCT inst.inst_outputs /\ (^register_buffer)) /\
   outs = inst.inst_outputs /\ ~t.vs_halted /\ allocas_from lo t /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\ fn_inst_ids_distinct func ==>
-  !marks v ee ir cs Gc tc.
-    (!tail. (^return_source)
-      (es1 with gas_obs := gas_explicit marks entered.vs_gas_readings ++ tail) =
-      (INL v,ee with gas_obs := tail)) /\
-    storage_trace_domain cx st0 ee.storage_trace /\
-    (!H. valid_horizon cx st0 H ee.storage_trace ==>
-      gas_origin_ptr_path (DF H,lo,explicit,ctx,callee,MAP (op_prov G) ops)
-        (entered,FEMPTY,tn with t_var := FEMPTY) marks (IntRet ir cs,Gc,tc) /\
-      (^callee_return) H v (ee with gas_obs := []) (Gc,tc) ir cs) ==>
-    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
-      (^return_rest) (es1,t,G,tn) (^selected_owned) (^caller_exit)
+  ^selected_normal_callback
 Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  rpt gen_tac >> strip_tac >>
   mp_tac (Q.INST [`Gc` |-> `Gc`, `args` |-> `args`, `argv` |-> `argv`,
     `bb` |-> `bb`, `callee` |-> `callee`, `cs` |-> `cs`, `dflts` |-> `dflts`,
     `ee` |-> `ee`, `entered` |-> `entered`, `inst` |-> `inst`, `ir` |-> `ir`,
@@ -1867,6 +1873,52 @@ Proof
     (first_assum ACCEPT_TAC ORELSE
      (rpt conj_tac >> first_assum ACCEPT_TAC)))) >>
   disch_then ACCEPT_TAC
+QED
+
+Theorem caller_decoded_ops_clean[local]:
+  (^caller_real_compile) /\ (^caller_shadow_compile) /\
+  ce.ce_func_info (nsid_to_string (src,name)) = (rc,rbs,pvs) /\
+  fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func /\
+  (^prepared_compile) /\ (^prepared_allocation) /\ (^prepared_frame) /\
+  (^prepared_ops) /\ (^prepared_fetch) ==>
+  EVERY (\op. op_taint tn op = {}) ops
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then (assume_tac o CONJUNCT2) caller_ops_packet >>
+  mp_tac caller_prepared_emission >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choosel_then [`s4`,`emitted`,`eb`,`ei`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  `eb = bb` by
+    (qpat_assum `lookup_block _ _ = SOME bb` (fn eq =>
+       qpat_x_assum `lookup_block _ _ = SOME eb`
+         (mp_tac o PURE_REWRITE_RULE [eq])) >> simp[]) >>
+  qpat_x_assum `eb = bb` SUBST_ALL_TAC >>
+  `ei = inst` by
+    (qpat_assum `get_instruction bb _ = SOME inst` (fn eq =>
+       qpat_x_assum `get_instruction bb _ = SOME ei`
+         (mp_tac o PURE_REWRITE_RULE [eq])) >> simp[]) >>
+  qpat_x_assum `ei = inst` SUBST_ALL_TAC >>
+  `emitted = ops` by
+    (qpat_assum `decode_invoke inst = SOME (lbl,ops)` (fn eq =>
+       qpat_x_assum `decode_invoke inst = SOME (_,emitted)`
+         (mp_tac o PURE_REWRITE_RULE [eq])) >> simp[]) >>
+  qpat_x_assum `emitted = ops` SUBST_ALL_TAC >>
+  Cases_on `0 < rc`
+  >- (qpat_assum `0 < rc ==> ?buf results. _` (drule_then strip_assume_tac) >>
+      asm_rewrite_tac[]) >>
+  `rc = 0` by decide_tac >>
+  Cases_on `rbs = 0`
+  >- (qpat_assum `rc = 0 /\ rbs = 0 ==> _` (drule_all_then strip_assume_tac) >>
+      asm_rewrite_tac[]) >>
+  `0 < rbs` by decide_tac >>
+  qpat_assum `rc = 0 /\ 0 < rbs ==> ?buf. _`
+    (drule_all_then (qx_choose_then `emitted_buf` strip_assume_tac)) >>
+  qpat_x_assum `let cap = _ in _` mp_tac >>
+  pure_rewrite_tac[LET_THM] >> simp[] >>
+  disch_then (qx_choosel_then [`root`,`b`,`ai`] strip_assume_tac) >>
+  drule_all_then strip_assume_tac caller_pin_packet >>
+  simp[]
 QED
 
 (* Public linked caller restoration: the prepared packet fixes the reached
@@ -1914,27 +1966,43 @@ Theorem selected_caller_exit_restore_mods:
          (bind (^return_rest) (read_result cx)) (es1,t,G,tn)
          (^caller_call_read) (^caller_read_exit))
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `EVERY (\op. op_taint tn op = {}) ops` by
+    (mp_tac caller_decoded_ops_clean >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then ACCEPT_TAC) >>
   `gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
       (^return_rest) (es1,t,G,tn) (^selected_owned) (^caller_exit)` by
-    (irule caller_callee_outcome_cases >>
-     qexistsl_tac [`^callee_return`,`bb`,`callee`,`entered`,`inst`,`lbl`,`ops`] >>
-     ((rpt strip_tac >>> NTH_GOAL (simp[SIMP_RULE bool_ss [LET_THM] caller_completed_normal]) 3 >>> NTH_GOAL (simp[SIMP_RULE bool_ss [LET_THM] caller_completed_normal]) 3 >>> NTH_GOAL (simp[SIMP_RULE bool_ss [LET_THM] caller_completed_normal]) 3 >>> NTH_GOAL (simp[SIMP_RULE bool_ss [LET_THM] caller_completed_normal]) 3 >>> NTH_GOAL (simp[SIMP_RULE bool_ss [LET_THM] caller_completed_normal]) 3 >>
-       CONV_TAC (DEPTH_CONV BETA_CONV) >>
-       mp_tac (SIMP_RULE bool_ss [LET_THM] caller_completed_normal) >>
-       (impl_tac >- (rpt conj_tac >> (TRY (first_assum ACCEPT_TAC)) >> all_tac)) >>
-       disch_then ACCEPT_TAC) >-
-      (gen_tac >> strip_tac >>
-       qpat_assum `!callee entered bb inst lbl ops argv. _` drule_all >>
-       first_assum ACCEPT_TAC) >-
-      (rpt gen_tac >> strip_tac >>
-       irule caller_invoke_ptr_clean >>
-       rpt conj_tac >> first_assum ACCEPT_TAC) >-
-      first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >-
-      first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >-
-      first_assum ACCEPT_TAC)) >>
+    (mp_tac selected_caller_outcome_cases >>
+     (impl_tac >-
+       (conj_tac >- first_assum ACCEPT_TAC >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        conj_tac >-
+          (gen_tac >> disch_tac >>
+           irule caller_invoke_ptr_clean >>
+           conj_tac >- first_assum ACCEPT_TAC >>
+           conj_tac >- first_assum ACCEPT_TAC >>
+           conj_tac >- (qexistsl_tac [`lbl`,`ops`] >> asm_rewrite_tac[]) >>
+           first_assum ACCEPT_TAC) >>
+        conj_tac >-
+          (qpat_assum `!cal en block i l operands ws. gas_invoke_entry _ _ cal en /\ _ ==> _`
+             (qspecl_then [`callee`,`entered`,`bb`,`inst`,`lbl`,`ops`,`argv`] mp_tac) >>
+           (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+           disch_then ACCEPT_TAC) >>
+        mp_tac caller_completed_normal_callback_adapter >>
+        (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+        disch_then ACCEPT_TAC)) >>
+     disch_then ACCEPT_TAC) >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  irule selected_return_unwrap_mods >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  mp_tac (SPEC_ALL selected_return_unwrap_explicit_mods) >>
+  (impl_tac >-
+    (rpt conj_tac
+     >~ [`fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func ==> _`]
+     >- (disch_tac >> first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
 QED
 
