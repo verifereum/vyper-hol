@@ -68,7 +68,7 @@ Theorem intcall_buffer_alloc_vv_mods:
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME pt /\ value_has_type pt v /\
   vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv s /\
   ptr_vv_ok cx (post_value_type ce e) raw vv ee G tn s /\
-  (!tag x. vv = StackValue tag x ==> ptr_buf_ok ce e x G s) /\
+  (!tag x. vv = StackValue tag x /\ ~is_word_type (post_value_type ce e) ==> ptr_buf_ok ce e x G s) /\
   (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
      ptr_buf_ok ce e p.ptr_operand G s) /\
   (ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
@@ -114,7 +114,7 @@ Theorem intcall_buffer_alloc_vv_mods:
        ghost_inv_at_mods (DF H) lo d ce cx ee Ga ta a) /\
     vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv a /\
     ptr_vv_ok cx (post_value_type ce e) raw vv ee Ga ta a /\
-    (!tag x. vv = StackValue tag x ==> ptr_buf_ok ce e x Ga a) /\
+    (!tag x. vv = StackValue tag x /\ ~is_word_type (post_value_type ce e) ==> ptr_buf_ok ce e x Ga a) /\
     (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
        ptr_buf_ok ce e p.ptr_operand Ga a) /\
     (ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
@@ -173,9 +173,16 @@ QED
 Resume intcall_buffer_alloc_vv_mods[resources]:
   ASM_CASES_TAC ``is_word_type (post_value_type ce e)``
   >- suspend "word" >>
+  `!tag x. vv = StackValue tag x ==> ptr_buf_ok ce e x G s` by
+    (qpat_assum `!tag x. vv = StackValue tag x /\ _ ==> _` mp_tac >> simp[]) >>
   drule_all_then strip_assume_tac
     (Q.INST [`u` |-> `a`] ext_kw_default_alloc_unwrap_resources_mods) >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (qpat_assum `!tag x. vv = StackValue tag x ==> ptr_buf_ok ce e x Ga a`
+      mp_tac >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qpat_assum `_ ==> ?payload. _ /\ !rt w. _ /\ eval_operand _ a = _ ==> _`
     accept_alloc_payload
 QED
@@ -190,7 +197,7 @@ Resume intcall_buffer_alloc_vv_mods[word]:
     ptr_buf_ok ce e (vv_operand vv) Ga a)` by
     (strip_tac >> irule ptr_buf_ok_frame >> qexistsl [`G`,`s`] >> simp[] >>
      Cases_on `vv_operand vv` >> fs[op_prov_def]) >>
-  conj_tac >- (rpt gen_tac >> strip_tac >> fs[vv_operand_def]) >>
+  conj_tac >- simp[] >>
   conj_tac >- (rpt gen_tac >> strip_tac >> fs[vv_operand_def]) >>
   mp_tac (Q.INST [`ce` |-> `ce`, `vv` |-> `vv`, `cx` |-> `cx`,
                   `tv` |-> `raw`, `ee` |-> `ee`, `e` |-> `e`,
