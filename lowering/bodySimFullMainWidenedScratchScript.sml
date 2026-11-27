@@ -242,10 +242,23 @@ fun linked_body_ind_wide rank_guard =
   |> CONV_RULE (DEPTH_CONV BETA_CONV);
 val ranked_linked_body_ind_wide = linked_body_ind_wide ``LENGTH (remcode cx) <= rank``;
 
-Theorem body_sim_full_mutual_ranked_widened:
+Theorem body_sim_full_mutual_ranked_mods_widened:
   !mods exps rank:num. ^(snd (dest_imp (concl ranked_linked_body_ind_wide)))
 Proof
   cheat
+QED
+
+val unranked_linked_body_ind_wide = linked_body_ind_wide ``T``;
+
+Theorem body_sim_full_mutual_mods_widened:
+  !mods exps. ^(simpLib.SIMP_CONV bool_ss []
+    (snd (dest_imp (concl unranked_linked_body_ind_wide))) |> concl |> rhs)
+Proof
+  rpt gen_tac >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_rename_tac `ALOOKUP cx.sources cx.txn.target` >>
+  qspecl_then [`mods`, `exps`, `LENGTH (remcode cx)`] strip_assume_tac
+    body_sim_full_mutual_ranked_mods_widened >>
+  first_x_assum irule >> asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
 QED
 
 Theorem body_sim_header_post_equiv:
