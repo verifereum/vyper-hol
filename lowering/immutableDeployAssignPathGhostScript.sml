@@ -248,41 +248,6 @@ Proof
   asm_rewrite_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `ce.ce_module = NONE /\ cx_tops cx = tops /\
-   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
-   ce.ce_module_var_type = build_var_type_map tops /\
-   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-    gvs[body_inv_def,cenv_module_pins_def,cx_tops_module] >>
-  `get_tenv cx = type_env tops` by
-    simp[get_tenv_def,type_env_all_modules_def,type_env_def] >>
-  `?pre post vis ity slot.
-    tops = pre ++ VariableDecl vis Immutable id ity slot :: post /\
-    off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre` by
-    (drule body_inv_immutable_section_layout >>
-     simp[immutable_section_layout_def] >> metis_tac[]) >>
-  `ity = ty` by
-    (`MEM (VariableDecl vis Immutable id ity slot) tops` by simp[] >>
-     drule_all build_maps_variable >> strip_tac >>
-     qpat_x_assum `build_var_type_map tops _ = SOME ity` mp_tac >>
-     simp[] >> gvs[build_maps_variable]) >>
-  qpat_x_assum `ity = ty` SUBST_ALL_TAC >>
-  `lo = imm_len tops` by metis_tac[dead_lo_ok_def] >>
-  `evaluate_type (type_env tops) ty = SOME itv` by metis_tac[] >>
-  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-      type_memory_size itv` by drule_all_then ACCEPT_TAC immutable_exact_slot_size >>
-  `off + type_memory_size itv <= lo` by
-    (mp_tac (Q.INST [`off` |-> `0`, `prefix` |-> `pre`, `suffix` |-> `post`,
-       `sft` |-> `get_struct_fields (make_struct_fields_map tops)`,
-       `ty` |-> `ty`, `vis` |-> `vis`, `name` |-> `id`, `slot` |-> `slot`]
-       immutable_declaration_interval_bound) >>
-     simp[GSYM imm_len_def]) >>
-  simp[] >> metis_tac[]
-QED
-*)
 Theorem immutable_assign_section_root:
   body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
   ce.ce_is_ctor /\ dead_lo_ok H D lo ce cx /\
@@ -295,7 +260,39 @@ Theorem immutable_assign_section_root:
     tops = pre ++ VariableDecl vis Immutable id ty slot :: post /\
     off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre
 Proof
-  cheat
+  strip_tac >>
+  `ce.ce_module = NONE /\ ce.ce_modules = [(NONE,tops)] /\
+   cx_tops cx = tops /\
+   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+   ce.ce_module_var_type = build_var_type_map tops /\
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    gvs[body_inv_def,cenv_module_pins_def,cx_tops_module] >>
+  `get_tenv cx = type_env tops` by
+    simp[get_tenv_def,type_env_all_modules_def,type_env_def] >>
+  `lo = imm_len tops` by fs[dead_lo_ok_def,immSectionDeadTheory.imm_len_mods_singleton] >>
+  `?pre post vis ity slot.
+    tops = pre ++ VariableDecl vis Immutable id ity slot :: post /\
+    off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre` by
+    (drule body_inv_immutable_section_layout >>
+     simp[immutable_section_layout_def] >> metis_tac[]) >>
+  `ity = ty` by
+    (`MEM (VariableDecl vis Immutable id ity slot) tops` by simp[] >>
+     drule_all build_maps_variable >> strip_tac >>
+     qpat_x_assum `build_var_type_map tops _ = SOME ity` mp_tac >>
+     simp[] >> gvs[build_maps_variable]) >>
+  qpat_x_assum `ity = ty` SUBST_ALL_TAC >>
+  `evaluate_type (type_env tops) ty = SOME itv` by fs[] >>
+  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
+      type_memory_size itv` by drule_all_then ACCEPT_TAC immutable_exact_slot_size >>
+  `off + type_memory_size itv <= lo` by
+    (qpat_assum `off = _` (fn offset =>
+       qpat_assum `type_mem_bytes _ ty = _` (fn width =>
+         qpat_assum `lo = _` (fn len =>
+           PURE_REWRITE_TAC [offset, GSYM width, len, imm_len_def]))) >>
+     qpat_assum `tops = _` (PURE_ONCE_REWRITE_TAC o single) >>
+     irule (SIMP_RULE (srw_ss()) []
+       (Q.INST [`off` |-> `0`] immutable_declaration_interval_bound))) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem immutable_path_section_dead:
