@@ -1,7 +1,8 @@
 (* Adapt the physical ABI tuple driver to the linked saved-buffer state. *)
 Theory bodyAbiTupleLinkedLoopMods
 Ancestors
-  abiEncodeValuesRun abiEncodeValuesCode bodyFullExtCallDirectWindows
+  abiEncodeValuesRun abiEncodeValuesCode abiEncodeValuesCursorRunMods
+  bodyFullExtCallDirectWindows
   bodyAbiTupleBufferResourcesMods bodyAbiTupleBufferPhaseMods bodyAbiTuplePhaseEffectMods
   bodyAbiTupleBufferStateMods loweringStateRelDefs
   stateRelProj entryDecodeStructure abiEncoderWindowPhase abiEncoderRegisteredEffect
@@ -304,3 +305,279 @@ Resume abi_tuple_linked_loop_mods[row]:
 QED
 
 Finalise abi_tuple_linked_loop_mods
+
+
+(* The linked adapter keeps the compiler cursor fixed at the emitted ALLOCA
+   operand.  The physical driver is deliberately an implication premise: the
+   physical satellite can discharge it without being imported here. *)
+Theorem abi_tuple_linked_loop_with_cursor_from_driver_mods[local]:
+  (!cursor0 allocated.
+    compile_abi_encode_values_to_buf ce (Var payload_var) rows st = (alen,en) /\
+    fn_has_code st en func /\ fn_inst_ids_distinct func /\
+    LIST_REL (\row at. abi_embedded_static_size ce.ce_struct_fields (SND row) =
+      abi_member_head_size at) rows ats /\
+    LIST_REL abi_encoder_layout_valid ats avs /\ hl = head_lengths ats 0 /\
+    bytes = enc (Tuple ats) (ListV avs) /\
+    FLOOKUP u.vs_allocas shared = SOME (pbase,capacity) /\ shared < st.cs_next_id /\
+    emit_op ALLOCA [Lit 32w] st = (cursor0,allocated) /\
+    abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+      shared pbase capacity root payload_var dst_offset prefix st u Gu tu /\
+    abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset
+      st.cs_next_id st u Gu tu (loop_effect_cut st.cs_next_id st) u Gu tu ==>
+    (!a u' Gu' tu'. abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+        shared pbase capacity root payload_var dst_offset prefix a u' Gu' tu' /\
+      abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset
+        st.cs_next_id st u Gu tu (loop_effect_cut st.cs_next_id a) u' Gu' tu' ==>
+      alloca_inv u' /\ alloca_room ctx func u' /\ allocas_from lo u' /\ lo <= u'.vs_alloca_next /\
+      ~u'.vs_halted /\ u'.vs_current_bb = a.cs_current_bb /\
+      u'.vs_inst_idx = LENGTH a.cs_current_insts /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp u' /\
+        u'.vs_alloca_next + pending_alloca_size func u' <= w2n u'.vs_initial_fmp)) ==>
+    (!p n. FLOOKUP u.vs_allocas st.cs_next_id = SOME (p,n) ==> n = 32) ==>
+    (!a c ids u' Gu' tu' v Gv tv.
+      abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+        shared pbase capacity root payload_var dst_offset prefix a u' Gu' tu' /\
+      abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset
+        st.cs_next_id st u Gu tu (loop_effect_cut st.cs_next_id a) u' Gu' tu' /\ ci_mono a c /\ window_phase ctx func a c ids [] u' v /\
+      abi_encode_exec_frame func u' v /\ ids SUBSET {st.cs_next_id} /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+        (u',Gu',tu') [] (OK v,Gv,tv)) /\
+      (!x. not_fresh_at a x ==> FLOOKUP Gv x = FLOOKUP Gu' x /\
+        op_taint tv (Var x) = op_taint tu' (Var x)) /\
+      tv.t_stor = tu'.t_stor /\ tv.t_trans = tu'.t_trans /\
+      tv.t_imm = tu'.t_imm /\ tv.t_mem SUBSET tu'.t_mem ==> abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+          shared pbase capacity root payload_var dst_offset prefix c v Gv tv /\
+        abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset
+          st.cs_next_id st u Gu tu (loop_effect_cut st.cs_next_id c) v Gv tv) ==>
+    (!i a c u' Gu' tu' slot.
+      i < LENGTH rows /\ abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+        shared pbase capacity root payload_var dst_offset prefix a u' Gu' tu' /\
+      abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset
+        st.cs_next_id st u Gu tu (loop_effect_cut st.cs_next_id a) u' Gu' tu' /\
+      abi_encode_values_prefix_at ats avs hl (pbase + dst_offset) cursor0
+        st.cs_next_id slot i a u' Gu' tu' /\
+      compile_abi_encode_value_rows ce (Var payload_var) cursor0
+        (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields o SND)
+          (TAKE i rows))) [EL i rows] a = ((),c) /\ fn_has_code a c func ==>
+      ?v Gv tv. abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+          shared pbase capacity root payload_var dst_offset prefix c v Gv tv /\
+        abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset
+          st.cs_next_id st u Gu tu (loop_effect_cut st.cs_next_id c) v Gv tv /\
+        abi_encode_values_prefix_at ats avs hl (pbase + dst_offset) cursor0
+          st.cs_next_id slot (SUC i) c v Gv tv /\
+        (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+          (u',Gu',tu') [] (OK v,Gv,tv))) ==>
+    ?t G' tn'. abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+        shared pbase capacity root payload_var dst_offset prefix en t G' tn' /\
+      abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset
+        st.cs_next_id st u Gu tu (loop_effect_cut st.cs_next_id en) t G' tn' /\
+      eval_operand alen t = SOME (n2w (LENGTH bytes)) /\
+      op_taint tn' alen = {} /\
+      (!x. alen = Var x ==> not_fresh_at en x) /\
+      mem_bytes_at (pbase + dst_offset) (LENGTH bytes) t.vs_memory = bytes /\
+      (!j. pbase + dst_offset <= j /\
+        j < pbase + dst_offset + LENGTH bytes ==> j NOTIN tn'.t_mem) /\
+      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+        (u,Gu,tu) [] (OK t,G',tn')) /\
+  abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+    shared pbase capacity root payload_var dst_offset prefix st u Gu tu /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee s) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at se x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at se x) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_id = shared /\ inst.inst_outputs = [root] /\
+  not_local_ptr ce ee.scopes root /\
+  compile_abi_encode_values_to_buf ce (Var payload_var) rows st = (alen,en) /\
+  fn_has_code st en func /\
+  LIST_REL (\row at.
+    abi_embedded_static_size ce.ce_struct_fields (SND row) =
+      abi_member_head_size at) rows ats /\
+  LIST_REL abi_encoder_layout_valid ats avs /\
+  hl = head_lengths ats 0 /\ bytes = enc (Tuple ats) (ListV avs) /\
+  (!ci r. MEM ci (fn_insts func) /\ ci.inst_id = st.cs_next_id /\
+    ci.inst_opcode = ALLOCA /\ ci.inst_outputs = [r] /\
+    not_local_ptr ce ee.scopes r ==>
+    !i a c v Gv tv cursor slot.
+      i < LENGTH rows /\ cursor = Var r /\
+      abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+        shared pbase capacity root payload_var dst_offset prefix a v Gv tv /\
+      abi_encode_values_prefix_at ats avs hl
+        (pbase + dst_offset) cursor st.cs_next_id slot i a v Gv tv /\
+      compile_abi_encode_value_rows ce (Var payload_var) cursor
+        (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields o SND)
+          (TAKE i rows))) [EL i rows] a = ((),c) /\
+      fn_has_code a c func ==>
+      ?z Gz tz.
+        abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+          shared pbase capacity root payload_var dst_offset prefix c z Gz tz /\
+        abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset
+          st.cs_next_id a v Gv tv c z Gz tz /\
+        abi_encode_values_prefix_at ats avs hl
+          (pbase + dst_offset) cursor st.cs_next_id slot (SUC i) c z Gz tz /\
+        !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+          (v,Gv,tv) [] (OK z,Gz,tz)) ==>
+  ?z Gz tz.
+    abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+      shared pbase capacity root payload_var dst_offset prefix en z Gz tz /\
+    abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset
+      st.cs_next_id st u Gu tu en z Gz tz /\
+    eval_operand alen z = SOME (n2w (LENGTH bytes)) /\
+    op_taint tz alen = {} /\
+    (!x. alen = Var x ==> not_fresh_at en x) /\
+    mem_bytes_at (pbase + dst_offset) (LENGTH bytes) z.vs_memory = bytes /\
+    (!j. pbase + dst_offset <= j /\
+      j < pbase + dst_offset + LENGTH bytes ==> j NOTIN tz.t_mem) /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (u,Gu,tu) [] (OK z,Gz,tz)
+Proof
+  disch_then (CONJUNCTS_THEN2 (mk_asm "driver")
+    (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  `se.cs_next_var <= st.cs_next_var /\ se.cs_next_id <= shared /\
+    shared < st.cs_next_id /\ FLOOKUP u.vs_allocas shared = SOME (pbase,capacity)` by
+    (qhdtm_assum `abi_tuple_buffer_state_mods`
+      (fn th => map_every assume_tac
+        (CONJUNCTS (REWRITE_RULE[abi_tuple_buffer_state_mods_def] th))) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_then (qx_choosel_then [`cursor0`,`allocated`,`ready`,`stored`]
+    (MAP_EVERY assume_tac o CONJUNCTS)) abi_encode_values_to_buf_trace >>
+  `ci_mono st allocated /\ ci_mono allocated ready /\
+    ci_mono ready stored /\ ci_mono stored en` by
+    metis_tac[ci_mono_emit_op, ci_mono_emit_void,
+      ci_mono_compile_abi_encode_value_rows, SND] >>
+  `ci_mono allocated en` by metis_tac[ci_mono_trans] >>
+  `fn_has_code st allocated func` by
+    metis_tac[ci_mono_def, fn_has_code_split] >>
+  drule_all extcall_direct_alloca_site >>
+  disch_then (qspec_then `ee.scopes`
+    (qx_choosel_then [`ci`,`r`] (MAP_EVERY assume_tac o CONJUNCTS))) >>
+  asm_x "driver" (qspecl_then [`cursor0`,`allocated`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[loop_effect_refl]) >>
+  (impl_tac >-
+    (rpt gen_tac >> strip_tac >>
+     drule_all_then ACCEPT_TAC abi_tuple_buffer_resources_mods)) >>
+  (impl_tac >-
+    (qhdtm_assum `abi_tuple_buffer_state_mods`
+      (mp_then (Pos hd) mp_tac loop_cursor_alloca_size) >> metis_tac[])) >>
+  (impl_tac >-
+    (rpt gen_tac >>
+     disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+     `se.cs_next_id <= st.cs_next_id` by decide_tac >>
+     qpat_x_assum `abi_tuple_buffer_state_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ st u Gu tu`
+       kall_tac >>
+     drule_all_then (MAP_EVERY assume_tac o CONJUNCTS) loop_buffer_pure_phase >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     irule abi_tuple_row_effects_trans_mods >>
+     qpat_assum `abi_tuple_row_effects_mods _ _ _ _ _ _ _ _ st u Gu tu _ _ _ _`
+       (irule_at Any) >>
+     first_assum ACCEPT_TAC)) >>
+  (impl_tac >-
+    (qpat_x_assum `!ci r. MEM ci (fn_insts func) /\ _ ==> _`
+       (qspecl_then [`ci`,`r`] mp_tac) >>
+     (impl_tac >- asm_rewrite_tac[]) >>
+     disch_then (mk_asm "row_step") >>
+     rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+     asm_x "row_step" (drule_all_then
+       (qx_choosel_then [`v`,`Gv`,`tv`] (MAP_EVERY assume_tac o CONJUNCTS))) >>
+     `st.cs_next_id < a.cs_next_id /\ st.cs_next_id < c.cs_next_id` by
+       (qpat_assum `abi_encode_values_prefix_at _ _ _ _ _ _ _ i a _ _ _` mp_tac >>
+        qpat_assum `abi_encode_values_prefix_at _ _ _ _ _ _ _ (SUC i) c _ _ _` mp_tac >>
+        simp_tac (srw_ss()) [abi_encode_values_prefix_at_def] >> metis_tac[]) >>
+     `loop_effect_cut st.cs_next_id a = a /\ loop_effect_cut st.cs_next_id c = c` by
+       (conj_tac >> irule loop_effect_cut_reached >> first_assum ACCEPT_TAC) >>
+     qexistsl [`v`,`Gv`,`tv`] >> asm_rewrite_tac[] >>
+     irule abi_tuple_row_effects_trans_mods >>
+     qpat_assum `abi_tuple_row_effects_mods _ _ _ _ _ _ _ _ a u' Gu' tu' c v Gv tv`
+       (irule_at Any) >>
+     qpat_assum `loop_effect_cut st.cs_next_id a = a` (fn cut_eq =>
+       qpat_assum `abi_tuple_row_effects_mods _ _ _ _ _ _ _ _ st u Gu tu _ _ _ _`
+         (ACCEPT_TAC o PURE_REWRITE_RULE [cut_eq])))) >>
+  disch_then (qx_choosel_then [`z`,`Gz`,`tz`]
+    (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  `st.cs_next_id < en.cs_next_id` by
+    (drule emit_op_next_id >> fs[ci_mono_def] >> decide_tac) >>
+  qexistsl [`z`,`Gz`,`tz`] >>
+  gvs[loop_effect_cut_reached]
+QED
+
+Theorem abi_tuple_linked_loop_with_cursor_mods:
+  abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+    shared pbase capacity root payload_var dst_offset prefix st u Gu tu /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee s) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at se x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at se x) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_id = shared /\ inst.inst_outputs = [root] /\
+  not_local_ptr ce ee.scopes root /\
+  compile_abi_encode_values_to_buf ce (Var payload_var) rows st = (alen,en) /\
+  fn_has_code st en func /\
+  LIST_REL (\row at.
+    abi_embedded_static_size ce.ce_struct_fields (SND row) =
+      abi_member_head_size at) rows ats /\
+  LIST_REL abi_encoder_layout_valid ats avs /\
+  hl = head_lengths ats 0 /\ bytes = enc (Tuple ats) (ListV avs) /\
+  (!ci r. MEM ci (fn_insts func) /\ ci.inst_id = st.cs_next_id /\
+    ci.inst_opcode = ALLOCA /\ ci.inst_outputs = [r] /\
+    not_local_ptr ce ee.scopes r ==>
+    !i a c v Gv tv cursor slot.
+      i < LENGTH rows /\ cursor = Var r /\
+      abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+        shared pbase capacity root payload_var dst_offset prefix a v Gv tv /\
+      abi_encode_values_prefix_at ats avs hl
+        (pbase + dst_offset) cursor st.cs_next_id slot i a v Gv tv /\
+      compile_abi_encode_value_rows ce (Var payload_var) cursor
+        (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields o SND)
+          (TAKE i rows))) [EL i rows] a = ((),c) /\
+      fn_has_code a c func ==>
+      ?z Gz tz.
+        abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+          shared pbase capacity root payload_var dst_offset prefix c z Gz tz /\
+        abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset st.cs_next_id
+          a v Gv tv c z Gz tz /\
+        abi_encode_values_prefix_at ats avs hl
+          (pbase + dst_offset) cursor st.cs_next_id slot (SUC i) c z Gz tz /\
+        !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+          (v,Gv,tv) [] (OK z,Gz,tz)) ==>
+  ?z Gz tz.
+    abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+      shared pbase capacity root payload_var dst_offset prefix en z Gz tz /\
+    abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset st.cs_next_id
+      st u Gu tu en z Gz tz /\
+    eval_operand alen z = SOME (n2w (LENGTH bytes)) /\
+    op_taint tz alen = {} /\
+    (!x. alen = Var x ==> not_fresh_at en x) /\
+    mem_bytes_at (pbase + dst_offset) (LENGTH bytes) z.vs_memory = bytes /\
+    (!j. pbase + dst_offset <= j /\
+      j < pbase + dst_offset + LENGTH bytes ==> j NOTIN tz.t_mem) /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (u,Gu,tu) [] (OK z,Gz,tz)
+Proof
+  disch_tac >>
+  mp_tac abi_tuple_linked_loop_with_cursor_from_driver_mods >>
+  impl_tac
+  >- (reverse conj_tac >- first_assum ACCEPT_TAC >>
+      rpt gen_tac >> rpt (disch_then (MAP_EVERY assume_tac o CONJUNCTS)) >>
+      mp_tac (Q.INST
+        [`dst` |-> `Var payload_var`, `out` |-> `alen`, `s` |-> `u`,
+         `G` |-> `Gu`, `tn` |-> `tu`, `owner` |-> `shared`, `b` |-> `pbase`,
+         `cap` |-> `capacity`, `d` |-> `pbase + dst_offset`,
+         `P` |-> `\a v Gv tv.
+           abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo disp se s G tn
+             shared pbase capacity root payload_var dst_offset prefix a v Gv tv /\
+           abi_tuple_row_effects_mods ce ee func shared pbase capacity dst_offset
+             st.cs_next_id st u Gu tu (loop_effect_cut st.cs_next_id a) v Gv tv`]
+        abi_encode_values_execute_with_cursor |> BETA_RULE
+        |> PURE_REWRITE_RULE [GSYM CONJ_ASSOC]) >>
+      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+      disch_then ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED
