@@ -2,10 +2,13 @@
 Theory abiMalformedPruneState
 Ancestors
   abiDecoderReentry exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs
-  venomState finite_map pred_set arithmetic
+  venomState finite_map pred_set arithmetic stateRelProj
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem abi_malformed_reserved_vars_state:
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  (!x. not_fresh_at st x ==>
+       lookup_var x (s with vs_vars := vars) = lookup_var x s) ==>
+  stmt_state_rel H ctx func cenv cx es (s with vs_vars := vars)
 Proof
   strip_tac >>
   `!name entry p sz.
@@ -14,37 +17,28 @@ Proof
      lookup_var p (s with vs_vars := vars) = lookup_var p s` by
     (rpt strip_tac >> first_x_assum irule >>
      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  `local_ptrs_rel func cenv es.scopes s` by
-    gvs[stmt_state_rel_def, state_rel_def] >>
+  `state_rel H func cenv cx es s` by metis_tac[stmt_state_rel_state_rel] >>
   `local_ptrs_rel func cenv es.scopes (s with vs_vars := vars)` by
-    (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >> simp[] >>
-     rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  irule stmt_state_rel_allocas_frame >> conj_tac
-  >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
-      reverse conj_tac >- gvs[stmt_state_rel_def] >>
-      rpt strip_tac >>
-      qpat_x_assum `!x. not_fresh_at st x ==> _` irule >>
-      fs[local_ptrs_reserved_def]) >>
+    (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >>
+     simp[] >> rpt strip_tac >> gvs[] >> metis_tac[state_rel_local_ptrs_rel]) >>
+  `immutable_base_zero cenv (s with vs_vars := vars)` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
+     metis_tac[stmt_state_rel_immutable_base_zero, local_ptrs_reserved_imm_base]) >>
+  `!ce. ce.ce_vars = cenv.ce_vars /\ immutable_alloca_sep func ce cx es s ==>
+        immutable_alloca_sep func ce cx es (s with vs_vars := vars)` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `es`] >> simp[] >>
+     simp[local_region_def] >> metis_tac[]) >>
+  `state_rel H func cenv cx es (s with vs_vars := vars)` by
+    (irule state_rel_frame >> simp[] >> qexistsl_tac [`es`, `s`] >> simp[] >>
+     qpat_x_assum `state_rel H func cenv cx es s` mp_tac >>
+     simp[state_rel_def, immutables_rel_def] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+  irule stmt_state_rel_allocas_frame >> simp[] >>
   conj_tac
-  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
-      simp[] >> reverse conj_tac >- gvs[stmt_state_rel_def] >>
-      rpt strip_tac >> qexists_tac `id` >>
-      fs[local_region_def] >> metis_tac[]) >>
-  reverse conj_tac
-  >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
-  irule state_rel_frame >> conj_tac >- simp[] >>
-  qexistsl_tac [`es`, `s`] >> simp[] >>
-  gvs[stmt_state_rel_def, state_rel_def, immutables_rel_def] >>
-  first_assum ACCEPT_TAC
-QED
-*)
-Theorem abi_malformed_reserved_vars_state:
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
-  (!x. not_fresh_at st x ==>
-       lookup_var x (s with vs_vars := vars) = lookup_var x s) ==>
-  stmt_state_rel H ctx func cenv cx es (s with vs_vars := vars)
-Proof
-  cheat
+  >- (rpt strip_tac >> first_x_assum irule >> simp[] >> fs[stmt_state_rel_def]) >>
+  conj_tac
+  >- (first_x_assum irule >> simp[] >> fs[stmt_state_rel_def]) >>
+  qexistsl_tac [`es`, `s`] >> simp[]
 QED
 
 Theorem abi_malformed_prune_state:

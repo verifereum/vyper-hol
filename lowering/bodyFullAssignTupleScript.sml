@@ -3189,6 +3189,7 @@ QED
 
 Theorem tuple_immutable_word_stmt_post[local]:
   stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+  immutable_section_layout_mods ce.ce_modules ce /\
   expr_sim_inv ce cx env ee /\ local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
@@ -3445,7 +3446,9 @@ Proof
   conj_tac
   >- (gen_tac >> irule fragGasOriginPtrDeadTheory.gas_origin_ptr_path_from_no_dead >> simp[]) >>
   conj_tac
-  >- (rpt strip_tac >> irule tuple_immutable_word_stmt_post >>
+  >- (rpt strip_tac >>
+      drule_then assume_tac bodyInvCodePropsTheory.body_inv_unit_immutable_layout >>
+      irule tuple_immutable_word_stmt_post >>
       metis_tac[]) >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
@@ -3951,7 +3954,9 @@ Proof
   >- (gen_tac >> irule fragGasOriginPtrDeadTheory.gas_origin_ptr_path_from_no_dead >>
       goal_assum (drule_at Any)) >>
   conj_tac
-  >- (rpt strip_tac >> irule immutable_assign_suffix_stmt_post >>
+  >- (rpt strip_tac >>
+      drule_then assume_tac bodyInvCodePropsTheory.body_inv_unit_immutable_layout >>
+      irule immutable_assign_suffix_stmt_post >>
       simp[GSYM lookup_var_def,venom_state_component_equality] >>
       qexistsl_tac [`env`,`id`,`tv`,`ty`,`off`,`vi`] >> fs[]) >>
   conj_tac
@@ -5913,6 +5918,7 @@ Resume tuple_immutable_runtime_bytes_joint[stmt_post]:
   `!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s` by
     (rpt strip_tac >> first_x_assum drule >> simp[]) >>
   qpat_x_assum `q.vs_memory = _` kall_tac >>
+  drule_then assume_tac bodyInvCodePropsTheory.body_inv_unit_immutable_layout >>
   irule immutable_assign_suffix_stmt_post >> asm_rewrite_tac[] >>
   qexistsl_tac [`env`,`id`,`dtv`,`dty`,`off`,`vi`] >> asm_rewrite_tac[]
 QED
@@ -6375,7 +6381,9 @@ Proof
   (conj_tac >-
     (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
      conj_tac
-     >- (irule immutableDeployAssignRestoreTheory.immutable_path_store_stmt_state_rel >>
+     >- (`immutable_section_layout_mods ce.ce_modules ce` by
+           drule_then ACCEPT_TAC bodyInvCodePropsTheory.body_inv_unit_immutable_layout >>
+         irule immutableDeployAssignRestoreTheory.immutable_path_store_stmt_state_rel >>
          rpt (CHANGED_TAC (first_assum (irule_at Any))) >> simp[]) >>
      conj_tac
      >- (`storage_well_formed_on cx fin (FST H) <=> storage_well_formed_on cx mid (FST H)` by

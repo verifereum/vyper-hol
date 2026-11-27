@@ -162,23 +162,6 @@ Proof
   simp[imm_len_mods_singleton]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt strip_tac >>
-  drule intCallFrameTheory.invoke_return_frame >> strip_tac >>
-  `ghost_inv_at (DF H) lo d cenv cx (es1 with scopes := prev) G tn t` by
-    fs[intcall_entry_full_def] >>
-  simp[ghost_inv_at_def] >> rpt conj_tac
-  >- suspend "locals"
-  >- suspend "buffer"
-  >- suspend "pc"
-  >- suspend "storage"
-  >- suspend "fixed"
-  >- suspend "base"
-  >> gvs[ghost_inv_at_def, allocas_from_def] >> metis_tac[]
-QED
-*)
 Theorem intcall_return_ghost_inv:
   !tops ctx cenv cx H DF lo sa mut nr rtv rc rb sm t tn v ee Gc tc ir cs
    outs out d func tenv name es vv s0 es0 G0 tn0 args ret ss rr prev penv es1 G.
@@ -197,10 +180,29 @@ Theorem intcall_return_ghost_inv:
     (DRESTRICT G (COMPL (set outs)))
     (tc with t_var := DRESTRICT tn.t_var (COMPL (set outs))) out
 Proof
-  cheat
+  rpt strip_tac >>
+  drule intCallFrameTheory.invoke_return_frame >> strip_tac >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  `!sec j. imm_section_dead_mods cenv sec j <=> imm_section_dead tops sec j` by
+    (rpt gen_tac >>
+     qpat_x_assum `cenv.ce_modules = [(NONE,tops)]`
+       (fn th => ACCEPT_TAC (MATCH_MP imm_section_dead_mods_singleton th))) >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  `imm_len_mods cenv.ce_modules = imm_len (cx_tops cx)` by
+    simp[imm_len_mods_singleton] >>
+  `ghost_inv_at (DF H) lo d cenv cx (es1 with scopes := prev) G tn t` by
+    fs[intcall_entry_full_def] >>
+  simp[ghost_inv_at_def] >> rpt conj_tac
+  >- suspend "locals"
+  >- suspend "buffer"
+  >- suspend "pc"
+  >- suspend "storage"
+  >- suspend "fixed"
+  >- suspend "base"
+  >> gvs[ghost_inv_at_def, allocas_from_def] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_ghost_inv[locals]:
   rpt gen_tac >> strip_tac >>
   `not_fresh_at sa p` by
@@ -229,7 +231,7 @@ Resume intcall_return_ghost_inv[locals]:
   `immutable_decl_sep cenv cx prev t.vs_vars t.vs_allocas t.vs_alloca_next` by
     (drule return_stmt_immutable_sep >> simp[immutable_alloca_sep_def]) >>
   `!i. w2n w <= i /\ i < w2n w + sz ==> lo <= i` by
-    (rpt strip_tac >> fs[dead_lo_ok_def] >>
+    (rpt strip_tac >> fs[dead_lo_ok_def, imm_len_mods_singleton] >>
      Cases_on `cenv.ce_is_ctor` >> gvs[] >>
      drule_all (ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] intcall_local_immutable_prefix_disjoint) >> simp[]) >>
   `mem_bytes_at (w2n w) sz cs.vs_memory = mem_bytes_at (w2n w) sz t.vs_memory` by
@@ -238,7 +240,7 @@ Resume intcall_return_ghost_inv[locals]:
        (strip_tac >>
         qpat_x_assum `!i. w2n w <= i /\ _ ==> lo <= i`
           (qspec_then `w2n w` mp_tac) >>
-        gvs[dead_lo_ok_def]) >>
+        gvs[dead_lo_ok_def, imm_len_mods_singleton]) >>
      fs[intcall_callee_exit_full_def, bodyIntCallSeamsTheory.intcall_callee_exit_def,
         exprSimDefsTheory.expr_exit_def] >>
      first_x_assum irule >> simp[] >> rpt strip_tac >>
@@ -258,8 +260,7 @@ Resume intcall_return_ghost_inv[locals]:
   qexistsl [`tn.t_mem`, `tc.t_mem`, `t.vs_memory`, `cs.vs_memory`, `sz`] >>
   simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
+
 Resume intcall_return_ghost_inv[buffer]:
   Cases_on `d` >- simp[return_buf_ptr_def] >>
   rename1 `return_buf_ptr (SOME pair) _ _ _ _` >> PairCases_on `pair` >>
@@ -268,16 +269,14 @@ Resume intcall_return_ghost_inv[buffer]:
   `~MEM x outs` by metis_tac[] >>
   gvs[ptr_covers_def, op_taint_def, FLOOKUP_DRESTRICT]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
+
 Resume intcall_return_ghost_inv[pc]:
   rpt strip_tac >>
   `not_fresh_at sa x` by metis_tac[] >>
   `~MEM x outs` by metis_tac[] >>
   fs[ghost_inv_at_def, op_taint_def, FLOOKUP_DRESTRICT]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
+
 Resume intcall_return_ghost_inv[storage]:
   `stor_taint_ok_at (DF H) tc cs` by fs[intcall_callee_exit_full_def] >>
   `t.vs_call_ctx.cc_address = cx.txn.target` by
@@ -300,13 +299,14 @@ Resume intcall_return_ghost_inv[storage]:
       venomExecSemanticsTheory.merge_callee_state_def,
       stor_taint_ok_at_def]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
+
 Resume intcall_return_ghost_inv[fixed]:
-  gvs[intcall_callee_exit_full_def]
+  fs[intcall_callee_exit_full_def] >>
+  first_x_assum (qspec_then `mem_bytes_at 0 lo cs.vs_memory` assume_tac) >>
+  first_x_assum (qspec_then `i` assume_tac) >>
+  metis_tac[]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
+
 Resume intcall_return_ghost_inv[base]:
   rpt strip_tac >>
   `not_fresh_at sa x` by
@@ -314,10 +314,8 @@ Resume intcall_return_ghost_inv[base]:
   `~MEM x outs` by metis_tac[] >>
   gvs[ghost_inv_at_def, op_taint_def, FLOOKUP_DRESTRICT]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
+
 Finalise intcall_return_ghost_inv
-*)
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -332,6 +330,7 @@ Proof
   >> suspend "locals"
 QED
 *)
+
 Theorem intcall_return_ghost_kept:
   !tops ctx cenv cx H DF lo sa mut nr rtv rc rb sm t tn v ee Gc tc ir cs
    outs out d func tenv name es vv s0 es0 G0 tn0 args ret ss rr prev penv es1 G.
@@ -350,8 +349,74 @@ Theorem intcall_return_ghost_kept:
     (DRESTRICT G (COMPL (set outs)))
     (tc with t_var := DRESTRICT tn.t_var (COMPL (set outs)))
 Proof
-  cheat
+  rpt strip_tac >>
+  `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn /\
+   stmt_state_rel H ctx func cenv cx (es1 with scopes := prev) t /\
+   expr_sim_inv cenv cx tenv (es1 with scopes := prev)` by
+    fs[intcall_entry_full_def] >>
+  `lo = (if cenv.ce_is_ctor then imm_len (cx_tops cx) else 0)` by
+    (drule_then assume_tac body_inv_contract >>
+     drule_then assume_tac contract_inv_cenv_modules >>
+     drule_then strip_assume_tac body_inv_main_code >>
+     fs[dead_lo_ok_def, imm_len_mods_singleton]) >>
+  `immutable_decl_sep cenv cx prev t.vs_vars t.vs_allocas t.vs_alloca_next` by
+    (drule return_stmt_immutable_sep >> simp[immutable_alloca_sep_def]) >>
+  simp[ghost_kept_at_def] >> rpt conj_tac
+  >- (rpt strip_tac >> `~MEM x outs` by metis_tac[] >>
+      gvs[ghost_kept_at_def, op_taint_def, FLOOKUP_DRESTRICT])
+  >- suspend "allocas"
+  >> suspend "locals"
 QED
+
+Resume intcall_return_ghost_kept[allocas]:
+  rpt strip_tac >>
+  `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by
+    (fs[intcall_entry_full_def] >> metis_tac[]) >>
+  `off + sz <= t.vs_alloca_next` by
+    (drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
+     fs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     metis_tac[]) >>
+  `lo <= i` by
+    (Cases_on `cenv.ce_is_ctor` >> gvs[] >>
+     drule_all intcall_alloca_immutable_prefix_disjoint >> simp[]) >>
+  `i IN tn.t_mem` by
+    (fs[intcall_callee_exit_full_def] >>
+     qpat_x_assum `!j. _ /\ _ ==> j IN tn.t_mem` irule >> gvs[] >>
+     rpt strip_tac >>
+     drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
+     fs[venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.allocas_non_overlapping_def] >>
+     `aid <> aid'` by decide_tac >>
+     first_x_assum drule_all >> decide_tac) >>
+  fs[ghost_kept_at_def] >> metis_tac[]
+QED
+
+Resume intcall_return_ghost_kept[locals]:
+  rpt strip_tac >>
+  `local_region cenv prev t n b sz` by
+    (irule exprSimPropsTheory.local_region_frame_fwd >>
+     qexistsl [`s0`, `sa`, `es0.scopes`] >>
+     fs[intcall_entry_full_def,
+        loweringPostsTheory.locals_kept_def]) >>
+  `b + sz <= t.vs_alloca_next` by
+    (drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
+     fs[loweringStateRelDefsTheory.local_region_def,
+        loweringStateRelDefsTheory.local_ptrs_rel_def] >>
+     qpat_x_assum `!n e p sz. _ ==> ?w. _` drule_all >> strip_tac >> gvs[]) >>
+  `lo <= i` by
+    (Cases_on `cenv.ce_is_ctor` >> gvs[] >>
+     drule_all intcall_local_immutable_prefix_disjoint >> simp[]) >>
+  `i IN tn.t_mem` by
+    (fs[intcall_callee_exit_full_def] >>
+     qpat_x_assum `!j. _ /\ _ ==> j IN tn.t_mem` irule >> gvs[] >>
+     rpt strip_tac >>
+     `regions_disjoint b sz off asz` by
+       (fs[intcall_entry_full_def] >> metis_tac[]) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  fs[ghost_kept_at_def] >> metis_tac[]
+QED
+
+Finalise intcall_return_ghost_kept
 (* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_ghost_kept[allocas]:
   rpt strip_tac >>
