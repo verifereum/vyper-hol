@@ -2008,7 +2008,8 @@ Definition frame_maps_def:
   frame_maps env art <=>
     env.bare_globals = art.cta_bare_globals /\
     env.bare_global_assignable = art.cta_bare_global_assignable /\
-    env.fn_sigs = art.cta_fn_sigs
+    env.fn_sigs = art.cta_fn_sigs /\
+    env.event_fields = art.cta_event_fields
 End
 
 Definition checked_frame_context_def:
