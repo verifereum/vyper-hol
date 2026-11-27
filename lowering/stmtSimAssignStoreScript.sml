@@ -130,13 +130,65 @@ Proof
   rpt conj_tac >> asm_rewrite_tac[] >> rpt strip_tac >> gvs[]
 QED
 
+(* A write within one local preserves each separated immutable window. *)
+Theorem local_write_preserves_immutables:
+  stmt_state_rel H ctx func cenv cx es s /\
+  (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+  local_region cenv es.scopes s id b sz /\
+  t.vs_data_section = s.vs_data_section /\
+  (!a n. a + n <= b \/ b + sz <= a ==>
+     mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) ==>
+  immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s /\
+   immutable_alloca_sep func (cenv with ce_module := src) cx es s` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def]) >>
+     Cases_on `src = cenv.ce_module` >>
+     gvs[compileEnvTheory.compile_env_component_equality,
+         optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+  Cases_on `cenv.ce_is_ctor`
+  >- (fs[immutables_rel_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+      qpat_x_assum `!name tv v byte_offset. _ ==> _`
+        (drule_all_then strip_assume_tac) >>
+      `regions_disjoint byte_offset (type_memory_size tv) b sz` by
+        (qpat_x_assum `immutable_alloca_sep _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE
+              [immutable_alloca_sep_def, immutable_decl_sep_alt]) >>
+         fs[local_region_def] >> metis_tac[]) >>
+      `mem_bytes_at byte_offset (type_memory_size tv) t.vs_memory =
+       mem_bytes_at byte_offset (type_memory_size tv) s.vs_memory` by
+        (first_x_assum irule >> fs[regions_disjoint_def]) >>
+      simp[] >> metis_tac[val_in_memory_mem_agree,
+                          immutable_admissible_val_wf, arithmeticTheory.LESS_EQ_REFL]) >>
+  fs[immutables_rel_def] >> metis_tac[]
+QED
+
 (* The local id, held at p in the scope find_containing_scope finds,
    rewritten in t: t is s up to its variables and memory, keeps the
    pointers of live locals, and keeps memory outside the bytes the local's
    type lays out at its base, where it lays out v.  Then t is related to
    the scopes write_place leaves. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_state_rel_write_local:
+  !H func cenv cx es s t id p sz w pre env entry rest v ctx.
+    stmt_state_rel H ctx func cenv cx es s /\
+    find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    ((ptrDiscipline$ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) /\
+    (!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s) /\
+    (!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
+           mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
+    val_wf entry.type v /\ memory_value_rel entry.type v (w2n w) t.vs_memory ==>
+    stmt_state_rel H ctx func cenv cx
+      (es with scopes :=
+         pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
+      t
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `entry' = entry with <|value := v; popped := []|>` >>
@@ -193,24 +245,44 @@ Proof
     (irule local_ptrs_rel_write_local >>
      qexistsl_tac [`entry'`, `id`, `p`, `es.scopes`, `s`, `sz`, `w`] >>
      rpt conj_tac >> asm_rewrite_tac[] >> rpt strip_tac >> gvs[]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t` by
+    (gen_tac >> disch_tac >>
+     MATCH_MP_TAC (Q.INST
+       [`H` |-> `H`, `b` |-> `w2n (w:bytes32)`, `ctx` |-> `ctx`, `func` |-> `func`,
+        `id` |-> `id`, `s` |-> `s`, `sz` |-> `sz`]
+       (SPEC_ALL local_write_preserves_immutables)) >>
+     simp[] >> rpt strip_tac >>
+     qpat_x_assum `!b n. _ ==> mem_bytes_at b n t.vs_memory = _` irule >>
+     decide_tac) >>
   `state_rel H func cenv cx (es with scopes := scs') t` by
     (irule state_rel_frame >> conj_tac >- simp[] >>
      qexists_tac `es` >> qexists_tac `s` >>
      simp[vyperStateTheory.evaluation_state_component_equality] >>
-     fs[stmt_state_rel_def]) >>
+     fs[stmt_state_rel_def] >> first_assum ACCEPT_TAC) >>
   `alloca_inv t` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `fmp_room ctx func t` by
     (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def] >>
      first_assum ACCEPT_TAC) >>
+  `!ce. ce.ce_vars = cenv.ce_vars ==>
+     !n b sz. local_region ce scs' t n b sz ==>
+       ?n0. local_region ce es.scopes s n0 b sz` by
+    (rpt strip_tac >> qexists_tac `n` >> gvs[local_region_def] >>
+     qpat_x_assum `!n e q sq. _ ==> lookup_var q t = _` drule_all >>
+     strip_tac >> Cases_on `n = id` >> gvs[] >> metis_tac[]) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
     (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
-     simp[] >> reverse conj_tac >- fs[stmt_state_rel_def] >>
-     rpt strip_tac >> qexists_tac `id'` >>
-     gvs[local_region_def] >>
-     qpat_x_assum `!n e q sq. _ ==> lookup_var q t = _` drule_all >>
-     strip_tac >> Cases_on `id' = id` >> gvs[] >> metis_tac[]) >>
+     fs[stmt_state_rel_def] >> metis_tac[]) >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx
+       (es with scopes := scs') t` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `es`] >> simp[] >>
+     fs[stmt_state_rel_def] >>
+     qpat_assum `!ce. ce.ce_vars = _ ==> _`
+       (qspec_then `cenv with ce_module := src` mp_tac) >> simp[]) >>
   `immutable_base_zero cenv t` by
     (irule immutable_base_zero_frame >> qexists_tac `s` >>
      simp[] >> reverse conj_tac >- fs[stmt_state_rel_def] >>
@@ -218,29 +290,6 @@ Proof
      qpat_x_assum `!q. ~not_local_ptr _ _ q ==> _` irule >>
      simp[not_local_ptr_def]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
-QED
-*)
-Theorem stmt_state_rel_write_local:
-  !H func cenv cx es s t id p sz w pre env entry rest v ctx.
-    stmt_state_rel H ctx func cenv cx es s /\
-    find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    lookup_var p s = SOME w /\
-    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-    ((ptrDiscipline$ctx_has_dalloca ctx \/
-      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
-      LENGTH s.vs_memory <= LENGTH t.vs_memory) /\
-    (!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s) /\
-    (!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
-           mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
-    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
-    val_wf entry.type v /\ memory_value_rel entry.type v (w2n w) t.vs_memory ==>
-    stmt_state_rel H ctx func cenv cx
-      (es with scopes :=
-         pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
-      t
-Proof
-  cheat
 QED
 
 (* One MSTORE of a word inside a local's region. *)
