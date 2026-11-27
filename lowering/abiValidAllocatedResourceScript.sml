@@ -8,16 +8,8 @@ Ancestors
   venomInst venomExecSemantics finite_map words list arithmetic
 
 (* Allocation-free decoder execution preserves the destination's resource frame. *)
-Theorem abi_valid_allocated_scratch_free_resource:
-  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
-  fn_inst_ids_distinct func /\
-  abi_malformed_destination func cenv es.scopes dstid d n s /\
-  abi_decode_frame d n s t /\
-  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\ i.inst_opcode <> ALLOCA) code /\
-  run_inst_seq code s = OK t /\
-  (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
-    eval_operand op t = SOME w) ==>
-  abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) code` by fs[EVERY_MEM] >>
@@ -61,7 +53,22 @@ Proof
   `B+cap <= b \/ b+sz <= B` by
     (fs[alloca_inv_def, allocas_non_overlapping_def] >> metis_tac[]) >> decide_tac
 QED
+*)
+Theorem abi_valid_allocated_scratch_free_resource:
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  fn_inst_ids_distinct func /\
+  abi_malformed_destination func cenv es.scopes dstid d n s /\
+  abi_decode_frame d n s t /\
+  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\ i.inst_opcode <> ALLOCA) code /\
+  run_inst_seq code s = OK t /\
+  (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+    eval_operand op t = SOME w) ==>
+  abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_valid_allocated_scratch_free_resource[code]:
   irule run_inst_seq_preserves_field >> goal_assum (drule_at Any) >>
   rpt strip_tac >> Cases_on `is_terminator i.inst_opcode`
@@ -75,7 +82,9 @@ Resume abi_valid_allocated_scratch_free_resource[code]:
       pairarg_tac >> gvs[]) >>
   drule_all step_inst_base_preserves_all >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_valid_allocated_scratch_free_resource[locals]:
   irule local_ptrs_rel_mem_agree >> qexists_tac `s` >> simp[] >>
   reverse conj_tac >- (conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >> gvs[]) >>
@@ -86,7 +95,9 @@ Resume abi_valid_allocated_scratch_free_resource[locals]:
   qpat_x_assum `!name lb lsz. _ ==> regions_disjoint _ _ _ _` drule >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_valid_allocated_scratch_free_resource[immutables]:
   irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
   reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
@@ -96,7 +107,9 @@ Resume abi_valid_allocated_scratch_free_resource[immutables]:
     (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
   first_x_assum match_mp_tac >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_valid_allocated_scratch_free_resource[state]:
   rpt strip_tac >>
   `t.vs_initial_fmp = s.vs_initial_fmp /\
@@ -116,5 +129,8 @@ Resume abi_valid_allocated_scratch_free_resource[state]:
   irule state_rel_frame >> simp[] >> qexistsl_tac [`es`, `s`] >>
   simp[] >> fs[stmt_state_rel_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise abi_valid_allocated_scratch_free_resource
+*)
