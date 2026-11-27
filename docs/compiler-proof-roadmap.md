@@ -790,8 +790,8 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    satisfying `immutables_section_rel`. The result relation compares accounts
    and transient storage at the run's storage horizon, ordered logs and call
    requests. The theorem includes a resource-exhaustion alternative. The result
-   relation handles failure; its sole source exemption is the recipient-overflow
-   error, which the well-formed deployment state rules out.
+   relation handles failure. Recipient-overflow is classified by the separate
+   source-exemption predicate, and the well-formed deployment state rules it out.
    Nested creation frames and general runtime immutables remain generalizations.
 
 ## Milestone 7: Full theorem
