@@ -34,31 +34,12 @@ Theorem allocated_bytes_write_state_rel:
       (write_memory_with_expansion (b + 32) data s))
 Proof
   strip_tac >> gvs[] >> irule bytes_buffer_write_state_rel >>
-  simp[] >> conj_tac
+  simp[] >> reverse conj_tac
   >- (qexists_tac `N` >> simp[] >> rpt strip_tac >>
       qpat_x_assum `!name p len. _` drule >>
       simp[regions_disjoint_def] >> decide_tac) >>
-  irule immutables_rel_mem_agree >> qexists_tac `s` >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s /\
-   immutable_alloca_sep fn cenv cx es s` by fs[stmt_state_rel_def, state_rel_def] >>
-  `(mstore b (n2w (LENGTH data))
-      (write_memory_with_expansion (b + 32) data s)).vs_data_section = s.vs_data_section` by
-    simp[mstore_def, write_memory_with_expansion_def] >>
-  simp[immutable_mstore_capacity, immutable_write_memory_capacity] >>
-  suspend "immutable"
+  metis_tac[bytes_buffer_write_alloca_immutables, arithmeticTheory.ADD_COMM]
 QED
-
-Resume allocated_bytes_write_state_rel[immutable]:
-  rpt strip_tac >>
-  qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
-  simp[immutable_alloca_sep_def] >>
-  disch_then (drule_all o CONJUNCT2) >> strip_tac >>
-  `regions_disjoint off (type_memory_size tv) b N` by
-    (qpat_x_assum `!inst b sz. _` drule_all >> simp[]) >>
-  irule bytes_buffer_write_frame >>
-  fs[regions_disjoint_def] >> decide_tac
-QED
-Finalise allocated_bytes_write_state_rel
 
 Theorem allocated_bytes_write_local_windows:
   LENGTH data = n /\ 32 + n <= N /\

@@ -354,6 +354,7 @@ Theorem annassign_word_full_rhs[local]:
   (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   (!fn inst s. frag_reachable ctx func t fn inst s ==> dalloca_fmp_headroom inst s) /\
   (!H. dead_lo_ok H (DF H) lo old cx) /\ ce.ce_is_ctor = old.ce_is_ctor /\
+  ce.ce_modules = old.ce_modules /\
   ce.ce_return_buf = old.ce_return_buf /\ ce.ce_return_pc = old.ce_return_pc /\
   (!x sz. old.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ret_pc_ok old sa s0 /\ sa.cs_next_var <= a.cs_next_var /\
@@ -618,6 +619,10 @@ Proof
      disch_then (qspecl_then [`sa'`,`shadow_a`] mp_tac) >> simp[]) >>
   gvs[] >>
   `cenv'.ce_is_ctor = cenv.ce_is_ctor` by
+    (qpat_x_assum `cenv' with <|ce_vars := _; ce_dynarray_capacity := _;
+                              ce_var_type := _|> = cenv` mp_tac >>
+     simp[compile_env_component_equality]) >>
+  `cenv'.ce_modules = cenv.ce_modules` by
     (qpat_x_assum `cenv' with <|ce_vars := _; ce_dynarray_capacity := _;
                               ce_var_type := _|> = cenv` mp_tac >>
      simp[compile_env_component_equality]) >>
