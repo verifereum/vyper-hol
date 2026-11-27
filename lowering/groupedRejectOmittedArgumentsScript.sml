@@ -253,29 +253,6 @@ Proof
   simp[AllCaseEqs(), GSYM CONJ_ASSOC] >> strip_tac >> gvs[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `ce = _` (assume_tac o SYM) >>
-  qpat_x_assum `ctx = _` SUBST_ALL_TAC >>
-  drule row22_model_package >> strip_tac >>
-  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts (tx with function_name := name) NONE` >>
-  `cx = initial_evaluation_context am.sources am.layouts (tx with function_name := name) NONE` by simp[Abbr `cx`] >>
-  mp_tac (SPEC_ALL row22_model_source) >>
-  impl_tac >-
-    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     FIRST [qpat_assum `common.ec_env = ce` (fn th => pure_rewrite_tac [SYM th]) >> first_assum ACCEPT_TAC,
-            qpat_assum `common.ec_payable <=> _` (fn th => pure_rewrite_tac [SYM th]) >> first_assum ACCEPT_TAC]) >>
-  disch_then (qx_choosel_then [`art`,`es`] (map_every assume_tac o CONJUNCTS)) >>
-  qpat_x_assum `common.ec_env = ce` (assume_tac o SYM) >>
-  qexistsl_tac [`art`, `es`, `cx`, `artifact_env art [(NONE,tops)] NONE`,
-    `u with vs_outcomes := []`] >>
-  simp[NoAsms] >>
-  qabbrev_tac `kept = MAP (\((aid,p,base,tv),v). (aid,p,base,tv,v)) (ZIP (supplied,vals))` >>
-  suspend "syntax"
-QED
-*)
 Theorem row22_omitted_model_inputs:
   lower_vyper_runtime_unit tops rp = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
@@ -304,7 +281,7 @@ Theorem row22_omitted_model_inputs:
     unit_alloca_budget ctx <= w2n vs.vs_initial_fmp /\ w2n vs.vs_initial_fmp < 2 ** 254) /\
   gas_origin_ptr_path (D,0,explicit,ctx,fn,[])
     (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>,
-     FEMPTY,entry_taint) [] (OK u,G,tn) ==>
+     FEMPTY,entry_taint) [] (OK u,G,tn) ==> 
   ?art es cx env s.
     cx = initial_evaluation_context am.sources am.layouts (tx with function_name := name) NONE /\
     env = artifact_env art [(NONE,tops)] NONE /\
@@ -345,15 +322,24 @@ Theorem row22_omitted_model_inputs:
     (!f inst w. frag_reachable ctx fn s f inst w ==> dalloca_fmp_headroom inst w) /\
     ~s.vs_halted /\ at_point sa s
 Proof
-  cheat
-QED
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume row22_omitted_model_inputs[syntax]:
-  qpat_x_assum `Abbrev (cx = _)` kall_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `ce = _` (assume_tac o SYM) >>
+  qpat_x_assum `ctx = _` SUBST_ALL_TAC >>
+  drule row22_model_package >> strip_tac >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts (tx with function_name := name) NONE` >>
+  `cx = initial_evaluation_context am.sources am.layouts (tx with function_name := name) NONE` by simp[Abbr `cx`] >>
+  mp_tac (SPEC_ALL row22_model_source) >>
+  impl_tac >-
+    (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`art`,`es`] (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `common.ec_env = ce` (assume_tac o SYM) >>
+  qexistsl_tac [`art`, `es`, `cx`, `artifact_env art [(NONE,tops)] NONE`,
+    `u with vs_outcomes := []`] >>
+  simp[NoAsms] >>
+  qabbrev_tac `kept = MAP (\((aid,p,base,tv),v). (aid,p,base,tv,v)) (ZIP (supplied,vals))` >>
   drule_all row22_model_default_syntax >> strip_tac >>
   mp_tac (Q.INST [`env` |-> `artifact_env art [(NONE,tops)] NONE`] (SPEC_ALL row22_model_context)) >>
-  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, REFL_TAC]) >> strip_tac >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   drule compile_create_kwarg_allocas_preserves_specs >>
   qpat_assum `specs = _` (fn th => disch_then (assume_tac o REWRITE_RULE [th])) >>
   mp_tac (SPEC_ALL row22_model_spec_annotations) >>
@@ -369,20 +355,12 @@ Resume row22_omitted_model_inputs[syntax]:
   drule source_typing_ok_type_def_keys_distinct >> strip_tac >>
   mp_tac (Q.INST [`vspec` |-> `DROP k vars`, `env` |-> `artifact_env art [(NONE,tops)] NONE`]
     (SPEC_ALL row22_model_slot_inputs)) >>
-  impl_tac >-
-    (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       qpat_assum `ce = _` SUBST1_TAC >> first_assum ACCEPT_TAC]) >> strip_tac >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   mp_tac (SPEC_ALL row22_model_no_sha) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   `EVERY (runtime_constant_expr [(NONE,tops)]) (MAP (\(_,_,_,e). e) (DROP k vars))` by
     (qpat_assum `MAP _ (DROP k vars) = _` SUBST1_TAC >>
      irule EVERY_DROP >> first_assum ACCEPT_TAC) >>
-  suspend "target_frame"
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume row22_omitted_model_inputs[target_frame]:
   qpat_x_assum `ce = _` kall_tac >>
   `unit_alloca_budget unit.cu_context < dimword (:256) /\ ctx_inst_ids_distinct unit.cu_context` by
     metis_tac[lower_vyper_runtime_unit_context_entry,lowering_context_ok_alloca_budget,
@@ -403,23 +381,13 @@ Resume row22_omitted_model_inputs[target_frame]:
     `ce` |-> `ce with ce_vars := FEMPTY`,
     `os0` |-> `vs.vs_outcomes`, `os1` |-> `u.vs_outcomes`]
     (SPEC_ALL row22_model_frame)) >>
-  impl_tac >-
-    (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-      (qpat_assum `initial_venom_state_rel _ _ (tx with function_name := _) (vs with vs_outcomes := [])` mp_tac >>
-       simp_tac bool_ss [initial_venom_state_rel_def,venom_env_rel_def,venom_state_accfupds] >> NO_TAC),
-      (simp[NoAsms] >> TRY (first_assum ACCEPT_TAC) >> NO_TAC)]) >>
-  strip_tac >>
-  suspend "bounds"
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume row22_omitted_model_inputs[bounds]:
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   mp_tac (Q.INST [`cut` |-> `u`, `marks` |-> `[]`]
     (SPEC_ALL row22_real_cut_empty_oracle_headroom)) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_tac >>
-  qpat_x_assum `selected_registration_resources _ _ _ _ _ _` (strip_assume_tac o REWRITE_RULE[selected_registration_resources_def]) >>
+  qpat_x_assum `selected_registration_resources _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE[selected_registration_resources_def]) >>
   `EVERY (^row22_kw_alloc sa (u with vs_outcomes := []) G tn) slots` by
     (qpat_assum `EVERY _ slots` mp_tac >>
      simp[NoAsms,ptr_covers_def,lookup_var_outcomes_update]) >>
@@ -434,19 +402,14 @@ Resume row22_omitted_model_inputs[bounds]:
   simp[at_point_def, dead_lo_ok_def, storage_trace_domain_def,
        storage_trace_horizon_def, storage_trace_regions_def, storage_trace_locks_def,
        grouped_default_empty_regions_horizon, ptr_predicates_outcomes_update] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  rpt strip_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC >>
+  rpt strip_tac >> first_assum ACCEPT_TAC >>
   fs[valid_horizon_def] >>
   qpat_assum `!regions. storage_well_formed_on _ _ regions ==>
                         storage_well_formed_on _ _ regions` mp_tac >>
   qpat_assum `storage_well_formed_on _ (initial_state _ []) _` mp_tac >>
   rpt (pop_assum kall_tac) >> metis_tac[]
 QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Finalise row22_omitted_model_inputs
-*)
 
 Theorem row22_omitted_seed_path_if_no_exempt:
   compile_init_kwargs ce vars off 0 hi sa = ((),sb) /\
