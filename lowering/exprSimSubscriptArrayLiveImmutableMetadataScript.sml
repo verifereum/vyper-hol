@@ -3,7 +3,7 @@ Theory exprSimSubscriptArrayLiveImmutableMetadata
 Ancestors
   exprSimSubscriptArrayLiveImmutableView exprSimHypsDefs vyperTypeInvariants
   exprSimProps targetSubscriptMemory vyperPlaceTyping loweringPosts
-  vyperEvalPreservesScopes vyperTypeEnvPreservation vyperState finite_map words option[qualified,ignore_grammar]
+  vyperEvalPreservesScopes vyperTypeEnvPreservation vyperState finite_map words
 
 Theorem live_immutable_captured_root:
   expr_sim_inv cenv cx env t /\
@@ -31,10 +31,9 @@ Proof
   metis_tac[]
 QED
 
-
 Theorem live_immutable_captured_array_view:
   expr_sim_inv cenv cx env t /\ expr_sim_inv cenv cx env ee /\
-  (~cx_const_name cx (src,id) /\
+  (~cx_const_name cx (src,id) \/
    IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) /\
   stmt_state_rel H ctx func cenv cx ee s /\
   vv_place_ptr cenv cx t u (PlaceR (ImmutablePlace src id path))
@@ -55,8 +54,7 @@ Theorem live_immutable_captured_array_view:
     off + type_memory_size itv < dimword (:256) /\
     eval_operand p.ptr_operand s = SOME (n2w (off+k)) /\
     evaluate_subscripts itv iv path = INL v /\
-    value_has_type (ArrayTV etv bd) v /\
-    well_formed_type_value (ArrayTV etv bd) /\
+    value_has_type (ArrayTV etv bd) v /\ well_formed_type_value (ArrayTV etv bd) /\
     read_result cx (PlaceR (ImmutablePlace src id path)) ee = (INL v,ee) /\
     vv_place_ptr cenv cx ee s (PlaceR (ImmutablePlace src id path))
       (LocatedValue (ArrayT et bd) p) /\
@@ -65,21 +63,17 @@ Theorem live_immutable_captured_array_view:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `vv_place_ptr _ _ _ _ _ _`
-    (strip_assume_tac o SRULE [loweringPostsTheory.vv_place_ptr_def]) >>
-  `off + type_memory_size itv < dimword (:256) /\
-     ?root_ty. FLOOKUP env.bare_globals (src,id) = SOME root_ty /\
-       evaluate_type (get_tenv cx) root_ty = SOME itv` by
-    (mp_tac (live_immutable_captured_root |> Q.INST
-      [`cenv` |-> `cenv`, `cx` |-> `cx`, `env` |-> `env`, `t` |-> `t`,
-       `src` |-> `src`, `id` |-> `id`, `off` |-> `off`, `itv` |-> `itv`,
-       `iv` |-> `iv`]) >> simp[]) >>
-  qpat_x_assum `expr_sim_inv _ _ _ t`
-    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
+    (map_every assume_tac o CONJUNCTS o
+     SRULE [loweringPostsTheory.vv_place_ptr_def]) >>
+  qpat_x_assum `?off itv iv k tvk. _` strip_assume_tac >>
+  drule_all live_immutable_captured_root >> strip_tac >>
   `src = cenv.ce_module` by
-    (qpat_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\
+    (qpat_x_assum `expr_sim_inv _ _ _ t`
+       (strip_assume_tac o REWRITE_RULE [expr_sim_inv_split_def]) >>
+     qpat_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\
           (~cx_const_name cx (src,id) \/ IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) ==> _`
        (qspecl_then [`src`,`id`,`root_ty`] mp_tac) >>
-     simp[] >> disch_tac >> (metis_tac [optionTheory.IS_SOME_EXISTS, env_consistent_def, env_context_consistent_def])) >>
+     simp[]) >>
   `mem_path_offset itv path = SOME (k,ArrayTV etv bd)` by
     (drule mem_path_offset_sound >> strip_tac >>
      qpat_x_assum `runtime_place_typed _ _ _ _` mp_tac >>
@@ -89,30 +83,8 @@ Proof
      rpt strip_tac >>
      Cases_on `ALOOKUP t.immutables cx.txn.target` >>
      gvs[raise_def, return_def]) >>
-  `FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off)` by gvs[] >>
   qpat_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
   `eval_operand p.ptr_operand s = SOME (n2w (off+k))` by metis_tac[] >>
-  qexistsl_tac [`off`,`itv`,`k`] >> simp[] >>
-  mp_tac (live_immutable_array_current_view |> Q.INST
-    [`src` |-> `cenv.ce_module`, `s` |-> `s`, `root_ty` |-> `root_ty`,
-     `path` |-> `path`, `p` |-> `p`, `off` |-> `off`, `k` |-> `k`,
-     `itv` |-> `itv`, `id` |-> `id`, `func` |-> `func`, `etv` |-> `etv`,
-     `et` |-> `et`, `ctx` |-> `ctx`, `bd` |-> `bd`, `H` |-> `H`]) >>
-  `?iv' v.
-      FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) id = SOME (itv,iv') /\
-      evaluate_subscripts itv iv' path = INL v /\
-      value_has_type (ArrayTV etv bd) v /\
-      well_formed_type_value (ArrayTV etv bd) /\
-      k + type_memory_size (ArrayTV etv bd) <= type_memory_size itv /\
-      read_result cx (PlaceR (ImmutablePlace cenv.ce_module id path)) ee = (INL v,ee) /\
-      vv_place_ptr cenv cx ee s (PlaceR (ImmutablePlace cenv.ce_module id path))
-        (LocatedValue (ArrayT et bd) p) /\
-      immutable_holds cenv cx (ArrayT et bd)
-        (PlaceR (ImmutablePlace cenv.ce_module id path)) (n2w (off+k)) ee s` by
-    (irule live_immutable_array_current_view >> simp[] >>
-     conj_tac
-     >- (qexistsl_tac [`env`,`root_ty`] >> simp[])
-     >- (qexistsl_tac [`H`,`ctx`,`func`] >> simp[])) >>
-  disch_tac >> qexistsl_tac [`iv'`,`v`] >> simp[] >> metis_tac [arithmeticTheory.ADD_COMM]
+  drule_all live_immutable_array_current_view >> strip_tac >>
+  qexistsl_tac [`off`,`itv`,`k`,`iv'`,`v`] >> simp[arithmeticTheory.ADD_COMM]
 QED

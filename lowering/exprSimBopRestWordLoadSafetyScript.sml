@@ -18,8 +18,13 @@ Proof
   simp[below_frontier_no_ranges]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+
+Theorem rest_word_immutable_region_bound:
+  stmt_state_rel H ctx func cenv cx es s /\
+  immutable_holds cenv cx ty tv w es s /\
+  evaluate_type (get_tenv cx) ty = SOME vt ==>
+  w2n w + type_memory_size vt <=
+    (if cenv.ce_is_ctor then s.vs_alloca_next else LENGTH s.vs_data_section)
 Proof
   strip_tac >>
   qpat_x_assum `immutable_holds _ _ _ _ _ _ _` mp_tac >>
@@ -32,22 +37,28 @@ Proof
   >- (qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` mp_tac >>
       simp[exprLoweringPropsTheory.stmt_state_rel_def,
            exprLoweringPropsTheory.immutable_alloca_sep_def] >>
-      rpt strip_tac >>
-      qpat_x_assum `!name tv v off. _` drule_all >> strip_tac >> decide_tac) >>
+      rpt strip_tac >> Cases_on `src = cenv.ce_module`
+      >- (gvs[] >>
+          qpat_assum `!nm tm vm oo. _ ==> _` (drule_all_then strip_assume_tac) >>
+          decide_tac)
+      >- (gvs[] >>
+          qpat_x_assum `IS_SOME (ALOOKUP cenv.ce_modules src)` mp_tac >>
+          rw[optionTheory.IS_SOME_EXISTS] >>
+          qpat_assum `!srcx tops. _ ==> _` (drule_all_then strip_assume_tac) >>
+          qpat_assum `!nm tm vm oo. _ ==> _` (drule_all_then strip_assume_tac) >>
+          decide_tac)) >>
   qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` mp_tac >>
   simp[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
        loweringStateRelDefsTheory.immutables_rel_def] >> rpt strip_tac >>
-  qpat_x_assum `!name tv v byte_offset. _` drule_all >> strip_tac >> decide_tac)
-QED
-*)
-Theorem rest_word_immutable_region_bound:
-  stmt_state_rel H ctx func cenv cx es s /\
-  immutable_holds cenv cx ty tv w es s /\
-  evaluate_type (get_tenv cx) ty = SOME vt ==>
-  w2n w + type_memory_size vt <=
-    (if cenv.ce_is_ctor then s.vs_alloca_next else LENGTH s.vs_data_section)
-Proof
-  cheat
+  Cases_on `src = cenv.ce_module`
+  >- (gvs[] >>
+      qpat_assum `!nm tm vm bo. _ ==> _` (drule_all_then strip_assume_tac) >>
+      decide_tac)
+  >- (gvs[] >>
+      qpat_x_assum `IS_SOME (ALOOKUP cenv.ce_modules src)` mp_tac >>
+      rw[optionTheory.IS_SOME_EXISTS] >>
+      qpat_assum `!srcx tops. _ ==> !nm tm vm bo. _ ==> _` (drule_all_then strip_assume_tac) >>
+      decide_tac))
 QED
 
 (* Constructor staging adds the zero immutable base before the memory load.

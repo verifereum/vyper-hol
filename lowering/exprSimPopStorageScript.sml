@@ -241,43 +241,6 @@ Proof
   simp[lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
 
-(* SCRATCH: indirect build dependency awaiting widened-relation repair.
-Proof
-  strip_tac >>
-  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel H cx es s` by
-    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx _ _ _ es1 s1` >>
-  `accounts_rel H cx es1 s1` by
-    (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`]
-     >- (irule accounts_rel_tstore >> simp[] >> qexists_tac `es` >>
-         simp[set_storage_backend_eq, get_storage_def, vfmStateTheory.lookup_account_def] >>
-         rpt strip_tac >> irule storage_dead_pop_header >> metis_tac[]) >>
-     irule accounts_rel_sstore >> simp[] >> qexists_tac `es` >>
-     simp[set_storage_backend_eq, get_storage_def, vfmStateTheory.lookup_account_def] >>
-     rpt strip_tac >> irule storage_dead_pop_header >> metis_tac[]) >>
-  `s1.vs_call_ctx = s.vs_call_ctx` by
-    (Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]) >>
-  drule accounts_rel_storage_transient >> strip_tac >>
-  `state_rel H func cenv cx es1 s1` by
-    (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`] >>
-     fs[stmt_state_rel_def, state_rel_def, sstore_def, tstore_def, LET_THM,
-        set_storage_def, local_ptrs_rel_def, local_backed_def, local_region_def,
-        lookup_var_def, immutables_rel_def, logs_rel_def] >> gvs[] >> metis_tac[]) >>
-  `immutable_alloca_sep func cenv cx es1 s1` by
-    (`immutable_alloca_sep func cenv cx es s` by fs[stmt_state_rel_def] >>
-     irule immutable_alloca_sep_fields >> qexistsl [`s`, `es`] >>
-     simp[] >> Cases_on `tr` >>
-     simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
-          set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
-  `immutable_base_zero cenv s1` by
-    (irule immutable_base_zero_frame >> qexists_tac `s` >>
-     fs[stmt_state_rel_def] >> Cases_on `tr` >>
-     simp[Abbr `s1`, sstore_def, tstore_def, LET_THM, lookup_var_def]) >>
-  irule stmt_state_rel_allocas_frame >> simp[] >>
-  qexistsl [`es`, `s`] >> simp[] >>
-  Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
-QED
-*)
 Theorem stmt_state_rel_pop_header:
   stmt_state_rel H ctx func cenv cx es s /\
   MEM (tr,slot,ArrayTV tv (Dynamic n)) (FST H) ==>
@@ -290,7 +253,49 @@ Theorem stmt_state_rel_pop_header:
      else
        sstore slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1)) s)
 Proof
-  cheat
+  strip_tac >>
+  `state_rel H func cenv cx es s` by fs[stmt_state_rel_def] >>
+  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel H cx es s` by
+    fs[state_rel_def, call_ctx_rel_def] >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx _ _ _ es1 s1` >>
+  `accounts_rel H cx es1 s1` by
+    (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`]
+     >- (irule accounts_rel_tstore >> simp[] >> qexists_tac `es` >>
+         simp[set_storage_backend_eq, get_storage_def, vfmStateTheory.lookup_account_def] >>
+         rpt strip_tac >> irule storage_dead_pop_header >> metis_tac[]) >>
+     irule accounts_rel_sstore >> simp[] >> qexists_tac `es` >>
+     simp[set_storage_backend_eq, get_storage_def, vfmStateTheory.lookup_account_def] >>
+     rpt strip_tac >> irule storage_dead_pop_header >> metis_tac[]) >>
+  `s1.vs_call_ctx = s.vs_call_ctx` by
+    (Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]) >>
+  `storage_rel H cx.txn.target es1 s1 /\ transient_rel H cx.txn.target es1 s1` by
+    metis_tac[accounts_rel_storage_transient] >>
+  `state_rel H func cenv cx es1 s1` by
+    (simp[state_rel_def] >>
+     qpat_x_assum `state_rel H func cenv cx es s` mp_tac >>
+     Cases_on `tr` >>
+     simp[Abbr `s1`, Abbr `es1`, state_rel_def, sstore_def, tstore_def, LET_THM,
+          set_storage_def, local_ptrs_rel_def, local_backed_def, local_region_def,
+          lookup_var_def, immutables_rel_def, logs_rel_def] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!ce. immutable_alloca_sep func ce cx es s ==>
+        immutable_alloca_sep func ce cx es1 s1` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl [`s`, `es`] >> simp[] >> Cases_on `tr` >>
+     simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
+          set_storage_def, local_region_def, lookup_var_def] >>
+     rpt strip_tac >> qexistsl [`id`, `entry`, `p`, `w`] >> simp[]) >>
+  `immutable_base_zero cenv s1` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     fs[stmt_state_rel_def] >> Cases_on `tr` >>
+     simp[Abbr `s1`, sstore_def, tstore_def, LET_THM, lookup_var_def]) >>
+  irule stmt_state_rel_allocas_frame >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> fs[stmt_state_rel_def]) >>
+  conj_tac
+  >- (first_x_assum irule >> fs[stmt_state_rel_def]) >>
+  qexistsl [`es`, `s`] >>
+  Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
 QED
 
 Theorem storage_range_agree_dyn_last:
