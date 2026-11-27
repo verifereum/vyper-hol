@@ -3,13 +3,6 @@ Theory s1PrefixAnnAssignWord
 Ancestors
   s1PrefixPreds bodyFullAnnAssignWord s1PrefixDefs s1PrefixCompose s1PrefixProps vyperStorageTrace list gasShadowCompileStmtHelpers gasShadowCompileStmtBase stmtSimProps loweringSlice gasShadow exprLoweringProps bodyFullAnnAssignMemoryPost bodyFullHashKeccakFixed stateRelProj bodyFullIfExpReach stmtSimDeclSource bodySimFull exprSimDefs bodyFullAllocaFresh gasOutcomeFullCompose vyperState vyperStorageFootprint loweringPosts compileEnv
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> Cases_on `storage_trace_domain cx st0 es.storage_trace`
-  >- suspend "layout" >> suspend "no_horizon"
-QED
-*)
 Theorem annassign_word_prefix_execution_sep:
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -57,10 +50,10 @@ Theorem annassign_word_prefix_execution_sep:
       cx st0 (eval_stmt cx (AnnAssign id (expr_type e) e))
       (es,s0,G0,tn0)
 Proof
-  cheat
+  strip_tac >> Cases_on `storage_trace_domain cx st0 es.storage_trace`
+  >- suspend "layout" >> suspend "no_horizon"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_word_prefix_execution_sep[no_horizon]:
   `storage_trace_frame (eval_stmt cx (AnnAssign id (expr_type e) e))` by
     simp[evaluate_storage_trace_frame] >>
@@ -77,9 +70,7 @@ Resume annassign_word_prefix_execution_sep[no_horizon]:
   metis_tac[gasOutcomeFullTheory.valid_horizon_append,
             bodyFullExtCallPackingReadyTheory.extcall_packing_observed_domain]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_word_prefix_execution_sep[layout]:
   drule_all annassign_word_full_declared_layout >>
   disch_then (qx_choosel_then [`p`, `a`, `b`, `op`] strip_assume_tac) >>
@@ -122,9 +113,7 @@ Resume annassign_word_prefix_execution_sep[layout]:
      disch_then (qspecl_then [`a`,`shadow_a`] mp_tac) >> simp[]) >>
   gvs[] >> suspend "entry"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_word_prefix_execution_sep[entry]:
   `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
   `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
@@ -137,7 +126,7 @@ Resume annassign_word_prefix_execution_sep[entry]:
   drule_all annassign_full_alloc_entry >>
   disch_then (qspecl_then [`PG`, `gas_explicit_sites ctx shadow_ctx`]
     (qx_choosel_then [`w`, `t`, `G'`, `tn'`] strip_assume_tac)) >>
-  `cenv'.ce_is_ctor = cenv.ce_is_ctor` by
+  `cenv'.ce_is_ctor = cenv.ce_is_ctor /\ cenv'.ce_modules = cenv.ce_modules` by
     (qpat_assum `cenv' with <|ce_vars := _; ce_var_type := _;
                               ce_dynarray_capacity := _|> = cenv` mp_tac >>
      simp[compile_env_component_equality]) >>
@@ -158,17 +147,13 @@ Resume annassign_word_prefix_execution_sep[entry]:
      fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
         unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]) >>
   `!H. dead_lo_ok H (DF H) lo cenv' cx` by
-    (pure_rewrite_tac[bodyPtrDefsTheory.dead_lo_ok_def] >>
-     qpat_assum `cenv'.ce_is_ctor = cenv.ce_is_ctor` SUBST1_TAC >>
-     qpat_assum `!H. dead_lo_ok H _ _ cenv _`
-       (ACCEPT_TAC o PURE_REWRITE_RULE[bodyPtrDefsTheory.dead_lo_ok_def])) >>
+    (qpat_assum `!H. dead_lo_ok H _ _ cenv _` mp_tac >>
+     simp[bodyPtrDefsTheory.dead_lo_ok_def]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (drule annassign_admissible_rhs >> simp[]) >>
   suspend "source"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_word_prefix_execution_sep[source]:
   irule gas_prefix_full_zero_prefix_guarded >> simp[evaluate_storage_trace_frame] >>
   qexistsl_tac [`G'`,`t`,`tn'`] >>
@@ -198,11 +183,8 @@ Resume annassign_word_prefix_execution_sep[source]:
        type_check_def, assert_def, return_def, raise_def, set_scopes_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise annassign_word_prefix_execution_sep
-*)
 
 Theorem annassign_word_prefix_execution:
   is_word_type (expr_type e) /\
