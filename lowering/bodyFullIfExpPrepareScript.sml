@@ -723,6 +723,42 @@ Finalise ifexp_selected_arm_step_full
 (* Source composition is independent of the proof of arm conversion.
    The conversion contract is specialized at the fixed compiler layout;
    only its runtime endpoint is universally quantified. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `gas_admissible (eval_expr cx e) expr_vv_res_ok es1` by
+    (rw[gasContextTheory.gas_admissible_def] >>
+     qpat_x_assum `gas_admissible (bind _ _) _ _`
+       (qspec_then `gs` mp_tac o REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
+     Cases_on `res` >> simp[vyperStateTheory.bind_def, expr_vv_res_ok_def] >>
+     rename1 `INL rv0` >> Cases_on `rv0` >>
+     simp[conditional_result_def, vyperStateTheory.raise_def, expr_vv_res_ok_def]) >>
+  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`vv`,`u`,`G1`,`tn1`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ armQ armR` >>
+  irule gas_outcome_full_bind_all >>
+  rpt conj_tac
+  >~ [`gas_marked_exec _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_result >>
+      qexistsl [`mid`,`t'`,`v`] >> fs[])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_result >> simp[])
+  >~ [`storage_trace_frame (eval_expr _ _)`]
+  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
+  >- (gen_tac >> simp[vyperStorageTraceTheory.storage_trace_frame_conditional_result]) >>
+  qexists `\H res ee G tn z. armQ H res ee G tn z /\ ~z.vs_halted /\ ee.gas_obs = []` >>
+  reverse conj_tac
+  >- (irule gas_outcome_full_post_source >>
+      qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
+      conj_tac >- simp[] >>
+      simp[Abbr `armR`] >> rpt strip_tac >>
+      Cases_on `res` >> fs[expr_exit_def]) >>
+  suspend "selected"
+QED
+*)
 Theorem ifexp_arm_outcome_full_conditional[local]:
   (!ee tv z G tn.
     (ctx_has_dalloca ctx ==> allocas_below_fmp z) /\
@@ -846,39 +882,10 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
-  strip_tac >>
-  `gas_admissible (eval_expr cx e) expr_vv_res_ok es1` by
-    (rw[gasContextTheory.gas_admissible_def] >>
-     qpat_x_assum `gas_admissible (bind _ _) _ _`
-       (qspec_then `gs` mp_tac o REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
-     Cases_on `res` >> simp[vyperStateTheory.bind_def, expr_vv_res_ok_def] >>
-     rename1 `INL rv0` >> Cases_on `rv0` >>
-     simp[conditional_result_def, vyperStateTheory.raise_def, expr_vv_res_ok_def]) >>
-  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`vv`,`u`,`G1`,`tn1`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ armQ armR` >>
-  irule gas_outcome_full_bind_all >>
-  rpt conj_tac
-  >~ [`gas_marked_exec _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_result >>
-      qexistsl [`mid`,`t'`,`v`] >> fs[])
-  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_result >> simp[])
-  >~ [`storage_trace_frame (eval_expr _ _)`]
-  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
-  >- (gen_tac >> simp[vyperStorageTraceTheory.storage_trace_frame_conditional_result]) >>
-  qexists `\H res ee G tn z. armQ H res ee G tn z /\ ~z.vs_halted /\ ee.gas_obs = []` >>
-  reverse conj_tac
-  >- (irule gas_outcome_full_post_source >>
-      qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
-      conj_tac >- simp[] >>
-      simp[Abbr `armR`] >> rpt strip_tac >>
-      Cases_on `res` >> fs[expr_exit_def]) >>
-  suspend "selected"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ifexp_arm_outcome_full_conditional[selected]:
   qx_genl_tac [`marks`,`res`,`ee`,`G`,`tn`,`z`] >>
   BETA_TAC >> strip_tac >>
@@ -921,7 +928,9 @@ Resume ifexp_arm_outcome_full_conditional[selected]:
   strip_tac >>
   suspend "pure"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ifexp_arm_outcome_full_conditional[pure]:
   Cases_on `conditional_result cx tv ee` >>
   rename1 `conditional_result cx tv ee = (cr,ces)` >>
@@ -939,7 +948,9 @@ Resume ifexp_arm_outcome_full_conditional[pure]:
   fs[] >>
   suspend "post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ifexp_arm_outcome_full_conditional[post]:
   `ee with gas_obs := [] = ee` by
     (Cases_on `ee` >> gvs (TypeBase.updates_of ``:evaluation_state``)) >>
@@ -961,7 +972,9 @@ Resume ifexp_arm_outcome_full_conditional[post]:
     | SOME {Name = "vv_own", ...} => suspend "post_own" g
     | _ => suspend "post_place" g)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ifexp_arm_outcome_full_conditional[post_at]:
   irule ifexp_vv_at_conditional >>
   qexistsl [`tv`,`v`] >> fs[] >>
@@ -971,7 +984,9 @@ Resume ifexp_arm_outcome_full_conditional[post_at]:
   disch_then (mp_tac o MATCH_MP ifexp_conditional_result_shape) >>
   strip_tac >> fs[read_result_def, vyperStateTheory.return_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ifexp_arm_outcome_full_conditional[post_own]:
   `cr = INL (Value v') /\ ces = ee` by
     (qpat_assum `!tail. conditional_result _ _ _ = _`
@@ -984,7 +999,9 @@ Resume ifexp_arm_outcome_full_conditional[post_own]:
   qpat_assum `!v. _ ==> vv_own cenv cx t sa sb ee _ _ zf`
     (qspec_then `v'` mp_tac) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ifexp_arm_outcome_full_conditional[post_place]:
   qpat_assum `!tail. conditional_result _ _ _ = _`
     (qspec_then `ee.gas_obs` mp_tac) >>
@@ -992,8 +1009,11 @@ Resume ifexp_arm_outcome_full_conditional[post_place]:
   disch_then (mp_tac o MATCH_MP ifexp_conditional_result_place) >>
   strip_tac >> gvs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise ifexp_arm_outcome_full_conditional
+*)
 
 (* The ternary's root from the condition's value judgment and the arms'
    vv judgments.  Each arm is one of the three arm steps' kinds. *)

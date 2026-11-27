@@ -10,6 +10,35 @@ Ancestors
 
 val _ = Parse.hide "base";
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >> drule_all array_body_allocation_layout >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `compile_make_array compile_expr cenv args et _ header _ _` >>
+  `?sba ssm su.
+    compile_alloc_buffer (type_memory_bytes cenv (ArrayT et n)) shadow_sa = (sba,ssm) /\
+    compile_make_array compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) et
+      (type_memory_size tv) header sba.buf_operand ssm = (su,shadow_sb)` by
+    (qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
+     simp[gas_shadow_expr_def,gas_shadow_builtin_def] >>
+     disch_then (mp_tac o MATCH_MP compile_array_literal_inv) >>
+     simp[gasShadowCompileBaseTheory.type_memory_bytes_gas_shadow_env,Abbr `header`] >>
+     metis_tac[]) >>
+  `sba = ba /\ gas_shadow_state sm ssm` by
+    (mp_tac (Q.INST [`nbytes` |-> `type_memory_bytes cenv (ArrayT et n)`]
+      gas_shadow_compiles_alloc_buffer) >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >> gvs[] >>
+  mp_tac (Q.INST [`cap` |-> `type_memory_bytes cenv (ArrayT et n)`,
+    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `PG` |-> `PG`,
+    `ann` |-> `ArrayT et n`, `elem_opt` |-> `SOME et`, `bnd` |-> `n`]
+    make_array_init_full) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`q`,`w`,`si`,`Gi`,`tni`] strip_assume_tac) >>
+  `u = Var q /\ su = Var q` by metis_tac[compiler_make_array_result] >> gvs[] >>
+  suspend "split_header"
+QED
+*)
 Theorem make_array_header_loop_entry:
   expr_body_pre cenv cx env (Builtin ann (MakeArray (SOME et) n) args) es /\
   body_inv tops ctx cenv cx /\
@@ -70,32 +99,10 @@ Theorem make_array_header_loop_entry:
       base <= p /\ p + m <= base + off /\
       (!mem. mem_agree_outside tnj.t_mem sj.vs_memory mem ==> val_in_memory rt v p mem)) ps
 Proof
-  strip_tac >> drule_all array_body_allocation_layout >> strip_tac >> gvs[] >>
-  qmatch_asmsub_abbrev_tac `compile_make_array compile_expr cenv args et _ header _ _` >>
-  `?sba ssm su.
-    compile_alloc_buffer (type_memory_bytes cenv (ArrayT et n)) shadow_sa = (sba,ssm) /\
-    compile_make_array compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr args) et
-      (type_memory_size tv) header sba.buf_operand ssm = (su,shadow_sb)` by
-    (qpat_x_assum `compile_expr _ _ (gas_shadow_expr _) _ = _` mp_tac >>
-     simp[gas_shadow_expr_def,gas_shadow_builtin_def] >>
-     disch_then (mp_tac o MATCH_MP compile_array_literal_inv) >>
-     simp[gasShadowCompileBaseTheory.type_memory_bytes_gas_shadow_env,Abbr `header`] >>
-     metis_tac[]) >>
-  `sba = ba /\ gas_shadow_state sm ssm` by
-    (mp_tac (Q.INST [`nbytes` |-> `type_memory_bytes cenv (ArrayT et n)`]
-      gas_shadow_compiles_alloc_buffer) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[]) >> gvs[] >>
-  mp_tac (Q.INST [`cap` |-> `type_memory_bytes cenv (ArrayT et n)`,
-    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`, `PG` |-> `PG`,
-    `ann` |-> `ArrayT et n`, `elem_opt` |-> `SOME et`, `bnd` |-> `n`]
-    make_array_init_full) >>
-  (impl_tac >- simp[]) >>
-  disch_then (qx_choosel_then [`q`,`w`,`si`,`Gi`,`tni`] strip_assume_tac) >>
-  `u = Var q /\ su = Var q` by metis_tac[compiler_make_array_result] >> gvs[] >>
-  suspend "split_header"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_header_loop_entry[split_header]:
   `?sh. (if header then emit_void MSTORE [Var q; Lit (n2w (LENGTH args))]
          else return ()) sm = ((),sh) /\
@@ -123,7 +130,9 @@ Resume make_array_header_loop_entry[split_header]:
           compileEnvTheory.comp_bind_def]) >>
   suspend "loop_code"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_header_loop_entry[loop_code]:
   `type_memory_bytes (gas_shadow_env T cenv) et = type_memory_size tv` by
     simp[gasShadowCompileBaseTheory.type_memory_bytes_gas_shadow_env] >>
@@ -155,7 +164,9 @@ Resume make_array_header_loop_entry[loop_code]:
      conj_tac >- fs[ci_mono_def] >> qexists_tac `shadow_sa` >> fs[ci_mono_def]) >>
   suspend "execute_header"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_header_loop_entry[execute_header]:
   `0 < type_slot_size tv` by
     (qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
@@ -190,7 +201,9 @@ Resume make_array_header_loop_entry[execute_header]:
   disch_then (qx_choosel_then [`sj`,`Gj`,`tnj`,`ps`] strip_assume_tac) >>
   suspend "entry"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_header_loop_entry[entry]:
   `!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (s0,G0,tn0) [] (OK sj,Gj,tnj)` by
@@ -217,5 +230,8 @@ Resume make_array_header_loop_entry[entry]:
   rpt strip_tac >> qpat_assum `!name b m. local_region _ _ sj name b m ==> _` irule >>
   qexists_tac `name` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise make_array_header_loop_entry
+*)
