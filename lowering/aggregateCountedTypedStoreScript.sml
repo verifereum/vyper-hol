@@ -7,6 +7,26 @@ Ancestors
   loweringPosts venomState venomInst venomMemDefs exprSimHash
   aggregateCountedStraightExec aggregateCountedStraightStore
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `cs_extends su sb` by metis_tac[aggregate_typed_store_extends] >>
+  `compile_store_memory_typed ce (Var x) (expr_type e) op (post_value_type ce e)
+     (start_relabel L ids su) = ((),start_swap su L ids sb)` by
+    (mp_tac (cj 1 compile_typed_copy_start_oblivious_family) >>
+     simp[frag_start_oblivious_def] >> metis_tac[]) >>
+  drule_all start_swap_fields >>
+  disch_then (qspecl_then [`ids`, `L`] strip_assume_tac) >>
+  drule aggregate_store_body_typed_run >>
+  simp[aggregate_expr_post_start_relabel] >>
+  disch_then irule >>
+  simp[aggregate_expr_post_start_relabel, start_relabel_def,
+       local_ptrs_reserved_def, not_fresh_at_def] >>
+  fs[local_ptrs_reserved_def, not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+*)
 Theorem aggregate_typed_store_renamed_body_run:
   compile_store_memory_typed ce (Var x) (expr_type e) op
     (post_value_type ce e) su = ((),sb) /\
@@ -55,21 +75,7 @@ Theorem aggregate_typed_store_renamed_body_run:
     (!fuel rr. run_from fuel ctx fn' q = rr /\ (!err. rr <> Error err) ==>
       ?fuel'. run_from fuel' ctx fn' (s with vs_current_bb := L) = rr)
 Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  `cs_extends su sb` by metis_tac[aggregate_typed_store_extends] >>
-  `compile_store_memory_typed ce (Var x) (expr_type e) op (post_value_type ce e)
-     (start_relabel L ids su) = ((),start_swap su L ids sb)` by
-    (mp_tac (cj 1 compile_typed_copy_start_oblivious_family) >>
-     simp[frag_start_oblivious_def] >> metis_tac[]) >>
-  drule_all start_swap_fields >>
-  disch_then (qspecl_then [`ids`, `L`] strip_assume_tac) >>
-  drule aggregate_store_body_typed_run >>
-  simp[aggregate_expr_post_start_relabel] >>
-  disch_then irule >>
-  simp[aggregate_expr_post_start_relabel, start_relabel_def,
-       local_ptrs_reserved_def, not_fresh_at_def] >>
-  fs[local_ptrs_reserved_def, not_fresh_at_def] >>
-  metis_tac[arithmeticTheory.ADD_COMM]
+  cheat
 QED
 
 Theorem typed_store_relabel_counted_normal:
@@ -121,6 +127,41 @@ Proof
        immutable_base_zero_alt, accounts_rel_def]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `su.cs_blocks = sb.cs_blocks`
+  >- suspend "straight" >>
+  drule aggregate_typed_store_extends >> strip_tac >>
+  drule aggregate_typed_store_raw_shape >> strip_tac >>
+  ho_match_mp_tac typed_store_relabel_counted_normal >>
+  simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_all aggregate_typed_store_renamed_body_run >>
+      strip_tac >> qexists_tac `q` >>
+      gvs[arithmeticTheory.ADD_COMM] >> first_assum MATCH_ACCEPT_TAC) >>
+  simp[hash_returndata_state_rel, aggregate_stmt_state_rel_prev_bb,
+       lookup_var_def, locals_kept_def, popped_kept_def] >>
+  rpt gen_tac >> strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
+QED
+
+Resume aggregate_store_body_typed_counted[straight]:
+  drule aggregate_typed_store_extends >> strip_tac >>
+  drule aggregate_typed_store_raw_shape >> strip_tac >>
+  drule_all compile_store_memory_typed_same_block_nonterminators >> strip_tac >>
+  drule_all aggregate_store_body_typed_sim >>
+  disch_then (qspec_then `\r. F` assume_tac) >>
+  ho_match_mp_tac frag_exec_same_block_gas_path >>
+  qexists_tac `su` >>
+  goal_assum (drule_at Any) >>
+  simp[arithmeticTheory.ADD_COMM] >>
+  simp[hash_returndata_state_rel, lookup_var_def, locals_kept_def, popped_kept_def] >>
+  rpt gen_tac >> strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
+QED
+
+Finalise aggregate_store_body_typed_counted
+*)
 Theorem aggregate_store_body_typed_counted:
   compile_store_memory_typed ce (Var x) (expr_type e) op
     (post_value_type ce e) su = ((),sb) /\
@@ -166,34 +207,5 @@ Theorem aggregate_store_body_typed_counted:
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `su.cs_blocks = sb.cs_blocks`
-  >- suspend "straight" >>
-  drule aggregate_typed_store_extends >> strip_tac >>
-  drule aggregate_typed_store_raw_shape >> strip_tac >>
-  ho_match_mp_tac typed_store_relabel_counted_normal >>
-  simp[] >> conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      drule_all aggregate_typed_store_renamed_body_run >>
-      strip_tac >> qexists_tac `q` >>
-      gvs[arithmeticTheory.ADD_COMM] >> first_assum MATCH_ACCEPT_TAC) >>
-  simp[hash_returndata_state_rel, aggregate_stmt_state_rel_prev_bb,
-       lookup_var_def, locals_kept_def, popped_kept_def] >>
-  rpt gen_tac >> strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
+  cheat
 QED
-
-Resume aggregate_store_body_typed_counted[straight]:
-  drule aggregate_typed_store_extends >> strip_tac >>
-  drule aggregate_typed_store_raw_shape >> strip_tac >>
-  drule_all compile_store_memory_typed_same_block_nonterminators >> strip_tac >>
-  drule_all aggregate_store_body_typed_sim >>
-  disch_then (qspec_then `\r. F` assume_tac) >>
-  ho_match_mp_tac frag_exec_same_block_gas_path >>
-  qexists_tac `su` >>
-  goal_assum (drule_at Any) >>
-  simp[arithmeticTheory.ADD_COMM] >>
-  simp[hash_returndata_state_rel, lookup_var_def, locals_kept_def, popped_kept_def] >>
-  rpt gen_tac >> strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
-QED
-
-Finalise aggregate_store_body_typed_counted

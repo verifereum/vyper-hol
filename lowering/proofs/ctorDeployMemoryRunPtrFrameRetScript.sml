@@ -1000,7 +1000,7 @@ Theorem epilogue_ptr_safe_at[local]:
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\
   ~block_is_terminated st /\
   stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
-  cx_tops cx = tops /\
+  cx_tops cx = tops /\ cenv.ce_modules = [(NONE,tops)] /\
   LENGTH runtime_bc + imm_len tops < dimword(:256) /\
   (imm_len tops <> 0 ==>
     cenv.ce_imm_alloca = SOME imm /\
@@ -1025,6 +1025,7 @@ Theorem constructor_epilogue_origin_ptr_path:
       ((), st') /\
     fn_has_code st st' func /\ fn_inst_ids_distinct func /\
     ~block_is_terminated st /\ cenv.ce_is_ctor /\ cx_tops cx = tops /\
+    cenv.ce_modules = [(NONE,tops)] /\
     LENGTH runtime_bc + imm_len tops < dimword(:256) /\
     (imm_len tops <> 0 ==>
       cenv.ce_imm_alloca = SOME imm /\
@@ -1090,6 +1091,7 @@ Theorem constructor_return_none_frag_full:
     cx = deploy_evaluation_context tops am tx /\
     cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
     cenv.ce_ctor_exit_label = SOME exit_lbl /\
+    cenv.ce_modules = [(NONE,tops)] /\
     same_frame cenv body_cenv /\
     st_exit.cs_current_bb = exit_lbl /\
     st_exit.cs_current_insts = [] /\
@@ -1128,6 +1130,7 @@ Proof
   qpat_x_assum `cx = _` kall_tac >>
   `body_cenv.ce_is_ctor /\ body_cenv.ce_return_pc = NONE /\
    body_cenv.ce_ctor_exit_label = SOME exit_lbl /\
+   body_cenv.ce_modules = [(NONE,tops)] /\
    (imm_len tops <> 0 ==> body_cenv.ce_imm_alloca = SOME imm /\
      (!x. imm = Var x ==> not_fresh_at st_exit x))` by
     gvs[same_frame_def, compile_env_component_equality] >>
@@ -1207,6 +1210,7 @@ Theorem constructor_frame_ret_ok_full:
     cx = deploy_evaluation_context tops am tx /\
     cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
     cenv.ce_ctor_exit_label = SOME exit_lbl /\
+    cenv.ce_modules = [(NONE,tops)] /\
     st_exit.cs_current_bb = exit_lbl /\ st_exit.cs_current_insts = [] /\
     (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
       st_exit = ((), st_epilogue) /\
