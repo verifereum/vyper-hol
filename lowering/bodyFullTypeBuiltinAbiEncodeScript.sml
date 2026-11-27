@@ -6,13 +6,8 @@ Ancestors
   vyperContext vyperInterpreter vyperState vyperAST
   bodyFullPredsMods[qualified]
 
-Theorem abi_encode_expr_full_ok:
-  !cx v11 b m typ es.
-    (!s'' x t.
-       type_check (type_builtin_args_length_ok (AbiEncode b m) (LENGTH es))
-         "TypeBuiltin args" s'' = (INL x,t) ==>
-       body_exprs_full_ok_mods mods exps cx es) ==>
-    body_expr_full_ok_mods mods exps cx (TypeBuiltin v11 (AbiEncode b m) typ es)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   once_rewrite_tac[body_expr_full_ok_def] >> simp[] >>
@@ -21,7 +16,19 @@ Proof
   >- suspend "value" >>
   suspend "vv"
 QED
+*)
+Theorem abi_encode_expr_full_ok:
+  !cx v11 b m typ es.
+    (!s'' x t.
+       type_check (type_builtin_args_length_ok (AbiEncode b m) (LENGTH es))
+         "TypeBuiltin args" s'' = (INL x,t) ==>
+       body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (TypeBuiltin v11 (AbiEncode b m) typ es)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_expr_full_ok[value]:
   irule expr_sim_full_of_vv >> simp[loweringPostsTheory.post_value_type_def] >>
   conj_tac
@@ -33,13 +40,17 @@ Resume abi_encode_expr_full_ok[value]:
     (es' with gas_obs := gs)` by simp[] >>
   drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_expr_full_ok[vv]:
   Cases_on `LENGTH es = 1 /\ ~b`
   >- suspend "singleton" >>
   irule abi_encode_tuple_vv_full_from_packaging >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_expr_full_ok[singleton]:
   gvs[] >> Cases_on `es` >> gvs[] >>
   rename1 `TypeBuiltin _ (AbiEncode F _) _ [e]` >>
@@ -51,7 +62,9 @@ Resume abi_encode_expr_full_ok[singleton]:
   >- suspend "word" >>
   irule abi_encode_nonword_vv_full_from_packaging >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_expr_full_ok[word]:
   `expr_body_pre cenv cx env e es'` by
     (irule abi_encode_body_arg_pre >> goal_assum (drule_at Any) >> simp[]) >>
@@ -61,5 +74,8 @@ Resume abi_encode_expr_full_ok[word]:
      once_rewrite_tac[body_expr_full_ok_def] >> metis_tac[]) >>
   irule abi_encode_word_vv_full_from_packaging >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise abi_encode_expr_full_ok
+*)

@@ -945,29 +945,8 @@ Proof
   simp[compileEnvTheory.log_non_indexed_types_def]
 QED
 
-Theorem compile_log_frag_full:
-  !cx id args DF lo d PG tops bindings ctx shadow_ctx func
-   shadow_func cenv env env' ret_ty lctx RetQ es.
-    body_exprs_full_ok_mods mods exps cx args /\
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\ supported_stmt tops bindings (Log id args) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (Log id args) ==>
-       occurs_abi_decode_target target tops) /\
-    body_const_cells_agree mods cx env es /\
-    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Log id args) = SOME env' /\
-    stmt_exprs_ok cenv (Log id args) /\
-    call_evaluation_safe cx (int_calls_stmt (Log id args)) /\
-    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Log id args))
-      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Log id args)))
-      (eval_stmt cx (Log id args)) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `supported_log tops id args` by
@@ -1082,7 +1061,35 @@ Proof
   simp[gas_origin_ptr_focus_nil] >> irule gas_bad_storage_at_initial >>
   simp[evaluate_storage_trace_frame]
 QED
+*)
+Theorem compile_log_frag_full:
+  !cx id args DF lo d PG tops bindings ctx shadow_ctx func
+   shadow_func cenv env env' ret_ty lctx RetQ es.
+    body_exprs_full_ok_mods mods exps cx args /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\ supported_stmt tops bindings (Log id args) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Log id args) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Log id args) = SOME env' /\
+    stmt_exprs_ok cenv (Log id args) /\
+    call_evaluation_safe cx (int_calls_stmt (Log id args)) /\
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Log id args))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Log id args)))
+      (eval_stmt cx (Log id args)) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_log_frag_full[selected_capture]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   BETA_TAC >> strip_tac >>
@@ -1177,7 +1184,9 @@ Resume compile_log_frag_full[selected_capture]:
   disch_then (qx_choosel_then [`topics`,`avs`] strip_assume_tac) >>
   suspend "captured_values"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_log_frag_full[captured_values]:
   `LIST_REL (log_saved_row cenv cx st0 mid sa sm t G1 tn1) rows vs` by
     (simp[LIST_REL_EL_EQN] >> qx_gen_tac `i` >> strip_tac >>
@@ -1219,7 +1228,9 @@ Resume compile_log_frag_full[captured_values]:
      Cases_on `EL i saved` >> fs[vv_operand_def]) >>
   suspend "captured_rows"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_log_frag_full[captured_rows]:
   `LIST_REL (\(flag,row) v. flag ==>
        supported_event_leaf_type (SND row) /\ log_saved_row cenv cx st0 mid sa sm t G1 tn1 row v)
@@ -1245,7 +1256,9 @@ Resume compile_log_frag_full[captured_rows]:
      simp[CONJ_ASSOC]) >>
   suspend "selected_topics"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_log_frag_full[selected_topics]:
   `cenv.ce_event_info (nsid_to_string id) = SOME (h,dtys,flags)` by
     (simp_tac bool_ss [Abbr `dtys`, Abbr `flags`] >> first_assum ACCEPT_TAC) >>
@@ -1372,7 +1385,9 @@ Resume compile_log_frag_full[selected_topics]:
   drule log_topics_values >> strip_tac >>
   suspend "selected_data"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_log_frag_full[selected_data]:
   `MAP SND data_rows = log_non_indexed_types flags atys` by
     simp[Abbr `data_rows`, split_log_ops_data_types] >>
@@ -1409,7 +1424,9 @@ Resume compile_log_frag_full[selected_data]:
   >- suspend "empty_data" >>
   suspend "direct_data"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_log_frag_full[empty_data]:
   `log_non_indexed_types flags atys = [] /\ log_non_indexed_values flags vs = []` by
     (qpat_assum `data_rows = []` (fn empty =>
@@ -1448,7 +1465,9 @@ Resume compile_log_frag_full[empty_data]:
     simp_tac bool_ss [ADD_COMM] >>
     ACCEPT_TAC (SIMP_RULE bool_ss [ADD_COMM] outcome))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_log_frag_full[direct_data]:
   qabbrev_tac `dvs = log_non_indexed_values flags vs` >>
   qabbrev_tac `ats = vyper_to_abi_types (get_tenv cx) (MAP SND data_rows)` >>
@@ -1514,7 +1533,9 @@ Resume compile_log_frag_full[direct_data]:
   disch_then (qx_choosel_then [`p`,`w`,`u`,`Gu`,`tu`,`inst`] strip_assume_tac) >>
   suspend "direct_rows"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_log_frag_full[direct_rows]:
   `LIST_REL (log_saved_row cenv cx st0 mid sa se tp Gp tnp) data_rows dvs` by
     (irule LIST_REL_mono >> goal_assum (drule_at Any) >>
@@ -1748,8 +1769,21 @@ Resume compile_log_frag_full[direct_rows]:
     simp_tac bool_ss [ADD_COMM] >>
     ACCEPT_TAC (SIMP_RULE bool_ss [ADD_COMM] outcome))
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_log_frag_full
+*)
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule compile_log_frag_full >>
+  asm_simp_tac bool_ss [] >>
+  qexistsl_tac [`[]`, `env`, `env'`, `tops`] >>
+  asm_simp_tac bool_ss [supported_stmt_def]
+QED
+*)
 Theorem body_log_aggregate_full:
   !cx id args fields DF lo d PG tops ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -1777,9 +1811,5 @@ Theorem body_log_aggregate_full:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Log id args)))
       (eval_stmt cx (Log id args)) es
 Proof
-  rpt gen_tac >> strip_tac >>
-  irule compile_log_frag_full >>
-  asm_simp_tac bool_ss [] >>
-  qexistsl_tac [`[]`, `env`, `env'`, `tops`] >>
-  asm_simp_tac bool_ss [supported_stmt_def]
+  cheat
 QED

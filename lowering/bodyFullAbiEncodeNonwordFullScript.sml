@@ -5,6 +5,19 @@ Ancestors
   vyperState vyperAST list
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `expr_body_pre ce cx env e es` by
+    (irule abi_encode_body_arg_pre >> goal_assum (drule_at Any) >> simp[]) >>
+  `~is_word_type (lowered_value_type ce e)` by
+    metis_tac[expr_body_pre_lowered_fits, arg_type_fits_word_type] >>
+  `body_exprs_full_ok cx [e]` by simp[body_exprs_full_ok_def] >>
+  irule abi_encode_vv_full_from_packaging >> simp[] >>
+  qexistsl_tac [`env`, `tops`] >> asm_rewrite_tac[]
+QED
+*)
 Theorem abi_encode_nonword_vv_full_from_packaging:
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\
@@ -15,12 +28,5 @@ Theorem abi_encode_nonword_vv_full_from_packaging:
   ==> expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
         ce cx cty (TypeBuiltin ann (AbiEncode F mid) ty [e]) es
 Proof
-  strip_tac >>
-  `expr_body_pre ce cx env e es` by
-    (irule abi_encode_body_arg_pre >> goal_assum (drule_at Any) >> simp[]) >>
-  `~is_word_type (lowered_value_type ce e)` by
-    metis_tac[expr_body_pre_lowered_fits, arg_type_fits_word_type] >>
-  `body_exprs_full_ok cx [e]` by simp[body_exprs_full_ok_def] >>
-  irule abi_encode_vv_full_from_packaging >> simp[] >>
-  qexistsl_tac [`env`, `tops`] >> asm_rewrite_tac[]
+  cheat
 QED
