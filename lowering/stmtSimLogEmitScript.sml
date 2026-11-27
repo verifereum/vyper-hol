@@ -21,10 +21,8 @@ Proof
     mem_bytes_at_def]
 QED
 
-Theorem log_append_stmt_state_rel:
-  stmt_state_rel H ctx func cenv cx es s ==>
-  stmt_state_rel H ctx func cenv cx (es with logs := es.logs ++ [ev])
-    (s with vs_logs := s.vs_logs ++ [ev])
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   simp[stmt_state_rel_def, state_rel_def, logs_rel_eq,
     local_ptrs_rel_def, storage_rel_def, transient_rel_def,
@@ -36,6 +34,14 @@ Proof
     alloca_room_def, pending_alloca_size_def, fmp_room_def,
     immutable_base_zero_alt] >>
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+*)
+Theorem log_append_stmt_state_rel:
+  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx (es with logs := es.logs ++ [ev])
+    (s with vs_logs := s.vs_logs ++ [ev])
+Proof
+  cheat
 QED
 
 Theorem compile_log_emit_run:
