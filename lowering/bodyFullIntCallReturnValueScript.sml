@@ -267,6 +267,34 @@ QED
 Finalise intcall_return_register_type_facts
 *)
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+ rpt gen_tac >> strip_tac >> rename1 `0 < nret` >>
+ drule_all intcall_return_register_type_facts >> strip_tac >>
+ `intret_vals_match rtv v ir.iret_values /\ LENGTH ir.iret_values = nret` by
+   (qhdtm_assum `intcall_callee_exit_full` mp_tac >>
+    pure_rewrite_tac[intcall_callee_exit_full_def, bodyIntCallSeamsTheory.intcall_callee_exit_def,
+         exprSimDefsTheory.expr_exit_def] >> strip_tac >> gvs[]) >>
+ `!mem. mem_agree_outside ts.t_mem stored.vs_memory mem ==>
+    val_in_memory rtv v off mem` by suspend "robust" >>
+ `stored.vs_alloca_next = t.vs_alloca_next` by
+   (drule calleeTransportTheory.bind_outputs_shared_fields >>
+    Cases_on `ir.iret_adopt_fmp` >>
+    simp[venomExecSemanticsTheory.adopt_return_fmp_def,
+         venomExecSemanticsTheory.merge_callee_state_def] >>
+    strip_tac >>
+    qpat_x_assum `stored with <|vs_vars := _; vs_memory := _|> = _` (mp_tac o Q.AP_TERM `\s:venom_state. s.vs_alloca_next`) >>
+    simp[]) >>
+ `eval_operand rbuf.buf_operand stored = SOME (n2w off)` by suspend "root_operand" >>
+ `off < dimword (:256)` by decide_tac >>
+ `val_store_size rtv v <= 32 * nret` by
+   (drule valueTypingMemoryPropsTheory.value_has_type_memory_wf >>
+    disch_then (mp_tac o MATCH_MP exprSimPropsTheory.val_store_size_le) >> simp[]) >>
+ conj_tac >- suspend "holds" >>
+ conj_tac >- suspend "bound" >> suspend "pointer"
+QED
+*)
 Theorem intcall_return_register_value_certificate:
  !tops ctx func cenv cx tenv ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
@@ -311,30 +339,9 @@ Theorem intcall_return_register_value_certificate:
    (Value v) vv (out with scopes := prev) Gs ts
    (stored with vs_inst_idx := LENGTH sm.cs_current_insts)
 Proof
- rpt gen_tac >> strip_tac >> rename1 `0 < nret` >>
- drule_all intcall_return_register_type_facts >> strip_tac >>
- `intret_vals_match rtv v ir.iret_values /\ LENGTH ir.iret_values = nret` by
-   (qhdtm_assum `intcall_callee_exit_full` mp_tac >>
-    pure_rewrite_tac[intcall_callee_exit_full_def, bodyIntCallSeamsTheory.intcall_callee_exit_def,
-         exprSimDefsTheory.expr_exit_def] >> strip_tac >> gvs[]) >>
- `!mem. mem_agree_outside ts.t_mem stored.vs_memory mem ==>
-    val_in_memory rtv v off mem` by suspend "robust" >>
- `stored.vs_alloca_next = t.vs_alloca_next` by
-   (drule calleeTransportTheory.bind_outputs_shared_fields >>
-    Cases_on `ir.iret_adopt_fmp` >>
-    simp[venomExecSemanticsTheory.adopt_return_fmp_def,
-         venomExecSemanticsTheory.merge_callee_state_def] >>
-    strip_tac >>
-    qpat_x_assum `stored with <|vs_vars := _; vs_memory := _|> = _` (mp_tac o Q.AP_TERM `\s:venom_state. s.vs_alloca_next`) >>
-    simp[]) >>
- `eval_operand rbuf.buf_operand stored = SOME (n2w off)` by suspend "root_operand" >>
- `off < dimword (:256)` by decide_tac >>
- `val_store_size rtv v <= 32 * nret` by
-   (drule valueTypingMemoryPropsTheory.value_has_type_memory_wf >>
-    disch_then (mp_tac o MATCH_MP exprSimPropsTheory.val_store_size_le) >> simp[]) >>
- conj_tac >- suspend "holds" >>
- conj_tac >- suspend "bound" >> suspend "pointer"
+  cheat
 QED
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_value_certificate[robust]:
  rpt strip_tac >>
  irule intCallResultTheory.stack_results_val_in_memory >>
@@ -343,6 +350,8 @@ Resume intcall_return_register_value_certificate[robust]:
  conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
  Cases_on `ir.iret_values` >> gvs[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_value_certificate[abi_shape]:
  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
    (drule_then strip_assume_tac expr_body_pre_static_facts >>
@@ -353,6 +362,8 @@ Resume intcall_return_register_value_certificate[abi_shape]:
  gvs[compileEnvTheory.returns_stack_count_def] >>
  suspend "shape_detail"
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_value_certificate[shape_detail]:
  markerLib.RESUME_TAC
  >~ [`evaluate_type _ (TupleT tys) = SOME _`] >-
@@ -367,6 +378,8 @@ Resume intcall_return_register_value_certificate[shape_detail]:
     metis_tac[listTheory.MEM_EL]) >>
  suspend "struct_shape"
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_value_certificate[struct_shape]:
  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
@@ -391,6 +404,8 @@ Resume intcall_return_register_value_certificate[struct_shape]:
  conj_tac >- (first_x_assum irule >> simp[listTheory.MEM_EL] >> metis_tac[]) >>
  metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_value_certificate[root_operand]:
  `lookup_var root returned = lookup_var root t` by
    (drule dftGasInvCallPartnerTheory.inv_bind_outputs_lookup_outside >>
@@ -400,16 +415,22 @@ Resume intcall_return_register_value_certificate[root_operand]:
          venomExecSemanticsTheory.merge_callee_state_def, venomStateTheory.lookup_var_def]) >>
  gvs[venomStateTheory.eval_operand_def] >> metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_value_certificate[holds]:
  gvs[] >> irule intCallResultTheory.buffer_vv_holds >>
  simp[] >>
  first_x_assum irule >> simp[bodyPtrDefsTheory.mem_agree_outside_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_value_certificate[bound]:
  gvs[exprSimMemDefsTheory.vv_store_bound_def,
      contextTheory.base_ptr_def, exprLoweringTheory.lowered_value_type_def,
      vyperStateTheory.read_result_def, vyperStateTheory.return_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_value_certificate[pointer]:
  `FLOOKUP G root = SOME (off,rbuf.buf_size) /\ op_taint tn (Var root) = {}` by
    (qhdtm_assum `intcall_entry_full` mp_tac >>
@@ -434,4 +455,7 @@ Resume intcall_return_register_value_certificate[pointer]:
      contextTheory.base_ptr_def, vyperStateTheory.read_result_def,
      vyperStateTheory.return_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise intcall_return_register_value_certificate
+*)

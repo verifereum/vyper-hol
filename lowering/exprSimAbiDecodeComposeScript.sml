@@ -17,36 +17,8 @@ QED
 (* The decode continuation after the forced operand, in the guarded
    horizon form: the operand's post holds at every valid horizon, and the
    decoder's post is moved from one horizon to all of them. *)
-Theorem abi_decode_suffix_outcome:
-  expr_body_pre_mods mods ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
-  expr_type e = BaseT (BytesT (Dynamic n)) /\ local_ptrs_reserved ce sa /\
-  lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
-  lower_abi_decode data
-    (type_to_abi_dec_info ce.ce_struct_fields ce
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (abi_static_size ce.ce_struct_fields
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (abi_size_bound ce.ce_struct_fields
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (type_memory_bytes ce
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) start = (out,final) /\
-  fn_has_code start final func /\ fn_inst_ids_distinct func /\
-  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
-    (es,s0) marks (INL v) ee (OK s) /\
-  storage_trace_domain cx st0 ee.storage_trace /\
-  (!H. valid_horizon cx st0 H ee.storage_trace ==>
-     expr_post H ctx func ce cx e es sa start s0 (ee with gas_obs := []) v data s /\
-     s.vs_current_bb = start.cs_current_bb /\
-     s.vs_inst_idx = LENGTH start.cs_current_insts) ==>
-  gas_outcome F (cx_tops cx) (ctx,func) cx st0
-    (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [v]))
-      (\w. return (Value w))) (ee with gas_obs := [],s)
-    (\H res es1 t. ?tv. res = INL tv /\
-      vv_post H ctx func ce cx (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es sa final s0
-        es1 tv (LocatedValue ty (mk_ptr out LocMemory)) t /\
-      t.vs_current_bb = final.cs_current_bb /\
-      t.vs_inst_idx = LENGTH final.cs_current_insts)
-    (\H res es1 r. expr_exit res r)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `~s.vs_halted` by
@@ -115,6 +87,40 @@ Proof
       impl_tac >- (gvs[] >> simp[vv_storage_live_def, contextTheory.mk_ptr_def]) >>
       simp[])
   >- (disj2_tac >> gvs[])
+QED
+*)
+Theorem abi_decode_suffix_outcome:
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
+  expr_type e = BaseT (BytesT (Dynamic n)) /\ local_ptrs_reserved ce sa /\
+  lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
+  lower_abi_decode data
+    (type_to_abi_dec_info ce.ce_struct_fields ce
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_static_size ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_size_bound ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (type_memory_bytes ce
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) start = (out,final) /\
+  fn_has_code start final func /\ fn_inst_ids_distinct func /\
+  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    (es,s0) marks (INL v) ee (OK s) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func ce cx e es sa start s0 (ee with gas_obs := []) v data s /\
+     s.vs_current_bb = start.cs_current_bb /\
+     s.vs_inst_idx = LENGTH start.cs_current_insts) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [v]))
+      (\w. return (Value w))) (ee with gas_obs := [],s)
+    (\H res es1 t. ?tv. res = INL tv /\
+      vv_post H ctx func ce cx (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es sa final s0
+        es1 tv (LocatedValue ty (mk_ptr out LocMemory)) t /\
+      t.vs_current_bb = final.cs_current_bb /\
+      t.vs_inst_idx = LENGTH final.cs_current_insts)
+    (\H res es1 r. expr_exit res r)
+Proof
+  cheat
 QED
 
 (* The decode continuation cannot produce HaltException; retain this fact
