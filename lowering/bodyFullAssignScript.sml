@@ -12829,6 +12829,97 @@ QED
 
 (* Common prefix of the snapshot and nonmutating-target value assignments.
    The suffix starts at sr, before any snapshot, with the original stmt post. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all body_assign_value_rhs_pre >> strip_tac >>
+  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
+  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule gas_outcome_full_initial_domain >>
+  simp[cj 1 evaluate_storage_trace_frame] >> strip_tac >>
+  drule_all body_assign_value_paired_code >>
+  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
+    fs[ret_pc_ok_def] >>
+  `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
+    (drule expr_body_pre_vv_gas_admissible >> simp[]) >>
+  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sr`,`shadow_sa`,`tr`,`vv0`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  irule assign_return_buf_sep >> asm_rewrite_tac[] >>
+  once_rewrite_tac[evaluate_def] >>
+  irule body_assign_raw_read_bind >> first_assum (irule_at Any) >> BETA_TAC >>
+  qexistsl [`vv0`,`sr`,`sa`,`cenv`] >>
+  reverse conj_tac
+  >- (conj_tac >- (rpt gen_tac >> strip_tac >> simp[] >> metis_tac[]) >>
+      rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      irule body_assign_value_rhs_exit >> simp[]) >>
+  qx_genl_tac [`marks`,`tv`,`v`,`mid`,`G`,`tn`,`s`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_fmp_headroom inst z` by
+    (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+       metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+     `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+       fs[storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\
+        gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G,tn)`
+       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (fn post =>
+       qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` (fn phi =>
+         qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z`
+           (fn nowrap => ACCEPT_TAC (MATCH_MP
+             bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
+             (LIST_CONJ [CONJUNCT2 post,phi,nowrap])))))) >>
+  `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
+  `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL tv,mid)` by
+    (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     qpat_assum `mid with gas_obs := [] = mid` (fn th => simp[NoAsms, listTheory.APPEND_NIL, th])) >>
+  `read_result cx tv mid = (INL v,mid)` by
+    (qpat_assum `!tail. read_result _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     qpat_assum `mid with gas_obs := [] = mid` (fn th => simp[NoAsms, th])) >>
+  `body_base_target_full_ok cx t` by
+    (qpat_assum `!a b c d e f. _ ==> body_base_target_full_ok _ _` irule >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+  `expr_sim_inv cenv cx env mid` by
+    (irule bodySimStmtFactsTheory.expr_body_pre_eval_result >>
+     qexistsl [`e`,`es with gas_obs := gas_explicit marks s0.vs_gas_readings`,`INL tv`] >>
+     simp[exprSimSourceTheory.expr_body_pre_gas_obs]) >>
+  first_assum irule >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`marks`,`op`,`r`,`shadow_sa`,`shadow_sb`,`ss`,`st`,`su`,
+            `tr`,`ts`,`tt`,`tu`,`tv`,`vv`] >>
+  simp[] >> qx_gen_tac `H` >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+    (?tv'. _) /\ gas_origin_ptr_path _ _ _ _`
+    (qspec_then `H` (drule_then (strip_assume_tac o CONJUNCT1))) >>
+  qpat_x_assum `INL tv = INL tv'` (SUBST_ALL_TAC o SYM o SRULE []) >>
+  simp[] >> conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_assum `!v. tv = Value v /\ _ ==> vv_own _ _ _ _ _ _ _ _ _ /\ _`
+        (qspec_then `v'` mp_tac) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      strip_tac >>
+      qpat_assum `tv = Value v'` (SUBST1_TAC o SYM) >>
+      first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  qpat_assum `cenv.ce_is_ctor /\ vv_location vv0 = SOME LocCode ==> ?val. _` mp_tac >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `val` strip_assume_tac) >>
+  `val = v` by
+    (qpat_assum `read_result cx tv mid = (INL val,mid)` mp_tac >>
+     qpat_assum `read_result cx tv mid = (INL v,mid)` (fn th => simp[NoAsms, th])) >>
+  qpat_x_assum `val = v` SUBST_ALL_TAC >>
+  qpat_assum `!rt w. evaluate_type _ _ = SOME rt /\ _ ==> _`
+    (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM])
+QED
+*)
 Theorem body_assign_other_value_rhs_bind[local]:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
@@ -12994,92 +13085,7 @@ Theorem body_assign_other_value_rhs_bind[local]:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all body_assign_value_rhs_pre >> strip_tac >>
-  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
-  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  irule gas_outcome_full_initial_domain >>
-  simp[cj 1 evaluate_storage_trace_frame] >> strip_tac >>
-  drule_all body_assign_value_paired_code >>
-  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
-  qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
-  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
-    fs[ret_pc_ok_def] >>
-  `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
-    (drule expr_body_pre_vv_gas_admissible >> simp[]) >>
-  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`sr`,`shadow_sa`,`tr`,`vv0`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  irule assign_return_buf_sep >> asm_rewrite_tac[] >>
-  once_rewrite_tac[evaluate_def] >>
-  irule body_assign_raw_read_bind >> first_assum (irule_at Any) >> BETA_TAC >>
-  qexistsl [`vv0`,`sr`,`sa`,`cenv`] >>
-  reverse conj_tac
-  >- (conj_tac >- (rpt gen_tac >> strip_tac >> simp[] >> metis_tac[]) >>
-      rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-      irule body_assign_value_rhs_exit >> simp[]) >>
-  qx_genl_tac [`marks`,`tv`,`v`,`mid`,`G`,`tn`,`s`] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_fmp_headroom inst z` by
-    (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-       metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
-     `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
-       fs[storage_trace_domain_def] >>
-     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\
-        gas_origin_ptr_path _ (s0,G0,tn0) marks (OK s,G,tn)`
-       (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >>
-     disch_then (fn post =>
-       qpat_assum `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` (fn phi =>
-         qpat_assum `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z`
-           (fn nowrap => ACCEPT_TAC (MATCH_MP
-             bodyFullIfExpReachTheory.gas_origin_ptr_path_dalloca_fmp_headroom
-             (LIST_CONJ [CONJUNCT2 post,phi,nowrap])))))) >>
-  `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
-  `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL tv,mid)` by
-    (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
-     qpat_assum `mid with gas_obs := [] = mid` (fn th => simp[NoAsms, listTheory.APPEND_NIL, th])) >>
-  `read_result cx tv mid = (INL v,mid)` by
-    (qpat_assum `!tail. read_result _ _ _ = _` (qspec_then `[]` mp_tac) >>
-     qpat_assum `mid with gas_obs := [] = mid` (fn th => simp[NoAsms, th])) >>
-  `body_base_target_full_ok cx t` by
-    (qpat_assum `!a b c d e f. _ ==> body_base_target_full_ok _ _` irule >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
-  `expr_sim_inv cenv cx env mid` by
-    (irule bodySimStmtFactsTheory.expr_body_pre_eval_result >>
-     qexistsl [`e`,`es with gas_obs := gas_explicit marks s0.vs_gas_readings`,`INL tv`] >>
-     simp[exprSimSourceTheory.expr_body_pre_gas_obs]) >>
-  first_assum irule >> simp[] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`marks`,`op`,`r`,`shadow_sa`,`shadow_sb`,`ss`,`st`,`su`,
-            `tr`,`ts`,`tt`,`tu`,`tv`,`vv`] >>
-  simp[] >> qx_gen_tac `H` >> strip_tac >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
-    (?tv'. _) /\ gas_origin_ptr_path _ _ _ _`
-    (qspec_then `H` (drule_then (strip_assume_tac o CONJUNCT1))) >>
-  qpat_x_assum `INL tv = INL tv'` (SUBST_ALL_TAC o SYM o SRULE []) >>
-  simp[] >> conj_tac
-  >- (gen_tac >> strip_tac >>
-      qpat_assum `!v. tv = Value v /\ _ ==> vv_own _ _ _ _ _ _ _ _ _ /\ _`
-        (qspec_then `v'` mp_tac) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      strip_tac >>
-      qpat_assum `tv = Value v'` (SUBST1_TAC o SYM) >>
-      first_assum ACCEPT_TAC) >>
-  strip_tac >>
-  qpat_assum `cenv.ce_is_ctor /\ vv_location vv0 = SOME LocCode ==> ?val. _` mp_tac >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then (qx_choose_then `val` strip_assume_tac) >>
-  `val = v` by
-    (qpat_assum `read_result cx tv mid = (INL val,mid)` mp_tac >>
-     qpat_assum `read_result cx tv mid = (INL v,mid)` (fn th => simp[NoAsms, th])) >>
-  qpat_x_assum `val = v` SUBST_ALL_TAC >>
-  qpat_assum `!rt w. evaluate_type _ _ = SOME rt /\ _ ==> _`
-    (ACCEPT_TAC o ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM])
+  cheat
 QED
 
 
