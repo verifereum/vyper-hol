@@ -41,6 +41,10 @@ Proof
            gas_bad_storage_at cx st0 plain es s marks` by
     simp[gas_bad_storage_at_def] >>
   pop_assum (mk_asm "bad") >>
+  `!raw r. create_size_exit_ok ctx (SUM_MAP Value I raw) r =
+           create_size_exit_ok ctx raw r` by
+    (Cases_on `raw` >> simp[createSizeExitTheory.create_size_exit_ok_def]) >>
+  pop_assum (mk_asm "create_size") >>
   asm "ign" (fn ign => asm "bad" (fn bad =>
     simp[NoAsms, gas_outcome_full_mods_def, ign, bad])) >>
   AP_TERM_TAC >> ABS_TAC >> AP_TERM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
@@ -53,11 +57,18 @@ Proof
          qpat_assum `!st. wrapped st = _` (fn th => pure_rewrite_tac[th]) >>
          simp[NoAsms, Abbr `raw`] >> metis_tac[]) >>
       qexistsl [`raw`,`ee`,`r`,`G'`,`tn'`] >>
+      qpat_x_assum `res = SUM_MAP Value I raw` SUBST_ALL_TAC >>
       drule value_result_equation >> strip_tac >>
-      simp[] >> metis_tac[]) >>
+      simp[] >> conj_tac
+      >- (qpat_assum `!st res ee. wrapped st = _ <=> _`
+            (fn th => pure_once_rewrite_tac[GSYM th]) >>
+          first_assum ACCEPT_TAC) >>
+      gen_tac >> strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then mp_tac) >>
+      asm "create_size" (fn th => simp[NoAsms,th])) >>
   rename1 `gas_origin_ptr_path _ _ _ (r,g,tt)` >>
   qexistsl [`SUM_MAP Value I res`,`ee`,`r`,`g`,`tt`] >>
-  simp[]
+  asm "create_size" (fn th => simp[th])
 QED
 
 Triviality value_result_read:
