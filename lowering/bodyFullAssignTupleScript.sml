@@ -16864,8 +16864,8 @@ Resume tuple_assign_widened_with_immutable_paths[regular_write]:
      (cenv,cx,env,st0,es,ee) (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
      i c sh src s G tn obs` by
    (qpat_assum `_ i c sh src s G tn obs` mp_tac >>
-    simp[NoAsms,tupleWidenedStoreEntryTheory.tuple_widened_store_entry_def,
-         Abbr `pending`,Abbr `snapshot`,AC CONJ_ASSOC CONJ_COMM] >>
+    simp_tac bool_ss [tupleWidenedStoreEntryTheory.tuple_widened_store_entry_def,
+      Abbr `pending`,Abbr `snapshot`] >>
     rpt (disch_then (map_every assume_tac o CONJUNCTS)) >>
     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `tuple_assign_alloc_ok cenv tys gs` by
