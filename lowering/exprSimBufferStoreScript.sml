@@ -539,8 +539,13 @@ QED
 
 (* A short copy into a non-live allocation preserves live local and immutable
    memory. The allocation can be larger than the copied prefix. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_state_rel_mcopy_alloca:
+  !func cenv cx es s inst p dst src sz alloc_sz ctx.
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+    not_local_ptr cenv es.scopes p /\ sz <= alloc_sz /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (dst, alloc_sz) ==>
+    stmt_state_rel H ctx func cenv cx es (mcopy dst src sz s)
 Proof
   rpt strip_tac >>
   `(mcopy dst src sz s with <|vs_vars := s.vs_vars;
@@ -548,19 +553,25 @@ Proof
     simp[mcopy_def, write_memory_with_expansion_def, LET_THM] >>
   `!q. lookup_var q (mcopy dst src sz s) = lookup_var q s` by
     simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def] >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-     (mcopy dst src sz s)` by
-    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
+  `!imm_src. imm_src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules imm_src) ==>
+     immutables_rel cenv cx.txn.target imm_src cenv.ce_is_ctor es
+       (mcopy dst src sz s)` by
+    (gen_tac >> disch_tac >> rename1 `imm_src = _ \/ _` >>
+     irule immutables_rel_mem_agree >> qexists_tac `s` >>
      conj_tac
      >- simp[mcopy_def, immutableMemoryFrameTheory.immutable_write_memory_capacity,
              arithmeticTheory.MAX_DEF] >>
      conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
-     reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
+     reverse conj_tac >- metis_tac[stmt_state_rel_def, state_rel_def,
+                                   optionTheory.IS_SOME_EXISTS] >>
      rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
-     qpat_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
-     strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >> strip_tac >>
+     `immutable_alloca_sep func (cenv with ce_module := imm_src) cx es s` by
+       (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+        Cases_on `imm_src = cenv.ce_module` >>
+        gvs[compileEnvTheory.compile_env_component_equality] >> metis_tac[]) >>
+     pop_assum mp_tac >> simp[immutable_alloca_sep_def] >>
+     strip_tac >>
+     qpat_x_assum `!name tv v off. _ ==> _ /\ _ /\ _` drule_all >> strip_tac >>
      qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `LENGTH s.vs_memory <= LENGTH (mcopy dst src sz s).vs_memory` by
@@ -574,17 +585,6 @@ Proof
          qexistsl_tac [`cenv`, `func`, `inst`, `name`, `p`, `es.scopes`, `s`] >>
          fs[stmt_state_rel_def, state_rel_def]) >>
       fs[loweringStateRelDefsTheory.regions_disjoint_def]) >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem stmt_state_rel_mcopy_alloca:
-  !func cenv cx es s inst p dst src sz alloc_sz ctx.
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
-    not_local_ptr cenv es.scopes p /\ sz <= alloc_sz /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME (dst, alloc_sz) ==>
-    stmt_state_rel H ctx func cenv cx es (mcopy dst src sz s)
-Proof
-  cheat
 QED
 
 Theorem mcopy_alloca_framed_frag:
