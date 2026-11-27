@@ -7,14 +7,6 @@ Ancestors
   finite_map freshWrites exprSimPtrProps ptrSafetyTransport exprSimMemorySource
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> gvs[vv_post_def, vv_holds_def, immutable_holds_def,
-    read_result_def, return_def] >>
-  qexistsl [`name`, `off`, `itv`, `iv`, `k`] >> simp[]
-QED
-*)
 Theorem vv_post_code_source:
   vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   p.ptr_location = LocCode ==>
@@ -23,7 +15,9 @@ Theorem vv_post_code_source:
     eval_operand p.ptr_operand s = SOME a /\
     immutable_holds cenv cx t (Value v) a ee s
 Proof
-  cheat
+  strip_tac >> gvs[vv_post_def, vv_holds_def, immutable_holds_def,
+    read_result_def, return_def] >>
+  (metis_tac[])
 QED
 
 Theorem unwrap_code_word_post:
