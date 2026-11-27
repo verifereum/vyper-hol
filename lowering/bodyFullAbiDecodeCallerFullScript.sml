@@ -8,6 +8,8 @@ Ancestors
   exprSimMemDefs loweringPosts exprLowering vyperAST context vyperState
   exprSimAbiGasBridge venomExecSemantics exprOpenFirstOperand exprSimHyps stateRelProj
   bodyFullAbiDecodeCallerCollisionInterface vyperTyping
+  bodyFullAbiDecodeCallerSetupCut bodyFullAbiDecodeGuardedCut bodyFullAbiDecodeCutPath
+  exprSimAbiDecodeOblivious abiBuiltinDecodeCorrect externalEntryShape pair
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyInvSplit[qualified] exprSimHypsDefs[qualified] gasOutcomeFullMods[qualified]
 Libs
@@ -380,8 +382,189 @@ val caller_full_cut_selector = boolSyntax.list_mk_forall o
           b d ops ready r0 Gs ts r Gf tnf /\
         (^caller_cut_certificate) start final func ctx s r``;
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem setup_suffix_extends[local]:
+  lower_abi_decode data info mn mx cap start = (out,final) /\
+  abi_builtin_decode_setup data mn mx cap start = (ops,ready) ==>
+  cs_extends ready final
+Proof
+  strip_tac >> drule lower_abi_decode_setup_trace >> strip_tac >>
+  fs[] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[GSYM PULL_EXISTS] >> metis_tac[cj 1 compile_abi_decode_labels, SND]
+QED
+
+Theorem guarded_handoff_first[local]:
+  (layout /\ blocks /\ entry /\ contained /\ origin /\ cursor ==> result) ==>
+  (entry /\ contained /\ origin) ==> (layout /\ blocks /\ cursor) ==> result
+Proof
+  metis_tac[]
+QED
+
+Theorem abi_decode_caller_cut_choice:
+  ^caller_full_cut_selector
+Proof
+  rpt gen_tac >> simp_tac pure_ss [LET_THM, BETA_THM] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  simp_tac pure_ss [GSYM CONJ_ASSOC] >>
+  drule lower_abi_decode_frag_facts >> strip_tac >>
+  drule_all frag_relabel_observer_exists >> strip_tac >>
+  drule_all setup_suffix_extends >> strip_tac >>
+  drule_at (Pat `abi_builtin_decode_setup _ _ _ _ _ = _`)
+    (SIMP_RULE pure_ss [LET_THM, BETA_THM, GSYM CONJ_ASSOC]
+       abi_decode_caller_setup_cut) >>
+  disch_then (drule_at (Pat `fn_has_code (start_relabel _ _ _) _ _`)) >>
+  disch_then (mp_tac o BETA_RULE o
+    Q.INST [`V` |-> `\H. valid_horizon cx st0 H es1.storage_trace`,
+            `s''` |-> `s`, `input_bytes` |-> `bs`, `origin` |-> `sa`,
+            `ce'` |-> `ce`, `es` |-> `es1`, `es0` |-> `es`] o SPEC_ALL) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `r0` (qx_choose_then `Gs` (qx_choose_then `ts`
+    (map_every assume_tac o CONJUNCTS)))) >>
+  qpat_assum `(?a. r0 = Abort Revert_abort a) \/ _`
+    (DISJ_CASES_THEN2 (qx_choose_then `a` assume_tac)
+      (qx_choose_then `ready_state` (CONJUNCTS_THEN2 assume_tac assume_tac)))
+  >- (qexistsl [`r0`, `Gs`, `ts`, `r0`, `Gs`, `ts`] >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+      conj_tac >- (disj1_tac >> qexists `a` >> simp[]) >>
+      qexistsl [`L`, `ids`, `id`] >>
+      rpt (conj_tac >- first_assum ACCEPT_TAC) >> disj2_tac >>
+      qpat_x_assum `(?t u. r0 = OK t /\ _) \/ _` mp_tac >>
+      qpat_assum `r0 = Abort Revert_abort a` (fn th =>
+        simp_tac bool_ss [th, venomExecSemanticsTheory.exec_result_distinct])) >>
+  qpat_assum `!t Gs ts. _ ==> _` (qspecl_then [`ready_state`, `Gs`, `ts`] mp_tac) >>
+  (impl_tac >- (simp_tac pure_ss [GSYM CONJ_ASSOC] >>
+    qpat_assum `(?output input. ~ready_state.vs_halted /\ _) /\ _` ACCEPT_TAC)) >>
+  disch_then (mk_asm "guarded_entry") >>
+  qpat_x_assum `(?t u. r0 = OK t /\ _) \/ _` mp_tac >>
+  qpat_assum `r0 = OK ready_state` (fn th =>
+    simp_tac bool_ss [th, venomExecSemanticsTheory.exec_result_distinct,
+                     venomExecSemanticsTheory.exec_result_11]) >>
+  disch_then (qx_choose_then `u` (map_every assume_tac o CONJUNCTS)) >>
+  drule abiBuiltinDecodeSetupTheory.abi_builtin_decode_setup_shape >> strip_tac >>
+  `cs_extends start ready` by
+    (irule abiEncoderChildContextTheory.abi_encoder_straight_extends >> simp[]) >>
+  asm "guarded_entry" (fn th =>
+    let
+      val producer = Q.INST [`V` |-> `\H. valid_horizon cx st0 H es1.storage_trace`]
+        (INST_TYPE [alpha |-> ``:256``]
+          (SPEC_ALL abi_decode_guarded_to_buf_cut_selected))
+      val reordered = MATCH_MP guarded_handoff_first
+        (CONV_RULE (REDEPTH_CONV BETA_CONV) producer)
+      val by_entry = CONV_RULE (LAND_CONV (PURE_REWRITE_CONV [GSYM CONJ_ASSOC])) reordered
+    in
+      mp_tac (Q.INST [`cut_start` |-> `start`]
+        (MATCH_MP by_entry (PURE_REWRITE_RULE [GSYM CONJ_ASSOC] th)))
+    end) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `r` (qx_choose_then `Gf` (qx_choose_then `tnf`
+    (CONJUNCTS_THEN2 (map_every assume_tac o CONJUNCTS) (mk_asm "terminal"))))) >>
+  qexistsl [`r0`, `Gs`, `ts`, `r`, `Gf`, `tnf`] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (disj2_tac >> qexists `ready_state` >>
+    rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+    first_assum (ACCEPT_TAC o PURE_REWRITE_RULE [GSYM CONJ_ASSOC])) >>
+  qexistsl [`L`, `ids`, `id`] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  asm_x "terminal" (DISJ_CASES_THEN2
+    (qx_choose_then `v` (qx_choose_then `w` (map_every assume_tac o CONJUNCTS)))
+    (qx_choose_then `v` (qx_choose_then `w` (qx_choose_then `fuel`
+      (map_every assume_tac o CONJUNCTS)))))
+  >- (disj1_tac >> qexistsl [`v`, `w`] >>
+      `run_from 0 ctx (frag_relabel_observer start final L ids func id) w =
+       Halt (stop_view w)` by
+        (irule abiEncoderObserverTheory.run_from_stop_view >>
+         qexistsl [`<|bb_label := final.cs_current_bb;
+           bb_instructions := final.cs_current_insts ++ [mk_inst id STOP [] []]|>`, `id`] >>
+         qpat_assum `(w.vs_current_bb,w.vs_inst_idx) = frag_observer_cut final` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >>
+         simp[frag_observer_cut_def] >> strip_tac >>
+         simp[frag_relabel_observer_cut, frag_observer_cut_instruction]) >>
+      `?k. run_from k ctx (frag_relabel_observer start final L ids func id) u =
+           Halt (stop_view w)` by
+        (qpat_assum `local_prefix _ _ (frag_observer_cut final) u w` mp_tac >>
+         qpat_assum `run_from 0 _ _ w = Halt _` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >>
+         metis_tac[abi_decode_cut_prefix_run, venomExecSemanticsTheory.exec_result_distinct]) >>
+      `(?k. run_from k ctx (frag_relabel_observer start final L ids func id)
+         (s with vs_current_bb := L) = Halt (stop_view w))` suffices_by
+        (disch_then (qx_choose_then `fuel_all` assume_tac) >>
+         qexists `fuel_all` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      qpat_assum `local_prefix _ _ (L,LENGTH ready.cs_current_insts) _ u` mp_tac >>
+      qpat_assum `run_from _ _ _ u = Halt (stop_view w)` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      metis_tac[abi_decode_cut_prefix_run, venomExecSemanticsTheory.exec_result_distinct]) >>
+  disj2_tac >> qexistsl [`v`, `w`] >>
+  `(?k. run_from k ctx (frag_relabel_observer start final L ids func id)
+     (s with vs_current_bb := L) = Abort Revert_abort w)` suffices_by
+    (disch_then (qx_choose_then `fuel_all` assume_tac) >>
+     qexists `fuel_all` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `local_prefix _ _ (L,LENGTH ready.cs_current_insts) _ u` mp_tac >>
+  qpat_assum `run_from fuel _ _ u = Abort Revert_abort w` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  metis_tac[abi_decode_cut_prefix_run, venomExecSemanticsTheory.exec_result_distinct]
+QED
+
+Theorem abi_decode_caller_full_conditional:
+  (^caller_full_setup_producer) /\ (^caller_full_guarded_producer) /\
+  (^caller_full_cut_selector) /\ (^caller_full_endpoint_producer) /\
+  (^caller_full_context) exps (TypeBuiltin ann (AbiDecode unwrap) ty [e]) (type_to_abi_dec_info
+    ce.ce_struct_fields ce (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_static_size ce.ce_struct_fields (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else
+    ty)) (abi_size_bound ce.ce_struct_fields (if unwrap /\ needs_external_call_wrap ty then TupleT [ty]
+    else ty)) (type_memory_bytes ce (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (\(H:(bool # 256 word # type_value) list # num list).
+      valid_horizon cx st0 H es1.storage_trace) /\
+  (^caller_full_entry) func sa es es1 bs
+    (\(H:(bool # 256 word # type_value) list # num list). valid_horizon cx st0 H es1.storage_trace)
+    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)
+    (if unwrap /\ needs_external_call_wrap ty then TupleTV [tv] else tv)
+    (abi_static_size ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_size_bound ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (type_memory_bytes ce
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) ==>
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) ce.ce_modules cx st0
+    (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty
+      [expr_type e] [BytesV bs])) (\v. return (Value v))) (es1,s,G,tn)
+    (\H res ee G' tn' t. ?v. res = INL v /\
+      vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0 ee v
+        (LocatedValue ann (mk_ptr out LocMemory)) t /\
+      vv_store_bound cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
+        (lowered_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
+        ee v (LocatedValue ann (mk_ptr out LocMemory)) t /\
+      t.vs_current_bb = final.cs_current_bb /\
+      t.vs_inst_idx = LENGTH final.cs_current_insts /\
+      alloca_history func t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo delta ce cx ee G' tn' t /\
+      ptr_vv_ok cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) v (LocatedValue ann
+        (mk_ptr out LocMemory)) ee G' tn' t /\
+      (!w. v = Value w /\ ~is_word_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
+        /\
+        ~is_bytestring_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
+        vv_own ce cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) sa final ee v
+          (LocatedValue ann (mk_ptr out LocMemory)) t /\
+        (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p ==> p.ptr_location =
+          LocMemory)) /\
+      (ce.ce_is_ctor /\ vv_location (LocatedValue ann (mk_ptr out LocMemory)) = SOME LocCode ==>
+        ?val. read_result cx v ee = (INL val,ee) /\
+          !rt w. evaluate_type (get_tenv cx) (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty
+            [e])) = SOME rt /\
+            eval_operand (vv_operand (LocatedValue ann (mk_ptr out LocMemory))) t = SOME w ==>
+            w2n w + type_memory_size rt <= lo /\
+            (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
+              val_in_memory rt val (w2n w) mem)) /\
+      (!t' op. (LocatedValue ann (mk_ptr out LocMemory)) = StackValue t' op /\ ~is_word_type
+        (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
+        ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) op G' t) /\
+      (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p /\ p.ptr_location = LocMemory
+        ==>
+        ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) p.ptr_operand G' t) /\
+      ghost_kept_at lo ce es sa G0 tn0 s0 G' tn')
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
   qabbrev_tac `V = \(H:(bool # 256 word # type_value) list # num list). valid_horizon cx st0 H es1.storage_trace` >>
@@ -443,6 +626,7 @@ Proof
                        start.cs_current_bb = final.cs_current_bb`
             (CONJUNCTS_THEN assume_tac) >>
           rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+          conj_tac >- (qexists `exps` >> first_assum ACCEPT_TAC) >>
           qexistsl [`ann`,`data`,`data_var`,`e`,`env`,`n`,`out`] >>
           rpt conj_tac >> first_assum ACCEPT_TAC)
           >- (qx_gen_tac `r` >>
@@ -533,13 +717,7 @@ Proof
     (qpat_assum `stmt_state_rel hh ctx func ce cx es1 s`
        (mp_tac o REWRITE_RULE [exprLoweringPropsTheory.stmt_state_rel_def]) >> simp[]) >>
   `evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic n)))` by
-    (`IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
-       (qpat_assum `expr_body_pre ce cx _ (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es`
-          (mp_tac o MATCH_MP expr_body_pre_type_builtin_head) >>
-        disch_then (ACCEPT_TAC o MATCH_MP expr_body_pre_type_evaluates)) >>
-     qpat_assum `expr_type e = BaseT (BytesT (Dynamic n))` SUBST1_TAC >>
-     qpat_x_assum `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` mp_tac >>
-     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+    (drule_all exprSimAbiDecodeBodyEntryTheory.abi_decode_body_operand_evaluates >> simp[]) >>
   `~is_word_type (expr_type e)` by simp[compileEnvTheory.is_word_type_def] >>
   drule_all exprSimAbiDecodeResourcesTheory.abi_decode_caller_resources >>
   disch_then (qx_choose_then `p` (qx_choose_then `d'`
@@ -598,73 +776,7 @@ Proof
     (qx_choose_then `a` assume_tac))
   >- suspend "normal_post" >> suspend "decoder_abort"
 QED
-*)
-Theorem abi_decode_caller_full_conditional:
-  (^caller_full_setup_producer) /\ (^caller_full_guarded_producer) /\
-  (^caller_full_cut_selector) /\ (^caller_full_endpoint_producer) /\
-  (^caller_full_context) exps (TypeBuiltin ann (AbiDecode unwrap) ty [e]) (type_to_abi_dec_info
-    ce.ce_struct_fields ce (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (abi_static_size ce.ce_struct_fields (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else
-    ty)) (abi_size_bound ce.ce_struct_fields (if unwrap /\ needs_external_call_wrap ty then TupleT [ty]
-    else ty)) (type_memory_bytes ce (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (\(H:(bool # 256 word # type_value) list # num list).
-      valid_horizon cx st0 H es1.storage_trace) /\
-  (^caller_full_entry) func sa es es1 bs
-    (\(H:(bool # 256 word # type_value) list # num list). valid_horizon cx st0 H es1.storage_trace)
-    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)
-    (if unwrap /\ needs_external_call_wrap ty then TupleTV [tv] else tv)
-    (abi_static_size ce.ce_struct_fields
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (abi_size_bound ce.ce_struct_fields
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (type_memory_bytes ce
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) ==>
-  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) ce.ce_modules cx st0
-    (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty
-      [expr_type e] [BytesV bs])) (\v. return (Value v))) (es1,s,G,tn)
-    (\H res ee G' tn' t. ?v. res = INL v /\
-      vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0 ee v
-        (LocatedValue ann (mk_ptr out LocMemory)) t /\
-      vv_store_bound cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
-        (lowered_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
-        ee v (LocatedValue ann (mk_ptr out LocMemory)) t /\
-      t.vs_current_bb = final.cs_current_bb /\
-      t.vs_inst_idx = LENGTH final.cs_current_insts /\
-      alloca_history func t /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-      s0.vs_alloca_next <= t.vs_alloca_next /\
-      ghost_inv_at (DF H) lo delta ce cx ee G' tn' t /\
-      ptr_vv_ok cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) v (LocatedValue ann
-        (mk_ptr out LocMemory)) ee G' tn' t /\
-      (!w. v = Value w /\ ~is_word_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
-        /\
-        ~is_bytestring_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
-        vv_own ce cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) sa final ee v
-          (LocatedValue ann (mk_ptr out LocMemory)) t /\
-        (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p ==> p.ptr_location =
-          LocMemory)) /\
-      (ce.ce_is_ctor /\ vv_location (LocatedValue ann (mk_ptr out LocMemory)) = SOME LocCode ==>
-        ?val. read_result cx v ee = (INL val,ee) /\
-          !rt w. evaluate_type (get_tenv cx) (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty
-            [e])) = SOME rt /\
-            eval_operand (vv_operand (LocatedValue ann (mk_ptr out LocMemory))) t = SOME w ==>
-            w2n w + type_memory_size rt <= lo /\
-            (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
-              val_in_memory rt val (w2n w) mem)) /\
-      (!t' op. (LocatedValue ann (mk_ptr out LocMemory)) = StackValue t' op /\ ~is_word_type
-        (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
-        ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) op G' t) /\
-      (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p /\ p.ptr_location = LocMemory
-        ==>
-        ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) p.ptr_operand G' t) /\
-      ghost_kept_at lo ce es sa G0 tn0 s0 G' tn')
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_decode_caller_full_conditional[normal_post]:
   Q_TAC (fn tm => SUBGOAL_THEN tm (mk_asm "control"))
     `(?z. r = OK z /\ ~z.vs_halted /\
@@ -735,7 +847,8 @@ Resume abi_decode_caller_full_conditional[normal_post]:
         (drule exprSimAbiDecodeBodyEntryTheory.abi_decode_body_target >> simp[]) >>
       `abi_decode_root_metadata ce (get_tenv cx)` by
         (irule exprSimAbiDecodeEntryMetadataTheory.abi_decode_root_metadata_inv >>
-         qexistsl [`env`, `es`] >> fs[exprSimHypsDefsTheory.expr_body_pre_def]) >>
+         qexistsl [`env`, `es`, `ce.ce_modules`] >>
+         fs[exprSimHypsDefsTheory.expr_body_pre_mods_def]) >>
       `type_memory_bytes ce ty = type_memory_size tv` by
         (irule abi_decode_descended_memory_size >>
          qexistsl [`get_tenv cx`, `get_tenv cx`] >> simp[]) >>
@@ -799,7 +912,7 @@ Resume abi_decode_caller_full_conditional[normal_post]:
            (abi_static_size ce.ce_struct_fields (if wrapped then TupleT [ty] else ty))
            (abi_size_bound ce.ce_struct_fields (if wrapped then TupleT [ty] else ty))`,
            `d`, `cap`] >> simp[] >> (gvs[]))) >>
-      irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+      irule gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
       qexistsl [`Gf`, `es1`, `INL (Value v)`, `t`, `tnf`] >>
       conj_tac >- simp[lift_sum_def, bind_def, return_def] >>
       qx_gen_tac `H` >> strip_tac >>
@@ -835,7 +948,6 @@ Resume abi_decode_caller_full_conditional[normal_post]:
       qpat_assum `ann = ty` SUBST1_TAC >> simp[mk_ptr_def]) >>
   qpat_x_assum `r = Abort Revert_abort z` mp_tac >> simp[]
 QED
-*)
 
 (* Both rejection cases interpret the selected Revert and keep its ghosts. *)
 val caller_revert_post =
@@ -847,7 +959,7 @@ val caller_revert_post =
    `evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs] =
       INR (RuntimeError err)` by
      (irule (cj 1 exprSimAbiDecodeRejectTheory.abi_decode_builtin_reject) >> simp[]) >>
-   irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
+   irule gas_outcome_full_mods_exit >> reverse conj_tac >- simp[] >>
    qexistsl [`Gf`, `es1`, `Abort Revert_abort a`,
              `INR (Error (RuntimeError err))`, `tnf`] >>
    simp[lift_sum_def, bind_def, vyperStateTheory.raise_def,
@@ -856,13 +968,10 @@ val caller_revert_post =
    qx_gen_tac `H` >> disch_tac >>
    asm "joint_path" (qspec_then `H` mp_tac) >> simp[]);
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_decode_caller_full_conditional[decoder_abort]:
   caller_revert_post
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_decode_caller_full_conditional[setup_abort]:
   qpat_assum `r0 = Abort Revert_abort a` (fn th =>
     qpat_assum `r = r0` (assume_tac o PURE_REWRITE_RULE [th])) >>
@@ -880,8 +989,5 @@ Resume abi_decode_caller_full_conditional[setup_abort]:
      asm "setup_obs" (qspec_then `obs` mp_tac) >> simp[]) >>
   caller_revert_post
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise abi_decode_caller_full_conditional
-*)
