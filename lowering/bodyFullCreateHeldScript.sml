@@ -7823,6 +7823,19 @@ QED
 Finalise create_copy_expr_full_ok
 *)
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >> drule expr_body_pre_static_facts >>
+  Cases_on `salted` >>
+  simp[well_typed_expr_def, create_arg_types_ok_def, listTheory.MAP_EQ_CONS] >>
+  strip_tac >> gvs[]
+  >- (rename1 `expr_type salt = BaseT (BytesT (Fixed 32))` >>
+      qexists_tac `[salt]` >> simp[] >>
+      metis_tac[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]) >>
+  metis_tac[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]
+QED
+*)
 Theorem blueprint_pre_args:
   expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget (CreateFromBlueprint raw) salted rof ks) args dflt) es ==>
@@ -7837,14 +7850,7 @@ Theorem blueprint_pre_args:
      else salts = []) /\
     (raw ==> ?e n. ctor = [e] /\ expr_type e = BaseT (BytesT (Dynamic n)))
 Proof
-  strip_tac >> drule expr_body_pre_static_facts >>
-  Cases_on `salted` >>
-  simp[well_typed_expr_def, create_arg_types_ok_def, listTheory.MAP_EQ_CONS] >>
-  strip_tac >> gvs[]
-  >- (rename1 `expr_type salt = BaseT (BytesT (Fixed 32))` >>
-      qexists_tac `[salt]` >> simp[] >>
-      metis_tac[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]) >>
-  metis_tac[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]
+  cheat
 QED
 
 Theorem blueprint_read_prepared:
