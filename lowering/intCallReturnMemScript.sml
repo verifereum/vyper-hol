@@ -97,11 +97,12 @@ Theorem compile_internal_return_memory_frag_raw:
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
     val_wf tv v /\ type_memory_bytes cenv ty = type_memory_size tv /\
     w2n bw + type_memory_size tv + 64 < dimword (:256) /\
-    (cenv.ce_is_ctor ==> !name itv iv off.
-       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+    (cenv.ce_is_ctor ==> !src name itv iv off.
+       (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+       FLOOKUP cenv.ce_module_vars (src,name) =
          SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-         | SOME imms => get_source_immutables cenv.ce_module imms) name =
+         | SOME imms => get_source_immutables src imms) name =
          SOME (itv,iv) ==>
        regions_disjoint off (type_memory_size itv) (w2n bw)
          (type_memory_size tv)) ==>
@@ -159,21 +160,31 @@ Resume compile_internal_return_memory_frag_raw[store]:
   `w2n bw + type_memory_size tv + 64 < dimword (:256)` by decide_tac >>
   drule_all compile_store_memory_run_capacity >> strip_tac >>
   rename1 `run_inst_seq _ s = OK t1` >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
-     (es with scopes := []) s` by fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor
+       (es with scopes := []) s` by
+    metis_tac[stmt_state_rel_def, state_rel_def, optionTheory.IS_SOME_EXISTS] >>
   `t1.vs_data_section = s.vs_data_section` by
     (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = s`
        (mp_tac o AP_TERM ``\z. z.vs_data_section``) >> simp[]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor
      (es with scopes := []) t1` by
-    (irule loweringSliceTheory.immutables_rel_mem_agree >> qexists_tac `s` >>
-     simp[] >> rpt strip_tac >>
-     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >> simp[regions_disjoint_def] >> strip_tac >>
+    (gen_tac >> disch_tac >> rename1 `src = _ \/ _` >>
+     irule loweringSliceTheory.immutables_rel_mem_agree >> qexists_tac `s` >>
+     simp[] >> reverse conj_tac >- metis_tac[] >>
+     disch_tac >> map_every qx_gen_tac [`name`, `itype`, `ivalue`, `ioff`] >> strip_tac >>
+     qpat_assum `cenv.ce_is_ctor ==> !src name itv iv off. _ ==> _` mp_tac >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (qspecl_then [`src`, `name`, `itype`, `ivalue`, `ioff`] mp_tac) >>
+     impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>
+     simp[regions_disjoint_def] >> strip_tac >>
      first_x_assum irule >> simp[]) >>
   qexists_tac `t1` >> simp[stmt_state_rel_inst_idx, eval_op_inst_idx] >>
   conj_tac
-  >- (irule result_state_memory_frame >> simp[] >> qexists_tac `s` >>
+  >- (irule result_state_memory_frame >> conj_tac
+      >- first_assum ACCEPT_TAC >>
+      qexists_tac `s` >>
       simp[local_region_def, lookup_scopes_def] >>
       fs[venom_state_component_equality] >>
       metis_tac[]) >>
@@ -219,11 +230,12 @@ Theorem compile_internal_return_memory_frag:
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
     val_wf tv v /\ type_memory_bytes cenv ty = type_memory_size tv /\
     w2n bw + type_memory_size tv + 64 < dimword (:256) /\
-    (cenv.ce_is_ctor ==> !name itv iv off.
-       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+    (cenv.ce_is_ctor ==> !src name itv iv off.
+       (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+       FLOOKUP cenv.ce_module_vars (src,name) =
          SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-         | SOME imms => get_source_immutables cenv.ce_module imms) name =
+         | SOME imms => get_source_immutables src imms) name =
          SOME (itv,iv) ==>
        regions_disjoint off (type_memory_size itv) (w2n bw)
          (type_memory_size tv)) ==>
@@ -277,20 +289,33 @@ Resume compile_internal_return_memory_frag[frame]:
      qspecl_then [`cenv`, `s0`, `t.vs_vars`, `t.vs_memory`,
                   `LENGTH sm.cs_current_insts`, `sa.cs_next_id`]
        mp_tac return_unlock_memory_frame >> simp[Abbr `pre`]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
-     (es with scopes := []) s0` by fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
+  `LENGTH s0.vs_memory <= LENGTH t.vs_memory` by fs[return_unlock_frames] >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor
+       (es with scopes := []) s0` by
+    metis_tac[stmt_state_rel_def, state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor
      (es with scopes := [])
      (s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>)` by
-    (irule loweringSliceTheory.immutables_rel_mem_agree >> qexists_tac `s0` >>
-     fs[return_unlock_frames] >> rpt strip_tac >>
-     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >> simp[regions_disjoint_def] >> strip_tac >>
-     first_x_assum irule >> simp[]) >>
+    (gen_tac >> disch_tac >> rename1 `src = _ \/ _` >>
+     irule loweringSliceTheory.immutables_rel_mem_agree >> qexists_tac `s0` >>
+     simp[] >> reverse conj_tac >- metis_tac[] >>
+     disch_tac >> map_every qx_gen_tac [`name`, `itype`, `ivalue`, `ioff`] >> strip_tac >>
+     qpat_assum `cenv.ce_is_ctor ==> !src name itv iv off. _ ==> _` mp_tac >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (qspecl_then [`src`, `name`, `itype`, `ivalue`, `ioff`] mp_tac) >>
+     impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>
+     simp[regions_disjoint_def] >> strip_tac >>
+     qpat_assum `!a len. _ ==> mem_bytes_at a len t.vs_memory = _`
+       (qspecl_then [`ioff`, `type_memory_size itype`] mp_tac) >>
+     simp[]) >>
   `stmt_state_rel H ctx func cenv cx (es with scopes := [])
      (s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>)` by
     (`LENGTH s0.vs_memory <= LENGTH t.vs_memory` by fs[return_unlock_frames] >>
-     irule result_state_memory_frame >> simp[] >> qexists_tac `s0` >>
+     irule result_state_memory_frame >> conj_tac
+     >- first_assum ACCEPT_TAC >>
+     qexists_tac `s0` >>
      simp[local_region_def, lookup_scopes_def] >> rpt strip_tac >>
      `not_fresh_at su x` by metis_tac[] >>
      qpat_x_assum `!x. not_fresh_at su x ==> _` drule >>
