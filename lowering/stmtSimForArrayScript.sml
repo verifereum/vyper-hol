@@ -1,6 +1,7 @@
 (* Array iteration boundaries shared by loop simulation and body adapters. *)
 Theory stmtSimForArray
 Ancestors
+  placeMemoryProtectedFrame
   supportedStmts vyperTypeSystem vyperTypeValues vyperValue
   arithmetic words vyperAST vyperInterpreter vyperState vyperValueOperation
   vyperArray vyperTypeEnv vyperTypeInvariants vyperTyping exprSimHyps
@@ -278,32 +279,6 @@ Proof
   first_x_assum irule >> fs[regions_disjoint_def] >> decide_tac
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  `memory_value_rel tv v (w2n w) t.vs_memory` by
-    metis_tac[val_in_memory_memory_value_rel] >>
-  `!n b len. n <> id /\ local_region cenv es.scopes s n b len ==>
-      mem_bytes_at b len s.vs_memory = mem_bytes_at b len t.vs_memory` by
-    (rpt strip_tac >>
-     `regions_disjoint (w2n w) sz b len` by
-       (irule local_ptrs_rel_alloca_disjoint >>
-        qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >>
-        fs[stmt_state_rel_def, state_rel_def]) >>
-     irule EQ_SYM >> first_x_assum irule >>
-     fs[regions_disjoint_def] >> decide_tac) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
-    (`t.vs_data_section = s.vs_data_section` by
-       (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = _` mp_tac >>
-        simp[venom_state_component_equality]) >>
-     drule_all array_iter_copy_immutables >> simp[]) >>
-  irule stmt_state_rel_declare_memory >> simp[] >>
-  qexistsl_tac [`inst`, `s`, `w`] >> simp[] >>
-  qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = _` mp_tac >>
-  simp[venom_state_component_equality] >> metis_tac[]
-QED
-*)
 Theorem array_iter_copy_declare_rel:
   !H ctx func cenv cx es s t id p sz w inst v tv sc rest a sa.
     stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -325,7 +300,35 @@ Theorem array_iter_copy_declare_rel:
       (es with scopes :=
         (sc |+ (id, <|assignable := a; type := tv; value := v; popped := []|>)) :: rest) t
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `memory_value_rel tv v (w2n w) t.vs_memory` by
+    metis_tac[val_in_memory_memory_value_rel] >>
+  `!n b len. n <> id /\ local_region cenv es.scopes s n b len ==>
+      mem_bytes_at b len s.vs_memory = mem_bytes_at b len t.vs_memory` by
+    (rpt strip_tac >>
+     `regions_disjoint (w2n w) sz b len` by
+       (irule local_ptrs_rel_alloca_disjoint >>
+        qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >>
+        fs[stmt_state_rel_def, state_rel_def]) >>
+     irule EQ_SYM >> first_x_assum irule >>
+     fs[regions_disjoint_def] >> decide_tac) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t` by
+    (`t.vs_data_section = s.vs_data_section` by
+       (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+        simp[venom_state_component_equality]) >>
+     gen_tac >> disch_tac >>
+     irule (Q.INST [`b` |-> `w2n (w:bytes32)`, `len` |-> `type_memory_size tv`]
+              stmt_state_rel_immutables_alloca_frame) >> simp[] >>
+     qexistsl_tac [`H`, `ctx`, `func`, `inst`, `s`, `sz`, `tv`, `w`] >>
+     simp[] >> rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!b n. _ ==> mem_bytes_at b n t.vs_memory = _` irule >>
+     decide_tac) >>
+  irule stmt_state_rel_declare_memory >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`inst`, `s`, `w`] >> simp[] >>
+  qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = _` mp_tac >>
+  simp[venom_state_component_equality] >> metis_tac[]
 QED
 
 Theorem fixed_array_elements_typed:

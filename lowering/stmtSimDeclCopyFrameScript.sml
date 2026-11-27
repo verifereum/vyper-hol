@@ -1,53 +1,12 @@
 (* Registering a newly stored aggregate under the typed-copy frame. *)
 Theory stmtSimDeclCopyFrame
 Ancestors
+  placeMemoryProtectedFrame
   stmtSimDeclMem stmtSimDeclStore exprSimStorageCopy localPtrsProps
   loweringPosts loweringStateRelDefs valueEncoding compileEnv
   exprLoweringProps loweringSlice
   finite_map venomState venomInst
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
-       lookup_var q t = lookup_var q s` by
-    (rpt strip_tac >- simp[] >>
-     `not_fresh_at sa q` by
-       (gvs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
-     simp[]) >>
-  `!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
-       mem_bytes_at b sz' s.vs_memory = mem_bytes_at b sz' t.vs_memory` by
-    (rpt strip_tac >>
-     `regions_disjoint (w2n w) sz b sz'` by
-       (irule local_ptrs_rel_alloca_disjoint >>
-        qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >>
-        fs[stmt_state_rel_def, state_rel_def]) >>
-     `b + sz' <= w2n w \/ w2n w + type_memory_size tyv <= b` by
-       (fs[regions_disjoint_def] >> decide_tac) >>
-     metis_tac[]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
-    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
-     fs[stmt_state_rel_def, state_rel_def] >>
-     `t.vs_data_section = s.vs_data_section` by
-       metis_tac[copy_static_fields] >>
-     fs[immutable_alloca_sep_def] >> rpt strip_tac >>
-     first_x_assum drule_all >> strip_tac >>
-     `regions_disjoint off (type_memory_size tv) (w2n w) sz` by metis_tac[] >>
-     `off + type_memory_size tv <= w2n w \/
-      w2n w + type_memory_size tyv <= off` by
-       (fs[regions_disjoint_def] >> decide_tac) >>
-     qpat_x_assum `!b n. _ ==> mem_bytes_at b n t.vs_memory = _`
-       (qspecl_then [`off`, `type_memory_size tv`] mp_tac) >> simp[]) >>
-  `memory_value_rel tyv v (w2n w) t.vs_memory` by
-    (irule memoryValueEncodingTheory.val_in_memory_memory_value_rel >> simp[]) >>
-  irule stmt_state_rel_declare_memory >> simp[] >>
-  qexistsl_tac [`inst`, `s`, `w`] >> gs[] >>
-  qpat_x_assum `copy_static t = copy_static s` mp_tac >>
-  simp[copy_static_def, venom_state_component_equality] >>
-  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-*)
 Theorem stmt_state_rel_declare_copy_frame:
   !H func cenv cx es s t sa id p sz w inst v tyv sc rest a ctx.
     stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -69,5 +28,39 @@ Theorem stmt_state_rel_declare_copy_frame:
       (es with scopes :=
         (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
+       lookup_var q t = lookup_var q s` by
+    (rpt strip_tac >- simp[] >>
+     `not_fresh_at sa q` by
+       (gvs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
+     simp[]) >>
+  `!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
+       mem_bytes_at b sz' s.vs_memory = mem_bytes_at b sz' t.vs_memory` by
+    (rpt strip_tac >>
+     `regions_disjoint (w2n w) sz b sz'` by
+       (irule local_ptrs_rel_alloca_disjoint >>
+        qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >>
+        fs[stmt_state_rel_def, state_rel_def]) >>
+     `b + sz' <= w2n w \/ w2n w + type_memory_size tyv <= b` by
+       (fs[regions_disjoint_def] >> decide_tac) >>
+     metis_tac[]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t` by
+    (`t.vs_data_section = s.vs_data_section` by metis_tac[copy_static_fields] >>
+     gen_tac >> disch_tac >>
+     irule (Q.INST [`b` |-> `w2n (w:bytes32)`, `len` |-> `type_memory_size tyv`]
+              stmt_state_rel_immutables_alloca_frame) >> simp[] >>
+     qexistsl_tac [`H`, `ctx`, `func`, `inst`, `s`, `sz`, `tyv`, `w`] >>
+     simp[] >> rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!b n. _ ==> mem_bytes_at b n t.vs_memory = _` irule >>
+     decide_tac) >>
+  `memory_value_rel tyv v (w2n w) t.vs_memory` by
+    (irule memoryValueEncodingTheory.val_in_memory_memory_value_rel >> simp[]) >>
+  irule stmt_state_rel_declare_memory >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`inst`, `s`, `w`] >> gs[] >>
+  qpat_x_assum `copy_static t = copy_static s` mp_tac >>
+  simp[copy_static_def, venom_state_component_equality] >>
+  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED

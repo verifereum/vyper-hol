@@ -1,7 +1,7 @@
 Theory placeMemoryProtectedFrame
 Ancestors
   valueEncodingDefs placeMemoryCopyEffect exprSimAlloc exprLoweringProps compileEnv loweringStateRelDefs
-  venomInst finite_map option alist
+  loweringSlice venomInst finite_map option alist
 
 (* A protected slice survives both writes, relative to the allocation-only
    reference state rather than to the scratch-copy state. *)
@@ -50,6 +50,46 @@ Proof
   rw[stmt_state_rel_def, IS_SOME_EXISTS] >-
     gvs[compile_env_component_equality] >>
   metis_tac[]
+QED
+
+Theorem stmt_state_rel_immutable_alloca_disjoint:
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+  FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+  FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+    | SOME imms => get_source_immutables src imms) name = SOME (tv,v) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+  regions_disjoint off (type_memory_size tv) b sz
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all_then mp_tac stmt_state_rel_immutable_alloca_sep_source >>
+  simp[immutable_alloca_sep_def] >> strip_tac >>
+  qpat_x_assum `!name tv v off. _ ==> _ /\ _ /\ _`
+    drule_all >> strip_tac >>
+  qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
+  simp[]
+QED
+
+Theorem stmt_state_rel_immutables_alloca_frame:
+  stmt_state_rel H ctx func cenv cx es s /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\ len <= sz /\
+  t.vs_data_section = s.vs_data_section /\
+  LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+  (!a n. a+n <= b \/ b+len <= a ==>
+    mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) ==>
+  !src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+    immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t
+Proof
+  strip_tac >> rpt gen_tac >> disch_tac >>
+  irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+  reverse conj_tac
+  >- metis_tac[stmt_state_rel_def, state_rel_def, IS_SOME_EXISTS] >>
+  disch_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all_then assume_tac stmt_state_rel_immutable_alloca_disjoint >>
+  first_x_assum irule >> fs[regions_disjoint_def] >> decide_tac
 QED
 
 Theorem immutable_local_slice_disjoint:
