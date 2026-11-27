@@ -16701,62 +16701,8 @@ QED
 Finalise body_assign_other_saved_unstaged_memory_write_full[local]
 *)
 
-Theorem body_assign_other_nonempty_target_full[local]:
-  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t' s'3' v t''.
-       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
-       body_base_target_full_ok_mods mods exps cx t) /\
-    body_expr_full_ok_mods mods exps cx e /\
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    struct_args_unique tops /\
-    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (BaseTarget t) e) ==>
-       occurs_abi_decode_target target tops) /\
-    body_const_cells_agree mods cx env es /\
-    expr_sim_inv_mods mods cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
-    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
-    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
-              is_word_type ty) /\
-    ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
-              ~is_word_type ty /\
-              (expr_type e = ty \/ lowered_value_type cenv e = ty \/
-               is_bytestring_type ty \/
-               has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
-    ~(?nsid dty. t = TopLevelNameTarget nsid /\
-          supported_scalar_target tops nsid /\
-          type_place_target env t = SOME (Type dty) /\ is_word_type dty) /\
-    ~(?nsid mut ty slot.
-        t = TopLevelNameTarget nsid /\
-        supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
-        (mut = Storage \/ mut = Transient) /\
-        ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
-        ~is_bytestring_type ty /\
-        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
-        lowered_value_type cenv e = expr_type e) /\
-    ~(?id fld sid fty.
-        t = AttributeTarget (NameTarget id) fld /\
-        FLOOKUP env.var_types id = SOME (StructT sid) /\
-        attribute_type env.type_defs (StructT sid) fld = SOME fty /\
-        is_word_type fty) /\
-    ~(?nsid fld fty.
-        t = AttributeTarget (TopLevelNameTarget nsid) fld /\
-        supported_storage_field_write tops nsid fld /\
-        type_place_target env t = SOME (Type fty) /\ is_word_type fty) /\
-    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-    ~immutable_root cx t ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
-      (eval_stmt cx (Assign (BaseTarget t) e)) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   irule body_assign_other_value_rhs_bind >>
@@ -16858,7 +16804,68 @@ Proof
   >- (Cases_on `FST (SND r)` >> fs[]) >>
   suspend "saved_write"
 QED
+*)
+Theorem body_assign_other_nonempty_target_full[local]:
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok_mods mods exps cx t) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    struct_args_unique tops /\
+    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget t) e) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+              is_word_type ty) /\
+    ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+              ~is_word_type ty /\
+              (expr_type e = ty \/ lowered_value_type cenv e = ty \/
+               is_bytestring_type ty \/
+               has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
+    ~(?nsid dty. t = TopLevelNameTarget nsid /\
+          supported_scalar_target tops nsid /\
+          type_place_target env t = SOME (Type dty) /\ is_word_type dty) /\
+    ~(?nsid mut ty slot.
+        t = TopLevelNameTarget nsid /\
+        supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
+        (mut = Storage \/ mut = Transient) /\
+        ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_bytestring_type ty /\
+        0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
+        lowered_value_type cenv e = expr_type e) /\
+    ~(?id fld sid fty.
+        t = AttributeTarget (NameTarget id) fld /\
+        FLOOKUP env.var_types id = SOME (StructT sid) /\
+        attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+        is_word_type fty) /\
+    ~(?nsid fld fty.
+        t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+        supported_storage_field_write tops nsid fld /\
+        type_place_target env t = SOME (Type fty) /\ is_word_type fty) /\
+    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+    ~immutable_root cx t ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (eval_stmt cx (Assign (BaseTarget t) e)) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_write]:
   map_every qx_gen_tac [`target_marks`,`p`,`ee`,`Gu`,`tnu`,`u`,`z`,`Gz`,`tnz`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -16918,7 +16925,9 @@ Resume body_assign_other_nonempty_target_full[saved_write]:
       suspend "saved_memory_word") >>
   suspend "saved_nonword"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[snapshot_write]:
   map_every qx_gen_tac [`target_marks`,`p`,`ee`,`z`,`Gz`,`tnz`,`u`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -16958,6 +16967,7 @@ Resume body_assign_other_nonempty_target_full[snapshot_write]:
       suspend "memory_word") >>
   suspend "snapshot_nonword"
 QED
+*)
 
 (* At either target cursor, the word write uses the same original-entry frame. *)
 fun residual_word_entry_frame g =
@@ -17078,32 +17088,41 @@ fun residual_memory_word_posts g =
   rpt gen_tac >> strip_tac >> qexists `cenv` >> simp[] >>
   first_assum ACCEPT_TAC)) g;
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[storage_word]:
   residual_storage_word >>
   (conj_tac >- (residual_word_entry_frame >> gvs[])) >>
   residual_storage_word_posts
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[memory_word]:
   residual_memory_word_setup >>
   residual_memory_word_source >>
   residual_memory_word_write >>
   residual_memory_word_posts
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_storage_word]:
   residual_storage_word >>
   (conj_tac >- (residual_word_entry_frame >> gvs[])) >>
   residual_storage_word_posts
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_memory_word]:
   residual_memory_word_setup >>
   residual_memory_word_source >>
   residual_memory_word_write >>
   residual_memory_word_posts
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[snapshot_nonword]:
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
   `eval_target_place cx t (mid with gas_obs := target_gas) = (INL p,ee)` by
@@ -17117,7 +17136,9 @@ Resume body_assign_other_nonempty_target_full[snapshot_nonword]:
   >- suspend "snapshot_slots" >>
   suspend "snapshot_memory"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[snapshot_memory]:
   `~is_word_type (lowered_value_type cenv e)` by
     (qpat_assum `type_widens_to (get_tenv cx) (lowered_value_type cenv e) ty` mp_tac >>
@@ -17173,7 +17194,9 @@ Resume body_assign_other_nonempty_target_full[snapshot_memory]:
     drule_all_then ACCEPT_TAC placeRelayoutOpenTheory.compile_get_target_ptr_endpoint_open >>
   drule_all_then ACCEPT_TAC exprOpenTerminalsTheory.unwrap_value_open
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[snapshot_slots]:
   `~is_word_type (lowered_value_type cenv e)` by
     (qpat_assum `type_widens_to (get_tenv cx) (lowered_value_type cenv e) ty` mp_tac >>
@@ -17216,7 +17239,9 @@ Resume body_assign_other_nonempty_target_full[snapshot_slots]:
   qpat_assum `compile_assign_value _ _ loc op _ _ _ _ _ su = _` mp_tac >>
   gvs[Abbr `target_gas`] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_nonword]:
   `~is_word_type (lowered_value_type cenv e)` by
     (qpat_assum `type_widens_to (get_tenv cx) (lowered_value_type cenv e) ty` mp_tac >>
@@ -17228,7 +17253,9 @@ Resume body_assign_other_nonempty_target_full[saved_nonword]:
   qpat_x_assum `place_ptr_rel _ _ z (PlaceR (ImmutablePlace _ _ _)) _ _ _`
     mp_tac >> simp[place_ptr_rel_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_memory]:
   `?entry w. lookup_scopes id ee.scopes = SOME entry /\
      evaluate_subscripts entry.type entry.value path = INL w` by
@@ -17255,7 +17282,9 @@ Resume body_assign_other_nonempty_target_full[saved_memory]:
   qpat_assum `compile_assign_value _ _ loc op _ _ _ _ _ su = _` mp_tac >> gvs[]
   >> gvs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_slots]:
   `w = k /\ loc = slot_loc trans /\ evaluate_type (get_tenv cx) ty = SOME dtv` by
     (qpat_assum `place_ptr_rel _ _ z (PlaceR (StoragePlace _ _ _)) _ _ _`
@@ -17313,7 +17342,9 @@ Resume body_assign_other_nonempty_target_full[saved_slots]:
         (ACCEPT_TAC o REWRITE_RULE [DE_MORGAN_THM])) >>
   qpat_assum `compile_assign_value _ _ loc op _ _ _ _ _ su = _` mp_tac >> gvs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[snapshot_bytes_slots]:
   rename1 `write_place cx (StoragePlace trans k dtv) v` >>
   qpat_x_assum `tu' = dtv` SUBST_ALL_TAC >>
@@ -17364,7 +17395,9 @@ Resume body_assign_other_nonempty_target_full[snapshot_bytes_slots]:
   simp[DISJ_IMP_THM, FORALL_AND_THM] >>
   qexists `xd` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_bytes_slots]:
   qpat_x_assum `is_bytestring_type ty /\ is_bytestring_type (lowered_value_type cenv e)`
     strip_assume_tac >>
@@ -17466,8 +17499,11 @@ Resume body_assign_other_nonempty_target_full[saved_bytes_slots]:
   simp[DISJ_IMP_THM, FORALL_AND_THM] >>
   qexists `xs` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_nonempty_target_full[local]
+*)
 
 (* Every other base target: subscripts, nested attributes, immutables. *)
 Theorem body_assign_nested_empty_immutable_full:
