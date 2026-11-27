@@ -1,6 +1,7 @@
 (* Linked aggregate family rules at the evaluator's builtin boundaries. *)
 Theory bodyBuiltinAggregateRoutesMods
 Ancestors
+  bodyECArithReachedDispatchMods bodyECAddReachedStageMods bodyECMulReachedStageMods
   bodyFullPredsMods bodyAggregateArityMods bodyBuiltinArgBranchesMods
   bodyEmptyWordMods bodyEmptyBufferMods
   bodyConvertScalarMods bodyConvertDynamicMods bodyConvertBytesMods
@@ -13,7 +14,7 @@ Ancestors
   bodyUint2StrRouteMods bodyECRecoverOperandsMods bodyECArithOperandsMods
   bodyAggregateReadMods
   exprBodyPreProps exprLoweringProps exprSimOperators
-  vyperTypeSystem vyperContext vyperAST compileEnv vyperInterpreter
+  vyperTypeSystem vyperContext vyperAST compileEnv vyperInterpreter bodyHashSimPairMods bodyExtract32SimPairMods bodyConcatSimPairMods bodySliceOrdinarySimPairMods bodySliceSelfSimPairMods bodySliceExternalSimPairMods
 
 
 Theorem empty_expr_full_ok_mods:
@@ -119,4 +120,103 @@ Proof
   >- (rpt strip_tac >> irule scalar_stack_vv_sim_full_mods >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   map_every qexists_tac [`env`,`exps`,`mods`,`src`,`tops`] >> simp[]
+QED
+
+Theorem hash_builtin_expr_full_ok_mods:
+  !mods exps cx ann bt args.
+    (bt = Keccak256 \/ bt = Sha256) /\
+    (builtin_args_length_ok bt (LENGTH args) ==>
+      body_exprs_full_ok_mods mods exps cx args) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ann bt args)
+Proof
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  qpat_x_assum `bt = Keccak256 \/ _` DISJ_CASES_TAC >> gvs[] >>
+  simp[Once body_expr_full_ok_mods_def] >> rpt gen_tac >> strip_tac >>
+  irule hash_sim_pair_mods >> simp[] >>
+  map_every qexists_tac [`env`,`exps`,`mods`,`src`,`tops`] >> simp[]
+QED
+
+Theorem extract32_expr_full_ok_mods:
+  !mods exps cx ann dst args.
+    (!s x t. type_check (type_builtin_args_length_ok Extract32 (LENGTH args))
+      "TypeBuiltin args" s = (INL x,t) ==> body_exprs_full_ok_mods mods exps cx args) ==>
+    body_expr_full_ok_mods mods exps cx (TypeBuiltin ann Extract32 dst args)
+Proof
+  rpt gen_tac >> disch_tac >> simp[Once body_expr_full_ok_mods_def] >>
+  rpt gen_tac >> strip_tac >> irule extract32_sim_pair_mods >>
+  map_every qexists_tac [`env`,`exps`,`mods`,`src`,`tops`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem bytestring_builtin_expr_full_ok_mods:
+  !mods exps cx ann bt args.
+    ((?n. bt = CalldataSlice n) \/ (?n. bt = Concat n) \/ (?n. bt = Slice n) \/
+     (?n. bt = Uint2Str n)) /\
+    (builtin_args_length_ok bt (LENGTH args) ==>
+      case code_slice_source bt args of
+        NONE => body_exprs_full_ok_mods mods exps cx args
+      | SOME (code_ty,addr) =>
+          body_exprs_full_ok_mods mods exps cx (TL args) /\
+          (!s tail_vs t. eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
+            body_exprs_full_ok_mods mods exps cx [addr])) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ann bt args)
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  qpat_x_assum `(?n. bt = CalldataSlice n) \/ _` strip_assume_tac >> gvs[] >>
+  simp[Once body_expr_full_ok_mods_def] >> rpt gen_tac >> strip_tac
+  >- (irule calldata_slice_route_mods >>
+      map_every qexists_tac [`env`,`exps`,`mods`,`src`,`tops`] >> simp[])
+  >- (irule concat_sim_pair_mods >>
+      map_every qexists_tac [`env`,`exps`,`mods`,`src`,`tops`] >> simp[])
+  >- (rename1 `Builtin ann (Slice n) args` >>
+      Cases_on `code_slice_source (Slice n) args`
+      >- (irule slice_ordinary_sim_pair_mods >> conj_tac >- first_assum ACCEPT_TAC >>
+          map_every qexists_tac [`env`,`exps`,`mods`,`src`,`tops`] >> fs[]) >>
+      rename1 `code_slice_source _ _ = SOME code` >> PairCases_on `code` >>
+      rename1 `code_slice_source _ _ = SOME (ct,addr)` >>
+      Cases_on `is_self_code (Builtin ct (Acc Code) [addr])` >>
+      (qpat_assum `is_self_code _` (K (irule slice_self_sim_pair_mods)) ORELSE
+       irule slice_external_sim_pair_mods) >>
+      qpat_assum `code_slice_source _ _ = SOME _` (irule_at Any) >>
+      map_every qexists_tac [`tops`,`src`,`mods`,`exps`,`env`] >>
+      fs[] >> strip_tac >> first_x_assum drule >>
+      disch_then (ACCEPT_TAC o CONJUNCT2))
+  >- (irule uint2str_route_mods >>
+      map_every qexists_tac [`env`,`exps`,`mods`,`src`,`tops`] >> simp[])
+QED
+
+Theorem precompile_builtin_expr_full_ok_mods:
+  !mods exps cx ann bt args.
+    (bt = ECRecover \/ bt = ECAdd \/ bt = ECMul) /\
+    (builtin_args_length_ok bt (LENGTH args) ==>
+      body_exprs_full_ok_mods mods exps cx args) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ann bt args)
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  Cases_on `bt = ECRecover`
+  >- gvs[ecrecover_expr_full_ok_mods] >>
+  `bt = ECAdd \/ bt = ECMul` by fs[] >>
+  simp[Once body_expr_full_ok_mods_def] >> rpt gen_tac >> strip_tac >>
+  irule ec_arith_sim_pair_given_stages_mods >>
+  qpat_assum `module_body_inv _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `body_const_cells_agree_mods _ _ _ _` (irule_at Any) >>
+  qpat_assum `contract_inv _ _ _ _ _` (irule_at Any) >>
+  `ECMul <> ECAdd` by simp[] >>
+  pure_asm_rewrite_tac [vyperASTTheory.builtin_distinct, REFL_CLAUSE,
+    COND_CLAUSES, IMP_CLAUSES, AND_CLAUSES, OR_CLAUSES] >>
+  (conj_tac >- (
+    (qpat_assum `bt = ECAdd` (K (
+       CONV_TAC (STRIP_QUANT_CONV (RAND_CONV (STRIP_QUANT_CONV (RAND_CONV
+         (REWR_CONV CONJ_ASSOC THENC REWR_CONV CONJ_COMM THENC
+          REWR_CONV (GSYM CONJ_ASSOC)))))) >>
+       match_mp_tac (PURE_REWRITE_RULE [vyperASTTheory.builtin_distinct, REFL_CLAUSE,
+           COND_CLAUSES, IMP_CLAUSES, AND_CLAUSES, OR_CLAUSES]
+           (BETA_RULE ecadd_stage_from_reached_mods)))) ORELSE
+     qpat_assum `ECMul <> ECAdd` (fn distinct =>
+       match_mp_tac (PURE_REWRITE_RULE [distinct, REFL_CLAUSE,
+         COND_CLAUSES, IMP_CLAUSES, AND_CLAUSES, OR_CLAUSES]
+         (Q.INST [`bt` |-> `ECMul`] ecmul_stage_from_reached_mods)))) >>
+    rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE fs[]))) >>
+  rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE fs[])
 QED
