@@ -419,6 +419,9 @@ Theorem body_stmts_sim_full:
   !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
    ret_ty lctx RetQ ss es.
     body_inv tops ctx cenv cx /\
+    IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+    EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (int_calls_stmts ss) /\
     shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
     supported_stmts tops bindings ss /\
     (!vis mut nr raw fn args dflts ret body.
@@ -453,13 +456,19 @@ Proof
      drule checked_subst_consts_loop_calls_ok >>
      simp[] >> disch_then irule >> gvs[] >> metis_tac[]) >>
   `!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
+        IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,ts)]) /\
+        EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+          (int_calls_stmts ss) /\
         struct_args_unique ts /\
         (!vis mut nr raw fn args dflts ret body.
            MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
            stmts_loop_calls_ok [(NONE,ts)]
              (subst_consts_stmts (module_consts_env ts []) body)) /\
-        stmts_loop_calls_ok [(NONE,ts)] ss` by (drule_then assume_tac body_inv_contract >>
-          drule_then assume_tac contract_inv_singleton_source_modules >>
-          simp[] >> first_assum ACCEPT_TAC) >>
+        stmts_loop_calls_ok [(NONE,ts)] ss` by
+    (qpat_assum `body_inv _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+     rpt gen_tac >> strip_tac >>
+     `ts = tops` by metis_tac[] >>
+     simp[] >> first_assum ACCEPT_TAC) >>
   metis_tac[body_sim_full_mutual, body_stmts_full_ok_def]
 QED
