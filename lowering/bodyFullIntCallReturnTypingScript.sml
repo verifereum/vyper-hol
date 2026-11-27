@@ -31,7 +31,6 @@ Proof
 QED
 
 Theorem intcall_declared_return_type:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
@@ -46,7 +45,6 @@ Proof
 QED
 
 Theorem intcall_rest_read_post_typed:
-  !mods exps.
  !tops ctx cenv cx tenv ann name es dflt es0 mut nr args ret ss rtv
   prev start tv ee rt v dflts.
  (contract_inv mods exps ctx cenv cx /\

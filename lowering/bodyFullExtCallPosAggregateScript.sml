@@ -20,7 +20,6 @@ Ancestors
    with a narrowed physical type return a pointer or use the call's
    declared result type. *)
 Theorem extcall_operand_snapshot_type:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) ==>
   vv_type (ext_call_arg_value (lowered_value_type cenv e) vv) =
@@ -94,7 +93,6 @@ QED
    change how unwrap reaches its source bytes. Other locations keep their
    original tag. *)
 Theorem extcall_operand_materialize_retag:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) ==>
   (is_word_type (vv_type (ext_call_arg_value (lowered_value_type cenv e) vv)) <=>
@@ -150,7 +148,6 @@ QED
    therefore retains the region/local value witness without retagging a
    memory path in the source store. *)
 Theorem snapshot_bytes_retag:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\ post_value_type ce e = expr_type e /\
   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
   eval_expr cx e es = (INL raw,ee) /\ read_result cx raw ee = (INL v,ee) /\
@@ -213,7 +210,6 @@ Proof
 QED
 
 Theorem extcall_pos_aggregate_outcome:
-  !mods exps.
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\

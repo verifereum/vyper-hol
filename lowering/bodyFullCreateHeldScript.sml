@@ -420,7 +420,6 @@ Proof
 QED
 
 Theorem proxy_pre_args:
-  !mods.
   expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget CreateMinimalProxy salted rof ks) args dflt) es ==>
   ann = BaseT AddressT /\
@@ -479,7 +478,6 @@ Proof
 QED
 
 Theorem create_operand_pre:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Call ann (CreateTarget kind salted rof ks) args dflt) es /\
   MEM e args /\ expr_sim_inv_mods mods cenv cx env ee ==>
   expr_body_pre_mods mods cenv cx env e ee
@@ -2107,7 +2105,6 @@ QED
 (* Replay at an arbitrary gas tail gives the type and state invariant.
    The guard of the list IH only asks for existence of a successful read. *)
 Theorem create_operand_read_post:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
     (INL v,ee with gas_obs := tail) ==>
@@ -2132,7 +2129,6 @@ Proof
 QED
 
 Theorem create_operand_const_cells_replay:
-  !mods'.
   body_const_cells_agree mods cx env es /\
   expr_body_pre_mods mods' cenv cx env e es /\
   (!tail. bind (eval_expr cx e) (read_result cx)
@@ -2151,7 +2147,6 @@ QED
 (* Recover the continuation invariants at the endpoint of the same path
    whose marks replay the successful operand read. *)
 Theorem create_operand_replay_midpoint:
-  !mods exps.
   body_const_cells_agree [(NONE,tops)] cx env es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ MEM func ctx.ctx_functions /\
@@ -2206,7 +2201,6 @@ QED
 (* A cut evaluates exactly one operand. The continuation receives the
    typing and IH guard from replay, and all horizon facts from that run. *)
 Theorem create_body_operand_cut_replay:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -2310,7 +2304,6 @@ Proof
 QED
 
 Theorem create_body_operand_cut[local]:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -2465,7 +2458,6 @@ Proof
 QED
 
 Theorem create_word_cut_facts[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\ expr_result_typed env e (Value v) /\
   expr_type e = BaseT bt /\ is_word_type (BaseT bt) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
@@ -2540,7 +2532,6 @@ QED
 (* Project the typed word and the write-back and horizon frames from the
    same operand run. The scalar continuations use both views of the post. *)
 Theorem create_word_cut_frame_facts:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\ expr_result_typed env e (Value v) /\
   expr_type e = BaseT bt /\ is_word_type (BaseT bt) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
@@ -2588,7 +2579,6 @@ QED
 (* The prepared initcode belongs to the continuation: the scalar cut
    evaluates only the amount and, when present, the one salt expression. *)
 Theorem raw_create_scalar_suffix_cut:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -2811,7 +2801,6 @@ Proof
 QED
 
 Theorem proxy_salt_dispatch_ready:
-  !mods.
   stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ ci_mono sa c /\ ci_mono c d' /\
   wb_frame cenv es ea sa s0 sbuf /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gbuf tnb /\
@@ -2879,7 +2868,6 @@ QED
 (* The two successful operands have already run. Allocate and populate the
    window before entering the optional salt computation. *)
 Theorem proxy_amount_buffer_cut:
-  !mods.
   expr_type target = BaseT AddressT /\ expr_type amount = BaseT (UintT 256) /\
   expr_body_pre_mods mods cenv cx env target es /\ expr_body_pre_mods mods cenv cx env amount et /\
   expr_result_typed env target (Value tv) /\ expr_result_typed env amount (Value av) /\
@@ -3070,7 +3058,6 @@ QED
 Finalise proxy_amount_buffer_cut
 
 Theorem proxy_expr_sim_from_parts:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -3335,7 +3322,7 @@ QED
 Finalise proxy_expr_sim_from_parts
 
 Theorem create_minimal_proxy_expr_full_ok:
-  !mods exps cx ty s r ks es d.
+  !cx ty s r ks es d.
     body_exprs_full_ok_mods mods exps cx (create_operand_order CreateMinimalProxy s es) ==>
     body_expr_full_ok_mods mods exps cx (Call ty (CreateTarget CreateMinimalProxy s r ks) es d)
 Proof
@@ -3373,7 +3360,6 @@ QED
 (* The physical rows and the source annotations yield the same ABI bytes.
    The bound here is for the physical allocation. *)
 Triviality create_encoded_rows_layout:
-  !mods.
   EVERY (\e. expr_body_pre_mods mods ce cx env e es) args /\
   LENGTH args = LENGTH vs /\ LENGTH args = LENGTH (vals:vyper_value list) /\
   sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
@@ -3427,7 +3413,6 @@ QED
    constructor evaluation; st and initial are after destination setup.
    Blueprint uses an empty prefix, and RawCreate uses its saved bytecode. *)
 Theorem create_encoded_rows_window:
-  !mods exps.
   LENGTH args = LENGTH vals /\ LENGTH args = LENGTH vs /\
   EVERY (\e. expr_body_pre_mods mods ce cx env e ee) args /\
   (contract_inv mods exps ctx ce cx /\
@@ -3604,7 +3589,6 @@ Finalise create_encoded_rows_window
 (* The snapshot's physical tag decides whether it saves a word or copies
    bytes. Retagging a nonword leaves the materialization code unchanged. *)
 Theorem create_ctor_snapshot_retag:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) ==>
   vv_type (ext_call_arg_value (lowered_value_type cenv e) vv) = lowered_value_type cenv e /\
@@ -3621,7 +3605,6 @@ Proof
 QED
 
 Theorem create_ctor_borrowed_row[local]:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
   read_result cx raw ee = (INL v,ee) /\ compile_expr ce (expr_type e) e sa = (vv,sb) /\
   ty = lowered_value_type ce e /\ sv = ext_call_arg_value ty vv /\ ~is_word_type ty /\
@@ -3702,7 +3685,6 @@ Finalise create_ctor_borrowed_row
 (* Reading a borrowed aggregate adds no target instruction. Its source
    read still runs immediately, before evaluating any later argument. *)
 Theorem create_ctor_borrowed_head_outcome:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -3943,7 +3925,6 @@ Finalise create_ctor_borrowed_head_outcome
 (* The suffix changes the evaluation and machine endpoints, but not the
    compiler cuts of the immediate saved row. *)
 Theorem create_ctor_saved_row_suffix:
-  !mods.
   compile_expr cenv (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv cenv copy (ext_call_arg_value (lowered_value_type cenv e) vv) sm = (sv,ss) /\
   local_ptrs_reserved cenv si /\ local_ptrs_reserved cenv ss /\
@@ -4103,7 +4084,6 @@ Finalise create_ctor_saved_row_suffix
 
 (* A copying snapshot carries its own allocation witness to the suffix. *)
 Theorem create_ctor_materialized_head_outcome:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -4231,7 +4211,6 @@ Finalise create_ctor_materialized_head_outcome
 (* All constructor heads use the same packet at the immediate-read cut.
    A private allocation is required only when a nonword snapshot copies. *)
 Theorem create_ctor_head_outcome:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -4377,7 +4356,6 @@ Finalise create_ctor_head_outcome
 (* Constructor operands are read before evaluating the suffix. Their row
    witnesses refer to the original compiler cuts and the final runtime cut. *)
 Theorem create_ctor_rows_outcome[local]:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -4868,7 +4846,6 @@ Finalise create_ctor_rows_outcome
 (* The continuation starts only after all constructor arguments were read.
    The row relation describes the actual saved values at the common cut. *)
 Theorem create_ctor_rows_cut:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -7141,7 +7118,6 @@ QED
 Finalise create_blueprint_prepared_path
 
 Theorem copy_pre_args:
-  !mods.
   expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget CreateCopyOf salted rof ks) args dflt) es ==>
   ann = BaseT AddressT /\
@@ -7304,7 +7280,7 @@ QED
 Finalise create_copy_finish
 
 Theorem create_copy_expr_full_ok:
-  !mods exps cx ty s r ks es d.
+  !cx ty s r ks es d.
     body_exprs_full_ok_mods mods exps cx (create_operand_order CreateCopyOf s es) ==>
     body_expr_full_ok_mods mods exps cx (Call ty (CreateTarget CreateCopyOf s r ks) es d)
 Proof
@@ -7615,7 +7591,6 @@ QED
 Finalise create_copy_expr_full_ok
 
 Theorem blueprint_pre_args:
-  !mods.
   expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget (CreateFromBlueprint raw) salted rof ks) args dflt) es ==>
   ann = BaseT AddressT /\
@@ -7722,7 +7697,6 @@ QED
 (* Project the original cut at a single horizon for the compiler witnesses.
    Storage liveness is re-projected at each horizon on the same saved row. *)
 Theorem create_rows_encoder_inputs:
-  !mods.
   EVERY (\e. expr_body_pre_mods mods ce cx env e entry) ctor /\
   EVERY (\e. expr_body_pre_mods mods ce cx env e ee) ctor /\
   eval_exprs cx ctor entry = (INL vs,fin) /\
@@ -7887,7 +7861,6 @@ QED
 Finalise create_rows_encoder_inputs
 
 Theorem blueprint_rows_encoder_inputs:
-  !mods.
   expr_body_pre_mods mods ce cx env
     (Call ann (CreateTarget (CreateFromBlueprint F) salted rof ks)
       (target::amount::(salts ++ offset::ctor)) dflt) es /\
@@ -8323,7 +8296,7 @@ QED
 (* A folded offset performs no target instructions, but does contribute
    a successful source operand to the replay of the later list. *)
 Theorem blueprint_offset_cut_by_operand:
-  !mods exps Run HeadOK.
+  !Run HeadOK.
   (!e es sa sb op sh shb s G tn (next : value -> evaluation_state -> value evaluation_result).
     body_const_cells_agree mods cx env es /\
     (contract_inv mods exps ctx cenv cx /\
@@ -8469,7 +8442,6 @@ Proof
 QED
 
 Theorem blueprint_offset_cut[local]:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -8548,7 +8520,6 @@ QED
 (* The size/count window is recovered at the actual endpoint of the
    scalar reads, not assumed to survive arbitrary evaluation. *)
 Theorem blueprint_scalar_suffix_cut_by_stages:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -9022,7 +8993,6 @@ QED
 Finalise blueprint_scalar_suffix_cut_by_stages
 
 Theorem blueprint_scalar_suffix_cut:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -9207,7 +9177,6 @@ QED
 (* The raw snapshot is sized by the returned tag, not by the physical
    type of the source window. Both possible tags have their own fit proof. *)
 Theorem blueprint_raw_snapshot_type[local]:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\ expr_type e = BaseT (BytesT (Dynamic n)) /\
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL (BytesV bs),ee) ==>
@@ -9258,7 +9227,6 @@ QED
    header view at the actual suffix endpoint, rather than pretending
    the local alias is a separately owned allocation. *)
 Theorem blueprint_raw_borrowed_window[local]:
-  !mods exps.
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\ ~exprs_can_mutate ce later /\
   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
@@ -9724,7 +9692,6 @@ Finalise blueprint_raw_copy_store_exit
 (* The raw argument is read before any scalar, even when its snapshot
    borrows the original bytes. Recover the window at the actual suffix exit. *)
 Theorem blueprint_raw_args_cut:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -10799,7 +10766,6 @@ Finalise create_blueprint_finish
 (* Encode the witnessed constructor rows and preserve their registered byte
    window across the later scalar operands. *)
 Theorem blueprint_encoded_args_pack_from_rows:
-  !mods exps.
   ctor <> [] /\ LENGTH salts = (if salted then 1 else 0) /\
   expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget (CreateFromBlueprint F) salted rof ks)
@@ -11158,7 +11124,6 @@ QED
 Finalise blueprint_encoded_args_pack_from_rows
 
 Theorem blueprint_encoded_args_cut:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   ctor <> [] /\ LENGTH salts = (if salted then 1 else 0) /\
   expr_body_pre_mods mods cenv cx env
@@ -11295,7 +11260,7 @@ Proof
 QED
 
 Theorem create_body_exprs_split:
-  !mods exps xs ys cx. body_exprs_full_ok_mods mods exps cx (xs ++ ys) ==>
+  !xs ys cx. body_exprs_full_ok_mods mods exps cx (xs ++ ys) ==>
     body_exprs_full_ok_mods mods exps cx xs /\
     (!st vs en. eval_exprs cx xs st = (INL vs,en) ==> body_exprs_full_ok_mods mods exps cx ys)
 Proof
@@ -11318,7 +11283,7 @@ Proof
 QED
 
 Theorem create_blueprint_expr_full_ok:
-  !mods exps cx ty b s r ks es d.
+  !cx ty b s r ks es d.
     body_exprs_full_ok_mods mods exps cx (create_operand_order (CreateFromBlueprint b) s es) ==>
     body_expr_full_ok_mods mods exps cx
       (Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)
@@ -11687,7 +11652,6 @@ Finalise create_blueprint_expr_full_ok
 (* The snapshot destination is always the freshly allocated physical buffer.
    This is the compiler-level boundary used by the RawCreate runtime cut. *)
 Theorem raw_create_bytecode_physical_input:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\ expr_type e = BaseT (BytesT (Dynamic n)) /\
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   bind (eval_expr cx e) (read_result cx) es = (INL v,ee) /\
@@ -12019,7 +11983,6 @@ QED
 Finalise raw_create_encoder_saved_prefix
 
 Theorem raw_create_pre_args:
-  !mods.
   expr_body_pre_mods mods ce cx env (Call ann (CreateTarget RawCreate salted rof ks) args dflt) es ==>
   ann = BaseT AddressT /\
   ?code amount ctor salts bound.
@@ -13570,7 +13533,6 @@ Finalise raw_create_total_path
 (* The constructor cut owns its bytecode prefix before the first row is
    evaluated. The new owner is registered before the encoder starts. *)
 Theorem raw_create_encoded_args_cut:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   ctor <> [] /\
   expr_body_pre_mods mods cenv cx env
@@ -13876,7 +13838,6 @@ Finalise raw_create_encoded_args_cut
 (* The first bytecode read always uses the registered snapshot, even if
    the child was already represented by a pointer into ordinary memory. *)
 Theorem raw_create_bytecode_cut:
-  !mods exps.
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -14444,7 +14405,7 @@ QED
 Finalise raw_create_bytecode_cut
 
 Theorem raw_create_expr_full_ok:
-  !mods exps cx ty s r ks es d.
+  !cx ty s r ks es d.
     body_exprs_full_ok_mods mods exps cx (create_operand_order RawCreate s es) ==>
     body_expr_full_ok_mods mods exps cx (Call ty (CreateTarget RawCreate s r ks) es d)
 Proof

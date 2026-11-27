@@ -9,7 +9,7 @@ Ancestors
   bodyFullPredsMods[qualified]
 
 Theorem empty_expr_full_ok:
-  !mods exps cx v11 typ es.
+  !cx v11 typ es.
     (!s'' x t.
        type_check (type_builtin_args_length_ok Empty (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>

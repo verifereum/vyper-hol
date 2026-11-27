@@ -953,7 +953,6 @@ QED
    is fixed at the tuple row.  Old resource bytes and the tuple prefix
    are protected separately. *)
 Theorem extcall_store_values_joint_all_dead:
-  !mods exps.
   compile_extcall_store_values ce (ZIP (svs,tys)) (Var root) off ca = ((),cb) /\
   LENGTH svs = LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\
   fn_has_code ca cb fn /\ fn_inst_ids_distinct fn /\
@@ -1230,7 +1229,6 @@ QED
 Finalise extcall_store_values_joint_all_dead
 
 Theorem extcall_store_values_joint:
-  !mods exps.
   compile_extcall_store_values ce (ZIP (svs,tys)) (Var root) off ca = ((),cb) /\
   LENGTH svs = LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\
   fn_has_code ca cb fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\

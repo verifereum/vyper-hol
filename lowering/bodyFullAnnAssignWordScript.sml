@@ -242,7 +242,6 @@ Proof
 QED
 
 Theorem annassign_word_full_success[local]:
-  !mods.
   gas_admissible (eval_stmt cx (AnnAssign id (expr_type e) e)) (stmt_res_ok lctx) es /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   is_word_type (expr_type e) /\ expr_body_pre_mods mods ce cx env e es /\
@@ -281,7 +280,6 @@ Proof
 QED
 
 Theorem annassign_word_full_store_freshness[local]:
-  !mods.
   compile_stmt ce lctx ret_ty (AnnAssign id typ e) r = ((),sf) /\
   expr_body_pre_mods mods ce cx env e es /\ is_word_type typ /\ expr_type e = typ /\
   lower_value compile_expr ce typ e a = (op,b) /\
@@ -384,7 +382,6 @@ Proof
 QED
 
 Theorem annassign_word_full_declared_layout:
-  !mods.
   declare_local old id (expr_type e) sa = (ce,r) /\
   compile_stmt ce lctx ret_ty (AnnAssign id (expr_type e) e) r = ((),sf) /\
   old.ce_alloca_locals /\ FLOOKUP old.ce_vars id = NONE /\
@@ -435,7 +432,6 @@ Proof
 QED
 
 Theorem annassign_word_full_store_ready[local]:
-  !mods.
   gas_admissible (eval_stmt cx (AnnAssign id (expr_type e) e)) (stmt_res_ok lctx) es ==>
   (!tail. bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := prefix ++ tail) = (res,mid with gas_obs := tail)) ==>
@@ -498,7 +494,6 @@ Proof
 QED
 
 Theorem annassign_word_full_runtime_preparation[local]:
-  !mods.
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\
@@ -653,7 +648,6 @@ Proof
 QED
 
 Theorem annassign_word_full_source_action[local]:
-  !mods.
   gas_admissible (eval_stmt cx (AnnAssign id (expr_type e) e)) (stmt_res_ok lctx) es ==>
   (!tail. bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks t.vs_gas_readings ++ tail) =
@@ -797,7 +791,6 @@ Proof
 QED
 
 Theorem annassign_word_full_execution_sep:
-  !mods.
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\
@@ -907,7 +900,6 @@ QED
 Finalise annassign_word_full_execution_sep
 
 Theorem annassign_word_full_execution:
-  !mods.
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\

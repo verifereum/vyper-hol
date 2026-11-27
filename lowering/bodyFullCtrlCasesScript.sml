@@ -33,28 +33,28 @@ val _ = Parse.hide "body";
 (* ===== Exits ===== *)
 
 Theorem break_stmt_full_ok:
-  !mods exps cx. body_stmt_full_ok_mods mods exps cx Break
+  !cx. body_stmt_full_ok_mods mods exps cx Break
 Proof
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def] >>
   irule compile_loop_jump_frag_full_action >> simp[]
 QED
 
 Theorem continue_stmt_full_ok:
-  !mods exps cx. body_stmt_full_ok_mods mods exps cx Continue
+  !cx. body_stmt_full_ok_mods mods exps cx Continue
 Proof
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def] >>
   irule compile_loop_jump_frag_full_action >> simp[]
 QED
 
 Theorem raise_bare_stmt_full_ok:
-  !mods exps cx. body_stmt_full_ok_mods mods exps cx (Raise RaiseBare)
+  !cx. body_stmt_full_ok_mods mods exps cx (Raise RaiseBare)
 Proof
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def, gas_shadow_raise_reason_def] >>
   irule compile_raise_frag_full_action >> simp[]
 QED
 
 Theorem raise_unreachable_stmt_full_ok:
-  !mods exps cx. body_stmt_full_ok_mods mods exps cx (Raise RaiseUnreachable)
+  !cx. body_stmt_full_ok_mods mods exps cx (Raise RaiseUnreachable)
 Proof
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def, gas_shadow_raise_reason_def] >>
   irule compile_raise_frag_full_action >> simp[]
@@ -63,7 +63,7 @@ QED
 (* An assertion with no reason: the condition's joint simulation at
    BaseT BoolT, by its case at the expr_body_pre its statement gives. *)
 Theorem body_assert_bare_full[local]:
-  !mods exps cx e ak.
+  !cx e ak.
     (ak = AssertBare \/ ak = AssertUnreachable) /\ body_expr_full_ok_mods mods exps cx e ==>
     body_stmt_full_ok_mods mods exps cx (Assert e ak)
 Proof
@@ -98,13 +98,13 @@ Proof
 QED
 
 Theorem assert_bare_stmt_full_ok:
-  !mods exps cx e. body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Assert e AssertBare)
+  !cx e. body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Assert e AssertBare)
 Proof
   metis_tac[body_assert_bare_full]
 QED
 
 Theorem assert_unreachable_stmt_full_ok:
-  !mods exps cx e.
+  !cx e.
     body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Assert e AssertUnreachable)
 Proof
   metis_tac[body_assert_bare_full]
@@ -113,7 +113,7 @@ QED
 (* ===== The expression statement ===== *)
 
 Theorem expr_stmt_full_ok:
-  !mods exps cx e. body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Expr e)
+  !cx e. body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Expr e)
 Proof
   rpt gen_tac >> strip_tac >>
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def] >>
@@ -150,7 +150,7 @@ QED
 (* ===== If ===== *)
 
 Theorem if_stmt_full_ok:
-  !mods exps cx e ss1 ss2.
+  !cx e ss1 ss2.
     (!s'' tv t s'3' x t'.
        eval_expr cx e s'' = (INL tv,t) /\ push_scope s'3' = (INL x,t') ==>
        body_stmts_full_ok_mods mods exps cx ss1) /\
@@ -249,7 +249,7 @@ QED
 (* The head by its case; the tail by the IH at the environments the
    head's typing and declaration give. *)
 Theorem stmts_cons_full_ok:
-  !mods exps cx s ss.
+  !cx s ss.
     (!s'' x t. eval_stmt cx s s'' = (INL x,t) ==> body_stmts_full_ok_mods mods exps cx ss) /\
     body_stmt_full_ok_mods mods exps cx s ==>
     body_stmts_full_ok_mods mods exps cx (s::ss)

@@ -10,7 +10,7 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem ec_arith_staged_cut:
-  !mods exps bt a e1 e2 cx tops ctx cenv env es ty sa vv sb shadow_sa shadow_sb
+  !bt a e1 e2 cx tops ctx cenv env es ty sa vv sb shadow_sa shadow_sb
     x s1 y s2 shadow_s1 shadow_s2 res shadow_ctx func shadow_func DF lo d
     s0 st0 G0 tn0 marks1 v1 es1 t1 G1 tn1 marks2 v2 es2 t2 G2 tn2 PG.
   (bt = ECAdd \/ bt = ECMul) /\

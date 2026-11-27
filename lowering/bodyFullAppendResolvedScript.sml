@@ -117,7 +117,7 @@ Proof
 QED
 
 Theorem body_append_local_primitive_full:
-  !mods exps cx id e.
+  !cx id e.
     is_word_type (expr_type e) /\
     (!s0 p s1. eval_target_place cx (NameTarget id) s0 = (INL p,s1) ==>
                   body_expr_full_ok_mods mods exps cx e) ==>
@@ -1071,7 +1071,7 @@ QED
 Finalise body_append_local_primitive_full
 
 Theorem body_append_local_word_full:
-  !mods exps cx id e.
+  !cx id e.
     supported_full_word_type (expr_type e) /\
     (!s0 p s1. eval_target_place cx (NameTarget id) s0 = (INL p,s1) ==>
                   body_expr_full_ok_mods mods exps cx e) ==>

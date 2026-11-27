@@ -18,7 +18,6 @@ Libs
 (* The typing contract excludes fixed-byte sources and signed offsets.
    Both simulation proofs use this boundary without narrowing the expression case. *)
 Theorem extract32_full_pre_shape:
-  !mods.
   expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Extract32 t args) es ==>
   ?src off m k bt.
     args = [src;off] /\
@@ -34,7 +33,6 @@ Proof
 QED
 
 Theorem extract32_vv_full[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -533,7 +531,7 @@ QED
 Finalise extract32_vv_full
 
 Theorem extract32_expr_full_ok:
-  !mods exps cx v11 typ es.
+  !cx v11 typ es.
     (!s'' x t.
        type_check (type_builtin_args_length_ok Extract32 (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>

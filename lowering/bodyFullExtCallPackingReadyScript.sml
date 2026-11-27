@@ -29,7 +29,6 @@ Proof
 QED
 
 Theorem extcall_request_packing_ready:
-  !mods exps.
   LENGTH xs = LENGTH vals /\ LENGTH vals = LENGTH argvs /\
   LENGTH argvs = LENGTH arg_types /\ tys = MAP (lowered_value_type cenv) xs /\
   EVERY (assignable_type (get_tenv cx)) arg_types /\

@@ -15,7 +15,6 @@ Ancestors
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem abi_encode_word_vv_full_from_packaging:
-  !mods exps.
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiEncode F mid) ty [e]) es /\

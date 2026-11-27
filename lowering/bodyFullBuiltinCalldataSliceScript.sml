@@ -21,7 +21,7 @@ Libs
   pairLib
 
 Theorem calldata_slice_vv_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
     (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
       body_exprs_full_ok_mods mods exps cx args) /\
     (contract_inv mods exps ctx cenv cx /\
@@ -475,7 +475,7 @@ Proof
 QED
 
 Theorem calldata_slice_expr_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
     (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
       body_exprs_full_ok_mods mods exps cx args) /\
     (contract_inv mods exps ctx cenv cx /\

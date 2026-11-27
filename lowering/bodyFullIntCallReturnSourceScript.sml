@@ -463,7 +463,7 @@ Proof
 QED
 
 Theorem intcall_return_noncompleted:
-  !mods exps DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
    rr prev penv rtv es1 t G tn rc rbs pvs callee entered bb inst lbl arg_ops argv dflts Q.
     (contract_inv mods exps ctx cenv cx /\

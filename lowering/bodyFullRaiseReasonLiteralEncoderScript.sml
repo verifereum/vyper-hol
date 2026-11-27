@@ -29,7 +29,6 @@ Proof
 QED
 
 Theorem reason_literal_encoder_origin_ptr:
-  !mods.
   compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sm) /\
   compile_revert_with_reason cenv
     (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf))

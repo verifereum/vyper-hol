@@ -15,7 +15,6 @@ Ancestors bodyFullSubscriptLocalCutOrigin[qualified,ignore_grammar] abiEncodeArg
   bodyInvSplit[qualified]
 
 Theorem subscript_nocopy_memory_place_select_full:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\

@@ -5,7 +5,7 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem len_full_suffix:
-  !mods DF lo d explicit ctx func PG cenv cx env e es st0 sa sm sb s0
+  !DF lo d explicit ctx func PG cenv cx env e es st0 sa sm sb s0
    G0 tn0 ee tv vv t G tn op pvt tvt.
     expr_body_pre_mods mods cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\
     expr_body_pre_mods mods cenv cx env e es /\ is_sized_type (expr_type e) /\

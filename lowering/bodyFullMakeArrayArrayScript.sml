@@ -17,7 +17,7 @@ Ancestors
 val _ = Parse.hide "base";
 
 Theorem make_array_vv_sim_full_conditional:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann et n args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann et n args es.
     ^(rhs (concl (PURE_REWRITE_RULE [make_array_completed_def]
       make_array_packaging_ok_def))) /\
     (builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH args) ==>

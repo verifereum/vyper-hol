@@ -35,7 +35,7 @@ QED
 
 (* Readiness is supplied by the containing expression at each source state. *)
 Theorem lower_word_args_by_type_sim_full:
-  !mods exps todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx tyf
+  !todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx tyf
     es st0 sa sm shadow_sa shadow_sm xs s0 G0 tn0.
     (!e. tyf (gas_shadow_expr e) = tyf e) /\
     (!e ee. MEM e todo /\ expr_sim_inv_mods mods cenv cx env ee ==>
@@ -362,7 +362,7 @@ Proof
 QED
 
 Theorem lower_word_args_sim_full:
-  !mods exps todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty
+  !todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty
     es st0 sa sm shadow_sa shadow_sm xs s0 G0 tn0.
     (!e ee. MEM e todo /\ expr_sim_inv_mods mods cenv cx env ee ==>
       expr_body_pre_mods mods cenv cx env e ee /\ is_word_type (expr_type e)) /\

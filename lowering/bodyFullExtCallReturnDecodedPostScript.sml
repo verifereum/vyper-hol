@@ -214,7 +214,6 @@ QED
 
 (* Package the witness returned by the decoder before any control-flow join. *)
 Theorem extcall_return_decoded_post:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts) args dflt)
     es /\
   ret_type <> NoneT /\

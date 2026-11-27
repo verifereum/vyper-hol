@@ -10,7 +10,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem raw_call_kwargs_prepared_entry:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
   expr_type a = BaseT AddressT /\ expr_type d = BaseT (BytesT (Dynamic cap)) /\
   post_value_type cenv d = expr_type d /\

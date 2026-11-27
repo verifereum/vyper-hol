@@ -9,7 +9,6 @@ Ancestors
   vyperPlaceTyping vyperValueOperation list
 
 Theorem marked_local_eval_facts[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env e st /\ eval_expr cx e st = (INL pv,st') ==>
   typed_scope_transition st st' /\ state_well_typed st' /\
   eval_result_typed (env,cx,st') pv (Type (expr_type e)) /\
@@ -29,7 +28,6 @@ Proof
 QED
 
 Theorem marked_base_initial_local[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\
   eval_expr cx e (es with gas_obs := gs) = (INL (PlaceR (MemoryPlace id p)),mid) ==>
   ?initial v. lookup_scopes id es.scopes = SOME initial /\
@@ -70,7 +68,6 @@ Proof
 QED
 
 Theorem subscript_local_cut_returned_paths:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et bd /\
   eval_expr cx obj (es with gas_obs := gs1) = (INL (PlaceR (MemoryPlace id path)),mid) /\

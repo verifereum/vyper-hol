@@ -7,7 +7,6 @@ Ancestors
   exprOperandVar externalEntryShape localPtrsProps freshWrites fragExec
 
 Theorem rest_word_full_compile_layout:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
   expr_type e2 = ArrayT (expr_type e1) bd /\

@@ -7,7 +7,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem slice_code_child_full:
-  !mods exps.
   expr_body_pre_mods mods cenv cx env
     (Builtin a (Slice n) [Builtin ct (Acc Code) [addr]; start; len]) es /\
   body_const_cells_agree mods cx env ee /\

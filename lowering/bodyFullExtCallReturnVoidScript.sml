@@ -7,7 +7,7 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem extcall_return_step_void:
-  !mods DF lo d explicit ctx PG func cenv cx env es ann is_static skip fname
+  !DF lo d explicit ctx PG func cenv cx env es ann is_static skip fname
    arg_types ret_type opts args dflt st0 sa sb s0 G0 tn0 sr result_op vv
    addr_op buf_op cap target has_default default_op default_ty default_opt
    returnData ee t G tn.

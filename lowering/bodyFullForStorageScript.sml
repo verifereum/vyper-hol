@@ -374,7 +374,6 @@ QED
 Finalise for_storage_array_nil_core
 
 Theorem for_storage_element_layout:
-  !mods.
   expr_sim_inv_mods mods cenv cx env es /\
   evaluate_type (get_tenv cx) et = SOME tv ==>
   elem_size_in_location cenv (if tr then LocTransient else LocStorage) et =
@@ -397,7 +396,7 @@ QED
 (* Invoke the body at its actual compiler age.  The non-Label fact is
    supplied by the iterator's literal/load compilation, not source typing. *)
 Theorem for_storage_body_invoke_full:
-  !mods exps DF lo d ctx shadow_ctx PG func shadow_func cx RetQ tops bindings env id typ
+  !DF lo d ctx shadow_ctx PG func shadow_func cx RetQ tops bindings env id typ
       tyv v ei body env_b ret_ty bc bc1 sb0 sb1 shadow_sb0 shadow_sb1 st0 s G
       tn idx p lvo k dst len.
     body_stmts_full_ok_mods mods exps cx body /\ (contract_inv mods exps ctx bc cx /\
@@ -751,7 +750,7 @@ QED
 
 (* Interpret the existing copy endpoint; no execution witness is selected here. *)
 Theorem for_storage_copy_body_entry:
-  !mods H D lo d ctx func cx c0 e0 sa0 s0 G0 tn0 ei env id typ tyv v sd st bc sa sb0
+  !H D lo d ctx func cx c0 e0 sa0 s0 G0 tn0 ei env id typ tyv v sd st bc sa sb0
       inst p nb dst n src load u Gu tnu z Gf tnf idx k lvo len.
     expr_sim_inv_mods mods c0 cx env ei /\ ce_locals_declared c0 env /\
     locals_alloc_ok c0 env /\ id NOTIN FDOM env.var_types /\
@@ -1372,7 +1371,7 @@ Finalise for_storage_array_head_prefix_at_prov
 (* Interpret the selected scalar prefix and the counted copy at the same
    endpoints. No observation of the parent array is needed here. *)
 Theorem for_storage_observed_head_from_prefix:
-  !mods exps DF lo d ctx func cx RetQ lctx c0 e0 sa0 s0 G0 tn0 tr slot dst tyv typ
+  !DF lo d ctx func cx RetQ lctx c0 e0 sa0 s0 G0 tn0 tr slot dst tyv typ
    vs len nb id env p idx lvo sd body st0 explicit PG ep exit incr sa st bc
    sb0 inst bop a rs k addr ei s G tn u Gu tnu.
     0 < type_slot_size tyv /\ body_for_full_ok_mods mods exps cx tyv id body vs /\

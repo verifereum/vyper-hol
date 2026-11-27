@@ -14,7 +14,6 @@ Ancestors
 Libs pairLib
 
 Theorem raw_log_topics_operands_shape[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env
     (Call ann RawLog [Builtin a (MakeArray elem bd) topics; data] dflt) es /\
   EVERY (\e. MEM e topics) suffix /\
@@ -66,7 +65,6 @@ Proof
 QED
 
 Theorem raw_log_expr_sim_full:
-  !mods exps.
   (!ce ty e. gas_shadow_compiles (lower_value compile_expr ce ty e)
     (lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e))) /\
   (!ce xs. gas_shadow_compiles (compile_multi_exprs compile_expr ce xs)

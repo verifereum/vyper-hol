@@ -22,7 +22,7 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem compile_for_frag_full:
-  !mods exps cx id typ it n body DF lo d PG tops bindings ctx shadow_ctx func
+  !cx id typ it n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
        tenv = get_tenv cx /\

@@ -7,7 +7,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem calldata_slice_body_operand_full:
-  !mods exps.
   (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
      body_exprs_full_ok_mods mods exps cx args) /\
   (contract_inv mods exps ctx cenv cx /\

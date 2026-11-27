@@ -5,7 +5,6 @@ Ancestors bodyFullBuiltinECAddStagingCore bodyFullBuiltinECArithPointCopy
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem ecadd_staging_full:
-  !mods exps.
   bt = ECAdd /\
   a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\

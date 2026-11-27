@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem env_reads_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (?i. bt = Env i /\ i <> PrevHash /\ i <> MsgGas) /\
     builtin_args_length_ok bt (LENGTH args) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>

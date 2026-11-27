@@ -25,7 +25,6 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem compile_assert_reason_frag_full_from_raise:
-  !mods exps.
   (!cx e DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     body_expr_full_ok_mods mods exps cx e /\
@@ -342,7 +341,7 @@ QED
 Finalise compile_assert_reason_frag_full_from_raise
 
 Theorem compile_assert_reason_frag_full:
-  !mods exps cx e se DF lo d PG tops bindings ctx shadow_ctx func
+  !cx e se DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx se) /\
     body_expr_full_ok_mods mods exps cx e /\

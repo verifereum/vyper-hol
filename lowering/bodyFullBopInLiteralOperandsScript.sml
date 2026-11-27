@@ -13,7 +13,7 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem bop_in_literal_operands_clean_full_halt:
-  !mods exps args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
+  !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
     body_const_cells_agree mods cx env es /\
     expr_body_pre_mods mods cenv cx env
@@ -345,7 +345,7 @@ Proof
 QED
 
 Theorem bop_in_literal_operands_clean_full:
-  !mods exps args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
+  !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
     body_const_cells_agree mods cx env es /\
     expr_body_pre_mods mods cenv cx env
@@ -405,7 +405,7 @@ Proof
 QED
 
 Theorem bop_in_literal_operands_full:
-  !mods exps args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
+  !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
     body_const_cells_agree mods cx env es /\
     expr_body_pre_mods mods cenv cx env

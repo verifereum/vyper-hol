@@ -66,7 +66,7 @@ fun operand_path_no_wrap horizon path =
 (* ===== Leaves ===== *)
 
 Theorem name_expr_full_ok:
-  !mods exps cx ann id. body_expr_full_ok_mods mods exps cx (Name ann id)
+  !cx ann id. body_expr_full_ok_mods mods exps cx (Name ann id)
 Proof
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
   conj_tac >- (Cases_on `is_word_type ann` >>
@@ -75,7 +75,7 @@ Proof
 QED
 
 Theorem toplevel_name_expr_full_ok:
-  !mods exps cx ann nsid. body_expr_full_ok_mods mods exps cx (TopLevelName ann nsid)
+  !cx ann nsid. body_expr_full_ok_mods mods exps cx (TopLevelName ann nsid)
 Proof
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
   conj_tac
@@ -87,7 +87,6 @@ QED
    (compile_expr_def), in runtime and constructor frames alike; the source
    side is exprSimProps' eval_expr_flag_member_gas. *)
 Theorem flag_member_value_full[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env (FlagMember ann nsid mid) es ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (FlagMember ann nsid mid) es
@@ -128,7 +127,6 @@ Proof
 QED
 
 Theorem flag_member_vv_full[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env (FlagMember ann nsid mid) es ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (FlagMember ann nsid mid) es
@@ -176,14 +174,14 @@ Proof
 QED
 
 Theorem flag_member_expr_full_ok:
-  !mods exps cx ann nsid mid. body_expr_full_ok_mods mods exps cx (FlagMember ann nsid mid)
+  !cx ann nsid mid. body_expr_full_ok_mods mods exps cx (FlagMember ann nsid mid)
 Proof
   simp[body_expr_full_ok_def] >> rpt strip_tac >>
   metis_tac[flag_member_value_full, flag_member_vv_full]
 QED
 
 Theorem literal_expr_full_ok:
-  !mods exps cx ann l. body_expr_full_ok_mods mods exps cx (Literal ann l)
+  !cx ann l. body_expr_full_ok_mods mods exps cx (Literal ann l)
 Proof
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `is_word_type ann`
@@ -200,7 +198,7 @@ QED
    to a comparison with each element, so it takes the elements'
    judgments where e1 evaluates and is read. *)
 Theorem bop_in_literal_word_sim_full:
-  !mods exps DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
    e1 a t n elems es.
     (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
     body_expr_full_ok_mods mods exps cx e1 /\
@@ -329,7 +327,7 @@ QED
 
 (* == and != on bytestrings: keccak256 of each operand's bytes. *)
 Theorem bop_bytestring_eqne_sim_full:
-  !mods exps DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
    e1 e2 es.
     (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
     body_exprs_full_ok_mods mods exps cx [e1; e2] /\
@@ -711,7 +709,7 @@ QED
 
 (* Both operands of word_value_type. *)
 Theorem bop_word_sim_full:
-  !mods exps DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
    e1 e2 es.
     word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
     body_exprs_full_ok_mods mods exps cx [e1; e2] /\
@@ -754,7 +752,7 @@ QED
 
 (* == and != on address and bytesN. *)
 Theorem bop_bytes_eq_sim_full:
-  !mods exps DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
    e1 e2 es.
     (bop = Eq \/ bop = NotEq) /\
     (expr_type e1 = BaseT AddressT \/
@@ -1267,7 +1265,7 @@ Finalise bop_bytes_eq_sim_full
 (* The rest, as exprSimBopRestWord's compile_bop_rest_word_case leaves it:
    in and not in on an array of words that is not a literal. *)
 Theorem bop_bytes_sim_full[local]:
-  !mods exps DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
    e1 e2 es.
     (?m. expr_type e1 = BaseT (BytesT (Fixed m))) /\
     MEM bop [And;Or;XOr;ShL;ShR] /\
@@ -1336,7 +1334,7 @@ Proof
 QED
 
 Theorem bop_rest_word_sim_full:
-  !mods exps DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
    e1 e2 es.
     ~((bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1)) /\
     ~((bop = In \/ bop = NotIn) /\ ~is_word_type (expr_type e1)) /\

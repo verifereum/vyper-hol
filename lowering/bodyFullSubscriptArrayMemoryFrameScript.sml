@@ -24,7 +24,6 @@ Proof
 QED
 
 Theorem captured_memory_base_transport:
-  !mods.
   vv_post H ctx func cenv cx obj es sa sb s0 t r
     (LocatedValue (ArrayT et (Fixed n)) p) u /\
   expr_post H ctx func cenv cx idx t sb sc u t' iv iop v /\

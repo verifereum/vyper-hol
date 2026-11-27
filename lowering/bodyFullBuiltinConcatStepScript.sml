@@ -12,7 +12,6 @@ Ancestors bodyFullBuiltinConcatReady bodyFullBuiltinConcatHead
   exprSimHypsDefs[qualified]
 
 Theorem concat_loop_head_entry:
-  !mods.
   concat_loop_ready (e::args) P k DF lo d ctx shadow_ctx PG
     tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
     s0 G0 tn0 dv ov ow binst B bsz oinst ==>
@@ -83,7 +82,6 @@ Proof
 QED
 
 Theorem concat_loop_copy_entry:
-  !mods.
   concat_loop_ready (e::args) P k DF lo d ctx shadow_ctx PG
     tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
     s0 G0 tn0 dv ov ow binst B bsz oinst /\

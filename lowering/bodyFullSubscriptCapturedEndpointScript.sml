@@ -41,7 +41,6 @@ Proof
 QED
 
 Theorem subscript_dynamic_header_at_index:
-  !mods.
   expr_body_pre_mods mods ce cx env (Subscript ty obj idx) es /\
   eval_expr cx obj es = (INL raw,mid) /\
   expr_type obj = ArrayT et (Dynamic cap) /\

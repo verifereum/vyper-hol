@@ -17,7 +17,6 @@ Ancestors
 Libs monadsyntax
 
 Theorem annassign_other_typed_layout:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\ env.type_defs = get_tenv cx /\
   type_widens_to env.type_defs (expr_type e) typ /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\
@@ -106,7 +105,6 @@ Proof
 QED
 
 Theorem annassign_other_typed_full_execution:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\

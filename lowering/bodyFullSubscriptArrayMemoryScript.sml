@@ -105,7 +105,7 @@ Proof
 QED
 
 Theorem subscript_array_framed_memory_full:
-  !mods exps cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et n.
+  !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et n.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
     body_expr_full_ok_mods mods exps cx e1 /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\

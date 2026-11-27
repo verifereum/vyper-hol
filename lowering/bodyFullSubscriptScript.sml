@@ -14,7 +14,7 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem subscript_ih_not_read[local]:
-  !mods exps cx e1 e2.
+  !cx e1 e2.
     (!s'' res t s3 res' t'.
        eval_expr cx e1 s'' = (INL res,t) /\
        (if subscript_reads_base cx e1 e2 then
@@ -29,7 +29,6 @@ Proof
 QED
 
 Theorem subscript_value_base_type:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Subscript ann obj idx) es /\
   place_type cenv obj = ValPT bt ==>
   bt = expr_type obj
@@ -50,7 +49,7 @@ Proof
 QED
 
 Theorem subscript_expr_full_ok_from_place_base:
-  !mods exps cx v8 e1 e2.
+  !cx v8 e1 e2.
     (!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
        (!s'' res t s3 res' t'.
           eval_expr cx e1 s'' = (INL res,t) /\

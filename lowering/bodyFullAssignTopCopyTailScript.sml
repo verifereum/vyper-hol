@@ -111,7 +111,6 @@ Proof
 QED
 
 Theorem assign_slots_sparse_stmt_post[local]:
-  !mods.
   expr_sim_inv_mods mods cenv cx env ee /\
   stmt_state_rel H ctx func cenv cx ee s /\
   MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
@@ -353,7 +352,6 @@ QED
 (* The runtime copy may use a smaller source layout when both layouts have
    identical live encodings. The storage relation uses the declared layout. *)
 Theorem body_assign_slots_full_layout_frame_path:
-  !mods.
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
   (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
@@ -510,7 +508,6 @@ QED
 Finalise body_assign_slots_full_layout_frame_path
 
 Theorem body_assign_slots_full_frame_path:
-  !mods.
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
   (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
@@ -571,7 +568,6 @@ Proof
 QED
 
 Theorem body_assign_slots_positive_endpoint_post:
-  !mods.
   expr_sim_inv_mods mods cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
   ghost_inv_at D lo d cenv cx ee G tn s /\ dead_lo_ok H D lo cenv cx /\
   MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\

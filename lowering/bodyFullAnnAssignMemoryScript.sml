@@ -28,7 +28,6 @@ Ancestors
 (* The physical source footprint is positive and fits in the destination;
    its runtime type is not identified with the destination runtime type. *)
 Theorem annassign_memory_full_source_layout[local]:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\
   type_widens_to env.type_defs (expr_type e) typ /\
   (expr_type e = typ \/ is_bytestring_type typ) /\
@@ -473,7 +472,7 @@ Finalise annassign_memory_full_raw_rhs_from_entry
 (* Keep the physical frontier and unwrap origin at the very endpoint used by
    the successful source read.  The value-only judgment forgets these fields. *)
 Theorem annassign_memory_full_physical_rhs_from_entry[local]:
-  !mods DF lo d PG ctx shadow_ctx func shadow_func old ce cx es id typ e
+  !DF lo d PG ctx shadow_ctx func shadow_func old ce cx es id typ e
    sa r a b shadow_a shadow_b p sz op s0 G0 tn0 lctx st0 w entry Ga tna env.
     declare_local old id typ sa = (ce,r) /\ old.ce_alloca_locals /\
     FLOOKUP old.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
@@ -861,7 +860,6 @@ Finalise annassign_memory_full_physical_rhs_from_entry
 (* Complete consumer boundary.  Dispatch and installation are the two literal
    universal contracts; RHS induction is supplied for the declared environment. *)
 Theorem annassign_memory_full_execution:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   expr_body_pre_mods mods cenv cx env e es /\

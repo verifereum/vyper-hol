@@ -11,7 +11,7 @@ Ancestors
   vyperInterpreter vyperState venomState venomInst list finite_map
 
 Theorem len_ctor_header_clean[local]:
-  !mods cenv cx env e es pvt tvt v a tn t.
+  !cenv cx env e es pvt tvt v a tn t.
     expr_body_pre_mods mods cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\
     is_sized_type (expr_type e) /\
     type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e) /\
@@ -46,7 +46,7 @@ Proof
 QED
 
 Theorem len_full_suffix_ctor:
-  !mods DF lo d explicit ctx func PG cenv cx env e es st0 sa sm sb s0
+  !DF lo d explicit ctx func PG cenv cx env e es st0 sa sm sb s0
    G0 tn0 ee tv vv t G tn op pvt tvt.
     cenv.ce_is_ctor /\
     (case vv_location vv of NONE => LocMemory | SOME l => l) = LocCode /\

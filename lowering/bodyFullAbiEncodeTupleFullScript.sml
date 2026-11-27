@@ -5,7 +5,7 @@ Ancestors
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 
 Theorem abi_encode_tuple_vv_full_from_packaging:
-  !mods exps tops ctx ce cx env ann ensure mid ty args es DF lo d shadow_ctx PG func shadow_func cty.
+  !tops ctx ce cx env ann ensure mid ty args es DF lo d shadow_ctx PG func shadow_func cty.
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\

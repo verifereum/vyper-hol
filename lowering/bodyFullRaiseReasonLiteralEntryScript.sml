@@ -11,7 +11,6 @@ Ancestors
   exprSimHypsDefs stmtLowering exprLowering context compileEnv list
 
 Theorem reason_literal_entry_source_family:
-  !mods.
   compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sb) /\
   expr_body_pre_mods mods cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -117,7 +116,6 @@ QED
 Finalise reason_literal_entry_source_family
 
 Theorem reason_literal_message_full_entry:
-  !mods.
   compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sb) /\
   expr_body_pre_mods mods cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\

@@ -7,7 +7,6 @@ Ancestors
   bodyFullPredsMods[qualified]
 
 Theorem rest_word_full_second_entry:
-  !mods' exps.
   expr_body_pre_mods mods' cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   body_const_cells_agree mods cx env es /\
   body_exprs_full_ok_mods mods' exps cx [e1;e2] /\
@@ -48,7 +47,6 @@ Proof
 QED
 
 Theorem rest_word_full_array_read:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
   expr_type e2 = ArrayT (expr_type e1) bd /\

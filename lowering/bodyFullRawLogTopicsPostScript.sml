@@ -8,7 +8,6 @@ Ancestors
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem raw_log_topics_ghost_cons[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env
     (Call ann RawLog
       [Builtin a (MakeArray elem bd) (pre ++ e::rest); data] dflt) es /\
@@ -55,7 +54,7 @@ QED
 (* The successful cons case, with the suffix post expanded so its one
    endpoint and all frame/ghost anchors are visible to the consumer. *)
 Theorem raw_log_topics_post_cons:
-  !mods exps tops ctx func cenv cx env ann n pre e rest data dflt
+  !tops ctx func cenv cx env ann n pre e rest data dflt
    sa sm sb shadow_sa shadow_sm shadow_sb op ops
    H DF lo d es s G0 tn0 xs mid v u G1 tn1 ys ee vs t G tn.
   (contract_inv mods exps ctx cenv cx /\

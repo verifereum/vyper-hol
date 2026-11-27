@@ -12,7 +12,7 @@ Ancestors
   stmtSimProps gasExemptCert vyperStorageTrace vyperStorageFootprint
 
 Theorem keccak_vv_sim_full:
-  !mods DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann e es.
+  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann e es.
     expr_body_pre_mods mods cenv cx env (Builtin ann Keccak256 [e]) es /\
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx (expr_type e) e es ==>

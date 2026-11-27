@@ -26,7 +26,6 @@ Proof
 QED
 
 Theorem raw_call_source_inv_facts:
-  !mods.
   expr_sim_inv_mods mods cenv cx env es ==>
   IS_SOME es.outcomes /\ outcomes_accounts_typed es.outcomes /\
   accounts_runtime_well_typed es.accounts
@@ -190,7 +189,6 @@ end
 (* After evaluating its input, either lowering uses the same call and result
    continuation. The input range can come from ALLOCA or DALLOCA. *)
 Theorem raw_call_continuation_full:
-  !mods.
   expr_has_effect e /\ post_value_type cenv e = expr_type e /\
   lowered_value_type cenv e = expr_type e /\
   expr_type e = raw_call_return_type flags /\ type_alloc_ok cenv (expr_type e) /\
@@ -1191,7 +1189,6 @@ QED
 
 (* Finish the checked source action from the prepared operand boundary. *)
 Theorem raw_call_prepared_action_full:
-  !mods.
   expr_body_pre_mods mods cenv cx env
     (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE) es /\
   lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
@@ -1452,7 +1449,6 @@ QED
 Finalise raw_call_prepared_action_full
 
 Theorem raw_call_expr_vv_full:
-  !mods exps.
   body_exprs_full_ok_mods mods exps cx args /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\

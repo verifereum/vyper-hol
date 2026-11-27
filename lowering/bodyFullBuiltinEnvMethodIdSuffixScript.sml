@@ -16,7 +16,6 @@ Ancestors
   bodyInvSplit[qualified]
 
 Theorem method_id_runtime_full_suffix:
-  !mods exps.
  !DF lo d explicit ctx func PG tops cenv cx env ann e es sa sm sb s0 st0 mid v x s G0 tn0 G tn fixed op.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\

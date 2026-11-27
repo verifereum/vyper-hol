@@ -4,7 +4,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem abi_decode_body_caller_success_horizons:
-  !mods.
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
   (!H. V H ==> expr_post H ctx func ce cx e es sa start s0 es1 (BytesV bs) data s) /\
   (?H. V H) /\

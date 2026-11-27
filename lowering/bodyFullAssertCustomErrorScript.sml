@@ -16,7 +16,7 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem compile_assert_custom_frag_full_from_raise:
-  !mods exps cx e err DF lo d PG tops bindings ctx shadow_ctx func
+  !cx e err DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_stmt_full_ok_mods mods exps cx (Raise (RaiseCustomError err))) /\
     body_expr_full_ok_mods mods exps cx e /\

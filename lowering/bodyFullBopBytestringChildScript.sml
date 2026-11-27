@@ -4,7 +4,6 @@ Ancestors bodyFullBopBytestringHash bodySimFull gasShadow gasShadowState
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem bop_bytestring_selected_child_full_halt:
-  !mods exps.
   (case bytestring_literal_hash e of
      NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e) e sa))
        (SND (lower_value compile_expr cenv (expr_type e) e sa))
@@ -84,7 +83,6 @@ Proof
 QED
 
 Theorem bop_bytestring_selected_child_full:
-  !mods exps.
   (case bytestring_literal_hash e of
      NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e) e sa))
        (SND (lower_value compile_expr cenv (expr_type e) e sa))

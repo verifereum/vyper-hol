@@ -22,7 +22,7 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem attribute_vv_sim_full:
-  !mods DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann obj fld es.
+  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann obj fld es.
     expr_body_pre_mods mods cenv cx env (Attribute ann obj fld) es /\
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty obj es ==>
@@ -380,7 +380,7 @@ Finalise attribute_vv_sim_full
 
 
 Theorem attribute_expr_full_ok:
-  !mods exps cx v9 e id. body_expr_full_ok_mods mods exps cx e ==> body_expr_full_ok_mods mods exps cx (Attribute v9 e id)
+  !cx v9 e id. body_expr_full_ok_mods mods exps cx e ==> body_expr_full_ok_mods mods exps cx (Attribute v9 e id)
 Proof
   rpt gen_tac >> strip_tac >>
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>

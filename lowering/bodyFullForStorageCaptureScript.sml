@@ -54,7 +54,6 @@ Proof
 QED
 
 Theorem for_storage_iterator_capture:
-  !mods.
   expr_body_pre_mods mods c cx env e es /\
   eval_expr cx e es = (INL (PlaceR (StoragePlace tr slot (ArrayTV et bd))),ee) /\
   valid_horizon cx st0 H ee.storage_trace /\
@@ -109,7 +108,6 @@ QED
 (* This is the successful slot branch of the full expression post. Its
    operand may have been computed by a subscript or a field selection. *)
 Theorem for_storage_iterator_operand:
-  !mods.
   expr_body_pre_mods mods c cx env e es /\
   eval_expr cx e es = (INL (PlaceR (StoragePlace tr slot (ArrayTV et bd))),ee) /\
   vv_post H ctx func c cx e es sa sb s0 ee

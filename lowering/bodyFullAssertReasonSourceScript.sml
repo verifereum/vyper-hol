@@ -46,7 +46,6 @@ QED
 
 (* Only the actual condition trace can activate the conditional reason IH. *)
 Theorem assert_reason_false_source_ready:
-  !mods exps.
   (!s tv t. eval_expr cx e s = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx r) /\
   expr_body_pre_mods mods cenv cx env e es /\
   ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
@@ -119,7 +118,6 @@ Proof
 QED
 
 Theorem assert_reason_condition_source_pre:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assert e (AssertReason r)) /\

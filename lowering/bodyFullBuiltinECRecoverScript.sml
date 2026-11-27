@@ -26,7 +26,7 @@ Libs
   monadsyntax
 
 Theorem ecrecover_expr_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
     (builtin_args_length_ok ECRecover (LENGTH args) ==>
       body_exprs_full_ok_mods mods exps cx args) /\
     (contract_inv mods exps ctx cenv cx /\
@@ -1340,7 +1340,7 @@ Proof
 QED
 
 Theorem ecrecover_builtin_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
     (builtin_args_length_ok ECRecover (LENGTH args) ==>
       body_exprs_full_ok_mods mods exps cx args) /\
     (contract_inv mods exps ctx cenv cx /\

@@ -13,7 +13,6 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem modular_sim_full_from_suffix:
-  !mods exps.
   (!DF lo explicit ctx func PG d cenv cx st0 ee sm sb bt x y z op t G1 tn1 ann ts (va:bytes32) (vb:bytes32) (vc:bytes32).
     (bt = AddMod \/ bt = MulMod) /\
     (if bt = AddMod then compile_addmod else compile_mulmod) x y z sm = (op,sb) /\

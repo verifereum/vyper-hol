@@ -155,7 +155,6 @@ Proof
 QED
 
 Theorem intcall_return_type_facts:
-  !mods exps.
  !tops ctx func cenv cx tenv ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn v.
  (contract_inv mods exps ctx cenv cx /\
@@ -186,7 +185,6 @@ QED
 
 (* Typed interpretation of the words in the selected return buffer. *)
 Theorem intcall_return_register_type_facts:
-  !mods exps.
  !tops ctx func cenv cx tenv ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn rc rbs pvs v.
  (contract_inv mods exps ctx cenv cx /\
@@ -252,7 +250,6 @@ QED
 Finalise intcall_return_register_type_facts
 
 Theorem intcall_return_register_value_certificate:
-  !mods exps.
  !tops ctx func cenv cx tenv ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
   rc rbs pvs v ee Gc tc ir cs returned out outs rbuf root off st4 stored Gs ts.

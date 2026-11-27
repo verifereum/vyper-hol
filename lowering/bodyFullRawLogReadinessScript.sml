@@ -7,7 +7,6 @@ Ancestors
   bodyFullPredsMods[qualified]
 
 Theorem raw_log_full_children_ready:
-  !mods exps.
   body_exprs_full_ok_mods mods exps cx
     [Builtin ann (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
      data] /\ LENGTH topics <= n ==>
@@ -41,7 +40,6 @@ Proof
 QED
 
 Theorem raw_log_full_data_reached_ready:
-  !mods exps.
   expr_body_pre_mods mods cenv cx env
     (Call ann RawLog
       [Builtin a (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;

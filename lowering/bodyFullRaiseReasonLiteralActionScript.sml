@@ -17,7 +17,7 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem compile_raise_reason_literal_frag_full_action:
-  !mods exps cx ml str DF lo d PG tops bindings ctx shadow_ctx func
+  !cx ml str DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es shadow_m.
     body_expr_full_ok_mods mods exps cx (Literal (BaseT (StringT ml)) (StringL str)) /\
     (contract_inv mods exps ctx cenv cx /\

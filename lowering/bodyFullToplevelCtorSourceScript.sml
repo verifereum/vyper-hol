@@ -4,7 +4,6 @@ Ancestors
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem toplevel_ctor_source_contract:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_body_pre_mods mods cenv cx env (TopLevelName ann (cenv.ce_module,id)) es /\

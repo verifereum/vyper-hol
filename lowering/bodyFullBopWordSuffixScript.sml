@@ -10,7 +10,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem bop_word_suffix_inputs[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   ptr_val_ok cx (expr_type e1) v1 x G1 tn1 t /\
   ptr_val_ok cx (expr_type e2) v2 y G2 tn2 u /\
@@ -27,7 +26,6 @@ Proof
 QED
 
 Theorem bop_suffix_full_halt:
-  !mods.
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
@@ -216,7 +214,6 @@ QED
 Finalise bop_suffix_full_halt
 
 Theorem bop_suffix_full:
-  !mods.
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
@@ -323,7 +320,6 @@ Proof
 QED
 
 Theorem bop_word_suffix_full_halt:
-  !mods.
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
@@ -432,7 +428,6 @@ Proof
 QED
 
 Theorem bop_word_suffix_full:
-  !mods.
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\

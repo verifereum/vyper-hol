@@ -16,7 +16,6 @@ Ancestors
   bodyInvSplit[qualified]
 
 Theorem immutable_target_array_tail:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ cenv.ce_is_ctor /\ cenv.ce_module = NONE /\
   expr_sim_inv_mods mods cenv cx env ee /\ ee.gas_obs = [] /\

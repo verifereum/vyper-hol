@@ -35,7 +35,6 @@ fun use_ifexp_child child =
   metis_tac[];
 
 Theorem ifexp_expr_full_ok_from_root[local]:
-  !mods exps.
   (!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     (!e. (e = a \/ e = b) ==>
@@ -173,7 +172,7 @@ Finalise ifexp_expr_full_ok_from_root
 (* body_inv and expr_body_pre, the word agreement by the contrapositive of
    post_value_type_nonword. *)
 Theorem ifexp_expr_full_ok:
-  !mods exps cx v5 e1 e2 e3.
+  !cx v5 e1 e2 e3.
     (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
     (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx e3) /\
     body_expr_full_ok_mods mods exps cx e1 ==>

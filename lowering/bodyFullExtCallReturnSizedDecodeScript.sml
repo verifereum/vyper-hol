@@ -10,7 +10,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem extcall_return_sized_decode:
-  !mods.
   (!H0 ce env sf ty tv v ctx func cenv cx es st en source hi pos output
     B L xs p d dstid live ceiling s G tn lo PG.
     abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es

@@ -8,7 +8,6 @@ Ancestors
   immutableDeployAssignFacts vyperTypeEnv vyperTypeInitialState finite_map alist
 
 Theorem immutable_target_write_entry:
-  !mods.
   expr_sim_inv_mods mods ce cx env mid /\ target_indices_pre ce cx env bt /\
   type_place_target env bt = SOME (Type ty) /\
   call_evaluation_safe cx (int_calls_target bt) /\
@@ -47,7 +46,6 @@ Proof
 QED
 
 Theorem immutable_target_write_root:
-  !mods.
   immutable_root cx bt /\
   target_root bt = TopLevelNameTarget (NONE,id) /\
   eval_target_place cx bt es = (INL (ImmutablePlace NONE name path),ee) /\

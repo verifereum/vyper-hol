@@ -9,7 +9,7 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem env_family_bad_arity_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i /\ i <> MsgGas) \/
      (?i. bt = Acc i) \/ bt = BlockHash \/ bt = BlobHash \/ bt = MethodId) /\
     ~builtin_args_length_ok bt (LENGTH args) /\
@@ -31,7 +31,7 @@ Proof
 QED
 
 Theorem env_item_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (?i. bt = Env i /\ i <> MsgGas) /\
     builtin_args_length_ok bt (LENGTH args) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>

@@ -8,7 +8,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem raw_log_fixed_child_tail_input:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Call ann RawLog args dflt) es0 /\
   MEM data args /\ expr_sim_inv_mods mods cenv cx env es /\
   bind (eval_expr cx data) (read_result cx)

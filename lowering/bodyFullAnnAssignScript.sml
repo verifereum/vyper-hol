@@ -41,7 +41,6 @@ Proof
 QED
 
 Theorem annassign_full_declared_rhs_pre:
-  !mods exps.
   body_stmt_safe tops (AnnAssign id typ e) /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ supported_expr tops e /\
@@ -68,7 +67,6 @@ Proof
 QED
 
 Theorem annassign_word_full_source:
-  !mods exps.
   (!tenv s'' tyv t.
     tenv = get_tenv cx /\
     lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
@@ -122,7 +120,7 @@ fun annassign_rhs_sim_tac g =
 
 (* A word local. *)
 Theorem body_annassign_word_full:
-  !mods exps cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
@@ -211,7 +209,7 @@ QED
 
 (* A memory local whose source is stored at its own layout. *)
 Theorem body_annassign_memory_full:
-  !mods exps cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
@@ -289,7 +287,7 @@ QED
 
 (* A memory local whose source is a widened aggregate. *)
 Theorem body_annassign_widened_full:
-  !mods exps cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
@@ -361,7 +359,7 @@ QED
 
 (* Any other declared type. *)
 Theorem body_annassign_other_full:
-  !mods exps cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =

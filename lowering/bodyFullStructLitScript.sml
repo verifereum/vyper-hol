@@ -381,7 +381,7 @@ Proof
 QED
 
 Theorem structlit_fields_cons_continuation[local]:
-  !mods inv'. inv' = (\H ee cs G tn s cells off.
+  !inv'. inv' = (\H ee cs G tn s cells off.
     stmt_state_rel H ctx func ce cx ee s /\
     storage_well_formed_on cx ee (FST H) /\
     ghost_inv_at (DF H) lo d ce cx ee G tn s /\
@@ -486,7 +486,7 @@ Proof
 QED
 
 Theorem structlit_fields_bundled_full:
-  !mods exps inv'. inv' = (\H ee cs G tn s cells off.
+  !inv'. inv' = (\H ee cs G tn s cells off.
     stmt_state_rel H ctx func ce cx ee s /\
     storage_well_formed_on cx ee (FST H) /\
     ghost_inv_at (DF H) lo d ce cx ee G tn s /\
@@ -1404,7 +1404,7 @@ Proof
 QED
 
 Theorem structlit_allocated_fields_bundled_full[local]:
-  !mods exps ctx func ce cx DF lo d es sa s0 G0 tn0 pure root w tvs inv'
+  !ctx func ce cx DF lo d es sa s0 G0 tn0 pure root w tvs inv'
     shadow_ctx shadow_func PG env st0 nsid fs tys sm sb shadow_sm shadow_sb
     out t G tn.
   inv' = (\H ee cs G tn s cells off.
@@ -1579,7 +1579,7 @@ Proof
 QED
 
 Theorem structlit_vv_sim_full[local]:
-  !mods exps cx v7 src_id_opt id kes DF lo d PG tops ctx shadow_ctx func shadow_func
+  !cx v7 src_id_opt id kes DF lo d PG tops ctx shadow_ctx func shadow_func
      cenv env ty es.
     body_exprs_full_ok_mods mods exps cx (MAP SND kes) /\
     (contract_inv mods exps ctx cenv cx /\
@@ -1781,7 +1781,7 @@ Proof
 QED
 
 Theorem structlit_expr_full_ok:
-  !mods exps cx v7 src_id_opt id kes.
+  !cx v7 src_id_opt id kes.
     (!ks. ks = MAP FST kes ==> body_exprs_full_ok_mods mods exps cx (MAP SND kes)) ==>
     body_expr_full_ok_mods mods exps cx (StructLit v7 (src_id_opt,id) kes)
 Proof

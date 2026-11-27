@@ -14,7 +14,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem ec_arith_vv_from_tail_full:
-  !mods exps.
   (!bt a e1 e2 cx tops ctx cenv env es ty sa vv sb shadow_sa shadow_sb
     x s1 y s2 shadow_s1 shadow_s2 res shadow_ctx func shadow_func DF lo
     d PG s0 st0 G0 tn0 marks1 v1 es1 t1 G1 tn1 marks2 v2 es2 t2 G2 tn2.
@@ -429,7 +428,7 @@ QED
 Finalise ec_arith_vv_from_tail_full
 
 Theorem ec_arith_builtin_vv_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (bt = ECAdd \/ bt = ECMul) /\
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
     (contract_inv mods exps ctx cenv cx /\
@@ -535,7 +534,7 @@ Proof
 QED
 
 Theorem ec_arith_builtin_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (bt = ECAdd \/ bt = ECMul) /\
     (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
     (contract_inv mods exps ctx cenv cx /\

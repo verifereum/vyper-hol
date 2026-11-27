@@ -11,7 +11,6 @@ Libs
 (* Join the source replay to the saved physical row without widening
    the value's memory layout to that of the formal parameter. *)
 Theorem post_gas_row_type_facts[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env e ee /\
   env.type_defs = get_tenv cx /\
   value_runtime_typed env (lowered_value_type cenv e) v /\
@@ -75,7 +74,6 @@ Proof
 QED
 
 Theorem post_gas_indexed_rows:
-  !mods.
   env.type_defs = get_tenv cx /\ expr_sim_inv_mods mods cenv cx env pos /\
   (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
   LIST_REL (\e v. value_runtime_typed env (lowered_value_type cenv e) v) xs vs /\
@@ -169,7 +167,6 @@ Proof
 QED
 
 Theorem post_gas_encoding_plans[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env ee /\
   EVERY (assignable_type (get_tenv cx)) tys /\
@@ -210,7 +207,6 @@ Proof
 QED
 
 Theorem post_gas_call_signature[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) (addr::tail) dr) es /\
   env.type_defs = get_tenv cx /\ xs = TAKE (LENGTH ats) tail ==>
@@ -231,7 +227,6 @@ Proof
 QED
 
 Theorem post_gas_lowered_assignable[local]:
-  !mods.
   env.type_defs = get_tenv cx /\ expr_sim_inv_mods mods cenv cx env pos /\
   (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
   LIST_REL (\e v. value_runtime_typed env (lowered_value_type cenv e) v) xs vs /\
@@ -319,7 +314,7 @@ QED
 
 (* Both typings come from the same successful source replay. *)
 Theorem post_gas_replay_typed[local]:
-  !mods xs pos vs ee.
+  !xs pos vs ee.
     expr_sim_inv_mods mods cenv cx env pos /\
     (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
     eval_exprs cx xs pos = (INL vs,ee) ==>
@@ -359,7 +354,6 @@ Proof
 QED
 
 Theorem post_gas_default_packet[local]:
-  !mods.
   env.type_defs = get_tenv cx /\ expr_sim_inv_mods mods cenv cx env kw_in /\
   (!e st. MEM e kw_es /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
   eval_exprs cx kw_es kw_in = (INL kws,ke) /\
@@ -527,7 +521,6 @@ QED
 (* Keyword selection returns either an unwrapped child operand or the
    buffer operand produced by materializing a nonword default. *)
 Theorem post_gas_kwarg_not_label[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\ expr_type e = ext_call_kw_type rt k /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,dt),sb) ==>
   !l. op <> Label l
@@ -553,7 +546,7 @@ Proof
 QED
 
 Theorem post_gas_kwargs_not_label[local]:
-  !mods opts es sa vo go def sb.
+  !opts es sa vo go def sb.
     (!e. MEM e es ==> expr_body_pre_mods mods cenv cx env e pre) /\
     MAP expr_type es = MAP (ext_call_kw_type rt) opts /\
     compile_ext_call_kwargs compile_expr cenv rt opts es sa = ((vo,go,def),sb) ==>
@@ -578,7 +571,6 @@ QED
 
 (* Assemble the request from the saved rows and the actual operand path. *)
 Theorem extcall_request_post_gas_packing:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_body_pre_mods mods cenv cx env

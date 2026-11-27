@@ -11,7 +11,7 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem for_array_prepared_expr_cut_frag_full:
-  !mods exps cx id typ e n loop_body DF lo d PG tops ctx shadow_ctx func
+  !cx id typ e n loop_body DF lo d PG tops ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
   (!tenv s'' tyv t s'3' vs t' s'4' x t''.
      tenv = get_tenv cx /\

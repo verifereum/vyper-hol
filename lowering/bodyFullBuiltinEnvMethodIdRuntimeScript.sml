@@ -14,7 +14,6 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
 Libs pairLib
 
 Theorem method_id_runtime_joint_outcome_from_suffix:
-  !mods exps.
   (!DF lo d explicit ctx func PG tops cenv cx env ann e es sa sm sb s0 st0 mid v x s G0 tn0 G tn fixed op.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -230,7 +229,6 @@ QED
 Finalise method_id_runtime_joint_outcome_from_suffix
 
 Theorem method_id_runtime_sim_full_from_suffix:
-  !mods exps.
   (!DF lo d explicit ctx func PG tops cenv cx env ann e es sa sm sb s0 st0 mid v x s G0 tn0 G tn fixed op.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\

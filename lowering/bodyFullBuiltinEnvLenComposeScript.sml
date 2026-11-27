@@ -11,7 +11,6 @@ Ancestors
   vyperInterpreter vyperState venomState venomInst list finite_map
 
 Theorem len_full_compose:
-  !mods.
   (!DF lo d explicit ctx func PG cenv cx env e es st0 sa sm sb s0
     G0 tn0 ee tv vv t G tn op pvt tvt.
     expr_body_pre_mods mods cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\

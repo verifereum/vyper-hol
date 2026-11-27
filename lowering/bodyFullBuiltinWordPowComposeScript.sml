@@ -13,7 +13,6 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem pow_mod256_sim_full_from_suffix:
-  !mods exps.
   (!DF lo explicit ctx func PG d cenv cx st0 ee sm sb x y op t G1 tn1 ann ts (va:bytes32) (vb:bytes32).
     compile_pow_mod256 x y sm = (op,sb) /\
     eval_operand x t = SOME va /\ eval_operand y t = SOME vb /\

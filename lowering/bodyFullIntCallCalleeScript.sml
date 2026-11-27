@@ -559,7 +559,6 @@ Proof
 QED
 
 Theorem intcall_callee_locked_body[local]:
-  !mods exps.
   gas_admissible (intcall_rest cx name mut nr ss prev rtv)
     expr_vv_res_ok es /\
   ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
@@ -2538,7 +2537,6 @@ Proof
 QED
 
 Theorem intcall_callee_expr_inv_singleton[local]:
-  !mods exps.
   (contract_inv mods exps ctx caller cx /\
      module_body_inv mods caller.ce_module tops caller cx) /\ body_inv tops ctx body_ce (cx with stk updated_by CONS (NONE,name)) /\
   expr_sim_inv_mods mods caller cx tenv (es with scopes := prev) /\
@@ -2601,7 +2599,6 @@ QED
 (* This interface separates source typing and the paired body compiler
    from the execution that reaches the body. The return frame is abstract. *)
 Theorem intcall_callee_locked_body_ready:
-  !mods exps.
   (contract_inv mods exps ctx caller cx /\
      module_body_inv mods caller.ce_module tops caller cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -2804,7 +2801,6 @@ Proof
 QED
 
 Theorem intcall_callee_locked_body_frag[local]:
-  !mods exps.
   (contract_inv mods exps ctx caller cx /\
      module_body_inv mods caller.ce_module tops caller cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -2860,7 +2856,6 @@ QED
 (* Apply the checked paired body fragments at the successful lock landing.
    RetQ is supplied by the caller of this lemma, not chosen by the body. *)
 Theorem intcall_callee_locked_body_outcome[local]:
-  !mods exps.
   (contract_inv mods exps ctx caller cx /\
      module_body_inv mods caller.ce_module tops caller cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -2963,7 +2958,6 @@ QED
 (* A caller-selected observation at the successful lock landing.  The full
    simulation retains its own postconditions; Run only observes the cut. *)
 Theorem intcall_callee_locked_body_outcome_with:
-  !mods exps.
   (contract_inv mods exps ctx caller cx /\
      module_body_inv mods caller.ce_module tops caller cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -3420,7 +3414,6 @@ Proof
 QED
 
 Theorem intcall_callee_buffered_return_relayout[local]:
-  !mods exps.
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\ same_frame ce cenv /\
   expr_sim_inv_mods mods cenv cx env es /\
@@ -3644,7 +3637,6 @@ Proof
 QED
 
 Theorem intcall_callee_buffered_frame_ret[local]:
-  !mods exps.
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\ lo <= w2n bw /\
@@ -3682,7 +3674,6 @@ Proof
 QED
 
 Theorem intcall_callee_frame_return[local]:
-  !mods exps.
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
@@ -4375,7 +4366,7 @@ fun intcall_locked_body_outcome_tac th =
 (* The entry proof also exposes the locked-body landing to an independent
    observation. The full outcome does not depend on that observation. *)
 Theorem intcall_callee_full_with_prefix:
-  !mods exps B Run Out DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
+  !B Run Out DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
    G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
    rbs pvs dflts.
     (contract_inv mods exps ctx cenv cx /\
@@ -6801,7 +6792,7 @@ Proof
 QED
 
 Theorem intcall_callee_full:
-  !mods exps DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
+  !DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
    G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
    rbs pvs dflts.
     (contract_inv mods exps ctx cenv cx /\

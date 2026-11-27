@@ -3,13 +3,13 @@ Ancestors bodyFullPreds
   bodyFullPredsMods[qualified]
 
 Theorem body_exprs_full_ok_nil:
-  !mods exps cx. body_exprs_full_ok_mods mods exps cx [] = T
+  !cx. body_exprs_full_ok_mods mods exps cx [] = T
 Proof
   simp[CONJUNCT1 body_exprs_full_ok_def]
 QED
 
 Theorem body_exprs_full_ok_cons:
-  !mods exps cx e es.
+  !cx e es.
     body_exprs_full_ok_mods mods exps cx (e::es) =
       (body_expr_full_ok_mods mods exps cx e /\
        ((?s tv t s1 v t1.

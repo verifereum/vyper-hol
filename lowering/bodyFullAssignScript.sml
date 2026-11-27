@@ -252,7 +252,6 @@ val _ = Parse.hide "body";
    the scalar operand used by the joint tail. *)
 
 Theorem body_assign_local_word_full_rhs[local]:
-  !mods.
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
     (stmt_res_ok lctx) es /\ expr_body_pre_mods mods cenv cx env e es /\
   FLOOKUP env.var_types id = SOME (expr_type e) /\
@@ -303,7 +302,6 @@ QED
 (* A single RHS endpoint is extended by the same scalar store at every horizon. *)
 
 Theorem body_assign_local_word_full_continue[local]:
-  !mods exps.
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e) sa = (cenv,sb) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
@@ -461,7 +459,7 @@ QED
 
 (* A word local. *)
 Theorem body_assign_local_word_full:
-  !mods exps cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx (NameTarget id)) /\
@@ -586,7 +584,6 @@ Proof
 QED
 
 Theorem body_assign_widened_success_resources[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   expr_body_pre_mods mods cenv cx env e es /\ supported_expr tops e /\
@@ -737,7 +734,7 @@ Proof
 QED
 
 Theorem body_assign_widened_layout_ready[local]:
-  !mods exps cx id ty e tops bindings ctx cenv env env' ret_ty es.
+  !cx id ty e tops bindings ctx cenv env env' ret_ty es.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
@@ -783,7 +780,7 @@ QED
 
 (* A memory local whose source has a widened physical layout. *)
 Theorem body_assign_local_widened_full:
-  !mods exps cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx (NameTarget id)) /\
@@ -1354,7 +1351,6 @@ Proof
 QED
 
 Theorem body_assign_toplevel_word_full_after_rhs_frame[local]:
-  !mods.
   ~cx.txn.is_static /\ get_module_code cx src = SOME tops /\
   find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id_str) /\
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -1462,7 +1458,6 @@ QED
 
 (* Instantiate the RHS judgment in the paired Assign frame. *)
 Theorem body_assign_toplevel_word_full_framed_frame[local]:
-  !mods.
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx (expr_type e) e es /\ expr_body_pre_mods mods cenv cx env e es /\
   get_module_code cx NONE = SOME tops /\
@@ -1603,7 +1598,7 @@ QED
 
 (* A scalar top-level variable. *)
 Theorem body_assign_toplevel_word_full:
-  !mods exps cx nsid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx nsid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx (TopLevelNameTarget nsid)) /\
@@ -1646,7 +1641,6 @@ Proof
 QED
 
 Theorem body_assign_toplevel_copy_after_rhs_frame[local]:
-  !mods.
   get_module_code cx src = SOME tops /\
   find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id_str) /\
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -1909,7 +1903,6 @@ QED
 Finalise body_assign_toplevel_copy_after_rhs_frame
 
 Theorem body_assign_topcopy_frontend[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) /\
@@ -1970,7 +1963,6 @@ Proof
 QED
 
 Theorem body_assign_toplevel_copy_entry:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
@@ -2084,7 +2076,6 @@ Proof
 QED
 
 Theorem body_assign_empty_target_rhs_pre:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -2108,7 +2099,6 @@ Proof
 QED
 
 Theorem body_assign_expr_vv_full:
-  !mods exps.
   body_expr_full_ok_mods mods exps cx e ==>
   !DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
     (contract_inv mods exps ctx cenv cx /\
@@ -2122,7 +2112,7 @@ QED
 
 (* A word field of a storage struct. *)
 Theorem body_assign_attr_storage_full:
-  !mods exps cx nsid fld fty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx nsid fld fty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx (AttributeTarget (TopLevelNameTarget nsid) fld)) /\
@@ -2680,7 +2670,6 @@ Finalise body_assign_field_store_joint_frame
 
 (* A word field of a memory struct local. *)
 Theorem body_assign_attr_local_rhs_pre:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) /\
@@ -2708,7 +2697,7 @@ Proof
 QED
 
 Theorem body_assign_attr_local_full:
-  !mods exps cx id fld sid fty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx id fld sid fty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx (AttributeTarget (NameTarget id) fld)) /\
@@ -3141,7 +3130,7 @@ QED
 Finalise body_assign_attr_local_full
 
 Theorem body_assign_local_memory_nonempty_full[local]:
-  !mods exps cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx (NameTarget id)) /\
@@ -3724,7 +3713,7 @@ Finalise body_assign_local_memory_nonempty_full
 
 (* A memory local whose source is stored at its own layout. *)
 Theorem body_assign_local_memory_full:
-  !mods exps cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx (NameTarget id)) /\
@@ -3776,7 +3765,6 @@ QED
 
 
 Theorem body_assign_snapshot_word_joint[local]:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\
   eval_expr cx e es = (INL pv,ee) /\ read_result cx pv ee = (INL v,ee) /\
   is_word_type (lowered_value_type ce e) /\
@@ -4542,7 +4530,6 @@ Proof
 QED
 
 Theorem body_assign_immutable_typed[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   supported_immutable_type tops nsid = SOME ity /\
@@ -4626,7 +4613,6 @@ Proof
 QED
 
 Theorem body_assign_immutable_target_replay[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ cx.in_deploy /\
   supported_immutable_type tops (src,id) = SOME ity /\
@@ -4670,7 +4656,6 @@ Proof
 QED
 
 Theorem body_assign_immutable_bind[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ cx.in_deploy /\
   supported_immutable_type tops (src,id) = SOME ity /\
@@ -5189,7 +5174,6 @@ QED
 Finalise body_assign_immutable_normalize_joint[local]
 
 Theorem body_assign_snapshot_memory_unwrap_joint[local]:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\
   (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee) /\
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
@@ -5389,7 +5373,6 @@ Proof
 QED
 
 Theorem body_assign_empty_immutable_ghost[local]:
-  !mods exps.
   ghost_inv_at D lo d ce cx es G tn s /\
   dead_lo_ok H D lo ce cx /\
   (contract_inv mods exps ctx ce cx /\
@@ -5611,7 +5594,6 @@ Proof
 QED
 
 Theorem body_assign_memory_place_lower_bound[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_sim_inv_mods mods cenv cx env ee /\
@@ -5635,7 +5617,6 @@ QED
 
 
 Theorem body_assign_immutable_word_layout[local]:
-  !mods exps.
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\ struct_args_unique tops /\
   expr_sim_inv_mods mods ce cx env ee /\ ce.ce_is_ctor /\
@@ -5726,7 +5707,6 @@ Proof
 QED
 
 Theorem body_assign_immutable_bytes_restore[local]:
-  !mods.
   P H0 /\
   (!H. P H ==> stmt_state_rel H ctx func ce cx es s /\
     ghost_inv_at (DF H) lo d ce cx es G tn s /\
@@ -6019,7 +5999,7 @@ QED
 Finalise body_assign_immutable_bytes_restore[local]
 
 Theorem body_assign_snapshot_memory_alloc_joint[local]:
-  !mods ce cx env e es pv ee v sa vv0 sm buf sn func ctx s DF lo st0 G tn d
+  !ce cx env e es pv ee v sa vv0 sm buf sn func ctx s DF lo st0 G tn d
    s0 Gi ti explicit PG.
   expr_body_pre_mods mods ce cx env e es /\
   eval_expr cx e es = (INL pv,ee) /\ read_result cx pv ee = (INL v,ee) /\
@@ -6289,7 +6269,6 @@ QED
 Finalise body_assign_snapshot_memory_alloc_joint[local]
 
 Theorem immutable_word_store_endpoint:
-  !mods.
   compile_assign_value ce (Lit (n2w off)) LocCode op T loc ity sty bytes su = ((),sb) /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -6489,7 +6468,6 @@ QED
 Finalise immutable_word_store_endpoint
 
 Theorem body_assign_immutable_word_endpoint_run[local]:
-  !mods.
   compile_assign_value ce (Lit (n2w off)) LocCode op T loc ity sty bytes su = ((),sb) /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -6904,7 +6882,6 @@ QED
 (* The direct slots arm starts at the landing of the RHS, target and
    unwrap prefix. The prefix's replay marks do not belong to this suffix. *)
 Theorem body_assign_other_direct_slots_write_full[local]:
-  !mods.
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
   (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
@@ -7086,7 +7063,6 @@ Finalise body_assign_other_direct_slots_write_full[local]
 
 (* The bytes loop reads the physical source length, not destination capacity. *)
 Theorem body_assign_other_bytes_slots_write_full[local]:
-  !mods.
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
   (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
@@ -7357,7 +7333,6 @@ QED
 (* The scalar suffix chooses one concrete endpoint before the horizon split. *)
 
 Theorem body_assign_empty_place_joint[local]:
-  !mods exps.
   compile_store_at_loc imm dst (Lit 0w) (SOME loc) sa = ((),sb) /\
   eval_operand dst s = SOME w /\ op_taint tn dst = {} /\
   has_length_word dty /\ evaluate_type (get_tenv cx) dty = SOME dtv /\
@@ -7616,7 +7591,6 @@ Proof
 QED
 
 Theorem body_assign_target_indices_pre:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -7655,7 +7629,6 @@ Proof
 QED
 
 Theorem body_assign_empty_target_pre[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -7673,7 +7646,6 @@ QED
 
 (* The empty read changes neither state; its certificate prefix has no marks. *)
 Theorem body_assign_empty_target_source[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\ is_empty_value_expr e /\
   has_length_word (expr_type e) /\
   type_widens_to env.type_defs (expr_type e) dty /\
@@ -7755,7 +7727,7 @@ Proof
 QED
 
 Theorem body_assign_other_empty_target_full[local]:
-  !mods exps cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx t) /\
@@ -8140,7 +8112,7 @@ QED
 Finalise body_assign_other_empty_target_full[local]
 
 Theorem body_assign_other_empty_immutable_full[local]:
-  !mods exps cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx t) /\
@@ -8515,7 +8487,7 @@ QED
 (* Keep the ordinary expression post and the lowered allocation capacity
    at the same RHS endpoint, across the source-only immutable lookup. *)
 Theorem body_assign_other_immutable_frontier_bind[local]:
-  !mods exps cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx t) /\
@@ -8872,7 +8844,6 @@ Proof
 QED
 
 Theorem body_assign_saved_rhs_ctor_read[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env ee /\ cenv.ce_is_ctor /\
   stmt_state_rel H ctx func cenv cx ee u /\
@@ -8901,7 +8872,6 @@ QED
    tests are those of the actual target endpoint. *)
 
 Theorem body_assign_saved_rhs_nonmemory_frame[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ struct_args_unique tops /\
   target_indices_pre cenv cx env bt /\ expr_sim_inv_mods mods cenv cx env es1 /\ eval_base_place cx bt es1 = (INL pv,ee) /\
@@ -9160,7 +9130,6 @@ Proof
 QED
 
 Theorem body_assign_snapshot_memory_joint[local]:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\
   eval_expr cx e es = (INL pv,ee) /\ read_result cx pv ee = (INL v,ee) /\
   ~is_word_type (lowered_value_type ce e) /\
@@ -9774,7 +9743,6 @@ QED
 
 (* The snapshot is silent in the source and contributes no gas marks. *)
 Theorem body_assign_snapshot_target_entry:
-  !mods exps.
   expr_body_pre_mods mods ce cx env e es /\
   (!tail. eval_expr cx e
     (es with gas_obs := gas_explicit rhsmarks s0.vs_gas_readings ++ tail) =
@@ -9995,7 +9963,6 @@ Proof
 QED
 
 Theorem body_assign_other_snapshot_target_bind[local]:
-  !mods exps.
   expr_body_pre_mods mods ce cx env e es /\
   (!tail. eval_expr cx e
     (es with gas_obs := gas_explicit rhsmarks s0.vs_gas_readings ++ tail) =
@@ -10239,7 +10206,6 @@ QED
 
 
 Theorem body_assign_immutable_direct_prefix[local]:
-  !mods exps.
   compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty bytes su = ((),sb) /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -10574,7 +10540,6 @@ Proof
 QED
 
 Theorem body_assign_immutable_direct_joint[local]:
-  !mods exps.
   compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty bytes su = ((),sb) /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -11018,7 +10983,6 @@ Proof
 QED
 
 Theorem body_assign_nonmutating_rhs_physical[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ struct_args_unique tops /\
   target_indices_pre cenv cx env bt /\ expr_sim_inv_mods mods cenv cx env es1 /\ eval_base_place cx bt es1 = (INL pv,ee) /\
@@ -11068,7 +11032,6 @@ QED
    not a snapshot or a retyped value, while retaining the target operand. *)
 
 Theorem body_assign_nonmutating_target_rhs[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ struct_args_unique tops /\
   expr_body_pre_mods mods cenv cx env e es /\ runtime_consistent env cx es /\
@@ -11395,7 +11358,7 @@ Proof
 QED
 
 Theorem body_assign_other_immutable_word_write_full[local]:
-  !mods exps cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx t) /\
@@ -11745,7 +11708,6 @@ Proof
 QED
 
 Theorem body_assign_saved_target_pre[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -11895,7 +11857,6 @@ QED
 (* Run the target before unwrapping the original, unsnapshotted RHS.
    The only open outcome is the actual destination write. *)
 Theorem body_assign_other_saved_target_bind[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ struct_args_unique tops /\
   supported_stmt tops bindings (Assign (BaseTarget bt) e) /\
@@ -12359,7 +12320,6 @@ Proof
 QED
 
 Theorem body_assign_value_rhs_pre:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -12398,7 +12358,7 @@ QED
 (* Common prefix of the snapshot and nonmutating-target value assignments.
    The suffix starts at sr, before any snapshot, with the original stmt post. *)
 Theorem body_assign_other_value_rhs_bind[local]:
-  !mods exps cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx t) /\
@@ -12652,7 +12612,6 @@ QED
 
 
 Theorem body_assign_immutable_bytes_joint_frame[local]:
-  !mods.
   compile_store_immutable_bytestring ce.ce_imm_alloca (Var src) (Lit (n2w off)) sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   not_fresh_at sa src /\
@@ -12821,7 +12780,6 @@ Proof
 QED
 
 Theorem body_assign_other_immutable_nonword_entry[local]:
-  !mods.
   ~is_word_type ity /\
   assignable_type env.type_defs (expr_type e) /\
   type_widens_to env.type_defs (expr_type e) ity /\
@@ -12916,7 +12874,6 @@ QED
    destination's write entry.  Normalisation, when required, is part of
    the write suffix, so preservation of allocations is monotone. *)
 Theorem body_assign_immutable_memory_joint[local]:
-  !mods exps.
   compile_assign_value ce (Lit (n2w off)) LocCode (Var src) F loc ity sty
     (type_memory_bytes ce ity) sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sb /\
@@ -13312,7 +13269,7 @@ QED
 Finalise body_assign_immutable_memory_joint[local]
 
 Theorem body_assign_other_immutable_nonword_write_full[local]:
-  !mods exps cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx t) /\
@@ -13827,7 +13784,6 @@ Finalise body_assign_other_snapshot_equal_slots_write_full[local]
 (* The saved operand at z still has the lowered source layout.  Complete
    the emitted normalization before passing the new buffer to the slots. *)
 Theorem body_assign_other_saved_normalized_slots_write_full[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   type_stmt env ret_ty (Assign (BaseTarget bt) e) = SOME env' /\
@@ -14135,7 +14091,6 @@ QED
 Finalise body_assign_other_saved_normalized_slots_write_full[local]
 
 Theorem body_assign_other_snapshot_normalized_slots_write_full[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_body_pre_mods mods cenv cx env e es /\
@@ -14430,7 +14385,6 @@ Finalise body_assign_other_snapshot_normalized_slots_write_full[local]
 (* The saved RHS is read before the target runs. Its physical buffer and the
    destination operand are both available after the intervening unwrap. *)
 Theorem body_assign_other_saved_equal_slots_write_full[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (BaseTarget bt) e) /\
@@ -14643,7 +14597,6 @@ Finalise body_assign_other_saved_equal_slots_write_full[local]
 
 (* The nonword snapshot is already in memory when the target lands. *)
 Theorem body_assign_other_snapshot_memory_write_full[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ struct_args_unique tops /\
   expr_sim_inv_mods mods cenv cx env es /\ target_pre cenv cx env t mid /\
@@ -15010,7 +14963,6 @@ QED
 
 (* Saved RHS, with the copy staging selected by the original value location. *)
 Theorem body_assign_other_saved_staged_memory_write_full[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ struct_args_unique tops /\
   supported_stmt tops bindings (Assign (BaseTarget bt) e) /\
@@ -15448,7 +15400,6 @@ Proof
 QED
 
 Theorem body_assign_other_saved_unstaged_memory_write_full[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ ~block_is_terminated sa /\
   type_stmt env ret_ty (Assign (BaseTarget bt) e) = SOME env' /\
@@ -16141,7 +16092,7 @@ QED
 Finalise body_assign_other_saved_unstaged_memory_write_full[local]
 
 Theorem body_assign_other_nonempty_target_full[local]:
-  !mods exps cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx t) /\
@@ -16910,7 +16861,7 @@ Finalise body_assign_other_nonempty_target_full[local]
 
 (* Every other base target: subscripts, nested attributes, immutables. *)
 Theorem body_assign_nested_empty_immutable_full:
-  !mods exps cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx t) /\
@@ -17606,7 +17557,7 @@ fun nested_immutable_normalize_store origin g =
    nested_immutable_finish `zn:venom_state` `sn` `Gn` `tnn`) g;
 
 Theorem body_assign_nested_nonempty_immutable_full:
-  !mods exps cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx t) /\
@@ -18002,7 +17953,7 @@ QED
 Finalise body_assign_nested_nonempty_immutable_full
 
 Theorem body_assign_other_full:
-  !mods exps cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx t) /\
@@ -18104,7 +18055,7 @@ QED
 
 (* A static aggregate storage or transient variable. *)
 Theorem body_assign_toplevel_copy_full:
-  !mods exps cx nsid mut ty slot e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx nsid mut ty slot e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx (TopLevelNameTarget nsid)) /\

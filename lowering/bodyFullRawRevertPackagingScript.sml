@@ -9,7 +9,6 @@ Libs
   pairLib
 
 Theorem raw_revert_body_full_from_value:
-  !mods exps.
   (!cx ann args dflt DF lo d PG tops ctx shadow_ctx func shadow_func
       cenv env ty es.
     (!cenv ty e.

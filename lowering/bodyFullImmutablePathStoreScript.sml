@@ -159,7 +159,6 @@ Proof
 QED
 
 Theorem immutable_path_write_outcome:
-  !mods exps.
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\
   expr_sim_inv_mods mods ce cx env ee /\ local_ptrs_reserved ce su /\ ce.ce_is_ctor /\

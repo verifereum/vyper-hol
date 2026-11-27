@@ -4,7 +4,6 @@ Ancestors
   vfmConstants words arithmetic list
 
 Theorem abi_decode_body_input_bound:
-  !mods.
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
   expr_type e = BaseT (BytesT (Dynamic n)) ==>
   abi_size_bound ce.ce_struct_fields
@@ -27,7 +26,6 @@ Proof
 QED
 
 Theorem abi_decode_body_input_word_bound:
-  !mods.
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
   expr_type e = BaseT (BytesT (Dynamic n)) ==>
   abi_size_bound ce.ce_struct_fields

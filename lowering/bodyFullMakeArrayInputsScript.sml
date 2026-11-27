@@ -28,7 +28,6 @@ Proof
 QED
 
 Theorem make_array_physical_store_input:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\
   ~is_word_type (expr_type e) /\
   ~is_word_type (post_value_type ce e) /\

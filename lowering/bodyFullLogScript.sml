@@ -157,7 +157,6 @@ Proof
 QED
 
 Theorem log_full_physical_source_encoding[local]:
-  !mods exps.
   lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id = SOME (h,dtys,flags) /\
   LENGTH flags = LENGTH dtys /\ LIST_REL event_arg_compatible dtys atys /\
   EVERY (\(ty,indexed). indexed ==> supported_event_leaf_type ty) (ZIP (dtys,flags)) /\
@@ -240,7 +239,6 @@ Proof
 QED
 
 Theorem log_capture_type[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\ env.type_defs = get_tenv cx /\
   ty = lowered_value_type cenv e /\ type_alloc_ok cenv ty /\
   value_runtime_typed env ty v /\
@@ -341,7 +339,6 @@ Proof
 QED
 
 Theorem compile_log_one_saved_topic[local]:
-  !mods exps.
   log_saved_row cenv cx st0 es sa front s G tn (sv,ty) v /\
   supported_event_leaf_type ty /\ encode_event_topic ty v = SOME topic /\
   log_topic_state ctx func cenv cx st0 es DF lo d front s G tn a u Gu tu /\
@@ -937,7 +934,7 @@ Proof
 QED
 
 Theorem compile_log_frag_full:
-  !mods exps cx id args DF lo d PG tops bindings ctx shadow_ctx func
+  !cx id args DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     body_exprs_full_ok_mods mods exps cx args /\
     (contract_inv mods exps ctx cenv cx /\
@@ -1742,7 +1739,7 @@ QED
 Finalise compile_log_frag_full
 
 Theorem body_log_aggregate_full:
-  !mods exps cx id args fields DF lo d PG tops ctx shadow_ctx func
+  !cx id args fields DF lo d PG tops ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     body_exprs_full_ok_mods mods exps cx args /\
     (contract_inv mods exps ctx cenv cx /\

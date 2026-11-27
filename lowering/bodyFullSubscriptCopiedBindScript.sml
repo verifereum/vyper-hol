@@ -176,7 +176,7 @@ QED
    the pre-index read, and the array selection uses its saved Value.
    The frames flag lets the selector request the caller's composed frames. *)
 Theorem subscript_copied_bind_caller_frames:
-  !mods exps frames cx ann obj idx DF lo d PG tops ctx shadow_ctx func shadow_func ce env ty es et bd.
+  !frames cx ann obj idx DF lo d PG tops ctx shadow_ctx func shadow_func ce env ty es et bd.
     (!s raw mid saved. eval_expr cx obj s = (INL raw,mid) /\
        read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok_mods mods exps cx idx) /\
     body_expr_full_ok_mods mods exps cx obj /\ (contract_inv mods exps ctx ce cx /\
@@ -592,7 +592,7 @@ QED
 Finalise subscript_copied_bind_caller_frames
 
 Theorem subscript_copied_bind_full:
-  !mods exps cx ann obj idx DF lo d PG tops ctx shadow_ctx func shadow_func ce env ty es et bd.
+  !cx ann obj idx DF lo d PG tops ctx shadow_ctx func shadow_func ce env ty es et bd.
     (!s raw mid saved. eval_expr cx obj s = (INL raw,mid) /\
        read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok_mods mods exps cx idx) /\
     body_expr_full_ok_mods mods exps cx obj /\ (contract_inv mods exps ctx ce cx /\

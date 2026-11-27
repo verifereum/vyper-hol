@@ -11,7 +11,7 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem compile_rest_word_membership_full:
-  !mods exps DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop e1 e2 bd es.
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop e1 e2 bd es.
   (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
   expr_type e2 = ArrayT (expr_type e1) bd /\
   (!a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\

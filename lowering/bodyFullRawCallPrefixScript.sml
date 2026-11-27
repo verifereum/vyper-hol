@@ -160,7 +160,6 @@ Proof
 QED
 
 Theorem raw_call_prefix_prepared_full:
-  !mods exps.
  !DF lo dframe PG tops ctx shadow_ctx func shadow_func cenv env cx ty ann flags
   a d kws st0 sa sb shadow_sa shadow_sb vv addr data len ptr vo go ignored
   gas ov op result s1 s2 s3 s4 s5 s6 s7 xs es s0 G0 tn0 k Q R.

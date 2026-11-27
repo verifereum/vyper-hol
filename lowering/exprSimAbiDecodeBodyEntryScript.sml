@@ -5,7 +5,6 @@ Ancestors
   vyperTypeSystem vyperTypeInvariants vyperValue vyperTyping allocLimits list option
 
 Theorem abi_decode_body_target:
-  !mods.
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty args) es ==>
   ann = ty /\ assignable_type (get_tenv cx) ty /\
   abi_decode_bytes_widths (get_tenv cx) ty
@@ -16,7 +15,6 @@ Proof
 QED
 
 Theorem abi_decode_body_wrapped_coherent:
-  !mods.
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty args) es ==>
   ?tv. abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields
     (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) tv
@@ -35,7 +33,6 @@ Proof
 QED
 
 Theorem abi_decode_body_wrapped_widths:
-  !mods.
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty args) es ==>
   abi_decode_bytes_widths (get_tenv cx)
     (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)
@@ -45,7 +42,6 @@ Proof
 QED
 
 Theorem abi_decode_body_wrapped_assignable:
-  !mods.
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty args) es ==>
   assignable_type (get_tenv cx)
     (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)
@@ -55,7 +51,6 @@ Proof
 QED
 
 Theorem abi_decode_body_output_bound:
-  !mods.
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty args) es ==>
   type_memory_bytes ce
     (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) < 2 ** 64

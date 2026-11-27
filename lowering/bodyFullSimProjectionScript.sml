@@ -3,7 +3,6 @@ Ancestors bodyFullPreds
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem body_expr_full_ok_simulations:
-  !mods exps.
   body_expr_full_ok_mods mods exps cx e /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\

@@ -109,7 +109,6 @@ Proof
 QED
 
 Theorem immutable_empty_store_ghost:
-  !mods exps.
   ghost_inv_at D lo d ce cx es G tn s /\
   dead_lo_ok H D lo ce cx /\ ce.ce_is_ctor /\
   (contract_inv mods exps ctx ce cx /\
@@ -149,7 +148,6 @@ Proof
 QED
 
 Theorem immutable_empty_path_store_restore:
-  !mods.
   stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv_mods mods ce cx env es /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME root_ty /\

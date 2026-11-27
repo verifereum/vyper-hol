@@ -57,7 +57,7 @@ Proof
 QED
 
 Theorem returns_stack_extent:
-  !mods ce cx env es ty tv.
+  !ce cx env es ty tv.
     expr_sim_inv_mods mods ce cx env es /\
     evaluate_type (get_tenv cx) ty = SOME tv /\
     0 < returns_stack_count

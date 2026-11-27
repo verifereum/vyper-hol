@@ -11,7 +11,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem raw_call_forced_data_kwargs_full_from_action:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
   body_const_cells_agree mods cx env esD /\

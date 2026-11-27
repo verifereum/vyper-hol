@@ -48,7 +48,6 @@ QED
 (* Endpoint hypotheses are universally closed: this proof does not depend on
    the independent concrete allocation or MSTORE/LOG publications. *)
 Theorem raw_log_fixed_data_full_from_endpoints:
-  !mods.
   (!data cenv ret_ty ty topics dflt call_sa vv call_sb sm buf sd func ctx
       cx st0 ee DF lo explicit PG s G tn d.
     expr_type data = BaseT (BytesT (Fixed 32)) /\

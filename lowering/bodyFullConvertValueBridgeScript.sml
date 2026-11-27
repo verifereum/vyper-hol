@@ -5,7 +5,6 @@ Ancestors
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem convert_sim_full_of_vv:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Convert dst [e]) es /\

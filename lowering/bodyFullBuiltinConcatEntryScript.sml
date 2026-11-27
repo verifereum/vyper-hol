@@ -13,7 +13,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 
 Theorem concat_loop_initial_entry:
-  !mods exps.
   (builtin_args_length_ok (Concat n) (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\

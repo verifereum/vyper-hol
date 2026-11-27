@@ -16,7 +16,6 @@ Ancestors
 Libs pairLib
 
 Theorem bop_bytestring_hash_post_view:
-  !mods exps.
   is_bytestring_type (expr_type e) /\ expr_body_pre_mods mods cenv cx env e es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -110,7 +109,6 @@ Proof
 QED
 
 Theorem bop_bytestring_hash_operational_certificate:
-  !mods exps.
   ~t.vs_halted /\
   is_bytestring_type (expr_type e) /\ expr_body_pre_mods mods cenv cx env e es /\
   (contract_inv mods exps ctx cenv cx /\
@@ -287,7 +285,6 @@ Proof
 QED
 
 Theorem bop_bytestring_hash_suffix_frame_from_certificate:
-  !mods exps.
   is_bytestring_type (expr_type e) /\ expr_body_pre_mods mods cenv cx env e es /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -413,7 +410,6 @@ Proof
 QED
 
 Theorem bop_bytestring_hash_suffix_from_view:
-  !mods exps.
   ~t.vs_halted /\
   is_bytestring_type (expr_type e) /\ expr_body_pre_mods mods cenv cx env e es /\
   (contract_inv mods exps ctx cenv cx /\
@@ -476,7 +472,6 @@ Proof
 QED
 
 Theorem bop_bytestring_hash_suffix_full:
-  !mods exps.
   ~t.vs_halted /\
   is_bytestring_type (expr_type e) /\ expr_body_pre_mods mods cenv cx env e es /\
   (contract_inv mods exps ctx cenv cx /\
@@ -525,7 +520,6 @@ Proof
 QED
 
 Theorem bop_bytestring_selected_hash_full_exit:
-  !mods exps.
   (case bytestring_literal_hash e of
      NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e) e sa))
        (SND (lower_value compile_expr cenv (expr_type e) e sa))
@@ -620,7 +614,6 @@ Proof
 QED
 
 Theorem bop_bytestring_selected_hash_full:
-  !mods exps.
   (case bytestring_literal_hash e of
      NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e) e sa))
        (SND (lower_value compile_expr cenv (expr_type e) e sa))

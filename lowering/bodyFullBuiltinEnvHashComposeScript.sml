@@ -12,7 +12,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem hash_builtin_value_from_suffixes:
-  !mods exps.
  (!arg sa op sb func st0 cenv cx mid s ctx DF lo d G tn explicit PG i.
  compile_blockhash arg sa = (op,sb) /\ fn_has_code sa sb func /\
  fn_inst_ids_distinct func /\ storage_trace_domain cx st0 mid.storage_trace /\

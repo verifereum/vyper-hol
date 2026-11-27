@@ -503,7 +503,6 @@ Proof
 QED
 
 Theorem word_neg_continuation_full:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Builtin (expr_type e) Neg [e]) es /\
   expr_body_pre_mods mods cenv cx env e es /\
   is_numeric_type (expr_type e) /\ ~is_uint_type (expr_type e) /\
@@ -691,7 +690,7 @@ Proof
 QED
 
 Theorem word_neg_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
        (~is_word_type (expr_type e) ==>
         !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =

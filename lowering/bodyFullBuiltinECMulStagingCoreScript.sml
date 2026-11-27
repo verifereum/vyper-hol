@@ -16,7 +16,6 @@ Ancestors
 open compileEnvTheory;
 
 Theorem ecmul_staging_full_from_transfers:
-  !mods exps.
   bt = ECMul /\
   a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\

@@ -108,7 +108,7 @@ Definition extcall_positional_post_def:
 End
 
 Theorem extcall_request_positional_packing_outcome_named:
-  !mods exps keep_pure.
+  !keep_pure.
   body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\

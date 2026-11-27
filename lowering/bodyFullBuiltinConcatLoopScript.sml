@@ -15,7 +15,7 @@ Ancestors stmtSimProps[qualified,ignore_grammar]
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem concat_args_sim_full:
-  !mods exps args P k DF lo d ctx shadow_ctx PG tops func shadow_func cenv cx env st0
+  !args P k DF lo d ctx shadow_ctx PG tops func shadow_func cenv cx env st0
    es sa sb shadow_sa shadow_sb s0 G0 tn0 dv ov ow binst B bsz oinst.
     compile_concat compile_expr cenv args (Var dv)
       (MAP (\e.

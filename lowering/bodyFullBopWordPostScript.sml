@@ -9,7 +9,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem bop_suffix_success_post:
-  !mods.
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
@@ -153,7 +152,6 @@ Proof
 QED
 
 Theorem bop_word_suffix_success_post:
-  !mods.
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\

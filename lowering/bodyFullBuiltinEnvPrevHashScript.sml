@@ -119,7 +119,7 @@ Proof
 QED
 
 Theorem env_prevhash_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     bt = Env PrevHash /\ builtin_args_length_ok bt (LENGTH args) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>
      body_exprs_full_ok_mods mods exps cx args) /\

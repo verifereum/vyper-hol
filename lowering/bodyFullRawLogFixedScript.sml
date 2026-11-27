@@ -5,7 +5,7 @@ Ancestors bodyFullRawLogFixedCompose bodyFullRawLogFixedAlloc bodyFullRawLogFixe
   exprSimHypsDefs[qualified]
 
 Theorem raw_log_fixed_data_full:
-  !mods DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm
+  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm
       shadow_sd shadow_sm sa shadow_sa s0 G0 tn0 st0 vals ops ann es_call dflt
       buf s1 sb ret_ty ty topics call_sa vv call_sb env es0.
     expr_body_pre_mods mods cenv cx env (Call ann RawLog es_call dflt) es0 /\

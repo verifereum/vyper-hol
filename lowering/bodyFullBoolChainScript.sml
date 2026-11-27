@@ -36,7 +36,7 @@ Definition bool_chain_full_ok_def:
 End
 
 Theorem bool_chain_ops_outcome_full:
-  !mods exps k x sa shadow_sa es s G tn.
+  !k x sa shadow_sa es s G tn.
   bool_chain_full_ok cx (bool_chain_operands p k x) /\ expr_type x = BaseT BoolT /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -239,7 +239,7 @@ QED
 Finalise bool_chain_ops_outcome_full
 
 Theorem bool_chain_expr_full_ok:
-  !mods exps cx ann is_and n e.
+  !cx ann is_and n e.
     bool_chain_full_ok cx (bool_chain_operands is_and (n - 1) e) ==>
     body_expr_full_ok_mods mods exps cx (Builtin ann (BoolChain is_and n) [e])
 Proof

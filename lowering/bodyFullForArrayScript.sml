@@ -393,7 +393,6 @@ QED
 (* Apply the enabled Array iterator IH to the actual expression compilations.
    Keep the full vv post, including aggregate ownership and exceptional exits. *)
 Theorem for_array_expr_prefix_full:
-  !mods exps.
   body_iterator_full_ok_mods mods exps cx (Array e) /\
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx c cx /\
@@ -486,7 +485,6 @@ QED
 (* The actual source list and the header observation share the expression
    endpoint. A fixed array contributes its dense, type-indexed element list. *)
 Theorem for_nonslot_array_length_observation:
-  !mods.
   expr_body_pre_mods mods c cx env e es0 /\
   expr_type e = ArrayT ty bd /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et bd) /\
@@ -1997,7 +1995,6 @@ QED
 
 (* Non-slot iterator evaluation and its actual conditional length slice. *)
 Theorem for_nonslot_array_prefix_full:
-  !mods exps.
   body_iterator_full_ok_mods mods exps cx (Array e) /\
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx c cx /\

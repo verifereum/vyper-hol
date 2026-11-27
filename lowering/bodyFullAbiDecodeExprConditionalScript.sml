@@ -84,7 +84,6 @@ Proof
 QED
 
 Theorem abi_decode_singleton_vv_full[local]:
-  !mods exps.
   ^decode_guarded_producer /\ ^decode_cut_selector /\
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\
@@ -292,7 +291,6 @@ QED
 Finalise abi_decode_singleton_vv_full
 
 Theorem abi_decode_expr_full_from_producers:
-  !mods exps.
   (^decode_guarded_producer /\ ^decode_cut_selector) ==>
   (!cx v11 b typ es.
      (!s'' x t.

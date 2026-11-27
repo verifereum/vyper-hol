@@ -20,7 +20,7 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem raw_revert_expr_full_ok:
-  !mods exps cx ann es dflt.
+  !cx ann es dflt.
     (!cenv ty e.
        gas_shadow_compiles (lower_value compile_expr cenv ty e)
          (lower_value compile_expr cenv ty (gas_shadow_expr e))) /\

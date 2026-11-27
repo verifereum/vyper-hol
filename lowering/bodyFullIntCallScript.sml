@@ -14,7 +14,7 @@ Libs
 val _ = Parse.hide "body";
 
 Theorem intcall_defaults_full_ih:
-  !mods exps cx src_id_opt fn es ts mut nr args dflts ret ss s1 vs t1.
+  !cx src_id_opt fn es ts mut nr args dflts ret ss s1 vs t1.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
          t'5' s'8' x'' t'6'.
@@ -53,7 +53,7 @@ Proof
 QED
 
 Theorem intcall_body_full_ih:
-  !mods exps cx src_id_opt fn es ts mut nr args dflts ret ss s1 vs t1 sd dvs td penv rtv.
+  !cx src_id_opt fn es ts mut nr args dflts ret ss s1 vs t1 sd dvs td penv rtv.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
          t'5' s'8' dflt_vs t'6' all_tenv s'9' env t'7' s'10' rtv
@@ -150,7 +150,6 @@ Proof
   fs[] >> metis_tac[]
 QED
 Theorem intcall_entry_body_ih[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   lookup_callable_function cx.in_deploy name tops =
@@ -370,7 +369,6 @@ QED
 
 (* Stage (b) gives stage (c)'s callee premise. *)
 Theorem intcall_callee_premise[local]:
-  !mods exps.
   ^callee_input ==>
   !DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
    G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn nrc nrbs npvs dflts.
@@ -454,7 +452,6 @@ QED
 (* The value judgment: stage (a) with the unwrap and the read after the
    call, then stage (c)'s second conjunct. *)
 Theorem intcall_sim_full:
-  !mods exps.
   ^read_args_input ==> ^callee_input ==>
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
@@ -543,7 +540,6 @@ QED
 
 (* Use the return stage's owned value post for the expression judgment. *)
 Theorem intcall_vv_full:
-  !mods exps.
   ^vv_args_input ==> ^callee_input ==>
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.

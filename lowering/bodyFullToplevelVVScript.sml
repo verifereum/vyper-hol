@@ -6,7 +6,7 @@ Ancestors
   bodyInvSplit[qualified]
 
 Theorem toplevel_name_vv_full:
-  !mods exps DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann nsid es.
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann nsid es.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
     expr_body_pre_mods mods cenv cx env (TopLevelName ann nsid) es ==>

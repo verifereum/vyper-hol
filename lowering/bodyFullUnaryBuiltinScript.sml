@@ -5,7 +5,7 @@ Ancestors
   bodyFullPredsMods[qualified]
 
 Theorem unary_builtin_expr_full_ok:
-  !mods exps cx ann bt es.
+  !cx ann bt es.
     (!m. builtin_args_length_ok bt m ==> m = 1) /\
     (!e. body_expr_full_ok_mods mods exps cx e ==> body_expr_full_ok_mods mods exps cx (Builtin ann bt [e])) /\
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok_mods mods exps cx es) ==>

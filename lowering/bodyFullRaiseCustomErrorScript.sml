@@ -42,7 +42,7 @@ Proof
 QED
 
 Theorem compile_raise_custom_frag_full:
-  !mods exps cx err DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env
+  !cx err DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env
     env' ret_ty lctx RetQ es.
     (!id pos kw error_tops params args.
        err = CustomError id pos kw /\

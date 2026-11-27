@@ -8,7 +8,6 @@ Ancestors
 Libs monadsyntax
 
 Theorem structlit_unwrapped_physical_inputs:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\
   (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee) /\
   expr_post H ctx func ce cx e es si su s0 ee v op s /\

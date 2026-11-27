@@ -39,7 +39,7 @@ Proof
 QED
 
 Theorem subscript_unframed_array_vv_full:
-  !mods exps cx v8 e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
+  !cx v8 e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
     (!s'' res t s3 res' t'.
        eval_expr cx e1 s'' = (INL res,t) /\
        (if subscript_reads_base cx e1 e2 then

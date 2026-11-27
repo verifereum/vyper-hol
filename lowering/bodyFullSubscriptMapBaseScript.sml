@@ -12,7 +12,6 @@ Ancestors
 (* The mapping declaration gives both the source reference and the compiled
    literal slot. Resolving it does not run an instruction or change a ghost. *)
 Theorem toplevel_map_sim_full[local]:
-  !mods.
   expr_map_pre_mods mods cenv cx env (TopLevelName ann (src,id)) es ==>
   expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TopLevelName ann (src,id)) es
@@ -66,7 +65,6 @@ Proof
 QED
 
 Theorem body_expr_full_ok_map:
-  !mods exps.
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
   body_const_cells_agree mods cx env es /\

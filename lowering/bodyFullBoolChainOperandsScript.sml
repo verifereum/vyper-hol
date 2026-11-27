@@ -4,7 +4,7 @@ Ancestors
   bodyFullPredsMods[qualified]
 
 Theorem body_expr_full_ok_bool_chain_operands:
-  !mods exps cx d k e. body_expr_full_ok_mods mods exps cx e ==>
+  !cx d k e. body_expr_full_ok_mods mods exps cx e ==>
     bool_chain_full_ok cx (bool_chain_operands d k e)
 Proof
   ntac 2 gen_tac >>

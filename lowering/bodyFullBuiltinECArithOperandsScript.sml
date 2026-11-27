@@ -6,7 +6,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem ec_first_point_staging_ready:
-  !mods.
   post_value_type cenv e1 = expr_type e1 /\
   expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
   expr_post H ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\

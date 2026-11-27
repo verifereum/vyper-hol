@@ -7,7 +7,7 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem slice_builtin_some_vv_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es code_ty addr.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es code_ty addr.
     (builtin_args_length_ok (Slice n) (LENGTH args) ==>
        case code_slice_source (Slice n) args of
          NONE => body_exprs_full_ok_mods mods exps cx args

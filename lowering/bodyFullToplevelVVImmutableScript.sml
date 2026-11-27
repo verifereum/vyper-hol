@@ -9,7 +9,6 @@ Ancestors
   bodyInvSplit[qualified]
 
 Theorem toplevel_immutable_vv_full_from_contract:
-  !mods exps.
   (!tops ctx cenv cx env ann id es H D lo func s d G tn src off imms rt v.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\

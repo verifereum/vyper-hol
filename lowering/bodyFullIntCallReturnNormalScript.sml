@@ -192,7 +192,6 @@ QED
 Finalise intcall_return_caller_frame
 
 Theorem intcall_return_register_frame_certificate:
-  !mods exps.
  !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
   rc rbs pvs v ee Gc tc ir cs returned out outs rbuf root off st4 stored Gs ts.
@@ -557,7 +556,7 @@ QED
 Finalise intcall_return_register_frame_certificate
 
 Theorem intcall_return_register_post:
-  !mods exps tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
+  !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
    DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
    rc rbs pvs v ee Gc tc ir cs returned out outs rbuf root off st4 stored Gs ts bb inst dflts.
   (contract_inv mods exps ctx cenv cx /\
@@ -786,7 +785,7 @@ QED
 Finalise intcall_return_register_post
 
 Theorem intcall_return_normal_owned:
-  !mods exps DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
    rr prev penv rtv es1 t G tn rc rbs pvs callee entered bb inst lbl arg_ops argv dflts.
     (contract_inv mods exps ctx cenv cx /\

@@ -119,7 +119,6 @@ QED
 
 
 Theorem abi_encode_saved_restore_row_pure:
-  !mods exps.
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -206,7 +205,6 @@ Theorem abi_encode_saved_restore_row =
   pureFrameLib.drop_frame abi_encode_saved_restore_row_pure
 
 Theorem extcall_direct_restore_row:
-  !mods exps.
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\

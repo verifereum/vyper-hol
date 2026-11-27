@@ -77,7 +77,6 @@ QED
 (* Keep Stage 1's saved value and provenance through the encoder's own
    cursor and address arithmetic, then materialize at the actual unwrap. *)
 Theorem extcall_direct_restore_saved_pure:
-  !mods exps.
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\

@@ -51,7 +51,6 @@ Proof
 QED
 
 Theorem raw_call_calldata_pre:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
   ?a kws. args = a::kws /\ expr_type a = BaseT AddressT /\
     LENGTH kws = LENGTH flags.rcf_kws /\ raw_call_kws_ok flags kws /\
@@ -74,7 +73,6 @@ Proof
 QED
 
 Theorem raw_call_calldata_args_ready:
-  !mods.
   expr_body_pre_mods mods cenv cx env
     (Call ann (RawCallCalldataTarget flags) (a::kws) NONE) es ==>
   !e ee. MEM e (a::kws) /\ expr_sim_inv_mods mods cenv cx env ee ==>
@@ -93,7 +91,6 @@ Proof
 QED
 
 Theorem raw_call_calldata_source_ready:
-  !mods.
   expr_body_pre_mods mods cenv cx env
     (Call ann (RawCallCalldataTarget flags) (a::kws) NONE) es /\
   eval_exprs cx (a::kws) (es with gas_obs := gs) = (INL vs,mid) /\
@@ -191,7 +188,6 @@ Proof
 QED
 
 Theorem raw_call_calldata_vv_full[local]:
-  !mods exps.
   body_exprs_full_ok_mods mods exps cx args /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -378,7 +374,6 @@ Proof
 QED
 
 Theorem raw_call_calldata_input_bound[local]:
-  !mods.
   expr_sim_inv_mods mods cenv cx env es ==> LENGTH cx.txn.calldata < dimword (:256)
 Proof
   simp[expr_sim_inv_def,vyperTypeInvariantsTheory.context_well_typed_def,dimword_def]
@@ -394,7 +389,6 @@ val calldata_call_full = REWRITE_RULE [post_value_type_def]
 val calldata_call_pre = fst (dest_imp (concl calldata_call_full));
 
 Theorem raw_call_calldata_word_success_to_call:
-  !mods exps.
   expr_body_pre_mods mods cenv cx env
     (Call (raw_call_return_type flags) (RawCallCalldataTarget flags) (a::kws) NONE) es /\
   type_alloc_ok cenv (raw_call_return_type flags) /\
@@ -989,7 +983,7 @@ QED
 Finalise raw_call_calldata_vv_full[local]
 
 Theorem raw_call_calldata_expr_full_ok:
-  !mods exps cx ty flags es v19.
+  !cx ty flags es v19.
     body_exprs_full_ok_mods mods exps cx es ==>
     body_expr_full_ok_mods mods exps cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
@@ -1019,7 +1013,6 @@ Proof
 QED
 
 Theorem raw_call_calldata_word_schedule:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es /\
   compile_expr cenv ty (Call ann (RawCallCalldataTarget flags) args dflt) sa = (vv,sb) /\
   compile_expr (gas_shadow_env T cenv) ty

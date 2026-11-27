@@ -7,7 +7,7 @@ Ancestors
   bodyFullPredsMods[qualified]
 
 Theorem abi_encode_expr_full_ok:
-  !mods exps cx v11 b m typ es.
+  !cx v11 b m typ es.
     (!s'' x t.
        type_check (type_builtin_args_length_ok (AbiEncode b m) (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>

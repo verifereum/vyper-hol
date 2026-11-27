@@ -14,7 +14,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem ecadd_staging_full_from_transfers:
-  !mods exps.
   (!pp bp pd sa sb s pw bw G tn nd lo ctx func bb explicit PG.
     (do src <- emit_op ADD [Var pp; Lit 0w];
         value <- emit_op MLOAD [src];

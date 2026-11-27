@@ -11,7 +11,7 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
 val _ = Parse.hide "base";
 
 Theorem make_array_loop_full:
-  !mods exps args tys dtvs off ps sa sb shadow_sa shadow_sb es s G tn.
+  !args tys dtvs off ps sa sb shadow_sa shadow_sb es s G tn.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
     shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env ebase /\

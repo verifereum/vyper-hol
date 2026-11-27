@@ -16,7 +16,7 @@ val _ = Parse.hide "body";
    judgment already includes its memory read. The hash suffix adds zero
    explicit source GAS observations, including SHA256's internal GAS. *)
 Theorem hash_vv_sim_full:
-  !mods DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann bt e es.
+  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann bt e es.
     (bt = Keccak256 \/ bt = Sha256) /\
     expr_body_pre_mods mods cenv cx env (Builtin ann bt [e]) es /\
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -28,7 +28,7 @@ Proof
 QED
 
 Theorem hash_expr_full_ok:
-  !mods exps cx ty bt es.
+  !cx ty bt es.
     (bt = Keccak256 \/ bt = Sha256) /\
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok_mods mods exps cx es) ==>
     body_expr_full_ok_mods mods exps cx (Builtin ty bt es)

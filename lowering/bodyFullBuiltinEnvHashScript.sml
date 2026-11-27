@@ -10,7 +10,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem hash_builtin_full_vv:
-  !mods.
   (bt = BlockHash \/ bt = BlobHash) /\
   expr_body_pre_mods mods cenv cx env (Builtin a bt args) es /\
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -37,7 +36,7 @@ Proof
 QED
 
 Theorem hash_builtin_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (bt = BlockHash \/ bt = BlobHash) /\
     builtin_args_length_ok bt (LENGTH args) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>

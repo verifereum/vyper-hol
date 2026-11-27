@@ -6,7 +6,7 @@ Ancestors
   vyperTypeSystem vyperAST vyperInterpreter vyperContext vyperState list
 
 Theorem as_wei_value_argument_shape:
-  !mods cenv cx env ann dn args es.
+  !cenv cx env ann dn args es.
     expr_body_pre_mods mods cenv cx env (Builtin ann (AsWeiValue dn) args) es ==>
     ?e k. args = [e] /\ expr_type e = BaseT (UintT k) /\
           ann = BaseT (UintT 256)

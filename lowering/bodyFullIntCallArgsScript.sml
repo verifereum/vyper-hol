@@ -113,7 +113,6 @@ Proof
 QED
 
 Theorem intcall_args_pre_state:
-  !mods.
   expr_body_pre_mods mods cenv cx tenv e es /\
   expr_sim_inv_mods mods cenv cx tenv ee ==>
   expr_body_pre_mods mods cenv cx tenv e ee
@@ -1795,7 +1794,6 @@ Proof
 QED
 
 Theorem intcall_args_defaults_inv[local]:
-  !mods.
   expr_sim_inv_mods mods ce cx env st ==>
   expr_sim_inv_mods mods (cenv_without_defaults ce name)
     (cx with stk updated_by CONS (NONE,name)) (env with current_src := NONE) st
@@ -2020,7 +2018,6 @@ QED
 
 (* Prepare defaults in caller scopes at the supplied-argument endpoint. *)
 Theorem intcall_args_defaults_pre[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_sim_inv_mods mods cenv cx tenv ee /\
@@ -2139,7 +2136,6 @@ Proof
 QED
 
 Theorem intcall_args_defaults_ih:
-  !mods exps.
   (!s1 vs t1. ~MEM (NONE,name) cx.stk /\
      eval_exprs cx es s1 = (INL vs,t1) ==>
      body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
@@ -2569,7 +2565,7 @@ Proof
 QED
 
 Theorem intcall_args_stage_full_p2_with_path[local]:
-  !mods exps es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
+  !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
     (contract_inv mods exps ctx cenv cx /\
@@ -5611,7 +5607,7 @@ Proof
 QED
 
 Theorem intcall_args_stage_left_outcome:
-  !mods exps es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
+  !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
    flags dtys newops ops ws vals ptys pflags pin clean_words keep_sites P.
     (contract_inv mods exps ctx cenv cx /\
@@ -5761,7 +5757,7 @@ Proof
 QED
 
 Theorem intcall_args_stage_full_p2:
-  !mods exps es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
+  !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
     (contract_inv mods exps ctx cenv cx /\
@@ -5936,7 +5932,7 @@ QED
 
 (* Compatibility for continuations that only need expr_exit. *)
 Theorem intcall_args_stage_full:
-  !mods exps es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
+  !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
     (contract_inv mods exps ctx cenv cx /\
@@ -7696,7 +7692,6 @@ Proof
 QED
 
 Theorem args_defaults_restore_expr_sim_inv[local]:
-  !mods.
   expr_sim_inv_mods mods ce cx env before /\
   expr_sim_inv_mods mods (cenv_without_defaults ce name)
     (cx with stk updated_by CONS (NONE,name)) (env with current_src := NONE) after ==>
@@ -7832,7 +7827,6 @@ Proof
 QED
 
 Theorem args_return_buffer_geometry[local]:
-  !mods.
   (ret <> NoneT ==> 0 < type_memory_size tv) /\
   get_module_code cx NONE = SOME tops /\
   expr_sim_inv_mods mods ce cx env es /\
@@ -8501,7 +8495,6 @@ Proof
 QED
 
 Theorem args_stage_source_typing:
-  !mods.
   expr_sim_inv_mods mods ce cx env st ==>
   env_consistent env cx st /\ state_well_typed st /\ functions_well_typed cx
 Proof
@@ -8509,7 +8502,6 @@ Proof
 QED
 
 Theorem intcall_args_defaults_source_setup[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
@@ -8789,7 +8781,6 @@ QED
 (* The actuals replay and target midpoint are produced by the supplied stage.
    No continuation simulation is needed to prepare the default stage. *)
 Theorem intcall_args_defaults_stage_setup:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
@@ -9613,7 +9604,7 @@ Proof
 QED
 
 Theorem intcall_args_full:
-  !mods exps DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -10068,7 +10059,6 @@ QED
 (* The two successful argument stages share xs in their accumulator, and
    share t as the endpoint of supplied evaluation and start of defaults. *)
 Theorem intcall_args_after_defaults_data:
-  !mods exps.
   (* Caller preparation and compile layout. *)
   well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
   (contract_inv mods exps ctx cenv cx /\

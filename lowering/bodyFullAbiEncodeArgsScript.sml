@@ -38,7 +38,6 @@ Ancestors
 Libs pairLib horizonTypeLib
 
 Theorem abi_encode_snapshot_not_label[local]:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value (lowered_value_type ce e) vv) sm =
@@ -49,7 +48,6 @@ Proof
 QED
 
 Theorem abi_encode_vv_full_from_packaging:
-  !mods exps.
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\

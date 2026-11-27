@@ -442,7 +442,7 @@ QED
 (* Keep the raw source result until the actual fallthrough/continue/break
    suffix is chosen. The source execution is available at the same post. *)
 Theorem for_nonslot_array_body_invoke:
-  !mods exps DF lo d ctx shadow_ctx func shadow_func PG cx RetQ c id env body
+  !DF lo d ctx shadow_ctx func shadow_func PG cx RetQ c id env body
    original captured operands item bc benv sbCopy dtv v k a rs es eb G tn s
    tops bindings env' ret_ty st0 exit incr bc' sbBody shadow_sbCopy shadow_sbBody.
   (!H. valid_horizon cx st0 H eb.storage_trace ==>
@@ -1425,7 +1425,7 @@ Finalise for_nonslot_entry_control
 
 (* Place the chosen iterator capture at the condition label before the first round. *)
 Theorem for_nonslot_array_entry_full:
-  !mods c id fty e sty bd ret_ty body func shadow_func sa0 vv sbExpr shadow_sa0
+  !c id fty e sty bd ret_ty body func shadow_func sa0 vv sbExpr shadow_sa0
    shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem entry cond bod incr
    exit idx invalid valid done_var next_var sa stride off_op sm sum_op sn addr
    saCopy sbCopy sbBody sj sb shadow_sbCopy shadow_sbBody n d s0 ctx u cx st0 em
@@ -1904,7 +1904,6 @@ QED
 
 (* Execute the nonempty test and the actual indexed copy before calling the body. *)
 Theorem for_nonslot_array_head_full:
-  !mods exps.
   for_nonslot_layout (c, id, fty, e, sty, bd, ret_ty, loop_body)
     (func, shadow_func)
     (sa0, vv, sbExpr, shadow_sa0, shadow_sbExpr, loc, len_op, saL)
@@ -2661,7 +2660,6 @@ Proof
 QED
 
 Theorem for_nonslot_selected_immutable_holds[local]:
-  !mods.
   expr_sim_inv_mods mods c cx env em /\
   FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
   ~cx_const_name cx (src,name) /\
@@ -2709,7 +2707,6 @@ Definition for_nonslot_code_frame_def:
 End
 
 Theorem for_nonslot_bare_immutable_lookup[local]:
-  !mods.
   expr_sim_inv_mods mods c cx env es /\
   FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
   ~cx_const_name cx (src,name) /\
@@ -2778,7 +2775,6 @@ QED
 
 (* Finish the prepared round with one target suffix for all storage horizons. *)
 Theorem for_nonslot_array_scoped_body_at[local]:
-  !mods exps.
   (!H. valid_horizon cx st0 H eb.storage_trace ==>
     for_nonslot_body_entry (DF H,lo,d,ctx,func,cx,c,id,env,body)
       (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
@@ -3712,7 +3708,6 @@ QED
 (* The increment runner gives the path; only its endpoint and reachability
    matter to the live packet.  Neither register write touches an old local. *)
 Theorem for_nonslot_actual_increment_live[local]:
-  !mods exps.
   (?bb inst. lookup_block cond func.fn_blocks = SOME bb /\
      get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI) /\
   sa0.cs_next_var <= saL.cs_next_var /\
@@ -3834,7 +3829,6 @@ QED
 Finalise for_nonslot_actual_increment_live
 
 Theorem for_nonslot_array_round_contracts_at_with_prefix:
-  !mods exps.
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
     (bc,saD,saA,xd,capacity,aidItem)
@@ -4490,7 +4484,6 @@ QED
 Finalise for_nonslot_array_round_contracts_at_with_prefix
 
 Theorem for_nonslot_array_round_contracts_at:
-  !mods exps.
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
     (bc,saD,saA,xd,capacity,aidItem)
@@ -4616,7 +4609,6 @@ QED
 
 (* The captured iterator's source facts are common to the full and prefix rounds. *)
 Theorem for_nonslot_array_round_source_pre:
-  !mods exps.
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
     (bc,saD,saA,xd,capacity,aidItem)
@@ -4704,7 +4696,6 @@ Proof
 QED
 
 Theorem for_nonslot_array_round_contracts:
-  !mods exps.
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
     (bc,saD,saA,xd,capacity,aidItem)

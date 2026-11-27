@@ -9,7 +9,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem target_array_source_cases:
-  !mods.
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   type_place_target env bt = SOME (Type (ArrayT et bd)) /\
   type_place_target env (SubscriptTarget bt e) = SOME vt /\

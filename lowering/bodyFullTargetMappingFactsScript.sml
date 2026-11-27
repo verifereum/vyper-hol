@@ -7,7 +7,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem target_mapping_source_cut:
-  !mods.
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   type_place_target env bt = SOME (HashMapT kt vt) /\
   type_place_target env (SubscriptTarget bt e) = SOME et /\

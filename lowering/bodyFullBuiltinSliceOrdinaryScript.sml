@@ -55,7 +55,6 @@ fun slice_stmt_state_room related =
   simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac
 
 Theorem slice_builtin_none_vv_full_from_runs:
-  !mods exps.
   (!sa src len data sb func s p G tn capacity bs lo ctx explicit PG.
     compile_bytestring_src (Var src) sa = ((len,data),sb) /\
     fn_has_code sa sb func /\ not_fresh_at sa src /\
@@ -2163,7 +2162,7 @@ QED
 Finalise slice_builtin_none_vv_full_from_runs
 
 Theorem slice_builtin_none_vv_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es.
     (builtin_args_length_ok (Slice n) (LENGTH args) ==>
        case code_slice_source (Slice n) args of
          NONE => body_exprs_full_ok_mods mods exps cx args

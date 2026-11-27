@@ -131,7 +131,6 @@ Proof
 QED
 
 Theorem intcall_local_immutable_prefix_disjoint:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx tenv es /\
   cenv.ce_is_ctor /\
@@ -149,7 +148,6 @@ Proof
 QED
 
 Theorem intcall_alloca_immutable_prefix_disjoint:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx tenv es /\
   cenv.ce_is_ctor /\

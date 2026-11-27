@@ -22,7 +22,6 @@ Proof
 QED
 
 Theorem custom_error_encode_payload:
-  !mods exps.
   LENGTH xs = LENGTH vals /\ LENGTH vals = LENGTH argvs /\
   LENGTH argvs = LENGTH arg_types /\ tys = MAP (lowered_value_type cenv) xs /\
   (contract_inv mods exps ctx cenv cx /\

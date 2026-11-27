@@ -155,7 +155,6 @@ Proof
 QED
 
 Theorem nonslot_iterator_expr_pre:
-  !mods exps.
   (contract_inv mods exps ctx c cx /\
      module_body_inv mods c.ce_module tops c cx) /\ supported_iterator tops typ (Array e) n /\
   expr_type e = ArrayT typ bd /\ well_typed_iterator env typ (Array e) /\
@@ -235,7 +234,7 @@ Proof
 QED
 
 Theorem compile_for_nonslot_array_frag_full:
-  !mods exps cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
+  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
                supported_storage_value tops nid (ArrayT typ bd)) /\
@@ -516,7 +515,7 @@ QED
 
 (* Bind the two array-loop implementations at the same expression cut. *)
 Theorem for_array_expr_cut_frag_full:
-  !mods exps cx id typ e n loop_body DF lo d PG tops bindings ctx shadow_ctx func
+  !cx id typ e n loop_body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
   (!tenv s'' tyv t s'3' vs t' s'4' x t''.
      tenv = get_tenv cx /\

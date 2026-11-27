@@ -50,7 +50,6 @@ Proof
 QED
 
 Theorem subscript_owned_array_index_view:
-  !mods.
   expr_body_pre_mods mods ce cx env (Subscript ann obj idx) es /\
   eval_expr cx obj es = (INL (Value av),mid) /\
   expr_type obj = ArrayT et bd /\

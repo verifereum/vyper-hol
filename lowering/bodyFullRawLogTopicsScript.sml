@@ -8,7 +8,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem raw_log_topics_full:
-  !mods exps.
   (!cenv cx env ann a n topics data dflt es vs es'.
     expr_body_pre_mods mods cenv cx env
       (Call ann RawLog

@@ -401,7 +401,6 @@ QED
 (* The expression/length endpoint (em,u,Gu,tu) is the capture anchor.
    (es0,sa0,s0,G0,tn0) is the older anchor of the whole For fragment. *)
 Theorem for_nonslot_array_element_prepare_full:
-  !mods exps.
   (contract_inv mods exps ctx c cx /\
      module_body_inv mods c.ce_module tops c cx) /\ expr_sim_inv_mods mods c cx env es /\
   supported_stmt tops bindings (For id fty (Array e) bound loop_body) /\

@@ -9,7 +9,7 @@ Ancestors
   bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem compile_for_storage_array_frag_full:
-  !mods exps cx id typ bd nid n body DF lo d PG tops bindings ctx shadow_ctx func
+  !cx id typ bd nid n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     (!c0 e0 sa0 s0 c1 e1 s1 sa1 c2 e2 s2.
        alloca_frame c0 e0 sa0 s0 c1 e1 s1 /\

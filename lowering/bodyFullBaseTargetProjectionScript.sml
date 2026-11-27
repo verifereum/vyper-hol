@@ -3,14 +3,12 @@ Ancestors bodyFullPreds
   bodyFullPredsMods[qualified]
 
 Theorem body_base_target_full_ok_attribute_projection:
-  !mods exps.
   body_base_target_full_ok_mods mods exps cx (AttributeTarget t id) = body_base_target_full_ok_mods mods exps cx t
 Proof
   PURE_REWRITE_TAC[body_base_target_full_ok_def] >> REFL_TAC
 QED
 
 Theorem body_base_target_full_ok_subscript_projection:
-  !mods exps.
   body_base_target_full_ok_mods mods exps cx (SubscriptTarget t e) =
     (body_base_target_full_ok_mods mods exps cx t /\
      ((?s pv s1. eval_base_place cx t s = (INL pv, s1)) ==>

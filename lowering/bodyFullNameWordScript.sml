@@ -66,7 +66,6 @@ Proof
 QED
 
 Theorem name_word_full:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Name ann id) es /\ is_word_type ann ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Name ann id) es

@@ -59,7 +59,6 @@ Proof
 QED
 
 Theorem body_assign_local_word_full_store:
-  !mods exps.
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e) sa = (cenv,sb) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
@@ -232,7 +231,6 @@ Proof
 QED
 
 Theorem body_assign_local_word_full_tail:
-  !mods exps.
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e) sa = (cenv,sb) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\

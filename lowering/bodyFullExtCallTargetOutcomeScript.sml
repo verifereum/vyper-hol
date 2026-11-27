@@ -49,7 +49,6 @@ Proof
 QED
 
 Theorem extcall_request_head_halt_outcome:
-  !mods exps.
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok_mods mods exps cx [addr] /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -144,7 +143,6 @@ QED
 
 (* The non-owning prefixes only need the ordinary exit projection. *)
 Theorem extcall_request_head_outcome:
-  !mods exps.
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok_mods mods exps cx [addr] /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\

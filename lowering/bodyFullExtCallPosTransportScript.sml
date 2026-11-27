@@ -86,7 +86,6 @@ Proof
 QED
 
 Theorem extcall_request_saved_stack_endpoint:
-  !mods.
   (?raw. read_result cx raw mid = (INL v,mid) /\
     vv_holds cenv cx (lowered_value_type cenv e) raw (StackValue tag op) mid t /\
     vv_at cenv cx (lowered_value_type cenv e) sa sm mid raw (StackValue tag op) t /\
@@ -165,7 +164,6 @@ Proof
 QED
 
 Theorem extcall_request_saved_memory_endpoint:
-  !mods.
   p.ptr_location = LocMemory /\ ~is_word_type (lowered_value_type cenv e) /\
   (?raw. read_result cx raw mid = (INL v,mid) /\
     vv_holds cenv cx (lowered_value_type cenv e) raw
@@ -448,7 +446,6 @@ Proof
 QED
 
 Theorem extcall_request_saved_ctor_read:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env entry /\
   cenv.ce_is_ctor /\ p.ptr_location = LocCode /\ dead_lo_ok H D lo cenv cx /\

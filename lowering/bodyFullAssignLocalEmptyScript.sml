@@ -262,7 +262,7 @@ QED
 Finalise body_assign_empty_scalar_suffix
 
 Theorem body_assign_local_memory_empty_full:
-  !mods exps cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
        body_base_target_full_ok_mods mods exps cx (NameTarget id)) /\

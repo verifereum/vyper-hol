@@ -7,7 +7,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem abi_encode_borrowed_footprint_frame:
-  !mods.
   expr_sim_inv_mods mods ce cx env es /\
   stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
   stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx ee t /\ ee.scopes = es.scopes /\
@@ -50,7 +49,6 @@ Proof
 QED
 
 Theorem abi_encode_borrowed_operand_retained:
-  !mods.
   expr_sim_inv_mods mods ce cx env es /\
   stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
   stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx ee t /\ ee.scopes = es.scopes /\

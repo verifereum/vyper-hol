@@ -72,7 +72,6 @@ QED
 
 (* The scalar and materialized cases agree on the frame for the suffix. *)
 Theorem extcall_keyword_head_outcome:
-  !mods exps.
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -179,7 +178,6 @@ QED
    The selected operands match source first-occurrence selection; evaluating
    a later duplicate still contributes its gas marks and frame. *)
 Theorem extcall_request_keywords_owned_outcome:
-  !mods exps.
   body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\

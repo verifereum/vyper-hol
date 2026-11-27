@@ -20,7 +20,6 @@ Libs pairLib
 val _ = Parse.hide "body";
 
 Theorem raw_log_compile_stack:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Call ann RawLog args dflt) es ==>
   !sa. ?t op sb. compile_expr cenv ty (Call ann RawLog args dflt) sa =
                 (StackValue t op,sb)
@@ -39,7 +38,7 @@ Proof
 QED
 
 Theorem raw_log_expr_full_ok:
-  !mods exps cx ann es dflt.
+  !cx ann es dflt.
     (!cenv ty e.
        gas_shadow_compiles (lower_value compile_expr cenv ty e)
          (lower_value compile_expr cenv ty (gas_shadow_expr e))) /\

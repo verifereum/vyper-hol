@@ -104,7 +104,7 @@ QED
 
 (* A local. *)
 Theorem body_augassign_local_full:
-  !mods exps cx aty bop id e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx aty bop id e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (NameTarget id) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -138,7 +138,7 @@ QED
 
 (* A scalar top-level variable. *)
 Theorem body_augassign_toplevel_word_full:
-  !mods exps cx aty bop nsid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx aty bop nsid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (TopLevelNameTarget nsid) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -173,7 +173,7 @@ QED
 
 (* A field of a struct local. *)
 Theorem body_augassign_attr_local_full:
-  !mods exps cx aty bop id fld e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx aty bop id fld e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (AttributeTarget (NameTarget id) fld) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -207,7 +207,7 @@ QED
 
 (* A field of a storage struct. *)
 Theorem body_augassign_attr_storage_full:
-  !mods exps cx aty bop nsid fld e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx aty bop nsid fld e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (AttributeTarget (TopLevelNameTarget nsid) fld) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -241,7 +241,7 @@ Proof
 QED
 
 Theorem body_augassign_nested_immutable_full:
-  !mods exps cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx t s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -1207,7 +1207,7 @@ Finalise body_augassign_nested_immutable_full
 
 (* Every other base target. *)
 Theorem body_augassign_other_full:
-  !mods exps cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx t s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -1259,7 +1259,7 @@ QED
 
 (* Shared composition for the ordinary target-place route. *)
 Theorem augassign_ordinary_full[local]:
-  !mods exps cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx t s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\

@@ -43,7 +43,7 @@ val _ = Parse.hide "body";
 
 (* Declaration transports the three static body inputs at the pushed scope. *)
 Theorem range_declared_scope_inputs:
-  !mods cenv cx env es id typ e1 e2 n body ret_ty env' tyv v st bc st1.
+  !cenv cx env es id typ e1 e2 n body ret_ty env' tyv v st bc st1.
     type_stmt env ret_ty (For id typ (Range e1 e2) n body) = SOME env' /\
     stmt_exprs_ok cenv (For id typ (Range e1 e2) n body) /\
     expr_sim_inv_mods mods cenv cx env es /\
@@ -109,7 +109,7 @@ Proof
 QED
 
 Theorem range_body_static_transport:
-  !mods exps tops ctx cenv cx bc id typ st st1 body env ret_ty
+  !tops ctx cenv cx bc id typ st st1 body env ret_ty
     DF lo d shadow_ctx PG func shadow_func RetQ.
     declare_local cenv id typ st = (bc,st1) /\
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
@@ -135,7 +135,7 @@ Proof
 QED
 
 Theorem range_full_body_ih:
-  !mods exps cx tyv id body n1 N.
+  !cx tyv id body n1 N.
     body_for_full_ok_mods mods exps cx tyv id body
       (GENLIST (\j. Value (IntV (n1 + &j))) N) /\ 0 < N ==>
     body_stmts_full_ok_mods mods exps cx body
@@ -220,7 +220,7 @@ QED
 (* The original iterator supplies the body IH; the current cons call supplies
    admissibility at this iteration's actual source scope. *)
 Theorem range_cons_source_pre:
-  !mods exps cx id typ e1 e2 bound body tops bindings cenv env env' ret_ty
+  !cx id typ e1 e2 bound body tops bindings cenv env env' ret_ty
     tyv n1 N k a rs es lctx exit_lbl incr_lbl.
     supported_stmt tops bindings (For id typ (Range e1 e2) bound body) /\
     type_stmt env ret_ty (For id typ (Range e1 e2) bound body) = SOME env' /\
@@ -1967,7 +1967,6 @@ QED
 
 (* ===== Empty suffix: the concrete test and complete outer post ===== *)
 Theorem range_full_nil:
-  !mods.
   stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) bound body) sa = (cenv',sb) /\
   n1 <= n2 /\ N = Num (n2 - n1) /\
   sb.cs_current_bb = exit_lbl /\ sb.cs_current_insts = [] /\
@@ -2402,7 +2401,7 @@ Finalise range_entry_condition_frame
 
 (* Compiler witnesses are fixed before any runtime state or horizon. *)
 Theorem range_full_body_entry:
-  !mods exps cx id typ e1 e2 bound body DF lo d PG tops bindings ctx shadow_ctx func
+  !cx id typ e1 e2 bound body DF lo d PG tops bindings ctx shadow_ctx func
       shadow_func cenv env env' ret_ty lctx RetQ tyv sa sb shadow_sa shadow_sb.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -3571,7 +3570,7 @@ Finalise range_full_body_entry
 
 (* Complete checked post-allocation entry, retaining the original frame. *)
 Theorem range_checked_entry_full:
-  !mods DF lo explicit d ctx func PG tops cx st0 RetQ cenv env es sa s0 G0 tn0 ea sA
+  !DF lo explicit d ctx func PG tops cx st0 RetQ cenv env es sa s0 G0 tn0 ea sA
       GA tnA st sb0 entry_lbl cond_lbl op1 op2 p cv rv g1 z1 g2 z2 ev bound fty
       tyv n1 n2 w sz id.
     lookup_block st.cs_current_bb func.fn_blocks =
@@ -4047,7 +4046,7 @@ Finalise range_checked_entry_full
 (* ===== Initialization: one allocation and the selected scalar suffix ===== *)
 
 Theorem range_full_init:
-  !mods DF lo explicit d ctx func PG tops cx st0 RetQ cenv env es sa s0 G0 tn0 ea s
+  !DF lo explicit d ctx func PG tops cx st0 RetQ cenv env es sa s0 G0 tn0 ea s
       GE tnE st sb0 entry_lbl cond_lbl p cv ev bound fty tyv n1 n2 sz id.
     p = STRING #"%" (toString st.cs_next_var) /\
     lookup_block st.cs_current_bb func.fn_blocks =
@@ -6296,7 +6295,6 @@ Proof
 QED
 
 Theorem compile_for_range_frag_full:
-  !mods exps.
 !cx id typ e1 e2 n body DF lo d PG tops bindings ctx shadow_ctx func
  shadow_func cenv env env' ret_ty lctx RetQ es.
  (

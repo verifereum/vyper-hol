@@ -998,7 +998,6 @@ Finalise ifexp_arm_outcome_full_conditional
 (* The ternary's root from the condition's value judgment and the arms'
    vv judgments.  Each arm is one of the three arm steps' kinds. *)
 Theorem ifexp_body_post_nonword[local]:
-  !mods.
   expr_body_pre_mods mods ce cx env e es /\ ~is_word_type (expr_type e) ==>
   ~is_word_type (post_value_type ce e)
 Proof
@@ -1044,7 +1043,6 @@ Proof
 QED
 
 Theorem ifexp_body_arm_kind:
-  !mods.
   expr_body_pre_mods mods ce cx env e es ==>
   (is_word_type (post_value_type ce e) ==> is_word_type (expr_type e)) /\
   (post_value_type ce e = expr_type e /\
@@ -1096,7 +1094,7 @@ Proof
 QED
 
 Theorem ifexp_body_pre_children:
-  !mods cenv cx env t c a b es.
+  !cenv cx env t c a b es.
     expr_body_pre_mods mods cenv cx env (IfExp t c a b) es ==>
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     expr_body_pre_mods mods cenv cx env c es /\

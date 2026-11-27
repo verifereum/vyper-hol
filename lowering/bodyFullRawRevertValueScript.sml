@@ -12,7 +12,6 @@ Libs
   pairLib
 
 Theorem raw_revert_value_full_from_tail:
-  !mods exps.
   (!(H : (bool # 256 word # type_value) list # num list) ctx func cenv cx e es (sa:compile_state) (sm:compile_state)
     (sb:compile_state) (s0:venom_state) ee bs op (t:venom_state)
     cap G tn D lo d explicit PG.

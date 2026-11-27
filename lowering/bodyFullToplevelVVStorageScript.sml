@@ -13,7 +13,6 @@ Ancestors
 (* Needs no allocation bound on the variable's type: the read compiles to
    its slot and allocates nothing. *)
 Theorem toplevel_storage_vv_full:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_sim_inv_mods mods cenv cx env es /\
@@ -131,7 +130,6 @@ Finalise toplevel_storage_vv_full
 (* A storage or transient array variable read as a subscript base
    (array_slot_base) is a storage variable (array_slot_base_storage_decl). *)
 Theorem toplevel_slot_base_vv_full:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   well_typed_expr env e /\ ~const_name_root cx e /\ array_slot_base cenv e ==>

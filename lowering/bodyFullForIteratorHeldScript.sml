@@ -10,7 +10,7 @@ Ancestors
   bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem compile_for_storage_subplace_array_frag_full:
-  !mods exps cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
+  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
                supported_storage_value tops nid (ArrayT typ bd)) /\
@@ -191,7 +191,7 @@ Proof
 QED
 
 Theorem compile_for_immutable_subplace_array_frag_full:
-  !mods exps cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
+  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
                supported_storage_value tops nid (ArrayT typ bd)) /\

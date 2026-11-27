@@ -98,7 +98,6 @@ Proof
 QED
 
 Theorem extcall_operand_materialized_full:
-  !mods exps.
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -593,7 +592,6 @@ QED
 Finalise extcall_operand_materialized_full
 
 Theorem extcall_kwarg_default_owned_lookup_full:
-  !mods exps.
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -690,7 +688,6 @@ QED
 
 (* Project away allocation ownership for callers that only save the operand. *)
 Theorem extcall_kwarg_default_lookup_full:
-  !mods exps.
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -752,7 +749,6 @@ QED
 
 (* Keep the outcome interface for callers that do not save operands. *)
 Theorem extcall_kwarg_default_full:
-  !mods exps.
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\

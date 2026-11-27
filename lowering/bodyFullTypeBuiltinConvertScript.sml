@@ -8,7 +8,7 @@ Ancestors
   bodyFullPredsMods[qualified]
 
 Theorem convert_expr_full_ok:
-  !mods exps cx v11 typ es.
+  !cx v11 typ es.
     (!s'' x t.
        type_check (type_builtin_args_length_ok Convert (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>

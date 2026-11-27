@@ -12,7 +12,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem raw_log_topics_suffix_full_under_compose:
-  !mods exps.
   (!tops ctx func cenv cx env ann n pre e rest data dflt
    sa sm sb shadow_sa shadow_sm shadow_sb op ops
    (H : (bool # 256 word # type_value) list # num list) DF lo d es s G0 tn0 xs mid v u G1 tn1 ys ee vs t G tn.

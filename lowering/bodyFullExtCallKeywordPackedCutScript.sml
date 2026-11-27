@@ -14,7 +14,6 @@ Libs
 (* The source is already at eval_ext_call.  Separate the optional generated
    GAS from the physical ABI packing, which consumes no gas observations. *)
 Theorem extcall_request_keyword_packed_cut:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_body_pre_mods mods cenv cx env

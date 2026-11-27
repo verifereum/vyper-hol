@@ -35,7 +35,6 @@ Proof
 QED
 
 Theorem abi_encode_saved_row_open_pure:
-  !mods exps.
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -286,7 +285,6 @@ QED
 Finalise abi_encode_saved_row_open_pure
 
 Theorem abi_encode_saved_row_pure:
-  !mods exps.
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -356,7 +354,6 @@ Theorem abi_encode_saved_row =
   pureFrameLib.drop_frame abi_encode_saved_row_pure
 
 Theorem abi_encode_direct_row:
-  !mods exps.
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -428,7 +425,6 @@ Proof
 QED
 
 Theorem extcall_direct_row:
-  !mods exps.
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\

@@ -7,7 +7,7 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem make_array_builtin_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann t n args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann t n args es.
     (builtin_args_length_ok (MakeArray t n) (LENGTH args) ==>
       body_exprs_full_ok_mods mods exps cx args) /\
     (contract_inv mods exps ctx cenv cx /\

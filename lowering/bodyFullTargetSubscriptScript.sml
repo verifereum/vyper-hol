@@ -210,7 +210,6 @@ Proof
 QED
 
 Theorem target_subscript_sim_full:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -574,7 +573,6 @@ Proof
 QED
 
 Theorem immutable_target_subscript_sim_full:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\

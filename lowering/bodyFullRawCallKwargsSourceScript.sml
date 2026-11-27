@@ -6,7 +6,7 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem raw_call_kwargs_source_inv:
-  !mods cenv cx env ann flags args dflt base kws es vs ee.
+  !cenv cx env ann flags args dflt base kws es vs ee.
     expr_body_pre_mods mods cenv cx env (Call ann (RawCallTarget flags) args dflt) base /\
     expr_sim_inv_mods mods cenv cx env es /\ EVERY (\e. MEM e args) kws /\
     eval_exprs cx kws es = (INL vs,ee) ==>

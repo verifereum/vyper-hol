@@ -9,7 +9,7 @@ Ancestors
 val _ = Parse.hide "base";
 
 Theorem make_array_elements_full:
-  !mods exps args et tv header off ps sa sb shadow_sa shadow_sb es s G tn.
+  !args et tv header off ps sa sb shadow_sa shadow_sb es s G tn.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
     shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env ebase /\

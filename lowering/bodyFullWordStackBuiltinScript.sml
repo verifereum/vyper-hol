@@ -6,7 +6,7 @@ Ancestors
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem word_stack_builtin_body_full_intro:
-  !mods exps cx ann bi args.
+  !cx ann bi args.
     (!t n. bi <> MakeArray t n) /\
     (!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
       (contract_inv mods exps ctx cenv cx /\

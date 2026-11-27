@@ -56,7 +56,6 @@ Proof
 QED
 
 Theorem dynamic_read_storage_well_formed:
-  !mods.
   expr_body_pre_mods mods cenv cx env e s /\
   storage_well_formed_on cx s (FST H) /\
   valid_horizon cx st0 H mid.storage_trace /\

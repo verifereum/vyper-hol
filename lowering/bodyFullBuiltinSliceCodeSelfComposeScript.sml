@@ -50,7 +50,6 @@ Proof
 QED
 
 Theorem slice_builtin_self_vv_full_from_tail:
-  !mods exps.
   (!query_op query_ops sa limit sc start cnt sd N out data se copy_op copy_ops sf sb
     func cenv ctx tn s code i k G addr n e args cx st0 es DF lo d explicit PG tops source.
     emit_op query_op query_ops sa = (limit,sc) /\

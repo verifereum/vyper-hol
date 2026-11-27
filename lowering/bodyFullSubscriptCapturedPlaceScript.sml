@@ -20,7 +20,6 @@ Ancestors exprLowering[qualified,ignore_grammar]
    before the index is evaluated.  Preserve the entry, including its
    popped history, rather than requiring the captured path to be live. *)
 Theorem subscript_pop_local_frame[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env (Subscript ty obj idx) es /\
   eval_expr cx obj es = (INL (PlaceR (MemoryPlace id path)),mid) /\
   is_ArrayT (expr_type obj) /\ base_from_pop obj /\
@@ -130,7 +129,6 @@ QED
 (* The two child posts suffice to carry a captured memory place across
    the index. No lookup in the live array value is required. *)
 Theorem subscript_captured_pop_transport:
-  !mods.
   expr_body_pre_mods mods ce cx env (Subscript ty obj idx) es /\
   eval_expr cx obj es = (INL (PlaceR (MemoryPlace id path)),mid) /\
   expr_type obj = ArrayT et bd /\ base_from_pop obj /\
@@ -477,7 +475,6 @@ Proof
 QED
 
 Theorem captured_fixed_capacity[local]:
-  !mods.
   base_from_pop obj /\ expr_type obj = ArrayT et (Fixed n) /\
   post_value_type ce obj = expr_type obj /\
   vv_store_bound cx (post_value_type ce obj) (lowered_value_type ce obj)
@@ -531,7 +528,6 @@ Proof
 QED
 
 Theorem subscript_captured_fixed_execution:
-  !mods.
   expr_body_pre_mods mods ce cx env (Subscript ann obj idx) es /\
   eval_expr cx obj es = (INL (PlaceR (MemoryPlace id path)),mid) /\
   expr_type obj = ArrayT et (Fixed n) /\ base_from_pop obj /\
@@ -898,7 +894,6 @@ QED
    The canonical horizon chooses one endpoint; the two child posts at each
    horizon then establish its joint post without running the tail again. *)
 Theorem subscript_captured_fixed_outcome:
-  !mods.
   expr_body_pre_mods mods ce cx env (Subscript et obj idx) es /\
   eval_expr cx obj es = (INL (PlaceR (MemoryPlace id path)),mid) /\
   expr_type obj = ArrayT et (Fixed n) /\ base_from_pop obj /\

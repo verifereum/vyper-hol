@@ -9,7 +9,7 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem account_builtin_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (?i. bt = Acc i) /\
     builtin_args_length_ok bt (LENGTH args) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>

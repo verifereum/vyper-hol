@@ -10,7 +10,6 @@ Ancestors
 (* Scalar keywords use the child's lower_value endpoint, without another
    machine step. Keep its frame and exit so the remainder can compose. *)
 Theorem extcall_kwarg_scalar_full:
-  !mods exps.
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\

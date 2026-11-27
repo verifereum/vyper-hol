@@ -169,7 +169,7 @@ Proof
 QED
 
 Theorem concat_head_arm_full:
-  !mods exps DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env st0
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env st0
    e args es ee sa sc sb shadow_sa shadow_sc shadow_sb s t G tn G1 tn1
    B bsz ow k P binst oinst dv ov v op tv.
     compile_concat compile_expr cenv (e::args) (Var dv)

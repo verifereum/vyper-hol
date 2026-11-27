@@ -21,7 +21,6 @@ Ancestors
 val _ = Parse.hide "base";
 
 Theorem make_array_slot_full_bundled:
-  !mods exps.
     (
         (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -1394,7 +1393,6 @@ QED
 Finalise make_array_slot_full_bundled
 
 Theorem make_array_slot_full:
-  !mods exps.
     (
         (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\

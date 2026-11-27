@@ -7,7 +7,7 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem extcall_body_full_ok_of_vv:
-  !mods exps cx ann stat skip sig opts args dflt.
+  !cx ann stat skip sig opts args dflt.
     (!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
        (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\

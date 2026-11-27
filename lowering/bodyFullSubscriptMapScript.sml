@@ -427,7 +427,7 @@ val mapping_map_package_tac =
 
 
 Theorem subscript_map_map_full:
-  !mods exps cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+  !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -491,7 +491,7 @@ QED
 Finalise subscript_map_map_full
 
 Theorem subscript_map_full:
-  !mods exps cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es kt vt.
+  !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es kt vt.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\

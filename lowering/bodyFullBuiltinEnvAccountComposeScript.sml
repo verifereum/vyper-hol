@@ -56,7 +56,7 @@ Proof
 QED
 
 Theorem self_codesize_sim_full[local]:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty es.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
     expr_body_pre_mods mods cenv cx env
@@ -196,7 +196,6 @@ QED
 Finalise self_codesize_sim_full
 
 Theorem account_full_from_suffix:
-  !mods exps.
   (!item bs ee cx v x sa op sb func st0 cenv s ctx G tn DF lo d explicit PG.
     item <> Code /\ LENGTH bs = 20 /\ accounts_well_typed ee.accounts /\
     unop_result cx (account_item_type item) (Acc item) [BaseT AddressT]

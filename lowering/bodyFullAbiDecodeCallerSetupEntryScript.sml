@@ -43,7 +43,6 @@ val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b dat
      SOME (d,outsz))``;
 
 Theorem abi_decode_body_setup_entry:
-  !mods exps.
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es0 /\

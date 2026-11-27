@@ -7,7 +7,7 @@ Ancestors
 
 (* Original application anchors typing; the suffix post uses its own start. *)
 Theorem ecrecover_args_suffix_full:
-  !mods exps todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty
+  !todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty
     ann args done entry es st0 sa sm shadow_sa shadow_sm xs s0 G0 tn0.
     expr_body_pre_mods mods cenv cx env (Builtin ann ECRecover args) entry /\
     args = done ++ todo /\ body_exprs_full_ok_mods mods exps cx todo /\

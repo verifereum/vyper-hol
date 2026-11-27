@@ -15,7 +15,6 @@ Ancestors
 Libs horizonTypeLib
 
 Theorem log_arg_clear_event:
-  !mods.
   expr_sim_inv_mods mods cenv cx env es /\ supported_event_leaf_type ty ==>
   log_arg_clear cenv cx ty v
 Proof
@@ -34,7 +33,6 @@ Proof
 QED
 
 Theorem compile_log_saved_topic_hash:
-  !mods.
   local_ptrs_reserved cenv sm /\ expr_sim_inv_mods mods cenv cx env es /\
   expr_val_rel cx ty v src s /\ expr_val_at cenv cx ty sa sm es v src s /\
   supported_event_leaf_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\

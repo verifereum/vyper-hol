@@ -16,7 +16,7 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
 val _ = Parse.hide "base";
 
 Theorem make_tuple_vv_sim_full_conditional:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
     ^(rhs (concl (PURE_REWRITE_RULE [make_array_completed_def]
       make_array_packaging_ok_def))) /\
     (builtin_args_length_ok (MakeArray NONE n) (LENGTH args) ==>

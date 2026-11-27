@@ -63,7 +63,6 @@ QED
 (* This is a one-horizon row. The selected witness serves the dynamic
    conjuncts; storage liveness can subsequently be projected at any horizon. *)
 Theorem keyword_packing_row_endpoint[local]:
-  !mods.
   compile_snapshot_vv cenv copy (ext_call_arg_value (lowered_value_type cenv e) vv)
     sm = (sv,ss) /\
   (copy /\ ~is_word_type (lowered_value_type cenv e) ==>
@@ -200,7 +199,6 @@ Proof
 QED
 
 Theorem extcall_keyword_packing_rows:
-  !mods.
   LENGTH svs = LENGTH xs /\
   local_ptrs_reserved cenv sb /\
   sb.cs_next_var <= se.cs_next_var /\ sb.cs_next_id <= se.cs_next_id /\

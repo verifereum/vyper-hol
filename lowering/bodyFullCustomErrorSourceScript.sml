@@ -14,7 +14,6 @@ Libs
   monadsyntax
 
 Theorem custom_error_raise_source:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Raise (RaiseCustomError (CustomError id pos kw))) /\
@@ -183,7 +182,6 @@ QED
 
 (* Only the actual condition trace can activate the conditional reason IH. *)
 Theorem assert_custom_false_source_ready:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\
   ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
   supported_stmt tops bindings (Assert e (AssertCustomError err)) /\
@@ -224,7 +222,6 @@ QED
 
 
 Theorem assert_custom_condition_source_pre:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assert e (AssertCustomError err)) /\

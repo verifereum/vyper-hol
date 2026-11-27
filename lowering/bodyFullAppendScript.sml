@@ -2072,7 +2072,6 @@ QED
 Finalise append_nested_storage_endpoint_full
 
 Theorem append_nested_storage_cont_framed[local]:
-  !mods exps.
  !DF lo d ctx shadow_ctx PG func cx st0 lctx RetQ cenv env sa sm sb s0 G0 tn0
    mid t G tn tr slot tv v bop vop w elem src_ty cap.
   (contract_inv mods exps ctx cenv cx /\
@@ -3440,7 +3439,6 @@ QED
 Finalise append_memory_copy_payload_path[local]
 
 Theorem append_nested_memory_cont_full[local]:
-  !mods exps.
   compile_dynarray_append cenv (Var p) src 32 (type_memory_size tv)
     elem elem cap F LocMemory sa = ((),sb) /\
   (contract_inv mods exps ctx cenv cx /\
@@ -3747,7 +3745,6 @@ QED
 Finalise append_nested_memory_cont_full[local]
 
 Theorem append_memory_copy_cont_full[local]:
-  !mods exps.
   compile_dynarray_append cenv (Var p) (Var xs) 32 (type_memory_size tv)
     elem elem cap F LocMemory sa = ((),sb) /\
   (contract_inv mods exps ctx cenv cx /\
@@ -3816,7 +3813,6 @@ Proof
 QED
 
 Theorem append_aggregate_input[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\
   bind (eval_expr cx e) (read_result cx) es = (INL v,ee) /\
   expr_post H ctx func cenv cx e es sa sb s0 ee v op s /\
@@ -3902,7 +3898,6 @@ QED
 Finalise append_aggregate_input[local]
 
 Theorem append_memory_local_inputs[local]:
-  !mods exps.
   expr_sim_inv_mods mods cenv cx env es /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module (cx_tops cx) cenv cx) /\
   target_mutable env (NameTarget id) /\
@@ -3990,7 +3985,7 @@ Proof
 QED
 
 Theorem body_append_local_nonword_frag_full:
-  !mods exps cx id e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+  !cx id e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
     env env' ret_ty lctx RetQ es elem cap.
   (!s p t. eval_target_place cx (NameTarget id) s = (INL p,t) ==>
      body_expr_full_ok_mods mods exps cx e) /\
@@ -4559,7 +4554,6 @@ Proof
 QED
 
 Theorem append_nested_word_input[local]:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\
   bind (eval_expr cx e) (read_result cx) es = (INL v,ee) /\
   expr_post H ctx func cenv cx e es sa sb s0 ee v vop s /\
@@ -4722,7 +4716,7 @@ Proof
 QED
 
 Theorem append_typed_target_place[local]:
-  !mods t cenv cx env es vt.
+  !t cenv cx env es vt.
     expr_sim_inv_mods mods cenv cx env es /\ ~immutable_root cx t /\
     type_place_target env t = SOME vt ==>
     target_place_type cenv t = SOME (value_type_place vt)
@@ -4788,7 +4782,7 @@ QED
 Finalise append_typed_target_place[local]
 
 Theorem body_append_nested_frag_full[local]:
-  !mods exps cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
     env env' ret_ty lctx RetQ es elem cap.
   (!s p mid. eval_target_place cx t s = (INL p,mid) ==>
      body_expr_full_ok_mods mods exps cx e) /\
@@ -5958,7 +5952,7 @@ QED
 Finalise body_append_nested_frag_full[local]
 
 Theorem body_append_nested_subscript_frag_full:
-  !mods exps cx base key e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+  !cx base key e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
     env env' ret_ty lctx RetQ es elem cap.
   (!s p t. eval_target_place cx (SubscriptTarget base key) s = (INL p,t) ==>
      body_expr_full_ok_mods mods exps cx e) /\
@@ -5991,7 +5985,7 @@ Proof
 QED
 
 Theorem body_append_nested_attribute_frag_full:
-  !mods exps cx base field e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+  !cx base field e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
     env env' ret_ty lctx RetQ es elem cap.
   (!s p t. eval_target_place cx (AttributeTarget base field) s = (INL p,t) ==>
      body_expr_full_ok_mods mods exps cx e) /\
@@ -6024,7 +6018,7 @@ Proof
 QED
 
 Theorem body_append_storage_word_frag_full:
-  !mods exps cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+  !cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
     env env' ret_ty lctx RetQ es elem cap.
   (!s p t. eval_target_place cx (TopLevelNameTarget nid) s = (INL p,t) ==>
      body_expr_full_ok_mods mods exps cx e) /\
@@ -6459,7 +6453,7 @@ QED
 Finalise body_append_storage_word_frag_full
 
 Theorem body_append_storage_aggregate_frag_full[local]:
-  !mods exps cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+  !cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
     env env' ret_ty lctx RetQ es elem cap.
   (!s p t. eval_target_place cx (TopLevelNameTarget nid) s = (INL p,t) ==>
      body_expr_full_ok_mods mods exps cx e) /\
@@ -7046,7 +7040,7 @@ QED
 Finalise body_append_storage_aggregate_frag_full[local]
 
 Theorem body_append_storage_bytestring_frag_full:
-  !mods exps cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+  !cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
     env env' ret_ty lctx RetQ es elem cap.
   (!s p t. eval_target_place cx (TopLevelNameTarget nid) s = (INL p,t) ==>
      body_expr_full_ok_mods mods exps cx e) /\
@@ -7076,7 +7070,7 @@ Proof
 QED
 
 Theorem body_append_storage_flat_copy_frag_full:
-  !mods exps cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+  !cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
     env env' ret_ty lctx RetQ es elem cap.
   (!s p t. eval_target_place cx (TopLevelNameTarget nid) s = (INL p,t) ==>
      body_expr_full_ok_mods mods exps cx e) /\
@@ -7106,7 +7100,7 @@ Proof
 QED
 
 Theorem body_append_storage_typed_copy_frag_full:
-  !mods exps cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+  !cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
     env env' ret_ty lctx RetQ es elem cap.
   (!s p t. eval_target_place cx (TopLevelNameTarget nid) s = (INL p,t) ==>
      body_expr_full_ok_mods mods exps cx e) /\
@@ -7137,7 +7131,7 @@ Proof
 QED
 
 Theorem body_append_storage_tuple_layout_frag_full:
-  !mods exps cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+  !cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
     env env' ret_ty lctx RetQ es elem cap.
   (!s p t. eval_target_place cx (TopLevelNameTarget nid) s = (INL p,t) ==>
      body_expr_full_ok_mods mods exps cx e) /\
@@ -7168,7 +7162,7 @@ Proof
 QED
 
 Theorem body_append_local_full:
-  !mods exps cx id e.
+  !cx id e.
     (!s'' p t'.
        eval_target_place cx (NameTarget id) s'' = (INL p,t') ==>
        body_expr_full_ok_mods mods exps cx e) ==>
@@ -7193,7 +7187,7 @@ Proof
 QED
 
 Theorem body_append_nested_full:
-  !mods exps cx t e.
+  !cx t e.
     (!id. t <> NameTarget id) /\ (!nid. t <> TopLevelNameTarget nid) /\
     (!s'' p t'.
        eval_target_place cx t s'' = (INL p,t') ==> body_expr_full_ok_mods mods exps cx e) /\
@@ -7220,7 +7214,7 @@ Proof
 QED
 
 Theorem body_append_storage_full:
-  !mods exps cx nid e.
+  !cx nid e.
     (!s'' p t'.
        eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
        body_expr_full_ok_mods mods exps cx e) ==>

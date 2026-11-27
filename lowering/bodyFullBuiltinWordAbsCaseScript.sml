@@ -15,7 +15,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem abs_continuation_full:
-  !mods.
   expr_type e = BaseT (IntT 256) /\
   expr_body_pre_mods mods cenv cx env e es /\
   compile_builtin_abs x s1 = (op,sb) /\
@@ -200,7 +199,7 @@ Proof
 QED
 
 Theorem word_abs_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
        (~is_word_type (expr_type e) ==>
         !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =

@@ -6,7 +6,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem raw_call_kwargs_bytes_frame:
-  !mods.
   expr_sim_inv_mods mods cenv cx env es /\
   expr_val_at cenv cx (BaseT(BytesT(Dynamic cap))) sa sd es (BytesV bs) data s /\
   evaluate_type (get_tenv cx) (BaseT(BytesT(Dynamic cap))) =

@@ -9,7 +9,6 @@ Ancestors
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem as_wei_value_continuation_full:
-  !mods exps.
   expr_type e = BaseT (UintT k) /\
   expr_body_pre_mods mods cenv cx env e es /\
   (contract_inv mods exps ctx cenv cx /\

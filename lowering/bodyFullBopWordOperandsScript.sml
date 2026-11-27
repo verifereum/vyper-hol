@@ -10,7 +10,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem bop_operands_full_cps_exit:
-  !mods exps.
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   body_exprs_full_ok_mods mods exps cx [e1; e2] /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -246,7 +245,6 @@ Proof
 QED
 
 Theorem bop_word_operands_full_cps_exit:
-  !mods exps.
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   body_exprs_full_ok_mods mods exps cx [e1; e2] /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -330,7 +328,6 @@ Proof
 QED
 
 Theorem bop_operands_full_cps:
-  !mods exps.
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
   body_exprs_full_ok_mods mods exps cx [e1; e2] /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -413,7 +410,6 @@ Proof
 QED
 
 Theorem bop_word_operands_full_cps:
-  !mods exps.
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
   body_exprs_full_ok_mods mods exps cx [e1; e2] /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\

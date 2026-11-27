@@ -7,7 +7,6 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Theorem make_array_init_full:
-  !mods.
   expr_body_pre_mods mods cenv cx env
     (Builtin ann (MakeArray elem_opt bnd) args) es /\
   cap = type_memory_bytes cenv ann /\ cap < dimword (:256) /\

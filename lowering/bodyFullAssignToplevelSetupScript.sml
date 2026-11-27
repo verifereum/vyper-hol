@@ -66,7 +66,6 @@ Proof
 QED
 
 Theorem body_assign_toplevel_word_full_setup:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\

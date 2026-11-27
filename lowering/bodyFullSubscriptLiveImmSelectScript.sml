@@ -23,7 +23,6 @@ Ancestors
   freshWrites wordArgsPtr gasSummary fragExec exprSimMemDefs venomState
 
 Theorem selected_constructor_code_read[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env fin /\
   cenv.ce_is_ctor /\ p.ptr_location = LocCode /\ dead_lo_ok H D lo cenv cx /\
@@ -49,7 +48,6 @@ QED
 (* A fixed projection can be read from the current root even if the index
    changed that root.  The last selected value may itself be dynamic. *)
 Theorem current_immutable_fixed_path_live[local]:
-  !mods.
   expr_sim_inv_mods mods cenv cx env fin /\
   FLOOKUP (case ALOOKUP fin.immutables cx.txn.target of
              NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
@@ -300,7 +298,6 @@ Proof
 QED
 
 Theorem immutable_target_index_frame:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_body_pre_mods mods cenv cx env idx es /\
   target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
@@ -320,7 +317,6 @@ Proof
 QED
 
 Theorem immutable_target_path_after_index:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_body_pre_mods mods cenv cx env idx es /\
   target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
@@ -472,7 +468,6 @@ QED
 Finalise immutable_fixed_spine
 
 Theorem live_immutable_path_after_index[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_body_pre_mods mods cenv cx env obj es /\
@@ -517,7 +512,6 @@ Proof
 QED
 
 Theorem live_immutable_index_cut_view[local]:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_body_pre_mods mods cenv cx env obj es /\ expr_body_pre_mods mods cenv cx env idx mid /\
@@ -1083,7 +1077,6 @@ QED
 
 (* The successful index cut, before executing the immutable bounds suffix. *)
 Theorem subscript_live_immutable_select_full:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_body_pre_mods mods cenv cx env (Subscript et obj idx) es /\

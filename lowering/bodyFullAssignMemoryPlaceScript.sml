@@ -204,7 +204,6 @@ QED
 Finalise body_assign_memory_place_execution
 
 Theorem body_assign_memory_place_joint:
-  !mods.
   compile_assign_value cenv (Var xd) LocMemory (Var xs) F loc dty sty bytes sa = ((),sb) /\
   ~is_word_type dty /\ ~is_word_type sty /\
   acyclic_struct_metadata cenv.ce_struct_fields /\

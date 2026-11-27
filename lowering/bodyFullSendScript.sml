@@ -21,7 +21,7 @@ Ancestors
 val _ = Parse.hide "body";
 
 Theorem send_expr_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
    has_gas args dflt es.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -819,7 +819,7 @@ QED
 Finalise send_expr_sim_full
 
 Theorem send_expr_vv_sim_full:
-  !mods exps DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
    has_gas args dflt es.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -848,7 +848,7 @@ QED
 
 (* The send operands and CALL/ASSERT suffix share the joint witness. *)
 Theorem body_send_case_full:
-  !mods exps cx v12 has_gas es v13.
+  !cx v12 has_gas es v13.
     (!s'' x t.
        type_check (LENGTH es = if has_gas then 3 else 2) "Send args" s'' =
        (INL x,t) ==>

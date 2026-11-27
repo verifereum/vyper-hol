@@ -26,7 +26,6 @@ val operand_bind_tac =
 
 (* Keep the target's pointer ownership at the head cut of this execution. *)
 Theorem extcall_request_guarded_operand_prefix_address_owned_bundled:
-  !mods exps.
   args = addr::tail /\ nargs = LENGTH arg_types /\
   xs = TAKE nargs tail /\ kw_es = DROP nargs tail /\
   expr_type addr = BaseT AddressT /\
@@ -260,7 +259,6 @@ Proof
 QED
 
 Theorem extcall_request_guarded_operand_prefix_address_owned:
-  !mods exps.
   args = addr::tail /\ nargs = LENGTH arg_types /\
   xs = TAKE nargs tail /\ kw_es = DROP nargs tail /\
   expr_type addr = BaseT AddressT /\

@@ -55,7 +55,6 @@ QED
 
 (* Only the ExtCall typing clause is needed to seed the operand cuts. *)
 Theorem request_stage_source_boundary:
-  !mods.
   expr_body_pre_mods mods cenv cx env
     (Call ann (ExtCall stat skip (name,ats,rt) opts) args dr) es ==>
   ann = rt /\ dr = NONE /\ ext_call_opts_ok stat opts /\
@@ -262,7 +261,6 @@ QED
 (* The continuation starts before the optional code check, with the physical
    request at the endpoint chosen by operand evaluation and ABI packing. *)
 Theorem extcall_request_full:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   shadow_body_inv_mods mods exps ctx shadow_ctx /\

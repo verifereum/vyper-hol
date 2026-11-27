@@ -174,7 +174,6 @@ Proof
 QED
 
 Theorem typed_immutable_target_root:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   immutable_root cx bt /\ IS_SOME (type_place_target env bt) ==>
@@ -223,7 +222,6 @@ Proof
 QED
 
 Theorem immutable_toplevel_target_sim_full:
-  !mods exps.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   immutable_root cx (TopLevelNameTarget (NONE,id)) /\ ~cx_const_name cx (NONE,id) ==>
@@ -272,7 +270,7 @@ Proof
 QED
 
 Theorem immutable_target_place_type:
-  !mods exps bt tops ctx cenv cx env es vt.
+  !bt tops ctx cenv cx env es vt.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
     immutable_root cx bt /\ type_place_target env bt = SOME vt ==>

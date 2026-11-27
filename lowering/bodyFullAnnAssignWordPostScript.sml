@@ -61,7 +61,6 @@ Proof
 QED
 
 Theorem annassign_word_full_value_type:
-  !mods.
   expr_body_pre_mods mods cenv cx env e es /\
   evaluate_type (get_tenv cx) typ = SOME tyv /\ expr_type e = typ /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,mid) /\
