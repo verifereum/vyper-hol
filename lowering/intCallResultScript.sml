@@ -374,8 +374,23 @@ Finalise stack_results_val_in_memory
 (* stmt_state_rel survives code that changes only variables and memory,
    keeping the live locals' pointer variables and the bytes of their
    regions (as literal_state_memory_frame in exprSimLiteralBuffer). *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem result_state_memory_frame:
+  !func cenv cx es s t ctx.
+    stmt_state_rel H ctx func cenv cx es s /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) /\
+    (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
+       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+       lookup_var p t = lookup_var p s) /\
+    (!name b sz. local_region cenv es.scopes s name b sz ==>
+       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+    (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+       immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
+         lookup_var x t = lookup_var x s) ==>
+    stmt_state_rel H ctx func cenv cx es t
 Proof
   rpt strip_tac >>
   `t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>` by
@@ -405,39 +420,27 @@ Proof
     (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
      gvs[stmt_state_rel_def] >> rpt strip_tac >> qexists_tac `id` >>
      fs[local_region_def] >> metis_tac[]) >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+      immutable_alloca_sep func (cenv with ce_module := src) cx es t` by
+    (rpt strip_tac >>
+     irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+     fs[stmt_state_rel_def] >>
+     rpt strip_tac >> qexists_tac `id` >>
+     fs[local_region_def] >> metis_tac[]) >>
   `immutable_base_zero cenv t` by
     (irule immutable_base_zero_frame >> qexists_tac `s` >>
      simp[] >> fs[stmt_state_rel_def] >>
      qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `state_rel H func cenv cx es s` by fs[stmt_state_rel_def] >>
   rewrite_tac[stmt_state_rel_def] >>
   conj_tac
-  >- (irule state_rel_frame >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`es`, `s`] >>
-      qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
-        (fn th => once_rewrite_tac[th]) >>
-      gvs[stmt_state_rel_def] >> metis_tac[]) >>
+  >- (match_mp_tac
+         (Q.SPECL [`H`,`func`,`cenv`,`cx`,`es`,`es`,`s`,`t`] state_rel_frame) >>
+      rpt conj_tac >>
+      FIRST [first_assum ACCEPT_TAC,
+             qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
+               (fn th => once_rewrite_tac[th]) >> simp[]]) >>
   gvs[stmt_state_rel_def] >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem result_state_memory_frame:
-  !func cenv cx es s t ctx.
-    stmt_state_rel H ctx func cenv cx es s /\
-    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-    ((ctx_has_dalloca ctx \/
-      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
-      LENGTH s.vs_memory <= LENGTH t.vs_memory) /\
-    (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
-       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-       lookup_var p t = lookup_var p s) /\
-    (!name b sz. local_region cenv es.scopes s name b sz ==>
-       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
-    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
-    (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
-         lookup_var x t = lookup_var x s) ==>
-    stmt_state_rel H ctx func cenv cx es t
-Proof
-  cheat
 QED
 
 (* A buffer holding v in memory is a pointer to v: the caller's view of a
@@ -481,11 +484,12 @@ Theorem store_multi_results_frag:
     w2n w + 32 * LENGTH results < dimword (:256) /\
     (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
        w2n w + 32 * LENGTH results <= lb \/ lb + lsz <= w2n w) /\
-    (cenv.ce_is_ctor ==> !name itv iv off.
-       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+    (cenv.ce_is_ctor ==> !src name itv iv off.
+       (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+       FLOOKUP cenv.ce_module_vars (src,name) =
          SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-         | SOME imms => get_source_immutables cenv.ce_module imms) name =
+         | SOME imms => get_source_immutables src imms) name =
          SOME (itv,iv) ==>
        regions_disjoint (w2n w) (32 * LENGTH results) off
          (type_memory_size itv)) ==>
@@ -524,18 +528,23 @@ Resume store_multi_results_frag[post]:
   `s1.vs_data_section = s0.vs_data_section` by
     (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = _`
        (mp_tac o AP_TERM ``\z. z.vs_data_section``) >> simp[]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s0` by
-    fs[stmt_state_rel_def, state_rel_def] >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s1` by
-    (irule loweringSliceTheory.immutables_rel_mem_agree >> qexists_tac `s0` >>
-     simp[] >>
-     rpt strip_tac >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+    immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s1` by
+    (rpt gen_tac >> disch_tac >>
+     irule loweringSliceTheory.immutables_rel_mem_agree >> qexists_tac `s0` >>
+     simp[] >> conj_tac
+     >~ [`immutables_rel _ _ _ _ _ s0`]
+     >- (fs[stmt_state_rel_def, state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+         metis_tac[]) >>
+     disch_tac >> map_every qx_gen_tac [`nm`,`ity`,`iv`,`offset`] >> strip_tac >>
      qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >>
+     disch_then (qspecl_then [`src`,`nm`,`ity`,`iv`,`offset`] mp_tac) >>
      simp[regions_disjoint_def] >> strip_tac >>
      first_x_assum irule >> simp[]) >>
   rpt conj_tac
-  >- (irule result_state_memory_frame >> simp[] >> qexists_tac `s0` >>
+  >- (irule result_state_memory_frame >> simp[] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `s0` >>
       asm_rewrite_tac[] >>
       conj_tac
       >- (rpt strip_tac >>
