@@ -14,13 +14,148 @@ Ancestors
   logBytesRobustSeqPtr bodyCopyMemoryBase fragGasCopyLoop fragGasOriginPtrDead
   fragGasCopySeqLiftProps
   exprSimBufferStore reasonCopySourcePtr
-  bodyMemAggregatePath fragGasPathFrameMem logValueFramePtr internalReturnImmutableTypes
-  bodyFullBuiltinWordPowCompose stateRelProj immutableDeployAssignFacts
+  bodyMemAggregatePath fragGasPathFrameMem logValueFramePtr bodyInvSplit
+  bodyFullBuiltinWordPowCompose stateRelProj immutableRegionTypingProps
+  placeMemoryProtectedFrame vyperTypeInvariants
 
 val _ = Parse.hide "base";
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem make_array_alloca_immutable_disjoint[local]:
+  contract_inv mods exps ctx cenv cx /\
+  expr_sim_inv_mods mods cenv cx env ebase /\
+  env_consistent env cx ee /\ stmt_state_rel H ctx func cenv cx ee z /\
+  FLOOKUP z.vs_allocas aid = SOME (base,cap) /\ cenv.ce_is_ctor /\
+  (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+  FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc io) /\
+  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+    | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
+  regions_disjoint io (type_memory_size itv) base cap
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then (strip_assume_tac o REWRITE_RULE [immutable_section_layout_mods_def])
+    contract_inv_immutable_section_layout >>
+  `?bytes. immutable_region_mods mods src name io bytes` by metis_tac[] >>
+  drule_all_then strip_assume_tac immutable_region_mods_type >>
+  `evaluate_type (get_tenv cx) ty = SOME itv` by
+    (qpat_assum `env_consistent env cx ee`
+       (mp_tac o cj 3 o REWRITE_RULE [env_consistent_def]) >>
+     simp[env_immutables_consistent_def] >>
+     disch_then (mp_tac o Q.SPECL [`src`,`name`,`ty`,`itv`,`iv`] o cj 2) >>
+     Cases_on `ALOOKUP ee.immutables cx.txn.target` >> gvs[]) >>
+  drule_all_then mp_tac stmt_state_rel_immutable_alloca_sep_source >>
+  simp[immutable_alloca_sep_def, immutable_decl_sep_alt] >>
+  disch_then (mp_tac o CONJUNCT1) >>
+  disch_then (qspecl_then [`name`, `ty`, `itv`, `io`] mp_tac) >>
+  simp[] >> impl_tac >- (qexists_tac `bytes` >> simp[]) >> strip_tac >>
+  qpat_x_assum `!aid b sz. FLOOKUP z.vs_allocas aid = _ ==> _` drule >>
+  simp[]
+QED
+
+Theorem make_array_slot_full_bundled:
+    (
+        body_inv tops ctx cenv cx /\
+        shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env ebase /\
+        csbase.cs_next_id <= aid /\ csbase.cs_next_id <= sa.cs_next_id /\
+        csbase.cs_next_var <= sa.cs_next_var /\
+        local_ptrs_reserved cenv csbase /\ local_ptrs_reserved cenv sa /\
+        (!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_fmp_headroom inst z) /\
+        (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+        (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==>
+               not_fresh_at csbase x) /\
+        (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==>
+               not_fresh_at csbase x) /\
+        (!H. valid_horizon cx st0 H ebase.storage_trace ==>
+             stmt_state_rel H ctx func cenv cx ebase sbase)) /\ body_expr_full_ok cx e /\ expr_body_pre cenv cx env e es /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    arg_type_fits (expr_type e) dty /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\
+    type_memory_bytes cenv dty = type_memory_size dtv /\
+    off + type_memory_size dtv <= cap /\
+    (\cs ee s G tn.
+        (?events. ee.storage_trace = ebase.storage_trace ++ events) /\
+        FLOOKUP s.vs_allocas aid = SOME (base,cap) /\
+        lookup_var q s = SOME (n2w base) /\
+        ptr_covers G tn q s cap /\ not_fresh_at cs q /\
+        aid < cs.cs_next_id /\ base+cap < dimword (:256) /\
+        base+cap <= s.vs_alloca_next /\
+        (!name b n. local_region cenv ee.scopes s name b n ==>
+                    loweringStateRelDefs$regions_disjoint base cap b n) /\
+        (!a b. FLOOKUP sbase.vs_allocas a = SOME b ==>
+               FLOOKUP s.vs_allocas a = SOME b) /\
+        MAP FDOM ebase.scopes = MAP FDOM ee.scopes /\
+        wb_frame cenv ebase ee csbase sbase s /\
+        ghost_kept_at lo cenv ebase csbase Gbase tnbase sbase G tn /\
+        return_buf_frame d cenv cs s /\ ~s.vs_halted /\
+        expr_sim_full_endpoint func cs sbase s /\
+        (!H. valid_horizon cx st0 H ee.storage_trace ==>
+             stmt_state_rel H ctx func cenv cx ee s /\
+             storage_well_formed_on cx ee (FST H) /\
+             ghost_inv_at (DF H) lo d cenv cx ee G tn s)) sa es s G tn /\ (\ps (off:num) s tn.
+        EVERY (\(rt,v,p,n).
+          val_wf rt v /\ val_footprint rt v <= n /\
+          base <= p /\ p+n <= (base:num)+(off:num) /\
+          (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+               val_in_memory rt v p m)) ps) ps off s tn /\
+    gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+    (do vv <- compile_expr cenv (expr_type e) e;
+        dst <- emit_op ADD [Var q; Lit (n2w off)];
+        src <- unwrap_value cenv vv;
+        compile_store_memory cenv src dst dty (lowered_value_type cenv e)
+     od) sa = ((),sb) /\
+    (do vv <- compile_expr (gas_shadow_env T cenv) (expr_type (gas_shadow_expr e)) (gas_shadow_expr e);
+        dst <- emit_op ADD [Var q; Lit (n2w off)];
+        src <- unwrap_value cenv vv;
+        compile_store_memory cenv src dst dty
+          (lowered_value_type cenv (gas_shadow_expr e))
+     od) shadow_sa = ((),shadow_sb) /\
+    expr_sim_full_code (ctx,shadow_ctx,func,shadow_func)
+      (sa,sb,shadow_sa,shadow_sb) ==>
+    gas_outcome_full
+      (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
+      (es,s,G,tn)
+      (\H res ee Gf tnf t.
+        ?v. res = INL v /\ value_has_type dtv v /\ val_wf dtv v /\
+            (\cs ee s G tn.
+        (?events. ee.storage_trace = ebase.storage_trace ++ events) /\
+        FLOOKUP s.vs_allocas aid = SOME (base,cap) /\
+        lookup_var q s = SOME (n2w base) /\
+        ptr_covers G tn q s cap /\ not_fresh_at cs q /\
+        aid < cs.cs_next_id /\ base+cap < dimword (:256) /\
+        base+cap <= s.vs_alloca_next /\
+        (!name b n. local_region cenv ee.scopes s name b n ==>
+                    loweringStateRelDefs$regions_disjoint base cap b n) /\
+        (!a b. FLOOKUP sbase.vs_allocas a = SOME b ==>
+               FLOOKUP s.vs_allocas a = SOME b) /\
+        MAP FDOM ebase.scopes = MAP FDOM ee.scopes /\
+        wb_frame cenv ebase ee csbase sbase s /\
+        ghost_kept_at lo cenv ebase csbase Gbase tnbase sbase G tn /\
+        return_buf_frame d cenv cs s /\ ~s.vs_halted /\
+        expr_sim_full_endpoint func cs sbase s /\
+        (!H. valid_horizon cx st0 H ee.storage_trace ==>
+             stmt_state_rel H ctx func cenv cx ee s /\
+             storage_well_formed_on cx ee (FST H) /\
+             ghost_inv_at (DF H) lo d cenv cx ee G tn s)) sb ee t Gf tnf /\ (\ps (off:num) s tn.
+        EVERY (\(rt,v,p,n).
+          val_wf rt v /\ val_footprint rt v <= n /\
+          base <= p /\ p+n <= (base:num)+(off:num) /\
+          (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+               val_in_memory rt v p m)) ps) ps off t tnf /\
+            (!m. mem_agree_outside tnf.t_mem t.vs_memory m ==>
+                 val_in_memory dtv v ((base:num)+(off:num)) m) /\
+            (!(p:num) (n:num). (base:num)+(off:num)+type_memory_size dtv <= p /\ p+n <= base+cap ==>
+                   mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory) /\
+            (~expr_has_effect e ==>
+              (!name b n. local_region cenv es.scopes s name b n ==>
+                mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
+              !p n. (p+n <= base \/ base+cap <= p) /\
+                (!inst b sz. MEM inst (fn_insts func) /\
+                  inst.inst_opcode = ALLOCA /\ sa.cs_next_id <= inst.inst_id /\
+                  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
+                  loweringStateRelDefs$regions_disjoint p n b sz) ==>
+                mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory))
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
   REWRITE_TAC [expr_sim_full_code_def, expr_sim_full_endpoint_def] >>
   BETA_TAC >> strip_tac >>
@@ -1110,37 +1245,20 @@ Resume make_array_slot_full_bundled[finish_post]:
   `env_consistent env cx ee` by
     (qpat_assum `expr_sim_inv cenv cx env ee` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[exprSimHypsDefsTheory.expr_sim_inv_def]) >>
-  `cenv.ce_module = NONE /\ cenv.ce_module_vars =
-    add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
-      tops 0 (add_module_var_locations tops FEMPTY)` by
-    (drule body_inv_module_locations >> simp[]) >>
-  `cenv.ce_is_ctor ==> !nm io ity itv.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc io) /\
-    cenv.ce_module_var_type (cenv.ce_module,nm) = SOME ity /\
-    evaluate_type (get_tenv cx) ity = SOME itv ==>
-    loweringStateRelDefs$regions_disjoint io (type_memory_size itv) base cap` by
-    (qpat_assum `stmt_state_rel (storage_trace_horizon ee.storage_trace)
-       ctx func cenv cx ee z` mp_tac >>
-     qpat_assum `FLOOKUP z.vs_allocas aid = SOME (base,cap)` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     metis_tac[immutable_assign_declared_region]) >>
-  `cenv.ce_is_ctor ==> !name itv iv io.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc io) /\
+  `cenv.ce_is_ctor ==> !src name itv iv io.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc io) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (itv,iv) ==>
-    loweringStateRelDefs$regions_disjoint io (type_memory_size itv)
-      (base+off) (type_memory_size dtv)` by
-    (strip_tac >>
-     mp_tac (Q.INST [`es` |-> `ebase`, `b` |-> `base+off`,
-       `cap` |-> `type_memory_size dtv`] internal_return_immutable_separation) >>
-     (impl_tac >-
-       (simp[] >> rpt strip_tac >>
-        `loweringStateRelDefs$regions_disjoint io (type_memory_size itv) base cap` by
-          metis_tac[] >>
-        qpat_assum `loweringStateRelDefs$regions_disjoint io (type_memory_size itv) base cap` mp_tac >>
-        qpat_assum `off+type_memory_size dtv <= cap` mp_tac >>
-        POP_ASSUM_LIST (K all_tac) >>
-        REWRITE_TAC[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >> simp[]) >>
+      | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) (base+off) (type_memory_size dtv)` by
+    (drule_then assume_tac bodySimTheory.body_inv_contract >>
+     drule_then strip_assume_tac body_inv_main_code >>
+     `expr_sim_inv_mods [(NONE,tops)] cenv cx env ebase` by
+       fs[exprSimHypsDefsTheory.expr_sim_inv_split_def] >>
+     disch_tac >> rpt gen_tac >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     drule_all_then assume_tac make_array_alloca_immutable_disjoint >>
+     fs[regions_disjoint_def] >> decide_tac) >>
   `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee u` by
     (mp_tac (Q.INST [`H` |-> `storage_trace_horizon ee.storage_trace`,
        `s` |-> `z`, `q` |-> `u`, `ce` |-> `cenv`, `es` |-> `ee`,
@@ -1159,7 +1277,7 @@ Resume make_array_slot_full_bundled[finish_post]:
         qpat_assum `!name b n. local_region cenv ee.scopes z name b n ==>
           b+n <= base+off \/ _` mp_tac >>
         qpat_assum `LENGTH z.vs_memory <= LENGTH u.vs_memory` mp_tac >>
-        qpat_assum `cenv.ce_is_ctor ==> !name itv iv io. _ ==>
+        qpat_assum `cenv.ce_is_ctor ==> !src name itv iv io. _ ==>
           loweringStateRelDefs$regions_disjoint io (type_memory_size itv)
             (base+off) (type_memory_size dtv)` mp_tac >>
         POP_ASSUM_LIST (K all_tac) >> REWRITE_TAC[arithmeticTheory.ADD_ASSOC] >>
@@ -1286,115 +1404,6 @@ Resume make_array_slot_full_bundled[finish_close]:
 QED
 
 Finalise make_array_slot_full_bundled
-*)
-Theorem make_array_slot_full_bundled:
-    (
-        body_inv tops ctx cenv cx /\
-        shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env ebase /\
-        csbase.cs_next_id <= aid /\ csbase.cs_next_id <= sa.cs_next_id /\
-        csbase.cs_next_var <= sa.cs_next_var /\
-        local_ptrs_reserved cenv csbase /\ local_ptrs_reserved cenv sa /\
-        (!fn inst z. frag_reachable ctx func s fn inst z ==> dalloca_fmp_headroom inst z) /\
-        (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-        (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==>
-               not_fresh_at csbase x) /\
-        (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==>
-               not_fresh_at csbase x) /\
-        (!H. valid_horizon cx st0 H ebase.storage_trace ==>
-             stmt_state_rel H ctx func cenv cx ebase sbase)) /\ body_expr_full_ok cx e /\ expr_body_pre cenv cx env e es /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    arg_type_fits (expr_type e) dty /\
-    evaluate_type (get_tenv cx) dty = SOME dtv /\
-    type_memory_bytes cenv dty = type_memory_size dtv /\
-    off + type_memory_size dtv <= cap /\
-    (\cs ee s G tn.
-        (?events. ee.storage_trace = ebase.storage_trace ++ events) /\
-        FLOOKUP s.vs_allocas aid = SOME (base,cap) /\
-        lookup_var q s = SOME (n2w base) /\
-        ptr_covers G tn q s cap /\ not_fresh_at cs q /\
-        aid < cs.cs_next_id /\ base+cap < dimword (:256) /\
-        base+cap <= s.vs_alloca_next /\
-        (!name b n. local_region cenv ee.scopes s name b n ==>
-                    loweringStateRelDefs$regions_disjoint base cap b n) /\
-        (!a b. FLOOKUP sbase.vs_allocas a = SOME b ==>
-               FLOOKUP s.vs_allocas a = SOME b) /\
-        MAP FDOM ebase.scopes = MAP FDOM ee.scopes /\
-        wb_frame cenv ebase ee csbase sbase s /\
-        ghost_kept_at lo cenv ebase csbase Gbase tnbase sbase G tn /\
-        return_buf_frame d cenv cs s /\ ~s.vs_halted /\
-        expr_sim_full_endpoint func cs sbase s /\
-        (!H. valid_horizon cx st0 H ee.storage_trace ==>
-             stmt_state_rel H ctx func cenv cx ee s /\
-             storage_well_formed_on cx ee (FST H) /\
-             ghost_inv_at (DF H) lo d cenv cx ee G tn s)) sa es s G tn /\ (\ps (off:num) s tn.
-        EVERY (\(rt,v,p,n).
-          val_wf rt v /\ val_footprint rt v <= n /\
-          base <= p /\ p+n <= (base:num)+(off:num) /\
-          (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
-               val_in_memory rt v p m)) ps) ps off s tn /\
-    gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-    (do vv <- compile_expr cenv (expr_type e) e;
-        dst <- emit_op ADD [Var q; Lit (n2w off)];
-        src <- unwrap_value cenv vv;
-        compile_store_memory cenv src dst dty (lowered_value_type cenv e)
-     od) sa = ((),sb) /\
-    (do vv <- compile_expr (gas_shadow_env T cenv) (expr_type (gas_shadow_expr e)) (gas_shadow_expr e);
-        dst <- emit_op ADD [Var q; Lit (n2w off)];
-        src <- unwrap_value cenv vv;
-        compile_store_memory cenv src dst dty
-          (lowered_value_type cenv (gas_shadow_expr e))
-     od) shadow_sa = ((),shadow_sb) /\
-    expr_sim_full_code (ctx,shadow_ctx,func,shadow_func)
-      (sa,sb,shadow_sa,shadow_sb) ==>
-    gas_outcome_full
-      (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
-      (es,s,G,tn)
-      (\H res ee Gf tnf t.
-        ?v. res = INL v /\ value_has_type dtv v /\ val_wf dtv v /\
-            (\cs ee s G tn.
-        (?events. ee.storage_trace = ebase.storage_trace ++ events) /\
-        FLOOKUP s.vs_allocas aid = SOME (base,cap) /\
-        lookup_var q s = SOME (n2w base) /\
-        ptr_covers G tn q s cap /\ not_fresh_at cs q /\
-        aid < cs.cs_next_id /\ base+cap < dimword (:256) /\
-        base+cap <= s.vs_alloca_next /\
-        (!name b n. local_region cenv ee.scopes s name b n ==>
-                    loweringStateRelDefs$regions_disjoint base cap b n) /\
-        (!a b. FLOOKUP sbase.vs_allocas a = SOME b ==>
-               FLOOKUP s.vs_allocas a = SOME b) /\
-        MAP FDOM ebase.scopes = MAP FDOM ee.scopes /\
-        wb_frame cenv ebase ee csbase sbase s /\
-        ghost_kept_at lo cenv ebase csbase Gbase tnbase sbase G tn /\
-        return_buf_frame d cenv cs s /\ ~s.vs_halted /\
-        expr_sim_full_endpoint func cs sbase s /\
-        (!H. valid_horizon cx st0 H ee.storage_trace ==>
-             stmt_state_rel H ctx func cenv cx ee s /\
-             storage_well_formed_on cx ee (FST H) /\
-             ghost_inv_at (DF H) lo d cenv cx ee G tn s)) sb ee t Gf tnf /\ (\ps (off:num) s tn.
-        EVERY (\(rt,v,p,n).
-          val_wf rt v /\ val_footprint rt v <= n /\
-          base <= p /\ p+n <= (base:num)+(off:num) /\
-          (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
-               val_in_memory rt v p m)) ps) ps off t tnf /\
-            (!m. mem_agree_outside tnf.t_mem t.vs_memory m ==>
-                 val_in_memory dtv v ((base:num)+(off:num)) m) /\
-            (!(p:num) (n:num). (base:num)+(off:num)+type_memory_size dtv <= p /\ p+n <= base+cap ==>
-                   mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory) /\
-            (~expr_has_effect e ==>
-              (!name b n. local_region cenv es.scopes s name b n ==>
-                mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
-              !p n. (p+n <= base \/ base+cap <= p) /\
-                (!inst b sz. MEM inst (fn_insts func) /\
-                  inst.inst_opcode = ALLOCA /\ sa.cs_next_id <= inst.inst_id /\
-                  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
-                  loweringStateRelDefs$regions_disjoint p n b sz) ==>
-                mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory))
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
-Proof
-  cheat
-QED
 
 Theorem make_array_slot_full:
     (

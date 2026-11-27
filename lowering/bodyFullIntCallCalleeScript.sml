@@ -3822,8 +3822,6 @@ Proof
          MATCH_MP immSectionDeadTheory.imm_section_dead_mods_singleton) >>
       irule stmtSimReturnTheory.internal_frame_ret_word_full_taint >>
          fs[]) >>
-     qpat_assum `ce.ce_modules = [(NONE,cx_tops cx)]`
-       (pure_rewrite_tac o single o MATCH_MP imm_section_dead_mods_singleton) >>
      irule internalReturnStackAggregateTheory.internal_frame_ret_stack_aggregate_full_taint >>
      fs[]) >>
   qpat_x_assum `frame_ret_ok_full _ _ _ _ _`
