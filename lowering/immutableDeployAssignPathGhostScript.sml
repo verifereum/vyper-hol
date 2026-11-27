@@ -11,6 +11,8 @@ Ancestors
   exprLoweringProps exprSimProps immutableDeployAssignAdmissible loweringPosts loweringStateRelDefs
   valueEncodingProps valueEncodingProofs vyperTypeInvariants vyperPlaceFrames
   compileVyper compileEnv list finite_map alist venomState
+  bodySimLogArgs abiCallerTypeEnv immutableRegionDeadProps vyperTypeConstantFold valueCopyBytes
+  exprSimHypsDefs vyperValue pair
 
 Theorem immutable_section_replace_exact:
   (!t u. evaluate_type (type_env tops) t = SOME u ==>
@@ -100,6 +102,150 @@ Proof
   conj_tac
   >- (rpt strip_tac >> drule_all_then ACCEPT_TAC imm_frame_size) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem immutable_layout_type_env_submap[local]:
+  bare_globals_layout ctor module_var_type module_vars mods cx globals assignable ==>
+  type_env_all_modules mods SUBMAP get_tenv cx
+Proof
+  strip_tac >>
+  fs[bare_globals_layout_def, SUBMAP_FLOOKUP_EQN, FORALL_PROD] >>
+  qx_genl_tac [`src`, `name`] >>
+  simp[FLOOKUP_type_env_all_modules] >>
+  Cases_on `ALOOKUP mods src` >> gvs[] >>
+  rename1 `get_module_code cx src = SOME tops` >>
+  gvs[get_module_code_def, get_tenv_def, AllCaseEqs()] >>
+  rename1 `ALOOKUP cx.sources cx.txn.target = SOME unit` >>
+  `type_env_for_module src tops SUBMAP type_env_all_modules unit` by
+    (irule module_type_env_submap >> metis_tac[]) >>
+  pop_assum mp_tac >> simp[SUBMAP_FLOOKUP_EQN] >> metis_tac[]
+QED
+
+Theorem immutable_bytes_section_replace:
+  expr_sim_inv ce cx env es /\
+  immutable_section_layout_mods ce.ce_modules ce /\
+  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME dty /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  is_bytestring_type dty /\ evaluate_type (get_tenv cx) dty = SOME tv /\
+  tops = cx_tops cx /\ struct_args_unique tops /\
+  tops = pre ++ VariableDecl vis Immutable id dty slot :: post /\
+  off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre /\
+  LENGTH sec1 = lo /\ LENGTH sec2 = lo /\ off + type_memory_size tv <= lo /\
+  (!j. j < lo /\ ~(off <= j /\ j < off + type_memory_size tv) ==>
+       EL j sec2 = EL j sec1) /\
+  (!j. j < lo /\ j IN M1 ==> imm_section_dead_mods ce sec1 j) /\
+  (!j. j < lo /\ ~(off <= j /\ j < off + type_memory_size tv) /\
+       j IN M2 ==> j IN M1) /\
+  (!j. off <= j /\ j < off + type_memory_size tv /\ j IN M2 ==>
+       mem_dead_bytes sec2 off tv j) ==>
+  !j. j < lo /\ j IN M2 ==> imm_section_dead_mods ce sec2 j
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `bare_globals_layout ce.ce_is_ctor ce.ce_module_var_type ce.ce_module_vars
+     ce.ce_modules cx env.bare_globals env.bare_global_assignable` by
+    fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
+  Cases_on `?ts. ce.ce_modules = [(NONE,ts)]`
+  >- (qpat_x_assum `?ts. ce.ce_modules = [(NONE,ts)]`
+        (qx_choose_then `ts` assume_tac) >>
+      `get_module_code cx NONE = SOME ts` by
+        (qpat_assum `bare_globals_layout _ _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [bare_globals_layout_def]) >>
+         qpat_assum `ce.ce_modules = [(NONE,ts)]` (fn modules =>
+           qpat_assum `!src. ALOOKUP ce.ce_modules src = get_module_code cx src`
+             (qspec_then `NONE:num option`
+               (ACCEPT_TAC o SYM o SIMP_RULE (srw_ss()) [modules, ALOOKUP_def])))) >>
+      `tops = ts` by metis_tac[cx_tops_module] >>
+      `evaluate_type (type_env tops) dty = SOME tv` by
+        (Cases_on `dty` >> fs[is_bytestring_type_def, evaluate_type_def] >>
+         Cases_on `b` >> fs[is_bytestring_type_def, evaluate_type_def] >>
+         Cases_on `d` >> fs[is_bytestring_type_def, evaluate_type_def]) >>
+      qpat_x_assum `tops = ts` (SUBST_ALL_TAC o SYM) >>
+      qpat_assum `ce.ce_modules = [(NONE,tops)]` (fn modules =>
+        let val singleton = MATCH_MP immSectionDeadTheory.imm_section_dead_mods_singleton modules
+        in RULE_ASSUM_TAC (REWRITE_RULE [singleton]) >> PURE_REWRITE_TAC [singleton] end) >>
+      MATCH_MP_TAC (Q.INST [`tops` |-> `tops`, `lo` |-> `lo`,
+        `pre` |-> `pre`, `post` |-> `post`, `vis` |-> `vis`, `slot` |-> `slot`,
+        `name` |-> `id`, `ty` |-> `dty`, `tv` |-> `tv`, `off` |-> `off`,
+        `sec1` |-> `sec1`, `sec2` |-> `sec2`,
+        `M1` |-> `M1`, `M2` |-> `M2`] immutable_section_replace) >>
+      asm_rewrite_tac[]) >>
+  `!sec j. imm_section_dead_mods ce sec j <=>
+     ?src ts vis id ty slot off tv.
+       ALOOKUP ce.ce_modules src = SOME ts /\
+       MEM (VariableDecl vis Immutable id ty slot) ts /\
+       FLOOKUP ce.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+       evaluate_type (type_env_all_modules ce.ce_modules) ty = SOME tv /\
+       mem_dead_bytes sec off tv j` by
+    metis_tac[imm_section_dead_mods_other] >>
+  `!src name ty ts vis slot. ALOOKUP ce.ce_modules src = SOME ts /\
+     MEM (VariableDecl vis Immutable name ty slot) ts ==>
+     FLOOKUP env.bare_globals (src,name) = SOME ty` by
+    (fs[exprSimHypsDefsTheory.expr_sim_inv_def,
+        exprSimHypsDefsTheory.bare_globals_layout_def,
+        env_consistent_def, env_context_consistent_def, bare_globals_complete_def] >>
+     metis_tac[]) >>
+  `?ts vis slot.
+     ALOOKUP ce.ce_modules ce.ce_module = SOME ts /\
+     MEM (VariableDecl vis Immutable id dty slot) ts` by
+    (qpat_assum `immutable_section_layout_mods _ _`
+       (mp_tac o Q.SPECL [`ce.ce_module`, `id`, `off`] o CONJUNCT1 o
+        REWRITE_RULE [immutable_section_layout_mods_def]) >>
+     qpat_assum `FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off)`
+       (fn loc => PURE_REWRITE_TAC [loc]) >>
+     simp[immutable_region_mods_def, MEM_APPEND] >>
+     disch_then (qx_choosel_then [`p`, `q`, `v`, `ty`, `ann`]
+       (assume_tac o CONJUNCT1)) >>
+     `MEM (VariableDecl v Immutable id ty ann)
+           (p ++ VariableDecl v Immutable id ty ann :: q)` by simp[MEM_APPEND] >>
+     `FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty` by metis_tac[] >>
+     `ty = dty` by metis_tac[optionTheory.SOME_11] >>
+     qpat_x_assum `ty = dty` SUBST_ALL_TAC >>
+     qexistsl_tac [`p ++ VariableDecl v Immutable id dty ann :: q`, `v`, `ann`] >>
+     simp[MEM_APPEND, IgnAsm `off = _`, IgnAsm `tops = _`]) >>
+  `evaluate_type (type_env_all_modules ce.ce_modules) dty = SOME tv` by
+    (Cases_on `dty` >> fs[is_bytestring_type_def, evaluate_type_def] >>
+     Cases_on `b` >> fs[is_bytestring_type_def, evaluate_type_def] >>
+     Cases_on `d` >> fs[is_bytestring_type_def, evaluate_type_def]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `off <= j /\ j < off + type_memory_size tv`
+  >- metis_tac[] >>
+  `imm_section_dead_mods ce sec1 j` by metis_tac[] >>
+  qpat_assum `!sec j. imm_section_dead_mods ce sec j <=> _` (fn dead =>
+    qpat_assum `imm_section_dead_mods ce sec1 j`
+      (strip_assume_tac o REWRITE_RULE [dead])) >>
+  rename1 `FLOOKUP ce.ce_module_vars (src',id') = SOME (ImmutableLoc off')` >>
+  `src' = ce.ce_module` by metis_tac[immutable_store_layout_active] >>
+  `evaluate_type (get_tenv cx) ty = SOME tv'` by
+    metis_tac[abi_caller_type_submap, immutable_layout_type_env_submap] >>
+  `FLOOKUP env.bare_globals (src',id') = SOME ty` by metis_tac[] >>
+  Cases_on `id' = id`
+  >- (`off' = off /\ tv' = tv` by
+        metis_tac[optionTheory.SOME_11, compileEnvTheory.var_location_11] >>
+      qpat_assum `mem_dead_bytes sec1 off' tv' j`
+        (mp_tac o MATCH_MP (cj 1 mem_dead_bytes_range)) >>
+      qpat_assum `off' = off` (fn offset =>
+        qpat_assum `tv' = tv` (fn tyval => PURE_REWRITE_TAC [offset,tyval])) >>
+      qpat_assum `~(off <= j /\ j < off + type_memory_size tv)`
+        (fn outside => REWRITE_TAC [EQF_INTRO outside])) >>
+  qpat_x_assum `src' = ce.ce_module` SUBST_ALL_TAC >>
+  `regions_disjoint off (type_memory_size tv) off' (type_memory_size tv')` by
+    (qpat_assum `bare_globals_layout _ _ _ _ _ _ _`
+       (mp_tac o Q.SPECL [`ce.ce_module`,`id`,`id'`,`dty`,`ty`,`off`,`off'`,`tv`,`tv'`] o
+        el 4 o CONJUNCTS o REWRITE_RULE [bare_globals_layout_def]) >>
+     asm_rewrite_tac[] >> metis_tac[]) >>
+  `mem_dead_bytes sec2 off' tv' = mem_dead_bytes sec1 off' tv'` by
+    (irule mem_dead_bytes_frame >>
+     qpat_assum `LENGTH sec1 = lo` (fn len1 =>
+       qpat_assum `LENGTH sec2 = lo` (fn len2 => REWRITE_TAC [len1,len2])) >>
+     rpt strip_tac >>
+     qpat_assum `!j. _ ==> EL j sec2 = EL j sec1` irule >>
+     qpat_assum `regions_disjoint off _ off' _`
+       (mp_tac o REWRITE_RULE [regions_disjoint_def]) >>
+     decide_tac) >>
+  qpat_assum `!sec j. imm_section_dead_mods ce sec j <=> _`
+    (fn dead => PURE_REWRITE_TAC [dead]) >>
+  qexistsl_tac [`ce.ce_module`,`ts'`,`vis''`,`id'`,`ty`,`slot''`,`off'`,`tv'`] >>
+  asm_rewrite_tac[]
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
