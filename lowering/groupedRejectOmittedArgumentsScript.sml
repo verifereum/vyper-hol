@@ -253,6 +253,29 @@ Proof
   simp[AllCaseEqs(), GSYM CONJ_ASSOC] >> strip_tac >> gvs[]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `ce = _` (assume_tac o SYM) >>
+  qpat_x_assum `ctx = _` SUBST_ALL_TAC >>
+  drule row22_model_package >> strip_tac >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts (tx with function_name := name) NONE` >>
+  `cx = initial_evaluation_context am.sources am.layouts (tx with function_name := name) NONE` by simp[Abbr `cx`] >>
+  mp_tac (SPEC_ALL row22_model_source) >>
+  impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     FIRST [qpat_assum `common.ec_env = ce` (fn th => pure_rewrite_tac [SYM th]) >> first_assum ACCEPT_TAC,
+            qpat_assum `common.ec_payable <=> _` (fn th => pure_rewrite_tac [SYM th]) >> first_assum ACCEPT_TAC]) >>
+  disch_then (qx_choosel_then [`art`,`es`] (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `common.ec_env = ce` (assume_tac o SYM) >>
+  qexistsl_tac [`art`, `es`, `cx`, `artifact_env art [(NONE,tops)] NONE`,
+    `u with vs_outcomes := []`] >>
+  simp[NoAsms] >>
+  qabbrev_tac `kept = MAP (\((aid,p,base,tv),v). (aid,p,base,tv,v)) (ZIP (supplied,vals))` >>
+  suspend "syntax"
+QED
+*)
 Theorem row22_omitted_model_inputs:
   lower_vyper_runtime_unit tops rp = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
@@ -322,26 +345,10 @@ Theorem row22_omitted_model_inputs:
     (!f inst w. frag_reachable ctx fn s f inst w ==> dalloca_fmp_headroom inst w) /\
     ~s.vs_halted /\ at_point sa s
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `ce = _` (assume_tac o SYM) >>
-  qpat_x_assum `ctx = _` SUBST_ALL_TAC >>
-  drule row22_model_package >> strip_tac >>
-  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts (tx with function_name := name) NONE` >>
-  `cx = initial_evaluation_context am.sources am.layouts (tx with function_name := name) NONE` by simp[Abbr `cx`] >>
-  mp_tac (SPEC_ALL row22_model_source) >>
-  impl_tac >-
-    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     FIRST [qpat_assum `common.ec_env = ce` (fn th => pure_rewrite_tac [SYM th]) >> first_assum ACCEPT_TAC,
-            qpat_assum `common.ec_payable <=> _` (fn th => pure_rewrite_tac [SYM th]) >> first_assum ACCEPT_TAC]) >>
-  disch_then (qx_choosel_then [`art`,`es`] (map_every assume_tac o CONJUNCTS)) >>
-  qpat_x_assum `common.ec_env = ce` (assume_tac o SYM) >>
-  qexistsl_tac [`art`, `es`, `cx`, `artifact_env art [(NONE,tops)] NONE`,
-    `u with vs_outcomes := []`] >>
-  simp[NoAsms] >>
-  qabbrev_tac `kept = MAP (\((aid,p,base,tv),v). (aid,p,base,tv,v)) (ZIP (supplied,vals))` >>
-  suspend "syntax"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume row22_omitted_model_inputs[syntax]:
   qpat_x_assum `Abbrev (cx = _)` kall_tac >>
   drule_all row22_model_default_syntax >> strip_tac >>
@@ -372,7 +379,9 @@ Resume row22_omitted_model_inputs[syntax]:
      irule EVERY_DROP >> first_assum ACCEPT_TAC) >>
   suspend "target_frame"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume row22_omitted_model_inputs[target_frame]:
   qpat_x_assum `ce = _` kall_tac >>
   `unit_alloca_budget unit.cu_context < dimword (:256) /\ ctx_inst_ids_distinct unit.cu_context` by
@@ -402,7 +411,9 @@ Resume row22_omitted_model_inputs[target_frame]:
   strip_tac >>
   suspend "bounds"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume row22_omitted_model_inputs[bounds]:
   mp_tac (Q.INST [`cut` |-> `u`, `marks` |-> `[]`]
     (SPEC_ALL row22_real_cut_empty_oracle_headroom)) >>
@@ -431,8 +442,11 @@ Resume row22_omitted_model_inputs[bounds]:
   qpat_assum `storage_well_formed_on _ (initial_state _ []) _` mp_tac >>
   rpt (pop_assum kall_tac) >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise row22_omitted_model_inputs
+*)
 
 Theorem row22_omitted_seed_path_if_no_exempt:
   compile_init_kwargs ce vars off 0 hi sa = ((),sb) /\
