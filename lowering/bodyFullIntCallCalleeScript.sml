@@ -25,7 +25,7 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   bodyExprPreFacts fragExec intCallCallee stmtSimProps emitHelper context
   compileVyper gasShadow gasShadowState gasShadowModuleOps
   gasShadowCompileContext gasShadowStmtEnv bodyFullIntCallEntryShadow entryInternalAppend entryCompileIntervals
-  intCallLookup ctorDeployLoweringPrefix venomExecProps
+  intCallLookup bodyFullShadowInternalCode fmpAnalysisProps ctorDeployLoweringPrefix venomExecProps
   externalEntryShape abiDecoderAppend intCallEntryFull exprLoweringProps
   storageCopyGasPath fragGasOriginPtrLoop contextProps
   intCallMaterializeFull memoryValueEncoding moduleLowering venomInst o1PassContract o1PipelineCompose unitShapeDefs entryStateRel stmtSimReturn stateRelProj
@@ -167,6 +167,111 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem intcall_callee_paired_code_mods[local]:
+  !mods exps cx ctx shadow_ctx src tops vis mut nr rr name args dflts ret ss callee.
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    ALOOKUP mods src = SOME tops /\
+    (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+    MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+    lookup_function
+      (internal_fn_label (build_func_ids_mods 0 mods (nsid_to_string (src,name)))
+         (nsid_to_string (src,name)) (MAP SND args) cx.in_deploy)
+      ctx.ctx_functions = SOME callee ==>
+    ?rpolicy unit label ce params has_rb nr' key trans view ctor ilen
+     compiled_ss rt before old entry final sf beforeS oldS entryS finalS.
+      (if cx.in_deploy then
+         ?rbc. lower_vyper_deploy_unit_mods mods exps rpolicy rbc = SOME unit
+       else lower_vyper_runtime_unit_mods mods exps rpolicy = SOME unit) /\
+      ctx = unit.cu_context /\
+      set_internal_package_target rpolicy.rpol_target
+        (package_internal_fn_unit mods T (K global_nonreentrant_slot) cx.in_deploy
+          (if cx.in_deploy then imm_len_mods mods else 0)
+          (src,subst_consts_fn_mods (consts_env_mods mods)
+            (mut,nr,rr,name,args,dflts,ret,ss))) =
+        (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,
+         compiled_ss,rt) /\
+      compiled_ss = subst_consts_stmts_mods (consts_env_mods mods) ss /\
+      new_block label before = (old,entry) /\
+      compile_internal_function ce params has_rb nr' key trans view ctor ilen
+        compiled_ss rt entry = ((),final) /\
+      fn_has_code entry final callee /\
+      ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks) /\
+      ctx_inst_ids_distinct ctx /\
+      MEM sf shadow_ctx.ctx_functions /\
+      gas_shadow_function callee sf /\
+      new_block label beforeS = (oldS,entryS) /\
+      compile_internal_function (gas_shadow_env T ce) params has_rb nr' key
+        trans view ctor ilen (MAP gas_shadow_stmt compiled_ss) rt entryS =
+        ((),finalS) /\
+      gas_shadow_state entry entryS /\
+      gas_shadow_state final finalS /\
+      fn_has_code entryS finalS sf
+Proof
+  rpt gen_tac >> simp[shadow_body_inv_mods_def] >> strip_tac >>
+  first_x_assum irule >> (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`tops`, `vis`] >> simp[]
+QED
+
+(* The descriptor list here is the list that extraction actually packaged. *)
+Theorem packaged_invoke_entry_label[local]:
+  extract_context_with_internals root ips final = SOME (raw,data) /\
+  ALL_DISTINCT (ctx_fn_names raw) /\ lbl <> root /\
+  lookup_function lbl raw.ctx_functions = SOME callee ==>
+  fn_entry_label callee = SOME lbl
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP FST (internal_fn_descriptors ips))` by
+    (drule_then assume_tac extract_context_internal_names >> fs[ctx_fn_names_def]) >>
+  qpat_x_assum `extract_context_with_internals _ _ _ = _` mp_tac >>
+  simp[vyperCompilerTheory.extract_context_with_internals_def, AllCaseEqs()] >> strip_tac >>
+  gvs[mk_venom_context_def, ctx_fn_names_def, lookup_function_def,
+      listTheory.FIND_thm, mk_raw_function_def] >>
+  fs[GSYM lookup_function_def] >>
+  drule_then assume_tac lookup_function_MEM >>
+  drule_then assume_tac lookup_function_name >>
+  drule_then assume_tac vyperCompilerTheory.package_internal_blocks_metadata >>
+  drule_all listTheory.LIST_REL_MEM_IMP_R >> strip_tac >>
+  rename1 `internal_fn_matches_descriptor desc callee` >> PairCases_on `desc` >>
+  gvs[vyperCompilerTheory.internal_fn_matches_descriptor_def] >>
+  drule_all package_internal_blocks_mem >> strip_tac >>
+  drule_all lookup_function_distinct_mem >>
+  gvs[vyperCompilerTheory.mk_internal_function_metadata] >>
+  disch_then (mp_tac o Q.AP_TERM `\f. f.fn_blocks`) >>
+  simp[vyperCompilerTheory.mk_internal_function_metadata] >> strip_tac >>
+  simp[fn_entry_label_def, entry_block_def, listTheory.NULL_EQ]
+QED
+
+Theorem runtime_packaged_invoke_entry[local]:
+  lower_vyper_runtime_unit_mods mods exps rp = SOME unit /\ lbl <> "__entry" /\
+  lookup_function lbl unit.cu_context.ctx_functions = SOME callee ==>
+  fn_entry_label callee = SOME lbl
+Proof
+  Cases_on `classify_functions_unit mods exps` >>
+  rename1 `classify_functions_unit _ _ = classified` >> PairCases_on `classified` >>
+  simp[lower_vyper_runtime_unit_mods_def, AllCaseEqs()] >>
+  strip_tac >> gvs[vyperCompilerTheory.run_lowering_def,
+                   vyperCompilerTheory.run_grouped_lowering_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >>
+  drule packaged_invoke_entry_label >> fs[vyperCompilerTheory.lowering_context_ok_def]
+QED
+
+Theorem deploy_packaged_invoke_entry[local]:
+  lower_vyper_deploy_unit_mods mods exps rp bc = SOME unit /\ lbl <> "__deploy" /\
+  lookup_function lbl unit.cu_context.ctx_functions = SOME callee ==>
+  fn_entry_label callee = SOME lbl
+Proof
+  Cases_on `classify_functions_unit mods exps` >>
+  rename1 `classify_functions_unit _ _ = classified` >> PairCases_on `classified` >>
+  simp[lower_vyper_deploy_unit_mods_def, AllCaseEqs()] >>
+  pairarg_tac >> simp[] >>
+  strip_tac >> gvs[vyperCompilerTheory.run_deploy_lowering_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >>
+  drule packaged_invoke_entry_label >>
+  fs[vyperCompilerTheory.lowering_context_ok_def, ctx_fn_names_def,
+     vyperCompilerTheory.install_immutable_reservation_def]
+QED
+
 
 Theorem intcall_callee_invoke_label[local]:
   intcall_entry_full_mods (DF, lo, d) H mods src tops ctx func cenv cx tenv name es sa sb
