@@ -3,12 +3,15 @@ Ancestors
   exprSimHypsDefs allocLimits compileEnv abiBuiltinAllocation
   vfmConstants words arithmetic list
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem abi_decode_body_input_bound:
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
+  expr_type e = BaseT (BytesT (Dynamic n)) ==>
+  abi_size_bound ce.ce_struct_fields
+    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) < 2 ** 64
 Proof
   strip_tac >>
   `alloc_limits_expr ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])` by
-    fs[expr_body_pre_def] >>
+    fs[expr_body_pre_mods_def] >>
   drule_all alloc_limits_abi_decode_bound >> strip_tac >>
   `alloc_limits_expr ce e` by
     (qpat_x_assum `alloc_limits_expr _ _` mp_tac >>
@@ -20,15 +23,6 @@ Proof
   simp[type_alloc_ok_def, is_word_type_def, type_memory_bytes_def] >>
   qspec_then `n` mp_tac abi_builtin_word_size_capacity >>
   simp[word_size_def] >> decide_tac
-QED
-*)
-Theorem abi_decode_body_input_bound:
-  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
-  expr_type e = BaseT (BytesT (Dynamic n)) ==>
-  abi_size_bound ce.ce_struct_fields
-    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) < 2 ** 64
-Proof
-  cheat
 QED
 
 Theorem abi_decode_body_input_word_bound:

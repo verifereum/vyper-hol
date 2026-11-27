@@ -4,7 +4,7 @@ Theory bodyFullAbiDecodeCallerEntryOrigin
 Ancestors
   bodyFullAbiDecodeCallerSetupEntry bodyFullAbiDecodeCallerEntryContained
   exprSimAbiDecodeFootprint exprOpenFirstOperand exprSimHyps vyperValue
-  compileEnv abiBuiltinDecodeSetup
+  compileEnv abiBuiltinDecodeSetup exprSimAbiDecodeBodyEntry
 
 val caller_input_origin = ``\s b.
   (?aid ib isz.
@@ -24,8 +24,8 @@ val setup_origin = ``(^caller_input_origin) s ^(hd setup_witnesses)``;
 val setup_origin_stmt =
   mk_imp (setup_pre, list_mk_exists (setup_witnesses, mk_conj (setup_core, setup_origin)));
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem abi_decode_body_setup_entry_origin:
+  ^(list_mk_forall (free_vars setup_origin_stmt, setup_origin_stmt))
 Proof
   rpt gen_tac >> disch_tac >>
   first_assum (mp_tac o MATCH_MP (GEN_ALL abi_decode_body_setup_entry)) >>
@@ -33,7 +33,7 @@ Proof
     (assume_tac o BETA_RULE)))) >>
   qexistsl_tac [`b`, `data_var`, `d`] >> BETA_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `body_inv _ _ _ _ /\ _`
+  qpat_x_assum `(contract_inv _ _ _ _ _ /\ module_body_inv _ _ _ _ _) /\ _`
     (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   qpat_assum `?H. V H` (qx_choose_then `horizon` assume_tac) >>
   qpat_assum `!H. V H ==> expr_post H ctx fn ce cx e es0 origin st s0 es _ _ s /\ _`
@@ -41,9 +41,7 @@ Proof
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (CONJUNCTS_THEN2 assume_tac kall_tac) >>
   `evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic n)))` by
-    (`IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
-       metis_tac[expr_body_pre_type_builtin_head, expr_body_pre_type_evaluates] >>
-     gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+    (drule_all abi_decode_body_operand_evaluates >> simp[]) >>
   `~is_word_type (expr_type e)` by simp[compileEnvTheory.is_word_type_def] >>
   drule_all abi_decode_bytes_post_footprint >>
   disch_then (qx_choose_then `p` (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
@@ -60,12 +58,6 @@ Proof
   >- (disj1_tac >> goal_assum (drule_at Any) >>
       simp[] >> metis_tac[arithmeticTheory.LESS_TRANS]) >>
   disj2_tac >> goal_assum (drule_at Any) >> simp[]
-QED
-*)
-Theorem abi_decode_body_setup_entry_origin:
-  ^(list_mk_forall (free_vars setup_origin_stmt, setup_origin_stmt))
-Proof
-  cheat
 QED
 
 val (entry_pre, entry_post) =

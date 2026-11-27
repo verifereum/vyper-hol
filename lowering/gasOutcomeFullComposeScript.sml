@@ -3,7 +3,7 @@
    since the right computation only appends storage observations. *)
 Theory gasOutcomeFullCompose
 Ancestors
-  createSizeExit gasOutcomeFull fragGasOriginPtr fragGasOrigin gasOutcome gasExemptCert
+  gasOutcomeFullMods createSizeExit gasOutcomeFull fragGasOriginPtr fragGasOrigin gasOutcome gasExemptCert
   gasStorage gasSummaryCompose gasSummary fragGasPathPtr fragGasPathMem
   fragGasPath fragGasMode fragExec
   vyperStorageTrace vyperStorageFootprint
@@ -686,4 +686,71 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   rpt strip_tac >> res_tac >> simp[] >>
   irule gas_origin_ptr_path_append >> metis_tac[]
+QED
+
+Theorem gas_outcome_full_mods_bad_nil[local]:
+  ~s.vs_halted /\
+  (!tail. ~storage_trace_domain cx st0
+            (SND (source (es with gas_obs := tail))).storage_trace) ==>
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
+    (es, s, G, tn) Q R
+Proof
+  strip_tac >> rewrite_tac[gas_outcome_full_mods_def] >>
+  qexists_tac `[]` >> disj1_tac >> conj_tac
+  >- simp[gas_bad_storage_at_def, gas_explicit_def] >>
+  qexistsl_tac [`storage_trace_horizon es.storage_trace`, `func`, `PG`,
+                `G`, `tn`, `s`] >>
+  simp[gas_origin_ptr_focus_nil, storage_trace_domain_def]
+QED
+
+Theorem linked_outcome_nil_endpoint[local]:
+  ~s.vs_halted /\
+  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+       (s, G, tn) [] (r, G', tn') /\
+     ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
+      (exit_result r /\ create_size_exit_ok ctx res r /\
+       R H res (ee with gas_obs := []) (G', tn') r))) ==>
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
+    (es, s, G, tn) Q R
+Proof
+  strip_tac >> Cases_on `storage_trace_domain cx st0 ee.storage_trace`
+  >- (rewrite_tac[gas_outcome_full_mods_def] >>
+      qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >>
+      simp[gas_explicit_def]) >>
+  irule gas_outcome_full_mods_bad_nil >> simp[]
+QED
+
+Theorem gas_outcome_full_mods_pure:
+  ~s.vs_halted /\
+  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+       (s, G, tn) [] (OK t, G', tn') /\
+     Q H res (ee with gas_obs := []) G' tn' t) ==>
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
+    (es, s, G, tn) Q R
+Proof
+  strip_tac >> irule linked_outcome_nil_endpoint >>
+  (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`G'`, `ee`, `OK t`, `res`, `tn'`] >> simp[]
+QED
+
+Theorem gas_outcome_full_mods_exit:
+  ~s.vs_halted /\
+  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
+  exit_result r /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+       (s, G, tn) [] (r, G', tn') /\
+     create_size_exit_ok ctx res r /\
+     R H res (ee with gas_obs := []) (G', tn') r) ==>
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
+    (es, s, G, tn) Q R
+Proof
+  strip_tac >> irule linked_outcome_nil_endpoint >>
+  (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`G'`, `ee`, `r`, `res`, `tn'`] >> simp[] >> metis_tac[]
 QED

@@ -77,8 +77,29 @@ Proof
   fs[expr_post_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem abi_decode_caller_success:
+  expr_sim_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
+  expr_post H ctx func ce cx e es sa start s0 es1 (BytesV bs) data s /\
+  eval_expr cx e es = (res,es1) /\ local_ptrs_reserved ce sa /\
+  lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  lower_abi_decode data
+    (type_to_abi_dec_info ce.ce_struct_fields ce
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_static_size ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_size_bound ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (type_memory_bytes ce
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) start = (out,final) /\
+  fn_has_code start final func /\ fn_inst_ids_distinct func /\
+  abi_decode_immutable_success ce (get_tenv cx)
+    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)
+    (if unwrap /\ needs_external_call_wrap ty then TupleTV [tv] else tv)
+    bs out d start final ctx func cx es1 s t ==>
+  ?v. evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs] = INL v /\
+    vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
+      es1 (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t
 Proof
   strip_tac >>
   `ann = ty` by metis_tac[abi_decode_pre_target] >>
@@ -87,9 +108,8 @@ Proof
     metis_tac[eval_expr_preserves_scopes_dom] >>
   `sa.cs_next_var <= start.cs_next_var /\ sa.cs_next_id <= start.cs_next_id` by
     (drule (cj 2 compile_expr_grows) >> simp[]) >>
-  `abi_decode_root_metadata ce (get_tenv cx)` by
-    (irule abi_decode_root_metadata_inv >> qexistsl_tac [`env`, `es`] >>
-     fs[expr_sim_pre_def]) >>
+  `expr_sim_inv_mods [(NONE,cx_tops cx)] ce cx env es` by fs[expr_sim_pre_def, expr_sim_inv_split_def] >>
+  drule_then assume_tac abi_decode_root_metadata_inv >>
   `type_memory_bytes ce ty = type_memory_size tv` by
     (irule abi_decode_descended_memory_size >>
      qexistsl_tac [`get_tenv cx`, `get_tenv cx`] >> simp[]) >>
@@ -119,31 +139,4 @@ Proof
      qexists_tac `v` >> gvs[abi_source_decode_wrapping_iff]) >>
   qexists_tac `v` >> simp[] >>
   metis_tac[abi_decode_caller_frames]
-QED
-*)
-Theorem abi_decode_caller_success:
-  expr_sim_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
-  expr_post H ctx func ce cx e es sa start s0 es1 (BytesV bs) data s /\
-  eval_expr cx e es = (res,es1) /\ local_ptrs_reserved ce sa /\
-  lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\
-  lower_abi_decode data
-    (type_to_abi_dec_info ce.ce_struct_fields ce
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (abi_static_size ce.ce_struct_fields
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (abi_size_bound ce.ce_struct_fields
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (type_memory_bytes ce
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) start = (out,final) /\
-  fn_has_code start final func /\ fn_inst_ids_distinct func /\
-  abi_decode_immutable_success ce (get_tenv cx)
-    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)
-    (if unwrap /\ needs_external_call_wrap ty then TupleTV [tv] else tv)
-    bs out d start final ctx func cx es1 s t ==>
-  ?v. evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs] = INL v /\
-    vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
-      es1 (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t
-Proof
-  cheat
 QED

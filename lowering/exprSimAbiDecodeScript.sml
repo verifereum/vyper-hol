@@ -17,8 +17,10 @@ Ancestors
   vyperTypeSystem vyperState gasOutcome gasSummary gasSummaryCompose
   fragGasPath fragGasMode fragExec exprSimAbiDecodeOblivious list
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem compile_abi_decode_case:
+  !nocalls ctx func cenv cx ann unwrap t args.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann (AbiDecode unwrap) t args)
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
@@ -70,14 +72,7 @@ Proof
       qspec_then `Value` (qspec_then `INR ex` mp_tac) expr_exit_success_map >>
       simp[] >> gvs[halt_exit_def]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
-  irule abi_decode_suffix_full_exit_outcome >> simp[] >>
+  irule abi_decode_suffix_full_exit_outcome >>
+  fs[exprSimHypsDefsTheory.expr_body_pre_split_def] >>
   metis_tac[]
-QED
-*)
-Theorem compile_abi_decode_case:
-  !nocalls ctx func cenv cx ann unwrap t args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann (AbiDecode unwrap) t args)
-Proof
-  cheat
 QED
