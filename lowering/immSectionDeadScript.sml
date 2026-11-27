@@ -7,7 +7,7 @@
 Theory immSectionDead
 Ancestors
   compileVyper compileEnv valueEncoding valueEncodingDefs vyperValue vyperContext vyperAST
-  words list
+  compileUnit vyperTypeSystem alist finite_map words list
 
 (* Bytes of the constructor's immutables fixed region, at memory offset 0. *)
 Definition imm_len_def:
@@ -66,3 +66,39 @@ Definition imm_section_dead_def:
         (compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre)
         tv j
 End
+
+(* The fixed memory prefix shared by all modules of a deploy unit. *)
+Definition imm_len_mods_def[nocompute]:
+  imm_len_mods mods =
+    compute_immutables_len_unit
+      (get_struct_fields (make_struct_fields_map_mods mods)) mods
+End
+
+Theorem imm_len_mods_singleton:
+  imm_len_mods [(NONE,tops)] = imm_len tops
+Proof
+  simp[imm_len_mods_def, imm_len_def, make_struct_fields_map_mods_singleton,
+       compute_immutables_len_unit_singleton]
+QED
+
+(* The singleton equation also holds before the caller has established
+   that cenv's immutable locations agree with its declarations. *)
+Definition imm_section_dead_mods_def[nocompute]:
+  imm_section_dead_mods cenv sec j <=>
+    case cenv.ce_modules of
+      [(NONE,tops)] => imm_section_dead tops sec j
+    | mods =>
+      ?src tops vis name ty slot off tv.
+        ALOOKUP mods src = SOME tops /\
+        MEM (VariableDecl vis Immutable name ty slot) tops /\
+        FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+        evaluate_type (type_env_all_modules mods) ty = SOME tv /\
+        mem_dead_bytes sec off tv j
+End
+
+Theorem imm_section_dead_mods_singleton:
+  cenv.ce_modules = [(NONE,tops)] ==>
+  (imm_section_dead_mods cenv sec j <=> imm_section_dead tops sec j)
+Proof
+  simp[imm_section_dead_mods_def]
+QED

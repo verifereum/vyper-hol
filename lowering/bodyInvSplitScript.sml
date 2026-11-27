@@ -6,19 +6,8 @@ Ancestors
   vyperAST vyperContext vyperABI moduleLowering venomInst
   alist finite_map list words combin
 
-(* The fixed memory prefix shared by all modules of a deploy unit. *)
-Definition imm_len_mods_def[nocompute]:
-  imm_len_mods mods =
-    compute_immutables_len_unit
-      (get_struct_fields (make_struct_fields_map_mods mods)) mods
-End
-
-Theorem imm_len_mods_singleton:
-  imm_len_mods [(NONE,tops)] = imm_len tops
-Proof
-  simp[imm_len_mods_def, imm_len_def, make_struct_fields_map_mods_singleton,
-       compute_immutables_len_unit_singleton]
-QED
+Theorem imm_len_mods_def = immSectionDeadTheory.imm_len_mods_def;
+Theorem imm_len_mods_singleton = immSectionDeadTheory.imm_len_mods_singleton;
 
 (* A uses-only module has no allocated region for an unannotated
    immutable. The singleton allocator uses declaration order. *)
@@ -55,27 +44,8 @@ Definition immutable_section_layout_mods_def[nocompute]:
          off <= i /\ i < off + size)
 End
 
-(* The singleton equation also holds before the caller has established
-   that cenv's immutable locations agree with its declarations. *)
-Definition imm_section_dead_mods_def[nocompute]:
-  imm_section_dead_mods cenv sec j <=>
-    case cenv.ce_modules of
-      [(NONE,tops)] => imm_section_dead tops sec j
-    | mods =>
-      ?src tops vis name ty slot off tv.
-        ALOOKUP mods src = SOME tops /\
-        MEM (VariableDecl vis Immutable name ty slot) tops /\
-        FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
-        evaluate_type (type_env_all_modules mods) ty = SOME tv /\
-        mem_dead_bytes sec off tv j
-End
-
-Theorem imm_section_dead_mods_singleton:
-  cenv.ce_modules = [(NONE,tops)] ==>
-  (imm_section_dead_mods cenv sec j <=> imm_section_dead tops sec j)
-Proof
-  simp[imm_section_dead_mods_def]
-QED
+Theorem imm_section_dead_mods_def = immSectionDeadTheory.imm_section_dead_mods_def;
+Theorem imm_section_dead_mods_singleton = immSectionDeadTheory.imm_section_dead_mods_singleton;
 
 (* These relations cover the shared immutable section even when a call
    changes the active module. *)

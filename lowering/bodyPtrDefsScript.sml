@@ -58,7 +58,7 @@ Definition dead_lo_ok_def:
     dead_sub (cx_dead H cx) D /\
     D.d_stor = (cx_dead H cx).d_stor /\ D.d_trans = (cx_dead H cx).d_trans /\
     (cenv.ce_is_ctor ==> !im. D.d_imm im = UNIV) /\
-    lo = (if cenv.ce_is_ctor then imm_len (cx_tops cx) else 0)
+    lo = (if cenv.ce_is_ctor then imm_len_mods cenv.ce_modules else 0)
 End
 
 (* Two memories agree on every byte outside m. *)
@@ -126,7 +126,7 @@ QED
    variable, when there is one, is untainted and no pointer; and every
    ALLOCA site, and the frontier, is at or above lo. *)
 Definition ghost_inv_at_def:
-  ghost_inv_at D lo d cenv cx (es : evaluation_state) G tn
+  ghost_inv_at D lo d cenv (cx : evaluation_context) (es : evaluation_state) G tn
     (s : venom_state) <=>
     (!name entry p sz.
        lookup_scopes name es.scopes = SOME entry /\
@@ -140,7 +140,7 @@ Definition ghost_inv_at_def:
             op_taint tn (Var x) = {}) /\
     stor_taint_ok_at D tn s /\
     (!i. i < lo /\ i IN tn.t_mem ==>
-         imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo s.vs_memory) i) /\
+         imm_section_dead_mods cenv (mem_bytes_at 0 lo s.vs_memory) i) /\
     (!x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==>
          FLOOKUP G x = NONE /\ op_taint tn (Var x) = {}) /\
     allocas_from lo s /\ lo <= s.vs_alloca_next
