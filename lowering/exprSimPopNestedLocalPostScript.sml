@@ -180,12 +180,9 @@ Proof
          arithmeticTheory.MAX_DEF] >>
   `u.vs_data_section = s.vs_data_section` by
     (qpat_x_assum `u = _ with <|vs_vars := _; vs_memory := _|>` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-     (mstore (locbase + k) w s)` by
-    (drule_all local_mstore_immutables_at >> simp[]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es u` by
-    (irule immutables_rel_mem_agree >>
-     qexists_tac `mstore (locbase + k) w s` >> simp[mstore_def]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es u` by
+    metis_tac[pop_local_mstore_immutables] >>
   `immutable_base_zero cenv u` by
     (irule immutable_base_zero_frame >> qexists_tac `s` >>
      rpt conj_tac
@@ -195,7 +192,8 @@ Proof
            (fn th => once_rewrite_tac[th]) >> simp[]) >>
      gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
   irule pop_stmt_state_rel_scopes >> goal_assum (drule_at Any) >>
-  simp[] >> qexists_tac `s` >> simp[] >>
+  simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `s` >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> qexists_tac `id'` >>
       `local_ptrs_rel func cenv es.scopes s` by
