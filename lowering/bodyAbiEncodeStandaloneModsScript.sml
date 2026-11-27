@@ -75,7 +75,7 @@ QED
 Theorem abi_encode_nonword_payload_mods:
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiEncode F mid) target [e]) es /\
   eval_exprs cx [e] (es with gas_obs := gs) = (INL [v],ee) /\
-  ~is_word_type (lowered_value_type ce e) /\ assignable_type (get_tenv cx) (lowered_value_type ce e) /\
+  ~is_word_type (lowered_value_type ce e) /\
   get_tenv cx SUBMAP E0 /\ sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
   sfields_tenv_consistent ce.ce_struct_fields E0 /\
   (!t tv. evaluate_type E0 t = SOME tv ==> type_memory_bytes ce t = type_memory_size tv) /\
@@ -227,16 +227,8 @@ Proof
      >- first_assum ACCEPT_TAC
      >- (qexistsl_tac [`E0`,`storage_trace_horizon ee.storage_trace`,`av`,`p`,`ctx`,`cx`,`ee`,`first`,`last`,`owner`,`cap`,`root`] >>
          rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  `abi_enc_plan (get_tenv cx) ty (type_to_abi_enc_info ce.ce_struct_fields ce ty)` by
-    (irule abi_encode_translated_plan >>
-     conj_tac >- (qexists_tac `rt` >> first_assum ACCEPT_TAC) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexists_tac `E0` >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     first_assum ACCEPT_TAC) >>
-  drule_then assume_tac (cj 1 abi_enc_plan_admissible) >>
+  `abi_encoder_admissible (type_to_abi_enc_info ce.ce_struct_fields ce ty)` by
+    irule abiEncoderAdmissibleTheory.abi_encoder_translation_admissible >>
   qpat_assum `stmt_state_rel _ _ _ _ _ _ z` (fn th =>
     MAP_EVERY (fn rule => mp_tac (MATCH_MP rule th) >> strip_tac)
       [stmt_state_rel_local_ptrs_alloca,stmt_state_rel_alloca_room,
