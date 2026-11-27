@@ -1,7 +1,7 @@
 (* Caller-byte separation at the full internal-call entry. *)
 Theory bodyFullIntCallByteFrame
 Ancestors
-  bodyFullIntCallDefs bodyIntCallSeams bodyPtrDefs ptrDiscipline ptrSafeRun
+  bodyFullIntCallDefs bodyIntCallSeams compileUnit bodyPtrDefs ptrDiscipline ptrSafeRun
   stepWriteFootprintBase loweringStateRelDefs valueEncodingDefs
   codegenRel contextCodegenRel venomExecProofs venomExecSemantics venomState
   runtimeProvenanceSources ctxLookupAgreeHelpers venomMemProofs venomFnInstsProofs venomInst
@@ -27,18 +27,8 @@ QED
 
 
 
-Theorem intcall_entry_full_fmp_room:
-  intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es sa sb
-    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
-  lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
-  get_instruction bb t.vs_inst_idx = SOME inst /\
-  decode_invoke inst = SOME (lbl,arg_ops) /\
-  eval_operands arg_ops t = SOME argv /\
-  lookup_function lbl ctx.ctx_functions = SOME callee /\
-  setup_callee callee argv t = SOME setup ==>
-  fmp_room ctx callee setup
-Proof
-  rw[intcall_entry_full_def] >>
+fun intcall_entry_fmp_room_tac entry_definition package =
+  rw[entry_definition] >>
   qpat_x_assum `lookup_function lbl _ = SOME callee` mp_tac >>
   qpat_x_assum `setup_callee callee argv t = SOME setup` mp_tac >>
   qpat_x_assum `lookup_block _ _ = SOME bb` mp_tac >>
@@ -56,13 +46,44 @@ Proof
     is_nr key trans view ctor imm_len' ss' rt. _`
     (qspecl_then [`F`, `\x:string. 0`, `0`, `([]:expr list)`] mp_tac) >>
   simp[] >>
-  qabbrev_tac `pack = set_internal_package_target cenv.ce_target
-    (package_internal_fn tops F (\x:string. 0) cenv.ce_is_ctor 0
-      (mut,nr,rr,name,args,([]:expr list),ret,ss))` >>
+  qabbrev_tac `pack = ^package` >>
   PairCases_on `pack` >>
   disch_then (qspecl_then [`pack0`,`pack1`,`pack2`,`pack3`,`pack4`,`pack5`,
     `pack6`,`pack7`,`pack8`,`pack9`,`pack10`,`pack11`] mp_tac) >>
-  simp[] >> strip_tac >> metis_tac[]
+  simp[] >> strip_tac >> metis_tac[];
+
+Theorem intcall_entry_full_fmp_room:
+  intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es sa sb
+    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
+  lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb t.vs_inst_idx = SOME inst /\
+  decode_invoke inst = SOME (lbl,arg_ops) /\
+  eval_operands arg_ops t = SOME argv /\
+  lookup_function lbl ctx.ctx_functions = SOME callee /\
+  setup_callee callee argv t = SOME setup ==>
+  fmp_room ctx callee setup
+Proof
+  intcall_entry_fmp_room_tac intcall_entry_full_def
+    ``set_internal_package_target cenv.ce_target
+      (package_internal_fn tops F (\x:string. 0) cenv.ce_is_ctor 0
+        (mut,nr,rr,name,args,([]:expr list),ret,ss))``
+QED
+
+Theorem intcall_entry_full_fmp_room_mods:
+  intcall_entry_full_mods (DF, lo, d) H mods src tops ctx func cenv cx tenv name es sa sb
+    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
+  lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb t.vs_inst_idx = SOME inst /\
+  decode_invoke inst = SOME (lbl,arg_ops) /\
+  eval_operands arg_ops t = SOME argv /\
+  lookup_function lbl ctx.ctx_functions = SOME callee /\
+  setup_callee callee argv t = SOME setup ==>
+  fmp_room ctx callee setup
+Proof
+  intcall_entry_fmp_room_tac intcall_entry_full_mods_def
+    ``set_internal_package_target cenv.ce_target
+      (package_internal_fn_unit mods F (\x:string. 0) cenv.ce_is_ctor 0
+        (src,(mut,nr,rr,name,args,([]:expr list),ret,ss)))``
 QED
 
 (* Every pointer site and allocation misses x; a fresh allocation starts
@@ -459,6 +480,31 @@ Proof
   metis_tac[cj 2 ptr_byte_frame_run]
 QED
 
+fun intcall_entry_completed_byte_tac entry_pattern entry_definition fmp_room_theorem =
+  strip_tac >> fs[gas_invoke_entry_def] >> gvs[] >>
+  `fmp_room ctx callee setup` by metis_tac[fmp_room_theorem] >>
+  `ptr_byte_frame_inv (ctx,x) FEMPTY setup` by
+    (gvs[setup_callee_def, ptr_byte_frame_inv_def] >>
+     rpt strip_tac >> fs[fmp_room_def] >> decide_tac) >>
+  `ptr_byte_frame_inv (ctx,x) FEMPTY
+     (phi_state with vs_inst_idx := phi_prefix_length first.bb_instructions) /\
+   phi_state.vs_memory = setup.vs_memory` by
+    metis_tac[ptr_byte_frame_inv_phis] >>
+  `!b sz. MEM (SOME (b,sz)) (MAP (op_prov G) arg_ops) ==>
+     x < b \/ b + sz <= x` by
+    (qpat_x_assum entry_pattern
+       (mp_tac o last o CONJUNCTS o REWRITE_RULE [entry_definition]) >>
+     disch_then (qspecl_then [`bb`,`inst`,`lbl`,`arg_ops`,`argv`] mp_tac) >>
+     simp[] >> strip_tac >>
+     qpat_x_assum `!b bsz. MEM (SOME (b,bsz)) (MAP (op_prov G) arg_ops) ==> _` mp_tac >>
+     qpat_x_assum `!aid off asz.
+       FLOOKUP t.vs_allocas aid = SOME (off,asz) /\ _ ==> _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ADD_COMM]) >>
+  `MEM callee ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  qpat_x_assum `ptr_byte_frame_inv _ _ setup` kall_tac >>
+  drule_all ptr_byte_frame_completed_path >> simp[] >> strip_tac >>
+  gvs[setup_callee_def];
+
 Theorem intcall_entry_full_completed_byte[local]:
   intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es sa sb
     vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
@@ -474,57 +520,50 @@ Theorem intcall_entry_full_completed_byte[local]:
     (entered,FEMPTY,tn with t_var := FEMPTY) marks (IntRet ir s',G',tn') ==>
   read_byte x s'.vs_memory = read_byte x t.vs_memory
 Proof
-  strip_tac >> fs[gas_invoke_entry_def] >> gvs[] >>
-  `fmp_room ctx callee setup` by metis_tac[intcall_entry_full_fmp_room] >>
-  `ptr_byte_frame_inv (ctx,x) FEMPTY setup` by
-    (gvs[setup_callee_def, ptr_byte_frame_inv_def] >>
-     rpt strip_tac >> fs[fmp_room_def] >> decide_tac) >>
-  `ptr_byte_frame_inv (ctx,x) FEMPTY
-     (phi_state with vs_inst_idx := phi_prefix_length first.bb_instructions) /\
-   phi_state.vs_memory = setup.vs_memory` by
-    metis_tac[ptr_byte_frame_inv_phis] >>
-  `!b sz. MEM (SOME (b,sz)) (MAP (op_prov G) arg_ops) ==>
-     x < b \/ b + sz <= x` by
-    (qpat_x_assum `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sb
+  intcall_entry_completed_byte_tac
+    `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sb
        vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn`
-       (mp_tac o last o CONJUNCTS o REWRITE_RULE [intcall_entry_full_def]) >>
-     disch_then (qspecl_then [`bb`,`inst`,`lbl`,`arg_ops`,`argv`] mp_tac) >>
-     simp[] >> strip_tac >>
-     qpat_x_assum `!b bsz. MEM (SOME (b,bsz)) (MAP (op_prov G) arg_ops) ==> _` mp_tac >>
-     qpat_x_assum `!aid off asz.
-       FLOOKUP t.vs_allocas aid = SOME (off,asz) /\ _ ==> _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ADD_COMM]) >>
-  `MEM callee ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
-  qpat_x_assum `ptr_byte_frame_inv _ _ setup` kall_tac >>
-  drule_all ptr_byte_frame_completed_path >> simp[] >> strip_tac >>
-  gvs[setup_callee_def]
+    intcall_entry_full_def intcall_entry_full_fmp_room
+QED
+
+Theorem intcall_entry_full_completed_byte_mods[local]:
+  intcall_entry_full_mods (DF, lo, d) H mods src tops ctx func cenv cx tenv name es sa sb
+    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
+  gas_invoke_entry (ctx,func) t callee entered /\
+  lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb t.vs_inst_idx = SOME inst /\
+  decode_invoke inst = SOME (lbl,arg_ops) /\
+  eval_operands arg_ops t = SOME argv /\
+  lo <= x /\ x < t.vs_alloca_next /\
+  (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
+    sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==> x < off \/ off + asz <= x) /\
+  gas_origin_ptr_path (DF H,lo,explicit,ctx,callee,MAP (op_prov G) arg_ops)
+    (entered,FEMPTY,tn with t_var := FEMPTY) marks (IntRet ir s',G',tn') ==>
+  read_byte x s'.vs_memory = read_byte x t.vs_memory
+Proof
+  intcall_entry_completed_byte_tac
+    `intcall_entry_full_mods (DF,lo,d) H mods src tops ctx func cenv cx tenv name es sa sb
+       vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn`
+    intcall_entry_full_mods_def intcall_entry_full_fmp_room_mods
 QED
 
 (* This uses only the stage's entry, dead-byte bound and actual INVOKE
    hypotheses. The path is the completed-run witness of gas_outcome_full. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
+fun intcall_callee_caller_memory_bytes_tac entry_tac completed_byte byte_bound_tac =
   strip_tac >>
-  `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sb
-    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
-    metis_tac[] >>
-  `lo = if cenv.ce_is_ctor then imm_len (cx_tops cx) else 0` by
-    metis_tac[dead_lo_ok_def] >>
+  entry_tac >>
   rpt gen_tac >> strip_tac >> irule LIST_EQ >>
   simp[LENGTH_mem_bytes_at_proof] >> rpt strip_tac >> simp[EL_mem_bytes_at] >>
-  `lo <= b + x /\ b + x < t.vs_alloca_next` by
-    (Cases_on `cenv.ce_is_ctor` >> gvs[] >> decide_tac) >>
+  `lo <= b + x /\ b + x < t.vs_alloca_next` by byte_bound_tac >>
   `!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
      sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
      b + x < off \/ off + asz <= b + x` by
     (rpt strip_tac >> res_tac >>
      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `read_byte (b + x) s'.vs_memory = read_byte (b + x) t.vs_memory` by
-    metis_tac[intcall_entry_full_completed_byte] >>
-  fs[read_byte_def]
-QED
-*)
+    metis_tac[completed_byte] >>
+  fs[read_byte_def];
+
 Theorem intcall_callee_caller_memory_bytes:
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!H. valid_horizon cx st0 H es1.storage_trace ==>
@@ -539,12 +578,49 @@ Theorem intcall_callee_caller_memory_bytes:
   gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
     MAP (op_prov G) arg_ops)
     (entered,FEMPTY,tn with t_var := FEMPTY) marks (IntRet ir s',G',tn') ==>
-  !b sz. (cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b) /\
+  !b sz. (cenv.ce_is_ctor ==> imm_len_mods cenv.ce_modules <= b) /\
     b + sz <= t.vs_alloca_next /\
     (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
       sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
       regions_disjoint b sz off asz) ==>
     mem_bytes_at b sz s'.vs_memory = mem_bytes_at b sz t.vs_memory
 Proof
-  cheat
+  intcall_callee_caller_memory_bytes_tac
+    (`intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sb
+    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
+      (qpat_assum `!K. valid_horizon cx st0 K es1.storage_trace ==> _`
+         (mp_tac o Q.SPEC `H`) >> simp[]))
+    intcall_entry_full_completed_byte
+    (`lo = if cenv.ce_is_ctor then imm_len_mods cenv.ce_modules else 0` by
+       metis_tac[dead_lo_ok_def] >>
+     Cases_on `cenv.ce_is_ctor` >> gvs[] >> decide_tac)
+QED
+
+
+Theorem intcall_callee_caller_memory_bytes_mods:
+  (!H. valid_horizon cx st0 H es1.storage_trace ==>
+    intcall_entry_full_mods (DF, lo, d) H mods src tops ctx func cenv cx tenv name es sa sb
+      vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn) /\
+  gas_invoke_entry (ctx,func) t callee entered /\
+  lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb t.vs_inst_idx = SOME inst /\
+  decode_invoke inst = SOME (lbl,arg_ops) /\
+  eval_operands arg_ops t = SOME argv /\
+  valid_horizon cx st0 H es1.storage_trace /\
+  gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
+    MAP (op_prov G) arg_ops)
+    (entered,FEMPTY,tn with t_var := FEMPTY) marks (IntRet ir s',G',tn') ==>
+  !b sz. lo <= b /\
+    b + sz <= t.vs_alloca_next /\
+    (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
+      sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
+      regions_disjoint b sz off asz) ==>
+    mem_bytes_at b sz s'.vs_memory = mem_bytes_at b sz t.vs_memory
+Proof
+  intcall_callee_caller_memory_bytes_tac
+    (`intcall_entry_full_mods (DF,lo,d) H mods src tops ctx func cenv cx tenv name es sa sb
+    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
+      (qpat_assum `!K. valid_horizon cx st0 K es1.storage_trace ==> _`
+         (mp_tac o Q.SPEC `H`) >> simp[]))
+    intcall_entry_full_completed_byte_mods decide_tac
 QED

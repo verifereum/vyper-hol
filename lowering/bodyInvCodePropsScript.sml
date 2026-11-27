@@ -15,6 +15,14 @@ Proof
   simp[contract_inv_def, cenv_module_pins_mods_def]
 QED
 
+Theorem body_inv_unit_immutable_layout:
+  body_inv tops ctx cenv cx ==>
+  immutable_section_layout_mods cenv.ce_modules cenv
+Proof
+  metis_tac[body_inv_contract, contract_inv_immutable_section_layout,
+            contract_inv_cenv_modules]
+QED
+
 Theorem contract_inv_struct_fields:
   contract_inv mods exps ctx cenv cx ==>
   cenv.ce_struct_fields = make_struct_fields_map_mods mods
