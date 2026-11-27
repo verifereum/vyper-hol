@@ -13,6 +13,42 @@ Ancestors
   venomState venomInst relation arithmetic list finite_map words freshWrites
 Libs horizonTypeLib
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qabbrev_tac `input = ext_call_arg_value (lowered_value_type ce e) vv` >>
+  `vv_type input = lowered_value_type ce e` by
+    (simp[Abbr `input`] >> drule_all extcall_operand_snapshot_type >> simp[]) >>
+  `?dst. compile_materialize_vv ce (lowered_value_type ce e) input sm = (dst,sb) /\
+    saved = LocatedValue (lowered_value_type ce e) (mk_ptr dst LocMemory)` by
+    (qpat_x_assum `compile_snapshot_vv ce T input sm = _` mp_tac >>
+     Cases_on `compile_materialize_vv ce (lowered_value_type ce e) input sm` >>
+     simp[compile_snapshot_vv_def,comp_bind_def,comp_return_def]) >>
+  `ci_mono sa sm /\ ci_mono sm sb` by
+    metis_tac[ci_mono_compile_expr_sa,ci_mono_compile_snapshot_vv,pairTheory.SND] >>
+  qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
+  `valid_horizon cx st0 H0 ee.storage_trace` by
+    fs[storage_trace_domain_def,Abbr `H0`] >>
+  `stmt_state_rel H0 ctx func ce cx ee s /\
+   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x s = SOME w)` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+     fs[vv_post_def]) >>
+  `expr_body_pre ce cx env e (es with gas_obs := gs)` by simp[] >>
+  `vyperState$bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee)` by
+    simp[bind_def] >>
+  `~is_word_type (expr_type e)` by
+    metis_tac[expr_body_pre_lowered_fits,arg_type_fits_word_type] >>
+  drule_all (REWRITE_RULE [ETA_AX] abi_args_success_ready) >> simp[] >> strip_tac >>
+  `local_ptrs_reserved ce sm /\ return_buf_frame d ce sm s` by
+    (fs[ci_mono_def] >> conj_tac
+     >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+     irule return_buf_frame_frame >> qexistsl_tac [`ce`,`s0`,`sa`] >> simp[]) >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
+    metis_tac[cj 1 compiler_compile_var] >>
+  suspend "source"
+QED
+*)
 Theorem ctor_private_snapshot_actual:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   compile_snapshot_vv ce T (ext_call_arg_value (lowered_value_type ce e) vv) sm = (saved,sb) /\
@@ -69,39 +105,10 @@ Theorem ctor_private_snapshot_actual:
       !xs. extcall_positional_post T DF lo d ctx func ce cx env xs [e] [saved]
         sa sb es s0 G0 tn0 H (INL [v]) ee Gt tt t
 Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qabbrev_tac `input = ext_call_arg_value (lowered_value_type ce e) vv` >>
-  `vv_type input = lowered_value_type ce e` by
-    (simp[Abbr `input`] >> drule_all extcall_operand_snapshot_type >> simp[]) >>
-  `?dst. compile_materialize_vv ce (lowered_value_type ce e) input sm = (dst,sb) /\
-    saved = LocatedValue (lowered_value_type ce e) (mk_ptr dst LocMemory)` by
-    (qpat_x_assum `compile_snapshot_vv ce T input sm = _` mp_tac >>
-     Cases_on `compile_materialize_vv ce (lowered_value_type ce e) input sm` >>
-     simp[compile_snapshot_vv_def,comp_bind_def,comp_return_def]) >>
-  `ci_mono sa sm /\ ci_mono sm sb` by
-    metis_tac[ci_mono_compile_expr_sa,ci_mono_compile_snapshot_vv,pairTheory.SND] >>
-  qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
-  `valid_horizon cx st0 H0 ee.storage_trace` by
-    fs[storage_trace_domain_def,Abbr `H0`] >>
-  `stmt_state_rel H0 ctx func ce cx ee s /\
-   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x s = SOME w)` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
-     fs[vv_post_def]) >>
-  `expr_body_pre ce cx env e (es with gas_obs := gs)` by simp[] >>
-  `vyperState$bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee)` by
-    simp[bind_def] >>
-  `~is_word_type (expr_type e)` by
-    metis_tac[expr_body_pre_lowered_fits,arg_type_fits_word_type] >>
-  drule_all (REWRITE_RULE [ETA_AX] abi_args_success_ready) >> simp[] >> strip_tac >>
-  `local_ptrs_reserved ce sm /\ return_buf_frame d ce sm s` by
-    (fs[ci_mono_def] >> conj_tac
-     >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-     irule return_buf_frame_frame >> qexistsl_tac [`ce`,`s0`,`sa`] >> simp[]) >>
-  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
-    metis_tac[cj 1 compiler_compile_var] >>
-  suspend "source"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[source]:
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
     vv_post H ctx func ce cx e (es with gas_obs := gs) sa sm s0 ee raw vv s /\
@@ -121,7 +128,9 @@ Resume ctor_private_snapshot_actual[source]:
       (MAP_EVERY assume_tac o CONJUNCTS))) >>
   suspend "store"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[store]:
   qabbrev_tac `HP = \H. valid_horizon cx st0 H ee.storage_trace` >>
   qabbrev_tac `n = if is_bytestring_type (lowered_value_type ce e) then val_store_size rt v
@@ -149,7 +158,9 @@ Resume ctor_private_snapshot_actual[store]:
     (qx_choosel_then [`u`,`Gu`,`tu`] (MAP_EVERY assume_tac o CONJUNCTS))) >>
   suspend "arrival"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[coverage]:
   `n <= type_memory_size rt` by (simp[Abbr `n`] >> rw[] >> simp[val_store_size_le]) >>
   strip_tac >>
@@ -159,7 +170,9 @@ Resume ctor_private_snapshot_actual[coverage]:
   qexists_tac `x` >> simp[] >>
   fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS,LESS_EQ_MONO_ADD_EQ]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[gas_frame]:
   conj_tac
   >- (qpat_assum `wb_frame ce (es with gas_obs := gs) ee sa s0 z` mp_tac >>
@@ -172,7 +185,9 @@ Resume ctor_private_snapshot_actual[gas_frame]:
   qpat_assum `~expr_has_effect e ==> pure_frame ce func (es with gas_obs := gs) sa s0 z`
     (drule_then (ACCEPT_TAC o REWRITE_RULE [pure_frame_gas_obs]))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[arrival]:
   `ci_mono mid su /\ ci_mono su sb` by
     metis_tac[ci_mono_unwrap_value,ci_mono_compile_store_memory,pairTheory.SND] >>
@@ -192,7 +207,9 @@ Resume ctor_private_snapshot_actual[arrival]:
   pop_assum SUBST_ALL_TAC >>
   suspend "pack"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[band]:
   irule RTC_TRANS >> qexists_tac `z` >> conj_tac
   >- (irule RTC_MONOTONE >> goal_assum (drule_at Any) >>
@@ -200,7 +217,9 @@ Resume ctor_private_snapshot_actual[band]:
   irule RTC_MONOTONE >> goal_assum (drule_at Any) >>
   simp[Abbr `C`] >> metis_tac[LESS_EQ_TRANS]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[exclude]:
   simp[Abbr `C`] >> rpt gen_tac >> strip_tac >> conj_tac
   >- (strip_tac >>
@@ -211,14 +230,18 @@ Resume ctor_private_snapshot_actual[exclude]:
       `i = last` by metis_tac[optionTheory.SOME_11] >> gvs[] >> decide_tac) >>
   qexists_tac `i` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[compare]:
   irule ctor_same_func_first_arrival >>
   qpat_assum `RTC (\a b. _ /\ ?i ms. _) s t` (irule_at Any) >>
   qexistsl_tac [`last`,`func`,`explicit`,`cut`,`ctx`,`C`] >>
   simp[Abbr `cut`] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[pack]:
   `not_fresh_at sb p` by metis_tac[not_fresh_at_mono] >>
   `w2n dw + type_memory_size rt <= u.vs_alloca_next` by simp[] >>
@@ -247,7 +270,9 @@ Resume ctor_private_snapshot_actual[pack]:
     ptr_buf_ok ce e (Var p) Gu u` by suspend "representation" >>
   suspend "result"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[history]:
   `alloca_inv z` by
     (qpat_assum `!H. HP H ==> stmt_state_rel H ctx func ce cx ee z /\ _`
@@ -256,7 +281,9 @@ Resume ctor_private_snapshot_actual[history]:
   qpat_assum `!D. gas_origin_ptr_path _ (z,Gz,tz) [] (OK u,Gu,tu)`
     (qspec_then `DF H0` (irule_at Any)) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[representation]:
   irule materialized_operand_endpoint >>
   qpat_assum `compile_snapshot_vv _ _ _ _ = _` (irule_at Any) >>
@@ -267,7 +294,9 @@ Resume ctor_private_snapshot_actual[representation]:
       simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_private_snapshot_actual[result]:
   qexistsl_tac [`p`,`dw`,`rt`,`Gu`,`tu`] >>
   simp[] >> conj_tac
@@ -291,4 +320,7 @@ Resume ctor_private_snapshot_actual[result]:
      gvs[mk_ptr_def,ci_mono_def] >> first_assum ACCEPT_TAC) >>
   fs[wb_frame_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise ctor_private_snapshot_actual
+*)

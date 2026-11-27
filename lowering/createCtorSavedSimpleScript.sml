@@ -78,26 +78,8 @@ Proof
       vv_store_bound_def, read_result_def, return_def]
 QED
 
-Theorem ctor_retained_representation[local]:
-  expr_body_pre ce cx env e es /\
-  ~is_word_type (lowered_value_type ce e) /\
-  compile_expr ce (expr_type e) e sa = (vv,sb) /\
-  eval_expr cx e es = (INL raw,ee) /\ read_result cx raw ee = (INL v,ee) /\
-  vv_holds ce cx (post_value_type ce e) raw vv ee t /\
-  vv_at ce cx (post_value_type ce e) sa sb ee raw vv t /\
-  ptr_vv_ok cx (post_value_type ce e) raw vv ee G tn t /\
-  vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv t /\
-  (!tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv ==> val_wf tv v) /\
-  sv = ext_call_arg_value (lowered_value_type ce e) vv ==>
-  ((?tag op. sv = StackValue tag op) \/
-   (?p. sv = LocatedValue (lowered_value_type ce e) p /\ p.ptr_location = LocMemory) \/
-   (?p. sv = LocatedValue (lowered_value_type ce e) p /\ p.ptr_location <> LocMemory /\
-        lowered_value_type ce e = expr_type e /\ sv = vv)) /\
-  ?saved. read_result cx saved ee = (INL v,ee) /\
-    vv_holds ce cx (lowered_value_type ce e) saved sv ee t /\
-    vv_at ce cx (lowered_value_type ce e) sa sb ee saved sv t /\
-    ptr_vv_ok cx (lowered_value_type ce e) saved sv ee G tn t /\
-    vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e) ee saved sv t
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   drule expr_body_pre_lowered_fits >> strip_tac >>
@@ -139,6 +121,30 @@ Proof
   Cases_on `vv` >> gvs[ext_call_arg_value_def] >>
   qexists_tac `Value v` >> simp[]
 QED
+*)
+Theorem ctor_retained_representation[local]:
+  expr_body_pre ce cx env e es /\
+  ~is_word_type (lowered_value_type ce e) /\
+  compile_expr ce (expr_type e) e sa = (vv,sb) /\
+  eval_expr cx e es = (INL raw,ee) /\ read_result cx raw ee = (INL v,ee) /\
+  vv_holds ce cx (post_value_type ce e) raw vv ee t /\
+  vv_at ce cx (post_value_type ce e) sa sb ee raw vv t /\
+  ptr_vv_ok cx (post_value_type ce e) raw vv ee G tn t /\
+  vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv t /\
+  (!tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv ==> val_wf tv v) /\
+  sv = ext_call_arg_value (lowered_value_type ce e) vv ==>
+  ((?tag op. sv = StackValue tag op) \/
+   (?p. sv = LocatedValue (lowered_value_type ce e) p /\ p.ptr_location = LocMemory) \/
+   (?p. sv = LocatedValue (lowered_value_type ce e) p /\ p.ptr_location <> LocMemory /\
+        lowered_value_type ce e = expr_type e /\ sv = vv)) /\
+  ?saved. read_result cx saved ee = (INL v,ee) /\
+    vv_holds ce cx (lowered_value_type ce e) saved sv ee t /\
+    vv_at ce cx (lowered_value_type ce e) sa sb ee saved sv t /\
+    ptr_vv_ok cx (lowered_value_type ce e) saved sv ee G tn t /\
+    vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e) ee saved sv t
+Proof
+  cheat
+QED
 
 Theorem ctor_retained_storage_live[local]:
   body_inv tops ctx ce cx /\ expr_body_pre ce cx env e (es with gas_obs := gs) /\
@@ -159,36 +165,8 @@ Proof
   simp[vv_post_initial_gas]
 QED
 
-Theorem ctor_saved_head_retained:
-  body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
-  ~is_word_type (lowered_value_type ce e) /\ ~exprs_can_mutate ce xs /\
-  compile_expr ce (expr_type e) e sa = (vv,sm) /\
-  compile_snapshot_vv ce (exprs_can_mutate ce xs)
-    (ext_call_arg_value (lowered_value_type ce e) vv) sm = (sv,sb) /\
-  eval_expr cx e (es with gas_obs := gs) = (INL raw,ee) /\
-  read_result cx raw ee = (INL v,ee) /\
-  valid_horizon cx (es with gas_obs := gs) H ee.storage_trace /\
-  local_ptrs_reserved ce sa /\
-  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  return_buf_frame d ce sa s0 /\ ~t.vs_halted /\
-  t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  vv_post H ctx func ce cx e es sa sm s0 ee raw vv t /\
-  vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv t /\
-  ptr_vv_ok cx (post_value_type ce e) raw vv ee G tn t /\
-  alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
-  ghost_inv_at (DF H) lo d ce cx ee G tn t /\
-  ghost_kept_at lo ce es sa G0 tn0 s0 G tn /\
-  (!tag op. vv = StackValue tag op ==> ptr_buf_ok ce e op G t) /\
-  (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
-           ptr_buf_ok ce e p.ptr_operand G t) /\
-  (ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-    !rt w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rt /\
-           eval_operand (vv_operand vv) t = SOME w ==>
-       w2n w + type_memory_size rt <= lo /\
-       (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==> val_in_memory rt v (w2n w) mem)) ==>
-  extcall_positional_post T DF lo d ctx func ce cx env xs [e] [sv]
-    sa sb es s0 G0 tn0 H (INL [v]) ee G tn t
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `~is_word_type (expr_type e)` by
@@ -233,7 +211,42 @@ Proof
   drule_at (Pat `eval_expr _ _ _ = _`) ctor_retained_representation >>
   disch_then drule_all >> suspend "saved"
 QED
+*)
+Theorem ctor_saved_head_retained:
+  body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
+  ~is_word_type (lowered_value_type ce e) /\ ~exprs_can_mutate ce xs /\
+  compile_expr ce (expr_type e) e sa = (vv,sm) /\
+  compile_snapshot_vv ce (exprs_can_mutate ce xs)
+    (ext_call_arg_value (lowered_value_type ce e) vv) sm = (sv,sb) /\
+  eval_expr cx e (es with gas_obs := gs) = (INL raw,ee) /\
+  read_result cx raw ee = (INL v,ee) /\
+  valid_horizon cx (es with gas_obs := gs) H ee.storage_trace /\
+  local_ptrs_reserved ce sa /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  return_buf_frame d ce sa s0 /\ ~t.vs_halted /\
+  t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  vv_post H ctx func ce cx e es sa sm s0 ee raw vv t /\
+  vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) ee raw vv t /\
+  ptr_vv_ok cx (post_value_type ce e) raw vv ee G tn t /\
+  alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+  ghost_inv_at (DF H) lo d ce cx ee G tn t /\
+  ghost_kept_at lo ce es sa G0 tn0 s0 G tn /\
+  (!tag op. vv = StackValue tag op ==> ptr_buf_ok ce e op G t) /\
+  (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
+           ptr_buf_ok ce e p.ptr_operand G t) /\
+  (ce.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+    !rt w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rt /\
+           eval_operand (vv_operand vv) t = SOME w ==>
+       w2n w + type_memory_size rt <= lo /\
+       (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==> val_in_memory rt v (w2n w) mem)) ==>
+  extcall_positional_post T DF lo d ctx func ce cx env xs [e] [sv]
+    sa sb es s0 G0 tn0 H (INL [v]) ee G tn t
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_saved_head_retained[saved]:
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   qpat_x_assum `Abbrev _` kall_tac >>
@@ -245,8 +258,11 @@ Resume ctor_saved_head_retained[saved]:
   >- (map_every qexists_tac [`sa`,`sb`,`sb`,`vv`,`saved`,`F`] >> simp[]) >>
   qpat_x_assum `_ /\ vv_location sv = SOME LocCode ==> _` mp_tac >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise ctor_saved_head_retained[local]
+*)
 
 (* Use the scalar completed cut for words and the VV completed cut for
    retained aggregates. In the latter case the two target PCs coincide

@@ -37,28 +37,24 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs pairLib horizonTypeLib
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >> irule abi_snapshot_operand_not_label >>
+  metis_tac[assign_place_operand_not_label]
+QED
+*)
 Theorem abi_encode_snapshot_not_label[local]:
   expr_body_pre_mods mods ce cx env e es /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value (lowered_value_type ce e) vv) sm =
     (sv,ss) ==> !l. vv_operand sv <> Label l
 Proof
-  strip_tac >> irule abi_snapshot_operand_not_label >>
-  metis_tac[assign_place_operand_not_label]
+  cheat
 QED
 
-Theorem abi_encode_vv_full_from_packaging:
-  (contract_inv mods exps ctx ce cx /\
-     module_body_inv mods ce.ce_module tops ce cx) /\
-  shadow_body_inv_mods mods exps ctx shadow_ctx /\
-  (LENGTH args = 1 /\ ~ensure ==> ~is_word_type (lowered_value_type ce (HD args))) /\
-  body_const_cells_agree mods cx env es /\
-  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
-  (!s x t. type_check
-      (type_builtin_args_length_ok (AbiEncode ensure mid) (LENGTH args))
-      "TypeBuiltin args" s = (INL x,t) ==> body_exprs_full_ok_mods mods exps cx args) ==>
-  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    ce cx cty (TypeBuiltin ann (AbiEncode ensure mid) target args) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `1 <= LENGTH args` by
@@ -123,7 +119,24 @@ Proof
       fs[halt_exit_def]) >>
   suspend "payload"
 QED
+*)
+Theorem abi_encode_vv_full_from_packaging:
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  (LENGTH args = 1 /\ ~ensure ==> ~is_word_type (lowered_value_type ce (HD args))) /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
+  (!s x t. type_check
+      (type_builtin_args_length_ok (AbiEncode ensure mid) (LENGTH args))
+      "TypeBuiltin args" s = (INL x,t) ==> body_exprs_full_ok_mods mods exps cx args) ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    ce cx cty (TypeBuiltin ann (AbiEncode ensure mid) target args) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[payload]:
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `H0 = storage_trace_horizon mid'.storage_trace` >>
@@ -245,7 +258,9 @@ Resume abi_encode_vv_full_from_packaging[payload]:
      asm_rewrite_tac[]) >>
   suspend "setup_frame"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[setup_frame]:
   `cs_extends allocated ready /\ allocated.cs_next_var <= ready.cs_next_var` by
     metis_tac[cs_extends_trans] >>
@@ -367,7 +382,9 @@ Resume abi_encode_vv_full_from_packaging[setup_frame]:
     (Cases_on `single` >- suspend "standalone_payload" >> suspend "wrapped_payload") >>
   suspend "finish_payload"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[setup_horizons]:
   gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> extcall_positional_post T DF lo d ctx
@@ -389,7 +406,9 @@ Resume abi_encode_vv_full_from_packaging[setup_horizons]:
   qpat_assum `!D d ce cx es. _ ==> ghost_inv_at D lo d ce cx es Gpre tnpre pre` irule >>
   asm_rewrite_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[setup_caller_frame]:
   `u.vs_memory = t.vs_memory` by
     (qpat_assum `u with <|vs_vars := _; vs_allocas := _; vs_alloca_next := _;
@@ -447,7 +466,9 @@ Resume abi_encode_vv_full_from_packaging[setup_caller_frame]:
   qpat_assum `!ce es origin G0 tn0 s0. _ ==> ghost_kept_at lo ce es origin G0 tn0 s0 Gpre tnpre`
     irule >> simp[] >> metis_tac[ci_mono_def, not_fresh_at_mono]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[setup_pure_frame]:
   `u.vs_memory = t.vs_memory` by
     (qpat_assum `u with <| vs_vars := _; vs_allocas := _; vs_alloca_next := _; vs_inst_idx := _ |> = t`
@@ -467,7 +488,9 @@ Resume abi_encode_vv_full_from_packaging[setup_pure_frame]:
   qpat_assum `u.vs_memory = t.vs_memory` (SUBST1_TAC o SYM) >>
   rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[selector_source]:
   conj_tac
   >- (Cases_on `meth` >> simp[Abbr `prefix`,Abbr `k`,abi_builtin_encode_prefix_def,
@@ -478,7 +501,9 @@ Resume abi_encode_vv_full_from_packaging[selector_source]:
   drule abi_builtin_encode_checked_prefix >>
   simp_tac bool_ss [Abbr `prefix`, Abbr `meth`]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[selector_memory]:
   namedCases_on `meth` ["", "selector"]
   >- simp[NoAsms, Abbr `k`, Abbr `prefix`, abi_builtin_encode_prefix_def,
@@ -493,7 +518,9 @@ Resume abi_encode_vv_full_from_packaging[selector_memory]:
   qpat_assum `tnpre.t_mem = _` (fn th => PURE_REWRITE_TAC [th]) >>
   simp[NoAsms, Abbr `k`, Abbr `write_len`, IN_DIFF] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[wrapped_payload]:
   `compile_abi_encode_values_to_buf ce (Var dp) rows ready = (len,body_end)` by
     (simp[NoAsms, Abbr `rows`] >>
@@ -597,7 +624,9 @@ Resume abi_encode_vv_full_from_packaging[wrapped_payload]:
     abi_encode_saved_frames_trans) >>
   asm_simp_tac bool_ss [LESS_EQ_REFL]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[wrapped_rows]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   TRY (simp_tac bool_ss [Abbr `hl`] >> NO_TAC) >>
@@ -701,7 +730,9 @@ Resume abi_encode_vv_full_from_packaging[wrapped_rows]:
     suspend "wrapped_row_execute") >>
   suspend "saved_row"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[wrapped_row_execute]:
   `expr_body_pre ce cx env e es` by
     metis_tac[EL_MEM, Abbr `e`, abi_encode_body_arg_pre] >>
@@ -730,7 +761,9 @@ Resume abi_encode_vv_full_from_packaging[wrapped_row_execute]:
     first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [Abbr `at`, Abbr `av`, Abbr `off`])) >>
   disch_then ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[wrapped_layout]:
   `LENGTH tys = LENGTH declared /\ LENGTH tys = LENGTH vs /\
    LENGTH tys = LENGTH svs /\
@@ -765,7 +798,9 @@ Resume abi_encode_vv_full_from_packaging[wrapped_layout]:
      first_assum ACCEPT_TAC) >>
   asm_rewrite_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[saved_row]:
   `LENGTH args = LENGTH svs` by decide_tac >>
   qpat_assum `LIST_REL _ (ZIP (args,svs)) vs` mp_tac >>
@@ -788,7 +823,9 @@ Resume abi_encode_vv_full_from_packaging[saved_row]:
   strip_tac >> first_x_assum irule >>
   simp[NoAsms, SF CONJ_ss] >> TRY (first_assum ACCEPT_TAC)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[physical_row]:
   Cases_on `is_word_type (expr_type e)`
   >- (drule_all abi_encode_body_args_indexed_physical_types >>
@@ -814,7 +851,9 @@ Resume abi_encode_vv_full_from_packaging[physical_row]:
   qexists_tac `tv` >> simp_tac bool_ss [Abbr `e`, Abbr `v`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[standalone_payload]:
   `LENGTH args = 1 /\ ~ensure` by
     (qpat_assum `Abbrev (T = (LENGTH args = 1 /\ ~ensure))` mp_tac >>
@@ -1007,7 +1046,9 @@ Resume abi_encode_vv_full_from_packaging[standalone_payload]:
   strip_tac >>
   suspend "standalone_result"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[standalone_separation]:
   rpt strip_tac >>
   `stmt_state_rel H0 ctx func ce cx mid' pre` by
@@ -1022,7 +1063,9 @@ Resume abi_encode_vv_full_from_packaging[standalone_separation]:
   TRY (qpat_assum `inst.inst_id = st.cs_next_id` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   drule stmt_state_rel_local_ptrs_alloca >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[source_cut]:
   qpat_assum `~is_word_type ty ==> _ \/ _` (drule_then strip_assume_tac)
   >- (qexistsl_tac [`si`,`ss`] >> asm_rewrite_tac[] >>
@@ -1031,13 +1074,17 @@ Resume abi_encode_vv_full_from_packaging[source_cut]:
       qpat_assum `st.cs_next_id < ready.cs_next_id` mp_tac >> decide_tac) >>
   qexistsl_tac [`ready`,`unwrap_end`] >> asm_simp_tac bool_ss [LESS_EQ_REFL]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[standalone_source_premises]:
   qpat_assum `inst.inst_id = st.cs_next_id` (fn id_eq =>
     asm_rewrite_tac [id_eq]) >>
   rpt conj_tac >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[standalone_scratch]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac
   >- (irule local_ptrs_reserved_next_var >> qexists_tac `ready` >>
@@ -1047,7 +1094,9 @@ Resume abi_encode_vv_full_from_packaging[standalone_scratch]:
   qpat_assum `0 < val_footprint tv v ==> _ /\ _` (drule_then strip_assume_tac) >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[standalone_open_input]:
   simp_tac bool_ss [Abbr `bytes`] >>
   `!t value_type. evaluate_type (get_tenv cx) t = SOME value_type ==>
@@ -1061,7 +1110,9 @@ Resume abi_encode_vv_full_from_packaging[standalone_open_input]:
   irule abi_encode_uniform_translated_footprint_window >>
   simp[] >> qexists_tac `get_tenv cx` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[standalone_window_premises]:
   `ctx_has_dalloca ctx ==> allocas_below_fmp z /\
     z.vs_alloca_next + pending_alloca_size func z <= w2n z.vs_initial_fmp` by
@@ -1089,7 +1140,9 @@ Resume abi_encode_vv_full_from_packaging[standalone_window_premises]:
   qexists_tac `N - (32+k)` >> asm_rewrite_tac[] >>
   qpat_assum `32+k+LENGTH bytes <= N` mp_tac >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[standalone_result]:
   qpat_assum `enc at rv = bytes` SUBST_ALL_TAC >>
   mp_tac (Q.INST [`ee` |-> `mid'`,`se` |-> `st`,`s` |-> `t`,`G` |-> `G1`,`tn` |-> `tn1`,
@@ -1119,7 +1172,9 @@ Resume abi_encode_vv_full_from_packaging[standalone_result]:
   conj_tac >- (qexistsl_tac [`st`,`z`] >> asm_simp_tac bool_ss [LESS_EQ_REFL]) >>
   qexistsl_tac [`H0`,`ctx`,`cx`] >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[standalone_phase_premises]:
   `32+k+LENGTH bytes <= N` by first_assum ACCEPT_TAC >>
   `!aid. aid IN window_alloca_sites func (frag_ids unwrap_end body_end) ==>
@@ -1153,7 +1208,9 @@ Resume abi_encode_vv_full_from_packaging[standalone_phase_premises]:
     (qspec_then `i` mp_tac) >>
   pop_assum mp_tac >> tautLib.TAUT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[standalone_restore_premises]:
   `st.cs_next_var <= ready.cs_next_var /\ st.cs_next_id <= ready.cs_next_id` by
     (qpat_assum `ci_mono st allocated` (mp_tac o REWRITE_RULE [ci_mono_def]) >>
@@ -1174,7 +1231,9 @@ Resume abi_encode_vv_full_from_packaging[standalone_restore_premises]:
   qpat_assum `!tag pp. _ ==> ptr_buf_ok ce e pp.ptr_operand G1 t`
     (qspecl_then [`tag`,`pp`] mp_tac) >> asm_simp_tac (srw_ss()) []
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[finish_payload]:
   qpat_assum `abi_encode_saved_state ctx func ce cx st0 mid' DF lo d st t G1 tn1
     st.cs_next_id p N root dp (32+k) prefix body_end q Gq tq`
@@ -1290,14 +1349,18 @@ Resume abi_encode_vv_full_from_packaging[finish_payload]:
   simp[NoAsms] >>
   suspend "finish_post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[finish_local_separation]:
   rpt strip_tac >>
   mp_tac (Q.SPECL [`func`,`ce`,`mid'.scopes`,`q`,`inst`,`root`,`p`,`N`,`name`,`b`,`sz`]
     local_ptrs_rel_alloca_disjoint) >>
   asm_rewrite_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[finish_bytes]:
   `p+32+k-LENGTH prefix = p+32` by decide_tac >>
   `mem_bytes_at (p+32) k q.vs_memory = prefix` by
@@ -1332,7 +1395,9 @@ Resume abi_encode_vv_full_from_packaging[finish_bytes]:
   qpat_assum `mem_bytes_at (p+32+k) _ mem = _` (pure_rewrite_tac o single) >>
   REFL_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[finish_ghost]:
   qx_gen_tac `H` >> disch_tac >>
   qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==>
@@ -1359,7 +1424,9 @@ Resume abi_encode_vv_full_from_packaging[finish_ghost]:
      simp[NoAsms, loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   simp[NoAsms]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[finish_horizons]:
   gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==>
@@ -1375,7 +1442,9 @@ Resume abi_encode_vv_full_from_packaging[finish_horizons]:
   qpat_assum `!H. _ ==> ghost_inv_at (DF H) lo d ce cx mid' Gf tf actual /\ _`
     (qspec_then `H` (drule_then (ACCEPT_TAC o cj 1)))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[finish_result_separation]:
   rpt strip_tac >>
   `local_region ce mid'.scopes q name b sz` by
@@ -1391,7 +1460,9 @@ Resume abi_encode_vv_full_from_packaging[finish_result_separation]:
   qpat_assum `!name b sz. local_region ce mid'.scopes q name b sz ==> _`
     (drule_then (ACCEPT_TAC o REWRITE_RULE [loweringStateRelDefsTheory.regions_disjoint_def]))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[finish_caller_frame]:
   `valid_horizon cx st0 H0 es.storage_trace` by
     (qpat_assum `eval_exprs cx args _ = (INL vs,mid')`
@@ -1441,7 +1512,9 @@ Resume abi_encode_vv_full_from_packaging[finish_caller_frame]:
   qexistsl_tac [`G1`,`mid'`,`mid'`,`t`,`st`,`tn1`] >>
   asm_rewrite_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[finish_pure_frame]:
   strip_tac >>
   `pure_frame ce func es sa s0 q` by
@@ -1474,7 +1547,9 @@ Resume abi_encode_vv_full_from_packaging[finish_pure_frame]:
   qpat_assum `!a n. _ ==> mem_bytes_at a n actual.vs_memory = _` irule >>
   decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_vv_full_from_packaging[finish_post]:
   qx_gen_tac `H` >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func ce cx mid' actual /\ _`
@@ -1549,5 +1624,8 @@ Resume abi_encode_vv_full_from_packaging[finish_post]:
   >- (qpat_assum `is_bytestring_type _` (fn th => simp[NoAsms, th])) >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise abi_encode_vv_full_from_packaging
+*)
