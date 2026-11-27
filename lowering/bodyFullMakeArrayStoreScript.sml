@@ -16,13 +16,16 @@ Ancestors
   exprSimBufferStore reasonCopySourcePtr
   bodyMemAggregatePath fragGasPathFrameMem logValueFramePtr internalReturnImmutableTypes
   bodyFullBuiltinWordPowCompose stateRelProj immutableDeployAssignFacts
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 val _ = Parse.hide "base";
 
 Theorem make_array_slot_full_bundled:
+  !mods exps.
     (
-        body_inv tops ctx cenv cx /\
-        shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env ebase /\
+        (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+        shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env ebase /\
         csbase.cs_next_id <= aid /\ csbase.cs_next_id <= sa.cs_next_id /\
         csbase.cs_next_var <= sa.cs_next_var /\
         local_ptrs_reserved cenv csbase /\ local_ptrs_reserved cenv sa /\
@@ -33,8 +36,8 @@ Theorem make_array_slot_full_bundled:
         (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==>
                not_fresh_at csbase x) /\
         (!H. valid_horizon cx st0 H ebase.storage_trace ==>
-             stmt_state_rel H ctx func cenv cx ebase sbase)) /\ body_expr_full_ok cx e /\ expr_body_pre cenv cx env e es /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
+             stmt_state_rel H ctx func cenv cx ebase sbase)) /\ body_expr_full_ok_mods mods exps cx e /\ expr_body_pre_mods mods cenv cx env e es /\
+    body_const_cells_agree mods cx env es /\
     arg_type_fits (expr_type e) dty /\
     evaluate_type (get_tenv cx) dty = SOME dtv /\
     type_memory_bytes cenv dty = type_memory_size dtv /\
@@ -1391,9 +1394,11 @@ QED
 Finalise make_array_slot_full_bundled
 
 Theorem make_array_slot_full:
+  !mods exps.
     (
-        body_inv tops ctx cenv cx /\
-        shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env ebase /\
+        (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+        shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env ebase /\
         csbase.cs_next_id <= aid /\ csbase.cs_next_id <= sa.cs_next_id /\
         csbase.cs_next_var <= sa.cs_next_var /\
         local_ptrs_reserved cenv csbase /\ local_ptrs_reserved cenv sa /\
@@ -1408,8 +1413,8 @@ Theorem make_array_slot_full:
         (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==>
                not_fresh_at csbase x) /\
         (!H. valid_horizon cx st0 H ebase.storage_trace ==>
-             stmt_state_rel H ctx func cenv cx ebase sbase)) /\ body_expr_full_ok cx e /\ expr_body_pre cenv cx env e es /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
+             stmt_state_rel H ctx func cenv cx ebase sbase)) /\ body_expr_full_ok_mods mods exps cx e /\ expr_body_pre_mods mods cenv cx env e es /\
+    body_const_cells_agree mods cx env es /\
     arg_type_fits (expr_type e) dty /\
     evaluate_type (get_tenv cx) dty = SOME dtv /\
     type_memory_bytes cenv dty = type_memory_size dtv /\

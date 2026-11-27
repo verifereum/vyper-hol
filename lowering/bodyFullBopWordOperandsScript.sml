@@ -7,13 +7,16 @@ Ancestors
   bodyMemoryDefs exprLoweringProps loweringPosts bodyPtrDefs
   vyperStorageTrace vyperStorageFootprint vyperState compileEnv
   fragExec list exprSimDefs exprSimHyps freshWrites contextRawReachable ptrDiscipline unitMemInv
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem bop_operands_full_cps_exit:
+  !mods exps.
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
-  body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
+  body_exprs_full_ok_mods mods exps cx [e1; e2] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
   lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
@@ -243,11 +246,13 @@ Proof
 QED
 
 Theorem bop_word_operands_full_cps_exit:
+  !mods exps.
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
-  body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
+  body_exprs_full_ok_mods mods exps cx [e1; e2] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
   lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
@@ -325,11 +330,13 @@ Proof
 QED
 
 Theorem bop_operands_full_cps:
+  !mods exps.
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
-  body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
+  body_exprs_full_ok_mods mods exps cx [e1; e2] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
   lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =
@@ -406,11 +413,13 @@ Proof
 QED
 
 Theorem bop_word_operands_full_cps:
+  !mods exps.
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
-  body_exprs_full_ok cx [e1; e2] /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
+  body_exprs_full_ok_mods mods exps cx [e1; e2] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
   lower_value compile_expr cenv (expr_type e1) e2 s1 = (y,s2) /\
   lower_value compile_expr (gas_shadow_env T cenv) (expr_type e1) (gas_shadow_expr e1) shadow_sa =

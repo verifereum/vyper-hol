@@ -351,7 +351,8 @@ QED
 Finalise target_attribute_sim_full
 
 Theorem immutable_target_field_source[local]:
-  expr_sim_inv cenv cx env ee /\
+  !mods.
+  expr_sim_inv_mods mods cenv cx env ee /\
   attribute_type (get_tenv cx) (StructT sid) fld = SOME fty /\
   FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
      | SOME imms => get_source_immutables NONE imms) id = SOME (itv,iv) /\
@@ -491,7 +492,8 @@ Proof
 QED
 
 Theorem immutable_target_attribute_sim_full:
-  expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt /\
+  !mods.
+  expr_sim_inv_mods mods cenv cx env es /\ target_indices_pre cenv cx env bt /\
   immutable_root cx bt /\
   imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx env bt es ==>

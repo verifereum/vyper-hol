@@ -5,9 +5,11 @@ Ancestors
   exprLowering loweringPosts exprSimMemDefs bodyPtrDefs gasShadow fragGasOriginPtr
   ptrDiscipline compileEnv context valueEncoding vyperTyping vyperTypeSystem
   vyperContext vyperValueOperation vyperAST vyperInterpreter vyperState venomState
+  bodyFullPredsMods[qualified]
 
 Theorem type_builtin_literal_vv_full:
-  expr_body_pre cenv cx env (TypeBuiltin ann tb typ args) es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (TypeBuiltin ann tb typ args) es /\
   is_word_type ann /\
   (!gs. eval_expr cx (TypeBuiltin ann tb typ args) (es with gas_obs := gs) =
         (INL (Value v), es with gas_obs := gs)) /\
@@ -45,8 +47,9 @@ Proof
 QED
 
 Theorem bound_builtin_vv_full[local]:
+  !mods.
   MEM tb [MaxValue; MinValue; Epsilon] /\
-  expr_body_pre cenv cx env (TypeBuiltin ann tb typ args) es ==>
+  expr_body_pre_mods mods cenv cx env (TypeBuiltin ann tb typ args) es ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TypeBuiltin ann tb typ args) es
 Proof
@@ -76,9 +79,9 @@ Proof
 QED
 
 Theorem bound_builtin_expr_full_ok:
-  !cx ann tb typ args.
+  !mods exps cx ann tb typ args.
     MEM tb [MaxValue; MinValue; Epsilon] ==>
-    body_expr_full_ok cx (TypeBuiltin ann tb typ args)
+    body_expr_full_ok_mods mods exps cx (TypeBuiltin ann tb typ args)
 Proof
   rpt gen_tac >> strip_tac >>
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>

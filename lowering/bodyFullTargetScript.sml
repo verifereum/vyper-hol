@@ -23,6 +23,7 @@ Ancestors
   loweringPosts bodyPtrPopTargetFragTransport
   vyperStorageTrace vyperTypeEnv vyperTypeSystem vyperInterpreter vyperState
   vyperAST pair list exprSimDefs exprSimHypsDefs vyperStorageFootprint
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
@@ -45,11 +46,12 @@ Proof
 QED
 
 Theorem body_imm_target_place_sim_full:
-  !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es id.
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-    body_base_target_full_ok cx bt /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt /\
+  !mods exps bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es id.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_base_target_full_ok_mods mods exps cx bt /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ target_indices_pre cenv cx env bt /\
     cx.in_deploy /\ immutable_root cx bt /\
     target_root bt = TopLevelNameTarget (NONE,id) /\
     ~cx_const_name cx (NONE,id) ==>
@@ -78,11 +80,12 @@ Proof
 QED
 
 Theorem body_target_sim_full:
-  !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_base_target_full_ok cx bt /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
+  !mods exps bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_base_target_full_ok_mods mods exps cx bt /\
+    body_const_cells_agree mods cx env es /\
     target_pre cenv cx env bt es ==>
     target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx env bt es
@@ -111,11 +114,12 @@ QED
    eval_base_place then get_place, which runs no instruction; a memory place
    is live in the local's current value (targetLocalLive). *)
 Theorem body_target_place_sim_full:
-  !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_base_target_full_ok cx bt /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
+  !mods exps bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_base_target_full_ok_mods mods exps cx bt /\
+    body_const_cells_agree mods cx env es /\
     target_pre cenv cx env bt es ==>
     target_place_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx env bt es

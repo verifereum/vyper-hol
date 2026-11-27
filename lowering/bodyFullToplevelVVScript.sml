@@ -3,11 +3,13 @@ Ancestors
   bodyFullToplevelVVStorage bodyFullToplevelVVImmutable bodyFullToplevelCtorSource
   exprSimTopLevelProps vyperTypeGlobalLookupSoundness bodySimFull
   exprSimHypsDefs exprSimSource exprSimHyps exprSimDefs
+  bodyInvSplit[qualified]
 
 Theorem toplevel_name_vv_full:
-  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann nsid es.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (TopLevelName ann nsid) es ==>
+  !mods exps DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann nsid es.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx env (TopLevelName ann nsid) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (TopLevelName ann nsid) es
 Proof

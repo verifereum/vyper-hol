@@ -10,6 +10,7 @@ Ancestors
   loweringShapeDefs vyperInterpreter vyperState vyperValue vyperEvent
   venomState words list rich_list arithmetic finite_map pred_set
   contextRawReachable ptrDiscipline unitMemInv
+  exprSimHypsDefs[qualified]
 
 (* Reanchor the scalar child's frame across the scratch allocation. *)
 Theorem raw_log_fixed_data_reanchor:
@@ -47,6 +48,7 @@ QED
 (* Endpoint hypotheses are universally closed: this proof does not depend on
    the independent concrete allocation or MSTORE/LOG publications. *)
 Theorem raw_log_fixed_data_full_from_endpoints:
+  !mods.
   (!data cenv ret_ty ty topics dflt call_sa vv call_sb sm buf sd func ctx
       cx st0 ee DF lo explicit PG s G tn d.
     expr_type data = BaseT (BytesT (Fixed 32)) /\
@@ -162,8 +164,8 @@ Theorem raw_log_fixed_data_full_from_endpoints:
   (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm
       shadow_sd shadow_sm sa shadow_sa s0 G0 tn0 st0 vals ops ann es_call dflt
       buf s1 sb ret_ty ty topics call_sa vv call_sb env es0.
-    expr_body_pre cenv cx env (Call ann RawLog es_call dflt) es0 /\
-    MEM data es_call /\ expr_sim_inv cenv cx env es /\
+    expr_body_pre_mods mods cenv cx env (Call ann RawLog es_call dflt) es0 /\
+    MEM data es_call /\ expr_sim_inv_mods mods cenv cx env es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type data) data es /\
     lower_value compile_expr cenv (expr_type data) data sd = (data_op,sm) /\

@@ -6,6 +6,7 @@ Ancestors context[qualified,ignore_grammar]
   vyperInterpreter vyperState vyperAST vyperTyping bodyFullIntCallReturnTyping
   valueEncodingProofs valueCopyBytes exprLoweringProps
   bodyInvCodeProps exprBodyPreProps compileUnit alist
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem fresh_vars_arity_code[local]:
   !n sa xs sb. fresh_vars n sa = (xs,sb) ==>
@@ -154,10 +155,12 @@ Proof
 QED
 
 Theorem intcall_return_type_facts:
+  !mods exps.
  !tops ctx func cenv cx tenv ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn v.
- body_inv tops ctx cenv cx /\
- expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+ expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
  safe_cast rtv v = SOME v ==>
@@ -183,10 +186,12 @@ QED
 
 (* Typed interpretation of the words in the selected return buffer. *)
 Theorem intcall_return_register_type_facts:
+  !mods exps.
  !tops ctx func cenv cx tenv ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn rc rbs pvs v.
- body_inv tops ctx cenv cx /\
- expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+ expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
  cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\ 0 < rc /\
@@ -247,11 +252,13 @@ QED
 Finalise intcall_return_register_type_facts
 
 Theorem intcall_return_register_value_certificate:
+  !mods exps.
  !tops ctx func cenv cx tenv ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
   rc rbs pvs v ee Gc tc ir cs returned out outs rbuf root off st4 stored Gs ts.
- body_inv tops ctx cenv cx /\
- expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+ expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
  cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\ 0 < rc /\

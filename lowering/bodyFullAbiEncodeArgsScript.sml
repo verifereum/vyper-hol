@@ -34,10 +34,12 @@ Ancestors
   vyperEvalScopesProgress abiDecoderMembers vyperABIRoundtrip vyperTypeArgFits
   typedMemoryCopy venomMemDefs ptrDiscipline fragGasOriginPtr
   compileEnv context words arithmetic pair list pred_set finite_map
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs pairLib horizonTypeLib
 
 Theorem abi_encode_snapshot_not_label[local]:
-  expr_body_pre ce cx env e es /\
+  !mods.
+  expr_body_pre_mods mods ce cx env e es /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value (lowered_value_type ce e) vv) sm =
     (sv,ss) ==> !l. vv_operand sv <> Label l
@@ -47,14 +49,16 @@ Proof
 QED
 
 Theorem abi_encode_vv_full_from_packaging:
-  body_inv tops ctx ce cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
+  !mods exps.
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
   (LENGTH args = 1 /\ ~ensure ==> ~is_word_type (lowered_value_type ce (HD args))) /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
   (!s x t. type_check
       (type_builtin_args_length_ok (AbiEncode ensure mid) (LENGTH args))
-      "TypeBuiltin args" s = (INL x,t) ==> body_exprs_full_ok cx args) ==>
+      "TypeBuiltin args" s = (INL x,t) ==> body_exprs_full_ok_mods mods exps cx args) ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     ce cx cty (TypeBuiltin ann (AbiEncode ensure mid) target args) es
 Proof

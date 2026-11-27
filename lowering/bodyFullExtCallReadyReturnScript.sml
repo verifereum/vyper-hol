@@ -8,11 +8,12 @@ Ancestors
   gasOutcomeFullCompose vyperABI vyperAST words finite_map pred_set list
 
 Theorem extcall_ready_return_outcome:
+  !mods.
   (!DF lo d explicit ctx PG func cenv cx env es ann is_static skip fname
    arg_types ret_type opts args dflt st0 sa sb s0 G0 tn0 sr result_op vv
    addr_op buf_op cap target has_default default_op default_ty default_opt
    returnData ee t G tn.
-    expr_body_pre cenv cx env
+    expr_body_pre_mods mods cenv cx env
       (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
          args dflt) es /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -205,7 +206,7 @@ Theorem extcall_ready_return_outcome:
       (?p. default_op = Var p /\ ptr_covers G tn p s (type_memory_bytes cenv default_ty)) /\
       (!w. eval_operand default_op s = SOME w ==>
           w2n w + type_memory_bytes cenv default_ty <= s.vs_alloca_next))) /\
-  expr_body_pre cenv cx env
+  expr_body_pre_mods mods cenv cx env
     (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts) args dflt) es /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
   cap = abi_size_bound cenv.ce_struct_fields

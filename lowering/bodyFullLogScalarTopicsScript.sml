@@ -11,10 +11,12 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint vyperEvent
   exprLoweringProps exprSafeOperand exprSimWordArgs wordArgsPtr
   eventLoweringStructure freshWrites arithmetic
+  exprSimHypsDefs[qualified]
 Libs horizonTypeLib
 
 Theorem log_arg_clear_event:
-  expr_sim_inv cenv cx env es /\ supported_event_leaf_type ty ==>
+  !mods.
+  expr_sim_inv_mods mods cenv cx env es /\ supported_event_leaf_type ty ==>
   log_arg_clear cenv cx ty v
 Proof
   Cases_on `ty` >>
@@ -32,7 +34,8 @@ Proof
 QED
 
 Theorem compile_log_saved_topic_hash:
-  local_ptrs_reserved cenv sm /\ expr_sim_inv cenv cx env es /\
+  !mods.
+  local_ptrs_reserved cenv sm /\ expr_sim_inv_mods mods cenv cx env es /\
   expr_val_rel cx ty v src s /\ expr_val_at cenv cx ty sa sm es v src s /\
   supported_event_leaf_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v /\ encode_event_topic ty v = SOME topic /\

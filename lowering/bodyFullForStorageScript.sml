@@ -51,6 +51,7 @@ Ancestors exprSimSubscriptArrayLiveStorageSuffix[qualified,ignore_grammar] exprP
   supportedExprForms whitelistVisibility immutableLocationProps
   bodyFullForRounds[qualified] gasExemptCert[qualified] forStorageBodyLand[qualified] forStorageHeadFrame
   forConsBodyGas
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs
   monadsyntax
 
@@ -373,7 +374,8 @@ QED
 Finalise for_storage_array_nil_core
 
 Theorem for_storage_element_layout:
-  expr_sim_inv cenv cx env es /\
+  !mods.
+  expr_sim_inv_mods mods cenv cx env es /\
   evaluate_type (get_tenv cx) et = SOME tv ==>
   elem_size_in_location cenv (if tr then LocTransient else LocStorage) et =
     type_slot_size tv /\
@@ -395,16 +397,17 @@ QED
 (* Invoke the body at its actual compiler age.  The non-Label fact is
    supplied by the iterator's literal/load compilation, not source typing. *)
 Theorem for_storage_body_invoke_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cx RetQ tops bindings env id typ
+  !mods exps DF lo d ctx shadow_ctx PG func shadow_func cx RetQ tops bindings env id typ
       tyv v ei body env_b ret_ty bc bc1 sb0 sb1 shadow_sb0 shadow_sb1 st0 s G
       tn idx p lvo k dst len.
-    body_stmts_full_ok cx body /\ body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env ei /\
+    body_stmts_full_ok_mods mods exps cx body /\ (contract_inv mods exps ctx bc cx /\
+     module_body_inv mods bc.ce_module tops bc cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env ei /\
     supported_stmts tops bindings body /\
     (!target.
        supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
        occurs_abi_decode_target target tops) /\
-    expr_sim_inv bc cx (extend_local env id typ F)
+    expr_sim_inv_mods mods bc cx (extend_local env id typ F)
       (ei with
        scopes :=
          fmupdate id <|assignable := F; type := tyv; value := v; popped := []|>
@@ -413,7 +416,7 @@ Theorem for_storage_body_invoke_full:
     locals_alloc_ok bc (extend_local env id typ F) /\
     type_stmts (extend_local env id typ F) ret_ty body = SOME env_b /\
     stmts_exprs_ok bc body /\ call_evaluation_safe cx (int_calls_stmts body) /\
-    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc
+    frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc
       ret_ty /\ stmts_env bc (InLoop exit incr) ret_ty body sb0 = (bc1,sb1) /\
     stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
       shadow_sb0 = (gas_shadow_env T bc1,shadow_sb1) /\ gas_shadow_state sb0 shadow_sb0 /\
@@ -748,9 +751,9 @@ QED
 
 (* Interpret the existing copy endpoint; no execution witness is selected here. *)
 Theorem for_storage_copy_body_entry:
-  !H D lo d ctx func cx c0 e0 sa0 s0 G0 tn0 ei env id typ tyv v sd st bc sa sb0
+  !mods H D lo d ctx func cx c0 e0 sa0 s0 G0 tn0 ei env id typ tyv v sd st bc sa sb0
       inst p nb dst n src load u Gu tnu z Gf tnf idx k lvo len.
-    expr_sim_inv c0 cx env ei /\ ce_locals_declared c0 env /\
+    expr_sim_inv_mods mods c0 cx env ei /\ ce_locals_declared c0 env /\
     locals_alloc_ok c0 env /\ id NOTIN FDOM env.var_types /\
     evaluate_type (get_tenv cx) typ = SOME tyv /\ value_has_type tyv v /\
     val_wf tyv v /\ declare_local c0 id typ sd = (bc,st) /\
@@ -816,7 +819,7 @@ Theorem for_storage_copy_body_entry:
      scopes :=
        fmupdate id <|assignable := F; type := tyv; value := v; popped := []|>
          FEMPTY::ei.scopes) /\
-    expr_sim_inv bc cx (extend_local env id typ F)
+    expr_sim_inv_mods mods bc cx (extend_local env id typ F)
       (ei with
        scopes :=
          fmupdate id <|assignable := F; type := tyv; value := v; popped := []|>
@@ -1369,10 +1372,10 @@ Finalise for_storage_array_head_prefix_at_prov
 (* Interpret the selected scalar prefix and the counted copy at the same
    endpoints. No observation of the parent array is needed here. *)
 Theorem for_storage_observed_head_from_prefix:
-  !DF lo d ctx func cx RetQ lctx c0 e0 sa0 s0 G0 tn0 tr slot dst tyv typ
+  !mods exps DF lo d ctx func cx RetQ lctx c0 e0 sa0 s0 G0 tn0 tr slot dst tyv typ
    vs len nb id env p idx lvo sd body st0 explicit PG ep exit incr sa st bc
    sb0 inst bop a rs k addr ei s G tn u Gu tnu.
-    0 < type_slot_size tyv /\ body_for_full_ok cx tyv id body vs /\
+    0 < type_slot_size tyv /\ body_for_full_ok_mods mods exps cx tyv id body vs /\
     id NOTIN FDOM env.var_types /\
     declare_local c0 id typ sd = (bc,st) /\ c0.ce_alloca_locals /\
     type_memory_bytes c0 typ < 2 ** 64 /\
@@ -1406,9 +1409,9 @@ Theorem for_storage_observed_head_from_prefix:
         slot_copy_body_insts sa (Var ep) (Var p) (if tr then TLOAD else SLOAD)|> /\
     a::rs = DROP k vs /\ k < LENGTH vs /\ a = PlaceR (StoragePlace tr addr tyv) /\
     ~s.vs_halted /\ storage_trace_domain cx st0 ei.storage_trace /\
-    (k <> 0 ==> body_stmts_full_ok cx body) /\
+    (k <> 0 ==> body_stmts_full_ok_mods mods exps cx body) /\
     evaluate_type (get_tenv cx) typ = SOME tyv /\ well_formed_type_value tyv /\
-    expr_sim_inv c0 cx env ei /\ ce_locals_declared c0 env /\ locals_alloc_ok c0 env /\
+    expr_sim_inv_mods mods c0 cx env ei /\ ce_locals_declared c0 env /\ locals_alloc_ok c0 env /\
     lookup_scopes id ei.scopes = NONE /\
     gas_admissible (eval_for cx tyv id body (a::rs)) (stmt_res_ok lctx) ei /\
     (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
@@ -1462,7 +1465,7 @@ Theorem for_storage_observed_head_from_prefix:
              (INL (), (ei with gas_obs := []) with scopes :=
                (FEMPTY |+ (id,<|assignable := F; type := tyv; value := v; popped := []|>)) ::
                (ei with gas_obs := []).scopes) /\
-           expr_sim_inv bc cx (extend_local env id typ F)
+           expr_sim_inv_mods mods bc cx (extend_local env id typ F)
              ((ei with gas_obs := []) with scopes :=
                (FEMPTY |+ (id,<|assignable := F; type := tyv; value := v; popped := []|>)) ::
                (ei with gas_obs := []).scopes) /\
@@ -1519,7 +1522,7 @@ Theorem for_storage_observed_head_from_prefix:
            !aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                    FLOOKUP z.vs_allocas aid = SOME b) /\
           eval_operand bop z = SOME slot /\ op_taint tnf bop = {} /\ a::rs = DROP j vs /\
-          body_stmts_full_ok cx body /\
+          body_stmts_full_ok_mods mods exps cx body /\
           gas_admissible (eval_stmts cx body) (stmt_res_ok (InLoop exit incr)) eb)
       (\H res ee gt r. ?ex. res = INR ex /\
         (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r) /\

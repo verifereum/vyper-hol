@@ -9,12 +9,15 @@ Ancestors
   stmtSimProps vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
   list bodySimFull exprSimHypsDefs loweringPosts compileEnv exprLoweringProps
   loweringShapeDefs vyperState stmtSimDefs vyperValue vyperTyping
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem raw_call_forced_args_full:
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
-  body_exprs_full_ok cx (a::d::kws) /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
+  body_exprs_full_ok_mods mods exps cx (a::d::kws) /\
   lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
   lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
   lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
@@ -49,8 +52,8 @@ Theorem raw_call_forced_args_full:
     bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
       (INL (BytesV bs),esD) /\
     esA.gas_obs = [] /\ esD.gas_obs = [] /\
-    body_const_cells_agree [(NONE,tops)] cx env esD /\
-    body_exprs_full_ok cx kws /\ expr_sim_inv cenv cx env esD /\
+    body_const_cells_agree mods cx env esD /\
+    body_exprs_full_ok_mods mods exps cx kws /\ expr_sim_inv_mods mods cenv cx env esD /\
     storage_trace_domain cx st0 esD.storage_trace /\
     (!fn inst s. frag_reachable ctx func tD fn inst s ==> dalloca_fmp_headroom inst s) /\
     (!H. valid_horizon cx st0 H esD.storage_trace ==>

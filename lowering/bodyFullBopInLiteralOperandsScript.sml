@@ -10,19 +10,21 @@ Ancestors
   exprSimHyps exprSimHypsDefs exprSimProps exprLoweringProps freshWrites
   vyperInterpreter vyperState loweringPosts bodyPtrDefs fragGasOriginPtr
   fragExec list finite_map
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem bop_in_literal_operands_clean_full_halt:
-  !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
+  !mods exps args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
     (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
     (!e. MEM e args ==> MEM e (e1::elems)) /\
-    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    expr_sim_inv cenv cx env es /\
+    body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    expr_sim_inv_mods mods cenv cx env es /\
     lower_word_args cenv expr_type args sa = (xs,sb) /\
     gas_shadow_state sa shadow_sa /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -343,17 +345,18 @@ Proof
 QED
 
 Theorem bop_in_literal_operands_clean_full:
-  !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
+  !mods exps args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
     (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
     (!e. MEM e args ==> MEM e (e1::elems)) /\
-    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    expr_sim_inv cenv cx env es /\
+    body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    expr_sim_inv_mods mods cenv cx env es /\
     lower_word_args cenv expr_type args sa = (xs,sb) /\
     gas_shadow_state sa shadow_sa /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -402,17 +405,18 @@ Proof
 QED
 
 Theorem bop_in_literal_operands_full:
-  !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
+  !mods exps args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
    ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
     (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
     (!e. MEM e args ==> MEM e (e1::elems)) /\
-    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    expr_sim_inv cenv cx env es /\
+    body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    expr_sim_inv_mods mods cenv cx env es /\
     lower_word_args cenv expr_type args sa = (xs,sb) /\
     gas_shadow_state sa shadow_sa /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

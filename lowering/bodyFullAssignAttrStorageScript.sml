@@ -19,7 +19,7 @@ Ancestors
 Libs monadsyntax
 
 Theorem compile_assign_attr_storage_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty env
+  !mods DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty env
    src id fld sid fty fsz e es ts tr id_str slot.
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid),id_str) /\
@@ -30,7 +30,7 @@ Theorem compile_assign_attr_storage_full:
       SOME (fty,fsz) /\ is_word_type fty /\ expr_type e = fty /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type e) e es /\
-    expr_body_pre cenv cx env e es ==>
+    expr_body_pre_mods mods cenv cx env e es ==>
     stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ty

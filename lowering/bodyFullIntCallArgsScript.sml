@@ -41,6 +41,7 @@ Ancestors bodyCallSupport bodyFullShadowBodyInv vyperCallOutcome[qualified,ignor
   bodyInvExecutionProps[qualified] bodyInvMetadataProps[qualified]
   exprBodyPreProps[qualified]
   compileUnit intCallAllocationProps[qualified]
+  bodyFullPredsMods[qualified]
 
   venomInst[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar]
@@ -112,9 +113,10 @@ Proof
 QED
 
 Theorem intcall_args_pre_state:
-  expr_body_pre cenv cx tenv e es /\
-  expr_sim_inv cenv cx tenv ee ==>
-  expr_body_pre cenv cx tenv e ee
+  !mods.
+  expr_body_pre_mods mods cenv cx tenv e es /\
+  expr_sim_inv_mods mods cenv cx tenv ee ==>
+  expr_body_pre_mods mods cenv cx tenv e ee
 Proof
   simp[expr_body_pre_split_def, expr_body_pre_mods_def, expr_sim_inv_split_def] >>
   rpt strip_tac >> res_tac
@@ -1793,8 +1795,9 @@ Proof
 QED
 
 Theorem intcall_args_defaults_inv[local]:
-  expr_sim_inv ce cx env st ==>
-  expr_sim_inv (cenv_without_defaults ce name)
+  !mods.
+  expr_sim_inv_mods mods ce cx env st ==>
+  expr_sim_inv_mods mods (cenv_without_defaults ce name)
     (cx with stk updated_by CONS (NONE,name)) (env with current_src := NONE) st
 Proof
   `functions_well_typed (cx with stk updated_by CONS (NONE,name)) =
@@ -2017,8 +2020,10 @@ QED
 
 (* Prepare defaults in caller scopes at the supplied-argument endpoint. *)
 Theorem intcall_args_defaults_pre[local]:
-  body_inv tops ctx cenv cx /\
-  expr_sim_inv cenv cx tenv ee /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_sim_inv_mods mods cenv cx tenv ee /\
   well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
   call_evaluation_safe cx
     (int_calls_expr (Call ann (IntCall (NONE,name)) es dflt)) /\
@@ -2031,7 +2036,7 @@ Theorem intcall_args_defaults_pre[local]:
   ~supported_exprs_exists (const_name_root cx) (DROP k dflts') /\
   (!target. supported_exprs_exists (expr_abi_decode_target_root target) dflts' ==>
     supported_exprs_exists (expr_abi_decode_target_root target) dflts) ==>
-  EVERY (\e. expr_body_pre (cenv_without_defaults cenv name)
+  EVERY (\e. expr_body_pre_mods mods (cenv_without_defaults cenv name)
       (cx with stk updated_by CONS (NONE,name))
       (tenv with current_src := NONE) e ee) (DROP k dflts')
 Proof
@@ -2134,12 +2139,13 @@ Proof
 QED
 
 Theorem intcall_args_defaults_ih:
+  !mods exps.
   (!s1 vs t1. ~MEM (NONE,name) cx.stk /\
      eval_exprs cx es s1 = (INL vs,t1) ==>
-     body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
+     body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
   ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,ee) ==>
-  body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
+  body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
     (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
 Proof
   metis_tac[]
@@ -2563,21 +2569,22 @@ Proof
 QED
 
 Theorem intcall_args_stage_full_p2_with_path[local]:
-  !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
+  !mods exps es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx tenv esi /\
-    expr_sim_inv cenv cx tenv esi /\
-    EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
-    body_exprs_full_ok cx es /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx tenv esi /\
+    expr_sim_inv_mods mods cenv cx tenv esi /\
+    EVERY (\e. expr_body_pre_mods mods cenv cx tenv e esi) es /\
+    body_exprs_full_ok_mods mods exps cx es /\
     LENGTH flags = LENGTH es /\ LENGTH dtys = LENGTH es /\
     EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) dtys /\
     LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es) dtys /\
     (!j. j < LENGTH es /\ EL j flags ==> is_word_type (EL j dtys)) /\
     (!e dty ee ci vv cm.
-       expr_body_pre cenv cx tenv e ee /\
+       expr_body_pre_mods mods cenv cx tenv e ee /\
        compile_expr cenv (expr_type e) e ci = (vv,cm) /\
        ~is_word_type dty /\ ~is_bytestring_type dty /\
        type_widens_to (get_tenv cx) (expr_type e) dty ==>
@@ -2669,7 +2676,7 @@ Theorem intcall_args_stage_full_p2_with_path[local]:
           (INL xs, ee with gas_obs := tail)) /\
        gas_path ctx func s (LENGTH marks) (OK t) /\
        storage_trace_domain cx st0 ee.storage_trace /\
-       LENGTH xs = LENGTH es /\ expr_sim_inv cenv cx tenv ee /\
+       LENGTH xs = LENGTH es /\ expr_sim_inv_mods mods cenv cx tenv ee /\
        (?ws1.
          LENGTH ws1 = LENGTH (ops ++ newops) /\
          LENGTH (vals ++ xs) = LENGTH (ops ++ newops) /\
@@ -5604,21 +5611,22 @@ Proof
 QED
 
 Theorem intcall_args_stage_left_outcome:
-  !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
+  !mods exps es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
    flags dtys newops ops ws vals ptys pflags pin clean_words keep_sites P.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx tenv esi /\
-    expr_sim_inv cenv cx tenv esi /\
-    EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
-    body_exprs_full_ok cx es /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx tenv esi /\
+    expr_sim_inv_mods mods cenv cx tenv esi /\
+    EVERY (\e. expr_body_pre_mods mods cenv cx tenv e esi) es /\
+    body_exprs_full_ok_mods mods exps cx es /\
     LENGTH flags = LENGTH es /\ LENGTH dtys = LENGTH es /\
     EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) dtys /\
     LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es) dtys /\
     (!j. j < LENGTH es /\ EL j flags ==> is_word_type (EL j dtys)) /\
     (!e dty ee ci vv cm.
-       expr_body_pre cenv cx tenv e ee /\
+       expr_body_pre_mods mods cenv cx tenv e ee /\
        compile_expr cenv (expr_type e) e ci = (vv,cm) /\
        ~is_word_type dty /\ ~is_bytestring_type dty /\
        type_widens_to (get_tenv cx) (expr_type e) dty ==>
@@ -5753,22 +5761,23 @@ Proof
 QED
 
 Theorem intcall_args_stage_full_p2:
-  !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
+  !mods exps es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx tenv esi /\
-    expr_sim_inv cenv cx tenv esi /\
-    EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
-    body_exprs_full_ok cx es /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx tenv esi /\
+    expr_sim_inv_mods mods cenv cx tenv esi /\
+    EVERY (\e. expr_body_pre_mods mods cenv cx tenv e esi) es /\
+    body_exprs_full_ok_mods mods exps cx es /\
     LENGTH flags = LENGTH es /\ LENGTH dtys = LENGTH es /\
     EVERY (supported_value_type tops) dtys /\
     EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) dtys /\
     LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es) dtys /\
     (!j. j < LENGTH es /\ EL j flags ==> is_word_type (EL j dtys)) /\
     (!e dty ee ci vv cm.
-       expr_body_pre cenv cx tenv e ee /\
+       expr_body_pre_mods mods cenv cx tenv e ee /\
        compile_expr cenv (expr_type e) e ci = (vv,cm) /\
        ~is_word_type dty /\ ~is_bytestring_type dty /\
        type_widens_to (get_tenv cx) (expr_type e) dty ==>
@@ -5847,7 +5856,7 @@ Theorem intcall_args_stage_full_p2:
           (esi with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
           (INL xs, ee with gas_obs := tail)) /\
        storage_trace_domain cx st0 ee.storage_trace /\
-       LENGTH xs = LENGTH es /\ expr_sim_inv cenv cx tenv ee /\
+       LENGTH xs = LENGTH es /\ expr_sim_inv_mods mods cenv cx tenv ee /\
        (?ws1.
          LENGTH ws1 = LENGTH (ops ++ newops) /\
          LENGTH (vals ++ xs) = LENGTH (ops ++ newops) /\
@@ -5927,22 +5936,23 @@ QED
 
 (* Compatibility for continuations that only need expr_exit. *)
 Theorem intcall_args_stage_full:
-  !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
+  !mods exps es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
    flags dtys newops ops ws vals ptys pflags pin f P Q R.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx tenv esi /\
-    expr_sim_inv cenv cx tenv esi /\
-    EVERY (\e. expr_body_pre cenv cx tenv e esi) es /\
-    body_exprs_full_ok cx es /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx tenv esi /\
+    expr_sim_inv_mods mods cenv cx tenv esi /\
+    EVERY (\e. expr_body_pre_mods mods cenv cx tenv e esi) es /\
+    body_exprs_full_ok_mods mods exps cx es /\
     LENGTH flags = LENGTH es /\ LENGTH dtys = LENGTH es /\
     EVERY (supported_value_type tops) dtys /\
     EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) dtys /\
     LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es) dtys /\
     (!j. j < LENGTH es /\ EL j flags ==> is_word_type (EL j dtys)) /\
     (!e dty ee ci vv cm.
-       expr_body_pre cenv cx tenv e ee /\
+       expr_body_pre_mods mods cenv cx tenv e ee /\
        compile_expr cenv (expr_type e) e ci = (vv,cm) /\
        ~is_word_type dty /\ ~is_bytestring_type dty /\
        type_widens_to (get_tenv cx) (expr_type e) dty ==>
@@ -6018,7 +6028,7 @@ Theorem intcall_args_stage_full:
           (esi with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
           (INL xs, ee with gas_obs := tail)) /\
        storage_trace_domain cx st0 ee.storage_trace /\
-       LENGTH xs = LENGTH es /\ expr_sim_inv cenv cx tenv ee /\
+       LENGTH xs = LENGTH es /\ expr_sim_inv_mods mods cenv cx tenv ee /\
        (?ws1.
          LENGTH ws1 = LENGTH (ops ++ newops) /\
          LENGTH (vals ++ xs) = LENGTH (ops ++ newops) /\
@@ -7686,10 +7696,11 @@ Proof
 QED
 
 Theorem args_defaults_restore_expr_sim_inv[local]:
-  expr_sim_inv ce cx env before /\
-  expr_sim_inv (cenv_without_defaults ce name)
+  !mods.
+  expr_sim_inv_mods mods ce cx env before /\
+  expr_sim_inv_mods mods (cenv_without_defaults ce name)
     (cx with stk updated_by CONS (NONE,name)) (env with current_src := NONE) after ==>
-  expr_sim_inv ce cx env after
+  expr_sim_inv_mods mods ce cx env after
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim_inv ce cx env before`
@@ -7821,9 +7832,10 @@ Proof
 QED
 
 Theorem args_return_buffer_geometry[local]:
+  !mods.
   (ret <> NoneT ==> 0 < type_memory_size tv) /\
   get_module_code cx NONE = SOME tops /\
-  expr_sim_inv ce cx env es /\
+  expr_sim_inv_mods mods ce cx env es /\
   ce.ce_struct_fields = make_struct_fields_map tops /\
   evaluate_type (get_tenv cx) ret = SOME tv /\
   compute_func_info
@@ -8489,27 +8501,30 @@ Proof
 QED
 
 Theorem args_stage_source_typing:
-  expr_sim_inv ce cx env st ==>
+  !mods.
+  expr_sim_inv_mods mods ce cx env st ==>
   env_consistent env cx st /\ state_well_typed st /\ functions_well_typed cx
 Proof
   simp[expr_sim_inv_def]
 QED
 
 Theorem intcall_args_defaults_source_setup[local]:
-  body_inv tops ctx cenv cx /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
-  expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-  EVERY (\e. expr_body_pre cenv cx tenv e es0) es /\
+  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+  EVERY (\e. expr_body_pre_mods mods cenv cx tenv e es0) es /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-  expr_sim_inv cenv cx tenv ee /\
+  expr_sim_inv_mods mods cenv cx tenv ee /\
   eval_exprs cx es (es0 with gas_obs := obs) = (INL xs,ee with gas_obs := []) /\
   length_skip = LENGTH dflts - (LENGTH args - LENGTH es) /\
   cxd = cx with stk updated_by CONS (NONE,name) /\
   ds = DROP length_skip (subst_consts_exprs (module_consts_env tops []) dflts) ==>
   body_inv tops ctx (cenv_without_defaults cenv name) cxd /\
-  expr_sim_inv (cenv_without_defaults cenv name) cxd (tenv with current_src := NONE) ee /\
-  EVERY (\e. expr_body_pre (cenv_without_defaults cenv name) cxd
+  expr_sim_inv_mods mods (cenv_without_defaults cenv name) cxd (tenv with current_src := NONE) ee /\
+  EVERY (\e. expr_body_pre_mods mods (cenv_without_defaults cenv name) cxd
       (tenv with current_src := NONE) e ee) ds /\
   body_const_cells_agree [(NONE,tops)] cxd (tenv with current_src := NONE) ee /\
   (!gs scs. eval_exprs cxd ds (ee with <|gas_obs := gs; scopes := scs|>) =
@@ -8774,13 +8789,15 @@ QED
 (* The actuals replay and target midpoint are produced by the supplied stage.
    No continuation simulation is needed to prepare the default stage. *)
 Theorem intcall_args_defaults_stage_setup:
-  body_inv tops ctx cenv cx /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
-  expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-  EVERY (\e. expr_body_pre cenv cx tenv e es0) es /\
+  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+  EVERY (\e. expr_body_pre_mods mods cenv cx tenv e es0) es /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-  expr_sim_inv cenv cx tenv ee /\
+  expr_sim_inv_mods mods cenv cx tenv ee /\
   eval_exprs cx es (es0 with gas_obs := obs) = (INL xs,ee with gas_obs := []) /\
   length_skip = LENGTH dflts - (LENGTH args - LENGTH es) /\
   cxd = cx with stk updated_by CONS (NONE,name) /\
@@ -8808,9 +8825,10 @@ Theorem intcall_args_defaults_stage_setup:
      stmt_state_rel H ctx func cenv cx ee t /\
      storage_well_formed_on cx ee (FST H) /\
      ghost_inv_at (DF H) lo d cenv cx ee G tn t) ==>
-  body_inv tops ctx dc cxd /\
-  expr_sim_inv dc cxd (tenv with current_src := NONE) ee /\
-  EVERY (\e. expr_body_pre dc cxd (tenv with current_src := NONE) e ee) ds /\
+  (contract_inv mods exps ctx dc cxd /\
+     module_body_inv mods dc.ce_module tops dc cxd) /\
+  expr_sim_inv_mods mods dc cxd (tenv with current_src := NONE) ee /\
+  EVERY (\e. expr_body_pre_mods mods dc cxd (tenv with current_src := NONE) e ee) ds /\
   body_const_cells_agree [(NONE,tops)] cxd (tenv with current_src := NONE) ee /\
   (!gs scs. eval_exprs cxd ds (ee with <|gas_obs := gs; scopes := scs|>) =
     eval_exprs cxd (DROP length_skip dflts) (ee with <|gas_obs := gs; scopes := scs|>)) /\
@@ -8902,7 +8920,7 @@ QED
 Theorem intcall_args_supplied_stage_setup:
   body_inv tops ctx cenv cx /\
   body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
-  expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+  expr_body_pre_mods [(NONE,tops)] cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
   LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
@@ -9011,11 +9029,11 @@ Theorem intcall_args_supplied_stage_setup:
     ALL_DISTINCT (supported_function_names tops) /\ supported_program tops /\
     pvs = compute_pass_via_stack (MAP SND args) rc' /\ LENGTH pvs = LENGTH args /\
     (!i. i < LENGTH args /\ EL i pvs ==> is_word_type (EL i (MAP SND args))) /\
-    expr_sim_inv cenv cx tenv es0 /\ env_consistent tenv cx es0 /\ tenv.type_defs = get_tenv cx /\
+    expr_sim_inv_mods [(NONE,tops)] cenv cx tenv es0 /\ env_consistent tenv cx es0 /\ tenv.type_defs = get_tenv cx /\
     LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es) (TAKE (LENGTH es) (MAP SND args)) /\
     EVERY (supported_default_expression tops) dflts /\
     EVERY (\t. type_memory_bytes cenv t < 2 ** 64) (MAP SND args) /\
-    EVERY (\e. expr_body_pre cenv cx tenv e es0) es /\
+    EVERY (\e. expr_body_pre_mods [(NONE,tops)] cenv cx tenv e es0) es /\
     type_memory_bytes cenv ret < 2 ** 64 /\ rc' <= 2 /\ rbs < 2 ** 64 /\
     allocas_from lo s0 /\ lo <= s0.vs_alloca_next /\
     buf_n = (if 0 < rc' then 32 * rc' else rbs) /\ buf_n < dimword (:256) /\
@@ -9595,22 +9613,23 @@ Proof
 QED
 
 Theorem intcall_args_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+  !mods exps DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
-    expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx tenv es0 /\
+    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
-    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
+    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok_mods mods exps cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) ==>
-       body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
+       body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
          (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
            (subst_consts_exprs (module_consts_env tops []) dflts))) ==>
     !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 kc out f P Q R.
@@ -9661,7 +9680,7 @@ Theorem intcall_args_full:
             intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
               es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
               es1 t G tn) /\
-         body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
+         body_const_cells_agree mods cx tenv es1 /\
          (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
          (?H. valid_horizon cx st0 H es1.storage_trace) /\
          gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
@@ -10049,10 +10068,12 @@ QED
 (* The two successful argument stages share xs in their accumulator, and
    share t as the endpoint of supplied evaluation and start of defaults. *)
 Theorem intcall_args_after_defaults_data:
+  !mods exps.
   (* Caller preparation and compile layout. *)
   well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
-  body_inv tops ctx cenv cx /\
-  expr_sim_inv cenv cx tenv es0 /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_sim_inv_mods mods cenv cx tenv es0 /\
   ~MEM (NONE,name) cx.stk /\
   get_module_code cx NONE = SOME tops /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
@@ -10114,7 +10135,7 @@ Theorem intcall_args_after_defaults_data:
     (es0 with gas_obs := gas_explicit marks entry.vs_gas_readings ++ tail) =
       (INL xs,ee with gas_obs := tail)) /\
   gas_path ctx func entry (LENGTH marks) (OK t) /\
-  expr_sim_inv cenv cx tenv ee /\
+  expr_sim_inv_mods mods cenv cx tenv ee /\
   cxd = cx with stk updated_by CONS (NONE,name) /\
   supported_pure_exprs tops ds /\
   well_typed_exprs (defaults_env (tenv with current_src := NONE)) ds /\
@@ -10144,7 +10165,7 @@ Theorem intcall_args_after_defaults_data:
       (INL dvs,ed with gas_obs := tail)) /\
   gas_path ctx func t (LENGTH dm) (OK u) /\
   storage_trace_domain cxd st0 ed.storage_trace /\
-  expr_sim_inv (cenv_without_defaults cenv name) cxd (tenv with current_src := NONE) ed /\
+  expr_sim_inv_mods mods (cenv_without_defaults cenv name) cxd (tenv with current_src := NONE) ed /\
   LENGTH wd = LENGTH ([] ++ sup_ops ++ def_ops) /\
   LENGTH (TAKE (LENGTH es) (MAP SND args) ++ DROP (LENGTH es) (MAP SND args)) =
     LENGTH ([] ++ sup_ops ++ def_ops) /\

@@ -7,18 +7,20 @@ Ancestors
   loweringPosts stateRelProj
   vyperStorageTrace vyperStorageFootprint vyperTypeExprSoundness vyperValue
   venomCallOracleDefs exprSimPrecompiles vyperInterpreter
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem ec_arith_staged_cut:
-  !bt a e1 e2 cx tops ctx cenv env es ty sa vv sb shadow_sa shadow_sb
+  !mods exps bt a e1 e2 cx tops ctx cenv env es ty sa vv sb shadow_sa shadow_sb
     x s1 y s2 shadow_s1 shadow_s2 res shadow_ctx func shadow_func DF lo d
     s0 st0 G0 tn0 marks1 v1 es1 t1 G1 tn1 marks2 v2 es2 t2 G2 tn2 PG.
   (bt = ECAdd \/ bt = ECMul) /\
   a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e2 = (if bt = ECAdd then a else BaseT (UintT 256)) /\
-  body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
+  body_exprs_full_ok_mods mods exps cx [e1;e2] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
+  expr_body_pre_mods mods cenv cx env (Builtin a bt [e1;e2]) es /\
   compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
   compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a bt [e1;e2]))
     shadow_sa = (vv,shadow_sb) /\

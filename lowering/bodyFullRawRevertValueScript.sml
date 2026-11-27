@@ -7,10 +7,12 @@ Ancestors
   exprOperandVar exprSimProps loweringPosts bodyPtrDefs exprSimMemDefs
   gasExemptCert vyperSystemControl vyperStorageFootprint
   vyperAST gasShadow vyperInterpreter vyperState compileEnv builtinSystem
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs
   pairLib
 
 Theorem raw_revert_value_full_from_tail:
+  !mods exps.
   (!(H : (bool # 256 word # type_value) list # num list) ctx func cenv cx e es (sa:compile_state) (sm:compile_state)
     (sb:compile_state) (s0:venom_state) ee bs op (t:venom_state)
     cap G tn D lo d explicit PG.
@@ -34,10 +36,11 @@ Theorem raw_revert_value_full_from_tail:
    cenv env ty es.
     (!ce ct e. gas_shadow_compiles (lower_value compile_expr ce ct e)
        (lower_value compile_expr ce ct (gas_shadow_expr e))) /\
-    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Call ann RawRevert args dflt) es ==>
+    body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Call ann RawRevert args dflt) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann RawRevert args dflt) es
 Proof

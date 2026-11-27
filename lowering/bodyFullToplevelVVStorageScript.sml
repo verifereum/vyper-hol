@@ -8,12 +8,15 @@ Ancestors
   accountsRelProps fragGasPathPtr context words finite_map pred_set list
   vyperInterpreter vyperState vyperAST exprSimHyps exprSimDefs loweringStateRelDefs
   fragGasOriginPtr exprSimMemDefs
+  bodyInvSplit[qualified]
 
 (* Needs no allocation bound on the variable's type: the read compiles to
    its slot and allocates nothing. *)
 Theorem toplevel_storage_vv_full:
-  body_inv tops ctx cenv cx /\
-  expr_sim_inv cenv cx env es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_sim_inv_mods mods cenv cx env es /\
   well_typed_expr env (TopLevelName ann (src,id)) /\
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
@@ -128,7 +131,9 @@ Finalise toplevel_storage_vv_full
 (* A storage or transient array variable read as a subscript base
    (array_slot_base) is a storage variable (array_slot_base_storage_decl). *)
 Theorem toplevel_slot_base_vv_full:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   well_typed_expr env e /\ ~const_name_root cx e /\ array_slot_base cenv e ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es
 Proof

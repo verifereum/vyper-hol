@@ -2,13 +2,14 @@
 Theory bodyFullRawLogFixed
 Ancestors bodyFullRawLogFixedCompose bodyFullRawLogFixedAlloc bodyFullRawLogFixedTail
   bodyFullRawLogFixedTailPath contextRawReachable ptrDiscipline
+  exprSimHypsDefs[qualified]
 
 Theorem raw_log_fixed_data_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm
+  !mods DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm
       shadow_sd shadow_sm sa shadow_sa s0 G0 tn0 st0 vals ops ann es_call dflt
       buf s1 sb ret_ty ty topics call_sa vv call_sb env es0.
-    expr_body_pre cenv cx env (Call ann RawLog es_call dflt) es0 /\
-    MEM data es_call /\ expr_sim_inv cenv cx env es /\
+    expr_body_pre_mods mods cenv cx env (Call ann RawLog es_call dflt) es0 /\
+    MEM data es_call /\ expr_sim_inv_mods mods cenv cx env es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type data) data es /\
     lower_value compile_expr cenv (expr_type data) data sd = (data_op,sm) /\

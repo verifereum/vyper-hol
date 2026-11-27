@@ -4,12 +4,14 @@ Ancestors
   bodyFullTargetSubscript exprSimIfExp exprSimSource
   vyperTypeEnv vyperTypeSystem vyperInterpreter vyperState loweringPosts
   exprLowering compileEnv targetPlaceSim targetSubscriptSplit venomState
+  exprSimHypsDefs[qualified]
 
 Theorem target_mapping_source_cut:
+  !mods.
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   type_place_target env bt = SOME (HashMapT kt vt) /\
   type_place_target env (SubscriptTarget bt e) = SOME et /\
-  expr_sim_inv cenv cx env mid1 /\
+  expr_sim_inv_mods mods cenv cx env mid1 /\
   compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
   bind (eval_expr cx e) (read_result cx)
     (mid1 with gas_obs := gs) = (INL v, mid2) /\

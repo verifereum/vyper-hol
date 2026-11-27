@@ -24,6 +24,7 @@ Ancestors
   compileEnv exprLowering loweringStateRelDefs gasContext bodyFullShared
   vyperStorageTrace vyperStorageFootprint vyperTypeEnv vyperTypeSystem
   vyperInterpreter vyperState vyperAST vyperValue evalNoHalt list pair
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem gas_outcome_full_post_source_exit[local]:
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
@@ -209,10 +210,12 @@ Proof
 QED
 
 Theorem target_subscript_sim_full:
-  body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_base_target_full_ok cx (SubscriptTarget bt e) /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_base_target_full_ok_mods mods exps cx (SubscriptTarget bt e) /\
+  body_const_cells_agree mods cx env es /\
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env bt es /\
@@ -571,11 +574,13 @@ Proof
 QED
 
 Theorem immutable_target_subscript_sim_full:
-  body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_base_target_full_ok cx (SubscriptTarget bt e) /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_sim_inv cenv cx env es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_base_target_full_ok_mods mods exps cx (SubscriptTarget bt e) /\
+  body_const_cells_agree mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
   target_indices_pre cenv cx env (SubscriptTarget bt e) /\
   cx.in_deploy /\ immutable_root cx bt /\ ~cx_const_name cx (NONE,id) /\
   target_root bt = TopLevelNameTarget (NONE,id) /\

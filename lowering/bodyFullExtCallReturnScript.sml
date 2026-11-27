@@ -16,8 +16,10 @@ Ancestors
   exprSimMemDefs exprSimDefs compileEnv context exprLowering
   ptrDiscipline venomState venomMemDefs vyperInterpreter vyperState vyperABI
   vyperABIValid vyperAST words finite_map pred_set list createSizeExit
+  exprSimHypsDefs[qualified]
 
 Theorem extcall_return_full:
+  !mods.
   (!H0 ce env sf ty tv v ctx func cenv cx es st en source hi pos output
     B L xs p d dstid live ceiling s G tn lo PG.
     abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
@@ -83,7 +85,7 @@ Theorem extcall_return_full:
    arg_types ret_type opts args dflt st0 sa sb s0 G0 tn0 sr result_op vv
    addr_op buf_op cap target has_default default_op default_ty default_opt
    returnData ee t G tn.
-    expr_body_pre cenv cx env
+    expr_body_pre_mods mods cenv cx env
       (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
          args dflt) es /\
     acyclic_struct_metadata cenv.ce_struct_fields /\

@@ -8,6 +8,7 @@ Ancestors
   bodyFullIntCallReturnFrame bodyPtrBytestringBuiltinsWindowGhost
   exprLoweringProps exprSimWordArgs wordArgsPtr exprSimProps exprSimExtCallCase
   emitHelperProps compileEnv fragGasOriginPtrLoop fragGasOriginPtr list pair words
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem extcall_packing_observed_domain:
   valid_horizon cx st H obs ==> storage_trace_domain cx st obs
@@ -28,11 +29,13 @@ Proof
 QED
 
 Theorem extcall_request_packing_ready:
+  !mods exps.
   LENGTH xs = LENGTH vals /\ LENGTH vals = LENGTH argvs /\
   LENGTH argvs = LENGTH arg_types /\ tys = MAP (lowered_value_type cenv) xs /\
   EVERY (assignable_type (get_tenv cx)) arg_types /\
   EVERY (abi_decode_bytes_widths (get_tenv cx)) arg_types /\
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env ee /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env ee /\
   return_buf_frame d cenv se s /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!i. i < LENGTH xs ==>
     ?e sv v raw si sm ss vv tv param_tv copy.

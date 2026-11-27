@@ -366,8 +366,8 @@ irule gas_outcome_full_intro >>
 ) g;
 
 Theorem sha_vv_sim_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann e es.
-    expr_body_pre cenv cx env (Builtin ann Sha256 [e]) es /\
+  !mods DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann e es.
+    expr_body_pre_mods mods cenv cx env (Builtin ann Sha256 [e]) es /\
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx (expr_type e) e es ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

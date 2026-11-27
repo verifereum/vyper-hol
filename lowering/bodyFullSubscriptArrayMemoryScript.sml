@@ -17,6 +17,7 @@ Ancestors exprBopSimProps[qualified,ignore_grammar] integer[qualified,ignore_gra
   gasShadowCompile gasShadowState gasShadow gasExemptCert
   vyperStorageTrace vyperStorageFootprint vyperEvalExprPreservesScopesDom
   bodyPtrDefs loweringPosts compileEnv vyperInterpreter vyperState vyperAST
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 (* One uniform endpoint for fixed-literal bounds checking followed by address
    arithmetic. The final ADD retains the captured base's provenance. *)
@@ -104,12 +105,13 @@ Proof
 QED
 
 Theorem subscript_array_framed_memory_full:
-  !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et n.
-    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
-    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  !mods exps cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et n.
+    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
+    body_expr_full_ok_mods mods exps cx e1 /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
     ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et (Fixed n) /\
     place_type cenv e1 = ValPT (ArrayT et (Fixed n)) /\
     post_value_type cenv e1 = expr_type e1 /\

@@ -13,6 +13,7 @@ Ancestors
   venomInst venomState codegenRel contextCodegenRel unitTransformDefs
   ptrDiscipline memSafeRun ptrSafeRun fragGasOriginPtr
   bodyPtrDefs stateRelProj
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs
   pairLib
 
@@ -55,9 +56,10 @@ Proof
 QED
 
 Theorem self_codesize_sim_full[local]:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty es.
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-    expr_body_pre cenv cx env
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty es.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    expr_body_pre_mods mods cenv cx env
       (Builtin (BaseT (UintT 256)) (Acc Codesize)
         [Builtin (BaseT AddressT) (Env SelfAddr) []]) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty
@@ -194,6 +196,7 @@ QED
 Finalise self_codesize_sim_full
 
 Theorem account_full_from_suffix:
+  !mods exps.
   (!item bs ee cx v x sa op sb func st0 cenv s ctx G tn DF lo d explicit PG.
     item <> Code /\ LENGTH bs = 20 /\ accounts_well_typed ee.accounts /\
     unop_result cx (account_item_type item) (Acc item) [BaseT AddressT]
@@ -240,10 +243,11 @@ Theorem account_full_from_suffix:
         ghost_inv_at (DF H) lo d cenv cx ee G' tn' t)) ==>
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty item e es.
     item <> Code /\ expr_type e = BaseT AddressT /\
-    body_exprs_full_ok cx [e] /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env
+    body_exprs_full_ok_mods mods exps cx [e] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env
       (Builtin (account_item_type item) (Acc item) [e]) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty
       (Builtin (account_item_type item) (Acc item) [e]) es

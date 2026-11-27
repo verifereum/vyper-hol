@@ -7,9 +7,11 @@ Ancestors
   exprSimSource wordArgsPtr gasShadowState representationCleanPtr
   vyperEvalExprPreservesScopesDom exprLoweringProps exprSimWordArgs
   fragExec list gasShadow vyperStorageTrace
+  exprSimHypsDefs[qualified]
 
 Theorem raw_call_kwargs_prepared_entry:
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
   expr_type a = BaseT AddressT /\ expr_type d = BaseT (BytesT (Dynamic cap)) /\
   post_value_type cenv d = expr_type d /\
   evaluate_type (get_tenv cx) (post_value_type cenv d) = SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -34,12 +36,12 @@ Theorem raw_call_kwargs_prepared_entry:
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at s4 z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at s4 z) /\
   return_buf_frame dframe cenv sa s0 /\
-  (!e ee. MEM e kws /\ expr_sim_inv cenv cx env ee ==>
-    expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)) /\
+  (!e ee. MEM e kws /\ expr_sim_inv_mods mods cenv cx env ee ==>
+    expr_body_pre_mods mods cenv cx env e ee /\ is_word_type (expr_type e)) /\
   bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
   bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) = (INL (BytesV bs),esD) /\
   eval_exprs cx kws (esD with gas_obs := gsK) = (INL kvs,esK) /\
-  expr_sim_inv cenv cx env esD /\
+  expr_sim_inv_mods mods cenv cx env esD /\
   storage_trace_domain cx st0 es.storage_trace /\
   storage_trace_domain cx st0 esD.storage_trace /\
   storage_trace_domain cx st0 esK.storage_trace /\
@@ -81,7 +83,7 @@ Theorem raw_call_kwargs_prepared_entry:
   ghost_kept_at lo cenv esD s4 G4 tn4 t4 GK tnK /\
   EVERY (\x. op_taint tnK x = {}) xs ==>
   ?t7 G7 tn7 n ob gw.
-    expr_sim_inv cenv cx env esK /\
+    expr_sim_inv_mods mods cenv cx env esK /\
     (!H. valid_horizon cx st0 H esK.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (tk,GK,tnK) (REPLICATE n F) (OK t7,G7,tn7) /\

@@ -2,6 +2,7 @@ Theory bodyFullConvertEndpointPosts
 Ancestors
   bodyFullConvertScalarFrame exprSimHyps vyperFiniteStoragePreservation
   exprSimMemDefs bodyPtrDefs exprLoweringProps vyperInterpreter vyperState vyperAST
+  exprSimHypsDefs[qualified]
 
 Theorem dynamic_word_vv_post:
   expr_post H ctx func cenv cx (TypeBuiltin typ Convert typ [e])
@@ -55,7 +56,8 @@ Proof
 QED
 
 Theorem dynamic_read_storage_well_formed:
-  expr_body_pre cenv cx env e s /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env e s /\
   storage_well_formed_on cx s (FST H) /\
   valid_horizon cx st0 H mid.storage_trace /\
   bind (eval_expr cx e) (read_result cx) s = (INL v,mid) ==>

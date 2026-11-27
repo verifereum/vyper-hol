@@ -4,6 +4,7 @@ Ancestors
   exprSimVVFrame exprOperandVar exprLowering loweringStateRelDefs
   venomState venomInst bodyPtrDefs abiEncodeMaterialize exprSimHyps
   valueCopyBytes bodyPtrMakeArrayAddFrame decoderGhostFramePtr exprSimMemDefs
+  exprSimHypsDefs[qualified]
 
 val _ = Parse.hide "base";
 
@@ -27,7 +28,8 @@ Proof
 QED
 
 Theorem make_array_physical_store_input:
-  expr_body_pre ce cx env e es /\
+  !mods.
+  expr_body_pre_mods mods ce cx env e es /\
   ~is_word_type (expr_type e) /\
   ~is_word_type (post_value_type ce e) /\
   ptr_val_ok cx (post_value_type ce e) v (Var xs) G tn z /\

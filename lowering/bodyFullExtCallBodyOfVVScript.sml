@@ -4,17 +4,19 @@ Ancestors
   bodyFullShadowBodyInv
   bodyFullPreds bodyFullOfVV bodySimFull bodySim exprSimHyps exprSimSource
   exprSimHypsDefs loweringPosts vyperInterpreter vyperTypeSystem vyperState vyperAST
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem extcall_body_full_ok_of_vv:
-  !cx ann stat skip sig opts args dflt.
+  !mods exps cx ann stat skip sig opts args dflt.
     (!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
-       body_inv tops ctx cenv cx /\
-       shadow_body_inv tops ctx shadow_ctx /\
-       body_const_cells_agree [(NONE,tops)] cx env es /\
-       expr_body_pre cenv cx env (Call ann (ExtCall stat skip sig opts) args dflt) es ==>
+       (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+       shadow_body_inv_mods mods exps ctx shadow_ctx /\
+       body_const_cells_agree mods cx env es /\
+       expr_body_pre_mods mods cenv cx env (Call ann (ExtCall stat skip sig opts) args dflt) es ==>
        expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
          cenv cx ty (Call ann (ExtCall stat skip sig opts) args dflt) es) ==>
-    body_expr_full_ok cx (Call ann (ExtCall stat skip sig opts) args dflt)
+    body_expr_full_ok_mods mods exps cx (Call ann (ExtCall stat skip sig opts) args dflt)
 Proof
   rpt gen_tac >> disch_then (mk_asm "vv") >>
   simp[Once body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>

@@ -20,6 +20,7 @@ Ancestors
   gasShadowCompile gasShadowState gasShadow fragGasOriginPtr
   vyperStorageFootprint exprSafeOperand stateRelProj loweringStateRelDefs allocaHistory
   finite_map pred_set arithmetic
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs
   monadsyntax
 
@@ -50,7 +51,8 @@ Proof
 QED
 
 Theorem raw_call_calldata_pre:
-  expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
   ?a kws. args = a::kws /\ expr_type a = BaseT AddressT /\
     LENGTH kws = LENGTH flags.rcf_kws /\ raw_call_kws_ok flags kws /\
     ann = raw_call_return_type flags /\ dflt = NONE /\
@@ -72,10 +74,11 @@ Proof
 QED
 
 Theorem raw_call_calldata_args_ready:
-  expr_body_pre cenv cx env
+  !mods.
+  expr_body_pre_mods mods cenv cx env
     (Call ann (RawCallCalldataTarget flags) (a::kws) NONE) es ==>
-  !e ee. MEM e (a::kws) /\ expr_sim_inv cenv cx env ee ==>
-    expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)
+  !e ee. MEM e (a::kws) /\ expr_sim_inv_mods mods cenv cx env ee ==>
+    expr_body_pre_mods mods cenv cx env e ee /\ is_word_type (expr_type e)
 Proof
   disch_tac >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   conj_tac
@@ -90,13 +93,14 @@ Proof
 QED
 
 Theorem raw_call_calldata_source_ready:
-  expr_body_pre cenv cx env
+  !mods.
+  expr_body_pre_mods mods cenv cx env
     (Call ann (RawCallCalldataTarget flags) (a::kws) NONE) es /\
   eval_exprs cx (a::kws) (es with gas_obs := gs) = (INL vs,mid) /\
   typed_args_post H ctx func cenv cx es sa s0 mid (a::kws) (addr::xs) vs t ==>
   ?target av kvs amount.
     vs = av::kvs /\ dest_AddressV av = SOME target /\ LENGTH kvs = LENGTH flags.rcf_kws /\
-    expr_sim_inv cenv cx env mid /\ eval_operand addr t = SOME (w2w target) /\
+    expr_sim_inv_mods mods cenv cx env mid /\ eval_operand addr t = SOME (w2w target) /\
     raw_call_value flags.rcf_kws kvs = SOME amount /\
     eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
                    NONE => Lit 0w | SOME p => p) t = SOME (n2w amount) /\
@@ -187,10 +191,12 @@ Proof
 QED
 
 Theorem raw_call_calldata_vv_full[local]:
-  body_exprs_full_ok cx args /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
+  !mods exps.
+  body_exprs_full_ok_mods mods exps cx args /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
   expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann (RawCallCalldataTarget flags) args dflt) es
 Proof
@@ -372,7 +378,8 @@ Proof
 QED
 
 Theorem raw_call_calldata_input_bound[local]:
-  expr_sim_inv cenv cx env es ==> LENGTH cx.txn.calldata < dimword (:256)
+  !mods.
+  expr_sim_inv_mods mods cenv cx env es ==> LENGTH cx.txn.calldata < dimword (:256)
 Proof
   simp[expr_sim_inv_def,vyperTypeInvariantsTheory.context_well_typed_def,dimword_def]
 QED
@@ -387,13 +394,15 @@ val calldata_call_full = REWRITE_RULE [post_value_type_def]
 val calldata_call_pre = fst (dest_imp (concl calldata_call_full));
 
 Theorem raw_call_calldata_word_success_to_call:
-  expr_body_pre cenv cx env
+  !mods exps.
+  expr_body_pre_mods mods cenv cx env
     (Call (raw_call_return_type flags) (RawCallCalldataTarget flags) (a::kws) NONE) es /\
   type_alloc_ok cenv (raw_call_return_type flags) /\
   flags.rcf_max_outsize < dimword (:256) /\
   compile_expr cenv ty
     (Call (raw_call_return_type flags) (RawCallCalldataTarget flags) (a::kws) NONE) sa = (vv,sb) /\
-  body_inv tops ctx cenv cx /\ gas_shadow_context ctx shadow_ctx /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ gas_shadow_context ctx shadow_ctx /\
   gas_shadow_function func shadow_func /\ ctx_inst_ids_distinct ctx /\
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -980,9 +989,9 @@ QED
 Finalise raw_call_calldata_vv_full[local]
 
 Theorem raw_call_calldata_expr_full_ok:
-  !cx ty flags es v19.
-    body_exprs_full_ok cx es ==>
-    body_expr_full_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
+  !mods exps cx ty flags es v19.
+    body_exprs_full_ok_mods mods exps cx es ==>
+    body_expr_full_ok_mods mods exps cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
   map_every qx_gen_tac [`cx`,`ann`,`flags`,`args`,`dflt`] >>
   disch_tac >> simp[Once body_expr_full_ok_def] >>
@@ -1010,7 +1019,8 @@ Proof
 QED
 
 Theorem raw_call_calldata_word_schedule:
-  expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es /\
   compile_expr cenv ty (Call ann (RawCallCalldataTarget flags) args dflt) sa = (vv,sb) /\
   compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Call ann (RawCallCalldataTarget flags) args dflt)) shadow_sa =
@@ -1020,9 +1030,9 @@ Theorem raw_call_calldata_word_schedule:
   ?a kws addr xs vo go gas ov op dp len result s2 s3 s4 s5 h2 h3.
     args = a::kws /\ dflt = NONE /\ ann = raw_call_return_type flags /\
     flags.rcf_max_outsize < dimword (:256) /\
-    expr_sim_inv cenv cx env es /\ type_alloc_ok cenv (raw_call_return_type flags) /\
-    (!e ee. MEM e (a::kws) /\ expr_sim_inv cenv cx env ee ==>
-      expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)) /\
+    expr_sim_inv_mods mods cenv cx env es /\ type_alloc_ok cenv (raw_call_return_type flags) /\
+    (!e ee. MEM e (a::kws) /\ expr_sim_inv_mods mods cenv cx env ee ==>
+      expr_body_pre_mods mods cenv cx env e ee /\ is_word_type (expr_type e)) /\
     lower_word_args cenv expr_type (a::kws) sa = (addr::xs,s2) /\
     lower_word_args (gas_shadow_env T cenv) expr_type
       (MAP gas_shadow_expr (a::kws)) shadow_sa = (addr::xs,h2) /\

@@ -3,13 +3,14 @@ Theory bodyFullRawCallKwargsSource
 Ancestors
   exprSimRawCall exprSimSource exprSimWordArgs
   vyperEvalExprPreservesScopesDom
+  exprSimHypsDefs[qualified]
 
 Theorem raw_call_kwargs_source_inv:
-  !cenv cx env ann flags args dflt base kws es vs ee.
-    expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) base /\
-    expr_sim_inv cenv cx env es /\ EVERY (\e. MEM e args) kws /\
+  !mods cenv cx env ann flags args dflt base kws es vs ee.
+    expr_body_pre_mods mods cenv cx env (Call ann (RawCallTarget flags) args dflt) base /\
+    expr_sim_inv_mods mods cenv cx env es /\ EVERY (\e. MEM e args) kws /\
     eval_exprs cx kws es = (INL vs,ee) ==>
-    expr_sim_inv cenv cx env ee /\ MAP FDOM ee.scopes = MAP FDOM es.scopes
+    expr_sim_inv_mods mods cenv cx env ee /\ MAP FDOM ee.scopes = MAP FDOM es.scopes
 Proof
   ntac 8 gen_tac >> Induct
   >- simp[eval_exprs_nil] >>

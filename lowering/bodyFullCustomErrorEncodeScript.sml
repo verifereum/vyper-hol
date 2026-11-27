@@ -10,6 +10,7 @@ Ancestors
   exprLoweringProps exprSimWordArgs wordArgsPtr exprSimProps exprSimExtCallCase
   emitHelperProps compileEnv fragGasOriginPtrLoop fragGasOriginPtr list pair words
   vyperABI vyperStorageFootprint stateRelProj venomMemDefs memoryReadProps
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem custom_error_data_eq_calldata[local]:
   LENGTH tys = LENGTH vals ==>
@@ -21,9 +22,11 @@ Proof
 QED
 
 Theorem custom_error_encode_payload:
+  !mods exps.
   LENGTH xs = LENGTH vals /\ LENGTH vals = LENGTH argvs /\
   LENGTH argvs = LENGTH arg_types /\ tys = MAP (lowered_value_type cenv) xs /\
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env ee /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env ee /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!i. i < LENGTH xs ==>
     ?e sv v raw si sm ss vv tv param_tv copy.

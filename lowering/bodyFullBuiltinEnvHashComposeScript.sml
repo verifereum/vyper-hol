@@ -9,8 +9,10 @@ Ancestors
  vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperTypeSystem
  builtinProps builtinSimple compileEnv emitHelperProps allocaHistory
  codegenRel contextCodegenRel fragExec list pair finite_map
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem hash_builtin_value_from_suffixes:
+  !mods exps.
  (!arg sa op sb func st0 cenv cx mid s ctx DF lo d G tn explicit PG i.
  compile_blockhash arg sa = (op,sb) /\ fn_has_code sa sb func /\
  fn_inst_ids_distinct func /\ storage_trace_domain cx st0 mid.storage_trace /\
@@ -85,11 +87,12 @@ Theorem hash_builtin_value_from_suffixes:
  ghost_inv_at (DF H) lo d cenv cx mid G' tn' t)) ==>
  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
  (bt = BlockHash \/ bt = BlobHash) /\
- builtin_args_length_ok bt (LENGTH args) /\ body_exprs_full_ok cx args /\
- body_inv tops ctx cenv cx /\
- shadow_body_inv tops ctx shadow_ctx /\
- body_const_cells_agree [(NONE,tops)] cx env es /\
- expr_body_pre cenv cx env (Builtin a bt args) es ==>
+ builtin_args_length_ok bt (LENGTH args) /\ body_exprs_full_ok_mods mods exps cx args /\
+ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+ body_const_cells_agree mods cx env es /\
+ expr_body_pre_mods mods cenv cx env (Builtin a bt args) es ==>
  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
    cenv cx ty (Builtin a bt args) es
 Proof

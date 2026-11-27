@@ -16,17 +16,19 @@ Ancestors
   gasShadowCompile gasShadowState gasShadow
   exprSendPtr exprSimSend exprSimHypsDefs bodySim
   exprLowering vyperAST vyperInterpreter list
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
 Theorem send_expr_sim_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
+  !mods exps DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
    has_gas args dflt es.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
-    body_exprs_full_ok cx args ==>
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Call ann (Send has_gas) args dflt) es /\
+    body_exprs_full_ok_mods mods exps cx args ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (Send has_gas) args dflt) es
 Proof
@@ -817,13 +819,14 @@ QED
 Finalise send_expr_sim_full
 
 Theorem send_expr_vv_sim_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
+  !mods exps DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
    has_gas args dflt es.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
-    body_exprs_full_ok cx args ==>
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Call ann (Send has_gas) args dflt) es /\
+    body_exprs_full_ok_mods mods exps cx args ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (Send has_gas) args dflt) es
 Proof
@@ -845,12 +848,12 @@ QED
 
 (* The send operands and CALL/ASSERT suffix share the joint witness. *)
 Theorem body_send_case_full:
-  !cx v12 has_gas es v13.
+  !mods exps cx v12 has_gas es v13.
     (!s'' x t.
        type_check (LENGTH es = if has_gas then 3 else 2) "Send args" s'' =
        (INL x,t) ==>
-       body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Call v12 (Send has_gas) es v13)
+       body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Call v12 (Send has_gas) es v13)
 Proof
   rpt gen_tac >> disch_tac >> ONCE_REWRITE_TAC[body_expr_full_ok_def] >>
   reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>

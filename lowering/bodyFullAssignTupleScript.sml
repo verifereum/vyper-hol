@@ -58,6 +58,7 @@ Ancestors bodySingletonCallSupport bodyImmutableStoreMemory[qualified,ignore_gra
   bodyFullSimProjection[qualified,ignore_grammar]
   bodyFullTupleTargetProjection[qualified,ignore_grammar]
   exprSimAbiDecodeEntryTyping[qualified,ignore_grammar]
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 
 val _ = Parse.hide "body";
@@ -116,15 +117,17 @@ Proof
 QED
 
 Theorem tuple_assignment_rhs_pre:
-  body_inv tops ctx cenv cx /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Assign (TupleTarget gs) e) ==> occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
   type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
   stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
   call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) ==>
-  expr_body_pre cenv cx env e es
+  expr_body_pre_mods mods cenv cx env e es
 Proof
   strip_tac >>
   mp_tac (Q.INST [`tops` |-> `tops`, `ctx` |-> `ctx`,
@@ -1470,7 +1473,7 @@ QED
 (* Compose singleton stores over the fixed post-load snapshot.  The seed
    identifies the caller regions independently of the final trace horizon. *)
 Theorem body_assign_tuple_store_targets_full_path:
-  !gs tys tvs vs ops k m b fulltys fullvs ctx func cenv cx es s st sf
+  !mods exps gs tys tvs vs ops k m b fulltys fullvs ctx func cenv cx es s st sf
      tops env es0 eseed sseed Hseed Dseed lo G tn explicit PG RetQ RetP.
     compile_tuple_store_all cenv tys gs ops st = ((),sf) /\
     LENGTH gs = LENGTH tys /\ LENGTH tys = LENGTH tvs /\
@@ -1497,7 +1500,8 @@ Theorem body_assign_tuple_store_targets_full_path:
               local_region cenv es.scopes s id a cap ==>
               b + type_memory_size (TupleTV fulltys) <= a \/
               a + type_memory_size (EL i tvs) <= b)) /\
-    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es0 /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es0 /\
     stmt_state_rel Hseed ctx func cenv cx eseed sseed /\ dead_lo_ok Hseed Dseed lo cenv cx /\
     (!name a len. local_region cenv es.scopes s name a len <=>
                    local_region cenv eseed.scopes sseed name a len) /\
@@ -2288,26 +2292,27 @@ Finalise tuple_immutable_normalized_prefix[local]
 
 (* Every target a local, a scalar top-level variable or a storage word field. *)
 Theorem body_assign_tuple_targets_word_full:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     lowered_value_type cenv e = expr_type e /\
     EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
@@ -3058,25 +3063,26 @@ QED
 
 (* Every target a local. *)
 Theorem body_assign_tuple_locals_full:
-  !cx ids e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx ids e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget (MAP (BaseTarget o NameTarget) ids)) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_tuple_target_full_ok_mods mods exps cx (TupleTarget (MAP (BaseTarget o NameTarget) ids)) v) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ids <> [] /\
     EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
@@ -3098,7 +3104,9 @@ Proof
 QED
 
 Theorem tuple_immutable_slot_span[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env st /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env st /\
   FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
   cenv.ce_module_var_type (NONE,id) = SOME ty /\
   cenv.ce_is_ctor /\ dead_lo_ok H D lo cenv cx /\
@@ -3188,8 +3196,9 @@ QED
 (* This is the cursor adjustment of the very same mstore endpoint. *)
 
 Theorem tuple_immutable_word_stmt_post[local]:
+  !mods.
   stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
-  expr_sim_inv ce cx env ee /\ local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
+  expr_sim_inv_mods mods ce cx env ee /\ local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
   ce.ce_module_var_type (ce.ce_module,id) = SOME ty /\
@@ -3308,7 +3317,9 @@ Proof
 QED
 
 Theorem tuple_immutable_suffix_ghost_post[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env st /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env st /\
   stmt_state_rel H ctx func cenv cx st s /\ ghost_inv_at D lo d cenv cx st G tn s /\
   dead_lo_ok H D lo cenv cx /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
@@ -3351,7 +3362,9 @@ Proof
 QED
 
 Theorem tuple_immutable_word_head_joint[local]:
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env st /\
+  !mods exps.
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env st /\
   cx.in_deploy /\ supported_immutable_type tops (src,id) = SOME ty /\
   FLOOKUP env.bare_globals (src,id) = SOME ty /\ ~cx_const_name cx (src,id) /\
   ce.ce_is_ctor /\ evaluate_type (get_tenv cx) ty = SOME tv /\
@@ -3803,7 +3816,9 @@ QED
    from spatial ownership, not from the ghost site of the loaded child. *)
 
 Theorem tuple_immutable_rhs_floor[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   stmt_state_rel H ctx func cenv cx es s /\ dead_lo_ok H D lo cenv cx /\
   allocas_from lo s /\ expr_val_at cenv cx ty sa sb es v op s /\
   evaluate_type (get_tenv cx) ty = SOME (TupleTV tvs) /\ ~is_word_type ty /\
@@ -3849,11 +3864,13 @@ QED
    selected by the annotated fixed-size suffix, before any deadness proof. *)
 
 Theorem tuple_immutable_fixed_stmt_path[local]:
+  !mods exps.
   compile_assign_value ce (Lit (n2w off)) LocCode (Var root) F NONE ty ty
     (type_memory_bytes ce ty) sa = ((),sb) /\
   type_memory_bytes ce ty = type_memory_size tv /\
   ~is_bytestring_type ty /\ 0 < type_slot_size tv /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env st /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env st /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
   (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
@@ -4012,12 +4029,14 @@ QED
 (* The fixed store consumes the actual normalized buffer, while pending
    members keep their original tuple window. *)
 Theorem tuple_immutable_normalized_fixed_joint[local]:
+  !mods exps.
   compile_assign_value ce (Lit (n2w off)) LocCode (Var xs) F NONE dty sty
     (type_memory_bytes ce dty) sa = ((),sb) /\
   dty <> sty /\ ~is_bytestring_type dty /\ 0 < type_slot_size dtv /\
   type_memory_bytes ce dty = type_memory_size dtv /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ ~block_is_terminated sb /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env st /\ ce.ce_is_ctor /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env st /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME dty /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
   ce.ce_module_var_type (ce.ce_module,id) = SOME dty /\
@@ -5760,10 +5779,12 @@ QED
 (* The runtime physical representation and both posts refer to the exit of
    the annotated store, not to an independently run ordinary loop. *)
 Theorem tuple_immutable_runtime_bytes_joint[local]:
+  !mods exps.
   compile_assign_value ce (Lit (n2w off)) LocCode (Var root) F loc dty sty
     (type_memory_bytes ce dty) sa = ((),sb) /\
   is_bytestring_type sty /\ is_bytestring_type dty /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env st /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env st /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
   (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
@@ -5955,7 +5976,9 @@ QED
    The window [p,p+k) is the original tuple snapshot, not the normalization
    buffer; it remains available at the returned cursor. *)
 Theorem body_assign_tuple_immutable_head_joint:
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env st /\
+  !mods exps.
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env st /\
   cx.in_deploy /\ supported_immutable_type tops (src,id) = SOME dty /\
   ~cx_const_name cx (src,id) /\
   assignable_type (get_tenv cx) sty /\ type_widens_to (get_tenv cx) sty dty /\
@@ -6243,7 +6266,9 @@ Proof
 QED
 
 Theorem tuple_assign_target_supported_calls[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   IS_SOME (type_place_target env t) /\ supported_target tops bindings t ==>
   ~supported_target_exists expr_evm_run_root t /\
   EVERY (\c. FST c = NONE /\
@@ -6311,7 +6336,9 @@ QED
 
 (* Reassemble the tuple-specific post from a shared physical write. *)
 Triviality tuple_immutable_path_store_success:
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env mid /\
+  !mods exps.
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env mid /\
   stmt_state_rel (H0 : (bool # bytes32 # type_value) list # num list) ctx func ce cx mid s /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\ ce.ce_module = NONE /\
   FLOOKUP env.bare_globals (NONE,id) = SOME ity /\
@@ -6491,10 +6518,11 @@ Proof
 QED
 
 Theorem tuple_immutable_path_flat_store[local]:
+  !mods.
   compile_assign_value ce dst LocCode op (is_word_type sty) NONE dty sty
     (type_memory_bytes ce dty) sa = ((),sb) /\
   (sty = dty \/ is_bytestring_type dty) /\
-  expr_sim_inv ce cx env st /\
+  expr_sim_inv_mods mods ce cx env st /\
   assignable_type (get_tenv cx) sty /\ type_widens_to (get_tenv cx) sty dty /\
   evaluate_type (get_tenv cx) sty = SOME stv /\ value_has_type stv v /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
@@ -6655,11 +6683,12 @@ Proof
 QED
 
 Theorem tuple_immutable_target_source_endpoint[local]:
-  expr_sim_inv cenv cx env es /\ well_typed_target env bt ty /\
+  !mods.
+  expr_sim_inv_mods mods cenv cx env es /\ well_typed_target env bt ty /\
   call_evaluation_safe cx (int_calls_target bt) /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   eval_target_place cx bt es = (INL (ImmutablePlace src id path),ee) ==>
-  expr_sim_inv cenv cx env ee /\ state_well_typed ee /\
+  expr_sim_inv_mods mods cenv cx env ee /\ state_well_typed ee /\
   runtime_place_typed cx ee (ImmutablePlace src id path) tv /\
   runtime_place_writable cx ee (ImmutablePlace src id path)
 Proof
@@ -6704,8 +6733,9 @@ Proof
 QED
 
 Theorem tuple_immutable_target_source_write[local]:
+  !mods.
   bodyFullTargetDefs$imm_target_post H ctx func cenv cx es sa sb s ee id path ty r t /\
-  expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt /\
+  expr_sim_inv_mods mods cenv cx env es /\ target_indices_pre cenv cx env bt /\
   well_typed_target env bt ty /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt (es with gas_obs := obs) =
     (INL (ImmutablePlace NONE id path),ee) ==>
@@ -6728,9 +6758,11 @@ QED
 (* Both tuple layouts use the same target judgment. Add the source typing
    at its actual gas-marked endpoint before the write. *)
 Theorem tuple_immutable_head_target:
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  body_base_target_full_ok cx bt /\ body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_sim_inv cenv cx env es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_base_target_full_ok_mods mods exps cx bt /\ body_const_cells_agree mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
   target_indices_pre cenv cx env bt /\ cx.in_deploy /\ immutable_root cx bt /\
   target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
   well_typed_target env bt ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
@@ -6760,7 +6792,7 @@ Theorem tuple_immutable_head_target:
     (\H res ee G' tn' t. ?path.
       res = INL (ImmutablePlace NONE id path) /\
       bodyFullTargetDefs$imm_target_post H ctx func cenv cx es sa sb s ee id path ty r t /\
-      expr_sim_inv cenv cx env ee /\ state_well_typed ee /\
+      expr_sim_inv_mods mods cenv cx env ee /\ state_well_typed ee /\
       runtime_place_typed cx ee (ImmutablePlace NONE id path) tv /\
       runtime_place_writable cx ee (ImmutablePlace NONE id path) /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -7233,26 +7265,27 @@ Proof
 QED
 
 Theorem tuple_assign_exact_with_borrowed_frame[local]:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     (!bt. MEM (BaseTarget bt) gs /\ immutable_root cx bt /\
           ~(?nsid. bt = TopLevelNameTarget nsid) ==>
@@ -7446,14 +7479,16 @@ val finish_tuple_exact_cursor_post =
       simp[NoAsms,evaluation_state_component_equality]]
 
 Theorem tuple_assign_exact_store_head_outcome:
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_inst_ids_distinct func /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
   values_have_types tvs vs /\ val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
-  body_base_target_full_ok cx bt /\
+  body_base_target_full_ok_mods mods exps cx bt /\
   (immutable_root cx bt /\ ~(?nsid. bt = TopLevelNameTarget nsid) ==>
     !(H : (bool # bytes32 # type_value) list # num list) src mid u t sa sb id path ty r obs name b cap p tvs.
       eval_target_place cx bt (src with gas_obs := obs) =
@@ -10398,8 +10433,10 @@ QED
 
 (* The successful RHS only. Staging and loads take no explicit gas marks. *)
 Theorem tuple_assign_exact_store_entry:
-  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
-  expr_body_pre cenv cx env e es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ MEM func ctx.ctx_functions /\
+  expr_body_pre_mods mods cenv cx env e es /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
   expr_type e = TupleT tys /\ lowered_value_type cenv e = TupleT tys /\
   assignable_type env.type_defs (TupleT tys) /\
@@ -12574,26 +12611,27 @@ QED
 
 Finalise tuple_assign_exact_with_borrowed_frame[local]
 Theorem body_assign_tuple_other_full:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
                      ~(?nsid. t = TopLevelNameTarget nsid)) gs /\
@@ -12729,13 +12767,15 @@ Proof
 QED
 
 Theorem tuple_widened_load_entry_zero:
-  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\ fn_inst_ids_distinct func /\
-  expr_body_pre cenv cx env e es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ MEM func ctx.ctx_functions /\ fn_inst_ids_distinct func /\
+  expr_body_pre_mods mods cenv cx env e es /\
   type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
   lowered_value_type cenv e <> expr_type e /\
   (!s p r sp v t. eval_expr cx e s = (INL p,r) /\
      read_result cx p sp = (INL v,t) ==>
-     body_tuple_target_full_ok cx (TupleTarget gs) v) /\
+     body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,su) /\
   compile_tuple_unpack cenv (lowered_value_type cenv e) F gs op su = ((),sb) /\
   compile_tuple_unpack (gas_shadow_env T cenv) (lowered_value_type cenv e) F
@@ -13103,7 +13143,9 @@ QED
 Finalise tuple_widened_load_entry_zero
 
 Theorem tuple_widened_head_static:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env src /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env src /\
   supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Assign (TupleTarget gs) e) ==> occurs_abi_decode_target target tops) /\
@@ -13197,13 +13239,14 @@ Proof
 QED
 
 Theorem tuple_widened_head_source:
+  !mods exps.
   i < LENGTH gs /\ LENGTH gs = LENGTH vs /\ EL i gs = BaseTarget head /\
-  expr_sim_inv cenv cx env src /\ target_indices_pre cenv cx env head /\
+  expr_sim_inv_mods mods cenv cx env src /\ target_indices_pre cenv cx env head /\
   well_typed_target env head ty /\ call_evaluation_safe cx (int_calls_target head) /\
-  body_tuple_targets_full_ok cx (DROP i gs) (DROP i vs) ==>
-  body_base_target_full_ok cx head /\
+  body_tuple_targets_full_ok_mods mods exps cx (DROP i gs) (DROP i vs) ==>
+  body_base_target_full_ok_mods mods exps cx head /\
   ((?s u z. assign_tuple_targets cx (BaseTarget head) (EL i vs) s = (INL u,z)) ==>
-     body_tuple_targets_full_ok cx (DROP (SUC i) gs) (DROP (SUC i) vs)) /\
+     body_tuple_targets_full_ok_mods mods exps cx (DROP (SUC i) gs) (DROP (SUC i) vs)) /\
   gas_admissible (eval_target_place cx head) target_place_res_ok src /\
   assign_tuple_target_list cx (DROP i gs) (DROP i vs) =
     bind (eval_target_place cx head) (\p.
@@ -13256,7 +13299,9 @@ Proof
 QED
 
 Theorem tuple_widened_place_head_parts:
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
   supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Assign (TupleTarget gs) e) ==> occurs_abi_decode_target target tops) /\
@@ -13265,7 +13310,7 @@ Theorem tuple_widened_place_head_parts:
   call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
   LIST_REL (\g ty. well_typed_atarget env g ty) gs dtys /\
   LENGTH gs = LENGTH tys /\ LENGTH elems = LENGTH tys /\ LENGTH gs = LENGTH vs /\
-  body_const_cells_agree [(NONE,tops)] cx env ee /\
+  body_const_cells_agree mods cx env ee /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_inst_ids_distinct func /\
@@ -13279,12 +13324,12 @@ Theorem tuple_widened_place_head_parts:
     well_typed_target env head (EL i dtys) /\
     type_place_target env head = SOME (Type (EL i dtys)) /\
     call_evaluation_safe cx (int_calls_target head) /\
-    target_pre cenv cx env head src /\ body_base_target_full_ok cx head /\
-    body_const_cells_agree [(NONE,tops)] cx env src /\
+    target_pre cenv cx env head src /\ body_base_target_full_ok_mods mods exps cx head /\
+    body_const_cells_agree mods cx env src /\
     gas_admissible (eval_base_place cx head) target_res_ok src /\
     gas_admissible (eval_target_place cx head) target_place_res_ok src /\
     ((?s u z. assign_tuple_targets cx (BaseTarget head) (EL i vs) s = (INL u,z)) ==>
-       body_tuple_targets_full_ok cx (DROP (SUC i) gs) (DROP (SUC i) vs)) /\
+       body_tuple_targets_full_ok_mods mods exps cx (DROP (SUC i) gs) (DROP (SUC i) vs)) /\
     assign_tuple_target_list cx (DROP i gs) (DROP i vs) =
       bind (eval_target_place cx head) (\p.
         bind (write_place cx p (EL i vs)) (\u.
@@ -13786,26 +13831,27 @@ Proof
     (qspec_then `j` mp_tac) >> simp[ADD_COMM]
 QED
 Theorem tuple_assign_widened_with_immutable_paths[local]:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     lowered_value_type cenv e <> expr_type e ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -14267,9 +14313,11 @@ QED
 (* A successful regular target evaluation leaves a silent write.  Unlike the
    full store-loop induction, this contract stops before the next target. *)
 Theorem tuple_widened_place_write_advance:
+  !mods exps.
   tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
     (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) i c sh src s G tn obs /\
-  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\ fn_inst_ids_distinct func /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ MEM func ctx.ctx_functions /\ fn_inst_ids_distinct func /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   i < LENGTH gs /\ i < LENGTH tys /\ LENGTH gs = LENGTH dtys /\
   LENGTH tys = LENGTH dtys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tvs /\
@@ -14278,7 +14326,7 @@ Theorem tuple_widened_place_write_advance:
   call_evaluation_safe cx (int_calls_target head) /\ target_indices_pre cenv cx env head /\
   ~immutable_root cx head /\
   ((?st u z. assign_tuple_targets cx (BaseTarget head) (EL i vs) st = (INL u,z)) ==>
-   body_tuple_targets_full_ok cx (DROP (SUC i) gs) (DROP (SUC i) vs)) /\
+   body_tuple_targets_full_ok_mods mods exps cx (DROP (SUC i) gs) (DROP (SUC i) vs)) /\
   evaluate_type (get_tenv cx) (EL i dtys) = SOME (EL i dtvs) /\
   evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs) /\
   type_widens_to (get_tenv cx) (EL i tys) (EL i dtys) /\
@@ -16977,10 +17025,12 @@ QED
 (* A nested constructor place is writable at its marked midpoint. Both
    physical store branches are silent and advance the same detached tuple. *)
 Theorem tuple_widened_nested_write_advance:
+  !mods exps.
   tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func)
     (cenv,cx,env,st0,es,ee) (sa,sb,shadow_sb,s0,G0,tn0)
     (tys,gs,elems,tvs,vs,w,t,tf) i c sh src s G tn obs /\
-  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\ fn_inst_ids_distinct func /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ MEM func ctx.ctx_functions /\ fn_inst_ids_distinct func /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   i < LENGTH gs /\ i < LENGTH tys /\ LENGTH gs = LENGTH dtys /\
   LENGTH tys = LENGTH dtys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tvs /\
@@ -16993,7 +17043,7 @@ Theorem tuple_widened_nested_write_advance:
   FLOOKUP env.bare_globals (NONE,id) = SOME root_ty /\
   ~cx_const_name cx (NONE,id) /\ cenv.ce_is_ctor /\
   ((?u r z. assign_tuple_targets cx (BaseTarget head) (EL i vs) u = (INL r,z)) ==>
-   body_tuple_targets_full_ok cx (DROP (SUC i) gs) (DROP (SUC i) vs)) /\
+   body_tuple_targets_full_ok_mods mods exps cx (DROP (SUC i) gs) (DROP (SUC i) vs)) /\
   evaluate_type (get_tenv cx) (EL i dtys) = SOME (EL i dtvs) /\
   evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs) /\
   type_widens_to (get_tenv cx) (EL i tys) (EL i dtys) /\
@@ -17035,7 +17085,7 @@ Theorem tuple_widened_nested_write_advance:
     p_res = INL (ImmutablePlace NONE id path) /\
     bodyFullTargetDefs$imm_target_post H ctx func cenv cx src c place_cs s mid
       id path (EL i dtys) place_result sp /\
-    expr_sim_inv cenv cx env mid /\ state_well_typed mid /\
+    expr_sim_inv_mods mods cenv cx env mid /\ state_well_typed mid /\
     runtime_place_typed cx mid (ImmutablePlace NONE id path) (EL i dtvs) /\
     runtime_place_writable cx mid (ImmutablePlace NONE id path) /\
     sp.vs_current_bb = place_cs.cs_current_bb /\ sp.vs_inst_idx = LENGTH place_cs.cs_current_insts /\
@@ -17978,26 +18028,27 @@ QED
 Finalise tuple_assign_widened_with_immutable_paths[local]
 
 Theorem body_assign_tuple_widened_full:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
                      ~(?nsid. t = TopLevelNameTarget nsid)) gs /\
@@ -18016,26 +18067,27 @@ Proof
 QED
 
 Theorem body_assign_tuple_nested_immutable_conditional[local]:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     (!bt. MEM (BaseTarget bt) gs /\ immutable_root cx bt /\
           ~(?nsid. bt = TopLevelNameTarget nsid) ==>
@@ -18074,26 +18126,27 @@ Proof
 QED
 
 Theorem body_assign_tuple_nested_immutable_full:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     EXISTS (\g. ?t. g = BaseTarget t /\ immutable_root cx t /\
                     ~(?nsid. t = TopLevelNameTarget nsid)) gs ==>

@@ -1,14 +1,17 @@
 Theory bodyFullBopBytestringChild
 Ancestors bodyFullBopBytestringHash bodySimFull gasShadow gasShadowState
   gasShadowUnit gasExplicitSites
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem bop_bytestring_selected_child_full_halt:
+  !mods exps.
   (case bytestring_literal_hash e of
      NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e) e sa))
        (SND (lower_value compile_expr cenv (expr_type e) e sa))
    | SOME digest => (Lit digest,sa)) = (h,sz) /\
-  is_bytestring_type (expr_type e) /\ expr_body_pre cenv cx env e es /\
-  body_inv tops ctx cenv cx /\ fn_has_code sa sz func /\
+  is_bytestring_type (expr_type e) /\ expr_body_pre_mods mods cenv cx env e es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ fn_has_code sa sz func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u)) /\
@@ -81,12 +84,14 @@ Proof
 QED
 
 Theorem bop_bytestring_selected_child_full:
+  !mods exps.
   (case bytestring_literal_hash e of
      NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e) e sa))
        (SND (lower_value compile_expr cenv (expr_type e) e sa))
    | SOME digest => (Lit digest,sa)) = (h,sz) /\
-  is_bytestring_type (expr_type e) /\ expr_body_pre cenv cx env e es /\
-  body_inv tops ctx cenv cx /\ fn_has_code sa sz func /\
+  is_bytestring_type (expr_type e) /\ expr_body_pre_mods mods cenv cx env e es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ fn_has_code sa sz func /\
   fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\

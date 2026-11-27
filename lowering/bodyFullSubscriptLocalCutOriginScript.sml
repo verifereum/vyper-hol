@@ -9,7 +9,8 @@ Ancestors
   vyperPlaceTyping vyperValueOperation list
 
 Theorem marked_local_eval_facts[local]:
-  expr_body_pre cenv cx env e st /\ eval_expr cx e st = (INL pv,st') ==>
+  !mods.
+  expr_body_pre_mods mods cenv cx env e st /\ eval_expr cx e st = (INL pv,st') ==>
   typed_scope_transition st st' /\ state_well_typed st' /\
   eval_result_typed (env,cx,st') pv (Type (expr_type e)) /\
   live_memory_result st' pv
@@ -28,7 +29,8 @@ Proof
 QED
 
 Theorem marked_base_initial_local[local]:
-  expr_body_pre cenv cx env e es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env e es /\
   eval_expr cx e (es with gas_obs := gs) = (INL (PlaceR (MemoryPlace id p)),mid) ==>
   ?initial v. lookup_scopes id es.scopes = SOME initial /\
               evaluate_subscripts initial.type initial.value p = INL v
@@ -68,7 +70,8 @@ Proof
 QED
 
 Theorem subscript_local_cut_returned_paths:
-  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et bd /\
   eval_expr cx obj (es with gas_obs := gs1) = (INL (PlaceR (MemoryPlace id path)),mid) /\
   bind (eval_expr cx idx) (read_result cx) (mid with gas_obs := gs2) = (INL key,fin) ==>

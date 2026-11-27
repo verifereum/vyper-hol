@@ -10,6 +10,7 @@ Ancestors
   targetSubscriptSplit bodyPtrBopInMemoryContents vyperTypeSystem
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants vyperTyping
   vyperValue compileEnv valueEncoding vyperTypeEnv vyperInterpreter vyperState
+  exprSimHypsDefs[qualified]
 
 Definition array_tail_packet_def:
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
@@ -101,11 +102,12 @@ Proof
 QED
 
 Theorem array_tail_packet_source_index:
+  !mods.
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace ==>
-  expr_sim_inv cenv cx env mid2 /\
+  expr_sim_inv_mods mods cenv cx env mid2 /\
   stmt_state_rel H ctx func cenv cx mid2 t2 /\
   ?i iw. v = IntV i /\ eval_operand iop t2 = SOME iw /\
     i = (if is_signed_type (expr_type e) then w2i iw else &(w2n iw))
@@ -203,11 +205,12 @@ Proof
 QED
 
 Theorem array_tail_packet_source_bounds:
+  !mods.
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace ==>
-  expr_sim_inv cenv cx env mid2 /\
+  expr_sim_inv_mods mods cenv cx env mid2 /\
   stmt_state_rel H ctx func cenv cx mid2 t2 /\
   ?i iw. v = IntV i /\ eval_operand iop t2 = SOME iw /\
     i = (if is_signed_type (expr_type e) then w2i iw else &(w2n iw)) /\
@@ -1230,7 +1233,8 @@ Proof
 QED
 
 Theorem array_tail_memory_child_pointer[local]:
-  expr_sim_inv cenv cx env es /\
+  !mods.
+  expr_sim_inv_mods mods cenv cx env es /\
   place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) b loc
     (Type (ArrayT et bd)) /\
   evaluate_type (get_tenv cx) et = SOME etv /\

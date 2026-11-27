@@ -7,10 +7,11 @@ Ancestors exprSimAttributeProps[qualified,ignore_grammar] context[qualified,igno
   vyperStorageFootprint emitHelperProps exprLoweringProps fragExec
   loweringPosts compileEnv valueEncoding vyperTyping vyperInterpreter
   vyperState vyperAST stateRelProj tupleMemoryLayout typedCopyLayoutPtr
+  exprSimHypsDefs[qualified]
 
 Theorem subscript_tuple_vv_sim_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann obj idx es tys.
-    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  !mods DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann obj idx es tys.
+    expr_body_pre_mods mods cenv cx env (Subscript ann obj idx) es /\
     expr_type obj = TupleT tys /\ place_type cenv obj = ValPT (TupleT tys) /\
     post_value_type cenv obj = expr_type obj /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

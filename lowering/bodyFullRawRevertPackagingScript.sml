@@ -4,27 +4,30 @@ Ancestors
   bodyFullShadowBodyInv
   bodyFullPreds bodyFullExprGeneric bodyFullRawRevertInterfaces
   vyperSystemControl exprLowering builtinSystem compileEnv vyperAST
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs
   pairLib
 
 Theorem raw_revert_body_full_from_value:
+  !mods exps.
   (!cx ann args dflt DF lo d PG tops ctx shadow_ctx func shadow_func
       cenv env ty es.
     (!cenv ty e.
        gas_shadow_compiles (lower_value compile_expr cenv ty e)
          (lower_value compile_expr cenv ty (gas_shadow_expr e))) /\
-    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Call ann RawRevert args dflt) es ==>
+    body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Call ann RawRevert args dflt) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann RawRevert args dflt) es) ==>
   !cx ann es dflt.
     (!cenv ty e.
        gas_shadow_compiles (lower_value compile_expr cenv ty e)
          (lower_value compile_expr cenv ty (gas_shadow_expr e))) /\
-    body_exprs_full_ok cx es ==>
-    body_expr_full_ok cx (Call ann RawRevert es dflt)
+    body_exprs_full_ok_mods mods exps cx es ==>
+    body_expr_full_ok_mods mods exps cx (Call ann RawRevert es dflt)
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   once_rewrite_tac[body_expr_full_ok_def] >> simp[] >>

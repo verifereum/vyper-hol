@@ -11,6 +11,7 @@ Ancestors
   revertAllocationPtr stmtReasonLitFragMemory abiPathAllocInv
   vyperTypeSystem vyperTypeValues valueEncoding vyperValue vyperTyping
   valueEncodingDefs exprSimSource
+  exprSimHypsDefs[qualified]
 
 Theorem reason_literal_annotated_vv_post[local]:
   expr_post H ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))
@@ -28,13 +29,14 @@ Proof
 QED
 
 Theorem reason_literal_encoder_origin_ptr:
+  !mods.
   compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sm) /\
   compile_revert_with_reason cenv
     (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf))
     (BaseT (StringT ml)) M sm = ((),sf) /\
   M = type_memory_bytes cenv (BaseT (StringT ml)) /\
   64+M < dimword(:256) /\
-  expr_body_pre cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
+  expr_body_pre_mods mods cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
   buf.buf_operand = Var p /\ not_fresh_at sm p /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\

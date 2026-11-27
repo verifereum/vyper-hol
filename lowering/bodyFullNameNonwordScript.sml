@@ -36,7 +36,8 @@ Proof
 QED
 
 Theorem name_nonword_ghost_posts:
-  expr_body_pre cenv cx env (Name ann id) es /\ ~is_word_type ann /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Name ann id) es /\ ~is_word_type ann /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   stmt_state_rel H ctx func cenv cx es s /\
@@ -64,7 +65,8 @@ Proof
 QED
 
 Theorem name_nonword_full:
-  expr_body_pre cenv cx env (Name ann id) es /\ ~is_word_type ann ==>
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Name ann id) es /\ ~is_word_type ann ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Name ann id) es
 Proof

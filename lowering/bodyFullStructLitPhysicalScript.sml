@@ -3,10 +3,12 @@ Theory bodyFullStructLitPhysical
 Ancestors
   immutableDeployPhysicalSource bodyPtrDefs
   loweringPosts valueCopyBytes
+  exprSimHypsDefs[qualified]
 Libs monadsyntax
 
 Theorem structlit_child_physical_robust:
-  expr_body_pre ce cx env e es /\
+  !mods.
+  expr_body_pre_mods mods ce cx env e es /\
   (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee) /\
   expr_post H ctx func ce cx e es sa sb s0 ee v op s /\
   ptr_val_ok cx (post_value_type ce e) v op G tn s /\

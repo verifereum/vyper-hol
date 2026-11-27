@@ -9,12 +9,14 @@ Ancestors bodyFullBuiltinConcatReady bodyFullBuiltinConcatHead
   loweringStateRelDefs loweringPosts compileEnv stateRelProj
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState
   venomState words list finite_map pred_set
+  exprSimHypsDefs[qualified]
 
 Theorem concat_loop_head_entry:
+  !mods.
   concat_loop_ready (e::args) P k DF lo d ctx shadow_ctx PG
     tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
     s0 G0 tn0 dv ov ow binst B bsz oinst ==>
-  expr_body_pre cenv cx env e es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx (expr_type e) e es /\
   ?op sc shadow_sc.
@@ -81,10 +83,11 @@ Proof
 QED
 
 Theorem concat_loop_copy_entry:
+  !mods.
   concat_loop_ready (e::args) P k DF lo d ctx shadow_ctx PG
     tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
     s0 G0 tn0 dv ov ow binst B bsz oinst /\
-  expr_body_pre cenv cx env e es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx (expr_type e) e es (st0,sa,sc,shadow_sa,shadow_sc,op,s0,G0,tn0) /\
   (!tail. bind (eval_expr cx e) (read_result cx)

@@ -12,9 +12,10 @@ Ancestors stmtSimProps[qualified,ignore_grammar]
   exprLoweringProps loweringStateRelDefs loweringPosts compileEnv stateRelProj
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState
   venomState words list finite_map pred_set
+  bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem concat_args_sim_full:
-  !args P k DF lo d ctx shadow_ctx PG tops func shadow_func cenv cx env st0
+  !mods exps args P k DF lo d ctx shadow_ctx PG tops func shadow_func cenv cx env st0
    es sa sb shadow_sa shadow_sb s0 G0 tn0 dv ov ow binst B bsz oinst.
     compile_concat compile_expr cenv args (Var dv)
       (MAP (\e.
@@ -34,12 +35,13 @@ Theorem concat_args_sim_full:
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     EVERY (\e. is_bytestring_type (expr_type e) \/
                  ?m. expr_type e = BaseT (BytesT (Fixed m))) args /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
-    (!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
-       expr_body_pre cenv cx env e st) /\
-    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
+    (!e st. MEM e args /\ expr_sim_inv_mods mods cenv cx env st ==>
+       expr_body_pre_mods mods cenv cx env e st) /\
+    body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
@@ -79,7 +81,7 @@ Theorem concat_args_sim_full:
       (\H res ee G tn t. ?vs. res = INL vs /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
-         expr_sim_inv cenv cx env ee /\
+         expr_sim_inv_mods mods cenv cx env ee /\
          stmt_state_rel H ctx func cenv cx ee t /\
          storage_well_formed_on cx ee (FST H) /\
          alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\

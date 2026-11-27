@@ -5,8 +5,9 @@ Ancestors
   bodySim exprSimHypsDefs exprSimHyps fragExec exprSimSource compileEnv valueCopyBytes
 
 Theorem bop_full_layout:
+  !mods.
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) sa = (op,sb) /\
   lower_value compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Builtin ann (Bop bop) [e1; e2])) shadow_sa = (op,shadow_sb) /\
@@ -73,8 +74,9 @@ Proof
 QED
 
 Theorem bop_word_full_layout:
+  !mods.
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1; e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) sa = (op,sb) /\
   lower_value compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Builtin ann (Bop bop) [e1; e2])) shadow_sa = (op,shadow_sb) /\

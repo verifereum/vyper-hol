@@ -22,6 +22,7 @@ Ancestors
   exprSimMemDefs bodyPtrDefs loweringPosts exprLowering exprLoweringProps
   typedCopyDomain vyperTypeSystem compileEnv context vyperAST
   vyperInterpreter vyperState venomState
+  bodyFullPredsMods[qualified]
 
 val _ = Parse.hide "body";
 
@@ -34,6 +35,7 @@ fun use_ifexp_child child =
   metis_tac[];
 
 Theorem ifexp_expr_full_ok_from_root[local]:
+  !mods exps.
   (!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     (!e. (e = a \/ e = b) ==>
@@ -75,10 +77,10 @@ Theorem ifexp_expr_full_ok_from_root[local]:
           value_has_type ptv v') ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty (IfExp t c a b) es) ==>
   !cx v5 e1 e2 e3.
-    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok cx e2) /\
-    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok cx e3) /\
-    body_expr_full_ok cx e1 ==>
-    body_expr_full_ok cx (IfExp v5 e1 e2 e3)
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx e3) /\
+    body_expr_full_ok_mods mods exps cx e1 ==>
+    body_expr_full_ok_mods mods exps cx (IfExp v5 e1 e2 e3)
 Proof
   disch_then (assume_tac o GEN_ALL) >> rpt gen_tac >> strip_tac >>
   once_rewrite_tac [bodyFullPredsTheory.body_expr_full_ok_def] >> simp[] >>
@@ -171,11 +173,11 @@ Finalise ifexp_expr_full_ok_from_root
 (* body_inv and expr_body_pre, the word agreement by the contrapositive of
    post_value_type_nonword. *)
 Theorem ifexp_expr_full_ok:
-  !cx v5 e1 e2 e3.
-    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok cx e2) /\
-    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok cx e3) /\
-    body_expr_full_ok cx e1 ==>
-    body_expr_full_ok cx (IfExp v5 e1 e2 e3)
+  !mods exps cx v5 e1 e2 e3.
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx e3) /\
+    body_expr_full_ok_mods mods exps cx e1 ==>
+    body_expr_full_ok_mods mods exps cx (IfExp v5 e1 e2 e3)
 Proof
   match_mp_tac ifexp_expr_full_ok_from_root >>
   rpt gen_tac >> strip_tac >> irule ifexp_vv_full_root_uniform >>

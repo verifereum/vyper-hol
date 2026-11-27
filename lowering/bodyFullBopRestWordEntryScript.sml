@@ -4,17 +4,19 @@ Ancestors
   gasSummary vyperState vyperInterpreter exprSimHyps exprSimBopRestWordBasics
   exprSimBopRestWordCompose exprSimBopRestWordFacts vyperTypeSystem vyperValue vyperTyping
   allocLimits
+  bodyFullPredsMods[qualified]
 
 Theorem rest_word_full_second_entry:
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
+  !mods' exps.
+  expr_body_pre_mods mods' cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   body_const_cells_agree mods cx env es /\
-  body_exprs_full_ok cx [e1;e2] /\
+  body_exprs_full_ok_mods mods' exps cx [e1;e2] /\
   (!tail. bind (eval_expr cx e1) (read_result cx)
      (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
        (INL needle,mid with gas_obs := tail)) ==>
   body_const_cells_agree mods cx env mid /\
-  body_expr_full_ok cx e2 /\
-  expr_body_pre cenv cx env e2 (mid with gas_obs := []) /\
+  body_expr_full_ok_mods mods' exps cx e2 /\
+  expr_body_pre_mods mods' cenv cx env e2 (mid with gas_obs := []) /\
   MAP FDOM es.scopes = MAP FDOM mid.scopes
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -46,11 +48,12 @@ Proof
 QED
 
 Theorem rest_word_full_array_read:
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
   expr_type e2 = ArrayT (expr_type e1) bd /\
-  expr_body_pre cenv cx env e1 es /\
-  expr_body_pre cenv cx env e2 (mid with gas_obs := []) /\
+  expr_body_pre_mods mods cenv cx env e1 es /\
+  expr_body_pre_mods mods cenv cx env e2 (mid with gas_obs := []) /\
   (!tail. bind (eval_expr cx e1) (read_result cx)
      (es with gas_obs := obs1 ++ tail) = (INL needle,mid with gas_obs := tail)) /\
   (!tail. eval_expr cx e2 (mid with gas_obs := obs2 ++ tail) =

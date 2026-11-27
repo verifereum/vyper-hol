@@ -8,12 +8,15 @@ Ancestors
   gasShadowState representationCleanPtr gasExemptCert bodyMemoryDefs
   exprLoweringProps exprSimWordArgs fragExec list gasShadow vyperStorageTrace
   loweringPosts
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem raw_call_forced_data_kwargs_full_from_action:
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env esD /\
-  expr_sim_inv cenv cx env esD /\ body_exprs_full_ok cx kws /\
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env esD /\
+  expr_sim_inv_mods mods cenv cx env esD /\ body_exprs_full_ok_mods mods exps cx kws /\
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
   EVERY (\e. expr_type e = BaseT (UintT 256)) kws /\
   expr_type d = BaseT (BytesT (Dynamic cap)) /\
   lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
@@ -72,8 +75,8 @@ Theorem raw_call_forced_data_kwargs_full_from_action:
       ghost_kept_at lo cenv es0 sa G0 tn0 s0 G4 tn4) /\
     (!sa es0 s0. sa.cs_next_var <= s2.cs_next_var /\ wb_frame cenv es0 esD sa s0 tD ==>
       wb_frame cenv es0 esD sa s0 t4) /\
-    (!e ee. MEM e kws /\ expr_sim_inv cenv cx env ee ==>
-      expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)) /\
+    (!e ee. MEM e kws /\ expr_sim_inv_mods mods cenv cx env ee ==>
+      expr_body_pre_mods mods cenv cx env e ee /\ is_word_type (expr_type e)) /\
     (!tail. eval_exprs cx kws (esD with gas_obs := gas_explicit marks t4.vs_gas_readings ++ tail) =
       (INL kvs,esK with gas_obs := tail)) /\
     storage_trace_domain cx st0 esK.storage_trace /\ esK.gas_obs = [] /\

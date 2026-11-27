@@ -15,6 +15,7 @@ Ancestors
   bodySimAugPlaceLoad exprSimPopNestedLocalSource exprSimSubscriptArrayLiveImmutableView
   exprSimHypsDefs vyperTypeSystem vyperTypeInvariants vyperTargetPlaceWrite
   vyperPlaceWriteSoundness vyperInterpreter vyperState
+  bodyInvSplit[qualified]
 
 (* The executor fixes the write's byte window before source-state restoration. *)
 Definition immutable_path_store_post_def:
@@ -158,8 +159,10 @@ Proof
 QED
 
 Theorem immutable_path_write_outcome:
-  body_inv tops ctx ce cx /\
-  expr_sim_inv ce cx env ee /\ local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
+  !mods exps.
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\
+  expr_sim_inv_mods mods ce cx env ee /\ local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ity /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
   ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\

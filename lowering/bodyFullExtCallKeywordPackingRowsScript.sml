@@ -63,6 +63,7 @@ QED
 (* This is a one-horizon row. The selected witness serves the dynamic
    conjuncts; storage liveness can subsequently be projected at any horizon. *)
 Theorem keyword_packing_row_endpoint[local]:
+  !mods.
   compile_snapshot_vv cenv copy (ext_call_arg_value (lowered_value_type cenv e) vv)
     sm = (sv,ss) /\
   (copy /\ ~is_word_type (lowered_value_type cenv e) ==>
@@ -104,7 +105,7 @@ Theorem keyword_packing_row_endpoint[local]:
              local_region cenv ee.scopes t n b sz) /\
   stmt_state_rel H ctx func cenv cx pos u /\
   stmt_state_rel H ctx func cenv cx ee t /\
-  local_ptrs_reserved cenv ss /\ expr_sim_inv cenv cx env pos /\
+  local_ptrs_reserved cenv ss /\ expr_sim_inv_mods mods cenv cx env pos /\
   ghost_inv_at D lo d cenv cx ee G tn t /\ dead_lo_ok H D lo cenv cx ==>
   (?raw. read_result cx raw ee = (INL v,ee) /\
          vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
@@ -199,6 +200,7 @@ Proof
 QED
 
 Theorem extcall_keyword_packing_rows:
+  !mods.
   LENGTH svs = LENGTH xs /\
   local_ptrs_reserved cenv sb /\
   sb.cs_next_var <= se.cs_next_var /\ sb.cs_next_id <= se.cs_next_id /\
@@ -209,7 +211,7 @@ Theorem extcall_keyword_packing_rows:
   (!aid row. FLOOKUP u.vs_allocas aid = SOME row ==> FLOOKUP t.vs_allocas aid = SOME row) /\
   u.vs_alloca_next <= t.vs_alloca_next /\ t.vs_labels = u.vs_labels /\
   MAP FDOM ee.scopes = MAP FDOM pos.scopes /\
-  expr_sim_inv cenv cx env pos /\
+  expr_sim_inv_mods mods cenv cx env pos /\
   (~exprs_can_mutate cenv kw_es ==> ee.scopes = pos.scopes /\ ee.immutables = pos.immutables /\
      (!tr. get_storage cx ee tr = get_storage cx pos tr)) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\

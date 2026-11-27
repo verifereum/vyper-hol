@@ -7,9 +7,11 @@ Ancestors
   bodyPtrBopTypedSource bodyPtrBopScalarRun bodyPtrBopScalarDispatch
   bodySimFull gasOutcomeFullCompose exprBopSimProps exprSimSource exprSimProps
   wordArgsPtr ptrDiscipline bodyPtrDefs loweringPosts exprSimWordArgs
+  exprSimHypsDefs[qualified]
 
 Theorem bop_word_suffix_inputs[local]:
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   ptr_val_ok cx (expr_type e1) v1 x G1 tn1 t /\
   ptr_val_ok cx (expr_type e2) v2 y G2 tn2 u /\
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
@@ -25,8 +27,9 @@ Proof
 QED
 
 Theorem bop_suffix_full_halt:
+  !mods.
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
   lower_value compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2])) shadow_sa = (op,shadow_sb) /\
@@ -213,8 +216,9 @@ QED
 Finalise bop_suffix_full_halt
 
 Theorem bop_suffix_full:
+  !mods.
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
   lower_value compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2])) shadow_sa = (op,shadow_sb) /\
@@ -319,8 +323,9 @@ Proof
 QED
 
 Theorem bop_word_suffix_full_halt:
+  !mods.
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
   lower_value compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2])) shadow_sa = (op,shadow_sb) /\
@@ -427,8 +432,9 @@ Proof
 QED
 
 Theorem bop_word_suffix_full:
+  !mods.
   word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
+  expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
   lower_value compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Builtin ann (Bop bop) [e1;e2])) shadow_sa = (op,shadow_sb) /\

@@ -6,9 +6,10 @@ Ancestors
   bodyFullForExprCut bodySimFull bodySim bodyMemoryDefs loweringStateRelDefs
   vyperInterpreter vyperState vyperStorageFootprint vyperTypeValues vyperAST
   exprLowering supportedStmts venomInst finite_map list arithmetic
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem compile_for_storage_array_frag_full:
-  !cx id typ bd nid n body DF lo d PG tops bindings ctx shadow_ctx func
+  !mods exps cx id typ bd nid n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     (!c0 e0 sa0 s0 c1 e1 s1 sa1 c2 e2 s2.
        alloca_frame c0 e0 sa0 s0 c1 e1 s1 /\
@@ -52,20 +53,21 @@ Theorem compile_for_storage_array_frag_full:
          (INL vs,t') /\
        check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
          (INL x,t'') ==>
-       body_for_full_ok cx tyv id body vs) /\
+       body_for_full_ok_mods mods exps cx tyv id body vs) /\
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
          (INL tyv,t) ==>
-       body_iterator_full_ok cx (Array (TopLevelName (ArrayT typ bd) nid))) /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+       body_iterator_full_ok_mods mods exps cx (Array (TopLevelName (ArrayT typ bd) nid))) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings
       (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n body) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n body) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty
       (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n body) = SOME env' /\
@@ -73,7 +75,7 @@ Theorem compile_for_storage_array_frag_full:
       (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n body) /\
     call_evaluation_safe cx (int_calls_stmt
       (For id typ (Array (TopLevelName (ArrayT typ bd) nid)) n body)) /\
-    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cx RetQ cenv ret_ty ==>
     stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cx lctx RetQ cenv

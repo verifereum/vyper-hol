@@ -3,16 +3,18 @@ Theory bodyFullBuiltinPrecompileRecoveryArgs
 Ancestors
   bodyFullShadowBodyInv
   bodyFullWordArgs exprSimPrecompiles exprSimSource list
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 (* Original application anchors typing; the suffix post uses its own start. *)
 Theorem ecrecover_args_suffix_full:
-  !todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty
+  !mods exps todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty
     ann args done entry es st0 sa sm shadow_sa shadow_sm xs s0 G0 tn0.
-    expr_body_pre cenv cx env (Builtin ann ECRecover args) entry /\
-    args = done ++ todo /\ body_exprs_full_ok cx todo /\
-    body_inv tops ctx cenv cx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann ECRecover args) entry /\
+    args = done ++ todo /\ body_exprs_full_ok_mods mods exps cx todo /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    body_const_cells_agree mods cx env es /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env es /\
     lower_word_args cenv (\e. ty) todo sa = (xs,sm) /\
     lower_word_args (gas_shadow_env T cenv) (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
       (xs,shadow_sm) /\

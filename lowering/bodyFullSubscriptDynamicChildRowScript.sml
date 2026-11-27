@@ -10,7 +10,8 @@ Ancestors
   loweringStateRelDefs arithmetic words
 
 Theorem subscript_dynamic_child_input:
-  expr_body_pre ce cx env (Subscript ann obj idx) es /\
+  !mods.
+  expr_body_pre_mods mods ce cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et (Dynamic cap) /\
   eval_expr cx obj (es with gas_obs := gs1) =
     (INL (PlaceR (MemoryPlace id path)),mid) /\

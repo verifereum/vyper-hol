@@ -14,6 +14,7 @@ Ancestors
   vyperTypeSystem vyperTypeBuiltins list finite_map emitHelper compileEnv
   fragExec venomInst venomState
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem calldatalen_full_path:
   lower_value compile_expr cenv ty (Builtin (BaseT (UintT 256)) CalldataLen []) sa = (op,sb) /\
@@ -53,15 +54,16 @@ Proof
 QED
 
 Theorem calldatalen_builtin_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     bt = CalldataLen /\ builtin_args_length_ok bt (LENGTH args) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>
-     body_exprs_full_ok cx args) /\
+     body_exprs_full_ok_mods mods exps cx args) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt = Len ==>
-     body_expr_full_ok cx (HD args)) /\
-    body_inv tops ctx cenv cx /\
+     body_expr_full_ok_mods mods exps cx (HD args)) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
     body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt args) es ==>
+    expr_body_pre_mods mods cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a bt args) es /\
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -182,17 +184,18 @@ QED
 Finalise calldatalen_builtin_sim_full
 
 Theorem length_builtin_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (bt = Len \/ bt = CalldataLen) /\
     builtin_args_length_ok bt (LENGTH args) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>
-     body_exprs_full_ok cx args) /\
+     body_exprs_full_ok_mods mods exps cx args) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt = Len ==>
-     body_expr_full_ok cx (HD args)) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt args) es ==>
+     body_expr_full_ok_mods mods exps cx (HD args)) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a bt args) es /\
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

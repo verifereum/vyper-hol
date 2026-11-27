@@ -2,16 +2,17 @@ Theory bodyFullExtCallReturnVoid
 Ancestors
   exprSimExtCallCase extcallReturnInterface fragGasOriginPtr bodyPtrDefs
   exprSimMemDefs exprLowering vyperInterpreter vyperAST list createSizeExit
+  exprSimHypsDefs[qualified]
 
 val _ = Parse.hide "body";
 
 Theorem extcall_return_step_void:
-  !DF lo d explicit ctx PG func cenv cx env es ann is_static skip fname
+  !mods DF lo d explicit ctx PG func cenv cx env es ann is_static skip fname
    arg_types ret_type opts args dflt st0 sa sb s0 G0 tn0 sr result_op vv
    addr_op buf_op cap target has_default default_op default_ty default_opt
    returnData ee t G tn.
     ret_type = NoneT /\
-    expr_body_pre cenv cx env
+    expr_body_pre_mods mods cenv cx env
       (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
          args dflt) es /\
     cap = abi_size_bound cenv.ce_struct_fields

@@ -9,7 +9,8 @@ Ancestors
   venomState finite_map vyperAST valueEncoding vyperTypeSystem vyperTypeCallGraph
 
 Theorem name_vv_full:
-  expr_body_pre cenv cx env (Name ann id) es ==>
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Name ann id) es ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Name ann id) es
 Proof

@@ -4,9 +4,11 @@ Theory bodyFullAbiEncodeBorrowed
 Ancestors
   abiEncodeArgsSim logValueFramePtr bodyPtrDefs loweringPosts exprSimProps
   valueEncodingProps valueEncodingProofs ptrDiscipline
+  exprSimHypsDefs[qualified]
 
 Theorem abi_encode_borrowed_footprint_frame:
-  expr_sim_inv ce cx env es /\
+  !mods.
+  expr_sim_inv_mods mods ce cx env es /\
   stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
   stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx ee t /\ ee.scopes = es.scopes /\
   local_ptrs_reserved ce st /\ wb_frame ce es ee st s t /\
@@ -48,7 +50,8 @@ Proof
 QED
 
 Theorem abi_encode_borrowed_operand_retained:
-  expr_sim_inv ce cx env es /\
+  !mods.
+  expr_sim_inv_mods mods ce cx env es /\
   stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
   stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx ee t /\ ee.scopes = es.scopes /\
   local_ptrs_reserved ce st /\ wb_frame ce es ee st s t /\

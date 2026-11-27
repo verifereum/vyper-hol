@@ -5,6 +5,7 @@ Ancestors
   bodyFullSubscriptCapturedEndpoint loweringPosts exprSimMemDefs exprSimProps
   bodyPtrDefs bodyPtrBopHashFootprint logValueFramePtr
   context exprLoweringProps compileEnv vyperState vyperValue words
+  exprSimHypsDefs[qualified]
 
 Theorem owned_stack_memory_post[local]:
   vv_post H ctx fn ce cx obj es sa sm s0 mid (Value av) (StackValue t op) s /\
@@ -49,7 +50,8 @@ Proof
 QED
 
 Theorem subscript_owned_array_index_view:
-  expr_body_pre ce cx env (Subscript ann obj idx) es /\
+  !mods.
+  expr_body_pre_mods mods ce cx env (Subscript ann obj idx) es /\
   eval_expr cx obj es = (INL (Value av),mid) /\
   expr_type obj = ArrayT et bd /\
   post_value_type ce obj = expr_type obj /\

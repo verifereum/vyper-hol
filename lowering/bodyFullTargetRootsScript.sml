@@ -174,7 +174,9 @@ Proof
 QED
 
 Theorem typed_immutable_target_root:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   immutable_root cx bt /\ IS_SOME (type_place_target env bt) ==>
   ?id root_ty. target_root bt = TopLevelNameTarget (NONE,id) /\
     FLOOKUP env.bare_globals (NONE,id) = SOME root_ty /\
@@ -221,7 +223,9 @@ Proof
 QED
 
 Theorem immutable_toplevel_target_sim_full:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   immutable_root cx (TopLevelNameTarget (NONE,id)) /\ ~cx_const_name cx (NONE,id) ==>
   imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx env (TopLevelNameTarget (NONE,id)) es
@@ -268,8 +272,9 @@ Proof
 QED
 
 Theorem immutable_target_place_type:
-  !bt tops ctx cenv cx env es vt.
-    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  !mods exps bt tops ctx cenv cx env es vt.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
     immutable_root cx bt /\ type_place_target env bt = SOME vt ==>
     ?ty. vt = Type ty /\ target_place_type cenv bt = SOME (ValPT ty)
 Proof

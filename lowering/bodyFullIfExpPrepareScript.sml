@@ -12,6 +12,7 @@ Ancestors
   exprSimMemDefs bodyPtrDefs loweringPosts exprLowering exprLoweringProps
   typedCopyDomain vyperTypeSystem vyperTypeInvariants compileEnv context vyperAST
   vyperInterpreter vyperState venomState
+  exprSimHypsDefs[qualified]
 
 val _ = Parse.hide "body";
 
@@ -997,7 +998,8 @@ Finalise ifexp_arm_outcome_full_conditional
 (* The ternary's root from the condition's value judgment and the arms'
    vv judgments.  Each arm is one of the three arm steps' kinds. *)
 Theorem ifexp_body_post_nonword[local]:
-  expr_body_pre ce cx env e es /\ ~is_word_type (expr_type e) ==>
+  !mods.
+  expr_body_pre_mods mods ce cx env e es /\ ~is_word_type (expr_type e) ==>
   ~is_word_type (post_value_type ce e)
 Proof
   strip_tac >> Cases_on `post_value_type ce e = expr_type e`
@@ -1042,7 +1044,8 @@ Proof
 QED
 
 Theorem ifexp_body_arm_kind:
-  expr_body_pre ce cx env e es ==>
+  !mods.
+  expr_body_pre_mods mods ce cx env e es ==>
   (is_word_type (post_value_type ce e) ==> is_word_type (expr_type e)) /\
   (post_value_type ce e = expr_type e /\
     (is_word_type (expr_type e) \/
@@ -1093,12 +1096,12 @@ Proof
 QED
 
 Theorem ifexp_body_pre_children:
-  !cenv cx env t c a b es.
-    expr_body_pre cenv cx env (IfExp t c a b) es ==>
+  !mods cenv cx env t c a b es.
+    expr_body_pre_mods mods cenv cx env (IfExp t c a b) es ==>
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
-    expr_body_pre cenv cx env c es /\
-    !es'. expr_sim_inv cenv cx env es' ==>
-          expr_body_pre cenv cx env a es' /\ expr_body_pre cenv cx env b es'
+    expr_body_pre_mods mods cenv cx env c es /\
+    !es'. expr_sim_inv_mods mods cenv cx env es' ==>
+          expr_body_pre_mods mods cenv cx env a es' /\ expr_body_pre_mods mods cenv cx env b es'
 Proof
   rpt gen_tac >>
   simp[exprSimHypsDefsTheory.expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,

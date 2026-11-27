@@ -3,6 +3,7 @@ Theory bodyFullSubscriptArrayMemoryFrame
 Ancestors
   exprSimSubscriptArrayFrame exprBopSimProps bodyPtrBopRepresentationFrame
   bodyPtrDefs loweringPosts vyperValue vyperState exprSimProps
+  exprSimHypsDefs[qualified]
 
 Theorem captured_array_window_taint[local]:
   vv_at cenv cx ty sa sb t r (LocatedValue ty p) u /\
@@ -23,6 +24,7 @@ Proof
 QED
 
 Theorem captured_memory_base_transport:
+  !mods.
   vv_post H ctx func cenv cx obj es sa sb s0 t r
     (LocatedValue (ArrayT et (Fixed n)) p) u /\
   expr_post H ctx func cenv cx idx t sb sc u t' iv iop v /\
@@ -39,7 +41,7 @@ Theorem captured_memory_base_transport:
   (!l. p.ptr_operand <> Label l) /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
   t'.scopes = t.scopes /\ t'.immutables = t.immutables /\
-  expr_sim_inv cenv cx env t /\ local_ptrs_reserved cenv sb /\
+  expr_sim_inv_mods mods cenv cx env t /\ local_ptrs_reserved cenv sb /\
   sb.cs_next_id <= sc.cs_next_id ==>
   vv_holds cenv cx (ArrayT et (Fixed n)) r
     (LocatedValue (ArrayT et (Fixed n)) p) t' v /\

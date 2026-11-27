@@ -8,7 +8,8 @@ Ancestors
   immutableDeployAssignFacts vyperTypeEnv vyperTypeInitialState finite_map alist
 
 Theorem immutable_target_write_entry:
-  expr_sim_inv ce cx env mid /\ target_indices_pre ce cx env bt /\
+  !mods.
+  expr_sim_inv_mods mods ce cx env mid /\ target_indices_pre ce cx env bt /\
   type_place_target env bt = SOME (Type ty) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt (mid with gas_obs := gs) =
@@ -17,7 +18,7 @@ Theorem immutable_target_write_entry:
     | SOME imms => get_source_immutables src imms) id = SOME (itv,old) /\
   mem_path_offset itv path = SOME (k,tv) /\
   evaluate_subscripts itv old path = INL selected ==>
-  expr_sim_inv ce cx env ee /\
+  expr_sim_inv_mods mods ce cx env ee /\
   ?fin. write_place cx (ImmutablePlace src id path) v ee = (INL (),fin)
 Proof
   strip_tac >>
@@ -46,10 +47,11 @@ Proof
 QED
 
 Theorem immutable_target_write_root:
+  !mods.
   immutable_root cx bt /\
   target_root bt = TopLevelNameTarget (NONE,id) /\
   eval_target_place cx bt es = (INL (ImmutablePlace NONE name path),ee) /\
-  expr_sim_inv ce cx env ee /\
+  expr_sim_inv_mods mods ce cx env ee /\
   FLOOKUP env.bare_globals (NONE,id) = SOME ity /\
   ~cx_const_name cx (NONE,id) /\
   FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY

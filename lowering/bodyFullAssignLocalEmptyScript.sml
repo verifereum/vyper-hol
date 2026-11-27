@@ -14,6 +14,7 @@ Ancestors
   unitTransformDefs valueEncodingProps venomExecSemantics venomInst venomState vyperLookup
   vyperState vyperStorageBackend vyperStorageFootprint vyperStorageTrace vyperTypeInvariants
   vyperTyping wordLoadStorePtr words
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs
   monadsyntax
 
@@ -261,24 +262,25 @@ QED
 Finalise body_assign_empty_scalar_suffix
 
 Theorem body_assign_local_memory_empty_full:
-  !cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
-       body_base_target_full_ok cx (NameTarget id)) /\
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
+       body_base_target_full_ok_mods mods exps cx (NameTarget id)) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (NameTarget id)) e) ==>
        occurs_abi_decode_target target tops) /\
     body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     FLOOKUP env.var_types id = SOME ty /\
     ~is_word_type ty /\

@@ -20,6 +20,7 @@ Ancestors
   gasOutcomeFullCompose gasExemptCert haltExitProj vyperStorageTrace
   exprSimSubscriptArraySource exprSimSubscriptArrayOrigin
   targetSubscriptMemory stmtSimForArrayFrame vyperLocalAccessFrame exprSimIfExp[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 (* The bytestring copy uses the padded live footprint, not the capacity of
    either type. The path and representation refer to the same raw run. *)
@@ -392,9 +393,11 @@ QED
 (* Apply the enabled Array iterator IH to the actual expression compilations.
    Keep the full vv post, including aggregate ownership and exceptional exits. *)
 Theorem for_array_expr_prefix_full:
-  body_iterator_full_ok cx (Array e) /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es /\
+  !mods exps.
+  body_iterator_full_ok_mods mods exps cx (Array e) /\
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx c cx /\
+     module_body_inv mods c.ce_module tops c cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_body_pre_mods mods c cx env e es /\
   compile_expr c (expr_type e) e sa = (vv,sb) /\
   compile_expr (gas_shadow_env T c) (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
@@ -483,7 +486,8 @@ QED
 (* The actual source list and the header observation share the expression
    endpoint. A fixed array contributes its dense, type-indexed element list. *)
 Theorem for_nonslot_array_length_observation:
-  expr_body_pre c cx env e es0 /\
+  !mods.
+  expr_body_pre_mods mods c cx env e es0 /\
   expr_type e = ArrayT ty bd /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et bd) /\
   eval_expr cx e es0 = (INL rv,ee) /\
@@ -1993,9 +1997,11 @@ QED
 
 (* Non-slot iterator evaluation and its actual conditional length slice. *)
 Theorem for_nonslot_array_prefix_full:
-  body_iterator_full_ok cx (Array e) /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es /\
+  !mods exps.
+  body_iterator_full_ok_mods mods exps cx (Array e) /\
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx c cx /\
+     module_body_inv mods c.ce_module tops c cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_body_pre_mods mods c cx env e es /\
   well_typed_iterator env elem (Array e) /\ supported_iterator tops elem (Array e) n /\
   (!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)) /\

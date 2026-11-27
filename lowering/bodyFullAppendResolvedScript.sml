@@ -14,6 +14,7 @@ Ancestors
   abiDecodeStaticProps entryDecodeStaticProps appendStorageStageTransportPtr bodyMemoryDefs
   dynCopyExec loweringShapeDefs ptrDiscipline stateFrame valueEncodingProofs
   valueEncodingTyping vyperLookup
+  bodyFullPredsMods[qualified]
 
 Theorem type_stmt_append_name[local]:
   type_stmt env ret_ty (Append (NameTarget id) e) =
@@ -116,11 +117,11 @@ Proof
 QED
 
 Theorem body_append_local_primitive_full:
-  !cx id e.
+  !mods exps cx id e.
     is_word_type (expr_type e) /\
     (!s0 p s1. eval_target_place cx (NameTarget id) s0 = (INL p,s1) ==>
-                  body_expr_full_ok cx e) ==>
-    body_stmt_full_ok cx (Append (NameTarget id) e)
+                  body_expr_full_ok_mods mods exps cx e) ==>
+    body_stmt_full_ok_mods mods exps cx (Append (NameTarget id) e)
 Proof
   rpt strip_tac >> rw[body_stmt_full_ok_def] >>
   rw[stmt_frag_full_def] >>
@@ -1070,11 +1071,11 @@ QED
 Finalise body_append_local_primitive_full
 
 Theorem body_append_local_word_full:
-  !cx id e.
+  !mods exps cx id e.
     supported_full_word_type (expr_type e) /\
     (!s0 p s1. eval_target_place cx (NameTarget id) s0 = (INL p,s1) ==>
-                  body_expr_full_ok cx e) ==>
-    body_stmt_full_ok cx (Append (NameTarget id) e)
+                  body_expr_full_ok_mods mods exps cx e) ==>
+    body_stmt_full_ok_mods mods exps cx (Append (NameTarget id) e)
 Proof
   rpt strip_tac >>
   `is_word_type (expr_type e)` by fs[supported_full_word_type_def, is_word_type_def] >>

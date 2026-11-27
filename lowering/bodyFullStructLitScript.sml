@@ -20,6 +20,7 @@ Ancestors
   vyperTyping vyperInterpreter vyperState vyperAST list
   vyperStorageTrace vyperStorageFootprint venomExecProps
   bodyInvCodeProps exprBodyPreProps exprSimFullBundleProps
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
@@ -380,7 +381,7 @@ Proof
 QED
 
 Theorem structlit_fields_cons_continuation[local]:
-  !inv'. inv' = (\H ee cs G tn s cells off.
+  !mods inv'. inv' = (\H ee cs G tn s cells off.
     stmt_state_rel H ctx func ce cx ee s /\
     storage_well_formed_on cx ee (FST H) /\
     ghost_inv_at (DF H) lo d ce cx ee G tn s /\
@@ -413,7 +414,7 @@ Theorem structlit_fields_cons_continuation[local]:
       (t,G1,tn1) [] (OK u,G2,tn2)) /\
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (eval_exprs cx (MAP SND fs)) (mid,u,G2,tn2)
-    (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
+    (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv_mods mods ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
       inv' H ee sb G tn z
         ((cells++[(ftv,v,addr+off,type_memory_size ftv)])++added)
@@ -427,7 +428,7 @@ Theorem structlit_fields_cons_continuation[local]:
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (bind (read_result cx tv) (\v. bind (eval_exprs cx (MAP SND fs))
       (\vs. return (v::vs)))) (mid,t,G1,tn1)
-    (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
+    (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv_mods mods ce cx env ee /\
       LIST_REL value_has_type (ftv::tvs) vs /\
       inv' H ee sb G tn z (cells++added) (off+type_memory_size_list (ftv::tvs)) /\
       (!m. mem_agree_outside tn.t_mem z.vs_memory m ==>
@@ -485,7 +486,7 @@ Proof
 QED
 
 Theorem structlit_fields_bundled_full:
-  !inv'. inv' = (\H ee cs G tn s cells off.
+  !mods exps inv'. inv' = (\H ee cs G tn s cells off.
     stmt_state_rel H ctx func ce cx ee s /\
     storage_well_formed_on cx ee (FST H) /\
     ghost_inv_at (DF H) lo d ce cx ee G tn s /\
@@ -514,9 +515,10 @@ Theorem structlit_fields_bundled_full:
       (MAP (I ## gas_shadow_expr) fs) (Var root) off shadow_si = (out,shadow_sb) /\
     expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (si,sb,shadow_si,shadow_sb) /\
     body_const_cells_agree [(NONE,cx_tops cx)] cx env es /\
-    body_inv (cx_tops cx) ctx ce cx /\
-    shadow_body_inv (cx_tops cx) ctx shadow_ctx /\
-    body_exprs_full_ok cx (MAP SND fs) /\
+    (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module (cx_tops cx) ce cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_exprs_full_ok_mods mods exps cx (MAP SND fs) /\
     (?Hbase. stmt_state_rel Hbase ctx func ce cx ees sf) /\
     LIST_REL (\t (name,e). ALOOKUP
       (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid)) name =
@@ -529,9 +531,9 @@ Theorem structlit_fields_bundled_full:
     (!x sz. ce.ce_return_buf = SOME(PtrVar(Var x) sz) ==> not_fresh_at si x) /\
     (!x sz. ce.ce_return_pc = SOME(PtrVar(Var x) sz) ==> not_fresh_at si x) /\
     return_buf_frame d ce si s0 /\
-    (!e st. MEM e (MAP SND fs) /\ expr_sim_inv ce cx env st ==>
-      expr_body_pre ce cx env e st) /\
-    (pure ==> ~EXISTS expr_has_effect (MAP SND fs)) /\ expr_sim_inv ce cx env es /\
+    (!e st. MEM e (MAP SND fs) /\ expr_sim_inv_mods mods ce cx env st ==>
+      expr_body_pre_mods mods ce cx env e st) /\
+    (pure ==> ~EXISTS expr_has_effect (MAP SND fs)) /\ expr_sim_inv_mods mods ce cx env es /\
     storage_trace_domain cx st0 es.storage_trace /\
     off + type_memory_size_list tvs <= capacity /\
     gas_admissible (eval_exprs cx (MAP SND fs))
@@ -540,7 +542,7 @@ Theorem structlit_fields_bundled_full:
       inv' H es si G0 tn0 s0 cells off) ==>
     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (cx_tops cx) cx st0 (eval_exprs cx (MAP SND fs)) (es,s0,G0,tn0)
-      (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
+      (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv_mods mods ce cx env ee /\
         LIST_REL value_has_type tvs vs /\
         inv' H ee sb G tn z (cells++added) (off+type_memory_size_list tvs) /\
         (!m. mem_agree_outside tn.t_mem z.vs_memory m ==>
@@ -1402,7 +1404,7 @@ Proof
 QED
 
 Theorem structlit_allocated_fields_bundled_full[local]:
-  !ctx func ce cx DF lo d es sa s0 G0 tn0 pure root w tvs inv'
+  !mods exps ctx func ce cx DF lo d es sa s0 G0 tn0 pure root w tvs inv'
     shadow_ctx shadow_func PG env st0 nsid fs tys sm sb shadow_sm shadow_sb
     out t G tn.
   inv' = (\H ee cs G tn s cells off.
@@ -1434,8 +1436,9 @@ Theorem structlit_allocated_fields_bundled_full[local]:
     (MAP (I ## gas_shadow_expr) fs) (Var root) 0 shadow_sm = (out,shadow_sb) /\
   expr_sim_full_code (ctx,shadow_ctx,func,shadow_func) (sm,sb,shadow_sm,shadow_sb) /\
   body_const_cells_agree [(NONE,cx_tops cx)] cx env es /\
-  body_inv (cx_tops cx) ctx ce cx /\
-  shadow_body_inv (cx_tops cx) ctx shadow_ctx /\ body_exprs_full_ok cx (MAP SND fs) /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module (cx_tops cx) ce cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\ body_exprs_full_ok_mods mods exps cx (MAP SND fs) /\
   (?Hbase. stmt_state_rel Hbase ctx func ce cx es s0) /\
   LIST_REL (\t (name,e). ALOOKUP
     (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid)) name =
@@ -1448,9 +1451,9 @@ Theorem structlit_allocated_fields_bundled_full[local]:
   (!x sz. ce.ce_return_buf = SOME(PtrVar(Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. ce.ce_return_pc = SOME(PtrVar(Var x) sz) ==> not_fresh_at sm x) /\
   return_buf_frame d ce sm t /\
-  (!e st. MEM e (MAP SND fs) /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st) /\
-  (pure ==> ~EXISTS expr_has_effect (MAP SND fs)) /\ expr_sim_inv ce cx env es /\
+  (!e st. MEM e (MAP SND fs) /\ expr_sim_inv_mods mods ce cx env st ==>
+    expr_body_pre_mods mods ce cx env e st) /\
+  (pure ==> ~EXISTS expr_has_effect (MAP SND fs)) /\ expr_sim_inv_mods mods ce cx env es /\
   storage_trace_domain cx st0 es.storage_trace /\
   gas_admissible (eval_exprs cx (MAP SND fs))
     (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es /\
@@ -1475,7 +1478,7 @@ Theorem structlit_allocated_fields_bundled_full[local]:
     w2n w+type_memory_size_list tvs <= p \/ p+k <= w2n w) ==>
   gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (cx_tops cx) cx st0 (eval_exprs cx (MAP SND fs)) (es,t,G,tn)
-    (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
+    (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv_mods mods ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
       inv' H ee sb G tn z ([]++added) (0+type_memory_size_list tvs) /\
       (!m. mem_agree_outside tn.t_mem z.vs_memory m ==>
@@ -1576,13 +1579,14 @@ Proof
 QED
 
 Theorem structlit_vv_sim_full[local]:
-  !cx v7 src_id_opt id kes DF lo d PG tops ctx shadow_ctx func shadow_func
+  !mods exps cx v7 src_id_opt id kes DF lo d PG tops ctx shadow_ctx func shadow_func
      cenv env ty es.
-    body_exprs_full_ok cx (MAP SND kes) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) es ==>
+    body_exprs_full_ok_mods mods exps cx (MAP SND kes) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (StructLit v7 (src_id_opt,id) kes) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
 Proof
@@ -1777,9 +1781,9 @@ Proof
 QED
 
 Theorem structlit_expr_full_ok:
-  !cx v7 src_id_opt id kes.
-    (!ks. ks = MAP FST kes ==> body_exprs_full_ok cx (MAP SND kes)) ==>
-    body_expr_full_ok cx (StructLit v7 (src_id_opt,id) kes)
+  !mods exps cx v7 src_id_opt id kes.
+    (!ks. ks = MAP FST kes ==> body_exprs_full_ok_mods mods exps cx (MAP SND kes)) ==>
+    body_expr_full_ok_mods mods exps cx (StructLit v7 (src_id_opt,id) kes)
 Proof
   rpt gen_tac >> strip_tac >>
   `body_exprs_full_ok cx (MAP SND kes)` by

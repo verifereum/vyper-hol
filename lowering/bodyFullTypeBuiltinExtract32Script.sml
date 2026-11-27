@@ -11,13 +11,15 @@ Ancestors
   gasShadowCompile gasShadowCompileStmtHelpers exprOperandVar exprLoweringProps stmtSimProps
   gasOutcomeFullCompose exprSimHyps exprSimSource exprSimExtract32Source
   vyperContext vyperInterpreter vyperState vyperAST
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs
   horizonTypeLib
 
 (* The typing contract excludes fixed-byte sources and signed offsets.
    Both simulation proofs use this boundary without narrowing the expression case. *)
 Theorem extract32_full_pre_shape:
-  expr_body_pre cenv cx env (TypeBuiltin ann Extract32 t args) es ==>
+  !mods.
+  expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Extract32 t args) es ==>
   ?src off m k bt.
     args = [src;off] /\
     expr_type src = BaseT (BytesT (Dynamic m)) /\
@@ -32,11 +34,13 @@ Proof
 QED
 
 Theorem extract32_vv_full[local]:
-  body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (TypeBuiltin ann Extract32 ret [src;off]) es /\
-  body_exprs_full_ok cx [src;off] ==>
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Extract32 ret [src;off]) es /\
+  body_exprs_full_ok_mods mods exps cx [src;off] ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TypeBuiltin ann Extract32 ret [src;off]) es
 Proof
@@ -529,12 +533,12 @@ QED
 Finalise extract32_vv_full
 
 Theorem extract32_expr_full_ok:
-  !cx v11 typ es.
+  !mods exps cx v11 typ es.
     (!s'' x t.
        type_check (type_builtin_args_length_ok Extract32 (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>
-       body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (TypeBuiltin v11 Extract32 typ es)
+       body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (TypeBuiltin v11 Extract32 typ es)
 Proof
   rpt gen_tac >> strip_tac >>
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>

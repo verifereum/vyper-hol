@@ -13,14 +13,16 @@ Ancestors option[qualified,ignore_grammar] vyperTypeValues[qualified,ignore_gram
   vyperStorageTrace vyperStorageFootprint
   bodyPtrDefs loweringPosts compileEnv vyperInterpreter vyperState vyperAST
   bodyFullIfExpReach
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem subscript_nocopy_bind_full:
-  !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
-    (!s raw t. eval_expr cx e1 s = (INL raw,t) ==> body_expr_full_ok cx e2) /\
-    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  !mods exps cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
+    (!s raw t. eval_expr cx e1 s = (INL raw,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
+    body_expr_full_ok_mods mods exps cx e1 /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
     ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et bd /\ place_type cenv e1 = ValPT (ArrayT et bd) /\
     post_value_type cenv e1 = expr_type e1 /\
     (!st0 sa sm st2 sb bvv iop dst loc s0 G0 tn0

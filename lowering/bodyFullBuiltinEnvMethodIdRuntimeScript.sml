@@ -10,12 +10,15 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   bodyFullHashKeccakFixed[qualified,ignore_grammar] bodyFullUnaryValueCompose
   contextRawReachable[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
   unitTransformDefs[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 Libs pairLib
 
 Theorem method_id_runtime_joint_outcome_from_suffix:
+  !mods exps.
   (!DF lo d explicit ctx func PG tops cenv cx env ann e es sa sm sb s0 st0 mid v x s G0 tn0 G tn fixed op.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann MethodId [e]) es /\
     ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)) /\
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
@@ -65,9 +68,10 @@ Theorem method_id_runtime_joint_outcome_from_suffix:
   ==>
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ann e es
     st0 sa sm sb shadow_sa ss shadow_sb x op fixed s0 G0 tn0.
-    body_inv tops ctx cenv cx /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
     body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann MethodId [e]) es /\
     method_id_literal e = NONE /\
     ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)) /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -226,9 +230,11 @@ QED
 Finalise method_id_runtime_joint_outcome_from_suffix
 
 Theorem method_id_runtime_sim_full_from_suffix:
+  !mods exps.
   (!DF lo d explicit ctx func PG tops cenv cx env ann e es sa sm sb s0 st0 mid v x s G0 tn0 G tn fixed op.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann MethodId [e]) es /\
     ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)) /\
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
@@ -267,11 +273,12 @@ Theorem method_id_runtime_sim_full_from_suffix:
         (~fixed ==> ptr_buf_ok cenv (Builtin ann MethodId [e]) op G' z) /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn')) ==>
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann e es.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
-    body_expr_full_ok cx e /\ method_id_literal e = NONE ==>
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann MethodId [e]) es /\
+    body_expr_full_ok_mods mods exps cx e /\ method_id_literal e = NONE ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann MethodId [e]) es /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

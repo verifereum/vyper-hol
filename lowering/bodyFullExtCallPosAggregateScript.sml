@@ -14,12 +14,14 @@ Ancestors
   vyperTypeExprSoundness vyperTypeInvariants exprSimConcatResult exprNamedConstResult
   exprSimSend[qualified,ignore_grammar] abiBuiltinDispatchCorrect
   list[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 (* A stack result keeps its compiler tag when staged. The only forms
    with a narrowed physical type return a pointer or use the call's
    declared result type. *)
 Theorem extcall_operand_snapshot_type:
-  expr_body_pre cenv cx env e es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) ==>
   vv_type (ext_call_arg_value (lowered_value_type cenv e) vv) =
     lowered_value_type cenv e
@@ -92,7 +94,8 @@ QED
    change how unwrap reaches its source bytes. Other locations keep their
    original tag. *)
 Theorem extcall_operand_materialize_retag:
-  expr_body_pre cenv cx env e es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) ==>
   (is_word_type (vv_type (ext_call_arg_value (lowered_value_type cenv e) vv)) <=>
    is_word_type (expr_type e)) /\
@@ -147,7 +150,8 @@ QED
    therefore retains the region/local value witness without retagging a
    memory path in the source store. *)
 Theorem snapshot_bytes_retag:
-  expr_body_pre ce cx env e es /\ post_value_type ce e = expr_type e /\
+  !mods.
+  expr_body_pre_mods mods ce cx env e es /\ post_value_type ce e = expr_type e /\
   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
   eval_expr cx e es = (INL raw,ee) /\ read_result cx raw ee = (INL v,ee) /\
   ((?tag op. vv = StackValue tag op) \/
@@ -209,10 +213,12 @@ Proof
 QED
 
 Theorem extcall_pos_aggregate_outcome:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env e es /\
+  !mods exps.
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sb) /\
   compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sb) /\
   compile_snapshot_vv cenv F

@@ -10,6 +10,7 @@ Ancestors
   exprSimRawCall exprSimHyps exprSimSource
   gasOutcomeFullCompose vyperStorageTrace bodyFullIntCallReturnHalt exprLoweringProps
   bodyFullHashKeccakFixed bodyFullWordArgs
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs
   monadsyntax
 
@@ -25,7 +26,8 @@ Proof
 QED
 
 Theorem raw_call_source_inv_facts:
-  expr_sim_inv cenv cx env es ==>
+  !mods.
+  expr_sim_inv_mods mods cenv cx env es ==>
   IS_SOME es.outcomes /\ outcomes_accounts_typed es.outcomes /\
   accounts_runtime_well_typed es.accounts
 Proof
@@ -188,6 +190,7 @@ end
 (* After evaluating its input, either lowering uses the same call and result
    continuation. The input range can come from ALLOCA or DALLOCA. *)
 Theorem raw_call_continuation_full:
+  !mods.
   expr_has_effect e /\ post_value_type cenv e = expr_type e /\
   lowered_value_type cenv e = expr_type e /\
   expr_type e = raw_call_return_type flags /\ type_alloc_ok cenv (expr_type e) /\
@@ -195,7 +198,7 @@ Theorem raw_call_continuation_full:
   (flags.rcf_is_delegate ==> amount = 0) /\
   (flags.rcf_is_static ==> amount = 0) /\
   amount < dimword (:256) /\ flags.rcf_max_outsize < dimword (:256) /\
-  expr_sim_inv cenv cx env esK /\ esK.gas_obs = [] /\
+  expr_sim_inv_mods mods cenv cx env esK /\ esK.gas_obs = [] /\
   storage_trace_domain cx st0 esK.storage_trace /\
   fn_has_code sa sb func /\ fn_has_code s6 sout func /\ fn_inst_ids_distinct func /\
   ci_mono sa s6 /\ ci_mono s6 s7 /\ ci_mono sout s7 /\ ci_mono sa s7 /\
@@ -1188,7 +1191,8 @@ QED
 
 (* Finish the checked source action from the prepared operand boundary. *)
 Theorem raw_call_prepared_action_full:
-  expr_body_pre cenv cx env
+  !mods.
+  expr_body_pre_mods mods cenv cx env
     (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE) es /\
   lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
   lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
@@ -1448,10 +1452,12 @@ QED
 Finalise raw_call_prepared_action_full
 
 Theorem raw_call_expr_vv_full:
-  body_exprs_full_ok cx args /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
+  !mods exps.
+  body_exprs_full_ok_mods mods exps cx args /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
   expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann (RawCallTarget flags) args dflt) es
 Proof

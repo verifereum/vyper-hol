@@ -4,9 +4,11 @@ Ancestors
   bodyFullAllocaFresh bodyFullPreds bodyMemoryDefs exprSimProps
   abiBuiltinAllocation emitHelperProps exprLoweringProps vyperStorageFootprint
   venomState venomMemDefs stateRelProj bodyFullHashKeccakFixed
+  exprSimHypsDefs[qualified]
 
 Theorem make_array_init_full:
-  expr_body_pre cenv cx env
+  !mods.
+  expr_body_pre_mods mods cenv cx env
     (Builtin ann (MakeArray elem_opt bnd) args) es /\
   cap = type_memory_bytes cenv ann /\ cap < dimword (:256) /\
   storage_trace_domain cx st0 es.storage_trace /\

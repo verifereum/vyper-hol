@@ -7,6 +7,7 @@ Ancestors vyperTypeInvariants[qualified,ignore_grammar] bodyPtrDefs[qualified,ig
   gasExemptCert vyperInterpreter vyperState vyperAST exprLoweringProps
   instIdxIndep fragGasOriginPtrLoop fragExec venomState venomExecSemantics
   bodyFullIfExpReach bodyFullHashKeccakFixed contextRawReachable bodyFullSubscriptMappingValue
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 (* The two selections share the base and key evaluation and execute the
    same hash suffix. The continuations differ only in the selected result. *)
@@ -426,11 +427,12 @@ val mapping_map_package_tac =
 
 
 Theorem subscript_map_map_full:
-  !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
-    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_map_pre cenv cx env (Subscript ann e1 e2) es /\
+  !mods exps cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_map_pre_mods mods cenv cx env (Subscript ann e1 e2) es /\
     expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e1 es ==>
     expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Subscript ann e1 e2) es
@@ -489,11 +491,12 @@ QED
 Finalise subscript_map_map_full
 
 Theorem subscript_map_full:
-  !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es kt vt.
-    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
+  !mods exps cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es kt vt.
+    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Subscript ann e1 e2) es /\
     place_type cenv e1 = MapPT kt vt /\
     expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty e1 es ==>

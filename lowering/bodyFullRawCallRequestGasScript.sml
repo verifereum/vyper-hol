@@ -20,8 +20,9 @@ Proof
 QED
 
 Theorem raw_call_request_gas_at_entry:
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
-  expr_sim_inv cenv cx env esD /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
+  expr_sim_inv_mods mods cenv cx env esD /\
   eval_exprs cx kws (esD with gas_obs := gsK) = (INL kvs,esK) /\
   typed_args_post H ctx func cenv cx esD s4 t4 esK kws xs kvs tk /\
   (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t7 = SOME w) /\

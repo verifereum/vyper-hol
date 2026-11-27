@@ -6,21 +6,23 @@ Ancestors
   bodyFullBuiltinSliceCode bodyFullBuiltinSliceOrdinary
   exprSimHyps exprSimSource exprSimSliceExtcodeTyped
   exprLowering vyperInterpreter vyperAST list
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem slice_builtin_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es.
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es.
     (builtin_args_length_ok (Slice n) (LENGTH args) ==>
        case code_slice_source (Slice n) args of
-         NONE => body_exprs_full_ok cx args
+         NONE => body_exprs_full_ok_mods mods exps cx args
        | SOME (code_ty,addr) =>
-           body_exprs_full_ok cx (TL args) /\
+           body_exprs_full_ok_mods mods exps cx (TL args) /\
            (!s tail_vs t.
               eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
-              body_exprs_full_ok cx [addr])) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a (Slice n) args) es ==>
+              body_exprs_full_ok_mods mods exps cx [addr])) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a (Slice n) args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a (Slice n) args) es /\
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

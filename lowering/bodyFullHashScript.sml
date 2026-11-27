@@ -8,6 +8,7 @@ Ancestors
   bodyPtrHashBuiltinsCases gasShadowCompile gasShadowState
   loweringPosts exprLowering exprLoweringProps compileEnv valueEncoding
   vyperTyping vyperTypeSystem vyperInterpreter vyperState vyperAST
+  bodyFullPredsMods[qualified]
 
 val _ = Parse.hide "body";
 
@@ -15,9 +16,9 @@ val _ = Parse.hide "body";
    judgment already includes its memory read. The hash suffix adds zero
    explicit source GAS observations, including SHA256's internal GAS. *)
 Theorem hash_vv_sim_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann bt e es.
+  !mods DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann bt e es.
     (bt = Keccak256 \/ bt = Sha256) /\
-    expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann bt [e]) es /\
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx (expr_type e) e es ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -27,10 +28,10 @@ Proof
 QED
 
 Theorem hash_expr_full_ok:
-  !cx ty bt es.
+  !mods exps cx ty bt es.
     (bt = Keccak256 \/ bt = Sha256) /\
-    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Builtin ty bt es)
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ty bt es)
 Proof
   rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
   ONCE_REWRITE_TAC [body_expr_full_ok_def] >>

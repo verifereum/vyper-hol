@@ -154,7 +154,8 @@ QED
 Finalise literal_buffer_full_vv
 
 Theorem literal_nonword_vv_full:
-  expr_body_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Literal ann l) es
 Proof
@@ -223,7 +224,8 @@ QED
 Finalise literal_nonword_vv_full
 
 Theorem literal_nonword_memory_compile[local]:
-  expr_body_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
   ?p sb. compile_expr cenv ty (Literal ann l) sa = (LocatedValue ann p,sb) /\
     p.ptr_location = LocMemory
 Proof
@@ -237,7 +239,8 @@ Proof
 QED
 
 Theorem literal_nonword_value_full:
-  expr_body_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Literal ann l) es
 Proof

@@ -11,8 +11,10 @@ Ancestors
   vyperStorageTrace exprSimHyps exprSimSource
   bodyFullBuiltinECArithStaging bodyFullBuiltinECArithPermitted
   bodyFullBuiltinECArithEmpty bodyFullOfVV exprSimWordArgs
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem ec_arith_vv_from_tail_full:
+  !mods exps.
   (!bt a e1 e2 cx tops ctx cenv env es ty sa vv sb shadow_sa shadow_sb
     x s1 y s2 shadow_s1 shadow_s2 res shadow_ctx func shadow_func DF lo
     d PG s0 st0 G0 tn0 marks1 v1 es1 t1 G1 tn1 marks2 v2 es2 t2 G2 tn2.
@@ -20,9 +22,10 @@ Theorem ec_arith_vv_from_tail_full:
     a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
     expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
     expr_type e2 = (if bt = ECAdd then a else BaseT (UintT 256)) /\
-    body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
+    body_exprs_full_ok_mods mods exps cx [e1;e2] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a bt [e1;e2]) es /\
     compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
     compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a bt [e1;e2])) shadow_sa =
       (vv,shadow_sb) /\
@@ -119,11 +122,12 @@ Theorem ec_arith_vv_from_tail_full:
         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))) ==>
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (bt = ECAdd \/ bt = ECMul) /\
-    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt args) es ==>
+    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a bt args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es
 Proof
@@ -425,13 +429,14 @@ QED
 Finalise ec_arith_vv_from_tail_full
 
 Theorem ec_arith_builtin_vv_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (bt = ECAdd \/ bt = ECMul) /\
-    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt args) es ==>
+    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a bt args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es
 Proof
@@ -530,13 +535,14 @@ Proof
 QED
 
 Theorem ec_arith_builtin_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (bt = ECAdd \/ bt = ECMul) /\
-    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt args) es ==>
+    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

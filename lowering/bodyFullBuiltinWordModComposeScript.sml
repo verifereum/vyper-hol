@@ -8,10 +8,12 @@ Ancestors
   compileEnv exprLoweringProps vyperTyping vyperTypeSystem list finite_map
   gasShadowCompileStmtHelpers gasShadowState builtinMath fragExec wordArgsPtr
   bodyFullIfExpReach bodyFullSimProjection
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
 Theorem modular_sim_full_from_suffix:
+  !mods exps.
   (!DF lo explicit ctx func PG d cenv cx st0 ee sm sb bt x y z op t G1 tn1 ann ts (va:bytes32) (vb:bytes32) (vc:bytes32).
     (bt = AddMod \/ bt = MulMod) /\
     (if bt = AddMod then compile_addmod else compile_mulmod) x y z sm = (op,sb) /\
@@ -76,11 +78,12 @@ Theorem modular_sim_full_from_suffix:
       (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
       expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es) /\
     (bt = AddMod \/ bt = MulMod) /\
-    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt args) es ==>
+    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a bt args) es /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

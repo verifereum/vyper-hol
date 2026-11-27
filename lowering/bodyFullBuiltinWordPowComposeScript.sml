@@ -8,10 +8,12 @@ Ancestors
   fragGasSeqPtr bodyFullGhostFrame bodyFullBuiltinWordPowPost wordArgsPtr
   gasExemptCert vyperStorageTrace exprSimWordArgs exprLoweringProps
   exprSimHypsDefs exprLowering vyperAST vyperTypeSystem list finite_map words
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
 Theorem pow_mod256_sim_full_from_suffix:
+  !mods exps.
   (!DF lo explicit ctx func PG d cenv cx st0 ee sm sb x y op t G1 tn1 ann ts (va:bytes32) (vb:bytes32).
     compile_pow_mod256 x y sm = (op,sb) /\
     eval_operand x t = SOME va /\ eval_operand y t = SOME vb /\
@@ -64,11 +66,12 @@ Theorem pow_mod256_sim_full_from_suffix:
        (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
        expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
          cenv cx ty e es) /\
-    (builtin_args_length_ok PowMod256 (LENGTH args) ==> body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a PowMod256 args) es ==>
+    (builtin_args_length_ok PowMod256 (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a PowMod256 args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a PowMod256 args) es /\
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

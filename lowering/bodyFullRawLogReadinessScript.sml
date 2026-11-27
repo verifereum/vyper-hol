@@ -4,14 +4,16 @@ Theory bodyFullRawLogReadiness
 Ancestors
   bodyFullPreds bodyRawLogArgPre exprSimSource exprSimHypsDefs vyperInterpreter vyperContext vyperValue
   vyperState vyperAST list
+  bodyFullPredsMods[qualified]
 
 Theorem raw_log_full_children_ready:
-  body_exprs_full_ok cx
+  !mods exps.
+  body_exprs_full_ok_mods mods exps cx
     [Builtin ann (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
      data] /\ LENGTH topics <= n ==>
-  body_exprs_full_ok cx topics /\
+  body_exprs_full_ok_mods mods exps cx topics /\
   (!es vs es'. eval_exprs cx topics es = (INL vs, es') ==>
-    body_expr_full_ok cx data)
+    body_expr_full_ok_mods mods exps cx data)
 Proof
   strip_tac >>
   `body_expr_full_ok cx
@@ -39,16 +41,17 @@ Proof
 QED
 
 Theorem raw_log_full_data_reached_ready:
-  expr_body_pre cenv cx env
+  !mods exps.
+  expr_body_pre_mods mods cenv cx env
     (Call ann RawLog
       [Builtin a (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
        data] dflt) es /\
-  body_exprs_full_ok cx
+  body_exprs_full_ok_mods mods exps cx
     [Builtin a (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics;
      data] /\ LENGTH topics <= n /\
   eval_exprs cx topics es = (INL vs, es') ==>
-  expr_sim_inv cenv cx env es' /\
-  expr_body_pre cenv cx env data es' /\ body_expr_full_ok cx data
+  expr_sim_inv_mods mods cenv cx env es' /\
+  expr_body_pre_mods mods cenv cx env data es' /\ body_expr_full_ok_mods mods exps cx data
 Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>

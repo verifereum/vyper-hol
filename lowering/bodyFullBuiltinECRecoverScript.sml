@@ -21,17 +21,19 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState vyperContext
   vyperCallOutcome vyperCallOutcomeProps
   vyperAST vyperTyping vyperValue vyperTypeSystem valueEncodingProps list finite_map
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs
   monadsyntax
 
 Theorem ecrecover_expr_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
     (builtin_args_length_ok ECRecover (LENGTH args) ==>
-      body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a ECRecover args) es ==>
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a ECRecover args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a ECRecover args) es
 Proof
@@ -1338,13 +1340,14 @@ Proof
 QED
 
 Theorem ecrecover_builtin_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
     (builtin_args_length_ok ECRecover (LENGTH args) ==>
-      body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a ECRecover args) es ==>
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a ECRecover args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a ECRecover args) es /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

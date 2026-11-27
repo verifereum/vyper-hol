@@ -66,19 +66,21 @@ Proof
 QED
 
 Theorem body_assign_toplevel_word_full_setup:
-  body_inv tops ctx cenv cx /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
     (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
     occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
   type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) = SOME env' /\
   stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
   call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) /\
   supported_scalar_target tops nsid /\
   (?dty. type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) /\
          is_word_type dty) ==>
-  expr_body_pre cenv cx env e es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   ?id tr slot tvt.
     nsid = (NONE,id) /\ get_module_code cx NONE = SOME tops /\
     find_var_decl_by_name id tops = SOME (StorageVarDecl tr (expr_type e),id) /\

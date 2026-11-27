@@ -9,6 +9,7 @@ Ancestors
   vyperEvalExprPreservesScopesDom fragGasOriginPtr fragGasOrigin
   fragGasPath fragGasMode fragExec gasExemptCert gasSummaryCompose
   vyperInterpreter vyperState venomState list finite_map pred_set
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem ci_mono_lower_word_args:
   !todo sa sb ops. lower_word_args cenv tyf todo sa = (ops,sb) ==> ci_mono sa sb
@@ -34,15 +35,16 @@ QED
 
 (* Readiness is supplied by the containing expression at each source state. *)
 Theorem lower_word_args_by_type_sim_full:
-  !todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx tyf
+  !mods exps todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx tyf
     es st0 sa sm shadow_sa shadow_sm xs s0 G0 tn0.
     (!e. tyf (gas_shadow_expr e) = tyf e) /\
-    (!e ee. MEM e todo /\ expr_sim_inv cenv cx env ee ==>
-      expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)) /\
-    body_exprs_full_ok cx todo /\
-    body_inv tops ctx cenv cx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
+    (!e ee. MEM e todo /\ expr_sim_inv_mods mods cenv cx env ee ==>
+      expr_body_pre_mods mods cenv cx env e ee /\ is_word_type (expr_type e)) /\
+    body_exprs_full_ok_mods mods exps cx todo /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    body_const_cells_agree mods cx env es /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env es /\
     lower_word_args cenv tyf todo sa = (xs,sm) /\
     lower_word_args (gas_shadow_env T cenv) tyf (MAP gas_shadow_expr todo) shadow_sa =
       (xs,shadow_sm) /\
@@ -360,14 +362,15 @@ Proof
 QED
 
 Theorem lower_word_args_sim_full:
-  !todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty
+  !mods exps todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty
     es st0 sa sm shadow_sa shadow_sm xs s0 G0 tn0.
-    (!e ee. MEM e todo /\ expr_sim_inv cenv cx env ee ==>
-      expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)) /\
-    body_exprs_full_ok cx todo /\
-    body_inv tops ctx cenv cx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
+    (!e ee. MEM e todo /\ expr_sim_inv_mods mods cenv cx env ee ==>
+      expr_body_pre_mods mods cenv cx env e ee /\ is_word_type (expr_type e)) /\
+    body_exprs_full_ok_mods mods exps cx todo /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    body_const_cells_agree mods cx env es /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env es /\
     lower_word_args cenv (\e. ty) todo sa = (xs,sm) /\
     lower_word_args (gas_shadow_env T cenv) (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
       (xs,shadow_sm) /\

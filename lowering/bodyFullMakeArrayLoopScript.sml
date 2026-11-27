@@ -6,13 +6,15 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   valueEncoding gasShadowCompileHelpers gasShadowState gasShadow
   gasShadowCompileStmtHelpers gasShadowCompileContext gasShadowCompileConvert
   forPtrAllocationFrame stateRelProj bodyFullIfExpReach
+  bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 val _ = Parse.hide "base";
 
 Theorem make_array_loop_full:
-  !args tys dtvs off ps sa sb shadow_sa shadow_sb es s G tn.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env ebase /\
+  !mods exps args tys dtvs off ps sa sb shadow_sa shadow_sb es s G tn.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env ebase /\
     csbase.cs_next_id <= aid /\ csbase.cs_next_id <= sa.cs_next_id /\
     csbase.cs_next_var <= sa.cs_next_var /\
     local_ptrs_reserved cenv csbase /\ local_ptrs_reserved cenv sa /\
@@ -27,11 +29,11 @@ Theorem make_array_loop_full:
            not_fresh_at csbase x) /\
     (!H. valid_horizon cx st0 H ebase.storage_trace ==>
          stmt_state_rel H ctx func cenv cx ebase sbase) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    body_exprs_full_ok cx args /\
-    (!e ee. MEM e args /\ expr_sim_inv cenv cx env ee ==>
-            expr_body_pre cenv cx env e ee) /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    body_exprs_full_ok_mods mods exps cx args /\
+    (!e ee. MEM e args /\ expr_sim_inv_mods mods cenv cx env ee ==>
+            expr_body_pre_mods mods cenv cx env e ee) /\
+    expr_sim_inv_mods mods cenv cx env es /\
     LIST_REL (\ty e. arg_type_fits (expr_type e) ty) tys args /\
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME dtvs /\
     LIST_REL (\ty tv. type_memory_bytes cenv ty = type_memory_size tv) tys dtvs /\
@@ -73,7 +75,7 @@ Theorem make_array_loop_full:
       (cx_tops cx) cx st0 (eval_exprs cx args) (es,s,G,tn)
       (\H res ee Gf tnf t.
         ?vs. res = INL vs /\ LIST_REL value_has_type dtvs vs /\
-          LIST_REL val_wf dtvs vs /\ expr_sim_inv cenv cx env ee /\
+          LIST_REL val_wf dtvs vs /\ expr_sim_inv_mods mods cenv cx env ee /\
           ((\cs ee s G tn.
     (?events. ee.storage_trace = ebase.storage_trace ++ events) /\
     FLOOKUP s.vs_allocas aid = SOME (base,cap) /\

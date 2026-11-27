@@ -17,11 +17,12 @@ Ancestors
   bodyFullForArrayBranch bodyFullForIteratorRoot bodyFullForIteratorHeld
   bodyStorageMetadata vyperSubscriptOverlap vyperValue vyperTyping
   vyperTypeContract[qualified,ignore_grammar]
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
 Theorem compile_for_frag_full:
-  !cx id typ it n body DF lo d PG tops bindings ctx shadow_ctx func
+  !mods exps cx id typ it n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
        tenv = get_tenv cx /\
@@ -29,24 +30,25 @@ Theorem compile_for_frag_full:
        (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
        check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
        (INL x,t'') ==>
-       body_for_full_ok cx tyv id body vs) /\
+       body_for_full_ok_mods mods exps cx tyv id body vs) /\
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_iterator_full_ok cx it) /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ it n body) /\
+       body_iterator_full_ok_mods mods exps cx it) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ supported_stmt tops bindings (For id typ it n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ it n body) ==>
        occurs_abi_decode_target target tops) /\
     stmt_loop_calls_ok [(NONE,tops)] (For id typ it n body) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ it n body) = SOME env' /\
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv

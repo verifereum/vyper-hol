@@ -10,6 +10,7 @@ Ancestors loweringStateRelDefs[qualified,ignore_grammar]
   loweringPosts exprSimMemDefs exprSimProps exprLowering compileEnv
   context venomState vyperState vyperABI valueEncoding words
   finite_map pred_set arithmetic
+  exprSimHypsDefs[qualified]
 
 Theorem decoded_local_byte_exterior[local]:
   alloca_inv s /\ fn_inst_ids_distinct func /\ local_ptrs_rel func ce scopes s /\
@@ -213,7 +214,8 @@ QED
 
 (* Package the witness returned by the decoder before any control-flow join. *)
 Theorem extcall_return_decoded_post:
-  expr_body_pre cenv cx env (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts) args dflt)
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts) args dflt)
     es /\
   ret_type <> NoneT /\
   evaluate_type (get_tenv cx) ret_type = SOME actual_tv /\

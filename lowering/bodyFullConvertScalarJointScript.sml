@@ -8,13 +8,16 @@ Ancestors
   exprSimConvert exprSimHyps exprSimSource gasShadowCompile gasShadowState
   exprLowering exprLoweringProps compileEnv vyperContext vyperInterpreter
   vyperState vyperAST
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem convert_scalar_vv_sim_full:
-  body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
-  body_expr_full_ok cx e /\ ~is_bytestring_type (expr_type e) /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
+  body_expr_full_ok_mods mods exps cx e /\ ~is_bytestring_type (expr_type e) /\
   ~is_bytestring_type dst ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TypeBuiltin ann Convert dst [e]) es

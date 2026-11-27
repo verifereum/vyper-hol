@@ -22,12 +22,13 @@ Ancestors
   bodyFullUnwrapRun bodyFullGhostFrame
   loweringStateRelDefs bodyFullMemoryFrames
   stmtAppendStorageRunPtr payloadLoadStorePtr appendStorageGhostPtr
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
 Theorem pop_full_target_pre:
-  !cenv cx env ann bt es.
-    expr_body_pre cenv cx env (Pop ann bt) es ==>
+  !mods cenv cx env ann bt es.
+    expr_body_pre_mods mods cenv cx env (Pop ann bt) es ==>
     target_pre cenv cx env bt es
 Proof
   rpt strip_tac >> irule target_pre_of_pop >>
@@ -1329,9 +1330,10 @@ Proof
 QED
 
 Theorem pop_vv_full_of_target[local]:
-  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bt es.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (Pop ann bt) es /\
+  !mods exps DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bt es.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx env (Pop ann bt) es /\
     target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx env bt es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -2880,7 +2882,7 @@ Finalise pop_vv_full_of_target[local]
 (* The target producer selects one endpoint with its place and pointer.
    The pop suffix reads and updates the dynamic length at that pointer. *)
 Theorem pop_expr_full_ok:
-  !cx v10 bt. body_base_target_full_ok cx bt ==> body_expr_full_ok cx (Pop v10 bt)
+  !mods exps cx v10 bt. body_base_target_full_ok_mods mods exps cx bt ==> body_expr_full_ok_mods mods exps cx (Pop v10 bt)
 Proof
   rpt gen_tac >> strip_tac >>
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>

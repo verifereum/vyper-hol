@@ -4,13 +4,15 @@ Ancestors
   bodyFullShadowBodyInv
   bodyFullMakeArrayLoop exprSimAggregateEncoding rich_list list gasOutcomeFull
   exprSimDefs[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 val _ = Parse.hide "base";
 
 Theorem make_array_elements_full:
-  !args et tv header off ps sa sb shadow_sa shadow_sb es s G tn.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env ebase /\
+  !mods exps args et tv header off ps sa sb shadow_sa shadow_sb es s G tn.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env ebase /\
     csbase.cs_next_id <= aid /\ csbase.cs_next_id <= sa.cs_next_id /\
     csbase.cs_next_var <= sa.cs_next_var /\
     local_ptrs_reserved cenv csbase /\ local_ptrs_reserved cenv sa /\
@@ -25,11 +27,11 @@ Theorem make_array_elements_full:
            not_fresh_at csbase x) /\
     (!H. valid_horizon cx st0 H ebase.storage_trace ==>
          stmt_state_rel H ctx func cenv cx ebase sbase) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    body_exprs_full_ok cx args /\
-    (!e ee. MEM e args /\ expr_sim_inv cenv cx env ee ==>
-            expr_body_pre cenv cx env e ee) /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    body_exprs_full_ok_mods mods exps cx args /\
+    (!e ee. MEM e args /\ expr_sim_inv_mods mods cenv cx env ee ==>
+            expr_body_pre_mods mods cenv cx env e ee) /\
+    expr_sim_inv_mods mods cenv cx env es /\
     EVERY (\e. arg_type_fits (expr_type e) et) args /\
     evaluate_type (get_tenv cx) et = SOME tv /\
     type_memory_bytes cenv et = type_memory_size tv /\
@@ -75,7 +77,7 @@ Theorem make_array_elements_full:
         ?vs. res = INL vs /\ LENGTH vs = LENGTH args /\
           LIST_REL value_has_type (REPLICATE (LENGTH args) tv) vs /\
           LIST_REL val_wf (REPLICATE (LENGTH args) tv) vs /\
-          expr_sim_inv cenv cx env ee /\
+          expr_sim_inv_mods mods cenv cx env ee /\
           ((\cs ee s G tn.
             (?events. ee.storage_trace = ebase.storage_trace ++ events) /\
             FLOOKUP s.vs_allocas aid = SOME (base,cap) /\

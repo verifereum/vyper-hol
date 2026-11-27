@@ -7,9 +7,10 @@ Ancestors
   forCapturedStorageContinue[qualified,ignore_grammar]
   forImmutableBodyProjection[qualified,ignore_grammar]
   vyperTypeConstantFold[qualified,ignore_grammar]
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem compile_for_storage_subplace_array_frag_full:
-  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
+  !mods exps cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
                supported_storage_value tops nid (ArrayT typ bd)) /\
@@ -19,25 +20,26 @@ Theorem compile_for_storage_subplace_array_frag_full:
        (INL tyv,t) /\ eval_iterator cx (Array e) s'3' = (INL vs,t') /\
        check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
        (INL x,t'') ==>
-       body_for_full_ok cx tyv id body vs) /\
+       body_for_full_ok_mods mods exps cx tyv id body vs) /\
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_iterator_full_ok cx (Array e)) /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
+       body_iterator_full_ok_mods mods exps cx (Array e)) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
        occurs_abi_decode_target target tops) /\
     stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n body) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
     ~supported_expr_exists (const_name_root cx) e /\
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~(?ty nid. e = TopLevelName ty nid) /\
     (?tgt nid. loop_iterator_place e = SOME tgt /\
@@ -146,7 +148,7 @@ Theorem selected_array_code_frame:
   lookup_immutable cx em src name = SOME (rt,old) /\
   evaluate_subscripts rt old (MAP AttrSubscript attrs) = INL (ArrayV pav) /\
   evaluate_subscripts rt old path = INL (ArrayV av) /\
-  expr_sim_inv c cx env em /\ ~cx_const_name cx (src,name) /\
+  expr_sim_inv_mods [(NONE,tops)] c cx env em /\ ~cx_const_name cx (src,name) /\
   runtime_place_typed cx em (ImmutablePlace src name path) (ArrayTV tyv bd) /\
   evaluate_type (get_tenv cx) (ArrayT typ bd) = SOME (ArrayTV tyv bd) /\
   post_value_type c e = ArrayT typ bd ==>
@@ -189,7 +191,7 @@ Proof
 QED
 
 Theorem compile_for_immutable_subplace_array_frag_full:
-  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
+  !mods exps cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
     ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
                supported_storage_value tops nid (ArrayT typ bd)) /\
@@ -199,25 +201,26 @@ Theorem compile_for_immutable_subplace_array_frag_full:
        (INL tyv,t) /\ eval_iterator cx (Array e) s'3' = (INL vs,t') /\
        check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
        (INL x,t'') ==>
-       body_for_full_ok cx tyv id body vs) /\
+       body_for_full_ok_mods mods exps cx tyv id body vs) /\
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_iterator_full_ok cx (Array e)) /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
+       body_iterator_full_ok_mods mods exps cx (Array e)) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
        occurs_abi_decode_target target tops) /\
     stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n body) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
     ~supported_expr_exists (const_name_root cx) e /\
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~(?ty nid. e = TopLevelName ty nid) /\
     (?tgt nid. loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid /\

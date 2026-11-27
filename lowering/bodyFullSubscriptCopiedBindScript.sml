@@ -16,6 +16,7 @@ Ancestors
   bodyFullIfExpReach
   contextRawReachable[qualified,ignore_grammar]
   unitTransformDefs[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem compile_expr_copied_array_subscript[local]:
   compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
@@ -175,13 +176,14 @@ QED
    the pre-index read, and the array selection uses its saved Value.
    The frames flag lets the selector request the caller's composed frames. *)
 Theorem subscript_copied_bind_caller_frames:
-  !frames cx ann obj idx DF lo d PG tops ctx shadow_ctx func shadow_func ce env ty es et bd.
+  !mods exps frames cx ann obj idx DF lo d PG tops ctx shadow_ctx func shadow_func ce env ty es et bd.
     (!s raw mid saved. eval_expr cx obj s = (INL raw,mid) /\
-       read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok cx idx) /\
-    body_expr_full_ok cx obj /\ body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
+       read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok_mods mods exps cx idx) /\
+    body_expr_full_ok_mods mods exps cx obj /\ (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
     subscript_reads_base cx obj idx /\ copies_subscript_base ce obj idx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre ce cx env (Subscript ann obj idx) es /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods ce cx env (Subscript ann obj idx) es /\
     expr_type obj = ArrayT et bd /\ place_type ce obj = ValPT (ArrayT et bd) /\
     post_value_type ce obj = expr_type obj /\
     (!st0 sa sm sc bvv cvv shm s0 G0 tn0 gs raw mid saved s G1 tn1.
@@ -590,13 +592,14 @@ QED
 Finalise subscript_copied_bind_caller_frames
 
 Theorem subscript_copied_bind_full:
-  !cx ann obj idx DF lo d PG tops ctx shadow_ctx func shadow_func ce env ty es et bd.
+  !mods exps cx ann obj idx DF lo d PG tops ctx shadow_ctx func shadow_func ce env ty es et bd.
     (!s raw mid saved. eval_expr cx obj s = (INL raw,mid) /\
-       read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok cx idx) /\
-    body_expr_full_ok cx obj /\ body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
+       read_result cx raw mid = (INL saved,mid) ==> body_expr_full_ok_mods mods exps cx idx) /\
+    body_expr_full_ok_mods mods exps cx obj /\ (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
     subscript_reads_base cx obj idx /\ copies_subscript_base ce obj idx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre ce cx env (Subscript ann obj idx) es /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods ce cx env (Subscript ann obj idx) es /\
     expr_type obj = ArrayT et bd /\ place_type ce obj = ValPT (ArrayT et bd) /\
     post_value_type ce obj = expr_type obj /\
     (!st0 sa sm sc bvv cvv shm s0 G0 tn0 gs raw mid saved s G1 tn1.

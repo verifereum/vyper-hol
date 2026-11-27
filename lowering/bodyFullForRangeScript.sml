@@ -36,21 +36,22 @@ Ancestors exprSimWordArgs[qualified,ignore_grammar] vyperLookup[qualified,ignore
   bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar]
   stmtSimDeclCompose[qualified,ignore_grammar] bodyFullForRounds
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] exprSimHypsDefs[qualified]
 Libs rangeForDriverLib rangeRoundEntryLib[qualified]
 
 val _ = Parse.hide "body";
 
 (* Declaration transports the three static body inputs at the pushed scope. *)
 Theorem range_declared_scope_inputs:
-  !cenv cx env es id typ e1 e2 n body ret_ty env' tyv v st bc st1.
+  !mods cenv cx env es id typ e1 e2 n body ret_ty env' tyv v st bc st1.
     type_stmt env ret_ty (For id typ (Range e1 e2) n body) = SOME env' /\
     stmt_exprs_ok cenv (For id typ (Range e1 e2) n body) /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
     cenv.ce_alloca_locals /\
     evaluate_type (get_tenv cx) typ = SOME tyv /\ value_has_type tyv v /\
     declare_local cenv id typ st = (bc,st1) ==>
-    expr_sim_inv bc cx (extend_local env id typ F)
+    expr_sim_inv_mods mods bc cx (extend_local env id typ F)
       (es with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v;
                           popped := []|>)) :: es.scopes) /\
@@ -83,13 +84,13 @@ Theorem range_body_static_transport_mods:
     module_body_inv mods src tops cenv cx /\
     stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) body /\
     IS_SOME (type_stmts (extend_local env id typ F) ret_ty body) /\
-    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cx RetQ cenv ret_ty ==>
     same_frame cenv bc /\
     contract_inv mods exps ctx bc cx /\
     module_body_inv mods src tops bc cx /\
     stmts_exprs_ok bc body /\
-    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cx RetQ bc ret_ty /\
     ?body_env'. type_stmts (extend_local env id typ F) ret_ty body = SOME body_env'
 Proof
@@ -108,19 +109,21 @@ Proof
 QED
 
 Theorem range_body_static_transport:
-  !tops ctx cenv cx bc id typ st st1 body env ret_ty
+  !mods exps tops ctx cenv cx bc id typ st st1 body env ret_ty
     DF lo d shadow_ctx PG func shadow_func RetQ.
     declare_local cenv id typ st = (bc,st1) /\
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
-    body_inv tops ctx cenv cx /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
     stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) body /\
     IS_SOME (type_stmts (extend_local env id typ F) ret_ty body) /\
-    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cx RetQ cenv ret_ty ==>
     same_frame cenv bc /\
-    body_inv tops ctx bc cx /\
+    (contract_inv mods exps ctx bc cx /\
+     module_body_inv mods bc.ce_module tops bc cx) /\
     stmts_exprs_ok bc body /\
-    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cx RetQ bc ret_ty /\
     ?body_env'. type_stmts (extend_local env id typ F) ret_ty body = SOME body_env'
 Proof
@@ -132,10 +135,10 @@ Proof
 QED
 
 Theorem range_full_body_ih:
-  !cx tyv id body n1 N.
-    body_for_full_ok cx tyv id body
+  !mods exps cx tyv id body n1 N.
+    body_for_full_ok_mods mods exps cx tyv id body
       (GENLIST (\j. Value (IntV (n1 + &j))) N) /\ 0 < N ==>
-    body_stmts_full_ok cx body
+    body_stmts_full_ok_mods mods exps cx body
 Proof
   rpt gen_tac >> Cases_on `N` >> simp[GENLIST_CONS, body_for_full_ok_def,
     read_result_def, return_def]
@@ -217,7 +220,7 @@ QED
 (* The original iterator supplies the body IH; the current cons call supplies
    admissibility at this iteration's actual source scope. *)
 Theorem range_cons_source_pre:
-  !cx id typ e1 e2 bound body tops bindings cenv env env' ret_ty
+  !mods exps cx id typ e1 e2 bound body tops bindings cenv env env' ret_ty
     tyv n1 N k a rs es lctx exit_lbl incr_lbl.
     supported_stmt tops bindings (For id typ (Range e1 e2) bound body) /\
     type_stmt env ret_ty (For id typ (Range e1 e2) bound body) = SOME env' /\
@@ -227,7 +230,7 @@ Theorem range_cons_source_pre:
        occurs_abi_decode_target target tops) /\
     call_evaluation_safe cx
       (int_calls_stmt (For id typ (Range e1 e2) bound body)) /\
-    body_for_full_ok cx tyv id body
+    body_for_full_ok_mods mods exps cx tyv id body
       (GENLIST (\j. Value (IntV (n1 + &j))) N) /\
     k + LENGTH (a::rs) = N /\
     a::rs = GENLIST (\j. Value (IntV (n1 + &(k+j)))) (LENGTH (a::rs)) /\
@@ -235,7 +238,7 @@ Theorem range_cons_source_pre:
     gas_admissible (eval_for cx tyv id body (a::rs)) (stmt_res_ok lctx) es
     ==>
     a = Value (IntV (n1 + &k)) /\ k < N /\
-    body_stmts_full_ok cx body /\
+    body_stmts_full_ok_mods mods exps cx body /\
     (?body_env'. type_stmts (extend_local env id typ F) ret_ty body =
                   SOME body_env') /\
     id NOTIN FDOM env.var_types /\
@@ -1964,6 +1967,7 @@ QED
 
 (* ===== Empty suffix: the concrete test and complete outer post ===== *)
 Theorem range_full_nil:
+  !mods.
   stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) bound body) sa = (cenv',sb) /\
   n1 <= n2 /\ N = Num (n2 - n1) /\
   sb.cs_current_bb = exit_lbl /\ sb.cs_current_insts = [] /\
@@ -1978,8 +1982,8 @@ Theorem range_full_nil:
   Inv = (\H rs ee G tn s. ?k.
     k + LENGTH rs = N /\
     rs = GENLIST (\j. Value (IntV (n1 + &(k+j)))) (LENGTH rs) /\
-    body_const_cells_agree [(NONE,tops)] cx env ee /\
-    expr_sim_inv cenv cx env ee /\ lookup_scopes id ee.scopes = NONE /\
+    body_const_cells_agree mods cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\ lookup_scopes id ee.scopes = NONE /\
     s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
     stmt_state_rel H ctx func cenv cx ee s /\
     storage_well_formed_on cx ee (FST H) /\ ret_pc_ok cenv sa s /\
@@ -2398,9 +2402,10 @@ Finalise range_entry_condition_frame
 
 (* Compiler witnesses are fixed before any runtime state or horizon. *)
 Theorem range_full_body_entry:
-  !cx id typ e1 e2 bound body DF lo d PG tops bindings ctx shadow_ctx func
+  !mods exps cx id typ e1 e2 bound body DF lo d PG tops bindings ctx shadow_ctx func
       shadow_func cenv env env' ret_ty lctx RetQ tyv sa sb shadow_sa shadow_sb.
-    body_inv tops ctx cenv cx /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
     supported_stmt tops bindings (For id typ (Range e1 e2) bound body) /\
     (!target.
        supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -2411,7 +2416,7 @@ Theorem range_full_body_entry:
     stmt_exprs_ok cenv (For id typ (Range e1 e2) bound body) /\
     call_evaluation_safe cx
       (int_calls_stmt (For id typ (Range e1 e2) bound body)) /\
-    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv
+    frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv
       ret_ty /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
     stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) bound body) sa =
     (cenv,sb) /\
@@ -2538,12 +2543,13 @@ Theorem range_full_body_entry:
       fn_has_code sb0 sb1 func /\
       fn_has_code shadow_sb0 shadow_sb1 shadow_func /\
       type_stmts (extend_local env id typ F) ret_ty body = SOME body_env' /\
-      body_inv tops ctx bc cx /\ supported_stmts tops bindings body /\
+      (contract_inv mods exps ctx bc cx /\
+     module_body_inv mods bc.ce_module tops bc cx) /\ supported_stmts tops bindings body /\
       (!target.
          supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
          occurs_abi_decode_target target tops) /\ stmts_exprs_ok bc body /\
       call_evaluation_safe cx (int_calls_stmts body) /\
-      frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc
+      frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc
         ret_ty /\ local_ptrs_reserved bc sb0 /\ ~block_is_terminated sb0 /\
       (!H. dead_lo_ok H (DF H) lo bc cx) /\
       (!x z. bc.ce_return_buf = SOME (PtrVar (Var x) z) ==> not_fresh_at sb0 x) /\
@@ -2551,11 +2557,11 @@ Theorem range_full_body_entry:
       !st0 es0 s0 G0 tn0 n1 n2 N k a rs es s G tn w.
         n1 <= n2 /\ N = Num (n2 - n1) /\ N < dimword (:256) /\
         value_has_type tyv (IntV n1) /\ value_has_type tyv (IntV n2) /\
-        body_for_full_ok cx tyv id body
+        body_for_full_ok_mods mods exps cx tyv id body
           (GENLIST (\j. Value (IntV (n1 + &j))) N) /\ k + LENGTH (a::rs) = N /\
         a::rs = GENLIST (\j. Value (IntV (n1 + &(k + j)))) (LENGTH (a::rs)) /\
         body_const_cells_agree [(NONE,tops)] cx env es /\
-        expr_sim_inv cenv cx env es /\ lookup_scopes id es.scopes = NONE /\
+        expr_sim_inv_mods mods cenv cx env es /\ lookup_scopes id es.scopes = NONE /\
         storage_trace_domain cx st0 es.storage_trace /\
         s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
         ret_pc_ok cenv sa s /\ return_buf_frame d cenv sb0 s /\
@@ -2590,7 +2596,7 @@ Theorem range_full_body_entry:
              storage_well_formed_on cx es (FST H) /\
              ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
         gas_admissible (eval_for cx tyv id body (a::rs)) (stmt_res_ok lctx) es ==>
-        a = Value (IntV (n1 + &k)) /\ k < N /\ body_stmts_full_ok cx body /\
+        a = Value (IntV (n1 + &k)) /\ k < N /\ body_stmts_full_ok_mods mods exps cx body /\
         bind (read_result cx a) (\v. push_scope_with_var id tyv v)
           (es with gas_obs := []) =
         (INL (),
@@ -2599,7 +2605,7 @@ Theorem range_full_body_entry:
              fmupdate id
                <|assignable := F; type := tyv; value := IntV (n1 + &k);
                  popped := []|> FEMPTY::es.scopes; gas_obs := []|>) /\
-        expr_sim_inv bc cx (extend_local env id typ F)
+        expr_sim_inv_mods mods bc cx (extend_local env id typ F)
           (es with
            <|scopes :=
                fmupdate id
@@ -3565,7 +3571,7 @@ Finalise range_full_body_entry
 
 (* Complete checked post-allocation entry, retaining the original frame. *)
 Theorem range_checked_entry_full:
-  !DF lo explicit d ctx func PG tops cx st0 RetQ cenv env es sa s0 G0 tn0 ea sA
+  !mods DF lo explicit d ctx func PG tops cx st0 RetQ cenv env es sa s0 G0 tn0 ea sA
       GA tnA st sb0 entry_lbl cond_lbl op1 op2 p cv rv g1 z1 g2 z2 ev bound fty
       tyv n1 n2 w sz id.
     lookup_block st.cs_current_bb func.fn_blocks =
@@ -3605,7 +3611,7 @@ Theorem range_checked_entry_full:
     return_buf_frame d cenv st sA /\ is_int_type fty /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\
     value_has_type tyv (IntV n1) /\ value_has_type tyv (IntV n2) /\
-    bound < dimword (:256) /\ expr_sim_inv cenv cx env ea /\
+    bound < dimword (:256) /\ expr_sim_inv_mods mods cenv cx env ea /\
     lookup_scopes id ea.scopes = NONE /\ lookup_var p sA = SOME w /\
     FLOOKUP sA.vs_allocas st.cs_next_id = SOME (w2n w,sz) /\
     ptr_covers GA tnA p sA sz /\ allocas_from lo sA /\
@@ -3643,7 +3649,7 @@ Theorem range_checked_entry_full:
          n1 <= n2 /\ Num (n2 - n1) = Num (n2 - n1) /\
          Num (n2 - n1) < dimword (:256) /\ Num (n2 - n1) <= bound /\
          res = INL (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))) /\
-         expr_sim_inv cenv cx env ee /\ lookup_scopes id ee.scopes = NONE /\
+         expr_sim_inv_mods mods cenv cx env ee /\ lookup_scopes id ee.scopes = NONE /\
          t.vs_current_bb = cond_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
          stmt_state_rel H ctx func cenv cx ee t /\
          storage_well_formed_on cx ee (FST H) /\ ret_pc_ok cenv sa t /\
@@ -4041,7 +4047,7 @@ Finalise range_checked_entry_full
 (* ===== Initialization: one allocation and the selected scalar suffix ===== *)
 
 Theorem range_full_init:
-  !DF lo explicit d ctx func PG tops cx st0 RetQ cenv env es sa s0 G0 tn0 ea s
+  !mods DF lo explicit d ctx func PG tops cx st0 RetQ cenv env es sa s0 G0 tn0 ea s
       GE tnE st sb0 entry_lbl cond_lbl p cv ev bound fty tyv n1 n2 sz id.
     p = STRING #"%" (toString st.cs_next_var) /\
     lookup_block st.cs_current_bb func.fn_blocks =
@@ -4095,7 +4101,7 @@ Theorem range_full_init:
     ret_pc_ok cenv sa s /\ return_buf_frame d cenv st s /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
-    expr_sim_inv cenv cx env ea /\ lookup_scopes id ea.scopes = NONE /\
+    expr_sim_inv_mods mods cenv cx env ea /\ lookup_scopes id ea.scopes = NONE /\
     storage_trace_domain cx st0 ea.storage_trace /\
     (!H. valid_horizon cx st0 H ea.storage_trace ==>
          stmt_state_rel H ctx func cenv cx ea s /\
@@ -4136,7 +4142,7 @@ Theorem range_full_init:
                Num (n2 - n1) <= bound /\
                ?k. k + LENGTH rs = Num (n2 - n1) /\
                    rs = GENLIST (\j. Value (IntV (n1 + &(k + j)))) (LENGTH rs) /\
-                   expr_sim_inv cenv cx env ee /\
+                   expr_sim_inv_mods mods cenv cx env ee /\
                    lookup_scopes id ee.scopes = NONE /\
                    t.vs_current_bb = cond_lbl /\ t.vs_inst_idx = 0 /\
                    ~t.vs_halted /\ stmt_state_rel H ctx func cenv cx ee t /\
@@ -6290,6 +6296,7 @@ Proof
 QED
 
 Theorem compile_for_range_frag_full:
+  !mods exps.
 !cx id typ e1 e2 n body DF lo d PG tops bindings ctx shadow_ctx func
  shadow_func cenv env env' ret_ty lctx RetQ es.
  (
@@ -6416,23 +6423,24 @@ Theorem compile_for_range_frag_full:
     lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
       (INL tyv,t) /\ eval_iterator cx (Range e1 e2) s'3' = (INL vs,t') /\
     check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-      (INL x,t'') ==> body_for_full_ok cx tyv id body vs) /\
+      (INL x,t'') ==> body_for_full_ok_mods mods exps cx tyv id body vs) /\
   (!tenv s'' tyv t.
     tenv = get_tenv cx /\
     lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-      (INL tyv,t) ==> body_iterator_full_ok cx (Range e1 e2)) /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+      (INL tyv,t) ==> body_iterator_full_ok_mods mods exps cx (Range e1 e2)) /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
   supported_stmt tops bindings (For id typ (Range e1 e2) n body) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id typ (Range e1 e2) n body) ==>
       occurs_abi_decode_target target tops) /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+  body_const_cells_agree mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
   locals_alloc_ok cenv env /\
   type_stmt env ret_ty (For id typ (Range e1 e2) n body) = SOME env' /\
   stmt_exprs_ok cenv (For id typ (Range e1 e2) n body) /\
   call_evaluation_safe cx (int_calls_stmt (For id typ (Range e1 e2) n body)) /\
-  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cx RetQ cenv ret_ty
  ) ==>
  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

@@ -8,6 +8,7 @@ Ancestors
   vyperInterpreter vyperState vyperTypeSystem vyperAST list
   bodyInvCodeProps bodyInvSplit bodyInvMetadataProps exprSimHypsDefs exprBodyPreProps
   bodySingletonCallSupport compileUnit alist
+  bodyFullPredsMods[qualified]
 
 Theorem type_stmt_assert_reason:
   type_stmt env ret_ty (Assert e (AssertReason r)) =
@@ -45,8 +46,9 @@ QED
 
 (* Only the actual condition trace can activate the conditional reason IH. *)
 Theorem assert_reason_false_source_ready:
-  (!s tv t. eval_expr cx e s = (INL tv,t) ==> body_expr_full_ok cx r) /\
-  expr_body_pre cenv cx env e es /\
+  !mods exps.
+  (!s tv t. eval_expr cx e s = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx r) /\
+  expr_body_pre_mods mods cenv cx env e es /\
   ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
   supported_stmt tops bindings (Assert e (AssertReason r)) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -57,8 +59,8 @@ Theorem assert_reason_false_source_ready:
   (!tail. bind (eval_expr cx e) (read_result cx)
      (es with gas_obs := xs ++ tail) =
        (INL (BoolV F), mid with gas_obs := tail)) ==>
-  body_expr_full_ok cx r /\
-  expr_sim_inv cenv cx env (mid with gas_obs := []) /\
+  body_expr_full_ok_mods mods exps cx r /\
+  expr_sim_inv_mods mods cenv cx env (mid with gas_obs := []) /\
   ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
   supported_stmt tops bindings (Raise (RaiseReason r)) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -117,15 +119,17 @@ Proof
 QED
 
 Theorem assert_reason_condition_source_pre:
-  body_inv tops ctx cenv cx /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assert e (AssertReason r)) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (Assert e (AssertReason r)) ==> occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
   type_stmt env ret_ty (Assert e (AssertReason r)) = SOME env' /\
   stmt_exprs_ok cenv (Assert e (AssertReason r)) /\
   call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason r))) ==>
-  expr_body_pre cenv cx env e es
+  expr_body_pre_mods mods cenv cx env e es
 Proof
   strip_tac >>
   drule_then strip_assume_tac body_inv_main_code >>

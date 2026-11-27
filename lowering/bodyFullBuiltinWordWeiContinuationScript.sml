@@ -6,12 +6,15 @@ Ancestors
   exprSimWordBuiltins exprSimWordArgs exprLoweringProps exprSimUnopProps fragExec exprSimDefs
   vyperStorageTrace vyperStorageFootprint gasStorage compileEnv vyperTypeSystem
   vyperContext vyperAST list
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem as_wei_value_continuation_full:
+  !mods exps.
   expr_type e = BaseT (UintT k) /\
-  expr_body_pre cenv cx env e es /\
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env (Builtin (BaseT (UintT 256)) (AsWeiValue dn) [e]) es /\
+  expr_body_pre_mods mods cenv cx env e es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env (Builtin (BaseT (UintT 256)) (AsWeiValue dn) [e]) es /\
   lower_value compile_expr cenv (expr_type e) e sa = (x,s1) /\
   compile_as_wei_value_int x (denomination_multiplier dn) F s1 = (op,sb) /\
   sa.cs_next_var <= s1.cs_next_var /\

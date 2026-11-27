@@ -5,14 +5,17 @@ Ancestors
   exprSimSource exprSimWordArgs exprLoweringProps contextRawReachable
   ptrDiscipline unitMemInv exprLowering compileEnv gasOutcomeFull loweringPosts
   exprSimSend vyperValue vyperState vyperTyping venomState words
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 (* Scalar keywords use the child's lower_value endpoint, without another
    machine step. Keep its frame and exit so the remainder can compose. *)
 Theorem extcall_kwarg_scalar_full:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env e es /\ ~(k = EKDefault /\ ~is_word_type rt) /\
+  !mods exps.
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\ ~(k = EKDefault /\ ~is_word_type rt) /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,rt),sb) /\
   compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt k
     (gas_shadow_expr e) shadow_sa = ((op,rt),shadow_sb) /\

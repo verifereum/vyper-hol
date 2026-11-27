@@ -63,7 +63,8 @@ Proof
 QED
 
 Theorem subscript_live_slot_select_full:
-  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
   post_value_type cenv obj = expr_type obj /\
   compile_expr cenv ty obj sa = (bvv,sm) /\

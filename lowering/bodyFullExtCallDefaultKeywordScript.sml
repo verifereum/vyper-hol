@@ -12,6 +12,7 @@ Ancestors
   vyperEvalExprPreservesScopesDom gasExemptCert typedMemoryCopy words venomState
   compileEnv exprLowering exprLoweringProps fragExec loweringPosts exprSimHypsDefs
   loweringShapeDefs bodyPtrDefs
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 (* A robust value over a covering window has the memory pointer post. *)
 Theorem default_memory_post[local]:
   evaluate_type (get_tenv cx) ty = SOME tv /\
@@ -97,10 +98,12 @@ Proof
 QED
 
 Theorem extcall_operand_materialized_full:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env e es /\
+  !mods exps.
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   ~is_word_type (expr_type e) /\ dt = lowered_value_type cenv e /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
   compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa = (vv,shadow_sm) /\
@@ -590,10 +593,12 @@ QED
 Finalise extcall_operand_materialized_full
 
 Theorem extcall_kwarg_default_owned_lookup_full:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env e es /\
+  !mods exps.
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
   compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt EKDefault (gas_shadow_expr e)
@@ -685,10 +690,12 @@ QED
 
 (* Project away allocation ownership for callers that only save the operand. *)
 Theorem extcall_kwarg_default_lookup_full:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
+  !mods exps.
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\ ~expr_has_effect e /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
   compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt EKDefault (gas_shadow_expr e)
@@ -745,10 +752,12 @@ QED
 
 (* Keep the outcome interface for callers that do not save operands. *)
 Theorem extcall_kwarg_default_full:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
+  !mods exps.
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\ ~expr_has_effect e /\
   ~is_word_type rt /\ ~is_word_type (expr_type e) /\
   compile_ext_call_kwarg compile_expr cenv rt EKDefault e sa = ((op,dt),sb) /\
   compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt EKDefault (gas_shadow_expr e)

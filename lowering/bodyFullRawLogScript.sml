@@ -14,12 +14,14 @@ Ancestors
   gasShadowCompile gasShadowCompileHelpers gasShadowCompileStmtHelpers
   gasShadowState gasShadow exprLowering exprCallbackContracts exprSimHypsDefs vyperTypeSystem
   vyperAST list compileEnv vyperInterpreter vyperValue vyperState valueEncoding
+  bodyFullPredsMods[qualified]
 Libs pairLib
 
 val _ = Parse.hide "body";
 
 Theorem raw_log_compile_stack:
-  expr_body_pre cenv cx env (Call ann RawLog args dflt) es ==>
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Call ann RawLog args dflt) es ==>
   !sa. ?t op sb. compile_expr cenv ty (Call ann RawLog args dflt) sa =
                 (StackValue t op,sb)
 Proof
@@ -37,15 +39,15 @@ Proof
 QED
 
 Theorem raw_log_expr_full_ok:
-  !cx ann es dflt.
+  !mods exps cx ann es dflt.
     (!cenv ty e.
        gas_shadow_compiles (lower_value compile_expr cenv ty e)
          (lower_value compile_expr cenv ty (gas_shadow_expr e))) /\
     (!cenv xs.
        gas_shadow_compiles (compile_multi_exprs compile_expr cenv xs)
          (compile_multi_exprs compile_expr cenv (MAP gas_shadow_expr xs))) /\
-    body_exprs_full_ok cx es ==>
-    body_expr_full_ok cx (Call ann RawLog es dflt)
+    body_exprs_full_ok_mods mods exps cx es ==>
+    body_expr_full_ok_mods mods exps cx (Call ann RawLog es dflt)
 Proof
   rpt gen_tac >> strip_tac >>
   pure_once_rewrite_tac [body_expr_full_ok_def] >> conj_tac

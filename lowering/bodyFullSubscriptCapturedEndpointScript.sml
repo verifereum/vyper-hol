@@ -6,6 +6,7 @@ Ancestors
   bodyPtrBopHashFootprint exprSimSubscriptArraySuffix exprSimSubscriptArraySource
   exprSimSource typedCopyLayoutPtr valueEncodingProps ptrDiscipline bodyPtrDefs
   loweringPosts exprSimProps venomState valueEncoding words finite_map list
+  exprSimHypsDefs[qualified]
 
 Theorem captured_dynamic_memory_input[local]:
   ptr_vv_ok cx ty raw (LocatedValue t p) fin G tn u /\
@@ -40,7 +41,8 @@ Proof
 QED
 
 Theorem subscript_dynamic_header_at_index:
-  expr_body_pre ce cx env (Subscript ty obj idx) es /\
+  !mods.
+  expr_body_pre_mods mods ce cx env (Subscript ty obj idx) es /\
   eval_expr cx obj es = (INL raw,mid) /\
   expr_type obj = ArrayT et (Dynamic cap) /\
   post_value_type ce obj = expr_type obj /\

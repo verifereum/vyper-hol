@@ -13,10 +13,13 @@ Ancestors
   ptrDiscipline vyperArray vyperTypeValues vyperValueOperation vyperTyping
   vyperFixedShapePath vyperPlaceResultTyping vyperState vyperStorageFootprint valueEncoding
   valueEncodingProps exprSimFieldLayout vyperAST venomState list finite_map words
+  bodyInvSplit[qualified]
 
 Theorem immutable_target_array_tail:
-  body_inv tops ctx cenv cx /\ cenv.ce_is_ctor /\ cenv.ce_module = NONE /\
-  expr_sim_inv cenv cx env ee /\ ee.gas_obs = [] /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ cenv.ce_is_ctor /\ cenv.ce_module = NONE /\
+  expr_sim_inv_mods mods cenv cx env ee /\ ee.gas_obs = [] /\
   storage_trace_domain cx st0 ee.storage_trace /\
   FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
   FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY

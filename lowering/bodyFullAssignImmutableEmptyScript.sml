@@ -15,6 +15,7 @@ Ancestors
   ctorDeployDeadSectionFrame compileVyper venomMemProps stateRelProj
   bodyPtrDefs stmtSimDefs vyperState vyperTyping vyperTypeEnv vyperTypeValues
   exprSimHypsDefs vyperContext finite_map
+  bodyInvSplit[qualified]
 
 
 Theorem num_of_bytes_mono[local]:
@@ -108,10 +109,12 @@ Proof
 QED
 
 Theorem immutable_empty_store_ghost:
+  !mods exps.
   ghost_inv_at D lo d ce cx es G tn s /\
   dead_lo_ok H D lo ce cx /\ ce.ce_is_ctor /\
-  body_inv tops ctx ce cx /\
-  expr_sim_inv ce cx env es /\ stmt_state_rel H ctx func ce cx es s /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\
+  expr_sim_inv_mods mods ce cx env es /\ stmt_state_rel H ctx func ce cx es s /\
   local_ptrs_reserved ce sa /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at sa x) /\
@@ -146,7 +149,8 @@ Proof
 QED
 
 Theorem immutable_empty_path_store_restore:
-  stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
+  !mods.
+  stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv_mods mods ce cx env es /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME root_ty /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\

@@ -5,6 +5,7 @@ Ancestors
   vyperInterpreter vyperTypeContractStaticMaps stmtSimReturn exprSimHyps
   vyperValue vyperTyping valueEncoding
   bodySim bodyInvSplit bodyInvCodeProps compileUnit
+  exprSimHypsDefs[qualified]
 
 Theorem build_func_info_distinct[local]:
   !tops sft vis mut nr rr name args dflts ret stmts.
@@ -56,8 +57,8 @@ Proof
 QED
 
 Theorem returns_stack_extent:
-  !ce cx env es ty tv.
-    expr_sim_inv ce cx env es /\
+  !mods ce cx env es ty tv.
+    expr_sim_inv_mods mods ce cx env es /\
     evaluate_type (get_tenv cx) ty = SOME tv /\
     0 < returns_stack_count
       (\n. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields n)) ty ==>

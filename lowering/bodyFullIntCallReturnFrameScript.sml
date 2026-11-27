@@ -131,7 +131,9 @@ Proof
 QED
 
 Theorem intcall_local_immutable_prefix_disjoint:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx tenv es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx tenv es /\
   cenv.ce_is_ctor /\
   immutable_decl_sep cenv cx scopes t.vs_vars t.vs_allocas t.vs_alloca_next /\
   local_region cenv scopes t name b sz /\ b <= i /\ i < b + sz ==>
@@ -147,7 +149,9 @@ Proof
 QED
 
 Theorem intcall_alloca_immutable_prefix_disjoint:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx tenv es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx tenv es /\
   cenv.ce_is_ctor /\
   immutable_decl_sep cenv cx scopes t.vs_vars t.vs_allocas t.vs_alloca_next /\
   FLOOKUP t.vs_allocas aid = SOME (b,sz) /\ b <= i /\ i < b + sz ==>

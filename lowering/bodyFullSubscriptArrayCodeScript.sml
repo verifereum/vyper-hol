@@ -16,6 +16,7 @@ Ancestors vyperTyping[qualified,ignore_grammar] vyperValueOperation[qualified,ig
   vyperStorageTrace vyperStorageFootprint vyperEvalExprPreservesScopesDom
   bodyPtrDefs loweringPosts compileEnv vyperInterpreter vyperState vyperAST
   bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem code_array_operand_readonly_tail[local]:
   (!q. op = Var q ==> not_fresh_at st q) /\
@@ -57,6 +58,7 @@ Proof
 QED
 
 Theorem code_array_selected_post_tail[local]:
+  !mods.
   vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx)
     es sa st2 s0 fin tv (LocatedValue (ArrayT et bd) p) it /\
   p.ptr_location = LocCode /\
@@ -77,7 +79,7 @@ Theorem code_array_selected_post_tail[local]:
   read_result cx child fin = (INL v,fin) /\
   j = (case bd of Fixed _ => 0 | Dynamic _ => 32) + Num i * type_memory_size etv /\
   eval_operand dst sf = SOME (w + n2w j) /\
-  expr_sim_inv cenv cx env mid /\
+  expr_sim_inv_mods mods cenv cx env mid /\
   eval_result_typed (env,cx,mid) tv (Type (ArrayT et bd)) /\
   fin.scopes = mid.scopes /\ fin.immutables = mid.immutables /\
   (!tr slot vt. tv <> PlaceR (StoragePlace tr slot vt)) /\
@@ -195,12 +197,13 @@ Proof
 QED
 
 Theorem subscript_array_framed_code_full:
-  !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
-    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok cx e2) /\
-    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  !mods exps cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
+    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
+    body_expr_full_ok_mods mods exps cx e1 /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
     ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et bd /\
     place_type cenv e1 = ValPT (ArrayT et bd) /\
     post_value_type cenv e1 = expr_type e1 /\

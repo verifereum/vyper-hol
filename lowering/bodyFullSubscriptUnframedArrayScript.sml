@@ -12,6 +12,7 @@ Ancestors vyperState[qualified,ignore_grammar] exprSimIfExpWidenedOwnedProvenanc
   exprSimSubscriptArraySource exprSimHypsDefs
   vyperStorageFootprint exprSimSubscriptArray loweringPosts context compileEnv
   exprSimSubscriptArrayOrigin exprReasonOperand exprOperandVar exprSimCopy
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem subscript_ghost_kept_initial_gas[local]:
   ghost_kept_at lo ce (es with gas_obs := gs) sa G0 tn0 s0 G tn =
@@ -38,16 +39,17 @@ Proof
 QED
 
 Theorem subscript_unframed_array_vv_full:
-  !cx v8 e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
+  !mods exps cx v8 e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
     (!s'' res t s3 res' t'.
        eval_expr cx e1 s'' = (INL res,t) /\
        (if subscript_reads_base cx e1 e2 then
           bind (read_result cx res) (\v. return (Value v))
         else return res) s3 = (INL res',t') ==>
-       body_expr_full_ok cx e2) /\
-    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Subscript v8 e1 e2) es /\
+       body_expr_full_ok_mods mods exps cx e2) /\
+    body_expr_full_ok_mods mods exps cx e1 /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Subscript v8 e1 e2) es /\
     expr_type e1 = ArrayT et bd /\
     place_type cenv e1 = ValPT (ArrayT et bd) /\
     post_value_type cenv e1 = expr_type e1 /\

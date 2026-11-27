@@ -8,23 +8,25 @@ Ancestors
   stmtLowering loweringPosts compileEnv gasShadow exprSimHyps emitHelper
   exprSimAbiDecodeEntryTyping vyperTypeSystem vyperInterpreter vyperState
   vyperStorageTrace vyperStorageFootprint vyperEvalExprPreservesScopesDom list
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem for_array_prepared_expr_cut_frag_full:
-  !cx id typ e n loop_body DF lo d PG tops ctx shadow_ctx func
+  !mods exps cx id typ e n loop_body DF lo d PG tops ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
   (!tenv s'' tyv t s'3' vs t' s'4' x t''.
      tenv = get_tenv cx /\
      lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv,t) /\
      eval_iterator cx (Array e) s'3' = (INL vs,t') /\
      check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' = (INL x,t'') ==>
-     body_for_full_ok cx tyv id loop_body vs) /\
+     body_for_full_ok_mods mods exps cx tyv id loop_body vs) /\
   (!tenv s'' tyv t.
      tenv = get_tenv cx /\
      lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv,t) ==>
-     body_iterator_full_ok cx (Array e)) /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_sim_inv cenv cx env es /\ expr_body_pre cenv cx env e es /\
+     body_iterator_full_ok_mods mods exps cx (Array e)) /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\ expr_body_pre_mods mods cenv cx env e es /\
   type_stmt env ret_ty (For id typ (Array e) n loop_body) = SOME env' /\
   (!st0 sa sb sha shb s0 G0 tn0 vv se she bd tyv marks rv em G tn u.
      compile_stmt cenv lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
@@ -43,7 +45,7 @@ Theorem for_array_prepared_expr_cut_frag_full:
      ret_pc_ok cenv sa s0 /\ return_buf_frame d cenv sa s0 /\ return_buf_sep d cenv es s0 /\
      expr_type e = ArrayT typ bd /\ bound_length bd = n /\
      evaluate_type (get_tenv cx) typ = SOME tyv /\
-     expr_body_pre cenv cx env e es /\
+     expr_body_pre_mods mods cenv cx env e es /\
      (!tail. eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
                              (INL rv,em with gas_obs := tail)) /\
      storage_trace_domain cx st0 em.storage_trace /\
@@ -67,7 +69,7 @@ Theorem for_array_prepared_expr_cut_frag_full:
      (!vs. (!tail. array_iterator_results cx (expr_type e) rv (em with gas_obs := tail) =
                      (INL vs,em with gas_obs := tail)) /\
             check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" em = (INL (),em) ==>
-            body_for_full_ok cx tyv id loop_body vs /\
+            body_for_full_ok_mods mods exps cx tyv id loop_body vs /\
             gas_admissible (eval_for cx tyv id loop_body vs) (stmt_res_ok lctx) em) ==>
      gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (cx_tops cx) cx st0

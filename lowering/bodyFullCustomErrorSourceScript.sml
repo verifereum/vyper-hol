@@ -9,11 +9,14 @@ Ancestors
   gasContext gasOutcome vyperExprNoControl vyperState stmtSimIfProps exprSimDefs
   compileVyper vyperTypeCallStackSoundness
   bodyQualifiedStmtSupport
+  bodyInvSplit[qualified]
 Libs
   monadsyntax
 
 Theorem custom_error_raise_source:
-  body_inv tops ctx cenv cx /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Raise (RaiseCustomError (CustomError id pos kw))) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Raise (RaiseCustomError (CustomError id pos kw))) ==>
@@ -35,8 +38,8 @@ Theorem custom_error_raise_source:
         (lift_option (build_custom_error_data (get_tenv cx) (SND id)
           (MAP SND params) vs) "custom error encoding")
         (\data. raise (Error (RevertData data)))) /\
-    !e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
-      expr_body_pre cenv cx env e st
+    !e st. MEM e args /\ expr_sim_inv_mods mods cenv cx env st ==>
+      expr_body_pre_mods mods cenv cx env e st
 Proof
   strip_tac >>
   `get_module_code cx NONE = SOME tops /\ cenv_module_pins tops cenv` by
@@ -180,7 +183,8 @@ QED
 
 (* Only the actual condition trace can activate the conditional reason IH. *)
 Theorem assert_custom_false_source_ready:
-  expr_body_pre cenv cx env e es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env e es /\
   ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
   supported_stmt tops bindings (Assert e (AssertCustomError err)) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -191,7 +195,7 @@ Theorem assert_custom_false_source_ready:
   (!tail. bind (eval_expr cx e) (read_result cx)
      (es with gas_obs := xs ++ tail) =
        (INL (BoolV F), mid with gas_obs := tail)) ==>
-expr_sim_inv cenv cx env (mid with gas_obs := []) /\
+expr_sim_inv_mods mods cenv cx env (mid with gas_obs := []) /\
   ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
   supported_stmt tops bindings (Raise (RaiseCustomError err)) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -220,15 +224,17 @@ QED
 
 
 Theorem assert_custom_condition_source_pre:
-  body_inv tops ctx cenv cx /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (Assert e (AssertCustomError err)) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (Assert e (AssertCustomError err)) ==> occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
   type_stmt env ret_ty (Assert e (AssertCustomError err)) = SOME env' /\
   stmt_exprs_ok cenv (Assert e (AssertCustomError err)) /\
   call_evaluation_safe cx (int_calls_stmt (Assert e (AssertCustomError err))) ==>
-  expr_body_pre cenv cx env e es
+  expr_body_pre_mods mods cenv cx env e es
 Proof
   strip_tac >>
   `supported_expr tops e` by

@@ -4,13 +4,15 @@ Ancestors loweringPosts[qualified,ignore_grammar] exprSimHypsDefs[qualified,igno
   abiEncodeArgsCase aggregateEvaluatedLayout typedCopyCompatibility
   assignPlaceOperandFacts exprSafeOperand exprLowering context compileEnv
   immutableDeployPhysicalSource[qualified,ignore_grammar]
+  bodyInvSplit[qualified]
 Libs
   pairLib horizonTypeLib
 
 (* Join the source replay to the saved physical row without widening
    the value's memory layout to that of the formal parameter. *)
 Theorem post_gas_row_type_facts[local]:
-  expr_body_pre cenv cx env e ee /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env e ee /\
   env.type_defs = get_tenv cx /\
   value_runtime_typed env (lowered_value_type cenv e) v /\
   arg_type_fits (expr_type e) formal /\ well_formed_type (get_tenv cx) formal /\
@@ -73,8 +75,9 @@ Proof
 QED
 
 Theorem post_gas_indexed_rows:
-  env.type_defs = get_tenv cx /\ expr_sim_inv cenv cx env pos /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
+  !mods.
+  env.type_defs = get_tenv cx /\ expr_sim_inv_mods mods cenv cx env pos /\
+  (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
   LIST_REL (\e v. value_runtime_typed env (lowered_value_type cenv e) v) xs vs /\
   arg_types_fit (MAP expr_type xs) ats /\ EVERY (well_formed_type (get_tenv cx)) ats /\
   (!i. i < LENGTH xs ==>
@@ -166,7 +169,9 @@ Proof
 QED
 
 Theorem post_gas_encoding_plans[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env ee /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env ee /\
   EVERY (assignable_type (get_tenv cx)) tys /\
   SUM (MAP (type_memory_bytes cenv) tys) < 2**64 ==>
   abi_size_bound cenv.ce_struct_fields (TupleT tys) =
@@ -205,7 +210,8 @@ Proof
 QED
 
 Theorem post_gas_call_signature[local]:
-  expr_body_pre cenv cx env
+  !mods.
+  expr_body_pre_mods mods cenv cx env
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) (addr::tail) dr) es /\
   env.type_defs = get_tenv cx /\ xs = TAKE (LENGTH ats) tail ==>
   EVERY (assignable_type (get_tenv cx)) ats /\
@@ -225,8 +231,9 @@ Proof
 QED
 
 Theorem post_gas_lowered_assignable[local]:
-  env.type_defs = get_tenv cx /\ expr_sim_inv cenv cx env pos /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
+  !mods.
+  env.type_defs = get_tenv cx /\ expr_sim_inv_mods mods cenv cx env pos /\
+  (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
   LIST_REL (\e v. value_runtime_typed env (lowered_value_type cenv e) v) xs vs /\
   arg_types_fit (MAP expr_type xs) ats /\ EVERY (assignable_type (get_tenv cx)) ats ==>
   EVERY (assignable_type (get_tenv cx)) (MAP (lowered_value_type cenv) xs)
@@ -312,9 +319,9 @@ QED
 
 (* Both typings come from the same successful source replay. *)
 Theorem post_gas_replay_typed[local]:
-  !xs pos vs ee.
-    expr_sim_inv cenv cx env pos /\
-    (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
+  !mods xs pos vs ee.
+    expr_sim_inv_mods mods cenv cx env pos /\
+    (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
     eval_exprs cx xs pos = (INL vs,ee) ==>
     LIST_REL (\e v. value_runtime_typed env (expr_type e) v /\
       value_runtime_typed env (lowered_value_type cenv e) v) xs vs
@@ -352,8 +359,9 @@ Proof
 QED
 
 Theorem post_gas_default_packet[local]:
-  env.type_defs = get_tenv cx /\ expr_sim_inv cenv cx env kw_in /\
-  (!e st. MEM e kw_es /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
+  !mods.
+  env.type_defs = get_tenv cx /\ expr_sim_inv_mods mods cenv cx env kw_in /\
+  (!e st. MEM e kw_es /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
   eval_exprs cx kw_es kw_in = (INL kws,ke) /\
   MAP expr_type kw_es = MAP (ext_call_kw_type rt) opts /\
   (rt = NoneT ==> ext_call_kwarg EKDefault opts kws = NONE) /\
@@ -519,7 +527,8 @@ QED
 (* Keyword selection returns either an unwrapped child operand or the
    buffer operand produced by materializing a nonword default. *)
 Theorem post_gas_kwarg_not_label[local]:
-  expr_body_pre cenv cx env e es /\ expr_type e = ext_call_kw_type rt k /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env e es /\ expr_type e = ext_call_kw_type rt k /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,dt),sb) ==>
   !l. op <> Label l
 Proof
@@ -544,8 +553,8 @@ Proof
 QED
 
 Theorem post_gas_kwargs_not_label[local]:
-  !opts es sa vo go def sb.
-    (!e. MEM e es ==> expr_body_pre cenv cx env e pre) /\
+  !mods opts es sa vo go def sb.
+    (!e. MEM e es ==> expr_body_pre_mods mods cenv cx env e pre) /\
     MAP expr_type es = MAP (ext_call_kw_type rt) opts /\
     compile_ext_call_kwargs compile_expr cenv rt opts es sa = ((vo,go,def),sb) ==>
     (!op l. vo = SOME op ==> op <> Label l) /\
@@ -569,14 +578,16 @@ QED
 
 (* Assemble the request from the saved rows and the actual operand path. *)
 Theorem extcall_request_post_gas_packing:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) (addr::tail) dr) es /\
   xs = TAKE (LENGTH ats) tail /\
   LENGTH av = LENGTH xs /\ arg_types_fit (MAP expr_type xs) ats /\
-  expr_sim_inv cenv cx env mid /\ expr_sim_inv cenv cx env ee /\
-  expr_sim_inv cenv cx env ke /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
+  expr_sim_inv_mods mods cenv cx env mid /\ expr_sim_inv_mods mods cenv cx env ee /\
+  expr_sim_inv_mods mods cenv cx env ke /\
+  (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
   eval_exprs cx xs (mid with gas_obs := obs2) = (INL vs,ee) /\
   (!i. i < LENGTH xs ==>
     ?e sv v raw si sm ss vv copy.
@@ -650,7 +661,7 @@ Theorem extcall_request_post_gas_packing:
   (!g. OPTION_BIND (ext_call_kwarg EKGas opts kws) dest_NumV = SOME g ==> g = w2n gw) /\
   (case go of SOME g => (g,s3) | NONE => emit_op GAS [] s3) = (gas,s5) /\
   compile_ext_call_kwargs compile_expr cenv rt opts kw_es s2 = ((vo,go,def),s3) /\
-  (!e st. MEM e kw_es /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
+  (!e st. MEM e kw_es /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
   eval_exprs cx kw_es (ee with gas_obs := obs3) = (INL kws,ke) /\
   MAP expr_type kw_es = MAP (ext_call_kw_type rt) opts /\
   ext_call_opts_ok stat opts /\

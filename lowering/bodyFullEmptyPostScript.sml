@@ -6,10 +6,11 @@ Ancestors
   exprSimAggregateLayout exprSimMemDefs bodyMemAggregateBounds
   exprSimHyps exprSimProps valueEncodingProofs valueEncoding
   exprLowering compileEnv venomState ptrDiscipline finite_map pred_set context
+  exprSimHypsDefs[qualified]
 
 Theorem empty_memory_full_post:
-  !cenv cx env es typ rt sa sb buf func ctx s t p w G tn.
-    expr_sim_inv cenv cx env es /\
+  !mods cenv cx env es typ rt sa sb buf func ctx s t p w G tn.
+    expr_sim_inv_mods mods cenv cx env es /\
     evaluate_type (get_tenv cx) typ = SOME rt /\ ~is_word_type typ /\
     compile_builtin_empty_complex (type_memory_bytes cenv typ)
       (is_bytestring_type typ \/ (case typ of ArrayT _ (Dynamic _) => T | _ => F))

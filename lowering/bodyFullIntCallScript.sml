@@ -7,13 +7,14 @@ Ancestors bodyFullShadowBodyInv
   bodyFullIntCallArgs bodyFullIntCallReturn compileVyper moduleLowering fragGasFocus
   gasShadowCompile gasShadowState exprSimAccounts fragExec exprSimUnwrap
   bodySimFull exprLowering compileEnv exprSimDefs vyperStorageTrace
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs
   pairLib
 
 val _ = Parse.hide "body";
 
 Theorem intcall_defaults_full_ih:
-  !cx src_id_opt fn es ts mut nr args dflts ret ss s1 vs t1.
+  !mods exps cx src_id_opt fn es ts mut nr args dflts ret ss s1 vs t1.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
          t'5' s'8' x'' t'6'.
@@ -33,14 +34,14 @@ Theorem intcall_defaults_full_ih:
        cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
        get_scopes s'7' = (INL prev,t'5') /\
        set_scopes [FEMPTY] s'8' = (INL x'',t'6') ==>
-       body_exprs_full_ok cxd needed_dflts) /\
+       body_exprs_full_ok_mods mods exps cxd needed_dflts) /\
     get_module_code cx src_id_opt = SOME ts /\
     lookup_callable_function cx.in_deploy fn ts =
       SOME (mut,nr,args,dflts,ret,ss) /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
     ~MEM (src_id_opt,fn) cx.stk /\
     eval_exprs cx es s1 = (INL vs,t1) ==>
-    body_exprs_full_ok (cx with stk updated_by CONS (src_id_opt,fn))
+    body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (src_id_opt,fn))
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
 Proof
   rpt strip_tac >>
@@ -52,7 +53,7 @@ Proof
 QED
 
 Theorem intcall_body_full_ih:
-  !cx src_id_opt fn es ts mut nr args dflts ret ss s1 vs t1 sd dvs td penv rtv.
+  !mods exps cx src_id_opt fn es ts mut nr args dflts ret ss s1 vs t1 sd dvs td penv rtv.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
          t'5' s'8' dflt_vs t'6' all_tenv s'9' env t'7' s'10' rtv
@@ -82,7 +83,7 @@ Theorem intcall_body_full_ih:
        (INL rtv,t'8') /\ (is_view <=> is_view_mut mut) /\
        lock_if_nr cx nr is_view s'11' = (INL x'',t'9') /\
        push_function (src_id_opt,fn) env cx s'12' = (INL cxf,t'10') ==>
-       body_stmts_full_ok cxf body') /\
+       body_stmts_full_ok_mods mods exps cxf body') /\
     get_module_code cx src_id_opt = SOME ts /\
     lookup_callable_function cx.in_deploy fn ts =
       SOME (mut,nr,args,dflts,ret,ss) /\
@@ -96,7 +97,7 @@ Theorem intcall_body_full_ih:
     evaluate_type (get_tenv cx) ret = SOME rtv /\
     (nr ==> IS_SOME cx.nonreentrant_slot) /\
     (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-    body_stmts_full_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss
+    body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (src_id_opt,fn)) ss
 Proof
   rpt strip_tac >>
   `LENGTH args - LENGTH es <= LENGTH dflts` by decide_tac >>
@@ -149,7 +150,9 @@ Proof
   fs[] >> metis_tac[]
 QED
 Theorem intcall_entry_body_ih[local]:
-  body_inv tops ctx cenv cx /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   lookup_callable_function cx.in_deploy name tops =
     SOME (mut,nr,args,dflts,ret,ss) /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
@@ -165,10 +168,10 @@ Theorem intcall_entry_body_ih[local]:
      evaluate_type (get_tenv cx) ret = SOME rtv /\
      (nr ==> IS_SOME cx.nonreentrant_slot) /\
      (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-     body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+     body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
          (subst_consts_stmts (module_consts_env tops []) ss)) ==>
   ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-   body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+   body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
          (subst_consts_stmts (module_consts_env tops []) ss))
 Proof
   strip_tac >> strip_tac >> irule intcall_entry_after_arguments >>
@@ -367,11 +370,13 @@ QED
 
 (* Stage (b) gives stage (c)'s callee premise. *)
 Theorem intcall_callee_premise[local]:
+  !mods exps.
   ^callee_input ==>
   !DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
    G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn nrc nrbs npvs dflts.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
@@ -386,7 +391,7 @@ Theorem intcall_callee_premise[local]:
        evaluate_type (get_tenv cx) ret = SOME rtv /\
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+       body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
          (subst_consts_stmts (module_consts_env tops []) ss)) /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     MEM func ctx.ctx_functions /\
@@ -398,7 +403,7 @@ Theorem intcall_callee_premise[local]:
        intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
          sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
-    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
+    body_const_cells_agree mods cx tenv es1 /\
     (?H. valid_horizon cx st0 H es1.storage_trace) /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (nrc,nrbs,npvs) ==>
     !callee entered bb inst lbl arg_ops argv.
@@ -449,21 +454,23 @@ QED
 (* The value judgment: stage (a) with the unwrap and the read after the
    call, then stage (c)'s second conjunct. *)
 Theorem intcall_sim_full:
+  !mods exps.
   ^read_args_input ==> ^callee_input ==>
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
-    expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx tenv es0 /\
+    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
-    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
+    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok_mods mods exps cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
-       body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
+       body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
          (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
            (subst_consts_exprs (module_consts_env tops []) dflts))) /\
     (!s1 vs t1 sd dvs td penv rtv.
@@ -476,7 +483,7 @@ Theorem intcall_sim_full:
        evaluate_type (get_tenv cx) ret = SOME rtv /\
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+       body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
          (subst_consts_stmts (module_consts_env tops []) ss)) ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
@@ -536,21 +543,23 @@ QED
 
 (* Use the return stage's owned value post for the expression judgment. *)
 Theorem intcall_vv_full:
+  !mods exps.
   ^vv_args_input ==> ^callee_input ==>
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
-    expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx tenv es0 /\
+    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
-    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
+    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok_mods mods exps cx es) /\
     (!s1 vs t1.
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
-       body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
+       body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
          (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
            (subst_consts_exprs (module_consts_env tops []) dflts))) /\
     (!s1 vs t1 sd dvs td penv rtv.
@@ -563,7 +572,7 @@ Theorem intcall_vv_full:
        evaluate_type (get_tenv cx) ret = SOME rtv /\
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+       body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
          (subst_consts_stmts (module_consts_env tops []) ss)) ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0

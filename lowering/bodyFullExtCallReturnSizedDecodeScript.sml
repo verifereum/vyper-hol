@@ -7,8 +7,10 @@ Ancestors
   bodyPtrDefs loweringPosts loweringStateRelDefs[qualified,ignore_grammar]
   ptrDiscipline compileEnv exprLowering vyperStorageFootprint vyperABIValid
   vyperABI vyperAST vyperState venomState venomMemDefs words finite_map pred_set list
+  exprSimHypsDefs[qualified]
 
 Theorem extcall_return_sized_decode:
+  !mods.
   (!H0 ce env sf ty tv v ctx func cenv cx es st en source hi pos output
     B L xs p d dstid live ceiling s G tn lo PG.
     abi_valid_allocated_entry H0 ce env sf ty tv v ctx func cenv cx es
@@ -70,7 +72,7 @@ Theorem extcall_return_sized_decode:
       u.vs_call_ctx = s.vs_call_ctx /\ u.vs_immutables = s.vs_immutables /\
       (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
         (s,G,tn) [] (Abort Revert_abort u,G',tn'))) ==>
-  expr_body_pre cenv cx env (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts) args dflt)
+  expr_body_pre_mods mods cenv cx env (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts) args dflt)
     es /\
   ret_type <> NoneT /\
   evaluate_type (get_tenv cx) ret_type = SOME actual_tv /\

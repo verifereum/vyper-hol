@@ -23,11 +23,13 @@ Ancestors
   compileEnv exprLowering stmtLowering loweringPosts
   vyperTypeSystem vyperTypeArgFits vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
+  bodyInvSplit[qualified]
 
 (* The physical source footprint is positive and fits in the destination;
    its runtime type is not identified with the destination runtime type. *)
 Theorem annassign_memory_full_source_layout[local]:
-  expr_body_pre ce cx env e es /\
+  !mods.
+  expr_body_pre_mods mods ce cx env e es /\
   type_widens_to env.type_defs (expr_type e) typ /\
   (expr_type e = typ \/ is_bytestring_type typ) /\
   0 < type_memory_bytes ce typ /\ type_memory_bytes ce typ < 2 ** 64 /\
@@ -471,7 +473,7 @@ Finalise annassign_memory_full_raw_rhs_from_entry
 (* Keep the physical frontier and unwrap origin at the very endpoint used by
    the successful source read.  The value-only judgment forgets these fields. *)
 Theorem annassign_memory_full_physical_rhs_from_entry[local]:
-  !DF lo d PG ctx shadow_ctx func shadow_func old ce cx es id typ e
+  !mods DF lo d PG ctx shadow_ctx func shadow_func old ce cx es id typ e
    sa r a b shadow_a shadow_b p sz op s0 G0 tn0 lctx st0 w entry Ga tna env.
     declare_local old id typ sa = (ce,r) /\ old.ce_alloca_locals /\
     FLOOKUP old.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
@@ -496,7 +498,7 @@ Theorem annassign_memory_full_physical_rhs_from_entry[local]:
     (!fn inst z. frag_reachable ctx func entry fn inst z ==> dalloca_fmp_headroom inst z) /\
     storage_trace_domain cx st0 es.storage_trace /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
-    expr_body_pre ce cx env e es /\
+    expr_body_pre_mods mods ce cx env e es /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       ce cx (expr_type e) e es /\
     FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -859,8 +861,10 @@ Finalise annassign_memory_full_physical_rhs_from_entry
 (* Complete consumer boundary.  Dispatch and installation are the two literal
    universal contracts; RHS induction is supplied for the declared environment. *)
 Theorem annassign_memory_full_execution:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-  expr_body_pre cenv cx env e es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
   type_widens_to env.type_defs (expr_type e) typ /\
   assignable_type env.type_defs typ /\
@@ -873,7 +877,8 @@ Theorem annassign_memory_full_execution:
     is_bytestring_type (lowered_value_type cenv e) /\
     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
   (!sa ce r ty. declare_local cenv id typ sa = (ce,r) ==>
-    body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
+    (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_body_pre_mods mods ce cx env e es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es) ==>
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

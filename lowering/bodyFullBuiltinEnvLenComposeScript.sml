@@ -11,10 +11,11 @@ Ancestors
   vyperInterpreter vyperState venomState venomInst list finite_map
 
 Theorem len_full_compose:
+  !mods.
   (!DF lo d explicit ctx func PG cenv cx env e es st0 sa sm sb s0
     G0 tn0 ee tv vv t G tn op pvt tvt.
-    expr_body_pre cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\
-    expr_body_pre cenv cx env e es /\ is_sized_type (expr_type e) /\
+    expr_body_pre_mods mods cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\
+    expr_body_pre_mods mods cenv cx env e es /\ is_sized_type (expr_type e) /\
     compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
       (case vv_location vv of NONE => LocMemory | SOME l => l) sm = (op,sb) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
@@ -65,8 +66,8 @@ Theorem len_full_compose:
         ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2) ==>
   !DF lo d explicit ctx func PG cenv cx env e es st0 sa sm sb s0
     G0 tn0 vv op.
-    expr_body_pre cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\
-    expr_body_pre cenv cx env e es /\ is_sized_type (expr_type e) /\
+    expr_body_pre_mods mods cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\
+    expr_body_pre_mods mods cenv cx env e es /\ is_sized_type (expr_type e) /\
     compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
       (case vv_location vv of NONE => LocMemory | SOME l => l) sm = (op,sb) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\

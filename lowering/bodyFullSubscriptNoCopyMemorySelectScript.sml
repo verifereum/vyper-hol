@@ -12,11 +12,14 @@ Ancestors bodyFullSubscriptLocalCutOrigin[qualified,ignore_grammar] abiEncodeArg
   vyperStorageTrace vyperStorageFootprint bodyPtrDefs loweringPosts compileEnv
   vyperInterpreter vyperState vyperAST context exprSimWordArgs wordArgsPtr
   exprReasonOperand exprSimHyps bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  bodyInvSplit[qualified]
 
 Theorem subscript_nocopy_memory_place_select_full:
-  body_inv tops ctx cenv cx /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
-  expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
+  expr_body_pre_mods mods cenv cx env (Subscript ann e1 e2) es /\
   expr_type e1 = ArrayT et bd /\ place_type cenv e1 = ValPT (ArrayT et bd) /\
   post_value_type cenv e1 = expr_type e1 /\
   ~(?n i p. bd = Fixed n /\ PlaceR (MemoryPlace id path) = PlaceR (MemoryPlace i p) /\ base_from_pop e1) /\

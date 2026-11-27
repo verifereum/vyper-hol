@@ -32,7 +32,8 @@ val literal_word_vv_finish =
   literal_word_posts;
 
 Theorem literal_word_value_full:
-  expr_body_pre cenv cx env (Literal ann l) es /\ is_word_type ann ==>
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Literal ann l) es /\ is_word_type ann ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Literal ann l) es
 Proof
@@ -69,7 +70,8 @@ Proof
 QED
 
 Theorem literal_word_vv_full:
-  expr_body_pre cenv cx env (Literal ann l) es /\ is_word_type ann ==>
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Literal ann l) es /\ is_word_type ann ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Literal ann l) es
 Proof

@@ -14,6 +14,7 @@ Ancestors
   bodyFullBuiltinWordPowCompose stmtLoweringMono freshWrites stateRelProj
   bodyPtrBopRepresentationFrame vyperEvalExprPreservesScopesDom
   bodyFullIfExpReach
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem keyword_suffix_ci_mono[local]:
   !ks xs sa. ci_mono sa (SND (compile_ext_call_kwargs compile_expr cenv rt ks xs sa))
@@ -71,10 +72,12 @@ QED
 
 (* The scalar and materialized cases agree on the frame for the suffix. *)
 Theorem extcall_keyword_head_outcome:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env e es /\
+  !mods exps.
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   expr_type e = ext_call_kw_type rt k /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,dt),sb) /\
   compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt k (gas_shadow_expr e)
@@ -176,12 +179,14 @@ QED
    The selected operands match source first-occurrence selection; evaluating
    a later duplicate still contributes its gas marks and frame. *)
 Theorem extcall_request_keywords_owned_outcome:
-  body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_sim_inv cenv cx env es /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
-    expr_body_pre cenv cx env e st) /\
+  !mods exps.
+  body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==>
+    expr_body_pre_mods mods cenv cx env e st) /\
   MAP expr_type xs = MAP (ext_call_kw_type rt) ks /\
   compile_ext_call_kwargs compile_expr cenv rt ks xs sa = ((vo,go,dopt),sb) /\
   compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) rt ks (MAP gas_shadow_expr xs)
@@ -208,7 +213,7 @@ Theorem extcall_request_keywords_owned_outcome:
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (cx_tops cx) cx st0 (eval_exprs cx xs) (es,s0,G0,tn0)
     (\H res ee G tn t. ?vs. res = INL vs /\ LENGTH vs = LENGTH xs /\
-      expr_sim_inv cenv cx env ee /\
+      expr_sim_inv_mods mods cenv cx env ee /\
       stmt_state_rel H ctx func cenv cx ee t /\
       storage_well_formed_on cx ee (FST H) /\
       t.vs_current_bb = sb.cs_current_bb /\

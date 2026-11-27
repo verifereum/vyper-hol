@@ -10,6 +10,7 @@ Ancestors
   abiEmptyDispatch abiEmptyAllocate exprSafeOperand compileEnv context
   bodySimFull bodyPtrDefs gasOutcomeFull gasShadowState gasShadow
   exprSimHypsDefs vyperAST exprCallBounds
+  bodyFullPredsMods[qualified]
 Libs
   pairLib
 
@@ -194,7 +195,7 @@ Proof
 QED
 
 Theorem named_const_expr_full_ok:
-  !cx ann e. body_expr_full_ok cx e ==> body_expr_full_ok cx (Builtin ann NamedConst [e])
+  !mods exps cx ann e. body_expr_full_ok_mods mods exps cx e ==> body_expr_full_ok_mods mods exps cx (Builtin ann NamedConst [e])
 Proof
   rpt gen_tac >> strip_tac >> simp[Once body_expr_full_ok_def] >>
   rpt gen_tac >> strip_tac >> reverse conj_asm2_tac

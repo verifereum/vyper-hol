@@ -16,6 +16,7 @@ Ancestors
   reasonCodeResourcesPtr bodyPtrAttributeFields exprLoweringProps stateRelProj
   bodyFullIfExpReach
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem slice_self_compilation_context[local]:
   lower_value compile_expr cenv ty start sa = (start_op,s1) /\
@@ -49,6 +50,7 @@ Proof
 QED
 
 Theorem slice_builtin_self_vv_full_from_tail:
+  !mods exps.
   (!query_op query_ops sa limit sc start cnt sd N out data se copy_op copy_ops sf sb
     func cenv ctx tn s code i k G addr n e args cx st0 es DF lo d explicit PG tops source.
     emit_op query_op query_ops sa = (limit,sc) /\
@@ -119,26 +121,28 @@ Theorem slice_builtin_self_vv_full_from_tail:
       (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
          (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))) /\
   (!cenv cx env a n ct addr start len es ee e tops ctx DF lo d shadow_ctx PG func shadow_func ty.
-    expr_body_pre cenv cx env
+    expr_body_pre_mods mods cenv cx env
       (Builtin a (Slice n) [Builtin ct (Acc Code) [addr];start;len]) es /\
-    body_const_cells_agree [(NONE,tops)] cx env ee /\
-    expr_sim_inv cenv cx env ee /\ (e = start \/ e = len \/ e = addr) /\
-    body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx  ==>
+    body_const_cells_agree mods cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\ (e = start \/ e = len \/ e = addr) /\
+    body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx  ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e ee /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e ee) ==>
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es code_ty addr.
     (builtin_args_length_ok (Slice n) (LENGTH args) ==>
        case code_slice_source (Slice n) args of
-         NONE => body_exprs_full_ok cx args
+         NONE => body_exprs_full_ok_mods mods exps cx args
        | SOME (code_ty,addr) =>
-           body_exprs_full_ok cx (TL args) /\
+           body_exprs_full_ok_mods mods exps cx (TL args) /\
            (!s tail_vs t. eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
-              body_exprs_full_ok cx [addr])) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a (Slice n) args) es /\
+              body_exprs_full_ok_mods mods exps cx [addr])) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a (Slice n) args) es /\
     code_slice_source (Slice n) args = SOME (code_ty,addr) /\
     is_self_code (Builtin code_ty (Acc Code) [addr]) ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

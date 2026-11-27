@@ -69,8 +69,10 @@ Proof
 QED
 
 Theorem toplevel_ctor_source_layout:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env (TopLevelName ann (cenv.ce_module,id)) es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env (TopLevelName ann (cenv.ce_module,id)) es /\
   cenv.ce_is_ctor /\ dead_lo_ok H D lo cenv cx /\
   stmt_state_rel H ctx func cenv cx es s /\
   ghost_inv_at D lo d cenv cx es G tn s /\

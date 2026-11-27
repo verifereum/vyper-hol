@@ -12,7 +12,8 @@ Ancestors
   vyperTyping vyperValue context venomState words finite_map arithmetic
 
 Theorem subscript_live_local_index_view:
-  expr_body_pre ce cx env (Subscript ann obj idx) es /\
+  !mods.
+  expr_body_pre_mods mods ce cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et bd /\ ~base_from_pop obj /\
   post_value_type ce obj = expr_type obj /\
   eval_expr cx obj (es with gas_obs := gs1) = (INL (PlaceR (MemoryPlace id path)),mid) /\

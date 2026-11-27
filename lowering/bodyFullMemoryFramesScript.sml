@@ -47,7 +47,9 @@ Proof
 QED
 
 Theorem body_full_local_region_lower_bound:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es0 /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es0 /\
   stmt_state_rel H ctx func cenv cx es s /\
   local_region cenv es.scopes s id b n /\ 0 < n /\
   dead_lo_ok H D lo cenv cx ==> lo <= b

@@ -7,11 +7,13 @@ Ancestors
   vyperState bodySimFull gasSummary vyperStorageFootprint loweringStateRelDefs
   exprLowering loweringPosts vyperAST context venomState ptrDiscipline
   exprLoweringProps bodySim
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 (* The mapping declaration gives both the source reference and the compiled
    literal slot. Resolving it does not run an instruction or change a ghost. *)
 Theorem toplevel_map_sim_full[local]:
-  expr_map_pre cenv cx env (TopLevelName ann (src,id)) es ==>
+  !mods.
+  expr_map_pre_mods mods cenv cx env (TopLevelName ann (src,id)) es ==>
   expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TopLevelName ann (src,id)) es
 Proof
@@ -64,9 +66,11 @@ Proof
 QED
 
 Theorem body_expr_full_ok_map:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_map_pre cenv cx env e es ==>
+  !mods exps.
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_map_pre_mods mods cenv cx env e es ==>
   expr_map_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es
 Proof
   strip_tac >> drule expr_map_pre_shape >> strip_tac >> gvs[]

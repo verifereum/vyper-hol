@@ -9,18 +9,19 @@ Ancestors
   exprSimPlaces exprSimTuple exprSimSubscriptMap exprSimSource exprSimHyps
   exprSimHypsDefs exprSimMapDefs placeTypingProps exprLowering
   loweringPosts compileEnv vyperInterpreter vyperTypeSystem vyperState vyperAST
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
 Theorem subscript_ih_not_read[local]:
-  !cx e1 e2.
+  !mods exps cx e1 e2.
     (!s'' res t s3 res' t'.
        eval_expr cx e1 s'' = (INL res,t) /\
        (if subscript_reads_base cx e1 e2 then
           bind (read_result cx res) (\v. return (Value v))
-        else return res) s3 = (INL res',t') ==> body_expr_full_ok cx e2) /\
+        else return res) s3 = (INL res',t') ==> body_expr_full_ok_mods mods exps cx e2) /\
     ~subscript_reads_base cx e1 e2 ==>
-    !s0 r0 t0. eval_expr cx e1 s0 = (INL r0,t0) ==> body_expr_full_ok cx e2
+    !s0 r0 t0. eval_expr cx e1 s0 = (INL r0,t0) ==> body_expr_full_ok_mods mods exps cx e2
 Proof
   rpt strip_tac >>
   first_x_assum (qspecl_then [`s0`,`r0`,`t0`,`t0`,`r0`,`t0`] mp_tac) >>
@@ -28,7 +29,8 @@ Proof
 QED
 
 Theorem subscript_value_base_type:
-  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Subscript ann obj idx) es /\
   place_type cenv obj = ValPT bt ==>
   bt = expr_type obj
 Proof
@@ -48,17 +50,18 @@ Proof
 QED
 
 Theorem subscript_expr_full_ok_from_place_base:
-  !cx v8 e1 e2.
+  !mods exps cx v8 e1 e2.
     (!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
        (!s'' res t s3 res' t'.
           eval_expr cx e1 s'' = (INL res,t) /\
           (if subscript_reads_base cx e1 e2 then
              bind (read_result cx res) (\v. return (Value v))
            else return res) s3 = (INL res',t') ==>
-          body_expr_full_ok cx e2) /\
-       body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-       body_const_cells_agree [(NONE,tops)] cx env es /\
-       expr_body_pre cenv cx env (Subscript v8 e1 e2) es /\
+          body_expr_full_ok_mods mods exps cx e2) /\
+       body_expr_full_ok_mods mods exps cx e1 /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+       body_const_cells_agree mods cx env es /\
+       expr_body_pre_mods mods cenv cx env (Subscript v8 e1 e2) es /\
        expr_type e1 = ArrayT et bd /\
        place_type cenv e1 = ValPT (ArrayT et bd) /\
        post_value_type cenv e1 = expr_type e1 /\
@@ -79,9 +82,9 @@ Theorem subscript_expr_full_ok_from_place_base:
        (if subscript_reads_base cx e1 e2 then
           bind (read_result cx res) (\v. return (Value v))
         else return res) s3 = (INL res',t') ==>
-       body_expr_full_ok cx e2) /\
-    body_expr_full_ok cx e1 ==>
-    body_expr_full_ok cx (Subscript v8 e1 e2)
+       body_expr_full_ok_mods mods exps cx e2) /\
+    body_expr_full_ok_mods mods exps cx e1 ==>
+    body_expr_full_ok_mods mods exps cx (Subscript v8 e1 e2)
 Proof
   rpt gen_tac >> strip_tac >> once_rewrite_tac[body_expr_full_ok_def] >>
   reverse conj_tac >- (conj_tac >- simp[] >> suspend "mapping_result") >>

@@ -2,10 +2,13 @@ Theory bodyFullConvertValueBridge
 Ancestors
   bodyFullOfVV bodyFullPreds exprSimHyps exprSimSource exprSimConvert
   exprLoweringProps loweringPosts vyperInterpreter vyperState vyperAST
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem convert_sim_full_of_vv:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TypeBuiltin ann Convert dst [e]) es ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

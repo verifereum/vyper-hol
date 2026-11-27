@@ -13,6 +13,7 @@ Ancestors
   contractABI vyperABI vyperValue vyperTyping venomState venomInst
   finite_map pred_set list arithmetic pair words
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs pureFrameLib
 
 Theorem abi_encode_values_translated_window_input[local]:
@@ -34,6 +35,7 @@ Proof
 QED
 
 Theorem abi_encode_saved_row_open_pure:
+  !mods exps.
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -60,7 +62,8 @@ Theorem abi_encode_saved_row_open_pure:
     stmt_state_rel H ctx func ce cx ee s /\ vv_storage_live H cx saved ee s) /\
   (?H. valid_horizon cx st0 H ee.storage_trace) /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
   fn_inst_ids_distinct func /\
   fn_has_code su en func /\
@@ -283,6 +286,7 @@ QED
 Finalise abi_encode_saved_row_open_pure
 
 Theorem abi_encode_saved_row_pure:
+  !mods exps.
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -309,7 +313,8 @@ Theorem abi_encode_saved_row_pure:
     stmt_state_rel H ctx func ce cx ee s /\ vv_storage_live H cx saved ee s) /\
   (?H. valid_horizon cx st0 H ee.storage_trace) /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
   fn_inst_ids_distinct func /\
   fn_has_code su en func /\
@@ -351,6 +356,7 @@ Theorem abi_encode_saved_row =
   pureFrameLib.drop_frame abi_encode_saved_row_pure
 
 Theorem abi_encode_direct_row:
+  !mods exps.
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -377,7 +383,8 @@ Theorem abi_encode_direct_row:
     stmt_state_rel H ctx func ce cx ee s /\ vv_storage_live H cx saved ee s) /\
   (?H. valid_horizon cx st0 H ee.storage_trace) /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
   fn_inst_ids_distinct func /\
   fn_has_code su en func /\
@@ -421,6 +428,7 @@ Proof
 QED
 
 Theorem extcall_direct_row:
+  !mods exps.
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   compile_snapshot_vv ce copy (ext_call_arg_value ty vv) sm = (saved,ss) /\
@@ -447,7 +455,8 @@ Theorem extcall_direct_row:
     stmt_state_rel H ctx func ce cx ee s /\ vv_storage_live H cx saved ee s) /\
   (?H. valid_horizon cx st0 H ee.storage_trace) /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
   fn_inst_ids_distinct func /\
   fn_has_code su en func /\

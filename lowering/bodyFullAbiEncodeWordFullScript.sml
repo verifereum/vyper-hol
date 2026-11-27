@@ -12,10 +12,13 @@ Ancestors
   gasOutcomeFullCompose gasShadowCompilePure gasShadowState exprLowering compileEnv vyperContext vyperState
   exprLoweringProps exprBopSimProps exprBopLowering abiBuiltinAllocation abiBuiltinEncodeWord
   emitHelper vyperAST list loweringPosts abiBuiltinEncodeSource exprSimProps fragExec
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem abi_encode_word_vv_full_from_packaging:
-  body_inv tops ctx ce cx /\
-  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid) ty [e]) es /\
+  !mods exps.
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiEncode F mid) ty [e]) es /\
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     ce cx (expr_type e) e es /\ is_word_type (expr_type e)
   ==> expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

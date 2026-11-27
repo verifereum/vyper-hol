@@ -2,13 +2,14 @@
 Theory bodyFullUnaryBuiltin
 Ancestors
   bodyFullPreds exprSimHypsDefs vyperTypeBuiltins vyperTypeSystem vyperAST list
+  bodyFullPredsMods[qualified]
 
 Theorem unary_builtin_expr_full_ok:
-  !cx ann bt es.
+  !mods exps cx ann bt es.
     (!m. builtin_args_length_ok bt m ==> m = 1) /\
-    (!e. body_expr_full_ok cx e ==> body_expr_full_ok cx (Builtin ann bt [e])) /\
-    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Builtin ann bt es)
+    (!e. body_expr_full_ok_mods mods exps cx e ==> body_expr_full_ok_mods mods exps cx (Builtin ann bt [e])) /\
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ann bt es)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `builtin_args_length_ok bt (LENGTH es)`

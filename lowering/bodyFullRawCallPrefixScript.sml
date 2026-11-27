@@ -10,6 +10,7 @@ Ancestors
   exprSimSource wordArgsPtr gasShadowCompileStmtHelpers gasShadowCompileHelpers
   gasShadowState gasShadowCompileBuiltinSystem representationCleanPtr gasExemptCert
   vyperEvalExprPreservesScopesDom exprLoweringProps exprSimWordArgs fragExec list gasShadow vyperStorageTrace
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 (* Factor both compilation paths at the argument and preparation boundaries. *)
 Theorem raw_call_code_spans:
@@ -159,13 +160,15 @@ Proof
 QED
 
 Theorem raw_call_prefix_prepared_full:
+  !mods exps.
  !DF lo dframe PG tops ctx shadow_ctx func shadow_func cenv env cx ty ann flags
   a d kws st0 sa sb shadow_sa shadow_sb vv addr data len ptr vo go ignored
   gas ov op result s1 s2 s3 s4 s5 s6 s7 xs es s0 G0 tn0 k Q R.
- body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
- body_exprs_full_ok cx (a::d::kws) /\
- body_const_cells_agree [(NONE,tops)] cx env es /\
- expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
+ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+ body_exprs_full_ok_mods mods exps cx (a::d::kws) /\
+ body_const_cells_agree mods cx env es /\
+ expr_body_pre_mods mods cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
  compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) NONE) sa=(vv,sb) /\
  compile_expr (gas_shadow_env T cenv) ty
    (gas_shadow_expr (Call ann (RawCallTarget flags) (a::d::kws) NONE))
@@ -210,7 +213,7 @@ Theorem raw_call_prefix_prepared_full:
    bind (eval_expr cx d) (read_result cx) (esA with gas_obs:=gsD)=
       (INL(BytesV bs),esD) /\ esD.gas_obs=[] /\
    eval_exprs cx kws (esD with gas_obs:=gsK)=(INL kvs,esK) /\ esK.gas_obs=[] /\
-   expr_sim_inv cenv cx env esK /\ storage_trace_domain cx st0 esK.storage_trace /\
+   expr_sim_inv_mods mods cenv cx env esK /\ storage_trace_domain cx st0 esK.storage_trace /\
    vo=ext_call_kwarg EKValue flags.rcf_kws xs /\
    go=ext_call_kwarg EKGas flags.rcf_kws xs /\ ignored=NONE /\
    (!H. valid_horizon cx st0 H esK.storage_trace ==>

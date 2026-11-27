@@ -11,6 +11,7 @@ Ancestors
   vyperTypeBuiltins vyperTypeSystem vyperAST vyperInterpreter vyperContext
   venomExecSemantics venomInst venomState compileEnv list rich_list
   vyperStorageTrace vyperStorageFootprint loweringStateRelDefs
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
@@ -118,15 +119,16 @@ Proof
 QED
 
 Theorem env_prevhash_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     bt = Env PrevHash /\ builtin_args_length_ok bt (LENGTH args) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>
-     body_exprs_full_ok cx args) /\
+     body_exprs_full_ok_mods mods exps cx args) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt = Len ==>
-     body_expr_full_ok cx (HD args)) /\
-    body_inv tops ctx cenv cx /\
+     body_expr_full_ok_mods mods exps cx (HD args)) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
     body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt args) es ==>
+    expr_body_pre_mods mods cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a bt args) es /\
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

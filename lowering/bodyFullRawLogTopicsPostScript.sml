@@ -5,9 +5,11 @@ Ancestors
   exprSimWordArgs loweringPosts bodyPtrDefs exprLoweringProps
   vyperInterpreter vyperState vyperAST list finite_map
   loweringStateRelDefs loweringShapeDefs compileEnv vyperValue
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem raw_log_topics_ghost_cons[local]:
-  expr_body_pre cenv cx env
+  !mods.
+  expr_body_pre_mods mods cenv cx env
     (Call ann RawLog
       [Builtin a (MakeArray elem bd) (pre ++ e::rest); data] dflt) es /\
   (!tail. bind (eval_expr cx e) (read_result cx)
@@ -53,16 +55,17 @@ QED
 (* The successful cons case, with the suffix post expanded so its one
    endpoint and all frame/ghost anchors are visible to the consumer. *)
 Theorem raw_log_topics_post_cons:
-  !tops ctx func cenv cx env ann n pre e rest data dflt
+  !mods exps tops ctx func cenv cx env ann n pre e rest data dflt
    sa sm sb shadow_sa shadow_sm shadow_sb op ops
    H DF lo d es s G0 tn0 xs mid v u G1 tn1 ys ee vs t G tn.
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n))
         (pre ++ e::rest); data] dflt) es /\
-  expr_body_pre cenv cx env e es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   expr_type e = BaseT (BytesT (Fixed 32)) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
   compile_multi_exprs compile_expr cenv rest sm = (ops,sb) /\

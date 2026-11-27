@@ -38,6 +38,7 @@ Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallS
   vyperAST vyperInterpreter vyperState vyperValue list
   selfdestructHalt bodyFullHashKeccakFixed gasOutcomeFullCompose gasExemptOrigin
   exprOperandVar exprCallbackContracts builtinSystem emitHelper allocLimits exprLowering exprLoweringProps gasShadowState compileEnv fragExec fragGasEmitCtrl vfmSameFrame ptrSafeRun ptrDiscipline gasEvents gasCount memSafeRun instMemFrontier venomExecSemantics venomInst venomState unitTransformDefs contextCodegenRel codegenRel bodyPtrDefs rich_list
+  bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 Libs
   pairLib
 
@@ -45,10 +46,10 @@ val _ = Parse.hide "body";
 
 (* Join the four joint expression leaves. *)
 Theorem body_expr_full_ok_leaf:
-  !cx e.
+  !mods exps cx e.
     (?a id. e = Name a id) \/ (?a nsid. e = TopLevelName a nsid) \/
     (?a nsid mid. e = FlagMember a nsid mid) \/ (?a l. e = Literal a l) ==>
-    body_expr_full_ok cx e
+    body_expr_full_ok_mods mods exps cx e
 Proof
   rpt strip_tac >> gvs[] >>
   simp[name_expr_full_ok, toplevel_name_expr_full_ok,
@@ -57,13 +58,13 @@ QED
 
 (* Joint annotated declaration, split by the source and destination layouts. *)
 Theorem body_annassign_case_full:
-  !cx id typ e.
+  !mods exps cx id typ e.
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_expr_full_ok cx e) ==>
-    body_stmt_full_ok cx (AnnAssign id typ e)
+       body_expr_full_ok_mods mods exps cx e) ==>
+    body_stmt_full_ok_mods mods exps cx (AnnAssign id typ e)
 Proof
   rw[body_stmt_full_ok_def] >>
   Cases_on `is_word_type typ`
@@ -86,11 +87,11 @@ QED
 
 (* The joint Append case, by its storage, local and nested leaves. *)
 Theorem body_append_case_full:
-  !cx t e.
+  !mods exps cx t e.
     (!s'' p t'.
-       eval_target_place cx t s'' = (INL p,t') ==> body_expr_full_ok cx e) /\
-    body_base_target_full_ok cx t ==>
-    body_stmt_full_ok cx (Append t e)
+       eval_target_place cx t s'' = (INL p,t') ==> body_expr_full_ok_mods mods exps cx e) /\
+    body_base_target_full_ok_mods mods exps cx t ==>
+    body_stmt_full_ok_mods mods exps cx (Append t e)
 Proof
   rpt strip_tac >> Cases_on `?nid. t = TopLevelNameTarget nid`
   >- (gvs[] >> irule body_append_storage_full >> first_assum ACCEPT_TAC) >>
@@ -101,7 +102,7 @@ QED
 
 (* The joint twin of body_assert_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_assert_case_full:
-  !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Assert e AssertBare)
+  !mods exps cx e. body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Assert e AssertBare)
 Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.assert_bare_stmt_full_ok
 QED
@@ -109,10 +110,10 @@ QED
 (* The joint twin of body_assert_reason_case_ptr_at (bodyPtrExitCases),
    by its fragment in bodyFullAssertReason. *)
 Theorem body_assert_reason_case_full:
-  !cx e se.
-    (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok cx se) /\
-    body_expr_full_ok cx e ==>
-    body_stmt_full_ok cx (Assert e (AssertReason se))
+  !mods exps cx e se.
+    (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx se) /\
+    body_expr_full_ok_mods mods exps cx e ==>
+    body_stmt_full_ok_mods mods exps cx (Assert e (AssertReason se))
 Proof
   rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
   irule compile_assert_reason_frag_full >> metis_tac[]
@@ -120,8 +121,8 @@ QED
 
 (* The joint twin of body_assert_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_assert_unreachable_case_full:
-  !cx e.
-    body_expr_full_ok cx e ==> body_stmt_full_ok cx (Assert e AssertUnreachable)
+  !mods exps cx e.
+    body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Assert e AssertUnreachable)
 Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.assert_unreachable_stmt_full_ok
 QED
@@ -133,9 +134,9 @@ Theorem body_assign_case_full:
             struct_args_unique tops) /\
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
-       body_base_target_full_ok cx t) /\
-    body_expr_full_ok cx e ==>
-    body_stmt_full_ok cx (Assign (BaseTarget t) e)
+       body_base_target_full_ok_mods [(NONE,tops)] [] cx t) /\
+    body_expr_full_ok_mods [(NONE,tops)] [] cx e ==>
+    body_stmt_full_ok_mods [(NONE,tops)] [] cx (Assign (BaseTarget t) e)
 Proof
   rw[body_stmt_full_ok_def] >>
   `struct_args_unique tops` by
@@ -191,11 +192,11 @@ QED
 
 (* Combine expression evaluation with assignment to a tuple target. *)
 Theorem body_assign_tuple_case_full:
-  !cx gs e.
+  !mods exps cx gs e.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok cx (TupleTarget gs) v) /\ body_expr_full_ok cx e ==>
-    body_stmt_full_ok cx (Assign (TupleTarget gs) e)
+       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\ body_expr_full_ok_mods mods exps cx e ==>
+    body_stmt_full_ok_mods mods exps cx (Assign (TupleTarget gs) e)
 Proof
   rw[body_stmt_full_ok_def] >>
   drule_all body_inv_stmt_const_name_free >> strip_tac >>
@@ -242,20 +243,20 @@ QED
 
 (* Attribute's joint leaf is proved in bodyFullAttribute. *)
 Theorem body_attribute_case_full:
-  !cx v9 e id. body_expr_full_ok cx e ==> body_expr_full_ok cx (Attribute v9 e id)
+  !mods exps cx v9 e id. body_expr_full_ok_mods mods exps cx e ==> body_expr_full_ok_mods mods exps cx (Attribute v9 e id)
 Proof
   ACCEPT_TAC bodyFullAttributeTheory.attribute_expr_full_ok
 QED
 
 (* Admitted: the joint twin of body_augassign_case_ptr_at (bodyPtrAssignCases). *)
 Theorem body_augassign_case_full:
-  !cx ty t bop e.
+  !mods exps cx ty t bop e.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx t s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
-       body_expr_full_ok cx e) /\ body_base_target_full_ok cx t ==>
-    body_stmt_full_ok cx (AugAssign ty t bop e)
+       body_expr_full_ok_mods mods exps cx e) /\ body_base_target_full_ok_mods mods exps cx t ==>
+    body_stmt_full_ok_mods mods exps cx (AugAssign ty t bop e)
 Proof
   rw[body_stmt_full_ok_def] >>
   Cases_on `?id. t = NameTarget id`
@@ -273,25 +274,25 @@ QED
 
 (* The joint twin of body_break_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_break_case_full:
-  !cx. body_stmt_full_ok cx Break
+  !mods exps cx. body_stmt_full_ok_mods mods exps cx Break
 Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.break_stmt_full_ok
 QED
 
 (* Joint environment builtins, excluding Env MsgGas. *)
 Theorem env_builtin_expr_full_ok:
-  !cx ty bt es.
+  !mods exps cx ty bt es.
     (bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i /\ i <> MsgGas) \/
      (?i. bt = Acc i) \/ bt = BlockHash \/ bt = BlobHash \/ bt = MethodId) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) /\ bt <> Len ==>
-       body_exprs_full_ok cx es) /\
+       body_exprs_full_ok_mods mods exps cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) /\ bt = Len ==>
-       body_expr_full_ok cx (HD es)) ==>
-    body_expr_full_ok cx (Builtin ty bt es)
+       body_expr_full_ok_mods mods exps cx (HD es)) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ty bt es)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
@@ -302,10 +303,10 @@ QED
 
 (* Admitted: the joint twin of bodyPtrBopIn's bop_in_expr_ptr_ok. *)
 Theorem bop_in_expr_full_ok:
-  !cx ty bop es.
+  !mods exps cx ty bop es.
     (bop = In \/ bop = NotIn) /\
-    (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Builtin ty (Bop bop) es)
+    (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ty (Bop bop) es)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   ONCE_REWRITE_TAC [body_expr_full_ok_def] >> reverse conj_tac >- simp[] >>
@@ -331,10 +332,10 @@ QED
 
 (* Admitted: the joint twin of bodyPtrBop's bop_expr_ptr_ok. *)
 Theorem bop_expr_full_ok:
-  !cx ty bop es.
+  !mods exps cx ty bop es.
     bop <> In /\ bop <> NotIn /\
-    (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Builtin ty (Bop bop) es)
+    (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ty (Bop bop) es)
 Proof
   rpt gen_tac >> strip_tac >>
   ONCE_REWRITE_TAC [body_expr_full_ok_def] >> reverse conj_tac >- simp[] >>
@@ -378,10 +379,10 @@ QED
 
 (* Joint MakeArray execution and result ownership. *)
 Theorem make_array_expr_full_ok:
-  !cx ty bt es.
+  !mods exps cx ty bt es.
     (?t n. bt = MakeArray t n) /\
-    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Builtin ty bt es)
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ty bt es)
 Proof
   rpt strip_tac >> gvs[] >>
   ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
@@ -392,11 +393,11 @@ QED
 
 (* Admitted: the joint twin of bodyPtrWordBuiltins's word_builtin_expr_ptr_ok. *)
 Theorem word_builtin_expr_full_ok:
-  !cx ty bt es.
+  !mods exps cx ty bt es.
     (bt = Not \/ bt = Neg \/ bt = Abs \/ (?d. bt = AsWeiValue d) \/ bt = Ceil \/
      bt = Floor \/ bt = AddMod \/ bt = MulMod \/ bt = PowMod256) /\
-    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Builtin ty bt es)
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ty bt es)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
@@ -416,27 +417,27 @@ QED
 
 (* The joint hash producer supplies the same singleton-argument case. *)
 Theorem hash_builtin_expr_full_ok:
-  !cx ty bt es.
+  !mods exps cx ty bt es.
     (bt = Keccak256 \/ bt = Sha256) /\
-    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Builtin ty bt es)
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ty bt es)
 Proof
   ACCEPT_TAC bodyFullHashTheory.hash_expr_full_ok
 QED
 
 (* Joint bytestring suppliers, including Slice's code-source child order. *)
 Theorem bytestring_builtin_expr_full_ok:
-  !cx ty bt es.
+  !mods exps cx ty bt es.
     ((?n. bt = CalldataSlice n) \/ (?n. bt = Concat n) \/ (?n. bt = Slice n) \/
      (?n. bt = Uint2Str n)) /\
     (builtin_args_length_ok bt (LENGTH es) ==>
       case code_slice_source bt es of
-        NONE => body_exprs_full_ok cx es
+        NONE => body_exprs_full_ok_mods mods exps cx es
       | SOME (code_ty,addr) =>
-          body_exprs_full_ok cx (TL es) /\
+          body_exprs_full_ok_mods mods exps cx (TL es) /\
           (!s tail_vs t. eval_exprs cx (TL es) s = (INL tail_vs,t) ==>
-            body_exprs_full_ok cx [addr])) ==>
-    body_expr_full_ok cx (Builtin ty bt es)
+            body_exprs_full_ok_mods mods exps cx [addr])) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ty bt es)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
@@ -453,10 +454,10 @@ QED
 
 (* Joint precompile execution, including aggregate result ownership. *)
 Theorem precompile_builtin_expr_full_ok:
-  !cx ty bt es.
+  !mods exps cx ty bt es.
     (bt = ECRecover \/ bt = ECAdd \/ bt = ECMul) /\
-    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Builtin ty bt es)
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ty bt es)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   ONCE_REWRITE_TAC [body_expr_full_ok_def] >> conj_tac
@@ -470,7 +471,7 @@ QED
 (* msg.gas, by msgGasFull's joint fragment: typing fixes the
    annotation and the empty argument list. *)
 Theorem body_msg_gas_full_case:
-  !cx ann args. body_expr_full_ok cx (Builtin ann (Env MsgGas) args)
+  !mods exps cx ann args. body_expr_full_ok_mods mods exps cx (Builtin ann (Env MsgGas) args)
 Proof
   rw[body_expr_full_ok_def] >>
   `args = [] /\ ann = env_item_type MsgGas` by
@@ -481,30 +482,30 @@ QED
 
 (* A builtin, split by family as body_builtin_case_ptr does. *)
 Theorem body_builtin_case_full:
-  !cx ty bt es.
+  !mods exps cx ty bt es.
     (!s'' x t v code_ty addr tail_s tail_vs t'.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) /\ bt <> Len /\
        bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
        v = (code_ty,addr) /\
        eval_exprs cx (TL es) tail_s = (INL tail_vs,t') ==>
-       body_exprs_full_ok cx [addr]) /\
+       body_exprs_full_ok_mods mods exps cx [addr]) /\
     (!s'' x t v code_ty addr.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) /\ bt <> Len /\
        bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
        v = (code_ty,addr) ==>
-       body_exprs_full_ok cx (TL es)) /\
+       body_exprs_full_ok_mods mods exps cx (TL es)) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) /\ bt <> Len /\
        bt <> Env MsgGas /\ code_slice_source bt es = NONE ==>
-       body_exprs_full_ok cx es) /\
+       body_exprs_full_ok_mods mods exps cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) /\ bt = Len ==>
-       body_expr_full_ok cx (HD es)) ==>
-    body_expr_full_ok cx (Builtin ty bt es)
+       body_expr_full_ok_mods mods exps cx (HD es)) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ty bt es)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `bt = Env MsgGas` >- simp[body_msg_gas_full_case] >>
@@ -542,7 +543,7 @@ QED
 
 (* The joint twin of body_continue_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_continue_case_full:
-  !cx. body_stmt_full_ok cx Continue
+  !mods exps cx. body_stmt_full_ok_mods mods exps cx Continue
 Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.continue_stmt_full_ok
 QED
@@ -550,25 +551,25 @@ QED
 
 (* The joint twin of body_expr_stmt_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_expr_stmt_case_full:
-  !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Expr e)
+  !mods exps cx e. body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Expr e)
 Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.expr_stmt_full_ok
 QED
 
 (* Compose the counted request with its return and ABI decoder outcomes. *)
 Theorem body_extcall_case_full:
-  !cx v14 is_static skip_check sig opts es v15.
+  !mods exps cx v14 is_static skip_check sig opts es v15.
     (!s'' target t nargs s'3' results t'.
        eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
        nargs = LENGTH (FST (SND sig)) /\
        eval_exprs cx (TAKE nargs (DROP 1 es)) s'3' = (INL results,t') ==>
-       body_exprs_full_ok cx (DROP (1 + nargs) es)) /\
+       body_exprs_full_ok_mods mods exps cx (DROP (1 + nargs) es)) /\
     (!s'' target t nargs.
        eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
        nargs = LENGTH (FST (SND sig)) ==>
-       body_exprs_full_ok cx (TAKE nargs (DROP 1 es))) /\
-    body_exprs_full_ok cx (TAKE 1 es) ==>
-    body_expr_full_ok cx
+       body_exprs_full_ok_mods mods exps cx (TAKE nargs (DROP 1 es))) /\
+    body_exprs_full_ok_mods mods exps cx (TAKE 1 es) ==>
+    body_expr_full_ok_mods mods exps cx
       (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
   rpt gen_tac >> strip_tac >> PairCases_on `sig` >> fs[] >>
@@ -623,15 +624,15 @@ Theorem body_for_case_full:
        (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
        check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
        (INL x,t'') ==>
-       body_for_full_ok cx tyv id body vs) /\
+       body_for_full_ok_mods [(NONE,tops)] [] cx tyv id body vs) /\
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_iterator_full_ok cx it) /\
+       body_iterator_full_ok_mods [(NONE,tops)] [] cx it) /\
     (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
        stmt_loop_calls_ok [(NONE,tops)] (For id typ it n body)) ==>
-    body_stmt_full_ok cx (For id typ it n body)
+    body_stmt_full_ok_mods [(NONE,tops)] [] cx (For id typ it n body)
 Proof
   rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
   `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
@@ -642,25 +643,25 @@ QED
 
 (* The joint twin of body_if_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_if_case_full:
-  !cx e ss1 ss2.
+  !mods exps cx e ss1 ss2.
     (!s'' tv t s'3' x t'.
        eval_expr cx e s'' = (INL tv,t) /\ push_scope s'3' = (INL x,t') ==>
-       body_stmts_full_ok cx ss1) /\
+       body_stmts_full_ok_mods mods exps cx ss1) /\
     (!s'' tv t s'3' x t'.
        eval_expr cx e s'' = (INL tv,t) /\ push_scope s'3' = (INL x,t') ==>
-       body_stmts_full_ok cx ss2) /\ body_expr_full_ok cx e ==>
-    body_stmt_full_ok cx (If e ss1 ss2)
+       body_stmts_full_ok_mods mods exps cx ss2) /\ body_expr_full_ok_mods mods exps cx e ==>
+    body_stmt_full_ok_mods mods exps cx (If e ss1 ss2)
 Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.if_stmt_full_ok
 QED
 
 (* The joint twin of body_ifexp_case_ptr_at (bodyPtrExprCases): bodyFullIfExp. *)
 Theorem body_ifexp_case_full:
-  !cx v5 e1 e2 e3.
-    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok cx e2) /\
-    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok cx e3) /\
-    body_expr_full_ok cx e1 ==>
-    body_expr_full_ok cx (IfExp v5 e1 e2 e3)
+  !mods exps cx v5 e1 e2 e3.
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok_mods mods exps cx e3) /\
+    body_expr_full_ok_mods mods exps cx e1 ==>
+    body_expr_full_ok_mods mods exps cx (IfExp v5 e1 e2 e3)
 Proof
   ACCEPT_TAC bodyFullIfExpTheory.ifexp_expr_full_ok
 QED
@@ -693,14 +694,14 @@ Definition internal_defaults_const_names_def:
 End
 
 Theorem body_intcall_case_full:
-  !cx v16 src_id_opt fn es v17.
+  !mods exps cx v16 src_id_opt fn es v17.
     (!ts mut nr args dflts ret ss.
        ~MEM (src_id_opt,fn) cx.stk /\
        get_module_code cx src_id_opt = SOME ts /\
        lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (src_id_opt,fn))
+       body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (src_id_opt,fn))
          (subst_consts_stmts (module_consts_env (cx_tops cx) []) ss) /\
-       body_exprs_full_ok (cx with stk updated_by CONS (src_id_opt,fn))
+       body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (src_id_opt,fn))
          (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
            (subst_consts_exprs (module_consts_env (cx_tops cx) []) dflts))) /\
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
@@ -716,8 +717,8 @@ Theorem body_intcall_case_full:
        type_check
          (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
          "IntCall args length" s'5' = (INL x',t'3') ==>
-       body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
+       body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
   rpt gen_tac >> strip_tac >>
   ONCE_REWRITE_TAC[body_expr_full_ok_def] >> simp[] >>
@@ -763,7 +764,7 @@ QED
 
 (* Log, by bodyFullLog's joint fragment. *)
 Theorem body_log_case_full:
-  !cx id es. body_exprs_full_ok cx es ==> body_stmt_full_ok cx (Log id es)
+  !mods exps cx id es. body_exprs_full_ok_mods mods exps cx es ==> body_stmt_full_ok_mods mods exps cx (Log id es)
 Proof
   rw[body_stmt_full_ok_def] >>
   irule compile_log_frag_full >> metis_tac[]
@@ -771,20 +772,20 @@ QED
 
 (* Pass, by stmtSimPass's joint fragment. *)
 Theorem body_pass_case_full:
-  !cx. body_stmt_full_ok cx Pass
+  !mods exps cx. body_stmt_full_ok_mods mods exps cx Pass
 Proof
   rw[body_stmt_full_ok_def, gas_shadow_stmt_def, compile_pass_frag_full]
 QED
 
 Theorem body_pop_case_full:
-  !cx v10 bt. body_base_target_full_ok cx bt ==> body_expr_full_ok cx (Pop v10 bt)
+  !mods exps cx v10 bt. body_base_target_full_ok_mods mods exps cx bt ==> body_expr_full_ok_mods mods exps cx (Pop v10 bt)
 Proof
   ACCEPT_TAC bodyFullPopTheory.pop_expr_full_ok
 QED
 
 (* The joint twin of body_raise_bare_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_raise_bare_case_full:
-  !cx. body_stmt_full_ok cx (Raise RaiseBare)
+  !mods exps cx. body_stmt_full_ok_mods mods exps cx (Raise RaiseBare)
 Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.raise_bare_stmt_full_ok
 QED
@@ -792,7 +793,7 @@ QED
 (* The joint twin of body_raise_reason_case_ptr_at (bodyPtrExitCases),
    by its fragment in bodyFullRaiseReason. *)
 Theorem body_raise_reason_case_full:
-  !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Raise (RaiseReason e))
+  !mods exps cx e. body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Raise (RaiseReason e))
 Proof
   rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
   irule compile_raise_reason_frag_full >> metis_tac[]
@@ -800,25 +801,25 @@ QED
 
 (* The joint twin of body_raise_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_raise_unreachable_case_full:
-  !cx. body_stmt_full_ok cx (Raise RaiseUnreachable)
+  !mods exps cx. body_stmt_full_ok_mods mods exps cx (Raise RaiseUnreachable)
 Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.raise_unreachable_stmt_full_ok
 QED
 
 (* The joint raw_call-with-calldata case. *)
 Theorem body_raw_call_calldata_case_full:
-  !cx ty flags es v19.
-    body_exprs_full_ok cx es ==>
-    body_expr_full_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
+  !mods exps cx ty flags es v19.
+    body_exprs_full_ok_mods mods exps cx es ==>
+    body_expr_full_ok_mods mods exps cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
   ACCEPT_TAC bodyFullRawCallCalldataTheory.raw_call_calldata_expr_full_ok
 QED
 
 (* RawCall composes counted operands, the call and the return-data suffix. *)
 Theorem body_raw_call_case_full:
-  !cx ty flags es v18.
-    body_exprs_full_ok cx es ==>
-    body_expr_full_ok cx (Call ty (RawCallTarget flags) es v18)
+  !mods exps cx ty flags es v18.
+    body_exprs_full_ok_mods mods exps cx es ==>
+    body_expr_full_ok_mods mods exps cx (Call ty (RawCallTarget flags) es v18)
 Proof
   map_every qx_gen_tac [`cx`,`ann`,`flags`,`args`,`dflt`] >>
   disch_tac >> simp[Once body_expr_full_ok_def] >>
@@ -847,8 +848,8 @@ QED
 
 (* RawLog composes its topic and data children at one joint midpoint. *)
 Theorem body_raw_log_case_full:
-  !cx v20 es v21.
-    body_exprs_full_ok cx es ==> body_expr_full_ok cx (Call v20 RawLog es v21)
+  !mods exps cx v20 es v21.
+    body_exprs_full_ok_mods mods exps cx es ==> body_expr_full_ok_mods mods exps cx (Call v20 RawLog es v21)
 Proof
   rpt strip_tac >> irule raw_log_expr_full_ok >> simp[] >> conj_tac
   >- (rpt gen_tac >>
@@ -864,8 +865,8 @@ QED
 (* RawRevert, by raw_revert_expr_full_ok; its lower_value shadow-compile
  * premise is gas_shadow_compile_expr lifted by gas_shadow_compiles_lower_value. *)
 Theorem body_raw_revert_case_full:
-  !cx v22 es v23.
-    body_exprs_full_ok cx es ==> body_expr_full_ok cx (Call v22 RawRevert es v23)
+  !mods exps cx v22 es v23.
+    body_exprs_full_ok_mods mods exps cx es ==> body_expr_full_ok_mods mods exps cx (Call v22 RawRevert es v23)
 Proof
   rpt strip_tac >>
   `!cenv ty e. gas_shadow_compiles (lower_value compile_expr cenv ty e)
@@ -879,7 +880,7 @@ QED
 
 (* Return e, by the frame's own joint Return fragment and e's case. *)
 Theorem body_return_case_full:
-  !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Return (SOME e))
+  !mods exps cx e. body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Return (SOME e))
 Proof
   rw[body_stmt_full_ok_def, frame_ret_ok_full_def, gas_shadow_stmt_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
@@ -910,7 +911,7 @@ QED
 
 (* Return, by the frame's own joint Return fragment. *)
 Theorem body_return_none_case_full:
-  !cx. body_stmt_full_ok cx (Return NONE)
+  !mods exps cx. body_stmt_full_ok_mods mods exps cx (Return NONE)
 Proof
   rw[body_stmt_full_ok_def, frame_ret_ok_full_def, gas_shadow_stmt_def] >>
   first_x_assum (qspecl_then [`cenv`, `env`, `lctx`, `NONE`, `es`] mp_tac) >>
@@ -919,12 +920,13 @@ QED
 
 (* Joint composition from the source, paired layout and terminal interfaces. *)
 Theorem selfdestruct_expr_full_from_interfaces:
+  !mods exps.
   (!cenv cx env ann args dflt es.
-    expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
+    expr_body_pre_mods mods cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
     ?e. args = [e] /\ ann = NoneT /\ dflt = NONE /\
       expr_type e = BaseT AddressT /\
-      (!es'. expr_sim_inv cenv cx env es' ==>
-         expr_body_pre cenv cx env e es') /\
+      (!es'. expr_sim_inv_mods mods cenv cx env es' ==>
+         expr_body_pre_mods mods cenv cx env e es') /\
       eval_expr cx (Call ann SelfDestructTarget args dflt) =
         bind (bind (eval_expr cx e) (read_result cx)) (selfdestruct_tail cx)) ==>
   (!cenv ty ann e dflt sa sb vv ssa ssb svv func sfunc.
@@ -962,10 +964,11 @@ Theorem selfdestruct_expr_full_from_interfaces:
             (t,G,tn) [] (r,G,tn))) ==>
   !cx ann args dflt DF lo d PG tops ctx shadow_ctx func shadow_func
     cenv env ty es.
-    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
+    body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann SelfDestructTarget args dflt) es
 Proof
@@ -1341,12 +1344,12 @@ Proof
 QED
 
 Theorem selfdestruct_full_source_pre:
-  !cenv cx env ann args dflt es.
-    expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
+  !mods cenv cx env ann args dflt es.
+    expr_body_pre_mods mods cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
     ?e. args = [e] /\ ann = NoneT /\ dflt = NONE /\
       expr_type e = BaseT AddressT /\
-      (!es'. expr_sim_inv cenv cx env es' ==>
-         expr_body_pre cenv cx env e es') /\
+      (!es'. expr_sim_inv_mods mods cenv cx env es' ==>
+         expr_body_pre_mods mods cenv cx env e es') /\
       eval_expr cx (Call ann SelfDestructTarget args dflt) =
         bind (bind (eval_expr cx e) (read_result cx)) (selfdestruct_tail cx)
 Proof
@@ -1428,11 +1431,12 @@ QED
 
 (* Discharge the closed interfaces using their integrated suppliers. *)
 Theorem selfdestruct_expr_full:
-  !cx ann args dflt DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
-    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
+  !mods exps cx ann args dflt DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+    body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann SelfDestructTarget args dflt) es
 Proof
@@ -1445,9 +1449,9 @@ QED
 
 (* Both result judgments extend the same child joint witness. *)
 Theorem body_selfdestruct_case_full:
-  !cx v24 es v25.
-    body_exprs_full_ok cx es ==>
-    body_expr_full_ok cx (Call v24 SelfDestructTarget es v25)
+  !mods exps cx v24 es v25.
+    body_exprs_full_ok_mods mods exps cx es ==>
+    body_expr_full_ok_mods mods exps cx (Call v24 SelfDestructTarget es v25)
 Proof
   rpt gen_tac >> strip_tac >>
   once_rewrite_tac[body_expr_full_ok_def] >> simp[] >>
@@ -1477,52 +1481,52 @@ QED
 
 (* The send operands and CALL/ASSERT suffix share the joint witness. *)
 Theorem body_send_case_full:
-  !cx v12 has_gas es v13.
+  !mods exps cx v12 has_gas es v13.
     (!s'' x t.
        type_check (LENGTH es = if has_gas then 3 else 2) "Send args" s'' =
        (INL x,t) ==>
-       body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Call v12 (Send has_gas) es v13)
+       body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Call v12 (Send has_gas) es v13)
 Proof
   ACCEPT_TAC bodyFullSendTheory.body_send_case_full
 QED
 
 (* The joint twin of body_stmts_cons_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_stmts_cons_case_full:
-  !cx s ss.
-    (!s'' x t. eval_stmt cx s s'' = (INL x,t) ==> body_stmts_full_ok cx ss) /\
-    body_stmt_full_ok cx s ==>
-    body_stmts_full_ok cx (s::ss)
+  !mods exps cx s ss.
+    (!s'' x t. eval_stmt cx s s'' = (INL x,t) ==> body_stmts_full_ok_mods mods exps cx ss) /\
+    body_stmt_full_ok_mods mods exps cx s ==>
+    body_stmts_full_ok_mods mods exps cx (s::ss)
 Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.stmts_cons_full_ok
 QED
 
 (* The empty list, by stmtSimZero's joint fragment. *)
 Theorem body_stmts_nil_case_full:
-  !cx. body_stmts_full_ok cx []
+  !mods exps cx. body_stmts_full_ok_mods mods exps cx []
 Proof
   rw[body_stmts_full_ok_def, stmt_frag_nil_full]
 QED
 
 Theorem body_structlit_case_full:
-  !cx v7 src_id_opt id kes.
-    (!ks. ks = MAP FST kes ==> body_exprs_full_ok cx (MAP SND kes)) ==>
-    body_expr_full_ok cx (StructLit v7 (src_id_opt,id) kes)
+  !mods exps cx v7 src_id_opt id kes.
+    (!ks. ks = MAP FST kes ==> body_exprs_full_ok_mods mods exps cx (MAP SND kes)) ==>
+    body_expr_full_ok_mods mods exps cx (StructLit v7 (src_id_opt,id) kes)
 Proof
   ACCEPT_TAC bodyFullStructLitTheory.structlit_expr_full_ok
 QED
 
 (* Dispatch the joint subscript cases using the same-endpoint unframed array proof. *)
 Theorem body_subscript_case_full:
-  !cx v8 e1 e2.
+  !mods exps cx v8 e1 e2.
     (!s'' res t s'3' res' t'.
        eval_expr cx e1 s'' = (INL res,t) /\
        (if subscript_reads_base cx e1 e2 then
           bind (read_result cx res) (\v. return (Value v))
         else return res) s'3' = (INL res',t') ==>
-       body_expr_full_ok cx e2) /\
-    body_expr_full_ok cx e1 ==>
-    body_expr_full_ok cx (Subscript v8 e1 e2)
+       body_expr_full_ok_mods mods exps cx e2) /\
+    body_expr_full_ok_mods mods exps cx e1 ==>
+    body_expr_full_ok_mods mods exps cx (Subscript v8 e1 e2)
 Proof
   rpt gen_tac >> strip_tac >>
   irule bodyFullSubscriptTheory.subscript_expr_full_ok_from_place_base >>
@@ -1532,12 +1536,12 @@ QED
 
 (* Join the TypeBuiltin constructor proofs. *)
 Theorem body_type_builtin_case_full:
-  !cx v11 tb typ es.
+  !mods exps cx v11 tb typ es.
     (!s'' x t.
        type_check (type_builtin_args_length_ok tb (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>
-       body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (TypeBuiltin v11 tb typ es)
+       body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (TypeBuiltin v11 tb typ es)
 Proof
   rpt gen_tac >> Cases_on `tb`
   >- MATCH_ACCEPT_TAC bodyFullTypeBuiltinEmptyTheory.empty_expr_full_ok

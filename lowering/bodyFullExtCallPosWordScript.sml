@@ -12,6 +12,7 @@ Ancestors
   list[qualified,ignore_grammar]
   ptrDiscipline[qualified,ignore_grammar]
   unitTransformDefs[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 (* Retagging a word pointer changes no instruction emitted by unwrap_value. *)
 Theorem word_snapshot_unwrap[local]:
@@ -34,10 +35,12 @@ Proof
 QED
 
 Theorem extcall_request_snapshot_word_owned_full:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env e es /\
+  !mods exps.
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   comp_bind (compile_expr cenv (expr_type e) e)
     (\vv. compile_snapshot_vv cenv F
       (ext_call_arg_value (lowered_value_type cenv e) vv)) sa = (sv,sb) /\

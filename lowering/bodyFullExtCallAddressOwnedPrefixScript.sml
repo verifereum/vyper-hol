@@ -7,6 +7,7 @@ Ancestors
   exprSimHypsDefs exprSimSource exprSafeOperand exprSimWordArgs exprLoweringProps stmtSimProps
   bodyFullPreds bodySimFull compileEnv loweringPosts vyperInterpreter wordArgsPtr
   evalNoHalt supportedExprTraverse vyperTypeCallGraph list
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 (* At each bind, expose that the producer's cut has consumed its observations. *)
 val operand_bind_tac =
@@ -25,22 +26,24 @@ val operand_bind_tac =
 
 (* Keep the target's pointer ownership at the head cut of this execution. *)
 Theorem extcall_request_guarded_operand_prefix_address_owned_bundled:
+  !mods exps.
   args = addr::tail /\ nargs = LENGTH arg_types /\
   xs = TAKE nargs tail /\ kw_es = DROP nargs tail /\
   expr_type addr = BaseT AddressT /\
-  body_exprs_full_ok cx (TAKE 1 args) /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env addr es /\
+  body_exprs_full_ok_mods mods exps cx (TAKE 1 args) /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env addr es /\
   (!st target mid n. eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\
-     n = LENGTH arg_types ==> body_exprs_full_ok cx (TAKE n (DROP 1 args))) /\
+     n = LENGTH arg_types ==> body_exprs_full_ok_mods mods exps cx (TAKE n (DROP 1 args))) /\
   (!st target mid n st' vs ee.
      eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\
      n = LENGTH arg_types /\
      eval_exprs cx (TAKE n (DROP 1 args)) st' = (INL vs,ee) ==>
-     body_exprs_full_ok cx (DROP (1 + n) args)) /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
-     expr_body_pre cenv cx env e st) /\
+     body_exprs_full_ok_mods mods exps cx (DROP (1 + n) args)) /\
+  (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==>
+     expr_body_pre_mods mods cenv cx env e st) /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sm) /\
   lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr addr)
     shadow_sa = (ao,shadow_sm) /\
@@ -69,11 +72,11 @@ Theorem extcall_request_guarded_operand_prefix_address_owned_bundled:
   (!obs1 obs2 v target aw mid t G1 tn1 vs ee u G2 tn2.
     eval_exprs cx [addr] (es with gas_obs := obs1) = (INL [v],mid) /\
     eval_exprs cx xs (mid with gas_obs := obs2) = (INL vs,ee) /\
-    body_exprs_full_ok cx kw_es /\
+    body_exprs_full_ok_mods mods exps cx kw_es /\
     dest_AddressV v = SOME target /\ eval_operand ao u = SOME aw /\
     w2w aw = target /\ safe_operand sm ao /\
     ptr_val_ok cx (BaseT AddressT) v ao G1 tn1 t /\
-    expr_sim_inv cenv cx env mid /\ mid.gas_obs = [] /\ ee.gas_obs = [] /\
+    expr_sim_inv_mods mods cenv cx env mid /\ mid.gas_obs = [] /\ ee.gas_obs = [] /\
     storage_trace_domain cx st0 mid.storage_trace /\
     storage_trace_domain cx st0 ee.storage_trace /\
     LENGTH svs = LENGTH xs /\
@@ -83,7 +86,7 @@ Theorem extcall_request_guarded_operand_prefix_address_owned_bundled:
     (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z) /\
     wb_frame cenv mid ee sm t u /\
     MAP FDOM ee.scopes = MAP FDOM mid.scopes /\
-    expr_sim_inv cenv cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\
     (!x w. not_fresh_at sm x /\ lookup_var x t = SOME w ==> lookup_var x u = SOME w) /\
     (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
@@ -257,22 +260,24 @@ Proof
 QED
 
 Theorem extcall_request_guarded_operand_prefix_address_owned:
+  !mods exps.
   args = addr::tail /\ nargs = LENGTH arg_types /\
   xs = TAKE nargs tail /\ kw_es = DROP nargs tail /\
   expr_type addr = BaseT AddressT /\
-  body_exprs_full_ok cx (TAKE 1 args) /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env addr es /\
+  body_exprs_full_ok_mods mods exps cx (TAKE 1 args) /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env addr es /\
   (!st target mid n. eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\
-     n = LENGTH arg_types ==> body_exprs_full_ok cx (TAKE n (DROP 1 args))) /\
+     n = LENGTH arg_types ==> body_exprs_full_ok_mods mods exps cx (TAKE n (DROP 1 args))) /\
   (!st target mid n st' vs ee.
      eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\
      n = LENGTH arg_types /\
      eval_exprs cx (TAKE n (DROP 1 args)) st' = (INL vs,ee) ==>
-     body_exprs_full_ok cx (DROP (1 + n) args)) /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
-     expr_body_pre cenv cx env e st) /\
+     body_exprs_full_ok_mods mods exps cx (DROP (1 + n) args)) /\
+  (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==>
+     expr_body_pre_mods mods cenv cx env e st) /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sm) /\
   lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr addr)
     shadow_sa = (ao,shadow_sm) /\
@@ -304,11 +309,11 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
   (!obs1 obs2 v target aw mid t G1 tn1 vs ee u G2 tn2.
     eval_exprs cx [addr] (es with gas_obs := obs1) = (INL [v],mid) /\
     eval_exprs cx xs (mid with gas_obs := obs2) = (INL vs,ee) /\
-    body_exprs_full_ok cx kw_es /\
+    body_exprs_full_ok_mods mods exps cx kw_es /\
     dest_AddressV v = SOME target /\ eval_operand ao u = SOME aw /\
     w2w aw = target /\ safe_operand sm ao /\
     ptr_val_ok cx (BaseT AddressT) v ao G1 tn1 t /\
-    expr_sim_inv cenv cx env mid /\ mid.gas_obs = [] /\ ee.gas_obs = [] /\
+    expr_sim_inv_mods mods cenv cx env mid /\ mid.gas_obs = [] /\ ee.gas_obs = [] /\
     storage_trace_domain cx st0 mid.storage_trace /\
     storage_trace_domain cx st0 ee.storage_trace /\
     LENGTH svs = LENGTH xs /\
@@ -320,7 +325,7 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
     (!fn inst z. frag_reachable ctx func u fn inst z ==> dalloca_fmp_headroom inst z) /\
     wb_frame cenv mid ee sm t u /\
     MAP FDOM ee.scopes = MAP FDOM mid.scopes /\
-    expr_sim_inv cenv cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\
     (!x w. not_fresh_at sm x /\ lookup_var x t = SOME w ==> lookup_var x u = SOME w) /\
     (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\

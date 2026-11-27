@@ -6,11 +6,14 @@ Ancestors
   loweringPosts bodyPtrDefs accountsRelProps fragGasPathPtr context words
   finite_map pred_set list vyperInterpreter vyperState vyperAST exprSimHyps
   exprSimDefs loweringStateRelDefs fragGasOriginPtr exprSimMemDefs
+  bodyInvSplit[qualified]
 
 Theorem toplevel_immutable_vv_full_from_contract:
+  !mods exps.
   (!tops ctx cenv cx env ann id es H D lo func s d G tn src off imms rt v.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (TopLevelName ann (cenv.ce_module,id)) es /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx env (TopLevelName ann (cenv.ce_module,id)) es /\
     cenv.ce_is_ctor /\ dead_lo_ok
       (H : (bool # 256 word # type_value) list # num list) D lo cenv cx /\
     stmt_state_rel H ctx func cenv cx es s /\
@@ -22,8 +25,9 @@ Theorem toplevel_immutable_vv_full_from_contract:
     off + type_memory_size rt <= lo /\
     (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
       val_in_memory rt v off mem)) /\
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env (TopLevelName ann (src,id)) es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env (TopLevelName ann (src,id)) es /\
   get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = NONE ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (TopLevelName ann (src,id)) es

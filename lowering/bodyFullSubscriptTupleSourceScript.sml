@@ -5,7 +5,8 @@ Ancestors
 
 (* Select the source child at the marked base endpoint, before the ADD. *)
 Theorem tuple_selected_marked_source:
-  expr_body_pre cenv cx env (Subscript ann obj idx) (es with gas_obs := gs) /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Subscript ann obj idx) (es with gas_obs := gs) /\
   expr_type obj = TupleT tys /\ post_value_type cenv obj = TupleT tys /\
   eval_expr cx obj (es with gas_obs := gs) = (INL btv,ee) /\
   vv_post H ctx func cenv cx obj es sa sb s0 ee btv bvv q ==>

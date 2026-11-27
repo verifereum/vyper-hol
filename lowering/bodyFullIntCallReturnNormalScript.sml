@@ -8,6 +8,7 @@ Ancestors context[qualified,ignore_grammar]
   bodyFullIntCallReturnValue bodyFullHashKeccakFixed stateRelProj
   valueEncodingProofs valueCopyBytes bodyFullIntCallReturnMetadata
   exprLoweringProps exprSimDefs
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Libs
   monadsyntax
@@ -191,11 +192,13 @@ QED
 Finalise intcall_return_caller_frame
 
 Theorem intcall_return_register_frame_certificate:
+  !mods exps.
  !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
   rc rbs pvs v ee Gc tc ir cs returned out outs rbuf root off st4 stored Gs ts.
- body_inv tops ctx cenv cx /\
- expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+ expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
  compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
  local_ptrs_reserved cenv sa /\ dead_lo_ok H (DF H) lo cenv cx /\
  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -554,11 +557,12 @@ QED
 Finalise intcall_return_register_frame_certificate
 
 Theorem intcall_return_register_post:
-  !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
+  !mods exps tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
    DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
    rc rbs pvs v ee Gc tc ir cs returned out outs rbuf root off st4 stored Gs ts bb inst dflts.
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
   compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
@@ -782,11 +786,12 @@ QED
 Finalise intcall_return_register_post
 
 Theorem intcall_return_normal_owned:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+  !mods exps DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
    rr prev penv rtv es1 t G tn rc rbs pvs callee entered bb inst lbl arg_ops argv dflts.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\

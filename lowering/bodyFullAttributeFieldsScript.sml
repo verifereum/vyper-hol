@@ -3,11 +3,13 @@ Ancestors
   bodyPtrAttributeSource bodyPtrAttributeFields exprSimAttribute
   exprSimAttributeProps exprSimFieldLayout exprSimDefs loweringPosts
   compileEnv exprLowering context valueEncoding valueEncodingDefs venomState words list
+  exprSimHypsDefs[qualified]
 
 (* Restrict the constructor's robust code-memory clause, without choosing any
    horizon-dependent execution endpoint. *)
 Theorem attribute_code_field_full:
-  expr_body_pre cenv cx env (Attribute ann obj fld) es0 /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Attribute ann obj fld) es0 /\
   eval_expr cx obj es0 = (INL btv,ee) /\
   vv_post H ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
   select_result cx (expr_type obj) btv (AttrSubscript fld) ee = (INL tv',ee) /\

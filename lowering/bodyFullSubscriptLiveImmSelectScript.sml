@@ -23,7 +23,9 @@ Ancestors
   freshWrites wordArgsPtr gasSummary fragExec exprSimMemDefs venomState
 
 Theorem selected_constructor_code_read[local]:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env fin /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env fin /\
   cenv.ce_is_ctor /\ p.ptr_location = LocCode /\ dead_lo_ok H D lo cenv cx /\
   stmt_state_rel H ctx func cenv cx fin q /\
   ghost_inv_at D lo d cenv cx fin G tn q /\
@@ -47,7 +49,8 @@ QED
 (* A fixed projection can be read from the current root even if the index
    changed that root.  The last selected value may itself be dynamic. *)
 Theorem current_immutable_fixed_path_live[local]:
-  expr_sim_inv cenv cx env fin /\
+  !mods.
+  expr_sim_inv_mods mods cenv cx env fin /\
   FLOOKUP (case ALOOKUP fin.immutables cx.txn.target of
              NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
     SOME (itv,iv) /\
@@ -297,7 +300,9 @@ Proof
 QED
 
 Theorem immutable_target_index_frame:
-  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env idx es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_body_pre_mods mods cenv cx env idx es /\
   target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
   target_through_dynarray cenv bt /\ ~target_subscript_overlap cenv bt idx /\
   eval_expr cx idx es = (res,ee) ==>
@@ -315,7 +320,9 @@ Proof
 QED
 
 Theorem immutable_target_path_after_index:
-  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env idx es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_body_pre_mods mods cenv cx env idx es /\
   target_root bt = TopLevelNameTarget (NONE,id) /\ ~cx_const_name cx (NONE,id) /\
   ~target_subscript_overlap cenv bt idx /\
   eval_expr cx idx es = (res,ee) /\
@@ -325,7 +332,7 @@ Theorem immutable_target_path_after_index:
     NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id = SOME (itv,old) /\
   evaluate_subscripts itv old path = INL v /\
   (~target_through_dynarray cenv bt ==> fixed_shape_path itv path) ==>
-  expr_sim_inv cenv cx env ee /\
+  expr_sim_inv_mods mods cenv cx env ee /\
   ?current a.
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
       NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id =
@@ -465,15 +472,17 @@ QED
 Finalise immutable_fixed_spine
 
 Theorem live_immutable_path_after_index[local]:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env obj es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env obj es /\
   eval_expr cx obj es = (INL (PlaceR (ImmutablePlace src id path)),mid) /\
   read_result cx (PlaceR (ImmutablePlace src id path)) mid = (INL saved,mid) /\
   FLOOKUP env.bare_globals (src,id) = SOME root_ty /\
   evaluate_type (get_tenv cx) root_ty = SOME itv /\
   is_ArrayT (expr_type obj) /\ ~subscript_reads_base cx obj idx /\
-  expr_body_pre cenv cx env idx ix /\ ix.immutables = mid.immutables /\
-  eval_expr cx idx ix = (res,fin) /\ expr_sim_inv cenv cx env fin ==>
+  expr_body_pre_mods mods cenv cx env idx ix /\ ix.immutables = mid.immutables /\
+  eval_expr cx idx ix = (res,fin) /\ expr_sim_inv_mods mods cenv cx env fin ==>
   !rt rv. FLOOKUP (case ALOOKUP fin.immutables cx.txn.target of
     NONE => FEMPTY | SOME imms => get_source_immutables src imms) id = SOME (rt,rv) ==>
     ?v. evaluate_subscripts rt rv path = INL v
@@ -508,8 +517,10 @@ Proof
 QED
 
 Theorem live_immutable_index_cut_view[local]:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env obj es /\ expr_body_pre cenv cx env idx mid /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env obj es /\ expr_body_pre_mods mods cenv cx env idx mid /\
   expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
   ~subscript_reads_base cx obj idx /\
   eval_expr cx obj es = (INL (PlaceR (ImmutablePlace src id path)),mid) /\
@@ -1072,8 +1083,10 @@ QED
 
 (* The successful index cut, before executing the immutable bounds suffix. *)
 Theorem subscript_live_immutable_select_full:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env (Subscript et obj idx) es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env (Subscript et obj idx) es /\
   expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
   ~subscript_reads_base cx obj idx /\
   eval_expr cx obj (es with gas_obs := bgs) = (INL (PlaceR (ImmutablePlace src id path)),mid) /\

@@ -13,6 +13,7 @@ Ancestors
   bodyFullGhostFrame placeStoreStorage haltExitProj stmtSimStoreCopy stateRelProj stateRelProjStorage
   exprSimDefs[qualified,ignore_grammar] placeStoreSlots[qualified,ignore_grammar] representationCleanPtr[qualified,ignore_grammar] sourceUnitExecution[qualified,ignore_grammar] valueEncodingDefs[qualified,ignore_grammar] valueEncodingProofs[qualified,ignore_grammar]
   valueEncodingProps[qualified,ignore_grammar] venomMemProofs[qualified,ignore_grammar] vyperStorage[qualified,ignore_grammar] vyperStorageFrame[qualified,ignore_grammar] vyperStoragePlaceRegion[qualified,ignore_grammar] vyperTypeValues[qualified,ignore_grammar]
+  exprSimHypsDefs[qualified]
 
 Theorem body_assign_slots_full_static_exit:
   acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -110,7 +111,8 @@ Proof
 QED
 
 Theorem assign_slots_sparse_stmt_post[local]:
-  expr_sim_inv cenv cx env ee /\
+  !mods.
+  expr_sim_inv_mods mods cenv cx env ee /\
   stmt_state_rel H ctx func cenv cx ee s /\
   MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
   storage_locks_separated (FST H) (SND H) /\
@@ -351,6 +353,7 @@ QED
 (* The runtime copy may use a smaller source layout when both layouts have
    identical live encodings. The storage relation uses the declared layout. *)
 Theorem body_assign_slots_full_layout_frame_path:
+  !mods.
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
   (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
@@ -398,7 +401,7 @@ Theorem body_assign_slots_full_layout_frame_path:
     return_buf_frame d cenv sb t /\ alloca_history func t /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!H ee env rootk root path delta.
-       expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
+       expr_sim_inv_mods mods cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
        dead_lo_ok H (DF H) lo cenv cx /\ ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
        (0 < type_slot_size dtv ==>
           MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
@@ -507,6 +510,7 @@ QED
 Finalise body_assign_slots_full_layout_frame_path
 
 Theorem body_assign_slots_full_frame_path:
+  !mods.
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
   (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
@@ -549,7 +553,7 @@ Theorem body_assign_slots_full_frame_path:
     return_buf_frame d cenv sb t /\ alloca_history func t /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!H ee env rootk root path delta.
-       expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
+       expr_sim_inv_mods mods cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
        dead_lo_ok H (DF H) lo cenv cx /\ ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
        (0 < type_slot_size tv ==>
           MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
@@ -567,7 +571,8 @@ Proof
 QED
 
 Theorem body_assign_slots_positive_endpoint_post:
-  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
+  !mods.
+  expr_sim_inv_mods mods cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
   ghost_inv_at D lo d cenv cx ee G tn s /\ dead_lo_ok H D lo cenv cx /\
   MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
   storage_locks_separated (FST H) (SND H) /\ storage_subregion root path delta tv /\

@@ -8,6 +8,7 @@ Ancestors
   memoryPlaceStorePost pair placeMemoryCopyEffect placeMemoryLiveRegion
   placeMemoryStateRebuild pred_set ptrDiscipline stateRelProj stmtLowering stmtSimDefs sum
   targetPlaceSimCasesBase typedCopyOriginPtrBase typedMemoryCopy venomMemDefs words
+  exprSimHypsDefs[qualified]
 Libs
   monadsyntax
 
@@ -203,6 +204,7 @@ QED
 Finalise body_assign_memory_place_execution
 
 Theorem body_assign_memory_place_joint:
+  !mods.
   compile_assign_value cenv (Var xd) LocMemory (Var xs) F loc dty sty bytes sa = ((),sb) /\
   ~is_word_type dty /\ ~is_word_type sty /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -238,7 +240,7 @@ Theorem body_assign_memory_place_joint:
   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  expr_sim_inv cenv cx env ee /\
+  expr_sim_inv_mods mods cenv cx env ee /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type dty) /\
   target_ptr_ok cenv (PlaceR p) (Var xd,SOME LocMemory,SOME (ValPT dty)) G tn s /\
   ghost_inv_at D0 lo d0 cenv cx ee G tn s /\

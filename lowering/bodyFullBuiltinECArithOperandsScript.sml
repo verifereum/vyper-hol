@@ -3,13 +3,15 @@ Theory bodyFullBuiltinECArithOperands
 Ancestors
   bodyMemEcArithOperands loweringPosts valueEncoding bodyPtrDefs
   stateRelProj allocaSiteResource bodyMemoryDefs[qualified,ignore_grammar]
+  exprSimHypsDefs[qualified]
 
 Theorem ec_first_point_staging_ready:
+  !mods.
   post_value_type cenv e1 = expr_type e1 /\
   expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
   expr_post H ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  expr_sim_inv cenv cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
   (!w. eval_operand x t = SOME w ==> eval_operand x u = SOME w) /\
   local_ptrs_reserved cenv s1 /\ MAP FDOM es1.scopes = MAP FDOM es'.scopes /\
   s1.cs_next_id <= s2.cs_next_id /\

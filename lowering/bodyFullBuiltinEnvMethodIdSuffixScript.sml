@@ -13,11 +13,14 @@ Ancestors
   vyperValue vyperAST vyperInterpreter vyperState vyperTyping vyperContext
   vyperStorageTrace vyperStorageFootprint vyperTypeSystem exprSimHypsDefs exprSimHyps
   venomState vfmConstants finite_map list words arithmetic
+  bodyInvSplit[qualified]
 
 Theorem method_id_runtime_full_suffix:
+  !mods exps.
  !DF lo d explicit ctx func PG tops cenv cx env ann e es sa sm sb s0 st0 mid v x s G0 tn0 G tn fixed op.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann MethodId [e]) es /\
     ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)) /\
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\

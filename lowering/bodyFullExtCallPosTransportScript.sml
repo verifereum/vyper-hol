@@ -12,6 +12,7 @@ Ancestors
   gasContext valueEncodingProps abiCanonicalHeadSize bodyFullOperandSnapshot
   bodyFullAbiEncodeBorrowed bodyFullMaterializedOperandEndpointProps context
   bodyInvCodeProps bodyFullShadowBodyInv immutableRegionFrameProps
+  bodyInvSplit[qualified]
 
 Theorem extcall_saved_physical_store_bound:
   read_result cx raw ee = (INL v,ee) /\
@@ -85,6 +86,7 @@ Proof
 QED
 
 Theorem extcall_request_saved_stack_endpoint:
+  !mods.
   (?raw. read_result cx raw mid = (INL v,mid) /\
     vv_holds cenv cx (lowered_value_type cenv e) raw (StackValue tag op) mid t /\
     vv_at cenv cx (lowered_value_type cenv e) sa sm mid raw (StackValue tag op) t /\
@@ -95,7 +97,7 @@ Theorem extcall_request_saved_stack_endpoint:
   (!x. op = Var x ==> not_fresh_at sm x) /\
   (is_word_type (lowered_value_type cenv e) \/ pure_frame cenv func mid sm t u \/
    (?env (H0:(bool # bytes32 # type_value) list # num list) (H1:(bool # bytes32 # type_value) list # num list) ctx.
-      expr_sim_inv cenv cx env mid /\
+      expr_sim_inv_mods mods cenv cx env mid /\
       stmt_state_rel H0 ctx func cenv cx mid t /\
       stmt_state_rel H1 ctx func cenv cx ee u /\ ee.scopes = mid.scopes /\
       local_ptrs_reserved cenv sm /\ wb_frame cenv mid ee sm t u)) /\
@@ -163,6 +165,7 @@ Proof
 QED
 
 Theorem extcall_request_saved_memory_endpoint:
+  !mods.
   p.ptr_location = LocMemory /\ ~is_word_type (lowered_value_type cenv e) /\
   (?raw. read_result cx raw mid = (INL v,mid) /\
     vv_holds cenv cx (lowered_value_type cenv e) raw
@@ -177,7 +180,7 @@ Theorem extcall_request_saved_memory_endpoint:
   (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
   (pure_frame cenv func mid sm t u \/
    (?env (H0:(bool # bytes32 # type_value) list # num list) (H1:(bool # bytes32 # type_value) list # num list) ctx.
-      expr_sim_inv cenv cx env mid /\
+      expr_sim_inv_mods mods cenv cx env mid /\
       stmt_state_rel H0 ctx func cenv cx mid t /\
       stmt_state_rel H1 ctx func cenv cx ee u /\ ee.scopes = mid.scopes /\
       local_ptrs_reserved cenv sm /\ wb_frame cenv mid ee sm t u)) /\
@@ -445,7 +448,9 @@ Proof
 QED
 
 Theorem extcall_request_saved_ctor_read:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env entry /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env entry /\
   cenv.ce_is_ctor /\ p.ptr_location = LocCode /\ dead_lo_ok H D lo cenv cx /\
   ee.immutables = entry.immutables /\ stmt_state_rel H ctx func cenv cx ee u /\
   ghost_inv_at D lo d cenv cx ee G tn u /\

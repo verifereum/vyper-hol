@@ -12,6 +12,7 @@ Ancestors
   list rich_list finite_map codegenRel contextCodegenRel decoderGhostFramePtr
   freshWrites exprSimHypsDefs vyperTypeSystem vyperTyping vyperValue vyperContext
   exprSimUnopComposeProps gasShadowCompileStmtHelpers
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem word_neg_emission:
   !x ty sa op sb.
@@ -502,8 +503,9 @@ Proof
 QED
 
 Theorem word_neg_continuation_full:
-  expr_body_pre cenv cx env (Builtin (expr_type e) Neg [e]) es /\
-  expr_body_pre cenv cx env e es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Builtin (expr_type e) Neg [e]) es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   is_numeric_type (expr_type e) /\ ~is_uint_type (expr_type e) /\
   is_word_type (expr_type e) /\
   0 < type_bits (expr_type e) /\ type_bits (expr_type e) <= 256 /\
@@ -689,7 +691,7 @@ Proof
 QED
 
 Theorem word_neg_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
        (~is_word_type (expr_type e) ==>
         !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
@@ -701,11 +703,12 @@ Theorem word_neg_sim_full:
        expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
          cenv cx ty e es) /\
     bt = Neg /\
-    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt args) es ==>
+    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a bt args) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin a bt args) es /\
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)

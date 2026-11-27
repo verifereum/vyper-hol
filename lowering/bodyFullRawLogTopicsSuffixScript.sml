@@ -9,18 +9,21 @@ Ancestors
   vyperInterpreter vyperState vyperAST list exprLowering compileEnv
   exprSimWordArgs stmtSimProps vyperTypeArgFits
   contextRawReachable ptrDiscipline unitMemInv
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem raw_log_topics_suffix_full_under_compose:
+  !mods exps.
   (!tops ctx func cenv cx env ann n pre e rest data dflt
    sa sm sb shadow_sa shadow_sm shadow_sb op ops
    (H : (bool # 256 word # type_value) list # num list) DF lo d es s G0 tn0 xs mid v u G1 tn1 ys ee vs t G tn.
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n))
         (pre ++ e::rest); data] dflt) es /\
-  expr_body_pre cenv cx env e es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   expr_type e = BaseT (BytesT (Fixed 32)) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
   compile_multi_exprs compile_expr cenv rest sm = (ops,sb) /\
@@ -85,15 +88,16 @@ Theorem raw_log_topics_suffix_full_under_compose:
      gas_shadow_compiles (compile_multi_exprs compile_expr cenv xs)
        (compile_multi_exprs compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr xs))) /\
   topics = pre ++ rest /\
-  body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n))
         topics; data] dflt) es /\
-  body_exprs_full_ok cx rest /\
+  body_exprs_full_ok_mods mods exps cx rest /\
   compile_multi_exprs compile_expr cenv rest sa = (ops,sb) /\
   compile_multi_exprs compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr rest)
     shadow_sa = (ops,shadow_sb) /\

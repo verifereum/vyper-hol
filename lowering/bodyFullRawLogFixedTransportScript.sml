@@ -5,10 +5,12 @@ Ancestors
   exprSimWordArgs exprOperandVar vyperValue venomState words list
   finite_map pred_set bodyRawLogArgPre exprSimSource vyperTyping vyperState
   valueEncoding valueEncodingProofs compileEnv loweringStateRelDefs
+  exprSimHypsDefs[qualified]
 
 Theorem raw_log_fixed_child_tail_input:
-  expr_body_pre cenv cx env (Call ann RawLog args dflt) es0 /\
-  MEM data args /\ expr_sim_inv cenv cx env es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Call ann RawLog args dflt) es0 /\
+  MEM data args /\ expr_sim_inv_mods mods cenv cx env es /\
   bind (eval_expr cx data) (read_result cx)
     (es with gas_obs := input_gas) =
     (INL (BytesV bs),mid with gas_obs := output_gas) /\

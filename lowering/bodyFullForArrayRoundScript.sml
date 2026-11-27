@@ -21,6 +21,7 @@ Ancestors gasContext[qualified,ignore_grammar] bodyFullShared[qualified,ignore_g
   vyperStorageTrace gasExemptCert bodyLoopImmutableFrame forConsBodyGas
   forNestedArrayCapture[qualified,ignore_grammar]
   vyperTypeContract[qualified,ignore_grammar]
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs
   monadsyntax
 
@@ -441,7 +442,7 @@ QED
 (* Keep the raw source result until the actual fallthrough/continue/break
    suffix is chosen. The source execution is available at the same post. *)
 Theorem for_nonslot_array_body_invoke:
-  !DF lo d ctx shadow_ctx func shadow_func PG cx RetQ c id env body
+  !mods exps DF lo d ctx shadow_ctx func shadow_func PG cx RetQ c id env body
    original captured operands item bc benv sbCopy dtv v k a rs es eb G tn s
    tops bindings env' ret_ty st0 exit incr bc' sbBody shadow_sbCopy shadow_sbBody.
   (!H. valid_horizon cx st0 H eb.storage_trace ==>
@@ -450,15 +451,16 @@ Theorem for_nonslot_array_body_invoke:
       (H,k,a::rs,es,eb,G,tn,s)) /\
   return_buf_sep d bc eb s /\
   storage_trace_domain cx st0 eb.storage_trace /\
-  body_const_cells_agree [(NONE,tops)] cx benv eb /\
-  body_stmts_full_ok cx body /\ expr_sim_inv bc cx benv eb /\
+  body_const_cells_agree mods cx benv eb /\
+  body_stmts_full_ok_mods mods exps cx body /\ expr_sim_inv_mods mods bc cx benv eb /\
   ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
-  body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
+  (contract_inv mods exps ctx bc cx /\
+     module_body_inv mods bc.ce_module tops bc cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ supported_stmts tops bindings body /\
   (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
     occurs_abi_decode_target target tops) /\
   type_stmts benv ret_ty body = SOME env' /\ stmts_exprs_ok bc body /\
   call_evaluation_safe cx (int_calls_stmts body) /\
-  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
+  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
   stmts_env bc (InLoop exit incr) ret_ty body sbCopy = (bc',sbBody) /\
   stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
     shadow_sbCopy = (gas_shadow_env T bc',shadow_sbBody) /\
@@ -1423,7 +1425,7 @@ Finalise for_nonslot_entry_control
 
 (* Place the chosen iterator capture at the condition label before the first round. *)
 Theorem for_nonslot_array_entry_full:
-  !c id fty e sty bd ret_ty body func shadow_func sa0 vv sbExpr shadow_sa0
+  !mods c id fty e sty bd ret_ty body func shadow_func sa0 vv sbExpr shadow_sa0
    shadow_sbExpr loc len_op saL bc saD saA xd capacity aidItem entry cond bod incr
    exit idx invalid valid done_var next_var sa stride off_op sm sum_op sn addr
    saCopy sbCopy sbBody sj sb shadow_sbCopy shadow_sbBody n d s0 ctx u cx st0 em
@@ -1440,7 +1442,7 @@ Theorem for_nonslot_array_entry_full:
   return_buf_frame d c sa0 s0 /\ ret_pc_ok c sa0 s0 /\
   (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
   storage_trace_domain cx st0 em.storage_trace /\
-  expr_sim_inv c cx env em /\ ce_locals_declared c env /\ locals_alloc_ok c env /\
+  expr_sim_inv_mods mods c cx env em /\ ce_locals_declared c env /\ locals_alloc_ok c env /\
   lookup_scopes id em.scopes = NONE /\
   vs = MAP Value xs /\ evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV stv bd) /\
   value_has_type (ArrayTV stv bd) (ArrayV av) /\
@@ -1902,6 +1904,7 @@ QED
 
 (* Execute the nonempty test and the actual indexed copy before calling the body. *)
 Theorem for_nonslot_array_head_full:
+  !mods exps.
   for_nonslot_layout (c, id, fty, e, sty, bd, ret_ty, loop_body)
     (func, shadow_func)
     (sa0, vv, sbExpr, shadow_sa0, shadow_sbExpr, loc, len_op, saL)
@@ -1909,12 +1912,13 @@ Theorem for_nonslot_array_head_full:
     (entry, cond, bod, incr, exit, idx, invalid, valid, done_var, next_var)
     (sa, stride, off_op, sm, sum_op, sn, addr, saCopy, sbCopy)
     (sbBody, sj, sb, shadow_sbCopy, shadow_sbBody) /\
-  body_inv tops ctx c cx /\ c.ce_alloca_locals /\ fn_inst_ids_distinct func /\
+  (contract_inv mods exps ctx c cx /\
+     module_body_inv mods c.ce_module tops c cx) /\ c.ce_alloca_locals /\ fn_inst_ids_distinct func /\
   supported_stmt tops bindings (For id fty (Array e) bound loop_body) /\
   type_stmt env ret_ty (For id fty (Array e) bound loop_body) = SOME env' /\
   stmt_exprs_ok c (For id fty (Array e) bound loop_body) /\
   evaluate_type (get_tenv cx) fty = SOME dtv /\
-  body_for_full_ok cx dtv id loop_body vs /\
+  body_for_full_ok_mods mods exps cx dtv id loop_body vs /\
   storage_trace_domain cx st0 es.storage_trace /\
   return_buf_sep d c es s /\
   s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
@@ -2657,7 +2661,8 @@ Proof
 QED
 
 Theorem for_nonslot_selected_immutable_holds[local]:
-  expr_sim_inv c cx env em /\
+  !mods.
+  expr_sim_inv_mods mods c cx env em /\
   FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
   ~cx_const_name cx (src,name) /\
   read_result cx (PlaceR (ImmutablePlace src name [])) em = (INL (ArrayV av),em) /\
@@ -2704,7 +2709,8 @@ Definition for_nonslot_code_frame_def:
 End
 
 Theorem for_nonslot_bare_immutable_lookup[local]:
-  expr_sim_inv c cx env es /\
+  !mods.
+  expr_sim_inv_mods mods c cx env es /\
   FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
   ~cx_const_name cx (src,name) /\
   read_result cx (PlaceR (ImmutablePlace src name [])) es = (INL (ArrayV av),es) ==>
@@ -2726,7 +2732,7 @@ Theorem for_nonslot_code_frame_bare[local]:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   iterator_unmodified (Array e) body /\
   stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) n body) /\
-  expr_sim_inv c cx env em /\
+  expr_sim_inv_mods [(NONE,tops)] c cx env em /\
   (loc = LocCode ==> ?src name.
     e = TopLevelName (ArrayT et bd) (src,name) /\
     rv = PlaceR (ImmutablePlace src name []) /\
@@ -2772,6 +2778,7 @@ QED
 
 (* Finish the prepared round with one target suffix for all storage horizons. *)
 Theorem for_nonslot_array_scoped_body_at[local]:
+  !mods exps.
   (!H. valid_horizon cx st0 H eb.storage_trace ==>
     for_nonslot_body_entry (DF H,lo,d,ctx,func,cx,c,id,env,body)
       (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
@@ -2779,15 +2786,16 @@ Theorem for_nonslot_array_scoped_body_at[local]:
       (H,k,a::rs,es,eb,G,tn,s)) /\
   return_buf_sep d bc eb s /\
   storage_trace_domain cx st0 eb.storage_trace /\
-  expr_sim_inv c cx env em /\ local_ptrs_rel func c em.scopes u /\
+  expr_sim_inv_mods mods c cx env em /\ local_ptrs_rel func c em.scopes u /\
   well_typed_expr env e /\ expr_writes_ok (\_. F) e /\
   expr_type e = ArrayT et bd /\
   (?start. eval_expr cx e start = (INL rv,em)) /\
   for_nonslot_code_frame c cx env ctx func id e body loc rv vv av em u /\
-  body_const_cells_agree [(NONE,tops)] cx benv eb /\
-  body_stmts_full_ok cx body /\ expr_sim_inv bc cx benv eb /\
+  body_const_cells_agree mods cx benv eb /\
+  body_stmts_full_ok_mods mods exps cx body /\ expr_sim_inv_mods mods bc cx benv eb /\
   ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
-  body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmts tops bindings body /\
+  (contract_inv mods exps ctx bc cx /\
+     module_body_inv mods bc.ce_module tops bc cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ supported_stmts tops bindings body /\
   (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
     occurs_abi_decode_target target tops) /\
   type_stmts benv ret_ty body = SOME env' /\ stmts_exprs_ok bc body /\
@@ -2798,7 +2806,7 @@ Theorem for_nonslot_array_scoped_body_at[local]:
   (?bb inst. lookup_block incr func.fn_blocks = SOME bb /\
     get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI) /\
   call_evaluation_safe cx (int_calls_stmts body) /\
-  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
+  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
   stmts_env bc (InLoop exit incr) ret_ty body sbCopy = (bc',sbBody) /\
   stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt body)
     shadow_sbCopy = (gas_shadow_env T bc',shadow_sbBody) /\
@@ -2852,7 +2860,7 @@ Theorem for_nonslot_array_scoped_body_at[local]:
             (!name base len. local_region c es0.scopes s0 name base len ==>
               off+sz <= base \/ base+len <= off) /\
             off <= i /\ i < off+sz /\ i IN tt.t_mem ==> i IN tn0.t_mem)) /\
-        (~b ==> body_const_cells_agree [(NONE,tops)] cx env ef /\
+        (~b ==> body_const_cells_agree mods cx env ef /\
           t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
           for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
             (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
@@ -3704,13 +3712,14 @@ QED
 (* The increment runner gives the path; only its endpoint and reachability
    matter to the live packet.  Neither register write touches an old local. *)
 Theorem for_nonslot_actual_increment_live[local]:
+  !mods exps.
   (?bb inst. lookup_block cond func.fn_blocks = SOME bb /\
      get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI) /\
   sa0.cs_next_var <= saL.cs_next_var /\
   ~not_fresh_at saL idx /\ ~not_fresh_at saL out /\
   local_ptrs_reserved c saL /\ xd <> idx /\ xd <> out /\
   (!p. vv_operand vv = Var p \/ len_op = Var p ==> not_fresh_at saL p) /\
-  body_stmts_full_ok cx loop_body /\
+  body_stmts_full_ok_mods mods exps cx loop_body /\
   for_nonslot_live (D,lo,d,ctx,func,cx,c,id,env,loop_body)
     (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
     (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,a::rs,es,c,es,G,tn,s) /\
@@ -3825,14 +3834,16 @@ QED
 Finalise for_nonslot_actual_increment_live
 
 Theorem for_nonslot_array_round_contracts_at_with_prefix:
+  !mods exps.
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
     (bc,saD,saA,xd,capacity,aidItem)
     (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
-  body_const_cells_agree [(NONE,tops)] cx env em /\
-  body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es0 /\
+  body_const_cells_agree mods cx env em /\
+  (contract_inv mods exps ctx c cx /\
+     module_body_inv mods c.ce_module tops c cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_body_pre_mods mods c cx env e es0 /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
@@ -3842,7 +3853,7 @@ Theorem for_nonslot_array_round_contracts_at_with_prefix:
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id fty (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
   call_evaluation_safe cx (int_calls_stmt (For id fty (Array e) n loop_body)) /\
-  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ c ret_ty /\
+  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ c ret_ty /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_inst_ids_distinct func /\
@@ -3850,7 +3861,7 @@ Theorem for_nonslot_array_round_contracts_at_with_prefix:
   (!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
   return_buf_frame d c sa0 s0 /\ ret_pc_ok c sa0 s0 /\
   (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
-  evaluate_type (get_tenv cx) fty = SOME dtv /\ body_for_full_ok cx dtv id loop_body vs /\
+  evaluate_type (get_tenv cx) fty = SOME dtv /\ body_for_full_ok_mods mods exps cx dtv id loop_body vs /\
   storage_trace_domain cx st0 em.storage_trace /\
   return_buf_sep d c em u /\
   vs = MAP Value xs /\
@@ -3905,16 +3916,17 @@ Theorem for_nonslot_array_round_contracts_at_with_prefix:
         (len_op,idx,bw) (xd,dw,capacity,aidItem) (bc,benv,sbCopy,dtv,v)
         (H,k,a::rs,es,eb,Gf,tnf,t)) /\
     return_buf_sep d bc eb t /\ storage_trace_domain cx st0 eb.storage_trace /\
-    body_const_cells_agree [(NONE,tops)] cx benv eb /\
-    body_stmts_full_ok cx loop_body /\ expr_sim_inv bc cx benv eb /\
+    body_const_cells_agree mods cx benv eb /\
+    body_stmts_full_ok_mods mods exps cx loop_body /\ expr_sim_inv_mods mods bc cx benv eb /\
     ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
-    body_inv tops ctx bc cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    (contract_inv mods exps ctx bc cx /\
+     module_body_inv mods bc.ce_module tops bc cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmts tops bindings loop_body /\
     (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) loop_body ==>
       occurs_abi_decode_target target tops) /\
     type_stmts benv ret_ty loop_body = SOME env_b /\ stmts_exprs_ok bc loop_body /\
     call_evaluation_safe cx (int_calls_stmts loop_body) /\
-    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
+    frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty /\
     stmts_env bc (InLoop exit incr) ret_ty loop_body sbCopy = (bc',sbBody) /\
     stmts_env (gas_shadow_env T bc) (InLoop exit incr) ret_ty (MAP gas_shadow_stmt loop_body)
       shadow_sbCopy = (gas_shadow_env T bc',shadow_sbBody) /\
@@ -4478,14 +4490,16 @@ QED
 Finalise for_nonslot_array_round_contracts_at_with_prefix
 
 Theorem for_nonslot_array_round_contracts_at:
+  !mods exps.
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
     (bc,saD,saA,xd,capacity,aidItem)
     (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
-  body_const_cells_agree [(NONE,tops)] cx env em /\
-  body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es0 /\
+  body_const_cells_agree mods cx env em /\
+  (contract_inv mods exps ctx c cx /\
+     module_body_inv mods c.ce_module tops c cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_body_pre_mods mods c cx env e es0 /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
@@ -4495,7 +4509,7 @@ Theorem for_nonslot_array_round_contracts_at:
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id fty (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
   call_evaluation_safe cx (int_calls_stmt (For id fty (Array e) n loop_body)) /\
-  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ c ret_ty /\
+  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ c ret_ty /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_inst_ids_distinct func /\
@@ -4503,7 +4517,7 @@ Theorem for_nonslot_array_round_contracts_at:
   (!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
   return_buf_frame d c sa0 s0 /\ ret_pc_ok c sa0 s0 /\
   (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
-  evaluate_type (get_tenv cx) fty = SOME dtv /\ body_for_full_ok cx dtv id loop_body vs /\
+  evaluate_type (get_tenv cx) fty = SOME dtv /\ body_for_full_ok_mods mods exps cx dtv id loop_body vs /\
   storage_trace_domain cx st0 em.storage_trace /\
   return_buf_sep d c em u /\
   vs = MAP Value xs /\
@@ -4602,6 +4616,7 @@ QED
 
 (* The captured iterator's source facts are common to the full and prefix rounds. *)
 Theorem for_nonslot_array_round_source_pre:
+  !mods exps.
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
     (bc,saD,saA,xd,capacity,aidItem)
@@ -4609,7 +4624,8 @@ Theorem for_nonslot_array_round_source_pre:
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
   body_const_cells_agree [(NONE,tops)] cx env es0 /\
-  body_inv tops ctx c cx /\ expr_body_pre c cx env e es0 /\
+  (contract_inv mods exps ctx c cx /\
+     module_body_inv mods c.ce_module tops c cx) /\ expr_body_pre_mods mods c cx env e es0 /\
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
   (!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)) /\
@@ -4688,14 +4704,16 @@ Proof
 QED
 
 Theorem for_nonslot_array_round_contracts:
+  !mods exps.
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
     (bc,saD,saA,xd,capacity,aidItem)
     (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
-  body_const_cells_agree [(NONE,tops)] cx env es0 /\
-  body_inv tops ctx c cx /\ shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre c cx env e es0 /\
+  body_const_cells_agree mods cx env es0 /\
+  (contract_inv mods exps ctx c cx /\
+     module_body_inv mods c.ce_module tops c cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_body_pre_mods mods c cx env e es0 /\
   ce_locals_declared c env /\ locals_alloc_ok c env /\
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
@@ -4708,7 +4726,7 @@ Theorem for_nonslot_array_round_contracts:
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id fty (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
   call_evaluation_safe cx (int_calls_stmt (For id fty (Array e) n loop_body)) /\
-  frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ c ret_ty /\
+  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ c ret_ty /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
   MEM shadow_func shadow_ctx.ctx_functions /\ fn_inst_ids_distinct func /\
@@ -4716,7 +4734,7 @@ Theorem for_nonslot_array_round_contracts:
   (!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
   return_buf_frame d c sa0 s0 /\ ret_pc_ok c sa0 s0 /\
   (!fn inst t. frag_reachable ctx func u fn inst t ==> dalloca_fmp_headroom inst t) /\
-  evaluate_type (get_tenv cx) fty = SOME dtv /\ body_for_full_ok cx dtv id loop_body vs /\
+  evaluate_type (get_tenv cx) fty = SOME dtv /\ body_for_full_ok_mods mods exps cx dtv id loop_body vs /\
   storage_trace_domain cx st0 em.storage_trace /\
   return_buf_sep d c em u /\
   vs = MAP Value xs /\

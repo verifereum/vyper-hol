@@ -9,7 +9,8 @@ Ancestors
   compileEnv valueEncoding loweringStateRelDefs ptrDiscipline abiBuiltinAllocation emitHelperProps
 
 Theorem uint2str_suffix_joint_full:
-  expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) es /\
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) es /\
   expr_type e = BaseT (UintT k) /\
   lower_value compile_expr cenv ty e sa = (op,sm) /\
   as_ptr_val (BaseT (StringT n)) LocMemory

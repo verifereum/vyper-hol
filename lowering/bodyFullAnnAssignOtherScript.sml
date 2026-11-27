@@ -13,10 +13,12 @@ Ancestors
   vyperTypeValues vyperTypeInvariants vyperTypeExprSoundness valueTypingMemoryProps
   compileEnv exprLowering stmtLowering vyperInterpreter vyperState
   vyperValue vyperAST finite_map list
+  bodyInvSplit[qualified]
 Libs monadsyntax
 
 Theorem annassign_other_typed_layout:
-  expr_body_pre ce cx env e es /\ env.type_defs = get_tenv cx /\
+  !mods.
+  expr_body_pre_mods mods ce cx env e es /\ env.type_defs = get_tenv cx /\
   type_widens_to env.type_defs (expr_type e) typ /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\
   evaluate_type (get_tenv cx) typ = SOME dtv /\
@@ -104,7 +106,9 @@ Proof
 QED
 
 Theorem annassign_other_typed_full_execution:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
   env.type_defs = get_tenv cx /\
   type_widens_to env.type_defs (expr_type e) typ /\
@@ -115,7 +119,8 @@ Theorem annassign_other_typed_full_execution:
   ~is_word_type typ /\ expr_type e <> typ /\ ~is_bytestring_type typ /\
   ~(has_length_word typ /\ is_empty_value_expr e) /\
   (!sa ce r ty. declare_local cenv id typ sa = (ce,r) ==>
-    body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
+    (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_body_pre_mods mods ce cx env e es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es) ==>
   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

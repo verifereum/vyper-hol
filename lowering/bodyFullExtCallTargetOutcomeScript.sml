@@ -6,6 +6,7 @@ Ancestors
   unitMemInv venomMemProps byte divides loweringPosts compileEnv valueEncoding
   vyperTyping vyperValue bodySimFull vyperState vyperInterpreter gasOutcomeFull
   bodyMemoryDefs exprSimDefs list
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem target_word_decode[local]:
   value_has_type (BaseTV AddressT) v /\
@@ -48,11 +49,13 @@ Proof
 QED
 
 Theorem extcall_request_head_halt_outcome:
+  !mods exps.
   expr_type addr = BaseT AddressT /\
-  body_exprs_full_ok cx [addr] /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env addr es /\
+  body_exprs_full_ok_mods mods exps cx [addr] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env addr es /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
   lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr addr)
     shadow_sa = (ao,shadow_sb) /\
@@ -79,7 +82,7 @@ Theorem extcall_request_head_halt_outcome:
     (\H res ee G tn t. ?v target aw.
       res = INL [v] /\ dest_AddressV v = SOME target /\
       eval_operand ao t = SOME aw /\ w2w aw = target /\ safe_operand sb ao /\
-      expr_sim_inv cenv cx env ee /\
+      expr_sim_inv_mods mods cenv cx env ee /\
       expr_post H ctx func cenv cx addr es sa sb s0 ee v ao t /\
       expr_store_bound cx (BaseT AddressT) v ao t /\
       ptr_val_ok cx (BaseT AddressT) v ao G tn t /\
@@ -141,11 +144,13 @@ QED
 
 (* The non-owning prefixes only need the ordinary exit projection. *)
 Theorem extcall_request_head_outcome:
+  !mods exps.
   expr_type addr = BaseT AddressT /\
-  body_exprs_full_ok cx [addr] /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env addr es /\
+  body_exprs_full_ok_mods mods exps cx [addr] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env addr es /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
   lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr addr)
     shadow_sa = (ao,shadow_sb) /\
@@ -171,7 +176,7 @@ Theorem extcall_request_head_outcome:
     (\H res ee G tn t. ?v target aw.
       res = INL [v] /\ dest_AddressV v = SOME target /\
       eval_operand ao t = SOME aw /\ w2w aw = target /\ safe_operand sb ao /\
-      expr_sim_inv cenv cx env ee /\
+      expr_sim_inv_mods mods cenv cx env ee /\
       expr_post H ctx func cenv cx addr es sa sb s0 ee v ao t /\
       expr_store_bound cx (BaseT AddressT) v ao t /\
       ptr_val_ok cx (BaseT AddressT) v ao G tn t /\

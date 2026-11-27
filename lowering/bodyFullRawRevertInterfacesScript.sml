@@ -10,12 +10,12 @@ Libs
   pairLib
 
 Theorem raw_revert_source_pre:
-  !cenv cx env ann args dflt es.
-    expr_body_pre cenv cx env (Call ann RawRevert args dflt) es ==>
+  !mods cenv cx env ann args dflt es.
+    expr_body_pre_mods mods cenv cx env (Call ann RawRevert args dflt) es ==>
     ?e n. args = [e] /\ ann = NoneT /\ dflt = NONE /\
       expr_type e = BaseT (BytesT (Dynamic n)) /\
-      (!es'. expr_sim_inv cenv cx env es' ==>
-         expr_body_pre cenv cx env e es') /\
+      (!es'. expr_sim_inv_mods mods cenv cx env es' ==>
+         expr_body_pre_mods mods cenv cx env e es') /\
       eval_expr cx (Call ann RawRevert args dflt) =
         bind (bind (eval_expr cx e) (read_result cx))
           (\v. bind (lift_option_type (dest_BytesV v) "raw_revert data")

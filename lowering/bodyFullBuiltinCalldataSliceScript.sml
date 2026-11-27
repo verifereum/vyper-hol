@@ -16,17 +16,19 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   vyperStorageTrace vyperStorageFootprint loweringPosts bodyPtrDefs loweringStateRelDefs
   venomInst venomState
   vyperInterpreter vyperState vyperAST vyperContext list words arithmetic
+  bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 Libs
   pairLib
 
 Theorem calldata_slice_vv_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
     (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
-      body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
 Proof
@@ -473,13 +475,14 @@ Proof
 QED
 
 Theorem calldata_slice_expr_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
+  !mods exps DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
     (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
-      body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
 Proof

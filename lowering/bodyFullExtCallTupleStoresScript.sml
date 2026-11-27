@@ -5,6 +5,7 @@ Ancestors abiArgsLabelBoundary[qualified,ignore_grammar] calldataReconstruction[
   assignPlaceOperandFacts exprSafeOperand targetPurePostTransport
   exprLowering context compileEnv
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 (* The preparation cut may allocate. Only an old, registered and
    local-disjoint window is protected by the preparation frames. *)
@@ -952,11 +953,13 @@ QED
    is fixed at the tuple row.  Old resource bytes and the tuple prefix
    are protected separately. *)
 Theorem extcall_store_values_joint_all_dead:
+  !mods exps.
   compile_extcall_store_values ce (ZIP (svs,tys)) (Var root) off ca = ((),cb) /\
   LENGTH svs = LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\
   fn_has_code ca cb fn /\ fn_inst_ids_distinct fn /\
   storage_trace_domain cx st0 ee.storage_trace /\ (!H. dead_lo_ok H (DF H) lo ce cx) /\
-  (ce.ce_is_ctor ==> body_inv tops ctx ce cx /\ expr_sim_inv ce cx env entry /\
+  (ce.ce_is_ctor ==> (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env entry /\
                      ee.immutables = entry.immutables) /\
   local_ptrs_reserved ce ca /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
@@ -1227,11 +1230,13 @@ QED
 Finalise extcall_store_values_joint_all_dead
 
 Theorem extcall_store_values_joint:
+  !mods exps.
   compile_extcall_store_values ce (ZIP (svs,tys)) (Var root) off ca = ((),cb) /\
   LENGTH svs = LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\
   fn_has_code ca cb fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
   storage_trace_domain cx st0 ee.storage_trace /\ (!H. dead_lo_ok H (DF H) lo ce cx) /\
-  (ce.ce_is_ctor ==> body_inv tops ctx ce cx /\ expr_sim_inv ce cx env entry /\
+  (ce.ce_is_ctor ==> (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env entry /\
                      ee.immutables = entry.immutables) /\
   local_ptrs_reserved ce ca /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\

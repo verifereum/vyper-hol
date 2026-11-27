@@ -15,16 +15,17 @@ Ancestors
   bodyFullRawRevertCompiledTail bodyFullRawRevertValue
   bodyFullRawRevertPackaging bodyFullPreds bodySimFull
   gasShadowState gasShadow exprLowering vyperAST list
+  bodyFullPredsMods[qualified]
 
 val _ = Parse.hide "body";
 
 Theorem raw_revert_expr_full_ok:
-  !cx ann es dflt.
+  !mods exps cx ann es dflt.
     (!cenv ty e.
        gas_shadow_compiles (lower_value compile_expr cenv ty e)
          (lower_value compile_expr cenv ty (gas_shadow_expr e))) /\
-    body_exprs_full_ok cx es ==>
-    body_expr_full_ok cx (Call ann RawRevert es dflt)
+    body_exprs_full_ok_mods mods exps cx es ==>
+    body_expr_full_ok_mods mods exps cx (Call ann RawRevert es dflt)
 Proof
   mp_tac raw_revert_body_full_from_value >>
   (impl_tac >-

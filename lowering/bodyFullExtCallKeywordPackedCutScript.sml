@@ -7,20 +7,23 @@ Ancestors
   gasShadowCompileHelpers gasShadowCompileStmtHelpers
   entryReachBodyFirstEmissionExprSupport entryReachBodyFirstEmissionExpr
   externalEntryShape gasShadowState gasShadowCompileConvert list
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs
   pairLib
 
 (* The source is already at eval_ext_call.  Separate the optional generated
    GAS from the physical ABI packing, which consumes no gas observations. *)
 Theorem extcall_request_keyword_packed_cut:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) (addr::tail) dr) es /\
   xs = TAKE (LENGTH ats) tail /\
   arg_types_fit (MAP expr_type xs) ats /\ ext_call_opts_ok stat opts /\
   MAP expr_type kw_es = MAP (ext_call_kw_type rt) opts /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
-  (!e st. MEM e kw_es /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
+  (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
+  (!e st. MEM e kw_es /\ expr_sim_inv_mods mods cenv cx env st ==> expr_body_pre_mods mods cenv cx env e st) /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,s1) /\
   compile_ext_call_args compile_expr cenv kw_es
     (MAP (lowered_value_type cenv) xs) xs s1 = (av,s2) /\
@@ -58,7 +61,7 @@ Theorem extcall_request_keyword_packed_cut:
   dest_AddressV v = SOME (w2w (aw:256 word) : 160 word) /\
   eval_operand ao u = SOME aw /\ safe_operand s1 ao /\
   ptr_val_ok cx (BaseT AddressT) v ao G1 tn1 t /\
-  expr_sim_inv cenv cx env mid /\ expr_sim_inv cenv cx env ee /\
+  expr_sim_inv_mods mods cenv cx env mid /\ expr_sim_inv_mods mods cenv cx env ee /\
   LENGTH av = LENGTH xs /\
   s0.vs_alloca_next <= u.vs_alloca_next /\
   wb_frame cenv mid ee s1 t u /\
@@ -116,7 +119,7 @@ Theorem extcall_request_keyword_packed_cut:
     (ee with gas_obs := gas_explicit kw_marks u.vs_gas_readings ++ tail) =
     (INL kws,ke with gas_obs := tail)) /\
   (!H. valid_horizon cx st0 H ke.storage_trace ==>
-    expr_sim_inv cenv cx env ke /\
+    expr_sim_inv_mods mods cenv cx env ke /\
     stmt_state_rel H ctx func cenv cx ke z /\ storage_well_formed_on cx ke (FST H) /\
     z.vs_current_bb = s3.cs_current_bb /\ z.vs_inst_idx = LENGTH s3.cs_current_insts /\
     ~z.vs_halted /\ alloca_history func z /\ u.vs_alloca_next <= z.vs_alloca_next /\

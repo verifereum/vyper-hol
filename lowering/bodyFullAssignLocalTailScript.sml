@@ -10,6 +10,7 @@ Ancestors
   venomExecProofs venomState venomInst bodyFullUnwrapRun bodyMemoryDefs
   stmtSimDefs vyperStorageFootprint vyperStorageBackend emitHelper list rich_list
   loweringPosts stmtSimProps bodyFullHashKeccakFixed
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem body_assign_local_word_full_edge:
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e) sa = (cenv,sb) /\
@@ -58,6 +59,7 @@ Proof
 QED
 
 Theorem body_assign_local_word_full_store:
+  !mods exps.
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e) sa = (cenv,sb) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
@@ -65,7 +67,8 @@ Theorem body_assign_local_word_full_store:
   fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env0 es0 /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env0 es0 /\
   stmt_state_rel H ctx func cenv cx es s /\ dead_lo_ok H D lo cenv cx /\
   ghost_inv_at D lo d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
@@ -229,6 +232,7 @@ Proof
 QED
 
 Theorem body_assign_local_word_full_tail:
+  !mods exps.
   stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e) sa = (cenv,sb) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME (expr_type e) /\ is_word_type (expr_type e) /\
@@ -236,7 +240,8 @@ Theorem body_assign_local_word_full_tail:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env0 es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env0 es /\
   expr_post H ctx func cenv cx e es sa sm s0 ee v op s /\
   dead_lo_ok H D lo cenv cx /\ ghost_inv_at D lo d cenv cx ee G tn s /\
   ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\

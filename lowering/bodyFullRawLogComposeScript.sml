@@ -10,10 +10,12 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint stmtSimDefs loweringStateRelDefs
   gasOutcomeFull gasExemptCert exprSimDefs vyperState stmtSimProps
   vyperTypeInvariants exprLowering compileEnv vyperEvalExprPreservesScopesDom
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs pairLib
 
 Theorem raw_log_topics_operands_shape[local]:
-  expr_body_pre cenv cx env
+  !mods.
+  expr_body_pre_mods mods cenv cx env
     (Call ann RawLog [Builtin a (MakeArray elem bd) topics; data] dflt) es /\
   EVERY (\e. MEM e topics) suffix /\
   compile_multi_exprs compile_expr cenv suffix sa = (ops,sm) ==>
@@ -64,14 +66,16 @@ Proof
 QED
 
 Theorem raw_log_expr_sim_full:
+  !mods exps.
   (!ce ty e. gas_shadow_compiles (lower_value compile_expr ce ty e)
     (lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e))) /\
   (!ce xs. gas_shadow_compiles (compile_multi_exprs compile_expr ce xs)
     (compile_multi_exprs compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr xs))) /\
-  body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Call ann RawLog args dflt) es ==>
+  body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Call ann RawLog args dflt) es ==>
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann RawLog args dflt) es
 Proof

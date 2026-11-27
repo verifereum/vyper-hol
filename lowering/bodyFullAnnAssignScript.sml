@@ -19,6 +19,7 @@ Ancestors
   supportedStmtTraverse vyperTypeArgFits
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
@@ -40,16 +41,19 @@ Proof
 QED
 
 Theorem annassign_full_declared_rhs_pre:
+  !mods exps.
   body_stmt_safe tops (AnnAssign id typ e) /\
-  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ supported_expr tops e /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
     (AnnAssign id typ e) ==> occurs_abi_decode_target target tops) /\
-  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  expr_sim_inv_mods mods cenv cx env es /\ well_typed_expr env e /\
   id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
   stmt_exprs_ok cenv (AnnAssign id typ e) /\
   call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
   declare_local cenv id typ st = (c,st1) ==>
-  body_inv tops ctx c cx /\ expr_body_pre c cx env e es
+  (contract_inv mods exps ctx c cx /\
+     module_body_inv mods c.ce_module tops c cx) /\ expr_body_pre_mods mods c cx env e es
 Proof
   strip_tac >>
   `cenv.ce_alloca_locals` by fs[body_inv_def] >>
@@ -64,24 +68,26 @@ Proof
 QED
 
 Theorem annassign_word_full_source:
+  !mods exps.
   (!tenv s'' tyv t.
     tenv = get_tenv cx /\
     lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
-      (INL tyv,t) ==> body_expr_full_ok cx e) /\
-  body_inv tops ctx cenv cx /\
+      (INL tyv,t) ==> body_expr_full_ok_mods mods exps cx e) /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   supported_stmt tops bindings (AnnAssign id typ e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
     (AnnAssign id typ e) ==> occurs_abi_decode_target target tops) /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_sim_inv cenv cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
   type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
   stmt_exprs_ok cenv (AnnAssign id typ e) /\
   call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
   is_word_type typ ==>
   well_typed_expr env e /\ expr_type e = typ /\
   id NOTIN FDOM env.var_types /\ cenv.ce_alloca_locals /\
-  supported_expr tops e /\ expr_body_pre cenv cx env e es /\
-  body_expr_full_ok cx e /\
+  supported_expr tops e /\ expr_body_pre_mods mods cenv cx env e es /\
+  body_expr_full_ok_mods mods exps cx e /\
   ?tyv. evaluate_type (get_tenv cx) typ = SOME tyv
 Proof
   strip_tac >>
@@ -116,26 +122,27 @@ fun annassign_rhs_sim_tac g =
 
 (* A word local. *)
 Theorem body_annassign_word_full:
-  !cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_expr_full_ok cx e) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_expr_full_ok_mods mods exps cx e) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     is_word_type typ ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -204,26 +211,27 @@ QED
 
 (* A memory local whose source is stored at its own layout. *)
 Theorem body_annassign_memory_full:
-  !cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_expr_full_ok cx e) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_expr_full_ok_mods mods exps cx e) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~is_word_type typ /\
     0 < type_memory_bytes cenv typ /\
@@ -281,26 +289,27 @@ QED
 
 (* A memory local whose source is a widened aggregate. *)
 Theorem body_annassign_widened_full:
-  !cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_expr_full_ok cx e) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_expr_full_ok_mods mods exps cx e) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~is_word_type typ /\
     0 < type_memory_bytes cenv typ /\
@@ -352,26 +361,27 @@ QED
 
 (* Any other declared type. *)
 Theorem body_annassign_other_full:
-  !cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+  !mods exps cx id typ e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_expr_full_ok cx e) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_expr_full_ok_mods mods exps cx e) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~is_word_type typ /\
     ~(expr_type e = typ \/ is_bytestring_type typ \/

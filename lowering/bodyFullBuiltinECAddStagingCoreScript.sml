@@ -11,8 +11,10 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint exprSimHyps exprSimOperands exprSimSource
   stateRelProj allocaSiteResource allocasBelowFmpUpdatesProps
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem ecadd_staging_full_from_transfers:
+  !mods exps.
   (!pp bp pd sa sb s pw bw G tn nd lo ctx func bb explicit PG.
     (do src <- emit_op ADD [Var pp; Lit 0w];
         value <- emit_op MLOAD [src];
@@ -53,9 +55,10 @@ Theorem ecadd_staging_full_from_transfers:
   a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e2 = (if bt = ECAdd then a else BaseT (UintT 256)) /\
-  body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
+  body_exprs_full_ok_mods mods exps cx [e1;e2] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
+  expr_body_pre_mods mods cenv cx env (Builtin a bt [e1;e2]) es /\
   compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
   compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a bt [e1;e2]))
     shadow_sa = (vv,shadow_sb) /\

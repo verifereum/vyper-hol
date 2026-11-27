@@ -6,16 +6,18 @@ Ancestors
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
   vyperTypeEnv vyperTypeSystem
   vyperValue vyperInterpreter vyperState
+  exprSimHypsDefs[qualified]
 
 Theorem target_array_source_cases:
+  !mods.
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   type_place_target env bt = SOME (Type (ArrayT et bd)) /\
   type_place_target env (SubscriptTarget bt e) = SOME vt /\
-  expr_sim_inv cenv cx env mid1 /\
+  expr_sim_inv_mods mods cenv cx env mid1 /\
   eval_base_place cx bt (es with gas_obs := base_gas) = (INL pv, mid1) /\
   bind (eval_expr cx e) (read_result cx)
     (mid1 with gas_obs := index_gas) = (INL v, mid2) ==>
-  expr_sim_inv cenv cx env mid2 /\
+  expr_sim_inv_mods mods cenv cx env mid2 /\
   (?i. v = IntV i /\ expr_result_typed env e (Value (IntV i))) /\
   (!id. target_root bt = NameTarget id ==>
     ?path entry live. pv = PlaceR (MemoryPlace id path) /\
