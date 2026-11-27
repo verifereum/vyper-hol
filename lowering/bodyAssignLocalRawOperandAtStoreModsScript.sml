@@ -95,17 +95,34 @@ val rhs = ``qualified_assign_rhs_reached_mods cx st0 e es s0
 val reached = ``qualified_assign_target_reached_mods (DF,lo,d,ctx,func) cenv cx st0 bt dty
   mid sr st dst u Gu tu marks (MemoryPlace id path) ee Gz tz z``;
 
-Theorem assign_local_raw_operand_at_store_with_saved_read_mods:
+val store_guard = ``
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
   expr_body_pre_mods mods cenv cx env e es /\
   type_widens_to env.type_defs (expr_type e) dty /\
   (!i se. MEM i (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env se ==>
           expr_body_pre_mods mods cenv cx env i se) /\
-  exports_ok cx.layouts cx.txn.target mods exps /\
-  (!r. read_result cx r mid = (INL v,mid) ==>
+  exports_ok cx.layouts cx.txn.target mods exps``;
+
+val saved_read_update = ``
+  !r. read_result cx r mid = (INL v,mid) ==>
        read_result cx r ee = (INL v,ee) /\
        ee = mid with <|gas_obs := ee.gas_obs; outcomes := ee.outcomes;
-         requests := ee.requests; logs := ee.logs; storage_trace := ee.storage_trace|>) /\
+         requests := ee.requests; logs := ee.logs; storage_trace := ee.storage_trace|>``;
+
+val reached_saved_packet = ``
+  ee.scopes = mid.scopes /\
+  !gs raw H.
+    eval_expr cx e (es with gas_obs := gs) = (INL raw,mid) /\
+    read_result cx raw mid = (INL v,mid) /\
+    valid_horizon cx st0 H ee.storage_trace /\
+    valid_horizon cx st0 H mid.storage_trace /\
+    vv_post_mods H ctx func cenv cx e es sa sr s0 mid raw vv u /\
+    vv_storage_live H cx vv mid u ==>
+    read_result cx raw ee = (INL v,ee) /\
+    vv_post_mods H ctx func cenv cx e ee sa sr z ee raw vv z /\
+    vv_storage_live H cx vv ee z``;
+
+val store_entry = ``
   body_const_cells_agree_mods mods cx env es /\
   EVERY (source_body_call_supported cx) (int_calls_target bt) /\
   EVERY (\k. MEM k (linked_live_functions mods exps)) (int_calls_target bt) /\
@@ -119,7 +136,9 @@ Theorem assign_local_raw_operand_at_store_with_saved_read_mods:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
   ret_pc_ok cenv sa s0 /\ (!H. dead_lo_ok_mods H (DF H) lo cenv cx) /\
-  ^here st z Gz tz /\ write_place cx (MemoryPlace id path) v ee = (INL (),ff) ==>
+  ^here st z Gz tz /\ write_place cx (MemoryPlace id path) v ee = (INL (),ff)``;
+
+val store_post = ``
   ?op cur sw s G tn.
     unwrap_value cenv vv st = (op,cur) /\
     compile_assign_value cenv (FST dst) LocMemory op (is_word_type dty)
@@ -130,7 +149,12 @@ Theorem assign_local_raw_operand_at_store_with_saved_read_mods:
         (z,Gz,tz) [] (OK s,G,tn)) /\
     ^here cur s G tn /\
     local_assign_store_source_mods cenv cx e vv (dty,ptv) v (FST dst,dw)
-      (op,sw) sa ee cur s G tn
+      (op,sw) sa ee cur s G tn``;
+
+(* Share the physical suffix and landing across the two source certificates. *)
+Theorem assign_local_raw_operand_at_store_modes[local]:
+  ^store_guard /\ (^saved_read_update \/ ^reached_saved_packet) /\
+  ^store_entry ==> ^store_post
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `dst = (FST dst,SOME LocMemory,SOME (ValPT dty))` by
@@ -154,8 +178,6 @@ Proof
      disch_then (qspec_then `expr_type e` mp_tac) >>
      simp[reason_uniform_shape_def] >> strip_tac >>
      first_x_assum drule >> Cases_on `vv` >> simp[reason_result_shape_def,vv_operand_def]) >>
-  qpat_assum `!r. read_result cx r mid = (INL v,mid) ==> _ /\ _`
-    (drule_then strip_assume_tac) >>
   `expr_sim_inv_mods mods cenv cx env ee` by
     (drule_then strip_assume_tac qualified_place_rhs_entry_view_mods >>
      qhdtm_assum `local_assign_here_mods`
@@ -175,21 +197,22 @@ Proof
        (strip_assume_tac o REWRITE_RULE [qualified_assign_code_mods_def]) >>
      qspecl_then [`bt`,`cenv`,`sr`] mp_tac ci_mono_compile_get_target_ptr >>
      simp[ci_mono_def]) >>
-  `!r. read_result cx r mid = (INL v,mid) ==>
-       read_result cx r ee = (INL v,ee)` by
-    (gen_tac >> disch_tac >>
-     qpat_assum `!r. _ ==> _ /\ _`
-       (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
-  qpat_x_assum `eval_expr _ _ _ = (INL raw,mid)` kall_tac >>
-  qpat_x_assum `read_result _ raw mid = _` kall_tac >>
-  qpat_x_assum `read_result _ raw ee = _` kall_tac >>
   qhdtm_assum `qualified_assign_target_reached_mods`
     (mp_then (Pat `qualified_assign_target_reached_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-      mp_tac qualified_raw_saved_at_cut) >>
+      mp_tac qualified_raw_saved_at_cut_modes_mods) >>
   disch_then (fn th => qhdtm_assum `qualified_assign_rhs_reached_mods`
     (mp_then (Pat `qualified_assign_rhs_reached_mods _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac th)) >>
   disch_then (qspecl_then [`tops`,`src`,`exps`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >> simp[]) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+      >- (qpat_x_assum `^saved_read_update \/ ^reached_saved_packet` DISJ_CASES_TAC
+          >- (disj1_tac >> qpat_assum `^saved_read_update` (drule_then strip_assume_tac) >>
+              conj_tac >- first_assum ACCEPT_TAC >>
+              qx_gen_tac `r` >> qpat_assum `^saved_read_update` (qspec_then `r` mp_tac) >> simp[]) >>
+          disj2_tac >> first_assum ACCEPT_TAC) >>
+      simp[]) >>
+  qpat_x_assum `eval_expr _ _ _ = (INL raw,mid)` kall_tac >>
+  qpat_x_assum `read_result _ raw mid = _` kall_tac >>
   disch_then strip_assume_tac >>
   qhdtm_assum `local_assign_here_mods`
     (strip_assume_tac o REWRITE_RULE [local_assign_here_mods_def]) >>
@@ -212,7 +235,7 @@ Proof
   suspend "source"
 QED
 
-Resume assign_local_raw_operand_at_store_with_saved_read_mods[frame]:
+Resume assign_local_raw_operand_at_store_modes[frame]:
   qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
   `valid_horizon cx st0 H0 ee.storage_trace` by
     fs[Abbr `H0`,storage_trace_domain_def] >>
@@ -271,7 +294,7 @@ Resume assign_local_raw_operand_at_store_with_saved_read_mods[frame]:
        (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC))
 QED
 
-Resume assign_local_raw_operand_at_store_with_saved_read_mods[destvar]:
+Resume assign_local_raw_operand_at_store_modes[destvar]:
   `ptr_covers Gz tz p z cap` by
     (qpat_assum `ghost_inv_at_mods _ _ _ _ _ _ _ _ z`
        (strip_assume_tac o REWRITE_RULE [ghost_inv_at_mods_def]) >>
@@ -284,14 +307,14 @@ Resume assign_local_raw_operand_at_store_with_saved_read_mods[destvar]:
   Cases_on `FST dst` >> gvs[ptr_covers_def,ptrDisciplineTheory.op_prov_def]
 QED
 
-Resume assign_local_raw_operand_at_store_with_saved_read_mods[destfields]:
+Resume assign_local_raw_operand_at_store_modes[destfields]:
   qpat_assum `ghost_kept_at _ _ ee st _ _ z _ _`
     (strip_assume_tac o REWRITE_RULE [ghost_kept_at_def]) >>
   `not_fresh_at cur q` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   gvs[eval_operand_def,ptrDisciplineTheory.op_prov_def,ptr_covers_def]
 QED
 
-Resume assign_local_raw_operand_at_store_with_saved_read_mods[bufsep]:
+Resume assign_local_raw_operand_at_store_modes[bufsep]:
   `!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) s` by
     (rpt strip_tac >>
      `allocas_from (w2n bw + capacity) z` by fs[return_buf_sep_def] >>
@@ -305,7 +328,7 @@ Resume assign_local_raw_operand_at_store_with_saved_read_mods[bufsep]:
   simp[] >> qexists `st` >> simp[]
 QED
 
-Resume assign_local_raw_operand_at_store_with_saved_read_mods[compose]:
+Resume assign_local_raw_operand_at_store_modes[compose]:
   qhdtm_assum `qualified_assign_target_reached_mods`
     (strip_assume_tac o REWRITE_RULE [qualified_assign_target_reached_mods_def]) >>
   qpat_assum `!tail. eval_target_place _ _ _ = _`
@@ -344,7 +367,7 @@ Resume assign_local_raw_operand_at_store_with_saved_read_mods[compose]:
   simp[ci_mono_def]
 QED
 
-Resume assign_local_raw_operand_at_store_with_saved_read_mods[source]:
+Resume assign_local_raw_operand_at_store_modes[source]:
   drule_then assume_tac expr_body_pre_mods_inv >>
   `env_consistent env cx es` by drule_then ACCEPT_TAC expr_sim_inv_mods_env >>
   drule_then assume_tac env_consistent_type_defs_get_tenv >>
@@ -367,7 +390,7 @@ Resume assign_local_raw_operand_at_store_with_saved_read_mods[source]:
   suspend "source_memory"
 QED
 
-Resume assign_local_raw_operand_at_store_with_saved_read_mods[source_word]:
+Resume assign_local_raw_operand_at_store_modes[source_word]:
   `is_word_type (expr_type e)` by simp[] >>
   `lowered_value_type cenv e = dty /\ expr_type e = dty` by
     (conj_tac >> irule compileEnvTheory.type_widens_to_word >>
@@ -386,7 +409,7 @@ Resume assign_local_raw_operand_at_store_with_saved_read_mods[source_word]:
   fs[local_assign_store_source_mods_def]
 QED
 
-Resume assign_local_raw_operand_at_store_with_saved_read_mods[source_memory]:
+Resume assign_local_raw_operand_at_store_modes[source_memory]:
   `~is_word_type (expr_type e)` by simp[] >>
   `~is_word_type (lowered_value_type cenv e)` by
     metis_tac[arg_type_fits_word_type] >>
@@ -409,7 +432,7 @@ Resume assign_local_raw_operand_at_store_with_saved_read_mods[source_memory]:
   simp[] >> suspend "source_direct_other"
 QED
 
-Resume assign_local_raw_operand_at_store_with_saved_read_mods[source_direct_bytes]:
+Resume assign_local_raw_operand_at_store_modes[source_direct_bytes]:
   `is_bytestring_type (lowered_value_type cenv e)` by
     (qpat_assum `type_widens_to _ (lowered_value_type cenv e) dty` mp_tac >>
      simp[NoAsms,type_widens_to_def] >> strip_tac >>
@@ -442,7 +465,7 @@ Resume assign_local_raw_operand_at_store_with_saved_read_mods[source_direct_byte
   decide_tac
 QED
 
-Resume assign_local_raw_operand_at_store_with_saved_read_mods[source_locmemory]:
+Resume assign_local_raw_operand_at_store_modes[source_locmemory]:
   conj_tac
   >- (disch_tac >> qpat_assum `0 < type_memory_size rt ==> _`
         (drule_then strip_assume_tac) >> qexists `x` >> simp[]) >>
@@ -462,7 +485,7 @@ Resume assign_local_raw_operand_at_store_with_saved_read_mods[source_locmemory]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume assign_local_raw_operand_at_store_with_saved_read_mods[source_direct_other]:
+Resume assign_local_raw_operand_at_store_modes[source_direct_other]:
   conj_tac
   >- (disch_tac >> qpat_assum `0 < type_memory_size rt ==> _`
         (drule_then strip_assume_tac) >> qexists `x` >> simp[]) >>
@@ -502,7 +525,52 @@ Resume assign_local_raw_operand_at_store_with_saved_read_mods[source_direct_othe
   simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
 
-Finalise assign_local_raw_operand_at_store_with_saved_read_mods
+Finalise assign_local_raw_operand_at_store_modes[local]
+
+Theorem assign_local_raw_operand_at_store_with_saved_read_mods:
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
+  expr_body_pre_mods mods cenv cx env e es /\
+  type_widens_to env.type_defs (expr_type e) dty /\
+  (!i se. MEM i (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env se ==>
+          expr_body_pre_mods mods cenv cx env i se) /\
+  exports_ok cx.layouts cx.txn.target mods exps /\
+  ^saved_read_update /\ ^store_entry ==> ^store_post
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule assign_local_raw_operand_at_store_modes >>
+  qhdtm_assum `qualified_assign_rhs_reached_mods` (irule_at Any) >>
+  qhdtm_assum `qualified_assign_target_reached_mods` (irule_at Any) >>
+  qhdtm_assum `qualified_assign_code_mods` (irule_at Any) >>
+  qhdtm_assum `local_assign_here_mods` (irule_at Any) >>
+  qhdtm_assum `contract_inv` (irule_at Any) >>
+  qhdtm_assum `module_body_inv` (irule_at Any) >>
+  qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `fn_has_code shadow_sa shadow_sb shadow_func` (irule_at Any) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> disj1_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem assign_local_raw_operand_at_store_with_reached_saved_mods:
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
+  expr_body_pre_mods mods cenv cx env e es /\
+  type_widens_to env.type_defs (expr_type e) dty /\
+  (!i se. MEM i (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env se ==>
+          expr_body_pre_mods mods cenv cx env i se) /\
+  exports_ok cx.layouts cx.txn.target mods exps /\
+  ^reached_saved_packet /\ ^store_entry ==> ^store_post
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule assign_local_raw_operand_at_store_modes >>
+  qhdtm_assum `qualified_assign_rhs_reached_mods` (irule_at Any) >>
+  qhdtm_assum `qualified_assign_target_reached_mods` (irule_at Any) >>
+  qhdtm_assum `qualified_assign_code_mods` (irule_at Any) >>
+  qhdtm_assum `local_assign_here_mods` (irule_at Any) >>
+  qhdtm_assum `contract_inv` (irule_at Any) >>
+  qhdtm_assum `module_body_inv` (irule_at Any) >>
+  qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `fn_has_code shadow_sa shadow_sb shadow_func` (irule_at Any) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> disj2_tac >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
 
 Theorem assign_local_raw_operand_at_store_mods:
   contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
