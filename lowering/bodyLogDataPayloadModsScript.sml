@@ -414,3 +414,100 @@ Resume log_data_payload_mods[legacy_driver]:
 QED
 
 Finalise log_data_payload_mods
+
+Theorem log_data_payload_with_cursor_mods:
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at_mods (DF H) lo d ce cx ee G tn s /\ immutable_frame_mods func ce cx ee s) /\
+  return_buf_frame d ce se s /\ alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = se.cs_current_bb /\ s.vs_inst_idx = LENGTH se.cs_current_insts /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce se /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
+  EVERY (safe_operand se) ops /\ EVERY (\op. op_taint tn op = {}) ops /\
+  eval_operands ops s = SOME topics /\
+  LIST_REL (\row at. abi_embedded_static_size ce.ce_struct_fields (SND row) =
+                     abi_member_head_size at) rows ats /\
+  LIST_REL abi_encoder_layout_valid ats avs /\
+  hl = head_lengths ats 0 /\ bytes = enc (Tuple ats) (ListV avs) /\
+  ((rows = [] /\ en = se /\ len_op = Lit 0w /\ ptr_op = Lit 0w) \/
+   (rows <> [] /\ cap = abi_size_bound ce.ce_struct_fields (TupleT (MAP SND rows)) /\
+    LENGTH bytes <= cap /\ cap < dimword (:256) /\
+    compile_alloc_buffer cap se = (buf,st) /\ ptr_op = buf.buf_operand /\
+    compile_abi_encode_values_to_buf ce ptr_op rows st = (len_op,en) /\
+    fn_has_code se st func /\ fn_has_code st en func /\
+    (!p b owner. ptr_op = Var p /\ MEM owner (fn_insts func) /\
+      owner.inst_opcode = ALLOCA /\ owner.inst_id = se.cs_next_id /\
+      owner.inst_outputs = [p] /\ not_local_ptr ce ee.scopes p /\
+      se.cs_next_id < st.cs_next_id ==>
+      !ci r. MEM ci (fn_insts func) /\ ci.inst_id = st.cs_next_id /\
+        ci.inst_opcode = ALLOCA /\ ci.inst_outputs = [r] /\ not_local_ptr ce ee.scopes r ==>
+      !i a c v Gv tv cursor slot. i < LENGTH rows /\ cursor = Var r /\
+        abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo d se s G tn
+          se.cs_next_id b cap p p 0 [] a v Gv tv /\
+        abi_encode_values_prefix_at ats avs hl b cursor st.cs_next_id slot i a v Gv tv /\
+        compile_abi_encode_value_rows ce (Var p) cursor
+          (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields o SND) (TAKE i rows)))
+          [EL i rows] a = ((),c) /\ fn_has_code a c func ==>
+        ?q Gq tq.
+          abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo d se s G tn
+            se.cs_next_id b cap p p 0 [] c q Gq tq /\
+          abi_tuple_row_effects_mods ce ee func se.cs_next_id b cap 0 st.cs_next_id
+            a v Gv tv c q Gq tq /\
+          abi_encode_values_prefix_at ats avs hl b cursor st.cs_next_id slot (SUC i) c q Gq tq /\
+          !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (v,Gv,tv) [] (OK q,Gq,tq)))) ==>
+  ?z Gz tz off.
+    eval_operands ops z = SOME topics /\
+    eval_operand ptr_op z = SOME off /\ eval_operand len_op z = SOME (n2w (LENGTH bytes)) /\
+    EVERY (\op. op_taint tz op = {}) (ptr_op::len_op::ops) /\
+    (LENGTH bytes <> 0 ==> ?p. ptr_op = Var p /\ ptr_covers Gz tz p z (LENGTH bytes)) /\
+    mem_bytes_at (w2n off) (LENGTH bytes) z.vs_memory = bytes /\
+    (!i. w2n off <= i /\ i < w2n off + LENGTH bytes ==> i NOTIN tz.t_mem) /\
+    LENGTH bytes < dimword (:256) /\
+    (LENGTH bytes = 0 \/ w2n off + LENGTH bytes <= z.vs_alloca_next) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func ce cx ee z /\ storage_well_formed_on cx ee (FST H) /\
+      ghost_inv_at_mods (DF H) lo d ce cx ee Gz tz z /\ immutable_frame_mods func ce cx ee z) /\
+    return_buf_frame d ce en z /\ ~z.vs_halted /\ z.vs_current_bb = en.cs_current_bb /\
+    z.vs_inst_idx = LENGTH en.cs_current_insts /\ alloca_history func z /\
+    se.cs_next_var <= en.cs_next_var /\ s.vs_alloca_next <= z.vs_alloca_next /\
+    wb_frame ce ee ee se s z /\ ghost_kept_at lo ce ee se G tn s Gz tz /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,Gz,tz))
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  irule log_data_payload_core_mods >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (
+    qexistsl [`ats`,`avs`,`buf`,`cap`,`hl`,`rows`,`st`] >>
+    reverse conj_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    qpat_x_assum `(rows = [] /\ _) \/ _` (DISJ_CASES_THEN strip_assume_tac)
+    >- (disj1_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    disj2_tac >> rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+    suspend "cursor_driver") >>
+  first_assum ACCEPT_TAC
+QED
+
+Resume log_data_payload_with_cursor_mods[cursor_driver]:
+  map_every qx_gen_tac [`p`,`b`,`u`,`Gu`,`tu`,`owner`] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `ptr_op = Var p` SUBST_ALL_TAC >>
+  qhdtm_assum `abi_tuple_buffer_state_mods`
+    (mp_then (Pos hd)
+      (qspecl_then [`rows`,`owner`,`hl`,`explicit`,`en`,`bytes`,`avs`,`ats`,`len_op`,`PG`]
+        (mp_tac o PURE_REWRITE_RULE [ADD_0])) abi_tuple_linked_loop_with_cursor_mods) >>
+  impl_tac >- (
+    rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+    conj_tac >- (
+      gen_tac >> disch_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+      first_assum ACCEPT_TAC) >>
+    rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+    qpat_assum `!p b owner. Var _ = Var p /\ _ ==> _`
+      (qspecl_then [`p`,`b`,`owner`] mp_tac) >>
+    impl_tac >- (rewrite_tac[REFL_CLAUSE] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    disch_then ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED
+
+Finalise log_data_payload_with_cursor_mods
