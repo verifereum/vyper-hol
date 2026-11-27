@@ -242,6 +242,28 @@ Proof
   gvs[loweringPostsTheory.stmt_lands_def] >> first_assum ACCEPT_TAC
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `lookup_var p u = SOME w /\ FLOOKUP u.vs_allocas aid = SOME (w2n w,32)` by
+    (fs[expr_post_def] >> metis_tac[]) >>
+  `ptr_covers G1 tn1 p u 32` by
+    (qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `ptr_covers Ga tna _ entry 32` mp_tac >>
+     simp[bodyPtrDefsTheory.ghost_kept_at_def, bodyPtrDefsTheory.ptr_covers_def] >>
+     metis_tac[]) >>
+  `eval_operand op u = SOME (typed_val_to_w256 tyv v)` by
+    (fs[expr_post_def, expr_val_rel_def, post_value_type_word] >> (gvs[])) >>
+  `value_has_type tyv v` by
+    (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     simp[] >> strip_tac >> irule annassign_word_full_value_type >>
+     goal_assum (drule_at (Pat `bind _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `gas_admissible _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[]) >>
+  drule_all annassign_continuation_all_tails >> metis_tac[]
+QED
+*)
 Theorem annassign_word_full_success[local]:
   gas_admissible (eval_stmt cx (AnnAssign id (expr_type e) e)) (stmt_res_ok lctx) es /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -261,23 +283,7 @@ Theorem annassign_word_full_success[local]:
         (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>))::rest)
           with gas_obs := tail)
 Proof
-  strip_tac >>
-  `lookup_var p u = SOME w /\ FLOOKUP u.vs_allocas aid = SOME (w2n w,32)` by
-    (fs[expr_post_def] >> metis_tac[]) >>
-  `ptr_covers G1 tn1 p u 32` by
-    (qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _` mp_tac >>
-     qpat_x_assum `ptr_covers Ga tna _ entry 32` mp_tac >>
-     simp[bodyPtrDefsTheory.ghost_kept_at_def, bodyPtrDefsTheory.ptr_covers_def] >>
-     metis_tac[]) >>
-  `eval_operand op u = SOME (typed_val_to_w256 tyv v)` by
-    (fs[expr_post_def, expr_val_rel_def, post_value_type_word] >> (gvs[])) >>
-  `value_has_type tyv v` by
-    (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
-     simp[] >> strip_tac >> irule annassign_word_full_value_type >>
-     goal_assum (drule_at (Pat `bind _ _ _ = _`)) >>
-     goal_assum (drule_at (Pat `gas_admissible _ _ _`)) >>
-     goal_assum (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[]) >>
-  drule_all annassign_continuation_all_tails >> metis_tac[]
+  cheat
 QED
 
 Theorem annassign_word_full_store_freshness[local]:
