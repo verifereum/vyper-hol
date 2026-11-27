@@ -1,0 +1,11 @@
+Theory bodyAbiDecodeGuardedMemberSelectMods
+Ancestors
+  bodyAbiDecodeGuardedMemberSelectConditionalMods
+  bodyAbiDecodeGuardedWordLoadMods
+
+Theorem abi_decode_member_select_observed_effect_mods:
+  ^(snd (dest_imp (concl abi_decode_member_select_observed_effect_from_load_mods)))
+Proof
+  MATCH_MP_TAC abi_decode_member_select_observed_effect_from_load_mods >>
+  ACCEPT_TAC abi_decode_owned_relative_load_effect_mods
+QED
