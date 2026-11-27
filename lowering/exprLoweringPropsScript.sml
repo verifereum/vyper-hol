@@ -462,6 +462,8 @@ Definition stmt_state_rel_def:
     state_rel H func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room ctx func ss ∧
     fmp_room ctx func ss ∧
     immutable_alloca_sep func cenv cx vs ss ∧ immutable_base_zero cenv ss ∧
+    (∀src tops. ALOOKUP cenv.ce_modules src = SOME tops ⇒
+       immutable_alloca_sep func (cenv with ce_module := src) cx vs ss) ∧
     ∀inst n base sz.
       MEM inst (fn_insts func) ∧ inst.inst_opcode = ALLOCA ∧
       inst.inst_operands = [Lit n] ∧
