@@ -290,55 +290,6 @@ Proof
   irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem mcopy_alloca_framed_path[local]:
-  !ctx func cenv cx es sa sb s inst p dw sw src sz tv v.
-    emit_void MCOPY [Var p; src; Lit (n2w sz)] sa = ((), sb) /\
-    lookup_var p s = SOME dw /\ eval_operand src s = SOME sw /\
-    sz < dimword (:256) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
-    not_local_ptr cenv es.scopes p /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n dw, sz) /\
-    val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
-    val_footprint tv v <= sz /\ fn_has_code sa sb func /\ ~s.vs_halted /\
-    s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel H ctx func cenv cx es t /\
-        val_in_memory tv v (w2n dw) t.vs_memory /\
-        (!q. lookup_var q t = lookup_var q s) /\
-        t.vs_allocas = s.vs_allocas /\ ~t.vs_halted /\
-        t.vs_memory = (mcopy (w2n dw) (w2n sw) sz s).vs_memory /\
-        t.vs_current_bb = sb.cs_current_bb /\
-        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        gas_marked_path F ctx func s 0 (OK t)
-Proof
-  rpt strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
-    (irule stmt_state_rel_mcopy_alloca >> simp[] >>
-     qexistsl_tac [`sz`, `inst`, `p`] >> simp[]) >>
-  `val_in_memory tv v (w2n dw) (mcopy (w2n dw) (w2n sw) sz s).vs_memory` by
-    (irule mcopy_val_in_memory >> simp[]) >>
-  `emit_inst MCOPY [Var p; src; Lit (n2w sz)] [] sa = ((),sb)` by
-    fs[emit_void_def, emit_inst_def] >>
-  `step_inst_base (mk_inst sa.cs_next_id MCOPY
-      [Var p; src; Lit (n2w sz)] []) s =
-      OK (mcopy (w2n dw) (w2n sw) sz s)` by
-    simp[step_inst_base_def, eval_operand_def] >>
-  drule emit_inst_zero_marked_path >>
-  simp[is_terminator_def] >> strip_tac >>
-  `gas_marked_path F ctx func s 0
-     (OK (mcopy (w2n dw) (w2n sw) sz s with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (simp[] >> first_x_assum irule >> simp[]) >>
-  `sb.cs_current_bb = sa.cs_current_bb /\
-   LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
-    gvs[emit_void_def, comp_bind_def, fresh_id_def,
-        comp_ignore_bind_def, comp_return_def, emit_def] >>
-  qexists_tac `mcopy (w2n dw) (w2n sw) sz s with vs_inst_idx := SUC s.vs_inst_idx` >>
-  gs[stmt_state_rel_inst_idx, lookup_var_def, mcopy_def,
-     write_memory_with_expansion_def, LET_THM]
-QED
-
-
 Theorem alloc_copy_memory_owned_run:
   !ctx func cenv cx es sa sm sb s0 p src sz sw tv v.
     emit_inst ALLOCA [Lit (n2w sz)] [p] sa = ((), sm) /\
