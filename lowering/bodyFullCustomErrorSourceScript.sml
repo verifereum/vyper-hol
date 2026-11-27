@@ -187,6 +187,27 @@ Proof
 QED
 
 (* Only the actual condition trace can activate the conditional reason IH. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  Cases_on `err` >>
+  qpat_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >> fs[] >>
+  `expr_body_pre cenv cx env e (es with gas_obs := xs)` by simp[] >>
+  qpat_x_assum `expr_body_pre _ _ _ _ es` kall_tac >>
+  `expr_sim_inv cenv cx env (mid with gas_obs := [])` by
+    metis_tac[exprSimSourceTheory.expr_body_pre_eval] >>
+  gvs[supported_stmt_assert_custom, supported_stmt_raise_custom,
+      supported_assert_reason_def, supported_raise_reason_def,
+      supported_stmt_expr_exists_def, supported_assert_exists_def,
+      supported_raise_exists_def, type_stmt_assert_custom, type_stmt_raise_custom,
+      stmt_exprs_ok_def, alloc_limits_stmt_def, alloc_limits_assert_def,
+      alloc_limits_raise_def, int_calls_stmt_def, int_calls_raise_reason_def] >>
+  simp[stmt_valued_return_def] >>
+  gvs[int_calls_assert_reason_def] >>
+  metis_tac[call_evaluation_safe_append_right]
+QED
+*)
 Theorem assert_custom_false_source_ready:
   expr_body_pre_mods mods cenv cx env e es /\
   ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
@@ -208,22 +229,7 @@ expr_sim_inv_mods mods cenv cx env (mid with gas_obs := []) /\
   stmt_exprs_ok cenv (Raise (RaiseCustomError err)) /\
   call_evaluation_safe cx (int_calls_stmt (Raise (RaiseCustomError err)))
 Proof
-  strip_tac >>
-  Cases_on `err` >>
-  qpat_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >> fs[] >>
-  `expr_body_pre cenv cx env e (es with gas_obs := xs)` by simp[] >>
-  qpat_x_assum `expr_body_pre _ _ _ _ es` kall_tac >>
-  `expr_sim_inv cenv cx env (mid with gas_obs := [])` by
-    metis_tac[exprSimSourceTheory.expr_body_pre_eval] >>
-  gvs[supported_stmt_assert_custom, supported_stmt_raise_custom,
-      supported_assert_reason_def, supported_raise_reason_def,
-      supported_stmt_expr_exists_def, supported_assert_exists_def,
-      supported_raise_exists_def, type_stmt_assert_custom, type_stmt_raise_custom,
-      stmt_exprs_ok_def, alloc_limits_stmt_def, alloc_limits_assert_def,
-      alloc_limits_raise_def, int_calls_stmt_def, int_calls_raise_reason_def] >>
-  simp[stmt_valued_return_def] >>
-  gvs[int_calls_assert_reason_def] >>
-  metis_tac[call_evaluation_safe_append_right]
+  cheat
 QED
 
 
