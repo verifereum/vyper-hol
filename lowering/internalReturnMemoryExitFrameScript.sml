@@ -7,8 +7,30 @@ Ancestors
 
 (* Clearing the local scopes leaves only the immutable base lookup to
    preserve across the return-buffer copy. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem internal_return_memory_copy_exit_base:
+  same_frame ce cenv /\ cenv.ce_returns_count = 0 /\
+  (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
+       lookup_var x copied = lookup_var x t) /\
+  stmt_state_rel H ctx func cenv cx ee t /\
+  (cenv.ce_is_ctor ==> !src name itv iv off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+               NONE => FEMPTY
+             | SOME imms => get_source_immutables src imms) name =
+      SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n bw) (type_memory_size tv)) /\
+  (copied with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>) =
+    return_unlock_state cenv t /\
+  (!a len. a + len <= w2n bw \/ w2n bw + type_memory_size tv <= a ==>
+    mem_bytes_at a len copied.vs_memory = mem_bytes_at a len t.vs_memory) /\
+  LENGTH t.vs_memory <= LENGTH copied.vs_memory /\
+  val_in_memory tv v (w2n bw) copied.vs_memory /\
+  LENGTH (return_unlock_insts cenv iid) <= n /\
+  r = IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+        (copied with vs_inst_idx := n) ==>
+  !tail. intret_mem_q H func ce cx tv bw v
+    ((ee with gas_obs := tail) with scopes := []) r
 Proof
   strip_tac >>
   `copied = (return_unlock_state cenv t) with
@@ -29,12 +51,16 @@ Proof
   `stmt_state_rel H ctx func cenv cx (ee with scopes := []) t` by
     (irule internal_return_exit_stmt_state_rel >> qexists_tac `cenv` >>
      simp[same_frame_def]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
-     (ee with scopes := [])
-     (t with <|vs_vars := copied.vs_vars; vs_memory := copied.vs_memory|>)` by
-    (irule immutables_rel_mem_agree >> qexists_tac `t` >>
-     imp_res_tac stmt_state_rel_state_rel >>
-     imp_res_tac state_rel_immutables_rel >> fs[] >> rpt strip_tac >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor
+       (ee with scopes := [])
+       (t with <|vs_vars := copied.vs_vars; vs_memory := copied.vs_memory|>)` by
+    (gen_tac >> disch_tac >>
+     irule immutables_rel_mem_agree >> qexists_tac `t` >> simp[] >>
+     reverse conj_tac
+     >- (fs[stmt_state_rel_def, state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+         metis_tac[]) >>
+     disch_tac >> rpt gen_tac >> strip_tac >>
      qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> fs[regions_disjoint_def] >> metis_tac[]) >>
   `stmt_state_rel H ctx func cenv cx (ee with scopes := [])
@@ -65,43 +91,17 @@ Proof
   fs[intret_mem_q_def] >>
   irule internal_return_post_frame >> goal_assum (drule_at Any) >> metis_tac[]
 QED
-*)
-Theorem internal_return_memory_copy_exit_base:
-  same_frame ce cenv /\ cenv.ce_returns_count = 0 /\
-  (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
-       lookup_var x copied = lookup_var x t) /\
-  stmt_state_rel H ctx func cenv cx ee t /\
-  (cenv.ce_is_ctor ==> !name itv iv off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
-    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
-               NONE => FEMPTY
-             | SOME imms => get_source_immutables cenv.ce_module imms) name =
-      SOME (itv,iv) ==>
-    regions_disjoint off (type_memory_size itv) (w2n bw) (type_memory_size tv)) /\
-  (copied with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>) =
-    return_unlock_state cenv t /\
-  (!a len. a + len <= w2n bw \/ w2n bw + type_memory_size tv <= a ==>
-    mem_bytes_at a len copied.vs_memory = mem_bytes_at a len t.vs_memory) /\
-  LENGTH t.vs_memory <= LENGTH copied.vs_memory /\
-  val_in_memory tv v (w2n bw) copied.vs_memory /\
-  LENGTH (return_unlock_insts cenv iid) <= n /\
-  r = IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
-        (copied with vs_inst_idx := n) ==>
-  !tail. intret_mem_q H func ce cx tv bw v
-    ((ee with gas_obs := tail) with scopes := []) r
-Proof
-  cheat
-QED
 
 Theorem internal_return_memory_copy_exit:
   same_frame ce cenv /\ cenv.ce_returns_count = 0 /\
   cenv.ce_imm_alloca = NONE /\
   stmt_state_rel H ctx func cenv cx ee t /\
-  (cenv.ce_is_ctor ==> !name itv iv off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src name itv iv off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
                NONE => FEMPTY
-             | SOME imms => get_source_immutables cenv.ce_module imms) name =
+             | SOME imms => get_source_immutables src imms) name =
       SOME (itv,iv) ==>
     regions_disjoint off (type_memory_size itv) (w2n bw) (type_memory_size tv)) /\
   (copied with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>) =
