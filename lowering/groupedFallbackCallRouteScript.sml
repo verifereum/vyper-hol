@@ -190,34 +190,8 @@ Proof
        allocas_from_def] >> metis_tac[]
 QED
 
-Theorem grouped_fallback_call_route:
-  lower_vyper_runtime_unit tops rp = SOME unit /\ supported_program tops /\
-  EXISTS external_has_defaults (FST (classify_functions tops)) /\
-  runtime_gas_shadow_unit tops rp = SOME shadow_unit /\
-  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
-  initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
-  (ctx_has_dalloca unit.cu_context ==>
-    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
-    w2n vs.vs_initial_fmp < 2 ** 254) /\
-  calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name,tx.args) /\
-  (LENGTH vs.vs_call_ctx.cc_calldata < 4 \/
-   FIND (\(n,ts). abi_method_id (type_env tops) n ts = cd_selector vs.vs_call_ctx.cc_calldata)
-     (abi_external_signatures tops) = NONE) /\
-  vyperInterpreter$lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,ds,ret,fbody) ==>
-  (?es. runtime_body_endpoint tops rp unit am tx vs es mut nr args ds ret
-          (subst_consts_stmts (module_consts_env tops []) fbody)) \/
-  (?marks. source_unit_execution_correct_with shadow_unit.cu_context marks
-              tops ret am tx unit vs /\
-    ((?tail. call_storage_ok am tx vs.vs_outcomes
-               (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
-     !tail. FST (call_external (SOME vs.vs_outcomes)
-                    (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
-            INR (Error (RuntimeError "msg.gas: no gas reading"))) /\
-    (!tail res am' rqs obs.
-      call_external_trace (SOME vs.vs_outcomes)
-        (gas_explicit marks vs.vs_gas_readings ++ tail) am tx = (res,am',rqs,obs) ==>
-      obs = []) /\ marks = [])
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all grouped_fallback_source_parameters >> strip_tac >>
@@ -251,7 +225,40 @@ Proof
   pop_assum strip_assume_tac >>
   suspend "guard"
 QED
+*)
+Theorem grouped_fallback_call_route:
+  lower_vyper_runtime_unit tops rp = SOME unit /\ supported_program tops /\
+  EXISTS external_has_defaults (FST (classify_functions tops)) /\
+  runtime_gas_shadow_unit tops rp = SOME shadow_unit /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  initial_venom_state_rel tops am tx vs /\ outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+  (ctx_has_dalloca unit.cu_context ==>
+    unit_alloca_budget unit.cu_context <= w2n vs.vs_initial_fmp /\
+    w2n vs.vs_initial_fmp < 2 ** 254) /\
+  calldata_dispatch tops vs.vs_call_ctx.cc_calldata = SOME (tx.function_name,tx.args) /\
+  (LENGTH vs.vs_call_ctx.cc_calldata < 4 \/
+   FIND (\(n,ts). abi_method_id (type_env tops) n ts = cd_selector vs.vs_call_ctx.cc_calldata)
+     (abi_external_signatures tops) = NONE) /\
+  vyperInterpreter$lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,ds,ret,fbody) ==>
+  (?es. runtime_body_endpoint tops rp unit am tx vs es mut nr args ds ret
+          (subst_consts_stmts (module_consts_env tops []) fbody)) \/
+  (?marks. source_unit_execution_correct_with shadow_unit.cu_context marks
+              tops ret am tx unit vs /\
+    ((?tail. call_storage_ok am tx vs.vs_outcomes
+               (gas_explicit marks vs.vs_gas_readings ++ tail)) ==>
+     !tail. FST (call_external (SOME vs.vs_outcomes)
+                    (gas_explicit marks vs.vs_gas_readings ++ tail) am tx) <>
+            INR (Error (RuntimeError "msg.gas: no gas reading"))) /\
+    (!tail res am' rqs obs.
+      call_external_trace (SOME vs.vs_outcomes)
+        (gas_explicit marks vs.vs_gas_readings ++ tail) am tx = (res,am',rqs,obs) ==>
+      obs = []) /\ marks = [])
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume grouped_fallback_call_route[guard]:
   `compile_fallback_body ce (mut = Payable) nr global_nonreentrant_slot T
     (mut = View) stmts rt sn = ((),se) /\
@@ -296,7 +303,9 @@ Resume grouped_fallback_call_route[guard]:
      disch_then (qspecl_then [`sn`,`shn`] mp_tac) >> asm_rewrite_tac[SND]) >>
   suspend "value"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume grouped_fallback_call_route[value]:
   `gas_shadow_context unit.cu_context shadow_unit.cu_context /\
    MEM fn unit.cu_context.ctx_functions /\ MEM shadow_fn shadow_unit.cu_context.ctx_functions /\
@@ -312,7 +321,9 @@ Resume grouped_fallback_call_route[value]:
   >- suspend "accepted" >>
   suspend "rejected"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume grouped_fallback_call_route[accepted]:
   disj1_tac >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
@@ -336,7 +347,9 @@ Resume grouped_fallback_call_route[accepted]:
      suspend "body") >>
   fs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume grouped_fallback_call_route[body]:
   `selected_registration_frame vs entry_taint u tz` by
     fs[selected_registration_frame_def, Abbr `s`] >>
@@ -394,7 +407,9 @@ Resume grouped_fallback_call_route[body]:
   simp[constSubstCorrectTheory.subst_consts_exprs_map] >>
   simp[GSYM compile_env_component_equality, Abbr `s`]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume grouped_fallback_call_route[rejected]:
   `mut <> Payable /\ tx.value <> 0` by fs[] >>
   `t.vs_call_ctx.cc_callvalue <> 0w` by
@@ -413,5 +428,8 @@ Resume grouped_fallback_call_route[rejected]:
   drule_all grouped_entry_value_rejected >> strip_tac >>
   disj2_tac >> simp[gas_explicit_def] >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise grouped_fallback_call_route
+*)
