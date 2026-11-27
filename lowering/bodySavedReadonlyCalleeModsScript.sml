@@ -62,13 +62,15 @@ Proof
   fs[function_entry_env_fn_sigs, defaults_env_def, EVERY_MEM, FLOOKUP_DEF]
 QED
 
-Theorem saved_readonly_callee_frames_checked_mods:
+(* Both routes provide the same selected declaration and runtime signature. *)
+Theorem saved_readonly_callee_frames_runtime_sig_core:
   contract_inv mods exps ctx cenv cx /\
   check_contract F cx.layouts cx.txn.target mods = SOME art /\
-  exports_ok cx.layouts cx.txn.target mods exps /\
   get_module_code cx src = SOME tops /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
-  MEM (src,name) (linked_live_functions mods exps) /\ (mut = View \/ mut = Pure) ==>
+  (mut = View \/ mut = Pure) /\
+  lookup_callable_function F name tops = SOME (mut,nr,args,dflts,ret,ss) /\
+  IS_SOME (FLOOKUP art.cta_fn_sigs (src,name)) ==>
   !f n.
     state_rel_frame machine_frame (eval_exprs (cx with stk updated_by f) (DROP n dflts)) /\
     state_rel_frame machine_frame (eval_stmts (cx with stk updated_by f) ss)
@@ -77,8 +79,6 @@ Proof
   drule_then assume_tac contract_inv_module_codes >>
   `ALOOKUP cx.sources cx.txn.target = SOME mods` by fs[contract_inv_def] >>
   `ALOOKUP mods src = SOME tops` by fs[] >>
-  drule_all_then assume_tac saved_readonly_callee_runtime_sig >>
-  drule_all_then assume_tac saved_readonly_callee_runtime_lookup >>
   `EVERY (expr_mutability_ok mods View) dflts /\ stmts_mutability_ok mods View ss` by
     metis_tac[checked_internal_read_only] >>
   drule_all_then strip_assume_tac saved_readonly_nested_runtime_sigs >>
@@ -101,6 +101,51 @@ Proof
   strip_tac >> rpt gen_tac >> conj_tac >> first_assum irule >>
   fs[int_calls_exprs_FLAT_MAP, EVERY_FLAT, EVERY_MAP, EVERY_DROP,
      FUN_EQ_THM, get_module_code_stk_irrelevant]
+QED
+
+Theorem saved_readonly_callee_frames_checked_mods:
+  contract_inv mods exps ctx cenv cx /\
+  check_contract F cx.layouts cx.txn.target mods = SOME art /\
+  exports_ok cx.layouts cx.txn.target mods exps /\
+  get_module_code cx src = SOME tops /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
+  MEM (src,name) (linked_live_functions mods exps) /\ (mut = View \/ mut = Pure) ==>
+  !f n.
+    state_rel_frame machine_frame (eval_exprs (cx with stk updated_by f) (DROP n dflts)) /\
+    state_rel_frame machine_frame (eval_stmts (cx with stk updated_by f) ss)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then assume_tac contract_inv_module_codes >>
+  `ALOOKUP mods src = SOME tops` by fs[] >>
+  drule_all_then assume_tac saved_readonly_callee_runtime_sig >>
+  drule_all_then assume_tac saved_readonly_callee_runtime_lookup >>
+  drule_all saved_readonly_callee_frames_runtime_sig_core >> simp[]
+QED
+
+Theorem saved_readonly_callee_frames_sig_domain_mods:
+  contract_inv mods exps ctx cenv cx /\
+  check_contract F cx.layouts cx.txn.target mods = SOME runtime_art /\
+  check_contract cx.in_deploy cx.layouts cx.txn.target mods = SOME art /\
+  get_module_code cx src = SOME tops /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
+  IS_SOME (FLOOKUP art.cta_fn_sigs (src,name)) /\ (mut = View \/ mut = Pure) ==>
+  !f n.
+    state_rel_frame machine_frame (eval_exprs (cx with stk updated_by f) (DROP n dflts)) /\
+    state_rel_frame machine_frame (eval_stmts (cx with stk updated_by f) ss)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then assume_tac contract_inv_module_codes >>
+  `ALOOKUP mods src = SOME tops` by fs[] >>
+  drule_all_then assume_tac saved_readonly_callee_runtime_lookup >>
+  (* Current membership gives liveness; the F lookup supplies the F signature. *)
+  `IS_SOME (FLOOKUP runtime_art.cta_fn_sigs (src,name))` by
+    (qpat_assum `check_contract cx.in_deploy _ _ mods = SOME art`
+       (assume_tac o MATCH_MP (cj 2 check_contract_artifact_fields)) >>
+     qpat_assum `check_contract F _ _ mods = SOME runtime_art`
+       (strip_assume_tac o MATCH_MP check_contract_artifact_fields) >>
+     drule_all_then assume_tac build_contract_type_artifact_fn_sigs_complete >>
+     fs[optionTheory.IS_SOME_EXISTS, FLOOKUP_DRESTRICT_SOME]) >>
+  drule_all saved_readonly_callee_frames_runtime_sig_core >> simp[]
 QED
 
 Theorem saved_readonly_callee_syntax_mods[local]:
