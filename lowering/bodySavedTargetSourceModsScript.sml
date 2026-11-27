@@ -138,6 +138,40 @@ Proof
   drule_all_then MATCH_ACCEPT_TAC saved_call_frame_from_lookup
 QED
 
+Theorem saved_checked_call_frame_from_callee_mods:
+  contract_inv mods exps ctx cenv cx /\
+  check_contract cx.in_deploy cx.layouts cx.txn.target mods = SOME art /\
+  source_body_call_supported cx (src,name) /\
+  ~call_can_mutate cenv (IntCall (src,name)) /\
+  state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
+    (eval_exprs cx actuals) /\
+  (!tops mut nr args dflts ret ss.
+    get_module_code cx src = SOME tops /\
+    lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
+    (mut = View \/ mut = Pure) ==>
+    !f n.
+      state_rel_frame machine_frame (eval_exprs (cx with stk updated_by f) (DROP n dflts)) /\
+      state_rel_frame machine_frame (eval_stmts (cx with stk updated_by f) ss)) ==>
+  state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
+    (eval_expr cx (Call ty (IntCall (src,name)) actuals fallback))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?tops. get_module_code cx src = SOME tops` by fs[source_body_call_supported_def] >>
+  `?callable. lookup_callable_function cx.in_deploy name tops = SOME callable` by
+    (qpat_x_assum `source_body_call_supported cx _` mp_tac >>
+     Cases_on `src` >> simp[source_body_call_supported_def, PULL_EXISTS] >>
+     rpt strip_tac >> gvs[] >>
+     fs[supported_linked_callee_def, optionTheory.IS_SOME_EXISTS] >>
+     rename1 `supported_function_decl _ _ _ = SOME decl` >>
+     PairCases_on `decl` >>
+     drule_then assume_tac supported_internal_lookup >>
+     simp[lookup_callable_function_def]) >>
+  PairCases_on `callable` >>
+  drule_all_then assume_tac saved_selected_call_mutability_mods >>
+  qpat_x_assum `!tops mut nr args dflts ret ss. _` (drule_all_then assume_tac) >>
+  drule_all_then MATCH_ACCEPT_TAC saved_call_frame_from_lookup
+QED
+
 Triviality saved_target_source_update_from_walk:
   ~expr_can_mutate cenv (target_to_expr bt) /\
   state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
