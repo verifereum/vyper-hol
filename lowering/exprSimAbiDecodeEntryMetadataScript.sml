@@ -22,7 +22,8 @@ Definition abi_decode_descended_metadata_def:
 End
 
 Theorem abi_decode_root_metadata_inv:
-  expr_sim_inv ce cx env es ==>
+  !mods.
+  expr_sim_inv_mods mods ce cx env es ==>
   abi_decode_root_metadata ce (get_tenv cx)
 Proof
   simp[expr_sim_inv_def, abi_decode_root_metadata_def] >> metis_tac[]

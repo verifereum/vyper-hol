@@ -9,6 +9,7 @@ Ancestors
   exprSimAbiGasBridge venomExecSemantics exprOpenFirstOperand exprSimHyps stateRelProj
   bodyFullAbiDecodeCallerCollisionInterface vyperTyping
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified] gasOutcomeFullMods[qualified]
 Libs
   markerLib
 
@@ -331,10 +332,12 @@ val caller_full_entry = ``\fn origin es0 es input_bytes V wty wtv min_size max_s
   ?b data_var d ops ready.
     (^caller_full_open_entry) fn origin es0 es input_bytes V b data_var d ops ready``;
 
-val caller_full_context = ``\ewhole info min_size max_size cap
+val caller_full_context = ``\exps ewhole info min_size max_size cap
     (V:(bool # 256 word # type_value) list # num list -> bool).
-    body_inv (cx_tops cx) ctx ce cx /\ MEM func ctx.ctx_functions /\
-    expr_body_pre ce cx env ewhole es /\
+    contract_inv ce.ce_modules exps ctx ce cx /\
+    (?tops. module_body_inv ce.ce_modules ce.ce_module tops ce cx) /\
+    MEM func ctx.ctx_functions /\
+    expr_body_pre_mods ce.ce_modules ce cx env ewhole es /\
     expr_type e = BaseT (BytesT (Dynamic n)) /\
     lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
     lower_abi_decode data info min_size max_size cap start = (out,final) /\
@@ -369,7 +372,7 @@ val caller_full_cut_selector = boolSyntax.list_mk_forall o
         info = type_to_abi_dec_info ce.ce_struct_fields ce wty;
         V = \(H:(bool # 256 word # type_value) list # num list). valid_horizon cx st0 H es1.storage_trace
     in
-      ((^caller_full_context) ewhole info min_size max_size cap V /\
+      ((^caller_full_context) exps ewhole info min_size max_size cap V /\
        (^caller_full_open_entry) func sa es es1 bs V b data_var d ops ready) /\
       (^caller_collision) start final ==>
       ?r0 Gs ts r Gf tnf.
@@ -380,7 +383,7 @@ val caller_full_cut_selector = boolSyntax.list_mk_forall o
 Theorem abi_decode_caller_full_conditional:
   (^caller_full_setup_producer) /\ (^caller_full_guarded_producer) /\
   (^caller_full_cut_selector) /\ (^caller_full_endpoint_producer) /\
-  (^caller_full_context) (TypeBuiltin ann (AbiDecode unwrap) ty [e]) (type_to_abi_dec_info
+  (^caller_full_context) exps (TypeBuiltin ann (AbiDecode unwrap) ty [e]) (type_to_abi_dec_info
     ce.ce_struct_fields ce (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
     (abi_static_size ce.ce_struct_fields (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else
     ty)) (abi_size_bound ce.ce_struct_fields (if unwrap /\ needs_external_call_wrap ty then TupleT [ty]
@@ -397,7 +400,7 @@ Theorem abi_decode_caller_full_conditional:
       (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
     (type_memory_bytes ce
       (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) ce.ce_modules cx st0
     (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty
       [expr_type e] [BytesV bs])) (\v. return (Value v))) (es1,s,G,tn)
     (\H res ee G' tn' t. ?v. res = INL v /\

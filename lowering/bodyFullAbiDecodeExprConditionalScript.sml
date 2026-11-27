@@ -12,6 +12,7 @@ Ancestors
   vyperContext vyperInterpreter vyperState vyperAST
   vyperStorageFootprint exprSimHypsDefs vyperTypeExprResult vyperTypeExprSoundness
   vyperTypeInvariants vyperTyping bodyInvCodeProps exprBodyPreProps
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 (* Retain the two closed producer propositions at the checked caller boundary. *)
 local
@@ -83,13 +84,15 @@ Proof
 QED
 
 Theorem abi_decode_singleton_vv_full[local]:
+  !mods exps.
   ^decode_guarded_producer /\ ^decode_cut_selector /\
-  body_inv tops ctx ce cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
-  body_exprs_full_ok cx [e] ==>
+  body_exprs_full_ok_mods mods exps cx [e] ==>
   expr_vv_sim_full (DF,lo,delta,ctx,shadow_ctx,PG,func,shadow_func)
     ce cx ty0 (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es
 Proof
@@ -289,13 +292,14 @@ QED
 Finalise abi_decode_singleton_vv_full
 
 Theorem abi_decode_expr_full_from_producers:
+  !mods exps.
   (^decode_guarded_producer /\ ^decode_cut_selector) ==>
   (!cx v11 b typ es.
      (!s'' x t.
         type_check (type_builtin_args_length_ok (AbiDecode b) (LENGTH es))
           "TypeBuiltin args" s'' = (INL x,t) ==>
-        body_exprs_full_ok cx es) ==>
-     body_expr_full_ok cx (TypeBuiltin v11 (AbiDecode b) typ es))
+        body_exprs_full_ok_mods mods exps cx es) ==>
+     body_expr_full_ok_mods mods exps cx (TypeBuiltin v11 (AbiDecode b) typ es))
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "guarded") (mk_asm "selector")) >>
   rpt gen_tac >> strip_tac >>

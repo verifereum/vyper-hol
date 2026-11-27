@@ -7,6 +7,7 @@ Ancestors
   exprLoweringProps representationCleanPtr exprSimAbiDecodeEntryTyping
   exprSimHyps vyperValue compileEnv exprOperandVar exprSimAbiDecodeLiveFrame
   exprSafeOperand exprSimHypsDefs exprOpenFirstOperand
+  bodyInvSplit[qualified]
 
 val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b data_var d.
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
@@ -42,8 +43,10 @@ val caller_setup_pre = ``\data min_size max_size outsz st ready ops s G tn b dat
      SOME (d,outsz))``;
 
 Theorem abi_decode_body_setup_entry:
-  body_inv tops ctx ce cx /\
-  expr_body_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es0 /\
+  !mods exps.
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es0 /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
   wty = (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) /\
   min_size = abi_static_size ce.ce_struct_fields wty /\

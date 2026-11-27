@@ -5,6 +5,7 @@ Ancestors
   exprSimSliceCompose exprSimAbiDecodeBodySuccess vyperState
   gasShadow gasShadowState gasShadowCompileStmtHelpers
   exprBodyPreProps exprSimAbiDecodeEntryTyping exprOpenFirstOperand
+  bodyFullPredsMods[qualified]
 
 Theorem abi_decode_singleton_vv_prefix:
   expr_type e = BaseT (BytesT (Dynamic n)) /\
@@ -56,11 +57,11 @@ Proof
 QED
 
 Theorem abi_decode_expr_prefix:
-  !cx v11 b typ es.
+  !mods exps cx v11 b typ es.
     (!s'' x t.
        type_check (type_builtin_args_length_ok (AbiDecode b) (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>
-       body_exprs_full_ok cx es) /\
+       body_exprs_full_ok_mods mods exps cx es) /\
     (!s'' x t.
        type_check (type_builtin_args_length_ok (AbiDecode b) (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>

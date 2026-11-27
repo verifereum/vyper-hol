@@ -10,7 +10,8 @@ Ancestors
   vyperTypeSystem exprSafeOperand exprSimHyps exprOpenFirstOperand
 
 Theorem abi_decode_caller_suffix_summary:
-  expr_body_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
+  !mods.
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
   expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa start s0 (ee with gas_obs := []) (BytesV bs) data s /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\ local_ptrs_reserved ce sa /\

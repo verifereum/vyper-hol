@@ -17,7 +17,8 @@ Proof
 QED
 
 Theorem abi_decode_inv_type_env:
-  expr_sim_inv ce cx env es ==> env.type_defs = get_tenv cx
+  !mods.
+  expr_sim_inv_mods mods ce cx env es ==> env.type_defs = get_tenv cx
 Proof
   simp[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]
 QED

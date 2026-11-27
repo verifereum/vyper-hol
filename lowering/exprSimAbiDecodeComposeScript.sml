@@ -18,7 +18,8 @@ QED
    horizon form: the operand's post holds at every valid horizon, and the
    decoder's post is moved from one horizon to all of them. *)
 Theorem abi_decode_suffix_outcome:
-  expr_body_pre ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
+  !mods.
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\ local_ptrs_reserved ce sa /\
   lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
   lower_abi_decode data
@@ -120,7 +121,8 @@ QED
 (* The decode continuation cannot produce HaltException; retain this fact
    alongside its ordinary exit relation for finite-horizon consumers. *)
 Theorem abi_decode_suffix_full_exit_outcome:
-  expr_body_pre ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
+  !mods.
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\ local_ptrs_reserved ce sa /\
   lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
   lower_abi_decode data
