@@ -2,7 +2,7 @@
    (Expr, scoped bodies); shared by the full body leaves. *)
 Theory gasOutcomeFullStmts
 Ancestors
-  gasOutcomeFullCompose gasOutcomeFull fragGasOriginPtr fragGasOrigin
+  createSizeExit gasOutcomeFullCompose gasOutcomeFull fragGasOriginPtr fragGasOrigin
   fragGasMode fragGasPath fragExec gasOutcome gasExemptCert gasSummary
   gasSummaryCompose gasStorage fragGasPathMem stmtSimExpr stmtSimIfProps
   bodyDeclMemoryCompose
@@ -247,7 +247,7 @@ Theorem gas_outcome_full_handler_transport:
        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
          (s, G, tn) marks (r, G', tn') /\
        ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
-        (exit_result r /\
+        (exit_result r /\ create_size_exit_ok ctx res r /\
          R H res (ee with gas_obs := []) (G', tn') r))) ==>
      ?marks' res' ee' r' G'' tn''.
        (!tail. wrapped (es_out with gas_obs :=
@@ -261,13 +261,13 @@ Theorem gas_outcome_full_handler_transport:
           gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
             (s, G, tn) marks (r, G', tn') /\
           ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
-           (exit_result r /\
+           (exit_result r /\ create_size_exit_ok ctx res r /\
             R H res (ee with gas_obs := []) (G', tn') r)) ==>
           gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
             (s, G, tn) marks' (r', G'', tn'') /\
           ((?t. r' = OK t /\
                 Q' H res' (ee' with gas_obs := []) G'' tn'' t) \/
-           (exit_result r' /\
+           (exit_result r' /\ create_size_exit_ok ctx res' r' /\
             R' H res' (ee' with gas_obs := []) (G'', tn'') r')))) ==>
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0
     wrapped (es_out, s, G, tn) Q' R'

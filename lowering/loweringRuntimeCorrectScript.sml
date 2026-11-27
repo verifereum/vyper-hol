@@ -59,7 +59,7 @@ Ancestors
   groupedEntryAllocation groupedDefaultOutcome groupedDefaultPre
   registrationRejectMetadata rejectPrefixSourceShape entryRejectAllocationIds
   defaultDispatchFacts groupedCanonicalCallRoute groupedDefaultCallRoute
-  groupedFallbackCallRoute groupedLegacyCallRoute
+  groupedFallbackCallRoute groupedLegacyCallRoute runtimeBodyComposeCreateSize
 
 val _ = Parse.hide "body";
 
@@ -467,58 +467,6 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem runtime_selected_body_internal_constant_defaults:
-  !am tx mut nr args dflts fbody os gs es0 DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
-   ret_ty lctx RetQ ss es.
-    source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
-    internal_defaults_const_names tops /\
-    cx = initial_evaluation_context am.sources am.layouts tx NONE /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut,nr,args,dflts,ret_ty,fbody) /\
-    external_entry_bound tops am tx os gs mut args dflts es0 /\
-    lock_if_nr cx nr (is_view_mut mut) es0 = (INL (),es) /\
-    ss = subst_consts_stmts (module_consts_env tops []) fbody /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
-    supported_stmts tops bindings ss /\
-    (!target. supported_stmts_expr_exists
-       (expr_abi_decode_target_root target) ss ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmts env ret_ty ss = SOME env' /\
-    stmts_exprs_ok cenv ss /\
-    call_evaluation_safe cx (int_calls_stmts ss) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmts_env cenv lctx ret_ty ss)
-      (stmts_env (gas_shadow_env T cenv) lctx ret_ty (MAP gas_shadow_stmt ss))
-      (eval_stmts cx ss) es
-Proof
-  rpt gen_tac >> strip_tac >>
-  `~cx.in_deploy` by simp[initial_evaluation_context_def] >>
-  `?rpolicy unit. lower_vyper_runtime_unit tops rpolicy = SOME unit` by
-    (drule bodySimTheory.body_inv_contract >>
-     simp[bodyInvSplitTheory.contract_inv_def,
-          compileUnitTheory.lower_vyper_runtime_unit_mods_singleton] >>
-     metis_tac[]) >>
-  pop_assum strip_assume_tac >>
-  `env_context_consistent env cx` by fs[expr_sim_inv_def, env_consistent_def] >>
-  `es.immutables = am.immutables` by
-    (drule_all external_entry_bound_source_frame >> strip_tac >>
-     drule_all_then strip_assume_tac external_body_lock_frame >> simp[]) >>
-  `body_const_cells_agree [(NONE,tops)] cx env es` by
-    (qpat_x_assum `cx = initial_evaluation_context _ _ _ _` SUBST_ALL_TAC >>
-     drule_all_then ACCEPT_TAC external_source_body_const_cells_checked) >>
-  qspecl_then [`am`,`tx`,`mut`,`nr`,`args`,`dflts`,`fbody`,`os`,`gs`,`es0`,
-    `DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,`shadow_ctx`,`func`,
-    `shadow_func`,`cenv`,`cx`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`ss`,`es`]
-    mp_tac runtime_selected_body_frag_full >>
-  asm_rewrite_tac[]
-QED
-
 fun runtime_selected_body_frag_tac nr defaults readings endpoint =
   qpat_assum `frame_ret_ok_full _ _ _ _ _` (fn frame_th =>
     let
@@ -628,14 +576,12 @@ val runtime_reached_headroom_tac =
   disch_then ACCEPT_TAC);
 
 (* Compose at the body's marks, optionally retaining a call-result fact. *)
-fun runtime_body_compose_from_tac compose readings marks =
+fun runtime_body_compose_from_tac compose readings result_rel marks =
   drule_at_then (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)
     (Q.ISPECL_THEN
       [`vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                    vs_inst_idx := 0 |>`,
-       readings,
-       `\(H : (bool # bytes32 # type_value) list # num list) c r.
-          external_call_result_rel H tops ret tx c r`,
+       readings, result_rel,
        `source_exempt tops :
           ((value + exception) # abstract_machine # call_request list) -> bool`,
        marks]
@@ -643,7 +589,9 @@ fun runtime_body_compose_from_tac compose readings marks =
 
 fun runtime_body_compose_tac compose =
   runtime_body_compose_from_tac compose
-    `\g. call_external_trace (SOME vs.vs_outcomes) g am tx` `[]:bool list`;
+    `\g. call_external_trace (SOME vs.vs_outcomes) g am tx`
+    `\(H : (bool # bytes32 # type_value) list # num list) c r.
+       external_call_result_rel H tops ret tx c r` `[]:bool list`;
 
 val runtime_compose_exit_tac =
   rpt gen_tac >> BETA_TAC >> strip_tac >>
@@ -745,6 +693,7 @@ Theorem runtime_lock_abort_result_with:
   lookup_block "__entry" func.fn_blocks = SOME bb /\
   phi_prefix_length bb.bb_instructions = 0 /\
   expr_exit (INR exc : unit + exception) (Abort a t) /\
+  create_size_exit_ok unit.cu_context (INR exc : unit + exception) (Abort a t) /\
   (exc = Error (RuntimeError "nonreentrant lock") \/
    exc = Error (RuntimeError "write in static context")) /\
   (!D. gas_origin_ptr_path
@@ -801,6 +750,8 @@ Proof
     [`INR exc`, `am`, `es_abort.requests`, `es_abort.storage_trace`] >>
   simp[] >> disj2_tac >> qexists_tac `Abort a t` >>
   simp[exit_result_def] >>
+  conj_tac >-
+    (fs[createSizeExitTheory.create_size_exit_ok_inr]) >>
   conj_tac >-
     (qpat_assum `!D. gas_origin_ptr_path _ (entry,_,_) _ (Abort _ _,_,_)`
        (mp_tac o CONJUNCT1 o MATCH_MP gas_origin_ptr_path_projections o Q.SPEC `ARB:dead`) >>
@@ -967,6 +918,66 @@ fun runtime_bound_unlock_tac return_type gas result state =
   strip_tac
   end;
 
+Theorem runtime_registration_lock_abort_create_size[local]:
+  is_view_mut mut = (mut = View) /\
+  cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
+  lock_if_nr cx T (is_view_mut mut) es0 = (INR exc,es_abort) /\
+  compile_guarded_body cenv T global_nonreentrant_slot T (mut = View)
+    fbody rt sa = ((),st') /\
+  fn_has_code sa st' func /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!H : (bool # bytes32 # type_value) list # num list.
+    stmt_state_rel H ctx func cenv cx es0 s0 /\
+    ghost_inv H NONE cenv cx es0 G0 tn0 s0) /\
+  (!D. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
+    (ss,FEMPTY,entry_taint) marks0 (OK s0,G0,tn0)) ==>
+  ?a s G tn.
+    expr_exit (INR exc : unit + exception) (Abort a s) /\
+    create_size_exit_ok ctx (INR exc : unit + exception) (Abort a s) /\
+    (exc = Error (RuntimeError "nonreentrant lock") \/
+     exc = Error (RuntimeError "write in static context")) /\
+    !D. gas_origin_ptr_path (D,0,explicit,ctx,func,[])
+      (ss,FEMPTY,entry_taint) marks0 (Abort a s,G,tn)
+Proof
+  strip_tac >>
+  drule_all nonreentrantEntryPathTheory.guarded_body_code_from_registration >>
+  simp[] >> strip_tac >>
+  `global_nonreentrant_slot < dimword (:256)` by
+    simp[contextTheory.global_nonreentrant_slot_def, wordsTheory.dimword_def] >>
+  qpat_assum `!H. stmt_state_rel H _ _ _ _ _ _ /\ _`
+    (qspec_then `([], [global_nonreentrant_slot])` strip_assume_tac) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+  drule_all (INST_TYPE [alpha |-> ``:256``]
+    nonreentrantEntryPathTheory.nonreentrant_entry_abort_joint_with_view) >>
+  disch_then (qx_choosel_then [`why`,`stop`,`G_stop`,`tn_stop`]
+    (MAP_EVERY ASSUME_TAC o CONJUNCTS)) >>
+  qexistsl_tac [`why`,`stop`,`G_stop`,`tn_stop`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qpat_assum `(_ /\ why = Revert_abort /\ _) \/ _` mp_tac >>
+      disch_then (DISJ_CASES_THEN strip_assume_tac)
+      >- simp[createSizeExitTheory.oversized_create_abort_def] >>
+      qpat_assum `why = ExHalt_abort` (fn eq =>
+        qpat_assum `!D E. gas_origin_ptr_path _ _ [] (Abort why stop,G_stop,tn_stop)`
+          (qspecl_then [`ARB:dead`,`explicit`]
+             (assume_tac o PURE_REWRITE_RULE [eq]))) >>
+      drule_all runtime_static_registration_lock_safe_suffix >>
+      disch_tac >>
+      drule_all bodyIntCallLockAbortExitTheory.lock_abort_suffix_no_oversize_transfer >>
+      simp[createSizeExitTheory.create_size_exit_ok_inr]) >>
+  conj_tac
+  >- (qpat_assum `(_ /\ why = Revert_abort /\ _) \/ _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> simp[]) >>
+  gen_tac >>
+  qpat_assum `!D. gas_origin_ptr_path _ (_,FEMPTY,_) _ _`
+    (qspec_then `D` (mp_tac o MATCH_MP gas_origin_ptr_path_append)) >>
+  disch_then (qspecl_then [`s0`,`G0`,`tn0`,`[]`,
+    `Abort why stop`,`G_stop`,`tn_stop`] mp_tac) >>
+  simp[]
+QED
+
 Theorem runtime_body_endpoint_correct:
   !tops rpolicy unit am tx ret vs mut nr args dflts fbody es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -1014,6 +1025,10 @@ Proof
   >- (rename1 `_ = (INR exc,es_lock)` >>
       `nr = T` by (Cases_on `nr` >> fs[lock_if_nr_def, return_def]) >>
       qpat_x_assum `nr = T` SUBST_ALL_TAC >>
+      qpat_assum `T ==> cx.nonreentrant_slot = _ /\ _`
+        (strip_assume_tac o C MP TRUTH) >>
+      qpat_assum `T ==> fresh_vars_wrt _ _ /\ _`
+        (strip_assume_tac o C MP TRUTH) >>
       `?bb. lookup_block "__entry" func.fn_blocks = SOME bb /\
             phi_prefix_length bb.bb_instructions = 0` by
         (`?bb. lookup_block "__entry" func.fn_blocks = SOME bb` by
@@ -1024,6 +1039,8 @@ Proof
       pop_assum strip_assume_tac >>
       `?a s_abort G_abort tn_abort.
         expr_exit (INR exc : unit + exception) (Abort a s_abort) /\
+        create_size_exit_ok unit.cu_context (INR exc : unit + exception)
+          (Abort a s_abort) /\
         (exc = Error (RuntimeError "nonreentrant lock") \/
          exc = Error (RuntimeError "write in static context")) /\
         !D. gas_origin_ptr_path (D,0,explicit,unit.cu_context,func,[])
@@ -1034,11 +1051,9 @@ Proof
            `es_abort` |-> `es_lock`, `marks0` |-> `marks0`,
            `s0` |-> `s0`, `G0` |-> `G0`, `tn0` |-> `tn0`,
            `explicit` |-> `explicit`]
-           (SPEC_ALL external_entry_abort_from_registration)) >>
-         impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-           fs[Abbr `entry`]) >>
-         disch_then (qx_choosel_then [`a`,`s`,`G`,`tn`] strip_assume_tac) >>
-         qexistsl_tac [`a`,`s`,`G`,`tn`] >> simp[]) >>
+           (SPEC_ALL runtime_registration_lock_abort_create_size)) >>
+         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         disch_then ACCEPT_TAC) >>
       pop_assum strip_assume_tac >>
       qexistsl_tac [`shadow_unit`,`marks0`] >>
       conj_tac >- first_assum ACCEPT_TAC >>
@@ -1179,12 +1194,10 @@ Proof
   `expr_sim_inv cenv cx env_t es_lock` by
     (irule runtime_lock_expr_sim_inv >> goal_assum (drule_at Any) >> simp[]) >>
   `body_const_cells_agree [(NONE,tops)] cx env_t es_lock` by
-    (`env_context_consistent env_t cx` by fs[expr_sim_inv_def, env_consistent_def] >>
-     `es_lock.immutables = am.immutables` by
-       (drule_all external_entry_bound_source_frame >> strip_tac >>
-        drule_then strip_assume_tac external_body_lock_frame >> simp[]) >>
-     qunabbrev_tac `cx` >>
-     drule_all_then ACCEPT_TAC external_source_body_const_cells_checked) >>
+    (`es_lock.immutables = es0.immutables` by
+       (drule_then strip_assume_tac external_body_lock_frame >> simp[]) >>
+     irule (iffLR body_const_cells_agree_immutables) >>
+     qexists_tac `es0` >> fs[Abbr `cx`]) >>
   `!gas. eval_stmts cx compiled_body (es_lock with gas_obs := gas) =
           eval_stmts cx fbody (es_lock with gas_obs := gas)` by
     (mp_tac (Q.INST [`gs` |-> `prefix ++ es0.gas_obs`, `es0` |-> `es0`,
@@ -1268,11 +1281,16 @@ Proof
            drule >> simp[]) >>
   qpat_assum `cx_tops _ = tops` (fn th => REWRITE_TAC [th]) >>
   strip_tac >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (assume_tac o ONCE_REWRITE_RULE [GSYM gas_outcome_full_record_create_size]) >>
   runtime_body_compose_from_tac
     (Q.ISPEC `\(cr : value + exception).
        cr <> INR (Error (RuntimeError "msg.gas: no gas reading"))`
        unit_execution_compose_result_horizon)
-    `\g. call_external_trace (SOME vs.vs_outcomes) (prefix ++ g) am tx` `marks0` >>
+    `\g. call_external_trace (SOME vs.vs_outcomes) (prefix ++ g) am tx`
+    `\(H : (bool # bytes32 # type_value) list # num list) c r.
+       external_call_result_rel H tops ret tx c r /\
+       create_size_exit_ok unit.cu_context (FST c) r` `marks0` >>
   impl_tac
   >- (rpt conj_tac
       >- simp[evaluate_storage_trace_frame]
@@ -1356,7 +1374,7 @@ Proof
             tstore (n2w global_nonreentrant_slot) 0w t else t)
             with <|vs_inst_idx := LENGTH su.cs_current_insts;
                    vs_returndata := []|>))` >>
-          simp[exit_result_def] >>
+          simp[exit_result_def, createSizeExitTheory.create_size_exit_ok_non_exhalt] >>
           qx_genl_tac [`H1`, `G1`, `tn1`] >> strip_tac >>
           `nr /\ mut <> View ==> ~t.vs_call_ctx.cc_static` by
             fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
@@ -1419,6 +1437,17 @@ Proof
       >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
           runtime_locked_eval_tac >>
           runtime_bound_unlock_tac `ret` `gx` `res` `ee with gas_obs := []` >>
+          reverse conj_tac
+          >- (simp[createSizeExitTheory.create_size_exit_ok_def] >> strip_tac >>
+              `res = INR (Error (RuntimeError "create initcode too large"))` by
+                fs[createSizeExitTheory.create_size_exit_ok_def] >>
+              qpat_x_assum `call_external_trace _ (prefix ++ gx) _ _ = (cr,_,_,_)`
+                (fn trace => qpat_assum `call_external_trace _ (prefix ++ gx) _ _ = (_,_,_,_)`
+                  (strip_assume_tac o SIMP_RULE (srw_ss()) [trace])) >>
+              qpat_assum `!e. res = INR e /\ _ ==> _`
+                (qspec_then `Error (RuntimeError "create initcode too large")` mp_tac) >>
+              gvs[]) >>
+          qpat_x_assum `create_size_exit_ok _ _ _` kall_tac >>
           qpat_x_assum `!tail. stmt_exit_ptr _ _ _ _ _`
             (qspec_then `[]` mp_tac) >>
           simp[stmt_exit_ptr_def] >> strip_tac
@@ -1495,8 +1524,16 @@ Proof
       simp[]) >>
   conj_tac
   >- (pure_rewrite_tac[source_unit_execution_correct_with_def] >>
-      qexistsl_tac [`func`,`shadow_func`] >> simp[] >>
-      disj2_tac >> qexistsl_tac [`cr`,`am'`,`rqs`,`obs`] >> simp[]) >>
+      qexistsl_tac [`func`,`shadow_func`] >> simp[] >> disj2_tac >>
+      qpat_x_assum `(source_exempt tops _ /\ _) \/ (?r. exit_result r /\ _)`
+        (DISJ_CASES_THEN2 assume_tac
+          (qx_choose_then `final_exit` (MAP_EVERY ASSUME_TAC o CONJUNCTS)))
+      >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+      disj2_tac >> qexists_tac `final_exit` >> simp[] >>
+      qpat_assum `storage_trace_domain _ _ obs`
+        (assume_tac o REWRITE_RULE [storage_trace_domain_def]) >>
+      qpat_assum `!H. valid_horizon _ _ H obs ==> _`
+        (qspec_then `storage_trace_horizon obs` mp_tac) >> simp[]) >>
   disch_tac >> qx_gen_tac `unread` >>
   qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
     (qspec_then `unread` (strip_assume_tac o MATCH_MP call_external_trace_result)) >>
@@ -1720,7 +1757,19 @@ Proof
        (MAP_EVERY ASSUME_TAC o CONJUNCTS) o
      REWRITE_RULE [source_unit_execution_correct_with_def]) >>
   qexistsl_tac [`shadow_unit.cu_context`, `func`, `shadow_func`, `marks`] >>
-  simp[]
+  simp[] >>
+  qpat_x_assum `((!tail. ~call_storage_ok _ _ _ _) /\ _) \/ _`
+    (DISJ_CASES_THEN2 assume_tac
+      (qx_choosel_then [`cr`,`am'`,`rqs`,`obs`] (MAP_EVERY ASSUME_TAC o CONJUNCTS)))
+  >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> qexistsl_tac [`cr`,`am'`,`rqs`,`obs`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `(source_exempt tops _ /\ _) \/ (?r. exit_result r /\ _)`
+    (DISJ_CASES_THEN2 assume_tac
+      (qx_choose_then `final_exit` (MAP_EVERY ASSUME_TAC o CONJUNCTS)))
+  >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> qexists_tac `final_exit` >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* S1 when the value moves and the body starts, for the canonical

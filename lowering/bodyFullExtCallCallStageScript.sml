@@ -7,9 +7,9 @@ Ancestors
   fragGasEmitCtrl fragGasOriginPtr fragExec memSafeRun instMemFrontier gasEvents gasCount
   pred_set list exprSimRawCallCalldata exprSimExtCallCase extCallOracleStep
   abiCallerAllocation exprLoweringProps emitHelperProps
-  gasOutcomeFullCompose vyperStorageTrace vyperStorageFootprint exprSimDefs
+  gasOutcomeFullCompose createSizeExit vyperStorageTrace vyperStorageFootprint exprSimDefs
 
-Theorem extcall_call_intervals[local]:
+Theorem extcall_call_intervals:
   (if ret_type = NoneT /\ ~skip then compile_extcodesize_check addr
    else comp_return ()) sp = ((),s1) /\
   emit_op opc ops s1 = (success,s2) /\
@@ -67,7 +67,7 @@ Proof
 QED
 
 (* Split the call suffix without unfolding the individual code emitters. *)
-Theorem extcall_call_layout[local]:
+Theorem extcall_call_layout:
   !ret_type skip addr_op is_static gas_op call_offset call_len buf_op ret_len
    value_op sp u sr.
   comp_ignore_bind
@@ -223,7 +223,7 @@ Proof
 QED
 
 (* All errors before a successful take halt at the fetched instruction. *)
-Theorem extcall_fetched_select[local]:
+Theorem extcall_fetched_select:
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee t /\
@@ -323,7 +323,7 @@ QED
 
 (* The code check changes neither saved operand observations nor the
    allocation frontier. Reuse the precheck's pointwise guarantees. *)
-Theorem extcall_precheck_dispatch_operands[local]:
+Theorem extcall_precheck_dispatch_operands:
   EVERY (safe_operand sp) [addr;value;gas;buf;off;len;default_op] /\
   (!op. safe_operand sp op ==> eval_operand op t = eval_operand op s /\
     op_taint tn1 op = op_taint tn op /\
@@ -414,7 +414,7 @@ Theorem extcall_call_landing[local]:
   (!H. valid_horizon cx st0 H ef.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (r,Gf,tf) /\
     ((?z. r = OK z /\ Q H res (ef with gas_obs := []) Gf tf z) \/
-     (exit_result r /\ expr_exit res r))) ==>
+     (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r))) ==>
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0 source
     (ee,s,G,tn) Q (\H res es gt r. expr_exit res r)
 Proof
@@ -446,7 +446,7 @@ Proof
   rename1 `_ = (fr,es)` >> Cases_on `fr` >> simp[]
 QED
 
-Theorem extcall_frame_value_replay[local]:
+Theorem extcall_frame_value_replay:
   frame_call_value cx value_opt ee = (INL framed,ee) ==>
   !tail. frame_call_value cx value_opt (ee with gas_obs := tail) =
     (INL framed,ee with gas_obs := tail)
@@ -474,7 +474,7 @@ Theorem extcall_call_stage_full:
          (emit_void RETURNDATACOPY [fail_buf.buf_operand;Lit 0w;rds])
        (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand;rds] [])
          (new_block cont_lbl)))))))))) sp = (u,sr) /\
-  fn_has_code sp sr func /\ fn_inst_ids_distinct func /\
+  fn_has_code sp sr func /\ fn_inst_ids_distinct func /\ MEM func ctx.ctx_functions /\
   extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
     addr value gas buf off len cap target value_opt calldata has_default
     default_op default_ty default_opt ee s /\
@@ -533,7 +533,7 @@ Theorem extcall_call_stage_full:
       (!H. valid_horizon cx st0 H ee'.storage_trace ==>
         gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (z,Gu,tu) [] (r,Gf,tf) /\
         ((?t. r = OK t /\ Q H res (ee' with gas_obs := []) Gf tf t) \/
-         (exit_result r /\ expr_exit res r)))) ==>
+         (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r)))) ==>
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (do accounts <- get_accounts;
         check (ext_call_precheck_ok skip ret_type target accounts)
@@ -551,20 +551,53 @@ Proof
    ?gw. eval_operand gas s = SOME gw` by
     (qhdtm_assum `extcall_request_ready`
        (strip_assume_tac o REWRITE_RULE [extcall_request_ready_def]) >>
-     fs[EVERY_DEF] >> Cases_on `eval_operand gas s` >> gs[]) >>
+     rpt conj_tac
+     >- first_assum ACCEPT_TAC
+     >- (qpat_assum `EVERY (\p. op_taint tn p = {}) _`
+           (ACCEPT_TAC o CONJUNCT1 o SIMP_RULE bool_ss [EVERY_DEF]))
+     >- first_assum ACCEPT_TAC
+     >- (qpat_assum `IS_SOME (eval_operand gas s)`
+           (ACCEPT_TAC o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]))) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==> stor_taint_ok_at (DF H) tn s` by
     (rpt strip_tac >> qpat_assum `!H. _ ==> ghost_inv_at _ _ _ _ _ _ _ _ _`
        (drule_then (ACCEPT_TAC o cj 4 o REWRITE_RULE [ghost_inv_at_def]))) >>
   drule_all (Q.INST [`explicit` |-> `explicit`, `PG` |-> `PG`, `DF` |-> `DF`]
                     extcall_precheck_to_call) >>
   reverse (Cases_on `ext_call_precheck_ok skip ret_type target ee.accounts`)
-  >- (disch_then (qspecl_then [`explicit`,`d`,`PG`] mp_tac) >>
-      ASM_SIMP_TAC bool_ss [] >> strip_tac >>
+  >- (disch_then kall_tac >>
+      `ret_type = NoneT /\ ~skip /\ NULL (lookup_account target ee.accounts).code` by
+        (qpat_assum `~ext_call_precheck_ok _ _ _ _` mp_tac >>
+         Cases_on `ret_type` >> simp[NoAsms,ext_call_precheck_ok_def,ext_call_has_code_def]) >>
+      `compile_extcodesize_check addr sp = ((),s1)` by
+        (qpat_x_assum `(if ret_type = NoneT /\ ~skip then _ else _) sp = _` mp_tac >> simp[]) >>
+      qhdtm_assum `extcall_request_ready`
+        (strip_assume_tac o REWRITE_RULE [extcall_request_ready_def]) >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+        (drule_then strip_assume_tac) >>
+      drule stmt_state_rel_state_rel >> strip_tac >>
+      drule accountsRelPropsTheory.state_rel_accounts >> strip_tac >>
+      drule accountsRelPropsTheory.accounts_agree_lookup >>
+      disch_then (qspec_then `target` strip_assume_tac) >>
+      drule_then assume_tac bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp >>
+      drule_all extcall_codesize_checked_path >>
+      disch_then (qspecl_then [`explicit`,`PG`,`G`] assume_tac) >>
+      qabbrev_tac `chk = STRING #"%" (toString sp.cs_next_var)` >>
+      qabbrev_tac `f = revert_state (set_returndata []
+        (update_var chk 0w s with vs_inst_idx := SUC s.vs_inst_idx))` >>
       irule extcall_call_landing >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`G1`,`ee`,`r`,`INR (Error (RuntimeError "ExtCall target has no code"))`,`tn1`] >>
-      simp[get_accounts_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-           vyperStateTheory.check_def, vyperStateTheory.assert_def, vyperStateTheory.raise_def,
-           vyperStateTheory.return_def]) >>
+      qexistsl_tac [`G \\ chk`,`ee`,`Abort Revert_abort f`,
+                    `INR (Error (RuntimeError "ExtCall target has no code"))`,
+                    `tn with t_var := tn.t_var |+ (chk,{})`] >>
+      conj_tac
+      >- simp[get_accounts_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+              vyperStateTheory.check_def, vyperStateTheory.assert_def, vyperStateTheory.raise_def,
+              vyperStateTheory.return_def, ext_call_precheck_ok_def, ext_call_has_code_def] >>
+      simp[exit_result_def,expr_exit_def] >> qx_gen_tac `h` >> disch_tac >>
+      qpat_assum `NULL (lookup_account target ee.accounts).code`
+        (assume_tac o REWRITE_RULE [listTheory.NULL_EQ]) >>
+      qpat_x_assum `!D. gas_origin_ptr_path _ (s,G,tn) [] _`
+        (qspec_then `DF h` mp_tac) >>
+      simp[Abbr `chk`,Abbr `f`]) >>
   disch_then (qspecl_then [`explicit`,`d`,`PG`] mp_tac) >>
   ASM_SIMP_TAC bool_ss [] >> strip_tac >>
   qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
@@ -603,12 +636,18 @@ Proof
   drule_all (Q.INST [`source_gas` |-> `source_gas`, `explicit` |-> `explicit`,
                     `PG` |-> `PG`] extcall_fetched_select) >>
   disch_then (qspecl_then [`source_gas`,`explicit`,`PG`] strip_assume_tac)
-  >- (irule extcall_call_landing >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  >- (`!res. create_size_exit_ok ctx res (Abort ExHalt_abort (halt_state (set_returndata [] t)))` by
+        (simp[create_size_exit_ok_def] >> rpt strip_tac >>
+         drule_all oversized_create_abort_at_cursor >>
+         qpat_assum `inst = mk_inst _ _ _ _` (fn th =>
+           simp[NoAsms, th, mk_inst_def, COND_RATOR, COND_RAND] >>
+           Cases_on `stat` >> simp[NoAsms])) >>
+      irule extcall_call_landing >> reverse conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`G1`,`ee`,`Abort ExHalt_abort (halt_state (set_returndata [] t))`,
         `INR (Error (RuntimeError err))`,`tn1`] >>
       conj_tac
       >- (simp[extcall_call_source_replay] >> simp[Once vyperStateTheory.bind_def]) >>
-      simp[exit_result_def,expr_exit_def] >> rpt strip_tac >>
+      simp[exit_result_def,expr_exit_def,create_size_exit_ok_non_exhalt] >> rpt strip_tac >>
       qpat_assum `!H. _ ==> gas_origin_ptr_path _ (s,G,tn) _ _` (drule_then assume_tac) >>
       irule fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >>
       goal_assum (drule_at Any) >> simp[]) >>
@@ -637,7 +676,11 @@ Proof
     (rpt strip_tac >> qpat_assum `!gw g. _ ==> _` drule_all >> simp[]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==> ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t`
     by (qpat_assum `_ ==> !H. _ ==> ghost_inv_at _ _ _ _ _ _ G1 tn1 t` mp_tac >> simp[]) >>
-  drule_all extcall_dispatch_selected >>
+  drule (Q.INST [`sp` |-> `p`, `s` |-> `t`, `G` |-> `G1`, `tn` |-> `tn1`]
+              extcall_dispatch_selected) >>
+  ntac 8 (disch_then drule) >>
+  ntac 8 (disch_then drule) >>
+  disch_then drule_all >>
   reverse (Cases_on `oc.co_success`)
   >- (disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >>
       ASM_SIMP_TAC bool_ss [] >> strip_tac >>
@@ -647,7 +690,7 @@ Proof
       >- (drule extcall_frame_value_replay >> strip_tac >>
           gen_tac >> simp[extcall_call_source_replay] >>
           simp[vyperStateTheory.bind_def]) >>
-      simp[exit_result_def,expr_exit_def] >> rpt strip_tac >>
+      simp[exit_result_def,expr_exit_def,create_size_exit_ok_non_exhalt] >> rpt strip_tac >>
       qpat_assum `!H. _ ==> _ /\ gas_origin_ptr_path _ (t,G1,tn1) _ _`
         (drule_then strip_assume_tac) >>
       qpat_assum `!H. _ ==> gas_origin_ptr_path _ (s,G,tn) _ _`
