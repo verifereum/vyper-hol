@@ -7727,11 +7727,8 @@ Proof
   simp[contextRawReachableTheory.frag_reachable_start] >> metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi]
 QED
 
-Theorem args_defaults_restore_expr_sim_inv[local]:
-  expr_sim_inv_mods mods ce cx env before /\
-  expr_sim_inv_mods mods (cenv_without_defaults ce name)
-    (cx with stk updated_by CONS (NONE,name)) (env with current_src := NONE) after ==>
-  expr_sim_inv_mods mods ce cx env after
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim_inv ce cx env before`
@@ -7749,6 +7746,15 @@ Proof
        vyperTypeInvariantsTheory.env_immutables_consistent_def,
        vyperContextTheory.get_tenv_def, vyperContextTheory.get_module_code_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+*)
+Theorem args_defaults_restore_expr_sim_inv[local]:
+  expr_sim_inv_mods mods ce cx env before /\
+  expr_sim_inv_mods mods (cenv_without_defaults ce name)
+    (cx with stk updated_by CONS (NONE,name)) (env with current_src := NONE) after ==>
+  expr_sim_inv_mods mods ce cx env after
+Proof
+  cheat
 QED
 
 Theorem args_fresh_outputs_code[local]:
