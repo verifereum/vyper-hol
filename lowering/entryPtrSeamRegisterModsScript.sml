@@ -78,7 +78,7 @@ Proof
   >- (drule_all checked_public_getter_params_ok >> simp[params_ok_def])
 QED
 
-Theorem linked_section_runtime_relation[local]:
+Theorem linked_section_runtime_relation:
   immutable_section_layout_mods mods ce /\
   immutables_section_rel_mods mods
     (case ALOOKUP es.immutables addr of
@@ -167,11 +167,12 @@ QED
 Resume linked_registration_endpoint_from_frame[linked_state]:
   qpat_x_assum `vars_pc_only _ s1` mp_tac >>
   simp[vars_pc_only_def, venom_state_component_equality] >> strip_tac >>
-  `immutables_rel cenv tx.target cenv.ce_module F es0 s0` by
-    (irule linked_section_runtime_relation >> qexists_tac `mods` >>
+  `!src. immutables_rel cenv tx.target src F es0 s0` by
+    (gen_tac >> irule linked_section_runtime_relation >> qexists_tac `mods` >>
      gvs[initial_state_def, account_immutables_def]) >>
   gvs[venom_env_rel_def, state_rel_def, initial_state_def,
       initial_evaluation_context_def] >>
+  fs[initial_state_def, initial_evaluation_context_def] >>
   `s0.vs_call_ctx.cc_address = tx.target` by fs[call_ctx_rel_def] >>
   simp[storage_rel_def, transient_rel_def, contract_storage_def,
        contract_transient_def, logs_rel_def, accounts_rel_def,
