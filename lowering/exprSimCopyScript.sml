@@ -97,54 +97,6 @@ Proof
   decide_tac
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule copy_static_fields >> strip_tac >>
-  qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
-  `local_ptrs_rel func cenv es.scopes t` by
-    (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >>
-     simp[] >> conj_tac
-     >- (rpt strip_tac >> sym_tac >>
-         qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ _ = _` irule >>
-         qpat_x_assum `!name lb len. local_region _ _ _ _ _ _ ==> _` drule >>
-         decide_tac) >>
-     conj_tac
-     >- (rpt strip_tac >> first_x_assum irule >>
-         gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
-     conj_tac >- (rpt strip_tac >> gvs[]) >>
-     gvs[state_rel_def]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
-    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
-     simp[] >> reverse conj_tac >- gvs[state_rel_def] >>
-     fs[immutable_alloca_sep_def] >> rpt strip_tac >>
-     first_x_assum drule_all >> strip_tac >>
-     `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
-     qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ _ = _` irule >>
-     gvs[regions_disjoint_def] >> decide_tac) >>
-  rewrite_tac[stmt_state_rel_def] >> conj_tac
-  >- (irule state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`es`, `s`] >> simp[] >>
-      gvs[copy_static_def, venom_state_component_equality]) >>
-  conj_tac >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
-  conj_tac >- (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
-  conj_tac
-  >- (irule fmp_room_fields >> qexists_tac `s` >>
-      simp[] >> gvs[copy_static_def, venom_state_component_equality]) >>
-  conj_tac
-  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
-      simp[] >> rpt strip_tac >> qexists_tac `id` >> simp[] >>
-      metis_tac[copy_buffer_local_region_frame]) >>
-  conj_tac
-  >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
-      rpt strip_tac >>
-      `not_fresh_at st x` by metis_tac[local_ptrs_reserved_imm_base] >>
-      simp[]) >>
-  metis_tac[]
-QED
-*)
 Theorem copy_buffer_state_rel_frame:
   !ctx func cenv cx es st s t inst b sz.
     stmt_state_rel H ctx func cenv cx es s /\
@@ -159,7 +111,62 @@ Theorem copy_buffer_state_rel_frame:
        mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) ==>
     stmt_state_rel H ctx func cenv cx es t
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  fs[copy_static_def, venom_state_component_equality] >>
+  `state_rel H func cenv cx es s` by
+    metis_tac[stateRelProjTheory.stmt_state_rel_state_rel] >>
+  drule stateRelProjTheory.state_rel_local_ptrs_rel >> strip_tac >>
+  `!p n len. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) len) ==>
+             lookup_var p t = lookup_var p s` by
+    (rpt strip_tac >> qpat_x_assum `!x. not_fresh_at st x ==> _` irule >>
+     metis_tac[local_ptrs_reserved_def]) >>
+  `local_ptrs_rel func cenv es.scopes t` by
+    (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >>
+     simp[stateRelProjTheory.state_rel_local_ptrs_rel] >> conj_tac
+     >- (rpt strip_tac >> sym_tac >>
+         qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ _ = _` irule >>
+         qpat_x_assum `!name lb len. local_region _ _ _ _ _ _ ==> _` drule >>
+         decide_tac) >>
+     rpt strip_tac >> fs[] >> metis_tac[]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+         immutable_alloca_sep func (cenv with ce_module := src) cx es s` by
+    (rpt strip_tac >>
+     qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` mp_tac >>
+     simp[stmt_state_rel_def] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+  `state_rel H func cenv cx es t` by
+    (irule state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`es`, `s`] >> simp[] >>
+     rpt gen_tac >> disch_tac >>
+     irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+     reverse conj_tac
+     >- (qpat_x_assum `state_rel H _ _ _ _ s` mp_tac >>
+         simp[state_rel_def] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+     qpat_x_assum `!src. _ ==> immutable_alloca_sep _ _ _ _ s` drule >>
+     simp[immutable_alloca_sep_def] >>
+     rpt strip_tac >>
+     `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
+     qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ _ = _` irule >>
+     fs[regions_disjoint_def] >> decide_tac) >>
+  `!ce. ce.ce_vars = cenv.ce_vars /\ immutable_alloca_sep func ce cx es s ==>
+        immutable_alloca_sep func ce cx es t` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `es`] >> simp[] >> rpt strip_tac >>
+     rename1 `local_region ce es.scopes t id lb len` >>
+     qexists_tac `id` >>
+     `local_region ce es.scopes t id lb len <=>
+      local_region ce es.scopes s id lb len` by
+       (irule local_region_lookup_cong >> simp[] >> metis_tac[]) >> metis_tac[]) >>
+  irule stmt_state_rel_allocas_frame >> rpt conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> simp[] >>
+      metis_tac[optionTheory.IS_SOME_EXISTS])
+  >- (irule immutable_base_zero_frame >> qexists_tac `s` >>
+      simp[] >> metis_tac[stateRelProjTheory.stmt_state_rel_immutable_base_zero,
+                         local_ptrs_reserved_imm_base])
+  >- (first_x_assum irule >> simp[] >>
+      qpat_x_assum `!src. _ ==> immutable_alloca_sep _ _ _ _ s`
+        (qspec_then `cenv.ce_module` mp_tac) >> simp[])
+  >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`es`, `s`] >> simp[]
 QED
 
 (* A copied buffer may be allocated after the expression starts. *)

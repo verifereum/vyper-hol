@@ -8,13 +8,32 @@ Ancestors
   venomInst venomExecSemantics finite_map words list arithmetic
 
 (* Allocation-free decoder execution preserves the destination's resource frame. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem abi_valid_allocated_scratch_free_resource:
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  fn_inst_ids_distinct func /\
+  abi_malformed_destination func cenv es.scopes dstid d n s /\
+  abi_decode_frame d n s t /\
+  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\ i.inst_opcode <> ALLOCA) code /\
+  run_inst_seq code s = OK t /\
+  (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+    eval_operand op t = SOME w) ==>
+  abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) code` by fs[EVERY_MEM] >>
   drule_all abi_valid_allocated_sequence_static >> strip_tac >>
-  `t.vs_code = s.vs_code` by suspend "code" >>
+  `t.vs_code = s.vs_code` by
+    (irule run_inst_seq_preserves_field >> goal_assum (drule_at Any) >>
+     rpt strip_tac >> Cases_on `is_terminator i.inst_opcode`
+     >- (Cases_on `i.inst_opcode` >> gvs[is_terminator_def] >>
+         qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+         qpat_assum `i.inst_opcode = _` (fn eq =>
+           PURE_ONCE_REWRITE_TAC
+             [tryfind (fn th => MATCH_MP th eq)
+               (CONJUNCTS step_inst_base_opcode_eqs)]) >>
+         simp[jump_to_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+         pairarg_tac >> gvs[]) >>
+     drule_all step_inst_base_preserves_all >> simp[]) >>
   drule_all ctor_actual_sequence_world >> strip_tac >>
   drule_all ctor_actual_sequence_no_alloca >> strip_tac >>
   `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
@@ -39,12 +58,63 @@ Proof
      regions_disjoint b sz lb lsz` by
     (rpt strip_tac >> irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  `local_ptrs_rel func cenv es.scopes t` by suspend "locals" >>
+  `local_ptrs_rel func cenv es.scopes t` by
+    (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+     reverse conj_tac >- (conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >> gvs[]) >>
+     rpt strip_tac >> sym_tac >>
+     qhdtm_assum `abi_decode_frame`
+       (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
+     first_x_assum match_mp_tac >>
+     qpat_x_assum `!name lb lsz. _ ==> regions_disjoint _ _ _ _` drule >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
-    suspend "immutables" >>
+    (irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+     reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
+     fs[stmt_state_rel_def, immutable_alloca_sep_def] >> rpt strip_tac >>
+     `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
+     qhdtm_assum `abi_decode_frame`
+       (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
+     first_x_assum match_mp_tac >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t` by
+    (rpt strip_tac >>
+     `immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s` by
+       (fs[stmt_state_rel_def, state_rel_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+     `immutable_alloca_sep func (cenv with ce_module := src) cx es s` by
+       (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+     irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+     rpt strip_tac >>
+     fs[immutable_alloca_sep_def] >> rpt strip_tac >>
+     `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
+     qhdtm_assum `abi_decode_frame`
+       (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
+     first_x_assum match_mp_tac >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `!H':(bool # bytes32 # type_value) list # num list.
      stmt_state_rel H' ctx func cenv cx es s ==>
-     stmt_state_rel H' ctx func cenv cx es t` by suspend "state" >>
+     stmt_state_rel H' ctx func cenv cx es t` by
+    (rpt strip_tac >>
+     `t.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+       metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length] >>
+     irule stmt_state_rel_allocas_frame >> conj_tac
+     >- (rpt strip_tac >>
+         irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >> simp[] >>
+         reverse conj_tac >- fs[stmt_state_rel_def] >>
+         rpt strip_tac >> qexists_tac `id` >>
+         fs[local_region_def, lookup_var_def] >> metis_tac[]) >>
+     conj_tac
+     >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
+         reverse conj_tac >- fs[stmt_state_rel_def] >> rpt strip_tac >>
+         `not_fresh_at st x` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+         `lookup_var x s = SOME 0w` by
+           (fs[stmt_state_rel_def, immutable_base_zero_alt, lookup_var_def] >> metis_tac[]) >>
+         metis_tac[]) >>
+     conj_tac
+     >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >> simp[] >>
+         reverse conj_tac >- fs[stmt_state_rel_def] >> metis_tac[]) >>
+     reverse conj_tac >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
+     irule state_rel_frame >> simp[] >> qexistsl_tac [`es`, `s`] >>
+     simp[] >> (conj_tac >- first_assum ACCEPT_TAC) >> fs[stmt_state_rel_def]) >>
   match_mp_tac (GEN_ALL abi_malformed_resource_post_frame_intro) >> qexists_tac `H` >> simp[] >>
   rpt strip_tac >>
   qhdtm_assum `abi_decode_frame`
@@ -53,84 +123,3 @@ Proof
   `B+cap <= b \/ b+sz <= B` by
     (fs[alloca_inv_def, allocas_non_overlapping_def] >> metis_tac[]) >> decide_tac
 QED
-*)
-Theorem abi_valid_allocated_scratch_free_resource:
-  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
-  fn_inst_ids_distinct func /\
-  abi_malformed_destination func cenv es.scopes dstid d n s /\
-  abi_decode_frame d n s t /\
-  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\ i.inst_opcode <> ALLOCA) code /\
-  run_inst_seq code s = OK t /\
-  (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
-    eval_operand op t = SOME w) ==>
-  abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
-Proof
-  cheat
-QED
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume abi_valid_allocated_scratch_free_resource[code]:
-  irule run_inst_seq_preserves_field >> goal_assum (drule_at Any) >>
-  rpt strip_tac >> Cases_on `is_terminator i.inst_opcode`
-  >- (Cases_on `i.inst_opcode` >> gvs[is_terminator_def] >>
-      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      qpat_assum `i.inst_opcode = _` (fn eq =>
-        PURE_ONCE_REWRITE_TAC
-          [tryfind (fn th => MATCH_MP th eq)
-            (CONJUNCTS step_inst_base_opcode_eqs)]) >>
-      simp[jump_to_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-      pairarg_tac >> gvs[]) >>
-  drule_all step_inst_base_preserves_all >> simp[]
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume abi_valid_allocated_scratch_free_resource[locals]:
-  irule local_ptrs_rel_mem_agree >> qexists_tac `s` >> simp[] >>
-  reverse conj_tac >- (conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >> gvs[]) >>
-  rpt strip_tac >> sym_tac >>
-  qhdtm_assum `abi_decode_frame`
-    (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
-  first_x_assum match_mp_tac >>
-  qpat_x_assum `!name lb lsz. _ ==> regions_disjoint _ _ _ _` drule >>
-  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume abi_valid_allocated_scratch_free_resource[immutables]:
-  irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
-  reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
-  fs[stmt_state_rel_def, immutable_alloca_sep_def] >> rpt strip_tac >>
-  `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
-  qhdtm_assum `abi_decode_frame`
-    (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
-  first_x_assum match_mp_tac >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume abi_valid_allocated_scratch_free_resource[state]:
-  rpt strip_tac >>
-  `t.vs_initial_fmp = s.vs_initial_fmp /\
-   LENGTH s.vs_memory <= LENGTH t.vs_memory` by
-    metis_tac[run_inst_seq_initial_fmp, run_inst_seq_memory_length] >>
-  irule stmt_state_rel_allocas_frame >> conj_tac
-  >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
-      reverse conj_tac >- fs[stmt_state_rel_def] >> rpt strip_tac >>
-      `not_fresh_at st x` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-      `lookup_var x s = SOME 0w` by
-        (fs[stmt_state_rel_def, immutable_base_zero_alt, lookup_var_def] >> metis_tac[]) >>
-      metis_tac[]) >>
-  conj_tac
-  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >> simp[] >>
-      reverse conj_tac >- fs[stmt_state_rel_def] >> metis_tac[]) >>
-  reverse conj_tac >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
-  irule state_rel_frame >> simp[] >> qexistsl_tac [`es`, `s`] >>
-  simp[] >> fs[stmt_state_rel_def]
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Finalise abi_valid_allocated_scratch_free_resource
-*)
