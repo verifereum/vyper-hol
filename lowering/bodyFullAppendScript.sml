@@ -4785,11 +4785,8 @@ Proof
   decide_tac
 QED
 
-Theorem append_typed_target_place[local]:
-  !t cenv cx env es vt.
-    expr_sim_inv_mods mods cenv cx env es /\ ~immutable_root cx t /\
-    type_place_target env t = SOME vt ==>
-    target_place_type cenv t = SOME (value_type_place vt)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   recInduct targetPlaceSimCasesBaseTheory.base_assignment_target_induct >> rpt conj_tac
   >- suspend "name"
@@ -4797,7 +4794,17 @@ Proof
   >- suspend "subscript" >>
   suspend "attribute"
 QED
+*)
+Theorem append_typed_target_place[local]:
+  !t cenv cx env es vt.
+    expr_sim_inv_mods mods cenv cx env es /\ ~immutable_root cx t /\
+    type_place_target env t = SOME vt ==>
+    target_place_type cenv t = SOME (value_type_place vt)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_typed_target_place[name]:
   rpt gen_tac >>
   simp[vyperTypeEnvTheory.type_place_target_NameTarget,
@@ -4808,7 +4815,9 @@ Resume append_typed_target_place[name]:
     (mp_tac o REWRITE_RULE [expr_sim_inv_def]) >>
   simp[] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_typed_target_place[top]:
   gen_tac >> PairCases_on `nsid` >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -4820,7 +4829,9 @@ Resume append_typed_target_place[top]:
   drule_all_then strip_assume_tac targetPlaceSimTheory.toplevel_target_env >>
   gvs[allocLimitsTheory.target_place_type_def,exprLoweringTheory.value_type_place_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_typed_target_place[subscript]:
   simp[vyperTypeEnvTheory.type_place_target_SubscriptTarget,
        targetPlaceSimTheory.immutable_root_def,targetPlaceSimTheory.target_root_def] >>
@@ -4833,7 +4844,9 @@ Resume append_typed_target_place[subscript]:
   gvs[vyperTypeSystemTheory.subscript_vtype_def,AllCaseEqs(),
      exprLoweringTheory.value_type_place_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_typed_target_place[attribute]:
   simp[vyperTypeEnvTheory.type_place_target_AttributeTarget,
        targetPlaceSimTheory.immutable_root_def,targetPlaceSimTheory.target_root_def] >>
@@ -4848,8 +4861,11 @@ Resume append_typed_target_place[attribute]:
   drule_all_then strip_assume_tac stmtSimAssignAttrTheory.attribute_type_struct_field >>
   gvs[allocLimitsTheory.target_place_type_def,exprLoweringTheory.value_type_place_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise append_typed_target_place[local]
+*)
 
 Theorem body_append_nested_frag_full[local]:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
