@@ -5,7 +5,7 @@ Ancestors
   bodyCallSupport bodyInvSplit vyperCallOutcomeFrame vyperMachineFrame
   vyperStorageBackend vyperInterpreter vyperTypeContract exprLowering list
 
-Triviality suffix_frame_from_walk:
+Theorem suffix_frame_from_walk:
   ~exprs_can_mutate cenv ys /\
   state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
     (eval_exprs cx ys) /\
