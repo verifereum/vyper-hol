@@ -15,10 +15,11 @@ Theorem bytestring_store_allocated_frag_frame:
   stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   (!name b sz. local_region ce es.scopes s name b sz ==>
     b+sz <= w2n d \/ w2n d+N <= b) /\
-  (ce.ce_is_ctor ==> !name itv iv off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (ce.ce_is_ctor ==> !src_id name itv iv off.
+    (src_id = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src_id)) /\
+    FLOOKUP ce.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+      | SOME imms => get_source_immutables src_id imms) name = SOME (itv,iv) ==>
     regions_disjoint off (type_memory_size itv) (w2n d) N) /\
   (!q. val_in_memory tv v (w2n d) q.vs_memory /\
     stmt_state_rel H ctx func ce cx es q /\

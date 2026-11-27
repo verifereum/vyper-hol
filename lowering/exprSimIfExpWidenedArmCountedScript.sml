@@ -528,14 +528,20 @@ Proof
     >- (rpt strip_tac >>
         qpat_x_assum `!name b sz. local_region _ _ u' _ _ _ ==> _` drule >>
         simp[arithmeticTheory.ADD_COMM]) >>
-    rpt strip_tac >> simp[regions_disjoint_def] >>
+    disch_tac >> qx_gen_tac `src_id` >> rpt gen_tac >>
+    disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+    simp[regions_disjoint_def] >>
     `off + type_memory_size itv <= w2n w \/ w2n w + type_memory_size tvt <= off`
       suffices_by decide_tac >>
-    irule compile_alloc_buffer_immutable_disjoint >>
+    irule (SIMP_RULE (srw_ss()) [] (Q.INST [`cenv` |-> `ce with ce_module := src_id`,
+      `name` |-> `name`, `v` |-> `iv`, `s` |-> `u'`]
+      compile_alloc_buffer_immutable_disjoint)) >>
     goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
-    `immutable_alloca_sep func ce cx ee u'` by fs[stmt_state_rel_def] >>
+    `immutable_alloca_sep func (ce with ce_module := src_id) cx ee u'` by
+      (Cases_on `src_id = ce.ce_module` >>
+       gvs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
     goal_assum (drule_at (Pat `immutable_alloca_sep _ _ _ _ _`)) >>
-    asm_rewrite_tac[] >> goal_assum (drule_at Any) >> asm_rewrite_tac[])) >>
+    qexistsl [`iv`, `name`] >> simp[])) >>
   strip_tac >>
   `gas_marked_path F ctx func s 0 (OK t)` by
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0] >>

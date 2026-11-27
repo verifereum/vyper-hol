@@ -39,6 +39,7 @@
  *)
 Theory exprSimECArith
 Ancestors
+  exprSimAggregates
   exprSimHashBoundary
   exprSimSource
   exprSimProps
@@ -1539,10 +1540,46 @@ Proof
        fcpLib.INDEX_CONV ``dimindex(:160)``]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem ec_suffix_pointer_post[local]:
+  (do gas <- emit_op GAS [];
+      success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit 64w];
+      emit_void ASSERT [success]; return op od) sm = (res,sb) /\
+  eval_operand ip st = SOME wi /\ eval_operand op st = SOME wo /\
+  (!z. ip = Var z ==> not_fresh_at sm z) /\
+  (!z. op = Var z ==> not_fresh_at sm z) /\
+  precompile_result (venom_call_request st target 0w wi insz T).cr_target
+    (venom_call_request st target 0w wi insz T).cr_data =
+    SOME (SOME (word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T)) /\
+  addr = w2w target /\
+  payload = read_memory (w2n wi) (w2n insz) st /\
+  st.vs_outcomes = co::rest /\ co.co_success /\
+  stmt_state_rel H ctx func cenv cx es st /\
+  storage_well_formed_on cx es (FST H) /\ local_ptrs_reserved cenv sm /\
+  sf.cs_next_var <= sm.cs_next_var /\ sf.cs_next_id <= sm.cs_next_id /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sf /\
+  wb_frame cenv es es sf s0 st /\ w2n wo + 64 < dimword (:256) /\
+  FLOOKUP st.vs_allocas aid = SOME (w2n wo,64) /\
+  sf.cs_next_id <= aid /\ aid < sm.cs_next_id /\
+  (!name b sz. local_region cenv es.scopes st name b sz ==>
+     regions_disjoint (w2n wo) 64 b sz) /\
+  (!old b sz. old < sf.cs_next_id /\ FLOOKUP st.vs_allocas old = SOME (b,sz) ==>
+     regions_disjoint (w2n wo) 64 b sz) /\
+  (cenv.ce_is_ctor ==> !name tv iv off.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
+    regions_disjoint (w2n wo) 64 off (type_memory_size tv)) /\
+  post_value_type cenv e = expr_type e /\
+  expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
+  pure_frame cenv func es sf s0 st /\
+  (?ops outs. MEM (mk_inst aid ALLOCA ops outs) (fn_insts func)) ==>
+  ?t. run_inst_seq (emitted_insts sm sb) st = OK t /\
+      vv_post H ctx func cenv cx e es sf sb s0
+        (SND (take_call_outcome NONE addr payload NONE es))
+        (Value (mk_ec_result (x,y)))
+        (FST (as_stack_val (expr_type e) (res,sb))) t
 Proof
-  strip_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_x_assum `addr = _` SUBST_ALL_TAC >>
   qpat_x_assum `payload = _` SUBST_ALL_TAC >>
   drule_at (Pat `precompile_result _ _ = _`) computed_suffix_success >>
@@ -1551,6 +1588,23 @@ Proof
   qexists `t` >> conj_tac >- simp[] >>
   qpat_x_assum `Abbrev _` kall_tac >>
   drule_all computed_suffix_output >> strip_tac >>
+  qpat_x_assum `?ops outs. MEM (mk_inst aid ALLOCA ops outs) _`
+    (qx_choose_then `ops` (qx_choose_then `outs` assume_tac)) >>
+  `cenv.ce_is_ctor ==> !src name tv iv off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,iv) ==>
+    regions_disjoint (w2n wo) 64 off (type_memory_size tv)` by
+    (strip_tac >> rpt gen_tac >>
+     disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+     `regions_disjoint off (type_memory_size tv) (w2n wo) 64` by
+       (irule exprSimAggregatesTheory.aggregate_alloca_immutable_sep_source >>
+        qpat_assum `stmt_state_rel H ctx func cenv cx es st` (irule_at Any) >>
+        qexistsl [`src`, `name`, `iv`, `mk_inst aid ALLOCA ops outs`] >>
+        simp[mk_inst_def]) >>
+     qpat_assum `regions_disjoint off (type_memory_size tv) (w2n wo) 64` mp_tac >>
+     pure_rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `stmt_state_rel H ctx func cenv cx
      (SND (take_call_outcome NONE (w2w target)
        (read_memory (w2n wi) (w2n insz) st) NONE es)) t /\
@@ -1618,48 +1672,6 @@ Proof
   qpat_assum `expr_type e = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
   irule ec_result_pointer_post >> simp[] >>
   qexists `aid` >> gvs[] >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem ec_suffix_pointer_post[local]:
-  (do gas <- emit_op GAS [];
-      success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit 64w];
-      emit_void ASSERT [success]; return op od) sm = (res,sb) /\
-  eval_operand ip st = SOME wi /\ eval_operand op st = SOME wo /\
-  (!z. ip = Var z ==> not_fresh_at sm z) /\
-  (!z. op = Var z ==> not_fresh_at sm z) /\
-  precompile_result (venom_call_request st target 0w wi insz T).cr_target
-    (venom_call_request st target 0w wi insz T).cr_data =
-    SOME (SOME (word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T)) /\
-  addr = w2w target /\
-  payload = read_memory (w2n wi) (w2n insz) st /\
-  st.vs_outcomes = co::rest /\ co.co_success /\
-  stmt_state_rel H ctx func cenv cx es st /\
-  storage_well_formed_on cx es (FST H) /\ local_ptrs_reserved cenv sm /\
-  sf.cs_next_var <= sm.cs_next_var /\ sf.cs_next_id <= sm.cs_next_id /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sf /\
-  wb_frame cenv es es sf s0 st /\ w2n wo + 64 < dimword (:256) /\
-  FLOOKUP st.vs_allocas aid = SOME (w2n wo,64) /\
-  sf.cs_next_id <= aid /\ aid < sm.cs_next_id /\
-  (!name b sz. local_region cenv es.scopes st name b sz ==>
-     regions_disjoint (w2n wo) 64 b sz) /\
-  (!old b sz. old < sf.cs_next_id /\ FLOOKUP st.vs_allocas old = SOME (b,sz) ==>
-     regions_disjoint (w2n wo) 64 b sz) /\
-  (cenv.ce_is_ctor ==> !name tv iv off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
-    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
-    regions_disjoint (w2n wo) 64 off (type_memory_size tv)) /\
-  post_value_type cenv e = expr_type e /\
-  expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  pure_frame cenv func es sf s0 st /\
-  (?ops outs. MEM (mk_inst aid ALLOCA ops outs) (fn_insts func)) ==>
-  ?t. run_inst_seq (emitted_insts sm sb) st = OK t /\
-      vv_post H ctx func cenv cx e es sf sb s0
-        (SND (take_call_outcome NONE addr payload NONE es))
-        (Value (mk_ec_result (x,y)))
-        (FST (as_stack_val (expr_type e) (res,sb))) t
-Proof
-  cheat
 QED
 
 Theorem ec_points_run:

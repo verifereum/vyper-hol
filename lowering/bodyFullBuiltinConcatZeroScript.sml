@@ -6,8 +6,35 @@ Ancestors
   venomInst venomExecSemantics
   ptrSafetyTransport fragGasSeqPtr allocaFootprint finite_map pred_set
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem concat_offset_zero_full:
+  emit_void MSTORE [Var oq; Lit 0w] sc = (u,sc') /\
+  fn_has_code sc sc' func /\ fn_inst_ids_distinct func /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ptr_covers G tn oq s 64 /\
+  lookup_var oq s = SOME ow /\ lo <= w2n ow /\
+  w2n ow+64 < dimword (:256) /\ w2n ow+64 <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts /\
+  alloca_history func s /\ alloca_inv s /\ allocas_from lo s ==>
+  ?t tn'.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G,tn')) /\
+    t = (mstore (w2n ow) 0w s with vs_inst_idx := LENGTH sc'.cs_current_insts) /\
+    t.vs_current_bb = sc'.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sc'.cs_current_insts /\ ~t.vs_halted /\
+    alloca_history func t /\ allocas_from lo t /\
+    t with <|vs_memory := s.vs_memory; vs_inst_idx := s.vs_inst_idx|> = s /\
+    tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    mload (w2n ow) t = 0w /\
+    tn'.t_mem = tn.t_mem DIFF {i | w2n ow <= i /\ i < w2n ow+32} /\
+    (!p n. p+n <= w2n ow \/ w2n ow+32 <= p ==>
+      mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory) /\
+    (!(H:(bool # bytes32 # type_value) list # num list) cenv cx es.
+      stmt_state_rel H ctx func cenv cx es s /\
+      (!name b sz. local_region cenv es.scopes s name b sz ==>
+        regions_disjoint (w2n ow) 64 b sz) /\
+      (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+        immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t) ==>
+      stmt_state_rel H ctx func cenv cx es t)
 Proof
   strip_tac >> Cases_on `u` >>
   drule emitted_insts_emit_void >> strip_tac >>
@@ -82,8 +109,9 @@ Proof
     stmt_state_rel H ctx func cenv cx es s /\
     (!name b sz. local_region cenv es.scopes s name b sz ==>
       regions_disjoint (w2n ow) 64 b sz) /\
-    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-      (raw with vs_inst_idx := LENGTH sc'.cs_current_insts) ==>
+    (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+      immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es
+        (raw with vs_inst_idx := LENGTH sc'.cs_current_insts)) ==>
     stmt_state_rel H ctx func cenv cx es (raw with vs_inst_idx := LENGTH sc'.cs_current_insts)` by
     (rpt strip_tac >> rewrite_tac[stmt_state_rel_inst_idx] >>
      qpat_assum `raw = mstore _ _ s` SUBST_ALL_TAC >>
@@ -92,7 +120,7 @@ Proof
      conj_tac
      >- (rpt strip_tac >> first_x_assum drule >>
          simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-     qpat_x_assum `immutables_rel _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `!src. _ ==> immutables_rel _ _ _ _ _ _` mp_tac >>
      simp[venomMemPropsTheory.mstore_eq_write_mem,
           loweringStateRelDefsTheory.immutables_rel_def,
           venomStateTheory.write_memory_with_expansion_def]) >>
@@ -120,36 +148,4 @@ Proof
     (qpat_assum `raw = mstore _ _ s` SUBST1_TAC >>
      simp[NoAsms, venomStateTheory.mstore_def, venomStateTheory.venom_state_component_equality])
   >> FIRST [first_assum ACCEPT_TAC, PURE_ASM_REWRITE_TAC [] >> simp[NoAsms]]
-QED
-*)
-Theorem concat_offset_zero_full:
-  emit_void MSTORE [Var oq; Lit 0w] sc = (u,sc') /\
-  fn_has_code sc sc' func /\ fn_inst_ids_distinct func /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ptr_covers G tn oq s 64 /\
-  lookup_var oq s = SOME ow /\ lo <= w2n ow /\
-  w2n ow+64 < dimword (:256) /\ w2n ow+64 <= s.vs_alloca_next /\
-  ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sc.cs_current_insts /\
-  alloca_history func s /\ alloca_inv s /\ allocas_from lo s ==>
-  ?t tn'.
-    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G,tn')) /\
-    t = (mstore (w2n ow) 0w s with vs_inst_idx := LENGTH sc'.cs_current_insts) /\
-    t.vs_current_bb = sc'.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sc'.cs_current_insts /\ ~t.vs_halted /\
-    alloca_history func t /\ allocas_from lo t /\
-    t with <|vs_memory := s.vs_memory; vs_inst_idx := s.vs_inst_idx|> = s /\
-    tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
-    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-    mload (w2n ow) t = 0w /\
-    tn'.t_mem = tn.t_mem DIFF {i | w2n ow <= i /\ i < w2n ow+32} /\
-    (!p n. p+n <= w2n ow \/ w2n ow+32 <= p ==>
-      mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory) /\
-    (!(H:(bool # bytes32 # type_value) list # num list) cenv cx es.
-      stmt_state_rel H ctx func cenv cx es s /\
-      (!name b sz. local_region cenv es.scopes s name b sz ==>
-        regions_disjoint (w2n ow) 64 b sz) /\
-      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t ==>
-      stmt_state_rel H ctx func cenv cx es t)
-Proof
-  cheat
 QED
