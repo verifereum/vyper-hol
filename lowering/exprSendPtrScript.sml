@@ -558,39 +558,6 @@ Proof
   irule call_assert_fail_path_ptr >> metis_tac[]
 QED
 
-(* SCRATCH: indirect build dependency awaiting widened-relation repair.
-Proof
-  strip_tac >>
-  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-   t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp /\
-   t.vs_memory = s.vs_memory /\
-   t.vs_vars = s.vs_vars /\ t.vs_labels = s.vs_labels` by
-    (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  `stmt_state_rel H ctx fn cenv cx es' (update_var out w t)` by
-     (irule stmt_state_rel_update_var >> conj_tac
-      >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
-      `immutable_alloca_sep fn cenv cx es' t` by
-        (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es1`] >>
-         gvs[stmt_state_rel_def] >> rpt strip_tac >> qexists_tac `id` >>
-         gvs[local_region_def, lookup_var_def]) >>
-      `immutable_base_zero cenv t` by
-        (irule immutable_base_zero_frame >> qexists_tac `s` >>
-         fs[stmt_state_rel_def, lookup_var_def]) >>
-      irule stmt_state_rel_allocas_frame >> simp[] >>
-      qexistsl_tac [`es1`, `s`] >> simp[]) >>
-  irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  `wb_frame cenv es es' sa s0 s` by
-    (qpat_x_assum `wb_frame cenv es es1 sa s0 s` mp_tac >>
-     pure_rewrite_tac[loweringPostsTheory.wb_frame_def,
-       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
-     qpat_x_assum `es'.scopes = es1.scopes` (fn th => pure_rewrite_tac[th]) >>
-     disch_then ACCEPT_TAC) >>
-  irule wb_frame_readonly_tail >> qexists_tac `sm` >>
-  qpat_assum `wb_frame cenv es es' sa s0 s` (irule_at Any) >>
-  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
-QED
-*)
 Theorem send_tail_none_post:
   expr_has_effect e /\
   stmt_state_rel H ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
@@ -605,7 +572,41 @@ Theorem send_tail_none_post:
   expr_post H ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w)
     ((update_var out w t) with vs_inst_idx := k)
 Proof
-  cheat
+  strip_tac >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+   t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp /\
+   t.vs_memory = s.vs_memory /\
+   t.vs_vars = s.vs_vars /\ t.vs_labels = s.vs_labels` by
+    (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `!ce. immutable_alloca_sep fn ce cx es1 s ==>
+        immutable_alloca_sep fn ce cx es' t` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `es1`] >> simp[] >>
+     rpt strip_tac >> qexists_tac `id` >> gvs[local_region_def, lookup_var_def]) >>
+  `immutable_alloca_sep fn cenv cx es1 s /\
+   (!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+               immutable_alloca_sep fn (cenv with ce_module := src) cx es1 s)` by
+    (qpat_assum `stmt_state_rel H ctx fn cenv cx es1 s` mp_tac >>
+     rewrite_tac[stmt_state_rel_def] >> strip_tac >> simp[] >> metis_tac[]) >>
+  `stmt_state_rel H ctx fn cenv cx es' (update_var out w t)` by
+     (irule stmt_state_rel_update_var >> conj_tac
+      >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
+      `immutable_base_zero cenv t` by
+        (irule immutable_base_zero_frame >> qexists_tac `s` >>
+         simp[lookup_var_def] >> metis_tac[stateRelProjTheory.stmt_state_rel_immutable_base_zero]) >>
+      irule stmt_state_rel_allocas_frame >>
+      simp[] >> qexistsl_tac [`es1`, `s`] >> simp[]) >>
+  irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
+  `wb_frame cenv es es' sa s0 s` by
+    (qpat_x_assum `wb_frame cenv es es1 sa s0 s` mp_tac >>
+     pure_rewrite_tac[loweringPostsTheory.wb_frame_def,
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+     qpat_x_assum `es'.scopes = es1.scopes` (fn th => pure_rewrite_tac[th]) >>
+     disch_then ACCEPT_TAC) >>
+  irule wb_frame_readonly_tail >> qexists_tac `sm` >>
+  qpat_assum `wb_frame cenv es es' sa s0 s` (irule_at Any) >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
 QED
 
 Theorem send_tail_path_ptr:
