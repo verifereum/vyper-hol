@@ -9,7 +9,7 @@ Ancestors
   supportedExprTraverse whitelistCheckerConsts vyperInterpreter vyperTypeContract
   list alist rich_list pair
 
-Theorem default_name_occurrence_declared[local]:
+Theorem default_name_occurrence_declared:
   (!e. runtime_constant_expr mods e /\
        supported_expr_exists ($= (TopLevelName ann (owner,id))) e ==>
        declared_constant mods owner id \/ declared_immutable mods owner id) /\
@@ -67,7 +67,7 @@ Proof
   Cases_on `ALOOKUP (consts_env_mods mods) (owner,id)` >> fs[ALOOKUP_NONE]
 QED
 
-Theorem default_declared_const_root[local]:
+Theorem default_declared_const_root:
   ALL_DISTINCT (MAP FST mods) /\ declared_constant mods owner id ==>
   const_name_root_mods mods (TopLevelName ann (owner,id))
 Proof
