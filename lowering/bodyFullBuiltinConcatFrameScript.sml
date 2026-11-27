@@ -617,9 +617,10 @@ Resume concat_suffix_full[suffix_source]:
         metis_tac[revertReasonPrefixPtrTheory.local_region_update_nonlocal] >>
       `regions_disjoint B 32 lo' sz` by metis_tac[] >>
       fs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
-  rpt strip_tac >>
+  disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   `regions_disjoint io (type_memory_size tv) B bsz` by
-    (drule_all exprSimAggregatesTheory.aggregate_alloca_immutable_sep >> simp[]) >>
+    (drule_all exprSimAggregatesTheory.aggregate_alloca_immutable_sep_source >> simp[]) >>
   fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
