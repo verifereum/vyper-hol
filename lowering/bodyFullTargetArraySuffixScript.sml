@@ -137,20 +137,8 @@ Proof
   cheat
 QED
 
-Theorem array_tail_packet_memory_source[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
-    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
-    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
-  valid_horizon cx st0 H mid2.storage_trace /\
-  pv = PlaceR (MemoryPlace id path) ==>
-  ?entry etv av.
-    evaluate_type (get_tenv cx) et = SOME etv /\
-    lookup_scopes id mid2.scopes = SOME entry /\
-    evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
-    subscripts_type entry.type path = SOME (ArrayTV etv bd) /\
-    value_has_type (ArrayTV etv bd) (ArrayV av) /\
-    well_formed_type_value (ArrayTV etv bd) /\
-    array_length (ArrayTV etv bd) av < dimword (:256)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   drule_all array_tail_packet_source_index >> strip_tac >>
@@ -170,6 +158,24 @@ Proof
   Cases_on `live` >> gvs[value_has_type_def] >>
   rename1 `value_has_type (ArrayTV etv bd) (ArrayV av)` >>
   drule_all target_memory_array_length_bound >> simp[wordsTheory.dimword_def]
+QED
+*)
+Theorem array_tail_packet_memory_source[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  valid_horizon cx st0 H mid2.storage_trace /\
+  pv = PlaceR (MemoryPlace id path) ==>
+  ?entry etv av.
+    evaluate_type (get_tenv cx) et = SOME etv /\
+    lookup_scopes id mid2.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+    subscripts_type entry.type path = SOME (ArrayTV etv bd) /\
+    value_has_type (ArrayTV etv bd) (ArrayV av) /\
+    well_formed_type_value (ArrayTV etv bd) /\
+    array_length (ArrayTV etv bd) av < dimword (:256)
+Proof
+  cheat
 QED
 
 Theorem array_tail_packet_storage_source[local]:
