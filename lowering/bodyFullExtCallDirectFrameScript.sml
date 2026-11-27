@@ -31,10 +31,11 @@ Theorem extcall_direct_encode_phase_frame:
       (?site. FLOOKUP s.vs_allocas site = SOME (b,n) /\ site < cut.cs_next_id)) ==>
      mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory /\
      (!i. b <= i /\ i < b+n /\ i IN tn'.t_mem ==> i IN tn.t_mem)) /\
-  (ce.ce_is_ctor ==> !name tv v off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (ce.ce_is_ctor ==> !src name tv v off.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     mem_bytes_at off (type_memory_size tv) t.vs_memory =
     mem_bytes_at off (type_memory_size tv) s.vs_memory) ==>
   stmt_state_rel H ctx func ce cx ee t /\ ghost_inv_at D lo d ce cx ee G' tn' t /\
