@@ -79,6 +79,7 @@ Proof
 QED
 
 Theorem immutable_assign_empty_store_restore:
+  bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce /\
   stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty /\
@@ -179,6 +180,8 @@ Theorem immutable_assign_empty_stmt_frag:
     (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)) es
 Proof
   strip_tac >>
+  `bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce` by
+    drule_then ACCEPT_TAC bodyInvCodePropsTheory.body_inv_unit_immutable_layout >>
   `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
   `~cx_const_name cx (src,id)` by
     (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >>
@@ -236,6 +239,7 @@ Proof
   `stmt_state_rel H ctx func ce cx ee q` by
     (irule immutable_assign_empty_store_restore >>
      goal_assum (drule_at Any) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`env`, `es`, `id`, `off`, `s0`, `sa`, `tv`, `ity`] >>
      simp[venom_state_component_equality] >>
      qpat_x_assum `q with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = _`
