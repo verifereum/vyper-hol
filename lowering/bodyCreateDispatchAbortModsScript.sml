@@ -7,7 +7,7 @@ Ancestors
   bodyFullShadowBodyInv bodyPtrDefs ptrDiscipline ptrDisciplineTaintProps
   memSafeRun unitTransformDefs contextCodegenRel codegenRel memLocDefs ptrSafeRun
   venomExecSemantics venomState venomInst venomMemDefs
-  exprSimDefs exprLoweringProps loweringStateRelDefs
+  exprSimDefs exprLoweringProps loweringStateRelDefs stateRelProj createSizeExit
   vyperCreate vyperInterpreter vyperCallOutcome vyperState vyperStorageFootprint
   words list
 Libs
@@ -155,5 +155,15 @@ Proof
   gen_tac >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _` (drule_then strip_assume_tac) >>
   `allocas_from lo s /\ stor_taint_ok_at (DF H) tn s` by fs[ghost_inv_at_mods_def] >>
-  drule_all create_dispatch_abort_path >> simp[]
+  drule_all create_dispatch_abort_path >> simp[] >> disch_tac >>
+  Cases_on `w2n sz > 2 * max_code_size` >- simp[Abbr `msg`] >>
+  Cases_on `s.vs_call_ctx.cc_static`
+  >- simp[halt_state_def,set_returndata_def] >>
+  strip_tac >>
+  `MEM func ctx.ctx_functions` by
+    (drule stmt_state_rel_alloca_room >> simp[alloca_room_def] >>
+     strip_tac >> drule lookup_function_MEM >> simp[]) >>
+  drule_all oversized_create_abort_at_cursor >> strip_tac >>
+  qpat_assum `inst.inst_opcode = CREATE /\ _ \/ _` strip_assume_tac >>
+  gvs[]
 QED
