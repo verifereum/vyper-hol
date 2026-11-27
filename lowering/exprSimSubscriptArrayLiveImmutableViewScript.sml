@@ -88,30 +88,6 @@ Proof
   cheat
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt strip_tac >>
-  drule_all live_immutable_root_current >> strip_tac >>
-  `?v. evaluate_subscripts itv iv path = INL v` by metis_tac[] >>
-  `value_has_type (ArrayTV etv bd) v /\
-   well_formed_type_value (ArrayTV etv bd)` by
-    (drule_all imm_place_at_value_type >> simp[]) >>
-  `k + type_memory_size (ArrayTV etv bd) <= type_memory_size itv` by
-    metis_tac[mem_path_offset_sound] >>
-  `immutable_holds cenv cx (ArrayT et bd)
-      (PlaceR (ImmutablePlace src id path)) (n2w (off+k)) ee s` by
-    (qpat_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
-     drule_all live_immutable_path_holds >> simp[]) >>
-  qexistsl_tac [`iv`, `v`] >> simp[vv_place_ptr_def] >>
-  conj_tac
-  >- (Cases_on `ALOOKUP ee.immutables cx.txn.target` >> gvs[] >>
-      simp[read_result_def, read_place_def, get_immutables_def,
-           get_address_immutables_def, bind_def, lift_option_type_def,
-           lift_sum_def, return_def]) >>
-  qexistsl_tac [`off`, `itv`, `iv`, `k`, `ArrayTV etv bd`] >> gvs[]
-QED
-*)
 Theorem live_immutable_array_current_view:
   expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
   src = cenv.ce_module /\
@@ -140,5 +116,21 @@ Theorem live_immutable_array_current_view:
     immutable_holds cenv cx (ArrayT et bd)
       (PlaceR (ImmutablePlace src id path)) (n2w (off+k)) ee s
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all live_immutable_root_current >> strip_tac >>
+  `?v. evaluate_subscripts itv iv path = INL v` by metis_tac[] >>
+  `value_has_type (ArrayTV etv bd) v /\
+   well_formed_type_value (ArrayTV etv bd)` by
+    (drule_all imm_place_at_value_type >> simp[]) >>
+  `k + type_memory_size (ArrayTV etv bd) <= type_memory_size itv` by
+    metis_tac[mem_path_offset_sound] >>
+  `immutable_holds cenv cx (ArrayT et bd)
+      (PlaceR (ImmutablePlace src id path)) (n2w (off+k)) ee s` by
+    (qpat_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
+     drule_all live_immutable_path_holds >> simp[]) >>
+  qexistsl_tac [`iv`, `v`] >> simp[vv_place_ptr_def] >>
+  Cases_on `ALOOKUP ee.immutables cx.txn.target` >> gvs[] >>
+  simp[read_result_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, bind_def, lift_option_type_def,
+       lift_sum_def, return_def]
 QED
