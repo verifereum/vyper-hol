@@ -988,7 +988,8 @@ Theorem state_rel_frame:
   !H.
   !func cenv cx es es' s s'.
     state_rel H func cenv cx es s /\ local_ptrs_rel func cenv es'.scopes s' /\
-    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s' /\
+    (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+       immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s') /\
     es' = es with scopes := es'.scopes /\
     s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
     s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
