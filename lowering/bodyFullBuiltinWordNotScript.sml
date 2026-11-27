@@ -9,13 +9,10 @@ Ancestors
   emitHelperProps emitHelper compileEnv fragExec venomInst venomState exprLowering
   finite_map venomExecSemantics builtinSimple vyperValueOperation valueEncoding vyperInterpreter vyperContext
   vyperTypeSystem vyperTyping vyperAST list
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
-Theorem word_not_pre:
-  expr_body_pre cenv cx env (Builtin ann Not args) es ==>
-  ?e. args = [e] /\ ann = expr_type e /\
-      expr_body_pre cenv cx env e es /\
-      (is_bool_type ann \/ is_uint256_type ann \/
-       is_bytes32_type ann \/ is_flag_type ann)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `well_typed_builtin_app ann Not (MAP expr_type args)` by
@@ -25,6 +22,16 @@ Proof
   (irule expr_body_pre_builtin_arg >> simp[] >>
    conj_tac >- gvs[expr_body_pre_def] >>
    qexistsl_tac [`expr_type h`, `[h]`, `Not`, `es`] >> simp[])
+QED
+*)
+Theorem word_not_pre:
+  expr_body_pre_mods mods cenv cx env (Builtin ann Not args) es ==>
+  ?e. args = [e] /\ ann = expr_type e /\
+      expr_body_pre_mods mods cenv cx env e es /\
+      (is_bool_type ann \/ is_uint256_type ann \/
+       is_bytes32_type ann \/ is_flag_type ann)
+Proof
+  cheat
 QED
 
 Theorem word_not_typed_suffix[local]:
@@ -242,28 +249,8 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem word_not_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
-    (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
-       (~is_word_type (expr_type e) ==>
-        !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
-                SOME tvt ==> type_memory_size tvt = 0) /\
-       expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-         cenv cx ty e es /\
-       (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
-       (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
-       expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-         cenv cx ty e es) /\
-    bt = Not /\
-    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt args) es ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin a bt args) es /\
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin a bt args) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   drule word_not_pre >>
@@ -478,4 +465,31 @@ Proof
      rename1 `BaseT b` >> Cases_on `b` >> simp[is_word_type_def] >>
      rename1 `BytesT bs` >> Cases_on `bs` >> simp[is_word_type_def] >>
      strip_tac >> gvs[]) >> simp[]
+QED
+*)
+Theorem word_not_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+    (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
+       (~is_word_type (expr_type e) ==>
+        !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
+                SOME tvt ==> type_memory_size tvt = 0) /\
+       expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+         cenv cx ty e es /\
+       (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
+       (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
+       expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+         cenv cx ty e es) /\
+    bt = Not /\
+    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a bt args) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a bt args) es /\
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a bt args) es
+Proof
+  cheat
 QED

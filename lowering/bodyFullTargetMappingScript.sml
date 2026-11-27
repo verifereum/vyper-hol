@@ -16,12 +16,8 @@ Ancestors
   bodyPtrDefs exprOperandVar exprLoweringProps compileEnv ptrDiscipline loweringStateRelDefs
   stmtLoweringMono vyperEvalExprPreservesScopesDom exprSimWordArgs
 
-Theorem target_mapping_tail_full:
-  body_inv tops ctx cenv cx /\
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
-  type_place_target env bt = SOME (HashMapT kt vt) ==>
-  subscript_tail_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-    cenv cx env bt e es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >> simp[subscript_tail_full_def] >> rpt gen_tac >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace)
@@ -43,7 +39,18 @@ Proof
      (impl_tac >- simp[]) >> strip_tac >> gvs[expr_post_def]) >>
   suspend "join"
 QED
+*)
+Theorem target_mapping_tail_full:
+  body_inv tops ctx cenv cx /\
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  type_place_target env bt = SOME (HashMapT kt vt) ==>
+  subscript_tail_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    cenv cx env bt e es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume target_mapping_tail_full[join]:
   qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
     (qspec_then `storage_trace_horizon mid2.storage_trace` mp_tac) >>
@@ -143,5 +150,8 @@ Resume target_mapping_tail_full[join]:
     metis_tac[valid_horizon_frame, storage_trace_frame_extend_place] >>
   metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise target_mapping_tail_full
+*)

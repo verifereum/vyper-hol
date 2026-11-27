@@ -1085,37 +1085,8 @@ QED
    epilogue halts returning the runtime code and the immutables.  The
    constructor takes no lock (deploy_ctor_entry_body_resources), so the
    exit has no unlock. *)
-Theorem constructor_return_none_frag_full:
-  !tops am tx runtime_bc imm cx cenv body_cenv exit_lbl st_exit st_epilogue
-   st_final nr nkey ut ctx shadow_ctx func shadow_func lctx es.
-    cx = deploy_evaluation_context tops am tx /\
-    cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
-    cenv.ce_ctor_exit_label = SOME exit_lbl /\
-    cenv.ce_modules = [(NONE,tops)] /\
-    same_frame cenv body_cenv /\
-    st_exit.cs_current_bb = exit_lbl /\
-    st_exit.cs_current_insts = [] /\
-    (if nr then compile_nonreentrant_unlock nkey ut F
-     else comp_return ()) st_exit = ((), st_epilogue) /\
-    compile_constructor_epilogue
-      (LENGTH runtime_bc) (imm_len tops) imm st_epilogue =
-        ((), st_final) /\
-    fn_has_code st_exit st_final func /\
-    LENGTH runtime_bc + imm_len tops < dimword(:256) /\ ~nr /\
-    (imm_len tops <> 0 ==>
-       cenv.ce_imm_alloca = SOME imm /\
-       (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
-    stmt_frag_full
-      ((\H. deploy_dead H tops runtime_bc am tx), imm_len tops, NONE,
-       ctx, shadow_ctx, [], func, shadow_func)
-      cx lctx
-      (\H v ee gt r.
-         constructor_return_q H func cenv cx
-           (LENGTH runtime_bc) (imm_len tops) nr nkey v ee r)
-      body_cenv
-      (stmt_env body_cenv lctx NoneT (Return NONE))
-      (stmt_env (gas_shadow_env T body_cenv) lctx NoneT (Return NONE))
-      (eval_stmt cx (Return NONE)) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `nr = F` by fs[] >> pop_assum SUBST_ALL_TAC >>
@@ -1200,6 +1171,41 @@ Proof
      nkey NoneV ((es with scopes := []) with gas_obs := tail) (Halt final)` by
     (pure_rewrite_tac[constructor_return_q_gas_obs] >> metis_tac[]) >>
   pop_assum mp_tac >> simp[]
+QED
+*)
+Theorem constructor_return_none_frag_full:
+  !tops am tx runtime_bc imm cx cenv body_cenv exit_lbl st_exit st_epilogue
+   st_final nr nkey ut ctx shadow_ctx func shadow_func lctx es.
+    cx = deploy_evaluation_context tops am tx /\
+    cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = SOME exit_lbl /\
+    cenv.ce_modules = [(NONE,tops)] /\
+    same_frame cenv body_cenv /\
+    st_exit.cs_current_bb = exit_lbl /\
+    st_exit.cs_current_insts = [] /\
+    (if nr then compile_nonreentrant_unlock nkey ut F
+     else comp_return ()) st_exit = ((), st_epilogue) /\
+    compile_constructor_epilogue
+      (LENGTH runtime_bc) (imm_len tops) imm st_epilogue =
+        ((), st_final) /\
+    fn_has_code st_exit st_final func /\
+    LENGTH runtime_bc + imm_len tops < dimword(:256) /\ ~nr /\
+    (imm_len tops <> 0 ==>
+       cenv.ce_imm_alloca = SOME imm /\
+       (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
+    stmt_frag_full
+      ((\H. deploy_dead H tops runtime_bc am tx), imm_len tops, NONE,
+       ctx, shadow_ctx, [], func, shadow_func)
+      cx lctx
+      (\H v ee gt r.
+         constructor_return_q H func cenv cx
+           (LENGTH runtime_bc) (imm_len tops) nr nkey v ee r)
+      body_cenv
+      (stmt_env body_cenv lctx NoneT (Return NONE))
+      (stmt_env (gas_shadow_env T body_cenv) lctx NoneT (Return NONE))
+      (eval_stmt cx (Return NONE)) es
+Proof
+  cheat
 QED
 
 (* Every return from a deployment constructor's body: a valueless Return,

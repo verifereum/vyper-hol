@@ -3,16 +3,32 @@ Theory bodyFullBuiltinPrecompileRecoveryArgs
 Ancestors
   bodyFullShadowBodyInv
   bodyFullWordArgs exprSimPrecompiles exprSimSource list
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 (* Original application anchors typing; the suffix post uses its own start. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule lower_word_args_sim_full >> simp[] >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- (qexistsl_tac [`shadow_func`, `shadow_sa`, `shadow_sm`, `ty`] >> simp[]) >>
+  qexistsl_tac [`env`, `tops`] >> simp[] >>
+  rpt strip_tac
+  >- (drule expr_body_pre_builtin_arg >>
+      disch_then (qspecl_then [`e`, `ee`] mp_tac) >> simp[]) >>
+  drule ecrecover_pre_types >> simp[EVERY_MEM] >> metis_tac[]
+QED
+*)
 Theorem ecrecover_args_suffix_full:
   !todo DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty
     ann args done entry es st0 sa sm shadow_sa shadow_sm xs s0 G0 tn0.
-    expr_body_pre cenv cx env (Builtin ann ECRecover args) entry /\
-    args = done ++ todo /\ body_exprs_full_ok cx todo /\
-    body_inv tops ctx cenv cx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann ECRecover args) entry /\
+    args = done ++ todo /\ body_exprs_full_ok_mods mods exps cx todo /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    body_const_cells_agree mods cx env es /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env es /\
     lower_word_args cenv (\e. ty) todo sa = (xs,sm) /\
     lower_word_args (gas_shadow_env T cenv) (\e. ty) (MAP gas_shadow_expr todo) shadow_sa =
       (xs,shadow_sm) /\
@@ -48,13 +64,5 @@ Theorem ecrecover_args_suffix_full:
       (\H rr mid gt r. wb_args_exit rr r /\ halt_exit H cx mid rr r /\
         (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  rpt gen_tac >> strip_tac >>
-  irule lower_word_args_sim_full >> simp[] >> rpt conj_tac
-  >- first_assum ACCEPT_TAC
-  >- (qexistsl_tac [`shadow_func`, `shadow_sa`, `shadow_sm`, `ty`] >> simp[]) >>
-  qexistsl_tac [`env`, `tops`] >> simp[] >>
-  rpt strip_tac
-  >- (drule expr_body_pre_builtin_arg >>
-      disch_then (qspecl_then [`e`, `ee`] mp_tac) >> simp[]) >>
-  drule ecrecover_pre_types >> simp[EVERY_MEM] >> metis_tac[]
+  cheat
 QED

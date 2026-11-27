@@ -4,14 +4,15 @@ Ancestors
   bodyFullAbiEncodeWordFull bodyFullAbiEncodeNonwordFull bodyFullAbiEncodeTupleFull
   exprSimAbiEncodeRuntimeInputs exprSimHyps exprSimSource bodySimFull
   vyperContext vyperInterpreter vyperState vyperAST
+  bodyFullPredsMods[qualified]
 
 Theorem abi_encode_expr_full_ok:
   !cx v11 b m typ es.
     (!s'' x t.
        type_check (type_builtin_args_length_ok (AbiEncode b m) (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>
-       body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (TypeBuiltin v11 (AbiEncode b m) typ es)
+       body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (TypeBuiltin v11 (AbiEncode b m) typ es)
 Proof
   rpt gen_tac >> strip_tac >>
   once_rewrite_tac[body_expr_full_ok_def] >> simp[] >>

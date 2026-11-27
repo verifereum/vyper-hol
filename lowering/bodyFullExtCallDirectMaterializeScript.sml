@@ -9,6 +9,7 @@ Ancestors
   compileEnv exprLowering context contractABI
   vyperValue vyperTyping vyperABI venomState venomInst venomMemDefs
   finite_map pred_set list arithmetic pair words
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs pureFrameLib
 
 (* The cursor and payload remain owned throughout the per-row unwrap.
@@ -144,7 +145,8 @@ Theorem abi_encode_saved_restore_row_pure:
     stmt_state_rel H ctx func ce cx ee s /\ vv_storage_live H cx saved ee s) /\
   (?H. valid_horizon cx st0 H ee.storage_trace) /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
   unwrap_value ce saved su = (src,sb) /\ fn_has_code su sb func /\ fn_inst_ids_distinct func /\
   ci_mono su sb /\ ~is_word_type ty /\
@@ -229,7 +231,8 @@ Theorem extcall_direct_restore_row:
     stmt_state_rel H ctx func ce cx ee s /\ vv_storage_live H cx saved ee s) /\
   (?H. valid_horizon cx st0 H ee.storage_trace) /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
   unwrap_value ce saved su = (src,sb) /\ fn_has_code su sb func /\ fn_inst_ids_distinct func /\
   ci_mono su sb /\ ~is_word_type ty /\

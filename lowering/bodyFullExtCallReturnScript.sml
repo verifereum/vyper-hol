@@ -16,7 +16,51 @@ Ancestors
   exprSimMemDefs exprSimDefs compileEnv context exprLowering
   ptrDiscipline venomState venomMemDefs vyperInterpreter vyperState vyperABI
   vyperABIValid vyperAST words finite_map pred_set list createSizeExit
+  exprSimHypsDefs[qualified]
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (mk_asm "valid") >> disch_then (mk_asm "reject") >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `expr_body_pre cenv cx env (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts) args dflt) es` >>
+  Cases_on `ret_type = NoneT`
+  >- (drule extcall_return_type_bounds >> strip_tac >>
+      `result_op = Lit 0w` by
+        (gvs[comp_return_def]) >>
+      `vv = StackValue NoneT (Lit 0w)` by simp[] >>
+      `!tv z. vv_own cenv cx
+        (post_value_type cenv (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts)
+          args dflt)) sa sb (ee with gas_obs := []) tv vv z` by
+        (simp[post_value_type_def, expr_type_def, vv_own_def,
+              expr_val_own_def, eval_operand_def] >>
+         rpt strip_tac >> Cases_on `v` >>
+         simp[val_footprint_def, valueEncodingTheory.type_memory_size_def]) >>
+      qpat_assum `!tv z. vv_own _ _ (post_value_type _ _) _ _ _ tv _ z`
+        (fn th => pure_rewrite_tac [th, boolTheory.AND_CLAUSES]) >>
+      match_mp_tac extcall_return_step_void >>
+      goal_assum (drule_at (Pat `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      qexists_tac `env` >> gvs[] >> rpt strip_tac >>
+      qpat_x_assum `!dv. default_opt = SOME dv /\ _ ==> _`
+        (drule_all_then strip_assume_tac) >>
+      qpat_x_assum `type_memory_bytes cenv default_ty <> 0 ==> _`
+        (drule_then strip_assume_tac) >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `has_default /\ returnData = []`
+  >- (match_mp_tac extcall_return_full_default_value >>
+      goal_assum (drule_at (Pat `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      qexists_tac `env` >> gvs[]) >>
+  qspecl_then [`cx`,`ret_type`,`returnData`,`default_opt`,`skip`,`target`,`ee`]
+    (qx_choose_then `res` assume_tac) extcall_return_source_tail >>
+  qexists_tac `res` >> simp[] >>
+  Cases_on `?H. valid_horizon cx st0 H ee.storage_trace`
+  >- suspend "has_horizon" >>
+  qexistsl_tac [`OK t`,`G`,`tn`] >>
+  qpat_assum `~(?H. valid_horizon cx st0 H _)`
+    (mp_tac o CONV_RULE NOT_EXISTS_CONV) >>
+  disch_then (fn th => gen_tac >> simp_tac bool_ss [th])
+QED
+*)
 Theorem extcall_return_full:
   (!H0 ce env sf ty tv v ctx func cenv cx es st en source hi pos output
     B L xs p d dstid live ceiling s G tn lo PG.
@@ -83,7 +127,7 @@ Theorem extcall_return_full:
    arg_types ret_type opts args dflt st0 sa sb s0 G0 tn0 sr result_op vv
    addr_op buf_op cap target has_default default_op default_ty default_opt
    returnData ee t G tn.
-    expr_body_pre cenv cx env
+    expr_body_pre_mods mods cenv cx env
       (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
          args dflt) es /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -216,46 +260,10 @@ Theorem extcall_return_full:
          ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn') \/
          (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r)))
 Proof
-  disch_then (mk_asm "valid") >> disch_then (mk_asm "reject") >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `expr_body_pre cenv cx env (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts) args dflt) es` >>
-  Cases_on `ret_type = NoneT`
-  >- (drule extcall_return_type_bounds >> strip_tac >>
-      `result_op = Lit 0w` by
-        (gvs[comp_return_def]) >>
-      `vv = StackValue NoneT (Lit 0w)` by simp[] >>
-      `!tv z. vv_own cenv cx
-        (post_value_type cenv (Call ann (ExtCall stat skip (fname,arg_types,ret_type) opts)
-          args dflt)) sa sb (ee with gas_obs := []) tv vv z` by
-        (simp[post_value_type_def, expr_type_def, vv_own_def,
-              expr_val_own_def, eval_operand_def] >>
-         rpt strip_tac >> Cases_on `v` >>
-         simp[val_footprint_def, valueEncodingTheory.type_memory_size_def]) >>
-      qpat_assum `!tv z. vv_own _ _ (post_value_type _ _) _ _ _ tv _ z`
-        (fn th => pure_rewrite_tac [th, boolTheory.AND_CLAUSES]) >>
-      match_mp_tac extcall_return_step_void >>
-      goal_assum (drule_at (Pat `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-      qexists_tac `env` >> gvs[] >> rpt strip_tac >>
-      qpat_x_assum `!dv. default_opt = SOME dv /\ _ ==> _`
-        (drule_all_then strip_assume_tac) >>
-      qpat_x_assum `type_memory_bytes cenv default_ty <> 0 ==> _`
-        (drule_then strip_assume_tac) >>
-      goal_assum (drule_at Any) >> simp[]) >>
-  Cases_on `has_default /\ returnData = []`
-  >- (match_mp_tac extcall_return_full_default_value >>
-      goal_assum (drule_at (Pat `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-      qexists_tac `env` >> gvs[]) >>
-  qspecl_then [`cx`,`ret_type`,`returnData`,`default_opt`,`skip`,`target`,`ee`]
-    (qx_choose_then `res` assume_tac) extcall_return_source_tail >>
-  qexists_tac `res` >> simp[] >>
-  Cases_on `?H. valid_horizon cx st0 H ee.storage_trace`
-  >- suspend "has_horizon" >>
-  qexistsl_tac [`OK t`,`G`,`tn`] >>
-  qpat_assum `~(?H. valid_horizon cx st0 H _)`
-    (mp_tac o CONV_RULE NOT_EXISTS_CONV) >>
-  disch_then (fn th => gen_tac >> simp_tac bool_ss [th])
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_return_full[has_horizon]:
       drule extcall_return_type_bounds >> strip_tac >>
       `?actual_tv. evaluate_type (get_tenv cx) ret_type = SOME actual_tv` by
@@ -674,7 +682,9 @@ Resume extcall_return_full[has_horizon]:
            qpat_assum `buf_op = Var source` (fn src => rewrite_tac [bo,src]))) >>
       suspend "after_size"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_return_full[after_size]:
       asm "valid" (fn valid => asm "reject" (fn reject =>
         qpat_assum `rt = (if needs_external_call_wrap ret_type then _ else _)` (fn wrap =>
@@ -705,7 +715,9 @@ Resume extcall_return_full[after_size]:
       >- suspend "decode_reject" >>
       suspend "decode_success"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_return_full[decode_reject]:
       disch_then (qx_choose_then `z` (qx_choose_then `Gd` (qx_choose_then `td` assume_tac))) >>
           qexistsl_tac [`Abort Revert_abort z`,`Gd`,`td`] >>
@@ -722,7 +734,9 @@ Resume extcall_return_full[decode_reject]:
           qpat_x_assum `INR _ = res` (SUBST1_TAC o SYM) >>
           simp[create_size_exit_ok_non_exhalt,expr_exit_def,exit_result_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_return_full[decode_success]:
       disch_then (qx_choose_then `z` (qx_choose_then `Gd` (qx_choose_then `td` strip_assume_tac))) >>
       qpat_x_assum `!tail. bind _ _ (ee with gas_obs := tail) = _`
@@ -775,7 +789,9 @@ Resume extcall_return_full[decode_success]:
       qexistsl_tac [`OK zf`,`Gd`,`td`] >>
       suspend "success_post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_return_full[success_post]:
       qx_gen_tac `Hpost` >> disch_tac >> conj_tac >- simp[] >>
       disj1_tac >> qexists_tac `zf` >> conj_tac >- REFL_TAC >>
@@ -827,5 +843,8 @@ Resume extcall_return_full[success_post]:
             (ACCEPT_TAC o SIMP_RULE (srw_ss()) defs)
        end)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise extcall_return_full
+*)

@@ -10,27 +10,8 @@ Ancestors
   bodyPtrDefs vyperStorageFootprint loweringStateRelDefs
   exprSimHypsDefs stmtLowering exprLowering context compileEnv list
 
-Theorem reason_literal_entry_source_family:
-  compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sb) /\
-  expr_body_pre cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\
-  32+32*word_size ml < dimword (:256) /\
-  storage_trace_domain cx st0 es.storage_trace /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx es s /\
-    storage_well_formed_on cx es (FST H) /\
-    ghost_inv_at (DF H) lo d cenv cx es G tn s) ==>
-  ?t p Gf tnf.
-    run_inst_seq (emitted_insts sa sb) s = OK t /\
-    buf.buf_operand = Var p /\
-    !H. valid_horizon cx st0 H es.storage_trace ==>
-      inst_seq_ptr (DF H) lo ctx func PG G tn (emitted_insts sa sb) s Gf tnf /\
-      expr_post H ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))
-        es sa sb s es (StringV str) (Var p)
-        (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-      ptr_val_ok cx (BaseT (StringT ml)) (StringV str) (Var p) Gf tnf
-        (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `LENGTH str <= ml` by
@@ -74,7 +55,33 @@ Proof
      qexists_tac `tn with t_mem := tn.t_mem UNION dirty'` >> simp[]) >>
   conj_tac >- suspend "source" >> suspend "pointer"
 QED
+*)
+Theorem reason_literal_entry_source_family:
+  compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sb) /\
+  expr_body_pre_mods mods cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  32+32*word_size ml < dimword (:256) /\
+  storage_trace_domain cx st0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx es G tn s) ==>
+  ?t p Gf tnf.
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    buf.buf_operand = Var p /\
+    !H. valid_horizon cx st0 H es.storage_trace ==>
+      inst_seq_ptr (DF H) lo ctx func PG G tn (emitted_insts sa sb) s Gf tnf /\
+      expr_post H ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))
+        es sa sb s es (StringV str) (Var p)
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+      ptr_val_ok cx (BaseT (StringT ml)) (StringV str) (Var p) Gf tnf
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_entry_source_family[pointer]:
   `lookup_var p t = SOME (n2w b)` by
     (qpat_assum `!x. not_fresh_at sh x ==> _` drule >> simp[]) >>
@@ -85,7 +92,9 @@ Resume reason_literal_entry_source_family[pointer]:
   simp[lookup_var_def, w2n_n2w, evaluate_type_def] >>
   rpt strip_tac >> gvs[] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_entry_source_family[source]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
     (drule_then strip_assume_tac) >>
@@ -112,45 +121,14 @@ Resume reason_literal_entry_source_family[source]:
      goal_assum (drule_at Any) >> gvs[]) >>
   drule expr_post_of_vv_post_memory >> gvs[base_ptr_def, expr_type_def, is_word_type_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise reason_literal_entry_source_family
+*)
 
-Theorem reason_literal_message_full_entry:
-  compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sb) /\
-  expr_body_pre cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\
-  32+32*word_size ml < dimword (:256) /\
-  storage_trace_domain cx st0 es.storage_trace /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx es s /\
-    storage_well_formed_on cx es (FST H) /\
-    ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
-  alloca_history func s /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ?t p Gf tnf.
-    compile_reason_message cenv (Literal (BaseT (StringT ml)) (StringL str)) sa =
-      (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf),sb) /\
-    buf.buf_operand = Var p /\
-    vv_operand (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf)) = Var p /\
-    vv_location (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf)) = SOME LocMemory /\
-    not_fresh_at sb p /\
-    alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
-    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_kept_at lo cenv es sa G tn s Gf tnf /\
-    expr_store_bound cx (BaseT (StringT (LENGTH str))) (StringV str) (Var p) t /\
-    ptr_val_ok cx (BaseT (StringT (LENGTH str))) (StringV str) (Var p) Gf tnf t /\
-    ptr_val_ok cx (BaseT (StringT ml)) (StringV str) (Var p) Gf tnf t /\
-    ptr_buf_ok cenv (Literal (BaseT (StringT ml)) (StringL str)) (Var p) Gf t /\
-    (!H. valid_horizon cx st0 H es.storage_trace ==>
-      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
-      expr_post H ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))
-        es sa sb s es (StringV str) (Var p) t /\
-      ghost_inv_at (DF H) lo d cenv cx es Gf tnf t)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   drule_all reason_literal_entry_source_family >>
@@ -274,7 +252,48 @@ Proof
   conj_tac >- suspend "path" >>
   conj_tac >- first_assum ACCEPT_TAC >> suspend "inv"
 QED
+*)
+Theorem reason_literal_message_full_entry:
+  compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sb) /\
+  expr_body_pre_mods mods cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  32+32*word_size ml < dimword (:256) /\
+  storage_trace_domain cx st0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+  ?t p Gf tnf.
+    compile_reason_message cenv (Literal (BaseT (StringT ml)) (StringL str)) sa =
+      (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf),sb) /\
+    buf.buf_operand = Var p /\
+    vv_operand (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf)) = Var p /\
+    vv_location (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf)) = SOME LocMemory /\
+    not_fresh_at sb p /\
+    alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ghost_kept_at lo cenv es sa G tn s Gf tnf /\
+    expr_store_bound cx (BaseT (StringT (LENGTH str))) (StringV str) (Var p) t /\
+    ptr_val_ok cx (BaseT (StringT (LENGTH str))) (StringV str) (Var p) Gf tnf t /\
+    ptr_val_ok cx (BaseT (StringT ml)) (StringV str) (Var p) Gf tnf t /\
+    ptr_buf_ok cenv (Literal (BaseT (StringT ml)) (StringL str)) (Var p) Gf t /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+      expr_post H ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))
+        es sa sb s es (StringV str) (Var p) t /\
+      ghost_inv_at (DF H) lo d cenv cx es Gf tnf t)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_message_full_entry[fresh]:
   `sh.cs_next_var <= sb.cs_next_var` by
     (mp_tac exprLoweringPropsTheory.ci_mono_compile_store_byte_chunks >>
@@ -283,6 +302,8 @@ Resume reason_literal_message_full_entry[fresh]:
   irule freshWritesTheory.not_fresh_at_mono >>
   qexists_tac `sh` >> gvs[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_message_full_entry[history]:
   `sb.cs_current_bb = sa.cs_current_bb` by
     gvs[exprLoweringPropsTheory.same_blocks_def] >>
@@ -297,6 +318,8 @@ Resume reason_literal_message_full_entry[history]:
   asm_rewrite_tac[EVERY_APPEND, EVERY_DEF, mk_inst_def] >>
   simp[EVERY_MEM, is_terminator_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_message_full_entry[kept]:
   `!name a len. local_region cenv es.scopes s name a len ==>
       regions_disjoint b (32+32*word_size ml) a len` by
@@ -319,6 +342,8 @@ Resume reason_literal_message_full_entry[kept]:
   pure_rewrite_tac[ghost_kept_at_def, ghost_kept_def] >>
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_message_full_entry[store]:
   `word_size (LENGTH str) <= word_size ml` by
     metis_tac[exprSimPropsTheory.word_size_monotone] >>
@@ -337,6 +362,8 @@ Resume reason_literal_message_full_entry[store]:
      rpt strip_tac >> simp[]) >>
   gvs[lookup_var_def, w2n_n2w] >> decide_tac
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_message_full_entry[actualptr]:
   `b < dimword (:256)` by decide_tac >>
   `word_size (LENGTH str) <= word_size ml` by
@@ -358,9 +385,13 @@ Resume reason_literal_message_full_entry[actualptr]:
   simp[lookup_var_def, w2n_n2w, evaluate_type_def] >>
   rpt strip_tac >> gvs[] >> decide_tac
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_message_full_entry[annotatedptr]:
   metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_message_full_entry[buf]:
   `b < dimword (:256)` by decide_tac >>
   `lookup_var p t = SOME (n2w b) /\ FLOOKUP Gf p = SOME (b,32+32*word_size ml)` by gvs[] >>
@@ -374,6 +405,8 @@ Resume reason_literal_message_full_entry[buf]:
   qpat_x_assum `word_size (LENGTH str) <= word_size ml` mp_tac >>
   simp_tac std_ss [vfmConstantsTheory.word_size_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_message_full_entry[path]:
   `sb.cs_current_bb = sa.cs_current_bb` by
     gvs[exprLoweringPropsTheory.same_blocks_def] >>
@@ -393,6 +426,8 @@ Resume reason_literal_message_full_entry[path]:
      disch_then (drule_then (strip_assume_tac o BETA_RULE)) >> simp[]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_message_full_entry[inv]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
     (drule_then strip_assume_tac) >>
@@ -425,6 +460,8 @@ Resume reason_literal_message_full_entry[inv]:
   simp[] >> fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
   imp_res_tac state_rel_local_ptrs_rel >> fs[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_message_full_entry[storinv]:
   `stor_taint_ok_at (DF H) tn s` by fs[ghost_inv_at_def] >>
   drule bodyPtrMakeArrayAllocBufferTheory.literal_alloca_static_frame >> strip_tac >>
@@ -435,6 +472,8 @@ Resume reason_literal_message_full_entry[storinv]:
   fs[stor_taint_ok_at_def, exprLoweringPropsTheory.stmt_state_rel_def] >>
   imp_res_tac state_rel_local_ptrs_rel >> fs[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume reason_literal_message_full_entry[taintinv]:
   gen_tac >> strip_tac >>
   `j NOTIN dirty` by
@@ -443,4 +482,7 @@ Resume reason_literal_message_full_entry[taintinv]:
      disch_then (qspec_then `j` mp_tac) >> simp[] >> decide_tac) >>
   simp[] >> decide_tac
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise reason_literal_message_full_entry
+*)

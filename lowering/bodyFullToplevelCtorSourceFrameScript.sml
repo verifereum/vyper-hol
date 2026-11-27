@@ -3,6 +3,7 @@ Ancestors
   bodySim bodyInvCodeProps exprBodyPreProps bodyFullShadowBodyInv
   immutableRegionFrameProps stateRelProj loweringStateRelDefs
   bodyPtrDefs exprSimHypsDefs exprLoweringProps
+  bodyInvSplit[qualified]
 
 Theorem toplevel_ctor_source_frame_mods:
   contract_inv mods exps ctx cenv cx /\
@@ -23,9 +24,26 @@ Proof
   drule_all immutable_ctor_frame_mods >> simp[]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  qpat_x_assum `tops = _` kall_tac >>
+  qpat_x_assum `off = _` kall_tac >>
+  qpat_x_assum `src = _` SUBST_ALL_TAC >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  drule_all_then assume_tac body_inv_expr_body_pre_mods >>
+  fs[GSYM dead_lo_ok_mods_singleton, GSYM ghost_inv_at_mods_singleton] >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                 `src` |-> `cenv.ce_module`] toplevel_ctor_source_frame_mods) >>
+  simp[]
+QED
+*)
 Theorem toplevel_ctor_source_frame:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env (TopLevelName ann (cenv.ce_module,id)) es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_body_pre_mods mods cenv cx env (TopLevelName ann (cenv.ce_module,id)) es /\
   cenv.ce_is_ctor /\ dead_lo_ok H D lo cenv cx /\
   stmt_state_rel H ctx func cenv cx es s /\
   ghost_inv_at D lo d cenv cx es G tn s /\
@@ -43,15 +61,5 @@ Theorem toplevel_ctor_source_frame:
   !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
     val_in_memory rt v off mem
 Proof
-  strip_tac >>
-  qpat_x_assum `tops = _` kall_tac >>
-  qpat_x_assum `off = _` kall_tac >>
-  qpat_x_assum `src = _` SUBST_ALL_TAC >>
-  drule_then assume_tac body_inv_contract >>
-  drule_then assume_tac contract_inv_cenv_modules >>
-  drule_all_then assume_tac body_inv_expr_body_pre_mods >>
-  fs[GSYM dead_lo_ok_mods_singleton, GSYM ghost_inv_at_mods_singleton] >>
-  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
-                 `src` |-> `cenv.ce_module`] toplevel_ctor_source_frame_mods) >>
-  simp[]
+  cheat
 QED

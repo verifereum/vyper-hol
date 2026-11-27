@@ -16,7 +16,7 @@ Ancestors
   immutableDeployAssignRanges annassignRelayoutContinue exprOpenTerminals
 
 Theorem annassign_widened_full_layout:
-  expr_body_pre ce cx env e es /\
+  expr_body_pre_mods mods ce cx env e es /\
   type_widens_to env.type_defs (expr_type e) typ /\ ~is_word_type typ /\
   ~(lowered_value_type ce e = expr_type e \/
     is_bytestring_type (expr_type e) /\
@@ -154,13 +154,15 @@ QED
 (* The two implementation callbacks are literal contracts.  The common
    allocation/RHS prefix is a theorem dependency, never an assumption. *)
 Theorem annassign_widened_full_execution:
-  body_inv tops ctx old cx /\ supported_expr tops e /\
+  (contract_inv mods exps ctx old cx /\
+     module_body_inv mods old.ce_module tops old cx) /\ supported_expr tops e /\
   type_widens_to env.type_defs (expr_type e) typ /\
   ~is_word_type typ /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
   type_memory_bytes old typ < 2 ** 64 /\
   FLOOKUP old.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE /\
   (!sa ce r. declare_local old id typ sa = (ce,r) ==>
-    body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
+    (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_body_pre_mods mods ce cx env e es /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       ce cx (expr_type e) e es /\
     ~(lowered_value_type ce e = expr_type e \/

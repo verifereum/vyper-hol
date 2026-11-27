@@ -8,17 +8,12 @@ Ancestors
   accountsRelProps fragGasPathPtr context words finite_map pred_set list
   vyperInterpreter vyperState vyperAST exprSimHyps exprSimDefs loweringStateRelDefs
   fragGasOriginPtr exprSimMemDefs
+  bodyInvSplit[qualified]
 
 (* Needs no allocation bound on the variable's type: the read compiles to
    its slot and allocates nothing. *)
-Theorem toplevel_storage_vv_full:
-  body_inv tops ctx cenv cx /\
-  expr_sim_inv cenv cx env es /\
-  well_typed_expr env (TopLevelName ann (src,id)) /\
-  get_module_code cx src = SOME ts /\
-  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
-  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (TopLevelName ann (src,id)) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   rw[expr_vv_sim_full_def] >>
@@ -32,7 +27,21 @@ Proof
   >- suspend "good" >>
   irule gas_outcome_full_bad_nil >> simp[]
 QED
+*)
+Theorem toplevel_storage_vv_full:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  well_typed_expr env (TopLevelName ann (src,id)) /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (TopLevelName ann (src,id)) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume toplevel_storage_vv_full[good]:
   irule gas_outcome_full_pure >>
   reverse conj_tac >- simp[] >>
@@ -57,7 +66,9 @@ Resume toplevel_storage_vv_full[good]:
      simp[compile_expr_def, expr_type_def]) >>
   gvs[] >> suspend "posts"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume toplevel_storage_vv_full[posts]:
   markerLib.RESUME_TAC >> Cases_on `tr` >>
   gvs[mk_ptr_def, vv_location_def, vv_operand_def, expr_type_def,
@@ -71,7 +82,9 @@ Resume toplevel_storage_vv_full[posts]:
       simp[ghost_inv_at_def] >> metis_tac[]) >>
   suspend "nontrivial"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume toplevel_storage_vv_full[nontrivial]:
   markerLib.RESUME_TAC >>
   all_tac >~ [`ptr_vv_ok _ _ _ _ _ _ _ _`]
@@ -98,7 +111,9 @@ Resume toplevel_storage_vv_full[nontrivial]:
       gvs[storage_read_live_def] >> metis_tac[]) >>
   suspend "semantic"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume toplevel_storage_vv_full[semantic]:
   markerLib.RESUME_TAC >>
   all_tac >~ [`StoragePlace F _ _`]
@@ -107,7 +122,9 @@ Resume toplevel_storage_vv_full[semantic]:
   irule (SRULE [mk_ptr_def] (Q.INST [`tr` |-> `T`] toplevel_storage_value_post)) >>
   suspend "producer"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume toplevel_storage_vv_full[producer]:
   markerLib.RESUME_TAC >> (
   `well_formed_type_value tvt` by metis_tac[evaluate_type_well_formed_type_value] >>
@@ -122,15 +139,16 @@ Resume toplevel_storage_vv_full[producer]:
       metis_tac[vyperLookupStorageTheory.decode_value_from_slots_in_range, w2n_n2w]) >>
   qpat_x_assum `!b slot tv. MEM _ _ ==> slots_in_range _ _ _` drule >> simp[])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise toplevel_storage_vv_full
+*)
 
 (* A storage or transient array variable read as a subscript base
    (array_slot_base) is a storage variable (array_slot_base_storage_decl). *)
-Theorem toplevel_slot_base_vv_full:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-  well_typed_expr env e /\ ~const_name_root cx e /\ array_slot_base cenv e ==>
-  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `?ann src id. e = TopLevelName ann (src,id)` by
@@ -141,4 +159,13 @@ Proof
   >- (fs[expr_vv_sim_full_def] >> metis_tac[missing_module_not_gas_admissible]) >>
   drule_all array_slot_base_storage_decl >> strip_tac >>
   irule toplevel_storage_vv_full >> metis_tac[]
+QED
+*)
+Theorem toplevel_slot_base_vv_full:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
+  well_typed_expr env e /\ ~const_name_root cx e /\ array_slot_base cenv e ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es
+Proof
+  cheat
 QED

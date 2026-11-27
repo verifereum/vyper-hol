@@ -73,6 +73,7 @@ Ancestors
   bodyFullExtCallPrecheck[qualified] bodyPtrBopScalarSeq[qualified]
   bodyFullBopWordSuccess[qualified] bodyFullBopWordAbort[qualified] bodyPtrBopScalarOutcome[qualified]
   constSubstStmtsPreserve[qualified] vyperPinFoldProps[qualified]
+  bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 Libs
   pairLib blastLib
 
@@ -419,7 +420,7 @@ Proof
 QED
 
 Theorem proxy_pre_args:
-  expr_body_pre cenv cx env
+  expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget CreateMinimalProxy salted rof ks) args dflt) es ==>
   ann = BaseT AddressT /\
   ?target amount salts.
@@ -477,9 +478,9 @@ Proof
 QED
 
 Theorem create_operand_pre:
-  expr_body_pre cenv cx env (Call ann (CreateTarget kind salted rof ks) args dflt) es /\
-  MEM e args /\ expr_sim_inv cenv cx env ee ==>
-  expr_body_pre cenv cx env e ee
+  expr_body_pre_mods mods cenv cx env (Call ann (CreateTarget kind salted rof ks) args dflt) es /\
+  MEM e args /\ expr_sim_inv_mods mods cenv cx env ee ==>
+  expr_body_pre_mods mods cenv cx env e ee
 Proof
   rw[expr_body_pre_split_def, expr_body_pre_mods_def, expr_sim_inv_split_def,
      well_typed_expr_def, int_calls_expr_def,
@@ -539,8 +540,39 @@ QED
 
 (* CREATE adopts the backend on both success and failure. Only its logs
    and deletion queue are conditional on the success bit. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem create_paired_adoption:
+  ee.outcomes = SOME (oc::rest) /\ s.vs_outcomes = oc::rest /\
+  outcomes_accounts_typed ee.outcomes /\
+  read_memory (w2n off) (w2n sz) s = code /\ w2n w = value /\
+  w2n sz <= 2 * max_code_size /\ inst.inst_outputs = [out] /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee s /\
+       storage_well_formed_on cx ee (FST H)) ==>
+  ?ee' t a rq rq'.
+    rq = create_outcome_request
+      (case salt of NONE => CreateCall | SOME sl => Create2Call sl) value code ee /\
+    rq' = venom_create_request s w off sz salt /\
+    consume_create_outcome rq' s = (w2w a,t) /\
+    exec_create inst s w off sz salt = OK (update_var out (w2w a) t) /\
+    a = (if oc.co_success then oc.co_created else 0w) /\
+    (!tail. create_oracle_result salt value code rof (ee with gas_obs := tail) =
+      (if a = 0w /\ rof then INR (Error (RevertData oc.co_returnData))
+       else INL (Value (AddressV a)), ee' with gas_obs := tail)) /\
+    ee'.scopes = ee.scopes /\ ee'.immutables = ee.immutables /\
+    ee'.outcomes = SOME rest /\ ee'.requests = ee.requests ++ [rq] /\
+    ee'.storage_trace = ee.storage_trace ++
+      [StorageOutcome rq oc; StorageBackend oc.co_accounts oc.co_tStorage] /\
+    t.vs_outcomes = rest /\ t.vs_requests = s.vs_requests ++ [rq'] /\
+    t.vs_returndata = oc.co_returnData /\
+    LENGTH oc.co_returnData < dimword (:256) /\
+    t = s with <|vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
+      vs_accounts := oc.co_accounts; vs_transient := oc.co_tStorage;
+      vs_logs := t.vs_logs; vs_pending_deletions := t.vs_pending_deletions;
+      vs_returndata := oc.co_returnData|> /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      request_agree H cx.txn.target rq rq' /\ stmt_state_rel H ctx func cenv cx ee' t) /\
+    (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+      valid_horizon cx st0 H ee.storage_trace /\ storage_well_formed_on cx ee' (FST H))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `accounts_runtime_well_typed oc.co_accounts /\
@@ -651,43 +683,6 @@ Proof
   qexistsl_tac [`ee'`,`t`,`a`,`rq`,`rq'`] >>
   simp[exec_create_def] >>
   simp[Abbr `t`, Abbr `ee'`, Abbr `taken`, Abbr `rq`, Abbr `rq'`, Abbr `k`, Abbr `a`]
-QED
-*)
-Theorem create_paired_adoption:
-  ee.outcomes = SOME (oc::rest) /\ s.vs_outcomes = oc::rest /\
-  outcomes_accounts_typed ee.outcomes /\
-  read_memory (w2n off) (w2n sz) s = code /\ w2n w = value /\
-  w2n sz <= 2 * max_code_size /\ inst.inst_outputs = [out] /\
-  (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx ee s /\
-       storage_well_formed_on cx ee (FST H)) ==>
-  ?ee' t a rq rq'.
-    rq = create_outcome_request
-      (case salt of NONE => CreateCall | SOME sl => Create2Call sl) value code ee /\
-    rq' = venom_create_request s w off sz salt /\
-    consume_create_outcome rq' s = (w2w a,t) /\
-    exec_create inst s w off sz salt = OK (update_var out (w2w a) t) /\
-    a = (if oc.co_success then oc.co_created else 0w) /\
-    (!tail. create_oracle_result salt value code rof (ee with gas_obs := tail) =
-      (if a = 0w /\ rof then INR (Error (RevertData oc.co_returnData))
-       else INL (Value (AddressV a)), ee' with gas_obs := tail)) /\
-    ee'.scopes = ee.scopes /\ ee'.immutables = ee.immutables /\
-    ee'.outcomes = SOME rest /\ ee'.requests = ee.requests ++ [rq] /\
-    ee'.storage_trace = ee.storage_trace ++
-      [StorageOutcome rq oc; StorageBackend oc.co_accounts oc.co_tStorage] /\
-    t.vs_outcomes = rest /\ t.vs_requests = s.vs_requests ++ [rq'] /\
-    t.vs_returndata = oc.co_returnData /\
-    LENGTH oc.co_returnData < dimword (:256) /\
-    t = s with <|vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
-      vs_accounts := oc.co_accounts; vs_transient := oc.co_tStorage;
-      vs_logs := t.vs_logs; vs_pending_deletions := t.vs_pending_deletions;
-      vs_returndata := oc.co_returnData|> /\
-    (!H. valid_horizon cx st0 H ee.storage_trace ==>
-      request_agree H cx.txn.target rq rq' /\ stmt_state_rel H ctx func cenv cx ee' t) /\
-    (!H. valid_horizon cx st0 H ee'.storage_trace ==>
-      valid_horizon cx st0 H ee.storage_trace /\ storage_well_formed_on cx ee' (FST H))
-Proof
-  cheat
 QED
 
 (* CREATE reads its input window but has no caller-memory output window. *)
@@ -2110,10 +2105,10 @@ QED
 (* Replay at an arbitrary gas tail gives the type and state invariant.
    The guard of the list IH only asks for existence of a successful read. *)
 Theorem create_operand_read_post:
-  expr_body_pre cenv cx env e es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
     (INL v,ee with gas_obs := tail) ==>
-  expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value v) /\
+  expr_sim_inv_mods mods cenv cx env ee /\ expr_result_typed env e (Value v) /\
   (?s tv t s1 v1 t1. eval_expr cx e s = (INL tv,t) /\
                       read_result cx tv s1 = (INL v1,t1)) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -2135,7 +2130,7 @@ QED
 
 Theorem create_operand_const_cells_replay:
   body_const_cells_agree mods cx env es /\
-  expr_body_pre cenv cx env e es /\
+  expr_body_pre_mods mods' cenv cx env e es /\
   (!tail. bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := prefix ++ tail) = (res,ee with gas_obs := tail)) ==>
   body_const_cells_agree mods cx env ee
@@ -2153,8 +2148,9 @@ QED
    whose marks replay the successful operand read. *)
 Theorem create_operand_replay_midpoint:
   body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx cenv cx /\ MEM func ctx.ctx_functions /\
-  expr_body_pre cenv cx env e es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ MEM func ctx.ctx_functions /\
+  expr_body_pre_mods mods cenv cx env e es /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
   return_buf_frame d cenv sa s /\
   (!fn i z. frag_reachable ctx func s fn i z ==> dalloca_fmp_headroom i z) /\
@@ -2171,7 +2167,7 @@ Theorem create_operand_replay_midpoint:
   ~t.vs_halted /\ return_buf_frame d cenv sb t /\
   (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
   body_const_cells_agree [(NONE,tops)] cx env ee /\
-  expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value v) /\
+  expr_sim_inv_mods mods cenv cx env ee /\ expr_result_typed env e (Value v) /\
   (?a tv b a' v' b'. eval_expr cx e a = (INL tv,b) /\
                       read_result cx tv a' = (INL v',b')) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -2205,9 +2201,10 @@ QED
 (* A cut evaluates exactly one operand. The continuation receives the
    typing and IH guard from replay, and all horizon facts from that run. *)
 Theorem create_body_operand_cut_replay:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env e es /\ body_expr_full_ok cx e /\
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  expr_body_pre_mods mods cenv cx env e es /\ body_expr_full_ok_mods mods exps cx e /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
   lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
     (gas_shadow_expr e) sh = (op,shb) /\
@@ -2243,8 +2240,8 @@ Theorem create_body_operand_cut_replay:
     ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
     return_buf_frame d cenv sb t /\
     (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
-    body_const_cells_agree [(NONE,tops)] cx env ee /\
-    expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value v) /\
+    body_const_cells_agree mods cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\ expr_result_typed env e (Value v) /\
     (?a tv b a' v' b'. eval_expr cx e a = (INL tv,b) /\
                         read_result cx tv a' = (INL v',b')) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -2307,9 +2304,10 @@ Proof
 QED
 
 Theorem create_body_operand_cut[local]:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env e es /\ body_expr_full_ok cx e /\
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  expr_body_pre_mods mods cenv cx env e es /\ body_expr_full_ok_mods mods exps cx e /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
   lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
     (gas_shadow_expr e) sh = (op,shb) /\
@@ -2345,8 +2343,8 @@ Theorem create_body_operand_cut[local]:
     ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
     return_buf_frame d cenv sb t /\
     (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
-    body_const_cells_agree [(NONE,tops)] cx env ee /\
-    expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value v) /\
+    body_const_cells_agree mods cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\ expr_result_typed env e (Value v) /\
     (?a tv b a' v' b'. eval_expr cx e a = (INL tv,b) /\
                         read_result cx tv a' = (INL v',b')) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -2460,7 +2458,7 @@ Proof
 QED
 
 Theorem create_word_cut_facts[local]:
-  expr_body_pre cenv cx env e es /\ expr_result_typed env e (Value v) /\
+  expr_body_pre_mods mods cenv cx env e es /\ expr_result_typed env e (Value v) /\
   expr_type e = BaseT bt /\ is_word_type (BaseT bt) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
   expr_post H ctx func cenv cx e es sa sb s ee v op t /\
@@ -2534,7 +2532,7 @@ QED
 (* Project the typed word and the write-back and horizon frames from the
    same operand run. The scalar continuations use both views of the post. *)
 Theorem create_word_cut_frame_facts:
-  expr_body_pre cenv cx env e es /\ expr_result_typed env e (Value v) /\
+  expr_body_pre_mods mods cenv cx env e es /\ expr_result_typed env e (Value v) /\
   expr_type e = BaseT bt /\ is_word_type (BaseT bt) /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
   ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
@@ -2581,14 +2579,15 @@ QED
 (* The prepared initcode belongs to the continuation: the scalar cut
    evaluates only the amount and, when present, the one salt expression. *)
 Theorem raw_create_scalar_suffix_cut:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env amount es /\ body_exprs_full_ok cx (amount::salts) /\
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  expr_body_pre_mods mods cenv cx env amount es /\ body_exprs_full_ok_mods mods exps cx (amount::salts) /\
   expr_type amount = BaseT (UintT 256) /\
   (if salted then ?salt. salts = [salt] /\ expr_type salt = BaseT (BytesT (Fixed 32))
    else salts = []) /\
-  (!salt em. MEM salt salts /\ expr_sim_inv cenv cx env em ==>
-     expr_body_pre cenv cx env salt em) /\
+  (!salt em. MEM salt salts /\ expr_sim_inv_mods mods cenv cx env em ==>
+     expr_body_pre_mods mods cenv cx env salt em) /\
   lower_value compile_expr cenv (expr_type amount) amount sa = (y,sm) /\
   lower_value compile_expr (gas_shadow_env T cenv) (expr_type amount)
     (gas_shadow_expr amount) sh = (y,shm) /\
@@ -2620,7 +2619,7 @@ Theorem raw_create_scalar_suffix_cut:
     OPTREL (\op w. eval_operand op t = SOME w /\ op_taint tn1 op = {}) sop sw /\
     (!x. y = Var x \/ sop = SOME (Var x) ==> not_fresh_at sb x) /\
     wb_frame cenv es ee sa s t /\ ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
-    MAP FDOM es.scopes = MAP FDOM ee.scopes /\ expr_sim_inv cenv cx env ee /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\ expr_sim_inv_mods mods cenv cx env ee /\
     s.vs_alloca_next <= t.vs_alloca_next /\ alloca_history func t /\
     return_buf_frame d cenv sb t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
@@ -2820,7 +2819,7 @@ Theorem proxy_salt_dispatch_ready:
   (!z n. cenv.ce_return_buf = SOME (PtrVar (Var z) n) ==> not_fresh_at c z) /\
   (!z n. cenv.ce_return_pc = SOME (PtrVar (Var z) n) ==> not_fresh_at c z) /\
   expr_type salt = BaseT (BytesT (Fixed 32)) /\
-  expr_body_pre cenv cx env salt ea /\ expr_result_typed env salt (Value sv) /\
+  expr_body_pre_mods mods cenv cx env salt ea /\ expr_result_typed env salt (Value sv) /\
   lower_value compile_expr cenv (BaseT (BytesT (Fixed 32))) salt c = (salt_op,d') /\
   ptr_val_ok cx (post_value_type cenv salt) sv salt_op Gsalt tns ssalt /\
   storage_trace_domain cx st0 ew.storage_trace /\
@@ -2870,7 +2869,7 @@ QED
    window before entering the optional salt computation. *)
 Theorem proxy_amount_buffer_cut:
   expr_type target = BaseT AddressT /\ expr_type amount = BaseT (UintT 256) /\
-  expr_body_pre cenv cx env target es /\ expr_body_pre cenv cx env amount et /\
+  expr_body_pre_mods mods cenv cx env target es /\ expr_body_pre_mods mods cenv cx env amount et /\
   expr_result_typed env target (Value tv) /\ expr_result_typed env amount (Value av) /\
   lower_value compile_expr cenv (expr_type target) target sa = (x,a) /\
   lower_value compile_expr cenv (expr_type amount) amount a = (y,b) /\
@@ -3059,10 +3058,11 @@ QED
 Finalise proxy_amount_buffer_cut
 
 Theorem proxy_expr_sim_from_parts:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env (Call ann (CreateTarget CreateMinimalProxy salted rof ks) args dflt) es /\
-  body_exprs_full_ok cx (create_operand_order CreateMinimalProxy salted args) /\
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  expr_body_pre_mods mods cenv cx env (Call ann (CreateTarget CreateMinimalProxy salted rof ks) args dflt) es /\
+  body_exprs_full_ok_mods mods exps cx (create_operand_order CreateMinimalProxy salted args) /\
   (!st0 sa sb sm s0 G0 tn0 result ee s G tn ptr pv amount aw sop sw addr source.
     compile_create_dispatch ptr (Lit 54w) amount sop rof sm = (result,sb) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
@@ -3323,8 +3323,8 @@ Finalise proxy_expr_sim_from_parts
 
 Theorem create_minimal_proxy_expr_full_ok:
   !cx ty s r ks es d.
-    body_exprs_full_ok cx (create_operand_order CreateMinimalProxy s es) ==>
-    body_expr_full_ok cx (Call ty (CreateTarget CreateMinimalProxy s r ks) es d)
+    body_exprs_full_ok_mods mods exps cx (create_operand_order CreateMinimalProxy s es) ==>
+    body_expr_full_ok_mods mods exps cx (Call ty (CreateTarget CreateMinimalProxy s r ks) es d)
 Proof
   rpt gen_tac >> disch_tac >> ONCE_REWRITE_TAC [body_expr_full_ok_def] >>
   reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
@@ -3360,7 +3360,7 @@ QED
 (* The physical rows and the source annotations yield the same ABI bytes.
    The bound here is for the physical allocation. *)
 Triviality create_encoded_rows_layout:
-  EVERY (\e. expr_body_pre ce cx env e es) args /\
+  EVERY (\e. expr_body_pre_mods mods ce cx env e es) args /\
   LENGTH args = LENGTH vs /\ LENGTH args = LENGTH (vals:vyper_value list) /\
   sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
   (!i. i < LENGTH args ==> ?tv.
@@ -3414,8 +3414,9 @@ QED
    Blueprint uses an empty prefix, and RawCreate uses its saved bytecode. *)
 Theorem create_encoded_rows_window:
   LENGTH args = LENGTH vals /\ LENGTH args = LENGTH vs /\
-  EVERY (\e. expr_body_pre ce cx env e ee) args /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
+  EVERY (\e. expr_body_pre_mods mods ce cx env e ee) args /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s) /\
@@ -3588,7 +3589,7 @@ Finalise create_encoded_rows_window
 (* The snapshot's physical tag decides whether it saves a word or copies
    bytes. Retagging a nonword leaves the materialization code unchanged. *)
 Theorem create_ctor_snapshot_retag:
-  expr_body_pre cenv cx env e es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) ==>
   vv_type (ext_call_arg_value (lowered_value_type cenv e) vv) = lowered_value_type cenv e /\
   (is_word_type (vv_type (ext_call_arg_value (lowered_value_type cenv e) vv)) <=>
@@ -3604,7 +3605,7 @@ Proof
 QED
 
 Theorem create_ctor_borrowed_row[local]:
-  expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
+  expr_body_pre_mods mods ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
   read_result cx raw ee = (INL v,ee) /\ compile_expr ce (expr_type e) e sa = (vv,sb) /\
   ty = lowered_value_type ce e /\ sv = ext_call_arg_value ty vv /\ ~is_word_type ty /\
   vv_holds ce cx (post_value_type ce e) raw vv ee s /\
@@ -3684,9 +3685,10 @@ Finalise create_ctor_borrowed_row
 (* Reading a borrowed aggregate adds no target instruction. Its source
    read still runs immediately, before evaluating any later argument. *)
 Theorem create_ctor_borrowed_head_outcome:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre cenv cx env e es /\
+  body_const_cells_agree mods cx env es /\
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_body_pre_mods mods cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sb) /\
   compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) sh = (vv,shb) /\
   compile_snapshot_vv cenv F (ext_call_arg_value (lowered_value_type cenv e) vv) sb = (sv,sb) /\
@@ -3950,7 +3952,7 @@ Theorem create_ctor_saved_row_suffix:
   (~copy /\ ~is_word_type (lowered_value_type cenv e) ==>
     ee.scopes = mid.scopes /\ ee.immutables = mid.immutables /\
     !tr. get_storage cx ee tr = get_storage cx mid tr) /\
-  expr_sim_inv cenv cx env mid /\
+  expr_sim_inv_mods mods cenv cx env mid /\
   stmt_state_rel H ctx func cenv cx mid t /\ stmt_state_rel H ctx func cenv cx ee u /\
   ghost_inv_at D lo d cenv cx ee G2 tn2 u /\ dead_lo_ok H D lo cenv cx /\
   wb_frame cenv mid ee ss t u /\ ghost_kept_at lo cenv mid ss G1 tn1 t G2 tn2 /\
@@ -4082,9 +4084,10 @@ Finalise create_ctor_saved_row_suffix
 
 (* A copying snapshot carries its own allocation witness to the suffix. *)
 Theorem create_ctor_materialized_head_outcome:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre cenv cx env e es /\
+  body_const_cells_agree mods cx env es /\
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_body_pre_mods mods cenv cx env e es /\
   ~is_word_type (expr_type e) /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
   compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) sh = (vv,shm) /\
@@ -4208,9 +4211,10 @@ Finalise create_ctor_materialized_head_outcome
 (* All constructor heads use the same packet at the immediate-read cut.
    A private allocation is required only when a nonword snapshot copies. *)
 Theorem create_ctor_head_outcome:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\ expr_body_pre cenv cx env e es /\
+  body_const_cells_agree mods cx env es /\
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_body_pre_mods mods cenv cx env e es /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
   compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) sh = (vv,shm) /\
   compile_snapshot_vv cenv copy (ext_call_arg_value (lowered_value_type cenv e) vv) sm = (sv,ss) /\
@@ -4352,11 +4356,12 @@ Finalise create_ctor_head_outcome
 (* Constructor operands are read before evaluating the suffix. Their row
    witnesses refer to the original compiler cuts and the final runtime cut. *)
 Theorem create_ctor_rows_outcome[local]:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
-     expr_body_pre cenv cx env e st) /\
+  body_const_cells_agree mods cx env es /\
+  body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env es /\
+  (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==>
+     expr_body_pre_mods mods cenv cx env e st) /\
   compile_create_ctor_args compile_expr cenv xs sa = (svs,sb) /\
   compile_create_ctor_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr xs)
     shadow_sa = (svs,shadow_sb) /\
@@ -4432,7 +4437,7 @@ Theorem create_ctor_rows_outcome[local]:
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       wb_frame cenv es ee sa s0 t /\ MAP FDOM ee.scopes = MAP FDOM es.scopes /\
-      expr_sim_inv cenv cx env ee /\
+      expr_sim_inv_mods mods cenv cx env ee /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b))
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
@@ -4841,11 +4846,12 @@ Finalise create_ctor_rows_outcome
 (* The continuation starts only after all constructor arguments were read.
    The row relation describes the actual saved values at the common cut. *)
 Theorem create_ctor_rows_cut:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
-     expr_body_pre cenv cx env e st) /\
+  body_const_cells_agree mods cx env es /\
+  body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env es /\
+  (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==>
+     expr_body_pre_mods mods cenv cx env e st) /\
   compile_create_ctor_args compile_expr cenv xs sa = (svs,sb) /\
   compile_create_ctor_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr xs)
     shadow_sa = (svs,shadow_sb) /\
@@ -4927,7 +4933,7 @@ Theorem create_ctor_rows_cut:
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       wb_frame cenv es ee sa s0 t /\ MAP FDOM ee.scopes = MAP FDOM es.scopes /\
-      expr_sim_inv cenv cx env ee /\
+      expr_sim_inv_mods mods cenv cx env ee /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)) ==>
     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -7112,7 +7118,7 @@ QED
 Finalise create_blueprint_prepared_path
 
 Theorem copy_pre_args:
-  expr_body_pre cenv cx env
+  expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget CreateCopyOf salted rof ks) args dflt) es ==>
   ann = BaseT AddressT /\
   ?target amount salts.
@@ -7275,8 +7281,8 @@ Finalise create_copy_finish
 
 Theorem create_copy_expr_full_ok:
   !cx ty s r ks es d.
-    body_exprs_full_ok cx (create_operand_order CreateCopyOf s es) ==>
-    body_expr_full_ok cx (Call ty (CreateTarget CreateCopyOf s r ks) es d)
+    body_exprs_full_ok_mods mods exps cx (create_operand_order CreateCopyOf s es) ==>
+    body_expr_full_ok_mods mods exps cx (Call ty (CreateTarget CreateCopyOf s r ks) es d)
 Proof
   rpt gen_tac >> disch_tac >> rewrite_tac[Once body_expr_full_ok_def] >>
   reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
@@ -7585,7 +7591,7 @@ QED
 Finalise create_copy_expr_full_ok
 
 Theorem blueprint_pre_args:
-  expr_body_pre cenv cx env
+  expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget (CreateFromBlueprint raw) salted rof ks) args dflt) es ==>
   ann = BaseT AddressT /\
   ?target amount salts offset ctor.
@@ -7691,10 +7697,10 @@ QED
 (* Project the original cut at a single horizon for the compiler witnesses.
    Storage liveness is re-projected at each horizon on the same saved row. *)
 Theorem create_rows_encoder_inputs:
-  EVERY (\e. expr_body_pre ce cx env e entry) ctor /\
-  EVERY (\e. expr_body_pre ce cx env e ee) ctor /\
+  EVERY (\e. expr_body_pre_mods mods ce cx env e entry) ctor /\
+  EVERY (\e. expr_body_pre_mods mods ce cx env e ee) ctor /\
   eval_exprs cx ctor entry = (INL vs,fin) /\
-  expr_sim_inv ce cx env ee /\ storage_trace_domain cx st0 ee.storage_trace /\
+  expr_sim_inv_mods mods ce cx env ee /\ storage_trace_domain cx st0 ee.storage_trace /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
     LENGTH vals = LENGTH ctor /\
     LIST_REL (\(e,sv) v.
@@ -7855,14 +7861,14 @@ QED
 Finalise create_rows_encoder_inputs
 
 Theorem blueprint_rows_encoder_inputs:
-  expr_body_pre ce cx env
+  expr_body_pre_mods mods ce cx env
     (Call ann (CreateTarget (CreateFromBlueprint F) salted rof ks)
       (target::amount::(salts ++ offset::ctor)) dflt) es /\
   LENGTH salts = (if salted then 1 else 0) /\ ctor <> [] /\
-  EVERY (\e. expr_body_pre ce cx env e entry) ctor /\
-  EVERY (\e. expr_body_pre ce cx env e ee) ctor /\
+  EVERY (\e. expr_body_pre_mods mods ce cx env e entry) ctor /\
+  EVERY (\e. expr_body_pre_mods mods ce cx env e ee) ctor /\
   eval_exprs cx ctor entry = (INL vs,fin) /\
-  expr_sim_inv ce cx env ee /\ storage_trace_domain cx st0 ee.storage_trace /\
+  expr_sim_inv_mods mods ce cx env ee /\ storage_trace_domain cx st0 ee.storage_trace /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
     LENGTH vals = LENGTH ctor /\
     LIST_REL (\(e,sv) v.
@@ -8292,9 +8298,10 @@ QED
 Theorem blueprint_offset_cut_by_operand:
   !Run HeadOK.
   (!e es sa sb op sh shb s G tn (next : value -> evaluation_state -> value evaluation_result).
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-    expr_body_pre cenv cx env e es /\ body_expr_full_ok cx e /\ HeadOK e /\
+    body_const_cells_agree mods cx env es /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    expr_body_pre_mods mods cenv cx env e es /\ body_expr_full_ok_mods mods exps cx e /\ HeadOK e /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
     lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
       (gas_shadow_expr e) sh = (op,shb) /\
@@ -8330,8 +8337,8 @@ Theorem blueprint_offset_cut_by_operand:
       ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
       return_buf_frame d cenv sb t /\
       (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
-      body_const_cells_agree [(NONE,tops)] cx env ee /\
-      expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value v) /\
+      body_const_cells_agree mods cx env ee /\
+      expr_sim_inv_mods mods cenv cx env ee /\ expr_result_typed env e (Value v) /\
       (?a tv b a' v' b'. eval_expr cx e a = (INL tv,b) /\
                           read_result cx tv a' = (INL v',b')) /\
       (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -8345,10 +8352,11 @@ Theorem blueprint_offset_cut_by_operand:
             (s,G,tn) marks (OK t,G1,tn1))) ==>
       Run (next v) (ee,t,G1,tn1)) ==>
     Run (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s,G,tn)) /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_sim_inv cenv cx env es /\
-  expr_body_pre cenv cx env e es /\ body_expr_full_ok cx e /\ HeadOK e /\
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\ body_expr_full_ok_mods mods exps cx e /\ HeadOK e /\
   expr_type e = BaseT (UintT 256) /\
   (case expr_int_literal (origin_fold_value e) of
      SOME i => comp_return (Lit (i2w i))
@@ -8394,7 +8402,7 @@ Theorem blueprint_offset_cut_by_operand:
     wb_frame cenv es ee sa s t /\ ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
     return_buf_frame d cenv sb t /\
     (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
-    expr_sim_inv cenv cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\
     dest_NumV v = SOME (w2n ow) /\ eval_operand op t = SOME ow /\
     op_taint tn1 op = {} /\ op_prov G1 op = NONE /\
     (!x. op = Var x ==> not_fresh_at sb x) ==>
@@ -8434,10 +8442,11 @@ Proof
 QED
 
 Theorem blueprint_offset_cut[local]:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_sim_inv cenv cx env es /\
-  expr_body_pre cenv cx env e es /\ body_expr_full_ok cx e /\
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\ body_expr_full_ok_mods mods exps cx e /\
   expr_type e = BaseT (UintT 256) /\
   (case expr_int_literal (origin_fold_value e) of
      SOME i => comp_return (Lit (i2w i))
@@ -8483,7 +8492,7 @@ Theorem blueprint_offset_cut[local]:
     wb_frame cenv es ee sa s t /\ ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
     return_buf_frame d cenv sb t /\
     (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
-    expr_sim_inv cenv cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\
     dest_NumV v = SOME (w2n ow) /\ eval_operand op t = SOME ow /\
     op_taint tn1 op = {} /\ op_prov G1 op = NONE /\
     (!x. op = Var x ==> not_fresh_at sb x) ==>
@@ -8511,12 +8520,13 @@ QED
 (* The size/count window is recovered at the actual endpoint of the
    scalar reads, not assumed to survive arbitrary evaluation. *)
 Theorem blueprint_scalar_suffix_cut_by_stages:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget (CreateFromBlueprint raw) salted rof ks)
       (target_e::amount::(salts ++ offset::ctor)) dflt) entry /\
-  expr_sim_inv cenv cx env es /\ body_exprs_full_ok cx (amount::(salts ++ [offset])) /\
+  expr_sim_inv_mods mods cenv cx env es /\ body_exprs_full_ok_mods mods exps cx (amount::(salts ++ [offset])) /\
   expr_type amount = BaseT (UintT 256) /\ expr_type offset = BaseT (UintT 256) /\
   (if salted then ?e. salts = [e] /\ expr_type e = BaseT (BytesT (Fixed 32))
    else salts = []) /\
@@ -8588,7 +8598,7 @@ Theorem blueprint_scalar_suffix_cut_by_stages:
       (!i. w2n a <= i /\ i < w2n a + LENGTH args ==> i NOTIN tn1.t_mem) /\
       read_memory (w2n a) (LENGTH args) t = args) /\
     wb_frame cenv es ee sa s t /\ ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
-    MAP FDOM es.scopes = MAP FDOM ee.scopes /\ expr_sim_inv cenv cx env ee /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\ expr_sim_inv_mods mods cenv cx env ee /\
     s.vs_alloca_next <= t.vs_alloca_next /\ alloca_history func t /\
     return_buf_frame d cenv sb t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
@@ -8605,9 +8615,10 @@ Theorem blueprint_scalar_suffix_cut_by_stages:
     ((?a tv b a' v b'. eval_expr cx e a = (INL tv,b) /\
       read_result cx tv a' = (INL v,b')) ==> ListOK xs)) /\
   (!e ee z J tz op ca cb ha hb k.
-    HeadOK e /\ body_const_cells_agree [(NONE,tops)] cx env ee /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-    expr_body_pre cenv cx env e ee /\ body_expr_full_ok cx e /\
+    HeadOK e /\ body_const_cells_agree mods cx env ee /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    expr_body_pre_mods mods cenv cx env e ee /\ body_expr_full_ok_mods mods exps cx e /\
     lower_value compile_expr cenv (expr_type e) e ca = (op,cb) /\
     lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
       (gas_shadow_expr e) ha = (op,hb) /\
@@ -8639,8 +8650,8 @@ Theorem blueprint_scalar_suffix_cut_by_stages:
       ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t /\
       ghost_kept_at lo cenv ee ca J tz z G1 tn1 /\ return_buf_frame d cenv cb t /\
       (!fn i u. frag_reachable ctx func t fn i u ==> dalloca_fmp_headroom i u) /\
-      body_const_cells_agree [(NONE,tops)] cx env ef /\
-      expr_sim_inv cenv cx env ef /\ expr_result_typed env e (Value v) /\
+      body_const_cells_agree mods cx env ef /\
+      expr_sim_inv_mods mods cenv cx env ef /\ expr_result_typed env e (Value v) /\
       (?a tv b a' v' b'. eval_expr cx e a = (INL tv,b) /\ read_result cx tv a' = (INL v',b')) /\
       (!H. valid_horizon cx st0 H ef.storage_trace ==> valid_horizon cx st0 H ee.storage_trace) /\
       (?marks.
@@ -8653,10 +8664,11 @@ Theorem blueprint_scalar_suffix_cut_by_stages:
       Run (k v) (ef,t,G1,tn1)) ==>
     Run (bind (bind (eval_expr cx e) (read_result cx)) k) (ee,z,J,tz)) /\
   (!ee z J tz k.
-    HeadOK offset /\ body_const_cells_agree [(NONE,tops)] cx env ee /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-    expr_sim_inv cenv cx env ee /\
-    expr_body_pre cenv cx env offset ee /\ body_expr_full_ok cx offset /\
+    HeadOK offset /\ body_const_cells_agree mods cx env ee /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    expr_sim_inv_mods mods cenv cx env ee /\
+    expr_body_pre_mods mods cenv cx env offset ee /\ body_expr_full_ok_mods mods exps cx offset /\
     expr_type offset = BaseT (UintT 256) /\
     (case expr_int_literal (origin_fold_value offset) of
        SOME i => comp_return (Lit (i2w i))
@@ -8700,7 +8712,7 @@ Theorem blueprint_scalar_suffix_cut_by_stages:
       wb_frame cenv ee ef sn z t /\ ghost_kept_at lo cenv ee sn J tz z G1 tn1 /\
       return_buf_frame d cenv sb t /\
       (!fn i u. frag_reachable ctx func t fn i u ==> dalloca_fmp_headroom i u) /\
-      expr_sim_inv cenv cx env ef /\
+      expr_sim_inv_mods mods cenv cx env ef /\
       dest_NumV v = SOME (w2n ow) /\ eval_operand off t = SOME ow /\
       op_taint tn1 off = {} /\ op_prov G1 off = NONE /\
       (!x. off = Var x ==> not_fresh_at sb x) ==>
@@ -8981,12 +8993,13 @@ QED
 Finalise blueprint_scalar_suffix_cut_by_stages
 
 Theorem blueprint_scalar_suffix_cut:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget (CreateFromBlueprint raw) salted rof ks)
       (target_e::amount::(salts ++ offset::ctor)) dflt) entry /\
-  expr_sim_inv cenv cx env es /\ body_exprs_full_ok cx (amount::(salts ++ [offset])) /\
+  expr_sim_inv_mods mods cenv cx env es /\ body_exprs_full_ok_mods mods exps cx (amount::(salts ++ [offset])) /\
   expr_type amount = BaseT (UintT 256) /\ expr_type offset = BaseT (UintT 256) /\
   (if salted then ?e. salts = [e] /\ expr_type e = BaseT (BytesT (Fixed 32))
    else salts = []) /\
@@ -9058,7 +9071,7 @@ Theorem blueprint_scalar_suffix_cut:
       (!i. w2n a <= i /\ i < w2n a + LENGTH args ==> i NOTIN tn1.t_mem) /\
       read_memory (w2n a) (LENGTH args) t = args) /\
     wb_frame cenv es ee sa s t /\ ghost_kept_at lo cenv es sa G tn s G1 tn1 /\
-    MAP FDOM es.scopes = MAP FDOM ee.scopes /\ expr_sim_inv cenv cx env ee /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\ expr_sim_inv_mods mods cenv cx env ee /\
     s.vs_alloca_next <= t.vs_alloca_next /\ alloca_history func t /\
     return_buf_frame d cenv sb t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
     (!fn i z. frag_reachable ctx func t fn i z ==> dalloca_fmp_headroom i z) /\
@@ -9164,7 +9177,7 @@ QED
 (* The raw snapshot is sized by the returned tag, not by the physical
    type of the source window. Both possible tags have their own fit proof. *)
 Theorem blueprint_raw_snapshot_type[local]:
-  expr_body_pre ce cx env e es /\ expr_type e = BaseT (BytesT (Dynamic n)) /\
+  expr_body_pre_mods mods ce cx env e es /\ expr_type e = BaseT (BytesT (Dynamic n)) /\
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL (BytesV bs),ee) ==>
   ?k. vv_type vv = BaseT (BytesT (Dynamic k)) /\
@@ -9214,12 +9227,13 @@ QED
    header view at the actual suffix endpoint, rather than pretending
    the local alias is a separately owned allocation. *)
 Theorem blueprint_raw_borrowed_window[local]:
-  body_inv tops ctx ce cx /\ ~exprs_can_mutate ce later /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ ~exprs_can_mutate ce later /\
   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
     (int_calls_exprs later) /\
   (!tail. eval_exprs cx later (es with gas_obs := gs ++ tail) =
             (INL vs,ee with gas_obs := tail)) /\
-  expr_sim_inv ce cx env es /\
+  expr_sim_inv_mods mods ce cx env es /\
   stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
   stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx ee t /\
   local_ptrs_reserved ce sh /\ su.cs_next_id <= sh.cs_next_id /\ ci_mono sh ss /\
@@ -9678,9 +9692,10 @@ Finalise blueprint_raw_copy_store_exit
 (* The raw argument is read before any scalar, even when its snapshot
    borrows the original bytes. Recover the window at the actual suffix exit. *)
 Theorem blueprint_raw_args_cut:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env e es /\ body_expr_full_ok cx e /\
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  expr_body_pre_mods mods cenv cx env e es /\ body_expr_full_ok_mods mods exps cx e /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
     (int_calls_exprs later) /\
@@ -9707,7 +9722,7 @@ Theorem blueprint_raw_args_cut:
     LENGTH bs < 2 ** 64 /\
     (!tail. eval_exprs cx [e] (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
       (INL [BytesV bs],ee with gas_obs := tail)) /\
-    expr_sim_inv cenv cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\
     wb_frame cenv es ee sa s u /\ ghost_kept_at lo cenv es sa G tn s Gu tu /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ s.vs_alloca_next <= u.vs_alloca_next /\
     alloca_history func u /\ return_buf_frame d cenv sb u /\
@@ -10752,11 +10767,12 @@ Finalise create_blueprint_finish
    window across the later scalar operands. *)
 Theorem blueprint_encoded_args_pack_from_rows:
   ctor <> [] /\ LENGTH salts = (if salted then 1 else 0) /\
-  expr_body_pre cenv cx env
+  expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget (CreateFromBlueprint F) salted rof ks)
       (target::amount::(salts ++ offset::ctor)) dflt) entry /\
-  expr_sim_inv cenv cx env es /\ body_inv tops ctx cenv cx /\
-  (!e u. MEM e ctor /\ expr_sim_inv cenv cx env u ==> expr_body_pre cenv cx env e u) /\
+  expr_sim_inv_mods mods cenv cx env es /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  (!e u. MEM e ctor /\ expr_sim_inv_mods mods cenv cx env u ==> expr_body_pre_mods mods cenv cx env e u) /\
   compile_alloc_buffer
     (abi_size_bound cenv.ce_struct_fields (TupleT (MAP (lowered_value_type cenv) ctor)))
     se = (buf,st) /\
@@ -10833,7 +10849,7 @@ Theorem blueprint_encoded_args_pack_from_rows:
     ~rs.vs_halted /\ rs.vs_current_bb = se.cs_current_bb /\
     rs.vs_inst_idx = LENGTH se.cs_current_insts /\
     wb_frame cenv es ee sa s rs /\ MAP FDOM ee.scopes = MAP FDOM es.scopes /\
-    expr_sim_inv cenv cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> lookup_var x rs = SOME w) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP rs.vs_allocas aid = SOME b)) ==>
   ?bytes z Gz tz.
@@ -10843,7 +10859,7 @@ Theorem blueprint_encoded_args_pack_from_rows:
     LENGTH bytes < 2 ** 64 /\
     (!tail. eval_exprs cx ctor (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
       (INL vs,ee with gas_obs := tail)) /\
-    expr_sim_inv cenv cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\
     wb_frame cenv es ee sa s z /\ ghost_kept_at lo cenv es sa G tn s Gz tz /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ s.vs_alloca_next <= z.vs_alloca_next /\
     alloca_history func z /\ return_buf_frame d cenv sb z /\
@@ -11108,13 +11124,14 @@ QED
 Finalise blueprint_encoded_args_pack_from_rows
 
 Theorem blueprint_encoded_args_cut:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
+  body_const_cells_agree mods cx env es /\
   ctor <> [] /\ LENGTH salts = (if salted then 1 else 0) /\
-  expr_body_pre cenv cx env
+  expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget (CreateFromBlueprint F) salted rof ks)
       (target::amount::(salts ++ offset::ctor)) dflt) entry /\
-  expr_sim_inv cenv cx env es /\ body_exprs_full_ok cx ctor /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  expr_sim_inv_mods mods cenv cx env es /\ body_exprs_full_ok_mods mods exps cx ctor /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
   compile_create_blueprint_args compile_expr cenv F later ctor sa = ((data,cnt),sb) /\
   compile_create_blueprint_args compile_expr (gas_shadow_env T cenv) F (MAP gas_shadow_expr later)
     (MAP gas_shadow_expr ctor) sh = ((data,cnt),shb) /\
@@ -11138,7 +11155,7 @@ Theorem blueprint_encoded_args_cut:
     LENGTH bytes < 2 ** 64 /\
     (!tail. eval_exprs cx ctor (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
       (INL vs,ee with gas_obs := tail)) /\
-    expr_sim_inv cenv cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\
     wb_frame cenv es ee sa s z /\ ghost_kept_at lo cenv es sa G tn s Gz tz /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ s.vs_alloca_next <= z.vs_alloca_next /\
     alloca_history func z /\ return_buf_frame d cenv sb z /\
@@ -11243,9 +11260,9 @@ Proof
 QED
 
 Theorem create_body_exprs_split:
-  !xs ys cx. body_exprs_full_ok cx (xs ++ ys) ==>
-    body_exprs_full_ok cx xs /\
-    (!st vs en. eval_exprs cx xs st = (INL vs,en) ==> body_exprs_full_ok cx ys)
+  !xs ys cx. body_exprs_full_ok_mods mods exps cx (xs ++ ys) ==>
+    body_exprs_full_ok_mods mods exps cx xs /\
+    (!st vs en. eval_exprs cx xs st = (INL vs,en) ==> body_exprs_full_ok_mods mods exps cx ys)
 Proof
   mp_tac (Q.SPECL [`body_exprs_full_ok`, `body_expr_full_ok`]
     exprListSplitPropsTheory.expr_list_ok_append_split) >>
@@ -11265,8 +11282,11 @@ Proof
   simp[listTheory.LENGTH_EQ_NUM_compute] >> rpt strip_tac >> gvs[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem create_blueprint_expr_full_ok:
+  !cx ty b s r ks es d.
+    body_exprs_full_ok_mods mods exps cx (create_operand_order (CreateFromBlueprint b) s es) ==>
+    body_expr_full_ok_mods mods exps cx
+      (Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)
 Proof
   rpt gen_tac >> disch_tac >> rewrite_tac[Once body_expr_full_ok_def] >>
   reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
@@ -11293,17 +11313,7 @@ Proof
        vyperASTTheory.expr_type_def,is_word_type_def] >>
   metis_tac[create_eval_value]
 QED
-*)
-Theorem create_blueprint_expr_full_ok:
-  !cx ty b s r ks es d.
-    body_exprs_full_ok cx (create_operand_order (CreateFromBlueprint b) s es) ==>
-    body_expr_full_ok cx
-      (Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[target]:
   `expr_body_pre cenv cx env target es'` by
     (irule create_operand_pre >>
@@ -11325,9 +11335,7 @@ Resume create_blueprint_expr_full_ok[target]:
   qx_genl_tac [`tv`,`et`,`Gtar`,`tnt`,`st`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
   suspend "ctor"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[ctor]:
   qpat_assum `( ?a tv b a' v' b'. eval_expr cx target a = _ /\ _) ==> body_exprs_full_ok _ _`
     (drule_then (strip_assume_tac o MATCH_MP create_body_exprs_split)) >>
@@ -11421,9 +11429,7 @@ Resume create_blueprint_expr_full_ok[ctor]:
         vyperStorageTraceTheory.storage_trace_frame_create_operands]) >>
   suspend "ctor_encoded"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[ctor_encoded]:
   qx_genl_tac [`vs`,`bytes`,`eu`,`Gu`,`tu`,`u`,`ctor_marks`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -11435,9 +11441,7 @@ Resume create_blueprint_expr_full_ok[ctor_encoded]:
         (drule_then (map_every assume_tac o CONJUNCTS)) >> simp[]) >>
   qexists `bytes` >> pure_rewrite_tac[COND_CLAUSES] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[ctor_values]:
   qx_genl_tac [`vs`,`bytes`,`eu`,`Gu`,`tu`,`u`,`ctor_marks`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -11501,9 +11505,7 @@ Resume create_blueprint_expr_full_ok[ctor_values]:
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "scalar_finish"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[scalar_finish]:
   qx_genl_tac [`av`,`sv`,`ov`,`yw`,`sw`,`ow`,`ee`,`Gf`,`tf`,`z`,`scalar_marks`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -11578,9 +11580,7 @@ Resume create_blueprint_expr_full_ok[scalar_finish]:
       simp[IgnAsm `IS_SOME sv <=> s`,listTheory.DROP_APPEND2]) >>
   qpat_assum `!x'. MEM (Var x') [x;off;p;n;y] \/ _ ==> _` mp_tac >> simp[NoAsms]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[ctor_raw]:
   qpat_x_assum `T ==> ?e cap. _` (strip_assume_tac o REWRITE_RULE []) >>
   qpat_x_assum `ctor = [e]` SUBST_ALL_TAC >>
@@ -11627,9 +11627,7 @@ Resume create_blueprint_expr_full_ok[ctor_raw]:
   qexists `bytes` >> pure_rewrite_tac[COND_CLAUSES] >>
   rpt conj_tac >> (REFL_TAC ORELSE first_assum ACCEPT_TAC)
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[ctor_empty]:
   qpat_x_assum `ctor = []` SUBST_ALL_TAC >>
   qpat_x_assum `compile_create_blueprint_args _ _ F _ [] a = _`
@@ -11648,20 +11646,17 @@ Resume create_blueprint_expr_full_ok[ctor_empty]:
   qexists `[]` >>
   simp[eval_operand_def,op_taint_def] >> EVAL_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise create_blueprint_expr_full_ok
-*)
 
 (* The snapshot destination is always the freshly allocated physical buffer.
    This is the compiler-level boundary used by the RawCreate runtime cut. *)
 Theorem raw_create_bytecode_physical_input:
-  expr_body_pre ce cx env e es /\ expr_type e = BaseT (BytesT (Dynamic n)) /\
+  expr_body_pre_mods mods ce cx env e es /\ expr_type e = BaseT (BytesT (Dynamic n)) /\
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   bind (eval_expr cx e) (read_result cx) es = (INL v,ee) /\
   vv_post H ctx func ce cx e es sa sm s0 ee raw vv s ==>
-  expr_sim_inv ce cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  expr_sim_inv_mods mods ce cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   vv_location vv <> SOME LocCalldata /\
   ?bs k. v = BytesV bs /\ lowered_value_type ce e = BaseT (BytesT (Dynamic k)) /\
     LENGTH bs <= k /\ k <= n /\
@@ -11988,7 +11983,7 @@ QED
 Finalise raw_create_encoder_saved_prefix
 
 Theorem raw_create_pre_args:
-  expr_body_pre ce cx env (Call ann (CreateTarget RawCreate salted rof ks) args dflt) es ==>
+  expr_body_pre_mods mods ce cx env (Call ann (CreateTarget RawCreate salted rof ks) args dflt) es ==>
   ann = BaseT AddressT /\
   ?code amount ctor salts bound.
     args = code :: amount :: (ctor ++ salts) /\
@@ -11997,7 +11992,7 @@ Theorem raw_create_pre_args:
     LENGTH salts = (if salted then 1 else 0) /\
     EVERY (\e. expr_type e = BaseT (BytesT (Fixed 32))) salts /\
     create_operand_order RawCreate salted args = code :: (ctor ++ amount :: salts) /\
-    EVERY (\e. expr_body_pre ce cx env e es) args /\
+    EVERY (\e. expr_body_pre_mods mods ce cx env e es) args /\
     (ctor <> [] ==> bound + abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type ctor)) < 2 ** 64)
 Proof
   strip_tac >> drule expr_body_pre_static_facts >>
@@ -13538,17 +13533,18 @@ Finalise raw_create_total_path
 (* The constructor cut owns its bytecode prefix before the first row is
    evaluated. The new owner is registered before the encoder starts. *)
 Theorem raw_create_encoded_args_cut:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
+  body_const_cells_agree mods cx env es /\
   ctor <> [] /\
-  expr_body_pre cenv cx env
+  expr_body_pre_mods mods cenv cx env
     (Call ann (CreateTarget RawCreate salted rof ks) (code::amount::(ctor ++ salts)) dflt) entry /\
   expr_type code = BaseT (BytesT (Dynamic bd)) /\
   bd + abi_size_bound cenv.ce_struct_fields (TupleT (MAP expr_type ctor)) < 2**64 /\
   LENGTH bs <= bytelike_type_bound (lowered_value_type cenv code) /\
   cap = bytelike_type_bound (lowered_value_type cenv code) +
     abi_size_bound cenv.ce_struct_fields (TupleT (MAP (lowered_value_type cenv) ctor)) /\
-  body_exprs_full_ok cx ctor /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env es /\
+  body_exprs_full_ok_mods mods exps cx ctor /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_sim_inv_mods mods cenv cx env es /\
   compile_create_ctor_args compile_expr cenv ctor sa = (vals,se) /\
   compile_create_ctor_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr ctor) sh = (vals,she) /\
   compile_alloc_buffer cap se = (buf,a) /\
@@ -13589,7 +13585,7 @@ Theorem raw_create_encoded_args_cut:
     encode_create_ctor_args (get_tenv cx) (MAP expr_type ctor) vs = SOME args_bytes /\
     (!tail. eval_exprs cx ctor (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
       (INL vs,ee with gas_obs := tail)) /\
-    expr_sim_inv cenv cx env ee /\ storage_trace_domain cx st0 ee.storage_trace /\
+    expr_sim_inv_mods mods cenv cx env ee /\ storage_trace_domain cx st0 ee.storage_trace /\
     wb_frame cenv es ee sa s z /\ ghost_kept_at lo cenv es sa G tn s Gz tz /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ s.vs_alloca_next <= z.vs_alloca_next /\
     alloca_history func z /\ return_buf_frame d cenv sb z /\
@@ -13842,9 +13838,10 @@ Finalise raw_create_encoded_args_cut
 (* The first bytecode read always uses the registered snapshot, even if
    the child was already represented by a pointer into ordinary memory. *)
 Theorem raw_create_bytecode_cut:
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  expr_body_pre cenv cx env code es /\ body_expr_full_ok cx code /\
+  body_const_cells_agree mods cx env es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  expr_body_pre_mods mods cenv cx env code es /\ body_expr_full_ok_mods mods exps cx code /\
   expr_type code = BaseT (BytesT (Dynamic bound)) /\
   compile_expr cenv (expr_type code) code sa = (vv,a) /\
   compile_expr (gas_shadow_env T cenv) (expr_type code) (gas_shadow_expr code) sh = (vv,sha) /\
@@ -13872,8 +13869,8 @@ Theorem raw_create_bytecode_cut:
     (!tail. bind (eval_expr cx code) (read_result cx)
        (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
        (INL (BytesV bs),ee with gas_obs := tail)) /\
-    body_const_cells_agree [(NONE,tops)] cx env ee /\
-    expr_sim_inv cenv cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+    body_const_cells_agree mods cx env ee /\
+    expr_sim_inv_mods mods cenv cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     storage_trace_domain cx st0 ee.storage_trace /\
     wb_frame cenv es ee sa s z /\ ghost_kept_at lo cenv es sa G tn s Gz tz /\
     s.vs_alloca_next <= z.vs_alloca_next /\ alloca_history func z /\ return_buf_frame d cenv sb z /\
@@ -14409,8 +14406,8 @@ Finalise raw_create_bytecode_cut
 
 Theorem raw_create_expr_full_ok:
   !cx ty s r ks es d.
-    body_exprs_full_ok cx (create_operand_order RawCreate s es) ==>
-    body_expr_full_ok cx (Call ty (CreateTarget RawCreate s r ks) es d)
+    body_exprs_full_ok_mods mods exps cx (create_operand_order RawCreate s es) ==>
+    body_expr_full_ok_mods mods exps cx (Call ty (CreateTarget RawCreate s r ks) es d)
 Proof
   map_every qx_gen_tac [`cx`,`ann`,`salted`,`rof`,`ks`,`args`,`dflt`] >>
   disch_tac >> rewrite_tac[Once body_expr_full_ok_def] >>

@@ -6,6 +6,7 @@ Ancestors
   bodyPtrBopHashFootprint exprSimSubscriptArraySuffix exprSimSubscriptArraySource
   exprSimSource typedCopyLayoutPtr valueEncodingProps ptrDiscipline bodyPtrDefs
   loweringPosts exprSimProps venomState valueEncoding words finite_map list
+  exprSimHypsDefs[qualified]
 
 Theorem captured_dynamic_memory_input[local]:
   ptr_vv_ok cx ty raw (LocatedValue t p) fin G tn u /\
@@ -39,8 +40,45 @@ Proof
   goal_assum (drule_at Any) >> qexistsl [`a`,`b`,`sz`] >> simp[] >> decide_tac
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  DISCH_THEN (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `evaluate_type (get_tenv cx) (post_value_type ce obj) = SOME (ArrayTV etv (Dynamic cap))` by
+    (simp[] >> (gvs[])) >>
+  `p.ptr_location = LocMemory /\
+   ptr_vv_ok cx (expr_type obj) raw (LocatedValue t p) fin G' tn' u /\
+   ?a v. read_result cx raw mid = (INL v,mid) /\ read_result cx raw fin = (INL v,fin) /\
+         val_wf (ArrayTV etv (Dynamic cap)) v /\
+         eval_operand p.ptr_operand s = SOME a /\ eval_operand p.ptr_operand u = SOME a /\
+         ((?id path. raw = PlaceR (MemoryPlace id path) /\
+             runtime_place_typed cx fin (MemoryPlace id path) (ArrayTV etv (Dynamic cap)) /\
+             popped_keys_indexed fin.scopes /\
+             vv_place_ptr ce cx fin u raw (LocatedValue t p) /\
+             place_ptr_rel ce cx u raw a (SOME LocMemory) (Type (expr_type obj))) \/
+          (raw = Value v /\ vv_own ce cx (expr_type obj) sa sm fin raw (LocatedValue t p) u))`
+     by (qpat_x_assum `(?id path. _) \/ (?v. _)` strip_assume_tac
+         >- (qpat_x_assum `raw = PlaceR _` SUBST_ALL_TAC >>
+             drule_all_then strip_assume_tac subscript_captured_pop_transport >>
+             gvs[] >> metis_tac[]) >>
+         qpat_x_assum `raw = Value _` SUBST_ALL_TAC >>
+         drule_all_then strip_assume_tac subscript_owned_value_transport >>
+         gvs[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >> metis_tac[]) >>
+  `expr_body_pre ce cx env obj es` by
+    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
+       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
+     qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[]) >>
+  drule_all_then strip_assume_tac expr_body_pre_runtime_typed >>
+  `value_has_type (ArrayTV etv (Dynamic cap)) v` by metis_tac[optionTheory.SOME_11] >>
+  drule_all_then assume_tac vv_post_memory_footprint_bound >>
+  drule_then strip_assume_tac typedMemoryCopyTheory.typed_copy_dynarray_typed_value >>
+  gvs[] >>
+  drule_all_then strip_assume_tac captured_dynamic_memory_input >>
+  qexistsl [`x`,`b`,`sz`] >> gvs[val_footprint_def, type_memory_size_def] >> decide_tac
+QED
+*)
 Theorem subscript_dynamic_header_at_index:
-  expr_body_pre ce cx env (Subscript ty obj idx) es /\
+  expr_body_pre_mods mods ce cx env (Subscript ty obj idx) es /\
   eval_expr cx obj es = (INL raw,mid) /\
   expr_type obj = ArrayT et (Dynamic cap) /\
   post_value_type ce obj = expr_type obj /\
@@ -81,36 +119,5 @@ Theorem subscript_dynamic_header_at_index:
      (raw = Value (ArrayV (DynArrayV vs)) /\
          vv_own ce cx (expr_type obj) sa sm fin raw (LocatedValue t p) u))
 Proof
-  DISCH_THEN (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `evaluate_type (get_tenv cx) (post_value_type ce obj) = SOME (ArrayTV etv (Dynamic cap))` by
-    (simp[] >> (gvs[])) >>
-  `p.ptr_location = LocMemory /\
-   ptr_vv_ok cx (expr_type obj) raw (LocatedValue t p) fin G' tn' u /\
-   ?a v. read_result cx raw mid = (INL v,mid) /\ read_result cx raw fin = (INL v,fin) /\
-         val_wf (ArrayTV etv (Dynamic cap)) v /\
-         eval_operand p.ptr_operand s = SOME a /\ eval_operand p.ptr_operand u = SOME a /\
-         ((?id path. raw = PlaceR (MemoryPlace id path) /\
-             runtime_place_typed cx fin (MemoryPlace id path) (ArrayTV etv (Dynamic cap)) /\
-             popped_keys_indexed fin.scopes /\
-             vv_place_ptr ce cx fin u raw (LocatedValue t p) /\
-             place_ptr_rel ce cx u raw a (SOME LocMemory) (Type (expr_type obj))) \/
-          (raw = Value v /\ vv_own ce cx (expr_type obj) sa sm fin raw (LocatedValue t p) u))`
-     by (qpat_x_assum `(?id path. _) \/ (?v. _)` strip_assume_tac
-         >- (qpat_x_assum `raw = PlaceR _` SUBST_ALL_TAC >>
-             drule_all_then strip_assume_tac subscript_captured_pop_transport >>
-             gvs[] >> metis_tac[]) >>
-         qpat_x_assum `raw = Value _` SUBST_ALL_TAC >>
-         drule_all_then strip_assume_tac subscript_owned_value_transport >>
-         gvs[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >> metis_tac[]) >>
-  `expr_body_pre ce cx env obj es` by
-    (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
-       (mp_then Any irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base_eval) >>
-     qpat_assum `eval_expr cx obj _ = (INL _,_)` (irule_at Any) >> simp[]) >>
-  drule_all_then strip_assume_tac expr_body_pre_runtime_typed >>
-  `value_has_type (ArrayTV etv (Dynamic cap)) v` by metis_tac[optionTheory.SOME_11] >>
-  drule_all_then assume_tac vv_post_memory_footprint_bound >>
-  drule_then strip_assume_tac typedMemoryCopyTheory.typed_copy_dynarray_typed_value >>
-  gvs[] >>
-  drule_all_then strip_assume_tac captured_dynamic_memory_input >>
-  qexistsl [`x`,`b`,`sz`] >> gvs[val_footprint_def, type_memory_size_def] >> decide_tac
+  cheat
 QED

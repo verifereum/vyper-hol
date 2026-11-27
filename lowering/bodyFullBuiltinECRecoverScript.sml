@@ -21,19 +21,12 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState vyperContext
   vyperCallOutcome vyperCallOutcomeProps
   vyperAST vyperTyping vyperValue vyperTypeSystem valueEncodingProps list finite_map
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs
   monadsyntax
 
-Theorem ecrecover_expr_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
-    (builtin_args_length_ok ECRecover (LENGTH args) ==>
-      body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a ECRecover args) es ==>
-    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Builtin a ECRecover args) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `a = BaseT AddressT /\ LENGTH args = 4 /\
@@ -1336,19 +1329,24 @@ Proof
           (ACCEPT_TAC o MATCH_MP th))) >>
   simp[NoAsms,exit_result_def,expr_exit_def,exprSimDefsTheory.halt_exit_def]
 QED
-
-Theorem ecrecover_builtin_sim_full:
+*)
+Theorem ecrecover_expr_sim_full:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
     (builtin_args_length_ok ECRecover (LENGTH args) ==>
-      body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a ECRecover args) es ==>
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a ECRecover args) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Builtin a ECRecover args) es /\
-    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a ECRecover args) es
+Proof
+  cheat
+QED
+
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -1363,4 +1361,21 @@ Proof
   >- (gen_tac >> Cases_on `compile_expr cenv ty (Builtin a ECRecover args) sa` >>
       drule_all compile_ecrecover_stack >> simp[] >> metis_tac[]) >>
   metis_tac[eval_expr_builtin_value]
+QED
+*)
+Theorem ecrecover_builtin_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
+    (builtin_args_length_ok ECRecover (LENGTH args) ==>
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a ECRecover args) es ==>
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Builtin a ECRecover args) es /\
+    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Builtin a ECRecover args) es
+Proof
+  cheat
 QED

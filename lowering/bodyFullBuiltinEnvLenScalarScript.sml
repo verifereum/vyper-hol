@@ -96,8 +96,8 @@ Theorem len_full_suffix_scalar:
   !DF lo d explicit ctx func PG cenv cx env e es st0 sa sm sb s0
    G0 tn0 ee tv vv t G tn op pvt tvt.
     ~(cenv.ce_is_ctor /\ (case vv_location vv of NONE => LocMemory | SOME l => l) = LocCode) /\
-    expr_body_pre cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\
-    expr_body_pre cenv cx env e es /\ is_sized_type (expr_type e) /\
+    expr_body_pre_mods mods cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\
+    expr_body_pre_mods mods cenv cx env e es /\ is_sized_type (expr_type e) /\
     compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
       (case vv_location vv of NONE => LocMemory | SOME l => l) sm = (op,sb) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\

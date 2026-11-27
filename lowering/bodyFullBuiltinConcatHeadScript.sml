@@ -12,6 +12,7 @@ Ancestors exprLowering[qualified,ignore_grammar] vyperAST[qualified,ignore_gramm
   vyperStorageFootprint exprOperandVar loweringPosts exprSimMemDefs
   venomMemDefs valueEncodingDefs vyperTyping venomState vyperValue exprSimProps
   words list finite_map pred_set
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs
   monadsyntax
 
@@ -192,10 +193,11 @@ Theorem concat_head_arm_full:
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     EVERY (\e. is_bytestring_type (expr_type e) \/
                  ?m. expr_type e = BaseT (BytesT (Fixed m))) (e::args) /\
-    expr_sim_inv cenv cx env es /\ expr_sim_inv cenv cx env ee /\
-    (!x st. MEM x (e::args) /\ expr_sim_inv cenv cx env st ==>
-       expr_body_pre cenv cx env x st) /\
-    body_exprs_full_ok cx (e::args) /\ body_inv tops ctx cenv cx /\
+    expr_sim_inv_mods mods cenv cx env es /\ expr_sim_inv_mods mods cenv cx env ee /\
+    (!x st. MEM x (e::args) /\ expr_sim_inv_mods mods cenv cx env st ==>
+       expr_body_pre_mods mods cenv cx env x st) /\
+    body_exprs_full_ok_mods mods exps cx (e::args) /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     storage_trace_domain cx st0 es.storage_trace /\

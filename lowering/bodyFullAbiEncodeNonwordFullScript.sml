@@ -3,13 +3,15 @@ Ancestors
   bodyFullAbiEncodeArgs bodyFullPreds bodySimFull
   exprSimHyps exprSimHypsDefs exprSimAbiEncodeRuntimeInputs aggregateEvaluatedLayout
   vyperState vyperAST list
+  bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 
 Theorem abi_encode_nonword_vv_full_from_packaging:
-  body_inv tops ctx ce cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid) ty [e]) es /\
-  body_expr_full_ok cx e /\ ~is_word_type (expr_type e)
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiEncode F mid) ty [e]) es /\
+  body_expr_full_ok_mods mods exps cx e /\ ~is_word_type (expr_type e)
   ==> expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
         ce cx cty (TypeBuiltin ann (AbiEncode F mid) ty [e]) es
 Proof

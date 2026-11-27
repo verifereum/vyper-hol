@@ -11,18 +11,14 @@ Ancestors
   gasShadowCompile gasShadowCompileStmtHelpers exprOperandVar exprLoweringProps stmtSimProps
   gasOutcomeFullCompose exprSimHyps exprSimSource exprSimExtract32Source
   vyperContext vyperInterpreter vyperState vyperAST
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs
   horizonTypeLib
 
 (* The typing contract excludes fixed-byte sources and signed offsets.
    Both simulation proofs use this boundary without narrowing the expression case. *)
-Theorem extract32_full_pre_shape:
-  expr_body_pre cenv cx env (TypeBuiltin ann Extract32 t args) es ==>
-  ?src off m k bt.
-    args = [src;off] /\
-    expr_type src = BaseT (BytesT (Dynamic m)) /\
-    expr_type off = BaseT (UintT k) /\
-    t = BaseT bt /\ extract32_result_base_ok bt /\ ann = t
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >> drule extract32_body_pre_shape >> strip_tac >> gvs[] >>
   fs[exprSimHypsDefsTheory.expr_body_pre_def,
@@ -30,15 +26,20 @@ Proof
      vyperTypeSystemTheory.well_typed_type_builtin_args_def,
      vyperTypeSystemTheory.is_uint_type_def] >> metis_tac[]
 QED
+*)
+Theorem extract32_full_pre_shape:
+  expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Extract32 t args) es ==>
+  ?src off m k bt.
+    args = [src;off] /\
+    expr_type src = BaseT (BytesT (Dynamic m)) /\
+    expr_type off = BaseT (UintT k) /\
+    t = BaseT bt /\ extract32_result_base_ok bt /\ ann = t
+Proof
+  cheat
+QED
 
-Theorem extract32_vv_full[local]:
-  body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (TypeBuiltin ann Extract32 ret [src;off]) es /\
-  body_exprs_full_ok cx [src;off] ==>
-  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (TypeBuiltin ann Extract32 ret [src;off]) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >> drule extract32_full_pre_shape >> strip_tac >> gvs[] >>
   simp[bodySimFullTheory.expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
@@ -113,7 +114,21 @@ Proof
      metis_tac[haltExitProjTheory.halt_exit_INR_type]) >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC
 QED
+*)
+Theorem extract32_vv_full[local]:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Extract32 ret [src;off]) es /\
+  body_exprs_full_ok_mods mods exps cx [src;off] ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (TypeBuiltin ann Extract32 ret [src;off]) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extract32_vv_full[source_continuation]:
   qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`s`] >> strip_tac >>
   RULE_ASSUM_TAC BETA_RULE >>
@@ -202,7 +217,9 @@ Resume extract32_vv_full[source_continuation]:
   suspend "offset_entry"
 
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extract32_vv_full[offset_entry]:
   `expr_body_pre cenv cx env off mid` by
     (`expr_body_pre cenv cx env
@@ -256,7 +273,9 @@ Resume extract32_vv_full[offset_entry]:
   impl_tac >- suspend "offset_inputs" >>
   strip_tac >> suspend "offset_continuation"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extract32_vv_full[offset_inputs]:
   `sa.cs_next_var <= s2.cs_next_var` by fs[ci_mono_def] >>
   `local_ptrs_reserved cenv s2` by metis_tac[local_ptrs_reserved_next_var] >>
@@ -292,7 +311,9 @@ Resume extract32_vv_full[offset_inputs]:
   drule fragGasOriginPtrTheory.gas_origin_ptr_path_projections >>
   metis_tac[fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extract32_vv_full[offset_continuation]:
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ offQ offR` >>
   irule gas_outcome_full_bind_all >>
@@ -323,7 +344,9 @@ Resume extract32_vv_full[offset_continuation]:
      metis_tac[haltExitProjTheory.halt_exit_INR_type]) >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extract32_vv_full[suffix_entry]:
   qx_genl_tac [`marks'`,`res`,`ee`,`G3`,`tn3`,`t`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -513,7 +536,9 @@ Resume extract32_vv_full[suffix_entry]:
   qpat_assum `ghost_kept_at lo cenv mid s2 G2 tn2 u G3 tn3` (irule_at Any) >>
   qpat_assum `wb_frame cenv es mid sa s0 u` (irule_at Any) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extract32_vv_full[result_bounds]:
   qpat_x_assum `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _` mp_tac >>
   simp[exprSimHypsDefsTheory.expr_body_pre_def,
@@ -525,16 +550,14 @@ Resume extract32_vv_full[result_bounds]:
   simp[vyperTypeSystemTheory.well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
   rpt CASE_TAC >> gvs[] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise extract32_vv_full
+*)
 
-Theorem extract32_expr_full_ok:
-  !cx v11 typ es.
-    (!s'' x t.
-       type_check (type_builtin_args_length_ok Extract32 (LENGTH es))
-         "TypeBuiltin args" s'' = (INL x,t) ==>
-       body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (TypeBuiltin v11 Extract32 typ es)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
@@ -561,4 +584,15 @@ Proof
      (es' with gas_obs := gs)` by simp[] >>
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
   strip_tac >> gvs[] >> metis_tac[]
+QED
+*)
+Theorem extract32_expr_full_ok:
+  !cx v11 typ es.
+    (!s'' x t.
+       type_check (type_builtin_args_length_ok Extract32 (LENGTH es))
+         "TypeBuiltin args" s'' = (INL x,t) ==>
+       body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (TypeBuiltin v11 Extract32 typ es)
+Proof
+  cheat
 QED

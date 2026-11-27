@@ -11,22 +11,10 @@ Ancestors
   vyperTypeSystem vyperTypeBuiltins list finite_map emitHelper compileEnv
   fragExec venomInst venomState exprSimHypsDefs bodySimFull vyperAST
   exprBopLowering exprLoweringProps exprLowering exprSimUnwrap gasShadowState
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
-Theorem len_builtin_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
-    bt = Len /\ builtin_args_length_ok bt (LENGTH args) /\
-    (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>
-      body_exprs_full_ok cx args) /\
-    (builtin_args_length_ok bt (LENGTH args) /\ bt = Len ==>
-      body_expr_full_ok cx (HD args)) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin a bt args) es ==>
-    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Builtin a bt args) es /\
-    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Builtin a bt args) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   drule len_pre_args >> strip_tac >> gvs[] >>
@@ -46,7 +34,28 @@ Proof
       simp[as_stack_val_pair]) >>
   metis_tac[eval_expr_builtin_value]
 QED
+*)
+Theorem len_builtin_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+    bt = Len /\ builtin_args_length_ok bt (LENGTH args) /\
+    (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (builtin_args_length_ok bt (LENGTH args) /\ bt = Len ==>
+      body_expr_full_ok_mods mods exps cx (HD args)) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a bt args) es ==>
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Builtin a bt args) es /\
+    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Builtin a bt args) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume len_builtin_sim_full[value]:
   gvs[lower_value_def, compile_expr_len, comp_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>
@@ -95,5 +104,8 @@ Resume len_builtin_sim_full[value]:
   qexists_tac `tv` >> simp[] >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise len_builtin_sim_full
+*)

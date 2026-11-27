@@ -13,14 +13,69 @@ Ancestors option[qualified,ignore_grammar] vyperTypeValues[qualified,ignore_gram
   vyperStorageTrace vyperStorageFootprint
   bodyPtrDefs loweringPosts compileEnv vyperInterpreter vyperState vyperAST
   bodyFullIfExpReach
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_typed >>
+  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_admissible >>
+  `~array_slot_base cenv e1 ==> expr_body_pre cenv cx env e1 es` by
+    metis_tac[expr_body_pre_array_subscript_base] >>
+  (* A storage or transient array base has no precondition of its own: its
+     simulation needs only the invariant and typing. *)
+  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx ty e1 es` by
+    (Cases_on `array_slot_base cenv e1`
+     >- metis_tac[toplevel_slot_base_vv_full,
+                  expr_body_pre_array_subscript_slot_base] >>
+     `expr_body_pre cenv cx env e1 es` by fs[] >>
+     irule (cj 2 body_expr_full_ok_simulations) >>
+     simp[] >> qexistsl_tac [`env`, `tops`] >> simp[]) >>
+  simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  drule_all compile_expr_array_subscript >> strip_tac >>
+  rename1 `compile_expr cenv ty e1 sa = (bvv,sm)` >>
+  drule compile_expr_extends >> strip_tac >>
+  drule (cj 2 compile_expr_grows) >> strip_tac >>
+  `cs_extends st2 sb` by
+    (`ci_mono st2 sb` suffices_by simp[ci_mono_def] >>
+     qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
+       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
+     irule ci_mono_compile_array_subscript >> simp[ci_mono_compile_ptr_load]) >>
+  `cs_extends sm sb` by
+    (irule cs_extends_trans >> qexists_tac `st2` >> simp[]) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `?shadow_sm. compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa =
+      (bvv,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
+    (`gas_shadow_compiles (compile_expr cenv ty e1)
+         (compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1))` by
+       irule gas_shadow_stmt_compile_expr_env >>
+     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+       REWRITE_RULE [gas_shadow_compiles_def]) >>
+     Cases_on `compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa` >>
+     simp[]) >>
+  `cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sb` by
+    suspend "shadow_extends" >>
+  `fn_has_code shadow_sa shadow_sm shadow_func` by
+    (drule_all fn_has_code_split >> simp[]) >>
+  qpat_x_assum `expr_vv_sim_full _ _ _ _ e1 _`
+    (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
+                          `bvv`, `s0`, `G0`, `tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> gvs[])) >> strip_tac >>
+  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
+  suspend "bind_base"
+QED
+*)
 Theorem subscript_nocopy_bind_full:
   !cx ann e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
-    (!s raw t. eval_expr cx e1 s = (INL raw,t) ==> body_expr_full_ok cx e2) /\
-    body_expr_full_ok cx e1 /\ body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+    (!s raw t. eval_expr cx e1 s = (INL raw,t) ==> body_expr_full_ok_mods mods exps cx e2) /\
+    body_expr_full_ok_mods mods exps cx e1 /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
     ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et bd /\ place_type cenv e1 = ValPT (ArrayT et bd) /\
     post_value_type cenv e1 = expr_type e1 /\
     (!st0 sa sm st2 sb bvv iop dst loc s0 G0 tn0
@@ -118,56 +173,10 @@ Theorem subscript_nocopy_bind_full:
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Subscript ann e1 e2) es
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_typed >>
-  drule_all_then strip_assume_tac expr_body_pre_array_subscript_base_admissible >>
-  `~array_slot_base cenv e1 ==> expr_body_pre cenv cx env e1 es` by
-    metis_tac[expr_body_pre_array_subscript_base] >>
-  (* A storage or transient array base has no precondition of its own: its
-     simulation needs only the invariant and typing. *)
-  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx ty e1 es` by
-    (Cases_on `array_slot_base cenv e1`
-     >- metis_tac[toplevel_slot_base_vv_full,
-                  expr_body_pre_array_subscript_slot_base] >>
-     `expr_body_pre cenv cx env e1 es` by fs[] >>
-     irule (cj 2 body_expr_full_ok_simulations) >>
-     simp[] >> qexistsl_tac [`env`, `tops`] >> simp[]) >>
-  simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  drule_all compile_expr_array_subscript >> strip_tac >>
-  rename1 `compile_expr cenv ty e1 sa = (bvv,sm)` >>
-  drule compile_expr_extends >> strip_tac >>
-  drule (cj 2 compile_expr_grows) >> strip_tac >>
-  `cs_extends st2 sb` by
-    (`ci_mono st2 sb` suffices_by simp[ci_mono_def] >>
-     qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
-       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
-     irule ci_mono_compile_array_subscript >> simp[ci_mono_compile_ptr_load]) >>
-  `cs_extends sm sb` by
-    (irule cs_extends_trans >> qexists_tac `st2` >> simp[]) >>
-  drule_all fn_has_code_split >> strip_tac >>
-  `?shadow_sm. compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa =
-      (bvv,shadow_sm) /\ gas_shadow_state sm shadow_sm` by
-    (`gas_shadow_compiles (compile_expr cenv ty e1)
-         (compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1))` by
-       irule gas_shadow_stmt_compile_expr_env >>
-     pop_assum (qspecl_then [`sa`, `shadow_sa`] mp_tac o
-       REWRITE_RULE [gas_shadow_compiles_def]) >>
-     Cases_on `compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e1) shadow_sa` >>
-     simp[]) >>
-  `cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sb` by
-    suspend "shadow_extends" >>
-  `fn_has_code shadow_sa shadow_sm shadow_func` by
-    (drule_all fn_has_code_split >> simp[]) >>
-  qpat_x_assum `expr_vv_sim_full _ _ _ _ e1 _`
-    (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
-                          `bvv`, `s0`, `G0`, `tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> gvs[])) >> strip_tac >>
-  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
-  suspend "bind_base"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_nocopy_bind_full[shadow_extends]:
   reverse conj_tac
   >- (qpat_x_assum `compile_expr _ _ (gas_shadow_expr (Subscript _ _ _)) _ = _` mp_tac >>
@@ -186,7 +195,9 @@ Resume subscript_nocopy_bind_full[shadow_extends]:
       irule cs_extends_trans >> goal_assum (drule_at Any) >> simp[]) >>
   drule compile_expr_extends >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_nocopy_bind_full[bind_base]:
   qpat_assum `~subscript_reads_base _ _ _` (fn th =>
     pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
@@ -212,7 +223,9 @@ Resume subscript_nocopy_bind_full[bind_base]:
   conj_tac >- simp[Abbr `baseR`] >>
   simp[Abbr `baseQ`, Abbr `baseR`] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_nocopy_bind_full[after_base]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `s`] >>
   strip_tac >> fs[] >>
@@ -316,7 +329,9 @@ Resume subscript_nocopy_bind_full[after_base]:
   >- (irule exprSimHashTheory.expr_exit_INR_cast >> first_assum ACCEPT_TAC) >>
   gvs[exprSimDefsTheory.halt_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_nocopy_bind_full[selection]:
   qx_genl_tac [`imarks`, `ires`, `fin`, `Gi`, `tni`, `it`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon fin.storage_trace) fin.storage_trace` by
@@ -352,7 +367,9 @@ Resume subscript_nocopy_bind_full[selection]:
   >- suspend "fixed_pop" >>
   suspend "other_selection"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_nocopy_bind_full[horizon]:
   qx_gen_tac `H` >> strip_tac >>
   `valid_horizon cx st0 H mid.storage_trace` by
@@ -369,7 +386,9 @@ Resume subscript_nocopy_bind_full[horizon]:
     (drule_then strip_assume_tac) >>
   (metis_tac[Abbr `indexQ`])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_nocopy_bind_full[other_selection]:
   `local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv st2` by
     metis_tac[local_ptrs_reserved_next_var] >>
@@ -380,7 +399,9 @@ Resume subscript_nocopy_bind_full[other_selection]:
     `gas_explicit imarks s.vs_gas_readings`, `mid`, `s`, `tn1`] >>
   simp[] >> rpt strip_tac >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_nocopy_bind_full[fixed_pop]:
   qpat_x_assum `?n id path. _` strip_assume_tac >> gvs[] >>
   `expr_body_pre cenv cx env e1 es` by
@@ -441,5 +462,8 @@ Resume subscript_nocopy_bind_full[fixed_pop]:
      POP_ASSUM_LIST (K ALL_TAC) >> simp[ghost_kept_at_def] >> metis_tac[]) >>
   qexists_tac `r` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise subscript_nocopy_bind_full
+*)

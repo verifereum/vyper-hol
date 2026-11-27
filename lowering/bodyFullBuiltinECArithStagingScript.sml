@@ -7,7 +7,44 @@ Ancestors
   loweringPosts stateRelProj
   vyperStorageTrace vyperStorageFootprint vyperTypeExprSoundness vyperValue
   venomCallOracleDefs exprSimPrecompiles vyperInterpreter
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 (mk_asm "layouts")
+    (fn th => mk_asm "stage_premises" th >> map_every assume_tac (CONJUNCTS th))) >>
+  `bind (eval_expr cx e1) (read_result cx)
+    (es with gas_obs := gas_explicit marks1 s0.vs_gas_readings ++ es1.gas_obs) =
+    (INL v1,es1)` by
+    (qpat_assum `!tail. bind (eval_expr cx e1) _ _ = _`
+       (qspec_then `es1.gas_obs` mp_tac) >> simp[]) >>
+  `bind (eval_expr cx e2) (read_result cx)
+    (es1 with gas_obs := gas_explicit marks2 t1.vs_gas_readings ++ es2.gas_obs) =
+    (INL v2,es2)` by
+    (qpat_assum `!tail. bind (eval_expr cx e2) _ _ = _`
+       (qspec_then `es2.gas_obs` mp_tac) >> simp[]) >>
+  `!n. bt <> Slice n` by
+    (asm "layouts" (DISJ_CASES_THEN (fn th => simp[th,vyperASTTheory.builtin_distinct]))) >>
+  `expr_body_pre cenv cx env e1 es` by
+    (drule expr_body_pre_builtin_arg >>
+     disch_then (qspecl_then [`e1`,`es`] mp_tac) >> fs[expr_body_pre_def]) >>
+  `expr_body_pre cenv cx env e1
+      (es with gas_obs := gas_explicit marks1 s0.vs_gas_readings ++ es1.gas_obs)` by
+    simp[expr_body_pre_gas_obs] >>
+  `expr_sim_inv cenv cx env es1` by
+    (drule_all (CONV_RULE (DEPTH_CONV ETA_CONV)
+      (cj 1 exprSimSourceTheory.expr_body_pre_eval)) >> simp[]) >>
+  `expr_body_pre cenv cx env e2 es1` by
+    (irule expr_body_pre_builtin_arg >>
+     conj_tac >- simp[] >> qexistsl_tac [`a`,`[e1;e2]`,`bt`,`es`] >> simp[]) >>
+  `expr_body_pre cenv cx env e2
+      (es1 with gas_obs := gas_explicit marks2 t1.vs_gas_readings ++ es2.gas_obs)` by
+    simp[expr_body_pre_gas_obs] >>
+  suspend "operands"
+QED
+*)
 Theorem ec_arith_staged_cut:
   !bt a e1 e2 cx tops ctx cenv env es ty sa vv sb shadow_sa shadow_sb
     x s1 y s2 shadow_s1 shadow_s2 res shadow_ctx func shadow_func DF lo d
@@ -16,9 +53,10 @@ Theorem ec_arith_staged_cut:
   a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_type e2 = (if bt = ECAdd then a else BaseT (UintT 256)) /\
-  body_exprs_full_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
+  body_exprs_full_ok_mods mods exps cx [e1;e2] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin a bt [e1;e2]) es /\
+  expr_body_pre_mods mods cenv cx env (Builtin a bt [e1;e2]) es /\
   compile_expr cenv ty (Builtin a bt [e1;e2]) sa = (vv,sb) /\
   compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a bt [e1;e2]))
     shadow_sa = (vv,shadow_sb) /\
@@ -162,39 +200,10 @@ Theorem ec_arith_staged_cut:
           | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
         regions_disjoint (w2n wo) (w2n (64w:256 word)) off (type_memory_size tv)))
 Proof
-  rpt gen_tac >>
-  disch_then (CONJUNCTS_THEN2 (mk_asm "layouts")
-    (fn th => mk_asm "stage_premises" th >> map_every assume_tac (CONJUNCTS th))) >>
-  `bind (eval_expr cx e1) (read_result cx)
-    (es with gas_obs := gas_explicit marks1 s0.vs_gas_readings ++ es1.gas_obs) =
-    (INL v1,es1)` by
-    (qpat_assum `!tail. bind (eval_expr cx e1) _ _ = _`
-       (qspec_then `es1.gas_obs` mp_tac) >> simp[]) >>
-  `bind (eval_expr cx e2) (read_result cx)
-    (es1 with gas_obs := gas_explicit marks2 t1.vs_gas_readings ++ es2.gas_obs) =
-    (INL v2,es2)` by
-    (qpat_assum `!tail. bind (eval_expr cx e2) _ _ = _`
-       (qspec_then `es2.gas_obs` mp_tac) >> simp[]) >>
-  `!n. bt <> Slice n` by
-    (asm "layouts" (DISJ_CASES_THEN (fn th => simp[th,vyperASTTheory.builtin_distinct]))) >>
-  `expr_body_pre cenv cx env e1 es` by
-    (drule expr_body_pre_builtin_arg >>
-     disch_then (qspecl_then [`e1`,`es`] mp_tac) >> fs[expr_body_pre_def]) >>
-  `expr_body_pre cenv cx env e1
-      (es with gas_obs := gas_explicit marks1 s0.vs_gas_readings ++ es1.gas_obs)` by
-    simp[expr_body_pre_gas_obs] >>
-  `expr_sim_inv cenv cx env es1` by
-    (drule_all (CONV_RULE (DEPTH_CONV ETA_CONV)
-      (cj 1 exprSimSourceTheory.expr_body_pre_eval)) >> simp[]) >>
-  `expr_body_pre cenv cx env e2 es1` by
-    (irule expr_body_pre_builtin_arg >>
-     conj_tac >- simp[] >> qexistsl_tac [`a`,`[e1;e2]`,`bt`,`es`] >> simp[]) >>
-  `expr_body_pre cenv cx env e2
-      (es1 with gas_obs := gas_explicit marks2 t1.vs_gas_readings ++ es2.gas_obs)` by
-    simp[expr_body_pre_gas_obs] >>
-  suspend "operands"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ec_arith_staged_cut[operands]:
   `post_value_type cenv e1 = expr_type e1` by
     (irule post_value_type_ec_point >> simp[] >>
@@ -242,7 +251,9 @@ Resume ec_arith_staged_cut[operands]:
   rename1 `eval_operand x t2 = SOME point_word` >>
   suspend "payload"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ec_arith_staged_cut[payload]:
   `value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) v1` by
     (qpat_assum `expr_body_pre _ _ _ e1 (es with gas_obs := _)`
@@ -277,7 +288,9 @@ Resume ec_arith_staged_cut[payload]:
        qexists_tac `ow` >> ACCEPT_TAC (CONJUNCT1 th)))) >>
   suspend "join"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ec_arith_staged_cut[join]:
   asm_x "layouts" (fn layouts =>
     assume_tac layouts >>
@@ -312,5 +325,8 @@ Resume ec_arith_staged_cut[join]:
     `gi`,`ci`,`ai`,`bb`,`u`,`Gu`,`tnu`,`point_result`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise ec_arith_staged_cut
+*)

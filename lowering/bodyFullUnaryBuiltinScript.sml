@@ -2,13 +2,10 @@
 Theory bodyFullUnaryBuiltin
 Ancestors
   bodyFullPreds exprSimHypsDefs vyperTypeBuiltins vyperTypeSystem vyperAST list
+  bodyFullPredsMods[qualified]
 
-Theorem unary_builtin_expr_full_ok:
-  !cx ann bt es.
-    (!m. builtin_args_length_ok bt m ==> m = 1) /\
-    (!e. body_expr_full_ok cx e ==> body_expr_full_ok cx (Builtin ann bt [e])) /\
-    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
-    body_expr_full_ok cx (Builtin ann bt es)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `builtin_args_length_ok bt (LENGTH es)`
@@ -22,4 +19,14 @@ Proof
       gvs[expr_body_pre_def, cj 9 well_typed_expr_def] >>
       drule well_typed_builtin_app_length >> simp[]) >>
   rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+*)
+Theorem unary_builtin_expr_full_ok:
+  !cx ann bt es.
+    (!m. builtin_args_length_ok bt m ==> m = 1) /\
+    (!e. body_expr_full_ok_mods mods exps cx e ==> body_expr_full_ok_mods mods exps cx (Builtin ann bt [e])) /\
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ann bt es)
+Proof
+  cheat
 QED

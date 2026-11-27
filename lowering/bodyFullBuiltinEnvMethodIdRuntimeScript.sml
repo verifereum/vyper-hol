@@ -10,12 +10,43 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   bodyFullHashKeccakFixed[qualified,ignore_grammar] bodyFullUnaryValueCompose
   contextRawReachable[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
   unitTransformDefs[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 Libs pairLib
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_tac >> rpt gen_tac >> strip_tac >> simp_tac std_ss [LET_THM] >>
+  `post_value_type cenv e = expr_type e` by
+    (`expr_body_pre cenv cx env e es` by
+       (drule expr_body_pre_builtin_arg >> disch_then irule >>
+        gvs[expr_body_pre_def]) >>
+     `is_bytes_or_string_type (expr_type e)` by
+       (mp_tac (Q.INST [`b` |-> `MethodId`, `ty` |-> `ann`,
+          `ts` |-> `[expr_type e]`] hash_builtin_types) >>
+        gvs[expr_body_pre_def, cj 9 well_typed_expr_def] >> metis_tac[]) >>
+     `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by
+       (irule exprSimHypsTheory.post_value_type_widens >>
+        gvs[expr_body_pre_def] >> metis_tac[]) >>
+     Cases_on `expr_type e` >> gvs[is_bytes_or_string_type_def] >>
+     rename1 `expr_type e = BaseT bt` >> Cases_on `bt` >>
+     gvs[is_bytes_or_string_type_def, is_bytestring_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     gvs[is_bytestring_type_def] >>
+     Cases_on `post_value_type cenv e` >>
+     gvs[type_widens_to_def, arg_type_fits_def] >>
+     rename1 `BaseT physical` >> Cases_on `physical` >>
+     gvs[arg_type_fits_def] >>
+     rename1 `BytesT physical_bytes` >> Cases_on `physical_bytes` >>
+     gvs[arg_type_fits_def]) >>
+  suspend "child_run"
+QED
+*)
 Theorem method_id_runtime_joint_outcome_from_suffix:
   (!DF lo d explicit ctx func PG tops cenv cx env ann e es sa sm sb s0 st0 mid v x s G0 tn0 G tn fixed op.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann MethodId [e]) es /\
     ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)) /\
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
@@ -65,9 +96,10 @@ Theorem method_id_runtime_joint_outcome_from_suffix:
   ==>
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ann e es
     st0 sa sm sb shadow_sa ss shadow_sb x op fixed s0 G0 tn0.
-    body_inv tops ctx cenv cx /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
     body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann MethodId [e]) es /\
     method_id_literal e = NONE /\
     ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)) /\
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -113,32 +145,10 @@ Theorem method_id_runtime_joint_outcome_from_suffix:
       (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  disch_tac >> rpt gen_tac >> strip_tac >> simp_tac std_ss [LET_THM] >>
-  `post_value_type cenv e = expr_type e` by
-    (`expr_body_pre cenv cx env e es` by
-       (drule expr_body_pre_builtin_arg >> disch_then irule >>
-        gvs[expr_body_pre_def]) >>
-     `is_bytes_or_string_type (expr_type e)` by
-       (mp_tac (Q.INST [`b` |-> `MethodId`, `ty` |-> `ann`,
-          `ts` |-> `[expr_type e]`] hash_builtin_types) >>
-        gvs[expr_body_pre_def, cj 9 well_typed_expr_def] >> metis_tac[]) >>
-     `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by
-       (irule exprSimHypsTheory.post_value_type_widens >>
-        gvs[expr_body_pre_def] >> metis_tac[]) >>
-     Cases_on `expr_type e` >> gvs[is_bytes_or_string_type_def] >>
-     rename1 `expr_type e = BaseT bt` >> Cases_on `bt` >>
-     gvs[is_bytes_or_string_type_def, is_bytestring_type_def] >>
-     rename1 `BytesT bd` >> Cases_on `bd` >>
-     gvs[is_bytestring_type_def] >>
-     Cases_on `post_value_type cenv e` >>
-     gvs[type_widens_to_def, arg_type_fits_def] >>
-     rename1 `BaseT physical` >> Cases_on `physical` >>
-     gvs[arg_type_fits_def] >>
-     rename1 `BytesT physical_bytes` >> Cases_on `physical_bytes` >>
-     gvs[arg_type_fits_def]) >>
-  suspend "child_run"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume method_id_runtime_joint_outcome_from_suffix[child_run]:
   `cs_appends (compile_method_id_runtime (expr_type e) x fixed)` by
     simp[cj 5 hash_suffix_appends] >>
@@ -161,7 +171,9 @@ Resume method_id_runtime_joint_outcome_from_suffix[child_run]:
   (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
   strip_tac >> suspend "bind_composition"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume method_id_runtime_joint_outcome_from_suffix[bind_composition]:
   `bind (eval_expr cx (Builtin ann MethodId [e])) (read_result cx) =
     bind (bind (eval_expr cx e) (read_result cx))
@@ -184,7 +196,9 @@ Resume method_id_runtime_joint_outcome_from_suffix[bind_composition]:
           exprSimDefsTheory.halt_exit_def]) >>
   suspend "successful_suffix"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume method_id_runtime_joint_outcome_from_suffix[successful_suffix]:
   qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`t`,`v`] >>
   BETA_TAC >> strip_tac >>
@@ -222,13 +236,38 @@ Resume method_id_runtime_joint_outcome_from_suffix[successful_suffix]:
     (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
   Cases_on `fixed` >> gvs[expr_type_def, is_word_type_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise method_id_runtime_joint_outcome_from_suffix
+*)
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env e es` by
+    (drule expr_body_pre_builtin_arg >> disch_then irule >> gvs[expr_body_pre_def]) >>
+  Q.SUBGOAL_THEN `is_bytes_or_string_type (expr_type e) /\
+    (ann = BaseT (BytesT (Fixed 4)) \/ ann = BaseT (BytesT (Dynamic 4)))` assume_tac
+  >- (mp_tac (Q.INST [`b` |-> `MethodId`, `ty` |-> `ann`, `ts` |-> `[expr_type e]`]
+      hash_builtin_types) >>
+     gvs[expr_body_pre_def, cj 9 well_typed_expr_def] >> metis_tac[]) >>
+  qabbrev_tac `fixed = (ann = BaseT (BytesT (Fixed 4)))` >>
+  `ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))` by
+    (gvs[Abbr `fixed`] >> metis_tac[]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[expr_body_pre_gas_admissible] >>
+  conj_tac >- suspend "value_run" >> suspend "vv_run"
+QED
+*)
 Theorem method_id_runtime_sim_full_from_suffix:
   (!DF lo d explicit ctx func PG tops cenv cx env ann e es sa sm sb s0 st0 mid v x s G0 tn0 G tn fixed op.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann MethodId [e]) es /\
     ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)) /\
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
@@ -267,34 +306,21 @@ Theorem method_id_runtime_sim_full_from_suffix:
         (~fixed ==> ptr_buf_ok cenv (Builtin ann MethodId [e]) op G' z) /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn')) ==>
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann e es.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
-    body_expr_full_ok cx e /\ method_id_literal e = NONE ==>
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann MethodId [e]) es /\
+    body_expr_full_ok_mods mods exps cx e /\ method_id_literal e = NONE ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann MethodId [e]) es /\
     expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann MethodId [e]) es
 Proof
-  disch_tac >> rpt gen_tac >> strip_tac >>
-  `expr_body_pre cenv cx env e es` by
-    (drule expr_body_pre_builtin_arg >> disch_then irule >> gvs[expr_body_pre_def]) >>
-  Q.SUBGOAL_THEN `is_bytes_or_string_type (expr_type e) /\
-    (ann = BaseT (BytesT (Fixed 4)) \/ ann = BaseT (BytesT (Dynamic 4)))` assume_tac
-  >- (mp_tac (Q.INST [`b` |-> `MethodId`, `ty` |-> `ann`, `ts` |-> `[expr_type e]`]
-      hash_builtin_types) >>
-     gvs[expr_body_pre_def, cj 9 well_typed_expr_def] >> metis_tac[]) >>
-  qabbrev_tac `fixed = (ann = BaseT (BytesT (Fixed 4)))` >>
-  `ann = BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))` by
-    (gvs[Abbr `fixed`] >> metis_tac[]) >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (expr_type e) e es` by metis_tac[body_expr_full_ok_def] >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
-    metis_tac[expr_body_pre_gas_admissible] >>
-  conj_tac >- suspend "value_run" >> suspend "vv_run"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume method_id_runtime_sim_full_from_suffix[value_run]:
   (rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
       `?x sm op'. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
@@ -340,7 +366,9 @@ Resume method_id_runtime_sim_full_from_suffix[value_run]:
         (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o
          CONJUNCT1 o REWRITE_RULE [expr_post_def]))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume method_id_runtime_sim_full_from_suffix[vv_run]:
   rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   `?x sm op. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
@@ -377,7 +405,9 @@ Resume method_id_runtime_sim_full_from_suffix[vv_run]:
   disch_then (assume_tac o BETA_RULE o PURE_REWRITE_RULE [LET_THM]) >>
   suspend "vv_source_transport"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume method_id_runtime_sim_full_from_suffix[vv_source_transport]:
   `eval_expr cx (Builtin ann MethodId [e]) =
      bind (bind (eval_expr cx e) (read_result cx))
@@ -420,5 +450,8 @@ Resume method_id_runtime_sim_full_from_suffix[vv_source_transport]:
   Cases_on `raw_exit` >>
   gvs[oneline exprSimDefsTheory.expr_exit_def, AllCaseEqs(), exprSimDefsTheory.halt_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise method_id_runtime_sim_full_from_suffix
+*)

@@ -10,6 +10,7 @@ Ancestors bodyInvSplit bodyInvCodeProps bodyInvMetadataProps bodyInvExecutionPro
   compileEnv exprLoweringProps exprOperandVar finite_map list words arithmetic
   vyperTypeEnv[qualified,ignore_grammar] vyperPlaceTyping[qualified,ignore_grammar]
   stmtLoweringMono[qualified,ignore_grammar]
+  exprSimHypsDefs[qualified]
 
 (* When a dead byte depends on a dynamic header, that header ends before
    the byte. No agreement at or beyond the byte under test is needed. *)
@@ -423,7 +424,8 @@ Proof
 QED
 *)
 Theorem for_nonslot_array_element_prepare_full:
-  body_inv tops ctx c cx /\ expr_sim_inv c cx env es /\
+  (contract_inv mods exps ctx c cx /\
+     module_body_inv mods c.ce_module tops c cx) /\ expr_sim_inv_mods mods c cx env es /\
   supported_stmt tops bindings (For id fty (Array e) bound loop_body) /\
   type_stmt env ret_ty (For id fty (Array e) bound loop_body) = SOME env' /\
   stmt_exprs_ok c (For id fty (Array e) bound loop_body) /\

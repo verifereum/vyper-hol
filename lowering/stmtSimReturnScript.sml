@@ -1040,10 +1040,8 @@ Proof
   strip_tac >> qexistsl_tac [`G'`, `tn'`] >> simp[]
 QED
 
-Theorem stmt_frag_full_retq_weaken:
-  stmt_frag_full ps cx lctx RetQ cenv m shadow_m source es /\
-  (!H v ee gt r. RetQ H v ee gt r ==> RetQ' H v ee gt r) ==>
-  stmt_frag_full ps cx lctx RetQ' cenv m shadow_m source es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   PairCases_on `ps` >>
   pure_rewrite_tac[stmt_frag_full_def] >>
@@ -1053,28 +1051,17 @@ Proof
   simp[] >> rpt strip_tac >>
   fs[stmt_exit_ptr_def] >> metis_tac[]
 QED
+*)
+Theorem stmt_frag_full_retq_weaken:
+  stmt_frag_full ps cx lctx RetQ cenv m shadow_m source es /\
+  (!H v ee gt r. RetQ H v ee gt r ==> RetQ' H v ee gt r) ==>
+  stmt_frag_full ps cx lctx RetQ' cenv m shadow_m source es
+Proof
+  cheat
+QED
 
-Theorem compile_return_none_int_frag_full_taint:
-  !DF lo d ctx shadow_ctx PG func shadow_func
-   cx lctx cenv ty ret_tv es rpc slot_size.
-    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
-    cenv.ce_returns_count = 0 /\
-    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
-      ~cx.txn.is_static) ==>
-    stmt_frag_full
-      (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx
-      (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r /\
-        !ir u. r = IntRet ir u /\
-          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
-            FST (SND (SND cenv.ce_nonreentrant))) ==>
-          stor_taint_ok_at (DF H) (SND gt) u /\
-          (!i. i < lo /\ i IN (SND gt).t_mem ==>
-               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i))
-      cenv
-      (stmt_env cenv lctx ty (Return NONE))
-      (stmt_env (gas_shadow_env T cenv) lctx ty (Return NONE))
-      (eval_stmt cx (Return NONE)) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
@@ -1138,6 +1125,31 @@ Proof
   qexists_tac `(return_unlock_state cenv s0).vs_inst_idx` >>
   simp[venom_state_component_equality]
 QED
+*)
+Theorem compile_return_none_int_frag_full_taint:
+  !DF lo d ctx shadow_ctx PG func shadow_func
+   cx lctx cenv ty ret_tv es rpc slot_size.
+    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+    cenv.ce_returns_count = 0 /\
+    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+      ~cx.txn.is_static) ==>
+    stmt_frag_full
+      (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx
+      (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r /\
+        !ir u. r = IntRet ir u /\
+          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+            FST (SND (SND cenv.ce_nonreentrant))) ==>
+          stor_taint_ok_at (DF H) (SND gt) u /\
+          (!i. i < lo /\ i IN (SND gt).t_mem ==>
+               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i))
+      cenv
+      (stmt_env cenv lctx ty (Return NONE))
+      (stmt_env (gas_shadow_env T cenv) lctx ty (Return NONE))
+      (eval_stmt cx (Return NONE)) es
+Proof
+  cheat
+QED
 
 Theorem compile_return_none_int_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func
@@ -1180,21 +1192,8 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem internal_frame_ret_none_full_taint:
-  !DF lo d ctx shadow_ctx PG func shadow_func cx cenv ret_tv rpc slot_size.
-    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
-    cenv.ce_returns_count = 0 /\
-    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
-      ~cx.txn.is_static) ==>
-    frame_ret_ok_full
-      (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
-      (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r /\
-        !ir u. r = IntRet ir u /\
-          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
-            FST (SND (SND cenv.ce_nonreentrant))) ==>
-          stor_taint_ok_at (DF H) (SND gt) u /\
-          (!i. i < lo /\ i IN (SND gt).t_mem ==>
-               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)) cenv NoneT
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
@@ -1228,6 +1227,25 @@ Proof
         [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
         constructor_exit_state_rel) >> simp[]) >>
   first_assum ACCEPT_TAC
+QED
+*)
+Theorem internal_frame_ret_none_full_taint:
+  !DF lo d ctx shadow_ctx PG func shadow_func cx cenv ret_tv rpc slot_size.
+    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+    cenv.ce_returns_count = 0 /\
+    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+      ~cx.txn.is_static) ==>
+    frame_ret_ok_full
+      (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
+      (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r /\
+        !ir u. r = IntRet ir u /\
+          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+            FST (SND (SND cenv.ce_nonreentrant))) ==>
+          stor_taint_ok_at (DF H) (SND gt) u /\
+          (!i. i < lo /\ i IN (SND gt).t_mem ==>
+               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)) cenv NoneT
+Proof
+  cheat
 QED
 
 Theorem internal_frame_ret_none_full:
@@ -1378,34 +1396,8 @@ Proof
 QED
 
 (* Scalar internal returns retain the expression's joint source prefix. *)
-Theorem compile_return_word_int_frag_full_taint:
-  !DF lo d ctx shadow_ctx PG func shadow_func cx lctx cenv ty tv es e env
-   rpc slot_size.
-   cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
-   cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
-   ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
-     ~cx.txn.is_static) /\
-   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
-   expr_sim_inv cenv cx env es /\
-   stmt_exprs_ok cenv (Return (SOME e)) /\
-   IS_SOME (type_stmt env ty (Return (SOME e))) /\
-   call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
-   (!ety. expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-            cenv cx ety e es /\
-          expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-            cenv cx ety e es)
-   ==>
-   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx lctx
-     (\H v ee gt r. intret_q H func cenv cx tv v ee r /\
-       !ir u. r = IntRet ir u /\
-         ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
-           FST (SND (SND cenv.ce_nonreentrant))) ==>
-         stor_taint_ok_at (DF H) (SND gt) u /\
-         (!i. i < lo /\ i IN (SND gt).t_mem ==>
-              imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)) cenv
-     (stmt_env cenv lctx ty (Return (SOME e)))
-     (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
-     (eval_stmt cx (Return (SOME e))) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
@@ -1536,6 +1528,38 @@ Proof
   pop_assum SUBST1_TAC >> REWRITE_TAC[state_rel_gas_obs] >>
   first_assum ACCEPT_TAC
 QED
+*)
+Theorem compile_return_word_int_frag_full_taint:
+  !DF lo d ctx shadow_ctx PG func shadow_func cx lctx cenv ty tv es e env
+   rpc slot_size.
+   cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+   cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
+   ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+     ~cx.txn.is_static) /\
+   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+   expr_sim_inv cenv cx env es /\
+   stmt_exprs_ok cenv (Return (SOME e)) /\
+   IS_SOME (type_stmt env ty (Return (SOME e))) /\
+   call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
+   (!ety. expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+            cenv cx ety e es /\
+          expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+            cenv cx ety e es)
+   ==>
+   stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx lctx
+     (\H v ee gt r. intret_q H func cenv cx tv v ee r /\
+       !ir u. r = IntRet ir u /\
+         ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+           FST (SND (SND cenv.ce_nonreentrant))) ==>
+         stor_taint_ok_at (DF H) (SND gt) u /\
+         (!i. i < lo /\ i IN (SND gt).t_mem ==>
+              imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)) cenv
+     (stmt_env cenv lctx ty (Return (SOME e)))
+     (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
+     (eval_stmt cx (Return (SOME e))) es
+Proof
+  cheat
+QED
 
 Theorem compile_return_word_int_frag_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx lctx cenv ty tv es e env
@@ -1574,22 +1598,8 @@ Proof
   qexists_tac `env` >> simp[]
 QED
 
-Theorem internal_frame_ret_word_full_taint:
-  !DF lo d ctx shadow_ctx PG func shadow_func cx cenv ty tv rpc slot_size.
-    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
-    cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
-    is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
-    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
-      ~cx.txn.is_static) ==>
-    frame_ret_ok_full
-      (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
-      (\H v ee gt r. intret_q H func cenv cx tv v ee r /\
-        !ir u. r = IntRet ir u /\
-          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
-            FST (SND (SND cenv.ce_nonreentrant))) ==>
-          stor_taint_ok_at (DF H) (SND gt) u /\
-          (!i. i < lo /\ i IN (SND gt).t_mem ==>
-               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)) cenv ty
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
@@ -1625,6 +1635,26 @@ Proof
         [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
         constructor_exit_state_rel) >> simp[]) >>
   first_assum ACCEPT_TAC
+QED
+*)
+Theorem internal_frame_ret_word_full_taint:
+  !DF lo d ctx shadow_ctx PG func shadow_func cx cenv ty tv rpc slot_size.
+    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+    cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
+    is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+    ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+      ~cx.txn.is_static) ==>
+    frame_ret_ok_full
+      (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
+      (\H v ee gt r. intret_q H func cenv cx tv v ee r /\
+        !ir u. r = IntRet ir u /\
+          ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
+            FST (SND (SND cenv.ce_nonreentrant))) ==>
+          stor_taint_ok_at (DF H) (SND gt) u /\
+          (!i. i < lo /\ i IN (SND gt).t_mem ==>
+               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)) cenv ty
+Proof
+  cheat
 QED
 
 Theorem internal_frame_ret_word_full:

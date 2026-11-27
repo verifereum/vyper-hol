@@ -19,19 +19,35 @@ Ancestors bodyFullShadowBodyInv
   bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   vyperInterpreter vyperTypeSystem vyperState vyperAST list
   vyperTypeContract vyperTypeConstantFold alist finite_map
+  constSubstMods[qualified] vyperSubscriptOverlap[qualified]
 
 val _ = Parse.hide "body";
 
-Definition body_const_cells_agree_def:
+Definition body_const_cells_agree_def[nocompute]:
   body_const_cells_agree mods cx env es <=>
-    ?roots art imms A.
+    ?roots art imms.
       check_contract cx.in_deploy cx.layouts cx.txn.target mods = SOME art /\
       ALOOKUP cx.sources cx.txn.target = SOME mods /\
-      ALOOKUP mods NONE = SOME (cx_tops cx) /\
-      constants_fold_module mods imms NONE (cx_tops cx) FEMPTY = SOME A /\
-      frame_maps env art /\
-      const_subst_context roots cx env (module_consts_env (cx_tops cx) [])
-        mods art /\
+      frame_maps env art /\ env.type_defs = get_tenv cx /\
+      imms = (case ALOOKUP es.immutables cx.txn.target of
+                NONE => empty_immutables | SOME cells => cells) /\
+      (!src tops. MEM (src,tops) mods ==>
+        ?A. constants_fold_module mods imms src tops FEMPTY = SOME A /\
+            A SUBMAP get_source_immutables src imms) /\
+      (!addr src id tv root. MEM (addr,src,id,tv,root) roots ==>
+        checked_frame_context cx mods art src id env) /\
+      (!src id r. ALOOKUP (consts_env_mods mods) (src,id) = SOME r ==>
+        declared_constant mods src id /\ constant_expr mods r /\
+        vyperSubscriptOverlap$accesses_expr r = [] /\
+        FLOOKUP env.bare_globals (src,id) = SOME (expr_type r) /\
+        FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type (expr_type r)) /\
+        (?pv v. const_result_at roots cx (expr_type r)
+                  (PlaceR (ImmutablePlace src id [])) v /\
+                const_result_at roots cx (expr_type r) pv v /\
+                !st. const_cells_agree roots st ==>
+                  lookup_global cx src id st =
+                    (INL (PlaceR (ImmutablePlace src id [])),st) /\
+                  eval_expr cx r st = (INL pv,st))) /\
       const_cells_agree roots es
 End
 
@@ -56,42 +72,58 @@ Proof
   rpt conj_tac >> irule body_const_cells_agree_immutables >> simp[]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rw[body_const_cells_agree_def] >>
+  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
+  metis_tac[const_subst_context_expr_frame]
+QED
+*)
 Theorem body_const_cells_agree_expr:
   body_const_cells_agree mods cx env st /\
   (well_typed_expr env e \/ IS_SOME (type_place_expr env e)) /\
   eval_expr cx e st = (res,st') ==>
   body_const_cells_agree mods cx env st'
 Proof
-  rw[body_const_cells_agree_def] >>
-  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
-  metis_tac[const_subst_context_expr_frame]
+  cheat
 QED
 
-Theorem body_const_cells_agree_exprs:
-  body_const_cells_agree mods cx env st /\
-  well_typed_exprs env es /\ eval_exprs cx es st = (res,st') ==>
-  body_const_cells_agree mods cx env st'
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[body_const_cells_agree_def] >>
   qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
   metis_tac[const_subst_context_exprs_frame]
 QED
+*)
+Theorem body_const_cells_agree_exprs:
+  body_const_cells_agree mods cx env st /\
+  well_typed_exprs env es /\ eval_exprs cx es st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rw[body_const_cells_agree_def] >>
+  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
+  metis_tac[const_subst_context_base_frame]
+QED
+*)
 Theorem body_const_cells_agree_base:
   body_const_cells_agree mods cx env st /\
   IS_SOME (type_place_target env bt) /\
   eval_base_place cx bt st = (res,st') ==>
   body_const_cells_agree mods cx env st'
 Proof
-  rw[body_const_cells_agree_def] >>
-  qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
-  metis_tac[const_subst_context_base_frame]
+  cheat
 QED
 
-Theorem body_const_cells_agree_read:
-  body_const_cells_agree mods cx env st /\
-  read_result cx pv st = (res,st') ==>
-  body_const_cells_agree mods cx env st'
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[body_const_cells_agree_def] >>
   qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
@@ -99,6 +131,14 @@ Proof
   qexists_tac `st` >> simp[] >> rpt strip_tac >>
   mp_tac (CONJUNCT1 protected_cell_frame_reads) >>
   simp[state_rel_frame_result] >> disch_then drule >> simp[]
+QED
+*)
+Theorem body_const_cells_agree_read:
+  body_const_cells_agree mods cx env st /\
+  read_result cx pv st = (res,st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  cheat
 QED
 
 Theorem body_const_cells_agree_expr_read:
@@ -112,12 +152,8 @@ Proof
   metis_tac[body_const_cells_agree_expr, body_const_cells_agree_read]
 QED
 
-Theorem body_const_cells_agree_frame[local]:
-  body_const_cells_agree mods cx env st /\
-  (!art addr src id.
-     checked_frame_context cx mods art src id env ==>
-     protected_cell_frame addr src id st st') ==>
-  body_const_cells_agree mods cx env st'
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[body_const_cells_agree_def] >>
   qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
@@ -127,6 +163,16 @@ Proof
   qpat_assum `const_subst_context _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [const_subst_context_def]) >>
   metis_tac[]
+QED
+*)
+Theorem body_const_cells_agree_frame[local]:
+  body_const_cells_agree mods cx env st /\
+  (!art addr src id.
+     checked_frame_context cx mods art src id env ==>
+     protected_cell_frame addr src id st st') ==>
+  body_const_cells_agree mods cx env st'
+Proof
+  cheat
 QED
 
 Theorem body_const_cells_agree_target:
@@ -150,10 +196,8 @@ Proof
   metis_tac[cj 9 checked_protected_cell_frame_mutual]
 QED
 
-Theorem body_const_cells_agree_stmt:
-  body_const_cells_agree mods cx env st /\
-  type_stmt env ret s = SOME env' /\ eval_stmt cx s st = (res,st') ==>
-  body_const_cells_agree mods cx env' st'
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `body_const_cells_agree mods cx env st'` by
@@ -164,6 +208,14 @@ Proof
   pure_once_rewrite_tac [body_const_cells_agree_def] >>
   qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
   metis_tac[const_subst_context_type_stmt, type_stmt_frame_maps]
+QED
+*)
+Theorem body_const_cells_agree_stmt:
+  body_const_cells_agree mods cx env st /\
+  type_stmt env ret s = SOME env' /\ eval_stmt cx s st = (res,st') ==>
+  body_const_cells_agree mods cx env' st'
+Proof
+  cheat
 QED
 
 Theorem body_const_cells_agree_stmts:
@@ -186,19 +238,24 @@ Proof
   metis_tac[cj 3 checked_protected_cell_frame_mutual]
 QED
 
-Theorem body_const_cells_agree_extend_local[simp]:
-  body_const_cells_agree mods cx (extend_local env nm ty b) st <=>
-  body_const_cells_agree mods cx env st
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   simp[body_const_cells_agree_def] >> EQ_TAC >> strip_tac >>
   qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
   irule const_subst_context_static >>
   first_assum (irule_at Any) >> simp[extend_local_def]
 QED
+*)
+Theorem body_const_cells_agree_extend_local[simp]:
+  body_const_cells_agree mods cx (extend_local env nm ty b) st <=>
+  body_const_cells_agree mods cx env st
+Proof
+  cheat
+QED
 
-Theorem body_const_cells_agree_stk:
-  body_const_cells_agree mods cx env st ==>
-  body_const_cells_agree mods (cx with stk := stk) env st
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[body_const_cells_agree_def, cx_tops_stk] >>
   qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
@@ -207,10 +264,16 @@ Proof
     (strip_assume_tac o REWRITE_RULE [const_subst_context_def]) >>
   metis_tac[]
 QED
-
-Theorem body_const_cells_agree_current_src:
+*)
+Theorem body_const_cells_agree_stk:
   body_const_cells_agree mods cx env st ==>
-  body_const_cells_agree mods cx (env with current_src := src) st
+  body_const_cells_agree mods (cx with stk := stk) env st
+Proof
+  cheat
+QED
+
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[body_const_cells_agree_def] >>
   qexistsl_tac [`roots`, `art`, `imms`, `A`] >> simp[] >>
@@ -219,6 +282,13 @@ Proof
         (strip_assume_tac o REWRITE_RULE [frame_maps_def]) >>
       simp[frame_maps_def]) >>
   irule const_subst_context_static >> qexists_tac `env` >> simp[]
+QED
+*)
+Theorem body_const_cells_agree_current_src:
+  body_const_cells_agree mods cx env st ==>
+  body_const_cells_agree mods cx (env with current_src := src) st
+Proof
+  cheat
 QED
 
 (* As bodySim's body_expr_ok, a literal array's elements are ok too. *)

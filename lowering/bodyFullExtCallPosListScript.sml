@@ -11,6 +11,7 @@ Ancestors
   stateRelProj exprOperandVar exprSimSource exprSimWordArgs list
   bodyFullExtCallDefaultKeyword targetPureWalkSource bodyStorageCases
   vyperEvalExprPreservesScopesDom vyperMachineFrame
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem positional_post_source_labels[local]:
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
@@ -108,12 +109,13 @@ End
 
 Theorem extcall_request_positional_packing_outcome_named:
   !keep_pure.
-  body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_sim_inv cenv cx env es /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
-     expr_body_pre cenv cx env e st) /\
+  body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==>
+     expr_body_pre_mods mods cenv cx env e st) /\
   compile_ext_call_args compile_expr cenv kw_es
     (MAP (lowered_value_type cenv) xs) xs sa = (svs,sb) /\
   compile_ext_call_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr kw_es)

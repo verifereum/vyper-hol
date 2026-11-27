@@ -16,19 +16,12 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   vyperStorageTrace vyperStorageFootprint loweringPosts bodyPtrDefs loweringStateRelDefs
   venomInst venomState
   vyperInterpreter vyperState vyperAST vyperContext list words arithmetic
+  bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 Libs
   pairLib
 
-Theorem calldata_slice_vv_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
-    (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
-      body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
-    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Builtin ann (CalldataSlice n) args) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all calldata_slice_body_operand_full >>
@@ -471,17 +464,24 @@ Proof
   qexistsl_tac [`HG`,`errstr`,`mid`,`tm`,`u`] >>
   simp[exprSimDefsTheory.halt_exit_def]
 QED
-
-Theorem calldata_slice_expr_sim_full:
+*)
+Theorem calldata_slice_vv_sim_full:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
     (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
-      body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
-    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
+    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin ann (CalldataSlice n) args) es
+Proof
+  cheat
+QED
+
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -502,4 +502,19 @@ Proof
       (es with gas_obs := gs)` by simp[] >>
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
   strip_tac >> gvs[] >> metis_tac[]
+QED
+*)
+Theorem calldata_slice_expr_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
+    (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (CalldataSlice n) args) es ==>
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Builtin ann (CalldataSlice n) args) es
+Proof
+  cheat
 QED

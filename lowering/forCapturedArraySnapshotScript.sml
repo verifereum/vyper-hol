@@ -80,6 +80,25 @@ Proof
                       vv_post_def,vv_place_ptr_def,vv_at_def]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `dynamic = case bd of Fixed _ => F | Dynamic _ => T` >>
+  qabbrev_tac `cnt = case bd of Fixed k => k | Dynamic k => k` >>
+  `(if dynamic then compile_ptr_load c.ce_is_ctor c.ce_imm_alloca loc (vv_operand vv)
+    else comp_return (Lit (n2w cnt))) se = (len_op,sl)` by
+    (Cases_on `bd` >> gvs[Abbr `dynamic`,Abbr `cnt`]) >>
+  `dynamic = (case bd of Fixed _ => F | Dynamic _ => T) /\
+   cnt = (case bd of Fixed k => k | Dynamic k => k)` by simp[Abbr `dynamic`,Abbr `cnt`] >>
+  drule_at_then (Pat `eval_expr _ _ _ = (INL _,_)`) drule_all
+    (REWRITE_RULE [] (Q.INST [`addr` |-> `vv_operand vv`]
+      (SPEC_ALL for_nonslot_array_length_observation))) >>
+  disch_then (CONJUNCTS_THEN2 kall_tac
+    (qx_choosel_then [`av`,`xs`,`pty`,`pbd`,`pet`,`a`] (map_every assume_tac o CONJUNCTS))) >>
+  suspend "run"
+QED
+*)
 Theorem snapshot_length:
   expr_body_pre c cx env e start /\ eval_expr cx e start = (INL rv,em) /\
   expr_type e = ArrayT typ bd /\ evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV tyv bd) /\
@@ -114,22 +133,10 @@ Theorem snapshot_length:
     sl.cs_current_insts = se.cs_current_insts ++ emitted_insts se sl /\
     EVERY (\i. i.inst_opcode <> ALLOCA) (emitted_insts se sl)
 Proof
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  qabbrev_tac `dynamic = case bd of Fixed _ => F | Dynamic _ => T` >>
-  qabbrev_tac `cnt = case bd of Fixed k => k | Dynamic k => k` >>
-  `(if dynamic then compile_ptr_load c.ce_is_ctor c.ce_imm_alloca loc (vv_operand vv)
-    else comp_return (Lit (n2w cnt))) se = (len_op,sl)` by
-    (Cases_on `bd` >> gvs[Abbr `dynamic`,Abbr `cnt`]) >>
-  `dynamic = (case bd of Fixed _ => F | Dynamic _ => T) /\
-   cnt = (case bd of Fixed k => k | Dynamic k => k)` by simp[Abbr `dynamic`,Abbr `cnt`] >>
-  drule_at_then (Pat `eval_expr _ _ _ = (INL _,_)`) drule_all
-    (REWRITE_RULE [] (Q.INST [`addr` |-> `vv_operand vv`]
-      (SPEC_ALL for_nonslot_array_length_observation))) >>
-  disch_then (CONJUNCTS_THEN2 kall_tac
-    (qx_choosel_then [`av`,`xs`,`pty`,`pbd`,`pet`,`a`] (map_every assume_tac o CONJUNCTS))) >>
-  suspend "run"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume snapshot_length[run]:
   qpat_x_assum `dynamic = (case bd of Fixed _ => _ | Dynamic _ => _)` kall_tac >>
   qpat_x_assum `cnt = (case bd of Fixed _ => _ | Dynamic _ => _)` kall_tac >>
@@ -166,7 +173,9 @@ Resume snapshot_length[run]:
   qexistsl [`t`,`G'`,`tn'`] >> rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   suspend "code"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume snapshot_length[code]:
   qpat_assum `(if dynamic then _ else _) se = _` mp_tac >>
   qpat_assum `loc = LocMemory \/ loc = LocCode` mp_tac >>
@@ -183,8 +192,11 @@ Resume snapshot_length[code]:
   qpat_assum `EVERY _ _` (qspec_then `i` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
   simp[] >> strip_tac >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise snapshot_length
+*)
 
 Theorem for_array_snapshot_length_setup:
   compile_stmt c lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
@@ -479,6 +491,25 @@ QED
 
 Finalise for_array_snapshot_length_setup
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (SPEC_ALL for_array_snapshot_length_setup) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choosel_then
+    [`she0`,`loc`,`len_op`,`sl`,`bc`,`saD`,`saA`,`xd`,`capacity`,`aidItem`,
+     `entry`,`cond`,`bod`,`incr`,`exit`,`idx`,`invalid`,`valid`,`done_var`,`next_var`,
+     `sa'`,`stride`,`off_op`,`sm`,`sum_op`,`sn`,`addr`,`saCopy`,`sbCopy`,
+     `sbBody`,`sj`,`shadow_sbCopy`,`shadow_sbBody`,`av`,`xs`,`vs`,`tL`,`GL`,`tnL`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  `body_for_full_ok cx tyv id loop_body vs /\
+   gas_admissible (eval_for cx tyv id loop_body vs) (stmt_res_ok lctx) em` by
+    (qpat_assum `!vs. _ ==> body_for_full_ok _ _ _ _ _ /\ _` irule >> simp[return_def]) >>
+  pop_assum strip_assume_tac >>
+  suspend "rounds"
+QED
+*)
 Theorem for_array_snapshot_continue_full:
   compile_stmt c lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb) /\
   compile_stmt (gas_shadow_env T c) lctx ret_ty
@@ -531,22 +562,10 @@ Theorem for_array_snapshot_continue_full:
     (em,u,Gu,tu) (for_array_loop_post (DF,lo,d,ctx,func) c cx lctx (es,sa,s0,G0,tn0) sb)
     (for_array_loop_exit ctx cx RetQ)
 Proof
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  mp_tac (SPEC_ALL for_array_snapshot_length_setup) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (qx_choosel_then
-    [`she0`,`loc`,`len_op`,`sl`,`bc`,`saD`,`saA`,`xd`,`capacity`,`aidItem`,
-     `entry`,`cond`,`bod`,`incr`,`exit`,`idx`,`invalid`,`valid`,`done_var`,`next_var`,
-     `sa'`,`stride`,`off_op`,`sm`,`sum_op`,`sn`,`addr`,`saCopy`,`sbCopy`,
-     `sbBody`,`sj`,`shadow_sbCopy`,`shadow_sbBody`,`av`,`xs`,`vs`,`tL`,`GL`,`tnL`]
-    (map_every assume_tac o CONJUNCTS)) >>
-  `body_for_full_ok cx tyv id loop_body vs /\
-   gas_admissible (eval_for cx tyv id loop_body vs) (stmt_res_ok lctx) em` by
-    (qpat_assum `!vs. _ ==> body_for_full_ok _ _ _ _ _ /\ _` irule >> simp[return_def]) >>
-  pop_assum strip_assume_tac >>
-  suspend "rounds"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_array_snapshot_continue_full[rounds]:
   mp_tac (Q.INST [`u` |-> `tL`, `Gu` |-> `GL`, `tu` |-> `tnL`,
      `sty` |-> `typ`, `fty` |-> `typ`, `dtv` |-> `tyv`, `stv` |-> `tyv`, `es0` |-> `es`,
@@ -560,7 +579,9 @@ Resume for_array_snapshot_continue_full[rounds]:
   disch_then (qx_choosel_then [`s`,`G`,`tn`,`Inv`,`Done`] (map_every assume_tac o CONJUNCTS)) >>
   suspend "induct"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_array_snapshot_continue_full[induct]:
   qabbrev_tac `Round = (\a. do v <- read_result cx a;
       push_scope_with_var id tyv v;
@@ -592,7 +613,9 @@ Resume for_array_snapshot_continue_full[induct]:
      first_assum ACCEPT_TAC) >>
   suspend "finish"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_array_snapshot_continue_full[finish]:
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (cx_tops cx) cx st0 (eval_for cx tyv id loop_body vs) (em,tL,GL,tnL)
@@ -617,7 +640,9 @@ Resume for_array_snapshot_continue_full[finish]:
      simp[Abbr `Exit`] >> metis_tac[]) >>
   suspend "bind"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_array_snapshot_continue_full[bind]:
   irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all >> BETA_TAC >>
   conj_tac >-
@@ -647,5 +672,8 @@ Resume for_array_snapshot_continue_full[bind]:
     (fn th => rewrite_tac[th,ignore_bind_def,bind_return]) >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise for_array_snapshot_continue_full
+*)

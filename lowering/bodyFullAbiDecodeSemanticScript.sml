@@ -1,9 +1,10 @@
 Theory bodyFullAbiDecodeSemantic
 Ancestors
   exprSimAbiDecodeBodySuccess
+  exprSimHypsDefs[qualified]
 
 Theorem abi_decode_body_caller_success_horizons:
-  expr_body_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
   (!H. V H ==> expr_post H ctx func ce cx e es sa start s0 es1 (BytesV bs) data s) /\
   (?H. V H) /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\ local_ptrs_reserved ce sa /\

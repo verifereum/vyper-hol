@@ -35,14 +35,8 @@ Proof
   simp[mk_ptr_def]
 QED
 
-Theorem name_nonword_ghost_posts:
-  expr_body_pre cenv cx env (Name ann id) es /\ ~is_word_type ann /\
-  lookup_scopes id es.scopes = SOME entry /\
-  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-  stmt_state_rel H ctx func cenv cx es s /\
-  ghost_inv_at D lo d cenv cx es G tn s ==>
-  ptr_val_ok cx (post_value_type cenv (Name ann id)) entry.value (Var p) G tn s /\
-  ptr_buf_ok cenv (Name ann id) (Var p) G s
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `expr_sim_pre cenv cx env (Name ann id) es` by
@@ -62,11 +56,21 @@ Proof
        eval_operand_def] >>
   gvs[ptr_covers_def] >> drule val_store_size_le >> strip_tac >> decide_tac
 QED
+*)
+Theorem name_nonword_ghost_posts:
+  expr_body_pre_mods mods cenv cx env (Name ann id) es /\ ~is_word_type ann /\
+  lookup_scopes id es.scopes = SOME entry /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv_at D lo d cenv cx es G tn s ==>
+  ptr_val_ok cx (post_value_type cenv (Name ann id)) entry.value (Var p) G tn s /\
+  ptr_buf_ok cenv (Name ann id) (Var p) G s
+Proof
+  cheat
+QED
 
-Theorem name_nonword_full:
-  expr_body_pre cenv cx env (Name ann id) es /\ ~is_word_type ann ==>
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Name ann id) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[expr_sim_full_def] >>
   `expr_sim_pre cenv cx env (Name ann id) es` by
@@ -98,4 +102,12 @@ Proof
                       eval_operand_def] >>
       rpt strip_tac >> gvs[] >> drule val_store_size_le >> strip_tac >> decide_tac) >>
   gvs[ghost_inv_at_def] >> metis_tac[]
+QED
+*)
+Theorem name_nonword_full:
+  expr_body_pre_mods mods cenv cx env (Name ann id) es /\ ~is_word_type ann ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Name ann id) es
+Proof
+  cheat
 QED

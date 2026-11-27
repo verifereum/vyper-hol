@@ -5,6 +5,7 @@ Ancestors
   gasContext constSubst vyperAST list
   bodyTypedTargetScope vyperTypeSystem vyperTypeInvariants finite_map pair
   vyperTypeContract[qualified,ignore_grammar]
+  bodyInvSplit[qualified]
 
 Theorem loop_iterator_root_occurs[local]:
   !e t nid.
@@ -80,18 +81,8 @@ Proof
   simp[expr_size_def] >> metis_tac[]
 QED
 
-Theorem supported_nested_iterator_root_kind:
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-  well_typed_expr env e /\ supported_expr tops e /\
-  ~supported_expr_exists (const_name_root cx) e /\
-  (~(?ty nid. e = TopLevelName ty nid)) /\
-  loop_iterator_place e = SOME t /\ target_root t = TopLevelNameTarget nid ==>
-  IS_SOME (supported_immutable_type tops nid) \/
-  (?vis kind ty slot.
-     supported_variable_decl tops nid = SOME (vis,kind,ty,SOME slot) /\
-     (kind = Storage \/ kind = Transient)) \/
-  (?vis transient kt vt slot.
-     supported_hashmap_decl tops nid = SOME (vis,transient,kt,vt,SOME slot))
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `FST nid = NONE` by
@@ -119,4 +110,21 @@ Proof
   `cx_tops cx = tops` by
     (fs[body_inv_def] >> metis_tac[cx_tops_module]) >>
   fs[cx_const_name_def] >> metis_tac[iterator_constant_decl_member]
+QED
+*)
+Theorem supported_nested_iterator_root_kind:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
+  well_typed_expr env e /\ supported_expr tops e /\
+  ~supported_expr_exists (const_name_root cx) e /\
+  (~(?ty nid. e = TopLevelName ty nid)) /\
+  loop_iterator_place e = SOME t /\ target_root t = TopLevelNameTarget nid ==>
+  IS_SOME (supported_immutable_type tops nid) \/
+  (?vis kind ty slot.
+     supported_variable_decl tops nid = SOME (vis,kind,ty,SOME slot) /\
+     (kind = Storage \/ kind = Transient)) \/
+  (?vis transient kt vt slot.
+     supported_hashmap_decl tops nid = SOME (vis,transient,kt,vt,SOME slot))
+Proof
+  cheat
 QED

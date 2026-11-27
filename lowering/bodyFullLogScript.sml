@@ -51,6 +51,7 @@ Ancestors exprSimAggregateNestedStore[qualified,ignore_grammar]
   compilerInstructionSuffix emitHelperProps stmtLoweringMono loweringHalt abiEncoderProps
   bodyFullAllocGeneric bodyCopyMemoryBase valueCopy valueCopyBytes representationCleanPtr
   immutableMemoryFrame exprSimProps valueEncoding venomState tuplePlaceZero exprPtrUnwrapFacts placeMemoryTypeInterfaces typedLogFieldChecked venomMemDefs bytesCopyProps vyperTyping
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 
 Libs horizonTypeLib
 
@@ -161,7 +162,8 @@ Theorem log_full_physical_source_encoding[local]:
   EVERY (\(ty,indexed). indexed ==> supported_event_leaf_type ty) (ZIP (dtys,flags)) /\
   LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v)
     atys vals /\
-  expr_sim_inv cenv cx env es /\ body_inv tops ctx cenv cx /\
+  expr_sim_inv_mods mods cenv cx env es /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
   EVERY (supported_nested_type supported_event_leaf_type (LENGTH tops) tops)
     (log_non_indexed_types flags dtys) /\
   SUM (MAP (type_memory_bytes cenv) (log_non_indexed_types flags dtys)) < 2 ** 64 ==>
@@ -237,7 +239,7 @@ Proof
 QED
 
 Theorem log_capture_type[local]:
-  expr_body_pre cenv cx env e es /\ env.type_defs = get_tenv cx /\
+  expr_body_pre_mods mods cenv cx env e es /\ env.type_defs = get_tenv cx /\
   ty = lowered_value_type cenv e /\ type_alloc_ok cenv ty /\
   value_runtime_typed env ty v /\
   compile_expr cenv (expr_type e) e si = (vv,sm) /\
@@ -342,7 +344,8 @@ Theorem compile_log_one_saved_topic[local]:
   log_topic_state ctx func cenv cx st0 es DF lo d front s G tn a u Gu tu /\
   (?H. valid_horizon cx st0 H es.storage_trace) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==> stmt_state_rel H ctx func cenv cx es s) /\
-  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   storage_trace_domain cx st0 es.storage_trace /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   local_ptrs_reserved cenv front /\ sa.cs_next_id <= front.cs_next_id /\
@@ -933,19 +936,20 @@ QED
 Theorem compile_log_frag_full:
   !cx id args DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
-    body_exprs_full_ok cx args /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Log id args) /\
+    body_exprs_full_ok_mods mods exps cx args /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\ supported_stmt tops bindings (Log id args) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Log id args) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Log id args) = SOME env' /\
     stmt_exprs_ok cenv (Log id args) /\
     call_evaluation_safe cx (int_calls_stmt (Log id args)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
@@ -1737,22 +1741,23 @@ Finalise compile_log_frag_full
 Theorem body_log_aggregate_full:
   !cx id args fields DF lo d PG tops ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
-    body_exprs_full_ok cx args /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+    body_exprs_full_ok_mods mods exps cx args /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_log tops id args /\
     supported_event_fields tops id = SOME fields /\
     ~EVERY supported_scalar_type (MAP (SND o FST) fields) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Log id args) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Log id args) = SOME env' /\
     stmt_exprs_ok cenv (Log id args) /\
     call_evaluation_safe cx (int_calls_stmt (Log id args)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv

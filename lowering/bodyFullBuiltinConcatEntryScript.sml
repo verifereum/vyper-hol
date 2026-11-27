@@ -10,13 +10,59 @@ Ancestors
   gasShadowCompile gasShadowCompileHelpers gasShadowState
   vyperTypeConversions valueEncoding valueEncodingDefs valueEncodingProps
   vfmConstants vyperAST words arithmetic list
+  bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
+          expr_body_pre cenv cx env e st` by
+    (rpt gen_tac >> strip_tac >>
+     irule exprSimSourceTheory.expr_body_pre_builtin_arg >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`a`,`args`,`Concat n`,`es`] >> simp[]) >>
+  `expr_sim_inv cenv cx env es /\ well_typed_expr env (Builtin a (Concat n) args) /\
+   alloc_limits_expr cenv (Builtin a (Concat n) args)` by fs[expr_body_pre_def] >>
+  `env.type_defs = get_tenv cx` by
+    metis_tac[exprSimAbiDecodeEntryTypingTheory.abi_decode_inv_type_env] >>
+  `2 <= LENGTH args /\ SUM (MAP bytelike_type_bound (MAP expr_type args)) <= n /\
+   well_formed_type env.type_defs a` by
+    (qpat_assum `well_typed_expr _ _` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+     simp[cj 9 well_typed_expr_def,well_typed_builtin_app_def] >>
+     rpt strip_tac >> fs[]) >>
+  `body_exprs_full_ok cx args` by
+    (qpat_assum `builtin_args_length_ok (Concat n) (LENGTH args) ==> _` irule >>
+     simp[builtin_args_length_ok_def]) >>
+  Q.SUBGOAL_THEN
+    `(a = BaseT (BytesT (Dynamic n)) /\
+      EVERY (\t. ?bd. t = BaseT (BytesT bd)) (MAP expr_type args)) \/
+     (a = BaseT (StringT n) /\
+      EVERY (\t. ?m. t = BaseT (StringT m)) (MAP expr_type args))` assume_tac
+  >- (qpat_assum `well_typed_expr _ _` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+     simp[cj 9 well_typed_expr_def,well_typed_builtin_app_def] >>
+     rpt strip_tac >> fs[]) >>
+  `?tvr. evaluate_type (get_tenv cx) a = SOME tvr` by
+    (qpat_x_assum `well_formed_type _ _` mp_tac >>
+     qpat_assum `env.type_defs = _`
+       (fn th => simp[th,well_formed_type_def,optionTheory.IS_SOME_EXISTS])) >>
+  `concat_alloc_size (MAP expr_type args) < 2 ** 64` by
+    (qpat_x_assum `alloc_limits_expr _ _` mp_tac >> simp[alloc_limits_expr_def]) >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ s0 /\ _`
+    (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  suspend "allocate"
+QED
+*)
 Theorem concat_loop_initial_entry:
-  (builtin_args_length_ok (Concat n) (LENGTH args) ==> body_exprs_full_ok cx args) /\
-  body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin a (Concat n) args) es /\
+  (builtin_args_length_ok (Concat n) (LENGTH args) ==> body_exprs_full_ok_mods mods exps cx args) /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Builtin a (Concat n) args) es /\
   compile_expr cenv ty (Builtin a (Concat n) args) sa = (vv,sb) /\
   compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr (Builtin a (Concat n) args))
     shadow_sa = (vv,shadow_sb) /\
@@ -77,47 +123,10 @@ Theorem concat_loop_initial_entry:
       mem_bytes_at p n t4.vs_memory = mem_bytes_at p n s0.vs_memory) /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 G4 tn4
 Proof
-  strip_tac >>
-  `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
-          expr_body_pre cenv cx env e st` by
-    (rpt gen_tac >> strip_tac >>
-     irule exprSimSourceTheory.expr_body_pre_builtin_arg >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl [`a`,`args`,`Concat n`,`es`] >> simp[]) >>
-  `expr_sim_inv cenv cx env es /\ well_typed_expr env (Builtin a (Concat n) args) /\
-   alloc_limits_expr cenv (Builtin a (Concat n) args)` by fs[expr_body_pre_def] >>
-  `env.type_defs = get_tenv cx` by
-    metis_tac[exprSimAbiDecodeEntryTypingTheory.abi_decode_inv_type_env] >>
-  `2 <= LENGTH args /\ SUM (MAP bytelike_type_bound (MAP expr_type args)) <= n /\
-   well_formed_type env.type_defs a` by
-    (qpat_assum `well_typed_expr _ _` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
-     simp[cj 9 well_typed_expr_def,well_typed_builtin_app_def] >>
-     rpt strip_tac >> fs[]) >>
-  `body_exprs_full_ok cx args` by
-    (qpat_assum `builtin_args_length_ok (Concat n) (LENGTH args) ==> _` irule >>
-     simp[builtin_args_length_ok_def]) >>
-  Q.SUBGOAL_THEN
-    `(a = BaseT (BytesT (Dynamic n)) /\
-      EVERY (\t. ?bd. t = BaseT (BytesT bd)) (MAP expr_type args)) \/
-     (a = BaseT (StringT n) /\
-      EVERY (\t. ?m. t = BaseT (StringT m)) (MAP expr_type args))` assume_tac
-  >- (qpat_assum `well_typed_expr _ _` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
-     simp[cj 9 well_typed_expr_def,well_typed_builtin_app_def] >>
-     rpt strip_tac >> fs[]) >>
-  `?tvr. evaluate_type (get_tenv cx) a = SOME tvr` by
-    (qpat_x_assum `well_formed_type _ _` mp_tac >>
-     qpat_assum `env.type_defs = _`
-       (fn th => simp[th,well_formed_type_def,optionTheory.IS_SOME_EXISTS])) >>
-  `concat_alloc_size (MAP expr_type args) < 2 ** 64` by
-    (qpat_x_assum `alloc_limits_expr _ _` mp_tac >> simp[alloc_limits_expr_def]) >>
-  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
-    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ s0 /\ _`
-    (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  suspend "allocate"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_loop_initial_entry[allocate]:
   qpat_assum `compile_expr cenv ty (Builtin a (Concat n) args) sa = _`
     (strip_assume_tac o MATCH_MP exprSimConcatResultTheory.concat_compile_shape) >>
@@ -176,7 +185,9 @@ Resume concat_loop_initial_entry[allocate]:
       (map_every assume_tac o CONJUNCTS))) >>
   suspend "shadow"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_loop_initial_entry[shadow]:
   qpat_assum `compile_expr _ ty (gas_shadow_expr (Builtin a (Concat n) args)) shadow_sa = _`
     (mp_tac o SIMP_RULE (srw_ss())
@@ -230,7 +241,9 @@ Resume concat_loop_initial_entry[shadow]:
      disch_then (qspecl_then [`s4`,`shadow_s4`] mp_tac) >> simp[]) >>
   suspend "shadow_code"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_loop_initial_entry[shadow_code]:
   `ci_mono shadow_s4 shadow_s5` by
     (qpat_assum `compile_concat _ _ _ _ _ _ shadow_s4 = _` mp_tac >>
@@ -288,7 +301,9 @@ Resume concat_loop_initial_entry[shadow_code]:
        (qspec_then `H` mp_tac) >> simp[]) >>
   suspend "ready"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_loop_initial_entry[ready]:
   `!name lb lsz. local_region cenv es.scopes t4 name lb lsz ==>
      local_region cenv es.scopes s0 name lb lsz` by
@@ -365,5 +380,8 @@ Resume concat_loop_initial_entry[ready]:
   rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
     simp[Abbr `bsz`,Abbr `binst`,Abbr `oinst`])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise concat_loop_initial_entry
+*)

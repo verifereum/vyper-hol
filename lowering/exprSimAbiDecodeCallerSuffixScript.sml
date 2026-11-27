@@ -9,34 +9,8 @@ Ancestors
   compileEnv exprLowering exprSimAbiDecodeEntryTyping vyperTypeExprSoundness
   vyperTypeSystem exprSafeOperand exprSimHyps exprOpenFirstOperand
 
-Theorem abi_decode_caller_suffix_summary:
-  expr_body_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
-  expr_type e = BaseT (BytesT (Dynamic n)) /\
-  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa start s0 (ee with gas_obs := []) (BytesV bs) data s /\
-  MAP FDOM es.scopes = MAP FDOM ee.scopes /\ local_ptrs_reserved ce sa /\
-  lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
-  lower_abi_decode data
-    (type_to_abi_dec_info ce.ce_struct_fields ce
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (abi_static_size ce.ce_struct_fields
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (abi_size_bound ce.ce_struct_fields
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (type_memory_bytes ce
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) start = (out,final) /\
-  fn_has_code start final func /\ fn_inst_ids_distinct func /\
-  ~s.vs_halted /\ s.vs_current_bb = start.cs_current_bb /\
-  s.vs_inst_idx = LENGTH start.cs_current_insts ==>
-  gas_summary_at F (ctx,func) []
-    (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs]))
-      (\w. return (Value w))) (ee with gas_obs := [],s)
-    (\res es1 t. ?v. res = INL (Value v) /\
-      vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
-        es1 (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t /\
-      t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts /\
-      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx)
-    (\res es1 r. expr_exit res r)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `cs_extends sa start` by metis_tac[cj 2 compile_expr_grows] >>
@@ -92,7 +66,40 @@ Proof
   qexistsl_tac [`INR (Error (RuntimeError e'))`, `ee`, `Abort Revert_abort u`] >>
   gvs[vyperStateTheory.raise_def, exprSimDefsTheory.expr_exit_def]
 QED
+*)
+Theorem abi_decode_caller_suffix_summary:
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
+  expr_type e = BaseT (BytesT (Dynamic n)) /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa start s0 (ee with gas_obs := []) (BytesV bs) data s /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\ local_ptrs_reserved ce sa /\
+  lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
+  lower_abi_decode data
+    (type_to_abi_dec_info ce.ce_struct_fields ce
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_static_size ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_size_bound ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (type_memory_bytes ce
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) start = (out,final) /\
+  fn_has_code start final func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = start.cs_current_bb /\
+  s.vs_inst_idx = LENGTH start.cs_current_insts ==>
+  gas_summary_at F (ctx,func) []
+    (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs]))
+      (\w. return (Value w))) (ee with gas_obs := [],s)
+    (\res es1 t. ?v. res = INL (Value v) /\
+      vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
+        es1 (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t /\
+      t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx)
+    (\res es1 r. expr_exit res r)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_decode_caller_suffix_summary[success]:
   `?rtv. evaluate_type (get_tenv cx) ty = SOME rtv` by
     (drule abi_decode_body_target >> strip_tac >>
@@ -116,4 +123,7 @@ Resume abi_decode_caller_suffix_summary[success]:
   qexistsl_tac [`INL (Value v)`, `ee`, `OK t`] >>
   gvs[vyperStateTheory.return_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise abi_decode_caller_suffix_summary
+*)

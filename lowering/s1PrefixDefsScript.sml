@@ -9,6 +9,7 @@ Ancestors
   exprSimMapDefs bodyPtrDefs unitMemInv contextRawReachable exprSimMemDefs stmtSimDefs
   gasShadow gasShadowState gasShadowUnit exprLowering stmtLowering loweringPosts
   compileEnv allocaHistory venomWf finite_map list option
+  gasOutcomeFullMods[qualified]
 
 
 (* The raw state t a focus from s reaches, whose own (non-INVOKE) step
@@ -302,9 +303,9 @@ Theorem expr_map_sim_full_eq:
       expr_map_sim_full_pre (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es
         (st0, sa, sb, shadow_sa, shadow_sb, vv, s0, G0, tn0) ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_expr cx e) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_expr cx e) (es, s0, G0, tn0)
         (\H res ee G tn t. ?tr slot kt vt tp p.
           res = INL (HashMapRef tr slot kt vt) /\
           storage_mapping_region cx tr slot (HashMapT kt vt) /\
@@ -349,9 +350,9 @@ Theorem expr_sim_full_eq:
       expr_sim_full_pre (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es
         (st0, sa, sb, shadow_sa, shadow_sb, op, s0, G0, tn0) ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
+        cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx))
         (es, s0, G0, tn0)
         (\H res ee G tn t. ?v. res = INL v /\
           expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
@@ -380,9 +381,9 @@ Theorem expr_vv_sim_full_eq:
       expr_vv_sim_full_pre (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty e es
         (st0, sa, sb, shadow_sa, shadow_sb, vv, s0, G0, tn0) ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_expr cx e) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_expr cx e) (es, s0, G0, tn0)
         (\H res ee G tn t. ?tv. res = INL tv /\
           vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
           vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e)
@@ -431,9 +432,9 @@ Theorem stmt_frag_full_eq:
         m shadow_m
         source es
         (st0, sa, sb, shadow_sa, shadow_sb, s0, G0, tn0, cenv') ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 source (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 source (es, s0, G0, tn0)
         (\H res ee G tn t. ?cenv''.
           stmt_lands lctx sb res t /\ ~t.vs_halted /\
           (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\

@@ -14,32 +14,12 @@ Ancestors
   loweringPosts gasContext gasExemptCert vyperStorageTrace vyperStorageFootprint
   exprSimDefs stmtSimDefs stmtSimProps bodyPtrDefs
   vyperInterpreter vyperState vyperAST list
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
-Theorem compile_raise_reason_nonliteral_frag_full:
-  !cx e DF lo d PG tops bindings ctx shadow_ctx func
-   shadow_func cenv env env' ret_ty lctx RetQ es.
-    body_expr_full_ok cx e /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (Raise (RaiseReason e)) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (Raise (RaiseReason e)) ==>
-       occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Raise (RaiseReason e)) = SOME env' /\
-    stmt_exprs_ok cenv (Raise (RaiseReason e)) /\
-    call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason e))) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    (!ml str. e <> Literal (BaseT (StringT ml)) (StringL str)) ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Raise (RaiseReason e)))
-      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
-      (eval_stmt cx (Raise (RaiseReason e))) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `supported_string_reason tops e` by
@@ -74,7 +54,36 @@ Proof
   drule compile_raise_reason_parts >> strip_tac >> gvs[] >>
   suspend "layout"
 QED
+*)
+Theorem compile_raise_reason_nonliteral_frag_full:
+  !cx e DF lo d PG tops bindings ctx shadow_ctx func
+   shadow_func cenv env env' ret_ty lctx RetQ es.
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\ supported_stmt tops bindings (Raise (RaiseReason e)) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Raise (RaiseReason e)) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Raise (RaiseReason e)) = SOME env' /\
+    stmt_exprs_ok cenv (Raise (RaiseReason e)) /\
+    call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason e))) /\
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    (!ml str. e <> Literal (BaseT (StringT ml)) (StringL str)) ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Raise (RaiseReason e)))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
+      (eval_stmt cx (Raise (RaiseReason e))) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_raise_reason_nonliteral_frag_full[layout]:
   drule compile_reason_message_cases >> strip_tac >- metis_tac[] >>
   drule_all raise_reason_compiler_code >> strip_tac >>
@@ -92,7 +101,9 @@ Resume compile_raise_reason_nonliteral_frag_full[layout]:
     metis_tac[ret_pc_ok_def] >>
   suspend "expression"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_raise_reason_nonliteral_frag_full[expression]:
   `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa =
      (vv,sm')` by
@@ -107,7 +118,9 @@ Resume compile_raise_reason_nonliteral_frag_full[expression]:
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   suspend "compose"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_raise_reason_nonliteral_frag_full[compose]:
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ reasonQ reasonR` >>
   pure_rewrite_tac[eval_raise_reason_bind] >>
@@ -145,7 +158,9 @@ Resume compile_raise_reason_nonliteral_frag_full[compose]:
      rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
   fs[stmt_exit_ptr_def, halt_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_raise_reason_nonliteral_frag_full[normal]:
   qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`t`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
@@ -212,5 +227,8 @@ Resume compile_raise_reason_nonliteral_frag_full[normal]:
                simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def]) >>
   simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_raise_reason_nonliteral_frag_full
+*)

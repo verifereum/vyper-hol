@@ -6,6 +6,7 @@ Ancestors
   targetPurePostTransport exprBopSimProps stateRelProj
   loweringPosts loweringStateRelDefs bodyPtrDefs fragGasOriginPtrDead
   vyperStorageFootprint compileEnv exprLowering context venomState freshWrites
+  bodyInvSplit[qualified]
 Libs horizonTypeLib pureFrameLib
 
 (* Each later row reads the same saved value at its actual unwrap cut.
@@ -107,7 +108,8 @@ Theorem extcall_direct_restore_saved_pure:
   (!H. dead_lo_ok H (DF H) lo ce cx) /\
   wb_frame ce ee ee front s u /\ ghost_kept_at lo ce ee front G tn s Gu tu /\
   s.vs_alloca_next <= u.vs_alloca_next /\
-  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env ee /\
+  (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env ee /\
   storage_trace_domain cx st0 ee.storage_trace /\
   unwrap_value ce saved su = (src,sb) /\ fn_has_code su sb func /\ fn_inst_ids_distinct func /\
   alloca_history func u /\ ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\

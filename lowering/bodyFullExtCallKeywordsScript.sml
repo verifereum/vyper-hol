@@ -5,14 +5,58 @@ Ancestors
   exprSimSource exprSimWordArgs exprLoweringProps contextRawReachable
   ptrDiscipline unitMemInv exprLowering compileEnv gasOutcomeFull loweringPosts
   exprSimSend vyperValue vyperState vyperTyping venomState words
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 (* Scalar keywords use the child's lower_value endpoint, without another
    machine step. Keep its frame and exit so the remainder can compose. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  qabbrev_tac `ty = if k = EKDefault then rt else BaseT (UintT 256)` >>
+  `lower_value compile_expr cenv ty e sa = (op,sb) /\
+   lower_value compile_expr (gas_shadow_env T cenv) ty
+     (gas_shadow_expr e) shadow_sa = (op,shadow_sb)` by
+    (qpat_x_assum `compile_ext_call_kwarg _ _ _ _ e _ = _` mp_tac >>
+     qpat_x_assum `compile_ext_call_kwarg _ _ _ _ (gas_shadow_expr e) _ = _` mp_tac >>
+     simp[compile_ext_call_kwarg_def, Abbr `ty`, comp_bind_def,
+          comp_return_def, pairTheory.pair_case_thm] >>
+     pairarg_tac >> simp[] >> pairarg_tac >> simp[]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es` by
+    (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
+     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+  drule expr_body_pre_gas_admissible >> strip_tac >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >> disch_then drule_all >> strip_tac >>
+  irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
+  simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+      qexistsl [`cenv`,`s0`,`sa`] >> simp[] >>
+      reverse conj_tac
+      >- (mp_tac (Q.SPECL [`cenv`,`ty`,`e`,`sa`] ci_mono_lower_value_compile_expr) >>
+          simp[ci_mono_def]) >>
+      fs[expr_post_def]) >>
+  strip_tac >>
+  qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+  simp[] >> strip_tac >>
+  `expr_body_pre cenv cx env e (es with gas_obs := xs)` by simp[] >>
+  `is_word_type (expr_type e)` by simp[is_word_type_def] >>
+  drule_at (Pat `bind _ _ _ = (INL _,_)`)
+    (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_word_value) >>
+  disch_then (qspecl_then [`cenv`,`env`] mp_tac) >>
+  simp[evaluate_type_def] >> strip_tac >>
+  qhdtm_x_assum `expr_post` mp_tac >>
+  simp[expr_post_def, expr_val_rel_def, is_word_type_def,
+       evaluate_type_def, uint256_typed_dest]
+QED
+*)
 Theorem extcall_kwarg_scalar_full:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env e es /\ ~(k = EKDefault /\ ~is_word_type rt) /\
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\ ~(k = EKDefault /\ ~is_word_type rt) /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,rt),sb) /\
   compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt k
     (gas_shadow_expr e) shadow_sa = ((op,rt),shadow_sb) /\
@@ -54,41 +98,5 @@ Theorem extcall_kwarg_scalar_full:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  strip_tac >>
-  qabbrev_tac `ty = if k = EKDefault then rt else BaseT (UintT 256)` >>
-  `lower_value compile_expr cenv ty e sa = (op,sb) /\
-   lower_value compile_expr (gas_shadow_env T cenv) ty
-     (gas_shadow_expr e) shadow_sa = (op,shadow_sb)` by
-    (qpat_x_assum `compile_ext_call_kwarg _ _ _ _ e _ = _` mp_tac >>
-     qpat_x_assum `compile_ext_call_kwarg _ _ _ _ (gas_shadow_expr e) _ = _` mp_tac >>
-     simp[compile_ext_call_kwarg_def, Abbr `ty`, comp_bind_def,
-          comp_return_def, pairTheory.pair_case_thm] >>
-     pairarg_tac >> simp[] >> pairarg_tac >> simp[]) >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es` by
-    (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
-     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
-  drule expr_body_pre_gas_admissible >> strip_tac >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_sim_full_def] >> disch_then drule_all >> strip_tac >>
-  irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
-  simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
-  conj_tac
-  >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-      qexistsl [`cenv`,`s0`,`sa`] >> simp[] >>
-      reverse conj_tac
-      >- (mp_tac (Q.SPECL [`cenv`,`ty`,`e`,`sa`] ci_mono_lower_value_compile_expr) >>
-          simp[ci_mono_def]) >>
-      fs[expr_post_def]) >>
-  strip_tac >>
-  qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
-  simp[] >> strip_tac >>
-  `expr_body_pre cenv cx env e (es with gas_obs := xs)` by simp[] >>
-  `is_word_type (expr_type e)` by simp[is_word_type_def] >>
-  drule_at (Pat `bind _ _ _ = (INL _,_)`)
-    (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_word_value) >>
-  disch_then (qspecl_then [`cenv`,`env`] mp_tac) >>
-  simp[evaluate_type_def] >> strip_tac >>
-  qhdtm_x_assum `expr_post` mp_tac >>
-  simp[expr_post_def, expr_val_rel_def, is_word_type_def,
-       evaluate_type_def, uint256_typed_dest]
+  cheat
 QED

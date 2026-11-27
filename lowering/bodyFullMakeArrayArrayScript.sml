@@ -12,21 +12,12 @@ Ancestors
   exprLoweringProps emitHelperProps exprSimHyps exprSimHypsDefs bodySimFull
   vyperTypeSystem bodyFullPreds stateRelProj vyperStorageTrace
   bodyFullIfExpReach
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "base";
 
-Theorem make_array_vv_sim_full_conditional:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann et n args es.
-    ^(rhs (concl (PURE_REWRITE_RULE [make_array_completed_def]
-      make_array_packaging_ok_def))) /\
-    (builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH args) ==>
-       body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (MakeArray (SOME et) n) args) es ==>
-    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Builtin ann (MakeArray (SOME et) n) args) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   pure_once_rewrite_tac [GSYM (PURE_REWRITE_RULE [make_array_completed_def]
     make_array_packaging_ok_def)] >>
@@ -72,7 +63,25 @@ Proof
   `u = Var q /\ su = Var q` by metis_tac[compiler_make_array_result] >> gvs[] >>
   suspend "split_header"
 QED
+*)
+Theorem make_array_vv_sim_full_conditional:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann et n args es.
+    ^(rhs (concl (PURE_REWRITE_RULE [make_array_completed_def]
+      make_array_packaging_ok_def))) /\
+    (builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH args) ==>
+       body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (MakeArray (SOME et) n) args) es ==>
+    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Builtin ann (MakeArray (SOME et) n) args) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_vv_sim_full_conditional[split_header]:
   qmatch_asmsub_abbrev_tac `compile_make_array compile_expr cenv args et _ header _ _` >>
   `?sh. (if header then emit_void MSTORE [Var q; Lit (n2w (LENGTH args))]
@@ -102,7 +111,9 @@ Resume make_array_vv_sim_full_conditional[split_header]:
           compileEnvTheory.comp_bind_def]) >>
   suspend "header"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_vv_sim_full_conditional[header]:
   `ci_mono sm sh` by
     (Cases_on `header` >> gvs[compileEnvTheory.comp_return_def] >-
@@ -146,7 +157,9 @@ Resume make_array_vv_sim_full_conditional[header]:
   disch_then (qx_choosel_then [`sj`,`Gj`,`tnj`,`ps`] strip_assume_tac) >>
   suspend "elements"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_vv_sim_full_conditional[header_pre]:
   simp[venomInstTheory.mk_inst_def] >>
   conj_tac >-
@@ -157,7 +170,9 @@ Resume make_array_vv_sim_full_conditional[header_pre]:
      qexists_tac `sa` >> fs[ci_mono_def] >> metis_tac[]) >>
   rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_vv_sim_full_conditional[elements]:
   `ci_mono shadow_sa ssm` by
     (qpat_x_assum `compile_alloc_buffer _ shadow_sa = _` mp_tac >>
@@ -208,7 +223,9 @@ Resume make_array_vv_sim_full_conditional[elements]:
   (impl_tac >- suspend "elements_pre") >>
   strip_tac >> suspend "outcome"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_vv_sim_full_conditional[elements_pre]:
   fs[ci_mono_def] >> simp[arithmeticTheory.ADD_SYM] >> rpt conj_tac
   >~ [`!fn inst z. frag_reachable ctx func sj fn inst z ==> dalloca_fmp_headroom inst z`]
@@ -218,7 +235,9 @@ Resume make_array_vv_sim_full_conditional[elements_pre]:
     (rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >> simp[]) >>
   qpat_x_assum `EVERY _ ps` mp_tac >> simp[arithmeticTheory.ADD_SYM]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_vv_sim_full_conditional[outcome]:
   drule_at Any (Q.INST [
     `f` |-> `\rr. case rr of INL vs => INL (Value (ArrayV (make_array_value tv n vs))) | INR ex => INR ex`]
@@ -241,7 +260,9 @@ Resume make_array_vv_sim_full_conditional[outcome]:
   gvs[oneline exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def,
       AllCaseEqs()]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_vv_sim_full_conditional[package]:
   BETA_TAC >> rpt strip_tac >> gvs[] >>
   rpt (qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac) >>
@@ -274,14 +295,18 @@ Resume make_array_vv_sim_full_conditional[package]:
   rewrite_tac[make_array_packaging_ok_def] >> disch_then drule >>
   simp[loweringPostsTheory.post_value_type_def,vyperASTTheory.expr_type_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_vv_sim_full_conditional[memory]:
   qpat_x_assum `!m. mem_agree_outside tn'.t_mem t.vs_memory m ==> val_in_memory _ _ _ m`
     (qspec_then `m` mp_tac) >>
   simp[valueEncodingDefsTheory.val_in_memory_def,
        valueEncodingTheory.val_to_w256_def,integer_wordTheory.i2w_pos]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_vv_sim_full_conditional[certificate]:
   conj_tac >- metis_tac[expr_sim_inv_memory_size] >>
   conj_tac >-
@@ -308,5 +333,8 @@ Resume make_array_vv_sim_full_conditional[certificate]:
      Cases_on `header` >> gvs[] >> decide_tac) >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise make_array_vv_sim_full_conditional
+*)

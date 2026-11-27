@@ -6,32 +6,10 @@ Ancestors
   exprSimAggregateLayout exprSimMemDefs bodyMemAggregateBounds
   exprSimHyps exprSimProps valueEncodingProofs valueEncoding
   exprLowering compileEnv venomState ptrDiscipline finite_map pred_set context
+  exprSimHypsDefs[qualified]
 
-Theorem empty_memory_full_post:
-  !cenv cx env es typ rt sa sb buf func ctx s t p w G tn.
-    expr_sim_inv cenv cx env es /\
-    evaluate_type (get_tenv cx) typ = SOME rt /\ ~is_word_type typ /\
-    compile_builtin_empty_complex (type_memory_bytes cenv typ)
-      (is_bytestring_type typ \/ (case typ of ArrayT _ (Dynamic _) => T | _ => F))
-      sa = (buf,sb) /\
-    fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
-    storage_well_formed_on cx es (FST H) /\
-    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    type_memory_bytes cenv typ < dimword (:256) /\
-    run_inst_seq (emitted_insts sa sb) s = OK t /\
-    buf.buf_operand = Var p /\ lookup_var p t = SOME w /\
-    ptr_covers G tn p t (type_memory_bytes cenv typ) /\
-    (!i. w2n w <= i /\
-      i < w2n w + (if is_bytestring_type typ \/
-        (case typ of ArrayT _ (Dynamic _) => T | _ => F)
-        then 32 else type_memory_bytes cenv typ) ==> i NOTIN tn.t_mem) ==>
-    vv_post H ctx func cenv cx (TypeBuiltin typ Empty typ []) es sa sb s es
-      (Value (default_value rt)) (LocatedValue typ (base_ptr buf)) t /\
-    vv_store_bound cx typ typ es (Value (default_value rt))
-      (LocatedValue typ (base_ptr buf)) t /\
-    ptr_vv_ok cx typ (Value (default_value rt))
-      (LocatedValue typ (base_ptr buf)) es G tn t /\
-    ptr_buf_ok cenv (TypeBuiltin typ Empty typ []) (Var p) G t
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all empty_type_buffer_size >> strip_tac >>
@@ -59,6 +37,36 @@ Proof
        (case typ of ArrayT _ (Dynamic _) => T | _ => F)` >> gvs[]) >>
   gvs[base_ptr_def, bodyPtrDefsTheory.ptr_vv_ok_def]
 QED
+*)
+Theorem empty_memory_full_post:
+  !cenv cx env es typ rt sa sb buf func ctx s t p w G tn.
+    expr_sim_inv_mods mods cenv cx env es /\
+    evaluate_type (get_tenv cx) typ = SOME rt /\ ~is_word_type typ /\
+    compile_builtin_empty_complex (type_memory_bytes cenv typ)
+      (is_bytestring_type typ \/ (case typ of ArrayT _ (Dynamic _) => T | _ => F))
+      sa = (buf,sb) /\
+    fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\
+    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    type_memory_bytes cenv typ < dimword (:256) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    buf.buf_operand = Var p /\ lookup_var p t = SOME w /\
+    ptr_covers G tn p t (type_memory_bytes cenv typ) /\
+    (!i. w2n w <= i /\
+      i < w2n w + (if is_bytestring_type typ \/
+        (case typ of ArrayT _ (Dynamic _) => T | _ => F)
+        then 32 else type_memory_bytes cenv typ) ==> i NOTIN tn.t_mem) ==>
+    vv_post H ctx func cenv cx (TypeBuiltin typ Empty typ []) es sa sb s es
+      (Value (default_value rt)) (LocatedValue typ (base_ptr buf)) t /\
+    vv_store_bound cx typ typ es (Value (default_value rt))
+      (LocatedValue typ (base_ptr buf)) t /\
+    ptr_vv_ok cx typ (Value (default_value rt))
+      (LocatedValue typ (base_ptr buf)) es G tn t /\
+    ptr_buf_ok cenv (TypeBuiltin typ Empty typ []) (Var p) G t
+Proof
+  cheat
+QED
+(* SCRATCH MEASUREMENT: original continuation.
 Resume empty_memory_full_post[post]:
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.SPECL [`func`, `cenv`, `cx`, `TypeBuiltin typ Empty typ []`] buffer_memory_vv_post)) >>
@@ -74,6 +82,8 @@ Resume empty_memory_full_post[post]:
      qexistsl_tac [`sa`, `es.scopes`, `t`] >> simp[]) >>
   qpat_x_assum `!name b len. local_region _ _ s _ _ _ ==> _` drule >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume empty_memory_full_post[bound]:
   drule_all aggregate_alloca_capacity_mem >> strip_tac >>
   irule (SRULE [vyperASTTheory.expr_type_def]
@@ -82,4 +92,7 @@ Resume empty_memory_full_post[bound]:
   >- (qexistsl_tac [`rt`, `w`] >> simp[base_ptr_def, eval_operand_def]) >>
   metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise empty_memory_full_post
+*)

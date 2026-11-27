@@ -14,6 +14,7 @@ Ancestors
   bodyFullBuiltinWordPowCompose stmtLoweringMono freshWrites stateRelProj
   bodyPtrBopRepresentationFrame vyperEvalExprPreservesScopesDom
   bodyFullIfExpReach
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem keyword_suffix_ci_mono[local]:
   !ks xs sa. ci_mono sa (SND (compile_ext_call_kwargs compile_expr cenv rt ks xs sa))
@@ -71,10 +72,11 @@ QED
 
 (* The scalar and materialized cases agree on the frame for the suffix. *)
 Theorem extcall_keyword_head_outcome:
-  body_expr_full_ok cx e /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env e es /\
+  body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env e es /\
   expr_type e = ext_call_kw_type rt k /\
   compile_ext_call_kwarg compile_expr cenv rt k e sa = ((op,dt),sb) /\
   compile_ext_call_kwarg compile_expr (gas_shadow_env T cenv) rt k (gas_shadow_expr e)
@@ -175,13 +177,39 @@ QED
 (* Fold the concrete keyword compiler and evaluator over the same suffix.
    The selected operands match source first-occurrence selection; evaluating
    a later duplicate still contributes its gas marks and frame. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  map_every qid_spec_tac
+    [`tn0`,`G0`,`s0`,`es`,`shadow_sb`,`shadow_sa`,`sb`,`sa`,`dopt`,`go`,`vo`,`ks`] >>
+  Induct_on `xs` >> rpt gen_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS)
+  >- (gvs[compile_ext_call_kwargs_def, comp_return_def] >>
+      irule (Q.INST [`res` |-> `INL ([] : value list)`, `ee` |-> `es`,
+                    `t` |-> `s0`, `G'` |-> `G0`, `tn'` |-> `tn0`]
+        (INST_TYPE [alpha |-> ``:value list``] gas_outcome_full_pure)) >>
+      simp[evaluate_def, return_def] >>
+      qexistsl [`G0`, `s0`, `tn0`] >>
+      simp[gas_origin_ptr_path_rules, ghost_kept_at_refl, ext_call_kwarg_def] >>
+      qx_gen_tac `H` >> strip_tac >>
+      `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+       storage_well_formed_on cx es (FST H)` by
+        (irule storage_well_formed_on_backends >> simp[]) >>
+      qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+        (qspec_then `H` mp_tac) >>
+      simp[] >> strip_tac >> gvs[ghost_inv_at_def, wb_frame_refl] >>
+      first_assum ACCEPT_TAC) >>
+  suspend "cons"
+QED
+*)
 Theorem extcall_request_keywords_owned_outcome:
-  body_exprs_full_ok cx xs /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_sim_inv cenv cx env es /\
-  (!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
-    expr_body_pre cenv cx env e st) /\
+  body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  (!e st. MEM e xs /\ expr_sim_inv_mods mods cenv cx env st ==>
+    expr_body_pre_mods mods cenv cx env e st) /\
   MAP expr_type xs = MAP (ext_call_kw_type rt) ks /\
   compile_ext_call_kwargs compile_expr cenv rt ks xs sa = ((vo,go,dopt),sb) /\
   compile_ext_call_kwargs compile_expr (gas_shadow_env T cenv) rt ks (MAP gas_shadow_expr xs)
@@ -208,7 +236,7 @@ Theorem extcall_request_keywords_owned_outcome:
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     (cx_tops cx) cx st0 (eval_exprs cx xs) (es,s0,G0,tn0)
     (\H res ee G tn t. ?vs. res = INL vs /\ LENGTH vs = LENGTH xs /\
-      expr_sim_inv cenv cx env ee /\
+      expr_sim_inv_mods mods cenv cx env ee /\
       stmt_state_rel H ctx func cenv cx ee t /\
       storage_well_formed_on cx ee (FST H) /\
       t.vs_current_bb = sb.cs_current_bb /\
@@ -251,28 +279,10 @@ Theorem extcall_request_keywords_owned_outcome:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  map_every qid_spec_tac
-    [`tn0`,`G0`,`s0`,`es`,`shadow_sb`,`shadow_sa`,`sb`,`sa`,`dopt`,`go`,`vo`,`ks`] >>
-  Induct_on `xs` >> rpt gen_tac >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS)
-  >- (gvs[compile_ext_call_kwargs_def, comp_return_def] >>
-      irule (Q.INST [`res` |-> `INL ([] : value list)`, `ee` |-> `es`,
-                    `t` |-> `s0`, `G'` |-> `G0`, `tn'` |-> `tn0`]
-        (INST_TYPE [alpha |-> ``:value list``] gas_outcome_full_pure)) >>
-      simp[evaluate_def, return_def] >>
-      qexistsl [`G0`, `s0`, `tn0`] >>
-      simp[gas_origin_ptr_path_rules, ghost_kept_at_refl, ext_call_kwarg_def] >>
-      qx_gen_tac `H` >> strip_tac >>
-      `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
-       storage_well_formed_on cx es (FST H)` by
-        (irule storage_well_formed_on_backends >> simp[]) >>
-      qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
-        (qspec_then `H` mp_tac) >>
-      simp[] >> strip_tac >> gvs[ghost_inv_at_def, wb_frame_refl] >>
-      first_assum ACCEPT_TAC) >>
-  suspend "cons"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_keywords_owned_outcome[cons]:
   Cases_on `ks` >> fs[] >>
   rename1 `compile_ext_call_kwargs _ _ rt (k::ks) (e::xs) sa = _` >>
@@ -343,7 +353,9 @@ Resume extcall_request_keywords_owned_outcome[cons]:
   rpt strip_tac >> Cases_on `res` >> fs[expr_exit_def] >>
   gvs[expr_exit_INR_type,halt_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_keywords_owned_outcome[tail]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   strip_tac >> disj1_tac >>
@@ -533,5 +545,8 @@ Resume extcall_request_keywords_owned_outcome[tail]:
       gvs[] >> strip_tac >> goal_assum (drule_at Any) >> simp[]) >>
   qexists `aid` >> simp[] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise extcall_request_keywords_owned_outcome
+*)

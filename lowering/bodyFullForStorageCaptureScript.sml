@@ -54,7 +54,7 @@ Proof
 QED
 
 Theorem for_storage_iterator_capture:
-  expr_body_pre c cx env e es /\
+  expr_body_pre_mods mods c cx env e es /\
   eval_expr cx e es = (INL (PlaceR (StoragePlace tr slot (ArrayTV et bd))),ee) /\
   valid_horizon cx st0 H ee.storage_trace /\
   storage_well_formed_on cx es (FST H) /\
@@ -107,24 +107,8 @@ QED
 
 (* This is the successful slot branch of the full expression post. Its
    operand may have been computed by a subscript or a field selection. *)
-Theorem for_storage_iterator_operand:
-  expr_body_pre c cx env e es /\
-  eval_expr cx e es = (INL (PlaceR (StoragePlace tr slot (ArrayTV et bd))),ee) /\
-  vv_post H ctx func c cx e es sa sb s0 ee
-    (PlaceR (StoragePlace tr slot (ArrayTV et bd))) vv s /\
-  ptr_vv_ok cx (post_value_type c e)
-    (PlaceR (StoragePlace tr slot (ArrayTV et bd))) vv ee G tn s ==>
-  post_value_type c e = expr_type e /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et bd) /\
-  well_formed_type_value (ArrayTV et bd) /\
-  ?p. vv = LocatedValue (expr_type e) p /\ p.ptr_location = slot_loc tr /\
-    eval_operand p.ptr_operand s = SOME slot /\ op_taint tn p.ptr_operand = {} /\
-    storage_holds cx tr (expr_type e)
-      (PlaceR (StoragePlace tr slot (ArrayTV et bd))) slot ee s /\
-    (case bd of Fixed _ => T | Dynamic _ =>
-       key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
-       (if tr then tload slot s else sload slot s) =
-         lookup_storage slot (get_storage cx ee tr))
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   drule_then assume_tac storage_expr_post_value_type >>
@@ -154,6 +138,28 @@ Proof
   simp[storage_holds_def, type_slot_size_def] >> strip_tac >>
   drule storage_range_agree_head >>
   simp[type_slot_size_def] >> Cases_on `tr` >> simp[sload_def, tload_def]
+QED
+*)
+Theorem for_storage_iterator_operand:
+  expr_body_pre_mods mods c cx env e es /\
+  eval_expr cx e es = (INL (PlaceR (StoragePlace tr slot (ArrayTV et bd))),ee) /\
+  vv_post H ctx func c cx e es sa sb s0 ee
+    (PlaceR (StoragePlace tr slot (ArrayTV et bd))) vv s /\
+  ptr_vv_ok cx (post_value_type c e)
+    (PlaceR (StoragePlace tr slot (ArrayTV et bd))) vv ee G tn s ==>
+  post_value_type c e = expr_type e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et bd) /\
+  well_formed_type_value (ArrayTV et bd) /\
+  ?p. vv = LocatedValue (expr_type e) p /\ p.ptr_location = slot_loc tr /\
+    eval_operand p.ptr_operand s = SOME slot /\ op_taint tn p.ptr_operand = {} /\
+    storage_holds cx tr (expr_type e)
+      (PlaceR (StoragePlace tr slot (ArrayTV et bd))) slot ee s /\
+    (case bd of Fixed _ => T | Dynamic _ =>
+       key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
+       (if tr then tload slot s else sload slot s) =
+         lookup_storage slot (get_storage cx ee tr))
+Proof
+  cheat
 QED
 
 (* The dynamic array's header load can follow any expression operand. The

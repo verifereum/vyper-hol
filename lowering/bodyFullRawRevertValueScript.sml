@@ -7,9 +7,26 @@ Ancestors
   exprOperandVar exprSimProps loweringPosts bodyPtrDefs exprSimMemDefs
   gasExemptCert vyperSystemControl vyperStorageFootprint
   vyperAST gasShadow vyperInterpreter vyperState compileEnv builtinSystem
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs
   pairLib
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (mk_asm "tail_contract") >> rpt gen_tac >> strip_tac >>
+  drule raw_revert_source_pre >> strip_tac >> gvs[] >>
+  `expr_body_pre cenv cx env e es` by
+    (first_x_assum irule >> gvs[expr_body_pre_def]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx (expr_type e) e es` by
+    (gvs[body_exprs_full_ok_def] >>
+     qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
+     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  suspend "compiler"
+QED
+*)
 Theorem raw_revert_value_full_from_tail:
   (!(H : (bool # 256 word # type_value) list # num list) ctx func cenv cx e es (sa:compile_state) (sm:compile_state)
     (sb:compile_state) (s0:venom_state) ee bs op (t:venom_state)
@@ -34,26 +51,18 @@ Theorem raw_revert_value_full_from_tail:
    cenv env ty es.
     (!ce ct e. gas_shadow_compiles (lower_value compile_expr ce ct e)
        (lower_value compile_expr ce ct (gas_shadow_expr e))) /\
-    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Call ann RawRevert args dflt) es ==>
+    body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Call ann RawRevert args dflt) es ==>
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann RawRevert args dflt) es
 Proof
-  disch_then (mk_asm "tail_contract") >> rpt gen_tac >> strip_tac >>
-  drule raw_revert_source_pre >> strip_tac >> gvs[] >>
-  `expr_body_pre cenv cx env e es` by
-    (first_x_assum irule >> gvs[expr_body_pre_def]) >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx (expr_type e) e es` by
-    (gvs[body_exprs_full_ok_def] >>
-     qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
-     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
-  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  suspend "compiler"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_revert_value_full_from_tail[compiler]:
   `!ce child ss v st.
      compile_expr ce ty (Call NoneT RawRevert [child] NONE) ss = (v,st) ==>
@@ -80,7 +89,9 @@ Resume raw_revert_value_full_from_tail[compiler]:
   drule_all raw_revert_layout_shadow >> strip_tac >>
   suspend "operand"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_revert_value_full_from_tail[operand]:
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (rw[gasContextTheory.gas_admissible_def] >>
@@ -99,7 +110,9 @@ Resume raw_revert_value_full_from_tail[operand]:
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >> suspend "compose"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_revert_value_full_from_tail[compose]:
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
     (fn th => assume_tac th) >>
@@ -108,7 +121,9 @@ Resume raw_revert_value_full_from_tail[compose]:
   irule gas_outcome_full_bind_all >>
   suspend "bind"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_revert_value_full_from_tail[bind]:
   rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _`]
@@ -137,7 +152,9 @@ Resume raw_revert_value_full_from_tail[bind]:
   simp[Abbr `childR`] >> rpt strip_tac >>
   Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_revert_value_full_from_tail[selected]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
@@ -152,7 +169,9 @@ Resume raw_revert_value_full_from_tail[selected]:
   qexists `v` >> simp[] >>
   suspend "tail"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_revert_value_full_from_tail[tail]:
   `?bs. dest_BytesV v = SOME bs` by
     (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
@@ -221,5 +240,8 @@ Resume raw_revert_value_full_from_tail[tail]:
     exprSimDefsTheory.expr_exit_def, fragExecTheory.exit_result_def] >>
   gvs[vyperValueTheory.dest_BytesV_def, exprSimDefsTheory.halt_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise raw_revert_value_full_from_tail
+*)

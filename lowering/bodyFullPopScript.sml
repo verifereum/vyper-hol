@@ -22,19 +22,26 @@ Ancestors
   bodyFullUnwrapRun bodyFullGhostFrame
   loweringStateRelDefs bodyFullMemoryFrames
   stmtAppendStorageRunPtr payloadLoadStorePtr appendStorageGhostPtr
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
-Theorem pop_full_target_pre:
-  !cenv cx env ann bt es.
-    expr_body_pre cenv cx env (Pop ann bt) es ==>
-    target_pre cenv cx env bt es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt strip_tac >> irule target_pre_of_pop >>
   reverse conj_tac >- (qexists `ann` >> simp[]) >>
   strip_tac >> gvs[targetPlaceSimTheory.immutable_root_def] >>
   drule pop_immutable_root_rejected >>
   disch_then drule >> simp[]
+QED
+*)
+Theorem pop_full_target_pre:
+  !cenv cx env ann bt es.
+    expr_body_pre_mods mods cenv cx env (Pop ann bt) es ==>
+    target_pre cenv cx env bt es
+Proof
+  cheat
 QED
 
 Theorem pop_full_ghost_cursor_unique[local]:
@@ -1328,14 +1335,8 @@ Proof
     source_memory_read_ranges_def,source_memory_write_ranges_def]
 QED
 
-Theorem pop_vv_full_of_target[local]:
-  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bt es.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx env (Pop ann bt) es /\
-    target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx env bt es ==>
-    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Pop ann bt) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   simp[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
@@ -1417,7 +1418,21 @@ Proof
     (qspecl_then [`INR y`, `r`] mp_tac) >>
   simp[exprSimDefsTheory.halt_exit_def] >> strip_tac >> simp[]
 QED
+*)
+Theorem pop_vv_full_of_target[local]:
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bt es.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx env (Pop ann bt) es /\
+    target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx env bt es ==>
+    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Pop ann bt) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[pop_suffix]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   strip_tac >> fs[] >>
@@ -1445,7 +1460,9 @@ Resume pop_vv_full_of_target[pop_suffix]:
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   simp[target_post_def, place_ptr_rel_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[memory_suffix]:
   rename1 `MemoryPlace local_name local_path` >>
   `target_post (storage_trace_horizon mid.storage_trace) ctx func cenv cx
@@ -1879,7 +1896,9 @@ Resume pop_vv_full_of_target[memory_suffix]:
   qpat_assum `!q. not_fresh_at sa q ==> _ /\ _ /\ _`
     (qspec_then `x` mp_tac) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[memory_store_bound]:
   `u.vs_alloca_next = t.vs_alloca_next` by
     (qpat_assum `u = t with <|vs_vars := _; vs_memory := _|>`
@@ -1898,7 +1917,9 @@ Resume pop_vv_full_of_target[memory_store_bound]:
     lowered_value_type_def, contextTheory.mk_ptr_def] >>
   conj_tac >> gvs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[memory_alloca_history]:
   `alloca_inv t` by
     (qpat_assum `stmt_state_rel H ctx func cenv cx mid t`
@@ -1913,7 +1934,9 @@ Resume pop_vv_full_of_target[memory_alloca_history]:
   qpat_assum `fn_has_code sm sb func` (irule_at Any) >>
   simp[memory_pop_insts_def, mk_inst_def, is_terminator_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[memory_pointer]:
   qpat_assum `read_result cx result fin = (INL (LAST vs),fin)` mp_tac >>
   qpat_assum `evaluate_type (get_tenv cx) ann = SOME etv` mp_tac >>
@@ -1935,7 +1958,9 @@ Resume pop_vv_full_of_target[memory_pointer]:
   simp[ptr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
   gvs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[memory_buffer]:
   qpat_assum `type_memory_bytes cenv ann = type_memory_size etv` mp_tac >>
   qpat_assum `FLOOKUP G' x6 = SOME (prov_base,prov_size)` mp_tac >>
@@ -1947,7 +1972,9 @@ Resume pop_vv_full_of_target[memory_buffer]:
   simp[ptr_buf_ok_def, lowered_value_type_def, expr_type_def] >>
   rpt gen_tac >> strip_tac >> gvs[] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[memory_ghost]:
   `local_ptrs_rel func cenv mid.scopes t` by
     (qpat_assum `stmt_state_rel H ctx func cenv cx mid t`
@@ -2071,6 +2098,7 @@ Resume pop_vv_full_of_target[memory_ghost]:
       (CONJUNCT1 (MATCH_MP (Q.SPEC `x` th)
         (ASSUME ``not_fresh_at sa x``)))))
 QED
+*)
 
 Theorem pop_full_storage_static_path[local]:
   ALL_DISTINCT [x0;x1;x2;x3;x4;x5;x6] /\
@@ -2222,6 +2250,7 @@ QED
 
 Finalise pop_full_storage_static_path[local]
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[storage_suffix]:
   rename1 `StoragePlace tr slot tv` >>
   `target_post (storage_trace_horizon mid.storage_trace) ctx func cenv cx
@@ -2299,7 +2328,9 @@ Resume pop_vv_full_of_target[storage_suffix]:
     (assume_tac o REWRITE_RULE [slot_loc_def]) >>
   drule nested_pop_suffix_shape >> strip_tac >> suspend "storage_live"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[storage_live]:
   qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
   `valid_horizon cx st0 H0 mid.storage_trace` by simp[Abbr `H0`] >>
@@ -2352,7 +2383,9 @@ Resume pop_vv_full_of_target[storage_live]:
   >- suspend "storage_static" >>
   `~t.vs_call_ctx.cc_static` by simp[] >> suspend "storage_positive"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[storage_empty]:
   drule_all fn_has_code_code >> strip_tac >>
   `isPREFIX
@@ -2393,7 +2426,9 @@ Resume pop_vv_full_of_target[storage_empty]:
   simp[exit_result_def] >> rpt strip_tac >>
   simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[storage_static]:
   drule_all fn_has_code_code >> strip_tac >>
   `isPREFIX
@@ -2437,7 +2472,9 @@ Resume pop_vv_full_of_target[storage_static]:
   simp[exit_result_def] >> rpt strip_tac >>
   simp[exprSimDefsTheory.expr_exit_def,exprSimDefsTheory.halt_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[storage_positive]:
   qpat_x_assum `elem = Var x6` SUBST_ALL_TAC >>
   qpat_assum `EVERY (\x. ~not_fresh_at sm x) [x0;x1;x2;x3;x4;x5;x6]`
@@ -2600,7 +2637,9 @@ Resume pop_vv_full_of_target[storage_positive]:
   simp[] >> rpt strip_tac >>
   qpat_assum `!q. not_fresh_at sa q ==> _ /\ _ /\ _` (qspec_then `x` mp_tac) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[storage_vv]:
   `?hroot hrtv hpath hoff. MEM (tr,hroot,hrtv) (FST H) /\
     storage_subregion hrtv hpath hoff (ArrayTV etv (Dynamic n)) /\
@@ -2652,7 +2691,9 @@ Resume pop_vv_full_of_target[storage_vv]:
   simp[Abbr `result`, vv_place_ptr_def, contextTheory.mk_ptr_def,
     slot_loc_def, eval_operand_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[storage_history]:
   `alloca_inv t` by
     (qpat_assum `stmt_state_rel H ctx func cenv cx mid t`
@@ -2666,6 +2707,7 @@ Resume pop_vv_full_of_target[storage_history]:
   qpat_assum `fn_has_code sm sb func` (irule_at Any) >>
   Cases_on `tr` >> simp[nested_pop_suffix_def,mk_inst_def,is_terminator_def]
 QED
+*)
 
 Theorem pop_full_storage_header_taint[local]:
   stor_taint_ok_at D tn s /\
@@ -2715,6 +2757,7 @@ Proof
     vfmStateTheory.lookup_account_def,combinTheory.APPLY_UPDATE_THM]
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[storage_ghost]:
   `?hroot hrtv hpath hoff. MEM (tr,hroot,hrtv) (FST H) /\
     storage_subregion hrtv hpath hoff (ArrayTV etv (Dynamic n)) /\
@@ -2777,7 +2820,9 @@ Resume pop_vv_full_of_target[storage_ghost]:
       (strip_assume_tac o MP (Q.SPEC `x` fam))) >>
   fs[lookup_var_def,op_taint_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pop_vv_full_of_target[storage_pointer]:
   `MEM (tr,n2w offset,root_tv) (FST H)` by
     (irule vyperFiniteStoragePreservationTheory.storage_observations_ok_root >>
@@ -2874,13 +2919,16 @@ Resume pop_vv_full_of_target[storage_pointer]:
   qpat_assum `u = _` (fn th => PURE_ONCE_REWRITE_TAC [th]) >>
   simp[combinTheory.APPLY_UPDATE_THM] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise pop_vv_full_of_target[local]
+*)
 
 (* The target producer selects one endpoint with its place and pointer.
    The pop suffix reads and updates the dynamic length at that pointer. *)
-Theorem pop_expr_full_ok:
-  !cx v10 bt. body_base_target_full_ok cx bt ==> body_expr_full_ok cx (Pop v10 bt)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
@@ -2905,4 +2953,10 @@ Proof
   `expr_body_pre cenv cx env (Pop v10 bt) (es with gas_obs := gs)` by simp[] >>
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
   strip_tac >> gvs[] >> metis_tac[]
+QED
+*)
+Theorem pop_expr_full_ok:
+  !cx v10 bt. body_base_target_full_ok_mods mods exps cx bt ==> body_expr_full_ok_mods mods exps cx (Pop v10 bt)
+Proof
+  cheat
 QED

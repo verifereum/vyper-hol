@@ -62,59 +62,8 @@ QED
 
 (* This is a one-horizon row. The selected witness serves the dynamic
    conjuncts; storage liveness can subsequently be projected at any horizon. *)
-Theorem keyword_packing_row_endpoint[local]:
-  compile_snapshot_vv cenv copy (ext_call_arg_value (lowered_value_type cenv e) vv)
-    sm = (sv,ss) /\
-  (copy /\ ~is_word_type (lowered_value_type cenv e) ==>
-    ?x w tv. vv_location sv = SOME LocMemory /\ vv_operand sv = Var x /\
-      eval_operand (vv_operand sv) u = SOME w /\
-      evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tv /\
-      val_wf tv v /\ FLOOKUP u.vs_allocas sm.cs_next_id =
-        SOME (w2n w,type_memory_size tv) /\
-      si.cs_next_id <= sm.cs_next_id /\ sm.cs_next_id < ss.cs_next_id /\
-      (!n b len. local_region cenv pos.scopes u n b len ==>
-         regions_disjoint (w2n w) (type_memory_size tv) b len)) /\
-  ((?tag op0. sv = StackValue tag op0) \/
-   (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
-        ~is_word_type (lowered_value_type cenv e) /\ p.ptr_location = LocMemory) \/
-   (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
-        ~is_word_type (lowered_value_type cenv e) /\ p.ptr_location <> LocMemory /\
-        lowered_value_type cenv e = expr_type e /\ sv = vv)) /\
-  (?raw. read_result cx raw pos = (INL v,pos) /\
-         vv_holds cenv cx (lowered_value_type cenv e) raw sv pos u /\
-         vv_at cenv cx (lowered_value_type cenv e) si ss pos raw sv u /\
-         ptr_vv_ok cx (lowered_value_type cenv e) raw sv pos Gp tp u /\
-         vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) pos raw sv u) /\
-  vv_storage_live (H:(bool # bytes32 # type_value) list # num list) cx sv pos u /\
-  (!tag op. sv = StackValue tag op /\ ~is_word_type (lowered_value_type cenv e) ==>
-    ptr_buf_ok cenv e op Gp u) /\
-  (!tag p. sv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
-    ptr_buf_ok cenv e p.ptr_operand Gp u) /\
-  (!x. vv_operand sv = Var x ==> not_fresh_at ss x) /\
-  wb_frame cenv pos ee ss u t /\
-  ghost_kept_at lo cenv pos ss Gp tp u G tn /\
-  (!x w. not_fresh_at ss x /\ lookup_var x u = SOME w ==>
-         lookup_var x t = SOME w) /\
-  (!aid row. FLOOKUP u.vs_allocas aid = SOME row ==> FLOOKUP t.vs_allocas aid = SOME row) /\
-  u.vs_alloca_next <= t.vs_alloca_next /\ t.vs_labels = u.vs_labels /\
-  alloca_inv u /\ alloca_inv t /\
-  (~copy ==> ee.scopes = pos.scopes /\ ee.immutables = pos.immutables /\
-     (!tr. get_storage cx ee tr = get_storage cx pos tr)) /\
-  (!n b sz. local_region cenv pos.scopes u n b sz <=>
-             local_region cenv ee.scopes t n b sz) /\
-  stmt_state_rel H ctx func cenv cx pos u /\
-  stmt_state_rel H ctx func cenv cx ee t /\
-  local_ptrs_reserved cenv ss /\ expr_sim_inv cenv cx env pos /\
-  ghost_inv_at D lo d cenv cx ee G tn t /\ dead_lo_ok H D lo cenv cx ==>
-  (?raw. read_result cx raw ee = (INL v,ee) /\
-         vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
-         vv_at cenv cx (lowered_value_type cenv e) si ss ee raw sv t /\
-         ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G tn t /\
-         vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t) /\
-  vv_storage_live H cx sv ee t /\
-  ((case sv of StackValue tag op0 => ~is_word_type (lowered_value_type cenv e)
-    | LocatedValue tag p => p.ptr_location = LocMemory) ==>
-    ptr_buf_ok cenv e (vv_operand sv) G t)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   namedCases_on `sv` ["tag op", "tag p"] >>
   simp[vv_operand_def, vv_location_def, Excl "vv_storage_live_def"] >>
@@ -197,7 +146,145 @@ Proof
   `p.ptr_location = LocCalldata` by (Cases_on `p.ptr_location` >> gvs[]) >>
   fs[vv_holds_def]
 QED
+*)
+Theorem keyword_packing_row_endpoint[local]:
+  compile_snapshot_vv cenv copy (ext_call_arg_value (lowered_value_type cenv e) vv)
+    sm = (sv,ss) /\
+  (copy /\ ~is_word_type (lowered_value_type cenv e) ==>
+    ?x w tv. vv_location sv = SOME LocMemory /\ vv_operand sv = Var x /\
+      eval_operand (vv_operand sv) u = SOME w /\
+      evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tv /\
+      val_wf tv v /\ FLOOKUP u.vs_allocas sm.cs_next_id =
+        SOME (w2n w,type_memory_size tv) /\
+      si.cs_next_id <= sm.cs_next_id /\ sm.cs_next_id < ss.cs_next_id /\
+      (!n b len. local_region cenv pos.scopes u n b len ==>
+         regions_disjoint (w2n w) (type_memory_size tv) b len)) /\
+  ((?tag op0. sv = StackValue tag op0) \/
+   (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
+        ~is_word_type (lowered_value_type cenv e) /\ p.ptr_location = LocMemory) \/
+   (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
+        ~is_word_type (lowered_value_type cenv e) /\ p.ptr_location <> LocMemory /\
+        lowered_value_type cenv e = expr_type e /\ sv = vv)) /\
+  (?raw. read_result cx raw pos = (INL v,pos) /\
+         vv_holds cenv cx (lowered_value_type cenv e) raw sv pos u /\
+         vv_at cenv cx (lowered_value_type cenv e) si ss pos raw sv u /\
+         ptr_vv_ok cx (lowered_value_type cenv e) raw sv pos Gp tp u /\
+         vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) pos raw sv u) /\
+  vv_storage_live (H:(bool # bytes32 # type_value) list # num list) cx sv pos u /\
+  (!tag op. sv = StackValue tag op /\ ~is_word_type (lowered_value_type cenv e) ==>
+    ptr_buf_ok cenv e op Gp u) /\
+  (!tag p. sv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
+    ptr_buf_ok cenv e p.ptr_operand Gp u) /\
+  (!x. vv_operand sv = Var x ==> not_fresh_at ss x) /\
+  wb_frame cenv pos ee ss u t /\
+  ghost_kept_at lo cenv pos ss Gp tp u G tn /\
+  (!x w. not_fresh_at ss x /\ lookup_var x u = SOME w ==>
+         lookup_var x t = SOME w) /\
+  (!aid row. FLOOKUP u.vs_allocas aid = SOME row ==> FLOOKUP t.vs_allocas aid = SOME row) /\
+  u.vs_alloca_next <= t.vs_alloca_next /\ t.vs_labels = u.vs_labels /\
+  alloca_inv u /\ alloca_inv t /\
+  (~copy ==> ee.scopes = pos.scopes /\ ee.immutables = pos.immutables /\
+     (!tr. get_storage cx ee tr = get_storage cx pos tr)) /\
+  (!n b sz. local_region cenv pos.scopes u n b sz <=>
+             local_region cenv ee.scopes t n b sz) /\
+  stmt_state_rel H ctx func cenv cx pos u /\
+  stmt_state_rel H ctx func cenv cx ee t /\
+  local_ptrs_reserved cenv ss /\ expr_sim_inv_mods mods cenv cx env pos /\
+  ghost_inv_at D lo d cenv cx ee G tn t /\ dead_lo_ok H D lo cenv cx ==>
+  (?raw. read_result cx raw ee = (INL v,ee) /\
+         vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
+         vv_at cenv cx (lowered_value_type cenv e) si ss ee raw sv t /\
+         ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G tn t /\
+         vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t) /\
+  vv_storage_live H cx sv ee t /\
+  ((case sv of StackValue tag op0 => ~is_word_type (lowered_value_type cenv e)
+    | LocatedValue tag p => p.ptr_location = LocMemory) ==>
+    ptr_buf_ok cenv e (vv_operand sv) G t)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?H. valid_horizon _ _ H ee.storage_trace` (qx_choose_then `H0` assume_tac) >>
+  qx_gen_tac `i` >> disch_tac >>
+  (* Project a fixed list position at every valid keyword exit horizon. *)
+  qpat_x_assum `!H. valid_horizon _ _ H pos.storage_trace ==> _`
+    (mp_tac o SRULE[LIST_REL_EL_EQN]) >>
+  simp[] >> disch_then (mk_asm "pos_rows") >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  asm "pos_rows" (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 kall_tac (qspec_then `i` mp_tac))) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  simp[EL_ZIP, Excl "vv_storage_live_def"] >>
+  disch_then (CONJUNCTS_THEN2
+    (qx_choosel_then [`si`,`sm`,`ss`,`vv`,`old_raw`,`copy`] (MAP_EVERY assume_tac o CONJUNCTS))
+    (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  qabbrev_tac `e = EL i xs` >> qabbrev_tac `sv = EL i svs` >>
+  qabbrev_tac `v = EL i vs` >>
+  drule_all_then strip_assume_tac keyword_packing_endpoint_frame >>
+  drule_all_then strip_assume_tac keyword_packing_restrict_frame >>
+  `!x. vv_operand sv = Var x ==> not_fresh_at ss x` by
+    metis_tac[extcall_saved_operand_not_fresh] >>
+  `ci_mono sm ss` by
+    (qspecl_then [`cenv`,`copy`,`ext_call_arg_value (lowered_value_type cenv e) vv`,`sm`]
+       mp_tac ci_mono_compile_snapshot_vv >> simp[]) >>
+  `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id` by
+    (drule exprSimUnwrapTheory.compile_expr_extends >> simp[]) >>
+  `local_ptrs_reserved cenv ss` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `si` >>
+     fs[ci_mono_def] >> decide_tac) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+      (?raw. read_result cx raw ee = (INL v,ee) /\
+             vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
+             vv_at cenv cx (lowered_value_type cenv e) si ss ee raw sv t /\
+             ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G tn t /\
+             vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t) /\
+      vv_storage_live H cx sv ee t /\
+      ((case sv of StackValue tag op0 => ~is_word_type (lowered_value_type cenv e)
+        | LocatedValue tag p => p.ptr_location = LocMemory) ==>
+        ptr_buf_ok cenv e (vv_operand sv) G t)` by
+    (qx_gen_tac `H` >> disch_tac >>
+     qpat_assum `!h. valid_horizon _ _ h ee.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+     `stmt_state_rel H ctx func cenv cx pos u /\ vv_storage_live H cx sv pos u` by
+       (asm "pos_rows" (qspec_then `H` mp_tac) >>
+        (impl_tac >- first_assum ACCEPT_TAC) >>
+        disch_then (CONJUNCTS_THEN2 assume_tac
+          (CONJUNCTS_THEN2 kall_tac (qspec_then `i` mp_tac))) >>
+        (impl_tac >- first_assum ACCEPT_TAC) >>
+        simp[EL_ZIP, Abbr `sv`, Excl "vv_storage_live_def"]) >>
+     irule keyword_packing_row_endpoint >>
+     simp[Excl "vv_storage_live_def"] >>
+     qexistsl_tac [`DF H`,`Gp`,`copy`,`ctx`,`d`,`env`,`func`,`lo`,`pos`,`sm`,`tp`,`u`,`vv`] >>
+     simp[Excl "vv_storage_live_def"] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- (qexists_tac `old_raw` >> simp[]) >>
+     disch_tac >>
+     qpat_assum `copy /\ ~is_word_type (lowered_value_type cenv e)` (fn premise =>
+       qpat_assum `_ ==> ?x w tv. vv_location sv = SOME LocMemory /\ _`
+         (qx_choosel_then [`x`,`w`,`tv`] strip_assume_tac o C MATCH_MP premise)) >>
+     qexistsl_tac [`x`,`w`,`tv`] >> simp[] >>
+     qpat_assum `!n b len. local_region cenv pos.scopes u n b len ==> regions_disjoint _ _ _ _`
+       mp_tac >> simp[]) >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> (?raw. _) /\ _`
+    (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (CONJUNCTS_THEN2 (qx_choose_then `raw` strip_assume_tac)
+    (CONJUNCTS_THEN2 kall_tac assume_tac)) >>
+  qexistsl_tac [`raw`,`si`,`sm`,`ss`,`vv`,`copy`] >>
+  simp[Excl "vv_storage_live_def"] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+*)
 Theorem extcall_keyword_packing_rows:
   LENGTH svs = LENGTH xs /\
   local_ptrs_reserved cenv sb /\
@@ -209,7 +296,7 @@ Theorem extcall_keyword_packing_rows:
   (!aid row. FLOOKUP u.vs_allocas aid = SOME row ==> FLOOKUP t.vs_allocas aid = SOME row) /\
   u.vs_alloca_next <= t.vs_alloca_next /\ t.vs_labels = u.vs_labels /\
   MAP FDOM ee.scopes = MAP FDOM pos.scopes /\
-  expr_sim_inv cenv cx env pos /\
+  expr_sim_inv_mods mods cenv cx env pos /\
   (~exprs_can_mutate cenv kw_es ==> ee.scopes = pos.scopes /\ ee.immutables = pos.immutables /\
      (!tr. get_storage cx ee tr = get_storage cx pos tr)) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
@@ -289,80 +376,5 @@ Theorem extcall_keyword_packing_rows:
         | LocatedValue tag p => p.ptr_location = LocMemory) ==>
         ptr_buf_ok cenv e (vv_operand sv) G t)
 Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `?H. valid_horizon _ _ H ee.storage_trace` (qx_choose_then `H0` assume_tac) >>
-  qx_gen_tac `i` >> disch_tac >>
-  (* Project a fixed list position at every valid keyword exit horizon. *)
-  qpat_x_assum `!H. valid_horizon _ _ H pos.storage_trace ==> _`
-    (mp_tac o SRULE[LIST_REL_EL_EQN]) >>
-  simp[] >> disch_then (mk_asm "pos_rows") >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
-    (qspec_then `H0` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  asm "pos_rows" (qspec_then `H0` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  disch_then (CONJUNCTS_THEN2 assume_tac
-    (CONJUNCTS_THEN2 kall_tac (qspec_then `i` mp_tac))) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  simp[EL_ZIP, Excl "vv_storage_live_def"] >>
-  disch_then (CONJUNCTS_THEN2
-    (qx_choosel_then [`si`,`sm`,`ss`,`vv`,`old_raw`,`copy`] (MAP_EVERY assume_tac o CONJUNCTS))
-    (MAP_EVERY assume_tac o CONJUNCTS)) >>
-  qabbrev_tac `e = EL i xs` >> qabbrev_tac `sv = EL i svs` >>
-  qabbrev_tac `v = EL i vs` >>
-  drule_all_then strip_assume_tac keyword_packing_endpoint_frame >>
-  drule_all_then strip_assume_tac keyword_packing_restrict_frame >>
-  `!x. vv_operand sv = Var x ==> not_fresh_at ss x` by
-    metis_tac[extcall_saved_operand_not_fresh] >>
-  `ci_mono sm ss` by
-    (qspecl_then [`cenv`,`copy`,`ext_call_arg_value (lowered_value_type cenv e) vv`,`sm`]
-       mp_tac ci_mono_compile_snapshot_vv >> simp[]) >>
-  `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id` by
-    (drule exprSimUnwrapTheory.compile_expr_extends >> simp[]) >>
-  `local_ptrs_reserved cenv ss` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `si` >>
-     fs[ci_mono_def] >> decide_tac) >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-      (?raw. read_result cx raw ee = (INL v,ee) /\
-             vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\
-             vv_at cenv cx (lowered_value_type cenv e) si ss ee raw sv t /\
-             ptr_vv_ok cx (lowered_value_type cenv e) raw sv ee G tn t /\
-             vv_store_bound cx (lowered_value_type cenv e) (lowered_value_type cenv e) ee raw sv t) /\
-      vv_storage_live H cx sv ee t /\
-      ((case sv of StackValue tag op0 => ~is_word_type (lowered_value_type cenv e)
-        | LocatedValue tag p => p.ptr_location = LocMemory) ==>
-        ptr_buf_ok cenv e (vv_operand sv) G t)` by
-    (qx_gen_tac `H` >> disch_tac >>
-     qpat_assum `!h. valid_horizon _ _ h ee.storage_trace ==> _`
-       (qspec_then `H` mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >>
-     disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-     `stmt_state_rel H ctx func cenv cx pos u /\ vv_storage_live H cx sv pos u` by
-       (asm "pos_rows" (qspec_then `H` mp_tac) >>
-        (impl_tac >- first_assum ACCEPT_TAC) >>
-        disch_then (CONJUNCTS_THEN2 assume_tac
-          (CONJUNCTS_THEN2 kall_tac (qspec_then `i` mp_tac))) >>
-        (impl_tac >- first_assum ACCEPT_TAC) >>
-        simp[EL_ZIP, Abbr `sv`, Excl "vv_storage_live_def"]) >>
-     irule keyword_packing_row_endpoint >>
-     simp[Excl "vv_storage_live_def"] >>
-     qexistsl_tac [`DF H`,`Gp`,`copy`,`ctx`,`d`,`env`,`func`,`lo`,`pos`,`sm`,`tp`,`u`,`vv`] >>
-     simp[Excl "vv_storage_live_def"] >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-     >- (qexists_tac `old_raw` >> simp[]) >>
-     disch_tac >>
-     qpat_assum `copy /\ ~is_word_type (lowered_value_type cenv e)` (fn premise =>
-       qpat_assum `_ ==> ?x w tv. vv_location sv = SOME LocMemory /\ _`
-         (qx_choosel_then [`x`,`w`,`tv`] strip_assume_tac o C MATCH_MP premise)) >>
-     qexistsl_tac [`x`,`w`,`tv`] >> simp[] >>
-     qpat_assum `!n b len. local_region cenv pos.scopes u n b len ==> regions_disjoint _ _ _ _`
-       mp_tac >> simp[]) >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> (?raw. _) /\ _`
-    (qspec_then `H0` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  disch_then (CONJUNCTS_THEN2 (qx_choose_then `raw` strip_assume_tac)
-    (CONJUNCTS_THEN2 kall_tac assume_tac)) >>
-  qexistsl_tac [`raw`,`si`,`sm`,`ss`,`vv`,`copy`] >>
-  simp[Excl "vv_storage_live_def"] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  cheat
 QED

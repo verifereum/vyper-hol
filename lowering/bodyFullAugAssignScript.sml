@@ -40,6 +40,7 @@ Ancestors stateFrame[qualified,ignore_grammar] bodyPtrDefs[qualified,ignore_gram
   bodyFullShadowBodyInv[qualified,ignore_grammar] bodyInvSplit[qualified,ignore_grammar]
   vyperTypeEnv[qualified,ignore_grammar] exprLoweringProps[qualified,ignore_grammar]
   valueEncodingProps[qualified,ignore_grammar] loweringStateRelDefs[qualified,ignore_grammar]
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified]
 
 val _ = Parse.hide "body";
 
@@ -108,22 +109,23 @@ Theorem body_augassign_local_full:
        eval_target_place cx (NameTarget id) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
-       body_expr_full_ok cx e) /\
-    body_base_target_full_ok cx (NameTarget id) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_expr_full_ok_mods mods exps cx e) /\
+    body_base_target_full_ok_mods mods exps cx (NameTarget id) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (NameTarget id) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (NameTarget id) bop e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AugAssign aty (NameTarget id) bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign aty (NameTarget id) bop e) /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign aty (NameTarget id) bop e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
@@ -141,22 +143,23 @@ Theorem body_augassign_toplevel_word_full:
        eval_target_place cx (TopLevelNameTarget nsid) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
-       body_expr_full_ok cx e) /\
-    body_base_target_full_ok cx (TopLevelNameTarget nsid) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_expr_full_ok_mods mods exps cx e) /\
+    body_base_target_full_ok_mods mods exps cx (TopLevelNameTarget nsid) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (TopLevelNameTarget nsid) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (TopLevelNameTarget nsid) bop e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AugAssign aty (TopLevelNameTarget nsid) bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign aty (TopLevelNameTarget nsid) bop e) /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign aty (TopLevelNameTarget nsid) bop e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     supported_scalar_target tops nsid ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -175,22 +178,23 @@ Theorem body_augassign_attr_local_full:
        eval_target_place cx (AttributeTarget (NameTarget id) fld) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
-       body_expr_full_ok cx e) /\
-    body_base_target_full_ok cx (AttributeTarget (NameTarget id) fld) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_expr_full_ok_mods mods exps cx e) /\
+    body_base_target_full_ok_mods mods exps cx (AttributeTarget (NameTarget id) fld) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e) /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign aty (AttributeTarget (NameTarget id) fld) bop e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
@@ -208,22 +212,23 @@ Theorem body_augassign_attr_storage_full:
        eval_target_place cx (AttributeTarget (TopLevelNameTarget nsid) fld) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
-       body_expr_full_ok cx e) /\
-    body_base_target_full_ok cx (AttributeTarget (TopLevelNameTarget nsid) fld) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_expr_full_ok_mods mods exps cx e) /\
+    body_base_target_full_ok_mods mods exps cx (AttributeTarget (TopLevelNameTarget nsid) fld) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e) /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign aty (AttributeTarget (TopLevelNameTarget nsid) fld) bop e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     supported_storage_field_write tops nsid fld ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -241,22 +246,23 @@ Theorem body_augassign_nested_immutable_full:
        eval_target_place cx t s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
-       body_expr_full_ok cx e) /\
-    body_base_target_full_ok cx t /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_expr_full_ok_mods mods exps cx e) /\
+    body_base_target_full_ok_mods mods exps cx t /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty t bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AugAssign aty t bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign aty t bop e) /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign aty t bop e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~(?id. t = NameTarget id) /\
     ~(?nsid. t = TopLevelNameTarget nsid /\
@@ -1202,8 +1208,41 @@ QED
 Finalise body_augassign_nested_immutable_full
 
 (* Every other base target. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem body_augassign_other_full:
+  !cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx t s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_full_ok_mods mods exps cx e) /\
+    body_base_target_full_ok_mods mods exps cx t /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    supported_stmt tops bindings (AugAssign aty t bop e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (AugAssign aty t bop e) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (AugAssign aty t bop e) = SOME env' /\
+    stmt_exprs_ok cenv (AugAssign aty t bop e) /\
+    call_evaluation_safe cx (int_calls_stmt (AugAssign aty t bop e)) /\
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~(?id. t = NameTarget id) /\
+    ~(?nsid. t = TopLevelNameTarget nsid /\
+             supported_scalar_target tops nsid) /\
+    ~(?id fld. t = AttributeTarget (NameTarget id) fld) /\
+    ~(?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+                 supported_storage_field_write tops nsid fld) ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AugAssign aty t bop e))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
+      (eval_stmt cx (AugAssign aty t bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `immutable_root cx t /\ ~(?nsid. t = TopLevelNameTarget nsid)`
@@ -1219,44 +1258,6 @@ Proof
   >- suspend "ordinary" >>
   suspend "immutable"
 QED
-*)
-Theorem body_augassign_other_full:
-  !cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
-       eval_target_place cx t s'' = (INL p,t') /\
-       read_place cx p s'3' = (INL cur,t'') /\
-       place_type_value cx p s'4' = (INL ptv,t'3') ==>
-       body_expr_full_ok cx e) /\
-    body_base_target_full_ok cx t /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    supported_stmt tops bindings (AugAssign aty t bop e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (AugAssign aty t bop e) ==>
-       occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (AugAssign aty t bop e) = SOME env' /\
-    stmt_exprs_ok cenv (AugAssign aty t bop e) /\
-    call_evaluation_safe cx (int_calls_stmt (AugAssign aty t bop e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    ~(?id. t = NameTarget id) /\
-    ~(?nsid. t = TopLevelNameTarget nsid /\
-             supported_scalar_target tops nsid) /\
-    ~(?id fld. t = AttributeTarget (NameTarget id) fld) /\
-    ~(?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
-                 supported_storage_field_write tops nsid fld) ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AugAssign aty t bop e))
-      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
-      (eval_stmt cx (AugAssign aty t bop e)) es
-Proof
-  cheat
-QED
 
 (* Shared composition for the ordinary target-place route. *)
 Theorem augassign_ordinary_full[local]:
@@ -1265,22 +1266,23 @@ Theorem augassign_ordinary_full[local]:
        eval_target_place cx t s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
-       body_expr_full_ok cx e) /\
-    body_base_target_full_ok cx t /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_expr_full_ok_mods mods exps cx e) /\
+    body_base_target_full_ok_mods mods exps cx t /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (AugAssign aty t bop e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (AugAssign aty t bop e) ==>
        occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
     ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AugAssign aty t bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign aty t bop e) /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign aty t bop e)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     (?pt. supported_target_info tops bindings t = SOME pt) /\
     ~immutable_root cx t ==>
@@ -1999,16 +2001,13 @@ QED
 
 Finalise body_augassign_attr_storage_full
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[ordinary]:
   irule augassign_ordinary_full >>
   qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
   qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>
   simp[] >> metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable]:
   qpat_x_assum `t = TopLevelNameTarget nsid` SUBST_ALL_TAC >>
   PairCases_on `nsid` >> rename1 `supported_immutable_type tops (src,id) = SOME ity` >>
@@ -2081,9 +2080,7 @@ Resume body_augassign_other_full[immutable]:
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   suspend "immutable_load"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_load]:
   qabbrev_tac `H0 = storage_trace_horizon es.storage_trace` >>
   `valid_horizon cx st0 H0 es.storage_trace` by simp[Abbr `H0`] >>
@@ -2161,9 +2158,7 @@ Resume body_augassign_other_full[immutable_load]:
   `eval_operand (Lit (n2w off)) u = SOME (n2w off)` by simp[venomStateTheory.eval_operand_def] >>
   suspend "immutable_rhs_setup"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_load_post]:
   qx_gen_tac `H` >> disch_tac >>
   qpat_assum `!K. valid_horizon cx st0 K es.storage_trace ==>
@@ -2194,9 +2189,7 @@ Resume body_augassign_other_full[immutable_load_post]:
      simp[venomStateTheory.eval_operand_def, IgnAsm `off = _`]]) >>
   strip_tac >> simp[IgnAsm `off = _`]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_rhs_setup]:
   asm "immLoadPost" (qspec_then `H0` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
@@ -2280,9 +2273,7 @@ Resume body_augassign_other_full[immutable_rhs_setup]:
   qx_genl_tac [`ms`,`res`,`ee`,`result`,`G'`,`tn'`] >> strip_tac >>
   qexistsl_tac [`ms`,`res`,`ee`,`result`,`G'`,`tn'`] >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_rhs]:
   qx_genl_tac [`ms`,`res`,`ee`,`Gq`,`tnq`,`q`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -2376,9 +2367,7 @@ Resume body_augassign_other_full[immutable_rhs]:
   >- suspend "immutable_operator_error" >>
   suspend "immutable_operator_success"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_operator_error]:
   drule_all augassign_operator_source_runtime_error >>
   disch_then (qspec_then `ee` (qx_choose_then `msg` STRIP_ASSUME_TAC)) >>
@@ -2400,9 +2389,7 @@ Resume body_augassign_other_full[immutable_operator_error]:
   (impl_tac >- first_assum ACCEPT_TAC) >>
   strip_tac >> simp[haltExitProjTheory.halt_exit_not_halt]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_operator_success]:
   rename1 `evaluate_binop _ ptv bop cur rhs = INL value` >>
   `bop_result cx ity bop [ity;expr_type e] cur rhs ee = INL value` by
@@ -2422,9 +2409,7 @@ Resume body_augassign_other_full[immutable_operator_success]:
   rename1 `write_place cx p value ee = (wr,ff)` >>
   suspend "immutable_stage_frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_stage_frame]:
   asm "opSuccess" (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
@@ -2454,9 +2439,7 @@ Resume body_augassign_other_full[immutable_stage_frame]:
     (qx_gen_tac `H` >> disch_tac >> asm "opSuccess" (qspec_then `H` mp_tac) >> simp[]) >>
   suspend "immutable_join_frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_join_frame]:
   qpat_x_assum `Abbrev (p = _)` (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   `cd.cs_next_var <= sb.cs_next_var` by fs[exprLoweringPropsTheory.ci_mono_def] >>
@@ -2501,9 +2484,7 @@ Resume body_augassign_other_full[immutable_join_frame]:
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "immutable_writeback"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_writeback]:
   qexistsl_tac [`Gw`,`tnw`,`w`] >>
   conj_tac >- (asm "opSuccess" (ACCEPT_TAC o cj 1)) >>
@@ -2576,9 +2557,7 @@ Resume body_augassign_other_full[immutable_writeback]:
     (INL (),ee with immutables := _)` kall_tac >>
   suspend "immutable_store_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_store_post]:
   irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
   reverse conj_tac >- simp[] >>
@@ -2657,8 +2636,5 @@ Resume body_augassign_other_full[immutable_store_post]:
   qpat_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN tn0.t_mem`
     (drule_all_then ACCEPT_TAC)
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_augassign_other_full
-*)

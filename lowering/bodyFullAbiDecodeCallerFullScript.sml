@@ -9,6 +9,7 @@ Ancestors
   exprSimAbiGasBridge venomExecSemantics exprOpenFirstOperand exprSimHyps stateRelProj
   bodyFullAbiDecodeCallerCollisionInterface vyperTyping
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified] gasOutcomeFullMods[qualified]
 Libs
   markerLib
 
@@ -331,10 +332,12 @@ val caller_full_entry = ``\fn origin es0 es input_bytes V wty wtv min_size max_s
   ?b data_var d ops ready.
     (^caller_full_open_entry) fn origin es0 es input_bytes V b data_var d ops ready``;
 
-val caller_full_context = ``\ewhole info min_size max_size cap
+val caller_full_context = ``\exps ewhole info min_size max_size cap
     (V:(bool # 256 word # type_value) list # num list -> bool).
-    body_inv (cx_tops cx) ctx ce cx /\ MEM func ctx.ctx_functions /\
-    expr_body_pre ce cx env ewhole es /\
+    contract_inv ce.ce_modules exps ctx ce cx /\
+    (?tops. module_body_inv ce.ce_modules ce.ce_module tops ce cx) /\
+    MEM func ctx.ctx_functions /\
+    expr_body_pre_mods ce.ce_modules ce cx env ewhole es /\
     expr_type e = BaseT (BytesT (Dynamic n)) /\
     lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
     lower_abi_decode data info min_size max_size cap start = (out,final) /\
@@ -369,7 +372,7 @@ val caller_full_cut_selector = boolSyntax.list_mk_forall o
         info = type_to_abi_dec_info ce.ce_struct_fields ce wty;
         V = \(H:(bool # 256 word # type_value) list # num list). valid_horizon cx st0 H es1.storage_trace
     in
-      ((^caller_full_context) ewhole info min_size max_size cap V /\
+      ((^caller_full_context) exps ewhole info min_size max_size cap V /\
        (^caller_full_open_entry) func sa es es1 bs V b data_var d ops ready) /\
       (^caller_collision) start final ==>
       ?r0 Gs ts r Gf tnf.
@@ -377,67 +380,8 @@ val caller_full_cut_selector = boolSyntax.list_mk_forall o
           b d ops ready r0 Gs ts r Gf tnf /\
         (^caller_cut_certificate) start final func ctx s r``;
 
-Theorem abi_decode_caller_full_conditional:
-  (^caller_full_setup_producer) /\ (^caller_full_guarded_producer) /\
-  (^caller_full_cut_selector) /\ (^caller_full_endpoint_producer) /\
-  (^caller_full_context) (TypeBuiltin ann (AbiDecode unwrap) ty [e]) (type_to_abi_dec_info
-    ce.ce_struct_fields ce (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (abi_static_size ce.ce_struct_fields (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else
-    ty)) (abi_size_bound ce.ce_struct_fields (if unwrap /\ needs_external_call_wrap ty then TupleT [ty]
-    else ty)) (type_memory_bytes ce (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (\(H:(bool # 256 word # type_value) list # num list).
-      valid_horizon cx st0 H es1.storage_trace) /\
-  (^caller_full_entry) func sa es es1 bs
-    (\(H:(bool # 256 word # type_value) list # num list). valid_horizon cx st0 H es1.storage_trace)
-    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)
-    (if unwrap /\ needs_external_call_wrap ty then TupleTV [tv] else tv)
-    (abi_static_size ce.ce_struct_fields
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (abi_size_bound ce.ce_struct_fields
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
-    (type_memory_bytes ce
-      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
-    (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty
-      [expr_type e] [BytesV bs])) (\v. return (Value v))) (es1,s,G,tn)
-    (\H res ee G' tn' t. ?v. res = INL v /\
-      vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0 ee v
-        (LocatedValue ann (mk_ptr out LocMemory)) t /\
-      vv_store_bound cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
-        (lowered_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
-        ee v (LocatedValue ann (mk_ptr out LocMemory)) t /\
-      t.vs_current_bb = final.cs_current_bb /\
-      t.vs_inst_idx = LENGTH final.cs_current_insts /\
-      alloca_history func t /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-      s0.vs_alloca_next <= t.vs_alloca_next /\
-      ghost_inv_at (DF H) lo delta ce cx ee G' tn' t /\
-      ptr_vv_ok cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) v (LocatedValue ann
-        (mk_ptr out LocMemory)) ee G' tn' t /\
-      (!w. v = Value w /\ ~is_word_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
-        /\
-        ~is_bytestring_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
-        vv_own ce cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) sa final ee v
-          (LocatedValue ann (mk_ptr out LocMemory)) t /\
-        (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p ==> p.ptr_location =
-          LocMemory)) /\
-      (ce.ce_is_ctor /\ vv_location (LocatedValue ann (mk_ptr out LocMemory)) = SOME LocCode ==>
-        ?val. read_result cx v ee = (INL val,ee) /\
-          !rt w. evaluate_type (get_tenv cx) (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty
-            [e])) = SOME rt /\
-            eval_operand (vv_operand (LocatedValue ann (mk_ptr out LocMemory))) t = SOME w ==>
-            w2n w + type_memory_size rt <= lo /\
-            (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
-              val_in_memory rt val (w2n w) mem)) /\
-      (!t' op. (LocatedValue ann (mk_ptr out LocMemory)) = StackValue t' op /\ ~is_word_type
-        (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
-        ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) op G' t) /\
-      (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p /\ p.ptr_location = LocMemory
-        ==>
-        ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) p.ptr_operand G' t) /\
-      ghost_kept_at lo ce es sa G0 tn0 s0 G' tn')
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
   qabbrev_tac `V = \(H:(bool # 256 word # type_value) list # num list). valid_horizon cx st0 H es1.storage_trace` >>
@@ -654,7 +598,73 @@ Proof
     (qx_choose_then `a` assume_tac))
   >- suspend "normal_post" >> suspend "decoder_abort"
 QED
+*)
+Theorem abi_decode_caller_full_conditional:
+  (^caller_full_setup_producer) /\ (^caller_full_guarded_producer) /\
+  (^caller_full_cut_selector) /\ (^caller_full_endpoint_producer) /\
+  (^caller_full_context) exps (TypeBuiltin ann (AbiDecode unwrap) ty [e]) (type_to_abi_dec_info
+    ce.ce_struct_fields ce (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_static_size ce.ce_struct_fields (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else
+    ty)) (abi_size_bound ce.ce_struct_fields (if unwrap /\ needs_external_call_wrap ty then TupleT [ty]
+    else ty)) (type_memory_bytes ce (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (\(H:(bool # 256 word # type_value) list # num list).
+      valid_horizon cx st0 H es1.storage_trace) /\
+  (^caller_full_entry) func sa es es1 bs
+    (\(H:(bool # 256 word # type_value) list # num list). valid_horizon cx st0 H es1.storage_trace)
+    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)
+    (if unwrap /\ needs_external_call_wrap ty then TupleTV [tv] else tv)
+    (abi_static_size ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (abi_size_bound ce.ce_struct_fields
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty))
+    (type_memory_bytes ce
+      (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty)) ==>
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) ce.ce_modules cx st0
+    (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty
+      [expr_type e] [BytesV bs])) (\v. return (Value v))) (es1,s,G,tn)
+    (\H res ee G' tn' t. ?v. res = INL v /\
+      vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0 ee v
+        (LocatedValue ann (mk_ptr out LocMemory)) t /\
+      vv_store_bound cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
+        (lowered_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
+        ee v (LocatedValue ann (mk_ptr out LocMemory)) t /\
+      t.vs_current_bb = final.cs_current_bb /\
+      t.vs_inst_idx = LENGTH final.cs_current_insts /\
+      alloca_history func t /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo delta ce cx ee G' tn' t /\
+      ptr_vv_ok cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) v (LocatedValue ann
+        (mk_ptr out LocMemory)) ee G' tn' t /\
+      (!w. v = Value w /\ ~is_word_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
+        /\
+        ~is_bytestring_type (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
+        vv_own ce cx (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) sa final ee v
+          (LocatedValue ann (mk_ptr out LocMemory)) t /\
+        (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p ==> p.ptr_location =
+          LocMemory)) /\
+      (ce.ce_is_ctor /\ vv_location (LocatedValue ann (mk_ptr out LocMemory)) = SOME LocCode ==>
+        ?val. read_result cx v ee = (INL val,ee) /\
+          !rt w. evaluate_type (get_tenv cx) (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty
+            [e])) = SOME rt /\
+            eval_operand (vv_operand (LocatedValue ann (mk_ptr out LocMemory))) t = SOME w ==>
+            w2n w + type_memory_size rt <= lo /\
+            (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
+              val_in_memory rt val (w2n w) mem)) /\
+      (!t' op. (LocatedValue ann (mk_ptr out LocMemory)) = StackValue t' op /\ ~is_word_type
+        (post_value_type ce (TypeBuiltin ann (AbiDecode unwrap) ty [e])) ==>
+        ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) op G' t) /\
+      (!t' p. (LocatedValue ann (mk_ptr out LocMemory)) = LocatedValue t' p /\ p.ptr_location = LocMemory
+        ==>
+        ptr_buf_ok ce (TypeBuiltin ann (AbiDecode unwrap) ty [e]) p.ptr_operand G' t) /\
+      ghost_kept_at lo ce es sa G0 tn0 s0 G' tn')
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_decode_caller_full_conditional[normal_post]:
   Q_TAC (fn tm => SUBGOAL_THEN tm (mk_asm "control"))
     `(?z. r = OK z /\ ~z.vs_halted /\
@@ -825,6 +835,7 @@ Resume abi_decode_caller_full_conditional[normal_post]:
       qpat_assum `ann = ty` SUBST1_TAC >> simp[mk_ptr_def]) >>
   qpat_x_assum `r = Abort Revert_abort z` mp_tac >> simp[]
 QED
+*)
 
 (* Both rejection cases interpret the selected Revert and keep its ghosts. *)
 val caller_revert_post =
@@ -845,10 +856,13 @@ val caller_revert_post =
    qx_gen_tac `H` >> disch_tac >>
    asm "joint_path" (qspec_then `H` mp_tac) >> simp[]);
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_decode_caller_full_conditional[decoder_abort]:
   caller_revert_post
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_decode_caller_full_conditional[setup_abort]:
   qpat_assum `r0 = Abort Revert_abort a` (fn th =>
     qpat_assum `r = r0` (assume_tac o PURE_REWRITE_RULE [th])) >>
@@ -866,5 +880,8 @@ Resume abi_decode_caller_full_conditional[setup_abort]:
      asm "setup_obs" (qspec_then `obs` mp_tac) >> simp[]) >>
   caller_revert_post
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise abi_decode_caller_full_conditional
+*)

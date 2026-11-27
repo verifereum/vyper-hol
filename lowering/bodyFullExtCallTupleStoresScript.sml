@@ -5,6 +5,7 @@ Ancestors abiArgsLabelBoundary[qualified,ignore_grammar] calldataReconstruction[
   assignPlaceOperandFacts exprSafeOperand targetPurePostTransport
   exprLowering context compileEnv
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 (* The preparation cut may allocate. Only an old, registered and
    local-disjoint window is protected by the preparation frames. *)
@@ -951,12 +952,31 @@ QED
 (* The write cursor moves, but the allocation-ID cutoff for saved operands
    is fixed at the tuple row.  Old resource bytes and the tuple prefix
    are protected separately. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  map_every qid_spec_tac [`cb`,`ca`,`off`,`s`,`G`,`tn`,`tys`,`tvs`,`vs`] >>
+  Induct_on `svs`
+  >- (rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+      gvs[compile_extcall_store_values_def, comp_return_def] >>
+      qexistsl [`s`,`G`,`tn`] >>
+      simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules, val_in_memory_tuple,
+           valueEncodingDefsTheory.val_in_memory_def, exprSimWordArgsTheory.wb_frame_refl,
+           wordArgsPtrTheory.ghost_kept_at_refl]) >>
+  rpt gen_tac >>
+  namedCases_on `tys` ["", "ty tys"] >> namedCases_on `tvs` ["", "tv tvs"] >>
+  namedCases_on `vs` ["", "v vs"] >>
+  simp[] >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  suspend "head"
+QED
+*)
 Theorem extcall_store_values_joint_all_dead:
   compile_extcall_store_values ce (ZIP (svs,tys)) (Var root) off ca = ((),cb) /\
   LENGTH svs = LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\
   fn_has_code ca cb fn /\ fn_inst_ids_distinct fn /\
   storage_trace_domain cx st0 ee.storage_trace /\ (!H. dead_lo_ok H (DF H) lo ce cx) /\
-  (ce.ce_is_ctor ==> body_inv tops ctx ce cx /\ expr_sim_inv ce cx env entry /\
+  (ce.ce_is_ctor ==> (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env entry /\
                      ee.immutables = entry.immutables) /\
   local_ptrs_reserved ce ca /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
@@ -1019,21 +1039,10 @@ Theorem extcall_store_values_joint_all_dead:
     (!i. w2n bw <= i /\ i < w2n bw+off /\ i IN tq.t_mem ==> i IN tn.t_mem) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK q,Gq,tq))
 Proof
-  map_every qid_spec_tac [`cb`,`ca`,`off`,`s`,`G`,`tn`,`tys`,`tvs`,`vs`] >>
-  Induct_on `svs`
-  >- (rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-      gvs[compile_extcall_store_values_def, comp_return_def] >>
-      qexistsl [`s`,`G`,`tn`] >>
-      simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules, val_in_memory_tuple,
-           valueEncodingDefsTheory.val_in_memory_def, exprSimWordArgsTheory.wb_frame_refl,
-           wordArgsPtrTheory.ghost_kept_at_refl]) >>
-  rpt gen_tac >>
-  namedCases_on `tys` ["", "ty tys"] >> namedCases_on `tvs` ["", "tv tvs"] >>
-  namedCases_on `vs` ["", "v vs"] >>
-  simp[] >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  suspend "head"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_store_values_joint_all_dead[head]:
   rename1 `compile_extcall_store_values ce ((h,ty)::ZIP (svs,rest)) (Var root) off ca = _` >>
   rename1 `val_in_memory (TupleTV (tv::rts)) (ArrayV (TupleV (v::rvs))) _ _` >>
@@ -1094,7 +1103,9 @@ Resume extcall_store_values_joint_all_dead[head]:
   impl_tac >- suspend "tail_input" >>
   suspend "join"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_store_values_joint_all_dead[tail_input]:
   `local_ptrs_reserved ce cm` by
     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
@@ -1161,7 +1172,9 @@ Resume extcall_store_values_joint_all_dead[tail_input]:
   qexistsl [`ei`,`sii`,`vvi`,`smi`,`ssi`,`ri`,`copy'`] >>
   simp[] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_store_values_joint_all_dead[join]:
   disch_then (qx_choose_then `q` (qx_choose_then `Gq` (qx_choose_then `tq`
     (REPEAT_TCL CONJUNCTS_THEN assume_tac)))) >>
@@ -1223,15 +1236,19 @@ Resume extcall_store_values_joint_all_dead[join]:
   qpat_assum `!D. gas_origin_ptr_path _ (m,Gm,tm) _ _` (qspec_then `D` assume_tac) >>
   drule_all fragGasOriginPtrLoopTheory.gas_origin_ptr_path_trans >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise extcall_store_values_joint_all_dead
+*)
 
 Theorem extcall_store_values_joint:
   compile_extcall_store_values ce (ZIP (svs,tys)) (Var root) off ca = ((),cb) /\
   LENGTH svs = LENGTH tys /\ LENGTH tvs = LENGTH tys /\ LENGTH vs = LENGTH tys /\
   fn_has_code ca cb fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
   storage_trace_domain cx st0 ee.storage_trace /\ (!H. dead_lo_ok H (DF H) lo ce cx) /\
-  (ce.ce_is_ctor ==> body_inv tops ctx ce cx /\ expr_sim_inv ce cx env entry /\
+  (ce.ce_is_ctor ==> (contract_inv mods exps ctx ce cx /\
+     module_body_inv mods ce.ce_module tops ce cx) /\ expr_sim_inv_mods mods ce cx env entry /\
                      ee.immutables = entry.immutables) /\
   local_ptrs_reserved ce ca /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\

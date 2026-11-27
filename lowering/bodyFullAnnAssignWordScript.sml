@@ -244,7 +244,7 @@ QED
 Theorem annassign_word_full_success[local]:
   gas_admissible (eval_stmt cx (AnnAssign id (expr_type e) e)) (stmt_res_ok lctx) es /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-  is_word_type (expr_type e) /\ expr_body_pre ce cx env e es /\
+  is_word_type (expr_type e) /\ expr_body_pre_mods mods ce cx env e es /\
   (!tail. bind (eval_expr cx e) (read_result cx) (es with gas_obs := prefix ++ tail) =
     (INL v,mid with gas_obs := tail)) /\
   expr_post H ctx func ce cx e es a b entry mid v op u /\
@@ -281,7 +281,7 @@ QED
 
 Theorem annassign_word_full_store_freshness[local]:
   compile_stmt ce lctx ret_ty (AnnAssign id typ e) r = ((),sf) /\
-  expr_body_pre ce cx env e es /\ is_word_type typ /\ expr_type e = typ /\
+  expr_body_pre_mods mods ce cx env e es /\ is_word_type typ /\ expr_type e = typ /\
   lower_value compile_expr ce typ e a = (op,b) /\
   FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) 32) /\
   lookup_scopes id scopes = NONE /\
@@ -313,32 +313,6 @@ Proof
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_sim_full_def] >>
-  disch_then (qspecl_then [`st0`, `a`, `b`, `shadow_a`, `shadow_b`,
-     `op`, `t`, `G`, `tn`] mp_tac) >>
-  impl_tac >-
-    (asm_rewrite_tac[] >> rpt conj_tac
-     >- (qpat_x_assum `!H. dead_lo_ok H _ _ old _` mp_tac >>
-         simp[bodyPtrDefsTheory.dead_lo_ok_def])
-     >- (rpt strip_tac >> metis_tac[])
-     >- (rpt strip_tac >> fs[ret_pc_ok_def] >> metis_tac[])
-     >~ [`gas_admissible _ expr_res_ok es`]
-     >- (drule annassign_admissible_rhs >> simp[])
-     >~ [`return_buf_frame d ce a t`]
-     >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-         qexistsl_tac [`old`, `s0`, `sa`] >> simp[]) >>
-     simp[]) >>
-  simp[post_value_type_word] >> disch_tac >>
-  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
-  goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >> simp[] >>
-  rpt strip_tac >> qexists_tac `v` >> simp[]
-QED
-*)
 Theorem annassign_word_full_rhs[local]:
   is_word_type (expr_type e) /\
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -385,14 +359,34 @@ Theorem annassign_word_full_rhs[local]:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  cheat
+  strip_tac >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`, `a`, `b`, `shadow_a`, `shadow_b`,
+     `op`, `t`, `G`, `tn`] mp_tac) >>
+  impl_tac >-
+    (asm_rewrite_tac[] >> rpt conj_tac
+     >- (qpat_x_assum `!H. dead_lo_ok H _ _ old _` mp_tac >>
+         simp[bodyPtrDefsTheory.dead_lo_ok_def])
+     >- (rpt strip_tac >> metis_tac[])
+     >- (rpt strip_tac >> fs[ret_pc_ok_def] >> metis_tac[])
+     >~ [`gas_admissible _ expr_res_ok es`]
+     >- (drule annassign_admissible_rhs >> simp[])
+     >~ [`return_buf_frame d ce a t`]
+     >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+         qexistsl_tac [`old`, `s0`, `sa`] >> simp[]) >>
+     simp[]) >>
+  simp[post_value_type_word] >> disch_tac >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >> simp[] >>
+  rpt strip_tac >> qexists_tac `v` >> simp[]
 QED
 
 Theorem annassign_word_full_declared_layout:
   declare_local old id (expr_type e) sa = (ce,r) /\
   compile_stmt ce lctx ret_ty (AnnAssign id (expr_type e) e) r = ((),sf) /\
   old.ce_alloca_locals /\ FLOOKUP old.ce_vars id = NONE /\
-  is_word_type (expr_type e) /\ expr_body_pre ce cx env e es /\
+  is_word_type (expr_type e) /\ expr_body_pre_mods mods ce cx env e es /\
   local_ptrs_reserved old sa /\ fn_has_code sa sf func ==>
   ?p a b op.
     FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) 32) /\
@@ -453,7 +447,7 @@ Theorem annassign_word_full_store_ready[local]:
       ghost_kept_at lo ce es a Ga tna entry G1 tn1) /\ ~u.vs_halted /\ mid.gas_obs = []) ==>
   storage_trace_domain cx st0 mid.storage_trace /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-  is_word_type (expr_type e) /\ expr_body_pre ce cx env e es /\
+  is_word_type (expr_type e) /\ expr_body_pre_mods mods ce cx env e es /\
   ptr_covers Ga tna p entry 32 /\ not_fresh_at a p /\
   lookup_var p entry = SOME w /\ FLOOKUP entry.vs_allocas aid = SOME (w2n w,32) /\
   w2n w + 32 <= entry.vs_alloca_next /\
@@ -504,7 +498,7 @@ Theorem annassign_word_full_runtime_preparation[local]:
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\
-  lookup_scopes id es.scopes = NONE /\ expr_body_pre cenv' cx env e es /\
+  lookup_scopes id es.scopes = NONE /\ expr_body_pre_mods mods cenv' cx env e es /\
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv' cx (expr_type e) e es /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_context ctx shadow_ctx /\
   ctx_inst_ids_distinct ctx /\ gas_shadow_function func shadow_func /\
@@ -675,7 +669,7 @@ Theorem annassign_word_full_source_action[local]:
       ghost_kept_at lo cenv' es sa' Ga tna t G1 tn1) /\ ~u.vs_halted /\ mid.gas_obs = []) ==>
   is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\
-  expr_sim_inv cenv cx env es /\ expr_body_pre cenv' cx env e es /\
+  expr_sim_inv_mods mods cenv cx env es /\ expr_body_pre_mods mods cenv' cx env e es /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\ ~block_is_terminated sa /\
@@ -806,7 +800,7 @@ Theorem annassign_word_full_execution_sep:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\
   lookup_scopes id es.scopes = NONE /\
-  expr_sim_inv cenv cx env es /\ expr_body_pre cenv' cx env e es /\
+  expr_sim_inv_mods mods cenv cx env es /\ expr_body_pre_mods mods cenv' cx env e es /\
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv' cx (expr_type e) e es /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sf shadow_sf /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -915,7 +909,7 @@ Theorem annassign_word_full_execution:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\
   lookup_scopes id es.scopes = NONE /\
-  expr_sim_inv cenv cx env es /\ expr_body_pre cenv' cx env e es /\
+  expr_sim_inv_mods mods cenv cx env es /\ expr_body_pre_mods mods cenv' cx env e es /\
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv' cx (expr_type e) e es /\
   gas_shadow_state sa shadow_sa /\ gas_shadow_state sf shadow_sf /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\

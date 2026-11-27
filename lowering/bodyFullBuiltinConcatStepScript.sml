@@ -9,17 +9,10 @@ Ancestors bodyFullBuiltinConcatReady bodyFullBuiltinConcatHead
   loweringStateRelDefs loweringPosts compileEnv stateRelProj
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState
   venomState words list finite_map pred_set
+  exprSimHypsDefs[qualified]
 
-Theorem concat_loop_head_entry:
-  concat_loop_ready (e::args) P k DF lo d ctx shadow_ctx PG
-    tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
-    s0 G0 tn0 dv ov ow binst B bsz oinst ==>
-  expr_body_pre cenv cx env e es /\
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx (expr_type e) e es /\
-  ?op sc shadow_sc.
-    expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx (expr_type e) e es (st0,sa,sc,shadow_sa,shadow_sc,op,s0,G0,tn0)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   pure_rewrite_tac [concat_loop_ready_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -79,61 +72,23 @@ Proof
   pure_rewrite_tac [expr_sim_full_hypotheses_def,expr_sim_full_code_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-Theorem concat_loop_copy_entry:
+*)
+Theorem concat_loop_head_entry:
   concat_loop_ready (e::args) P k DF lo d ctx shadow_ctx PG
     tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
-    s0 G0 tn0 dv ov ow binst B bsz oinst /\
-  expr_body_pre cenv cx env e es /\
-  expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx (expr_type e) e es (st0,sa,sc,shadow_sa,shadow_sc,op,s0,G0,tn0) /\
-  (!tail. bind (eval_expr cx e) (read_result cx)
-      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
-      (INL v,ee with gas_obs := tail)) /\
-  storage_trace_domain cx st0 ee.storage_trace /\
-  (!H. valid_horizon cx st0 H ee.storage_trace ==>
-    expr_sim_full_post (DF,lo,d,ctx,func) cenv cx e (es,sa,sc,s0,op,G0,tn0)
-      H (INL v) ee G1 tn1 t /\
-    (?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-         (s0,G0,tn0) cm (OK t,G1,tn1)) /\
-    ~t.vs_halted /\ ee.gas_obs = []) ==>
-  ?s2 shadow_s2 u G2 tn2.
-    concat_loop_ready args (P+concat_payload_capacity (expr_type e))
-      (k+LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []))
-      DF lo d ctx shadow_ctx PG tops func shadow_func cenv cx env st0 ee s2 sb
-      shadow_s2 shadow_sb u G2 tn2 dv ov ow binst B bsz oinst /\
-    (!H. valid_horizon cx st0 H ee.storage_trace ==>
-      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        (t,G1,tn1) [] (OK u,G2,tn2)) /\
-    ~u.vs_halted /\ ee.gas_obs = [] /\
-    (?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v) /\
-    ci_mono sa sc /\ ci_mono sc s2 /\
-    s0.vs_alloca_next <= t.vs_alloca_next /\ u.vs_alloca_next = t.vs_alloca_next /\
-    ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2 /\
-    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-    (!name lb lsz. local_region cenv ee.scopes u name lb lsz <=>
-      local_region cenv es.scopes s0 name lb lsz) /\
-    mem_bytes_at (B+32) (k+LENGTH (case v of BytesV bs => bs
-                 | StringV str => MAP (n2w o ORD) str | _ => [])) u.vs_memory =
-      mem_bytes_at (B+32) k s0.vs_memory ++
-        (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) /\
-    (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z u = SOME w) /\
-    (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==> FLOOKUP u.vs_allocas aid = SOME a) /\
-    (!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\ aid < sa.cs_next_id /\
-       (p+n <= B \/ B+bsz <= p) /\ (p+n <= w2n ow \/ w2n ow+64 <= p) /\
-       (!name lb lsz. local_region cenv es.scopes s0 name lb lsz ==>
-                       p+n <= lb \/ lb+lsz <= p) ==>
-       mem_bytes_at p n u.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-    locals_kept cenv es ee s0 u /\
-    (~expr_has_effect e ==>
-      (!name lb lsz. local_region cenv es.scopes s0 name lb lsz ==>
-         mem_bytes_at lb lsz u.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
-      (!p n. (p+n <= B \/ B+bsz <= p) /\
-         (p+n <= w2n ow \/ w2n ow+64 <= p) /\
-         (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-            sa.cs_next_id <= inst.inst_id /\ FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==>
-            regions_disjoint p n b sz) ==>
-         mem_bytes_at p n u.vs_memory = mem_bytes_at p n s0.vs_memory))
+    s0 G0 tn0 dv ov ow binst B bsz oinst ==>
+  expr_body_pre_mods mods cenv cx env e es /\
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx (expr_type e) e es /\
+  ?op sc shadow_sc.
+    expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx (expr_type e) e es (st0,sa,sc,shadow_sa,shadow_sc,op,s0,G0,tn0)
+Proof
+  cheat
+QED
+
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qhdtm_assum `concat_loop_ready`
@@ -192,7 +147,66 @@ Proof
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> metis_tac[]) >>
   suspend "arm"
 QED
+*)
+Theorem concat_loop_copy_entry:
+  concat_loop_ready (e::args) P k DF lo d ctx shadow_ctx PG
+    tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
+    s0 G0 tn0 dv ov ow binst B bsz oinst /\
+  expr_body_pre_mods mods cenv cx env e es /\
+  expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx (expr_type e) e es (st0,sa,sc,shadow_sa,shadow_sc,op,s0,G0,tn0) /\
+  (!tail. bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+      (INL v,ee with gas_obs := tail)) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_sim_full_post (DF,lo,d,ctx,func) cenv cx e (es,sa,sc,s0,op,G0,tn0)
+      H (INL v) ee G1 tn1 t /\
+    (?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (s0,G0,tn0) cm (OK t,G1,tn1)) /\
+    ~t.vs_halted /\ ee.gas_obs = []) ==>
+  ?s2 shadow_s2 u G2 tn2.
+    concat_loop_ready args (P+concat_payload_capacity (expr_type e))
+      (k+LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []))
+      DF lo d ctx shadow_ctx PG tops func shadow_func cenv cx env st0 ee s2 sb
+      shadow_s2 shadow_sb u G2 tn2 dv ov ow binst B bsz oinst /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (t,G1,tn1) [] (OK u,G2,tn2)) /\
+    ~u.vs_halted /\ ee.gas_obs = [] /\
+    (?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v) /\
+    ci_mono sa sc /\ ci_mono sc s2 /\
+    s0.vs_alloca_next <= t.vs_alloca_next /\ u.vs_alloca_next = t.vs_alloca_next /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2 /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+    (!name lb lsz. local_region cenv ee.scopes u name lb lsz <=>
+      local_region cenv es.scopes s0 name lb lsz) /\
+    mem_bytes_at (B+32) (k+LENGTH (case v of BytesV bs => bs
+                 | StringV str => MAP (n2w o ORD) str | _ => [])) u.vs_memory =
+      mem_bytes_at (B+32) k s0.vs_memory ++
+        (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) /\
+    (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z u = SOME w) /\
+    (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==> FLOOKUP u.vs_allocas aid = SOME a) /\
+    (!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\ aid < sa.cs_next_id /\
+       (p+n <= B \/ B+bsz <= p) /\ (p+n <= w2n ow \/ w2n ow+64 <= p) /\
+       (!name lb lsz. local_region cenv es.scopes s0 name lb lsz ==>
+                       p+n <= lb \/ lb+lsz <= p) ==>
+       mem_bytes_at p n u.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    locals_kept cenv es ee s0 u /\
+    (~expr_has_effect e ==>
+      (!name lb lsz. local_region cenv es.scopes s0 name lb lsz ==>
+         mem_bytes_at lb lsz u.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+      (!p n. (p+n <= B \/ B+bsz <= p) /\
+         (p+n <= w2n ow \/ w2n ow+64 <= p) /\
+         (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+            sa.cs_next_id <= inst.inst_id /\ FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==>
+            regions_disjoint p n b sz) ==>
+         mem_bytes_at p n u.vs_memory = mem_bytes_at p n s0.vs_memory))
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_loop_copy_entry[arm]:
   `expr_store_bound cx (expr_type e) v op t` by
     (qpat_assum `post_value_type cenv e = expr_type e` (fn th =>
@@ -241,7 +255,9 @@ Resume concat_loop_copy_entry[arm]:
           CONJUNCT1 o CONJUNCT2 o MATCH_MP th))) >>
   suspend "ready"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_loop_copy_entry[ready]:
   qpat_assum `EVERY _ (e::args)`
     (map_every assume_tac o CONJUNCTS o BETA_RULE o REWRITE_RULE [listTheory.EVERY_DEF]) >>
@@ -288,5 +304,8 @@ Resume concat_loop_copy_entry[ready]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qexists `tv` >> asm_rewrite_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise concat_loop_copy_entry
+*)

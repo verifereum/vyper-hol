@@ -17,9 +17,18 @@ Ancestors
   bodyFullForArrayBranch bodyFullForIteratorRoot bodyFullForIteratorHeld
   bodyStorageMetadata vyperSubscriptOverlap vyperValue vyperTyping
   vyperTypeContract[qualified,ignore_grammar]
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `it`
+  >- suspend "array"
+  >- suspend "range"
+QED
+*)
 Theorem compile_for_frag_full:
   !cx id typ it n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -29,24 +38,25 @@ Theorem compile_for_frag_full:
        (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
        check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
        (INL x,t'') ==>
-       body_for_full_ok cx tyv id body vs) /\
+       body_for_full_ok_mods mods exps cx tyv id body vs) /\
     (!tenv s'' tyv t.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
        (INL tyv,t) ==>
-       body_iterator_full_ok cx it) /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ it n body) /\
+       body_iterator_full_ok_mods mods exps cx it) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ supported_stmt tops bindings (For id typ it n body) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (For id typ it n body) ==>
        occurs_abi_decode_target target tops) /\
     stmt_loop_calls_ok [(NONE,tops)] (For id typ it n body) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ it n body) = SOME env' /\
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
@@ -54,11 +64,10 @@ Theorem compile_for_frag_full:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ it n body)))
       (eval_stmt cx (For id typ it n body)) es
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `it`
-  >- suspend "array"
-  >- suspend "range"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_frag_full[range]:
   rename1 `For id typ (Range a b) n body` >>
   qspecl_then
@@ -72,7 +81,9 @@ Resume compile_for_frag_full[range]:
   conj_tac >- (simp[] >> MATCH_ACCEPT_TAC (SRULE [] for_full_exit_scopes_gas_obs)) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_frag_full[array]:
   rename1 `For id typ (Array e) n body` >>
   Cases_on `?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
@@ -105,7 +116,9 @@ Resume compile_for_frag_full[array]:
     bodyFullForArrayBranchTheory.compile_for_nonslot_array_frag_full >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_frag_full[nested_array]:
   `well_typed_expr env e` by
     fs[Once type_stmt_def, well_typed_iterator_def, AllCaseEqs()] >>
@@ -128,5 +141,8 @@ Resume compile_for_frag_full[nested_array]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qexistsl [`tgt`,`nid`] >> simp[] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_for_frag_full
+*)

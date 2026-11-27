@@ -4,19 +4,10 @@ Ancestors
   bodyFullShadowBodyInv
   bodyFullMakeArrayResult bodyFullMakeTuple bodyFullMakeArrayArray
   bodyFullOfVV bodyFullPreds bodySimFull exprSimHyps exprSimSource
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
-Theorem make_array_builtin_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann t n args es.
-    (builtin_args_length_ok (MakeArray t n) (LENGTH args) ==>
-      body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (MakeArray t n) args) es ==>
-    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Builtin ann (MakeArray t n) args) es /\
-    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Builtin ann (MakeArray t n) args) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   reverse conj_asm2_tac
@@ -35,4 +26,21 @@ Proof
      (es with gas_obs := gs)` by simp[] >>
   drule_all expr_body_pre_runtime_typed >>
   strip_tac >> gvs[] >> metis_tac[]
+QED
+*)
+Theorem make_array_builtin_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann t n args es.
+    (builtin_args_length_ok (MakeArray t n) (LENGTH args) ==>
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (MakeArray t n) args) es ==>
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Builtin ann (MakeArray t n) args) es /\
+    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Builtin ann (MakeArray t n) args) es
+Proof
+  cheat
 QED

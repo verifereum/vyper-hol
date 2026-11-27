@@ -13,6 +13,7 @@ Ancestors
   externalEntryShape gasShadowState gasShadowCompileConvert
   evalNoHalt exprSimDefs gasOutcomeFull bodyFullPreds list
   bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 Libs
   pairLib
 
@@ -54,15 +55,15 @@ QED
 
 (* Only the ExtCall typing clause is needed to seed the operand cuts. *)
 Theorem request_stage_source_boundary:
-  expr_body_pre cenv cx env
+  expr_body_pre_mods mods cenv cx env
     (Call ann (ExtCall stat skip (name,ats,rt) opts) args dr) es ==>
   ann = rt /\ dr = NONE /\ ext_call_opts_ok stat opts /\
   LENGTH args = 1 + LENGTH ats + LENGTH opts /\
   expr_type (HD args) = BaseT AddressT /\
   arg_types_fit (MAP expr_type (TAKE (LENGTH ats) (TL args))) ats /\
   MAP expr_type (DROP (1 + LENGTH ats) args) = MAP (ext_call_kw_type rt) opts /\
-  (!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
-    expr_body_pre cenv cx env e st)
+  (!e st. MEM e args /\ expr_sim_inv_mods mods cenv cx env st ==>
+    expr_body_pre_mods mods cenv cx env e st)
 Proof
   rw[exprSimHypsDefsTheory.expr_body_pre_def,
      cj 13 vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -260,18 +261,19 @@ QED
 (* The continuation starts before the optional code check, with the physical
    request at the endpoint chosen by operand evaluation and ABI packing. *)
 Theorem extcall_request_full:
-  body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dr) es /\
   (!st target mid n. eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\
-    n = LENGTH ats ==> body_exprs_full_ok cx (TAKE n (DROP 1 args))) /\
+    n = LENGTH ats ==> body_exprs_full_ok_mods mods exps cx (TAKE n (DROP 1 args))) /\
   (!st target mid n src vs ee.
     eval_exprs cx (TAKE 1 args) st = (INL target,mid) /\
     n = LENGTH ats /\ eval_exprs cx (TAKE n (DROP 1 args)) src = (INL vs,ee) ==>
-    body_exprs_full_ok cx (DROP (1 + n) args)) /\
-  body_exprs_full_ok cx (TAKE 1 args) /\
+    body_exprs_full_ok_mods mods exps cx (DROP (1 + n) args)) /\
+  body_exprs_full_ok_mods mods exps cx (TAKE 1 args) /\
   compile_expr cenv ty (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dr)
     sa = (vv,sb) /\
   compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr

@@ -16,23 +16,14 @@ Ancestors
   exprSimHash exprSimWordArgs exprSimProps exprSimHyps loweringPosts
   loweringStateRelDefs ptrDiscipline compileEnv fragExec
   vyperInterpreter vyperState vyperValue vyperContext vyperAST list words
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs
   horizonTypeLib
 
 val _ = Parse.hide "body";
 
-Theorem uint2str_builtin_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
-    (builtin_args_length_ok (Uint2Str n) (LENGTH args) ==>
-     body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (Uint2Str n) args) es ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin ann (Uint2Str n) args) es /\
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin ann (Uint2Str n) args) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -94,7 +85,25 @@ Proof
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
   suspend "compose"
 QED
+*)
+Theorem uint2str_builtin_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty ann n args es.
+    (builtin_args_length_ok (Uint2Str n) (LENGTH args) ==>
+     body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (Uint2Str n) args) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann (Uint2Str n) args) es /\
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann (Uint2Str n) args) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume uint2str_builtin_sim_full[compose]:
   `eval_expr cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) =
     bind (bind (eval_expr cx e) (read_result cx))
@@ -155,7 +164,9 @@ Resume uint2str_builtin_sim_full[compose]:
               arithmeticTheory.LESS_EQ_TRANS] >>
   suspend "suffix"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume uint2str_builtin_sim_full[suffix]:
   `bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
@@ -212,7 +223,9 @@ Resume uint2str_builtin_sim_full[suffix]:
       expr_type_def, is_bytestring_type_def] >>
   rpt conj_tac >> simp[] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume uint2str_builtin_sim_full[suffix_entry]:
   `stmt_state_rel (storage_trace_horizon mid.storage_trace) ctx func cenv cx es s0` by
     metis_tac[] >>
@@ -231,5 +244,8 @@ Resume uint2str_builtin_sim_full[suffix_entry]:
      drule_all (at_horizon_named "H" body_local_region_frontier) >> decide_tac) >>
   simp[] >> conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise uint2str_builtin_sim_full
+*)

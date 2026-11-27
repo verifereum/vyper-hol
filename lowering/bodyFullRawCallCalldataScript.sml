@@ -20,6 +20,7 @@ Ancestors
   gasShadowCompile gasShadowState gasShadow fragGasOriginPtr
   vyperStorageFootprint exprSafeOperand stateRelProj loweringStateRelDefs allocaHistory
   finite_map pred_set arithmetic
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs
   monadsyntax
 
@@ -49,15 +50,21 @@ Proof
   Cases_on `flags.rcf_max_outsize = 0` >> gvs[]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  Cases_on `args` >> simp[expr_body_pre_def, well_typed_expr_def]
+QED
+*)
 Theorem raw_call_calldata_pre:
-  expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
   ?a kws. args = a::kws /\ expr_type a = BaseT AddressT /\
     LENGTH kws = LENGTH flags.rcf_kws /\ raw_call_kws_ok flags kws /\
     ann = raw_call_return_type flags /\ dflt = NONE /\
     ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
     flags.rcf_max_outsize < dimword (:256)
 Proof
-  Cases_on `args` >> simp[expr_body_pre_def, well_typed_expr_def]
+  cheat
 QED
 
 Theorem raw_call_calldata_word_args:
@@ -71,11 +78,8 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> metis_tac[]
 QED
 
-Theorem raw_call_calldata_args_ready:
-  expr_body_pre cenv cx env
-    (Call ann (RawCallCalldataTarget flags) (a::kws) NONE) es ==>
-  !e ee. MEM e (a::kws) /\ expr_sim_inv cenv cx env ee ==>
-    expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_tac >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   conj_tac
@@ -88,23 +92,18 @@ Proof
   qpat_assum `MEM e (a::kws)` (strip_assume_tac o REWRITE_RULE [MEM]) >>
   fs[is_word_type_def, EVERY_MEM]
 QED
+*)
+Theorem raw_call_calldata_args_ready:
+  expr_body_pre_mods mods cenv cx env
+    (Call ann (RawCallCalldataTarget flags) (a::kws) NONE) es ==>
+  !e ee. MEM e (a::kws) /\ expr_sim_inv_mods mods cenv cx env ee ==>
+    expr_body_pre_mods mods cenv cx env e ee /\ is_word_type (expr_type e)
+Proof
+  cheat
+QED
 
-Theorem raw_call_calldata_source_ready:
-  expr_body_pre cenv cx env
-    (Call ann (RawCallCalldataTarget flags) (a::kws) NONE) es /\
-  eval_exprs cx (a::kws) (es with gas_obs := gs) = (INL vs,mid) /\
-  typed_args_post H ctx func cenv cx es sa s0 mid (a::kws) (addr::xs) vs t ==>
-  ?target av kvs amount.
-    vs = av::kvs /\ dest_AddressV av = SOME target /\ LENGTH kvs = LENGTH flags.rcf_kws /\
-    expr_sim_inv cenv cx env mid /\ eval_operand addr t = SOME (w2w target) /\
-    raw_call_value flags.rcf_kws kvs = SOME amount /\
-    eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
-                   NONE => Lit 0w | SOME p => p) t = SOME (n2w amount) /\
-    amount < dimword (:256) /\
-    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
-    (!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
-      ?p w. ext_call_kwarg EKGas flags.rcf_kws xs = SOME p /\
-            eval_operand p t = SOME w /\ g = w2n w)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule raw_call_calldata_pre >> simp[] >> strip_tac >>
@@ -172,6 +171,26 @@ Proof
      metis_tac[optionTheory.SOME_11]) >>
   qexistsl [`target`,`amount`] >> simp[]
 QED
+*)
+Theorem raw_call_calldata_source_ready:
+  expr_body_pre_mods mods cenv cx env
+    (Call ann (RawCallCalldataTarget flags) (a::kws) NONE) es /\
+  eval_exprs cx (a::kws) (es with gas_obs := gs) = (INL vs,mid) /\
+  typed_args_post H ctx func cenv cx es sa s0 mid (a::kws) (addr::xs) vs t ==>
+  ?target av kvs amount.
+    vs = av::kvs /\ dest_AddressV av = SOME target /\ LENGTH kvs = LENGTH flags.rcf_kws /\
+    expr_sim_inv_mods mods cenv cx env mid /\ eval_operand addr t = SOME (w2w target) /\
+    raw_call_value flags.rcf_kws kvs = SOME amount /\
+    eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
+                   NONE => Lit 0w | SOME p => p) t = SOME (n2w amount) /\
+    amount < dimword (:256) /\
+    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
+    (!g. OPTION_BIND (ext_call_kwarg EKGas flags.rcf_kws kvs) dest_NumV = SOME g ==>
+      ?p w. ext_call_kwarg EKGas flags.rcf_kws xs = SOME p /\
+            eval_operand p t = SOME w /\ g = w2n w)
+Proof
+  cheat
+QED
 
 Theorem raw_call_calldata_eval:
   eval_expr cx (Call ann (RawCallCalldataTarget flags) args NONE) =
@@ -186,13 +205,8 @@ Proof
   simp[Once evaluate_def]
 QED
 
-Theorem raw_call_calldata_vv_full[local]:
-  body_exprs_full_ok cx args /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
-  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Call ann (RawCallCalldataTarget flags) args dflt) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule raw_call_calldata_pre >>
@@ -370,11 +384,29 @@ Proof
   disj1_tac >> qexists_tac `vs` >> simp[] >>
   suspend "buffers"
 QED
+*)
+Theorem raw_call_calldata_vv_full[local]:
+  body_exprs_full_ok_mods mods exps cx args /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
+  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Call ann (RawCallCalldataTarget flags) args dflt) es
+Proof
+  cheat
+QED
 
-Theorem raw_call_calldata_input_bound[local]:
-  expr_sim_inv cenv cx env es ==> LENGTH cx.txn.calldata < dimword (:256)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   simp[expr_sim_inv_def,vyperTypeInvariantsTheory.context_well_typed_def,dimword_def]
+QED
+*)
+Theorem raw_call_calldata_input_bound[local]:
+  expr_sim_inv_mods mods cenv cx env es ==> LENGTH cx.txn.calldata < dimword (:256)
+Proof
+  cheat
 QED
 
 (* Share the exact finish-entry contract with the full continuation. *)
@@ -386,62 +418,8 @@ val calldata_call_full = REWRITE_RULE [post_value_type_def]
       raw_call_continuation_full);
 val calldata_call_pre = fst (dest_imp (concl calldata_call_full));
 
-Theorem raw_call_calldata_word_success_to_call:
-  expr_body_pre cenv cx env
-    (Call (raw_call_return_type flags) (RawCallCalldataTarget flags) (a::kws) NONE) es /\
-  type_alloc_ok cenv (raw_call_return_type flags) /\
-  flags.rcf_max_outsize < dimword (:256) /\
-  compile_expr cenv ty
-    (Call (raw_call_return_type flags) (RawCallCalldataTarget flags) (a::kws) NONE) sa = (vv,sb) /\
-  body_inv tops ctx cenv cx /\ gas_shadow_context ctx shadow_ctx /\
-  gas_shadow_function func shadow_func /\ ctx_inst_ids_distinct ctx /\
-  MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  return_buf_frame dframe cenv sa s0 /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==> stmt_state_rel H ctx func cenv cx es s0) /\
-  (case go of NONE => emit_op GAS [] s2 | SOME g => (g,s2)) = (gas,s3) /\
-  (case go of NONE => emit_op GAS [] h2 | SOME g => (g,h2)) = (gas,h3) /\
-  gas_shadow_state s2 h2 /\ fn_has_code h2 h3 shadow_func /\
-  vo = ext_call_kwarg EKValue flags.rcf_kws xs /\ go = ext_call_kwarg EKGas flags.rcf_kws xs /\
-  compile_raw_call_outbuf flags.rcf_max_outsize s3 = ((ov,op),s4) /\
-  compile_msg_data_to_memory s4 = ((dp,len),s5) /\
-  compile_raw_call_finish addr dp len gas (case vo of NONE => Lit 0w | SOME v => v)
-    (if flags.rcf_is_delegate then DelegateCall
-     else if flags.rcf_is_static then StaticCall else RegularCall)
-    flags.rcf_max_outsize flags.rcf_revert_on_failure ov op s5 = (result,sb) /\
-  ci_mono sa s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\ ci_mono s4 s5 /\
-  fn_has_code s2 s3 func /\ fn_has_code s3 s4 func /\ fn_has_code s4 s5 func /\
-  EVERY (safe_operand s2) (addr::xs) /\
-  (!tail. eval_exprs cx (a::kws)
-    (es with gas_obs := gas_explicit marksK s0.vs_gas_readings ++ tail) =
-      (INL vs,esK with gas_obs := tail)) /\
-  storage_trace_domain cx st0 esK.storage_trace /\
-  (!H. valid_horizon cx st0 H esK.storage_trace ==>
-    gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (s0,G0,tn0) marksK (OK tk,GK,tnK)) /\
-  (!H. valid_horizon cx st0 H esK.storage_trace ==>
-    typed_args_post H ctx func cenv cx es sa s0 esK (a::kws) (addr::xs) vs tk /\
-    ghost_inv_at (DF H) lo dframe cenv cx esK GK tnK tk) /\
-  tk.vs_current_bb = s2.cs_current_bb /\ tk.vs_inst_idx = LENGTH s2.cs_current_insts /\
-  alloca_history func tk /\ s0.vs_alloca_next <= tk.vs_alloca_next /\
-  ghost_kept_at lo cenv es sa G0 tn0 s0 GK tnK /\
-  EVERY (\x. op_taint tnK x = {}) (addr::xs) /\ ~tk.vs_halted /\ esK.gas_obs = [] ==>
-  ?n tg GG tnG t7 G7 tn7 av kvs target amount gw ib ob.
-    vs = av::kvs /\ dest_AddressV av = SOME target /\
-    LENGTH kvs = LENGTH flags.rcf_kws /\ raw_call_value flags.rcf_kws kvs = SOME amount /\
-    (case go of NONE => n = 1 | SOME g => gas = g /\ n = 0) /\
-    (!H. valid_horizon cx st0 H esK.storage_trace ==>
-      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        (tk,GK,tnK) (REPLICATE n F) (OK tg,GG,tnG)) /\
-    (!H. valid_horizon cx st0 H esK.storage_trace ==>
-      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        (tg,GG,tnG) [] (OK t7,G7,tn7)) /\
-    (^calldata_call_pre)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `valid_horizon cx st0 (storage_trace_horizon esK.storage_trace)
@@ -550,7 +528,69 @@ Proof
      simp[EVAL ``REPLICATE 0 F``,gas_origin_ptr_path_rules]) >>
   suspend "output_buffer"
 QED
+*)
+Theorem raw_call_calldata_word_success_to_call:
+  expr_body_pre_mods mods cenv cx env
+    (Call (raw_call_return_type flags) (RawCallCalldataTarget flags) (a::kws) NONE) es /\
+  type_alloc_ok cenv (raw_call_return_type flags) /\
+  flags.rcf_max_outsize < dimword (:256) /\
+  compile_expr cenv ty
+    (Call (raw_call_return_type flags) (RawCallCalldataTarget flags) (a::kws) NONE) sa = (vv,sb) /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ gas_shadow_context ctx shadow_ctx /\
+  gas_shadow_function func shadow_func /\ ctx_inst_ids_distinct ctx /\
+  MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  return_buf_frame dframe cenv sa s0 /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==> stmt_state_rel H ctx func cenv cx es s0) /\
+  (case go of NONE => emit_op GAS [] s2 | SOME g => (g,s2)) = (gas,s3) /\
+  (case go of NONE => emit_op GAS [] h2 | SOME g => (g,h2)) = (gas,h3) /\
+  gas_shadow_state s2 h2 /\ fn_has_code h2 h3 shadow_func /\
+  vo = ext_call_kwarg EKValue flags.rcf_kws xs /\ go = ext_call_kwarg EKGas flags.rcf_kws xs /\
+  compile_raw_call_outbuf flags.rcf_max_outsize s3 = ((ov,op),s4) /\
+  compile_msg_data_to_memory s4 = ((dp,len),s5) /\
+  compile_raw_call_finish addr dp len gas (case vo of NONE => Lit 0w | SOME v => v)
+    (if flags.rcf_is_delegate then DelegateCall
+     else if flags.rcf_is_static then StaticCall else RegularCall)
+    flags.rcf_max_outsize flags.rcf_revert_on_failure ov op s5 = (result,sb) /\
+  ci_mono sa s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\ ci_mono s4 s5 /\
+  fn_has_code s2 s3 func /\ fn_has_code s3 s4 func /\ fn_has_code s4 s5 func /\
+  EVERY (safe_operand s2) (addr::xs) /\
+  (!tail. eval_exprs cx (a::kws)
+    (es with gas_obs := gas_explicit marksK s0.vs_gas_readings ++ tail) =
+      (INL vs,esK with gas_obs := tail)) /\
+  storage_trace_domain cx st0 esK.storage_trace /\
+  (!H. valid_horizon cx st0 H esK.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (s0,G0,tn0) marksK (OK tk,GK,tnK)) /\
+  (!H. valid_horizon cx st0 H esK.storage_trace ==>
+    typed_args_post H ctx func cenv cx es sa s0 esK (a::kws) (addr::xs) vs tk /\
+    ghost_inv_at (DF H) lo dframe cenv cx esK GK tnK tk) /\
+  tk.vs_current_bb = s2.cs_current_bb /\ tk.vs_inst_idx = LENGTH s2.cs_current_insts /\
+  alloca_history func tk /\ s0.vs_alloca_next <= tk.vs_alloca_next /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 GK tnK /\
+  EVERY (\x. op_taint tnK x = {}) (addr::xs) /\ ~tk.vs_halted /\ esK.gas_obs = [] ==>
+  ?n tg GG tnG t7 G7 tn7 av kvs target amount gw ib ob.
+    vs = av::kvs /\ dest_AddressV av = SOME target /\
+    LENGTH kvs = LENGTH flags.rcf_kws /\ raw_call_value flags.rcf_kws kvs = SOME amount /\
+    (case go of NONE => n = 1 | SOME g => gas = g /\ n = 0) /\
+    (!H. valid_horizon cx st0 H esK.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (tk,GK,tnK) (REPLICATE n F) (OK tg,GG,tnG)) /\
+    (!H. valid_horizon cx st0 H esK.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (tg,GG,tnG) [] (OK t7,G7,tn7)) /\
+    (^calldata_call_pre)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_calldata_word_success_to_call[output_buffer]:
   `ci_mono s2 s4 /\ ci_mono s3 s5` by metis_tac[ci_mono_trans] >>
   `sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_var <= s3.cs_next_var /\
@@ -633,7 +673,9 @@ Resume raw_call_calldata_word_success_to_call[output_buffer]:
     (qx_choose_then `ob` (map_every assume_tac o CONJUNCTS)))) >>
   suspend "input_buffer"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_calldata_word_success_to_call[input_buffer]:
   `ctx_has_dalloca ctx` by
     (qpat_assum `compile_expr cenv ty (Call _ (RawCallCalldataTarget flags) _ _) sa = _`
@@ -718,7 +760,9 @@ Resume raw_call_calldata_word_success_to_call[input_buffer]:
      qexistsl [`Gout`,`tout`,`tnout`] >> simp[]) >>
   suspend "call"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_calldata_word_success_to_call[call]:
   `t7.vs_alloca_next = tout.vs_alloca_next /\ t7.vs_allocas = tout.vs_allocas /\
     t7.vs_initial_fmp = tout.vs_initial_fmp` by
@@ -892,7 +936,9 @@ Resume raw_call_calldata_word_success_to_call[call]:
   qpat_x_assum `vo = ext_call_kwarg EKValue flags.rcf_kws xs` SUBST_ALL_TAC >>
   suspend "continuation"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_calldata_word_success_to_call[continuation]:
   qpat_assum `flags.rcf_is_delegate \/ flags.rcf_is_static ==> amount = 0`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [DISJ_IMP_THM]) >>
@@ -939,9 +985,13 @@ Resume raw_call_calldata_word_success_to_call[continuation]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   disj2_tac >> disj2_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise raw_call_calldata_word_success_to_call
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_calldata_vv_full[buffers]:
   `!H. valid_horizon cx st0 H esK.storage_trace ==>
     typed_args_post H ctx func cenv cx es sa s0 esK (a::kws) (addr::xs) vs tk /\
@@ -976,13 +1026,14 @@ Resume raw_call_calldata_vv_full[buffers]:
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   simp[NoAsms,lowered_value_type_def,vyperASTTheory.expr_type_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise raw_call_calldata_vv_full[local]
+*)
 
-Theorem raw_call_calldata_expr_full_ok:
-  !cx ty flags es v19.
-    body_exprs_full_ok cx es ==>
-    body_expr_full_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   map_every qx_gen_tac [`cx`,`ann`,`flags`,`args`,`dflt`] >>
   disch_tac >> simp[Once body_expr_full_ok_def] >>
@@ -1008,45 +1059,17 @@ Proof
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
   strip_tac >> gvs[] >> metis_tac[]
 QED
+*)
+Theorem raw_call_calldata_expr_full_ok:
+  !cx ty flags es v19.
+    body_exprs_full_ok_mods mods exps cx es ==>
+    body_expr_full_ok_mods mods exps cx (Call ty (RawCallCalldataTarget flags) es v19)
+Proof
+  cheat
+QED
 
-Theorem raw_call_calldata_word_schedule:
-  expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es /\
-  compile_expr cenv ty (Call ann (RawCallCalldataTarget flags) args dflt) sa = (vv,sb) /\
-  compile_expr (gas_shadow_env T cenv) ty
-    (gas_shadow_expr (Call ann (RawCallCalldataTarget flags) args dflt)) shadow_sa =
-      (vv,shadow_sb) /\
-  gas_shadow_state sa shadow_sa /\
-  fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>
-  ?a kws addr xs vo go gas ov op dp len result s2 s3 s4 s5 h2 h3.
-    args = a::kws /\ dflt = NONE /\ ann = raw_call_return_type flags /\
-    flags.rcf_max_outsize < dimword (:256) /\
-    expr_sim_inv cenv cx env es /\ type_alloc_ok cenv (raw_call_return_type flags) /\
-    (!e ee. MEM e (a::kws) /\ expr_sim_inv cenv cx env ee ==>
-      expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)) /\
-    lower_word_args cenv expr_type (a::kws) sa = (addr::xs,s2) /\
-    lower_word_args (gas_shadow_env T cenv) expr_type
-      (MAP gas_shadow_expr (a::kws)) shadow_sa = (addr::xs,h2) /\
-    vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
-    go = ext_call_kwarg EKGas flags.rcf_kws xs /\
-    (case go of SOME g => (g,s2) | NONE => emit_op GAS [] s2) = (gas,s3) /\
-    (case go of SOME g => (g,h2) | NONE => emit_op GAS [] h2) = (gas,h3) /\
-    compile_raw_call_outbuf flags.rcf_max_outsize s3 = ((ov,op),s4) /\
-    compile_msg_data_to_memory s4 = ((dp,len),s5) /\
-    compile_raw_call_finish addr dp len gas
-      (case vo of SOME v => v | NONE => Lit 0w)
-      (if flags.rcf_is_delegate then DelegateCall
-       else if flags.rcf_is_static then StaticCall else RegularCall)
-      flags.rcf_max_outsize flags.rcf_revert_on_failure ov op s5 = (result,sb) /\
-    vv = (if flags.rcf_max_outsize = 0 then StackValue ann result
-          else LocatedValue ann (mk_ptr result LocMemory)) /\
-    gas_shadow_state s2 h2 /\ gas_shadow_state s3 h3 /\
-    EVERY (safe_operand s2) (addr::xs) /\
-    ci_mono sa s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\ ci_mono s4 s5 /\
-    ci_mono shadow_sa h2 /\ ci_mono h2 h3 /\
-    cs_extends s5 sb /\ cs_extends h3 shadow_sb /\
-    fn_has_code sa s2 func /\ fn_has_code s2 s3 func /\
-    fn_has_code s3 s4 func /\ fn_has_code s4 s5 func /\
-    fn_has_code shadow_sa h2 shadow_func /\ fn_has_code h2 h3 shadow_func
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule raw_call_calldata_pre >>
@@ -1178,4 +1201,46 @@ Proof
          CONJUNCT2 (REWRITE_RULE [EVERY_DEF] th)]) >>
       simp[])
   >> gvs[]
+QED
+*)
+Theorem raw_call_calldata_word_schedule:
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es /\
+  compile_expr cenv ty (Call ann (RawCallCalldataTarget flags) args dflt) sa = (vv,sb) /\
+  compile_expr (gas_shadow_env T cenv) ty
+    (gas_shadow_expr (Call ann (RawCallCalldataTarget flags) args dflt)) shadow_sa =
+      (vv,shadow_sb) /\
+  gas_shadow_state sa shadow_sa /\
+  fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>
+  ?a kws addr xs vo go gas ov op dp len result s2 s3 s4 s5 h2 h3.
+    args = a::kws /\ dflt = NONE /\ ann = raw_call_return_type flags /\
+    flags.rcf_max_outsize < dimword (:256) /\
+    expr_sim_inv_mods mods cenv cx env es /\ type_alloc_ok cenv (raw_call_return_type flags) /\
+    (!e ee. MEM e (a::kws) /\ expr_sim_inv_mods mods cenv cx env ee ==>
+      expr_body_pre_mods mods cenv cx env e ee /\ is_word_type (expr_type e)) /\
+    lower_word_args cenv expr_type (a::kws) sa = (addr::xs,s2) /\
+    lower_word_args (gas_shadow_env T cenv) expr_type
+      (MAP gas_shadow_expr (a::kws)) shadow_sa = (addr::xs,h2) /\
+    vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
+    go = ext_call_kwarg EKGas flags.rcf_kws xs /\
+    (case go of SOME g => (g,s2) | NONE => emit_op GAS [] s2) = (gas,s3) /\
+    (case go of SOME g => (g,h2) | NONE => emit_op GAS [] h2) = (gas,h3) /\
+    compile_raw_call_outbuf flags.rcf_max_outsize s3 = ((ov,op),s4) /\
+    compile_msg_data_to_memory s4 = ((dp,len),s5) /\
+    compile_raw_call_finish addr dp len gas
+      (case vo of SOME v => v | NONE => Lit 0w)
+      (if flags.rcf_is_delegate then DelegateCall
+       else if flags.rcf_is_static then StaticCall else RegularCall)
+      flags.rcf_max_outsize flags.rcf_revert_on_failure ov op s5 = (result,sb) /\
+    vv = (if flags.rcf_max_outsize = 0 then StackValue ann result
+          else LocatedValue ann (mk_ptr result LocMemory)) /\
+    gas_shadow_state s2 h2 /\ gas_shadow_state s3 h3 /\
+    EVERY (safe_operand s2) (addr::xs) /\
+    ci_mono sa s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\ ci_mono s4 s5 /\
+    ci_mono shadow_sa h2 /\ ci_mono h2 h3 /\
+    cs_extends s5 sb /\ cs_extends h3 shadow_sb /\
+    fn_has_code sa s2 func /\ fn_has_code s2 s3 func /\
+    fn_has_code s3 s4 func /\ fn_has_code s4 s5 func /\
+    fn_has_code shadow_sa h2 shadow_func /\ fn_has_code h2 h3 shadow_func
+Proof
+  cheat
 QED

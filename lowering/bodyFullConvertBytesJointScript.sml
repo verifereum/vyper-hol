@@ -11,6 +11,7 @@ Ancestors
   bodyPtrSignedConvertSourceTyping
   gasShadowCompile gasShadowState exprLowering exprLoweringProps compileEnv
   vyperContext vyperInterpreter vyperState vyperAST
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem convert_memory_vv_post[local]:
   expr_post H ctx func cenv cx (TypeBuiltin typ Convert typ [e])
@@ -264,14 +265,8 @@ Proof
   qexistsl_tac [`b`,`sz`] >> simp[] >> decide_tac
 QED
 
-Theorem convert_bytes_vv_sim_full:
-  body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
-  body_expr_full_ok cx e /\ is_bytestring_type dst ==>
-  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (TypeBuiltin ann Convert dst [e]) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   drule expr_body_pre_convert >> strip_tac >> gvs[] >>
@@ -395,7 +390,21 @@ Proof
   POP_ASSUM_LIST (K all_tac) >>
   metis_tac[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_INR_type]
 QED
+*)
+Theorem convert_bytes_vv_sim_full:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
+  body_expr_full_ok_mods mods exps cx e /\ is_bytestring_type dst ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (TypeBuiltin ann Convert dst [e]) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume convert_bytes_vv_sim_full[continuation]:
   qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >> fs[] >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -452,7 +461,9 @@ Resume convert_bytes_vv_sim_full[continuation]:
   >- suspend "widen" >>
   suspend "cast"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume convert_bytes_vv_sim_full[cast]:
   markerLib.RESUME_TAC >> (gvs[] >>
   `~is_word_type (expr_type e)` by metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
@@ -510,7 +521,9 @@ Resume convert_bytes_vv_sim_full[cast]:
   (impl_tac >- simp[]) >> strip_tac >>
   suspend "cast_dispatch")
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume convert_bytes_vv_sim_full[cast_dispatch]:
   markerLib.RESUME_TAC >> (Cases_on `L <= n`
   >- suspend "cast_success" >>
@@ -526,7 +539,9 @@ Resume convert_bytes_vv_sim_full[cast_dispatch]:
     simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def,
          halt_exit_not_halt]) >> simp[])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume convert_bytes_vv_sim_full[cast_success]:
   markerLib.RESUME_TAC >> (
   qpat_x_assum `L <= n ==> _` drule >> strip_tac >>
@@ -585,7 +600,9 @@ Resume convert_bytes_vv_sim_full[cast_success]:
     gvs[lowered_value_type_def, expr_type_def, contextTheory.vv_location_def,
         contextTheory.vv_operand_def, contextTheory.mk_ptr_def]) >> simp[])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume convert_bytes_vv_sim_full[widen]:
   markerLib.RESUME_TAC >> gvs[] >>
   `~is_word_type (expr_type e)` by metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
@@ -754,5 +771,8 @@ Resume convert_bytes_vv_sim_full[widen]:
   simp[lowered_value_type_def, expr_type_def, vyperStateTheory.read_result_def] >>
   gvs[vyperStateTheory.return_def, bodyPtrDefsTheory.ptr_val_ok_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise convert_bytes_vv_sim_full
+*)

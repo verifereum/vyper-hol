@@ -11,6 +11,7 @@ Ancestors
   gasOutcomeFull fragGasFocus bodyPtrDefs gasShadow gasContext
   exprSimHypsDefs exprLowering vyperInterpreter vyperAST list
   bodyFullIntCallReturnNormal bodyFullIntCallReturnSource bodyFullIntCallReturnUnwrap
+  bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
@@ -46,8 +47,9 @@ Theorem intcall_return_full_owned:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
    rr prev penv rtv es1 t G tn rc rbs pvs dflts.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
@@ -256,8 +258,9 @@ Theorem intcall_return_full:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
    rr prev penv rtv es1 t G tn rc rbs pvs dflts.
-    body_inv tops ctx cenv cx /\
-    expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\

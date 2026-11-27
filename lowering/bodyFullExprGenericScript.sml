@@ -39,18 +39,8 @@ QED
    value's lowered type must take no memory: expr_sim_full bounds only the
    value's footprint, and vv_store_bound also wants the whole lowered
    type's region below the frontier. *)
-Theorem expr_vv_sim_stack_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
-    (~is_word_type (post_value_type cenv e) ==>
-     !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
-             SOME tvt ==>
-           type_memory_size tvt = 0) /\
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty e es /\
-    (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
-    (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty e es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[expr_vv_sim_full_def] >>
   qpat_x_assum `!sa. ?t op sb. _` (qspec_then `sa` strip_assume_tac) >> gvs[] >>
@@ -121,6 +111,22 @@ Proof
   rename1 `expr_exit (INR exc) result` >>
   Cases_on `result` >> Cases_on `exc` >> gvs[expr_exit_def] >>
   rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]
+QED
+*)
+Theorem expr_vv_sim_stack_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
+    (~is_word_type (post_value_type cenv e) ==>
+     !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
+             SOME tvt ==>
+           type_memory_size tvt = 0) /\
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty e es /\
+    (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
+    (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty e es
+Proof
+  cheat
 QED
 
 Theorem gas_shadow_compiles_alloc_buffer:

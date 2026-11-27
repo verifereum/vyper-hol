@@ -17,6 +17,7 @@ Ancestors
   vyperContext selectorDispatch selectorCompilerProps valueEncoding
   ptrDiscipline venomMemDefs fragGasOriginPtrLoop fragExec
   list pair words arithmetic
+  bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 Theorem custom_error_tail_outcome[local]:
   build_custom_error_data tenv name formals vs = SOME data /\
@@ -48,19 +49,20 @@ Theorem compile_raise_custom_frag_full:
        get_module_code cx (FST id) = SOME error_tops /\
        lookup_custom_error_args_in (SND id) error_tops = SOME params /\
        order_custom_error_args params err = SOME args ==>
-       body_exprs_full_ok cx args) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+       body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     supported_stmt tops bindings (Raise (RaiseCustomError err)) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Raise (RaiseCustomError err)) ==> occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Raise (RaiseCustomError err)) = SOME env' /\
     stmt_exprs_ok cenv (Raise (RaiseCustomError err)) /\
     call_evaluation_safe cx (int_calls_stmt (Raise (RaiseCustomError err))) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv

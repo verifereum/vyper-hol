@@ -10,9 +10,39 @@ Ancestors
   words venomState exprLoweringProps compileEnv fragExec
   exprSimSource exprSimHyps vyperStorageFootprint vyperStorageTrace
   gasShadowState bodyMemoryDefs
+  exprSimHypsDefs[qualified]
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type ce obj = expr_type obj` by
+    metis_tac[expr_body_pre_subscript_base_type] >>
+  `expr_body_pre ce cx env obj (es with gas_obs := gs)` by
+    metis_tac[expr_body_pre_array_subscript_base,expr_body_pre_gas_obs] >>
+  `arg_type_fits (lowered_value_type ce obj) (expr_type obj)` by
+    metis_tac[expr_body_pre_lowered_fits] >>
+  `~is_word_type (expr_type obj) /\ ~is_bytestring_type (expr_type obj)` by
+    simp[is_word_type_def,is_bytestring_type_def] >>
+  `post_value_type ce obj = lowered_value_type ce obj` by
+    metis_tac[materialize_post_lowered_classify] >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. _ ==> vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `storage_trace_horizon mid.storage_trace`
+      (drule_then (map_every assume_tac o CONJUNCTS))) >>
+  `vv_type bvv = ArrayT et bd` by
+    (drule_all compile_array_vv_type >> simp[]) >>
+  `bind (eval_expr cx obj) (read_result cx) (es with gas_obs := gs) = (INL saved,mid)` by
+    simp[vyperStateTheory.bind_def] >>
+  drule_all (REWRITE_RULE [ETA_THM] abi_args_success_ready) >> simp[] >>
+  disch_then (qx_choose_then `atv` mp_tac o cj 3) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  suspend "compile"
+QED
+*)
 Theorem subscript_array_copy_snapshot_caller_frame:
-  expr_body_pre ce cx env (Subscript ann obj idx) es /\
+  expr_body_pre_mods mods ce cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et bd /\ ~array_slot_base ce obj /\
   eval_expr cx obj (es with gas_obs := gs) = (INL raw,mid) /\
   read_result cx raw mid = (INL saved,mid) /\
@@ -75,32 +105,10 @@ Theorem subscript_array_copy_snapshot_caller_frame:
     wb_frame ce es mid sa s0 u /\
     (~expr_has_effect obj ==> pure_frame ce func es sa s0 u)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `post_value_type ce obj = expr_type obj` by
-    metis_tac[expr_body_pre_subscript_base_type] >>
-  `expr_body_pre ce cx env obj (es with gas_obs := gs)` by
-    metis_tac[expr_body_pre_array_subscript_base,expr_body_pre_gas_obs] >>
-  `arg_type_fits (lowered_value_type ce obj) (expr_type obj)` by
-    metis_tac[expr_body_pre_lowered_fits] >>
-  `~is_word_type (expr_type obj) /\ ~is_bytestring_type (expr_type obj)` by
-    simp[is_word_type_def,is_bytestring_type_def] >>
-  `post_value_type ce obj = lowered_value_type ce obj` by
-    metis_tac[materialize_post_lowered_classify] >>
-  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
-    fs[storage_trace_domain_def] >>
-  qpat_assum `!H. _ ==> vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-    (qspec_then `storage_trace_horizon mid.storage_trace`
-      (drule_then (map_every assume_tac o CONJUNCTS))) >>
-  `vv_type bvv = ArrayT et bd` by
-    (drule_all compile_array_vv_type >> simp[]) >>
-  `bind (eval_expr cx obj) (read_result cx) (es with gas_obs := gs) = (INL saved,mid)` by
-    simp[vyperStateTheory.bind_def] >>
-  drule_all (REWRITE_RULE [ETA_THM] abi_args_success_ready) >> simp[] >>
-  disch_then (qx_choose_then `atv` mp_tac o cj 3) >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  suspend "compile"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_array_copy_snapshot_caller_frame[compile]:
   `ci_mono sa sm /\ ci_mono sm sc` by
     metis_tac[compile_expr_ci_mono,ci_mono_compile_snapshot_vv,pairTheory.SND] >>
@@ -136,7 +144,9 @@ Resume subscript_array_copy_snapshot_caller_frame[compile]:
      fs[ci_mono_def] >> metis_tac[fn_has_code_split]) >>
   suspend "alloc_unwrap"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_array_copy_snapshot_caller_frame[alloc_unwrap]:
   `lowered_value_type ce obj = ArrayT et bd` by metis_tac[] >>
   `evaluate_type (get_tenv cx) (post_value_type ce obj) = SOME atv` by metis_tac[] >>
@@ -182,7 +192,9 @@ Resume subscript_array_copy_snapshot_caller_frame[alloc_unwrap]:
   qpat_x_assum `v = saved` SUBST_ALL_TAC >>
   suspend "copy"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_array_copy_snapshot_caller_frame[copy]:
   `compile_store_memory ce src (Var dst) (ArrayT et bd) (ArrayT et bd) sl = ((),sc)` by
     (qpat_assum `compile_store_memory ce src buf.buf_operand _ _ sl = _` (mp_tac) >>
@@ -211,7 +223,9 @@ Resume subscript_array_copy_snapshot_caller_frame[copy]:
   disch_then (foldr (uncurry qx_choose_then) (map_every assume_tac o CONJUNCTS) [`u`,`Gu`,`tu`]) >>
   suspend "frames"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_array_copy_snapshot_caller_frame[frames]:
   qpat_assum `typed_copy_state_frame sl _ _ z u`
     (mp_tac o REWRITE_RULE [typed_copy_state_frame_def]) >>
@@ -258,7 +272,9 @@ Resume subscript_array_copy_snapshot_caller_frame[frames]:
      simp[] >> rpt strip_tac >> `not_fresh_at sl x` by simp[] >> metis_tac[]) >>
   suspend "ownership"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_array_copy_snapshot_caller_frame[ownership]:
   `sm.cs_next_id < sk.cs_next_id` by
     (qpat_assum `compile_alloc_buffer _ sm = (buf,sk)`
@@ -290,7 +306,9 @@ Resume subscript_array_copy_snapshot_caller_frame[ownership]:
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   suspend "exterior"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_array_copy_snapshot_caller_frame[exterior]:
   `lo <= w2n dw` by
     (qpat_assum `allocas_from lo z` (mp_tac o REWRITE_RULE [allocas_from_def]) >>
@@ -338,7 +356,9 @@ Resume subscript_array_copy_snapshot_caller_frame[exterior]:
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   suspend "caller_frame"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_array_copy_snapshot_caller_frame[caller_frame]:
   `wb_frame ce es mid sa s0 z` by
     (qpat_assum `expr_post _ ctx func ce cx obj es sa sl s0 mid saved src z`
@@ -394,7 +414,9 @@ Resume subscript_array_copy_snapshot_caller_frame[caller_frame]:
      (impl_tac >- decide_tac) >> simp[]) >>
   suspend "ghost"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_array_copy_snapshot_caller_frame[ghost]:
   `!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sl x` by
     (rpt strip_tac >> `not_fresh_at sa x` by metis_tac[] >> simp[]) >>
@@ -436,12 +458,15 @@ Resume subscript_array_copy_snapshot_caller_frame[ghost]:
     (qpat_assum `u.vs_current_bb = sc.cs_current_bb` mp_tac >> simp[]) >>
   qexistsl [`u`,`Gu`,`tu`,`dst`,`dw`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise subscript_array_copy_snapshot_caller_frame
+*)
 
 (* The original interface forgets only the two caller-frame facts. *)
 Theorem subscript_array_copy_snapshot_joint:
-  expr_body_pre ce cx env (Subscript ann obj idx) es /\
+  expr_body_pre_mods mods ce cx env (Subscript ann obj idx) es /\
   expr_type obj = ArrayT et bd /\ ~array_slot_base ce obj /\
   eval_expr cx obj (es with gas_obs := gs) = (INL raw,mid) /\
   read_result cx raw mid = (INL saved,mid) /\

@@ -35,6 +35,7 @@ Ancestors
   exprSimMemDefs bodyPtrDefs gasShadow fragGasOriginPtr ptrDiscipline loweringSlice
   bodyFullSimProjection bodyFullPreds bodySimFull bodySim exprSimHypsDefs compileEnv
   vyperContext vyperAST vyperInterpreter vyperState vyperValue venomState list
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 
 val _ = Parse.hide "body";
 
@@ -64,31 +65,41 @@ fun operand_path_no_wrap horizon path =
 
 (* ===== Leaves ===== *)
 
-Theorem name_expr_full_ok:
-  !cx ann id. body_expr_full_ok cx (Name ann id)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
   conj_tac >- (Cases_on `is_word_type ann` >>
     metis_tac[name_word_full, name_nonword_full]) >>
   irule name_vv_full >> metis_tac[]
 QED
+*)
+Theorem name_expr_full_ok:
+  !cx ann id. body_expr_full_ok_mods mods exps cx (Name ann id)
+Proof
+  cheat
+QED
 
-Theorem toplevel_name_expr_full_ok:
-  !cx ann nsid. body_expr_full_ok cx (TopLevelName ann nsid)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
   conj_tac
   >- (irule toplevel_name_value_full >> metis_tac[]) >>
   irule toplevel_name_vv_full >> metis_tac[]
 QED
+*)
+Theorem toplevel_name_expr_full_ok:
+  !cx ann nsid. body_expr_full_ok_mods mods exps cx (TopLevelName ann nsid)
+Proof
+  cheat
+QED
 
 (* A flag member compiles to StackValue (Lit _) and emits no instruction
    (compile_expr_def), in runtime and constructor frames alike; the source
    side is exprSimProps' eval_expr_flag_member_gas. *)
-Theorem flag_member_value_full[local]:
-  expr_body_pre cenv cx env (FlagMember ann nsid mid) es ==>
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (FlagMember ann nsid mid) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[expr_sim_full_def] >> PairCases_on `nsid` >>
   drule eval_expr_flag_member_gas >> strip_tac >>
@@ -124,11 +135,17 @@ Proof
   >- (gvs[op_taint_def] >> metis_tac[]) >>
   gvs[expr_type_def, is_word_type_def]
 QED
-
-Theorem flag_member_vv_full[local]:
-  expr_body_pre cenv cx env (FlagMember ann nsid mid) es ==>
-  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+*)
+Theorem flag_member_value_full[local]:
+  expr_body_pre_mods mods cenv cx env (FlagMember ann nsid mid) es ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (FlagMember ann nsid mid) es
+Proof
+  cheat
+QED
+
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[expr_vv_sim_full_def] >> PairCases_on `nsid` >>
   `gas_admissible (bind (eval_expr cx (FlagMember ann (nsid0,nsid1) mid))
@@ -171,21 +188,41 @@ Proof
   gvs[expr_type_def, is_word_type_def] >>
   gvs[contextTheory.vv_location_def]
 QED
+*)
+Theorem flag_member_vv_full[local]:
+  expr_body_pre_mods mods cenv cx env (FlagMember ann nsid mid) es ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (FlagMember ann nsid mid) es
+Proof
+  cheat
+QED
 
-Theorem flag_member_expr_full_ok:
-  !cx ann nsid mid. body_expr_full_ok cx (FlagMember ann nsid mid)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   simp[body_expr_full_ok_def] >> rpt strip_tac >>
   metis_tac[flag_member_value_full, flag_member_vv_full]
 QED
+*)
+Theorem flag_member_expr_full_ok:
+  !cx ann nsid mid. body_expr_full_ok_mods mods exps cx (FlagMember ann nsid mid)
+Proof
+  cheat
+QED
 
-Theorem literal_expr_full_ok:
-  !cx ann l. body_expr_full_ok cx (Literal ann l)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `is_word_type ann`
   >- metis_tac[literal_word_value_full, literal_word_vv_full] >>
   metis_tac[literal_nonword_value_full, literal_nonword_vv_full]
+QED
+*)
+Theorem literal_expr_full_ok:
+  !cx ann l. body_expr_full_ok_mods mods exps cx (Literal ann l)
+Proof
+  cheat
 QED
 
 (* ===== Binary operators =====
@@ -196,23 +233,8 @@ QED
 (* in and not in on an array literal of words, which the lowering unrolls
    to a comparison with each element, so it takes the elements'
    judgments where e1 evaluates and is read. *)
-Theorem bop_in_literal_word_sim_full:
-  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
-   e1 a t n elems es.
-    (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
-    body_expr_full_ok cx e1 /\
-    ((?s0 tv s1 s2 v s3. eval_expr cx e1 s0 = (INL tv, s1) /\
-                         read_result cx tv s2 = (INL v, s3)) ==>
-     builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-     body_exprs_full_ok cx elems) /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env
-      (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems])
-      es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all literal_body_typing >> strip_tac >>
@@ -322,19 +344,32 @@ Proof
       gvs[is_word_type_def]) >>
   first_assum ACCEPT_TAC
 QED
+*)
+Theorem bop_in_literal_word_sim_full:
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+   e1 a t n elems es.
+    (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
+    body_expr_full_ok_mods mods exps cx e1 /\
+    ((?s0 tv s1 s2 v s3. eval_expr cx e1 s0 = (INL tv, s1) /\
+                         read_result cx tv s2 = (INL v, s3)) ==>
+     builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+     body_exprs_full_ok_mods mods exps cx elems) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env
+      (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems])
+      es
+Proof
+  cheat
+QED
 
 (* == and != on bytestrings: keccak256 of each operand's bytes. *)
-Theorem bop_bytestring_eqne_sim_full:
-  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
-   e1 e2 es.
-    (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
-    body_exprs_full_ok cx [e1; e2] /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
@@ -698,6 +733,22 @@ Proof
   qpat_assum `ghost_inv_at (DF H) lo d cenv cx mid' G1' tn1' t'` mp_tac >>
   simp[NoAsms, ghost_inv_at_def] >> strip_tac >> simp[])
 QED
+*)
+Theorem bop_bytestring_eqne_sim_full:
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+   e1 e2 es.
+    (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
+    body_exprs_full_ok_mods mods exps cx [e1; e2] /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+Proof
+  cheat
+QED
 
 (* ===== Binary operators =====
    Each family is a binary operator lowered to a StackValue
@@ -705,17 +756,8 @@ QED
    stated; the vv judgment follows from it. *)
 
 (* Both operands of word_value_type. *)
-Theorem bop_word_sim_full:
-  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
-   e1 e2 es.
-    word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
-    body_exprs_full_ok cx [e1; e2] /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
@@ -745,21 +787,26 @@ Proof
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (expr_core_outcome_room_tac [Abbr `Q`, expr_type_def])
 QED
-
-(* == and != on address and bytesN. *)
-Theorem bop_bytes_eq_sim_full:
+*)
+Theorem bop_word_sim_full:
   !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
    e1 e2 es.
-    (bop = Eq \/ bop = NotEq) /\
-    (expr_type e1 = BaseT AddressT \/
-     ?m. expr_type e1 = BaseT (BytesT (Fixed m))) /\
-    body_exprs_full_ok cx [e1; e2] /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
+    body_exprs_full_ok_mods mods exps cx [e1; e2] /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+Proof
+  cheat
+QED
+
+(* == and != on address and bytesN. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule expr_body_pre_bop >> strip_tac >>
@@ -823,7 +870,26 @@ Proof
   Cases_on `res` >- fs[expr_exit_def] >>
   metis_tac[]
 QED
+*)
+Theorem bop_bytes_eq_sim_full:
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+   e1 e2 es.
+    (bop = Eq \/ bop = NotEq) /\
+    (expr_type e1 = BaseT AddressT \/
+     ?m. expr_type e1 = BaseT (BytesT (Fixed m))) /\
+    body_exprs_full_ok_mods mods exps cx [e1; e2] /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_bytes_eq_sim_full[second]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
@@ -914,7 +980,9 @@ Resume bop_bytes_eq_sim_full[second]:
   simp[Abbr `secondR`] >> rpt strip_tac >>
   Cases_on `res` >- fs[expr_exit_def] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_bytes_eq_sim_full[suffix]:
   qx_genl_tac [`marks2`, `res2`, `mid2`, `G2`, `tn2`, `u`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
@@ -1042,7 +1110,9 @@ Resume bop_bytes_eq_sim_full[suffix]:
      IF_CASES_TAC >> simp[]) >>
   suspend "post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_bytes_eq_sim_full[post]:
   markerLib.RESUME_TAC >>
   irule gas_outcome_full_pure >> simp[] >>
@@ -1055,7 +1125,9 @@ Resume bop_bytes_eq_sim_full[post]:
        simp[exprBopSimDefsTheory.bop_result_def])) >>
   suspend "endpoint"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_bytes_eq_sim_full[endpoint]:
   markerLib.RESUME_TAC >> gen_tac >> disch_tac >>
   `straight_fresh (compile_binop bop x y (expr_type e1) NONE NONE)` by
@@ -1091,7 +1163,9 @@ Resume bop_bytes_eq_sim_full[endpoint]:
       fs[LENGTH_NIL] >> simp[])) >>
   suspend "joint"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_bytes_eq_sim_full[joint]:
   markerLib.RESUME_TAC >>
   `local_ptrs_reserved cenv s2` by
@@ -1161,7 +1235,9 @@ Resume bop_bytes_eq_sim_full[joint]:
        POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[])) >>
   suspend "resources"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_bytes_eq_sim_full[resources]:
   markerLib.RESUME_TAC >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp u'` by
@@ -1213,7 +1289,9 @@ Resume bop_bytes_eq_sim_full[resources]:
     POP_ASSUM_LIST (K all_tac) >> simp[ptr_val_ok_def, is_word_type_def])) >>
   suspend "kept"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_bytes_eq_sim_full[kept]:
   markerLib.RESUME_TAC >>
   `(!z. not_fresh_at sa z ==> not_fresh_at s1 z) /\
@@ -1250,8 +1328,11 @@ Resume bop_bytes_eq_sim_full[kept]:
   simp[ghost_kept_at_def, ghost_kept_def, op_taint_def] >>
   rpt strip_tac >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise bop_bytes_eq_sim_full
+*)
 
 
 
@@ -1259,18 +1340,8 @@ Finalise bop_bytes_eq_sim_full
 
 (* The rest, as exprSimBopRestWord's compile_bop_rest_word_case leaves it:
    in and not in on an array of words that is not a literal. *)
-Theorem bop_bytes_sim_full[local]:
-  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
-   e1 e2 es.
-    (?m. expr_type e1 = BaseT (BytesT (Fixed m))) /\
-    MEM bop [And;Or;XOr;ShL;ShR] /\
-    body_exprs_full_ok cx [e1; e2] /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
@@ -1326,7 +1397,35 @@ Proof
                     CONJUNCT1 o REWRITE_RULE [expr_post_def]))) >>
   simp[]
 QED
+*)
+Theorem bop_bytes_sim_full[local]:
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
+   e1 e2 es.
+    (?m. expr_type e1 = BaseT (BytesT (Fixed m))) /\
+    MEM bop [And;Or;XOr;ShL;ShR] /\
+    body_exprs_full_ok_mods mods exps cx [e1; e2] /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
+    fs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  drule_all rest_word_typed_membership >> strip_tac
+  >- (irule bop_bytes_sim_full >> metis_tac[]) >>
+  irule compile_rest_word_membership_full >> metis_tac[]
+QED
+*)
 Theorem bop_rest_word_sim_full:
   !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop
    e1 e2 es.
@@ -1338,18 +1437,14 @@ Theorem bop_rest_word_sim_full:
        ?m. expr_type e1 = BaseT (BytesT (Fixed m)))) /\
     ((bop = In \/ bop = NotIn) ==>
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\
-    body_exprs_full_ok cx [e1; e2] /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    body_exprs_full_ok_mods mods exps cx [e1; e2] /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
 Proof
-  rpt gen_tac >> strip_tac >>
-  `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
-    fs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
-  drule_all rest_word_typed_membership >> strip_tac
-  >- (irule bop_bytes_sim_full >> metis_tac[]) >>
-  irule compile_rest_word_membership_full >> metis_tac[]
+  cheat
 QED

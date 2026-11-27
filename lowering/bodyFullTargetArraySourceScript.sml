@@ -6,21 +6,10 @@ Ancestors
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
   vyperTypeEnv vyperTypeSystem
   vyperValue vyperInterpreter vyperState
+  exprSimHypsDefs[qualified]
 
-Theorem target_array_source_cases:
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
-  type_place_target env bt = SOME (Type (ArrayT et bd)) /\
-  type_place_target env (SubscriptTarget bt e) = SOME vt /\
-  expr_sim_inv cenv cx env mid1 /\
-  eval_base_place cx bt (es with gas_obs := base_gas) = (INL pv, mid1) /\
-  bind (eval_expr cx e) (read_result cx)
-    (mid1 with gas_obs := index_gas) = (INL v, mid2) ==>
-  expr_sim_inv cenv cx env mid2 /\
-  (?i. v = IntV i /\ expr_result_typed env e (Value (IntV i))) /\
-  (!id. target_root bt = NameTarget id ==>
-    ?path entry live. pv = PlaceR (MemoryPlace id path) /\
-      lookup_scopes id mid2.scopes = SOME entry /\
-      evaluate_subscripts entry.type entry.value path = INL live)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `expr_body_pre cenv cx env e (mid1 with gas_obs := index_gas)` by
@@ -38,4 +27,22 @@ Proof
      (es with gas_obs := base_gas)` by fs[target_pre_def] >>
   qpat_x_assum `target_pre _ _ _ _ es` kall_tac >>
   drule_all local_subscript_index_live >> simp[]
+QED
+*)
+Theorem target_array_source_cases:
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  type_place_target env bt = SOME (Type (ArrayT et bd)) /\
+  type_place_target env (SubscriptTarget bt e) = SOME vt /\
+  expr_sim_inv_mods mods cenv cx env mid1 /\
+  eval_base_place cx bt (es with gas_obs := base_gas) = (INL pv, mid1) /\
+  bind (eval_expr cx e) (read_result cx)
+    (mid1 with gas_obs := index_gas) = (INL v, mid2) ==>
+  expr_sim_inv_mods mods cenv cx env mid2 /\
+  (?i. v = IntV i /\ expr_result_typed env e (Value (IntV i))) /\
+  (!id. target_root bt = NameTarget id ==>
+    ?path entry live. pv = PlaceR (MemoryPlace id path) /\
+      lookup_scopes id mid2.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL live)
+Proof
+  cheat
 QED

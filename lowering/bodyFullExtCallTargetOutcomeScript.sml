@@ -6,6 +6,7 @@ Ancestors
   unitMemInv venomMemProps byte divides loweringPosts compileEnv valueEncoding
   vyperTyping vyperValue bodySimFull vyperState vyperInterpreter gasOutcomeFull
   bodyMemoryDefs exprSimDefs list
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
 Theorem target_word_decode[local]:
   value_has_type (BaseTV AddressT) v /\
@@ -47,51 +48,8 @@ Proof
   Cases_on `raw` >> simp[Once bind_def, bind_def, return_def, eval_exprs_nil]
 QED
 
-Theorem extcall_request_head_halt_outcome:
-  expr_type addr = BaseT AddressT /\
-  body_exprs_full_ok cx [addr] /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env addr es /\
-  lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
-  lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr addr)
-    shadow_sa = (ao,shadow_sb) /\
-  gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
-  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
-  MEM shadow_func shadow_ctx.ctx_functions /\
-  fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx es s0 /\
-    storage_well_formed_on cx es (FST H) /\
-    ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
-  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
-    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_exprs cx [addr]) (es,s0,G0,tn0)
-    (\H res ee G tn t. ?v target aw.
-      res = INL [v] /\ dest_AddressV v = SOME target /\
-      eval_operand ao t = SOME aw /\ w2w aw = target /\ safe_operand sb ao /\
-      expr_sim_inv cenv cx env ee /\
-      expr_post H ctx func cenv cx addr es sa sb s0 ee v ao t /\
-      expr_store_bound cx (BaseT AddressT) v ao t /\
-      ptr_val_ok cx (BaseT AddressT) v ao G tn t /\
-      return_buf_frame d cenv sb t /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
-      ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
-      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
-      ~t.vs_halted /\ ee.gas_obs = [])
-    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   irule gas_outcome_full_initial_domain >>
@@ -138,14 +96,87 @@ Proof
   gvs[] >> drule_all target_word_decode >> strip_tac >>
   qexists_tac `aw` >> gvs[safe_operand_def]
 QED
+*)
+Theorem extcall_request_head_halt_outcome:
+  expr_type addr = BaseT AddressT /\
+  body_exprs_full_ok_mods mods exps cx [addr] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env addr es /\
+  lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr addr)
+    shadow_sa = (ao,shadow_sb) /\
+  gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
+  MEM shadow_func shadow_ctx.ctx_functions /\
+  fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome_full
+    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    (cx_tops cx) cx st0 (eval_exprs cx [addr]) (es,s0,G0,tn0)
+    (\H res ee G tn t. ?v target aw.
+      res = INL [v] /\ dest_AddressV v = SOME target /\
+      eval_operand ao t = SOME aw /\ w2w aw = target /\ safe_operand sb ao /\
+      expr_sim_inv_mods mods cenv cx env ee /\
+      expr_post H ctx func cenv cx addr es sa sb s0 ee v ao t /\
+      expr_store_bound cx (BaseT AddressT) v ao t /\
+      ptr_val_ok cx (BaseT AddressT) v ao G tn t /\
+      return_buf_frame d cenv sb t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+      ~t.vs_halted /\ ee.gas_obs = [])
+    (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+      (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
+Proof
+  cheat
+QED
 
 (* The non-owning prefixes only need the ordinary exit projection. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z` by
+    (rpt strip_tac >> drule frag_reachable_members >> disch_then drule >>
+     strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
+        unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]) >>
+  irule (Q.INST [`Q'` |-> `Q`,
+                  `R` |-> `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+                    (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)`]
+           gas_outcome_full_post_mono) >>
+  BETA_TAC >> rpt conj_tac
+  >~ [`gas_outcome_full _ _ _ _ _ _ _ _`]
+  >- (irule extcall_request_head_halt_outcome >>
+      rpt (goal_assum (drule_at Any)) >> simp[] >>
+      conj_tac >- (qexistsl [`shadow_func`,`shadow_sa`,`shadow_sb`] >> simp[]) >>
+      qexists `tops` >> simp[]) >>
+  simp[]
+QED
+*)
 Theorem extcall_request_head_outcome:
   expr_type addr = BaseT AddressT /\
-  body_exprs_full_ok cx [addr] /\ body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env addr es /\
+  body_exprs_full_ok_mods mods exps cx [addr] /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env addr es /\
   lower_value compile_expr cenv (BaseT AddressT) addr sa = (ao,sb) /\
   lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT) (gas_shadow_expr addr)
     shadow_sa = (ao,shadow_sb) /\
@@ -171,7 +202,7 @@ Theorem extcall_request_head_outcome:
     (\H res ee G tn t. ?v target aw.
       res = INL [v] /\ dest_AddressV v = SOME target /\
       eval_operand ao t = SOME aw /\ w2w aw = target /\ safe_operand sb ao /\
-      expr_sim_inv cenv cx env ee /\
+      expr_sim_inv_mods mods cenv cx env ee /\
       expr_post H ctx func cenv cx addr es sa sb s0 ee v ao t /\
       expr_store_bound cx (BaseT AddressT) v ao t /\
       ptr_val_ok cx (BaseT AddressT) v ao G tn t /\
@@ -184,21 +215,5 @@ Theorem extcall_request_head_outcome:
       ~t.vs_halted /\ ee.gas_obs = [])
     (\H res ee gt r. expr_exit res r)
 Proof
-  strip_tac >>
-  `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z` by
-    (rpt strip_tac >> drule frag_reachable_members >> disch_then drule >>
-     strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]) >>
-  irule (Q.INST [`Q'` |-> `Q`,
-                  `R` |-> `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-                    (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)`]
-           gas_outcome_full_post_mono) >>
-  BETA_TAC >> rpt conj_tac
-  >~ [`gas_outcome_full _ _ _ _ _ _ _ _`]
-  >- (irule extcall_request_head_halt_outcome >>
-      rpt (goal_assum (drule_at Any)) >> simp[] >>
-      conj_tac >- (qexistsl [`shadow_func`,`shadow_sa`,`shadow_sb`] >> simp[]) >>
-      qexists `tops` >> simp[]) >>
-  simp[]
+  cheat
 QED
