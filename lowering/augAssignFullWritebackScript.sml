@@ -5,6 +5,7 @@ Ancestors
   augAssignFullMemoryStorePath augAssignFullMstoreSafety
   augAssignFullMstoreGhostTransport augAssignFullImmutableWriteSource
   augAssignFullImmutableLocalResources augAssignFullImmutableDeadMask
+  augAssignFullLinkedGhost
   gasOutcomeFullCompose bodySimFull
   stateRelProj bodyMemoryDefs bodyFullTargetDefs loweringShapeRules
   bodyBinopFragMemory stmtSimAugAssignPlaceMemory exprOpenPrimitives
@@ -82,21 +83,6 @@ QED
 
 Finalise augassign_memory_write_machine_resources
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `!H. valid_horizon cx st0 H es'.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
-  drule_all augassign_memory_write_source_joint >> strip_tac >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G`, `es'`, `res`, `u`, `un`] >> simp[] >>
-  conj_tac >- metis_tac[aug_place_memory_write_gas_obs] >>
-  qx_gen_tac `H` >> strip_tac >>
-  qpat_assum `!H. _ ==> _ /\ _` (drule_then strip_assume_tac) >>
-  suspend "memory_horizon"
-QED
-*)
 Theorem augassign_memory_writeback_full:
   body_inv tops ctx cenv cx /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
@@ -162,10 +148,18 @@ Theorem augassign_memory_writeback_full:
           off + sz <= b \/ b + sz' <= off) /\
         off <= i /\ i < off + sz /\ i IN tn'.t_mem ==> i IN tn0.t_mem)) R
 Proof
-  cheat
+  strip_tac >>
+  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
+  drule_all augassign_memory_write_source_joint >> strip_tac >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`G`, `es'`, `res`, `u`, `un`] >> simp[] >>
+  conj_tac >- metis_tac[aug_place_memory_write_gas_obs] >>
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_assum `!H. _ ==> _ /\ _` (drule_then strip_assume_tac) >>
+  suspend "memory_horizon"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume augassign_memory_writeback_full[memory_horizon]:
   `w2n a + 32 <= s.vs_alloca_next /\
    ptr_inst_ok (DF H) lo 0 ctx func G tn
@@ -203,9 +197,7 @@ Resume augassign_memory_writeback_full[memory_horizon]:
       qexistsl_tac [`cx`, `es'`, `st0`] >> simp[]) >>
   suspend "memory_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume augassign_memory_writeback_full[memory_post]:
   `!name ee p sz.
      lookup_scopes name es'.scopes = SOME ee /\
@@ -223,20 +215,34 @@ Resume augassign_memory_writeback_full[memory_post]:
      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `lookup_scopes _ es'.scopes = SOME ee`)) >>
      simp[] >> qexists_tac `LENGTH sb.cs_current_insts` >> simp[]) >>
+  (* The prefix is unchanged, so the linked mask is unchanged without
+     rewriting it to a single-module mask. *)
+  `mem_bytes_at 0 lo u.vs_memory = mem_bytes_at 0 lo s.vs_memory` by
+    (irule (INST_TYPE [alpha |-> ``:256``] augassign_memory_store_prefix_preserved) >>
+     goal_assum (drule_at (Pat `body_inv _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `store_lays_out _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
+     simp[] >> qexistsl_tac [`DF H`, `LENGTH sb.cs_current_insts`] >> simp[]) >>
   `ghost_inv_at (DF H) lo d cenv cx es' G un u` by
-    (irule augassign_mstore_ghost_transport >> reverse conj_tac
-     >- (goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
-         qexistsl_tac [`w2n a`, `LENGTH sb.cs_current_insts`, `typed_val_to_w256 etv v`] >>
-         qpat_x_assum `!name ee p sz. _` mp_tac >> simp[]) >>
-     `mem_bytes_at 0 lo u.vs_memory = mem_bytes_at 0 lo s.vs_memory` by
-       (irule (INST_TYPE [alpha |-> ``:256``] augassign_memory_store_prefix_preserved) >>
-        goal_assum (drule_at (Pat `body_inv _ _ _ _`)) >>
-        goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
-        goal_assum (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
-        goal_assum (drule_at (Pat `store_lays_out _ _ _`)) >>
-        goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-        simp[] >> qexistsl_tac [`DF H`, `LENGTH sb.cs_current_insts`] >> simp[]) >>
-     fs[ghost_inv_at_def] >> metis_tac[]) >>
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`ghost_inv_at _ _ _ _ _ es _ _ _`, `!name ee p sz. _`,
+        `mem_bytes_at 0 lo u.vs_memory = _`, `u = _`, `un = _`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >>
+     qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[ghost_inv_at_def] >> strip_tac >>
+     conj_tac
+     >- (rpt gen_tac >> strip_tac >>
+         first_assum (drule_all_then strip_assume_tac) >>
+         gvs[ptr_covers_def, op_taint_def, lookup_var_def, mstore_def]) >>
+     conj_tac
+     >- (Cases_on `d` >- simp[return_buf_ptr_def] >>
+         PairCases_on `x` >>
+         gvs[return_buf_ptr_def, ptr_covers_def, op_taint_def,
+             lookup_var_def, mstore_def]) >>
+     gvs[op_taint_def, stor_taint_ok_at_def, allocas_from_def, mstore_def] >>
+     metis_tac[]) >>
   `es'.accounts = es.accounts /\ es'.tStorage = es.tStorage` by
     (drule vyperPlaceFramesTheory.write_memory_place_frame >> strip_tac >> simp[]) >>
   `storage_well_formed_on cx (es' with gas_obs := []) (FST H)` by
@@ -272,32 +278,9 @@ Resume augassign_memory_writeback_full[memory_post]:
        lookup_var_def, mstore_def, op_taint_def, allocas_below_fmp_def] >>
   metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise augassign_memory_writeback_full
-*)
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `!H. valid_horizon cx st0 H es'.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
-  drule_all augassign_immutable_write_source_joint >> strip_tac >>
-  `off < dimword (:256)` by decide_tac >>
-  `w2n (n2w off : 256 word) = off` by simp[] >>
-  `type_memory_size tv = 32` by
-    metis_tac[entryDecodeStaticPropsTheory.word_type_memory_size] >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G`, `es'`, `res`, `u`, `un`] >> simp[NoAsms] >>
-  conj_tac
-  >- (drule bodyImmutableAugAssignExecTheory.immutable_write_place_gas_obs >> simp[]) >>
-  qx_gen_tac `H` >> strip_tac >>
-  qpat_assum `!H. _ ==> _ /\ _` (drule_then strip_assume_tac) >>
-  suspend "immutable_horizon"
-QED
-*)
 Theorem augassign_immutable_writeback_full:
   body_inv tops ctx cenv cx /\ cx.in_deploy /\ cenv.ce_is_ctor /\
   expr_sim_inv cenv cx env es /\ cx_tops cx = tops /\
@@ -365,11 +348,23 @@ Theorem augassign_immutable_writeback_full:
           off + sz <= b \/ b + sz' <= off) /\
         off <= i /\ i < off + sz /\ i IN tn'.t_mem ==> i IN tn0.t_mem)) R
 Proof
-  cheat
-QED
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume augassign_immutable_writeback_full[immutable_horizon]:
+  strip_tac >>
+  `cenv.ce_modules = [(NONE,tops)]` by
+    (drule bodySimTheory.body_inv_contract >>
+     disch_then (irule o MATCH_MP bodyInvCodePropsTheory.contract_inv_cenv_modules)) >>
+  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
+  drule_all augassign_immutable_write_source_joint >> strip_tac >>
+  `off < dimword (:256)` by decide_tac >>
+  `w2n (n2w off : 256 word) = off` by simp[] >>
+  `type_memory_size tv = 32` by
+    metis_tac[entryDecodeStaticPropsTheory.word_type_memory_size] >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`G`, `es'`, `res`, `u`, `un`] >> simp[NoAsms] >>
+  conj_tac
+  >- (drule bodyImmutableAugAssignExecTheory.immutable_write_place_gas_obs >> simp[]) >>
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_assum `!H. _ ==> _ /\ _` (drule_then strip_assume_tac) >>
   `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
   `!H. valid_horizon cx st0 H es'.storage_trace ==>
     ptr_inst_ok (DF H) lo 0 ctx func G tn
@@ -393,12 +388,6 @@ Resume augassign_immutable_writeback_full[immutable_horizon]:
       goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
       qexistsl_tac [`n2w off`, `cx`, `es'`, `st0`] >>
       simp[IgnAsm `off = _`, IgnAsm `tops = _`, eval_operand_def]) >>
-  suspend "immutable_post"
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume augassign_immutable_writeback_full[immutable_post]:
   `es'.scopes = es.scopes` by simp[] >>
   `!name entry p sz.
      lookup_scopes name es'.scopes = SOME entry /\
@@ -414,29 +403,30 @@ Resume augassign_immutable_writeback_full[immutable_post]:
      goal_assum (drule_at (Pat `FLOOKUP cenv.ce_module_vars _ = _`)) >>
      simp[IgnAsm `off = _`, IgnAsm `tops = _`] >> metis_tac[]) >>
   `ghost_inv_at (DF H) lo d cenv cx es' G un u` by
-    (irule augassign_mstore_ghost_transport >> reverse conj_tac
+    (irule augassign_mstore_linked_ghost_transport >> reverse conj_tac
      >- (goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
          qexistsl_tac [`off`, `LENGTH sb.cs_current_insts`, `typed_val_to_w256 tv v`] >>
          qpat_x_assum `!name entry p sz. _` mp_tac >>
          simp[IgnAsm `off = _`, IgnAsm `tops = _`]) >>
-     simp[IgnAsm `off = _`, IgnAsm `tops = _`, IgnAsm `es' = _`, IgnAsm `un = _`] >>
+     drule_then (fn th => simp[th, IgnAsm `off = _`, IgnAsm `tops = _`,
+                                  IgnAsm `es' = _`, IgnAsm `un = _`])
+       immSectionDeadTheory.imm_section_dead_mods_singleton >>
      qpat_assum `cx_tops cx = tops` (fn th => once_rewrite_tac[GSYM th]) >>
      qpat_assum `un = _` (fn th => rewrite_tac[th]) >>
      rpt gen_tac >> strip_tac >>
-     irule (INST_TYPE [alpha |-> ``:256``] augassign_immutable_word_dead_mask) >>
+     irule augassign_immutable_word_dead_mask >>
      conj_tac >- simp[] >> conj_tac >- simp[] >>
      goal_assum (drule_at (Pat `body_inv _ _ _ _`)) >>
      goal_assum (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
      goal_assum (drule_at (Pat `tops = _`)) >>
      simp[IgnAsm `off = _`, IgnAsm `tops = _`] >>
      qexists_tac `tn.t_mem` >>
-     fs[ghost_inv_at_def, IgnAsm `off = _`, IgnAsm `tops = _`] >> metis_tac[]) >>
-  suspend "immutable_frames"
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume augassign_immutable_writeback_full[immutable_frames]:
+     drule_then (fn eq =>
+       qpat_assum `ghost_inv_at _ _ _ _ _ es _ _ _`
+         (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def, eq]))
+       immSectionDeadTheory.imm_section_dead_mods_singleton >>
+     rpt conj_tac >> simp[IgnAsm `tops = _`] >>
+     fs[IgnAsm `tops = _`]) >>
   `storage_well_formed_on cx (es' with gas_obs := []) (FST H)` by
     fs[vyperStorageFootprintTheory.storage_well_formed_on_def,
        boolTheory.FORALL_BOOL, vyperStorageBackendTheory.get_storage_def,
@@ -468,17 +458,11 @@ Resume augassign_immutable_writeback_full[immutable_frames]:
      simp[fragExecTheory.fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
      strip_tac >> goal_assum (drule_at Any) >>
      simp[DROP_APPEND, mk_inst_def] >> metis_tac[]) >>
-  suspend "immutable_allocation"
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume augassign_immutable_writeback_full[immutable_allocation]:
   `immutable_decl_sep cenv cx es.scopes s.vs_vars s.vs_allocas
      s.vs_alloca_next` by
-    (qpat_x_assum `stmt_state_rel H _ _ _ _ es s` mp_tac >>
+    (qpat_assum `stmt_state_rel H _ _ _ _ es s` mp_tac >>
      pure_rewrite_tac[Once stmt_state_rel_def, immutable_alloca_sep_def] >>
-     strip_tac >> metis_tac[]) >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
   `!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
     regions_disjoint off 32 b sz` by
     (qpat_x_assum `immutable_decl_sep _ _ _ _ _ _` mp_tac >>
@@ -503,11 +487,6 @@ Resume augassign_immutable_writeback_full[immutable_allocation]:
        lookup_var_def, mstore_def, op_taint_def, allocas_below_fmp_def,
        IgnAsm `off = _`, IgnAsm `tops = _`] >> metis_tac[]
 QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Finalise augassign_immutable_writeback_full
-*)
 
 Theorem augassign_storage_writeback_full:
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\

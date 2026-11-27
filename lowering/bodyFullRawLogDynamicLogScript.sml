@@ -6,60 +6,8 @@ Ancestors
   words list rich_list finite_map pred_set loweringStateRelDefs venomExecSemantics venomInst
   arithmetic valueEncodingDefs memSafeRun bodyPtrDefs ptrSafeRun ptrDiscipline
   memLocDefs compileEnv vyperStorage vyperState venomState
-  sourceLogFrames vyperStorageBackend
+  sourceLogFrames vyperStorageBackend stateRelProj
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `~t.vs_call_ctx.cc_static /\ t.vs_call_ctx.cc_address = cx.txn.target` by
-    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  `step_inst_base (mk_inst id LOG
-     (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t =
-     OK (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs])` by
-    (simp[step_inst_base_def, mk_inst_def, REVERSE_APPEND,
-          w2n_n2w, LESS_MOD, GSYM mem_bytes_at_def,
-          encode_raw_event_values_def, encode_raw_event_def]) >>
-  rpt conj_tac
-  >- simp[]
-  >- (simp[below_frontier_LOG] >> rpt strip_tac >> gvs[w2n_n2w, LESS_MOD])
-  >- simp[inst_dload_in_section_def, mk_inst_def]
-  >- (`access_ok 0 G func (mk_inst id LOG
-         (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t` by
-        (irule log_access_ok >> simp[w2n_n2w, LESS_MOD] >>
-         rpt strip_tac >> gvs[ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
-      `access_ok lo G func (mk_inst id LOG
-         (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t` by
-        (fs[access_ok_def] >> metis_tac[LESS_EQ_TRANS, DECIDE ``0 <= n:num``]) >>
-      `taint_ok func tn (mk_inst id LOG
-         (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t` by
-        (irule log_taint_ok >> simp[w2n_n2w, LESS_MOD] >> gvs[]) >>
-      fs[ptr_inst_ok_def, ghost_inv_at_def, stor_taint_ok_at_def,
-         mk_inst_def, step_inst_non_invoke])
-  >- simp[log_ghost]
-  >- simp[log_ghost]
-  >- simp[]
-  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
-      simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
-           logs_rel_eq, local_ptrs_rel_def, local_region_def, local_backed_def,
-           storage_rel_def, transient_rel_def, accounts_rel_def,
-           immutables_rel_def, immutable_alloca_sep_def, alloca_room_def,
-           fmp_room_def, pending_alloca_size_def, alloca_inv_def,
-           lookup_var_def, contract_storage_def, contract_transient_def,
-           allocas_non_overlapping_def, alloca_next_valid_def] >>
-      strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC)
-  >- (fs[storage_well_formed_on_def] >> rpt strip_tac >>
-      Cases_on `b` >> fs[get_storage_def] >> metis_tac[get_storage_def])
-  >> (qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
-      simp[ghost_inv_at_def, ptr_covers_def, return_buf_ptr_def,
-           stor_taint_ok_at_def, lookup_var_def, allocas_from_def] >>
-      Cases_on `d`
-      >- (simp[return_buf_ptr_def] >> strip_tac >>
-          rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
-      PairCases_on `x` >> simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def] >>
-      strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC)
-QED
-*)
 Theorem raw_log_dynamic_log_joint:
   ~cx.txn.is_static /\
   LENGTH ops < dimword (:256) /\
@@ -93,5 +41,59 @@ Theorem raw_log_dynamic_log_joint:
   ghost_inv_at D lo d cenv cx
     (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) G tn (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs])
 Proof
-  cheat
+  strip_tac >>
+  `~t.vs_call_ctx.cc_static /\ t.vs_call_ctx.cc_address = cx.txn.target` by
+    (drule stmt_state_rel_state_rel >> disch_then (mp_tac o MATCH_MP state_rel_call_ctx_rel) >>
+     simp[call_ctx_rel_def]) >>
+  `step_inst_base (mk_inst id LOG
+     (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t =
+     OK (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs])` by
+    simp[step_inst_base_def, mk_inst_def, REVERSE_APPEND,
+         w2n_n2w, LESS_MOD, GSYM mem_bytes_at_def,
+         encode_raw_event_values_def, encode_raw_event_def] >>
+  rpt conj_tac
+  >- simp[]
+  >- (simp[below_frontier_LOG] >> rpt strip_tac >> gvs[w2n_n2w, LESS_MOD])
+  >- simp[inst_dload_in_section_def, mk_inst_def]
+  >- (`access_ok 0 G func (mk_inst id LOG
+         (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t` by
+        (irule log_access_ok >> simp[w2n_n2w, LESS_MOD] >>
+         rpt strip_tac >> gvs[ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
+      `access_ok lo G func (mk_inst id LOG
+         (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t` by
+        (fs[access_ok_def] >> metis_tac[LESS_EQ_TRANS, ZERO_LESS_EQ]) >>
+      `taint_ok func tn (mk_inst id LOG
+         (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t` by
+        (irule log_taint_ok >> simp[w2n_n2w, LESS_MOD] >> gvs[]) >>
+      fs[ptr_inst_ok_def, ghost_inv_at_def, stor_taint_ok_at_def,
+         mk_inst_def, step_inst_non_invoke])
+  >- simp[log_ghost]
+  >- simp[log_ghost]
+  >- simp[]
+  >- (qabbrev_tac `ev = encode_raw_event_values cx.txn.target vals bs` >>
+      `!ce. immutable_alloca_sep func ce cx
+              (ee with logs := ee.logs ++ [ev]) (t with vs_logs := t.vs_logs ++ [ev]) <=>
+            immutable_alloca_sep func ce cx ee t` by
+        simp[immutable_alloca_sep_def, local_region_def, lookup_var_def] >>
+      `!src. immutables_rel cenv cx.txn.target src cenv.ce_is_ctor
+               (ee with logs := ee.logs ++ [ev]) (t with vs_logs := t.vs_logs ++ [ev]) <=>
+             immutables_rel cenv cx.txn.target src cenv.ce_is_ctor ee t` by
+        simp[immutables_rel_def] >>
+      qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
+      simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
+           logs_rel_eq, storage_rel_def, transient_rel_def, accounts_rel_def,
+           alloca_room_def, fmp_room_def, pending_alloca_size_def, alloca_inv_def,
+           contract_storage_def, contract_transient_def,
+           allocas_non_overlapping_def, alloca_next_valid_def] >>
+      strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC)
+  >- (fs[storage_well_formed_on_def] >> rpt strip_tac >>
+      Cases_on `b` >> fs[get_storage_def] >> metis_tac[get_storage_def])
+  >> (qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[ghost_inv_at_def, ptr_covers_def, return_buf_ptr_def,
+           stor_taint_ok_at_def, lookup_var_def, allocas_from_def] >>
+      Cases_on `d`
+      >- (simp[return_buf_ptr_def] >> strip_tac >>
+          rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+      PairCases_on `x` >> simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def] >>
+      strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC)
 QED
