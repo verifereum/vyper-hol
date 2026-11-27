@@ -261,6 +261,46 @@ Proof
   first_x_assum irule >> asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
 QED
 
+Theorem body_stmt_full_ok_singleton_wide:
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+  EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+    (int_calls_stmt s) /\
+  struct_args_unique tops /\
+  (!vis mut nr raw fn args dflts ret ss.
+     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
+     stmts_loop_calls_ok [(NONE,tops)]
+       (subst_consts_stmts (module_consts_env tops []) ss)) /\
+  stmt_loop_calls_ok [(NONE,tops)] s ==>
+  body_stmt_full_ok cx s
+Proof
+  strip_tac >>
+  `body_stmt_full_ok_mods [(NONE,tops)] [] cx s` by
+    (irule (cj 1 (Q.SPECL [`[(NONE,tops)]`,`[]`]
+      body_sim_full_mutual_mods_widened)) >>
+     simp[alistTheory.ALOOKUP_def,
+          constSubstModsTheory.consts_env_mods_singleton,
+          constSubstModsTheory.subst_consts_mods_singleton] >>
+     conj_tac
+     >- first_assum ACCEPT_TAC
+     >- metis_tac[vyperTypeContractTheory.check_contract_single_module_exports_ok,
+                 optionTheory.IS_SOME_EXISTS]) >>
+  `body_stmt_full_ok_mods [(NONE,tops)] [] cx s <=> body_stmt_full_ok cx s` by
+    (irule body_stmt_full_ok_mods_singleton >> first_assum ACCEPT_TAC) >>
+  metis_tac[]
+QED
+
+Theorem check_single_exports_from_is_some_wide:
+  IS_SOME (vyperTypeContract$check_contract F layouts addr [(NONE,tops)]) ==>
+  vyperTypeContract$exports_ok layouts addr [(NONE,tops)] []
+Proof
+  strip_tac >>
+  qpat_x_assum `IS_SOME (vyperTypeContract$check_contract _ _ _ _)`
+    (mp_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
+  strip_tac >>
+  metis_tac[vyperTypeContractTheory.check_contract_single_module_exports_ok]
+QED
+
 Theorem body_sim_header_post_equiv:
   cenv_module_pins_mods mods cenv /\
   module_body_inv mods src tops cenv cx ==>
