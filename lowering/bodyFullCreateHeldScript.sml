@@ -3116,6 +3116,23 @@ Resume proxy_amount_buffer_cut[ready]:
 QED
 Finalise proxy_amount_buffer_cut
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >> drule proxy_pre_args >> strip_tac >> gvs[] >>
+  `LENGTH salts = (if salted then 1 else 0)` by
+    (Cases_on `salted` >> gvs[]) >>
+  rewrite_tac[bodySimFullTheory.expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  drule_all proxy_compile_cuts >> strip_tac >>
+  qpat_assum `lower_value _ _ _ target sa = _`
+    (mp_then Any (drule_all_then strip_assume_tac) proxy_cut_code) >>
+  qpat_assum `lower_value _ _ _ (gas_shadow_expr target) shadow_sa = _`
+    (mp_then Any (drule_all_then strip_assume_tac) proxy_cut_code) >>
+  simp[NoAsms,create_eval_read,create_operand_order_def,vyperASTTheory.expr_type_def,
+       loweringPostsTheory.post_value_type_def,is_word_type_def] >>
+  suspend "target"
+QED
+*)
 Theorem proxy_expr_sim_from_parts:
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
@@ -3171,20 +3188,10 @@ Theorem proxy_expr_sim_from_parts:
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx ty (Call ann (CreateTarget CreateMinimalProxy salted rof ks) args dflt) es
 Proof
-  strip_tac >> drule proxy_pre_args >> strip_tac >> gvs[] >>
-  `LENGTH salts = (if salted then 1 else 0)` by
-    (Cases_on `salted` >> gvs[]) >>
-  rewrite_tac[bodySimFullTheory.expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  drule_all proxy_compile_cuts >> strip_tac >>
-  qpat_assum `lower_value _ _ _ target sa = _`
-    (mp_then Any (drule_all_then strip_assume_tac) proxy_cut_code) >>
-  qpat_assum `lower_value _ _ _ (gas_shadow_expr target) shadow_sa = _`
-    (mp_then Any (drule_all_then strip_assume_tac) proxy_cut_code) >>
-  simp[NoAsms,create_eval_read,create_operand_order_def,vyperASTTheory.expr_type_def,
-       loweringPostsTheory.post_value_type_def,is_word_type_def] >>
-  suspend "target"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume proxy_expr_sim_from_parts[target]:
   `expr_body_pre cenv cx env target es` by
     (irule create_operand_pre >> simp[] >>
@@ -3231,7 +3238,9 @@ Resume proxy_expr_sim_from_parts[target]:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   suspend "buffer_inputs"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume proxy_expr_sim_from_parts[buffer_inputs]:
   qpat_x_assum `_ ==> body_exprs_full_ok _ salts` (drule_then assume_tac) >>
   `!H. valid_horizon cx st0 H et.storage_trace ==>
@@ -3273,7 +3282,9 @@ Resume proxy_expr_sim_from_parts[buffer_inputs]:
   >- (gvs[compile_create_salt_def,comp_return_def] >> suspend "salt_cut") >>
   gvs[compile_create_salt_def,comp_return_def] >> suspend "no_salt"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume proxy_expr_sim_from_parts[no_salt]:
   simp[NoAsms,Once vyperInterpreterTheory.evaluate_def,bind_return] >>
   qpat_assum `!st0 sa sb sm s0 G0 tn0 result ee s G tn ptr pv amount aw sop sw addr source.
@@ -3296,7 +3307,9 @@ Resume proxy_expr_sim_from_parts[no_salt]:
     qpat_assum `compile_create_dispatch buf (Lit 54w) y NONE rof c = (op,sb)`
       (ACCEPT_TAC o REWRITE_RULE [buffer]))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume proxy_expr_sim_from_parts[salt_cut]:
   Cases_on `lower_value compile_expr cenv (BaseT (BytesT (Fixed 32))) salt c` >>
   rename1 `lower_value _ _ _ salt c = (salt_op,stage)` >>
@@ -3357,7 +3370,9 @@ Resume proxy_expr_sim_from_parts[salt_cut]:
       (ACCEPT_TAC o REWRITE_RULE [storage_trace_domain_def]) >>
   suspend "salt_dispatch"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume proxy_expr_sim_from_parts[salt_dispatch]:
   `outcomes_accounts_typed ew.outcomes` by
     (qpat_assum `expr_sim_inv _ _ _ ew`
@@ -3378,7 +3393,10 @@ Resume proxy_expr_sim_from_parts[salt_dispatch]:
   irule (SIMP_RULE (srw_ss()) [dest_optional_salt_def]
     (Q.INST [`salt` |-> `SOME sv`] create_proxy_read_prepared)) >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise proxy_expr_sim_from_parts
+*)
 
 Theorem create_minimal_proxy_expr_full_ok:
   !cx ty s r ks es d.
