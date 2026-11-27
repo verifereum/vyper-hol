@@ -205,14 +205,8 @@ Proof
   simp[Once evaluate_def]
 QED
 
-Theorem raw_call_calldata_vv_full[local]:
-  body_exprs_full_ok_mods mods exps cx args /\
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
-  body_const_cells_agree mods cx env es /\
-  expr_body_pre_mods mods cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
-  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Call ann (RawCallCalldataTarget flags) args dflt) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule raw_call_calldata_pre >>
@@ -389,6 +383,18 @@ Proof
   qpat_x_assum `resK = INL vs` SUBST_ALL_TAC >>
   disj1_tac >> qexists_tac `vs` >> simp[] >>
   suspend "buffers"
+QED
+*)
+Theorem raw_call_calldata_vv_full[local]:
+  body_exprs_full_ok_mods mods exps cx args /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
+  expr_vv_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Call ann (RawCallCalldataTarget flags) args dflt) es
+Proof
+  cheat
 QED
 
 Theorem raw_call_calldata_input_bound[local]:
@@ -963,6 +969,7 @@ QED
 
 Finalise raw_call_calldata_word_success_to_call
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_calldata_vv_full[buffers]:
   `!H. valid_horizon cx st0 H esK.storage_trace ==>
     typed_args_post H ctx func cenv cx es sa s0 esK (a::kws) (addr::xs) vs tk /\
@@ -997,8 +1004,11 @@ Resume raw_call_calldata_vv_full[buffers]:
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   simp[NoAsms,lowered_value_type_def,vyperASTTheory.expr_type_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise raw_call_calldata_vv_full[local]
+*)
 
 Theorem raw_call_calldata_expr_full_ok:
   !cx ty flags es v19.

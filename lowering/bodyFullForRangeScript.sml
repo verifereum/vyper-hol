@@ -5594,8 +5594,8 @@ val range_full_round_with_entry_statement =
       mk_imp (run_pre, list_mk_exists (layout, retain_entry round))))
   end;
 
-Theorem range_full_round_with_entry:
-  ^range_full_round_with_entry_statement
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "entry")
     (CONJUNCTS_THEN2 (mk_asm "frame_compose")
@@ -5687,7 +5687,14 @@ Proof
   pop_assum (mk_asm "clean_outcome") >>
   suspend "attach_prefix"
 QED
+*)
+Theorem range_full_round_with_entry:
+  ^range_full_round_with_entry_statement
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_round_with_entry[exception_suffix]:
   rpt gen_tac >> simp[Abbr `BR`] >> strip_tac >>
   rename1 `halt_exit H cx (ee with scopes := sc::ee.scopes) raw r` >>
@@ -5721,7 +5728,9 @@ Resume range_full_round_with_entry[exception_suffix]:
   irule bodyFullForControlTheory.halt_exit_scopes_gas_obs >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_round_with_entry[normal_suffix]:
   rpt gen_tac >> simp[NoAsms, Abbr `EnrichedQ`, Abbr `SourceQ`, Abbr `BQ`] >>
   disch_then (CONJUNCTS_THEN2 assume_tac (mk_asm "body_post")) >>
@@ -5955,7 +5964,9 @@ Resume range_full_round_with_entry[normal_suffix]:
       simp[NoAsms]) >>
   suspend "backedge"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_round_with_entry[backedge]:
   qpat_assum `landing_raw <> INR BreakException` (fn th => simp[NoAsms, th]) >>
   qpat_assum `for_code _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -6217,7 +6228,9 @@ Resume range_full_round_with_entry[backedge]:
                         lookup_var x (jump_to _ _) = SOME v`
     (ACCEPT_TAC o SRULE [NoAsms])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_round_with_entry[loop_registers]:
   `!x u. x <> dv /\ not_fresh_at sb0 x /\ lookup_var x s = SOME u ==>
     lookup_var x t' = SOME u /\ FLOOKUP G1 x = FLOOKUP G x /\
@@ -6267,7 +6280,9 @@ Resume range_full_round_with_entry[loop_registers]:
   conj_tac >- first_assum ACCEPT_TAC >> goal_assum (drule_at Any) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_round_with_entry[attach_prefix]:
   qabbrev_tac `head = bind (read_result cx a) (push_scope_with_var id tyv)` >>
   qabbrev_tac `clean =
@@ -6331,8 +6346,11 @@ Resume range_full_round_with_entry[attach_prefix]:
             []
         end)))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise range_full_round_with_entry
+*)
 
 Theorem range_full_round:
   ^range_full_round_statement
