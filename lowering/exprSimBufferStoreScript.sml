@@ -509,11 +509,12 @@ Theorem buffer_store_state_frame:
     (!name b sz. local_region cenv es.scopes s name b sz ==>
       b+sz <= dst \/ dst+n <= b) /\
     LENGTH s.vs_memory <= LENGTH q.vs_memory /\
-    (cenv.ce_is_ctor ==> !name tv v off.
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+    (cenv.ce_is_ctor ==> !src name tv v off.
+      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+      FLOOKUP cenv.ce_module_vars (src,name) =
         SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+        | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
       regions_disjoint off (type_memory_size tv) dst n) ==>
     stmt_state_rel H ctx func cenv cx es q
 Proof
@@ -530,7 +531,8 @@ Proof
   >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
       qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
       first_assum ACCEPT_TAC) >>
-  rpt strip_tac >>
+  disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   qpat_x_assum `!a k. _ ==> mem_bytes_at a k _ = _` irule >>
   gvs[regions_disjoint_def] >> metis_tac[]
 QED

@@ -918,11 +918,12 @@ Theorem sha256_tail_frame:
   (!x. not_fresh_at sa x ==> x <> gas_name /\ x <> success_var /\ x <> out) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b + sz <= w2n r \/ w2n r + 32 <= b) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+  (cenv.ce_is_ctor ==> !src name tv v off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (tv,v) ==>
      regions_disjoint off (type_memory_size tv) (w2n r) 32) ==>
   ?t. run_inst_seq
@@ -997,7 +998,8 @@ Proof
   >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity, arithmeticTheory.MAX_DEF] >>
   conj_tac
   >- simp[write_memory_with_expansion_def, LET_THM, venom_state_component_equality] >>
-  rpt strip_tac >> irule hash_write_memory_disjoint >>
+  disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >> irule hash_write_memory_disjoint >>
   simp[] >> metis_tac[regions_disjoint_def]
 QED
 
@@ -1064,11 +1066,12 @@ Theorem emit_sha256_tail_frame:
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b + sz <= w2n r \/ w2n r + 32 <= b) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+  (cenv.ce_is_ctor ==> !src name tv v off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (tv,v) ==>
      regions_disjoint off (type_memory_size tv) (w2n r) 32) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -1200,18 +1203,23 @@ Proof
      base + len <= w2n w \/ w2n w + 32 <= base` by
     (rpt strip_tac >> first_x_assum drule >> simp[regions_disjoint_def] >> decide_tac) >>
   `mem_bytes_at (w2n p) (w2n n) allocated.vs_memory = bs` by simp[] >>
-  `(cenv.ce_is_ctor ==> !name tv v off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+  `(cenv.ce_is_ctor ==> !src name tv v off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (tv,v) ==>
      regions_disjoint off (type_memory_size tv) (w2n w) 32)` by
-    (rpt strip_tac >>
-     qpat_assum `stmt_state_rel H ctx func cenv cx es allocated` mp_tac >>
-     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
-     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >> strip_tac >>
+    (disch_tac >> rpt gen_tac >>
+     disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+     `immutable_alloca_sep func (cenv with ce_module := src) cx es allocated` by
+       (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+        Cases_on `src = cenv.ce_module` >>
+        gvs[compileEnvTheory.compile_env_component_equality] >> metis_tac[]) >>
+     qpat_x_assum `immutable_alloca_sep _ (_ with ce_module := _) _ _ _` mp_tac >>
+     simp[immutable_alloca_sep_def] >> strip_tac >>
+     first_x_assum (drule_all_then strip_assume_tac) >>
      qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _`
        (qspec_then `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
          [STRING #"%" (toString sa.cs_next_var)]` mp_tac) >>
@@ -1716,11 +1724,12 @@ Theorem hash_single_word_buffer_frame:
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!name off len. local_region cenv es.scopes s name off len ==>
      regions_disjoint b 64 off len) /\
-  (cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+  (cenv.ce_is_ctor ==> !src name tv iv off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (tv,iv) ==>
      regions_disjoint b 64 off (type_memory_size tv)) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -1756,7 +1765,8 @@ Proof
   conj_tac
   >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
           arithmeticTheory.MAX_DEF] >>
-  rpt strip_tac >>
+  disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   qpat_x_assum `t.vs_memory = _` (fn th => rewrite_tac[GSYM th]) >>
   qpat_x_assum `!off len. regions_disjoint b 64 off len ==> _` irule >>
   metis_tac[]
@@ -1831,18 +1841,23 @@ Proof
     gvs[not_fresh_at_def] >>
   `w2n addr + 32 < dimword (:256)` by decide_tac >>
   `eval_operand buf.buf_operand allocated = SOME (n2w (w2n addr))` by simp[] >>
-  `(cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+  `(cenv.ce_is_ctor ==> !src name tv iv off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (tv,iv) ==>
      regions_disjoint (w2n addr) 64 off (type_memory_size tv))` by
-    (rpt strip_tac >>
-     qpat_assum `stmt_state_rel H ctx func cenv cx es allocated` mp_tac >>
-     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
-     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >> strip_tac >>
+    (disch_tac >> rpt gen_tac >>
+     disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+     `immutable_alloca_sep func (cenv with ce_module := src) cx es allocated` by
+       (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+        Cases_on `src = cenv.ce_module` >>
+        gvs[compileEnvTheory.compile_env_component_equality] >> metis_tac[]) >>
+     qpat_x_assum `immutable_alloca_sep _ (_ with ce_module := _) _ _ _` mp_tac >>
+     simp[immutable_alloca_sep_def] >> strip_tac >>
+     first_x_assum (drule_all_then strip_assume_tac) >>
      qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _`
        (qspec_then `mk_inst sa.cs_next_id ALLOCA [Lit 64w]
          [STRING #"%" (toString sa.cs_next_var)]` mp_tac) >>

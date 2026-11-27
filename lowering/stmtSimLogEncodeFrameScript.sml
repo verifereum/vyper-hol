@@ -34,15 +34,15 @@ Proof
 QED
 
 Theorem log_encode_immutable_frame[local]:
-  immutables_rel ce cx.txn.target ce.ce_module ce.ce_is_ctor es s /\
+  immutables_rel ce cx.txn.target src ce.ce_is_ctor es s /\
   abi_decode_footprint_frame fp s t /\
   LENGTH s.vs_memory <= LENGTH t.vs_memory /\
   (ce.ce_is_ctor ==> !name tv v off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     abi_footprint_disjoint off (type_memory_size tv) fp) ==>
-  immutables_rel ce cx.txn.target ce.ce_module ce.ce_is_ctor es t
+  immutables_rel ce cx.txn.target src ce.ce_is_ctor es t
 Proof
   strip_tac >> irule immutables_rel_mem_agree >> qexists_tac `s` >>
   asm_simp_tac bool_ss [] >> conj_tac
@@ -80,24 +80,6 @@ Proof
   first_x_assum drule_all >> decide_tac
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `local_ptrs_rel func ce es.scopes s /\
-   immutables_rel ce cx.txn.target ce.ce_module ce.ce_is_ctor es s` by
-    fs[state_rel_def] >>
-  `local_ptrs_rel func ce es.scopes t` by
-    (irule log_encode_local_frame >> qexistsl_tac [`fp`,`s`] >>
-     asm_simp_tac bool_ss [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `immutables_rel ce cx.txn.target ce.ce_module ce.ce_is_ctor es t` by
-    (irule log_encode_immutable_frame >> qexistsl_tac [`fp`,`s`] >>
-     asm_simp_tac bool_ss [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  drule log_encode_external_fields >> strip_tac >>
-  irule state_rel_frame >> (conj_tac >- first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`es`,`s`] >> asm_simp_tac (srw_ss()) []
-QED
-*)
 Theorem log_encode_state_frame[local]:
   state_rel H func ce cx es s /\ log_encode_external t = log_encode_external s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
@@ -112,14 +94,35 @@ Theorem log_encode_state_frame[local]:
   LENGTH s.vs_memory <= LENGTH t.vs_memory /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
     abi_footprint_disjoint lo sz fp) /\
-  (ce.ce_is_ctor ==> !name tv v off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (ce.ce_is_ctor ==> !src name tv v off.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     abi_footprint_disjoint off (type_memory_size tv) fp) ==>
   state_rel H func ce cx es t
 Proof
-  cheat
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `local_ptrs_rel func ce es.scopes s` by fs[state_rel_def] >>
+  `local_ptrs_rel func ce es.scopes t` by
+    (irule log_encode_local_frame >> qexistsl_tac [`fp`,`s`] >>
+     asm_simp_tac bool_ss [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!src. src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src) ==>
+     immutables_rel ce cx.txn.target src ce.ce_is_ctor es t` by
+    (rpt gen_tac >> disch_tac >>
+     irule log_encode_immutable_frame >> qexistsl_tac [`fp`,`s`] >>
+     asm_simp_tac bool_ss [] >>
+     conj_tac
+     >~ [`immutables_rel _ _ _ _ _ s`]
+     >- (fs[state_rel_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+     rpt strip_tac >>
+     qpat_x_assum `ce.ce_is_ctor ==> _` drule >>
+     disch_then (qspecl_then [`src`,`name`,`tv`,`v`,`off`] mp_tac) >>
+     simp[]) >>
+  drule log_encode_external_fields >> strip_tac >>
+  match_mp_tac
+    (Q.SPECL [`H`,`func`,`ce`,`cx`,`es`,`es`,`s`,`t`] state_rel_frame) >>
+  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]
 QED
 
 Theorem log_encode_immutable_sep_frame[local]:
@@ -184,8 +187,20 @@ Proof
   fs[stmt_state_rel_def] >> first_x_assum drule_all >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem log_encode_allocation_frame[local]:
+  stmt_state_rel H ctx func ce cx es s /\ state_rel H func ce cx es t /\
+  immutable_alloca_sep func ce cx es t /\
+  (!src tops. ALOOKUP ce.ce_modules src = SOME tops ==>
+    immutable_alloca_sep func (ce with ce_module := src) cx es t) /\
+  fn_inst_ids_distinct func /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_operands = [Lit (n2w n)] /\ n < dimword (:256) /\
+  t.vs_allocas = (abi_builtin_allocate_state inst.inst_id n s).vs_allocas /\
+  t.vs_alloca_next = (abi_builtin_allocate_state inst.inst_id n s).vs_alloca_next /\
+  t.vs_fmp = s.vs_fmp /\ immutable_base_zero ce t /\
+  t.vs_initial_fmp = s.vs_initial_fmp /\
+  LENGTH s.vs_memory <= LENGTH t.vs_memory ==>
+  stmt_state_rel H ctx func ce cx es t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `alloca_inv s /\ alloca_room ctx func s /\ fmp_room ctx func s` by
@@ -209,22 +224,8 @@ Proof
       irule fmp_room_fields >>
       qexists_tac `abi_builtin_allocate_state inst.inst_id n s` >>
       gvs[abi_builtin_allocate_state_def] >> IF_CASES_TAC >> gvs[]) >>
+  conj_tac >- (rpt strip_tac >> metis_tac[]) >>
   rpt strip_tac >> drule_all log_encode_allocate_sizes >> simp[]
-QED
-*)
-Theorem log_encode_allocation_frame[local]:
-  stmt_state_rel H ctx func ce cx es s /\ state_rel H func ce cx es t /\
-  immutable_alloca_sep func ce cx es t /\ fn_inst_ids_distinct func /\
-  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-  inst.inst_operands = [Lit (n2w n)] /\ n < dimword (:256) /\
-  t.vs_allocas = (abi_builtin_allocate_state inst.inst_id n s).vs_allocas /\
-  t.vs_alloca_next = (abi_builtin_allocate_state inst.inst_id n s).vs_alloca_next /\
-  t.vs_fmp = s.vs_fmp /\ immutable_base_zero ce t /\
-  t.vs_initial_fmp = s.vs_initial_fmp /\
-  LENGTH s.vs_memory <= LENGTH t.vs_memory ==>
-  stmt_state_rel H ctx func ce cx es t
-Proof
-  cheat
 QED
 
 Theorem log_encode_continuation:
@@ -237,10 +238,11 @@ Theorem log_encode_continuation:
   abi_decode_footprint_frame fp s t /\ LENGTH s.vs_memory <= LENGTH t.vs_memory /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
     abi_footprint_disjoint lo sz fp) /\
-  (ce.ce_is_ctor ==> !name tv v off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (ce.ce_is_ctor ==> !src name tv v off.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     abi_footprint_disjoint off (type_memory_size tv) fp) /\
   t.vs_allocas = (if dyn then abi_builtin_allocate_state site n s else s).vs_allocas /\
   t.vs_alloca_next = (if dyn then abi_builtin_allocate_state site n s else s).vs_alloca_next /\
@@ -264,14 +266,28 @@ Proof
      qpat_x_assum `t.vs_alloca_next = _` kall_tac >>
      irule log_encode_state_frame >> qexistsl_tac [`fp`,`s`] >>
      asm_simp_tac (srw_ss()) [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!name lo sz. local_region ce es.scopes t name lo sz ==>
+    local_region ce es.scopes s name lo sz` by
+    (drule local_region_lookup_cong >> metis_tac[]) >>
   `immutable_alloca_sep func ce cx es t` by
     (qpat_x_assum `t.vs_allocas = _` kall_tac >>
      qpat_x_assum `t.vs_alloca_next = _` kall_tac >>
-     `!name lo sz. local_region ce es.scopes t name lo sz ==>
-       local_region ce es.scopes s name lo sz` by
-       (drule local_region_lookup_cong >> metis_tac[]) >>
      irule log_encode_immutable_sep_frame >> qexists_tac `s` >>
      asm_simp_tac bool_ss [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!src tops. ALOOKUP ce.ce_modules src = SOME tops ==>
+    immutable_alloca_sep func (ce with ce_module := src) cx es t` by
+    (qpat_x_assum `t.vs_allocas = _` kall_tac >>
+     qpat_x_assum `t.vs_alloca_next = _` kall_tac >>
+     rpt gen_tac >> disch_tac >>
+     `immutable_alloca_sep func (ce with ce_module := src) cx es s` by
+       (fs[stmt_state_rel_def] >>
+        qpat_assum `!src tops. ALOOKUP ce.ce_modules src = SOME tops ==> _` irule >>
+        goal_assum ACCEPT_TAC) >>
+     irule log_encode_immutable_sep_frame >> qexists_tac `s` >>
+     asm_simp_tac bool_ss [] >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+            qpat_x_assum `!name lo sz. local_region ce es.scopes t name lo sz ==> _` mp_tac >>
+            simp[local_region_def]]) >>
   `immutable_base_zero ce t` by
     (`immutable_base_zero ce s` by fs[stmt_state_rel_def] >>
      irule exprLoweringPropsTheory.immutable_base_zero_frame >>
@@ -285,11 +301,13 @@ Proof
      simp[log_encode_external_def]) >>
   Cases_on `dyn` >> gvs[]
   >- (irule log_encode_allocation_frame >> asm_simp_tac bool_ss [] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`inst`,`n`,`s`] >> simp[] >>
       qpat_x_assum `log_encode_external t = _`
         (mp_tac o Q.AP_TERM `\x. x.vs_fmp`) >>
       simp[log_encode_external_def]) >>
   irule stmt_state_rel_allocas_frame >> asm_simp_tac bool_ss [] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qexistsl_tac [`es`,`s`] >> simp[] >>
   qpat_x_assum `log_encode_external t = _`
     (mp_tac o Q.AP_TERM `\x. x.vs_fmp`) >>
@@ -343,10 +361,11 @@ Theorem log_scalar_tuple_continue:
   (!name lo sz. local_region ce es.scopes initial name lo sz ==>
     abi_footprint_disjoint lo sz
       ((db,outcap)::(if (?infos. ei = AbiComplex infos) then [(p,32)] else []))) /\
-  (ce.ce_is_ctor ==> !name tv v off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (ce.ce_is_ctor ==> !src name tv v off.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     abi_footprint_disjoint off (type_memory_size tv)
       ((db,outcap)::(if (?infos. ei = AbiComplex infos) then [(p,32)] else []))) /\
   ((?infos. ei = AbiComplex infos) ==> fn_inst_ids_distinct func /\
