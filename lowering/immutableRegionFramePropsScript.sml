@@ -34,7 +34,7 @@ Proof
   metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value]
 QED
 
-Theorem immutable_region_mem_frame_mods[local]:
+Theorem immutable_region_mem_frame_mods:
   contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env entry /\
   immutable_region_mods mods src id off (type_memory_size rt) /\
   off + type_memory_size rt <= lo /\
