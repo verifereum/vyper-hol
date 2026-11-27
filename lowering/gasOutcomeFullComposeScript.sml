@@ -688,7 +688,7 @@ Proof
   irule gas_origin_ptr_path_append >> metis_tac[]
 QED
 
-Theorem gas_outcome_full_mods_bad_nil[local]:
+Theorem gas_outcome_full_mods_bad_nil:
   ~s.vs_halted /\
   (!tail. ~storage_trace_domain cx st0
             (SND (source (es with gas_obs := tail))).storage_trace) ==>

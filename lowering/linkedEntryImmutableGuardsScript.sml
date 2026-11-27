@@ -144,7 +144,7 @@ Theorem linked_checked_body_immutable_guards:
   check_linked_state_ownership layouts addr mods (linked_live_functions mods exps) /\
   ALOOKUP mods src = SOME tops /\
   MEM (FunctionDecl vis mut nr raw name args dflts ret body) tops /\
-  MEM (src,name) (linked_live_functions mods exps) /\
+  (mods = [(NONE,tops)] \/ MEM (src,name) (linked_live_functions mods exps)) /\
   env.bare_globals = art.cta_bare_globals /\
   env.bare_global_assignable = art.cta_bare_global_assignable /\
   immutable_section_layout_mods mods ce /\
@@ -165,6 +165,9 @@ Proof
               (accesses_stmts (subst_consts_stmts_mods (consts_env_mods mods) body))) ==>
           (mods = [(NONE,tops)] \/ linked_state_ref_allocated layouts addr mods key)` by
     (gen_tac >> disch_tac >>
+     Cases_on `mods = [(NONE,tops)]` >- asm_rewrite_tac[] >>
+     `MEM (src,name) (linked_live_functions mods exps)` by metis_tac[] >>
+     asm_rewrite_tac[] >>
      drule_then (assume_tac o cj 2) linked_subst_accesses_subset >>
      Q.SUBGOAL_THEN
        `MEM (ReadAcc (StateRef key)) (accesses_stmts body) \/
@@ -174,22 +177,22 @@ Proof
        ?mtops. mods = [(NONE,mtops)])` by
        (Cases_on `mods` >> simp[] >> PairCases_on `h` >>
         Cases_on `h0` >> Cases_on `t` >> simp[]) >>
+     `~(case mods of [(NONE,_)] => T | _ => F)` by
+       (asm_rewrite_tac[] >> strip_tac >> gvs[ALOOKUP_def]) >>
      `MEM (src,tops) mods` by (irule ALOOKUP_MEM >> simp[]) >>
      qpat_x_assum `check_linked_state_ownership _ _ _ _` mp_tac >>
-     simp[check_linked_state_ownership_def] >>
-     disch_then (DISJ_CASES_THEN2 strip_assume_tac mp_tac)
-     >- fs[] >>
+     asm_rewrite_tac[check_linked_state_ownership_def] >>
      simp[Once EVERY_MEM] >>
-     qpat_assum `MEM (src,tops) mods` (fn member =>
-       disch_then (mp_tac o (C MATCH_MP member))) >>
+     disch_then (qspec_then `(src,tops)` mp_tac) >>
      simp[Once EVERY_MEM] >>
-     qpat_assum `MEM (FunctionDecl vis mut nr raw name args dflts ret body) tops`
-       (fn decl => disch_then (mp_tac o (C MATCH_MP decl))) >>
+     disch_then (qspec_then `FunctionDecl vis mut nr raw name args dflts ret body`
+       mp_tac) >>
      asm_simp_tac (srw_ss()) [EVERY_MEM, MEM_APPEND] >>
-     strip_tac >> disj2_tac >>
+     strip_tac >>
      qpat_assum `!a. MEM a (accesses_stmts body) ==> _` (fn owned =>
        qpat_x_assum `MEM (ReadAcc (StateRef key)) (accesses_stmts body) \/ _`
          (DISJ_CASES_THEN (mp_tac o MATCH_MP owned))) >> simp[]) >>
+  qpat_x_assum `mods = [(NONE,tops)] \/ MEM (src,name) _` kall_tac >>
   `!isrc itops ivis id ty slot.
      ALOOKUP mods isrc = SOME itops /\
      MEM (VariableDecl ivis Immutable id ty slot) itops /\

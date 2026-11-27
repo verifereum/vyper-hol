@@ -284,21 +284,6 @@ Definition stmt_frag_full_def:
            !s. (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 End
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rewrite_tac[stmt_frag_full_def] >>
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  irule gas_outcome_full_source_cong >> qexists_tac `source` >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `!st0 sa sb shadow_sa shadow_sb s0 G0 tn0 cenv'. _`
-    (qspecl_then [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`s0`,`G0`,`tn0`,`cenv'`]
-      match_mp_tac) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qpat_x_assum `gas_admissible source' (stmt_res_ok lctx) es` mp_tac >>
-  simp[gasContextTheory.gas_admissible_def]
-QED
-*)
 Theorem stmt_frag_full_source_cong:
   stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cx lctx RetQ cenv m shadow_m source es /\
@@ -306,7 +291,16 @@ Theorem stmt_frag_full_source_cong:
   stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cx lctx RetQ cenv m shadow_m source' es
 Proof
-  cheat
+  rewrite_tac[stmt_frag_full_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  irule gas_outcome_full_mods_source_cong >> qexists_tac `source` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!st0 sa sb shadow_sa shadow_sb s0 G0 tn0 cenv'. _`
+    (qspecl_then [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`s0`,`G0`,`tn0`,`cenv'`]
+      match_mp_tac) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_x_assum `gas_admissible source' (stmt_res_ok lctx) es` mp_tac >>
+  simp[gasContextTheory.gas_admissible_def]
 QED
 
 (* The bytes of the older allocations clear of the live locals gain no

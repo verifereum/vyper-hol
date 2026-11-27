@@ -14,7 +14,7 @@ Proof
   drule_all allocate_args_FLOOKUP_other >> simp[]
 QED
 
-Theorem selected_package_formal_domain[local]:
+Theorem selected_package_formal_domain:
   set_internal_package_target target
     (package_internal_fn_unit mods T (K global_nonreentrant_slot) deploy ilen
       (src,subst_consts_fn_mods (consts_env_mods mods)

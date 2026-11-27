@@ -242,7 +242,7 @@ Theorem body_inv_def:
 Proof
   Cases_on `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` >>
   simp[body_inv_split_def, contract_inv_def, module_body_inv_def,
-       cenv_module_pins_split_def, cenv_module_pins_mods_def, type_env_def,
+       check_linked_state_ownership_def, cenv_module_pins_split_def, cenv_module_pins_mods_def, type_env_def,
        ALOOKUP_def, optionTheory.FORALL_OPTION, nsid_to_string_def,
        get_module_code_def, get_tenv_def, type_env_all_modules_def, FUNION_FEMPTY_2,
        lower_vyper_deploy_unit_mods_singleton, lower_vyper_runtime_unit_mods_singleton,

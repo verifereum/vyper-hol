@@ -5,8 +5,7 @@ Ancestors
   bodyCheckedLinkedSupportMods bodySelectedCheckedBodySupportEnvMods
   bodyIntCallDefaultSliceConstRootsMods bodyInvExecutionProps
   bodyLinkedSubstAbiTargetsMods bodyLinkedSubstConstRootsMods
-  bodyLinkedConstRhsRangeMods bodySelectedLockedGuardsMods
-  linkedStateOwnership linkedEntryImmutableGuards linkedConstAnnotations
+  bodyLinkedConstRhsRangeMods linkedEntryImmutableGuards linkedConstAnnotations
   externalBodyWidths bodyExprPreFacts bodyFullPreds bodyFullPredsMods supportedProgram
   constSubstStmtsPreserve constSubstModsCorrect constSubstMods allocLimitsProps
   vyperTypeContract compileUnit compileVyper finite_map alist list option pair
@@ -49,13 +48,12 @@ Proof
 QED
 
 Theorem checked_selected_body_guards[local]:
-  MEM (src,name) (linked_live_functions mods exps) /\
+  (mods = [(NONE,tops)] \/ MEM (src,name) (linked_live_functions mods exps)) /\
   ALOOKUP mods src = SOME tops /\
   MEM (FunctionDecl vis mut nr raw name args dflts ret ss) tops /\
   body_const_cells_agree mods p env locked /\
   contract_inv mods exps ctx body_ce p /\
-  check_contract p.in_deploy p.layouts p.txn.target mods = SOME art /\
-  exports_ok p.layouts p.txn.target mods exps ==>
+  check_contract p.in_deploy p.layouts p.txn.target mods = SOME art ==>
   ~supported_stmts_expr_exists (unallocated_bare_global_root body_ce env)
      (subst_consts_stmts_mods (consts_env_mods mods) ss) /\
   (!key. MEM (WriteAcc (StateRef key))
@@ -63,34 +61,21 @@ Theorem checked_selected_body_guards[local]:
     IS_SOME (FLOOKUP env.bare_global_assignable key) ==>
     IS_SOME (FLOOKUP body_ce.ce_module_vars key))
 Proof
-  strip_tac >>
-  drule_all_then assume_tac check_contract_linked_state_ownership >>
-  `!art'. check_contract p.in_deploy p.layouts p.txn.target mods = SOME art' /\
-      ALOOKUP mods src = SOME tops /\
-      MEM (FunctionDecl vis mut nr raw name args dflts ret ss) tops /\
-      MEM (src,name) (linked_live_functions mods exps) /\
-      check_linked_state_ownership p.layouts p.txn.target mods
-        (linked_live_functions mods exps) /\
-      env.bare_globals = art'.cta_bare_globals /\
-      env.bare_global_assignable = art'.cta_bare_global_assignable /\
-      (!sid id r. ALOOKUP (consts_env_mods mods) (sid,id) = SOME r ==>
-         accesses_expr r = []) /\
-      immutable_section_layout_mods mods body_ce ==>
-      ~supported_stmts_expr_exists (unallocated_bare_global_root body_ce env)
-        (subst_consts_stmts_mods (consts_env_mods mods) ss) /\
-      (!key. MEM (WriteAcc (StateRef key))
-          (accesses_stmts (subst_consts_stmts_mods (consts_env_mods mods) ss)) /\
-        IS_SOME (FLOOKUP env.bare_global_assignable key) ==>
-        IS_SOME (FLOOKUP body_ce.ce_module_vars key))` by
-    (gen_tac >> strip_tac >>
-     `!key r. ALOOKUP (consts_env_mods mods) key = SOME r ==> accesses_expr r = []` by
-       (PairCases >> rpt strip_tac >>
-        qpat_assum `!sid id r. ALOOKUP _ (sid,id) = SOME r ==> _`
-          (drule_then ACCEPT_TAC)) >>
-     drule_all linked_checked_body_immutable_guards >> simp[]) >>
-  qpat_x_assum `!art'. check_contract _ _ _ _ = SOME art' /\ _ ==> _`
-    (assume_tac o SIMP_RULE bool_ss []) >>
-  metis_tac[SIMP_RULE bool_ss [LET_THM] selected_locked_immutable_guards_mods]
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `check_linked_state_ownership p.layouts p.txn.target mods
+      (linked_live_functions mods exps)` by fs[bodyInvSplitTheory.contract_inv_def] >>
+  qpat_x_assum `body_const_cells_agree _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
+  qpat_x_assum `frame_maps _ _`
+    (strip_assume_tac o REWRITE_RULE [constSubstCorrectTheory.frame_maps_def]) >>
+  `immutable_section_layout_mods mods body_ce` by
+    drule_then ACCEPT_TAC bodyInvSplitTheory.contract_inv_immutable_section_layout >>
+  `!key r. ALOOKUP (consts_env_mods mods) key = SOME r ==> accesses_expr r = []` by
+    (PairCases >> rpt strip_tac >>
+     qpat_assum `!sid id r. ALOOKUP (consts_env_mods _) (sid,id) = SOME r ==> _`
+       (drule_then strip_assume_tac) >>
+     first_assum ACCEPT_TAC) >>
+  drule_all linked_checked_body_immutable_guards >> simp[]
 QED
 
 Theorem selected_package_body_eq[local]:
@@ -105,7 +90,7 @@ Proof
        set_internal_package_target_def] >> simp[]
 QED
 
-Theorem selected_classified_allocs[local]:
+Theorem selected_classified_allocs:
   contract_inv mods exps ctx caller cx /\
   (if cx.in_deploy then ?rbc. lower_vyper_deploy_unit_mods mods exps policy rbc = SOME unit
    else lower_vyper_runtime_unit_mods mods exps policy = SOME unit) /\
@@ -146,8 +131,7 @@ Theorem selected_checked_body_support_alloc_mods:
   env = function_entry_env art mods src vis args /\
   type_stmts env ret b = SOME env' /\
   body_const_cells_agree mods p env locked /\
-  MEM (src,name) (linked_live_functions mods exps) /\
-  exports_ok cx.layouts cx.txn.target mods exps ==>
+  (mods = [(NONE,tops)] \/ MEM (src,name) (linked_live_functions mods exps)) ==>
   ?bindings. supported_stmts tops bindings b /\
     (!target. supported_stmts_expr_exists
       (expr_abi_decode_target_root target) b ==>
@@ -186,7 +170,10 @@ Proof
      simp[subst_consts_fn_mods_def, GSYM (Abbr `b`)] >> strip_tac >>
      drule_all selected_body_alloc_bounds_mods >> simp[]) >>
   `src = NONE ==> supported_program tops` by
-    (strip_tac >> gvs[] >> drule_all contract_inv_supported_module >> simp[]) >>
+    (strip_tac >> qpat_x_assum `src = NONE` SUBST_ALL_TAC >>
+     qpat_assum `contract_inv _ _ _ caller cx` (fn inv =>
+       qpat_assum `ALOOKUP mods NONE = SOME tops` (fn lookup =>
+         ACCEPT_TAC (MATCH_MP contract_inv_supported_module (CONJ inv lookup))))) >>
   `(cx.in_deploy /\ src = NONE /\ vis <> Deploy ==>
     !callee. MEM (NONE,callee) (int_calls_stmts ss) ==>
       IS_SOME (supported_function_decl tops (NONE,callee) Internal))` by
@@ -212,8 +199,8 @@ Proof
      supported_stmts_bindings F b) b` by
     (`b = subst_consts_stmts_mods (consts_env_mods mods) ss` by simp[Abbr `b`] >>
      drule_all checked_linked_substituted_body_supported_mode >> simp[]) >>
-  `check_contract p.in_deploy p.layouts p.txn.target mods = SOME art /\
-   exports_ok p.layouts p.txn.target mods exps` by simp[Abbr `p`] >>
+  `check_contract p.in_deploy p.layouts p.txn.target mods = SOME art` by
+    simp[Abbr `p`] >>
   drule_all_then strip_assume_tac checked_selected_body_guards >>
   `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) b ==>
        EXISTS (occurs_abi_decode_target target o SND) mods` by

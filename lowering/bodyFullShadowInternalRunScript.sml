@@ -156,7 +156,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem classified_unit_internal_member[local]:
+Theorem classified_unit_internal_member:
   ALOOKUP mods src = SOME tops /\
   MEM (FunctionDecl Internal mut nr rr fname args dflts ret ss) tops ==>
   MEM (src,subst_consts_fn_mods (consts_env_mods mods) (mut,nr,rr,fname,args,dflts,ret,ss))
