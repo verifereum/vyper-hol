@@ -159,7 +159,7 @@ Theorem grouped_fallback_empty_body_state[local]:
   (ctx_has_dalloca ctx ==> unit_alloca_budget ctx <= w2n vs.vs_initial_fmp /\
     w2n vs.vs_initial_fmp < 2 ** 254) /\
   unit_alloca_budget ctx < dimword (:256) /\
-  ce.ce_vars = FEMPTY /\ ce.ce_module = NONE /\ ~ce.ce_is_ctor /\
+  ce.ce_vars = FEMPTY /\ ce.ce_modules = [(NONE,tops)] /\ ce.ce_module = NONE /\ ~ce.ce_is_ctor /\
   ce.ce_imm_alloca = NONE /\ ce.ce_return_pc = NONE /\ ce.ce_return_buf = NONE /\
   immutable_section_layout ce tops /\ storage_vars_rel ce cx /\ transient_vars_rel ce cx ==>
   return_buf_frame NONE ce st t /\
@@ -177,7 +177,7 @@ Proof
   `!H:(bool # bytes32 # type_value) list # num list.
     state_rel H fn ce (initial_evaluation_context am.sources am.layouts tx NONE) es t` by
     (gen_tac >> irule body_entry_state_rel_runtime >> simp[initial_evaluation_context_def] >>
-     qexistsl_tac [`am`,`FEMPTY`,`mut`,`tops`,`vs`] >> fs[initial_evaluation_context_def]) >>
+     qexistsl_tac [`am`,`FEMPTY`,`mut`,`vs`] >> fs[initial_evaluation_context_def]) >>
   qpat_assum `selected_registration_resources _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [selected_registration_resources_def]) >>
   `alloca_room ctx fn t` by metis_tac[registration_frontier_alloca_room] >>
