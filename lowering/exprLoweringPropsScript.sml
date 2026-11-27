@@ -1138,7 +1138,7 @@ Proof
   rw[state_rel_def]
   >- metis_tac[local_ptrs_rel_cenv_cong]
   >- (simp[storage_vars_rel_def] >> conj_tac >> rpt strip_tac
-      >- (`FLOOKUP cenv'.ce_module_vars (cenv.ce_module,name) =
+      >- (`FLOOKUP cenv'.ce_module_vars (src,name) =
            SOME (StorageLoc slot)` by
             (qpat_x_assum `!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ _ ==> _`
                irule >> simp[]) >>
@@ -1148,7 +1148,7 @@ Proof
       simp[] >> qpat_x_assum `storage_vars_rel cenv' cx` mp_tac >>
       simp[storage_vars_rel_def] >> metis_tac[])
   >- (simp[transient_vars_rel_def] >> conj_tac >> rpt strip_tac
-      >- (`FLOOKUP cenv'.ce_module_vars (cenv.ce_module,name) =
+      >- (`FLOOKUP cenv'.ce_module_vars (src,name) =
            SOME (TransientLoc slot)` by
             (qpat_x_assum `!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ _ ==> _`
                irule >> simp[]) >>
