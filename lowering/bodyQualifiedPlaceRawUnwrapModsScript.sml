@@ -733,7 +733,7 @@ Finalise qualified_raw_saved_at_cut_modes_mods
 
 val raw_source = ``expr_sim_inv_mods mods ce cx env ee /\ ^raw_update``;
 
-Theorem qualified_raw_saved_at_cut[local]:
+Theorem qualified_raw_saved_at_cut:
   contract_inv mods exps ctx ce cx /\ module_body_inv mods src tops ce cx /\
   expr_body_pre_mods mods ce cx env e es /\ ^raw_source /\ ^raw_cut_entry ==>
   ^raw_cut_post
