@@ -65,30 +65,6 @@ Proof
   gvs[optionTheory.IS_SOME_EXISTS]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  Cases_on `nsid` >> rename1 `(src,id)` >> strip_tac >>
-  `src = NONE` by metis_tac[body_inv_toplevel_target_main, optionTheory.IS_SOME_EXISTS] >>
-  gvs[] >>
-  drule_then strip_assume_tac body_inv_main_code >>
-  drule_then assume_tac body_inv_contract >>
-  `~supported_expr_exists (const_name_root cx) e` by
-    (drule_all body_inv_stmt_const_name_free >>
-     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
-  drule_all_then assume_tac expr_sim_inv_no_unallocated_bare_globals >>
-  `expr_sim_inv_mods [(NONE,tops)] cenv cx env es` by fs[expr_sim_inv_split_def] >>
-  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
-    body_assign_toplevel_word_full_setup_mods) >>
-  impl_tac >- (simp[main_module_def, ALOOKUP_def] >> metis_tac[]) >>
-  simp[main_module_def, ALOOKUP_def] >> strip_tac >>
-  drule_then assume_tac contract_inv_type_env >>
-  fs[expr_body_pre_split_def, vyperContextTheory.type_env_all_modules_def,
-     vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2,
-     supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
-  metis_tac[body_inv_typed_calls_main, expr_body_pre_mods_well_typed]
-QED
-*)
 Theorem body_assign_toplevel_word_full_setup:
   !mods exps.
   (contract_inv mods exps ctx cenv cx /\
@@ -114,5 +90,23 @@ Theorem body_assign_toplevel_word_full_setup:
     cenv.ce_module_var_type nsid = SOME (expr_type e) /\
     is_word_type (expr_type e)
 Proof
-  cheat
+  Cases_on `nsid` >> rename1 `(src,id)` >> strip_tac >>
+  `src = NONE` by metis_tac[body_inv_toplevel_target_main, optionTheory.IS_SOME_EXISTS] >>
+  gvs[] >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  drule_then assume_tac body_inv_contract >>
+  `~supported_expr_exists (const_name_root cx) e` by
+    (drule_all body_inv_stmt_const_name_free >>
+     simp[supported_stmt_expr_exists_def, supported_assignment_exists_def]) >>
+  drule_all_then assume_tac expr_sim_inv_no_unallocated_bare_globals >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx env es` by fs[expr_sim_inv_split_def] >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
+    body_assign_toplevel_word_full_setup_mods) >>
+  impl_tac >- (simp[main_module_def, ALOOKUP_def] >> metis_tac[]) >>
+  simp[main_module_def, ALOOKUP_def] >> strip_tac >>
+  drule_then assume_tac contract_inv_type_env >>
+  fs[expr_body_pre_split_def, vyperContextTheory.type_env_all_modules_def,
+     vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2,
+     supported_stmt_expr_exists_def, supported_assignment_exists_def] >>
+  metis_tac[body_inv_typed_calls_main, expr_body_pre_mods_well_typed]
 QED

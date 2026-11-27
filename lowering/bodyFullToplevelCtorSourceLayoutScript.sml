@@ -68,23 +68,6 @@ Proof
   qexistsl_tac [`pre`, `post`, `vis`, `slot`] >> fs[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  drule body_inv_main_code >> strip_tac >>
-  drule body_inv_contract >> strip_tac >>
-  drule contract_inv_cenv_modules >> strip_tac >>
-  drule_all body_inv_expr_body_pre_mods >> strip_tac >>
-  `dead_lo_ok_mods H D lo cenv cx` by
-    fs[dead_lo_ok_mods_singleton] >>
-  qpat_x_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
-  drule_all toplevel_ctor_source_layout_mods >>
-  Cases_on `cenv.ce_module` >> gvs[alistTheory.ALOOKUP_def, AllCaseEqs(),
-    compileUnitTheory.make_struct_fields_map_mods_singleton] >>
-  metis_tac[]
-QED
-*)
 Theorem toplevel_ctor_source_layout:
   !mods exps.
   (contract_inv mods exps ctx cenv cx /\
@@ -107,5 +90,16 @@ Theorem toplevel_ctor_source_layout:
     type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
       type_memory_size rt
 Proof
-  cheat
+  strip_tac >>
+  drule body_inv_main_code >> strip_tac >>
+  drule body_inv_contract >> strip_tac >>
+  drule contract_inv_cenv_modules >> strip_tac >>
+  drule_all body_inv_expr_body_pre_mods >> strip_tac >>
+  `dead_lo_ok_mods H D lo cenv cx` by
+    fs[dead_lo_ok_mods_singleton] >>
+  qpat_x_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
+  drule_all toplevel_ctor_source_layout_mods >>
+  Cases_on `cenv.ce_module` >> gvs[alistTheory.ALOOKUP_def, AllCaseEqs(),
+    compileUnitTheory.make_struct_fields_map_mods_singleton] >>
+  metis_tac[]
 QED

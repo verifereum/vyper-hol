@@ -27,26 +27,6 @@ Proof
   metis_tac[compiler_compile_var, not_fresh_at_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `!mem. mem_agree_outside tn.t_mem z.vs_memory mem ==>
-     val_in_memory pt v (w2n sw) mem` by
-    (gvs[ptr_val_ok_def, ptr_mem_ok_def] >> metis_tac[]) >>
-  conj_tac
-  >- (`arg_type_fits (lowered_value_type ce e) (expr_type e)` by
-        metis_tac[expr_body_pre_lowered_fits] >>
-      drule_all materialize_post_lowered_classify >> strip_tac
-      >- gvs[] >>
-      rpt strip_tac >> irule bytestring_val_in_memory_transfer >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`post_value_type ce e`, `lowered_value_type ce e`,
-                    `get_tenv cx`, `pt`] >> simp[]) >>
-  strip_tac >> gvs[ptr_buf_ok_def, ptr_val_ok_def, ptr_covers_def,
-                   venomStateTheory.eval_operand_def] >> metis_tac[]
-QED
-*)
 Theorem make_array_physical_store_input:
   !mods.
   expr_body_pre_mods mods ce cx env e es /\
@@ -63,7 +43,21 @@ Theorem make_array_physical_store_input:
          val_in_memory lt v (w2n sw) mem) /\
   (type_memory_size lt <> 0 ==> ptr_covers G tn xs z (type_memory_size lt))
 Proof
-  cheat
+  strip_tac >>
+  `!mem. mem_agree_outside tn.t_mem z.vs_memory mem ==>
+     val_in_memory pt v (w2n sw) mem` by
+    (gvs[ptr_val_ok_def, ptr_mem_ok_def] >> metis_tac[]) >>
+  conj_tac
+  >- (`arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+        metis_tac[expr_body_pre_lowered_fits] >>
+      drule_all materialize_post_lowered_classify >> strip_tac
+      >- gvs[] >>
+      rpt strip_tac >> irule bytestring_val_in_memory_transfer >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`post_value_type ce e`, `lowered_value_type ce e`,
+                    `get_tenv cx`, `pt`] >> simp[]) >>
+  strip_tac >> gvs[ptr_buf_ok_def, ptr_val_ok_def, ptr_covers_def,
+                   venomStateTheory.eval_operand_def] >> metis_tac[]
 QED
 
 Theorem make_array_add_value_inputs:

@@ -5,18 +5,6 @@ Ancestors
   stateRelProj allocaSiteResource bodyMemoryDefs[qualified,ignore_grammar]
   exprSimHypsDefs[qualified]
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt strip_tac >>
-  drule_all ec_point_operand_kept >> strip_tac >>
-  `?w. eval_operand x t = SOME w` by
-    fs[expr_post_def, expr_val_rel_def] >>
-  `eval_operand x u = SOME w` by metis_tac[] >>
-  qexists_tac `w` >> simp[] >>
-  irule ec_point_read_capacity >> metis_tac[]
-QED
-*)
 Theorem ec_first_point_staging_ready:
   !mods.
   post_value_type cenv e1 = expr_type e1 /\
@@ -34,7 +22,13 @@ Theorem ec_first_point_staging_ready:
       expr_val_rel cx (expr_type e1) v1 x u /\
       expr_val_at cenv cx (expr_type e1) sa s2 es' v1 x u
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all ec_point_operand_kept >> strip_tac >>
+  `?w. eval_operand x t = SOME w` by
+    fs[expr_post_def, expr_val_rel_def] >>
+  `eval_operand x u = SOME w` by metis_tac[] >>
+  qexists_tac `w` >> simp[] >>
+  irule ec_point_read_capacity >> metis_tac[]
 QED
 
 (* The staging writes introduce no taint into live input regions. *)

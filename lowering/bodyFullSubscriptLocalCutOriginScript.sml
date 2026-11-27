@@ -8,8 +8,12 @@ Ancestors
   vyperImmutableMetadataFrame vyperStatePreservation vyperState
   vyperPlaceTyping vyperValueOperation list
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem marked_local_eval_facts[local]:
+  !mods.
+  expr_body_pre_mods mods cenv cx env e st /\ eval_expr cx e st = (INL pv,st') ==>
+  typed_scope_transition st st' /\ state_well_typed st' /\
+  eval_result_typed (env,cx,st') pv (Type (expr_type e)) /\
+  live_memory_result st' pv
 Proof
   strip_tac >>
   `runtime_consistent env cx st' /\
@@ -22,16 +26,6 @@ Proof
   irule (cj 2 (cj 5 eval_scc_type_sound_mutual)) >>
   gvs[expr_body_pre_def, expr_sim_inv_def] >>
   qexistsl [`cx`, `e`, `env`, `INL pv`] >> simp[]
-QED
-*)
-Theorem marked_local_eval_facts[local]:
-  !mods.
-  expr_body_pre_mods mods cenv cx env e st /\ eval_expr cx e st = (INL pv,st') ==>
-  typed_scope_transition st st' /\ state_well_typed st' /\
-  eval_result_typed (env,cx,st') pv (Type (expr_type e)) /\
-  live_memory_result st' pv
-Proof
-  cheat
 QED
 
 Theorem marked_base_initial_local[local]:

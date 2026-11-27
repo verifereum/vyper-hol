@@ -241,8 +241,17 @@ Proof
   simp[lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_state_rel_pop_header:
+  stmt_state_rel H ctx func cenv cx es s /\
+  MEM (tr,slot,ArrayTV tv (Dynamic n)) (FST H) ==>
+  stmt_state_rel H ctx func cenv cx
+    (set_storage cx es tr
+      (update_storage slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1))
+        (get_storage cx es tr)))
+    (if tr then
+       tstore slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1)) s
+     else
+       sstore slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1)) s)
 Proof
   strip_tac >>
   `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel H cx es s` by
@@ -277,21 +286,6 @@ Proof
   irule stmt_state_rel_allocas_frame >> simp[] >>
   qexistsl [`es`, `s`] >> simp[] >>
   Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
-QED
-*)
-Theorem stmt_state_rel_pop_header:
-  stmt_state_rel H ctx func cenv cx es s /\
-  MEM (tr,slot,ArrayTV tv (Dynamic n)) (FST H) ==>
-  stmt_state_rel H ctx func cenv cx
-    (set_storage cx es tr
-      (update_storage slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1))
-        (get_storage cx es tr)))
-    (if tr then
-       tstore slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1)) s
-     else
-       sstore slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1)) s)
-Proof
-  cheat
 QED
 
 Theorem storage_range_agree_dyn_last:

@@ -6,8 +6,22 @@ Ancestors
   valueEncodingProps valueEncodingProofs ptrDiscipline
   exprSimHypsDefs[qualified]
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem abi_encode_borrowed_footprint_frame:
+  !mods.
+  expr_sim_inv_mods mods ce cx env es /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
+  stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx ee t /\ ee.scopes = es.scopes /\
+  local_ptrs_reserved ce st /\ wb_frame ce es ee st s t /\
+  ghost_kept_at lo ce es st G tn s G' tn' /\
+  sb.cs_next_id <= st.cs_next_id /\
+  expr_val_at ce cx ty sa sb es v op s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  eval_operand op s = SOME w ==>
+  val_wf tv v /\
+  mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory =
+    mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory /\
+  (!i. w2n w <= i /\ i < w2n w + val_footprint tv v /\
+       i IN tn'.t_mem ==> i IN tn.t_mem)
 Proof
   strip_tac >>
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -33,26 +47,6 @@ Proof
       conj_tac >- simp[] >>
       qexistsl_tac [`b`, `n`, `sz`] >> simp[] >> decide_tac)
   >> simp[valueEncodingDefsTheory.mem_bytes_at_def] >> rpt strip_tac >> decide_tac
-QED
-*)
-Theorem abi_encode_borrowed_footprint_frame:
-  !mods.
-  expr_sim_inv_mods mods ce cx env es /\
-  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
-  stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx ee t /\ ee.scopes = es.scopes /\
-  local_ptrs_reserved ce st /\ wb_frame ce es ee st s t /\
-  ghost_kept_at lo ce es st G tn s G' tn' /\
-  sb.cs_next_id <= st.cs_next_id /\
-  expr_val_at ce cx ty sa sb es v op s /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
-  eval_operand op s = SOME w ==>
-  val_wf tv v /\
-  mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory =
-    mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory /\
-  (!i. w2n w <= i /\ i < w2n w + val_footprint tv v /\
-       i IN tn'.t_mem ==> i IN tn.t_mem)
-Proof
-  cheat
 QED
 
 Theorem abi_encode_borrowed_operand_retained:

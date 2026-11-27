@@ -30,15 +30,6 @@ Proof
    fs[vyperTypeSystemTheory.well_typed_expr_def] >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  metis_tac[bodySimTheory.body_inv_contract, body_inv_expr_body_pre_mods,
-    REWRITE_RULE [alistTheory.ALOOKUP_def]
-      (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`]
-        intcall_declared_return_type_mods)]
-QED
-*)
 Theorem intcall_declared_return_type:
   !mods exps.
   (contract_inv mods exps ctx cenv cx /\
@@ -48,7 +39,10 @@ Theorem intcall_declared_return_type:
   cenv.ce_func_return_type (nsid_to_string (NONE,name)) = ret /\
   type_widens_to (get_tenv cx) ret ann
 Proof
-  cheat
+  metis_tac[bodySimTheory.body_inv_contract, body_inv_expr_body_pre_mods,
+    REWRITE_RULE [alistTheory.ALOOKUP_def]
+      (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`]
+        intcall_declared_return_type_mods)]
 QED
 
 Theorem intcall_rest_read_post_typed:
