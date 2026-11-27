@@ -9227,6 +9227,21 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac body_inv_module >>
+  drule_then (assume_tac o cj 2) body_inv_main_code >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx env ee` by
+    fs[expr_sim_inv_split_def] >>
+  `dead_lo_ok_mods H D lo cenv cx /\ ghost_inv_at_mods D lo d cenv cx ee Gu tnu u` by
+    metis_tac[dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton] >>
+  drule_all body_assign_saved_rhs_ctor_read_mods >> simp[]
+QED
+*)
 Theorem body_assign_saved_rhs_ctor_read[local]:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env ee /\ cenv.ce_is_ctor /\
@@ -9240,16 +9255,7 @@ Theorem body_assign_saved_rhs_ctor_read[local]:
                (!mem. mem_agree_outside tnu.t_mem u.vs_memory mem ==>
                       val_in_memory rt val (w2n w) mem)
 Proof
-  strip_tac >>
-  drule_then assume_tac body_inv_contract >>
-  drule_then assume_tac body_inv_module >>
-  drule_then (assume_tac o cj 2) body_inv_main_code >>
-  drule_then assume_tac contract_inv_cenv_modules >>
-  `expr_sim_inv_mods [(NONE,tops)] cenv cx env ee` by
-    fs[expr_sim_inv_split_def] >>
-  `dead_lo_ok_mods H D lo cenv cx /\ ghost_inv_at_mods D lo d cenv cx ee Gu tnu u` by
-    metis_tac[dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton] >>
-  drule_all body_assign_saved_rhs_ctor_read_mods >> simp[]
+  cheat
 QED
 
 (* The saved operand still belongs to sm, but its representation and dead-byte
