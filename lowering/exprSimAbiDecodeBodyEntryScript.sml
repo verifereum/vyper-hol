@@ -3,6 +3,7 @@ Ancestors
   exprSimAbiDecodeEntryTyping exprSimAbiDecodeEntryMetadata
   exprSimAbiDecodeEntryCoherence exprSimHypsDefs abiCallerDecodeBounds
   vyperTypeSystem vyperTypeInvariants vyperValue vyperTyping allocLimits list option
+  exprSafeOperand exprSimSource
 
 Theorem abi_decode_body_target:
   expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty args) es ==>
@@ -12,6 +13,22 @@ Proof
   simp_tac bool_ss [expr_body_pre_mods_def] >> strip_tac >>
   drule abi_decode_inv_type_env >> strip_tac >>
   drule abi_decode_parent_type >> metis_tac[]
+QED
+
+Theorem abi_decode_body_operand_evaluates:
+  expr_body_pre_mods mods ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
+  expr_type e = BaseT (BytesT (Dynamic n)) ==>
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic n)))
+Proof
+  simp_tac bool_ss [expr_body_pre_mods_def] >> strip_tac >>
+  drule_then assume_tac abi_decode_inv_type_env >>
+  `well_typed_expr env e` by metis_tac[abi_decode_parent_type, listTheory.CONS_11] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_mods_def] >>
+  `!id t. FLOOKUP env.var_types id = SOME t ==>
+          well_formed_type env.type_defs t` by
+    metis_tac[well_formed_type_def, env_consistent_var_type_evaluates] >>
+  drule_all well_typed_expr_type_well_formed >>
+  gvs[well_formed_type_def, evaluate_type_def, AllCaseEqs()]
 QED
 
 Theorem abi_decode_body_wrapped_coherent:
