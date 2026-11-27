@@ -131,7 +131,7 @@ Proof
 QED
 
 (* Entry observations are overwritten by replay, including exempt replay. *)
-Triviality calldata_outcome_reset:
+Theorem calldata_outcome_reset:
   gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0 source
     (es with gas_obs := [],s,G,tn) Q R ==>
   gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0 source
