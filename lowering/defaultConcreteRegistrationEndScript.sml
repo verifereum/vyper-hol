@@ -59,7 +59,7 @@ QED
 Theorem default_registration_terminal_state:
   default_registration_invariant tops cx ctx fn site k vs ce0 start
     args all_tvs specs cef sa ce st off [] [] s G tn owners /\
-  initial_venom_state_rel tops am tx vs /\ cx.txn = tx /\
+  ce.ce_modules = [(NONE,tops)] /\ initial_venom_state_rel tops am tx vs /\ cx.txn = tx /\
   send_call_value mut cx
     (initial_state am [env] with
       <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es) /\
@@ -77,7 +77,7 @@ Proof
   irule default_registration_endpoint_state >>
   fs[default_registration_invariant_def, default_registration_resources_def,
      default_registration_entry_frame_def] >>
-  qexistsl [`am`,`args`,`env`,`mut`,`owners`,`tops`,
+  qexistsl [`am`,`args`,`env`,`mut`,`owners`,
     `MAP (\tv. (ARB,tv)) all_tvs`,`vs`] >> simp[MAP_MAP_o, combinTheory.o_DEF] >>
   qpat_x_assum `LIST_REL _ args all_tvs` mp_tac >>
   simp[LIST_REL_MAP2, combinTheory.o_DEF] >> strip_tac >>
