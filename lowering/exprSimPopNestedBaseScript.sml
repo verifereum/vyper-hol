@@ -254,7 +254,19 @@ Proof
      vyperValueTheory.type_slot_size_def] >> decide_tac
 QED
 
-(* SCRATCH: indirect build dependency awaiting widened-relation repair.
+Theorem nested_pop_stmt_state_rel_header:
+  stmt_state_rel H ctx func cenv cx es s /\
+  MEM (tr,root_slot,root) (FST H) /\
+  storage_subregion root path delta (ArrayTV tv (Dynamic n)) /\
+  w2n slot = w2n root_slot + delta ==>
+  stmt_state_rel H ctx func cenv cx
+    (set_storage cx es tr
+      (update_storage slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1))
+        (get_storage cx es tr)))
+    (if tr then
+       tstore slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1)) s
+     else
+       sstore slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1)) s)
 Proof
   strip_tac >>
   `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel H cx es s` by
@@ -262,10 +274,10 @@ Proof
   qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx _ _ _ es1 s1` >>
   `accounts_rel H cx es1 s1` by
     (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`]
-     >- (irule accountsRelPropsTheory.accounts_rel_tstore >> simp[] >> qexists `es` >>
+     >- (irule accounts_rel_tstore >> simp[] >> qexists_tac `es` >>
          simp[vyperStorageBackendTheory.set_storage_backend_eq, vyperStorageBackendTheory.get_storage_def, vfmStateTheory.lookup_account_def] >>
          rpt strip_tac >> irule nested_pop_storage_dead_header >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-     irule accountsRelPropsTheory.accounts_rel_sstore >> simp[] >> qexists `es` >>
+     irule accounts_rel_sstore >> simp[] >> qexists_tac `es` >>
      simp[vyperStorageBackendTheory.set_storage_backend_eq, vyperStorageBackendTheory.get_storage_def, vfmStateTheory.lookup_account_def] >>
      rpt strip_tac >> irule nested_pop_storage_dead_header >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   `s1.vs_call_ctx = s.vs_call_ctx` by
@@ -282,31 +294,23 @@ Proof
      simp[] >> Cases_on `tr` >>
      simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
           vyperStorageBackendTheory.set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx es1 s1` by
+    (rpt strip_tac >>
+     irule immutable_alloca_sep_fields >> qexistsl [`s`, `es`] >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+     Cases_on `tr` >>
+     simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
+          vyperStorageBackendTheory.set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
   `immutable_base_zero cenv s1` by
     (`immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>
      irule immutable_base_zero_frame >> qexists `s` >>
      Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM, lookup_var_def]) >>
   irule stmt_state_rel_allocas_frame >>
   qpat_assum `immutable_base_zero cenv _` (irule_at Any) >> simp[] >>
-  qexistsl [`s`, `es`] >> simp[] >> Cases_on `tr` >>
-  simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
-QED
-*)
-Theorem nested_pop_stmt_state_rel_header:
-  stmt_state_rel H ctx func cenv cx es s /\
-  MEM (tr,root_slot,root) (FST H) /\
-  storage_subregion root path delta (ArrayTV tv (Dynamic n)) /\
-  w2n slot = w2n root_slot + delta ==>
-  stmt_state_rel H ctx func cenv cx
-    (set_storage cx es tr
-      (update_storage slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1))
-        (get_storage cx es tr)))
-    (if tr then
-       tstore slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1)) s
-     else
-       sstore slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1)) s)
-Proof
-  cheat
+  qexistsl [`s`, `es`] >> simp[] >>
+  Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
 QED
 
 Theorem nested_pop_live_array_agree:
