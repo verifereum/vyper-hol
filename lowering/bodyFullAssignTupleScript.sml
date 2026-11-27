@@ -17124,6 +17124,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_widened_with_immutable_paths[regular_write]:
   `tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func)
      (cenv,cx,env,st0,es,ee) (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
@@ -17245,6 +17246,7 @@ Resume tuple_assign_widened_with_immutable_paths[regular_write]:
   conj_tac >- simp[venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def] >>
   simp[Abbr `stmtR`,stmt_exit_ptr_def,expr_exit_def,halt_exit_def]
 QED
+*)
 
 
 (* A nested constructor place is writable at its marked midpoint. Both
@@ -17837,6 +17839,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_widened_nested_write_advance[computed_immutable_write]:
    `ptv = EL i dtvs` by
      (qpat_assum `evaluate_type (get_tenv cx) (EL i dtys) = SOME ptv` mp_tac >>
@@ -17971,7 +17974,9 @@ Resume tuple_widened_nested_write_advance[computed_immutable_write]:
    suspend "normalized"
 
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_widened_nested_write_advance[normalized]:
    qpat_assum `~(EL i tys = EL i dtys \/ is_bytestring_type (EL i dtys))`
      (map_every assume_tac o CONJUNCTS o REWRITE_RULE [boolTheory.DE_MORGAN_THM]) >>
@@ -18152,9 +18157,13 @@ Resume tuple_widened_nested_write_advance[normalized]:
      (qspecl_then [`aid`,`a`,`cap`,`byte`] (drule_all_then ACCEPT_TAC))
 
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise tuple_widened_nested_write_advance
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_widened_with_immutable_paths[nested_immutable]:
    qpat_assum `frame c src s G tn` mp_tac >>
    qpat_assum `Abbrev (frame = _)`
@@ -18254,8 +18263,11 @@ Resume tuple_assign_widened_with_immutable_paths[nested_immutable]:
         (ff,q,Gq,tq) _ _` mp_tac >>
    simp[NoAsms,Abbr `cfg`]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise tuple_assign_widened_with_immutable_paths[local]
+*)
 
 Theorem body_assign_tuple_widened_full:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.

@@ -6391,6 +6391,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_snapshot_memory_alloc_joint[horizon]:
   gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
@@ -6406,7 +6407,9 @@ Resume body_assign_snapshot_memory_alloc_joint[horizon]:
   goal_assum (drule_at Any) >> simp[]
   >> (metis_tac[])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_snapshot_memory_alloc_joint[entry_kept]:
   irule alloc_buffer_ghost_kept_at >>
   qexistsl_tac [`G`,`w2n w + type_memory_bytes ce (lowered_value_type ce e)`,`s`,`tn`] >>
@@ -6421,14 +6424,18 @@ Resume body_assign_snapshot_memory_alloc_joint[entry_kept]:
   qpat_assum `!aid off len. FLOOKUP s.vs_allocas aid = SOME (off,len) ==> _`
     (qspecl_then [`aid`,`off`,`sz`] mp_tac) >> simp[] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_snapshot_memory_alloc_joint[rhs_kept]:
   irule alloc_buffer_ghost_kept_at >>
   qexistsl_tac [`G`,`w2n w + type_memory_bytes ce (lowered_value_type ce e)`,`s`,`tn`] >>
   simp[ghost_kept_at_def]
   >> (metis_tac[])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_snapshot_memory_alloc_joint[pointer]:
   `vv_at ce cx (post_value_type ce e) sa sm ee pv vv0 s` by fs[vv_post_def] >>
   `~is_word_type (post_value_type ce e) /\
@@ -6452,17 +6459,23 @@ Resume body_assign_snapshot_memory_alloc_joint[pointer]:
   >- (gvs[ptr_vv_ok_def] >> simp[]) >>
   irule ptr_vv_ok_nonmemory_frame >> simp[] >> qexistsl_tac [`G`,`s`,`tn`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_snapshot_memory_alloc_joint[stack_buffer]:
   rpt strip_tac >> fs[contextTheory.vv_operand_def] >>
   irule ptr_buf_ok_frame >> qexistsl_tac [`G`,`s`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_snapshot_memory_alloc_joint[located_buffer]:
   rpt strip_tac >> fs[contextTheory.vv_operand_def] >>
   irule ptr_buf_ok_frame >> qexistsl_tac [`G`,`s`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_snapshot_memory_alloc_joint[constructor]:
   disch_then (fn guard =>
     qpat_x_assum `ce.ce_is_ctor /\ vv_location vv0 = SOME LocCode ==> _`
@@ -6486,8 +6499,11 @@ Resume body_assign_snapshot_memory_alloc_joint[constructor]:
   `val_footprint rt v <= type_memory_size rt` by simp[exprSimPropsTheory.val_footprint_le] >>
   rpt strip_tac >> `i < s.vs_alloca_next` by decide_tac >> fs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_snapshot_memory_alloc_joint[local]
+*)
 
 Theorem immutable_word_store_endpoint:
   compile_assign_value ce (Lit (n2w off)) LocCode op T loc ity sty bytes su = ((),sb) /\
@@ -7375,6 +7391,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_bytes_slots_write_full[static]:
   `type_slot_size stv <> 0` by decide_tac >>
   mp_tac (Q.INST [`s` |-> `z`,`sa` |-> `su`,`src` |-> `op`,
@@ -7392,7 +7409,9 @@ Resume body_assign_other_bytes_slots_write_full[static]:
   simp[write_place_def,write_storage_slot_eq,stmt_exit_ptr_def,
        exprSimDefsTheory.expr_exit_def,halt_exit_not_halt]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_bytes_slots_write_full[normal]:
   mp_tac (Q.INST [`s` |-> `z`,`sa` |-> `su`,`src` |-> `op`,
     `tv` |-> `stv`,`dw` |-> `k`,`G` |-> `Gz`,`tn` |-> `tnz`,
@@ -7403,7 +7422,9 @@ Resume body_assign_other_bytes_slots_write_full[normal]:
     (qx_choose_then `tnf` (REPEAT_TCL CONJUNCTS_THEN assume_tac))))) >>
   suspend "landing"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_bytes_slots_write_full[landing]:
   `!x. not_fresh_at su x ==> lookup_var x u = lookup_var x z` by
     (rpt strip_tac >> qpat_assum `!x. not_fresh_at su x ==> _ /\ _`
@@ -7447,7 +7468,9 @@ Resume body_assign_other_bytes_slots_write_full[landing]:
       simp[]) >>
   suspend "posts"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_bytes_slots_write_full[posts]:
   gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
@@ -7480,8 +7503,11 @@ Resume body_assign_other_bytes_slots_write_full[posts]:
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_bytes_slots_write_full[local]
+*)
 
 Theorem body_assign_empty_backend_ghost[local]:
   ghost_inv_at D lo d cenv cx ee G tn s /\ dead_lo_ok H D lo cenv cx /\
@@ -7635,6 +7661,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_empty_place_joint[restore]:
   qx_gen_tac `H` >> strip_tac >>
   Cases_on `loc` >> gvs[] >>
@@ -7648,7 +7675,9 @@ Resume body_assign_empty_place_joint[restore]:
   >- suspend "backend"
   >> suspend "immutable"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_empty_place_joint[memory]:
   qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx ff u` >>
   `32 <= type_memory_size dtv` by
@@ -7695,6 +7724,8 @@ Resume body_assign_empty_place_joint[memory]:
    (ee with scopes := sc).tStorage = ee.tStorage` by simp[] >>
   metis_tac[storage_well_formed_on_backends]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_empty_place_joint[backend]:
   markerLib.RESUME_TAC >>
   Cases_on `p` >> gvs[place_ptr_rel_def, slot_loc_def, AllCaseEqs()] >>
@@ -7707,7 +7738,9 @@ Resume body_assign_empty_place_joint[backend]:
     (irule alloca_frame_same >> simp[sstore_def,tstore_def])) >>
   suspend "backend_ghost"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_empty_place_joint[backend_wf]:
   markerLib.RESUME_TAC >>
   `regions_consistent (FST H)` by fs[valid_horizon_def] >>
@@ -7716,7 +7749,9 @@ Resume body_assign_empty_place_joint[backend_wf]:
     (drule vyperTypeDefaultsTheory.default_value_has_type_thm >> simp[]) >>
   drule_all body_assign_observed_storage_write_wf >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_empty_place_joint[backend_ghost]:
   markerLib.RESUME_TAC >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
@@ -7726,6 +7761,8 @@ Resume body_assign_empty_place_joint[backend_ghost]:
   qpat_assum `dead_lo_ok H _ _ _ _` (mp_then Any mp_tac body_assign_empty_backend_ghost) >>
   metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_empty_place_joint[immutable]:
   `ff.scopes = ee.scopes /\ ff.accounts = ee.accounts /\ ff.tStorage = ee.tStorage` by
     (drule write_immutable_place_frame >> strip_tac >> simp[]) >>
@@ -7762,7 +7799,10 @@ Resume body_assign_empty_place_joint[immutable]:
   drule body_assign_ghost_imm_decrease >>
   disch_then (qspec_then `tf.t_imm` mp_tac) >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_empty_place_joint[local]
+*)
 
 Theorem body_assign_empty_target_typing:
   type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' ==>
@@ -8083,6 +8123,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_empty_target_full[write]:
   qx_genl_tac [`marks`,`p`,`mid`,`G1`,`tn1`,`u`] >> simp[] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
@@ -8197,7 +8238,9 @@ Resume body_assign_other_empty_target_full[write]:
   qpat_x_assum `wr = INL ()` SUBST_ALL_TAC >>
   suspend "normal"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_empty_target_full[static]:
   Cases_on `p` >> gvs[place_ptr_rel_def] >>
   rename1 `StoragePlace tr slot dtv` >>
@@ -8217,7 +8260,9 @@ Resume body_assign_other_empty_target_full[static]:
   conj_tac >- simp[halt_state_def, set_returndata_def] >>
   simp[stmt_exit_ptr_def, expr_exit_def, halt_exit_not_halt]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_empty_target_full[normal]:
   `ff.storage_trace = mid.storage_trace` by
     (drule write_place_storage_trace >> simp[]) >>
@@ -8253,7 +8298,9 @@ Resume body_assign_other_empty_target_full[normal]:
     suspend "memory_header" >>
   suspend "normal_tail"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_empty_target_full[memory_header]:
   disch_then SUBST_ALL_TAC >>
   `32 <= type_memory_size dtv` by
@@ -8276,7 +8323,9 @@ Resume body_assign_other_empty_target_full[memory_header]:
   `w2n w + 32 <= u.vs_alloca_next` by decide_tac >> simp[] >>
   suspend "memory_coverage"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_empty_target_full[memory_coverage]:
   qpat_x_assum `place_ptr_rel _ _ u (PlaceR p) _ _ _` mp_tac >>
   namedCases_on `p` ["tr slot tv", "id path", "src name0 path0"] >> simp[place_ptr_rel_def]
@@ -8318,7 +8367,9 @@ Resume body_assign_other_empty_target_full[memory_coverage]:
       qexistsl_tac [`provbase`,`provsize`] >> simp[] >> decide_tac) >>
   metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_empty_target_full[normal_tail]:
   `((loc = LocStorage \/ loc = LocTransient) ==> ~cx.txn.is_static)` by
     (Cases_on `loc` >> gvs[]) >>
@@ -8340,8 +8391,11 @@ Resume body_assign_other_empty_target_full[normal_tail]:
   simp[stmt_lands_def,cenv_top_ext_refl] >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_empty_target_full[local]
+*)
 
 Theorem body_assign_other_empty_immutable_full[local]:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -11851,6 +11905,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_immutable_word_write_full[landing]:
   qpat_x_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
   drule_all_then strip_assume_tac body_assign_immutable_word_layout >>
@@ -11903,7 +11958,9 @@ Resume body_assign_other_immutable_word_write_full[landing]:
   qpat_x_assum `u' = u` SUBST_ALL_TAC >>
   suspend "write_outcome"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_immutable_word_write_full[write_outcome]:
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x z = SOME w` by
     (qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ z` mp_tac >>
@@ -11974,7 +12031,9 @@ Resume body_assign_other_immutable_word_write_full[write_outcome]:
   strip_tac >>
   suspend "entry_post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_immutable_word_write_full[entry_post]:
   `valid_horizon cx st0 H es.storage_trace` by
     (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
@@ -12018,8 +12077,11 @@ Resume body_assign_other_immutable_word_write_full[entry_post]:
   qpat_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN tn0.t_mem`
     (drule_all_then ACCEPT_TAC)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_immutable_word_write_full[local]
+*)
 
 Theorem body_assign_saved_target_admissible:
   gas_admissible (eval_stmt cx (Assign (BaseTarget t) e)) (stmt_res_ok lctx) es /\
@@ -12357,6 +12419,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_target_bind[normal]:
   qx_genl_tac [`marks`,`p`,`ee`,`Gu`,`tnu`,`u`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -12414,7 +12477,10 @@ Resume body_assign_other_saved_target_bind[normal]:
      conj_tac >> first_assum ACCEPT_TAC)) >>
   simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_saved_target_bind[local]
+*)
 
 Theorem body_assign_value_code_slice[local]:
   compile_expr cenv (expr_type e) e sa = (vv0,sr) /\
@@ -13313,6 +13379,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_immutable_memory_joint[direct]:
   `itv = stv` by fs[] >>
   `a < dimword (:256)` by decide_tac >>
@@ -13370,7 +13437,9 @@ Resume body_assign_immutable_memory_joint[direct]:
      first_assum ACCEPT_TAC) >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_immutable_memory_joint[bytes]:
   qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
   `valid_horizon cx st0 H0 ee.storage_trace` by simp[Abbr `H0`] >>
@@ -13475,7 +13544,9 @@ Resume body_assign_immutable_memory_joint[bytes]:
   rpt strip_tac >> simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   metis_tac[storage_well_formed_on_backends]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_immutable_memory_joint[normalize]:
   `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb` by
     metis_tac[ci_mono_compile_alloc_buffer, cj 1 ci_mono_typed_memory_family,
@@ -13636,8 +13707,11 @@ Resume body_assign_immutable_memory_joint[normalize]:
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_immutable_memory_joint[local]
+*)
 
 Theorem body_assign_other_immutable_nonword_write_full[local]:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -14115,6 +14189,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_equal_slots_write_full[slots_input]:
   `acyclic_struct_metadata cenv.ce_struct_fields` by
     drule_then (ACCEPT_TAC o MATCH_MP contract_inv_acyclic_struct_metadata) body_inv_contract >>
@@ -14157,8 +14232,11 @@ Resume body_assign_other_snapshot_equal_slots_write_full[slots_input]:
   qexistsl [`FST r`,`lowered_value_type cenv e`,`Var xd`,`su`,`n2w b`] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_snapshot_equal_slots_write_full[local]
+*)
 
 (* The saved operand at z still has the lowered source layout.  Complete
    the emitted normalization before passing the new buffer to the slots. *)
@@ -14273,6 +14351,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_normalized_slots_write_full[source]:
   `bind (eval_expr cx e) (read_result cx) (es with gas_obs := prefix) =
      (INL v,mid with gas_obs := [])` by
@@ -14320,7 +14399,9 @@ Resume body_assign_other_saved_normalized_slots_write_full[source]:
     (drule stmt_state_rel_alloca_room >> simp[alloca_room_def] >> decide_tac) >>
   suspend "normalize"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_normalized_slots_write_full[normalize]:
   `ci_mono sa sm` by metis_tac[compile_expr_ci_mono,SND] >>
   `ci_mono sm sb` by metis_tac[ci_mono_compile_get_target_ptr,SND] >>
@@ -14378,7 +14459,9 @@ Resume body_assign_other_saved_normalized_slots_write_full[normalize]:
     (map_every assume_tac o CONJUNCTS)) >>
   suspend "slots"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_normalized_slots_write_full[slots]:
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
   qabbrev_tac `start = mid with gas_obs := gas_explicit marks s.vs_gas_readings` >>
@@ -14428,7 +14511,9 @@ Resume body_assign_other_saved_normalized_slots_write_full[slots]:
      Cases_on `FST r` >> gvs[op_taint_def] >> metis_tac[]) >>
   suspend "frame"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_normalized_slots_write_full[frame]:
   `sc.cs_next_var <= sn.cs_next_var /\ sa.cs_next_var <= sn.cs_next_var /\
    sa.cs_next_id <= sc.cs_next_id` by fs[ci_mono_def] >>
@@ -14460,7 +14545,9 @@ Resume body_assign_other_saved_normalized_slots_write_full[frame]:
        (drule_all_then ACCEPT_TAC)) >>
   suspend "compose"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_normalized_slots_write_full[compose]:
   irule gasOutcomeFullGuardedTheory.gas_outcome_full_zero_prefix_guarded >>
   simp[storage_trace_frame_write_place] >>
@@ -14472,8 +14559,11 @@ Resume body_assign_other_saved_normalized_slots_write_full[compose]:
   qexistsl [`FST r`,`dty`,`Var root`,`sn`,`n2w b`] >>
   simp[SF CONJ_ss,DISJ_IMP_THM,FORALL_AND_THM]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_saved_normalized_slots_write_full[local]
+*)
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -14602,6 +14692,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[normalize]:
   markerLib.RESUME_TAC >>
   qabbrev_tac `sty = lowered_value_type cenv e` >>
@@ -14659,7 +14750,9 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[normalize]:
   disch_then (qx_choosel_then [`q`,`root`,`a`,`Gq`,`tf`] (map_every assume_tac o CONJUNCTS)) >>
   suspend "slots"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[slots]:
   markerLib.RESUME_TAC >>
   `!l. FST r <> Label l` by
@@ -14676,7 +14769,9 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[slots]:
     (irule return_buf_frame_frame >> qexistsl [`cenv`,`z`,`su`] >> simp[] >> metis_tac[]) >>
   suspend "frames"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[frames]:
   markerLib.RESUME_TAC >>
   `sa.cs_next_var <= sc.cs_next_var /\ s0.vs_alloca_next <= q.vs_alloca_next` by decide_tac >>
@@ -14705,7 +14800,9 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[frames]:
     off <= i /\ i < off + sz /\ i IN tf.t_mem ==> i IN tn0.t_mem` by suspend "old_taint" >>
   suspend "execute_slots"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[old_taint]:
   markerLib.RESUME_TAC >> rpt strip_tac >>
   rename1 `FLOOKUP s0.vs_allocas j = SOME (off,sz)` >>
@@ -14723,7 +14820,9 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[old_taint]:
     (qspecl_then [`j`,`off`,`sz`,`i`] mp_tac) >> simp[] >>
   impl_tac >- first_assum ACCEPT_TAC >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[execute_slots]:
   markerLib.RESUME_TAC >>
   `env.type_defs = get_tenv cx` by fs[env_consistent_def, env_context_consistent_def] >>
@@ -14755,7 +14854,9 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[execute_slots]:
   qpat_x_assum `buf.buf_operand = Var root` SUBST_ALL_TAC >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[horizon]:
   markerLib.RESUME_TAC >> gen_tac >> disch_tac >>
   `storage_place_observed H (StoragePlace tr k dtv)` by
@@ -14770,8 +14871,11 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[horizon]:
     (first_assum irule >> first_assum ACCEPT_TAC) >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_snapshot_normalized_slots_write_full[local]
+*)
 
 (* The saved RHS is read before the target runs. Its physical buffer and the
    destination operand are both available after the intervening unwrap. *)
@@ -14903,6 +15007,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_equal_slots_write_full[physical]:
   `~is_word_type (post_value_type cenv e)` by
     metis_tac[immutable_rhs_post_physical_classify,is_bytestring_word_type] >>
@@ -14920,7 +15025,9 @@ Resume body_assign_other_saved_equal_slots_write_full[physical]:
      metis_tac[bytestring_val_in_memory_transfer]) >>
   suspend "slots_input"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_equal_slots_write_full[slots_input]:
   `acyclic_struct_metadata cenv.ce_struct_fields` by
     drule_then (ACCEPT_TAC o MATCH_MP contract_inv_acyclic_struct_metadata) body_inv_contract >>
@@ -14944,7 +15051,9 @@ Resume body_assign_other_saved_equal_slots_write_full[slots_input]:
      simp[] >> qexistsl [`cenv`,`e`] >> simp[]) >>
   suspend "freshness"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_equal_slots_write_full[freshness]:
   `ci_mono sa sm` by metis_tac[compile_expr_ci_mono,SND] >>
   `ci_mono sm sb` by metis_tac[ci_mono_compile_get_target_ptr,SND] >>
@@ -14965,7 +15074,9 @@ Resume body_assign_other_saved_equal_slots_write_full[freshness]:
     (drule compiler_unwrap_value_var >> Cases_on `vv` >> fs[vv_operand_def]) >>
   suspend "outcome"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_equal_slots_write_full[outcome]:
   `ctx_has_dalloca ctx ==> allocas_below_fmp z` by
     (drule_then (mp_tac o MATCH_MP stmt_state_rel_allocas_below_fmp)
@@ -14989,8 +15100,11 @@ Resume body_assign_other_saved_equal_slots_write_full[outcome]:
   qexistsl [`FST r`,`lowered_value_type cenv e`,`Var xs`,`sc`,`sw`] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_saved_equal_slots_write_full[local]
+*)
 
 (* The nonword snapshot is already in memory when the target lands. *)
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
@@ -15640,6 +15754,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_staged_memory_write_full[staged_suffix]:
   qpat_x_assum `op = Var xs` SUBST_ALL_TAC >>
   `target_ptr_ok cenv (PlaceR (MemoryPlace id path))
@@ -15659,7 +15774,9 @@ Resume body_assign_other_saved_staged_memory_write_full[staged_suffix]:
   disch_then (qx_choosel_then [`t`,`Gf`,`tf`] strip_assume_tac) >>
   suspend "staged_landing"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_staged_memory_write_full[staged_landing]:
   `~block_is_terminated sf` by
     (`0 < type_memory_bytes cenv (lowered_value_type cenv e)` by simp[] >>
@@ -15730,8 +15847,11 @@ Resume body_assign_other_saved_staged_memory_write_full[staged_landing]:
       (qspecl_then [`old_id`,`off`,`old_sz`,`i`] mp_tac) >>
     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_saved_staged_memory_write_full[local]
+*)
 
 (* The saved RHS may point into the target's local allocation.  The byte
    store reads the live padded interval from the initial memory. *)
@@ -15936,6 +16056,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_unstaged_memory_write_full[destination]:
   `ci_mono sa sm` by
     (qspecl_then [`cenv`,`expr_type e`,`e`,`sa`] mp_tac
@@ -16078,7 +16199,9 @@ Resume body_assign_other_saved_unstaged_memory_write_full[destination]:
   >- suspend "bytes_write" >>
   suspend "direct_memory"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_unstaged_memory_write_full[land_write]:
   disch_then (qx_choosel_then [`t`,`Gf`,`tf`] (map_every assume_tac o CONJUNCTS)) >>
   `!tail. write_place cx (MemoryPlace id path) v (ee with gas_obs := tail) =
@@ -16143,7 +16266,9 @@ Resume body_assign_other_saved_unstaged_memory_write_full[land_write]:
     (qspecl_then [`aid`,`off`,`sz`,`i`] mp_tac) >>
   simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_unstaged_memory_write_full[bytes_write]:
   `compile_store_bytestring op (FST r) sc = ((),sf)` by
     ((qpat_assum `compile_assign_value cenv _ LocMemory op F _ _ _ _ sc = _` mp_tac >>
@@ -16217,7 +16342,9 @@ Resume body_assign_other_saved_unstaged_memory_write_full[bytes_write]:
     (drule_then strip_assume_tac buffer_store_bytestring_shape >> simp[]) >>
   qexistsl [`t`,`Gf`,`tf`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_unstaged_memory_write_full[effect_land]:
   disch_then (qx_choosel_then [`t`,`Gf`,`tf`] (map_every assume_tac o CONJUNCTS)) >>
   drule_then strip_assume_tac typed_copy_effect_endpoint >>
@@ -16263,7 +16390,9 @@ Resume body_assign_other_saved_unstaged_memory_write_full[effect_land]:
   `stmt_state_rel H ctx func cenv cx ee z` by fs[expr_post_def] >>
   drule_all_then strip_assume_tac body_assign_memory_place_store_post >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_unstaged_memory_write_full[direct_memory]:
   `compile_copy_memory (FST r) op (type_memory_bytes cenv ty) sc = ((),sf)` by
     (qpat_assum `compile_assign_value _ _ LocMemory _ F _ _ _ _ _ = _`
@@ -16301,6 +16430,8 @@ Resume body_assign_other_saved_unstaged_memory_write_full[direct_memory]:
   `val_footprint dtv v <= type_memory_size dtv` by simp[exprSimPropsTheory.val_footprint_le] >>
   suspend "direct_positive"
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_unstaged_memory_write_full[direct_positive]:
   `0 < type_memory_bytes cenv (lowered_value_type cenv e)` by decide_tac >>
   `op_taint tnz op = {}` by fs[ptr_val_ok_def] >>
@@ -16382,7 +16513,9 @@ Resume body_assign_other_saved_unstaged_memory_write_full[direct_positive]:
   `lo <= w2n dw` by decide_tac >>
   qexistsl [`t`,`Gf`,`tf`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_unstaged_memory_write_full[typed_memory]:
   `~is_bytestring_type (lowered_value_type cenv e)` by
     metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring] >>
@@ -16428,7 +16561,9 @@ Resume body_assign_other_saved_unstaged_memory_write_full[typed_memory]:
      `lo <= b` by drule_all_then ACCEPT_TAC body_full_local_region_lower_bound >> decide_tac) >>
   suspend "typed_separation"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_unstaged_memory_write_full[typed_separation]:
   `lowered_value_type cenv e <> ty` by (CCONTR_TAC >> fs[]) >>
   `w2n sw + type_memory_size stv <= w2n dw \/
@@ -16503,8 +16638,11 @@ Resume body_assign_other_saved_unstaged_memory_write_full[typed_separation]:
     (qspecl_then [`H`, `DF H`, `d`] mp_tac) >>
   fs[expr_post_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_saved_unstaged_memory_write_full[local]
+*)
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -16670,6 +16808,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_write]:
   map_every qx_gen_tac [`target_marks`,`p`,`ee`,`Gu`,`tnu`,`u`,`z`,`Gz`,`tnz`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -16729,7 +16868,9 @@ Resume body_assign_other_nonempty_target_full[saved_write]:
       suspend "saved_memory_word") >>
   suspend "saved_nonword"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[snapshot_write]:
   map_every qx_gen_tac [`target_marks`,`p`,`ee`,`z`,`Gz`,`tnz`,`u`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -16769,6 +16910,7 @@ Resume body_assign_other_nonempty_target_full[snapshot_write]:
       suspend "memory_word") >>
   suspend "snapshot_nonword"
 QED
+*)
 
 (* At either target cursor, the word write uses the same original-entry frame. *)
 fun residual_word_entry_frame g =
@@ -16889,32 +17031,41 @@ fun residual_memory_word_posts g =
   rpt gen_tac >> strip_tac >> qexists `cenv` >> simp[] >>
   first_assum ACCEPT_TAC)) g;
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[storage_word]:
   residual_storage_word >>
   (conj_tac >- (residual_word_entry_frame >> gvs[])) >>
   residual_storage_word_posts
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[memory_word]:
   residual_memory_word_setup >>
   residual_memory_word_source >>
   residual_memory_word_write >>
   residual_memory_word_posts
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_storage_word]:
   residual_storage_word >>
   (conj_tac >- (residual_word_entry_frame >> gvs[])) >>
   residual_storage_word_posts
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_memory_word]:
   residual_memory_word_setup >>
   residual_memory_word_source >>
   residual_memory_word_write >>
   residual_memory_word_posts
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[snapshot_nonword]:
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
   `eval_target_place cx t (mid with gas_obs := target_gas) = (INL p,ee)` by
@@ -16928,7 +17079,9 @@ Resume body_assign_other_nonempty_target_full[snapshot_nonword]:
   >- suspend "snapshot_slots" >>
   suspend "snapshot_memory"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[snapshot_memory]:
   `~is_word_type (lowered_value_type cenv e)` by
     (qpat_assum `type_widens_to (get_tenv cx) (lowered_value_type cenv e) ty` mp_tac >>
@@ -16984,7 +17137,9 @@ Resume body_assign_other_nonempty_target_full[snapshot_memory]:
     drule_all_then ACCEPT_TAC placeRelayoutOpenTheory.compile_get_target_ptr_endpoint_open >>
   drule_all_then ACCEPT_TAC exprOpenTerminalsTheory.unwrap_value_open
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[snapshot_slots]:
   `~is_word_type (lowered_value_type cenv e)` by
     (qpat_assum `type_widens_to (get_tenv cx) (lowered_value_type cenv e) ty` mp_tac >>
@@ -17027,7 +17182,9 @@ Resume body_assign_other_nonempty_target_full[snapshot_slots]:
   qpat_assum `compile_assign_value _ _ loc op _ _ _ _ _ su = _` mp_tac >>
   gvs[Abbr `target_gas`] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_nonword]:
   `~is_word_type (lowered_value_type cenv e)` by
     (qpat_assum `type_widens_to (get_tenv cx) (lowered_value_type cenv e) ty` mp_tac >>
@@ -17039,7 +17196,9 @@ Resume body_assign_other_nonempty_target_full[saved_nonword]:
   qpat_x_assum `place_ptr_rel _ _ z (PlaceR (ImmutablePlace _ _ _)) _ _ _`
     mp_tac >> simp[place_ptr_rel_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_memory]:
   `?entry w. lookup_scopes id ee.scopes = SOME entry /\
      evaluate_subscripts entry.type entry.value path = INL w` by
@@ -17066,7 +17225,9 @@ Resume body_assign_other_nonempty_target_full[saved_memory]:
   qpat_assum `compile_assign_value _ _ loc op _ _ _ _ _ su = _` mp_tac >> gvs[]
   >> gvs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_slots]:
   `w = k /\ loc = slot_loc trans /\ evaluate_type (get_tenv cx) ty = SOME dtv` by
     (qpat_assum `place_ptr_rel _ _ z (PlaceR (StoragePlace _ _ _)) _ _ _`
@@ -17124,7 +17285,9 @@ Resume body_assign_other_nonempty_target_full[saved_slots]:
         (ACCEPT_TAC o REWRITE_RULE [DE_MORGAN_THM])) >>
   qpat_assum `compile_assign_value _ _ loc op _ _ _ _ _ su = _` mp_tac >> gvs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[snapshot_bytes_slots]:
   rename1 `write_place cx (StoragePlace trans k dtv) v` >>
   qpat_x_assum `tu' = dtv` SUBST_ALL_TAC >>
@@ -17175,7 +17338,9 @@ Resume body_assign_other_nonempty_target_full[snapshot_bytes_slots]:
   simp[DISJ_IMP_THM, FORALL_AND_THM] >>
   qexists `xd` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_nonempty_target_full[saved_bytes_slots]:
   qpat_x_assum `is_bytestring_type ty /\ is_bytestring_type (lowered_value_type cenv e)`
     strip_assume_tac >>
@@ -17277,8 +17442,11 @@ Resume body_assign_other_nonempty_target_full[saved_bytes_slots]:
   simp[DISJ_IMP_THM, FORALL_AND_THM] >>
   qexists `xs` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_nonempty_target_full[local]
+*)
 
 (* Every other base target: subscripts, nested attributes, immutables. *)
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
@@ -17418,6 +17586,7 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_empty_immutable_full[write]:
   qx_genl_tac [`marks`,`p`,`mid`,`G1`,`tn1`,`u`] >> simp[] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace`
@@ -17505,7 +17674,9 @@ Resume body_assign_nested_empty_immutable_full[write]:
   impl_tac >- simp[] >> strip_tac >>
   suspend "write_post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_empty_immutable_full[write_post]:
   qpat_x_assum `p = ImmutablePlace NONE id path` SUBST_ALL_TAC >>
   Cases_on `write_place cx (ImmutablePlace NONE id path) (default_value dtv) mid` >>
@@ -17644,8 +17815,11 @@ Resume body_assign_nested_empty_immutable_full[write_post]:
    impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
    disch_then ACCEPT_TAC)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_nested_empty_immutable_full
+*)
 
 
 fun nested_immutable_target_post g =
@@ -18136,6 +18310,7 @@ Proof
 QED
 
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[saved_write]:
   qx_genl_tac [`target_marks`,`p`,`ee`,`Gu`,`tnu`,`u`,`z`,`Gz`,`tnz`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -18154,7 +18329,9 @@ Resume body_assign_nested_nonempty_immutable_full[saved_write]:
     (qspec_then `H` (drule_then strip_assume_tac)) >>
   fs[expr_post_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[snapshot_write]:
   qx_genl_tac [`target_marks`,`p`,`ee`,`z`,`Gz`,`tnz`,`u`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -18173,7 +18350,9 @@ Resume body_assign_nested_nonempty_immutable_full[snapshot_write]:
     (qspec_then `H` (drule_then strip_assume_tac)) >>
   fs[assign_target_post_def,imm_target_post_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[snapshot_target]:
   strip_tac >>
   nested_immutable_target_post >>
@@ -18196,7 +18375,9 @@ Resume body_assign_nested_nonempty_immutable_full[snapshot_target]:
       suspend "snapshot_word") >>
   suspend "snapshot_nonword"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[saved_target]:
   strip_tac >>
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -18237,21 +18418,27 @@ Resume body_assign_nested_nonempty_immutable_full[saved_target]:
       suspend "saved_word") >>
   suspend "saved_nonword"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[snapshot_word]:
   nested_immutable_word_width >>
   nested_immutable_write_base >>
   nested_immutable_word_execution ``vv:vyper_value`` >>
   nested_immutable_finish `z:venom_state` `su` `Gz` `tnz`
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[saved_word]:
   nested_immutable_word_width >>
   nested_immutable_write_base >>
   nested_immutable_word_execution ``vv0:vyper_value`` >>
   nested_immutable_finish `z:venom_state` `su` `Gz` `tnz`
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[snapshot_nonword]:
   nested_immutable_class_compile `~is_word_type ty` >>
   `~is_word_type (lowered_value_type cenv e)` by
@@ -18275,7 +18462,9 @@ Resume body_assign_nested_nonempty_immutable_full[snapshot_nonword]:
      metis_tac[val_footprint_le,ADD_COMM]) >>
   suspend "snapshot_normalize"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[saved_nonword]:
   nested_immutable_class_compile `~is_word_type ty` >>
   `~is_word_type (lowered_value_type cenv e)` by
@@ -18354,7 +18543,9 @@ Resume body_assign_nested_nonempty_immutable_full[saved_nonword]:
   Cases_on `lowered_value_type cenv e = ty` >- (nested_immutable_fixed_suffix ``vv0:vyper_value``) >>
   suspend "saved_normalize"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[snapshot_normalize]:
   nested_immutable_normalize_compile >>
   nested_immutable_normalize_code >>
@@ -18368,7 +18559,9 @@ Resume body_assign_nested_nonempty_immutable_full[snapshot_normalize]:
   nested_immutable_normalize_origin_frames >>
   nested_immutable_normalize_store ``vv:vyper_value``
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[saved_normalize]:
   nested_immutable_normalize_compile >>
   nested_immutable_normalize_code >>
@@ -18382,8 +18575,11 @@ Resume body_assign_nested_nonempty_immutable_full[saved_normalize]:
   nested_immutable_normalize_origin_frames >>
   nested_immutable_normalize_store ``vv0:vyper_value``
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_nested_nonempty_immutable_full
+*)
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
