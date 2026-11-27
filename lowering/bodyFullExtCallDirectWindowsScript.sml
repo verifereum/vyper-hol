@@ -28,10 +28,11 @@ Theorem extcall_direct_encode_windows:
           (?aid. FLOOKUP s.vs_allocas aid = SOME (b,n) /\ aid < cut)) ==>
      mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory /\
      (!i. b <= i /\ i < b+n /\ i IN tn'.t_mem ==> i IN tn.t_mem)) /\
-  (ce.ce_is_ctor ==> !name tv v off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (ce.ce_is_ctor ==> !src name tv v off.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     mem_bytes_at off (type_memory_size tv) t.vs_memory =
     mem_bytes_at off (type_memory_size tv) s.vs_memory)
 Proof
@@ -82,13 +83,17 @@ Proof
           `row_id <> aid` by (fs[IN_INSERT] >> res_tac >> decide_tac) >>
           metis_tac[alloca_site_registered_disjoint]) >>
       disch_then ACCEPT_TAC) >>
-  disch_tac >> rpt gen_tac >> strip_tac >>
-  drule return_stmt_immutable_sep >>
-  simp_tac bool_ss [immutable_alloca_sep_def] >> strip_tac >>
-  qpat_assum `ce.ce_is_ctor ==> !name tv v off. _` (drule_then assume_tac) >>
-  qpat_assum `!name tv v off. _`
-    (qspecl_then [`name`,`tv`,`v`,`off`] mp_tac) >>
-  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `immutable_alloca_sep func (ce with ce_module := src) cx ee s` by
+    (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+     Cases_on `src = ce.ce_module` >>
+     gvs[compileEnvTheory.compile_env_component_equality] >> metis_tac[]) >>
+  qpat_x_assum `immutable_alloca_sep _ _ _ _ _`
+    (mp_tac o CONJUNCT2 o REWRITE_RULE [immutable_alloca_sep_def]) >>
+  simp[] >> disch_then (drule_then assume_tac) >>
+  qpat_assum `!tv v. _ ==> off + type_memory_size tv <= _ /\ _`
+    (drule_then strip_assume_tac) >>
   qpat_assum `!q k. _ ==> mem_bytes_at q k t.vs_memory = _ /\ _`
     (qspecl_then [`off`,`type_memory_size tv`] mp_tac) >>
   impl_tac
