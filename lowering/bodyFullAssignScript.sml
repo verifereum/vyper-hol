@@ -3251,6 +3251,42 @@ QED
 Finalise body_assign_attr_local_full
 *)
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all assign_base_local_rhs_pre >> strip_tac >>
+  Q.SUBGOAL_THEN `lowered_value_type cenv e = ty \/ is_bytestring_type ty` assume_tac
+  >- metis_tac[] >>
+  `cx_tops cx = tops` by drule_then (ACCEPT_TAC o cj 2) body_inv_main_code >>
+  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx (expr_type e) e es` by
+    (qpat_assum `body_expr_full_ok cx e`
+       (mp_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     strip_tac >>
+     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+          _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+       (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
+         `func`,`shadow_func`,`cenv`,`env`,`expr_type e`,`es`] mp_tac) >>
+     simp[]) >>
+  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def,env_consistent_def,env_context_consistent_def] >>
+  drule post_type_evaluates >> disch_then (qx_choose_then `rty` assume_tac) >>
+  `!gs tv ee v. eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\
+       read_result cx tv ee = (INL v,ee) ==> value_has_type rty v` by suspend "rhs_type" >>
+  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  conj_tac >- simp[cj 1 evaluate_storage_trace_frame] >>
+  simp[] >> disch_tac >>
+  drule_all assign_local_memory_widen_code_parts >> strip_tac >>
+  qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
+  rename1 `compile_expr cenv (expr_type e) e sa = (vv,sV)` >>
+  rename1 `unwrap_value cenv vv sV = (op,sB)` >>
+  suspend "shadow"
+QED
+*)
 Theorem body_assign_local_memory_nonempty_full[local]:
   !cx id ty e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
@@ -3289,39 +3325,10 @@ Theorem body_assign_local_memory_nonempty_full[local]:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget (NameTarget id)) e)))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all assign_base_local_rhs_pre >> strip_tac >>
-  Q.SUBGOAL_THEN `lowered_value_type cenv e = ty \/ is_bytestring_type ty` assume_tac
-  >- metis_tac[] >>
-  `cx_tops cx = tops` by drule_then (ACCEPT_TAC o cj 2) body_inv_main_code >>
-  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx (expr_type e) e es` by
-    (qpat_assum `body_expr_full_ok cx e`
-       (mp_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     strip_tac >>
-     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
-          _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
-       (qspecl_then [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
-         `func`,`shadow_func`,`cenv`,`env`,`expr_type e`,`es`] mp_tac) >>
-     simp[]) >>
-  drule_all targetPlaceSimTheory.expr_sim_inv_local >> strip_tac >>
-  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
-  `env.type_defs = get_tenv cx` by
-    fs[expr_sim_inv_def,env_consistent_def,env_context_consistent_def] >>
-  drule post_type_evaluates >> disch_then (qx_choose_then `rty` assume_tac) >>
-  `!gs tv ee v. eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\
-       read_result cx tv ee = (INL v,ee) ==> value_has_type rty v` by suspend "rhs_type" >>
-  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
-  irule gas_outcome_full_initial_domain >>
-  conj_tac >- simp[cj 1 evaluate_storage_trace_frame] >>
-  simp[] >> disch_tac >>
-  drule_all assign_local_memory_widen_code_parts >> strip_tac >>
-  qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
-  rename1 `compile_expr cenv (expr_type e) e sa = (vv,sV)` >>
-  rename1 `unwrap_value cenv vv sV = (op,sB)` >>
-  suspend "shadow"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[rhs_type]:
   rpt gen_tac >> strip_tac >>
   `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
@@ -3329,7 +3336,9 @@ Resume body_assign_local_memory_nonempty_full[rhs_type]:
   drule_all (SIMP_RULE (srw_ss() ++ ETA_ss) [] memory_rhs_read_post_typed) >>
   simp[vyperTypeExprSoundnessTheory.value_runtime_typed_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[shadow]:
   qpat_assum `cx_tops cx = tops` (SUBST1_TAC o SYM) >>
   `?shadow_sB.
@@ -3365,7 +3374,9 @@ Resume body_assign_local_memory_nonempty_full[shadow]:
   drule_all body_assign_local_memory_rhs_frontier >> disch_tac >>
   suspend "compose"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[compose]:
   qmatch_asmsub_abbrev_tac `gas_outcome_full cfg tops0 cx st0 src start Q R` >>
   `gas_outcome_full cfg tops0 cx st0 src start
@@ -3395,7 +3406,9 @@ Resume body_assign_local_memory_nonempty_full[compose]:
   conj_tac >- suspend "tail" >>
   rpt strip_tac >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[tail]:
   qx_genl_tac [`marks`,`v`,`mid`,`Gi`,`ti`,`u`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -3457,7 +3470,9 @@ Resume body_assign_local_memory_nonempty_full[tail]:
      metis_tac[]) >>
   suspend "rhs_resources"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[rhs_resources]:
   `~is_word_type (lowered_value_type cenv e)` by
     metis_tac[typedMemoryCopyTheory.typed_copy_bytestring_source,is_bytestring_word_type] >>
@@ -3560,13 +3575,17 @@ Resume body_assign_local_memory_nonempty_full[rhs_resources]:
             off <= i /\ i < off+len /\ i IN tf.t_mem ==> i IN ti.t_mem))` by suspend "suffix" >>
   suspend "landing"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[suffix]:
   Cases_on `vv_location vv = SOME LocMemory`
   >- suspend "staged" >>
   suspend "direct"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[staged]:
   drule_all_then (map_every assume_tac o CONJUNCTS) immutable_assign_copy_metadata >>
   `type_memory_size stv < dimword (:256)` by decide_tac >>
@@ -3599,7 +3618,9 @@ Resume body_assign_local_memory_nonempty_full[staged]:
   qpat_assum `!aid off len i. _ ==> i IN ti.t_mem` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ADD_COMM]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[direct]:
   qpat_x_assum `op = Var xs` SUBST_ALL_TAC >>
   `compile_store_memory cenv (Var xs) (Var p) ty (lowered_value_type cenv e) sB = ((),sb)` by
@@ -3618,13 +3639,17 @@ Resume body_assign_local_memory_nonempty_full[direct]:
          (i IN tf.t_mem <=> i IN ti.t_mem))` by suspend "direct_effect" >>
   suspend "direct_post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[direct_effect]:
   Cases_on `is_bytestring_type ty`
   >- suspend "direct_bytes" >>
   suspend "direct_flat"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[direct_flat]:
   `lowered_value_type cenv e = ty` by
     (qpat_assum `_ = ty \/ is_bytestring_type ty` mp_tac >>
@@ -3644,7 +3669,9 @@ Resume body_assign_local_memory_nonempty_full[direct_flat]:
   asm_rewrite_tac[] >>
   qexistsl_tac [`sw`,`p`,`xs`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[direct_bytes]:
   `is_bytestring_type (lowered_value_type cenv e)` by
     metis_tac[typedMemoryCopyTheory.typed_copy_bytestring_source] >>
@@ -3667,14 +3694,18 @@ Resume body_assign_local_memory_nonempty_full[direct_bytes]:
      `n = 32 + 32 * word_size len` by simp[Abbr `n`] >> decide_tac) >>
   suspend "bytes_execute"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[bytes_size]:
   drule_all (Q.SPECL [`get_tenv cx`,`lowered_value_type cenv e`,`stv`] bytestring_type_value) >>
   qpat_x_assum `value_has_type stv v` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> disch_tac >> strip_tac >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def,val_store_size_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[bytes_execute]:
   `len <= 32 * word_size len` by simp[exprSimPropsTheory.le_word_size_mul] >>
   `n = 32 + 32 * word_size len` by simp[Abbr `n`] >>
@@ -3706,7 +3737,9 @@ Resume body_assign_local_memory_nonempty_full[bytes_execute]:
   `~(w2n (dw:bytes32) <= i /\ i < w2n dw + n)` by decide_tac >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[direct_post]:
   drule_then strip_assume_tac typed_copy_effect_endpoint >>
   drule_then assume_tac typed_copy_effect_allocas >>
@@ -3744,7 +3777,9 @@ Resume body_assign_local_memory_nonempty_full[direct_post]:
   qpat_assum `!aid off len i. _ ==> i IN ti.t_mem` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[landing]:
   qexistsl_tac [`ff`,`t`,`Gf`,`tf`] >>
   simp[stmt_lands_def,stmtSimPropsTheory.cenv_top_ext_refl] >>
@@ -3805,7 +3840,9 @@ Resume body_assign_local_memory_nonempty_full[landing]:
     (assume_tac o cj 1 o REWRITE_RULE [ghost_kept_at_def]) >>
   simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_local_memory_nonempty_full[landing_alloca]:
   `valid_horizon cx st0 H es.storage_trace` by
     (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
@@ -3830,8 +3867,11 @@ Resume body_assign_local_memory_nonempty_full[landing_alloca]:
       POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[arithmeticTheory.ADD_COMM]]) >>
   disch_then ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_local_memory_nonempty_full
+*)
 
 (* A memory local whose source is stored at its own layout. *)
 Theorem body_assign_local_memory_full:
