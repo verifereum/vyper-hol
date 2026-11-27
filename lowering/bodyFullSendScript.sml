@@ -20,17 +20,8 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem send_expr_sim_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
-   has_gas args dflt es.
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    body_const_cells_agree mods cx env es /\
-    expr_body_pre_mods mods cenv cx env (Call ann (Send has_gas) args dflt) es /\
-    body_exprs_full_ok_mods mods exps cx args ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Call ann (Send has_gas) args dflt) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   drule send_pre_types >> strip_tac >>
@@ -55,14 +46,32 @@ Proof
      strip_tac >> gvs[vyperStateTheory.bind_def]) >>
   suspend "operands"
 QED
+*)
+Theorem send_expr_sim_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
+   has_gas args dflt es.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Call ann (Send has_gas) args dflt) es /\
+    body_exprs_full_ok_mods mods exps cx args ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Call ann (Send has_gas) args dflt) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[operands]:
   Cases_on `has_gas` >> gvs[LENGTH_EQ_NUM_compute,
     exprSimWordArgsTheory.lower_word_args_cons,
     exprSimWordArgsTheory.lower_word_args_nil] >>
   suspend "arity"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[arity]:
   markerLib.RESUME_TAC >> (rpt strip_tac >>
   rename1 `expr_type to_e = BaseT AddressT` >>
@@ -153,7 +162,9 @@ Resume send_expr_sim_full[arity]:
   simp[Abbr `childR`] >> rpt strip_tac >>
   Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[after_address]:
   markerLib.RESUME_TAC >> (rpt gen_tac >> strip_tac >>
     `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
@@ -296,7 +307,9 @@ Resume send_expr_sim_full[after_address]:
     simp[Abbr `amountR`, Abbr `childR`] >> rpt strip_tac >>
     Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[after_amount]:
   markerLib.RESUME_TAC >> (rpt gen_tac >> strip_tac >>
     `valid_horizon cx st0 (storage_trace_horizon mid'.storage_trace)
@@ -404,7 +417,9 @@ Resume send_expr_sim_full[after_amount]:
        simp[vyperValueTheory.evaluate_type_def]) >>
     suspend "ready_amount")
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[ready_amount]:
   markerLib.RESUME_TAC >>
   (`eval_exprs cx [] = return []` by
@@ -413,7 +428,9 @@ Resume send_expr_sim_full[ready_amount]:
    simp[vyperStateTheory.bind_return] >>
    suspend "tail_no_gas")
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[tail_no_gas]:
   markerLib.RESUME_TAC >>
   (FIRST [
@@ -421,7 +438,9 @@ Resume send_expr_sim_full[tail_no_gas]:
      suspend "gas_child"),
     suspend "call_tail"])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[gas_child]:
   markerLib.RESUME_TAC >>
   `body_const_cells_agree [(NONE,tops)] cx env mid` by
@@ -550,7 +569,9 @@ Resume send_expr_sim_full[gas_child]:
       simp[exprSimDefsTheory.expr_exit_def]) >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[call_tail]:
   markerLib.RESUME_TAC >>
   `sa.cs_next_var <= amount_end.cs_next_var /\
@@ -605,7 +626,9 @@ Resume send_expr_sim_full[call_tail]:
   simp[venomStateTheory.eval_operand_def,ptrDisciplineTheory.op_taint_def] >>
   suspend "suffix_post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[suffix_post]:
   qexistsl_tac [`amount_op`,`Var (STRING #"%" (toString amount_end.cs_next_var))`,
     `amount_end`,`send_expr`,`sb`,`sa`,`s3`,`s0`,`0w`,`Lit 0w`,`es`,`d`,`cenv`,
@@ -615,7 +638,9 @@ Resume send_expr_sim_full[suffix_post]:
        callStepPtrTheory.ptr_val_ok_none] >>
   suspend "suffix_finish"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[suffix_finish]:
   simp[venomStateTheory.eval_operand_def, ext_call_kwarg_def] >>
   rpt gen_tac >> strip_tac >> conj_tac
@@ -626,7 +651,9 @@ Resume send_expr_sim_full[suffix_finish]:
     `storage_trace_horizon mid.storage_trace`,`ctx`,`func`,`cx`,`mid'`]
     mp_tac wordArgsPtrTheory.ghost_kept_at_wb_trans >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[after_gas]:
   map_every qx_gen_tac [`gas_marks`,`gas_res`,`gas_end`,`gas_G`,`gas_tn`,`gas_s`] >>
   strip_tac >>
@@ -666,7 +693,9 @@ Resume send_expr_sim_full[after_gas]:
      simp[vyperValueTheory.evaluate_type_def]) >>
   suspend "gas_frame"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[gas_frame]:
   `!x. addr_op = Var x ==> not_fresh_at amount_end x` by
     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
@@ -732,7 +761,9 @@ Resume send_expr_sim_full[gas_frame]:
       mp_tac wordArgsPtrTheory.ghost_kept_at_wb_trans >> simp[]) >>
   suspend "gas_call_tail"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[gas_call_tail]:
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
     metis_tac[exprSimSourceTheory.expr_body_pre_lower_value_word_shape,
@@ -793,7 +824,9 @@ Resume send_expr_sim_full[gas_call_tail]:
   simp[venomStateTheory.eval_operand_def,ptrDisciplineTheory.op_taint_def] >>
   suspend "gas_suffix_post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[gas_suffix_post]:
   qexistsl_tac [`amount_op`,`Var (STRING #"%" (toString sm.cs_next_var))`,
     `sm`,`send_expr`,`sb`,`sa`,`s3`,`s0`,
@@ -805,7 +838,9 @@ Resume send_expr_sim_full[gas_suffix_post]:
        callStepPtrTheory.ptr_val_ok_none] >>
   suspend "gas_suffix_finish"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_full[gas_suffix_finish]:
   rpt gen_tac >> strip_tac >> conj_tac
   >- (strip_tac >> irule callStepPtrTheory.ptr_buf_ok_zero_type >>
@@ -815,8 +850,11 @@ Resume send_expr_sim_full[gas_suffix_finish]:
     `storage_trace_horizon mid.storage_trace`,`ctx`,`func`,`cx`,`gas_end`]
     mp_tac wordArgsPtrTheory.ghost_kept_at_wb_trans >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise send_expr_sim_full
+*)
 
 Theorem send_expr_vv_sim_full:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann

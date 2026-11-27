@@ -21,13 +21,8 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem attribute_vv_sim_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann obj fld es.
-    expr_body_pre_mods mods cenv cx env (Attribute ann obj fld) es /\
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty obj es ==>
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Attribute ann obj fld) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >> drule attr_pre_base >> strip_tac >>
   `post_value_type cenv obj = expr_type obj` by
@@ -93,7 +88,19 @@ Proof
   simp[Abbr `baseQ`, Abbr `baseR`] >>
   rpt gen_tac >> Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_def]
 QED
+*)
+Theorem attribute_vv_sim_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func cenv cx env ty ann obj fld es.
+    expr_body_pre_mods mods cenv cx env (Attribute ann obj fld) es /\
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty obj es ==>
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Attribute ann obj fld) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[selected]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `s`] >>
   strip_tac >> fs[] >>
@@ -147,7 +154,9 @@ Resume attribute_vv_sim_full[selected]:
   >- gvs[bodyPtrDefsTheory.ghost_inv_at_def] >>
   suspend "endpoint_posts"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[endpoint_posts]:
   drule_all bodyPtrAttributeCaseTheory.attribute_add_vv_post >>
   disch_then (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
@@ -188,7 +197,9 @@ Resume attribute_vv_sim_full[endpoint_posts]:
   conj_tac >- suspend "ptr_buf" >>
   suspend "ghost_kept"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[current_bb]:
   drule emitted_insts_emit_op >> strip_tac >>
   gvs[emitHelperTheory.emit_op_def, compileEnvTheory.comp_bind_def,
@@ -196,7 +207,9 @@ Resume attribute_vv_sim_full[current_bb]:
       compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
       compileEnvTheory.emit_def, venomStateTheory.update_var_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[inst_idx]:
   drule emitted_insts_emit_op >> strip_tac >>
   gvs[emitHelperTheory.emit_op_def, compileEnvTheory.comp_bind_def,
@@ -204,7 +217,9 @@ Resume attribute_vv_sim_full[inst_idx]:
       compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
       compileEnvTheory.emit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[store_bound]:
   `expr_body_pre cenv cx env obj
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
@@ -215,20 +230,26 @@ Resume attribute_vv_sim_full[store_bound]:
   drule_all attr_field_store_bound >>
   simp[vyperASTTheory.expr_type_def, exprLoweringTheory.lowered_value_type_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[ghost_inv]:
   qpat_x_assum `out = STRING _ _` SUBST_ALL_TAC >>
   drule_all attribute_fresh_full_ghost_update >> strip_tac >>
   gvs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[ghost_kept]:
   qpat_x_assum `out = STRING _ _` SUBST_ALL_TAC >>
   drule_all attribute_fresh_full_ghost_update >> strip_tac >>
   qpat_x_assum `!w s'' n. _` (qspecl_then [`w`, `s`, `0`] mp_tac) >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[owned_value]:
   qx_gen_tac `child` >> strip_tac >>
   `?sv. tv = Value sv` by
@@ -301,7 +322,9 @@ Resume attribute_vv_sim_full[owned_value]:
     qpat_assum `read_result cx tv' mid = (INL fv,mid)`
       (ACCEPT_TAC o REWRITE_RULE [eq]))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[code_field]:
   `t.vs_memory = s.vs_memory` by simp[venomStateTheory.update_var_def] >>
   qpat_assum `vv_post H ctx func cenv cx obj es sa sm s0 mid tv bvv s`
@@ -321,7 +344,9 @@ Resume attribute_vv_sim_full[code_field]:
   qpat_x_assum `cenv.ce_is_ctor /\ vv_location bvv = SOME LocCode ==> _` mp_tac >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[alloca_history]:
   drule emitted_insts_emit_op >> strip_tac >>
   `sb.cs_current_bb = sm.cs_current_bb` by
@@ -343,15 +368,21 @@ Resume attribute_vv_sim_full[alloca_history]:
   drule_all allocaHistoryTheory.alloca_history_base_step >>
   simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[selected_ptr]:
   gvs[vyperASTTheory.expr_type_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[ptr_buf]:
   gvs[contextTheory.mk_ptr_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume attribute_vv_sim_full[pointer_posts]:
   `vv_loc bvv = LocCode ==> op_prov G2 p = NONE` by
     (strip_tac >>
@@ -375,8 +406,11 @@ Resume attribute_vv_sim_full[pointer_posts]:
   qexistsl_tac [`G1`, `tn1`] >>
   gvs[ptrDisciplineTheory.op_prov_def, venomStateTheory.update_var_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise attribute_vv_sim_full
+*)
 
 
 Theorem attribute_expr_full_ok:

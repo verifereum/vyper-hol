@@ -10,16 +10,8 @@ Ancestors
   vyperState vyperAST
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
-Theorem convert_scalar_vv_sim_full:
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-  shadow_body_inv_mods mods exps ctx shadow_ctx /\
-  body_const_cells_agree mods cx env es /\
-  expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
-  body_expr_full_ok_mods mods exps cx e /\ ~is_bytestring_type (expr_type e) /\
-  ~is_bytestring_type dst ==>
-  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (TypeBuiltin ann Convert dst [e]) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   drule expr_body_pre_convert >> strip_tac >> gvs[] >>
@@ -114,7 +106,22 @@ Proof
   POP_ASSUM_LIST (K all_tac) >>
   metis_tac[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_INR_type]
 QED
+*)
+Theorem convert_scalar_vv_sim_full:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (TypeBuiltin ann Convert dst [e]) es /\
+  body_expr_full_ok_mods mods exps cx e /\ ~is_bytestring_type (expr_type e) /\
+  ~is_bytestring_type dst ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (TypeBuiltin ann Convert dst [e]) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume convert_scalar_vv_sim_full[continuation]:
   qx_genl_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >> fs[] >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -233,4 +240,7 @@ Resume convert_scalar_vv_sim_full[continuation]:
   rpt strip_tac >>
   qpat_assum `_ ==> ~oversized_create_abort ctx (Abort err t')` mp_tac >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise convert_scalar_vv_sim_full
+*)

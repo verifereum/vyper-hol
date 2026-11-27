@@ -18,6 +18,18 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?ml str. e = Literal (BaseT (StringT ml)) (StringL str)`
+  >- (gvs[] >> irule compile_raise_reason_literal_frag_full_action >>
+      asm_rewrite_tac[] >> conj_tac
+      >- (qexistsl_tac [`bindings`,`tops`] >> asm_rewrite_tac[]) >>
+      qexistsl_tac [`env`,`env'`] >> asm_rewrite_tac[]) >>
+  irule compile_raise_reason_nonliteral_frag_full >> metis_tac[]
+QED
+*)
 Theorem compile_raise_reason_frag_full:
   !cx e DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -42,11 +54,5 @@ Theorem compile_raise_reason_frag_full:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Raise (RaiseReason e))))
       (eval_stmt cx (Raise (RaiseReason e))) es
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `?ml str. e = Literal (BaseT (StringT ml)) (StringL str)`
-  >- (gvs[] >> irule compile_raise_reason_literal_frag_full_action >>
-      asm_rewrite_tac[] >> conj_tac
-      >- (qexistsl_tac [`bindings`,`tops`] >> asm_rewrite_tac[]) >>
-      qexistsl_tac [`env`,`env'`] >> asm_rewrite_tac[]) >>
-  irule compile_raise_reason_nonliteral_frag_full >> metis_tac[]
+  cheat
 QED

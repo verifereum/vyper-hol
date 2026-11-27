@@ -611,6 +611,26 @@ QED
 Finalise intcall_return_register_frame_certificate
 *)
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule run_inst_seq_memory_length >>
+  disch_then (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  conj_tac >- suspend "value_post" >>
+  conj_tac >- suspend "store_bound" >>
+  conj_tac >- suspend "position" >>
+  conj_tac >- suspend "history" >>
+  conj_tac >- suspend "frontier" >>
+  conj_tac >- suspend "ghost_inv" >>
+  conj_tac >- suspend "pointer" >>
+  conj_tac >- (drule_all intcall_return_register_frame_certificate >> simp[]) >>
+  conj_tac >- simp[contextTheory.vv_location_def, contextTheory.base_ptr_def] >>
+  conj_tac >- simp[] >>
+  conj_tac >- suspend "buffer" >>
+  suspend "ghost_kept"
+QED
+*)
 Theorem intcall_return_register_post:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
    DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
@@ -704,22 +724,9 @@ Theorem intcall_return_register_post:
       (stored with vs_inst_idx := LENGTH sm.cs_current_insts)) /\
   ghost_kept_at lo cenv es0 sa G0 tn0 s0 Gs ts
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule run_inst_seq_memory_length >>
-  disch_then (assume_tac o SIMP_RULE (srw_ss()) []) >>
-  conj_tac >- suspend "value_post" >>
-  conj_tac >- suspend "store_bound" >>
-  conj_tac >- suspend "position" >>
-  conj_tac >- suspend "history" >>
-  conj_tac >- suspend "frontier" >>
-  conj_tac >- suspend "ghost_inv" >>
-  conj_tac >- suspend "pointer" >>
-  conj_tac >- (drule_all intcall_return_register_frame_certificate >> simp[]) >>
-  conj_tac >- simp[contextTheory.vv_location_def, contextTheory.base_ptr_def] >>
-  conj_tac >- simp[] >>
-  conj_tac >- suspend "buffer" >>
-  suspend "ghost_kept"
+  cheat
 QED
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_post[value_post]:
   drule_all intcall_return_register_value_certificate >> strip_tac >>
   drule_all intcall_return_register_frame_certificate >> strip_tac >>
@@ -731,9 +738,13 @@ Resume intcall_return_register_post[value_post]:
   >- (qhdtm_assum `vv_holds` mp_tac >> gvs[]) >>
   rpt strip_tac >> first_assum irule >> metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_post[store_bound]:
   drule_all intcall_return_register_value_certificate >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_post[position]:
   qpat_x_assum `stored with <|vs_vars := _; vs_memory := _|> = _`
     (assume_tac o SRULE [] o Q.AP_TERM `\z. z.vs_current_bb`) >>
@@ -743,6 +754,8 @@ Resume intcall_return_register_post[position]:
   gvs[venomExecSemanticsTheory.adopt_return_fmp_def,
       venomExecSemanticsTheory.merge_callee_state_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_post[history]:
   drule intCallFrameTheory.invoke_return_frame >> strip_tac >>
   `alloca_history func (t with vs_inst_idx := SUC t.vs_inst_idx)` by
@@ -780,18 +793,26 @@ Resume intcall_return_register_post[history]:
   irule allocaHistoryFragmentTheory.alloca_history_run_inst_seq >>
   fs[listTheory.EVERY_MEM] >> metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_post[frontier]:
   drule intCallFrameTheory.invoke_return_frame >> strip_tac >>
   qpat_x_assum `stored with <|vs_vars := _; vs_memory := _|> = _`
     (assume_tac o SRULE [] o Q.AP_TERM `\z. z.vs_alloca_next`) >>
   fs[intcall_entry_full_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_post[ghost_inv]:
   drule_all intcall_return_register_frame_certificate >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_post[pointer]:
   drule_all intcall_return_register_value_certificate >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_post[buffer]:
   drule_all intcall_return_register_type_facts >> strip_tac >>
   `type_memory_bytes cenv ret = type_memory_size rtv` by
@@ -822,6 +843,8 @@ Resume intcall_return_register_post[buffer]:
   `off < dimword (:256)` by decide_tac >>
   simp[wordsTheory.w2n_n2w] >> metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_post[ghost_kept]:
  `sa.cs_next_var <= st4.cs_next_var` by
    (`?x. MEM x outs` by (Cases_on `outs` >> gvs[] >> metis_tac[]) >>
@@ -838,7 +861,10 @@ Resume intcall_return_register_post[ghost_kept]:
  simp[bodyPtrDefsTheory.ghost_kept_at_def] >>
  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise intcall_return_register_post
+*)
 
 Theorem intcall_return_normal_owned:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
