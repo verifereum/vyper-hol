@@ -109,7 +109,7 @@ Theorem default_registration_concrete_fold:
   default_registration_invariant tops cx ctx fn site k vs ce0 start
     args all_tvs specs cef sa ce0 start 4 specs all_tvs s G tn [] /\
   calldata_decode_args cd all_tvs 0 = SOME vals /\
-  initial_venom_state_rel tops am tx vs /\ cx.txn = tx /\
+  cef.ce_modules = [(NONE,tops)] /\ initial_venom_state_rel tops am tx vs /\ cx.txn = tx /\
   send_call_value mut cx
     (initial_state am [env] with
       <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es) /\
