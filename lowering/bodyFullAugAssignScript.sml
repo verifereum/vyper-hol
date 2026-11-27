@@ -1200,24 +1200,6 @@ QED
 Finalise body_augassign_nested_immutable_full
 
 (* Every other base target. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `immutable_root cx t /\ ~(?nsid. t = TopLevelNameTarget nsid)`
-  >- (drule_all bodySimTheory.body_inv_stmt_const_name_free >> strip_tac >>
-      irule body_augassign_nested_immutable_full >> metis_tac[]) >>
-  `target_mutable env t` by
-    (qpat_assum `type_stmt _ _ _ = _` mp_tac >>
-     simp[NoAsms, Once type_stmt_def, AllCaseEqs()]) >>
-  `immutable_root cx t ==> ?nsid. t = TopLevelNameTarget nsid` by
-    metis_tac[] >>
-  drule_all augassign_other_target_routes >>
-  disch_then (DISJ_CASES_THEN STRIP_ASSUME_TAC)
-  >- suspend "ordinary" >>
-  suspend "immutable"
-QED
-*)
 Theorem body_augassign_other_full:
   !cx aty bop t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
@@ -1253,7 +1235,19 @@ Theorem body_augassign_other_full:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AugAssign aty t bop e)))
       (eval_stmt cx (AugAssign aty t bop e)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `immutable_root cx t /\ ~(?nsid. t = TopLevelNameTarget nsid)`
+  >- (drule_all bodySimTheory.body_inv_stmt_const_name_free >> strip_tac >>
+      irule body_augassign_nested_immutable_full >> metis_tac[]) >>
+  `target_mutable env t` by
+    (qpat_assum `type_stmt _ _ _ = _` mp_tac >>
+     simp[NoAsms, Once type_stmt_def, AllCaseEqs()]) >>
+  `immutable_root cx t ==> ?nsid. t = TopLevelNameTarget nsid` by
+    metis_tac[] >>
+  drule_all augassign_other_target_routes >>
+  disch_then (DISJ_CASES_THEN STRIP_ASSUME_TAC)
+  >- suspend "ordinary" >>
+  suspend "immutable"
 QED
 
 (* Shared composition for the ordinary target-place route. *)
@@ -1997,16 +1991,13 @@ QED
 
 Finalise body_augassign_attr_storage_full
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[ordinary]:
   irule augassign_ordinary_full >>
   qpat_assum `supported_stmt _ _ _` (irule_at Any) >>
   qpat_assum `type_stmt _ _ _ = _` (irule_at Any) >>
   simp[] >> metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable]:
   qpat_x_assum `t = TopLevelNameTarget nsid` SUBST_ALL_TAC >>
   PairCases_on `nsid` >> rename1 `supported_immutable_type tops (src,id) = SOME ity` >>
@@ -2079,9 +2070,7 @@ Resume body_augassign_other_full[immutable]:
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   suspend "immutable_load"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_load]:
   qabbrev_tac `H0 = storage_trace_horizon es.storage_trace` >>
   `valid_horizon cx st0 H0 es.storage_trace` by simp[Abbr `H0`] >>
@@ -2159,9 +2148,7 @@ Resume body_augassign_other_full[immutable_load]:
   `eval_operand (Lit (n2w off)) u = SOME (n2w off)` by simp[venomStateTheory.eval_operand_def] >>
   suspend "immutable_rhs_setup"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_load_post]:
   qx_gen_tac `H` >> disch_tac >>
   qpat_assum `!K. valid_horizon cx st0 K es.storage_trace ==>
@@ -2192,9 +2179,7 @@ Resume body_augassign_other_full[immutable_load_post]:
      simp[venomStateTheory.eval_operand_def, IgnAsm `off = _`]]) >>
   strip_tac >> simp[IgnAsm `off = _`]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_rhs_setup]:
   asm "immLoadPost" (qspec_then `H0` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
@@ -2278,9 +2263,7 @@ Resume body_augassign_other_full[immutable_rhs_setup]:
   qx_genl_tac [`ms`,`res`,`ee`,`result`,`G'`,`tn'`] >> strip_tac >>
   qexistsl_tac [`ms`,`res`,`ee`,`result`,`G'`,`tn'`] >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_rhs]:
   qx_genl_tac [`ms`,`res`,`ee`,`Gq`,`tnq`,`q`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -2374,9 +2357,7 @@ Resume body_augassign_other_full[immutable_rhs]:
   >- suspend "immutable_operator_error" >>
   suspend "immutable_operator_success"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_operator_error]:
   drule_all augassign_operator_source_runtime_error >>
   disch_then (qspec_then `ee` (qx_choose_then `msg` STRIP_ASSUME_TAC)) >>
@@ -2398,9 +2379,7 @@ Resume body_augassign_other_full[immutable_operator_error]:
   (impl_tac >- first_assum ACCEPT_TAC) >>
   strip_tac >> simp[haltExitProjTheory.halt_exit_not_halt]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_operator_success]:
   rename1 `evaluate_binop _ ptv bop cur rhs = INL value` >>
   `bop_result cx ity bop [ity;expr_type e] cur rhs ee = INL value` by
@@ -2420,9 +2399,7 @@ Resume body_augassign_other_full[immutable_operator_success]:
   rename1 `write_place cx p value ee = (wr,ff)` >>
   suspend "immutable_stage_frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_stage_frame]:
   asm "opSuccess" (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
@@ -2452,9 +2429,7 @@ Resume body_augassign_other_full[immutable_stage_frame]:
     (qx_gen_tac `H` >> disch_tac >> asm "opSuccess" (qspec_then `H` mp_tac) >> simp[]) >>
   suspend "immutable_join_frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_join_frame]:
   qpat_x_assum `Abbrev (p = _)` (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   `cd.cs_next_var <= sb.cs_next_var` by fs[exprLoweringPropsTheory.ci_mono_def] >>
@@ -2499,9 +2474,7 @@ Resume body_augassign_other_full[immutable_join_frame]:
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "immutable_writeback"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_writeback]:
   qexistsl_tac [`Gw`,`tnw`,`w`] >>
   conj_tac >- (asm "opSuccess" (ACCEPT_TAC o cj 1)) >>
@@ -2574,9 +2547,7 @@ Resume body_augassign_other_full[immutable_writeback]:
     (INL (),ee with immutables := _)` kall_tac >>
   suspend "immutable_store_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_augassign_other_full[immutable_store_post]:
   irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >>
   reverse conj_tac >- simp[] >>
@@ -2655,8 +2626,5 @@ Resume body_augassign_other_full[immutable_store_post]:
   qpat_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN tn0.t_mem`
     (drule_all_then ACCEPT_TAC)
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_augassign_other_full
-*)

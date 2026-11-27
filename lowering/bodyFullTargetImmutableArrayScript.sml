@@ -14,58 +14,6 @@ Ancestors
   vyperFixedShapePath vyperPlaceResultTyping vyperState vyperStorageFootprint valueEncoding
   valueEncodingProps exprSimFieldLayout vyperAST venomState list finite_map words
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
-  `valid_horizon cx st0 H0 ee.storage_trace` by
-    simp[Abbr `H0`,GSYM storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
-  `immutable_holds cenv cx (ArrayT et bd) (PlaceR (ImmutablePlace NONE id path))
-      (n2w (off+k)) ee s` by
-    (qpat_assum `cenv.ce_module = NONE`
-       (fn eq => irule (REWRITE_RULE[eq] (INST_TYPE [``:'a`` |-> ``:256``] live_immutable_path_holds))) >>
-     simp[] >> conj_tac >- (qexists_tac `env` >> simp[]) >>
-     qexistsl [`H0`,`ctx`,`func`] >> simp[]) >>
-  drule_all_then strip_assume_tac imm_place_at_value_type >>
-  `val_wf (ArrayTV etv bd) (ArrayV av)` by
-    metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
-  qabbrev_tac `cnt = array_length (ArrayTV etv bd) av` >>
-  qabbrev_tac `dyn = case bd of Fixed _ => F | Dynamic _ => T` >>
-  `cnt < dimword (:256)` by
-    (simp[Abbr `cnt`] >> drule_all target_memory_array_length_bound >> simp[]) >>
-  `valid_index (ArrayTV etv bd) av i <=> idx_in_range sgn iw (n2w cnt)` by
-    (mp_tac (Q.INST [`et` |-> `etv`,`w` |-> `iw:bytes32`] array_index_word_bounds) >>
-     fs[Abbr `cnt`]) >>
-  `compile_array_subscript arg iop dyn (if dyn then 0 else cnt) 32
-     (type_memory_size etv) sgn
-      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode) sn = (dst,sb)` by
-    (Cases_on `bd` >> fs[Abbr `dyn`,Abbr `cnt`,array_length_def] >>
-     Cases_on `av` >> gvs[value_has_type_def,array_length_def]) >>
-  `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
-    drule_then ACCEPT_TAC stmt_state_rel_allocas_below_fmp >>
-  `dyn ==> immutable_copy_read cenv.ce_is_ctor (n2w (off+k)) s = n2w cnt /\
-    w2n (n2w (off+k):bytes32) + 32 <= lo /\
-    mem_word_taint tn.t_mem (w2n (n2w (off+k):bytes32)) = {} /\
-    (!region. cenv.ce_imm_alloca = SOME region ==> eval_operand region s = SOME 0w /\
-       copy_old_operand sn region /\ op_taint tn region = {} /\ op_prov G region = NONE)` by
-    suspend "header" >>
-  `eval_operand iop s = SOME (n2w (w2n iw))` by simp[] >>
-  qpat_x_assum `eval_operand iop s = SOME iw` kall_tac >>
-  mp_tac (Q.INST [`sa` |-> `sn`,`idx` |-> `iop`,
-    `a` |-> `n2w (off+k):bytes32`,`i` |-> `w2n (iw:bytes32)`,`esz` |-> `type_memory_size etv`,
-    `ctor` |-> `cenv.ce_is_ctor`,`imm` |-> `cenv.ce_imm_alloca`,
-    `PG` |-> `PG`,`explicit` |-> `explicit`] live_code_select_joint) >>
-  impl_tac >- simp[] >>
-  disch_then (qx_choosel_then [`Gf`,`tnf`,`q`]
-    (strip_assume_tac o REWRITE_RULE [wordsTheory.n2w_w2n])) >>
-  Cases_on `idx_in_range sgn iw (n2w cnt)`
-  >- suspend "in_range" >>
-  suspend "out_of_range"
-QED
-*)
 Theorem immutable_target_array_tail:
   body_inv tops ctx cenv cx /\ cenv.ce_is_ctor /\ cenv.ce_module = NONE /\
   expr_sim_inv cenv cx env ee /\ ee.gas_obs = [] /\
@@ -118,10 +66,55 @@ Theorem immutable_target_array_tail:
     (\H res fin gt r. expr_exit res r /\ halt_exit H cx fin res r /\
       (ctx_has_dalloca ctx ==> !q. r = Halt q ==> allocas_below_fmp q))
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
+  `valid_horizon cx st0 H0 ee.storage_trace` by
+    simp[Abbr `H0`,GSYM storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  `immutable_holds cenv cx (ArrayT et bd) (PlaceR (ImmutablePlace NONE id path))
+      (n2w (off+k)) ee s` by
+    (qpat_assum `cenv.ce_module = NONE`
+       (fn eq => irule (REWRITE_RULE[eq] (INST_TYPE [``:'a`` |-> ``:256``] live_immutable_path_holds))) >>
+     simp[] >> conj_tac >- (qexists_tac `env` >> simp[]) >>
+     qexistsl [`H0`,`ctx`,`func`] >> simp[]) >>
+  drule_all_then strip_assume_tac imm_place_at_value_type >>
+  `val_wf (ArrayTV etv bd) (ArrayV av)` by
+    metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  qabbrev_tac `cnt = array_length (ArrayTV etv bd) av` >>
+  qabbrev_tac `dyn = case bd of Fixed _ => F | Dynamic _ => T` >>
+  `cnt < dimword (:256)` by
+    (simp[Abbr `cnt`] >> drule_all target_memory_array_length_bound >> simp[]) >>
+  `valid_index (ArrayTV etv bd) av i <=> idx_in_range sgn iw (n2w cnt)` by
+    (mp_tac (Q.INST [`et` |-> `etv`,`w` |-> `iw:bytes32`] array_index_word_bounds) >>
+     fs[Abbr `cnt`]) >>
+  `compile_array_subscript arg iop dyn (if dyn then 0 else cnt) 32
+     (type_memory_size etv) sgn
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode) sn = (dst,sb)` by
+    (Cases_on `bd` >> fs[Abbr `dyn`,Abbr `cnt`,array_length_def] >>
+     Cases_on `av` >> gvs[value_has_type_def,array_length_def]) >>
+  `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    drule_then ACCEPT_TAC stmt_state_rel_allocas_below_fmp >>
+  `dyn ==> immutable_copy_read cenv.ce_is_ctor (n2w (off+k)) s = n2w cnt /\
+    w2n (n2w (off+k):bytes32) + 32 <= lo /\
+    mem_word_taint tn.t_mem (w2n (n2w (off+k):bytes32)) = {} /\
+    (!region. cenv.ce_imm_alloca = SOME region ==> eval_operand region s = SOME 0w /\
+       copy_old_operand sn region /\ op_taint tn region = {} /\ op_prov G region = NONE)` by
+    suspend "header" >>
+  `eval_operand iop s = SOME (n2w (w2n iw))` by simp[] >>
+  qpat_x_assum `eval_operand iop s = SOME iw` kall_tac >>
+  mp_tac (Q.INST [`sa` |-> `sn`,`idx` |-> `iop`,
+    `a` |-> `n2w (off+k):bytes32`,`i` |-> `w2n (iw:bytes32)`,`esz` |-> `type_memory_size etv`,
+    `ctor` |-> `cenv.ce_is_ctor`,`imm` |-> `cenv.ce_imm_alloca`,
+    `PG` |-> `PG`,`explicit` |-> `explicit`] live_code_select_joint) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`Gf`,`tnf`,`q`]
+    (strip_assume_tac o REWRITE_RULE [wordsTheory.n2w_w2n])) >>
+  Cases_on `idx_in_range sgn iw (n2w cnt)`
+  >- suspend "in_range" >>
+  suspend "out_of_range"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_array_tail[header]:
   Cases_on `bd` >> simp[Abbr `dyn`,Abbr `cnt`] >>
   `read_result cx (PlaceR (ImmutablePlace NONE id path)) ee = (INL (ArrayV av),ee)` by
@@ -164,9 +157,7 @@ Resume immutable_target_array_tail[header]:
   gvs[copy_old_operand_def,eval_operand_def,ghost_inv_at_def,op_taint_def,op_prov_def] >>
   metis_tac[local_ptrs_reserved_imm_base]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_array_tail[in_range]:
   `valid_index (ArrayTV etv bd) av i` by metis_tac[] >>
   `Num i = w2n iw` by
@@ -228,9 +219,7 @@ Resume immutable_target_array_tail[in_range]:
        arithmeticTheory.MULT_COMM] >>
   metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_array_tail[out_of_range]:
   `~valid_index (ArrayTV etv bd) av i` by metis_tac[] >>
   qpat_x_assum `i = if sgn then _ else _` kall_tac >>
@@ -257,8 +246,5 @@ Resume immutable_target_array_tail[out_of_range]:
   rpt strip_tac >>
   qpat_assum `!D. gas_origin_ptr_path _ _ _ _` (assume_tac o Q.SPEC `DF H`) >> gvs[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise immutable_target_array_tail
-*)

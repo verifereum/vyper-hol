@@ -107,25 +107,6 @@ Proof
   simp[mstore_mem_bytes_at_disjoint]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  mp_tac (Q.INST [`word` |-> `0w`]
-    immutableCtorWordStoreGhostTheory.immutable_ctor_word_store_ghost) >>
-  impl_tac >-
-    (simp[] >> rpt strip_tac >>
-     irule imm_section_dead_mstore_zero >>
-     `i IN tn.t_mem` by
-       (qpat_assum `tf.t_mem SUBSET tn.t_mem`
-          (drule_then ACCEPT_TAC o REWRITE_RULE [SUBSET_DEF])) >>
-     qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
-     qpat_assum `!i. i < lo /\ i IN tn.t_mem ==> _`
-       (qspec_then `i` mp_tac) >> simp[]) >>
-  simp[]
-QED
-*)
 Theorem immutable_empty_store_ghost:
   ghost_inv_at D lo d ce cx es G tn s /\
   dead_lo_ok H D lo ce cx /\ ce.ce_is_ctor /\
@@ -148,7 +129,20 @@ Theorem immutable_empty_store_ghost:
   tf.t_mem SUBSET tn.t_mem ==>
   ghost_inv_at D lo d ce cx ee Gf tf q
 Proof
-  cheat
+  strip_tac >>
+  mp_tac (Q.INST [`word` |-> `0w`]
+    immutableCtorWordStoreGhostTheory.immutable_ctor_word_store_ghost) >>
+  impl_tac >-
+    (simp[] >> rpt strip_tac >>
+     irule imm_section_dead_mstore_zero >>
+     `i IN tn.t_mem` by
+       (qpat_assum `tf.t_mem SUBSET tn.t_mem`
+          (drule_then ACCEPT_TAC o REWRITE_RULE [SUBSET_DEF])) >>
+     qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+     qpat_assum `!i. i < lo /\ i IN tn.t_mem ==> _`
+       (qspec_then `i` mp_tac) >> simp[]) >>
+  simp[]
 QED
 
 Theorem immutable_empty_path_store_restore:

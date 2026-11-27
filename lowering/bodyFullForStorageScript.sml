@@ -747,140 +747,6 @@ Proof
 QED
 
 (* Interpret the existing copy endpoint; no execution witness is selected here. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
- rpt gen_tac >>
-  abbrev_lambda_tac "Fr" 5 0 `alloca_history func s /\ _` >>
-  qpat_abbrev_tac `eb = ei with scopes := (FEMPTY |+ (id, _)) :: ei.scopes` >>
- strip_tac >>
- `expr_sim_inv bc cx (extend_local env id typ F) eb` by
-   (simp[Abbr `eb`] >> irule expr_sim_inv_for_scope >> metis_tac[]) >>
- `ce_locals_declared bc (extend_local env id typ F)` by
-   (irule ce_locals_declared_declare_local >> metis_tac[]) >>
- `locals_alloc_ok bc (extend_local env id typ F)` by
-   (drule_all declare_local_memory_types_mem >> strip_tac >>
-    simp[locals_alloc_ok_def, vyperTypeSystemTheory.extend_local_def, FLOOKUP_UPDATE] >>
-    map_every qx_gen_tac [`nm`,`tv`] >> Cases_on `id = nm` >>
-    strip_tac >> gvs[locals_alloc_ok_def] >>
-    qpat_x_assum `!nm tv. FLOOKUP env.var_types nm = SOME tv ==> _` irule >>
-    qexists `nm` >> simp[]) >>
- `cenv_top_ext c0 bc (FEMPTY::ei.scopes) /\ cenv_top_ext c0 bc eb.scopes` by
-   (simp[Abbr `eb`] >> conj_tac >> irule cenv_top_ext_declare_local >> metis_tac[]) >>
- drule_all slot_copy_semantic_frame >> strip_tac >>
- `type_memory_size tyv = 32*n` by simp[type_memory_size_slots] >>
- `lookup_var p z = SOME dst` by metis_tac[] >>
- `stmt_state_rel H ctx func bc cx eb z` by
-   (qabbrev_tac `empty = ei with scopes := FEMPTY::ei.scopes` >>
-    `stmt_state_rel H ctx func bc cx empty u` by
-      (simp[Abbr `empty`] >> irule array_empty_scope_rel_transport >> metis_tac[]) >>
-    `eb = empty with scopes :=
-      (FEMPTY |+ (id,<|assignable:=F; type:=tyv; value:=v; popped:=[]|>))::ei.scopes` by
-      simp[Abbr `eb`, Abbr `empty`] >>
-    pop_assum SUBST1_TAC >> irule stmt_state_rel_declare_copy_frame >>
-    simp[Abbr `empty`,lookup_scopes_def] >>
-    qexistsl [`inst`,`u`,`sa`,`dst`] >>
-    simp[] >> conj_tac
-    >- (qpat_x_assum `slot_copy_runtime_frame _ _ _ _ _` mp_tac >>
-        simp[slot_copy_runtime_frame_def] >> metis_tac[ADD_COMM]) >>
-    qpat_x_assum `!mem. mem_agree_outside _ _ mem ==> _` irule >>
-    simp[mem_agree_outside_def]) >>
- `(!x. not_fresh_at sa x ==>
-     lookup_var x z = lookup_var x u /\ FLOOKUP Gf x = FLOOKUP Gu x /\
-     op_taint tnf (Var x) = op_taint tnu (Var x))` by
-   (rpt strip_tac >> drule slot_copy_not_fresh_external >> strip_tac >>
-    gvs[slot_copy_ghost_inv_def]) >>
- `z.vs_allocas = u.vs_allocas /\ z.vs_alloca_next = u.vs_alloca_next /\
-  z.vs_accounts = u.vs_accounts /\ z.vs_transient = u.vs_transient /\
-  z.vs_call_ctx = u.vs_call_ctx` by gvs[slot_copy_runtime_frame_def] >>
- `lo <= z.vs_alloca_next` by
-   (qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >> simp[ghost_inv_at_def]) >>
- `ghost_inv_at D lo d c0 cx ei Gf tnf z` by
-   (irule body_full_memory_ghost_frame >> simp[] >>
-    qexistsl [`Gu`,`u`,`sa`,`tnu`,`{i | w2n dst <= i /\ i < w2n dst+32*n}`] >>
-    simp[] >> conj_tac
-    >- (rpt gen_tac >> strip_tac >>
-        `local_region c0 ei.scopes u name (w2n w) sz` by
-          (simp[local_region_def] >> metis_tac[]) >>
-        Q.SUBGOAL_THEN
-          `w2n w + sz <= w2n dst \/ w2n dst + 32*n <= w2n w` assume_tac
-        >- (qpat_x_assum `!name b sz. local_region c0 _ _ _ _ _ ==> _` drule >>
-            decide_tac) >>
-        drule_all for_storage_outer_local_footprint >>
-        metis_tac[ADD_COMM]) >>
-    gvs[slot_copy_ghost_inv_def, slot_copy_runtime_frame_def] >>
-    rpt conj_tac >> rpt strip_tac >> metis_tac[ADD_COMM, DECIDE ``i < lo /\ lo <= a ==> ~(a <= i)``]) >>
- `ptr_covers Gf tnf p z nb` by
-   (drule copy_external_ptr_covers >>
-    disch_then (qspecl_then [`p`,`u`,`nb`] mp_tac) >>
-    simp[eval_operand_def]) >>
- drule_all declare_local_ptr >> strip_tac >>
- `bc.ce_return_buf = c0.ce_return_buf /\
-  bc.ce_return_pc = c0.ce_return_pc /\
-  bc.ce_imm_alloca = c0.ce_imm_alloca` by
-   (qpat_x_assum `bc with <|ce_vars := _; ce_var_type := _; ce_dynarray_capacity := _|> = c0`
-      (fn th => once_rewrite_tac[GSYM th] >> simp[NoAsms])) >>
- `ghost_inv_at D lo d bc cx eb Gf tnf z` by
-   (qpat_x_assum `ghost_inv_at D lo d c0 cx ei Gf tnf z` mp_tac >>
-    simp[ghost_inv_at_def, Abbr `eb`, lookup_scopes_def, FLOOKUP_UPDATE] >>
-    strip_tac >> conj_tac
-    >- (rpt gen_tac >> Cases_on `name = id` >> simp[] >> strip_tac >> gvs[] >>
-        metis_tac[]) >>
-    Cases_on `d` >> gvs[return_buf_ptr_def] >>
-    rename1 `return_buf_ptr (SOME pair) _ _ _ _` >>
-    PairCases_on `pair` >> gvs[return_buf_ptr_def]) >>
- `ret_pc_ok bc sb0 z` by
-   (irule ret_pc_ok_frame >> qexistsl [`c0`,`u`,`sa0`] >>
-    simp[] >> metis_tac[]) >>
- `return_buf_frame d bc sb0 z` by
-   (irule return_buf_frame_frame >> qexistsl [`c0`,`u`,`sa0`] >>
-    simp[] >> metis_tac[]) >>
- `return_buf_sep d bc eb z` by
-   ((qpat_x_assum `FLOOKUP bc.ce_vars id = SOME (PtrVar (Var (STRING _ _)) _)` kall_tac >>
-    irule return_buf_sep_allocated_local >>
-    qpat_assum `FLOOKUP bc.ce_vars id = SOME _` (irule_at Any) >>
-    qexistsl_tac [`dst`, `sa`, `u`, `func`, `ei`, `cx`, `ctx`, `c0`,
-                  `inst.inst_id`, `H`] >>
-    simp[Abbr `eb`, lookup_scopes_def, FLOOKUP_UPDATE] >>
-    rpt strip_tac >> gvs[return_buf_sep_def, allocas_from_def] >> (metis_tac[Abbr `eb`, lookup_scopes_def, FLOOKUP_UPDATE, return_buf_sep_def, allocas_from_def, return_buf_sep_allocated_local]))) >>
- `alloca_frame c0 e0 sa0 s0 bc eb z` by
-   (simp[Abbr `eb`] >> irule for_storage_copy_alloca_frame >>
-    conj_tac >- simp[] >>
-    qexistsl [`inst.inst_id`,`c0`,`dst`,`nb`,`p`,`sa`,`u`] >>
-    qpat_x_assum `Fr c0 ei u Gu tnu` mp_tac >>
-    simp[Abbr `Fr`] >> strip_tac >>
-    rpt conj_tac
-    >- (rpt strip_tac >> Cases_on `name = id` >> gvs[]) >>
-    rpt strip_tac >> gvs[]) >>
- `Fr bc eb z Gf tnf` by
-   (qpat_x_assum `Fr c0 ei u Gu tnu` mp_tac >>
-    simp[Abbr `Fr`] >> strip_tac >> simp[] >>
-    rpt gen_tac >> strip_tac >>
-    `FLOOKUP u.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
-    `aid <> inst.inst_id` by decide_tac >>
-    qpat_x_assum `allocas_non_overlapping u` mp_tac >>
-    simp[venomMemDefsTheory.allocas_non_overlapping_def] >>
-    disch_then (qspecl_then [`aid`,`inst.inst_id`,`off`,`sz`,`w2n dst`,`nb`] mp_tac) >>
-    simp[] >> strip_tac >>
-    `~(w2n dst <= i /\ i < w2n dst + 32*n)` by decide_tac >>
-    `i IN tnu.t_mem` by
-      (qpat_x_assum `slot_copy_ghost_inv _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-       pure_rewrite_tac[slot_copy_ghost_inv_def] >> strip_tac >>
-       qpat_x_assum `!a. ~(_ /\ _) ==> _` (qspec_then `i` mp_tac) >> simp[]) >>
-    qpat_x_assum `!aid off sz i. _` irule >>
-    metis_tac[]) >>
- simp[] >> conj_tac
- >- simp[Abbr `eb`,push_scope_with_var_def,return_def,
-         evaluation_state_component_equality,combinTheory.o_DEF] >>
- conj_tac
- >- (`storage_well_formed_on cx eb (FST H) <=>
-      storage_well_formed_on cx ei (FST H)` suffices_by simp[] >>
-     irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
-     simp[Abbr `eb`]) >>
- qpat_x_assum `Fr c0 ei u Gu tnu` mp_tac >>
- simp[Abbr `Fr`]
-QED
-*)
 Theorem for_storage_copy_body_entry:
   !H D lo d ctx func cx c0 e0 sa0 s0 G0 tn0 ei env id typ tyv v sd st bc sa sb0
       inst p nb dst n src load u Gu tnu z Gf tnf idx k lvo len.
@@ -1018,7 +884,135 @@ Theorem for_storage_copy_body_entry:
     !aid b.
       FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP z.vs_allocas aid = SOME b
 Proof
-  cheat
+ rpt gen_tac >>
+  abbrev_lambda_tac "Fr" 5 0 `alloca_history func s /\ _` >>
+  qpat_abbrev_tac `eb = ei with scopes := (FEMPTY |+ (id, _)) :: ei.scopes` >>
+ strip_tac >>
+ `expr_sim_inv bc cx (extend_local env id typ F) eb` by
+   (simp[Abbr `eb`] >> irule expr_sim_inv_for_scope >> metis_tac[]) >>
+ `ce_locals_declared bc (extend_local env id typ F)` by
+   (irule ce_locals_declared_declare_local >> metis_tac[]) >>
+ `locals_alloc_ok bc (extend_local env id typ F)` by
+   (drule_all declare_local_memory_types_mem >> strip_tac >>
+    simp[locals_alloc_ok_def, vyperTypeSystemTheory.extend_local_def, FLOOKUP_UPDATE] >>
+    map_every qx_gen_tac [`nm`,`tv`] >> Cases_on `id = nm` >>
+    strip_tac >> gvs[locals_alloc_ok_def] >>
+    qpat_x_assum `!nm tv. FLOOKUP env.var_types nm = SOME tv ==> _` irule >>
+    qexists `nm` >> simp[]) >>
+ `cenv_top_ext c0 bc (FEMPTY::ei.scopes) /\ cenv_top_ext c0 bc eb.scopes` by
+   (simp[Abbr `eb`] >> conj_tac >> irule cenv_top_ext_declare_local >> metis_tac[]) >>
+ drule_all slot_copy_semantic_frame >> strip_tac >>
+ `type_memory_size tyv = 32*n` by simp[type_memory_size_slots] >>
+ `lookup_var p z = SOME dst` by metis_tac[] >>
+ `stmt_state_rel H ctx func bc cx eb z` by
+   (qabbrev_tac `empty = ei with scopes := FEMPTY::ei.scopes` >>
+    `stmt_state_rel H ctx func bc cx empty u` by
+      (simp[Abbr `empty`] >> irule array_empty_scope_rel_transport >> metis_tac[]) >>
+    `eb = empty with scopes :=
+      (FEMPTY |+ (id,<|assignable:=F; type:=tyv; value:=v; popped:=[]|>))::ei.scopes` by
+      simp[Abbr `eb`, Abbr `empty`] >>
+    pop_assum SUBST1_TAC >> irule stmt_state_rel_declare_copy_frame >>
+    simp[Abbr `empty`,lookup_scopes_def] >>
+    qexistsl [`inst`,`u`,`sa`,`dst`] >>
+    simp[] >> conj_tac
+    >- (qpat_x_assum `slot_copy_runtime_frame _ _ _ _ _` mp_tac >>
+        simp[slot_copy_runtime_frame_def] >> metis_tac[ADD_COMM]) >>
+    qpat_x_assum `!mem. mem_agree_outside _ _ mem ==> _` irule >>
+    simp[mem_agree_outside_def]) >>
+ `(!x. not_fresh_at sa x ==>
+     lookup_var x z = lookup_var x u /\ FLOOKUP Gf x = FLOOKUP Gu x /\
+     op_taint tnf (Var x) = op_taint tnu (Var x))` by
+   (rpt strip_tac >> drule slot_copy_not_fresh_external >> strip_tac >>
+    gvs[slot_copy_ghost_inv_def]) >>
+ `z.vs_allocas = u.vs_allocas /\ z.vs_alloca_next = u.vs_alloca_next /\
+  z.vs_accounts = u.vs_accounts /\ z.vs_transient = u.vs_transient /\
+  z.vs_call_ctx = u.vs_call_ctx` by gvs[slot_copy_runtime_frame_def] >>
+ `lo <= z.vs_alloca_next` by
+   (qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >> simp[ghost_inv_at_def]) >>
+ `ghost_inv_at D lo d c0 cx ei Gf tnf z` by
+   (irule body_full_memory_ghost_frame >> simp[] >>
+    qexistsl [`Gu`,`u`,`sa`,`tnu`,`{i | w2n dst <= i /\ i < w2n dst+32*n}`] >>
+    simp[] >> conj_tac
+    >- (rpt gen_tac >> strip_tac >>
+        `local_region c0 ei.scopes u name (w2n w) sz` by
+          (simp[local_region_def] >> metis_tac[]) >>
+        Q.SUBGOAL_THEN
+          `w2n w + sz <= w2n dst \/ w2n dst + 32*n <= w2n w` assume_tac
+        >- (qpat_x_assum `!name b sz. local_region c0 _ _ _ _ _ ==> _` drule >>
+            decide_tac) >>
+        drule_all for_storage_outer_local_footprint >>
+        metis_tac[ADD_COMM]) >>
+    gvs[slot_copy_ghost_inv_def, slot_copy_runtime_frame_def] >>
+    rpt conj_tac >> rpt strip_tac >> metis_tac[ADD_COMM, DECIDE ``i < lo /\ lo <= a ==> ~(a <= i)``]) >>
+ `ptr_covers Gf tnf p z nb` by
+   (drule copy_external_ptr_covers >>
+    disch_then (qspecl_then [`p`,`u`,`nb`] mp_tac) >>
+    simp[eval_operand_def]) >>
+ drule_all declare_local_ptr >> strip_tac >>
+ `bc.ce_return_buf = c0.ce_return_buf /\
+  bc.ce_return_pc = c0.ce_return_pc /\
+  bc.ce_imm_alloca = c0.ce_imm_alloca` by
+   (qpat_x_assum `bc with <|ce_vars := _; ce_var_type := _; ce_dynarray_capacity := _|> = c0`
+      (fn th => once_rewrite_tac[GSYM th] >> simp[NoAsms])) >>
+ `ghost_inv_at D lo d bc cx eb Gf tnf z` by
+   (qpat_x_assum `ghost_inv_at D lo d c0 cx ei Gf tnf z` mp_tac >>
+    simp[ghost_inv_at_def, Abbr `eb`, lookup_scopes_def, FLOOKUP_UPDATE] >>
+    strip_tac >> conj_tac
+    >- (rpt gen_tac >> Cases_on `name = id` >> simp[] >> strip_tac >> gvs[] >>
+        metis_tac[]) >>
+    Cases_on `d` >> gvs[return_buf_ptr_def] >>
+    rename1 `return_buf_ptr (SOME pair) _ _ _ _` >>
+    PairCases_on `pair` >> gvs[return_buf_ptr_def]) >>
+ `ret_pc_ok bc sb0 z` by
+   (irule ret_pc_ok_frame >> qexistsl [`c0`,`u`,`sa0`] >>
+    simp[] >> metis_tac[]) >>
+ `return_buf_frame d bc sb0 z` by
+   (irule return_buf_frame_frame >> qexistsl [`c0`,`u`,`sa0`] >>
+    simp[] >> metis_tac[]) >>
+ `return_buf_sep d bc eb z` by
+   ((qpat_x_assum `FLOOKUP bc.ce_vars id = SOME (PtrVar (Var (STRING _ _)) _)` kall_tac >>
+    irule return_buf_sep_allocated_local >>
+    qpat_assum `FLOOKUP bc.ce_vars id = SOME _` (irule_at Any) >>
+    qexistsl_tac [`dst`, `sa`, `u`, `func`, `ei`, `cx`, `ctx`, `c0`,
+                  `inst.inst_id`, `H`] >>
+    simp[Abbr `eb`, lookup_scopes_def, FLOOKUP_UPDATE] >>
+    rpt strip_tac >> gvs[return_buf_sep_def, allocas_from_def] >> (metis_tac[Abbr `eb`, lookup_scopes_def, FLOOKUP_UPDATE, return_buf_sep_def, allocas_from_def, return_buf_sep_allocated_local]))) >>
+ `alloca_frame c0 e0 sa0 s0 bc eb z` by
+   (simp[Abbr `eb`] >> irule for_storage_copy_alloca_frame >>
+    conj_tac >- simp[] >>
+    qexistsl [`inst.inst_id`,`c0`,`dst`,`nb`,`p`,`sa`,`u`] >>
+    qpat_x_assum `Fr c0 ei u Gu tnu` mp_tac >>
+    simp[Abbr `Fr`] >> strip_tac >>
+    rpt conj_tac
+    >- (rpt strip_tac >> Cases_on `name = id` >> gvs[]) >>
+    rpt strip_tac >> gvs[]) >>
+ `Fr bc eb z Gf tnf` by
+   (qpat_x_assum `Fr c0 ei u Gu tnu` mp_tac >>
+    simp[Abbr `Fr`] >> strip_tac >> simp[] >>
+    rpt gen_tac >> strip_tac >>
+    `FLOOKUP u.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+    `aid <> inst.inst_id` by decide_tac >>
+    qpat_x_assum `allocas_non_overlapping u` mp_tac >>
+    simp[venomMemDefsTheory.allocas_non_overlapping_def] >>
+    disch_then (qspecl_then [`aid`,`inst.inst_id`,`off`,`sz`,`w2n dst`,`nb`] mp_tac) >>
+    simp[] >> strip_tac >>
+    `~(w2n dst <= i /\ i < w2n dst + 32*n)` by decide_tac >>
+    `i IN tnu.t_mem` by
+      (qpat_x_assum `slot_copy_ghost_inv _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+       pure_rewrite_tac[slot_copy_ghost_inv_def] >> strip_tac >>
+       qpat_x_assum `!a. ~(_ /\ _) ==> _` (qspec_then `i` mp_tac) >> simp[]) >>
+    qpat_x_assum `!aid off sz i. _` irule >>
+    metis_tac[]) >>
+ simp[] >> conj_tac
+ >- simp[Abbr `eb`,push_scope_with_var_def,return_def,
+         evaluation_state_component_equality,combinTheory.o_DEF] >>
+ conj_tac
+ >- (`storage_well_formed_on cx eb (FST H) <=>
+      storage_well_formed_on cx ei (FST H)` suffices_by simp[] >>
+     irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+     simp[Abbr `eb`]) >>
+ qpat_x_assum `Fr c0 ei u Gu tnu` mp_tac >>
+ simp[Abbr `Fr`]
 QED
 
 (* Pure scalar prefix steps have explicit finite ghost updates. *)

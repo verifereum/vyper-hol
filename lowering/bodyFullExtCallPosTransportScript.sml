@@ -384,24 +384,6 @@ QED
 
 (* Code pointers keep their source witness; this step does not claim that
    the constructor's memory taint is unchanged. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `?w. eval_operand p.ptr_operand t = SOME w /\ immutable_holds cenv cx ty raw w mid t` by
-    gvs[vv_holds_def] >>
-  `eval_operand p.ptr_operand u = SOME w` by
-    (Cases_on `p.ptr_operand` >> gvs[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
-  `op_taint tn2 p.ptr_operand = {} /\ op_prov G2 p.ptr_operand = NONE` by
-    (gvs[ghost_kept_at_def, ptr_vv_ok_def] >> Cases_on `p.ptr_operand` >>
-     gvs[op_taint_def, op_prov_def] >> metis_tac[]) >>
-  simp[] >> qexists_tac `Value v` >>
-  simp[read_result_def, return_def, vv_holds_def, vv_at_def,
-       vv_store_bound_def, ptr_vv_ok_def] >>
-  gvs[immutable_holds_def, read_result_def, return_def] >>
-  qexistsl_tac [`name`,`off`,`itv`,`iv`,`k`] >> simp[]
-QED
-*)
 Theorem extcall_request_saved_code_endpoint:
   p.ptr_location = LocCode /\
   (?raw. read_result cx raw mid = (INL v,mid) /\
@@ -419,27 +401,23 @@ Theorem extcall_request_saved_code_endpoint:
   vv_storage_live H cx (LocatedValue ty p) ee u /\
   eval_operand p.ptr_operand u = eval_operand p.ptr_operand t
 Proof
-  cheat
+  strip_tac >>
+  `?w. eval_operand p.ptr_operand t = SOME w /\ immutable_holds cenv cx ty raw w mid t` by
+    gvs[vv_holds_def] >>
+  `eval_operand p.ptr_operand u = SOME w` by
+    (Cases_on `p.ptr_operand` >> gvs[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+  `op_taint tn2 p.ptr_operand = {} /\ op_prov G2 p.ptr_operand = NONE` by
+    (gvs[ghost_kept_at_def, ptr_vv_ok_def] >> Cases_on `p.ptr_operand` >>
+     gvs[op_taint_def, op_prov_def] >> metis_tac[]) >>
+  simp[] >> qexists_tac `Value v` >>
+  simp[read_result_def, return_def, vv_holds_def, vv_at_def,
+       vv_store_bound_def, ptr_vv_ok_def] >>
+  gvs[immutable_holds_def, read_result_def, return_def] >>
+  qexistsl_tac [`name`,`off`,`itv`,`iv`,`k`] >> simp[]
 QED
 
 (* Apply this at the same endpoint as extcall_request_saved_code_endpoint.
    The robust read is reconstructed from that state's own immutables and ghost. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  gvs[loweringPostsTheory.vv_holds_def, loweringPostsTheory.immutable_holds_def] >>
-  Cases_on `ALOOKUP entry.immutables cx.txn.target` >> gvs[] >>
-  rename1 `ALOOKUP entry.immutables cx.txn.target = SOME imms` >>
-  `ALOOKUP ee.immutables cx.txn.target = SOME imms` by metis_tac[] >>
-  drule_all immutable_ctor_frame_mods >> strip_tac >>
-  qpat_x_assum `sub_layout _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.sub_layout_def]) >>
-  `off + k < dimword (:256)` by decide_tac >>
-  simp[arithmeticTheory.LESS_MOD] >>
-  rpt strip_tac >> metis_tac[arithmeticTheory.ADD_COMM]
-QED
-*)
 Theorem extcall_request_saved_ctor_read_mods:
   contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env entry /\
   cenv.ce_is_ctor /\ p.ptr_location = LocCode /\ dead_lo_ok_mods H D lo cenv cx /\
@@ -453,7 +431,17 @@ Theorem extcall_request_saved_ctor_read_mods:
     (!mem. mem_agree_outside tn.t_mem u.vs_memory mem ==>
            val_in_memory rt v (w2n w) mem)
 Proof
-  cheat
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[loweringPostsTheory.vv_holds_def, loweringPostsTheory.immutable_holds_def] >>
+  Cases_on `ALOOKUP entry.immutables cx.txn.target` >> gvs[] >>
+  rename1 `ALOOKUP entry.immutables cx.txn.target = SOME imms` >>
+  `ALOOKUP ee.immutables cx.txn.target = SOME imms` by metis_tac[] >>
+  drule_all immutable_ctor_frame_mods >> strip_tac >>
+  qpat_x_assum `sub_layout _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.sub_layout_def]) >>
+  `off + k < dimword (:256)` by decide_tac >>
+  simp[arithmeticTheory.LESS_MOD] >>
+  rpt strip_tac >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem extcall_request_saved_ctor_read:

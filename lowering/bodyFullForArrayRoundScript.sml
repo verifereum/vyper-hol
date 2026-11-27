@@ -2656,8 +2656,15 @@ Proof
   simp[] >> metis_tac[optionTheory.SOME_11]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem for_nonslot_selected_immutable_holds[local]:
+  expr_sim_inv c cx env em /\
+  FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
+  ~cx_const_name cx (src,name) /\
+  read_result cx (PlaceR (ImmutablePlace src name [])) em = (INL (ArrayV av),em) /\
+  vv_place_ptr c cx em u (PlaceR (ImmutablePlace src name [])) vv /\
+  vv_location vv = SOME LocCode /\ eval_operand (vv_operand vv) u = SOME bw /\
+  lookup_immutable cx ep src name = lookup_immutable cx em src name ==>
+  immutable_holds c cx (ArrayT et bd) (Value (ArrayV av)) bw ep t
 Proof
   strip_tac >>
   drule_all whitelistForIterImmSourceTheory.immutable_array_source_ready >>
@@ -2672,19 +2679,6 @@ Proof
   simp[immutable_holds_def,read_result_def,return_def] >>
   qexistsl [`name`,`off`,`atv`,`ArrayV av`,`0`] >>
   simp[sub_layout_def]
-QED
-*)
-Theorem for_nonslot_selected_immutable_holds[local]:
-  expr_sim_inv c cx env em /\
-  FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
-  ~cx_const_name cx (src,name) /\
-  read_result cx (PlaceR (ImmutablePlace src name [])) em = (INL (ArrayV av),em) /\
-  vv_place_ptr c cx em u (PlaceR (ImmutablePlace src name [])) vv /\
-  vv_location vv = SOME LocCode /\ eval_operand (vv_operand vv) u = SOME bw /\
-  lookup_immutable cx ep src name = lookup_immutable cx em src name ==>
-  immutable_holds c cx (ArrayT et bd) (Value (ArrayV av)) bw ep t
-Proof
-  cheat
 QED
 
 (* A code-backed iterator retains the captured path and address, not the
@@ -3830,13 +3824,6 @@ QED
 
 Finalise for_nonslot_actual_increment_live
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  suspend "capture"
-QED
-*)
 Theorem for_nonslot_array_round_contracts_at_with_prefix:
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
     (sa0,vv,sbExpr,shadow_sa0,shadow_sbExpr,loc,len_op,saL)
@@ -4003,10 +3990,10 @@ Theorem for_nonslot_array_round_contracts_at_with_prefix:
           off + sz <= base \/ base + len <= off) /\
         off <= i /\ i < off + sz /\ i IN tn1.t_mem ==> i IN tn0.t_mem))
 Proof
-  cheat
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  suspend "capture"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[capture]:
   drule_then (map_every assume_tac o CONJUNCTS) bodyFullForFactsTheory.type_stmt_for_projection >>
   drule_then (map_every assume_tac o CONJUNCTS) bodyFullForFactsTheory.supported_stmt_for_projection >>
@@ -4045,9 +4032,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[capture]:
     (ACCEPT_TAC o MATCH_MP bodyInvExecutionPropsTheory.contract_inv_alloca_locals o MATCH_MP bodySimTheory.body_inv_contract)) >>
   suspend "entry"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[entry]:
   `?dw bw s G tn.
      s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
@@ -4082,9 +4067,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[entry]:
      simp[] >> qexists `saL` >> simp[] >> first_assum ACCEPT_TAC) >>
   suspend "round_packets"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[round_packets]:
   qabbrev_tac `Live = \H k rs es J tz z.
     for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,loop_body)
@@ -4122,9 +4105,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[round_packets]:
   simp[Abbr `Done`, NoAsms] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[nil]:
   map_every qx_gen_tac [`es`,`z`,`J`,`tz`] >>
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
@@ -4158,9 +4139,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[nil]:
   qpat_assum `return_buf_sep d c es z ==> _` irule >>
   first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[cons]:
   map_every qx_gen_tac [`a`,`rs`,`es`,`z`,`J`,`tz`] >>
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
@@ -4207,9 +4186,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons]:
     (qx_choosel_then [`v`,`eb`,`t`,`Gf`,`tnf`] strip_assume_tac)) >>
   suspend "cons_body"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[cons_body]:
   qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> for_nonslot_live _ _ _ _ _ _`
     (qspec_then `storage_trace_horizon es.storage_trace` (drule_then assume_tac)) >>
@@ -4238,9 +4215,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons_body]:
      first_assum ACCEPT_TAC) >>
   suspend "cons_admissible"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[cons_admissible]:
   `gas_admissible (eval_stmts cx loop_body) (stmt_res_ok (InLoop exit incr)) eb` by
     (`!res. stmt_res_ok lctx res ==> stmt_res_ok lctx res` by simp[] >>
@@ -4264,9 +4239,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons_admissible]:
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [for_nonslot_layout_def]) >>
   suspend "cons_static_body"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[cons_static_body]:
   qpat_assum `compile_stmts bc _ _ loop_body sbCopy = _`
     (mp_then Any mp_tac bodyFullForRangeTheory.range_body_compiler_pair) >>
@@ -4298,9 +4271,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons_static_body]:
      MATCH_ACCEPT_TAC vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right) >>
   suspend "cons_body_geometry"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[cons_body_geometry]:
   qpat_assum `!H. valid_horizon cx st0 H eb.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
     (assume_tac o (fn th => SIMP_RULE (srw_ss()) [] (cj 3 th))) >>
@@ -4335,9 +4306,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons_body_geometry]:
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "cons_scoped_body"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[cons_scoped_body]:
   `!H. dead_lo_ok H (DF H) lo bc cx` by
     (qpat_assum `same_frame c bc` (mp_then Any assume_tac bodyPtrDefsTheory.same_frame_is_ctor) >>
@@ -4378,9 +4347,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons_scoped_body]:
   reverse conj_tac >- suspend "cons_extra" >>
   suspend "cons_compose"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[cons_increment]:
   map_every qx_gen_tac [`iz`,`JG`,`ef`] >> PairCases_on `JG` >>
   simp[NoAsms,pairTheory.FST,pairTheory.SND] >> strip_tac >>
@@ -4420,9 +4387,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons_increment]:
   (rpt conj_tac >>> SELECT_LT (first_assum ACCEPT_TAC)) >>
   simp[NoAsms,Abbr `q`,Abbr `Gq`,Abbr `tq`]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[cons_extra]:
   qpat_assum `!a rs es z J tz v eb t Gf tnf. _ ==> P a rs es z J tz` irule >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -4434,9 +4399,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons_extra]:
   qpat_assum `eb = _` (fn th => PURE_REWRITE_TAC [th]) >>
   simp[NoAsms,Abbr `sc`]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[cons_compose]:
   qabbrev_tac `head = bind (read_result cx a) (push_scope_with_var id dtv)` >>
   qabbrev_tac `clean = finally
@@ -4467,9 +4430,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons_compose]:
       simp[NoAsms, storage_trace_frame_read_result, storage_trace_frame_state_updates]) >>
   suspend "cons_bind_continuation"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[cons_bind_continuation]:
   irule gas_outcome_full_pure >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
@@ -4496,9 +4457,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons_bind_continuation]:
   reverse conj_tac >- (rpt gen_tac >> disch_tac >> first_assum ACCEPT_TAC) >>
   suspend "cons_next_suffix"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_round_contracts_at_with_prefix[cons_next_suffix]:
   `SUC k = LENGTH vs - LENGTH rs` by
     (`LENGTH rs = LENGTH vs - SUC k` by
@@ -4515,11 +4474,8 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons_next_suffix]:
   first_x_assum (drule_then (map_every assume_tac o CONJUNCTS)) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise for_nonslot_array_round_contracts_at_with_prefix
-*)
 
 Theorem for_nonslot_array_round_contracts_at:
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)

@@ -539,8 +539,39 @@ QED
 
 (* CREATE adopts the backend on both success and failure. Only its logs
    and deletion queue are conditional on the success bit. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem create_paired_adoption:
+  ee.outcomes = SOME (oc::rest) /\ s.vs_outcomes = oc::rest /\
+  outcomes_accounts_typed ee.outcomes /\
+  read_memory (w2n off) (w2n sz) s = code /\ w2n w = value /\
+  w2n sz <= 2 * max_code_size /\ inst.inst_outputs = [out] /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee s /\
+       storage_well_formed_on cx ee (FST H)) ==>
+  ?ee' t a rq rq'.
+    rq = create_outcome_request
+      (case salt of NONE => CreateCall | SOME sl => Create2Call sl) value code ee /\
+    rq' = venom_create_request s w off sz salt /\
+    consume_create_outcome rq' s = (w2w a,t) /\
+    exec_create inst s w off sz salt = OK (update_var out (w2w a) t) /\
+    a = (if oc.co_success then oc.co_created else 0w) /\
+    (!tail. create_oracle_result salt value code rof (ee with gas_obs := tail) =
+      (if a = 0w /\ rof then INR (Error (RevertData oc.co_returnData))
+       else INL (Value (AddressV a)), ee' with gas_obs := tail)) /\
+    ee'.scopes = ee.scopes /\ ee'.immutables = ee.immutables /\
+    ee'.outcomes = SOME rest /\ ee'.requests = ee.requests ++ [rq] /\
+    ee'.storage_trace = ee.storage_trace ++
+      [StorageOutcome rq oc; StorageBackend oc.co_accounts oc.co_tStorage] /\
+    t.vs_outcomes = rest /\ t.vs_requests = s.vs_requests ++ [rq'] /\
+    t.vs_returndata = oc.co_returnData /\
+    LENGTH oc.co_returnData < dimword (:256) /\
+    t = s with <|vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
+      vs_accounts := oc.co_accounts; vs_transient := oc.co_tStorage;
+      vs_logs := t.vs_logs; vs_pending_deletions := t.vs_pending_deletions;
+      vs_returndata := oc.co_returnData|> /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      request_agree H cx.txn.target rq rq' /\ stmt_state_rel H ctx func cenv cx ee' t) /\
+    (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+      valid_horizon cx st0 H ee.storage_trace /\ storage_well_formed_on cx ee' (FST H))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `accounts_runtime_well_typed oc.co_accounts /\
@@ -651,43 +682,6 @@ Proof
   qexistsl_tac [`ee'`,`t`,`a`,`rq`,`rq'`] >>
   simp[exec_create_def] >>
   simp[Abbr `t`, Abbr `ee'`, Abbr `taken`, Abbr `rq`, Abbr `rq'`, Abbr `k`, Abbr `a`]
-QED
-*)
-Theorem create_paired_adoption:
-  ee.outcomes = SOME (oc::rest) /\ s.vs_outcomes = oc::rest /\
-  outcomes_accounts_typed ee.outcomes /\
-  read_memory (w2n off) (w2n sz) s = code /\ w2n w = value /\
-  w2n sz <= 2 * max_code_size /\ inst.inst_outputs = [out] /\
-  (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx ee s /\
-       storage_well_formed_on cx ee (FST H)) ==>
-  ?ee' t a rq rq'.
-    rq = create_outcome_request
-      (case salt of NONE => CreateCall | SOME sl => Create2Call sl) value code ee /\
-    rq' = venom_create_request s w off sz salt /\
-    consume_create_outcome rq' s = (w2w a,t) /\
-    exec_create inst s w off sz salt = OK (update_var out (w2w a) t) /\
-    a = (if oc.co_success then oc.co_created else 0w) /\
-    (!tail. create_oracle_result salt value code rof (ee with gas_obs := tail) =
-      (if a = 0w /\ rof then INR (Error (RevertData oc.co_returnData))
-       else INL (Value (AddressV a)), ee' with gas_obs := tail)) /\
-    ee'.scopes = ee.scopes /\ ee'.immutables = ee.immutables /\
-    ee'.outcomes = SOME rest /\ ee'.requests = ee.requests ++ [rq] /\
-    ee'.storage_trace = ee.storage_trace ++
-      [StorageOutcome rq oc; StorageBackend oc.co_accounts oc.co_tStorage] /\
-    t.vs_outcomes = rest /\ t.vs_requests = s.vs_requests ++ [rq'] /\
-    t.vs_returndata = oc.co_returnData /\
-    LENGTH oc.co_returnData < dimword (:256) /\
-    t = s with <|vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
-      vs_accounts := oc.co_accounts; vs_transient := oc.co_tStorage;
-      vs_logs := t.vs_logs; vs_pending_deletions := t.vs_pending_deletions;
-      vs_returndata := oc.co_returnData|> /\
-    (!H. valid_horizon cx st0 H ee.storage_trace ==>
-      request_agree H cx.txn.target rq rq' /\ stmt_state_rel H ctx func cenv cx ee' t) /\
-    (!H. valid_horizon cx st0 H ee'.storage_trace ==>
-      valid_horizon cx st0 H ee.storage_trace /\ storage_well_formed_on cx ee' (FST H))
-Proof
-  cheat
 QED
 
 (* CREATE reads its input window but has no caller-memory output window. *)
@@ -11265,8 +11259,11 @@ Proof
   simp[listTheory.LENGTH_EQ_NUM_compute] >> rpt strip_tac >> gvs[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem create_blueprint_expr_full_ok:
+  !cx ty b s r ks es d.
+    body_exprs_full_ok cx (create_operand_order (CreateFromBlueprint b) s es) ==>
+    body_expr_full_ok cx
+      (Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)
 Proof
   rpt gen_tac >> disch_tac >> rewrite_tac[Once body_expr_full_ok_def] >>
   reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
@@ -11293,17 +11290,7 @@ Proof
        vyperASTTheory.expr_type_def,is_word_type_def] >>
   metis_tac[create_eval_value]
 QED
-*)
-Theorem create_blueprint_expr_full_ok:
-  !cx ty b s r ks es d.
-    body_exprs_full_ok cx (create_operand_order (CreateFromBlueprint b) s es) ==>
-    body_expr_full_ok cx
-      (Call ty (CreateTarget (CreateFromBlueprint b) s r ks) es d)
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[target]:
   `expr_body_pre cenv cx env target es'` by
     (irule create_operand_pre >>
@@ -11325,9 +11312,7 @@ Resume create_blueprint_expr_full_ok[target]:
   qx_genl_tac [`tv`,`et`,`Gtar`,`tnt`,`st`] >> disch_then (map_every assume_tac o CONJUNCTS) >>
   suspend "ctor"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[ctor]:
   qpat_assum `( ?a tv b a' v' b'. eval_expr cx target a = _ /\ _) ==> body_exprs_full_ok _ _`
     (drule_then (strip_assume_tac o MATCH_MP create_body_exprs_split)) >>
@@ -11421,9 +11406,7 @@ Resume create_blueprint_expr_full_ok[ctor]:
         vyperStorageTraceTheory.storage_trace_frame_create_operands]) >>
   suspend "ctor_encoded"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[ctor_encoded]:
   qx_genl_tac [`vs`,`bytes`,`eu`,`Gu`,`tu`,`u`,`ctor_marks`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -11435,9 +11418,7 @@ Resume create_blueprint_expr_full_ok[ctor_encoded]:
         (drule_then (map_every assume_tac o CONJUNCTS)) >> simp[]) >>
   qexists `bytes` >> pure_rewrite_tac[COND_CLAUSES] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[ctor_values]:
   qx_genl_tac [`vs`,`bytes`,`eu`,`Gu`,`tu`,`u`,`ctor_marks`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -11501,9 +11482,7 @@ Resume create_blueprint_expr_full_ok[ctor_values]:
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "scalar_finish"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[scalar_finish]:
   qx_genl_tac [`av`,`sv`,`ov`,`yw`,`sw`,`ow`,`ee`,`Gf`,`tf`,`z`,`scalar_marks`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -11578,9 +11557,7 @@ Resume create_blueprint_expr_full_ok[scalar_finish]:
       simp[IgnAsm `IS_SOME sv <=> s`,listTheory.DROP_APPEND2]) >>
   qpat_assum `!x'. MEM (Var x') [x;off;p;n;y] \/ _ ==> _` mp_tac >> simp[NoAsms]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[ctor_raw]:
   qpat_x_assum `T ==> ?e cap. _` (strip_assume_tac o REWRITE_RULE []) >>
   qpat_x_assum `ctor = [e]` SUBST_ALL_TAC >>
@@ -11627,9 +11604,7 @@ Resume create_blueprint_expr_full_ok[ctor_raw]:
   qexists `bytes` >> pure_rewrite_tac[COND_CLAUSES] >>
   rpt conj_tac >> (REFL_TAC ORELSE first_assum ACCEPT_TAC)
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_expr_full_ok[ctor_empty]:
   qpat_x_assum `ctor = []` SUBST_ALL_TAC >>
   qpat_x_assum `compile_create_blueprint_args _ _ F _ [] a = _`
@@ -11648,11 +11623,8 @@ Resume create_blueprint_expr_full_ok[ctor_empty]:
   qexists `[]` >>
   simp[eval_operand_def,op_taint_def] >> EVAL_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise create_blueprint_expr_full_ok
-*)
 
 (* The snapshot destination is always the freshly allocated physical buffer.
    This is the compiler-level boundary used by the RawCreate runtime cut. *)

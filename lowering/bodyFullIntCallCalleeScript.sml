@@ -1519,21 +1519,15 @@ Proof
   simp[bodyPtrDefsTheory.return_buf_ptr_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  Cases_on `dest` >- (simp[bodyPtrDefsTheory.ghost_inv_at_def,
-    bodyPtrDefsTheory.return_buf_ptr_def] >> metis_tac[]) >>
-  rename1 `SOME ret_range` >> PairCases_on `ret_range` >>
-  simp[bodyPtrDefsTheory.ghost_inv_at_def, bodyPtrDefsTheory.return_buf_ptr_def] >> metis_tac[]
-QED
-*)
 Theorem intcall_callee_ghost_imm[local]:
   ghost_inv_at D lo dest (ce with <|ce_imm_alloca := imm; ce_alloca_locals := flag|>) cx es G tn s <=>
   ghost_inv_at D lo dest (ce with ce_imm_alloca := NONE) cx es G tn s /\
   (!x. lo <> 0 /\ imm = SOME (Var x) ==> FLOOKUP G x = NONE /\ op_taint tn (Var x) = {})
 Proof
-  cheat
+  Cases_on `dest` >- (simp[bodyPtrDefsTheory.ghost_inv_at_def,
+    bodyPtrDefsTheory.return_buf_ptr_def] >> metis_tac[]) >>
+  rename1 `SOME ret_range` >> PairCases_on `ret_range` >>
+  simp[bodyPtrDefsTheory.ghost_inv_at_def, bodyPtrDefsTheory.return_buf_ptr_def] >> metis_tac[]
 QED
 
 Theorem intcall_callee_alloca_room[local]:
@@ -2071,8 +2065,22 @@ Proof
       listTheory.LAST_CONS_cond, listTheory.LAST_APPEND_CONS]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem intcall_callee_lock_landing_concrete[local]:
+  compile_nonreentrant_lock key T view pro = ((),a) /\
+  run_inst_seq (emitted_insts pro a) s = OK u /\
+  stmt_state_rel H ctx fn ce cx es s /\ state_rel H fn ce cx locked u /\
+  locked.scopes = es.scopes /\ locked.immutables = es.immutables /\
+  fresh_vars_wrt pro s /\ local_ptrs_reserved ce pro /\ ret_pc_ok ce pro s /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at pro x) /\
+  return_buf_frame dret ce pro s /\
+  ~s.vs_halted /\ s.vs_current_bb = pro.cs_current_bb ==>
+    stmt_state_rel H ctx fn ce cx locked (u with vs_inst_idx := LENGTH a.cs_current_insts) /\
+    fresh_vars_wrt a (u with vs_inst_idx := LENGTH a.cs_current_insts) /\ local_ptrs_reserved ce a /\ ret_pc_ok ce a (u with vs_inst_idx := LENGTH a.cs_current_insts) /\
+    (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
+    return_buf_frame dret ce a (u with vs_inst_idx := LENGTH a.cs_current_insts) /\ ~block_is_terminated a /\
+    ~(u with vs_inst_idx := LENGTH a.cs_current_insts).vs_halted /\ (u with vs_inst_idx := LENGTH a.cs_current_insts).vs_current_bb = a.cs_current_bb /\
+    (u with vs_inst_idx := LENGTH a.cs_current_insts).vs_inst_idx = LENGTH a.cs_current_insts /\
+    (!x. not_fresh_at pro x ==> lookup_var x (u with vs_inst_idx := LENGTH a.cs_current_insts) = lookup_var x s)
 Proof
   strip_tac >> simp[LET_THM, blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
   drule_all intcall_callee_lock_concrete_fields >>
@@ -2099,26 +2107,6 @@ Proof
   >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_ADD] >>
   irule bodyMemoryDefsTheory.return_buf_frame_frame >> qexistsl_tac [`ce`,`s`,`pro`] >>
   simp[blockPrefixEquivTheory.lookup_var_set_inst_idx] >> metis_tac[]
-QED
-*)
-Theorem intcall_callee_lock_landing_concrete[local]:
-  compile_nonreentrant_lock key T view pro = ((),a) /\
-  run_inst_seq (emitted_insts pro a) s = OK u /\
-  stmt_state_rel H ctx fn ce cx es s /\ state_rel H fn ce cx locked u /\
-  locked.scopes = es.scopes /\ locked.immutables = es.immutables /\
-  fresh_vars_wrt pro s /\ local_ptrs_reserved ce pro /\ ret_pc_ok ce pro s /\
-  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at pro x) /\
-  return_buf_frame dret ce pro s /\
-  ~s.vs_halted /\ s.vs_current_bb = pro.cs_current_bb ==>
-    stmt_state_rel H ctx fn ce cx locked (u with vs_inst_idx := LENGTH a.cs_current_insts) /\
-    fresh_vars_wrt a (u with vs_inst_idx := LENGTH a.cs_current_insts) /\ local_ptrs_reserved ce a /\ ret_pc_ok ce a (u with vs_inst_idx := LENGTH a.cs_current_insts) /\
-    (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at a x) /\
-    return_buf_frame dret ce a (u with vs_inst_idx := LENGTH a.cs_current_insts) /\ ~block_is_terminated a /\
-    ~(u with vs_inst_idx := LENGTH a.cs_current_insts).vs_halted /\ (u with vs_inst_idx := LENGTH a.cs_current_insts).vs_current_bb = a.cs_current_bb /\
-    (u with vs_inst_idx := LENGTH a.cs_current_insts).vs_inst_idx = LENGTH a.cs_current_insts /\
-    (!x. not_fresh_at pro x ==> lookup_var x (u with vs_inst_idx := LENGTH a.cs_current_insts) = lookup_var x s)
-Proof
-  cheat
 QED
 
 Theorem intcall_callee_lock_path[local]:
@@ -2490,18 +2478,12 @@ Proof
   fs[module_body_inv_def, contract_inv_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  simp[bodyPtrDefsTheory.dead_lo_ok_def, sourceUnitExecutionTheory.cx_dead_def,
-       cx_tops_def, get_module_code_stk_irrelevant]
-QED
-*)
 Theorem intcall_callee_dead_lo[local]:
   body_ce.ce_is_ctor = caller.ce_is_ctor /\ dead_lo_ok H D lo caller cx ==>
   dead_lo_ok H D lo body_ce (cx with stk updated_by CONS k)
 Proof
-  cheat
+  simp[bodyPtrDefsTheory.dead_lo_ok_def, sourceUnitExecutionTheory.cx_dead_def,
+       cx_tops_def, get_module_code_stk_irrelevant]
 QED
 
 Theorem module_body_inv_active_module[local]:
@@ -3425,8 +3407,39 @@ Proof
   gvs[pairTheory.SND]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem intcall_callee_buffered_return_relayout[local]:
+  body_inv tops ctx ce cx /\ same_frame ce cenv /\
+  expr_sim_inv cenv cx env es /\
+  (!H. dead_lo_ok H (DF H) lo ce cx) /\ lo <= w2n bw /\
+  ((FST ce.ce_nonreentrant /\ ~SND (SND (SND ce.ce_nonreentrant))) ==>
+     ~cx.txn.is_static /\ FST (SND (SND ce.ce_nonreentrant))) /\
+  ce.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
+  ce.ce_returns_count = 0 /\
+  ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  0 < type_memory_size tv /\ type_memory_size tv + 64 < dimword (:256) /\
+  stmt_exprs_ok cenv (Return (SOME e)) /\
+  IS_SOME (type_stmt env ty (Return (SOME e))) /\
+  call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
+  (!ety. expr_sim_full
+      (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ety e es /\
+    expr_vv_sim_full
+      (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ety e es) /\
+  (!H v ee gt r. intret_mem_q H func ce cx tv bw v ee r /\
+    (!ir u. r = IntRet ir u ==>
+      (!mem. mem_agree_outside (SND gt).t_mem u.vs_memory mem ==>
+         val_in_memory tv v (w2n bw) mem) /\
+      stor_taint_ok_at (DF H) (SND gt) u /\
+      (!i. i < lo /\ i IN (SND gt).t_mem ==>
+         imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) ==>
+    RetQ H v ee gt r) ==>
+  stmt_frag_full
+    (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ cenv
+    (stmt_env cenv lctx ty (Return (SOME e)))
+    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
+    (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >>
   drule_all_then assume_tac body_inv_same_frame >>
@@ -3483,43 +3496,6 @@ Proof
   irule_at Any internal_return_memory_relayout_robust_taint >>
   qexistsl [`tops`,`rsz`,`rpc`,`env`,`ce`] >>
   gvs[] >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem intcall_callee_buffered_return_relayout[local]:
-  body_inv tops ctx ce cx /\ same_frame ce cenv /\
-  expr_sim_inv cenv cx env es /\
-  (!H. dead_lo_ok H (DF H) lo ce cx) /\ lo <= w2n bw /\
-  ((FST ce.ce_nonreentrant /\ ~SND (SND (SND ce.ce_nonreentrant))) ==>
-     ~cx.txn.is_static /\ FST (SND (SND ce.ce_nonreentrant))) /\
-  ce.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
-  ce.ce_returns_count = 0 /\
-  ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
-  0 < type_memory_size tv /\ type_memory_size tv + 64 < dimword (:256) /\
-  stmt_exprs_ok cenv (Return (SOME e)) /\
-  IS_SOME (type_stmt env ty (Return (SOME e))) /\
-  call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
-  (!ety. expr_sim_full
-      (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ety e es /\
-    expr_vv_sim_full
-      (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ety e es) /\
-  (!H v ee gt r. intret_mem_q H func ce cx tv bw v ee r /\
-    (!ir u. r = IntRet ir u ==>
-      (!mem. mem_agree_outside (SND gt).t_mem u.vs_memory mem ==>
-         val_in_memory tv v (w2n bw) mem) /\
-      stor_taint_ok_at (DF H) (SND gt) u /\
-      (!i. i < lo /\ i IN (SND gt).t_mem ==>
-         imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) ==>
-    RetQ H v ee gt r) ==>
-  stmt_frag_full
-    (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
-    cx lctx RetQ cenv
-    (stmt_env cenv lctx ty (Return (SOME e)))
-    (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
-    (eval_stmt cx (Return (SOME e))) es
-Proof
-  cheat
 QED
 
 (* The callee's own allocations start above the caller's frontier.
@@ -3588,31 +3564,6 @@ Proof
       listTheory.LAST_CONS_cond, listTheory.LAST_APPEND_CONS]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> rpt conj_tac
-  >- (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
-      qexists_tac `materialized` >> simp[])
-  >- simp[]
-  >- (irule stmtSimPropsTheory.ret_pc_ok_frame >>
-      qexistsl_tac [`ce1`,`at_reserve`,`reserved`] >> simp[])
-  >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-      qexistsl_tac [`ce1`,`at_reserve`,`reserved`] >> simp[])
-  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
-      qexists_tac `materialized` >> simp[])
-  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
-      qexists_tac `materialized` >> simp[])
-  >- (simp[exprLoweringPropsTheory.stmt_state_rel_def] >> rpt strip_tac >>
-      qpat_assum `!i w b sz. MEM i (fn_insts callee) /\ _ /\ _ /\ FLOOKUP at_pro.vs_allocas _ = _ ==> _`
-        (irule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
-  gen_tac >> disch_tac >>
-  irule bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at_vars >>
-  conj_tac >- (first_assum irule >> first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`Gmat`,`at_pro.vs_alloca_next`,`callee`,`at_mat`,`materialized`,`tnmat`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> simp[]
-QED
-*)
 Theorem intcall_callee_prologue_body_resources:
   local_ptrs_reserved body_ce materialized /\
   materialized.cs_next_var <= prologue.cs_next_var /\
@@ -3656,7 +3607,26 @@ Theorem intcall_callee_prologue_body_resources:
   (!H. valid_horizon cx st0 H es1.storage_trace ==>
      ghost_inv_at (DF H) lo ret_dest body_ce cx es1 Gpro tnpro at_pro)
 Proof
-  cheat
+  strip_tac >> rpt conj_tac
+  >- (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+      qexists_tac `materialized` >> simp[])
+  >- simp[]
+  >- (irule stmtSimPropsTheory.ret_pc_ok_frame >>
+      qexistsl_tac [`ce1`,`at_reserve`,`reserved`] >> simp[])
+  >- (irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+      qexistsl_tac [`ce1`,`at_reserve`,`reserved`] >> simp[])
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `materialized` >> simp[])
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `materialized` >> simp[])
+  >- (simp[exprLoweringPropsTheory.stmt_state_rel_def] >> rpt strip_tac >>
+      qpat_assum `!i w b sz. MEM i (fn_insts callee) /\ _ /\ _ /\ FLOOKUP at_pro.vs_allocas _ = _ ==> _`
+        (irule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  gen_tac >> disch_tac >>
+  irule bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at_vars >>
+  conj_tac >- (first_assum irule >> first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`Gmat`,`at_pro.vs_alloca_next`,`callee`,`at_mat`,`materialized`,`tnmat`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> simp[]
 QED
 
 Theorem intcall_callee_buffered_frame_ret[local]:
@@ -4386,8 +4356,134 @@ fun intcall_locked_body_outcome_tac th =
 
 (* The entry proof also exposes the locked-body landing to an independent
    observation. The full outcome does not depend on that observation. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem intcall_callee_full_with_prefix:
+  !B Run Out DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
+   G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
+   rbs pvs dflts.
+    body_inv tops ctx cenv cx /\
+    shadow_body_inv tops ctx shadow_ctx /\
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    LENGTH args - LENGTH dflts <= LENGTH es /\
+    LENGTH es <= LENGTH args /\
+    ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
+       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) /\
+    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+    MEM func ctx.ctx_functions /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+    (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+       intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
+         sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
+         G tn) /\
+    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
+    gas_invoke_entry (ctx,func) t callee entered /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
+    !bb inst lbl arg_ops argv.
+      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx = SOME inst /\
+      decode_invoke inst = SOME (lbl,arg_ops) /\
+      eval_operands arg_ops t = SOME argv ==>
+      gas_outcome_full
+        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
+         MAP (op_prov G) arg_ops)
+        (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
+        (es1, entered, FEMPTY, tn with t_var := FEMPTY)
+        (\H res ee G' tn' t'. F)
+        (\H res ee gt r.
+           intcall_callee_exit_full (DF, lo) H func cenv cx mut nr rtv rc
+             (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
+             sa.cs_next_id sb.cs_next_id t tn res ee gt r) /\
+      ((((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
+          B (cx with stk updated_by CONS (NONE,name))
+            (subst_consts_stmts (module_consts_env tops []) ss)) /\
+        (!dret RetQ body_ce bindings env env_after rt locked sf body_start body_end
+            shadow_start shadow_end env_end at_body Gbody tnbody.
+          B (cx with stk updated_by CONS (NONE,name))
+            (subst_consts_stmts (module_consts_env tops []) ss) /\
+          body_inv tops ctx body_ce (cx with stk updated_by CONS (NONE,name)) /\
+          shadow_body_inv tops ctx shadow_ctx /\
+          supported_stmts tops bindings (subst_consts_stmts (module_consts_env tops []) ss) /\
+          (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target)
+             (subst_consts_stmts (module_consts_env tops []) ss) ==>
+             occurs_abi_decode_target target tops) /\
+          body_const_cells_agree [(NONE,tops)] (cx with stk updated_by CONS (NONE,name)) env locked /\
+          expr_sim_inv body_ce (cx with stk updated_by CONS (NONE,name)) env locked /\
+          ce_locals_declared body_ce env /\ locals_alloc_ok body_ce env /\
+          type_stmts env ret (subst_consts_stmts (module_consts_env tops []) ss) = SOME env_after /\
+          stmts_exprs_ok body_ce (subst_consts_stmts (module_consts_env tops []) ss) /\
+          call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
+            (int_calls_stmts (subst_consts_stmts (module_consts_env tops []) ss)) /\
+          frame_ret_ok_full (DF,lo,dret,ctx,shadow_ctx,MAP (op_prov G) arg_ops,callee,sf)
+            (cx with stk updated_by CONS (NONE,name)) RetQ body_ce ret /\
+          (!gs. eval_stmts (cx with stk updated_by CONS (NONE,name)) ss
+                         (locked with gas_obs := gs) =
+                eval_stmts (cx with stk updated_by CONS (NONE,name))
+                  (subst_consts_stmts (module_consts_env tops []) ss) (locked with gas_obs := gs)) /\
+          stmts_env body_ce NoLoop ret (subst_consts_stmts (module_consts_env tops []) ss) =
+            stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty)
+              (subst_consts_stmts (module_consts_env tops []) ss) /\
+          stmts_env (gas_shadow_env T body_ce) NoLoop ret
+            (MAP gas_shadow_stmt (subst_consts_stmts (module_consts_env tops []) ss)) =
+            stmts_env (gas_shadow_env T body_ce) NoLoop
+              (case rt of NONE => BaseT BoolT | SOME ty => ty)
+              (MAP gas_shadow_stmt (subst_consts_stmts (module_consts_env tops []) ss)) /\
+          stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty)
+            (subst_consts_stmts (module_consts_env tops []) ss) body_start = (env_end,body_end) /\
+          stmts_env (gas_shadow_env T body_ce) NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty)
+            (MAP gas_shadow_stmt (subst_consts_stmts (module_consts_env tops []) ss))
+            shadow_start = (gas_shadow_env T env_end,shadow_end) /\
+          gas_shadow_state body_start shadow_start /\ gas_shadow_state body_end shadow_end /\
+          gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+          gas_shadow_function callee sf /\ MEM callee ctx.ctx_functions /\
+          MEM sf shadow_ctx.ctx_functions /\ fn_has_code body_start body_end callee /\
+          fn_has_code shadow_start shadow_end sf /\
+          (!K. dead_lo_ok K (DF K) lo body_ce (cx with stk updated_by CONS (NONE,name))) /\
+          fn_inst_ids_distinct callee /\ local_ptrs_reserved body_ce body_start /\
+          ret_pc_ok body_ce body_start at_body /\
+          (!x sz. body_ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+                  not_fresh_at body_start x) /\
+          ~block_is_terminated body_start /\
+          gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss)
+            (stmt_res_ok NoLoop) locked /\
+          return_buf_frame dret body_ce body_start at_body /\ return_buf_sep dret body_ce locked at_body /\
+          alloca_history callee at_body /\ (ctx_has_dalloca ctx ==> allocas_below_fmp at_body) /\
+          (!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_fmp_headroom inst s) /\
+          (!K. valid_horizon (cx with stk updated_by CONS (NONE,name)) st0 K locked.storage_trace ==>
+            stmt_state_rel K ctx callee body_ce (cx with stk updated_by CONS (NONE,name)) locked at_body /\
+            storage_well_formed_on (cx with stk updated_by CONS (NONE,name)) locked (FST K) /\
+            ghost_inv_at (DF K) lo dret body_ce (cx with stk updated_by CONS (NONE,name)) locked Gbody tnbody at_body) /\
+          ~at_body.vs_halted /\ at_body.vs_current_bb = body_start.cs_current_bb /\
+          at_body.vs_inst_idx = LENGTH body_start.cs_current_insts ==>
+          Run (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+            (cx with stk updated_by CONS (NONE,name)) st0
+            (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (locked,at_body,Gbody,tnbody)) /\
+        (~entered.vs_halted /\
+         ~(?locked. lock_if_nr cx nr (is_view_mut mut) es1 = (INL (),locked) /\
+                   storage_trace_domain cx st0 locked.storage_trace) ==>
+          Out (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+            cx st0 (intcall_callee_src cx name mut nr ss)
+            (es1,entered,FEMPTY,tn with t_var := FEMPTY)) /\
+        (!locked at_body Gl tnl.
+          lock_if_nr cx nr (is_view_mut mut) es1 = (INL (),locked) /\
+          storage_trace_domain (cx with stk updated_by CONS (NONE,name)) st0 locked.storage_trace /\
+          at_body.vs_gas_readings = entered.vs_gas_readings /\
+          (!H. gas_origin_ptr_path
+             (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+             (entered,FEMPTY,tn with t_var := FEMPTY) [] (OK at_body,Gl,tnl)) /\
+          Run (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+            (cx with stk updated_by CONS (NONE,name)) st0
+            (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (locked,at_body,Gl,tnl) ==>
+          Out (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+            cx st0 (intcall_callee_src cx name mut nr ss)
+            (es1,entered,FEMPTY,tn with t_var := FEMPTY))) ==>
+       Out (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+         cx st0 (intcall_callee_src cx name mut nr ss)
+         (es1,entered,FEMPTY,tn with t_var := FEMPTY))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es1.storage_trace`)
@@ -6683,138 +6779,6 @@ Proof
       qexists_tac `H` >>
       conj_tac >- (disch_tac >> first_assum irule >> first_assum ACCEPT_TAC) >>
       first_assum ACCEPT_TAC)
-QED
-*)
-Theorem intcall_callee_full_with_prefix:
-  !B Run Out DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
-   G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
-   rbs pvs dflts.
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
-    lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,nr,args,dflts,ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    LENGTH args - LENGTH dflts <= LENGTH es /\
-    LENGTH es <= LENGTH args /\
-    ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
-         (subst_consts_stmts (module_consts_env tops []) ss)) /\
-    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-    MEM func ctx.ctx_functions /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
-    (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-    (!H. valid_horizon cx st0 H es1.storage_trace ==>
-       intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
-         sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
-         G tn) /\
-    body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
-    gas_invoke_entry (ctx,func) t callee entered /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
-    !bb inst lbl arg_ops argv.
-      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
-      get_instruction bb t.vs_inst_idx = SOME inst /\
-      decode_invoke inst = SOME (lbl,arg_ops) /\
-      eval_operands arg_ops t = SOME argv ==>
-      gas_outcome_full
-        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
-         MAP (op_prov G) arg_ops)
-        (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
-        (es1, entered, FEMPTY, tn with t_var := FEMPTY)
-        (\H res ee G' tn' t'. F)
-        (\H res ee gt r.
-           intcall_callee_exit_full (DF, lo) H func cenv cx mut nr rtv rc
-             (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
-             sa.cs_next_id sb.cs_next_id t tn res ee gt r) /\
-      ((((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-          B (cx with stk updated_by CONS (NONE,name))
-            (subst_consts_stmts (module_consts_env tops []) ss)) /\
-        (!dret RetQ body_ce bindings env env_after rt locked sf body_start body_end
-            shadow_start shadow_end env_end at_body Gbody tnbody.
-          B (cx with stk updated_by CONS (NONE,name))
-            (subst_consts_stmts (module_consts_env tops []) ss) /\
-          body_inv tops ctx body_ce (cx with stk updated_by CONS (NONE,name)) /\
-          shadow_body_inv tops ctx shadow_ctx /\
-          supported_stmts tops bindings (subst_consts_stmts (module_consts_env tops []) ss) /\
-          (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target)
-             (subst_consts_stmts (module_consts_env tops []) ss) ==>
-             occurs_abi_decode_target target tops) /\
-          body_const_cells_agree [(NONE,tops)] (cx with stk updated_by CONS (NONE,name)) env locked /\
-          expr_sim_inv body_ce (cx with stk updated_by CONS (NONE,name)) env locked /\
-          ce_locals_declared body_ce env /\ locals_alloc_ok body_ce env /\
-          type_stmts env ret (subst_consts_stmts (module_consts_env tops []) ss) = SOME env_after /\
-          stmts_exprs_ok body_ce (subst_consts_stmts (module_consts_env tops []) ss) /\
-          call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
-            (int_calls_stmts (subst_consts_stmts (module_consts_env tops []) ss)) /\
-          frame_ret_ok_full (DF,lo,dret,ctx,shadow_ctx,MAP (op_prov G) arg_ops,callee,sf)
-            (cx with stk updated_by CONS (NONE,name)) RetQ body_ce ret /\
-          (!gs. eval_stmts (cx with stk updated_by CONS (NONE,name)) ss
-                         (locked with gas_obs := gs) =
-                eval_stmts (cx with stk updated_by CONS (NONE,name))
-                  (subst_consts_stmts (module_consts_env tops []) ss) (locked with gas_obs := gs)) /\
-          stmts_env body_ce NoLoop ret (subst_consts_stmts (module_consts_env tops []) ss) =
-            stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty)
-              (subst_consts_stmts (module_consts_env tops []) ss) /\
-          stmts_env (gas_shadow_env T body_ce) NoLoop ret
-            (MAP gas_shadow_stmt (subst_consts_stmts (module_consts_env tops []) ss)) =
-            stmts_env (gas_shadow_env T body_ce) NoLoop
-              (case rt of NONE => BaseT BoolT | SOME ty => ty)
-              (MAP gas_shadow_stmt (subst_consts_stmts (module_consts_env tops []) ss)) /\
-          stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty)
-            (subst_consts_stmts (module_consts_env tops []) ss) body_start = (env_end,body_end) /\
-          stmts_env (gas_shadow_env T body_ce) NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty)
-            (MAP gas_shadow_stmt (subst_consts_stmts (module_consts_env tops []) ss))
-            shadow_start = (gas_shadow_env T env_end,shadow_end) /\
-          gas_shadow_state body_start shadow_start /\ gas_shadow_state body_end shadow_end /\
-          gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-          gas_shadow_function callee sf /\ MEM callee ctx.ctx_functions /\
-          MEM sf shadow_ctx.ctx_functions /\ fn_has_code body_start body_end callee /\
-          fn_has_code shadow_start shadow_end sf /\
-          (!K. dead_lo_ok K (DF K) lo body_ce (cx with stk updated_by CONS (NONE,name))) /\
-          fn_inst_ids_distinct callee /\ local_ptrs_reserved body_ce body_start /\
-          ret_pc_ok body_ce body_start at_body /\
-          (!x sz. body_ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
-                  not_fresh_at body_start x) /\
-          ~block_is_terminated body_start /\
-          gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss)
-            (stmt_res_ok NoLoop) locked /\
-          return_buf_frame dret body_ce body_start at_body /\ return_buf_sep dret body_ce locked at_body /\
-          alloca_history callee at_body /\ (ctx_has_dalloca ctx ==> allocas_below_fmp at_body) /\
-          (!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_fmp_headroom inst s) /\
-          (!K. valid_horizon (cx with stk updated_by CONS (NONE,name)) st0 K locked.storage_trace ==>
-            stmt_state_rel K ctx callee body_ce (cx with stk updated_by CONS (NONE,name)) locked at_body /\
-            storage_well_formed_on (cx with stk updated_by CONS (NONE,name)) locked (FST K) /\
-            ghost_inv_at (DF K) lo dret body_ce (cx with stk updated_by CONS (NONE,name)) locked Gbody tnbody at_body) /\
-          ~at_body.vs_halted /\ at_body.vs_current_bb = body_start.cs_current_bb /\
-          at_body.vs_inst_idx = LENGTH body_start.cs_current_insts ==>
-          Run (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
-            (cx with stk updated_by CONS (NONE,name)) st0
-            (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (locked,at_body,Gbody,tnbody)) /\
-        (~entered.vs_halted /\
-         ~(?locked. lock_if_nr cx nr (is_view_mut mut) es1 = (INL (),locked) /\
-                   storage_trace_domain cx st0 locked.storage_trace) ==>
-          Out (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
-            cx st0 (intcall_callee_src cx name mut nr ss)
-            (es1,entered,FEMPTY,tn with t_var := FEMPTY)) /\
-        (!locked at_body Gl tnl.
-          lock_if_nr cx nr (is_view_mut mut) es1 = (INL (),locked) /\
-          storage_trace_domain (cx with stk updated_by CONS (NONE,name)) st0 locked.storage_trace /\
-          at_body.vs_gas_readings = entered.vs_gas_readings /\
-          (!H. gas_origin_ptr_path
-             (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
-             (entered,FEMPTY,tn with t_var := FEMPTY) [] (OK at_body,Gl,tnl)) /\
-          Run (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
-            (cx with stk updated_by CONS (NONE,name)) st0
-            (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (locked,at_body,Gl,tnl) ==>
-          Out (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
-            cx st0 (intcall_callee_src cx name mut nr ss)
-            (es1,entered,FEMPTY,tn with t_var := FEMPTY))) ==>
-       Out (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
-         cx st0 (intcall_callee_src cx name mut nr ss)
-         (es1,entered,FEMPTY,tn with t_var := FEMPTY))
-Proof
-  cheat
 QED
 
 Theorem intcall_callee_full:

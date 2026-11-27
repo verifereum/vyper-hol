@@ -507,8 +507,34 @@ Proof
   irule current_immutable_fixed_path_live >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem live_immutable_index_cut_view[local]:
+  body_inv tops ctx cenv cx /\
+  expr_body_pre cenv cx env obj es /\ expr_body_pre cenv cx env idx mid /\
+  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
+  ~subscript_reads_base cx obj idx /\
+  eval_expr cx obj es = (INL (PlaceR (ImmutablePlace src id path)),mid) /\
+  eval_expr cx idx (mid with gas_obs := gs) = (INL ir,fin) /\
+  vv_post H ctx func cenv cx obj es sa sb s0 mid
+    (PlaceR (ImmutablePlace src id path)) (LocatedValue (ArrayT et bd) p) u /\
+  expr_post H ctx func cenv cx idx (mid with gas_obs := gs) sb sc u fin key iop s /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
+  (!l. p.ptr_operand <> Label l) ==>
+  ?etv off itv k iv av.
+    evaluate_type (get_tenv cx) et = SOME etv /\
+    src = cenv.ce_module /\ p.ptr_location = LocCode /\
+    FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP fin.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables src imms) id = SOME (itv,iv) /\
+    mem_path_offset itv path = SOME (k,ArrayTV etv bd) /\
+    off + type_memory_size itv < dimword (:256) /\
+    eval_operand p.ptr_operand s = SOME (n2w (off+k)) /\
+    evaluate_subscripts itv iv path = INL (ArrayV av) /\
+    value_has_type (ArrayTV etv bd) (ArrayV av) /\ well_formed_type_value (ArrayTV etv bd) /\
+    read_result cx (PlaceR (ImmutablePlace src id path)) fin = (INL (ArrayV av),fin) /\
+    vv_place_ptr cenv cx fin s (PlaceR (ImmutablePlace src id path))
+      (LocatedValue (ArrayT et bd) p) /\
+    immutable_holds cenv cx (ArrayT et bd)
+      (PlaceR (ImmutablePlace src id path)) (n2w (off+k)) fin s
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all_then strip_assume_tac expr_body_pre_place_metadata >>
@@ -551,38 +577,6 @@ Proof
   (impl_tac >- simp[]) >> strip_tac >>
   `?av. v = ArrayV av` by (Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]) >>
   gvs[] >> metis_tac[]
-QED
-*)
-Theorem live_immutable_index_cut_view[local]:
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env obj es /\ expr_body_pre cenv cx env idx mid /\
-  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
-  ~subscript_reads_base cx obj idx /\
-  eval_expr cx obj es = (INL (PlaceR (ImmutablePlace src id path)),mid) /\
-  eval_expr cx idx (mid with gas_obs := gs) = (INL ir,fin) /\
-  vv_post H ctx func cenv cx obj es sa sb s0 mid
-    (PlaceR (ImmutablePlace src id path)) (LocatedValue (ArrayT et bd) p) u /\
-  expr_post H ctx func cenv cx idx (mid with gas_obs := gs) sb sc u fin key iop s /\
-  (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
-  (!l. p.ptr_operand <> Label l) ==>
-  ?etv off itv k iv av.
-    evaluate_type (get_tenv cx) et = SOME etv /\
-    src = cenv.ce_module /\ p.ptr_location = LocCode /\
-    FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
-    FLOOKUP (case ALOOKUP fin.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables src imms) id = SOME (itv,iv) /\
-    mem_path_offset itv path = SOME (k,ArrayTV etv bd) /\
-    off + type_memory_size itv < dimword (:256) /\
-    eval_operand p.ptr_operand s = SOME (n2w (off+k)) /\
-    evaluate_subscripts itv iv path = INL (ArrayV av) /\
-    value_has_type (ArrayTV etv bd) (ArrayV av) /\ well_formed_type_value (ArrayTV etv bd) /\
-    read_result cx (PlaceR (ImmutablePlace src id path)) fin = (INL (ArrayV av),fin) /\
-    vv_place_ptr cenv cx fin s (PlaceR (ImmutablePlace src id path))
-      (LocatedValue (ArrayT et bd) p) /\
-    immutable_holds cenv cx (ArrayT et bd)
-      (PlaceR (ImmutablePlace src id path)) (n2w (off+k)) fin s
-Proof
-  cheat
 QED
 
 (* Use the existing LocCode load safety proof and keep the raw execution and

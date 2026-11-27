@@ -1099,8 +1099,37 @@ Proof
 QED
 
 (* Store while the loop id is inactive; only then expose its live scope. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem range_entry_store_scope:
+  !H ctx func cenv cx e b D lo d G tn id bc p sz w ainst tyv z.
+    stmt_state_rel H ctx func cenv cx e b /\
+    ghost_inv_at D lo d cenv cx e G tn b /\ lookup_scopes id e.scopes = NONE /\
+    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    (!nm. nm <> id ==> FLOOKUP bc.ce_vars nm = FLOOKUP cenv.ce_vars nm) /\
+    bc with
+    <|ce_vars := cenv.ce_vars; ce_var_type := cenv.ce_var_type;
+      ce_dynarray_capacity := cenv.ce_dynarray_capacity|> = cenv /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z'. l = PtrVar q z') /\
+    not_local_ptr cenv e.scopes p /\ not_local_ptr bc (FEMPTY::e.scopes) p /\
+    lookup_var p b = SOME w /\ ptr_covers G tn p b sz /\
+    MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
+    ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
+    FLOOKUP b.vs_allocas ainst.inst_id = SOME (w2n w,sz) /\ 32 <= sz /\
+    type_memory_size tyv = 32 /\ word_memory_type tyv /\ val_wf tyv (IntV z) /\
+    lo <= w2n w ==>
+    stmt_state_rel H ctx func bc cx
+      (e with
+       scopes :=
+         fmupdate id
+           <|assignable := F; type := tyv; value := IntV z; popped := []|>
+           FEMPTY::e.scopes) (mstore (w2n w) (i2w z) b) /\
+    ghost_inv_at D lo d bc cx
+      (e with
+       scopes :=
+         fmupdate id
+           <|assignable := F; type := tyv; value := IntV z; popped := []|>
+           FEMPTY::e.scopes) G
+      (tn with t_mem := tn.t_mem DIFF {i | w2n w <= i /\ i < w2n w + 32})
+      (mstore (w2n w) (i2w z) b)
 Proof
   rpt gen_tac >> strip_tac >> pure_rewrite_tac [LET_THM] >>
   drule_then strip_assume_tac stmt_state_rel_local_ptrs_alloca >>
@@ -1135,43 +1164,7 @@ Proof
   gvs[lookup_scopes_def, FLOOKUP_UPDATE] >>
   first_x_assum irule >> simp[] >> qexists_tac `name` >> simp[]
 QED
-*)
-Theorem range_entry_store_scope:
-  !H ctx func cenv cx e b D lo d G tn id bc p sz w ainst tyv z.
-    stmt_state_rel H ctx func cenv cx e b /\
-    ghost_inv_at D lo d cenv cx e G tn b /\ lookup_scopes id e.scopes = NONE /\
-    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    (!nm. nm <> id ==> FLOOKUP bc.ce_vars nm = FLOOKUP cenv.ce_vars nm) /\
-    bc with
-    <|ce_vars := cenv.ce_vars; ce_var_type := cenv.ce_var_type;
-      ce_dynarray_capacity := cenv.ce_dynarray_capacity|> = cenv /\
-    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z'. l = PtrVar q z') /\
-    not_local_ptr cenv e.scopes p /\ not_local_ptr bc (FEMPTY::e.scopes) p /\
-    lookup_var p b = SOME w /\ ptr_covers G tn p b sz /\
-    MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
-    ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    FLOOKUP b.vs_allocas ainst.inst_id = SOME (w2n w,sz) /\ 32 <= sz /\
-    type_memory_size tyv = 32 /\ word_memory_type tyv /\ val_wf tyv (IntV z) /\
-    lo <= w2n w ==>
-    stmt_state_rel H ctx func bc cx
-      (e with
-       scopes :=
-         fmupdate id
-           <|assignable := F; type := tyv; value := IntV z; popped := []|>
-           FEMPTY::e.scopes) (mstore (w2n w) (i2w z) b) /\
-    ghost_inv_at D lo d bc cx
-      (e with
-       scopes :=
-         fmupdate id
-           <|assignable := F; type := tyv; value := IntV z; popped := []|>
-           FEMPTY::e.scopes) G
-      (tn with t_mem := tn.t_mem DIFF {i | w2n w <= i /\ i < w2n w + 32})
-      (mstore (w2n w) (i2w z) b)
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_entry_store_scope[declare]:
   `stmt_state_rel H ctx func bc cx (e with scopes := FEMPTY :: e.scopes) b` by
     (simp[stmt_state_rel_push_scope] >> irule stmt_state_rel_cenv_cong >>
@@ -1184,9 +1177,7 @@ Resume range_entry_store_scope[declare]:
   conj_tac >- (qexists_tac `ainst` >> simp[]) >>
   simp[GSYM val_to_w256_def, word_value_memory_rel, word_value_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_entry_store_scope[new_local]:
   gvs[lookup_scopes_def, FLOOKUP_UPDATE] >>
   conj_tac
@@ -1202,11 +1193,8 @@ Resume range_entry_store_scope[new_local]:
   simp[valueEncodingDefsTheory.val_in_memory_def, mstore_mem_word_at_same,
        val_to_w256_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise range_entry_store_scope
-*)
 
 (* ===== Initialization: virtual allocation cut ===== *)
 
@@ -2409,19 +2397,6 @@ QED
 Finalise range_entry_condition_frame
 
 (* Compiler witnesses are fixed before any runtime state or horizon. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
-  `cenv.ce_alloca_locals` by
-    (qpat_assum `body_inv tops ctx cenv cx`
-       (ACCEPT_TAC o MATCH_MP contract_inv_alloca_locals o MATCH_MP body_inv_contract)) >>
-  `!c lc s t. compile_stmts c lc ret_ty body s = ((),t) ==> cs_extends s t` by
-    metis_tac[cs_mono_def, cj 2 stmtLoweringMonoTheory.compile_stmt_cs_mono] >>
-  drule_all range_full_static_pre >> strip_tac >>
-  suspend "geometry"
-QED
-*)
 Theorem range_full_body_entry:
   !cx id typ e1 e2 bound body DF lo d PG tops bindings ctx shadow_ctx func
       shadow_func cenv env env' ret_ty lctx RetQ tyv sa sb shadow_sa shadow_sb.
@@ -2850,10 +2825,16 @@ Theorem range_full_body_entry:
                     (update_var dv (bool_to_word F) s with vs_inst_idx := 1)) with
                vs_inst_idx := 1)
 Proof
-  cheat
+  rpt gen_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  `cenv.ce_alloca_locals` by
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (ACCEPT_TAC o MATCH_MP contract_inv_alloca_locals o MATCH_MP body_inv_contract)) >>
+  `!c lc s t. compile_stmts c lc ret_ty body s = ((),t) ==> cs_extends s t` by
+    metis_tac[cs_mono_def, cj 2 stmtLoweringMonoTheory.compile_stmt_cs_mono] >>
+  drule_all range_full_static_pre >> strip_tac >>
+  suspend "geometry"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_body_entry[geometry]:
   Cases_on `?a1 m1 a2 m2. e1 = Literal a1 (IntL m1) /\ e2 = Literal a2 (IntL m2)` >>
   IF (qpat_assum `?a1 m1 a2 m2. e1 = Literal a1 (IntL m1) /\ e2 = Literal a2 (IntL m2)` kall_tac)
@@ -3302,9 +3283,7 @@ Resume range_full_body_entry[geometry]:
   >>> NTH_GOAL (gvs[]) 2
   >> irule cs_extends_trans >> qexists_tac `bj` >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_body_entry[body_jump]:
   markerLib.RESUME_TAC >> Cases_on `block_is_terminated bs1` >>
   pop_assum (fn term =>
@@ -3317,9 +3296,7 @@ Resume range_full_body_entry[body_jump]:
   simp[cs_extends_refl] >>
   irule cs_extends_same_block >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_body_entry[entry_runtime]:
   markerLib.RESUME_TAC >>
   map_every qx_gen_tac [`st0`, `es0`, `s0`, `G0`, `tn0`, `n1`, `n2`,
@@ -3583,11 +3560,8 @@ Resume range_full_body_entry[entry_runtime]:
              (qspecl_then [`aid`,`off`,`az`,`i`] mp_tac) >> simp[] >>
            (impl_tac >- first_assum ACCEPT_TAC) >> simp[]))
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise range_full_body_entry
-*)
 
 (* Complete checked post-allocation entry, retaining the original frame. *)
 Theorem range_checked_entry_full:
@@ -5537,8 +5511,8 @@ val range_full_round_with_entry_statement =
       mk_imp (run_pre, list_mk_exists (layout, retain_entry round))))
   end;
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem range_full_round_with_entry:
+  ^range_full_round_with_entry_statement
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "entry")
     (CONJUNCTS_THEN2 (mk_asm "frame_compose")
@@ -5630,14 +5604,7 @@ Proof
   pop_assum (mk_asm "clean_outcome") >>
   suspend "attach_prefix"
 QED
-*)
-Theorem range_full_round_with_entry:
-  ^range_full_round_with_entry_statement
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_round_with_entry[exception_suffix]:
   rpt gen_tac >> simp[Abbr `BR`] >> strip_tac >>
   rename1 `halt_exit H cx (ee with scopes := sc::ee.scopes) raw r` >>
@@ -5671,9 +5638,7 @@ Resume range_full_round_with_entry[exception_suffix]:
   irule bodyFullForControlTheory.halt_exit_scopes_gas_obs >>
   first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_round_with_entry[normal_suffix]:
   rpt gen_tac >> simp[NoAsms, Abbr `EnrichedQ`, Abbr `SourceQ`, Abbr `BQ`] >>
   disch_then (CONJUNCTS_THEN2 assume_tac (mk_asm "body_post")) >>
@@ -5907,9 +5872,7 @@ Resume range_full_round_with_entry[normal_suffix]:
       simp[NoAsms]) >>
   suspend "backedge"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_round_with_entry[backedge]:
   qpat_assum `landing_raw <> INR BreakException` (fn th => simp[NoAsms, th]) >>
   qpat_assum `for_code _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -6171,9 +6134,7 @@ Resume range_full_round_with_entry[backedge]:
                         lookup_var x (jump_to _ _) = SOME v`
     (ACCEPT_TAC o SRULE [NoAsms])
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_round_with_entry[loop_registers]:
   `!x u. x <> dv /\ not_fresh_at sb0 x /\ lookup_var x s = SOME u ==>
     lookup_var x t' = SOME u /\ FLOOKUP G1 x = FLOOKUP G x /\
@@ -6223,9 +6184,7 @@ Resume range_full_round_with_entry[loop_registers]:
   conj_tac >- first_assum ACCEPT_TAC >> goal_assum (drule_at Any) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_round_with_entry[attach_prefix]:
   qabbrev_tac `head = bind (read_result cx a) (push_scope_with_var id tyv)` >>
   qabbrev_tac `clean =
@@ -6289,11 +6248,8 @@ Resume range_full_round_with_entry[attach_prefix]:
             []
         end)))
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise range_full_round_with_entry
-*)
 
 Theorem range_full_round:
   ^range_full_round_statement

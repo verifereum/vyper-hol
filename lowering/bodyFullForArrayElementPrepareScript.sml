@@ -399,29 +399,6 @@ QED
 
 (* The expression/length endpoint (em,u,Gu,tu) is the capture anchor.
    (es0,sa0,s0,G0,tn0) is the older anchor of the whole For fragment. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  qabbrev_tac `H = storage_trace_horizon es.storage_trace` >>
-  `valid_horizon cx st0 H es.storage_trace` by
-    fs[Abbr `H`, vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
-    (drule_then (map_every assume_tac o CONJUNCTS)) >>
-  qabbrev_tac `D = DF H` >>
-  `word_scale loc = 32` by
-    (qpat_assum `loc = LocMemory \/ loc = LocCode` (DISJ_CASES_THEN SUBST1_TAC) >>
-     simp[word_scale_def]) >>
-  `(if dyn then emit_op ADD [Lit 32w;offOp] sm = (sumOp,sn)
-    else sumOp = offOp /\ sn = sm)` by
-    (Cases_on `dyn` >> fs[]) >>
-  drule_all for_element_address_prefix >>
-  disch_then (qspecl_then [`explicit`,`PG`,`G`]
-    (qx_choose_then `out` (qx_choose_then `sCopy`
-      (qx_choose_then `GCopy` (qx_choose_then `tnCopy` strip_assume_tac))))) >>
-  suspend "at_copy"
-QED
-*)
 Theorem for_nonslot_array_element_prepare_full:
   body_inv tops ctx c cx /\ expr_sim_inv c cx env es /\
   supported_stmt tops bindings (For id fty (Array e) bound loop_body) /\
@@ -567,10 +544,26 @@ Theorem for_nonslot_array_element_prepare_full:
         off + sz <= b \/ b + len <= off) /\
       off <= i /\ i < off + sz /\ i IN tnf.t_mem ==> i IN tn0.t_mem)
 Proof
-  cheat
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `H = storage_trace_horizon es.storage_trace` >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    fs[Abbr `H`, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  qabbrev_tac `D = DF H` >>
+  `word_scale loc = 32` by
+    (qpat_assum `loc = LocMemory \/ loc = LocCode` (DISJ_CASES_THEN SUBST1_TAC) >>
+     simp[word_scale_def]) >>
+  `(if dyn then emit_op ADD [Lit 32w;offOp] sm = (sumOp,sn)
+    else sumOp = offOp /\ sn = sm)` by
+    (Cases_on `dyn` >> fs[]) >>
+  drule_all for_element_address_prefix >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G`]
+    (qx_choose_then `out` (qx_choose_then `sCopy`
+      (qx_choose_then `GCopy` (qx_choose_then `tnCopy` strip_assume_tac))))) >>
+  suspend "at_copy"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[at_copy]:
   `vs = MAP Value (array_elements (ArrayTV stv bd) av)` by
     fs[vyperValueOperationTheory.extract_elements_def] >>
@@ -621,9 +614,7 @@ Resume for_nonslot_array_element_prepare_full[at_copy]:
      qexistsl [`G`,`s`,`tn`] >> simp[]) >>
   suspend "representation"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[representation]:
   `sCopy = (s with vs_vars := sCopy.vs_vars) with
      <|vs_prev_bb := sCopy.vs_prev_bb; vs_current_bb := sCopy.vs_current_bb;
@@ -690,9 +681,7 @@ Resume for_nonslot_array_element_prepare_full[representation]:
   >- suspend "memory_source"
   >> suspend "immutable_source"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_source]:
   `?ty p. vv = LocatedValue ty p /\ p.ptr_location = LocCode` by
     (Cases_on `vv` >> fs[vv_location_def]) >>
@@ -704,9 +693,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_source]:
     fs[bodyPtrDefsTheory.ptr_vv_ok_def, vv_operand_def] >>
   suspend "immutable_input"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_input]:
   `c.ce_is_ctor ==> w2n bw + type_memory_size (ArrayTV stv bd) <= lo /\
      !mem. mem_agree_outside tu.t_mem u.vs_memory mem ==>
@@ -763,9 +750,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_input]:
      >> qexistsl [`D`,`d`] >> simp[]) >>
   suspend "immutable_binding"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_binding]:
   qpat_x_assum `expr_type e = ArrayT fty bd /\ _`
     (fn th =>
@@ -784,9 +769,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_binding]:
     simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
   suspend "immutable_copy_antecedents"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_copy_antecedents]:
   `venomMemDefs$allocas_non_overlapping sCopy` by
     (qpat_assum `stmt_state_rel H ctx func c cx es sCopy`
@@ -851,9 +834,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_copy_antecedents]:
        (qspec_then `reg` mp_tac) >> simp[]) >>
   suspend "immutable_copy_size"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_copy_size]:
   `compile_iter_elem_copy c (Var out) (Var xd) stride LocCode F fty fty
      saCopy = ((),sbCopy)` by
@@ -909,9 +890,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_copy_size]:
       >> suspend "immutable_large_copy")
   >> suspend "immutable_positioned_join"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_word_copy]:
   `compile_iter_elem_copy c (Var out) (Var xd) 32 LocCode F fty fty
      saCopy = ((),sbCopy)` by
@@ -943,11 +922,9 @@ Resume for_nonslot_array_element_prepare_full[immutable_word_copy]:
   >- suspend "immutable_word_ctor"
   >> suspend "immutable_word_runtime"
 QED
-*)
 
 (* Reuse the range witnesses for the precise one-word taint result.
    Only the raw state is identified with the semantic wrapper endpoint. *)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_word_ctor]:
   fs[] >>
   drule (bodyFullUnwrapCodeCtorRunTheory.code_copy_ctor_range_origin_ptr |>
@@ -976,9 +953,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_word_ctor]:
   qpat_assum `sCopy.vs_memory = s.vs_memory` (SUBST1_TAC o SYM) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_word_runtime]:
   fs[] >>
   drule (bodyFullUnwrapCodeRuntimeRunTheory.runtime_code_copy_range_origin |>
@@ -1012,9 +987,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_word_runtime]:
   qpat_assum `sCopy.vs_memory = s.vs_memory` (SUBST1_TAC o SYM) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_large_copy]:
   `compile_iter_elem_copy c (Var out) (Var xd) (32*q) LocCode F fty fty
      saCopy = ((),sbCopy)` by
@@ -1052,9 +1025,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_large_copy]:
   conj_tac >- REFL_TAC >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_positioned_join]:
   qpat_x_assum `?n Gf tnf z. 32*n = stride /\ _`
     (qx_choose_then `n` (qx_choose_then `Gf` (qx_choose_then `tnf`
@@ -1079,9 +1050,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_positioned_join]:
       suspend "immutable_robust_ctor") >>
   suspend "immutable_frame_join"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor]:
   `compile_imm_copy_to_memory T c.ce_imm_alloca (Var out) (Var xd) n 0
      saCopy = ((),sbCopy)` by
@@ -1130,9 +1099,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor]:
       REWRITE_TAC[immutableConstructorRelationTheory.immutable_copy_memory_readback]) >>
   suspend "immutable_robust_ctor_source"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_source]:
   qpat_assum `immutable_holds c cx fty (Value v) a es sCopy`
     (mp_tac o REWRITE_RULE [loweringPostsTheory.immutable_holds_def]) >>
@@ -1191,9 +1158,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_source]:
      disch_then drule_all >> simp[]) >>
   suspend "immutable_robust_ctor_decl"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_decl]:
   `ra + stride <= type_memory_size rt` by
     (qpat_assum `sub_layout rt rvRoot ra ctv cv`
@@ -1230,9 +1195,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_decl]:
      sym_tac >> first_assum ACCEPT_TAC) >>
   suspend "immutable_robust_ctor_padded"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_padded]:
   `c.ce_struct_fields = make_struct_fields_map tops` by
     (drule_then assume_tac bodySimTheory.body_inv_contract >>
@@ -1295,9 +1258,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_padded]:
      qpat_assum `ro <= j` mp_tac >> decide_tac) >>
   suspend "immutable_robust_ctor_restrict"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_restrict]:
   `!j. j <= lo ==> mem_bytes_at 0 j short = mem_bytes_at 0 j padded` by
     (qx_gen_tac `j` >> disch_tac >>
@@ -1324,9 +1285,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_restrict]:
      disch_then (qspecl_then [`ro`,`rt`] mp_tac) >> simp[]) >>
   suspend "immutable_robust_ctor_live"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_live]:
   qx_gen_tac `mem` >> disch_tac >>
   qabbrev_tac `ao = w2n a` >> qabbrev_tac `dst = w2n dw` >>
@@ -1384,9 +1343,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_live]:
      first_assum ACCEPT_TAC) >>
   suspend "immutable_robust_ctor_splice"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_splice]:
   qabbrev_tac `win = mem_bytes_at dst stride mem` >>
   qabbrev_tac `spliced = TAKE ao padded ++ win ++ DROP (ao+stride) padded` >>
@@ -1454,9 +1411,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_robust_ctor_splice]:
   qpat_assum `mem_bytes_at ao stride spliced = win` SUBST1_TAC >>
   simp[NoAsms,Abbr`win`]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_frame_join]:
   `t.vs_allocas = sCopy.vs_allocas` by
     (qpat_assum `(z with <|vs_vars := _; vs_memory := _|>) = sCopy`
@@ -1497,9 +1452,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_frame_join]:
     (qpat_assum `!(HH:(bool # bytes32 # type_value) list # num list). stmt_state_rel HH ctx func c cx es s ==> stmt_state_rel HH ctx func bc cx ee t`
        irule >> first_assum ACCEPT_TAC) >>  suspend "immutable_frame_fields"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_bound_rel]:
   qabbrev_tac `empty = es with scopes := FEMPTY :: es.scopes` >>
   `!(HH:(bool # bytes32 # type_value) list # num list). stmt_state_rel HH ctx func c cx es s ==>
@@ -1547,9 +1500,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_bound_rel]:
   qpat_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = _`
     (qspecl_then [`b`,`n'`] mp_tac) >> simp[] >> (metis_tac[])
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_frame_fields]:
   qpat_assum `copy_runtime_frame saCopy sCopy sbCopy z`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [exprSimCopyTheory.copy_runtime_frame_def]) >>
@@ -1679,9 +1630,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_frame_fields]:
          IgnAsm `sCopy = _ with vs_vars := _`]) >>
   first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_ghost]:
   qpat_assum `ghost_inv_at D lo d c cx es GCopy tnCopy sCopy`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >>
@@ -1701,9 +1650,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_ghost]:
   conj_tac >- suspend "immutable_ghost_low" >>
   simp[allocas_from_def,Abbr `t`]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_ghost_return]:
   Cases_on `d` >- simp[bodyPtrDefsTheory.return_buf_ptr_def] >>
   rename1 `return_buf_ptr (SOME rb) _ _ _ _` >> PairCases_on `rb` >>
@@ -1716,9 +1663,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_ghost_return]:
   `x' = x` by fs[] >>
   qpat_x_assum `x' = x` SUBST_ALL_TAC >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_ghost_low]:
   `lo <= w2n dw` by
     (qpat_assum `allocas_from lo sCopy`
@@ -1733,9 +1678,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_ghost_low]:
   qpat_assum `!i. i < lo /\ i IN tnCopy.t_mem ==> _`
     (qspec_then `i` mp_tac) >> fs[] >> metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[immutable_ghost_locals]:
   map_every qx_gen_tac [`name`,`ent`,`reg`,`cap`] >>
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
@@ -1809,9 +1752,7 @@ Resume for_nonslot_array_element_prepare_full[immutable_ghost_locals]:
   drule_all bodyPtrBytestringBuiltinsWindowGhostTheory.robust_val_in_memory_window_transport >>
   simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_source]:
   `~is_word_type (post_value_type c e) /\
    ~is_bytestring_type (post_value_type c e)` by
@@ -1871,9 +1812,7 @@ Resume for_nonslot_array_element_prepare_full[memory_source]:
   >- suspend "memory_child" >>
   suspend "memory_dispatch"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_child]:
   Q_TAC (fn tm => SUBGOAL_THEN tm DISJ_CASES_TAC)
     `rv = Value (ArrayV av) \/ ?name path. rv = PlaceR (MemoryPlace name path)`
@@ -1882,9 +1821,7 @@ Resume for_nonslot_array_element_prepare_full[memory_child]:
   pop_assum (qx_choose_then `name` (qx_choose_then `path` assume_tac)) >>
   suspend "memory_place"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_owned]:
   `vv_own c cx (post_value_type c e) sa0 sbExpr em rv vv u` by
     (qpat_assum `!v. rv = Value v /\ _ ==> _` (qspec_then `ArrayV av` mp_tac) >> simp[]) >>
@@ -1898,9 +1835,7 @@ Resume for_nonslot_array_element_prepare_full[memory_owned]:
   >- simp[] >>
   suspend "memory_owned_child"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_owned_child]:
   Q_TAC (fn tm => SUBGOAL_THEN tm
       (qx_choose_then `ann` (qx_choose_then `mp` (map_every assume_tac o CONJUNCTS))))
@@ -1992,9 +1927,7 @@ Resume for_nonslot_array_element_prepare_full[memory_owned_child]:
      decide_tac) >>
   suspend "memory_owned_bounds"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_owned_bounds]:
   qabbrev_tac `off = h + k*stride` >>
   qabbrev_tac `sz = type_memory_size (ArrayTV stv bd)` >>
@@ -2028,9 +1961,7 @@ Resume for_nonslot_array_element_prepare_full[memory_owned_bounds]:
   qpat_assum `w2n (bw + n2w off) = w2n bw + off` (fn th => REWRITE_TAC [th]) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_owned_frontier]:
   disch_tac >>
   qpat_assum `val_footprint (ArrayTV stv bd) (ArrayV av) = 0 \/ _` mp_tac >>
@@ -2052,9 +1983,7 @@ Resume for_nonslot_array_element_prepare_full[memory_owned_frontier]:
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_owned_cover]:
   disch_tac >>
   `sz <> 0` by decide_tac >>
@@ -2088,9 +2017,7 @@ Resume for_nonslot_array_element_prepare_full[memory_owned_cover]:
   TRY (qpat_assum `FLOOKUP GCopy out = FLOOKUP Gu x` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   qpat_assum `w2n (bw + n2w off) = w2n bw + off` SUBST1_TAC >> decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_place]:
   `?ann p. vv = LocatedValue ann p` by
     (Cases_on `vv` >-
@@ -2132,9 +2059,7 @@ Resume for_nonslot_array_element_prepare_full[memory_place]:
        (qspec_then `root` mp_tac) >> simp[]) >>
   suspend "memory_place_child"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_dispatch]:
   `read_result cx (EL k vs) es = (INL v,es)` by
     simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
@@ -2202,9 +2127,7 @@ Resume for_nonslot_array_element_prepare_full[memory_dispatch]:
     (qx_choose_then `tnf` (map_every assume_tac o CONJUNCTS))))) >>
   suspend "memory_frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_frame]:
   qpat_assum `typed_copy_state_frame saCopy (w2n dw) n sCopy t`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE [typed_copy_state_frame_def,
@@ -2266,9 +2189,7 @@ Resume for_nonslot_array_element_prepare_full[memory_frame]:
        (ACCEPT_TAC o REWRITE_RULE [vyperStorageFootprintTheory.storage_well_formed_on_def])) >>
   suspend "memory_frame_binding"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_frame_binding]:
   qabbrev_tac `empty = es with scopes := FEMPTY :: es.scopes` >>
   `!(HH:(bool # bytes32 # type_value) list # num list). stmt_state_rel HH ctx func c cx es s ==>
@@ -2310,9 +2231,7 @@ Resume for_nonslot_array_element_prepare_full[memory_frame_binding]:
        irule >> first_assum ACCEPT_TAC) >>
   suspend "memory_outer_frames"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_binding_rel]:
   `ee = empty with scopes := (FEMPTY |+ (id,entry)) :: es.scopes` by
     simp[Abbr`ee`, Abbr`empty`,NoAsms, vyperStateTheory.evaluation_state_component_equality] >>
@@ -2332,9 +2251,7 @@ Resume for_nonslot_array_element_prepare_full[memory_binding_rel]:
   qpat_assum `sCopy.vs_memory = s.vs_memory` (fn th => REWRITE_TAC [th]) >>
   disch_then irule >> decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_outer_frames]:
   `venomMemDefs$allocas_non_overlapping sCopy` by
     (qpat_assum `alloca_inv sCopy`
@@ -2424,9 +2341,7 @@ Resume for_nonslot_array_element_prepare_full[memory_outer_frames]:
     (qspecl_then [`aid`,`off`,`sz`,`i`] MATCH_MP_TAC) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_alloca_frame]:
   `!name b len. local_region bc empty.scopes sCopy name b len <=>
                 local_region bc empty.scopes s name b len` by
@@ -2475,9 +2390,7 @@ Resume for_nonslot_array_element_prepare_full[memory_alloca_frame]:
            `sCopy`,`sa0`,`saCopy`,`FEMPTY`,`dw`,`capacity`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[Abbr `empty`]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_ghost]:
   `!p sz. not_fresh_at saCopy p /\ ptr_covers GCopy tnCopy p sCopy sz ==>
        ptr_covers Gf tnf p t sz` by
@@ -2539,9 +2452,7 @@ Resume for_nonslot_array_element_prepare_full[memory_ghost]:
   qpat_assum `t.vs_allocas = sCopy.vs_allocas` SUBST1_TAC >>
   qpat_assum `allocas_from lo sCopy` (ACCEPT_TAC o REWRITE_RULE [allocas_from_def])
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_ghost_locals]:
   map_every qx_gen_tac [`name`,`ent`,`reg`,`cap`] >>
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
@@ -2613,9 +2524,7 @@ Resume for_nonslot_array_element_prepare_full[memory_ghost_locals]:
   drule_all bodyPtrBytestringBuiltinsWindowGhostTheory.robust_val_in_memory_window_transport >>
   simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_place_child]:
   Q_TAC (fn tm => SUBGOAL_THEN tm
     (qx_choose_then `initialEntry` (map_every assume_tac o CONJUNCTS)))
@@ -2680,9 +2589,7 @@ Resume for_nonslot_array_element_prepare_full[memory_place_child]:
         (fn th => simp[NoAsms,th])) >>
   suspend "memory_place_live"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_place_live]:
   `evaluate_subscripts currentEntry.type currentEntry.value path = INL (ArrayV av)` by
     (qpat_assum `!name path. rv = PlaceR (MemoryPlace name path) ==>
@@ -2720,9 +2627,7 @@ Resume for_nonslot_array_element_prepare_full[memory_place_live]:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   suspend "memory_place_bounds"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_place_bounds]:
   `?cap h. h = (case bd of Fixed _ => 0 | Dynamic _ => 32) /\
            k < cap /\ type_memory_size (ArrayTV stv bd) = h + cap * stride` by
@@ -2833,9 +2738,7 @@ Resume for_nonslot_array_element_prepare_full[memory_place_bounds]:
   qpat_assum `w2n (bw + n2w off) = w2n bw + off` (fn th => REWRITE_TAC [th]) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_element_prepare_full[memory_place_cover]:
   disch_tac >>
   `sz <> 0` by
@@ -2889,8 +2792,5 @@ Resume for_nonslot_array_element_prepare_full[memory_place_cover]:
   qpat_assum `off + stride <= sz` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise for_nonslot_array_element_prepare_full
-*)
