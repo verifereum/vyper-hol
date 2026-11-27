@@ -7,6 +7,7 @@ Ancestors
   vyperStorageLayoutSafety vyperTypeStoragePreservation supportedExprTraverse
   supportedProgram placeTypingProps allocLimits selectorDispatch constSubst
   vyperContext alist option
+  vyperSubscriptOverlap[qualified]
 
 Definition outcomes_accounts_typed_def:
   outcomes_accounts_typed (oos : call_outcome list option) <=>
@@ -103,6 +104,10 @@ Definition unallocated_bare_global_root_def[nocompute]:
   unallocated_bare_global_root cenv env (TopLevelName ty nsid) =
     (IS_SOME (FLOOKUP env.bare_globals nsid) /\
      FLOOKUP cenv.ce_module_vars nsid = NONE) /\
+  unallocated_bare_global_root cenv env (Pop ty bt) =
+    (?nsid. MEM (WriteAcc (StateRef nsid)) (vyperSubscriptOverlap$accesses_target bt) /\
+            IS_SOME (FLOOKUP env.bare_global_assignable nsid) /\
+            FLOOKUP cenv.ce_module_vars nsid = NONE) /\
   unallocated_bare_global_root cenv env _ = F
 End
 

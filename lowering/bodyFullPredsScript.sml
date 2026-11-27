@@ -19,19 +19,35 @@ Ancestors bodyFullShadowBodyInv
   bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   vyperInterpreter vyperTypeSystem vyperState vyperAST list
   vyperTypeContract vyperTypeConstantFold alist finite_map
+  constSubstMods[qualified] vyperSubscriptOverlap[qualified]
 
 val _ = Parse.hide "body";
 
-Definition body_const_cells_agree_def:
+Definition body_const_cells_agree_def[nocompute]:
   body_const_cells_agree mods cx env es <=>
-    ?roots art imms A.
+    ?roots art imms.
       check_contract cx.in_deploy cx.layouts cx.txn.target mods = SOME art /\
       ALOOKUP cx.sources cx.txn.target = SOME mods /\
-      ALOOKUP mods NONE = SOME (cx_tops cx) /\
-      constants_fold_module mods imms NONE (cx_tops cx) FEMPTY = SOME A /\
-      frame_maps env art /\
-      const_subst_context roots cx env (module_consts_env (cx_tops cx) [])
-        mods art /\
+      frame_maps env art /\ env.type_defs = get_tenv cx /\
+      imms = (case ALOOKUP es.immutables cx.txn.target of
+                NONE => empty_immutables | SOME cells => cells) /\
+      (!src tops. MEM (src,tops) mods ==>
+        ?A. constants_fold_module mods imms src tops FEMPTY = SOME A /\
+            A SUBMAP get_source_immutables src imms) /\
+      (!addr src id tv root. MEM (addr,src,id,tv,root) roots ==>
+        checked_frame_context cx mods art src id env) /\
+      (!src id r. ALOOKUP (consts_env_mods mods) (src,id) = SOME r ==>
+        declared_constant mods src id /\ constant_expr mods r /\
+        vyperSubscriptOverlap$accesses_expr r = [] /\
+        FLOOKUP env.bare_globals (src,id) = SOME (expr_type r) /\
+        FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type (expr_type r)) /\
+        (?pv v. const_result_at roots cx (expr_type r)
+                  (PlaceR (ImmutablePlace src id [])) v /\
+                const_result_at roots cx (expr_type r) pv v /\
+                !st. const_cells_agree roots st ==>
+                  lookup_global cx src id st =
+                    (INL (PlaceR (ImmutablePlace src id [])),st) /\
+                  eval_expr cx r st = (INL pv,st))) /\
       const_cells_agree roots es
 End
 

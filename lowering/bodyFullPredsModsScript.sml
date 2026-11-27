@@ -8,6 +8,7 @@ Ancestors
   gasShadow gasContext bodySimFull vyperInterpreter vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperState vyperContext vyperAST
   vyperTypeInvariants list alist option pair finite_map
+  vyperSubscriptOverlap[qualified]
 
 val _ = Parse.hide "body";
 
@@ -70,6 +71,11 @@ Definition body_stmt_full_ok_mods_def[nocompute]:
       expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
+      ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env) s /\
+      (!key. MEM (vyperSubscriptOverlap$WriteAcc (vyperSubscriptOverlap$StateRef key))
+                  (vyperSubscriptOverlap$accesses_stmt s) /\
+             IS_SOME (FLOOKUP env.bare_global_assignable key) ==>
+             IS_SOME (FLOOKUP cenv.ce_module_vars key)) /\
       call_evaluation_safe cx (int_calls_stmt s) /\
       frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx RetQ cenv ret_ty ==>
@@ -96,6 +102,11 @@ Definition body_stmts_full_ok_mods_def[nocompute]:
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
       stmts_exprs_ok cenv ss /\
+      ~supported_stmts_expr_exists (unallocated_bare_global_root cenv env) ss /\
+      (!key. MEM (vyperSubscriptOverlap$WriteAcc (vyperSubscriptOverlap$StateRef key))
+                  (vyperSubscriptOverlap$accesses_stmts ss) /\
+             IS_SOME (FLOOKUP env.bare_global_assignable key) ==>
+             IS_SOME (FLOOKUP cenv.ce_module_vars key)) /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
       frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cx RetQ cenv ret_ty ==>

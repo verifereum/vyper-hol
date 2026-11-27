@@ -8,6 +8,7 @@ Ancestors
   gasShadow gasShadowState gasShadowUnit gasExplicitSites gasShadowCompileBase
   exprLowering stmtLowering loweringPosts compileEnv allocaHistory
   vyperInterpreter vyperState venomState venomWf list option
+  gasOutcomeFullMods[qualified]
 
 Definition expr_map_sim_full_def:
   expr_map_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -40,9 +41,9 @@ Definition expr_map_sim_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_expr cx e) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_expr cx e) (es, s0, G0, tn0)
         (\H res ee G tn t. ?tr slot kt vt tp p.
           res = INL (HashMapRef tr slot kt vt) /\
           storage_mapping_region cx tr slot (HashMapT kt vt) /\
@@ -110,9 +111,9 @@ Definition expr_sim_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
+        cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx))
         (es, s0, G0, tn0)
         (\H res ee G tn t. ?v. res = INL v /\
           expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
@@ -163,9 +164,9 @@ Definition expr_vv_sim_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_expr cx e) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_expr cx e) (es, s0, G0, tn0)
         (\H res ee G tn t. ?tv. res = INL tv /\
           vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
           vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e)
@@ -248,9 +249,9 @@ Definition stmt_frag_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 source (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 source (es, s0, G0, tn0)
         (\H res ee G tn t. ?cenv''.
           stmt_lands lctx sb res t /\ ~t.vs_halted /\
           (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
