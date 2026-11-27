@@ -502,29 +502,6 @@ QED
 
 (* This uses only the stage's entry, dead-byte bound and actual INVOKE
    hypotheses. The path is the completed-run witness of gas_outcome_full. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sb
-    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
-    metis_tac[] >>
-  `lo = if cenv.ce_is_ctor then imm_len (cx_tops cx) else 0` by
-    metis_tac[dead_lo_ok_def] >>
-  rpt gen_tac >> strip_tac >> irule LIST_EQ >>
-  simp[LENGTH_mem_bytes_at_proof] >> rpt strip_tac >> simp[EL_mem_bytes_at] >>
-  `lo <= b + x /\ b + x < t.vs_alloca_next` by
-    (Cases_on `cenv.ce_is_ctor` >> gvs[] >> decide_tac) >>
-  `!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
-     sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
-     b + x < off \/ off + asz <= b + x` by
-    (rpt strip_tac >> res_tac >>
-     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  `read_byte (b + x) s'.vs_memory = read_byte (b + x) t.vs_memory` by
-    metis_tac[intcall_entry_full_completed_byte] >>
-  fs[read_byte_def]
-QED
-*)
 Theorem intcall_callee_caller_memory_bytes:
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!H. valid_horizon cx st0 H es1.storage_trace ==>
@@ -539,12 +516,29 @@ Theorem intcall_callee_caller_memory_bytes:
   gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
     MAP (op_prov G) arg_ops)
     (entered,FEMPTY,tn with t_var := FEMPTY) marks (IntRet ir s',G',tn') ==>
-  !b sz. (cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b) /\
+  !b sz. (cenv.ce_is_ctor ==> imm_len_mods cenv.ce_modules <= b) /\
     b + sz <= t.vs_alloca_next /\
     (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
       sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
       regions_disjoint b sz off asz) ==>
     mem_bytes_at b sz s'.vs_memory = mem_bytes_at b sz t.vs_memory
 Proof
-  cheat
+  strip_tac >>
+  `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sb
+    vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
+    metis_tac[] >>
+  `lo = if cenv.ce_is_ctor then imm_len_mods cenv.ce_modules else 0` by
+    metis_tac[dead_lo_ok_def] >>
+  rpt gen_tac >> strip_tac >> irule LIST_EQ >>
+  simp[LENGTH_mem_bytes_at_proof] >> rpt strip_tac >> simp[EL_mem_bytes_at] >>
+  `lo <= b + x /\ b + x < t.vs_alloca_next` by
+    (Cases_on `cenv.ce_is_ctor` >> gvs[] >> decide_tac) >>
+  `!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
+     sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
+     b + x < off \/ off + asz <= b + x` by
+    (rpt strip_tac >> res_tac >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `read_byte (b + x) s'.vs_memory = read_byte (b + x) t.vs_memory` by
+    metis_tac[intcall_entry_full_completed_byte] >>
+  fs[read_byte_def]
 QED
