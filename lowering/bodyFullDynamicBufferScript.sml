@@ -103,48 +103,7 @@ Proof
        fmp_room_def, pending_alloca_size_def, SF CONJ_ss] >>
   first_assum ACCEPT_TAC
 QED
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `t = s with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx;
-               vs_memory := t.vs_memory; vs_fmp := t.vs_fmp|>` by
-    (qpat_assum `_ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|> = _`
-      (mp_tac o AP_TERM ``\z. z with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx;
-                                     vs_memory := t.vs_memory; vs_fmp := t.vs_fmp|>``) >> simp[]) >>
-  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-   t.vs_initial_fmp = s.vs_initial_fmp` by
-    (qpat_assum `t = _ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|>`
-      (PURE_ONCE_REWRITE_TAC o single) >> simp[]) >>
-  `s.vs_alloca_next <= B /\ fmp_room ctx func t` by
-    (drule stateRelProjTheory.stmt_state_rel_fmp_room >>
-     `venomLayout$ceil32 N <= N+31` by
-       (rw[venomLayoutTheory.ceil32_def] >> decide_tac) >>
-     simp[exprLoweringPropsTheory.fmp_room_def,pending_alloca_size_def] >>
-     rpt strip_tac >> fs[arithmeticTheory.MAX_DEF] >> decide_tac) >>
-  `!b k. b+k <= s.vs_alloca_next ==>
-      mem_bytes_at b k t.vs_memory = mem_bytes_at b k s.vs_memory` by
-    (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-  `!name b k. local_region cenv ee.scopes s name b k ==> b+k <= s.vs_alloca_next` by
-    metis_tac[bodyMemoryDefsTheory.body_local_region_frontier] >>
-  `!name b k. local_region cenv es.scopes s0 name b k ==> b+k <= s0.vs_alloca_next` by
-    metis_tac[bodyMemoryDefsTheory.body_local_region_frontier] >>
-  `!aid b k. FLOOKUP s0.vs_allocas aid = SOME (b,k) ==> b+k <= s0.vs_alloca_next` by
-    (qpat_assum `stmt_state_rel H0 ctx func cenv cx es s0`
-       (strip_assume_tac o REWRITE_RULE
-         [exprLoweringPropsTheory.stmt_state_rel_def,alloca_inv_def,alloca_next_valid_def]) >>
-     first_assum ACCEPT_TAC) >>
-  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-       FLOOKUP Gmat x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)` by
-    metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
-  conj_tac >- suspend "state" >>
-  conj_tac >- suspend "ghost" >>
-  conj_tac >- suspend "writeback" >>
-  conj_tac >- suspend "kept" >>
-  irule bodyMemoryDefsTheory.return_buf_frame_frame >>
-  qpat_assum `return_buf_frame d cenv sm s` (irule_at Any) >> simp[] >> metis_tac[]
-QED
-*)
+
 Theorem dynamic_buffer_materialized_frame:
   ctx_has_dalloca ctx /\
   stmt_state_rel H0 ctx func cenv cx es s0 /\
@@ -169,58 +128,119 @@ Theorem dynamic_buffer_materialized_frame:
   wb_frame cenv es ee sa s0 t /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gmat tt /\
   return_buf_frame d cenv sm t
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `t = s with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx;
+               vs_memory := t.vs_memory; vs_fmp := t.vs_fmp|>` by
+    (qpat_assum `_ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|> = _`
+      (mp_tac o AP_TERM ``\z. z with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx;
+                                     vs_memory := t.vs_memory; vs_fmp := t.vs_fmp|>``) >> simp[]) >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+   t.vs_initial_fmp = s.vs_initial_fmp` by
+    (qpat_assum `t = _ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|>`
+      (PURE_ONCE_REWRITE_TAC o single) >> simp[]) >>
+  `s.vs_alloca_next <= B /\ fmp_room ctx func t` by
+    (drule stateRelProjTheory.stmt_state_rel_fmp_room >>
+     `venomLayout$ceil32 N <= N+31` by
+       (rw[venomLayoutTheory.ceil32_def] >> decide_tac) >>
+     simp[fmp_room_def,pending_alloca_size_def] >>
+     rpt strip_tac >> fs[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  `!b k. b+k <= s.vs_alloca_next ==>
+      mem_bytes_at b k t.vs_memory = mem_bytes_at b k s.vs_memory` by
+    (rpt strip_tac >> qpat_assum `!b k. b+k <= B ==> _` irule >> decide_tac) >>
+  `!name b k. local_region cenv ee.scopes s name b k ==> b+k <= s.vs_alloca_next` by
+    metis_tac[body_local_region_frontier] >>
+  `!name b k. local_region cenv es.scopes s0 name b k ==> b+k <= s0.vs_alloca_next` by
+    metis_tac[body_local_region_frontier] >>
+  `!aid b k. FLOOKUP s0.vs_allocas aid = SOME (b,k) ==> b+k <= s0.vs_alloca_next` by
+    (qpat_assum `stmt_state_rel H0 ctx func cenv cx es s0`
+       (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_local_ptrs_alloca) >>
+     simp[alloca_inv_def,alloca_next_valid_def] >> metis_tac[]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+       FLOOKUP Gmat x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)` by
+    metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
+  `lo <= B` by (fs[ghost_inv_at_def] >> decide_tac) >>
+  `state_rel H func cenv cx ee s` by
+    metis_tac[stateRelProjTheory.stmt_state_rel_state_rel] >>
+  `local_ptrs_rel func cenv ee.scopes s` by
+    metis_tac[stateRelProjTheory.state_rel_local_ptrs_rel] >>
+  conj_tac >- suspend "state" >>
+  conj_tac >- suspend "ghost" >>
+  conj_tac >- suspend "writeback" >>
+  conj_tac >- suspend "kept" >>
+  irule bodyMemoryDefsTheory.return_buf_frame_frame >>
+  qpat_assum `return_buf_frame d cenv sm s` (irule_at Any) >> simp[] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume dynamic_buffer_materialized_frame[state]:
-  `local_ptrs_rel func cenv ee.scopes s /\
-   immutable_alloca_sep func cenv cx ee s /\ immutable_base_zero cenv s /\
-   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor ee s` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def,state_rel_def] >>
-  `!name entry p sz. lookup_scopes name ee.scopes = SOME entry /\
-     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-     lookup_var p t = lookup_var p s` by metis_tac[local_ptrs_reserved_def] >>
+  `!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+     lookup_var p t = lookup_var p s` by
+    metis_tac[local_ptrs_reserved_def] >>
   `local_ptrs_rel func cenv ee.scopes t` by
     (irule localPtrsPropsTheory.local_ptrs_rel_mem_agree >> qexists `s` >> simp[] >>
-     rpt strip_tac >> gvs[] >>
-     TRY (qpat_assum `!name entry p sz. _ ==> lookup_var p t = lookup_var p s`
-           (drule_all_then ACCEPT_TAC)) >>
-     sym_tac >>
-     qpat_assum `!b k. _ ==> mem_bytes_at b k t.vs_memory = _` irule >>
-     qpat_assum `!name b k. local_region cenv ee.scopes s name b k ==> _` drule >>
-     decide_tac) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor ee t` by
-    (irule loweringSliceTheory.immutables_rel_mem_agree >> qexists `s` >> simp[] >>
+     rpt strip_tac >> gvs[]
+     >~ [`lookup_var p t = lookup_var p s`] >- metis_tac[] >>
+     sym_tac >> metis_tac[LESS_EQ_TRANS]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor ee s /\
+     immutable_alloca_sep func (cenv with ce_module := src) cx ee s` by
+    (gen_tac >> strip_tac
+     >- fs[stmt_state_rel_def,state_rel_def]
+     >> Cases_on `ALOOKUP cenv.ce_modules src` >> gvs[] >>
+     fs[stmt_state_rel_def,state_rel_def]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor ee t` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!src. _ ==> immutables_rel _ _ src _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     irule loweringSliceTheory.immutables_rel_mem_agree >> qexists `s` >> simp[] >>
      conj_tac
      >- (qpat_assum `t = _ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|>`
            (PURE_ONCE_REWRITE_TAC o single) >> simp[]) >>
-     rpt strip_tac >>
+     strip_tac >> rpt gen_tac >> strip_tac >>
      qpat_assum `!b k. b+k <= s.vs_alloca_next ==> _` irule >>
-     qpat_assum `immutable_alloca_sep func cenv cx ee s`
-       (strip_assume_tac o REWRITE_RULE[exprLoweringPropsTheory.immutable_alloca_sep_def]) >>
-     first_x_assum (drule_all_then strip_assume_tac) >> simp[]) >>
-  `immutable_alloca_sep func cenv cx ee t` by
-    (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >> qexistsl [`s`,`ee`] >> simp[] >>
-     rpt strip_tac >> qexists `id` >>
-     irule (iffLR exprSimCopyTheory.copy_buffer_local_region_frame) >> metis_tac[]) >>
+     qpat_x_assum `immutable_alloca_sep func (cenv with ce_module := src) cx ee s`
+       (strip_assume_tac o SIMP_RULE (srw_ss ()) [immutable_alloca_sep_def]) >>
+     metis_tac[]) >>
+  `!name b k. local_region cenv ee.scopes t name b k <=>
+     local_region cenv ee.scopes s name b k` by
+    metis_tac[exprSimCopyTheory.copy_buffer_local_region_frame] >>
+  `!ce. ce.ce_vars = cenv.ce_vars /\ immutable_alloca_sep func ce cx ee s ==>
+     immutable_alloca_sep func ce cx ee t` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >> qexistsl [`s`,`ee`] >>
+     simp[] >> gvs[local_region_def] >> metis_tac[]) >>
+  `immutable_base_zero cenv s` by
+    metis_tac[stateRelProjTheory.stmt_state_rel_immutable_base_zero] >>
+  `t.vs_labels = s.vs_labels` by
+    (qpat_assum `t = _ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|>`
+        (PURE_ONCE_REWRITE_TAC o single) >> simp[]) >>
   `immutable_base_zero cenv t` by
-    (irule exprLoweringPropsTheory.immutable_base_zero_frame >> qexists `s` >> simp[] >>
-     reverse conj_tac
-     >- (qpat_assum `t = _ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|>`
-          (PURE_ONCE_REWRITE_TAC o single) >> simp[]) >>
-     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_imm_base]) >>
+    (irule immutable_base_zero_frame >> qexists `s` >> simp[] >>
+     metis_tac[local_ptrs_reserved_imm_base]) >>
   `state_rel H func cenv cx ee t` by
-    (irule exprLoweringPropsTheory.state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl [`ee`,`s`] >> fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
-     qpat_assum `t:venom_state = _` (PURE_ONCE_REWRITE_TAC o single) >> simp[]) >>
-  fs[exprLoweringPropsTheory.stmt_state_rel_def,alloca_inv_def,allocas_non_overlapping_def,
-     alloca_next_valid_def,alloca_room_def,pending_alloca_size_def]
-  >> (metis_tac[])
+    (irule state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`ee`,`s`] >> simp[] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `t = _ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|>`
+       (PURE_ONCE_REWRITE_TAC o single) >> simp[]) >>
+  `alloca_inv t` by
+    (`alloca_inv s` by metis_tac[stateRelProjTheory.stmt_state_rel_local_ptrs_alloca] >>
+     fs[alloca_inv_def,allocas_non_overlapping_def,alloca_next_valid_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `alloca_room ctx func t` by
+    (`alloca_room ctx func s` by metis_tac[stateRelProjTheory.stmt_state_rel_alloca_room] >>
+     fs[alloca_room_def,pending_alloca_size_def]) >>
+  `immutable_alloca_sep func cenv cx ee t` by
+    (qpat_assum `!ce. _ ==> immutable_alloca_sep func ce cx ee t` irule >>
+     fs[stmt_state_rel_def]) >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx ee t` by
+    (rpt strip_tac >> qpat_assum `!ce. _ ==> immutable_alloca_sep func ce cx ee t` irule >>
+     simp[] >> fs[stmt_state_rel_def]) >>
+  irule stateRelProjTheory.stmt_state_rel_intro >> simp[] >>
+  qpat_assum `stmt_state_rel H ctx func cenv cx ee s`
+    (mp_tac o MATCH_MP stateRelProjTheory.stmt_state_rel_alloca_size) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume dynamic_buffer_materialized_frame[ghost]:
   `allocas_from lo t /\ lo <= t.vs_alloca_next /\ stor_taint_ok_at D tt t` by
     (qpat_assum `t = _ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|>`
@@ -230,9 +250,6 @@ Resume dynamic_buffer_materialized_frame[ghost]:
   qpat_assum `ghost_inv_at D lo d cenv cx ee G tn s`
     (mp_then Any irule bodyPtrBytestringBuiltinsWindowGhostTheory.ghost_inv_at_local_window_transport) >>
   qpat_assum `local_ptrs_reserved cenv sm` (irule_at Any) >>
-  `lo <= B` by (fs[ghost_inv_at_def] >> decide_tac) >>
-  `local_ptrs_rel func cenv ee.scopes s` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def,state_rel_def] >>
   simp[] >> qexists `func` >> simp[] >>
   rpt gen_tac >> strip_tac >>
   qpat_assum `!name b k. local_region cenv ee.scopes s name b k ==> _`
@@ -240,13 +257,11 @@ Resume dynamic_buffer_materialized_frame[ghost]:
   simp[] >> rpt strip_tac >>
   qpat_assum `!i. i < B /\ i IN tt.t_mem ==> _` irule >> simp[] >> decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume dynamic_buffer_materialized_frame[writeback]:
   qpat_assum `wb_frame cenv es ee sa s0 s`
-    (strip_assume_tac o REWRITE_RULE[loweringPostsTheory.wb_frame_def]) >>
-  simp[loweringPostsTheory.wb_frame_def] >> rpt conj_tac
+    (strip_assume_tac o REWRITE_RULE[wb_frame_def]) >>
+  simp[wb_frame_def] >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >>
       qpat_assum `!aid off sz. _ ==> mem_bytes_at off sz s.vs_memory = _`
         (drule_all_then (SUBST1_TAC o SYM)) >>
@@ -259,21 +274,20 @@ Resume dynamic_buffer_materialized_frame[writeback]:
   qpat_assum `!name b k. local_region cenv es.scopes s0 name b k ==> _` drule >>
   decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume dynamic_buffer_materialized_frame[kept]:
   irule bodyFullUnwrapSlotPostTheory.unwrap_slot_copy_ghost_kept_at >>
   qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G tn` (irule_at Any) >>
-  `lo <= B` by (fs[ghost_inv_at_def] >> decide_tac) >>
-  simp[] >> rpt conj_tac >> rpt strip_tac >>
-  qpat_assum `!i. i < B /\ i IN tt.t_mem ==> _` irule >> simp[] >>
-  TRY (qpat_assum `!name b k. local_region cenv es.scopes s0 name b k ==> _` drule) >>
-  TRY (qpat_assum `!aid b k. FLOOKUP s0.vs_allocas aid = SOME (b,k) ==> _` drule) >>
-  decide_tac
+  simp[] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!i. i < B /\ i IN tt.t_mem ==> _` irule >> simp[] >>
+      qpat_assum `!name b k. local_region cenv es.scopes s0 name b k ==> _` drule >>
+      decide_tac)
+  >- (rpt strip_tac >>
+      qpat_assum `!i. i < B /\ i IN tt.t_mem ==> _` irule >> simp[] >>
+      qpat_assum `!aid b k. FLOOKUP s0.vs_allocas aid = SOME (b,k) ==> _` drule >>
+      decide_tac) >>
+  rpt strip_tac >> qpat_assum `!i. i < B /\ i IN tt.t_mem ==> _` irule >> simp[] >> decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise dynamic_buffer_materialized_frame
-*)
