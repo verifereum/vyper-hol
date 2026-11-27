@@ -523,12 +523,12 @@ End
 
 Definition storage_vars_rel_def:
   storage_vars_rel cenv (cx:evaluation_context) ⇔
-    (∀ name (slot:bytes32).
-       FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
+    (∀ src name (slot:bytes32).
+       FLOOKUP cenv.ce_module_vars (src, name) =
          SOME (StorageLoc slot) ⇒
        (* Interpreter layout maps (src_id_opt, name) → slot_num : num.
           Compile env stores slot as bytes32. Relation: n2w slot_num = slot. *)
-       ∃ slot_num. lookup_var_slot_from_layout cx F cenv.ce_module name = SOME slot_num ∧
+       ∃ slot_num. lookup_var_slot_from_layout cx F src name = SOME slot_num ∧
                    n2w slot_num = slot) ∧
     (∀ src ts name d id slot_num.
        get_module_code cx src = SOME ts ∧
@@ -542,10 +542,10 @@ End
 (* Transient storage variables: same as storage_vars_rel but for transient. *)
 Definition transient_vars_rel_def:
   transient_vars_rel cenv (cx:evaluation_context) ⇔
-    (∀ name (slot:bytes32).
-       FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
+    (∀ src name (slot:bytes32).
+       FLOOKUP cenv.ce_module_vars (src, name) =
          SOME (TransientLoc slot) ⇒
-       ∃ slot_num. lookup_var_slot_from_layout cx T cenv.ce_module name = SOME slot_num ∧
+       ∃ slot_num. lookup_var_slot_from_layout cx T src name = SOME slot_num ∧
                    n2w slot_num = slot) ∧
     (∀ src ts name d id slot_num.
        get_module_code cx src = SOME ts ∧
