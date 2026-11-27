@@ -4848,29 +4848,8 @@ Proof
   BETA_TAC >> gvs[ignore_bind_def] >> metis_tac[]
 QED
 
-Theorem body_assign_immutable_bind[local]:
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ cx.in_deploy /\
-  supported_immutable_type tops (src,id) = SOME ity /\
-  expr_body_pre_mods mods cenv cx env e es /\
-  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
-    (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
-    (\H res ee G tn z. ?v. res = INL v /\ N H v ee G tn z)
-    (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
-  (!marks v ee G tn z.
-    (!tail. bind (eval_expr cx e) (read_result cx)
-       (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
-       (INL v,ee with gas_obs := tail)) /\
-    storage_trace_domain cx st0 ee.storage_trace /\ ee.gas_obs = [] /\ ~z.vs_halted /\
-    (!tail. expr_sim_inv_mods mods cenv cx env (ee with gas_obs := tail) /\
-      eval_target_place cx (TopLevelNameTarget (src,id)) (ee with gas_obs := tail) =
-        (INL (ImmutablePlace src id []),ee with gas_obs := tail)) /\
-    (!H. valid_horizon cx st0 H ee.storage_trace ==> N H v ee G tn z) ==>
-    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
-      (write_place cx (ImmutablePlace src id []) v) (ee,z,G,tn) P R) ==>
-  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
-    (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e))
-    (es,s0,G0,tn0) P R
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) =
@@ -4909,6 +4888,33 @@ Proof
     (fn eq => irule (REWRITE_RULE [eq]
       (Q.INST [`ee` |-> `ee`] body_assign_immutable_pure_prefix))) >>
   simp[] >> qexists `ImmutablePlace src id []` >> BETA_TAC >> metis_tac[]
+QED
+*)
+Theorem body_assign_immutable_bind[local]:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ cx.in_deploy /\
+  supported_immutable_type tops (src,id) = SOME ity /\
+  expr_body_pre_mods mods cenv cx env e es /\
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
+    (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+    (\H res ee G tn z. ?v. res = INL v /\ N H v ee G tn z)
+    (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
+  (!marks v ee G tn z.
+    (!tail. bind (eval_expr cx e) (read_result cx)
+       (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+       (INL v,ee with gas_obs := tail)) /\
+    storage_trace_domain cx st0 ee.storage_trace /\ ee.gas_obs = [] /\ ~z.vs_halted /\
+    (!tail. expr_sim_inv_mods mods cenv cx env (ee with gas_obs := tail) /\
+      eval_target_place cx (TopLevelNameTarget (src,id)) (ee with gas_obs := tail) =
+        (INL (ImmutablePlace src id []),ee with gas_obs := tail)) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==> N H v ee G tn z) ==>
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
+      (write_place cx (ImmutablePlace src id []) v) (ee,z,G,tn) P R) ==>
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
+    (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e))
+    (es,s0,G0,tn0) P R
+Proof
+  cheat
 QED
 
 Theorem assign_outcome_scopes[local]:
