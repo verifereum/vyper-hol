@@ -24,10 +24,11 @@ Theorem ecmul_payload_callback:
     regions_disjoint (w2n bw) 96 b sz) /\
   (!aid b sz. aid < sc.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
     regions_disjoint (w2n bw) 96 b sz) /\
-  (cenv.ce_is_ctor ==> !name tv iv off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src_id name tv iv off.
+    (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+    FLOOKUP cenv.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
+      | SOME imms => get_source_immutables src_id imms) name = SOME (tv,iv) ==>
     regions_disjoint (w2n bw) 96 off (type_memory_size tv)) /\
   FLOOKUP s.vs_allocas sc.cs_next_id = SOME (w2n bw,96) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -80,10 +81,11 @@ Theorem ecadd_payload_callback:
     regions_disjoint (w2n bw) 128 b sz) /\
   (!aid b sz. aid < sc.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
     regions_disjoint (w2n bw) 128 b sz) /\
-  (cenv.ce_is_ctor ==> !name tv iv off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src_id name tv iv off.
+    (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+    FLOOKUP cenv.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
+      | SOME imms => get_source_immutables src_id imms) name = SOME (tv,iv) ==>
     regions_disjoint (w2n bw) 128 off (type_memory_size tv)) /\
   FLOOKUP s.vs_allocas sc.cs_next_id = SOME (w2n bw,128) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\

@@ -300,16 +300,17 @@ Proof
   `MEM (mk_inst sf.cs_next_id ALLOCA [Lit (n2w 128)]
        [STRING #"%" (toString sf.cs_next_var)]) (fn_insts func)` by
     metis_tac[buffer_alloc_code] >>
-  `(cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  `(cenv.ce_is_ctor ==> !src_id name tv iv off.
+     (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+     FLOOKUP cenv.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src_id imms) name =
        SOME (tv,iv) ==>
      regions_disjoint (w2n wi) 128 off (type_memory_size tv))` by
     (qpat_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ _ s1`
        (fn ssr => let
           val horizon = hd (snd (strip_comb (concl ssr)));
-          val th = precompile_alloca_immutable_disjoint;
+          val th = precompile_alloca_immutable_disjoint_source;
           val hv = valOf (List.find (fn v => fst (dest_var v) = "H")
             (free_vars (concl th)));
           val typed = INST_TYPE (match_type (type_of hv) (type_of horizon)) th;

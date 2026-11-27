@@ -157,16 +157,17 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts sa sb) s1` by
     (irule ecrecover_input_stores_mem >> goal_assum (drule_at Any) >> simp[]) >>
   `sf.cs_next_id <= sa.cs_next_id` by decide_tac >>
-  `cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+  `cenv.ce_is_ctor ==> !src_id name tv iv off.
+     (src_id = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src_id)) /\
+     FLOOKUP cenv.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src_id imms) name =
        SOME (tv,iv) ==>
      regions_disjoint (w2n wi) 128 off (type_memory_size tv)` by
     (match_mp_tac (Q.INST
        [`s` |-> `s1`, `inst` |-> `mk_inst sf.cs_next_id ALLOCA [Lit 128w]
          [STRING #"%" (toString sf.cs_next_var)]`]
-       precompile_alloca_immutable_disjoint) >> simp[mk_inst_def]) >>
+       precompile_alloca_immutable_disjoint_source) >> simp[mk_inst_def]) >>
   `!aid b len. aid < sf.cs_next_id /\
      FLOOKUP s1.vs_allocas aid = SOME (b,len) ==>
      regions_disjoint (w2n wi) 128 b len` by
