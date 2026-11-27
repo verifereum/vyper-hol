@@ -87,7 +87,7 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem assign_local_reached_memory_outcome_mods:
+Theorem assign_local_reached_memory_outcome_with_raw_mods:
   target_root bt = NameTarget id /\
   type_place_target env bt = SOME (Type dty) /\
   type_stmt env ret_ty (Assign (BaseTarget bt) e) = SOME env' /\
@@ -97,7 +97,20 @@ Theorem assign_local_reached_memory_outcome_mods:
   (!i se. MEM i (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env se ==>
      expr_body_pre_mods mods cenv cx env i se) /\
   exports_ok cx.layouts cx.txn.target mods exps /\
-  IS_SOME (check_contract F cx.layouts cx.txn.target mods) /\
+  (!vv entry p cap b off ptv dw ff.
+     saved = SOME vv /\ ~expr_can_mutate cenv (target_to_expr bt) /\
+     ^here st z Gz tz /\ write_place cx (MemoryPlace id path) v ee = (INL (),ff) ==>
+     ?opd cur sw s G tn.
+       unwrap_value cenv vv st = (opd,cur) /\
+       compile_assign_value cenv (FST dst) LocMemory opd (is_word_type dty)
+         (vv_location vv) dty (lowered_value_type cenv e)
+         (type_memory_bytes cenv dty) cur = ((),sb) /\
+       (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+           (z,Gz,tz) [] (OK s,G,tn)) /\
+       ^here cur s G tn /\
+       local_assign_store_source_mods cenv cx e vv (dty,ptv) v (FST dst,dw)
+         (opd,sw) sa ee cur s G tn) /\
   body_const_cells_agree_mods mods cx env es /\
   EVERY (source_body_call_supported cx) (int_calls_target bt) /\
   EVERY (\k. MEM k (linked_live_functions mods exps)) (int_calls_target bt) /\
@@ -153,7 +166,7 @@ Proof
   rename1 `SOME vv` >> suspend "operand"
 QED
 
-Resume assign_local_reached_memory_outcome_mods[operand]:
+Resume assign_local_reached_memory_outcome_with_raw_mods[operand]:
   `?opd cur sw s G tn.
       unwrap_value cenv vv st = (opd,cur) /\
       compile_assign_value cenv (FST dst) LocMemory opd (is_word_type dty)
@@ -170,11 +183,11 @@ Resume assign_local_reached_memory_outcome_mods[operand]:
          disch_then (qspecl_then [`shadow_ctx`,`PG`]
            (qx_choosel_then [`opd`,`cur`,`s`,`G`,`tn`,`sw`] strip_assume_tac)) >>
          qexistsl_tac [`opd`,`cur`,`sw`,`s`,`G`,`tn`] >> asm_rewrite_tac[]) >>
-     irule assign_local_raw_operand_at_store_mods >>
-     qhdtm_assum `qualified_assign_rhs_reached_mods` (irule_at Any) >>
-     qhdtm_assum `qualified_assign_target_reached_mods` (irule_at Any) >>
-     qhdtm_assum `qualified_assign_code_mods` (irule_at Any) >>
-     simp[] >> qexistsl_tac [`tops`,`src`,`shadow_func`,`exps`] >> simp[]) >>
+     qpat_assum `!vv entry p cap b off ptv dw ff. _` irule >>
+     qpat_assum `local_assign_here_mods _ _ _ _ _ _ _ _ ee st z Gz tz`
+       (irule_at Any) >>
+     qpat_assum `write_place _ _ _ _ = (INL (),_)` (irule_at Any) >>
+     simp[]) >>
   rename1 `unwrap_value cenv vv st = (opd,cur)` >>
   `fn_has_code cur sb func` by
     (`cs_extends st cur` by
@@ -217,7 +230,7 @@ Resume assign_local_reached_memory_outcome_mods[operand]:
   suspend "widen"
 QED
 
-Resume assign_local_reached_memory_outcome_mods[layout]:
+Resume assign_local_reached_memory_outcome_with_raw_mods[layout]:
   pure_rewrite_tac[local_assign_normal_at_cut_mods] >>
   irule (BETA_RULE assign_local_layout_install_at_path_mods) >>
   rpt (first_assum (irule_at Any)) >> simp[] >>
@@ -235,7 +248,7 @@ Resume assign_local_reached_memory_outcome_mods[layout]:
   strip_tac >> gvs[]
 QED
 
-Resume assign_local_reached_memory_outcome_mods[widen]:
+Resume assign_local_reached_memory_outcome_with_raw_mods[widen]:
   qpat_assum `~is_word_type dty` (fn nw =>
     qpat_assum `local_assign_store_source_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _`
       (strip_assume_tac o SRULE [local_assign_store_source_mods_def,LET_THM,nw])) >>
@@ -352,4 +365,62 @@ Resume assign_local_reached_memory_outcome_mods[widen]:
   first_assum ACCEPT_TAC
 QED
 
-Finalise assign_local_reached_memory_outcome_mods
+Finalise assign_local_reached_memory_outcome_with_raw_mods
+
+Theorem assign_local_reached_memory_outcome_mods:
+  target_root bt = NameTarget id /\
+  type_place_target env bt = SOME (Type dty) /\
+  type_stmt env ret_ty (Assign (BaseTarget bt) e) = SOME env' /\
+  type_widens_to env.type_defs (expr_type e) dty /\
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
+  expr_body_pre_mods mods cenv cx env e es /\
+  (!i se. MEM i (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env se ==>
+     expr_body_pre_mods mods cenv cx env i se) /\
+  exports_ok cx.layouts cx.txn.target mods exps /\
+  IS_SOME (check_contract F cx.layouts cx.txn.target mods) /\
+  body_const_cells_agree_mods mods cx env es /\
+  EVERY (source_body_call_supported cx) (int_calls_target bt) /\
+  EVERY (\k. MEM k (linked_live_functions mods exps)) (int_calls_target bt) /\
+  (!H. dead_lo_ok_mods H (DF H) lo cenv cx) /\
+  fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
+  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
+  ~block_is_terminated sa /\ return_buf_sep d cenv es s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\ storage_well_formed_on cx es (FST H)) /\
+  gas_admissible (eval_stmt cx (Assign (BaseTarget bt) e)) (stmt_res_ok lctx) es /\
+  qualified_assign_code_mods cenv bt e sa sb shadow_sa shadow_sb saved sr st
+    shadow_sr shadow_st dst /\
+  qualified_assign_rhs_reached_mods cx st0 e es s0 ^rhs_post ms v mid Gu tu u /\
+  qualified_assign_target_reached_mods (DF,lo,d,ctx,func) cenv cx st0 bt dty
+    mid sr st dst u Gu tu marks (MemoryPlace id path) ee Gz tz z /\
+  dst = (FST dst,SOME LocMemory,SOME (ValPT dty)) /\
+  (?entry old. lookup_scopes id ee.scopes = SOME entry /\
+       evaluate_subscripts entry.type entry.value path = INL old) /\
+  (!bw capacity. d = SOME (bw,capacity) ==> allocas_from (w2n bw + capacity) z) /\
+  ~block_is_terminated st ==>
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (write_place cx (MemoryPlace id path) v) (ee,z,Gz,tz)
+    ^normal
+    (\H res ee gt r.
+       (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+       halt_exit H cx ee res r /\
+       (ctx_has_dalloca ctx ==> !s.
+          (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
+Proof
+  strip_tac >> irule assign_local_reached_memory_outcome_with_raw_mods >>
+  qhdtm_assum `qualified_assign_rhs_reached_mods` (irule_at Any) >>
+  qhdtm_assum `qualified_assign_target_reached_mods` (irule_at Any) >>
+  qhdtm_assum `qualified_assign_code_mods` (irule_at Any) >>
+  qhdtm_assum `type_stmt` (irule_at Any) >>
+  qhdtm_assum `module_body_inv` (irule_at Any) >>
+  qpat_assum `fn_has_code shadow_sa shadow_sb shadow_func` (irule_at Any) >>
+  qexistsl_tac [`old`,`exps`,`entry`] >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `saved = SOME _` SUBST_ALL_TAC >>
+  irule assign_local_raw_operand_at_store_mods >>
+  qhdtm_assum `qualified_assign_rhs_reached_mods` (irule_at Any) >>
+  qhdtm_assum `qualified_assign_target_reached_mods` (irule_at Any) >>
+  qhdtm_assum `qualified_assign_code_mods` (irule_at Any) >>
+  simp[] >> qexistsl_tac [`tops`,`src`,`shadow_func`,`exps`] >> simp[]
+QED
