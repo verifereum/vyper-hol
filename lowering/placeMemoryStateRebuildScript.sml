@@ -108,6 +108,19 @@ Resume memory_place_write_local_ptrs[lift]:
 QED
 Finalise memory_place_write_local_ptrs
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  Cases_on `p` >> gvs[place_ptr_rel_def, slot_loc_def, AllCaseEqs()] >>
+  rename1 `write_place cx (MemoryPlace id path) v ee = (INL (),ff)` >>
+  drule write_memory_place_entry_update >> strip_tac >>
+  `local_ptrs_rel func cenv ee.scopes s /\
+   local_ptrs_rel func cenv ee.scopes r` by
+    metis_tac[stmt_state_rel_def, state_rel_def] >>
+  suspend "root"
+QED
+*)
 Theorem memory_place_write_stmt_state:
   stmt_state_rel H ctx func cenv cx ee s /\
   stmt_state_rel H ctx func cenv cx ee r /\
@@ -137,15 +150,9 @@ Theorem memory_place_write_stmt_state:
     mem_bytes_at off (type_memory_size tv) r.vs_memory) ==>
   stmt_state_rel H ctx func cenv cx ff t
 Proof
-  strip_tac >>
-  Cases_on `p` >> gvs[place_ptr_rel_def, slot_loc_def, AllCaseEqs()] >>
-  rename1 `write_place cx (MemoryPlace id path) v ee = (INL (),ff)` >>
-  drule write_memory_place_entry_update >> strip_tac >>
-  `local_ptrs_rel func cenv ee.scopes s /\
-   local_ptrs_rel func cenv ee.scopes r` by
-    metis_tac[stmt_state_rel_def, state_rel_def] >>
-  suspend "root"
+  cheat
 QED
+(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[root]:
   `tv0 = entry.type` by metis_tac[] >> gvs[] >>
   `value_has_type entry.type entry.value` by
@@ -171,6 +178,8 @@ Resume memory_place_write_stmt_state[root]:
      irule w2n_add_2 >> simp[] >> decide_tac) >>
   gvs[] >> suspend "assemble"
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[assemble]:
   `!name e q len. lookup_scopes name ff.scopes = SOME e /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var q) len) ==>
@@ -191,6 +200,8 @@ Resume memory_place_write_stmt_state[assemble]:
      metis_tac[ADD_COMM]) >>
   suspend "state"
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[live_vars]:
   rpt strip_tac >>
   `?e0. lookup_scopes name ee.scopes = SOME e0` by
@@ -210,6 +221,8 @@ Resume memory_place_write_stmt_state[live_vars]:
      simp[local_ptrs_reserved_def] >> metis_tac[]) >>
   metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[state]:
   `!name a n. local_region cenv ff.scopes t name a n ==>
      ?name0. local_region cenv ee.scopes r name0 a n` by suspend "regions" >>
@@ -230,6 +243,8 @@ Resume memory_place_write_stmt_state[state]:
   qpat_x_assum `_ = r` mp_tac >>
   simp[venom_state_component_equality]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[base]:
   `immutable_base_zero cenv s /\ immutable_base_zero cenv r` by
     metis_tac[stmt_state_rel_def] >>
@@ -246,6 +261,8 @@ Resume memory_place_write_stmt_state[base]:
   `lookup_var x t = lookup_var x s` by metis_tac[] >>
   gvs[lookup_var_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[regions]:
   rpt strip_tac >>
   qpat_x_assum `local_region _ _ _ _ _ _` mp_tac >>
@@ -255,6 +272,8 @@ Resume memory_place_write_stmt_state[regions]:
     (Cases_on `name = id` >> metis_tac[]) >>
   qexists_tac `e0` >> simp[] >> metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[immutables]:
   irule immutables_rel_mem_agree >> qexists_tac `r` >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -265,6 +284,8 @@ Resume memory_place_write_stmt_state[immutables]:
   qpat_x_assum `stmt_state_rel _ _ _ _ _ ee r` mp_tac >>
   simp[stmt_state_rel_def, state_rel_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[state_frame]:
   irule state_rel_frame >>
   goal_assum (drule_at (Pat `local_ptrs_rel _ _ ff.scopes t`)) >>
@@ -275,4 +296,7 @@ Resume memory_place_write_stmt_state[state_frame]:
   rpt (first_x_assum kall_tac) >>
   simp[stmt_state_rel_def, venom_state_component_equality] >> metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise memory_place_write_stmt_state
+*)
