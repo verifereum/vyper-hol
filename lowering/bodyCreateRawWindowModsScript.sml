@@ -9,7 +9,7 @@ Ancestors
   bodyFullPostsMods bodyFullShadowBodyInv bodyMemoryDefs bodyPtrDefs
   fragGasOriginPtr fragExec freshWrites stateFrame
   venomExecSemantics venomInst venomState ptrDiscipline words arithmetic list finite_map
-  vyperStorageFootprint loweringPosts
+  vyperStorageFootprint loweringPosts bodyAbiTupleBufferResourcesMods bodyAbiTupleBufferStateMods
 
 Theorem raw_total_length_step[local]:
   emit_op ADD [left;right] a = (dst,b) /\ fn_has_code a b func /\
@@ -244,3 +244,155 @@ Proof
   `w2n (n2w (pbase + 32) :bytes32) = pbase + 32` by simp[w2n_n2w] >>
   drule_all (Q.INST [`off` |-> `32`] raw_create_owned_window_frame) >> simp[]
 QED
+
+
+(* linked length endpoint companion *)
+Theorem raw_create_total_window_linked_mods:
+  !root len sm dst st func ce rows alen en total_op sb initial lo explicit
+  ctx PG Gi ti z Gz tz cx st0 ee DF d se s G tn shared pbase capacity bs args_bytes.
+  emit_op ADD [Var root;len] sm = (Var dst,st) /\ fn_has_code sm st func /\
+  compile_abi_encode_values_to_buf ce (Var dst) rows st = (alen,en) /\
+  fn_has_code st en func /\ emit_op ADD [len;alen] en = (total_op,sb) /\ fn_has_code en sb func /\
+  initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (initial,Gi,ti) [] (OK z,Gz,tz)) /\
+  abi_tuple_buffer_state_mods ctx func ce cx st0 ee DF lo d se s G tn
+    shared pbase capacity root dst (LENGTH bs) bs en z Gz tz /\
+  local_ptrs_reserved ce se /\ fn_inst_ids_distinct func /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
+  return_buf_frame d ce se s /\
+  (!x. len = Var x ==> not_fresh_at se x) /\ (!l. len <> Label l) /\
+  eval_operand len s = SOME (n2w (LENGTH bs)) /\ op_taint tn len = {} /\ op_prov G len = NONE /\
+  eval_operand alen z = SOME (n2w (LENGTH args_bytes)) /\ op_taint tz alen = {} /\
+  LENGTH bs + LENGTH args_bytes <= capacity /\
+  read_memory pbase (LENGTH (bs ++ args_bytes)) z = bs ++ args_bytes /\
+  (!i. pbase <= i /\ i < pbase + LENGTH (bs ++ args_bytes) ==> i NOTIN tz.t_mem) ==> 
+  ?out t gf tf. total_op = Var out /\ not_fresh_at sb out /\ not_fresh_at sb root /\
+    shared < sb.cs_next_id /\ FLOOKUP t.vs_allocas shared = SOME (pbase,capacity) /\
+    lookup_var root t = SOME (n2w pbase) /\ ptr_covers gf tf root t capacity /\
+    pbase + capacity <= t.vs_alloca_next /\ pbase + capacity < dimword (:256) /\
+    LENGTH (bs ++ args_bytes) <= capacity /\ LENGTH (bs ++ args_bytes) < dimword (:256) /\
+    eval_operand total_op t = SOME (n2w (LENGTH (bs ++ args_bytes))) /\
+    op_taint tf total_op = {} /\ op_prov gf total_op = NONE /\
+    read_memory pbase (LENGTH (bs ++ args_bytes)) t = bs ++ args_bytes /\
+    (!i. pbase <= i /\ i < pbase + LENGTH (bs ++ args_bytes) ==> i NOTIN tf.t_mem) /\
+    wb_frame ce ee ee se s t /\ ghost_kept_at lo ce ee se G tn s gf tf /\
+    return_buf_frame d ce sb t /\ alloca_history func t /\ allocas_from lo t /\
+    lo <= t.vs_alloca_next /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func ce cx ee t /\ storage_well_formed_on cx ee (FST H) /\
+      ghost_inv_at_mods (DF H) lo d ce cx ee gf tf t /\
+      immutable_frame_mods func ce cx ee t) /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (z,Gz,tz) [] (OK t,gf,tf))
+Proof
+  rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  drule abi_tuple_buffer_resources_mods >>
+  (impl_tac >- (qexists `storage_trace_horizon ee.storage_trace` >> first_assum ACCEPT_TAC)) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qhdtm_x_assum `abi_tuple_buffer_state_mods`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [abi_tuple_buffer_state_mods_def]) >>
+  `op_prov Gz alen = NONE` by
+    (qpat_assum `!D. gas_origin_ptr_path _ (initial,Gi,ti) [] _`
+       (qspec_then `DF (storage_trace_horizon ee.storage_trace)` assume_tac) >>
+     irule create_encoded_length_no_prov >>
+     qpat_assum `emit_op ADD [Var root;len] sm = (Var dst,st)` (irule_at Any) >>
+     qpat_assum `compile_abi_encode_values_to_buf _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `gas_origin_ptr_path _ (initial,Gi,ti) [] (OK z,Gz,tz)` (irule_at Any) >> simp[]) >>
+  `eval_operand len z = SOME (n2w (LENGTH bs)) /\ op_taint tz len = {} /\ op_prov Gz len = NONE` by
+    (Cases_on `len` >> gvs[wb_frame_def,ghost_kept_at_def,eval_operand_def,op_taint_def,op_prov_def] >>
+     metis_tac[]) >>
+  `pbase + capacity <= z.vs_alloca_next` by
+    (irule allocaSiteResourceTheory.alloca_site_registered_below >> conj_tac
+     >- first_assum ACCEPT_TAC >> qexists `shared` >> first_assum ACCEPT_TAC) >>
+  `pbase + capacity < dimword (:256)` by
+    (irule LESS_EQ_LESS_TRANS >> qexists `z.vs_alloca_next` >>
+     simp[] >> drule_all_then ACCEPT_TAC alloca_room_next_lt) >>
+  `LENGTH (bs ++ args_bytes) < dimword (:256)` by
+    (qpat_assum `pbase+capacity < _` mp_tac >> qpat_assum `LENGTH bs + LENGTH args_bytes <= capacity` mp_tac >>
+     rewrite_tac[LENGTH_APPEND] >> numLib.ARITH_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp z` by metis_tac[] >>
+  drule_all raw_total_length_step >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  suspend "finish"
+QED
+
+Resume raw_create_total_window_linked_mods[finish]:
+  rename1 `op_prov gf total_op = NONE` >>
+  rename1 `op_taint tf total_op = {}` >>
+  `ci_mono en sb` by (qspecl_then [`ADD`,`[len;alen]`,`en`] mp_tac ci_mono_emit_op >> simp[]) >>
+  `en.cs_next_var <= sb.cs_next_var /\ en.cs_next_id <= sb.cs_next_id` by fs[ci_mono_def] >>
+  `t.vs_memory = z.vs_memory /\ t.vs_data_section = z.vs_data_section /\
+   t.vs_allocas = z.vs_allocas /\ t.vs_alloca_next = z.vs_alloca_next /\
+   t.vs_call_ctx = z.vs_call_ctx /\ t.vs_accounts = z.vs_accounts /\
+   t.vs_transient = z.vs_transient /\ t.vs_immutables = z.vs_immutables /\
+   ~t.vs_halted /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+   allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+   state_frame t = state_frame (z with vs_inst_idx := t.vs_inst_idx)` by
+    (qpat_assum `t = _` SUBST1_TAC >>
+     simp[update_var_def,allocas_from_def,allocas_below_fmp_def,state_frame_def]) >>
+  `lookup_var root t = SOME (n2w pbase) /\ ptr_covers gf tf root t capacity` by
+    (qpat_assum `!x. not_fresh_at en x ==> _`
+       (qspec_then `root` (drule_then strip_assume_tac)) >>
+     conj_tac >- fs[eval_operand_def] >>
+     irule ptr_covers_lookup_frame >>
+     qpat_assum `ptr_covers Gz tz root z capacity` (irule_at Any) >> simp[]) >>
+  `!x. not_fresh_at se x ==> not_fresh_at en x` by metis_tac[not_fresh_at_mono] >>
+  `wb_frame ce ee ee se s t` by
+    (irule wb_frame_readonly_tail >> qpat_assum `wb_frame ce ee ee se s z` (irule_at Any) >>
+     qexists `en` >> simp[IgnAsm `t = _`] >> rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at en x ==> _` (drule_then strip_assume_tac) >> simp[]) >>
+  `ghost_kept_at lo ce ee se G tn s gf tf` by
+    (irule ghost_kept_at_clean_suffix >>
+     qpat_assum `ghost_kept_at lo ce ee se G tn s Gz tz` (irule_at Any) >>
+     simp[] >> rpt strip_tac >>
+     qpat_assum `!x. not_fresh_at se x ==> not_fresh_at en x` (drule_then assume_tac) >>
+     qpat_assum `!x. not_fresh_at en x ==> _` (drule_then strip_assume_tac) >> simp[]) >>
+  `se.cs_next_var <= sb.cs_next_var` by (irule LESS_EQ_TRANS >> qexists `en.cs_next_var` >> simp[]) >>
+  `return_buf_frame d ce sb t` by
+    (irule return_buf_frame_frame >>
+     qpat_assum `return_buf_frame d ce se s` (irule_at Any) >>
+     simp[IgnAsm `t = _`] >> rpt strip_tac >>
+     irule wb_frame_vars >> qexistsl [`ce`,`ee`,`ee`,`s`,`se`] >> simp[]) >>
+  `alloca_history func t` by
+    (irule body_full_path_alloca_history >>
+     qpat_assum `!D. gas_origin_ptr_path _ (z,Gz,tz) [] (OK t,gf,tf)`
+       (qspec_then `DF (storage_trace_horizon ee.storage_trace)` (irule_at Any)) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `local_ptrs_reserved ce en` by metis_tac[local_ptrs_reserved_next_var] >>
+  `(!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at en x) /\
+   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at en x)` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func ce cx ee t /\ storage_well_formed_on cx ee (FST H) /\
+    ghost_inv_at_mods (DF H) lo d ce cx ee gf tf t /\ immutable_frame_mods func ce cx ee t` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ _ z /\ _` (drule_then strip_assume_tac) >>
+     conj_tac
+     >- (irule stmt_state_rel_old_vars_frame_ptr >> qpat_assum `state_frame t = _` (irule_at Any) >>
+         qexists `en` >> simp[IgnAsm `t = _`]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (irule ghost_inv_at_mods_exterior_frame >>
+         qpat_assum `ghost_inv_at_mods (DF H) _ _ _ _ _ _ _ z` (irule_at Any) >>
+         qexists `en` >> simp[IgnAsm `t = _`]) >>
+     irule immutable_frame_mods_exterior_frame >>
+     qpat_assum `immutable_frame_mods func ce cx ee z` (irule_at Any) >>
+     qexists `en` >> simp[IgnAsm `t = _`]) >>
+  `not_fresh_at sb root` by metis_tac[not_fresh_at_mono] >>
+  `shared < sb.cs_next_id` by (irule LESS_LESS_EQ_TRANS >> qexists `en.cs_next_id` >> simp[]) >>
+  `read_memory pbase (LENGTH (bs ++ args_bytes)) t = bs ++ args_bytes` by
+    fs[IgnAsm `t = _`,read_memory_def] >>
+  qexistsl [`out`,`t`,`gf`,`tf`] >>
+  simp[IgnAsm `t = _`,LENGTH_APPEND,word_add_n2w] >>
+  rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ t /\ _`
+    (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC
+QED
+
+Finalise raw_create_total_window_linked_mods
