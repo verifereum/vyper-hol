@@ -143,25 +143,6 @@ Proof
   simp[abi_encoder_registered_effect_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `local_ptrs_rel func cenv vs.scopes initial /\
-   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs initial` by
-    fs[state_rel_def] >>
-  `local_ptrs_rel func cenv vs.scopes actual` by
-    (irule local_ptrs_rel_mem_agree >> qexists `initial` >> simp[] >> metis_tac[]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs actual` by
-    (irule immutables_rel_mem_agree >> qexists `initial` >>
-     fs[abi_encode_exec_frame_def] >> metis_tac[]) >>
-  drule_all abi_encode_caller_world_fields >> strip_tac >>
-  drule abi_encode_framed_semantic_fields >> strip_tac >>
-  irule state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`vs`, `initial`] >>
-  gvs[abi_encode_exec_frame_def]
-QED
-*)
 Theorem abi_encode_caller_state_rel:
   state_rel (H:(bool # bytes32 # type_value) list # num list) func cenv cx vs initial /\
   abi_encode_exec_frame observer initial actual /\
@@ -181,15 +162,34 @@ Theorem abi_encode_caller_state_rel:
   initial.vs_alloca_next <= actual.vs_alloca_next /\
   (!name b n. local_region cenv vs.scopes initial name b n ==>
     mem_bytes_at b n actual.vs_memory = mem_bytes_at b n initial.vs_memory) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME(ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src name tv v off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME(ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME(tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME(tv,v) ==>
     mem_bytes_at off (type_memory_size tv) actual.vs_memory =
       mem_bytes_at off (type_memory_size tv) initial.vs_memory) ==>
   state_rel H func cenv cx vs actual
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `local_ptrs_rel func cenv vs.scopes initial` by fs[state_rel_def] >>
+  `local_ptrs_rel func cenv vs.scopes actual` by
+    (irule local_ptrs_rel_mem_agree >> qexists `initial` >> simp[] >> metis_tac[]) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor vs actual` by
+    (gen_tac >> disch_tac >>
+     irule immutables_rel_mem_agree >> qexists `initial` >>
+     simp[abi_encode_exec_frame_def] >>
+     qpat_assum `abi_encode_exec_frame observer initial actual`
+       (strip_assume_tac o REWRITE_RULE [abi_encode_exec_frame_def]) >>
+     simp[] >> reverse conj_tac
+     >- metis_tac[state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+     rpt strip_tac >> metis_tac[]) >>
+  drule_all abi_encode_caller_world_fields >> strip_tac >>
+  drule abi_encode_framed_semantic_fields >> strip_tac >>
+  irule state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`vs`, `initial`] >>
+  gvs[abi_encode_exec_frame_def] >> first_assum ACCEPT_TAC
 QED
 
 Theorem abi_encode_caller_resource_room:
