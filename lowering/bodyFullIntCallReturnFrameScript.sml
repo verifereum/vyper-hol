@@ -418,26 +418,6 @@ QED
 Finalise intcall_return_ghost_kept
 *)
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt strip_tac >>
-  `stmt_state_rel H ctx func cenv cx (es1 with scopes := prev) t /\
-   expr_sim_inv cenv cx tenv (es1 with scopes := prev)` by
-    fs[intcall_entry_full_def] >>
-  `state_rel H func cenv cx (out with scopes := []) cs /\
-   ir.iret_adopt_fmp = NONE` by
-    (fs[intcall_callee_exit_full_def, bodyIntCallSeamsTheory.intcall_callee_exit_def,
-        exprSimDefsTheory.expr_exit_def] >> gvs[]) >>
-  drule invoke_return_frame >> strip_tac >>
-  irule stmt_state_rel_allocas_frame >>
-  conj_tac >- suspend "base" >>
-  conj_tac >- suspend "immutable" >>
-  conj_tac >- suspend "state" >>
-  qexistsl [`es1 with scopes := prev`, `t`] >> simp[] >>
-  suspend "fmp"
-QED
-*)
 Theorem intcall_return_stmt_state_rel:
   !tops ctx cenv cx H DF lo sa mut nr rtv rc rb sm t tn v ee Gc tc ir cs
    outs returned out d func tenv name es vv s0 es0 G0 tn0 args ret ss rr prev penv es1 G
@@ -460,158 +440,173 @@ Theorem intcall_return_stmt_state_rel:
   (!x. MEM x outs ==> ~not_fresh_at sa x) ==>
   stmt_state_rel H ctx func cenv cx (out with scopes := prev) returned
 Proof
-  cheat
-QED
-(* SCRATCH MEASUREMENT: original continuation.
-Resume intcall_return_stmt_state_rel[state]:
-  `cs.vs_data_section = t.vs_data_section` by
-    (drule run_blocks_intret_data_section >>
-     gvs[venomExecSemanticsTheory.setup_callee_def, AllCaseEqs()]) >>
-  `local_ptrs_rel func cenv prev returned` by
-    (irule invoke_return_local_ptrs_rel >>
-     goal_assum (drule_at Any) >> simp[] >>
-     reverse conj_tac
-     >- (conj_tac
-         >- (simp[EVERY_MEM, loweringStateRelDefsTheory.not_local_ptr_def] >>
-             fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
-         drule stmt_state_rel_local_ptrs_alloca >> simp[]) >>
-     rpt strip_tac >>
-     rename1 `local_region cenv prev t name' b sz` >>
-     Cases_on `sz = 0`
-     >- gvs[valueEncodingDefsTheory.mem_bytes_at_def] >>
-     `b + sz <= t.vs_alloca_next` by
-       (drule stmt_state_rel_local_ptrs_alloca >> simp[] >> strip_tac >>
-        fs[loweringStateRelDefsTheory.local_ptrs_rel_def,
-           loweringStateRelDefsTheory.local_region_def] >>
-        first_x_assum drule_all >> strip_tac >> gvs[]) >>
-     `cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b` by
-       (strip_tac >>
-        `immutable_decl_sep cenv cx prev t.vs_vars t.vs_allocas t.vs_alloca_next` by
-          (drule return_stmt_immutable_sep >> simp[immutable_alloca_sep_def]) >>
-        irule intcall_local_immutable_prefix_disjoint >>
-        goal_assum (drule_at Any) >>
-        goal_assum (drule_at Any) >>
-        goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-     fs[intcall_callee_exit_full_def, bodyIntCallSeamsTheory.intcall_callee_exit_def,
-        exprSimDefsTheory.expr_exit_def] >>
-     sym_tac >> first_x_assum irule >> simp[] >> rpt strip_tac >>
-     fs[intcall_entry_full_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  drule_then (assume_tac o MATCH_MP contract_inv_cenv_modules) body_inv_contract >>
+  drule_then strip_assume_tac body_inv_module_locations >>
+  `stmt_state_rel H ctx func cenv cx (es1 with scopes := prev) t` by
+    fs[intcall_entry_full_def] >>
+  `expr_sim_inv cenv cx tenv (es1 with scopes := prev)` by
+    fs[intcall_entry_full_def] >>
+  `state_rel H func cenv cx (out with scopes := []) cs /\
+   ir.iret_adopt_fmp = NONE` by
+    (fs[intcall_callee_exit_full_def, bodyIntCallSeamsTheory.intcall_callee_exit_def,
+        exprSimDefsTheory.expr_exit_def] >> gvs[]) >>
+  drule_then strip_assume_tac invoke_return_frame >>
   qspecl_then [`ZIP (outs, ir.iret_values)`,
     `adopt_return_fmp ir (merge_callee_state t cs)`]
     strip_assume_tac foldl_update_var_frame >>
   `returned = (adopt_return_fmp ir (merge_callee_state t cs)) with vs_vars := vars` by
     (fs[venomExecSemanticsTheory.bind_outputs_def] >> metis_tac[]) >>
+  pop_assum $ mk_asm "returned_fields" >>
+  `immutable_alloca_sep func cenv cx (out with scopes := prev) returned` by
+    suspend "separation" >>
+  `state_rel H func cenv cx (out with scopes := prev) returned` by
+    suspend "state" >>
+  `immutable_base_zero cenv returned` by suspend "base" >>
+  `!src ts. ALOOKUP cenv.ce_modules src = SOME ts ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx
+       (out with scopes := prev) returned` by suspend "modules" >>
+  `returned.vs_fmp = t.vs_fmp /\ returned.vs_initial_fmp = t.vs_initial_fmp` by
+    (asm "returned_fields" (fn th =>
+       simp[th, venomExecSemanticsTheory.adopt_return_fmp_def,
+            venomExecSemanticsTheory.merge_callee_state_def])) >>
+  drule_then assume_tac step_inst_memory_length >>
+  irule stmt_state_rel_allocas_frame >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`es1 with scopes := prev`, `t`] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  simp[NoAsms] >> metis_tac[]
+QED
+
+Resume intcall_return_stmt_state_rel[separation]:
+  `immutable_metadata_frame es1 out` by suspend "metadata" >>
+  `!id b sz. local_region cenv prev returned id b sz ==>
+             local_region cenv prev t id b sz` by
+    (simp[loweringStateRelDefsTheory.local_region_def] >> rpt strip_tac >>
+     `not_fresh_at sa p` by
+       (fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
+     `~MEM p outs` by metis_tac[] >> metis_tac[]) >>
+  drule return_stmt_immutable_sep >> simp[immutable_alloca_sep_def] >>
+  strip_tac >>
+  conj_tac >- (gvs[immutable_decl_sep_alt] >> metis_tac[]) >>
+  rpt gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `FLOOKUP _ nm = SOME (ty,value)` >>
+  `?old. FLOOKUP
+      (case ALOOKUP es1.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables NONE imms) nm = SOME (ty,old)` by
+    (qpat_assum `immutable_metadata_frame _ _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                    vyperPlaceWriteSoundnessTheory.immutable_metadata_frame_value_lookup)) >>
+     disch_then (qspecl_then [`cx.txn.target`, `NONE`, `nm`, `ty`, `value`] mp_tac) >>
+     Cases_on `ALOOKUP out.immutables cx.txn.target` >>
+     Cases_on `ALOOKUP es1.immutables cx.txn.target` >>
+     gvs[vyperStateTheory.get_source_immutables_def]) >>
+  first_x_assum drule_all >> strip_tac >> metis_tac[]
+QED
+
+Resume intcall_return_stmt_state_rel[metadata]:
+  `out.immutables = ee.immutables` by
+    (qpat_x_assum `unlock_if_nr _ _ _ _ = _` mp_tac >>
+     simp[vyperInterpreterTheory.unlock_if_nr_def] >>
+     Cases_on `nr /\ mut <> View /\ mut <> Pure` >>
+     simp[vyperStateTheory.return_def] >>
+     Cases_on `cx.nonreentrant_slot` >> simp[vyperStateTheory.return_def] >>
+     metis_tac[vyperStatePreservationTheory.release_nonreentrant_lock_immutables]) >>
+  qpat_x_assum `intcall_callee_src _ _ _ _ _ _ = _` mp_tac >>
+  simp[bodyIntCallSeamsTheory.intcall_callee_src_def, Excl "lock_if_nr_def"] >>
+  Cases_on `lock_if_nr cx nr (is_view_mut mut) (es1 with gas_obs := obs)` >>
+  Cases_on `q` >>
+  gvs[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def, Excl "lock_if_nr_def"] >>
+  strip_tac >>
+  drule_then strip_assume_tac externalBodySupportTheory.external_body_lock_frame >>
+  rename1 `lock_if_nr _ _ _ _ = (INL (),locked)` >>
+  Cases_on `eval_stmts (cx with stk updated_by CONS (NONE,name)) ss locked` >>
+  rename1 `eval_stmts _ _ _ = (res,last)` >>
+  drule_then assume_tac (cj 2 eval_metadata_frame_mutual) >>
+  `last.immutables = out.immutables` by
+    (Cases_on `res` >>
+     gvs[vyperStateTheory.try_def, vyperStateTheory.ignore_bind_def,
+         vyperStateTheory.bind_def, vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+     rename1 `eval_stmts _ _ _ = (INR err,last)` >>
+     Cases_on `err` >>
+     gvs[vyperInterpreterTheory.handle_function_def,
+         vyperStateTheory.return_def, vyperStateTheory.raise_def]) >>
+  qpat_x_assum `immutable_metadata_frame locked last` mp_tac >>
+  `locked.immutables = es1.immutables` by fs[] >>
+  simp[immutable_metadata_frame_def] >> metis_tac[]
+QED
+
+Resume intcall_return_stmt_state_rel[state]:
+  `local_ptrs_rel func cenv prev t` by
+    (drule_then strip_assume_tac stmt_state_rel_local_ptrs_alloca >> fs[]) >>
+  `local_ptrs_rel func cenv prev returned` by suspend "locals" >>
   `cs.vs_call_ctx = t.vs_call_ctx /\ cs.vs_tx_ctx = t.vs_tx_ctx /\
-   cs.vs_block_ctx = t.vs_block_ctx /\ cs.vs_code = t.vs_code` by
-    (drule run_blocks_intret_fields >>
+   cs.vs_block_ctx = t.vs_block_ctx /\ cs.vs_code = t.vs_code /\
+   cs.vs_data_section = t.vs_data_section` by
+    (drule_then strip_assume_tac run_blocks_intret_fields >>
+     drule_then assume_tac run_blocks_intret_data_section >>
      gvs[venomExecSemanticsTheory.setup_callee_def, AllCaseEqs()]) >>
   irule state_rel_frame >>
   conj_tac >- (simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC) >>
   qexistsl [`out with scopes := []`, `cs`] >>
   drule state_rel_immutables_rel >>
-  simp[loweringStateRelDefsTheory.immutables_rel_def,
-       venomExecSemanticsTheory.adopt_return_fmp_def,
-       venomExecSemanticsTheory.merge_callee_state_def]
+  asm "returned_fields" (fn th =>
+    simp[th, venomExecSemanticsTheory.adopt_return_fmp_def,
+         venomExecSemanticsTheory.merge_callee_state_def,
+         loweringStateRelDefsTheory.immutables_rel_def,
+         ALOOKUP_def, AllCaseEqs()]) >>
+  rpt strip_tac >> gvs[]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
-Resume intcall_return_stmt_state_rel[immutable]:
-  `immutable_metadata_frame (es1 with scopes := prev) (out with scopes := prev)` by
-    (qpat_x_assum `intcall_callee_src _ _ _ _ _ _ = _` mp_tac >>
-     simp[bodyIntCallSeamsTheory.intcall_callee_src_def,
-          vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
-          vyperStateTheory.try_def, AllCaseEqs()] >>
-     rpt strip_tac >>
-     drule (cj 2 eval_metadata_frame_mutual) >>
-     qpat_x_assum `unlock_if_nr _ _ _ _ = _` mp_tac >>
-     gvs[vyperInterpreterTheory.unlock_if_nr_def,
-         vyperInterpreterTheory.lock_if_nr_def,
-         vyperStateTheory.bind_def, vyperStateTheory.return_def,
-         vyperStateTheory.raise_def, vyperStateTheory.check_not_static_def,
-         vyperStateTheory.check_def, vyperStateTheory.assert_def, AllCaseEqs()] >>
-     rpt strip_tac >>
-     TRY (rename1 `handle_function ex st = _` >> Cases_on `ex` >>
-          gvs[vyperInterpreterTheory.handle_function_def,
-              vyperStateTheory.return_def, vyperStateTheory.raise_def]) >>
-     Cases_on `nr` >>
-     Cases_on `cx.nonreentrant_slot` >>
-     Cases_on `mut = View \/ mut = Pure` >>
-     gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-         vyperStateTheory.raise_def, vyperStateTheory.assert_def, AllCaseEqs()] >>
-     imp_res_tac vyperStatePreservationTheory.acquire_nonreentrant_lock_immutables >>
-     imp_res_tac vyperStatePreservationTheory.release_nonreentrant_lock_immutables >>
-     gvs[immutable_metadata_frame_def] >> metis_tac[]) >>
-  `!nm tv iv. FLOOKUP
-     (case ALOOKUP out.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) nm = SOME (tv,iv) ==>
-     ?old. FLOOKUP
-     (case ALOOKUP es1.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) nm = SOME (tv,old)` by
-    (gvs[immutable_metadata_frame_def] >> rpt strip_tac >>
-     Cases_on `ALOOKUP out.immutables cx.txn.target` >> gvs[] >>
-     rename1 `FLOOKUP (get_source_immutables cenv.ce_module out_imms) nm =
-                SOME (tv,iv)` >>
-     Cases_on `ALOOKUP es1.immutables cx.txn.target` >> gvs[] >>
-     qpat_x_assum `!addr. IS_SOME _ <=> _`
-       (qspec_then `cx.txn.target` mp_tac) >> simp[] >>
-     rename1 `?old. FLOOKUP (get_source_immutables cenv.ce_module entry_imms)
-                        nm = SOME (tv,old)` >>
-     qpat_x_assum `!addr imms imms' src id. _`
-       (qspecl_then [`cx.txn.target`,`entry_imms`,`out_imms`,
-                     `cenv.ce_module`,`nm`] mp_tac) >>
-     simp[] >>
-     Cases_on `FLOOKUP (get_source_immutables cenv.ce_module entry_imms) nm`
-     >- simp[] >>
-     rename1 `FLOOKUP (get_source_immutables cenv.ce_module entry_imms) nm =
-                SOME entry_cell` >>
-     PairCases_on `entry_cell` >> simp[]) >>
-  `!id b sz. local_region cenv prev returned id b sz ==>
-             local_region cenv prev t id b sz` by
-    (simp[loweringStateRelDefsTheory.local_region_def] >> rpt strip_tac >>
-     `~MEM p outs` by
-       (fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
-     metis_tac[]) >>
-  drule return_stmt_immutable_sep >> simp[immutable_alloca_sep_def] >>
-  strip_tac >>
-  conj_tac
-  >- (gvs[immutable_decl_sep_alt] >> metis_tac[]) >>
-  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+
+Resume intcall_return_stmt_state_rel[locals]:
+  irule invoke_return_local_ptrs_rel >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  reverse conj_tac
+  >- (simp[EVERY_MEM, loweringStateRelDefsTheory.not_local_ptr_def] >>
+      fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  rename1 `local_region cenv prev t id b sz` >>
+  Cases_on `sz = 0` >- gvs[valueEncodingDefsTheory.mem_bytes_at_def] >>
+  `b + sz <= t.vs_alloca_next` by
+    (fs[loweringStateRelDefsTheory.local_ptrs_rel_def,
+        loweringStateRelDefsTheory.local_region_def] >>
+     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  `cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b` by
+    (strip_tac >>
+     `immutable_decl_sep cenv cx prev t.vs_vars t.vs_allocas t.vs_alloca_next` by
+       (drule return_stmt_immutable_sep >> simp[immutable_alloca_sep_def]) >>
+     irule intcall_local_immutable_prefix_disjoint >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> decide_tac) >>
+  qhdtm_assum `intcall_callee_exit_full`
+    (strip_assume_tac o SIMP_RULE (srw_ss())
+      [intcall_callee_exit_full_def, bodyIntCallSeamsTheory.intcall_callee_exit_def,
+       exprSimDefsTheory.expr_exit_def]) >>
+  sym_tac >> first_x_assum irule >> simp[] >> rpt strip_tac >>
+  fs[intcall_entry_full_def] >> metis_tac[]
+QED
+
+Resume intcall_return_stmt_state_rel[base]:
+  irule immutable_base_zero_frame >> qexists `t` >>
+  `immutable_base_zero cenv t` by
+    (drule stmt_state_rel_immutable_base_zero >> simp[]) >>
+  `returned.vs_labels = t.vs_labels` by
+    (asm "returned_fields" (fn th =>
+       simp[th, venomExecSemanticsTheory.adopt_return_fmp_def,
+            venomExecSemanticsTheory.merge_callee_state_def])) >>
+  simp[] >>
+  qx_gen_tac `x` >> disch_tac >>
+  qpat_x_assum `local_ptrs_reserved _ _`
+    (strip_assume_tac o REWRITE_RULE [loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+  `not_fresh_at sa x` by metis_tac[] >>
+  `~MEM x outs` by metis_tac[] >>
   metis_tac[]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
-Resume intcall_return_stmt_state_rel[fmp]:
-  qspecl_then [`ZIP (outs, ir.iret_values)`,
-    `adopt_return_fmp ir (merge_callee_state t cs)`]
-    strip_assume_tac foldl_update_var_frame >>
-  `returned = (adopt_return_fmp ir (merge_callee_state t cs)) with vs_vars := vars` by
-    (fs[venomExecSemanticsTheory.bind_outputs_def] >> metis_tac[]) >>
-  simp[venomExecSemanticsTheory.adopt_return_fmp_def,
-       venomExecSemanticsTheory.merge_callee_state_def] >>
-  metis_tac[step_inst_memory_length]
+
+Resume intcall_return_stmt_state_rel[modules]:
+  `cenv with ce_module := NONE = cenv` by
+    simp[compileEnvTheory.compile_env_component_equality] >>
+  simp[ALOOKUP_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
-Resume intcall_return_stmt_state_rel[base]:
-  qspecl_then [`ZIP (outs, ir.iret_values)`,
-    `adopt_return_fmp ir (merge_callee_state t cs)`]
-    strip_assume_tac foldl_update_var_frame >>
-  `returned = (adopt_return_fmp ir (merge_callee_state t cs)) with vs_vars := vars` by
-    (fs[venomExecSemanticsTheory.bind_outputs_def] >> metis_tac[]) >>
-  irule immutable_base_zero_frame >> qexists `t` >>
-  simp[venomExecSemanticsTheory.adopt_return_fmp_def,
-       venomExecSemanticsTheory.merge_callee_state_def] >>
-  reverse conj_tac >-
-    (qhdtm_assum `stmt_state_rel`
-       (ACCEPT_TAC o cj 6 o PURE_REWRITE_RULE [stmt_state_rel_def])) >>
-  rpt strip_tac >>
-  `~MEM x outs` by
-    (fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
-  qpat_x_assum `!x. ~MEM x outs ==> lookup_var x returned = _` drule >>
-  simp[venomExecSemanticsTheory.adopt_return_fmp_def,
-       venomExecSemanticsTheory.merge_callee_state_def]
-QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
+
 Finalise intcall_return_stmt_state_rel
-*)
