@@ -515,7 +515,7 @@ Proof
     simp[fmp_room_def, pending_alloca_size_def] >>
   strip_tac >>
   gvs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
-      immutable_base_zero_alt, immutable_alloca_sep_def,
+      immutable_base_zero_alt, immutable_alloca_sep_def, immutable_decl_sep_def,
       loweringStateRelDefsTheory.local_ptrs_rel_def,
       loweringStateRelDefsTheory.local_region_def,
       loweringStateRelDefsTheory.local_backed_def,
