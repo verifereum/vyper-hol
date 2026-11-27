@@ -6,7 +6,7 @@
  *)
 Theory deployUnitExecution
 Ancestors
-  sourceUnitExecution ctorDeployDefs e2eDeployDefs fragGasOriginPtr
+  createSizeExit sourceUnitExecution ctorDeployDefs e2eDeployDefs fragGasOriginPtr
   vyperStorageFootprint
 
 (* At gas marks marks: either the constructor run's finite storage guard
@@ -51,6 +51,7 @@ Definition deploy_unit_execution_correct_at_def:
                             vs_inst_idx := 0 |>), FEMPTY, entry_taint)
                marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
           (?r. exit_result r /\
+             create_size_exit_ok unit.cu_context src r /\
              storage_trace_domain (deploy_evaluation_context tops am tx)
                (initial_state am []) obs /\
              gas_origin_path T
@@ -105,6 +106,7 @@ Definition deploy_unit_execution_correct_with_def:
                             vs_inst_idx := 0 |>), FEMPTY, entry_taint)
                marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
           (?r. exit_result r /\
+             create_size_exit_ok unit.cu_context src r /\
              storage_trace_domain (deploy_evaluation_context tops am tx)
                (initial_state am []) obs /\
              gas_origin_path T
