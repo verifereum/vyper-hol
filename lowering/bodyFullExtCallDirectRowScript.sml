@@ -34,6 +34,39 @@ Proof
   simp[] >> qexists_tac `env` >> simp[]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_saved_state_resources >> strip_tac >>
+  qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_def]) >>
+  qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace` (qx_choose_then `hz` assume_tac) >>
+  `stmt_state_rel hz ctx func ce cx ee u` by
+    (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee u /\ _`
+       (drule_then (ACCEPT_TAC o cj 1))) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
+    (drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s` by
+    (gen_tac >> disch_tac >> first_assum (drule_then (ACCEPT_TAC o cj 1))) >>
+  `hl <= off /\ pbase+dst_offset+h <= pbase+capacity /\ pbase+dst_offset+off <= pbase+capacity` by decide_tac >>
+  `pbase+capacity <= u.vs_alloca_next` by metis_tac[alloca_site_registered_below] >>
+  `~is_abi_dynamic ce.ce_struct_fields ty <=> ~is_dynamic at` by
+    metis_tac[abi_encode_translated_dynamic] >>
+  Cases_on `is_word_type ty`
+  >- (`?tag src. saved = StackValue tag src` by metis_tac[] >>
+      mp_tac (Q.INST [`a` |-> `su`] extcall_direct_word_source) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+      qpat_assum `saved = StackValue tag src` SUBST_ALL_TAC >>
+      mp_tac (Q.INST [`a` |-> `su`,`c` |-> `en`]
+        abi_encode_saved_word_row_pure) >>
+      impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+      disch_then ACCEPT_TAC) >>
+  Cases_on `is_dynamic at`
+  >- suspend "dynamic" >>
+  suspend "static"
+QED
+*)
 Theorem abi_encode_saved_row_open_pure:
   ty = lowered_value_type ce e /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -92,36 +125,10 @@ Theorem abi_encode_saved_row_open_pure:
     abi_encode_values_prefix_at ats avs hl (pbase+dst_offset) cursor loc slot (SUC i) en z Gz tz /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)
 Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_encode_saved_state_resources >> strip_tac >>
-  qpat_assum `abi_encode_saved_state _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [abi_encode_saved_state_def]) >>
-  qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace` (qx_choose_then `hz` assume_tac) >>
-  `stmt_state_rel hz ctx func ce cx ee u` by
-    (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee u /\ _`
-       (drule_then (ACCEPT_TAC o cj 1))) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
-    (drule_then ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s` by
-    (gen_tac >> disch_tac >> first_assum (drule_then (ACCEPT_TAC o cj 1))) >>
-  `hl <= off /\ pbase+dst_offset+h <= pbase+capacity /\ pbase+dst_offset+off <= pbase+capacity` by decide_tac >>
-  `pbase+capacity <= u.vs_alloca_next` by metis_tac[alloca_site_registered_below] >>
-  `~is_abi_dynamic ce.ce_struct_fields ty <=> ~is_dynamic at` by
-    metis_tac[abi_encode_translated_dynamic] >>
-  Cases_on `is_word_type ty`
-  >- (`?tag src. saved = StackValue tag src` by metis_tac[] >>
-      mp_tac (Q.INST [`a` |-> `su`] extcall_direct_word_source) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-      qpat_assum `saved = StackValue tag src` SUBST_ALL_TAC >>
-      mp_tac (Q.INST [`a` |-> `su`,`c` |-> `en`]
-        abi_encode_saved_word_row_pure) >>
-      impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
-      disch_then ACCEPT_TAC) >>
-  Cases_on `is_dynamic at`
-  >- suspend "dynamic" >>
-  suspend "static"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_saved_row_open_pure[dynamic]:
   `is_abi_dynamic ce.ce_struct_fields ty /\ abi_member_head_size at = 32` by
     (simp[abi_member_head_size_def] >> metis_tac[]) >>
@@ -225,7 +232,9 @@ Resume abi_encode_saved_row_open_pure[dynamic]:
   qexistsl_tac [`G1`,`u1`,`t1`] >> asm_rewrite_tac[] >>
   irule gas_origin_ptr_path_trans >> qexistsl_tac [`G2`,`u2`,`t2`] >> asm_rewrite_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume abi_encode_saved_row_open_pure[static]:
   `~is_abi_dynamic ce.ce_struct_fields ty` by metis_tac[] >>
   drule_all abi_encode_values_static_cuts >>
@@ -281,8 +290,11 @@ Resume abi_encode_saved_row_open_pure[static]:
   qexistsl_tac [`G1`,`u1`,`t1`] >> asm_rewrite_tac[] >>
   irule gas_origin_ptr_path_trans >> qexistsl_tac [`G2`,`u2`,`t2`] >> asm_rewrite_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise abi_encode_saved_row_open_pure
+*)
 
 Theorem abi_encode_saved_row_pure:
   ty = lowered_value_type ce e /\

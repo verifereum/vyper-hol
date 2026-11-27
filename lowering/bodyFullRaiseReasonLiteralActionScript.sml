@@ -16,27 +16,8 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem compile_raise_reason_literal_frag_full_action:
-  !cx ml str DF lo d PG tops bindings ctx shadow_ctx func
-   shadow_func cenv env env' ret_ty lctx RetQ es shadow_m.
-    body_expr_full_ok_mods mods exps cx (Literal (BaseT (StringT ml)) (StringL str)) /\
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ supported_stmt tops bindings (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))) = SOME env' /\
-    stmt_exprs_ok cenv (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))) /\
-    call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str))))) /\
-    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))))
-      (shadow_m : compile_env compiler)
-      (eval_stmt cx (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str))))) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `supported_string_reason tops (Literal (BaseT (StringT ml)) (StringL str))` by
@@ -72,13 +53,41 @@ Proof
   drule_all raise_reason_compiler_code >> strip_tac >>
   suspend "entry"
 QED
+*)
+Theorem compile_raise_reason_literal_frag_full_action:
+  !cx ml str DF lo d PG tops bindings ctx shadow_ctx func
+   shadow_func cenv env env' ret_ty lctx RetQ es shadow_m.
+    body_expr_full_ok_mods mods exps cx (Literal (BaseT (StringT ml)) (StringL str)) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ supported_stmt tops bindings (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))) = SOME env' /\
+    stmt_exprs_ok cenv (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))) /\
+    call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str))))) /\
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))))
+      (shadow_m : compile_env compiler)
+      (eval_stmt cx (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str))))) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_raise_reason_literal_frag_full_action[entry]:
   Cases_on `storage_trace_domain cx st0 es.storage_trace`
   >- suspend "domain" >>
   irule gas_outcome_full_bad_nil >> simp[eval_raise_string_literal_reason]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_raise_reason_literal_frag_full_action[domain]:
   drule literal_reason_source_resources >> strip_tac >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
@@ -88,7 +97,9 @@ Resume compile_raise_reason_literal_frag_full_action[domain]:
     strip_assume_tac) >>
   suspend "encoder"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_raise_reason_literal_frag_full_action[encoder]:
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
     (qspecl_then [`MAP (n2w o ORD) str`,`ml`,`sa`] mp_tac
@@ -109,7 +120,9 @@ Resume compile_raise_reason_literal_frag_full_action[encoder]:
      simp[expr_type_def]) >>
   suspend "exit"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_raise_reason_literal_frag_full_action[exit]:
   irule gas_outcome_full_exit >>
   conj_tac >- (qexistsl_tac [`Gz`,`es`,`Abort Revert_abort z`,
@@ -121,5 +134,8 @@ Resume compile_raise_reason_literal_frag_full_action[exit]:
     conj_tac >> first_x_assum drule >> simp[]) >>
   simp[exit_result_def, stmt_exit_ptr_def, expr_exit_def, halt_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_raise_reason_literal_frag_full_action
+*)

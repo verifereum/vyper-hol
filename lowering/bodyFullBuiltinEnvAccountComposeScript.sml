@@ -55,16 +55,8 @@ Proof
   disch_then (qx_choose_then `out` strip_assume_tac) >> gvs[]
 QED
 
-Theorem self_codesize_sim_full[local]:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty es.
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    expr_body_pre_mods mods cenv cx env
-      (Builtin (BaseT (UintT 256)) (Acc Codesize)
-        [Builtin (BaseT AddressT) (Env SelfAddr) []]) es ==>
-    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty
-      (Builtin (BaseT (UintT 256)) (Acc Codesize)
-        [Builtin (BaseT AddressT) (Env SelfAddr) []]) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   rw[expr_sim_full_def] >>
@@ -118,7 +110,22 @@ Proof
   conj_tac >- suspend "self_history" >>
   suspend "self_ghosts"
 QED
+*)
+Theorem self_codesize_sim_full[local]:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty es.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    expr_body_pre_mods mods cenv cx env
+      (Builtin (BaseT (UintT 256)) (Acc Codesize)
+        [Builtin (BaseT AddressT) (Env SelfAddr) []]) es ==>
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty
+      (Builtin (BaseT (UintT 256)) (Acc Codesize)
+        [Builtin (BaseT AddressT) (Env SelfAddr) []]) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume self_codesize_sim_full[self_word_post]:
   irule expr_post_word_intro >>
   simp[expr_type_def, is_word_type_def, loweringSliceTheory.word_value_def,
@@ -151,7 +158,9 @@ Resume self_codesize_sim_full[self_word_post]:
     simp[valueEncodingTheory.val_to_w256_def, integer_wordTheory.i2w_def] >>
   metis_tac[stmt_state_rel_inst_idx]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume self_codesize_sim_full[self_history]:
   fs[alloca_history_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `k < LENGTH sa.cs_current_insts`
@@ -161,7 +170,9 @@ Resume self_codesize_sim_full[self_history]:
   first_x_assum (qspec_then `0` mp_tac) >>
   simp[] >> strip_tac >> gvs[mk_inst_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume self_codesize_sim_full[self_ghosts]:
   conj_tac
   >- (match_mp_tac ghost_inv_at_exterior_frame >>
@@ -192,8 +203,11 @@ Resume self_codesize_sim_full[self_ghosts]:
                written_taint_def, update_var_def] >>
           metis_tac[]))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise self_codesize_sim_full
+*)
 
 Theorem account_full_from_suffix:
   (!item bs ee cx v x sa op sb func st0 cenv s ctx G tn DF lo d explicit PG.

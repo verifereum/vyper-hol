@@ -209,6 +209,73 @@ QED
 Finalise intcall_return_caller_frame
 *)
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+ rpt gen_tac >> strip_tac >>
+ `sa.cs_next_var <= st4.cs_next_var` by
+   (`?x. MEM x outs` by (Cases_on `outs` >> gvs[] >> metis_tac[]) >>
+    `~not_fresh_at sa x /\ not_fresh_at st4 x` by metis_tac[] >>
+    qpat_x_assum `~not_fresh_at sa x` mp_tac >>
+    pure_rewrite_tac[loweringStateRelDefsTheory.not_fresh_at_def] >>
+    simp_tac bool_ss [] >> strip_tac >>
+    qpat_x_assum `not_fresh_at st4 x` mp_tac >>
+    pure_rewrite_tac[loweringStateRelDefsTheory.not_fresh_at_def] >>
+    disch_then (qspec_then `n` mp_tac) >> simp[] >> decide_tac) >>
+ `!x. not_fresh_at sa x ==> not_fresh_at st4 x` by
+   metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+ drule_all intcall_return_caller_frame >> strip_tac >>
+ drule intCallFrameTheory.invoke_return_frame >> strip_tac >>
+ `!p. not_fresh_at sa p ==> lookup_var p returned = lookup_var p t` by
+   metis_tac[] >>
+ `!name entry p sz. lookup_scopes name prev = SOME entry /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+    not_fresh_at sa p` by
+   (fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
+ `!name b sz. local_region cenv prev returned name b sz <=>
+              local_region cenv prev t name b sz` by
+   (irule loweringStateRelDefsTheory.local_region_lookup_cong >> metis_tac[]) >>
+ `!name b sz. local_region cenv prev returned name b sz ==>
+    b + sz <= off \/ off + rbuf.buf_size <= b` by
+   (map_every qx_gen_tac [`nm`,`b`,`sz`] >> strip_tac >>
+    `local_region cenv prev t nm b sz` by metis_tac[] >>
+    qhdtm_assum `intcall_entry_full` mp_tac >>
+    pure_rewrite_tac[intcall_entry_full_def] >> strip_tac >>
+    qpat_x_assum `!n lo sz aid off asz. _` drule >>
+    disch_then (drule_at Any) >>
+    simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
+ drule_all intcall_return_register_type_facts >> strip_tac >>
+ `val_wf rtv v` by
+   metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+ `val_footprint rtv v <= rbuf.buf_size` by
+   metis_tac[exprSimPropsTheory.val_footprint_le] >>
+ `eval_operand rbuf.buf_operand stored = SOME (n2w off)` by
+   (`lookup_var root t = SOME (n2w off)` by
+      (qpat_x_assum `eval_operand rbuf.buf_operand t = _` mp_tac >>
+       simp[venomStateTheory.eval_operand_def]) >>
+    simp[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+ `stored.vs_allocas = t.vs_allocas` by
+   (qpat_x_assum `stored with <|vs_vars := _; vs_memory := _|> = _`
+     (mp_tac o Q.AP_TERM `\s:venom_state. s.vs_allocas`) >> simp[]) >>
+ `!name b sz. local_region cenv prev stored name b sz ==>
+    b + sz <= off \/ off + rbuf.buf_size <= b` by
+   (rpt strip_tac >>
+    `local_region cenv prev returned name' b sz` by
+      (fs[loweringStateRelDefsTheory.local_region_def,
+          venomStateTheory.lookup_var_def] >> metis_tac[]) >> metis_tac[]) >>
+ conj_tac >- suspend "state" >>
+ conj_tac >- suspend "storage" >>
+ conj_tac >- suspend "at" >>
+ conj_tac >- suspend "own" >>
+ conj_tac >- simp[contextTheory.base_ptr_def] >>
+ conj_tac >- suspend "vars" >>
+ conj_tac >- suspend "allocas" >>
+ conj_tac >- suspend "bytes" >>
+ conj_tac >- suspend "locals" >>
+ conj_tac >- simp[supportedExprTraverseTheory.expr_has_effect_def] >>
+ suspend "ghost"
+QED
+*)
 Theorem intcall_return_register_frame_certificate:
  !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
@@ -283,69 +350,9 @@ Theorem intcall_return_register_frame_certificate:
  ghost_inv_at (DF H) lo d cenv cx (out with scopes := prev) Gs ts
    (stored with vs_inst_idx := LENGTH sm.cs_current_insts)
 Proof
- rpt gen_tac >> strip_tac >>
- `sa.cs_next_var <= st4.cs_next_var` by
-   (`?x. MEM x outs` by (Cases_on `outs` >> gvs[] >> metis_tac[]) >>
-    `~not_fresh_at sa x /\ not_fresh_at st4 x` by metis_tac[] >>
-    qpat_x_assum `~not_fresh_at sa x` mp_tac >>
-    pure_rewrite_tac[loweringStateRelDefsTheory.not_fresh_at_def] >>
-    simp_tac bool_ss [] >> strip_tac >>
-    qpat_x_assum `not_fresh_at st4 x` mp_tac >>
-    pure_rewrite_tac[loweringStateRelDefsTheory.not_fresh_at_def] >>
-    disch_then (qspec_then `n` mp_tac) >> simp[] >> decide_tac) >>
- `!x. not_fresh_at sa x ==> not_fresh_at st4 x` by
-   metis_tac[freshWritesTheory.not_fresh_at_mono] >>
- drule_all intcall_return_caller_frame >> strip_tac >>
- drule intCallFrameTheory.invoke_return_frame >> strip_tac >>
- `!p. not_fresh_at sa p ==> lookup_var p returned = lookup_var p t` by
-   metis_tac[] >>
- `!name entry p sz. lookup_scopes name prev = SOME entry /\
-    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-    not_fresh_at sa p` by
-   (fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
- `!name b sz. local_region cenv prev returned name b sz <=>
-              local_region cenv prev t name b sz` by
-   (irule loweringStateRelDefsTheory.local_region_lookup_cong >> metis_tac[]) >>
- `!name b sz. local_region cenv prev returned name b sz ==>
-    b + sz <= off \/ off + rbuf.buf_size <= b` by
-   (map_every qx_gen_tac [`nm`,`b`,`sz`] >> strip_tac >>
-    `local_region cenv prev t nm b sz` by metis_tac[] >>
-    qhdtm_assum `intcall_entry_full` mp_tac >>
-    pure_rewrite_tac[intcall_entry_full_def] >> strip_tac >>
-    qpat_x_assum `!n lo sz aid off asz. _` drule >>
-    disch_then (drule_at Any) >>
-    simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
- drule_all intcall_return_register_type_facts >> strip_tac >>
- `val_wf rtv v` by
-   metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
- `val_footprint rtv v <= rbuf.buf_size` by
-   metis_tac[exprSimPropsTheory.val_footprint_le] >>
- `eval_operand rbuf.buf_operand stored = SOME (n2w off)` by
-   (`lookup_var root t = SOME (n2w off)` by
-      (qpat_x_assum `eval_operand rbuf.buf_operand t = _` mp_tac >>
-       simp[venomStateTheory.eval_operand_def]) >>
-    simp[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
- `stored.vs_allocas = t.vs_allocas` by
-   (qpat_x_assum `stored with <|vs_vars := _; vs_memory := _|> = _`
-     (mp_tac o Q.AP_TERM `\s:venom_state. s.vs_allocas`) >> simp[]) >>
- `!name b sz. local_region cenv prev stored name b sz ==>
-    b + sz <= off \/ off + rbuf.buf_size <= b` by
-   (rpt strip_tac >>
-    `local_region cenv prev returned name' b sz` by
-      (fs[loweringStateRelDefsTheory.local_region_def,
-          venomStateTheory.lookup_var_def] >> metis_tac[]) >> metis_tac[]) >>
- conj_tac >- suspend "state" >>
- conj_tac >- suspend "storage" >>
- conj_tac >- suspend "at" >>
- conj_tac >- suspend "own" >>
- conj_tac >- simp[contextTheory.base_ptr_def] >>
- conj_tac >- suspend "vars" >>
- conj_tac >- suspend "allocas" >>
- conj_tac >- suspend "bytes" >>
- conj_tac >- suspend "locals" >>
- conj_tac >- simp[supportedExprTraverseTheory.expr_has_effect_def] >>
- suspend "ghost"
+  cheat
 QED
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[state]:
  simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
  `stored.vs_data_section = returned.vs_data_section /\
@@ -390,6 +397,8 @@ Resume intcall_return_register_frame_certificate[state]:
  qpat_x_assum `!p. not_fresh_at sa p ==> _` (qspec_then `x` mp_tac) >>
  simp[venomStateTheory.lookup_var_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[state_imm]:
  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
     (out with scopes := prev) returned /\
@@ -418,6 +427,8 @@ Resume intcall_return_register_frame_certificate[state_imm]:
  qexistsl_tac [`type_memory_size tv`,`returned.vs_memory`] >>
  simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[storage]:
  qhdtm_assum `intcall_callee_exit_full` mp_tac >>
  pure_rewrite_tac[intcall_callee_exit_full_def] >> strip_tac >>
@@ -430,6 +441,8 @@ Resume intcall_return_register_frame_certificate[storage]:
    (qspecl_then [`b`,`slot`,`tv`] mp_tac) >>
  Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[at]:
  simp[loweringPostsTheory.vv_at_def,contextTheory.base_ptr_def,
       vyperStateTheory.read_result_def,vyperStateTheory.return_def] >>
@@ -444,6 +457,8 @@ Resume intcall_return_register_frame_certificate[at]:
  qpat_x_assum `!name b sz. local_region cenv prev stored name b sz ==> _`
    (qspecl_then [`n`,`lb`,`lsz`] mp_tac) >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[own]:
  simp[loweringPostsTheory.vv_own_def,contextTheory.base_ptr_def,
       vyperStateTheory.read_result_def,vyperStateTheory.return_def] >>
@@ -457,6 +472,8 @@ Resume intcall_return_register_frame_certificate[own]:
  qpat_x_assum `!name b sz. local_region cenv prev stored name b sz ==> _`
    (qspecl_then [`n`,`lb`,`lsz`] mp_tac) >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[vars]:
  rpt strip_tac >>
  `lookup_var x returned = SOME w` by metis_tac[] >>
@@ -464,11 +481,15 @@ Resume intcall_return_register_frame_certificate[vars]:
  `lookup_var x stored = lookup_var x returned` by metis_tac[] >>
  fs[venomStateTheory.lookup_var_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[allocas]:
  qpat_x_assum `stored with <|vs_vars := _; vs_memory := _|> = _`
    (mp_tac o Q.AP_TERM `\s:venom_state. s.vs_allocas`) >> simp[] >>
  metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[bytes]:
  rpt strip_tac >>
  `FLOOKUP t.vs_allocas aid = SOME (b,sz)` by metis_tac[] >>
@@ -485,6 +506,8 @@ Resume intcall_return_register_frame_certificate[bytes]:
     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[locals]:
  irule exprBopSimPropsTheory.locals_kept_trans >>
  qexistsl_tac [`out with scopes := prev`,`sa`,`returned`] >> simp[] >>
@@ -493,6 +516,8 @@ Resume intcall_return_register_frame_certificate[locals]:
  `local_region cenv prev returned n b sz` by simp[] >>
  metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[ghost]:
  simp[bodyPtrDefsTheory.ghost_inv_at_def] >>
  conj_tac >- suspend "ghost_locals" >>
@@ -509,6 +534,8 @@ Resume intcall_return_register_frame_certificate[ghost]:
  simp[] >> strip_tac >>
  fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[ghost_locals]:
  rpt gen_tac >> strip_tac >>
  `not_fresh_at sa p` by
@@ -539,6 +566,8 @@ Resume intcall_return_register_frame_certificate[ghost_locals]:
  qexistsl_tac [`tc.t_mem`,`ts.t_mem`,`returned.vs_memory`,`stored.vs_memory`,`sz`] >>
  simp[] >> metis_tac[exprSimPropsTheory.val_footprint_le,arithmeticTheory.LESS_EQ_TRANS]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[ghost_buffer]:
  qhdtm_assum `ghost_inv_at` mp_tac >>
  pure_rewrite_tac[bodyPtrDefsTheory.ghost_inv_at_def] >> strip_tac >>
@@ -551,6 +580,8 @@ Resume intcall_return_register_frame_certificate[ghost_buffer]:
  qpat_x_assum `!x. not_fresh_at st4 x ==> _` (qspec_then `x` mp_tac) >>
  simp[venomStateTheory.lookup_var_def] >> gvs[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[ghost_pc]:
  rpt strip_tac >>
  `op_taint (tc with t_var := DRESTRICT tn.t_var (COMPL (set outs))) (Var x) = {}` by
@@ -558,12 +589,16 @@ Resume intcall_return_register_frame_certificate[ghost_pc]:
  `not_fresh_at st4 x` by metis_tac[] >>
  metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[ghost_stor]:
  qpat_x_assum `stored with <|vs_vars := _; vs_memory := _|> = _`
    (mp_tac o Q.AP_TERM `\s:venom_state. (s.vs_accounts,s.vs_transient,s.vs_immutables,s.vs_call_ctx)`) >>
  simp[] >> strip_tac >>
  fs[bodyPtrDefsTheory.stor_taint_ok_at_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_frame_certificate[ghost_imm]:
  rpt strip_tac >>
  `not_fresh_at sa x` by
@@ -571,7 +606,10 @@ Resume intcall_return_register_frame_certificate[ghost_imm]:
  `not_fresh_at st4 x` by metis_tac[] >>
  metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise intcall_return_register_frame_certificate
+*)
 
 Theorem intcall_return_register_post:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0

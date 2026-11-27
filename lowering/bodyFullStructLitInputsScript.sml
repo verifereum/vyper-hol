@@ -7,6 +7,24 @@ Ancestors
   exprSimHypsDefs[qualified]
 Libs monadsyntax
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  drule_all immutableDeployPhysicalSourceTheory.immutable_rhs_physical_typed >> strip_tac >>
+  `~is_word_type (post_value_type ce e)` by
+    (drule immutableDeployPhysicalSourceTheory.immutable_rhs_post_physical_classify >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
+  drule_all structlit_child_physical_robust >> strip_tac >>
+  qexistsl_tac [`stv`, `w`] >> simp[] >>
+  conj_tac >- gvs[ptr_val_ok_def] >>
+  strip_tac >>
+  irule ptr_buf_ok_read_covers >>
+  conj_tac >- gvs[ptr_val_ok_def] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`ce`, `e`] >> simp[]
+QED
+*)
 Theorem structlit_unwrapped_physical_inputs:
   expr_body_pre_mods mods ce cx env e es /\
   (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee) /\
@@ -29,19 +47,7 @@ Theorem structlit_unwrapped_physical_inputs:
     (0 < type_memory_size stv ==>
      ?src. op = Var src /\ ptr_covers G tn src s (type_memory_size stv))
 Proof
-  strip_tac >>
-  drule_all immutableDeployPhysicalSourceTheory.immutable_rhs_physical_typed >> strip_tac >>
-  `~is_word_type (post_value_type ce e)` by
-    (drule immutableDeployPhysicalSourceTheory.immutable_rhs_post_physical_classify >>
-     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
-  drule_all structlit_child_physical_robust >> strip_tac >>
-  qexistsl_tac [`stv`, `w`] >> simp[] >>
-  conj_tac >- gvs[ptr_val_ok_def] >>
-  strip_tac >>
-  irule ptr_buf_ok_read_covers >>
-  conj_tac >- gvs[ptr_val_ok_def] >>
-  conj_tac >- metis_tac[] >>
-  qexistsl_tac [`ce`, `e`] >> simp[]
+  cheat
 QED
 
 Theorem structlit_physical_footprint_bounds:

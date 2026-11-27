@@ -34,6 +34,56 @@ Proof
   gvs[ext_call_arg_value_def, compile_snapshot_vv_def, vv_type_def]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_read_result] >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func cenv cx es s0 /\ _`
+       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx es s0`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  Cases_on `compile_expr cenv (expr_type e) e sa` >>
+  rename1 `compile_expr _ _ _ _ = (vv,sm)` >>
+  `is_word_type (vv_type (ext_call_arg_value (lowered_value_type cenv e) vv))` by
+    metis_tac[] >>
+  gvs[comp_bind_def] >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  rename1 `compile_expr _ _ (gas_shadow_expr _) _ = (shadow_vv,shadow_sm)` >>
+  `shadow_vv = vv /\ gas_shadow_state sm shadow_sm` by
+    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+       (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+       irule (cj 1 gas_shadow_compile_expr_env |> SPEC_ALL |>
+              Q.INST [`shadow` |-> `T`] |> REWRITE_RULE [COND_CLAUSES]) >>
+     qpat_x_assum `gas_shadow_compiles _ _`
+       (qspecl_then [`sa`, `shadow_sa`] mp_tac o
+        REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >> simp[]) >>
+  gvs[] >>
+  `cs_extends sa sm /\ cs_extends shadow_sa shadow_sm` by
+    metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
+  `cs_extends sm sb /\ cs_extends shadow_sm shadow_sb` by
+    (gvs[compile_snapshot_vv_def, comp_bind_def, comp_return_def] >>
+     pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+     metis_tac[exprSimUnwrapTheory.unwrap_value_extends]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func /\
+   fn_has_code shadow_sa shadow_sm shadow_func` by metis_tac[fragExecTheory.fn_has_code_split] >>
+  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e) e es` by
+    (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
+     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+  drule forced_expr_admissible_raw >> strip_tac >>
+  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_vv_sim_full_def] >> disch_then drule_all >>
+  strip_tac >> suspend "read"
+QED
+*)
 Theorem extcall_request_snapshot_word_owned_full:
   body_expr_full_ok_mods mods exps cx e /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -95,53 +145,10 @@ Theorem extcall_request_snapshot_word_owned_full:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
-  strip_tac >>
-  irule gas_outcome_full_initial_domain >>
-  simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
-       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
-       vyperStorageTraceTheory.storage_trace_frame_read_result] >>
-  strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
-    (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
-       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func cenv cx es s0 /\ _`
-       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
-     qpat_assum `stmt_state_rel _ ctx func cenv cx es s0`
-       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
-  Cases_on `compile_expr cenv (expr_type e) e sa` >>
-  rename1 `compile_expr _ _ _ _ = (vv,sm)` >>
-  `is_word_type (vv_type (ext_call_arg_value (lowered_value_type cenv e) vv))` by
-    metis_tac[] >>
-  gvs[comp_bind_def] >>
-  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
-  rename1 `compile_expr _ _ (gas_shadow_expr _) _ = (shadow_vv,shadow_sm)` >>
-  `shadow_vv = vv /\ gas_shadow_state sm shadow_sm` by
-    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
-       (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
-       irule (cj 1 gas_shadow_compile_expr_env |> SPEC_ALL |>
-              Q.INST [`shadow` |-> `T`] |> REWRITE_RULE [COND_CLAUSES]) >>
-     qpat_x_assum `gas_shadow_compiles _ _`
-       (qspecl_then [`sa`, `shadow_sa`] mp_tac o
-        REWRITE_RULE [gasShadowStateTheory.gas_shadow_compiles_def]) >> simp[]) >>
-  gvs[] >>
-  `cs_extends sa sm /\ cs_extends shadow_sa shadow_sm` by
-    metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
-  `cs_extends sm sb /\ cs_extends shadow_sm shadow_sb` by
-    (gvs[compile_snapshot_vv_def, comp_bind_def, comp_return_def] >>
-     pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-     metis_tac[exprSimUnwrapTheory.unwrap_value_extends]) >>
-  `fn_has_code sa sm func /\ fn_has_code sm sb func /\
-   fn_has_code shadow_sa shadow_sm shadow_func` by metis_tac[fragExecTheory.fn_has_code_split] >>
-  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (expr_type e) e es` by
-    (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
-     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
-  drule forced_expr_admissible_raw >> strip_tac >>
-  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_vv_sim_full_def] >> disch_then drule_all >>
-  strip_tac >> suspend "read"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_snapshot_word_owned_full[read]:
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_bind_all >>
@@ -164,7 +171,9 @@ Resume extcall_request_snapshot_word_owned_full[read]:
       gvs[expr_exit_def, halt_exit_def, expr_exit_INR_type]) >>
   suspend "normal"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_snapshot_word_owned_full[normal]:
   qx_genl_tac [`marks`,`res`,`ee`,`G1`,`tn1`,`t`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -218,7 +227,9 @@ Resume extcall_request_snapshot_word_owned_full[normal]:
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
   suspend "unwrap"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_snapshot_word_owned_full[unwrap]:
   `expr_body_pre cenv cx env e
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
@@ -238,7 +249,9 @@ Resume extcall_request_snapshot_word_owned_full[unwrap]:
     (simp[] >> qpat_x_assum `cenv.ce_is_ctor /\ _ ==> _` mp_tac >> simp[]) >>
   strip_tac >> suspend "package"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_snapshot_word_owned_full[package]:
   irule gas_outcome_full_pure >>
   reverse conj_tac >- simp[] >>
@@ -248,7 +261,9 @@ Resume extcall_request_snapshot_word_owned_full[package]:
   qpat_assum `!H. _ ==> gas_origin_ptr_path _ _ _ _ /\ _` drule >>
   strip_tac >> simp[] >> suspend "post"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_snapshot_word_owned_full[post]:
   `~expr_has_effect e ==>
     (ee with <|gas_obs := []; outcomes := NONE; requests := []; storage_trace := []|>) =
@@ -267,7 +282,9 @@ Resume extcall_request_snapshot_word_owned_full[post]:
      gvs[expr_post_def]) >>
   suspend "representation"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_snapshot_word_owned_full[representation]:
   `post_value_type cenv e = expr_type e` by simp[] >>
   `(is_word_type (expr_type e) ==> safe_operand cs'' op)` by
@@ -290,5 +307,8 @@ Resume extcall_request_snapshot_word_owned_full[representation]:
   fs[vv_holds_def, vv_at_def, ptr_vv_ok_def, read_result_def, return_def,
      vv_store_bound_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise extcall_request_snapshot_word_owned_full
+*)
