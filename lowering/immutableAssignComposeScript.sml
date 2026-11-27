@@ -108,6 +108,7 @@ Proof
 QED
 
 Theorem immutable_assign_suffix_stmt_post:
+  bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce /\
   stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
   expr_sim_inv ce cx env ee /\
   local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
@@ -139,6 +140,7 @@ Proof
 QED
 
 Theorem immutable_path_assign_suffix_stmt_post:
+  bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce /\
   stmt_state_rel H ctx func ce cx ee s /\ storage_well_formed_on cx ee (FST H) /\
   expr_sim_inv ce cx env ee /\
   local_ptrs_reserved ce su /\ ce.ce_is_ctor /\
@@ -174,6 +176,7 @@ Proof
 QED
 
 Theorem immutable_assign_word_stmt_post_frame:
+  bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce /\
   compile_assign_value ce (Lit (n2w off)) LocCode op T loc ity sty bytes su = ((),sb) /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -232,6 +235,7 @@ Proof
 QED
 
 Theorem immutable_assign_word_stmt_post:
+  bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce /\
   compile_assign_value ce (Lit (n2w off)) LocCode op T loc ity sty bytes su = ((),sb) /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -255,6 +259,7 @@ Proof
 QED
 
 Theorem immutable_assign_direct_stmt_post_frame:
+  bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce /\
   compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty bytes su = ((),sb) /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -328,6 +333,7 @@ Proof
 QED
 
 Theorem immutable_assign_direct_stmt_post:
+  bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce /\
   compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty bytes su = ((),sb) /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -360,6 +366,7 @@ Proof
 QED
 
 Theorem immutable_assign_normalized_stmt_post_frame:
+  bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce /\
   compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty L su = ((),sb) /\
   ity <> sty /\ ~is_bytestring_type ity /\
   fn_has_code su sb func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sb /\
@@ -458,6 +465,7 @@ Proof
 QED
 
 Theorem immutable_assign_normalized_stmt_post:
+  bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce /\
   compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty L su = ((),sb) /\
   ity <> sty /\ ~is_bytestring_type ity /\
   fn_has_code su sb func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sb /\
@@ -523,6 +531,8 @@ Theorem immutable_assign_value_stmt_post_frame:
     stmt_post H ctx func cx lctx ce ce su sb ee s (INL ()) fin q
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce` by
+    drule_then ACCEPT_TAC bodyInvCodePropsTheory.body_inv_unit_immutable_layout >>
   `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
   drule_all immutable_assign_bare_global >> strip_tac >>
   drule_all immutable_rhs_physical_typed >> strip_tac >>
