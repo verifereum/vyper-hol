@@ -755,6 +755,8 @@ Definition state_rel_def:
      transient_vars_rel cenv cx ∧
      accounts_rel H cx vs ss ∧
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
+     (∀src tops. ALOOKUP cenv.ce_modules src = SOME tops ⇒
+        immutables_rel cenv cx.txn.target src cenv.ce_is_ctor vs ss) ∧
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
