@@ -317,6 +317,9 @@ Finalise body_sim_full_mutual_ranked
 
 Theorem body_sim_full_mutual:
   (!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_stmt s) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -325,6 +328,9 @@ Theorem body_sim_full_mutual:
                  stmt_loop_calls_ok [(NONE,tops)] s) ==>
     body_stmt_full_ok cx s) /\
   (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_stmts ss) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -333,6 +339,9 @@ Theorem body_sim_full_mutual:
                  stmts_loop_calls_ok [(NONE,tops)] ss) ==>
     body_stmts_full_ok cx ss) /\
   (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_iterator it) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -340,6 +349,9 @@ Theorem body_sim_full_mutual:
                       (subst_consts_stmts (module_consts_env tops []) ss))) ==>
     body_iterator_full_ok cx it) /\
   (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_stmts body) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -348,6 +360,9 @@ Theorem body_sim_full_mutual:
                  stmts_loop_calls_ok [(NONE,tops)] body) ==>
     body_for_full_ok cx tyv nm body vs) /\
   (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_expr e) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -355,6 +370,9 @@ Theorem body_sim_full_mutual:
                       (subst_consts_stmts (module_consts_env tops []) ss))) ==>
     body_expr_full_ok cx e) /\
   (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_exprs es) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -362,6 +380,9 @@ Theorem body_sim_full_mutual:
                       (subst_consts_stmts (module_consts_env tops []) ss))) ==>
     body_exprs_full_ok cx es) /\
   (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_target t) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -369,6 +390,9 @@ Theorem body_sim_full_mutual:
                       (subst_consts_stmts (module_consts_env tops []) ss))) ==>
     body_base_target_full_ok cx t) /\
   (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_atarget g) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -376,6 +400,9 @@ Theorem body_sim_full_mutual:
                       (subst_consts_stmts (module_consts_env tops []) ss))) ==>
     body_tuple_target_full_ok cx g v) /\
   (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (int_calls_atargets gs) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
