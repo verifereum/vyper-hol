@@ -182,11 +182,11 @@ presumed or proved.
 Success relates `tx_return_bytes`, accounts after EVM pending deletions,
 transient storage modulo dead target storage, logs and the full request
 list (computed precompiles included) via `request_agree`. A source halt relates the same effects (`effects_agree`) with empty output. Requests and these effects are compared only on success or halt, never on failure; leftover outcomes are not final
-observations. Non-exempt source failure requires target failure, without
-revert-data/reason/general-kind equality. The sole exemption is exact
-`RuntimeError "abi_decode invalid"` with a dynamic target occurring in a function
-body (including a return rejection producing that same message); not arbitrary
-`ReturnReject`, static-only decoding or conversion failure.
+observations. Source failure requires target failure, without
+revert-data/reason/general-kind equality. The sole source exemption is exact
+`RuntimeError "transfer_value recipient overflow"`; the call and deployment
+state corollaries rule it out under their well-formed state hypotheses. Dynamic
+decoder failures, including `"abi_decode invalid"`, are not exempt.
 
 The resource alternative is frame OutOfGas/StackOverflow, not an existential gas
 threshold. Entry `cc_gas=0`; Venom GAS consumes the frame's gas readings,

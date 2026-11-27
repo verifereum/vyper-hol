@@ -531,10 +531,7 @@ Definition tx_return_bytes_def:
 End
 
 Definition unspecified_behaviour_exempt_def:
-  unspecified_behaviour_exempt tops e <=>
-    (e = RuntimeError "abi_decode invalid" /\
-    ?ty. occurs_abi_decode_target ty tops /\
-         is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
+  unspecified_behaviour_exempt (tops : toplevel list) e <=>
     e = RuntimeError "transfer_value recipient overflow"
 End
 
@@ -756,7 +753,6 @@ Definition external_call_result_rel_def:
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error (RevertData _)), Abort Revert_abort _) => T
     | (INR (Error (RuntimeError m)), Abort _ _) => T
-    | (INR (Error e), Halt _) => unspecified_behaviour_exempt tops e
     | _ => F
 End
 
@@ -785,7 +781,6 @@ Definition exception_outcome_rel_def:
        frame_outcome es r es' (SOME exc) out lgs /\
        ((exc = Reverted /\ frame_raises es Reverted) \/ s = "UNREACHABLE")) /\
   (exception_outcome_rel tops (Error e) es r es' <=>
-     unspecified_behaviour_exempt tops e \/
      ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                   (!d. e = RevertData d ==> exc = Reverted /\ frame_raises es Reverted)) /\
   (exception_outcome_rel tops _ es r es' <=> F)
@@ -799,7 +794,6 @@ Theorem exception_outcome_rel_cases:
           frame_outcome es r es' (SOME failure) out lgs /\
           ((failure = Reverted /\ frame_raises es Reverted) \/ s = "UNREACHABLE")
     | Error e =>
-        unspecified_behaviour_exempt tops e \/
         ?failure out lgs.
           frame_outcome es r es' (SOME failure) out lgs /\
           (!d. e = RevertData d ==> failure = Reverted /\ frame_raises es Reverted)

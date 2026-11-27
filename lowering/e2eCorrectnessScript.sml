@@ -24,6 +24,7 @@ Ancestors
   codegenCorrectness immutableCodeLayout asmOptimizer codegenEncodingWf
   spillWordBounds
   sourceUnitExecution gasSummary supportedProgram callTrace frameOutcome
+  totalBalanceOverflowCore
   whitelistCheckerGate
   stateEquiv stateEquivProps
   venomExecSemantics
@@ -233,13 +234,13 @@ Theorem e2e_vyper_to_evm:
   !gobs tops ret am tx ctx ctx' vs es.
     external_return_type tops tx.function_name = ret /\
     vs.vs_outcomes = MAP SND (call_trace es) /\
+    ~source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx) /\
     (?fuel. external_call_result_rel
               (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs))
               tops ret tx
               (call_external (SOME vs.vs_outcomes) gobs am tx)
               (run_context fuel ctx vs)) /\
-    (~source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx) ==>
-       ctx_sim (external_call_dead
+    (ctx_sim (external_call_dead
                   (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs)) tx
                   (call_external (SOME vs.vs_outcomes) gobs am tx))
          ctx ctx' vs vs /\
@@ -255,8 +256,6 @@ Proof
   rpt strip_tac >>
   qspec_then `es` strip_assume_tac run_call_total >>
   qexistsl_tac [`r`, `es'`] >> simp[] >>
-  Cases_on `source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx)`
-  >- (disj2_tac >> irule source_exempt_call_result_rel >> gvs[]) >>
   gvs[] >>
   drule_all external_call_result_rel_terminates >> strip_tac >>
   qpat_x_assum `ctx_sim _ _ _ _ _` mp_tac >>
@@ -1083,6 +1082,10 @@ Proof
     metis_tac[opt_entry_initial_venom_state_rel_own] >>
   `initial_venom_state_rel tops am txp vs` by
     metis_tac[raw_variant_initial_venom_state_rel] >>
+  `tx with code := vs0.vs_code = tx` by
+    metis_tac[opt_entry_own_txp_identity] >>
+  `txp = tx` by
+    (qpat_assum `txp = tx with code := vs0.vs_code` mp_tac >> fs[]) >>
   qpat_x_assum `source_unit_execution_correct_at _ _ _ _ _ _ _` mp_tac >>
   simp[source_unit_execution_correct_at_def,
        source_unit_execution_correct_with_def] >> strip_tac
@@ -1091,13 +1094,31 @@ Proof
       qpat_assum `!tail. call_external_trace _ _ _ _ = _`
         (qspec_then `tail` assume_tac) >>
       drule call_external_trace_result >> strip_tac >>
-      irule source_exempt_call_result_rel >> gvs[]) >>
+      `source_result_ok res` by
+        metis_tac[call_state_rel_no_recipient_overflow_core] >>
+      Cases_on `res`
+      >- gvs[source_exempt_def]
+      >- (Cases_on `y` >>
+          gvs[source_exempt_def, unspecified_behaviour_exempt_def,
+              vyperBalanceOverflowTheory.source_result_ok_def] >>
+          Cases_on `e` >>
+          gvs[source_exempt_def, unspecified_behaviour_exempt_def,
+              vyperBalanceOverflowTheory.source_result_ok_def])) >>
   gen_tac >> strip_tac >>
   qpat_assum `!tail. call_external_trace _ _ _ _ = _`
     (qspec_then `tail` assume_tac) >>
   drule call_external_trace_result >> strip_tac >>
-  Cases_on `source_exempt tops (res,am',rqs)`
-  >- (irule source_exempt_call_result_rel >> simp[]) >>
+  `source_result_ok res` by
+    metis_tac[call_state_rel_no_recipient_overflow_core] >>
+  `~source_exempt tops (res,am',rqs)` by
+    (Cases_on `res`
+     >- gvs[source_exempt_def]
+     >- (Cases_on `y` >>
+         gvs[source_exempt_def, unspecified_behaviour_exempt_def,
+             vyperBalanceOverflowTheory.source_result_ok_def] >>
+         Cases_on `e` >>
+         gvs[source_exempt_def, unspecified_behaviour_exempt_def,
+             vyperBalanceOverflowTheory.source_result_ok_def])) >>
   fs[] >>
   drule_all selected_run >> strip_tac >>
   `terminates (run_context fuel unit.cu_context vs)` by
@@ -1157,9 +1178,6 @@ Proof
       pop_assum SUBST_ALL_TAC >>
       `tx with code := (entry_venom_state prog cplan es).vs_code = tx` by
         metis_tac[opt_entry_own_txp_identity, opt_entry_state_own_identity] >>
-      `txp = tx` by
-        (qpat_assum `txp = tx with code := vs0.vs_code` mp_tac >>
-         fs[]) >>
       qpat_x_assum `txp = tx` SUBST_ALL_TAC >>
       `initial_ctx_rel cplan prog out.po_unit.cu_context vs0 es` by
         metis_tac[entry_venom_state_initial_ctx_rel] >>

@@ -5,11 +5,7 @@ Ancestors
 (* A dynamic abi_decode may occur in an imported body or in the main
    module. Its type is interpreted in the linked unit's type environment. *)
 Definition unspecified_behaviour_exempt_mods_def:
-  unspecified_behaviour_exempt_mods mods e <=>
-    (e = RuntimeError "abi_decode invalid" /\
-     ?src tops ty. MEM (src, tops) mods /\
-       occurs_abi_decode_target ty tops /\
-       is_dynamic (vyper_to_abi_type (type_env_all_modules mods) ty)) \/
+  unspecified_behaviour_exempt_mods (mods : (num option # toplevel list) list) e <=>
     e = RuntimeError "transfer_value recipient overflow"
 End
 
