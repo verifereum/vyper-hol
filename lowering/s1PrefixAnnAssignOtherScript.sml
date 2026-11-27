@@ -69,7 +69,7 @@ Resume annassign_other_typed_prefix_execution[allocation]:
       (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac)) >>
     qpat_x_assum `if _ then _ else _` mp_tac >> asm_rewrite_tac[] >>
     disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
-    qpat_x_assum `!sa ce r ty. declare_local _ _ _ _ = _ ==> _ /\ _ /\ expr_sim_prefix _ _ _ _ _ _`
+    qpat_x_assum `!sa ce r ty. declare_local cenv id typ sa = (ce,r) ==> _`
       (drule_then (qspec_then `expr_type e` strip_assume_tac)) >>
     `!bb. MEM bb func.fn_blocks ==> venomExecSemantics$phi_prefix_length bb.bb_instructions = 0` by
       (drule_at (Pat `body_inv tops ctx cenv cx`) body_inv_no_phi >>
@@ -82,6 +82,9 @@ Resume annassign_other_typed_prefix_execution[allocation]:
     `cenv'.ce_is_ctor = cenv.ce_is_ctor` by
       (qpat_assum `cenv' with <|ce_vars := _; ce_var_type := _; ce_dynarray_capacity := _|> = _` mp_tac >>
        simp[compile_env_component_equality]) >>
+    `cenv'.ce_modules = cenv.ce_modules` by
+      (qpat_assum `cenv' with <|ce_vars := _; ce_var_type := _; ce_dynarray_capacity := _|> = _`
+         (mp_tac o Q.AP_TERM `\ce. ce.ce_modules`) >> simp[]) >>
     `!H. dead_lo_ok H (DF H) lo cenv' cx` by fs[dead_lo_ok_def] >>
     `ctx_has_dalloca ctx ==> allocas_below_fmp entry` by
       (`stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv' cx es entry` by
@@ -121,7 +124,7 @@ Resume annassign_other_typed_prefix_execution[rhs_request]:
       (qspec_then `src_st` mp_tac) >>
     asm_rewrite_tac[pairTheory.SND] >> strip_tac >>
     unabbrev_all_tac >>
-    qpat_x_assum `!tail res ee obs_pre rq outcome sfx H. _ ==> request_site _ _ _ _ _ _`
+    qpat_x_assum `!tail res ee obs_pre rq outcome sfx H. _ ==> request_site _ _ _ _ _ _ _`
       (qspecl_then [`tail`,`rhs_res`,`rhs_state`,`obs_pre`,`rq`,`outcome`,`sfx`,`H`] mp_tac) >>
     asm_rewrite_tac[] >> metis_tac[]
 QED
