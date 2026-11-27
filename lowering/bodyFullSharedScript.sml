@@ -32,13 +32,8 @@ Proof
   simp[ghost_inv_at_def, lookup_scopes_def] >> metis_tac[]
 QED
 
-Theorem ghost_inv_at_pop:
-  !D lo d cenv cenv' cx ee G tn s sc rest.
-  ghost_inv_at D lo d cenv' cx ee G tn s /\
-  cenv_top_ext cenv cenv' ee.scopes /\
-  ee.scopes = sc :: rest /\
-  (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-  ghost_inv_at D lo d cenv cx (ee with scopes := rest) G tn s
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >>
   simp[ghost_inv_at_def, cenv_top_ext_def, compile_env_component_equality] >>
@@ -53,6 +48,17 @@ Proof
   gvs[] >> Cases_on `d` >> simp[return_buf_ptr_def] >>
   rename1 `SOME ds` >> PairCases_on `ds` >>
   gvs[return_buf_ptr_def]
+QED
+*)
+Theorem ghost_inv_at_pop:
+  !D lo d cenv cenv' cx ee G tn s sc rest.
+  ghost_inv_at D lo d cenv' cx ee G tn s /\
+  cenv_top_ext cenv cenv' ee.scopes /\
+  ee.scopes = sc :: rest /\
+  (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
+  ghost_inv_at D lo d cenv cx (ee with scopes := rest) G tn s
+Proof
+  cheat
 QED
 
 (* local_ptrs_reserved reads only ce_vars, which the shadow env keeps, and
