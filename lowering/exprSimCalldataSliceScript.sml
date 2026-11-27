@@ -639,8 +639,31 @@ Proof
 QED
 
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem slice_calldata_run:
+  !op n m sa ptr sb func cenv cx es s a ctx.
+  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size m) sa = (ptr,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
+  context_well_typed cx /\ n <= m /\ 0 < n /\ n < dimword (:256) /\ a < dimword (:256) /\
+  32 + 32 * word_size m < 2 ** 64 /\
+  eval_operand op s = SOME (n2w a) /\
+  (!x. op = Var x ==> not_fresh_at sa x) ==>
+  if dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n then
+    ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+  else ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    stmt_state_rel H ctx func cenv cx es t /\ eval_operand ptr t = SOME w /\
+    FLOOKUP t.vs_allocas (sa.cs_next_id + 7) = SOME (w2n w,32 + 32 * word_size m) /\
+    pure_frame cenv func es sa s t /\
+    val_in_memory (BaseTV (BytesT (Dynamic m)))
+      (BytesV (TAKE n (DROP a cx.txn.calldata))) (w2n w) t.vs_memory /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id ==>
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    locals_kept cenv es es s t /\
+    (!nm lb len. local_region cenv es.scopes t nm lb len ==>
+       regions_disjoint (w2n w) (32 + 32 * word_size m) lb len)
 Proof
   rpt gen_tac >> strip_tac >>
   `word_size n <= word_size m` by
@@ -701,19 +724,23 @@ Proof
   `pre.vs_memory = s.vs_memory /\ pre.vs_allocas = s.vs_allocas /\
    pre.vs_labels = s.vs_labels` by
     (qpat_assum `pre = s with vs_vars := _` SUBST1_TAC >> simp[]) >>
-  `(cenv.ce_is_ctor ==> !name tv v off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+  `(cenv.ce_is_ctor ==> !src name tv v off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (tv,v) ==>
      regions_disjoint off (type_memory_size tv) (w2n w)
        (32 * word_size m + 32))` by
-    (rpt strip_tac >>
-     qpat_assum `stmt_state_rel H ctx func cenv cx es t` mp_tac >>
-     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
-     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >> strip_tac >>
+    (disch_tac >> rpt gen_tac >>
+     disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+     `immutable_alloca_sep func (cenv with ce_module := src) cx es t` by
+       (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+        Cases_on `src = cenv.ce_module` >>
+        gvs[compileEnvTheory.compile_env_component_equality] >> metis_tac[]) >>
+     pop_assum mp_tac >> simp[immutable_alloca_sep_def] >> strip_tac >>
+     qpat_x_assum `!name tv v off. _ ==> _ /\ _ /\ _` drule_all >> strip_tac >>
      qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _`
        (qspec_then `mk_inst s2.cs_next_id ALLOCA
          [Lit (n2w (32 * word_size m + 32))]
@@ -863,12 +890,19 @@ Proof
           simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
                immutableMemoryFrameTheory.immutable_write_memory_capacity] >>
           decide_tac) >>
-      rpt strip_tac >>
-      `regions_disjoint off (type_memory_size tv) (w2n w)
-         (32 * word_size m + 32)` by metis_tac[] >>
+      disch_tac >>
+      map_every qx_gen_tac [`imm_src`, `imm_name`, `imm_tv`, `imm_v`, `imm_off`] >>
+      disch_tac >>
+      `regions_disjoint imm_off (type_memory_size imm_tv) (w2n w)
+         (32 * word_size m + 32)` by
+        (qpat_assum `cenv.ce_is_ctor ==> !src name tv v off. _ ==> _` mp_tac >>
+         impl_tac >- first_assum ACCEPT_TAC >>
+         disch_then (qspecl_then
+           [`imm_src`, `imm_name`, `imm_tv`, `imm_v`, `imm_off`] MATCH_MP_TAC) >>
+         first_assum ACCEPT_TAC) >>
       qpat_assum `!b len. _ ==> mem_bytes_at _ _ u.vs_memory = _`
-        (qspec_then `off` mp_tac) >>
-      disch_then (qspec_then `type_memory_size tv` mp_tac) >>
+        (qspec_then `imm_off` mp_tac) >>
+      disch_then (qspec_then `type_memory_size imm_tv` mp_tac) >>
       simp[regions_disjoint_def] >>
       impl_tac >- (fs[regions_disjoint_def] >> decide_tac) >> simp[]) >>
   `FLOOKUP u.vs_allocas (sa.cs_next_id + 7) =
@@ -901,35 +935,6 @@ Proof
     (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
      simp[regions_disjoint_def] >> decide_tac) >>
   metis_tac[]
-QED
-*)
-Theorem slice_calldata_run:
-  !op n m sa ptr sb func cenv cx es s a ctx.
-  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size m) sa = (ptr,sb) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
-  context_well_typed cx /\ n <= m /\ 0 < n /\ n < dimword (:256) /\ a < dimword (:256) /\
-  32 + 32 * word_size m < 2 ** 64 /\
-  eval_operand op s = SOME (n2w a) /\
-  (!x. op = Var x ==> not_fresh_at sa x) ==>
-  if dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n then
-    ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
-  else ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel H ctx func cenv cx es t /\ eval_operand ptr t = SOME w /\
-    FLOOKUP t.vs_allocas (sa.cs_next_id + 7) = SOME (w2n w,32 + 32 * word_size m) /\
-    pure_frame cenv func es sa s t /\
-    val_in_memory (BaseTV (BytesT (Dynamic m)))
-      (BytesV (TAKE n (DROP a cx.txn.calldata))) (w2n w) t.vs_memory /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-       FLOOKUP t.vs_allocas aid = SOME entry) /\
-    (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id ==>
-       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
-    locals_kept cenv es es s t /\
-    (!nm lb len. local_region cenv es.scopes t nm lb len ==>
-       regions_disjoint (w2n w) (32 + 32 * word_size m) lb len)
-Proof
-  cheat
 QED
 
 Theorem slice_calldata_vv_post:
