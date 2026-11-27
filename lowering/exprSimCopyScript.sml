@@ -605,17 +605,6 @@ Proof
 QED
 
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def] >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-  `off + k < dimword (:256)` by DECIDE_TAC >>
-  gvs[arithmeticTheory.ADD_COMM]
-QED
-*)
 Theorem immutable_holds_data:
   !func cenv cx es s t tv w ctx.
     stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
@@ -624,7 +613,19 @@ Theorem immutable_holds_data:
             read_result cx tv es = (INL v, es) /\
             val_in_memory tvt v (w2n w) s.vs_data_section
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `immutable_holds _ _ _ _ _ _ _` mp_tac >>
+  simp[immutable_holds_def] >> strip_tac >>
+  `immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s` by
+    (drule stateRelProjTheory.stmt_state_rel_state_rel >>
+     simp[state_rel_def] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+  `val_in_memory itv iv off s.vs_data_section` by
+    (qpat_x_assum `immutables_rel _ _ _ _ _ _` mp_tac >>
+     simp[immutables_rel_def] >> metis_tac[]) >>
+  fs[sub_layout_def] >>
+  `k + off < dimword (:256)` by decide_tac >>
+  simp[] >>
+  `k + off = off + k` by decide_tac >> metis_tac[]
 QED
 
 Theorem immutable_holds_bounds:
@@ -637,38 +638,27 @@ Proof
   gvs[] >> metis_tac[value_has_type_val_wf, arithmeticTheory.ADD_ASSOC]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def, read_result_def, return_def] >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-  `off + k < dimword (:256)` by decide_tac >>
-  gvs[arithmeticTheory.ADD_COMM]
-QED
-*)
 Theorem immutable_holds_memory:
   stmt_state_rel H ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
   immutable_holds cenv cx t (Value v) a es uu /\
   evaluate_type (get_tenv cx) t = SOME tv ==>
   val_in_memory tv v (w2n a) uu.vs_memory
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `immutable_holds _ _ _ _ _ _ _` mp_tac >>
+  simp[immutable_holds_def, read_result_def, return_def] >> strip_tac >>
+  `immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es uu` by
+    (drule stateRelProjTheory.stmt_state_rel_state_rel >>
+     simp[state_rel_def] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
+  `val_in_memory itv iv off uu.vs_memory` by
+    (qpat_x_assum `immutables_rel _ _ _ _ _ _` mp_tac >>
+     simp[immutables_rel_def] >> metis_tac[]) >>
+  fs[sub_layout_def] >>
+  `k + off < dimword (:256)` by decide_tac >>
+  simp[] >>
+  `k + off = off + k` by decide_tac >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rw[immutable_holds_def, stmt_state_rel_def, immutable_alloca_sep_def,
-     read_result_def, return_def] >>
-  gvs[sub_layout_def] >>
-  `off + k < dimword (:256)` by decide_tac >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  first_x_assum drule_all >>
-  simp[regions_disjoint_def] >> decide_tac
-QED
-*)
 Theorem immutable_holds_alloca_disjoint:
   stmt_state_rel H ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
   immutable_holds cenv cx t (Value v) a es uu /\
@@ -677,7 +667,29 @@ Theorem immutable_holds_alloca_disjoint:
   FLOOKUP uu.vs_allocas inst.inst_id = SOME (dst,sz) ==>
   regions_disjoint (w2n a) (type_memory_size tv) dst sz
 Proof
-  cheat
+  strip_tac >>
+  qpat_x_assum `immutable_holds _ _ _ _ _ _ _`
+    (REPEAT_TCL CHOOSE_THEN (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) o
+     REWRITE_RULE [immutable_holds_def]) >>
+  rename1 `FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off)` >>
+  rename1 `sub_layout itv iv k _ _` >>
+  `immutable_alloca_sep func (cenv with ce_module := src) cx es uu` by
+    (Cases_on `src = cenv.ce_module`
+     >- (simp[compile_env_component_equality] >> fs[stmt_state_rel_def]) >>
+     `?tops. ALOOKUP cenv.ce_modules src = SOME tops` by
+       fs[optionTheory.IS_SOME_EXISTS] >>
+     qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
+     simp[stmt_state_rel_def] >> strip_tac >>
+     first_x_assum (qspecl_then [`src`, `tops`] mp_tac) >> simp[]) >>
+  `regions_disjoint off (type_memory_size itv) dst sz` by
+    (qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
+     simp[immutable_alloca_sep_def] >> strip_tac >>
+     first_x_assum drule_all >> strip_tac >>
+     first_x_assum drule_all >> simp[]) >>
+  fs[sub_layout_def] >>
+  `off + k < dimword (:256)` by decide_tac >>
+  gvs[arithmeticTheory.LESS_MOD, loweringStateRelDefsTheory.regions_disjoint_def] >>
+  decide_tac
 QED
 
 Theorem copy_runtime_contents:
