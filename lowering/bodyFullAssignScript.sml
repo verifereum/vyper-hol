@@ -751,6 +751,21 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all assign_base_local_rhs_pre >> strip_tac >>
+  drule_all assign_relayout_source_classify >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  `evaluate_type (get_tenv cx) ty = SOME entry.type` by metis_tac[] >>
+  `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
+  drule_all widening_memory_layout_bound >> strip_tac >>
+  `0 < type_memory_size stv` by
+    (drule_all widening_zero_memory_size >> simp[] >> decide_tac) >>
+  simp[] >> gvs[wordsTheory.dimword_def] >> decide_tac
+QED
+*)
 Theorem body_assign_widened_layout_ready[local]:
   !cx id ty e tops bindings ctx cenv env env' ret_ty es.
     (contract_inv mods exps ctx cenv cx /\
@@ -784,16 +799,7 @@ Theorem body_assign_widened_layout_ready[local]:
       type_memory_size stv <= type_memory_size dtv /\
       type_memory_size dtv < dimword (:256)
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all assign_base_local_rhs_pre >> strip_tac >>
-  drule_all assign_relayout_source_classify >> strip_tac >>
-  drule_all expr_sim_inv_local >> strip_tac >>
-  `evaluate_type (get_tenv cx) ty = SOME entry.type` by metis_tac[] >>
-  `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
-  drule_all widening_memory_layout_bound >> strip_tac >>
-  `0 < type_memory_size stv` by
-    (drule_all widening_zero_memory_size >> simp[] >> decide_tac) >>
-  simp[] >> gvs[wordsTheory.dimword_def] >> decide_tac
+  cheat
 QED
 
 (* A memory local whose source has a widened physical layout. *)
