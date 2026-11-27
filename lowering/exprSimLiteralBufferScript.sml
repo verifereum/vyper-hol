@@ -328,8 +328,27 @@ QED
 
 Finalise literal_chunks_run
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem literal_state_memory_frame:
+  !func cenv cx es s t ctx.
+    stmt_state_rel H ctx func cenv cx es s /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
+       lookup_var x t = lookup_var x s) /\
+    (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
+       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+       lookup_var p t = lookup_var p s) /\
+    (!name b sz. local_region cenv es.scopes s name b sz ==>
+       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    (cenv.ce_is_ctor ==> !src name tv v off.
+      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+      FLOOKUP cenv.ce_module_vars (src,name) =
+        SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
+      mem_bytes_at off (type_memory_size tv) t.vs_memory =
+        mem_bytes_at off (type_memory_size tv) s.vs_memory) ==>
+    stmt_state_rel H ctx func cenv cx es t
 Proof
   rpt strip_tac >>
   `t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>` by
@@ -356,16 +375,25 @@ Proof
      qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
        (fn th => once_rewrite_tac[th]) >>
      gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
-    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+      immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es t` by
+    (rpt strip_tac >>
+     irule immutables_rel_mem_agree >> qexists_tac `s` >>
      qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
        (fn th => once_rewrite_tac[th]) >>
-     gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
-     first_assum ACCEPT_TAC) >>
+     fs[stmt_state_rel_def, state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+     metis_tac[]) >>
   `immutable_alloca_sep func cenv cx es t` by
     (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
      qexistsl_tac [`s`, `es`] >>
      gvs[exprLoweringPropsTheory.stmt_state_rel_def] >>
+     rpt strip_tac >> qexists_tac `id` >>
+     fs[local_region_def] >> metis_tac[]) >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+      immutable_alloca_sep func (cenv with ce_module := src) cx es t` by
+    (rpt strip_tac >>
+     irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+     fs[stmt_state_rel_def] >>
      rpt strip_tac >> qexists_tac `id` >>
      fs[local_region_def] >> metis_tac[]) >>
   `immutable_base_zero cenv t` by
@@ -374,39 +402,16 @@ Proof
      gvs[exprLoweringPropsTheory.stmt_state_rel_def] >>
      qpat_assum `t = _ with <|vs_memory := _; vs_vars := _|>`
        (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `state_rel H func cenv cx es s` by fs[stmt_state_rel_def] >>
   rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
   conj_tac
-  >- (irule exprLoweringPropsTheory.state_rel_frame >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`es`, `s`] >> simp[] >>
-      qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
-        (fn th => once_rewrite_tac[th]) >>
-      gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
+  >- (match_mp_tac
+         (Q.SPECL [`H`,`func`,`cenv`,`cx`,`es`,`es`,`s`,`t`] state_rel_frame) >>
+      rpt conj_tac >>
+      FIRST [first_assum ACCEPT_TAC,
+             qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
+               (fn th => once_rewrite_tac[th]) >> simp[]]) >>
   gvs[exprLoweringPropsTheory.stmt_state_rel_def] >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem literal_state_memory_frame:
-  !func cenv cx es s t ctx.
-    stmt_state_rel H ctx func cenv cx es s /\
-    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-    (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
-       lookup_var x t = lookup_var x s) /\
-    (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
-       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-       lookup_var p t = lookup_var p s) /\
-    (!name b sz. local_region cenv es.scopes s name b sz ==>
-       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
-    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-    (cenv.ce_is_ctor ==> !name tv v off.
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
-        SOME (ImmutableLoc off) /\
-      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
-      mem_bytes_at off (type_memory_size tv) t.vs_memory =
-        mem_bytes_at off (type_memory_size tv) s.vs_memory) ==>
-    stmt_state_rel H ctx func cenv cx es t
-Proof
-  cheat
 QED
 
 Theorem literal_buffer_prefix_shape[local]:
@@ -588,13 +593,18 @@ Resume literal_bytelike_run[frame]:
        >- (qpat_x_assum `LENGTH (mstore _ _ _).vs_memory <= _` mp_tac >>
            simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
                 arithmeticTheory.MAX_DEF] >> IF_CASES_TAC >> decide_tac) >>
-       rpt strip_tac >>
+       disch_tac >> rpt gen_tac >>
+       disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+       `immutable_alloca_sep func (cenv with ce_module := src) cx es t` by
+         (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+          Cases_on `src = cenv.ce_module` >>
+          gvs[compileEnvTheory.compile_env_component_equality] >>
+          metis_tac[]) >>
        `regions_disjoint off (type_memory_size tv) (w2n w)
           (32 + 32 * word_size (LENGTH bs))` by
-         (qpat_x_assum `stmt_state_rel H ctx _ _ _ _ t` mp_tac >>
-          simp[exprLoweringPropsTheory.stmt_state_rel_def,
-               exprLoweringPropsTheory.immutable_alloca_sep_def] >>
-          strip_tac >> first_x_assum drule_all >> strip_tac >>
+         (qpat_x_assum `immutable_alloca_sep _ (_ with ce_module := _) _ _ _` mp_tac >>
+          simp[immutable_alloca_sep_def] >> strip_tac >>
+          first_x_assum drule_all >> strip_tac >>
           qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
           goal_assum (drule_at Any) >>
           simp[venomInstTheory.mk_inst_def]) >>
