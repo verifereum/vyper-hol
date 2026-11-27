@@ -2160,21 +2160,18 @@ Proof
       immutable_alloca_sep fn (ce with ce_module := src) cx es s)` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ es s`
        (mp_tac o REWRITE_RULE [stmt_state_rel_def]) >> simp[]) >>
-  `stmt_state_rel H ctx fn ce cx locked u` by
-    (irule stmt_state_rel_allocas_frame >> qexistsl_tac [`es`,`s`] >> simp[] >>
-     rpt conj_tac
-     >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`,`es`] >> simp[] >>
-         rpt strip_tac >> qexists_tac `id` >>
-         metis_tac[exprSimCopyTheory.copy_buffer_local_region_frame])
-     >- (rpt strip_tac >> irule immutable_alloca_sep_fields >>
-         qexistsl_tac [`s`,`es`] >> simp[] >> conj_tac
-         >- (rpt strip_tac >> qexists_tac `id` >>
-             `local_ptrs_reserved (ce with ce_module := src) pro` by
-               fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
-             metis_tac[exprSimCopyTheory.copy_buffer_local_region_frame]) >>
-         metis_tac[]) >>
-     irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
+  `!c. c.ce_vars = ce.ce_vars /\ immutable_alloca_sep fn c cx es s ==>
+       immutable_alloca_sep fn c cx locked u` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >> simp[] >>
+     qexistsl_tac [`s`,`es`] >> simp[] >> rpt strip_tac >> qexists_tac `id` >>
+     fs[loweringStateRelDefsTheory.local_region_def] >>
+     metis_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+  `immutable_base_zero ce u` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
      metis_tac[stmt_state_rel_immutable_base_zero, local_ptrs_reserved_imm_base]) >>
+  `stmt_state_rel H ctx fn ce cx locked u` by
+    (irule stmt_state_rel_allocas_frame >> simp[] >>
+     qexistsl_tac [`es`,`s`] >> simp[]) >>
   simp[] >> rpt conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists_tac `pro` >> simp[])
   >- (irule ret_pc_ok_frame >> qexistsl_tac [`ce`,`s`,`pro`] >>
