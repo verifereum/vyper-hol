@@ -11,6 +11,7 @@ Ancestors
   gasOutcomeFullCompose vyperStorageTrace bodyFullIntCallReturnHalt exprLoweringProps
   bodyFullHashKeccakFixed bodyFullWordArgs
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 Libs
   monadsyntax horizonTypeLib
 
@@ -295,8 +296,8 @@ Theorem raw_call_continuation_full:
     [addr;len;dp;gas;(case ext_call_kwarg EKValue flags.rcf_kws xs of
       NONE => Lit 0w | SOME p => p);ov;op] ==> not_fresh_at s7 x)
   ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (eval_raw_call cx flags target bs amount (ext_call_kwarg EKGas flags.rcf_kws kvs))
     (esK,t7,G7,tn7)
         (\H res ee G tn t. ?tv. res = INL tv /\
@@ -1430,8 +1431,8 @@ Theorem raw_call_prepared_action_full:
     EVERY (safe_operand s7) [addr;len;dp;gas;(case vo of NONE=>Lit 0w | SOME v=>v);ov;op] /\
     (!x. MEM (Var x) [addr;len;dp;gas;(case vo of NONE=>Lit 0w | SOME v=>v);ov;op] ==>
        not_fresh_at s7 x)) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (do
       type_check (LENGTH (av::BytesV bs::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
       target <- lift_option_type (dest_AddressV av) "raw_call target";

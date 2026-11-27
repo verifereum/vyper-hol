@@ -8,6 +8,7 @@ Ancestors bodyFullShadowBodyInv
   gasShadowCompile gasShadowState exprSimAccounts fragExec exprSimUnwrap
   bodySimFull exprLowering compileEnv exprSimDefs vyperStorageTrace
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 Libs
   pairLib
 
@@ -447,10 +448,10 @@ Theorem intcall_callee_premise[local]:
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
       eval_operands arg_ops t = SOME argv ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
          MAP (op_prov G) arg_ops)
-        (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
+        cenv.ce_modules cx st0 (intcall_callee_src cx name mut nr ss)
         (es1, entered, FEMPTY, tn with t_var := FEMPTY)
         (\H res ee G' tn' t'. F)
         (\H res ee gt r.

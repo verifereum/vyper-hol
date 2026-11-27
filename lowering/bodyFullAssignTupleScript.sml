@@ -59,6 +59,7 @@ Ancestors bodySingletonCallSupport bodyImmutableStoreMemory[qualified,ignore_gra
   bodyFullTupleTargetProjection[qualified,ignore_grammar]
   exprSimAbiDecodeEntryTyping[qualified,ignore_grammar]
   bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 
 val _ = Parse.hide "body";
@@ -6950,8 +6951,8 @@ Theorem tuple_immutable_head_target:
     storage_well_formed_on cx es (FST H) /\
     ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_target_place cx bt) (es,s,G,tn)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (eval_target_place cx bt) (es,s,G,tn)
     (\H res ee G' tn' t. ?path.
       res = INL (ImmutablePlace NONE id path) /\
       bodyFullTargetDefs$imm_target_post H ctx func cenv cx es sa sb s ee id path ty r t /\
@@ -10558,7 +10559,7 @@ Theorem tuple_assign_exact_store_head_outcome:
     compile_tuple_store_all cenv [sty] [BaseTarget bt] [op0] cur = ((),sm) /\
     compile_tuple_store_all (gas_shadow_env T cenv) [sty] [BaseTarget (gas_shadow_target bt)]
       [op0] shadow_cur = ((),shadow_sm) /\
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
       (assign_tuple_targets cx (BaseTarget bt) vi) (src,u,Gu,tu)
       (\H res fin Gq tq q. res = INL () /\ fin.gas_obs = [] /\ ~q.vs_halted /\
         bodyTupleExactStoreCursor$tuple_exact_cursor_common (cenv,cx,env,tops,bindings)
@@ -13643,8 +13644,8 @@ Theorem tuple_widened_place_head_parts:
        storage_well_formed_on cx src (FST H) /\ ghost_inv_at (DF H) lo d cenv cx src G tn s) /\
     ~s.vs_halted /\ s.vs_current_bb = c.cs_current_bb /\
     s.vs_inst_idx = LENGTH c.cs_current_insts /\
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_target_place cx head) (src,s,G,tn)
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (eval_target_place cx head) (src,s,G,tn)
       (\H res mid Gp tp sp.
         (?p. res = INL p /\
           target_post H ctx func cenv cx src c place_cs s mid (PlaceR p) (Type (EL i dtys)) r sp /\

@@ -11,6 +11,7 @@ Ancestors
   vyperInterpreter vyperState loweringPosts bodyPtrDefs fragGasOriginPtr
   fragExec list finite_map
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -329,9 +330,9 @@ Theorem bop_in_literal_operands_clean_full_halt:
       ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
+      cenv.ce_modules cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
       (\H res ee G tn u. ?vs. res = INL vs /\
         stmt_state_rel H ctx func cenv cx ee u /\
         storage_well_formed_on cx ee (FST H) /\
@@ -385,9 +386,9 @@ Theorem bop_in_literal_operands_clean_full:
       ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
+      cenv.ce_modules cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
       (\H res ee G tn u. ?vs. res = INL vs /\
         stmt_state_rel H ctx func cenv cx ee u /\
         storage_well_formed_on cx ee (FST H) /\
@@ -445,9 +446,9 @@ Theorem bop_in_literal_operands_full:
       ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
+      cenv.ce_modules cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
       (\H res ee G tn u. ?vs. res = INL vs /\
         stmt_state_rel H ctx func cenv cx ee u /\
         storage_well_formed_on cx ee (FST H) /\

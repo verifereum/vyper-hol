@@ -22,6 +22,7 @@ Ancestors gasContext[qualified,ignore_grammar] bodyFullShared[qualified,ignore_g
   forNestedArrayCapture[qualified,ignore_grammar]
   vyperTypeContract[qualified,ignore_grammar]
   bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 Libs
   monadsyntax
 
@@ -490,8 +491,8 @@ Theorem for_nonslot_array_body_invoke:
   (!x sz. bc.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sbCopy x) /\
   ~block_is_terminated sbCopy /\
   gas_admissible (eval_stmts cx body) (stmt_res_ok (InLoop exit incr)) eb ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_stmts cx body) (eb,s,G,tn)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    bc.ce_modules cx st0 (eval_stmts cx body) (eb,s,G,tn)
     (\H raw ef GG tt u.
       (?c'. stmt_lands (InLoop exit incr) sbBody raw u /\ ~u.vs_halted /\
         (raw = INL () ==> ~block_is_terminated sbBody /\ c' = bc') /\
@@ -2920,11 +2921,11 @@ Theorem for_nonslot_array_scoped_body_at[local]:
       for_nonslot_live (DF H,lo,d,ctx,func,cx,c,id,env,body)
         (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
         (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,tz,c,tz,Gf,tf,t)) /\
-  ((?Q R. gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_stmts cx body) (eb,s,G,tn) Q R) ==> Extra eb s G tn) ==>
+  ((?Q R. gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      bc.ce_modules cx st0 (eval_stmts cx body) (eb,s,G,tn) Q R) ==> Extra eb s G tn) ==>
   Extra eb s G tn /\
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    bc.ce_modules cx st0
     (finally (try (do eval_stmts cx body; return F od) handle_loop_exception) pop_scope)
     (eb,s,G,tn)
     (\H out ef GG tt t. ?b. out = INL b /\
@@ -4071,8 +4072,8 @@ Theorem for_nonslot_array_round_contracts_at_with_prefix:
     (!x sz. bc.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sbCopy x) /\
     ~block_is_terminated sbCopy /\
     gas_admissible (eval_stmts cx loop_body) (stmt_res_ok (InLoop exit incr)) eb /\
-    (?Q R. gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_stmts cx loop_body) (eb,t,Gf,tnf) Q R) ==>
+    (?Q R. gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      bc.ce_modules cx st0 (eval_stmts cx loop_body) (eb,t,Gf,tnf) Q R) ==>
     B eb t Gf tnf) /\
   (!a rs es z J tz v eb t Gf tnf.
     B eb t Gf tnf /\ a = Value v /\
@@ -4094,8 +4095,8 @@ Theorem for_nonslot_array_round_contracts_at_with_prefix:
       ~z.vs_halted /\
       (!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z) /\
       gas_admissible (eval_for cx dtv id loop_body (a::rs)) (stmt_res_ok lctx) es ==>
-      gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        (cx_tops cx) cx st0
+      gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        c.ce_modules cx st0
         (do v <- read_result cx a;
             push_scope_with_var id dtv v;
             finally (try (do eval_stmts cx loop_body; return F od)
@@ -4732,8 +4733,8 @@ Theorem for_nonslot_array_round_contracts_at:
       ~z.vs_halted /\
       (!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z) /\
       gas_admissible (eval_for cx dtv id loop_body (a::rs)) (stmt_res_ok lctx) es ==>
-      gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        (cx_tops cx) cx st0
+      gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        c.ce_modules cx st0
         (do v <- read_result cx a;
             push_scope_with_var id dtv v;
             finally (try (do eval_stmts cx loop_body; return F od)
@@ -4964,8 +4965,8 @@ Theorem for_nonslot_array_round_contracts:
       ~z.vs_halted /\
       (!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z) /\
       gas_admissible (eval_for cx dtv id loop_body (a::rs)) (stmt_res_ok lctx) es ==>
-      gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        (cx_tops cx) cx st0
+      gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        c.ce_modules cx st0
         (do v <- read_result cx a;
             push_scope_with_var id dtv v;
             finally (try (do eval_stmts cx loop_body; return F od)

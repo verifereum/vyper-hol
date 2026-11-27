@@ -8,6 +8,7 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint vyperState compileEnv
   fragExec list exprSimDefs exprSimHyps freshWrites contextRawReachable ptrDiscipline unitMemInv
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -238,12 +239,12 @@ Theorem bop_operands_full_cps_exit:
       (~is_word_type (post_value_type cenv e2) ==> ptr_buf_ok cenv e2 y G2 u) /\
       ghost_kept_at lo cenv mid s1 G1 tn1 t G2 tn2 /\
       ~u.vs_halted /\ fin.gas_obs = [])) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0
       (\ee. (bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 ee, ee))
       (fin,u,G2,tn2) Q R) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (bind (eval_expr cx (Builtin ann (Bop bop) [e1; e2])) (read_result cx))
     (es,s0,G0,tn0) Q R
 Proof
@@ -318,12 +319,12 @@ Theorem bop_word_operands_full_cps_exit:
       (~is_word_type (post_value_type cenv e2) ==> ptr_buf_ok cenv e2 y G2 u) /\
       ghost_kept_at lo cenv mid s1 G1 tn1 t G2 tn2 /\
       ~u.vs_halted /\ fin.gas_obs = [])) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0
       (\ee. (bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 ee, ee))
       (fin,u,G2,tn2) Q R) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (bind (eval_expr cx (Builtin ann (Bop bop) [e1; e2])) (read_result cx))
     (es,s0,G0,tn0) Q R
 Proof
@@ -399,12 +400,12 @@ Theorem bop_operands_full_cps:
       (~is_word_type (post_value_type cenv e2) ==> ptr_buf_ok cenv e2 y G2 u) /\
       ghost_kept_at lo cenv mid s1 G1 tn1 t G2 tn2 /\
       ~u.vs_halted /\ fin.gas_obs = [])) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0
       (\ee. (bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 ee, ee))
       (fin,u,G2,tn2) Q (\H res ee gt r. expr_exit res r)) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (bind (eval_expr cx (Builtin ann (Bop bop) [e1; e2])) (read_result cx))
     (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)
 Proof
@@ -481,12 +482,12 @@ Theorem bop_word_operands_full_cps:
       (~is_word_type (post_value_type cenv e2) ==> ptr_buf_ok cenv e2 y G2 u) /\
       ghost_kept_at lo cenv mid s1 G1 tn1 t G2 tn2 /\
       ~u.vs_halted /\ fin.gas_obs = [])) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0
       (\ee. (bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 ee, ee))
       (fin,u,G2,tn2) Q (\H res ee gt r. expr_exit res r)) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (bind (eval_expr cx (Builtin ann (Bop bop) [e1; e2])) (read_result cx))
     (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)
 Proof

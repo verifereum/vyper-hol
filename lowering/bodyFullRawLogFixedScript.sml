@@ -3,6 +3,7 @@ Theory bodyFullRawLogFixed
 Ancestors bodyFullRawLogFixedCompose bodyFullRawLogFixedAlloc bodyFullRawLogFixedTail
   bodyFullRawLogFixedTailPath contextRawReachable ptrDiscipline
   exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 Theorem raw_log_fixed_data_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cenv cx data es sd data_op sm
@@ -61,8 +62,8 @@ Theorem raw_log_fixed_data_full:
     emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;buf.buf_operand]) [] s1 = ((),sb) /\
     fn_has_code sm sb func /\
     compile_call compile_expr cenv ret_ty ty RawLog [topics;data] dflt call_sa = (vv,call_sb) ==>
-    gas_outcome_full
-      (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+    gas_outcome_full_mods
+      (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
       (bind (bind (eval_expr cx data) (read_result cx))
         (\v. do bs <- lift_option_type (dest_BytesV v) "raw_log data";
                 type_check (LENGTH vals <= 4) "raw_log too many topics";

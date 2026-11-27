@@ -9,6 +9,7 @@ Ancestors
   exprLoweringProps exprSimWordArgs fragExec list gasShadow vyperStorageTrace
   loweringPosts
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -129,10 +130,10 @@ Theorem raw_call_forced_data_kwargs_full_from_action:
     tk.vs_inst_idx = LENGTH s5.cs_current_insts /\ alloca_history func tk /\
     t4.vs_alloca_next <= tk.vs_alloca_next /\ ghost_kept_at lo cenv esD s4 G4 tn4 t4 GK tnK /\
     EVERY (\x. op_taint tnK x = {}) xs ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (next kvs) (esK,tk,GK,tnK) Q R) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_exprs cx kws) next) (esD,tD,GD,tnD) Q R
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (next kvs) (esK,tk,GK,tnK) Q R) ==>
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_exprs cx kws) next) (esD,tD,GD,tnD) Q R
 Proof
   cheat
 QED

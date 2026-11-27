@@ -30,6 +30,7 @@ Ancestors
   vyperInterpreter vyperAST list stateRelProj
   bodyFullIfExpReach bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 fun slice_use [] rule = mp_tac rule
   | slice_use (premise::rest) rule = qpat_assum premise (mp_then Any (slice_use rest) rule)
@@ -1194,7 +1195,7 @@ Theorem slice_builtin_none_vv_full_from_runs:
       ((if i+k <= LENGTH bs then INL (Value result)
         else INR (Error (RuntimeError "evaluate_slice range"))),
        es with gas_obs := tail)) ==>
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0 source
       (es,s,G,tn)
       (\H res ee HG tm t.
         res = INL (Value result) /\

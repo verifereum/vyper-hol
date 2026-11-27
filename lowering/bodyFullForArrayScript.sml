@@ -21,6 +21,7 @@ Ancestors
   exprSimSubscriptArraySource exprSimSubscriptArrayOrigin
   targetSubscriptMemory stmtSimForArrayFrame vyperLocalAccessFrame exprSimIfExp[qualified,ignore_grammar]
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* The bytestring copy uses the padded live footprint, not the capacity of
    either type. The path and representation refer to the same raw run. *)
@@ -433,9 +434,9 @@ Theorem for_array_expr_prefix_full:
     ghost_inv_at (DF H) lo d c cx es G tn s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_expr cx e) (es,s,G,tn)
+    c.ce_modules cx st0 (eval_expr cx e) (es,s,G,tn)
     (\H res ee G1 tn1 t. ?tv. res = INL tv /\
       vv_post H ctx func c cx e es sa sb s ee tv vv t /\
       vv_store_bound cx (post_value_type c e) (lowered_value_type c e) ee tv vv t /\
@@ -2087,9 +2088,9 @@ Theorem for_nonslot_array_prefix_full:
      vyperAST$Fixed cnt => comp_return (Lit (n2w cnt))
    | Dynamic _ => compile_ptr_load c.ce_is_ctor c.ce_imm_alloca loc (vv_operand vv)) sb =
     (len_op,sc) /\ fn_has_code sb sc func ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_iterator cx (Array e)) (es,s,G,tn)
+    c.ce_modules cx st0 (eval_iterator cx (Array e)) (es,s,G,tn)
     (\H res ee G' tn' t. ?vs rv av xs et.
       res = INL vs /\ vs = MAP Value xs /\
       (?obs. !tail. eval_expr cx e (es with gas_obs := obs ++ tail) =

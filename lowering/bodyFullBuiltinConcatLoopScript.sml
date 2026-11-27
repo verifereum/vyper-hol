@@ -13,6 +13,7 @@ Ancestors stmtSimProps[qualified,ignore_grammar]
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState
   venomState words list finite_map pred_set
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -157,9 +158,9 @@ Theorem concat_args_sim_full:
     mload (w2n ow) s0 = n2w k /\ k <= P /\
     32+P+SUM (MAP concat_payload_capacity (MAP expr_type args)) <= bsz /\
     32+concat_data_bound P (MAP expr_type args) <= bsz ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
+      cenv.ce_modules cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
       (\H res ee G tn t. ?vs. res = INL vs /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\

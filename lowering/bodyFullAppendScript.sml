@@ -38,6 +38,7 @@ Ancestors
   vyperTypeCallStackSoundness bodyFullShared vyperStorageTrace vyperStorageFootprint
   vyperEvalExprPreservesScopesDom immutableDeployPhysicalSource
   bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 val _ = Parse.hide "body";
 
@@ -2107,8 +2108,8 @@ Theorem append_nested_storage_cont_framed[local]:
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
   (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
     op_taint tn (Var x) = op_taint tn0 (Var x)) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v) (mid,t,G,tn)
     (\H res ee Gf tf u. ?cenv''.
       stmt_lands lctx sb res u /\ ~u.vs_halted /\
@@ -3525,8 +3526,8 @@ Theorem append_nested_memory_cont_full[local]:
   return_buf_frame d cenv sa s /\ alloca_history func s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (append_place cx (MemoryPlace id path) v) (mid,s,G,tn)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (append_place cx (MemoryPlace id path) v) (mid,s,G,tn)
     (\H res ee Gf tf u. ?cenv''.
       stmt_lands lctx sb res u /\ ~u.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
@@ -3806,8 +3807,8 @@ Theorem append_memory_copy_cont_full[local]:
   return_buf_frame d cenv sa s /\ alloca_history func s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (append_place cx (MemoryPlace id path) v) (mid,s,G,tn)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (append_place cx (MemoryPlace id path) v) (mid,s,G,tn)
     (\H res ee Gf tf u. ?cenv''.
       stmt_lands lctx sb res u /\ ~u.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\

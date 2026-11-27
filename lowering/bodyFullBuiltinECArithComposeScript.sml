@@ -12,6 +12,7 @@ Ancestors
   bodyFullBuiltinECArithStaging bodyFullBuiltinECArithPermitted
   bodyFullBuiltinECArithEmpty bodyFullOfVV exprSimWordArgs
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -227,9 +228,9 @@ Theorem ec_arith_vv_from_tail_full:
       ptr_val_ok cx (post_value_type cenv e2) v2 y G2 tn2 t2 /\
       (~is_word_type (post_value_type cenv e2) ==> ptr_buf_ok cenv e2 y G2 t2) /\
       ghost_kept_at lo cenv es1 s1 G1 tn1 t1 G2 tn2) ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0
+      cenv.ce_modules cx st0
       (ec_source_tail cx a bt [expr_type e1;expr_type e2] [v1;v2])
       (es2,t2,G2,tn2)
       (\H rr ee G tn t. ?tv. rr = INL tv /\

@@ -8,6 +8,7 @@ Ancestors
   bodyFullPreds bodySimFull compileEnv loweringPosts vyperInterpreter wordArgsPtr
   evalNoHalt supportedExprTraverse vyperTypeCallGraph list
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* At each bind, expose that the producer's cut has consumed its observations. *)
 val operand_bind_tac =
@@ -252,11 +253,11 @@ Theorem extcall_request_guarded_operand_prefix_address_owned_bundled:
             w2n w + type_memory_size rt <= lo /\
             (!mem. mem_agree_outside tn2.t_mem u.vs_memory mem ==>
               val_in_memory rt v (w2n w) mem))) (ZIP (xs,svs)) vs) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (k [v] vs) (ee,u,G2,tn2) Q (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (k [v] vs) (ee,u,G2,tn2) Q (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (bind (eval_exprs cx [addr]) (\target. bind (eval_exprs cx xs) (k target)))
     (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
@@ -384,11 +385,11 @@ Theorem extcall_request_guarded_operand_prefix_address_owned:
             w2n w + type_memory_size rt <= lo /\
             (!mem. mem_agree_outside tn2.t_mem u.vs_memory mem ==>
               val_in_memory rt v (w2n w) mem))) (ZIP (xs,svs)) vs) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (k [v] vs) (ee,u,G2,tn2) Q (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (k [v] vs) (ee,u,G2,tn2) Q (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (bind (eval_exprs cx [addr]) (\target. bind (eval_exprs cx xs) (k target)))
     (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))

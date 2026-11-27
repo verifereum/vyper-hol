@@ -37,6 +37,7 @@ Ancestors exprSimWordArgs[qualified,ignore_grammar] vyperLookup[qualified,ignore
   bodyFullIfExpReach[qualified,ignore_grammar]
   stmtSimDeclCompose[qualified,ignore_grammar] bodyFullForRounds
   bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 Libs rangeForDriverLib rangeRoundEntryLib[qualified]
 
 val _ = Parse.hide "body";
@@ -3796,7 +3797,7 @@ Theorem range_checked_entry_full:
           off + z <= b \/ b + z' <= off) /\ off <= i /\ i < off + z /\
        i IN tnA.t_mem ==>
        i IN tn0.t_mem) ==>
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
       (bind (lift_sum (get_range_limits (IntV n1) (IntV n2)))
          (\rl.
             ignore_bind
@@ -4292,7 +4293,7 @@ Theorem range_full_init:
             off + z <= b \/ b + z' <= off) /\ off <= i /\ i < off + z /\
          i IN tn.t_mem ==>
          i IN tn0.t_mem) sa es s0 G0 tn0 ea s GE tnE ==>
-    ?w. gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    ?w. gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
           (bind (lift_sum (get_range_limits (IntV n1) (IntV n2)))
              (\rl.
                 ignore_bind
@@ -6503,11 +6504,11 @@ Theorem compile_for_range_frag_full:
       (!nm b sz'. local_region c0 e0.scopes s0 nm b sz' ==>
                   off + sz <= b \/ b + sz' <= off) /\
       off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem)) /\
-  (!DF0 lo0 d0 ctx0 func0 PG0 tops0 cx0 st0 body0 es0 s G tn Q R.
+  (!DF0 lo0 d0 ctx0 func0 PG0 cx0 st0 body0 es0 s G tn Q R.
     es0.scopes <> [] /\
-    gas_outcome_full (DF0,lo0,d0,ctx0,func0,PG0) tops0 cx0 st0
+    gas_outcome_full_mods (DF0,lo0,d0,ctx0,func0,PG0) cenv.ce_modules cx0 st0
       (eval_stmts cx0 body0) (es0,s,G,tn) Q R ==>
-    gas_outcome_full (DF0,lo0,d0,ctx0,func0,PG0) tops0 cx0 st0
+    gas_outcome_full_mods (DF0,lo0,d0,ctx0,func0,PG0) cenv.ce_modules cx0 st0
       (finally (try (do eval_stmts cx0 body0; return F od)
          handle_loop_exception) pop_scope) (es0,s,G,tn)
       (\H res' ee G tn t. ?res sc.

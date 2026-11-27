@@ -6,6 +6,7 @@ Ancestors
   exprLowering compileEnv context venomState venomInst vyperInterpreter vyperState
   bodyPtrDefs loweringStateRelDefs[qualified,ignore_grammar] fragGasOriginPtr
   gasOutcomeFullCompose vyperABI vyperAST words finite_map pred_set list
+  gasOutcomeFullMods[qualified]
 
 Theorem extcall_ready_return_outcome:
   (!DF lo d explicit ctx PG func cenv cx env es ann is_static skip fname
@@ -234,7 +235,7 @@ Theorem extcall_ready_return_outcome:
         else LocatedValue ann (mk_ptr result_op LocMemory)) /\
   fn_has_code sr sb func /\ local_ptrs_reserved cenv sa /\
   MEM func ctx.ctx_functions /\ (!H. dead_lo_ok H (DF H) lo cenv cx) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (eval_ext_call cx stat skip (fname,arg_types,ret_type) opts (target_v::rest))
     (ee,s,G,tn)
     (\H res ee G tn t. ?tv. res = INL tv /\

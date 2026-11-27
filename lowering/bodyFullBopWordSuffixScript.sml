@@ -8,6 +8,7 @@ Ancestors
   bodySimFull gasOutcomeFullCompose exprBopSimProps exprSimSource exprSimProps
   wordArgsPtr ptrDiscipline bodyPtrDefs loweringPosts exprSimWordArgs
   exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 Theorem bop_word_suffix_inputs[local]:
   expr_body_pre_mods mods cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
@@ -110,8 +111,8 @@ Theorem bop_suffix_full_halt:
    (?m r. bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 fin =
       INR (Error (RuntimeError m)) /\
       run_inst_seq (emitted_insts s2 sb) u = Abort Revert_abort r)) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (\ee. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 ee,ee))
     (fin,u,G2,tn2) (\H (res : value + vyperState$exception) ee G tn t. ?v. res = INL v /\
     expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 ee v op t /\
@@ -298,8 +299,8 @@ Theorem bop_suffix_full:
    (?m r. bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 fin =
       INR (Error (RuntimeError m)) /\
       run_inst_seq (emitted_insts s2 sb) u = Abort Revert_abort r)) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (\ee. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 ee,ee))
     (fin,u,G2,tn2) (\H (res : value + vyperState$exception) ee G tn t. ?v. res = INL v /\
     expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 ee v op t /\
@@ -392,8 +393,8 @@ Theorem bop_word_suffix_full_halt:
       (~is_word_type (post_value_type cenv e2) ==> ptr_buf_ok cenv e2 y G2 u) /\
       ghost_kept_at lo cenv mid s1 G1 tn1 t G2 tn2 /\
       ~u.vs_halted /\ fin.gas_obs = [])) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (\ee. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 ee,ee))
     (fin,u,G2,tn2) (\H (res : value + vyperState$exception) ee G tn t. ?v. res = INL v /\
     expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 ee v op t /\
@@ -500,8 +501,8 @@ Theorem bop_word_suffix_full:
       (~is_word_type (post_value_type cenv e2) ==> ptr_buf_ok cenv e2 y G2 u) /\
       ghost_kept_at lo cenv mid s1 G1 tn1 t G2 tn2 /\
       ~u.vs_halted /\ fin.gas_obs = [])) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (\ee. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 ee,ee))
     (fin,u,G2,tn2) (\H (res : value + vyperState$exception) ee G tn t. ?v. res = INL v /\
     expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 ee v op t /\

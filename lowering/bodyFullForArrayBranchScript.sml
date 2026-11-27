@@ -16,6 +16,7 @@ Ancestors
   supportedExprTraverse[qualified,ignore_grammar]
   vyperTypeContract[qualified,ignore_grammar]
   bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* The loop continuation starts at the iterator's own captured endpoint. *)
 Theorem for_nonslot_array_prefix_continue_full:
@@ -613,8 +614,8 @@ Theorem for_array_expr_cut_frag_full:
             check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" em = (INL (),em) ==>
             body_for_full_ok_mods mods exps cx tyv id loop_body vs /\
             gas_admissible (eval_for cx tyv id loop_body vs) (stmt_res_ok lctx) em) ==>
-     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-       (cx_tops cx) cx st0
+     gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       cenv.ce_modules cx st0
        (bind (array_iterator_results cx (expr_type e) rv)
          (\vs. ignore_bind (check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long")
                           (eval_for cx tyv id loop_body vs)))

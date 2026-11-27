@@ -14,6 +14,7 @@ Ancestors
   evalNoHalt exprSimDefs gasOutcomeFull bodyFullPreds list
   bodyFullBuiltinWordPowCompose[qualified,ignore_grammar]
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 Libs
   pairLib
 
@@ -550,11 +551,11 @@ Theorem extcall_request_full:
         (?p. def = Var p /\ ptr_covers G tn p t (type_memory_bytes cenv dt)) /\
         (!w. eval_operand def t = SOME w ==>
           w2n w + type_memory_bytes cenv dt <= t.vs_alloca_next))) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_ext_call cx stat skip (fname,ats,rt) opts (v::(vs ++ kws)))
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (eval_ext_call cx stat skip (fname,ats,rt) opts (v::(vs ++ kws)))
       (ee,t,G,tn) Q (\H res ee gt r. expr_exit res r)) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_expr cx (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dr))
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (eval_expr cx (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dr))
     (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   cheat

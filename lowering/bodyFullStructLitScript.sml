@@ -21,6 +21,7 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint venomExecProps
   bodyInvCodeProps exprBodyPreProps exprSimFullBundleProps
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 val _ = Parse.hide "body";
 
@@ -412,7 +413,7 @@ Theorem structlit_fields_cons_continuation[local]:
   (!H. valid_horizon cx st0 H mid.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
       (t,G1,tn1) [] (OK u,G2,tn2)) /\
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) ce.ce_modules cx st0
     (eval_exprs cx (MAP SND fs)) (mid,u,G2,tn2)
     (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv_mods mods ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
@@ -425,7 +426,7 @@ Theorem structlit_fields_cons_continuation[local]:
     (\H res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
       halt_exit H cx ee (INR exc : eval_result + exception) r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u)) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) ce.ce_modules cx st0
     (bind (read_result cx tv) (\v. bind (eval_exprs cx (MAP SND fs))
       (\vs. return (v::vs)))) (mid,t,G1,tn1)
     (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv_mods mods ce cx env ee /\
@@ -1395,8 +1396,8 @@ Theorem structlit_fields_bundled_full:
       (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
       inv' H es si G0 tn0 s0 cells off) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx (MAP SND fs)) (es,s0,G0,tn0)
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      ce.ce_modules cx st0 (eval_exprs cx (MAP SND fs)) (es,s0,G0,tn0)
       (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv_mods mods ce cx env ee /\
         LIST_REL value_has_type tvs vs /\
         inv' H ee sb G tn z (cells++added) (off+type_memory_size_list tvs) /\
@@ -1500,8 +1501,8 @@ Theorem structlit_allocated_fields_bundled_full[local]:
     w2n w+type_memory_size_list tvs <= p \/ p+k <= w2n w) /\
   (!old p k. FLOOKUP s0.vs_allocas old = SOME(p,k) /\ old < sa.cs_next_id ==>
     w2n w+type_memory_size_list tvs <= p \/ p+k <= w2n w) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_exprs cx (MAP SND fs)) (es,t,G,tn)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    ce.ce_modules cx st0 (eval_exprs cx (MAP SND fs)) (es,t,G,tn)
     (\H res ee G tn z. ?vs added. res = INL vs /\ expr_sim_inv_mods mods ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
       inv' H ee sb G tn z ([]++added) (0+type_memory_size_list tvs) /\

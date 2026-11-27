@@ -15,6 +15,7 @@ Ancestors
   exprSimSend[qualified,ignore_grammar] abiBuiltinDispatchCorrect
   list[qualified,ignore_grammar]
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* A stack result keeps its compiler tag when staged. The only forms
    with a narrowed physical type return a pointer or use the call's
@@ -303,9 +304,9 @@ Theorem extcall_pos_aggregate_outcome:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+    cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v. res = INL v /\
       ((?tag op0. sv = StackValue tag op0) \/
        (?p. sv = LocatedValue (lowered_value_type cenv e) p /\

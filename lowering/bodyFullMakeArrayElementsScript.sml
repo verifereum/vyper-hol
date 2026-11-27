@@ -5,6 +5,7 @@ Ancestors
   bodyFullMakeArrayLoop exprSimAggregateEncoding rich_list list gasOutcomeFull
   exprSimDefs[qualified,ignore_grammar]
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 val _ = Parse.hide "base";
 
@@ -113,9 +114,9 @@ Theorem make_array_elements_full:
       (type_memory_bytes cenv et) header (Var q) 0 shadow_sa = (Var q,shadow_sb) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
     fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx args) (es,s,G,tn)
+      cenv.ce_modules cx st0 (eval_exprs cx args) (es,s,G,tn)
       (\H res ee Gf tnf t.
         ?vs. res = INL vs /\ LENGTH vs = LENGTH args /\
           LIST_REL value_has_type (REPLICATE (LENGTH args) tv) vs /\

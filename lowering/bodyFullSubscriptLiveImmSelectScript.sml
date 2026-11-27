@@ -21,6 +21,7 @@ Ancestors
   targetSubscriptMemory vyperStorageFootprint
   exprSimSubscriptArraySuffix gasOutcomeFullCompose compileEnv bodyPtrDefs
   freshWrites wordArgsPtr gasSummary fragExec exprSimMemDefs venomState
+  gasOutcomeFullMods[qualified]
 
 Theorem selected_constructor_code_read[local]:
   (contract_inv mods exps ctx cenv cx /\
@@ -1346,7 +1347,7 @@ Theorem subscript_live_immutable_select_full:
       (PlaceR (ImmutablePlace src id path)) (LocatedValue (ArrayT et bd) p) u /\
     expr_post H ctx func cenv cx idx (mid with gas_obs := gs) sm sn u fin key iop s /\
     ghost_inv_at (DF H) lo d cenv cx fin Gi tni s) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (select_result cx (ArrayT et bd) (PlaceR (ImmutablePlace src id path)) (ValueSubscript key))
     (fin,s,Gi,tni)
     (\H res ee Gz tnz z. ?r. res = INL r /\

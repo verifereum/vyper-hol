@@ -18,6 +18,7 @@ Ancestors
   bodyFullBuiltinWordPowCompose stateRelProj immutableRegionTypingProps
   placeMemoryProtectedFrame vyperTypeInvariants
   bodyFullPredsMods[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 val _ = Parse.hide "base";
 
@@ -218,9 +219,9 @@ Theorem make_array_slot_full_bundled:
      od) shadow_sa = ((),shadow_sb) /\
     expr_sim_full_code (ctx,shadow_ctx,func,shadow_func)
       (sa,sb,shadow_sa,shadow_sb) ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
+      cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx))
       (es,s,G,tn)
       (\H res ee Gf tnf t.
         ?v. res = INL v /\ value_has_type dtv v /\ val_wf dtv v /\
@@ -1511,9 +1512,9 @@ Theorem make_array_slot_full:
      od) shadow_sa = ((),shadow_sb) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
     fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
+      cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx))
       (es,s,G,tn)
       (\H res ee Gf tnf t.
         ?v. res = INL v /\ value_has_type dtv v /\ val_wf dtv v /\

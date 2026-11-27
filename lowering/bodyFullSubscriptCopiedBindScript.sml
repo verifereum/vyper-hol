@@ -17,6 +17,7 @@ Ancestors
   contextRawReachable[qualified,ignore_grammar]
   unitTransformDefs[qualified,ignore_grammar]
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 Theorem compile_expr_copied_array_subscript[local]:
   compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
@@ -331,7 +332,7 @@ Theorem subscript_copied_bind_caller_frames:
        lookup_var q z = SOME w /\ not_fresh_at si q /\ ptr_covers Gi tni q z (type_memory_size atv) /\
        (!m. mem_agree_outside tni.t_mem z.vs_memory m ==> val_in_memory atv saved (w2n w) m) /\
        vv_own ce cx (ArrayT et bd) sm sc fin (Value saved) cvv z ==>
-       gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+       gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) ce.ce_modules cx st0
          (select_result cx (ArrayT et bd) (Value saved) (ValueSubscript key)) (fin,z,Gi,tni)
          (\H res ee G tn t. ?tv. res = INL tv /\
            vv_post H ctx func ce cx (Subscript ann obj idx) es sa sb s0 ee tv vv t /\
@@ -714,7 +715,7 @@ Theorem subscript_copied_bind_full:
        lookup_var q z = SOME w /\ not_fresh_at si q /\ ptr_covers Gi tni q z (type_memory_size atv) /\
        (!m. mem_agree_outside tni.t_mem z.vs_memory m ==> val_in_memory atv saved (w2n w) m) /\
        vv_own ce cx (ArrayT et bd) sm sc fin (Value saved) cvv z ==>
-       gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+       gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) ce.ce_modules cx st0
          (select_result cx (ArrayT et bd) (Value saved) (ValueSubscript key)) (fin,z,Gi,tni)
          (\H res ee G tn t. ?tv. res = INL tv /\
            vv_post H ctx func ce cx (Subscript ann obj idx) es sa sb s0 ee tv vv t /\

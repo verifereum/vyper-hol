@@ -10,6 +10,7 @@ Ancestors
   stmtSimDeclSource stmtSimDeclStore bodyMemoryDefs logStoreDataOriginPtr bodyBinopFragMemory
   compileEnv exprLowering stmtLowering loweringPosts vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
+  gasOutcomeFullMods[qualified]
 
 Theorem annassign_word_full_bind[local]:
   evaluate_type (get_tenv cx) typ = SOME tyv /\
@@ -550,8 +551,8 @@ Theorem annassign_word_full_runtime_preparation[local]:
     ghost_kept_at lo cenv es sa G0 tn0 s0 Ga tna /\
     cenv'.ce_return_buf = cenv.ce_return_buf /\ cenv'.ce_return_pc = cenv.ce_return_pc /\
     sa.cs_next_var <= a.cs_next_var /\
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,t,Ga,tna)
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv'.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,t,Ga,tna)
       (\H res ee Gf tnf u. ?v. res = INL v /\
         expr_post H ctx func cenv' cx e es a b t ee v op u /\
         expr_store_bound cx (expr_type e) v op u /\
@@ -701,7 +702,7 @@ Theorem annassign_word_full_source_action[local]:
   cenv'.ce_return_buf = cenv.ce_return_buf /\ cenv'.ce_return_pc = cenv.ce_return_pc /\
   sa.cs_next_var <= sa'.cs_next_var ==>
   (?v. res = INL v /\
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
       (new_variable id tyv v) (mid,u,G1,tn1)
       (\H res ee G tn t'. ?ce.
         stmt_lands lctx sf res t' /\ ~t'.vs_halted /\
@@ -827,7 +828,7 @@ Theorem annassign_word_full_execution_sep:
   compile_stmt cenv' lctx ret_ty (AnnAssign id (expr_type e) e) r = ((),sf) /\
   compile_stmt (gas_shadow_env T cenv') lctx ret_ty
     (AnnAssign id (expr_type e) (gas_shadow_expr e)) r' = ((),shadow_sf) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
     (eval_stmt cx (AnnAssign id (expr_type e) e)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?ce.
       stmt_lands lctx sf res t /\ ~t.vs_halted /\
@@ -933,7 +934,7 @@ Theorem annassign_word_full_execution:
   compile_stmt cenv' lctx ret_ty (AnnAssign id (expr_type e) e) r = ((),sf) /\
   compile_stmt (gas_shadow_env T cenv') lctx ret_ty
     (AnnAssign id (expr_type e) (gas_shadow_expr e)) r' = ((),shadow_sf) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
     (eval_stmt cx (AnnAssign id (expr_type e) e)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?ce.
       stmt_lands lctx sf res t /\ ~t.vs_halted /\

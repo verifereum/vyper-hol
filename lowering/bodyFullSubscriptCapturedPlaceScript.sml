@@ -15,6 +15,7 @@ Ancestors exprLowering[qualified,ignore_grammar]
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullUnwrapRun[qualified,ignore_grammar] wordArgsPtr[qualified,ignore_grammar]
   gasOutcomeFullCompose vyperStorageFootprint exprSimDefs
+  gasOutcomeFullMods[qualified]
 
 (* The allocation check rejects writes to the root of a popped array
    before the index is evaluated.  Preserve the entry, including its
@@ -953,7 +954,7 @@ Theorem subscript_captured_fixed_outcome:
       (PlaceR (MemoryPlace id path)) (LocatedValue t p) s /\
     expr_post H ctx fn ce cx idx (mid with gas_obs := gs) sm sn s fin key iop u /\
     ghost_inv_at (DF H) lo d ce cx fin G' tn' u) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,fn,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,fn,PG) ce.ce_modules cx st0
     (select_result cx (ArrayT et (Fixed n)) (PlaceR (MemoryPlace id path))
       (ValueSubscript key)) (fin,u,G',tn')
     (\H res ee Gz tnz z. ?r. res = INL r /\

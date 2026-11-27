@@ -3128,9 +3128,9 @@ Theorem intcall_callee_locked_body_outcome[local]:
     ghost_inv_at (DF K) lo dret body_ce (cx with stk updated_by CONS (NONE,name)) locked Gbody tnbody at_body) /\
   ~at_body.vs_halted /\ at_body.vs_current_bb = body_start.cs_current_bb /\
   at_body.vs_inst_idx = LENGTH body_start.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,PG)
-    (cx_tops (cx with stk updated_by CONS (NONE,name))) (cx with stk updated_by CONS (NONE,name)) st0 (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (locked,at_body,Gbody,tnbody)
+    body_ce.ce_modules (cx with stk updated_by CONS (NONE,name)) st0 (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (locked,at_body,Gbody,tnbody)
     (\K res ee G' tn' t'. ?ce'.
        stmt_lands NoLoop body_end res t' /\ ~t'.vs_halted /\
        (res = INL () ==> ~block_is_terminated body_end /\ ce' = env_end) /\
@@ -3294,9 +3294,9 @@ Theorem intcall_callee_locked_body_outcome_with:
     Run (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,PG)
       (cx with stk updated_by CONS (NONE,name)) st0
       (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (locked,at_body,Gbody,tnbody)) ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,PG)
-    (cx_tops (cx with stk updated_by CONS (NONE,name))) (cx with stk updated_by CONS (NONE,name)) st0 (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (locked,at_body,Gbody,tnbody)
+    body_ce.ce_modules (cx with stk updated_by CONS (NONE,name)) st0 (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss) (locked,at_body,Gbody,tnbody)
     (\K res ee G' tn' t'. ?ce'.
        stmt_lands NoLoop body_end res t' /\ ~t'.vs_halted /\
        (res = INL () ==> ~block_is_terminated body_end /\ ce' = env_end) /\
@@ -7164,10 +7164,10 @@ Theorem intcall_callee_full_with_prefix:
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
       eval_operands arg_ops t = SOME argv ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
          MAP (op_prov G) arg_ops)
-        (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
+        cenv.ce_modules cx st0 (intcall_callee_src cx name mut nr ss)
         (es1, entered, FEMPTY, tn with t_var := FEMPTY)
         (\H res ee G' tn' t'. F)
         (\H res ee gt r.
@@ -7297,10 +7297,10 @@ Theorem intcall_callee_full:
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
       eval_operands arg_ops t = SOME argv ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
          MAP (op_prov G) arg_ops)
-        (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
+        cenv.ce_modules cx st0 (intcall_callee_src cx name mut nr ss)
         (es1, entered, FEMPTY, tn with t_var := FEMPTY)
         (\H res ee G' tn' t'. F)
         (\H res ee gt r.

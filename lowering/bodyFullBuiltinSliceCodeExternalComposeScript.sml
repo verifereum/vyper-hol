@@ -17,6 +17,7 @@ Ancestors
   stateRelProj
   bodyFullHashKeccakFixed[qualified,ignore_grammar]
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -708,7 +709,7 @@ Theorem slice_builtin_external_vv_full_from_tail:
       ((case evaluate_slice (BytesV code) (IntV (&i)) (IntV (&k)) n of
           INL v => INL (Value v) | INR err => INR (Error err)),
        es with gas_obs := tail)) ==>
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0 source (es,s,G,tn)
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0 source (es,s,G,tn)
       (\H res ee HG tm t.
         res = INL (Value (BytesV (TAKE k (DROP i code)))) /\
         vv_post H ctx func cenv cx e es sa sb s ee

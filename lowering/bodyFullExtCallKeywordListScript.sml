@@ -15,6 +15,7 @@ Ancestors
   bodyPtrBopRepresentationFrame vyperEvalExprPreservesScopesDom
   bodyFullIfExpReach
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 Theorem keyword_suffix_ci_mono[local]:
   !ks xs sa. ci_mono sa (SND (compile_ext_call_kwargs compile_expr cenv rt ks xs sa))
@@ -99,9 +100,9 @@ Theorem extcall_keyword_head_outcome:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+    cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v. res = INL v /\
       stmt_state_rel H ctx func cenv cx ee t /\
       storage_well_formed_on cx ee (FST H) /\
@@ -232,9 +233,9 @@ Theorem extcall_request_keywords_owned_outcome:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_exprs cx xs) (es,s0,G0,tn0)
+    cenv.ce_modules cx st0 (eval_exprs cx xs) (es,s0,G0,tn0)
     (\H res ee G tn t. ?vs. res = INL vs /\ LENGTH vs = LENGTH xs /\
       expr_sim_inv_mods mods cenv cx env ee /\
       stmt_state_rel H ctx func cenv cx ee t /\

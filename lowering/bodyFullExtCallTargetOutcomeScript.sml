@@ -7,6 +7,7 @@ Ancestors
   vyperTyping vyperValue bodySimFull vyperState vyperInterpreter gasOutcomeFull
   bodyMemoryDefs exprSimDefs list
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 Theorem target_word_decode[local]:
   value_has_type (BaseTV AddressT) v /\
@@ -124,9 +125,9 @@ Theorem extcall_request_head_halt_outcome:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_exprs cx [addr]) (es,s0,G0,tn0)
+    cenv.ce_modules cx st0 (eval_exprs cx [addr]) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v target aw.
       res = INL [v] /\ dest_AddressV v = SOME target /\
       eval_operand ao t = SOME aw /\ w2w aw = target /\ safe_operand sb ao /\
@@ -196,9 +197,9 @@ Theorem extcall_request_head_outcome:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_exprs cx [addr]) (es,s0,G0,tn0)
+    cenv.ce_modules cx st0 (eval_exprs cx [addr]) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v target aw.
       res = INL [v] /\ dest_AddressV v = SOME target /\
       eval_operand ao t = SOME aw /\ w2w aw = target /\ safe_operand sb ao /\

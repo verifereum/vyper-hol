@@ -10,6 +10,7 @@ Ancestors
   list bodySimFull exprSimHypsDefs loweringPosts compileEnv exprLoweringProps
   loweringShapeDefs vyperState stmtSimDefs vyperValue vyperTyping
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -290,10 +291,10 @@ Theorem raw_call_forced_args_full:
       ptr_val_ok cx (post_value_type cenv d) (BytesV bs) data GD tnD tD /\
       (~is_word_type (post_value_type cenv d) ==> ptr_buf_ok cenv d data GD tD) /\
       ghost_kept_at lo cenv esA s1 GA tnA tA GD tnD /\ ~tD.vs_halted) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (k av (BytesV bs)) (esD,tD,GD,tnD) Q R) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (k av (BytesV bs)) (esD,tD,GD,tnD) Q R) ==>
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (bind (bind (eval_expr cx a) (read_result cx))
       (\av. bind (bind (eval_expr cx d) (read_result cx)) (k av)))
     (es,s0,G0,tn0) Q R

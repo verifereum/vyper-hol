@@ -13,6 +13,7 @@ Ancestors
   context compileEnv exprReasonOperand exprSimHyps
   exprSimFieldLayout exprSimWordArgs exprBopSimProps freshWrites targetSubscriptStorage
   vyperTypeValues[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
+  gasOutcomeFullMods[qualified]
 
 Theorem subscript_slot_root_after_index[local]:
   well_typed_expr env obj /\ runtime_consistent env cx st /\
@@ -480,8 +481,8 @@ Theorem subscript_live_slot_select_full:
     vv_post H ctx func cenv cx obj es sa sm s0 mid (PlaceR (StoragePlace tr slot vt)) bvv s /\
     expr_post H ctx func cenv cx idx mid sm sn s fin key iop u /\
     ghost_inv_at (DF H) lo d cenv cx fin Gi tni u) ==>
-  gas_outcome_full
-    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods
+    (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
     (select_result cx (ArrayT et bd) (PlaceR (StoragePlace tr slot vt)) (ValueSubscript key))
     (fin,u,Gi,tni)
     (\H res ee G tn t. ?tv. res = INL tv /\

@@ -12,6 +12,7 @@ Ancestors
   exprSimHypsDefs exprLowering vyperInterpreter vyperAST list
   bodyFullIntCallReturnNormal bodyFullIntCallReturnSource bodyFullIntCallReturnUnwrap
   bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 val _ = Parse.hide "body";
 
@@ -85,10 +86,10 @@ Theorem intcall_return_full_owned:
        get_instruction bb t.vs_inst_idx = SOME inst /\
        decode_invoke inst = SOME (lbl,arg_ops) /\
        eval_operands arg_ops t = SOME argv ==>
-       gas_outcome_full
+       gas_outcome_full_mods
          (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
           MAP (op_prov G) arg_ops)
-         (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
+         cenv.ce_modules cx st0 (intcall_callee_src cx name mut nr ss)
          (es1, entered, FEMPTY, tn with t_var := FEMPTY)
          (\H res ee G' tn' t'. F)
          (\H res ee gt r.
@@ -97,9 +98,9 @@ Theorem intcall_return_full_owned:
               sa.cs_next_id sm.cs_next_id t tn res ee gt r)) ==>
     (fn_has_code sa sm func /\
      fn_has_code shadow_sa shadow_sm shadow_func ==>
-     gas_outcome_full
+     gas_outcome_full_mods
        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-       (cx_tops cx) cx st0 (intcall_rest cx name mut nr ss prev rtv)
+       cenv.ce_modules cx st0 (intcall_rest cx name mut nr ss prev rtv)
        (es1, t, G, tn)
        (\H res ee G tn t'. ?tv. res = INL tv /\
          vv_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
@@ -156,9 +157,9 @@ Theorem intcall_return_full_owned:
        gas_admissible
          (bind (intcall_rest cx name mut nr ss prev rtv) (read_result cx))
          expr_res_ok es1 ==>
-       gas_outcome_full
+       gas_outcome_full_mods
          (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-         (cx_tops cx) cx st0
+         cenv.ce_modules cx st0
          (bind (intcall_rest cx name mut nr ss prev rtv) (read_result cx))
          (es1, t, G, tn)
          (\H res ee G tn t'. ?v. res = INL v /\
@@ -296,10 +297,10 @@ Theorem intcall_return_full:
        get_instruction bb t.vs_inst_idx = SOME inst /\
        decode_invoke inst = SOME (lbl,arg_ops) /\
        eval_operands arg_ops t = SOME argv ==>
-       gas_outcome_full
+       gas_outcome_full_mods
          (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
           MAP (op_prov G) arg_ops)
-         (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
+         cenv.ce_modules cx st0 (intcall_callee_src cx name mut nr ss)
          (es1, entered, FEMPTY, tn with t_var := FEMPTY)
          (\H res ee G' tn' t'. F)
          (\H res ee gt r.
@@ -308,9 +309,9 @@ Theorem intcall_return_full:
               sa.cs_next_id sm.cs_next_id t tn res ee gt r)) ==>
     (fn_has_code sa sm func /\
      fn_has_code shadow_sa shadow_sm shadow_func ==>
-     gas_outcome_full
+     gas_outcome_full_mods
        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-       (cx_tops cx) cx st0 (intcall_rest cx name mut nr ss prev rtv)
+       cenv.ce_modules cx st0 (intcall_rest cx name mut nr ss prev rtv)
        (es1, t, G, tn)
        (\H res ee G tn t'. ?tv. res = INL tv /\
          vv_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
@@ -358,9 +359,9 @@ Theorem intcall_return_full:
        gas_admissible
          (bind (intcall_rest cx name mut nr ss prev rtv) (read_result cx))
          expr_res_ok es1 ==>
-       gas_outcome_full
+       gas_outcome_full_mods
          (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-         (cx_tops cx) cx st0
+         cenv.ce_modules cx st0
          (bind (intcall_rest cx name mut nr ss prev rtv) (read_result cx))
          (es1, t, G, tn)
          (\H res ee G tn t'. ?v. res = INL v /\

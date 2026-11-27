@@ -13,6 +13,7 @@ Ancestors
   compileEnv exprLowering exprLoweringProps fragExec loweringPosts exprSimHypsDefs
   loweringShapeDefs bodyPtrDefs
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 (* A robust value over a covering window has the memory pointer post. *)
 Theorem default_memory_post[local]:
   evaluate_type (get_tenv cx) ty = SOME tv /\
@@ -164,9 +165,9 @@ Theorem extcall_operand_materialized_full:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+    cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v. res = INL v /\ dt = lowered_value_type cenv e /\
       stmt_state_rel H ctx func cenv cx ee t /\
       storage_well_formed_on cx ee (FST H) /\
@@ -685,9 +686,9 @@ Theorem extcall_kwarg_default_owned_lookup_full:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+    cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v. res = INL v /\ dt = lowered_value_type cenv e /\
       stmt_state_rel H ctx func cenv cx ee t /\
       storage_well_formed_on cx ee (FST H) /\
@@ -751,9 +752,9 @@ Theorem extcall_kwarg_default_lookup_full:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+    cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v. res = INL v /\ dt = lowered_value_type cenv e /\
       stmt_state_rel H ctx func cenv cx ee t /\
       storage_well_formed_on cx ee (FST H) /\
@@ -812,9 +813,9 @@ Theorem extcall_kwarg_default_full:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+    cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v. res = INL v /\ dt = lowered_value_type cenv e /\
       stmt_state_rel H ctx func cenv cx ee t /\
       storage_well_formed_on cx ee (FST H) /\

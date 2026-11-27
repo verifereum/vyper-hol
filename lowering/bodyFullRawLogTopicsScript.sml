@@ -6,6 +6,7 @@ Ancestors
   gasOutcomeFullCompose bodyRawLogArgPre exprSimSource exprSimHypsDefs
   vyperTypeSystem vyperContext vyperValue vyperInterpreter vyperState vyperAST list
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -101,9 +102,9 @@ Theorem raw_log_topics_full:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_exprs cx topics) (es,s,G0,tn0)
+    cenv.ce_modules cx st0 (eval_exprs cx topics) (es,s,G0,tn0)
     (\H res ee G tn t. ?vs. res = INL vs /\
       LENGTH topics = LENGTH vs /\ LENGTH ops = LENGTH vs /\
       EVERY (value_has_type (BaseTV (BytesT (Fixed 32)))) vs /\

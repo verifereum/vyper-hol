@@ -2,6 +2,7 @@ Theory bodyFullBopBytestringChild
 Ancestors bodyFullBopBytestringHash bodySimFull gasShadow gasShadowState
   gasShadowUnit gasExplicitSites
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -69,7 +70,7 @@ Theorem bop_bytestring_selected_child_full_halt:
         storage_well_formed_on cx es (FST H) /\
         ghost_inv_at (DF H) lo d cenv cx es G tn s) /\ ~s.vs_halted /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
     (\H res ee HG un t. ?v contents. res = INL v /\
       (v = BytesV contents \/
@@ -130,7 +131,7 @@ Theorem bop_bytestring_selected_child_full:
         storage_well_formed_on cx es (FST H) /\
         ghost_inv_at (DF H) lo d cenv cx es G tn s) /\ ~s.vs_halted /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
     (\H res ee HG un t. ?v contents. res = INL v /\
       (v = BytesV contents \/

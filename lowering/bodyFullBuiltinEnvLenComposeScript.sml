@@ -9,6 +9,7 @@ Ancestors
   loweringStateRelDefs ptrDiscipline codegenRel contextCodegenRel
   instMemFrontier allocaHistory emitHelperProps compileEnv
   vyperInterpreter vyperState venomState venomInst list finite_map
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -100,7 +101,7 @@ Theorem len_full_compose:
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
       (eval_expr cx e) (es,s0,G0,tn0)
       (\H res ee G tn t. ?tv. res = INL tv /\
         vv_post H ctx func cenv cx e es sa sm s0 ee tv vv t /\
@@ -123,7 +124,7 @@ Theorem len_full_compose:
         ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
       (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)) ==>
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
       (bind (eval_expr cx (Builtin (BaseT (UintT 256)) Len [e])) (read_result cx))
       (es,s0,G0,tn0)
       (\H res ee G tn t. ?v. res = INL v /\

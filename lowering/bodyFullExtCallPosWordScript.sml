@@ -13,6 +13,7 @@ Ancestors
   ptrDiscipline[qualified,ignore_grammar]
   unitTransformDefs[qualified,ignore_grammar]
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* Retagging a word pointer changes no instruction emitted by unwrap_value. *)
 Theorem word_snapshot_unwrap[local]:
@@ -117,9 +118,9 @@ Theorem extcall_request_snapshot_word_owned_full:
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!vv sm. compile_expr cenv (expr_type e) e sa = (vv,sm) ==>
     is_word_type (vv_type (ext_call_arg_value (lowered_value_type cenv e) vv))) ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+    cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v tag op raw. res = INL v /\ sv = StackValue tag op /\
       read_result cx raw ee = (INL v,ee) /\
       vv_holds cenv cx (lowered_value_type cenv e) raw sv ee t /\

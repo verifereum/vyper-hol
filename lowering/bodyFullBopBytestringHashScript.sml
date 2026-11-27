@@ -13,6 +13,7 @@ Ancestors
   gasOutcomeFull exprOperandVar exprLowering compileEnv vyperTyping
   vyperValue vyperInterpreter venomState words list vyperStorageFootprint
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 Libs pairLib
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
@@ -544,7 +545,7 @@ Theorem bop_bytestring_selected_hash_full_exit:
     ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
   (!m cb. bytestring_literal_hash e = NONE /\
     lower_value compile_expr cenv (expr_type e) e sa = (m,cb) ==>
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
       (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
       (\H res ee HG un t. ?v. res = INL v /\
         expr_post H ctx func cenv cx e es sa cb s ee v m t /\
@@ -557,7 +558,7 @@ Theorem bop_bytestring_selected_hash_full_exit:
         (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e m HG t) /\
         ghost_kept_at lo cenv es sa G tn s HG un)
       R) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
     (\H res ee HG un t. ?v contents. res = INL v /\
       (v = BytesV contents \/
@@ -638,7 +639,7 @@ Theorem bop_bytestring_selected_hash_full:
     ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
   (!m cb. bytestring_literal_hash e = NONE /\
     lower_value compile_expr cenv (expr_type e) e sa = (m,cb) ==>
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
       (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
       (\H res ee HG un t. ?v. res = INL v /\
         expr_post H ctx func cenv cx e es sa cb s ee v m t /\
@@ -651,7 +652,7 @@ Theorem bop_bytestring_selected_hash_full:
         (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e m HG t) /\
         ghost_kept_at lo cenv es sa G tn s HG un)
       (\H res ee gt r. expr_exit res r)) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)
     (\H res ee HG un t. ?v contents. res = INL v /\
       (v = BytesV contents \/

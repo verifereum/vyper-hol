@@ -52,6 +52,7 @@ Ancestors exprSimSubscriptArrayLiveStorageSuffix[qualified,ignore_grammar] exprP
   bodyFullForRounds[qualified] gasExemptCert[qualified] forStorageBodyLand[qualified] forStorageHeadFrame
   forConsBodyGas
   bodyFullPostsMods[qualified] bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 Libs
   monadsyntax
 
@@ -510,8 +511,8 @@ Theorem for_storage_body_invoke_full:
     not_fresh_at sb0 p /\ (!x. lvo = Var x ==> not_fresh_at sb0 x) /\
     (!lbl. lvo <> Label lbl) /\ lookup_var idx s = SOME (n2w k) /\
     lookup_var p s = SOME dst /\ eval_operand lvo s = SOME (n2w len) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_stmts cx body)
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      bc.ce_modules cx st0 (eval_stmts cx body)
       (ei with
        scopes :=
          fmupdate id <|assignable := F; type := tyv; value := v; popped := []|>
@@ -1521,7 +1522,7 @@ Theorem for_storage_observed_head_from_prefix:
       (INL (), (ei with scopes :=
         (FEMPTY |+ (id,<|assignable := F; type := tyv; value := v; popped := []|>)) ::
         ei.scopes) with gas_obs := tail)) /\
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) c0.ce_modules cx st0
       (bind (read_result cx a) (\v. push_scope_with_var id tyv v)) (ei,s,G,tn)
       (\H res eb Gf tnf z. res = INL () /\ eb.gas_obs = [] /\
         ?v j. eb = ((ei with gas_obs := []) with scopes :=

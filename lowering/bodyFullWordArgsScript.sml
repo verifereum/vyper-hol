@@ -10,6 +10,7 @@ Ancestors
   fragGasPath fragGasMode fragExec gasExemptCert gasSummaryCompose
   vyperInterpreter vyperState venomState list finite_map pred_set
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 Theorem ci_mono_lower_word_args:
   !todo sa sb ops. lower_word_args cenv tyf todo sa = (ops,sb) ==> ci_mono sa sb
@@ -350,9 +351,9 @@ Theorem lower_word_args_by_type_sim_full:
       ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx todo) (es,s0,G0,tn0)
+      cenv.ce_modules cx st0 (eval_exprs cx todo) (es,s0,G0,tn0)
       (\H rr mid G tn t. ?vs. rr = INL vs /\
         typed_args_post H ctx func cenv cx es sa s0 mid todo xs vs t /\
         t.vs_current_bb = sm.cs_current_bb /\
@@ -398,9 +399,9 @@ Theorem lower_word_args_sim_full:
       ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx todo) (es,s0,G0,tn0)
+      cenv.ce_modules cx st0 (eval_exprs cx todo) (es,s0,G0,tn0)
       (\H rr mid G tn t. ?vs. rr = INL vs /\
         typed_args_post H ctx func cenv cx es sa s0 mid todo xs vs t /\
         t.vs_current_bb = sm.cs_current_bb /\

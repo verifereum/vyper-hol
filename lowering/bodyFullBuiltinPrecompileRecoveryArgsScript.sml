@@ -4,6 +4,7 @@ Ancestors
   bodyFullShadowBodyInv
   bodyFullWordArgs exprSimPrecompiles exprSimSource list
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* Original application anchors typing; the suffix post uses its own start. *)
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
@@ -50,9 +51,9 @@ Theorem ecrecover_args_suffix_full:
       ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx todo) (es,s0,G0,tn0)
+      cenv.ce_modules cx st0 (eval_exprs cx todo) (es,s0,G0,tn0)
       (\H rr mid G tn t. ?vs. rr = INL vs /\
         typed_args_post H ctx func cenv cx es sa s0 mid todo xs vs t /\
         t.vs_current_bb = sm.cs_current_bb /\

@@ -9,6 +9,7 @@ Ancestors context[qualified,ignore_grammar]
   valueEncodingProofs valueCopyBytes bodyFullIntCallReturnMetadata
   exprLoweringProps exprSimDefs exprSimAggregates
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 Libs
   monadsyntax
@@ -942,8 +943,8 @@ Theorem intcall_return_normal_owned:
              (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
              sa.cs_next_id sm.cs_next_id t tn res (ee with gas_obs := []) (Gc,tc) r))) ==>
     (fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func ==>
-     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-       (cx_tops cx) cx st0 (intcall_rest cx name mut nr ss prev rtv) (es1,t,G,tn)
+     gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       cenv.ce_modules cx st0 (intcall_rest cx name mut nr ss prev rtv) (es1,t,G,tn)
        (\H res ee G tn t'. ?tv. res = INL tv /\
          vv_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
            es0 sa sm s0 ee tv vv t' /\

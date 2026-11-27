@@ -7,6 +7,7 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint gasStorage compileEnv vyperTypeSystem
   vyperContext vyperAST list
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -198,7 +199,7 @@ Theorem as_wei_value_continuation_full:
     ptr_val_ok cx (expr_type e) v x G1 tn1 t /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
     ~t.vs_halted /\ mid.gas_obs = []) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     ((\v ee. (builtin_result cx ee.accounts (BaseT (UintT 256))
       (AsWeiValue dn) [expr_type e] [v],ee)) v) (mid,t,G1,tn1)
     (\H res ee G tn u. (?w. res = INL w /\

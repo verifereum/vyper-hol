@@ -42,6 +42,7 @@ Ancestors bodyCallSupport bodyFullShadowBodyInv vyperCallOutcome[qualified,ignor
   exprBodyPreProps[qualified]
   compileUnit intCallAllocationProps[qualified]
   bodyFullPredsMods[qualified]
+  gasOutcomeFullMods[qualified]
 
   venomInst[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar]
@@ -5525,12 +5526,12 @@ Theorem intcall_args_stage_full_p2_with_path[local]:
          storage_well_formed_on cx ee (FST H) /\
          ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t) /\
        gas_admissible (f xs) P ee ==>
-       gas_outcome_full
+       gas_outcome_full_mods
          (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-         (cx_tops cx) cx st0 (f xs) (ee,t,G1,tn1) Q R) ==>
-    gas_outcome_full
+         cenv.ce_modules cx st0 (f xs) (ee,t,G1,tn1) Q R) ==>
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (vyperState$bind (eval_exprs cx es) f) (esi,s,G,tn) Q R
+      cenv.ce_modules cx st0 (vyperState$bind (eval_exprs cx es) f) (esi,s,G,tn) Q R
 Proof
   cheat
 QED
@@ -5767,9 +5768,9 @@ Theorem intcall_args_stage_left_outcome:
        stmt_state_rel H ctx func cenv cx esi s /\
        storage_well_formed_on cx esi (FST H) /\
        ghost_inv_at (DF H) lo d cenv cx esi G tn s) ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx es) (esi,s,G,tn)
+      cenv.ce_modules cx st0 (eval_exprs cx es) (esi,s,G,tn)
       (intcall_args_stage_post (DF,lo,d,ctx,func,cenv,cx,tenv)
         (es,sa,s0,es0,G0,tn0,sf)
         (flags,dtys,newops,ops,vals,ptys,pflags,pin,clean_words,keep_sites))
@@ -5929,12 +5930,12 @@ Theorem intcall_args_stage_full_p2:
          storage_well_formed_on cx ee (FST H) /\
          ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t) /\
        gas_admissible (f xs) P ee ==>
-       gas_outcome_full
+       gas_outcome_full_mods
          (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-         (cx_tops cx) cx st0 (f xs) (ee,t,G1,tn1) Q R) ==>
-    gas_outcome_full
+         cenv.ce_modules cx st0 (f xs) (ee,t,G1,tn1) Q R) ==>
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (vyperState$bind (eval_exprs cx es) f) (esi,s,G,tn) Q R
+      cenv.ce_modules cx st0 (vyperState$bind (eval_exprs cx es) f) (esi,s,G,tn) Q R
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`es`,`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,`shadow_func`,`tops`,`cenv`,`cx`,`tenv`,`st0`,`sa`,`s0`,`es0`,`G0`,`tn0`,`si`,`sf`,`shadow_si`,`shadow_sf`,`esi`,`s`,`G`,`tn`,`flags`,`dtys`,`newops`,`ops`,`ws`,`vals`,`ptys`,`pflags`,`pin`,`f`,`P`,`Q`,`R`]
@@ -6121,12 +6122,12 @@ Theorem intcall_args_stage_full:
          storage_well_formed_on cx ee (FST H) /\
          ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t) /\
        gas_admissible (f xs) P ee ==>
-       gas_outcome_full
+       gas_outcome_full_mods
          (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-         (cx_tops cx) cx st0 (f xs) (ee,t,G1,tn1) Q R) ==>
-    gas_outcome_full
+         cenv.ce_modules cx st0 (f xs) (ee,t,G1,tn1) Q R) ==>
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (vyperState$bind (eval_exprs cx es) f) (esi,s,G,tn) Q R
+      cenv.ce_modules cx st0 (vyperState$bind (eval_exprs cx es) f) (esi,s,G,tn) Q R
 Proof
   cheat
 QED
@@ -10121,14 +10122,14 @@ Theorem intcall_args_full:
          (?H. valid_horizon cx st0 H es1.storage_trace) /\
          gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
            P es1 ==>
-         gas_outcome_full
+         gas_outcome_full_mods
            (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-           (cx_tops cx) cx st0
+           cenv.ce_modules cx st0
            (bind (intcall_rest cx name mut nr ss prev rtv) f) (es1, t, G, tn)
            Q R) ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0
+        cenv.ce_modules cx st0
         (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
         (es0, s0, G0, tn0) Q R
 Proof

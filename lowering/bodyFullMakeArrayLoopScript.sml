@@ -7,6 +7,7 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   gasShadowCompileStmtHelpers gasShadowCompileContext gasShadowCompileConvert
   forPtrAllocationFrame stateRelProj bodyFullIfExpReach
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 val _ = Parse.hide "base";
 
@@ -207,9 +208,9 @@ Theorem make_array_loop_full:
       (Var q) off shadow_sa = (Var q,shadow_sb) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
     fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func ==>
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx args) (es,s,G,tn)
+      cenv.ce_modules cx st0 (eval_exprs cx args) (es,s,G,tn)
       (\H res ee Gf tnf t.
         ?vs. res = INL vs /\ LIST_REL value_has_type dtvs vs /\
           LIST_REL val_wf dtvs vs /\ expr_sim_inv_mods mods cenv cx env ee /\

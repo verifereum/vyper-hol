@@ -13,6 +13,7 @@ Ancestors
   freshWrites exprSimHypsDefs vyperTypeSystem vyperTyping vyperValue vyperContext
   exprSimUnopComposeProps gasShadowCompileStmtHelpers
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 Theorem word_neg_emission:
   !x ty sa op sb.
@@ -673,7 +674,7 @@ Theorem word_neg_continuation_full:
        ptr_val_ok cx (expr_type e) v x G1 tn1 t /\
        ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\ ~t.vs_halted) ==>
   ?v. res = INL v /\
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
       (\es. (unop_result cx (expr_type e) Neg [expr_type e] v es,es))
       (mid,t,G1,tn1)
       (\H res ee G tn t.

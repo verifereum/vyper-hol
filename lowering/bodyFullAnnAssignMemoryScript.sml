@@ -24,6 +24,7 @@ Ancestors
   vyperTypeSystem vyperTypeArgFits vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
   bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* The physical source footprint is positive and fits in the destination;
    its runtime type is not identified with the destination runtime type. *)
@@ -530,9 +531,9 @@ Theorem annassign_memory_full_physical_rhs_from_entry[local]:
     (!x. not_fresh_at sa x ==> not_fresh_at a x /\ not_fresh_at b x) /\
     (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x) /\
     (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x) /\
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
+      ce.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx))
       (es,entry,Ga,tna)
       (\H res mid G tn u. ?v vv sm tv.
         res = INL v /\

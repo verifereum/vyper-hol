@@ -11,6 +11,7 @@ Ancestors
   gasShadowState gasShadowCompileBuiltinSystem representationCleanPtr gasExemptCert
   vyperEvalExprPreservesScopesDom exprLoweringProps exprSimWordArgs fragExec list gasShadow vyperStorageTrace
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* Factor both compilation paths at the argument and preparation boundaries. *)
 Theorem raw_call_code_spans:
@@ -384,10 +385,10 @@ Theorem raw_call_prefix_prepared_full:
      (!x. MEM (Var x)
        [addr;len;ptr;gas;(case vo of NONE=>Lit 0w | SOME v=>v);ov;op] ==>
        not_fresh_at s7 x)) ==>
-   gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     (cx_tops cx) cx st0 (k av (BytesV bs) kvs) (esK,t7,G7,tn7) Q R) ==>
- gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-   (cx_tops cx) cx st0
+   gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     cenv.ce_modules cx st0 (k av (BytesV bs) kvs) (esK,t7,G7,tn7) Q R) ==>
+ gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+   cenv.ce_modules cx st0
    (bind (bind (eval_expr cx a) (read_result cx)) (\av.
      bind (bind (eval_expr cx d) (read_result cx)) (\dv.
        bind (eval_exprs cx kws) (k av dv)))) (es,s0,G0,tn0) Q R

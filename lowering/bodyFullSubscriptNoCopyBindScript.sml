@@ -14,6 +14,7 @@ Ancestors option[qualified,ignore_grammar] vyperTypeValues[qualified,ignore_gram
   bodyPtrDefs loweringPosts compileEnv vyperInterpreter vyperState vyperAST
   bodyFullIfExpReach
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -137,8 +138,8 @@ Theorem subscript_nocopy_bind_full:
         ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 s /\
         expr_post H ctx func cenv cx e2 mid sm st2 s fin key iop it /\
         ghost_inv_at (DF H) lo d cenv cx fin Gi tni it) ==>
-      gas_outcome_full
-        (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+      gas_outcome_full_mods
+        (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
         (select_result cx (ArrayT et bd) raw (ValueSubscript key)) (fin,it,Gi,tni)
         (\H res ee G tn t. ?tv. res = INL tv /\
           vv_post H ctx func cenv cx (Subscript ann e1 e2) es sa sb s0 ee tv (LocatedValue ann (mk_ptr dst loc)) t /\

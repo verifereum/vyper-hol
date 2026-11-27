@@ -11,6 +11,7 @@ Ancestors exprSimDefs[qualified,ignore_grammar]
   contextRawReachable[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
   unitTransformDefs[qualified,ignore_grammar]
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 Libs pairLib
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
@@ -127,8 +128,8 @@ Theorem method_id_runtime_joint_outcome_from_suffix:
       ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (bind (eval_expr cx (Builtin ann MethodId [e])) (read_result cx)) (es,s0,G0,tn0)
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (bind (eval_expr cx (Builtin ann MethodId [e])) (read_result cx)) (es,s0,G0,tn0)
       (\H res ee G tn t. ?v. res = INL v /\
         expr_post H ctx func cenv cx (Builtin ann MethodId [e]) es sa sb s0 ee v op t /\
         expr_store_bound cx (expr_type (Builtin ann MethodId [e])) v op t /\

@@ -74,6 +74,7 @@ Ancestors
   bodyFullBopWordSuccess[qualified] bodyFullBopWordAbort[qualified] bodyPtrBopScalarOutcome[qualified]
   constSubstStmtsPreserve[qualified] vyperPinFoldProps[qualified]
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 Libs
   pairLib blastLib
 
@@ -2327,12 +2328,12 @@ Theorem create_body_operand_cut_replay:
       (!H. valid_horizon cx st0 H ee.storage_trace ==>
         gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
           (s,G,tn) marks (OK t,G1,tn1))) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (next v) (ee,t,G1,tn1) Q
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (next v) (ee,t,G1,tn1) Q
       (\H (res:value + exception) ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
          (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s,G,tn) Q
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s,G,tn) Q
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
@@ -2410,12 +2411,12 @@ Theorem create_body_operand_cut[local]:
     (?marks. !H. valid_horizon cx st0 H ee.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (s,G,tn) marks (OK t,G1,tn1)) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (next v) (ee,t,G1,tn1) Q
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (next v) (ee,t,G1,tn1) Q
       (\H (res:value + exception) ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
          (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s,G,tn) Q
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s,G,tn) Q
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
@@ -2672,12 +2673,12 @@ Theorem raw_create_scalar_suffix_cut:
       storage_well_formed_on cx ee (FST H) /\ ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t /\
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (s,G,tn) marks (OK t,G1,tn1)) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (next av sv) (ee,t,G1,tn1) Q
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (next av sv) (ee,t,G1,tn1) Q
       (\H (res:value + exception) ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (bind (eval_exprs cx (amount::salts))
       (\vs. next (HD vs) (if salted then SOME (EL 1 vs) else NONE)))
     (es,s,G,tn) Q
@@ -3136,8 +3137,8 @@ Theorem proxy_expr_sim_from_parts:
        bind (ignore_bind (check_not_static cx)
           (create_oracle_result sw (w2n aw) (minimal_proxy_initcode addr) rof))
         (read_result cx) (ee with gas_obs := tail)) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 source (ee,s,G,tn)
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 source (ee,s,G,tn)
       (\H res ee' G' tn' t. ?v. res = INL v /\
         expr_post H ctx func cenv cx
           (Call ann (CreateTarget CreateMinimalProxy salted rof ks) args dflt)
@@ -3755,8 +3756,8 @@ Theorem create_ctor_borrowed_head_outcome:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v. res = INL v /\
       ((?tag op. sv = StackValue tag op) \/
        (?p. sv = LocatedValue (lowered_value_type cenv e) p /\ p.ptr_location = LocMemory) \/
@@ -4150,8 +4151,8 @@ Theorem create_ctor_materialized_head_outcome:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v. res = INL v /\
       (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
            p.ptr_location = LocMemory /\ ~is_word_type (lowered_value_type cenv e)) /\
@@ -4276,8 +4277,8 @@ Theorem create_ctor_head_outcome:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?v. res = INL v /\
       ((?tag op. sv = StackValue tag op) \/
        (?p. sv = LocatedValue (lowered_value_type cenv e) p /\
@@ -4424,8 +4425,8 @@ Theorem create_ctor_rows_outcome[local]:
     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_exprs cx xs) (es,s0,G0,tn0)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (eval_exprs cx xs) (es,s0,G0,tn0)
     (\H res ee G tn t. ?vs. res = INL vs /\
       LENGTH svs = LENGTH xs /\
       LIST_REL (\(e,sv) v.
@@ -4978,12 +4979,12 @@ Theorem create_ctor_rows_cut:
       expr_sim_inv_mods mods cenv cx env ee /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (next vs) (ee,t,G,tn) Q
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (next vs) (ee,t,G,tn) Q
       (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_exprs cx xs) next) (es,s0,G0,tn0) Q
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_exprs cx xs) next) (es,s0,G0,tn0) Q
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
@@ -8538,12 +8539,12 @@ Theorem blueprint_offset_cut[local]:
     dest_NumV v = SOME (w2n ow) /\ eval_operand op t = SOME ow /\
     op_taint tn1 op = {} /\ op_prov G1 op = NONE /\
     (!x. op = Var x ==> not_fresh_at sb x) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (next v) (ee,t,G1,tn1) Q
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (next v) (ee,t,G1,tn1) Q
       (\H (res:value + exception) ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
          (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s,G,tn) Q
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s,G,tn) Q
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
@@ -9124,12 +9125,12 @@ Theorem blueprint_scalar_suffix_cut:
       storage_well_formed_on cx ee (FST H) /\ ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t /\
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         (s,G,tn) marks (OK t,G1,tn1)) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (next av sv ov) (ee,t,G1,tn1) Q
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (next av sv ov) (ee,t,G1,tn1) Q
       (\H (res:value + exception) ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
          (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (bind (eval_exprs cx (amount::(salts ++ [offset])))
       (\vs. next (HD vs) (if salted then SOME (EL 1 vs) else NONE) (LAST vs)))
     (es,s,G,tn) Q
@@ -9791,12 +9792,12 @@ Theorem blueprint_raw_args_cut:
         ptr_covers Gf tf q f (LENGTH bs) /\ (bs = [] \/ w2n a + LENGTH bs <= f.vs_alloca_next) /\
         (!i. w2n a <= i /\ i < w2n a + LENGTH bs ==> i NOTIN tf.t_mem) /\
         read_memory (w2n a) (LENGTH bs) f = bs)) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (next [BytesV bs]) (ee,u,Gu,tu) Q
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (next [BytesV bs]) (ee,u,Gu,tu) Q
       (\H (res:value + exception) ef gt r. expr_exit res r /\ halt_exit H cx ef res r /\
          (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_exprs cx [e]) next) (es,s,G,tn) Q
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_exprs cx [e]) next) (es,s,G,tn) Q
     (\H res ef gt r. expr_exit res r /\ halt_exit H cx ef res r /\
        (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
@@ -11224,12 +11225,12 @@ Theorem blueprint_encoded_args_cut:
         ptr_covers Gf tf q f (LENGTH bytes) /\ (bytes = [] \/ w2n a + LENGTH bytes <= f.vs_alloca_next) /\
         (!i. w2n a <= i /\ i < w2n a + LENGTH bytes ==> i NOTIN tf.t_mem) /\
         read_memory (w2n a) (LENGTH bytes) f = bytes)) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (next vs) (ee,z,Gz,tz) Q
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (next vs) (ee,z,Gz,tz) Q
       (\H (res:value + exception) ef gt r. expr_exit res r /\ halt_exit H cx ef res r /\
          (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_exprs cx ctor) next) (es,s,G,tn) Q
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_exprs cx ctor) next) (es,s,G,tn) Q
     (\H res ef gt r. expr_exit res r /\ halt_exit H cx ef res r /\
        (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
@@ -13650,12 +13651,12 @@ Theorem raw_create_encoded_args_cut:
         op_taint tf total_op = {} /\ op_prov Gf total_op = NONE /\
         read_memory pbase (LENGTH (bs ++ args_bytes)) f = bs ++ args_bytes /\
         (!i. pbase <= i /\ i < pbase + LENGTH (bs ++ args_bytes) ==> i NOTIN tf.t_mem)) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (next vs) (ee,z,Gz,tz) Q
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (next vs) (ee,z,Gz,tz) Q
       (\H (res:value + exception) ef gt r. expr_exit res r /\ halt_exit H cx ef res r /\
         (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_exprs cx ctor) next) (es,s,G,tn) Q
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_exprs cx ctor) next) (es,s,G,tn) Q
     (\H res ef gt r. expr_exit res r /\ halt_exit H cx ef res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
@@ -13934,12 +13935,12 @@ Theorem raw_create_bytecode_cut:
     eval_operand len z = SOME (n2w (LENGTH bs)) /\ op_taint tz len = {} /\ op_prov Gz len = NONE /\
     read_memory (pbase + 32) (LENGTH bs) z = bs /\
     (!i. pbase + 32 <= i /\ i < pbase + 32 + LENGTH bs ==> i NOTIN tz.t_mem) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (next (BytesV bs)) (ee,z,Gz,tz) Q
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (next (BytesV bs)) (ee,z,Gz,tz) Q
       (\H (res:value + exception) ef gt r. expr_exit res r /\ halt_exit H cx ef res r /\
         (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (bind (eval_expr cx code) (read_result cx)) next) (es,s,G,tn) Q
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (bind (eval_expr cx code) (read_result cx)) next) (es,s,G,tn) Q
     (\H res ef gt r. expr_exit res r /\ halt_exit H cx ef res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof

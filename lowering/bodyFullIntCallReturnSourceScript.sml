@@ -5,6 +5,7 @@ Ancestors
   fragGasOriginPtr gasSummary fragGasMode vyperInterpreter vyperState vyperAST
   gasShadowCompileBase[qualified,ignore_grammar]
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 Libs
   monadsyntax
 
@@ -507,8 +508,8 @@ Theorem intcall_return_noncompleted:
            gas_origin_ptr_focus (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
              (entered,FEMPTY,tn with t_var := FEMPTY) marks (leaf,leaf_pg,leaf_g,leaf_tn,finish))) ==>
     (fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func ==>
-     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-       (cx_tops cx) cx st0 (intcall_rest cx name mut nr ss prev rtv) (es1,t,G,tn)
+     gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       cenv.ce_modules cx st0 (intcall_rest cx name mut nr ss prev rtv) (es1,t,G,tn)
        Q
        (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))

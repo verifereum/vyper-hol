@@ -25,6 +25,7 @@ Ancestors
   loweringShapeDefs loweringSlice bodyPtrDefs compileEnv freshWrites valueEncoding
   venomExecSemantics vyperAST vyperInterpreter vyperState vyperValueOperation venomState list
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* Each operand is ok, a later one where the one before evaluates. *)
 Definition bool_chain_full_ok_def:
@@ -83,8 +84,8 @@ Theorem bool_chain_ops_outcome_full:
   (~expr_has_effect root ==> pure_frame cenv func es0 sa0 s0 s) /\
   ghost_kept_at lo cenv es0 sa0 G0 tn0 s0 G tn /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   exit.cs_current_bb = xl /\ exit.cs_current_insts = [] ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx x) (read_result cx)) (es,s,G,tn)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_expr cx x) (read_result cx)) (es,s,G,tn)
     (\H res ee Gz tf z. ?b. res = INL (BoolV b) /\
       expr_post H ctx func cenv cx root es0 sa0 exit s0 ee (BoolV b) (Var rv) z /\
       z.vs_current_bb = exit.cs_current_bb /\ z.vs_inst_idx = LENGTH exit.cs_current_insts /\

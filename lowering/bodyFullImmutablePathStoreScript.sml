@@ -16,6 +16,7 @@ Ancestors
   exprSimHypsDefs vyperTypeSystem vyperTypeInvariants vyperTargetPlaceWrite
   vyperPlaceWriteSoundness vyperInterpreter vyperState
   bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* The executor fixes the write's byte window before source-state restoration. *)
 Definition immutable_path_store_post_def:
@@ -268,7 +269,7 @@ Theorem immutable_path_write_outcome:
   (!aid a n i. FLOOKUP s0.vs_allocas aid = SOME (a,n) /\ aid < sa.cs_next_id /\
     (!name b cap. local_region ce es.scopes s0 name b cap ==> a+n <= b \/ b+cap <= a) /\
     a <= i /\ i < a+n /\ i IN tn.t_mem ==> i IN tn0.t_mem) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) ce.ce_modules cx st0
     (write_place cx (ImmutablePlace ce.ce_module id path) v) (ee,s,G,tn)
     (\H res ef G' tn' t. ?ce'.
       stmt_lands lctx sb res t /\ ~t.vs_halted /\

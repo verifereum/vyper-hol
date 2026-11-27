@@ -14,6 +14,7 @@ Ancestors
   vyperFixedShapePath vyperPlaceResultTyping vyperState vyperStorageFootprint valueEncoding
   valueEncodingProps exprSimFieldLayout vyperAST venomState list finite_map words
   bodyInvSplit[qualified]
+  gasOutcomeFullMods[qualified]
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
@@ -103,7 +104,7 @@ Theorem immutable_target_array_tail:
     stmt_state_rel H ctx func cenv cx ee s /\ storage_well_formed_on cx ee (FST H) /\
     wb_frame cenv es ee sa s0 s /\ ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (bind (extend_place cx (PlaceR (ImmutablePlace NONE id path))
              (ValueSubscript (IntV i))) get_place) (ee,s,G,tn)
     (\H res fin G' tn' q.

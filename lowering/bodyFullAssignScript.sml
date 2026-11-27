@@ -243,6 +243,7 @@ Ancestors augAssignFullImmutableDeadMask bodySingletonCallSupport immutableBytes
   placeStoreStorage
   fragGasOriginPtrLoop
   bodyFullPostsMods[qualified] bodyFullPredsMods[qualified]
+  gasOutcomeFullMods[qualified]
 Libs
   monadsyntax
 
@@ -342,7 +343,7 @@ Theorem body_assign_local_word_full_continue[local]:
       ptr_val_ok cx (expr_type e) v op G1 tn1 t /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1) /\
     (!bw cap. d = SOME (bw,cap) ==> allocas_from (w2n bw + cap) t)) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?ce.
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
@@ -1479,7 +1480,7 @@ Theorem body_assign_toplevel_word_full_after_rhs_frame[local]:
       ghost_inv_at (DF H) lo d cenv cx (mid with gas_obs := []) G1 tn1 t /\
       ptr_val_ok cx (expr_type e) v op G1 tn1 t /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1)) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?ce.
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
@@ -1619,8 +1620,8 @@ Theorem body_assign_toplevel_word_full_framed_frame[local]:
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   storage_trace_domain cx st0 es.storage_trace ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
     (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (NONE,id))) e)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?ce'.
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
@@ -1834,7 +1835,7 @@ Theorem body_assign_toplevel_copy_after_rhs_frame[local]:
     ghost_inv_at (DF H) lo d cenv cx (mid with gas_obs := []) G1 tn1 t /\
     ptr_val_ok cx (expr_type e) v op G1 tn1 t /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)) (es,s0,G0,tn0)
     (\H res ee G tn t. ?ce.
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
@@ -4888,7 +4889,7 @@ Theorem body_assign_immutable_bind[local]:
      module_body_inv mods cenv.ce_module tops cenv cx) /\ cx.in_deploy /\
   supported_immutable_type tops (src,id) = SOME ity /\
   expr_body_pre_mods mods cenv cx env e es /\
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\H res ee G tn z. ?v. res = INL v /\ N H v ee G tn z)
     (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
@@ -4901,9 +4902,9 @@ Theorem body_assign_immutable_bind[local]:
       eval_target_place cx (TopLevelNameTarget (src,id)) (ee with gas_obs := tail) =
         (INL (ImmutablePlace src id []),ee with gas_obs := tail)) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==> N H v ee G tn z) ==>
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
       (write_place cx (ImmutablePlace src id []) v) (ee,z,G,tn) P R) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e))
     (es,s0,G0,tn0) P R
 Proof
@@ -7200,8 +7201,8 @@ Theorem body_assign_other_direct_slots_write_full[local]:
   (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
     (!n b sz'. local_region cenv es.scopes s0 n b sz' ==> off + sz <= b \/ b + sz' <= off) /\
     off <= i /\ i < off + sz /\ i IN tnz.t_mem ==> i IN tn0.t_mem) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (write_place cx (StoragePlace tr k tv) v) (ee,z,Gz,tnz)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (write_place cx (StoragePlace tr k tv) v) (ee,z,Gz,tnz)
     (\H res ef G tn t. ?ce.
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ ce = cenv) /\
@@ -7431,8 +7432,8 @@ Theorem body_assign_other_bytes_slots_write_full[local]:
   (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
     (!n b sz'. local_region cenv es.scopes s0 n b sz' ==> off + sz <= b \/ b + sz' <= off) /\
     off <= i /\ i < off + sz /\ i IN tnz.t_mem ==> i IN tn0.t_mem) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (write_place cx (StoragePlace tr k dtv) v) (ee,z,Gz,tnz)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (write_place cx (StoragePlace tr k dtv) v) (ee,z,Gz,tnz)
     (\H res ef G tn t. ?ce.
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ ce = cenv) /\
@@ -8008,10 +8009,10 @@ Theorem body_assign_empty_target_source[local]:
   has_length_word (expr_type e) /\
   type_widens_to env.type_defs (expr_type e) dty /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\ ~s.vs_halted /\
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (bind (eval_target_place cx t) (\p. write_place cx p (default_value dtv)))
     (es,s,G,tn) Q R ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (eval_stmt cx (Assign (BaseTarget t) e)) (es,s,G,tn) Q R
 Proof
   cheat
@@ -9067,8 +9068,8 @@ Theorem body_assign_other_immutable_frontier_bind[local]:
          !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
                 eval_operand op z = SOME w ==>
                 type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) ==>
-      gas_outcome_full
-        (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+      gas_outcome_full_mods
+        (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
         (write_place cx (ImmutablePlace src id []) v) (ee,z,G,tn)
         (\H res ff Gf tf u. ?ce.
           stmt_lands lctx sb res u /\ ~u.vs_halted /\
@@ -10471,15 +10472,15 @@ Theorem body_assign_other_snapshot_target_bind[local]:
                       loweringStateRelDefs$regions_disjoint b (type_memory_size tv) off len) /\
          ptr_covers Gz tnz xd z (type_memory_size tv) /\
          (!mem. mem_agree_outside tnz.t_mem z.vs_memory mem ==> val_in_memory tv v b mem))) ==>
-     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-       (cx_tops cx) cx st0 (write_place cx p v) (ee,z,Gz,tnz) P
+     gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       ce.ce_modules cx st0 (write_place cx p v) (ee,z,Gz,tnz) P
        (\H res ee gt q.
          (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt q) /\
          halt_exit H cx ee res q /\
          (ctx_has_dalloca ctx ==>
            !s. (q = Halt s \/ ?ir. q = IntRet ir s) ==> allocas_below_fmp s))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_target_place cx t) (\p. write_place cx p v))
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    ce.ce_modules cx st0 (bind (eval_target_place cx t) (\p. write_place cx p v))
     (mid,s,G,tn) P
     (\H res ee gt q.
       (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt q) /\
@@ -11977,8 +11978,8 @@ Theorem body_assign_other_immutable_word_write_full[local]:
          ptr_val_ok cx (post_value_type cenv e) v op G tn z /\
          (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G z) /\
          ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) ==>
-      gas_outcome_full
-        (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+      gas_outcome_full_mods
+        (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
         (write_place cx (ImmutablePlace src id []) v) (ee,z,G,tn)
         (\H res ff Gf tf u. ?ce.
           stmt_lands lctx sb res u /\ ~u.vs_halted /\
@@ -12506,15 +12507,15 @@ Theorem body_assign_other_saved_target_bind[local]:
       (!name b cap. local_region cenv es.scopes s0 name b cap ==>
         a+n <= b \/ b+cap <= a) /\ a <= i /\ i < a+n /\ i IN tnz.t_mem ==>
       i IN ti.t_mem) ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (write_place cx p v) (ee,z,Gz,tnz) Q
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (write_place cx p v) (ee,z,Gz,tnz) Q
       (\H res ee gt r.
         (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
         halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==>
            !s. (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_target_place cx bt) (\p. write_place cx p v))
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_target_place cx bt) (\p. write_place cx p v))
     (mid,s,G,tn) Q
     (\H res ee gt r.
       (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
@@ -13095,9 +13096,9 @@ Theorem body_assign_other_value_rhs_bind[local]:
         (!ty p. vv0 = LocatedValue ty p /\ p.ptr_location = LocMemory ==>
                 ptr_buf_ok cenv e p.ptr_operand G s) /\
         ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (bind (eval_target_place cx t) (\p. write_place cx p v))
+        cenv.ce_modules cx st0 (bind (eval_target_place cx t) (\p. write_place cx p v))
         (mid,s,G,tn)
         (\H res ee G' tn' z. ?cenv''.
           stmt_lands lctx sb res z /\ ~z.vs_halted /\
@@ -14155,8 +14156,8 @@ Theorem body_assign_other_immutable_nonword_write_full[local]:
         evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rt /\
         eval_operand op z = SOME w ==>
         type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) ==>
-      gas_outcome_full
-        (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
+      gas_outcome_full_mods
+        (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
         (write_place cx (ImmutablePlace src id []) v) (ee,z,G,tn)
         (\H res ff Gf tf u. ?ce.
           stmt_lands lctx sb res u /\ ~u.vs_halted /\
@@ -14437,8 +14438,8 @@ Theorem body_assign_other_saved_normalized_slots_write_full[local]:
      (!name b cap. local_region cenv es.scopes s0 name b cap ==>
        a+n <= b \/ b+cap <= a) /\ a <= i /\ i < a+n /\ i IN tnz.t_mem ==>
      i IN ti.t_mem) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (write_place cx (StoragePlace tr k dtv) v) (ee,z,Gz,tnz)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (write_place cx (StoragePlace tr k dtv) v) (ee,z,Gz,tnz)
     (\H res ef G tn t. ?ce.
       stmt_lands lctx sf res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sf /\ ce = cenv) /\
@@ -14778,8 +14779,8 @@ Theorem body_assign_other_snapshot_normalized_slots_write_full[local]:
   (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
     (!n b sz'. local_region cenv es.scopes s0 n b sz' ==> off + sz <= b \/ b + sz' <= off) /\
     off <= i /\ i < off + sz /\ i IN tnz.t_mem ==> i IN tn0.t_mem) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (write_place cx (StoragePlace tr k dtv) v) (ee,z,Gz,tnz)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (write_place cx (StoragePlace tr k dtv) v) (ee,z,Gz,tnz)
     (\H res ef G tn t. ?ce.
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ ce = cenv) /\
@@ -15093,8 +15094,8 @@ Theorem body_assign_other_saved_equal_slots_write_full[local]:
   target_ptr_ok cenv (PlaceR (StoragePlace tr k dtv)) r Gz tnz z /\
   wb_frame cenv es ee sa s0 z /\ ghost_kept_at lo cenv es sa Gi ti s0 Gz tnz /\
   alloca_frame cenv es sa s0 cenv ee z ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (write_place cx (StoragePlace tr k dtv) v) (ee,z,Gz,tnz)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (write_place cx (StoragePlace tr k dtv) v) (ee,z,Gz,tnz)
     (\H res ef G tn t. ?ce.
       stmt_lands lctx sf res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sf /\ ce = cenv) /\
@@ -15564,8 +15565,8 @@ Theorem body_assign_other_snapshot_memory_write_full[local]:
   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   ~block_is_terminated su ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (write_place cx (MemoryPlace id path) v) (ee,z,Gz,tnz)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (write_place cx (MemoryPlace id path) v) (ee,z,Gz,tnz)
     (\H res ff Gf tf zf.
       ?ce. stmt_lands lctx sb res zf /\ ~zf.vs_halted /\
         (res = INL () ==> ~block_is_terminated sb /\ ce = cenv) /\
@@ -15840,8 +15841,8 @@ Theorem body_assign_other_saved_staged_memory_write_full[local]:
     (!name b cap. local_region cenv es.scopes s0 name b cap ==>
       a+n <= b \/ b+cap <= a) /\ a <= i /\ i < a+n /\ i IN tnz.t_mem ==>
     i IN ti.t_mem) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (write_place cx (MemoryPlace id path) v) (ee,z,Gz,tnz)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (write_place cx (MemoryPlace id path) v) (ee,z,Gz,tnz)
     (\H res ef G tn q. ?ce.
       stmt_lands lctx sf res q /\ ~q.vs_halted /\
       (res = INL () ==> ~block_is_terminated sf /\ ce = cenv) /\
@@ -16142,8 +16143,8 @@ Theorem body_assign_other_saved_unstaged_memory_write_full[local]:
     (!name b cap. local_region cenv es.scopes s0 name b cap ==>
       a+n <= b \/ b+cap <= a) /\ a <= i /\ i < a+n /\ i IN tnz.t_mem ==>
     i IN tn0.t_mem) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (write_place cx (MemoryPlace id path) v) (ee,z,Gz,tnz)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (write_place cx (MemoryPlace id path) v) (ee,z,Gz,tnz)
     (\H res ef G tn t. ?ce.
       stmt_lands lctx sf res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sf /\ ce = cenv) /\
