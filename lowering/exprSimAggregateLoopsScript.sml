@@ -18,6 +18,7 @@
  *)
 Theory exprSimAggregateLoops
 Ancestors
+  exprSimAggregateBodyFrames
   exprSimAggregateBodyHeader
   exprSimHashBoundary fragGasPathMem
   exprBopSimProps
@@ -158,40 +159,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem aggregate_tuple_marked_footprint[local]:
-  expr_body_pre ce cx env e es /\
-  gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0)
-    marks (INL tv) mid (OK t) /\
-  (ce.ce_is_ctor ==> !name itv iv io.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
-    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name =
-        SOME (itv,iv) ==>
-    regions_disjoint io (type_memory_size itv) b n) ==>
-  (ce.ce_is_ctor ==> !name itv iv io.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
-    FLOOKUP (case ALOOKUP mid.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name =
-        SOME (itv,iv) ==>
-    regions_disjoint io (type_memory_size itv) b n)
-Proof
-  strip_tac >> drule_all aggregate_tuple_marked_child_source >> strip_tac >>
-  rpt strip_tac >>
-  Cases_on `ALOOKUP mid.immutables cx.txn.target` >> gvs[] >>
-  Cases_on `ALOOKUP es.immutables cx.txn.target`
-  >- (fs[vyperImmutableMetadataFrameTheory.immutable_metadata_frame_def] >>
-      qpat_x_assum `!addr. IS_SOME _ <=> IS_SOME _`
-        (qspec_then `cx.txn.target` mp_tac) >> simp[]) >>
-  gvs[vyperImmutableMetadataFrameTheory.immutable_metadata_frame_def] >>
-  rename1 `ALOOKUP es.immutables cx.txn.target = SOME old` >>
-  qpat_x_assum `!addr imms imms' src id. _`
-    (drule_all_then (qspecl_then [`ce.ce_module`, `name`] mp_tac)) >>
-  Cases_on `FLOOKUP (get_source_immutables ce.ce_module old) name` >>
-  simp[] >>
-  rename1 `FLOOKUP (get_source_immutables ce.ce_module old) name = SOME entry` >>
-  PairCases_on `entry` >> simp[] >> strip_tac >> gvs[] >> metis_tac[]
-QED
-
 Theorem aggregate_tuple_store_no_gas[local]:
   compile_store_memory ce src dst ty ty sa = ((),sb) ==>
   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
@@ -304,8 +271,49 @@ QED
 
 (* exprSimAggregateChildren's aggregate_store_rebased_slice_run, storing at a
    compatible declared type dty. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem aggregate_store_compatible_rebased_slice_run[local]:
+  post_value_type ce e = expr_type e /\
+  compile_store_memory ce op (Var x) dty (expr_type e) su = ((),sb) /\
+  (dty = expr_type e \/ is_bytestring_type dty /\ is_bytestring_type (expr_type e)) /\
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    su r es' v op s /\
+  not_fresh_at sm x /\ lookup_var x r = SOME w /\
+  sm.cs_next_var <= su.cs_next_var /\
+  (!z. op = Var z ==> not_fresh_at su z) /\
+  local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  value_has_type dtv v /\ val_wf dtv v /\
+  type_memory_bytes ce dty = type_memory_size dtv /\
+  type_memory_size dtv < dimword (:256) /\
+  stmt_state_rel H ctx func ce cx es' r /\
+  (!n b k. local_region ce es'.scopes r n b k ==>
+    b + k <= w2n w \/ w2n w + type_memory_size dtv <= b) /\
+  (ce.ce_is_ctor ==> !src name itv iv off.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size dtv)) ==>
+  ?q. (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+      FLOOKUP q.vs_allocas aid = SOME b) /\
+    (!a k. a + k <= w2n w \/ w2n w + type_memory_size dtv <= a ==>
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
+    run_inst_seq (emitted_insts su sb) s = OK q /\
+    val_in_memory dtv v (w2n w) q.vs_memory /\
+    stmt_state_rel H ctx func ce cx es' q /\
+    (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
+      lookup_var z q = SOME a) /\
+    (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>
+      FLOOKUP q.vs_allocas aid = SOME b) /\
+    (!aid off sz a k.
+      FLOOKUP r.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+      (!n b len. local_region ce es'.scopes r n b len ==>
+        off + sz <= b \/ b + len <= off) /\
+      off <= a /\ a + k <= off + sz /\
+      (a + k <= w2n w \/ w2n w + type_memory_size dtv <= a) ==>
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
+    locals_kept ce es' es' r q
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `lookup_var x s = SOME w` by
@@ -354,52 +362,6 @@ Proof
     (first_x_assum irule >> simp[]) >>
   metis_tac[]
 QED
-*)
-Theorem aggregate_store_compatible_rebased_slice_run[local]:
-  post_value_type ce e = expr_type e /\
-  compile_store_memory ce op (Var x) dty (expr_type e) su = ((),sb) /\
-  (dty = expr_type e \/ is_bytestring_type dty /\ is_bytestring_type (expr_type e)) /\
-  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
-    su r es' v op s /\
-  not_fresh_at sm x /\ lookup_var x r = SOME w /\
-  sm.cs_next_var <= su.cs_next_var /\
-  (!z. op = Var z ==> not_fresh_at su z) /\
-  local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-  evaluate_type (get_tenv cx) dty = SOME dtv /\
-  value_has_type dtv v /\ val_wf dtv v /\
-  type_memory_bytes ce dty = type_memory_size dtv /\
-  type_memory_size dtv < dimword (:256) /\
-  stmt_state_rel H ctx func ce cx es' r /\
-  (!n b k. local_region ce es'.scopes r n b k ==>
-    b + k <= w2n w \/ w2n w + type_memory_size dtv <= b) /\
-  (ce.ce_is_ctor ==> !name itv iv off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
-    FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
-    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size dtv)) ==>
-  ?q. (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-      FLOOKUP q.vs_allocas aid = SOME b) /\
-    (!a k. a + k <= w2n w \/ w2n w + type_memory_size dtv <= a ==>
-      mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
-    run_inst_seq (emitted_insts su sb) s = OK q /\
-    val_in_memory dtv v (w2n w) q.vs_memory /\
-    stmt_state_rel H ctx func ce cx es' q /\
-    (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
-      lookup_var z q = SOME a) /\
-    (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>
-      FLOOKUP q.vs_allocas aid = SOME b) /\
-    (!aid off sz a k.
-      FLOOKUP r.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
-      (!n b len. local_region ce es'.scopes r n b len ==>
-        off + sz <= b \/ b + len <= off) /\
-      off <= a /\ a + k <= off + sz /\
-      (a + k <= w2n w \/ w2n w + type_memory_size dtv <= a) ==>
-      mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' es' r q
-Proof
-  cheat
-QED
 
 (* Split a tuple-literal iteration at its declared member type. *)
 Theorem compile_make_tuple_cons:
@@ -437,10 +399,11 @@ Theorem aggregate_tuple_store_compatible_marked[local]:
   stmt_state_rel H ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size dtv <= b) /\
-  (ce.ce_is_ctor ==> !name itv iv off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (ce.ce_is_ctor ==> !src name itv iv off.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
     regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size dtv)) /\
   fn_has_code su sb func /\ ~s.vs_halted /\
   s.vs_current_bb = su.cs_current_bb /\
@@ -540,10 +503,11 @@ Theorem aggregate_tuple_store_member_marked[local]:
   stmt_state_rel H ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size dtv <= b) /\
-  (ce.ce_is_ctor ==> !name itv iv off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (ce.ce_is_ctor ==> !src name itv iv off.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
     regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size dtv)) /\
   fn_has_code su sb func /\ ~s.vs_halted /\
   s.vs_current_bb = su.cs_current_bb /\
@@ -816,11 +780,12 @@ Theorem aggregate_make_tuple_member_full_exit_sim[local]:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -977,11 +942,17 @@ Resume aggregate_make_tuple_member_full_exit_sim[child_success]:
   drule_all aggregate_tuple_marked_child_source >>
   asm_rewrite_tac[] >> strip_tac >>
   rename1 `evaluate_type (get_tenv cx) (expr_type h) = SOME stv` >>
-  drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)
-    aggregate_tuple_marked_footprint >>
-  disch_then (qpat_assum `expr_body_pre ce cx env h es` o mp_then Any mp_tac) >>
-  disch_then (qpat_assum `ce.ce_is_ctor ==> _` o mp_then Any mp_tac) >>
-  asm_rewrite_tac[] >> strip_tac >>
+  `immutable_metadata_frame es es1` by
+    (fs[vyperImmutableMetadataFrameTheory.immutable_metadata_frame_def] >>
+     metis_tac[]) >>
+  `ce.ce_is_ctor ==> !src name itv iv io.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es1.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size_list tvs)` by
+    (disch_tac >> ho_match_mp_tac immutable_metadata_frame_linked_property >>
+     simp[] >> first_assum (drule_then ACCEPT_TAC)) >>
   `?v. read_result cx tv es1 = (INL v,es1)` by metis_tac[vv_post_materialises] >>
   `value_has_type stv v /\ val_wf stv v` by
     metis_tac[aggregate_materialised_child_typed, aggregate_materialised_child_wf] >>
@@ -1103,8 +1074,8 @@ Resume aggregate_make_tuple_member_full_exit_sim[unwrap_store]:
   (impl_tac >- (asm_rewrite_tac[] >> fs[ci_mono_def] >> rpt conj_tac >>
      rpt strip_tac >> fs[]
      >>~- ([`regions_disjoint _ _ _ _`],
-       (qpat_assum `!n1 i1 v1 o1. _ /\ FLOOKUP (case ALOOKUP es1.immutables _ of NONE => _ | SOME imms => _) _ = _ ==> _`
-          (qspecl_then [`name`, `itv`, `iv`, `off'`]
+       (qpat_assum `!src n1 i1 v1 o1. _ /\ _ /\ FLOOKUP (case ALOOKUP es1.immutables _ of NONE => _ | SOME imms => _) _ = _ ==> _`
+          (qspecl_then [`src`, `name`, `itv`, `iv`, `off'`]
              (mp_tac o REWRITE_RULE [regions_disjoint_def, type_memory_size_def])) >>
         asm_rewrite_tac[] >>
         simp_tac std_ss [regions_disjoint_def, type_memory_size_def] >>
@@ -1159,9 +1130,10 @@ Resume aggregate_make_tuple_member_full_exit_sim[rest]:
     gnvs[ci_mono_def, type_memory_size_def] >> conj_tac
     >- metis_tac[] >>
     rpt strip_tac >>
-    qpat_assum `!n1 i1 v1 o1. ce.ce_is_ctor /\ _ ==> _`
-      (qspecl_then [`name`, `itv`, `iv`, `io`]
-        (mp_tac o REWRITE_RULE [regions_disjoint_def])) >>
+    qpat_assum `ce.ce_is_ctor ==> !src n1 i1 v1 o1.
+      _ /\ _ /\ FLOOKUP (case ALOOKUP es1.immutables _ of NONE => _ | SOME imms => _) _ = _ ==> _`
+      (drule_then (qspecl_then [`src`, `name`, `itv`, `iv`, `io`]
+        (mp_tac o REWRITE_RULE [regions_disjoint_def]))) >>
     asm_rewrite_tac[] >> simp_tac std_ss [regions_disjoint_def] >> decide_tac)) >>
   strip_tac >>
   BETA_TAC >> irule aggregate_tuple_values_outcome >>
@@ -1410,11 +1382,12 @@ Theorem aggregate_make_tuple_flat_full_exit_sim[local]:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -1485,11 +1458,12 @@ Theorem aggregate_make_tuple_full_exit_sim[local]:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -1567,11 +1541,12 @@ Theorem aggregate_make_tuple_nested_full_exit_sim[local]:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -1663,11 +1638,12 @@ Theorem aggregate_make_tuple_fits_full_exit_sim:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -1767,11 +1743,12 @@ Theorem aggregate_struct_fields_full_exit_sim:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -1924,11 +1901,12 @@ Theorem aggregate_make_array_elems_full_exit_sim[local]:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + LENGTH args * type_memory_size tv <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (LENGTH args * type_memory_size tv)) /\
@@ -1986,10 +1964,11 @@ Proof
     (gvs[] >> metis_tac[]) >>
   `off + type_memory_size_list (REPLICATE (LENGTH args) tv) <= asz` by
     gvs[type_memory_size_list_replicate] >>
-  `ce.ce_is_ctor ==> !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+  `ce.ce_is_ctor ==> !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+       | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list (REPLICATE (LENGTH args) tv))` by
     (gvs[type_memory_size_list_replicate] >> metis_tac[]) >>
@@ -2040,11 +2019,12 @@ Theorem aggregate_make_array_start_full_exit_sim[local]:
   (if header then 32 else 0) + LENGTH args * type_memory_size tv <= asz /\
   b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+(if header then 32 else 0))
        (LENGTH args * type_memory_size tv)) /\
@@ -2270,7 +2250,7 @@ Proof
      simp[] >> reverse conj_tac
      >- (rpt strip_tac >>
          qpat_x_assum `ce.ce_is_ctor ==> !src name itv iv io. _` drule >>
-         disch_then (qspecl_then [`ce.ce_module`, `name`, `itv`, `iv`, `io`]
+         disch_then (qspecl_then [`src`, `name`, `itv`, `iv`, `io`]
            mp_tac) >> simp[regions_disjoint_def] >> decide_tac) >>
      metis_tac[])) >>
   strip_tac >> conj_tac >- simp[] >>
@@ -2440,11 +2420,12 @@ Theorem aggregate_make_tuple_member_sim:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -2517,11 +2498,12 @@ Theorem aggregate_make_tuple_flat_sim:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -2591,11 +2573,12 @@ Theorem aggregate_make_tuple_sim:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -2669,11 +2652,12 @@ Theorem aggregate_make_tuple_nested_sim:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -2746,11 +2730,12 @@ Theorem aggregate_make_tuple_fits_sim:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -2826,11 +2811,12 @@ Theorem aggregate_struct_fields_sim:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
@@ -2906,11 +2892,12 @@ Theorem aggregate_make_array_elems_sim:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + LENGTH args * type_memory_size tv <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (LENGTH args * type_memory_size tv)) /\
@@ -2985,11 +2972,12 @@ Theorem aggregate_make_array_start_sim:
   (if header then 32 else 0) + LENGTH args * type_memory_size tv <= asz /\
   b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) =
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) =
        SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+(if header then 32 else 0))
        (LENGTH args * type_memory_size tv)) /\

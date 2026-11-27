@@ -259,7 +259,7 @@ Proof
   disch_then (qspecl_then [`ctx`, `nocalls`, `st0`] mp_tac) >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
     `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
-    irule (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_sep) >>
+    irule (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_sep_source) >>
     goal_assum (drule_at (Pat `stmt_state_rel _ ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
@@ -402,7 +402,7 @@ Resume compile_make_array_vv_case[tuple]:
   disch_then (qspecl_then [`ctx`,`nocalls`,`st0`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
     `stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
-    irule (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_sep) >>
+    irule (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_sep_source) >>
     goal_assum (drule_at (Pat `stmt_state_rel _ ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>

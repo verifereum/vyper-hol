@@ -47,10 +47,11 @@ Theorem aggregate_struct_fields_body_sim:
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
   (ce.ce_is_ctor ==>
-   !name itv iv io.
-     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+   !src name itv iv io.
+     (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+     FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc io) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+       | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size_list tvs)) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func ce cx es s0 /\
