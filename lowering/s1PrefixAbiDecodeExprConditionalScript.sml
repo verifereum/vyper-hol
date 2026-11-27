@@ -5,7 +5,6 @@ Ancestors
   exprSimSliceCompose exprSimAbiDecodeBodySuccess vyperState
   gasShadow gasShadowState gasShadowCompileStmtHelpers
   exprBodyPreProps exprSimAbiDecodeEntryTyping exprOpenFirstOperand
-  bodyFullPredsMods[qualified]
 
 Theorem abi_decode_singleton_vv_prefix:
   expr_type e = BaseT (BytesT (Dynamic n)) /\
@@ -61,7 +60,7 @@ Theorem abi_decode_expr_prefix:
     (!s'' x t.
        type_check (type_builtin_args_length_ok (AbiDecode b) (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>
-       body_exprs_full_ok_mods mods exps cx es) /\
+       body_exprs_full_ok cx es) /\
     (!s'' x t.
        type_check (type_builtin_args_length_ok (AbiDecode b) (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>
