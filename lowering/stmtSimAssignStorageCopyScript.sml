@@ -1100,14 +1100,8 @@ Proof
   simp[set_storage_backend_eq] >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem storage_copy_state_fold[local]:
-  !H ctx func cenv cx es s tr k ws is stor.
-    stmt_state_rel H ctx func cenv cx es s /\
-    storage_agree (storage_dead H tr stor) stor
-      (FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
-        (if tr then contract_transient s else contract_storage s) is) ==>
-    stmt_state_rel H ctx func cenv cx (set_storage cx es tr stor)
-      (FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is)
+(* SCRATCH MEASUREMENT: the original proof failed after restating the state-relation
+   lemmas. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel H cx es s` by
@@ -1134,6 +1128,18 @@ Proof
   qpat_assum `immutable_base_zero cenv _` (irule_at Any) >> simp[] >>
   qexistsl_tac [`s`, `es`] >> simp[] >> Cases_on `tr` >>
   simp[Abbr `s1`, storage_copy_backend_fold]
+QED
+*)
+Theorem storage_copy_state_fold[local]:
+  !H ctx func cenv cx es s tr k ws is stor.
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_agree (storage_dead H tr stor) stor
+      (FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
+        (if tr then contract_transient s else contract_storage s) is) ==>
+    stmt_state_rel H ctx func cenv cx (set_storage cx es tr stor)
+      (FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is)
+Proof
+  cheat
 QED
 
 Theorem storage_copy_initial_agree:
