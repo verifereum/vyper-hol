@@ -14,8 +14,19 @@ Ancestors exprSimDefs[qualified,ignore_grammar] stmtSimProps[qualified,ignore_gr
   vyperAST words arithmetic list
   bodyFullPredsMods[qualified] bodyFullShadowBodyInv[qualified] bodyInvSplit[qualified]
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem concat_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es.
+    (builtin_args_length_ok (Concat n) (LENGTH args) ==>
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a (Concat n) args) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a (Concat n) args) es /\
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a (Concat n) args) es
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -33,25 +44,7 @@ Proof
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
   strip_tac >> gvs[] >> metis_tac[]
 QED
-*)
-Theorem concat_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es.
-    (builtin_args_length_ok (Concat n) (LENGTH args) ==>
-      body_exprs_full_ok_mods mods exps cx args) /\
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    body_const_cells_agree mods cx env es /\
-    expr_body_pre_mods mods cenv cx env (Builtin a (Concat n) args) es ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin a (Concat n) args) es /\
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin a (Concat n) args) es
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[vv]:
   rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_initial_domain >>
@@ -88,9 +81,7 @@ Resume concat_sim_full[vv]:
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[finish]:
   qspecl_then [`cx`,`a`,`n`,`args`] mp_tac exprSimHypsTheory.eval_expr_concat_bind >>
   (impl_tac >- first_assum ACCEPT_TAC) >> disch_then (fn th => rewrite_tac[th]) >>
@@ -122,9 +113,7 @@ Resume concat_sim_full[finish]:
       POP_ASSUM_LIST (K all_tac) >> simp[exprSimDefsTheory.halt_exit_def]) >>
   simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[continuation]:
   qx_genl_tac [`marks`,`res`,`ee`,`G5`,`tn5`,`t5`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -174,9 +163,7 @@ Resume concat_sim_full[continuation]:
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists `s4` >> simp[]) >>
   suspend "suffix"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[suffix]:
   `!name lb lsz. local_region cenv ee.scopes t5 name lb lsz ==>
     regions_disjoint B 32 lb lsz` by
@@ -222,9 +209,7 @@ Resume concat_sim_full[suffix]:
      >- first_assum MATCH_ACCEPT_TAC >> suspend "post")) >>
   disch_then ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[post]:
   `ee with gas_obs := [] = ee` by
     (qpat_assum `ee.gas_obs = []` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
@@ -300,9 +285,7 @@ Resume concat_sim_full[post]:
      (impl_tac >- decide_tac) >> disch_then ACCEPT_TAC) >>
   suspend "representation"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[representation]:
   `w2n (n2w B:bytes32) = B` by simp[] >>
   `ptr_mem_ok cx a v (Var bv) G6 tn6 t6` by
@@ -338,9 +321,7 @@ Resume concat_sim_full[representation]:
   qpat_assum `buf.buf_operand = Var bv` (fn th => pure_rewrite_tac [th]) >>
   suspend "frames"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[frames]:
   qpat_assum `stmt_state_rel H ctx func cenv cx ee t6`
     (fn th => simp[NoAsms, MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp th]) >>
@@ -369,9 +350,7 @@ Resume concat_sim_full[frames]:
       strip_tac >> simp[compileEnvTheory.is_bytestring_type_def])
   >> suspend "kept"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[vvpost]:
   `sa.cs_next_id < s5.cs_next_id+2` by
     (qpat_assum `ci_mono s4 s5` mp_tac >>
@@ -427,9 +406,7 @@ Resume concat_sim_full[vvpost]:
        (qspecl_then [`name`,`lb`,`lsz`] mp_tac) >> simp[])) >>
   disch_then ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[wb]:
   `sa.cs_next_var <= s4.cs_next_var /\ sa.cs_next_var <= s5.cs_next_var` by
     (qpat_assum `s4.cs_next_var = sa.cs_next_var+3` mp_tac >>
@@ -455,8 +432,6 @@ Resume concat_sim_full[wb]:
   >- suspend "wbmem" >>
   suspend "wblocals"
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[wbmem]:
   qx_genl_tac [`aid`,`off`,`sz`] >> strip_tac >>
   `regions_disjoint B bsz off sz /\ regions_disjoint (w2n ow) 64 off sz` by
@@ -505,8 +480,6 @@ Resume concat_sim_full[wbmem]:
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   simp[]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[wblocals]:
   `locals_kept cenv es es s0 t4` by
     (irule exprSimPropsTheory.locals_kept_regions >>
@@ -538,8 +511,6 @@ Resume concat_sim_full[wblocals]:
   qpat_assum `32 <= bsz` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[pure]:
   disch_tac >>
   `~EXISTS expr_has_effect args` by
@@ -560,8 +531,6 @@ Resume concat_sim_full[pure]:
   rewrite_tac[loweringPostsTheory.pure_frame_def] >>
   conj_tac >- suspend "purelocals" >> suspend "pureglobal"
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[purelocals]:
   qx_genl_tac [`name`,`lb`,`lsz`] >> disch_tac >>
   `regions_disjoint B bsz lb lsz /\ regions_disjoint (w2n ow) 64 lb lsz` by
@@ -583,8 +552,6 @@ Resume concat_sim_full[purelocals]:
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   simp[]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[pureglobal]:
   qx_genl_tac [`off`,`len`] >> disch_tac >>
   `FLOOKUP t6.vs_allocas binst.inst_id = SOME (B,bsz) /\
@@ -638,8 +605,6 @@ Resume concat_sim_full[pureglobal]:
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   simp[]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[storebound]:
   map_every (fn q => qpat_assum q mp_tac)
     [`B < dimword (:256)`, `lookup_var bv t6 = SOME (n2w B)`,
@@ -659,8 +624,6 @@ Resume concat_sim_full[storebound]:
     vyperValueTheory.evaluate_type_def,valueEncodingTheory.type_memory_size_def,
     vfmConstantsTheory.word_size_def] >> decide_tac
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume concat_sim_full[kept]:
   `!name lb lsz. local_region cenv es.scopes t4 name lb lsz <=>
     local_region cenv es.scopes s0 name lb lsz` by
@@ -692,8 +655,5 @@ Resume concat_sim_full[kept]:
         (qspec_then `x` mp_tac) >> simp[]) >>
   first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise concat_sim_full
-*)

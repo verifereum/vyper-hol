@@ -2231,50 +2231,6 @@ QED
 
 (* A cut evaluates exactly one operand. The continuation receives the
    typing and IH guard from replay, and all horizon facts from that run. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (expr_type e) e es` by
-    (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
-     rewrite_tac[Once body_expr_full_ok_def] >>
-     strip_tac >>
-     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
-       _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
-       (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`, `shadow_ctx`,
-          `func`, `shadow_func`, `cenv`, `env`, `expr_type e`, `es`] mp_tac) >>
-     simp[]) >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[bodySimFullTheory.expr_sim_full_def] >>
-  disch_then (qspecl_then [`st0`,`sa`,`sb`,`sh`,`shb`,`op`,`s`,`G`,`tn`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >>
-    FIRST [first_assum ACCEPT_TAC,
-           drule_then ACCEPT_TAC exprSimSourceTheory.expr_body_pre_gas_admissible])) >>
-  strip_tac >> irule create_bind_operand >> simp[] >>
-  qexists `\H v ee G1 tn1 t.
-    expr_post H ctx func cenv cx e es sa sb s ee v op t /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-    s.vs_alloca_next <= t.vs_alloca_next /\ ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t /\
-    ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t /\
-    ghost_kept_at lo cenv es sa G tn s G1 tn1` >>
-  reverse conj_tac
-  >- (irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >>
-      simp[] >> rpt strip_tac >> qexists `v` >> simp[]) >>
-  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
-  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
-    by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-       expr_post H ctx func cenv cx e es sa sb s ee v op t /\
-       s.vs_alloca_next <= t.vs_alloca_next` by simp[] >>
-  drule_all create_operand_replay_midpoint >> strip_tac >>
-  qpat_assum `!v ee G1 tn1 t. _ ==> gas_outcome_full _ _ _ _ _ _ _ _` irule >>
-  simp[] >> metis_tac[]
-QED
-*)
 Theorem create_body_operand_cut_replay:
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
@@ -2337,31 +2293,47 @@ Theorem create_body_operand_cut_replay:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
-  cheat
+  strip_tac >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e) e es` by
+    (qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
+     rewrite_tac[Once body_expr_full_ok_def] >>
+     strip_tac >>
+     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+       _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+       (qspecl_then [`DF`, `lo`, `d`, `PG`, `tops`, `ctx`, `shadow_ctx`,
+          `func`, `shadow_func`, `cenv`, `env`, `expr_type e`, `es`] mp_tac) >>
+     simp[]) >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[bodySimFullTheory.expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`,`sa`,`sb`,`sh`,`shb`,`op`,`s`,`G`,`tn`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >>
+    FIRST [first_assum ACCEPT_TAC,
+           drule_then ACCEPT_TAC exprSimSourceTheory.expr_body_pre_gas_admissible])) >>
+  strip_tac >> irule create_bind_operand >> simp[] >>
+  qexists `\H v ee G1 tn1 t.
+    expr_post H ctx func cenv cx e es sa sb s ee v op t /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+    s.vs_alloca_next <= t.vs_alloca_next /\ ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t /\
+    ptr_val_ok cx (post_value_type cenv e) v op G1 tn1 t /\
+    ghost_kept_at lo cenv es sa G tn s G1 tn1` >>
+  reverse conj_tac
+  >- (irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >>
+      simp[] >> rpt strip_tac >> qexists `v` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace`
+    by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       expr_post H ctx func cenv cx e es sa sb s ee v op t /\
+       s.vs_alloca_next <= t.vs_alloca_next` by simp[] >>
+  drule_all create_operand_replay_midpoint >> strip_tac >>
+  qpat_assum `!v ee G1 tn1 t. _ ==> gas_outcome_full _ _ _ _ _ _ _ _` irule >>
+  simp[] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  mp_tac (Q.INST [`tops` |-> `tops`, `cenv` |-> `cenv`, `env` |-> `env`,
-    `shadow_ctx` |-> `shadow_ctx`, `shadow_func` |-> `shadow_func`,
-    `sa` |-> `sa`, `sb` |-> `sb`, `sh` |-> `sh`, `shb` |-> `shb`,
-    `op` |-> `op`, `d` |-> `d`, `cx` |-> `cx`, `DF` |-> `DF`,
-    `ctx` |-> `ctx`, `func` |-> `func`, `PG` |-> `PG`, `lo` |-> `lo`,
-    `st0` |-> `st0`, `e` |-> `e`, `next` |-> `next`, `es` |-> `es`,
-    `s` |-> `s`, `G` |-> `G`, `tn` |-> `tn`, `Q` |-> `Q`] create_body_operand_cut_replay) >>
-  impl_tac
-  >- (rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-      rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-      qpat_assum `!v ee G1 tn1 t. _ ==> gas_outcome_full _ _ _ _ _ _ _ _` irule >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      qpat_assum `?marks. (!tail. monad_bind (eval_expr cx e) _ _ = _) /\ _`
-        (qx_choose_then `marks` (fn th =>
-          qexists_tac `marks` >> ACCEPT_TAC (CONJUNCT2 th)))) >>
-  disch_then ACCEPT_TAC
-QED
-*)
 Theorem create_body_operand_cut[local]:
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
@@ -2420,7 +2392,23 @@ Theorem create_body_operand_cut[local]:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
-  cheat
+  strip_tac >>
+  mp_tac (Q.INST [`tops` |-> `tops`, `cenv` |-> `cenv`, `env` |-> `env`,
+    `shadow_ctx` |-> `shadow_ctx`, `shadow_func` |-> `shadow_func`,
+    `sa` |-> `sa`, `sb` |-> `sb`, `sh` |-> `sh`, `shb` |-> `shb`,
+    `op` |-> `op`, `d` |-> `d`, `cx` |-> `cx`, `DF` |-> `DF`,
+    `ctx` |-> `ctx`, `func` |-> `func`, `PG` |-> `PG`, `lo` |-> `lo`,
+    `st0` |-> `st0`, `e` |-> `e`, `next` |-> `next`, `es` |-> `es`,
+    `s` |-> `s`, `G` |-> `G`, `tn` |-> `tn`, `Q` |-> `Q`] create_body_operand_cut_replay) >>
+  impl_tac
+  >- (rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+      rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      qpat_assum `!v ee G1 tn1 t. _ ==> gas_outcome_full _ _ _ _ _ _ _ _` irule >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qpat_assum `?marks. (!tail. monad_bind (eval_expr cx e) _ _ = _) /\ _`
+        (qx_choose_then `marks` (fn th =>
+          qexists_tac `marks` >> ACCEPT_TAC (CONJUNCT2 th)))) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem proxy_cut_code:

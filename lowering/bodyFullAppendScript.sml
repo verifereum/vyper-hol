@@ -3461,52 +3461,6 @@ QED
 
 Finalise append_memory_copy_payload_path[local]
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
-  `valid_horizon cx st0 H0 mid.storage_trace` by
-    fs[Abbr `H0`, vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
-    metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
-  `s.vs_alloca_next < dimword (:256)` by
-    metis_tac[stateRelProjTheory.stmt_state_rel_alloca_room,
-      exprLoweringPropsTheory.alloca_room_next_lt] >>
-  `LENGTH vs <= cap /\ (!j. j < LENGTH vs ==> val_wf tv (EL j vs))` by
-    (fs[vyperTypingTheory.value_has_type_def, vyperTypingTheory.all_have_type_EVERY,
-        listTheory.EVERY_EL] >> metis_tac[valueEncodingTypingTheory.value_has_type_val_wf]) >>
-  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==> mem_word_at (w2n bp) m = n2w (LENGTH vs)` by
-    (rpt strip_tac >>
-     `val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) (w2n bp) m` by
-       metis_tac[] >>
-     qpat_x_assum `val_in_memory _ _ _ m`
-       (mp_tac o PURE_ONCE_REWRITE_RULE [val_in_memory_def]) >> simp[]) >>
-  `(!i. w2n bp <= i /\ i < w2n bp+32 ==> i NOTIN tn.t_mem) /\
-    mem_word_at (w2n bp) s.vs_memory = n2w (LENGTH vs)` by
-    metis_tac[representationCleanPtrTheory.robust_mem_word_at_clean,
-      mem_agree_outside_def] >>
-  `mload (w2n bp) s = n2w (LENGTH vs)` by
-    fs[valueEncodingPropsTheory.mem_word_at_eq_mload] >>
-  `ptr_covers G tn p s 32 /\ w2n bp+32 <= s.vs_alloca_next` by
-    (fs[ptr_covers_def] >> rpt strip_tac >> res_tac >> decide_tac) >>
-  qpat_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`
-    (strip_assume_tac o REWRITE_RULE [append_memory_copy_suffix_parts]) >>
-  rename1 `emit_op MLOAD [Var p] sa = (lop,a1)` >>
-  rename1 `emit_op LT [lop; Lit (n2w cap)] a1 = (valid,a2)` >>
-  rename1 `emit_void ASSERT [valid] a2 = ((),a3)` >>
-  `ci_mono sa a3 /\ ci_mono a3 sb` by suspend "code" >>
-  `fn_has_code sa a3 func /\ fn_has_code a3 sb func` by
-    metis_tac[fragExecTheory.fn_has_code_split, ci_mono_def] >>
-  drule_all append_memory_guard_path >>
-  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] mp_tac) >>
-  Cases_on `LENGTH vs < cap` >> simp[] >> strip_tac
-  >- suspend "success" >> suspend "capacity"
-QED
-*)
 Theorem append_nested_memory_cont_full[local]:
   compile_dynarray_append cenv (Var p) src 32 (type_memory_size tv)
     elem elem cap F LocMemory sa = ((),sb) /\
@@ -3570,10 +3524,49 @@ Theorem append_nested_memory_cont_full[local]:
       (ctx_has_dalloca ctx ==> !s. (r = Halt s \/ ?ir. r = IntRet ir s) ==>
         allocas_below_fmp s))
 Proof
-  cheat
+  strip_tac >>
+  qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
+  `valid_horizon cx st0 H0 mid.storage_trace` by
+    fs[Abbr `H0`, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[stateRelProjTheory.stmt_state_rel_alloca_room,
+      exprLoweringPropsTheory.alloca_room_next_lt] >>
+  `LENGTH vs <= cap /\ (!j. j < LENGTH vs ==> val_wf tv (EL j vs))` by
+    (fs[vyperTypingTheory.value_has_type_def, vyperTypingTheory.all_have_type_EVERY,
+        listTheory.EVERY_EL] >> metis_tac[valueEncodingTypingTheory.value_has_type_val_wf]) >>
+  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==> mem_word_at (w2n bp) m = n2w (LENGTH vs)` by
+    (rpt strip_tac >>
+     `val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) (w2n bp) m` by
+       metis_tac[] >>
+     qpat_x_assum `val_in_memory _ _ _ m`
+       (mp_tac o PURE_ONCE_REWRITE_RULE [val_in_memory_def]) >> simp[]) >>
+  `(!i. w2n bp <= i /\ i < w2n bp+32 ==> i NOTIN tn.t_mem) /\
+    mem_word_at (w2n bp) s.vs_memory = n2w (LENGTH vs)` by
+    metis_tac[representationCleanPtrTheory.robust_mem_word_at_clean,
+      mem_agree_outside_def] >>
+  `mload (w2n bp) s = n2w (LENGTH vs)` by
+    fs[valueEncodingPropsTheory.mem_word_at_eq_mload] >>
+  `ptr_covers G tn p s 32 /\ w2n bp+32 <= s.vs_alloca_next` by
+    (fs[ptr_covers_def] >> rpt strip_tac >> res_tac >> decide_tac) >>
+  qpat_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ = _`
+    (strip_assume_tac o REWRITE_RULE [append_memory_copy_suffix_parts]) >>
+  rename1 `emit_op MLOAD [Var p] sa = (lop,a1)` >>
+  rename1 `emit_op LT [lop; Lit (n2w cap)] a1 = (valid,a2)` >>
+  rename1 `emit_void ASSERT [valid] a2 = ((),a3)` >>
+  `ci_mono sa a3 /\ ci_mono a3 sb` by suspend "code" >>
+  `fn_has_code sa a3 func /\ fn_has_code a3 sb func` by
+    metis_tac[fragExecTheory.fn_has_code_split, ci_mono_def] >>
+  drule_all append_memory_guard_path >>
+  disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] mp_tac) >>
+  Cases_on `LENGTH vs < cap` >> simp[] >> strip_tac
+  >- suspend "success" >> suspend "capacity"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_memory_cont_full[code]:
   drule_then assume_tac typed_copy_emit_op_mono >>
   `ci_mono sa a1 /\ ci_mono a1 a2 /\ ci_mono a3 a4 /\ ci_mono a4 a5 /\
@@ -3588,9 +3581,7 @@ Resume append_nested_memory_cont_full[code]:
   `ci_mono a3 a6 /\ ci_mono a6 sb` by metis_tac[exprLoweringPropsTheory.ci_mono_trans] >>
   metis_tac[exprLoweringPropsTheory.ci_mono_trans]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_memory_cont_full[capacity]:
   `!tail. append_place cx (MemoryPlace id path) v (mid with gas_obs := tail) =
     (INR (Error (RuntimeError "append overflow")),mid with gas_obs := tail)` by
@@ -3606,9 +3597,7 @@ Resume append_nested_memory_cont_full[capacity]:
            exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >>
   simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_memory_cont_full[success]:
   rename1 `!D. gas_origin_ptr_path
     (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (s,G,tn) [] (OK guarded,Gg,tg)` >>
@@ -3646,9 +3635,7 @@ Resume append_nested_memory_cont_full[success]:
        metis_tac[append_frame_unchanged_memory, typedMemoryCopyTheory.typed_copy_state_frame_mono] >> metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_trans]) >>
   suspend "source_and_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_memory_cont_full[source_and_post]:
   `?pre sc rest. find_containing_scope id mid.scopes = SOME (pre,sc,entry,rest)` by
     metis_tac[vyperLookupTheory.lookup_scopes_find_containing_scope] >>
@@ -3680,9 +3667,7 @@ Resume append_nested_memory_cont_full[source_and_post]:
   irule gasOutcomeFullComposeTheory.gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`Gf`,`ff`,`INL ()`,`t`,`tf`] >> simp[] >> suspend "post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_memory_cont_full[replace]:
   Cases_on `evaluate_subscripts entry.type entry.value path` >> simp[replace_memory_entry_def] >>
   rename1 `evaluate_subscripts _ _ _ = INL old` >>
@@ -3705,9 +3690,7 @@ Resume append_nested_memory_cont_full[replace]:
       lift_sum_def, return_def, raise_def, replace_memory_entry_def, GSYM markerTheory.Abbrev_def] >>
   drule_all gasContextTheory.gas_admissible_result >> simp[stmtSimDefsTheory.stmt_res_ok_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_memory_cont_full[effect]:
   `gas_marked_path F ctx func s 0 (OK t)` by
     (qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) [] (OK t,Gf,tf)`
@@ -3720,9 +3703,7 @@ Resume append_nested_memory_cont_full[effect]:
     typedMemoryCopyTheory.typed_copy_frame_def, valueEncodingTheory.type_memory_size_def,
     venomStateTheory.venom_state_component_equality] >> metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_memory_cont_full[post]:
   gen_tac >> strip_tac >>
   `evaluate_type (get_tenv cx) (ArrayT elem (Dynamic cap)) = SOME (ArrayTV tv (Dynamic cap))` by
@@ -3749,9 +3730,7 @@ Resume append_nested_memory_cont_full[post]:
      GSYM markerTheory.Abbrev_def] >> metis_tac[])) >>
   strip_tac >> suspend "finish"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_memory_cont_full[finish]:
   simp[loweringPostsTheory.stmt_lands_def, loweringPostsTheory.cenv_top_ext_def] >>
   rpt conj_tac
@@ -3785,11 +3764,8 @@ Resume append_nested_memory_cont_full[finish]:
     (fn th => POP_ASSUM_LIST (K ALL_TAC) >> mp_tac th) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise append_nested_memory_cont_full[local]
-*)
 
 Theorem append_memory_copy_cont_full[local]:
   compile_dynarray_append cenv (Var p) (Var xs) 32 (type_memory_size tv)
@@ -4047,8 +4023,29 @@ Proof
   cheat
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem body_append_local_nonword_frag_full:
+  !cx id e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+    env env' ret_ty lctx RetQ es elem cap.
+  (!s p t. eval_target_place cx (NameTarget id) s = (INL p,t) ==>
+     body_expr_full_ok_mods mods exps cx e) /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  supported_stmt tops bindings (Append (NameTarget id) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Append (NameTarget id) e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
+  locals_alloc_ok cenv env /\
+  type_stmt env ret_ty (Append (NameTarget id) e) = SOME env' /\
+  type_place_target env (NameTarget id) = SOME (Type (ArrayT elem (Dynamic cap))) /\
+  ~is_word_type elem /\ stmt_exprs_ok cenv (Append (NameTarget id) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append (NameTarget id) e)) /\
+  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty ==>
+  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ cenv
+    (stmt_env cenv lctx ret_ty (Append (NameTarget id) e))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (NameTarget id) e)))
+    (eval_stmt cx (Append (NameTarget id) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   `~(?nid. NameTarget id = TopLevelNameTarget nid)` by simp[] >>
@@ -4104,35 +4101,7 @@ Proof
         G = G0 /\ tn = tn0 /\ u = s0` >> simp[] >>
   suspend "rhs_setup"
 QED
-*)
-Theorem body_append_local_nonword_frag_full:
-  !cx id e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
-    env env' ret_ty lctx RetQ es elem cap.
-  (!s p t. eval_target_place cx (NameTarget id) s = (INL p,t) ==>
-     body_expr_full_ok_mods mods exps cx e) /\
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
-  supported_stmt tops bindings (Append (NameTarget id) e) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-     (Append (NameTarget id) e) ==> occurs_abi_decode_target target tops) /\
-  body_const_cells_agree mods cx env es /\
-  expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
-  locals_alloc_ok cenv env /\
-  type_stmt env ret_ty (Append (NameTarget id) e) = SOME env' /\
-  type_place_target env (NameTarget id) = SOME (Type (ArrayT elem (Dynamic cap))) /\
-  ~is_word_type elem /\ stmt_exprs_ok cenv (Append (NameTarget id) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Append (NameTarget id) e)) /\
-  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty ==>
-  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cx lctx RetQ cenv
-    (stmt_env cenv lctx ret_ty (Append (NameTarget id) e))
-    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (NameTarget id) e)))
-    (eval_stmt cx (Append (NameTarget id) e)) es
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_local_nonword_frag_full[rhs_setup]:
   rpt strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -4227,9 +4196,7 @@ Resume body_append_local_nonword_frag_full[rhs_setup]:
   conj_tac >- suspend "rhs_exit" >>
   simp_tac (srw_ss()) [Abbr `Q1`] >> suspend "rhs_success"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_local_nonword_frag_full[rhs_exit]:
   simp[Abbr `R1`] >> rpt gen_tac >> strip_tac >>
   Cases_on `res` >> Cases_on `r` >> gvs[exprSimDefsTheory.expr_exit_def] >>
@@ -4242,9 +4209,7 @@ Resume body_append_local_nonword_frag_full[rhs_exit]:
   rename1 `Error err` >> Cases_on `err` >>
   gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_local_nonword_frag_full[rhs_success]:
   rpt strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid'.storage_trace) mid'.storage_trace` by
@@ -4292,9 +4257,7 @@ Resume body_append_local_nonword_frag_full[rhs_success]:
   qpat_x_assum `vop = Var src` SUBST_ALL_TAC >>
   suspend "stage_setup"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_local_nonword_frag_full[admissible]:
   qpat_assum `gas_admissible (eval_stmt _ _) _ es`
     (mp_tac o ONCE_REWRITE_RULE [vyperInterpreterTheory.evaluate_def]) >>
@@ -4315,9 +4278,7 @@ Resume body_append_local_nonword_frag_full[admissible]:
   simp[GSYM bind_assoc, Once bind_def] >> simp[Once bind_def, SF ETA_ss] >>
   disch_then (qspecl_then [`res'`,`ee`] mp_tac) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_local_nonword_frag_full[stage_setup]:
   `type_memory_bytes cenv elem = type_memory_size tv /\ type_memory_bytes cenv elem < 2**64` by
     metis_tac[appendMemoryRelTheory.append_memory_element_size_bound] >>
@@ -4370,9 +4331,7 @@ Resume body_append_local_nonword_frag_full[stage_setup]:
   qpat_x_assum `tmp.buf_operand = Var root` SUBST_ALL_TAC >>
   suspend "staged_suffix"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_local_nonword_frag_full[staged_suffix]:
   `!H. valid_horizon cx st0 H mid'.storage_trace ==>
     stmt_state_rel H ctx func cenv cx mid' staged /\ storage_well_formed_on cx mid' (FST H) /\
@@ -4428,9 +4387,7 @@ Resume body_append_local_nonword_frag_full[staged_suffix]:
     (irule_at Any) >>
   simp[] >> suspend "staged_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_local_nonword_frag_full[staged_post]:
   `gas_in.storage_trace = es.storage_trace /\ gas_in.scopes = es.scopes` by
     (qpat_assum `mid = es with gas_obs := []` (fn mid_eq =>
@@ -4486,9 +4443,7 @@ Resume body_append_local_nonword_frag_full[staged_post]:
   disch_then (qx_choose_then `cenvf` strip_assume_tac) >>
   qexists_tac `cenvf` >> simp[] >> suspend "staged_frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_local_nonword_frag_full[staged_frame]:
   `sa.cs_next_id <= sm.cs_next_id /\ sa.cs_next_id <= sd.cs_next_id` by
     (fs[ci_mono_def] >> decide_tac) >>
@@ -4555,11 +4510,8 @@ Resume body_append_local_nonword_frag_full[staged_frame]:
     (qspecl_then [`aid`,`off`,`sz0`,`i`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_append_local_nonword_frag_full
-*)
 
 Theorem append_subscript_operand_var[local]:
   (compile_mapping_subscript bop kop sa = (op,sb) \/
@@ -4890,8 +4842,32 @@ QED
 Finalise append_typed_target_place[local]
 *)
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem body_append_nested_frag_full[local]:
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+    env env' ret_ty lctx RetQ es elem cap.
+  (!s p mid. eval_target_place cx t s = (INL p,mid) ==>
+     body_expr_full_ok_mods mods exps cx e) /\
+  body_base_target_full_ok_mods mods exps cx t /\
+  ((?base key. t = SubscriptTarget base key) \/
+   (?base fld. t = AttributeTarget base fld)) /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  supported_stmt tops bindings (Append t e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Append t e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
+  locals_alloc_ok cenv env /\
+  type_stmt env ret_ty (Append t e) = SOME env' /\
+  type_place_target env t = SOME (Type (ArrayT elem (Dynamic cap))) /\
+  stmt_exprs_ok cenv (Append t e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append t e)) /\
+  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty ==>
+  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ cenv
+    (stmt_env cenv lctx ret_ty (Append t e))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append t e)))
+    (eval_stmt cx (Append t e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `!raw cs ce. compile_get_target_ptr compile_expr cenv t cs = (raw,ce) ==>
@@ -4978,38 +4954,7 @@ Proof
       BETA_TAC >> conj_tac >- simp[] >> suspend "target_exit") >>
   suspend "target_success"
 QED
-*)
-Theorem body_append_nested_frag_full[local]:
-  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
-    env env' ret_ty lctx RetQ es elem cap.
-  (!s p mid. eval_target_place cx t s = (INL p,mid) ==>
-     body_expr_full_ok_mods mods exps cx e) /\
-  body_base_target_full_ok_mods mods exps cx t /\
-  ((?base key. t = SubscriptTarget base key) \/
-   (?base fld. t = AttributeTarget base fld)) /\
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
-  supported_stmt tops bindings (Append t e) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-     (Append t e) ==> occurs_abi_decode_target target tops) /\
-  body_const_cells_agree mods cx env es /\
-  expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
-  locals_alloc_ok cenv env /\
-  type_stmt env ret_ty (Append t e) = SOME env' /\
-  type_place_target env t = SOME (Type (ArrayT elem (Dynamic cap))) /\
-  stmt_exprs_ok cenv (Append t e) /\
-  call_evaluation_safe cx (int_calls_stmt (Append t e)) /\
-  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty ==>
-  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cx lctx RetQ cenv
-    (stmt_env cenv lctx ret_ty (Append t e))
-    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append t e)))
-    (eval_stmt cx (Append t e)) es
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[target_exit]:
   simp[Abbr `R1`] >> rpt gen_tac >> strip_tac >>
   Cases_on `res` >> Cases_on `r'` >> gvs[exprSimDefsTheory.expr_exit_def] >>
@@ -5019,9 +4964,7 @@ Resume body_append_nested_frag_full[target_exit]:
   rename1 `Error err` >> Cases_on `err` >>
   gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[target_success]:
   qx_genl_tac [`target_marks`,`place_res`,`mid`,`Gm`,`tm`,`target_state`] >>
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -5094,9 +5037,7 @@ Resume body_append_nested_frag_full[target_success]:
      (stmt_res_ok lctx) mid` by suspend "rhs_admissible" >>
   suspend "rhs"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[rhs_admissible]:
   `gas_admissible (bind (eval_target_place cx t)
        (\p. bind (bind (eval_expr cx e) (read_result cx)) (append_place cx p)))
@@ -5108,9 +5049,7 @@ Resume body_append_nested_frag_full[rhs_admissible]:
   drule_all (SRULE [SF ETA_ss] stmtSimForRoundsTheory.gas_admissible_bind_tail) >>
   simp[evaluation_state_component_equality]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[rhs]:
   drule_all_then strip_assume_tac append_resolved_rhs_code_full >>
   qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) shadow_sa = _`
@@ -5183,9 +5122,7 @@ Resume body_append_nested_frag_full[rhs]:
   conj_tac >- suspend "rhs_exit" >>
   simp_tac (srw_ss()) [Abbr `rhsQ`] >> suspend "rhs_success"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[rhs_exit]:
   simp[Abbr `rhsR`] >> rpt gen_tac >> strip_tac >>
   Cases_on `res` >> Cases_on `r` >> gvs[exprSimDefsTheory.expr_exit_def] >>
@@ -5198,9 +5135,7 @@ Resume body_append_nested_frag_full[rhs_exit]:
   rename1 `Error err` >> Cases_on `err` >>
   gvs[exprSimDefsTheory.expr_exit_def, stmt_exit_ptr_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[rhs_success]:
   qx_genl_tac [`marks`,`res`,`rhs_state`,`Gr`,`trhs`,`u`] >>
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -5260,9 +5195,7 @@ Resume body_append_nested_frag_full[rhs_success]:
      simp[Abbr `gas_in`,exprSimExtract32PostTheory.extract32_expr_post_start_gas_obs]) >>
   suspend "rhs_frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[rhs_frame]:
   `valid_horizon cx st0 (storage_trace_horizon rhs_state.storage_trace)
      mid.storage_trace` by metis_tac[] >>
@@ -5319,9 +5252,7 @@ Resume body_append_nested_frag_full[rhs_frame]:
      POP_ASSUM_LIST (K all_tac) >> simp[loweringPostsTheory.expr_post_def]) >>
   suspend "resolve_pointer"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[resolve_pointer]:
   rename1 `eval_operand (Var x) target_state = SOME addr` >>
   `lookup_var x target_state = SOME addr` by
@@ -5381,9 +5312,7 @@ Resume body_append_nested_frag_full[resolve_pointer]:
   >- suspend "memory" >>
   fs[loweringPostsTheory.place_ptr_rel_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[memory]:
   rename1 `place_ptr_rel _ _ u (PlaceR (MemoryPlace id path)) _ _ _` >>
   qpat_assum `place_ptr_rel _ _ u (PlaceR (MemoryPlace id path)) _ _ _`
@@ -5419,9 +5348,7 @@ Resume body_append_nested_frag_full[memory]:
      simp[] >> metis_tac[]) >>
   suspend "memory_view"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[memory_view]:
   qabbrev_tac `H = storage_trace_horizon rhs_state.storage_trace` >>
   `valid_horizon cx st0 H rhs_state.storage_trace` by
@@ -5478,9 +5405,7 @@ Resume body_append_nested_frag_full[memory_view]:
      rpt (conj_tac >- first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC) >>
   suspend "memory_bounds"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[memory_bounds]:
   `!t0. cenv.ce_var_type id = SOME t0 ==>
      evaluate_type (get_tenv cx) t0 = SOME entry.type` by
@@ -5580,9 +5505,7 @@ Resume body_append_nested_frag_full[memory_bounds]:
   Cases_on `is_word_type elem`
   >- suspend "memory_word" >> suspend "memory_aggregate"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[memory_aggregate]:
   qpat_assum `~is_word_type elem` (fn nonword =>
     qpat_assum `if is_word_type elem then
@@ -5615,9 +5538,7 @@ Resume body_append_nested_frag_full[memory_aggregate]:
   qpat_x_assum `tmp.buf_operand = Var root` SUBST_ALL_TAC >>
   suspend "staged_view"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[staged_view]:
   `!H. valid_horizon cx st0 H rhs_state.storage_trace ==>
     stmt_state_rel H ctx func cenv cx rhs_state staged /\
@@ -5668,9 +5589,7 @@ Resume body_append_nested_frag_full[staged_view]:
   goal_assum (drule_at Any) >>
   suspend "staged_cont"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[staged_read]:
   match_mp_tac robustCopyTransportPtrTheory.robust_val_in_memory_exterior_frame >>
   qexistsl_tac [`trhs.t_mem`,`u.vs_memory`,`{i | b <= i /\ i < b+type_memory_size tv}`] >>
@@ -5681,9 +5600,7 @@ Resume body_append_nested_frag_full[staged_read]:
   drule exprSimPropsTheory.val_footprint_le >> simp[] >>
   fs[regions_disjoint_def,valueEncodingTheory.type_memory_size_def] >> decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[staged_cont]:
   irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
   irule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`) append_nested_memory_cont_full >>
@@ -5696,9 +5613,7 @@ Resume body_append_nested_frag_full[staged_cont]:
   qexistsl_tac [`lctx`,`env`,`d`,`RetQ`] >>
   suspend "staged_conditions"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[staged_conditions]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -5716,9 +5631,7 @@ Resume body_append_nested_frag_full[staged_conditions]:
   qexists_tac `cenvf` >> simp[] >>
   suspend "nested_staged_frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[nested_staged_frame]:
   `s0.vs_alloca_next <= fin_state.vs_alloca_next` by
     (qpat_assum `s0.vs_alloca_next <= u.vs_alloca_next` mp_tac >>
@@ -5788,9 +5701,7 @@ Resume body_append_nested_frag_full[nested_staged_frame]:
   qpat_assum `!aid off sz i. FLOOKUP staged.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN ts.t_mem` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[memory_word]:
   `type_widens_to env.type_defs (expr_type e) elem` by simp[] >>
   drule_all_then strip_assume_tac append_nested_word_input >>
@@ -5819,9 +5730,7 @@ Resume body_append_nested_frag_full[memory_word]:
   reverse conj_tac >- (POP_ASSUM_LIST (K all_tac) >> metisTools.METIS_TAC []) >>
   suspend "memory_word_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[memory_word_post]:
   rpt gen_tac >> disch_then (qx_choose_then `cenvf` strip_assume_tac) >>
   qexists_tac `cenvf` >> simp[] >>
@@ -5860,9 +5769,7 @@ Resume body_append_nested_frag_full[memory_word_post]:
   qpat_assum `!aid off sz i. FLOOKUP u.vs_allocas aid = SOME (off,sz) /\ _ ==> i IN trhs.t_mem` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[storage]:
   rename1 `place_ptr_rel _ _ _ (PlaceR (StoragePlace tr slot leaf)) _ _ _` >>
   qpat_assum `place_ptr_rel _ _ u (PlaceR (StoragePlace tr slot leaf)) _ _ _`
@@ -5890,9 +5797,7 @@ Resume body_append_nested_frag_full[storage]:
   Cases_on `is_word_type elem`
   >- suspend "storage_word" >> suspend "storage_aggregate"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[storage_cap]:
   qabbrev_tac `H = storage_trace_horizon rhs_state.storage_trace` >>
   `valid_horizon cx st0 H rhs_state.storage_trace` by simp[Abbr `H`] >>
@@ -5908,9 +5813,7 @@ Resume body_append_nested_frag_full[storage_cap]:
   qpat_assum `cap <= cap * type_slot_size tv` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[storage_aggregate]:
   qpat_assum `~is_word_type elem` (fn nonword =>
     qpat_assum `if is_word_type elem then
@@ -5986,9 +5889,7 @@ Resume body_append_nested_frag_full[storage_aggregate]:
   reverse conj_tac >- (POP_ASSUM_LIST (K all_tac) >> metisTools.METIS_TAC []) >>
   suspend "aggregate_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[aggregate_post]:
   rpt gen_tac >> disch_then (qx_choose_then `cenvf` strip_assume_tac) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp t'` by
@@ -6037,9 +5938,7 @@ Resume body_append_nested_frag_full[aggregate_post]:
   impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qspec_then `mem_i` mp_tac) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_nested_frag_full[storage_word]:
   `type_widens_to env.type_defs (expr_type e) elem` by simp[] >>
   drule_all_then strip_assume_tac append_nested_word_input >>
@@ -6110,11 +6009,8 @@ Resume body_append_nested_frag_full[storage_word]:
       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_append_nested_frag_full[local]
-*)
 
 Theorem body_append_nested_subscript_frag_full:
   !cx base key e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
@@ -6182,8 +6078,30 @@ Proof
   simp[] >> disch_then irule >> first_assum ACCEPT_TAC
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem body_append_storage_word_frag_full:
+  !cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
+    env env' ret_ty lctx RetQ es elem cap.
+  (!s p t. eval_target_place cx (TopLevelNameTarget nid) s = (INL p,t) ==>
+     body_expr_full_ok_mods mods exps cx e) /\
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Append (TopLevelNameTarget nid) e) ==> occurs_abi_decode_target target tops) /\
+  body_const_cells_agree mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
+  locals_alloc_ok cenv env /\
+  type_stmt env ret_ty (Append (TopLevelNameTarget nid) e) = SOME env' /\
+  type_place_target env (TopLevelNameTarget nid) = SOME (Type (ArrayT elem (Dynamic cap))) /\
+  is_word_type elem /\
+  stmt_exprs_ok cenv (Append (TopLevelNameTarget nid) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget nid) e)) /\
+  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty ==>
+  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ cenv
+    (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
+    (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `type_place_target env (TopLevelNameTarget nid) =
@@ -6210,36 +6128,7 @@ Proof
     bodyAppendStorageFactsTheory.supported_append_storage_decl) >>
   simp[] >> metis_tac[]
 QED
-*)
-Theorem body_append_storage_word_frag_full:
-  !cx nid e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv
-    env env' ret_ty lctx RetQ es elem cap.
-  (!s p t. eval_target_place cx (TopLevelNameTarget nid) s = (INL p,t) ==>
-     body_expr_full_ok_mods mods exps cx e) /\
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
-  supported_stmt tops bindings (Append (TopLevelNameTarget nid) e) /\
-  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-     (Append (TopLevelNameTarget nid) e) ==> occurs_abi_decode_target target tops) /\
-  body_const_cells_agree mods cx env es /\
-  expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
-  locals_alloc_ok cenv env /\
-  type_stmt env ret_ty (Append (TopLevelNameTarget nid) e) = SOME env' /\
-  type_place_target env (TopLevelNameTarget nid) = SOME (Type (ArrayT elem (Dynamic cap))) /\
-  is_word_type elem /\
-  stmt_exprs_ok cenv (Append (TopLevelNameTarget nid) e) /\
-  call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget nid) e)) /\
-  frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty ==>
-  stmt_frag_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cx lctx RetQ cenv
-    (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget nid) e))
-    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Append (TopLevelNameTarget nid) e)))
-    (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_storage_word_frag_full[compose]:
   `cenv' = cenv` by
     (qpat_assum `stmt_env _ _ _ (Append _ e) sa = (cenv',sb)` (fn code =>
@@ -6285,9 +6174,7 @@ Resume body_append_storage_word_frag_full[compose]:
         G = G0 /\ tn = tn0 /\ u = s0` >> simp[] >>
   suspend "after_root"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_storage_word_frag_full[after_root]:
   rpt strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -6354,9 +6241,7 @@ Resume body_append_storage_word_frag_full[after_root]:
     metis_tac[bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp] >>
   suspend "rhs_code"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_storage_word_frag_full[rhs_code]:
   qpat_x_assum `nid0 = NONE` SUBST_ALL_TAC >>
   qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
@@ -6416,9 +6301,7 @@ Resume body_append_storage_word_frag_full[rhs_code]:
   conj_tac >- suspend "rhs_exit" >>
   simp[Abbr `Q1`] >> suspend "suffix"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_storage_word_frag_full[rhs_exit]:
   simp[Abbr `R1`] >>
   qx_genl_tac [`H`, `result`, `ee`, `gt`, `r`] >>
@@ -6434,9 +6317,7 @@ Resume body_append_storage_word_frag_full[rhs_exit]:
   rename1 `expr_exit (INR (Error err)) (IntRet _ _)` >>
   Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_storage_word_frag_full[suffix]:
   rpt strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid'.storage_trace) mid'.storage_trace` by
@@ -6543,9 +6424,7 @@ Resume body_append_storage_word_frag_full[suffix]:
   simp[Abbr `place`] >>
   suspend "word"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_storage_word_frag_full[word]:
   `env_consistent env cx es /\ env.type_defs = get_tenv cx` by
     (qpat_assum `expr_sim_inv cenv cx env es` mp_tac >>
@@ -6578,9 +6457,7 @@ Resume body_append_storage_word_frag_full[word]:
      simp[]) >>
   suspend "word_operand"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_storage_word_frag_full[word_operand]:
   `eval_operand vop t = SOME (typed_val_to_w256 tv v)` by
     (drule exprSimPrecompilesTheory.expr_post_typed_stack_operand >> simp[]) >>
@@ -6633,11 +6510,8 @@ Resume body_append_storage_word_frag_full[word_operand]:
       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
   first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_append_storage_word_frag_full
-*)
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.

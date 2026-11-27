@@ -184,31 +184,6 @@ QED
 (* Fold the concrete keyword compiler and evaluator over the same suffix.
    The selected operands match source first-occurrence selection; evaluating
    a later duplicate still contributes its gas marks and frame. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  map_every qid_spec_tac
-    [`tn0`,`G0`,`s0`,`es`,`shadow_sb`,`shadow_sa`,`sb`,`sa`,`dopt`,`go`,`vo`,`ks`] >>
-  Induct_on `xs` >> rpt gen_tac >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS)
-  >- (gvs[compile_ext_call_kwargs_def, comp_return_def] >>
-      irule (Q.INST [`res` |-> `INL ([] : value list)`, `ee` |-> `es`,
-                    `t` |-> `s0`, `G'` |-> `G0`, `tn'` |-> `tn0`]
-        (INST_TYPE [alpha |-> ``:value list``] gas_outcome_full_pure)) >>
-      simp[evaluate_def, return_def] >>
-      qexistsl [`G0`, `s0`, `tn0`] >>
-      simp[gas_origin_ptr_path_rules, ghost_kept_at_refl, ext_call_kwarg_def] >>
-      qx_gen_tac `H` >> strip_tac >>
-      `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
-       storage_well_formed_on cx es (FST H)` by
-        (irule storage_well_formed_on_backends >> simp[]) >>
-      qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
-        (qspec_then `H` mp_tac) >>
-      simp[] >> strip_tac >> gvs[ghost_inv_at_def, wb_frame_refl] >>
-      first_assum ACCEPT_TAC) >>
-  suspend "cons"
-QED
-*)
 Theorem extcall_request_keywords_owned_outcome:
   body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -286,10 +261,28 @@ Theorem extcall_request_keywords_owned_outcome:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  cheat
+  map_every qid_spec_tac
+    [`tn0`,`G0`,`s0`,`es`,`shadow_sb`,`shadow_sa`,`sb`,`sa`,`dopt`,`go`,`vo`,`ks`] >>
+  Induct_on `xs` >> rpt gen_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS)
+  >- (gvs[compile_ext_call_kwargs_def, comp_return_def] >>
+      irule (Q.INST [`res` |-> `INL ([] : value list)`, `ee` |-> `es`,
+                    `t` |-> `s0`, `G'` |-> `G0`, `tn'` |-> `tn0`]
+        (INST_TYPE [alpha |-> ``:value list``] gas_outcome_full_pure)) >>
+      simp[evaluate_def, return_def] >>
+      qexistsl [`G0`, `s0`, `tn0`] >>
+      simp[gas_origin_ptr_path_rules, ghost_kept_at_refl, ext_call_kwarg_def] >>
+      qx_gen_tac `H` >> strip_tac >>
+      `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+       storage_well_formed_on cx es (FST H)` by
+        (irule storage_well_formed_on_backends >> simp[]) >>
+      qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+        (qspec_then `H` mp_tac) >>
+      simp[] >> strip_tac >> gvs[ghost_inv_at_def, wb_frame_refl] >>
+      first_assum ACCEPT_TAC) >>
+  suspend "cons"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_keywords_owned_outcome[cons]:
   Cases_on `ks` >> fs[] >>
   rename1 `compile_ext_call_kwargs _ _ rt (k::ks) (e::xs) sa = _` >>
@@ -360,9 +353,7 @@ Resume extcall_request_keywords_owned_outcome[cons]:
   rpt strip_tac >> Cases_on `res` >> fs[expr_exit_def] >>
   gvs[expr_exit_INR_type,halt_exit_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_keywords_owned_outcome[tail]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   strip_tac >> disj1_tac >>
@@ -552,8 +543,5 @@ Resume extcall_request_keywords_owned_outcome[tail]:
       gvs[] >> strip_tac >> goal_assum (drule_at Any) >> simp[]) >>
   qexists `aid` >> simp[] >> decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise extcall_request_keywords_owned_outcome
-*)

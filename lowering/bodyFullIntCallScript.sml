@@ -375,37 +375,6 @@ Proof
 QED
 
 (* Stage (b) gives stage (c)'s callee premise. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
-      sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
-    (qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==> _`
-       (qspec_then `H` mp_tac) >> simp[]) >>
-  qpat_assum `body_inv _ _ _ _` (fn inv =>
-    qpat_assum `lookup_callable_function _ _ _ = SOME _` (fn lookup =>
-      qpat_assum `MEM (FunctionDecl Internal _ _ _ _ _ _ _ _) _` (fn decl =>
-        qhdtm_assum `intcall_entry_full` (fn entry =>
-          qpat_assum `!s1 vs t1 sd dvs td penv rtv. _ ==> body_stmts_full_ok _ _`
-            (fn ih =>
-              assume_tac (MATCH_MP intcall_entry_body_ih
-                (LIST_CONJ [inv, lookup, decl, entry, ih]))))))) >>
-  first_assum (fn callee_stage =>
-    if aconv (concl callee_stage) callee_input then
-  qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`tops`,`cenv`,`cx`,
-               `tenv`,`name`,`es`,`st0`,`sa`,`sb`,`vv`,`s0`,`es0`,`G0`,`tn0`,
-               `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,
-               `t`,`G`,`tn`,`callee`,`entered`,`nrc`,`nrbs`,`npvs`,`dflts`]
-    mp_tac callee_stage
-    else NO_TAC) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then (qspecl_then [`bb`,`inst`,`lbl`,`arg_ops`,`argv`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then ACCEPT_TAC
-QED
-*)
 Theorem intcall_callee_premise[local]:
   ^callee_input ==>
   !DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
@@ -459,13 +428,69 @@ Theorem intcall_callee_premise[local]:
              (if nrc = 0 /\ 0 < nrbs then SOME (HD argv) else NONE)
              sa.cs_next_id sb.cs_next_id t tn res ee gt r)
 Proof
-  cheat
+  strip_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+      sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
+    (qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >> simp[]) >>
+  qpat_assum `body_inv _ _ _ _` (fn inv =>
+    qpat_assum `lookup_callable_function _ _ _ = SOME _` (fn lookup =>
+      qpat_assum `MEM (FunctionDecl Internal _ _ _ _ _ _ _ _) _` (fn decl =>
+        qhdtm_assum `intcall_entry_full` (fn entry =>
+          qpat_assum `!s1 vs t1 sd dvs td penv rtv. _ ==> body_stmts_full_ok _ _`
+            (fn ih =>
+              assume_tac (MATCH_MP intcall_entry_body_ih
+                (LIST_CONJ [inv, lookup, decl, entry, ih]))))))) >>
+  first_assum (fn callee_stage =>
+    if aconv (concl callee_stage) callee_input then
+  qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`tops`,`cenv`,`cx`,
+               `tenv`,`name`,`es`,`st0`,`sa`,`sb`,`vv`,`s0`,`es0`,`G0`,`tn0`,
+               `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,
+               `t`,`G`,`tn`,`callee`,`entered`,`nrc`,`nrbs`,`npvs`,`dflts`]
+    mp_tac callee_stage
+    else NO_TAC) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qspecl_then [`bb`,`inst`,`lbl`,`arg_ops`,`argv`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED
 
 (* The value judgment: stage (a) with the unwrap and the read after the
    call, then stage (c)'s second conjunct. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem intcall_sim_full:
+  ^read_args_input ==> ^callee_input ==>
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+   es dflt es0 mut nr args ret ss rr dflts.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx tenv es0 /\
+    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
+    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok_mods mods exps cx es) /\
+    (!s1 vs t1.
+       ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
+       body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+           (subst_consts_exprs (module_consts_env tops []) dflts))) /\
+    (!s1 vs t1 sd dvs td penv rtv.
+       ~MEM (NONE,name) cx.stk /\
+       eval_exprs cx es s1 = (INL vs,t1) /\
+       eval_exprs (cx with stk updated_by CONS (NONE,name))
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+         (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
+       bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv /\
+       evaluate_type (get_tenv cx) ret = SOME rtv /\
+       (nr ==> IS_SOME cx.nonreentrant_slot) /\
+       (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
+       body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
+         (subst_consts_stmts (module_consts_env tops []) ss)) ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
 Proof
   disch_then kall_tac >> strip_tac >>
   rpt gen_tac >> disch_then (fn entry =>
@@ -518,84 +543,9 @@ Proof
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
   disch_then (irule o CONJUNCT2) >> simp[])
 QED
-*)
-Theorem intcall_sim_full:
-  ^read_args_input ==> ^callee_input ==>
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
-   es dflt es0 mut nr args ret ss rr dflts.
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    body_const_cells_agree mods cx tenv es0 /\
-    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-    lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,nr,args,dflts,ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
-    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok_mods mods exps cx es) /\
-    (!s1 vs t1.
-       ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
-       body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
-         (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
-           (subst_consts_exprs (module_consts_env tops []) dflts))) /\
-    (!s1 vs t1 sd dvs td penv rtv.
-       ~MEM (NONE,name) cx.stk /\
-       eval_exprs cx es s1 = (INL vs,t1) /\
-       eval_exprs (cx with stk updated_by CONS (NONE,name))
-         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
-         (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
-       bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv /\
-       evaluate_type (get_tenv cx) ret = SOME rtv /\
-       (nr ==> IS_SOME cx.nonreentrant_slot) /\
-       (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
-       body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
-         (subst_consts_stmts (module_consts_env tops []) ss)) ==>
-    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
-Proof
-  cheat
-QED
 
 
 (* Use the return stage's owned value post for the expression judgment. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  disch_then kall_tac >> strip_tac >>
-  rpt gen_tac >> disch_then (fn entry =>
-  strip_assume_tac entry >>
-  rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  `?nrc nrbs npvs. cenv.ce_func_info (nsid_to_string (NONE,name)) =
-                (nrc,nrbs,npvs)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
-  `!v : eval_result. storage_trace_frame (return v)` by
-    simp[storage_trace_frame_return] >>
-  `!v : vyper_value. cs_appends (comp_return v)` by simp[cs_appends_return] >>
-  intcall_apply_args entry `comp_return : vyper_value -> vyper_value compiler`
-    `vv` `return : eval_result -> evaluation_state ->
-                   (eval_result + exception) # evaluation_state`
-    `expr_vv_res_ok` [bind_return_right, comp_bind_comp_return] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (simp[] >> NO_TAC) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `comp_return _ _ = _`
-    (strip_assume_tac o SIMP_RULE std_ss [comp_return_def, pairTheory.PAIR_EQ]) >>
-  qpat_x_assum `_ = vv` SUBST_ALL_TAC >>
-  qpat_x_assum `_ = sb` SUBST_ALL_TAC >>
-  stage_tac callee_input (qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`tops`,`cenv`,`cx`,
-               `tenv`,`name`,`es`,`st0`,`sa`,`sb`,`vv`,`s0`,`es0`,`G0`,`tn0`,
-               `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,
-               `t`,`G`,`tn`,`nrc`,`nrbs`,`npvs`,`dflts`] mp_tac o MP intcall_callee_premise) >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
-  strip_tac >>
-  qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,`shadow_func`,
-               `tops`,`cenv`,`cx`,`tenv`,`ty`,`ann`,`name`,`es`,`dflt`,`es0`,
-               `st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`vv`,`s0`,`G0`,`tn0`,
-               `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,
-               `t`,`G`,`tn`,`nrc`,`nrbs`,`npvs`,`dflts`] mp_tac intcall_return_full_owned >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
-  disch_then (irule o CONJUNCT1) >> simp[])
-QED
-*)
 Theorem intcall_vv_full:
   ^vv_args_input ==> ^callee_input ==>
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
@@ -630,5 +580,37 @@ Theorem intcall_vv_full:
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
 Proof
-  cheat
+  disch_then kall_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (fn entry =>
+  strip_assume_tac entry >>
+  rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  `?nrc nrbs npvs. cenv.ce_func_info (nsid_to_string (NONE,name)) =
+                (nrc,nrbs,npvs)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
+  `!v : eval_result. storage_trace_frame (return v)` by
+    simp[storage_trace_frame_return] >>
+  `!v : vyper_value. cs_appends (comp_return v)` by simp[cs_appends_return] >>
+  intcall_apply_args entry `comp_return : vyper_value -> vyper_value compiler`
+    `vv` `return : eval_result -> evaluation_state ->
+                   (eval_result + exception) # evaluation_state`
+    `expr_vv_res_ok` [bind_return_right, comp_bind_comp_return] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (simp[] >> NO_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `comp_return _ _ = _`
+    (strip_assume_tac o SIMP_RULE std_ss [comp_return_def, pairTheory.PAIR_EQ]) >>
+  qpat_x_assum `_ = vv` SUBST_ALL_TAC >>
+  qpat_x_assum `_ = sb` SUBST_ALL_TAC >>
+  stage_tac callee_input (qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`tops`,`cenv`,`cx`,
+               `tenv`,`name`,`es`,`st0`,`sa`,`sb`,`vv`,`s0`,`es0`,`G0`,`tn0`,
+               `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,
+               `t`,`G`,`tn`,`nrc`,`nrbs`,`npvs`,`dflts`] mp_tac o MP intcall_callee_premise) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
+  strip_tac >>
+  qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,`shadow_func`,
+               `tops`,`cenv`,`cx`,`tenv`,`ty`,`ann`,`name`,`es`,`dflt`,`es0`,
+               `st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`vv`,`s0`,`G0`,`tn0`,
+               `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,
+               `t`,`G`,`tn`,`nrc`,`nrbs`,`npvs`,`dflts`] mp_tac intcall_return_full_owned >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
+  disch_then (irule o CONJUNCT1) >> simp[])
 QED

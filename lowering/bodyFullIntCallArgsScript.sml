@@ -2577,8 +2577,187 @@ Proof
   first_x_assum irule >> simp[] >> qexists_tac `i` >> simp[] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem intcall_args_stage_full_p2_with_path[local]:
+  !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
+   st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
+   flags dtys newops ops ws vals ptys pflags pin f P Q R.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx tenv esi /\
+    expr_sim_inv_mods mods cenv cx tenv esi /\
+    EVERY (\e. expr_body_pre_mods mods cenv cx tenv e esi) es /\
+    body_exprs_full_ok_mods mods exps cx es /\
+    LENGTH flags = LENGTH es /\ LENGTH dtys = LENGTH es /\
+    EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) dtys /\
+    LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es) dtys /\
+    (!j. j < LENGTH es /\ EL j flags ==> is_word_type (EL j dtys)) /\
+    (!e dty ee ci vv cm.
+       expr_body_pre_mods mods cenv cx tenv e ee /\
+       compile_expr cenv (expr_type e) e ci = (vv,cm) /\
+       ~is_word_type dty /\ ~is_bytestring_type dty /\
+       type_widens_to (get_tenv cx) (expr_type e) dty ==>
+       vv_type vv = lowered_value_type cenv e) /\
+    compile_stage_intcall_args compile_expr cenv es flags dtys si =
+      (newops,sf) /\
+    compile_stage_intcall_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr es)
+      flags dtys shadow_si = (newops,shadow_sf) /\
+    gas_shadow_state si shadow_si /\ gas_shadow_state sf shadow_sf /\
+    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+    gas_shadow_function func shadow_func /\
+    MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
+    fn_has_code si sf func /\ fn_has_code shadow_si shadow_sf shadow_func /\
+    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv si /\
+    ((ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u)) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+       not_fresh_at si x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+       not_fresh_at si x) /\
+    (!xs. storage_trace_frame (f xs)) /\
+    gas_admissible (vyperState$bind (eval_exprs cx es) f) P esi /\
+    (!err. P (INR err) ==> expr_vv_res_ok (INR err)) /\
+    (!H res ee gt r.
+       expr_exit res r /\ halt_exit H cx ee res r /\
+       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s) ==>
+       R H res ee gt r) /\
+    LENGTH ws = LENGTH ops /\ LENGTH vals = LENGTH ops /\
+    LENGTH ptys = LENGTH ops /\ LENGTH pflags = LENGTH ops /\
+    eval_operands ops s = SOME ws /\ EVERY (\op. op_taint tn op = {}) ops /\
+    (!x. MEM (Var x) ops ==> not_fresh_at si x) /\
+    (keep_sites ==> !j. j < LENGTH ops /\ ~EL j pflags ==>
+       ?b cap aid. op_prov G (EL j ops) = SOME (b,cap) /\
+         FLOOKUP s.vs_allocas aid = SOME (b,cap) /\
+         sa.cs_next_id <= aid /\ aid < si.cs_next_id /\
+         32 <= cap /\
+         ?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+           inst.inst_id = aid) /\
+    (keep_sites ==> !i j b k c l.
+       i < j /\ j < LENGTH ops /\ ~EL i pflags /\ ~EL j pflags /\
+       op_prov G (EL i ops) = SOME (b,k) /\ op_prov G (EL j ops) = SOME (c,l) ==>
+       regions_disjoint b k c l) /\
+    (!j rt. j < LENGTH ops /\
+       evaluate_type (get_tenv cx) (EL j ptys) = SOME rt ==>
+       value_has_type rt (EL j vals) /\ val_wf rt (EL j vals) /\
+       val_footprint rt (EL j vals) <= type_memory_size rt /\
+       (EL j pflags ==> EL j ws = typed_val_to_w256 rt (EL j vals) /\
+         (clean_words ==> op_prov G (EL j ops) = NONE)) /\
+       (~EL j pflags ==>
+         ?b cap aid.
+           op_prov G (EL j ops) = SOME (b,cap) /\
+           FLOOKUP s.vs_allocas aid = SOME (b,cap) /\
+           sa.cs_next_id <= aid /\ aid < si.cs_next_id /\
+           lo <= b /\ b+cap <= s.vs_alloca_next /\ b <= w2n (EL j ws) /\
+           w2n (EL j ws) + type_memory_size rt <= b+cap /\
+           (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+             val_in_memory rt (EL j vals) (w2n (EL j ws)) mem) /\
+           (!n lb sz. local_region cenv esi.scopes s n lb sz ==>
+             b+cap <= lb \/ lb+sz <= b) /\
+           (case pin of NONE => T | SOME (rb,pb,pk) =>
+             b+cap <= pb \/ pb+pk <= b))) /\
+    (case pin of NONE => T | SOME (rb,b,k) =>
+       FLOOKUP G rb = SOME (b,k) /\ op_taint tn (Var rb) = {} /\
+       lookup_var rb s = SOME (n2w b) /\
+       FLOOKUP s.vs_allocas sa.cs_next_id = SOME (b,k) /\
+       sa.cs_next_id < si.cs_next_id /\ lo <= b /\ b+k <= s.vs_alloca_next /\
+       not_fresh_at si rb /\
+       (!n lb sz. local_region cenv esi.scopes s n lb sz ==>
+         b+k <= lb \/ lb+sz <= b)) /\
+    wb_frame cenv es0 esi sa s0 s /\
+    ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn /\
+    alloca_history func s /\ sa.cs_next_id <= si.cs_next_id /\
+    sa.cs_next_var <= si.cs_next_var /\
+    (!n b sz. local_region cenv es0.scopes s0 n b sz <=>
+       local_region cenv esi.scopes s n b sz) /\
+    s0.vs_alloca_next <= s.vs_alloca_next /\
+    MAP FDOM es0.scopes = MAP FDOM esi.scopes /\
+    return_buf_frame d cenv si s /\ ~s.vs_halted /\
+    s.vs_current_bb = si.cs_current_bb /\
+    s.vs_inst_idx = LENGTH si.cs_current_insts /\
+    (!H. valid_horizon cx st0 H esi.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx esi s /\
+       storage_well_formed_on cx esi (FST H) /\
+       ghost_inv_at (DF H) lo d cenv cx esi G tn s) /\
+    (!marks xs ee t G1 tn1.
+       (!tail. eval_exprs cx es
+          (esi with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
+          (INL xs, ee with gas_obs := tail)) /\
+       gas_path ctx func s (LENGTH marks) (OK t) /\
+       storage_trace_domain cx st0 ee.storage_trace /\
+       LENGTH xs = LENGTH es /\ expr_sim_inv_mods mods cenv cx tenv ee /\
+       (?ws1.
+         LENGTH ws1 = LENGTH (ops ++ newops) /\
+         LENGTH (vals ++ xs) = LENGTH (ops ++ newops) /\
+         LENGTH (ptys ++ dtys) = LENGTH (ops ++ newops) /\
+         LENGTH (pflags ++ flags) = LENGTH (ops ++ newops) /\
+         eval_operands (ops ++ newops) t = SOME ws1 /\
+         EVERY (\op. op_taint tn1 op = {}) (ops ++ newops) /\
+         (!x. MEM (Var x) (ops ++ newops) ==> not_fresh_at sf x) /\
+         (keep_sites ==> !j. j < LENGTH (ops ++ newops) /\ ~EL j (pflags ++ flags) ==>
+           ?b cap aid. op_prov G1 (EL j (ops ++ newops)) = SOME (b,cap) /\
+             FLOOKUP t.vs_allocas aid = SOME (b,cap) /\
+             sa.cs_next_id <= aid /\ aid < sf.cs_next_id /\
+             32 <= cap /\
+             ?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+               inst.inst_id = aid) /\
+         (keep_sites ==> !i j b k c l.
+           i < j /\ j < LENGTH (ops ++ newops) /\
+           ~EL i (pflags ++ flags) /\ ~EL j (pflags ++ flags) /\
+           op_prov G1 (EL i (ops ++ newops)) = SOME (b,k) /\
+           op_prov G1 (EL j (ops ++ newops)) = SOME (c,l) ==>
+           regions_disjoint b k c l) /\
+         (!j rt. j < LENGTH (ops ++ newops) /\
+           evaluate_type (get_tenv cx) (EL j (ptys ++ dtys)) = SOME rt ==>
+           value_has_type rt (EL j (vals ++ xs)) /\
+           val_wf rt (EL j (vals ++ xs)) /\
+           val_footprint rt (EL j (vals ++ xs)) <= type_memory_size rt /\
+           (EL j (pflags ++ flags) ==>
+             EL j ws1 = typed_val_to_w256 rt (EL j (vals ++ xs)) /\
+             (clean_words ==> op_prov G1 (EL j (ops ++ newops)) = NONE)) /\
+           (~EL j (pflags ++ flags) ==>
+             ?b cap aid.
+               op_prov G1 (EL j (ops ++ newops)) = SOME (b,cap) /\
+               FLOOKUP t.vs_allocas aid = SOME (b,cap) /\
+               sa.cs_next_id <= aid /\ aid < sf.cs_next_id /\
+               lo <= b /\ b+cap <= t.vs_alloca_next /\ b <= w2n (EL j ws1) /\
+               w2n (EL j ws1) + type_memory_size rt <= b+cap /\
+               (!mem. mem_agree_outside tn1.t_mem t.vs_memory mem ==>
+                 val_in_memory rt (EL j (vals ++ xs)) (w2n (EL j ws1)) mem) /\
+               (!n lb sz. local_region cenv ee.scopes t n lb sz ==>
+                 b+cap <= lb \/ lb+sz <= b) /\
+               (case pin of NONE => T | SOME (rb,pb,pk) =>
+                 b+cap <= pb \/ pb+pk <= b)))) /\
+       (case pin of NONE => T | SOME (rb,b,k) =>
+         FLOOKUP G1 rb = SOME (b,k) /\ op_taint tn1 (Var rb) = {} /\
+         lookup_var rb t = SOME (n2w b) /\
+         FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,k) /\
+         sa.cs_next_id < sf.cs_next_id /\ lo <= b /\ b+k <= t.vs_alloca_next /\
+         not_fresh_at sf rb /\
+         (!n lb sz. local_region cenv ee.scopes t n lb sz ==>
+           b+k <= lb \/ lb+sz <= b)) /\
+       wb_frame cenv es0 ee sa s0 t /\
+       ghost_kept_at lo cenv es0 sa G0 tn0 s0 G1 tn1 /\
+       alloca_history func t /\ sa.cs_next_id <= sf.cs_next_id /\
+       sa.cs_next_var <= sf.cs_next_var /\
+       (!n b sz. local_region cenv es0.scopes s0 n b sz <=>
+          local_region cenv ee.scopes t n b sz) /\
+       s0.vs_alloca_next <= t.vs_alloca_next /\
+       MAP FDOM es0.scopes = MAP FDOM ee.scopes /\
+       return_buf_frame d cenv sf t /\ ~t.vs_halted /\
+       t.vs_current_bb = sf.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+       (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx ee t /\
+         storage_well_formed_on cx ee (FST H) /\
+         ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t) /\
+       gas_admissible (f xs) P ee ==>
+       gas_outcome_full_mods
+         (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         cenv.ce_modules cx st0 (f xs) (ee,t,G1,tn1) Q R) ==>
+    gas_outcome_full_mods
+      (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (vyperState$bind (eval_exprs cx es) f) (esi,s,G,tn) Q R
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >>
@@ -5350,191 +5529,6 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt (goal_assum (drule_at Any) >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC))
 QED
-*)
-Theorem intcall_args_stage_full_p2_with_path[local]:
-  !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
-   st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
-   flags dtys newops ops ws vals ptys pflags pin f P Q R.
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    body_const_cells_agree mods cx tenv esi /\
-    expr_sim_inv_mods mods cenv cx tenv esi /\
-    EVERY (\e. expr_body_pre_mods mods cenv cx tenv e esi) es /\
-    body_exprs_full_ok_mods mods exps cx es /\
-    LENGTH flags = LENGTH es /\ LENGTH dtys = LENGTH es /\
-    EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) dtys /\
-    LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es) dtys /\
-    (!j. j < LENGTH es /\ EL j flags ==> is_word_type (EL j dtys)) /\
-    (!e dty ee ci vv cm.
-       expr_body_pre_mods mods cenv cx tenv e ee /\
-       compile_expr cenv (expr_type e) e ci = (vv,cm) /\
-       ~is_word_type dty /\ ~is_bytestring_type dty /\
-       type_widens_to (get_tenv cx) (expr_type e) dty ==>
-       vv_type vv = lowered_value_type cenv e) /\
-    compile_stage_intcall_args compile_expr cenv es flags dtys si =
-      (newops,sf) /\
-    compile_stage_intcall_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr es)
-      flags dtys shadow_si = (newops,shadow_sf) /\
-    gas_shadow_state si shadow_si /\ gas_shadow_state sf shadow_sf /\
-    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-    gas_shadow_function func shadow_func /\
-    MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-    fn_has_code si sf func /\ fn_has_code shadow_si shadow_sf shadow_func /\
-    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv si /\
-    ((ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u)) /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
-       not_fresh_at si x) /\
-    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-       not_fresh_at si x) /\
-    (!xs. storage_trace_frame (f xs)) /\
-    gas_admissible (vyperState$bind (eval_exprs cx es) f) P esi /\
-    (!err. P (INR err) ==> expr_vv_res_ok (INR err)) /\
-    (!H res ee gt r.
-       expr_exit res r /\ halt_exit H cx ee res r /\
-       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s) ==>
-       R H res ee gt r) /\
-    LENGTH ws = LENGTH ops /\ LENGTH vals = LENGTH ops /\
-    LENGTH ptys = LENGTH ops /\ LENGTH pflags = LENGTH ops /\
-    eval_operands ops s = SOME ws /\ EVERY (\op. op_taint tn op = {}) ops /\
-    (!x. MEM (Var x) ops ==> not_fresh_at si x) /\
-    (keep_sites ==> !j. j < LENGTH ops /\ ~EL j pflags ==>
-       ?b cap aid. op_prov G (EL j ops) = SOME (b,cap) /\
-         FLOOKUP s.vs_allocas aid = SOME (b,cap) /\
-         sa.cs_next_id <= aid /\ aid < si.cs_next_id /\
-         32 <= cap /\
-         ?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-           inst.inst_id = aid) /\
-    (keep_sites ==> !i j b k c l.
-       i < j /\ j < LENGTH ops /\ ~EL i pflags /\ ~EL j pflags /\
-       op_prov G (EL i ops) = SOME (b,k) /\ op_prov G (EL j ops) = SOME (c,l) ==>
-       regions_disjoint b k c l) /\
-    (!j rt. j < LENGTH ops /\
-       evaluate_type (get_tenv cx) (EL j ptys) = SOME rt ==>
-       value_has_type rt (EL j vals) /\ val_wf rt (EL j vals) /\
-       val_footprint rt (EL j vals) <= type_memory_size rt /\
-       (EL j pflags ==> EL j ws = typed_val_to_w256 rt (EL j vals) /\
-         (clean_words ==> op_prov G (EL j ops) = NONE)) /\
-       (~EL j pflags ==>
-         ?b cap aid.
-           op_prov G (EL j ops) = SOME (b,cap) /\
-           FLOOKUP s.vs_allocas aid = SOME (b,cap) /\
-           sa.cs_next_id <= aid /\ aid < si.cs_next_id /\
-           lo <= b /\ b+cap <= s.vs_alloca_next /\ b <= w2n (EL j ws) /\
-           w2n (EL j ws) + type_memory_size rt <= b+cap /\
-           (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-             val_in_memory rt (EL j vals) (w2n (EL j ws)) mem) /\
-           (!n lb sz. local_region cenv esi.scopes s n lb sz ==>
-             b+cap <= lb \/ lb+sz <= b) /\
-           (case pin of NONE => T | SOME (rb,pb,pk) =>
-             b+cap <= pb \/ pb+pk <= b))) /\
-    (case pin of NONE => T | SOME (rb,b,k) =>
-       FLOOKUP G rb = SOME (b,k) /\ op_taint tn (Var rb) = {} /\
-       lookup_var rb s = SOME (n2w b) /\
-       FLOOKUP s.vs_allocas sa.cs_next_id = SOME (b,k) /\
-       sa.cs_next_id < si.cs_next_id /\ lo <= b /\ b+k <= s.vs_alloca_next /\
-       not_fresh_at si rb /\
-       (!n lb sz. local_region cenv esi.scopes s n lb sz ==>
-         b+k <= lb \/ lb+sz <= b)) /\
-    wb_frame cenv es0 esi sa s0 s /\
-    ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn /\
-    alloca_history func s /\ sa.cs_next_id <= si.cs_next_id /\
-    sa.cs_next_var <= si.cs_next_var /\
-    (!n b sz. local_region cenv es0.scopes s0 n b sz <=>
-       local_region cenv esi.scopes s n b sz) /\
-    s0.vs_alloca_next <= s.vs_alloca_next /\
-    MAP FDOM es0.scopes = MAP FDOM esi.scopes /\
-    return_buf_frame d cenv si s /\ ~s.vs_halted /\
-    s.vs_current_bb = si.cs_current_bb /\
-    s.vs_inst_idx = LENGTH si.cs_current_insts /\
-    (!H. valid_horizon cx st0 H esi.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx esi s /\
-       storage_well_formed_on cx esi (FST H) /\
-       ghost_inv_at (DF H) lo d cenv cx esi G tn s) /\
-    (!marks xs ee t G1 tn1.
-       (!tail. eval_exprs cx es
-          (esi with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
-          (INL xs, ee with gas_obs := tail)) /\
-       gas_path ctx func s (LENGTH marks) (OK t) /\
-       storage_trace_domain cx st0 ee.storage_trace /\
-       LENGTH xs = LENGTH es /\ expr_sim_inv_mods mods cenv cx tenv ee /\
-       (?ws1.
-         LENGTH ws1 = LENGTH (ops ++ newops) /\
-         LENGTH (vals ++ xs) = LENGTH (ops ++ newops) /\
-         LENGTH (ptys ++ dtys) = LENGTH (ops ++ newops) /\
-         LENGTH (pflags ++ flags) = LENGTH (ops ++ newops) /\
-         eval_operands (ops ++ newops) t = SOME ws1 /\
-         EVERY (\op. op_taint tn1 op = {}) (ops ++ newops) /\
-         (!x. MEM (Var x) (ops ++ newops) ==> not_fresh_at sf x) /\
-         (keep_sites ==> !j. j < LENGTH (ops ++ newops) /\ ~EL j (pflags ++ flags) ==>
-           ?b cap aid. op_prov G1 (EL j (ops ++ newops)) = SOME (b,cap) /\
-             FLOOKUP t.vs_allocas aid = SOME (b,cap) /\
-             sa.cs_next_id <= aid /\ aid < sf.cs_next_id /\
-             32 <= cap /\
-             ?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-               inst.inst_id = aid) /\
-         (keep_sites ==> !i j b k c l.
-           i < j /\ j < LENGTH (ops ++ newops) /\
-           ~EL i (pflags ++ flags) /\ ~EL j (pflags ++ flags) /\
-           op_prov G1 (EL i (ops ++ newops)) = SOME (b,k) /\
-           op_prov G1 (EL j (ops ++ newops)) = SOME (c,l) ==>
-           regions_disjoint b k c l) /\
-         (!j rt. j < LENGTH (ops ++ newops) /\
-           evaluate_type (get_tenv cx) (EL j (ptys ++ dtys)) = SOME rt ==>
-           value_has_type rt (EL j (vals ++ xs)) /\
-           val_wf rt (EL j (vals ++ xs)) /\
-           val_footprint rt (EL j (vals ++ xs)) <= type_memory_size rt /\
-           (EL j (pflags ++ flags) ==>
-             EL j ws1 = typed_val_to_w256 rt (EL j (vals ++ xs)) /\
-             (clean_words ==> op_prov G1 (EL j (ops ++ newops)) = NONE)) /\
-           (~EL j (pflags ++ flags) ==>
-             ?b cap aid.
-               op_prov G1 (EL j (ops ++ newops)) = SOME (b,cap) /\
-               FLOOKUP t.vs_allocas aid = SOME (b,cap) /\
-               sa.cs_next_id <= aid /\ aid < sf.cs_next_id /\
-               lo <= b /\ b+cap <= t.vs_alloca_next /\ b <= w2n (EL j ws1) /\
-               w2n (EL j ws1) + type_memory_size rt <= b+cap /\
-               (!mem. mem_agree_outside tn1.t_mem t.vs_memory mem ==>
-                 val_in_memory rt (EL j (vals ++ xs)) (w2n (EL j ws1)) mem) /\
-               (!n lb sz. local_region cenv ee.scopes t n lb sz ==>
-                 b+cap <= lb \/ lb+sz <= b) /\
-               (case pin of NONE => T | SOME (rb,pb,pk) =>
-                 b+cap <= pb \/ pb+pk <= b)))) /\
-       (case pin of NONE => T | SOME (rb,b,k) =>
-         FLOOKUP G1 rb = SOME (b,k) /\ op_taint tn1 (Var rb) = {} /\
-         lookup_var rb t = SOME (n2w b) /\
-         FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,k) /\
-         sa.cs_next_id < sf.cs_next_id /\ lo <= b /\ b+k <= t.vs_alloca_next /\
-         not_fresh_at sf rb /\
-         (!n lb sz. local_region cenv ee.scopes t n lb sz ==>
-           b+k <= lb \/ lb+sz <= b)) /\
-       wb_frame cenv es0 ee sa s0 t /\
-       ghost_kept_at lo cenv es0 sa G0 tn0 s0 G1 tn1 /\
-       alloca_history func t /\ sa.cs_next_id <= sf.cs_next_id /\
-       sa.cs_next_var <= sf.cs_next_var /\
-       (!n b sz. local_region cenv es0.scopes s0 n b sz <=>
-          local_region cenv ee.scopes t n b sz) /\
-       s0.vs_alloca_next <= t.vs_alloca_next /\
-       MAP FDOM es0.scopes = MAP FDOM ee.scopes /\
-       return_buf_frame d cenv sf t /\ ~t.vs_halted /\
-       t.vs_current_bb = sf.cs_current_bb /\
-       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-       (!H. valid_horizon cx st0 H ee.storage_trace ==>
-         stmt_state_rel H ctx func cenv cx ee t /\
-         storage_well_formed_on cx ee (FST H) /\
-         ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t) /\
-       gas_admissible (f xs) P ee ==>
-       gas_outcome_full_mods
-         (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-         cenv.ce_modules cx st0 (f xs) (ee,t,G1,tn1) Q R) ==>
-    gas_outcome_full_mods
-      (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      cenv.ce_modules cx st0 (vyperState$bind (eval_exprs cx es) f) (esi,s,G,tn) Q R
-Proof
-  cheat
-QED
 
 (* The accumulated arguments at the end of this stage, independently of
    how its source replay and machine path were witnessed. *)
@@ -5625,52 +5619,6 @@ Proof
        cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  `vyperState$bind (eval_exprs cx es) return = eval_exprs cx es` by
-    (simp[FUN_EQ_THM, bind_def, return_def] >> gen_tac >>
-     Cases_on `eval_exprs cx es x` >> rename1 `(res,_)` >> Cases_on `res` >> simp[]) >>
-  qpat_assum `vyperState$bind (eval_exprs cx es) return = _`
-    (once_rewrite_tac o single o SYM) >>
-  irule intcall_args_stage_full_p2_with_path >>
-  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-  qpat_assum `expr_sim_inv cenv cx tenv esi` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ es _ _ si = _` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) _ _ shadow_si = _`
-    (irule_at Any) >>
-  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
-  qpat_assum `eval_operands ops s = SOME ws` (irule_at Any) >>
-  qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn` (irule_at Any) >>
-  qpat_assum `return_buf_frame d cenv si s` (irule_at Any) >>
-  qexistsl [`vals`, `ptys`, `pin`, `pflags`, `keep_sites`, `clean_words`, `P`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- simp[storage_trace_frame_return]
-  >- (rpt gen_tac >> Cases_on `res` >> simp[])
-  >- (rpt gen_tac >> strip_tac >> irule intcall_args_return_outcome >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      rpt strip_tac >>
-      qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
-        (qspec_then `H` mp_tac) >>
-      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-      `storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
-        (`storage_well_formed_on cx (ee with gas_obs := []) (FST H) <=>
-          storage_well_formed_on cx ee (FST H)` by
-            (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
-         simp[]) >>
-      `ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) G1 tn1 t` by
-        (qpat_assum `ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t` mp_tac >>
-         pure_rewrite_tac[ghost_inv_at_def, evaluation_state_accfupds] >>
-         disch_then ACCEPT_TAC) >>
-      simp_tac bool_ss [intcall_args_stage_post_def, sumTheory.INL_11, UNWIND_THM2,
-        evaluation_state_accfupds, expr_sim_inv_gas_obs,
-        exprSimWordArgsTheory.wb_frame_gas_obs, exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      qexists_tac `ws1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[]
-QED
-*)
 Theorem intcall_args_stage_left_outcome:
   !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
@@ -5778,7 +5726,47 @@ Theorem intcall_args_stage_left_outcome:
         expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `vyperState$bind (eval_exprs cx es) return = eval_exprs cx es` by
+    (simp[FUN_EQ_THM, bind_def, return_def] >> gen_tac >>
+     Cases_on `eval_exprs cx es x` >> rename1 `(res,_)` >> Cases_on `res` >> simp[]) >>
+  qpat_assum `vyperState$bind (eval_exprs cx es) return = _`
+    (once_rewrite_tac o single o SYM) >>
+  irule intcall_args_stage_full_p2_with_path >>
+  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
+  qpat_assum `expr_sim_inv cenv cx tenv esi` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ _ es _ _ si = _` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) _ _ shadow_si = _`
+    (irule_at Any) >>
+  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
+  qpat_assum `eval_operands ops s = SOME ws` (irule_at Any) >>
+  qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn` (irule_at Any) >>
+  qpat_assum `return_buf_frame d cenv si s` (irule_at Any) >>
+  qexistsl [`vals`, `ptys`, `pin`, `pflags`, `keep_sites`, `clean_words`, `P`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- simp[storage_trace_frame_return]
+  >- (rpt gen_tac >> Cases_on `res` >> simp[])
+  >- (rpt gen_tac >> strip_tac >> irule intcall_args_return_outcome >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      rpt strip_tac >>
+      qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
+        (qspec_then `H` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      `storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
+        (`storage_well_formed_on cx (ee with gas_obs := []) (FST H) <=>
+          storage_well_formed_on cx ee (FST H)` by
+            (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+         simp[]) >>
+      `ghost_inv_at (DF H) lo d cenv cx (ee with gas_obs := []) G1 tn1 t` by
+        (qpat_assum `ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t` mp_tac >>
+         pure_rewrite_tac[ghost_inv_at_def, evaluation_state_accfupds] >>
+         disch_then ACCEPT_TAC) >>
+      simp_tac bool_ss [intcall_args_stage_post_def, sumTheory.INL_11, UNWIND_THM2,
+        evaluation_state_accfupds, expr_sim_inv_gas_obs,
+        exprSimWordArgsTheory.wb_frame_gas_obs, exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qexists_tac `ws1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[]
 QED
 
 Theorem intcall_args_stage_full_p2:
@@ -5956,26 +5944,6 @@ QED
 
 
 (* Compatibility for continuations that only need expr_exit. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  irule intcall_args_stage_full_p2 >>
-  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-  qpat_assum `expr_sim_inv cenv cx tenv esi` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ es _ _ si = _` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) _ _ shadow_si = _`
-    (irule_at Any) >>
-  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
-  qpat_assum `gas_admissible (vyperState$bind (eval_exprs cx es) f) P esi`
-    (irule_at Any) >>
-  qpat_assum `eval_operands ops s = SOME ws` (irule_at Any) >>
-  qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn` (irule_at Any) >>
-  qpat_assum `return_buf_frame d cenv si s` (irule_at Any) >>
-  qexistsl [`vals`, `ptys`, `pin`, `pflags`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
-QED
-*)
 Theorem intcall_args_stage_full:
   !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
@@ -6129,7 +6097,21 @@ Theorem intcall_args_stage_full:
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       cenv.ce_modules cx st0 (vyperState$bind (eval_exprs cx es) f) (esi,s,G,tn) Q R
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule intcall_args_stage_full_p2 >>
+  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
+  qpat_assum `expr_sim_inv cenv cx tenv esi` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ _ es _ _ si = _` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) _ _ shadow_si = _`
+    (irule_at Any) >>
+  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
+  qpat_assum `gas_admissible (vyperState$bind (eval_exprs cx es) f) P esi`
+    (irule_at Any) >>
+  qpat_assum `eval_operands ops s = SOME ws` (irule_at Any) >>
+  qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn` (irule_at Any) >>
+  qpat_assum `return_buf_frame d cenv si s` (irule_at Any) >>
+  qexistsl [`vals`, `ptys`, `pin`, `pflags`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
 QED
 
 Theorem intcall_args_stmt_state_rel_push[local]:
@@ -9688,8 +9670,89 @@ Proof
   cheat
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem intcall_args_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+   es dflt es0 mut nr args ret ss rr dflts.
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx tenv es0 /\
+    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    LENGTH args - LENGTH dflts <= LENGTH es /\
+    LENGTH es <= LENGTH args /\
+    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok_mods mods exps cx es) /\
+    (!s1 vs t1.
+       ~MEM (NONE,name) cx.stk /\
+       eval_exprs cx es s1 = (INL vs,t1) ==>
+       body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
+           (subst_consts_exprs (module_consts_env tops []) dflts))) ==>
+    !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 kc out f P Q R.
+      (!v. storage_trace_frame (f v)) /\
+      (!v. cs_appends (kc v)) /\
+      comp_bind (compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt))
+        kc sa = (out, sb) /\
+      comp_bind
+        (compile_expr (gas_shadow_env T cenv) ty
+           (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)))
+        kc shadow_sa = (out, shadow_sb) /\
+      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+      gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+      gas_shadow_function func shadow_func /\
+      MEM func ctx.ctx_functions /\
+      MEM shadow_func shadow_ctx.ctx_functions /\
+      fn_has_code sa sb func /\
+      fn_has_code shadow_sa shadow_sb shadow_func /\
+      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+              not_fresh_at sa x) /\
+      gas_admissible
+        (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
+        P es0 /\
+      (!e. P (INR e) ==> expr_vv_res_ok (INR e)) /\
+      return_buf_frame d cenv sa s0 /\
+      alloca_history func s0 /\
+      (!H. valid_horizon cx st0 H es0.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es0 s0 /\
+        storage_well_formed_on cx es0 (FST H) /\
+        ghost_inv_at (DF H) lo d cenv cx es0 G0 tn0 s0) /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!H res ee gt r.
+         expr_exit res r /\ halt_exit H cx ee res r /\
+         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s) ==>
+         R H res ee gt r) /\
+      (!vv sm prev penv rtv es1 t G tn.
+         compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
+           (vv, sm) /\
+         kc vv sm = (out, sb) /\
+         (!H. valid_horizon cx st0 H es1.storage_trace ==>
+            intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
+              es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
+              es1 t G tn) /\
+         body_const_cells_agree mods cx tenv es1 /\
+         (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
+         (?H. valid_horizon cx st0 H es1.storage_trace) /\
+         gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
+           P es1 ==>
+         gas_outcome_full_mods
+           (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
+           cenv.ce_modules cx st0
+           (bind (intcall_rest cx name mut nr ss prev rtv) f) (es1, t, G, tn)
+           Q R) ==>
+      gas_outcome_full_mods
+        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
+        cenv.ce_modules cx st0
+        (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
+        (es0, s0, G0, tn0) Q R
 Proof
   rpt strip_tac >>
   `storage_trace_frame
@@ -10047,93 +10110,6 @@ Proof
   >>
   map_every qx_gen_tac [`dm`,`dvs`,`ed`,`u`,`Gd`,`tnd`] >> strip_tac >>
   suspend "after_defaults"
-QED
-*)
-Theorem intcall_args_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
-   es dflt es0 mut nr args ret ss rr dflts.
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    body_const_cells_agree mods cx tenv es0 /\
-    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-    lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,nr,args,dflts,ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    LENGTH args - LENGTH dflts <= LENGTH es /\
-    LENGTH es <= LENGTH args /\
-    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok_mods mods exps cx es) /\
-    (!s1 vs t1.
-       ~MEM (NONE,name) cx.stk /\
-       eval_exprs cx es s1 = (INL vs,t1) ==>
-       body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
-         (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
-           (subst_consts_exprs (module_consts_env tops []) dflts))) ==>
-    !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 kc out f P Q R.
-      (!v. storage_trace_frame (f v)) /\
-      (!v. cs_appends (kc v)) /\
-      comp_bind (compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt))
-        kc sa = (out, sb) /\
-      comp_bind
-        (compile_expr (gas_shadow_env T cenv) ty
-           (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)))
-        kc shadow_sa = (out, shadow_sb) /\
-      gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
-      gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-      gas_shadow_function func shadow_func /\
-      MEM func ctx.ctx_functions /\
-      MEM shadow_func shadow_ctx.ctx_functions /\
-      fn_has_code sa sb func /\
-      fn_has_code shadow_sa shadow_sb shadow_func /\
-      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-      (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
-      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
-              not_fresh_at sa x) /\
-      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-              not_fresh_at sa x) /\
-      gas_admissible
-        (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
-        P es0 /\
-      (!e. P (INR e) ==> expr_vv_res_ok (INR e)) /\
-      return_buf_frame d cenv sa s0 /\
-      alloca_history func s0 /\
-      (!H. valid_horizon cx st0 H es0.storage_trace ==>
-        stmt_state_rel H ctx func cenv cx es0 s0 /\
-        storage_well_formed_on cx es0 (FST H) /\
-        ghost_inv_at (DF H) lo d cenv cx es0 G0 tn0 s0) /\ ~s0.vs_halted /\
-      s0.vs_current_bb = sa.cs_current_bb /\
-      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-      (!H res ee gt r.
-         expr_exit res r /\ halt_exit H cx ee res r /\
-         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s) ==>
-         R H res ee gt r) /\
-      (!vv sm prev penv rtv es1 t G tn.
-         compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
-           (vv, sm) /\
-         kc vv sm = (out, sb) /\
-         (!H. valid_horizon cx st0 H es1.storage_trace ==>
-            intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
-              es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
-              es1 t G tn) /\
-         body_const_cells_agree mods cx tenv es1 /\
-         (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
-         (?H. valid_horizon cx st0 H es1.storage_trace) /\
-         gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
-           P es1 ==>
-         gas_outcome_full_mods
-           (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-           cenv.ce_modules cx st0
-           (bind (intcall_rest cx name mut nr ss prev rtv) f) (es1, t, G, tn)
-           Q R) ==>
-      gas_outcome_full_mods
-        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        cenv.ce_modules cx st0
-        (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
-        (es0, s0, G0, tn0) Q R
-Proof
-  cheat
 QED
 
 Theorem args_alloc_buffer_site[local]:
@@ -11905,7 +11881,6 @@ Proof
   cheat
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_args_full[after_defaults]:
   `?penv rtv.
      ~u.vs_halted /\
@@ -11982,8 +11957,5 @@ Resume intcall_args_full[after_defaults]:
   qexists_tac `H` >>
   qpat_assum `valid_horizon cx st0 H ed.storage_trace` ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise intcall_args_full
-*)

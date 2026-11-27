@@ -7,27 +7,6 @@ Ancestors
   vyperInterpreter vyperStorageTrace vyperStorageFootprint vyperTypeSystem
   typeLayoutProps list pair option
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  irule gas_outcome_full_post_mono >>
-  irule_at Any (structlit_fields_bundled_full |> INST_TYPE [alpha |-> ``:256``] |>
-    Q.SPEC `inv'` |> UNDISCH |>
-    Q.SPECL [`[(fname,e)]`, `[fty]`, `[ftv]`] |>
-    SIMP_RULE (srw_ss()) [LIST_REL_CONS1, type_memory_size_list_sum]) >>
-  qpat_x_assum `inv' = _` kall_tac >>
-  qpat_assum `compile_struct_lit _ ce _ _ _ _ _ = _` (irule_at Any) >>
-  qpat_assum `compile_struct_lit _ _ _ [(fname,gas_shadow_expr e)]
-                _ _ shadow_si = (_,shadow_sb)` (irule_at Any) >>
-  qpat_assum `expr_sim_full_code _ _` (irule_at Any) >>
-  qpat_assum `body_const_cells_agree _ _ _ _` (irule_at Any) >>
-  qpat_assum `ALOOKUP _ _ = SOME (_,_)` (irule_at Any) >>
-  qpat_assum `evaluate_type _ _ = SOME _` (irule_at Any) >>
-  qexistsl_tac [`cells`, `Hbase`] >>
-  simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-*)
 Theorem structlit_single_field_store_outcome:
   inv' = (\H ee cs G tn s cells off.
     stmt_state_rel H ctx func ce cx ee s /\
@@ -91,5 +70,20 @@ Theorem structlit_single_field_store_outcome:
       halt_exit H cx ee (INR exc : eval_result + exception) r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  cheat
+  strip_tac >>
+  irule gas_outcome_full_post_mono >>
+  irule_at Any (structlit_fields_bundled_full |> INST_TYPE [alpha |-> ``:256``] |>
+    Q.SPEC `inv'` |> UNDISCH |>
+    Q.SPECL [`[(fname,e)]`, `[fty]`, `[ftv]`] |>
+    SIMP_RULE (srw_ss()) [LIST_REL_CONS1, type_memory_size_list_sum]) >>
+  qpat_x_assum `inv' = _` kall_tac >>
+  qpat_assum `compile_struct_lit _ ce _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_struct_lit _ _ _ [(fname,gas_shadow_expr e)]
+                _ _ shadow_si = (_,shadow_sb)` (irule_at Any) >>
+  qpat_assum `expr_sim_full_code _ _` (irule_at Any) >>
+  qpat_assum `body_const_cells_agree _ _ _ _` (irule_at Any) >>
+  qpat_assum `ALOOKUP _ _ = SOME (_,_)` (irule_at Any) >>
+  qpat_assum `evaluate_type _ _ = SOME _` (irule_at Any) >>
+  qexistsl_tac [`cells`, `Hbase`] >>
+  simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]
 QED

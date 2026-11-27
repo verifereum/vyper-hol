@@ -4,28 +4,6 @@ Ancestors bodyFullBopBytestringHash bodySimFull gasShadow gasShadowState
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
   gasOutcomeFullMods[qualified]
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> irule bop_bytestring_selected_hash_full_exit >>
-  simp[] >>
-  (reverse conj_tac >- metis_tac[]) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!m cb. _` drule_all >> strip_tac >>
-  `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u` by
-    (Cases_on `ctx_has_dalloca ctx` >- fs[] >>
-     rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >> simp[] >>
-     strip_tac >> fs[unitTransformDefsTheory.dalloca_fmp_headroom_def,
-       ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
-     metis_tac[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
-  simp[] >> strip_tac >> first_x_assum drule_all >> strip_tac >>
-  drule gasOutcomeFullTheory.gas_outcome_full_post_mono >> disch_then irule >> simp[] >>
-  rpt gen_tac >> strip_tac >> qexists_tac `v` >> simp[]
-QED
-*)
 Theorem bop_bytestring_selected_child_full_halt:
   (case bytestring_literal_hash e of
      NONE => compile_bytestring_hash (FST (lower_value compile_expr cenv (expr_type e) e sa))
@@ -86,7 +64,23 @@ Theorem bop_bytestring_selected_child_full_halt:
       (~expr_has_effect e ==> pure_frame cenv func es sa s t))
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
-  cheat
+  strip_tac >> irule bop_bytestring_selected_hash_full_exit >>
+  simp[] >>
+  (reverse conj_tac >- metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!m cb. _` drule_all >> strip_tac >>
+  `!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u` by
+    (Cases_on `ctx_has_dalloca ctx` >- fs[] >>
+     rpt strip_tac >> drule contextRawReachableTheory.frag_reachable_members >> simp[] >>
+     strip_tac >> fs[unitTransformDefsTheory.dalloca_fmp_headroom_def,
+       ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM] >>
+     metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by metis_tac[] >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
+  simp[] >> strip_tac >> first_x_assum drule_all >> strip_tac >>
+  drule gasOutcomeFullTheory.gas_outcome_full_post_mono >> disch_then irule >> simp[] >>
+  rpt gen_tac >> strip_tac >> qexists_tac `v` >> simp[]
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body

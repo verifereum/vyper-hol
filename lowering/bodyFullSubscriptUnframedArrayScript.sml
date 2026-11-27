@@ -38,8 +38,33 @@ Proof
   qexistsl [`aid`,`b`,`sz`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem subscript_unframed_array_vv_full:
+  !cx v8 e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
+    (!s'' res t s3 res' t'.
+       eval_expr cx e1 s'' = (INL res,t) /\
+       (if subscript_reads_base cx e1 e2 then
+          bind (read_result cx res) (\v. return (Value v))
+        else return res) s3 = (INL res',t') ==>
+       body_expr_full_ok_mods mods exps cx e2) /\
+    body_expr_full_ok_mods mods exps cx e1 /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Subscript v8 e1 e2) es /\
+    expr_type e1 = ArrayT et bd /\
+    place_type cenv e1 = ValPT (ArrayT et bd) /\
+    post_value_type cenv e1 = expr_type e1 /\
+    ~((!t r t'. eval_expr cx e2 t = (INL r,t') ==>
+                t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+      ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
+      (!s tr slot vt t.
+         eval_expr cx e1 s <> (INL (PlaceR (StoragePlace tr slot vt)),t)) /\
+      ((~cenv.ce_is_ctor /\
+        !ty st. vv_location (FST (compile_expr cenv ty e1 st)) = SOME LocCode) \/
+       ((?n. bd = Fixed n) /\
+        (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
+        !ty st. vv_location (FST (compile_expr cenv ty e1 st)) = SOME LocMemory))) ==>
+    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Subscript v8 e1 e2) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_then (qspecl_then [`e1`, `e2`] assume_tac) body_inv_copies_subscript_base >>
@@ -82,39 +107,7 @@ Proof
   drule_all_then strip_assume_tac exprSimSourceTheory.expr_body_pre_runtime_typed >>
   gvs[vyperTypeInvariantsTheory.eval_result_typed_def]
 QED
-*)
-Theorem subscript_unframed_array_vv_full:
-  !cx v8 e1 e2 DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es et bd.
-    (!s'' res t s3 res' t'.
-       eval_expr cx e1 s'' = (INL res,t) /\
-       (if subscript_reads_base cx e1 e2 then
-          bind (read_result cx res) (\v. return (Value v))
-        else return res) s3 = (INL res',t') ==>
-       body_expr_full_ok_mods mods exps cx e2) /\
-    body_expr_full_ok_mods mods exps cx e1 /\ (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    body_const_cells_agree mods cx env es /\
-    expr_body_pre_mods mods cenv cx env (Subscript v8 e1 e2) es /\
-    expr_type e1 = ArrayT et bd /\
-    place_type cenv e1 = ValPT (ArrayT et bd) /\
-    post_value_type cenv e1 = expr_type e1 /\
-    ~((!t r t'. eval_expr cx e2 t = (INL r,t') ==>
-                t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
-      ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
-      (!s tr slot vt t.
-         eval_expr cx e1 s <> (INL (PlaceR (StoragePlace tr slot vt)),t)) /\
-      ((~cenv.ce_is_ctor /\
-        !ty st. vv_location (FST (compile_expr cenv ty e1 st)) = SOME LocCode) \/
-       ((?n. bd = Fixed n) /\
-        (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
-        !ty st. vv_location (FST (compile_expr cenv ty e1 st)) = SOME LocMemory))) ==>
-    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Subscript v8 e1 e2) es
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_unframed_array_vv_full[immutable]:
   `expr_body_pre cenv cx env e1 es` by
     (qpat_assum `expr_body_pre _ _ _ (Subscript _ _ _) _`
@@ -171,9 +164,7 @@ Resume subscript_unframed_array_vv_full[immutable]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> _`
     (drule_then (map_every assume_tac o CONJUNCTS)) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_unframed_array_vv_full[value]:
   qpat_x_assum `~((!t r t'. eval_expr _ _ _ = _ ==> _) /\ _)` kall_tac >>
   `expr_body_pre cenv cx env e1 es` by
@@ -431,9 +422,7 @@ Resume subscript_unframed_array_vv_full[value]:
       simp[] >> qexistsl [`aid`,`b'`,`sz'`] >> simp[]) >>
   gvs[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_unframed_array_vv_full[copied]:
   `copies_subscript_base cenv e1 e2` by fs[] >>
   `!s raw mid saved. eval_expr cx e1 s = (INL raw,mid) /\
@@ -454,9 +443,7 @@ Resume subscript_unframed_array_vv_full[copied]:
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`] strip_assume_tac) >>
   qexistsl [`u`,`Gc`,`tnc`,`q`,`w`,`atv`] >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_unframed_array_vv_full[copied_select]:
   qpat_x_assum `T ==> _` (strip_assume_tac o REWRITE_RULE []) >>
   `expr_body_pre cenv cx env e2 (mid with gas_obs := ic)` by
@@ -578,9 +565,7 @@ Resume subscript_unframed_array_vv_full[copied_select]:
   >- suspend "copied_fixed" >>
   suspend "copied_dynamic"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_unframed_array_vv_full[copied_fixed]:
   `?kvs. saved = ArrayV (SArrayV kvs)` by
     (qpat_assum `value_has_type (ArrayTV _ (Fixed _)) saved` mp_tac >>
@@ -605,9 +590,7 @@ Resume subscript_unframed_array_vv_full[copied_fixed]:
      vyperStateTheory.read_result_def, vyperStateTheory.return_def,
      valueEncodingTheory.type_memory_size_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_unframed_array_vv_full[copied_dynamic]:
   `?vs. saved = ArrayV (DynArrayV vs) /\ LENGTH vs <= n` by
     (qpat_assum `value_has_type (ArrayTV _ (Dynamic _)) saved` mp_tac >>
@@ -631,8 +614,5 @@ Resume subscript_unframed_array_vv_full[copied_dynamic]:
   fs[GSYM mk_ptr_def, elem_size_in_location_def, is_slot_addressed_def, word_scale_def,
      valueEncodingTheory.type_memory_size_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise subscript_unframed_array_vv_full
-*)

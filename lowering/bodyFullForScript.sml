@@ -21,14 +21,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >> Cases_on `it`
-  >- suspend "array"
-  >- suspend "range"
-QED
-*)
 Theorem compile_for_frag_full:
   !cx id typ it n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -64,10 +56,11 @@ Theorem compile_for_frag_full:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ it n body)))
       (eval_stmt cx (For id typ it n body)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> Cases_on `it`
+  >- suspend "array"
+  >- suspend "range"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_frag_full[range]:
   rename1 `For id typ (Range a b) n body` >>
   qspecl_then
@@ -81,9 +74,7 @@ Resume compile_for_frag_full[range]:
   conj_tac >- (simp[] >> MATCH_ACCEPT_TAC (SRULE [] for_full_exit_scopes_gas_obs)) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_frag_full[array]:
   rename1 `For id typ (Array e) n body` >>
   Cases_on `?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
@@ -116,9 +107,7 @@ Resume compile_for_frag_full[array]:
     bodyFullForArrayBranchTheory.compile_for_nonslot_array_frag_full >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_frag_full[nested_array]:
   `well_typed_expr env e` by
     fs[Once type_stmt_def, well_typed_iterator_def, AllCaseEqs()] >>
@@ -141,8 +130,5 @@ Resume compile_for_frag_full[nested_array]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qexistsl [`tgt`,`nid`] >> simp[] >> metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_for_frag_full
-*)

@@ -36,21 +36,6 @@ Definition bool_chain_full_ok_def:
       bool_chain_full_ok cx es))
 End
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  Induct_on `k`
-  >- (pure_rewrite_tac[bool_chain_operands_def, bool_chain_full_ok_def, listTheory.MAP] >>
-      rpt strip_tac >> suspend "singleton") >>
-  rpt gen_tac >> strip_tac >>
-  qpat_assum `expr_type x = BaseT BoolT`
-    (mp_then Any (qspecl_then [`k`,`p`] strip_assume_tac) bool_chain_residual_cases)
-  >- (qpat_assum `bool_chain_operands _ _ _ = [_]`
-        (fn th => RULE_ASSUM_TAC (SIMP_RULE bool_ss [th, listTheory.MAP, bool_chain_full_ok_def])) >>
-      suspend "singleton") >>
-  suspend "test"
-QED
-*)
 Theorem bool_chain_ops_outcome_full:
   !k x sa shadow_sa es s G tn.
   bool_chain_full_ok cx (bool_chain_operands p k x) /\ expr_type x = BaseT BoolT /\
@@ -97,17 +82,23 @@ Theorem bool_chain_ops_outcome_full:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
 Proof
-  cheat
+  Induct_on `k`
+  >- (pure_rewrite_tac[bool_chain_operands_def, bool_chain_full_ok_def, listTheory.MAP] >>
+      rpt strip_tac >> suspend "singleton") >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `expr_type x = BaseT BoolT`
+    (mp_then Any (qspecl_then [`k`,`p`] strip_assume_tac) bool_chain_residual_cases)
+  >- (qpat_assum `bool_chain_operands _ _ _ = [_]`
+        (fn th => RULE_ASSUM_TAC (SIMP_RULE bool_ss [th, listTheory.MAP, bool_chain_full_ok_def])) >>
+      suspend "singleton") >>
+  suspend "test"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_ops_outcome_full[singleton]:
   markerLib.RESUME_TAC >>
   drule_all_then (qspec_then `PG` ACCEPT_TAC) bool_chain_full_singleton
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_ops_outcome_full[test]:
   `?hd hs. bool_chain_operands p k tail = hd::hs` by
     simp[bool_chain_operands_cons] >>
@@ -165,9 +156,7 @@ Resume bool_chain_ops_outcome_full[test]:
   Cases_on `b = p`
   >- suspend "continue" >> suspend "short"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_ops_outcome_full[continue]:
   `b = p` by simp[] >> qpat_x_assum `b = p` SUBST_ALL_TAC >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==> stmt_state_rel H ctx func cenv cx es0 s0` by
@@ -207,9 +196,7 @@ Resume bool_chain_ops_outcome_full[continue]:
   conj_tac >- simp[Abbr `z`, jump_to_def] >>
   qexistsl_tac [`st`,`shadow_st`] >> fs[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_ops_outcome_full[short]:
   `(if b then (if p then tail else Literal (BaseT BoolT) (BoolL T))
           else (if p then Literal (BaseT BoolT) (BoolL F) else tail)) =
@@ -249,14 +236,13 @@ Resume bool_chain_ops_outcome_full[short]:
   qpat_x_assum `ghost_inv_at (DF H) lo d cenv cx mid Gf tf fin` mp_tac >>
   rpt (pop_assum kall_tac) >> simp[ghost_inv_at_def] >> strip_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise bool_chain_ops_outcome_full
-*)
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem bool_chain_expr_full_ok:
+  !cx ann is_and n e.
+    bool_chain_full_ok cx (bool_chain_operands is_and (n - 1) e) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ann (BoolChain is_and n) [e])
 Proof
   rpt gen_tac >> strip_tac >>
   irule word_stack_builtin_body_full_intro >> simp[] >>
@@ -298,16 +284,7 @@ Proof
   >- simp[Abbr `root`] >>
   suspend "outcome"
 QED
-*)
-Theorem bool_chain_expr_full_ok:
-  !cx ann is_and n e.
-    bool_chain_full_ok cx (bool_chain_operands is_and (n - 1) e) ==>
-    body_expr_full_ok_mods mods exps cx (Builtin ann (BoolChain is_and n) [e])
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_expr_full_ok[outcome]:
   irule gas_outcome_full_post_mono >>
   qexistsl_tac
@@ -339,8 +316,5 @@ Resume bool_chain_expr_full_ok[outcome]:
       first_assum ACCEPT_TAC) >>
   qexistsl_tac [`env`,`tops`] >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise bool_chain_expr_full_ok
-*)

@@ -9,49 +9,6 @@ Ancestors
 
 val _ = Parse.hide "base";
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  `OPT_MMAP (evaluate_type (get_tenv cx)) (REPLICATE (LENGTH args) et) =
-    SOME (REPLICATE (LENGTH args) tv)` by
-    (qspec_tac (`LENGTH args`, `n`) >> Induct >> simp[REPLICATE]) >>
-  `LIST_REL (\ty e. arg_type_fits (expr_type e) ty)
-    (REPLICATE (LENGTH args) et) args` by
-    gvs[LIST_REL_EL_EQN, EL_REPLICATE, EVERY_EL] >>
-  `LIST_REL (\ty tv. type_memory_bytes cenv ty = type_memory_size tv)
-    (REPLICATE (LENGTH args) et) (REPLICATE (LENGTH args) tv)` by
-    simp[LIST_REL_REPLICATE_same] >>
-  fs[exprSimAggregateLoopsTheory.compile_make_array_elems_as_tuple,
-     SIMP_RULE (srw_ss()) [gasShadowCompileBaseTheory.type_memory_bytes_gas_shadow_env]
-       (Q.INST [`ce` |-> `gas_shadow_env T cenv`]
-          exprSimAggregateLoopsTheory.compile_make_array_elems_as_tuple)] >>
-  irule gas_outcome_full_post_mono >>
-  irule_at (Pos last) make_array_loop_full >> BETA_TAC >>
-  first_assum (irule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
-  first_assum (irule_at (Pat `compile_make_tuple _ _ args _ _ _ _ = _`)) >>
-  first_assum (irule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)) >>
-  first_assum (irule_at (Pat `OPT_MMAP _ _ = _`)) >>
-  qpat_assum `FLOOKUP s.vs_allocas aid = SOME (base,cap)`
-    (irule_at (Pat `FLOOKUP _ _ = _`)) >>
-  first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
-  first_assum (irule_at (Pat `gas_shadow_function _ _`)) >>
-  first_assum (irule_at (Pat `expr_sim_inv _ _ _ _`)) >>
-  first_assum (irule_at (Pat `return_buf_frame _ _ _ _`)) >>
-  simp[type_memory_size_list_replicate, arithmeticTheory.ADD_SYM] >>
-  qexists_tac `ps` >>
-  conj_tac >- gvs[arithmeticTheory.ADD_SYM] >>
-  conj_tac >- gvs[arithmeticTheory.ADD_SYM] >>
-  conj_tac >- gvs[] >>
-  conj_tac >- gvs[] >>
-  rpt gen_tac >> strip_tac >>
-  `LENGTH vs = LENGTH args` by (imp_res_tac LIST_REL_LENGTH >> gvs[]) >>
-  simp[] >>
-  conj_tac >- (first_assum ACCEPT_TAC) >>
-  reverse conj_tac >- (first_assum ACCEPT_TAC) >>
-  simp[GSYM tuple_in_memory_replicate_elems]
-QED
-*)
 Theorem make_array_elements_full:
   !args et tv header off ps sa sb shadow_sa shadow_sb es s G tn.
     (contract_inv mods exps ctx cenv cx /\
@@ -165,5 +122,42 @@ Theorem make_array_elements_full:
       (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `OPT_MMAP (evaluate_type (get_tenv cx)) (REPLICATE (LENGTH args) et) =
+    SOME (REPLICATE (LENGTH args) tv)` by
+    (qspec_tac (`LENGTH args`, `n`) >> Induct >> simp[REPLICATE]) >>
+  `LIST_REL (\ty e. arg_type_fits (expr_type e) ty)
+    (REPLICATE (LENGTH args) et) args` by
+    gvs[LIST_REL_EL_EQN, EL_REPLICATE, EVERY_EL] >>
+  `LIST_REL (\ty tv. type_memory_bytes cenv ty = type_memory_size tv)
+    (REPLICATE (LENGTH args) et) (REPLICATE (LENGTH args) tv)` by
+    simp[LIST_REL_REPLICATE_same] >>
+  fs[exprSimAggregateLoopsTheory.compile_make_array_elems_as_tuple,
+     SIMP_RULE (srw_ss()) [gasShadowCompileBaseTheory.type_memory_bytes_gas_shadow_env]
+       (Q.INST [`ce` |-> `gas_shadow_env T cenv`]
+          exprSimAggregateLoopsTheory.compile_make_array_elems_as_tuple)] >>
+  irule gas_outcome_full_post_mono >>
+  irule_at (Pos last) make_array_loop_full >> BETA_TAC >>
+  first_assum (irule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `compile_make_tuple _ _ args _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `OPT_MMAP _ _ = _`)) >>
+  qpat_assum `FLOOKUP s.vs_allocas aid = SOME (base,cap)`
+    (irule_at (Pat `FLOOKUP _ _ = _`)) >>
+  first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
+  first_assum (irule_at (Pat `gas_shadow_function _ _`)) >>
+  first_assum (irule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+  first_assum (irule_at (Pat `return_buf_frame _ _ _ _`)) >>
+  simp[type_memory_size_list_replicate, arithmeticTheory.ADD_SYM] >>
+  qexists_tac `ps` >>
+  conj_tac >- gvs[arithmeticTheory.ADD_SYM] >>
+  conj_tac >- gvs[arithmeticTheory.ADD_SYM] >>
+  conj_tac >- gvs[] >>
+  conj_tac >- gvs[] >>
+  rpt gen_tac >> strip_tac >>
+  `LENGTH vs = LENGTH args` by (imp_res_tac LIST_REL_LENGTH >> gvs[]) >>
+  simp[] >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  reverse conj_tac >- (first_assum ACCEPT_TAC) >>
+  simp[GSYM tuple_in_memory_replicate_elems]
 QED

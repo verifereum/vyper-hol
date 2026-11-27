@@ -3620,115 +3620,6 @@ Finalise range_full_body_entry
 *)
 
 (* Complete checked post-allocation entry, retaining the original frame. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ source _ Q R` >>
-  qspecl_then [`get_tenv cx`, `fty`, `tyv`, `n1`, `n2`] mp_tac range_end_words >>
-  simp[] >> strip_tac >>
-  qabbrev_tac `s = jump_to entry_lbl sA` >>
-  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-    (sA,GA,tnA) [] (OK s,GA,tnA)` by
-    (gen_tac >> simp[Abbr `s`] >> irule jmp_origin_ptr_path >> simp[] >>
-     qexists_tac `st.cs_next_id + 1` >>
-     simp[get_instruction_def, EL_APPEND_EQN]) >>
-  qabbrev_tac `A = {x | op1 = Var x \/ op2 = Var x}` >>
-  qabbrev_tac `cmp = if is_signed_type fty then SGT else GT` >>
-  qmatch_asmsub_abbrev_tac
-    `lookup_block entry_lbl _ = SOME <|bb_label := entry_lbl; bb_instructions := fullcode|>` >>
-  qabbrev_tac `code = TAKE 9 fullcode` >>
-  `MEM cmp [SGT;GT] /\ scalar_available A op1 /\ scalar_available A op2 /\
-   ALL_DISTINCT [cv;rv;g1;z1;g2;z2;ev] /\
-   (!x. op1 = Var x \/ op2 = Var x ==>
-     ~MEM x [cv;rv;g1;z1;g2;z2;ev])` by
-    (simp[Abbr `cmp`] >> conj_tac >- (Cases_on `is_signed_type fty` >> simp[]) >>
-     conj_tac >- (Cases_on `op1` >> gvs[scalar_available_def, Abbr `A`] >> metis_tac[]) >>
-     conj_tac >- (Cases_on `op2` >> gvs[scalar_available_def, Abbr `A`] >> metis_tac[]) >>
-     conj_tac >- fs[ALL_DISTINCT] >>
-     gen_tac >> strip_tac >>
-     `not_fresh_at st x` by
-       (qpat_x_assum `!x. op1 = Var x \/ op2 = Var x ==> not_fresh_at st x`
-          irule >> simp[]) >>
-     qpat_x_assum `!x. MEM x [cv;rv;g1;z1;g2;z2;ev] ==> _`
-       (qspec_then `x` mp_tac) >> simp[]) >>
-  `eval_operand op1 s = SOME (i2w n1) /\
-   eval_operand op2 s = SOME (i2w n2)` by
-    simp[Abbr `s`, eval_operand_def, lookup_var_def, jump_to_def] >>
-  qabbrev_tac `bad1 = if cmp = SGT then word_gt (i2w n1 : bytes32) (i2w n2)
-                       else w2n (i2w n1 : bytes32) > w2n (i2w n2 : bytes32)` >>
-  qabbrev_tac `bad2 = (w2n (i2w n2 - i2w n1 : bytes32) >
-                       w2n (n2w bound : bytes32))` >>
-  qabbrev_tac `u1 = update_var cv (i2w n1) s` >>
-  qabbrev_tac `u2 = update_var rv (i2w n2-i2w n1) u1` >>
-  qabbrev_tac `u3 = update_var g1 (bool_to_word bad1) u2` >>
-  qabbrev_tac `u4 = update_var z1 (bool_to_word (bool_to_word bad1 = 0w)) u3` >>
-  qabbrev_tac `u5 = update_var g2 (bool_to_word bad2) u4` >>
-  qabbrev_tac `u6 = update_var z2 (bool_to_word (bool_to_word bad2 = 0w)) u5` >>
-  qabbrev_tac `u7 = update_var ev (i2w n1+(i2w n2-i2w n1)) u6` >>
-  `scalar_code A code /\ run_inst_seq_mem_ok code s /\
-   run_inst_seq code s =
-     (if bad1 then Abort Revert_abort (revert_state (set_returndata [] u4))
-      else if bad2 then Abort Revert_abort (revert_state (set_returndata [] u6))
-      else OK u7) /\
-   lookup_var cv u7 = SOME (i2w n1) /\
-   lookup_var ev u7 = SOME (i2w n1+(i2w n2-i2w n1)) /\
-   (!x. ~MEM x [cv;rv;g1;z1;g2;z2;ev] ==>
-     lookup_var x u4 = lookup_var x s /\
-     lookup_var x u6 = lookup_var x s /\
-     lookup_var x u7 = lookup_var x s)` by
-    (mp_tac (range_checked_scalar_run |> SPEC_ALL |>
-       Q.INST [`i` |-> `st.cs_next_id + 2`, `a` |-> `i2w n1 : bytes32`,
-               `b` |-> `i2w n2 : bytes32`]) >>
-     (impl_tac >- asm_rewrite_tac[]) >>
-     simp[LET_THM, Abbr `code`, Abbr `fullcode`, Abbr `u7`, Abbr `u6`, Abbr `u5`,
-          Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `bad1`, Abbr `bad2`,
-          GSYM arithmeticTheory.ADD_ASSOC]) >>
-  `?G' tn' j.
-    (!D. inst_seq_ptr D 0 ctx func PG GA tnA code s G' tn') /\
-    (!v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) code)) ==>
-      FLOOKUP G' v = FLOOKUP GA v /\
-      FLOOKUP tn'.t_var v = FLOOKUP tnA.t_var v /\
-      op_taint tn' (Var v) = op_taint tnA (Var v)) /\
-    tn'.t_mem = tnA.t_mem /\ tn'.t_stor = tnA.t_stor /\
-    tn'.t_trans = tnA.t_trans /\ tn'.t_imm = tnA.t_imm /\
-    (!t. run_inst_seq code s = OK t ==>
-      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-        (s,GA,tnA) []
-        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code),G',tn')) /\
-      (!v. v IN A UNION BIGUNION (set (MAP (\i. set i.inst_outputs) code)) ==>
-        op_prov G' (Var v) = NONE /\ op_taint tn' (Var v) = {})) /\
-    (!a t. run_inst_seq code s = Abort a t ==>
-      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
-        (s,GA,tnA) [] (Abort a (t with vs_inst_idx := j),G',tn'))` by
-    (`!v. v IN A ==> op_prov GA (Var v) = NONE /\ op_taint tnA (Var v) = {}` by
-       (simp[Abbr `A`] >> asm_rewrite_tac[]) >>
-     `~s.vs_halted /\ allocas_from lo s /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
-       (pure_rewrite_tac[allocas_from_def, allocas_below_fmp_def] >>
-        simp[Abbr `s`, jump_to_def] >>
-        conj_tac >-
-          (qpat_x_assum `allocas_from lo sA` mp_tac >>
-           pure_rewrite_tac[allocas_from_def] >> asm_rewrite_tac[]) >>
-        qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp sA` mp_tac >>
-        pure_rewrite_tac[allocas_below_fmp_def] >> asm_rewrite_tac[]) >>
-     irule range_scalar_joint_lift >> asm_rewrite_tac[] >>
-     qexists_tac `<|bb_label := entry_lbl; bb_instructions := fullcode|>` >>
-     simp[Abbr `s`, jump_to_def, Abbr `code`, Abbr `fullcode`,
-          rich_listTheory.IS_PREFIX_APPEND]) >>
-  `bad1 = (n2 < n1)` by
-    (simp[Abbr `bad1`, Abbr `cmp`] >>
-     Cases_on `is_signed_type fty` >> fs[]) >>
-  `n1 <= n2 ==> (bad2 = (bound < Num (n2-n1)))` by
-    (strip_tac >> simp[Abbr `bad2`]) >>
-  Cases_on `bad1` >- suspend "order_error" >>
-  `n1 <= n2` by
-    (qpat_x_assum `bad1 = (n2 < n1)` mp_tac >>
-     asm_rewrite_tac[] >> POP_ASSUM_LIST (K ALL_TAC) >> intLib.COOPER_TAC) >>
-  Cases_on `bad2` >- suspend "bound_error" >>
-  suspend "success"
-QED
-*)
 Theorem range_checked_entry_full:
   !DF lo explicit d ctx func PG tops cx st0 RetQ cenv env es sa s0 G0 tn0 ea sA
       GA tnA st sb0 entry_lbl cond_lbl op1 op2 p cv rv g1 z1 g2 z2 ev bound fty
@@ -3848,10 +3739,112 @@ Theorem range_checked_entry_full:
            (ctx_has_dalloca ctx ==>
             !t. r = Halt t \/ (?ir. r = IntRet ir t) ==> allocas_below_fmp t))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ source _ Q R` >>
+  qspecl_then [`get_tenv cx`, `fty`, `tyv`, `n1`, `n2`] mp_tac range_end_words >>
+  simp[] >> strip_tac >>
+  qabbrev_tac `s = jump_to entry_lbl sA` >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (sA,GA,tnA) [] (OK s,GA,tnA)` by
+    (gen_tac >> simp[Abbr `s`] >> irule jmp_origin_ptr_path >> simp[] >>
+     qexists_tac `st.cs_next_id + 1` >>
+     simp[get_instruction_def, EL_APPEND_EQN]) >>
+  qabbrev_tac `A = {x | op1 = Var x \/ op2 = Var x}` >>
+  qabbrev_tac `cmp = if is_signed_type fty then SGT else GT` >>
+  qmatch_asmsub_abbrev_tac
+    `lookup_block entry_lbl _ = SOME <|bb_label := entry_lbl; bb_instructions := fullcode|>` >>
+  qabbrev_tac `code = TAKE 9 fullcode` >>
+  `MEM cmp [SGT;GT] /\ scalar_available A op1 /\ scalar_available A op2 /\
+   ALL_DISTINCT [cv;rv;g1;z1;g2;z2;ev] /\
+   (!x. op1 = Var x \/ op2 = Var x ==>
+     ~MEM x [cv;rv;g1;z1;g2;z2;ev])` by
+    (simp[Abbr `cmp`] >> conj_tac >- (Cases_on `is_signed_type fty` >> simp[]) >>
+     conj_tac >- (Cases_on `op1` >> gvs[scalar_available_def, Abbr `A`] >> metis_tac[]) >>
+     conj_tac >- (Cases_on `op2` >> gvs[scalar_available_def, Abbr `A`] >> metis_tac[]) >>
+     conj_tac >- fs[ALL_DISTINCT] >>
+     gen_tac >> strip_tac >>
+     `not_fresh_at st x` by
+       (qpat_x_assum `!x. op1 = Var x \/ op2 = Var x ==> not_fresh_at st x`
+          irule >> simp[]) >>
+     qpat_x_assum `!x. MEM x [cv;rv;g1;z1;g2;z2;ev] ==> _`
+       (qspec_then `x` mp_tac) >> simp[]) >>
+  `eval_operand op1 s = SOME (i2w n1) /\
+   eval_operand op2 s = SOME (i2w n2)` by
+    simp[Abbr `s`, eval_operand_def, lookup_var_def, jump_to_def] >>
+  qabbrev_tac `bad1 = if cmp = SGT then word_gt (i2w n1 : bytes32) (i2w n2)
+                       else w2n (i2w n1 : bytes32) > w2n (i2w n2 : bytes32)` >>
+  qabbrev_tac `bad2 = (w2n (i2w n2 - i2w n1 : bytes32) >
+                       w2n (n2w bound : bytes32))` >>
+  qabbrev_tac `u1 = update_var cv (i2w n1) s` >>
+  qabbrev_tac `u2 = update_var rv (i2w n2-i2w n1) u1` >>
+  qabbrev_tac `u3 = update_var g1 (bool_to_word bad1) u2` >>
+  qabbrev_tac `u4 = update_var z1 (bool_to_word (bool_to_word bad1 = 0w)) u3` >>
+  qabbrev_tac `u5 = update_var g2 (bool_to_word bad2) u4` >>
+  qabbrev_tac `u6 = update_var z2 (bool_to_word (bool_to_word bad2 = 0w)) u5` >>
+  qabbrev_tac `u7 = update_var ev (i2w n1+(i2w n2-i2w n1)) u6` >>
+  `scalar_code A code /\ run_inst_seq_mem_ok code s /\
+   run_inst_seq code s =
+     (if bad1 then Abort Revert_abort (revert_state (set_returndata [] u4))
+      else if bad2 then Abort Revert_abort (revert_state (set_returndata [] u6))
+      else OK u7) /\
+   lookup_var cv u7 = SOME (i2w n1) /\
+   lookup_var ev u7 = SOME (i2w n1+(i2w n2-i2w n1)) /\
+   (!x. ~MEM x [cv;rv;g1;z1;g2;z2;ev] ==>
+     lookup_var x u4 = lookup_var x s /\
+     lookup_var x u6 = lookup_var x s /\
+     lookup_var x u7 = lookup_var x s)` by
+    (mp_tac (range_checked_scalar_run |> SPEC_ALL |>
+       Q.INST [`i` |-> `st.cs_next_id + 2`, `a` |-> `i2w n1 : bytes32`,
+               `b` |-> `i2w n2 : bytes32`]) >>
+     (impl_tac >- asm_rewrite_tac[]) >>
+     simp[LET_THM, Abbr `code`, Abbr `fullcode`, Abbr `u7`, Abbr `u6`, Abbr `u5`,
+          Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `bad1`, Abbr `bad2`,
+          GSYM arithmeticTheory.ADD_ASSOC]) >>
+  `?G' tn' j.
+    (!D. inst_seq_ptr D 0 ctx func PG GA tnA code s G' tn') /\
+    (!v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) code)) ==>
+      FLOOKUP G' v = FLOOKUP GA v /\
+      FLOOKUP tn'.t_var v = FLOOKUP tnA.t_var v /\
+      op_taint tn' (Var v) = op_taint tnA (Var v)) /\
+    tn'.t_mem = tnA.t_mem /\ tn'.t_stor = tnA.t_stor /\
+    tn'.t_trans = tnA.t_trans /\ tn'.t_imm = tnA.t_imm /\
+    (!t. run_inst_seq code s = OK t ==>
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+        (s,GA,tnA) []
+        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code),G',tn')) /\
+      (!v. v IN A UNION BIGUNION (set (MAP (\i. set i.inst_outputs) code)) ==>
+        op_prov G' (Var v) = NONE /\ op_taint tn' (Var v) = {})) /\
+    (!a t. run_inst_seq code s = Abort a t ==>
+      !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+        (s,GA,tnA) [] (Abort a (t with vs_inst_idx := j),G',tn'))` by
+    (`!v. v IN A ==> op_prov GA (Var v) = NONE /\ op_taint tnA (Var v) = {}` by
+       (simp[Abbr `A`] >> asm_rewrite_tac[]) >>
+     `~s.vs_halted /\ allocas_from lo s /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp s)` by
+       (pure_rewrite_tac[allocas_from_def, allocas_below_fmp_def] >>
+        simp[Abbr `s`, jump_to_def] >>
+        conj_tac >-
+          (qpat_x_assum `allocas_from lo sA` mp_tac >>
+           pure_rewrite_tac[allocas_from_def] >> asm_rewrite_tac[]) >>
+        qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp sA` mp_tac >>
+        pure_rewrite_tac[allocas_below_fmp_def] >> asm_rewrite_tac[]) >>
+     irule range_scalar_joint_lift >> asm_rewrite_tac[] >>
+     qexists_tac `<|bb_label := entry_lbl; bb_instructions := fullcode|>` >>
+     simp[Abbr `s`, jump_to_def, Abbr `code`, Abbr `fullcode`,
+          rich_listTheory.IS_PREFIX_APPEND]) >>
+  `bad1 = (n2 < n1)` by
+    (simp[Abbr `bad1`, Abbr `cmp`] >>
+     Cases_on `is_signed_type fty` >> fs[]) >>
+  `n1 <= n2 ==> (bad2 = (bound < Num (n2-n1)))` by
+    (strip_tac >> simp[Abbr `bad2`]) >>
+  Cases_on `bad1` >- suspend "order_error" >>
+  `n1 <= n2` by
+    (qpat_x_assum `bad1 = (n2 < n1)` mp_tac >>
+     asm_rewrite_tac[] >> POP_ASSUM_LIST (K ALL_TAC) >> intLib.COOPER_TAC) >>
+  Cases_on `bad2` >- suspend "bound_error" >>
+  suspend "success"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_checked_entry_full[order_error]:
   qpat_x_assum `T = (n2 < n1)` mp_tac >>
   pure_rewrite_tac[EQ_CLAUSES] >> strip_tac >>
@@ -3881,9 +3874,7 @@ Resume range_checked_entry_full[order_error]:
   simp[Abbr `R`, stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def,
        haltExitProjTheory.halt_exit_not_halt]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_checked_entry_full[bound_error]:
   qpat_x_assum `n1 <= n2 ==> (T = (bound < Num (n2-n1)))` mp_tac >>
   pure_rewrite_tac[EQ_CLAUSES] >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
@@ -3910,9 +3901,7 @@ Resume range_checked_entry_full[bound_error]:
   simp[Abbr `R`, stmt_exit_ptr_def, exprSimDefsTheory.expr_exit_def,
        haltExitProjTheory.halt_exit_not_halt]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_checked_entry_full[success]:
   qpat_x_assum `n1 <= n2 ==> (F = (bound < Num (n2-n1)))` mp_tac >>
   pure_rewrite_tac[EQ_CLAUSES] >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
@@ -3963,9 +3952,7 @@ Resume range_checked_entry_full[success]:
      simp[] >> qexistsl_tac [`G'`, `pre`, `tn'`] >> simp[]) >>
   suspend "success_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_checked_entry_full[success_post]:
   `fin = jump_to cond_lbl (jump_to entry_lbl (sA with vs_vars := u7.vs_vars))` by
     simp[Abbr `fin`, Abbr `pre`, Abbr `u7`, Abbr `u6`, Abbr `u5`, Abbr `u4`,
@@ -4104,113 +4091,11 @@ Resume range_checked_entry_full[success_post]:
        (ACCEPT_TAC o PURE_REWRITE_RULE [alloca_frame_def])) >>
   first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise range_checked_entry_full
-*)
 
 (* ===== Initialization: one allocation and the selected scalar suffix ===== *)
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> SIMP_TAC pure_ss [LET_THM, pairTheory.UNCURRY_DEF] >> BETA_TAC >>
-  qabbrev_tac `N = Num (n2 - n1)` >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `valid_horizon cx st0 (storage_trace_horizon ea.storage_trace) ea.storage_trace` by
-    fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon cx st0 H ea.storage_trace ==> _`
-    (qspec_then `storage_trace_horizon ea.storage_trace` mp_tac) >>
-  impl_tac >- first_assum ACCEPT_TAC >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
-  Cases_on `compile_alloc_buffer sz st` >>
-  rename1 `compile_alloc_buffer sz st = (buf,cut)` >>
-  `fn_has_code st cut func` by
-    (irule range_alloc_buffer_code >> qexistsl_tac [`buf`, `sz`,
-        `[mk_inst (st.cs_next_id + 1) JMP [Label entry_lbl] []]`] >> simp[]) >>
-  drule_then strip_assume_tac loweringHaltTheory.compile_alloc_buffer_insts >>
-  drule_all (INST_TYPE [beta |-> alpha]
-    bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_exact) >>
-  disch_then (qspecl_then [`tnE`, `explicit`, `PG`, `GE`]
-    (qx_choosel_then [`q`, `w`, `sA`, `GA`, `tnA`] strip_assume_tac)) >>
-  `q = p` by fs[] >> qpat_x_assum `q = p` SUBST_ALL_TAC >>
-  `sA.vs_current_bb = st.cs_current_bb /\
-   sA.vs_inst_idx = LENGTH st.cs_current_insts + 1` by simp[] >>
-  `sA.vs_memory = s.vs_memory /\ ~sA.vs_halted` by
-    (qpat_assum `~s.vs_halted` mp_tac >>
-     qpat_assum `sA with <|vs_vars := _; vs_allocas := _;
-          vs_alloca_next := _; vs_inst_idx := _|> = s`
-       (SUBST1_TAC o SYM) >> simp[]) >>
-  `stmt_state_rel (storage_trace_horizon ea.storage_trace) ctx func cenv cx ea sA` by
-    (qpat_assum `!H. stmt_state_rel H ctx func cenv cx ea s ==> _` irule >>
-     first_assum ACCEPT_TAC) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp sA` by
-    (qpat_assum `stmt_state_rel _ ctx func cenv cx ea sA`
-       (mp_then Any ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
-  `!x. not_fresh_at sa x ==> not_fresh_at st x` by
-    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
-     qexists_tac `sa` >> simp[]) >>
-  `ret_pc_ok cenv sa sA` by
-    (drule ret_pc_ok_frame >> disch_then irule >> simp[]) >>
-  `return_buf_frame d cenv st sA` by
-    (drule return_buf_frame_frame >> disch_then irule >> simp[]) >>
-  `(!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) /\
-   (!x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x)` by
-    (conj_tac >- (rpt strip_tac >>
-       qpat_assum `!x. not_fresh_at sa x ==> _` irule >>
-       qpat_assum `!x z. cenv.ce_return_buf = _ ==> _` (qspecl_then [`x`,`z`] mp_tac) >> simp[]) >>
-     rpt strip_tac >> qpat_assum `!x. not_fresh_at sa x ==> _` irule >>
-     qpat_assum `ret_pc_ok cenv sa sA`
-       (qspecl_then [`x`,`z`] mp_tac o REWRITE_RULE[ret_pc_ok_def]) >> simp[]) >>
-  qpat_assum `stmt_state_rel _ ctx func cenv cx ea s`
-    (mp_then Any strip_assume_tac stmt_state_rel_local_ptrs_alloca) >>
-  `!H. valid_horizon cx st0 H ea.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx ea sA /\
-    storage_well_formed_on cx ea (FST H) /\
-    ghost_inv_at (DF H) lo d cenv cx ea GA tnA sA` by
-    (gen_tac >> disch_tac >>
-     qpat_assum `!H. valid_horizon cx st0 H ea.storage_trace ==> _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     disch_then (map_every assume_tac o CONJUNCTS) >>
-     conj_tac >- (qpat_assum `!H. stmt_state_rel H ctx func cenv cx ea s ==> _`
-        irule >> first_assum ACCEPT_TAC) >>
-     simp[] >> irule bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at_locals >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl_tac [`GE`, `w2n w + sz`, `func`, `s`, `st`, `tnE`] >> simp[]) >>
-  `alloca_frame cenv ea st s cenv ea sA` by
-    (irule (INST_TYPE [alpha |-> ``:256``] (cj 1 range_alloca_full_frame)) >> simp[] >>
-     conj_tac >- ((qexistsl_tac [`tnE`, `tnA`] >> simp[SF DISJ_ss] >> (metis_tac[SF DISJ_ss]))) >>
-     qexistsl_tac [`storage_trace_horizon ea.storage_trace`, `ctx`, `cx`, `func`] >> simp[]) >>
-  `alloca_frame cenv es sa s0 cenv ea sA` by
-    (irule alloca_frame_trans >> (metis_tac[])) >>
-  `s0.vs_alloca_next <= sA.vs_alloca_next /\
-   (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
-      lookup_var x sA = SOME v) /\
-   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP sA.vs_allocas aid = SOME b) /\
-   (!x. not_fresh_at sa x ==> FLOOKUP GA x = FLOOKUP G0 x /\
-      op_taint tnA (Var x) = op_taint tn0 (Var x))` by
-    (conj_tac >- decide_tac >> rpt conj_tac >> rpt strip_tac >> simp[]) >>
-  `!aid off z i. FLOOKUP s0.vs_allocas aid = SOME (off,z) /\ aid < sa.cs_next_id /\
-     (!nm b z'. local_region cenv es.scopes s0 nm b z' ==> off+z <= b \/ b+z' <= off) /\
-     off <= i /\ i < off+z /\ i IN tnA.t_mem ==> i IN tn0.t_mem` by
-    (rpt gen_tac >> strip_tac >>
-     `off + z <= s.vs_alloca_next` by
-       (qpat_assum `alloca_inv s` (mp_tac o REWRITE_RULE [alloca_inv_def, alloca_next_valid_def]) >>
-        strip_tac >> first_x_assum (qspecl_then [`aid`, `off`, `z`] mp_tac) >> simp[]) >>
-     `i IN tnE.t_mem` by
-       (qpat_assum `!i. i IN tnA.t_mem <=> _` (qspec_then `i` mp_tac) >>
-        `~(s.vs_alloca_next <= i)` by decide_tac >> simp[]) >>
-     qpat_assum `!aid off z i. _ ==> i IN tn0.t_mem` (qspecl_then [`aid`,`off`,`z`,`i`] mp_tac) >>
-     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
-  qexists_tac `w` >>
-  qpat_x_assum `(n1 <= n2 /\ _) \/ _` strip_assume_tac
-  >- suspend "literal_init"
-  >> suspend "checked_init"
-QED
-*)
 Theorem range_full_init:
   !DF lo explicit d ctx func PG tops cx st0 RetQ cenv env es sa s0 G0 tn0 ea s
       GE tnE st sb0 entry_lbl cond_lbl p cv ev bound fty tyv n1 n2 sz id.
@@ -4353,10 +4238,102 @@ Theorem range_full_init:
                 !t. r = Halt t \/ (?ir. r = IntRet ir t) ==>
                     allocas_below_fmp t))
 Proof
-  cheat
+  rpt gen_tac >> SIMP_TAC pure_ss [LET_THM, pairTheory.UNCURRY_DEF] >> BETA_TAC >>
+  qabbrev_tac `N = Num (n2 - n1)` >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 (storage_trace_horizon ea.storage_trace) ea.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon cx st0 H ea.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon ea.storage_trace` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
+  Cases_on `compile_alloc_buffer sz st` >>
+  rename1 `compile_alloc_buffer sz st = (buf,cut)` >>
+  `fn_has_code st cut func` by
+    (irule range_alloc_buffer_code >> qexistsl_tac [`buf`, `sz`,
+        `[mk_inst (st.cs_next_id + 1) JMP [Label entry_lbl] []]`] >> simp[]) >>
+  drule_then strip_assume_tac loweringHaltTheory.compile_alloc_buffer_insts >>
+  drule_all (INST_TYPE [beta |-> alpha]
+    bodyFullAllocaFreshTheory.alloc_buffer_origin_ptr_path_exact) >>
+  disch_then (qspecl_then [`tnE`, `explicit`, `PG`, `GE`]
+    (qx_choosel_then [`q`, `w`, `sA`, `GA`, `tnA`] strip_assume_tac)) >>
+  `q = p` by fs[] >> qpat_x_assum `q = p` SUBST_ALL_TAC >>
+  `sA.vs_current_bb = st.cs_current_bb /\
+   sA.vs_inst_idx = LENGTH st.cs_current_insts + 1` by simp[] >>
+  `sA.vs_memory = s.vs_memory /\ ~sA.vs_halted` by
+    (qpat_assum `~s.vs_halted` mp_tac >>
+     qpat_assum `sA with <|vs_vars := _; vs_allocas := _;
+          vs_alloca_next := _; vs_inst_idx := _|> = s`
+       (SUBST1_TAC o SYM) >> simp[]) >>
+  `stmt_state_rel (storage_trace_horizon ea.storage_trace) ctx func cenv cx ea sA` by
+    (qpat_assum `!H. stmt_state_rel H ctx func cenv cx ea s ==> _` irule >>
+     first_assum ACCEPT_TAC) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp sA` by
+    (qpat_assum `stmt_state_rel _ ctx func cenv cx ea sA`
+       (mp_then Any ACCEPT_TAC bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at st x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[]) >>
+  `ret_pc_ok cenv sa sA` by
+    (drule ret_pc_ok_frame >> disch_then irule >> simp[]) >>
+  `return_buf_frame d cenv st sA` by
+    (drule return_buf_frame_frame >> disch_then irule >> simp[]) >>
+  `(!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) /\
+   (!x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x)` by
+    (conj_tac >- (rpt strip_tac >>
+       qpat_assum `!x. not_fresh_at sa x ==> _` irule >>
+       qpat_assum `!x z. cenv.ce_return_buf = _ ==> _` (qspecl_then [`x`,`z`] mp_tac) >> simp[]) >>
+     rpt strip_tac >> qpat_assum `!x. not_fresh_at sa x ==> _` irule >>
+     qpat_assum `ret_pc_ok cenv sa sA`
+       (qspecl_then [`x`,`z`] mp_tac o REWRITE_RULE[ret_pc_ok_def]) >> simp[]) >>
+  qpat_assum `stmt_state_rel _ ctx func cenv cx ea s`
+    (mp_then Any strip_assume_tac stmt_state_rel_local_ptrs_alloca) >>
+  `!H. valid_horizon cx st0 H ea.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ea sA /\
+    storage_well_formed_on cx ea (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx ea GA tnA sA` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H ea.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (map_every assume_tac o CONJUNCTS) >>
+     conj_tac >- (qpat_assum `!H. stmt_state_rel H ctx func cenv cx ea s ==> _`
+        irule >> first_assum ACCEPT_TAC) >>
+     simp[] >> irule bodyFullAllocaFreshTheory.alloc_buffer_ghost_inv_at_locals >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`GE`, `w2n w + sz`, `func`, `s`, `st`, `tnE`] >> simp[]) >>
+  `alloca_frame cenv ea st s cenv ea sA` by
+    (irule (INST_TYPE [alpha |-> ``:256``] (cj 1 range_alloca_full_frame)) >> simp[] >>
+     conj_tac >- ((qexistsl_tac [`tnE`, `tnA`] >> simp[SF DISJ_ss] >> (metis_tac[SF DISJ_ss]))) >>
+     qexistsl_tac [`storage_trace_horizon ea.storage_trace`, `ctx`, `cx`, `func`] >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv ea sA` by
+    (irule alloca_frame_trans >> (metis_tac[])) >>
+  `s0.vs_alloca_next <= sA.vs_alloca_next /\
+   (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
+      lookup_var x sA = SOME v) /\
+   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP sA.vs_allocas aid = SOME b) /\
+   (!x. not_fresh_at sa x ==> FLOOKUP GA x = FLOOKUP G0 x /\
+      op_taint tnA (Var x) = op_taint tn0 (Var x))` by
+    (conj_tac >- decide_tac >> rpt conj_tac >> rpt strip_tac >> simp[]) >>
+  `!aid off z i. FLOOKUP s0.vs_allocas aid = SOME (off,z) /\ aid < sa.cs_next_id /\
+     (!nm b z'. local_region cenv es.scopes s0 nm b z' ==> off+z <= b \/ b+z' <= off) /\
+     off <= i /\ i < off+z /\ i IN tnA.t_mem ==> i IN tn0.t_mem` by
+    (rpt gen_tac >> strip_tac >>
+     `off + z <= s.vs_alloca_next` by
+       (qpat_assum `alloca_inv s` (mp_tac o REWRITE_RULE [alloca_inv_def, alloca_next_valid_def]) >>
+        strip_tac >> first_x_assum (qspecl_then [`aid`, `off`, `z`] mp_tac) >> simp[]) >>
+     `i IN tnE.t_mem` by
+       (qpat_assum `!i. i IN tnA.t_mem <=> _` (qspec_then `i` mp_tac) >>
+        `~(s.vs_alloca_next <= i)` by decide_tac >> simp[]) >>
+     qpat_assum `!aid off z i. _ ==> i IN tn0.t_mem` (qspecl_then [`aid`,`off`,`z`,`i`] mp_tac) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
+  qexists_tac `w` >>
+  qpat_x_assum `(n1 <= n2 /\ _) \/ _` strip_assume_tac
+  >- suspend "literal_init"
+  >> suspend "checked_init"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_init[literal_init]:
   `cv <> ev /\ p <> cv /\ p <> ev` by fs[] >>
   qmatch_asmsub_abbrev_tac
@@ -4444,9 +4421,7 @@ Resume range_full_init[literal_init]:
   simp[op_prov_def]
   >> (gvs[])
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume range_full_init[checked_init]:
   `!x. op1 = Var x \/ op2 = Var x ==>
        not_fresh_at st x /\ lookup_var x sA = lookup_var x s /\
@@ -4495,11 +4470,8 @@ Resume range_full_init[checked_init]:
   (* The length equation forces the initial index k to be zero. *)
   simp[] >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise range_full_init
-*)
 
 (* The entry cut selects compiler geometry before every runtime anchor. *)
 val range_full_round_statement = ``
@@ -6391,24 +6363,6 @@ Proof
   irule bitTheory.TWOEXP_MONO2 >> decide_tac
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >>
-  disch_then (fn th =>
-    let val clauses = CONJUNCTS th in
-      EVERY (map assume_tac clauses) >> mk_asm "frame_comp" (hd clauses)
-    end) >>
-  pure_once_rewrite_tac [bodySimFullTheory.stmt_frag_full_def] >>
-  rpt gen_tac >> strip_tac >>
-  rangeForDriverLib.range_driver_static_tac range_full_outer_env range_full_static_pre >>
-  rangeForDriverLib.range_driver_layout_tac
-    (mp_tac range_full_round >>
-     impl_tac >- (conj_tac >- ACCEPT_TAC range_full_body_entry >>
-                  rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  rangeForDriverLib.range_driver_cases_tac (suspend "literal") (suspend "checked")
-QED
-*)
 Theorem compile_for_range_frag_full:
 !cx id typ e1 e2 n body DF lo d PG tops bindings ctx shadow_ctx func
  shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -6563,10 +6517,21 @@ Theorem compile_for_range_frag_full:
       (gas_shadow_stmt (For id typ (Range e1 e2) n body)))
    (eval_stmt cx (For id typ (Range e1 e2) n body)) es
 Proof
-  cheat
+  rpt gen_tac >>
+  disch_then (fn th =>
+    let val clauses = CONJUNCTS th in
+      EVERY (map assume_tac clauses) >> mk_asm "frame_comp" (hd clauses)
+    end) >>
+  pure_once_rewrite_tac [bodySimFullTheory.stmt_frag_full_def] >>
+  rpt gen_tac >> strip_tac >>
+  rangeForDriverLib.range_driver_static_tac range_full_outer_env range_full_static_pre >>
+  rangeForDriverLib.range_driver_layout_tac
+    (mp_tac range_full_round >>
+     impl_tac >- (conj_tac >- ACCEPT_TAC range_full_body_entry >>
+                  rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  rangeForDriverLib.range_driver_cases_tac (suspend "literal") (suspend "checked")
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_range_frag_full[checked]:
   rangeForDriverLib.range_checked_shadow_edges_tac >>
   rangeForDriverLib.range_checked_code_tac >>
@@ -6574,9 +6539,7 @@ Resume compile_for_range_frag_full[checked]:
   rangeForDriverLib.range_first_endpoint_tac >>
   suspend "join_endpoints"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_range_frag_full[join_endpoints]:
   irule (BETA_RULE (Q.INST [
     `tyv` |-> `tyv`,
@@ -6615,9 +6578,7 @@ Resume compile_for_range_frag_full[join_endpoints]:
   conj_tac >- first_assum ACCEPT_TAC >>
   suspend "first_exit"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_range_frag_full[first_exit]:
   drule_all_then (assume_tac o BETA_RULE)
     (Q.INST [`d` |-> `d`, `cenv` |-> `cenv`, `sa` |-> `sa`]
@@ -6644,9 +6605,7 @@ Resume compile_for_range_frag_full[first_exit]:
   rename1 `expr_exit (INR (Error err)) _ ==> _` >> Cases_on `err` >>
   simp[NoAsms,exprSimDefsTheory.expr_exit_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_range_frag_full[first_success]:
   map_every qx_gen_tac [`marks1`,`v1`,`mid1`,`G1`,`tn1`,`t1`] >> strip_tac >>
   rangeForDriverLib.range_first_replay_tac >>
@@ -6658,15 +6617,11 @@ Resume compile_for_range_frag_full[first_success]:
   conj_tac >- suspend "second_exit" >>
   suspend "second_success"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_range_frag_full[second_entry]:
   rangeForDriverLib.range_second_entry_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_range_frag_full[second_exit]:
   drule_all_then (assume_tac o BETA_RULE)
     (Q.INST [`d` |-> `d`, `cenv` |-> `cenv`, `sa` |-> `s1`]
@@ -6693,9 +6648,7 @@ Resume compile_for_range_frag_full[second_exit]:
   rename1 `expr_exit (INR (Error err)) _ ==> _` >> Cases_on `err` >>
   simp[NoAsms,exprSimDefsTheory.expr_exit_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_range_frag_full[second_success]:
   map_every qx_gen_tac [`marks2`,`v2`,`mid2`,`G2`,`tn2`,`t2`] >> strip_tac >>
   rangeForDriverLib.range_checked_read_tac >>
@@ -6704,7 +6657,6 @@ Resume compile_for_range_frag_full[second_success]:
   rangeForDriverLib.range_fresh_scope_tac `mid2` >>
   suspend "checked_init"
 QED
-*)
 
 (* Apply the selected initialization witness and recover its full iterator list. *)
 fun range_join_init_tac replay scopes immutables =
@@ -6733,7 +6685,6 @@ fun range_join_init_tac replay scopes immutables =
   rangeForDriverLib.range_join_init_replay_tac replay scopes immutables >>
   disj1_tac >> qexists `rs` >> conj_tac >- first_assum ACCEPT_TAC;
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_range_frag_full[checked_init]:
   rangeForDriverLib.range_computed_init_tac range_full_computed_bound range_full_init >>
   drule_all_then (assume_tac o BETA_RULE)
@@ -6750,7 +6701,6 @@ Resume compile_for_range_frag_full[checked_init]:
   rangeForDriverLib.range_computed_iterator_replay_tac >>
   suspend "range_rounds"
 QED
-*)
 
 (* Instantiate the empty round with the predicate in its own premise. *)
 fun defer_exists_conv tm =
@@ -6834,7 +6784,6 @@ val range_join_rounds_nil_tac =
   conj_tac >- (rpt gen_tac >> REFL_TAC) >>
   reverse conj_tac >- first_assum ACCEPT_TAC;
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_range_frag_full[literal]:
   rangeForDriverLib.range_literal_code_tac >>
   irule gas_outcome_full_initial_domain >>
@@ -6861,9 +6810,7 @@ Resume compile_for_range_frag_full[literal]:
   rangeForDriverLib.range_literal_iterator_replay_tac >>
   suspend "literal_rounds"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_range_frag_full[literal_rounds]:
   range_join_rounds_source_tac >>
   rangeForDriverLib.range_join_rounds_invariants_tac >>
@@ -6874,9 +6821,7 @@ Resume compile_for_range_frag_full[literal_rounds]:
   rangeForDriverLib.range_join_rounds_sep_tac >>
   rangeForDriverLib.range_join_rounds_pack_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_range_frag_full[range_rounds]:
   range_join_rounds_source_tac >>
   rangeForDriverLib.range_join_rounds_invariants_tac >>
@@ -6887,8 +6832,5 @@ Resume compile_for_range_frag_full[range_rounds]:
   rangeForDriverLib.range_join_rounds_sep_tac >>
   rangeForDriverLib.range_join_rounds_pack_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_for_range_frag_full
-*)

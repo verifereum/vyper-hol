@@ -289,34 +289,6 @@ End
 
 (* Run one nonempty round. Cleanup and the backedge both use the actual
    scoped body endpoint, not the earlier scalar or expression endpoint. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  pure_rewrite_tac[for_array_loop_exit_def] >> strip_tac >>
-  irule gas_outcome_full_initial_domain >>
-  conj_tac >- (irule storage_trace_frame_bind_all >> simp[storage_trace_frame_read_result] >>
-    gen_tac >> irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_state_updates] >>
-    irule storage_trace_frame_finally >> simp[storage_trace_frame_pop_scope] >>
-    irule storage_trace_frame_try >> simp[storage_trace_frame_loop_handler] >>
-    irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_return,evaluate_storage_trace_frame]) >>
-  conj_tac >- first_assum ACCEPT_TAC >> disch_tac >>
-  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-    metis_tac[body_inv_no_phi] >>
-  ho_match_mp_tac (BETA_RULE (Q.INST [`ok` |-> `stmt_res_ok lctx`,
-    `Guard` |-> `body_const_cells_agree [(NONE,cx_tops cx)] cx env`,
-    `Entry` |-> `\H ei v j z GG tt.
-      for_captured_storage_round_entry (DF,lo,d,ctx,func)
-        (cx,c0,bc,extend_local env id typ F,sb0,stmts) (e0,sa0,s0,G0,tn0)
-        (idx,p,dst,lvo,len,inst,nb)
-        (H,for_captured_storage_round_scope id tyv ei v,j,z,GG,tt)`]
-    (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]))
-      for_captured_storage_cons_from_stages))) >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac >- simp[] >>
-  conj_tac >- suspend "head" >>
-  conj_tac >- suspend "body" >> suspend "backedge"
-QED
-*)
 Theorem for_captured_storage_round_from_head:
   body_inv (cx_tops cx) ctx bc cx /\ shadow_body_inv (cx_tops cx) ctx shadow_ctx /\
   supported_program (cx_tops cx) /\ get_module_code cx NONE = SOME (cx_tops cx) /\
@@ -384,10 +356,31 @@ Theorem for_captured_storage_round_from_head:
           (lvo,idx,cond) (p,dst,nb,sd) (H,j,rs,ee,GG,tt,z)))
     (\H res ee gt r. ?ex. res = INR ex /\ for_array_loop_exit ctx cx RetQ H (INR ex) ee gt r)
 Proof
-  cheat
+  pure_rewrite_tac[for_array_loop_exit_def] >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  conj_tac >- (irule storage_trace_frame_bind_all >> simp[storage_trace_frame_read_result] >>
+    gen_tac >> irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_state_updates] >>
+    irule storage_trace_frame_finally >> simp[storage_trace_frame_pop_scope] >>
+    irule storage_trace_frame_try >> simp[storage_trace_frame_loop_handler] >>
+    irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_return,evaluate_storage_trace_frame]) >>
+  conj_tac >- first_assum ACCEPT_TAC >> disch_tac >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[body_inv_no_phi] >>
+  ho_match_mp_tac (BETA_RULE (Q.INST [`ok` |-> `stmt_res_ok lctx`,
+    `Guard` |-> `body_const_cells_agree [(NONE,cx_tops cx)] cx env`,
+    `Entry` |-> `\H ei v j z GG tt.
+      for_captured_storage_round_entry (DF,lo,d,ctx,func)
+        (cx,c0,bc,extend_local env id typ F,sb0,stmts) (e0,sa0,s0,G0,tn0)
+        (idx,p,dst,lvo,len,inst,nb)
+        (H,for_captured_storage_round_scope id tyv ei v,j,z,GG,tt)`]
+    (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]))
+      for_captured_storage_cons_from_stages))) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- simp[] >>
+  conj_tac >- suspend "head" >>
+  conj_tac >- suspend "body" >> suspend "backedge"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_round_from_head[head]:
   strip_tac >>
   qabbrev_tac `H0 = storage_trace_horizon es.storage_trace` >>
@@ -414,9 +407,7 @@ Resume for_captured_storage_round_from_head[head]:
         simp[NoAsms,evaluation_state_fupdfupds])) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_round_from_head[body]:
   map_every qx_gen_tac [`v`,`eb`,`GG`,`tt`,`z`] >> strip_tac >>
   `for_captured_storage_round_scope id tyv (es with gas_obs := []) v = eb` by
@@ -431,9 +422,7 @@ Resume for_captured_storage_round_from_head[body]:
     (fn th => simp[NoAsms,th,for_captured_storage_round_entry_def]) >>
   strip_tac >> suspend "invoke"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_round_from_head[backedge]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `si.cs_current_bb = incr` (SUBST_ALL_TAC o SYM) >>
@@ -442,9 +431,7 @@ Resume for_captured_storage_round_from_head[backedge]:
   qexistsl [`a`,`out`,`si`,`sk`,`sl`,`sm`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_round_from_head[invoke]:
   qabbrev_tac `ei = es with gas_obs := []` >>
   `body_const_cells_agree [(NONE,cx_tops cx)] cx env ei` by simp[Abbr `ei`] >>
@@ -490,9 +477,7 @@ Resume for_captured_storage_round_from_head[invoke]:
   conj_tac >- (qpat_assum `eb = ei with scopes := _` SUBST1_TAC >> simp[]) >>
   conj_tac >- first_assum ACCEPT_TAC >> suspend "raw_land"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_round_from_head[raw_land]:
   map_every qx_gen_tac [`H`,`raw`,`ef`,`G1`,`tn1`,`t`] >>
   disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
@@ -519,9 +504,7 @@ Resume for_captured_storage_round_from_head[raw_land]:
     (qspec_then `H` (drule_then strip_assume_tac)) >>
   suspend "land_at"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_round_from_head[land_at]:
   `expr_sim_inv c0 cx env ei /\ lookup_scopes id ei.scopes = NONE /\
      cenv_top_ext c0 c0 ei.scopes` by simp[Abbr `ei`] >>
@@ -541,9 +524,7 @@ Resume for_captured_storage_round_from_head[land_at]:
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "apply_land"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_round_from_head[apply_land]:
   (* The local landing's entry register, provenance and taint state are
      the head endpoint, not the round's initial register state. *)
@@ -555,18 +536,14 @@ Resume for_captured_storage_round_from_head[apply_land]:
   impl_tac >- suspend "land_inputs" >>
   suspend "pack_landing"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_round_from_head[land_inputs]:
   qpat_assum `inst.inst_id = sd.cs_next_id` (SUBST1_TAC o SYM) >>
   `w2n dst + nb < 2 ** 256` by
     (qpat_assum `w2n dst + nb < dimword (:256)` mp_tac >> simp[NoAsms,dimword_def]) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_round_from_head[pack_landing]:
   strip_tac >> qexistsl [`sc`,`rest`,`b`] >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -580,9 +557,7 @@ Resume for_captured_storage_round_from_head[pack_landing]:
   qpat_x_assum `~b ==> _` (drule_then strip_assume_tac) >>
   suspend "pack_live"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_round_from_head[pack_live]:
   conj_tac >- simp[] >>
   conj_tac >- (
@@ -600,8 +575,5 @@ Resume for_captured_storage_round_from_head[pack_live]:
     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise for_captured_storage_round_from_head
-*)

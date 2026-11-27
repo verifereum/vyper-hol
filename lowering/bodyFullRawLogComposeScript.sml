@@ -70,8 +70,18 @@ Proof
   cheat
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem raw_log_expr_sim_full:
+  (!ce ty e. gas_shadow_compiles (lower_value compile_expr ce ty e)
+    (lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e))) /\
+  (!ce xs. gas_shadow_compiles (compile_multi_exprs compile_expr ce xs)
+    (compile_multi_exprs compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr xs))) /\
+  body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Call ann RawLog args dflt) es ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Call ann RawLog args dflt) es
 Proof
   strip_tac >>
   `?a elem bd topics data n.
@@ -165,24 +175,7 @@ Proof
   Cases_on `res` >> gvs[expr_exit_def, halt_exit_def] >>
   metis_tac[expr_exit_INR_type])
 QED
-*)
-Theorem raw_log_expr_sim_full:
-  (!ce ty e. gas_shadow_compiles (lower_value compile_expr ce ty e)
-    (lower_value compile_expr (gas_shadow_env T ce) ty (gas_shadow_expr e))) /\
-  (!ce xs. gas_shadow_compiles (compile_multi_exprs compile_expr ce xs)
-    (compile_multi_exprs compile_expr (gas_shadow_env T ce) (MAP gas_shadow_expr xs))) /\
-  body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-  shadow_body_inv_mods mods exps ctx shadow_ctx /\
-  body_const_cells_agree mods cx env es /\
-  expr_body_pre_mods mods cenv cx env (Call ann RawLog args dflt) es ==>
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Call ann RawLog args dflt) es
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_log_expr_sim_full[continuation]:
   markerLib.RESUME_TAC >> (
   rename1 `compile_multi_exprs compile_expr cenv topics sa = (ops,sm)` >>
@@ -261,9 +254,7 @@ Resume raw_log_expr_sim_full[continuation]:
            (K all_tac) >> suspend "fixed_data",
          suspend "dynamic_data"])
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_log_expr_sim_full[fixed_data]:
   qpat_assum `compile_call _ _ _ _ RawLog _ _ _ = _`
     (mp_then (Pat `compile_call _ _ _ _ RawLog _ _ _ = _`) mp_tac raw_log_fixed_data_full) >>
@@ -336,9 +327,7 @@ Resume raw_log_expr_sim_full[fixed_data]:
   irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
   simp[] >> suspend "fixed_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_log_expr_sim_full[dynamic_data]:
   `env.type_defs = get_tenv cx /\
    (!id et. FLOOKUP env.var_types id = SOME et ==>
@@ -429,9 +418,7 @@ Resume raw_log_expr_sim_full[dynamic_data]:
       disch_then (qspec_then `H` mp_tac) >> simp[]) >>
   simp[wordsTheory.dimword_def] >> decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_log_expr_sim_full[fixed_post]:
   qx_genl_tac [`H`,`out_res`,`end_es`,`endG`,`endtn`,`endst`] >> strip_tac >>
   `valid_horizon cx st0 H mid.storage_trace` by
@@ -463,9 +450,7 @@ Resume raw_log_expr_sim_full[fixed_post]:
     loweringPostsTheory.expr_has_effect_thm] raw_log_topics_continuation_post) >>
   simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_log_expr_sim_full[dynamic_post]:
   qx_genl_tac [`H`,`out_res`,`end_es`,`endG`,`endtn`,`endst`] >> strip_tac >>
   `valid_horizon cx st0 H mid.storage_trace` by
@@ -497,8 +482,5 @@ Resume raw_log_expr_sim_full[dynamic_post]:
     loweringPostsTheory.expr_has_effect_thm] raw_log_topics_continuation_post) >>
   simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise raw_log_expr_sim_full
-*)

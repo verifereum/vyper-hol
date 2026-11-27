@@ -49,55 +49,6 @@ Proof
   Cases_on `raw` >> simp[Once bind_def, bind_def, return_def, eval_exprs_nil]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  irule gas_outcome_full_initial_domain >>
-  simp[cj 6 vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
-  strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
-    (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
-       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func cenv cx es s0 /\ _`
-       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
-     qpat_assum `stmt_state_rel _ ctx func cenv cx es s0`
-       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx (BaseT AddressT) addr es` by
-    (gvs[body_exprs_full_ok_def] >> metis_tac[body_expr_full_ok_def]) >>
-  `gas_admissible (bind (eval_expr cx addr) (read_result cx)) expr_res_ok es` by
-    metis_tac[expr_body_pre_gas_admissible] >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_sim_full_def] >>
-  disch_then (qspecl_then [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`ao`,
-    `s0`,`G0`,`tn0`] mp_tac) >> simp[] >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  disch_then (assume_tac o MATCH_MP singleton_source_map) >>
-  drule gas_outcome_full_post_source >> disch_then irule >>
-  (reverse conj_tac
-   >- (simp[] >> rpt gen_tac >> disch_then (qx_choose_then `raw` strip_assume_tac) >>
-       Cases_on `raw` >> fs[halt_exit_def] >>
-       metis_tac[expr_exit_success_map, stmtSimPropsTheory.expr_exit_INR_type])) >>
-  simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
-  qpat_x_assum `!tail. eval_exprs _ _ _ = _`
-    (qspec_then `[]` (strip_assume_tac o MATCH_MP eval_exprs_cons_cases)) >>
-  gvs[eval_exprs_nil] >>
-  `(ee with gas_obs := []) = ee` by simp[evaluation_state_component_equality] >>
-  `expr_body_pre cenv cx env addr (es with gas_obs := xs)` by simp[] >>
-  `expr_sim_inv cenv cx env ee /\ value_has_type (BaseTV AddressT) v` by
-    metis_tac[expr_body_pre_base_result] >>
-  `is_word_type (expr_type addr)` by simp[is_word_type_def] >>
-  drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
-  qhdtm_assum `expr_post`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  `return_buf_frame d cenv sb t` by
-    (irule return_buf_frame_frame >> qexistsl [`cenv`,`s0`,`sa`] >> simp[]) >>
-  gvs[] >> drule_all target_word_decode >> strip_tac >>
-  qexists_tac `aw` >> gvs[safe_operand_def]
-QED
-*)
 Theorem extcall_request_head_halt_outcome:
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok_mods mods exps cx [addr] /\ (contract_inv mods exps ctx cenv cx /\
@@ -145,32 +96,53 @@ Theorem extcall_request_head_halt_outcome:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
-  cheat
+  strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  simp[cj 6 vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
+    (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func cenv cx es s0 /\ _`
+       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx es s0`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx (BaseT AddressT) addr es` by
+    (gvs[body_exprs_full_ok_def] >> metis_tac[body_expr_full_ok_def]) >>
+  `gas_admissible (bind (eval_expr cx addr) (read_result cx)) expr_res_ok es` by
+    metis_tac[expr_body_pre_gas_admissible] >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`ao`,
+    `s0`,`G0`,`tn0`] mp_tac) >> simp[] >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (assume_tac o MATCH_MP singleton_source_map) >>
+  drule gas_outcome_full_post_source >> disch_then irule >>
+  (reverse conj_tac
+   >- (simp[] >> rpt gen_tac >> disch_then (qx_choose_then `raw` strip_assume_tac) >>
+       Cases_on `raw` >> fs[halt_exit_def] >>
+       metis_tac[expr_exit_success_map, stmtSimPropsTheory.expr_exit_INR_type])) >>
+  simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `!tail. eval_exprs _ _ _ = _`
+    (qspec_then `[]` (strip_assume_tac o MATCH_MP eval_exprs_cons_cases)) >>
+  gvs[eval_exprs_nil] >>
+  `(ee with gas_obs := []) = ee` by simp[evaluation_state_component_equality] >>
+  `expr_body_pre cenv cx env addr (es with gas_obs := xs)` by simp[] >>
+  `expr_sim_inv cenv cx env ee /\ value_has_type (BaseTV AddressT) v` by
+    metis_tac[expr_body_pre_base_result] >>
+  `is_word_type (expr_type addr)` by simp[is_word_type_def] >>
+  drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
+  qhdtm_assum `expr_post`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `return_buf_frame d cenv sb t` by
+    (irule return_buf_frame_frame >> qexistsl [`cenv`,`s0`,`sa`] >> simp[]) >>
+  gvs[] >> drule_all target_word_decode >> strip_tac >>
+  qexists_tac `aw` >> gvs[safe_operand_def]
 QED
 
 (* The non-owning prefixes only need the ordinary exit projection. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z` by
-    (rpt strip_tac >> drule frag_reachable_members >> disch_then drule >>
-     strip_tac >>
-     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
-        unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]) >>
-  irule (Q.INST [`Q'` |-> `Q`,
-                  `R` |-> `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-                    (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)`]
-           gas_outcome_full_post_mono) >>
-  BETA_TAC >> rpt conj_tac
-  >~ [`gas_outcome_full _ _ _ _ _ _ _ _`]
-  >- (irule extcall_request_head_halt_outcome >>
-      rpt (goal_assum (drule_at Any)) >> simp[] >>
-      conj_tac >- (qexistsl [`shadow_func`,`shadow_sa`,`shadow_sb`] >> simp[]) >>
-      qexists `tops` >> simp[]) >>
-  simp[]
-QED
-*)
 Theorem extcall_request_head_outcome:
   expr_type addr = BaseT AddressT /\
   body_exprs_full_ok_mods mods exps cx [addr] /\ (contract_inv mods exps ctx cenv cx /\
@@ -216,5 +188,21 @@ Theorem extcall_request_head_outcome:
       ~t.vs_halted /\ ee.gas_obs = [])
     (\H res ee gt r. expr_exit res r)
 Proof
-  cheat
+  strip_tac >>
+  `!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z` by
+    (rpt strip_tac >> drule frag_reachable_members >> disch_then drule >>
+     strip_tac >>
+     fs[ptrDisciplineTheory.ctx_has_dalloca_def, listTheory.EXISTS_MEM,
+        unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]) >>
+  irule (Q.INST [`Q'` |-> `Q`,
+                  `R` |-> `\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+                    (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)`]
+           gas_outcome_full_post_mono) >>
+  BETA_TAC >> rpt conj_tac
+  >~ [`gas_outcome_full _ _ _ _ _ _ _ _`]
+  >- (irule extcall_request_head_halt_outcome >>
+      rpt (goal_assum (drule_at Any)) >> simp[] >>
+      conj_tac >- (qexistsl [`shadow_func`,`shadow_sa`,`shadow_sb`] >> simp[]) >>
+      qexists `tops` >> simp[]) >>
+  simp[]
 QED

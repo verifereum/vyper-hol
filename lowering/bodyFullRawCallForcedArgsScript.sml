@@ -12,8 +12,78 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
   gasOutcomeFullMods[qualified]
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem raw_call_forced_args_full:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\
+  expr_body_pre_mods mods cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
+  body_exprs_full_ok_mods mods exps cx (a::d::kws) /\
+  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
+  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
+    (gas_shadow_expr a) shadow_sa = (addr,shadow_s1) /\
+  lower_value compile_expr (gas_shadow_env T cenv) (expr_type d)
+    (gas_shadow_expr d) shadow_s1 = (data,shadow_s2) /\
+  gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
+  gas_shadow_state s2 shadow_s2 /\ gas_shadow_context ctx shadow_ctx /\
+  gas_shadow_function func shadow_func /\ ctx_inst_ids_distinct ctx /\
+  MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
+  fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\
+  fn_has_code shadow_sa shadow_s1 shadow_func /\
+  fn_has_code shadow_s1 shadow_s2 shadow_func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
+  (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
+  return_buf_frame dframe cenv sa s0 /\ alloca_history func s0 /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo dframe cenv cx es G0 tn0 s0) /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!av dv. storage_trace_frame (k av dv)) /\
+  (!H exc ee gt r. expr_exit (INR exc : value + vyperState$exception) r /\
+     halt_exit H cx ee (INR exc) r ==> R H (INR exc) ee gt r) /\
+  (!gsA av esA tA GA tnA gsD bs esD tD GD tnD.
+    bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
+    bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
+      (INL (BytesV bs),esD) /\
+    esA.gas_obs = [] /\ esD.gas_obs = [] /\
+    body_const_cells_agree mods cx env esD /\
+    body_exprs_full_ok_mods mods exps cx kws /\ expr_sim_inv_mods mods cenv cx env esD /\
+    storage_trace_domain cx st0 esD.storage_trace /\
+    (!fn inst s. frag_reachable ctx func tD fn inst s ==> dalloca_fmp_headroom inst s) /\
+    (!H. valid_horizon cx st0 H esD.storage_trace ==>
+      expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\
+      expr_store_bound cx (post_value_type cenv a) av addr tA /\
+      tA.vs_current_bb = s1.cs_current_bb /\
+      tA.vs_inst_idx = LENGTH s1.cs_current_insts /\ alloca_history func tA /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp tA) /\
+      s0.vs_alloca_next <= tA.vs_alloca_next /\
+      ghost_inv_at (DF H) lo dframe cenv cx esA GA tnA tA /\
+      ptr_val_ok cx (post_value_type cenv a) av addr GA tnA tA /\
+      (~is_word_type (post_value_type cenv a) ==> ptr_buf_ok cenv a addr GA tA) /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 GA tnA /\ ~tA.vs_halted /\
+      expr_post H ctx func cenv cx d esA s1 s2 tA esD (BytesV bs) data tD /\
+      expr_store_bound cx (post_value_type cenv d) (BytesV bs) data tD /\
+      tD.vs_current_bb = s2.cs_current_bb /\
+      tD.vs_inst_idx = LENGTH s2.cs_current_insts /\ alloca_history func tD /\
+      (ctx_has_dalloca ctx ==> allocas_below_fmp tD) /\
+      tA.vs_alloca_next <= tD.vs_alloca_next /\
+      ghost_inv_at (DF H) lo dframe cenv cx esD GD tnD tD /\
+      ptr_val_ok cx (post_value_type cenv d) (BytesV bs) data GD tnD tD /\
+      (~is_word_type (post_value_type cenv d) ==> ptr_buf_ok cenv d data GD tD) /\
+      ghost_kept_at lo cenv esA s1 GA tnA tA GD tnD /\ ~tD.vs_halted) ==>
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (k av (BytesV bs)) (esD,tD,GD,tnD) Q R) ==>
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0
+    (bind (bind (eval_expr cx a) (read_result cx))
+      (\av. bind (bind (eval_expr cx d) (read_result cx)) (k av)))
+    (es,s0,G0,tn0) Q R
 Proof
   strip_tac >>
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
@@ -224,80 +294,4 @@ Proof
   qpat_assum `!h. valid_horizon _ _ h esD.storage_trace ==> _ _ esD GD tnD tD`
     (qspec_then `H` (mp_tac o BETA_RULE)) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> gvs[]
-QED
-*)
-Theorem raw_call_forced_args_full:
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
-  body_const_cells_agree mods cx env es /\
-  expr_body_pre_mods mods cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) NONE) es /\
-  body_exprs_full_ok_mods mods exps cx (a::d::kws) /\
-  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
-  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
-  lower_value compile_expr (gas_shadow_env T cenv) (BaseT AddressT)
-    (gas_shadow_expr a) shadow_sa = (addr,shadow_s1) /\
-  lower_value compile_expr (gas_shadow_env T cenv) (expr_type d)
-    (gas_shadow_expr d) shadow_s1 = (data,shadow_s2) /\
-  gas_shadow_state sa shadow_sa /\ gas_shadow_state s1 shadow_s1 /\
-  gas_shadow_state s2 shadow_s2 /\ gas_shadow_context ctx shadow_ctx /\
-  gas_shadow_function func shadow_func /\ ctx_inst_ids_distinct ctx /\
-  MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-  fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\
-  fn_has_code shadow_sa shadow_s1 shadow_func /\
-  fn_has_code shadow_s1 shadow_s2 shadow_func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-  (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
-  (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
-  return_buf_frame dframe cenv sa s0 /\ alloca_history func s0 /\
-  (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-  (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx es s0 /\
-    storage_well_formed_on cx es (FST H) /\
-    ghost_inv_at (DF H) lo dframe cenv cx es G0 tn0 s0) /\
-  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!av dv. storage_trace_frame (k av dv)) /\
-  (!H exc ee gt r. expr_exit (INR exc : value + vyperState$exception) r /\
-     halt_exit H cx ee (INR exc) r ==> R H (INR exc) ee gt r) /\
-  (!gsA av esA tA GA tnA gsD bs esD tD GD tnD.
-    bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
-    bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
-      (INL (BytesV bs),esD) /\
-    esA.gas_obs = [] /\ esD.gas_obs = [] /\
-    body_const_cells_agree mods cx env esD /\
-    body_exprs_full_ok_mods mods exps cx kws /\ expr_sim_inv_mods mods cenv cx env esD /\
-    storage_trace_domain cx st0 esD.storage_trace /\
-    (!fn inst s. frag_reachable ctx func tD fn inst s ==> dalloca_fmp_headroom inst s) /\
-    (!H. valid_horizon cx st0 H esD.storage_trace ==>
-      expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\
-      expr_store_bound cx (post_value_type cenv a) av addr tA /\
-      tA.vs_current_bb = s1.cs_current_bb /\
-      tA.vs_inst_idx = LENGTH s1.cs_current_insts /\ alloca_history func tA /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp tA) /\
-      s0.vs_alloca_next <= tA.vs_alloca_next /\
-      ghost_inv_at (DF H) lo dframe cenv cx esA GA tnA tA /\
-      ptr_val_ok cx (post_value_type cenv a) av addr GA tnA tA /\
-      (~is_word_type (post_value_type cenv a) ==> ptr_buf_ok cenv a addr GA tA) /\
-      ghost_kept_at lo cenv es sa G0 tn0 s0 GA tnA /\ ~tA.vs_halted /\
-      expr_post H ctx func cenv cx d esA s1 s2 tA esD (BytesV bs) data tD /\
-      expr_store_bound cx (post_value_type cenv d) (BytesV bs) data tD /\
-      tD.vs_current_bb = s2.cs_current_bb /\
-      tD.vs_inst_idx = LENGTH s2.cs_current_insts /\ alloca_history func tD /\
-      (ctx_has_dalloca ctx ==> allocas_below_fmp tD) /\
-      tA.vs_alloca_next <= tD.vs_alloca_next /\
-      ghost_inv_at (DF H) lo dframe cenv cx esD GD tnD tD /\
-      ptr_val_ok cx (post_value_type cenv d) (BytesV bs) data GD tnD tD /\
-      (~is_word_type (post_value_type cenv d) ==> ptr_buf_ok cenv d data GD tD) /\
-      ghost_kept_at lo cenv esA s1 GA tnA tA GD tnD /\ ~tD.vs_halted) ==>
-    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      cenv.ce_modules cx st0 (k av (BytesV bs)) (esD,tD,GD,tnD) Q R) ==>
-  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    cenv.ce_modules cx st0
-    (bind (bind (eval_expr cx a) (read_result cx))
-      (\av. bind (bind (eval_expr cx d) (read_result cx)) (k av)))
-    (es,s0,G0,tn0) Q R
-Proof
-  cheat
 QED

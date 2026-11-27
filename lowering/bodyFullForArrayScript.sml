@@ -393,21 +393,6 @@ QED
 
 (* Apply the enabled Array iterator IH to the actual expression compilations.
    Keep the full vv post, including aggregate ownership and exceptional exits. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     c cx (expr_type e) e es` by
-    (fs[body_iterator_full_ok_def, Once body_expr_full_ok_def] >>
-     first_x_assum drule_all >> simp[]) >>
-  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
-  disch_then irule >> simp[] >>
-  conj_tac >- metis_tac[] >>
-  qexistsl_tac [`shadow_sa`, `shadow_sb`] >> simp[]
-QED
-*)
 Theorem for_array_expr_prefix_full:
   body_iterator_full_ok_mods mods exps cx (Array e) /\
   body_const_cells_agree mods cx env es /\
@@ -465,7 +450,16 @@ Theorem for_array_expr_prefix_full:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !t. r = Halt t ==> allocas_below_fmp t))
 Proof
-  cheat
+  strip_tac >>
+  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     c cx (expr_type e) e es` by
+    (fs[body_iterator_full_ok_def, Once body_expr_full_ok_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
+  disch_then irule >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`shadow_sa`, `shadow_sb`] >> simp[]
 QED
 
 (* A non-slot iterator materializes exactly the elements of its source read. *)
@@ -2007,50 +2001,6 @@ Proof
 QED
 
 (* Non-slot iterator evaluation and its actual conditional length slice. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> simp[Once evaluate_def] >>
-  irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all >>
-  conj_tac >- simp[storage_trace_frame_array_iterator_results] >>
-  conj_tac >- (rpt gen_tac >> simp[] >> strip_tac >>
-    irule gas_exempt_cert_bind_result >> goal_assum (drule_at Any) >> simp[]) >>
-  conj_tac >- (rpt gen_tac >> strip_tac >>
-    irule gas_exempt_cert_error_result >> simp[]) >>
-  conj_tac >- simp[cj 5 evaluate_storage_trace_frame] >>
-  qexists_tac `\H res ee G1 tn1 t. ee.gas_obs = [] /\ ~t.vs_halted /\
-    ?tv. res = INL tv /\
-      vv_post H ctx func c cx e es sa sb s ee tv vv t /\
-      vv_store_bound cx (post_value_type c e) (lowered_value_type c e) ee tv vv t /\
-      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
-      s.vs_alloca_next <= t.vs_alloca_next /\ ghost_inv_at (DF H) lo d c cx ee G1 tn1 t /\
-      ptr_vv_ok cx (post_value_type c e) tv vv ee G1 tn1 t /\
-      (!v. tv = Value v /\ ~is_word_type (post_value_type c e) /\
-        ~is_bytestring_type (post_value_type c e) ==>
-        vv_own c cx (post_value_type c e) sa sb ee tv vv t /\
-        (!t' p. vv = LocatedValue t' p ==> p.ptr_location = LocMemory)) /\
-      (c.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-        ?v. read_result cx tv ee = (INL v,ee) /\
-          !rt w. evaluate_type (get_tenv cx) (post_value_type c e) = SOME rt /\
-            eval_operand (vv_operand vv) t = SOME w ==>
-            w2n w + type_memory_size rt <= lo /\
-            (!mem. mem_agree_outside tn1.t_mem t.vs_memory mem ==>
-              val_in_memory rt v (w2n w) mem)) /\
-      (!t' op. vv = StackValue t' op /\ ~is_word_type (post_value_type c e) ==>
-        ptr_buf_ok c e op G1 t) /\
-      (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
-        ptr_buf_ok c e p.ptr_operand G1 t) /\
-      ghost_kept_at lo c es sa G tn s G1 tn1` >>
-  reverse conj_tac
-  >- (drule_all for_array_expr_prefix_full >>
-      disch_then (qspec_then `PG` assume_tac) >>
-      irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
-      simp[] >> rpt gen_tac >> Cases_on `res` >> simp[] >>
-      strip_tac >> metis_tac[expr_exit_INR_type, halt_exit_INR_type]) >>
-  suspend "normal"
-QED
-*)
 Theorem for_nonslot_array_prefix_full:
   body_iterator_full_ok_mods mods exps cx (Array e) /\
   body_const_cells_agree mods cx env es /\
@@ -2139,10 +2089,47 @@ Theorem for_nonslot_array_prefix_full:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
       (ctx_has_dalloca ctx ==> !t. r = Halt t ==> allocas_below_fmp t))
 Proof
-  cheat
+  strip_tac >> simp[Once evaluate_def] >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all >>
+  conj_tac >- simp[storage_trace_frame_array_iterator_results] >>
+  conj_tac >- (rpt gen_tac >> simp[] >> strip_tac >>
+    irule gas_exempt_cert_bind_result >> goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- (rpt gen_tac >> strip_tac >>
+    irule gas_exempt_cert_error_result >> simp[]) >>
+  conj_tac >- simp[cj 5 evaluate_storage_trace_frame] >>
+  qexists_tac `\H res ee G1 tn1 t. ee.gas_obs = [] /\ ~t.vs_halted /\
+    ?tv. res = INL tv /\
+      vv_post H ctx func c cx e es sa sb s ee tv vv t /\
+      vv_store_bound cx (post_value_type c e) (lowered_value_type c e) ee tv vv t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
+      s.vs_alloca_next <= t.vs_alloca_next /\ ghost_inv_at (DF H) lo d c cx ee G1 tn1 t /\
+      ptr_vv_ok cx (post_value_type c e) tv vv ee G1 tn1 t /\
+      (!v. tv = Value v /\ ~is_word_type (post_value_type c e) /\
+        ~is_bytestring_type (post_value_type c e) ==>
+        vv_own c cx (post_value_type c e) sa sb ee tv vv t /\
+        (!t' p. vv = LocatedValue t' p ==> p.ptr_location = LocMemory)) /\
+      (c.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+        ?v. read_result cx tv ee = (INL v,ee) /\
+          !rt w. evaluate_type (get_tenv cx) (post_value_type c e) = SOME rt /\
+            eval_operand (vv_operand vv) t = SOME w ==>
+            w2n w + type_memory_size rt <= lo /\
+            (!mem. mem_agree_outside tn1.t_mem t.vs_memory mem ==>
+              val_in_memory rt v (w2n w) mem)) /\
+      (!t' op. vv = StackValue t' op /\ ~is_word_type (post_value_type c e) ==>
+        ptr_buf_ok c e op G1 t) /\
+      (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+        ptr_buf_ok c e p.ptr_operand G1 t) /\
+      ghost_kept_at lo c es sa G tn s G1 tn1` >>
+  reverse conj_tac
+  >- (drule_all for_array_expr_prefix_full >>
+      disch_then (qspec_then `PG` assume_tac) >>
+      irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
+      simp[] >> rpt gen_tac >> Cases_on `res` >> simp[] >>
+      strip_tac >> metis_tac[expr_exit_INR_type, halt_exit_INR_type]) >>
+  suspend "normal"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_prefix_full[normal]:
   map_every qx_gen_tac [`marks`,`res`,`mid`,`G1`,`tn1`,`u`] >>
   simp[] >> strip_tac >>
@@ -2296,9 +2283,7 @@ Resume for_nonslot_array_prefix_full[normal]:
           (map_every assume_tac o CONJUNCTS)))))))) >>
   suspend "length"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_prefix_full[iterator_live_induction]:
   POP_ASSUM_LIST (K all_tac) >>
   completeInduct_on `expr_size a` >>
@@ -2323,9 +2308,7 @@ Resume for_nonslot_array_prefix_full[iterator_live_induction]:
   drule_at (Pat `eval_expr _ _ _ = _`) eval_iterator_memory_place_access >>
   simp[vyperTypeSystemTheory.expr_places_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_prefix_full[iterator_live_subscript]:
   rename1 `eval_expr ctx0 (Subscript ann obj key) zs = _` >>
   Cases_on `subscript_reads_base ctx0 obj key` >>
@@ -2336,9 +2319,7 @@ Resume for_nonslot_array_prefix_full[iterator_live_subscript]:
   strip_tac >> gvs[] >>
   suspend "iterator_live_subscript_frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_prefix_full[iterator_live_subscript_frame]:
   rename1 `eval_expr ctx0 obj zs = (INL (PlaceR (MemoryPlace name path0)),zm)` >>
   rename1 `eval_expr ctx0 key zm = (INL idx,zk)` >>
@@ -2379,9 +2360,7 @@ Resume for_nonslot_array_prefix_full[iterator_live_subscript_frame]:
   drule_all targetSubscriptMemoryTheory.extend_place_memory_live >>
   strip_tac >> gvs[] >> metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_prefix_full[iterator_live_attribute]:
   rename1 `eval_expr ctx0 (Attribute ann obj attrId) zs = _` >>
   qpat_x_assum `eval_expr ctx0 (Attribute ann obj attrId) zs = _` mp_tac >>
@@ -2391,9 +2370,7 @@ Resume for_nonslot_array_prefix_full[iterator_live_attribute]:
   strip_tac >> gvs[] >>
   suspend "iterator_live_attribute_base"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_prefix_full[iterator_live_attribute_base]:
   rename1 `eval_expr ctx0 obj zs = (INL (PlaceR (MemoryPlace name path0)),zm)` >>
   `well_typed_expr en obj` by
@@ -2413,9 +2390,7 @@ Resume for_nonslot_array_prefix_full[iterator_live_attribute_base]:
   drule_all targetSubscriptMemoryTheory.extend_place_memory_live >>
   strip_tac >> gvs[] >> metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_prefix_full[iterator_live_read]:
   rpt strip_tac >>
   `eval_expr cx e esx = (INL (PlaceR (MemoryPlace name path)),mid)` by
@@ -2435,9 +2410,7 @@ Resume for_nonslot_array_prefix_full[iterator_live_read]:
        lift_option_type_def, lift_sum_def, return_def, raise_def] >>
   metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_prefix_full[iterator_live_conditional]:
   rename1 `eval_expr ctx0 (IfExp ann cond yes no) zs = _` >>
   `well_typed_expr en yes /\ well_typed_expr en no` by
@@ -2456,9 +2429,7 @@ Resume for_nonslot_array_prefix_full[iterator_live_conditional]:
   disch_then (qspec_then `arm` mp_tac) >> simp[NoAsms] >>
   disch_then (qspecl_then [`ctx0`,`en`,`ms`,`name`,`path`,`ze`] mp_tac) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_prefix_full[length]:
   `(if dynamic then compile_ptr_load c.ce_is_ctor c.ce_imm_alloca loc (vv_operand vv)
     else comp_return (Lit (n2w cnt))) sb = (len_op,sc)` by
@@ -2510,9 +2481,7 @@ Resume for_nonslot_array_prefix_full[length]:
   qexistsl_tac [`rv`,`av`,`xs`,`et`] >>
   suspend "frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_prefix_full[frame]:
   `ci_mono sb sc /\ sc.cs_current_bb = sb.cs_current_bb /\
    sc.cs_current_insts = sb.cs_current_insts ++ emitted_insts sb sc /\
@@ -2537,9 +2506,7 @@ Resume for_nonslot_array_prefix_full[frame]:
      qpat_assum `compile_expr c (expr_type e) e sa = _` (fn th => simp[NoAsms, th])) >>
   suspend "anchor"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_prefix_full[anchor]:
   `sa.cs_next_var <= sb.cs_next_var /\ sb.cs_next_var <= sc.cs_next_var` by
     (qpat_assum `ci_mono sa sb` mp_tac >> qpat_assum `ci_mono sb sc` mp_tac >>
@@ -2627,8 +2594,5 @@ Resume for_nonslot_array_prefix_full[anchor]:
      disch_then ACCEPT_TAC)) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise for_nonslot_array_prefix_full
-*)

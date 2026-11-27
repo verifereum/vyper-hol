@@ -6885,43 +6885,6 @@ QED
 
 (* Both tuple layouts use the same target judgment. Add the source typing
    at its actual gas-marked endpoint before the write. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `type_place_target env bt = SOME (Type ty)` by fs[well_typed_target_def] >>
-  drule_all_then assume_tac tuplePlaceTargetGasTheory.tuple_place_target_gas_admissible >>
-  mp_tac (Q.SPECL [`bt`,`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,
-                   `shadow_func`,`cenv`,`cx`,`env`,`es`,`id`]
-    bodyFullTargetTheory.body_imm_target_place_sim_full) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  PURE_REWRITE_TAC[bodyFullTargetDefsTheory.imm_target_place_sim_full_def] >>
-  disch_then (qspecl_then [`st0`,`ty`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`r`,`s`,`G`,`tn`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_tac >>
-  irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
-  goal_assum (drule_at Any) >> reverse conj_tac >- simp[] >>
-  rpt gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `?xs. !tail. eval_target_place _ _ _ = _`
-    (qx_choose_then `xs` assume_tac) >>
-  qpat_x_assum `?name path. res = INL (ImmutablePlace NONE name path) /\ _`
-    (qx_choosel_then [`name`,`path`] (map_every assume_tac o CONJUNCTS)) >>
-  `name = id` by
-    (qpat_assum `target_root bt = TopLevelNameTarget (NONE,name)` mp_tac >>
-     PURE_REWRITE_TAC[ASSUME ``target_root bt = TopLevelNameTarget (NONE,id)``] >> simp[]) >>
-  qpat_x_assum `name = id` SUBST_ALL_TAC >>
-  qexists_tac `path` >> asm_rewrite_tac[] >>
-  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
-  `eval_target_place cx bt (es with gas_obs := xs) = (INL (ImmutablePlace NONE id path),ee)` by
-    (qpat_assum `!tail. eval_target_place cx bt _ = _`
-       (qspec_then `[]` (fn eval =>
-         qpat_assum `res = INL (ImmutablePlace NONE id path)` (fn result =>
-           qpat_assum `ee with gas_obs := [] = ee` (fn obs =>
-             ACCEPT_TAC (REWRITE_RULE [APPEND_NIL,result,obs] eval)))))) >>
-  `expr_sim_inv cenv cx env (es with gas_obs := xs)` by simp[] >>
-  drule_all tuple_immutable_target_source_endpoint >> simp[]
-QED
-*)
 Theorem tuple_immutable_head_target:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -6970,7 +6933,38 @@ Theorem tuple_immutable_head_target:
       expr_exit res q /\ halt_exit H cx ee res q /\
       (ctx_has_dalloca ctx ==> !s. q = Halt s ==> allocas_below_fmp s))
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `type_place_target env bt = SOME (Type ty)` by fs[well_typed_target_def] >>
+  drule_all_then assume_tac tuplePlaceTargetGasTheory.tuple_place_target_gas_admissible >>
+  mp_tac (Q.SPECL [`bt`,`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,
+                   `shadow_func`,`cenv`,`cx`,`env`,`es`,`id`]
+    bodyFullTargetTheory.body_imm_target_place_sim_full) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  PURE_REWRITE_TAC[bodyFullTargetDefsTheory.imm_target_place_sim_full_def] >>
+  disch_then (qspecl_then [`st0`,`ty`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`r`,`s`,`G`,`tn`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_tac >>
+  irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
+  goal_assum (drule_at Any) >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?xs. !tail. eval_target_place _ _ _ = _`
+    (qx_choose_then `xs` assume_tac) >>
+  qpat_x_assum `?name path. res = INL (ImmutablePlace NONE name path) /\ _`
+    (qx_choosel_then [`name`,`path`] (map_every assume_tac o CONJUNCTS)) >>
+  `name = id` by
+    (qpat_assum `target_root bt = TopLevelNameTarget (NONE,name)` mp_tac >>
+     PURE_REWRITE_TAC[ASSUME ``target_root bt = TopLevelNameTarget (NONE,id)``] >> simp[]) >>
+  qpat_x_assum `name = id` SUBST_ALL_TAC >>
+  qexists_tac `path` >> asm_rewrite_tac[] >>
+  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
+  `eval_target_place cx bt (es with gas_obs := xs) = (INL (ImmutablePlace NONE id path),ee)` by
+    (qpat_assum `!tail. eval_target_place cx bt _ = _`
+       (qspec_then `[]` (fn eval =>
+         qpat_assum `res = INL (ImmutablePlace NONE id path)` (fn result =>
+           qpat_assum `ee with gas_obs := [] = ee` (fn obs =>
+             ACCEPT_TAC (REWRITE_RULE [APPEND_NIL,result,obs] eval)))))) >>
+  `expr_sim_inv cenv cx env (es with gas_obs := xs)` by simp[] >>
+  drule_all tuple_immutable_target_source_endpoint >> simp[]
 QED
 
 (* A nested constructor head uses the same source bind for both tuple
@@ -7397,8 +7391,48 @@ Proof
   simp[targetPlaceSimDefsTheory.target_res_ok_def,targetPlaceSimCasesTheory.target_place_res_ok_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem tuple_assign_exact_with_borrowed_frame[local]:
+  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    (!bt. MEM (BaseTarget bt) gs /\ immutable_root cx bt /\
+          ~(?nsid. bt = TopLevelNameTarget nsid) ==>
+          !(H : (bool # bytes32 # type_value) list # num list) src mid u t sa sb id path ty r obs name b cap p tvs.
+            eval_target_place cx bt (src with gas_obs := obs) =
+              (INL (ImmutablePlace NONE id path),mid) /\
+            bodyFullTargetDefs$imm_target_post H ctx func cenv cx src sa sb u mid id path ty r t /\
+            local_region cenv src.scopes u name b cap /\
+            b <= p /\ p + type_memory_size_list tvs <= b+cap /\
+            local_path_at cenv cx name (p-b) (TupleTV tvs) ==>
+            mem_bytes_at p (type_memory_size_list tvs) t.vs_memory =
+              mem_bytes_at p (type_memory_size_list tvs) u.vs_memory) /\
+    lowered_value_type cenv e = expr_type e /\
+    ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
+            EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   drule tuple_targets_typing >> strip_tac >>
@@ -7547,52 +7581,6 @@ Proof
   HEADGOAL (suspend "rhs_exempt") >>>
   HEADGOAL (suspend "rhs_bad_storage")
 QED
-*)
-Theorem tuple_assign_exact_with_borrowed_frame[local]:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' tv t s'3' v t'.
-       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
-    body_expr_full_ok_mods mods exps cx e /\
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (TupleTarget gs) e) ==>
-       occurs_abi_decode_target target tops) /\
-    body_const_cells_agree mods cx env es /\
-    expr_sim_inv_mods mods cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
-    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
-    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    (!bt. MEM (BaseTarget bt) gs /\ immutable_root cx bt /\
-          ~(?nsid. bt = TopLevelNameTarget nsid) ==>
-          !(H : (bool # bytes32 # type_value) list # num list) src mid u t sa sb id path ty r obs name b cap p tvs.
-            eval_target_place cx bt (src with gas_obs := obs) =
-              (INL (ImmutablePlace NONE id path),mid) /\
-            bodyFullTargetDefs$imm_target_post H ctx func cenv cx src sa sb u mid id path ty r t /\
-            local_region cenv src.scopes u name b cap /\
-            b <= p /\ p + type_memory_size_list tvs <= b+cap /\
-            local_path_at cenv cx name (p-b) (TupleTV tvs) ==>
-            mem_bytes_at p (type_memory_size_list tvs) t.vs_memory =
-              mem_bytes_at p (type_memory_size_list tvs) u.vs_memory) /\
-    lowered_value_type cenv e = expr_type e /\
-    ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
-            EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
-      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
-      (eval_stmt cx (Assign (TupleTarget gs) e)) es
-Proof
-  cheat
-QED
 
 (* The head simulation has no dependence on the suffix simulation or on
    admissibility of that suffix. Its common post is the next store cursor. *)
@@ -7617,8 +7605,46 @@ val finish_tuple_exact_cursor_post =
     qpat_assum `fin.gas_obs = []` mp_tac >>
       simp[NoAsms,evaluation_state_component_equality]]
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem tuple_assign_exact_store_head_outcome:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\
+  MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
+  fn_inst_ids_distinct func /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+  values_have_types tvs vs /\ val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
+  body_base_target_full_ok_mods mods exps cx bt /\
+  (immutable_root cx bt /\ ~(?nsid. bt = TopLevelNameTarget nsid) ==>
+    !(H : (bool # bytes32 # type_value) list # num list) src mid u t sa sb id path ty r obs name b cap p tvs.
+      eval_target_place cx bt (src with gas_obs := obs) =
+        (INL (ImmutablePlace NONE id path),mid) /\
+      bodyFullTargetDefs$imm_target_post H ctx func cenv cx src sa sb u mid id path ty r t /\
+      local_region cenv src.scopes u name b cap /\
+      b <= p /\ p + type_memory_size_list tvs <= b+cap /\
+      local_path_at cenv cx name (p-b) (TupleTV tvs) ==>
+      mem_bytes_at p (type_memory_size_list tvs) t.vs_memory =
+        mem_bytes_at p (type_memory_size_list tvs) u.vs_memory) /\
+  bodyTupleExactStoreCursor$tuple_exact_store_cursor (cenv,cx,env,tops,bindings)
+    (DF,lo,d,ctx,func,shadow_func,st0) (sa,sb,shadow_sb) (es,s0,G0,tn0)
+    (tys,tvs,vs) (BaseTarget bt::todo,sty::tys_tail,stv::tvs_tail,vi::vs_tail,op0::ops_tail,k,p)
+    (cur,shadow_cur,src,u,Gu,tu) ==>
+  ?sm shadow_sm.
+    compile_tuple_store_all cenv [sty] [BaseTarget bt] [op0] cur = ((),sm) /\
+    compile_tuple_store_all (gas_shadow_env T cenv) [sty] [BaseTarget (gas_shadow_target bt)]
+      [op0] shadow_cur = ((),shadow_sm) /\
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
+      (assign_tuple_targets cx (BaseTarget bt) vi) (src,u,Gu,tu)
+      (\H res fin Gq tq q. res = INL () /\ fin.gas_obs = [] /\ ~q.vs_halted /\
+        bodyTupleExactStoreCursor$tuple_exact_cursor_common (cenv,cx,env,tops,bindings)
+          (lo,d,ctx,func,shadow_func,st0) (sa,sb,shadow_sb) (es,s0,G0,tn0)
+          (tys,tvs,vs) (todo,tys_tail,tvs_tail,vs_tail,ops_tail,SUC k,p)
+          (sm,shadow_sm,fin,q,Gq,tq) /\
+        bodyTupleExactStoreCursor$tuple_exact_cursor_at (cenv,cx) (DF,lo,d,ctx,func) H fin q Gq tq)
+      (\H res ee gt r. (?exc. res = INR exc) /\
+        (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
+        halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s \/ (?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 Proof
   ALL_TAC >>>
   HEADGOAL (
@@ -10530,50 +10556,6 @@ Proof
     conj_tac >- simp[venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def] >>
     simp[Abbr `suffixR`,stmt_exit_ptr_def,halt_exit_def,expr_exit_def])
 QED
-*)
-Theorem tuple_assign_exact_store_head_outcome:
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
-  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-  gas_shadow_function func shadow_func /\
-  MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-  fn_inst_ids_distinct func /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-  evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
-  values_have_types tvs vs /\ val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
-  body_base_target_full_ok_mods mods exps cx bt /\
-  (immutable_root cx bt /\ ~(?nsid. bt = TopLevelNameTarget nsid) ==>
-    !(H : (bool # bytes32 # type_value) list # num list) src mid u t sa sb id path ty r obs name b cap p tvs.
-      eval_target_place cx bt (src with gas_obs := obs) =
-        (INL (ImmutablePlace NONE id path),mid) /\
-      bodyFullTargetDefs$imm_target_post H ctx func cenv cx src sa sb u mid id path ty r t /\
-      local_region cenv src.scopes u name b cap /\
-      b <= p /\ p + type_memory_size_list tvs <= b+cap /\
-      local_path_at cenv cx name (p-b) (TupleTV tvs) ==>
-      mem_bytes_at p (type_memory_size_list tvs) t.vs_memory =
-        mem_bytes_at p (type_memory_size_list tvs) u.vs_memory) /\
-  bodyTupleExactStoreCursor$tuple_exact_store_cursor (cenv,cx,env,tops,bindings)
-    (DF,lo,d,ctx,func,shadow_func,st0) (sa,sb,shadow_sb) (es,s0,G0,tn0)
-    (tys,tvs,vs) (BaseTarget bt::todo,sty::tys_tail,stv::tvs_tail,vi::vs_tail,op0::ops_tail,k,p)
-    (cur,shadow_cur,src,u,Gu,tu) ==>
-  ?sm shadow_sm.
-    compile_tuple_store_all cenv [sty] [BaseTarget bt] [op0] cur = ((),sm) /\
-    compile_tuple_store_all (gas_shadow_env T cenv) [sty] [BaseTarget (gas_shadow_target bt)]
-      [op0] shadow_cur = ((),shadow_sm) /\
-    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cenv.ce_modules cx st0
-      (assign_tuple_targets cx (BaseTarget bt) vi) (src,u,Gu,tu)
-      (\H res fin Gq tq q. res = INL () /\ fin.gas_obs = [] /\ ~q.vs_halted /\
-        bodyTupleExactStoreCursor$tuple_exact_cursor_common (cenv,cx,env,tops,bindings)
-          (lo,d,ctx,func,shadow_func,st0) (sa,sb,shadow_sb) (es,s0,G0,tn0)
-          (tys,tvs,vs) (todo,tys_tail,tvs_tail,vs_tail,ops_tail,SUC k,p)
-          (sm,shadow_sm,fin,q,Gq,tq) /\
-        bodyTupleExactStoreCursor$tuple_exact_cursor_at (cenv,cx) (DF,lo,d,ctx,func) H fin q Gq tq)
-      (\H res ee gt r. (?exc. res = INR exc) /\
-        (!tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r) /\
-        halt_exit H cx ee res r /\
-        (ctx_has_dalloca ctx ==> !s. r = Halt s \/ (?ir. r = IntRet ir s) ==> allocas_below_fmp s))
-Proof
-  cheat
-QED
 
 (* The successful RHS only. Staging and loads take no explicit gas marks. *)
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
@@ -11598,7 +11580,6 @@ Proof
   cheat
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_with_borrowed_frame[store_entry]:
   sg `?tvs' vs' p t' Gf' tf'.
     ArrayV (TupleV vs) = ArrayV (TupleV vs') /\
@@ -11810,9 +11791,7 @@ Resume tuple_assign_exact_with_borrowed_frame[store_entry]:
       (fn source_eq => simp[NoAsms,source_eq]) >>
     rpt conj_tac >> first_assum ACCEPT_TAC)
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_with_borrowed_frame[rhs_halt]:
   ALL_TAC >>>
   HEADGOAL (
@@ -11866,9 +11845,7 @@ Resume tuple_assign_exact_with_borrowed_frame[rhs_halt]:
   HEADGOAL (first_assum ACCEPT_TAC) >>>
   HEADGOAL (first_assum ACCEPT_TAC)
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_with_borrowed_frame[rhs_abort]:
   ALL_TAC >>>
   HEADGOAL (
@@ -11921,9 +11898,7 @@ Resume tuple_assign_exact_with_borrowed_frame[rhs_abort]:
       simp[NoAsms,REWRITE_RULE [markerTheory.Abbrev_def] abbrev])) >>>
   HEADGOAL (first_assum ACCEPT_TAC)
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_with_borrowed_frame[rhs_intret]:
   ALL_TAC >>>
   HEADGOAL (sg `F`) >>>
@@ -11942,9 +11917,7 @@ Resume tuple_assign_exact_with_borrowed_frame[rhs_intret]:
     rename1 `expr_exit (INR (Error err)) (IntRet _ _)` >>
     Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def])
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_with_borrowed_frame[rhs_no_horizon]:
   ALL_TAC >>>
   HEADGOAL (
@@ -11954,9 +11927,7 @@ Resume tuple_assign_exact_with_borrowed_frame[rhs_no_horizon]:
       (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
     simp[])
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_with_borrowed_frame[rhs_exempt]:
   ALL_TAC >>>
   HEADGOAL (
@@ -11972,9 +11943,7 @@ Resume tuple_assign_exact_with_borrowed_frame[rhs_exempt]:
         first_assum ACCEPT_TAC) >>
     qexists_tac `H` >> rpt conj_tac >> first_assum ACCEPT_TAC)
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_with_borrowed_frame[rhs_bad_storage]:
   ALL_TAC >>>
   HEADGOAL (
@@ -11996,10 +11965,8 @@ Resume tuple_assign_exact_with_borrowed_frame[rhs_bad_storage]:
   HEADGOAL (first_assum ACCEPT_TAC) >>>
   HEADGOAL (first_assum ACCEPT_TAC)
 QED
-*)
 
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_store_head_outcome[nested_immutable]:
   ALL_TAC >>>
   HEADGOAL (
@@ -12045,10 +12012,8 @@ Resume tuple_assign_exact_store_head_outcome[nested_immutable]:
     rpt conj_tac >> first_assum ACCEPT_TAC) >>>
   HEADGOAL (qunabbrev_tac `immutableQ` >> BETA_TAC >> suspend "target_frame")
 QED
-*)
 
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_store_head_outcome[target_frame]:
   ALL_TAC >>>
   HEADGOAL (
@@ -12266,9 +12231,7 @@ Resume tuple_assign_exact_store_head_outcome[target_frame]:
   HEADGOAL (suspend "computed_immutable_write") >>>
   HEADGOAL (suspend "suffix_frame")
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_store_head_outcome[suffix_frame]:
   ALL_TAC >>>
   HEADGOAL (
@@ -12590,9 +12553,7 @@ Resume tuple_assign_exact_store_head_outcome[suffix_frame]:
     qpat_assum `fin with gas_obs := [] = fin` (fn obs => PURE_REWRITE_TAC [obs]) >>
     finish_tuple_exact_cursor_post)
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_store_head_outcome[computed_immutable_write]:
   ALL_TAC >>>
   HEADGOAL (
@@ -12669,13 +12630,9 @@ Resume tuple_assign_exact_store_head_outcome[computed_immutable_write]:
   HEADGOAL (rpt conj_tac >> first_assum ACCEPT_TAC)
 
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise tuple_assign_exact_store_head_outcome
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_with_borrowed_frame[store_list]:
   Induct_on `todo`
   >- (
@@ -12782,11 +12739,8 @@ Resume tuple_assign_exact_with_borrowed_frame[store_list]:
     (qspec_then `next_bt` match_mp_tac) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise tuple_assign_exact_with_borrowed_frame[local]
-*)
 Theorem body_assign_tuple_other_full:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
@@ -13502,67 +13456,6 @@ Proof
     (qspec_then `[]` (irule_at Any)) >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  qpat_x_assum `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [tupleWidenedStoreEntryTheory.tuple_widened_store_entry_def]) >>
-  drule_all tuple_widened_head_static >> strip_tac >>
-  drule_all tuple_widened_head_source >> strip_tac >>
-  drule_all tuple_widened_head_const_cells >> strip_tac >>
-  `target_pre cenv cx env head src` by (simp[target_pre_def] >> metis_tac[]) >>
-  `gas_admissible (eval_base_place cx head) target_res_ok src` by
-    (qpat_assum `gas_admissible (eval_target_place _ _) _ _` mp_tac >>
-     pure_rewrite_tac[bodyPtrPopTargetFragTransportTheory.eval_target_place_as_bind,
-                      gas_admissible_def] >> rpt strip_tac >>
-     rename1 `eval_base_place cx head (src with gas_obs := gas) = (res,mid)` >>
-     qpat_assum `!g a b. bind (eval_base_place cx head) get_place _ = _ ==> _`
-       (qspec_then `gas` mp_tac) >>
-     Cases_on `res` >> simp[bind_def,targetPlaceSimDefsTheory.target_res_ok_def,
-                            targetPlaceSimCasesTheory.target_place_res_ok_def]) >>
-  `type_place_target env head = SOME (Type (EL i dtys))` by
-    qpat_assum `well_typed_target env head _`
-      (ACCEPT_TAC o REWRITE_RULE [well_typed_target_def]) >>
-  `i < LENGTH tys` by decide_tac >>
-  qpat_assum `compile_tuple_store_all _ _ (DROP i gs) _ c = _`
-    (mp_then (Pat `compile_tuple_store_all _ _ _ _ _ = _`)
-      (Q.ISPECL_THEN [`tys`,`func`,`head`] mp_tac)
-      tuplePlaceSuffixCodeTheory.tuple_place_suffix_code_parts) >>
-  (impl_tac >- simp[]) >>
-  disch_then (qx_choosel_then [`r`,`place_cs`,`write_cs`] strip_assume_tac) >>
-  `EL i (MAP gas_shadow_assignment gs) = BaseTarget (gas_shadow_target head)` by
-    simp[EL_MAP,gasShadowTheory.gas_shadow_assignment_def] >>
-  qpat_assum `compile_tuple_store_all _ _ (DROP i (MAP gas_shadow_assignment gs)) _ sh = _`
-    (mp_then (Pat `compile_tuple_store_all _ _ _ _ _ = _`)
-      (Q.ISPECL_THEN [`tys`,`shadow_func`,`gas_shadow_target head`] mp_tac)
-      tuplePlaceSuffixCodeTheory.tuple_place_suffix_code_parts) >>
-  (impl_tac >- simp[]) >>
-  disch_then (qx_choosel_then [`shadow_r`,`shadow_place_cs`,`shadow_write_cs`] strip_assume_tac) >>
-  `r = shadow_r /\ gas_shadow_state place_cs shadow_place_cs` by
-    (`gas_shadow_compiles (compile_get_target_ptr compile_expr cenv head)
-       (compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target head))` by
-        irule gas_shadow_stmt_get_target_ptr_env >>
-     pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
-     disch_then (qspecl_then [`c`,`sh`] mp_tac) >> simp[]) >>
-  qpat_x_assum `r = shadow_r` (SUBST_ALL_TAC o SYM) >>
-  qexistsl_tac [`head`,`r`,`place_cs`,`shadow_place_cs`,`write_cs`,`shadow_write_cs`,
-    `case FST (SND r) of SOME l => l | NONE => LocMemory`,
-    `case SND (SND r) of SOME (ValPT ty) => ty | _ => EL i tys`] >>
-  rpt conj_tac >>
-  TRY (FIRST [first_assum ACCEPT_TAC, REFL_TAC,
-              first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [LET_THM])] >> NO_TAC) >>
-  ho_match_mp_tac (Q.INST [`sa` |-> `c`] gas_outcome_full_return_buf_allocas) >>
-  `target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx env head src` by (irule body_target_place_sim_full >> simp[] >> qexists_tac `tops` >> simp[]) >>
-  qpat_assum `target_place_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [bodyFullTargetDefsTheory.target_place_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`,`EL i dtys`,`c`,`place_cs`,`sh`,`shadow_place_cs`,
-                           `r`,`s`,`G`,`tn`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  simp[]
-QED
-*)
 Theorem tuple_widened_place_head_parts:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
@@ -13662,7 +13555,62 @@ Theorem tuple_widened_place_head_parts:
       (\H res mid gt q. expr_exit res q /\ halt_exit H cx mid res q /\
         (ctx_has_dalloca ctx ==> !u. q = Halt u ==> allocas_below_fmp u))
 Proof
-  cheat
+  strip_tac >>
+  qpat_x_assum `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [tupleWidenedStoreEntryTheory.tuple_widened_store_entry_def]) >>
+  drule_all tuple_widened_head_static >> strip_tac >>
+  drule_all tuple_widened_head_source >> strip_tac >>
+  drule_all tuple_widened_head_const_cells >> strip_tac >>
+  `target_pre cenv cx env head src` by (simp[target_pre_def] >> metis_tac[]) >>
+  `gas_admissible (eval_base_place cx head) target_res_ok src` by
+    (qpat_assum `gas_admissible (eval_target_place _ _) _ _` mp_tac >>
+     pure_rewrite_tac[bodyPtrPopTargetFragTransportTheory.eval_target_place_as_bind,
+                      gas_admissible_def] >> rpt strip_tac >>
+     rename1 `eval_base_place cx head (src with gas_obs := gas) = (res,mid)` >>
+     qpat_assum `!g a b. bind (eval_base_place cx head) get_place _ = _ ==> _`
+       (qspec_then `gas` mp_tac) >>
+     Cases_on `res` >> simp[bind_def,targetPlaceSimDefsTheory.target_res_ok_def,
+                            targetPlaceSimCasesTheory.target_place_res_ok_def]) >>
+  `type_place_target env head = SOME (Type (EL i dtys))` by
+    qpat_assum `well_typed_target env head _`
+      (ACCEPT_TAC o REWRITE_RULE [well_typed_target_def]) >>
+  `i < LENGTH tys` by decide_tac >>
+  qpat_assum `compile_tuple_store_all _ _ (DROP i gs) _ c = _`
+    (mp_then (Pat `compile_tuple_store_all _ _ _ _ _ = _`)
+      (Q.ISPECL_THEN [`tys`,`func`,`head`] mp_tac)
+      tuplePlaceSuffixCodeTheory.tuple_place_suffix_code_parts) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`r`,`place_cs`,`write_cs`] strip_assume_tac) >>
+  `EL i (MAP gas_shadow_assignment gs) = BaseTarget (gas_shadow_target head)` by
+    simp[EL_MAP,gasShadowTheory.gas_shadow_assignment_def] >>
+  qpat_assum `compile_tuple_store_all _ _ (DROP i (MAP gas_shadow_assignment gs)) _ sh = _`
+    (mp_then (Pat `compile_tuple_store_all _ _ _ _ _ = _`)
+      (Q.ISPECL_THEN [`tys`,`shadow_func`,`gas_shadow_target head`] mp_tac)
+      tuplePlaceSuffixCodeTheory.tuple_place_suffix_code_parts) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`shadow_r`,`shadow_place_cs`,`shadow_write_cs`] strip_assume_tac) >>
+  `r = shadow_r /\ gas_shadow_state place_cs shadow_place_cs` by
+    (`gas_shadow_compiles (compile_get_target_ptr compile_expr cenv head)
+       (compile_get_target_ptr compile_expr (gas_shadow_env T cenv) (gas_shadow_target head))` by
+        irule gas_shadow_stmt_get_target_ptr_env >>
+     pop_assum (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
+     disch_then (qspecl_then [`c`,`sh`] mp_tac) >> simp[]) >>
+  qpat_x_assum `r = shadow_r` (SUBST_ALL_TAC o SYM) >>
+  qexistsl_tac [`head`,`r`,`place_cs`,`shadow_place_cs`,`write_cs`,`shadow_write_cs`,
+    `case FST (SND r) of SOME l => l | NONE => LocMemory`,
+    `case SND (SND r) of SOME (ValPT ty) => ty | _ => EL i tys`] >>
+  rpt conj_tac >>
+  TRY (FIRST [first_assum ACCEPT_TAC, REFL_TAC,
+              first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [LET_THM])] >> NO_TAC) >>
+  ho_match_mp_tac (Q.INST [`sa` |-> `c`] gas_outcome_full_return_buf_allocas) >>
+  `target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx env head src` by (irule body_target_place_sim_full >> simp[] >> qexists_tac `tops` >> simp[]) >>
+  qpat_assum `target_place_sim_full _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [bodyFullTargetDefsTheory.target_place_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`,`EL i dtys`,`c`,`place_cs`,`sh`,`shadow_place_cs`,
+                           `r`,`s`,`G`,`tn`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[]
 QED
 
 Theorem assign_tuple_target_list_snoc_success[local]:
@@ -14045,8 +13993,35 @@ Theorem tuple_widened_immutable_name_advance:
 Proof
   cheat
 QED
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem tuple_assign_widened_with_immutable_paths[local]:
+  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    lowered_value_type cenv e <> expr_type e ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
+      (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_body_pre cenv cx env e es` by
@@ -14496,39 +14471,6 @@ Proof
         (map_every assume_tac o CONJUNCTS)) >>
       disj1_tac >> qexists_tac `p` >> simp[] >>
       suspend "regular_write")
-QED
-*)
-Theorem tuple_assign_widened_with_immutable_paths[local]:
-  !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' tv t s'3' v t'.
-       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
-       body_tuple_target_full_ok_mods mods exps cx (TupleTarget gs) v) /\
-    body_expr_full_ok_mods mods exps cx e /\
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (TupleTarget gs) e) ==>
-       occurs_abi_decode_target target tops) /\
-    body_const_cells_agree mods cx env es /\
-    expr_sim_inv_mods mods cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
-    ~supported_stmt_expr_exists (const_name_root cx) (Assign (TupleTarget gs) e) /\
-    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
-    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    lowered_value_type cenv e <> expr_type e ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
-      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
-      (eval_stmt cx (Assign (TupleTarget gs) e)) es
-Proof
-  cheat
 QED
 
 (* A successful regular target evaluation leaves a silent write.  Unlike the
@@ -17125,7 +17067,6 @@ Proof
   cheat
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_widened_with_immutable_paths[regular_write]:
   `tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func)
      (cenv,cx,env,st0,es,ee) (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
@@ -17247,7 +17188,6 @@ Resume tuple_assign_widened_with_immutable_paths[regular_write]:
   conj_tac >- simp[venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def] >>
   simp[Abbr `stmtR`,stmt_exit_ptr_def,expr_exit_def,halt_exit_def]
 QED
-*)
 
 
 (* A nested constructor place is writable at its marked midpoint. Both
@@ -18164,7 +18104,6 @@ QED
 Finalise tuple_widened_nested_write_advance
 *)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_widened_with_immutable_paths[nested_immutable]:
    qpat_assum `frame c src s G tn` mp_tac >>
    qpat_assum `Abbrev (frame = _)`
@@ -18264,11 +18203,8 @@ Resume tuple_assign_widened_with_immutable_paths[nested_immutable]:
         (ff,q,Gq,tq) _ _` mp_tac >>
    simp[NoAsms,Abbr `cfg`]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise tuple_assign_widened_with_immutable_paths[local]
-*)
 
 Theorem body_assign_tuple_widened_full:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.

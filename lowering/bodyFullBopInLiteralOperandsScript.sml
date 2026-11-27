@@ -13,8 +13,58 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
   gasOutcomeFullMods[qualified]
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem bop_in_literal_operands_clean_full_halt:
+  !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
+   ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env
+      (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
+    (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
+    evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
+    (!e. MEM e args ==> MEM e (e1::elems)) /\
+    body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    expr_sim_inv_mods mods cenv cx env es /\
+    lower_word_args cenv expr_type args sa = (xs,sb) /\
+    gas_shadow_state sa shadow_sa /\
+    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+    gas_shadow_function func shadow_func /\
+    MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
+    fn_has_code sa sb func /\
+    (!shadow_xs shadow_sb.
+       lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr args) shadow_sa =
+         (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
+    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx es s0 /\
+      storage_well_formed_on cx es (FST H) /\
+      ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
+    ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome_full_mods
+      (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
+      (\H res ee G tn u. ?vs. res = INL vs /\
+        stmt_state_rel H ctx func cenv cx ee u /\
+        storage_well_formed_on cx ee (FST H) /\
+        EVERY (value_has_type tv) vs /\
+        LIST_REL (\x v. eval_operand x u = SOME (typed_val_to_w256 tv v)) xs vs /\
+        EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
+        wb_frame cenv es ee sa s0 u /\
+        (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 u) /\
+        u.vs_current_bb = sb.cs_current_bb /\
+        u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+        ghost_inv_at (DF H) lo d cenv cx ee G tn u /\
+        ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
 Proof
   Induct
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -293,62 +343,6 @@ Proof
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qexistsl_tac [`G1`, `mid`, `mid`, `t1`, `s1`, `tn1`] >>
   simp[wb_frame_def] >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem bop_in_literal_operands_clean_full_halt:
-  !args DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env
-   ann bop e1 a t n elems base tv st0 es sa xs sb shadow_sa s0 G0 tn0.
-    body_const_cells_agree mods cx env es /\
-    expr_body_pre_mods mods cenv cx env
-      (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) base /\
-    (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
-    evaluate_type (get_tenv cx) (expr_type e1) = SOME tv /\
-    (!e. MEM e args ==> MEM e (e1::elems)) /\
-    body_exprs_full_ok_mods mods exps cx args /\ (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    expr_sim_inv_mods mods cenv cx env es /\
-    lower_word_args cenv expr_type args sa = (xs,sb) /\
-    gas_shadow_state sa shadow_sa /\
-    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-    gas_shadow_function func shadow_func /\
-    MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-    fn_has_code sa sb func /\
-    (!shadow_xs shadow_sb.
-       lower_word_args (gas_shadow_env T cenv) expr_type (MAP gas_shadow_expr args) shadow_sa =
-         (shadow_xs,shadow_sb) ==> fn_has_code shadow_sa shadow_sb shadow_func) /\
-    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-    return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
-    (!H. valid_horizon cx st0 H es.storage_trace ==>
-      stmt_state_rel H ctx func cenv cx es s0 /\
-      storage_well_formed_on cx es (FST H) /\
-      ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
-    ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_full_mods
-      (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      cenv.ce_modules cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
-      (\H res ee G tn u. ?vs. res = INL vs /\
-        stmt_state_rel H ctx func cenv cx ee u /\
-        storage_well_formed_on cx ee (FST H) /\
-        EVERY (value_has_type tv) vs /\
-        LIST_REL (\x v. eval_operand x u = SOME (typed_val_to_w256 tv v)) xs vs /\
-        EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
-        wb_frame cenv es ee sa s0 u /\
-        (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 u) /\
-        u.vs_current_bb = sb.cs_current_bb /\
-        u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
-        ghost_inv_at (DF H) lo d cenv cx ee G tn u /\
-        ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r)
-Proof
-  cheat
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body

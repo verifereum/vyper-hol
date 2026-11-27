@@ -53,112 +53,6 @@ Proof
   simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  REWRITE_TAC [expr_sim_full_code_def, expr_sim_full_endpoint_def] >>
-  BETA_TAC >> strip_tac >>
-  irule gas_outcome_full_initial_domain >>
-  simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
-       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
-       storage_trace_frame_read_result] >>
-  strip_tac >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
-    (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
-       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func cenv cx es s /\ _`
-       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
-     qpat_assum `stmt_state_rel _ ctx func cenv cx es s`
-       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
-  Cases_on `compile_expr cenv (expr_type e) e sa` >>
-  rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
-  Cases_on `emit_op ADD [Var q; Lit (n2w off)] sm` >>
-  rename1 `emit_op ADD [Var q; Lit (n2w off)] sm = (dst,sn)` >>
-  Cases_on `unwrap_value cenv vv sn` >>
-  rename1 `unwrap_value cenv vv sn = (src,sc)` >>
-  gvs[comp_bind_def] >>
-  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (expr_type e) e es` by
-    (qpat_x_assum `body_expr_full_ok cx e`
-       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
-     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
-         _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
-       drule_all >> simp[]) >>
-  `gas_shadow_compiles (compile_expr cenv (expr_type e) e)
-     (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
-     irule gas_shadow_stmt_compile_expr_env >>
-  qpat_x_assum `gas_shadow_compiles _ _`
-    (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
-  disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
-  simp[] >> strip_tac >>
-  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
-  gvs[] >>
-  rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
-  rename1 `gas_shadow_state sm shadow_sm` >>
-  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
-   sa.cs_next_id <= sm.cs_next_id` by metis_tac[compile_expr_extends] >>
-  `cs_extends sm sn` by
-    (mp_tac (cj 2 cs_appends_emit_helpers) >>
-     simp[cs_appends_def] >> metis_tac[]) >>
-  `cs_extends sn sc` by metis_tac[unwrap_value_extends] >>
-  `cs_extends sc sb` by
-    (qspec_then `sc` mp_tac
-      (Q.SPECL [`cenv`,`src`,`dst`,`dty`,`lowered_value_type cenv e`]
-        compile_store_memory_labels) >> simp[]) >>
-  `cs_extends sm sb` by metis_tac[cs_extends_trans] >>
-  `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
-  Cases_on `emit_op ADD [Var q; Lit (n2w off)] shadow_sm` >>
-  rename1 `emit_op ADD [Var q; Lit (n2w off)] shadow_sm = (shadow_dst,shadow_sn)` >>
-  Cases_on `unwrap_value cenv vv shadow_sn` >>
-  rename1 `unwrap_value cenv vv shadow_sn = (shadow_src,shadow_sc)` >>
-  gvs[] >>
-  `cs_extends shadow_sa shadow_sm` by metis_tac[compile_expr_extends] >>
-  `cs_extends shadow_sm shadow_sn` by
-    (mp_tac (cj 2 cs_appends_emit_helpers) >>
-     simp[cs_appends_def] >> metis_tac[]) >>
-  `cs_extends shadow_sn shadow_sc` by metis_tac[unwrap_value_extends] >>
-  `cs_extends shadow_sc shadow_sb` by
-    (qspec_then `shadow_sc` mp_tac
-      (Q.SPECL [`cenv`,`shadow_src`,`shadow_dst`,`dty`,`lowered_value_type cenv e`]
-        compile_store_memory_labels) >> simp[]) >>
-  `cs_extends shadow_sm shadow_sb` by metis_tac[cs_extends_trans] >>
-  `fn_has_code shadow_sa shadow_sm shadow_func` by metis_tac[fn_has_code_split] >>
-  `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
-    metis_tac[expr_body_pre_vv_gas_admissible] >>
-  `!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x` by
-    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x` by
-    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`vv`,`s`,`G`,`tn`] mp_tac) >>
-  simp[] >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
-  irule gas_outcome_full_bind_all >> rpt conj_tac
-  >~ [`storage_trace_frame (eval_expr _ _)`]
-  >- simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame]
-  >~ [`!v. storage_trace_frame (read_result cx v)`]
-  >- simp[storage_trace_frame_read_result]
-  >~ [`gas_marked_exec _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> drule gas_exempt_cert_bind_result >> simp[] >>
-      disch_then irule >> simp[])
-  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_error_result >> first_assum ACCEPT_TAC) >>
-  qexists `\H res ee G tn t. childQ H res ee G tn t /\ ee.gas_obs = [] /\ ~t.vs_halted` >>
-  reverse conj_tac
-  >- (irule gas_outcome_full_post_source >>
-      first_assum (irule_at Any) >> simp[Abbr `childR`] >>
-      rpt strip_tac >>
-      qpat_x_assum `expr_exit res r` mp_tac >>
-      qpat_x_assum `halt_exit H cx ee res r` mp_tac >>
-      POP_ASSUM_LIST (K all_tac) >>
-      Cases_on `res` >> simp[exprSimDefsTheory.halt_exit_def] >>
-      Cases_on `r` >> Cases_on `y` >> simp[exprSimDefsTheory.expr_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def]) >>
-  suspend "slot"
-QED
-*)
 Theorem make_array_slot_full_bundled:
     (
         (contract_inv mods exps ctx cenv cx /\
@@ -266,10 +160,109 @@ Theorem make_array_slot_full_bundled:
       (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
-  cheat
+  REWRITE_TAC [expr_sim_full_code_def, expr_sim_full_endpoint_def] >>
+  BETA_TAC >> strip_tac >>
+  irule gas_outcome_full_initial_domain >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       storage_trace_frame_read_result] >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H ctx func cenv cx es s /\ _`
+       (qspec_then `storage_trace_horizon es.storage_trace` (drule_then strip_assume_tac)) >>
+     qpat_assum `stmt_state_rel _ ctx func cenv cx es s`
+       (ACCEPT_TAC o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp)) >>
+  Cases_on `compile_expr cenv (expr_type e) e sa` >>
+  rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
+  Cases_on `emit_op ADD [Var q; Lit (n2w off)] sm` >>
+  rename1 `emit_op ADD [Var q; Lit (n2w off)] sm = (dst,sn)` >>
+  Cases_on `unwrap_value cenv vv sn` >>
+  rename1 `unwrap_value cenv vv sn = (src,sc)` >>
+  gvs[comp_bind_def] >>
+  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e) e es` by
+    (qpat_x_assum `body_expr_full_ok cx e`
+       (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_full_ok_def]) >>
+     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+         _ ==> expr_sim_full _ _ _ _ _ _ /\ expr_vv_sim_full _ _ _ _ _ _`
+       drule_all >> simp[]) >>
+  `gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+     (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+     irule gas_shadow_stmt_compile_expr_env >>
+  qpat_x_assum `gas_shadow_compiles _ _`
+    (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
+  disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e) shadow_sa` >>
+  gvs[] >>
+  rename1 `compile_expr cenv (expr_type e) e sa = (vv,sm)` >>
+  rename1 `gas_shadow_state sm shadow_sm` >>
+  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
+   sa.cs_next_id <= sm.cs_next_id` by metis_tac[compile_expr_extends] >>
+  `cs_extends sm sn` by
+    (mp_tac (cj 2 cs_appends_emit_helpers) >>
+     simp[cs_appends_def] >> metis_tac[]) >>
+  `cs_extends sn sc` by metis_tac[unwrap_value_extends] >>
+  `cs_extends sc sb` by
+    (qspec_then `sc` mp_tac
+      (Q.SPECL [`cenv`,`src`,`dst`,`dty`,`lowered_value_type cenv e`]
+        compile_store_memory_labels) >> simp[]) >>
+  `cs_extends sm sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
+  Cases_on `emit_op ADD [Var q; Lit (n2w off)] shadow_sm` >>
+  rename1 `emit_op ADD [Var q; Lit (n2w off)] shadow_sm = (shadow_dst,shadow_sn)` >>
+  Cases_on `unwrap_value cenv vv shadow_sn` >>
+  rename1 `unwrap_value cenv vv shadow_sn = (shadow_src,shadow_sc)` >>
+  gvs[] >>
+  `cs_extends shadow_sa shadow_sm` by metis_tac[compile_expr_extends] >>
+  `cs_extends shadow_sm shadow_sn` by
+    (mp_tac (cj 2 cs_appends_emit_helpers) >>
+     simp[cs_appends_def] >> metis_tac[]) >>
+  `cs_extends shadow_sn shadow_sc` by metis_tac[unwrap_value_extends] >>
+  `cs_extends shadow_sc shadow_sb` by
+    (qspec_then `shadow_sc` mp_tac
+      (Q.SPECL [`cenv`,`shadow_src`,`shadow_dst`,`dty`,`lowered_value_type cenv e`]
+        compile_store_memory_labels) >> simp[]) >>
+  `cs_extends shadow_sm shadow_sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code shadow_sa shadow_sm shadow_func` by metis_tac[fn_has_code_split] >>
+  `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
+    metis_tac[expr_body_pre_vv_gas_admissible] >>
+  `!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  qpat_x_assum `expr_vv_sim_full _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,`vv`,`s`,`G`,`tn`] mp_tac) >>
+  simp[] >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
+  irule gas_outcome_full_bind_all >> rpt conj_tac
+  >~ [`storage_trace_frame (eval_expr _ _)`]
+  >- simp[cj 5 vyperStorageTraceTheory.evaluate_storage_trace_frame]
+  >~ [`!v. storage_trace_frame (read_result cx v)`]
+  >- simp[storage_trace_frame_read_result]
+  >~ [`gas_marked_exec _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> drule gas_exempt_cert_bind_result >> simp[] >>
+      disch_then irule >> simp[])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_error_result >> first_assum ACCEPT_TAC) >>
+  qexists `\H res ee G tn t. childQ H res ee G tn t /\ ee.gas_obs = [] /\ ~t.vs_halted` >>
+  reverse conj_tac
+  >- (irule gas_outcome_full_post_source >>
+      first_assum (irule_at Any) >> simp[Abbr `childR`] >>
+      rpt strip_tac >>
+      qpat_x_assum `expr_exit res r` mp_tac >>
+      qpat_x_assum `halt_exit H cx ee res r` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      Cases_on `res` >> simp[exprSimDefsTheory.halt_exit_def] >>
+      Cases_on `r` >> Cases_on `y` >> simp[exprSimDefsTheory.expr_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >> simp[exprSimDefsTheory.expr_exit_def]) >>
+  suspend "slot"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[slot]:
   qx_genl_tac [`marks`,`res`,`ee`,`G1`,`tn1`,`t`] >> BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
@@ -373,9 +366,7 @@ Resume make_array_slot_full_bundled[slot]:
      POP_ASSUM_LIST (K all_tac) >> simp[]) >>
   suspend "unwrap"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[unwrap]:
   `fn_has_code sn sc func` by metis_tac[fn_has_code_split,cs_extends_trans] >>
   mp_tac (Q.INST [`sb` |-> `sn`, `op` |-> `src`, `s` |-> `at`,
@@ -509,9 +500,7 @@ Resume make_array_slot_full_bundled[unwrap]:
   >- suspend "word_store" >>
   suspend "memory_store"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[word_store]:
   `type_widens_to (get_tenv cx) (expr_type e) dty` by
     simp[vyperTypeSystemTheory.type_widens_to_def,
@@ -551,9 +540,7 @@ Resume make_array_slot_full_bundled[word_store]:
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   qexistsl_tac [`t'`,`Gf`,`tnf`] >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[memory_store]:
   `~is_word_type (expr_type e)` by
     metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type] >>
@@ -568,9 +555,7 @@ Resume make_array_slot_full_bundled[memory_store]:
   >- suspend "zero_store" >>
   suspend "positive_store"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[zero_store]:
   `lowered_value_type cenv e = dty` by metis_tac[type_widens_to_zero_layout] >>
   `stv = dtv /\ type_memory_size dtv = 0` by
@@ -608,9 +593,7 @@ Resume make_array_slot_full_bundled[zero_store]:
   qexistsl_tac [`z`,`G'`,`tn'`] >> simp[typedMemoryCopyTheory.typed_copy_state_frame_refl] >>
   gen_tac >> irule (cj 1 fragGasOriginPtrTheory.gas_origin_ptr_path_rules) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[positive_store]:
   `ptr_buf_ok cenv e src G' z` by metis_tac[] >>
   `?xs. src = Var xs` by
@@ -644,9 +627,7 @@ Resume make_array_slot_full_bundled[positive_store]:
   >- suspend "bytes_store" >>
   suspend "aggregate_store"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[bytes_store]:
   `is_bytestring_type (lowered_value_type cenv e)` by
     metis_tac[compileEnvTheory.arg_type_fits_bytestring_source] >>
@@ -753,9 +734,7 @@ Resume make_array_slot_full_bundled[bytes_store]:
   strip_tac >>
   suspend "bytes_finish"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[bytes_finish]:
   markerLib.RESUME_TAC >>
   mp_tac (Q.SPECL [`Var xs`,`Var out`,`sc`,`sb`,`z`,`sw`,
@@ -828,9 +807,7 @@ Resume make_array_slot_full_bundled[bytes_finish]:
   qpat_assum `~(base+off <= i /\ i < base+off+type_memory_size dtv)` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> decide_tac
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[aggregate_store]:
   `post_value_type cenv e = lowered_value_type cenv e` by
     (qpat_assum `~is_word_type (expr_type e)` mp_tac >>
@@ -922,9 +899,7 @@ Resume make_array_slot_full_bundled[aggregate_store]:
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   qexistsl_tac [`t'`,`Gf`,`tnf`] >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[finish]:
   markerLib.RESUME_TAC >> strip_tac >>
   qpat_assum `typed_copy_state_frame sc (base+off) (type_memory_size dtv) z u`
@@ -978,9 +953,7 @@ Resume make_array_slot_full_bundled[finish]:
   rpt strip_tac >> simp[] >>
   suspend "finish_frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[finish_frame]:
   markerLib.RESUME_TAC >>
   `mem_bytes_at base cap z.vs_memory = mem_bytes_at base cap s.vs_memory` by
@@ -1050,9 +1023,7 @@ Resume make_array_slot_full_bundled[finish_frame]:
        `p-base`,`n`] valueEncodingPropsTheory.mem_bytes_at_translated_window) >> simp[]) >>
   simp[] >> suspend "finish_parent"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[finish_parent]:
   markerLib.RESUME_TAC >>
   `?observations. ee.storage_trace = es.storage_trace ++ observations` by
@@ -1247,9 +1218,7 @@ Resume make_array_slot_full_bundled[finish_parent]:
      (impl_tac >- simp[]) >> simp[]) >>
   suspend "finish_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[finish_post]:
   markerLib.RESUME_TAC >>
   `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
@@ -1351,9 +1320,7 @@ Resume make_array_slot_full_bundled[finish_post]:
      simp[ptrDisciplineTheory.allocas_from_def]) >>
   suspend "finish_ghost"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[finish_ghost]:
   markerLib.RESUME_TAC >>
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
@@ -1420,9 +1387,7 @@ Resume make_array_slot_full_bundled[finish_ghost]:
      POP_ASSUM_LIST (K all_tac) >> REWRITE_TAC[expr_post_def] >> metis_tac[]) >>
   simp[] >> rpt conj_tac >> suspend "finish_close"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume make_array_slot_full_bundled[finish_close]:
   markerLib.RESUME_TAC >- first_assum ACCEPT_TAC >>
   strip_tac >>
@@ -1440,11 +1405,8 @@ Resume make_array_slot_full_bundled[finish_close]:
      qpat_assum `!inst b sz. _ ==> loweringStateRelDefs$regions_disjoint p n b sz` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[])) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise make_array_slot_full_bundled
-*)
 
 Theorem make_array_slot_full:
     (

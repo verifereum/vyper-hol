@@ -55,8 +55,162 @@ fun slice_stmt_state_room related =
   POP_ASSUM_LIST (K ALL_TAC) >>
   simp[exprLoweringPropsTheory.fmp_room_def] >> decide_tac
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem slice_builtin_none_vv_full_from_runs:
+  (!sa src len data sb func s p G tn capacity bs lo ctx explicit PG.
+    compile_bytestring_src (Var src) sa = ((len,data),sb) /\
+    fn_has_code sa sb func /\ not_fresh_at sa src /\
+    lookup_var src s = SOME p /\ ptr_covers G tn src s capacity /\
+    32 <= capacity /\ w2n p + 32 < dimword (:256) /\
+    mload (w2n p) s = n2w (LENGTH bs) /\
+    mem_bytes_at (w2n p + 32) (LENGTH bs) s.vs_memory = bs /\
+    (!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==> i NOTIN tn.t_mem) /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    w2n p + 32 <= s.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?u G' tn'.
+      run_inst_seq (emitted_insts sa sb) s = OK u /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+         (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),G',tn')) /\
+      eval_operand len u = SOME (n2w (LENGTH bs)) /\
+      eval_operand data u = SOME (p+32w) /\
+      op_taint tn' len = {} /\ op_prov G' len = NONE /\
+      mem_bytes_at (w2n p + 32) (LENGTH bs) u.vs_memory = bs /\
+      (!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==> i NOTIN tn'.t_mem) /\
+      tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+      tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+      u = s with vs_vars := u.vs_vars /\
+      (!x. not_fresh_at sa x ==>
+         lookup_var x u = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+         op_taint tn' (Var x) = op_taint tn (Var x)) /\
+      (!n. 32+n <= capacity ==>
+         ?dp. data = Var dp /\ ptr_covers G' tn' dp u n) /\
+      (?lp dp. len = Var lp /\ data = Var dp /\
+         not_fresh_at sb lp /\ not_fresh_at sb dp)) /\
+  (!sa buf sm src sb func cenv H ctx cx es s w tn lo explicit PG G.
+    compile_alloc_buffer 32 sa = (buf,sm) /\
+    emit_void MSTORE [buf.buf_operand;src] sm = ((),sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+      ctx func cenv cx es s /\ alloca_history func s /\
+    eval_operand src s = SOME w /\ op_taint tn src = {} /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+       s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?root p u t G' tn'.
+      buf.buf_operand = Var root /\ not_fresh_at sb root /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (OK t,G',tn')) /\
+      t = mstore (w2n p) w u with vs_inst_idx := LENGTH sb.cs_current_insts /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+      lookup_var root t = SOME p /\ ptr_covers G' tn' root t 32 /\
+      mem_word_at (w2n p) t.vs_memory = w /\
+      mem_bytes_at (w2n p) 32 t.vs_memory = word_to_bytes w T /\
+      (!i. w2n p <= i /\ i < w2n p+32 ==> i NOTIN tn'.t_mem) /\
+      alloca_history func t /\ allocas_from lo t /\
+      s.vs_alloca_next <= t.vs_alloca_next /\
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n p,32) /\
+      w2n p+32 < dimword (:256) /\ w2n p+32 <= t.vs_alloca_next /\
+      (!x. not_fresh_at sa x ==>
+        lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+        op_taint tn' (Var x) = op_taint tn (Var x)) /\
+      u with <|vs_vars := s.vs_vars;vs_allocas := s.vs_allocas;
+        vs_alloca_next := s.vs_alloca_next;vs_inst_idx := s.vs_inst_idx|> = s /\
+      (!H':(bool # bytes32 # type_value) list # num list.
+        stmt_state_rel H' ctx func cenv cx es s ==>
+        stmt_state_rel H' ctx func cenv cx es u) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+        FLOOKUP t.vs_allocas aid = SOME entry) /\
+      (!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+        regions_disjoint (w2n p) 32 b len) /\
+      (!name b len. local_region cenv es.scopes u name b len ==>
+        regions_disjoint (w2n p) 32 b len) /\
+      tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+      (!j. j < s.vs_alloca_next /\ j IN tn'.t_mem ==> j IN tn.t_mem)) /\
+  (!limit src start cnt N sa out sb func cenv ctx s bs p G tn i k n a result
+    e args cx st0 es DF lo d explicit tops source PG.
+    compile_slice_data limit (Var src) start cnt N sa = (out,sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
+      s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
+    eval_operand limit s = SOME (n2w (LENGTH bs)) /\
+    lookup_var src s = SOME p /\ ptr_covers G tn src s (LENGTH bs) /\
+    op_prov G limit = NONE /\ op_taint tn limit = {} /\
+    eval_operand start s = SOME (n2w i) /\
+    eval_operand cnt s = SOME (n2w k) /\
+    op_prov G start = NONE /\ op_taint tn start = {} /\
+    op_prov G cnt = NONE /\ op_taint tn cnt = {} /\
+    (!op x. MEM op [limit;Var src;start;cnt] /\ op = Var x ==>
+      not_fresh_at sa x) /\
+    (!l. limit <> Label l /\ start <> Label l /\ cnt <> Label l) /\
+    mem_bytes_at (w2n p) (LENGTH bs) s.vs_memory = bs /\
+    (!j. w2n p <= j /\ j < w2n p + LENGTH bs ==> j NOTIN tn.t_mem) /\
+    w2n p + LENGTH bs < dimword (:256) /\
+    w2n p + LENGTH bs <= s.vs_alloca_next /\
+    i < dimword (:256) /\ k < dimword (:256) /\
+    (i+k <= LENGTH bs ==> k <= n) /\
+    ((a = BaseT (BytesT (Dynamic n)) /\
+        result = BytesV (TAKE k (DROP i bs))) \/
+     (?str. a = BaseT (StringT n) /\ bs = MAP (n2w o ORD) str /\
+        result = StringV (TAKE k (DROP i str)))) /\
+    e = Builtin a (Slice n) args /\
+    N = type_memory_bytes cenv a /\ 32+n <= N /\ N < dimword (:256) /\
+    storage_trace_domain cx st0 es.storage_trace /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx es s /\
+      storage_well_formed_on cx es (FST H) /\
+      ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
+    es.gas_obs = [] /\ alloca_history func s /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+      not_fresh_at sa x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+      not_fresh_at sa x) /\
+    (!tail. source (es with gas_obs := tail) =
+      ((if i+k <= LENGTH bs then INL (Value result)
+        else INR (Error (RuntimeError "evaluate_slice range"))),
+       es with gas_obs := tail)) ==>
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0 source
+      (es,s,G,tn)
+      (\H res ee HG tm t.
+        res = INL (Value result) /\
+        vv_post H ctx func cenv cx e es sa sb s ee (Value result)
+          (LocatedValue a (mk_ptr out LocMemory)) t /\
+        vv_store_bound cx a a ee (Value result)
+          (LocatedValue a (mk_ptr out LocMemory)) t /\
+        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+        ghost_inv_at (DF H) lo d cenv cx ee HG tm t /\
+        ptr_vv_ok cx a (Value result) (LocatedValue a (mk_ptr out LocMemory)) ee HG tm t /\
+        ptr_buf_ok cenv e out HG t /\ ghost_kept_at lo cenv es sa G tn s HG tm)
+      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))) ==>
+
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es.
+    (builtin_args_length_ok (Slice n) (LENGTH args) ==>
+       case code_slice_source (Slice n) args of
+         NONE => body_exprs_full_ok_mods mods exps cx args
+       | SOME (code_ty,addr) =>
+           body_exprs_full_ok_mods mods exps cx (TL args) /\
+           (!s tail_vs t.
+              eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
+              body_exprs_full_ok_mods mods exps cx [addr])) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a (Slice n) args) es /\
+    code_slice_source (Slice n) args = NONE ==>
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a (Slice n) args) es
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "dynamic_run")
     (CONJUNCTS_THEN2 (mk_asm "fixed_run") (mk_asm "tail_run"))) >>
@@ -1071,168 +1225,7 @@ Proof
    POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
    gvs[contextTheory.mk_ptr_def,compileEnvTheory.is_bytestring_type_def])))
 QED
-*)
-Theorem slice_builtin_none_vv_full_from_runs:
-  (!sa src len data sb func s p G tn capacity bs lo ctx explicit PG.
-    compile_bytestring_src (Var src) sa = ((len,data),sb) /\
-    fn_has_code sa sb func /\ not_fresh_at sa src /\
-    lookup_var src s = SOME p /\ ptr_covers G tn src s capacity /\
-    32 <= capacity /\ w2n p + 32 < dimword (:256) /\
-    mload (w2n p) s = n2w (LENGTH bs) /\
-    mem_bytes_at (w2n p + 32) (LENGTH bs) s.vs_memory = bs /\
-    (!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==> i NOTIN tn.t_mem) /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\
-    w2n p + 32 <= s.vs_alloca_next /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
-    s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?u G' tn'.
-      run_inst_seq (emitted_insts sa sb) s = OK u /\
-      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-         (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),G',tn')) /\
-      eval_operand len u = SOME (n2w (LENGTH bs)) /\
-      eval_operand data u = SOME (p+32w) /\
-      op_taint tn' len = {} /\ op_prov G' len = NONE /\
-      mem_bytes_at (w2n p + 32) (LENGTH bs) u.vs_memory = bs /\
-      (!i. w2n p <= i /\ i < w2n p + 32 + LENGTH bs ==> i NOTIN tn'.t_mem) /\
-      tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
-      tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-      u = s with vs_vars := u.vs_vars /\
-      (!x. not_fresh_at sa x ==>
-         lookup_var x u = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
-         op_taint tn' (Var x) = op_taint tn (Var x)) /\
-      (!n. 32+n <= capacity ==>
-         ?dp. data = Var dp /\ ptr_covers G' tn' dp u n) /\
-      (?lp dp. len = Var lp /\ data = Var dp /\
-         not_fresh_at sb lp /\ not_fresh_at sb dp)) /\
-  (!sa buf sm src sb func cenv H ctx cx es s w tn lo explicit PG G.
-    compile_alloc_buffer 32 sa = (buf,sm) /\
-    emit_void MSTORE [buf.buf_operand;src] sm = ((),sb) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\
-    stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
-      ctx func cenv cx es s /\ alloca_history func s /\
-    eval_operand src s = SOME w /\ op_taint tn src = {} /\
-    (!x. src = Var x ==> not_fresh_at sa x) /\
-    allocas_from lo s /\ lo <= s.vs_alloca_next /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-       s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
-    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?root p u t G' tn'.
-      buf.buf_operand = Var root /\ not_fresh_at sb root /\
-      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-        (OK t,G',tn')) /\
-      t = mstore (w2n p) w u with vs_inst_idx := LENGTH sb.cs_current_insts /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
-      lookup_var root t = SOME p /\ ptr_covers G' tn' root t 32 /\
-      mem_word_at (w2n p) t.vs_memory = w /\
-      mem_bytes_at (w2n p) 32 t.vs_memory = word_to_bytes w T /\
-      (!i. w2n p <= i /\ i < w2n p+32 ==> i NOTIN tn'.t_mem) /\
-      alloca_history func t /\ allocas_from lo t /\
-      s.vs_alloca_next <= t.vs_alloca_next /\
-      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n p,32) /\
-      w2n p+32 < dimword (:256) /\ w2n p+32 <= t.vs_alloca_next /\
-      (!x. not_fresh_at sa x ==>
-        lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
-        op_taint tn' (Var x) = op_taint tn (Var x)) /\
-      u with <|vs_vars := s.vs_vars;vs_allocas := s.vs_allocas;
-        vs_alloca_next := s.vs_alloca_next;vs_inst_idx := s.vs_inst_idx|> = s /\
-      (!H':(bool # bytes32 # type_value) list # num list.
-        stmt_state_rel H' ctx func cenv cx es s ==>
-        stmt_state_rel H' ctx func cenv cx es u) /\
-      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-        FLOOKUP t.vs_allocas aid = SOME entry) /\
-      (!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
-        regions_disjoint (w2n p) 32 b len) /\
-      (!name b len. local_region cenv es.scopes u name b len ==>
-        regions_disjoint (w2n p) 32 b len) /\
-      tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-      (!j. j < s.vs_alloca_next /\ j IN tn'.t_mem ==> j IN tn.t_mem)) /\
-  (!limit src start cnt N sa out sb func cenv ctx s bs p G tn i k n a result
-    e args cx st0 es DF lo d explicit tops source PG.
-    compile_slice_data limit (Var src) start cnt N sa = (out,sb) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp s /\
-      s.vs_alloca_next + pending_alloca_size func s <= w2n s.vs_initial_fmp) /\
-    eval_operand limit s = SOME (n2w (LENGTH bs)) /\
-    lookup_var src s = SOME p /\ ptr_covers G tn src s (LENGTH bs) /\
-    op_prov G limit = NONE /\ op_taint tn limit = {} /\
-    eval_operand start s = SOME (n2w i) /\
-    eval_operand cnt s = SOME (n2w k) /\
-    op_prov G start = NONE /\ op_taint tn start = {} /\
-    op_prov G cnt = NONE /\ op_taint tn cnt = {} /\
-    (!op x. MEM op [limit;Var src;start;cnt] /\ op = Var x ==>
-      not_fresh_at sa x) /\
-    (!l. limit <> Label l /\ start <> Label l /\ cnt <> Label l) /\
-    mem_bytes_at (w2n p) (LENGTH bs) s.vs_memory = bs /\
-    (!j. w2n p <= j /\ j < w2n p + LENGTH bs ==> j NOTIN tn.t_mem) /\
-    w2n p + LENGTH bs < dimword (:256) /\
-    w2n p + LENGTH bs <= s.vs_alloca_next /\
-    i < dimword (:256) /\ k < dimword (:256) /\
-    (i+k <= LENGTH bs ==> k <= n) /\
-    ((a = BaseT (BytesT (Dynamic n)) /\
-        result = BytesV (TAKE k (DROP i bs))) \/
-     (?str. a = BaseT (StringT n) /\ bs = MAP (n2w o ORD) str /\
-        result = StringV (TAKE k (DROP i str)))) /\
-    e = Builtin a (Slice n) args /\
-    N = type_memory_bytes cenv a /\ 32+n <= N /\ N < dimword (:256) /\
-    storage_trace_domain cx st0 es.storage_trace /\
-    (!H. valid_horizon cx st0 H es.storage_trace ==>
-      stmt_state_rel H ctx func cenv cx es s /\
-      storage_well_formed_on cx es (FST H) /\
-      ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
-    es.gas_obs = [] /\ alloca_history func s /\ ~s.vs_halted /\
-    s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
-      not_fresh_at sa x) /\
-    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-      not_fresh_at sa x) /\
-    (!tail. source (es with gas_obs := tail) =
-      ((if i+k <= LENGTH bs then INL (Value result)
-        else INR (Error (RuntimeError "evaluate_slice range"))),
-       es with gas_obs := tail)) ==>
-    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0 source
-      (es,s,G,tn)
-      (\H res ee HG tm t.
-        res = INL (Value result) /\
-        vv_post H ctx func cenv cx e es sa sb s ee (Value result)
-          (LocatedValue a (mk_ptr out LocMemory)) t /\
-        vv_store_bound cx a a ee (Value result)
-          (LocatedValue a (mk_ptr out LocMemory)) t /\
-        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
-        ghost_inv_at (DF H) lo d cenv cx ee HG tm t /\
-        ptr_vv_ok cx a (Value result) (LocatedValue a (mk_ptr out LocMemory)) ee HG tm t /\
-        ptr_buf_ok cenv e out HG t /\ ghost_kept_at lo cenv es sa G tn s HG tm)
-      (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-       (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))) ==>
 
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a n args es.
-    (builtin_args_length_ok (Slice n) (LENGTH args) ==>
-       case code_slice_source (Slice n) args of
-         NONE => body_exprs_full_ok_mods mods exps cx args
-       | SOME (code_ty,addr) =>
-           body_exprs_full_ok_mods mods exps cx (TL args) /\
-           (!s tail_vs t.
-              eval_exprs cx (TL args) s = (INL tail_vs,t) ==>
-              body_exprs_full_ok_mods mods exps cx [addr])) /\
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    body_const_cells_agree mods cx env es /\
-    expr_body_pre_mods mods cenv cx env (Builtin a (Slice n) args) es /\
-    code_slice_source (Slice n) args = NONE ==>
-    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Builtin a (Slice n) args) es
-Proof
-  cheat
-QED
-
-(* SCRATCH MEASUREMENT: original continuation.
 Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
   qpat_x_assum `if is_bytestring_type _ then _ else _` mp_tac >> simp[] >>
   disch_then (qx_choosel_then [`buf`,`sm`,`shadow_sm`] (map_every assume_tac o CONJUNCTS)) >>
@@ -2166,11 +2159,8 @@ Resume slice_builtin_none_vv_full_from_runs[fixed_source]:
    POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
    gvs[contextTheory.mk_ptr_def,compileEnvTheory.is_bytestring_type_def]))
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise slice_builtin_none_vv_full_from_runs
-*)
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.

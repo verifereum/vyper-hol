@@ -160,119 +160,6 @@ Proof
   metis_tac[compileEnvTheory.cs_extends_refl,compileEnvTheory.cs_extends_trans]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  rename1 `emit_op ADD [data;Lit 32w] s3 = (dp,s4)` >>
-  `expr_type a = BaseT AddressT /\
-   ?cap. expr_type d = BaseT (BytesT (Dynamic cap))` by
-    (drule raw_call_pre_operands >> simp[] >> metis_tac[]) >>
-  `raw_call_kws_ok flags kws /\ LENGTH kws = LENGTH flags.rcf_kws` by
-    (drule raw_call_pre_flags >> simp[]) >>
-  `EVERY (\kw. kw = EKValue \/ kw = EKGas) flags.rcf_kws /\
-   EVERY (\e. expr_type e = BaseT (UintT 256)) kws` by
-    metis_tac[raw_call_kwargs_types] >>
-  drule_all raw_call_code_spans >> strip_tac >>
-  `vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
-   go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ignored = NONE` by
-    (drule_all exprSimRawCallTheory.raw_call_kwargs_word_args >>
-     strip_tac >> gvs[]) >>
-  irule gas_outcome_full_initial_domain >> conj_tac
-  >- (match_mp_tac storage_trace_frame_bind_all >> conj_tac
-      >- (match_mp_tac storage_trace_frame_bind_all >>
-          simp[cj 5 evaluate_storage_trace_frame,storage_trace_frame_read_result]) >>
-      gen_tac >> BETA_TAC >> match_mp_tac storage_trace_frame_bind_all >> conj_tac
-      >- (match_mp_tac storage_trace_frame_bind_all >>
-          simp[cj 5 evaluate_storage_trace_frame,storage_trace_frame_read_result]) >>
-      gen_tac >> BETA_TAC >> match_mp_tac storage_trace_frame_bind_all >>
-      simp[cj 6 evaluate_storage_trace_frame]) >>
-  conj_tac >- first_assum ACCEPT_TAC >> strip_tac >>
-  (* The successful cut of both forced values supplies the keyword IH and
-     both child posts, without choosing a new endpoint at each horizon. *)
-  irule (BETA_RULE (Q.INST [`k` |-> `\av dv. bind (eval_exprs cx kws) (kk av dv)`]
-    raw_call_forced_args_full)) >>
-  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
-  qexistsl_tac [`tops`,`shadow_sa`,`h2`,`h1`,`shadow_func`,`sa`,`s2`,`s1`,
-                `dframe`,`data`,`addr`] >>
-  simp[] >> (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac >-
-    (qpat_assum `!H exc ee gt r. _ ==> R H _ _ _ _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[Q.INST_TYPE [`:'b` |-> `:value`] stmtSimPropsTheory.expr_exit_INR_type,
-          exprSimDefsTheory.halt_exit_def]) >>
-  conj_tac >- (rpt gen_tac >> irule storage_trace_frame_bind_all >>
-               simp[cj 6 evaluate_storage_trace_frame]) >>
-  qx_genl_tac [`gsA`,`av`,`esA`,`tA`,`GA`,`tnA`,`gsD`,`bs`,`esD`,`tD`,`GD`,`tnD`] >>
-  strip_tac >>
-  irule raw_call_forced_data_kwargs_full_from_action >>
-  first_assum (irule_at (Pat `emit_op MLOAD _ _ = _`)) >>
-  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
-  first_assum (irule_at (Pat `emit_op ADD _ _ = _`)) >>
-  qpat_assum `lower_word_args cenv _ kws s4 = _` (irule_at Any) >>
-  qpat_assum `return_buf_frame dframe cenv sa s0` (irule_at Any) >>
-  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
-  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-  qpat_assum `expr_type d = BaseT (BytesT (Dynamic cap))` (irule_at Any) >>
-  qexistsl_tac [`tA`,`s1`,`h5`,`h4`,`esA`,`bs`,`av`,`addr`] >>
-  (reverse ((rpt conj_tac >> TRY (first_assum ACCEPT_TAC)) >- simp[])
-   >- (rpt gen_tac >> strip_tac >>
-       qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _` drule >> simp[])) >>
-  qx_genl_tac [`b`,`x`,`l`,`p`,`base'`,`cap'`,`t4`,`G4`,`tn4`,`marksK`,`kvs`,`esK`,`tk`,`GK`,`tnK`] >>
-  strip_tac >>
-  qpat_assum `!tail. eval_exprs cx kws _ = _`
-    (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
-  `esK with gas_obs := [] = esK` by simp[vyperStateTheory.evaluation_state_component_equality] >>
-  `valid_horizon cx st0 (storage_trace_horizon esD.storage_trace) esD.storage_trace` by
-    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _`
-    (drule_then strip_assume_tac) >>
-  `!H. valid_horizon cx st0 H esD.storage_trace ==>
-     expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\
-     expr_post H ctx func cenv cx d esA s1 s2 tA esD (BytesV bs) data tD` by
-    (rpt gen_tac >> strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _` drule >> simp[]) >>
-  mp_tac (Q.INST [`gsK` |-> `gasSummary$gas_explicit marksK t4.vs_gas_readings`]
-    bodyFullRawCallPreparedEntryTheory.raw_call_kwargs_prepared_entry) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
-  strip_tac >>
-  irule raw_call_generated_prefix_full >> simp[] >>
-  qexistsl_tac [`G7`,`n`,`t7`,`tn7`] >>
-  (conj_tac >- (rpt strip_tac >>
-    qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-      (qspec_then `H` mp_tac) >> simp[])) >>
-  qpat_assum `!gsA av esA gsD bs esD gsK kvs esK b ob gw tA tD t4 tk t7 G7 tn7. _` irule >>
-  simp[] >>
-  qexistsl_tac [`b`,`esA`,`esD`,`gsA`,`gsD`,
-    `gasSummary$gas_explicit marksK t4.vs_gas_readings`,`gw`,`ob`,`t4`,`tA`,`tD`,`tk`] >>
-  simp[] >> qx_gen_tac `H` >> strip_tac >>
-  qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
-    (qspec_then `H` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  qpat_x_assum `data = Var x` SUBST_ALL_TAC >>
-  qpat_x_assum `len = Var l` SUBST_ALL_TAC >>
-  qpat_x_assum `dp = Var p` SUBST_ALL_TAC >>
-  qpat_x_assum `vo = ext_call_kwarg EKValue flags.rcf_kws xs` SUBST_ALL_TAC >>
-  qpat_assum `expr_type d = BaseT (BytesT (Dynamic cap))` (fn type_eq =>
-    qpat_x_assum `expr_store_bound cx (expr_type d) (BytesV bs) _ tD`
-      (assume_tac o REWRITE_RULE [type_eq])) >>
-  qpat_x_assum `EVERY (\arg. op_taint tn7 arg = {}) _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-  qpat_x_assum `EVERY (\arg. op_prov G7 arg = NONE) _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-  qpat_x_assum `EVERY (safe_operand s7) _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-  qpat_x_assum `!z. MEM (Var z) _ ==> not_fresh_at s7 z`
-    (assume_tac o SIMP_RULE (srw_ss()) []) >>
-  qpat_x_assum `LENGTH bs <> 0 ==> _`
-    (assume_tac o SIMP_RULE (srw_ss()) []) >>
-  PURE_REWRITE_TAC[arithmeticTheory.ADD_ASSOC,
-                   Q.SPEC `32` arithmeticTheory.MULT_COMM] >>
-  `b + LENGTH bs + 32 = b + 32 + LENGTH bs` by decide_tac >>
-  pop_assum (fn eq => PURE_REWRITE_TAC [eq]) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-*)
 Theorem raw_call_prefix_prepared_full:
  !DF lo dframe PG tops ctx shadow_ctx func shadow_func cenv env cx ty ann flags
   a d kws st0 sa sb shadow_sa shadow_sb vv addr data len ptr vo go ignored
@@ -393,5 +280,112 @@ Theorem raw_call_prefix_prepared_full:
      bind (bind (eval_expr cx d) (read_result cx)) (\dv.
        bind (eval_exprs cx kws) (k av dv)))) (es,s0,G0,tn0) Q R
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rename1 `emit_op ADD [data;Lit 32w] s3 = (dp,s4)` >>
+  `expr_type a = BaseT AddressT /\
+   ?cap. expr_type d = BaseT (BytesT (Dynamic cap))` by
+    (drule raw_call_pre_operands >> simp[] >> metis_tac[]) >>
+  `raw_call_kws_ok flags kws /\ LENGTH kws = LENGTH flags.rcf_kws` by
+    (drule raw_call_pre_flags >> simp[]) >>
+  `EVERY (\kw. kw = EKValue \/ kw = EKGas) flags.rcf_kws /\
+   EVERY (\e. expr_type e = BaseT (UintT 256)) kws` by
+    metis_tac[raw_call_kwargs_types] >>
+  drule_all raw_call_code_spans >> strip_tac >>
+  `vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
+   go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ignored = NONE` by
+    (drule_all exprSimRawCallTheory.raw_call_kwargs_word_args >>
+     strip_tac >> gvs[]) >>
+  irule gas_outcome_full_initial_domain >> conj_tac
+  >- (match_mp_tac storage_trace_frame_bind_all >> conj_tac
+      >- (match_mp_tac storage_trace_frame_bind_all >>
+          simp[cj 5 evaluate_storage_trace_frame,storage_trace_frame_read_result]) >>
+      gen_tac >> BETA_TAC >> match_mp_tac storage_trace_frame_bind_all >> conj_tac
+      >- (match_mp_tac storage_trace_frame_bind_all >>
+          simp[cj 5 evaluate_storage_trace_frame,storage_trace_frame_read_result]) >>
+      gen_tac >> BETA_TAC >> match_mp_tac storage_trace_frame_bind_all >>
+      simp[cj 6 evaluate_storage_trace_frame]) >>
+  conj_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  (* The successful cut of both forced values supplies the keyword IH and
+     both child posts, without choosing a new endpoint at each horizon. *)
+  irule (BETA_RULE (Q.INST [`k` |-> `\av dv. bind (eval_exprs cx kws) (kk av dv)`]
+    raw_call_forced_args_full)) >>
+  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+  qexistsl_tac [`tops`,`shadow_sa`,`h2`,`h1`,`shadow_func`,`sa`,`s2`,`s1`,
+                `dframe`,`data`,`addr`] >>
+  simp[] >> (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qpat_assum `!H exc ee gt r. _ ==> R H _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[Q.INST_TYPE [`:'b` |-> `:value`] stmtSimPropsTheory.expr_exit_INR_type,
+          exprSimDefsTheory.halt_exit_def]) >>
+  conj_tac >- (rpt gen_tac >> irule storage_trace_frame_bind_all >>
+               simp[cj 6 evaluate_storage_trace_frame]) >>
+  qx_genl_tac [`gsA`,`av`,`esA`,`tA`,`GA`,`tnA`,`gsD`,`bs`,`esD`,`tD`,`GD`,`tnD`] >>
+  strip_tac >>
+  irule raw_call_forced_data_kwargs_full_from_action >>
+  first_assum (irule_at (Pat `emit_op MLOAD _ _ = _`)) >>
+  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+  first_assum (irule_at (Pat `emit_op ADD _ _ = _`)) >>
+  qpat_assum `lower_word_args cenv _ kws s4 = _` (irule_at Any) >>
+  qpat_assum `return_buf_frame dframe cenv sa s0` (irule_at Any) >>
+  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
+  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
+  qpat_assum `expr_type d = BaseT (BytesT (Dynamic cap))` (irule_at Any) >>
+  qexistsl_tac [`tA`,`s1`,`h5`,`h4`,`esA`,`bs`,`av`,`addr`] >>
+  (reverse ((rpt conj_tac >> TRY (first_assum ACCEPT_TAC)) >- simp[])
+   >- (rpt gen_tac >> strip_tac >>
+       qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _` drule >> simp[])) >>
+  qx_genl_tac [`b`,`x`,`l`,`p`,`base'`,`cap'`,`t4`,`G4`,`tn4`,`marksK`,`kvs`,`esK`,`tk`,`GK`,`tnK`] >>
+  strip_tac >>
+  qpat_assum `!tail. eval_exprs cx kws _ = _`
+    (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
+  `esK with gas_obs := [] = esK` by simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `valid_horizon cx st0 (storage_trace_horizon esD.storage_trace) esD.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  `!H. valid_horizon cx st0 H esD.storage_trace ==>
+     expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\
+     expr_post H ctx func cenv cx d esA s1 s2 tA esD (BytesV bs) data tD` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> _` drule >> simp[]) >>
+  mp_tac (Q.INST [`gsK` |-> `gasSummary$gas_explicit marksK t4.vs_gas_readings`]
+    bodyFullRawCallPreparedEntryTheory.raw_call_kwargs_prepared_entry) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
+  strip_tac >>
+  irule raw_call_generated_prefix_full >> simp[] >>
+  qexistsl_tac [`G7`,`n`,`t7`,`tn7`] >>
+  (conj_tac >- (rpt strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+      (qspec_then `H` mp_tac) >> simp[])) >>
+  qpat_assum `!gsA av esA gsD bs esD gsK kvs esK b ob gw tA tD t4 tk t7 G7 tn7. _` irule >>
+  simp[] >>
+  qexistsl_tac [`b`,`esA`,`esD`,`gsA`,`gsD`,
+    `gasSummary$gas_explicit marksK t4.vs_gas_readings`,`gw`,`ob`,`t4`,`tA`,`tD`,`tk`] >>
+  simp[] >> qx_gen_tac `H` >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> gas_origin_ptr_path _ _ _ _ /\ _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_x_assum `data = Var x` SUBST_ALL_TAC >>
+  qpat_x_assum `len = Var l` SUBST_ALL_TAC >>
+  qpat_x_assum `dp = Var p` SUBST_ALL_TAC >>
+  qpat_x_assum `vo = ext_call_kwarg EKValue flags.rcf_kws xs` SUBST_ALL_TAC >>
+  qpat_assum `expr_type d = BaseT (BytesT (Dynamic cap))` (fn type_eq =>
+    qpat_x_assum `expr_store_bound cx (expr_type d) (BytesV bs) _ tD`
+      (assume_tac o REWRITE_RULE [type_eq])) >>
+  qpat_x_assum `EVERY (\arg. op_taint tn7 arg = {}) _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  qpat_x_assum `EVERY (\arg. op_prov G7 arg = NONE) _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  qpat_x_assum `EVERY (safe_operand s7) _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  qpat_x_assum `!z. MEM (Var z) _ ==> not_fresh_at s7 z`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  qpat_x_assum `LENGTH bs <> 0 ==> _`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  PURE_REWRITE_TAC[arithmeticTheory.ADD_ASSOC,
+                   Q.SPEC `32` arithmeticTheory.MULT_COMM] >>
+  `b + LENGTH bs + 32 = b + 32 + LENGTH bs` by decide_tac >>
+  pop_assum (fn eq => PURE_REWRITE_TAC [eq]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED

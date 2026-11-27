@@ -402,42 +402,6 @@ QED
 
 (* Invoke the body at its actual compiler age.  The non-Label fact is
    supplied by the iterator's literal/load compilation, not source typing. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >>
-  qpat_abbrev_tac `envb = extend_local env id typ F` >>
-  qpat_abbrev_tac `eb = ei with scopes := (FEMPTY |+ (id, _)) :: ei.scopes` >>
-  qpat_abbrev_tac `explicit = gas_explicit_sites ctx shadow_ctx` >>
-  abbrev_lambda_tac "Qb" 6 1 `stmt_lands (InLoop exit incr) sb1 res t /\ _` >>
-  abbrev_lambda_tac "Rb" 5 0 `(!tail. stmt_exit_ptr _ (ee with gas_obs := tail) res gt r) /\ _` >>
-  abbrev_lambda_tac "Keep" 3 0 `lookup_var idx t = lookup_var idx s /\ _` >>
-  rpt strip_tac >>
-  `body_const_cells_agree [(NONE,tops)] cx envb eb` by
-    simp[Abbr `envb`, Abbr `eb`] >>
-  rename1 `body_stmts_full_ok cx stmts` >>
-  qpat_x_assum `body_stmts_full_ok _ _`
-    (mp_tac o REWRITE_RULE [body_stmts_full_ok_def]) >>
-  disch_then drule_all >>
-  disch_then (qspec_then `InLoop exit incr` mp_tac) >>
-  rewrite_tac [stmt_frag_full_def] >>
-  disch_then (qspecl_then [`st0`, `sb0`, `sb1`, `shadow_sb0`,
-    `shadow_sb1`, `s`, `G`, `tn`, `bc1`] mp_tac) >>
-  simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  irule gas_outcome_full_post_source >>
-  goal_assum (drule_at Any) >>
-  reverse conj_tac >- simp[] >>
-  rpt gen_tac >> strip_tac >>
-  BETA_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
-  simp[] >>
-  reverse conj_tac >- (qexists_tac `xs` >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `Qb _ _ _ _ _ _` mp_tac >>
-  simp[Abbr `Qb`] >> strip_tac >>
-  simp[Abbr `Keep`] >>
-  Cases_on `lvo` >> gvs[eval_operand_def, op_prov_def, op_taint_def] >>
-  metis_tac[]
-QED
-*)
 Theorem for_storage_body_invoke_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cx RetQ tops bindings env id typ
       tyv v ei body env_b ret_ty bc bc1 sb0 sb1 shadow_sb0 shadow_sb1 st0 s G
@@ -582,7 +546,37 @@ Theorem for_storage_body_invoke_full:
          (ctx_has_dalloca ctx ==>
           !u. r = Halt u \/ (?ir. r = IntRet ir u) ==> allocas_below_fmp u))
 Proof
-  cheat
+  rpt gen_tac >>
+  qpat_abbrev_tac `envb = extend_local env id typ F` >>
+  qpat_abbrev_tac `eb = ei with scopes := (FEMPTY |+ (id, _)) :: ei.scopes` >>
+  qpat_abbrev_tac `explicit = gas_explicit_sites ctx shadow_ctx` >>
+  abbrev_lambda_tac "Qb" 6 1 `stmt_lands (InLoop exit incr) sb1 res t /\ _` >>
+  abbrev_lambda_tac "Rb" 5 0 `(!tail. stmt_exit_ptr _ (ee with gas_obs := tail) res gt r) /\ _` >>
+  abbrev_lambda_tac "Keep" 3 0 `lookup_var idx t = lookup_var idx s /\ _` >>
+  rpt strip_tac >>
+  `body_const_cells_agree [(NONE,tops)] cx envb eb` by
+    simp[Abbr `envb`, Abbr `eb`] >>
+  rename1 `body_stmts_full_ok cx stmts` >>
+  qpat_x_assum `body_stmts_full_ok _ _`
+    (mp_tac o REWRITE_RULE [body_stmts_full_ok_def]) >>
+  disch_then drule_all >>
+  disch_then (qspec_then `InLoop exit incr` mp_tac) >>
+  rewrite_tac [stmt_frag_full_def] >>
+  disch_then (qspecl_then [`st0`, `sb0`, `sb1`, `shadow_sb0`,
+    `shadow_sb1`, `s`, `G`, `tn`, `bc1`] mp_tac) >>
+  simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  irule gas_outcome_full_post_source >>
+  goal_assum (drule_at Any) >>
+  reverse conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  BETA_TAC >> conj_tac >- first_assum ACCEPT_TAC >>
+  simp[] >>
+  reverse conj_tac >- (qexists_tac `xs` >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `Qb _ _ _ _ _ _` mp_tac >>
+  simp[Abbr `Qb`] >> strip_tac >>
+  simp[Abbr `Keep`] >>
+  Cases_on `lvo` >> gvs[eval_operand_def, op_prov_def, op_taint_def] >>
+  metis_tac[]
 QED
 
 (* Current observed children need no saved value or current array length. *)
@@ -1389,56 +1383,6 @@ Finalise for_storage_array_head_prefix_at_prov
    register the one selected copy endpoint as the actual body entry. *)
 (* Interpret the selected scalar prefix and the counted copy at the same
    endpoints. No observation of the parent array is needed here. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  (* Fold the expanded frame and body-entry predicates just for this proof. *)
-  rpt gen_tac >>
-  qabbrev_tac `Fr = \c ee st G tn.
-    alloca_history func st /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp st) /\
-    s0.vs_alloca_next <= st.vs_alloca_next /\
-    (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
-           lookup_var x st = SOME w) /\
-    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-             FLOOKUP st.vs_allocas aid = SOME b) /\
-    (!x. not_fresh_at sa0 x ==>
-         FLOOKUP G x = FLOOKUP G0 x /\ op_taint tn (Var x) = op_taint tn0 (Var x)) /\
-    alloca_frame c0 e0 sa0 s0 c ee st /\
-    !aid off sz i.
-      FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
-      (!name b sz'. local_region c0 e0.scopes s0 name b sz' ==>
-                    off + sz <= b \/ b + sz' <= off) /\
-      off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem` >>
-  qabbrev_tac `EB = \ee v. ee with scopes :=
-    (FEMPTY |+ (id,<|assignable := F; type := tyv; value := v; popped := []|>)) ::
-    ee.scopes` >>
-  map_every (fn q => qpat_assum q (fn th => pure_rewrite_tac
-      [GSYM (BETA_RULE (PURE_REWRITE_RULE [markerTheory.Abbrev_def, FUN_EQ_THM] th))]))
-    [`Abbrev (Fr = _)`, `Abbrev (EB = _)`] >>
-  qabbrev_tac `Entry = \H ee v j z Gf tnf.
-    push_scope_with_var id tyv v ee = (INL (),EB ee v) /\
-    expr_sim_inv bc cx (extend_local env id typ F) (EB ee v) /\
-    ce_locals_declared bc (extend_local env id typ F) /\
-    locals_alloc_ok bc (extend_local env id typ F) /\
-    cenv_top_ext c0 bc (EB ee v).scopes /\
-    stmt_state_rel H ctx func bc cx (EB ee v) z /\
-    storage_well_formed_on cx (EB ee v) (FST H) /\
-    ghost_inv_at (DF H) lo d bc cx (EB ee v) Gf tnf z /\
-    ret_pc_ok bc sb0 z /\ return_buf_frame d bc sb0 z /\
-    return_buf_sep d bc (EB ee v) z /\ Fr bc (EB ee v) z Gf tnf /\
-    ~z.vs_halted /\ z.vs_current_bb = sb0.cs_current_bb /\
-    z.vs_inst_idx = LENGTH sb0.cs_current_insts /\
-    lookup_var idx z = SOME (n2w j) /\ FLOOKUP Gf idx = NONE /\
-    op_taint tnf (Var idx) = {} /\ lookup_var p z = SOME dst /\
-    eval_operand lvo z = SOME (n2w len) /\ op_prov Gf lvo = NONE /\
-    op_taint tnf lvo = {} /\ allocas_from lo z /\
-    FLOOKUP z.vs_allocas inst.inst_id = SOME (w2n dst,nb) /\
-    ptr_covers Gf tnf p z nb /\
-    !aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP z.vs_allocas aid = SOME b` >>
-  qpat_abbrev_tac `n = type_slot_size tyv` >> suspend "entry"
-QED
-*)
 Theorem for_storage_observed_head_from_prefix:
   !DF lo d ctx func cx RetQ lctx c0 e0 sa0 s0 G0 tn0 tr slot dst tyv typ
    vs len nb id env p idx lvo sd body st0 explicit PG ep exit incr sa st bc
@@ -1598,10 +1542,53 @@ Theorem for_storage_observed_head_from_prefix:
         (ctx_has_dalloca ctx ==> !s. r = Halt s \/ (?ir. r = IntRet ir s) ==>
                                     allocas_below_fmp s))
 Proof
-  cheat
+  (* Fold the expanded frame and body-entry predicates just for this proof. *)
+  rpt gen_tac >>
+  qabbrev_tac `Fr = \c ee st G tn.
+    alloca_history func st /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp st) /\
+    s0.vs_alloca_next <= st.vs_alloca_next /\
+    (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x st = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+             FLOOKUP st.vs_allocas aid = SOME b) /\
+    (!x. not_fresh_at sa0 x ==>
+         FLOOKUP G x = FLOOKUP G0 x /\ op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+    alloca_frame c0 e0 sa0 s0 c ee st /\
+    !aid off sz i.
+      FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
+      (!name b sz'. local_region c0 e0.scopes s0 name b sz' ==>
+                    off + sz <= b \/ b + sz' <= off) /\
+      off <= i /\ i < off + sz /\ i IN tn.t_mem ==> i IN tn0.t_mem` >>
+  qabbrev_tac `EB = \ee v. ee with scopes :=
+    (FEMPTY |+ (id,<|assignable := F; type := tyv; value := v; popped := []|>)) ::
+    ee.scopes` >>
+  map_every (fn q => qpat_assum q (fn th => pure_rewrite_tac
+      [GSYM (BETA_RULE (PURE_REWRITE_RULE [markerTheory.Abbrev_def, FUN_EQ_THM] th))]))
+    [`Abbrev (Fr = _)`, `Abbrev (EB = _)`] >>
+  qabbrev_tac `Entry = \H ee v j z Gf tnf.
+    push_scope_with_var id tyv v ee = (INL (),EB ee v) /\
+    expr_sim_inv bc cx (extend_local env id typ F) (EB ee v) /\
+    ce_locals_declared bc (extend_local env id typ F) /\
+    locals_alloc_ok bc (extend_local env id typ F) /\
+    cenv_top_ext c0 bc (EB ee v).scopes /\
+    stmt_state_rel H ctx func bc cx (EB ee v) z /\
+    storage_well_formed_on cx (EB ee v) (FST H) /\
+    ghost_inv_at (DF H) lo d bc cx (EB ee v) Gf tnf z /\
+    ret_pc_ok bc sb0 z /\ return_buf_frame d bc sb0 z /\
+    return_buf_sep d bc (EB ee v) z /\ Fr bc (EB ee v) z Gf tnf /\
+    ~z.vs_halted /\ z.vs_current_bb = sb0.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb0.cs_current_insts /\
+    lookup_var idx z = SOME (n2w j) /\ FLOOKUP Gf idx = NONE /\
+    op_taint tnf (Var idx) = {} /\ lookup_var p z = SOME dst /\
+    eval_operand lvo z = SOME (n2w len) /\ op_prov Gf lvo = NONE /\
+    op_taint tnf lvo = {} /\ allocas_from lo z /\
+    FLOOKUP z.vs_allocas inst.inst_id = SOME (w2n dst,nb) /\
+    ptr_covers Gf tnf p z nb /\
+    !aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP z.vs_allocas aid = SOME b` >>
+  qpat_abbrev_tac `n = type_slot_size tyv` >> suspend "entry"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_storage_observed_head_from_prefix[entry]:
   strip_tac >>
   rename1 `body_for_full_ok cx tyv id stmts vs` >>
@@ -1630,9 +1617,7 @@ Resume for_storage_observed_head_from_prefix[entry]:
      (EB (ei with gas_obs:=[]) v)` by suspend "body_gas" >>
   suspend "execute"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_storage_observed_head_from_prefix[activate]:
   reverse (Cases_on `k = 0`)
   >- (qpat_assum `k <> 0 ==> _` irule >> first_assum ACCEPT_TAC) >>
@@ -1644,9 +1629,7 @@ Resume for_storage_observed_head_from_prefix[activate]:
   qexistsl [`ei`,`v`,`ei`] >> rewrite_tac [NOT_CONS_NIL, HD] >>
   first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_storage_observed_head_from_prefix[body_gas]:
   simp[Abbr `EB`] >>
   irule forConsBodyGasTheory.captured_storage_body_admissible >>
@@ -1657,9 +1640,7 @@ Resume for_storage_observed_head_from_prefix[body_gas]:
   first_assum ACCEPT_TAC
 
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_storage_observed_head_from_prefix[execute]:
   `ptr_covers Gu tnu p u (32*n)` by
     (irule reasonCopySourcePtrTheory.ptr_covers_mono >> qexists `nb` >> simp[]) >>
@@ -1700,9 +1681,7 @@ Resume for_storage_observed_head_from_prefix[execute]:
        Entry H (ei with gas_obs := []) v k z Gf tnf` by suspend "register" >>
   suspend "finish"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_storage_observed_head_from_prefix[copy_value]:
   `ptr_vv_ok cx typ (PlaceR (StoragePlace tr addr tyv))
       (LocatedValue typ (mk_ptr (Var ep) (slot_loc tr))) ei Gu tnu u` by
@@ -1723,9 +1702,7 @@ Resume for_storage_observed_head_from_prefix[copy_value]:
      simp[NoAsms]) >>
   qpat_assum `v = vv` SUBST1_TAC >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_storage_observed_head_from_prefix[copy_scalars]:
   `slot_copy_external sa (Var idx) /\ slot_copy_external sa lvo` by
     (conj_tac >- (irule slot_copy_not_fresh_external >> first_assum ACCEPT_TAC) >>
@@ -1747,9 +1724,7 @@ Resume for_storage_observed_head_from_prefix[copy_scalars]:
        (qspec_then `Var idx` mp_tac) >> simp[eval_operand_def]) >>
   simp[] >> Cases_on `lvo` >> gvs[op_prov_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_storage_observed_head_from_prefix[register]:
   qx_gen_tac `H` >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ _ _ ==> storage_place_observed _ _ /\ _`
@@ -1793,9 +1768,7 @@ Resume for_storage_observed_head_from_prefix[register]:
     simp[Q.SPECL [`w2n (dst:256 word)`,`nb`] arithmeticTheory.ADD_COMM])) >>
   simp[Abbr `Entry`, Abbr `EB`]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_storage_observed_head_from_prefix[register_obs]:
   rpt conj_tac
   >- simp[Abbr `er`, return_buf_sep_gas_obs]
@@ -1812,9 +1785,7 @@ Resume for_storage_observed_head_from_prefix[register_obs]:
       POP_ASSUM_LIST (K (metis_tac[]))) >>
   simp[Abbr `er`]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_storage_observed_head_from_prefix[finish]:
   irule gas_outcome_full_pure >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
@@ -1833,8 +1804,5 @@ Resume for_storage_observed_head_from_prefix[finish]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> push_scope_with_var _ _ _ _ = _ /\ _`
     (qspec_then `H` mp_tac) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise for_storage_observed_head_from_prefix
-*)

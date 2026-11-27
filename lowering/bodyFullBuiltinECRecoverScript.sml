@@ -25,8 +25,17 @@ Ancestors
 Libs
   monadsyntax
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem ecrecover_expr_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
+    (builtin_args_length_ok ECRecover (LENGTH args) ==>
+      body_exprs_full_ok_mods mods exps cx args) /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_body_pre_mods mods cenv cx env (Builtin a ECRecover args) es ==>
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx ty (Builtin a ECRecover args) es
 Proof
   rpt gen_tac >> strip_tac >>
   `a = BaseT AddressT /\ LENGTH args = 4 /\
@@ -1328,21 +1337,6 @@ Proof
         (fn th => qpat_assum `valid_horizon cx st0 H mid.storage_trace`
           (ACCEPT_TAC o MATCH_MP th))) >>
   simp[NoAsms,exit_result_def,expr_exit_def,exprSimDefsTheory.halt_exit_def]
-QED
-*)
-Theorem ecrecover_expr_sim_full:
-  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a args es.
-    (builtin_args_length_ok ECRecover (LENGTH args) ==>
-      body_exprs_full_ok_mods mods exps cx args) /\
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    body_const_cells_agree mods cx env es /\
-    expr_body_pre_mods mods cenv cx env (Builtin a ECRecover args) es ==>
-    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ty (Builtin a ECRecover args) es
-Proof
-  cheat
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body

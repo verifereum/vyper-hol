@@ -11,42 +11,6 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
   gasOutcomeFullMods[qualified]
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `stmt_env _ _ _ (For _ _ _ _ _) _ = _` mp_tac >>
-  simp[stmt_env_def,declare_stmt_local_def,comp_bind_def,
-       comp_ignore_bind_def,comp_return_def] >> pairarg_tac >> simp[] >> strip_tac >>
-  qpat_x_assum `cenv = cenv'` (SUBST_ALL_TAC o SYM) >>
-  `compile_stmt cenv lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb)` by gvs[] >>
-  `compile_stmt (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
-     shadow_sa = ((),shadow_sb)` by
-    (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
-     simp[gas_shadow_stmt_def,stmt_env_def,declare_stmt_local_def,
-          comp_bind_def,comp_ignore_bind_def,comp_return_def] >> pairarg_tac >> simp[]) >>
-  `cenv.ce_alloca_locals` by
-    (drule_then (MATCH_ACCEPT_TAC o MATCH_MP contract_inv_alloca_locals)
-       body_inv_contract) >>
-  drule_then strip_assume_tac type_stmt_for_projection >>
-  `?bd. expr_type e = ArrayT typ bd /\ bound_length bd = n` by
-    (drule_then strip_assume_tac type_stmt_for_array_bound >> simp[]) >>
-  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
-    (drule_then assume_tac abi_decode_inv_type_env >>
-     drule assignable_type_well_formed >>
-     simp[well_formed_type_def, optionTheory.IS_SOME_EXISTS]) >>
-  `body_iterator_full_ok cx (Array e)` by
-    (qpat_assum `!tenv s'' tyv t. _ ==> body_iterator_full_ok _ _` irule >>
-     qexistsl [`es`,`es`,`get_tenv cx`,`tyv`] >> simp[lift_option_type_def,return_def]) >>
-  `!x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at sa x` by
-    (rpt strip_tac >> qpat_assum `ret_pc_ok cenv sa s0`
-      (drule_then (ACCEPT_TAC o CONJUNCT1) o REWRITE_RULE [ret_pc_ok_def])) >>
-  drule_all for_array_expr_compile_cuts >>
-  disch_then (qx_choosel_then [`vv`,`se`,`she`] strip_assume_tac) >>
-  drule_then assume_tac expr_body_pre_vv_gas_admissible >>
-  suspend "compose"
-QED
-*)
 Theorem for_array_prepared_expr_cut_frag_full:
   !cx id typ e n loop_body DF lo d PG tops ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -120,10 +84,39 @@ Theorem for_array_prepared_expr_cut_frag_full:
     (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body)))
     (eval_stmt cx (For id typ (Array e) n loop_body)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ (For _ _ _ _ _) _ = _` mp_tac >>
+  simp[stmt_env_def,declare_stmt_local_def,comp_bind_def,
+       comp_ignore_bind_def,comp_return_def] >> pairarg_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `cenv = cenv'` (SUBST_ALL_TAC o SYM) >>
+  `compile_stmt cenv lctx ret_ty (For id typ (Array e) n loop_body) sa = ((),sb)` by gvs[] >>
+  `compile_stmt (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body))
+     shadow_sa = ((),shadow_sb)` by
+    (qpat_x_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _` mp_tac >>
+     simp[gas_shadow_stmt_def,stmt_env_def,declare_stmt_local_def,
+          comp_bind_def,comp_ignore_bind_def,comp_return_def] >> pairarg_tac >> simp[]) >>
+  `cenv.ce_alloca_locals` by
+    (drule_then (MATCH_ACCEPT_TAC o MATCH_MP contract_inv_alloca_locals)
+       body_inv_contract) >>
+  drule_then strip_assume_tac type_stmt_for_projection >>
+  `?bd. expr_type e = ArrayT typ bd /\ bound_length bd = n` by
+    (drule_then strip_assume_tac type_stmt_for_array_bound >> simp[]) >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    (drule_then assume_tac abi_decode_inv_type_env >>
+     drule assignable_type_well_formed >>
+     simp[well_formed_type_def, optionTheory.IS_SOME_EXISTS]) >>
+  `body_iterator_full_ok cx (Array e)` by
+    (qpat_assum `!tenv s'' tyv t. _ ==> body_iterator_full_ok _ _` irule >>
+     qexistsl [`es`,`es`,`get_tenv cx`,`tyv`] >> simp[lift_option_type_def,return_def]) >>
+  `!x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at sa x` by
+    (rpt strip_tac >> qpat_assum `ret_pc_ok cenv sa s0`
+      (drule_then (ACCEPT_TAC o CONJUNCT1) o REWRITE_RULE [ret_pc_ok_def])) >>
+  drule_all for_array_expr_compile_cuts >>
+  disch_then (qx_choosel_then [`vv`,`se`,`she`] strip_assume_tac) >>
+  drule_then assume_tac expr_body_pre_vv_gas_admissible >>
+  suspend "compose"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_array_prepared_expr_cut_frag_full[compose]:
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      (cx_tops cx) cx st0 (eval_stmt cx (For id typ (Array e) n loop_body)) (es,s0,G0,tn0)
@@ -143,9 +136,7 @@ Resume for_array_prepared_expr_cut_frag_full[compose]:
   disch_then (irule_at Any) >> simp[for_array_expr_endpoint_def] >>
   rpt gen_tac >> strip_tac >> qexists_tac `tv` >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_array_prepared_expr_cut_frag_full[normal]:
   map_every qx_gen_tac [`marks`,`rv`,`em`,`G`,`tn`,`u`] >> strip_tac >>
   qabbrev_tac `H0 = storage_trace_horizon em.storage_trace` >>
@@ -187,9 +178,7 @@ Resume for_array_prepared_expr_cut_frag_full[normal]:
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   suspend "loop_ih"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume for_array_prepared_expr_cut_frag_full[loop_ih]:
   conj_tac >-
     (gen_tac >> strip_tac >>
@@ -215,8 +204,5 @@ Resume for_array_prepared_expr_cut_frag_full[loop_ih]:
     (qexistsl [`se`,`shadow_sa`,`shadow_sb`,`she`,`vv`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise for_array_prepared_expr_cut_frag_full
-*)

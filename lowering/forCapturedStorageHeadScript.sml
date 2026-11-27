@@ -8,59 +8,6 @@ Ancestors
 
 (* The scalar head and the copy meet at the actual copy-start state. *)
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  gen_tac >> strip_tac >>
-  qmatch_asmsub_rename_tac `body_for_full_ok cx tyv id loop_body vs` >>
-  mp_tac (Q.INST [`saCopy` |-> `sa`]
-    (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]))
-      for_captured_storage_head_prefix)) >>
-  (impl_tac >- simp[]) >>
-  disch_then (qx_choose_then `k` (qx_choose_then `u`
-    (qx_choose_then `Gu` (qx_choose_then `tnu` strip_assume_tac)))) >>
-  qabbrev_tac `H0 = storage_trace_horizon ei.storage_trace` >>
-  `valid_horizon cx st0 H0 ei.storage_trace` by
-    simp[Abbr `H0`, GSYM storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> for_captured_storage_live _ _ _ _ _ _ /\ _`
-    (qspec_then `H0` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  qpat_assum `for_captured_storage_live _ _ _ _ _ (H0,k,_,_,_,_,_)`
-    (strip_assume_tac o REWRITE_RULE [for_captured_storage_live_def]) >>
-  `return_buf_sep d c0 ei u` by
-    (irule return_buf_sep_transport >> conj_tac
-     >- (rpt gen_tac >> disch_then SUBST_ALL_TAC >>
-         qpat_assum `return_buf_sep (SOME _) c0 ei s`
-           (mp_tac o CONJUNCT1 o REWRITE_RULE [return_buf_sep_def]) >>
-         asm_rewrite_tac[allocas_from_def]) >>
-     qexistsl [`c0`,`ei`,`s`] >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-     qpat_assum `!name b sz. local_region c0 ei.scopes u name b sz <=> _`
-       (rewrite_tac o single)) >>
-  MATCH_MP_TAC (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]))
-    for_storage_observed_head_from_prefix) >>
-  qmatch_asmsub_abbrev_tac `eval_operand (Var ep) u = SOME addr` >>
-  qexistsl [`lctx`,`tr`,`sd`,`ep`,`sa`,`st`,`k`,`addr`,`u`,`Gu`,`tnu`] >>
-  `k < LENGTH vs` by
-    (qpat_assum `len = LENGTH vs` (rewrite_tac o single o SYM) >> first_assum ACCEPT_TAC) >>
-  `w2n dst + nb < 2 ** 256` by
-    (qpat_assum `w2n dst + nb < dimword (:256)` mp_tac >> simp[NoAsms, dimword_def]) >>
-  `FLOOKUP u.vs_allocas sd.cs_next_id = SOME (w2n dst,nb) /\
-   w2n dst + nb <= u.vs_alloca_next` by
-    (map_every (fn q => qpat_assum q (rewrite_tac o single))
-       [`u.vs_allocas = s.vs_allocas`,`u.vs_alloca_next = s.vs_alloca_next`] >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
-  `!name b sz. local_region c0 ei.scopes u name b sz ==>
-     w2n dst + nb <= b \/ b + sz <= w2n dst` by
-    (qpat_assum `!name b sz. local_region c0 ei.scopes u name b sz <=> _`
-       (rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  conj_tac
-  >- (gen_tac >> disch_tac >>
-      qpat_assum `!H. valid_horizon _ _ H _ ==> for_captured_storage_live _ _ _ _ _ _ /\ _`
-        (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-*)
 Theorem for_captured_storage_head_full:
   !body.
   0 < type_slot_size tyv /\ body_for_full_ok cx tyv id body vs /\
@@ -206,5 +153,52 @@ Theorem for_captured_storage_head_full:
       (ctx_has_dalloca ctx ==> !s. r = Halt s \/ (?ir. r = IntRet ir s) ==>
                                   allocas_below_fmp s))
 Proof
-  cheat
+  gen_tac >> strip_tac >>
+  qmatch_asmsub_rename_tac `body_for_full_ok cx tyv id loop_body vs` >>
+  mp_tac (Q.INST [`saCopy` |-> `sa`]
+    (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]))
+      for_captured_storage_head_prefix)) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `k` (qx_choose_then `u`
+    (qx_choose_then `Gu` (qx_choose_then `tnu` strip_assume_tac)))) >>
+  qabbrev_tac `H0 = storage_trace_horizon ei.storage_trace` >>
+  `valid_horizon cx st0 H0 ei.storage_trace` by
+    simp[Abbr `H0`, GSYM storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> for_captured_storage_live _ _ _ _ _ _ /\ _`
+    (qspec_then `H0` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_assum `for_captured_storage_live _ _ _ _ _ (H0,k,_,_,_,_,_)`
+    (strip_assume_tac o REWRITE_RULE [for_captured_storage_live_def]) >>
+  `return_buf_sep d c0 ei u` by
+    (irule return_buf_sep_transport >> conj_tac
+     >- (rpt gen_tac >> disch_then SUBST_ALL_TAC >>
+         qpat_assum `return_buf_sep (SOME _) c0 ei s`
+           (mp_tac o CONJUNCT1 o REWRITE_RULE [return_buf_sep_def]) >>
+         asm_rewrite_tac[allocas_from_def]) >>
+     qexistsl [`c0`,`ei`,`s`] >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `!name b sz. local_region c0 ei.scopes u name b sz <=> _`
+       (rewrite_tac o single)) >>
+  MATCH_MP_TAC (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]))
+    for_storage_observed_head_from_prefix) >>
+  qmatch_asmsub_abbrev_tac `eval_operand (Var ep) u = SOME addr` >>
+  qexistsl [`lctx`,`tr`,`sd`,`ep`,`sa`,`st`,`k`,`addr`,`u`,`Gu`,`tnu`] >>
+  `k < LENGTH vs` by
+    (qpat_assum `len = LENGTH vs` (rewrite_tac o single o SYM) >> first_assum ACCEPT_TAC) >>
+  `w2n dst + nb < 2 ** 256` by
+    (qpat_assum `w2n dst + nb < dimword (:256)` mp_tac >> simp[NoAsms, dimword_def]) >>
+  `FLOOKUP u.vs_allocas sd.cs_next_id = SOME (w2n dst,nb) /\
+   w2n dst + nb <= u.vs_alloca_next` by
+    (map_every (fn q => qpat_assum q (rewrite_tac o single))
+       [`u.vs_allocas = s.vs_allocas`,`u.vs_alloca_next = s.vs_alloca_next`] >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `!name b sz. local_region c0 ei.scopes u name b sz ==>
+     w2n dst + nb <= b \/ b + sz <= w2n dst` by
+    (qpat_assum `!name b sz. local_region c0 ei.scopes u name b sz <=> _`
+       (rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (gen_tac >> disch_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> for_captured_storage_live _ _ _ _ _ _ /\ _`
+        (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
