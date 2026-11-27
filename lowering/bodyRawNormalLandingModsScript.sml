@@ -40,12 +40,10 @@ Theorem raw_call_normal_landing_mods:
   es2 = SND (adopt_call_outcome rq outcome es1) /\
   (!name b sz. local_region cenv esK.scopes t7 name b sz ==>
      regions_disjoint ro cap b sz) /\
-  (cenv.ce_is_ctor ==> ?tops. ALOOKUP cenv.ce_modules cenv.ce_module = SOME tops) /\
-  (cenv.ce_is_ctor ==> !src tops name tv v off.
-     ALOOKUP cenv.ce_modules src = SOME tops /\
-     FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !name tv v off.
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP esK.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
+       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
      regions_disjoint off (type_memory_size tv) ro cap) /\
   source_memory_write_ranges inst t7 = [(ro,cap)] /\
   mem_safe_step 0 ctx inst t7 /\ allocas_from lo t7 /\ stor_taint_ok_at D tn7 t7 /\
@@ -88,8 +86,7 @@ Proof
        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
      off + type_memory_size tv <= w2n rw \/ w2n rw + cap <= off` by
     (rpt strip_tac >>
-     qpat_assum `cenv.ce_is_ctor ==> ?tops. _` (drule_then strip_assume_tac) >>
-     qpat_assum `cenv.ce_is_ctor ==> !src tops name tv v off. _`
+     qpat_x_assum `cenv.ce_is_ctor ==> !name tv v off. _`
        (drule_then (drule_all_then mp_tac)) >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   qpat_x_assum `inst = _` (mk_asm "encoded_call") >>
