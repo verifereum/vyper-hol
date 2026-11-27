@@ -1992,8 +1992,18 @@ Proof
   qexistsl_tac [`type_memory_size tv`, `caller.vs_memory`] >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem internal_body_state_rel[local]:
+  !f func cenv cx vs caller cenv1 cenv2 rb rpc caps st st' env s0 s args st0.
+    state_rel H f cenv cx (vs with scopes := []) caller /\
+    (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+       internal_immutable_regions (cenv with ce_module := src)
+         cx vs caller.vs_alloca_next) /\
+    cenv1 = cenv with <| ce_return_buf := rb; ce_return_pc := rpc |> /\
+    materialize_internal_params cenv1 caps st = (cenv2, st') /\
+    EVERY (\c. ?off sz. FLOOKUP cenv1.ce_vars (FST c) = SOME (MemLoc off sz)) caps /\
+    setup_callee func args caller = SOME s0 /\ mat_frame st0 s0 s /\
+    local_ptrs_rel func cenv2 [env] s ==>
+    state_rel H func (cenv2 with ce_alloca_locals := T) cx (vs with scopes := [env]) s
 Proof
   rpt gen_tac >> strip_tac >>
   drule materialize_global_binding >> simp[] >> disch_then assume_tac >>
@@ -2010,6 +2020,21 @@ Proof
   `local_ptrs_rel func (cenv2 with ce_alloca_locals := T) [env] s` by
     (fs[local_ptrs_rel_def, local_region_def, local_backed_def] >>
      conj_tac >> first_assum ACCEPT_TAC) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+    immutables_rel cenv cx.txn.target src cenv.ce_is_ctor vs s` by
+    (gen_tac >> disch_tac >>
+     mp_tac (Q.SPECL [`cenv with ce_module := src`, `cx`, `vs`, `caller`, `s`]
+       internal_immutables_frame) >>
+     simp[immutables_rel_def] >>
+     impl_tac
+     >- (conj_tac
+         >- (fs[state_rel_def, optionTheory.IS_SOME_EXISTS, immutables_rel_def] >>
+             metis_tac[]) >>
+         conj_tac
+         >- (qpat_assum `!src. _ ==> internal_immutable_regions _ _ _ _`
+              (drule_then ACCEPT_TAC)) >>
+         fs[mat_frame_def, setup_callee_def, AllCaseEqs()] >> gvs[]) >>
+     simp[]) >>
   qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
   simp[state_rel_def] >> strip_tac >>
   gvs[] >> rpt conj_tac
@@ -2018,28 +2043,13 @@ Proof
   >- fs[transient_rel_def, contract_transient_def]
   >- (fs[transient_vars_rel_def] >> metis_tac[])
   >- fs[accounts_rel_def]
-  >- (`immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs s` by
-        (irule internal_immutables_frame >> simp[] >>
-         qexists_tac `caller` >> simp[] >>
-         fs[mat_frame_def, setup_callee_def, AllCaseEqs(), immutables_rel_def] >>
-         gvs[] >> first_assum ACCEPT_TAC) >>
-      fs[immutables_rel_def] >> metis_tac[])
+  >- (qpat_assum `!src. _ ==> immutables_rel cenv _ _ _ vs s`
+        (qspec_then `cenv.ce_module` mp_tac) >> fs[immutables_rel_def])
+  >- (rpt strip_tac >>
+      qpat_assum `!src. _ ==> immutables_rel cenv _ _ _ vs s`
+        (qspec_then `src` mp_tac) >> fs[immutables_rel_def])
   >- fs[logs_rel_def, log_entry_equiv_def, LIST_REL_EL_EQN] >>
   simp[]
-QED
-*)
-Theorem internal_body_state_rel[local]:
-  !f func cenv cx vs caller cenv1 cenv2 rb rpc caps st st' env s0 s args st0.
-    state_rel H f cenv cx (vs with scopes := []) caller /\
-    internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
-    cenv1 = cenv with <| ce_return_buf := rb; ce_return_pc := rpc |> /\
-    materialize_internal_params cenv1 caps st = (cenv2, st') /\
-    EVERY (\c. ?off sz. FLOOKUP cenv1.ce_vars (FST c) = SOME (MemLoc off sz)) caps /\
-    setup_callee func args caller = SOME s0 /\ mat_frame st0 s0 s /\
-    local_ptrs_rel func cenv2 [env] s ==>
-    state_rel H func (cenv2 with ce_alloca_locals := T) cx (vs with scopes := [env]) s
-Proof
-  cheat
 QED
 
 Theorem compile_internal_prologue_shape[local]:
@@ -2327,25 +2337,29 @@ Theorem internal_prologue_run:
     fn_has_code st0 st1 func /\ fn_inst_ids_distinct func /\
     setup_callee func args caller = SOME s0 /\
     state_rel H f cenv cx (vs with scopes := []) caller /\
-    internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
+    (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+       internal_immutable_regions (cenv with ce_module := src)
+         cx vs caller.vs_alloca_next) /\
     internal_args_rel cenv params env (if has_rb then 1 else 0) args
       caller.vs_alloca_next caller.vs_memory /\
-    (cenv.ce_is_ctor ==> !i po psz name tv iv io.
+    (cenv.ce_is_ctor ==> !src i po psz name tv iv io.
+      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
       i < LENGTH params /\ ~SND (EL i params) /\
       FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+      FLOOKUP cenv.ce_module_vars (src,name) =
         SOME (ImmutableLoc io) /\
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) name =
+        | SOME imms => get_source_immutables src imms) name =
         SOME (tv,iv) ==>
       regions_disjoint io (type_memory_size tv)
         (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
-    (cenv.ce_is_ctor ==> !i po psz name ty tv io.
+    (cenv.ce_is_ctor ==> !src i po psz name ty tv io.
+      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
       i < LENGTH params /\ ~SND (EL i params) /\
       FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+      FLOOKUP cenv.ce_module_vars (src,name) =
         SOME (ImmutableLoc io) /\
-      cenv.ce_module_var_type (cenv.ce_module,name) = SOME ty /\
+      cenv.ce_module_var_type (src,name) = SOME ty /\
       evaluate_type (get_tenv cx) ty = SOME tv ==>
       regions_disjoint io (type_memory_size tv)
         (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
@@ -2353,8 +2367,9 @@ Theorem internal_prologue_run:
       < dimword (:256) ==>
     ?t.
       run_inst_seq (emitted_insts st0 st1) s0 = OK t /\
-      immutable_alloca_sep func (cenv2 with ce_alloca_locals := T) cx
-        (vs with scopes := [env]) t /\
+      (!src. src = cenv2.ce_module \/ IS_SOME (ALOOKUP cenv2.ce_modules src) ==>
+        immutable_alloca_sep func (cenv2 with <|ce_alloca_locals := T; ce_module := src|>)
+          cx (vs with scopes := [env]) t) /\
       state_rel H func (cenv2 with ce_alloca_locals := T) cx
         (vs with scopes := [env]) t /\ alloca_inv t /\
       (!inst n base sz.
@@ -2453,7 +2468,7 @@ Resume internal_prologue_run[relation]:
      rpt strip_tac >> gvs[] >>
      first_x_assum drule >> strip_tac >> metis_tac[]) >>
   qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
-  qpat_x_assum `internal_immutable_regions _ _ _ _` mp_tac >>
+  qpat_x_assum `!src. _ ==> internal_immutable_regions _ _ _ _` mp_tac >>
   qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
   qpat_x_assum `materialize_internal_params ce caps sc = _` mp_tac >>
   qpat_x_assum `EVERY _ caps` mp_tac >>
@@ -2488,9 +2503,11 @@ Resume internal_prologue_run[returns]:
   drule materialize_internal_params_shape >> strip_tac >> simp[]
 QED
 Resume internal_prologue_run[separation]:
+  gen_tac >> disch_tac >>
   drule materialize_internal_params_shape >> strip_tac >>
   drule materialize_nonptr_binding >> disch_then assume_tac >>
   `cenv2.ce_module = cenv.ce_module /\
+   cenv2.ce_modules = cenv.ce_modules /\
    cenv2.ce_is_ctor = cenv.ce_is_ctor /\
    cenv2.ce_module_var_type = cenv.ce_module_var_type /\
    (!name off. FLOOKUP cenv2.ce_module_vars name = SOME (ImmutableLoc off) ==>
@@ -2512,25 +2529,31 @@ Resume internal_prologue_run[separation]:
      qpat_x_assum `!name b sz. local_region cenv2 [env] t' _ _ _ ==> _` drule >>
      strip_tac >>
      qpat_x_assum `!n b sz. local_region cenv2 [env] u _ _ _ ==> _` drule >> simp[]) >>
-  qpat_x_assum `internal_immutable_regions _ _ _ _` mp_tac >>
-  qpat_x_assum `cenv.ce_is_ctor ==> !i po psz name tv iv io.
-     _ /\ _ /\ _ /\ _ /\ FLOOKUP _ _ = SOME (tv,iv) ==> _` mp_tac >>
-  qpat_x_assum `cenv.ce_is_ctor ==> !i po psz name ty tv io.
-     _ /\ _ /\ _ /\ _ /\ _ /\ evaluate_type _ _ = _ ==> _` mp_tac >>
+  qpat_assum `!src. _ ==> internal_immutable_regions _ _ _ _`
+    (qspec_then `src` mp_tac) >>
+  impl_tac >- fs[] >>
+  qpat_assum `cenv.ce_is_ctor ==> !src i po psz name tv iv io.
+    _ ==> regions_disjoint io (type_memory_size tv) _ psz`
+    (fn th => mp_tac (DISCH (#1 (dest_imp (concl th))) (Q.SPEC `src` (UNDISCH th)))) >>
+  qpat_assum `cenv.ce_is_ctor ==> !src i po psz name ty tv io.
+     _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ evaluate_type _ _ = _ ==> _`
+    (fn th => mp_tac (DISCH (#1 (dest_imp (concl th))) (Q.SPEC `src` (UNDISCH th)))) >>
   qpat_x_assum `!n b sz. mr n = SOME (b,sz) <=> _` mp_tac >>
   qpat_x_assum `!n b sz. local_region cenv2 [env] t' _ _ _ ==> _` mp_tac >>
   qpat_x_assum `!aid b sz. FLOOKUP t'.vs_allocas aid = _ ==> _` mp_tac >>
   qpat_x_assum `caller.vs_alloca_next <= t'.vs_alloca_next` mp_tac >>
   qpat_x_assum `!name off. FLOOKUP cenv2.ce_module_vars name = _ ==> _` mp_tac >>
   qpat_x_assum `cenv2.ce_is_ctor = cenv.ce_is_ctor` mp_tac >>
+  qpat_x_assum `src = cenv2.ce_module \/ IS_SOME (ALOOKUP cenv2.ce_modules src)` mp_tac >>
   qpat_x_assum `cenv2.ce_module = cenv.ce_module` mp_tac >>
+  qpat_x_assum `cenv2.ce_modules = cenv.ce_modules` mp_tac >>
   qpat_x_assum `cenv2.ce_module_var_type = cenv.ce_module_var_type` mp_tac >>
   qpat_x_assum `ce.ce_vars = cenv.ce_vars` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
   simp[immutable_alloca_sep_def, immutable_decl_sep_alt] >>
   conj_tac >> strip_tac >> (
   rpt gen_tac >> strip_tac >>
-  `FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+  `FLOOKUP cenv.ce_module_vars (src,name) =
      SOME (ImmutableLoc off)` by
     (qpat_x_assum `!name off. _` drule >> simp[]) >>
   `off + type_memory_size tv <= caller.vs_alloca_next` by
@@ -2547,12 +2570,14 @@ Resume internal_prologue_run[separation]:
   qpat_x_assum `!n b sz. mr n = _ <=> _` (drule o iffLR) >>
   strip_tac >> gvs[] >>
   FIRST [
-    qpat_x_assum `!i po psz name tv iv io.
-       _ /\ _ /\ _ /\ _ /\ FLOOKUP _ _ = SOME (tv,iv) ==> _` irule >>
-    simp[] >> qexistsl_tac [`v`, `name`] >> simp[] >> NO_TAC,
-    qpat_x_assum `!i po psz name ty tv io.
-       _ /\ _ /\ _ /\ _ /\ _ /\ evaluate_type _ _ = _ ==> _` irule >>
-    simp[] >> metis_tac[]])
+    qpat_assum `!i po psz name tv iv io. _ ==>
+      regions_disjoint io (type_memory_size tv) _ psz`
+      (qspecl_then [`i`, `off'`, `sz`, `name`, `tv`, `v`, `off`] mp_tac) >>
+    asm_simp_tac (srw_ss()) [arithmeticTheory.ADD_COMM] >> res_tac >> simp[] >> NO_TAC,
+    qpat_assum `!i po psz name ty tv io. _ ==>
+      regions_disjoint io (type_memory_size tv) _ psz`
+      (qspecl_then [`i`, `off'`, `sz`, `name`, `ty`, `tv`, `off`] mp_tac) >>
+    asm_simp_tac (srw_ss()) [arithmeticTheory.ADD_COMM] >> res_tac >> simp[]])
 QED
 Finalise internal_prologue_run[local]
 
@@ -2595,8 +2620,62 @@ Proof
       emit_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem compile_internal_prologue_entry:
+  !cenv params has_rb ret_type st0 cenv2 return_pc st1 func ctx args caller
+   s0 f cx vs env.
+    compile_internal_prologue cenv params has_rb ret_type st0 =
+      ((cenv2, return_pc), st1) /\
+    fn_has_code st0 st1 func /\ fn_inst_ids_distinct func /\
+    st0.cs_current_insts = [] /\
+    st0.cs_current_bb = (HD func.fn_blocks).bb_label /\
+    setup_callee func args caller = SOME s0 /\
+    (cenv.ce_is_ctor ==>
+      IS_SOME (FLOOKUP caller.vs_labels "runtime_begin")) /\
+    state_rel H f cenv cx (vs with scopes := []) caller /\
+    (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+       internal_immutable_regions (cenv with ce_module := src)
+         cx vs caller.vs_alloca_next) /\
+    internal_args_rel cenv params env (if has_rb then 1 else 0) args
+      caller.vs_alloca_next caller.vs_memory /\
+    (cenv.ce_is_ctor ==> !src i po psz name tv iv io.
+      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+      i < LENGTH params /\ ~SND (EL i params) /\
+      FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+      FLOOKUP cenv.ce_module_vars (src,name) =
+        SOME (ImmutableLoc io) /\
+      FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables src imms) name =
+        SOME (tv,iv) ==>
+      regions_disjoint io (type_memory_size tv)
+        (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
+    (cenv.ce_is_ctor ==> !src i po psz name ty tv io.
+      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+      i < LENGTH params /\ ~SND (EL i params) /\
+      FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+      FLOOKUP cenv.ce_module_vars (src,name) =
+        SOME (ImmutableLoc io) /\
+      cenv.ce_module_var_type (src,name) = SOME ty /\
+      evaluate_type (get_tenv cx) ty = SOME tv ==>
+      regions_disjoint io (type_memory_size tv)
+        (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
+    caller.vs_alloca_next + internal_stack_size cenv params
+      < dimword (:256) /\
+    alloca_room ctx func s0 /\ fmp_room ctx func s0 /\
+    cenv.ce_imm_alloca = NONE ==>
+    ?s1.
+      ~s1.vs_halted /\ s1.vs_current_bb = st1.cs_current_bb /\
+      s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
+      stmt_state_rel H ctx func (cenv2 with ce_alloca_locals := T) cx
+        (vs with scopes := [env]) s1 /\
+      fresh_vars_wrt st1 s1 /\
+      (?x. return_pc = Var x /\ not_fresh_at st1 x /\
+           lookup_var x s1 = SOME s0.vs_return_pc_token) /\
+      (has_rb ==>
+       ?rb. not_fresh_at st1 rb /\ lookup_var rb s1 = SOME (HD args) /\
+            !off sz. cenv.ce_return_buf = SOME (MemLoc off sz) ==>
+                     cenv2.ce_return_buf = SOME (PtrVar (Var rb) sz)) /\
+      !fuel r. run_from fuel ctx func s1 = r /\ (!e. r <> Error e) ==>
+               ?fuel'. run_from fuel' ctx func s0 = r
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all internal_prologue_run >> strip_tac >>
@@ -2650,63 +2729,13 @@ Proof
   qexists_tac `t with vs_inst_idx := LENGTH st1.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx, stmt_state_rel_def, fresh_vars_wrt_def,
        lookup_var_def, immutable_base_zero_def] >>
-  fs[fresh_vars_wrt_def, lookup_var_def] >> metis_tac[]
-QED
-*)
-Theorem compile_internal_prologue_entry:
-  !cenv params has_rb ret_type st0 cenv2 return_pc st1 func ctx args caller
-   s0 f cx vs env.
-    compile_internal_prologue cenv params has_rb ret_type st0 =
-      ((cenv2, return_pc), st1) /\
-    fn_has_code st0 st1 func /\ fn_inst_ids_distinct func /\
-    st0.cs_current_insts = [] /\
-    st0.cs_current_bb = (HD func.fn_blocks).bb_label /\
-    setup_callee func args caller = SOME s0 /\
-    (cenv.ce_is_ctor ==>
-      IS_SOME (FLOOKUP caller.vs_labels "runtime_begin")) /\
-    state_rel H f cenv cx (vs with scopes := []) caller /\
-    internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
-    internal_args_rel cenv params env (if has_rb then 1 else 0) args
-      caller.vs_alloca_next caller.vs_memory /\
-    (cenv.ce_is_ctor ==> !i po psz name tv iv io.
-      i < LENGTH params /\ ~SND (EL i params) /\
-      FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
-        SOME (ImmutableLoc io) /\
-      FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) name =
-        SOME (tv,iv) ==>
-      regions_disjoint io (type_memory_size tv)
-        (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
-    (cenv.ce_is_ctor ==> !i po psz name ty tv io.
-      i < LENGTH params /\ ~SND (EL i params) /\
-      FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
-        SOME (ImmutableLoc io) /\
-      cenv.ce_module_var_type (cenv.ce_module,name) = SOME ty /\
-      evaluate_type (get_tenv cx) ty = SOME tv ==>
-      regions_disjoint io (type_memory_size tv)
-        (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
-    caller.vs_alloca_next + internal_stack_size cenv params
-      < dimword (:256) /\
-    alloca_room ctx func s0 /\ fmp_room ctx func s0 /\
-    cenv.ce_imm_alloca = NONE ==>
-    ?s1.
-      ~s1.vs_halted /\ s1.vs_current_bb = st1.cs_current_bb /\
-      s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
-      stmt_state_rel H ctx func (cenv2 with ce_alloca_locals := T) cx
-        (vs with scopes := [env]) s1 /\
-      fresh_vars_wrt st1 s1 /\
-      (?x. return_pc = Var x /\ not_fresh_at st1 x /\
-           lookup_var x s1 = SOME s0.vs_return_pc_token) /\
-      (has_rb ==>
-       ?rb. not_fresh_at st1 rb /\ lookup_var rb s1 = SOME (HD args) /\
-            !off sz. cenv.ce_return_buf = SOME (MemLoc off sz) ==>
-                     cenv2.ce_return_buf = SOME (PtrVar (Var rb) sz)) /\
-      !fuel r. run_from fuel ctx func s1 = r /\ (!e. r <> Error e) ==>
-               ?fuel'. run_from fuel' ctx func s0 = r
-Proof
-  cheat
+  fs[fresh_vars_wrt_def, lookup_var_def] >> conj_tac
+  >- (`(cenv2 with <|ce_module := cenv2.ce_module; ce_alloca_locals := T|>) =
+       (cenv2 with ce_alloca_locals := T)` by
+        simp[compileEnvTheory.compile_env_component_equality] >>
+      qpat_assum `!src. _ ==> immutable_alloca_sep _ _ _ _ _`
+        (qspec_then `cenv2.ce_module` mp_tac) >> simp[] >> metis_tac[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 
