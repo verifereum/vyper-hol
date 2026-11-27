@@ -995,8 +995,6 @@ Theorem external_source_body_const_cells_checked:
   env_context_consistent env (initial_evaluation_context am.sources am.layouts tx NONE) /\
   (!art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art ==>
          env.event_fields = art.cta_event_fields) /\
-  (!art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art ==>
-         env.event_fields = art.cta_event_fields) /\
   es.immutables = am.immutables ==>
   body_const_cells_agree [(NONE,tops)]
     (initial_evaluation_context am.sources am.layouts tx NONE) env es
