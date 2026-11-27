@@ -412,35 +412,24 @@ Theorem ifexp_immutable_destination_sep[local]:
     stmt_state_rel H ctx func cenv cx es s /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (dst,sz) ==>
-    cenv.ce_is_ctor ==> !name tv v off.
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    cenv.ce_is_ctor ==> !src name tv v off.
+      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+      FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+        | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
       regions_disjoint off (type_memory_size tv) dst sz
 Proof
-  rpt strip_tac >> fs[stmt_state_rel_def, immutable_alloca_sep_def] >>
-  first_x_assum drule_all >> strip_tac >> metis_tac[]
+  rpt gen_tac >> strip_tac >> disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `immutable_alloca_sep func (cenv with ce_module := src) cx es s` by
+    (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+     Cases_on `src = cenv.ce_module` >>
+     gvs[compileEnvTheory.compile_env_component_equality] >> metis_tac[]) >>
+  qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
+  simp[immutable_alloca_sep_def] >> strip_tac >>
+  first_x_assum (drule_all_then strip_assume_tac) >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt strip_tac >> drule_all ifexp_store_bytestring_encoding >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es q` by
-    (irule literal_state_memory_frame >> qexists_tac `s` >> simp[] >>
-     rpt conj_tac >> rpt strip_tac
-     >~ [`ImmutableLoc _`]
-     >- (qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >>
-         drule_all ifexp_immutable_destination_sep >>
-         simp[regions_disjoint_def])
-     >~ [`local_region _ _ _ _ _ _`]
-     >- (qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> metis_tac[]) >>
-     qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
-     gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  qexists_tac `q` >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> decide_tac
-QED
-*)
 Theorem ifexp_bytestring_store_state[local]:
   !ctx func cenv cx es src dst sa sb s w d len tv v inst.
     compile_store_bytestring src dst sa = ((),sb) /\
@@ -463,7 +452,24 @@ Theorem ifexp_bytestring_store_state[local]:
       (!a k. a + k <= w2n d \/ w2n d + type_memory_size tv <= a ==>
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
-  cheat
+  rpt strip_tac >> drule_all ifexp_store_bytestring_encoding >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es q` by
+    (irule literal_state_memory_frame >> qexists_tac `s` >> simp[] >>
+     rpt conj_tac
+     >~ [`cenv.ce_is_ctor ==> _`]
+     >- (qspecl_then [`ctx`,`func`,`cenv`,`cx`,`es`,`s`,`inst`,
+           `w2n d`,`type_memory_size tv`] mp_tac ifexp_immutable_destination_sep >>
+         simp[] >>
+         strip_tac >> rpt strip_tac >>
+         qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >>
+         simp[GSYM regions_disjoint_def] >> metis_tac[]) >>
+     rpt strip_tac
+     >~ [`local_region _ _ _ _ _ _`]
+     >- (qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> metis_tac[]) >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+     gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  qexists_tac `q` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> decide_tac
 QED
 
 Theorem ifexp_destination_at[local]:

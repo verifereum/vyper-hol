@@ -26,10 +26,11 @@ Theorem log_write_frame_stmt:
   local_ptrs_reserved ce st /\ LENGTH s.vs_memory <= LENGTH t.vs_memory /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
     lo+sz <= b \/ b+n <= lo) /\
-  (ce.ce_is_ctor ==> !name tv v off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (ce.ce_is_ctor ==> !src name tv v off.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     off+type_memory_size tv <= b \/ b+n <= off) ==>
   stmt_state_rel H ctx func ce cx es t
 Proof
@@ -115,10 +116,11 @@ Theorem log_store_data_stmt:
     ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
     lo+sz <= b+off \/ b+off+SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= lo) /\
-  (ce.ce_is_ctor ==> !name tv v p.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc p) /\
+  (ce.ce_is_ctor ==> !src name tv v p.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc p) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
     p+type_memory_size tv <= b+off \/
     b+off+SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= p) ==>
   inst_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
