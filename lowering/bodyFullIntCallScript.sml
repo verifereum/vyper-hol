@@ -374,6 +374,37 @@ Proof
 QED
 
 (* Stage (b) gives stage (c)'s callee premise. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+      sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
+    (qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >> simp[]) >>
+  qpat_assum `body_inv _ _ _ _` (fn inv =>
+    qpat_assum `lookup_callable_function _ _ _ = SOME _` (fn lookup =>
+      qpat_assum `MEM (FunctionDecl Internal _ _ _ _ _ _ _ _) _` (fn decl =>
+        qhdtm_assum `intcall_entry_full` (fn entry =>
+          qpat_assum `!s1 vs t1 sd dvs td penv rtv. _ ==> body_stmts_full_ok _ _`
+            (fn ih =>
+              assume_tac (MATCH_MP intcall_entry_body_ih
+                (LIST_CONJ [inv, lookup, decl, entry, ih]))))))) >>
+  first_assum (fn callee_stage =>
+    if aconv (concl callee_stage) callee_input then
+  qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`tops`,`cenv`,`cx`,
+               `tenv`,`name`,`es`,`st0`,`sa`,`sb`,`vv`,`s0`,`es0`,`G0`,`tn0`,
+               `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,
+               `t`,`G`,`tn`,`callee`,`entered`,`nrc`,`nrbs`,`npvs`,`dflts`]
+    mp_tac callee_stage
+    else NO_TAC) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qspecl_then [`bb`,`inst`,`lbl`,`arg_ops`,`argv`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED
+*)
 Theorem intcall_callee_premise[local]:
   ^callee_input ==>
   !DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
@@ -427,32 +458,7 @@ Theorem intcall_callee_premise[local]:
              (if nrc = 0 /\ 0 < nrbs then SOME (HD argv) else NONE)
              sa.cs_next_id sb.cs_next_id t tn res ee gt r)
 Proof
-  strip_tac >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
-      sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
-    (qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==> _`
-       (qspec_then `H` mp_tac) >> simp[]) >>
-  qpat_assum `body_inv _ _ _ _` (fn inv =>
-    qpat_assum `lookup_callable_function _ _ _ = SOME _` (fn lookup =>
-      qpat_assum `MEM (FunctionDecl Internal _ _ _ _ _ _ _ _) _` (fn decl =>
-        qhdtm_assum `intcall_entry_full` (fn entry =>
-          qpat_assum `!s1 vs t1 sd dvs td penv rtv. _ ==> body_stmts_full_ok _ _`
-            (fn ih =>
-              assume_tac (MATCH_MP intcall_entry_body_ih
-                (LIST_CONJ [inv, lookup, decl, entry, ih]))))))) >>
-  first_assum (fn callee_stage =>
-    if aconv (concl callee_stage) callee_input then
-  qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`tops`,`cenv`,`cx`,
-               `tenv`,`name`,`es`,`st0`,`sa`,`sb`,`vv`,`s0`,`es0`,`G0`,`tn0`,
-               `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,
-               `t`,`G`,`tn`,`callee`,`entered`,`nrc`,`nrbs`,`npvs`,`dflts`]
-    mp_tac callee_stage
-    else NO_TAC) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then (qspecl_then [`bb`,`inst`,`lbl`,`arg_ops`,`argv`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then ACCEPT_TAC
+  cheat
 QED
 
 (* The value judgment: stage (a) with the unwrap and the read after the

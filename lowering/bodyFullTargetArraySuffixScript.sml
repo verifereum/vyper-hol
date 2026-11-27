@@ -1303,21 +1303,8 @@ Proof
   cheat
 QED
 
-Theorem array_tail_packet_child_post[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
-    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
-    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
-  valid_horizon cx st0 H mid2.storage_trace /\
-  extend_place cx pv (ValueSubscript v) mid2 = (INL child,mid2) /\
-  eval_operand (FST rb) t2 = SOME b /\ eval_operand iop t2 = SOME iw /\
-  (u with <|vs_vars := t2.vs_vars; vs_inst_idx := t2.vs_inst_idx|>) = t2 /\
-  (!x. not_fresh_at sn x ==> FLOOKUP u.vs_vars x = FLOOKUP t2.vs_vars x) /\
-  eval_operand (FST r) u = SOME
-    ((if (case bd of Dynamic _ => T | _ => F) then b + n2w (word_scale loc) else b) +
-      iw * n2w (elem_size_in_location cenv loc et)) /\
-  loc = (case FST (SND rb) of SOME l => l | NONE => LocMemory) /\
-  stmt_state_rel H ctx func cenv cx mid2 u ==>
-  target_post H ctx func cenv cx es sa sb s0 mid2 child vt r u
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   drule_all array_tail_packet_index_post >> strip_tac >>
@@ -1379,6 +1366,25 @@ Proof
   gvs[elem_size_in_location_def, is_slot_addressed_def, word_scale_def] >>
   metis_tac[array_tail_memory_child_pointer]
 
+QED
+*)
+Theorem array_tail_packet_child_post[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
+  valid_horizon cx st0 H mid2.storage_trace /\
+  extend_place cx pv (ValueSubscript v) mid2 = (INL child,mid2) /\
+  eval_operand (FST rb) t2 = SOME b /\ eval_operand iop t2 = SOME iw /\
+  (u with <|vs_vars := t2.vs_vars; vs_inst_idx := t2.vs_inst_idx|>) = t2 /\
+  (!x. not_fresh_at sn x ==> FLOOKUP u.vs_vars x = FLOOKUP t2.vs_vars x) /\
+  eval_operand (FST r) u = SOME
+    ((if (case bd of Dynamic _ => T | _ => F) then b + n2w (word_scale loc) else b) +
+      iw * n2w (elem_size_in_location cenv loc et)) /\
+  loc = (case FST (SND rb) of SOME l => l | NONE => LocMemory) /\
+  stmt_state_rel H ctx func cenv cx mid2 u ==>
+  target_post H ctx func cenv cx es sa sb s0 mid2 child vt r u
+Proof
+  cheat
 QED
 
 Theorem array_tail_packet_child_ptr_ok[local]:

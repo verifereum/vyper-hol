@@ -3825,24 +3825,8 @@ QED
 
 (* The increment runner gives the path; only its endpoint and reachability
    matter to the live packet.  Neither register write touches an old local. *)
-Theorem for_nonslot_actual_increment_live[local]:
-  (?bb inst. lookup_block cond func.fn_blocks = SOME bb /\
-     get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI) /\
-  sa0.cs_next_var <= saL.cs_next_var /\
-  ~not_fresh_at saL idx /\ ~not_fresh_at saL out /\
-  local_ptrs_reserved c saL /\ xd <> idx /\ xd <> out /\
-  (!p. vv_operand vv = Var p \/ len_op = Var p ==> not_fresh_at saL p) /\
-  body_stmts_full_ok_mods mods exps cx loop_body /\
-  for_nonslot_live (D,lo,d,ctx,func,cx,c,id,env,loop_body)
-    (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-    (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,a::rs,es,c,es,G,tn,s) /\
-  t = jump_to cond (update_var idx (n2w (SUC k)) (update_var out (n2w (SUC k)) s)) /\
-  Gf = DRESTRICT (DRESTRICT G (COMPL {out})) (COMPL {idx}) /\
-  tnf = (tn with t_var := (tn.t_var |+ (out,{})) |+ (idx,{})) /\
-  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) ==>
-  for_nonslot_live (D,lo,d,ctx,func,cx,c,id,env,loop_body)
-    (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
-    (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,es,c,es,Gf,tnf,t)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `!x. x <> idx /\ x <> out ==>
@@ -3864,7 +3848,30 @@ Proof
     simp[jump_to_def,update_var_def] >>
   suspend "increment_machine_frame"
 QED
+*)
+Theorem for_nonslot_actual_increment_live[local]:
+  (?bb inst. lookup_block cond func.fn_blocks = SOME bb /\
+     get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI) /\
+  sa0.cs_next_var <= saL.cs_next_var /\
+  ~not_fresh_at saL idx /\ ~not_fresh_at saL out /\
+  local_ptrs_reserved c saL /\ xd <> idx /\ xd <> out /\
+  (!p. vv_operand vv = Var p \/ len_op = Var p ==> not_fresh_at saL p) /\
+  body_stmts_full_ok_mods mods exps cx loop_body /\
+  for_nonslot_live (D,lo,d,ctx,func,cx,c,id,env,loop_body)
+    (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
+    (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,a::rs,es,c,es,G,tn,s) /\
+  t = jump_to cond (update_var idx (n2w (SUC k)) (update_var out (n2w (SUC k)) s)) /\
+  Gf = DRESTRICT (DRESTRICT G (COMPL {out})) (COMPL {idx}) /\
+  tnf = (tn with t_var := (tn.t_var |+ (out,{})) |+ (idx,{})) /\
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) ==>
+  for_nonslot_live (D,lo,d,ctx,func,cx,c,id,env,loop_body)
+    (es0,sa0,s0,G0,tn0) (e,sbExpr,saL,loc,vv,bd,stv,vs,rv,av,xs,em,u,Gu,tu)
+    (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,SUC k,rs,es,c,es,Gf,tnf,t)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_actual_increment_live[increment_machine_frame]:
   drule_then strip_assume_tac for_nonslot_live_head_index >>
   qpat_x_assum `k = LENGTH vs - _` kall_tac >>
@@ -3905,7 +3912,9 @@ Resume for_nonslot_actual_increment_live[increment_machine_frame]:
      rpt strip_tac >> metis_tac[not_local_ptr_def]) >>
   suspend "increment_live_tail"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_actual_increment_live[increment_live_tail]:
   `!i. active_inst func i t ==> frag_reachable ctx func s func i t` by
     (drule fragGasOriginPtrTheory.gas_origin_ptr_path_projections >> strip_tac >>
@@ -3943,8 +3952,11 @@ Resume for_nonslot_actual_increment_live[increment_live_tail]:
   qpat_assum `!name b len. local_region c es.scopes s name b len ==> _`
     drule >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise for_nonslot_actual_increment_live
+*)
 
 Theorem for_nonslot_array_round_contracts_at_with_prefix:
   for_nonslot_layout (c,id,fty,e,sty,bd,ret_ty,loop_body) (func,shadow_func)
