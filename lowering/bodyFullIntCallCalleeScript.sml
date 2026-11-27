@@ -8,6 +8,8 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   bodyFullGhostFrame[qualified,ignore_grammar] augAssignFullStoreGhost[qualified,ignore_grammar]
   ghostPcTransportPtr[qualified,ignore_grammar]
   bodyIntCallSeams bodyFullPredsMods
+  bodySelectedVoidReturnMods bodySelectedWordReturnMods bodySelectedStackReturnMods
+  bodySelectedUnlockTaintMods gasOutcomeFullBindMods typedCopyPtr[qualified]
   fragGasFocus fragGasOriginPtr gasOutcomeFullCompose gasOutcomeFull gasOutcomeFullMods gasStorage
   vyperStorageFootprint vyperStorageTrace vyperState venomState createSizeExit[qualified]
   contextRawReachable contextCodegenRel contextCodegenRelProps
@@ -17,7 +19,7 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   vyperTypeContractFunction bodySimFull[qualified]
   bodyInvSplit bodyCallSupport[qualified,ignore_grammar] bodyInvCodeProps bodyInvExecutionProps bodyInvMetadataProps
   bodyInvIntCallPinsProps contractInvContextProps
-  moduleVariableKeyProps compileUnit bodyFullPostsMods
+  moduleVariableKeyProps compileUnit bodyFullPostsMods bodyInvariantFrameProps
   bodyQualifiedStmtSupport linkedConstAnnotations constSubstMods
   bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
   ctorDeployLoweringSource nonreentrantEquiv internalReturnMemoryMem
@@ -3703,19 +3705,16 @@ Theorem intcall_callee_buffered_return_relayout[local]:
   stmt_exprs_ok cenv (Return (SOME e)) /\
   IS_SOME (type_stmt env ty (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
-  (!ety. expr_sim_full
-      (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ety e es /\
-    expr_vv_sim_full
-      (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx ety e es) /\
+  expr_sim_full
+    (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty e es /\
   (!H v ee gt r. intret_mem_q H func ce cx tv bw v ee r /\
     (!ir u. r = IntRet ir u ==>
       (!mem. mem_agree_outside (SND gt).t_mem u.vs_memory mem ==>
          val_in_memory tv v (w2n bw) mem) /\
       stor_taint_ok_at (DF H) (SND gt) u /\
       (!i. i < lo /\ i IN (SND gt).t_mem ==>
-         imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) ==>
+         imm_section_dead_mods ce (mem_bytes_at 0 lo u.vs_memory) i)) ==>
     RetQ H v ee gt r) ==>
   stmt_frag_full
     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
@@ -3724,7 +3723,19 @@ Theorem intcall_callee_buffered_return_relayout[local]:
     (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
-  cheat
+  strip_tac >>
+  `contract_inv mods exps ctx cenv cx` by
+    metis_tac[body_invariants_same_frame] >>
+  `cenv.ce_returns_count = 0 /\ cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz)` by
+    fs[bodySimTheory.same_frame_def, compile_env_component_equality] >>
+  irule stmtSimReturnTheory.stmt_frag_full_retq_weaken >>
+  mp_tac (Q.SPECL
+    [`DF`,`lo`,`ctx`,`shadow_ctx`,`PG`,`func`,`shadow_func`,`mods`,`exps`,
+     `cx`,`ce`,`cenv`,`env`,`es`,`ty`,`tv`,`e`,`lctx`,`bw`,`rpc`,`rsz`]
+    internal_return_memory_relayout_robust_taint) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> fs[]) >>
+  disch_then (irule_at Any) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >> first_x_assum irule >> fs[]
 QED
 
 (* The callee's own allocations start above the caller's frontier.
@@ -3894,76 +3905,114 @@ Theorem intcall_callee_buffered_frame_ret[local]:
          val_in_memory tv v (w2n bw) mem) /\
       stor_taint_ok_at (DF H) (SND gt) u /\
       (!i. i < lo /\ i IN (SND gt).t_mem ==>
-         imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) ==>
+         imm_section_dead_mods ce (mem_bytes_at 0 lo u.vs_memory) i)) ==>
     RetQ H v ee gt r) ==>
   frame_ret_ok_full_mods mods
     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
     cx RetQ ce ty
 Proof
-  cheat
+  strip_tac >>
+  pure_rewrite_tac[frame_ret_ok_full_mods_def, stmt_frag_full_mods_widened] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `eo` >- gvs[vyperTypeSystemTheory.type_stmt_def] >>
+  rename1 `Return (SOME e)` >>
+  `expr_sim_full
+      (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
+      cenv' cx ty e es` by
+    metis_tac[expr_sim_full_mods_widened] >>
+  simp[] >>
+  irule intcall_callee_buffered_return_relayout >> simp[] >>
+  qexistsl [`ce`, `env`, `exps`, `mods`, `rpc`, `rsz`, `tops`] >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem intcall_return_retq_weaken[local]:
+  stmt_frag_full_mods (DF,lo,d,ctx,shctx,PG,func,shfunc)
+    cx lctx Q ce m shm src es /\
+  (!H v ee gt r. ee.scopes = [] /\ Q H v ee gt r ==> R H v ee gt r) ==>
+  stmt_frag_full_mods (DF,lo,d,ctx,shctx,PG,func,shfunc)
+    cx lctx R ce m shm src es
+Proof
+  pure_rewrite_tac[stmt_frag_full_mods_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (drule_all_then assume_tac) >>
+  irule gas_outcome_full_mods_post_source >> goal_assum (drule_at Any) >>
+  simp[] >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >>
+  qpat_assum `!tail. stmt_exit_ptr _ _ _ _ _` (qspec_then `tail` mp_tac) >>
+  rewrite_tac[bodyPtrDefsTheory.stmt_exit_ptr_def] >>
+  disch_then (DISJ_CASES_THEN2 assume_tac strip_assume_tac)
+  >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> qexists `v` >> simp[] >>
+  qpat_assum `!H v ee gt r. _ ==> R H v ee gt r` irule >> simp[]
+QED
+
+Theorem intcall_return_frame_metadata[local]:
+  same_frame ce site ==>
+  site.ce_return_pc = ce.ce_return_pc /\
+  site.ce_return_buf = ce.ce_return_buf /\
+  site.ce_returns_count = ce.ce_returns_count /\
+  site.ce_nonreentrant = ce.ce_nonreentrant /\
+  site.ce_modules = ce.ce_modules /\
+  site.ce_module_vars = ce.ce_module_vars /\
+  site.ce_module_var_type = ce.ce_module_var_type /\
+  site.ce_is_ctor = ce.ce_is_ctor
+Proof
+  simp[bodySimTheory.same_frame_def, compile_env_component_equality]
+QED
+
+Theorem intcall_return_word_count[local]:
+  is_word_type ty ==> returns_stack_count sft ty = 1
+Proof
+  Cases_on `ty` >> simp[returns_stack_count_def,is_word_type_def]
+QED
+
+Theorem intcall_return_word_rebase[local]:
+  same_frame ce site /\ ee.scopes = [] /\ intret_q H func site cx tv v ee r /\
+  (!ir u. r = IntRet ir u ==>
+    immutable_frame_mods func site cx (ee with scopes := []) u /\
+    stor_taint_ok_at D (SND gt) u /\
+    !i. i < lo /\ i IN (SND gt).t_mem ==>
+      imm_section_dead_mods site (mem_bytes_at 0 lo u.vs_memory) i) ==>
+  intret_q H func ce cx tv v ee r /\
+  (!ir u. r = IntRet ir u ==>
+    stor_taint_ok_at D (SND gt) u /\
+    !i. i < lo /\ i IN (SND gt).t_mem ==>
+      imm_section_dead_mods ce (mem_bytes_at 0 lo u.vs_memory) i)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `ce.ce_modules = [(NONE,cx_tops cx)]` by
-    (qpat_assum `body_inv tops ctx ce cx` (fn inv =>
-      map_every assume_tac
-        [MATCH_MP contract_inv_cenv_modules (MATCH_MP bodySimTheory.body_inv_contract inv),
-         CONJUNCT2 (MATCH_MP body_inv_main_code inv)]) >> simp[]) >>
-  `is_word_type ty ==> ce.ce_returns_count = 1` by
-    (qpat_assum `ce.ce_returns_count = _` (once_rewrite_tac o single) >>
-     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `ty` >>
-     simp[returns_stack_count_def,is_word_type_def]) >>
-  `?pc slot. ce.ce_return_pc = SOME (PtrVar (Var pc) slot)` by
-    (qexistsl [`rpc`,`rsz`] >> first_assum ACCEPT_TAC) >>
-  `ce.ce_modules = [(NONE,cx_tops cx)]` by
-    fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def,
-       gasContextTheory.cx_tops_module] >>
-  Cases_on `has_rb`
-  >- (simp[NoAsms] >> irule intcall_callee_buffered_frame_ret >>
-      `~is_word_type ty` by
-        (strip_tac >> first_x_assum drule >> fs[]) >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-      TRY (qexists_tac `tops` >> first_assum ACCEPT_TAC >> NO_TAC) >>
-      fs[intCallReturnMemTheory.intret_mem_q_def]) >>
-  simp[NoAsms] >>
-  `frame_ret_ok_full (DF,lo,NONE,ctx,shadow_ctx,PG,func,sf) cx
-    (\H v ee gt r. intret_q H func ce cx tv v ee r /\
-      !ir u. r = IntRet ir u /\
-        ((FST ce.ce_nonreentrant /\ ~SND (SND (SND ce.ce_nonreentrant))) ==>
-          FST (SND (SND ce.ce_nonreentrant))) ==>
-        stor_taint_ok_at (DF H) (SND gt) u /\
-        (!i. i < lo /\ i IN (SND gt).t_mem ==>
-           imm_section_dead_mods ce (mem_bytes_at 0 lo u.vs_memory) i))
-    ce ty` by
-    (Cases_on `ty = NoneT`
-     >- (qpat_assum `ty = NoneT` SUBST_ALL_TAC >>
-         qpat_assum `ce.ce_modules = [(NONE,cx_tops cx)]`
-           (pure_rewrite_tac o single o GSYM o
-            MATCH_MP immSectionDeadTheory.imm_section_dead_mods_singleton) >>
-         irule stmtSimReturnTheory.internal_frame_ret_none_full_taint >>
-         fs[returns_stack_count_def]) >>
-     Cases_on `is_word_type ty`
-     >- (qpat_assum `ce.ce_modules = [(NONE,cx_tops cx)]`
-        (pure_rewrite_tac o single o GSYM o
-         MATCH_MP immSectionDeadTheory.imm_section_dead_mods_singleton) >>
-      irule stmtSimReturnTheory.internal_frame_ret_word_full_taint >>
-         fs[]) >>
-     irule internalReturnStackAggregateTheory.internal_frame_ret_stack_aggregate_full_taint >>
-     fs[]) >>
-  qpat_x_assum `frame_ret_ok_full _ _ _ _ _`
-    (assume_tac o REWRITE_RULE [bodySimFullTheory.frame_ret_ok_full_def]) >>
-  pure_rewrite_tac[bodySimFullTheory.frame_ret_ok_full_def] >>
+  drule_then strip_assume_tac intcall_return_frame_metadata >>
+  qpat_x_assum `intret_q _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [intret_q_def, loweringStateRelDefsTheory.result_rel_def]) >>
+  `return_unlock_state site s = return_unlock_state ce s` by
+    simp[return_unlock_state_def] >>
+  conj_tac
+  >- (simp[intret_q_def, loweringStateRelDefsTheory.result_rel_def] >>
+      qexistsl [`s`,`i`] >> simp[] >>
+      `state_rel H func ce cx (ee with scopes := []) s` by
+        (irule constructor_exit_state_rel >> metis_tac[]) >>
+      `ee with scopes := [] = ee` by simp[vyperStateTheory.evaluation_state_component_equality] >>
+      fs[]) >>
   rpt gen_tac >> strip_tac >>
-  irule stmtSimReturnTheory.stmt_frag_full_retq_weaken >>
-  qpat_assum `!cenv' env lctx eo es. _ ==> stmt_frag_full _ _ _ _ _ _ _ _ _`
-    (drule_all_then (irule_at Any)) >>
-  qpat_assum `ce.ce_modules = [(NONE,cx_tops cx)]`
-    (pure_rewrite_tac o single o MATCH_MP imm_section_dead_mods_singleton) >> simp[]
+  qpat_assum `!ir u. r = IntRet ir u ==> _` (drule_then strip_assume_tac) >>
+  simp[] >>
+  qpat_assum `!i. i < lo /\ _ ==> imm_section_dead_mods _ _ _` mp_tac >>
+  pure_rewrite_tac[immSectionDeadTheory.imm_section_dead_mods_def] >>
+  qpat_assum `site.ce_modules = _` (pure_once_rewrite_tac o single) >>
+  qpat_assum `site.ce_module_vars = _` (pure_once_rewrite_tac o single) >> simp[]
 QED
-*)
+
+fun intcall_plain_retq c =
+  ``\(H:(bool # bytes32 # type_value) list # num list) v ee
+     (gt:(string |-> num # num) # taint) r. intret_q H func ^c cx tv v ee r /\
+      !ir u. r = IntRet ir u ==>
+        immutable_frame_mods func ^c cx (ee with scopes := []) u /\
+        stor_taint_ok_at (DF H) (SND gt) u /\
+        !i. i < lo /\ i IN (SND gt).t_mem ==>
+          imm_section_dead_mods ^c (mem_bytes_at 0 lo u.vs_memory) i``;
+
+val intcall_frame_plain_retq = intcall_plain_retq ``ce:compile_env``;
+val intcall_site_plain_retq = intcall_plain_retq ``site:compile_env``;
 Theorem intcall_callee_frame_return[local]:
   (contract_inv mods exps ctx ce cx /\
      module_body_inv mods ce.ce_module tops ce cx) /\
@@ -3987,10 +4036,50 @@ Theorem intcall_callee_frame_return[local]:
            val_in_memory tv v (w2n bw) mem) /\
         stor_taint_ok_at (DF H) (SND gt) u /\
         (!i. i < lo /\ i IN (SND gt).t_mem ==>
-           imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i))
+           imm_section_dead_mods ce (mem_bytes_at 0 lo u.vs_memory) i))
     ce ty
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `is_word_type ty ==> ce.ce_returns_count = 1` by
+    simp[intcall_return_word_count] >>
+  Cases_on `has_rb`
+  >- (simp[NoAsms] >> irule intcall_callee_buffered_frame_ret >>
+      `~is_word_type ty` by (strip_tac >> res_tac >> fs[]) >>
+      simp[] >> metis_tac[intCallReturnMemTheory.intret_mem_q_def]) >>
+  simp[NoAsms] >>
+  pure_rewrite_tac[frame_ret_ok_full_mods_def] >>
+  rpt gen_tac >> rename1 `same_frame ce site` >> strip_tac >>
+  drule_then strip_assume_tac intcall_return_frame_metadata >>
+  Cases_on `eo`
+  >- (`ty = NoneT` by fs[vyperTypeSystemTheory.type_stmt_def, AllCaseEqs()] >>
+      `ce.ce_returns_count = 0` by fs[returns_stack_count_def] >>
+      gvs[] >>
+      irule intcall_return_retq_weaken >> qexists `^intcall_frame_plain_retq` >>
+      simp[] >> irule selected_void_return_frag_mods >> simp[] >>
+      rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      `FST site.ce_nonreentrant /\ ~SND (SND (SND site.ce_nonreentrant)) ==>
+         FST (SND (SND site.ce_nonreentrant))` by simp[] >>
+      drule_all selected_unlock_exit_taint_mods >> simp[]) >>
+  rename1 `Return (SOME e)` >>
+  `ty <> NoneT` by fs[typedCopyPtrTheory.type_stmt_return_some_iff] >>
+  `evaluate_type (get_tenv cx) ty = SOME tv` by simp[] >>
+  Cases_on `is_word_type ty`
+  >- (`ce.ce_returns_count = 1 /\ ce.ce_return_buf = NONE` by simp[] >>
+      gvs[] >>
+      irule intcall_return_retq_weaken >> qexists `^intcall_site_plain_retq` >>
+      conj_tac
+      >- (rpt gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
+          drule_all_then strip_assume_tac intcall_return_word_rebase >> simp[]) >>
+      irule selected_word_return_frag_mods >> simp[] >> conj_tac
+      >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+          drule_all selected_unlock_exit_taint_mods >> simp[]) >>
+      qexists `env` >> simp[]) >>
+  `0 < ce.ce_returns_count /\ ce.ce_return_buf = NONE` by
+    (conj_tac >- (CCONTR_TAC >> gvs[]) >> simp[]) >>
+  gvs[] >>
+  irule intcall_return_retq_weaken >> qexists `^intcall_frame_plain_retq` >>
+  simp[] >> irule selected_stack_return_frag_mods >>
+  simp[] >> qexistsl [`env`, `mods`] >> simp[]
 QED
 
 (* Newly materialized locals lie above the entry frontier. Borrowed

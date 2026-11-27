@@ -9,12 +9,13 @@
 Theory internalReturnMemoryMem
 Ancestors
   internalReturnImmutableTypes internalReturnMemoryInputs bodyInvCodeProps
-  structFieldsProps bodyInvSplit
+  structFieldsProps bodyInvSplit bodySelectedReturnWeakLayoutMods
   internalReturnMemoryExitFrame bodyFullMemorySameTypeStore
   typedCopyOriginPtrBase typedMemoryCopy vyperTypeEnvPreservation loweringStateRelDefs
   stateRelProj bodyFullIntCallBufferedCopy bodyFullMemoryStore
   gasExemptCert exprSimDefs bodyFullShared externalReturnSiteSemantics
   gasShadowCompileStmtHelpers externalNormalizePremises externalReturnSelectedResources
+  externalReturnCopyRecursive exprBodyPreProps vyperTypeEvalCaseProofs
   intCallReturnMem stmtSimReturn intCallResult
   loweringSlice instIdxIndep vyperStorageTrace vyperStatePreservation
   vyperStorageFootprint
@@ -1265,9 +1266,29 @@ Proof
         (ACCEPT_TAC o SIMP_RULE (srw_ss()) [allocas_below_fmp_def]))
 QED
 *)
+Theorem expr_sim_inv_mods_memory_layout:
+  expr_sim_inv_mods mods cenv cx env es ==>
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(nm,ty,sz). !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+    type_memory_bytes cenv ty = type_memory_size tv)
+Proof
+  simp[expr_sim_inv_mods_def] >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  irule return_copy_memory_size >>
+  goal_assum (drule_at Any) >> simp[] >>
+  rpt gen_tac >> disch_tac >>
+  qpat_assum `!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==> _`
+    (drule_then (ACCEPT_TAC o cj 2))
+QED
+
 (* Every allocated immutable lies below the linked constructor prefix. *)
 Theorem return_buffer_immutable_separation[local]:
-  contract_inv mods exps ctx cenv cx /\ expr_sim_inv cenv cx env entry /\
+  contract_inv mods exps ctx cenv cx /\ expr_sim_inv_mods mods cenv cx env entry /\
   env_consistent env cx ee /\ cenv.ce_is_ctor /\
   imm_len_mods cenv.ce_modules <= b /\
   FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
@@ -1298,7 +1319,7 @@ Proof
      disch_then (mp_tac o Q.SPECL [`src`,`name`,`ty`,`itv`,`iv`] o cj 2) >>
      Cases_on `ALOOKUP ee.immutables cx.txn.target` >> gvs[]) >>
   `type_memory_bytes cenv ty = type_memory_size itv` by
-    metis_tac[expr_sim_inv_memory_size] >>
+    metis_tac[expr_sim_inv_mods_memory_layout] >>
   `bytes = type_memory_size itv` by
     metis_tac[structFieldsPropsTheory.type_mem_bytes_type_memory_bytes] >>
   rewrite_tac[regions_disjoint_def] >> disj1_tac >> metis_tac[]
@@ -1308,7 +1329,7 @@ Theorem internal_return_memory_relayout_robust_taint:
   !DF lo ctx shadow_ctx PG func shadow_func mods exps cx ce cenv env es
    ty tv e lctx bw rpc rsz.
   contract_inv mods exps ctx cenv cx /\
-  same_frame ce cenv /\ expr_sim_inv cenv cx env es /\ lo <= w2n bw /\
+  same_frame ce cenv /\ expr_sim_inv_mods mods cenv cx env es /\ lo <= w2n bw /\
   ((FST ce.ce_nonreentrant /\ ~SND (SND (SND ce.ce_nonreentrant))) ==>
     ~cx.txn.is_static) /\
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
@@ -1319,12 +1340,9 @@ Theorem internal_return_memory_relayout_robust_taint:
   IS_SOME (type_stmt env ty (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
   type_memory_size tv + 64 < dimword (:256) /\
-  (!ety. expr_sim_full
-     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx ety e es /\
-   expr_vv_sim_full
-     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx ety e es) ==>
+  expr_sim_full
+    (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty e es ==>
   stmt_frag_full
     (DF,lo,SOME (bw,type_memory_size tv),ctx,shadow_ctx,PG,func,shadow_func)
     cx lctx (\H v ee gt r.
@@ -1364,7 +1382,7 @@ Proof
              (shadow_op, shadow_sm)` >>
   rename1 `compile_return_unlock cenv shadow_sm = ((), shadow_su)` >>
   `type_memory_bytes cenv ty = type_memory_size tv` by
-    metis_tac[expr_sim_inv_memory_size] >>
+    metis_tac[expr_sim_inv_mods_memory_layout] >>
   `op = shadow_op /\ gas_shadow_state sm shadow_sm` by
     (`gas_shadow_compiles (lower_value compile_expr cenv ty e)
         (lower_value compile_expr (gas_shadow_env T cenv) ty (gas_shadow_expr e))` by
@@ -1379,7 +1397,6 @@ Proof
      not_fresh_at sa x` by metis_tac[ret_pc_ok_def] >>
   `?pc. lookup_var rpc s0 = SOME pc /\ not_fresh_at sa rpc` by
     metis_tac[ret_pc_ok_def] >>
-  qpat_x_assum `!ety. _` (qspec_then `ty` strip_assume_tac) >>
   qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[expr_sim_full_def] >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `shadow_sa`, `shadow_sm`,
@@ -1450,14 +1467,8 @@ Proof
      (INL v, mid with gas_obs := [])` by
     (qpat_assum `!tail. bind _ _ _ = _`
        (qspec_then `[]` assume_tac) >> fs[]) >>
-  `alloc_limits_expr cenv e` by
-    fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
-       Once allocLimitsTheory.alloc_limits_expr_def] >>
-  mp_tac (Q.INST [`ret` |-> `ty`, `g` |-> `gas_explicit marks s0.vs_gas_readings`,
-    `ee` |-> `mid with gas_obs := []`] internal_return_buffer_value_layout_typed) >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  disch_then (qx_choosel_then [`stv`, `ptv`]
-    (map_every assume_tac o CONJUNCTS)) >>
+  drule_all_then (qx_choosel_then [`stv`,`ptv`]
+    (map_every assume_tac o CONJUNCTS)) selected_return_weak_layout_mods >>
   `0 < type_memory_size stv /\ type_memory_size stv <= type_memory_size tv` by
     (conj_tac
      >- metis_tac[placeMemoryTypeInterfacesTheory.type_widens_to_zero_memory_size,
@@ -1468,24 +1479,14 @@ Proof
      qpat_assum `arg_type_fits (lowered_value_type cenv e) ty`
        (mp_tac o MATCH_MP (cj 1 aggregateEvaluatedLayoutTheory.arg_fits_evaluated_memory_size)) >>
      disch_then (qspecl_then [`get_tenv cx`,`stv`,`tv`] mp_tac) >> simp[]) >>
-  `call_evaluation_safe cx (int_calls_expr e)` by
-    fs[vyperTypeCallGraphTheory.int_calls_stmt_def,vyperTypeCallGraphTheory.int_calls_expr_def] >>
-  `expr_sim_inv cenv cx env (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
-    simp[] >>
-  mp_tac (Q.INST [`es` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-    `ce` |-> `cenv`, `ret` |-> `ty`, `ee` |-> `mid with gas_obs := []`]
-    (CONV_RULE (DEPTH_CONV ETA_CONV) return_site_value_semantics)) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  `value_has_type tv v /\ val_wf tv v /\ val_wf stv v` by
-    (qpat_assum `evaluate_type (get_tenv cx) ty = SOME tv` (fn eq =>
-       qpat_assum `evaluate_type (get_tenv cx) ty = SOME _` (fn dst =>
-         assume_tac (REWRITE_RULE [eq, optionTheory.SOME_11] dst))) >>
-     rpt conj_tac >>
-     FIRST [first_assum ACCEPT_TAC,
-            first_assum (ACCEPT_TAC o MATCH_MP value_has_type_memory_wf),
-            asm_simp_tac bool_ss []]) >>
+  `val_wf tv v /\ val_wf stv v` by metis_tac[value_has_type_memory_wf] >>
   `type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv` by
-    metis_tac[expr_sim_inv_memory_size] >>
+    metis_tac[expr_sim_inv_mods_memory_layout] >>
+  `type_widens_to env.type_defs (expr_type e) ty` by
+    fs[vyperTypeSystemTheory.type_stmt_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    (drule_then assume_tac expr_sim_inv_mods_env >>
+     drule_then ACCEPT_TAC env_consistent_type_defs_get_tenv) >>
   `~is_word_type (expr_type e) /\ ~is_word_type (lowered_value_type cenv e)` by
     metis_tac[return_source_word_widens_eq] >>
   `~is_word_type (post_value_type cenv e)` by
@@ -1501,10 +1502,6 @@ Proof
      qpat_assum `~is_word_type (expr_type e)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      metis_tac[post_value_type_not_int_call]) >>
-  Q.SUBGOAL_THEN `post_value_type cenv e = lowered_value_type cenv e \/
-    (is_bytestring_type (post_value_type cenv e) /\
-     is_bytestring_type (lowered_value_type cenv e))` assume_tac
-  >- metis_tac[] >>
   `?src a. op = Var src /\ lookup_var src t = SOME a /\
      ptr_covers G1 tn1 src t (type_memory_size stv) /\
      (!m. mem_agree_outside tn1.t_mem t.vs_memory m ==>
@@ -1571,9 +1568,9 @@ Proof
     `stv` |-> `stv`, `tv` |-> `tv`]
       return_buffer_relayout_suffix) >>
   (impl_tac >- (
-    drule return_site_copy_metadata >> strip_tac >>
+    drule_then strip_assume_tac expr_sim_inv_mods_memory_layout >>
     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    TRY (fs[expr_sim_inv_def] >> NO_TAC) >>
+    TRY (fs[expr_sim_inv_mods_def] >> NO_TAC) >>
     TRY (fs[compile_return_unlock_shape,not_fresh_at_def] >> NO_TAC) >>
     metis_tac[typed_copy_bytestring_source])) >> strip_tac >>
   rename1 `val_in_memory tv v (w2n bw) copied.vs_memory` >>
@@ -1646,7 +1643,7 @@ Proof
        (qspec_then `H` (strip_assume_tac o BETA_RULE o C MP vh))) >>
   `stmt_state_rel H ctx func cenv cx mid t` by fs[expr_post_def] >>
   `env_consistent env cx (mid with gas_obs := [])` by
-    (irule internal_return_source_env >> fs[expr_sim_inv_def] >>
+    (irule internal_return_source_env >> fs[expr_sim_inv_mods_def] >>
      metis_tac[]) >>
   `cenv.ce_is_ctor ==> !src name itv iv off.
      (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\

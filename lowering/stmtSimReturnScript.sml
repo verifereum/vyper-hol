@@ -12,6 +12,7 @@
 
 Theory stmtSimReturn
 Ancestors
+  gasOutcomeFullBindMods
   stmtSimProps
   exprSimProps
   stmtSimDefs
@@ -1040,24 +1041,18 @@ Proof
   strip_tac >> qexistsl_tac [`G'`, `tn'`] >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  PairCases_on `ps` >>
-  pure_rewrite_tac[stmt_frag_full_def] >>
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >>
-  fs[stmt_exit_ptr_def] >> metis_tac[]
-QED
-*)
 Theorem stmt_frag_full_retq_weaken:
   stmt_frag_full ps cx lctx RetQ cenv m shadow_m source es /\
   (!H v ee gt r. RetQ H v ee gt r ==> RetQ' H v ee gt r) ==>
   stmt_frag_full ps cx lctx RetQ' cenv m shadow_m source es
 Proof
-  cheat
+  PairCases_on `ps` >>
+  pure_rewrite_tac[stmt_frag_full_def] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  irule gas_outcome_full_mods_post_source >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  fs[stmt_exit_ptr_def] >> metis_tac[]
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
@@ -1347,7 +1342,7 @@ QED
 
 (* The release and RET after a word operand; one ghost endpoint for every
    dead mask. *)
-Theorem return_word_suffix_origin_ptr_taint[local]:
+Theorem return_word_suffix_origin_ptr_taint:
   compile_return_unlock cenv sm = ((),su) /\
   emit_inst RET [op; Var rpc] [] su = ((),sb) /\
   fn_has_code sm su func /\ fn_has_code su sb func /\
