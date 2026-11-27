@@ -183,12 +183,8 @@ Proof
   rule_assum_tac (PURE_REWRITE_RULE [APPEND, APPEND_ASSOC]) >>
   `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
      (order_internals (runtime_internal_order tops ints) ints)))`
-    by (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops F)
-                (order_internals (runtime_internal_order tops ints) ints)))
-              (MAP FST (MAP (source_internal_fn_descriptor tops F) ints))`
-          by (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
-              simp[PERM_order_runtime_internals]) >>
-        drule sortingTheory.ALL_DISTINCT_PERM >> simp[]) >>
+    by (REWRITE_TAC [listTheory.MAP_MAP_o] >>
+        irule ALL_DISTINCT_order_runtime_internals >> fs[listTheory.MAP_MAP_o]) >>
   `EVERY (\d. internal_label_ok (FST d))
      (internal_fn_descriptors
        (MAP (set_internal_package_target rpolicy.rpol_target o
@@ -516,12 +512,8 @@ Proof
   `rpolicy.rpol_frontend_dispatch = Linear` by fs[lowering_policy_ok_def] >>
   `ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor tops F)
      (order_internals (runtime_internal_order tops ints) ints)))` by
-    (`PERM (MAP FST (MAP (source_internal_fn_descriptor tops F)
-              (order_internals (runtime_internal_order tops ints) ints)))
-           (MAP FST (MAP (source_internal_fn_descriptor tops F) ints))` by
-       (irule sortingTheory.PERM_MAP >> irule sortingTheory.PERM_MAP >>
-        simp[PERM_order_runtime_internals]) >>
-     drule sortingTheory.ALL_DISTINCT_PERM >> fs[]) >>
+    (REWRITE_TAC [listTheory.MAP_MAP_o] >>
+     irule ALL_DISTINCT_order_runtime_internals >> fs[listTheory.MAP_MAP_o]) >>
   `EVERY (\d. internal_label_ok (FST d))
      (internal_fn_descriptors
        (MAP (set_internal_package_target rpolicy.rpol_target o
