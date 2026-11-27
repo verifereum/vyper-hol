@@ -190,42 +190,6 @@ Proof
        allocas_from_def] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all grouped_fallback_source_parameters >> strip_tac >>
-  `vyperInterpreter$lookup_function NONE "__default__" External tops =
-    SOME (mut,nr,[],[],ret,fbody)` by fs[] >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  rename1 `classify_functions tops = (exts,ints,fb,ctor)` >>
-  `EXISTS external_has_defaults exts` by fs[] >>
-  drule_all lower_grouped_runtime_pair >> strip_tac >>
-  drule_all default_fallback_classified >> simp[] >> strip_tac >>
-  qabbrev_tac `stmts = subst_consts_stmts (module_consts_env tops []) fbody` >>
-  qabbrev_tac `rt = if ret = NoneT then NONE else SOME ret` >>
-  `?ce. fall = SOME (ce,mut = Payable,nr,global_nonreentrant_slot,T,mut = View,stmts,rt)` by
-    simp[package_fallback_fn_def, set_fallback_package_target_def, Abbr `stmts`, Abbr `rt`] >>
-  pop_assum strip_assume_tac >>
-  drule_all grouped_shadow_entry_dispatch >>
-  disch_then (qx_choosel_then [`shadow_installed`,`shadow_fn`,`sf`,`fallback`,`jobs`,
-    `sd`,`shd`,`sx`,`shx`,`sn`,`shn`,`se`,`she`] (map_every assume_tac o CONJUNCTS)) >>
-  `shadow_installed = shadow_unit` by metis_tac[optionTheory.SOME_11] >>
-  qpat_x_assum `shadow_installed = _` SUBST_ALL_TAC >>
-  qabbrev_tac `s = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
-  `?site. selected_registration_resources unit.cu_context fn site 0 sf s /\
-    s.vs_allocas = FEMPTY /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
-    fn_inst_ids_distinct fn /\ unit_alloca_budget unit.cu_context < dimword (:256) /\
-    (!name bb. lookup_block name fn.fn_blocks = SOME bb ==> phi_prefix_length bb.bb_instructions = 0) /\
-    (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp s /\
-     s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by
-    (qexists_tac `ARB` >> irule grouped_dispatch_initial_resources >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     simp[Abbr `s`] >> metis_tac[]) >>
-  pop_assum strip_assume_tac >>
-  suspend "guard"
-QED
-*)
 Theorem grouped_fallback_call_route:
   lower_vyper_runtime_unit tops rp = SOME unit /\ supported_program tops /\
   EXISTS external_has_defaults (FST (classify_functions tops)) /\
@@ -255,10 +219,38 @@ Theorem grouped_fallback_call_route:
         (gas_explicit marks vs.vs_gas_readings ++ tail) am tx = (res,am',rqs,obs) ==>
       obs = []) /\ marks = [])
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all grouped_fallback_source_parameters >> strip_tac >>
+  `vyperInterpreter$lookup_function NONE "__default__" External tops =
+    SOME (mut,nr,[],[],ret,fbody)` by fs[] >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rename1 `classify_functions tops = (exts,ints,fb,ctor)` >>
+  `EXISTS external_has_defaults exts` by fs[] >>
+  drule_all lower_grouped_runtime_pair >> strip_tac >>
+  drule_all default_fallback_classified >> simp[] >> strip_tac >>
+  qabbrev_tac `stmts = subst_consts_stmts (module_consts_env tops []) fbody` >>
+  qabbrev_tac `rt = if ret = NoneT then NONE else SOME ret` >>
+  `?ce. fall = SOME (ce,mut = Payable,nr,global_nonreentrant_slot,T,mut = View,stmts,rt)` by
+    simp[package_fallback_fn_def, set_fallback_package_target_def, Abbr `stmts`, Abbr `rt`] >>
+  pop_assum strip_assume_tac >>
+  drule_all grouped_shadow_entry_dispatch >>
+  disch_then (qx_choosel_then [`shadow_installed`,`shadow_fn`,`sf`,`fallback`,`jobs`,
+    `sd`,`shd`,`sx`,`shx`,`sn`,`shn`,`se`,`she`] (map_every assume_tac o CONJUNCTS)) >>
+  `shadow_installed = shadow_unit` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `shadow_installed = _` SUBST_ALL_TAC >>
+  qabbrev_tac `s = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+  `?site. selected_registration_resources unit.cu_context fn site 0 sf s /\
+    s.vs_allocas = FEMPTY /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+    fn_inst_ids_distinct fn /\ unit_alloca_budget unit.cu_context < dimword (:256) /\
+    (!name bb. lookup_block name fn.fn_blocks = SOME bb ==> phi_prefix_length bb.bb_instructions = 0) /\
+    (ctx_has_dalloca unit.cu_context ==> allocas_below_fmp s /\
+     s.vs_alloca_next + pending_alloca_size fn s <= w2n s.vs_initial_fmp)` by
+    (qexists_tac `ARB` >> irule grouped_dispatch_initial_resources >>
+     rpt conj_tac >> simp[Abbr `s`] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  suspend "guard"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume grouped_fallback_call_route[guard]:
   `compile_fallback_body ce (mut = Payable) nr global_nonreentrant_slot T
     (mut = View) stmts rt sn = ((),se) /\
@@ -303,9 +295,7 @@ Resume grouped_fallback_call_route[guard]:
      disch_then (qspecl_then [`sn`,`shn`] mp_tac) >> asm_rewrite_tac[SND]) >>
   suspend "value"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume grouped_fallback_call_route[value]:
   `gas_shadow_context unit.cu_context shadow_unit.cu_context /\
    MEM fn unit.cu_context.ctx_functions /\ MEM shadow_fn shadow_unit.cu_context.ctx_functions /\
@@ -321,9 +311,7 @@ Resume grouped_fallback_call_route[value]:
   >- suspend "accepted" >>
   suspend "rejected"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume grouped_fallback_call_route[accepted]:
   disj1_tac >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
@@ -347,20 +335,18 @@ Resume grouped_fallback_call_route[accepted]:
      suspend "body") >>
   fs[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume grouped_fallback_call_route[body]:
   `selected_registration_frame vs entry_taint u tz` by
     fs[selected_registration_frame_def, Abbr `s`] >>
   `!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,fn,[])
      (s,FEMPTY,entry_taint) [] (OK u,J,tz)` by
-     (rpt gen_tac >>
-      qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ (OK t,G,tn)`
-        (qspecl_then [`D`,`explicit`] mp_tac) >>
-      qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ (OK u,J,tz)`
-        (qspecl_then [`D`,`explicit`] mp_tac) >>
-      rpt (pop_assum kall_tac) >> metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
+    (rpt gen_tac >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ (OK t,G,tn)`
+       (qspecl_then [`D`,`explicit`] mp_tac) >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ (OK u,J,tz)`
+       (qspecl_then [`D`,`explicit`] mp_tac) >>
+     rpt (pop_assum kall_tac) >> metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
   `u.vs_initial_fmp = vs.vs_initial_fmp` by
     (qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ (OK u,J,tz)`
       (qspecl_then [`ARB`,`{}`] assume_tac) >>
@@ -370,6 +356,14 @@ Resume grouped_fallback_call_route[body]:
     qpat_assum `fall = set_fallback_package_target _ _` (fn pkg_eq =>
       qpat_assum `fall = SOME _` (assume_tac o SUBS [fb_eq] o SUBS [pkg_eq]))) >>
   drule_all fallback_empty_environment >> strip_tac >>
+  `ce.ce_modules = [(NONE,tops)]` by
+    (qpat_assum `set_fallback_package_target _ (package_fallback_fn _ _ _ (SOME _)) = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `ret = NoneT` >>
+     rw[package_fallback_fn_def, set_fallback_package_target_def,
+        update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
+        compile_env_accfupds, build_compile_env_ce_modules] >>
+     simp[compile_env_accfupds, build_compile_env_ce_modules]) >>
   drule fallback_empty_source_external_package >> strip_tac >>
   `~block_is_terminated sa` by metis_tac[compile_entry_checks_open] >>
   `local_ptrs_reserved ce sa` by simp[local_ptrs_reserved_def] >>
@@ -395,21 +389,35 @@ Resume grouped_fallback_call_route[body]:
       (D,0,gas_explicit_sites unit.cu_context shadow_unit.cu_context,unit.cu_context,fn,[])
       (s,FEMPTY,entry_taint) [] (OK u,J,tz)` by
     (rpt gen_tac >> first_x_assum irule) >>
+  `s = vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>` by
+    simp[Abbr `s`] >>
   qunabbrev_tac `rt` >>
   irule (Q.INST [`marks` |-> `[]`, `ce0` |-> `ce`] grouped_registered_body_endpoint) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (qexists_tac `fbody` >> simp[Abbr `stmts`]) >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (qexists_tac `fbody` >> simp[Abbr `stmts`])
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`J`,`bb`,`ce`,`cx`,`se`,`fn`,`mut = Payable`,`mut = View`,
     `"fn_" ++ "__default__"`,`4`,`global_nonreentrant_slot`,`[]`,
     `if ret = NoneT then NONE else SOME ret`,`s`,`sa`,`she`,`shadow_fn`,`sha`,`shadow_unit`,
     `u`,`tz`,`T`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  simp[constSubstCorrectTheory.subst_consts_exprs_map] >>
-  simp[GSYM compile_env_component_equality, Abbr `s`]
+  qpat_assum `ce.ce_vars = FEMPTY` (fn vars =>
+    qpat_assum `tx.function_name = "__default__"` (fn name =>
+      qpat_assum `set_external_package_target _ _ = _` (fn pkg =>
+        qpat_assum `fresh_vars_wrt sa u` (fn fresh =>
+          simp_tac (srw_ss()) [vars,name,pkg,fresh,
+            GSYM compile_env_component_equality,
+            constSubstCorrectTheory.subst_consts_exprs_map])))) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume grouped_fallback_call_route[rejected]:
   `mut <> Payable /\ tx.value <> 0` by fs[] >>
   `t.vs_call_ctx.cc_callvalue <> 0w` by
@@ -428,8 +436,5 @@ Resume grouped_fallback_call_route[rejected]:
   drule_all grouped_entry_value_rejected >> strip_tac >>
   disj2_tac >> simp[gas_explicit_def] >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise grouped_fallback_call_route
-*)
