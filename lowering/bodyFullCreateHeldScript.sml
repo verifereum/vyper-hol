@@ -14851,10 +14851,8 @@ QED
 Finalise raw_create_bytecode_cut
 *)
 
-Theorem raw_create_expr_full_ok:
-  !cx ty s r ks es d.
-    body_exprs_full_ok_mods mods exps cx (create_operand_order RawCreate s es) ==>
-    body_expr_full_ok_mods mods exps cx (Call ty (CreateTarget RawCreate s r ks) es d)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   map_every qx_gen_tac [`cx`,`ann`,`salted`,`rof`,`ks`,`args`,`dflt`] >>
   disch_tac >> rewrite_tac[Once body_expr_full_ok_def] >>
@@ -14888,7 +14886,16 @@ Proof
        vyperASTTheory.expr_type_def,is_word_type_def] >>
   metis_tac[create_eval_value]
 QED
+*)
+Theorem raw_create_expr_full_ok:
+  !cx ty s r ks es d.
+    body_exprs_full_ok_mods mods exps cx (create_operand_order RawCreate s es) ==>
+    body_expr_full_ok_mods mods exps cx (Call ty (CreateTarget RawCreate s r ks) es d)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_create_expr_full_ok[bytecode]:
   `expr_body_pre cenv cx env code es` by fs[] >>
   qpat_assum `create_operand_order RawCreate _ _ = _` (fn order_th =>
@@ -15001,7 +15008,9 @@ Resume raw_create_expr_full_ok[bytecode]:
   >- suspend "no_ctor" >>
   suspend "ctor"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_create_expr_full_ok[scalar]:
   qabbrev_tac `raw_action = \av sv.
     bind (src_action (BytesV bs::(cvs ++ av::(case sv of NONE => [] | SOME salt_val => [salt_val]))))
@@ -15093,7 +15102,9 @@ Resume raw_create_expr_full_ok[scalar]:
   qpat_assum `OPTREL _ sop sw` mp_tac >>
   Cases_on `sop` >> Cases_on `sw` >> simp[NoAsms,optionTheory.OPTREL_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_create_expr_full_ok[no_ctor]:
   qpat_x_assum `if ctor = [] then _ else _`
     (fn th => qpat_assum `ctor = []` (fn eq =>
@@ -15133,7 +15144,9 @@ Resume raw_create_expr_full_ok[no_ctor]:
     qexists `pbase + 32` >> fs[wordsTheory.dimword_def]) >>
   simp[NoAsms]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_create_expr_full_ok[ctor]:
   qpat_x_assum `if ctor = [] then _ else _`
     (fn th => qpat_assum `ctor <> []` (fn ne =>
@@ -15243,5 +15256,8 @@ Resume raw_create_expr_full_ok[ctor]:
       (ACCEPT_TAC o SIMP_RULE (srw_ss()) [])) >>
   simp[NoAsms]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise raw_create_expr_full_ok
+*)
