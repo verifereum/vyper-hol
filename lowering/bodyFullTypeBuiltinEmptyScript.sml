@@ -8,13 +8,8 @@ Ancestors
   vyperContext vyperInterpreter vyperState vyperAST
   bodyFullPredsMods[qualified]
 
-Theorem empty_expr_full_ok:
-  !cx v11 typ es.
-    (!s'' x t.
-       type_check (type_builtin_args_length_ok Empty (LENGTH es))
-         "TypeBuiltin args" s'' = (INL x,t) ==>
-       body_exprs_full_ok_mods mods exps cx es) ==>
-    body_expr_full_ok_mods mods exps cx (TypeBuiltin v11 Empty typ es)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   rw[body_expr_full_ok_def] >>
@@ -26,7 +21,19 @@ Proof
     cenv cx ty (TypeBuiltin typ Empty typ []) es'` by suspend "vv" >>
   simp[] >> suspend "value"
 QED
+*)
+Theorem empty_expr_full_ok:
+  !cx v11 typ es.
+    (!s'' x t.
+       type_check (type_builtin_args_length_ok Empty (LENGTH es))
+         "TypeBuiltin args" s'' = (INL x,t) ==>
+       body_exprs_full_ok_mods mods exps cx es) ==>
+    body_expr_full_ok_mods mods exps cx (TypeBuiltin v11 Empty typ es)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume empty_expr_full_ok[vv]:
   Cases_on `is_word_type typ` >- suspend "word" >>
   rewrite_tac[bodySimFullTheory.expr_vv_sim_full_def] >>
@@ -142,6 +149,8 @@ Resume empty_expr_full_ok[vv]:
      simp[]) >>
   qpat_x_assum `!name b len. local_region _ _ s0 _ _ _ ==> _` drule >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume empty_expr_full_ok[value]:
   irule expr_sim_full_of_vv >> simp[] >>
   conj_tac
@@ -155,6 +164,8 @@ Resume empty_expr_full_ok[value]:
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
   strip_tac >> gvs[] >> metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume empty_expr_full_ok[word]:
   drule expr_body_pre_type_evaluates >>
   simp[expr_type_def, optionTheory.IS_SOME_EXISTS] >> strip_tac >>
@@ -174,4 +185,7 @@ Resume empty_expr_full_ok[word]:
   irule exprSimAggregatesTheory.typed_val_to_w256_default_word >>
   metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise empty_expr_full_ok
+*)

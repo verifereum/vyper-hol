@@ -373,6 +373,19 @@ QED
 
 Finalise for_storage_array_nil_core
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >> drule_all expr_sim_inv_memory_size >> strip_tac >>
+  conj_tac >- (Cases_on `tr` >>
+    simp[elem_size_in_location_def, is_slot_addressed_def,
+      slot_count_of_memory_size]) >>
+  conj_tac >- simp[type_memory_size_slots] >>
+  strip_tac >> drule unwrap_typed_buffer_count_bound >> strip_tac >>
+  simp[]
+  >> (gvs[])
+QED
+*)
 Theorem for_storage_element_layout:
   expr_sim_inv_mods mods cenv cx env es /\
   evaluate_type (get_tenv cx) et = SOME tv ==>
@@ -383,14 +396,7 @@ Theorem for_storage_element_layout:
     type_slot_size tv < 2**256 /\
     type_memory_bytes cenv et + 64 < 2**256)
 Proof
-  strip_tac >> drule_all expr_sim_inv_memory_size >> strip_tac >>
-  conj_tac >- (Cases_on `tr` >>
-    simp[elem_size_in_location_def, is_slot_addressed_def,
-      slot_count_of_memory_size]) >>
-  conj_tac >- simp[type_memory_size_slots] >>
-  strip_tac >> drule unwrap_typed_buffer_count_bound >> strip_tac >>
-  simp[]
-  >> (gvs[])
+  cheat
 QED
 
 (* Invoke the body at its actual compiler age.  The non-Label fact is

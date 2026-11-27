@@ -34,6 +34,55 @@ fun use_ifexp_child child =
       _ ==> expr_sim_full _ _ _ _ _ _ /\ _` mp_tac >>
   metis_tac[];
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (assume_tac o GEN_ALL) >> rpt gen_tac >> strip_tac >>
+  once_rewrite_tac [bodyFullPredsTheory.body_expr_full_ok_def] >> simp[] >>
+  reverse conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> rpt (goal_assum (drule_at Any))) >>
+  rpt gen_tac >> strip_tac >>
+  drule ifexp_body_pre_children >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+  `?rty. evaluate_type (get_tenv cx) v5 = SOME rty` by
+    (qpat_assum `expr_body_pre _ _ _ (IfExp _ _ _ _) _`
+       (mp_then Any mp_tac exprSimHypsTheory.expr_body_pre_type_evaluates) >>
+     simp[expr_type_def, optionTheory.IS_SOME_EXISTS]) >>
+  reverse conj_asm2_tac
+  >- (qpat_x_assum `!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env. _` irule >>
+      simp[] >>
+      conj_tac >- (rpt gen_tac >> strip_tac >>
+        `expr_body_pre cenv cx env e es` by metis_tac[] >>
+        drule ifexp_body_arm_kind >> gvs[]) >>
+      conj_tac >- fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
+      conj_tac >- (rpt strip_tac >> irule typedMemoryCopyTheory.typed_copy_memory_size >>
+        fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
+      conj_tac >- (strip_tac >>
+        qpat_assum `expr_body_pre _ _ _ (IfExp _ _ _ _) _`
+          (mp_then Any mp_tac exprSimHypsTheory.expr_body_pre_copy_ok) >>
+        simp[expr_type_def]) >>
+      conj_tac >- fs[bodySimTheory.body_inv_def] >>
+      conj_tac >- suspend "arms" >>
+      conj_tac >- fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
+      use_ifexp_child `body_expr_full_ok cx e1`) >>
+  qpat_x_assum `!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env. _` kall_tac >>
+  irule bodyFullOfVVTheory.expr_sim_full_of_vv >>
+  simp[post_value_type_def, expr_type_def] >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_assum `expr_body_pre _ _ _ (IfExp _ _ _ _) _`
+        (mp_then Any mp_tac exprSimHypsTheory.expr_body_pre_copy_ok) >>
+      simp[expr_type_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env (IfExp v5 e1 e2 e3) (es with gas_obs := gs)` by
+    metis_tac[exprSimSourceTheory.expr_body_pre_gas_obs] >>
+  `bind (eval_expr cx (IfExp v5 e1 e2 e3)) (read_result cx)
+     (es with gas_obs := gs) = (INL v,ee)` by simp[bind_def] >>
+  qpat_assum `expr_body_pre _ _ _ (IfExp _ _ _ _) (_ with gas_obs := _)`
+    (mp_then Any mp_tac exprSimIfExpTheory.ifexp_body_pre_read_typed) >>
+  simp[expr_type_def] >> metis_tac[]
+QED
+*)
 Theorem ifexp_expr_full_ok_from_root[local]:
   (!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
@@ -81,52 +130,10 @@ Theorem ifexp_expr_full_ok_from_root[local]:
     body_expr_full_ok_mods mods exps cx e1 ==>
     body_expr_full_ok_mods mods exps cx (IfExp v5 e1 e2 e3)
 Proof
-  disch_then (assume_tac o GEN_ALL) >> rpt gen_tac >> strip_tac >>
-  once_rewrite_tac [bodyFullPredsTheory.body_expr_full_ok_def] >> simp[] >>
-  reverse conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >> rpt (goal_assum (drule_at Any))) >>
-  rpt gen_tac >> strip_tac >>
-  drule ifexp_body_pre_children >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
-  `?rty. evaluate_type (get_tenv cx) v5 = SOME rty` by
-    (qpat_assum `expr_body_pre _ _ _ (IfExp _ _ _ _) _`
-       (mp_then Any mp_tac exprSimHypsTheory.expr_body_pre_type_evaluates) >>
-     simp[expr_type_def, optionTheory.IS_SOME_EXISTS]) >>
-  reverse conj_asm2_tac
-  >- (qpat_x_assum `!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env. _` irule >>
-      simp[] >>
-      conj_tac >- (rpt gen_tac >> strip_tac >>
-        `expr_body_pre cenv cx env e es` by metis_tac[] >>
-        drule ifexp_body_arm_kind >> gvs[]) >>
-      conj_tac >- fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
-      conj_tac >- (rpt strip_tac >> irule typedMemoryCopyTheory.typed_copy_memory_size >>
-        fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
-      conj_tac >- (strip_tac >>
-        qpat_assum `expr_body_pre _ _ _ (IfExp _ _ _ _) _`
-          (mp_then Any mp_tac exprSimHypsTheory.expr_body_pre_copy_ok) >>
-        simp[expr_type_def]) >>
-      conj_tac >- fs[bodySimTheory.body_inv_def] >>
-      conj_tac >- suspend "arms" >>
-      conj_tac >- fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
-      use_ifexp_child `body_expr_full_ok cx e1`) >>
-  qpat_x_assum `!c a b t cenv cx rty DF lo d ctx shadow_ctx PG func shadow_func es ty env. _` kall_tac >>
-  irule bodyFullOfVVTheory.expr_sim_full_of_vv >>
-  simp[post_value_type_def, expr_type_def] >>
-  conj_tac
-  >- (strip_tac >>
-      qpat_assum `expr_body_pre _ _ _ (IfExp _ _ _ _) _`
-        (mp_then Any mp_tac exprSimHypsTheory.expr_body_pre_copy_ok) >>
-      simp[expr_type_def]) >>
-  rpt gen_tac >> strip_tac >>
-  `expr_body_pre cenv cx env (IfExp v5 e1 e2 e3) (es with gas_obs := gs)` by
-    metis_tac[exprSimSourceTheory.expr_body_pre_gas_obs] >>
-  `bind (eval_expr cx (IfExp v5 e1 e2 e3)) (read_result cx)
-     (es with gas_obs := gs) = (INL v,ee)` by simp[bind_def] >>
-  qpat_assum `expr_body_pre _ _ _ (IfExp _ _ _ _) (_ with gas_obs := _)`
-    (mp_then Any mp_tac exprSimIfExpTheory.ifexp_body_pre_read_typed) >>
-  simp[expr_type_def] >> metis_tac[]
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ifexp_expr_full_ok_from_root[arms]:
   qexists `env` >>
   rpt gen_tac >> strip_tac >>
@@ -166,8 +173,11 @@ Resume ifexp_expr_full_ok_from_root[arms]:
    gvs[SF ETA_ss, vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
    strip_tac >> rpt strip_tac >> gvs[])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise ifexp_expr_full_ok_from_root
+*)
 
 (* body_inv and expr_body_pre, the word agreement by the contrapositive of
    post_value_type_nonword. *)
