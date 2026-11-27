@@ -276,19 +276,15 @@ Proof
 QED
 
 (* No scope holds a local once the frame is left. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rw[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
-     logs_rel_def, local_ptrs_rel_def, local_region_def, lookup_scopes_def]
-QED
-*)
 Theorem state_rel_scopes_nil:
   !H func cenv cx es s.
     state_rel H func cenv cx es s ==>
     state_rel H func cenv cx (es with scopes := []) s
 Proof
-  cheat
+  simp[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+       immutables_rel_def, logs_rel_def, local_ptrs_rel_def, local_region_def,
+       lookup_scopes_def] >>
+  rpt gen_tac >> strip_tac >> conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
