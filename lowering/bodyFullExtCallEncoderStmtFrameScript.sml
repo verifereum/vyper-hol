@@ -5,10 +5,30 @@ Ancestors
   bodyFullIntCallReturnFrame loweringStateRelDefs exprLoweringProps
   compileEnv venomInst venomState finite_map alist words list
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem extcall_encoder_stmt_frame:
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+    ctx func cenv cx ee q /\
+  abi_encode_exec_frame func q t /\
+  abi_encoder_registered_effect ids outs q t /\
+  allocation_growth q t /\ alloca_inv t /\ t.vs_labels = q.vs_labels /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv st /\
+  (!x w. not_fresh_at st x /\ lookup_var x q = SOME w ==>
+    lookup_var x t = SOME w) /\
+  (!name b n. local_region cenv ee.scopes q name b n ==>
+    mem_bytes_at b n t.vs_memory = mem_bytes_at b n q.vs_memory) /\
+  (cenv.ce_is_ctor ==> !src name tv v off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
+    mem_bytes_at off (type_memory_size tv) t.vs_memory =
+      mem_bytes_at off (type_memory_size tv) q.vs_memory) /\
+  (!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_operands = [Lit n] /\ FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
+    FLOOKUP q.vs_allocas inst.inst_id = NONE ==> sz = w2n n) ==>
+  stmt_state_rel H ctx func cenv cx ee t
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_then strip_assume_tac stmt_state_rel_local_ptrs_alloca >>
   drule_then assume_tac stmt_state_rel_state_rel >>
   drule_then assume_tac stmt_state_rel_alloca_room >>
@@ -39,6 +59,11 @@ Proof
   `immutable_alloca_sep func cenv cx ee t` by
     (irule abi_encode_caller_immutable_separation >> qexists `q` >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+    immutable_alloca_sep func (cenv with ce_module := src) cx ee t` by
+    (rpt strip_tac >> irule abi_encode_caller_immutable_separation >>
+     qexists `q` >>
+     simp[] >> rpt conj_tac >> metis_tac[stmt_state_rel_def]) >>
   `immutable_base_zero cenv t` by
     (irule abi_encode_caller_immutable_base >> qexists `q` >> simp[] >>
      metis_tac[local_ptrs_reserved_imm_base]) >>
@@ -55,29 +80,4 @@ Proof
   PairCases_on `x` >> gvs[] >>
   qpat_assum `stmt_state_rel H ctx func cenv cx ee q`
     (mp_then Any (drule_all_then ACCEPT_TAC) stmt_state_rel_alloca_size)
-QED
-*)
-Theorem extcall_encoder_stmt_frame:
-  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
-    ctx func cenv cx ee q /\
-  abi_encode_exec_frame func q t /\
-  abi_encoder_registered_effect ids outs q t /\
-  allocation_growth q t /\ alloca_inv t /\ t.vs_labels = q.vs_labels /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv st /\
-  (!x w. not_fresh_at st x /\ lookup_var x q = SOME w ==>
-    lookup_var x t = SOME w) /\
-  (!name b n. local_region cenv ee.scopes q name b n ==>
-    mem_bytes_at b n t.vs_memory = mem_bytes_at b n q.vs_memory) /\
-  (cenv.ce_is_ctor ==> !name tv v off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
-    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
-    mem_bytes_at off (type_memory_size tv) t.vs_memory =
-      mem_bytes_at off (type_memory_size tv) q.vs_memory) /\
-  (!inst n b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-    inst.inst_operands = [Lit n] /\ FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
-    FLOOKUP q.vs_allocas inst.inst_id = NONE ==> sz = w2n n) ==>
-  stmt_state_rel H ctx func cenv cx ee t
-Proof
-  cheat
 QED
