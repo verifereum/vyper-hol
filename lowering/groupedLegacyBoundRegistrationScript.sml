@@ -35,7 +35,7 @@ Theorem grouped_legacy_bound_registration:
     u.vs_alloca_next + pending_alloca_size fn u <= w2n u.vs_initial_fmp) /\
   (!k. ~MEM k (MAP FST args) ==> FLOOKUP cf.ce_vars k = NONE) /\
   local_ptrs_reserved cf sa /\
-  cf.ce_module = NONE /\ ~cf.ce_is_ctor /\ cf.ce_imm_alloca = NONE /\
+  cf.ce_modules = [(NONE,tops)] /\ cf.ce_module = NONE /\ ~cf.ce_is_ctor /\ cf.ce_imm_alloca = NONE /\
   cf.ce_return_pc = NONE /\ cf.ce_return_buf = NONE /\
   storage_vars_rel (cf with ce_vars := FEMPTY) cx /\
   transient_vars_rel (cf with ce_vars := FEMPTY) cx /\
