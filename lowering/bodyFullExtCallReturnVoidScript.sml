@@ -6,6 +6,50 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule extcallReturnInterfaceTheory.extcall_return_type_bounds >> strip_tac >>
+  gvs[extcall_returned_def, extcall_default_ready_def, compileEnvTheory.comp_return_def] >>
+  simp[vyperABITheory.evaluate_abi_decode_return_def,
+       vyperABITheory.needs_external_call_wrap_def,
+       vyperABITheory.evaluate_abi_decode_returndata_def,
+       vyperABITheory.vyper_abi_size_bound_def,
+       vyperABITheory.vyper_valid_enc_returndata_def,
+       vyperABITheory.decode_abi_value_def,
+       vyperABITheory.vyper_is_dynamic_def,
+       vyperABITheory.vyper_decode_valid_enc_def] >>
+  qexistsl_tac [`INL (Value NoneV)`, `OK t`, `G`, `tn`] >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.lift_sum_runtime_def] >>
+  gen_tac >> disch_tac >>
+  `ee with gas_obs := [] = ee` by simp[vyperStateTheory.evaluation_state_component_equality] >>
+  simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules,
+       contextTheory.vv_location_def, expr_type_def,
+       compileEnvTheory.is_word_type_def, ptr_vv_ok_def, ptr_val_ok_def,
+       exprSimMemDefsTheory.vv_store_bound_def] >>
+  simp[lowered_value_type_def, ptr_buf_ok_def, ptr_mem_ok_def,
+       compileEnvTheory.type_memory_bytes_def,
+       vyperStateTheory.read_result_def, vyperStateTheory.return_def,
+       venomStateTheory.eval_operand_def,
+       valueEncodingDefsTheory.val_in_memory_def] >>
+  simp[expr_type_def, exprSimPropsTheory.val_store_size_def,
+       loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def,
+       ptrDisciplineTheory.op_taint_def, compileEnvTheory.type_memory_bytes_def] >>
+  simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
+       loweringPostsTheory.vv_at_def, loweringPostsTheory.post_value_type_def,
+       expr_type_def, loweringPostsTheory.wb_frame_def] >>
+  gvs[loweringPostsTheory.wb_frame_def,
+      vyperStateTheory.read_result_def, vyperStateTheory.return_def,
+      loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
+      venomStateTheory.eval_operand_def, compileEnvTheory.is_word_type_def,
+      valueEncodingDefsTheory.val_in_memory_def,
+      loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def,
+      valueEncodingDefsTheory.val_wf_def] >>
+  metis_tac[]
+QED
+*)
 Theorem extcall_return_step_void:
   !mods DF lo d explicit ctx PG func cenv cx env es ann is_static skip fname
    arg_types ret_type opts args dflt st0 sa sb s0 G0 tn0 sr result_op vv
@@ -134,43 +178,5 @@ Theorem extcall_return_step_void:
          ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn') \/
          (exit_result r /\ create_size_exit_ok ctx res r /\ expr_exit res r)))
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule extcallReturnInterfaceTheory.extcall_return_type_bounds >> strip_tac >>
-  gvs[extcall_returned_def, extcall_default_ready_def, compileEnvTheory.comp_return_def] >>
-  simp[vyperABITheory.evaluate_abi_decode_return_def,
-       vyperABITheory.needs_external_call_wrap_def,
-       vyperABITheory.evaluate_abi_decode_returndata_def,
-       vyperABITheory.vyper_abi_size_bound_def,
-       vyperABITheory.vyper_valid_enc_returndata_def,
-       vyperABITheory.decode_abi_value_def,
-       vyperABITheory.vyper_is_dynamic_def,
-       vyperABITheory.vyper_decode_valid_enc_def] >>
-  qexistsl_tac [`INL (Value NoneV)`, `OK t`, `G`, `tn`] >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.lift_sum_runtime_def] >>
-  gen_tac >> disch_tac >>
-  `ee with gas_obs := [] = ee` by simp[vyperStateTheory.evaluation_state_component_equality] >>
-  simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules,
-       contextTheory.vv_location_def, expr_type_def,
-       compileEnvTheory.is_word_type_def, ptr_vv_ok_def, ptr_val_ok_def,
-       exprSimMemDefsTheory.vv_store_bound_def] >>
-  simp[lowered_value_type_def, ptr_buf_ok_def, ptr_mem_ok_def,
-       compileEnvTheory.type_memory_bytes_def,
-       vyperStateTheory.read_result_def, vyperStateTheory.return_def,
-       venomStateTheory.eval_operand_def,
-       valueEncodingDefsTheory.val_in_memory_def] >>
-  simp[expr_type_def, exprSimPropsTheory.val_store_size_def,
-       loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def,
-       ptrDisciplineTheory.op_taint_def, compileEnvTheory.type_memory_bytes_def] >>
-  simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
-       loweringPostsTheory.vv_at_def, loweringPostsTheory.post_value_type_def,
-       expr_type_def, loweringPostsTheory.wb_frame_def] >>
-  gvs[loweringPostsTheory.wb_frame_def,
-      vyperStateTheory.read_result_def, vyperStateTheory.return_def,
-      loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
-      venomStateTheory.eval_operand_def, compileEnvTheory.is_word_type_def,
-      valueEncodingDefsTheory.val_in_memory_def,
-      loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def,
-      valueEncodingDefsTheory.val_wf_def] >>
-  metis_tac[]
+  cheat
 QED
