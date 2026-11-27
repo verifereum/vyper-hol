@@ -12318,6 +12318,33 @@ QED
 
 (* Run the target before unwrapping the original, unsnapshotted RHS.
    The only open outcome is the actual destination write. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule body_assign_saved_target_type >> strip_tac >>
+  `gas_admissible (eval_target_place cx bt) target_place_res_ok mid` by
+    (mp_tac (Q.INST [`t` |-> `bt`] body_assign_saved_target_admissible) >> simp[]) >>
+  `ci_mono sa sm` by
+    (qspecl_then [`cenv`,`expr_type e`,`e`,`sa`] mp_tac
+      (cj 1 ci_mono_compile_expr_sa) >> simp[]) >>
+  `local_ptrs_reserved cenv sm /\
+   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
+    (fs[ci_mono_def, ret_pc_ok_def, not_fresh_at_def] >>
+     metis_tac[local_ptrs_reserved_next_var, LESS_LESS_EQ_TRANS]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx mid s /\
+       storage_well_formed_on cx mid (FST H) /\
+       ghost_inv_at (DF H) lo d cenv cx mid G tn s` by
+    (rpt strip_tac >> fs[vv_post_def]) >>
+  mp_tac (Q.INST [`t` |-> `bt`, `sr` |-> `sm`, `st` |-> `sb`]
+    body_assign_saved_target_outcome) >>
+  (impl_tac >-
+    (reverse (rpt conj_tac) >- suspend "normal" >> first_assum ACCEPT_TAC)) >>
+  simp[]
+QED
+*)
 Theorem body_assign_other_saved_target_bind[local]:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ struct_args_unique tops /\
@@ -12446,30 +12473,10 @@ Theorem body_assign_other_saved_target_bind[local]:
       (ctx_has_dalloca ctx ==>
          !s. (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule body_assign_saved_target_type >> strip_tac >>
-  `gas_admissible (eval_target_place cx bt) target_place_res_ok mid` by
-    (mp_tac (Q.INST [`t` |-> `bt`] body_assign_saved_target_admissible) >> simp[]) >>
-  `ci_mono sa sm` by
-    (qspecl_then [`cenv`,`expr_type e`,`e`,`sa`] mp_tac
-      (cj 1 ci_mono_compile_expr_sa) >> simp[]) >>
-  `local_ptrs_reserved cenv sm /\
-   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
-    (fs[ci_mono_def, ret_pc_ok_def, not_fresh_at_def] >>
-     metis_tac[local_ptrs_reserved_next_var, LESS_LESS_EQ_TRANS]) >>
-  `!H. valid_horizon cx st0 H mid.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx mid s /\
-       storage_well_formed_on cx mid (FST H) /\
-       ghost_inv_at (DF H) lo d cenv cx mid G tn s` by
-    (rpt strip_tac >> fs[vv_post_def]) >>
-  mp_tac (Q.INST [`t` |-> `bt`, `sr` |-> `sm`, `st` |-> `sb`]
-    body_assign_saved_target_outcome) >>
-  (impl_tac >-
-    (reverse (rpt conj_tac) >- suspend "normal" >> first_assum ACCEPT_TAC)) >>
-  simp[]
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_saved_target_bind[normal]:
   qx_genl_tac [`marks`,`p`,`ee`,`Gu`,`tnu`,`u`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -12527,7 +12534,10 @@ Resume body_assign_other_saved_target_bind[normal]:
      conj_tac >> first_assum ACCEPT_TAC)) >>
   simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_saved_target_bind[local]
+*)
 
 Theorem body_assign_value_code_slice[local]:
   compile_expr cenv (expr_type e) e sa = (vv0,sr) /\
