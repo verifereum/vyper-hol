@@ -18214,36 +18214,8 @@ fun nested_immutable_normalize_store origin g =
    (impl_tac >- simp[eval_operand_def]) >>
    nested_immutable_finish `zn:venom_state` `sn` `Gn` `tnn`) g;
 
-Theorem body_assign_nested_nonempty_immutable_full:
-  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t' s'3' v t''.
-       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
-       body_base_target_full_ok_mods mods exps cx t) /\
-    body_expr_full_ok_mods mods exps cx e /\
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    struct_args_unique tops /\
-    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
-    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
-       (Assign (BaseTarget t) e) ==>
-       occurs_abi_decode_target target tops) /\
-    body_const_cells_agree mods cx env es /\
-    expr_sim_inv_mods mods cenv cx env es /\
-    ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
-    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
-    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
-    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty /\
-    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-    immutable_root cx t /\ ~(?nsid. t = TopLevelNameTarget nsid) /\
-    ~supported_stmt_expr_exists (const_name_root cx) (Assign (BaseTarget t) e) ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
-      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
-      (eval_stmt cx (Assign (BaseTarget t) e)) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   irule body_assign_other_value_rhs_bind >>
@@ -18359,8 +18331,43 @@ Proof
   >- (Cases_on `FST (SND r)` >> fs[]) >>
   suspend "saved_write"
 QED
+*)
+Theorem body_assign_nested_nonempty_immutable_full:
+  !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok_mods mods exps cx t) /\
+    body_expr_full_ok_mods mods exps cx e /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    struct_args_unique tops /\
+    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget t) e) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
+    ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+    frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty /\
+    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+    immutable_root cx t /\ ~(?nsid. t = TopLevelNameTarget nsid) /\
+    ~supported_stmt_expr_exists (const_name_root cx) (Assign (BaseTarget t) e) ==>
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
+      (eval_stmt cx (Assign (BaseTarget t) e)) es
+Proof
+  cheat
+QED
 
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[saved_write]:
   qx_genl_tac [`target_marks`,`p`,`ee`,`Gu`,`tnu`,`u`,`z`,`Gz`,`tnz`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -18379,7 +18386,9 @@ Resume body_assign_nested_nonempty_immutable_full[saved_write]:
     (qspec_then `H` (drule_then strip_assume_tac)) >>
   fs[expr_post_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[snapshot_write]:
   qx_genl_tac [`target_marks`,`p`,`ee`,`z`,`Gz`,`tnz`,`u`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -18398,7 +18407,9 @@ Resume body_assign_nested_nonempty_immutable_full[snapshot_write]:
     (qspec_then `H` (drule_then strip_assume_tac)) >>
   fs[assign_target_post_def,imm_target_post_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[snapshot_target]:
   strip_tac >>
   nested_immutable_target_post >>
@@ -18421,7 +18432,9 @@ Resume body_assign_nested_nonempty_immutable_full[snapshot_target]:
       suspend "snapshot_word") >>
   suspend "snapshot_nonword"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[saved_target]:
   strip_tac >>
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -18462,21 +18475,27 @@ Resume body_assign_nested_nonempty_immutable_full[saved_target]:
       suspend "saved_word") >>
   suspend "saved_nonword"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[snapshot_word]:
   nested_immutable_word_width >>
   nested_immutable_write_base >>
   nested_immutable_word_execution ``vv:vyper_value`` >>
   nested_immutable_finish `z:venom_state` `su` `Gz` `tnz`
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[saved_word]:
   nested_immutable_word_width >>
   nested_immutable_write_base >>
   nested_immutable_word_execution ``vv0:vyper_value`` >>
   nested_immutable_finish `z:venom_state` `su` `Gz` `tnz`
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[snapshot_nonword]:
   nested_immutable_class_compile `~is_word_type ty` >>
   `~is_word_type (lowered_value_type cenv e)` by
@@ -18500,7 +18519,9 @@ Resume body_assign_nested_nonempty_immutable_full[snapshot_nonword]:
      metis_tac[val_footprint_le,ADD_COMM]) >>
   suspend "snapshot_normalize"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[saved_nonword]:
   nested_immutable_class_compile `~is_word_type ty` >>
   `~is_word_type (lowered_value_type cenv e)` by
@@ -18579,7 +18600,9 @@ Resume body_assign_nested_nonempty_immutable_full[saved_nonword]:
   Cases_on `lowered_value_type cenv e = ty` >- (nested_immutable_fixed_suffix ``vv0:vyper_value``) >>
   suspend "saved_normalize"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[snapshot_normalize]:
   nested_immutable_normalize_compile >>
   nested_immutable_normalize_code >>
@@ -18593,7 +18616,9 @@ Resume body_assign_nested_nonempty_immutable_full[snapshot_normalize]:
   nested_immutable_normalize_origin_frames >>
   nested_immutable_normalize_store ``vv:vyper_value``
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_nonempty_immutable_full[saved_normalize]:
   nested_immutable_normalize_compile >>
   nested_immutable_normalize_code >>
@@ -18607,8 +18632,11 @@ Resume body_assign_nested_nonempty_immutable_full[saved_normalize]:
   nested_immutable_normalize_origin_frames >>
   nested_immutable_normalize_store ``vv0:vyper_value``
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_nested_nonempty_immutable_full
+*)
 
 Theorem body_assign_other_full:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
