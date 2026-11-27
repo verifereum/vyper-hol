@@ -30,19 +30,37 @@ Ancestors
   moduleLoweringProps selectorDispatch compileVyper constSubst vyperInterpreter
   vyperTypeBytesCrypto contractABI moduleLowering compileEnv loweringStateRelDefs fragExec
   emitHelper emitHelperProps venomState vyperTypeContract vyperGetter
+  compileUnit[qualified] constSubstMods[qualified]
   vyperTypeContractGetter supportedDecls
 Libs
   wordsLib
 
 val _ = Parse.hide "body";
 
+Theorem collect_locals_subst_consts_stmts_mods:
+  !E ss. collect_locals (subst_consts_stmts_mods E ss) = collect_locals ss
+Proof
+  gen_tac >> recInduct collect_locals_ind >>
+  rw[constSubstModsTheory.subst_consts_stmt_mods_def, collect_locals_def] >>
+  qmatch_goalsub_abbrev_tac `subst_consts_stmt_mods E st` >>
+  Cases_on `st` >> gvs[constSubstModsTheory.subst_consts_stmt_mods_def, collect_locals_def]
+QED
+
 Theorem collect_locals_subst_consts_stmts:
   !E ss. collect_locals (subst_consts_stmts E ss) = collect_locals ss
 Proof
-  gen_tac >> recInduct collect_locals_ind >>
-  rw[subst_consts_stmt_def, collect_locals_def] >>
-  qmatch_goalsub_abbrev_tac `subst_consts_stmt E st` >>
-  Cases_on `st` >> gvs[subst_consts_stmt_def, collect_locals_def]
+  rpt gen_tac >>
+  mp_tac (Q.SPECL [`MAP (\(id,v). ((NONE,id),v)) E`, `ss`]
+    collect_locals_subst_consts_stmts_mods) >>
+  simp[constSubstModsTheory.subst_consts_mods_singleton]
+QED
+
+Theorem build_compile_env_unit_subst_consts_stmts:
+  build_compile_env_unit mods src vis mut name args ret
+    (subst_consts_stmts_mods E ss) use_trans =
+  build_compile_env_unit mods src vis mut name args ret ss use_trans
+Proof
+  simp[compileUnitTheory.build_compile_env_unit_def, collect_locals_subst_consts_stmts_mods]
 QED
 
 Theorem build_compile_env_subst_consts_stmts:
