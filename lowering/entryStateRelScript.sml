@@ -221,9 +221,8 @@ Theorem entry_storage_vars_rel:
     cx.sources = am.sources /\ cx.layouts = am.layouts /\
     cx.txn.target = tx.target /\
     cenv.ce_module = NONE /\
-    (!name. FLOOKUP cenv.ce_module_vars (NONE, name) =
-            FLOOKUP (add_module_var_locations tops FEMPTY)
-              ((NONE, name))) ==>
+    (!key. FLOOKUP cenv.ce_module_vars key =
+            FLOOKUP (add_module_var_locations tops FEMPTY) key) ==>
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
 Proof
   rpt gen_tac >> strip_tac >>
@@ -236,11 +235,15 @@ Proof
   simp[storage_vars_rel_def, transient_vars_rel_def] >> rpt conj_tac >>
   rpt gen_tac >> strip_tac
   >~ [`FLOOKUP _ _ = SOME (StorageLoc slot)`]
-  >- (drule add_module_var_locations_cases >> rw[] >>
+  >- (qpat_x_assum `!key. FLOOKUP cenv.ce_module_vars key = _`
+        (qspec_then `(src,name)` mp_tac) >> simp[] >>
+      drule add_module_var_locations_cases >> rw[] >>
       gvs[] >> res_tac >> simp[] >>
       Cases_on `tr` >> gvs[] >> res_tac >> simp[])
   >~ [`FLOOKUP _ _ = SOME (TransientLoc slot)`]
-  >- (drule add_module_var_locations_cases >> rw[] >>
+  >- (qpat_x_assum `!key. FLOOKUP cenv.ce_module_vars key = _`
+        (qspec_then `(src,name)` mp_tac) >> simp[] >>
+      drule add_module_var_locations_cases >> rw[] >>
       gvs[] >> res_tac >> simp[] >>
       Cases_on `tr` >> gvs[] >> res_tac >> simp[]) >>
   first_x_assum drule >> strip_tac >> gvs[] >>
@@ -304,10 +307,10 @@ Theorem entry_storage_vars_rel_immutable:
     source_deployment_rel tops am tx /\
     cx.sources = am.sources /\ cx.layouts = am.layouts /\
     cx.txn.target = tx.target /\ cenv.ce_module = NONE /\
-    (!name. FLOOKUP cenv.ce_module_vars (NONE, name) =
+    (!key. FLOOKUP cenv.ce_module_vars key =
       FLOOKUP (add_immutable_locations
         (get_struct_fields (make_struct_fields_map tops)) tops 0
-        (add_module_var_locations tops FEMPTY)) ((NONE, name))) ==>
+        (add_module_var_locations tops FEMPTY)) key) ==>
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
 Proof
   rpt gen_tac >> strip_tac >>
