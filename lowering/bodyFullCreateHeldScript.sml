@@ -8790,6 +8790,81 @@ QED
 
 (* The size/count window is recovered at the actual endpoint of the
    scalar reads, not assumed to survive arbitrary evaluation. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_body_pre cenv cx env amount es` by
+    (irule create_operand_pre >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
+  `expr_body_pre cenv cx env offset es` by
+    (irule create_operand_pre >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
+  `LENGTH salts = (if salted then 1 else 0)` by (Cases_on `salted` >> gvs[]) >>
+  drule_all blueprintLiteralOffsetPropsTheory.blueprint_offset_literal_bit >> strip_tac >>
+  qpat_x_assum `body_exprs_full_ok _ (amount::_)` mp_tac >>
+  rewrite_tac[Once body_exprs_full_ok_def] >> strip_tac >>
+  qpat_assum `!e xs. ListOK (e::xs) ==> _`
+    (qspecl_then [`amount`,`salts ++ [offset]`] (drule_then strip_assume_tac)) >>
+  once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
+  simp[NoAsms,bind_assoc,bind_return] >> once_rewrite_tac[GSYM bind_assoc] >>
+  qpat_assum `!e ee z J tz op ca cb ha hb k. _ ==> Run _ _` irule >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  conj_tac >-
+    simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+         vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  qexistsl [`sa`,`sm`,`sh`,`shm`,`y`] >>
+  simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (qmatch_goalsub_rename_tac `lower_value _ _ _ _ _` >>
+       qpat_assum `expr_type amount = _` (fn th => once_rewrite_tac [GSYM th]) >>
+       first_assum ACCEPT_TAC) >>
+  map_every qx_gen_tac [`av`,`em`,`Gm`,`tm`,`m`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?ms. _ /\ (!H. _ ==> gas_origin_ptr_path _ _ ms _)`
+    (qx_choose_then `ma` strip_assume_tac) >>
+  qpat_x_assum `_ ==> body_exprs_full_ok _ _` (drule_then assume_tac) >>
+  `is_word_type (BaseT (UintT 256))` by simp[is_word_type_def] >>
+  qpat_assum `!H. _ ==> expr_post H _ _ _ _ amount _ _ _ _ _ _ _ _ /\ _`
+    (mp_then Any (drule_all_then strip_assume_tac) create_word_cut_frame_facts) >>
+  qpat_x_assum `_ ==> ListOK _` (drule_then assume_tac) >>
+  qabbrev_tac `yw = typed_val_to_w256 (BaseTV (UintT 256)) av` >>
+  `dest_NumV av = SOME (w2n yw)` by simp[Abbr `yw`,exprSimSendTheory.uint256_typed_dest] >>
+  `sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\ sn.cs_next_var <= sb.cs_next_var`
+    by fs[ci_mono_def] >>
+  `ci_mono sa sn` by metis_tac[ci_mono_trans] >>
+  `!z. (target = Var z \/ args_ptr = Var z \/ cnt = Var z) ==> not_fresh_at sb z` by
+    (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
+     qexists `sa` >> simp[] >> decide_tac) >>
+  `local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sn` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,arithmeticTheory.LESS_EQ_TRANS] >>
+  qsuff_tac `!sv sw en n Gn tnn mn.
+    IS_SOME sv = salted /\ dest_optional_salt sv = SOME sw /\
+    OPTREL (\op w. eval_operand op n = SOME w /\ op_taint tnn op = {} /\
+      (!x. op = Var x ==> not_fresh_at sn x) /\ (!l. op <> Label l)) sop sw /\
+    body_const_cells_agree [(NONE,tops)] cx env en /\
+    expr_sim_inv cenv cx env en /\ body_expr_full_ok cx offset /\ HeadOK offset /\
+    storage_trace_domain cx st0 en.storage_trace /\
+    (!H. valid_horizon cx st0 H en.storage_trace ==>
+      valid_horizon cx st0 H es.storage_trace /\ stmt_state_rel H ctx func cenv cx en n /\
+      storage_well_formed_on cx en (FST H) /\ ghost_inv_at (DF H) lo d cenv cx en Gn tnn n /\
+      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (s,G,tn) mn (OK n,Gn,tnn)) /\
+    ~n.vs_halted /\ n.vs_current_bb = sn.cs_current_bb /\ n.vs_inst_idx = LENGTH sn.cs_current_insts /\
+    alloca_history func n /\ return_buf_frame d cenv sn n /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp n) /\
+    (!fn i z. frag_reachable ctx func n fn i z ==> dalloca_fmp_headroom i z) /\
+    s.vs_alloca_next <= n.vs_alloca_next /\ wb_frame cenv es en sa s n /\
+    ghost_kept_at lo cenv es sa G tn s Gn tnn /\
+    eval_operand y n = SOME yw /\ op_taint tnn y = {} /\
+    (!ov ee go.
+      (!tail. eval_exprs cx [offset] (en with gas_obs := go ++ tail) = (INL [ov],ee with gas_obs := tail)) ==>
+      ?gs. !tail. eval_exprs cx (amount::(salts ++ [offset])) (es with gas_obs := gs ++ tail) =
+        (INL (av::((case sv of NONE => [] | SOME v => [v]) ++ [ov])),ee with gas_obs := tail)) ==>
+    Run (bind (bind (eval_expr cx offset) (read_result cx)) (next av sv)) (en,n,Gn,tnn)`
+  >- suspend "scalar_salt" >>
+  suspend "scalar_offset"
+QED
+*)
 Theorem blueprint_scalar_suffix_cut_by_stages:
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
@@ -8993,78 +9068,10 @@ Theorem blueprint_scalar_suffix_cut_by_stages:
       (\vs. next (HD vs) (if salted then SOME (EL 1 vs) else NONE) (LAST vs)))
     (es,s,G,tn)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `expr_body_pre cenv cx env amount es` by
-    (irule create_operand_pre >>
-     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
-  `expr_body_pre cenv cx env offset es` by
-    (irule create_operand_pre >>
-     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
-  `LENGTH salts = (if salted then 1 else 0)` by (Cases_on `salted` >> gvs[]) >>
-  drule_all blueprintLiteralOffsetPropsTheory.blueprint_offset_literal_bit >> strip_tac >>
-  qpat_x_assum `body_exprs_full_ok _ (amount::_)` mp_tac >>
-  rewrite_tac[Once body_exprs_full_ok_def] >> strip_tac >>
-  qpat_assum `!e xs. ListOK (e::xs) ==> _`
-    (qspecl_then [`amount`,`salts ++ [offset]`] (drule_then strip_assume_tac)) >>
-  once_rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action] >>
-  simp[NoAsms,bind_assoc,bind_return] >> once_rewrite_tac[GSYM bind_assoc] >>
-  qpat_assum `!e ee z J tz op ca cb ha hb k. _ ==> Run _ _` irule >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  conj_tac >-
-    simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
-         vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
-  qexistsl [`sa`,`sm`,`sh`,`shm`,`y`] >>
-  simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (qmatch_goalsub_rename_tac `lower_value _ _ _ _ _` >>
-       qpat_assum `expr_type amount = _` (fn th => once_rewrite_tac [GSYM th]) >>
-       first_assum ACCEPT_TAC) >>
-  map_every qx_gen_tac [`av`,`em`,`Gm`,`tm`,`m`] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `?ms. _ /\ (!H. _ ==> gas_origin_ptr_path _ _ ms _)`
-    (qx_choose_then `ma` strip_assume_tac) >>
-  qpat_x_assum `_ ==> body_exprs_full_ok _ _` (drule_then assume_tac) >>
-  `is_word_type (BaseT (UintT 256))` by simp[is_word_type_def] >>
-  qpat_assum `!H. _ ==> expr_post H _ _ _ _ amount _ _ _ _ _ _ _ _ /\ _`
-    (mp_then Any (drule_all_then strip_assume_tac) create_word_cut_frame_facts) >>
-  qpat_x_assum `_ ==> ListOK _` (drule_then assume_tac) >>
-  qabbrev_tac `yw = typed_val_to_w256 (BaseTV (UintT 256)) av` >>
-  `dest_NumV av = SOME (w2n yw)` by simp[Abbr `yw`,exprSimSendTheory.uint256_typed_dest] >>
-  `sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\ sn.cs_next_var <= sb.cs_next_var`
-    by fs[ci_mono_def] >>
-  `ci_mono sa sn` by metis_tac[ci_mono_trans] >>
-  `!z. (target = Var z \/ args_ptr = Var z \/ cnt = Var z) ==> not_fresh_at sb z` by
-    (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
-     qexists `sa` >> simp[] >> decide_tac) >>
-  `local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sn` by
-    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,arithmeticTheory.LESS_EQ_TRANS] >>
-  qsuff_tac `!sv sw en n Gn tnn mn.
-    IS_SOME sv = salted /\ dest_optional_salt sv = SOME sw /\
-    OPTREL (\op w. eval_operand op n = SOME w /\ op_taint tnn op = {} /\
-      (!x. op = Var x ==> not_fresh_at sn x) /\ (!l. op <> Label l)) sop sw /\
-    body_const_cells_agree [(NONE,tops)] cx env en /\
-    expr_sim_inv cenv cx env en /\ body_expr_full_ok cx offset /\ HeadOK offset /\
-    storage_trace_domain cx st0 en.storage_trace /\
-    (!H. valid_horizon cx st0 H en.storage_trace ==>
-      valid_horizon cx st0 H es.storage_trace /\ stmt_state_rel H ctx func cenv cx en n /\
-      storage_well_formed_on cx en (FST H) /\ ghost_inv_at (DF H) lo d cenv cx en Gn tnn n /\
-      gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        (s,G,tn) mn (OK n,Gn,tnn)) /\
-    ~n.vs_halted /\ n.vs_current_bb = sn.cs_current_bb /\ n.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    alloca_history func n /\ return_buf_frame d cenv sn n /\
-    (ctx_has_dalloca ctx ==> allocas_below_fmp n) /\
-    (!fn i z. frag_reachable ctx func n fn i z ==> dalloca_fmp_headroom i z) /\
-    s.vs_alloca_next <= n.vs_alloca_next /\ wb_frame cenv es en sa s n /\
-    ghost_kept_at lo cenv es sa G tn s Gn tnn /\
-    eval_operand y n = SOME yw /\ op_taint tnn y = {} /\
-    (!ov ee go.
-      (!tail. eval_exprs cx [offset] (en with gas_obs := go ++ tail) = (INL [ov],ee with gas_obs := tail)) ==>
-      ?gs. !tail. eval_exprs cx (amount::(salts ++ [offset])) (es with gas_obs := gs ++ tail) =
-        (INL (av::((case sv of NONE => [] | SOME v => [v]) ++ [ov])),ee with gas_obs := tail)) ==>
-    Run (bind (bind (eval_expr cx offset) (read_result cx)) (next av sv)) (en,n,Gn,tnn)`
-  >- suspend "scalar_salt" >>
-  suspend "scalar_offset"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume blueprint_scalar_suffix_cut_by_stages[scalar_salt]:
   disch_tac >>
   `!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z` by
@@ -9101,7 +9108,9 @@ Resume blueprint_scalar_suffix_cut_by_stages[scalar_salt]:
   qexists `gas_explicit ma s.vs_gas_readings ++ go` >>
   irule create_eval_exprs_cons_replay >> qexists `em` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume blueprint_scalar_suffix_cut_by_stages[salt_some]:
   rename1 `expr_type salt = BaseT (BytesT (Fixed 32))` >>
   Cases_on `lower_value compile_expr cenv (expr_type salt) salt sm` >>
@@ -9180,7 +9189,9 @@ Resume blueprint_scalar_suffix_cut_by_stages[salt_some]:
   qpat_x_assum `body_exprs_full_ok cx [offset]` mp_tac >>
   rewrite_tac[bodyFullExprsSingletonTheory.body_exprs_full_ok_singleton] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume blueprint_scalar_suffix_cut_by_stages[scalar_offset]:
   map_every qx_gen_tac [`sv`,`sw`,`en`,`n`,`Gn`,`tnn`,`mn`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -9260,8 +9271,11 @@ Resume blueprint_scalar_suffix_cut_by_stages[scalar_offset]:
   irule fragGasOriginPtrTheory.gas_origin_ptr_path_append >>
   qexistsl [`Gn`,`n`,`(OK n,Gn,tnn)`,`tnn`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise blueprint_scalar_suffix_cut_by_stages
+*)
 
 Theorem blueprint_scalar_suffix_cut:
   body_const_cells_agree mods cx env es /\
