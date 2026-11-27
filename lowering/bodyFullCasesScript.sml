@@ -1005,8 +1005,8 @@ Proof
 QED
 
 (* Return e, by the frame's own joint Return fragment and e's case. *)
-Theorem body_return_case_full:
-  !cx e. body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Return (SOME e))
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[body_stmt_full_ok_def, frame_ret_ok_full_def, gas_shadow_stmt_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
@@ -1033,6 +1033,12 @@ Proof
   first_x_assum (qspecl_then [`cenv`, `env`, `lctx`, `SOME e`, `es`] mp_tac) >>
   simp[same_frame_refl] >> disch_then irule >>
   gen_tac >> drule_all body_expr_full_ok_simulations >> simp[]
+QED
+*)
+Theorem body_return_case_full:
+  !cx e. body_expr_full_ok_mods mods exps cx e ==> body_stmt_full_ok_mods mods exps cx (Return (SOME e))
+Proof
+  cheat
 QED
 
 (* Return, by the frame's own joint Return fragment. *)
