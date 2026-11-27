@@ -292,19 +292,6 @@ QED
 
 (* At runtime a word immutable is in the data section at its offset, as
    immutables_rel says.  Aggregates instead occupy their full memory layout. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rw[immutable_holds_def, exprLoweringPropsTheory.stmt_state_rel_def,
-     state_rel_def, immutables_rel_def, read_result_def, return_def] >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-  `off + k < dimword (:256)` by DECIDE_TAC >>
-  `mem_word_at (off + k) s.vs_data_section = typed_val_to_w256 tvt v` by
-    (irule val_in_memory_word_type >> metis_tac[]) >>
-  gvs[valueEncodingDefsTheory.mem_word_at_def]
-QED
-*)
 Theorem immutable_holds_dload:
   !func cenv cx es s t v w ctx.
     stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
@@ -314,7 +301,22 @@ Theorem immutable_holds_dload:
             (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)) =
           typed_val_to_w256 tvt v
 Proof
-  cheat
+  rpt strip_tac >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+         immutables_rel cenv cx.txn.target src F es s` by
+    (drule stateRelProjTheory.stmt_state_rel_state_rel >>
+     simp[state_rel_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+  gvs[immutable_holds_def, read_result_def, return_def] >>
+  rename1 `sub_layout itv iv k tvt v` >>
+  rename1 `FLOOKUP cenv.ce_module_vars (_, name) = SOME (ImmutableLoc off)` >>
+  `val_in_memory itv iv off s.vs_data_section` by
+    (qpat_x_assum `!src. _ ==> immutables_rel _ _ _ _ _ _` mp_tac >>
+     simp[immutables_rel_def] >> metis_tac[]) >>
+  fs[sub_layout_def] >>
+  `off + k < dimword (:256)` by DECIDE_TAC >>
+  `mem_word_at (off + k) s.vs_data_section = typed_val_to_w256 tvt v` by
+    (irule val_in_memory_word_type >> metis_tac[]) >>
+  gvs[valueEncodingDefsTheory.mem_word_at_def]
 QED
 
 (* A word immutable at runtime: a DLOAD. *)
