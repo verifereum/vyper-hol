@@ -98,7 +98,7 @@ Proof
 QED
 
 Triviality linked_main_structs_nonempty:
-  check_contract F layouts addr mods = SOME art /\ ALOOKUP mods src = SOME tops ==>
+  check_contract mode layouts addr mods = SOME art /\ ALOOKUP mods src = SOME tops ==>
   !name. ~MEM (StructDecl name []) tops
 Proof
   rpt strip_tac >>
@@ -141,8 +141,8 @@ Proof
   drule_all linked_stmt_leaf_supported >> simp[]
 QED
 
-Theorem checked_linked_substituted_body_supported:
-  check_contract F layouts addr mods = SOME art /\
+Theorem checked_linked_substituted_body_supported_mode:
+  check_contract mode layouts addr mods = SOME art /\
   check_function_body layouts addr mods art src vis mut nr args dflts ret ss /\
   ALOOKUP mods src = SOME tops /\
   MEM (FunctionDecl vis mut nr raw name args dflts ret ss) tops /\
@@ -188,4 +188,21 @@ Proof
       disch_then (drule_at (Pat `linked_body_env _ _ _ _`)) >>
       disch_then (drule_at (Pat `custom_errors_stmt_ok _ _`)) >> simp[]) >>
   simp[]
+QED
+
+Theorem checked_linked_substituted_body_supported:
+  check_contract F layouts addr mods = SOME art /\
+  check_function_body layouts addr mods art src vis mut nr args dflts ret ss /\
+  ALOOKUP mods src = SOME tops /\
+  MEM (FunctionDecl vis mut nr raw name args dflts ret ss) tops /\
+  linked_body_env tops src tenv env /\
+  FDOM env.var_types = set (MAP FST args) /\ ALL_DISTINCT (MAP FST args) /\
+  b = subst_consts_stmts_mods (consts_env_mods mods) ss /\
+  IS_SOME (type_stmts env ret b) /\ qualified_stmts_decls_ok mods b ==>
+  supported_stmts tops (args ++ supported_stmts_bindings T b ++ supported_stmts_bindings F b) b
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  irule checked_linked_substituted_body_supported_mode >>
+  simp[] >>
+  metis_tac[]
 QED
