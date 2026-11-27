@@ -215,50 +215,6 @@ Proof
   simp[GSYM MAP_TAKE, GSYM MAP_DROP, valueEncodingDefsTheory.val_in_memory_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> simp[] >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s /\
-   immutable_alloca_sep func cenv cx es s` by
-    fs[stmt_state_rel_def, state_rel_def] >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-    (mstore p (n2w (LENGTH bytes))
-      (write_memory_with_expansion (p+32) bytes s))` by
-    (irule loweringSliceTheory.immutables_rel_mem_agree >>
-     qexists_tac `s` >>
-     conj_tac
-     >- (simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
-              immutableMemoryFrameTheory.immutable_write_memory_capacity,
-              MAX_DEF] >> decide_tac) >>
-     conj_tac >- simp[mstore_def, write_memory_with_expansion_def] >>
-     simp[] >> rpt strip_tac >>
-     `regions_disjoint p sz off (type_memory_size tv)` by
-       (fs[immutable_alloca_sep_def] >>
-        first_x_assum drule_all >> strip_tac >>
-        `regions_disjoint off (type_memory_size tv) p sz` by metis_tac[] >>
-        fs[regions_disjoint_def] >> decide_tac) >>
-     irule bytes_buffer_write_frame >>
-     fs[regions_disjoint_def] >> decide_tac) >>
-  conj_tac
-  >- (irule bytes_buffer_write_state_rel >> simp[] >> qexists_tac `sz` >>
-      simp[] >> rpt strip_tac >>
-      first_x_assum drule >> simp[regions_disjoint_def] >> decide_tac) >>
-  rewrite_tac[loweringPostsTheory.wb_frame_def] >>
-  conj_tac >- simp[mstore_def, lookup_var_def] >>
-  conj_tac >- simp[mstore_def] >>
-  conj_tac
-  >- (rpt strip_tac >> irule bytes_buffer_write_frame >>
-      `regions_disjoint p sz off sz'` by
-        (qpat_x_assum `!aid b len. aid < _ /\ _ ==> _` irule >>
-         qexists_tac `aid` >> simp[]) >>
-      fs[regions_disjoint_def] >> decide_tac) >>
-  irule exprSimPropsTheory.locals_kept_regions_tail >>
-  qexists_tac `s` >> simp[exprSimPropsTheory.locals_kept_refl] >>
-  rpt strip_tac >> irule bytes_buffer_write_frame >>
-  first_x_assum drule >> simp[regions_disjoint_def] >> decide_tac
-QED
-*)
 Theorem slice_allocated_bytes_write_frame:
   stmt_state_rel H ctx func cenv cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -273,7 +229,30 @@ Theorem slice_allocated_bytes_write_frame:
             (write_memory_with_expansion (p+32) bytes s)
   in stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sa s t
 Proof
-  cheat
+  strip_tac >> simp[] >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+    immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es
+      (mstore p (n2w (LENGTH bytes))
+        (write_memory_with_expansion (p+32) bytes s))` by
+    (metis_tac[bytes_buffer_write_alloca_immutables]) >>
+  conj_tac
+  >- (irule bytes_buffer_write_state_rel >> simp[] >> conj_tac
+      >- first_assum ACCEPT_TAC >>
+      qexists_tac `sz` >> simp[] >> rpt strip_tac >>
+      first_x_assum drule >> simp[regions_disjoint_def] >> decide_tac) >>
+  rewrite_tac[loweringPostsTheory.wb_frame_def] >>
+  conj_tac >- simp[mstore_def, lookup_var_def] >>
+  conj_tac >- simp[mstore_def] >>
+  conj_tac
+  >- (rpt strip_tac >> irule bytes_buffer_write_frame >>
+      `regions_disjoint p sz off sz'` by
+        (qpat_x_assum `!aid b len. aid < _ /\ _ ==> _` irule >>
+         qexists_tac `aid` >> simp[]) >>
+      fs[regions_disjoint_def] >> decide_tac) >>
+  irule exprSimPropsTheory.locals_kept_regions_tail >>
+  qexists_tac `s` >> simp[exprSimPropsTheory.locals_kept_refl] >>
+  rpt strip_tac >> irule bytes_buffer_write_frame >>
+  first_x_assum drule >> simp[regions_disjoint_def] >> decide_tac
 QED
 
 (* The same write keeps the pure frame of an effect-free expression: it lands
