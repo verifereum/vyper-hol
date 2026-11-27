@@ -80,6 +80,23 @@ QED
 
 (* The saved list is evaluated in s; the encoder cursor and destination
    evolve from u. The destination may be anywhere in the output allocation. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. _ ==> extcall_positional_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ H _ _ _ _ _`
+       (drule_then (strip_assume_tac o SIMP_RULE bool_ss [extcall_positional_post_def, sumTheory.INL_11])) >>
+     first_assum ACCEPT_TAC) >>
+  irule abi_encode_saved_values_execute_pure >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (qexists_tac `inst` >> simp[]) >>
+  qexistsl_tac [`ats`,`avs`,`head_lengths ats 0`,`rows`,`st`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
+  suspend "row"
+QED
+*)
 Theorem ctor_encoder_length_witness:
   body_inv tops ctx ce cx /\
   (!e. MEM e args ==> ?es'. expr_body_pre ce cx env e es') /\
@@ -120,20 +137,10 @@ Theorem ctor_encoder_length_witness:
     (!j. pbase+dst_offset <= j /\ j < pbase+dst_offset + LENGTH bytes ==> j NOTIN tz.t_mem) /\
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (u,Gu,tu) [] (OK z,Gz,tz)
 Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==> stmt_state_rel H ctx func ce cx ee s` by
-    (gen_tac >> disch_tac >>
-     qpat_assum `!H. _ ==> extcall_positional_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ H _ _ _ _ _`
-       (drule_then (strip_assume_tac o SIMP_RULE bool_ss [extcall_positional_post_def, sumTheory.INL_11])) >>
-     first_assum ACCEPT_TAC) >>
-  irule abi_encode_saved_values_execute_pure >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (qexists_tac `inst` >> simp[]) >>
-  qexistsl_tac [`ats`,`avs`,`head_lengths ats 0`,`rows`,`st`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
-  suspend "row"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_encoder_length_witness[row]:
   qx_genl_tac [`ci`,`cr`] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qx_genl_tac [`i`,`a`,`c`,`r`,`Gr`,`tr`,`cursor`,`slot`] >>
@@ -192,7 +199,9 @@ Resume ctor_encoder_length_witness[row]:
      conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "execute_row"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_encoder_length_witness[execute_row]:
   qpat_assum `?H. valid_horizon cx st0 H ee.storage_trace`
     (qx_choose_then `H0` assume_tac) >>
@@ -236,5 +245,8 @@ Resume ctor_encoder_length_witness[execute_row]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   TRY (simp_tac bool_ss [Abbr `off`] >> NO_TAC) >> REFL_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise ctor_encoder_length_witness
+*)

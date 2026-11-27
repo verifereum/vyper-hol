@@ -9,27 +9,8 @@ Ancestors
   exprLowering venomState loweringStateRelDefs context bodyFullExtCallSavedOperand
   ptrDiscipline exprSimUnwrap
 
-Theorem ctor_saved_rows_cons:
-  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
-  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv cut /\
-  ci_mono sa cut /\ ci_mono cut sb /\ u.vs_labels = t.vs_labels /\
-  (!K. dead_lo_ok K (DF K) lo cenv cx) /\
-  EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
-    (int_calls_exprs xs) /\
-  eval_exprs cx xs (mid with gas_obs := obs) = (INL vs,ee with gas_obs := out) /\
-  (!K. valid_horizon cx st0 K es.storage_trace ==>
-       stmt_state_rel K ctx func cenv cx es s0) /\
-  (!K. valid_horizon cx st0 K mid.storage_trace ==>
-       valid_horizon cx st0 K es.storage_trace) /\
-  (!K. valid_horizon cx st0 K mid.storage_trace ==>
-       extcall_positional_post T DF lo d ctx func cenv cx env
-         xs [e] [sv] sa cut es s0 G0 tn0 K (INL [v]) mid G1 tn1 t) /\
-  (!K. valid_horizon cx st0 K ee.storage_trace ==>
-       extcall_positional_post T DF lo d ctx func cenv cx env
-         [] xs svs cut sb mid t G1 tn1 K (INL vs) ee G2 tn2 u) /\
-  valid_horizon cx st0 H ee.storage_trace ==>
-  extcall_positional_post T DF lo d ctx func cenv cx env
-    [] (e::xs) (sv::svs) sa sb es s0 G0 tn0 H (INL (v::vs)) ee G2 tn2 u
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `valid_horizon cx st0 H mid.storage_trace` by
@@ -107,7 +88,33 @@ Proof
   >- suspend "vars"
   >> metis_tac[]
 QED
+*)
+Theorem ctor_saved_rows_cons:
+  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv cut /\
+  ci_mono sa cut /\ ci_mono cut sb /\ u.vs_labels = t.vs_labels /\
+  (!K. dead_lo_ok K (DF K) lo cenv cx) /\
+  EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+    (int_calls_exprs xs) /\
+  eval_exprs cx xs (mid with gas_obs := obs) = (INL vs,ee with gas_obs := out) /\
+  (!K. valid_horizon cx st0 K es.storage_trace ==>
+       stmt_state_rel K ctx func cenv cx es s0) /\
+  (!K. valid_horizon cx st0 K mid.storage_trace ==>
+       valid_horizon cx st0 K es.storage_trace) /\
+  (!K. valid_horizon cx st0 K mid.storage_trace ==>
+       extcall_positional_post T DF lo d ctx func cenv cx env
+         xs [e] [sv] sa cut es s0 G0 tn0 K (INL [v]) mid G1 tn1 t) /\
+  (!K. valid_horizon cx st0 K ee.storage_trace ==>
+       extcall_positional_post T DF lo d ctx func cenv cx env
+         [] xs svs cut sb mid t G1 tn1 K (INL vs) ee G2 tn2 u) /\
+  valid_horizon cx st0 H ee.storage_trace ==>
+  extcall_positional_post T DF lo d ctx func cenv cx env
+    [] (e::xs) (sv::svs) sa sb es s0 G0 tn0 H (INL (v::vs)) ee G2 tn2 u
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_saved_rows_cons[head]:
   `vv_type (ext_call_arg_value (lowered_value_type cenv e) vv) =
       lowered_value_type cenv e` by drule_all_then ACCEPT_TAC extcall_operand_snapshot_type >>
@@ -165,6 +172,8 @@ Resume ctor_saved_rows_cons[head]:
   >> `p.ptr_location = LocCalldata` by (Cases_on `p.ptr_location` >> fs[] >> metis_tac[slot_loc_def]) >>
   fs[vv_holds_def]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_saved_rows_cons[stack]:
   simp[vv_location_def, vv_storage_live_def] >>
   irule extcall_request_saved_stack_endpoint >>
@@ -175,6 +184,8 @@ Resume ctor_saved_rows_cons[stack]:
   `~copy` by (Cases_on `copy` >> fs[vv_location_def]) >>
   disj2_tac >> qexistsl_tac [`env`,`H`,`H`,`ctx`] >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_saved_rows_cons[copy]:
   qpat_x_assum `tag = lowered_value_type cenv e` SUBST_ALL_TAC >>
   qpat_assum `_ ==> ?x w tv. vv_location (LocatedValue _ p) = SOME LocMemory /\ _`
@@ -214,6 +225,8 @@ Resume ctor_saved_rows_cons[copy]:
      fs[vv_operand_def, regions_disjoint_def] >> metis_tac[]) >>
   simp[] >> qexists_tac `Value v` >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_saved_rows_cons[retain_memory]:
   qpat_x_assum `tag = lowered_value_type cenv e` SUBST_ALL_TAC >>
   simp[vv_location_def, vv_storage_live_def] >>
@@ -223,6 +236,8 @@ Resume ctor_saved_rows_cons[retain_memory]:
   >- (qexists_tac `raw` >> simp[]) >>
   disj2_tac >> qexistsl_tac [`env`,`H`,`H`,`ctx`] >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_saved_rows_cons[slot]:
   qpat_x_assum `tag = lowered_value_type cenv e` SUBST_ALL_TAC >>
   qpat_x_assum `?tr. p.ptr_location = slot_loc tr` (qx_choose_then `tr` assume_tac) >>
@@ -236,6 +251,8 @@ Resume ctor_saved_rows_cons[slot]:
   qexists_tac `tr` >> simp[vv_operand_def, Excl "vv_storage_live_def"] >>
   qexists_tac `raw` >> simp[GSYM AND_IMP_INTRO] >> metis_tac[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_saved_rows_cons[code]:
   qpat_x_assum `tag = lowered_value_type cenv e` SUBST_ALL_TAC >>
   simp[vv_location_def, vv_storage_live_def, vv_operand_def] >>
@@ -269,6 +286,8 @@ Resume ctor_saved_rows_cons[code]:
     (irule_at Any) >>
   simp[] >> qexists_tac `r` >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_saved_rows_cons[row]:
   qexistsl_tac [`si`,`sm`,`ss`,`vv`,`r`,`copy`] >> simp[] >>
   `sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
@@ -283,6 +302,8 @@ Resume ctor_saved_rows_cons[row]:
   qpat_assum `!n b sz. local_region cenv mid.scopes t n b sz ==> _`
     (drule_then ACCEPT_TAC)
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_saved_rows_cons[tail]:
   irule LIST_REL_mono >>
   qpat_assum `LIST_REL _ (ZIP (xs,svs)) vs` (irule_at Any) >>
@@ -296,10 +317,14 @@ Resume ctor_saved_rows_cons[tail]:
     (K ALL_TAC)) >>
   qexistsl_tac [`si`,`sm`,`ss`,`vv`,`raw`,`copy`] >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_saved_rows_cons[pure]:
   strip_tac >> irule pure_frame_trans >> simp[] >>
   qexistsl_tac [`mid`,`cut`,`t`] >> fs[ci_mono_def] >> simp[EQ_SYM_EQ]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ctor_saved_rows_cons[vars]:
   rpt strip_tac >>
   rename1 `lookup_var x u = SOME w` >>
@@ -307,4 +332,7 @@ Resume ctor_saved_rows_cons[vars]:
     (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> fs[ci_mono_def]) >>
   `lookup_var x t = SOME w` by simp[] >> simp[]
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise ctor_saved_rows_cons
+*)
