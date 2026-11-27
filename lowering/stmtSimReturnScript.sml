@@ -904,25 +904,6 @@ Proof
   qexists_tac `tn'` >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> fs[ghost_inv_at_def] >>
-  simp[stor_taint_ok_at_def] >>
-  qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
-  Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
-  gvs[return_unlock_state_def, tstore_def, dead_lo_ok_def,
-      stor_taint_ok_at_def, combinTheory.APPLY_UPDATE_THM] >>
-  irule pred_setTheory.SUBSET_TRANS >>
-  qexists_tac `tn.t_trans` >> simp[] >>
-  Cases_on `s.vs_call_ctx.cc_address = cx.txn.target` >>
-  gvs[sourceUnitExecutionTheory.cx_dead_def, pred_setTheory.SUBSET_DEF] >>
-  rpt strip_tac >> rename1 `p IN tn.t_trans` >> PairCases_on `p` >> fs[] >>
-  irule storage_dead_update_zero >>
-  qpat_x_assum `!x. x IN tn.t_trans ==> _`
-    (qspec_then `(p0,p1)` mp_tac) >> simp[]
-QED
-*)
 Theorem return_unlock_exit_taint:
   dead_lo_ok H D lo cenv cx /\
   ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
@@ -932,10 +913,24 @@ Theorem return_unlock_exit_taint:
   ghost_inv_at D lo d cenv cx es G tn s ==>
   stor_taint_ok_at D tn' (return_unlock_state cenv s) /\
   (!i. i < lo /\ i IN tn'.t_mem ==>
-       imm_section_dead (cx_tops cx)
+       imm_section_dead_mods cenv
          (mem_bytes_at 0 lo (return_unlock_state cenv s).vs_memory) i)
 Proof
-  cheat
+  rpt strip_tac >> fs[ghost_inv_at_def] >> simp[]
+  >- (simp[stor_taint_ok_at_def] >>
+      qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
+      Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
+      gvs[return_unlock_state_def, tstore_def, dead_lo_ok_def,
+          stor_taint_ok_at_def, combinTheory.APPLY_UPDATE_THM] >>
+      irule pred_setTheory.SUBSET_TRANS >>
+      qexists_tac `tn.t_trans` >> simp[] >>
+      Cases_on `s.vs_call_ctx.cc_address = cx.txn.target` >>
+      gvs[sourceUnitExecutionTheory.cx_dead_def, pred_setTheory.SUBSET_DEF] >>
+      rpt strip_tac >> rename1 `p IN tn.t_trans` >> PairCases_on `p` >> fs[] >>
+      irule storage_dead_update_zero >>
+      qpat_x_assum `!x. x IN tn.t_trans ==> _`
+        (qspec_then `(p0,p1)` mp_tac) >> simp[]) >>
+  first_x_assum irule >> metis_tac[]
 QED
 
 (* RET of words already on hand, with untainted operands. *)
@@ -1090,7 +1085,7 @@ Theorem compile_return_none_int_frag_full_taint:
             FST (SND (SND cenv.ce_nonreentrant))) ==>
           stor_taint_ok_at (DF H) (SND gt) u /\
           (!i. i < lo /\ i IN (SND gt).t_mem ==>
-               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i))
+               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i))
       cenv
       (stmt_env cenv lctx ty (Return NONE))
       (stmt_env (gas_shadow_env T cenv) lctx ty (Return NONE))
@@ -1112,7 +1107,7 @@ Proof
          FST (SND (SND cenv.ce_nonreentrant))) ==>
        stor_taint_ok_at (DF H) tn' (return_unlock_state cenv s0) /\
        (!i. i < lo /\ i IN tn'.t_mem ==>
-            imm_section_dead (cx_tops cx)
+            imm_section_dead_mods cenv
               (mem_bytes_at 0 lo (return_unlock_state cenv s0).vs_memory) i))` by
     (Cases_on `?H. valid_horizon cx st0 H es.storage_trace` >> gvs[] >>
      first_assum (drule_then strip_assume_tac) >>
@@ -1183,7 +1178,7 @@ Proof
             FST (SND (SND cenv.ce_nonreentrant))) ==>
           stor_taint_ok_at (DF H) (SND gt) u /\
           (!i. i < lo /\ i IN (SND gt).t_mem ==>
-               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)` >>
+               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)` >>
   conj_tac >- simp[] >>
   irule compile_return_none_int_frag_full_taint >> simp[]
 QED
@@ -1214,7 +1209,7 @@ Theorem internal_frame_ret_none_full_taint:
             FST (SND (SND cenv.ce_nonreentrant))) ==>
           stor_taint_ok_at (DF H) (SND gt) u /\
           (!i. i < lo /\ i IN (SND gt).t_mem ==>
-               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) cenv NoneT
+               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)) cenv NoneT
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
@@ -1223,6 +1218,9 @@ Proof
    cenv'.ce_returns_count = 0 /\
    cenv'.ce_nonreentrant = cenv.ce_nonreentrant` by
     fs[same_frame_def, compile_env_component_equality] >>
+  `imm_section_dead_mods cenv' = imm_section_dead_mods cenv` by
+    fs[same_frame_def, compile_env_component_equality,
+       FUN_EQ_THM, immSectionDeadTheory.imm_section_dead_mods_def] >>
   mp_tac (Q.SPECL
     [`DF`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`, `shadow_func`,
      `cx`, `lctx`, `cenv'`, `NoneT`, `ret_tv`, `es`, `rpc`, `slot_size`]
@@ -1265,7 +1263,7 @@ Proof
             FST (SND (SND cenv.ce_nonreentrant))) ==>
           stor_taint_ok_at (DF H) (SND gt) u /\
           (!i. i < lo /\ i IN (SND gt).t_mem ==>
-               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)` >>
+               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)` >>
   conj_tac >- simp[] >>
   irule internal_frame_ret_none_full_taint >> simp[]
 QED
@@ -1419,7 +1417,7 @@ Theorem compile_return_word_int_frag_full_taint:
            FST (SND (SND cenv.ce_nonreentrant))) ==>
          stor_taint_ok_at (DF H) (SND gt) u /\
          (!i. i < lo /\ i IN (SND gt).t_mem ==>
-              imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) cenv
+              imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)) cenv
      (stmt_env cenv lctx ty (Return (SOME e)))
      (stmt_env (gas_shadow_env T cenv) lctx ty (Return (SOME (gas_shadow_expr e))))
      (eval_stmt cx (Return (SOME e))) es
@@ -1585,7 +1583,7 @@ Proof
            FST (SND (SND cenv.ce_nonreentrant))) ==>
          stor_taint_ok_at (DF H) (SND gt) u /\
          (!i. i < lo /\ i IN (SND gt).t_mem ==>
-              imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)` >>
+              imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)` >>
   conj_tac >- simp[] >>
   irule compile_return_word_int_frag_full_taint >> simp[] >>
   qexists_tac `env` >> simp[]
@@ -1606,7 +1604,7 @@ Theorem internal_frame_ret_word_full_taint:
             FST (SND (SND cenv.ce_nonreentrant))) ==>
           stor_taint_ok_at (DF H) (SND gt) u /\
           (!i. i < lo /\ i IN (SND gt).t_mem ==>
-               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)) cenv ty
+               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)) cenv ty
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
@@ -1617,6 +1615,9 @@ Proof
    cenv'.ce_returns_count = 1 /\ cenv'.ce_return_buf = NONE /\
    cenv'.ce_nonreentrant = cenv.ce_nonreentrant` by
     fs[same_frame_def, compile_env_component_equality] >>
+  `imm_section_dead_mods cenv' = imm_section_dead_mods cenv` by
+    fs[same_frame_def, compile_env_component_equality,
+       FUN_EQ_THM, immSectionDeadTheory.imm_section_dead_mods_def] >>
   mp_tac (Q.SPECL
     [`DF`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`, `shadow_func`,
      `cx`, `lctx`, `cenv'`, `ty`, `tv`, `es`, `e`, `env`, `rpc`, `slot_size`]
@@ -1660,7 +1661,7 @@ Proof
             FST (SND (SND cenv.ce_nonreentrant))) ==>
           stor_taint_ok_at (DF H) (SND gt) u /\
           (!i. i < lo /\ i IN (SND gt).t_mem ==>
-               imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo u.vs_memory) i)` >>
+               imm_section_dead_mods cenv (mem_bytes_at 0 lo u.vs_memory) i)` >>
   conj_tac >- simp[] >>
   irule internal_frame_ret_word_full_taint >> simp[]
 QED
