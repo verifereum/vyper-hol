@@ -1063,32 +1063,6 @@ Proof
   goal_assum (drule_at Any)
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  irule (Q.SPEC `\ei. ?gs. P (ei with gas_obs := gs)`
-           (Q.GEN `P` (SPEC_ALL compile_for_dynarray_frag_zero))) >>
-  simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexists `P` >> simp[] >> qexists `vs` >> simp[] >> rpt conj_tac
-  >- (rpt strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
-      first_x_assum (qspecl_then [`st0`, `bc`, `sd`, `ex`, `inc`,
-        `ei with gas_obs := g0`, `k`] mp_tac) >> simp[] >>
-      disch_then (qspec_then `ei.gas_obs` mp_tac o
-        MATCH_MP stmt_frag_start_gas_obs) >> simp[])
-  >- (rpt gen_tac >> strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
-      first_x_assum (qspecl_then [`ei with gas_obs := g0`, `k`, `gs`, `r`, `es2`]
-        mp_tac) >> simp[] >> strip_tac >> simp[] >>
-      strip_tac >> gvs[] >> qexists `es2.gas_obs` >> simp[])
-  >- (rpt strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
-      first_x_assum (qspecl_then [`H`, `ei with gas_obs := g0`, `s`] mp_tac) >>
-      simp[] >> disch_then irule >>
-      qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
-      simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>
-      strip_tac >> asm_rewrite_tac[])
-  >> qexists `es.gas_obs` >> simp[]
-QED
-*)
 Theorem compile_for_dynarray_frag:
   !ctx func cx cenv lctx RetQ ty id et c n name arr_ptr arr_sz stmts tv vs es P.
   (!gs. eval_iterator cx (Array (Name (ArrayT et (Dynamic c)) name))
@@ -1134,5 +1108,23 @@ Theorem compile_for_dynarray_frag:
       (For id et (Array (Name (ArrayT et (Dynamic c)) name)) n stmts))
     (eval_stmt cx (For id et (Array (Name (ArrayT et (Dynamic c)) name)) n stmts)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule (Q.SPEC `\ei. ?gs. P (ei with gas_obs := gs)`
+           (Q.GEN `P` (SPEC_ALL compile_for_dynarray_frag_zero))) >>
+  simp[] >> conj_tac >- (first_assum ACCEPT_TAC) >>
+  qexists `P` >> simp[] >> qexists `vs` >> simp[] >> rpt conj_tac
+  >- (rpt strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
+      first_x_assum (qspecl_then [`st0`, `bc`, `sd`, `ex`, `inc`,
+        `ei with gas_obs := g0`, `k`] mp_tac) >> simp[] >>
+      disch_then (qspec_then `ei.gas_obs` mp_tac o
+        MATCH_MP stmt_frag_start_gas_obs) >> simp[])
+  >- (rpt gen_tac >> strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
+      first_x_assum (qspecl_then [`ei with gas_obs := g0`, `k`, `gs`, `r`, `es2`]
+        mp_tac) >> simp[] >> strip_tac >> simp[] >>
+      strip_tac >> gvs[] >> qexists `es2.gas_obs` >> simp[])
+  >- (rpt strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
+      first_x_assum (qspecl_then [`H`, `ei with gas_obs := g0`, `s`] mp_tac) >>
+      simp[stmt_state_rel_start_gas_obs] >> disch_then irule >>
+      simp[stmt_state_rel_start_gas_obs])
+  >> qexists `es.gas_obs` >> simp[]
 QED
