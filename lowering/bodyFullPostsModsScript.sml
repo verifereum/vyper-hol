@@ -378,6 +378,91 @@ Proof
   metis_tac[]
 QED
 
+(* At a body entry the active module is present in the linked module table,
+   so the widened single-file immutable predicate is the list predicate. *)
+Theorem immutable_holds_mods_body_entry[local]:
+  cenv_module_pins_mods mods cenv /\
+  module_body_inv mods src tops cenv cx ==>
+  (immutable_holds_mods cenv cx t tv w es s <=>
+   immutable_holds cenv cx t tv w es s)
+Proof
+  strip_tac >>
+  `ALOOKUP cenv.ce_modules cenv.ce_module = SOME tops` by
+    fs[cenv_module_pins_mods_def, module_body_inv_def] >>
+  rw[immutable_holds_mods_def, immutable_holds_def] >>
+  simp[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
+QED
+
+Theorem vv_place_ptr_mods_body_entry[local]:
+  cenv_module_pins_mods mods cenv /\
+  module_body_inv mods src tops cenv cx ==>
+  (vv_place_ptr_mods cenv cx es s tv vv <=>
+   vv_place_ptr cenv cx es s tv vv)
+Proof
+  strip_tac >>
+  `ALOOKUP cenv.ce_modules cenv.ce_module = SOME tops` by
+    fs[cenv_module_pins_mods_def, module_body_inv_def] >>
+  Cases_on `vv` >> Cases_on `tv` >>
+  TRY (rename1 `PlaceR place` >> Cases_on `place`) >>
+  simp[vv_place_ptr_mods_def, vv_place_ptr_def,
+       optionTheory.IS_SOME_EXISTS] >> metis_tac[]
+QED
+
+Theorem vv_holds_mods_body_entry[local]:
+  cenv_module_pins_mods mods cenv /\
+  module_body_inv mods src tops cenv cx ==>
+  (vv_holds_mods cenv cx t tv vv es s <=>
+   vv_holds cenv cx t tv vv es s)
+Proof
+  strip_tac >>
+  Cases_on `vv` >> simp[vv_holds_mods_def] >>
+  rename1 `p.ptr_location = LocCode` >>
+  Cases_on `p.ptr_location = LocCode` >>
+  simp[vv_holds_def, vv_holds_mods_def] >>
+  metis_tac[immutable_holds_mods_body_entry]
+QED
+
+Theorem stmt_state_rel_immutable_frame_mods[local]:
+  stmt_state_rel H ctx func cenv cx es s ==>
+  immutable_frame_mods func cenv cx es s
+Proof
+  strip_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
+  simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+       immutable_frame_mods_def, immutables_rel_mods_def,
+       immutable_alloca_sep_mods_def]
+QED
+
+Theorem expr_post_mods_body_entry[local]:
+  cenv_module_pins_mods mods cenv /\
+  module_body_inv mods src tops cenv cx /\
+  stmt_state_rel H ctx func cenv cx es' s ==>
+  (expr_post_mods H ctx func cenv cx e es sa sb s0 es' v op s <=>
+   expr_post H ctx func cenv cx e es sa sb s0 es' v op s)
+Proof
+  strip_tac >>
+  drule_all stmt_state_rel_immutable_frame_mods >>
+  simp[expr_post_mods_def]
+QED
+
+Theorem vv_post_mods_body_entry[local]:
+  cenv_module_pins_mods mods cenv /\
+  module_body_inv mods src tops cenv cx /\
+  stmt_state_rel H ctx func cenv cx es' s ==>
+  (vv_post_mods H ctx func cenv cx e es sa sb s0 es' tv vv s <=>
+   vv_post H ctx func cenv cx e es sa sb s0 es' tv vv s)
+Proof
+  strip_tac >>
+  drule_all stmt_state_rel_immutable_frame_mods >>
+  `vv_holds_mods cenv cx (post_value_type cenv e) tv vv es' s <=>
+   vv_holds cenv cx (post_value_type cenv e) tv vv es' s` by
+    (irule vv_holds_mods_body_entry >> metis_tac[]) >>
+  `vv_place_ptr_mods cenv cx es' s tv vv <=>
+   vv_place_ptr cenv cx es' s tv vv` by
+    (irule vv_place_ptr_mods_body_entry >> metis_tac[]) >>
+  simp[vv_post_mods_def, vv_post_def, immutable_frame_mods_def]
+QED
+
 Theorem vv_place_ptr_mods_singleton:
   cenv.ce_modules = [(NONE,tops)] /\ cenv.ce_module = NONE ==>
   (vv_place_ptr_mods cenv cx es s tv vv <=>
