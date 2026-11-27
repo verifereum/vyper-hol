@@ -34,12 +34,12 @@ QED
    push_function; lock_if_nr touches only transient storage and
    push_function only the scopes, so taking it just after is the same
    run, and matches the compiled callee, which takes it in its prologue. *)
-Definition intcall_rest_def:
-  intcall_rest cx name mut nr ss prev rtv =
+Definition intcall_rest_at_def:
+  intcall_rest_at cx src name mut nr ss prev rtv =
     do lock_if_nr cx nr (is_view_mut mut);
        rv <- finally_unless_halt
          (finally
-            (try (do eval_stmts (cx with stk updated_by CONS (NONE,name)) ss;
+            (try (do eval_stmts (cx with stk updated_by CONS (src,name)) ss;
                      return NoneV
                   od) handle_function)
             (pop_function prev))
@@ -48,6 +48,14 @@ Definition intcall_rest_def:
        return (Value crv)
     od
 End
+
+Definition intcall_rest_singleton_def:
+  intcall_rest cx name mut nr ss prev rtv =
+    intcall_rest_at cx NONE name mut nr ss prev rtv
+End
+
+Theorem intcall_rest_def =
+  PURE_REWRITE_RULE [intcall_rest_at_def] intcall_rest_singleton_def;
 
 Theorem ignore_bind_return_unit[local]:
   ignore_bind f (return ()) = f
@@ -82,14 +90,22 @@ QED
 
 (* The callee as the INVOKE runs it: the nonreentrant lock its prologue
    takes, then its body. *)
-Definition intcall_callee_src_def:
-  intcall_callee_src cx name mut nr ss =
+Definition intcall_callee_src_at_def:
+  intcall_callee_src_at cx src name mut nr ss =
     do lock_if_nr cx nr (is_view_mut mut);
-       try (do eval_stmts (cx with stk updated_by CONS (NONE,name)) ss;
+       try (do eval_stmts (cx with stk updated_by CONS (src,name)) ss;
                return NoneV
             od) handle_function
     od
 End
+
+Definition intcall_callee_src_singleton_def:
+  intcall_callee_src cx name mut nr ss =
+    intcall_callee_src_at cx NONE name mut nr ss
+End
+
+Theorem intcall_callee_src_def =
+  PURE_REWRITE_RULE [intcall_callee_src_at_def] intcall_callee_src_singleton_def;
 
 (* Without the lock, the callee is its body alone. *)
 Theorem intcall_callee_src_F:
@@ -113,8 +129,8 @@ QED
    The memory frame is a fact of the callee's Venom code (it writes below
    its entry frontier only through the pointers it is passed), not of the
    body's simulation: stmt_frag's post carries no memory frame. *)
-Definition intcall_callee_exit_def:
-  intcall_callee_exit H func cenv cx mut nr rtv rc (rb:bytes32 option) (n:num)
+Definition intcall_callee_exit_mods_def:
+  intcall_callee_exit_mods mods H func cenv cx mut nr rtv rc (rb:bytes32 option) (n:num)
                       (m:num)
                       (t:venom_state) res (ee:evaluation_state) r <=>
     (expr_exit res r /\ halt_exit H cx ee res r) \/
@@ -124,7 +140,7 @@ Definition intcall_callee_exit_def:
       state_rel H func cenv cx (ee' with scopes := []) s' /\
       intret_vals_match rtv v ir.iret_values /\
       LENGTH ir.iret_values = rc /\ ir.iret_adopt_fmp = NONE /\
-      (!b sz. (cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b) /\
+      (!b sz. (cenv.ce_is_ctor ==> imm_len_mods mods <= b) /\
               b + sz <= t.vs_alloca_next /\
               (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
                              n <= aid /\ aid < m ==>
@@ -132,6 +148,14 @@ Definition intcall_callee_exit_def:
               mem_bytes_at b sz s'.vs_memory = mem_bytes_at b sz t.vs_memory) /\
       (!p. rb = SOME p ==> val_in_memory rtv v (w2n p) s'.vs_memory)
 End
+
+Definition intcall_callee_exit_singleton_def:
+  intcall_callee_exit H func cenv cx mut nr rtv rc rb n m t res ee r <=>
+    intcall_callee_exit_mods [(NONE,cx_tops cx)] H func cenv cx mut nr rtv rc rb n m t res ee r
+End
+
+Theorem intcall_callee_exit_def =
+  PURE_REWRITE_RULE [intcall_callee_exit_mods_def, imm_len_mods_singleton] intcall_callee_exit_singleton_def;
 
 (* Without the lock, the IntRet's state is the callee's own. *)
 Theorem intcall_callee_exit_F:

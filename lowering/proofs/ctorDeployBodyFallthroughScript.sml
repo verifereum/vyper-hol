@@ -14,7 +14,8 @@ Theorem deploy_ctor_fallthrough_joint:
   !P H0 tops runtime_bc am tx imm cenv cenv' cx ee ctx func sb sj
    st_exit st_final exit_lbl nkey ut t G tn explicit.
     cx = deploy_evaluation_context tops am tx /\
-    cenv.ce_is_ctor /\ same_frame cenv cenv' /\
+    cenv.ce_is_ctor /\ cenv.ce_modules = [(NONE,tops)] /\
+    same_frame cenv cenv' /\
     emit_inst JMP [Label exit_lbl] [] sb = ((), sj) /\
     fn_has_code sb sj func /\
     st_exit.cs_current_bb = exit_lbl /\ st_exit.cs_current_insts = [] /\
@@ -44,7 +45,7 @@ Proof
   `cx_tops cx = tops` by
     simp[deploy_evaluation_context_def, gasContextTheory.cx_tops_def,
          vyperContextTheory.get_module_code_def, initial_evaluation_context_def] >>
-  `cenv'.ce_is_ctor /\
+  `cenv'.ce_is_ctor /\ cenv'.ce_modules = [(NONE,tops)] /\
    (imm_len tops <> 0 ==> cenv'.ce_imm_alloca = SOME imm /\
      !x. imm = Var x ==> not_fresh_at st_exit x)` by
     gvs[same_frame_def, compile_env_component_equality] >>
