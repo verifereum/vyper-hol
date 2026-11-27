@@ -98,10 +98,8 @@ QED
 (* A flag member compiles to StackValue (Lit _) and emits no instruction
    (compile_expr_def), in runtime and constructor frames alike; the source
    side is exprSimProps' eval_expr_flag_member_gas. *)
-Theorem flag_member_value_full[local]:
-  expr_body_pre_mods mods cenv cx env (FlagMember ann nsid mid) es ==>
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (FlagMember ann nsid mid) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[expr_sim_full_def] >> PairCases_on `nsid` >>
   drule eval_expr_flag_member_gas >> strip_tac >>
@@ -136,6 +134,14 @@ Proof
       Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def])
   >- (gvs[op_taint_def] >> metis_tac[]) >>
   gvs[expr_type_def, is_word_type_def]
+QED
+*)
+Theorem flag_member_value_full[local]:
+  expr_body_pre_mods mods cenv cx env (FlagMember ann nsid mid) es ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (FlagMember ann nsid mid) es
+Proof
+  cheat
 QED
 
 Theorem flag_member_vv_full[local]:

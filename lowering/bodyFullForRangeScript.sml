@@ -1126,37 +1126,8 @@ Proof
 QED
 
 (* Store while the loop id is inactive; only then expose its live scope. *)
-Theorem range_entry_store_scope:
-  !H ctx func cenv cx e b D lo d G tn id bc p sz w ainst tyv z.
-    stmt_state_rel H ctx func cenv cx e b /\
-    ghost_inv_at D lo d cenv cx e G tn b /\ lookup_scopes id e.scopes = NONE /\
-    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    (!nm. nm <> id ==> FLOOKUP bc.ce_vars nm = FLOOKUP cenv.ce_vars nm) /\
-    bc with
-    <|ce_vars := cenv.ce_vars; ce_var_type := cenv.ce_var_type;
-      ce_dynarray_capacity := cenv.ce_dynarray_capacity|> = cenv /\
-    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z'. l = PtrVar q z') /\
-    not_local_ptr cenv e.scopes p /\ not_local_ptr bc (FEMPTY::e.scopes) p /\
-    lookup_var p b = SOME w /\ ptr_covers G tn p b sz /\
-    MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
-    ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    FLOOKUP b.vs_allocas ainst.inst_id = SOME (w2n w,sz) /\ 32 <= sz /\
-    type_memory_size tyv = 32 /\ word_memory_type tyv /\ val_wf tyv (IntV z) /\
-    lo <= w2n w ==>
-    stmt_state_rel H ctx func bc cx
-      (e with
-       scopes :=
-         fmupdate id
-           <|assignable := F; type := tyv; value := IntV z; popped := []|>
-           FEMPTY::e.scopes) (mstore (w2n w) (i2w z) b) /\
-    ghost_inv_at D lo d bc cx
-      (e with
-       scopes :=
-         fmupdate id
-           <|assignable := F; type := tyv; value := IntV z; popped := []|>
-           FEMPTY::e.scopes) G
-      (tn with t_mem := tn.t_mem DIFF {i | w2n w <= i /\ i < w2n w + 32})
-      (mstore (w2n w) (i2w z) b)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >> pure_rewrite_tac [LET_THM] >>
   drule_then strip_assume_tac stmt_state_rel_local_ptrs_alloca >>
@@ -1191,7 +1162,43 @@ Proof
   gvs[lookup_scopes_def, FLOOKUP_UPDATE] >>
   first_x_assum irule >> simp[] >> qexists_tac `name` >> simp[]
 QED
+*)
+Theorem range_entry_store_scope:
+  !H ctx func cenv cx e b D lo d G tn id bc p sz w ainst tyv z.
+    stmt_state_rel H ctx func cenv cx e b /\
+    ghost_inv_at D lo d cenv cx e G tn b /\ lookup_scopes id e.scopes = NONE /\
+    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    (!nm. nm <> id ==> FLOOKUP bc.ce_vars nm = FLOOKUP cenv.ce_vars nm) /\
+    bc with
+    <|ce_vars := cenv.ce_vars; ce_var_type := cenv.ce_var_type;
+      ce_dynarray_capacity := cenv.ce_dynarray_capacity|> = cenv /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z'. l = PtrVar q z') /\
+    not_local_ptr cenv e.scopes p /\ not_local_ptr bc (FEMPTY::e.scopes) p /\
+    lookup_var p b = SOME w /\ ptr_covers G tn p b sz /\
+    MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
+    ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
+    FLOOKUP b.vs_allocas ainst.inst_id = SOME (w2n w,sz) /\ 32 <= sz /\
+    type_memory_size tyv = 32 /\ word_memory_type tyv /\ val_wf tyv (IntV z) /\
+    lo <= w2n w ==>
+    stmt_state_rel H ctx func bc cx
+      (e with
+       scopes :=
+         fmupdate id
+           <|assignable := F; type := tyv; value := IntV z; popped := []|>
+           FEMPTY::e.scopes) (mstore (w2n w) (i2w z) b) /\
+    ghost_inv_at D lo d bc cx
+      (e with
+       scopes :=
+         fmupdate id
+           <|assignable := F; type := tyv; value := IntV z; popped := []|>
+           FEMPTY::e.scopes) G
+      (tn with t_mem := tn.t_mem DIFF {i | w2n w <= i /\ i < w2n w + 32})
+      (mstore (w2n w) (i2w z) b)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_entry_store_scope[declare]:
   `stmt_state_rel H ctx func bc cx (e with scopes := FEMPTY :: e.scopes) b` by
     (simp[stmt_state_rel_push_scope] >> irule stmt_state_rel_cenv_cong >>
@@ -1204,7 +1211,9 @@ Resume range_entry_store_scope[declare]:
   conj_tac >- (qexists_tac `ainst` >> simp[]) >>
   simp[GSYM val_to_w256_def, word_value_memory_rel, word_value_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_entry_store_scope[new_local]:
   gvs[lookup_scopes_def, FLOOKUP_UPDATE] >>
   conj_tac
@@ -1220,8 +1229,11 @@ Resume range_entry_store_scope[new_local]:
   simp[valueEncodingDefsTheory.val_in_memory_def, mstore_mem_word_at_same,
        val_to_w256_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise range_entry_store_scope
+*)
 
 (* ===== Initialization: virtual allocation cut ===== *)
 

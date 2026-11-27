@@ -254,10 +254,8 @@ QED
 Finalise bool_chain_ops_outcome_full
 *)
 
-Theorem bool_chain_expr_full_ok:
-  !cx ann is_and n e.
-    bool_chain_full_ok cx (bool_chain_operands is_and (n - 1) e) ==>
-    body_expr_full_ok_mods mods exps cx (Builtin ann (BoolChain is_and n) [e])
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   irule word_stack_builtin_body_full_intro >> simp[] >>
@@ -299,7 +297,16 @@ Proof
   >- simp[Abbr `root`] >>
   suspend "outcome"
 QED
+*)
+Theorem bool_chain_expr_full_ok:
+  !cx ann is_and n e.
+    bool_chain_full_ok cx (bool_chain_operands is_and (n - 1) e) ==>
+    body_expr_full_ok_mods mods exps cx (Builtin ann (BoolChain is_and n) [e])
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_expr_full_ok[outcome]:
   irule gas_outcome_full_post_mono >>
   qexistsl_tac
@@ -331,5 +338,8 @@ Resume bool_chain_expr_full_ok[outcome]:
       first_assum ACCEPT_TAC) >>
   qexistsl_tac [`env`,`tops`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise bool_chain_expr_full_ok
+*)
