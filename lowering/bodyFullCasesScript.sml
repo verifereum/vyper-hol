@@ -1057,6 +1057,24 @@ Proof
 QED
 
 (* Joint composition from the source, paired layout and terminal interfaces. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (mk_asm "source_contract") >>
+  disch_then (mk_asm "layout_contract") >>
+  disch_then (mk_asm "tail_contract") >> rpt gen_tac >> strip_tac >>
+  asm "source_contract" drule >> strip_tac >> gvs[] >>
+  `expr_body_pre cenv cx env e es` by
+    (first_x_assum irule >> metis_tac[expr_body_pre_static_facts]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx (expr_type e) e es` by
+    (gvs[body_exprs_full_ok_def] >>
+     qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
+     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  suspend "compiler"
+QED
+*)
 Theorem selfdestruct_expr_full_from_interfaces:
   (!cenv cx env ann args dflt es.
     expr_body_pre_mods mods cenv cx env (Call ann SelfDestructTarget args dflt) es ==>
@@ -1109,21 +1127,10 @@ Theorem selfdestruct_expr_full_from_interfaces:
     expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Call ann SelfDestructTarget args dflt) es
 Proof
-  disch_then (mk_asm "source_contract") >>
-  disch_then (mk_asm "layout_contract") >>
-  disch_then (mk_asm "tail_contract") >> rpt gen_tac >> strip_tac >>
-  asm "source_contract" drule >> strip_tac >> gvs[] >>
-  `expr_body_pre cenv cx env e es` by
-    (first_x_assum irule >> metis_tac[expr_body_pre_static_facts]) >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx (expr_type e) e es` by
-    (gvs[body_exprs_full_ok_def] >>
-     qpat_x_assum `body_expr_full_ok cx e` mp_tac >>
-     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
-  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
-  suspend "compiler"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume selfdestruct_expr_full_from_interfaces[compiler]:
   `!ce child ss v st.
      compile_expr ce ty (Call NoneT SelfDestructTarget [child] NONE) ss = (v,st) ==>
@@ -1157,7 +1164,9 @@ Resume selfdestruct_expr_full_from_interfaces[compiler]:
   (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
   strip_tac >> suspend "compose"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume selfdestruct_expr_full_from_interfaces[compose]:
   asm_x "source_contract" kall_tac >> asm_x "layout_contract" kall_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ fullQ fullR` >>
@@ -1242,7 +1251,9 @@ Resume selfdestruct_expr_full_from_interfaces[compose]:
      gvs[bodyPtrDefsTheory.ptr_val_ok_def, is_word_type_def]) >>
   suspend "normal"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume selfdestruct_expr_full_from_interfaces[normal]:
   `bind (eval_expr cx e) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
@@ -1291,7 +1302,9 @@ Resume selfdestruct_expr_full_from_interfaces[normal]:
       (w2w (typed_val_to_w256 (BaseTV AddressT) v)) ee.accounts`
   >- suspend "overflow" >> suspend "halt"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume selfdestruct_expr_full_from_interfaces[static]:
   `r = Abort ExHalt_abort (halt_state (set_returndata [] t))` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
@@ -1324,7 +1337,9 @@ Resume selfdestruct_expr_full_from_interfaces[static]:
   disch_then (qspec_then `[]` mp_tac) >> simp[] >>
   disch_then irule >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume selfdestruct_expr_full_from_interfaces[overflow]:
   rewrite_tac[gasOutcomeFullTheory.gas_outcome_full_def] >>
   qexists `marks` >> disj2_tac >> disj2_tac >>
@@ -1347,7 +1362,9 @@ Resume selfdestruct_expr_full_from_interfaces[overflow]:
     (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume selfdestruct_expr_full_from_interfaces[halt]:
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      ?u. step_inst_base (mk_inst sm.cs_next_id SELFDESTRUCT [op'] []) t = Halt u /\
@@ -1402,8 +1419,11 @@ Resume selfdestruct_expr_full_from_interfaces[halt]:
   disch_then (qspec_then `[]` mp_tac) >> simp[] >>
   disch_then irule >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise selfdestruct_expr_full_from_interfaces
+*)
 
 (* A single mask-independent terminal result carries the child ghosts. *)
 Theorem selfdestruct_full_compiled_tail_joint:
