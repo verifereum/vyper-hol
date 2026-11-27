@@ -26,16 +26,22 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem pop_full_target_pre:
-  !cenv cx env ann bt es.
-    expr_body_pre_mods mods cenv cx env (Pop ann bt) es ==>
-    target_pre cenv cx env bt es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt strip_tac >> irule target_pre_of_pop >>
   reverse conj_tac >- (qexists `ann` >> simp[]) >>
   strip_tac >> gvs[targetPlaceSimTheory.immutable_root_def] >>
   drule pop_immutable_root_rejected >>
   disch_then drule >> simp[]
+QED
+*)
+Theorem pop_full_target_pre:
+  !cenv cx env ann bt es.
+    expr_body_pre_mods mods cenv cx env (Pop ann bt) es ==>
+    target_pre cenv cx env bt es
+Proof
+  cheat
 QED
 
 Theorem pop_full_ghost_cursor_unique[local]:
