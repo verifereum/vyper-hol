@@ -41,3 +41,12 @@ Proof
     metis_tac[TAKE_LENGTH_ID_rwt, LENGTH_MAP] >>
   simp[build_ext_calldata_def, encode_create_ctor_args_def, AllCaseEqs()]
 QED
+
+Theorem create_ctor_args_snapshots:
+  !args.
+    compile_create_ctor_args cfn ce args =
+    compile_abi_encode_args cfn ce args
+Proof
+  Induct >> simp[compile_abi_encode_args_def, compile_create_ctor_args_def,
+                 compile_ext_call_args_def]
+QED
