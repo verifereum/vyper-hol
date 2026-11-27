@@ -605,8 +605,9 @@ Proof
   metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_frag_start_gas_obs:
+  stmt_frag ctx func cx lctx RetQ cenv m source es ==>
+  !gs. stmt_frag ctx func cx lctx RetQ cenv m source (es with gas_obs := gs)
 Proof
   rw[stmt_frag_def, stmt_framed_frag_def] >>
   `(\(H:(bool # bytes32 # type_value) list # num list).
@@ -617,20 +618,13 @@ Proof
   irule gas_outcome_start_gas_obs >> first_x_assum irule >> simp[] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >> fs[] >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
-  simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>
-  strip_tac >> asm_rewrite_tac[] >>
+  simp[stmt_state_rel_start_gas_obs] >>
+  strip_tac >>
   qpat_x_assum `storage_well_formed_on _ (_ with gas_obs := _) _` mp_tac >>
   match_mp_tac (METIS_PROVE [] ``(A <=> B) ==> A ==> B``) >>
-  irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]
+  irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+  simp[]
 QED
-*)
-Theorem stmt_frag_start_gas_obs:
-  stmt_frag ctx func cx lctx RetQ cenv m source es ==>
-  !gs. stmt_frag ctx func cx lctx RetQ cenv m source (es with gas_obs := gs)
-Proof
-  cheat
-QED
-
 Theorem array_code_return_pc[local]:
   array_for_code func cenv bc ty stmts id et tv n stride saved_base
     p sz ainst idx dv ov ep nv cond exit bod incr
