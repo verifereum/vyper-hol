@@ -83,21 +83,6 @@ QED
 
 Finalise augassign_memory_write_machine_resources
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `!H. valid_horizon cx st0 H es'.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
-  drule_all augassign_memory_write_source_joint >> strip_tac >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
-  qexistsl_tac [`G`, `es'`, `res`, `u`, `un`] >> simp[] >>
-  conj_tac >- metis_tac[aug_place_memory_write_gas_obs] >>
-  qx_gen_tac `H` >> strip_tac >>
-  qpat_assum `!H. _ ==> _ /\ _` (drule_then strip_assume_tac) >>
-  suspend "memory_horizon"
-QED
-*)
 Theorem augassign_memory_writeback_full:
   body_inv tops ctx cenv cx /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
@@ -163,10 +148,18 @@ Theorem augassign_memory_writeback_full:
           off + sz <= b \/ b + sz' <= off) /\
         off <= i /\ i < off + sz /\ i IN tn'.t_mem ==> i IN tn0.t_mem)) R
 Proof
-  cheat
+  strip_tac >>
+  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
+  drule_all augassign_memory_write_source_joint >> strip_tac >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  qexistsl_tac [`G`, `es'`, `res`, `u`, `un`] >> simp[] >>
+  conj_tac >- metis_tac[aug_place_memory_write_gas_obs] >>
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_assum `!H. _ ==> _ /\ _` (drule_then strip_assume_tac) >>
+  suspend "memory_horizon"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume augassign_memory_writeback_full[memory_horizon]:
   `w2n a + 32 <= s.vs_alloca_next /\
    ptr_inst_ok (DF H) lo 0 ctx func G tn
@@ -204,9 +197,7 @@ Resume augassign_memory_writeback_full[memory_horizon]:
       qexistsl_tac [`cx`, `es'`, `st0`] >> simp[]) >>
   suspend "memory_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume augassign_memory_writeback_full[memory_post]:
   `!name ee p sz.
      lookup_scopes name es'.scopes = SOME ee /\
@@ -224,20 +215,34 @@ Resume augassign_memory_writeback_full[memory_post]:
      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `lookup_scopes _ es'.scopes = SOME ee`)) >>
      simp[] >> qexists_tac `LENGTH sb.cs_current_insts` >> simp[]) >>
+  (* The prefix is unchanged, so the linked mask is unchanged without
+     rewriting it to a single-module mask. *)
+  `mem_bytes_at 0 lo u.vs_memory = mem_bytes_at 0 lo s.vs_memory` by
+    (irule (INST_TYPE [alpha |-> ``:256``] augassign_memory_store_prefix_preserved) >>
+     goal_assum (drule_at (Pat `body_inv _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `store_lays_out _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
+     simp[] >> qexistsl_tac [`DF H`, `LENGTH sb.cs_current_insts`] >> simp[]) >>
   `ghost_inv_at (DF H) lo d cenv cx es' G un u` by
-    (irule augassign_mstore_ghost_transport >> reverse conj_tac
-     >- (goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
-         qexistsl_tac [`w2n a`, `LENGTH sb.cs_current_insts`, `typed_val_to_w256 etv v`] >>
-         qpat_x_assum `!name ee p sz. _` mp_tac >> simp[]) >>
-     `mem_bytes_at 0 lo u.vs_memory = mem_bytes_at 0 lo s.vs_memory` by
-       (irule (INST_TYPE [alpha |-> ``:256``] augassign_memory_store_prefix_preserved) >>
-        goal_assum (drule_at (Pat `body_inv _ _ _ _`)) >>
-        goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
-        goal_assum (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
-        goal_assum (drule_at (Pat `store_lays_out _ _ _`)) >>
-        goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-        simp[] >> qexistsl_tac [`DF H`, `LENGTH sb.cs_current_insts`] >> simp[]) >>
-     fs[ghost_inv_at_def] >> metis_tac[]) >>
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`ghost_inv_at _ _ _ _ _ es _ _ _`, `!name ee p sz. _`,
+        `mem_bytes_at 0 lo u.vs_memory = _`, `u = _`, `un = _`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> gvs[] >>
+     qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[ghost_inv_at_def] >> strip_tac >>
+     conj_tac
+     >- (rpt gen_tac >> strip_tac >>
+         first_assum (drule_all_then strip_assume_tac) >>
+         gvs[ptr_covers_def, op_taint_def, lookup_var_def, mstore_def]) >>
+     conj_tac
+     >- (Cases_on `d` >- simp[return_buf_ptr_def] >>
+         PairCases_on `x` >>
+         gvs[return_buf_ptr_def, ptr_covers_def, op_taint_def,
+             lookup_var_def, mstore_def]) >>
+     gvs[op_taint_def, stor_taint_ok_at_def, allocas_from_def, mstore_def] >>
+     metis_tac[]) >>
   `es'.accounts = es.accounts /\ es'.tStorage = es.tStorage` by
     (drule vyperPlaceFramesTheory.write_memory_place_frame >> strip_tac >> simp[]) >>
   `storage_well_formed_on cx (es' with gas_obs := []) (FST H)` by
@@ -273,11 +278,8 @@ Resume augassign_memory_writeback_full[memory_post]:
        lookup_var_def, mstore_def, op_taint_def, allocas_below_fmp_def] >>
   metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise augassign_memory_writeback_full
-*)
 
 Theorem augassign_immutable_writeback_full:
   body_inv tops ctx cenv cx /\ cx.in_deploy /\ cenv.ce_is_ctor /\
