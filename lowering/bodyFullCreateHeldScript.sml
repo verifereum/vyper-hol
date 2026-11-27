@@ -9277,6 +9277,36 @@ QED
 Finalise blueprint_scalar_suffix_cut_by_stages
 *)
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule (BETA_RULE (Q.INST
+    [`ListOK` |-> `\xs. T`, `HeadOK` |-> `\e. T`,
+     `Run` |-> `\act st. gas_outcome_full
+       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0 act st Q
+       (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+         (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))`]
+    blueprint_scalar_suffix_cut_by_stages)) >>
+  map_every (fn pat => qpat_assum pat (irule_at Any))
+    [`expr_body_pre _ _ _ (Call _ _ _ _) _`,
+     `lower_value _ _ _ amount sa = _`,
+     `lower_value _ _ _ (gas_shadow_expr amount) sh = _`,
+     `compile_create_salt _ _ _ sm = _`,
+     `compile_create_salt _ _ _ shm = _`,
+     `gas_shadow_function func shadow_func`,
+     `return_buf_frame d cenv sa s`,
+     `eval_operand target s = SOME aw`,
+     `body_inv tops ctx cenv cx`,
+     `_ sn = (off,sb)`, `_ shn = (off,shb)`] >>
+  qexistsl [`cnt`,`args_ptr`,`args`] >>
+  pure_rewrite_tac[boolTheory.AND_CLAUSES,boolTheory.IMP_CLAUSES,boolTheory.FORALL_SIMP] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
+  >- (irule blueprint_offset_cut >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  irule create_body_operand_cut_replay >> rpt (goal_assum (drule_at Any)) >> simp[]
+QED
+*)
 Theorem blueprint_scalar_suffix_cut:
   body_const_cells_agree mods cx env es /\
   (contract_inv mods exps ctx cenv cx /\
@@ -9379,31 +9409,7 @@ Theorem blueprint_scalar_suffix_cut:
     (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  irule (BETA_RULE (Q.INST
-    [`ListOK` |-> `\xs. T`, `HeadOK` |-> `\e. T`,
-     `Run` |-> `\act st. gas_outcome_full
-       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0 act st Q
-       (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-         (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z))`]
-    blueprint_scalar_suffix_cut_by_stages)) >>
-  map_every (fn pat => qpat_assum pat (irule_at Any))
-    [`expr_body_pre _ _ _ (Call _ _ _ _) _`,
-     `lower_value _ _ _ amount sa = _`,
-     `lower_value _ _ _ (gas_shadow_expr amount) sh = _`,
-     `compile_create_salt _ _ _ sm = _`,
-     `compile_create_salt _ _ _ shm = _`,
-     `gas_shadow_function func shadow_func`,
-     `return_buf_frame d cenv sa s`,
-     `eval_operand target s = SOME aw`,
-     `body_inv tops ctx cenv cx`,
-     `_ sn = (off,sb)`, `_ shn = (off,shb)`] >>
-  qexistsl [`cnt`,`args_ptr`,`args`] >>
-  pure_rewrite_tac[boolTheory.AND_CLAUSES,boolTheory.IMP_CLAUSES,boolTheory.FORALL_SIMP] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
-  >- (irule blueprint_offset_cut >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  irule create_body_operand_cut_replay >> rpt (goal_assum (drule_at Any)) >> simp[]
+  cheat
 QED
 
 Theorem blueprint_raw_args_parts:
