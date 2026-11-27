@@ -276,39 +276,24 @@ Proof
 QED
 
 (* No scope holds a local once the frame is left. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rw[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
-     logs_rel_def, local_ptrs_rel_def, local_region_def, lookup_scopes_def]
-QED
-*)
 Theorem state_rel_scopes_nil:
   !H func cenv cx es s.
     state_rel H func cenv cx es s ==>
     state_rel H func cenv cx (es with scopes := []) s
 Proof
-  cheat
+  rw[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
+    logs_rel_def, local_ptrs_rel_def, local_region_def, lookup_scopes_def] >>
+  first_assum (drule_all_then strip_assume_tac) >> first_assum ACCEPT_TAC
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> dxrule state_rel_scopes_nil >> strip_tac >>
-  gvs[same_frame_def, compile_env_component_equality, state_rel_def,
-      local_ptrs_rel_def, local_region_def, lookup_scopes_def,
-      storage_vars_rel_def, transient_vars_rel_def, logs_rel_def,
-      log_entry_equiv_def, listTheory.LIST_REL_EL_EQN, immutables_rel_def] >>
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!name tv v byte_offset. _` (drule_all_then strip_assume_tac) >>
-  simp[]
-QED
-*)
 Theorem constructor_exit_state_rel:
   same_frame cenv cenv' /\ state_rel H func cenv' cx es s ==>
   state_rel H func cenv cx (es with scopes := []) s
 Proof
-  cheat
+  strip_tac >> irule state_rel_cenv_cong >> qexists_tac `cenv'` >>
+  drule state_rel_scopes_nil >> strip_tac >>
+  fs[same_frame_def, compile_env_component_equality, lookup_scopes_def,
+     optionTheory.IS_SOME_EXISTS] >> metis_tac[]
 QED
 
 Theorem state_rel_return_index[local,simp]:

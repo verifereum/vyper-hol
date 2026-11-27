@@ -71,6 +71,8 @@ Proof
       st_epilogue = ((), st_final) /\ fn_has_code st_exit st_final func` by
     (qpat_x_assum `deploy_ctor_code _ _ _ _ _` mp_tac >>
      simp[deploy_ctor_code_def, new_block_def] >> strip_tac >> gvs[]) >>
+  `cenv.ce_modules = [(NONE,tops)]` by
+    fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def] >>
   `frame_ret_ok_full
      ((\H. deploy_dead H tops runtime_bc am tx), imm_len tops, NONE,
       dunit.cu_context, shadow_ctx, [], func, shadow_func)
