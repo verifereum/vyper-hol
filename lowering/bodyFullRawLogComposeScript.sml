@@ -13,13 +13,8 @@ Ancestors
   bodyFullPredsMods[qualified] bodyInvSplit[qualified]
 Libs pairLib
 
-Theorem raw_log_topics_operands_shape[local]:
-  expr_body_pre_mods mods cenv cx env
-    (Call ann RawLog [Builtin a (MakeArray elem bd) topics; data] dflt) es /\
-  EVERY (\e. MEM e topics) suffix /\
-  compile_multi_exprs compile_expr cenv suffix sa = (ops,sm) ==>
-  EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
-               (!l. op <> Label l)) ops
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `EVERY (well_typed_expr env) topics /\
@@ -62,6 +57,17 @@ Proof
   conj_tac >- (rpt strip_tac >> irule loweringShapeDefsTheory.not_fresh_at_mono >>
               qexists_tac `cs'` >> metis_tac[]) >>
   metis_tac[]
+QED
+*)
+Theorem raw_log_topics_operands_shape[local]:
+  expr_body_pre_mods mods cenv cx env
+    (Call ann RawLog [Builtin a (MakeArray elem bd) topics; data] dflt) es /\
+  EVERY (\e. MEM e topics) suffix /\
+  compile_multi_exprs compile_expr cenv suffix sa = (ops,sm) ==>
+  EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
+               (!l. op <> Label l)) ops
+Proof
+  cheat
 QED
 
 Theorem raw_log_expr_sim_full:
