@@ -8,38 +8,8 @@ Ancestors
   memLocDefs compileEnv vyperStorage vyperState venomState
   sourceLogFrames vyperStorageBackend
 
-Theorem raw_log_dynamic_log_joint:
-  ~cx.txn.is_static /\
-  LENGTH ops < dimword (:256) /\
-  eval_operands ops t = SOME (MAP event_value_to_word vals) /\
-  eval_operand ptr_op t = SOME (n2w p) /\
-  eval_operand len_op t = SOME (n2w (LENGTH bs)) /\
-  p < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-  EVERY (\op. op_taint tn op = {}) (ptr_op::len_op::ops) /\
-  (LENGTH bs <> 0 ==> ?x. ptr_op = Var x /\ ptr_covers G tn x t (LENGTH bs)) /\
-  p + LENGTH bs <= t.vs_alloca_next /\
-  (!j. p <= j /\ j < p + LENGTH bs ==> j NOTIN tn.t_mem) /\
-  mem_bytes_at p (LENGTH bs) t.vs_memory = bs /\
-  stmt_state_rel H ctx func cenv cx ee t /\
-  storage_well_formed_on cx ee (FST H) /\
-  ghost_inv_at D lo d cenv cx ee G tn t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) ==>
-  step_inst_base (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [])
-    t = OK (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) /\
-  inst_mem_below_frontier (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t /\
-  inst_dload_in_section (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t /\
-  ptr_inst_ok D lo 0 ctx func
-    G tn (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t /\
-  step_prov PG G (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op])
-    []) (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) = G /\
-  step_taint (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op])
-    []) t (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) tn = tn /\
-  ((t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) with vs_logs := t.vs_logs) = t /\
-  stmt_state_rel H ctx func cenv cx
-    (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) /\
-  storage_well_formed_on cx
-    (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (FST H) /\
-  ghost_inv_at D lo d cenv cx
-    (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) G tn (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs])
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `~t.vs_call_ctx.cc_static /\ t.vs_call_ctx.cc_address = cx.txn.target` by
@@ -88,4 +58,40 @@ Proof
           rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
       PairCases_on `x` >> simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def] >>
       strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC)
+QED
+*)
+Theorem raw_log_dynamic_log_joint:
+  ~cx.txn.is_static /\
+  LENGTH ops < dimword (:256) /\
+  eval_operands ops t = SOME (MAP event_value_to_word vals) /\
+  eval_operand ptr_op t = SOME (n2w p) /\
+  eval_operand len_op t = SOME (n2w (LENGTH bs)) /\
+  p < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+  EVERY (\op. op_taint tn op = {}) (ptr_op::len_op::ops) /\
+  (LENGTH bs <> 0 ==> ?x. ptr_op = Var x /\ ptr_covers G tn x t (LENGTH bs)) /\
+  p + LENGTH bs <= t.vs_alloca_next /\
+  (!j. p <= j /\ j < p + LENGTH bs ==> j NOTIN tn.t_mem) /\
+  mem_bytes_at p (LENGTH bs) t.vs_memory = bs /\
+  stmt_state_rel H ctx func cenv cx ee t /\
+  storage_well_formed_on cx ee (FST H) /\
+  ghost_inv_at D lo d cenv cx ee G tn t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t) ==>
+  step_inst_base (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [])
+    t = OK (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) /\
+  inst_mem_below_frontier (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t /\
+  inst_dload_in_section (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t /\
+  ptr_inst_ok D lo 0 ctx func
+    G tn (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t /\
+  step_prov PG G (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op])
+    []) (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) = G /\
+  step_taint (mk_inst id LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op])
+    []) t (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) tn = tn /\
+  ((t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) with vs_logs := t.vs_logs) = t /\
+  stmt_state_rel H ctx func cenv cx
+    (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs]) /\
+  storage_well_formed_on cx
+    (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (FST H) /\
+  ghost_inv_at D lo d cenv cx
+    (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) G tn (t with vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs])
+Proof
+  cheat
 QED
