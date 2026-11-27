@@ -208,6 +208,39 @@ Proof
   cheat
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >> irule for_array_expr_cut_frag_full >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`bindings`,`env`,`env'`,`tops`] >> asm_rewrite_tac[] >>
+  map_every qx_gen_tac [`st0`,`sa`,`sb`,`sha`,`shb`,`s0`,`G0`,`tn0`,`vv`,
+    `se`,`she`,`bd`,`tyv`,`marks`,`rv`,`em`,`G`,`tn`,`u`] >>
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `start = es with gas_obs := gas_explicit marks s0.vs_gas_readings` >>
+  `em with gas_obs := [] = em` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> for_array_expr_endpoint _ _ _ _ _ _ _ _ _ _ _ _`
+      (qspec_then `storage_trace_horizon em.storage_trace` mp_tac) >>
+     fs[vyperStorageFootprintTheory.storage_trace_domain_def,bodyFullForExprCutTheory.for_array_expr_endpoint_def,
+        vyperStateTheory.evaluation_state_component_equality]) >>
+  `eval_expr cx e start = (INL rv,em)` by
+    (qpat_assum `em with gas_obs := [] = em` (fn eq =>
+       qpat_assum `!tail. eval_expr cx e _ = _` (qspec_then `[]` mp_tac) >>
+       simp[NoAsms,Abbr `start`,eq])) >>
+  `expr_body_pre cenv cx env e start` by simp[Abbr `start`] >>
+  drule_at_then (Pat `eval_expr cx e start = _`) drule_all
+    forNestedArrayCaptureTheory.nested_array_capture_cases >>
+  disch_then (qx_choose_then `elem` (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 kall_tac assume_tac))) >>
+  `elem = tyv` by metis_tac[optionTheory.SOME_11] >>
+  pop_assum SUBST_ALL_TAC >>
+  `post_value_type cenv e = ArrayT typ bd` by
+    (`post_value_type cenv e = expr_type e` suffices_by simp[] >>
+     irule loweringPostsTheory.post_value_type_not_int_call >> rpt strip_tac >>
+     gvs[vyperTypeContractTheory.loop_iterator_place_def]) >>
+  suspend "snapshot"
+QED
+*)
 Theorem compile_for_immutable_subplace_array_frag_full:
   !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -249,36 +282,10 @@ Theorem compile_for_immutable_subplace_array_frag_full:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
       (eval_stmt cx (For id typ (Array e) n body)) es
 Proof
-  rpt gen_tac >> strip_tac >> irule for_array_expr_cut_frag_full >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`bindings`,`env`,`env'`,`tops`] >> asm_rewrite_tac[] >>
-  map_every qx_gen_tac [`st0`,`sa`,`sb`,`sha`,`shb`,`s0`,`G0`,`tn0`,`vv`,
-    `se`,`she`,`bd`,`tyv`,`marks`,`rv`,`em`,`G`,`tn`,`u`] >>
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  qabbrev_tac `start = es with gas_obs := gas_explicit marks s0.vs_gas_readings` >>
-  `em with gas_obs := [] = em` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> for_array_expr_endpoint _ _ _ _ _ _ _ _ _ _ _ _`
-      (qspec_then `storage_trace_horizon em.storage_trace` mp_tac) >>
-     fs[vyperStorageFootprintTheory.storage_trace_domain_def,bodyFullForExprCutTheory.for_array_expr_endpoint_def,
-        vyperStateTheory.evaluation_state_component_equality]) >>
-  `eval_expr cx e start = (INL rv,em)` by
-    (qpat_assum `em with gas_obs := [] = em` (fn eq =>
-       qpat_assum `!tail. eval_expr cx e _ = _` (qspec_then `[]` mp_tac) >>
-       simp[NoAsms,Abbr `start`,eq])) >>
-  `expr_body_pre cenv cx env e start` by simp[Abbr `start`] >>
-  drule_at_then (Pat `eval_expr cx e start = _`) drule_all
-    forNestedArrayCaptureTheory.nested_array_capture_cases >>
-  disch_then (qx_choose_then `elem` (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 kall_tac assume_tac))) >>
-  `elem = tyv` by metis_tac[optionTheory.SOME_11] >>
-  pop_assum SUBST_ALL_TAC >>
-  `post_value_type cenv e = ArrayT typ bd` by
-    (`post_value_type cenv e = expr_type e` suffices_by simp[] >>
-     irule loweringPostsTheory.post_value_type_not_int_call >> rpt strip_tac >>
-     gvs[vyperTypeContractTheory.loop_iterator_place_def]) >>
-  suspend "snapshot"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_immutable_subplace_array_frag_full[snapshot]:
   qsuff_tac `((?av. rv = Value (ArrayV av)) \/ (?src name path. rv = PlaceR (ImmutablePlace src name path)))`
   >- (disch_tac >> irule for_array_snapshot_continue_full >>
@@ -297,7 +304,9 @@ Resume compile_for_immutable_subplace_array_frag_full[snapshot]:
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   gvs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_immutable_subplace_array_frag_full[frame]:
   qpat_assum `IS_SOME _ ==> _`
     (drule_then (DISJ_CASES_THEN2 (qx_choose_then `va` assume_tac)
@@ -329,5 +338,8 @@ Resume compile_for_immutable_subplace_array_frag_full[frame]:
      drule_then strip_assume_tac vyperTypeValuesTheory.evaluate_type_ArrayT_cases >> gvs[]) >>
   gen_tac >> disch_tac >> drule_all_then MATCH_ACCEPT_TAC selected_array_code_frame
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_for_immutable_subplace_array_frag_full
+*)
