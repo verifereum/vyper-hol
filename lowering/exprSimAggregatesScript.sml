@@ -83,6 +83,33 @@ Ancestors
   exprLoweringProps
 
 (* The allocation must be a generated ALLOCA, not merely a tracked map entry. *)
+Theorem aggregate_alloca_immutable_sep_source:
+  stmt_state_rel H ctx func cenv cx es t /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
+  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
+  cenv.ce_is_ctor ==>
+  !src name itv iv io.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) =
+      SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables src imms) name =
+      SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) b sz
+Proof
+  strip_tac >> disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `immutable_alloca_sep func (cenv with ce_module := src) cx es t` by
+    (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+     Cases_on `src = cenv.ce_module` >>
+     gvs[compileEnvTheory.compile_env_component_equality] >> metis_tac[]) >>
+  qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
+  simp[immutable_alloca_sep_def] >>
+  disch_then (drule_all o CONJUNCT2) >> strip_tac >>
+  qpat_x_assum `!inst b sz. _ ==> regions_disjoint _ _ b sz` drule_all >>
+  simp[]
+QED
+
 Theorem aggregate_alloca_immutable_sep:
   stmt_state_rel H ctx func cenv cx es t /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
@@ -96,12 +123,7 @@ Theorem aggregate_alloca_immutable_sep:
       SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) b sz
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
-  simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
-  goal_assum (drule_at Any) >> simp[]
+  metis_tac[aggregate_alloca_immutable_sep_source]
 QED
 
 Theorem aggregate_outcome_map[local]:
@@ -503,7 +525,7 @@ Resume compile_make_array_vv_case[array]:
     `regions_disjoint io (type_memory_size itv) b
        (type_memory_bytes cenv (ArrayT x bnd))` by
       (`stmt_state_rel H0 ctx func cenv cx es t` by simp[] >>
-       irule (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_sep) >>
+       irule (INST_TYPE [alpha |-> ``:256``] aggregate_alloca_immutable_sep_source) >>
        goal_assum (drule_at (Pat `stmt_state_rel _ ctx _ _ _ _ _`)) >>
        qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
        goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
