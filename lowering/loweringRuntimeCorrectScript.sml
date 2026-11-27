@@ -467,58 +467,6 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem runtime_selected_body_internal_constant_defaults:
-  !am tx mut nr args dflts fbody os gs es0 DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
-   ret_ty lctx RetQ ss es.
-    source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
-    internal_defaults_const_names tops /\
-    cx = initial_evaluation_context am.sources am.layouts tx NONE /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut,nr,args,dflts,ret_ty,fbody) /\
-    external_entry_bound tops am tx os gs mut args dflts es0 /\
-    lock_if_nr cx nr (is_view_mut mut) es0 = (INL (),es) /\
-    ss = subst_consts_stmts (module_consts_env tops []) fbody /\
-    body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
-    supported_stmts tops bindings ss /\
-    (!target. supported_stmts_expr_exists
-       (expr_abi_decode_target_root target) ss ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmts env ret_ty ss = SOME env' /\
-    stmts_exprs_ok cenv ss /\
-    call_evaluation_safe cx (int_calls_stmts ss) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty ==>
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmts_env cenv lctx ret_ty ss)
-      (stmts_env (gas_shadow_env T cenv) lctx ret_ty (MAP gas_shadow_stmt ss))
-      (eval_stmts cx ss) es
-Proof
-  rpt gen_tac >> strip_tac >>
-  `~cx.in_deploy` by simp[initial_evaluation_context_def] >>
-  `?rpolicy unit. lower_vyper_runtime_unit tops rpolicy = SOME unit` by
-    (drule bodySimTheory.body_inv_contract >>
-     simp[bodyInvSplitTheory.contract_inv_def,
-          compileUnitTheory.lower_vyper_runtime_unit_mods_singleton] >>
-     metis_tac[]) >>
-  pop_assum strip_assume_tac >>
-  `env_context_consistent env cx` by fs[expr_sim_inv_def, env_consistent_def] >>
-  `es.immutables = am.immutables` by
-    (drule_all external_entry_bound_source_frame >> strip_tac >>
-     drule_all_then strip_assume_tac external_body_lock_frame >> simp[]) >>
-  `body_const_cells_agree [(NONE,tops)] cx env es` by
-    (qpat_x_assum `cx = initial_evaluation_context _ _ _ _` SUBST_ALL_TAC >>
-     drule_all_then ACCEPT_TAC external_source_body_const_cells_checked) >>
-  qspecl_then [`am`,`tx`,`mut`,`nr`,`args`,`dflts`,`fbody`,`os`,`gs`,`es0`,
-    `DF`,`lo`,`d`,`PG`,`tops`,`bindings`,`ctx`,`shadow_ctx`,`func`,
-    `shadow_func`,`cenv`,`cx`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`ss`,`es`]
-    mp_tac runtime_selected_body_frag_full >>
-  asm_rewrite_tac[]
-QED
-
 fun runtime_selected_body_frag_tac nr defaults readings endpoint =
   qpat_assum `frame_ret_ok_full _ _ _ _ _` (fn frame_th =>
     let

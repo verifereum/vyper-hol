@@ -380,31 +380,47 @@ Proof
   res_tac >> gvs[] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `!x. unallocated_bare_global_root cenv env x ==> const_name_root cx x` by
-    (gen_tac >> Cases_on `x` >>
-     simp[unallocated_bare_global_root_def, const_name_root_def] >>
-     rename1 `cx_const_name cx nsid` >> PairCases_on `nsid` >>
-     rw[IS_SOME_EXISTS] >>
-     qpat_x_assum `expr_sim_inv _ _ _ _`
-       (mp_tac o CONJUNCT2 o REWRITE_RULE [expr_sim_inv_split_def]) >>
-     disch_then (qspecl_then [`nsid0`, `nsid1`] mp_tac) >>
-     simp[]) >>
-  strip_tac >>
-  qpat_x_assum `~supported_expr_exists (const_name_root cx) e` mp_tac >>
-  simp[] >> irule (CONJUNCT1 supported_expr_exists_mono) >>
-  metis_tac[]
-QED
-*)
 Theorem expr_sim_inv_no_unallocated_bare_globals:
   expr_sim_inv cenv cx env es /\
   ~supported_expr_exists (const_name_root cx) e ==>
   ~supported_expr_exists (unallocated_bare_global_root cenv env) e
 Proof
-  cheat
+  strip_tac >>
+  `!x. unallocated_bare_global_root cenv env x ==> const_name_root cx x` by
+    (gen_tac >> Cases_on `x` >>
+     simp[unallocated_bare_global_root_def, const_name_root_def] >-
+     (rename1 `cx_const_name cx nsid` >> PairCases_on `nsid` >>
+      rw[IS_SOME_EXISTS] >>
+      qpat_x_assum `expr_sim_inv _ _ _ _`
+        (mp_tac o CONJUNCT2 o REWRITE_RULE [expr_sim_inv_split_def]) >>
+      disch_then (qspecl_then [`nsid0`, `nsid1`] mp_tac) >>
+      simp[]) >-
+     (gen_tac >> PairCases_on `nsid` >> rpt strip_tac >>
+      qpat_assum `expr_sim_inv _ _ _ _`
+        (fn th => assume_tac (CONJUNCT2
+          (REWRITE_RULE [expr_sim_inv_split_def] th))) >>
+      qpat_x_assum `expr_sim_inv _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
+      qpat_x_assum `env_consistent _ _ _`
+        (strip_assume_tac o REWRITE_RULE [env_consistent_def]) >>
+      qpat_x_assum `env_context_consistent _ _`
+        (strip_assume_tac o REWRITE_RULE [env_context_consistent_def]) >>
+      Cases_on `FLOOKUP env.bare_global_assignable (nsid0,nsid1)` >> simp[] >>
+      rename1 `SOME aty` >>
+      qpat_x_assum
+        `!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==> _`
+        (qspecl_then [`nsid0`, `nsid1`, `aty`] mp_tac) >>
+      simp[] >> strip_tac >>
+      qpat_x_assum
+        `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\
+          (~cx_const_name cx (src,id) \/
+           IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) ==> _`
+        (qspecl_then [`nsid0`, `nsid1`, `aty`] mp_tac) >>
+      simp[] >> fs[])) >>
+  strip_tac >>
+  qpat_x_assum `~supported_expr_exists (const_name_root cx) e` mp_tac >>
+  simp[] >> irule (CONJUNCT1 supported_expr_exists_mono) >>
+  metis_tac[]
 QED
 
 Theorem expr_body_pre_def:

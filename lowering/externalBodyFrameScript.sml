@@ -954,6 +954,8 @@ Proof
     drule_all_then ACCEPT_TAC runtime_context_bare_globals >>
   `env.fn_sigs = canonical_env.fn_sigs` by
     drule_all_then ACCEPT_TAC runtime_context_fn_sigs >>
+  `env.event_fields = canonical_env.event_fields` by
+    (simp[Abbr `canonical_env`, artifact_env_def] >> metis_tac[]) >>
   `env.bare_global_assignable = canonical_env.bare_global_assignable` by
     fs[env_context_consistent_def, bare_global_assignable_complete_def] >>
   `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
@@ -991,6 +993,10 @@ Theorem external_source_body_const_cells_checked:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   env_context_consistent env (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  (!art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art ==>
+         env.event_fields = art.cta_event_fields) /\
+  (!art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art ==>
+         env.event_fields = art.cta_event_fields) /\
   es.immutables = am.immutables ==>
   body_const_cells_agree [(NONE,tops)]
     (initial_evaluation_context am.sources am.layouts tx NONE) env es

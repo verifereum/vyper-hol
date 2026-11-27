@@ -561,6 +561,7 @@ Theorem intcall_callee_typed_env[local]:
     env.fn_sigs = tenv.fn_sigs /\ env.bare_globals = tenv.bare_globals /\
     env.bare_global_assignable = tenv.bare_global_assignable /\
     env.toplevel_vtypes = tenv.toplevel_vtypes /\ env.flag_members = tenv.flag_members /\
+    env.event_fields = tenv.event_fields /\
     type_stmts env ret (subst_consts_stmts (module_consts_env tops []) ss) = SOME env_after /\
     (?env_raw. type_stmts env ret ss = SOME env_raw) /\
     (!id ty. MEM (id,ty) args ==> FLOOKUP env.var_types id = SOME ty) /\
@@ -674,6 +675,7 @@ Theorem intcall_callee_locked_source[local]:
     env.type_defs = tenv.type_defs /\ env.fn_sigs = tenv.fn_sigs /\ env.bare_globals = tenv.bare_globals /\
     env.bare_global_assignable = tenv.bare_global_assignable /\
     env.toplevel_vtypes = tenv.toplevel_vtypes /\
+    env.event_fields = tenv.event_fields /\
     type_stmts env ret (subst_consts_stmts (module_consts_env tops []) ss) = SOME env_after /\
     (?env_raw. type_stmts env ret ss = SOME env_raw) /\
     (!id ty. MEM (id,ty) args ==> FLOOKUP env.var_types id = SOME ty) /\

@@ -257,6 +257,9 @@ Resume grouped_default_passing_execution_trace[omitted_suffix]:
   `body_const_cells_agree [(NONE,tops)] ^pcx ^penv es` by
     (`env_context_consistent ^penv ^pcx` by
        fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def] >>
+     `!checked_art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME checked_art ==>
+                    (^penv).event_fields = checked_art.cta_event_fields` by
+       simp[vyperTypeContractTheory.artifact_env_def] >>
      drule_all_then ACCEPT_TAC external_source_body_const_cells_checked) >>
   `gas_outcome_full ((\H. cx_dead H ^pcx),0,^pexp,^pctx,fn,[])
     (cx_tops ^pcx) ^pcx ^pst (eval_exprs ^pcx (DROP k ds)) (es,t,J,tz)

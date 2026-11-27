@@ -379,12 +379,10 @@ fun prepare_source_tac headroom lock_inv =
   `expr_sim_inv cenv cx env_t es_lock` by
     (irule lock_inv >> goal_assum (drule_at Any) >> simp[]) >>
   `body_const_cells_agree [(NONE,tops)] cx env_t es_lock` by
-    (`env_context_consistent env_t cx` by fs[expr_sim_inv_def, env_consistent_def] >>
-     `es_lock.immutables = am.immutables` by
-       (drule_all external_entry_bound_source_frame >> strip_tac >>
-        drule_then strip_assume_tac external_body_lock_frame >> simp[]) >>
-     qunabbrev_tac `cx` >>
-     drule_all_then ACCEPT_TAC external_source_body_const_cells_checked);
+    (`es_lock.immutables = es0.immutables` by
+       (drule_then strip_assume_tac external_body_lock_frame >> simp[]) >>
+     irule (iffLR bodyFullPredsTheory.body_const_cells_agree_immutables) >>
+     qexists_tac `es0` >> fs[Abbr `cx`]);
 
 fun prepare_substitution_tac () =
   `!gas. eval_stmts cx compiled_body (es_lock with gas_obs := gas) =
