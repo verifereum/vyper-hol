@@ -248,41 +248,6 @@ Proof
   asm_rewrite_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `ce.ce_module = NONE /\ cx_tops cx = tops /\
-   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
-   ce.ce_module_var_type = build_var_type_map tops /\
-   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-    gvs[body_inv_def,cenv_module_pins_def,cx_tops_module] >>
-  `get_tenv cx = type_env tops` by
-    simp[get_tenv_def,type_env_all_modules_def,type_env_def] >>
-  `?pre post vis ity slot.
-    tops = pre ++ VariableDecl vis Immutable id ity slot :: post /\
-    off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre` by
-    (drule body_inv_immutable_section_layout >>
-     simp[immutable_section_layout_def] >> metis_tac[]) >>
-  `ity = ty` by
-    (`MEM (VariableDecl vis Immutable id ity slot) tops` by simp[] >>
-     drule_all build_maps_variable >> strip_tac >>
-     qpat_x_assum `build_var_type_map tops _ = SOME ity` mp_tac >>
-     simp[] >> gvs[build_maps_variable]) >>
-  qpat_x_assum `ity = ty` SUBST_ALL_TAC >>
-  `lo = imm_len tops` by metis_tac[dead_lo_ok_def] >>
-  `evaluate_type (type_env tops) ty = SOME itv` by metis_tac[] >>
-  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-      type_memory_size itv` by drule_all_then ACCEPT_TAC immutable_exact_slot_size >>
-  `off + type_memory_size itv <= lo` by
-    (mp_tac (Q.INST [`off` |-> `0`, `prefix` |-> `pre`, `suffix` |-> `post`,
-       `sft` |-> `get_struct_fields (make_struct_fields_map tops)`,
-       `ty` |-> `ty`, `vis` |-> `vis`, `name` |-> `id`, `slot` |-> `slot`]
-       immutable_declaration_interval_bound) >>
-     simp[GSYM imm_len_def]) >>
-  simp[] >> metis_tac[]
-QED
-*)
 Theorem immutable_assign_section_root:
   body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
   ce.ce_is_ctor /\ dead_lo_ok H D lo ce cx /\
@@ -295,13 +260,64 @@ Theorem immutable_assign_section_root:
     tops = pre ++ VariableDecl vis Immutable id ty slot :: post /\
     off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre
 Proof
-  cheat
+  strip_tac >>
+  `ce.ce_module = NONE /\ ce.ce_modules = [(NONE,tops)] /\
+   cx_tops cx = tops /\
+   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+   ce.ce_module_var_type = build_var_type_map tops /\
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    gvs[body_inv_def,cenv_module_pins_def,cx_tops_module] >>
+  `get_tenv cx = type_env tops` by
+    simp[get_tenv_def,type_env_all_modules_def,type_env_def] >>
+  `lo = imm_len tops` by fs[dead_lo_ok_def,immSectionDeadTheory.imm_len_mods_singleton] >>
+  `?pre post vis ity slot.
+    tops = pre ++ VariableDecl vis Immutable id ity slot :: post /\
+    off = compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) pre` by
+    (drule body_inv_immutable_section_layout >>
+     simp[immutable_section_layout_def] >> metis_tac[]) >>
+  `ity = ty` by
+    (`MEM (VariableDecl vis Immutable id ity slot) tops` by simp[] >>
+     drule_all build_maps_variable >> strip_tac >>
+     qpat_x_assum `build_var_type_map tops _ = SOME ity` mp_tac >>
+     simp[] >> gvs[build_maps_variable]) >>
+  qpat_x_assum `ity = ty` SUBST_ALL_TAC >>
+  `evaluate_type (type_env tops) ty = SOME itv` by fs[] >>
+  `type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
+      type_memory_size itv` by drule_all_then ACCEPT_TAC immutable_exact_slot_size >>
+  `off + type_memory_size itv <= lo` by
+    (qpat_assum `off = _` (fn offset =>
+       qpat_assum `type_mem_bytes _ ty = _` (fn width =>
+         qpat_assum `lo = _` (fn len =>
+           PURE_REWRITE_TAC [offset, GSYM width, len, imm_len_def]))) >>
+     qpat_assum `tops = _` (PURE_ONCE_REWRITE_TAC o single) >>
+     irule (SIMP_RULE (srw_ss()) []
+       (Q.INST [`off` |-> `0`] immutable_declaration_interval_bound))) >>
+  simp[] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem immutable_path_section_dead:
+  body_inv tops ctx ce cx /\
+  stmt_state_rel H ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
+  ghost_inv_at D lo d ce cx ee G tn s /\ dead_lo_ok H D lo ce cx /\
+  ce.ce_is_ctor /\
+  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ty /\
+  evaluate_type (get_tenv cx) ty = SOME itv /\
+  mem_path_offset itv path = SOME (k,ptv) /\
+  write_place cx (ImmutablePlace ce.ce_module id path) v ee = (INL (),fin) /\
+  value_has_type ptv v /\
+  (!m. mem_agree_outside tf.t_mem q.vs_memory m ==> val_in_memory ptv v (off+k) m) /\
+  (!b n. regions_disjoint b n (off+k) (type_memory_size ptv) ==>
+      mem_bytes_at b n q.vs_memory = mem_bytes_at b n s.vs_memory) /\
+  (!i. ~(off+k <= i /\ i < off+k+type_memory_size ptv) /\ i IN tf.t_mem ==>
+       i IN tn.t_mem) ==>
+  !i. i < lo /\ i IN tf.t_mem ==>
+      imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo q.vs_memory) i
 Proof
   strip_tac >> drule_all_then strip_assume_tac immutable_assign_section_root >>
+  `ce.ce_modules = [(NONE,tops)]` by
+    gvs[body_inv_split_def,cenv_module_pins_def] >>
   `!t u. evaluate_type (type_env tops) t = SOME u ==>
     type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) t =
     type_memory_size u` by (rpt strip_tac >> drule_all_then ACCEPT_TAC immutable_exact_slot_size) >>
@@ -310,8 +326,7 @@ Proof
     FLOOKUP (get_source_immutables ce.ce_module imms) id = SOME (itv,old)` by
     (drule_all immutable_assign_source_lookup >> simp[]) >>
   drule_all_then strip_assume_tac immutable_path_write_source >>
-  `FLOOKUP (get_source_immutables NONE imms) id = SOME (itv,old)` by
-    metis_tac[] >>
+  `FLOOKUP (get_source_immutables NONE imms) id = SOME (itv,old)` by metis_tac[] >>
   drule_then (assume_tac o MATCH_MP state_rel_immutables_rel)
     stmt_state_rel_state_rel >>
   `immutable_value_admissible itv old /\ val_in_memory itv old off s.vs_memory` by
@@ -333,7 +348,7 @@ Proof
     (rpt strip_tac >>
      `mem_bytes_at j 1 q.vs_memory = mem_bytes_at j 1 s.vs_memory` by
        (first_x_assum irule >> simp[NoAsms,regions_disjoint_def] >> decide_tac) >>
-     pop_assum (mp_tac o AP_TERM “EL 0:byte list -> byte”) >>
+     pop_assum (mp_tac o AP_TERM ``EL 0:byte list -> byte``) >>
      simp[Abbr `sec`,Abbr `sec'`,EL_mem_bytes_at]) >>
   `mem_bytes_at off (type_memory_size itv) sec =
      mem_bytes_at off (type_memory_size itv) s.vs_memory` by
@@ -349,13 +364,16 @@ Proof
     (simp[NoAsms,Abbr `sec'`] >>
      irule immutable_section_byte_window >> decide_tac) >>
   `!m. mem_agree_outside tf.t_mem sec' m ==> val_in_memory ptv v (off+k) m` by
-    (mp_tac (Q.INST [`tv` |-> `ptv`,`v` |-> `v`,`b` |-> `off+k`,
-       `len` |-> `type_memory_size ptv`,`mem'` |-> `sec'`,
-       `mem` |-> `q.vs_memory`,`dirty'` |-> `tf.t_mem`,`dirty` |-> `tf.t_mem`]
-       robust_val_in_memory_window_transport) >>
+    (rpt strip_tac >> irule robust_val_in_memory_window_transport >>
+     conj_tac >- metis_tac[value_has_type_memory_wf] >>
+     qexistsl_tac [`tf.t_mem`,`tf.t_mem`,`type_memory_size ptv`,`q.vs_memory`,`sec'`] >>
      simp[val_footprint_le,value_has_type_memory_wf]) >>
   `!j. j < lo /\ j IN tn.t_mem ==> imm_section_dead tops sec j` by
-    fs[ghost_inv_at_def] >>
+    (qpat_assum `ce.ce_modules = [(NONE,tops)]`
+       (fn mods => pure_rewrite_tac [GSYM (MATCH_MP imm_section_dead_mods_singleton mods)]) >>
+     qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+     simp[Abbr `sec`]) >>
   `evaluate_type (type_env tops) ty = SOME itv` by metis_tac[] >>
   `!j. off <= j /\ j < off + type_memory_size itv /\
        (j < off+k \/ off+k+type_memory_size ptv <= j) ==>
@@ -371,15 +389,16 @@ Proof
     metis_tac[] >>
   `!j. off <= j /\ j < off+type_memory_size itv /\ j IN tf.t_mem ==>
      mem_dead_bytes sec' off itv j` by
-    (MATCH_MP_TAC (Q.INST [`itv` |-> `itv`,`old` |-> `old`,`v` |-> `v`,
-       `ptv` |-> `ptv`,`path` |-> `path`,`k` |-> `k`,`new` |-> `new`,
-       `off` |-> `off`,`sec` |-> `sec`,`sec'` |-> `sec'`,`dirty` |-> `tf.t_mem`]
-       immutable_replace_path_dirty_dead) >>
+    (rpt strip_tac >> irule immutable_replace_path_dirty_dead >>
+     rpt conj_tac
+     >- first_assum ACCEPT_TAC
+     >- first_assum ACCEPT_TAC
+     >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`tf.t_mem`,`k`,`new`,`old`,`path`,`ptv`,`sec`,`v`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `!j. j < lo /\ ~(off <= j /\ j < off+type_memory_size itv) ==>
     EL j sec' = EL j sec` by
-    (rpt strip_tac >> first_x_assum irule >> conj_tac >>
-     TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+    (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `!j. j < lo /\ ~(off <= j /\ j < off+type_memory_size itv) /\ j IN tf.t_mem ==>
     j IN tn.t_mem` by
     (rpt strip_tac >> first_x_assum irule >> conj_tac
@@ -387,19 +406,18 @@ Proof
   qsuff_tac `!i. i < lo /\ i IN tf.t_mem ==> imm_section_dead tops sec' i`
   >- (qpat_assum `tops = cx_tops cx` (fn th =>
          pure_rewrite_tac[GSYM th]) >> disch_then ACCEPT_TAC) >>
-  MATCH_MP_TAC (Q.INST [`tops` |-> `tops`,`lo` |-> `lo`,`pre` |-> `pre`,
-    `vis` |-> `vis`,`name` |-> `id`,`ty` |-> `ty`,`slot` |-> `slot`,
-    `post` |-> `post`,`tv` |-> `itv`,`off` |-> `off`,`sec1` |-> `sec`,
-    `sec2` |-> `sec'`,`M1` |-> `tn.t_mem`,`M2` |-> `tf.t_mem`]
-    immutable_section_replace_exact) >>
+  rpt strip_tac >> irule immutable_section_replace_exact >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`tn.t_mem`,`tf.t_mem`,`lo`,`id`,`off`,`post`,`pre`,`sec`,
+                `slot`,`itv`,`ty`,`vis`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
-Theorem immutable_path_section_dead:
+
+Theorem immutable_path_store_ghost_inv:
   body_inv tops ctx ce cx /\
   stmt_state_rel H ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
   ghost_inv_at D lo d ce cx ee G tn s /\ dead_lo_ok H D lo ce cx /\
-  ce.ce_is_ctor /\
+  ce.ce_is_ctor /\ local_ptrs_reserved ce sa /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
   ce.ce_module_var_type (ce.ce_module,id) = SOME ty /\
@@ -411,26 +429,26 @@ Theorem immutable_path_section_dead:
   (!b n. regions_disjoint b n (off+k) (type_memory_size ptv) ==>
       mem_bytes_at b n q.vs_memory = mem_bytes_at b n s.vs_memory) /\
   (!i. ~(off+k <= i /\ i < off+k+type_memory_size ptv) /\ i IN tf.t_mem ==>
-       i IN tn.t_mem) ==>
-  !i. i < lo /\ i IN tf.t_mem ==>
-      imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo q.vs_memory) i
-Proof
-  cheat
-QED
-
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+       i IN tn.t_mem) /\
+  (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s /\
+       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+  q.vs_call_ctx = s.vs_call_ctx /\ q.vs_accounts = s.vs_accounts /\
+  q.vs_transient = s.vs_transient /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+  allocas_from lo q /\ s.vs_alloca_next <= q.vs_alloca_next ==>
+  ghost_inv_at D lo d ce cx fin Gf tf q
 Proof
   strip_tac >>
+  drule_then (assume_tac o MATCH_MP bodyInvCodePropsTheory.contract_inv_cenv_modules)
+    body_inv_contract >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
   `!i. i < lo /\ i IN tf.t_mem ==>
-      imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo q.vs_memory) i` by
-    (MATCH_MP_TAC (Q.INST [`tops` |-> `tops`,`ctx` |-> `ctx`,`func` |-> `func`,
-       `ce` |-> `ce`,`ee` |-> `ee`,`env` |-> `env`,`H` |-> `H`,
-       `d` |-> `d`,`D` |-> `D`,`s` |-> `s`,`G` |-> `G`,`tn` |-> `tn`,
-       `id` |-> `id`,`ty` |-> `ty`,`off` |-> `off`,`k` |-> `k`,
-       `itv` |-> `itv`,`path` |-> `path`,`ptv` |-> `ptv`,`fin` |-> `fin`,`v` |-> `v`]
-       immutable_path_section_dead) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      imm_section_dead_mods ce (mem_bytes_at 0 lo q.vs_memory) i` by
+    (drule_then (fn th => PURE_REWRITE_TAC [th])
+       immSectionDeadTheory.imm_section_dead_mods_singleton >>
+     qpat_assum `cx_tops cx = tops` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+     rpt strip_tac >> irule immutable_path_section_dead >> metis_tac[]) >>
   drule_all_then strip_assume_tac immutable_assign_declared_region >>
   drule_then strip_assume_tac mem_path_offset_sound >>
   `fin.scopes = ee.scopes` by metis_tac[write_immutable_place_scopes] >>
@@ -459,11 +477,10 @@ Proof
   `mem_bytes_at 0 0 q.vs_memory = mem_bytes_at 0 0 s.vs_memory` by
     simp[mem_bytes_at_def] >>
   `ghost_inv_at D 0 d ce cx fin Gf tf q` by
-    (MATCH_MP_TAC (Q.INST [`es` |-> `ee`,`s` |-> `s`,`G` |-> `G`,`tn` |-> `tn`,
-       `fn` |-> `func`,`sa` |-> `sa`] ghost_inv_at_local_window_transport) >>
-     rpt (conj_tac ORELSE first_assum ACCEPT_TAC) >>
+    (irule ghost_inv_at_local_window_transport >>
      simp[ptrDisciplineTheory.allocas_from_def] >>
-     rpt strip_tac >> simp[]) >>
+     qexistsl_tac [`G`,`ee`,`func`,`s`,`sa`,`tn`] >>
+     simp[] >> first_assum ACCEPT_TAC) >>
   qpat_assum `fin.scopes = ee.scopes` (fn eq =>
     qpat_x_assum `ghost_inv_at D 0 d ce cx fin Gf tf q`
       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def,eq])) >>
@@ -474,33 +491,4 @@ Proof
      simp[]) >>
   `lo <= q.vs_alloca_next` by decide_tac >>
   simp[ghost_inv_at_def] >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem immutable_path_store_ghost_inv:
-  body_inv tops ctx ce cx /\
-  stmt_state_rel H ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
-  ghost_inv_at D lo d ce cx ee G tn s /\ dead_lo_ok H D lo ce cx /\
-  ce.ce_is_ctor /\ local_ptrs_reserved ce sa /\
-  FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty /\
-  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
-  ce.ce_module_var_type (ce.ce_module,id) = SOME ty /\
-  evaluate_type (get_tenv cx) ty = SOME itv /\
-  mem_path_offset itv path = SOME (k,ptv) /\
-  write_place cx (ImmutablePlace ce.ce_module id path) v ee = (INL (),fin) /\
-  value_has_type ptv v /\
-  (!m. mem_agree_outside tf.t_mem q.vs_memory m ==> val_in_memory ptv v (off+k) m) /\
-  (!b n. regions_disjoint b n (off+k) (type_memory_size ptv) ==>
-      mem_bytes_at b n q.vs_memory = mem_bytes_at b n s.vs_memory) /\
-  (!i. ~(off+k <= i /\ i < off+k+type_memory_size ptv) /\ i IN tf.t_mem ==>
-       i IN tn.t_mem) /\
-  (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
-  (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
-  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s /\
-       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
-  q.vs_call_ctx = s.vs_call_ctx /\ q.vs_accounts = s.vs_accounts /\
-  q.vs_transient = s.vs_transient /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
-  allocas_from lo q /\ s.vs_alloca_next <= q.vs_alloca_next ==>
-  ghost_inv_at D lo d ce cx fin Gf tf q
-Proof
-  cheat
 QED
