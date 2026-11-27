@@ -317,6 +317,40 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
+Theorem bytes_buffer_write_alloca_immutables:
+  stmt_state_rel H ctx func cenv cx es s /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
+  32 + LENGTH data <= sz ==>
+  !src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+    immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es
+      (mstore b (n2w (LENGTH data))
+        (write_memory_with_expansion (b + 32) data s))
+Proof
+  strip_tac >> gen_tac >> disch_tac >>
+  irule immutables_rel_mem_agree >> qexists_tac `s` >>
+  conj_tac
+  >- (simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
+        immutableMemoryFrameTheory.immutable_write_memory_capacity,
+        arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  conj_tac >- simp[mstore_def, write_memory_with_expansion_def] >>
+  reverse conj_tac
+  >- (fs[stmt_state_rel_def, state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+      metis_tac[]) >>
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  `immutable_alloca_sep func (cenv with ce_module := src) cx es s` by
+    (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+     Cases_on `src = cenv.ce_module` >>
+     gvs[compileEnvTheory.compile_env_component_equality] >> metis_tac[]) >>
+  qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
+  simp[immutable_alloca_sep_def] >>
+  disch_then (drule_all o CONJUNCT2) >> strip_tac >>
+  `regions_disjoint off (type_memory_size tv) b sz` by
+    (qpat_x_assum `!inst b sz. _` drule_all >> simp[]) >>
+  irule bytes_buffer_write_frame >>
+  fs[regions_disjoint_def] >> decide_tac
+QED
+
 Theorem calldata_copy_step:
   !dst off count s wd wa wn iid.
   eval_operand dst s = SOME wd /\ eval_operand off s = SOME wa /\
