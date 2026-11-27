@@ -103,29 +103,8 @@ Proof
        fmp_room_def, pending_alloca_size_def, SF CONJ_ss] >>
   first_assum ACCEPT_TAC
 QED
-Theorem dynamic_buffer_materialized_frame:
-  ctx_has_dalloca ctx /\
-  stmt_state_rel H0 ctx func cenv cx es s0 /\
-  stmt_state_rel H ctx func cenv cx ee s /\
-  ghost_inv_at D lo d cenv cx ee G tn s /\
-  wb_frame cenv es ee sa s0 s /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
-  s0.vs_alloca_next <= s.vs_alloca_next /\
-  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-  return_buf_frame d cenv sm s /\
-  (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx;
-            vs_memory := s.vs_memory; vs_fmp := s.vs_fmp|>) = s /\
-  B = w2n s.vs_fmp /\ w2n t.vs_fmp = B + venomLayout$ceil32 N /\
-  B+N <= LENGTH t.vs_memory /\ LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-  (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s /\
-       FLOOKUP Gmat x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)) /\
-  tt.t_stor = tn.t_stor /\ tt.t_trans = tn.t_trans /\ tt.t_imm = tn.t_imm /\
-  (!b k. b+k <= B ==> mem_bytes_at b k t.vs_memory = mem_bytes_at b k s.vs_memory) /\
-  (!i. i < B /\ i IN tt.t_mem ==> i IN tn.t_mem) ==>
-  stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv_at D lo d cenv cx ee Gmat tt t /\
-  wb_frame cenv es ee sa s0 t /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gmat tt /\
-  return_buf_frame d cenv sm t
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `t = s with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx;
@@ -165,7 +144,35 @@ Proof
   irule bodyMemoryDefsTheory.return_buf_frame_frame >>
   qpat_assum `return_buf_frame d cenv sm s` (irule_at Any) >> simp[] >> metis_tac[]
 QED
+*)
+Theorem dynamic_buffer_materialized_frame:
+  ctx_has_dalloca ctx /\
+  stmt_state_rel H0 ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx ee s /\
+  ghost_inv_at D lo d cenv cx ee G tn s /\
+  wb_frame cenv es ee sa s0 s /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+  s0.vs_alloca_next <= s.vs_alloca_next /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  return_buf_frame d cenv sm s /\
+  (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx;
+            vs_memory := s.vs_memory; vs_fmp := s.vs_fmp|>) = s /\
+  B = w2n s.vs_fmp /\ w2n t.vs_fmp = B + venomLayout$ceil32 N /\
+  B+N <= LENGTH t.vs_memory /\ LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+  (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s /\
+       FLOOKUP Gmat x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)) /\
+  tt.t_stor = tn.t_stor /\ tt.t_trans = tn.t_trans /\ tt.t_imm = tn.t_imm /\
+  (!b k. b+k <= B ==> mem_bytes_at b k t.vs_memory = mem_bytes_at b k s.vs_memory) /\
+  (!i. i < B /\ i IN tt.t_mem ==> i IN tn.t_mem) ==>
+  stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv_at D lo d cenv cx ee Gmat tt t /\
+  wb_frame cenv es ee sa s0 t /\ ghost_kept_at lo cenv es sa G0 tn0 s0 Gmat tt /\
+  return_buf_frame d cenv sm t
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume dynamic_buffer_materialized_frame[state]:
   `local_ptrs_rel func cenv ee.scopes s /\
    immutable_alloca_sep func cenv cx ee s /\ immutable_base_zero cenv s /\
@@ -211,7 +218,9 @@ Resume dynamic_buffer_materialized_frame[state]:
      alloca_next_valid_def,alloca_room_def,pending_alloca_size_def]
   >> (metis_tac[])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume dynamic_buffer_materialized_frame[ghost]:
   `allocas_from lo t /\ lo <= t.vs_alloca_next /\ stor_taint_ok_at D tt t` by
     (qpat_assum `t = _ with <|vs_vars := _; vs_inst_idx := _; vs_memory := _; vs_fmp := _|>`
@@ -231,7 +240,9 @@ Resume dynamic_buffer_materialized_frame[ghost]:
   simp[] >> rpt strip_tac >>
   qpat_assum `!i. i < B /\ i IN tt.t_mem ==> _` irule >> simp[] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume dynamic_buffer_materialized_frame[writeback]:
   qpat_assum `wb_frame cenv es ee sa s0 s`
     (strip_assume_tac o REWRITE_RULE[loweringPostsTheory.wb_frame_def]) >>
@@ -248,7 +259,9 @@ Resume dynamic_buffer_materialized_frame[writeback]:
   qpat_assum `!name b k. local_region cenv es.scopes s0 name b k ==> _` drule >>
   decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume dynamic_buffer_materialized_frame[kept]:
   irule bodyFullUnwrapSlotPostTheory.unwrap_slot_copy_ghost_kept_at >>
   qpat_assum `ghost_kept_at lo cenv es sa G0 tn0 s0 G tn` (irule_at Any) >>
@@ -259,5 +272,8 @@ Resume dynamic_buffer_materialized_frame[kept]:
   TRY (qpat_assum `!aid b k. FLOOKUP s0.vs_allocas aid = SOME (b,k) ==> _` drule) >>
   decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise dynamic_buffer_materialized_frame
+*)

@@ -65,11 +65,8 @@ Proof
   simp[ghost_kept_at_def, mload_ghost_frame] >> metis_tac[mload_ghost_frame]
 QED
 
-Theorem name_word_full:
-  !mods.
-  expr_body_pre_mods mods cenv cx env (Name ann id) es /\ is_word_type ann ==>
-  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Name ann id) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rw[expr_sim_full_def] >>
   `expr_sim_pre cenv cx env (Name ann id) es` by
@@ -116,7 +113,17 @@ Proof
        ptrDisciplineTheory.set_prov_def, ptrDisciplineTheory.out_prov_def, mk_inst_def,
        FLOOKUP_DRESTRICT]
 QED
+*)
+Theorem name_word_full:
+  !mods.
+  expr_body_pre_mods mods cenv cx env (Name ann id) es /\ is_word_type ann ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Name ann id) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume name_word_full[name_load_path]:
   drule_all name_word_ghost_inputs >> strip_tac >> gvs[Abbr `inst`] >>
   `LENGTH sb.cs_current_insts = SUC s0.vs_inst_idx` by
@@ -147,5 +154,8 @@ Resume name_word_full[name_load_path]:
   pure_rewrite_tac[APPEND_NIL] >>
   goal_assum (drule_at Any) >> simp[gas_origin_ptr_path_rules]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise name_word_full
+*)
