@@ -60,8 +60,17 @@ Proof
   simp[vyperValueTheory.type_slot_size_def, tload_def, contract_transient_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem state_rel_transient_update:
+  state_rel H func cenv cx vs ss /\
+  (!j b. storage_dead H T (vs.tStorage cx.txn.target) j b /\
+         j <> w2n key ==>
+         storage_dead H T
+           (update_storage key value (vs.tStorage cx.txn.target)) j b) ==>
+  state_rel H func cenv cx
+    (vs with tStorage :=
+      (cx.txn.target =+ update_storage key value (vs.tStorage cx.txn.target))
+        vs.tStorage)
+    (tstore key value ss)
 Proof
   strip_tac >>
   `transient_agree H cx.txn.target vs.tStorage ss.vs_transient` by
@@ -79,47 +88,27 @@ Proof
       transient_rel_def, accounts_rel_def, immutables_rel_def, logs_rel_def,
       call_ctx_rel_def, contract_storage_def, contract_transient_def,
       tstore_def, combinTheory.APPLY_UPDATE_THM] >>
-  first_assum ACCEPT_TAC
-QED
-*)
-Theorem state_rel_transient_update:
-  state_rel H func cenv cx vs ss /\
-  (!j b. storage_dead H T (vs.tStorage cx.txn.target) j b /\
-         j <> w2n key ==>
-         storage_dead H T
-           (update_storage key value (vs.tStorage cx.txn.target)) j b) ==>
-  state_rel H func cenv cx
-    (vs with tStorage :=
-      (cx.txn.target =+ update_storage key value (vs.tStorage cx.txn.target))
-        vs.tStorage)
-    (tstore key value ss)
-Proof
-  cheat
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Unlike the transient write, the scratch writes need freshness: state_rel
    now includes the live local pointer registers. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem state_rel_transient_lock_checked_state:
+  state_rel H func cenv cx vs ss /\ fresh_vars_wrt st ss ==>
+  state_rel H func cenv cx vs (transient_lock_checked_state st key ss)
 Proof
   strip_tac >>
   `local_ptrs_rel func cenv vs.scopes
      (transient_lock_checked_state st key ss)` by
     (irule transient_lock_checked_local_ptrs >> fs[state_rel_def]) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs
-     (transient_lock_checked_state st key ss)` by
-    (gvs[state_rel_def, immutables_rel_def,
-         transient_lock_checked_state_def, update_var_def] >>
-     first_assum ACCEPT_TAC) >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor vs
+       (transient_lock_checked_state st key ss)` by
+    (simp[immutables_rel_def, transient_lock_checked_state_def, update_var_def] >>
+     fs[state_rel_def, immutables_rel_def] >>
+     metis_tac[optionTheory.IS_SOME_EXISTS]) >>
   irule state_rel_frame >> simp[] >> qexistsl_tac [`vs`, `ss`] >>
-  simp[transient_lock_checked_state_def, update_var_def]
-QED
-*)
-Theorem state_rel_transient_lock_checked_state:
-  state_rel H func cenv cx vs ss /\ fresh_vars_wrt st ss ==>
-  state_rel H func cenv cx vs (transient_lock_checked_state st key ss)
-Proof
-  cheat
+  asm_rewrite_tac[] >> simp[transient_lock_checked_state_def, update_var_def]
 QED
 
 Theorem compile_nonreentrant_lock_source_correct:

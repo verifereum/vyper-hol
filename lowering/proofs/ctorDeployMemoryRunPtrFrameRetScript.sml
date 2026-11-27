@@ -974,25 +974,6 @@ Proof
   simp[run_from_def, Once exec_block_def]
 QED
 
-(* The epilogue's pointer check from the frame's ghost invariant. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `imm_len tops = 0`
-  >- (`compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops)
-         (Lit 0w) st = ((), st')` by
-        (qpat_x_assum `compile_constructor_epilogue _ _ _ _ = _` mp_tac >>
-         simp[compile_constructor_epilogue_def]) >>
-      `deploy_ptr_inv H tops runtime_bc am tx (Lit 0w) G tn s` by
-        fs[deploy_ptr_inv_def, ghost_inv_at_def, stor_taint_ok_at_def] >>
-      metis_tac[epilogue_ptr_safe]) >>
-  `deploy_ptr_inv H tops runtime_bc am tx imm G tn s` by
-    (fs[deploy_ptr_inv_def, ghost_inv_at_def, stor_taint_ok_at_def] >>
-     metis_tac[]) >>
-  metis_tac[epilogue_ptr_safe]
-QED
-*)
 Theorem epilogue_ptr_safe_at[local]:
   !H tops runtime_bc am tx imm st st' func ctx cenv cx es s d G tn.
   compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm st =
@@ -1012,7 +993,19 @@ Theorem epilogue_ptr_safe_at[local]:
   !fuel. ptr_safe_run (deploy_dead H tops runtime_bc am tx) (imm_len tops)
            fuel ctx func [] G tn s
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `imm_len tops = 0`
+  >- (`compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops)
+         (Lit 0w) st = ((), st')` by
+        (qpat_x_assum `compile_constructor_epilogue _ _ _ _ = _` mp_tac >>
+         simp[compile_constructor_epilogue_def]) >>
+      `deploy_ptr_inv H tops runtime_bc am tx (Lit 0w) G tn s` by
+        fs[deploy_ptr_inv_def, ghost_inv_at_def, stor_taint_ok_at_def] >>
+      metis_tac[epilogue_ptr_safe]) >>
+  `deploy_ptr_inv H tops runtime_bc am tx imm G tn s` by
+    (fs[deploy_ptr_inv_def, ghost_inv_at_def, stor_taint_ok_at_def] >>
+     metis_tac[immSectionDeadTheory.imm_section_dead_mods_singleton]) >>
+  metis_tac[epilogue_ptr_safe]
 QED
 
 (* The epilogue from its start is a zero-mark joint path to its halt, for
