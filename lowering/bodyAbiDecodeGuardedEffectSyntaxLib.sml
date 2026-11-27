@@ -11,7 +11,7 @@ open abiEncoderTheory compileEnvTheory venomStateTheory venomExecSemanticsTheory
 open bodyFullAbiDecodeArrayBulkRobustTheory
 
 fun effect_const () = prim_mk_const
-  {Thy = "bodyAbiDecodeGuardedEffectBaseMods", Name = "abi_decode_guarded_effect"};
+  {Thy = "bodyAbiDecodeGuardedEffectBaseMods", Name = "abi_decode_guarded_effect_core"};
 fun effect s tn t tf = list_mk_comb (effect_const (), [s,tn,t,tf]);
 val beta_conv = QCONV (REDEPTH_CONV BETA_CONV);
 val normalize_guarded_effect = QCONV (beta_conv THENC REWRITE_CONV [GSYM CONJ_ASSOC]);

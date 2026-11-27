@@ -174,7 +174,7 @@ Resume complex_effect_bind[normal_join]:
     (qpat_assum `tnf.t_mem = tn.t_mem` (fn th =>
        qpat_assum `!i. _ /\ _ /\ i IN tn'.t_mem ==> i IN tnf.t_mem`
          (ACCEPT_TAC o REWRITE_RULE [th]))) >>
-  `abi_decode_guarded_effect s tn u tn'` by
+  `abi_decode_guarded_effect_core s tn u tn'` by
     (irule abi_decode_guarded_effect_compose_core >> qexistsl [`tnf`, `t`] >> simp[]) >>
   asm_rewrite_tac[] >> suspend "aggregate_robust"
 QED

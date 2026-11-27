@@ -33,7 +33,7 @@ Theorem complex_scalar_success[local]:
     (^owned_decoder_state) sb t Gf tnf /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x)) /\
-    tnf.t_mem = tn.t_mem /\ abi_decode_guarded_effect s tn t tnf
+    tnf.t_mem = tn.t_mem /\ abi_decode_guarded_effect_core s tn t tnf
 Proof
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all (bop_scalar_seq_run |> Q.INST [`D` |->
@@ -90,7 +90,7 @@ Resume complex_scalar_success[owned_and_effect]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  simp[abi_decode_guarded_effect_def]
+  simp[abi_decode_guarded_effect_core_def]
 QED
 
 Finalise complex_scalar_success[local]
