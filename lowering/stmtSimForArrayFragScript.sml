@@ -625,7 +625,6 @@ Proof
   irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
   simp[]
 QED
-
 Theorem array_code_return_pc[local]:
   array_for_code func cenv bc ty stmts id et tv n stride saved_base
     p sz ainst idx dv ov ep nv cond exit bod incr
