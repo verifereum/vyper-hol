@@ -154,6 +154,7 @@ Proof
 QED
 
 (* Reading send's result: send returns a value, which reads as itself. *)
+
 Theorem eval_send_read:
   !cx has_gas vs st res st'.
     (do tv <- eval_send cx has_gas vs; read_result cx tv od) st =
@@ -186,6 +187,7 @@ QED
    outcome whose accounts are not runtime well typed: not one of the
    remaining outcomes, by outcomes_accounts_typed, nor a computed
    precompile's, which keeps the current accounts. *)
+
 Theorem take_call_outcome_typed:
   !target cd vo st gas_cap.
     outcomes_accounts_typed st.outcomes /\
@@ -329,6 +331,7 @@ Proof
 QED
 
 (* The ASSERT of the success word the CALL just bound. *)
+
 Theorem send_assert_ok:
   !id x w s.
     w <> 0w ==>
@@ -399,7 +402,30 @@ Proof
   metis_tac[]
 QED
 
-(* SCRATCH: indirect build dependency awaiting widened-relation repair.
+
+Theorem send_tail_frag:
+  expr_has_effect e /\
+  emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
+    sm = (success, s3) /\
+  emit_void ASSERT [success] s3 = (u, sb) /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  stmt_state_rel H ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
+  storage_well_formed_on cx es' (FST H) /\
+  outcomes_accounts_typed es1.outcomes /\
+  accounts_runtime_well_typed es1.accounts /\
+  eval_operand gas_op t = SOME gw /\
+  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
+               NONE => 0 | SOME g => g) /\
+  eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+      read_result cx tv od) es1 = (res, es') /\
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
+  frag_exec ctx sm sb (\s. s = t)
+    (\s. ?v. res = INL v /\
+             expr_post H ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
+    (expr_exit res)
 Proof
   strip_tac >> drule_all send_tail_shape >> strip_tac >>
   `~not_fresh_at sm out` by gvs[not_fresh_at_def] >>
@@ -427,22 +453,28 @@ Proof
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
-        (drule eval_send_read >> strip_tac >>
-         drule eval_send_preserves_non_accounts >> simp[]) >>
-      `immutable_alloca_sep func cenv cx es' s'` by
-        (irule immutable_alloca_sep_fields >> qexistsl_tac [`t`, `es1`] >>
-         gvs[stmt_state_rel_def] >>
-         rpt strip_tac >> qexists_tac `id` >>
-         gvs[local_region_def, lookup_var_def]) >>
-      `immutable_base_zero cenv s'` by
-        (irule immutable_base_zero_frame >> qexists_tac `t` >>
-         fs[stmt_state_rel_def, lookup_var_def]) >>
-      irule stmt_state_rel_allocas_frame >> simp[] >>
-      qexistsl_tac [`es1`, `t`] >> simp[] >>
-      qpat_x_assum `s' = _ with <|vs_transient := _; vs_returndata := _;
-        vs_accounts := _; vs_logs := _; vs_outcomes := _; vs_requests := _;
-        vs_pending_deletions := _|>`
-        (fn th => once_rewrite_tac[th]) >> simp[]) >>
+            (drule eval_send_read >> strip_tac >>
+             drule eval_send_preserves_non_accounts >> simp[]) >>
+          `immutable_alloca_sep func cenv cx es' s'` by
+            (irule immutable_alloca_sep_fields >> qexistsl_tac [`t`, `es1`] >>
+             gvs[stmt_state_rel_def] >>
+             rpt strip_tac >> qexists_tac `id` >>
+             gvs[local_region_def, lookup_var_def]) >>
+          `immutable_base_zero cenv s'` by
+            (irule immutable_base_zero_frame >> qexists_tac `t` >>
+             fs[stmt_state_rel_def, lookup_var_def]) >>
+          irule stmt_state_rel_allocas_frame >> simp[] >>
+          conj_tac
+          >- (rpt gen_tac >> strip_tac >>
+              irule immutable_alloca_sep_fields >> qexistsl_tac [`t`, `es1`] >>
+              gvs[stmt_state_rel_def] >>
+              rpt strip_tac >> qexists_tac `id` >>
+              gvs[local_region_def, lookup_var_def])
+          >- (qexistsl_tac [`es1`, `t`] >> simp[] >>
+              qpat_x_assum `s' = _ with <|vs_transient := _; vs_returndata := _;
+            vs_accounts := _; vs_logs := _; vs_outcomes := _; vs_requests := _;
+            vs_pending_deletions := _|>`
+            (fn th => once_rewrite_tac[th]) >> simp[])) >>
   `wb_frame cenv es es' sa s0 t` by
     (`es'.scopes = es1.scopes` by
        (drule eval_send_read >> strip_tac >>
@@ -456,33 +488,6 @@ Proof
   qpat_assum `wb_frame cenv es es' sa s0 t` (irule_at Any) >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
-QED
-*)
-Theorem send_tail_frag:
-  expr_has_effect e /\
-  emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
-    sm = (success, s3) /\
-  emit_void ASSERT [success] s3 = (u, sb) /\
-  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel H ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
-  storage_well_formed_on cx es' (FST H) /\
-  outcomes_accounts_typed es1.outcomes /\
-  accounts_runtime_well_typed es1.accounts /\
-  eval_operand gas_op t = SOME gw /\
-  w2n gw = (case OPTION_BIND (ext_call_kwarg EKGas [EKGas] gas_vs) dest_NumV of
-               NONE => 0 | SOME g => g) /\
-  eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
-  eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
-  LENGTH gas_vs = (if has_gas then 1 else 0) /\
-  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
-      read_result cx tv od) es1 = (res, es') /\
-  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
-  frag_exec ctx sm sb (\s. s = t)
-    (\s. ?v. res = INL v /\
-             expr_post H ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
-    (expr_exit res)
-Proof
-  cheat
 QED
 
 (* ===== Counted gas: the CALL and the ASSERT as a gas path ===== *)
