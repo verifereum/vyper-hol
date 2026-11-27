@@ -55,24 +55,6 @@ Proof
   cheat
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `eval_operand op s = eval_operand op t` by
-    (Cases_on `eval_operand op s` >> gvs[expr_val_rel_def] >>
-     metis_tac[abi_args_operand_kept]) >>
-  conj_tac >- (irule abi_args_value_kept_eq >> metis_tac[]) >>
-  conj_tac >- (irule abi_args_location_kept_eq >> simp[] >> metis_tac[]) >>
-  irule ptr_val_ok_footprint_frame >> qexistsl_tac [`G`, `s`, `tn`] >> simp[] >>
-  conj_tac >- (Cases_on `op` >> gvs[ghost_kept_at_def, op_taint_def]) >>
-  reverse conj_tac
-  >- (Cases_on `op` >> gvs[ghost_kept_at_def, op_taint_def]) >>
-  rpt gen_tac >> strip_tac >>
-  `eval_operand op s = SOME w` by metis_tac[] >>
-  drule_all abi_encode_borrowed_footprint_frame >> simp[]
-QED
-*)
 Theorem abi_encode_borrowed_operand_retained:
   !mods.
   expr_sim_inv_mods mods ce cx env es /\
@@ -87,5 +69,17 @@ Theorem abi_encode_borrowed_operand_retained:
   expr_val_rel cx ty v op t /\ expr_val_at ce cx ty sa sb ee v op t /\
   ptr_val_ok cx ty v op G' tn' t
 Proof
-  cheat
+  strip_tac >>
+  `eval_operand op s = eval_operand op t` by
+    (Cases_on `eval_operand op s` >> gvs[expr_val_rel_def] >>
+     metis_tac[abi_args_operand_kept]) >>
+  conj_tac >- (irule abi_args_value_kept_eq >> metis_tac[]) >>
+  conj_tac >- (irule abi_args_location_kept_eq >> simp[] >> metis_tac[]) >>
+  irule ptr_val_ok_footprint_frame >> qexistsl_tac [`G`, `s`, `tn`] >> simp[] >>
+  conj_tac >- (Cases_on `op` >> gvs[ghost_kept_at_def, op_taint_def]) >>
+  reverse conj_tac
+  >- (Cases_on `op` >> gvs[ghost_kept_at_def, op_taint_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `eval_operand op s = SOME w` by metis_tac[] >>
+  drule_all abi_encode_borrowed_footprint_frame >> simp[]
 QED

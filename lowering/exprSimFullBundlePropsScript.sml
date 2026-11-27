@@ -86,14 +86,6 @@ Proof
   simp[expr_sim_full_endpoint_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  simp[expr_sim_full_def, expr_sim_full_hypotheses_def, expr_sim_full_code_def,
-       expr_sim_full_post_def, expr_sim_full_endpoint_def, FUN_EQ_THM,
-       AC CONJ_ASSOC CONJ_COMM]
-QED
-*)
 Theorem expr_sim_full_via_bundle:
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es <=>
   !st0 sa sb shadow_sa shadow_sb op s0 G0 tn0.
@@ -108,5 +100,7 @@ Theorem expr_sim_full_via_bundle:
           expr_exit res r /\ halt_exit H cx ee res r /\
           (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))
 Proof
-  cheat
+  simp[expr_sim_full_def, expr_sim_full_hypotheses_def, expr_sim_full_code_def,
+       expr_sim_full_post_def, expr_sim_full_endpoint_def, FUN_EQ_THM,
+       AC CONJ_ASSOC CONJ_COMM]
 QED

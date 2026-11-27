@@ -107,8 +107,17 @@ QED
 (* The source writes the one-slot encoding w of v at slot, a declared
    region of one slot, and Venom stores w there: stmt_state_rel holds after
    both. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_state_rel_write_storage_word:
+  !H func cenv cx es s tr slot tvt v w res es' ctx.
+    stmt_state_rel H ctx func cenv cx es s /\
+    (!u st. storage_dead H tr (update_storage slot u st) =
+            storage_dead H tr st) /\
+    ~cx.txn.is_static /\
+    write_storage_slot cx tr slot tvt v es = (res, es') /\
+    encode_value tvt v = SOME [(0, w)] ==>
+    res = INL () /\
+    stmt_state_rel H ctx func cenv cx es'
+      (if tr then tstore slot w s else sstore slot w s)
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[write_storage_slot_eq, apply_writes_def, LET_THM] >>
@@ -147,21 +156,6 @@ Proof
   qpat_assum `immutable_base_zero cenv _` (irule_at Any) >> simp[] >>
   qexistsl [`s`, `es`] >> simp[] >>
   Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
-QED
-*)
-Theorem stmt_state_rel_write_storage_word:
-  !H func cenv cx es s tr slot tvt v w res es' ctx.
-    stmt_state_rel H ctx func cenv cx es s /\
-    (!u st. storage_dead H tr (update_storage slot u st) =
-            storage_dead H tr st) /\
-    ~cx.txn.is_static /\
-    write_storage_slot cx tr slot tvt v es = (res, es') /\
-    encode_value tvt v = SOME [(0, w)] ==>
-    res = INL () /\
-    stmt_state_rel H ctx func cenv cx es'
-      (if tr then tstore slot w s else sstore slot w s)
-Proof
-  cheat
 QED
 
 (* ===== The lowering ===== *)

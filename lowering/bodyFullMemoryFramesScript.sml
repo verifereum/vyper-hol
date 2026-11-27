@@ -46,8 +46,13 @@ Proof
   fs[regions_disjoint_def] >> decide_tac
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem body_full_local_region_lower_bound:
+  !mods exps.
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es0 /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  local_region cenv es.scopes s id b n /\ 0 < n /\
+  dead_lo_ok H D lo cenv cx ==> lo <= b
 Proof
   strip_tac >> drule_then assume_tac body_inv_contract >>
   drule_then strip_assume_tac body_inv_main_code >>
@@ -60,17 +65,6 @@ Proof
   `dead_lo_ok_mods H D lo cenv cx` by metis_tac[dead_lo_ok_mods_singleton] >>
   fs[expr_sim_inv_split_def] >>
   drule_all body_full_local_region_lower_bound_mods >> simp[]
-QED
-*)
-Theorem body_full_local_region_lower_bound:
-  !mods exps.
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es0 /\
-  stmt_state_rel H ctx func cenv cx es s /\
-  local_region cenv es.scopes s id b n /\ 0 < n /\
-  dead_lo_ok H D lo cenv cx ==> lo <= b
-Proof
-  cheat
 QED
 
 Theorem body_full_local_scope_ghost_post:

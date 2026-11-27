@@ -1060,8 +1060,10 @@ Proof
   strip_tac >> qexistsl_tac [`G'`, `tn'`] >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_frag_full_retq_weaken:
+  stmt_frag_full ps cx lctx RetQ cenv m shadow_m source es /\
+  (!H v ee gt r. RetQ H v ee gt r ==> RetQ' H v ee gt r) ==>
+  stmt_frag_full ps cx lctx RetQ' cenv m shadow_m source es
 Proof
   PairCases_on `ps` >>
   pure_rewrite_tac[stmt_frag_full_def] >>
@@ -1070,14 +1072,6 @@ Proof
   irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >>
   fs[stmt_exit_ptr_def] >> metis_tac[]
-QED
-*)
-Theorem stmt_frag_full_retq_weaken:
-  stmt_frag_full ps cx lctx RetQ cenv m shadow_m source es /\
-  (!H v ee gt r. RetQ H v ee gt r ==> RetQ' H v ee gt r) ==>
-  stmt_frag_full ps cx lctx RetQ' cenv m shadow_m source es
-Proof
-  cheat
 QED
 
 Theorem compile_return_none_int_frag_full_taint:

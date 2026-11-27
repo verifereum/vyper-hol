@@ -3,16 +3,6 @@ Ancestors
   bodyFullToplevelCtorSourceLayout bodyFullToplevelCtorSourceFrame
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  drule_all toplevel_ctor_source_layout >> strip_tac >>
-  qpat_x_assum `ty = ann` SUBST_ALL_TAC >>
-  conj_tac >- simp[] >>
-  metis_tac[toplevel_ctor_source_frame]
-QED
-*)
 Theorem toplevel_ctor_source_contract:
   !mods exps.
   (contract_inv mods exps ctx cenv cx /\
@@ -30,5 +20,9 @@ Theorem toplevel_ctor_source_contract:
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
     val_in_memory rt v off mem)
 Proof
-  cheat
+  strip_tac >>
+  drule_all toplevel_ctor_source_layout >> strip_tac >>
+  qpat_x_assum `ty = ann` SUBST_ALL_TAC >>
+  conj_tac >- simp[] >>
+  metis_tac[toplevel_ctor_source_frame]
 QED

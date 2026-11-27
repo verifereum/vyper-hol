@@ -70,8 +70,12 @@ Proof
   gvs[stmt_post_def] >> qexists_tac `cenv` >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_frag_nil_full:
+  !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty es.
+    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmts_env cenv lctx ty []) (stmts_env (gas_shadow_env T cenv) lctx ty [])
+      (eval_stmts cx []) es
 Proof
   rw[stmt_frag_full_def, stmts_env_def, comp_return_def] >>
   `!tail. eval_stmts cx [] (es with gas_obs := tail) =
@@ -99,14 +103,4 @@ Proof
      fs[return_buf_sep_def] >> first_assum ACCEPT_TAC) >>
   gvs[stmt_post_def] >> fs[ghost_inv_at_def] >>
   FIRST [first_assum ACCEPT_TAC, metis_tac[]]
-QED
-*)
-Theorem stmt_frag_nil_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty es.
-    stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmts_env cenv lctx ty []) (stmts_env (gas_shadow_env T cenv) lctx ty [])
-      (eval_stmts cx []) es
-Proof
-  cheat
 QED

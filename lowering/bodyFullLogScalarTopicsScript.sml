@@ -14,8 +14,10 @@ Ancestors
   exprSimHypsDefs[qualified]
 Libs horizonTypeLib
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem log_arg_clear_event:
+  !mods.
+  expr_sim_inv_mods mods cenv cx env es /\ supported_event_leaf_type ty ==>
+  log_arg_clear cenv cx ty v
 Proof
   Cases_on `ty` >>
   simp[supported_event_leaf_type_def, supported_scalar_type_def,
@@ -29,14 +31,6 @@ Proof
           optionTheory.OPTION_MAP_EQ_SOME, pairTheory.EXISTS_PROD, PULL_EXISTS] >>
      rpt strip_tac >> drule mem_step_offset_shape >> simp[]) >>
   drule_all exprSimAttributeFieldsTheory.local_val_at_dynarray_apart >> simp[]
-QED
-*)
-Theorem log_arg_clear_event:
-  !mods.
-  expr_sim_inv_mods mods cenv cx env es /\ supported_event_leaf_type ty ==>
-  log_arg_clear cenv cx ty v
-Proof
-  cheat
 QED
 
 Theorem compile_log_saved_topic_hash:
