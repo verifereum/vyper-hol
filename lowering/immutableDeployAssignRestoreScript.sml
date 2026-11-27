@@ -6,9 +6,57 @@ Ancestors
   exprLoweringProps exprSimHypsDefs compileEnv loweringStateRelDefs vyperPlaceFrames vyperState
   venomState finite_map alist valueEncodingProps vyperTypeInvariants placeMemoryPathRebuild
   exprSimSubscriptArrayLiveImmutableView vyperTypeInitialState loweringPosts
+  bodyInvSplit supportedNameRoot gasContext list
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+(* The legacy expression invariant can expose an inactive bare global
+   only as a constant. An immutable layout cannot allocate such a cell. *)
+Theorem immutable_store_layout_active:
+  expr_sim_inv ce cx env es /\
+  immutable_section_layout_mods ce.ce_modules ce /\
+  FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) ==>
+  src = ce.ce_module
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `bare_globals_layout ce.ce_is_ctor ce.ce_module_var_type ce.ce_module_vars
+     ce.ce_modules cx env.bare_globals env.bare_global_assignable` by
+    fs[expr_sim_inv_def] >>
+  `?ty. FLOOKUP env.bare_globals (src,name) = SOME ty` by
+    metis_tac[bare_globals_layout_def] >>
+  `cx_const_name cx (src,name)` by (fs[expr_sim_inv_def] >> metis_tac[]) >>
+  `?tops vis ty slot.
+    ALOOKUP ce.ce_modules src = SOME tops /\
+    MEM (VariableDecl vis Immutable name ty slot) tops` by
+    (fs[immutable_section_layout_mods_def, immutable_region_mods_def] >>
+     metis_tac[MEM_APPEND, MEM]) >>
+  `get_module_code cx src = SOME tops /\
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tops))` by
+    metis_tac[bare_globals_layout_def] >>
+  `src = NONE /\ cx_tops cx = tops` by
+    (fs[cx_const_name_def] >> metis_tac[cx_tops_module]) >>
+  gvs[cx_const_name_def] >>
+  drule_then (drule_then strip_assume_tac)
+    distinct_module_consts_env_names_constant >>
+  drule_all_then assume_tac (SPEC_ALL supported_variable_decl_distinct_mem) >>
+  fs[]
+QED
+
+Theorem immutable_store_stmt_state_rel_frame[local]:
+  stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
+  immutable_section_layout_mods ce.ce_modules ce /\
+  local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\ src = ce.ce_module /\
+  FLOOKUP env.bare_globals (src,id) = SOME ty /\
+  FLOOKUP ce.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  write_place cx (ImmutablePlace src id path) v es = (INL (),es') /\
+  immutables_rel ce cx.txn.target src T es' q /\
+  (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+    vs_immutables := s.vs_immutables; vs_prev_bb := s.vs_prev_bb;
+    vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx|>) = s /\
+  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
+  LENGTH s.vs_memory <= LENGTH q.vs_memory /\
+  (!a k. regions_disjoint a k off (type_memory_size tv) ==>
+    mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) ==>
+  stmt_state_rel H ctx func ce cx es' q
 Proof
   strip_tac >> gvs[] >>
   `q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next /\
@@ -42,34 +90,28 @@ Proof
   `immutable_base_zero ce q` by
     (irule immutable_base_zero_frame >> qexists_tac `s` >>
      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `!src name off. src <> ce.ce_module ==>
+     FLOOKUP ce.ce_module_vars (src,name) <> SOME (ImmutableLoc off)` by
+    metis_tac[immutable_store_layout_active] >>
+  `!src tops. ALOOKUP ce.ce_modules src = SOME tops ==>
+     immutable_alloca_sep func (ce with ce_module := src) cx es' q` by
+    (rpt strip_tac >> Cases_on `src = ce.ce_module`
+     >- gvs[compile_env_component_equality] >>
+     simp[immutable_alloca_sep_def, immutable_decl_sep_alt] >>
+     metis_tac[]) >>
+  `!src tops. ALOOKUP ce.ce_modules src = SOME tops ==>
+     immutables_rel ce cx.txn.target src T es' q` by
+    (rpt strip_tac >> Cases_on `src = ce.ce_module`
+     >- gvs[] >> simp[immutables_rel_def] >> metis_tac[]) >>
   irule stmt_state_rel_allocas_frame >> simp[] >>
   reverse conj_tac >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
   gvs[state_rel_def, stmt_state_rel_def, storage_rel_def, transient_rel_def,
       accounts_rel_def, logs_rel_def, contract_storage_def, contract_transient_def]
 QED
-*)
-Theorem immutable_store_stmt_state_rel_frame[local]:
-  stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
-  local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\ src = ce.ce_module /\
-  FLOOKUP env.bare_globals (src,id) = SOME ty /\
-  FLOOKUP ce.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\
-  write_place cx (ImmutablePlace src id path) v es = (INL (),es') /\
-  immutables_rel ce cx.txn.target src T es' q /\
-  (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
-    vs_immutables := s.vs_immutables; vs_prev_bb := s.vs_prev_bb;
-    vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx|>) = s /\
-  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
-  LENGTH s.vs_memory <= LENGTH q.vs_memory /\
-  (!a k. regions_disjoint a k off (type_memory_size tv) ==>
-    mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) ==>
-  stmt_state_rel H ctx func ce cx es' q
-Proof
-  cheat
-QED
 
 Theorem immutable_store_stmt_state_rel:
   stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
+  immutable_section_layout_mods ce.ce_modules ce /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\ src = ce.ce_module /\
   FLOOKUP env.bare_globals (src,id) = SOME ty /\
   FLOOKUP ce.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
@@ -106,6 +148,7 @@ QED
 
 Theorem immutable_path_store_stmt_state_rel:
   stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
+  immutable_section_layout_mods ce.ce_modules ce /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\ src = ce.ce_module /\
   FLOOKUP env.bare_globals (src,id) = SOME ty /\
   FLOOKUP ce.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
