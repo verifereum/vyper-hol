@@ -16,7 +16,7 @@ Theorem grouped_empty_registration_state:
   selected_registration_frame vs entry_taint s tn /\
   default_registration_resources ctx fn site 0 st s (tn with t_mem := {}) /\
   fn_inst_ids_distinct fn /\ ce.ce_vars = FEMPTY /\
-  ce.ce_module = NONE /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
+  ce.ce_modules = [(NONE,tops)] /\ ce.ce_module = NONE /\ ~ce.ce_is_ctor /\ ce.ce_imm_alloca = NONE /\
   ce.ce_return_pc = NONE /\ ce.ce_return_buf = NONE /\
   storage_vars_rel ce cx /\ transient_vars_rel ce cx /\
   immutable_section_layout ce tops ==>
