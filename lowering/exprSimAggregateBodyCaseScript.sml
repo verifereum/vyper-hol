@@ -73,10 +73,11 @@ Proof
     (rpt strip_tac >> irule expr_body_pre_builtin_arg >>
      conj_tac >- simp[] >>
      qexistsl_tac [`ArrayT et bnd`, `args`, `MakeArray (SOME et) bnd`, `es`] >> simp[]) >>
-  `cenv.ce_is_ctor ==> !name itv iv io.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc io) /\
+  `cenv.ce_is_ctor ==> !src name itv iv io.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc io) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (itv,iv) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) b
       ((if (case bnd of Fixed _ => F | Dynamic _ => T) then 32 else 0) +
        LENGTH args * type_memory_size tv)` by
@@ -84,7 +85,7 @@ Proof
        (qspec_then `H0` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      drule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
-       aggregate_body_alloc_immutable_prefix) >>
+       aggregate_body_alloc_immutable_prefix_source) >>
      disch_then (drule_at (Pat `fn_has_code sa sm func`)) >>
      disch_then (drule_at (Pat `stmt_state_rel H0 _ _ _ _ _ t`)) >>
      disch_then (qspec_then
@@ -282,16 +283,17 @@ Proof
          expr_body_pre cenv cx env e st /\ (F ==> int_calls_expr e = [])` by
         (rpt strip_tac >> irule expr_body_pre_builtin_arg >>
          conj_tac >- simp[] >> qexistsl_tac [`ann`, `args`, `MakeArray NONE bnd`, `es`] >> simp[]) >>
-      `cenv.ce_is_ctor ==> !name itv iv io.
-        FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc io) /\
+      `cenv.ce_is_ctor ==> !src name itv iv io.
+        (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+        FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc io) /\
         FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-          | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (itv,iv) ==>
+          | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
         regions_disjoint io (type_memory_size itv) b (type_memory_size_list tvs)` by
         (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ t /\ storage_well_formed_on _ _ (FST H)`
            (qspec_then `H0` mp_tac) >>
          (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
          drule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
-           aggregate_body_alloc_immutable_prefix) >>
+           aggregate_body_alloc_immutable_prefix_source) >>
          disch_then (drule_at (Pat `fn_has_code sa sm func`)) >>
          disch_then (drule_at (Pat `stmt_state_rel H0 _ _ _ _ _ t`)) >>
          disch_then (qspec_then `type_memory_size_list tvs` mp_tac) >>

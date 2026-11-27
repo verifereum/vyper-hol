@@ -1,6 +1,6 @@
 Theory exprSimStructLitBodyCounted
 Ancestors
-  exprSimAggregateBodyCountedLoops exprSimAggregatesAllocCounted
+  exprSimAggregateBodyAlloc exprSimAggregateBodyCountedLoops exprSimAggregatesAllocCounted
   exprSimAggregateLayout exprSimAggregateSource exprSimAggregateChildren
   exprSimHyps exprSimHypsDefs exprSimDefs loweringPosts
   aggregateCountedOutcome aggregateCountedOutcomeFacts stmtReasonVvMemory
@@ -66,10 +66,11 @@ Proof
     metis_tac[stmt_state_rel_def, state_rel_def] >>
   `!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
       expr_body_pre ce cx env e st` by metis_tac[expr_body_pre_struct_field] >>
-  `ce.ce_is_ctor ==> !name itv iv io.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+  `ce.ce_is_ctor ==> !src name itv iv io.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc io) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) b (type_memory_size_list tvs)` by
     suspend "immutable" >>
   qpat_x_assum `compile_struct_lit _ _ _ _ _ _ _ = _` mp_tac >>
@@ -84,15 +85,12 @@ Proof
 QED
 
 Resume compile_struct_lit_body_value_owned[immutable]:
-  qpat_assum `stmt_state_rel H _ _ _ _ _ t` mp_tac >>
-  pure_rewrite_tac[stmt_state_rel_def] >> strip_tac >>
-  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
-  fs[immutable_alloca_sep_def] >> rpt strip_tac >>
-  qpat_x_assum `ce.ce_is_ctor ==> _` (mp_tac o UNDISCH) >>
-  disch_then drule_all >> strip_tac >>
-  qpat_x_assum `!ii bb nn. MEM ii _ /\ _ ==> regions_disjoint _ _ _ _` irule >>
-  goal_assum (drule_at Any) >>
-  simp[venomInstTheory.mk_inst_def] >> metis_tac[]
+  drule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+    aggregate_body_alloc_immutable_prefix_source) >>
+  disch_then (drule_at (Pat `fn_has_code sa sm func`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel H0 _ _ _ _ _ t`)) >>
+  disch_then (qspec_then `type_memory_size_list tvs` mp_tac) >>
+  gvs[] >> metis_tac[]
 QED
 
 Resume compile_struct_lit_body_value_owned[outcome]:

@@ -184,8 +184,57 @@ Resume unwrap_value_body_rebased_path_horizons[unequal]:
 QED
 Finalise unwrap_value_body_rebased_path_horizons
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem aggregate_store_body_rebased_slice_path:
+  compile_store_memory ce op (Var x) (expr_type e) (lowered_value_type ce e)
+    su = ((),sb) /\
+  expr_body_pre ce cx env e es /\
+  (do res <- eval_expr cx e; read_result cx res od) es = (INL v,es') /\
+  (int_calls_expr e <> [] /\ lowered_value_type ce e <> expr_type e ==>
+    acyclic_struct_metadata ce.ce_struct_fields) /\
+  not_fresh_at sm x /\ lookup_var x r = SOME w /\
+  sm.cs_next_var <= su.cs_next_var /\
+  (!z. op = Var z ==> not_fresh_at su z) /\
+  local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+  type_memory_size tv < dimword (:256) /\
+  stmt_state_rel H ctx func ce cx es' r /\
+  FLOOKUP r.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
+  b <= w2n w /\ w2n w + type_memory_size tv <= b+k /\
+  w2n w + type_memory_size tv < dimword (:256) /\
+  (!name a len. local_region ce es'.scopes r name a len ==>
+    a+len <= w2n w \/ w2n w + type_memory_size tv <= a) /\
+  (ce.ce_is_ctor ==> !src name itv iv off.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) /\
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    su r es' v op s /\
+  fn_has_code su sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
+  s.vs_inst_idx = LENGTH su.cs_current_insts ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    val_in_memory tv v (w2n w) q.vs_memory /\
+    stmt_state_rel H ctx func ce cx es' q /\
+    (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
+    (!aid a. FLOOKUP r.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
+    (!aid off sz a len.
+      FLOOKUP r.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+      (!name b k. local_region ce es'.scopes r name b k ==>
+        off+sz <= b \/ b+k <= off) /\
+      off <= a /\ a+len <= off+sz /\
+      (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
+      mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
+    locals_kept ce es' es' r q /\
+    (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==>
+      FLOOKUP q.vs_allocas aid = SOME a) /\
+    (!a len. a + len <= w2n w \/ w2n w + type_memory_size tv <= a ==>
+      mem_bytes_at a len q.vs_memory = mem_bytes_at a len s.vs_memory)
 Proof
   strip_tac >>
   `well_typed_expr env e` by fs[expr_body_pre_def] >>
@@ -314,60 +363,6 @@ Resume aggregate_store_body_rebased_slice_path[same_layout]:
 QED
 
 Finalise aggregate_store_body_rebased_slice_path
-*)
-Theorem aggregate_store_body_rebased_slice_path:
-  compile_store_memory ce op (Var x) (expr_type e) (lowered_value_type ce e)
-    su = ((),sb) /\
-  expr_body_pre ce cx env e es /\
-  (do res <- eval_expr cx e; read_result cx res od) es = (INL v,es') /\
-  (int_calls_expr e <> [] /\ lowered_value_type ce e <> expr_type e ==>
-    acyclic_struct_metadata ce.ce_struct_fields) /\
-  not_fresh_at sm x /\ lookup_var x r = SOME w /\
-  sm.cs_next_var <= su.cs_next_var /\
-  (!z. op = Var z ==> not_fresh_at su z) /\
-  local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\
-  type_memory_bytes ce (expr_type e) = type_memory_size tv /\
-  type_memory_size tv < dimword (:256) /\
-  stmt_state_rel H ctx func ce cx es' r /\
-  FLOOKUP r.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
-  b <= w2n w /\ w2n w + type_memory_size tv <= b+k /\
-  w2n w + type_memory_size tv < dimword (:256) /\
-  (!name a len. local_region ce es'.scopes r name a len ==>
-    a+len <= w2n w \/ w2n w + type_memory_size tv <= a) /\
-  (ce.ce_is_ctor ==> !name itv iv off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
-    FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
-    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) /\
-  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
-    su r es' v op s /\
-  fn_has_code su sb func /\ fn_inst_ids_distinct func /\
-  ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
-  s.vs_inst_idx = LENGTH su.cs_current_insts ==>
-  ?q. gas_marked_path F ctx func s 0 (OK q) /\
-    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
-    q.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    val_in_memory tv v (w2n w) q.vs_memory /\
-    stmt_state_rel H ctx func ce cx es' q /\
-    (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
-    (!aid a. FLOOKUP r.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
-    (!aid off sz a len.
-      FLOOKUP r.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
-      (!name b k. local_region ce es'.scopes r name b k ==>
-        off+sz <= b \/ b+k <= off) /\
-      off <= a /\ a+len <= off+sz /\
-      (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
-      mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-    locals_kept ce es' es' r q /\
-    (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==>
-      FLOOKUP q.vs_allocas aid = SOME a) /\
-    (!a len. a + len <= w2n w \/ w2n w + type_memory_size tv <= a ==>
-      mem_bytes_at a len q.vs_memory = mem_bytes_at a len s.vs_memory)
-Proof
-  cheat
-QED
 
 Theorem aggregate_body_child_store_slice_path:
   compile_expr ce ty e si = (vv,sj) /\
@@ -397,10 +392,11 @@ Theorem aggregate_body_child_store_slice_path:
   w2n w + type_memory_size tv < dimword (:256) /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b+k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
-  (ce.ce_is_ctor ==> !name itv iv off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (ce.ce_is_ctor ==> !src name itv iv off.
+    (src = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src)) /\
+    FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+      | SOME imms => get_source_immutables src imms) name = SOME (itv,iv) ==>
     regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) /\
   (!q. val_in_memory tv v (w2n w) q.vs_memory /\
       stmt_state_rel H ctx func ce cx es' q /\
