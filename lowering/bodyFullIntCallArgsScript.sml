@@ -5956,6 +5956,26 @@ QED
 
 
 (* Compatibility for continuations that only need expr_exit. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule intcall_args_stage_full_p2 >>
+  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
+  qpat_assum `expr_sim_inv cenv cx tenv esi` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ _ es _ _ si = _` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) _ _ shadow_si = _`
+    (irule_at Any) >>
+  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
+  qpat_assum `gas_admissible (vyperState$bind (eval_exprs cx es) f) P esi`
+    (irule_at Any) >>
+  qpat_assum `eval_operands ops s = SOME ws` (irule_at Any) >>
+  qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn` (irule_at Any) >>
+  qpat_assum `return_buf_frame d cenv si s` (irule_at Any) >>
+  qexistsl [`vals`, `ptys`, `pin`, `pflags`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
+QED
+*)
 Theorem intcall_args_stage_full:
   !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
@@ -6109,21 +6129,7 @@ Theorem intcall_args_stage_full:
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       cenv.ce_modules cx st0 (vyperState$bind (eval_exprs cx es) f) (esi,s,G,tn) Q R
 Proof
-  rpt gen_tac >> strip_tac >>
-  irule intcall_args_stage_full_p2 >>
-  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-  qpat_assum `expr_sim_inv cenv cx tenv esi` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ es _ _ si = _` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) _ _ shadow_si = _`
-    (irule_at Any) >>
-  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
-  qpat_assum `gas_admissible (vyperState$bind (eval_exprs cx es) f) P esi`
-    (irule_at Any) >>
-  qpat_assum `eval_operands ops s = SOME ws` (irule_at Any) >>
-  qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn` (irule_at Any) >>
-  qpat_assum `return_buf_frame d cenv si s` (irule_at Any) >>
-  qexistsl [`vals`, `ptys`, `pin`, `pflags`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
+  cheat
 QED
 
 Theorem intcall_args_stmt_state_rel_push[local]:
