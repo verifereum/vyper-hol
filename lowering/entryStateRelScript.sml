@@ -402,7 +402,7 @@ Theorem body_entry_state_rel_runtime:
     ss.vs_code = vs.vs_code /\
     local_ptrs_rel func cenv [env] ss /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
-    cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
+    cenv.ce_modules = [(NONE,tops)] /\ cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
     immutable_section_layout cenv tops /\ ss.vs_data_section = vs.vs_data_section ==>
     state_rel H func cenv cx es ss
 Proof
@@ -781,8 +781,13 @@ Proof
     (drule package_external_fn_immutable_layout >> simp[]) >>
   `~cenv.ce_is_ctor /\ immutable_section_layout cenv tops` by
     (drule_all register_positional_args_immutable_layout >> simp[]) >>
+  `cenv0.ce_modules = [(NONE,tops)]` by
+    (gvs[package_external_fn_def, update_cenv_nonreentrant_def] >>
+     rw[update_cenv_ret_abi_def, build_compile_env_ce_modules]) >>
+  `cenv.ce_modules = [(NONE,tops)]` by
+    (qpat_assum `cenv = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   irule body_entry_state_rel_runtime >> simp[] >>
-  qexistsl_tac [`am`, `env`, `mut`, `tops`, `vs`] >>
+  qexistsl_tac [`am`, `env`, `mut`, `vs`] >>
   qpat_x_assum `_ with <| vs_vars := _; vs_memory := _; vs_allocas := _;
                           vs_alloca_next := _; vs_inst_idx := _ |> = s0`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [venom_state_component_equality]) >>
