@@ -108,19 +108,6 @@ Resume memory_place_write_local_ptrs[lift]:
 QED
 Finalise memory_place_write_local_ptrs
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  Cases_on `p` >> gvs[place_ptr_rel_def, slot_loc_def, AllCaseEqs()] >>
-  rename1 `write_place cx (MemoryPlace id path) v ee = (INL (),ff)` >>
-  drule write_memory_place_entry_update >> strip_tac >>
-  `local_ptrs_rel func cenv ee.scopes s /\
-   local_ptrs_rel func cenv ee.scopes r` by
-    metis_tac[stmt_state_rel_def, state_rel_def] >>
-  suspend "root"
-QED
-*)
 Theorem memory_place_write_stmt_state:
   stmt_state_rel H ctx func cenv cx ee s /\
   stmt_state_rel H ctx func cenv cx ee r /\
@@ -142,17 +129,24 @@ Theorem memory_place_write_stmt_state:
   (!name b len a n. local_region cenv ee.scopes r name b len /\ b <= a /\
     a+n <= b+len /\ (a+n <= w2n w \/ w2n w+type_memory_size dtv <= a) ==>
     mem_bytes_at a n t.vs_memory = mem_bytes_at a n r.vs_memory) /\
-  (cenv.ce_is_ctor ==> !nm tv iv off.
-    FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) /\
+  (cenv.ce_is_ctor ==> !src nm tv iv off.
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    FLOOKUP cenv.ce_module_vars (src,nm) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables cenv.ce_module imms) nm = SOME (tv,iv) ==>
+      | SOME imms => get_source_immutables src imms) nm = SOME (tv,iv) ==>
     mem_bytes_at off (type_memory_size tv) t.vs_memory =
     mem_bytes_at off (type_memory_size tv) r.vs_memory) ==>
   stmt_state_rel H ctx func cenv cx ff t
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `p` >> gvs[place_ptr_rel_def, slot_loc_def, AllCaseEqs()] >>
+  rename1 `write_place cx (MemoryPlace id path) v ee = (INL (),ff)` >>
+  drule write_memory_place_entry_update >> strip_tac >>
+  `local_ptrs_rel func cenv ee.scopes s /\
+   local_ptrs_rel func cenv ee.scopes r` by
+    metis_tac[stmt_state_rel_def, state_rel_def] >>
+  suspend "root"
 QED
-(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[root]:
   `tv0 = entry.type` by metis_tac[] >> gvs[] >>
   `value_has_type entry.type entry.value` by
@@ -178,8 +172,6 @@ Resume memory_place_write_stmt_state[root]:
      irule w2n_add_2 >> simp[] >> decide_tac) >>
   gvs[] >> suspend "assemble"
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[assemble]:
   `!name e q len. lookup_scopes name ff.scopes = SOME e /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var q) len) ==>
@@ -200,8 +192,6 @@ Resume memory_place_write_stmt_state[assemble]:
      metis_tac[ADD_COMM]) >>
   suspend "state"
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[live_vars]:
   rpt strip_tac >>
   `?e0. lookup_scopes name ee.scopes = SOME e0` by
@@ -221,13 +211,12 @@ Resume memory_place_write_stmt_state[live_vars]:
      simp[local_ptrs_reserved_def] >> metis_tac[]) >>
   metis_tac[]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[state]:
   `!name a n. local_region cenv ff.scopes t name a n ==>
      ?name0. local_region cenv ee.scopes r name0 a n` by suspend "regions" >>
   `immutable_base_zero cenv t` by suspend "base" >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor ee t` by
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+     immutables_rel cenv cx.txn.target src cenv.ce_is_ctor ee t` by
     suspend "immutables" >>
   `state_rel H func cenv cx ff t` by suspend "state_frame" >>
   `immutable_alloca_sep func cenv cx ff t` by
@@ -238,13 +227,17 @@ Resume memory_place_write_stmt_state[state]:
      >- (qpat_assum `ff = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
      qpat_x_assum `stmt_state_rel _ _ _ _ _ ee r` mp_tac >>
      simp[stmt_state_rel_def]) >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+    immutable_alloca_sep func (cenv with ce_module := src) cx ff t` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`r`, `ee`] >> simp[] >>
+     qpat_assum `ff = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+     fs[stmt_state_rel_def] >> fs[local_region_def] >> metis_tac[]) >>
   irule stmt_state_rel_allocas_frame >> simp[] >>
   qexistsl_tac [`ee`, `r`] >> simp[] >>
   qpat_x_assum `_ = r` mp_tac >>
   simp[venom_state_component_equality]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[base]:
   `immutable_base_zero cenv s /\ immutable_base_zero cenv r` by
     metis_tac[stmt_state_rel_def] >>
@@ -261,8 +254,6 @@ Resume memory_place_write_stmt_state[base]:
   `lookup_var x t = lookup_var x s` by metis_tac[] >>
   gvs[lookup_var_def]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[regions]:
   rpt strip_tac >>
   qpat_x_assum `local_region _ _ _ _ _ _` mp_tac >>
@@ -272,31 +263,25 @@ Resume memory_place_write_stmt_state[regions]:
     (Cases_on `name = id` >> metis_tac[]) >>
   qexists_tac `e0` >> simp[] >> metis_tac[]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[immutables]:
-  irule immutables_rel_mem_agree >> qexists_tac `r` >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (qpat_x_assum `_ = r` mp_tac >>
-      rpt (first_x_assum kall_tac) >> simp[venom_state_component_equality]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ ee r` mp_tac >>
-  simp[stmt_state_rel_def, state_rel_def]
+  gen_tac >> disch_tac >>
+  `t.vs_data_section = r.vs_data_section` by
+    (qpat_assum `_ = r` mp_tac >> simp[venom_state_component_equality]) >>
+  `immutables_rel cenv cx.txn.target src cenv.ce_is_ctor ee r` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ ee r`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def]) >>
+     Cases_on `src = cenv.ce_module` >- gvs[] >>
+     `?tops. ALOOKUP cenv.ce_modules src = SOME tops` by
+       fs[optionTheory.IS_SOME_EXISTS] >>
+     metis_tac[]) >>
+  irule immutables_rel_mem_agree >> qexists_tac `r` >> simp[] >>
+  rpt gen_tac >> strip_tac >> metis_tac[]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Resume memory_place_write_stmt_state[state_frame]:
-  irule state_rel_frame >>
-  goal_assum (drule_at (Pat `local_ptrs_rel _ _ ff.scopes t`)) >>
-  goal_assum (drule_at (Pat `immutables_rel _ _ _ _ ee t`)) >>
-  simp[] >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ ee r` mp_tac >>
-  qpat_x_assum `_ = r` mp_tac >>
-  rpt (first_x_assum kall_tac) >>
-  simp[stmt_state_rel_def, venom_state_component_equality] >> metis_tac[]
+  MATCH_MP_TAC (Q.INST [`es` |-> `ee`, `s` |-> `r`]
+    (SPEC_ALL state_rel_frame)) >>
+  qpat_assum `_ = r` mp_tac >>
+  simp[stmt_state_rel_def, venom_state_component_equality] >>
+  fs[stmt_state_rel_def] >> metis_tac[]
 QED
-*)
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise memory_place_write_stmt_state
-*)

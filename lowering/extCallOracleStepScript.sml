@@ -99,8 +99,22 @@ QED
    outcome: locals and immutable bytes need output preservation; other
    fields follow from state_rel before the call, as both sides take,
    record and adopt the same outcome. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem state_rel_adopt_consume[local]:
+  !func cenv cx es s rq rq' outcome rest ro rz tr.
+    state_rel H func cenv cx es s /\ request_agree H cx.txn.target rq rq' /\
+    take_outcome rq s.vs_outcomes = (outcome, rest) /\
+    local_ptrs_rel func cenv es.scopes
+      (SND (consume_call_outcome rq' ro rz s)) /\
+    (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+      immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es
+        (SND (consume_call_outcome rq' ro rz s))) ==>
+
+    state_rel H func cenv cx
+      (SND (adopt_call_outcome rq outcome
+              (es with <| outcomes := SOME rest;
+                          requests := record_request rq es.requests;
+                          storage_trace := tr |>)))
+      (SND (consume_call_outcome rq' ro rz s))
 Proof
   rpt strip_tac >>
   Cases_on `take_outcome rq' s.vs_outcomes` >>
@@ -138,27 +152,12 @@ Proof
       call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
   gvs[immutables_rel_def] >>
   Cases_on `computed_precompile rq` >> simp[LIST_REL_APPEND] >>
-  first_assum ACCEPT_TAC
-
-QED
-*)
-Theorem state_rel_adopt_consume[local]:
-  !func cenv cx es s rq rq' outcome rest ro rz tr.
-    state_rel H func cenv cx es s /\ request_agree H cx.txn.target rq rq' /\
-    take_outcome rq s.vs_outcomes = (outcome, rest) /\
-    local_ptrs_rel func cenv es.scopes
-      (SND (consume_call_outcome rq' ro rz s)) /\
-    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-      (SND (consume_call_outcome rq' ro rz s)) ==>
-
-    state_rel H func cenv cx
-      (SND (adopt_call_outcome rq outcome
-              (es with <| outcomes := SOME rest;
-                          requests := record_request rq es.requests;
-                          storage_trace := tr |>)))
-      (SND (consume_call_outcome rq' ro rz s))
-Proof
-  cheat
+  (conj_tac
+   >- (qpat_assum `!src. src = _ \/ IS_SOME _ ==> _`
+         (qspec_then `cenv.ce_module` mp_tac) >> simp[]) >>
+   rpt gen_tac >> disch_tac >>
+   qpat_assum `!src. src = _ \/ IS_SOME _ ==> _` (qspec_then `src` mp_tac) >>
+   simp[])
 QED
 
 (* TOP-LEVEL: CALL or STATICCALL in oracle mode.  Given the source took
@@ -193,7 +192,8 @@ Theorem exec_ext_call_oracle_step:
               (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
          s'.vs_returndata = outcome.co_returnData /\
          (local_ptrs_rel func cenv es.scopes s' /\
-          immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s' ==>
+          (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+            immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s') ==>
           state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) s')
 Proof
   rpt gen_tac >> strip_tac >>
@@ -232,7 +232,9 @@ Proof
   >- simp[]
   >- simp[] >>
   strip_tac >> qpat_x_assum `es1 = _` SUBST1_TAC >>
-  irule state_rel_adopt_consume >> simp[]
+  irule state_rel_adopt_consume >> simp[] >>
+  qpat_assum `!src. _ ==> immutables_rel _ _ _ _ _ _` mp_tac >>
+  simp[consume_call_outcome_eq]
 QED
 
 Theorem exec_delegate_call_oracle_step:
@@ -257,7 +259,8 @@ Theorem exec_delegate_call_oracle_step:
          (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
        s'.vs_returndata = outcome.co_returnData /\
        (local_ptrs_rel func cenv es.scopes s' /\
-        immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s' ==>
+        (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+          immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s') ==>
         state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) s')
 Proof
   strip_tac >>
@@ -299,7 +302,9 @@ Proof
   >- simp[]
   >- simp[] >>
   strip_tac >> qpat_x_assum `es1 = _` SUBST1_TAC >>
-  irule state_rel_adopt_consume >> simp[]
+  irule state_rel_adopt_consume >> simp[] >>
+  qpat_assum `!src. _ ==> immutables_rel _ _ _ _ _ _` mp_tac >>
+  simp[consume_call_outcome_eq]
 QED
 
 Theorem frame_call_value_success:
@@ -437,9 +442,11 @@ Proof
       `local_ptrs_rel func cenv es.scopes s'` by
         (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
          simp[local_ptrs_rel_oracle_fields] >> first_assum ACCEPT_TAC) >>
-      `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s'` by
-        (`immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s`
-           by fs[state_rel_def] >>
+      `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+        immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s'` by
+        (gen_tac >> disch_tac >>
+         `immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s` by
+           (fs[state_rel_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
          qpat_x_assum `immutables_rel _ _ _ _ es s` mp_tac >>
          qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
          simp[immutables_rel_def]) >>
@@ -449,7 +456,7 @@ Proof
       rpt (qpat_x_assum `s' = _` kall_tac) >>
       Cases_on `outcome.co_success` >>
       gvs[adopt_call_outcome_equation, bind_def, ignore_bind_def, assert_def,
-          vyperStateTheory.return_def]) >>
+          vyperStateTheory.return_def] >> metis_tac[]) >>
   strip_tac >> disj1_tac >>
   qpat_x_assum `take_call_outcome _ _ _ _ _ = _` mp_tac >>
   Cases_on `s.vs_outcomes` >> gvs[] >>
