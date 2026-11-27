@@ -16,16 +16,10 @@ Proof
   Cases_on `args` >> gvs[well_typed_expr_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  simp[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]
-QED
-*)
 Theorem abi_decode_inv_type_env:
   expr_sim_inv_mods mods ce cx env es ==> env.type_defs = get_tenv cx
 Proof
-  cheat
+  simp[expr_sim_inv_mods_def, env_consistent_def, env_context_consistent_def]
 QED
 
 Theorem abi_decode_wrapped_type:
@@ -63,24 +57,20 @@ Proof
   drule abi_decode_parent_type >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  simp_tac bool_ss [expr_sim_pre_def] >> strip_tac >>
-  drule abi_decode_inv_type_env >> strip_tac >>
-  drule abi_decode_parent_type >> metis_tac[]
-QED
-*)
 Theorem abi_decode_pre_target:
   expr_sim_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty args) es ==>
   ann = ty /\ assignable_type (get_tenv cx) ty /\
   abi_decode_bytes_widths (get_tenv cx) ty
 Proof
-  cheat
+  simp_tac bool_ss [expr_sim_pre_def, expr_sim_inv_split_def] >> strip_tac >>
+  drule abi_decode_inv_type_env >> strip_tac >>
+  drule abi_decode_parent_type >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem abi_decode_pre_wrapped_coherent:
+  expr_sim_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty args) es ==>
+  ?tv. abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields
+    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) tv
 Proof
   strip_tac >> drule abi_decode_pre_target >> strip_tac >>
   drule assignable_type_well_formed >>
@@ -89,18 +79,10 @@ Proof
   disch_then (qspec_then `unwrap /\ needs_external_call_wrap ty` assume_tac) >>
   drule abi_decode_wrapped_assignable >>
   disch_then (qspec_then `unwrap /\ needs_external_call_wrap ty` assume_tac) >>
-  `abi_decode_root_metadata ce (get_tenv cx)` by
-    (irule abi_decode_root_metadata_inv >> qexistsl_tac [`env`, `es`] >>
-     gvs[expr_sim_pre_def]) >>
+  `expr_sim_inv_mods [(NONE,cx_tops cx)] ce cx env es` by
+    fs[expr_sim_pre_def, expr_sim_inv_split_def] >>
+  drule_then assume_tac abi_decode_root_metadata_inv >>
   drule_all abi_decode_root_coherent >> metis_tac[]
-QED
-*)
-Theorem abi_decode_pre_wrapped_coherent:
-  expr_sim_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty args) es ==>
-  ?tv. abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields
-    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) tv
-Proof
-  cheat
 QED
 
 Theorem abi_decode_pre_wrapped_widths:
