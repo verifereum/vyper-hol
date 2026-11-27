@@ -7,7 +7,8 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   exprPtrUnwrapFrames[qualified,ignore_grammar]
   bodyFullGhostFrame[qualified,ignore_grammar] augAssignFullStoreGhost[qualified,ignore_grammar]
   ghostPcTransportPtr[qualified,ignore_grammar]
-  bodyIntCallSeams fragGasFocus gasOutcomeFullCompose gasOutcomeFull gasStorage
+  bodyIntCallSeams bodyFullPredsMods
+  fragGasFocus fragGasOriginPtr gasOutcomeFullCompose gasOutcomeFull gasOutcomeFullMods gasStorage
   vyperStorageFootprint vyperStorageTrace vyperState venomState createSizeExit[qualified]
   contextRawReachable contextCodegenRel contextCodegenRelProps
   vyperInterpreter gasContext stmtSimDefs exprSimDefs compileEnv
@@ -16,8 +17,8 @@ Ancestors bodyFullShadowBodyInv sourceUnitExecution[qualified,ignore_grammar] lo
   vyperTypeContractFunction bodySimFull[qualified]
   bodyInvSplit bodyCallSupport[qualified,ignore_grammar] bodyInvCodeProps bodyInvExecutionProps bodyInvMetadataProps
   bodyInvIntCallPinsProps contractInvContextProps
-  moduleVariableKeyProps compileUnit bodyFullPostsMods[qualified,ignore_grammar]
-  bodyQualifiedStmtSupport linkedConstAnnotations constSubstMods[qualified]
+  moduleVariableKeyProps compileUnit bodyFullPostsMods
+  bodyQualifiedStmtSupport linkedConstAnnotations constSubstMods
   bodyFullIfExpReach[qualified,ignore_grammar] bodyFullHashKeccakFixed[qualified,ignore_grammar]
   ctorDeployLoweringSource nonreentrantEquiv internalReturnMemoryMem
   internalReturnStackAggregate[qualified,ignore_grammar]
@@ -6687,6 +6688,188 @@ Proof
       first_assum ACCEPT_TAC)
 QED
 *)
+
+val intcall_callee_full_with_prefix_statement = ``
+  !B Run Out DF lo d ctx shadow_ctx func mods exps caller_src caller_tops src tops vis cenv cx tenv name es st0 sa sb vv s0 es0
+   G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
+   rbs pvs dflts.
+    contract_inv mods exps ctx cenv cx /\
+    module_body_inv mods caller_src caller_tops cenv cx /\
+    ALOOKUP mods src = SOME tops /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+    MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+    (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot) /\
+    LENGTH args - LENGTH dflts <= LENGTH es /\
+    LENGTH es <= LENGTH args /\
+    ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
+       body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (src,name))
+         (subst_consts_stmts_mods (consts_env_mods mods) ss)) /\
+    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+    MEM func ctx.ctx_functions /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+    (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+       intcall_entry_full_mods (DF, lo, d) H mods src tops ctx func cenv cx tenv name es
+         sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
+         G tn) /\
+    body_const_cells_agree mods cx tenv es1 /\
+    gas_invoke_entry (ctx,func) t callee entered /\
+    cenv.ce_func_info (nsid_to_string (src,name)) = (rc,rbs,pvs) ==>
+    !bb inst lbl arg_ops argv.
+      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx = SOME inst /\
+      decode_invoke inst = SOME (lbl,arg_ops) /\
+      eval_operands arg_ops t = SOME argv ==>
+      gas_outcome_full_mods
+        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
+         MAP (op_prov G) arg_ops)
+        mods cx st0 (intcall_callee_src_at cx src name mut nr ss)
+        (es1, entered, FEMPTY, tn with t_var := FEMPTY)
+        (\H res ee G' tn' t'. F)
+        (\H res ee gt r.
+           intcall_callee_exit_full_mods mods (DF, lo) H func cenv cx mut nr rtv rc
+             (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
+             sa.cs_next_id sb.cs_next_id t tn res ee gt r) /\
+      ((((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
+          B (cx with stk updated_by CONS (src,name))
+            (subst_consts_stmts_mods (consts_env_mods mods) ss)) /\
+        (!dret RetQ body_ce bindings env env_after rt locked sf body_start body_end
+            shadow_start shadow_end env_end at_body Gbody tnbody.
+          B (cx with stk updated_by CONS (src,name))
+            (subst_consts_stmts_mods (consts_env_mods mods) ss) /\
+          contract_inv mods exps ctx body_ce (cx with stk updated_by CONS (src,name)) /\
+          module_body_inv mods src tops body_ce (cx with stk updated_by CONS (src,name)) /\
+          shadow_body_inv_mods mods exps ctx shadow_ctx /\
+          supported_stmts tops bindings (subst_consts_stmts_mods (consts_env_mods mods) ss) /\
+          (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target)
+             (subst_consts_stmts_mods (consts_env_mods mods) ss) ==>
+             EXISTS (occurs_abi_decode_target target o SND) mods) /\
+          body_const_cells_agree mods (cx with stk updated_by CONS (src,name)) env locked /\
+          expr_sim_inv_mods mods body_ce (cx with stk updated_by CONS (src,name)) env locked /\
+          ce_locals_declared body_ce env /\ locals_alloc_ok body_ce env /\
+          type_stmts env ret (subst_consts_stmts_mods (consts_env_mods mods) ss) = SOME env_after /\
+          stmts_exprs_ok body_ce (subst_consts_stmts_mods (consts_env_mods mods) ss) /\
+          call_evaluation_safe (cx with stk updated_by CONS (src,name))
+            (int_calls_stmts (subst_consts_stmts_mods (consts_env_mods mods) ss)) /\
+          frame_ret_ok_full_mods mods (DF,lo,dret,ctx,shadow_ctx,MAP (op_prov G) arg_ops,callee,sf)
+            (cx with stk updated_by CONS (src,name)) RetQ body_ce ret /\
+          (!gs. eval_stmts (cx with stk updated_by CONS (src,name)) ss
+                         (locked with gas_obs := gs) =
+                eval_stmts (cx with stk updated_by CONS (src,name))
+                  (subst_consts_stmts_mods (consts_env_mods mods) ss) (locked with gas_obs := gs)) /\
+          stmts_env body_ce NoLoop ret (subst_consts_stmts_mods (consts_env_mods mods) ss) =
+            stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty)
+              (subst_consts_stmts_mods (consts_env_mods mods) ss) /\
+          stmts_env (gas_shadow_env T body_ce) NoLoop ret
+            (MAP gas_shadow_stmt (subst_consts_stmts_mods (consts_env_mods mods) ss)) =
+            stmts_env (gas_shadow_env T body_ce) NoLoop
+              (case rt of NONE => BaseT BoolT | SOME ty => ty)
+              (MAP gas_shadow_stmt (subst_consts_stmts_mods (consts_env_mods mods) ss)) /\
+          stmts_env body_ce NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty)
+            (subst_consts_stmts_mods (consts_env_mods mods) ss) body_start = (env_end,body_end) /\
+          stmts_env (gas_shadow_env T body_ce) NoLoop (case rt of NONE => BaseT BoolT | SOME ty => ty)
+            (MAP gas_shadow_stmt (subst_consts_stmts_mods (consts_env_mods mods) ss))
+            shadow_start = (gas_shadow_env T env_end,shadow_end) /\
+          gas_shadow_state body_start shadow_start /\ gas_shadow_state body_end shadow_end /\
+          gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+          gas_shadow_function callee sf /\ MEM callee ctx.ctx_functions /\
+          MEM sf shadow_ctx.ctx_functions /\ fn_has_code body_start body_end callee /\
+          fn_has_code shadow_start shadow_end sf /\
+          (!K. dead_lo_ok K (DF K) lo body_ce (cx with stk updated_by CONS (src,name))) /\
+          fn_inst_ids_distinct callee /\ local_ptrs_reserved body_ce body_start /\
+          ret_pc_ok body_ce body_start at_body /\
+          (!x sz. body_ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+                  not_fresh_at body_start x) /\
+          ~block_is_terminated body_start /\
+          gas_admissible (eval_stmts (cx with stk updated_by CONS (src,name)) ss)
+            (stmt_res_ok NoLoop) locked /\
+          return_buf_frame dret body_ce body_start at_body /\ return_buf_sep dret body_ce locked at_body /\
+          alloca_history callee at_body /\ (ctx_has_dalloca ctx ==> allocas_below_fmp at_body) /\
+          (!fn inst s. frag_reachable ctx callee at_body fn inst s ==> dalloca_fmp_headroom inst s) /\
+          (!K. valid_horizon (cx with stk updated_by CONS (src,name)) st0 K locked.storage_trace ==>
+            stmt_state_rel K ctx callee body_ce (cx with stk updated_by CONS (src,name)) locked at_body /\
+            storage_well_formed_on (cx with stk updated_by CONS (src,name)) locked (FST K) /\
+            ghost_inv_at (DF K) lo dret body_ce (cx with stk updated_by CONS (src,name)) locked Gbody tnbody at_body) /\
+          ~at_body.vs_halted /\ at_body.vs_current_bb = body_start.cs_current_bb /\
+          at_body.vs_inst_idx = LENGTH body_start.cs_current_insts ==>
+          Run (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+            (cx with stk updated_by CONS (src,name)) st0
+            (eval_stmts (cx with stk updated_by CONS (src,name)) ss) (locked,at_body,Gbody,tnbody)) /\
+        (~entered.vs_halted /\
+         ~(?locked. lock_if_nr cx nr (is_view_mut mut) es1 = (INL (),locked) /\
+                   storage_trace_domain cx st0 locked.storage_trace) ==>
+          Out (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+            cx st0 (intcall_callee_src_at cx src name mut nr ss)
+            (es1,entered,FEMPTY,tn with t_var := FEMPTY)) /\
+        (!locked at_body Gl tnl.
+          lock_if_nr cx nr (is_view_mut mut) es1 = (INL (),locked) /\
+          storage_trace_domain (cx with stk updated_by CONS (src,name)) st0 locked.storage_trace /\
+          at_body.vs_gas_readings = entered.vs_gas_readings /\
+          (!H. gas_origin_ptr_path
+             (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+             (entered,FEMPTY,tn with t_var := FEMPTY) [] (OK at_body,Gl,tnl)) /\
+          Run (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+            (cx with stk updated_by CONS (src,name)) st0
+            (eval_stmts (cx with stk updated_by CONS (src,name)) ss) (locked,at_body,Gl,tnl) ==>
+          Out (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+            cx st0 (intcall_callee_src_at cx src name mut nr ss)
+            (es1,entered,FEMPTY,tn with t_var := FEMPTY))) ==>
+       Out (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
+         cx st0 (intcall_callee_src_at cx src name mut nr ss)
+         (es1,entered,FEMPTY,tn with t_var := FEMPTY))``;
+
+val intcall_callee_full_statement = ``
+  !DF lo d ctx shadow_ctx func mods exps caller_src caller_tops src tops vis cenv cx tenv name es st0 sa sb vv s0 es0
+   G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
+   rbs pvs dflts.
+    contract_inv mods exps ctx cenv cx /\
+    module_body_inv mods caller_src caller_tops cenv cx /\
+    ALOOKUP mods src = SOME tops /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+    MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+    (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot) /\
+    LENGTH args - LENGTH dflts <= LENGTH es /\
+    LENGTH es <= LENGTH args /\
+    ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
+       body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (src,name))
+         (subst_consts_stmts_mods (consts_env_mods mods) ss)) /\
+    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+    MEM func ctx.ctx_functions /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
+    (!fn inst s. frag_reachable ctx func s0 fn inst s ==> dalloca_fmp_headroom inst s) /\
+    (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
+    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+       intcall_entry_full_mods (DF, lo, d) H mods src tops ctx func cenv cx tenv name es
+         sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
+         G tn) /\
+    body_const_cells_agree mods cx tenv es1 /\
+    gas_invoke_entry (ctx,func) t callee entered /\
+    cenv.ce_func_info (nsid_to_string (src,name)) = (rc,rbs,pvs) ==>
+    !bb inst lbl arg_ops argv.
+      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx = SOME inst /\
+      decode_invoke inst = SOME (lbl,arg_ops) /\
+      eval_operands arg_ops t = SOME argv ==>
+      gas_outcome_full_mods
+        (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
+         MAP (op_prov G) arg_ops)
+        mods cx st0 (intcall_callee_src_at cx src name mut nr ss)
+        (es1, entered, FEMPTY, tn with t_var := FEMPTY)
+        (\H res ee G' tn' t'. F)
+        (\H res ee gt r.
+           intcall_callee_exit_full_mods mods (DF, lo) H func cenv cx mut nr rtv rc
+             (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
+             sa.cs_next_id sb.cs_next_id t tn res ee gt r)``;
+
 Theorem intcall_callee_full_with_prefix:
   !B Run Out DF lo d ctx shadow_ctx func tops cenv cx tenv name es st0 sa sb vv s0 es0
    G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn callee entered rc
