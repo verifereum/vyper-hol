@@ -6696,6 +6696,8 @@ val intcall_callee_full_with_prefix_statement = ``
     contract_inv mods exps ctx cenv cx /\
     module_body_inv mods caller_src caller_tops cenv cx /\
     ALOOKUP mods src = SOME tops /\
+    (src = NONE \/ context_function_live cx (src,name)) /\
+    (src = NONE \/ MEM (src,name) (linked_live_functions mods exps)) /\
     shadow_body_inv_mods mods exps ctx shadow_ctx /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
@@ -6830,6 +6832,8 @@ val intcall_callee_full_statement = ``
     contract_inv mods exps ctx cenv cx /\
     module_body_inv mods caller_src caller_tops cenv cx /\
     ALOOKUP mods src = SOME tops /\
+    (src = NONE \/ context_function_live cx (src,name)) /\
+    (src = NONE \/ MEM (src,name) (linked_live_functions mods exps)) /\
     shadow_body_inv_mods mods exps ctx shadow_ctx /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
