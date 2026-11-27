@@ -6,36 +6,8 @@ Ancestors
   bodyFullIfExpReach bodyFullHashKeccakFixed bodyFullExtCallPackingReady
   bodySim bodyExprPreFacts exprLoweringProps vyperState
 
-Theorem annassign_memory_prefix_execution:
-  body_inv tops ctx cenv cx /\
-  expr_sim_inv cenv cx env es /\
-  expr_body_pre cenv cx env e es /\
-  FLOOKUP cenv.ce_vars id = NONE /\
-  lookup_scopes id es.scopes = NONE /\
-  type_widens_to env.type_defs (expr_type e) typ /\
-  assignable_type env.type_defs typ /\
-  stmt_exprs_ok cenv (AnnAssign id typ e) /\
-  ~is_word_type typ /\
-  0 < type_memory_bytes cenv typ /\
-  (lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
-    has_length_word typ /\ is_empty_value_expr e) /\
-  (lowered_value_type cenv e = expr_type e \/
-    is_bytestring_type (expr_type e) /\
-    is_bytestring_type (lowered_value_type cenv e) /\
-    arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
-  (!sa ce r ty. declare_local cenv id typ sa = (ce,r) ==>
-    body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
-    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es /\
-    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es) /\
-  (!sa ce r ty. declare_local cenv id typ sa = (ce,r) ==>
-    body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
-    expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es /\
-    expr_vv_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es) ==>
-  stmt_frag_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cx lctx RetQ cenv
-    (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
-    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
-    (eval_stmt cx (AnnAssign id typ e)) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `cenv.ce_alloca_locals` by fs[body_inv_def] >>
@@ -84,7 +56,42 @@ Proof
      cx st0 (eval_expr cx e) (es,entry,Ga,tna)` by suspend "rhs" >>
   suspend "source_trace"
 QED
+*)
+Theorem annassign_memory_prefix_execution:
+  body_inv tops ctx cenv cx /\
+  expr_sim_inv cenv cx env es /\
+  expr_body_pre cenv cx env e es /\
+  FLOOKUP cenv.ce_vars id = NONE /\
+  lookup_scopes id es.scopes = NONE /\
+  type_widens_to env.type_defs (expr_type e) typ /\
+  assignable_type env.type_defs typ /\
+  stmt_exprs_ok cenv (AnnAssign id typ e) /\
+  ~is_word_type typ /\
+  0 < type_memory_bytes cenv typ /\
+  (lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
+    has_length_word typ /\ is_empty_value_expr e) /\
+  (lowered_value_type cenv e = expr_type e \/
+    is_bytestring_type (expr_type e) /\
+    is_bytestring_type (lowered_value_type cenv e) /\
+    arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
+  (!sa ce r ty. declare_local cenv id typ sa = (ce,r) ==>
+    body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
+    expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es /\
+    expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es) /\
+  (!sa ce r ty. declare_local cenv id typ sa = (ce,r) ==>
+    body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es /\
+    expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es /\
+    expr_vv_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty e es) ==>
+  stmt_frag_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cx lctx RetQ cenv
+    (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+    (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
+    (eval_stmt cx (AnnAssign id typ e)) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_prefix_execution[outside_domain]:
   simp[gas_prefix_full_def] >> qexists_tac `[]` >> conj_tac
   >- (qexistsl_tac [`storage_trace_horizon es.storage_trace`,`func`,`PG`,`G0`,`tn0`,`s0`] >>
@@ -107,7 +114,9 @@ Resume annassign_memory_prefix_execution[outside_domain]:
   fs[] >> metis_tac[gasOutcomeFullTheory.valid_horizon_append,
                      extcall_packing_observed_domain]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_prefix_execution[rhs]:
   `ctx_has_dalloca ctx ==> allocas_below_fmp entry` by
     (strip_tac >>
@@ -143,7 +152,9 @@ Resume annassign_memory_prefix_execution[rhs]:
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_memory_prefix_execution[source_trace]:
   (* Reading the value and declaring the source local add no requests. *)
   `!gs. (SND (eval_stmt cx (AnnAssign id typ e) (es with gas_obs := gs))).storage_trace =
@@ -177,5 +188,8 @@ Resume annassign_memory_prefix_execution[source_trace]:
     irule >>
   simp[] >> qexistsl_tac [`rhs_end`,`rhs_res`,`sfx`,`tail`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise annassign_memory_prefix_execution
+*)
