@@ -53,7 +53,7 @@ Theorem dalloca_windows_internal_function:
   (!env lc rt. env.ce_func_defaults = ce.ce_func_defaults ==>
      preserves_dalloca_windows window (compile_stmts env lc rt fbody)) ==>
   preserves_dalloca_windows window
-    (compile_internal_function ce params buf nr key tr view ctor imm_len fbody ret)
+    (compile_internal_function ce params buf nr key tr view ctor imm_size fbody ret)
 Proof
   strip_tac >> Cases_on `nr` >>
   simp[compile_internal_function_def, comp_ignore_bind_def] >> (

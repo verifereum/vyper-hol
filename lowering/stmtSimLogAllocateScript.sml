@@ -86,15 +86,18 @@ Theorem log_buffer_clear_of_immutable:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
   stmt_state_rel H ctx func ce cx es s /\ ce.ce_is_ctor /\
   FLOOKUP s.vs_allocas sa.cs_next_id = SOME (p,cap) /\
-  FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (src_id = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src_id)) /\
+  FLOOKUP ce.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
   FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-    | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    | SOME imms => get_source_immutables src_id imms) name = SOME (tv,v) ==>
   off + type_memory_size tv <= p \/ p + cap <= off
 Proof
   rpt strip_tac >> drule_all log_buffer_trace_code >> strip_tac >>
-  `immutable_alloca_sep func ce cx es s` by fs[stmt_state_rel_def] >>
+  `immutable_alloca_sep func (ce with ce_module := src_id) cx es s` by
+    (Cases_on `src_id = ce.ce_module` >>
+     gvs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
-  simp_tac bool_ss [immutable_alloca_sep_def] >> strip_tac >>
+  simp[NoAsms, immutable_alloca_sep_def] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   qpat_x_assum `!inst b sz. _` drule >>
   simp[mk_inst_def, regions_disjoint_def]
@@ -123,15 +126,18 @@ Theorem log_pending_alloca_immutable[local]:
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   ((FLOOKUP s.vs_allocas inst.inst_id = NONE /\ p = s.vs_alloca_next) \/
     FLOOKUP s.vs_allocas inst.inst_id = SOME (p,cap)) /\
-  FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  (src_id = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src_id)) /\
+  FLOOKUP ce.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
   FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-    | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    | SOME imms => get_source_immutables src_id imms) name = SOME (tv,v) ==>
   off + type_memory_size tv <= p \/ p + cap <= off
 Proof
   strip_tac >>
-  `immutable_alloca_sep func ce cx es s` by fs[stmt_state_rel_def] >>
+  `immutable_alloca_sep func (ce with ce_module := src_id) cx es s` by
+    (Cases_on `src_id = ce.ce_module` >>
+     gvs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
-  simp_tac bool_ss [immutable_alloca_sep_def] >> strip_tac >>
+  simp[NoAsms, immutable_alloca_sep_def] >> strip_tac >>
   first_x_assum drule_all >> strip_tac
   >- simp[] >>
   qpat_x_assum `!inst b sz. _` drule >> simp[regions_disjoint_def]
@@ -152,10 +158,11 @@ Theorem log_cursor_ownership:
       p+32 <= b \/ b+sz <= p) /\
     (!name lo sz. local_region ce es.scopes s name lo sz ==>
       lo+sz <= p \/ p+32 <= lo) /\
-    (ce.ce_is_ctor ==> !name tv v off.
-      FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    (ce.ce_is_ctor ==> !src_id name tv v off.
+      (src_id = ce.ce_module \/ IS_SOME (ALOOKUP ce.ce_modules src_id)) /\
+      FLOOKUP ce.ce_module_vars (src_id,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+        | SOME imms => get_source_immutables src_id imms) name = SOME (tv,v) ==>
       off+type_memory_size tv <= p \/ p+32 <= off)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -167,7 +174,9 @@ Proof
   qexists_tac `p` >> asm_simp_tac bool_ss [] >>
   conj_tac >- first_assum ACCEPT_TAC >> conj_tac
   >- (rpt strip_tac >> drule_all log_pending_alloca_locals >> simp[]) >>
-  rpt strip_tac >> drule_all log_pending_alloca_immutable >> simp[]
+  disch_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule_all log_pending_alloca_immutable >> simp[]
 QED
 
 Theorem log_cursor_trace_code:

@@ -3,7 +3,7 @@ Ancestors
   bodyFullBuiltinPrecompileSuffixSuccess bodyFullBuiltinPrecompileSuffixAbort
   bodyPtrPrecompileBuiltinsSuffixPaths bodyPtrPrecompileBuiltinsRuntime
   bodyPtrPrecompileBuiltinsArithmeticValue bodyPtrPrecompileBuiltinsSuffixGhost
-  exprSimECArith exprSimPrecompiles exprSimProps exprLoweringProps exprSimWordArgs
+  exprSimECArith exprSimAggregates exprSimPrecompiles exprSimProps exprLoweringProps exprSimWordArgs
   allocaHistoryFragment valueEncodingProofs venomCallOracleDefs venomExecSemantics
   venomInst venomState finite_map rich_list compileEnv vyperValue vyperState
   vyperInterpreter vyperContext fragGasOriginPtr gasOutcomeFull fragExec
@@ -364,7 +364,24 @@ Resume ec_arith_permitted_tail_full[success]:
     gen_tac >> strip_tac >>
     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ [] _ /\ _`
       (drule_then strip_assume_tac) >>
-    rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC ORELSE (simp[] >> NO_TAC)) >>
+    disch_tac >> rpt gen_tac >>
+    disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+    `regions_disjoint off (type_memory_size tv) (w2n wo) 64` by
+      (qpat_assum `stmt_state_rel H ctx func cenv cx es2 u`
+         (fn rel => let
+            val horizon = hd (snd (strip_comb (concl rel)))
+            val frame = aggregate_alloca_immutable_sep_source
+            val premises = fst (dest_imp (concl frame))
+            val frame_horizon = hd (snd (strip_comb (fst (dest_conj premises))))
+          in irule (INST_TYPE (match_type (type_of frame_horizon) (type_of horizon)) frame) end) >>
+       qpat_assum `stmt_state_rel H ctx func cenv cx es2 u` (irule_at Any) >>
+       qexistsl [`src_id`, `name`, `iv`,
+         `mk_inst out_alloc.cs_next_id ALLOCA [Lit 64w] [dst]`] >>
+       simp[mk_inst_def]) >>
+    pop_assum mp_tac >>
+    pure_rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
+    simp[wordsTheory.dimword_def] >> decide_tac)) >>
   disch_then (qx_choose_then `ec_tail_end` (qx_choose_then `Gout`
     (qx_choose_then `tnout` strip_assume_tac))) >>
   qpat_assum `Abbrev (ee = _)`
