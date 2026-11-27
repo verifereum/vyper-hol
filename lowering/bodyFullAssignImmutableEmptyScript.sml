@@ -1,7 +1,7 @@
 Theory bodyFullAssignImmutableEmpty
 Ancestors
   vfmBuffer[qualified,ignore_grammar]
-  ctorDeployDeadSection immSectionDead valueEncodingDefs valueEncodingProps
+  ctorDeployDeadSection immSectionDead gasContext valueEncodingDefs valueEncodingProps
   valueEncodingProofs abiEncoderMemory cv_std byte words divides arithmetic list
   ptrDiscipline context emitHelper fragExec
   venomState venomInst venomExecSemantics loweringStateRelDefs
@@ -107,25 +107,6 @@ Proof
   simp[mstore_mem_bytes_at_disjoint]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  mp_tac (Q.INST [`word` |-> `0w`]
-    immutableCtorWordStoreGhostTheory.immutable_ctor_word_store_ghost) >>
-  impl_tac >-
-    (simp[] >> rpt strip_tac >>
-     irule imm_section_dead_mstore_zero >>
-     `i IN tn.t_mem` by
-       (qpat_assum `tf.t_mem SUBSET tn.t_mem`
-          (drule_then ACCEPT_TAC o REWRITE_RULE [SUBSET_DEF])) >>
-     qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
-     qpat_assum `!i. i < lo /\ i IN tn.t_mem ==> _`
-       (qspec_then `i` mp_tac) >> simp[]) >>
-  simp[]
-QED
-*)
 Theorem immutable_empty_store_ghost:
   ghost_inv_at D lo d ce cx es G tn s /\
   dead_lo_ok H D lo ce cx /\ ce.ce_is_ctor /\
@@ -148,10 +129,30 @@ Theorem immutable_empty_store_ghost:
   tf.t_mem SUBSET tn.t_mem ==>
   ghost_inv_at D lo d ce cx ee Gf tf q
 Proof
-  cheat
+  strip_tac >>
+  `ce.ce_modules = [(NONE,tops)]` by
+    metis_tac[body_inv_contract, contract_inv_cenv_modules] >>
+  `cx_tops cx = tops` by metis_tac[body_inv_main_code, cx_tops_module] >>
+  mp_tac (Q.INST [`word` |-> `0w`]
+    immutableCtorWordStoreGhostTheory.immutable_ctor_word_store_ghost) >>
+  impl_tac >-
+    (simp[] >> rpt strip_tac >>
+     irule imm_section_dead_mstore_zero >>
+     `i IN tn.t_mem` by
+       (qpat_assum `tf.t_mem SUBSET tn.t_mem`
+          (drule_then ACCEPT_TAC o REWRITE_RULE [SUBSET_DEF])) >>
+     qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+     qpat_assum `ce.ce_modules = [(NONE,tops)]` (fn modules =>
+       qpat_assum `!i. i < lo /\ i IN tn.t_mem ==> _`
+         (qspec_then `i` (mp_tac o REWRITE_RULE
+           [MATCH_MP immSectionDeadTheory.imm_section_dead_mods_singleton modules]))) >>
+     asm_rewrite_tac[]) >>
+  simp[]
 QED
 
 Theorem immutable_empty_path_store_restore:
+  bodyInvSplit$immutable_section_layout_mods ce.ce_modules ce /\
   stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME root_ty /\
@@ -194,7 +195,10 @@ Proof
     (rpt strip_tac >> simp[] >> irule mstore_mem_bytes_at_disjoint >>
      fs[regions_disjoint_def] >> decide_tac) >>
   irule immutable_store_stmt_state_rel >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_assum `immutable_section_layout_mods _ _`
+    (fn layout => qpat_assum `ce.ce_is_ctor`
+      (fn ctor => REWRITE_TAC [layout,ctor])) >>
   qexistsl_tac [`env`,`es`,`id`,`off`,`s`,`sa`,`ce.ce_module`,`itv`,`root_ty`,`new`] >>
+  qpat_x_assum `q.vs_memory = _` kall_tac >>
   simp[]
 QED

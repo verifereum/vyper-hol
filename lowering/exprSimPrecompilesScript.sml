@@ -131,8 +131,14 @@ Proof
        fcpLib.INDEX_CONV ``dimindex(:256)``]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem write_memory_stmt_state_rel:
+  stmt_state_rel H ctx func cenv cx es s /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+     b + sz <= dst \/ dst + LENGTH data <= b) /\
+  (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+    immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es
+      (write_memory_with_expansion dst data s)) ==>
+  stmt_state_rel H ctx func cenv cx es (write_memory_with_expansion dst data s)
 Proof
   strip_tac >>
   `local_ptrs_rel func cenv es.scopes (write_memory_with_expansion dst data s)` by
@@ -152,6 +158,7 @@ Proof
   rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
   rewrite_tac[stmt_state_rel_def] >> conj_tac
   >- (irule state_rel_frame >> simp[] >> qexistsl_tac [`es`, `s`] >>
+      qpat_x_assum `!src. _ ==> immutables_rel _ _ _ _ _ _` mp_tac >>
       simp[write_memory_with_expansion_def]) >>
   conj_tac
   >- (irule localPtrsPropsTheory.alloca_inv_fields >> qexists_tac `s` >>
@@ -163,17 +170,6 @@ Proof
   >- (irule fmp_room_write_memory >> fs[stmt_state_rel_def]) >>
   gvs[write_memory_with_expansion_def, immutable_alloca_sep_def,
       local_region_def, lookup_var_def] >> metis_tac[]
-QED
-*)
-Theorem write_memory_stmt_state_rel:
-  stmt_state_rel H ctx func cenv cx es s /\
-  (!name b sz. local_region cenv es.scopes s name b sz ==>
-     b + sz <= dst \/ dst + LENGTH data <= b) /\
-  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-    (write_memory_with_expansion dst data s) ==>
-  stmt_state_rel H ctx func cenv cx es (write_memory_with_expansion dst data s)
-Proof
-  cheat
 QED
 
 Theorem computed_static_consume_eq:
@@ -225,9 +221,10 @@ Theorem computed_static_exec_state_rel:
      b + sz <= w2n ro \/
      w2n ro + LENGTH (TAKE (w2n rs)
        (FST (take_outcome rq s.vs_outcomes)).co_returnData) <= b) /\
-  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-    (write_memory_with_expansion (w2n ro)
-      (TAKE (w2n rs) (FST (take_outcome rq s.vs_outcomes)).co_returnData) s) ==>
+  (!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+    immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es
+      (write_memory_with_expansion (w2n ro)
+        (TAKE (w2n rs) (FST (take_outcome rq s.vs_outcomes)).co_returnData) s)) ==>
   ?t. exec_ext_call inst s gas addr 0w ai an ro rs T = OK t /\
       stmt_state_rel H ctx func cenv cx
         (SND (take_call_outcome NONE (w2w addr)
@@ -2313,22 +2310,25 @@ QED
 
 Theorem precompile_write_immutables[local]:
   stmt_state_rel H ctx func cenv cx es s /\ LENGTH data <= cap /\
+  (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
   (cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+     FLOOKUP cenv.ce_module_vars (src,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (tv,iv) ==>
      regions_disjoint dst cap off (type_memory_size tv)) ==>
-  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+  immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es
     (write_memory_with_expansion dst data s)
 Proof
-  strip_tac >> irule immutables_rel_mem_agree >> qexists_tac `s` >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule immutables_rel_mem_agree >> qexists_tac `s` >>
   conj_tac
   >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity,
           arithmeticTheory.MAX_DEF] >>
   conj_tac >- simp[write_memory_with_expansion_def] >>
-  reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
+  reverse conj_tac >-
+    metis_tac[stmt_state_rel_def, state_rel_def, optionTheory.IS_SOME_EXISTS] >>
   rpt strip_tac >> irule hash_write_memory_disjoint >>
   qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
   disch_then drule_all >>
@@ -2351,11 +2351,12 @@ Theorem computed_suffix_preserves:
      regions_disjoint (w2n wo) (w2n outsz) b sz) /\
   (!aid b sz. aid < sf.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n wo) (w2n outsz) b sz) /\
-  (cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+  (cenv.ce_is_ctor ==> !src name tv iv off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (tv,iv) ==>
      regions_disjoint (w2n wo) (w2n outsz) off (type_memory_size tv)) ==>
   stmt_state_rel H ctx func cenv cx
@@ -2418,10 +2419,12 @@ Proof
          `regions_disjoint (w2n wo) (w2n outsz) b sz` by metis_tac[] >>
          gvs[loweringStateRelDefsTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
          decide_tac) >>
+     gen_tac >> disch_tac >> rename1 `src = _ \/ _` >>
      irule precompile_write_immutables >>
-     reverse conj_tac >- (qexistsl_tac [`H`,`ctx`,`func`] >> simp[]) >>
-     qexists_tac `w2n outsz` >> simp[listTheory.LENGTH_TAKE_EQ] >>
-     first_assum ACCEPT_TAC) >>
+     conj_tac >- (qexists_tac `w2n (outsz:bytes32)` >>
+       simp[listTheory.LENGTH_TAKE_EQ] >> rpt strip_tac >> metis_tac[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`H`, `ctx`, `func`] >> simp[]) >>
   conj_tac >- gvs[Abbr `sg`, Abbr `s0`, update_var_def, read_memory_def] >>
   `?u. exec_ext_call ci sg (g:bytes32)
       target 0w wi insz wo outsz T = OK u /\ wb_frame cenv es es sf sg u` by
@@ -2700,11 +2703,12 @@ Theorem ecrecover_suffix_preserves:
     regions_disjoint (w2n wo) 32 b sz) /\
   (!aid b sz. aid < sf.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
     regions_disjoint (w2n wo) 32 b sz) /\
-  (cenv.ce_is_ctor ==> !name tv iv off.
-     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+  (cenv.ce_is_ctor ==> !src name tv iv off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) =
        SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       | SOME imms => get_source_immutables src imms) name =
        SOME (tv,iv) ==>
      regions_disjoint (w2n wo) 32 off (type_memory_size tv)) ==>
   stmt_state_rel H ctx func cenv cx
@@ -2813,6 +2817,24 @@ Proof
     (gvs[stmt_state_rel_def, state_rel_def]) >>
   drule_all ecrecover_suffix_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sm sb) t = OK tf` >>
+  `cenv.ce_is_ctor ==> !src name tv iv off.
+     (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+     FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables src imms) name = SOME (tv,iv) ==>
+     regions_disjoint (w2n po) 32 off (type_memory_size tv)` by
+    (disch_tac >> rpt gen_tac >>
+     disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+     `immutable_alloca_sep func (cenv with ce_module := src) cx es t` by
+       (fs[stmt_state_rel_def, optionTheory.IS_SOME_EXISTS] >>
+        Cases_on `src = cenv.ce_module` >>
+        gvs[compileEnvTheory.compile_env_component_equality] >> metis_tac[]) >>
+     pop_assum mp_tac >> simp[immutable_alloca_sep_def] >> strip_tac >>
+     qpat_x_assum `!name tv v off. _ ==> _ /\ _ /\ _` drule_all >> strip_tac >>
+     qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _`
+       (qspecl_then [`oi`, `w2n (po:bytes32)`, `32`] mp_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def,
+          Once DISJ_COMM]) >>
   drule_all ecrecover_suffix_preserves >> strip_tac >>
   (* the call writes only the fresh output buffer: the pure frame *)
   `!aid e. FLOOKUP t.vs_allocas aid = SOME e ==> FLOOKUP tf.vs_allocas aid = SOME e` by
