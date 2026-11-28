@@ -7354,7 +7354,7 @@ Theorem tuple_exact_store_head_code:
     fn_has_code cur sc func /\ fn_has_code sc sm func /\
     fn_has_code shadow_cur shadow_sc shadow_func /\ fn_has_code shadow_sc shadow_sm shadow_func /\
     type_place_target env bt = SOME (Type sty) /\
-    (~immutable_root cx bt ==> target_pre cenv cx env bt src) /\
+    (~immutable_root cx bt ==> target_pre_mods cenv.ce_modules cenv cx env bt src) /\
     gas_admissible (eval_base_place cx bt) target_res_ok src
 Proof
   simp[bodyTupleExactStoreCursorTheory.tuple_exact_store_cursor_def,
