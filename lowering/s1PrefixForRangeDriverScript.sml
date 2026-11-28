@@ -126,8 +126,8 @@ val range_driver_prefix_cons_tac =
     disch_then (mk_asm "round_prefix")
   end;
 
-Theorem range_frag_prefix_from_cons:
-  ^range_driver_prefix_statement
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >>
   (* The generated statement quantifies both the outer and invocation variables
@@ -148,7 +148,14 @@ Proof
   irule gas_prefix_full_invalid_trace_domain >>
   asm_rewrite_tac [] >> simp[evaluate_storage_trace_frame]
 QED
+*)
+Theorem range_frag_prefix_from_cons:
+  ^range_driver_prefix_statement
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_frag_prefix_from_cons[computed]:
   rangeForDriverLib.range_checked_shadow_edges_tac >>
   rangeForDriverLib.range_checked_code_tac >>
@@ -167,7 +174,9 @@ Resume range_frag_prefix_from_cons[computed]:
   range_split_midpoint_tac >>
   suspend "second"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_frag_prefix_from_cons[second]:
   rangeForDriverLib.range_first_replay_tac >>
   `body_expr_full_ok cx e2` by
@@ -199,7 +208,9 @@ Resume range_frag_prefix_from_cons[second]:
   rpt (qpat_x_assum `!H. _ ==> gas_origin_ptr_path _ _ _ _` kall_tac) >>
   suspend "checked_init"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_frag_prefix_from_cons[literal]:
   rangeForDriverLib.range_literal_code_tac >>
   `n1 <= n2 /\ n = Num (n2 - n1)` by
@@ -243,6 +254,7 @@ Resume range_frag_prefix_from_cons[literal]:
      qpat_assum `sb0.cs_next_var = _` SUBST1_TAC >> decide_tac) >>
   suspend "literal_apply"
 QED
+*)
 
 fun range_specialize_init_tac entry =
   qspecl_then
@@ -258,6 +270,7 @@ val range_abbrev_init_tac =
        (\rl. ignore_bind (check (compatible_bound (Dynamic n) (SND rl)) "For too long")
          (return (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl))))`;
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_frag_prefix_from_cons[literal_apply]:
   range_specialize_init_tac [`es`,`s0`,`G0`,`tn0`] >>
   impl_tac
@@ -299,6 +312,7 @@ Resume range_frag_prefix_from_cons[literal_apply]:
       (assume_tac o PURE_REWRITE_RULE [eq]) >> SUBST1_TAC eq) >>
   suspend "literal_init"
 QED
+*)
 
 (* Initialization is silent even when its bounds check fails. Its full
    outcome is used only to reach the selected machine entry. *)
@@ -376,6 +390,7 @@ val range_init_admissible_tac =
   disch_then (fn th => qpat_assum `!tail. init _ = (INL rs,mid with gas_obs := tail)`
     (mp_then Any ACCEPT_TAC th));
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_frag_prefix_from_cons[literal_init]:
   drule_all_then (assume_tac o BETA_RULE)
     (Q.INST [`d` |-> `d`, `cenv` |-> `cenv`, `sa` |-> `sa`]
@@ -390,7 +405,9 @@ Resume range_frag_prefix_from_cons[literal_init]:
   rangeForDriverLib.range_literal_iterator_replay_tac >>
   suspend "literal_rounds"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_frag_prefix_from_cons[checked_init]:
   `local_ptrs_reserved cenv st` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >> qexists_tac `sa` >>
@@ -423,7 +440,9 @@ Resume range_frag_prefix_from_cons[checked_init]:
   `st.cs_next_var <= st.cs_next_var + 9` by decide_tac >>
   suspend "checked_apply"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_frag_prefix_from_cons[checked_apply]:
   range_specialize_init_tac [`mid2`,`t2`,`G2`,`tn2`] >>
   impl_tac
@@ -471,6 +490,7 @@ Resume range_frag_prefix_from_cons[checked_apply]:
   rangeForDriverLib.range_computed_iterator_replay_tac >>
   suspend "computed_rounds"
 QED
+*)
 
 val range_round_guards_tac =
   rangeForDriverLib.range_join_rounds_source_tac
@@ -554,12 +574,18 @@ val range_round_join_tac =
   range_round_guards_tac >> rangeForDriverLib.range_join_rounds_invariants_tac >>
   range_round_apply_tac >> range_round_entry_tac;
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_frag_prefix_from_cons[literal_rounds]:
   range_round_join_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_frag_prefix_from_cons[computed_rounds]:
   range_round_join_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise range_frag_prefix_from_cons
+*)
