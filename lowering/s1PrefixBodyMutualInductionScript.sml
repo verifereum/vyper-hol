@@ -290,7 +290,7 @@ val inherited_operand_calls =
   FIRST (map (fn th => match_mp_tac (GEN_ALL th) >> first_assum ACCEPT_TAC >> NO_TAC) operand_calls);
 
 val from_source =
-  rpt gen_tac >> disch_tac >>
+  TRY (rpt gen_tac >> disch_tac) >>
   qpat_assum `!xs. ALOOKUP _ _ = SOME [(NONE,xs)] ==> _`
     (drule_then strip_assume_tac) >>
   fs (loop_calls :: syntax_calls) >> rpt conj_tac >>
@@ -298,14 +298,16 @@ val from_source =
   TRY inherited_operand_calls >>
   TRY (drule_all_then (fn th => ACCEPT_TAC (CONJUNCT1 th) ORELSE
       ACCEPT_TAC (CONJUNCT2 th)) code_slice_source_calls >> NO_TAC) >>
-  metis_tac[ordered_custom_error_calls];
+  drule_all_then ACCEPT_TAC ordered_custom_error_calls;
 
 val full_child = FIRST (map irule full_children) >> from_source;
 
 val prefix_child =
+  TRY (qpat_x_assum `err = CustomError _ _ _` SUBST_ALL_TAC) >>
   first_assum (fn ih =>
     irule ih >> asm_rewrite_tac[] >> rpt conj_tac >>
-    FIRST [from_source >> NO_TAC, metis_tac[]] >> NO_TAC);
+    TRY (from_source >> NO_TAC) >>
+    rpt (goal_assum (drule_at Any)) >> fs[] >> NO_TAC);
 
 fun apply_prefix_rule th =
   rpt strip_tac >> full_simp_tac bool_ss case_simps >>
@@ -315,7 +317,7 @@ fun prefix_case th =
   apply_prefix_rule th >> asm_rewrite_tac[] >>
   rpt conj_tac >> rpt strip_tac >>
   FIRST [full_child >> NO_TAC, prefix_child,
-         from_source >> NO_TAC, metis_tac[]];
+         from_source];
 
 fun without_smaller_rank tac =
   qpat_x_assum `!m:num. m < rank ==> _` kall_tac >> tac;
@@ -414,7 +416,7 @@ Resume body_sim_prefix_mutual_ranked[builtin]:
        `LENGTH es = 1` by fs[type_check_def, assert_def, builtin_args_length_ok_def] >>
        gvs[LENGTH_EQ_1]) >>
   FIRST [full_child >> NO_TAC, prefix_child,
-         from_source >> NO_TAC, metis_tac[]]
+         from_source]
 QED
 
 Resume body_sim_prefix_mutual_ranked[extcall]:
