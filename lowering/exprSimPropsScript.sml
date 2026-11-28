@@ -10,7 +10,7 @@ Ancestors
   valueEncoding valueEncodingDefs valueEncodingProofs vyperTypeSystem vyperTyping
   venomExecSemantics venomInst venomState
   vyperLookupStorage vyperStorageBackend vyperEvalPreservesScopes
-  vyperPlaceStatePreservation vyperStoragePlaceProvenance
+  vyperPlaceStatePreservation vyperStoragePlaceProvenance stateRelProj
 Libs
   pairLib
 
@@ -636,16 +636,6 @@ QED
 
 (* A value inside the value w points to, j bytes further on (sub_layout),
    is at w + j. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt strip_tac >> fs[immutable_holds_def] >> gvs[] >>
-  qexistsl [`name`, `off`, `itv`, `iv`, `k + j`] >>
-  simp[wordsTheory.word_add_n2w] >>
-  fs[sub_layout_def] >> rpt strip_tac >> TRY decide_tac >>
-  res_tac >> res_tac >> fs[]
-QED
-*)
 Theorem immutable_holds_sub:
   !cenv cx t tv w es s stv sv j ft ftv fv tv'.
     immutable_holds cenv cx t tv w es s /\
@@ -656,7 +646,19 @@ Theorem immutable_holds_sub:
     read_result cx tv' es = (INL fv, es) ==>
     immutable_holds cenv cx ft tv' (w + n2w j) es s
 Proof
-  cheat
+  rpt gen_tac >> rewrite_tac[immutable_holds_def] >>
+  disch_then (CONJUNCTS_THEN2
+    (REPEAT_TCL CHOOSE_THEN (CONJUNCTS_THEN2 assume_tac strip_assume_tac))
+    strip_assume_tac) >>
+  qexistsl [`src`, `name`, `off`, `itv`, `iv`, `k + j`, `ftv`, `fv`] >>
+  asm_simp_tac bool_ss [wordsTheory.word_add_n2w, arithmeticTheory.ADD_ASSOC] >>
+  qpat_x_assum `src = _ \/ _` kall_tac >>
+  gvs[sub_layout_def] >>
+  rpt strip_tac >>
+  `b + (j + k) = (b + k) + j` by decide_tac >>
+  pop_assum SUBST1_TAC >>
+  `val_in_memory stv sv (b + k) mem` by metis_tac[] >>
+  metis_tac[]
 QED
 
 Theorem val_footprint_le_store_size:

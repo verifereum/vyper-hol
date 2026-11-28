@@ -121,7 +121,7 @@ Proof
          (Q.INST [`H` |-> `hz`,`cut` |-> `front`,
            `D` |-> `(DF:((bool # bytes32 # type_value) list # num list) -> dead) hz`]
            (SPEC_ALL extcall_direct_encode_phase_frame))) >>
-     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
+     impl_tac >- (rpt conj_tac >>> NTH_GOAL (simp[]) 4 >> first_assum ACCEPT_TAC) >>
      strip_tac >> asm_rewrite_tac[]) >>
   qpat_x_assum `?H. valid_horizon cx st0 H ee.storage_trace`
     (qx_choose_then `hz` assume_tac) >>
