@@ -157,15 +157,17 @@ Proof
 QED
 *)
 Theorem intcall_return_ghost_inv:
-  !tops ctx cenv cx H DF lo sa mut nr rtv rc rb sm t tn v ee Gc tc ir cs
+  !mods exps caller_src caller_tops src callee_tops ctx cenv cx H DF lo sa mut nr rtv rc rb sm t tn v ee Gc tc ir cs
    outs out d func tenv name es vv s0 es0 G0 tn0 args ret ss rr prev penv es1 G.
-  body_inv tops ctx cenv cx /\
+  (contract_inv mods exps ctx cenv cx /\
+  module_body_inv mods caller_src caller_tops cenv cx) /\
+  ALOOKUP mods src = SOME callee_tops /\
   dead_lo_ok H (DF H) lo cenv cx /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
+  intcall_entry_full_mods (DF,lo,d) H mods src callee_tops ctx func cenv cx tenv name es sa sm vv
     s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
-  intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc rb
+  intcall_callee_exit_full_mods mods (DF,lo) H func cenv cx mut nr rtv rc rb
     sa.cs_next_id sm.cs_next_id t tn (INL v) ee (Gc,tc) (IntRet ir cs) /\
   bind_outputs outs ir.iret_values
     (adopt_return_fmp ir (merge_callee_state t cs)) = SOME out /\
@@ -328,15 +330,17 @@ Proof
 QED
 *)
 Theorem intcall_return_ghost_kept:
-  !tops ctx cenv cx H DF lo sa mut nr rtv rc rb sm t tn v ee Gc tc ir cs
+  !mods exps caller_src caller_tops src callee_tops ctx cenv cx H DF lo sa mut nr rtv rc rb sm t tn v ee Gc tc ir cs
    outs out d func tenv name es vv s0 es0 G0 tn0 args ret ss rr prev penv es1 G.
-  body_inv tops ctx cenv cx /\
+  (contract_inv mods exps ctx cenv cx /\
+  module_body_inv mods caller_src caller_tops cenv cx) /\
+  ALOOKUP mods src = SOME callee_tops /\
   dead_lo_ok H (DF H) lo cenv cx /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
+  intcall_entry_full_mods (DF,lo,d) H mods src callee_tops ctx func cenv cx tenv name es sa sm vv
     s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
-  intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc rb
+  intcall_callee_exit_full_mods mods (DF,lo) H func cenv cx mut nr rtv rc rb
     sa.cs_next_id sm.cs_next_id t tn (INL v) ee (Gc,tc) (IntRet ir cs) /\
   bind_outputs outs ir.iret_values
     (adopt_return_fmp ir (merge_callee_state t cs)) = SOME out /\
@@ -446,19 +450,21 @@ Proof
 QED
 *)
 Theorem intcall_return_stmt_state_rel:
-  !tops ctx cenv cx H DF lo sa mut nr rtv rc rb sm t tn v ee Gc tc ir cs
+  !mods exps caller_src caller_tops src callee_tops ctx cenv cx H DF lo sa mut nr rtv rc rb sm t tn v ee Gc tc ir cs
    outs returned out d func tenv name es vv s0 es0 G0 tn0 args ret ss rr prev penv es1 G
    fuel callee argv setup obs inst.
-  body_inv tops ctx cenv cx /\
+  (contract_inv mods exps ctx cenv cx /\
+  module_body_inv mods caller_src caller_tops cenv cx) /\
+  ALOOKUP mods src = SOME callee_tops /\
   dead_lo_ok H (DF H) lo cenv cx /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
+  intcall_entry_full_mods (DF,lo,d) H mods src callee_tops ctx func cenv cx tenv name es sa sm vv
     s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
-  intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc rb
+  intcall_callee_exit_full_mods mods (DF,lo) H func cenv cx mut nr rtv rc rb
     sa.cs_next_id sm.cs_next_id t tn (INL v) ee (Gc,tc) (IntRet ir cs) /\
   unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),out) /\
-  intcall_callee_src cx name mut nr ss (es1 with gas_obs := obs) = (INL v,ee) /\
+  intcall_callee_src_at cx src name mut nr ss (es1 with gas_obs := obs) = (INL v,ee) /\
   setup_callee callee argv t = SOME setup /\
   run_blocks fuel ctx callee setup = IntRet ir cs /\
   step_inst fuel ctx inst t = OK returned /\
