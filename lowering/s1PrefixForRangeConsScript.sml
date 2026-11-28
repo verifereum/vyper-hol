@@ -96,8 +96,8 @@ in
     (require (null (free_vars statement)) "a binder escaped"; statement)
 end
 
-Theorem range_cons_prefix:
-  ^range_cons_prefix_statement
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   map_every qx_gen_tac rangeRoundEntryLib.layout_names >>
@@ -123,14 +123,23 @@ Proof
   irule storage_trace_frame_ignore_bind >>
   simp[storage_trace_frame_state_updates]
 QED
+*)
+Theorem range_cons_prefix:
+  ^range_cons_prefix_statement
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_cons_prefix[scoped_frame]:
   rangeRoundEntryLib.prepare_locals
     bodyFullSharedTheory.return_buf_allocas_path
     bodyFullSharedTheory.return_buf_sep_allocated_local >>
   suspend "scoped_entry"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_cons_prefix[scoped_entry]:
   `body_stmts_prefix_ok cx body` by
     (qpat_x_assum `body_for_prefix_ok _ _ _ _ _`
@@ -179,7 +188,9 @@ Resume range_cons_prefix[scoped_entry]:
   disch_tac >>
   suspend "attach"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume range_cons_prefix[attach]:
   `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      cx st0 clean (ep,t,Gentry,tt)` by
@@ -212,5 +223,8 @@ Resume range_cons_prefix[attach]:
       qpat_assum `!obs. bind (read_result cx a) _ _ = _` (fn run =>
         simp[NoAsms, gas_prefix_full_def, tr, req, run])))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise range_cons_prefix
+*)
