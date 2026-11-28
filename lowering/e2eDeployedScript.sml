@@ -643,28 +643,8 @@ Proof
   `next_source_machine am' es' = next_source_machine am es'` by
     (irule call_external_next_source_machine >> metis_tac[]) >>
   gvs[] >>
-  `?obs. call_external_trace (SOME (MAP SND (call_trace es))) gs am
-      (tx with <| function_name := f; args := vals |>) = (res,am',rqs,obs)` by
-    (Cases_on `call_external_trace (SOME (MAP SND (call_trace es))) gs am
-       (tx with <| function_name := f; args := vals |>)` >>
-     rename1 `call_external_trace (SOME (MAP SND (call_trace es))) gs am
-       (tx with <| function_name := f; args := vals |>) = (res0, output0)` >>
-     PairCases_on `output0` >>
-     rename1 `call_external_trace (SOME (MAP SND (call_trace es))) gs am
-       (tx with <| function_name := f; args := vals |>) =
-         (res0, am0, rqs0, obs0)` >>
-     qexists_tac `obs0` >>
-     `call_external (SOME (MAP SND (call_trace es))) gs am
-          (tx with <| function_name := f; args := vals |>) =
-        (res0, am0, rqs0)` by
-        metis_tac[call_external_trace_result] >>
-     `res0 = res /\ am0 = am' /\ rqs0 = rqs` by
-       (qpat_x_assum `call_external _ _ _ _ = (res0,am0,rqs0)` (fn h0 =>
-          qpat_x_assum `call_external _ _ _ _ = (res,am',rqs)` (fn h1 =>
-            mp_tac (TRANS (SYM h0) h1) >> simp[]))) >>
-     simp[]) >>
   `source_result_ok res` by
-    metis_tac[call_state_rel_no_recipient_overflow_core] >>
+    metis_tac[call_state_rel_no_recipient_overflow_public] >>
   `~source_exempt tops (res,am',rqs)` by
     (Cases_on `res`
      >- gvs[source_exempt_def]

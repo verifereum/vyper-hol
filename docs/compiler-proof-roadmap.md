@@ -354,8 +354,8 @@ the source run is the same for every tail and source-exempt (it gives a focus
 witness then), the raw run must reach an exit related to the source result at
 every valid storage horizon; runtime
 failure is Abort, not Error/fuel0. Success relates canonical return bytes and
-whole effects/requests. UNREACHABLE permits ExHalt; dynamic strict decoding
-has the precise D9 exemption. Proving this
+whole effects/requests. UNREACHABLE permits ExHalt; the recipient-overflow
+source exemption is ruled out by the balance corollary. Proving this
 contract belongs to Milestone 6.
 
 ### 1.4 Pipeline statement
@@ -467,7 +467,7 @@ of the same kind:
 - supported calls to other contracts, creation included (CREATE/CREATE2 are
   inside `unit_shape_ok`; the created callee's correctness stays deferred);
 - trace-aware GAS and assembly steps;
-- ABI values of variable size, respecting the exact decoding exemption.
+- ABI values of variable size, with ordinary result obligations for decoder failures.
 
 Deployment stays out of this step.
 
@@ -700,13 +700,13 @@ unit simulation by themselves.
 | Not/Neg/Abs | Simple builtin/literal op paths | Not bool/uint256, Neg signed/decimal, Abs int256; excluded narrow/unsigned cases stay excluded. |
 | AddMod/MulMod/PowMod256/AsWeiValue | Math/misc builtins | Same modular/scaled results and matched checks for admitted forms. |
 | IfExp/literals, Empty/MaxValue/MinValue/Epsilon | Branch/literals/`typed_val_to_w256` | Word Empty only; correct typed byte literal encoding, fixed evaluation order. |
-| `evaluate_convert` | `compile_type_convert` | Conversions admitted by `valid_conversion`; compare integer/decimal clamps and scaling, bound-before-truncate, bytes->address/decimal/narrow-zero-tail D12d–g, and bytestring length/shift paths. Empty-byte signed integer/decimal conversion has the exact D9 exemption. |
+| `evaluate_convert` | `compile_type_convert` | Conversions admitted by `valid_conversion`; compare integer/decimal clamps and scaling, bound-before-truncate, bytes->address/decimal/narrow-zero-tail D12d–g, and bytestring length/shift paths. Empty-byte signed integer/decimal conversion follows the ordinary result relation. |
 | Env, account, BlockHash/BlobHash | `compile_env_var`, BALANCE/EXTCODEHASH/size, builtin block paths | Full env/typed-account ties, corrected empty-account codehash; real nonzero block/window bounds D22. |
 | ECRecover/SHA256/ECAdd/ECMul | Value-zero STATICCALL1/2/6/7 + ASSERT/buffer read | H21-pure bridge; success from the call's oracle outcome on both sides; invalid EC now source RuntimeError D12a, invalid recovery succeeds empty. Not pure: they consume an outcome. |
 | Tuple/struct/aggregate args/tuple locals | Aggregate expression and buffer paths | Same evaluation order and value-memory layout; fixed-memory/name/internal-call restrictions matter. |
 | `evaluate_abi_encode_bytes` | Builtin encode/ABI buffer path | Supported single-argument/flag form and corrected typed size rule D12j; same bytes incl dynamic multiblock encoding. |
 | Static `evaluate_abi_decode` | `lower_abi_decode`/clamps | Prove exactly same acceptance/value for static targets; conversion errors **not exempt**. |
-| Dynamic ABI tuple String/Bytes | Dynamic decoder offsets/end/padding | For source-accepted bytes same value. Source rejects nonzero padding that lowering accepts; raw Venom wraparound reads can survive where EVM starves. Test overlapping/out-of-order/head/trailing/short/overbound tails; exact D9 exemption, no blanket decoder correctness. |
+| Dynamic ABI tuple String/Bytes | Dynamic decoder offsets/end/padding | For source-accepted bytes same value. Source rejects nonzero padding that lowering accepts; raw Venom wraparound reads can survive where EVM starves. Test overlapping/out-of-order/head/trailing/short/overbound tails; decoder failures have ordinary result obligations, with no blanket decoder correctness claim. |
 | Storage scalar read/write | SLOAD/SSTORE/TLOAD/TSTORE | Full-word types only; actual initial/outcome storage validity. Narrow stored masking differs outside subset. |
 | Fixed/dynamic arrays, Append/Pop | `compile_array_subscript`, dynamic append/pop | Signed/unsigned bounds, effect-free index/RHS; storage length invariant and corrected length-only Pop D12b. |
 | Hashmap / `hashmap_slot` | `compile_mapping_subscript`/SHA3 | Admitted integer/bool/address key forms; no byte/nested/transient hashmap write claim; carry layout/hash separation. |

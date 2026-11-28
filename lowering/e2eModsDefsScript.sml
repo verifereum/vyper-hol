@@ -383,7 +383,8 @@ Proof
 QED
 
 Definition exception_outcome_rel_mods_def:
-  exception_outcome_rel_mods mods exc es r es' <=>
+  exception_outcome_rel_mods
+    (mods : (num option # toplevel list) list) exc es r es' <=>
     case exc of
       AssertException s =>
         ?failure out lgs.

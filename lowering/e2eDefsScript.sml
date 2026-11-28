@@ -776,7 +776,7 @@ Definition effects_agree_def:
 End
 
 Definition exception_outcome_rel_def:
-  (exception_outcome_rel tops (AssertException s) es r es' <=>
+  (exception_outcome_rel (tops : toplevel list) (AssertException s) es r es' <=>
      ?exc out lgs.
        frame_outcome es r es' (SOME exc) out lgs /\
        ((exc = Reverted /\ frame_raises es Reverted) \/ s = "UNREACHABLE")) /\

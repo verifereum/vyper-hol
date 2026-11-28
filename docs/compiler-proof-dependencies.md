@@ -67,7 +67,8 @@ non-exempt branch:
 
 clean generic e2e_vyper_to_evm (explicit stage premises, zero admission leaves)
   -> vyper_call_correct (seven public premises at Milestone 1; inherits exactly S1-S7)
-exempt branch: actual total run + exact decoder exemption, not invented safety
+source failures follow the ordinary result relation; recipient-overflow is
+excluded by the balance corollary, not by a decoder exemption
 ```
 
 The compiler is the actual `run_venom_pipeline ... o1_pipeline_spec`, not an
