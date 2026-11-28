@@ -1,7 +1,7 @@
 (*
  * The Log statement's argument evaluation (compile_log_eval_all) over the
  * finite-horizon joint judgment: each argument's joint fragment
- * (expr_sim_full) composed left to right into one gas_outcome_full over
+ * (expr_sim_full) composed left to right into one gas_outcome_full_mods over
  * eval_exprs.  The statement doesn't depend on the event's field types, so
  * the scalar and aggregate Log arms both build on it.
  *
@@ -18,7 +18,7 @@
  *)
 Theory bodyFullLogArgs
 Ancestors
-  bodyFullIfExpReach
+  bodyFullIfExpReach gasOutcomeFullBindMods
   bodySimFull loweringPosts bodyPtrDefs wordArgsPtr stmtSimLogArgsRun stmtSimProps stmtSimLogArgs
   stmtSimLogArgsGrowth gasOutcomeFullCompose gasShadowState gasShadow
   logValueFramePtr logGhostFramePtr exprSimProps exprSimWordArgs
@@ -386,9 +386,9 @@ Theorem compile_log_eval_all_full_store_bound_halt:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_exprs cx args) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_exprs cx args) (es, s0, G0, tn0)
         (log_full_post DF lo d ctx func cenv cx es sa sb s0 G0 tn0 args ops)
         (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
           (ctx_has_dalloca ctx ==> !u. r = Halt u ==> allocas_below_fmp u))
@@ -659,9 +659,9 @@ Theorem compile_log_eval_all_full_halt:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_exprs cx args) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_exprs cx args) (es, s0, G0, tn0)
         (\H res ee G tn t. ?vs. res = INL vs /\
           stmt_state_rel H ctx func cenv cx ee t /\
           storage_well_formed_on cx ee (FST H) /\
@@ -695,7 +695,7 @@ Proof
   disch_then (qspecl_then [`args`, `es`, `sa`, `sb`, `shadow_sa`,
                            `shadow_sb`, `ops`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  drule gas_outcome_full_post_mono >> disch_then irule >>
+  drule gas_outcome_full_mods_post_mono >> disch_then irule >>
   simp[log_full_post_def] >> rpt gen_tac >> strip_tac >>
   qexists_tac `vs` >> simp[] >>
   qpat_x_assum `LIST_REL _ _ vs` mp_tac >>
@@ -751,15 +751,15 @@ Theorem compile_log_eval_all_full_store_bound:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_exprs cx args) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_exprs cx args) (es, s0, G0, tn0)
         (log_full_post DF lo d ctx func cenv cx es sa sb s0 G0 tn0 args ops)
         (\H res ee gt r. expr_exit res r)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   drule_all compile_log_eval_all_full_store_bound_halt >> strip_tac >>
-  drule gas_outcome_full_post_mono >> disch_then irule >> simp[]
+  drule gas_outcome_full_mods_post_mono >> disch_then irule >> simp[]
 QED
 
 Theorem compile_log_eval_all_full:
@@ -810,9 +810,9 @@ Theorem compile_log_eval_all_full:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_exprs cx args) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_exprs cx args) (es, s0, G0, tn0)
         (\H res ee G tn t. ?vs. res = INL vs /\
           stmt_state_rel H ctx func cenv cx ee t /\
           storage_well_formed_on cx ee (FST H) /\
@@ -840,5 +840,5 @@ Theorem compile_log_eval_all_full:
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   drule_all compile_log_eval_all_full_halt >> strip_tac >>
-  drule gas_outcome_full_post_mono >> disch_then irule >> simp[]
+  drule gas_outcome_full_mods_post_mono >> disch_then irule >> simp[]
 QED

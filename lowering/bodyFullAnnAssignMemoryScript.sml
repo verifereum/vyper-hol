@@ -374,8 +374,8 @@ Theorem annassign_memory_full_raw_rhs_from_entry[local]:
     FLOOKUP entry.vs_allocas ad = SOME ent) /\
   alloca_frame old es sa s0 ce es entry /\
   ghost_kept_at lo old es sa G0 tn0 s0 Ga tna ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (eval_expr cx e) (es,entry,Ga,tna)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    ce.ce_modules cx st0 (eval_expr cx e) (es,entry,Ga,tna)
     (\H res mid G tn u. ?tv. res = INL tv /\
       vv_post H ctx func ce cx e es a b entry mid tv vv u /\
       vv_store_bound cx (post_value_type ce e) (lowered_value_type ce e) mid tv vv u /\

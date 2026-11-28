@@ -104,11 +104,16 @@ Proof
   `body_expr_full_ok cx e` by metis_tac[runtime_constant_expr_body_full_ok] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,fn,shadow_fn) ce cx ty e es` by
     (drule_all body_expr_full_ok_simulations >> simp[]) >>
+  `ce.ce_modules = [(NONE,cx_tops cx)]` by
+    metis_tac[bodySimTheory.body_inv_contract,
+              bodyInvCodePropsTheory.contract_inv_cenv_modules,
+              bodyInvCodePropsTheory.body_inv_main_code] >>
   qpat_assum `expr_sim_full _ _ _ _ _ _`
     (mp_tac o ONCE_REWRITE_RULE[expr_sim_full_via_bundle]) >>
   disch_then (qspecl_then [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,
     `op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  asm_rewrite_tac[] >> disch_tac >>
+  asm_rewrite_tac[GSYM gasOutcomeFullTheory.gas_outcome_full_singleton_def] >>
+  disch_tac >>
   irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >> simp[] >>
   rpt gen_tac >> strip_tac >> asm_rewrite_tac[] >>
   qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>

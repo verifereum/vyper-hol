@@ -1,6 +1,7 @@
 (* Retain canonical unwrap's whole-buffer bound through the joint read. *)
 Theory bodyFullConvertChildRead
 Ancestors
+  gasOutcomeFullBindMods
   bodyFullOfVV bodySimFull gasOutcomeFull exprSimDefs loweringPosts
   contextRawReachable ptrDiscipline unitTransformDefs
 
@@ -35,8 +36,8 @@ Theorem expr_sim_full_of_vv_post_buffer_exit:
       ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+    gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
       (\H res ee G tn t. ?v. res = INL v /\
         expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
         expr_store_bound cx (post_value_type cenv e) v op t /\
@@ -60,7 +61,7 @@ Proof
     [`st0`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
-  irule gas_outcome_full_post_mono >>
+  irule gas_outcome_full_mods_post_mono >>
   goal_assum (drule_at Any) >> simp[] >>
   rpt strip_tac >> qexists_tac `v` >> simp[]
 QED
