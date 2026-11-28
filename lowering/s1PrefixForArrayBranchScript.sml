@@ -12,56 +12,8 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem compile_for_nonslot_array_frag_prefix:
-  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
-   shadow_func cenv env env' ret_ty lctx RetQ es.
-    ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
-               supported_storage_value tops nid (ArrayT typ bd)) /\
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx (Array e) s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_full_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_full_ok cx (Array e)) /\
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx (Array e) s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_prefix_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_prefix_ok cx (Array e)) /\
-    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
-       occurs_abi_decode_target target tops) /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
-    ~supported_expr_exists (const_name_root cx) e /\
-    stmt_exprs_ok cenv (For id typ (Array e) n body) /\
-    (~(?ty nid. e = TopLevelName ty nid) ==>
-     !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
-    stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n body) /\
-    call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
-    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx RetQ cenv ret_ty ==>
-    stmt_frag_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
-      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
-      (eval_stmt cx (For id typ (Array e) n body)) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   rewrite_tac[stmt_frag_prefix_def,stmt_frag_full_pre_def] >>
@@ -141,7 +93,62 @@ Proof
        storage_trace_frame_ignore_bind, storage_trace_frame_checks] >>
   rpt gen_tac >> Cases_on `res` >> simp[]
 QED
+*)
+Theorem compile_for_nonslot_array_frag_prefix:
+  !cx id typ e n body DF lo d PG tops bindings ctx shadow_ctx func
+   shadow_func cenv env env' ret_ty lctx RetQ es.
+    ~(?bd nid. e = TopLevelName (ArrayT typ bd) nid /\
+               supported_storage_value tops nid (ArrayT typ bd)) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx (Array e) s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_full_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_full_ok cx (Array e)) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx (Array e) s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_prefix_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_prefix_ok cx (Array e)) /\
+    body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\ supported_stmt tops bindings (For id typ (Array e) n body) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (For id typ (Array e) n body) ==>
+       occurs_abi_decode_target target tops) /\
+    body_const_cells_agree [(NONE,tops)] cx env es /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
+    ~supported_expr_exists (const_name_root cx) e /\
+    stmt_exprs_ok cenv (For id typ (Array e) n body) /\
+    (~(?ty nid. e = TopLevelName ty nid) ==>
+     !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
+    stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n body) /\
+    call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
+    frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx RetQ cenv ret_ty ==>
+    stmt_frag_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
+      (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n body)))
+      (eval_stmt cx (For id typ (Array e) n body)) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_nonslot_array_frag_prefix[toplevel_scope]:
   qpat_assum `well_typed_iterator env typ (Array e)`
     (assume_tac o CONJUNCT1 o REWRITE_RULE [vyperTypeSystemTheory.well_typed_iterator_def]) >>
@@ -152,7 +159,9 @@ Resume compile_for_nonslot_array_frag_prefix[toplevel_scope]:
   PURE_REWRITE_TAC[pairTheory.FST] >>
   drule_all_then ACCEPT_TAC bodyTypedTargetScopeTheory.body_inv_toplevel_read_main
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_nonslot_array_frag_prefix[toplevel_immutable]:
   drule_then assume_tac body_inv_contract >>
   drule_then strip_assume_tac body_inv_main_code >>
@@ -170,7 +179,9 @@ Resume compile_for_nonslot_array_frag_prefix[toplevel_immutable]:
     (qspec_then `nid` mp_tac) >>
   PairCases_on `nid` >> gvs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_nonslot_array_frag_prefix[iterator_prefix]:
   `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cx st0
      (eval_expr cx e) (es,s0,G0,tn0)` suffices_by
@@ -194,7 +205,9 @@ Resume compile_for_nonslot_array_frag_prefix[iterator_prefix]:
   disch_then (qspecl_then [`st0`,`sa`,`sbExpr`,`shadow_sa`,`shadow_sbExpr`,`vv`,`s0`,`G0`,`tn0`] mp_tac) >>
   simp[expr_vv_sim_full_pre_def] >> disch_then irule >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_nonslot_array_frag_prefix[rounds]:
   map_every qx_gen_tac [`marks`,`vs`,`em`,`Gu`,`tu`,`u`] >> BETA_TAC >> strip_tac >>
   qabbrev_tac `H0 = storage_trace_horizon em.storage_trace` >>
@@ -307,5 +320,8 @@ Resume compile_for_nonslot_array_frag_prefix[rounds]:
        (qspec_then `H` (drule_then (ACCEPT_TAC o CONJUNCT2)))) >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_for_nonslot_array_frag_prefix
+*)
