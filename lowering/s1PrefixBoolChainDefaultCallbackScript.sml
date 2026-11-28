@@ -45,14 +45,6 @@ Proof
   PairCases_on `cfg` >> PairCases_on `origin` >> simp[bool_chain_default_ready_def]
 QED
 
-Theorem bool_chain_default_bind_cons[local]:
-  bind (eval_exprs cx (a::rs)) (\vs. next (vals ++ vs)) =
-  bind (eval_exprs cx [a]) (\hs.
-    bind (eval_exprs cx rs) (\vs. next ((vals ++ hs) ++ vs)))
-Proof
-  simp[Once intcall_stage_cons_source, bind_assoc, bind_return, APPEND_ASSOC]
-QED
-
 (* The nonempty callback for the suffix fold. Only the reached read or VV
    observation is needed from the smaller-context proof. *)
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
@@ -100,6 +92,8 @@ Proof
 QED
 *)
 Theorem bool_chain_default_singleton_callback:
+  EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+    (vyperTypeCallGraph$int_calls_expr a) /\
   body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ gas_shadow_state sf shf /\

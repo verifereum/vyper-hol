@@ -4,7 +4,7 @@ Ancestors
   s1PrefixBoolChainDefaultCallback s1PrefixBoolChainPushedChildren
   s1PrefixBoolChainDefaultSuffixFold s1PrefixIntCallStageSingleton s1PrefixIntCallStageList
   bodyFullCreateHeld gasSummaryCompose fragGasPath exprLowering compileEnv
-  vyperState list pair
+  vyperState vyperTypeCallGraph vyperReadOnlyEval list pair
 
 Theorem stage_intcall_args_snoc[local]:
   !done flags tys start ops si.
@@ -58,7 +58,12 @@ QED
    Its varying fields come from readiness and the default execution history. *)
 Theorem bool_chain_used_default_bind_prefix:
   (ds0 <> [] ==> LENGTH (remcode pushed) < rank) /\
-  (!c a. LENGTH (remcode c) < rank ==> body_expr_prefix_ok c a) /\
+  (!c a. LENGTH (remcode c) < rank /\
+       (!ts. ALOOKUP c.sources c.txn.target = SOME [(NONE,ts)] ==>
+          EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+            (vyperTypeCallGraph$int_calls_expr a)) ==> body_expr_prefix_ok c a) /\
+  EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+    (vyperTypeCallGraph$int_calls_exprs ds0) /\
   body_inv tops ctx ce pushed /\ shadow_body_inv tops ctx shadow_ctx /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ gas_shadow_state sf shf /\
@@ -142,7 +147,7 @@ QED
 Resume bool_chain_used_default_bind_prefix[cons]:
   simp[Abbr `ready`] >> rpt gen_tac >> strip_tac >>
   qpat_assum `bool_chain_default_ready _ _ _ _ (a::rs) _ _`
-    (mp_then (Pos (el 12)) (qspec_then `PG` mp_tac)
+    (mp_then (Pos (el 13)) (qspec_then `PG` mp_tac)
       bool_chain_default_singleton_callback) >>
   (impl_tac >- suspend "child") >>
   disch_then (qx_choosel_then [`flag`,`rest_flags`,`dt`,`rest_tys`,`opnd`,`sm`,`shm`,`Q`,`R`]
@@ -156,6 +161,9 @@ Resume bool_chain_used_default_bind_prefix[child]:
     (qpat_assum `ds0 <> [] ==> _` irule >> simp[]) >>
   qpat_assum `bool_chain_default_ready _ _ _ _ (a::rs) _ _`
     (strip_assume_tac o SIMP_RULE std_ss [bool_chain_default_ready_def,EVERY_DEF]) >>
+  `EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (int_calls_expr a)` by
+    (gvs[int_calls_exprs_FLAT_MAP, MAP_APPEND, EVERY_FLAT, EVERY_APPEND]) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt strip_tac >> drule_all bool_chain_pushed_default_child >>
   disch_then (fn th => FIRST [irule (cj 3 th), irule (cj 4 th)]) >>

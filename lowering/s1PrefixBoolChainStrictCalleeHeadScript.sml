@@ -4,7 +4,7 @@ Ancestors
   s1PrefixBoolChainSuppliedToDefaults s1PrefixBoolChainUsedDefaultBind
   s1PrefixBoolChainDefaultsToInvoke s1PrefixBoolChainUniformEntries
   s1PrefixBoolChainPushedLockedRun s1PrefixBoolChainCallRankBase[qualified]
-  vyperReadOnlySyntax
+  vyperReadOnlySyntax bodyCallLiveness s1PrefixSyntaxCalls vyperTypeCallGraph
   s1PrefixBoolChainHeadMakeArray s1PrefixCheckedContextFull s1PrefixOfVV
   bodyIntCallSource bodySimFullMain bodyLoopCalls typedCopyProducer
   bodyFullPreds bodyFullShadowBodyInv s1PrefixPreds s1PrefixDefs
@@ -23,8 +23,28 @@ Proof
   simp[expr_size_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem bool_chain_strict_callee_head_prefix:
+  !rank cx ann src name es dr.
+    LENGTH (remcode cx) <= rank /\
+    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+      EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+        (vyperTypeCallGraph$int_calls_expr (Call ann (IntCall (src,name)) es dr))) /\
+    (!a. expr_size a < expr_size (Call ann (IntCall (src,name)) es dr) /\
+       (!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
+         EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+           (vyperTypeCallGraph$int_calls_expr a)) ==>
+       body_expr_prefix_ok cx a) /\
+    (!c a. LENGTH (remcode c) < rank /\
+       (!ts. ALOOKUP c.sources c.txn.target = SOME [(NONE,ts)] ==>
+          EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+            (vyperTypeCallGraph$int_calls_expr a)) ==> body_expr_prefix_ok c a) /\
+    (!c ys. LENGTH (remcode c) < rank /\
+       (!ts. ALOOKUP c.sources c.txn.target = SOME [(NONE,ts)] ==>
+          EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+            (vyperTypeCallGraph$int_calls_stmts ys) /\
+          stmts_loop_calls_ok [(NONE,ts)] ys) ==>
+       body_stmts_prefix_ok c ys) ==>
+    body_expr_prefix_ok cx (Call ann (IntCall (src,name)) es dr)
 Proof
   rpt gen_tac >> strip_tac >>
   once_rewrite_tac[body_expr_prefix_ok_def] >> simp[] >>
@@ -32,34 +52,39 @@ Proof
   rename1 `body_const_cells_agree [(NONE,tops)] cx env es0` >>
   drule_all body_intcall_source_selection >> strip_tac >>
   qpat_x_assum `src = NONE` SUBST_ALL_TAC >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+    fs[body_const_cells_agree_def] >>
+  `!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
+     MEM (NONE,name) (linked_live_functions [(NONE,ts)] []) /\
+     EVERY (\k. MEM k (linked_live_functions [(NONE,ts)] [])) (int_calls_exprs es)` by
+    (rpt strip_tac >> res_tac >> fs[int_calls_expr_def]) >>
+  `MEM (NONE,name) (linked_live_functions [(NONE,tops)] []) /\
+    EVERY (\k. MEM k (linked_live_functions [(NONE,tops)] [])) (int_calls_exprs es)` by
+    (qpat_assum `!ts. ALOOKUP cx.sources _ = SOME _ ==> MEM _ _ /\ _`
+       (drule_then ACCEPT_TAC)) >>
   `body_exprs_prefix_ok cx es` by
     (irule prefix_list_from_members >> rpt strip_tac >>
-     qpat_assum `!a. expr_size a < _ ==> _` irule >>
+     qpat_assum `!a. expr_size a < _ /\ _ ==> _` irule >>
+     rpt conj_tac
+     >- (rpt strip_tac >> gvs[int_calls_exprs_members] >> metis_tac[]) >>
      irule intcall_supplied_smaller >> first_assum ACCEPT_TAC) >>
   drule_then strip_assume_tac checked_context_full_exprs >>
+  `body_exprs_full_ok cx es` by metis_tac[] >>
+  `IS_SOME (check_contract F cx.layouts cx.txn.target [(NONE,tops)])` by
+    drule_then ACCEPT_TAC body_const_cells_agree_runtime_check >>
+  `EVERY (\k. MEM k (linked_live_functions [(NONE,tops)] []))
+     (int_calls_stmts (subst_consts_stmts (module_consts_env tops []) ss)) /\
+    (!n. EVERY (\k. MEM k (linked_live_functions [(NONE,tops)] []))
+     (int_calls_exprs (DROP n (subst_consts_exprs (module_consts_env tops []) dflts))))` by
+    (fs[optionTheory.IS_SOME_EXISTS] >>
+     drule_all_then ACCEPT_TAC callable_compiled_calls_live) >>
   `expr_vv_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx ty (Call ann (IntCall (NONE,name)) es dr) es0` by
     suspend "raw" >>
   conj_tac >- (irule expr_sim_prefix_of_vv >> first_assum ACCEPT_TAC) >>
   first_assum ACCEPT_TAC
 QED
-*)
-Theorem bool_chain_strict_callee_head_prefix:
-  !rank cx ann src name es dr.
-    LENGTH (remcode cx) <= rank /\
-    (!a. expr_size a < expr_size (Call ann (IntCall (src,name)) es dr) ==>
-       body_expr_prefix_ok cx a) /\
-    (!c a. LENGTH (remcode c) < rank ==> body_expr_prefix_ok c a) /\
-    (!c ys. LENGTH (remcode c) < rank /\
-       (!ts. ALOOKUP c.sources c.txn.target = SOME [(NONE,ts)] ==>
-          stmts_loop_calls_ok [(NONE,ts)] ys) ==>
-       body_stmts_prefix_ok c ys) ==>
-    body_expr_prefix_ok cx (Call ann (IntCall (src,name)) es dr)
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_strict_callee_head_prefix[raw]:
   simp[expr_vv_sim_prefix_def] >> rpt gen_tac >> strip_tac >>
   qhdtm_assum `expr_vv_sim_full_pre`
@@ -103,6 +128,9 @@ Resume bool_chain_strict_callee_head_prefix[raw]:
     `DROP (LENGTH es) pvs`,`[]`,`ds`,`[]`,`[]`,`si`] >>
   simp[NoAsms,compile_stage_intcall_args_def,comp_return_def,gas_explicit_nil] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (qpat_assum `ds = DROP _ (subst_consts_exprs _ _)` SUBST1_TAC >>
+       qpat_assum `!n. EVERY _ (int_calls_exprs (DROP n _))`
+         (fn th => irule th >> NO_TAC) >> NO_TAC) >>
   TRY (qmatch_goalsub_rename_tac `LENGTH (remcode pushed) < rank` >>
        disch_tac >>
        `(dflts,ss) <> ([],[])` by (CCONTR_TAC >> gvs[subst_consts_expr_def]) >>
@@ -116,9 +144,7 @@ Resume bool_chain_strict_callee_head_prefix[raw]:
   qpat_x_assum `def_ops' = def_ops` SUBST_ALL_TAC >>
   suspend "invoke"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_strict_callee_head_prefix[invoke]:
   qpat_assum `IS_SOME (evaluate_type _ _)`
     (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
@@ -156,8 +182,5 @@ Resume bool_chain_strict_callee_head_prefix[invoke]:
   qpat_assum `dc = cenv_without_defaults cenv name` (pure_rewrite_tac o single o SYM) >>
   first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise bool_chain_strict_callee_head_prefix
-*)

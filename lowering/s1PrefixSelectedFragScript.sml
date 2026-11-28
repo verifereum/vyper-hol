@@ -1,7 +1,7 @@
 (* Instantiate the body prefix simulation at the selected runtime body. *)
 Theory s1PrefixSelectedFrag
 Ancestors
-  s1PrefixBodySimFullMain loweringRuntimeCorrect
+  bodyCallLiveness s1PrefixBodySimFullMain loweringRuntimeCorrect
 
 Theorem runtime_selected_body_frag_prefix:
   source_typing_ok tops am tx /\
@@ -30,6 +30,14 @@ Theorem runtime_selected_body_frag_prefix:
 Proof
   strip_tac >>
   drule_all runtime_selected_body_loop_calls_ok >> strip_tac >>
+  `EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (vyperTypeCallGraph$int_calls_stmts ss)` by
+    (qpat_assum `ss = subst_consts_stmts _ _` SUBST1_TAC >>
+     qpat_assum `source_typing_ok tops am tx`
+       (strip_assume_tac o REWRITE_RULE [e2eDefsTheory.source_typing_ok_def]) >>
+     drule_then (rewrite_tac o single o CONJUNCT2)
+       checked_singleton_subst_int_calls >>
+     drule_then ACCEPT_TAC singleton_external_body_calls_live) >>
   qpat_x_assum `ss = subst_consts_stmts _ _` kall_tac >>
   irule body_stmts_sim_prefix >> simp[] >>
   map_every qexists_tac [`bindings`,`env`,`env'`,`tops`] >> asm_rewrite_tac[]
