@@ -4535,7 +4535,7 @@ Proof
   suspend "cons"
 QED
 *)
-Theorem create_ctor_rows_outcome[local]:
+Theorem create_ctor_rows_outcome:
   body_const_cells_agree mods cx env es /\
   body_exprs_full_ok_mods mods exps cx xs /\ (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
