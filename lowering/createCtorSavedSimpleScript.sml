@@ -73,7 +73,7 @@ Proof
   fs[expr_post_def] >>
   `return_buf_frame d ce sb t` by
     (irule return_buf_frame_frame >> qexistsl [`ce`,`s0`,`sa`] >> simp[]) >>
-  `expr_sim_inv_mods ce.ce_modules ce cx env ee` by
+  `expr_sim_inv_mods [(NONE,cx_tops cx)] ce cx env ee` by
     fs[expr_sim_inv_split_def] >>
   simp[extcall_positional_post_def, vv_operand_def, vv_location_def] >>
   map_every qexists_tac [`sa`,`sm`,`sb`,`vv`,`Value v`,`exprs_can_mutate ce xs`] >>

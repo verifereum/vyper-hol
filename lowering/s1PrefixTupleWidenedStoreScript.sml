@@ -4,6 +4,7 @@ Ancestors
   tupleWidenedStoreEntry s1PrefixTupleStoreList s1PrefixDefs gasOutcomeFull
   gasStorage bodyFullExtCallPackingReady vyperStorageTrace vyperStorageFootprint
   vyperInterpreter vyperState list
+  bodyInvCodeProps[qualified] contractInvContextProps[qualified] bodyFullPredsMods[qualified]
 
 Theorem tuple_store_head_bad_domain[local]:
   ~s.vs_halted /\ ~storage_trace_domain cx st0 src.storage_trace ==>
@@ -31,7 +32,7 @@ Proof
 QED
 
 Theorem tuple_store_widened_prefix_from_heads:
-  LENGTH gs = LENGTH vs /\
+  body_inv tops ctx cenv cx /\ LENGTH gs = LENGTH vs /\
   tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
     (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) i c sh src s G tn obs /\
   body_tuple_targets_prefix_ok cx (DROP i gs) (DROP i vs) /\
@@ -58,6 +59,14 @@ Proof
   strip_tac >>
   qpat_assum `tuple_widened_store_entry _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o ONCE_REWRITE_RULE[tuple_widened_store_entry_def]) >>
+  `cenv.ce_modules = [(NONE,tops)] /\
+    ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+    (drule_then (fn inv => ACCEPT_TAC (CONJ
+      (MATCH_MP bodyInvCodePropsTheory.contract_inv_cenv_modules inv)
+      (MATCH_MP contractInvContextPropsTheory.contract_inv_singleton_source_modules inv)))
+      bodySimTheory.body_inv_contract) >>
+  `body_tuple_targets_full_ok cx (DROP i gs) (DROP i vs)` by
+    fs[bodyFullPredsModsTheory.body_tuple_target_full_ok_mods_singleton] >>
   qabbrev_tac `entry = tuple_widened_store_entry []
     (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
     (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)` >>

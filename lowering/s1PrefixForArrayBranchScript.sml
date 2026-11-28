@@ -195,19 +195,36 @@ QED
 Resume compile_for_nonslot_array_frag_prefix[toplevel_immutable]:
   drule_then assume_tac body_inv_contract >>
   drule_then strip_assume_tac body_inv_main_code >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx env es` by
+    fs[exprSimHypsDefsTheory.expr_sim_inv_split_def] >>
+  `~supported_expr_exists (unallocated_bare_global_root cenv env) e` by
+    metis_tac[exprSimHypsDefsTheory.expr_sim_inv_no_unallocated_bare_globals] >>
+  `~(?bd src name ts tr slot.
+      e = TopLevelName (ArrayT typ bd) (src,name) /\
+      ALOOKUP [(NONE,tops)] src = SOME ts /\
+      find_var_decl_by_name name ts = SOME (StorageVarDecl tr (ArrayT typ bd),name) /\
+      lookup_var_slot_from_layout cx tr src name = SOME slot)` by
+    (strip_tac >> Cases_on `src` >> gvs[alistTheory.ALOOKUP_def] >>
+     drule_then strip_assume_tac entryStateRelTheory.find_var_decl_by_name_mem >> gvs[] >>
+     `supported_declaration_headers tops` by
+       metis_tac[body_inv_main_support, supportedProgramTheory.supported_program_def] >>
+     drule_all_then strip_assume_tac entryStateRelTheory.supported_storage_decl_slot >>
+     `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+       metis_tac[moduleVariableKeyPropsTheory.contract_inv_unqualified_variable_keys,
+                 alistTheory.ALOOKUP_def] >>
+     drule_all_then assume_tac supportedNameRootTheory.supported_variable_decl_distinct_mem >>
+     fs[supportedDeclsTheory.supported_declaration_headers_def, EVERY_MEM] >>
+     first_x_assum (drule_then assume_tac) >>
+     gvs[supportedDeclsTheory.supported_declaration_header_def,
+         supportedExprFormsTheory.supported_storage_value_def]) >>
   mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
                    `c` |-> `cenv`, `bd` |-> `bd`, `n` |-> `n`,
-                   `ctx` |-> `ctx`, `typ` |-> `typ`]
+                   `ctx` |-> `ctx`, `typ` |-> `typ`,
+                   `env` |-> `env`, `es` |-> `es`]
             nonslot_iterator_bare_immutable_mods) >>
-  fs[compileUnitTheory.main_module_def, alistTheory.ALOOKUP_def,
-     GSYM exprSimHypsDefsTheory.const_name_root_mods_singleton] >>
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  `FST nid = NONE` by
-    (qpat_assum `!nid. e = TopLevelName (expr_type e) nid ==> FST nid = NONE`
-       (qspec_then `nid` mp_tac) >> simp[]) >>
-  qpat_assum `!nid. _ ==> IS_SOME (supported_immutable_type tops (NONE,SND nid))`
-    (qspec_then `nid` mp_tac) >>
-  PairCases_on `nid` >> gvs[]
+  rewrite_tac[GSYM exprSimHypsDefsTheory.const_name_root_mods_singleton] >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[alistTheory.ALOOKUP_def, pairTheory.FORALL_PROD] >> metis_tac[]
 QED
 *)
 

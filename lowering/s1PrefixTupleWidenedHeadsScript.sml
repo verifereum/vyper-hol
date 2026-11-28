@@ -190,8 +190,9 @@ Resume tuple_widened_prefix_from_nested_heads[rhs_success]:
   >- (gen_tac >> disch_tac >> first_assum MATCH_ACCEPT_TAC) >>
   qpat_assum `tuple_widened_store_entry _ _ _ _ _ 0 ss shadow_ss ee t Gf tf []`
     (mp_then Any irule
-      (Q.INST [`i` |-> `0`] tuple_store_widened_prefix_from_heads |> REWRITE_RULE[DROP_0])) >>
-  simp[] >> qexistsl_tac [`stmt_res_ok lctx`,`cx_tops cx`] >> simp[] >>
+      (Q.INST [`i` |-> `0`, `tops` |-> `tops`]
+        tuple_store_widened_prefix_from_heads |> REWRITE_RULE[DROP_0])) >>
+  simp[] >> qexists_tac `stmt_res_ok lctx` >> simp[] >>
   suspend "visited_head"
 QED
 *)
