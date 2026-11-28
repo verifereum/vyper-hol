@@ -55,7 +55,7 @@ Theorem for_captured_storage_increment_post[local]:
   for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
     (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
     (lvo,idx,incr) (p,dst,nb,sd) (H,k,a::rs,ee,G,tn,s) /\
-  k < len /\ body_stmts_full_ok cx stmts /\
+  k < len /\ body_stmts_full_ok_mods c0.ce_modules exps cx stmts /\
   local_ptrs_reserved c0 sa0 /\ ~not_fresh_at sa0 idx /\ ~not_fresh_at sa0 out /\
   (!x sz. c0.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
   (!x sz. c0.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
@@ -169,7 +169,7 @@ Theorem for_captured_storage_backedge[local]:
   p <> idx /\ p <> out /\
   (!x. lvo = Var x ==> x <> idx /\ x <> out) /\
   (!x. bop = Var x ==> x <> idx /\ x <> out) /\
-  k < len /\ body_stmts_full_ok cx stmts /\
+  k < len /\ body_stmts_full_ok_mods c0.ce_modules exps cx stmts /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
     for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
       (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)

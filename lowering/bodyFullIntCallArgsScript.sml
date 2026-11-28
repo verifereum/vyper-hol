@@ -6066,9 +6066,8 @@ Theorem intcall_args_selected_package_entry[local]:
   lookup_function label ctx.ctx_functions = SOME callee /\
   setup_callee callee argv u = SOME setup /\
   set_internal_package_target cenv.ce_target
-    (package_internal_fn tops T (K global_nonreentrant_slot) cenv.ce_is_ctor
-      (if cenv.ce_is_ctor then imm_len tops else 0)
-      (mut,nr,rr,name,args,(dflts : expr list),ret,ss)) =
+    (package_internal_fn_unit mods T (K global_nonreentrant_slot) cenv.ce_is_ctor
+      package_imm_len (NONE,(mut,nr,rr,name,args,(dflts : expr list),ret,ss))) =
     (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,ss,rt) ==>
   (!mem. mem_agree_outside tn.t_mem u.vs_memory mem ==>
     internal_args_rel ce params penv (if has_rb then 1 else 0) argv
@@ -6484,9 +6483,8 @@ Theorem intcall_args_capture_materialization_pre[local]:
   enters_block callee setup entered /\ (HD callee.fn_blocks).bb_label = label /\
   new_block label before = (old,entry) /\
   set_internal_package_target cenv.ce_target
-    (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
-       (if cx.in_deploy then imm_len tops else 0)
-       (mut,nr,rr,name,args,(dflts : expr list),ret,ss)) =
+    (package_internal_fn_unit mods T (K global_nonreentrant_slot) cx.in_deploy
+      package_imm_len (NONE,(mut,nr,rr,name,args,(dflts : expr list),ret,ss))) =
     (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,ss,rt) /\
   (cx.in_deploy = cenv.ce_is_ctor) /\
   compile_internal_entry_prefix ce params has_rb entry = ((ce1,caps,rpc),cap_end) /\
