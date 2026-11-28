@@ -260,7 +260,7 @@ Proof
   metis_tac[vyperTypeConstantCellsTheory.module_toplevel_vtype_key_MEM_Variable_any]
 QED
 
-Theorem module_consts_env_names_MEM[local]:
+Theorem module_consts_env_names_MEM:
   !tops acc id.
     MEM id (MAP FST (module_consts_env tops acc)) ==>
     MEM id (MAP FST acc) \/
