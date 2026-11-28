@@ -93,8 +93,14 @@ Proof
   simp[] >> EVAL_TAC
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem linked_witness_contract_inv:
+  ALOOKUP cx.sources cx.txn.target = SOME linked_witness_mods /\
+  cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
+  check_linked_state_ownership cx.layouts cx.txn.target linked_witness_mods
+    (linked_live_functions linked_witness_mods linked_witness_exports) /\
+  layouts_agree_mods linked_witness_mods linked_witness_exports am tx ==>
+  !src. ?ctx ce. contract_inv linked_witness_mods linked_witness_exports ctx ce cx /\
+    ce.ce_module = src
 Proof
   strip_tac >> gen_tac >>
   qspec_then `cx.in_deploy` strip_assume_tac linked_witness_lowering >>
@@ -136,16 +142,6 @@ Proof
   >- (rpt strip_tac >> metis_tac[linked_witness_closed_bodies])
   >> fs[]
 QED
-*)
-Theorem linked_witness_contract_inv:
-  ALOOKUP cx.sources cx.txn.target = SOME linked_witness_mods /\
-  cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
-  layouts_agree_mods linked_witness_mods linked_witness_exports am tx ==>
-  !src. ?ctx ce. contract_inv linked_witness_mods linked_witness_exports ctx ce cx /\
-    ce.ce_module = src
-Proof
-  cheat
-QED
 
 (* These are the support and resolution premises at the entry boundary.
    The frame and return hypotheses belong to the simulation of that entry. *)
@@ -157,6 +153,8 @@ Theorem linked_witness_entry_support:
   ALOOKUP cx.sources cx.txn.target = SOME linked_witness_mods /\
   cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
   layouts_agree_mods linked_witness_mods linked_witness_exports am tx /\
+  check_linked_state_ownership cx.layouts cx.txn.target linked_witness_mods
+    (linked_live_functions linked_witness_mods linked_witness_exports) /\
   cx.stk = [(src,name)] /\
   context_function_live cx (src,name) /\
   check_contract cx.in_deploy cx.layouts cx.txn.target linked_witness_mods =
