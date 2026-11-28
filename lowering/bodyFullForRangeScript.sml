@@ -2609,7 +2609,7 @@ Theorem range_full_body_entry:
         body_for_full_ok_mods mods exps cx tyv id body
           (GENLIST (\j. Value (IntV (n1 + &j))) N) /\ k + LENGTH (a::rs) = N /\
         a::rs = GENLIST (\j. Value (IntV (n1 + &(k + j)))) (LENGTH (a::rs)) /\
-        body_const_cells_agree [(NONE,tops)] cx env es /\
+        body_const_cells_agree mods cx env es /\
         expr_sim_inv_mods mods cenv cx env es /\ lookup_scopes id es.scopes = NONE /\
         storage_trace_domain cx st0 es.storage_trace /\
         s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
