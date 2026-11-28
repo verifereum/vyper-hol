@@ -9,7 +9,7 @@
 Theory bodyFullCases
 Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallSource
   intCallResultsProps[qualified,ignore_grammar] constSubstMods finite_map[qualified]
-  whitelistCheckerDecls[qualified] vyperTypeInvariants[qualified]
+  whitelistCheckerDecls[qualified] vyperTypeInvariants[qualified] bodyFullPostsMods[qualified]
   bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
   bodyFullAppend bodyFullIfExp bodyFullAttribute
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
@@ -1666,17 +1666,11 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.stmts_cons_full_ok
 QED
 
-(* The empty list, by stmtSimZero's joint fragment. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rw[body_stmts_full_ok_def, stmt_frag_nil_full]
-QED
-*)
 Theorem body_stmts_nil_case_full:
   !cx. body_stmts_full_ok_mods mods exps cx []
 Proof
-  cheat
+  simp[bodyFullPredsModsTheory.body_stmts_full_ok_mods_def,
+       bodyFullPostsModsTheory.stmt_frag_full_mods_widened, stmt_frag_nil_full]
 QED
 
 Theorem body_structlit_case_full:

@@ -10,6 +10,7 @@ Ancestors bodyFullShadowBodyInv
   bodyFullPredsMods[qualified] bodyInvSplit[qualified] exprSimHypsDefs[qualified]
   gasOutcomeFullMods[qualified] bodyFullPostsMods constSubstMods
   bodyFullIntCallCallee[qualified] bodyPtrDefs[qualified]
+  bodyInvCodeProps[qualified] contractInvContextProps[qualified]
 Libs
   pairLib
 
@@ -121,37 +122,6 @@ QED
 
 (* The entry boundary records both evaluated argument lists.  Specialize
    an arbitrary body IH at those arguments, before entering the callee. *)
-Theorem intcall_entry_after_arguments:
-  body_inv tops ctx cenv cx /\
-  lookup_callable_function cx.in_deploy name tops =
-    SOME (mut,nr,args,dflts,ret,ss) /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
-    sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
-  (!s1 vs t1 sd dvs td p rt.
-     ~MEM (NONE,name) cx.stk /\
-     eval_exprs cx es s1 = (INL vs,t1) /\
-     eval_exprs (cx with stk updated_by CONS (NONE,name))
-       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
-       (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
-     bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME p /\
-     evaluate_type (get_tenv cx) ret = SOME rt /\
-     (nr ==> IS_SOME cx.nonreentrant_slot) /\
-     (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==> P) ==>
-  ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==> P)
-Proof
-  strip_tac >>
-  `nr ==> IS_SOME cx.nonreentrant_slot` by
-    (strip_tac >> drule_all body_inv_nonreentrant_slot >> simp[]) >>
-  qhdtm_x_assum `intcall_entry_full`
-    (fn entry =>
-       map_every strip_assume_tac
-         (List.take (CONJUNCTS (PURE_REWRITE_RULE [intcall_entry_full_def] entry), 3))) >>
-  strip_tac >>
-  first_x_assum irule >>
-  fs[] >> metis_tac[]
-QED
-
 Theorem intcall_entry_after_arguments_mods:
   (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot) /\
   lookup_callable_function cx.in_deploy name tops =
@@ -180,6 +150,38 @@ Proof
   strip_tac >>
   first_x_assum irule >>
   fs[] >> metis_tac[]
+QED
+
+Theorem intcall_entry_after_arguments:
+  body_inv tops ctx cenv cx /\
+  lookup_callable_function cx.in_deploy name tops =
+    SOME (mut,nr,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+    sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
+  (!s1 vs t1 sd dvs td p rt.
+     ~MEM (NONE,name) cx.stk /\
+     eval_exprs cx es s1 = (INL vs,t1) /\
+     eval_exprs (cx with stk updated_by CONS (NONE,name))
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+       (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
+     bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME p /\
+     evaluate_type (get_tenv cx) ret = SOME rt /\
+     (nr ==> IS_SOME cx.nonreentrant_slot) /\
+     (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==> P) ==>
+  ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==> P)
+Proof
+  strip_tac >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then (assume_tac o CONJUNCT1) bodyInvCodePropsTheory.body_inv_module_locations >>
+  drule_then assume_tac bodyInvSplitTheory.contract_inv_immutable_section_layout >>
+  drule_then assume_tac contractInvContextPropsTheory.contract_inv_singleton_source_modules >>
+  `nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot` by
+    metis_tac[body_inv_nonreentrant_slot] >>
+  `intcall_entry_full_mods (DF,lo,d) H [(NONE,tops)] NONE tops ctx func cenv cx tenv name es
+     sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
+    asm_simp_tac bool_ss [intcall_entry_full_mods_singleton] >>
+  strip_tac >> drule_all_then ACCEPT_TAC intcall_entry_after_arguments_mods
 QED
 
 Theorem bind_return_right:
