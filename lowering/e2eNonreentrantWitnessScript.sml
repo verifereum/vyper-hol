@@ -325,8 +325,7 @@ QED
       val call_target = EVAL ``(^tx).target``
     in
       prove
-        (``deployed ^tops ^runtime_bc ^am_call (^tx).target /\
-           storage_ok ^horizon ^am_call ^tx``,
+        (``deployed ^horizon ^tops ^runtime_bc ^am_call (^tx).target``,
          mp_tac dep_result >>
          (* Keep the evaluated records in the form used by the run and load facts. *)
          SIMP_TAC bool_ss [dep_run, dep_trace, dep_not_starved, dep_survives,
@@ -340,9 +339,7 @@ QED
              Cases >> simp[]) >>
          SIMP_TAC bool_ss [listTheory.APPEND_NIL] >>
          disch_then (qspecl_then [`^am_dep_post`, `[]`] mp_tac o CONJUNCT2) >>
-         SIMP_TAC bool_ss [load] >>
-         disch_then (CONJUNCTS_THEN2 mp_tac (qspec_then `^tx` mp_tac)) >>
-         SIMP_TAC bool_ss [call_target, dep_target])
+         SIMP_TAC bool_ss [load, call_target, dep_target])
     end
 
   val _ = MATCH_MP
@@ -351,24 +348,25 @@ QED
     (LIST_CONJ (common_premises @ [optimized_getters_deploy_typing,
                                    dep_entry, dep_horizon get_horizon]))
 
-  fun check_call (horizon, tx, es, entry_facts, bound, within) =
+  fun check_call (horizon, tx, es, entry_facts, bound, storage, within) =
     let
       val args = compiler_args @ [am_call, tx, es]
       val call_entry_premises = CONJUNCTS (CONJUNCT2
-        (REWRITE_RULE [call_premises_deployed] (LIST_CONJ entry_facts)))
+        (REWRITE_RULE [call_premises_deployed] (LIST_CONJ (entry_facts @ [storage]))))
       val handoff = deploy_handoff (horizon, tx)
-      val premises = common_premises @ [CONJUNCT1 handoff] @ call_entry_premises
+      val premises = common_premises @ [handoff] @ call_entry_premises
       val _ = MATCH_MP (SPECL (args @ [horizon]) vyper_call_correct_deployed)
-        (LIST_CONJ (premises @ [bound, CONJUNCT2 handoff, within]))
+        (LIST_CONJ (premises @ [bound, within]))
       val _ = MATCH_MP
         (SPECL (args @ [horizon]) vyper_call_gas_sufficient_deployed)
-        (LIST_CONJ (premises @ [CONJUNCT2 handoff]))
+        (LIST_CONJ premises)
     in
       ()
     end
-  val () = check_call (get_horizon, get_tx, get_es, get_facts, get_bound, get_within)
+  val () = check_call (get_horizon, get_tx, get_es, get_facts, get_bound,
+                      get_storage, get_within)
   val () = check_call (locked_horizon, locked_tx, locked_es, locked_facts,
-                      locked_bound, locked_within)
+                      locked_bound, locked_storage, locked_within)
 
   val witnesses = [
     ``o1_policy all_capabilities``, tops, deploy_bc, runtime_bc, am_dep,

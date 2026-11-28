@@ -11,14 +11,15 @@ Ancestors
   e2eTransactionWorld e2eProducers asmOptNonemptyFinalizer
   totalBalanceOverflowCore
 
-(* Deployment installs the code and establishes the source facts at a.
-   The transaction quantifier lets us reuse the existing source relations. *)
+(* Deployment couples installed code with typing, deployment and storage
+   facts for every well-typed transaction to the address. *)
 Definition deployed_def:
-  deployed tops runtime_bc am a <=>
+  deployed H tops runtime_bc am a <=>
     installed_code_rel tops runtime_bc (account_immutables am a)
       (lookup_account a am.accounts).code /\
     !tx. tx.target = a /\ call_tx_well_typed tx ==>
-         source_typing_ok tops am tx /\ source_deployment_rel tops am tx
+         source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+         storage_ok H am tx
 End
 
 (* The fresh EVM frame for this transaction and its entry value transfer. *)
@@ -34,11 +35,12 @@ Definition call_entry_rel_def:
 End
 
 Theorem call_ready_deployed:
-  call_ready tops runtime_bc am a <=>
+  (call_ready tops runtime_bc am a /\
+   (!tx. tx.target = a /\ call_tx_well_typed tx ==> storage_ok H am tx)) <=>
     am.logs = [] /\ am.pending_deletions = [] /\
-    deployed tops runtime_bc am a
+    deployed H tops runtime_bc am a
 Proof
-  simp[call_ready_def, deployed_def]
+  simp[call_ready_def, deployed_def] >> metis_tac[]
 QED
 
 Triviality accounts_after_transfer_code:
@@ -82,13 +84,31 @@ Proof
   first_x_assum (qspec_then `tx` mp_tac) >> simp[]
 QED
 
+Triviality storage_ok_target:
+  storage_ok H am tx /\ tx'.target = tx.target ==>
+  storage_ok H am tx'
+Proof
+  simp[storage_ok_def, horizon_ok_def] >>
+  strip_tac >>
+  `storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx' NONE)
+      (initial_state am []) (FST H) <=>
+   storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am []) (FST H)` by
+    (irule vyperCallFiniteStorageSupportTheory.storage_well_formed_on_target >>
+     simp[initial_evaluation_context_def]) >>
+  fs[]
+QED
+
 Theorem call_premises_deployed:
-  source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es <=>
-    deployed tops runtime_bc am tx.target /\
+  source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es /\
+  storage_ok H am tx <=>
+    deployed H tops runtime_bc am tx.target /\
     call_tx_well_typed tx /\ call_entry_rel am tx es
 Proof
   simp[call_state_rel_entry, deployed_def] >>
-  metis_tac[call_source_premises]
+  metis_tac[call_source_premises, storage_ok_target]
 QED
 
 (* The constructor result at one filling of the observed gas readings. *)
@@ -132,7 +152,7 @@ Theorem e2e_deploy_correctness_deployed_guarded:
                 !am' rqs.
                   load_contract (SOME (MAP SND (call_trace es))) gs am tx
                     [(NONE, tops)] [] = INL (am', rqs) ==>
-                  deployed tops runtime_bc (next_source_machine am' es')
+                  call_ready tops runtime_bc (next_source_machine am' es')
                     tx.target)))
 Proof
   rpt gen_tac >> strip_tac >>
@@ -146,15 +166,13 @@ Proof
   qx_gen_tac `gs` >> BETA_TAC >> strip_tac >> strip_tac >> conj_tac
   >- fs[deploy_result_rel_at_def] >>
   strip_tac >> qx_genl_tac [`am'`, `rqs`] >> strip_tac >>
-  `call_ready tops runtime_bc (next_source_machine am' es') tx.target` by
-    (irule (INST_TYPE [alpha |-> “:256”] deploy_establishes_call_ready) >>
-     rpt (conj_tac >- simp[]) >>
-     qexistsl_tac [`storage_trace_horizon (deploy_storage_trace
-                      (SOME (MAP SND (call_trace es))) gs am tx tops)`,
-                   `am`, `deploy_bc`, `es`, `gs`, `SOME (MAP SND (call_trace es))`,
-                   `r`, `rqs`] >>
-     gvs[]) >>
-  fs[call_ready_deployed]
+  irule (INST_TYPE [alpha |-> “:256”] deploy_establishes_call_ready) >>
+  rpt (conj_tac >- simp[]) >>
+  qexistsl_tac [`storage_trace_horizon (deploy_storage_trace
+                   (SOME (MAP SND (call_trace es))) gs am tx tops)`,
+                `am`, `deploy_bc`, `es`, `gs`, `SOME (MAP SND (call_trace es))`,
+                `r`, `rqs`] >>
+  gvs[]
 QED
 
 Triviality deploy_post_storage_ok:
@@ -388,10 +406,8 @@ Theorem e2e_deploy_correctness_deployed:
                 !am' rqs.
                   load_contract (SOME (MAP SND (call_trace es))) gs am tx
                     [(NONE, tops)] [] = INL (am', rqs) ==>
-                  deployed tops runtime_bc (next_source_machine am' es')
-                    tx.target /\
-                  (!tx'. tx'.target = tx.target ==>
-                    storage_ok H (next_source_machine am' es') tx'))))
+                  deployed H tops runtime_bc (next_source_machine am' es')
+                    tx.target)))
 Proof
   rpt gen_tac >> strip_tac >>
   `deploy_state_rel tops deploy_bc am tx es /\
@@ -421,8 +437,12 @@ Proof
     (qspecl_then [`gs`] assume_tac) >>
   conj_tac >- simp[] >>
   strip_tac >> qx_genl_tac [`am'`, `rqs`] >> strip_tac >>
-  conj_tac >- metis_tac[] >>
-  match_mp_tac deploy_next_storage_ok >> fs[horizon_ok_def] >> metis_tac[]
+  `call_ready tops runtime_bc (next_source_machine am' es') tx.target` by
+    metis_tac[] >>
+  `!tx'. tx'.target = tx.target ==>
+     storage_ok H (next_source_machine am' es') tx'` by
+    (match_mp_tac deploy_next_storage_ok >> fs[horizon_ok_def] >> metis_tac[]) >>
+  metis_tac[call_ready_deployed]
 QED
 
 Triviality call_entry_stack_check:
@@ -440,36 +460,24 @@ Proof
 QED
 
 Theorem call_preserves_deployed:
-  deployed tops runtime_bc am tx.target /\ call_tx_well_typed tx /\
+  deployed H tops runtime_bc am tx.target /\ call_tx_well_typed tx /\
   runtime_bc <> [] /\ call_entry_rel am tx es /\ LENGTH es.contexts = 1 /\
   run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete /\
-  call_external orc gobs am tx = (res, am', rqs) ==>
-  deployed tops runtime_bc (next_source_machine am' es') tx.target
+  call_external orc gobs am tx = (res, am', rqs) /\
+  (!tx'. tx'.target = tx.target /\ call_tx_well_typed tx' ==>
+         storage_ok H (next_source_machine am' es') tx') ==>
+  deployed H tops runtime_bc (next_source_machine am' es') tx.target
 Proof
   strip_tac >>
-  `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es` by
+  `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es /\
+   storage_ok H am tx` by
     simp[call_premises_deployed] >>
   `balance_bounded (2 ** 256 - 1) es` by fs[call_entry_rel_def, evm_state_ok_def] >>
-  qpat_x_assum `deployed _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [deployed_def]) >>
-  drule_all call_frame_preserves_call_ready >> simp[call_ready_deployed]
-QED
-
-Triviality storage_ok_target:
-  storage_ok H am tx /\ tx'.target = tx.target ==>
-  storage_ok H am tx'
-Proof
-  simp[storage_ok_def, horizon_ok_def] >>
-  strip_tac >>
-  `storage_well_formed_on
-      (initial_evaluation_context am.sources am.layouts tx' NONE)
-      (initial_state am []) (FST H) <=>
-   storage_well_formed_on
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am []) (FST H)` by
-    (irule vyperCallFiniteStorageSupportTheory.storage_well_formed_on_target >>
-     simp[initial_evaluation_context_def]) >>
-  fs[]
+  `!tx'. tx'.target = tx.target /\ call_tx_well_typed tx' ==>
+         source_typing_ok tops am tx' /\ source_deployment_rel tops am tx'` by
+    fs[deployed_def] >>
+  drule_all call_frame_preserves_call_ready >>
+  metis_tac[call_ready_deployed]
 QED
 
 Triviality call_next_storage_ok:
@@ -690,22 +698,17 @@ Theorem vyper_call_correct_deployed:
   !fin policy tops deploy_bc runtime_bc am tx es H.
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    deployed tops runtime_bc am tx.target /\
+    deployed H tops runtime_bc am tx.target /\
     call_tx_well_typed tx /\ call_entry_rel am tx es /\
     LENGTH (call_trace es) < 2 ** 64 /\
-    storage_ok H am tx /\
     call_within H tops am tx es
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_starved es r es' \/
        calldata_result_rel H tops am tx es r es') /\
-      !tx'.
-        LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete /\
-        tx'.target = tx.target
-        ==>
-        deployed tops runtime_bc (transaction_world am r es') tx.target /\
-        storage_ok H (transaction_world am r es') tx'
+      (LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete ==>
+       deployed H tops runtime_bc (transaction_world am r es') tx.target)
 Proof
   rpt gen_tac >> strip_tac >>
   `runtime_bc <> []` by
@@ -713,14 +716,15 @@ Proof
      >- (gvs[] >> metis_tac[compile_vyper_runtime_nonempty]) >>
      gvs[] >> drule compile_vyper_runtime_phases_asm_opt >>
      metis_tac[codegen_assembly_finalizer_nonempty]) >>
-  `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es` by
+  `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es /\
+   storage_ok H am tx` by
     simp[call_premises_deployed] >>
   drule_all e2eCorrectnessTheory.vyper_call_correct >>
   disch_then (qx_choosel_then [`r`, `es'`]
     (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
   qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
   reverse conj_tac
-  >- (qx_gen_tac `tx'` >> strip_tac >> Cases_on `r = INR NONE`
+  >- (strip_tac >> Cases_on `r = INR NONE`
       >- (simp[transaction_world_def] >>
           qpat_x_assum `frame_resource_starved es r es' \/
              calldata_result_rel H tops am tx es r es'`
@@ -733,14 +737,11 @@ Proof
           `next_source_machine am_out es' = next_source_machine am es'` by
             (irule call_external_next_source_machine >>
              fs[call_state_rel_def] >> metis_tac[]) >>
-          `deployed tops runtime_bc (next_source_machine am es') tx.target` by
-            (drule_all call_preserves_deployed >> simp[]) >>
-          conj_tac
-          >- first_assum ACCEPT_TAC
-          >- metis_tac[call_success_storage_ok])
-      >- (simp[transaction_world_def] >>
-          qpat_x_assum `storage_ok H am tx` assume_tac >>
-          metis_tac[storage_ok_target])) >>
+          `!tx'. tx'.target = tx.target /\ call_tx_well_typed tx' ==>
+                 storage_ok H (next_source_machine am_out es') tx'` by
+            metis_tac[call_success_storage_ok] >>
+          drule_all call_preserves_deployed >> simp[])
+      >- simp[transaction_world_def]) >>
   qpat_x_assum `frame_resource_starved _ _ _ \/ _` strip_assume_tac >>
   asm_rewrite_tac[] >>
   DISJ1_TAC >>
@@ -751,44 +752,13 @@ Proof
   (conj_tac >- metis_tac[call_entry_stack_check] >> asm_rewrite_tac[])
 QED
 
-(* The per-filling form of the deployed call gas companion. *)
-Theorem vyper_call_gas_sufficient_deployed_guarded:
-  !fin policy tops deploy_bc runtime_bc am tx es.
-    fin IN accepted_finalizers /\
-    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    deployed tops runtime_bc am tx.target /\
-    call_tx_well_typed tx /\ call_entry_rel am tx es
-    ==>
-    ?g. !g'.
-      g <= g' ==>
-      ?r es'.
-        run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((!f vals.
-            calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
-              (!gs. call_storage_ok am
-                 (tx with <| function_name := f; args := vals |>)
-                 (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
-              (!obs. ~e2eGasSufficient$gas_source_exempt tops
-                 (tx with <| function_name := f; args := vals |>)
-                 (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-                    obs am (tx with <| function_name := f; args := vals |>))) /\
-              LENGTH (call_trace (add_frame_gas g' es)) < 2 ** 64) ==>
-         ~frame_raises (add_frame_gas g' es) OutOfGas)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es` by
-    simp[call_premises_deployed] >>
-  drule_all e2eGasSufficientTopTheory.vyper_call_gas_sufficient >> simp[]
-QED
-
 (* TOP-LEVEL: the sufficient-gas companion for a deployed call. *)
 Theorem vyper_call_gas_sufficient_deployed:
   !fin policy tops deploy_bc runtime_bc am tx es H.
     fin IN accepted_finalizers /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    deployed tops runtime_bc am tx.target /\
-    call_tx_well_typed tx /\ call_entry_rel am tx es /\
-    storage_ok H am tx
+    deployed H tops runtime_bc am tx.target /\
+    call_tx_well_typed tx /\ call_entry_rel am tx es
     ==>
     ?g. !g'.
       g <= g' ==>
@@ -805,7 +775,10 @@ Theorem vyper_call_gas_sufficient_deployed:
          ~frame_raises (add_frame_gas g' es) OutOfGas)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all vyper_call_gas_sufficient_deployed_guarded >>
+  `source_typing_ok tops am tx /\ call_state_rel tops runtime_bc am tx es /\
+   storage_ok H am tx` by
+    simp[call_premises_deployed] >>
+  drule_all e2eGasSufficientTopTheory.vyper_call_gas_sufficient >>
   disch_then (qx_choose_then `g` assume_tac) >>
   qexists_tac `g` >> rpt strip_tac >>
   first_x_assum (drule_all_then strip_assume_tac) >>

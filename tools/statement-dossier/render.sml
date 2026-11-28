@@ -27,11 +27,12 @@ val stops = [{Thy = "compileUnit", Name = "compile_vyper_mods"},
 val intro = if target then
   "`vyper_call_correct_mods` is the module-list target. Its proof is open.\n\n" ^ draftSource
   else "The deployment theorem shows how the constructor establishes `deployed`, \
-       \the facts about the installed contract that the call theorem assumes. \
+       \which combines installed code, source typing, source deployment and \
+       \storage validity on the fixed horizon `H`. \
        \The call theorem also needs a well-typed transaction, its fresh EVM \
-       \entry frame, the trace bound and the storage conditions for `H`. \
-       \`call_premises_deployed` proves that the new call premises are \
-       \equivalent to the previous premises."
+       \entry frame, the trace bound and `call_within H` for its trace. \
+       \`call_premises_deployed` relates the deployed and entry premises \
+       \to source typing, call state and initial storage validity."
 
 val exporterInfo = if exporterRevision = "" then
   " The pinned exporter may show a helper's defining equations under the first function \
